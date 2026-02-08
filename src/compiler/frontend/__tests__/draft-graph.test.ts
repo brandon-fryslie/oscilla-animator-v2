@@ -12,8 +12,8 @@ describe('buildDraftGraph', () => {
       // Add block has inputs 'a' and 'b' — both unconnected
     });
 
-    const g1 = buildDraftGraph(patch);
-    const g2 = buildDraftGraph(patch);
+    const { graph: g1 } = buildDraftGraph(patch);
+    const { graph: g2 } = buildDraftGraph(patch);
 
     // Same input → same obligation IDs
     const ids1 = g1.obligations.map((o) => o.id).sort();
@@ -26,7 +26,7 @@ describe('buildDraftGraph', () => {
       b.addBlock('Add');
     });
 
-    const g = buildDraftGraph(patch);
+    const { graph: g } = buildDraftGraph(patch);
 
     // Add has inputs 'a' and 'b'
     const missingInputObls = g.obligations.filter((o) => o.kind === 'missingInputSource');
@@ -41,7 +41,7 @@ describe('buildDraftGraph', () => {
       // 'b' is still unconnected
     });
 
-    const g = buildDraftGraph(patch);
+    const { graph: g } = buildDraftGraph(patch);
     const missingInputObls = g.obligations.filter((o) => o.kind === 'missingInputSource');
 
     // Should have obligation for 'b' but not for 'a'
@@ -58,7 +58,7 @@ describe('buildDraftGraph', () => {
       b.addBlock('Multiply');
     });
 
-    const g = buildDraftGraph(patch);
+    const { graph: g } = buildDraftGraph(patch);
 
     // Blocks should be sorted
     for (let i = 1; i < g.blocks.length; i++) {
@@ -76,7 +76,7 @@ describe('buildDraftGraph', () => {
       b.addBlock('Const');
     });
 
-    const g = buildDraftGraph(patch);
+    const { graph: g } = buildDraftGraph(patch);
 
     expect(g.blocks.length).toBe(1);
     expect(g.blocks[0].origin).toBe('user');
@@ -89,7 +89,7 @@ describe('buildDraftGraph', () => {
       b.wire(c, 'out', add, 'a');
     });
 
-    const g = buildDraftGraph(patch);
+    const { graph: g } = buildDraftGraph(patch);
 
     expect(g.edges.length).toBe(1);
     expect(g.edges[0].from.dir).toBe('out');
@@ -102,7 +102,7 @@ describe('buildDraftGraph', () => {
       b.addBlock('Const');
     });
 
-    const g = buildDraftGraph(patch);
+    const { graph: g } = buildDraftGraph(patch);
     expect(g.meta.revision).toBe(0);
   });
 
@@ -111,7 +111,7 @@ describe('buildDraftGraph', () => {
       // empty
     });
 
-    const g = buildDraftGraph(patch);
+    const { graph: g } = buildDraftGraph(patch);
     expect(g.blocks).toEqual([]);
     expect(g.edges).toEqual([]);
     expect(g.obligations).toEqual([]);
@@ -122,7 +122,7 @@ describe('buildDraftGraph', () => {
       b.addBlock('Add');
     });
 
-    const g = buildDraftGraph(patch);
+    const { graph: g } = buildDraftGraph(patch);
 
     for (const obl of g.obligations) {
       expect(obl.deps.length).toBe(1);

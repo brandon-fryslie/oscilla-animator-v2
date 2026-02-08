@@ -112,6 +112,21 @@ function missingInputObligationId(blockId: string, portName: string): Obligation
 }
 
 // =============================================================================
+// Build Diagnostics
+// =============================================================================
+
+export interface BuildDiagnostic {
+  readonly kind: 'MissingRequiredInput';
+  readonly blockId: string;
+  readonly portName: string;
+}
+
+export interface BuildDraftGraphResult {
+  readonly graph: DraftGraph;
+  readonly diagnostics: readonly BuildDiagnostic[];
+}
+
+// =============================================================================
 // buildDraftGraph
 // =============================================================================
 
@@ -120,13 +135,15 @@ function missingInputObligationId(blockId: string, portName: string): Obligation
  *
  * - Converts all blocks and edges to draft format
  * - Creates missingInputSource obligations for unconnected inputs
+ * - Emits MissingRequiredInput diagnostics for inputs with defaulting: 'forbidden'
  * - Does NOT insert default sources or adapters (that's the fixpoint's job)
  * - All arrays are deterministically sorted by id
  */
-export function buildDraftGraph(patch: Patch): DraftGraph {
+export function buildDraftGraph(patch: Patch): BuildDraftGraphResult {
   const blocks: DraftBlock[] = [];
   const edges: DraftEdge[] = [];
   const obligations: Obligation[] = [];
+  const diagnostics: BuildDiagnostic[] = [];
 
   // Convert blocks
   for (const [_blockId, block] of patch.blocks) {
@@ -171,6 +188,12 @@ export function buildDraftGraph(patch: Patch): DraftGraph {
       // Skip if already connected
       if (hasIncomingEdge(blockId, inputId, patch.edges)) continue;
 
+      // If defaulting is forbidden, emit diagnostic instead of obligation
+      if (inputDef.defaulting === 'forbidden') {
+        diagnostics.push({ kind: 'MissingRequiredInput', blockId, portName: inputId });
+        continue;
+      }
+
       const oblId = missingInputObligationId(blockId, inputId);
       obligations.push({
         id: oblId,
@@ -188,10 +211,13 @@ export function buildDraftGraph(patch: Patch): DraftGraph {
   }
 
   return {
-    blocks: sortById(blocks),
-    edges: sortById(edges),
-    obligations: sortById(obligations),
-    meta: { revision: 0, provenance: 'buildDraftGraph' },
+    graph: {
+      blocks: sortById(blocks),
+      edges: sortById(edges),
+      obligations: sortById(obligations),
+      meta: { revision: 0, provenance: 'buildDraftGraph' },
+    },
+    diagnostics,
   };
 }
 

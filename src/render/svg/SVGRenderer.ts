@@ -222,6 +222,9 @@ export class SVGRenderer {
     const defId = this.geomDefs.getOrCreatePathDefId(this.defs, geometry);
     const D = Math.min(this.width, this.height);
 
+    // [LAW:dataflow-not-control-flow] exception: SVG fill/stroke attributes with 'none' still
+    // create DOM overhead. No identity value exists — the only neutral action is omitting the
+    // attribute. This is an SVG API boundary constraint.
     const hasFill = style.fillColor !== undefined && style.fillColor.length > 0;
     const hasStroke = style.strokeColor !== undefined && style.strokeColor.length > 0;
 
@@ -241,18 +244,9 @@ export class SVGRenderer {
       const instanceSize = typeof size === 'number' ? size : size[i];
       const sizePx = instanceSize * D;
 
-      let transform = `translate(${x} ${y})`;
-
-      if (rotation) {
-        const rotDeg = rotation[i] * (180 / Math.PI);
-        transform += ` rotate(${rotDeg})`;
-      }
-
-      if (scale2) {
-        transform += ` scale(${sizePx * scale2[i * 2]} ${sizePx * scale2[i * 2 + 1]})`;
-      } else {
-        transform += ` scale(${sizePx} ${sizePx})`;
-      }
+      // [LAW:dataflow-not-control-flow] rotation and scale2 are always present
+      const rotDeg = rotation[i] * (180 / Math.PI);
+      const transform = `translate(${x} ${y}) rotate(${rotDeg}) scale(${sizePx * scale2[i * 2]} ${sizePx * scale2[i * 2 + 1]})`;
 
       const use = document.createElementNS('http://www.w3.org/2000/svg', 'use');
       use.setAttribute('href', `#${defId}`);
@@ -311,6 +305,7 @@ export class SVGRenderer {
     const topology = getTopology(geometry.topologyId);
     const D = Math.min(this.width, this.height);
 
+    // [LAW:dataflow-not-control-flow] exception: same SVG API boundary as path ops above.
     const hasFill = style.fillColor !== undefined && style.fillColor.length > 0;
     const uniformFill = hasFill && style.fillColor!.length === 4;
 
@@ -330,8 +325,9 @@ export class SVGRenderer {
       const instanceSize = typeof size === 'number' ? size : size[i];
       const sizePx = instanceSize * D;
 
-      const sx = scale2 ? scale2[i * 2] : 1;
-      const sy = scale2 ? scale2[i * 2 + 1] : 1;
+      // [LAW:dataflow-not-control-flow] scale2 is always present (identity = [1,1])
+      const sx = scale2[i * 2];
+      const sy = scale2[i * 2 + 1];
 
       let element: SVGElement;
 
@@ -365,10 +361,9 @@ export class SVGRenderer {
         element = circle;
       }
 
-      if (rotation) {
-        const rotDeg = rotation[i] * (180 / Math.PI);
-        element.setAttribute('transform', `rotate(${rotDeg} ${x} ${y})`);
-      }
+      // [LAW:dataflow-not-control-flow] rotation is always present (identity = 0)
+      const rotDeg = rotation[i] * (180 / Math.PI);
+      element.setAttribute('transform', `rotate(${rotDeg} ${x} ${y})`);
 
       // Fill
       if (hasFill) {

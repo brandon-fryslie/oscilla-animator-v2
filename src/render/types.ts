@@ -145,11 +145,15 @@ export interface InstanceTransforms {
    * WHEN PROJECTED: per-instance Float32Array of screenRadius */
   readonly size: number | Float32Array;
 
-  /** Optional per-instance rotations (radians) */
-  readonly rotation?: Float32Array;
+  // [LAW:dataflow-not-control-flow] rotation and scale2 are always present.
+  // Identity values (rotation=0, scale2=[1,1]) are filled by RenderAssembler
+  // so renderers execute unconditional transforms — variability lives in the values.
 
-  /** Optional per-instance anisotropic scale (x,y interleaved) */
-  readonly scale2?: Float32Array;
+  /** Per-instance rotations in radians (identity: 0.0) */
+  readonly rotation: Float32Array;
+
+  /** Per-instance anisotropic scale, x,y interleaved (identity: [1.0, 1.0]) */
+  readonly scale2: Float32Array;
 
   /** Optional per-instance depth (for test verification of depth-sorting)
    * Present when camera projection was applied */

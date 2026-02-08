@@ -1,11 +1,15 @@
 /**
  * DefaultSourcePolicy — discharges missingInputSource obligations.
  *
- * Reuses logic from normalize-default-sources.ts:
- * - Check port-level override → registry default → polymorphic DefaultSource block
- * - TimeRoot special case: wire to existing TimeRoot block (edge only, no new block)
- * - Only called when deps are met (port type is canonicalizable)
- * - Only returns 'blocked' for permanent conditions (no default source exists, unsupported type)
+ * Strategy resolution order:
+ * 1. InputDef.defaultSource (port-level override on block definition)
+ * 2. Polymorphic DefaultSource block (fallback — defers to type-resolved lowering)
+ *
+ * TimeRoot special case: wire to existing TimeRoot block (edge only, no new block).
+ *
+ * Guards:
+ * - UnexpectedConnectedInput: if the target port already has an incoming edge,
+ *   returns blocked (another elaboration already satisfied this port).
  *
  * // [LAW:single-enforcer] This is the only place that decides how to satisfy a missing input source.
  * // [LAW:one-source-of-truth] DefaultSource metadata on InputDef is the single authority.
@@ -16,7 +20,24 @@ import type { Obligation, ObligationId } from '../obligations';
 import type { ElaborationPlan } from '../elaboration';
 import type { PolicyContext, PolicyResult, DefaultSourcePolicy as DefaultSourcePolicyInterface } from './policy-types';
 import type { DefaultSource, BlockId, PortId, BlockRole } from '../../../types';
-import { getBlockDefinition, type InputDef } from '../../../blocks/registry';
+import type { InputDef } from '../../../blocks/registry';
+
+// =============================================================================
+// Strategy Resolution
+// =============================================================================
+
+/**
+ * Resolve the effective default source strategy for an input port.
+ *
+ * Resolution order:
+ * 1. InputDef.defaultSource (port-level spec on block definition)
+ * 2. (Future: domain-wide registry lookup by type shape — not implemented yet)
+ * 3. Polymorphic DefaultSource block fallback
+ */
+function resolveDefaultStrategy(inputDef: InputDef): DefaultSource {
+  if (inputDef.defaultSource) return inputDef.defaultSource;
+  return { blockType: 'DefaultSource', output: 'out', params: {} };
+}
 
 // =============================================================================
 // Policy Implementation
@@ -41,6 +62,16 @@ export const defaultSourcePolicyV1: DefaultSourcePolicyInterface = {
     const targetBlockId = anchor.blockId;
     const targetPortId = anchor.port.port;
 
+    // Guard: if the target port already has an incoming edge, another elaboration
+    // (or user wire) already connected it. This is not an error — the obligation
+    // is simply stale.
+    const hasEdge = ctx.graph.edges.some(
+      (e) => e.to.blockId === targetBlockId && e.to.port === targetPortId,
+    );
+    if (hasEdge) {
+      return { kind: 'blocked', reason: 'UnexpectedConnectedInput', diagIds: [] };
+    }
+
     // Find the target block in the graph
     const targetBlock = ctx.graph.blocks.find((b) => b.id === targetBlockId);
     if (!targetBlock) {
@@ -59,15 +90,8 @@ export const defaultSourcePolicyV1: DefaultSourcePolicyInterface = {
       return { kind: 'blocked', reason: `No input definition for ${targetBlock.type}.${targetPortId}`, diagIds: [] };
     }
 
-    // Determine effective default source:
-    // 1. Registry default on input def
-    // 2. Polymorphic DefaultSource block (fallback)
-    const registryDefault = inputDef.defaultSource;
-    const effectiveDefault: DefaultSource = registryDefault ?? {
-      blockType: 'DefaultSource',
-      output: 'out',
-      params: {},
-    };
+    // Resolve effective default source strategy
+    const effectiveDefault = resolveDefaultStrategy(inputDef);
 
     // Build the elaboration plan
     return buildDefaultSourcePlan(

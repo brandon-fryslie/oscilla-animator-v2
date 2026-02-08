@@ -31,7 +31,7 @@ import { validateTypes, validateNoVarAxes, type AxisViolation } from './axis-val
 // Composite expansion
 import { expandComposites, type ExpansionDiagnostic, type ExpansionProvenance } from './composite-expansion';
 
-import { buildDraftGraph } from './draft-graph';
+import { buildDraftGraph, type DraftGraph } from './draft-graph';
 import { finalizeNormalizationFixpoint } from './final-normalization';
 import { bridgeToNormalizedPatch, bridgePartialToNormalizedPatch } from './draft-graph-bridge';
 import { BLOCK_DEFS_BY_TYPE } from '../../blocks/registry';
@@ -115,7 +115,15 @@ export function compileFrontend(patch: Patch, options?: FrontendOptions): Fronte
   const expandedPatch = expansion.patch;
 
   // Step 2: Build DraftGraph from expanded patch (always)
-  const draftGraph = buildDraftGraph(expandedPatch);
+  const { graph: draftGraph, diagnostics: buildDiagnostics } = buildDraftGraph(expandedPatch);
+  errors.push(
+    ...buildDiagnostics.map((d) => ({
+      kind: `Build/${d.kind}` as const,
+      message: `Required input "${d.portName}" on block "${d.blockId}" is not connected`,
+      blockId: d.blockId,
+      portId: d.portName,
+    })),
+  );
 
   // Step 3: Run fixpoint engine (always)
   const fixpointResult = finalizeNormalizationFixpoint(
@@ -125,7 +133,7 @@ export function compileFrontend(patch: Patch, options?: FrontendOptions): Fronte
   );
 
   // Collect fixpoint diagnostics as errors
-  errors.push(...convertFixpointDiagnostics(fixpointResult.diagnostics));
+  errors.push(...convertFixpointDiagnostics(fixpointResult.diagnostics, fixpointResult.graph));
 
   // If fixpoint didn't converge and no diagnostics explain why, add a generic message
   if (fixpointResult.strict === null && errors.length === 0) {
@@ -187,17 +195,65 @@ function convertExpansionDiagnostic(d: ExpansionDiagnostic): FrontendError {
 
 /**
  * Convert fixpoint diagnostics to FrontendErrors.
+ * Extracts blockId/portId from DraftPortKey fields on solver errors.
  */
-function convertFixpointDiagnostics(diagnostics: readonly unknown[]): FrontendError[] {
+function convertFixpointDiagnostics(diagnostics: readonly unknown[], graph: DraftGraph): FrontendError[] {
+  // Build blockId→type lookup from DraftGraph blocks
+  const blockTypeMap = new Map<string, string>();
+  for (const b of graph.blocks) {
+    blockTypeMap.set(b.id, b.type);
+  }
+
   const result: FrontendError[] = [];
   for (const d of diagnostics) {
     if (typeof d === 'object' && d !== null && 'kind' in d) {
       const kind = (d as { kind: string }).kind;
       const message = 'message' in d ? String((d as { message: string }).message) : String(d);
-      result.push({ kind: `Fixpoint/${kind}`, message });
+
+      // Extract block/port context from DraftPortKey fields
+      const { blockId, portId } = extractPortContext(d);
+
+      result.push({ kind: `Fixpoint/${kind}`, message, blockId, portId });
     }
   }
   return result;
+}
+
+/**
+ * Extract blockId and portId from a fixpoint diagnostic's port key fields.
+ * Handles both `port` (single DraftPortKey) and `ports` (array of DraftPortKeys).
+ */
+function extractPortContext(d: object): { blockId?: string; portId?: string } {
+  // Single port key (payload-unit errors)
+  if ('port' in d && typeof (d as { port: unknown }).port === 'string') {
+    const key = (d as { port: string }).port;
+    return parseDraftPortKey(key);
+  }
+  // Array of port keys (cardinality errors) — use first entry for reference
+  if ('ports' in d && Array.isArray((d as { ports: unknown }).ports)) {
+    const ports = (d as { ports: string[] }).ports;
+    if (ports.length > 0) {
+      return parseDraftPortKey(ports[0]);
+    }
+  }
+  return {};
+}
+
+/**
+ * Parse a DraftPortKey (`${blockId}:${portName}:${'in'|'out'}`) into blockId and portId.
+ * Uses lastIndexOf to handle blockIds that contain colons (e.g. composite expansion IDs).
+ */
+function parseDraftPortKey(key: string): { blockId: string; portId: string } {
+  // Format: blockId:portName:dir — split from the right since blockId may contain ':'
+  const lastColon = key.lastIndexOf(':');
+  if (lastColon < 0) return { blockId: key, portId: '' };
+  const withoutDir = key.slice(0, lastColon);
+  const secondLastColon = withoutDir.lastIndexOf(':');
+  if (secondLastColon < 0) return { blockId: withoutDir, portId: '' };
+  return {
+    blockId: withoutDir.slice(0, secondLastColon),
+    portId: withoutDir.slice(secondLastColon + 1),
+  };
 }
 
 /**

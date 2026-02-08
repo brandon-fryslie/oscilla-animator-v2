@@ -9,11 +9,15 @@
 
 import { compile } from '../compiler';
 import { compileFrontend } from '../compiler/frontend';
+import type { FrontendError } from '../compiler/frontend';
 import { convertFrontendErrorsToDiagnostics } from '../compiler/frontend/frontendDiagnosticConversion';
 import { convertCompileErrorsToDiagnostics } from '../compiler/diagnosticConversion';
+import type { CompileError } from '../compiler/types';
 import { untracked } from 'mobx';
 import { debugSettings } from '../settings/tokens/debug-settings';
 import type { Patch } from '../graph';
+import { blockId as toBlockId } from '../types';
+import type { LogDetail } from '../stores/DiagnosticsStore';
 import {
   createSessionState,
   createRuntimeStateFromSession,
@@ -60,6 +64,24 @@ function setupDebugProbe(state: RuntimeState, patch: Patch, program: any): void 
   debugService.setEdgeToSlotMap(edgeMap, constantValues);
   debugService.setPortToSlotMap(portMap);
   debugService.setUnmappedEdges(unmappedEdges);
+}
+
+function frontendErrorDetails(errors: readonly FrontendError[], patch: Patch): LogDetail[] {
+  return errors.map(e => ({
+    message: e.message,
+    blockId: e.blockId,
+    blockType: e.blockId ? patch.blocks.get(toBlockId(e.blockId))?.type : undefined,
+    portId: e.portId,
+  }));
+}
+
+function backendErrorDetails(errors: readonly CompileError[], patch: Patch): LogDetail[] {
+  return errors.map(e => ({
+    message: e.message,
+    blockId: e.where?.blockId,
+    blockType: e.where?.blockId ? patch.blocks.get(toBlockId(e.where.blockId))?.type : undefined,
+    portId: e.where?.port,
+  }));
 }
 
 export interface CompileOrchestratorState {
@@ -142,7 +164,8 @@ export async function compileAndSwap(deps: CompileOrchestratorDeps, isInitial: b
 
     store.diagnostics.log({
       level: 'error',
-      message: `Compile failed (frontend not ready for backend): ${errorMsg}`,
+      message: `Compile failed (frontend): ${frontendResult.errors.length} error(s)`,
+      details: frontendErrorDetails(frontendResult.errors, patch),
     });
 
     if (isInitial) {
@@ -188,7 +211,8 @@ export async function compileAndSwap(deps: CompileOrchestratorDeps, isInitial: b
 
     store.diagnostics.log({
       level: 'error',
-      message: `Compile failed (backend): ${isInitial ? JSON.stringify(result.errors) : errorMsg}`,
+      message: `Compile failed (backend): ${result.errors.length} error(s)`,
+      details: backendErrorDetails(result.errors, patch),
     });
 
     if (isInitial) {

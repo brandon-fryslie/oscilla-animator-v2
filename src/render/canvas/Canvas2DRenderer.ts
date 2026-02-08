@@ -77,18 +77,13 @@ function rgbaToCSS(color: Uint8ClampedArray, offset: number): string {
 
 
 
+// [LAW:dataflow-not-control-flow] renderFrame is a pure sink — clearing is the caller's responsibility.
 export function renderFrame(
   ctx: CanvasRenderingContext2D,
   frame: RenderFrameIR,
   width: number,
   height: number,
-  skipClear = false
 ): void {
-  if (!skipClear) {
-    ctx.fillStyle = '#000000';
-    ctx.fillRect(0, 0, width, height);
-  }
-
   // Render each operation
   for (const op of frame.ops) {
     if (op.kind === 'drawPathInstances') {
@@ -114,7 +109,10 @@ export function renderDrawPathInstancesOp(
   const { geometry, instances, style } = op;
   const { count, position, size, rotation, scale2 } = instances;
 
-  // Determine rendering mode
+  // [LAW:dataflow-not-control-flow] exception: Canvas API ctx.fill()/ctx.stroke() with transparent
+  // colors still performs GPU rasterization. No identity value exists for "don't draw" — the only
+  // neutral action is not calling the API. This is a Canvas API boundary constraint, not a
+  // control-flow design choice.
   const hasFill = style.fillColor !== undefined && style.fillColor.length > 0;
   const hasStroke = style.strokeColor !== undefined && style.strokeColor.length > 0;
 
@@ -164,15 +162,10 @@ export function renderDrawPathInstancesOp(
     ctx.save();
     ctx.translate(x, y);
 
-    // Apply per-instance rotation if provided
-    if (rotation) {
-      ctx.rotate(rotation[i]);
-    }
-
-    // Apply per-instance anisotropic scale if provided
-    if (scale2) {
-      ctx.scale(scale2[i * 2], scale2[i * 2 + 1]);
-    }
+    // [LAW:dataflow-not-control-flow] rotation and scale2 are always present
+    // (identity values filled by RenderAssembler). No guards needed.
+    ctx.rotate(rotation[i]);
+    ctx.scale(scale2[i * 2], scale2[i * 2 + 1]);
 
     // Calculate instance size
     const instanceSize = typeof size === 'number' ? size : size[i];
@@ -269,15 +262,9 @@ export function renderDrawPrimitiveInstancesOp(
     ctx.save();
     ctx.translate(x, y);
 
-    // Apply per-instance rotation if provided
-    if (rotation) {
-      ctx.rotate(rotation[i]);
-    }
-
-    // Apply per-instance anisotropic scale if provided
-    if (scale2) {
-      ctx.scale(scale2[i * 2], scale2[i * 2 + 1]);
-    }
+    // [LAW:dataflow-not-control-flow] rotation and scale2 are always present
+    ctx.rotate(rotation[i]);
+    ctx.scale(scale2[i * 2], scale2[i * 2 + 1]);
 
     // Calculate instance size
     const instanceSize = typeof size === 'number' ? size : size[i];

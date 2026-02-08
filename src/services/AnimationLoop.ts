@@ -113,7 +113,48 @@ export function createAnimationLoopState(): AnimationLoopState {
 }
 
 /**
- * Execute a single animation frame
+ * Acquire a render frame for this tick.
+ *
+ * [LAW:dataflow-not-control-flow] The frame source varies (normal execution vs debug stepping);
+ * the pipeline that consumes the frame does not. This function encapsulates the only
+ * variability: how the frame is produced.
+ *
+ * @returns The frame to render (null if no frame is available) and execution time.
+ */
+function acquireFrame(
+  tMs: number,
+  deps: AnimationLoopDeps,
+  currentProgram: any,
+  currentState: RuntimeState,
+  arena: RenderBufferArena,
+): { frame: RenderFrameIR | null; execTimeMs: number } {
+  const { store } = deps;
+  const stepDebug = store.stepDebug;
+
+  // Debug mode: frame is produced by user-driven stepping, not the schedule executor
+  if (stepDebug?.active) {
+    // If idle or completed with no active frame, start a new frame
+    if (stepDebug.mode === 'idle' || stepDebug.mode === 'completed') {
+      arena.reset();
+      stepDebug.startFrame(currentProgram, currentState, arena, tMs);
+    }
+    return { frame: stepDebug.lastFrameResult, execTimeMs: 0 };
+  }
+
+  // Normal mode: execute the full schedule
+  arena.reset();
+  const execStart = performance.now();
+  const frame = executeFrame(currentProgram, currentState, arena, tMs);
+  const execTimeMs = performance.now() - execStart;
+  return { frame, execTimeMs };
+}
+
+/**
+ * Execute a single animation frame.
+ *
+ * [LAW:dataflow-not-control-flow] The pipeline (clear, transform, render, metrics, continuity, FPS)
+ * always runs in the same order. Only the frame source varies (via acquireFrame).
+ * Null frame = empty collection (no ops to draw), not control-flow branching.
  */
 export function executeAnimationFrame(
   tMs: number,
@@ -121,14 +162,6 @@ export function executeAnimationFrame(
   state: AnimationLoopState
 ): void {
   const { getCurrentProgram, getCurrentState, getCanvas, getContext, getArena, store, onStatsUpdate } = deps;
-
-  // Step debugger branch: when active, execution is driven by the user
-  // stepping through the schedule. The animation loop keeps running at rAF
-  // rate for rendering, but only advances when the user steps via UI.
-  if (store.stepDebug?.active) {
-    executeAnimationFrameDebug(tMs, deps, state);
-    return;
-  }
 
   const currentProgram = getCurrentProgram();
   const currentState = getCurrentState();
@@ -139,9 +172,6 @@ export function executeAnimationFrame(
   if (!currentProgram || !currentState || !ctx || !canvas || !arena) {
     return;
   }
-
-  // Reset arena for this frame (O(1) - just resets write heads)
-  arena.reset();
 
   // Capture delta BEFORE recordFrameDelta updates prevRafTimestamp
   const prevRaf = currentState.health.prevRafTimestamp;
@@ -165,10 +195,9 @@ export function executeAnimationFrame(
 
   const frameStart = performance.now();
 
-  // Execute frame (camera resolved from program.renderGlobals)
-  const execStart = performance.now();
-  const frame = executeFrame(currentProgram, currentState, arena, tMs);
-  state.execTime = performance.now() - execStart;
+  // Acquire frame — source varies (normal execution vs debug stepping), pipeline does not
+  const { frame, execTimeMs } = acquireFrame(tMs, deps, currentProgram, currentState, arena);
+  state.execTime = execTimeMs;
 
   // Render to canvas with zoom/pan transform from store
   const renderStart = performance.now();
@@ -179,17 +208,19 @@ export function executeAnimationFrame(
   ctx.fillStyle = '#000000';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  // Apply camera transform and draw scene
-  ctx.save();
-  ctx.translate(canvas.width / 2 + pan.x * zoom, canvas.height / 2 + pan.y * zoom);
-  ctx.scale(zoom, zoom);
-  ctx.translate(-canvas.width / 2, -canvas.height / 2);
-  renderFrame(ctx, frame, canvas.width, canvas.height, /* skipClear */ true);
-  ctx.restore();
+  // Render frame if available (null = no ops to draw, not control-flow branching)
+  if (frame) {
+    ctx.save();
+    ctx.translate(canvas.width / 2 + pan.x * zoom, canvas.height / 2 + pan.y * zoom);
+    ctx.scale(zoom, zoom);
+    ctx.translate(-canvas.width / 2, -canvas.height / 2);
+    renderFrame(ctx, frame, canvas.width, canvas.height);
+    ctx.restore();
+  }
   state.renderTime = performance.now() - renderStart;
 
   // Update content bounds in viewport store (for zoom-to-fit feature)
-  const bounds = calculateContentBounds(frame);
+  const bounds = frame ? calculateContentBounds(frame) : null;
   store.viewport.setContentBounds(bounds);
 
   // NOTE: No buffer release needed - arena is reset at frame start (O(1))
@@ -197,7 +228,7 @@ export function executeAnimationFrame(
   // Calculate frame time
   const frameTime = performance.now() - frameStart;
 
-  // Record health metrics
+  // Record health metrics (zeros are valid data in debug mode)
   recordFrameTime(currentState, frameTime);
 
   // Emit health snapshot if throttle interval elapsed
@@ -246,7 +277,9 @@ export function executeAnimationFrame(
     state.fps = Math.round((state.frameCount * 1000) / (now - state.lastFpsUpdate));
 
     // Calculate total elements being rendered
-    const totalElements = frame.ops.reduce((sum: number, op) => sum + op.instances.count, 0);
+    const totalElements = frame
+      ? frame.ops.reduce((sum: number, op) => sum + op.instances.count, 0)
+      : 0;
     const statsText = `FPS: ${state.fps} | Elements: ${totalElements} | ${state.execTime.toFixed(1)}/${state.renderTime.toFixed(1)}ms`;
 
     // Update stats via callback
@@ -259,56 +292,6 @@ export function executeAnimationFrame(
     state.minFrameTime = Infinity;
     state.maxFrameTime = 0;
     state.frameTimeSum = 0;
-  }
-}
-
-/**
- * Debug-mode animation frame handler.
- *
- * When the step debugger is active, the animation loop keeps running at rAF
- * rate for rendering, but execution only advances when the user steps via UI.
- *
- * - If no frame is in progress and mode is idle/completed: starts a new frame
- * - If paused: renders the last completed frame (user is stepping)
- * - If completed: renders the completed frame result
- */
-function executeAnimationFrameDebug(
-  tMs: number,
-  deps: AnimationLoopDeps,
-  _state: AnimationLoopState,
-): void {
-  const { getCurrentProgram, getCurrentState, getCanvas, getContext, getArena, store } = deps;
-  const stepDebug = store.stepDebug;
-
-  const currentProgram = getCurrentProgram();
-  const currentState = getCurrentState();
-  const ctx = getContext();
-  const canvas = getCanvas();
-  const arena = getArena();
-
-  if (!currentProgram || !currentState || !ctx || !canvas || !arena) {
-    return;
-  }
-
-  // If idle or completed with no active frame, start a new frame
-  if (stepDebug.mode === 'idle' || stepDebug.mode === 'completed') {
-    arena.reset();
-    stepDebug.startFrame(currentProgram, currentState, arena, tMs);
-  }
-
-  // Render the last completed frame if available
-  const frame = stepDebug.lastFrameResult;
-  if (frame) {
-    const { zoom, pan } = store.viewport;
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.fillStyle = '#000000';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.save();
-    ctx.translate(canvas.width / 2 + pan.x * zoom, canvas.height / 2 + pan.y * zoom);
-    ctx.scale(zoom, zoom);
-    ctx.translate(-canvas.width / 2, -canvas.height / 2);
-    renderFrame(ctx, frame, canvas.width, canvas.height, true);
-    ctx.restore();
   }
 }
 

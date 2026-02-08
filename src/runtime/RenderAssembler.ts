@@ -156,8 +156,8 @@ export function depthSortAndCompact(
   screenRadius: Float32Array;
   depth: Float32Array;
   color: Uint8ClampedArray;
-  rotation?: Float32Array;
-  scale2?: Float32Array;
+  rotation: Float32Array;
+  scale2: Float32Array;
 } {
   const { screenPosition, screenRadius, depth, visible } = projection;
 
@@ -231,23 +231,30 @@ export function depthSortAndCompact(
     outColor[o + 3] = color[s + 3];
   }
 
-  // Compact rotation if present
-  let compactedRotation: Float32Array | undefined;
+  // [LAW:dataflow-not-control-flow] Always produce rotation and scale2 buffers.
+  // When source buffers are absent, fill with identity values (rotation=0, scale2=[1,1]).
+  // Arena buffers contain stale data from previous frames, so identity fill is required.
+  const compactedRotation = arena.allocF32(visibleCount);
   if (rotation) {
-    compactedRotation = arena.allocF32(visibleCount);
     for (let out = 0; out < visibleCount; out++) {
       compactedRotation[out] = rotation[indices[out]];
     }
+  } else {
+    compactedRotation.fill(0);
   }
 
-  // Compact scale2 if present (stride 2)
-  let compactedScale2: Float32Array | undefined;
+  const compactedScale2 = arena.allocVec2(visibleCount);
   if (scale2) {
-    compactedScale2 = arena.allocVec2(visibleCount);
     for (let out = 0; out < visibleCount; out++) {
       const src = indices[out];
       compactedScale2[out * 2] = scale2[src * 2];
       compactedScale2[out * 2 + 1] = scale2[src * 2 + 1];
+    }
+  } else {
+    // Fill with identity scale [1,1] pairs
+    for (let i = 0; i < visibleCount; i++) {
+      compactedScale2[i * 2] = 1;
+      compactedScale2[i * 2 + 1] = 1;
     }
   }
 
@@ -360,8 +367,8 @@ export function projectAndCompact(
   screenRadius: Float32Array;
   depth: Float32Array;
   color: Uint8ClampedArray;
-  rotation?: Float32Array;
-  scale2?: Float32Array;
+  rotation: Float32Array;
+  scale2: Float32Array;
 } {
   // Step 1: Project
   const projection = projectInstances(worldPositions, worldRadius, count, camera, arena);
@@ -402,8 +409,8 @@ export function compactAndCopy(
   screenRadius: Float32Array;
   depth: Float32Array;
   color: Uint8ClampedArray;
-  rotation?: Float32Array;
-  scale2?: Float32Array;
+  rotation: Float32Array;
+  scale2: Float32Array;
 } {
   // Compact & sort (returns arena views directly)
   return depthSortAndCompact(projection, count, color, arena, rotation, scale2);
@@ -1167,8 +1174,8 @@ function buildInstanceTransforms(
   count: number,
   position: Float32Array,
   size: number | Float32Array,
-  rotation?: Float32Array,
-  scale2?: Float32Array,
+  rotation: Float32Array,
+  scale2: Float32Array,
   depth?: Float32Array
 ): InstanceTransforms {
   return {

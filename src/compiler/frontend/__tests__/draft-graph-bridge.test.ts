@@ -17,7 +17,7 @@ import { BLOCK_DEFS_BY_TYPE } from '../../../blocks/registry';
  */
 function fixpointStrict(patchFn: (b: import('../../../graph/Patch').PatchBuilder) => void) {
   const patch = buildPatch(patchFn);
-  const draftGraph = buildDraftGraph(patch);
+  const { graph: draftGraph } = buildDraftGraph(patch);
   const result = finalizeNormalizationFixpoint(draftGraph, BLOCK_DEFS_BY_TYPE, { maxIterations: 20 });
   if (!result.strict) {
     throw new Error(

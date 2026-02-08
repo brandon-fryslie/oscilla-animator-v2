@@ -43,6 +43,14 @@ export interface FixpointOptions {
 }
 
 // =============================================================================
+// Trace Events
+// =============================================================================
+
+export type TraceEvent =
+  | { readonly kind: 'PlanDefaultSource'; readonly obligationId: string; readonly targetPortKey: string; readonly strategyBlockType: string }
+  | { readonly kind: 'ApplyDefaultSource'; readonly obligationId: string; readonly addedBlocks: readonly string[]; readonly addedEdges: readonly string[] };
+
+// =============================================================================
 // Result
 // =============================================================================
 
@@ -52,6 +60,7 @@ export interface FixpointResult {
   readonly strict: StrictTypedGraph | null;
   readonly diagnostics: readonly unknown[];
   readonly iterations: number;
+  readonly trace?: readonly TraceEvent[];
 }
 
 // =============================================================================
@@ -70,6 +79,8 @@ export function finalizeNormalizationFixpoint(
   options: FixpointOptions,
 ): FixpointResult {
   const diagnostics: unknown[] = [];
+  const trace: TraceEvent[] = options.trace ? [] : [];
+  const tracing = options.trace === true;
   let g = input;
   let lastFacts: TypeFacts = EMPTY_TYPE_FACTS;
 
@@ -87,16 +98,50 @@ export function finalizeNormalizationFixpoint(
     if (added > 0) didMutateGraph = true;
     g = g2;
 
-    // 3) Plan discharge — stub: no plans
+    // 3) Plan discharge
     const plans = planDischarge(g, facts, registry);
+
+    // Trace plan events
+    if (tracing) {
+      for (const plan of plans) {
+        const obl = g.obligations.find((o) => o.id === plan.obligationId);
+        if (obl && plan.role === 'defaultSource') {
+          const portKey = obl.anchor.port
+            ? `${obl.anchor.port.blockId}:${obl.anchor.port.port}`
+            : 'unknown';
+          const strategyBlockType = plan.addBlocks?.[0]?.type
+            ?? plan.addEdges?.[0]?.from.blockId
+            ?? 'unknown';
+          trace.push({
+            kind: 'PlanDefaultSource',
+            obligationId: plan.obligationId,
+            targetPortKey: portKey,
+            strategyBlockType,
+          });
+        }
+      }
+    }
 
     // 4) Apply — stop when no plans AND no new obligations were added
     if (plans.length === 0 && !didMutateGraph) {
       const strict = tryFinalizeStrict(g, facts, collectPorts);
-      return { graph: g, facts, strict, diagnostics, iterations: i + 1 };
+      return { graph: g, facts, strict, diagnostics, iterations: i + 1, ...(tracing ? { trace } : {}) };
     }
 
     if (plans.length > 0) {
+      // Trace apply events
+      if (tracing) {
+        for (const plan of plans) {
+          if (plan.role === 'defaultSource') {
+            trace.push({
+              kind: 'ApplyDefaultSource',
+              obligationId: plan.obligationId,
+              addedBlocks: (plan.addBlocks ?? []).map((b) => b.id),
+              addedEdges: (plan.addEdges ?? []).map((e) => e.id),
+            });
+          }
+        }
+      }
       g = applyAllPlans(g, plans);
     }
   }
@@ -107,7 +152,7 @@ export function finalizeNormalizationFixpoint(
     message: `Fixpoint did not converge after ${options.maxIterations} iterations`,
   });
 
-  return { graph: g, facts: lastFacts, strict: null, diagnostics, iterations: options.maxIterations };
+  return { graph: g, facts: lastFacts, strict: null, diagnostics, iterations: options.maxIterations, ...(tracing ? { trace } : {}) };
 }
 
 // =============================================================================

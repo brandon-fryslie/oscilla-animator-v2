@@ -18,7 +18,7 @@ describe('finalizeNormalizationFixpoint (skeleton)', () => {
       // empty
     });
 
-    const g = buildDraftGraph(patch);
+    const { graph: g } = buildDraftGraph(patch);
     const result = finalizeNormalizationFixpoint(g, BLOCK_DEFS_BY_TYPE, {
       maxIterations: 10,
     });
@@ -34,7 +34,7 @@ describe('finalizeNormalizationFixpoint (skeleton)', () => {
       b.addBlock('Add');
     });
 
-    const g = buildDraftGraph(patch);
+    const { graph: g } = buildDraftGraph(patch);
     const result = finalizeNormalizationFixpoint(g, BLOCK_DEFS_BY_TYPE, {
       maxIterations: 10,
     });
@@ -59,7 +59,7 @@ describe('finalizeNormalizationFixpoint (skeleton)', () => {
     // With the stub solver, this should terminate immediately
     // but we test that the limit mechanism works
     const patch = buildPatch(() => {});
-    const g = buildDraftGraph(patch);
+    const { graph: g } = buildDraftGraph(patch);
 
     const result = finalizeNormalizationFixpoint(g, BLOCK_DEFS_BY_TYPE, {
       maxIterations: 1,
@@ -70,7 +70,7 @@ describe('finalizeNormalizationFixpoint (skeleton)', () => {
 
   it('empty graph produces empty result', () => {
     const patch = buildPatch(() => {});
-    const g = buildDraftGraph(patch);
+    const { graph: g } = buildDraftGraph(patch);
 
     const result = finalizeNormalizationFixpoint(g, BLOCK_DEFS_BY_TYPE, {
       maxIterations: 10,
@@ -88,7 +88,7 @@ describe('finalizeNormalizationFixpoint (skeleton)', () => {
       b.wire(c, 'out', add, 'a');
     });
 
-    const g = buildDraftGraph(patch);
+    const { graph: g } = buildDraftGraph(patch);
     const result = finalizeNormalizationFixpoint(g, BLOCK_DEFS_BY_TYPE, {
       maxIterations: 10,
     });
@@ -113,7 +113,7 @@ describe('finalizeNormalizationFixpoint (skeleton)', () => {
       b.addBlock('Add');
     });
 
-    const g = buildDraftGraph(patch);
+    const { graph: g } = buildDraftGraph(patch);
     const result = finalizeNormalizationFixpoint(g, BLOCK_DEFS_BY_TYPE, {
       maxIterations: 10,
     });
@@ -133,7 +133,7 @@ describe('finalizeNormalizationFixpoint (skeleton)', () => {
       b.wire(c2, 'out', add, 'b');
     });
 
-    const g = buildDraftGraph(patch);
+    const { graph: g } = buildDraftGraph(patch);
     const result = finalizeNormalizationFixpoint(g, BLOCK_DEFS_BY_TYPE, {
       maxIterations: 10,
     });
@@ -153,7 +153,7 @@ describe('finalizeNormalizationFixpoint (type solving)', () => {
       b.wire(c2, 'out', add, 'b');
     });
 
-    const g = buildDraftGraph(patch);
+    const { graph: g } = buildDraftGraph(patch);
     const result = finalizeNormalizationFixpoint(g, BLOCK_DEFS_BY_TYPE, {
       maxIterations: 10,
     });
@@ -182,7 +182,7 @@ describe('finalizeNormalizationFixpoint (type solving)', () => {
       b.addBlock('Const');
     });
 
-    const g = buildDraftGraph(patch);
+    const { graph: g } = buildDraftGraph(patch);
     const result = finalizeNormalizationFixpoint(g, BLOCK_DEFS_BY_TYPE, {
       maxIterations: 10,
     });
@@ -207,7 +207,7 @@ describe('finalizeNormalizationFixpoint (type solving)', () => {
       b.wire(c, 'out', add, 'a');
     });
 
-    const g = buildDraftGraph(patch);
+    const { graph: g } = buildDraftGraph(patch);
     const result = finalizeNormalizationFixpoint(g, BLOCK_DEFS_BY_TYPE, {
       maxIterations: 10,
     });
@@ -236,7 +236,7 @@ describe('finalizeNormalizationFixpoint (type solving)', () => {
       b.wire(c, 'out', add, 'a');
     });
 
-    const g = buildDraftGraph(patch);
+    const { graph: g } = buildDraftGraph(patch);
     const result = finalizeNormalizationFixpoint(g, BLOCK_DEFS_BY_TYPE, {
       maxIterations: 10,
     });
@@ -261,7 +261,7 @@ describe('finalizeNormalizationFixpoint (cardinality solving)', () => {
       b.wire(c2, 'out', add, 'b');
     });
 
-    const g = buildDraftGraph(patch);
+    const { graph: g } = buildDraftGraph(patch);
     const result = finalizeNormalizationFixpoint(g, BLOCK_DEFS_BY_TYPE, {
       maxIterations: 10,
     });
@@ -285,7 +285,7 @@ describe('finalizeNormalizationFixpoint (cardinality solving)', () => {
       b.wire(arr, 'elements', add, 'a');
     });
 
-    const g = buildDraftGraph(patch);
+    const { graph: g } = buildDraftGraph(patch);
     const result = finalizeNormalizationFixpoint(g, BLOCK_DEFS_BY_TYPE, {
       maxIterations: 10,
     });
@@ -309,7 +309,7 @@ describe('finalizeNormalizationFixpoint (cardinality solving)', () => {
       b.addBlock('Array');
     });
 
-    const g = buildDraftGraph(patch);
+    const { graph: g } = buildDraftGraph(patch);
     const result = finalizeNormalizationFixpoint(g, BLOCK_DEFS_BY_TYPE, {
       maxIterations: 10,
     });
@@ -345,7 +345,7 @@ describe('finalizeNormalizationFixpoint (cardinality solving)', () => {
       b.wire(c2, 'out', add, 'b');
     });
 
-    const g = buildDraftGraph(patch);
+    const { graph: g } = buildDraftGraph(patch);
     const result = finalizeNormalizationFixpoint(g, BLOCK_DEFS_BY_TYPE, {
       maxIterations: 10,
     });
@@ -367,7 +367,7 @@ describe('finalizeNormalizationFixpoint (cardinality solving)', () => {
       b.wire(c2, 'out', add, 'b');
     });
 
-    const g = buildDraftGraph(patch);
+    const { graph: g } = buildDraftGraph(patch);
     const result = finalizeNormalizationFixpoint(g, BLOCK_DEFS_BY_TYPE, {
       maxIterations: 10,
     });
@@ -392,7 +392,7 @@ describe('finalizeNormalizationFixpoint (adapter insertion)', () => {
       b.wire(c2, 'out', add, 'b');
     });
 
-    const g = buildDraftGraph(patch);
+    const { graph: g } = buildDraftGraph(patch);
     const result = finalizeNormalizationFixpoint(g, BLOCK_DEFS_BY_TYPE, {
       maxIterations: 10,
     });
@@ -414,7 +414,7 @@ describe('finalizeNormalizationFixpoint (adapter insertion)', () => {
       b.wire(c, 'out', add, 'a');
     });
 
-    const g = buildDraftGraph(patch);
+    const { graph: g } = buildDraftGraph(patch);
     const result = finalizeNormalizationFixpoint(g, BLOCK_DEFS_BY_TYPE, {
       maxIterations: 10,
     });
@@ -438,7 +438,7 @@ describe('finalizeNormalizationFixpoint (payload auto-derivation)', () => {
       b.wire(c2, 'out', add, 'b');
     });
 
-    const g = buildDraftGraph(patch);
+    const { graph: g } = buildDraftGraph(patch);
     const result = finalizeNormalizationFixpoint(g, BLOCK_DEFS_BY_TYPE, {
       maxIterations: 10,
     });
@@ -457,7 +457,7 @@ describe('finalizeNormalizationFixpoint (payload auto-derivation)', () => {
       b.wire(c, 'out', sin, 'input');
     });
 
-    const g = buildDraftGraph(patch);
+    const { graph: g } = buildDraftGraph(patch);
     const result = finalizeNormalizationFixpoint(g, BLOCK_DEFS_BY_TYPE, {
       maxIterations: 10,
     });
@@ -478,7 +478,7 @@ describe('finalizeNormalizationFixpoint (payload auto-derivation)', () => {
       b.addBlock('Add');
     });
 
-    const g = buildDraftGraph(patch);
+    const { graph: g } = buildDraftGraph(patch);
     const result = finalizeNormalizationFixpoint(g, BLOCK_DEFS_BY_TYPE, {
       maxIterations: 10,
     });

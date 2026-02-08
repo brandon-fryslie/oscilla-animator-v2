@@ -381,6 +381,14 @@ export interface InputDef {
   readonly hidden?: boolean;         // Hide from UI (normalizer params)
 
   /**
+   * Defaulting policy — controls how unconnected ports are handled.
+   *
+   * - 'allowed' (default): port gets a missingInputSource obligation when unconnected
+   * - 'forbidden': port does NOT get an obligation; emits MissingRequiredInput diagnostic
+   */
+  readonly defaulting?: 'allowed' | 'forbidden';
+
+  /**
    * Port semantic — declares the compile-time role of this input.
    *
    * - 'instanceCount': This port controls the instance count of a cardinality-transform block.

@@ -15,7 +15,7 @@ describe('extractConstraints', () => {
     const patch = buildPatch((b) => {
       b.addBlock('Add');
     });
-    const g = buildDraftGraph(patch);
+    const { graph: g } = buildDraftGraph(patch);
     const constraints = extractConstraints(g, BLOCK_DEFS_BY_TYPE);
 
     // Add has inputs a, b and output out
@@ -41,7 +41,7 @@ describe('extractConstraints', () => {
       const add = b.addBlock('Add');
       b.wire(c, 'out', add, 'a');
     });
-    const g = buildDraftGraph(patch);
+    const { graph: g } = buildDraftGraph(patch);
     const constraints = extractConstraints(g, BLOCK_DEFS_BY_TYPE);
 
     // Should have at least one edge constraint (payloadEq or unitEq with edge origin)
@@ -60,7 +60,7 @@ describe('extractConstraints', () => {
     const patch = buildPatch((b) => {
       b.addBlock('Broadcast');
     });
-    const g = buildDraftGraph(patch);
+    const { graph: g } = buildDraftGraph(patch);
     const constraints = extractConstraints(g, BLOCK_DEFS_BY_TYPE);
 
     // Broadcast has signal and field ports sharing payload/unit vars
@@ -76,7 +76,7 @@ describe('extractConstraints', () => {
     const patch = buildPatch((b) => {
       b.addBlock('Const');
     });
-    const g = buildDraftGraph(patch);
+    const { graph: g } = buildDraftGraph(patch);
     const constraints = extractConstraints(g, BLOCK_DEFS_BY_TYPE);
 
     // Const has concrete types on its output
@@ -92,7 +92,7 @@ describe('extractConstraints', () => {
       const add = b.addBlock('Add');
       b.wire(c, 'out', add, 'a');
     });
-    const g = buildDraftGraph(patch);
+    const { graph: g } = buildDraftGraph(patch);
 
     const c1 = extractConstraints(g, BLOCK_DEFS_BY_TYPE);
     const c2 = extractConstraints(g, BLOCK_DEFS_BY_TYPE);
@@ -110,7 +110,7 @@ describe('extractConstraints', () => {
 
   it('empty graph produces empty constraints', () => {
     const patch = buildPatch(() => {});
-    const g = buildDraftGraph(patch);
+    const { graph: g } = buildDraftGraph(patch);
     const constraints = extractConstraints(g, BLOCK_DEFS_BY_TYPE);
 
     expect(constraints.portBaseTypes.size).toBe(0);
@@ -123,7 +123,7 @@ describe('extractConstraints', () => {
     const patch = buildPatch((b) => {
       b.addBlock('Add');
     });
-    const g = buildDraftGraph(patch);
+    const { graph: g } = buildDraftGraph(patch);
     const constraints = extractConstraints(g, BLOCK_DEFS_BY_TYPE);
 
     // All port base types should have payload, unit, and extent
@@ -138,7 +138,7 @@ describe('extractConstraints', () => {
     const patch = buildPatch((b) => {
       b.addBlock('Add');
     });
-    const g = buildDraftGraph(patch);
+    const { graph: g } = buildDraftGraph(patch);
     const constraints = extractConstraints(g, BLOCK_DEFS_BY_TYPE);
 
     // Add has cardinality metadata (preserve mode), should generate constraints
@@ -150,7 +150,7 @@ describe('extractConstraints', () => {
     const patch = buildPatch((b) => {
       b.addBlock('Const');
     });
-    const g = buildDraftGraph(patch);
+    const { graph: g } = buildDraftGraph(patch);
     const constraints = extractConstraints(g, BLOCK_DEFS_BY_TYPE);
 
     // Const has a 'value' input with exposedAsPort: false — should not appear in portBaseTypes

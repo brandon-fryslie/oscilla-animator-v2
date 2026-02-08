@@ -20,6 +20,7 @@ import React, { useCallback, useState } from 'react';
 import { Handle, Position, type NodeProps } from 'reactflow';
 import { observer } from 'mobx-react-lite';
 import { useGraphEditor } from './GraphEditorContext';
+import { useStores } from '../../stores';
 import type { UnifiedNodeData, PortData } from './nodeDataTransform';
 import type { DefaultSource, PortId, BlockId } from '../../types';
 import { ParameterControl, DefaultSourceControl } from '../reactFlowEditor/ParameterControls';
@@ -97,6 +98,38 @@ function getPortHighlightStyle(
   }
 }
 
+/**
+ * Port diagnostic state.
+ * Priority: error > warning > selected > none
+ */
+type PortState = 'error' | 'warning' | 'selected' | 'none';
+
+/**
+ * Get port diagnostic/selection state for styling.
+ * Checks diagnostics store for errors/warnings, then selection store.
+ */
+function getPortState(
+  blockId: BlockId,
+  portId: PortId,
+  diagnosticsStore: ReturnType<typeof useStores>['diagnostics'],
+  selectedPort: { blockId: BlockId; portId: PortId } | null
+): PortState {
+  // Check diagnostics (error takes priority over warning)
+  const diagnostics = diagnosticsStore.getDiagnosticsForPort(blockId, portId);
+  const hasError = diagnostics.some(d => d.severity === 'error' || d.severity === 'fatal');
+  const hasWarning = diagnostics.some(d => d.severity === 'warn');
+
+  if (hasError) return 'error';
+  if (hasWarning) return 'warning';
+
+  // Check selection
+  if (selectedPort?.blockId === blockId && selectedPort?.portId === portId) {
+    return 'selected';
+  }
+
+  return 'none';
+}
+
 /** State for hovered port popover */
 interface HoveredPortState {
   port: PortData;
@@ -109,6 +142,7 @@ interface HoveredPortState {
  */
 export const UnifiedNode: React.FC<NodeProps<UnifiedNodeData>> = observer(({ data }) => {
   const { adapter, enableParamEditing, selection, portHighlight } = useGraphEditor();
+  const { diagnostics } = useStores();
 
   // Track hovered port for popover
   const [hoveredPortState, setHoveredPortState] = useState<HoveredPortState | null>(null);
@@ -192,6 +226,37 @@ export const UnifiedNode: React.FC<NodeProps<UnifiedNodeData>> = observer(({ dat
           portHighlight
         );
 
+        // Get port state (error, warning, selected, none)
+        const portState = getPortState(
+          data.blockId as BlockId,
+          input.id as PortId,
+          diagnostics,
+          selectedPort
+        );
+
+        // Map state to CSS animation class
+        const animationClass =
+          portState === 'error'
+            ? 'port-error'
+            : portState === 'warning'
+              ? 'port-warning'
+              : portState === 'selected'
+                ? 'port-selected'
+                : undefined;
+
+        // Compute boxShadow based on state (error/warning override compatibility)
+        let boxShadow: string;
+        if (portState === 'error' || portState === 'warning') {
+          // Animation handles glow — no inline boxShadow override
+          boxShadow = 'none';
+        } else if (isSelected) {
+          boxShadow = `0 0 12px 3px ${input.typeColor}80, inset 0 0 4px ${input.typeColor}`;
+        } else if (input.isConnected) {
+          boxShadow = `0 0 6px 1px ${input.typeColor}40`;
+        } else {
+          boxShadow = 'none';
+        }
+
         return (
           <React.Fragment key={`input-${input.id}`}>
             {/* Port Label */}
@@ -221,6 +286,7 @@ export const UnifiedNode: React.FC<NodeProps<UnifiedNodeData>> = observer(({ dat
               onContextMenu={(e) => handlePortContextMenu(input.id as PortId, true, e)}
               onMouseEnter={(e) => handlePortMouseEnter(input, true, e)}
               onMouseLeave={handlePortMouseLeave}
+              className={animationClass}
               style={{
                 top: `${topPercent}%`,
                 background: input.isConnected
@@ -230,13 +296,9 @@ export const UnifiedNode: React.FC<NodeProps<UnifiedNodeData>> = observer(({ dat
                 height: '14px',
                 border: `2px solid ${input.typeColor}`,
                 borderRadius: '50%',
-                boxShadow: isSelected
-                  ? `0 0 12px 3px ${input.typeColor}80, inset 0 0 4px ${input.typeColor}`
-                  : input.isConnected
-                    ? `0 0 6px 1px ${input.typeColor}40`
-                    : 'none',
+                boxShadow,
                 cursor: 'pointer',
-                transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                transition: animationClass ? 'none' : 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
                 ...highlightStyle,
               }}
             />

@@ -249,12 +249,20 @@ export interface JankEvent {
 
 export type LogLevel = 'info' | 'warn' | 'error' | 'debug';
 
+export interface LogDetail {
+  readonly message: string;
+  readonly blockId?: string;
+  readonly blockType?: string;
+  readonly portId?: string;
+}
+
 export interface LogEntry {
   id: string;
   level: LogLevel;
   message: string;
   timestamp: number;
   data?: unknown;
+  details?: LogDetail[];
 }
 
 // =============================================================================

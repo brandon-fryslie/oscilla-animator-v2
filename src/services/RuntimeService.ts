@@ -90,11 +90,10 @@ export class RuntimeService {
         true
       );
     } catch (err) {
+      // compileAndSwap already logs structured errors to diagnostics before throwing.
+      // Only console.error here for developer debugging — no duplicate log entry.
+      // [LAW:one-source-of-truth] Single structured log in CompileOrchestrator.
       console.error('Initial compilation failed:', err);
-      store.diagnostics.log({
-        level: 'error',
-        message: `Initial compilation failed: ${err instanceof Error ? err.message : err}`,
-      });
     }
 
     // Re-render App to update externalWriteBus prop now that runtime state exists

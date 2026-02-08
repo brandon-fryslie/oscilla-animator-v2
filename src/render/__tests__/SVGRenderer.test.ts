@@ -90,6 +90,8 @@ describe('SVGRenderer', () => {
           count: 2,
           position: new Float32Array([0.25, 0.5, 0.75, 0.5]),
           size: 0.1,
+          rotation: new Float32Array([0, 0]),
+          scale2: new Float32Array([1, 1, 1, 1]),
         },
         style: {
           fillColor: new Uint8ClampedArray([255, 0, 0, 255]),

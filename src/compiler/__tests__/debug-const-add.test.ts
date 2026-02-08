@@ -99,7 +99,7 @@ describe('Debug fixpoint harness', () => {
     });
 
     const expansion = expandComposites(patch);
-    const draftGraph = buildDraftGraph(expansion.patch);
+    const { graph: draftGraph } = buildDraftGraph(expansion.patch);
 
     // Run fixpoint to get the expanded graph
     const fixpoint = finalizeNormalizationFixpoint(draftGraph, BLOCK_DEFS_BY_TYPE, { maxIterations: 20 });

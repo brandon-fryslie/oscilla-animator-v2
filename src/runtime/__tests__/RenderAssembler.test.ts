@@ -265,8 +265,9 @@ describe('RenderAssembler', () => {
       }
       expect(op.instances.size).toBeInstanceOf(Float32Array);
       expect((op.instances.size as Float32Array).length).toBe(2); // 2 instances
-      expect(op.instances.rotation).toBeUndefined();
-      expect(op.instances.scale2).toBeUndefined();
+      // rotation and scale2 are always present (identity values when not specified)
+      expect(op.instances.rotation).toBeInstanceOf(Float32Array);
+      expect(op.instances.scale2).toBeInstanceOf(Float32Array);
 
       // Validate style
       expect(op.style.fillColor).toEqual(colorBuffer);
