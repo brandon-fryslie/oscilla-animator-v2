@@ -26,6 +26,7 @@ export type ObligationKind =
   | 'missingInputSource'
   | 'needsAdapter'
   | 'needsCardinalityAdapter'
+  | 'needsCycleBreak'
   | 'needsLaneAlignment'
   | 'needsDomainElaboration'
   | 'needsPayloadAnchor';

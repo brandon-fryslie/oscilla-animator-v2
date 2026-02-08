@@ -33,8 +33,10 @@ import { defaultSourcePolicyV1 } from './policies/default-source-policy';
 import { adapterPolicyV1 } from './policies/adapter-policy';
 import { payloadAnchorPolicyV1 } from './policies/payload-anchor-policy';
 import { cardinalityAdapterPolicyV1 } from './policies/cardinality-adapter-policy';
+import { cycleBreakPolicyV1 } from './policies/cycle-break-policy';
 import { createDerivedObligations } from './create-derived-obligations';
 import { createCardinalityAdapterObligations } from './create-cardinality-obligations';
+import { createCycleBreakObligations } from './create-cycle-break-obligations';
 
 // =============================================================================
 // Options
@@ -95,10 +97,11 @@ export function finalizeNormalizationFixpoint(
     lastFacts = facts;
     diagnostics.push(...solveDiagnostics);
 
-    // 2) Create derived obligations (pure) — adapter + cardinality adapter obligations
+    // 2) Create derived obligations (pure) — adapter + cardinality adapter + cycle break obligations
     const derivedObs = createDerivedObligations(g, facts);
     const cardObs = createCardinalityAdapterObligations(g, cardinalityConflicts);
-    const { graph: g2, added } = addObligationsIfMissing(g, [...derivedObs, ...cardObs]);
+    const cycleObs = createCycleBreakObligations(g, registry);
+    const { graph: g2, added } = addObligationsIfMissing(g, [...derivedObs, ...cardObs, ...cycleObs]);
     if (added > 0) didMutateGraph = true;
     g = g2;
 
@@ -445,6 +448,8 @@ function callPolicy(obligation: Obligation, ctx: PolicyContext): PolicyResult | 
       return payloadAnchorPolicyV1.plan(obligation, ctx);
     case 'cardinalityAdapters.v1':
       return cardinalityAdapterPolicyV1.plan(obligation, ctx);
+    case 'cycleBreak.v1':
+      return cycleBreakPolicyV1.plan(obligation, ctx);
     default:
       return null;
   }

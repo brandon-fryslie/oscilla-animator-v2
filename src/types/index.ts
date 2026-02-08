@@ -331,6 +331,7 @@ export type DerivedBlockMeta =
   | { readonly kind: "wireState";     readonly target: { readonly kind: "wire"; readonly wire: WireId } }
   | { readonly kind: "lens";          readonly target: { readonly kind: "node"; readonly node: NodeRef } }
   | { readonly kind: "adapter";       readonly edgeId: string; readonly adapterType: string }
+  | { readonly kind: "cycleBreak";    readonly edgeId: string }
   | { readonly kind: "compositeExpansion"; readonly compositeDefId: string; readonly compositeInstanceId: string; readonly internalBlockId: string };
 
 /**
