@@ -28,7 +28,7 @@ import { getBlockCardinalityMetadata } from '../../blocks/registry';
 import type { InferenceCanonicalType } from '../../core/inference-types';
 import { isPayloadVar, isUnitVar, isConcretePayload, isConcreteUnit } from '../../core/inference-types';
 import type { PayloadType, UnitType, CardinalityValue, Axis } from '../../core/canonical-types';
-import { axisVar, axisInst, isAxisInst, isAxisVar, instanceRef } from '../../core/canonical-types';
+import { axisVar, axisInst, isAxisInst, isAxisVar, instanceRef, isMany } from '../../core/canonical-types';
 import { cardinalityVarId, instanceVarId, type CardinalityVarId } from '../../core/ids';
 import type { CardinalityConstraint, InstanceTerm } from './cardinality/solve';
 import type { PayloadUnitConstraint, ConstraintOrigin } from './payload-unit/solve';
@@ -506,21 +506,43 @@ function rewriteFieldOnly(
   constraints: CardinalityConstraint[],
   blockPorts: DraftPortKey[],
 ): void {
+  // [LAW:one-source-of-truth] Capture original cardinality BEFORE rewritePortToVar overwrites it
+  const originalCardinality = new Map<DraftPortKey, CardinalityValue>();
   for (const key of blockPorts) {
+    const type = portBaseTypes.get(key);
+    if (type && isAxisInst(type.extent.cardinality)) {
+      originalCardinality.set(key, type.extent.cardinality.value);
+    }
+  }
+
+  // Field-typed ports for zipBroadcast (exclude signal-typed ports)
+  const fieldPorts: DraftPortKey[] = [];
+
+  for (const key of blockPorts) {
+    const origCard = originalCardinality.get(key);
+    const isFieldTyped = origCard && isMany(origCard);
+
     rewritePortToVar(key, block.id, portBaseTypes);
     const dir = key.endsWith(':out') ? 'out' : 'in';
 
-    if (dir === 'in') {
-      // Extract portName from key (format: blockId:portName:dir)
+    if (dir === 'in' && isFieldTyped) {
+      // Only emit forceMany for field-typed inputs (cardinality: many)
+      // Signal-typed inputs (cardinality: one) keep their var and default to one
       const parts = key.split(':');
       const portName = parts.slice(1, -1).join(':');
       const instVar: InstanceTerm = { kind: 'var', id: instanceVarId(`fieldOnly:${block.id}:${portName}`) };
       constraints.push({ kind: 'forceMany', port: key, instance: instVar, origin: { kind: 'blockRule', blockId: block.id, blockType: block.type, rule: 'fieldOnly.forceMany' } });
+      fieldPorts.push(key);
+    } else if (dir === 'out' && isFieldTyped) {
+      // Outputs with field typing also go in the zipBroadcast group
+      fieldPorts.push(key);
     }
+    // Signal-typed ports (both in and out) are excluded from zipBroadcast
   }
 
-  if (meta.broadcastPolicy === 'allowZipSig' && blockPorts.length > 0) {
-    constraints.push({ kind: 'zipBroadcast', ports: [...blockPorts].sort(), origin: { kind: 'blockRule', blockId: block.id, blockType: block.type, rule: 'fieldOnly.allowZipSig.zipBroadcast' } });
+  // Only include field-typed ports in zipBroadcast
+  if (meta.broadcastPolicy === 'allowZipSig' && fieldPorts.length > 0) {
+    constraints.push({ kind: 'zipBroadcast', ports: [...fieldPorts].sort(), origin: { kind: 'blockRule', blockId: block.id, blockType: block.type, rule: 'fieldOnly.allowZipSig.zipBroadcast' } });
   }
 }
 

@@ -199,6 +199,7 @@ function convertExpansionDiagnostic(d: ExpansionDiagnostic): FrontendError {
  */
 const INFORMATIONAL_DIAGNOSTIC_KINDS = new Set([
   'CardinalityAdapterInserted',
+  'CheaterAdapterUsed',
 ]);
 
 /**

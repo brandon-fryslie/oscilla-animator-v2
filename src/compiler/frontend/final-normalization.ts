@@ -88,6 +88,11 @@ export function finalizeNormalizationFixpoint(
   const tracing = options.trace === true;
   let g = input;
   let lastFacts: TypeFacts = EMPTY_TYPE_FACTS;
+  // [LAW:dataflow-not-control-flow] Track last iteration's solver diagnostics separately.
+  // Earlier iterations may report conflicts that the fixpoint resolves structurally
+  // (e.g., adapter insertion resolves ConflictingUnits). Only the final iteration's
+  // solver diagnostics reflect the converged state.
+  let lastSolveDiagnostics: unknown[] = [];
 
   for (let i = 0; i < options.maxIterations; i++) {
     let didMutateGraph = false;
@@ -95,7 +100,7 @@ export function finalizeNormalizationFixpoint(
     // 1) Solve (pure) — extract constraints + run payload/unit solver + compute TypeFacts
     const { facts, solveDiagnostics, cardinalityConflicts, collectPorts } = solveAndComputeFacts(g, registry);
     lastFacts = facts;
-    diagnostics.push(...solveDiagnostics);
+    lastSolveDiagnostics = solveDiagnostics;
 
     // 2) Create derived obligations (pure) — adapter + cardinality adapter + cycle break obligations
     const derivedObs = createDerivedObligations(g, facts);
@@ -131,6 +136,8 @@ export function finalizeNormalizationFixpoint(
 
     // 4) Apply — stop when no plans AND no new obligations were added
     if (plans.length === 0 && !didMutateGraph) {
+      // Push final iteration's solver diagnostics (converged state)
+      diagnostics.push(...lastSolveDiagnostics);
       // Emit remaining cardinality conflicts as diagnostics (could not resolve structurally)
       for (const conflict of cardinalityConflicts) {
         diagnostics.push({
@@ -171,7 +178,8 @@ export function finalizeNormalizationFixpoint(
     }
   }
 
-  // Non-convergence
+  // Non-convergence — push last iteration's solver diagnostics before reporting
+  diagnostics.push(...lastSolveDiagnostics);
   diagnostics.push({
     kind: 'NonConvergence',
     message: `Fixpoint did not converge after ${options.maxIterations} iterations`,

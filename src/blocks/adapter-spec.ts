@@ -13,7 +13,7 @@
 
 import type { UnitType, Extent, ValueContract } from '../core/canonical-types';
 import type { InferenceCanonicalType, InferencePayloadType, InferenceUnitType } from '../core/inference-types';
-import { unitsEqual, extentsEqual, contractsEqual } from '../core/canonical-types';
+import { unitsEqual, extentsEqual, contractsEqual, payloadsEqual } from '../core/canonical-types';
 import { requireInst } from '../core/canonical-types/axis';
 import {
   cardinalitiesEqual,
@@ -345,6 +345,21 @@ export function findAdapter(from: InferenceCanonicalType, to: InferenceCanonical
           continue;
         }
       }
+      // For rules with 'same' payload, require actual payloads to match
+      // (adapters that preserve payload must not match when payloads differ)
+      if (rule.to.payload === 'same') {
+        const fromPay = fromPattern.payload;
+        const toPay = toPattern.payload;
+        if (fromPay !== 'any' && toPay !== 'any' && fromPay !== 'same' && toPay !== 'same') {
+          if (typeof fromPay === 'object' && typeof toPay === 'object') {
+            if (fromPay.kind !== 'var' && toPay.kind !== 'var') {
+              if (!payloadsEqual(fromPay, toPay)) {
+                continue;
+              }
+            }
+          }
+        }
+      }
       // For rules with 'same' or 'any' unit, require actual units to match
       // (adapters that preserve units must not match when units differ)
       if (rule.to.unit === 'same' || (rule.from.unit === 'any' && rule.to.unit === 'any')) {
@@ -487,6 +502,19 @@ function isRuleOutputCompatibleWithDest(
   // For rules with 'any' payload on both sides, require actual payloads to match
   if (rule.from.payload === 'any' && rule.to.payload === 'any') {
     if (fromPattern.payload !== toPattern.payload) return false;
+  }
+
+  // For rules with 'same' payload, require actual payloads to match
+  if (rule.to.payload === 'same') {
+    const fromPay = fromPattern.payload;
+    const toPay = toPattern.payload;
+    if (fromPay !== 'any' && toPay !== 'any' && fromPay !== 'same' && toPay !== 'same') {
+      if (typeof fromPay === 'object' && typeof toPay === 'object') {
+        if (fromPay.kind !== 'var' && toPay.kind !== 'var') {
+          if (!payloadsEqual(fromPay, toPay)) return false;
+        }
+      }
+    }
   }
 
   // For rules with 'same'/'any' unit, require actual units to match

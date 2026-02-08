@@ -123,32 +123,44 @@ class UnionFind<T> {
     return this.findRoot(p.id);
   }
 
-  assign(id: UFNodeId, value: T, eq: (a: T, b: T) => boolean): { ok: true } | { ok: false; conflict: [T, T] } {
+  assign(id: UFNodeId, value: T, merge: (a: T, b: T) => T | null): { ok: true } | { ok: false; conflict: [T, T] } {
     const r = this.find(id);
+    const root = this.findRoot(id);
     if (r.tag === 'value') {
-      if (eq(r.value, value)) return { ok: true };
-      return { ok: false, conflict: [r.value, value] };
+      const merged = merge(r.value, value);
+      if (merged === null) return { ok: false, conflict: [r.value, value] };
+      // [LAW:one-source-of-truth] Update stored value to merged result
+      this.parent.set(root, { tag: 'value', value: merged });
+      return { ok: true };
     }
     this.parent.set(r.id, { tag: 'value', value });
     return { ok: true };
   }
 
-  union(a: UFNodeId, b: UFNodeId, eq: (a: T, b: T) => boolean): { ok: true; winner: UFNodeId } | { ok: false; conflict: [T, T] } {
+  union(a: UFNodeId, b: UFNodeId, merge: (a: T, b: T) => T | null): { ok: true; winner: UFNodeId } | { ok: false; conflict: [T, T] } {
     const ra = this.find(a);
     const rb = this.find(b);
+    const rootA = this.findRoot(a);
+    const rootB = this.findRoot(b);
 
     if (ra.tag === 'value' && rb.tag === 'value') {
-      if (eq(ra.value, rb.value)) return { ok: true, winner: this.findRoot(a) };
-      return { ok: false, conflict: [ra.value, rb.value] };
+      const merged = merge(ra.value, rb.value);
+      if (merged === null) return { ok: false, conflict: [ra.value, rb.value] };
+      // [LAW:one-source-of-truth] Store merged value in winner node
+      if (rootA !== rootB) {
+        this.parent.set(rootB, { tag: 'parent', id: rootA });
+      }
+      this.parent.set(rootA, { tag: 'value', value: merged });
+      return { ok: true, winner: rootA };
     }
 
     if (ra.tag === 'value' && rb.tag === 'parent') {
       this.parent.set(rb.id, ra);
-      return { ok: true, winner: this.findRoot(a) };
+      return { ok: true, winner: rootA };
     }
     if (rb.tag === 'value' && ra.tag === 'parent') {
       this.parent.set(ra.id, rb);
-      return { ok: true, winner: this.findRoot(b) };
+      return { ok: true, winner: rootB };
     }
 
     if (ra.tag === 'parent' && rb.tag === 'parent') {
@@ -156,7 +168,7 @@ class UnionFind<T> {
       return { ok: true, winner: rb.id };
     }
 
-    return { ok: true, winner: this.findRoot(a) };
+    return { ok: true, winner: rootA };
   }
 
   resolved(id: UFNodeId): T | null {
@@ -279,6 +291,40 @@ function classifyError(origins: readonly ConstraintOrigin[]): PUSolveErrorClass 
 }
 
 // =============================================================================
+// Merge Functions
+// =============================================================================
+
+/**
+ * Merge payloads: strict equality required.
+ * Returns merged value if compatible, null if conflicting.
+ */
+function payloadsMerge(a: PayloadType, b: PayloadType): PayloadType | null {
+  return payloadsEqual(a, b) ? a : null;
+}
+
+/**
+ * Merge units: `none` is compatible bottom type that yields to concrete units.
+ *
+ * Semantics:
+ * - none + none → none (both dimensionless)
+ * - none + concrete → concrete (dimensionless yields)
+ * - concrete + none → concrete (concrete wins)
+ * - concrete1 + concrete2 → null if incompatible
+ *
+ * // [LAW:one-source-of-truth] This is the single place that defines unit compatibility.
+ */
+function unitsMerge(a: UnitType, b: UnitType): UnitType | null {
+  if (unitsEqual(a, b)) return a;
+
+  // none yields to any concrete unit
+  if (a.kind === 'none') return b;
+  if (b.kind === 'none') return a;
+
+  // Both concrete but different → conflict
+  return null;
+}
+
+// =============================================================================
 // Solver
 // =============================================================================
 
@@ -373,7 +419,7 @@ export function solvePayloadUnit(
           break;
         }
         const node = getPayloadNode(constraint.port, varInfo);
-        const res = payloadUF.assign(node, constraint.value, payloadsEqual);
+        const res = payloadUF.assign(node, constraint.value, payloadsMerge);
         if (!res.ok) {
           errors.push({
             kind: 'ConflictingPayloads',
@@ -394,7 +440,7 @@ export function solvePayloadUnit(
           break;
         }
         const node = getUnitNode(constraint.port, varInfo);
-        const res = unitUF.assign(node, constraint.value, unitsEqual);
+        const res = unitUF.assign(node, constraint.value, unitsMerge);
         if (!res.ok) {
           errors.push({
             kind: 'ConflictingUnits',
@@ -425,7 +471,7 @@ export function solvePayloadUnit(
         const metaA = payloadMeta.get(rootA);
         const metaB = payloadMeta.get(rootB);
 
-        const res = payloadUF.union(nodeA, nodeB, payloadsEqual);
+        const res = payloadUF.union(nodeA, nodeB, payloadsMerge);
         if (!res.ok) {
           errors.push({
             kind: 'ConflictingPayloads',
@@ -461,7 +507,7 @@ export function solvePayloadUnit(
         const metaA = unitMeta.get(rootA);
         const metaB = unitMeta.get(rootB);
 
-        const res = unitUF.union(nodeA, nodeB, unitsEqual);
+        const res = unitUF.union(nodeA, nodeB, unitsMerge);
         if (!res.ok) {
           errors.push({
             kind: 'ConflictingUnits',
@@ -538,7 +584,7 @@ export function solvePayloadUnit(
         if (meta.allowedPayloads.length === 1) {
           // Single allowed payload — resolve to that
           resolvedPayload = meta.allowedPayloads[0];
-          payloadUF.assign(pNode, resolvedPayload, payloadsEqual);
+          payloadUF.assign(pNode, resolvedPayload, payloadsMerge);
         } else if (meta.allowedPayloads.length === 0 && !validatedPayloadRoots.has(pRoot)) {
           validatedPayloadRoots.add(pRoot);
           errors.push({
@@ -586,7 +632,7 @@ export function solvePayloadUnit(
       const meta = unitMeta.get(uRoot);
       if (meta?.mustBeUnitless) {
         resolvedUnit = unitNone();
-        unitUF.assign(uNode, resolvedUnit, unitsEqual);
+        unitUF.assign(uNode, resolvedUnit, unitsMerge);
       }
     }
 
@@ -594,7 +640,7 @@ export function solvePayloadUnit(
     // A chain of polymorphic blocks with no concrete unit source is dimensionless.
     if (!resolvedUnit && varInfo.unitVarId) {
       resolvedUnit = unitNone();
-      unitUF.assign(uNode, resolvedUnit, unitsEqual);
+      unitUF.assign(uNode, resolvedUnit, unitsMerge);
     }
 
     // Validate resolved unit against unitless requirement
