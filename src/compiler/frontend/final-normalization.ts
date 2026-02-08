@@ -25,12 +25,13 @@ import { BLOCK_DEFS_BY_TYPE } from '../../blocks/registry';
 import { extractConstraints, type ExtractedConstraints } from './extract-constraints';
 import { solvePayloadUnit, buildPortVarMapping } from './payload-unit/solve';
 import type { CanonicalType, InstanceRef } from '../../core/canonical-types';
-import { isAxisInst } from '../../core/canonical-types';
+import { isAxisInst, isAxisVar } from '../../core/canonical-types';
 import type { InferenceCanonicalType } from '../../core/inference-types';
 import { isPayloadVar, isUnitVar, isInferenceCanonicalizable, finalizeInferenceType, applyPartialSubstitution, type Substitution, EMPTY_SUBSTITUTION } from '../../core/inference-types';
 import { solveCardinality } from './cardinality/solve';
 import { defaultSourcePolicyV1 } from './policies/default-source-policy';
 import { adapterPolicyV1 } from './policies/adapter-policy';
+import { payloadAnchorPolicyV1 } from './policies/payload-anchor-policy';
 import { createDerivedObligations } from './create-derived-obligations';
 
 // =============================================================================
@@ -142,6 +143,14 @@ export function finalizeNormalizationFixpoint(
           }
         }
       }
+
+      // Collect diagnostics from plans
+      for (const plan of plans) {
+        if (plan.diagnostics) {
+          diagnostics.push(...plan.diagnostics);
+        }
+      }
+
       g = applyAllPlans(g, plans);
     }
   }
@@ -388,6 +397,13 @@ function areDependenciesSatisfied(deps: readonly FactDependency[], facts: TypeFa
         // For now, require full canonicalizability for axis deps
         if (hint.status !== 'ok') return false;
         break;
+      case 'portHasUnresolvedPayload': {
+        // Port must have an unresolved payload var (that's what we're anchoring)
+        if (hint.status === 'ok') return false; // Already fully resolved
+        if (hint.status !== 'unknown' || !hint.inference) return false;
+        if (hint.inference.payload.kind !== 'var') return false; // Already resolved or concrete
+        break;
+      }
     }
   }
   return true;
@@ -405,6 +421,8 @@ function callPolicy(obligation: Obligation, ctx: PolicyContext): PolicyResult | 
       return defaultSourcePolicyV1.plan(obligation, ctx);
     case 'adapters.v1':
       return adapterPolicyV1.plan(obligation, ctx);
+    case 'payloadAnchor.v1':
+      return payloadAnchorPolicyV1.plan(obligation, ctx);
     default:
       return null;
   }

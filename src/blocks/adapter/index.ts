@@ -23,3 +23,4 @@ import './scalar-to-deg';
 import './cast-float-to-int';
 import './cast-int-to-float';
 import './degrees-to-phase';
+import './payload-anchor-float';

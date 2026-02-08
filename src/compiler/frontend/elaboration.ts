@@ -32,6 +32,8 @@ export interface ElaborationPlan {
   readonly addEdges?: readonly DraftEdge[];
   /** Edges to replace (remove old, add new) */
   readonly replaceEdges?: readonly EdgeReplacement[];
+  /** Diagnostics emitted by this plan (warnings, info) */
+  readonly diagnostics?: readonly unknown[];
   /** Human-readable notes for debugging */
   readonly notes?: string;
 }

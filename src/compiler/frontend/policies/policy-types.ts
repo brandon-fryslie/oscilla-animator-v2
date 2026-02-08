@@ -52,5 +52,11 @@ export interface AdapterPolicy {
   plan(obligation: Obligation, ctx: PolicyContext): PolicyResult;
 }
 
+export interface PayloadAnchorPolicy {
+  readonly name: 'payloadAnchor.v1';
+  readonly version: 1;
+  plan(obligation: Obligation, ctx: PolicyContext): PolicyResult;
+}
+
 /** Union of all policy types for the fixpoint driver. */
-export type NormalizationPolicy = DefaultSourcePolicy | AdapterPolicy;
+export type NormalizationPolicy = DefaultSourcePolicy | AdapterPolicy | PayloadAnchorPolicy;

@@ -72,7 +72,7 @@ export const PortInfoPopover: React.FC<PortInfoPopoverProps> = observer(({
   anchorEl,
   blockId,
 }) => {
-  const { debug } = useStores();
+  const { debug, diagnostics } = useStores();
   // Read an observable before any early return so MobX observer tracks it.
   // Without this, renders where port=null would trigger "observer without observables" warning.
   const debugEnabled = debug.enabled;
@@ -317,6 +317,68 @@ export const PortInfoPopover: React.FC<PortInfoPopoverProps> = observer(({
               </Box>
             </>
           )}
+
+          {/* Port Diagnostics (errors/warnings) */}
+          {blockId && port.id && (() => {
+            const portDiags = diagnostics.getDiagnosticsForPort(blockId, port.id);
+            const errors = portDiags.filter(d => d.severity === 'error' || d.severity === 'fatal');
+            const warnings = portDiags.filter(d => d.severity === 'warn');
+
+            if (errors.length === 0 && warnings.length === 0) {
+              return null;
+            }
+
+            return (
+              <Box>
+                <Divider color="#444" my="xs" />
+                <Text size="xs" c="dimmed" mb={4}>
+                  Diagnostics
+                </Text>
+                <Stack gap={6}>
+                  {errors.map((diag, i) => (
+                    <Box
+                      key={`error-${i}`}
+                      style={{
+                        padding: '6px 8px',
+                        background: 'rgba(239, 68, 68, 0.1)',
+                        border: '1px solid rgba(239, 68, 68, 0.3)',
+                        borderRadius: '4px',
+                      }}
+                    >
+                      <Group gap="xs" wrap="nowrap" align="flex-start">
+                        <Badge size="xs" color="red" variant="filled" style={{ flexShrink: 0 }}>
+                          ERROR
+                        </Badge>
+                        <Text size="xs" c="red.3" style={{ flex: 1, lineHeight: 1.4 }}>
+                          {diag.message}
+                        </Text>
+                      </Group>
+                    </Box>
+                  ))}
+                  {warnings.map((diag, i) => (
+                    <Box
+                      key={`warn-${i}`}
+                      style={{
+                        padding: '6px 8px',
+                        background: 'rgba(245, 158, 11, 0.1)',
+                        border: '1px solid rgba(245, 158, 11, 0.3)',
+                        borderRadius: '4px',
+                      }}
+                    >
+                      <Group gap="xs" wrap="nowrap" align="flex-start">
+                        <Badge size="xs" color="orange" variant="filled" style={{ flexShrink: 0 }}>
+                          WARN
+                        </Badge>
+                        <Text size="xs" c="orange.3" style={{ flex: 1, lineHeight: 1.4 }}>
+                          {diag.message}
+                        </Text>
+                      </Group>
+                    </Box>
+                  ))}
+                </Stack>
+              </Box>
+            );
+          })()}
 
           {/* Default Source (for unconnected inputs) */}
           {isInput && !port.isConnected && port.defaultSource && (

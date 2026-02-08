@@ -80,8 +80,9 @@
 }
 
 .react-flow__handle:hover {
-  transform: scale(1.2);
-  box-shadow: 0 0 12px rgba(78, 205, 196, 0.6);
+  /* Use box-shadow instead of scale to avoid layout shift */
+  box-shadow: 0 0 12px rgba(78, 205, 196, 0.6), 0 0 4px rgba(78, 205, 196, 0.8) inset;
+  border-color: #4ecdc4;
 }
 
 .react-flow__handle-left {
@@ -93,37 +94,37 @@
 }
 
 /* Port state breathing animations */
-/* Subtle breathing for selected port (±10% hue, 20% brighter, 2.5s cycle) */
+/* Subtle breathing for selected port (±10% hue, brighter peak, 2.5s cycle) */
 @keyframes port-breathe-selected {
   0%, 100% {
-    filter: brightness(1.2) hue-rotate(-3deg);
+    filter: brightness(1.4) hue-rotate(-3deg);
   }
   50% {
-    filter: brightness(1.4) hue-rotate(3deg);
+    filter: brightness(1.7) hue-rotate(3deg);
   }
 }
 
 /* Moderate breathing for warning port (2s cycle) */
 @keyframes port-breathe-warning {
   0%, 100% {
-    filter: brightness(1.3) saturate(1.2);
-    box-shadow: 0 0 14px 4px rgba(255, 217, 61, 0.6);
+    filter: brightness(1.0) saturate(1.1);
+    box-shadow: 0 0 12px 3px rgba(255, 217, 61, 0.5);
   }
   50% {
-    filter: brightness(1.6) saturate(1.4);
-    box-shadow: 0 0 20px 6px rgba(255, 217, 61, 0.9);
+    filter: brightness(1.15) saturate(1.2);
+    box-shadow: 0 0 16px 5px rgba(255, 217, 61, 0.7);
   }
 }
 
 /* Fast breathing for error port (1.5s cycle) */
 @keyframes port-breathe-error {
   0%, 100% {
-    filter: brightness(1.4) saturate(1.3);
-    box-shadow: 0 0 16px 5px rgba(255, 107, 107, 0.7);
+    filter: brightness(1.0) saturate(1.1);
+    box-shadow: 0 0 12px 3px rgba(255, 107, 107, 0.5);
   }
   50% {
-    filter: brightness(1.7) saturate(1.5);
-    box-shadow: 0 0 24px 8px rgba(255, 107, 107, 1);
+    filter: brightness(1.15) saturate(1.2);
+    box-shadow: 0 0 16px 5px rgba(255, 107, 107, 0.7);
   }
 }
 

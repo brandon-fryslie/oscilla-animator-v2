@@ -283,4 +283,47 @@ describe('solvePayloadUnit', () => {
     expect(mapping.get(portA)).toEqual({ payloadVarId: 'T', unitVarId: 'U' });
     expect(mapping.get(portC)).toEqual({ payloadVarId: null, unitVarId: null });
   });
+
+  // ==========================================================================
+  // Solver strictness (no defaults)
+  // ==========================================================================
+
+  it('no concrete evidence → payload var stays unresolved (no default)', () => {
+    const mapping = makeVarMapping([[portA, 'T', null]]);
+    const constraints: PayloadUnitConstraint[] = [
+      // No constraints at all — var T has no evidence
+    ];
+
+    const result = solvePayloadUnit(constraints, mapping);
+    // Solver should NOT default to float. Var stays unresolved.
+    expect(result.errors).toHaveLength(0);
+    expect(result.portPayloads.has(portA)).toBe(false); // No resolution
+    expect(result.payloads.has('T')).toBe(false); // No resolution
+  });
+
+  it('single-entry requirePayloadIn → resolves to that payload', () => {
+    const mapping = makeVarMapping([[portA, 'T', null]]);
+    const constraints: PayloadUnitConstraint[] = [
+      { kind: 'requirePayloadIn', port: portA, allowed: [FLOAT], origin: metaOrigin },
+    ];
+
+    const result = solvePayloadUnit(constraints, mapping);
+    expect(result.errors).toHaveLength(0);
+    // Single-entry allowed set auto-resolves
+    expect(result.portPayloads.get(portA)?.kind).toBe('float');
+    expect(result.payloads.get('T')?.kind).toBe('float');
+  });
+
+  it('multi-entry requirePayloadIn + no evidence → stays unresolved', () => {
+    const mapping = makeVarMapping([[portA, 'T', null]]);
+    const constraints: PayloadUnitConstraint[] = [
+      { kind: 'requirePayloadIn', port: portA, allowed: [FLOAT, INT, VEC2, COLOR], origin: metaOrigin },
+    ];
+
+    const result = solvePayloadUnit(constraints, mapping);
+    expect(result.errors).toHaveLength(0);
+    // Multi-entry allowed set with no concrete evidence → no default
+    expect(result.portPayloads.has(portA)).toBe(false); // No resolution
+    expect(result.payloads.has('T')).toBe(false); // No resolution
+  });
 });

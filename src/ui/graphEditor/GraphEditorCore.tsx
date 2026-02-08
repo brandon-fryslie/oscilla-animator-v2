@@ -39,7 +39,7 @@ import { UnifiedNode as UnifiedNodeComponent } from './UnifiedNode';
 import { OscillaEdge } from '../reactFlowEditor/OscillaEdge';
 import { getLayoutedElements } from '../reactFlowEditor/layout';
 import { validateConnection } from '../reactFlowEditor/typeValidation';
-import { ErrorBadgeOverlay } from './ErrorBadgeOverlay';
+// import { ErrorBadgeOverlay } from './ErrorBadgeOverlay'; // DISABLED: Errors now shown in port popovers
 import type { SelectionStore } from '../../stores/SelectionStore';
 import type { PortHighlightStore } from '../../stores/PortHighlightStore';
 import type { DiagnosticsStore } from '../../stores/DiagnosticsStore';
@@ -557,10 +557,10 @@ export const GraphEditorCoreInner = observer(
               <Background color="#4ecdc4" gap={16} />
               <Controls />
               {mergedFeatures.enableMinimap && <MiniMap />}
-              
-              {/* Error badge overlay - shows errors/warnings on nodes */}
-              {diagnostics && <ErrorBadgeOverlay diagnostics={diagnostics} />}
-              
+
+              {/* Error badge overlay - DISABLED: Errors now shown in port popovers */}
+              {/* {diagnostics && <ErrorBadgeOverlay diagnostics={diagnostics} />} */}
+
               {children}
             </ReactFlow>
           </div>

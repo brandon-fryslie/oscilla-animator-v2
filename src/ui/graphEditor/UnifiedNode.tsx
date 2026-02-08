@@ -112,7 +112,7 @@ function getPortState(
   blockId: BlockId,
   portId: PortId,
   diagnosticsStore: ReturnType<typeof useStores>['diagnostics'],
-  selectedPort: { blockId: BlockId; portId: PortId } | null
+  selectedPort: { blockId: BlockId; portId: PortId } | null | undefined
 ): PortState {
   // Check diagnostics (error takes priority over warning)
   const diagnostics = diagnosticsStore.getDiagnosticsForPort(blockId, portId);
@@ -234,27 +234,61 @@ export const UnifiedNode: React.FC<NodeProps<UnifiedNodeData>> = observer(({ dat
           selectedPort
         );
 
-        // Map state to CSS animation class
-        const animationClass =
-          portState === 'error'
-            ? 'port-error'
-            : portState === 'warning'
-              ? 'port-warning'
-              : portState === 'selected'
-                ? 'port-selected'
-                : undefined;
+        // State colors
+        const ERROR_COLOR = '#ff6b6b';
+        const WARNING_COLOR = '#ffd93d';
 
-        // Compute boxShadow based on state (error/warning override compatibility)
+        // Determine if port has diagnostic state (error or warning)
+        const hasError = portState === 'error';
+        const hasWarning = portState === 'warning';
+        const hasDiagnostic = hasError || hasWarning;
+
+        // Map state to CSS animation class
+        // IMPORTANT: If selected AND has diagnostic, don't animate (static glow instead)
+        const animationClass =
+          hasDiagnostic && isSelected
+            ? undefined
+            : hasError
+              ? 'port-error'
+              : hasWarning
+                ? 'port-warning'
+                : portState === 'selected'
+                  ? 'port-selected'
+                  : undefined;
+
+        // Compute background color (diagnostic color overrides type color)
+        const backgroundColor = hasError
+          ? ERROR_COLOR
+          : hasWarning
+            ? WARNING_COLOR
+            : input.isConnected
+              ? input.typeColor
+              : `linear-gradient(135deg, ${input.typeColor}40 0%, #1a1a2e 100%)`;
+
+        // Compute border color (diagnostic color overrides type color)
+        const borderColor = hasError ? ERROR_COLOR : hasWarning ? WARNING_COLOR : input.typeColor;
+
+        // Compute boxShadow and filter based on state
         let boxShadow: string;
-        if (portState === 'error' || portState === 'warning') {
-          // Animation handles glow — no inline boxShadow override
+        let filter: string | undefined;
+        if (hasDiagnostic && isSelected) {
+          // Selected error/warning: Static enhanced glow with max brightness
+          const glowColor = hasError ? ERROR_COLOR : WARNING_COLOR;
+          boxShadow = `0 0 26px 9px ${glowColor}`;
+          filter = 'brightness(1.7) saturate(1.5)'; // Match max brightness from breathing animations
+        } else if (hasDiagnostic) {
+          // Animated error/warning: Animation handles glow
           boxShadow = 'none';
+          filter = undefined;
         } else if (isSelected) {
           boxShadow = `0 0 12px 3px ${input.typeColor}80, inset 0 0 4px ${input.typeColor}`;
+          filter = undefined;
         } else if (input.isConnected) {
           boxShadow = `0 0 6px 1px ${input.typeColor}40`;
+          filter = undefined;
         } else {
           boxShadow = 'none';
+          filter = undefined;
         }
 
         return (
@@ -289,14 +323,13 @@ export const UnifiedNode: React.FC<NodeProps<UnifiedNodeData>> = observer(({ dat
               className={animationClass}
               style={{
                 top: `${topPercent}%`,
-                background: input.isConnected
-                  ? input.typeColor
-                  : `linear-gradient(135deg, ${input.typeColor}40 0%, #1a1a2e 100%)`,
+                background: backgroundColor,
                 width: '14px',
                 height: '14px',
-                border: `2px solid ${input.typeColor}`,
+                border: `2px solid ${borderColor}`,
                 borderRadius: '50%',
                 boxShadow,
+                filter,
                 cursor: 'pointer',
                 transition: animationClass ? 'none' : 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
                 ...highlightStyle,
@@ -518,6 +551,71 @@ export const UnifiedNode: React.FC<NodeProps<UnifiedNodeData>> = observer(({ dat
           portHighlight
         );
 
+        // Get port state (error, warning, selected, none)
+        const portState = getPortState(
+          data.blockId as BlockId,
+          output.id as PortId,
+          diagnostics,
+          selectedPort
+        );
+
+        // State colors
+        const ERROR_COLOR = '#ff6b6b';
+        const WARNING_COLOR = '#ffd93d';
+
+        // Determine if port has diagnostic state (error or warning)
+        const hasError = portState === 'error';
+        const hasWarning = portState === 'warning';
+        const hasDiagnostic = hasError || hasWarning;
+
+        // Map state to CSS animation class
+        // IMPORTANT: If selected AND has diagnostic, don't animate (static glow instead)
+        const animationClass =
+          hasDiagnostic && isSelected
+            ? undefined
+            : hasError
+              ? 'port-error'
+              : hasWarning
+                ? 'port-warning'
+                : portState === 'selected'
+                  ? 'port-selected'
+                  : undefined;
+
+        // Compute background color (diagnostic color overrides type color)
+        const backgroundColor = hasError
+          ? ERROR_COLOR
+          : hasWarning
+            ? WARNING_COLOR
+            : output.isConnected
+              ? output.typeColor
+              : `linear-gradient(135deg, ${output.typeColor}40 0%, #1a1a2e 100%)`;
+
+        // Compute border color (diagnostic color overrides type color)
+        const borderColor = hasError ? ERROR_COLOR : hasWarning ? WARNING_COLOR : output.typeColor;
+
+        // Compute boxShadow and filter based on state
+        let boxShadow: string;
+        let filter: string | undefined;
+        if (hasDiagnostic && isSelected) {
+          // Selected error/warning: Static enhanced glow with max brightness
+          const glowColor = hasError ? ERROR_COLOR : WARNING_COLOR;
+          boxShadow = `0 0 26px 9px ${glowColor}`;
+          filter = 'brightness(1.7) saturate(1.5)'; // Match max brightness from breathing animations
+        } else if (hasDiagnostic) {
+          // Animated error/warning: Animation handles glow
+          boxShadow = 'none';
+          filter = undefined;
+        } else if (isSelected) {
+          boxShadow = `0 0 12px 3px ${output.typeColor}80, inset 0 0 4px ${output.typeColor}`;
+          filter = undefined;
+        } else if (output.isConnected) {
+          boxShadow = `0 0 6px 1px ${output.typeColor}40`;
+          filter = undefined;
+        } else {
+          boxShadow = 'none';
+          filter = undefined;
+        }
+
         return (
           <React.Fragment key={`output-${output.id}`}>
             {/* Port Label */}
@@ -547,22 +645,18 @@ export const UnifiedNode: React.FC<NodeProps<UnifiedNodeData>> = observer(({ dat
               onContextMenu={(e) => handlePortContextMenu(output.id as PortId, false, e)}
               onMouseEnter={(e) => handlePortMouseEnter(output, false, e)}
               onMouseLeave={handlePortMouseLeave}
+              className={animationClass}
               style={{
                 top: `${topPercent}%`,
-                background: output.isConnected
-                  ? output.typeColor
-                  : `linear-gradient(135deg, ${output.typeColor}40 0%, #1a1a2e 100%)`,
+                background: backgroundColor,
                 width: '14px',
                 height: '14px',
-                border: `2px solid ${output.typeColor}`,
+                border: `2px solid ${borderColor}`,
                 borderRadius: '50%',
-                boxShadow: isSelected
-                  ? `0 0 12px 3px ${output.typeColor}80, inset 0 0 4px ${output.typeColor}`
-                  : output.isConnected
-                    ? `0 0 6px 1px ${output.typeColor}40`
-                    : 'none',
+                boxShadow,
+                filter,
                 cursor: 'pointer',
-                transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                transition: animationClass ? 'none' : 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
                 ...highlightStyle,
               }}
             />

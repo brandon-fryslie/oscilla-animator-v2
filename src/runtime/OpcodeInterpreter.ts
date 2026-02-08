@@ -31,6 +31,7 @@
  *   sign     - Sign: -1, 0, or 1
  *   f64_to_i32_trunc - Float to int: trunc toward zero, clamp to i32, NaN→0
  *   i32_to_f64       - Int to float: identity in JS (type boundary marker)
+ *   identity         - Identity: returns input unchanged (used by cheater adapters)
  *
  * BINARY (exactly 2 arguments):
  *   sub      - Subtraction: a - b
@@ -154,6 +155,8 @@ function applyUnaryOp(op: string, x: number): number {
     }
     case 'i32_to_f64':
       return x; // Identity in JS — type boundary marker
+    case 'identity':
+      return x; // Identity — used by cheater adapters
     default:
       throw new Error(`OpCode ${op} is not unary`);
   }

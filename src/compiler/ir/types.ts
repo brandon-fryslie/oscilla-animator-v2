@@ -168,6 +168,9 @@ export enum OpCode {
   // Control flow
   Select = 'select',
 
+  // Identity
+  Identity = 'identity',
+
   // Cast
   F64ToI32Trunc = 'f64_to_i32_trunc',
   I32ToF64 = 'i32_to_f64',

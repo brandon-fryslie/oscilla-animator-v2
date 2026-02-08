@@ -13,7 +13,7 @@
  */
 
 import type { PayloadType, UnitType } from '../../../core/canonical-types';
-import { payloadsEqual, unitsEqual, unitNone, FLOAT } from '../../../core/canonical-types';
+import { payloadsEqual, unitsEqual, unitNone } from '../../../core/canonical-types';
 import type { InferenceCanonicalType } from '../../../core/inference-types';
 import { isPayloadVar, isUnitVar, isConcretePayload, isConcreteUnit } from '../../../core/inference-types';
 import type { DraftPortKey } from '../type-facts';
@@ -539,12 +539,6 @@ export function solvePayloadUnit(
           // Single allowed payload — resolve to that
           resolvedPayload = meta.allowedPayloads[0];
           payloadUF.assign(pNode, resolvedPayload, payloadsEqual);
-        } else if (meta.allowedPayloads.length > 1) {
-          // Multiple allowed payloads, no concrete evidence — default to first.
-          // [LAW:dataflow-not-control-flow] Polymorphic chains with no concrete
-          // evidence resolve to the first allowed payload (float for most blocks).
-          resolvedPayload = meta.allowedPayloads[0];
-          payloadUF.assign(pNode, resolvedPayload, payloadsEqual);
         } else if (meta.allowedPayloads.length === 0 && !validatedPayloadRoots.has(pRoot)) {
           validatedPayloadRoots.add(pRoot);
           errors.push({
@@ -556,14 +550,6 @@ export function solvePayloadUnit(
           });
         }
       }
-    }
-
-    // If still unresolved (no allowed set at all), default to float for payload vars.
-    // A chain of polymorphic blocks with no metadata constraints is assumed float.
-    // Uses the FLOAT singleton to preserve reference equality with singletons elsewhere.
-    if (!resolvedPayload && varInfo.payloadVarId) {
-      resolvedPayload = FLOAT;
-      payloadUF.assign(pNode, resolvedPayload, payloadsEqual);
     }
 
     // Validate resolved payload against allowed set

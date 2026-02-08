@@ -26,7 +26,8 @@ export type ObligationKind =
   | 'missingInputSource'
   | 'needsAdapter'
   | 'needsLaneAlignment'
-  | 'needsDomainElaboration';
+  | 'needsDomainElaboration'
+  | 'needsPayloadAnchor';
 
 // =============================================================================
 // Fact Dependencies
@@ -36,7 +37,8 @@ export type FactDependency =
   | { readonly kind: 'portCanonicalizable'; readonly port: DraftPortRef }
   | { readonly kind: 'portPayloadResolved'; readonly port: DraftPortRef }
   | { readonly kind: 'portUnitResolved'; readonly port: DraftPortRef }
-  | { readonly kind: 'portAxisResolved'; readonly port: DraftPortRef; readonly axis: string };
+  | { readonly kind: 'portAxisResolved'; readonly port: DraftPortRef; readonly axis: string }
+  | { readonly kind: 'portHasUnresolvedPayload'; readonly port: DraftPortRef };
 
 // =============================================================================
 // Obligation Status

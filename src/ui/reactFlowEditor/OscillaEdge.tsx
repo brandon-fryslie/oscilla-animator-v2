@@ -109,39 +109,8 @@ export function OscillaEdge({
       {/* Main edge path */}
       <BaseEdge id={id} path={edgePath} markerEnd={markerEnd} style={edgeStyle} />
 
-      {/* Diagnostic indicator (errors/warnings) */}
-      {hasDiagnostics && !hasLenses && (
-        <EdgeLabelRenderer>
-          <div
-            style={{
-              position: 'absolute',
-              transform: `translate(-50%, -50%) translate(${indicatorX}px, ${indicatorY}px)`,
-              pointerEvents: 'all',
-              cursor: 'help',
-            }}
-            title={tooltipText}
-          >
-            <div
-              style={{
-                width: '16px',
-                height: '16px',
-                borderRadius: '50%',
-                background: strokeColor,
-                border: '2px solid #fff',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: '10px',
-                fontWeight: 'bold',
-                color: '#fff',
-                boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
-              }}
-            >
-              !
-            </div>
-          </div>
-        </EdgeLabelRenderer>
-      )}
+      {/* Diagnostic indicator - REMOVED: Diagnostics now shown in port popovers */}
+      {/* Edge color already indicates errors (red) and warnings (orange) */}
 
       {/* Lens indicator badge (only if lenses present) */}
       {hasLenses && (
