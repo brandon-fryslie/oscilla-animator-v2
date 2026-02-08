@@ -7,15 +7,14 @@
  * Writes mouse input to external channels for runtime consumption.
  */
 
-import React, { useRef, useEffect, useState, useCallback } from 'react';
+import React, { useRef, useEffect, useState, useCallback, useContext } from 'react';
 import { useStores } from '../../../stores';
-import type { ExternalWriteBus } from '../../../runtime/ExternalChannel';
+import { ExternalWriteBusContext } from '../../ExternalWriteBusContext';
 import { ActionIcon, Tooltip } from '@mantine/core';
 import { ZoomOutMap as ZoomOutMapIcon } from '@mui/icons-material';
 
 interface CanvasTabProps {
   onCanvasReady?: (canvas: HTMLCanvasElement) => void;
-  externalWriteBus?: ExternalWriteBus;
 }
 
 // Target aspect ratio (1:1 square)
@@ -24,8 +23,9 @@ const TARGET_ASPECT_RATIO = 1;
 // Mouse smoothing lerp factor (matches legacy behavior)
 const MOUSE_SMOOTHING_FACTOR = 0.05;
 
-export const CanvasTab: React.FC<CanvasTabProps> = ({ onCanvasReady, externalWriteBus }) => {
+export const CanvasTab: React.FC<CanvasTabProps> = ({ onCanvasReady }) => {
   const { viewport } = useStores();
+  const externalWriteBus = useContext(ExternalWriteBusContext);
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [canvasSize, setCanvasSize] = useState({ width: 800, height: 600 });

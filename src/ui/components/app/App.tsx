@@ -23,6 +23,7 @@ import { useGlobalHotkeys, type HotkeyFeedback } from '../../hotkeys';
 import { Toast } from '../common/Toast';
 import { useStores, type RootStore } from '../../../stores';
 import type { ExternalWriteBus } from '../../../runtime/ExternalChannel';
+import { ExternalWriteBusContext } from '../../ExternalWriteBusContext';
 
 // Mantine dark theme configuration - gorgeous modern look
 const mantineTheme = createMantineTheme({
@@ -204,45 +205,46 @@ export const App: React.FC<AppProps> = ({ onCanvasReady, onStoreReady, externalW
   return (
     <MantineProvider theme={mantineTheme} defaultColorScheme="dark">
       <ThemeProvider theme={darkTheme}>
-        <EditorProvider>
-        {/* Capture EditorContext methods */}
-        <EditorContextCapture contextRef={editorContextRef} />
-        <GlobalHotkeys onFeedback={handleHotkeyFeedback} />
+        <ExternalWriteBusContext.Provider value={externalWriteBus}>
+          <EditorProvider>
+          {/* Capture EditorContext methods */}
+          <EditorContextCapture contextRef={editorContextRef} />
+          <GlobalHotkeys onFeedback={handleHotkeyFeedback} />
 
-        <div
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            height: '100vh',
-            overflow: 'hidden',
-            background: '#1a1a2e',
-            color: '#eee',
-            fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
-          }}
-        >
-          {/* Toolbar - outside Dockview, receives API via prop */}
-          <Toolbar stats={stats} dockviewApi={dockviewApi} />
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              height: '100vh',
+              overflow: 'hidden',
+              background: '#1a1a2e',
+              color: '#eee',
+              fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+            }}
+          >
+            {/* Toolbar - outside Dockview, receives API via prop */}
+            <Toolbar stats={stats} dockviewApi={dockviewApi} />
 
-          {/* Dockview workspace - all panels managed by Dockview */}
-          <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
-            <DockviewProvider
-              onReactFlowEditorReady={handleReactFlowEditorReady}
-              onCanvasReady={handleCanvasReady}
-              onActivePanelChange={handleActivePanelChange}
-              onApiReady={setDockviewApi}
-              externalWriteBus={externalWriteBus}
-            />
+            {/* Dockview workspace - all panels managed by Dockview */}
+            <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
+              <DockviewProvider
+                onReactFlowEditorReady={handleReactFlowEditorReady}
+                onCanvasReady={handleCanvasReady}
+                onActivePanelChange={handleActivePanelChange}
+                onApiReady={setDockviewApi}
+              />
+            </div>
           </div>
-        </div>
 
-        {/* Toast for keyboard shortcut feedback */}
-        <Toast
-          open={toastOpen}
-          message={toastMessage}
-          severity={toastSeverity}
-          onClose={handleToastClose}
-        />
-      </EditorProvider>
+          {/* Toast for keyboard shortcut feedback */}
+          <Toast
+            open={toastOpen}
+            message={toastMessage}
+            severity={toastSeverity}
+            onClose={handleToastClose}
+          />
+        </EditorProvider>
+        </ExternalWriteBusContext.Provider>
       </ThemeProvider>
     </MantineProvider>
   );
