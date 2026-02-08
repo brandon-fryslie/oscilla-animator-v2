@@ -34,9 +34,6 @@ function testProgramConverter(
 ): CompiledProgramIR {
   // Access the actual IR from the builder (matching compile.ts)
   const builder = unlinkedIR.builder;
-  // const signalNodes = builder.getSigExprs();
-  // const fieldNodes = builder.getFieldExprs();
-  // const eventNodes = builder.getEventExprs();
 
   return {
     irVersion: 1,
@@ -72,29 +69,25 @@ describe('Backend Preconditions', () => {
       });
 
       const frontendResult = compileFrontend(patch);
-      expect(frontendResult.kind).toBe('ok');
+      const { typedPatch, backendReady } = frontendResult;
 
-      if (frontendResult.kind === 'ok') {
-        const { typedPatch, backendReady } = frontendResult.result;
+      // Frontend should be ready
+      expect(backendReady).toBe(true);
 
-        // Frontend should be ready
-        expect(backendReady).toBe(true);
+      // Backend should accept this
+      const backendResult = compileBackend(
+        typedPatch,
+        testProgramConverter
+      );
 
-        // Backend should accept this
-        const backendResult = compileBackend(
-          typedPatch,
-          testProgramConverter
-        );
+      // Debug: log errors if any
+      if (backendResult.kind === 'error') {
+        console.log('Backend errors:', JSON.stringify(backendResult.errors, null, 2));
+      }
 
-        // Debug: log errors if any
-        if (backendResult.kind === 'error') {
-          console.log('Backend errors:', JSON.stringify(backendResult.errors, null, 2));
-        }
-
-        expect(backendResult.kind).toBe('ok');
-        if (backendResult.kind === 'ok') {
-          expect(backendResult.result.program).toBeDefined();
-        }
+      expect(backendResult.kind).toBe('ok');
+      if (backendResult.kind === 'ok') {
+        expect(backendResult.result.program).toBeDefined();
       }
     });
 
@@ -107,29 +100,26 @@ describe('Backend Preconditions', () => {
       });
 
       const frontendResult = compileFrontend(patch);
-      expect(frontendResult.kind).toBe('ok');
+      expect(frontendResult.backendReady).toBe(true);
 
-      if (frontendResult.kind === 'ok') {
-        const { typedPatch } = frontendResult.result;
+      const { typedPatch } = frontendResult;
 
-        const backendResult = compileBackend(
-          typedPatch,
-          testProgramConverter
-        );
+      const backendResult = compileBackend(
+        typedPatch,
+        testProgramConverter
+      );
 
-        expect(backendResult.kind).toBe('ok');
-        if (backendResult.kind === 'ok') {
-          const { program, scheduleIR, unlinkedIR } = backendResult.result;
+      expect(backendResult.kind).toBe('ok');
+      if (backendResult.kind === 'ok') {
+        const { program, scheduleIR, unlinkedIR } = backendResult.result;
 
-          // Verify program structure
-          expect(program).toBeDefined();
-          // expect(program.signalExprs).toBeDefined();
-          expect(program.schedule).toBeDefined();
+        // Verify program structure
+        expect(program).toBeDefined();
+        expect(program.schedule).toBeDefined();
 
-          // Verify intermediate representations
-          expect(scheduleIR).toBeDefined();
-          expect(unlinkedIR).toBeDefined();
-        }
+        // Verify intermediate representations
+        expect(scheduleIR).toBeDefined();
+        expect(unlinkedIR).toBeDefined();
       }
     });
   });
@@ -147,36 +137,33 @@ describe('Backend Preconditions', () => {
       });
 
       const frontendResult = compileFrontend(patch);
+      const { typedPatch, backendReady, cycleSummary } = frontendResult;
 
-      if (frontendResult.kind === 'ok') {
-        const { typedPatch, backendReady, cycleSummary } = frontendResult.result;
+      // Frontend should detect illegal cycle
+      expect(cycleSummary.hasIllegalCycles).toBe(true);
+      expect(backendReady).toBe(false);
 
-        // Frontend should detect illegal cycle
-        expect(cycleSummary.hasIllegalCycles).toBe(true);
-        expect(backendReady).toBe(false);
+      // Backend should fail with illegal cycle
+      const backendResult = compileBackend(
+        typedPatch,
+        testProgramConverter
+      );
 
-        // Backend should fail with illegal cycle
-        const backendResult = compileBackend(
-          typedPatch,
-          testProgramConverter
+      // Backend should fail
+      expect(backendResult.kind).toBe('error');
+      if (backendResult.kind === 'error') {
+        // Should have errors
+        expect(backendResult.errors.length).toBeGreaterThan(0);
+
+        // Errors should mention cycle or compilation failure
+        const hasRelevantError = backendResult.errors.some(
+          (e) =>
+            e.kind.includes('Cycle') ||
+            e.kind.includes('Illegal') ||
+            e.kind.includes('Backend') ||
+            e.message.toLowerCase().includes('cycle')
         );
-
-        // Backend should fail
-        expect(backendResult.kind).toBe('error');
-        if (backendResult.kind === 'error') {
-          // Should have errors
-          expect(backendResult.errors.length).toBeGreaterThan(0);
-
-          // Errors should mention cycle or compilation failure
-          const hasRelevantError = backendResult.errors.some(
-            (e) =>
-              e.kind.includes('Cycle') ||
-              e.kind.includes('Illegal') ||
-              e.kind.includes('Backend') ||
-              e.message.toLowerCase().includes('cycle')
-          );
-          expect(hasRelevantError).toBe(true);
-        }
+        expect(hasRelevantError).toBe(true);
       }
     });
 
@@ -196,22 +183,18 @@ describe('Backend Preconditions', () => {
       });
 
       const frontendResult = compileFrontend(patch);
-      expect(frontendResult.kind).toBe('ok');
+      const { typedPatch, backendReady } = frontendResult;
 
-      if (frontendResult.kind === 'ok') {
-        const { typedPatch, backendReady } = frontendResult.result;
+      // Should be legal and ready
+      expect(backendReady).toBe(true);
 
-        // Should be legal and ready
-        expect(backendReady).toBe(true);
+      // Backend should succeed
+      const backendResult = compileBackend(
+        typedPatch,
+        testProgramConverter
+      );
 
-        // Backend should succeed
-        const backendResult = compileBackend(
-          typedPatch,
-          testProgramConverter
-        );
-
-        expect(backendResult.kind).toBe('ok');
-      }
+      expect(backendResult.kind).toBe('ok');
     });
   });
 
@@ -227,23 +210,20 @@ describe('Backend Preconditions', () => {
       });
 
       const frontendResult = compileFrontend(patch);
+      const { typedPatch } = frontendResult;
 
-      if (frontendResult.kind === 'ok') {
-        const { typedPatch } = frontendResult.result;
+      // TypedPatch should have port types
+      expect(typedPatch.portTypes).toBeDefined();
+      expect(typedPatch.portTypes.size).toBeGreaterThan(0);
 
-        // TypedPatch should have port types
-        expect(typedPatch.portTypes).toBeDefined();
-        expect(typedPatch.portTypes.size).toBeGreaterThan(0);
+      // Backend should accept it
+      const backendResult = compileBackend(
+        typedPatch,
+        testProgramConverter
+      );
 
-        // Backend should accept it
-        const backendResult = compileBackend(
-          typedPatch,
-          testProgramConverter
-        );
-
-        // Should succeed or fail with clear error
-        expect(['ok', 'error']).toContain(backendResult.kind);
-      }
+      // Should succeed or fail with clear error
+      expect(['ok', 'error']).toContain(backendResult.kind);
     });
   });
 
@@ -256,30 +236,28 @@ describe('Backend Preconditions', () => {
       });
 
       const frontendResult = compileFrontend(patch);
-      expect(frontendResult.kind).toBe('ok');
+      expect(frontendResult.backendReady).toBe(true);
 
-      if (frontendResult.kind === 'ok') {
-        const { typedPatch } = frontendResult.result;
+      const { typedPatch } = frontendResult;
 
-        const backendResult = compileBackend(
-          typedPatch,
-          testProgramConverter
-        );
+      const backendResult = compileBackend(
+        typedPatch,
+        testProgramConverter
+      );
 
-        expect(backendResult.kind).toBe('ok');
-        if (backendResult.kind === 'ok') {
-          const { unlinkedIR, scheduleIR, acyclicPatch } = backendResult.result;
+      expect(backendResult.kind).toBe('ok');
+      if (backendResult.kind === 'ok') {
+        const { unlinkedIR, scheduleIR, acyclicPatch } = backendResult.result;
 
-          // Verify each stage produced output
-          expect(unlinkedIR).toBeDefined();
-          expect(unlinkedIR.builder).toBeDefined();
+        // Verify each stage produced output
+        expect(unlinkedIR).toBeDefined();
+        expect(unlinkedIR.builder).toBeDefined();
 
-          expect(scheduleIR).toBeDefined();
-          expect(scheduleIR.steps).toBeDefined();
+        expect(scheduleIR).toBeDefined();
+        expect(scheduleIR.steps).toBeDefined();
 
-          expect(acyclicPatch).toBeDefined();
-          expect(acyclicPatch.blocks).toBeDefined();
-        }
+        expect(acyclicPatch).toBeDefined();
+        expect(acyclicPatch.blocks).toBeDefined();
       }
     });
 
@@ -296,25 +274,23 @@ describe('Backend Preconditions', () => {
       });
 
       const frontendResult = compileFrontend(patch);
-      expect(frontendResult.kind).toBe('ok');
+      expect(frontendResult.backendReady).toBe(true);
 
-      if (frontendResult.kind === 'ok') {
-        const { typedPatch } = frontendResult.result;
+      const { typedPatch } = frontendResult;
 
-        const backendResult = compileBackend(
-          typedPatch,
-          testProgramConverter
-        );
+      const backendResult = compileBackend(
+        typedPatch,
+        testProgramConverter
+      );
 
-        expect(backendResult.kind).toBe('ok');
-        if (backendResult.kind === 'ok') {
-          const { scheduleIR } = backendResult.result;
+      expect(backendResult.kind).toBe('ok');
+      if (backendResult.kind === 'ok') {
+        const { scheduleIR } = backendResult.result;
 
-          // Should have execution steps
-          expect(scheduleIR.steps).toBeDefined();
-          expect(Array.isArray(scheduleIR.steps)).toBe(true);
-          expect(scheduleIR.steps.length).toBeGreaterThan(0);
-        }
+        // Should have execution steps
+        expect(scheduleIR.steps).toBeDefined();
+        expect(Array.isArray(scheduleIR.steps)).toBe(true);
+        expect(scheduleIR.steps.length).toBeGreaterThan(0);
       }
     });
   });
@@ -333,29 +309,26 @@ describe('Backend Preconditions', () => {
       });
 
       const frontendResult = compileFrontend(patch);
+      const { typedPatch } = frontendResult;
 
-      if (frontendResult.kind === 'ok') {
-        const { typedPatch } = frontendResult.result;
+      const backendResult = compileBackend(
+        typedPatch,
+        testProgramConverter
+      );
 
-        const backendResult = compileBackend(
-          typedPatch,
-          testProgramConverter
-        );
+      if (backendResult.kind === 'error') {
+        // Errors should have proper structure
+        expect(backendResult.errors).toBeDefined();
+        expect(Array.isArray(backendResult.errors)).toBe(true);
+        expect(backendResult.errors.length).toBeGreaterThan(0);
 
-        if (backendResult.kind === 'error') {
-          // Errors should have proper structure
-          expect(backendResult.errors).toBeDefined();
-          expect(Array.isArray(backendResult.errors)).toBe(true);
-          expect(backendResult.errors.length).toBeGreaterThan(0);
-
-          // Each error should have kind and message
-          backendResult.errors.forEach((error) => {
-            expect(error).toHaveProperty('kind');
-            expect(error).toHaveProperty('message');
-            expect(typeof error.kind).toBe('string');
-            expect(typeof error.message).toBe('string');
-          });
-        }
+        // Each error should have kind and message
+        backendResult.errors.forEach((error) => {
+          expect(error).toHaveProperty('kind');
+          expect(error).toHaveProperty('message');
+          expect(typeof error.kind).toBe('string');
+          expect(typeof error.message).toBe('string');
+        });
       }
     });
   });
@@ -368,22 +341,17 @@ describe('Backend Preconditions', () => {
 
       // Step 1: Frontend produces TypedPatch
       const frontendResult = compileFrontend(patch);
-      expect(frontendResult.kind).toBe('ok');
+      const { typedPatch, backendReady } = frontendResult;
 
-      if (frontendResult.kind === 'ok') {
-        const { typedPatch, backendReady } = frontendResult.result;
+      // Step 2: Check contract - if backendReady, backend should succeed
+      if (backendReady) {
+        const backendResult = compileBackend(
+          typedPatch,
+          testProgramConverter
+        );
 
-        // Step 2: Check contract - if backendReady, backend should succeed
-        if (backendReady) {
-          const backendResult = compileBackend(
-            typedPatch,
-            testProgramConverter
-          );
-
-          // Contract: backendReady=true implies backend succeeds
-          // (or fails with a clear reason unrelated to frontend issues)
-          expect(backendResult.kind).toBe('ok');
-        }
+        // Contract: backendReady=true implies backend succeeds
+        expect(backendResult.kind).toBe('ok');
       }
     });
 
@@ -395,30 +363,28 @@ describe('Backend Preconditions', () => {
       });
 
       const frontendResult = compileFrontend(patch);
-      expect(frontendResult.kind).toBe('ok');
+      expect(frontendResult.backendReady).toBe(true);
 
-      if (frontendResult.kind === 'ok') {
-        const { typedPatch } = frontendResult.result;
+      const { typedPatch } = frontendResult;
 
-        // TypedPatch should have normalized structure
-        expect(typedPatch.blocks).toBeDefined();
-        expect(Array.isArray(typedPatch.blocks)).toBe(true);
+      // TypedPatch should have normalized structure
+      expect(typedPatch.blocks).toBeDefined();
+      expect(Array.isArray(typedPatch.blocks)).toBe(true);
 
-        // Should have blockIndex map (from normalization)
-        expect(typedPatch.blockIndex).toBeDefined();
-        expect(typedPatch.blockIndex.size).toBeGreaterThan(0);
+      // Should have blockIndex map (from normalization)
+      expect(typedPatch.blockIndex).toBeDefined();
+      expect(typedPatch.blockIndex.size).toBeGreaterThan(0);
 
-        // Should have port types (from type analysis)
-        expect(typedPatch.portTypes).toBeInstanceOf(Map);
+      // Should have port types (from type analysis)
+      expect(typedPatch.portTypes).toBeInstanceOf(Map);
 
-        // Backend can trust this structure
-        const backendResult = compileBackend(
-          typedPatch,
-          testProgramConverter
-        );
+      // Backend can trust this structure
+      const backendResult = compileBackend(
+        typedPatch,
+        testProgramConverter
+      );
 
-        expect(['ok', 'error']).toContain(backendResult.kind);
-      }
+      expect(['ok', 'error']).toContain(backendResult.kind);
     });
   });
 });

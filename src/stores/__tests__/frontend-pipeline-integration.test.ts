@@ -22,17 +22,16 @@ describe('Frontend Pipeline Integration', () => {
     });
 
     const result = compileFrontend(patch);
-    expect(result.kind).toBe('ok');
-    if (result.kind !== 'ok') return;
+    expect(result.backendReady).toBe(true);
 
-    store.updateFromFrontendResult(result.result, 1);
+    store.updateFromFrontendResult(result, 1);
 
     // Verify snapshot has correct provenance
     const rxAddr = `v1:blocks.ellipse_1.inputs.rx`;
     const provenance = store.getPortProvenance(rxAddr);
     expect(provenance).toBeDefined();
     expect(provenance?.kind).toBe('defaultSource');
-    
+
     // Verify hasDefaultSource returns true
     expect(store.hasDefaultSource(rxAddr)).toBe(true);
     expect(store.hasDefaultSourceByIds(ellipseId!, 'rx')).toBe(true);
@@ -51,17 +50,16 @@ describe('Frontend Pipeline Integration', () => {
     });
 
     const result = compileFrontend(patch);
-    expect(result.kind).toBe('ok');
-    if (result.kind !== 'ok') return;
+    expect(result.backendReady).toBe(true);
 
-    store.updateFromFrontendResult(result.result, 1);
+    store.updateFromFrontendResult(result, 1);
 
     // Verify snapshot has userEdge provenance
     const rxAddr = `v1:blocks.ellipse_1.inputs.rx`;
     const provenance = store.getPortProvenance(rxAddr);
     expect(provenance).toBeDefined();
     expect(provenance?.kind).toBe('userEdge');
-    
+
     // Verify hasDefaultSource returns false (connected, not default)
     expect(store.hasDefaultSource(rxAddr)).toBe(false);
     expect(store.hasDefaultSourceByIds(ellipseId!, 'rx')).toBe(false);
@@ -77,10 +75,9 @@ describe('Frontend Pipeline Integration', () => {
     });
 
     const result = compileFrontend(patch);
-    expect(result.kind).toBe('ok');
-    if (result.kind !== 'ok') return;
+    expect(result.backendReady).toBe(true);
 
-    store.updateFromFrontendResult(result.result, 1);
+    store.updateFromFrontendResult(result, 1);
 
     // Verify input type (should be float for rx)
     const rxType = store.getResolvedPortTypeByIds(ellipseId!, 'rx', 'in');
@@ -93,10 +90,10 @@ describe('Frontend Pipeline Integration', () => {
     expect(shapeType?.payload.kind).toBe('float');
   });
 
-  it('handles frontend failures gracefully and stores partial data', () => {
+  it('handles cycles gracefully — always produces FrontendResult', () => {
     const store = new FrontendResultStore();
 
-    // Create a patch with a cycle (frontend will fail)
+    // Create a patch with a cycle
     const patch = buildPatch((b) => {
       b.addBlock('InfiniteTimeRoot');
       const lag1 = b.addBlock('Lag');
@@ -105,19 +102,16 @@ describe('Frontend Pipeline Integration', () => {
       b.wire(lag2, 'out', lag1, 'in');
     });
 
+    // compileFrontend always returns FrontendResult now
     const result = compileFrontend(patch);
-    
-    // Frontend should produce a result (ok or error)
-    if (result.kind === 'ok') {
-      store.updateFromFrontendResult(result.result, 1);
-      expect(store.snapshot.status).toBe('frontendOk');
-      // Even with errors, frontend produces partial results
-      expect(store.snapshot.errors.length).toBeGreaterThanOrEqual(0);
-    } else {
-      store.updateFromFrontendFailure(result, 1);
-      expect(store.snapshot.status).toBe('frontendError');
-      expect(store.snapshot.errors.length).toBeGreaterThan(0);
-    }
+
+    // Result always has the full shape
+    expect(result.typedPatch).toBeDefined();
+    expect(result.cycleSummary).toBeDefined();
+    expect(result.normalizedPatch).toBeDefined();
+
+    store.updateFromFrontendResult(result, 1);
+    expect(store.snapshot.status).toBe('ready');
   });
 
   it('snapshot tracks patch revision for coherence', () => {
@@ -129,10 +123,7 @@ describe('Frontend Pipeline Integration', () => {
     });
 
     const result1 = compileFrontend(patch1);
-    expect(result1.kind).toBe('ok');
-    if (result1.kind !== 'ok') return;
-
-    store.updateFromFrontendResult(result1.result, 10);
+    store.updateFromFrontendResult(result1, 10);
     expect(store.snapshot.patchRevision).toBe(10);
 
     // Update with new revision
@@ -142,10 +133,7 @@ describe('Frontend Pipeline Integration', () => {
     });
 
     const result2 = compileFrontend(patch2);
-    expect(result2.kind).toBe('ok');
-    if (result2.kind !== 'ok') return;
-
-    store.updateFromFrontendResult(result2.result, 11);
+    store.updateFromFrontendResult(result2, 11);
     expect(store.snapshot.patchRevision).toBe(11);
   });
 
@@ -158,11 +146,8 @@ describe('Frontend Pipeline Integration', () => {
     });
 
     const result = compileFrontend(patch);
-    expect(result.kind).toBe('ok');
-    if (result.kind !== 'ok') return;
-
-    store.updateFromFrontendResult(result.result, 1);
-    expect(store.snapshot.status).toBe('frontendOk');
+    store.updateFromFrontendResult(result, 1);
+    expect(store.snapshot.status).toBe('ready');
     expect(store.snapshot.resolvedPortTypes.size).toBeGreaterThan(0);
 
     store.clear();

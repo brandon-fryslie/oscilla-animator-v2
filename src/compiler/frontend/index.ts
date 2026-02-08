@@ -14,6 +14,8 @@
  * 6. Axis validation
  * 7. Cycle classification
  *
+ * // [LAW:dataflow-not-control-flow] All steps execute unconditionally; errors are data.
+ *
  * Output: FrontendResult with TypedPatch, CycleSummary, diagnostics, backendReady flag
  */
 
@@ -22,7 +24,7 @@ import type { NormalizedPatch } from '../../graph/normalize';
 import type { TypedPatch, TypeResolvedPatch } from '../ir/patches';
 import type { CanonicalType } from '../../core/canonical-types';
 // Frontend passes
-import { pass2TypeGraph } from './analyze-type-graph';
+import { pass2TypeGraphSafe, type Pass2Error } from './analyze-type-graph';
 import { analyzeCycles, type CycleSummary } from './analyze-cycles';
 import { validateTypes, validateNoVarAxes, type AxisViolation } from './axis-validate';
 
@@ -31,7 +33,7 @@ import { expandComposites, type ExpansionDiagnostic, type ExpansionProvenance } 
 
 import { buildDraftGraph } from './draft-graph';
 import { finalizeNormalizationFixpoint } from './final-normalization';
-import { bridgeToNormalizedPatch } from './draft-graph-bridge';
+import { bridgeToNormalizedPatch, bridgePartialToNormalizedPatch } from './draft-graph-bridge';
 import { BLOCK_DEFS_BY_TYPE } from '../../blocks/registry';
 
 // Re-export types for consumers
@@ -61,6 +63,8 @@ export interface FrontendError {
 /**
  * Result of Frontend compilation.
  * Contains everything UI needs, regardless of whether Backend will succeed.
+ *
+ * // [LAW:dataflow-not-control-flow] Always produced — backendReady is data, not control flow.
  */
 export interface FrontendResult {
   /** The typed patch with resolved port types */
@@ -77,21 +81,6 @@ export interface FrontendResult {
   readonly expansionProvenance?: ExpansionProvenance;
 }
 
-/**
- * Frontend failure (normalization or type resolution failed completely).
- */
-export interface FrontendFailure {
-  readonly kind: 'error';
-  readonly errors: readonly FrontendError[];
-  /** Partial results if available */
-  readonly normalizedPatch?: NormalizedPatch;
-  readonly typedPatch?: TypedPatch;
-}
-
-export type FrontendCompileResult =
-  | { kind: 'ok'; result: FrontendResult }
-  | FrontendFailure;
-
 // =============================================================================
 // Main Frontend Entry Point
 // =============================================================================
@@ -102,120 +91,84 @@ export type FrontendCompileResult =
  * Produces TypedPatch + CycleSummary for UI, even if Backend would fail.
  * The `backendReady` flag indicates whether Backend can proceed.
  *
+ * // [LAW:dataflow-not-control-flow] All passes execute unconditionally.
+ * Every pass always runs; variability lives in the data (errors, partial types),
+ * not in whether operations execute.
+ *
  * @param patch - The patch to compile
- * @returns FrontendCompileResult with typed graph and cycle info
+ * @returns FrontendResult with typed graph and cycle info
  */
 export interface FrontendOptions {
   readonly traceCardinalitySolver?: boolean;
 }
 
-export function compileFrontend(patch: Patch, options?: FrontendOptions): FrontendCompileResult {
-  // Step 1: Composite expansion
+export function compileFrontend(patch: Patch, options?: FrontendOptions): FrontendResult {
+  const errors: FrontendError[] = [];
+
+  // Step 1: Composite expansion (always)
   const expansion = expandComposites(patch);
-  const hasExpansionErrors = expansion.diagnostics.some(d => d.severity === 'error');
-  if (hasExpansionErrors) {
-    return { kind: 'error', errors: expansion.diagnostics.map(convertExpansionDiagnostic) };
-  }
+  errors.push(
+    ...expansion.diagnostics
+      .filter(d => d.severity === 'error')
+      .map(convertExpansionDiagnostic),
+  );
   const expandedPatch = expansion.patch;
 
-  // Step 2: Build DraftGraph from expanded patch
+  // Step 2: Build DraftGraph from expanded patch (always)
   const draftGraph = buildDraftGraph(expandedPatch);
 
-  // Step 3: Run fixpoint engine
+  // Step 3: Run fixpoint engine (always)
   const fixpointResult = finalizeNormalizationFixpoint(
     draftGraph,
     BLOCK_DEFS_BY_TYPE,
     { maxIterations: 20 },
   );
 
-  // Step 4: If strict resolution failed, return failure with diagnostics
-  if (fixpointResult.strict === null) {
-    const errors: FrontendError[] = fixpointResult.diagnostics.map((d) => ({
-      kind: 'FixpointDiagnostic',
-      message: typeof d === 'object' && d !== null && 'message' in d
-        ? String((d as { message: string }).message)
-        : String(d),
-    }));
+  // Collect fixpoint diagnostics as errors
+  errors.push(...convertFixpointDiagnostics(fixpointResult.diagnostics));
 
-    // If no diagnostics were collected, provide a generic message
-    if (errors.length === 0) {
-      errors.push({
-        kind: 'FixpointFailed',
-        message: 'Fixpoint normalization could not fully resolve the graph',
-      });
-    }
-
-    return { kind: 'error', errors };
-  }
-
-  // Step 5: Bridge StrictTypedGraph → NormalizedPatch + TypeResolvedPatch
-  const { normalizedPatch, typeResolved } = bridgeToNormalizedPatch(
-    fixpointResult.strict,
-    expandedPatch,
-    BLOCK_DEFS_BY_TYPE,
-  );
-
-  // Step 6: Shared tail (type graph → axis validation → cycle analysis)
-  const errors: FrontendError[] = [];
-
-  // Collect fixpoint diagnostics as non-fatal warnings
-  for (const d of fixpointResult.diagnostics) {
-    if (typeof d === 'object' && d !== null && 'kind' in d && (d as { kind: string }).kind === 'TypeConstraintError') {
-      errors.push({
-        kind: 'FixpointTypeError',
-        message: typeof d === 'object' && 'message' in d ? String((d as { message: string }).message) : String(d),
-      });
-    }
-  }
-
-  return compileFrontendTail(typeResolved, normalizedPatch, errors, expansion.provenance);
-}
-
-// =============================================================================
-// Shared Tail (pass2TypeGraph → axis validation → cycle analysis)
-// =============================================================================
-
-/**
- * Run type graph, axis validation, and cycle analysis.
- */
-function compileFrontendTail(
-  typeResolved: TypeResolvedPatch,
-  normalizedPatch: NormalizedPatch,
-  errors: FrontendError[],
-  expansionProvenance?: ExpansionProvenance,
-): FrontendCompileResult {
-  // Type Graph (produces TypedPatch)
-  let typedPatch;
-  try {
-    typedPatch = pass2TypeGraph(typeResolved);
-  } catch (e) {
-    // pass2TypeGraph throws on type mismatches — convert to structured error
+  // If fixpoint didn't converge and no diagnostics explain why, add a generic message
+  if (fixpointResult.strict === null && errors.length === 0) {
     errors.push({
-      kind: 'TypeGraphError',
-      message: e instanceof Error ? e.message : String(e),
+      kind: 'FixpointFailed',
+      message: 'Fixpoint normalization could not fully resolve the graph',
     });
-    return { kind: 'error', errors };
   }
 
-  // Axis Validation (Item #15)
+  // Step 4: Bridge (always — strict when available, partial otherwise)
+  // [LAW:dataflow-not-control-flow] Both paths produce the same shape; variability is in the data.
+  const { normalizedPatch, typeResolved } = fixpointResult.strict
+    ? bridgeToNormalizedPatch(fixpointResult.strict, expandedPatch, BLOCK_DEFS_BY_TYPE)
+    : bridgePartialToNormalizedPatch(fixpointResult.graph, fixpointResult.facts, expandedPatch, BLOCK_DEFS_BY_TYPE);
+
+  // Step 5: Type graph (always — total, never throws)
+  const { typedPatch, errors: tgErrors } = pass2TypeGraphSafe(typeResolved);
+  errors.push(...tgErrors.map(convertPass2Error));
+
+  // Step 6: Axis validation (always)
   const allTypes: CanonicalType[] = Array.from(typeResolved.portTypes.values());
   const axisViolations = validateTypes(allTypes);
   const varEscapeViolations = validateNoVarAxes(allTypes);
-  const allViolations = [...axisViolations, ...varEscapeViolations];
+  errors.push(
+    ...[...axisViolations, ...varEscapeViolations].map((v) => convertAxisViolation(v, typeResolved)),
+  );
 
-  if (allViolations.length > 0) {
-    errors.push(...allViolations.map((v) => convertAxisViolation(v, typeResolved)));
-  }
-
-  // Cycle Classification (for UI)
+  // Step 7: Cycle classification (always)
   const cycleSummary = analyzeCycles(typedPatch);
 
-  // Determine if Backend can proceed
-  const backendReady = errors.length === 0 && !cycleSummary.hasIllegalCycles;
+  // Step 8: backendReady is data, not control flow
+  const backendReady =
+    errors.length === 0 &&
+    fixpointResult.strict !== null &&
+    !cycleSummary.hasIllegalCycles;
 
   return {
-    kind: 'ok',
-    result: { typedPatch, cycleSummary, errors, backendReady, normalizedPatch, expansionProvenance },
+    typedPatch,
+    cycleSummary,
+    errors,
+    backendReady,
+    normalizedPatch,
+    expansionProvenance: expansion.provenance,
   };
 }
 
@@ -229,6 +182,31 @@ function convertExpansionDiagnostic(d: ExpansionDiagnostic): FrontendError {
     message: d.message,
     blockId: d.at.instanceBlockId,
     portId: d.at.port,
+  };
+}
+
+/**
+ * Convert fixpoint diagnostics to FrontendErrors.
+ */
+function convertFixpointDiagnostics(diagnostics: readonly unknown[]): FrontendError[] {
+  const result: FrontendError[] = [];
+  for (const d of diagnostics) {
+    if (typeof d === 'object' && d !== null && 'kind' in d) {
+      const kind = (d as { kind: string }).kind;
+      const message = 'message' in d ? String((d as { message: string }).message) : String(d);
+      result.push({ kind: `Fixpoint/${kind}`, message });
+    }
+  }
+  return result;
+}
+
+/**
+ * Convert Pass2Error to FrontendError.
+ */
+function convertPass2Error(error: Pass2Error): FrontendError {
+  return {
+    kind: `TypeGraph/${error.kind}`,
+    message: error.message,
   };
 }
 

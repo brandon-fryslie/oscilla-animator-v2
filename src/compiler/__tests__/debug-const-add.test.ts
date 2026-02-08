@@ -130,10 +130,10 @@ describe('Debug fixpoint harness', () => {
 
     // Full frontend should succeed
     const result = compileFrontend(patch);
-    console.log('\nFrontend result kind:', result.kind);
-    if (result.kind === 'error') {
+    console.log('\nFrontend backendReady:', result.backendReady);
+    if (!result.backendReady) {
       console.log('errors:', JSON.stringify(result.errors, null, 2));
     }
-    expect(result.kind).toBe('ok');
+    expect(result.backendReady).toBe(true);
   });
 });

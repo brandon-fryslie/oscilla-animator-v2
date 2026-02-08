@@ -6,7 +6,7 @@
  * 2. Edge cases: empty graph, result shape
  */
 import { describe, it, expect } from 'vitest';
-import { compileFrontend, type FrontendCompileResult } from '../index';
+import { compileFrontend, type FrontendResult } from '../index';
 import { buildPatch } from '../../../graph/Patch';
 
 // =============================================================================
@@ -24,12 +24,8 @@ describe('compileFrontend', () => {
     });
 
     const result = compileFrontend(patch);
-    expect(result.kind).toBe('ok');
-
-    if (result.kind === 'ok') {
-      expect(result.result.typedPatch.portTypes.size).toBeGreaterThan(0);
-      expect(result.result.backendReady).toBe(true);
-    }
+    expect(result.backendReady).toBe(true);
+    expect(result.typedPatch.portTypes.size).toBeGreaterThan(0);
   });
 
   it('Const → Multiply chain compiles successfully', () => {
@@ -42,11 +38,8 @@ describe('compileFrontend', () => {
     });
 
     const result = compileFrontend(patch);
-    expect(result.kind).toBe('ok');
-
-    if (result.kind === 'ok') {
-      expect(result.result.typedPatch.portTypes.size).toBeGreaterThan(0);
-    }
+    expect(result.backendReady).toBe(true);
+    expect(result.typedPatch.portTypes.size).toBeGreaterThan(0);
   });
 });
 
@@ -59,13 +52,9 @@ describe('Frontend edge cases', () => {
     const patch = buildPatch(() => {});
 
     const result = compileFrontend(patch);
-    expect(result.kind).toBe('ok');
-
-    if (result.kind === 'ok') {
-      expect(result.result.typedPatch.portTypes.size).toBe(0);
-      expect(result.result.errors).toHaveLength(0);
-      expect(result.result.backendReady).toBe(true);
-    }
+    expect(result.backendReady).toBe(true);
+    expect(result.typedPatch.portTypes.size).toBe(0);
+    expect(result.errors).toHaveLength(0);
   });
 
   it('result shape matches FrontendResult interface', () => {
@@ -79,18 +68,16 @@ describe('Frontend edge cases', () => {
 
     const result = compileFrontend(patch);
 
-    if (result.kind === 'ok') {
-      // Verify all required fields exist
-      expect(result.result.typedPatch).toBeDefined();
-      expect(result.result.cycleSummary).toBeDefined();
-      expect(result.result.errors).toBeDefined();
-      expect(typeof result.result.backendReady).toBe('boolean');
-      expect(result.result.normalizedPatch).toBeDefined();
-      expect(result.result.normalizedPatch.blocks).toBeDefined();
-      expect(result.result.normalizedPatch.edges).toBeDefined();
-      expect(result.result.normalizedPatch.blockIndex).toBeDefined();
-      expect(result.result.normalizedPatch.patch).toBeDefined();
-    }
+    // Verify all required fields exist
+    expect(result.typedPatch).toBeDefined();
+    expect(result.cycleSummary).toBeDefined();
+    expect(result.errors).toBeDefined();
+    expect(typeof result.backendReady).toBe('boolean');
+    expect(result.normalizedPatch).toBeDefined();
+    expect(result.normalizedPatch.blocks).toBeDefined();
+    expect(result.normalizedPatch.edges).toBeDefined();
+    expect(result.normalizedPatch.blockIndex).toBeDefined();
+    expect(result.normalizedPatch.patch).toBeDefined();
   });
 
   it('does not crash on graphs with type mismatches', () => {
@@ -104,9 +91,10 @@ describe('Frontend edge cases', () => {
       b.wire(ellipse, 'shape', array, 'element');
     });
 
-    // Should not throw — returns a result (ok or error)
+    // Should not throw — always returns FrontendResult
     const result = compileFrontend(patch);
-    expect(['ok', 'error']).toContain(result.kind);
+    expect(result.typedPatch).toBeDefined();
+    expect(result.cycleSummary).toBeDefined();
   });
 
   it('FrontendOptions no longer has useFixpointFrontend', () => {
@@ -114,6 +102,6 @@ describe('Frontend edge cases', () => {
 
     // compileFrontend should accept options without useFixpointFrontend
     const result = compileFrontend(patch, { traceCardinalitySolver: false });
-    expect(result.kind).toBe('ok');
+    expect(result.backendReady).toBe(true);
   });
 });

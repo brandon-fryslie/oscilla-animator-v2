@@ -116,60 +116,20 @@ export async function compileAndSwap(deps: CompileOrchestratorDeps, isInitial: b
     traceCardinalitySolver: debugValues?.traceCardinalitySolver,
   });
 
-  // Store frontend snapshot regardless of success/failure
-  if (frontendResult.kind === 'ok') {
-    store.frontend.updateFromFrontendResult(frontendResult.result, patchRevision);
-  } else {
-    store.frontend.updateFromFrontendFailure(frontendResult, patchRevision);
-  }
+  // Store frontend snapshot (always available now)
+  // [LAW:dataflow-not-control-flow] Frontend always produces a FrontendResult.
+  store.frontend.updateFromFrontendResult(frontendResult, patchRevision);
 
   // [LAW:one-source-of-truth] Compute frontend diagnostics once for all paths.
-  const frontendDiagnostics = (() => {
-    const errors = frontendResult.kind === 'error'
-      ? frontendResult.errors
-      : frontendResult.result.errors;
-    return errors.length > 0
-      ? convertFrontendErrorsToDiagnostics(errors, patchRevision, compileId)
-      : [];
-  })();
+  const frontendDiagnostics = frontendResult.errors.length > 0
+    ? convertFrontendErrorsToDiagnostics(frontendResult.errors, patchRevision, compileId)
+    : [];
 
-  // If frontend failed or backend is not ready, emit diagnostics and bail early
-  if (frontendResult.kind === 'error') {
+  // If backend is not ready, emit diagnostics and bail early
+  if (!frontendResult.backendReady) {
     const errorMsg = frontendResult.errors.map((e: { message: string }) => e.message).join(', ');
 
     // Emit CompileEnd with frontend errors
-    store.events.emit({
-      type: 'CompileEnd',
-      compileId,
-      patchId: 'patch-0',
-      patchRevision,
-      status: 'failure',
-      durationMs: Date.now() - startTime,
-      diagnostics: frontendDiagnostics,
-    });
-
-    store.diagnostics.log({
-      level: 'error',
-      message: `Compile failed (frontend): ${isInitial ? JSON.stringify(frontendResult.errors) : errorMsg}`,
-    });
-
-    if (isInitial) {
-      // INVARIANT: Initial compile MUST succeed. Failure means the demo patch
-      // is structurally broken (e.g., missing required inputs, unknown block types).
-      // This throw exists to surface those bugs immediately. Do NOT remove it or
-      // wrap it in a try/catch - fix the underlying patch instead.
-      // See: src/__tests__/initial-compile-invariant.test.ts
-      throw new Error(`Initial compile failed (frontend): ${errorMsg}`);
-    }
-    // For recompile, keep running with old program
-    return;
-  }
-
-  // Frontend succeeded - check if backend can proceed
-  if (!frontendResult.result.backendReady) {
-    const errorMsg = frontendResult.result.errors.map((e: { message: string }) => e.message).join(', ');
-
-    // Emit CompileEnd with partial frontend errors (backend not ready)
     store.events.emit({
       type: 'CompileEnd',
       compileId,
@@ -186,7 +146,12 @@ export async function compileAndSwap(deps: CompileOrchestratorDeps, isInitial: b
     });
 
     if (isInitial) {
-      throw new Error(`Initial compile failed (frontend not ready): ${errorMsg}`);
+      // INVARIANT: Initial compile MUST succeed. Failure means the demo patch
+      // is structurally broken (e.g., missing required inputs, unknown block types).
+      // This throw exists to surface those bugs immediately. Do NOT remove it or
+      // wrap it in a try/catch - fix the underlying patch instead.
+      // See: src/__tests__/initial-compile-invariant.test.ts
+      throw new Error(`Initial compile failed (frontend): ${errorMsg}`);
     }
     // For recompile, keep running with old program
     return;
@@ -201,7 +166,7 @@ export async function compileAndSwap(deps: CompileOrchestratorDeps, isInitial: b
     events: store.events,
     patchRevision,
     patchId: 'patch-0',
-    precomputedFrontend: frontendResult.result,
+    precomputedFrontend: frontendResult,
   });
 
   if (result.kind !== 'ok') {

@@ -12,6 +12,8 @@
 import {
   type CanonicalType,
   requireInst,
+  payloadsEqual,
+  unitsEqual,
 } from "../../core/canonical-types";
 import type { TypedPatch, BlockIndex, TypeResolvedPatch, PortKey } from "../ir/patches";
 import { getBlockDefinition, getBlockCardinalityMetadata } from "../../blocks/registry";
@@ -71,13 +73,13 @@ function isTypeCompatible(from: CanonicalType, to: CanonicalType, allowsBroadcas
   const toCard = requireInst(to.extent.cardinality, 'cardinality');
   const toTemp = requireInst(to.extent.temporality, 'temporality');
 
-  // Payload must match (resolved types - no variables)
-  if (from.payload !== to.payload) {
+  // Payload must match (structural equality — solver may produce non-singleton objects)
+  if (!payloadsEqual(from.payload, to.payload)) {
     return false;
   }
 
-  // Unit must match (resolved types - no variables)
-  if (from.unit.kind !== to.unit.kind) {
+  // Unit must match (structural equality — handles nested fields like angle subkind)
+  if (!unitsEqual(from.unit, to.unit)) {
     return false;
   }
 
@@ -208,4 +210,103 @@ export function pass2TypeGraph(typeResolved: TypeResolvedPatch): TypedPatch {
     ...typeResolved,
     blockOutputTypes,
   };
+}
+
+// =============================================================================
+// Total (never-throws) variant
+// =============================================================================
+
+export interface Pass2TypeGraphResult {
+  readonly typedPatch: TypedPatch;
+  readonly errors: readonly Pass2Error[];
+}
+
+/**
+ * Total variant of pass2TypeGraph — never throws.
+ *
+ * Returns the TypedPatch AND any errors as data. Downstream passes always
+ * get a TypedPatch to work with, even when there are type mismatches.
+ *
+ * // [LAW:dataflow-not-control-flow] Errors are data, not control flow.
+ */
+export function pass2TypeGraphSafe(typeResolved: TypeResolvedPatch): Pass2TypeGraphResult {
+  const errors: Pass2Error[] = [];
+
+  // Build block output types map (for legacy compatibility)
+  const blockOutputTypes = new Map<string, ReadonlyMap<string, CanonicalType>>();
+
+  for (let i = 0; i < typeResolved.blocks.length; i++) {
+    const block = typeResolved.blocks[i];
+    const blockIndex = i as BlockIndex;
+    const blockDef = getBlockDefinition(block.type);
+    if (!blockDef) continue;
+
+    const outputTypes = new Map<string, CanonicalType>();
+    for (const portId of Object.keys(blockDef.outputs)) {
+      const type = getPortType(typeResolved, blockIndex, portId, 'out');
+      if (type) {
+        outputTypes.set(portId, type);
+      }
+    }
+
+    blockOutputTypes.set(block.id, outputTypes);
+  }
+
+  // Validate type compatibility for edges
+  for (const edge of typeResolved.edges) {
+    const fromBlock = typeResolved.blocks[edge.fromBlock];
+    const toBlock = typeResolved.blocks[edge.toBlock];
+
+    if (!fromBlock || !toBlock) continue;
+
+    const fromType = getPortType(typeResolved, edge.fromBlock, edge.fromPort, 'out');
+    const toType = getPortType(typeResolved, edge.toBlock, edge.toPort, 'in');
+
+    if (!fromType || !toType) {
+      if (!fromType) {
+        errors.push({
+          kind: "PortTypeUnknown",
+          blockIndex: edge.fromBlock,
+          slotId: edge.fromPort,
+          message: `Unknown output port type: block[${edge.fromBlock}].${edge.fromPort}`,
+        });
+      }
+      if (!toType) {
+        errors.push({
+          kind: "PortTypeUnknown",
+          blockIndex: edge.toBlock,
+          slotId: edge.toPort,
+          message: `Unknown input port type: block[${edge.toBlock}].${edge.toPort}`,
+        });
+      }
+      continue;
+    }
+
+    // Check if the destination block allows signal→field broadcast
+    const toMeta = getBlockCardinalityMetadata(toBlock.type);
+    const allowsBroadcast = toMeta?.broadcastPolicy === 'allowZipSig';
+
+    // Validate type compatibility
+    if (!isTypeCompatible(fromType, toType, allowsBroadcast)) {
+      const fromCard = requireInst(fromType.extent.cardinality, 'cardinality');
+      const fromTemp = requireInst(fromType.extent.temporality, 'temporality');
+      const toCard = requireInst(toType.extent.cardinality, 'cardinality');
+      const toTemp = requireInst(toType.extent.temporality, 'temporality');
+
+      errors.push({
+        kind: "NoConversionPath",
+        connectionId: `${edge.fromBlock}:${edge.fromPort}->${edge.toBlock}:${edge.toPort}`,
+        fromType,
+        toType,
+        message: `Type mismatch: cannot connect ${fromCard.kind}+${fromTemp.kind}<${fromType.payload.kind}, unit:${fromType.unit.kind}> to ${toCard.kind}+${toTemp.kind}<${toType.payload.kind}, unit:${toType.unit.kind}> (${fromBlock.type}.${edge.fromPort} -> ${toBlock.type}.${edge.toPort})`,
+      });
+    }
+  }
+
+  const typedPatch: TypedPatch = {
+    ...typeResolved,
+    blockOutputTypes,
+  };
+
+  return { typedPatch, errors };
 }

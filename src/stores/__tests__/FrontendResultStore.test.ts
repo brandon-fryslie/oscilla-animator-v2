@@ -31,12 +31,9 @@ describe('FrontendResultStore', () => {
     });
 
     const result = compileFrontend(patch);
-    expect(result.kind).toBe('ok');
-    if (result.kind !== 'ok') return;
+    store.updateFromFrontendResult(result, 1);
 
-    store.updateFromFrontendResult(result.result, 1);
-
-    expect(store.snapshot.status).toBe('frontendOk');
+    expect(store.snapshot.status).toBe('ready');
     expect(store.snapshot.patchRevision).toBe(1);
     expect(store.snapshot.backendReady).toBe(true);
     expect(store.snapshot.resolvedPortTypes.size).toBeGreaterThan(0);
@@ -52,10 +49,7 @@ describe('FrontendResultStore', () => {
     });
 
     const result = compileFrontend(patch);
-    expect(result.kind).toBe('ok');
-    if (result.kind !== 'ok') return;
-
-    store.updateFromFrontendResult(result.result, 1);
+    store.updateFromFrontendResult(result, 1);
 
     // Check by canonical address (displayName-based, e.g. "ellipse_1")
     const rxAddr = `v1:blocks.ellipse_1.inputs.rx`;
@@ -78,10 +72,7 @@ describe('FrontendResultStore', () => {
     });
 
     const result = compileFrontend(patch);
-    expect(result.kind).toBe('ok');
-    if (result.kind !== 'ok') return;
-
-    store.updateFromFrontendResult(result.result, 1);
+    store.updateFromFrontendResult(result, 1);
 
     // Connected port should have 'userEdge' provenance, not 'defaultSource'
     const rxAddr = `v1:blocks.ellipse_1.inputs.rx`;
@@ -101,10 +92,7 @@ describe('FrontendResultStore', () => {
     });
 
     const result = compileFrontend(patch);
-    expect(result.kind).toBe('ok');
-    if (result.kind !== 'ok') return;
-
-    store.updateFromFrontendResult(result.result, 1);
+    store.updateFromFrontendResult(result, 1);
 
     // Ellipse output 'shape' should have a resolved type (Ellipse outputs float, not shape2d)
     const shapeAddr = `v1:blocks.ellipse_1.outputs.shape`;
@@ -123,10 +111,7 @@ describe('FrontendResultStore', () => {
     });
 
     const result = compileFrontend(patch);
-    expect(result.kind).toBe('ok');
-    if (result.kind !== 'ok') return;
-
-    store.updateFromFrontendResult(result.result, 1);
+    store.updateFromFrontendResult(result, 1);
 
     // Input port type
     const rxType = store.getResolvedPortTypeByIds(ellipseId!, 'rx', 'in');
@@ -147,11 +132,8 @@ describe('FrontendResultStore', () => {
     });
 
     const result = compileFrontend(patch);
-    expect(result.kind).toBe('ok');
-    if (result.kind !== 'ok') return;
-
-    store.updateFromFrontendResult(result.result, 1);
-    expect(store.snapshot.status).toBe('frontendOk');
+    store.updateFromFrontendResult(result, 1);
+    expect(store.snapshot.status).toBe('ready');
 
     store.clear();
 
@@ -172,13 +154,9 @@ describe('FrontendResultStore', () => {
     });
 
     const result = compileFrontend(patch);
-    if (result.kind === 'ok') {
-      store.updateFromFrontendResult(result.result, 1);
-      expect(store.snapshot.status).toBe('frontendOk');
-    } else {
-      store.updateFromFrontendFailure(result, 1);
-      expect(store.snapshot.status).toBe('frontendError');
-      expect(store.snapshot.errors.length).toBeGreaterThan(0);
-    }
+    // compileFrontend always returns FrontendResult now
+    store.updateFromFrontendResult(result, 1);
+    expect(store.snapshot.status).toBe('ready');
+    // Cycle should be detected but errors/backendReady tell the story
   });
 });

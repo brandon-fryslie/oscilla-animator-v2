@@ -131,10 +131,7 @@ function solveAndComputeFacts(
 ): { facts: TypeFacts; solveDiagnostics: unknown[]; collectPorts: ReadonlySet<DraftPortKey> } {
   const solveDiagnostics: unknown[] = [];
 
-  // Empty graph → empty facts
-  if (g.blocks.length === 0) {
-    return { facts: EMPTY_TYPE_FACTS, solveDiagnostics, collectPorts: new Set() };
-  }
+  // [LAW:dataflow-not-control-flow] No empty-graph guard — extractConstraints + solvers handle empty inputs.
 
   // 1) Extract constraints
   const extracted = extractConstraints(g, registry);
@@ -263,17 +260,9 @@ function addObligationsIfMissing(
   g: DraftGraph,
   newObligations: readonly Obligation[],
 ): { graph: DraftGraph; added: number } {
-  if (newObligations.length === 0) {
-    return { graph: g, added: 0 };
-  }
-
+  // [LAW:dataflow-not-control-flow] Empty arrays flow through naturally.
   const existingIds = new Set(g.obligations.map((o) => o.id));
   const toAdd = newObligations.filter((o) => !existingIds.has(o.id));
-
-  if (toAdd.length === 0) {
-    return { graph: g, added: 0 };
-  }
-
   const obligations = [...g.obligations, ...toAdd].sort((a, b) => a.id.localeCompare(b.id));
 
   return {

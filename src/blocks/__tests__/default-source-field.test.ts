@@ -52,13 +52,10 @@ describe('DefaultSource field cardinality', () => {
     });
 
     const result = compileFrontend(patch);
-    if (result.kind === 'error') {
+    if (!result.backendReady) {
       console.error('Frontend errors:', JSON.stringify(result.errors, null, 2));
     }
-    expect(result.kind).toBe('ok');
-    if (result.kind === 'ok') {
-      expect(result.result.backendReady).toBe(true);
-    }
+    expect(result.backendReady).toBe(true);
   });
 
   it('full compilation succeeds with default sources on field inputs', () => {

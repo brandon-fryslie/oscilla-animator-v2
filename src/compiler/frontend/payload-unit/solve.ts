@@ -13,7 +13,7 @@
  */
 
 import type { PayloadType, UnitType } from '../../../core/canonical-types';
-import { payloadsEqual, unitsEqual, unitNone } from '../../../core/canonical-types';
+import { payloadsEqual, unitsEqual, unitNone, FLOAT } from '../../../core/canonical-types';
 import type { InferenceCanonicalType } from '../../../core/inference-types';
 import { isPayloadVar, isUnitVar, isConcretePayload, isConcreteUnit } from '../../../core/inference-types';
 import type { DraftPortKey } from '../type-facts';
@@ -367,7 +367,11 @@ export function solvePayloadUnit(
     switch (constraint.kind) {
       case 'concretePayload': {
         const varInfo = portVarMapping.get(constraint.port);
-        if (!varInfo) break;
+        if (!varInfo) {
+          // [LAW:dataflow-not-control-flow] Missing port is data, not a skip reason.
+          errors.push({ kind: 'UnresolvedPayload', errorClass: 'Unresolved', port: constraint.port, message: `concretePayload constraint references unknown port: ${constraint.port}`, origins: [constraint.origin] });
+          break;
+        }
         const node = getPayloadNode(constraint.port, varInfo);
         const res = payloadUF.assign(node, constraint.value, payloadsEqual);
         if (!res.ok) {
@@ -384,7 +388,11 @@ export function solvePayloadUnit(
 
       case 'concreteUnit': {
         const varInfo = portVarMapping.get(constraint.port);
-        if (!varInfo) break;
+        if (!varInfo) {
+          // [LAW:dataflow-not-control-flow] Missing port is data, not a skip reason.
+          errors.push({ kind: 'UnresolvedUnit', errorClass: 'Unresolved', port: constraint.port, message: `concreteUnit constraint references unknown port: ${constraint.port}`, origins: [constraint.origin] });
+          break;
+        }
         const node = getUnitNode(constraint.port, varInfo);
         const res = unitUF.assign(node, constraint.value, unitsEqual);
         if (!res.ok) {
@@ -402,7 +410,12 @@ export function solvePayloadUnit(
       case 'payloadEq': {
         const varInfoA = portVarMapping.get(constraint.a);
         const varInfoB = portVarMapping.get(constraint.b);
-        if (!varInfoA || !varInfoB) break;
+        if (!varInfoA || !varInfoB) {
+          // [LAW:dataflow-not-control-flow] Missing port is data, not a skip reason.
+          const missing = !varInfoA ? constraint.a : constraint.b;
+          errors.push({ kind: 'UnresolvedPayload', errorClass: 'Unresolved', port: missing, message: `payloadEq constraint references unknown port: ${missing}`, origins: [constraint.origin] });
+          break;
+        }
         const nodeA = getPayloadNode(constraint.a, varInfoA);
         const nodeB = getPayloadNode(constraint.b, varInfoB);
 
@@ -433,7 +446,12 @@ export function solvePayloadUnit(
       case 'unitEq': {
         const varInfoA = portVarMapping.get(constraint.a);
         const varInfoB = portVarMapping.get(constraint.b);
-        if (!varInfoA || !varInfoB) break;
+        if (!varInfoA || !varInfoB) {
+          // [LAW:dataflow-not-control-flow] Missing port is data, not a skip reason.
+          const missing = !varInfoA ? constraint.a : constraint.b;
+          errors.push({ kind: 'UnresolvedUnit', errorClass: 'Unresolved', port: missing, message: `unitEq constraint references unknown port: ${missing}`, origins: [constraint.origin] });
+          break;
+        }
         const nodeA = getUnitNode(constraint.a, varInfoA);
         const nodeB = getUnitNode(constraint.b, varInfoB);
 
@@ -463,7 +481,11 @@ export function solvePayloadUnit(
 
       case 'requirePayloadIn': {
         const varInfo = portVarMapping.get(constraint.port);
-        if (!varInfo) break;
+        if (!varInfo) {
+          // [LAW:dataflow-not-control-flow] Missing port is data, not a skip reason.
+          errors.push({ kind: 'UnresolvedPayload', errorClass: 'Unresolved', port: constraint.port, message: `requirePayloadIn constraint references unknown port: ${constraint.port}`, origins: [constraint.origin] });
+          break;
+        }
         const node = getPayloadNode(constraint.port, varInfo);
         const meta = getPayloadMeta(node);
 
@@ -478,7 +500,11 @@ export function solvePayloadUnit(
 
       case 'requireUnitless': {
         const varInfo = portVarMapping.get(constraint.port);
-        if (!varInfo) break;
+        if (!varInfo) {
+          // [LAW:dataflow-not-control-flow] Missing port is data, not a skip reason.
+          errors.push({ kind: 'UnresolvedUnit', errorClass: 'Unresolved', port: constraint.port, message: `requireUnitless constraint references unknown port: ${constraint.port}`, origins: [constraint.origin] });
+          break;
+        }
         const node = getUnitNode(constraint.port, varInfo);
         const meta = getUnitMeta(node);
         meta.mustBeUnitless = true;
@@ -534,8 +560,9 @@ export function solvePayloadUnit(
 
     // If still unresolved (no allowed set at all), default to float for payload vars.
     // A chain of polymorphic blocks with no metadata constraints is assumed float.
+    // Uses the FLOAT singleton to preserve reference equality with singletons elsewhere.
     if (!resolvedPayload && varInfo.payloadVarId) {
-      resolvedPayload = { kind: 'float' } as PayloadType;
+      resolvedPayload = FLOAT;
       payloadUF.assign(pNode, resolvedPayload, payloadsEqual);
     }
 

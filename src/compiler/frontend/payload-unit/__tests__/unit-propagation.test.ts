@@ -19,14 +19,8 @@ import type { CanonicalType } from '../../../../core/canonical-types';
  */
 function compileAndGetPortTypes(patch: Patch): ReadonlyMap<PortKey, CanonicalType> | null {
   const result = compileFrontend(patch);
-  if (result.kind === 'ok') {
-    return result.result.typedPatch.portTypes;
-  }
-  // Error path may have partial typedPatch
-  if (result.typedPatch) {
-    return result.typedPatch.portTypes;
-  }
-  return null;
+  // FrontendResult always has typedPatch
+  return result.typedPatch.portTypes;
 }
 
 /**

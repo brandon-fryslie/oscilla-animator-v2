@@ -18,8 +18,8 @@ import type { NormalizedPatch, NormalizedEdge, BlockIndex } from './normalize-in
 import { blockIndex } from './normalize-indexing';
 import type { TypeResolvedPatch, PortKey, CollectEdgeKey } from '../ir/patches';
 import type { CanonicalType } from '../../core/canonical-types';
-import type { StrictTypedGraph, DraftPortKey } from './type-facts';
-import type { DraftBlock, DraftEdge, DraftEdgeRole } from './draft-graph';
+import type { StrictTypedGraph, DraftPortKey, TypeFacts } from './type-facts';
+import type { DraftBlock, DraftEdge, DraftEdgeRole, DraftGraph } from './draft-graph';
 import type { BlockDef } from '../../blocks/registry';
 
 // =============================================================================
@@ -84,6 +84,70 @@ export function bridgeToNormalizedPatch(
     ...normalizedPatch,
     portTypes,
     collectEdgeTypes: collectEdgeTypes.size > 0 ? collectEdgeTypes : undefined,
+  };
+
+  return { normalizedPatch, typeResolved };
+}
+
+/**
+ * Convert a DraftGraph + TypeFacts into NormalizedPatch + TypeResolvedPatch
+ * when strict finalization failed.
+ *
+ * Produces a partial TypeResolvedPatch: portTypes contains only ports where
+ * facts.ports has status === 'ok'. This allows downstream passes (type graph,
+ * axis validation, cycle analysis) to run on whatever we know, giving the UI
+ * partial type information rather than nothing.
+ *
+ * // [LAW:dataflow-not-control-flow] Pipeline always produces output; partial is data, not an error.
+ * // [LAW:one-type-per-behavior] Shares block reconstruction/edge conversion with bridgeToNormalizedPatch.
+ */
+export function bridgePartialToNormalizedPatch(
+  graph: DraftGraph,
+  facts: TypeFacts,
+  expandedPatch: Patch,
+  registry: ReadonlyMap<string, BlockDef>,
+): BridgeResult {
+  // Step 1: Build dense BlockIndex mapping (sorted by id for determinism)
+  const sortedBlocks = [...graph.blocks].sort((a, b) => a.id.localeCompare(b.id));
+  const blockIndexMap = new Map<BlockId, BlockIndex>();
+  for (let i = 0; i < sortedBlocks.length; i++) {
+    blockIndexMap.set(sortedBlocks[i].id as BlockId, blockIndex(i));
+  }
+
+  // Step 2: Reconstruct Block objects from DraftBlocks
+  const blocks: Block[] = sortedBlocks.map((db) =>
+    reconstructBlock(db, expandedPatch, registry),
+  );
+
+  // Step 3: Convert DraftEdge → NormalizedEdge
+  const stringIndexMap = new Map<string, BlockIndex>();
+  for (const [k, v] of blockIndexMap) { stringIndexMap.set(k, v); }
+
+  const normalizedEdges = buildNormalizedEdges(graph.edges, stringIndexMap);
+
+  // Step 4: Build synthetic Patch
+  const syntheticPatch = buildSyntheticPatch(blocks, graph.edges, stringIndexMap);
+
+  // Step 5: Build partial portTypes from TypeFacts (only status === 'ok' ports)
+  const portTypes = new Map<PortKey, CanonicalType>();
+  for (const [draftKey, hint] of facts.ports) {
+    if (hint.status !== 'ok' || !hint.canonical) continue;
+    const translated = translatePortKey(draftKey, stringIndexMap);
+    if (translated !== null) {
+      portTypes.set(translated, hint.canonical);
+    }
+  }
+
+  const normalizedPatch: NormalizedPatch = {
+    patch: syntheticPatch,
+    blockIndex: blockIndexMap,
+    blocks,
+    edges: normalizedEdges,
+  };
+
+  const typeResolved: TypeResolvedPatch = {
+    ...normalizedPatch,
+    portTypes,
   };
 
   return { normalizedPatch, typeResolved };

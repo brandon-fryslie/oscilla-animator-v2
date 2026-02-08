@@ -35,28 +35,25 @@ describe('Frontend Independence', () => {
 
       const result = compileFrontend(patch);
 
-      expect(result.kind).toBe('ok');
-      if (result.kind === 'ok') {
-        const frontend = result.result;
+      expect(result.backendReady).toBe(true);
 
-        // TypedPatch should exist
-        expect(frontend.typedPatch).toBeDefined();
-        expect(frontend.typedPatch.blocks).toBeDefined();
+      // TypedPatch should exist
+      expect(result.typedPatch).toBeDefined();
+      expect(result.typedPatch.blocks).toBeDefined();
 
-        // Port types should be resolved
-        expect(frontend.typedPatch.portTypes).toBeDefined();
-        expect(frontend.typedPatch.portTypes.size).toBeGreaterThan(0);
+      // Port types should be resolved
+      expect(result.typedPatch.portTypes).toBeDefined();
+      expect(result.typedPatch.portTypes.size).toBeGreaterThan(0);
 
-        // Check that some port types are concrete (not type variables)
-        let foundConcreteType = false;
-        for (const [portKey, portType] of frontend.typedPatch.portTypes) {
-          if (portType && typeof portType === 'object' && 'payload' in portType) {
-            foundConcreteType = true;
-            break;
-          }
+      // Check that some port types are concrete (not type variables)
+      let foundConcreteType = false;
+      for (const [portKey, portType] of result.typedPatch.portTypes) {
+        if (portType && typeof portType === 'object' && 'payload' in portType) {
+          foundConcreteType = true;
+          break;
         }
-        expect(foundConcreteType).toBe(true);
       }
+      expect(foundConcreteType).toBe(true);
     });
 
     it('provides type information accessible to UI', () => {
@@ -70,18 +67,16 @@ describe('Frontend Independence', () => {
 
       const result = compileFrontend(patch);
 
-      expect(result.kind).toBe('ok');
-      if (result.kind === 'ok') {
-        const { typedPatch } = result.result;
+      expect(result.backendReady).toBe(true);
+      const { typedPatch } = result;
 
-        // Verify TypedPatch structure for UI
-        expect(typedPatch.blocks).toBeDefined();
-        expect(Array.isArray(typedPatch.blocks)).toBe(true);
-        expect(typedPatch.portTypes).toBeInstanceOf(Map);
+      // Verify TypedPatch structure for UI
+      expect(typedPatch.blocks).toBeDefined();
+      expect(Array.isArray(typedPatch.blocks)).toBe(true);
+      expect(typedPatch.portTypes).toBeInstanceOf(Map);
 
-        // Should have types for connected ports
-        expect(typedPatch.portTypes.size).toBeGreaterThan(0);
-      }
+      // Should have types for connected ports
+      expect(typedPatch.portTypes.size).toBeGreaterThan(0);
     });
   });
 
@@ -105,17 +100,15 @@ describe('Frontend Independence', () => {
 
       // Frontend should succeed even if adapters were needed
       // (Note: actual adapter need depends on type inference)
-      expect(result.kind).toBe('ok');
-      if (result.kind === 'ok') {
-        const { normalizedPatch, typedPatch } = result.result;
+      expect(result.backendReady).toBe(true);
+      const { normalizedPatch, typedPatch } = result;
 
-        // Normalized patch should exist
-        expect(normalizedPatch).toBeDefined();
-        expect(normalizedPatch.blocks).toBeDefined();
+      // Normalized patch should exist
+      expect(normalizedPatch).toBeDefined();
+      expect(normalizedPatch.blocks).toBeDefined();
 
-        // TypedPatch should be produced
-        expect(typedPatch).toBeDefined();
-      }
+      // TypedPatch should be produced
+      expect(typedPatch).toBeDefined();
     });
 
     it('reports adapter insertion in normalized patch', () => {
@@ -129,21 +122,19 @@ describe('Frontend Independence', () => {
 
       const result = compileFrontend(patch);
 
-      expect(result.kind).toBe('ok');
-      if (result.kind === 'ok') {
-        const { normalizedPatch } = result.result;
+      expect(result.backendReady).toBe(true);
+      const { normalizedPatch } = result;
 
-        // Normalized patch should have blocks array
-        expect(normalizedPatch.blocks).toBeDefined();
-        expect(normalizedPatch.blocks.length).toBeGreaterThan(0);
+      // Normalized patch should have blocks array
+      expect(normalizedPatch.blocks).toBeDefined();
+      expect(normalizedPatch.blocks.length).toBeGreaterThan(0);
 
-        // Check that normalization produced a valid structure with blockIndex map
-        expect(normalizedPatch.blockIndex).toBeDefined();
-        expect(normalizedPatch.blockIndex.size).toBeGreaterThan(0);
+      // Check that normalization produced a valid structure with blockIndex map
+      expect(normalizedPatch.blockIndex).toBeDefined();
+      expect(normalizedPatch.blockIndex.size).toBeGreaterThan(0);
 
-        // Verify blocks can be indexed
-        expect(normalizedPatch.blockIndex.size).toBe(normalizedPatch.blocks.length);
-      }
+      // Verify blocks can be indexed
+      expect(normalizedPatch.blockIndex.size).toBe(normalizedPatch.blocks.length);
     });
   });
 
@@ -165,25 +156,23 @@ describe('Frontend Independence', () => {
 
       const result = compileFrontend(patch);
 
-      expect(result.kind).toBe('ok');
-      if (result.kind === 'ok') {
-        const { cycleSummary } = result.result;
+      expect(result.backendReady).toBe(true);
+      const { cycleSummary } = result;
 
-        // CycleSummary should exist
-        expect(cycleSummary).toBeDefined();
-        expect(cycleSummary.sccs).toBeDefined();
-        expect(Array.isArray(cycleSummary.sccs)).toBe(true);
+      // CycleSummary should exist
+      expect(cycleSummary).toBeDefined();
+      expect(cycleSummary.sccs).toBeDefined();
+      expect(Array.isArray(cycleSummary.sccs)).toBe(true);
 
-        // Should have detected the cycle
-        expect(cycleSummary.sccs.length).toBeGreaterThan(0);
+      // Should have detected the cycle
+      expect(cycleSummary.sccs.length).toBeGreaterThan(0);
 
-        // Verify cycle classification fields exist
-        const firstSCC = cycleSummary.sccs[0];
-        if (firstSCC) {
-          expect(firstSCC).toHaveProperty('blocks');
-          expect(firstSCC).toHaveProperty('classification');
-          expect(firstSCC).toHaveProperty('legality');
-        }
+      // Verify cycle classification fields exist
+      const firstSCC = cycleSummary.sccs[0];
+      if (firstSCC) {
+        expect(firstSCC).toHaveProperty('blocks');
+        expect(firstSCC).toHaveProperty('classification');
+        expect(firstSCC).toHaveProperty('legality');
       }
     });
 
@@ -198,25 +187,23 @@ describe('Frontend Independence', () => {
 
       const result = compileFrontend(patch);
 
-      expect(result.kind).toBe('ok');
-      if (result.kind === 'ok') {
-        const { cycleSummary } = result.result;
+      expect(result.backendReady).toBe(true);
+      const { cycleSummary } = result;
 
-        // CycleSummary should always be present
-        expect(cycleSummary).toBeDefined();
-        expect(cycleSummary.sccs).toBeDefined();
+      // CycleSummary should always be present
+      expect(cycleSummary).toBeDefined();
+      expect(cycleSummary.sccs).toBeDefined();
 
-        // Verify structure for UI consumption
-        expect(typeof cycleSummary.hasIllegalCycles).toBe('boolean');
+      // Verify structure for UI consumption
+      expect(typeof cycleSummary.hasIllegalCycles).toBe('boolean');
 
-        // Each SCC should have UI-relevant fields
-        cycleSummary.sccs.forEach((scc) => {
-          expect(scc.blocks).toBeDefined();
-          expect(Array.isArray(scc.blocks)).toBe(true);
-          expect(scc.classification).toBeDefined();
-          expect(scc.legality).toBeDefined();
-        });
-      }
+      // Each SCC should have UI-relevant fields
+      cycleSummary.sccs.forEach((scc) => {
+        expect(scc.blocks).toBeDefined();
+        expect(Array.isArray(scc.blocks)).toBe(true);
+        expect(scc.classification).toBeDefined();
+        expect(scc.legality).toBeDefined();
+      });
     });
 
     it('reports illegal cycles without backend failure', () => {
@@ -238,22 +225,19 @@ describe('Frontend Independence', () => {
       const result = compileFrontend(patch);
 
       // Frontend should succeed but report cycle as illegal
-      expect(result.kind).toBe('ok');
-      if (result.kind === 'ok') {
-        const { cycleSummary, backendReady } = result.result;
+      const { cycleSummary, backendReady } = result;
 
-        // Should detect illegal cycle
-        expect(cycleSummary.hasIllegalCycles).toBe(true);
+      // Should detect illegal cycle
+      expect(cycleSummary.hasIllegalCycles).toBe(true);
 
-        // Backend should NOT be ready
-        expect(backendReady).toBe(false);
+      // Backend should NOT be ready
+      expect(backendReady).toBe(false);
 
-        // Should have at least one illegal cycle
-        const illegalCycles = cycleSummary.sccs.filter(
-          (scc) => scc.legality === 'instantaneous-illegal'
-        );
-        expect(illegalCycles.length).toBeGreaterThan(0);
-      }
+      // Should have at least one illegal cycle
+      const illegalCycles = cycleSummary.sccs.filter(
+        (scc) => scc.legality === 'instantaneous-illegal'
+      );
+      expect(illegalCycles.length).toBeGreaterThan(0);
     });
   });
 
@@ -270,14 +254,11 @@ describe('Frontend Independence', () => {
 
       const result = compileFrontend(patch);
 
-      expect(result.kind).toBe('ok');
-      if (result.kind === 'ok') {
-        const { backendReady, errors } = result.result;
+      const { backendReady, errors } = result;
 
-        // Should be ready for backend
-        expect(backendReady).toBe(true);
-        expect(errors.length).toBe(0);
-      }
+      // Should be ready for backend
+      expect(backendReady).toBe(true);
+      expect(errors.length).toBe(0);
     });
 
     it('sets backendReady=false for illegal cycles', () => {
@@ -293,9 +274,7 @@ describe('Frontend Independence', () => {
 
       const result = compileFrontend(patch);
 
-      if (result.kind === 'ok') {
-        expect(result.result.backendReady).toBe(false);
-      }
+      expect(result.backendReady).toBe(false);
     });
 
     it('sets backendReady=false for type resolution errors', () => {
@@ -308,17 +287,9 @@ describe('Frontend Independence', () => {
 
       const result = compileFrontend(patch);
 
-      // Frontend might fail or succeed with unresolved types
-      if (result.kind === 'error') {
-        // Expected: type resolution failed
-        expect(result.errors.length).toBeGreaterThan(0);
-      } else if (result.kind === 'ok') {
-        // If it succeeded, should mark not ready due to unconnected block
-        // (may or may not be backend ready depending on how type inference handles this)
-        const { errors } = result.result;
-        // Just verify the structure exists
-        expect(errors).toBeDefined();
-      }
+      // Frontend always returns FrontendResult now — verify the structure exists
+      const { errors } = result;
+      expect(errors).toBeDefined();
     });
   });
 
@@ -330,21 +301,18 @@ describe('Frontend Independence', () => {
 
       const result = compileFrontend(patch);
 
-      expect(result.kind).toBe('ok');
-      if (result.kind === 'ok') {
-        const frontend = result.result;
+      expect(result.backendReady).toBe(true);
 
-        // Verify all required fields exist
-        expect(frontend).toHaveProperty('typedPatch');
-        expect(frontend).toHaveProperty('cycleSummary');
-        expect(frontend).toHaveProperty('errors');
-        expect(frontend).toHaveProperty('backendReady');
-        expect(frontend).toHaveProperty('normalizedPatch');
+      // Verify all required fields exist
+      expect(result).toHaveProperty('typedPatch');
+      expect(result).toHaveProperty('cycleSummary');
+      expect(result).toHaveProperty('errors');
+      expect(result).toHaveProperty('backendReady');
+      expect(result).toHaveProperty('normalizedPatch');
 
-        // Type checks
-        expect(Array.isArray(frontend.errors)).toBe(true);
-        expect(typeof frontend.backendReady).toBe('boolean');
-      }
+      // Type checks
+      expect(Array.isArray(result.errors)).toBe(true);
+      expect(typeof result.backendReady).toBe('boolean');
     });
 
     it('produces serializable output for UI', () => {
@@ -356,20 +324,18 @@ describe('Frontend Independence', () => {
 
       const result = compileFrontend(patch);
 
-      expect(result.kind).toBe('ok');
-      if (result.kind === 'ok') {
-        const { cycleSummary } = result.result;
+      expect(result.backendReady).toBe(true);
+      const { cycleSummary } = result;
 
-        // CycleSummary should be serializable
-        expect(() => JSON.stringify(cycleSummary.sccs)).not.toThrow();
+      // CycleSummary should be serializable
+      expect(() => JSON.stringify(cycleSummary.sccs)).not.toThrow();
 
-        // Verify structure is JSON-safe
-        cycleSummary.sccs.forEach((scc) => {
-          expect(typeof scc.classification).toBe('string');
-          expect(typeof scc.legality).toBe('string');
-          expect(Array.isArray(scc.blocks)).toBe(true);
-        });
-      }
+      // Verify structure is JSON-safe
+      cycleSummary.sccs.forEach((scc) => {
+        expect(typeof scc.classification).toBe('string');
+        expect(typeof scc.legality).toBe('string');
+        expect(Array.isArray(scc.blocks)).toBe(true);
+      });
     });
   });
 });

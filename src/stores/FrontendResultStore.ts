@@ -15,7 +15,7 @@
 
 import { makeAutoObservable } from 'mobx';
 import type { CanonicalType } from '../core/canonical-types';
-import type { FrontendResult, FrontendFailure, CycleSummary, FrontendError } from '../compiler/frontend';
+import type { FrontendResult, CycleSummary, FrontendError } from '../compiler/frontend';
 import type { NormalizedPatch } from '../compiler/frontend/normalize-indexing';
 import type { TypedPatch } from '../compiler/ir/patches';
 import type { DefaultSource, PortId, TransformStep } from '../types';
@@ -34,7 +34,7 @@ import { addressToString } from '../types/canonical-address';
  */
 export interface FrontendSnapshot {
   /** Status of the frontend compilation */
-  readonly status: 'none' | 'frontendOk' | 'frontendError';
+  readonly status: 'none' | 'ready';
 
   /** Patch revision this snapshot was produced from */
   readonly patchRevision: number;
@@ -137,39 +137,13 @@ export class FrontendResultStore {
     const portProvenance = this.buildPortProvenance(normalizedPatch, typedPatch);
 
     this.snapshot = {
-      status: 'frontendOk',
+      status: 'ready',
       patchRevision,
       portProvenance,
       resolvedPortTypes,
       errors,
       backendReady,
       cycleSummary,
-    };
-  }
-
-  /**
-   * Update snapshot from a FrontendFailure (partial data).
-   */
-  updateFromFrontendFailure(
-    failure: FrontendFailure,
-    patchRevision: number,
-  ): void {
-    if (failure.normalizedPatch) {
-      this.rebuildBlockIdMap(failure.normalizedPatch);
-    }
-
-    this.snapshot = {
-      status: 'frontendError',
-      patchRevision,
-      portProvenance: failure.normalizedPatch
-        ? this.buildPortProvenance(failure.normalizedPatch, failure.typedPatch ?? null)
-        : new Map(),
-      resolvedPortTypes: failure.typedPatch && failure.normalizedPatch
-        ? this.buildResolvedPortTypes(failure.typedPatch, failure.normalizedPatch)
-        : new Map(),
-      errors: failure.errors,
-      backendReady: false,
-      cycleSummary: null,
     };
   }
 

@@ -96,19 +96,12 @@ export function compile(patch: Patch, options?: CompileOptions): CompileResult {
   try {
     // =========================================================================
     // Frontend: Use precomputed result or run compileFrontend()
+    // [LAW:dataflow-not-control-flow] compileFrontend always returns FrontendResult.
     // =========================================================================
-    let frontend: FrontendResult;
-    if (options?.precomputedFrontend) {
-      frontend = options.precomputedFrontend;
-    } else {
-      const frontendResult = compileFrontend(patch);
-      if (frontendResult.kind === 'error') {
-        return makeFailure(frontendResult.errors.map(frontendErrorToCompileError));
-      }
-      if (!frontendResult.result.backendReady) {
-        return makeFailure(frontendResult.result.errors.map(frontendErrorToCompileError));
-      }
-      frontend = frontendResult.result;
+    const frontend: FrontendResult = options?.precomputedFrontend ?? compileFrontend(patch);
+
+    if (!frontend.backendReady) {
+      return makeFailure(frontend.errors.map(frontendErrorToCompileError));
     }
 
     const normalized = frontend.normalizedPatch;
