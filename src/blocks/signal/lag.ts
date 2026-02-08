@@ -7,6 +7,7 @@
 import { registerBlock } from '../registry';
 import { canonicalType, payloadStride, floatConst, requireInst, unitNone, contractClamp01 } from '../../core/canonical-types';
 import { FLOAT } from '../../core/canonical-types';
+import { inferType, unitVar } from '../../core/inference-types';
 import { OpCode, stableStateId } from '../../compiler/ir/types';
 
 registerBlock({
@@ -24,12 +25,12 @@ registerBlock({
     broadcastPolicy: 'allowZipSig',
   },
   inputs: {
-    target: { label: 'Target', type: canonicalType(FLOAT) },
+    target: { label: 'Target', type: inferType(FLOAT, unitVar('lag_U')) },
     smoothing: { type: canonicalType(FLOAT, unitNone(), undefined, contractClamp01()), defaultValue: 0.5, exposedAsPort: false },
     initialValue: { type: canonicalType(FLOAT), defaultValue: 0, exposedAsPort: false },
   },
   outputs: {
-    out: { label: 'Output', type: canonicalType(FLOAT) },
+    out: { label: 'Output', type: inferType(FLOAT, unitVar('lag_U')) },
   },
   lower: ({ ctx, inputsById, config }) => {
     const target = inputsById.target;

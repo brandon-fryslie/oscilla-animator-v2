@@ -20,3 +20,4 @@ import './bipolar-to-unipolar';
 import './unipolar-to-bipolar';
 import './norm01-to-scalar';
 import './scalar-to-deg';
+import './cast-float-to-int';

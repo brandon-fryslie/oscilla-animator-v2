@@ -35,7 +35,7 @@ export function unitNone(): UnitType {
 
 /** Integer count/index */
 export function unitCount(): UnitType {
-  return { kind: 'count' };
+  return { kind: 'none' };
 }
 
 /** Angle in turns [0,1) with wrap semantics (one full rotation = 1.0) */

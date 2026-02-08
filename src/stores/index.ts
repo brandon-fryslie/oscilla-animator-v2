@@ -27,6 +27,7 @@ export {
 } from './DiagnosticsStore';
 export { CompositeEditorStore } from './CompositeEditorStore';
 export { StepDebugStore } from './StepDebugStore';
+export { DemoStore } from './DemoStore';
 
 // React integration
 export { StoreProvider, useStores, useStore } from './context';

@@ -235,6 +235,50 @@ describe('OpcodeInterpreter - Error Handling', () => {
   });
 });
 
+describe('OpcodeInterpreter - F64ToI32Trunc', () => {
+  it('truncates positive floats toward zero', () => {
+    expect(applyOpcode('f64_to_i32_trunc', [2.7])).toBe(2);
+    expect(applyOpcode('f64_to_i32_trunc', [2.1])).toBe(2);
+    expect(applyOpcode('f64_to_i32_trunc', [2.9])).toBe(2);
+  });
+
+  it('truncates negative floats toward zero', () => {
+    expect(applyOpcode('f64_to_i32_trunc', [-2.7])).toBe(-2);
+    expect(applyOpcode('f64_to_i32_trunc', [-2.1])).toBe(-2);
+    expect(applyOpcode('f64_to_i32_trunc', [-2.9])).toBe(-2);
+  });
+
+  it('preserves integers already in range', () => {
+    expect(applyOpcode('f64_to_i32_trunc', [0])).toBe(0);
+    expect(applyOpcode('f64_to_i32_trunc', [1])).toBe(1);
+    expect(applyOpcode('f64_to_i32_trunc', [-1])).toBe(-1);
+    expect(applyOpcode('f64_to_i32_trunc', [42])).toBe(42);
+    expect(applyOpcode('f64_to_i32_trunc', [2147483647])).toBe(2147483647);
+    expect(applyOpcode('f64_to_i32_trunc', [-2147483648])).toBe(-2147483648);
+  });
+
+  it('clamps overflow to i32 range', () => {
+    expect(applyOpcode('f64_to_i32_trunc', [2147483648])).toBe(2147483647);
+    expect(applyOpcode('f64_to_i32_trunc', [1e15])).toBe(2147483647);
+    expect(applyOpcode('f64_to_i32_trunc', [-2147483649])).toBe(-2147483648);
+    expect(applyOpcode('f64_to_i32_trunc', [-1e15])).toBe(-2147483648);
+  });
+
+  it('NaN returns 0', () => {
+    expect(applyOpcode('f64_to_i32_trunc', [NaN])).toBe(0);
+  });
+
+  it('Infinity clamps to 0 (not finite)', () => {
+    expect(applyOpcode('f64_to_i32_trunc', [Infinity])).toBe(0);
+    expect(applyOpcode('f64_to_i32_trunc', [-Infinity])).toBe(0);
+  });
+
+  it('handles zero cases', () => {
+    expect(applyOpcode('f64_to_i32_trunc', [0])).toBe(0);
+    expect(applyOpcode('f64_to_i32_trunc', [-0])).toBe(0);
+  });
+});
+
 describe('OpcodeInterpreter - Strict Arity Enforcement', () => {
   describe('Binary ops require exactly 2 arguments', () => {
     it('sub: throws on 1 argument', () => {

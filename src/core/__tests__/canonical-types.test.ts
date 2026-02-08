@@ -29,7 +29,10 @@ import {
   instanceRef,
 } from '../canonical-types';
 import { isConcretePayload } from '../inference-types';
-import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, CAMERA_PROJECTION, payloadStride } from '../canonical-types';
+import {
+  FLOAT, INT, BOOL, VEC2, VEC3, COLOR, CAMERA_PROJECTION, payloadStride,
+  unitNone, unitDegrees, unitTurns, isValidPayloadUnit, defaultUnitForPayload,
+} from '../canonical-types';
 
 // =============================================================================
 // PayloadType Tests
@@ -156,6 +159,34 @@ describe('EventExpr Type Invariants', () => {
     expect(type.extent.binding.kind).toBe('inst');
     expect(type.extent.perspective.kind).toBe('inst');
     expect(type.extent.branch.kind).toBe('inst');
+  });
+});
+
+// =============================================================================
+// Unit System Tests (post scalar→none migration)
+// =============================================================================
+
+describe('Unit System (scalar removal)', () => {
+  it('defaultUnitForPayload(FLOAT) returns none (not scalar)', () => {
+    const unit = defaultUnitForPayload(FLOAT);
+    expect(unit.kind).toBe('none');
+  });
+
+  it('isValidPayloadUnit(FLOAT, unitNone()) returns true', () => {
+    expect(isValidPayloadUnit(FLOAT, unitNone())).toBe(true);
+  });
+
+  it('isValidPayloadUnit(FLOAT, unitDegrees()) returns true (angle still valid for float)', () => {
+    expect(isValidPayloadUnit(FLOAT, unitDegrees())).toBe(true);
+  });
+
+  it('isValidPayloadUnit(FLOAT, unitTurns()) returns true', () => {
+    expect(isValidPayloadUnit(FLOAT, unitTurns())).toBe(true);
+  });
+
+  it('canonicalType(FLOAT) defaults to unitNone()', () => {
+    const type = canonicalType(FLOAT);
+    expect(type.unit.kind).toBe('none');
   });
 });
 

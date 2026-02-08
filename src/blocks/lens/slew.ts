@@ -10,6 +10,7 @@
 import { registerBlock } from '../registry';
 import { canonicalType, payloadStride, requireInst, unitNone, contractClamp01 } from '../../core/canonical-types';
 import { FLOAT } from '../../core/canonical-types';
+import { inferType, unitVar } from '../../core/inference-types';
 import { OpCode, stableStateId } from '../../compiler/ir/types';
 
 registerBlock({
@@ -27,11 +28,11 @@ registerBlock({
     broadcastPolicy: 'allowZipSig',
   },
   inputs: {
-    in: { label: 'In', type: canonicalType(FLOAT) },
+    in: { label: 'In', type: inferType(FLOAT, unitVar('slew_U')) },
     rate: { label: 'Rate', type: canonicalType(FLOAT, unitNone(), undefined, contractClamp01()), defaultValue: 0.5 },
   },
   outputs: {
-    out: { label: 'Out', type: canonicalType(FLOAT) },
+    out: { label: 'Out', type: inferType(FLOAT, unitVar('slew_U')) },
   },
   lower: ({ ctx, inputsById }) => {
     const input = inputsById.in;

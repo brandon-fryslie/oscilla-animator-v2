@@ -10,6 +10,7 @@
 import { registerBlock } from '../registry';
 import { canonicalType, payloadStride } from '../../core/canonical-types';
 import { FLOAT } from '../../core/canonical-types';
+import { inferType, unitVar } from '../../core/inference-types';
 import { OpCode } from '../../compiler/ir/types';
 
 registerBlock({
@@ -26,10 +27,10 @@ registerBlock({
     broadcastPolicy: 'allowZipSig',
   },
   inputs: {
-    in: { label: 'In', type: canonicalType(FLOAT) },
+    in: { label: 'In', type: inferType(FLOAT, unitVar('w01_U')) },
   },
   outputs: {
-    out: { label: 'Out', type: canonicalType(FLOAT) },
+    out: { label: 'Out', type: inferType(FLOAT, unitVar('w01_U')) },
   },
   lower: ({ inputsById, ctx }) => {
     const input = inputsById.in;

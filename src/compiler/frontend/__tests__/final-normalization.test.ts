@@ -29,7 +29,7 @@ describe('finalizeNormalizationFixpoint (skeleton)', () => {
     expect(result.strict).not.toBeNull();
   });
 
-  it('standalone Add: cardinality defaults to one, payload unresolved', () => {
+  it('standalone Add: cardinality defaults to one, payload defaults to float', () => {
     const patch = buildPatch((b) => {
       b.addBlock('Add');
     });
@@ -40,18 +40,19 @@ describe('finalizeNormalizationFixpoint (skeleton)', () => {
     });
 
     // Add is preserve+allowZipSig — cardinality defaults to one (signal chain).
-    // Payload is unresolved (auto-derived var with no concrete evidence).
-    // Ports stay 'unknown' because payload can't canonicalize.
+    // Payload defaults to float (first in allowed set) when no concrete evidence.
+    // Default source Consts are elaborated once types resolve.
     expect(result.iterations).toBeLessThanOrEqual(5);
-    expect(result.graph.blocks.length).toBe(g.blocks.length);
+    expect(result.graph.blocks.length).toBeGreaterThanOrEqual(g.blocks.length);
     // No cardinality errors — default-to-one is valid
     expect(result.diagnostics.filter(
       (d: any) => d.kind === 'CardinalityConstraintError',
     )).toHaveLength(0);
-    // Ports are unknown (payload unresolved)
+    // Ports resolve to float (default)
     const addBlock = g.blocks.find(b => b.type === 'Add')!;
     const aHint = result.facts.ports.get(draftPortKey(addBlock.id, 'a', 'in'));
-    expect(aHint?.status).toBe('unknown');
+    expect(aHint?.status).toBe('ok');
+    expect(aHint?.canonical?.payload.kind).toBe('float');
   });
 
   it('respects max iteration limit', () => {
@@ -121,10 +122,9 @@ describe('finalizeNormalizationFixpoint (skeleton)', () => {
     expect(result.facts.ports.size).toBeGreaterThan(0);
   });
 
-  it('Const → Add: strict fails because preserve cardinality is unresolved', () => {
-    // Const and Add are preserve blocks — cardinality requires external
-    // evidence to resolve. Without a transform block providing many,
-    // cardinality stays unresolved and strict finalization fails.
+  it('Const → Add: strict succeeds (cardinality defaults to one, payload defaults to float)', () => {
+    // Const and Add are preserve blocks — evidence-free cardinality defaults to one.
+    // Payload defaults to float (first in allowed set) when no concrete evidence.
     const patch = buildPatch((b) => {
       const c1 = b.addBlock('Const');
       const c2 = b.addBlock('Const');
@@ -138,8 +138,8 @@ describe('finalizeNormalizationFixpoint (skeleton)', () => {
       maxIterations: 10,
     });
 
-    // Cardinality unresolved → ports not all 'ok' → strict = null
-    expect(result.strict).toBeNull();
+    // All types resolve (cardinality=one, payload=float) → strict succeeds
+    expect(result.strict).not.toBeNull();
   });
 });
 
@@ -252,7 +252,7 @@ describe('finalizeNormalizationFixpoint (type solving)', () => {
 });
 
 describe('finalizeNormalizationFixpoint (cardinality solving)', () => {
-  it('Const → Add: cardinality defaults to one (signal chain)', () => {
+  it('Const → Add: cardinality defaults to one, payload defaults to float', () => {
     const patch = buildPatch((b) => {
       const c1 = b.addBlock('Const');
       const c2 = b.addBlock('Const');
@@ -271,10 +271,11 @@ describe('finalizeNormalizationFixpoint (cardinality solving)', () => {
     expect(result.diagnostics.filter(
       (d: any) => d.kind === 'CardinalityConstraintError',
     )).toHaveLength(0);
-    // Payload stays unresolved (both Const and Add are polymorphic)
+    // Payload defaults to float (first in allowed set)
     const addBlock = g.blocks.find(b => b.type === 'Add')!;
     const aHint = result.facts.ports.get(draftPortKey(addBlock.id, 'a', 'in'));
-    expect(aHint?.status).toBe('unknown');
+    expect(aHint?.status).toBe('ok');
+    expect(aHint?.canonical?.payload.kind).toBe('float');
   });
 
   it('Array → Add: Add input becomes many (field)', () => {
@@ -333,10 +334,9 @@ describe('finalizeNormalizationFixpoint (cardinality solving)', () => {
     }
   });
 
-  it('Const → Add: strict finalization fails (payload unresolved without evidence)', () => {
-    // Const and Add are both polymorphic — no concrete payload evidence
-    // in a purely-polymorphic graph, so payload vars stay unresolved.
-    // Cardinality defaults to one (correct for signal chain).
+  it('Const → Add: strict succeeds (payload defaults to float, cardinality defaults to one)', () => {
+    // Const and Add are both polymorphic — payload defaults to float
+    // (first in allowed set). Cardinality defaults to one (signal chain).
     const patch = buildPatch((b) => {
       const c1 = b.addBlock('Const');
       const c2 = b.addBlock('Const');
@@ -350,8 +350,8 @@ describe('finalizeNormalizationFixpoint (cardinality solving)', () => {
       maxIterations: 10,
     });
 
-    // Ports stay 'unknown' (payload unresolved) → strict fails
-    expect(result.strict).toBeNull();
+    // All types resolve → strict succeeds
+    expect(result.strict).not.toBeNull();
     // No cardinality errors — default-to-one is valid for signal chains
     expect(result.diagnostics.filter(
       (d: any) => d.kind === 'CardinalityConstraintError',
@@ -425,10 +425,11 @@ describe('finalizeNormalizationFixpoint (adapter insertion)', () => {
 });
 
 describe('finalizeNormalizationFixpoint (payload auto-derivation)', () => {
-  it('Const→Add: both polymorphic, payload stays var without concrete evidence', () => {
-    // Const uses payloadVar('const_payload') — it's polymorphic, not concrete float.
+  it('Const→Add: both polymorphic, payload defaults to float', () => {
+    // Const uses payloadVar('const_payload') — it's polymorphic.
     // Add gets auto-derived vars from BlockPayloadMetadata. Edge constraints unify
-    // the vars but neither side has concrete evidence, so payload stays unresolved.
+    // the vars. Without concrete evidence, the solver defaults to the first allowed
+    // payload (float) from the RequirePayloadIn constraint.
     const patch = buildPatch((b) => {
       const c1 = b.addBlock('Const');
       const c2 = b.addBlock('Const');
@@ -445,11 +446,8 @@ describe('finalizeNormalizationFixpoint (payload auto-derivation)', () => {
     const addBlock = g.blocks.find((b) => b.type === 'Add')!;
     const aHint = result.facts.ports.get(draftPortKey(addBlock.id, 'a', 'in'));
     expect(aHint).toBeDefined();
-
-    // Without concrete evidence from either side, payload remains a var
-    if (aHint?.status === 'unknown' && aHint.inference) {
-      expect(aHint.inference.payload.kind).toBe('var');
-    }
+    expect(aHint?.status).toBe('ok');
+    expect(aHint?.canonical?.payload.kind).toBe('float');
   });
 
   it('Sin block gets requireUnitless constraint — no unit mismatch with scalar input', () => {

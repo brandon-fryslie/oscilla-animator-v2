@@ -328,6 +328,43 @@ describe('Forbidden Patterns (Type System Invariants)', () => {
   // Composite Expansion Migration
   // =============================================================================
 
+  // =============================================================================
+  // Scalar Unit Removal
+  // =============================================================================
+
+  describe('Scalar Unit Removal', () => {
+
+    it('no unitScalar function anywhere in src/', () => {
+      const matches = grepSrc('unitScalar');
+      const allowlist = [
+        /forbidden-patterns\.test\.ts/,  // This file
+      ];
+      const filtered = filterAllowlist(matches, allowlist);
+      expect(filtered, 'unitScalar was removed — use unitNone() for dimensionless values').toEqual([]);
+    });
+
+    it('no UnitType kind scalar in src/ (except SlotValue/runtime which is different)', () => {
+      const matches = grepSrc("kind: 'scalar'");
+      const allowlist = [
+        /forbidden-patterns\.test\.ts/,  // This file
+        /lowerTypes\.ts/,                // SlotValue.kind: 'scalar' (runtime concept)
+        /IRBuilderImpl\.ts/,             // SlotValue mapping
+        /types\.ts.*compiler\/ir/,       // IR types (SlotValue/StateMapping)
+        /StepDebugPanel\.tsx/,           // SlotValue display
+        /StepDebugTypes\.ts/,            // SlotValue types
+        /StateMigration\.ts/,            // SlotValue migration
+        /executeFrameStepped\.ts/,       // SlotValue runtime
+        /ValueInspector\.ts/,            // SlotValue rendering
+        /RendererSample/,               // RendererSample.type: 'scalar'
+        /debug-viz/,                     // Debug viz uses RendererSample
+        /DebugService/,                  // Debug service
+      ];
+      const filtered = filterAllowlist(matches, allowlist);
+      expect(filtered, "UnitType kind: 'scalar' was removed — use kind: 'none'").toEqual([]);
+    });
+
+  });
+
   describe('Composite Expansion Migration', () => {
 
     it('no pass0CompositeExpansion function name in src/', () => {

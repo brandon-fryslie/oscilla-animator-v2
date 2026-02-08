@@ -29,6 +29,7 @@
  *   exp      - Exponential: Math.exp(x)
  *   log      - Natural log: Math.log(x)
  *   sign     - Sign: -1, 0, or 1
+ *   f64_to_i32_trunc - Float to int: trunc toward zero, clamp to i32, NaN→0
  *
  * BINARY (exactly 2 arguments):
  *   sub      - Subtraction: a - b
@@ -143,6 +144,13 @@ function applyUnaryOp(op: string, x: number): number {
       return Math.log(x);
     case 'sign':
       return Math.sign(x);
+    case 'f64_to_i32_trunc': {
+      if (!Number.isFinite(x)) return 0;
+      const t = Math.trunc(x);
+      if (t > 2147483647) return 2147483647;
+      if (t < -2147483648) return -2147483648;
+      return t || 0; // normalize -0 to +0
+    }
     default:
       throw new Error(`OpCode ${op} is not unary`);
   }

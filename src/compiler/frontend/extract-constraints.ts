@@ -90,7 +90,8 @@ export function extractConstraints(
     // Process outputs
     for (const [portName, outDef] of Object.entries(def.outputs)) {
       const key = draftPortKey(block.id, portName, 'out');
-      let type = outDef.type;
+      // Instantiate template vars into block-scoped vars before any further processing.
+      let type = instantiateTemplateVars(outDef.type, block.id);
 
       // Auto-derivation: if port has concrete payload but metadata says polymorphic,
       // replace payload with a block-scoped var + emit RequirePayloadIn
@@ -125,7 +126,8 @@ export function extractConstraints(
     for (const [portName, inDef] of Object.entries(def.inputs)) {
       if (inDef.exposedAsPort === false) continue;
       const key = draftPortKey(block.id, portName, 'in');
-      let type = inDef.type;
+      // Instantiate template vars into block-scoped vars before any further processing.
+      let type = instantiateTemplateVars(inDef.type, block.id);
 
       // Auto-derivation for inputs (same logic as outputs)
       if (isPolymorphic && meta && isConcretePayload(type.payload) && !isPayloadVar(type.payload)) {
@@ -226,6 +228,50 @@ export function extractConstraints(
   }
 
   return { portBaseTypes, payloadUnit, cardinality, baseCardinalityAxis, collectPorts };
+}
+
+// =============================================================================
+// Template Var Instantiation
+// =============================================================================
+
+/**
+ * Instantiate (alpha-rename) template payload/unit var IDs into block-scoped var IDs.
+ *
+ * Template var IDs in block defs (e.g., `payloadVar('const_payload')`) are placeholders
+ * shared across all instances of that block type. When multiple instances exist in the
+ * same graph, the raw template IDs collide in the solver's Substitution output map
+ * (last-write-wins). This function rewrites them into deterministic, collision-free IDs.
+ *
+ * Format:
+ * - payloadVar: `p:{blockId}:{templateVarName}` (block-scoped generic)
+ * - unitVar:    `u:{blockId}:{templateVarName}` (block-scoped generic)
+ *
+ * This preserves the "ports sharing the same template var within one block instance
+ * resolve to the same type" property, while ensuring different block instances get
+ * independent var resolutions.
+ *
+ * // NEXT TRIGGER (scoped var instantiation):
+ * // If two different block instances can share a template var ID (eg 'const_payload'),
+ * // then template vars MUST be instantiated into block-scoped (or port-scoped) var IDs here.
+ * // Any last-write-wins behavior in Substitution maps means instantiation is missing or incorrect.
+ *
+ * // [LAW:single-enforcer] This is the single place that instantiates template vars.
+ * // [LAW:dataflow-not-control-flow] Always runs; produces different values, not different control paths.
+ */
+function instantiateTemplateVars(
+  type: InferenceCanonicalType,
+  blockId: string,
+): InferenceCanonicalType {
+  let result = type;
+  if (isPayloadVar(type.payload)) {
+    const scopedId = `p:${blockId}:${type.payload.id}`;
+    result = { ...result, payload: { kind: 'var' as const, id: scopedId } };
+  }
+  if (isUnitVar(type.unit)) {
+    const scopedId = `u:${blockId}:${type.unit.id}`;
+    result = { ...result, unit: { kind: 'var' as const, id: scopedId } };
+  }
+  return result;
 }
 
 // =============================================================================

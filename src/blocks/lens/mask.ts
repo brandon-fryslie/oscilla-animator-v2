@@ -10,6 +10,7 @@
 import { registerBlock } from '../registry';
 import { canonicalType, payloadStride, floatConst, requireInst } from '../../core/canonical-types';
 import { FLOAT } from '../../core/canonical-types';
+import { inferType, unitVar } from '../../core/inference-types';
 import { OpCode } from '../../compiler/ir/types';
 import { alignInputs, withoutContract } from '../lower-utils';
 
@@ -27,11 +28,11 @@ registerBlock({
     broadcastPolicy: 'allowZipSig',
   },
   inputs: {
-    in: { label: 'In', type: canonicalType(FLOAT) },
+    in: { label: 'In', type: inferType(FLOAT, unitVar('mask_U')) },
     mask: { label: 'Mask', type: canonicalType(FLOAT), exposedAsPort: true },
   },
   outputs: {
-    out: { label: 'Out', type: canonicalType(FLOAT) },
+    out: { label: 'Out', type: inferType(FLOAT, unitVar('mask_U')) },
   },
   lower: ({ inputsById, ctx }) => {
     const input = inputsById.in;

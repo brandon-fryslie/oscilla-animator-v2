@@ -26,6 +26,7 @@ import { EventHub } from '../events/EventHub';
 import { DiagnosticHub } from '../diagnostics/DiagnosticHub';
 import { CompositeEditorStore } from './CompositeEditorStore';
 import { StepDebugStore } from './StepDebugStore';
+import { DemoStore } from './DemoStore';
 import { executeAction, type ActionResult } from '../diagnostics/actionExecutor';
 import type { DiagnosticAction } from '../diagnostics/types';
 
@@ -45,6 +46,7 @@ export class RootStore {
   readonly compositeEditor: CompositeEditorStore;
   readonly frontend: FrontendResultStore;
   readonly stepDebug: StepDebugStore;
+  readonly demo: DemoStore;
 
   // Patch revision tracking (for diagnostics)
   private patchRevision: number = 0;
@@ -98,6 +100,9 @@ export class RootStore {
 
     // Create StepDebugStore (step-through schedule debugger)
     this.stepDebug = new StepDebugStore();
+
+    // Create DemoStore (inject PatchStore dependency)
+    this.demo = new DemoStore(this.patch);
 
     // Wire up callback for MobX reactivity
     this.diagnosticHub.setOnRevisionChange(() => this.diagnostics.incrementRevision());
@@ -183,6 +188,9 @@ export class RootStore {
     // Dispose MobX reaction
     this.graphCommittedDisposer?.();
     this.graphCommittedDisposer = null;
+
+    // Dispose PatchStore persistence
+    this.patch.stopPersistence();
 
     // Dispose DiagnosticHub
     this.diagnosticHub.dispose();

@@ -116,7 +116,7 @@ export function testSignalType(
  * // Field type over instances
  * const fieldType = testSignalTypeWithExtent(
  *   FLOAT,
- *   unitScalar(),
+ *   unitNone(),
  *   { cardinality: cardinalityMany(instanceRef('circle')) }
  * );
  */
@@ -142,7 +142,7 @@ export function testSignalTypeWithExtent(
  * const angle = testFloat(unitRadians());
  */
 export function testFloat(unit?: UnitType): CanonicalType {
-  return makeSignalType(FLOAT, unit ?? unitScalar());
+  return makeSignalType(FLOAT, unit ?? unitNone());
 }
 
 /**
@@ -257,7 +257,7 @@ export function testEventType(
 }
 
 // Re-export unit constructors for convenience
-export { unitScalar, unitCount, unitTurns, contractWrap01, contractClamp01, unitRadians, unitDegrees, unitNdc2, unitNdc3, unitWorld2, unitWorld3, unitRgba01, unitNone };
+export { unitCount, unitTurns, contractWrap01, contractClamp01, unitRadians, unitDegrees, unitNdc2, unitNdc3, unitWorld2, unitWorld3, unitRgba01, unitNone };
 
 // Re-export cardinality constructors
 

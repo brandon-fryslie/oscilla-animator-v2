@@ -5,7 +5,7 @@
  * Uses Mantine for a gorgeous, modern look.
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   Group,
   Button,
@@ -21,6 +21,7 @@ import { Settings as SettingsIcon } from '@mui/icons-material';
 import { observer } from 'mobx-react-lite';
 import { useStore } from '../../../stores';
 import { useExportPatch } from '../../hooks/useExportPatch';
+import { clearStorageAndReload } from '../../../services/PatchPersistence';
 import type { DockviewApi } from 'dockview';
 import { Toast } from '../common/Toast';
 
@@ -32,32 +33,21 @@ interface ToolbarProps {
 export const Toolbar: React.FC<ToolbarProps> = observer(({ stats = 'FPS: --', dockviewApi }) => {
   const camera = useStore('camera');
   const patch = useStore('patch');
+  const demo = useStore('demo');
   const exportPatch = useExportPatch();
   const [toastOpen, setToastOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
   const [toastSeverity, setToastSeverity] = useState<'success' | 'error'>('success');
 
-  // HCL demo dropdown state - reads from window globals set by main.ts
-  const [demos, setDemos] = useState<Array<{ label: string; value: string }>>([]);
-  const [currentDemo, setCurrentDemo] = useState<string | null>(null);
-
-  useEffect(() => {
-    // Poll for demos availability (set by main.ts after runtime init)
-    const check = () => {
-      if (window.__oscilla_demos) {
-        setDemos(window.__oscilla_demos.map(d => ({ label: d.name, value: d.filename })));
-        setCurrentDemo(window.__oscilla_currentDemo ?? null);
-      }
-    };
-    check();
-    const interval = setInterval(check, 200);
-    return () => clearInterval(interval);
-  }, []);
+  // Derive Select data from DemoStore (stable unless demos change — they don't)
+  const demoSelectData = useMemo(
+    () => demo.demos.map(d => ({ label: d.name, value: d.filename })),
+    [demo.demos],
+  );
 
   const handleDemoChange = (value: string | null) => {
     if (value === null) return;
-    setCurrentDemo(value);
-    window.__oscilla_switchDemo?.(value);
+    demo.selectDemo(value);
   };
 
   const handleExport = async () => {
@@ -76,10 +66,7 @@ export const Toolbar: React.FC<ToolbarProps> = observer(({ stats = 'FPS: --', do
   };
 
   const handleResetLocalStorage = () => {
-    const clearStorageAndReload = (window as unknown as { clearStorageAndReload?: () => void }).clearStorageAndReload;
-    if (clearStorageAndReload) {
-      clearStorageAndReload();
-    }
+    clearStorageAndReload();
   };
 
   const handleNewPatch = () => {
@@ -141,10 +128,10 @@ export const Toolbar: React.FC<ToolbarProps> = observer(({ stats = 'FPS: --', do
           {/* Preset Selector + Stats and Actions */}
           <Group gap="md">
             {/* Demo Dropdown */}
-            {demos.length > 0 && (
+            {demoSelectData.length > 0 && (
               <Select
-                data={demos}
-                value={currentDemo}
+                data={demoSelectData}
+                value={demo.currentFilename}
                 onChange={handleDemoChange}
                 searchable
                 placeholder="Select demo..."

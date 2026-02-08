@@ -195,7 +195,7 @@ describe('Sparkline', () => {
 
     it('does NOT draw wrap markers for non-phase units', () => {
       const history = makeHistory([0.9, 0.95, 0.05, 0.1]);
-      render(React.createElement(Sparkline, { history, width: 100, height: 30, unit: { kind: 'scalar' } }));
+      render(React.createElement(Sparkline, { history, width: 100, height: 30, unit: { kind: 'none' } }));
       // setLineDash should not be called (no wrap markers)
       expect(mockCtx.setLineDash).not.toHaveBeenCalled();
     });

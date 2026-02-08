@@ -7,6 +7,7 @@
 
 import { registerBlock } from '../registry';
 import { canonicalType, canonicalEvent, payloadStride, requireInst, FLOAT } from '../../core/canonical-types';
+import { inferType, unitVar } from '../../core/inference-types';
 import { OpCode, stableStateId } from '../../compiler/ir/types';
 import type { ValueExprId } from '../../compiler/ir/Indices';
 
@@ -25,12 +26,12 @@ registerBlock({
     broadcastPolicy: 'disallowSignalMix',
   },
   inputs: {
-    value: { label: 'Value', type: canonicalType(FLOAT) },
+    value: { label: 'Value', type: inferType(FLOAT, unitVar('sh_U')) },
     trigger: { label: 'Trigger', type: canonicalEvent() },
     initialValue: { type: canonicalType(FLOAT), defaultValue: 0, exposedAsPort: false },
   },
   outputs: {
-    out: { label: 'Held', type: canonicalType(FLOAT) },
+    out: { label: 'Held', type: inferType(FLOAT, unitVar('sh_U')) },
   },
   lower: ({ ctx, inputsById, config }) => {
     const valueInput = inputsById.value;

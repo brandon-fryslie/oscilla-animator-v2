@@ -513,6 +513,12 @@ export function solvePayloadUnit(
           // Single allowed payload — resolve to that
           resolvedPayload = meta.allowedPayloads[0];
           payloadUF.assign(pNode, resolvedPayload, payloadsEqual);
+        } else if (meta.allowedPayloads.length > 1) {
+          // Multiple allowed payloads, no concrete evidence — default to first.
+          // [LAW:dataflow-not-control-flow] Polymorphic chains with no concrete
+          // evidence resolve to the first allowed payload (float for most blocks).
+          resolvedPayload = meta.allowedPayloads[0];
+          payloadUF.assign(pNode, resolvedPayload, payloadsEqual);
         } else if (meta.allowedPayloads.length === 0 && !validatedPayloadRoots.has(pRoot)) {
           validatedPayloadRoots.add(pRoot);
           errors.push({
@@ -524,6 +530,13 @@ export function solvePayloadUnit(
           });
         }
       }
+    }
+
+    // If still unresolved (no allowed set at all), default to float for payload vars.
+    // A chain of polymorphic blocks with no metadata constraints is assumed float.
+    if (!resolvedPayload && varInfo.payloadVarId) {
+      resolvedPayload = { kind: 'float' } as PayloadType;
+      payloadUF.assign(pNode, resolvedPayload, payloadsEqual);
     }
 
     // Validate resolved payload against allowed set
@@ -562,6 +575,13 @@ export function solvePayloadUnit(
         resolvedUnit = unitNone();
         unitUF.assign(uNode, resolvedUnit, unitsEqual);
       }
+    }
+
+    // If still unresolved (no concrete evidence at all), default to unitNone().
+    // A chain of polymorphic blocks with no concrete unit source is dimensionless.
+    if (!resolvedUnit && varInfo.unitVarId) {
+      resolvedUnit = unitNone();
+      unitUF.assign(uNode, resolvedUnit, unitsEqual);
     }
 
     // Validate resolved unit against unitless requirement

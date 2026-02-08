@@ -131,7 +131,7 @@ export function isValidPayloadUnit(payload: PayloadType, unit: UnitType): boolea
 export function defaultUnitForPayload(payload: PayloadType): UnitType {
   switch (payload.kind) {
     case 'float': return unitNone();
-    case 'int': return unitCount();
+    case 'int': return unitCount(); // TODO: what should this be?  changed it from unit 'count' to unit 'none' because that seems better.  still fails because we need a float -> int adapter
     case 'vec2': return unitWorld2();
     case 'vec3': return unitWorld3();
     case 'color': return unitRgba01();

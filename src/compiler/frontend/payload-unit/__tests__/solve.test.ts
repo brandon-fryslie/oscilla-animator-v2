@@ -150,7 +150,7 @@ describe('solvePayloadUnit', () => {
 
     const result = solvePayloadUnit(constraints, mapping);
     expect(result.errors).toHaveLength(0);
-    expect(result.portUnits.get(portA)?.kind).toBe('scalar');
+    expect(result.portUnits.get(portA)?.kind).toBe('none');
   });
 
   it('unitEq propagates units across edge', () => {

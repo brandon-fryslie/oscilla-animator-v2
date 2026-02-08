@@ -155,11 +155,12 @@ describe('Adapter Registry', () => {
       expect(findAdapter(from, to)).toBeNull();
     });
 
-    it('returns null for incompatible payload types without adapter', () => {
+    it('float → int: returns Adapter_CastFloatToInt', () => {
       const from = canonicalType(FLOAT, unitNone());
       const to = canonicalType(INT, unitNone());
-      // No float→int adapter for scalar (only seconds→ms has payload change)
-      expect(findAdapter(from, to)).toBeNull();
+      const adapter = findAdapter(from, to);
+      expect(adapter).not.toBeNull();
+      expect(adapter!.blockType).toBe('Adapter_CastFloatToInt');
     });
   });
 

@@ -7,6 +7,7 @@
 import { registerBlock, type LowerResult } from '../registry';
 import { canonicalType, payloadStride, requireInst } from '../../core/canonical-types';
 import { FLOAT } from '../../core/canonical-types';
+import { inferType, unitVar } from '../../core/inference-types';
 import { stableStateId } from '../../compiler/ir/types';
 import { defaultSourceConst } from '../../types';
 
@@ -25,11 +26,11 @@ registerBlock({
     broadcastPolicy: 'allowZipSig',
   },
   inputs: {
-    in: { label: 'Input', type: canonicalType(FLOAT), defaultSource: defaultSourceConst(0) },
+    in: { label: 'Input', type: inferType(FLOAT, unitVar('unitDelay_U')), defaultSource: defaultSourceConst(0) },
     initialValue: { type: canonicalType(FLOAT), defaultValue: 0, exposedAsPort: false },
   },
   outputs: {
-    out: { label: 'Output', type: canonicalType(FLOAT) },
+    out: { label: 'Output', type: inferType(FLOAT, unitVar('unitDelay_U')) },
   },
   // Phase 1: Generate output (reading from state) without needing input resolved
   lowerOutputsOnly: ({ ctx, config }) => {

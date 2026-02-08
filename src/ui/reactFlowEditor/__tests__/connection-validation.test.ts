@@ -243,15 +243,14 @@ describe('Payload constraint validation', () => {
       expect(result.adapter).toBeUndefined();
     });
 
-    it('concrete float source → int sink without adapter is BLOCKED', () => {
-      // FLOAT ≠ INT, no allowedPayloads on either side to override
+    it('concrete float source → int sink is ALLOWED via CastFloatToInt adapter', () => {
       const patch = buildPatch((b) => {
         b.addBlock('TestFloatSource');
         b.addBlock('TestIntSink');
       });
 
       const result = validateConnection('b0', 'out', 'b1', 'in', patch);
-      expect(result.valid).toBe(false);
+      expect(result.valid).toBe(true);
     });
 
     it('concrete float source → Add.a (has allowedPayloads including FLOAT) is ALLOWED', () => {
@@ -435,14 +434,14 @@ describe('Type Compatibility Edge Cases', () => {
     expect(result.valid).toBe(true);
   });
 
-  it('blocks incompatible payload types without adapter', () => {
+  it('allows float→int payload conversion via adapter', () => {
     const patch = buildPatch((b) => {
       b.addBlock('TestFloatSource');
       b.addBlock('TestIntSink');
     });
 
     const result = validateConnection('b0', 'out', 'b1', 'in', patch);
-    expect(result.valid).toBe(false);
+    expect(result.valid).toBe(true);
   });
 
   it('blocks different units without adapter', () => {

@@ -9,6 +9,7 @@
 import { registerBlock } from '../registry';
 import { canonicalType, payloadStride } from '../../core/canonical-types';
 import { FLOAT } from '../../core/canonical-types';
+import { inferType, unitVar } from '../../core/inference-types';
 import { OpCode } from '../../compiler/ir/types';
 
 registerBlock({
@@ -25,11 +26,11 @@ registerBlock({
     broadcastPolicy: 'allowZipSig',
   },
   inputs: {
-    in: { label: 'In', type: canonicalType(FLOAT) },
-    step: { label: 'Step', type: canonicalType(FLOAT), defaultValue: 0.1 },
+    in: { label: 'In', type: inferType(FLOAT, unitVar('stepQ_U')) },
+    step: { label: 'Step', type: inferType(FLOAT, unitVar('stepQ_U')), defaultValue: 0.1 },
   },
   outputs: {
-    out: { label: 'Out', type: canonicalType(FLOAT) },
+    out: { label: 'Out', type: inferType(FLOAT, unitVar('stepQ_U')) },
   },
   lower: ({ inputsById, ctx }) => {
     const input = inputsById.in;

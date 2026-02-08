@@ -137,7 +137,7 @@ export function formatTypeLine(type: CanonicalType, cardinality: 'signal' | 'fie
   const unitKind = type.unit.kind;
   // PayloadType is an object with a 'kind' property (e.g., { kind: 'float', stride: 1 })
   const payloadKind = type.payload.kind;
-  const payloadUnit = unitKind === 'none' || unitKind === 'scalar'
+  const payloadUnit = unitKind === 'none'
     ? payloadKind
     : `${payloadKind}:${unitKind}`;
   const card = cardinality === 'signal' ? 'one' : 'many';

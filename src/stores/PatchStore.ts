@@ -10,14 +10,14 @@
  * - Derived state uses computed getters
  */
 
-import { makeObservable, observable, computed, action } from 'mobx';
+import { makeObservable, observable, computed, action, reaction } from 'mobx';
 import type { Block, Edge, Endpoint, Patch, BlockType, InputPort, OutputPort, LensAttachment } from '../graph/Patch';
 import type { BlockId, BlockRole, CombineMode, EdgeRole, PortId } from '../types';
 import { emptyPatchData, type PatchData } from './internal';
 import type { EventHub } from '../events/EventHub';
 import { requireAnyBlockDef } from '../blocks/registry';
 import { normalizeCanonicalName, detectCanonicalNameCollisions, generateLensId } from '../core/canonical-name';
-import { exportPatchAsHCL, importPatchFromHCL } from '../services/PatchPersistence';
+import { exportPatchAsHCL, importPatchFromHCL, savePatchToStorage } from '../services/PatchPersistence';
 
 /**
  * Opaque type for immutable patch access.
@@ -1056,6 +1056,33 @@ export class PatchStore {
    */
   exportToHCL(name?: string): string {
     return exportPatchAsHCL(this.patch, name);
+  }
+
+  // =============================================================================
+  // Persistence Lifecycle
+  // =============================================================================
+
+  private persistDisposer: (() => void) | null = null;
+
+  /**
+   * Start auto-persisting patch to localStorage on changes (debounced 500ms).
+   * [LAW:single-enforcer] Only PatchStore manages its own persistence.
+   */
+  startPersistence(): void {
+    this.stopPersistence();
+    this.persistDisposer = reaction(
+      () => this.patch,
+      (patch) => savePatchToStorage(patch, 0),
+      { delay: 500 }
+    );
+  }
+
+  /**
+   * Stop auto-persistence. Call on dispose/HMR cleanup.
+   */
+  stopPersistence(): void {
+    this.persistDisposer?.();
+    this.persistDisposer = null;
   }
 
   // =============================================================================

@@ -7,6 +7,7 @@
 import { registerBlock } from '../registry';
 import { canonicalType, payloadStride, floatConst, requireInst } from '../../core/canonical-types';
 import { FLOAT, BOOL } from '../../core/canonical-types';
+import { inferType, unitVar } from '../../core/inference-types';
 import { OpCode, stableStateId } from '../../compiler/ir/types';
 
 registerBlock({
@@ -24,11 +25,11 @@ registerBlock({
     broadcastPolicy: 'allowZipSig',
   },
   inputs: {
-    delta: { label: 'Delta', type: canonicalType(FLOAT) },
+    delta: { label: 'Delta', type: inferType(FLOAT, unitVar('accum_U')) },
     reset: { label: 'Reset', type: canonicalType(BOOL) },
   },
   outputs: {
-    value: { label: 'Value', type: canonicalType(FLOAT) },
+    value: { label: 'Value', type: inferType(FLOAT, unitVar('accum_U')) },
   },
   lower: ({ ctx, inputsById }) => {
     const delta = inputsById.delta;
