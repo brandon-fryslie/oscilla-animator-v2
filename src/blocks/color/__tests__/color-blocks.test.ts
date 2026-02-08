@@ -7,7 +7,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { BLOCK_DEFS_BY_TYPE, type BlockDef } from '../../registry';
-import { unitHsl, unitRgba01, unitScalar, contractClamp01, unitsEqual, type UnitType } from '../../../core/canonical-types';
+import { unitHsl, unitRgba01, unitNone, contractClamp01, unitsEqual, type UnitType } from '../../../core/canonical-types';
 
 // Import all blocks to trigger registration
 import '../../all';
@@ -104,7 +104,7 @@ describe('MixColor', () => {
     expect(def.inputs.a.type.payload.kind).toBe('color');
     expect(def.inputs.b.type.payload.kind).toBe('color');
     expect(def.inputs.t.type.payload.kind).toBe('float');
-    expect(unitsEqual(asUnit(def.inputs.t.type.unit), unitScalar())).toBe(true);
+    expect(unitsEqual(asUnit(def.inputs.t.type.unit), unitNone())).toBe(true);
     expect(def.outputs.color.type.payload.kind).toBe('color');
     expect(unitsEqual(asUnit(def.outputs.color.type.unit), unitHsl())).toBe(true);
   });

@@ -100,7 +100,7 @@ describe('derived CanonicalType helpers', () => {
 
   it('canonicalField creates many + continuous', () => {
     const instanceRef_ = instanceRef('grid-1', 'default');
-    const st = canonicalField(VEC2, { kind: 'scalar' }, instanceRef_);
+    const st = canonicalField(VEC2, { kind: 'none' }, instanceRef_);
     expect(st.payload.kind).toBe('vec2');
     const card = st.extent.cardinality;
     const temp = st.extent.temporality;

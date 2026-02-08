@@ -9,7 +9,7 @@
  */
 
 import { registerBlock } from '../registry';
-import { canonicalType, unitScalar, contractClamp01, unitDegrees, requireInst, FLOAT, CAMERA_PROJECTION } from '../../core/canonical-types';
+import { canonicalType, unitNone, contractClamp01, unitDegrees, requireInst, FLOAT, CAMERA_PROJECTION } from '../../core/canonical-types';
 import { defaultSourceConst, type DefaultSource } from '../../types';
 import type { CameraDeclIR } from '../../compiler/ir/program';
 
@@ -50,21 +50,21 @@ registerBlock({
     },
     centerX: {
       label: 'Center X',
-      type: canonicalType(FLOAT, unitScalar(), undefined, contractClamp01()),
+      type: canonicalType(FLOAT, unitNone(), undefined, contractClamp01()),
       defaultValue: 0.5,
       defaultSource: defaultSourceConst(0.5),
       uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 },
     },
     centerY: {
       label: 'Center Y',
-      type: canonicalType(FLOAT, unitScalar(), undefined, contractClamp01()),
+      type: canonicalType(FLOAT, unitNone(), undefined, contractClamp01()),
       defaultValue: 0.5,
       defaultSource: defaultSourceConst(0.5),
       uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 },
     },
     distance: {
       label: 'Distance',
-      type: canonicalType(FLOAT, unitScalar()),
+      type: canonicalType(FLOAT, unitNone()),
       defaultValue: 0.87,
       defaultSource: defaultSourceConst(0.87),
       uiHint: { kind: 'slider', min: 0.1, max: 5, step: 0.01 },
@@ -92,14 +92,14 @@ registerBlock({
     },
     near: {
       label: 'Near',
-      type: canonicalType(FLOAT, unitScalar()),
+      type: canonicalType(FLOAT, unitNone()),
       defaultValue: 0.01,
       defaultSource: defaultSourceConst(0.01),
       uiHint: { kind: 'slider', min: 0.001, max: 1, step: 0.001 },
     },
     far: {
       label: 'Far',
-      type: canonicalType(FLOAT, unitScalar()),
+      type: canonicalType(FLOAT, unitNone()),
       defaultValue: 100.0,
       defaultSource: defaultSourceConst(100.0),
       uiHint: { kind: 'slider', min: 1, max: 1000, step: 1 },

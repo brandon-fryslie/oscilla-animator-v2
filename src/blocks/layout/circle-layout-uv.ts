@@ -39,7 +39,7 @@
       semantics: 'typeSpecific',
     },
     inputs: {
-      elements: { label: 'Elements', type: canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }) },
+      elements: { label: 'Elements', type: canonicalField(FLOAT, { kind: 'none' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }) },
       radius: { label: 'Radius', type: canonicalType(FLOAT), defaultValue: 0.3, defaultSource: defaultSourceConst(0.3), exposedAsPort: true, uiHint: { kind: 'slider', min: 0.01, max: 0.5, step: 0.01 } },
       phase: { label: 'Phase', type: canonicalType(FLOAT, unitTurns(), undefined, contractWrap01()), defaultValue: 0, defaultSource: defaultSourceConst(0), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
     },
@@ -60,8 +60,8 @@
 
       // Rewrite output type with actual instance (ctx.outTypes has placeholder 'default')
       const posType = rewriteFieldType(ctx.outTypes[0], instanceId, ctx.instances);
-      const floatFieldType = { ...posType, payload: FLOAT, unit: { kind: 'scalar' as const } };
-      const vec2FieldType = { ...posType, payload: { kind: 'vec2' as const }, unit: { kind: 'scalar' as const } };
+      const floatFieldType = { ...posType, payload: FLOAT, unit: { kind: 'none' as const } };
+      const vec2FieldType = { ...posType, payload: { kind: 'vec2' as const }, unit: { kind: 'none' as const } };
 
       // Get radius and phase as signals
       const radiusSig = ('type' in inputsById.radius! && requireInst(inputsById.radius!.type.extent.cardinality, 'cardinality').kind === 'one')

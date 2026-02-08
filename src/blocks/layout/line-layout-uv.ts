@@ -38,7 +38,7 @@ registerBlock({
     semantics: 'typeSpecific',
   },
   inputs: {
-    elements: { label: 'Elements', type: canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }) },
+    elements: { label: 'Elements', type: canonicalField(FLOAT, { kind: 'none' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }) },
     x0: { label: 'Start X', type: canonicalType(FLOAT), defaultValue: 0.2, defaultSource: defaultSourceConst(0.2), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
     y0: { label: 'Start Y', type: canonicalType(FLOAT), defaultValue: 0.2, defaultSource: defaultSourceConst(0.2), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
     x1: { label: 'End X', type: canonicalType(FLOAT), defaultValue: 0.8, defaultSource: defaultSourceConst(0.8), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
@@ -61,8 +61,8 @@ registerBlock({
 
     // Get resolved output type first
     const posType = ctx.outTypes[0];
-    const floatFieldType = { ...posType, payload: FLOAT, unit: { kind: 'scalar' as const } };
-    const vec2FieldType = { ...posType, payload: { kind: 'vec2' as const }, unit: { kind: 'scalar' as const } };
+    const floatFieldType = { ...posType, payload: FLOAT, unit: { kind: 'none' as const } };
+    const vec2FieldType = { ...posType, payload: { kind: 'vec2' as const }, unit: { kind: 'none' as const } };
 
     // Get line endpoints as signals
     const x0Sig = ('type' in inputsById.x0! && requireInst(inputsById.x0!.type.extent.cardinality, 'cardinality').kind === 'one')

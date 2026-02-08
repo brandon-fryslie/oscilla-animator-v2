@@ -99,7 +99,7 @@ function sliderConfigForType(type: InferenceCanonicalType | undefined): SliderCo
           case 'seconds': return { min: 0, max: 10, step: 0.01 };
         }
         break;
-      case 'scalar': return { min: 0, max: 1, step: 0.01 };
+      case 'none': return { min: 0, max: 1, step: 0.01 };
       case 'count': return { min: 0, max: 10000, step: 1 };
       case 'color': return { min: 0, max: 1, step: 0.01 };
       case 'space':

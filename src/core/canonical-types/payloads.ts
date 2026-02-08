@@ -7,7 +7,7 @@
 
 import type { UnitType } from './units';
 import {
-  unitScalar, unitCount, unitWorld2, unitWorld3,
+  unitCount, unitWorld2, unitWorld3,
   unitRgba01, unitNone,
 } from './units';
 
@@ -97,7 +97,7 @@ const PAYLOAD_BY_KIND: Record<PayloadKind, ConcretePayloadType> = {
  * Updated for ValueContract migration: removed 'norm01' (use scalar + contract:clamp01).
  */
 const ALLOWED_UNITS: Record<PayloadKind, readonly UnitType['kind'][]> = {
-  float: ['scalar', 'angle', 'time'],
+  float: ['none', 'angle', 'time'],
   int: ['count', 'time'],
   vec2: ['space'],
   vec3: ['space'],
@@ -130,7 +130,7 @@ export function isValidPayloadUnit(payload: PayloadType, unit: UnitType): boolea
 /** Get the default unit for a payload type. */
 export function defaultUnitForPayload(payload: PayloadType): UnitType {
   switch (payload.kind) {
-    case 'float': return unitScalar();
+    case 'float': return unitNone();
     case 'int': return unitCount();
     case 'vec2': return unitWorld2();
     case 'vec3': return unitWorld3();

@@ -14,7 +14,7 @@ import {
 import {
   canonicalType,
   unitTurns,
-  unitScalar,
+  unitNone,
   unitRadians,
   unitDegrees,
   contractClamp01, contractWrap01,
@@ -94,8 +94,8 @@ describe('lensUtils', () => {
     it('returns true when types match exactly', () => {
       const sourceType = canonicalType(FLOAT, unitTurns(), undefined, contractWrap01());
       const lensInputType = canonicalType(FLOAT, unitTurns(), undefined, contractWrap01());
-      const lensOutputType = canonicalType(FLOAT, unitScalar());
-      const targetType = canonicalType(FLOAT, unitScalar());
+      const lensOutputType = canonicalType(FLOAT, unitNone());
+      const targetType = canonicalType(FLOAT, unitNone());
 
       const result = canApplyLens(sourceType, lensInputType, lensOutputType, targetType);
 
@@ -105,8 +105,8 @@ describe('lensUtils', () => {
     it('returns false when source payload differs from lens input', () => {
       const sourceType = canonicalType(FLOAT, unitTurns(), undefined, contractWrap01());
       const lensInputType = canonicalType(FLOAT, unitRadians()); // Mismatch
-      const lensOutputType = canonicalType(FLOAT, unitScalar());
-      const targetType = canonicalType(FLOAT, unitScalar());
+      const lensOutputType = canonicalType(FLOAT, unitNone());
+      const targetType = canonicalType(FLOAT, unitNone());
 
       const result = canApplyLens(sourceType, lensInputType, lensOutputType, targetType);
 
@@ -118,7 +118,7 @@ describe('lensUtils', () => {
       const sourceType = canonicalType(FLOAT, unitTurns(), undefined, contractWrap01());
       const lensInputType = canonicalType(FLOAT, unitTurns(), undefined, contractWrap01());
       const lensOutputType = canonicalType(FLOAT, unitRadians()); // Mismatch
-      const targetType = canonicalType(FLOAT, unitScalar());
+      const targetType = canonicalType(FLOAT, unitNone());
 
       const result = canApplyLens(sourceType, lensInputType, lensOutputType, targetType);
 
@@ -152,7 +152,7 @@ describe('lensUtils', () => {
 
     it('returns matching lenses for phase → scalar conversion', () => {
       const sourceType = canonicalType(FLOAT, unitTurns(), undefined, contractWrap01());
-      const targetType = canonicalType(FLOAT, unitScalar());
+      const targetType = canonicalType(FLOAT, unitNone());
 
       const lenses = findCompatibleLenses(sourceType, targetType);
 

@@ -5,7 +5,7 @@
  */
 
 import { registerBlock } from '../registry';
-import { canonicalType, unitDegrees, unitScalar, payloadStride } from '../../core/canonical-types';
+import { canonicalType, unitDegrees, unitNone, payloadStride } from '../../core/canonical-types';
 import { FLOAT } from '../../core/canonical-types';
 
 registerBlock({
@@ -22,7 +22,7 @@ registerBlock({
     broadcastPolicy: 'allowZipSig',
   },
   adapterSpec: {
-    from: { payload: FLOAT, unit: { kind: 'scalar' }, extent: 'any' },
+    from: { payload: FLOAT, unit: { kind: 'none' }, extent: 'any' },
     to: { payload: FLOAT, unit: { kind: 'angle', unit: 'degrees' }, extent: 'any' },
     inputPortId: 'in',
     outputPortId: 'out',
@@ -31,7 +31,7 @@ registerBlock({
     stability: 'stable',
   },
   inputs: {
-    in: { label: 'In', type: canonicalType(FLOAT, unitScalar()) },
+    in: { label: 'In', type: canonicalType(FLOAT, unitNone()) },
   },
   outputs: {
     out: { label: 'Out', type: canonicalType(FLOAT, unitDegrees()) },

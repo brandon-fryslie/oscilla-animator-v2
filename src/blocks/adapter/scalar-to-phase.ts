@@ -5,7 +5,7 @@
  */
 
 import { registerBlock } from '../registry';
-import { canonicalType, unitTurns, unitScalar, payloadStride, contractWrap01 } from '../../core/canonical-types';
+import { canonicalType, unitTurns, unitNone, payloadStride, contractWrap01 } from '../../core/canonical-types';
 import { FLOAT } from '../../core/canonical-types';
 import { OpCode } from '../../compiler/ir/types';
 
@@ -23,7 +23,7 @@ registerBlock({
     broadcastPolicy: 'allowZipSig',
   },
   adapterSpec: {
-    from: { payload: FLOAT, unit: { kind: 'scalar' }, extent: 'any' },
+    from: { payload: FLOAT, unit: { kind: 'none' }, extent: 'any' },
     to: { payload: FLOAT, unit: { kind: 'angle', unit: 'turns' }, contract: { kind: 'wrap01' }, extent: 'any' },
     inputPortId: 'in',
     outputPortId: 'out',
@@ -32,7 +32,7 @@ registerBlock({
     stability: 'stable',
   },
   inputs: {
-    in: { label: 'In', type: canonicalType(FLOAT, unitScalar()) },
+    in: { label: 'In', type: canonicalType(FLOAT, unitNone()) },
   },
   outputs: {
     out: { label: 'Out', type: canonicalType(FLOAT, unitTurns(), undefined, contractWrap01()) },

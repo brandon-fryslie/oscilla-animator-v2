@@ -5,7 +5,7 @@
  */
 
 import { registerBlock } from '../registry';
-import { canonicalType, payloadStride, floatConst, requireInst, unitScalar, contractClamp01 } from '../../core/canonical-types';
+import { canonicalType, payloadStride, floatConst, requireInst, unitNone, contractClamp01 } from '../../core/canonical-types';
 import { FLOAT } from '../../core/canonical-types';
 import { OpCode, stableStateId } from '../../compiler/ir/types';
 
@@ -25,7 +25,7 @@ registerBlock({
   },
   inputs: {
     target: { label: 'Target', type: canonicalType(FLOAT) },
-    smoothing: { type: canonicalType(FLOAT, unitScalar(), undefined, contractClamp01()), defaultValue: 0.5, exposedAsPort: false },
+    smoothing: { type: canonicalType(FLOAT, unitNone(), undefined, contractClamp01()), defaultValue: 0.5, exposedAsPort: false },
     initialValue: { type: canonicalType(FLOAT), defaultValue: 0, exposedAsPort: false },
   },
   outputs: {
@@ -50,7 +50,7 @@ registerBlock({
 
     // Compute: lerp(prev, target, smoothing)
     const lerpFn = ctx.b.opcode(OpCode.Lerp);
-    const smoothConst = ctx.b.constant(floatConst(smoothing), canonicalType(FLOAT, unitScalar(), undefined, contractClamp01()));
+    const smoothConst = ctx.b.constant(floatConst(smoothing), canonicalType(FLOAT, unitNone(), undefined, contractClamp01()));
     const newValue = ctx.b.kernelZip([prevValue, target.id, smoothConst], lerpFn, outType);
 
     // Return effects-as-data (no imperative calls)

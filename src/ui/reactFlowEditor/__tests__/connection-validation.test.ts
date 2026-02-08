@@ -14,7 +14,7 @@ import {
   canonicalType,
   unitTurns,
   unitRadians,
-  unitScalar,
+  unitNone,
   unitDegrees,
   contractClamp01, contractWrap01,
   unitMs,
@@ -157,7 +157,7 @@ registerBlock({
   capability: 'pure',
   inputs: {},
   outputs: {
-    out: { label: 'Out', type: canonicalType(FLOAT, unitScalar()) },
+    out: { label: 'Out', type: canonicalType(FLOAT, unitNone()) },
   },
   lower: () => ({ outputsById: {} }),
 });
@@ -170,7 +170,7 @@ registerBlock({
   form: 'primitive',
   capability: 'pure',
   inputs: {
-    in: { label: 'In', type: canonicalType(FLOAT, unitScalar(), undefined, contractClamp01()) },
+    in: { label: 'In', type: canonicalType(FLOAT, unitNone(), undefined, contractClamp01()) },
   },
   outputs: {},
   lower: () => ({ outputsById: {} }),
@@ -334,7 +334,7 @@ describe('Adapter-aware Connection Validation', () => {
         form: 'primitive',
         capability: 'pure',
         inputs: {
-          in: { label: 'In', type: canonicalType(FLOAT, unitScalar(), undefined, contractClamp01()) },
+          in: { label: 'In', type: canonicalType(FLOAT, unitNone(), undefined, contractClamp01()) },
         },
         outputs: {},
         lower: () => ({ outputsById: {} }),
@@ -368,7 +368,7 @@ describe('Adapter-aware Connection Validation', () => {
 describe('Unit Display Functions', () => {
   describe('formatUnitForDisplay', () => {
     it('returns empty string for scalar', () => {
-      expect(formatUnitForDisplay(unitScalar())).toBe('');
+      expect(formatUnitForDisplay(unitNone())).toBe('');
     });
 
     it('returns "rad" for radians', () => {
@@ -394,7 +394,7 @@ describe('Unit Display Functions', () => {
 
   describe('formatTypeForDisplay', () => {
     it('displays Signal<float> for scalar float', () => {
-      const type = canonicalType(FLOAT, unitScalar());
+      const type = canonicalType(FLOAT, unitNone());
       expect(formatTypeForDisplay(type)).toBe('Signal<float>');
     });
 

@@ -37,7 +37,6 @@ const styles = {
  */
 function unitLabel(unit: UnitType): string | null {
   switch (unit.kind) {
-    case 'scalar':
     case 'none':
       return null;
     case 'count':
@@ -221,4 +220,4 @@ export function createFloatValueRenderer(unit: UnitType): ValueRenderer {
 /**
  * Default float renderer (unit:scalar).
  */
-export const floatValueRenderer = createFloatValueRenderer({ kind: 'scalar' });
+export const floatValueRenderer = createFloatValueRenderer({ kind: 'none' });

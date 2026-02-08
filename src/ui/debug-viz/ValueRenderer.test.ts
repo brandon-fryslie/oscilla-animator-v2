@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import React from 'react';
 import { getValueRenderer, registerRenderer, type ValueRenderer } from './ValueRenderer';
-import { canonicalType, unitTurns, contractWrap01, unitScalar, contractClamp01 } from '../../core/canonical-types';
+import { canonicalType, unitTurns, contractWrap01, unitNone, contractClamp01 } from '../../core/canonical-types';
 import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, CAMERA_PROJECTION } from '../../core/canonical-types';
 import type { RendererSample } from './types';
 import { getDataAttr } from '../../__tests__/test-utils';
@@ -40,7 +40,7 @@ describe('ValueRenderer registry', () => {
     });
 
     it('tier 2: payload-only when no exact match', () => {
-      const type = canonicalType(FLOAT, unitScalar(), undefined, contractClamp01()); // falls back to "float" renderer (no exact "float:scalar" registered)
+      const type = canonicalType(FLOAT, unitNone(), undefined, contractClamp01()); // falls back to "float" renderer (no exact "float:scalar" registered)
       const renderer = getValueRenderer(type);
       const el = renderer.renderFull({ type: 'scalar', components: new Float32Array([0.5]), stride: 1 });
       expect(getDataAttr(el, 'renderer')).toBe('payload-float');

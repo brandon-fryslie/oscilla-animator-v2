@@ -5,7 +5,7 @@
  */
 
 import { registerBlock } from '../registry';
-import { canonicalType, unitScalar, payloadStride, contractClamp01 } from '../../core/canonical-types';
+import { canonicalType, unitNone, payloadStride, contractClamp01 } from '../../core/canonical-types';
 import { FLOAT } from '../../core/canonical-types';
 
 registerBlock({
@@ -22,8 +22,8 @@ registerBlock({
     broadcastPolicy: 'allowZipSig',
   },
   adapterSpec: {
-    from: { payload: FLOAT, unit: { kind: 'scalar' }, contract: { kind: 'clamp01' }, extent: 'any' },
-    to: { payload: FLOAT, unit: { kind: 'scalar' }, extent: 'any' },
+    from: { payload: FLOAT, unit: { kind: 'none' }, contract: { kind: 'clamp01' }, extent: 'any' },
+    to: { payload: FLOAT, unit: { kind: 'none' }, extent: 'any' },
     inputPortId: 'in',
     outputPortId: 'out',
     description: 'Normalized [0,1] → scalar (identity)',
@@ -31,10 +31,10 @@ registerBlock({
     stability: 'stable',
   },
   inputs: {
-    in: { label: 'In', type: canonicalType(FLOAT, unitScalar(), undefined, contractClamp01()) },
+    in: { label: 'In', type: canonicalType(FLOAT, unitNone(), undefined, contractClamp01()) },
   },
   outputs: {
-    out: { label: 'Out', type: canonicalType(FLOAT, unitScalar()) },
+    out: { label: 'Out', type: canonicalType(FLOAT, unitNone()) },
   },
   lower: ({ inputsById, ctx }) => {
     const input = inputsById.in;

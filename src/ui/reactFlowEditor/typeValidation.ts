@@ -84,7 +84,6 @@ export function formatUnitForDisplay(unit: UnitType | InferenceUnitType): string
 
   switch (unit.kind) {
     case 'none':
-    case 'scalar':
       return '';
     case 'count':
       return 'count';

@@ -29,7 +29,7 @@ describe('finalizeNormalizationFixpoint (skeleton)', () => {
     expect(result.strict).not.toBeNull();
   });
 
-  it('standalone Add: default source policy blocked by unresolved cardinality', () => {
+  it('standalone Add: cardinality defaults to one, payload unresolved', () => {
     const patch = buildPatch((b) => {
       b.addBlock('Add');
     });
@@ -39,16 +39,19 @@ describe('finalizeNormalizationFixpoint (skeleton)', () => {
       maxIterations: 10,
     });
 
-    // Add is preserve+allowZipSig — cardinality is unresolved without
-    // external evidence. Default source obligations have portCanonicalizable
-    // deps which require 'ok' status, so the policy can't fire.
+    // Add is preserve+allowZipSig — cardinality defaults to one (signal chain).
+    // Payload is unresolved (auto-derived var with no concrete evidence).
+    // Ports stay 'unknown' because payload can't canonicalize.
     expect(result.iterations).toBeLessThanOrEqual(5);
-    // No default source blocks added (deps not satisfied)
     expect(result.graph.blocks.length).toBe(g.blocks.length);
-    // Cardinality diagnostics should be present
-    expect(result.diagnostics.some(
+    // No cardinality errors — default-to-one is valid
+    expect(result.diagnostics.filter(
       (d: any) => d.kind === 'CardinalityConstraintError',
-    )).toBe(true);
+    )).toHaveLength(0);
+    // Ports are unknown (payload unresolved)
+    const addBlock = g.blocks.find(b => b.type === 'Add')!;
+    const aHint = result.facts.ports.get(draftPortKey(addBlock.id, 'a', 'in'));
+    expect(aHint?.status).toBe('unknown');
   });
 
   it('respects max iteration limit', () => {
@@ -249,7 +252,7 @@ describe('finalizeNormalizationFixpoint (type solving)', () => {
 });
 
 describe('finalizeNormalizationFixpoint (cardinality solving)', () => {
-  it('Const → Add: cardinality is unresolved (preserve blocks require context)', () => {
+  it('Const → Add: cardinality defaults to one (signal chain)', () => {
     const patch = buildPatch((b) => {
       const c1 = b.addBlock('Const');
       const c2 = b.addBlock('Const');
@@ -263,13 +266,15 @@ describe('finalizeNormalizationFixpoint (cardinality solving)', () => {
       maxIterations: 10,
     });
 
-    // Const and Add are preserve+allowZipSig — cardinality requires
-    // external evidence (forceMany from transform, clampOne from signalOnly).
-    // Without evidence, cardinality is unresolved and ports are NOT 'ok'.
-    const hasCardinalityDiag = result.diagnostics.some(
-      (d: any) => d.kind === 'CardinalityConstraintError' && d.subKind === 'UnresolvedCardinality',
-    );
-    expect(hasCardinalityDiag).toBe(true);
+    // Const and Add are preserve+allowZipSig — evidence-free groups
+    // default to one (signal chain). No cardinality error.
+    expect(result.diagnostics.filter(
+      (d: any) => d.kind === 'CardinalityConstraintError',
+    )).toHaveLength(0);
+    // Payload stays unresolved (both Const and Add are polymorphic)
+    const addBlock = g.blocks.find(b => b.type === 'Add')!;
+    const aHint = result.facts.ports.get(draftPortKey(addBlock.id, 'a', 'in'));
+    expect(aHint?.status).toBe('unknown');
   });
 
   it('Array → Add: Add input becomes many (field)', () => {
@@ -328,9 +333,10 @@ describe('finalizeNormalizationFixpoint (cardinality solving)', () => {
     }
   });
 
-  it('Const → Add: strict finalization fails (cardinality unresolved without evidence)', () => {
-    // Const and Add are preserve blocks — no cardinality evidence in a
-    // purely-preserve graph, so cardinality vars stay unresolved.
+  it('Const → Add: strict finalization fails (payload unresolved without evidence)', () => {
+    // Const and Add are both polymorphic — no concrete payload evidence
+    // in a purely-polymorphic graph, so payload vars stay unresolved.
+    // Cardinality defaults to one (correct for signal chain).
     const patch = buildPatch((b) => {
       const c1 = b.addBlock('Const');
       const c2 = b.addBlock('Const');
@@ -344,11 +350,12 @@ describe('finalizeNormalizationFixpoint (cardinality solving)', () => {
       maxIterations: 10,
     });
 
-    // Some ports have unresolved cardinality → not all 'ok' → strict fails
+    // Ports stay 'unknown' (payload unresolved) → strict fails
     expect(result.strict).toBeNull();
-    expect(result.diagnostics.some(
+    // No cardinality errors — default-to-one is valid for signal chains
+    expect(result.diagnostics.filter(
       (d: any) => d.kind === 'CardinalityConstraintError',
-    )).toBe(true);
+    )).toHaveLength(0);
   });
 
   it('instances index is empty for signal-only graphs', () => {

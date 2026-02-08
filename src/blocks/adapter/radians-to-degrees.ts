@@ -5,7 +5,7 @@
  */
 
 import { registerBlock } from '../registry';
-import { canonicalType, unitDegrees, unitScalar, unitRadians, payloadStride, floatConst } from '../../core/canonical-types';
+import { canonicalType, unitDegrees, unitNone, unitRadians, payloadStride, floatConst } from '../../core/canonical-types';
 import { FLOAT } from '../../core/canonical-types';
 import { OpCode } from '../../compiler/ir/types';
 
@@ -42,7 +42,7 @@ registerBlock({
     if (!input) throw new Error('Lens block input is required');
 
     const outType = ctx.outTypes[0];
-    const factor = ctx.b.constant(floatConst(57.29577951308232), canonicalType(FLOAT, unitScalar())); // 180/π
+    const factor = ctx.b.constant(floatConst(57.29577951308232), canonicalType(FLOAT, unitNone())); // 180/π
     const mulFn = ctx.b.opcode(OpCode.Mul);
     const degrees = ctx.b.kernelZip([input.id, factor], mulFn, outType);
     return {

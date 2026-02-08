@@ -3,11 +3,12 @@
  *
  * Closed discriminated union of 8 structured unit kinds.
  * Every typed value has (payload, unit, extent). Unit is ALWAYS present.
- * Units are semantic, not representational: turns != scalar even though
+ * Units are semantic, not representational: turns != none even though
  * both are float32 at runtime.
  *
  * Migration Note (ValueContract Sprint 2):
- * - Removed 'norm01' kind (replaced by scalar + contract:clamp01)
+ * - Removed 'norm01' kind (replaced by none + contract:clamp01)
+ * - Removed 'scalar' kind (unified with 'none' — one dimensionless concept)
  * - Renamed angle unit 'phase01' → 'turns' (clearer name for [0,1) cyclic angle)
  */
 
@@ -17,7 +18,6 @@
 
 export type UnitType =
   | { readonly kind: 'none' }
-  | { readonly kind: 'scalar' }
   | { readonly kind: 'count' }
   | { readonly kind: 'angle'; readonly unit: 'radians' | 'degrees' | 'turns' }
   | { readonly kind: 'time'; readonly unit: 'ms' | 'seconds' }
@@ -31,11 +31,6 @@ export type UnitType =
 /** Unitless (bool, enums) */
 export function unitNone(): UnitType {
   return { kind: 'none' };
-}
-
-/** Dimensionless numeric scalar */
-export function unitScalar(): UnitType {
-  return { kind: 'scalar' };
 }
 
 /** Integer count/index */
@@ -122,7 +117,6 @@ export function unitsEqual(a: UnitType, b: UnitType): boolean {
     case 'color':
       return (b as Extract<UnitType, { kind: 'color' }>).unit === a.unit;
     case 'none':
-    case 'scalar':
     case 'count':
       return true; // Kind match is sufficient for simple units
     default: {

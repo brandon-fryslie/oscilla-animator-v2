@@ -6,7 +6,7 @@
 
 import { registerBlock, ALL_CONCRETE_PAYLOADS } from '../registry';
 import { instanceId as makeInstanceId, domainTypeId as makeDomainTypeId } from '../../core/ids';
-import { canonicalType, canonicalField, floatConst, requireInst, payloadStride, unitScalar, contractClamp01 } from '../../core/canonical-types';
+import { canonicalType, canonicalField, floatConst, requireInst, payloadStride, unitNone, contractClamp01 } from '../../core/canonical-types';
 import { FLOAT, COLOR } from '../../core/canonical-types';
 
 registerBlock({
@@ -29,14 +29,14 @@ registerBlock({
     semantics: 'typeSpecific',
   },
   inputs: {
-    elements: { label: 'Elements', type: canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }) },
-    r: { label: 'Red', type: canonicalType(FLOAT, unitScalar(), undefined, contractClamp01()), defaultValue: 1.0, exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
-    g: { label: 'Green', type: canonicalType(FLOAT, unitScalar(), undefined, contractClamp01()), defaultValue: 1.0, exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
-    b: { label: 'Blue', type: canonicalType(FLOAT, unitScalar(), undefined, contractClamp01()), defaultValue: 1.0, exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
-    a: { label: 'Alpha', type: canonicalType(FLOAT, unitScalar(), undefined, contractClamp01()), defaultValue: 1.0, exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
+    elements: { label: 'Elements', type: canonicalField(FLOAT, { kind: 'none' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }) },
+    r: { label: 'Red', type: canonicalType(FLOAT, unitNone(), undefined, contractClamp01()), defaultValue: 1.0, exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
+    g: { label: 'Green', type: canonicalType(FLOAT, unitNone(), undefined, contractClamp01()), defaultValue: 1.0, exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
+    b: { label: 'Blue', type: canonicalType(FLOAT, unitNone(), undefined, contractClamp01()), defaultValue: 1.0, exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
+    a: { label: 'Alpha', type: canonicalType(FLOAT, unitNone(), undefined, contractClamp01()), defaultValue: 1.0, exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
   },
   outputs: {
-    color: { label: 'Color', type: canonicalField(COLOR, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }) },
+    color: { label: 'Color', type: canonicalField(COLOR, { kind: 'none' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }) },
   },
   lower: ({ ctx, inputsById }) => {
     const elementsInput = inputsById.elements;
@@ -55,19 +55,19 @@ registerBlock({
     // Get r, g, b, a as signals (using defaults if not connected)
     const rSig = (inputsById.r && 'type' in inputsById.r && requireInst(inputsById.r.type.extent.cardinality, 'cardinality').kind === 'one')
       ? inputsById.r.id
-      : ctx.b.constant(floatConst(1.0), canonicalType(FLOAT, unitScalar(), undefined, contractClamp01()));
+      : ctx.b.constant(floatConst(1.0), canonicalType(FLOAT, unitNone(), undefined, contractClamp01()));
     const gSig = (inputsById.g && 'type' in inputsById.g && requireInst(inputsById.g.type.extent.cardinality, 'cardinality').kind === 'one')
       ? inputsById.g.id
-      : ctx.b.constant(floatConst(1.0), canonicalType(FLOAT, unitScalar(), undefined, contractClamp01()));
+      : ctx.b.constant(floatConst(1.0), canonicalType(FLOAT, unitNone(), undefined, contractClamp01()));
     const bSig = (inputsById.b && 'type' in inputsById.b && requireInst(inputsById.b.type.extent.cardinality, 'cardinality').kind === 'one')
       ? inputsById.b.id
-      : ctx.b.constant(floatConst(1.0), canonicalType(FLOAT, unitScalar(), undefined, contractClamp01()));
+      : ctx.b.constant(floatConst(1.0), canonicalType(FLOAT, unitNone(), undefined, contractClamp01()));
     const aSig = (inputsById.a && 'type' in inputsById.a && requireInst(inputsById.a.type.extent.cardinality, 'cardinality').kind === 'one')
       ? inputsById.a.id
-      : ctx.b.constant(floatConst(1.0), canonicalType(FLOAT, unitScalar(), undefined, contractClamp01()));
+      : ctx.b.constant(floatConst(1.0), canonicalType(FLOAT, unitNone(), undefined, contractClamp01()));
 
     // Build a scalar float field type matching the instance extent
-    const floatFieldType = canonicalField(FLOAT, { kind: 'scalar' }, { instanceId, domainTypeId: makeDomainTypeId('default') });
+    const floatFieldType = canonicalField(FLOAT, { kind: 'none' }, { instanceId, domainTypeId: makeDomainTypeId('default') });
 
     // Broadcast each scalar signal to field, then construct color
     const rField = ctx.b.broadcast(rSig, floatFieldType);

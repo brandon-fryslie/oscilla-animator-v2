@@ -6,7 +6,7 @@
  */
 
 import { registerBlock } from '../registry';
-import { canonicalType, payloadStride, unitHsl, unitScalar } from '../../core/canonical-types';
+import { canonicalType, payloadStride, unitHsl, unitNone } from '../../core/canonical-types';
 import { FLOAT, COLOR } from '../../core/canonical-types';
 import { OpCode } from '../../compiler/ir/types';
 import { defaultSourceConst } from '../../types';
@@ -27,7 +27,7 @@ registerBlock({
   },
   inputs: {
     in: { label: 'Color', type: canonicalType(COLOR, unitHsl()) },
-    shift: { label: 'Shift', type: canonicalType(FLOAT, unitScalar()), defaultSource: defaultSourceConst(0.0) },
+    shift: { label: 'Shift', type: canonicalType(FLOAT, unitNone()), defaultSource: defaultSourceConst(0.0) },
   },
   outputs: {
     out: { label: 'Color', type: canonicalType(COLOR, unitHsl()) },
@@ -41,7 +41,7 @@ registerBlock({
     // Derive intermediate float type from resolved output extent (preserves cardinality)
     const intermediateFloat = withoutContract({
       payload: FLOAT,
-      unit: unitScalar(),
+      unit: unitNone(),
       extent: outType.extent,
     });
 

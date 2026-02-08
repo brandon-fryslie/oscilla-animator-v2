@@ -7,7 +7,7 @@
  */
 
 import { registerBlock } from '../registry';
-import { canonicalType, payloadStride, unitHsl, unitScalar, contractClamp01 } from '../../core/canonical-types';
+import { canonicalType, payloadStride, unitHsl, unitNone, contractClamp01 } from '../../core/canonical-types';
 import { FLOAT, COLOR } from '../../core/canonical-types';
 import { OpCode } from '../../compiler/ir/types';
 import { defaultSourceConst } from '../../types';
@@ -29,7 +29,7 @@ registerBlock({
   inputs: {
     a: { label: 'Color A', type: canonicalType(COLOR, unitHsl()) },
     b: { label: 'Color B', type: canonicalType(COLOR, unitHsl()) },
-    t: { label: 'Mix', type: canonicalType(FLOAT, unitScalar(), undefined, contractClamp01()), defaultSource: defaultSourceConst(0.5) },
+    t: { label: 'Mix', type: canonicalType(FLOAT, unitNone(), undefined, contractClamp01()), defaultSource: defaultSourceConst(0.5) },
   },
   outputs: {
     color: { label: 'Color', type: canonicalType(COLOR, unitHsl()) },
@@ -44,7 +44,7 @@ registerBlock({
     // Derive intermediate float type from resolved output extent (preserves cardinality)
     const intermediateFloat = withoutContract({
       payload: FLOAT,
-      unit: unitScalar(),
+      unit: unitNone(),
       extent: outType.extent,
     });
 

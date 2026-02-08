@@ -5,7 +5,7 @@
  */
 
 import { registerBlock } from '../registry';
-import { canonicalType, unitMs, unitScalar, unitSeconds, payloadStride, floatConst } from '../../core/canonical-types';
+import { canonicalType, unitMs, unitNone, unitSeconds, payloadStride, floatConst } from '../../core/canonical-types';
 import { INT, FLOAT } from '../../core/canonical-types';
 import { OpCode } from '../../compiler/ir/types';
 
@@ -42,7 +42,7 @@ registerBlock({
     if (!input) throw new Error('Lens block input is required');
 
     const outType = ctx.outTypes[0];
-    const multiplier = ctx.b.constant(floatConst(1000), canonicalType(FLOAT, unitScalar()));
+    const multiplier = ctx.b.constant(floatConst(1000), canonicalType(FLOAT, unitNone()));
     const mulFn = ctx.b.opcode(OpCode.Mul);
     const floatMs = ctx.b.kernelZip([input.id, multiplier], mulFn, outType);
     const floorFn = ctx.b.opcode(OpCode.Floor);

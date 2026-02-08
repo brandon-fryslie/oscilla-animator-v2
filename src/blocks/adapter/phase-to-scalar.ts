@@ -5,7 +5,7 @@
  */
 
 import { registerBlock } from '../registry';
-import { canonicalType, unitTurns, unitScalar, payloadStride, contractWrap01 } from '../../core/canonical-types';
+import { canonicalType, unitTurns, unitNone, payloadStride, contractWrap01 } from '../../core/canonical-types';
 import { FLOAT } from '../../core/canonical-types';
 
 registerBlock({
@@ -23,7 +23,7 @@ registerBlock({
   },
   adapterSpec: {
     from: { payload: FLOAT, unit: { kind: 'angle', unit: 'turns' }, contract: { kind: 'wrap01' }, extent: 'any' },
-    to: { payload: FLOAT, unit: { kind: 'scalar' }, extent: 'any' },
+    to: { payload: FLOAT, unit: { kind: 'none' }, extent: 'any' },
     inputPortId: 'in',
     outputPortId: 'out',
     description: 'Phase [0,1) → scalar (semantic boundary)',
@@ -34,7 +34,7 @@ registerBlock({
     in: { label: 'In', type: canonicalType(FLOAT, unitTurns(), undefined, contractWrap01()) },
   },
   outputs: {
-    out: { label: 'Out', type: canonicalType(FLOAT, unitScalar()) },
+    out: { label: 'Out', type: canonicalType(FLOAT, unitNone()) },
   },
   lower: ({ inputsById, ctx }) => {
     const input = inputsById.in;

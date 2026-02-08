@@ -5,7 +5,7 @@
  */
 
 import { registerBlock } from '../registry';
-import { canonicalType, unitScalar, payloadStride, floatConst, contractClamp11 } from '../../core/canonical-types';
+import { canonicalType, unitNone, payloadStride, floatConst, contractClamp11 } from '../../core/canonical-types';
 import { FLOAT } from '../../core/canonical-types';
 import { OpCode } from '../../compiler/ir/types';
 
@@ -23,8 +23,8 @@ registerBlock({
     broadcastPolicy: 'allowZipSig',
   },
   adapterSpec: {
-    from: { payload: FLOAT, unit: { kind: 'scalar' }, extent: 'any' },
-    to: { payload: FLOAT, unit: { kind: 'scalar' }, contract: { kind: 'clamp11' }, extent: 'any' },
+    from: { payload: FLOAT, unit: { kind: 'none' }, extent: 'any' },
+    to: { payload: FLOAT, unit: { kind: 'none' }, contract: { kind: 'clamp11' }, extent: 'any' },
     inputPortId: 'in',
     outputPortId: 'out',
     description: 'Scalar → bipolar [-1,1] with clamping',
@@ -32,18 +32,18 @@ registerBlock({
     stability: 'stable',
   },
   inputs: {
-    in: { label: 'In', type: canonicalType(FLOAT, unitScalar()) },
+    in: { label: 'In', type: canonicalType(FLOAT, unitNone()) },
   },
   outputs: {
-    out: { label: 'Out', type: canonicalType(FLOAT, unitScalar(), undefined, contractClamp11()) },
+    out: { label: 'Out', type: canonicalType(FLOAT, unitNone(), undefined, contractClamp11()) },
   },
   lower: ({ inputsById, ctx }) => {
     const input = inputsById.in;
     if (!input) throw new Error('Adapter_Clamp11: input is required');
 
     const outType = ctx.outTypes[0];
-    const minusOne = ctx.b.constant(floatConst(-1), canonicalType(FLOAT, unitScalar()));
-    const one = ctx.b.constant(floatConst(1), canonicalType(FLOAT, unitScalar()));
+    const minusOne = ctx.b.constant(floatConst(-1), canonicalType(FLOAT, unitNone()));
+    const one = ctx.b.constant(floatConst(1), canonicalType(FLOAT, unitNone()));
     const clampFn = ctx.b.opcode(OpCode.Clamp);
     const clamped = ctx.b.kernelZip([input.id, minusOne, one], clampFn, outType);
     return {

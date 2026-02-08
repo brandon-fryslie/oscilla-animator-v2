@@ -5,7 +5,7 @@
  */
 
 import { registerBlock } from '../registry';
-import { canonicalType, unitMs, unitScalar, unitSeconds, payloadStride, floatConst } from '../../core/canonical-types';
+import { canonicalType, unitMs, unitNone, unitSeconds, payloadStride, floatConst } from '../../core/canonical-types';
 import { INT, FLOAT } from '../../core/canonical-types';
 import { OpCode } from '../../compiler/ir/types';
 
@@ -43,7 +43,7 @@ registerBlock({
 
     const outType = ctx.outTypes[0];
     // int:ms → float division → float:seconds
-    const divisor = ctx.b.constant(floatConst(1000), canonicalType(FLOAT, unitScalar()));
+    const divisor = ctx.b.constant(floatConst(1000), canonicalType(FLOAT, unitNone()));
     const divFn = ctx.b.opcode(OpCode.Div);
     const seconds = ctx.b.kernelZip([input.id, divisor], divFn, outType);
     return {

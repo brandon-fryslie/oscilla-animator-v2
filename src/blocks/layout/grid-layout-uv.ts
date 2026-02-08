@@ -39,7 +39,7 @@ registerBlock({
     semantics: 'typeSpecific',
   },
   inputs: {
-    elements: { label: 'Elements', type: canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }) },
+    elements: { label: 'Elements', type: canonicalField(FLOAT, { kind: 'none' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }) },
     cols: { label: 'Columns', type: canonicalType(INT), defaultValue: 5, defaultSource: defaultSourceConst(5), exposedAsPort: true, uiHint: { kind: 'slider', min: 1, max: 100, step: 1 } },
     rows: { label: 'Rows', type: canonicalType(INT), defaultValue: 5, defaultSource: defaultSourceConst(5), exposedAsPort: true, uiHint: { kind: 'slider', min: 1, max: 100, step: 1 } },
   },
@@ -60,8 +60,8 @@ registerBlock({
 
     // Rewrite output type with actual instance (ctx.outTypes has placeholder 'default')
     const posType = rewriteFieldType(ctx.outTypes[0], instanceId, ctx.instances);
-    const floatFieldType = { ...posType, payload: FLOAT, unit: { kind: 'scalar' as const } };
-    const vec2FieldType = { ...posType, payload: { kind: 'vec2' as const }, unit: { kind: 'scalar' as const } };
+    const floatFieldType = { ...posType, payload: FLOAT, unit: { kind: 'none' as const } };
+    const vec2FieldType = { ...posType, payload: { kind: 'vec2' as const }, unit: { kind: 'none' as const } };
 
     // Get cols and rows as signals
     const colsSig = ('type' in inputsById.cols! && requireInst(inputsById.cols!.type.extent.cardinality, 'cardinality').kind === 'one')

@@ -93,15 +93,15 @@ registerBlock({
     controlPoints: {
       label: 'Control Points',
       // Use placeholder instance ID - will be replaced by actual instance from connected output
-      type: canonicalField(VEC2, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }),
+      type: canonicalField(VEC2, { kind: 'none' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }),
     },
   },
   outputs: {
     // Use placeholder instance IDs - will inherit actual instance from input via preserve cardinality
-    position: { label: 'Position', type: canonicalField(VEC3, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }) },
-    index: { label: 'Index', type: canonicalField(INT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }) },
-    tangent: { label: 'Tangent', type: canonicalField(VEC3, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }) },
-    arcLength: { label: 'Arc Length', type: canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }) },
+    position: { label: 'Position', type: canonicalField(VEC3, { kind: 'none' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }) },
+    index: { label: 'Index', type: canonicalField(INT, { kind: 'none' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }) },
+    tangent: { label: 'Tangent', type: canonicalField(VEC3, { kind: 'none' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }) },
+    arcLength: { label: 'Arc Length', type: canonicalField(FLOAT, { kind: 'none' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }) },
   },
   lower: ({ ctx, inputsById }) => {
     const controlPointsInput = inputsById.controlPoints;
@@ -127,7 +127,7 @@ registerBlock({
 
     // Position output: convert VEC2 control points to VEC3 (z=0)
     // vec2ToVec3 logic: extract x and y, then construct vec3 with z=0
-    const floatFieldType = { ...posType, payload: FLOAT, unit: { kind: 'scalar' as const } };
+    const floatFieldType = { ...posType, payload: FLOAT, unit: { kind: 'none' as const } };
     const xField = ctx.b.extract(controlPointsFieldId, 0, floatFieldType);  // X component
     const yField = ctx.b.extract(controlPointsFieldId, 1, floatFieldType);  // Y component
     const const0 = ctx.b.constant(floatConst(0), canonicalType(FLOAT));

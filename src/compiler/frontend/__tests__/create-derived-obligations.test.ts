@@ -6,7 +6,7 @@ import { createDerivedObligations } from '../create-derived-obligations';
 import type { DraftGraph, DraftBlock, DraftEdge } from '../draft-graph';
 import type { TypeFacts, DraftPortKey, PortTypeHint } from '../type-facts';
 import { draftPortKey } from '../type-facts';
-import { canonicalSignal, canonicalField, canonicalType, FLOAT, instanceRef, unitScalar, contractClamp01 } from '../../../core/canonical-types';
+import { canonicalSignal, canonicalField, canonicalType, FLOAT, instanceRef, unitNone, contractClamp01 } from '../../../core/canonical-types';
 import type { CanonicalType } from '../../../core/canonical-types';
 import type { ObligationId } from '../obligations';
 
@@ -182,8 +182,8 @@ describe('createDerivedObligations', () => {
   });
 
   it('contract-only difference is assignable (clamp01 → none), no obligation', () => {
-    const SCALAR_CLAMP01 = canonicalType(FLOAT, unitScalar(), undefined, contractClamp01());
-    const SCALAR_NONE = canonicalType(FLOAT, unitScalar());
+    const SCALAR_CLAMP01 = canonicalType(FLOAT, unitNone(), undefined, contractClamp01());
+    const SCALAR_NONE = canonicalType(FLOAT, unitNone());
 
     const g = emptyGraph({
       blocks: [makeBlock('c1', 'Const'), makeBlock('add', 'Add')],

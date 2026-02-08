@@ -8,7 +8,7 @@
  */
 
 import { registerBlock } from '../registry';
-import { canonicalType, payloadStride, requireInst, unitScalar, contractClamp01 } from '../../core/canonical-types';
+import { canonicalType, payloadStride, requireInst, unitNone, contractClamp01 } from '../../core/canonical-types';
 import { FLOAT } from '../../core/canonical-types';
 import { OpCode, stableStateId } from '../../compiler/ir/types';
 
@@ -28,7 +28,7 @@ registerBlock({
   },
   inputs: {
     in: { label: 'In', type: canonicalType(FLOAT) },
-    rate: { label: 'Rate', type: canonicalType(FLOAT, unitScalar(), undefined, contractClamp01()), defaultValue: 0.5 },
+    rate: { label: 'Rate', type: canonicalType(FLOAT, unitNone(), undefined, contractClamp01()), defaultValue: 0.5 },
   },
   outputs: {
     out: { label: 'Out', type: canonicalType(FLOAT) },

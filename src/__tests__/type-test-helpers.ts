@@ -9,7 +9,6 @@
 
 import {
   canonicalType as makeSignalType,
-  unitScalar,
   unitCount,
   unitTurns, contractWrap01, contractClamp01,
   unitRadians,

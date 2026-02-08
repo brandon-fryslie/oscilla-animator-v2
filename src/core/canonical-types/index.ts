@@ -14,7 +14,6 @@
 export {
   type UnitType,
   unitNone,
-  unitScalar,
   unitCount,
   unitTurns,
   unitRadians,

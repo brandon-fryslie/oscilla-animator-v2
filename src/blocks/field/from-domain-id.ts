@@ -26,7 +26,7 @@ registerBlock({
     domain: { label: 'Domain', type: canonicalType(INT) }, // Domain count
   },
   outputs: {
-    id01: { label: 'ID (0..1)', type: canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }) },
+    id01: { label: 'ID (0..1)', type: canonicalField(FLOAT, { kind: 'none' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }) },
   },
   lower: ({ ctx }) => {
     // Get instance context from Array block or inferred from inputs

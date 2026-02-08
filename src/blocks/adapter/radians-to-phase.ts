@@ -5,7 +5,7 @@
  */
 
 import { registerBlock } from '../registry';
-import { canonicalType, unitTurns, unitScalar, unitRadians, payloadStride, floatConst, contractWrap01 } from '../../core/canonical-types';
+import { canonicalType, unitTurns, unitNone, unitRadians, payloadStride, floatConst, contractWrap01 } from '../../core/canonical-types';
 import { FLOAT } from '../../core/canonical-types';
 import { OpCode } from '../../compiler/ir/types';
 
@@ -42,7 +42,7 @@ registerBlock({
     if (!input) throw new Error('Lens block input is required');
 
     const outType = ctx.outTypes[0];
-    const twoPi = ctx.b.constant(floatConst(6.283185307179586), canonicalType(FLOAT, unitScalar()));
+    const twoPi = ctx.b.constant(floatConst(6.283185307179586), canonicalType(FLOAT, unitNone()));
     const divFn = ctx.b.opcode(OpCode.Div);
     const divided = ctx.b.kernelZip([input.id, twoPi], divFn, outType);
     const wrapFn = ctx.b.opcode(OpCode.Wrap01);

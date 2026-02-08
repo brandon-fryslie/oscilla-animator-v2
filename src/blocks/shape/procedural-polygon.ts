@@ -118,7 +118,7 @@ registerBlock({
   },
   outputs: {
     shape: { label: 'Shape', type: canonicalType(FLOAT) },
-    controlPoints: { label: 'Control Points', type: canonicalField(VEC2, { kind: 'scalar' }, { instanceId: makeInstanceId('control'), domainTypeId: makeDomainTypeId('default') }) },
+    controlPoints: { label: 'Control Points', type: canonicalField(VEC2, { kind: 'none' }, { instanceId: makeInstanceId('control'), domainTypeId: makeDomainTypeId('default') }) },
   },
   lower: ({ ctx, inputsById, config }) => {
     // Get sides from config (must be compile-time constant)
@@ -147,7 +147,7 @@ registerBlock({
 
     // Use index to compute angle: angle = index * (2π / sides)
     const indexField = ctx.b.intrinsic('index',
-      canonicalField(INT, { kind: 'scalar' }, ref)
+      canonicalField(INT, { kind: 'none' }, ref)
     );
 
     // Get radiusX and radiusY signals
@@ -182,7 +182,7 @@ registerBlock({
     const halfPi = ctx.b.constant(floatConst(Math.PI / 2), canonicalType(FLOAT));
 
     // The field type for intermediates (float, same instance ref as index)
-    const floatFieldType = canonicalField(FLOAT, { kind: 'scalar' }, ref);
+    const floatFieldType = canonicalField(FLOAT, { kind: 'none' }, ref);
 
     // Step 1: broadcast signals to field extent
     const sidesBroadcast = ctx.b.broadcast(sidesSig, floatFieldType);
@@ -211,7 +211,7 @@ registerBlock({
     // Step 4: construct([x, y]) → vec2
     const computedPositions = ctx.b.construct(
       [xField, yField],
-      canonicalField(VEC2, { kind: 'scalar' }, ref)
+      canonicalField(VEC2, { kind: 'none' }, ref)
     );
 
     // Create shape reference with numeric topology ID

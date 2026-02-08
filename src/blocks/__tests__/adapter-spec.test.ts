@@ -10,7 +10,7 @@ import { findAdapter, needsAdapter, extractPattern, isAssignable, findAdapterCha
 import {
   canonicalType,
   unitTurns, contractWrap01,
-  unitScalar, contractClamp01,
+  unitNone, contractClamp01,
   unitRadians,
   unitDegrees,
   unitMs,
@@ -27,14 +27,14 @@ describe('Adapter Registry', () => {
   describe('findAdapter - unit conversion adapters (§B4.1)', () => {
     it('Phase → Scalar: returns Adapter_PhaseToScalar01', () => {
       const from = canonicalType(FLOAT, unitTurns(), undefined, contractWrap01());
-      const to = canonicalType(FLOAT, unitScalar());
+      const to = canonicalType(FLOAT, unitNone());
       const adapter = findAdapter(from, to);
       expect(adapter).not.toBeNull();
       expect(adapter!.blockType).toBe('Adapter_PhaseToScalar01');
     });
 
     it('Scalar → Phase: returns Adapter_ScalarToPhase01', () => {
-      const from = canonicalType(FLOAT, unitScalar());
+      const from = canonicalType(FLOAT, unitNone());
       const to = canonicalType(FLOAT, unitTurns(), undefined, contractWrap01());
       const adapter = findAdapter(from, to);
       expect(adapter).not.toBeNull();
@@ -90,16 +90,16 @@ describe('Adapter Registry', () => {
     });
 
     it('Scalar → Clamp01: returns Adapter_Clamp01', () => {
-      const from = canonicalType(FLOAT, unitScalar());
-      const to = canonicalType(FLOAT, unitScalar(), undefined, contractClamp01());
+      const from = canonicalType(FLOAT, unitNone());
+      const to = canonicalType(FLOAT, unitNone(), undefined, contractClamp01());
       const adapter = findAdapter(from, to);
       expect(adapter).not.toBeNull();
       expect(adapter!.blockType).toBe('Adapter_Clamp01');
     });
 
     it('Norm01 → Scalar: returns Adapter_Norm01ToScalar', () => {
-      const from = canonicalType(FLOAT, unitScalar(), undefined, contractClamp01());
-      const to = canonicalType(FLOAT, unitScalar());
+      const from = canonicalType(FLOAT, unitNone(), undefined, contractClamp01());
+      const to = canonicalType(FLOAT, unitNone());
       const adapter = findAdapter(from, to);
       // After migration: contract-only transitions are identity (no adapter needed)
       // This adapter may no longer exist since scalar→scalar with contract change is transparent
@@ -115,8 +115,8 @@ describe('Adapter Registry', () => {
     });
 
     it('returns null when types are identical (scalar → scalar)', () => {
-      const from = canonicalType(FLOAT, unitScalar());
-      const to = canonicalType(FLOAT, unitScalar());
+      const from = canonicalType(FLOAT, unitNone());
+      const to = canonicalType(FLOAT, unitNone());
       expect(findAdapter(from, to)).toBeNull();
     });
 
@@ -130,7 +130,7 @@ describe('Adapter Registry', () => {
   describe('findAdapter - disallowed conversions (§B4.2)', () => {
     it('returns null for Phase01 → Norm01 (semantic ambiguity)', () => {
       const from = canonicalType(FLOAT, unitTurns(), undefined, contractWrap01());
-      const to = canonicalType(FLOAT, unitScalar(), undefined, contractClamp01());
+      const to = canonicalType(FLOAT, unitNone(), undefined, contractClamp01());
       // After migration: turns→scalar with contract change may now have an adapter
       // If the adapter exists, this test expectation needs updating
       const adapter = findAdapter(from, to);
@@ -141,7 +141,7 @@ describe('Adapter Registry', () => {
     });
 
     it('returns null for Norm01 → Phase01 (no direct path)', () => {
-      const from = canonicalType(FLOAT, unitScalar(), undefined, contractClamp01());
+      const from = canonicalType(FLOAT, unitNone(), undefined, contractClamp01());
       const to = canonicalType(FLOAT, unitTurns(), undefined, contractWrap01());
       // After migration: scalar→turns with contract change may now have an adapter
       const adapter = findAdapter(from, to);
@@ -156,8 +156,8 @@ describe('Adapter Registry', () => {
     });
 
     it('returns null for incompatible payload types without adapter', () => {
-      const from = canonicalType(FLOAT, unitScalar());
-      const to = canonicalType(INT, unitScalar());
+      const from = canonicalType(FLOAT, unitNone());
+      const to = canonicalType(INT, unitNone());
       // No float→int adapter for scalar (only seconds→ms has payload change)
       expect(findAdapter(from, to)).toBeNull();
     });
@@ -166,15 +166,15 @@ describe('Adapter Registry', () => {
   describe('findAdapter - adapter port IDs', () => {
     it('all adapters use standard in/out port naming', () => {
       const conversions = [
-        { from: canonicalType(FLOAT, unitTurns(), undefined, contractWrap01()), to: canonicalType(FLOAT, unitScalar()) },
-        { from: canonicalType(FLOAT, unitScalar()), to: canonicalType(FLOAT, unitTurns(), undefined, contractWrap01()) },
+        { from: canonicalType(FLOAT, unitTurns(), undefined, contractWrap01()), to: canonicalType(FLOAT, unitNone()) },
+        { from: canonicalType(FLOAT, unitNone()), to: canonicalType(FLOAT, unitTurns(), undefined, contractWrap01()) },
         { from: canonicalType(FLOAT, unitTurns(), undefined, contractWrap01()), to: canonicalType(FLOAT, unitRadians()) },
         { from: canonicalType(FLOAT, unitRadians()), to: canonicalType(FLOAT, unitTurns(), undefined, contractWrap01()) },
         { from: canonicalType(FLOAT, unitDegrees()), to: canonicalType(FLOAT, unitRadians()) },
         { from: canonicalType(FLOAT, unitRadians()), to: canonicalType(FLOAT, unitDegrees()) },
         { from: canonicalType(INT, unitMs()), to: canonicalType(FLOAT, unitSeconds()) },
         { from: canonicalType(FLOAT, unitSeconds()), to: canonicalType(INT, unitMs()) },
-        { from: canonicalType(FLOAT, unitScalar()), to: canonicalType(FLOAT, unitScalar(), undefined, contractClamp01()) },
+        { from: canonicalType(FLOAT, unitNone()), to: canonicalType(FLOAT, unitNone(), undefined, contractClamp01()) },
         // Remove the Norm01→Scalar test since that adapter may not exist anymore
       ];
 
@@ -195,14 +195,14 @@ describe('Adapter Registry', () => {
     });
 
     it('returns false for matching types', () => {
-      const from = canonicalType(FLOAT, unitScalar());
-      const to = canonicalType(FLOAT, unitScalar());
+      const from = canonicalType(FLOAT, unitNone());
+      const to = canonicalType(FLOAT, unitNone());
       expect(needsAdapter(from, to)).toBe(false);
     });
 
     it('returns false for mismatched types with no available adapter', () => {
       const from = canonicalType(FLOAT, unitTurns(), undefined, contractWrap01());
-      const to = canonicalType(FLOAT, unitScalar(), undefined, contractClamp01());
+      const to = canonicalType(FLOAT, unitNone(), undefined, contractClamp01());
       // After migration: if an adapter exists, this returns true, not false
       // Update expectation to match actual behavior
       expect(needsAdapter(from, to)).toBe(true);
@@ -223,19 +223,19 @@ describe('Adapter Registry', () => {
 
 describe('isAssignable', () => {
   it('identical types are assignable', () => {
-    const t = canonicalType(FLOAT, unitScalar());
+    const t = canonicalType(FLOAT, unitNone());
     expect(isAssignable(t, t)).toBe(true);
   });
 
   it('contract dropping is assignable (clamp01 → none)', () => {
-    const src = canonicalType(FLOAT, unitScalar(), undefined, contractClamp01());
-    const dst = canonicalType(FLOAT, unitScalar());
+    const src = canonicalType(FLOAT, unitNone(), undefined, contractClamp01());
+    const dst = canonicalType(FLOAT, unitNone());
     expect(isAssignable(src, dst)).toBe(true);
   });
 
   it('contract gaining is NOT assignable (none → clamp01)', () => {
-    const src = canonicalType(FLOAT, unitScalar());
-    const dst = canonicalType(FLOAT, unitScalar(), undefined, contractClamp01());
+    const src = canonicalType(FLOAT, unitNone());
+    const dst = canonicalType(FLOAT, unitNone(), undefined, contractClamp01());
     expect(isAssignable(src, dst)).toBe(false);
   });
 
@@ -246,14 +246,14 @@ describe('isAssignable', () => {
   });
 
   it('different payloads are NOT assignable', () => {
-    const src = canonicalType(FLOAT, unitScalar());
-    const dst = canonicalType(INT, unitScalar());
+    const src = canonicalType(FLOAT, unitNone());
+    const dst = canonicalType(INT, unitNone());
     expect(isAssignable(src, dst)).toBe(false);
   });
 
   it('same contract is assignable', () => {
-    const src = canonicalType(FLOAT, unitScalar(), undefined, contractClamp01());
-    const dst = canonicalType(FLOAT, unitScalar(), undefined, contractClamp01());
+    const src = canonicalType(FLOAT, unitNone(), undefined, contractClamp01());
+    const dst = canonicalType(FLOAT, unitNone(), undefined, contractClamp01());
     expect(isAssignable(src, dst)).toBe(true);
   });
 
@@ -266,19 +266,19 @@ describe('isAssignable', () => {
 
 describe('findAdapterChain', () => {
   it('returns null when types are already assignable', () => {
-    const src = canonicalType(FLOAT, unitScalar());
-    const dst = canonicalType(FLOAT, unitScalar());
+    const src = canonicalType(FLOAT, unitNone());
+    const dst = canonicalType(FLOAT, unitNone());
     expect(findAdapterChain(src, dst)).toBeNull();
   });
 
   it('returns null when contract dropping (assignable without adapter)', () => {
-    const src = canonicalType(FLOAT, unitScalar(), undefined, contractClamp01());
-    const dst = canonicalType(FLOAT, unitScalar());
+    const src = canonicalType(FLOAT, unitNone(), undefined, contractClamp01());
+    const dst = canonicalType(FLOAT, unitNone());
     expect(findAdapterChain(src, dst)).toBeNull();
   });
 
   it('single-step: scalar → phase01', () => {
-    const src = canonicalType(FLOAT, unitScalar());
+    const src = canonicalType(FLOAT, unitNone());
     const dst = canonicalType(FLOAT, unitTurns(), undefined, contractWrap01());
     const chain = findAdapterChain(src, dst);
     expect(chain).not.toBeNull();
@@ -308,7 +308,7 @@ describe('findAdapterChain', () => {
   });
 
   it('returns null for impossible conversion (float → bool)', () => {
-    const src = canonicalType(FLOAT, unitScalar());
+    const src = canonicalType(FLOAT, unitNone());
     const dst = canonicalType(BOOL, { kind: 'none' });
     expect(findAdapterChain(src, dst)).toBeNull();
   });
@@ -331,8 +331,8 @@ describe('findAdapterChain', () => {
   });
 
   it('single-step: scalar → clamp01', () => {
-    const src = canonicalType(FLOAT, unitScalar());
-    const dst = canonicalType(FLOAT, unitScalar(), undefined, contractClamp01());
+    const src = canonicalType(FLOAT, unitNone());
+    const dst = canonicalType(FLOAT, unitNone(), undefined, contractClamp01());
     const chain = findAdapterChain(src, dst);
     expect(chain).not.toBeNull();
     expect(chain!.steps.length).toBe(1);

@@ -5,7 +5,7 @@
  */
 
 import { registerBlock } from '../registry';
-import { canonicalType, unitTurns, unitScalar, payloadStride, floatConst, requireInst, contractWrap01, contractClamp11 } from '../../core/canonical-types';
+import { canonicalType, unitTurns, unitNone, payloadStride, floatConst, requireInst, contractWrap01, contractClamp11 } from '../../core/canonical-types';
 import { FLOAT, INT } from '../../core/canonical-types';
 import { OpCode } from '../../compiler/ir/types';
 import { defaultSourceConst } from '../../types';
@@ -46,7 +46,7 @@ registerBlock({
     },
   },
   outputs: {
-    out: { label: 'Output', type: canonicalType(FLOAT, unitScalar(), undefined, contractClamp11()) },
+    out: { label: 'Output', type: canonicalType(FLOAT, unitNone(), undefined, contractClamp11()) },
   },
   lower: ({ ctx, inputsById, config }) => {
     const phase = inputsById.phase;

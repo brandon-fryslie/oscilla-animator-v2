@@ -20,9 +20,6 @@ export function formatSignalType(type: InferenceCanonicalType | undefined): stri
     case 'none':
       unitStr = '';
       break;
-    case 'scalar':
-      unitStr = '0..1';
-      break;
     case 'count':
       unitStr = '#';
       break;

@@ -12,7 +12,7 @@ import {
   canonicalType,
   unitTurns, contractWrap01,
   unitRadians,
-  unitScalar,
+  unitNone,
 } from '../../core/canonical-types';
 import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR,  CAMERA_PROJECTION } from '../../core/canonical-types';
 import { registerBlock } from '../../blocks/registry';
@@ -81,7 +81,7 @@ registerBlock({
   capability: 'pure',
   inputs: {},
   outputs: {
-    out: { label: 'Out', type: canonicalType(FLOAT, unitScalar()) },
+    out: { label: 'Out', type: canonicalType(FLOAT, unitNone()) },
   },
   lower: () => ({ outputsById: {} }),
 });

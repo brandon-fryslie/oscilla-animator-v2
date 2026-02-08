@@ -22,8 +22,8 @@ registerBlock({
   },
   inputs: {},
   outputs: {
-    index: { label: 'Index', type: canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }) },
-    indexInt: { label: 'Index (int)', type: canonicalField(INT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }) },
+    index: { label: 'Index', type: canonicalField(FLOAT, { kind: 'none' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }) },
+    indexInt: { label: 'Index (int)', type: canonicalField(INT, { kind: 'none' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }) },
   },
   lower: ({ ctx }) => {
     // Get instance context from Array block or inferred from inputs

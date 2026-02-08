@@ -6,7 +6,7 @@ import { solvePayloadUnit, buildPortVarMapping } from '../solve';
 import type { PayloadUnitConstraint, ConstraintOrigin } from '../solve';
 import type { DraftPortKey } from '../../type-facts';
 import { draftPortKey } from '../../type-facts';
-import { FLOAT, INT, VEC2, COLOR, unitScalar, unitNone, unitRadians } from '../../../../core/canonical-types';
+import { FLOAT, INT, VEC2, COLOR, unitNone, unitRadians } from '../../../../core/canonical-types';
 import type { PayloadType, UnitType } from '../../../../core/canonical-types';
 import type { InferenceCanonicalType } from '../../../../core/inference-types';
 import { inferType, payloadVar, unitVar } from '../../../../core/inference-types';
@@ -145,7 +145,7 @@ describe('solvePayloadUnit', () => {
   it('concreteUnit assigns unit to port', () => {
     const mapping = makeVarMapping([[portA, null, null]]);
     const constraints: PayloadUnitConstraint[] = [
-      { kind: 'concreteUnit', port: portA, value: unitScalar(), origin: portDefOrigin },
+      { kind: 'concreteUnit', port: portA, value: unitNone(), origin: portDefOrigin },
     ];
 
     const result = solvePayloadUnit(constraints, mapping);
@@ -276,7 +276,7 @@ describe('solvePayloadUnit', () => {
   it('buildPortVarMapping extracts var ids from inference types', () => {
     const portBaseTypes = new Map<DraftPortKey, InferenceCanonicalType>();
     portBaseTypes.set(portA, inferType(payloadVar('T'), unitVar('U')));
-    portBaseTypes.set(portC, inferType(FLOAT, unitScalar()));
+    portBaseTypes.set(portC, inferType(FLOAT, unitNone()));
 
     const mapping = buildPortVarMapping(portBaseTypes);
 

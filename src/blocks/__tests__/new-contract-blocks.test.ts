@@ -9,7 +9,7 @@ import { findAdapter } from '../adapter-spec';
 import { getBlockDefinition } from '../registry';
 import {
   canonicalType,
-  unitScalar,
+  unitNone,
   contractClamp01,
   contractWrap01,
   contractClamp11,
@@ -23,24 +23,24 @@ import '../all';
 describe('New Contract Blocks (Sprint 3)', () => {
   describe('P0: Contract adapter blocks', () => {
     it('Adapter_Clamp01: scalar(none) → scalar(clamp01)', () => {
-      const from = canonicalType(FLOAT, unitScalar(), undefined, contractNone());
-      const to = canonicalType(FLOAT, unitScalar(), undefined, contractClamp01());
+      const from = canonicalType(FLOAT, unitNone(), undefined, contractNone());
+      const to = canonicalType(FLOAT, unitNone(), undefined, contractClamp01());
       const adapter = findAdapter(from, to);
       expect(adapter).not.toBeNull();
       expect(adapter!.blockType).toBe('Adapter_Clamp01');
     });
 
     it('Adapter_Wrap01: scalar(none) → scalar(wrap01)', () => {
-      const from = canonicalType(FLOAT, unitScalar(), undefined, contractNone());
-      const to = canonicalType(FLOAT, unitScalar(), undefined, contractWrap01());
+      const from = canonicalType(FLOAT, unitNone(), undefined, contractNone());
+      const to = canonicalType(FLOAT, unitNone(), undefined, contractWrap01());
       const adapter = findAdapter(from, to);
       expect(adapter).not.toBeNull();
       expect(adapter!.blockType).toBe('Adapter_Wrap01');
     });
 
     it('Adapter_Clamp11: scalar(none) → scalar(clamp11)', () => {
-      const from = canonicalType(FLOAT, unitScalar(), undefined, contractNone());
-      const to = canonicalType(FLOAT, unitScalar(), undefined, contractClamp11());
+      const from = canonicalType(FLOAT, unitNone(), undefined, contractNone());
+      const to = canonicalType(FLOAT, unitNone(), undefined, contractClamp11());
       const adapter = findAdapter(from, to);
       expect(adapter).not.toBeNull();
       expect(adapter!.blockType).toBe('Adapter_Clamp11');
@@ -49,16 +49,16 @@ describe('New Contract Blocks (Sprint 3)', () => {
 
   describe('P1: Bidirectional bipolar ↔ unipolar adapters', () => {
     it('Adapter_BipolarToUnipolar: clamp11 → clamp01 (higher priority than Clamp01)', () => {
-      const from = canonicalType(FLOAT, unitScalar(), undefined, contractClamp11());
-      const to = canonicalType(FLOAT, unitScalar(), undefined, contractClamp01());
+      const from = canonicalType(FLOAT, unitNone(), undefined, contractClamp11());
+      const to = canonicalType(FLOAT, unitNone(), undefined, contractClamp01());
       const adapter = findAdapter(from, to);
       expect(adapter).not.toBeNull();
       expect(adapter!.blockType).toBe('Adapter_BipolarToUnipolar');
     });
 
     it('Adapter_UnipolarToBipolar: clamp01 → clamp11 (higher priority than Clamp11)', () => {
-      const from = canonicalType(FLOAT, unitScalar(), undefined, contractClamp01());
-      const to = canonicalType(FLOAT, unitScalar(), undefined, contractClamp11());
+      const from = canonicalType(FLOAT, unitNone(), undefined, contractClamp01());
+      const to = canonicalType(FLOAT, unitNone(), undefined, contractClamp11());
       const adapter = findAdapter(from, to);
       expect(adapter).not.toBeNull();
       expect(adapter!.blockType).toBe('Adapter_UnipolarToBipolar');

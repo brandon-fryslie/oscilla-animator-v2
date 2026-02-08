@@ -7,7 +7,7 @@
  */
 
 import { registerBlock } from '../registry';
-import { canonicalType, canonicalConst, payloadStride, unitHsl, unitTurns, unitScalar, contractWrap01, contractClamp01 } from '../../core/canonical-types';
+import { canonicalType, canonicalConst, payloadStride, unitHsl, unitTurns, unitNone, contractWrap01, contractClamp01 } from '../../core/canonical-types';
 import { FLOAT, COLOR } from '../../core/canonical-types';
 import { OpCode } from '../../compiler/ir/types';
 import { defaultSourceConst } from '../../types';
@@ -28,9 +28,9 @@ registerBlock({
   },
   inputs: {
     h: { label: 'Hue', type: canonicalType(FLOAT, unitTurns(), undefined, contractWrap01()), defaultSource: defaultSourceConst(0.0) },
-    s: { label: 'Saturation', type: canonicalType(FLOAT, unitScalar(), undefined, contractClamp01()), defaultSource: defaultSourceConst(1.0) },
-    l: { label: 'Lightness', type: canonicalType(FLOAT, unitScalar(), undefined, contractClamp01()), defaultSource: defaultSourceConst(0.5) },
-    a: { label: 'Alpha', type: canonicalType(FLOAT, unitScalar(), undefined, contractClamp01()), defaultSource: defaultSourceConst(1.0) },
+    s: { label: 'Saturation', type: canonicalType(FLOAT, unitNone(), undefined, contractClamp01()), defaultSource: defaultSourceConst(1.0) },
+    l: { label: 'Lightness', type: canonicalType(FLOAT, unitNone(), undefined, contractClamp01()), defaultSource: defaultSourceConst(0.5) },
+    a: { label: 'Alpha', type: canonicalType(FLOAT, unitNone(), undefined, contractClamp01()), defaultSource: defaultSourceConst(1.0) },
   },
   outputs: {
     color: { label: 'Color', type: canonicalType(COLOR, unitHsl()) },
@@ -55,8 +55,8 @@ registerBlock({
     const wrap01 = ctx.b.opcode(OpCode.Wrap01);
     const clamp = ctx.b.opcode(OpCode.Clamp);
     // Constants are card=zero (universal donors) — zipAuto handles cardinality alignment
-    const zero = ctx.b.constant({ kind: 'float', value: 0 }, canonicalConst(FLOAT, unitScalar()));
-    const one = ctx.b.constant({ kind: 'float', value: 1 }, canonicalConst(FLOAT, unitScalar()));
+    const zero = ctx.b.constant({ kind: 'float', value: 0 }, canonicalConst(FLOAT, unitNone()));
+    const one = ctx.b.constant({ kind: 'float', value: 1 }, canonicalConst(FLOAT, unitNone()));
 
     const hWrapped = ctx.b.kernelMap(hInput.id, wrap01, intermediateFloat);
     const sClamped = zipAuto([sInput.id, zero, one], clamp, intermediateFloat, ctx.b);

@@ -124,7 +124,7 @@ registerBlock({
   },
   outputs: {
     shape: { label: 'Shape', type: canonicalType(FLOAT) },
-    controlPoints: { label: 'Control Points', type: canonicalField(VEC2, { kind: 'scalar' }, { instanceId: makeInstanceId('control'), domainTypeId: makeDomainTypeId('default') }) },
+    controlPoints: { label: 'Control Points', type: canonicalField(VEC2, { kind: 'none' }, { instanceId: makeInstanceId('control'), domainTypeId: makeDomainTypeId('default') }) },
   },
   lower: ({ ctx, inputsById, config }) => {
     // Get points from config (must be compile-time constant)
@@ -156,7 +156,7 @@ registerBlock({
 
     // Use index to determine if outer (even) or inner (odd)
     const indexField = ctx.b.intrinsic('index',
-      canonicalField(INT, { kind: 'scalar' }, ref)
+      canonicalField(INT, { kind: 'none' }, ref)
     );
 
     // Get outerRadius and innerRadius signals
@@ -194,7 +194,7 @@ registerBlock({
     const two = ctx.b.constant(floatConst(2), canonicalType(FLOAT));
 
     // The field type for intermediates (float, same instance ref as index)
-    const floatFieldType = canonicalField(FLOAT, { kind: 'scalar' }, ref);
+    const floatFieldType = canonicalField(FLOAT, { kind: 'none' }, ref);
 
     // Step 1: broadcast signals to field extent
     const pointsBroadcast = ctx.b.broadcast(pointsSig, floatFieldType);
@@ -247,7 +247,7 @@ registerBlock({
     // Step 5: construct([x, y]) → vec2
     const computedPositions = ctx.b.construct(
       [xField, yField],
-      canonicalField(VEC2, { kind: 'scalar' }, ref)
+      canonicalField(VEC2, { kind: 'none' }, ref)
     );
 
     // Create shape reference with numeric topology ID

@@ -33,7 +33,7 @@ import type { CameraDeclIR } from './program';
 import type { ValueExpr } from './value-expr';
 import type { OrchestratorIRBuilder } from './OrchestratorIRBuilder';
 import { valueExprId } from './Indices';
-import { canonicalType, canonicalEvent, FLOAT, unitScalar, payloadStride, requireInst } from '../../core/canonical-types';
+import { canonicalType, canonicalEvent, FLOAT, unitNone, payloadStride, requireInst } from '../../core/canonical-types';
 
 /**
  * IRBuilderImpl - Implements OrchestratorIRBuilder (full surface)
@@ -206,9 +206,9 @@ export class IRBuilderImpl implements OrchestratorIRBuilder {
       // Auto-allocate event slot if not yet allocated
       const autoSlot = eventSlotId(this.eventSlotCounter++);
       this.eventSlots.set(eventExpr, autoSlot);
-      return this.pushExpr({ kind: 'eventRead', eventSlot: autoSlot, type: canonicalType(FLOAT, unitScalar()) });
+      return this.pushExpr({ kind: 'eventRead', eventSlot: autoSlot, type: canonicalType(FLOAT, unitNone()) });
     }
-    return this.pushExpr({ kind: 'eventRead', eventSlot: slot, type: canonicalType(FLOAT, unitScalar()) });
+    return this.pushExpr({ kind: 'eventRead', eventSlot: slot, type: canonicalType(FLOAT, unitNone()) });
   }
 
   pathDerivative(input: ValueExprId, op: 'tangent' | 'arcLength', topologyId: TopologyId, type: CanonicalType): ValueExprId {
