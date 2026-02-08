@@ -43,10 +43,13 @@ describe('CastFloatToInt adapter selection', () => {
     expect(findAdapter(from, to)).toBeNull();
   });
 
-  it('findAdapter(int:none, float:none) returns null (reverse not supported)', () => {
+  it('findAdapter(int:none, float:none) returns Adapter_CastIntToFloat', () => {
     const from = canonicalType(INT, unitNone());
     const to = canonicalType(FLOAT, unitNone());
-    // No int→float adapter in MVP
-    expect(findAdapter(from, to)).toBeNull();
+    const adapter = findAdapter(from, to);
+    expect(adapter).not.toBeNull();
+    expect(adapter!.blockType).toBe('Adapter_CastIntToFloat');
+    expect(adapter!.inputPortId).toBe('in');
+    expect(adapter!.outputPortId).toBe('out');
   });
 });

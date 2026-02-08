@@ -148,11 +148,12 @@ describe('Adapter Registry', () => {
       expect(adapter).not.toBeNull();
     });
 
-    it('returns null for Degrees → Phase01 (no direct adapter)', () => {
+    it('Degrees → Phase01: returns Adapter_DegreesToPhase', () => {
       const from = canonicalType(FLOAT, unitDegrees());
       const to = canonicalType(FLOAT, unitTurns(), undefined, contractWrap01());
-      // Must go degrees→radians→phase01 (two-hop)
-      expect(findAdapter(from, to)).toBeNull();
+      const adapter = findAdapter(from, to);
+      expect(adapter).not.toBeNull();
+      expect(adapter!.blockType).toBe('Adapter_DegreesToPhase');
     });
 
     it('float → int: returns Adapter_CastFloatToInt', () => {
@@ -297,15 +298,14 @@ describe('findAdapterChain', () => {
     expect(chain!.steps[0].blockType).toBe('Adapter_DegreesToRadians');
   });
 
-  it('two-step: degrees → phase01 (via radians)', () => {
+  it('single-step: degrees → phase01 (direct adapter)', () => {
     const src = canonicalType(FLOAT, unitDegrees());
     const dst = canonicalType(FLOAT, unitTurns(), undefined, contractWrap01());
     const chain = findAdapterChain(src, dst);
     expect(chain).not.toBeNull();
-    expect(chain!.steps.length).toBe(2);
-    expect(chain!.steps[0].blockType).toBe('Adapter_DegreesToRadians');
-    expect(chain!.steps[1].blockType).toBe('Adapter_RadiansToPhase01');
-    expect(chain!.cost).toBe(2);
+    expect(chain!.steps.length).toBe(1);
+    expect(chain!.steps[0].blockType).toBe('Adapter_DegreesToPhase');
+    expect(chain!.cost).toBe(1);
   });
 
   it('returns null for impossible conversion (float → bool)', () => {

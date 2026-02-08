@@ -279,6 +279,25 @@ describe('OpcodeInterpreter - F64ToI32Trunc', () => {
   });
 });
 
+describe('OpcodeInterpreter - I32ToF64', () => {
+  it('preserves integer values unchanged', () => {
+    expect(applyOpcode('i32_to_f64', [0])).toBe(0);
+    expect(applyOpcode('i32_to_f64', [1])).toBe(1);
+    expect(applyOpcode('i32_to_f64', [-1])).toBe(-1);
+    expect(applyOpcode('i32_to_f64', [42])).toBe(42);
+  });
+
+  it('preserves i32 boundary values', () => {
+    expect(applyOpcode('i32_to_f64', [2147483647])).toBe(2147483647);
+    expect(applyOpcode('i32_to_f64', [-2147483648])).toBe(-2147483648);
+  });
+
+  it('identity semantics: float values pass through unchanged', () => {
+    expect(applyOpcode('i32_to_f64', [3.14])).toBe(3.14);
+    expect(applyOpcode('i32_to_f64', [-0.5])).toBe(-0.5);
+  });
+});
+
 describe('OpcodeInterpreter - Strict Arity Enforcement', () => {
   describe('Binary ops require exactly 2 arguments', () => {
     it('sub: throws on 1 argument', () => {

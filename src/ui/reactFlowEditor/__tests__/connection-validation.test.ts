@@ -444,7 +444,7 @@ describe('Type Compatibility Edge Cases', () => {
     expect(result.valid).toBe(true);
   });
 
-  it('blocks different units without adapter', () => {
+  it('allows degrees → phase via direct adapter', () => {
     registerBlock({
       type: 'TestDegreesSource',
       label: 'Degrees Source',
@@ -458,13 +458,27 @@ describe('Type Compatibility Edge Cases', () => {
       lower: () => ({ outputsById: {} }),
     });
 
-    const patch = buildPatch((b) => {
-      b.addBlock('TestDegreesSource');
-      b.addBlock('TestUIPhaseSource');
+    registerBlock({
+      type: 'TestUIPhaseSink',
+      label: 'Phase Sink',
+      category: 'test',
+      form: 'primitive',
+      capability: 'pure',
+      inputs: {
+        in: { label: 'In', type: canonicalType(FLOAT, unitTurns(), undefined, contractWrap01()) },
+      },
+      outputs: {},
+      lower: () => ({ outputsById: {} }),
     });
 
-    // Degrees → Phase requires two hops (degrees→radians→phase), should be blocked
+    const patch = buildPatch((b) => {
+      b.addBlock('TestDegreesSource');
+      b.addBlock('TestUIPhaseSink');
+    });
+
+    // Degrees → Phase now has a direct adapter (Adapter_DegreesToPhase)
     const result = validateConnection('b0', 'out', 'b1', 'in', patch);
-    expect(result.valid).toBe(false);
+    expect(result.valid).toBe(true);
+    expect(result.adapter).toBeDefined();
   });
 });

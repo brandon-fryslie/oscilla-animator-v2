@@ -30,6 +30,7 @@
  *   log      - Natural log: Math.log(x)
  *   sign     - Sign: -1, 0, or 1
  *   f64_to_i32_trunc - Float to int: trunc toward zero, clamp to i32, NaN→0
+ *   i32_to_f64       - Int to float: identity in JS (type boundary marker)
  *
  * BINARY (exactly 2 arguments):
  *   sub      - Subtraction: a - b
@@ -151,6 +152,8 @@ function applyUnaryOp(op: string, x: number): number {
       if (t < -2147483648) return -2147483648;
       return t || 0; // normalize -0 to +0
     }
+    case 'i32_to_f64':
+      return x; // Identity in JS — type boundary marker
     default:
       throw new Error(`OpCode ${op} is not unary`);
   }
