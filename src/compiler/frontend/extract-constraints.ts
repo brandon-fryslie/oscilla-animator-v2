@@ -5,7 +5,7 @@
  * - portBaseTypes: stable Map<DraftPortKey, InferenceCanonicalType> from block defs
  * - payloadUnit: Payload/unit constraints for union-find solving (new typed constraints)
  * - cardinality: Cardinality constraints for cardinality union-find solving
- * - baseCardinalityAxis: Original cardinality axis per port (before axisVar rewriting)
+ * - baseCardinalityAxis: Solver-facing cardinality axis per port (after axisVar rewriting)
  *
  * This is the SOLE bridge between DraftGraph structure and solver inputs.
  * Solvers produce substitutions; you apply substitutions to portBaseTypes
@@ -44,7 +44,7 @@ export interface ExtractedConstraints {
   readonly payloadUnit: readonly PayloadUnitConstraint[];
   /** Cardinality constraints for cardinality solver */
   readonly cardinality: readonly CardinalityConstraint[];
-  /** Original cardinality axis per port (before axisVar rewriting), for the cardinality solver */
+  /** Solver-facing cardinality axis per port (after axisVar rewriting), for the cardinality solver */
   readonly baseCardinalityAxis: ReadonlyMap<DraftPortKey, Axis<CardinalityValue, CardinalityVarId>>;
   /**
    * Set of collect port keys. Edges targeting these ports are excluded
@@ -209,6 +209,18 @@ export function extractConstraints(
     rewriteCardinalityAxes(block, def, portBaseTypes, baseCardinalityAxis, cardinality);
   }
 
+  // Assertion: zipBroadcast members must all have axisVar in baseCardinalityAxis.
+  // If a concrete (axisInst) port is in a zipBroadcast, the filtering logic above is broken.
+  for (const c of cardinality) {
+    if (c.kind !== 'zipBroadcast') continue;
+    for (const p of c.ports) {
+      const ax = baseCardinalityAxis.get(p);
+      if (!ax || !isAxisVar(ax)) {
+        throw new Error(`zipBroadcast includes non-var port ${p} (axis: ${ax ? 'inst' : 'missing'})`);
+      }
+    }
+  }
+
   // Phase B: Edge constraints — unify from.out with to.in
   for (const edge of g.edges) {
     const fromKey = draftPortKey(edge.from.blockId, edge.from.port, 'out');
@@ -223,7 +235,7 @@ export function extractConstraints(
       payloadUnit.push({ kind: 'payloadEq', a: fromKey, b: toKey, origin: edgeOrigin });
       payloadUnit.push({ kind: 'unitEq', a: fromKey, b: toKey, origin: edgeOrigin });
       // Edge cardinality equality — solver unifies cardinality across edges
-      cardinality.push({ kind: 'equal', a: fromKey, b: toKey });
+      cardinality.push({ kind: 'equal', a: fromKey, b: toKey, origin: edgeOrigin });
     }
   }
 
@@ -393,9 +405,10 @@ function rewriteSignalOnly(
   constraints: CardinalityConstraint[],
   blockPorts: DraftPortKey[],
 ): void {
+  const origin: ConstraintOrigin = { kind: 'blockRule', blockId: block.id, blockType: block.type, rule: 'signalOnly.clampOne' };
   for (const key of blockPorts) {
     // Keep cardinality as axisInst(one) — no rewrite needed
-    constraints.push({ kind: 'clampOne', port: key });
+    constraints.push({ kind: 'clampOne', port: key, origin });
   }
 }
 
@@ -408,32 +421,53 @@ function rewriteTransform(
   constraints: CardinalityConstraint[],
   blockPorts: DraftPortKey[],
 ): void {
+  // [LAW:single-enforcer] Adapter-inserted Broadcast uses instanceVar, not concrete instanceRef.
+  // This lets the solver unify the Broadcast's instance with downstream instances.
+  // Gate specifically on block type 'Broadcast' with adapter origin — other adapters keep concrete refs.
+  const isBroadcastAdapter = block.type === 'Broadcast'
+    && typeof block.origin === 'object'
+    && (block.origin as { kind: string }).kind === 'elaboration'
+    && (block.origin as { role: string }).role === 'adapter';
+
   const ref = instanceRef(meta.domainType as string, block.id);
 
   for (const key of blockPorts) {
     const dir = key.endsWith(':out') ? 'out' : 'in';
 
     if (dir === 'out') {
-      // Transform outputs → deterministic axisInst(many(ref))
-      const type = portBaseTypes.get(key)!;
-      const rewritten: InferenceCanonicalType = {
-        ...type,
-        extent: {
-          ...type.extent,
-          cardinality: axisInst({ kind: 'many', instance: ref }),
-        },
-      };
-      portBaseTypes.set(key, rewritten);
-      constraints.push({ kind: 'forceMany', port: key, instance: { kind: 'inst', ref } });
+      if (isBroadcastAdapter) {
+        // Adapter-inserted Broadcast: use instanceVar so solver can unify with downstream
+        rewritePortToVar(key, block.id, portBaseTypes);
+        const instVar: InstanceTerm = { kind: 'var', id: instanceVarId(`adapter:${block.id}`) };
+        constraints.push({ kind: 'forceMany', port: key, instance: instVar, origin: { kind: 'blockRule', blockId: block.id, blockType: block.type, rule: 'transform.forceMany' } });
+      } else {
+        // Normal transform outputs → deterministic axisInst(many(ref))
+        const type = portBaseTypes.get(key)!;
+        const rewritten: InferenceCanonicalType = {
+          ...type,
+          extent: {
+            ...type.extent,
+            cardinality: axisInst({ kind: 'many', instance: ref }),
+          },
+        };
+        portBaseTypes.set(key, rewritten);
+        constraints.push({ kind: 'forceMany', port: key, instance: { kind: 'inst', ref }, origin: { kind: 'blockRule', blockId: block.id, blockType: block.type, rule: 'transform.forceMany' } });
+      }
     } else {
       // Transform inputs → axisVar
       rewritePortToVar(key, block.id, portBaseTypes);
     }
   }
 
-  // If allowZipSig, zipBroadcast over inputs + outputs
-  if (meta.broadcastPolicy === 'allowZipSig' && blockPorts.length > 0) {
-    constraints.push({ kind: 'zipBroadcast', ports: [...blockPorts].sort() });
+  // If allowZipSig, zipBroadcast over axisVar ports only (not concrete outputs)
+  if (meta.broadcastPolicy === 'allowZipSig') {
+    const varPorts = blockPorts.filter(key => {
+      const type = portBaseTypes.get(key);
+      return type && isAxisVar(type.extent.cardinality);
+    });
+    if (varPorts.length > 0) {
+      constraints.push({ kind: 'zipBroadcast', ports: [...varPorts].sort(), origin: { kind: 'blockRule', blockId: block.id, blockType: block.type, rule: 'transform.allowZipSig.zipBroadcast' } });
+    }
   }
 }
 
@@ -454,12 +488,12 @@ function rewritePreserve(
 
   if (meta.broadcastPolicy === 'allowZipSig') {
     // zipBroadcast over all ports
-    constraints.push({ kind: 'zipBroadcast', ports: [...blockPorts].sort() });
+    constraints.push({ kind: 'zipBroadcast', ports: [...blockPorts].sort(), origin: { kind: 'blockRule', blockId: block.id, blockType: block.type, rule: 'preserve.allowZipSig.zipBroadcast' } });
   } else {
     // strict equality: pairwise equal
     const sorted = [...blockPorts].sort();
     for (let i = 1; i < sorted.length; i++) {
-      constraints.push({ kind: 'equal', a: sorted[0], b: sorted[i] });
+      constraints.push({ kind: 'equal', a: sorted[0], b: sorted[i], origin: { kind: 'blockRule', blockId: block.id, blockType: block.type, rule: 'preserve.strict.equal' } });
     }
   }
 }
@@ -481,12 +515,12 @@ function rewriteFieldOnly(
       const parts = key.split(':');
       const portName = parts.slice(1, -1).join(':');
       const instVar: InstanceTerm = { kind: 'var', id: instanceVarId(`fieldOnly:${block.id}:${portName}`) };
-      constraints.push({ kind: 'forceMany', port: key, instance: instVar });
+      constraints.push({ kind: 'forceMany', port: key, instance: instVar, origin: { kind: 'blockRule', blockId: block.id, blockType: block.type, rule: 'fieldOnly.forceMany' } });
     }
   }
 
   if (meta.broadcastPolicy === 'allowZipSig' && blockPorts.length > 0) {
-    constraints.push({ kind: 'zipBroadcast', ports: [...blockPorts].sort() });
+    constraints.push({ kind: 'zipBroadcast', ports: [...blockPorts].sort(), origin: { kind: 'blockRule', blockId: block.id, blockType: block.type, rule: 'fieldOnly.allowZipSig.zipBroadcast' } });
   }
 }
 
@@ -515,12 +549,12 @@ function rewriteForLaneTopology(
     if (ports.length === 0) continue;
 
     if (group.relation === 'zipBroadcast') {
-      constraints.push({ kind: 'zipBroadcast', ports: [...ports].sort() });
+      constraints.push({ kind: 'zipBroadcast', ports: [...ports].sort(), origin: { kind: 'blockRule', blockId: block.id, blockType: block.type, rule: 'laneTopology.zipBroadcast' } });
     } else {
       // allEqual, reducible, broadcastOnly, custom → pairwise equal
       const sorted = [...ports].sort();
       for (let i = 1; i < sorted.length; i++) {
-        constraints.push({ kind: 'equal', a: sorted[0], b: sorted[i] });
+        constraints.push({ kind: 'equal', a: sorted[0], b: sorted[i], origin: { kind: 'blockRule', blockId: block.id, blockType: block.type, rule: 'laneTopology.equal' } });
       }
     }
   }

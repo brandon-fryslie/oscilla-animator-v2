@@ -21,6 +21,7 @@ import { isAxisVar, isAxisInst, type Axis } from '../../../core/canonical-types'
 import type { CardinalityVarId } from '../../../core/ids';
 import type { InstanceVarId } from '../../../core/ids';
 import type { DraftPortKey } from '../type-facts';
+import type { ConstraintOrigin } from '../payload-unit/solve';
 
 // =============================================================================
 // InstanceTerm (solver-internal)
@@ -35,10 +36,10 @@ export type InstanceTerm =
 // =============================================================================
 
 export type CardinalityConstraint =
-  | { readonly kind: 'equal'; readonly a: DraftPortKey; readonly b: DraftPortKey }
-  | { readonly kind: 'clampOne'; readonly port: DraftPortKey }
-  | { readonly kind: 'forceMany'; readonly port: DraftPortKey; readonly instance: InstanceTerm }
-  | { readonly kind: 'zipBroadcast'; readonly ports: readonly DraftPortKey[] };
+  | { readonly kind: 'equal'; readonly a: DraftPortKey; readonly b: DraftPortKey; readonly origin: ConstraintOrigin }
+  | { readonly kind: 'clampOne'; readonly port: DraftPortKey; readonly origin: ConstraintOrigin }
+  | { readonly kind: 'forceMany'; readonly port: DraftPortKey; readonly instance: InstanceTerm; readonly origin: ConstraintOrigin }
+  | { readonly kind: 'zipBroadcast'; readonly ports: readonly DraftPortKey[]; readonly origin: ConstraintOrigin };
 
 // =============================================================================
 // Input
@@ -55,16 +56,20 @@ export interface CardinalitySolveInput {
 // Errors
 // =============================================================================
 
-export type CardinalitySolveErrorKind =
-  | 'Conflict'
-  | 'UnresolvedCardinality'
-  | 'UnresolvedInstanceVar';
-
-export interface CardinalitySolveError {
-  readonly kind: CardinalitySolveErrorKind;
-  readonly ports: readonly DraftPortKey[];
-  readonly message: string;
-}
+export type CardinalitySolveError =
+  | {
+      readonly kind: 'ZipBroadcastClampOneConflict';
+      readonly zipPorts: readonly DraftPortKey[];
+      readonly clampOneMembers: readonly DraftPortKey[];
+      readonly manyMembers: readonly DraftPortKey[];
+      readonly zipOrigin: ConstraintOrigin;
+      readonly clampOneOrigins: readonly ConstraintOrigin[];
+      readonly manyEvidenceOrigins: readonly ConstraintOrigin[];
+      readonly message: string;
+    }
+  | { readonly kind: 'ClampManyConflict'; readonly ports: readonly DraftPortKey[]; readonly message: string }
+  | { readonly kind: 'InstanceConflict'; readonly ports: readonly DraftPortKey[]; readonly message: string }
+  | { readonly kind: 'UnresolvedInstanceVar'; readonly ports: readonly DraftPortKey[]; readonly message: string };
 
 // =============================================================================
 // Output
@@ -90,6 +95,8 @@ interface GroupFacts {
   forcedManyTerms: InstanceTerm[];
   /** Resolved cardinality for this group (set in phase 3+) */
   resolved: CardinalityValue | null;
+  clampOneOrigins: ConstraintOrigin[];
+  forceManyOrigins: ConstraintOrigin[];
 }
 
 class CardinalityUF {
@@ -145,6 +152,8 @@ class CardinalityUF {
     if (lf) {
       if (lf.forcedOne) wf.forcedOne = true;
       wf.forcedManyTerms.push(...lf.forcedManyTerms);
+      wf.clampOneOrigins.push(...lf.clampOneOrigins);
+      wf.forceManyOrigins.push(...lf.forceManyOrigins);
       this.facts.delete(loser);
     }
   }
@@ -153,7 +162,7 @@ class CardinalityUF {
     const root = this.find(id);
     let f = this.facts.get(root);
     if (!f) {
-      f = { forcedOne: false, forcedManyTerms: [], resolved: null };
+      f = { forcedOne: false, forcedManyTerms: [], resolved: null, clampOneOrigins: [], forceManyOrigins: [] };
       this.facts.set(root, f);
     }
     return f;
@@ -340,11 +349,14 @@ export function solveCardinality(input: CardinalitySolveInput): CardinalitySolve
   // From constraints
   for (const c of constraints) {
     if (c.kind === 'clampOne') {
-      uf.getOrCreateFacts(c.port).forcedOne = true;
+      const facts = uf.getOrCreateFacts(c.port);
+      facts.forcedOne = true;
+      facts.clampOneOrigins.push(c.origin);
     } else if (c.kind === 'forceMany') {
       const facts = uf.getOrCreateFacts(c.port);
       instanceUF.ensure(c.instance);
       facts.forcedManyTerms.push(c.instance);
+      facts.forceManyOrigins.push(c.origin);
     }
   }
 
@@ -370,7 +382,7 @@ export function solveCardinality(input: CardinalitySolveInput): CardinalitySolve
     if (facts.forcedOne && hasForcedMany) {
       // Conflict: clampOne AND forceMany in same group
       errors.push({
-        kind: 'Conflict',
+        kind: 'ClampManyConflict',
         ports: uf.members(root),
         message: `Cardinality conflict: ports constrained to both one and many`,
       });
@@ -388,7 +400,7 @@ export function solveCardinality(input: CardinalitySolveInput): CardinalitySolve
         const err = instanceUF.unify(facts.forcedManyTerms[0], facts.forcedManyTerms[i]);
         if (err) {
           errors.push({
-            kind: 'Conflict',
+            kind: 'InstanceConflict',
             ports: uf.members(root),
             message: err,
           });
@@ -412,13 +424,13 @@ export function solveCardinality(input: CardinalitySolveInput): CardinalitySolve
   // ---- Phase 4: ZipBroadcast fixpoint ----
   if (trace) console.log('[CardSolver] Phase 4: ZipBroadcast fixpoint');
 
-  // Collect zip sets from constraints
-  const zipSets: DraftPortKey[][] = [];
+  // Collect zip sets from constraints (with origins for provenance)
+  const zipSets: Array<{ ports: DraftPortKey[]; origin: ConstraintOrigin }> = [];
   for (const c of constraints) {
     if (c.kind === 'zipBroadcast') {
       // Sort and dedup
       const sorted = [...new Set(c.ports)].sort();
-      if (sorted.length > 0) zipSets.push(sorted);
+      if (sorted.length > 0) zipSets.push({ ports: sorted, origin: c.origin });
     }
   }
 
@@ -427,7 +439,7 @@ export function solveCardinality(input: CardinalitySolveInput): CardinalitySolve
   while (changed) {
     changed = false;
 
-    for (const zipPorts of zipSets) {
+    for (const { ports: zipPorts, origin: zipOrigin } of zipSets) {
       // Find groups represented in this zip set
       const groupRoots = [...new Set(zipPorts.map(p => uf.find(p)))];
 
@@ -447,7 +459,7 @@ export function solveCardinality(input: CardinalitySolveInput): CardinalitySolve
               const err = instanceUF.unify(manyGroup.forcedManyTerms[0], facts.forcedManyTerms[0]);
               if (err) {
                 errors.push({
-                  kind: 'Conflict',
+                  kind: 'InstanceConflict',
                   ports: zipPorts,
                   message: err,
                 });
@@ -462,20 +474,17 @@ export function solveCardinality(input: CardinalitySolveInput): CardinalitySolve
 
       if (hasConflict || !manyGroup) continue;
 
-      // Propagate many to all groups in this zip set
+      // Propagate many to all groups in this zip set.
+      // zipBroadcast semantics: signal (one) ports coexist with field (many) ports.
+      // clampOne groups stay at one — runtime broadcasts them via kernelZipSig.
+      // This is NOT a conflict; it's the expected behavior for allowZipSig blocks.
       for (const root of groupRoots) {
         if (root === manyRoot) continue;
         const facts = uf.getOrCreateFacts(root);
 
-        if (facts.forcedOne) {
-          // Conflict: clampOne port in zip with many member
-          errors.push({
-            kind: 'Conflict',
-            ports: zipPorts,
-            message: `ZipBroadcast conflict: clampOne port in zip group with many member`,
-          });
-          continue;
-        }
+        // clampOne groups stay at one — skip propagation, no conflict.
+        // The runtime handles mixed cardinality via kernelZipSig.
+        if (facts.forcedOne) continue;
 
         if (facts.resolved === null || facts.resolved?.kind === 'one') {
           // Propagate many

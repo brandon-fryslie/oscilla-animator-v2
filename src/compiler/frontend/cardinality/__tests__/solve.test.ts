@@ -8,11 +8,13 @@ import type { CardinalityValue, InstanceRef } from '../../../../core/canonical-t
 import { instanceRef } from '../../../../core/canonical-types';
 import { cardinalityVarId, instanceVarId, type CardinalityVarId } from '../../../../core/ids';
 import type { DraftPortKey } from '../../type-facts';
+import type { ConstraintOrigin } from '../../payload-unit/solve';
 
 // Helpers
 const pk = (s: string) => s as DraftPortKey;
 const cv = (s: string) => cardinalityVarId(s);
 const iv = (s: string) => instanceVarId(s);
+const o: ConstraintOrigin = { kind: 'blockRule', blockId: 'test', blockType: 'Test', rule: 'test' };
 
 function solve(
   ports: string[],
@@ -41,9 +43,9 @@ describe('solveCardinality', () => {
         'A:out:out': axisVar(cv('card:A:out:out')),
       },
       [
-        { kind: 'clampOne', port: pk('A:x:in') },
-        { kind: 'clampOne', port: pk('A:y:in') },
-        { kind: 'clampOne', port: pk('A:out:out') },
+        { kind: 'clampOne', port: pk('A:x:in'), origin: o },
+        { kind: 'clampOne', port: pk('A:y:in'), origin: o },
+        { kind: 'clampOne', port: pk('A:out:out'), origin: o },
       ],
     );
 
@@ -62,8 +64,8 @@ describe('solveCardinality', () => {
         'P:x:in': axisVar(cv('card:P:x:in')),
       },
       [
-        { kind: 'forceMany', port: pk('Arr:out:out'), instance: { kind: 'inst', ref } },
-        { kind: 'equal', a: pk('Arr:out:out'), b: pk('P:x:in') },
+        { kind: 'forceMany', port: pk('Arr:out:out'), instance: { kind: 'inst', ref }, origin: o },
+        { kind: 'equal', a: pk('Arr:out:out'), b: pk('P:x:in'), origin: o },
       ],
     );
 
@@ -82,10 +84,10 @@ describe('solveCardinality', () => {
       },
       [
         // All ports in preserve block share equality
-        { kind: 'equal', a: pk('P:a:in'), b: pk('P:b:in') },
-        { kind: 'equal', a: pk('P:b:in'), b: pk('P:out:out') },
+        { kind: 'equal', a: pk('P:a:in'), b: pk('P:b:in'), origin: o },
+        { kind: 'equal', a: pk('P:b:in'), b: pk('P:out:out'), origin: o },
         // External edge forces many on input a
-        { kind: 'forceMany', port: pk('P:a:in'), instance: { kind: 'inst', ref } },
+        { kind: 'forceMany', port: pk('P:a:in'), instance: { kind: 'inst', ref }, origin: o },
       ],
     );
 
@@ -108,8 +110,8 @@ describe('solveCardinality', () => {
         'A:out:out': axisVar(cv('card:A:out:out')),
       },
       [
-        { kind: 'forceMany', port: pk('A:x:in'), instance: { kind: 'inst', ref } },
-        { kind: 'zipBroadcast', ports: [pk('A:x:in'), pk('A:y:in'), pk('A:out:out')] },
+        { kind: 'forceMany', port: pk('A:x:in'), instance: { kind: 'inst', ref }, origin: o },
+        { kind: 'zipBroadcast', ports: [pk('A:x:in'), pk('A:y:in'), pk('A:out:out')], origin: o },
       ],
     );
 
@@ -125,7 +127,7 @@ describe('solveCardinality', () => {
         'B:y:in': axisVar(cv('card:B:y:in')),
       },
       [
-        { kind: 'zipBroadcast', ports: [pk('B:x:in'), pk('B:y:in')] },
+        { kind: 'zipBroadcast', ports: [pk('B:x:in'), pk('B:y:in')], origin: o },
       ],
     );
 
@@ -145,14 +147,14 @@ describe('solveCardinality', () => {
         'B:x:in': axisVar(cv('card:B:x:in')),
       },
       [
-        { kind: 'forceMany', port: pk('A:x:in'), instance: { kind: 'inst', ref: ref1 } },
-        { kind: 'forceMany', port: pk('B:x:in'), instance: { kind: 'inst', ref: ref2 } },
-        { kind: 'zipBroadcast', ports: [pk('A:x:in'), pk('B:x:in')] },
+        { kind: 'forceMany', port: pk('A:x:in'), instance: { kind: 'inst', ref: ref1 }, origin: o },
+        { kind: 'forceMany', port: pk('B:x:in'), instance: { kind: 'inst', ref: ref2 }, origin: o },
+        { kind: 'zipBroadcast', ports: [pk('A:x:in'), pk('B:x:in')], origin: o },
       ],
     );
 
     expect(result.errors.length).toBeGreaterThan(0);
-    expect(result.errors.some(e => e.kind === 'Conflict')).toBe(true);
+    expect(result.errors.some(e => e.kind === 'InstanceConflict')).toBe(true);
   });
 
   it('evidence-free group defaults to one', () => {
@@ -176,7 +178,7 @@ describe('solveCardinality', () => {
         'A:x:in': axisVar(cv('card:A:x:in')),
       },
       [
-        { kind: 'forceMany', port: pk('A:x:in'), instance: { kind: 'var', id: iv('inst:A:x') } },
+        { kind: 'forceMany', port: pk('A:x:in'), instance: { kind: 'var', id: iv('inst:A:x') }, origin: o },
       ],
     );
 
@@ -184,8 +186,14 @@ describe('solveCardinality', () => {
     expect(result.errors[0].kind).toBe('UnresolvedInstanceVar');
   });
 
-  it('signal→zip conflict: clampOne port in zip with many member → Conflict', () => {
+  it('zipBroadcast with clampOne + many: clampOne stays at one, many propagates to non-clampOne groups', () => {
+    // zipBroadcast semantics: signal (one) ports coexist with field (many) ports.
+    // clampOne groups stay at one — runtime broadcasts them via kernelZipSig.
     const ref = instanceRef('circle', 'arr1');
+    const clampOrigin: ConstraintOrigin = { kind: 'blockRule', blockId: 'Sig', blockType: 'SignalOnly', rule: 'signalOnly.clampOne' };
+    const manyOrigin: ConstraintOrigin = { kind: 'blockRule', blockId: 'Field', blockType: 'Transform', rule: 'transform.forceMany' };
+    const zipOrigin: ConstraintOrigin = { kind: 'blockRule', blockId: 'zip', blockType: 'Zip', rule: 'zipBroadcast' };
+
     const result = solve(
       ['Sig:out:out', 'Field:x:in'],
       {
@@ -193,17 +201,16 @@ describe('solveCardinality', () => {
         'Field:x:in': axisVar(cv('card:Field:x:in')),
       },
       [
-        { kind: 'clampOne', port: pk('Sig:out:out') },
-        { kind: 'forceMany', port: pk('Field:x:in'), instance: { kind: 'inst', ref } },
-        { kind: 'zipBroadcast', ports: [pk('Sig:out:out'), pk('Field:x:in')] },
+        { kind: 'clampOne', port: pk('Sig:out:out'), origin: clampOrigin },
+        { kind: 'forceMany', port: pk('Field:x:in'), instance: { kind: 'inst', ref }, origin: manyOrigin },
+        { kind: 'zipBroadcast', ports: [pk('Sig:out:out'), pk('Field:x:in')], origin: zipOrigin },
       ],
     );
 
-    expect(result.errors.length).toBeGreaterThan(0);
-    expect(result.errors.some(e => e.kind === 'Conflict')).toBe(true);
-    // Both ports should be listed
-    const conflict = result.errors.find(e => e.kind === 'Conflict')!;
-    expect(conflict.ports.length).toBeGreaterThanOrEqual(1);
+    // No conflict — clampOne stays at one, many stays at many
+    expect(result.errors).toHaveLength(0);
+    expect(result.cardinalities.get(cv('card:Sig:out:out'))).toEqual({ kind: 'one' });
+    expect(result.cardinalities.get(cv('card:Field:x:in'))).toEqual({ kind: 'many', instance: ref });
   });
 
   it('multiple vars per group: two ports with different var IDs in same equality group → both map to same value', () => {
@@ -215,8 +222,8 @@ describe('solveCardinality', () => {
         'A:y:in': axisVar(cv('v2')),
       },
       [
-        { kind: 'equal', a: pk('A:x:in'), b: pk('A:y:in') },
-        { kind: 'forceMany', port: pk('A:x:in'), instance: { kind: 'inst', ref } },
+        { kind: 'equal', a: pk('A:x:in'), b: pk('A:y:in'), origin: o },
+        { kind: 'forceMany', port: pk('A:x:in'), instance: { kind: 'inst', ref }, origin: o },
       ],
     );
 
@@ -225,7 +232,7 @@ describe('solveCardinality', () => {
     expect(result.cardinalities.get(cv('v2'))).toEqual({ kind: 'many', instance: ref });
   });
 
-  it('preserve-block broadcast rejection: mixed one/many without zip → Conflict via equality group', () => {
+  it('preserve-block broadcast rejection: mixed one/many without zip → ClampManyConflict via equality group', () => {
     // A preserve block with strict equality among all ports.
     // One input connected to signalOnly producer (clampOne) and another
     // connected to transform output (forceMany) → Conflict in the equality group
@@ -239,17 +246,17 @@ describe('solveCardinality', () => {
       },
       [
         // Strict preserve: all ports equal
-        { kind: 'equal', a: pk('P:a:in'), b: pk('P:b:in') },
-        { kind: 'equal', a: pk('P:b:in'), b: pk('P:out:out') },
+        { kind: 'equal', a: pk('P:a:in'), b: pk('P:b:in'), origin: o },
+        { kind: 'equal', a: pk('P:b:in'), b: pk('P:out:out'), origin: o },
         // clampOne from signal producer (propagated through edge equality to a)
-        { kind: 'clampOne', port: pk('P:a:in') },
+        { kind: 'clampOne', port: pk('P:a:in'), origin: o },
         // forceMany from transform producer (propagated through edge equality to b)
-        { kind: 'forceMany', port: pk('P:b:in'), instance: { kind: 'inst', ref } },
+        { kind: 'forceMany', port: pk('P:b:in'), instance: { kind: 'inst', ref }, origin: o },
       ],
     );
 
     expect(result.errors.length).toBeGreaterThan(0);
-    expect(result.errors.some(e => e.kind === 'Conflict')).toBe(true);
+    expect(result.errors.some(e => e.kind === 'ClampManyConflict')).toBe(true);
   });
 
   it('fieldOnly-only unresolved instance: fieldOnly block with only var instance → UnresolvedInstanceVar', () => {
@@ -259,7 +266,7 @@ describe('solveCardinality', () => {
         'F:data:in': axisVar(cv('card:F:data:in')),
       },
       [
-        { kind: 'forceMany', port: pk('F:data:in'), instance: { kind: 'var', id: iv('fieldOnly:F:data') } },
+        { kind: 'forceMany', port: pk('F:data:in'), instance: { kind: 'var', id: iv('fieldOnly:F:data') }, origin: o },
       ],
     );
 
@@ -289,15 +296,15 @@ describe('solveCardinality', () => {
         'A:x:in': axisVar(cv('v2')),
       },
       [
-        { kind: 'equal', a: pk('Z:x:in'), b: pk('A:x:in') },
+        { kind: 'equal', a: pk('Z:x:in'), b: pk('A:x:in'), origin: o },
         // Conflict: both one and many
-        { kind: 'clampOne', port: pk('Z:x:in') },
-        { kind: 'forceMany', port: pk('A:x:in'), instance: { kind: 'inst', ref: instanceRef('c', 'a') } },
+        { kind: 'clampOne', port: pk('Z:x:in'), origin: o },
+        { kind: 'forceMany', port: pk('A:x:in'), instance: { kind: 'inst', ref: instanceRef('c', 'a') }, origin: o },
       ],
     );
 
     expect(result.errors.length).toBeGreaterThan(0);
-    const conflict = result.errors.find(e => e.kind === 'Conflict')!;
+    const conflict = result.errors.find(e => e.kind === 'ClampManyConflict')!;
     // Ports should be sorted
     for (let i = 1; i < conflict.ports.length; i++) {
       expect(conflict.ports[i - 1] <= conflict.ports[i]).toBe(true);
@@ -314,9 +321,9 @@ describe('solveCardinality', () => {
         'F:data:in': axisVar(cv('card:F:data:in')),
       },
       [
-        { kind: 'forceMany', port: pk('Arr:out:out'), instance: { kind: 'inst', ref } },
-        { kind: 'forceMany', port: pk('F:data:in'), instance: { kind: 'var', id: varId } },
-        { kind: 'zipBroadcast', ports: [pk('Arr:out:out'), pk('F:data:in')] },
+        { kind: 'forceMany', port: pk('Arr:out:out'), instance: { kind: 'inst', ref }, origin: o },
+        { kind: 'forceMany', port: pk('F:data:in'), instance: { kind: 'var', id: varId }, origin: o },
+        { kind: 'zipBroadcast', ports: [pk('Arr:out:out'), pk('F:data:in')], origin: o },
       ],
     );
 

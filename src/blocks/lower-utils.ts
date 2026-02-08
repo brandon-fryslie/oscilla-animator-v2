@@ -109,3 +109,38 @@ export function zipAuto(
   });
   return b.kernelZip(aligned, fn, outType);
 }
+
+/**
+ * Cardinality-aware map: broadcasts input to field extent if needed.
+ *
+ * - Input and output same cardinality → kernelMap
+ * - Input is signal, output is field → broadcast then kernelMap
+ * - Input is field, output is signal → error (caller bug)
+ */
+export function mapAuto(
+  input: ValueExprId,
+  fn: PureFn,
+  outType: CanonicalType,
+  b: BlockIRBuilder,
+): ValueExprId {
+  const outCard = requireInst(outType.extent.cardinality, 'cardinality');
+
+  if (outCard.kind !== 'many') {
+    // Signal output — input must be signal too
+    return b.kernelMap(input, fn, outType);
+  }
+
+  // Output is field. Check input cardinality.
+  const expr = b.getValueExpr(input) as { type: CanonicalType } | undefined;
+  if (!expr) throw new Error(`mapAuto: invalid ValueExprId ${input}`);
+  const inCard = requireInst(expr.type.extent.cardinality, 'cardinality');
+
+  if (inCard.kind === 'many') {
+    // Both field → plain kernelMap
+    return b.kernelMap(input, fn, outType);
+  }
+
+  // Signal input → field output: broadcast then map
+  const broadcasted = b.broadcast(input, outType);
+  return b.kernelMap(broadcasted, fn, outType);
+}

@@ -7,7 +7,7 @@
 import { registerBlock, type LowerResult } from '../registry';
 import { canonicalType, payloadStride, requireInst } from '../../core/canonical-types';
 import { FLOAT } from '../../core/canonical-types';
-import { inferType, unitVar } from '../../core/inference-types';
+import { inferType, unitVar, payloadVar } from '../../core/inference-types';
 import { stableStateId } from '../../compiler/ir/types';
 import { defaultSourceConst } from '../../types';
 
@@ -26,11 +26,11 @@ registerBlock({
     broadcastPolicy: 'allowZipSig',
   },
   inputs: {
-    in: { label: 'Input', type: inferType(FLOAT, unitVar('unitDelay_U')), defaultSource: defaultSourceConst(0) },
+    in: { label: 'Input', type: inferType(payloadVar('unitDelay_T'), unitVar('unitDelay_U')), defaultSource: defaultSourceConst(0) },
     initialValue: { type: canonicalType(FLOAT), defaultValue: 0, exposedAsPort: false },
   },
   outputs: {
-    out: { label: 'Output', type: inferType(FLOAT, unitVar('unitDelay_U')) },
+    out: { label: 'Output', type: inferType(payloadVar('unitDelay_T'), unitVar('unitDelay_U')) },
   },
   // Phase 1: Generate output (reading from state) without needing input resolved
   lowerOutputsOnly: ({ ctx, config }) => {
@@ -41,7 +41,7 @@ registerBlock({
     const stateKey = stableStateId(ctx.instanceId, 'delay');
 
     // Read previous state (this is the output - delayed by 1 frame, symbolic key)
-    const outputId = ctx.b.stateRead(stateKey, canonicalType(FLOAT));
+    const outputId = ctx.b.stateRead(stateKey, outType);
 
     // Phase 1: declare state and output slot, but NO step request yet (phase 2 writes to state)
     return {
@@ -90,7 +90,7 @@ registerBlock({
     const stateKey = stableStateId(ctx.instanceId, 'delay');
 
     // Read previous state (this is the output - delayed by 1 frame, symbolic key)
-    const outputId = ctx.b.stateRead(stateKey, canonicalType(FLOAT));
+    const outputId = ctx.b.stateRead(stateKey, outType);
 
     // Return effects-as-data (no imperative calls)
     return {

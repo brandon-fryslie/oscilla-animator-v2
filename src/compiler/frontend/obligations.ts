@@ -25,6 +25,7 @@ export type ObligationId = string & { readonly __brand: 'ObligationId' };
 export type ObligationKind =
   | 'missingInputSource'
   | 'needsAdapter'
+  | 'needsCardinalityAdapter'
   | 'needsLaneAlignment'
   | 'needsDomainElaboration'
   | 'needsPayloadAnchor';

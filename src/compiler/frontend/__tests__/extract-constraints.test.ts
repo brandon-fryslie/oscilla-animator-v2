@@ -8,7 +8,7 @@ import { buildPatch } from '../../../graph/Patch';
 import { BLOCK_DEFS_BY_TYPE } from '../../../blocks/registry';
 import { draftPortKey } from '../type-facts';
 import { isPayloadVar, isUnitVar } from '../../../core/inference-types';
-import { isAxisInst } from '../../../core/canonical-types';
+import { isAxisInst, isAxisVar } from '../../../core/canonical-types';
 
 describe('extractConstraints', () => {
   it('extracts portBaseTypes for all ports of a block', () => {
@@ -144,6 +144,55 @@ describe('extractConstraints', () => {
     // Add has cardinality metadata (preserve mode), should generate constraints
     // The exact count depends on block definition
     expect(constraints.cardinality.length).toBeGreaterThanOrEqual(0);
+  });
+
+  it('clampOne constraints have signalOnly origin', () => {
+    const patch = buildPatch((b) => {
+      b.addBlock('InfiniteTimeRoot');
+    });
+    const { graph: g } = buildDraftGraph(patch);
+    const constraints = extractConstraints(g, BLOCK_DEFS_BY_TYPE);
+
+    const clampOnes = constraints.cardinality.filter((c) => c.kind === 'clampOne');
+    expect(clampOnes.length).toBeGreaterThan(0);
+    for (const c of clampOnes) {
+      expect(c.origin.kind).toBe('blockRule');
+      if (c.origin.kind === 'blockRule') {
+        expect(c.origin.rule).toBe('signalOnly.clampOne');
+      }
+    }
+  });
+
+  it('edge cardinality equal constraints have edge origin', () => {
+    const patch = buildPatch((b) => {
+      const c = b.addBlock('Const');
+      const add = b.addBlock('Add');
+      b.wire(c, 'out', add, 'a');
+    });
+    const { graph: g } = buildDraftGraph(patch);
+    const constraints = extractConstraints(g, BLOCK_DEFS_BY_TYPE);
+
+    const edgeEquals = constraints.cardinality.filter(
+      (c) => c.kind === 'equal' && c.origin.kind === 'edge',
+    );
+    expect(edgeEquals.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('transform zipBroadcast only contains axisVar ports (not concrete outputs)', () => {
+    const patch = buildPatch((b) => {
+      b.addBlock('Array');
+    });
+    const { graph: g } = buildDraftGraph(patch);
+    const constraints = extractConstraints(g, BLOCK_DEFS_BY_TYPE);
+
+    const zips = constraints.cardinality.filter((c) => c.kind === 'zipBroadcast');
+    for (const zip of zips) {
+      for (const port of zip.ports) {
+        const axis = constraints.baseCardinalityAxis.get(port);
+        expect(axis).toBeDefined();
+        expect(isAxisVar(axis!)).toBe(true);
+      }
+    }
   });
 
   it('skips unexposed ports', () => {

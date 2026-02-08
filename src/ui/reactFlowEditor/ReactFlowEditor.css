@@ -39,22 +39,23 @@
 }
 
 /* Edge styles */
+/* See graph-tokens.ts graphColors and edgeVisuals for canonical values */
 .react-flow__edge-path {
-  stroke: #4ecdc4;
-  stroke-width: 2;
+  stroke: #4ecdc4; /* graphColors.edgeDefault */
+  stroke-width: 2; /* edgeVisuals.strokeWidth.default */
   stroke-linecap: round;
   filter: drop-shadow(0 0 3px rgba(78, 205, 196, 0.3));
 }
 
 .react-flow__edge:hover .react-flow__edge-path {
-  stroke: #6ee7de;
-  stroke-width: 3;
+  stroke: #6ee7de; /* graphColors.edgeHover */
+  stroke-width: 3; /* edgeVisuals.strokeWidth.hover */
   filter: drop-shadow(0 0 6px rgba(78, 205, 196, 0.5));
 }
 
 .react-flow__edge.selected .react-flow__edge-path {
-  stroke: #7dd3fc;
-  stroke-width: 3;
+  stroke: #7dd3fc; /* graphColors.edgeSelected */
+  stroke-width: 3; /* edgeVisuals.strokeWidth.selected */
   filter: drop-shadow(0 0 8px rgba(125, 211, 252, 0.6));
 }
 
@@ -71,11 +72,12 @@
 }
 
 /* Handle styles */
+/* See graph-tokens.ts for canonical values */
 .react-flow__handle {
-  background: #4ecdc4;
-  width: 14px;
-  height: 14px;
-  border: 2px solid #1a1a2e;
+  background: #4ecdc4; /* graphColors.accent */
+  width: 14px; /* portSize.diameter */
+  height: 14px; /* portSize.diameter */
+  border: 2px solid #1a1a2e; /* portSize.borderWidth */
   transition: all 0.2s ease;
 }
 
@@ -94,21 +96,25 @@
 }
 
 /* Port state breathing animations */
+/* See graph-tokens.ts portAnimations for canonical reference values */
+
 /* Subtle breathing for selected port (±10% hue, brighter peak, 2.5s cycle) */
+/* Token: portAnimations.selected */
 @keyframes port-breathe-selected {
   0%, 100% {
-    filter: brightness(1.4) hue-rotate(-3deg);
+    filter: brightness(1.4) saturate(1.5) hue-rotate(-3deg);
   }
   50% {
-    filter: brightness(1.7) hue-rotate(3deg);
+    filter: brightness(1.7) saturate(1.8) hue-rotate(3deg); /* portAnimations.selected.keyframes.peak.brightness */
   }
 }
 
 /* Moderate breathing for warning port (2s cycle) */
+/* Token: portAnimations.warning, graphColors.warning (#ffd93d) */
 @keyframes port-breathe-warning {
   0%, 100% {
     filter: brightness(1.0) saturate(1.1);
-    box-shadow: 0 0 12px 3px rgba(255, 217, 61, 0.5);
+    box-shadow: 0 0 12px 3px rgba(255, 217, 61, 0.5); /* #ffd93d = rgba(255, 217, 61) */
   }
   50% {
     filter: brightness(1.15) saturate(1.2);
@@ -117,10 +123,11 @@
 }
 
 /* Fast breathing for error port (1.5s cycle) */
+/* Token: portAnimations.error, graphColors.error (#ff6b6b) */
 @keyframes port-breathe-error {
   0%, 100% {
     filter: brightness(1.0) saturate(1.1);
-    box-shadow: 0 0 12px 3px rgba(255, 107, 107, 0.5);
+    box-shadow: 0 0 12px 3px rgba(255, 107, 107, 0.5); /* #ff6b6b = rgba(255, 107, 107) */
   }
   50% {
     filter: brightness(1.15) saturate(1.2);
@@ -129,16 +136,17 @@
 }
 
 /* Animation classes (applied via className) */
+/* See graph-tokens.ts portAnimations for canonical durations */
 .port-selected {
-  animation: port-breathe-selected 2.5s ease-in-out infinite;
+  animation: port-breathe-selected 2.5s ease-in-out infinite; /* portAnimations.selected.duration */
 }
 
 .port-warning {
-  animation: port-breathe-warning 2s ease-in-out infinite;
+  animation: port-breathe-warning 2s ease-in-out infinite; /* portAnimations.warning.duration */
 }
 
 .port-error {
-  animation: port-breathe-error 1.5s ease-in-out infinite;
+  animation: port-breathe-error 1.5s ease-in-out infinite; /* portAnimations.error.duration */
 }
 
 /* Controls panel */
@@ -224,8 +232,8 @@
 
 /* Connection line while dragging */
 .react-flow__connection-line {
-  stroke: #4ecdc4;
-  stroke-width: 2;
+  stroke: #4ecdc4; /* graphColors.edgeDefault */
+  stroke-width: 2; /* edgeVisuals.strokeWidth.default */
   stroke-dasharray: 5, 5;
   animation: flow 0.5s linear infinite;
 }

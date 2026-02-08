@@ -10,6 +10,7 @@ import { FLOAT, INT } from '../../core/canonical-types';
 import { OpCode } from '../../compiler/ir/types';
 import { defaultSourceConst } from '../../types';
 import type { ValueExprId } from '../../compiler/ir/Indices';
+import { zipAuto, mapAuto } from '../lower-utils';
 
 registerBlock({
   type: 'Oscillator',
@@ -60,14 +61,16 @@ registerBlock({
 
     let id: ValueExprId;
 
+    // Use zipAuto/mapAuto for cardinality-aware operations:
+    // phase may be signal (one) while outType is field (many) in allowZipSig contexts.
     switch (mode) {
       case 0: {
         // Sin
         const mul = ctx.b.opcode(OpCode.Mul);
         const sin = ctx.b.opcode(OpCode.Sin);
         const tau = ctx.b.constant(floatConst(Math.PI * 2), canonicalType(FLOAT));
-        const phaseRadians = ctx.b.kernelZip([phase.id, tau], mul, outType);
-        id = ctx.b.kernelMap(phaseRadians, sin, outType);
+        const phaseRadians = zipAuto([phase.id, tau], mul, outType, ctx.b);
+        id = mapAuto(phaseRadians, sin, outType, ctx.b);
         break;
       }
       case 1: {
@@ -78,10 +81,10 @@ registerBlock({
         const two = ctx.b.constant(floatConst(2), canonicalType(FLOAT));
         const one = ctx.b.constant(floatConst(1), canonicalType(FLOAT));
 
-        const phaseFloor = ctx.b.kernelMap(phase.id, floor, outType);
-        const frac = ctx.b.kernelZip([phase.id, phaseFloor], sub, outType);
-        const scaled = ctx.b.kernelZip([two, frac], mul, outType);
-        id = ctx.b.kernelZip([scaled, one], sub, outType);
+        const phaseFloor = mapAuto(phase.id, floor, outType, ctx.b);
+        const frac = zipAuto([phase.id, phaseFloor], sub, outType, ctx.b);
+        const scaled = zipAuto([two, frac], mul, outType, ctx.b);
+        id = zipAuto([scaled, one], sub, outType, ctx.b);
         break;
       }
       case 2: {
@@ -90,15 +93,15 @@ registerBlock({
         const half = ctx.b.constant(floatConst(0.5), canonicalType(FLOAT));
         const sign = ctx.b.opcode(OpCode.Sign);
 
-        const shifted = ctx.b.kernelZip([phase.id, half], sub, outType);
-        id = ctx.b.kernelMap(shifted, sign, outType);
+        const shifted = zipAuto([phase.id, half], sub, outType, ctx.b);
+        id = mapAuto(shifted, sign, outType, ctx.b);
         break;
       }
       case 3: {
         // Noise: Deterministic hash of phase (produces pseudo-random [0,1) output)
         const hash = ctx.b.opcode(OpCode.Hash);
         const seed = ctx.b.constant(floatConst(0), canonicalType(FLOAT));
-        id = ctx.b.kernelZip([phase.id, seed], hash, outType);
+        id = zipAuto([phase.id, seed], hash, outType, ctx.b);
         break;
       }
       default: {

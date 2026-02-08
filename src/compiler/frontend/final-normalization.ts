@@ -28,11 +28,13 @@ import type { CanonicalType, InstanceRef } from '../../core/canonical-types';
 import { isAxisInst, isAxisVar } from '../../core/canonical-types';
 import type { InferenceCanonicalType } from '../../core/inference-types';
 import { isPayloadVar, isUnitVar, isInferenceCanonicalizable, finalizeInferenceType, applyPartialSubstitution, type Substitution, EMPTY_SUBSTITUTION } from '../../core/inference-types';
-import { solveCardinality } from './cardinality/solve';
+import { solveCardinality, type CardinalitySolveError } from './cardinality/solve';
 import { defaultSourcePolicyV1 } from './policies/default-source-policy';
 import { adapterPolicyV1 } from './policies/adapter-policy';
 import { payloadAnchorPolicyV1 } from './policies/payload-anchor-policy';
+import { cardinalityAdapterPolicyV1 } from './policies/cardinality-adapter-policy';
 import { createDerivedObligations } from './create-derived-obligations';
+import { createCardinalityAdapterObligations } from './create-cardinality-obligations';
 
 // =============================================================================
 // Options
@@ -89,13 +91,14 @@ export function finalizeNormalizationFixpoint(
     let didMutateGraph = false;
 
     // 1) Solve (pure) — extract constraints + run payload/unit solver + compute TypeFacts
-    const { facts, solveDiagnostics, collectPorts } = solveAndComputeFacts(g, registry);
+    const { facts, solveDiagnostics, cardinalityConflicts, collectPorts } = solveAndComputeFacts(g, registry);
     lastFacts = facts;
     diagnostics.push(...solveDiagnostics);
 
-    // 2) Create derived obligations (pure) — adapter obligations from type mismatches
+    // 2) Create derived obligations (pure) — adapter + cardinality adapter obligations
     const derivedObs = createDerivedObligations(g, facts);
-    const { graph: g2, added } = addObligationsIfMissing(g, derivedObs);
+    const cardObs = createCardinalityAdapterObligations(g, cardinalityConflicts);
+    const { graph: g2, added } = addObligationsIfMissing(g, [...derivedObs, ...cardObs]);
     if (added > 0) didMutateGraph = true;
     g = g2;
 
@@ -125,8 +128,18 @@ export function finalizeNormalizationFixpoint(
 
     // 4) Apply — stop when no plans AND no new obligations were added
     if (plans.length === 0 && !didMutateGraph) {
+      // Emit remaining cardinality conflicts as diagnostics (could not resolve structurally)
+      for (const conflict of cardinalityConflicts) {
+        diagnostics.push({
+          kind: 'CardinalityConstraintError',
+          subKind: conflict.kind,
+          ports: conflict.kind === 'ZipBroadcastClampOneConflict' ? conflict.zipPorts : [],
+          message: conflict.message,
+        });
+      }
       const strict = tryFinalizeStrict(g, facts, collectPorts);
-      return { graph: g, facts, strict, diagnostics, iterations: i + 1, ...(tracing ? { trace } : {}) };
+      const deduped = deduplicateDiagnostics(diagnostics);
+      return { graph: g, facts, strict, diagnostics: deduped, iterations: i + 1, ...(tracing ? { trace } : {}) };
     }
 
     if (plans.length > 0) {
@@ -161,7 +174,8 @@ export function finalizeNormalizationFixpoint(
     message: `Fixpoint did not converge after ${options.maxIterations} iterations`,
   });
 
-  return { graph: g, facts: lastFacts, strict: null, diagnostics, iterations: options.maxIterations, ...(tracing ? { trace } : {}) };
+  const deduped = deduplicateDiagnostics(diagnostics);
+  return { graph: g, facts: lastFacts, strict: null, diagnostics: deduped, iterations: options.maxIterations, ...(tracing ? { trace } : {}) };
 }
 
 // =============================================================================
@@ -182,7 +196,7 @@ export function finalizeNormalizationFixpoint(
 function solveAndComputeFacts(
   g: DraftGraph,
   registry: ReadonlyMap<string, BlockDef>,
-): { facts: TypeFacts; solveDiagnostics: unknown[]; collectPorts: ReadonlySet<DraftPortKey> } {
+): { facts: TypeFacts; solveDiagnostics: unknown[]; cardinalityConflicts: readonly CardinalitySolveError[]; collectPorts: ReadonlySet<DraftPortKey> } {
   const solveDiagnostics: unknown[] = [];
 
   // [LAW:dataflow-not-control-flow] No empty-graph guard — extractConstraints + solvers handle empty inputs.
@@ -214,14 +228,20 @@ function solveAndComputeFacts(
     constraints: extracted.cardinality,
   });
 
-  // Collect cardinality errors
+  // Separate cardinality errors: ZipBroadcastClampOneConflict are structural
+  // issues resolved via obligations, not terminal errors.
+  const cardinalityConflicts: CardinalitySolveError[] = [];
   for (const error of cardResult.errors) {
-    solveDiagnostics.push({
-      kind: 'CardinalityConstraintError',
-      subKind: error.kind,
-      ports: error.ports,
-      message: error.message,
-    });
+    if (error.kind === 'ZipBroadcastClampOneConflict') {
+      cardinalityConflicts.push(error);
+    } else {
+      solveDiagnostics.push({
+        kind: 'CardinalityConstraintError',
+        subKind: error.kind,
+        ports: error.ports,
+        message: error.message,
+      });
+    }
   }
 
   // 5) Build Substitution from solver outputs
@@ -242,7 +262,7 @@ function solveAndComputeFacts(
   // 7) Build instance index from resolved port hints
   const instances = buildInstanceIndex(ports);
 
-  return { facts: { ports, instances }, solveDiagnostics, collectPorts: extracted.collectPorts };
+  return { facts: { ports, instances }, solveDiagnostics, cardinalityConflicts, collectPorts: extracted.collectPorts };
 }
 
 /**
@@ -423,6 +443,8 @@ function callPolicy(obligation: Obligation, ctx: PolicyContext): PolicyResult | 
       return adapterPolicyV1.plan(obligation, ctx);
     case 'payloadAnchor.v1':
       return payloadAnchorPolicyV1.plan(obligation, ctx);
+    case 'cardinalityAdapters.v1':
+      return cardinalityAdapterPolicyV1.plan(obligation, ctx);
     default:
       return null;
   }
@@ -490,6 +512,34 @@ function tryFinalizeStrict(
     collectEdgeTypes: collectEdgeTypes && collectEdgeTypes.size > 0 ? collectEdgeTypes : undefined,
     diagnostics: [],
   };
+}
+
+// =============================================================================
+// Diagnostic Deduplication
+// =============================================================================
+
+/**
+ * Deduplicate diagnostics using a stable key.
+ * Fixpoint iterations can emit the same diagnostic multiple times;
+ * this removes duplicates while preserving order.
+ */
+function deduplicateDiagnostics(diagnostics: readonly unknown[]): unknown[] {
+  const seen = new Set<string>();
+  const result: unknown[] = [];
+  for (const d of diagnostics) {
+    const key = diagKey(d);
+    if (!seen.has(key)) {
+      seen.add(key);
+      result.push(d);
+    }
+  }
+  return result;
+}
+
+function diagKey(d: unknown): string {
+  if (typeof d !== 'object' || d === null) return String(d);
+  const o = d as Record<string, unknown>;
+  return `${o.kind ?? ''}:${o.subKind ?? ''}:${o.port ?? ''}:${o.message ?? ''}`;
 }
 
 // =============================================================================

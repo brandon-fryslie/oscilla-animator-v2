@@ -11,6 +11,7 @@ import { BaseEdge, EdgeLabelRenderer, getBezierPath, type EdgeProps } from 'reac
 import type { OscillaEdgeData } from './nodes';
 import { getLensLabel } from './lensUtils';
 import type { Diagnostic } from '../../diagnostics/types';
+import { graphColors } from '../graphEditor/graph-tokens';
 
 /**
  * Extended edge data including diagnostics.
@@ -25,21 +26,21 @@ export interface OscillaEdgeDataWithDiagnostics extends OscillaEdgeData {
  */
 function getEdgeStrokeColor(diagnostics?: Diagnostic[]): string {
   if (!diagnostics || diagnostics.length === 0) {
-    return '#4ecdc4'; // Default teal
+    return graphColors.edgeDefault;
   }
 
   const hasError = diagnostics.some(d => d.severity === 'error' || d.severity === 'fatal');
   const hasWarning = diagnostics.some(d => d.severity === 'warn');
 
   if (hasError) {
-    return '#ef4444'; // Red for errors
+    return graphColors.edgeError;
   }
 
   if (hasWarning) {
-    return '#f59e0b'; // Orange for warnings
+    return graphColors.edgeWarning;
   }
 
-  return '#4ecdc4'; // Default
+  return graphColors.edgeDefault;
 }
 
 /**
@@ -134,7 +135,7 @@ export function OscillaEdge({
                 minWidth: lensCount > 1 ? '18px' : '10px',
                 height: '10px',
                 borderRadius: '5px',
-                background: '#f59e0b', // Amber color
+                background: graphColors.lensBadge,
                 border: '1px solid #d97706', // Darker amber border
                 fontSize: '8px',
                 fontWeight: 'bold',

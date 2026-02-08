@@ -32,6 +32,8 @@ import {
   getAdapterBadgeLabel,
   getUnresolvedWarning,
 } from './portTooltipFormatters';
+import { resolvePortStyle } from './port-style';
+import { graphColors } from './graph-tokens';
 
 /**
  * Format a default source for display in tooltip.
@@ -61,41 +63,9 @@ function formatDefaultSource(ds: DefaultSource): string {
  */
 function getIndicatorColor(ds: DefaultSource): string {
   if (ds.blockType === 'TimeRoot') {
-    return '#2196F3'; // Blue for TimeRoot
+    return graphColors.timeRootIndicator;
   }
-  return '#4CAF50'; // Green for other blocks
-}
-
-/**
- * Get highlight style for a port based on compatibility.
- */
-function getPortHighlightStyle(
-  blockId: BlockId,
-  portId: PortId,
-  portHighlight: ReturnType<typeof useGraphEditor>['portHighlight']
-): React.CSSProperties | undefined {
-  if (!portHighlight) return undefined;
-
-  const { hoveredPort, isPortCompatible } = portHighlight;
-
-  // Don't highlight if no port is hovered
-  if (!hoveredPort) return undefined;
-
-  // Check if this port is compatible
-  const isCompatible = isPortCompatible(blockId, portId);
-
-  if (isCompatible) {
-    // Green glow for compatible ports
-    return {
-      boxShadow: '0 0 12px 4px #4ade80',
-      filter: 'brightness(1.3)',
-    };
-  } else {
-    // Gray out incompatible ports
-    return {
-      opacity: 0.3,
-    };
-  }
+  return graphColors.defaultSourceIndicator;
 }
 
 /**
@@ -220,11 +190,6 @@ export const UnifiedNode: React.FC<NodeProps<UnifiedNodeData>> = observer(({ dat
         const topPercent = ((index + 1) * 100) / (data.inputs.length + 1);
         const isSelected =
           selectedPort?.blockId === data.blockId && selectedPort?.portId === input.id;
-        const highlightStyle = getPortHighlightStyle(
-          data.blockId as BlockId,
-          input.id as PortId,
-          portHighlight
-        );
 
         // Get port state (error, warning, selected, none)
         const portState = getPortState(
@@ -234,62 +199,22 @@ export const UnifiedNode: React.FC<NodeProps<UnifiedNodeData>> = observer(({ dat
           selectedPort
         );
 
-        // State colors
-        const ERROR_COLOR = '#ff6b6b';
-        const WARNING_COLOR = '#ffd93d';
-
-        // Determine if port has diagnostic state (error or warning)
-        const hasError = portState === 'error';
-        const hasWarning = portState === 'warning';
-        const hasDiagnostic = hasError || hasWarning;
-
-        // Map state to CSS animation class
-        // IMPORTANT: If selected AND has diagnostic, don't animate (static glow instead)
-        const animationClass =
-          hasDiagnostic && isSelected
-            ? undefined
-            : hasError
-              ? 'port-error'
-              : hasWarning
-                ? 'port-warning'
-                : portState === 'selected'
-                  ? 'port-selected'
-                  : undefined;
-
-        // Compute background color (diagnostic color overrides type color)
-        const backgroundColor = hasError
-          ? ERROR_COLOR
-          : hasWarning
-            ? WARNING_COLOR
-            : input.isConnected
-              ? input.typeColor
-              : `linear-gradient(135deg, ${input.typeColor}40 0%, #1a1a2e 100%)`;
-
-        // Compute border color (diagnostic color overrides type color)
-        const borderColor = hasError ? ERROR_COLOR : hasWarning ? WARNING_COLOR : input.typeColor;
-
-        // Compute boxShadow and filter based on state
-        let boxShadow: string;
-        let filter: string | undefined;
-        if (hasDiagnostic && isSelected) {
-          // Selected error/warning: Static enhanced glow with max brightness
-          const glowColor = hasError ? ERROR_COLOR : WARNING_COLOR;
-          boxShadow = `0 0 26px 9px ${glowColor}`;
-          filter = 'brightness(1.7) saturate(1.5)'; // Match max brightness from breathing animations
-        } else if (hasDiagnostic) {
-          // Animated error/warning: Animation handles glow
-          boxShadow = 'none';
-          filter = undefined;
-        } else if (isSelected) {
-          boxShadow = `0 0 12px 3px ${input.typeColor}80, inset 0 0 4px ${input.typeColor}`;
-          filter = undefined;
-        } else if (input.isConnected) {
-          boxShadow = `0 0 6px 1px ${input.typeColor}40`;
-          filter = undefined;
-        } else {
-          boxShadow = 'none';
-          filter = undefined;
+        // Determine drag highlight state
+        let dragHighlight: 'compatible' | 'incompatible' | 'none' = 'none';
+        if (portHighlight?.hoveredPort) {
+          dragHighlight = portHighlight.isPortCompatible(data.blockId as BlockId, input.id as PortId)
+            ? 'compatible'
+            : 'incompatible';
         }
+
+        // Resolve port style
+        const resolved = resolvePortStyle({
+          typeColor: input.typeColor,
+          isConnected: input.isConnected,
+          isSelected,
+          diagnosticLevel: portState === 'error' ? 'error' : portState === 'warning' ? 'warning' : 'none',
+          dragHighlight,
+        });
 
         return (
           <React.Fragment key={`input-${input.id}`}>
@@ -320,19 +245,10 @@ export const UnifiedNode: React.FC<NodeProps<UnifiedNodeData>> = observer(({ dat
               onContextMenu={(e) => handlePortContextMenu(input.id as PortId, true, e)}
               onMouseEnter={(e) => handlePortMouseEnter(input, true, e)}
               onMouseLeave={handlePortMouseLeave}
-              className={animationClass}
+              className={resolved.className}
               style={{
                 top: `${topPercent}%`,
-                background: backgroundColor,
-                width: '14px',
-                height: '14px',
-                border: `2px solid ${borderColor}`,
-                borderRadius: '50%',
-                boxShadow,
-                filter,
-                cursor: 'pointer',
-                transition: animationClass ? 'none' : 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
-                ...highlightStyle,
+                ...resolved.style,
               }}
             />
 
@@ -366,7 +282,7 @@ export const UnifiedNode: React.FC<NodeProps<UnifiedNodeData>> = observer(({ dat
                   width: '12px',
                   height: '12px',
                   borderRadius: '3px',
-                  background: '#f59e0b',
+                  background: graphColors.adapterBadge,
                   color: '#fff',
                   fontSize: '10px',
                   display: 'flex',
@@ -391,7 +307,7 @@ export const UnifiedNode: React.FC<NodeProps<UnifiedNodeData>> = observer(({ dat
                   width: '12px',
                   height: '12px',
                   borderRadius: '3px',
-                  background: '#ef4444',
+                  background: graphColors.unresolvedBadge,
                   color: '#fff',
                   fontSize: '10px',
                   display: 'flex',
@@ -463,7 +379,7 @@ export const UnifiedNode: React.FC<NodeProps<UnifiedNodeData>> = observer(({ dat
         {data.inputs.length > 0 && (
           <span
             style={{
-              color: '#3b82f6',
+              color: graphColors.portCountInput,
               display: 'flex',
               alignItems: 'center',
               gap: '3px',
@@ -473,12 +389,12 @@ export const UnifiedNode: React.FC<NodeProps<UnifiedNodeData>> = observer(({ dat
           </span>
         )}
         {data.inputs.length > 0 && data.outputs.length > 0 && (
-          <span style={{ color: '#334155' }}>•</span>
+          <span style={{ color: graphColors.portCountSeparator }}>•</span>
         )}
         {data.outputs.length > 0 && (
           <span
             style={{
-              color: '#22c55e',
+              color: graphColors.portCountOutput,
               display: 'flex',
               alignItems: 'center',
               gap: '3px',
@@ -545,11 +461,6 @@ export const UnifiedNode: React.FC<NodeProps<UnifiedNodeData>> = observer(({ dat
         const topPercent = ((index + 1) * 100) / (data.outputs.length + 1);
         const isSelected =
           selectedPort?.blockId === data.blockId && selectedPort?.portId === output.id;
-        const highlightStyle = getPortHighlightStyle(
-          data.blockId as BlockId,
-          output.id as PortId,
-          portHighlight
-        );
 
         // Get port state (error, warning, selected, none)
         const portState = getPortState(
@@ -559,62 +470,22 @@ export const UnifiedNode: React.FC<NodeProps<UnifiedNodeData>> = observer(({ dat
           selectedPort
         );
 
-        // State colors
-        const ERROR_COLOR = '#ff6b6b';
-        const WARNING_COLOR = '#ffd93d';
-
-        // Determine if port has diagnostic state (error or warning)
-        const hasError = portState === 'error';
-        const hasWarning = portState === 'warning';
-        const hasDiagnostic = hasError || hasWarning;
-
-        // Map state to CSS animation class
-        // IMPORTANT: If selected AND has diagnostic, don't animate (static glow instead)
-        const animationClass =
-          hasDiagnostic && isSelected
-            ? undefined
-            : hasError
-              ? 'port-error'
-              : hasWarning
-                ? 'port-warning'
-                : portState === 'selected'
-                  ? 'port-selected'
-                  : undefined;
-
-        // Compute background color (diagnostic color overrides type color)
-        const backgroundColor = hasError
-          ? ERROR_COLOR
-          : hasWarning
-            ? WARNING_COLOR
-            : output.isConnected
-              ? output.typeColor
-              : `linear-gradient(135deg, ${output.typeColor}40 0%, #1a1a2e 100%)`;
-
-        // Compute border color (diagnostic color overrides type color)
-        const borderColor = hasError ? ERROR_COLOR : hasWarning ? WARNING_COLOR : output.typeColor;
-
-        // Compute boxShadow and filter based on state
-        let boxShadow: string;
-        let filter: string | undefined;
-        if (hasDiagnostic && isSelected) {
-          // Selected error/warning: Static enhanced glow with max brightness
-          const glowColor = hasError ? ERROR_COLOR : WARNING_COLOR;
-          boxShadow = `0 0 26px 9px ${glowColor}`;
-          filter = 'brightness(1.7) saturate(1.5)'; // Match max brightness from breathing animations
-        } else if (hasDiagnostic) {
-          // Animated error/warning: Animation handles glow
-          boxShadow = 'none';
-          filter = undefined;
-        } else if (isSelected) {
-          boxShadow = `0 0 12px 3px ${output.typeColor}80, inset 0 0 4px ${output.typeColor}`;
-          filter = undefined;
-        } else if (output.isConnected) {
-          boxShadow = `0 0 6px 1px ${output.typeColor}40`;
-          filter = undefined;
-        } else {
-          boxShadow = 'none';
-          filter = undefined;
+        // Determine drag highlight state
+        let dragHighlight: 'compatible' | 'incompatible' | 'none' = 'none';
+        if (portHighlight?.hoveredPort) {
+          dragHighlight = portHighlight.isPortCompatible(data.blockId as BlockId, output.id as PortId)
+            ? 'compatible'
+            : 'incompatible';
         }
+
+        // Resolve port style
+        const resolved = resolvePortStyle({
+          typeColor: output.typeColor,
+          isConnected: output.isConnected,
+          isSelected,
+          diagnosticLevel: portState === 'error' ? 'error' : portState === 'warning' ? 'warning' : 'none',
+          dragHighlight,
+        });
 
         return (
           <React.Fragment key={`output-${output.id}`}>
@@ -645,19 +516,10 @@ export const UnifiedNode: React.FC<NodeProps<UnifiedNodeData>> = observer(({ dat
               onContextMenu={(e) => handlePortContextMenu(output.id as PortId, false, e)}
               onMouseEnter={(e) => handlePortMouseEnter(output, false, e)}
               onMouseLeave={handlePortMouseLeave}
-              className={animationClass}
+              className={resolved.className}
               style={{
                 top: `${topPercent}%`,
-                background: backgroundColor,
-                width: '14px',
-                height: '14px',
-                border: `2px solid ${borderColor}`,
-                borderRadius: '50%',
-                boxShadow,
-                filter,
-                cursor: 'pointer',
-                transition: animationClass ? 'none' : 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
-                ...highlightStyle,
+                ...resolved.style,
               }}
             />
           </React.Fragment>

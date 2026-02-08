@@ -194,8 +194,17 @@ function convertExpansionDiagnostic(d: ExpansionDiagnostic): FrontendError {
 }
 
 /**
+ * Informational diagnostic kinds that are NOT errors.
+ * These represent successful structural resolutions, not failures.
+ */
+const INFORMATIONAL_DIAGNOSTIC_KINDS = new Set([
+  'CardinalityAdapterInserted',
+]);
+
+/**
  * Convert fixpoint diagnostics to FrontendErrors.
  * Extracts blockId/portId from DraftPortKey fields on solver errors.
+ * Filters out informational diagnostics (e.g., adapter insertion confirmations).
  */
 function convertFixpointDiagnostics(diagnostics: readonly unknown[], graph: DraftGraph): FrontendError[] {
   // Build blockId→type lookup from DraftGraph blocks
@@ -208,6 +217,10 @@ function convertFixpointDiagnostics(diagnostics: readonly unknown[], graph: Draf
   for (const d of diagnostics) {
     if (typeof d === 'object' && d !== null && 'kind' in d) {
       const kind = (d as { kind: string }).kind;
+
+      // Skip informational diagnostics — they confirm successful structural resolution
+      if (INFORMATIONAL_DIAGNOSTIC_KINDS.has(kind)) continue;
+
       const message = 'message' in d ? String((d as { message: string }).message) : String(d);
 
       // Extract block/port context from DraftPortKey fields
