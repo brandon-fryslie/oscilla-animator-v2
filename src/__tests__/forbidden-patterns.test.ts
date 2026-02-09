@@ -395,4 +395,63 @@ describe('Forbidden Patterns (Type System Invariants)', () => {
     });
 
   });
+
+  // =============================================================================
+  // Default Source Resolution Boundary
+  // =============================================================================
+
+  describe('Default Source Resolution Boundary', () => {
+
+    it('no defaultSource in compiler backend (resolved in frontend)', () => {
+      // defaultSource is resolved in frontend normalization (final-normalization.ts).
+      // Backend must not contain defaultSource logic — only comments/IR types allowed.
+      const matches = grepSrc('defaultSource', 'src/compiler/backend/');
+      const allowlist = [
+        /forbidden-patterns\.test\.ts/,  // This file
+        /\.test\./,                      // Test files
+        /__tests__/,                     // Test directories
+        /\/\//,                          // Single-line comments
+        /\*/,                            // Block comments
+        /types\.ts/,                     // IR type definitions
+      ];
+      const filtered = filterAllowlist(matches, allowlist);
+      expect(
+        filtered,
+        'defaultSource must not appear in compiler backend — resolved in frontend normalization'
+      ).toEqual([]);
+    });
+
+    it('no defaultSource in runtime (resolved before execution)', () => {
+      const matches = grepSrc('defaultSource', 'src/runtime/');
+      const allowlist = [
+        /forbidden-patterns\.test\.ts/,  // This file
+        /\.test\./,                      // Test files
+        /__tests__/,                     // Test directories
+        /\/\//,                          // Single-line comments
+        /\*/,                            // Block comments
+      ];
+      const filtered = filterAllowlist(matches, allowlist);
+      expect(
+        filtered,
+        'defaultSource must not appear in runtime — resolved before IR generation'
+      ).toEqual([]);
+    });
+
+    it('no defaultSource in renderer (resolved before rendering)', () => {
+      const matches = grepSrc('defaultSource', 'src/render/');
+      const allowlist = [
+        /forbidden-patterns\.test\.ts/,  // This file
+        /\.test\./,                      // Test files
+        /__tests__/,                     // Test directories
+        /\/\//,                          // Single-line comments
+        /\*/,                            // Block comments
+      ];
+      const filtered = filterAllowlist(matches, allowlist);
+      expect(
+        filtered,
+        'defaultSource must not appear in renderer — resolved before rendering'
+      ).toEqual([]);
+    });
+
+  });
 });
