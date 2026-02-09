@@ -74,7 +74,7 @@ registerBlock({
     if (widthInput && widthIsSignal) {
       widthSig = widthInput.id;
     } else {
-      widthSig = ctx.b.constant(floatConst((config?.width as number) ?? 0.04), canonicalType(FLOAT));
+      widthSig = ctx.b.constant(floatConst((config?.width as number)), canonicalType(FLOAT));
     }
 
     // Resolve height parameter
@@ -84,7 +84,7 @@ registerBlock({
     if (heightInput && heightIsSignal) {
       heightSig = heightInput.id;
     } else {
-      heightSig = ctx.b.constant(floatConst((config?.height as number) ?? 0.02), canonicalType(FLOAT));
+      heightSig = ctx.b.constant(floatConst((config?.height as number)), canonicalType(FLOAT));
     }
 
     // Resolve rotation parameter
@@ -94,7 +94,7 @@ registerBlock({
     if (rotationInput && rotationIsSignal) {
       rotationSig = rotationInput.id;
     } else {
-      rotationSig = ctx.b.constant(floatConst((config?.rotation as number) ?? 0), canonicalType(FLOAT));
+      rotationSig = ctx.b.constant(floatConst((config?.rotation as number)), canonicalType(FLOAT));
     }
 
     // Resolve cornerRadius parameter
@@ -104,7 +104,7 @@ registerBlock({
     if (cornerRadiusInput && cornerRadiusIsSignal) {
       cornerRadiusSig = cornerRadiusInput.id;
     } else {
-      cornerRadiusSig = ctx.b.constant(floatConst((config?.cornerRadius as number) ?? 0), canonicalType(FLOAT));
+      cornerRadiusSig = ctx.b.constant(floatConst((config?.cornerRadius as number)), canonicalType(FLOAT));
     }
 
     // Create shape reference with rect topology and param signals

@@ -122,7 +122,7 @@ registerBlock({
   },
   lower: ({ ctx, inputsById, config }) => {
     // Get sides from config (must be compile-time constant)
-    const sides = (config?.sides as number) ?? 5;
+    const sides = (config?.sides as number);
     if (sides < 3) {
       throw new Error(`Polygon must have at least 3 sides, got ${sides}`);
     }
@@ -155,12 +155,12 @@ registerBlock({
     const radiusXInput = inputsById.radiusX;
     const radiusXSig = ('type' in radiusXInput! && requireInst(radiusXInput!.type.extent.cardinality, 'cardinality').kind === 'one')
       ? radiusXInput!.id
-      : ctx.b.constant(floatConst((config?.radiusX as number) ?? 1.0), canonicalType(FLOAT));
+      : ctx.b.constant(floatConst((config?.radiusX as number)), canonicalType(FLOAT));
 
     const radiusYInput = inputsById.radiusY;
     const radiusYSig = ('type' in radiusYInput! && requireInst(radiusYInput!.type.extent.cardinality, 'cardinality').kind === 'one')
       ? radiusYInput!.id
-      : ctx.b.constant(floatConst((config?.radiusY as number) ?? 1.0), canonicalType(FLOAT));
+      : ctx.b.constant(floatConst((config?.radiusY as number)), canonicalType(FLOAT));
 
     const sidesSig = ctx.b.constant(intConst(sides), canonicalType(INT));
 
