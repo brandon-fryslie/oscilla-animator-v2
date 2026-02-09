@@ -7,23 +7,23 @@ default:
 
 # Start development server
 dev:
-  npm run dev
+  pnpm run dev
 
 # Run tests
 test:
-  npm test
+  pnpm test
 
 # Run tests in watch mode
 test-watch:
-  npm run test:watch
+  pnpm run test:watch
 
 # Build for production
 build:
-  npm run build
+  pnpm run build
 
 # Run TypeScript type checking
 typecheck:
-  npm run typecheck
+  pnpm run typecheck
 
 # Run all checks (typecheck + test + build)
 check: typecheck test build
@@ -37,7 +37,7 @@ clean:
 
 # Install dependencies
 install:
-  npm install
+  pnpm install
 
 # Format code (if prettier is added)
 # format:
