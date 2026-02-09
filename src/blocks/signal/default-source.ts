@@ -217,7 +217,7 @@ registerBlock({
     const temporal = requireInst(outType.extent.temporality, 'temporality');
     const cardinality = requireInst(outType.extent.cardinality, 'cardinality');
 
-    // ── Event path (discrete temporality) ──────────────────────────────
+    // TODO: REMOVE THIS
     if (temporal.kind === 'discrete') {
       const neverId = ctx.b.eventNever();
       return {

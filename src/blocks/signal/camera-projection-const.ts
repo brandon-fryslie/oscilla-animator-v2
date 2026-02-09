@@ -35,7 +35,7 @@ registerBlock({
     out: { label: 'Output', type: canonicalType(CAMERA_PROJECTION) },
   },
   lower: ({ ctx, config }) => {
-    const rawValue = (config?.value as number) ?? 0;
+    const rawValue = (config?.value as number);
     const sigId = ctx.b.constant(cameraProjectionConst(rawValue === 1 ? 'perspective' : 'orthographic'), canonicalType(CAMERA_PROJECTION));
     const outType = ctx.outTypes[0];
     return {

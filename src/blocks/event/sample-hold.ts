@@ -45,7 +45,7 @@ registerBlock({
       throw new Error('SampleHold: trigger input must be an event');
     }
 
-    const initialValue = (config?.initialValue as number) ?? 0;
+    const initialValue = (config?.initialValue as number);
 
     // Symbolic state key
     const stateKey = stableStateId(ctx.instanceId, 'sample');

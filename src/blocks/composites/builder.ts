@@ -81,10 +81,10 @@ class CompositeBuilder {
   }
 
   /** Add an internal block. Params are optional. */
-  block(id: string, type: string, params?: Record<string, unknown>): this {
+  block(id: string, type: string, params: Record<string, unknown>): this {
     const bid = internalBlockId(id);
     if (this._blocks.has(bid)) throw new Error(`Duplicate internal block id "${id}"`);
-    this._blocks.set(bid, { type, params: params ?? undefined });
+    this._blocks.set(bid, { type, params: params });
     return this;
   }
 

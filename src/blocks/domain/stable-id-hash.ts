@@ -31,7 +31,7 @@ registerBlock({
     id01: { label: 'ID [0,1]', type: canonicalField(FLOAT, { kind: 'none' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }) },
   },
   lower: ({ ctx, config }) => {
-    const seed = (config?.seed as number) ?? 0;
+    const seed = (config?.seed as number);
 
     // Get instance context from Array block or inferred from inputs
     const instance = ctx.inferredInstance;

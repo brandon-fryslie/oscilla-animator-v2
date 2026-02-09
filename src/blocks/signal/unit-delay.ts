@@ -34,7 +34,7 @@ registerBlock({
   },
   // Phase 1: Generate output (reading from state) without needing input resolved
   lowerOutputsOnly: ({ ctx, config }) => {
-    const initialValue = (config?.initialValue as number) ?? 0;
+    const initialValue = (config?.initialValue as number);
     const outType = ctx.outTypes[0];
 
     // Symbolic state key (will be reused in phase 2)
@@ -83,7 +83,7 @@ registerBlock({
     }
 
     // Single-pass lowering (for non-cycle usage)
-    const initialValue = (config?.initialValue as number) ?? 0;
+    const initialValue = (config?.initialValue as number);
     const outType = ctx.outTypes[0];
 
     // Symbolic state key

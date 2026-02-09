@@ -39,7 +39,7 @@ registerBlock({
     position: { label: 'Position', type: canonicalType(VEC2) },
   },
   lower: ({ ctx, config }) => {
-    const channelBase = (config?.channelBase as string) ?? 'mouse';
+    const channelBase = (config?.channelBase as string);
 
     const xSig = ctx.b.external(`${channelBase}.x`, canonicalType(FLOAT));
     const ySig = ctx.b.external(`${channelBase}.y`, canonicalType(FLOAT));

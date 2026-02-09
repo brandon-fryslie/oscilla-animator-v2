@@ -8,6 +8,7 @@ source_documents: 117
 topics: 26
 resolutions: 134
 update_history:
+update_history:
   - date: 2026-01-10T19:45:00Z
     sources_added: 23
     topics_updated: [07, 08, 09, 10, 12, 13]

@@ -165,20 +165,18 @@ enum Shape3DWord {
 
 ---
 
-## UnitType (8 Structured Kinds)
+## UnitType (6 Structured Kinds)
 
-Semantic interpretation of a value's numbers. Structured nesting with 8 top-level kinds.
+Semantic interpretation of a value's numbers. Structured nesting with 6 top-level kinds.
 
 ```typescript
 type UnitType =
   | { kind: 'none' }
-  | { kind: 'scalar' }
-  | { kind: 'norm01' }
   | { kind: 'count' }
   | { kind: 'angle'; unit: 'radians' | 'degrees' | 'phase01' }
   | { kind: 'time'; unit: 'ms' | 'seconds' }
   | { kind: 'space'; space: 'ndc' | 'world' | 'view'; dims: 2 | 3 }
-  | { kind: 'color'; space: 'rgba01' };
+  | { kind: 'color'; unit: 'rgba01' | 'hsl' };
 ```
 
 **Hard constraints**:
@@ -191,6 +189,24 @@ type UnitType =
 - Adapter matching can operate on "is this an angle?" rather than checking 3 separate kinds
 - Unit conversion within a family (radians↔degrees) is structurally encoded
 - The flat explosion of `ndc2/ndc3/world2/world3/view2/view3` collapses to parameterized `space`
+
+### Normalized Unit Policy (Foundational)
+
+The choice of when values are normalized to 0..1 vs kept in natural units is foundational to the number system:
+
+**Normalize to 0..1** (use `{ kind: 'angle', unit: 'phase01' }` or appropriate unit):
+- Phase values (oscillator output, LFO)
+- Weights, mix amounts, mask amounts
+- Easing curves (progress input/output)
+- normalizedIndex (per-element position in array)
+
+**Keep in natural units** (use the appropriate unit kind):
+- Time: seconds or milliseconds (`{ kind: 'time', unit: 'seconds' }`)
+- Angles: radians or degrees (`{ kind: 'angle', unit: 'radians' }`)
+- Positions: NDC, world, or view space (`{ kind: 'space', ... }`)
+- Velocities, accelerations: derived from natural units
+
+**Rule**: Use UnitType to encode the convention. Only normalize when the unit says so. Adapters handle conversion between unit kinds within a family (e.g., radians↔degrees).
 
 ---
 
@@ -313,6 +329,18 @@ Only explicit operations change cardinality:
 
 Two `many` values are aligned iff they reference the **same InstanceId**. No mapping/resampling in v0.
 
+### Cardinality Type Variables (Implemented)
+
+The cardinality axis supports type variables via `Axis<CardinalityValue, CardinalityVarId>`:
+- Blocks declare ports with cardinality vars for polymorphic behavior (signal OR field)
+- A dedicated 5-phase cardinality solver resolves all vars to concrete values
+- `Substitution` maps carry `cardinalities: Map<CardinalityVarId, CardinalityValue>` and `instances: Map<InstanceVarId, InstanceRef>`
+- After solving, `finalizeInferenceType()` replaces all vars with concrete values
+
+Constraint types: `equal` (ports share cardinality), `clampOne` (force signal), `forceMany` (force field), `zipBroadcast` (mixed one+many allowed, many wins).
+
+Evidence-free groups default to `one` (signal chain). This is correct — signals are the common case; field semantics require explicit evidence.
+
 ---
 
 ## Temporality (When)
@@ -347,7 +375,7 @@ Discrete outputs do NOT become continuous signals unless an explicit stateful op
 `eventRead` produces a continuous float signal (0.0/1.0), NOT a discrete event. The IR builder MUST NOT accept a caller-provided type for eventRead — the builder sets the type internally:
 
 ```typescript
-canonicalSignal({ kind: 'float' }, { kind: 'scalar' })
+canonicalSignal({ kind: 'float' }, { kind: 'none' })
 ```
 
 ---
@@ -507,7 +535,7 @@ type InferencePayloadType =
   | { kind: 'var'; var: PayloadVarId };  // Inference variable
 
 type InferenceUnitType =
-  | UnitType                          // All 8 structured unit kinds
+  | UnitType                          // All 6 structured unit kinds
   | { kind: 'var'; var: UnitVarId };  // Inference variable
 
 type InferenceCanonicalType = {
@@ -556,7 +584,7 @@ The "never fires" event is canonically: `{ kind: 'const', type: canonicalEventOn
 
 ### canonicalSignal(payload, unit?)
 - Creates: cardinality=one, temporality=continuous
-- Default unit: `{ kind: 'scalar' }` (convenience only, never inference fallback)
+- Default unit: `{ kind: 'none' }` (convenience only, never inference fallback)
 - All other axes: default instantiated values
 
 ### canonicalField(payload, unit, instance)

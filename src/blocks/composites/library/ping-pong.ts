@@ -14,13 +14,13 @@ export const PingPongComposite = composite('PingPong', 'Ping Pong')
   //  .capability(cap) — 'pure' | 'state' | 'render' | 'io'. Phasor accumulates phase across frames
   .capability('state')
   //  .block(id, type, params?) — id is a local name used in .connect/.in/.out refs. params is optional Record<string, unknown>
-  .block('phasor', 'Phasor')             // 0→1 sawtooth phase
+  .block('phasor', 'Phasor', {})             // 0→1 sawtooth phase
   .block('two', 'Const', { value: 2 })   // constant 2
   .block('one', 'Const', { value: 1 })   // constant 1
-  .block('mult', 'Multiply')             // 2 * phase
-  .block('sub1', 'Subtract')             // 2*phase - 1
+  .block('mult', 'Multiply', {})             // 2 * phase
+  .block('sub1', 'Subtract', {})             // 2*phase - 1
   .block('expr', 'Expression', { expression: 'abs(a)' }) // |2*phase - 1|
-  .block('sub2', 'Subtract')             // 1 - |2*phase - 1|
+  .block('sub2', 'Subtract', {})             // 1 - |2*phase - 1|
   //  .connect(from, to) — both args are "blockId.portId" strings
   .connect('phasor.out', 'mult.a')       // phase → multiply
   .connect('two.out', 'mult.b')          // 2 → multiply

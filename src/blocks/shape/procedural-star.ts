@@ -128,7 +128,7 @@ registerBlock({
   },
   lower: ({ ctx, inputsById, config }) => {
     // Get points from config (must be compile-time constant)
-    const points = (config?.points as number) ?? 5;
+    const points = (config?.points as number);
     if (points < 3) {
       throw new Error(`Star must have at least 3 points, got ${points}`);
     }

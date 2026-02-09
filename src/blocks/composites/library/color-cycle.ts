@@ -14,7 +14,7 @@ export const ColorCycleComposite = composite('ColorCycle', 'Color Cycle')
   //  .capability(cap) — 'pure' | 'state' | 'render' | 'io'. Phasor accumulates phase, so 'state'
   .capability('state')
   //  .block(id, type, params?) — params is Record<string, unknown>; here an RGBA array
-  .block('phasor', 'Phasor')            // 0→1 cycling phase
+  .block('phasor', 'Phasor', {})            // 0→1 cycling phase
   .block('color', 'Const', { value: [1, 0.5, 0.5, 1] }) // constant RGBA color
   //  no .connect() — these blocks aren't wired to each other internally
   //  .in(externalId, ref, label?) — externalId is what users connect to; ref points to the internal block's port

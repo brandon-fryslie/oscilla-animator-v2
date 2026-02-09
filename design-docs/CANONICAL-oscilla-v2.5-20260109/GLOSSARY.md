@@ -154,6 +154,36 @@ type CanonicalType = {
 
 ---
 
+### ColorPicker
+
+**Definition**: Constant authoring source block producing a user-space HSL+A color.
+
+**Type**: block
+
+**Canonical Form**: `ColorPicker`
+
+**Output**: Signal<color, HSL>
+
+**Source**: Topic 23 (Color System)
+
+**Note**: Parameters (h, s, l, a) are UI-controlled, not graph inputs.
+
+---
+
+### DefaultPolicyTable
+
+**Definition**: Type-indexed resolution table for choosing default producers for unconnected inputs. Pure function: resolve(policyKey, targetType, targetPort) → DefaultProducerPlan | Diagnostic.
+
+**Type**: concept
+
+**Canonical Form**: `DefaultPolicyTable`
+
+**Source**: Topic 25 (Pure Lowering)
+
+**Note**: Enables per-port semantic defaults (render.pos → vec2(0.5,0.5), render.color → palette).
+
+---
+
 ### Domain
 
 **Definition**: A classification that defines a kind of element. It answers the question: "What type of thing are we talking about?"
@@ -212,6 +242,20 @@ interface DomainSpec {
 **Examples**: `'shape'`, `'circle'`, `'rectangle'`, `'control'`, `'event'`
 
 **Source**: [01-type-system.md](./topics/01-type-system.md)
+
+---
+
+### HslToRgba
+
+**Definition**: Adapter block converting color payload from HSL unit to RGBA01 unit.
+
+**Type**: block (adapter)
+
+**Canonical Form**: `HslToRgba`
+
+**Source**: Topic 23 (Color System)
+
+**Note**: The only place HSL→RGB conversion occurs.
 
 ---
 
@@ -294,6 +338,95 @@ interface InstanceRef {
 
 ---
 
+### Lens
+
+**Definition**: A port decorator that modifies signal values. Attached to both input and output ports. Compiled to blocks. No separate lens catalog — blocks can be used as lenses.
+
+**Type**: concept (transform subtype)
+
+**Canonical Form**: `Lens`
+
+**Purpose**: Value transformation and modulation
+
+**Examples**:
+- `scale(0..1 → 0..360)` - range mapping
+- `ease(inOut)` - easing curve
+- `offset(+0.5)` - value shift
+
+**Minimal Ship Set** (10 lenses):
+1. Scale+Bias (value shaping)
+2. Clamp (value shaping)
+3. Wrap01 (phase/hue hygiene)
+4. Slew/Lag (dynamics)
+5. StepQuantize (discretization)
+6. Smoothstep (curves)
+7. Broadcast (signal→field)
+8. Reduce (field→signal: avg/sum/min/max)
+9. Mask (gate/hold)
+10. Extract/Construct (structural)
+
+**Source**: [14-modulation-table-ui.md](./topics/14-modulation-table-ui.md), Topic 26 (Lens System)
+
+**Note**: Lenses are port decorators (not edge decorators), attached to both input and output ports, compiled to blocks.
+
+---
+
+### LowerEffects
+
+**Definition**: Declarative data describing side effects requested by a lowerer — state cell requests, kernel registrations, intrinsic dependencies.
+
+**Type**: type
+
+**Canonical Form**: `LowerEffects`
+
+**Source**: Topic 25 (Pure Lowering)
+
+**Note**: Part of the effects-as-data model.
+
+---
+
+### LowerSandbox
+
+**Definition**: Constrained IR builder enforcing purity during block lowering. Provides capability-based API (emitConst, emitOp, emitKernel, etc.) while preventing graph mutation and scheduling side effects.
+
+**Type**: concept (compilation component)
+
+**Canonical Form**: `LowerSandbox`
+
+**Source**: Topic 25 (Pure Lowering)
+
+**Note**: Not a layer itself.
+
+---
+
+### Macro Lowering
+
+**Definition**: Technique of invoking existing blocks' lower() functions through a LowerSandbox to produce IR without creating graph nodes. Used by DefaultSource.
+
+**Type**: concept (compilation technique)
+
+**Canonical Form**: `Macro Lowering`
+
+**Source**: Topic 25 (Pure Lowering)
+
+**Note**: Keeps block semantics as single source of truth. If HueRainbow changes, the default changes automatically.
+
+---
+
+### MakeColorHSL
+
+**Definition**: Pack scalar h,s,l,a channels into a color payload with HSL unit. Enforces color validity.
+
+**Type**: block
+
+**Canonical Form**: `MakeColorHSL`
+
+**Source**: Topic 23 (Color System)
+
+**Note**: The enforcement point for HSL color validity.
+
+---
+
 ### Primitive Block
 
 **Definition**: A block that creates a single element of a specific domain type. Outputs `Signal<T>` (cardinality: one).
@@ -307,6 +440,56 @@ interface InstanceRef {
 **Source**: [02-block-system.md](./topics/02-block-system.md)
 
 **Note**: Part of the three-stage architecture: Primitive → Array → Layout.
+
+---
+
+### Sampleable
+
+**Definition**: A payload is "sampleable" iff payloadStride(payload) > 0. Payloads with stride=0 (shape2d, shape3d) are forbidden where numeric slots are required.
+
+**Type**: concept
+
+**Canonical Form**: `sampleable`
+
+**Source**: Topic 24 (Multi-Component Signals)
+
+**Note**: Stride 0 values cannot be stored in numeric slots and are never evaluated by numeric evaluators.
+
+---
+
+### SlotMetaEntry
+
+**Definition**: Compiler-emitted metadata for each allocated slot: slot ID, base offset, stride, and payload type.
+
+**Type**: type
+
+**Canonical Form**: `SlotMetaEntry`
+
+**Structure**:
+```typescript
+interface SlotMetaEntry {
+  readonly slot: ValueSlot;
+  readonly offset: number;
+  readonly stride: 0|1|2|3|4;
+  readonly payload: PayloadType;
+}
+```
+
+**Source**: Topic 24 (Multi-Component Signals)
+
+**Note**: stride === payloadStride(payload) is a compiler invariant.
+
+---
+
+### SplitColorHSL
+
+**Definition**: Unpack a color payload with HSL unit into scalar h,s,l,a channels.
+
+**Type**: block
+
+**Canonical Form**: `SplitColorHSL`
+
+**Source**: Topic 23 (Color System)
 
 ---
 
@@ -437,7 +620,7 @@ interface InstanceRef {
 - `vec3` → 3
 - `color` → 4
 
-**Note**: State stride may exceed payload stride when a primitive stores multiple values per lane (e.g., a filter storing y and dy has state stride 2 even for float payload).
+**Note**: State stride may exceed payload stride when a primitive stores multiple values per lane (e.g., a filter storing y and dy has state stride 2 even for float payload). Stride 0 is a valid classification for non-sampleable payloads (shape2d, shape3d). Stride 0 values cannot be stored in numeric slots and are never evaluated by numeric evaluators.
 
 **Source**: [04-compilation.md](./topics/04-compilation.md), [05-runtime.md](./topics/05-runtime.md)
 
@@ -815,6 +998,8 @@ type BlockRole =
 - `defaultSource` - fallback value for port
 - `wireState` - state on a wire
 - `lens` - transform/adapter
+
+**Note**: DefaultSource is a polymorphic structural block whose output type uses payload and unit variables. Its lower() function dispatches on the resolved type via a DefaultPolicyTable, potentially invoking other blocks' lowerers as macros through a LowerSandbox.
 
 **Source**: [02-block-system.md](./topics/02-block-system.md)
 
@@ -1221,27 +1406,6 @@ interface PathTopologyDef {
 **Example**: `phase → float` adapter allows phase output to connect to float input by converting type representation
 
 **Source**: [14-modulation-table-ui.md](./topics/14-modulation-table-ui.md)
-
----
-
-### Lens
-
-**Definition**: A transform that modifies signal values, possibly changing type as a side effect.
-
-**Type**: concept (transform subtype)
-
-**Canonical Form**: `Lens`
-
-**Purpose**: Value transformation and modulation
-
-**Examples**:
-- `scale(0..1 → 0..360)` - range mapping
-- `ease(inOut)` - easing curve
-- `offset(+0.5)` - value shift
-
-**Source**: [14-modulation-table-ui.md](./topics/14-modulation-table-ui.md)
-
-**Note**: Lens system details deferred to future spec topic
 
 ---
 
@@ -1755,15 +1919,15 @@ type ValueSummary =
 
 ### UnitType
 
-**Definition**: Semantic interpretation of a value's numbers. 8 structured kinds with no `var` branch in canonical type.
+**Definition**: Semantic interpretation of a value's numbers. 6 structured kinds with no `var` branch in canonical type.
 
 **Type**: type
 
-**Canonical Form**: `none | scalar | norm01 | count | angle(radians|degrees|phase01) | time(ms|seconds) | space(ndc|world|view, dims:2|3) | color(rgba01)`
+**Canonical Form**: `none | count | angle(radians|degrees|phase01) | time(ms|seconds) | space(ndc|world|view, dims:2|3) | color(hsl|rgba01)`
 
 **Source**: [01-type-system.md](./topics/01-type-system.md)
 
-**Note**: Unit variables exist only in inference-only wrappers (`InferenceUnitType`), never in `UnitType`.
+**Note**: Unit variables exist only in inference-only wrappers (`InferenceUnitType`), never in `UnitType`. The `color` kind uses `unit` as the sub-field name (not `space`). 6 concrete kinds: none, count, angle, time, space, color. `scalar` and `norm01` removed.
 
 ---
 

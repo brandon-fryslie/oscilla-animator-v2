@@ -68,8 +68,11 @@ registerBlock({
       rxSig = rxInput.id;
     } else {
       // Read from port default (via setPortDefault) or fall back to registry default
+      // this is insane and wildly broken.  inputs should be resolved before we get there
+      // EXAMPLE OF HOW NOT TO DO THIS
+      // TODO: eslint to ensure NO references to 'defaultSource' in compiler
       const rxPort = block?.inputPorts.get('rx');
-      const rxValue = (rxPort?.defaultSource?.params?.value as number | undefined) ?? (config?.rx as number) ?? 0.02;
+      const rxValue = (rxPort?.defaultSource?.params?.value as number | undefined); // TODO: fix this
       rxSig = ctx.b.constant(floatConst(rxValue), canonicalType(FLOAT));
     }
 
@@ -82,7 +85,7 @@ registerBlock({
     } else {
       // Read from port default (via setPortDefault) or fall back to registry default
       const ryPort = block?.inputPorts.get('ry');
-      const ryValue = (ryPort?.defaultSource?.params?.value as number | undefined) ?? (config?.ry as number) ?? 0.02;
+      const ryValue = (ryPort?.defaultSource?.params?.value as number | undefined);
       rySig = ctx.b.constant(floatConst(ryValue), canonicalType(FLOAT));
     }
 

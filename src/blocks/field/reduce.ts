@@ -62,8 +62,7 @@ registerBlock({
       throw new Error('Reduce field input must be a field');
     }
 
-    // Get operation from config (default to 'sum' if not specified)
-    const op = (config?.op as 'min' | 'max' | 'sum' | 'avg') ?? 'sum';
+    const op = (config?.op as 'min' | 'max' | 'sum' | 'avg');
     if (!['min', 'max', 'sum', 'avg'].includes(op)) {
       throw new Error(`Invalid reduce operation: ${op}`);
     }

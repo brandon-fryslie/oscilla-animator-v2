@@ -37,7 +37,7 @@ registerBlock({
       throw new Error('Phasor requires frequency signal input');
     }
 
-    const initialPhase = (config?.initialPhase as number) ?? 0;
+    const initialPhase = (config?.initialPhase as number);
     const outType = ctx.outTypes[0];
 
     // Symbolic state key

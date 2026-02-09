@@ -14,8 +14,8 @@ export const DelayedTriggerComposite = composite('DelayedTrigger', 'Delayed Trig
   //  .capability(cap) — 'pure' | 'state' | 'render' | 'io'. Both SampleHold and UnitDelay hold state
   .capability('state')
   //  .block(id, type, params?) — no params needed here; SampleHold and UnitDelay use port defaults
-  .block('sampleHold', 'SampleHold')     // latches value on trigger
-  .block('delay', 'UnitDelay')           // delays output by one frame
+  .block('sampleHold', 'SampleHold', {})     // latches value on trigger
+  .block('delay', 'UnitDelay', {})           // delays output by one frame
   //  .connect(from, to) — "blockId.portId" → "blockId.portId"
   .connect('sampleHold.out', 'delay.in') // feed latched value into delay
   //  .in(externalId, ref, label?) — label auto-titlecases externalId when omitted ("value" → "Value")

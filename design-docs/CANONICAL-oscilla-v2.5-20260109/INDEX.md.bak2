@@ -1,12 +1,24 @@
 ---
-status: CANONICAL
+status: UPDATING
 generated: 2026-01-09T17:00:00Z
 updated: 2026-02-09T05:15:00Z
+updating_sources:
+  - design-docs/_new/lenses/01-base-lenses.md
+  - design-docs/_new/pure-lowering-blocks/_source_docs/03-hybrid-approach.md
+  - design-docs/_new/pure-lowering-blocks/_source_docs/04-keeping-them-pure.md
+  - design-docs/_new/pure-lowering-blocks/01-macro-lowering.md
+  - design-docs/_new/colors/01-colors.md
+  - design-docs/_new/colors/02-color-units.md
+  - design-docs/_new/P0-Multi-Component-Signals.md
+  - design-docs/_new/normalized-units.md
+  - design-docs/_new/MultiValueSignals.md
+  - design-docs/_new/01-cardinality-type-var.md
+  - design-docs/_new/01-obligations.md
 approved_by: Brandon Fryslie
 approval_method: full_walkthrough + domain_system_reconceptualization + cardinality_generic_integration + payload_generic_integration + kernel_roadmap_integration + renderer_architecture_integration + layout_system_integration + camera_projection_integration + canonical_types_integration
-source_documents: 117
-topics: 26
-resolutions: 134
+source_documents: 102
+topics: 22
+resolutions: 121
 update_history:
   - date: 2026-01-10T19:45:00Z
     sources_added: 23
@@ -90,12 +102,17 @@ update_history:
 # Oscilla v2.5: Canonical Specification Index
 
 > **STATUS: UPDATING**
+> Integration in progress. New sources: 11 files (lenses, pure-lowering/macro-lowering, colors, multi-component signals, normalized-units, cardinality-type-var, obligations)
+> Started: 2026-02-09
+>
+> Previous: 2026-02-06 (integrated external input system: 4 sources, 3 resolutions, 1 new topic)
+> Approved by: Brandon Fryslie
 
 Generated: 2026-01-09T17:00:00Z
-Last Updated: 2026-02-09
+Last Updated: 2026-02-06
 Approved by: Brandon Fryslie
-Source Documents: 117 files
-Total Resolutions: 134
+Source Documents: 106 files
+Total Resolutions: 124
 
 ---
 

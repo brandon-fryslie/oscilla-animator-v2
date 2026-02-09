@@ -14,7 +14,7 @@ export const SmoothNoiseComposite = composite('SmoothNoise', 'Smooth Noise')
   //  .capability(cap) — optional, defaults to 'pure'. Values: 'pure' | 'state' | 'render' | 'io'. Lag holds state
   .capability('state')
   //  .block(id, type, params?) — add an internal block. id is local name, type is registered block type, params are optional defaults
-  .block('noise', 'Noise')            // random value source
+  .block('noise', 'Noise', {})            // random value source
   .block('lag', 'Lag', { smoothing: 0.9 }) // smoothing filter (0.9 = slow, organic)
   //  .connect(from, to) — wire "blockId.portId" → "blockId.portId" inside the composite
   .connect('noise.out', 'lag.target') // feed noise into lag

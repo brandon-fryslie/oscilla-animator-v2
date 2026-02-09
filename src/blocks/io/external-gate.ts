@@ -59,8 +59,8 @@ registerBlock({
     gate: { label: 'Gate', type: canonicalType(FLOAT) }, // 0 or 1
   },
   lower: ({ ctx, config }) => {
-    const channel = (config?.channel as string) ?? 'mouse.x';
-    const threshold = (config?.threshold as number) ?? 0.5;
+    const channel = (config?.channel as string);
+    const threshold = (config?.threshold as number);
     const outType = ctx.outTypes[0];
 
     const inputSig = ctx.b.external(channel, canonicalType(FLOAT));

@@ -48,6 +48,7 @@ export class LowerSandbox {
    * @param blockType - The block type to lower
    * @param inputsById - Map of port ID to ValueExprId for inputs
    * @param params - Block parameters (config)
+   * @param resolvedOutTypes
    * @returns Map of port ID to ValueExprId for outputs
    *
    * @throws Error if the block is not registered
@@ -56,7 +57,7 @@ export class LowerSandbox {
   lowerBlock(
     blockType: string,
     inputsById: Record<string, ValueExprId>,
-    params: Record<string, unknown> | undefined,
+    params: Record<string, unknown>,
     resolvedOutTypes: CanonicalType[]
   ): Record<string, ValueExprId> {
     const blockDef = requireBlockDef(blockType);

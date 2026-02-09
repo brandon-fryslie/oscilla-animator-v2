@@ -53,7 +53,7 @@ registerBlock({
     value: { label: 'Value', type: canonicalType(FLOAT) },
   },
   lower: ({ ctx, config }) => {
-    const channel = (config?.channel as string) ?? 'mouse.x';
+    const channel = (config?.channel as string);
     const sig = ctx.b.external(channel, canonicalType(FLOAT));
     const outType = ctx.outTypes[0];
 

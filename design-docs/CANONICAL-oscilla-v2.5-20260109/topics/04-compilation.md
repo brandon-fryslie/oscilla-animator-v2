@@ -42,12 +42,30 @@ The user-authored patch before any processing:
 
 ### Stage 2: GraphNormalization
 
-Makes all structure explicit:
-- Materializes derived blocks (default sources, buses, rails, lenses)
-- Assigns initial CanonicalType coordinates
-- Connects all inputs (default source invariant)
+Makes all structure explicit through a **fixpoint loop**:
+- Iteratively inserts default sources based on type information
+- Solves types after each insertion
+- Checks if new defaults are needed
+- Repeats until the graph is stable (no new insertions)
+
+**Key components:**
+- `DefaultSourcePolicy` drives default source insertion with type-aware resolution
+- `buildDraftGraph()` returns `{ graph, diagnostics }` (not just graph)
+- Every default-source is still an actual `BlockInstance + Edge` — but insertion happens iteratively with type solving, not as a single pre-solve pass
 
 **Output**: NormalizedGraph
+
+#### Fixpoint Loop Details
+
+The normalization process is not a single pass, but a fixpoint iteration:
+
+1. **Build Draft Graph**: Insert default sources based on current type knowledge
+2. **Solve Types**: Propagate and unify types across the graph
+3. **Check Convergence**: Determine if new default sources are needed based on newly resolved types
+4. **Repeat**: If new insertions occurred, loop back to step 1
+5. **Terminate**: When no new insertions are needed, graph is stable
+
+This allows default source selection to depend on resolved types (e.g., choosing different defaults for `float` vs `vec2`), while still maintaining determinism and purity.
 
 ### Stage 3: Compilation
 
@@ -262,6 +280,33 @@ interface CycleError {
 
 ---
 
+## Pure Lowering Contract (T2)
+
+Block lowering is a pure function. `lower()` takes resolved types, parameters, inputs, and a constrained builder context, and returns expression outputs plus declarative effects.
+
+### LowerSandbox
+
+The `LowerSandbox` is a capability-based IR builder that enforces lowering purity:
+- Provides: `emitConst`, `emitOp`, `emitKernel`, `emitExtract`, `emitConstruct`, `readRail`
+- Prevents: graph mutation, global state access, scheduling side effects
+- Used for both regular block lowering and macro lowering (invoking other blocks' `lower()` as IR libraries)
+
+### Effects-as-Data
+
+Lowerers return `exprOutputs + effects?` — effects are declarative data (state cell requests, kernel registrations, intrinsic dependencies). A separate compiler stage consumes effects. Lowerers never schedule directly.
+
+### Macro Lowering
+
+Existing blocks' `lower()` functions can be invoked through a LowerSandbox to produce IR without creating graph nodes. Used by DefaultSource to compose defaults from existing block semantics. Keeps block semantics as single source of truth.
+
+### Purity Enforcement
+
+- Determinism: same inputs → same outputs (no random, no timestamps)
+- No mutation: lowerers cannot modify graph or global state
+- Forbidden imports: no direct access to runtime or store modules
+
+---
+
 ## Scheduling
 
 ### Schedule is Data (Invariant I9)
@@ -337,6 +382,13 @@ Slot allocation accounts for the **stride** (number of float components) of the 
 | `color` | 4 (RGBA) |
 
 For FieldSlots, buffer size = `laneCount × stride`. The compiler must know stride and allocate buffers accordingly — runtime must not infer stride from payload names.
+
+### Stride-Aware Slot Allocation
+
+Slot allocation reserves `payloadStride(payload)` consecutive positions for multi-component values:
+- `SlotMetaEntry`: compiler-emitted metadata per slot (slot ID, base offset, stride, payload)
+- Compiler invariant: `stride === payloadStride(payload)` — stride is derived, never stored independently
+- Stride 0 (shape2d/shape3d) values are non-sampleable and use separate typed banks
 
 ### State Slot Allocation
 

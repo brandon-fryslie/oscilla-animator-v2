@@ -56,7 +56,7 @@ registerBlock({
       throw new Error('Oscillator phase required as signal');
     }
 
-    const mode = (config?.mode as number) ?? 0;
+    const mode = (config?.mode as number);
     const outType = ctx.outTypes[0];
 
     let id: ValueExprId;

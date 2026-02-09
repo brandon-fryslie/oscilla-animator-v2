@@ -76,7 +76,7 @@ registerBlock({
 
   lower: ({ ctx, collectInputsById, config }) => {
     // Step 1: Extract expression text from config
-    const exprText = (config?.expression as string | undefined) ?? '';
+    const exprText = (config?.expression as string | undefined);
 
     // Step 2: Handle empty expression (output constant 0)
     if (exprText.trim() === '') {
