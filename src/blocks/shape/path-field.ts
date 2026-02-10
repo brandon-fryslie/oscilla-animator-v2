@@ -5,8 +5,7 @@
  */
 
 import { registerBlock } from '../registry';
-import { instanceId as makeInstanceId, domainTypeId as makeDomainTypeId } from '../../core/ids';
-import { canonicalType, canonicalField, payloadStride, floatConst, requireInst } from '../../core/canonical-types';
+import { canonicalType, canonicalFieldDef, payloadStride, floatConst, requireInst } from '../../core/canonical-types';
 import { FLOAT, INT, VEC2, VEC3 } from '../../core/canonical-types';
 import type { ValueExprId } from '../../compiler/ir/Indices';
 import type { TopologyId } from '../../shapes/types';
@@ -92,16 +91,14 @@ registerBlock({
   inputs: {
     controlPoints: {
       label: 'Control Points',
-      // Use placeholder instance ID - will be replaced by actual instance from connected output
-      type: canonicalField(VEC2, { kind: 'none' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }),
+      type: canonicalFieldDef(VEC2, { kind: 'none' }),
     },
   },
   outputs: {
-    // Use placeholder instance IDs - will inherit actual instance from input via preserve cardinality
-    position: { label: 'Position', type: canonicalField(VEC3, { kind: 'none' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }) },
-    index: { label: 'Index', type: canonicalField(INT, { kind: 'none' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }) },
-    tangent: { label: 'Tangent', type: canonicalField(VEC3, { kind: 'none' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }) },
-    arcLength: { label: 'Arc Length', type: canonicalField(FLOAT, { kind: 'none' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }) },
+    position: { label: 'Position', type: canonicalFieldDef(VEC3, { kind: 'none' }) },
+    index: { label: 'Index', type: canonicalFieldDef(INT, { kind: 'none' }) },
+    tangent: { label: 'Tangent', type: canonicalFieldDef(VEC3, { kind: 'none' }) },
+    arcLength: { label: 'Arc Length', type: canonicalFieldDef(FLOAT, { kind: 'none' }) },
   },
   lower: ({ ctx, inputsById }) => {
     const controlPointsInput = inputsById.controlPoints;

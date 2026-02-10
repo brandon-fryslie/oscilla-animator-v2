@@ -12,7 +12,7 @@
  */
 
 import type { PayloadType, UnitType, Extent, CanonicalType, InstanceRef, ValueContract, CardinalityValue, TemporalityValue, BindingValue, PerspectiveValue, BranchValue } from './canonical-types';
-import { axisInst, isAxisVar, isAxisInst, type Axis, DEFAULT_BINDING, DEFAULT_PERSPECTIVE, DEFAULT_BRANCH } from './canonical-types';
+import { axisInst, isAxisVar, isAxisInst, type Axis, DEFAULT_BINDING, DEFAULT_PERSPECTIVE, DEFAULT_BRANCH, UNBOUND_INSTANCE } from './canonical-types';
 import type { CardinalityVarId, TemporalityVarId, BindingVarId, PerspectiveVarId, BranchVarId } from './ids';
 
 // =============================================================================
@@ -133,6 +133,19 @@ export function inferField(
     },
     contract,
   };
+}
+
+/**
+ * Create an inference field type for block definitions where the instance is not yet known.
+ * The cardinality uses UNBOUND_INSTANCE which the frontend solver replaces with
+ * inference variables. Use inferField() when a concrete instance is available.
+ */
+export function inferFieldDef(
+  payload: InferencePayloadType,
+  unit: InferenceUnitType,
+  contract?: ValueContract
+): InferenceCanonicalType {
+  return inferField(payload, unit, UNBOUND_INSTANCE, contract);
 }
 
 // =============================================================================

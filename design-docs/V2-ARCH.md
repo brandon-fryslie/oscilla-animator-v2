@@ -33,7 +33,7 @@ We’ll fill this in sequentially with your answers and intent for V2 and V3.
 ## Decision Log (V3-Relevant)
 
 - V3 carry-forward baseline: `design-docs/CANONICAL-oscilla-v2.5-20260109/` is the authoritative spec baseline.
-- V3 scope default: include *everything* from V2 functionality-wise, but re-architect so the system is structurally simpler, more deterministic, and collaboration/undo-first. Default assumption is “no backsliding,” unless explicitly called out as an intentional removal.
+- V3 scope default (feature parity, not architecture parity): replicate V2 user-visible functionality and core semantic contracts, but intentionally fix bad architectural decisions. Default assumption is “no backsliding on capabilities,” unless explicitly called out as an intentional removal or redesign.
 - Collaboration model (V3): server-sequenced ops is the source of truth.
 - Undo/redo scope (V3): undo/redo applies to serializable patch state (graph, params, settings, and layout), not pure UI state (selection/hover).
 - Command transactions (V3): atomic op batches are the foundation for undo/redo, collaboration, and reproducible replay.
@@ -869,18 +869,22 @@ We’ll fill this in sequentially with your answers and intent for V2 and V3.
 **What looks wrong / risky**
 - The service layer currently punches through boundaries:
   - `CompileOrchestrator` imports `mobx/untracked` and `RootStore`, and directly updates stores, logs, and debug systems. This is pragmatic for V2 but is exactly what makes V3 boundary enforcement hard if repeated.
+  - This is the entire point of building v3 so this must be implemented correctly from the first line of code.
 - Global singleton services conflict with V3’s “multi-engine / multi-editor / multi-user” direction:
   - `compilationInspector` and `debugService` are process-global. In V3 they must be instance-scoped (per engine/session) or they will create cross-patch and cross-runtime bleed.
 - Live recompile change detection is inherently “expensive and leaky” as a pattern:
   - Hashing large block maps with `JSON.stringify` on every reactive tick is an O(n) hot path that will eventually become jank, and it exists largely to compensate for shallow observable tracking.
   - This is a signal that V3 should *not* rely on “observe deep mutable state”; it should rely on an explicit op stream and a deterministic snapshot boundary.
+  - This is the entire point of building v3 so this must be implemented correctly from the first line of code.
 - Non-deterministic identifiers leak into orchestration:
   - `compileId` uses `Date.now()`. Fine for logs, but in V3 anything that influences cache keys, snapshots, or replay must be derived deterministically from ops/revisions.
+  - This is the entire point of building v3 so this must be implemented correctly from the first line of code.
 - Console logging still exists in core flows (e.g., debug probe warnings, recompile error logging):
   - In V3, user-visible issues must flow through structured diagnostics; console logs are dev-only and must be mechanically prevented from becoming a hidden correctness channel.
+  - This is the entire point of building v3 so this must be implemented correctly from the first line of code.
 
 **Progress / decisions captured so far**
-- V3 scope default applies here: these orchestration capabilities are *kept*, but the shape changes to enforce boundaries.
+- V3 scope default (feature parity) applies here: these orchestration capabilities are *kept*, but the shape changes to enforce boundaries.
 - V3 service layering (default):
   - “Engine” packages are pure/deterministic and do not import MobX/React/DOM or the app store.
   - “App shell” services own `requestAnimationFrame`, persistence IO, and debouncing/throttling.
@@ -890,8 +894,223 @@ We’ll fill this in sequentially with your answers and intent for V2 and V3.
 - V3 enforcement-first guardrail (services edition):
   - Lint boundaries: engine packages may not import `mobx`, `react`, `window`, `document`, or app stores.
   - Test gates: “every patch change is an op”, “compile triggers only on transaction commit”, and “no hidden compilation pathways”.
+- Decision (V3): move “compile+swap+state migration+continuity” orchestration *into the engine instance* as a pure service (no RootStore/MobX). Keep rAF loop, persistence IO, and debouncing in the app shell.
+- Decision (V3): treat debug tooling as a pluggable capability:
+  - No strict production-vs-dev constraints; likely rebuild debug tooling for V3.
+  - Engine exposes stable debug hooks/metadata (tap interface, mapping provenance), while the UI provides the visualization/query layer.
+- Decision (V3): compilation trigger policy:
+  - Default: `TransactionCommitted` triggers compilation (debounced to animation frames / microtasks as needed).
+  - Flexibility: allow explicit compilation requests without committing a transaction (preview/dry-run), but they must be side-effect free and must not advance patch revision.
 
 **Open questions**
-- Default: `src/services/*` maps to V3 “app shell” responsibilities, while engine packages stay pure. Any V2 service you want to live *inside* the engine boundary (as opposed to the shell)?
-- Default: keep `CompilationInspector` + `DebugService` as shipped-but-guarded tooling (debug flag, bounded memory), and make them instance-scoped. Any constraints on what must be available in production builds vs dev builds?
-- Default: replace MobX-deep-change detection (`LiveRecompile`) with an op-driven compile scheduler keyed off `TransactionCommitted` (debounced to animation frames). Any cases where compilation must trigger *without* a committed transaction (e.g., purely UI-time “preview”)?
+- None (resolved as of this pass).
+
+---
+
+## 14) Settings and Persistence
+
+**What I see**
+- There is a token-based settings system:
+  - `src/settings/defineSettings.ts` defines immutable, typed settings tokens with UI metadata and an explicit ownership model (“feature owns its token”).
+  - `src/stores/SettingsStore.ts` provides token registration, typed get/update/reset, and auto-persistence to `localStorage` per token namespace.
+  - Settings persistence is debounced (`500ms`) and schema validation is “defaults-only keys” (missing keys get defaults, extra keys dropped).
+  - Settings keys are namespaced under a prefix (`oscilla-v2-settings:`).
+  - There are multiple setting domains via tokens (`src/settings/tokens/*`), including compiler flags and debug/editor/app settings.
+- Patch persistence and other local persistence exist in multiple places:
+  - Patch JSON snapshot persistence via `src/services/PatchPersistence.ts` (separate from Patch DSL import/export).
+  - User composites persisted to `localStorage` via `src/blocks/composites/persistence.ts` (versioned schema, graceful errors).
+  - UI-only persistence (e.g., BlockLibrary collapse state) uses `localStorage` directly from UI components.
+- Layout persistence is *not* a first-class persisted artifact in V2:
+  - `src/stores/LayoutStore.ts` stores node positions in-memory (prunes orphans), but does not persist them to disk.
+
+**What looks right**
+- Token ownership + one-way dependency is a strong pattern:
+  - It prevents the settings system from becoming a dumping ground of feature imports.
+  - UI rendering can stay generic by reading token metadata from the registry.
+- Per-namespace persistence with schema validation is pragmatic and robust:
+  - Default merge handles incremental rollout.
+  - Extra-key dropping prevents indefinite “dead settings” accumulation.
+  - Debounce prevents localStorage thrash.
+- Composite persistence is versioned and defensive (and explicitly treats localStorage as fallible).
+
+**What looks wrong / risky**
+- Persistence is scattered and inconsistent:
+  - Multiple ad-hoc `localStorage` writers exist (settings store, patch persistence, composites persistence, UI collapse state).
+  - This is manageable for V2, but it becomes an architectural liability for V3 (collaboration + undo/redo + multi-user + offline).
+- Settings are “ambient globals” rather than explicit protocol inputs:
+  - `SettingsStore` is easy to reach for, which makes it easy for semantics-affecting behavior to become per-user and non-replayable (dangerous under server-sequenced ops).
+- Layout persistence gap is a UX + collab correctness hazard:
+  - Node positions must persist and must participate in undo/redo/collab (per earlier topics), but V2’s LayoutStore is in-memory only.
+- localStorage is the wrong long-term substrate for “ops log + snapshots”:
+  - It’s synchronous and size-limited; V3 will likely need a more robust local store for offline persistence (e.g., IndexedDB), even if localStorage remains for small user prefs.
+
+**Progress / decisions captured so far**
+- V3 scope default (feature parity): preserve all V2 user-visible persistence capabilities (patch save/load, import/export, composites, UI prefs), but re-architect the persistence boundary to support server-sequenced ops + undo/redo + multi-user.
+- V3 persistence split (default):
+  - Patch document: authoritative, collaborative, undoable (ops log + deterministic snapshots).
+  - Layout document(s): persisted (per-user and/or shared), optionally undoable, collab-capable; keyed by canonical addresses.
+  - User preferences: non-undoable, per-user, may remain in localStorage (small, simple).
+  - Caches/telemetry: bounded, optional, never authoritative.
+- V3 enforcement-first guardrail (persistence edition):
+  - Centralize persistence behind a single module boundary (one “writer” per artifact).
+  - Forbid direct `localStorage` access outside persistence adapters (lint rule).
+  - Golden tests for deterministic snapshots and for “no schema drift” across versions.
+- Decision (V3): no semantics-affecting per-user settings. Today everything is effectively “app-wide”; in the future we may introduce *patch-level settings* as part of the patch document (ops-driven, undoable, collab).
+- Decision (V3): persistence substrate is `ops log + periodic deterministic snapshots`, with Patch DSL retained for import/export/fixtures (not as the canonical live storage format).
+- Decision (V3): no constraints on local persistence substrate. Default local storage choice is IndexedDB for ops/snapshots/layouts, with localStorage reserved for small UI prefs.
+
+**Open questions**
+- None (resolved as of this pass).
+
+---
+
+## 15) Testing Strategy
+
+**What I see**
+- Unit/integration tests are primarily Vitest-based:
+  - `package.json` uses `vitest run` and `vitest` watch, plus coverage and bench scripts.
+  - `vitest.config.ts` runs in `jsdom` and sets up test fixtures via `src/__tests__/setup-blocks.ts` and `src/ui/components/__tests__/setup.ts`.
+  - Coverage uses V8 provider, includes `src/**/*.{ts,tsx}`, excludes tests and some type-only files, and applies global thresholds.
+  - There are dedicated memory scripts/tests (e.g., `test:memory` runs `src/__tests__/memory-profile.test.ts` with `--expose-gc`).
+- End-to-end tests exist via Playwright:
+  - `playwright.config.ts` points to `tests/e2e` and starts the dev server (`npm run dev`) on port `5174`.
+  - E2E coverage includes core editor flows (add/delete blocks, connect/disconnect, undo/redo, selection, pan/zoom, context menus, parameter editing, minimap, auto-layout, and “no console errors” smoke checks).
+  - Vitest excludes `tests/e2e` and `*.spec.ts` so unit tests and E2E tests are isolated.
+- There are “architecture enforcement / tripwire” tests:
+  - `src/__tests__/forbidden-patterns.test.ts` (repo-wide pattern bans) and other “no legacy” enforcement tests in compiler/runtime IR packages.
+  - Patch DSL has “tripwire” suites (`src/patch-dsl/__tests__/tripwire.test.ts`) and deterministic roundtrip/error-recovery coverage.
+
+**What looks right**
+- Tripwire/forbidden-pattern tests are an unusually high-leverage guardrail:
+  - They directly address the “agents simplify to pass tests” failure mode by making it mechanically hard to reintroduce banned patterns.
+  - They scale well for enforcing architectural boundaries (imports, identifiers, forbidden APIs) when used sparingly and precisely.
+- E2E tests cover meaningful user-visible behaviors:
+  - Undo/redo, editor interactions, and “no console errors” are the right kind of broad regression check for a UI-heavy system.
+- Patch DSL tests (roundtrip + error recovery + tripwires) are exactly the kind of deterministic, high-signal suite V3 should keep.
+- Memory/perf tests exist as first-class scripts (rare in typical repos) and align with “hot loop correctness matters.”
+
+**What looks wrong / risky**
+- Test suite intent is not structured around the canonical spec contracts:
+  - There’s no obvious “contract test layer” that maps spec invariants → deterministic tests (so it’s hard to know what *must* remain true in V3).
+- Grep-based enforcement is powerful but can become brittle:
+  - If overused, it turns refactors into “fix the regex” work and encourages cargo-cult compliance rather than semantic correctness.
+- Determinism under collaboration isn’t naturally enforced by tests yet:
+  - Given V3’s ops-first architecture, tests should be able to assert: same op log → same snapshot → same compile result → same render output (or same diagnostics), across platforms and runs.
+- UI tests can pass while core engine contracts drift:
+  - E2E tests tend to validate happy-path flows; they won’t catch subtle semantic regressions in normalization/typechecking/scheduling unless the suite is explicitly built around those invariants.
+
+**Progress / decisions captured so far**
+- V3 testing is a first-class architectural constraint (not a later add-on):
+  - The core V3 reducer/op model must be testable without any UI, with deterministic replay as a primary test primitive.
+- V3 “architecture compliance suite” (carry-forward pattern):
+  - Keep and expand “tripwire” testing, but constrain it to enforcing hard boundaries (imports, forbidden globals, single mutation doorway, no side effects in engine).
+  - Prefer semantic contract tests (ops replay determinism, snapshot equality, diagnostic targeting) over regex-only enforcement whenever possible.
+- V3 layering test pyramid (default):
+  - Engine contract tests (fast, deterministic): ops → snapshot → compile → runtime tick → render IR (goldens where needed).
+  - UI integration tests (still deterministic): editor intents → emitted ops → expected state/UI projection.
+  - E2E smoke/regression tests (Playwright): verify the product wiring and key behaviors (undo/redo, editor interactions, no console errors).
+- Decision (V3): ensure at least one full “vertical integration” test that exercises patch authoring → compilation → runtime → rendering (end-to-end correctness, not just unit behavior).
+- Decision (V3): determinism/replay CI gates start small (single browser, limited seed/fixture set) and expand later (multi-seed/multi-patch and multi-browser) once the system stabilizes.
+- Decision (V3): Playwright starts as a smoke suite and grows into a broader regression suite over time.
+
+**Open questions**
+- None (resolved as of this pass).
+
+---
+
+## 16) Tooling, Build, Lint, Dev Scripts
+
+**What I see**
+- Package manager + scripts:
+  - Repo uses `pnpm` (`pnpm-lock.yaml`, `pnpm-workspace.yaml`) and a `justfile` wrapper (`just dev`, `just test`, `just check`, etc.).
+  - `package.json` scripts:
+    - `dev`: Vite
+    - `build`: `tsc -b && vite build`
+    - `typecheck`: `tsc -b`
+    - `test`: Vitest (plus watch/coverage/bench/memory)
+    - `lint`: ESLint run on a *curated list* of performance-sensitive / correctness-sensitive files (not the whole repo).
+  - There is also `package-lock.json` present alongside `pnpm-lock.yaml` (mixed package manager artifacts).
+- Build system:
+  - Vite-based dev/build (`vite.config.ts`) using `public/` as the Vite root and emitting to `dist/`.
+  - TypeScript is configured for strictness and bundler resolution (`tsconfig.json` uses `moduleResolution: bundler`, `strict: true`).
+- Linting is enforcement-oriented (not just style):
+  - `eslint.config.js` uses `typescript-eslint` and a set of custom rules from `eslint-rules/`:
+    - block lowering constraints (e.g., forbid defaults/`defaultSource`/type checks in `lower()`)
+    - forbid `??` in select “data-path” files
+    - forbid heap allocations in select “hot-path” files
+  - This is effectively “mechanical enforcement of invariants” rather than conventional formatting.
+- E2E harness:
+  - Playwright is configured to run against the Vite dev server (`playwright.config.ts` starts `npm run dev`, expects port `5174`).
+
+**What looks right**
+- The `justfile` “check” recipe is a strong, repeatable gate for humans and agents.
+- Custom ESLint rules are exactly the right kind of mechanical guardrail for preventing backsliding on hot-path and lowering invariants.
+- Curated-lint scope is pragmatic for V2:
+  - It focuses enforcement where it matters most without fighting the whole repo’s churn.
+- Testing and dev server ports are explicit and stable (helps E2E and CI reproducibility).
+
+**What looks wrong / risky**
+- Mixed package manager state (`package-lock.json` + `pnpm-lock.yaml`) is a long-term footgun:
+  - It invites “works on my machine” dependency graphs and makes CI nondeterministic unless explicitly constrained.
+- Playwright’s dev-server launcher uses `npm run dev` while day-to-day workflows prefer `pnpm`/`just`:
+  - This is probably fine locally, but it’s an avoidable inconsistency that can cause CI drift (wrong lockfile, wrong install command expectations).
+- Lint does not enforce architectural boundaries yet:
+  - Current custom rules are about performance/correctness mechanics; they do not prevent forbidden imports (UI → engine, engine → UI), globals, or “second mutation doorways”.
+- `lint` being a curated list can be exploited (accidentally or by agents):
+  - New files can be added outside the lint list and silently bypass enforcement.
+- Tooling does not appear to mechanically verify design-doc alignment:
+  - The canonical spec exists, but there’s no obvious “doc drift” gate (e.g., ensuring key invariants match code/API surface).
+
+**Progress / decisions captured so far**
+- V3 enforcement-first: tooling is part of architecture. For V3 we should assume:
+  - One package manager (pnpm) and one lockfile; CI refuses mixed artifacts.
+  - A “single mutation doorway” and “engine/UI boundary” enforced by lint + tests, not convention.
+  - A deterministic replay test harness becomes a first-class CI job, not an occasional manual check.
+- V3 linting direction (default):
+  - Keep custom invariant rules.
+  - Add boundary rules (`no-restricted-imports`, path-based module boundary enforcement, forbidden globals).
+  - Make lint coverage “hard to bypass” (e.g., lint entire `src/` or enforce that any new file is in scope).
+- V3 docs verification (default):
+  - Keep grep-style “forbidden pattern” tests, but also add a small number of semantic “contract tests” derived from the canonical spec (ops replay determinism, patch validity invariants, type system invariants).
+- Decision (V3): standardize on `pnpm` only; delete/forbid `package-lock.json` in CI and treat it as an error if it reappears.
+- Decision (V3): lint scope should be hard to bypass. Default to linting all `src/` (or the full repo if feasible) in CI; if startup cost becomes a problem, keep a fast “engine-only” lint job but do not allow unlinted new files.
+- Decision (V3): Playwright starts as a smoke suite and is expected to run on every PR once stabilized; if flakiness is high early on, allow a temporary phase where it runs on main/nightly until the smoke suite is reliable.
+
+**Open questions**
+- None (resolved as of this pass).
+
+---
+
+## 17) Demos, Examples, and Docs
+
+**What I see**
+- Documentation and specs are split across multiple roots:
+  - Canonical spec system: `design-docs/CANONICAL-oscilla-v2.5-20260109/` (authoritative).
+  - Additional design notes and historical docs: `design-docs/` (non-canonical) and `docs/`.
+- The repo has explicit testing doc/guardrails encoded as tests (tripwires, forbidden patterns), which function as “executable documentation” for certain invariants.
+- There is a `public/` folder used as the Vite root, and a `dist/` output folder.
+- There are e2e editor regression suites under `tests/e2e/editor/` which effectively serve as “executable demos” of critical UX behaviors.
+
+**What looks right**
+- Having a canonical spec directory is the best “source of truth” pattern for a complex system (especially when multiple agents are implementing in parallel).
+- Tripwire tests are a powerful form of “docs that cannot drift.”
+- Playwright E2E tests act as high-signal “demos” of expected editor behaviors (and should remain minimal and meaningful).
+
+**What looks wrong / risky**
+- Multiple doc roots can create conflicting truths:
+  - Without explicit rules, `docs/` and non-canonical `design-docs/` content can contradict the canonical spec.
+- “Executable docs” coverage is uneven:
+  - Some invariants are enforced mechanically (great), while others remain purely narrative (easy to drift).
+
+**Progress / decisions captured so far**
+- V3 default: keep canonical spec docs as the only authoritative source for contracts; other docs are explicitly secondary.
+- V3 enforcement-first: for every foundational contract, add at least one mechanical verification (lint/test/golden) so docs are not purely aspirational.
+- V3 demos direction: keep E2E tests as smoke-level “executable demos” and grow only when there is strong ROI.
+- Decision (V3): keep docs primarily developer/spec oriented (no user-facing docs site until later).
+- Decision (V3): include demo patches checked into the repo as Patch DSL fixtures; use them for tests and as sample UI content.
+- Decision (V3): canonical spec is aspirational and must be allowed to lead the codebase:
+  - Spec changes must NOT require paired mechanical gate updates by default.
+  - Mechanical gates are still required for core invariants once implemented, but the spec should describe the target system even before implementation exists.
+
+**Open questions**
+- None (resolved as of this pass).

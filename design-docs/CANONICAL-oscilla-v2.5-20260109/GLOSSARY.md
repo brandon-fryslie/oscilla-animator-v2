@@ -27,9 +27,9 @@ Phase is represented as `float` with `unit: { kind: 'angle', unit: 'phase01' }`.
 - `vec2` → 2
 - `vec3` → 3
 - `color` → 4 (RGBA)
-- `cameraProjection` → 16
-- `shape2d` → 8 u32 words (opaque handle)
-- `shape3d` → 12 u32 words (opaque handle)
+- `cameraProjection` → 1
+- `shape2d` → 0 (non-sampleable; packed handle size: 8 u32 words)
+- `shape3d` → 0 (non-sampleable; packed handle size: 12 u32 words)
 
 **Source**: [01-type-system.md](./topics/01-type-system.md)
 
@@ -342,7 +342,7 @@ interface InstanceRef {
 
 **Definition**: A port decorator that modifies signal values. Attached to both input and output ports. Compiled to blocks. No separate lens catalog — blocks can be used as lenses.
 
-**Type**: concept (transform subtype)
+**Type**: concept
 
 **Canonical Form**: `Lens`
 
@@ -615,7 +615,7 @@ interface SlotMetaEntry {
 **Canonical Form**: `stride`
 
 **Values by PayloadType**:
-- `float`, `int`, `phase`, `bool`, `unit` → 1
+- `float`, `int`, `bool` → 1
 - `vec2` → 2
 - `vec3` → 3
 - `color` → 4
@@ -682,7 +682,8 @@ interface StateMappingField {
 
 **Canonical Form**: `shape2d`
 
-**Stride**: 8 (u32 words)
+**payloadStride**: 0 (non-sampleable)
+**Packed handle size**: 8 u32 words
 
 **Layout**: TopologyId, PointsFieldSlot, PointsCount, StyleRef, Flags, Reserved×3
 
@@ -1375,21 +1376,21 @@ interface PathTopologyDef {
 
 ### Transform
 
-**Definition**: Umbrella term for value transformations and type conversions on edges.
+**Definition**: Umbrella term for value transformations and type conversions applied to ports.
 
 **Type**: concept
 
-**Canonical Form**: `Transform` (abstract), `Adapter` (subtype), `Lens` (subtype)
+**Canonical Form**: `Transform`
 
-**Subtypes**:
-- **Adapter**: Type conversion that enables ports of different types to connect (mechanical compatibility, no value transformation)
-- **Lens**: Value transformation (scale, offset, easing, etc.) - may or may not change type
+**Related concepts**:
+- **Adapter**: Type conversion that enables ports of different types to connect (mechanical compatibility, no value transformation). See [Adapter](#adapter).
+- **Lens**: Port-attached value transformation (scale, offset, easing, etc.) compiled to blocks. See [Lens](#lens).
 
-**Source**: [14-modulation-table-ui.md](./topics/14-modulation-table-ui.md)
+**Source**: [14-modulation-table-ui.md](./topics/14-modulation-table-ui.md), Topic 26 (Lens System)
 
 **Implementation**: Transforms compile to blocks in the patch
 
-**Note**: Transform registry and detailed transform system are deferred (roadmap item)
+**Note**: Adapters and lenses are distinct concepts — adapters change type compatibility, lenses change values. Both compile to blocks.
 
 ---
 

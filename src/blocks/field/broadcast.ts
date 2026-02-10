@@ -5,9 +5,8 @@
  */
 
 import { registerBlock, ALL_CONCRETE_PAYLOADS } from '../registry';
-import { instanceId as makeInstanceId, domainTypeId as makeDomainTypeId } from '../../core/ids';
 import { payloadStride, type PayloadType, requireInst } from '../../core/canonical-types';
-import { unitVar, payloadVar, inferType, inferField } from '../../core/inference-types';
+import { unitVar, payloadVar, inferType, inferFieldDef } from '../../core/inference-types';
 import { DOMAIN_SHAPE } from '../../core/domain-registry';
 import { rewriteFieldType } from '../layout/_helpers';
 
@@ -67,7 +66,7 @@ registerBlock({
     signal: { label: 'Signal', type: inferType(payloadVar('broadcast_payload'), unitVar('broadcast_in')) },
   },
   outputs: {
-    field: { label: 'Field', type: inferField(payloadVar('broadcast_payload'), unitVar('broadcast_in'), { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }) },
+    field: { label: 'Field', type: inferFieldDef(payloadVar('broadcast_payload'), unitVar('broadcast_in')) },
   },
   lower: ({ ctx, inputsById }) => {
     // Get resolved payload type from ctx.outTypes (populated from pass1 portTypes)

@@ -243,10 +243,10 @@ describe('cycle break fixpoint integration', () => {
 
     // Verify CycleBreakInserted diagnostic is present
     const cycleBreakDiag = result.diagnostics.find(
-      (d: any) => d.kind === 'CycleBreakInserted',
+      (d: any) => d.diagnosticFlagCode === 'CycleBreakInserted',
     );
     expect(cycleBreakDiag).toBeDefined();
-    expect((cycleBreakDiag as any).insertedBlockId).toBe(unitDelay.id);
+    expect((cycleBreakDiag as any).stableKey).toContain('CycleBreakInserted');
 
     // Verify no remaining open obligations
     const openObligations = result.graph.obligations.filter((o) => o.status.kind === 'open');

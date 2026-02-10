@@ -18,8 +18,7 @@
  */
 
 import { registerBlock } from '../registry';
-import { instanceId as makeInstanceId, domainTypeId as makeDomainTypeId } from '../../core/ids';
-import { canonicalField, unitWorld3, unitHsl, requireInst, VEC3, COLOR, FLOAT } from '../../core/canonical-types';
+import { canonicalFieldDef, unitWorld3, unitHsl, requireInst, VEC3, COLOR, FLOAT } from '../../core/canonical-types';
 import { defaultSourceConst, canonicalType } from '../../types';
 
 registerBlock({
@@ -36,8 +35,8 @@ registerBlock({
     broadcastPolicy: 'allowZipSig',
   },
   inputs: {
-    pos: { label: 'Position', type: canonicalField(VEC3, unitWorld3(), { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }) },
-    color: { label: 'Color', type: canonicalField(COLOR, unitHsl(), { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }) },
+    pos: { label: 'Position', type: canonicalFieldDef(VEC3, unitWorld3()) },
+    color: { label: 'Color', type: canonicalFieldDef(COLOR, unitHsl()) },
     // Shape input REMOVED - now looked up automatically from instance
     scale: {
       label: 'Scale',

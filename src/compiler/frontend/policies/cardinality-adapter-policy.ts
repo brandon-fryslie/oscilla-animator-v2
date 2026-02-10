@@ -88,12 +88,9 @@ export const cardinalityAdapterPolicyV1: CardinalityAdapterPolicyInterface = {
         replaceEdges: [{ remove: edge.id, add: addEdges }],
         diagnostics: [
           {
-            kind: 'CardinalityAdapterInserted',
-            subKind: 'Broadcast',
-            obligationId: obligation.id,
-            edgeKey,
-            insertedBlockIds: [blockId],
+            diagnosticFlagCode: 'CardinalityAdapterInserted',
             message: `Broadcast adapter inserted on ${edgeKey}: signal→field cardinality boundary`,
+            stableKey: `CardinalityAdapterInserted:${edgeKey}`,
           },
         ],
       },

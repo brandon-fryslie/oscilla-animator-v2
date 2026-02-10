@@ -5,7 +5,7 @@
  */
 
 import { registerBlock } from '../registry';
-import { canonicalType, canonicalField, payloadStride, floatConst, intConst, withInstance, instanceRef, requireInst } from '../../core/canonical-types';
+import { canonicalType, canonicalField, payloadStride, floatConst, intConst, withInstance, instanceRef } from '../../core/canonical-types';
 import { FLOAT, INT, VEC2 } from '../../core/canonical-types';
 import { instanceId as makeInstanceId, domainTypeId as makeDomainTypeId } from '../../core/ids';
 import { DOMAIN_CONTROL } from '../../core/domain-registry';
@@ -13,6 +13,7 @@ import { PathVerb, type PathTopologyDef, PathTopologyDefInput } from '../../shap
 import { registerDynamicTopology } from '../../shapes/registry';
 import { defaultSourceConst } from '../../types';
 import { OpCode } from '../../compiler/ir/types';
+import { resolveInputConstant } from '../lower-utils';
 
 /**
  * Create a polygon path topology definition.
@@ -120,12 +121,11 @@ registerBlock({
     shape: { label: 'Shape', type: canonicalType(FLOAT) },
     controlPoints: { label: 'Control Points', type: canonicalField(VEC2, { kind: 'none' }, { instanceId: makeInstanceId('control'), domainTypeId: makeDomainTypeId('default') }) },
   },
-  lower: ({ ctx, inputsById, config }) => {
-    // Get sides from config (must be compile-time constant)
-    const sides = (config?.sides as number);
-    if (sides < 3) {
-      throw new Error(`Polygon must have at least 3 sides, got ${sides}`);
-    }
+  lower: ({ ctx, inputsById }) => {
+    // Get sides from input (must be compile-time constant)
+    const sidesInput = inputsById.sides;
+    if (!sidesInput) throw new Error('ProceduralPolygon: sides input not wired — normalization bug');
+    const sides = resolveInputConstant(ctx, sidesInput, 'sides', { min: 3, max: 100 });
 
     // Create path topology (compile-time, without id field)
     const topology = createPolygonTopology(sides);
@@ -150,17 +150,15 @@ registerBlock({
       canonicalField(INT, { kind: 'none' }, ref)
     );
 
-    // Get radiusX and radiusY signals
-    // Local-space convention: Default radius is 1.0 (unit local-space)
+    // Post-normalization: all inputs guaranteed wired — no fallback needed
+    // [LAW:one-source-of-truth] inputs are the single source; config was a dead fallback
     const radiusXInput = inputsById.radiusX;
-    const radiusXSig = ('type' in radiusXInput! && requireInst(radiusXInput!.type.extent.cardinality, 'cardinality').kind === 'one')
-      ? radiusXInput!.id
-      : ctx.b.constant(floatConst((config?.radiusX as number)), canonicalType(FLOAT));
+    if (!radiusXInput) throw new Error('ProceduralPolygon: radiusX input not wired — normalization bug');
+    const radiusXSig = radiusXInput.id;
 
     const radiusYInput = inputsById.radiusY;
-    const radiusYSig = ('type' in radiusYInput! && requireInst(radiusYInput!.type.extent.cardinality, 'cardinality').kind === 'one')
-      ? radiusYInput!.id
-      : ctx.b.constant(floatConst((config?.radiusY as number)), canonicalType(FLOAT));
+    if (!radiusYInput) throw new Error('ProceduralPolygon: radiusY input not wired — normalization bug');
+    const radiusYSig = radiusYInput.id;
 
     const sidesSig = ctx.b.constant(intConst(sides), canonicalType(INT));
 

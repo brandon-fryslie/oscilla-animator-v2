@@ -75,9 +75,7 @@ export interface LowerArgs {
    * Key is port ID, value is array of CollectInputEntry in sortKey order.
    */
   readonly collectInputsById?: Record<string, readonly import('../compiler/ir/lowerTypes').CollectInputEntry[]>;
-  readonly config?: Readonly<Record<string, unknown>>;
-  /** The source block (for reading port defaultSource values at compile time) */
-  readonly block?: import('../graph/Patch').Block;
+  readonly config: Readonly<Record<string, unknown>>;
   /**
    * Existing outputs from phase 1 (lowerOutputsOnly).
    * Only populated when called as phase 2 of two-pass lowering.
@@ -621,6 +619,68 @@ export function registerBlock(def: BlockDef): void {
   }
 
   registry.set(def.type, def);
+}
+
+// [LAW:single-enforcer] One validation gate for all config access
+/**
+ * Require a config value with type validation.
+ * Throws if missing or wrong type.
+ * Use this instead of (config?.field as T) to fail fast on missing config.
+ */
+export function requireConfig<T>(
+  config: Readonly<Record<string, unknown>>,
+  key: string,
+  typeName: 'number' | 'string' | 'boolean',
+): T {
+  const val = config[key];
+  if (val === undefined) {
+    throw new Error(`Missing config key '${key}' — must be set in block.params`);
+  }
+  if (typeof val !== typeName) {
+    throw new Error(`Config '${key}' expected ${typeName}, got ${typeof val}`);
+  }
+  return val as T;
+}
+
+/**
+ * Require an integer config value with optional bounds.
+ * For compile-time structural integers (topology counts, mode selects).
+ */
+export function requireConfigInt(
+  config: Readonly<Record<string, unknown>>,
+  key: string,
+  min?: number,
+  max?: number,
+): number {
+  const val = requireConfig<number>(config, key, 'number');
+  if (!Number.isInteger(val)) {
+    throw new Error(`Config '${key}' must be an integer, got ${val}`);
+  }
+  if (min !== undefined && val < min) {
+    throw new Error(`Config '${key}' must be >= ${min}, got ${val}`);
+  }
+  if (max !== undefined && val > max) {
+    throw new Error(`Config '${key}' must be <= ${max}, got ${val}`);
+  }
+  return val;
+}
+
+/**
+ * Require a string enum config value.
+ * For string config values that must be one of a fixed set (reduce op, etc.).
+ */
+export function requireConfigEnum<T extends string>(
+  config: Readonly<Record<string, unknown>>,
+  key: string,
+  allowed: readonly T[],
+): T {
+  const val = requireConfig<string>(config, key, 'string');
+  if (!allowed.includes(val as T)) {
+    throw new Error(
+      `Config '${key}' must be one of [${allowed.join(', ')}], got '${val}'`
+    );
+  }
+  return val as T;
 }
 
 /**

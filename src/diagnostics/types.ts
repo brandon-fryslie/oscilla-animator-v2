@@ -140,6 +140,13 @@ export type DiagnosticCode =
   // --- Authoring Hints ---
   | 'I_SILENT_VALUE_USED' // Unconnected input using default value (pre-normalization only)
 
+  // --- Fixpoint Escape Hatch Info ---
+  | 'I_UNIT_DEFAULTED_TO_NONE' // Polymorphic unit chain defaulted to unitless
+  | 'I_CARDINALITY_DEFAULTED_TO_ONE' // Evidence-free group defaulted to signal
+  | 'I_CARDINALITY_ADAPTER_INSERTED' // Broadcast adapter auto-inserted
+  | 'I_CHEATER_ADAPTER_USED' // Payload anchor auto-inserted
+  | 'I_CYCLE_BREAK_INSERTED' // UnitDelay inserted to break cycle
+
   // --- Compile Info ---
   | 'I_COMPILE_SUCCESS'; // Compilation successful (info)
 

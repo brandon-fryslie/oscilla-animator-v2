@@ -85,6 +85,29 @@ export function canonicalField(
   }, contract);
 }
 
+/**
+ * Sentinel instance ref for block definitions where instance is not yet known.
+ * The frontend solver immediately replaces this with axisVar during constraint extraction.
+ * MUST NOT escape into backend/runtime — enforced by axis-validate.ts.
+ */
+export const UNBOUND_INSTANCE: InstanceRef = {
+  domainTypeId: '__unbound__' as any, // DomainTypeId (avoiding circular import)
+  instanceId: '__unbound__' as any,   // InstanceId (avoiding circular import)
+};
+
+/**
+ * Create a field type for block definitions where the instance is not yet known.
+ * The cardinality uses UNBOUND_INSTANCE which the frontend solver replaces with
+ * inference variables. Use canonicalField() when a concrete instance is available.
+ */
+export function canonicalFieldDef(
+  payload: PayloadType,
+  unit?: UnitType,
+  contract?: ValueContract
+): CanonicalType {
+  return canonicalField(payload, unit, UNBOUND_INSTANCE, contract);
+}
+
 /** Create an event type (discrete + bool + none). */
 export function canonicalEvent(): CanonicalType {
   return canonicalType(BOOL, unitNone(), {

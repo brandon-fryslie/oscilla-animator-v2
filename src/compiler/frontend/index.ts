@@ -23,6 +23,9 @@ import type { Patch } from '../../graph';
 import type { NormalizedPatch } from '../../graph/normalize';
 import type { TypedPatch, TypeResolvedPatch } from '../ir/patches';
 import type { CanonicalType } from '../../core/canonical-types';
+import type { DiagnosticSeverityOverride } from '../diagnostic-flags';
+import { getDefaultSeverity } from '../diagnostic-flags';
+import type { FixpointDiagnostic } from './fixpoint-diagnostic';
 // Frontend passes
 import { pass2TypeGraphSafe, type Pass2Error } from './analyze-type-graph';
 import { analyzeCycles, type CycleSummary } from './analyze-cycles';
@@ -31,10 +34,10 @@ import { validateTypes, validateNoVarAxes, type AxisViolation } from './axis-val
 // Composite expansion
 import { expandComposites, type ExpansionDiagnostic, type ExpansionProvenance } from './composite-expansion';
 
-import { buildDraftGraph, type DraftGraph } from './draft-graph';
+import { buildDraftGraph } from './draft-graph';
 import { finalizeNormalizationFixpoint } from './final-normalization';
 import { bridgeToNormalizedPatch, bridgePartialToNormalizedPatch } from './draft-graph-bridge';
-import { BLOCK_DEFS_BY_TYPE } from '../../blocks/registry';
+import { BLOCK_DEFS_BY_TYPE, requireBlockDef } from '../../blocks/registry';
 
 // Re-export types for consumers
 export type { TypeResolvedPatch, PortKey } from '../ir/patches';
@@ -52,12 +55,18 @@ export { validateTypes, validateNoVarAxes } from './axis-validate';
 
 /**
  * Error from Frontend compilation.
+ *
+ * severity: 'error' blocks backend; 'warn'/'info' are pass-through.
+ * diagnosticFlagCode: present for configurable fixpoint diagnostics.
  */
 export interface FrontendError {
   readonly kind: string;
   readonly message: string;
   readonly blockId?: string;
   readonly portId?: string;
+  readonly severity: 'error' | 'warn' | 'info';
+  /** Present for configurable diagnostics (maps to DIAGNOSTIC_FLAGS code) */
+  readonly diagnosticFlagCode?: string;
 }
 
 /**
@@ -100,10 +109,13 @@ export interface FrontendResult {
  */
 export interface FrontendOptions {
   readonly traceCardinalitySolver?: boolean;
+  /** GCC-style severity overrides keyed by diagnosticFlagCode */
+  readonly diagnosticOverrides?: Readonly<Record<string, DiagnosticSeverityOverride>>;
 }
 
 export function compileFrontend(patch: Patch, options?: FrontendOptions): FrontendResult {
   const errors: FrontendError[] = [];
+  const overrides = options?.diagnosticOverrides ?? {};
 
   // Step 1: Composite expansion (always)
   const expansion = expandComposites(patch);
@@ -122,6 +134,7 @@ export function compileFrontend(patch: Patch, options?: FrontendOptions): Fronte
       message: `Required input "${d.portName}" on block "${d.blockId}" is not connected`,
       blockId: d.blockId,
       portId: d.portName,
+      severity: 'error' as const,
     })),
   );
 
@@ -132,15 +145,54 @@ export function compileFrontend(patch: Patch, options?: FrontendOptions): Fronte
     { maxIterations: 20 },
   );
 
-  // Collect fixpoint diagnostics as errors
-  errors.push(...convertFixpointDiagnostics(fixpointResult.diagnostics, fixpointResult.graph));
+  // Collect fixpoint diagnostics — severity applied by single enforcer
+  // [LAW:single-enforcer] convertFixpointDiagnostics is the one place that applies severity.
+  errors.push(...convertFixpointDiagnostics(fixpointResult.diagnostics, overrides));
 
   // If fixpoint didn't converge and no diagnostics explain why, add a generic message
   if (fixpointResult.strict === null && errors.length === 0) {
     errors.push({
       kind: 'FixpointFailed',
       message: 'Fixpoint normalization could not fully resolve the graph',
+      severity: 'error',
     });
+  }
+
+  // Step 3.5: Post-normalization wiring validation (unconditional)
+  // [LAW:single-enforcer] Frontend rejects missing inputs, not backend.
+  // This runs AFTER normalization (which materializes defaults) but BEFORE backend lowering.
+  if (fixpointResult.strict) {
+    for (const block of fixpointResult.strict.graph.blocks) {
+      try {
+        const blockDef = requireBlockDef(block.type);
+        for (const [portId, inputDef] of Object.entries(blockDef.inputs)) {
+          // Skip config-only inputs (exposedAsPort: false) and optional inputs
+          if (inputDef.exposedAsPort === false || inputDef.optional) continue;
+
+          // Check if there's an inbound edge for this required input
+          const hasInboundEdge = fixpointResult.strict.graph.edges.some(
+            (e: any) => e.toBlock === block.id && e.toPort === portId
+          );
+          if (!hasInboundEdge) {
+            errors.push({
+              kind: 'MissingInputSource',
+              message: `${block.type}#${block.id}:${portId} has no inbound edge after normalization`,
+              blockId: block.id,
+              portId,
+              severity: 'error',
+            });
+          }
+        }
+      } catch (e) {
+        // Block type not found — expansion should have caught this
+        errors.push({
+          kind: 'UnknownBlockType',
+          message: `Block type ${block.type} not found in registry`,
+          blockId: block.id,
+          severity: 'error',
+        });
+      }
+    }
   }
 
   // Step 4: Bridge (always — strict when available, partial otherwise)
@@ -165,8 +217,10 @@ export function compileFrontend(patch: Patch, options?: FrontendOptions): Fronte
   const cycleSummary = analyzeCycles(typedPatch);
 
   // Step 8: backendReady is data, not control flow
+  // Backend proceeds when no blocking errors remain and strict resolved.
+  const hasBlockingErrors = errors.some(e => e.severity === 'error');
   const backendReady =
-    errors.length === 0 &&
+    !hasBlockingErrors &&
     fixpointResult.strict !== null &&
     !cycleSummary.hasIllegalCycles;
 
@@ -190,65 +244,61 @@ function convertExpansionDiagnostic(d: ExpansionDiagnostic): FrontendError {
     message: d.message,
     blockId: d.at.instanceBlockId,
     portId: d.at.port,
+    severity: 'error',
   };
 }
 
 /**
- * Informational diagnostic kinds that are NOT errors.
- * These represent successful structural resolutions, not failures.
- */
-const INFORMATIONAL_DIAGNOSTIC_KINDS = new Set([
-  'CardinalityAdapterInserted',
-  'CheaterAdapterUsed',
-]);
-
-/**
  * Convert fixpoint diagnostics to FrontendErrors.
- * Extracts blockId/portId from DraftPortKey fields on solver errors.
- * Filters out informational diagnostics (e.g., adapter insertion confirmations).
+ *
+ * // [LAW:single-enforcer] This is the ONE place that applies severity from
+ * DIAGNOSTIC_FLAGS defaults + user overrides to fixpoint diagnostics.
+ *
+ * For each FixpointDiagnostic:
+ * 1. Read diagnosticFlagCode
+ * 2. Look up severity: overrides[code] ?? getDefaultSeverity(code)
+ * 3. If 'ignore', drop entirely
+ * 4. Produce FrontendError with severity and port context
  */
-function convertFixpointDiagnostics(diagnostics: readonly unknown[], graph: DraftGraph): FrontendError[] {
-  // Build blockId→type lookup from DraftGraph blocks
-  const blockTypeMap = new Map<string, string>();
-  for (const b of graph.blocks) {
-    blockTypeMap.set(b.id, b.type);
-  }
-
+function convertFixpointDiagnostics(
+  diagnostics: readonly FixpointDiagnostic[],
+  overrides: Readonly<Record<string, DiagnosticSeverityOverride>>,
+): FrontendError[] {
   const result: FrontendError[] = [];
   for (const d of diagnostics) {
-    if (typeof d === 'object' && d !== null && 'kind' in d) {
-      const kind = (d as { kind: string }).kind;
+    const code = d.diagnosticFlagCode;
+    const severity = overrides[code] ?? getDefaultSeverity(code);
 
-      // Skip informational diagnostics — they confirm successful structural resolution
-      if (INFORMATIONAL_DIAGNOSTIC_KINDS.has(kind)) continue;
+    // 'ignore' → drop entirely
+    if (severity === 'ignore') continue;
 
-      const message = 'message' in d ? String((d as { message: string }).message) : String(d);
+    // Extract block/port context from port key fields
+    const { blockId, portId } = extractPortContext(d);
 
-      // Extract block/port context from DraftPortKey fields
-      const { blockId, portId } = extractPortContext(d);
-
-      result.push({ kind: `Fixpoint/${kind}`, message, blockId, portId });
-    }
+    result.push({
+      kind: code,
+      message: d.message,
+      blockId,
+      portId,
+      severity: severity === 'error' ? 'error' : severity === 'warn' ? 'warn' : 'info',
+      diagnosticFlagCode: code,
+    });
   }
   return result;
 }
 
 /**
- * Extract blockId and portId from a fixpoint diagnostic's port key fields.
+ * Extract blockId and portId from a FixpointDiagnostic's port key fields.
  * Handles both `port` (single DraftPortKey) and `ports` (array of DraftPortKeys).
  */
-function extractPortContext(d: object): { blockId?: string; portId?: string } {
+function extractPortContext(d: FixpointDiagnostic): { blockId?: string; portId?: string } {
   // Single port key (payload-unit errors)
-  if ('port' in d && typeof (d as { port: unknown }).port === 'string') {
-    const key = (d as { port: string }).port;
-    return parseDraftPortKey(key);
+  if (d.port) {
+    return parseDraftPortKey(d.port);
   }
   // Array of port keys (cardinality errors) — use first entry for reference
-  if ('ports' in d && Array.isArray((d as { ports: unknown }).ports)) {
-    const ports = (d as { ports: string[] }).ports;
-    if (ports.length > 0) {
-      return parseDraftPortKey(ports[0]);
-    }
+  if (d.ports && d.ports.length > 0) {
+    return parseDraftPortKey(d.ports[0]);
   }
   return {};
 }
@@ -277,6 +327,7 @@ function convertPass2Error(error: Pass2Error): FrontendError {
   return {
     kind: `TypeGraph/${error.kind}`,
     message: error.message,
+    severity: 'error',
   };
 }
 
@@ -297,11 +348,13 @@ function convertAxisViolation(violation: AxisViolation, patch: TypeResolvedPatch
       message: violation.message,
       blockId: block?.id,
       portId: portName,
+      severity: 'error',
     };
   }
 
   return {
     kind: 'AxisInvalid',
     message: violation.message,
+    severity: 'error',
   };
 }

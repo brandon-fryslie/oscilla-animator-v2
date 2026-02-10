@@ -9,6 +9,7 @@
 
 import type { ObligationId, ElaboratedArtifactRefs } from './obligations';
 import type { DraftBlock, DraftEdge, ElaboratedRole } from './draft-graph';
+import type { FixpointDiagnostic } from './fixpoint-diagnostic';
 
 // =============================================================================
 // ElaborationPlan
@@ -33,7 +34,7 @@ export interface ElaborationPlan {
   /** Edges to replace (remove old, add new) */
   readonly replaceEdges?: readonly EdgeReplacement[];
   /** Diagnostics emitted by this plan (warnings, info) */
-  readonly diagnostics?: readonly unknown[];
+  readonly diagnostics?: readonly FixpointDiagnostic[];
   /** Human-readable notes for debugging */
   readonly notes?: string;
 }

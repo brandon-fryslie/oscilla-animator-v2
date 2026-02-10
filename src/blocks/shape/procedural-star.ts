@@ -5,7 +5,7 @@
  */
 
 import { registerBlock } from '../registry';
-import { canonicalType, canonicalField, payloadStride, floatConst, intConst, withInstance, instanceRef, requireInst } from '../../core/canonical-types';
+import { canonicalType, canonicalField, payloadStride, floatConst, intConst, withInstance, instanceRef } from '../../core/canonical-types';
 import { FLOAT, INT, VEC2 } from '../../core/canonical-types';
 import { instanceId as makeInstanceId, domainTypeId as makeDomainTypeId } from '../../core/ids';
 import { DOMAIN_CONTROL } from '../../core/domain-registry';
@@ -13,6 +13,7 @@ import { PathVerb, type PathTopologyDef, PathTopologyDefInput } from '../../shap
 import { registerDynamicTopology } from '../../shapes/registry';
 import { defaultSourceConst } from '../../types';
 import { OpCode } from '../../compiler/ir/types';
+import { resolveInputConstant } from '../lower-utils';
 
 /**
  * Create a star path topology definition.
@@ -126,12 +127,11 @@ registerBlock({
     shape: { label: 'Shape', type: canonicalType(FLOAT) },
     controlPoints: { label: 'Control Points', type: canonicalField(VEC2, { kind: 'none' }, { instanceId: makeInstanceId('control'), domainTypeId: makeDomainTypeId('default') }) },
   },
-  lower: ({ ctx, inputsById, config }) => {
-    // Get points from config (must be compile-time constant)
-    const points = (config?.points as number);
-    if (points < 3) {
-      throw new Error(`Star must have at least 3 points, got ${points}`);
-    }
+  lower: ({ ctx, inputsById }) => {
+    // Get points from input (must be compile-time constant)
+    const pointsInput = inputsById.points;
+    if (!pointsInput) throw new Error('ProceduralStar: points input not wired — normalization bug');
+    const points = resolveInputConstant(ctx, pointsInput, 'points', { min: 3, max: 100 });
 
     // Create star topology (compile-time, without id field)
     const topology = createStarTopology(points);
@@ -159,17 +159,15 @@ registerBlock({
       canonicalField(INT, { kind: 'none' }, ref)
     );
 
-    // Get outerRadius and innerRadius signals
-    // Local-space convention: Default radii are unit scale (1.0 outer, 0.4 inner for nice star)
+    // Post-normalization: all inputs guaranteed wired — no fallback needed
+    // [LAW:one-source-of-truth] inputs are the single source; config was a dead fallback
     const outerRadiusInput = inputsById.outerRadius;
-    const outerRadiusSig = ('type' in outerRadiusInput! && requireInst(outerRadiusInput!.type.extent.cardinality, 'cardinality').kind === 'one')
-      ? outerRadiusInput!.id
-      : ctx.b.constant(floatConst((config?.outerRadius as number) ?? 1.0), canonicalType(FLOAT));
+    if (!outerRadiusInput) throw new Error('ProceduralStar: outerRadius input not wired — normalization bug');
+    const outerRadiusSig = outerRadiusInput.id;
 
     const innerRadiusInput = inputsById.innerRadius;
-    const innerRadiusSig = ('type' in innerRadiusInput! && requireInst(innerRadiusInput!.type.extent.cardinality, 'cardinality').kind === 'one')
-      ? innerRadiusInput!.id
-      : ctx.b.constant(floatConst((config?.innerRadius as number) ?? 0.4), canonicalType(FLOAT));
+    if (!innerRadiusInput) throw new Error('ProceduralStar: innerRadius input not wired — normalization bug');
+    const innerRadiusSig = innerRadiusInput.id;
 
     const pointsSig = ctx.b.constant(intConst(points), canonicalType(INT));
 

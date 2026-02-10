@@ -280,7 +280,7 @@ describe('finalizeNormalizationFixpoint (cardinality solving)', () => {
     expect(anchorBlocks.length).toBeGreaterThan(0);
     // Should have CheaterAdapterUsed diagnostics
     const cheaterDiags = result.diagnostics.filter(
-      (d: any) => d.kind === 'CheaterAdapterUsed' && d.subKind === 'PayloadAnchorFloat',
+      (d: any) => d.diagnosticFlagCode === 'CheaterAdapterUsed',
     );
     expect(cheaterDiags.length).toBeGreaterThan(0);
     // Payload anchors to float (via anchor adapter)
@@ -375,7 +375,7 @@ describe('finalizeNormalizationFixpoint (cardinality solving)', () => {
     expect(anchorBlocks.length).toBeGreaterThan(0);
     // Should have CheaterAdapterUsed diagnostics
     const cheaterDiags = result.diagnostics.filter(
-      (d: any) => d.kind === 'CheaterAdapterUsed' && d.subKind === 'PayloadAnchorFloat',
+      (d: any) => d.diagnosticFlagCode === 'CheaterAdapterUsed',
     );
     expect(cheaterDiags.length).toBeGreaterThan(0);
   });
@@ -473,7 +473,7 @@ describe('finalizeNormalizationFixpoint (payload auto-derivation)', () => {
     expect(anchorBlocks.length).toBeGreaterThan(0);
     // Should have CheaterAdapterUsed diagnostics
     const cheaterDiags = result.diagnostics.filter(
-      (d: any) => d.kind === 'CheaterAdapterUsed' && d.subKind === 'PayloadAnchorFloat',
+      (d: any) => d.diagnosticFlagCode === 'CheaterAdapterUsed',
     );
     expect(cheaterDiags.length).toBeGreaterThan(0);
 

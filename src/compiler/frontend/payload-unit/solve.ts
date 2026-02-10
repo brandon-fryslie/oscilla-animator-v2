@@ -17,6 +17,7 @@ import { payloadsEqual, unitsEqual, unitNone } from '../../../core/canonical-typ
 import type { InferenceCanonicalType } from '../../../core/inference-types';
 import { isPayloadVar, isUnitVar, isConcretePayload, isConcreteUnit } from '../../../core/inference-types';
 import type { DraftPortKey } from '../type-facts';
+import type { FixpointDiagnostic } from '../fixpoint-diagnostic';
 
 // =============================================================================
 // Constraint Origin
@@ -227,6 +228,8 @@ export interface PayloadUnitSolveResult {
   readonly portUnits: ReadonlyMap<DraftPortKey, UnitType>;
   /** Solver errors */
   readonly errors: readonly PUSolveError[];
+  /** Escape hatch diagnostics (emitted unconditionally — severity applied downstream) */
+  readonly diagnostics: readonly FixpointDiagnostic[];
 }
 
 // =============================================================================
@@ -348,6 +351,8 @@ export function solvePayloadUnit(
   const payloadUF = new UnionFind<PayloadType>();
   const unitUF = new UnionFind<UnitType>();
   const errors: PUSolveError[] = [];
+  // [LAW:dataflow-not-control-flow] Escape hatch diagnostics emitted unconditionally.
+  const diagnostics: FixpointDiagnostic[] = [];
 
   // Per-group metadata tracked by root node id
   const payloadMeta = new Map<UFNodeId, PayloadGroupMeta>();
@@ -638,9 +643,18 @@ export function solvePayloadUnit(
 
     // If still unresolved (no concrete evidence at all), default to unitNone().
     // A chain of polymorphic blocks with no concrete unit source is dimensionless.
+    // [LAW:dataflow-not-control-flow] Emit diagnostic unconditionally; severity applied downstream.
     if (!resolvedUnit && varInfo.unitVarId) {
       resolvedUnit = unitNone();
       unitUF.assign(uNode, resolvedUnit, unitsMerge);
+      if (!validatedUnitRoots.has(uRoot)) {
+        diagnostics.push({
+          diagnosticFlagCode: 'UnitDefaultedToNone',
+          message: `Unit variable defaulted to unitless (no concrete unit evidence)`,
+          stableKey: `UnitDefaultedToNone:${uRoot}`,
+          port: portKey,
+        });
+      }
     }
 
     // Validate resolved unit against unitless requirement
@@ -666,7 +680,7 @@ export function solvePayloadUnit(
     }
   }
 
-  return { payloads, units, portPayloads, portUnits, errors };
+  return { payloads, units, portPayloads, portUnits, errors, diagnostics };
 }
 
 /**

@@ -4,7 +4,7 @@
  * Exponential smoothing filter.
  */
 
-import { registerBlock } from '../registry';
+import { registerBlock, requireConfig } from '../registry';
 import { canonicalType, payloadStride, floatConst, requireInst, unitNone, contractClamp01 } from '../../core/canonical-types';
 import { FLOAT } from '../../core/canonical-types';
 import { inferType, unitVar } from '../../core/inference-types';
@@ -40,8 +40,9 @@ registerBlock({
       throw new Error('Lag requires target signal input');
     }
 
-    const smoothing = (config?.smoothing as number);
-    const initialValue = (config?.initialValue as number);
+    const cfg = config ?? {};
+    const smoothing = requireConfig<number>(cfg, 'smoothing', 'number');
+    const initialValue = requireConfig<number>(cfg, 'initialValue', 'number');
     const outType = ctx.outTypes[0];
 
     // Symbolic state key

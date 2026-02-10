@@ -99,9 +99,9 @@
 
 **PayloadType**: Discriminated union - `{ kind: 'float' } | { kind: 'int' } | { kind: 'bool' } | { kind: 'vec2' } | { kind: 'vec3' } | { kind: 'color' } | { kind: 'cameraProjection' } | { kind: 'shape2d' } | { kind: 'shape3d' }`
 
-**payloadStride()**: Always derived from payload. `float/int/bool=1`, `vec2=2`, `vec3=3`, `color=4`, `cameraProjection=16`, `shape2d=8`, `shape3d=12`
+**payloadStride()**: Always derived from payload. `float/int/bool=1`, `vec2=2`, `vec3=3`, `color=4`, `cameraProjection=1`, `shape2d=0`, `shape3d=0`
 
-**UnitType**: 8 structured kinds - `none | scalar | norm01 | count | angle(radians|degrees|phase01) | time(ms|seconds) | space(ndc|world|view, dims:2|3) | color(rgba01)`. No `var` in canonical type.
+**UnitType**: 6 structured kinds - `none | count | angle(radians|degrees|phase01) | time(ms|seconds) | space(ndc|world|view, dims:2|3) | color(hsl|rgba01)`. No `var` in canonical type.
 
 **Phase**: Represented as `float` with `unit: { kind: 'angle', unit: 'phase01' }`. Not a distinct PayloadType.
 
@@ -213,8 +213,8 @@
 | `color` | 4 | RGBA, 0..1 each |
 | `float(phase01)` | 1 | float with unit:phase01, 0..1 with wrap semantics |
 | `bool` | 1 | true/false |
-| `unit` | 1 | 0..1 clamped |
-| `shape2d` | 8 | Packed u32 words (handle — no arithmetic) |
+| `cameraProjection` | 1 | Closed string enum (orthographic/perspective) |
+| `shape2d` | 0 | Non-sampleable opaque handle (packed size: 8 u32 words) |
 
 ### Extent (Five-Axis Coordinate)
 
@@ -280,17 +280,20 @@ interface InstanceDecl {
 
 Units refine payload types. A `float` may carry a unit that constrains valid operations.
 
-| Unit | Meaning | Examples |
-|------|---------|----------|
-| `scalar` | Dimensionless | multipliers, ratios |
-| `phase01` | 0..1 with wrap semantics | animation phase |
-| `deg` | Degrees | rotation angles |
-| `rad` | Radians | rotation angles |
-| `px` | Pixels | screen positions |
+6 structured kinds:
+
+| Kind | Sub-values | Examples |
+|------|------------|----------|
+| `none` | — | dimensionless multipliers, ratios |
+| `count` | — | element counts |
+| `angle` | `radians`, `degrees`, `phase01` | rotation, oscillator phase |
+| `time` | `ms`, `seconds` | durations, timestamps |
+| `space` | `ndc`/`world`/`view`, dims: 2/3 | positions, coordinates |
+| `color` | `hsl`, `rgba01` | color space encoding |
 
 **Unit checking is strict**: edges require exact unit match. No implicit conversion.
 
-**Generic blocks** have type variables for payload (`PayloadVar`) and/or unit (`UnitVar`) that must be resolved by constraint solving. Example: `Const.out` is generic in both payload and unit — resolved by what it connects to, never defaulted to `float<scalar>`.
+**Generic blocks** have type variables for payload (`PayloadVar`) and/or unit (`UnitVar`) that must be resolved by constraint solving. Example: `Const.out` is generic in both payload and unit — resolved by what it connects to, never defaulted to `float<none>`.
 
 ### Phase Arithmetic
 

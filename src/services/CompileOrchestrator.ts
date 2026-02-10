@@ -15,6 +15,7 @@ import { convertCompileErrorsToDiagnostics } from '../compiler/diagnosticConvers
 import type { CompileError } from '../compiler/types';
 import { untracked } from 'mobx';
 import { debugSettings } from '../settings/tokens/debug-settings';
+import { compilerFlagsSettings } from '../settings/tokens/compiler-flags-settings';
 import type { Patch } from '../graph';
 import { blockId as toBlockId } from '../types';
 import type { LogDetail } from '../stores/DiagnosticsStore';
@@ -134,8 +135,10 @@ export async function compileAndSwap(deps: CompileOrchestratorDeps, isInitial: b
   // Step 1: Run Frontend Compilation
   // =========================================================================
   const debugValues = store.settings.get(debugSettings);
+  const flagOverrides = store.settings.get(compilerFlagsSettings);
   const frontendResult = compileFrontend(patch, {
     traceCardinalitySolver: debugValues?.traceCardinalitySolver,
+    diagnosticOverrides: flagOverrides ?? undefined,
   });
 
   // Store frontend snapshot (always available now)

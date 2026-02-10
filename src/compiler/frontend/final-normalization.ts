@@ -13,6 +13,7 @@
  */
 
 import type { DraftGraph, DraftPortRef } from './draft-graph';
+import type { FixpointDiagnostic } from './fixpoint-diagnostic';
 import type { Obligation, ObligationId, FactDependency } from './obligations';
 import { isOpen } from './obligations';
 import type { ElaborationPlan } from './elaboration';
@@ -63,7 +64,7 @@ export interface FixpointResult {
   readonly graph: DraftGraph;
   readonly facts: TypeFacts;
   readonly strict: StrictTypedGraph | null;
-  readonly diagnostics: readonly unknown[];
+  readonly diagnostics: readonly FixpointDiagnostic[];
   readonly iterations: number;
   readonly trace?: readonly TraceEvent[];
 }
@@ -83,7 +84,7 @@ export function finalizeNormalizationFixpoint(
   registry: ReadonlyMap<string, BlockDef>,
   options: FixpointOptions,
 ): FixpointResult {
-  const diagnostics: unknown[] = [];
+  const diagnostics: FixpointDiagnostic[] = [];
   const trace: TraceEvent[] = options.trace ? [] : [];
   const tracing = options.trace === true;
   let g = input;
@@ -92,7 +93,7 @@ export function finalizeNormalizationFixpoint(
   // Earlier iterations may report conflicts that the fixpoint resolves structurally
   // (e.g., adapter insertion resolves ConflictingUnits). Only the final iteration's
   // solver diagnostics reflect the converged state.
-  let lastSolveDiagnostics: unknown[] = [];
+  let lastSolveDiagnostics: FixpointDiagnostic[] = [];
 
   for (let i = 0; i < options.maxIterations; i++) {
     let didMutateGraph = false;
@@ -140,11 +141,12 @@ export function finalizeNormalizationFixpoint(
       diagnostics.push(...lastSolveDiagnostics);
       // Emit remaining cardinality conflicts as diagnostics (could not resolve structurally)
       for (const conflict of cardinalityConflicts) {
+        const conflictPorts = conflict.kind === 'ZipBroadcastClampOneConflict' ? conflict.zipPorts : [];
         diagnostics.push({
-          kind: 'CardinalityConstraintError',
-          subKind: conflict.kind,
-          ports: conflict.kind === 'ZipBroadcastClampOneConflict' ? conflict.zipPorts : [],
+          diagnosticFlagCode: conflict.kind,
           message: conflict.message,
+          stableKey: `${conflict.kind}:${conflictPorts.join(',')}`,
+          ports: conflictPorts,
         });
       }
       const strict = tryFinalizeStrict(g, facts, collectPorts);
@@ -181,8 +183,9 @@ export function finalizeNormalizationFixpoint(
   // Non-convergence — push last iteration's solver diagnostics before reporting
   diagnostics.push(...lastSolveDiagnostics);
   diagnostics.push({
-    kind: 'NonConvergence',
+    diagnosticFlagCode: 'NonConvergence',
     message: `Fixpoint did not converge after ${options.maxIterations} iterations`,
+    stableKey: 'NonConvergence',
   });
 
   const deduped = deduplicateDiagnostics(diagnostics);
@@ -207,8 +210,8 @@ export function finalizeNormalizationFixpoint(
 function solveAndComputeFacts(
   g: DraftGraph,
   registry: ReadonlyMap<string, BlockDef>,
-): { facts: TypeFacts; solveDiagnostics: unknown[]; cardinalityConflicts: readonly CardinalitySolveError[]; collectPorts: ReadonlySet<DraftPortKey> } {
-  const solveDiagnostics: unknown[] = [];
+): { facts: TypeFacts; solveDiagnostics: FixpointDiagnostic[]; cardinalityConflicts: readonly CardinalitySolveError[]; collectPorts: ReadonlySet<DraftPortKey> } {
+  const solveDiagnostics: FixpointDiagnostic[] = [];
 
   // [LAW:dataflow-not-control-flow] No empty-graph guard — extractConstraints + solvers handle empty inputs.
 
@@ -221,16 +224,20 @@ function solveAndComputeFacts(
   // 3) Run payload/unit solver
   const puResult = solvePayloadUnit(extracted.payloadUnit, portVarMapping);
 
-  // Collect payload/unit errors
+  // Collect payload/unit errors as FixpointDiagnostic
   for (const error of puResult.errors) {
     solveDiagnostics.push({
-      kind: 'TypeConstraintError',
-      subKind: error.kind,
-      errorClass: error.errorClass,
-      port: error.port,
+      diagnosticFlagCode: error.kind,
       message: error.message,
+      stableKey: `${error.kind}:${error.port}`,
+      port: error.port,
+      origins: error.origins,
+      errorClass: error.errorClass,
     });
   }
+
+  // Collect PU escape hatch diagnostics (already FixpointDiagnostic)
+  solveDiagnostics.push(...puResult.diagnostics);
 
   // 4) Run cardinality solver
   const cardResult = solveCardinality({
@@ -247,13 +254,16 @@ function solveAndComputeFacts(
       cardinalityConflicts.push(error);
     } else {
       solveDiagnostics.push({
-        kind: 'CardinalityConstraintError',
-        subKind: error.kind,
-        ports: error.ports,
+        diagnosticFlagCode: error.kind,
         message: error.message,
+        stableKey: `${error.kind}:${error.ports.join(',')}`,
+        ports: error.ports,
       });
     }
   }
+
+  // Collect cardinality escape hatch diagnostics (already FixpointDiagnostic)
+  solveDiagnostics.push(...cardResult.diagnostics);
 
   // 5) Build Substitution from solver outputs
   const subst: Substitution = {
@@ -532,27 +542,20 @@ function tryFinalizeStrict(
 // =============================================================================
 
 /**
- * Deduplicate diagnostics using a stable key.
+ * Deduplicate diagnostics using stableKey.
  * Fixpoint iterations can emit the same diagnostic multiple times;
  * this removes duplicates while preserving order.
  */
-function deduplicateDiagnostics(diagnostics: readonly unknown[]): unknown[] {
+function deduplicateDiagnostics(diagnostics: readonly FixpointDiagnostic[]): FixpointDiagnostic[] {
   const seen = new Set<string>();
-  const result: unknown[] = [];
+  const result: FixpointDiagnostic[] = [];
   for (const d of diagnostics) {
-    const key = diagKey(d);
-    if (!seen.has(key)) {
-      seen.add(key);
+    if (!seen.has(d.stableKey)) {
+      seen.add(d.stableKey);
       result.push(d);
     }
   }
   return result;
-}
-
-function diagKey(d: unknown): string {
-  if (typeof d !== 'object' || d === null) return String(d);
-  const o = d as Record<string, unknown>;
-  return `${o.kind ?? ''}:${o.subKind ?? ''}:${o.port ?? ''}:${o.message ?? ''}`;
 }
 
 // =============================================================================

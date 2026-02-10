@@ -5,7 +5,7 @@
  */
 
 import { registerBlock } from '../registry';
-import { canonicalType, payloadStride, floatConst, requireInst } from '../../core/canonical-types';
+import { canonicalType, payloadStride } from '../../core/canonical-types';
 import { FLOAT } from '../../core/canonical-types';
 import { TOPOLOGY_ID_ELLIPSE } from '../../shapes/registry';
 import { defaultSourceConst } from '../../types';
@@ -59,48 +59,20 @@ registerBlock({
   outputs: {
     shape: { label: 'Shape', type: canonicalType(FLOAT) },
   },
-  lower: ({ ctx, inputsById, config, block }) => {
-    // Resolve rx parameter
+  lower: ({ ctx, inputsById }) => {
+    // Post-normalization: all inputs guaranteed wired — no fallback needed
+    // [LAW:one-source-of-truth] inputs are the single source; config/block.inputPorts was a dead fallback
     const rxInput = inputsById.rx;
-    let rxSig;
-    const rxIsSignal = rxInput && 'type' in rxInput && requireInst(rxInput.type.extent.cardinality, 'cardinality').kind !== 'many';
-    if (rxInput && rxIsSignal) {
-      rxSig = rxInput.id;
-    } else {
-      // Read from port default (via setPortDefault) or fall back to registry default
-      // this is insane and wildly broken.  inputs should be resolved before we get there
-      // EXAMPLE OF HOW NOT TO DO THIS
-      // TODO: eslint to ensure NO references to 'defaultSource' in compiler
-      const rxPort = block?.inputPorts.get('rx');
-      const rxValue = (rxPort?.defaultSource?.params?.value as number | undefined); // TODO: fix this
-      rxSig = ctx.b.constant(floatConst(rxValue), canonicalType(FLOAT));
-    }
+    if (!rxInput) throw new Error('Ellipse: rx input not wired — normalization bug');
+    const rxSig = rxInput.id;
 
-    // Resolve ry parameter
     const ryInput = inputsById.ry;
-    let rySig;
-    const ryIsSignal = ryInput && 'type' in ryInput && requireInst(ryInput.type.extent.cardinality, 'cardinality').kind !== 'many';
-    if (ryInput && ryIsSignal) {
-      rySig = ryInput.id;
-    } else {
-      // Read from port default (via setPortDefault) or fall back to registry default
-      const ryPort = block?.inputPorts.get('ry');
-      const ryValue = (ryPort?.defaultSource?.params?.value as number | undefined);
-      rySig = ctx.b.constant(floatConst(ryValue), canonicalType(FLOAT));
-    }
+    if (!ryInput) throw new Error('Ellipse: ry input not wired — normalization bug');
+    const rySig = ryInput.id;
 
-    // Resolve rotation parameter
     const rotationInput = inputsById.rotation;
-    let rotationSig;
-    const rotationIsSignal = rotationInput && 'type' in rotationInput && requireInst(rotationInput.type.extent.cardinality, 'cardinality').kind !== 'many';
-    if (rotationInput && rotationIsSignal) {
-      rotationSig = rotationInput.id;
-    } else {
-      // Read from port default (via setPortDefault) or fall back to registry default
-      const rotationPort = block?.inputPorts.get('rotation');
-      const rotationValue = (rotationPort?.defaultSource?.params?.value as number | undefined) ?? (config?.rotation as number) ?? 0;
-      rotationSig = ctx.b.constant(floatConst(rotationValue), canonicalType(FLOAT));
-    }
+    if (!rotationInput) throw new Error('Ellipse: rotation input not wired — normalization bug');
+    const rotationSig = rotationInput.id;
 
     // Create shape reference with ellipse topology and param signals
     const shapeRefSig = ctx.b.shapeRef(

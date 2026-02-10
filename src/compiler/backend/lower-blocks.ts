@@ -35,17 +35,14 @@ function portKey(blockIndex: BlockIndex, portName: string, direction: 'in' | 'ou
 }
 
 /**
- * Extract a compile-time constant from a block's port defaultSource.
- * Checks the port override first, then falls back to the registry default.
+ * Get a port's const value from registry default only.
+ * Used for extracting compile-time structural values for event emission.
+ *
+ * NOTE: This is a last resort for event metadata only. Block lowering should NOT use this.
+ * Blocks must use inputsById (for wired inputs) or config (for exposedAsPort:false inputs).
  */
-function getPortConstValue(block: Block, portId: string): unknown {
-  // Check port-level override
-  const port = block.inputPorts.get(portId);
-  if (port?.defaultSource?.blockType === 'Const') {
-    return port.defaultSource.params?.value;
-  }
-  // Fall back to registry default
-  const def = getBlockDefinition(block.type);
+function getPortConstValue(blockType: string, portId: string): unknown {
+  const def = getBlockDefinition(blockType);
   const inputDef = def?.inputs[portId];
   if (inputDef?.defaultSource?.blockType === 'Const') {
     return inputDef.defaultSource.params?.value;
@@ -532,10 +529,34 @@ function lowerBlockInstance(
     };
 
     // Pass block params as config (needed for DSConst blocks to access their value)
-    const config = block.params;
+    const config = block.params ?? {};
+
+    // [LAW:dataflow-not-control-flow] Always run the validation pass;
+    // do not branch around it per block type.
+    // [LAW:one-source-of-truth] Each key has exactly ONE source.
+    for (const [portId, inputDef] of Object.entries(blockDef.inputs)) {
+      if (inputDef.exposedAsPort !== false) {
+        // Wired source-of-truth: config must NOT contain this key
+        if (portId in config && config[portId] !== undefined) {
+          throw new Error(
+            `HARD ERROR: Block ${block.type}#${block.id} has key '${portId}' in both ` +
+            `config (params) and inputsById. exposedAsPort is not false — ` +
+            `value must come from wired input only.`
+          );
+        }
+      } else {
+        // Config source-of-truth: config MUST contain this key (unless optional)
+        if (!inputDef.optional && config[portId] === undefined) {
+          throw new Error(
+            `HARD ERROR: Block ${block.type}#${block.id} missing config key '${portId}'. ` +
+            `exposedAsPort is false — value must be in block.params.`
+          );
+        }
+      }
+    }
 
     // Call lowering function (with existingOutputs if this is phase 2)
-    let result = blockDef.lower({ ctx, inputs, inputsById, collectInputsById: resolvedCollectInputsById, config, block, existingOutputs });
+    let result = blockDef.lower({ ctx, inputs, inputsById, collectInputsById: resolvedCollectInputsById, config, existingOutputs });
 
     // Auto-propagate instanceContext for blocks with field outputs
     // Only applies if the block didn't explicitly set instanceContext
@@ -967,7 +988,7 @@ function lowerSCCTwoPass(
     if (options?.events) {
       const instanceContext = instanceContextByBlock.get(blockIndex);
       const instanceCount = block.type === 'Array'
-        ? (getPortConstValue(block, 'count') as number | undefined)
+        ? (getPortConstValue(block.type, 'count') as number | undefined)
         : undefined;
 
       options.events.emit({
@@ -1282,7 +1303,7 @@ export function pass6BlockLowering(
           const instanceContext = instanceContextByBlock.get(blockIndex);
           // For instance-creating blocks (Array), get the count from params
           const instanceCount = block.type === 'Array'
-            ? (getPortConstValue(block, 'count') as number | undefined)
+            ? (getPortConstValue(block.type, 'count') as number | undefined)
             : undefined;
 
           options.events.emit({

@@ -89,11 +89,9 @@ export const cycleBreakPolicyV1: CycleBreakPolicyInterface = {
         replaceEdges: [{ remove: edge.id, add: addEdges }],
         diagnostics: [
           {
-            kind: 'CycleBreakInserted',
-            obligationId: obligation.id,
-            edgeKey,
-            insertedBlockId: blockId,
+            diagnosticFlagCode: 'CycleBreakInserted',
             message: `UnitDelay inserted on ${edgeKey} to break algebraic cycle`,
+            stableKey: `CycleBreakInserted:${edgeKey}`,
           },
         ],
       },

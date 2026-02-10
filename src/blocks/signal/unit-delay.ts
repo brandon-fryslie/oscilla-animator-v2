@@ -4,7 +4,7 @@
  * Delays input by one frame.
  */
 
-import { registerBlock, type LowerResult } from '../registry';
+import { registerBlock, requireConfig, type LowerResult } from '../registry';
 import { canonicalType, payloadStride, requireInst } from '../../core/canonical-types';
 import { FLOAT } from '../../core/canonical-types';
 import { inferType, unitVar, payloadVar } from '../../core/inference-types';
@@ -34,7 +34,8 @@ registerBlock({
   },
   // Phase 1: Generate output (reading from state) without needing input resolved
   lowerOutputsOnly: ({ ctx, config }) => {
-    const initialValue = (config?.initialValue as number);
+    const cfg = config ?? {};
+    const initialValue = requireConfig<number>(cfg, 'initialValue', 'number');
     const outType = ctx.outTypes[0];
 
     // Symbolic state key (will be reused in phase 2)
@@ -83,7 +84,8 @@ registerBlock({
     }
 
     // Single-pass lowering (for non-cycle usage)
-    const initialValue = (config?.initialValue as number);
+    const cfg = config ?? {};
+    const initialValue = requireConfig<number>(cfg, 'initialValue', 'number');
     const outType = ctx.outTypes[0];
 
     // Symbolic state key

@@ -4,7 +4,7 @@
  * Convert external channel to gate (0/1) via threshold comparison.
  */
 
-import { registerBlock } from '../registry';
+import { registerBlock, requireConfig } from '../registry';
 import { canonicalType, payloadStride, floatConst, FLOAT } from '../../core/canonical-types';
 import { OpCode } from '../../compiler/ir/types';
 import { defaultSourceConst } from '../../types';
@@ -59,8 +59,9 @@ registerBlock({
     gate: { label: 'Gate', type: canonicalType(FLOAT) }, // 0 or 1
   },
   lower: ({ ctx, config }) => {
-    const channel = (config?.channel as string);
-    const threshold = (config?.threshold as number);
+    const cfg = config ?? {};
+    const channel = requireConfig<string>(cfg, 'channel', 'string');
+    const threshold = requireConfig<number>(cfg, 'threshold', 'number');
     const outType = ctx.outTypes[0];
 
     const inputSig = ctx.b.external(channel, canonicalType(FLOAT));

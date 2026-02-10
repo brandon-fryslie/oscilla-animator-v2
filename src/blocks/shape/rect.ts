@@ -5,7 +5,7 @@
  */
 
 import { registerBlock } from '../registry';
-import { canonicalType, payloadStride, floatConst, requireInst } from '../../core/canonical-types';
+import { canonicalType, payloadStride } from '../../core/canonical-types';
 import { FLOAT } from '../../core/canonical-types';
 import { TOPOLOGY_ID_RECT } from '../../shapes/registry';
 import { defaultSourceConst } from '../../types';
@@ -66,46 +66,24 @@ registerBlock({
   outputs: {
     shape: { label: 'Shape', type: canonicalType(FLOAT) },
   },
-  lower: ({ ctx, inputsById, config }) => {
-    // Resolve width parameter
+  lower: ({ ctx, inputsById }) => {
+    // Post-normalization: all inputs guaranteed wired — no fallback needed
+    // [LAW:one-source-of-truth] inputs are the single source; config was a dead fallback
     const widthInput = inputsById.width;
-    let widthSig;
-    const widthIsSignal = widthInput && 'type' in widthInput && requireInst(widthInput.type.extent.cardinality, 'cardinality').kind !== 'many';
-    if (widthInput && widthIsSignal) {
-      widthSig = widthInput.id;
-    } else {
-      widthSig = ctx.b.constant(floatConst((config?.width as number)), canonicalType(FLOAT));
-    }
+    if (!widthInput) throw new Error('Rect: width input not wired — normalization bug');
+    const widthSig = widthInput.id;
 
-    // Resolve height parameter
     const heightInput = inputsById.height;
-    let heightSig;
-    const heightIsSignal = heightInput && 'type' in heightInput && requireInst(heightInput.type.extent.cardinality, 'cardinality').kind !== 'many';
-    if (heightInput && heightIsSignal) {
-      heightSig = heightInput.id;
-    } else {
-      heightSig = ctx.b.constant(floatConst((config?.height as number)), canonicalType(FLOAT));
-    }
+    if (!heightInput) throw new Error('Rect: height input not wired — normalization bug');
+    const heightSig = heightInput.id;
 
-    // Resolve rotation parameter
     const rotationInput = inputsById.rotation;
-    let rotationSig;
-    const rotationIsSignal = rotationInput && 'type' in rotationInput && requireInst(rotationInput.type.extent.cardinality, 'cardinality').kind !== 'many';
-    if (rotationInput && rotationIsSignal) {
-      rotationSig = rotationInput.id;
-    } else {
-      rotationSig = ctx.b.constant(floatConst((config?.rotation as number)), canonicalType(FLOAT));
-    }
+    if (!rotationInput) throw new Error('Rect: rotation input not wired — normalization bug');
+    const rotationSig = rotationInput.id;
 
-    // Resolve cornerRadius parameter
     const cornerRadiusInput = inputsById.cornerRadius;
-    let cornerRadiusSig;
-    const cornerRadiusIsSignal = cornerRadiusInput && 'type' in cornerRadiusInput && requireInst(cornerRadiusInput.type.extent.cardinality, 'cardinality').kind !== 'many';
-    if (cornerRadiusInput && cornerRadiusIsSignal) {
-      cornerRadiusSig = cornerRadiusInput.id;
-    } else {
-      cornerRadiusSig = ctx.b.constant(floatConst((config?.cornerRadius as number)), canonicalType(FLOAT));
-    }
+    if (!cornerRadiusInput) throw new Error('Rect: cornerRadius input not wired — normalization bug');
+    const cornerRadiusSig = cornerRadiusInput.id;
 
     // Create shape reference with rect topology and param signals
     const shapeRefSig = ctx.b.shapeRef(

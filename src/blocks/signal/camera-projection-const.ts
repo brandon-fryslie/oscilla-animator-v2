@@ -4,7 +4,7 @@
  * Outputs a constant camera projection mode (0=ortho, 1=persp).
  */
 
-import { registerBlock } from '../registry';
+import { registerBlock, requireConfigInt } from '../registry';
 import { canonicalType, payloadStride, cameraProjectionConst } from '../../core/canonical-types';
 import { INT, CAMERA_PROJECTION } from '../../core/canonical-types';
 import { defaultSourceConst } from '../../types';
@@ -28,14 +28,14 @@ registerBlock({
       defaultValue: 0,
       defaultSource: defaultSourceConst(0),
       uiHint: { kind: 'select', options: [{ value: '0', label: 'Orthographic' }, { value: '1', label: 'Perspective' }] },
-      exposedAsPort: true,
+      exposedAsPort: false,
     },
   },
   outputs: {
     out: { label: 'Output', type: canonicalType(CAMERA_PROJECTION) },
   },
   lower: ({ ctx, config }) => {
-    const rawValue = (config?.value as number);
+    const rawValue = requireConfigInt(config!, 'value', 0, 1);
     const sigId = ctx.b.constant(cameraProjectionConst(rawValue === 1 ? 'perspective' : 'orthographic'), canonicalType(CAMERA_PROJECTION));
     const outType = ctx.outTypes[0];
     return {

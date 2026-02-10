@@ -90,9 +90,9 @@ type PayloadType =
 | `vec2` | 2D vector (x, y) | 2 | Two floats |
 | `vec3` | 3D vector (x, y, z) | 3 | Three floats |
 | `color` | RGBA color | 4 | Four floats, 0..1 each |
-| `cameraProjection` | Camera projection mode | 16 | Closed enum (see below) |
-| `shape2d` | 2D shape reference | 8 | Packed u32 words (opaque handle) |
-| `shape3d` | 3D shape reference (T3) | 12 | Packed u32 words (opaque handle, future) |
+| `cameraProjection` | Camera projection enum | 1 | Closed string enum (see below) |
+| `shape2d` | 2D shape reference | 0 | Non-sampleable opaque handle (packed size: 8 u32 words) |
+| `shape3d` | 3D shape reference (T3) | 0 | Non-sampleable opaque handle (packed size: 12 u32 words, future) |
 
 ### Stride
 
@@ -100,7 +100,7 @@ Stride is ALWAYS derived from payload via `payloadStride()`. Never stored as a s
 
 ```typescript
 function payloadStride(payload: PayloadType): number;
-// float=1, int=1, bool=1, vec2=2, vec3=3, color=4, cameraProjection=16, shape2d=8, shape3d=12
+// float=1, int=1, bool=1, vec2=2, vec3=3, color=4, cameraProjection=1, shape2d=0, shape3d=0
 ```
 
 ### Important Notes

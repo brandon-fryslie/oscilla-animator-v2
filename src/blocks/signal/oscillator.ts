@@ -4,7 +4,7 @@
  * Generates oscillating signals (sin, saw, square, noise).
  */
 
-import { registerBlock } from '../registry';
+import { registerBlock, requireConfigInt } from '../registry';
 import { canonicalType, unitTurns, unitNone, payloadStride, floatConst, requireInst, contractWrap01, contractClamp11 } from '../../core/canonical-types';
 import { FLOAT, INT } from '../../core/canonical-types';
 import { OpCode } from '../../compiler/ir/types';
@@ -34,7 +34,7 @@ registerBlock({
       type: canonicalType(INT),
       defaultValue: 0,
       defaultSource: defaultSourceConst(0),
-      exposedAsPort: true,
+      exposedAsPort: false,
       uiHint: {
         kind: 'select',
         options: [
@@ -56,7 +56,7 @@ registerBlock({
       throw new Error('Oscillator phase required as signal');
     }
 
-    const mode = (config?.mode as number);
+    const mode = requireConfigInt(config!, 'mode', 0, 3);
     const outType = ctx.outTypes[0];
 
     let id: ValueExprId;

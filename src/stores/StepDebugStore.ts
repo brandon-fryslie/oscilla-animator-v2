@@ -659,7 +659,7 @@ function formatExprLabel(expr: ValueExpr): string {
     case 'hslToRgb': return 'hslToRgb';
     default: {
       const _exhaustive: never = expr;
-      return (_exhaustive as any).kind ?? 'unknown';
+      throw new Error(`Unhandled ValueExpr kind: ${(_exhaustive as any).kind ?? 'unknown'}`);
     }
   }
 }

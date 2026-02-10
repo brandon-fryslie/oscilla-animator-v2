@@ -75,8 +75,12 @@ registerBlock({
   },
 
   lower: ({ ctx, collectInputsById, config }) => {
-    // Step 1: Extract expression text from config
-    const exprText = (config?.expression as string | undefined);
+    // Step 1: Extract expression text from config (default to empty string)
+    // Config is guaranteed non-null by lower-blocks.ts (uses ?? {})
+    const cfg = config ?? {};
+    const exprText = cfg.expression !== undefined
+      ? (cfg.expression as string)
+      : '';
 
     // Step 2: Handle empty expression (output constant 0)
     if (exprText.trim() === '') {

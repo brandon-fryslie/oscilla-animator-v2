@@ -5,8 +5,7 @@
    */
 
   import { registerBlock, ALL_CONCRETE_PAYLOADS } from '../registry';
-  import { instanceId as makeInstanceId, domainTypeId as makeDomainTypeId } from '../../core/ids';
-  import { canonicalType, canonicalField, unitWorld3, unitTurns, contractWrap01, payloadStride, floatConst, requireInst } from '../../core/canonical-types';
+  import { canonicalType, canonicalFieldDef, unitWorld3, unitTurns, contractWrap01, payloadStride, floatConst, requireInst } from '../../core/canonical-types';
   import { FLOAT, VEC3 } from '../../core/canonical-types';
   import { defaultSourceConst } from '../../types';
   import { OpCode } from '../../compiler/ir/types';
@@ -39,12 +38,12 @@
       semantics: 'typeSpecific',
     },
     inputs: {
-      elements: { label: 'Elements', type: canonicalField(FLOAT, { kind: 'none' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }) },
+      elements: { label: 'Elements', type: canonicalFieldDef(FLOAT, { kind: 'none' }) },
       radius: { label: 'Radius', type: canonicalType(FLOAT), defaultValue: 0.3, defaultSource: defaultSourceConst(0.3), exposedAsPort: true, uiHint: { kind: 'slider', min: 0.01, max: 0.5, step: 0.01 } },
       phase: { label: 'Phase', type: canonicalType(FLOAT, unitTurns(), undefined, contractWrap01()), defaultValue: 0, defaultSource: defaultSourceConst(0), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
     },
     outputs: {
-      position: { label: 'Position', type: canonicalField(VEC3, unitWorld3(), { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }) },
+      position: { label: 'Position', type: canonicalFieldDef(VEC3, unitWorld3()) },
     },
     lower: ({ ctx, inputsById }) => {
       const elementsInput = inputsById.elements;

@@ -5,7 +5,7 @@
  * Latches input value when event fires, holds until next fire.
  */
 
-import { registerBlock } from '../registry';
+import { registerBlock, requireConfig } from '../registry';
 import { canonicalType, canonicalEvent, payloadStride, requireInst, FLOAT } from '../../core/canonical-types';
 import { inferType, unitVar } from '../../core/inference-types';
 import { OpCode, stableStateId } from '../../compiler/ir/types';
@@ -45,7 +45,8 @@ registerBlock({
       throw new Error('SampleHold: trigger input must be an event');
     }
 
-    const initialValue = (config?.initialValue as number);
+    const cfg = config ?? {};
+    const initialValue = requireConfig<number>(cfg, 'initialValue', 'number');
 
     // Symbolic state key
     const stateKey = stableStateId(ctx.instanceId, 'sample');

@@ -22,6 +22,7 @@ import type { CardinalityVarId } from '../../../core/ids';
 import type { InstanceVarId } from '../../../core/ids';
 import type { DraftPortKey } from '../type-facts';
 import type { ConstraintOrigin } from '../payload-unit/solve';
+import type { FixpointDiagnostic } from '../fixpoint-diagnostic';
 
 // =============================================================================
 // InstanceTerm (solver-internal)
@@ -79,6 +80,8 @@ export interface CardinalitySolveResult {
   readonly cardinalities: ReadonlyMap<CardinalityVarId, CardinalityValue>;
   readonly instances: ReadonlyMap<InstanceVarId, InstanceRef>;
   readonly errors: readonly CardinalitySolveError[];
+  /** Escape hatch diagnostics (emitted unconditionally — severity applied downstream) */
+  readonly diagnostics: readonly FixpointDiagnostic[];
 }
 
 // =============================================================================
@@ -326,6 +329,8 @@ function writeGroupSubstitutions(
 export function solveCardinality(input: CardinalitySolveInput): CardinalitySolveResult {
   const { ports, baseCardinalityAxis, constraints, trace } = input;
   const errors: CardinalitySolveError[] = [];
+  // [LAW:dataflow-not-control-flow] Escape hatch diagnostics emitted unconditionally.
+  const escapeDiagnostics: FixpointDiagnostic[] = [];
   const uf = new CardinalityUF();
   const instanceUF = new InstanceUF();
 
@@ -418,7 +423,22 @@ export function solveCardinality(input: CardinalitySolveInput): CardinalitySolve
 
     // No evidence → default to one (signal chain).
     // [LAW:dataflow-not-control-flow] Groups without many evidence are signal-only.
+    // Emit diagnostic unconditionally; severity applied downstream.
     facts.resolved = { kind: 'one' };
+    const members = uf.members(root);
+    // Only emit if the group has axis vars (concrete one ports are intentional, not escape hatches)
+    const hasVars = members.some(p => {
+      const axis = baseCardinalityAxis.get(p);
+      return axis && isAxisVar(axis);
+    });
+    if (hasVars) {
+      escapeDiagnostics.push({
+        diagnosticFlagCode: 'CardinalityDefaultedToOne',
+        message: `Cardinality group defaulted to one (signal) — no many evidence`,
+        stableKey: `CardinalityDefaultedToOne:${root}`,
+        ports: members,
+      });
+    }
   }
 
   // ---- Phase 4: ZipBroadcast fixpoint ----
@@ -550,5 +570,6 @@ export function solveCardinality(input: CardinalitySolveInput): CardinalitySolve
     cardinalities,
     instances: resolvedInstanceVars,
     errors,
+    diagnostics: escapeDiagnostics,
   };
 }

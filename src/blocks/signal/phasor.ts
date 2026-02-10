@@ -4,7 +4,7 @@
  * Phase accumulator that wraps at 1.0.
  */
 
-import { registerBlock } from '../registry';
+import { registerBlock, requireConfig } from '../registry';
 import { canonicalType, unitTurns, payloadStride, floatConst, requireInst, contractWrap01 } from '../../core/canonical-types';
 import { FLOAT } from '../../core/canonical-types';
 import { OpCode, stableStateId } from '../../compiler/ir/types';
@@ -37,7 +37,8 @@ registerBlock({
       throw new Error('Phasor requires frequency signal input');
     }
 
-    const initialPhase = (config?.initialPhase as number);
+    const cfg = config ?? {};
+    const initialPhase = requireConfig<number>(cfg, 'initialPhase', 'number');
     const outType = ctx.outTypes[0];
 
     // Symbolic state key

@@ -209,7 +209,7 @@ export function getPortType(
   const slots = direction === 'input' ? blockDef.inputs : blockDef.outputs;
   const slot = slots[portId];
   if (!slot) {
-    console.warn(`Port '${portId}' not found in block def for '${block.type}'`);
+    console.error(`Port '${portId}' not found in block def for '${block.type}'`);
     return null;
   }
   return slot.type ?? null;
@@ -230,7 +230,7 @@ export function getPortTypeFromBlockType(
   const slots = direction === 'input' ? blockDef.inputs : blockDef.outputs;
   const slot = slots[portId];
   if (!slot) {
-    console.warn(`Port '${portId}' not found in block def for '${blockType}'`);
+    console.error(`Port '${portId}' not found in block def for '${blockType}'`);
     return null;
   }
   return slot.type ?? null;

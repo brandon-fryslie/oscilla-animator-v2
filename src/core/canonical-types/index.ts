@@ -131,10 +131,12 @@ export {
   canonicalType,
   canonicalSignal,
   canonicalField,
+  canonicalFieldDef,
   canonicalEvent,
   canonicalConst,
   requireManyInstance,
   withInstance,
+  UNBOUND_INSTANCE,
 } from './canonical-type';
 
 export {

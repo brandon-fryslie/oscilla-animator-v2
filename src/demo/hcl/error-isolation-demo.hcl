@@ -24,6 +24,7 @@ patch "Error Isolation Demo" {
     rx = 0.03
     ry = 0.03
     outputs {
+
       shape = instances.element
     }
   }

@@ -4,11 +4,11 @@
  * Reduce a field to a scalar using an aggregation operation.
  */
 
-import { registerBlock, ALL_CONCRETE_PAYLOADS } from '../registry';
-import { instanceId as makeInstanceId, domainTypeId as makeDomainTypeId } from '../../core/ids';
-import { canonicalType, payloadStride, type PayloadType, requireInst } from '../../core/canonical-types';
-import { unitVar, payloadVar, inferType, inferField } from '../../core/inference-types';
+import { registerBlock, ALL_CONCRETE_PAYLOADS, requireConfigEnum } from '../registry';
+import { canonicalType, payloadStride, type PayloadType, requireInst, INT } from '../../core/canonical-types';
+import { unitVar, payloadVar, inferType, inferFieldDef } from '../../core/inference-types';
 import { DOMAIN_SHAPE } from '../../core/domain-registry';
+import { defaultSourceConst } from '../../types';
 
 registerBlock({
   type: 'Reduce',
@@ -38,7 +38,23 @@ registerBlock({
   inputs: {
     field: {
       label: 'Field',
-      type: inferField(payloadVar('reduce_payload'), unitVar('reduce_in'), { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') })
+      type: inferFieldDef(payloadVar('reduce_payload'), unitVar('reduce_in'))
+    },
+    op: {
+      label: 'Operation',
+      type: canonicalType(INT),
+      defaultValue: 'sum',
+      defaultSource: defaultSourceConst(0),
+      exposedAsPort: false,
+      uiHint: {
+        kind: 'select',
+        options: [
+          { value: 'sum', label: 'Sum' },
+          { value: 'avg', label: 'Average' },
+          { value: 'min', label: 'Min' },
+          { value: 'max', label: 'Max' },
+        ],
+      },
     },
   },
   outputs: {
@@ -62,10 +78,7 @@ registerBlock({
       throw new Error('Reduce field input must be a field');
     }
 
-    const op = (config?.op as 'min' | 'max' | 'sum' | 'avg');
-    if (!['min', 'max', 'sum', 'avg'].includes(op)) {
-      throw new Error(`Invalid reduce operation: ${op}`);
-    }
+    const op = requireConfigEnum(config!, 'op', ['min', 'max', 'sum', 'avg'] as const);
 
     // Create reduce signal expression
     const sigId = ctx.b.reduce(

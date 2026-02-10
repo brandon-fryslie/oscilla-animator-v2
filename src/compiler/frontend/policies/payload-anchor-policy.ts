@@ -104,12 +104,9 @@ export const payloadAnchorPolicyV1: PayloadAnchorPolicyInterface = {
         replaceEdges: [{ remove: edge.id, add: addEdges }],
         diagnostics: [
           {
-            kind: 'CheaterAdapterUsed',
-            subKind: 'PayloadAnchorFloat',
-            obligationId: obligation.id,
-            edgeKey,
-            insertedBlockIds: [blockId],
+            diagnosticFlagCode: 'CheaterAdapterUsed',
             message: `Payload anchor inserted on ${edgeKey}: polymorphic chain anchored to float`,
+            stableKey: `CheaterAdapterUsed:${edgeKey}`,
           },
         ],
       },

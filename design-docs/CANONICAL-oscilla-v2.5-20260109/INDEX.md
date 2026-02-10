@@ -5,7 +5,7 @@ updated: 2026-02-09T05:15:00Z
 approved_by: Brandon Fryslie
 approval_method: full_walkthrough + domain_system_reconceptualization + cardinality_generic_integration + payload_generic_integration + kernel_roadmap_integration + renderer_architecture_integration + layout_system_integration + camera_projection_integration + canonical_types_integration
 source_documents: 117
-topics: 26
+topics: 27
 resolutions: 134
 update_history:
   - date: 2026-01-10T19:45:00Z
@@ -166,6 +166,11 @@ This condensed spec contains all invariants, glossary core terms, and T1 content
 | 20 | [Type Validation](./topics/20-type-validation.md) | Enforcement gate and guardrails | validateAxes, AxisViolation, 17 Guardrails, BindingMismatchError |
 | 21 | [Adapter System](./topics/21-adapter-system.md) | Type pattern matching and transforms | TypePattern, ExtentPattern, ExtentTransform, AdapterSpec |
 | 22 | [External Input System](./topics/22-external-input-system.md) | Unified channel-based input (MIDI/OSC/audio/keyboard/mouse) | ExternalChannelSnapshot, ChannelKind, ExternalInput, frame-boundary commit |
+| 23 | [Color System](./topics/23-color-system.md) | Color space as UnitType extension | HSL/RGBA01 units, Extract/Construct, ColorPicker, HslToRgba adapter |
+| 24 | [Multi-Component Signals](./topics/24-multi-component-signals.md) | Stride-aware evaluation and slot allocation | SlotMetaEntry, Hybrid A+ evaluation, sampleability, HistoryService guard |
+| 25 | [Pure Lowering](./topics/25-pure-lowering.md) | Purity contract for block lowering | LowerSandbox, effects-as-data, macro lowering, DefaultPolicyTable |
+| 26 | [Lens System](./topics/26-lens-system.md) | Port-attached value transformations | Lens as port decorator, 8 categories, minimal ship set |
+| 27 | [Obligation-Driven Normalization](./topics/27-obligation-normalization.md) | Fixpoint loop for graph normalization | Obligation abstraction, DefaultPolicyTable, anchor-based stable IDs |
 
 ## Recommended Reading Order
 
@@ -241,7 +246,7 @@ Looking for something specific? Here's where to find it:
 | PatchProfile, 2D/2.5D/3D profiles | [19-2_5d-profile.md](./topics/19-2_5d-profile.md) |
 | Depth policy, bounded depth authoring | [19-2_5d-profile.md](./topics/19-2_5d-profile.md) |
 | Tilt-only camera, constrained camera controls | [19-2_5d-profile.md](./topics/19-2_5d-profile.md) |
-| UnitType (8 structured kinds) | [01-type-system.md](./topics/01-type-system.md) |
+| UnitType (6 structured kinds) | [01-type-system.md](./topics/01-type-system.md) |
 | Axis\<T,V\> | [01-type-system.md](./topics/01-type-system.md) |
 | deriveKind, tryDeriveKind | [01-type-system.md](./topics/01-type-system.md) |
 | InferenceCanonicalType, InferencePayloadType | [01-type-system.md](./topics/01-type-system.md) |
@@ -259,6 +264,11 @@ Looking for something specific? Here's where to find it:
 | ExternalChannelSnapshot, ExternalWriteBus, ChannelKind | [22-external-input-system.md](./topics/22-external-input-system.md) |
 | External input channels (mouse, keyboard, MIDI, OSC, audio) | [22-external-input-system.md](./topics/22-external-input-system.md) |
 | All term definitions | [GLOSSARY.md](./GLOSSARY.md) |
+| Color UnitType, HSL/RGBA01, color blocks | [23-color-system.md](./topics/23-color-system.md) |
+| SlotMetaEntry, stride allocation, sampleability | [24-multi-component-signals.md](./topics/24-multi-component-signals.md) |
+| LowerSandbox, pure lowering, macro lowering | [25-pure-lowering.md](./topics/25-pure-lowering.md) |
+| Lens, port decorators, lens categories | [26-lens-system.md](./topics/26-lens-system.md) |
+| Obligation-Driven Normalization, fixpoint loop | [27-obligation-normalization.md](./topics/27-obligation-normalization.md) |
 | All invariant rules (I1-I37) | [INVARIANTS.md](./INVARIANTS.md) |
 
 ## Appendices

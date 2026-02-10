@@ -134,6 +134,88 @@ This document introduced:
 
 ---
 
+---
+
+## Update 2026-02-09 Integration
+
+### Topic 23 (Color System)
+
+| Section | Sources |
+|---------|---------|
+| Color space as UnitType extension | `_new/colors/01-colors.md` |
+| Compatibility rules | `_new/colors/02-color-units.md` |
+| Block catalog | `_new/colors/01-colors.md` |
+| HSL→RGB conversion | `_new/colors/01-colors.md` |
+| Extract/Construct intrinsics | `_new/colors/01-colors.md` |
+
+### Topic 24 (Multi-Component Signals)
+
+| Section | Sources |
+|---------|---------|
+| Evaluation model | `_new/P0-Multi-Component-Signals.md`, `_new/MultiValueSignals.md` |
+| SlotMetaEntry | `_new/MultiValueSignals.md` |
+| Stride-aware allocation | `_new/MultiValueSignals.md` |
+| Sampleability | `_new/MultiValueSignals.md` |
+| Construct ValueExpr | `_new/MultiValueSignals.md` |
+
+### Topic 25 (Pure Lowering)
+
+| Section | Sources |
+|---------|---------|
+| LowerSandbox | `_new/pure-lowering-blocks/01-macro-lowering.md` |
+| Effects-as-data model | `_new/pure-lowering-blocks/01-macro-lowering.md` |
+| Purity enforcement | `_new/pure-lowering-blocks/_source_docs/04-keeping-them-pure.md` |
+| Macro lowering | `_new/pure-lowering-blocks/01-macro-lowering.md` |
+| DefaultPolicyTable | `_new/pure-lowering-blocks/01-macro-lowering.md`, `_new/01-obligations.md` |
+| Hybrid approach | `_new/pure-lowering-blocks/_source_docs/03-hybrid-approach.md` |
+
+### Topic 26 (Lens System)
+
+| Section | Sources |
+|---------|---------|
+| Lens concept | `_new/lenses/01-base-lenses.md` |
+| 8 categories | `_new/lenses/01-base-lenses.md` |
+| Minimal ship set | `_new/lenses/01-base-lenses.md` |
+| Lens vs adapter | `_new/lenses/01-base-lenses.md` |
+| Normalized unit policy | `_new/normalized-units.md` |
+
+### Topic 27 (Obligation-Driven Normalization)
+
+| Section | Sources |
+|---------|---------|
+| Obligation abstraction | `_new/01-obligations.md` |
+| Pipeline restructuring | `_new/01-obligations.md` |
+| ObligationKind | `_new/01-obligations.md` |
+| AnchorRef | `_new/01-obligations.md` |
+| Fixpoint loop architecture | `_new/01-obligations.md` |
+
+### Topic 01 Updates (Type System)
+
+| Section | Sources |
+|---------|---------|
+| UnitType removal (scalar) | Implementation verification (per MEMORY.md 2026-02-08) |
+| Cardinality type variables | `_new/01-cardinality-type-var.md` |
+| Normalized unit policy | `_new/normalized-units.md` |
+
+### Topic 04 Updates (Compilation)
+
+| Section | Sources |
+|---------|---------|
+| Pure lowering reference | Topic 25 cross-reference |
+| Stride-aware slot allocation | `_new/MultiValueSignals.md` |
+| DefaultSource policy | `_new/pure-lowering-blocks/01-macro-lowering.md` |
+| ODN pipeline description | `_new/01-obligations.md` |
+
+### Topic 05 Updates (Runtime)
+
+| Section | Sources |
+|---------|---------|
+| Multi-component evaluation | `_new/P0-Multi-Component-Signals.md`, `_new/MultiValueSignals.md` |
+| HistoryService guard | `_new/MultiValueSignals.md` |
+| Debug sample API | `_new/MultiValueSignals.md` |
+
+---
+
 ## Source File List
 
 All files from `design-docs/spec/` (archived to `spec-archived-20260109-160000/`):
@@ -190,3 +272,20 @@ All files from `design-docs/spec/` (archived to `spec-archived-20260109-160000/`
 - `Rail.md`
 - `Rail-Modulation-and-Feedback.md`
 - `Unified-Transforms-Architecture.md`
+
+### Update 2026-02-09 Source Files
+
+All files from `design-docs/_new/` (archived to `_new-archived-20260209/`):
+
+**Processed and integrated:**
+- `01-cardinality-type-var.md` → Topic 01 (Type System)
+- `01-obligations.md` → Topic 27 (Obligation-Driven Normalization)
+- `P0-Multi-Component-Signals.md` → Topic 24 (Multi-Component Signals)
+- `MultiValueSignals.md` → Topic 24 (Multi-Component Signals)
+- `normalized-units.md` → Topics 01, 26 (Type System, Lens System)
+- `colors/01-colors.md` → Topic 23 (Color System)
+- `colors/02-color-units.md` → Topic 23 (Color System)
+- `lenses/01-base-lenses.md` → Topic 26 (Lens System)
+- `pure-lowering-blocks/01-macro-lowering.md` → Topic 25 (Pure Lowering)
+- `pure-lowering-blocks/_source_docs/03-hybrid-approach.md` → Topic 25 (Pure Lowering)
+- `pure-lowering-blocks/_source_docs/04-keeping-them-pure.md` → Topic 25 (Pure Lowering)

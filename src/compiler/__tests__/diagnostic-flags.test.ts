@@ -28,10 +28,10 @@ describe('DIAGNOSTIC_FLAGS registry', () => {
     expect(new Set(codes).size).toBe(codes.length);
   });
 
-  it('ConflictingUnits defaults to warn', () => {
+  it('ConflictingUnits defaults to error', () => {
     const flag = DIAGNOSTIC_FLAGS.find((f) => f.code === 'ConflictingUnits');
     expect(flag).toBeDefined();
-    expect(flag!.defaultSeverity).toBe('warn');
+    expect(flag!.defaultSeverity).toBe('error');
   });
 });
 

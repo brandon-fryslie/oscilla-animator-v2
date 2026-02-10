@@ -6,11 +6,11 @@
  */
 
 import { registerBlock, ALL_CONCRETE_PAYLOADS } from '../registry';
-import { instanceId as makeInstanceId, domainTypeId as makeDomainTypeId } from '../../core/ids';
-import { canonicalType, canonicalField, payloadStride, type PayloadType, boolConst, withInstance, instanceRef, requireInst, unitNone, contractClamp01 } from '../../core/canonical-types';
+import { canonicalType, canonicalFieldDef, payloadStride, type PayloadType, boolConst, withInstance, instanceRef, requireInst, unitNone, contractClamp01 } from '../../core/canonical-types';
 import { FLOAT, INT, BOOL } from '../../core/canonical-types';
 import { DOMAIN_CIRCLE } from '../../core/domain-registry';
 import { defaultSourceConst, defaultSource } from '../../types';
+import { resolveInputConstant } from '../lower-utils';
 
 registerBlock({
   type: 'Array',
@@ -54,15 +54,15 @@ registerBlock({
     },
   },
   outputs: {
-    elements: { label: 'Elements', type: canonicalField(FLOAT, { kind: 'none' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }, contractClamp01()) },
-    index: { label: 'Index', type: canonicalField(INT, { kind: 'none' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }, contractClamp01()) },
-    t: { label: 'T (0-1)', type: canonicalField(FLOAT, unitNone(), { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }, contractClamp01()) },
-    active: { label: 'Active', type: canonicalField(BOOL, { kind: 'none' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }, contractClamp01()) },
+    elements: { label: 'Elements', type: canonicalFieldDef(FLOAT, { kind: 'none' }, contractClamp01()) },
+    index: { label: 'Index', type: canonicalFieldDef(INT, { kind: 'none' }, contractClamp01()) },
+    t: { label: 'T (0-1)', type: canonicalFieldDef(FLOAT, unitNone(), contractClamp01()) },
+    active: { label: 'Active', type: canonicalFieldDef(BOOL, { kind: 'none' }, contractClamp01()) },
   },
-  lower: ({ ctx, inputsById, block }) => {
-    // Read count from port defaultSource (not config — count is an exposed port)
-    const port = block?.inputPorts.get('count');
-    const count = (port?.defaultSource?.params?.value as number); // Registry default
+  lower: ({ ctx, inputsById }) => {
+    const countInput = inputsById.count;
+    if (!countInput) throw new Error('Array: count input not wired — normalization bug');
+    const count = resolveInputConstant(ctx, countInput, 'count', { min: 1, max: 100000 });
     const elementInput = inputsById.element;
 
     // Validate element input

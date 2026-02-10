@@ -165,8 +165,14 @@ export function mapDebugMappings(patch: Patch, program: CompiledProgramIR): Debu
 
         if (slotId !== undefined) {
             const meta = program.slotMeta.find(m => m.slot === slotId);
-            const type = meta?.type || canonicalType(FLOAT);
-            const cardinality = portCardinality.get(sourceKey) || 'signal';
+            if (!meta?.type) {
+              throw new Error(`Slot ${slotId} has no type metadata — compiler bug`);
+            }
+            const type = meta.type;
+            const cardinality = portCardinality.get(sourceKey);
+            if (!cardinality) {
+              throw new Error(`Port ${sourceKey} has no cardinality metadata — type solver bug`);
+            }
 
             edgeMetaMap.set(edge.id, {
                 slotId,
@@ -217,7 +223,10 @@ export function mapDebugMappings(patch: Patch, program: CompiledProgramIR): Debu
     const portMetaMap = new Map<string, EdgeMetadata>();
     for (const [portKey, slotId] of targetToSlot.entries()) {
         const meta = program.slotMeta.find(m => m.slot === slotId);
-        const type = meta?.type || canonicalType(FLOAT);
+        if (!meta?.type) {
+          throw new Error(`Slot ${slotId} has no type metadata — compiler bug`);
+        }
+        const type = meta.type;
         const cardinality = portCardinality.get(portKey);
         if (!cardinality) throw new Error(`Port ${portKey} missing cardinality after type solve`);
         portMetaMap.set(portKey, { slotId, type, cardinality });

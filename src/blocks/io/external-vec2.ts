@@ -4,7 +4,7 @@
  * Read external channels as vec2 (channelBase.x, channelBase.y).
  */
 
-import { registerBlock } from '../registry';
+import { registerBlock, requireConfig } from '../registry';
 import { canonicalType, payloadStride, FLOAT, VEC2 } from '../../core/canonical-types';
 
 registerBlock({
@@ -39,7 +39,8 @@ registerBlock({
     position: { label: 'Position', type: canonicalType(VEC2) },
   },
   lower: ({ ctx, config }) => {
-    const channelBase = (config?.channelBase as string);
+    const cfg = config ?? {};
+    const channelBase = requireConfig<string>(cfg, 'channelBase', 'string');
 
     const xSig = ctx.b.external(`${channelBase}.x`, canonicalType(FLOAT));
     const ySig = ctx.b.external(`${channelBase}.y`, canonicalType(FLOAT));

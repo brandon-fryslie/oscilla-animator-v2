@@ -5,8 +5,7 @@
  */
 
 import { registerBlock } from '../registry';
-import { instanceId as makeInstanceId, domainTypeId as makeDomainTypeId } from '../../core/ids';
-import { canonicalField, payloadStride, FLOAT, INT } from '../../core/canonical-types';
+import { canonicalFieldDef, payloadStride, FLOAT, INT } from '../../core/canonical-types';
 
 registerBlock({
   type: 'DomainIndex',
@@ -22,8 +21,8 @@ registerBlock({
   },
   inputs: {},
   outputs: {
-    index: { label: 'Index', type: canonicalField(FLOAT, { kind: 'none' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }) },
-    indexInt: { label: 'Index (int)', type: canonicalField(INT, { kind: 'none' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }) },
+    index: { label: 'Index', type: canonicalFieldDef(FLOAT, { kind: 'none' }) },
+    indexInt: { label: 'Index (int)', type: canonicalFieldDef(INT, { kind: 'none' }) },
   },
   lower: ({ ctx }) => {
     // Get instance context from Array block or inferred from inputs

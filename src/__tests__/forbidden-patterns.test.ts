@@ -454,4 +454,66 @@ describe('Forbidden Patterns (Type System Invariants)', () => {
     });
 
   });
+
+  // =============================================================================
+  // Nullish Coalescing Audit - Config Access Patterns
+  // =============================================================================
+
+  describe('Config Access Patterns', () => {
+
+    it('no config?. in block lower() functions', () => {
+      const matches = grepSrc('config\\?\\.', 'src/blocks/');
+      const allowlist = [
+        /forbidden-patterns\.test\.ts/,  // This file
+        /\.test\./,                      // Test files
+        /__tests__/,                     // Test directories
+        /\/\/ OK:/,                      // Explicit exemption with reason
+      ];
+      const filtered = filterAllowlist(matches, allowlist);
+      expect(
+        filtered,
+        'Found unsafe config?. patterns in block lowering code.\n' +
+        'Use requireConfig() / requireConfigInt() / requireConfigEnum() instead.\n' +
+        'Found violations:\n' + filtered.join('\n')
+      ).toEqual([]);
+    });
+
+    it('no block.inputPorts access in block lower() functions', () => {
+      const matches = grepSrc('block\\.inputPorts', 'src/blocks/');
+      const allowlist = [
+        /forbidden-patterns\.test\.ts/,  // This file
+        /\.test\./,                      // Test files
+        /__tests__/,                     // Test directories
+        /registry\.ts/,                  // Block definition interface
+      ];
+      const filtered = filterAllowlist(matches, allowlist);
+      expect(
+        filtered,
+        'Found block.inputPorts access in block lowering code.\n' +
+        'Block lowering must only use inputsById and config.\n' +
+        'Found violations:\n' + filtered.join('\n')
+      ).toEqual([]);
+    });
+
+    it('no defaultSource reads in block lower() functions', () => {
+      const matches = grepSrc('defaultSource', 'src/blocks/');
+      const allowlist = [
+        /forbidden-patterns\.test\.ts/,  // This file
+        /\.test\./,                      // Test files
+        /__tests__/,                     // Test directories
+        /registry\.ts/,                  // InputDef/OutputDef type definitions
+        /adapter-spec\.ts/,              // Adapter type definitions
+        /import.*defaultSource/,         // Import statements (legitimate)
+        /defaultSource:/,                // InputDef field declarations (legitimate)
+      ];
+      const filtered = filterAllowlist(matches, allowlist);
+      expect(
+        filtered,
+        'Found defaultSource access in block lowering code.\n' +
+        'Defaults must be materialized by frontend normalization, not read in lowering.\n' +
+        'Found violations:\n' + filtered.join('\n')
+      ).toEqual([]);
+    });
+
+  });
 });

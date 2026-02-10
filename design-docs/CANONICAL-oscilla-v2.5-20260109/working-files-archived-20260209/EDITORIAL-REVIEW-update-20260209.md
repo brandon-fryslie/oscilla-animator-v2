@@ -23,6 +23,8 @@ The main concern is **incomplete integration**: several resolution actions have 
 
 **Verdict**: Approve with concerns — 3 blocking issues (all fixable without re-review) + 4 non-blocking.
 
+**UPDATE 2026-02-09**: All 3 blocking concerns (B1, B2, B3) and non-blocking concerns (N1, N2) have been fixed. See applied changes below.
+
 ---
 
 ## What I Like

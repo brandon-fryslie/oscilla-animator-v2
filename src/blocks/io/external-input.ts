@@ -4,7 +4,7 @@
  * Read a named external channel as a float signal.
  */
 
-import { registerBlock } from '../registry';
+import { registerBlock, requireConfig } from '../registry';
 import { canonicalType, payloadStride, floatConst, intConst, FLOAT } from '../../core/canonical-types';
 import { OpCode } from '../../compiler/ir/types';
 import { defaultSourceConst } from '../../types';
@@ -53,7 +53,8 @@ registerBlock({
     value: { label: 'Value', type: canonicalType(FLOAT) },
   },
   lower: ({ ctx, config }) => {
-    const channel = (config?.channel as string);
+    const cfg = config ?? {};
+    const channel = requireConfig<string>(cfg, 'channel', 'string');
     const sig = ctx.b.external(channel, canonicalType(FLOAT));
     const outType = ctx.outTypes[0];
 

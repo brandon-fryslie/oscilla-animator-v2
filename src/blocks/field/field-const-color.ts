@@ -5,8 +5,8 @@
  */
 
 import { registerBlock, ALL_CONCRETE_PAYLOADS } from '../registry';
-import { instanceId as makeInstanceId, domainTypeId as makeDomainTypeId } from '../../core/ids';
-import { canonicalType, canonicalField, floatConst, requireInst, payloadStride, unitNone, contractClamp01 } from '../../core/canonical-types';
+import { domainTypeId as makeDomainTypeId } from '../../core/ids';
+import { canonicalType, canonicalField, canonicalFieldDef, floatConst, requireInst, payloadStride, unitNone, contractClamp01 } from '../../core/canonical-types';
 import { FLOAT, COLOR } from '../../core/canonical-types';
 
 registerBlock({
@@ -29,14 +29,14 @@ registerBlock({
     semantics: 'typeSpecific',
   },
   inputs: {
-    elements: { label: 'Elements', type: canonicalField(FLOAT, { kind: 'none' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }) },
+    elements: { label: 'Elements', type: canonicalFieldDef(FLOAT, { kind: 'none' }) },
     r: { label: 'Red', type: canonicalType(FLOAT, unitNone(), undefined, contractClamp01()), defaultValue: 1.0, exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
     g: { label: 'Green', type: canonicalType(FLOAT, unitNone(), undefined, contractClamp01()), defaultValue: 1.0, exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
     b: { label: 'Blue', type: canonicalType(FLOAT, unitNone(), undefined, contractClamp01()), defaultValue: 1.0, exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
     a: { label: 'Alpha', type: canonicalType(FLOAT, unitNone(), undefined, contractClamp01()), defaultValue: 1.0, exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
   },
   outputs: {
-    color: { label: 'Color', type: canonicalField(COLOR, { kind: 'none' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }) },
+    color: { label: 'Color', type: canonicalFieldDef(COLOR, { kind: 'none' }) },
   },
   lower: ({ ctx, inputsById }) => {
     const elementsInput = inputsById.elements;
