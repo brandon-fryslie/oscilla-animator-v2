@@ -23,6 +23,7 @@ import type { InstanceVarId } from '../../../core/ids';
 import type { DraftPortKey } from '../type-facts';
 import type { ConstraintOrigin } from '../payload-unit/solve';
 import type { FixpointDiagnostic } from '../fixpoint-diagnostic';
+import { isSubdomainOf } from '../../../core/domain-registry';
 
 // =============================================================================
 // InstanceTerm (solver-internal)
@@ -244,9 +245,22 @@ class InstanceUF {
     const va = this.values.get(ra)!;
     const vb = this.values.get(rb)!;
 
-    // Two concrete instances that differ → conflict
+    // Two concrete instances — check domain hierarchy before declaring conflict
+    // [LAW:one-source-of-truth] Domain hierarchy in domain-registry is the authority for subtype compatibility.
     if (va.kind === 'inst' && vb.kind === 'inst') {
       if (va.ref.domainTypeId !== vb.ref.domainTypeId || va.ref.instanceId !== vb.ref.instanceId) {
+        // Check if domains are related via hierarchy — prefer the more specific (child) domain
+        const aIsSubOfB = isSubdomainOf(va.ref.domainTypeId, vb.ref.domainTypeId);
+        const bIsSubOfA = isSubdomainOf(vb.ref.domainTypeId, va.ref.domainTypeId);
+        if (aIsSubOfB) {
+          // a is more specific — keep a as winner
+          this.nodes.get(rb)!.parent = ra;
+          return null;
+        } else if (bIsSubOfA) {
+          // b is more specific — keep b as winner
+          this.nodes.get(ra)!.parent = rb;
+          return null;
+        }
         return `Instance conflict: ${va.ref.domainTypeId}:${va.ref.instanceId} vs ${vb.ref.domainTypeId}:${vb.ref.instanceId}`;
       }
     }

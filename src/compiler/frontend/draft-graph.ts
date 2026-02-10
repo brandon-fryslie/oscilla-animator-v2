@@ -12,6 +12,7 @@
  */
 
 import type { BlockId, PortId, DefaultSource, BlockRole } from '../../types';
+import { defaultSourceConst } from '../../types';
 import type { Block, Edge, Patch } from '../../graph/Patch';
 import { getBlockDefinition, type InputDef } from '../../blocks/registry';
 import type { Obligation, ObligationId } from './obligations';
@@ -53,7 +54,11 @@ export type DraftEdgeRole =
 export interface DraftBlock {
   readonly id: string;
   readonly type: string;
+  /** Config-only params (exposedAsPort: false). Exposed port values live in portDefaults. */
   readonly params: Readonly<Record<string, unknown>>;
+  /** Per-instance default source overrides for exposed ports (from Patch params or InputPort.defaultSource). */
+  // [LAW:single-enforcer] buildDraftGraph is the single boundary that partitions user params into config vs port defaults.
+  readonly portDefaults: Readonly<Record<string, DefaultSource>>;
   readonly origin: BlockOrigin;
   /** Display name (for diagnostics and UI bridge) */
   readonly displayName: string;
@@ -115,11 +120,9 @@ function missingInputObligationId(blockId: string, portName: string): Obligation
 // Build Diagnostics
 // =============================================================================
 
-export interface BuildDiagnostic {
-  readonly kind: 'MissingRequiredInput';
-  readonly blockId: string;
-  readonly portName: string;
-}
+export type BuildDiagnostic =
+  | { readonly kind: 'MissingRequiredInput'; readonly blockId: string; readonly portName: string }
+  | { readonly kind: 'UnknownParam'; readonly blockId: string; readonly portName: string };
 
 export interface BuildDraftGraphResult {
   readonly graph: DraftGraph;
@@ -145,13 +148,62 @@ export function buildDraftGraph(patch: Patch): BuildDraftGraphResult {
   const obligations: Obligation[] = [];
   const diagnostics: BuildDiagnostic[] = [];
 
-  // Convert blocks
+  // Convert blocks — partition params into config vs portDefaults
+  // [LAW:single-enforcer] This is the one place that separates user params from port defaults.
   for (const [_blockId, block] of patch.blocks) {
     const origin: BlockOrigin = classifyBlockOrigin(block);
+    const blockDef = getBlockDefinition(block.type);
+
+    const filteredParams: Record<string, unknown> = {};
+    const portDefaults: Record<string, DefaultSource> = {};
+
+    if (blockDef) {
+      // Partition user-provided params into config vs portDefaults
+      for (const [key, val] of Object.entries(block.params)) {
+        const inputDef = blockDef.inputs[key];
+        if (!inputDef) {
+          // Unknown key — emit diagnostic, don't pass through silently
+          diagnostics.push({ kind: 'UnknownParam', blockId: block.id, portName: key });
+          continue;
+        }
+        if (inputDef.exposedAsPort === false) {
+          // Config param — keep in params
+          filteredParams[key] = val;
+        } else {
+          // Exposed port — extract to portDefaults as a Const default source
+          portDefaults[key] = defaultSourceConst(val);
+        }
+      }
+
+      // Apply config defaults for config-only inputs not already in params.
+      // HCL deserialization (patch-from-ast.ts) creates blocks without config defaults;
+      // PatchBuilder.addBlock() applies them. This is the single enforcer that ensures
+      // config defaults are always present regardless of Patch creation path.
+      // [LAW:single-enforcer] Config defaults applied here, not scattered across HCL/PatchBuilder/etc.
+      for (const [inputId, inputDef] of Object.entries(blockDef.inputs)) {
+        if (inputDef.exposedAsPort === false && inputDef.defaultValue !== undefined) {
+          if (!(inputId in filteredParams)) {
+            filteredParams[inputId] = inputDef.defaultValue;
+          }
+        }
+      }
+
+      // Check InputPort.defaultSource overrides (from setPortDefault) — these take priority
+      for (const [portId, inputPort] of block.inputPorts) {
+        if (inputPort.defaultSource) {
+          portDefaults[portId] = inputPort.defaultSource;
+        }
+      }
+    } else {
+      // Unknown block type — pass params through as-is (error will be caught elsewhere)
+      Object.assign(filteredParams, block.params);
+    }
+
     blocks.push({
       id: block.id,
       type: block.type,
-      params: block.params,
+      params: filteredParams,
+      portDefaults,
       origin,
       displayName: block.displayName,
       domainId: block.domainId,
@@ -203,7 +255,7 @@ export function buildDraftGraph(patch: Patch): BuildDraftGraphResult {
           blockId,
         },
         status: { kind: 'open' },
-        deps: [{ kind: 'portCanonicalizable', port: { blockId, port: inputId, dir: 'in' } }],
+        deps: [], // [LAW:dataflow-not-control-flow] policy idempotency guard handles wired ports; no need to gate on type resolution
         policy: { name: 'defaultSources.v1', version: 1 },
         debug: { createdBy: 'buildDraftGraph' },
       });

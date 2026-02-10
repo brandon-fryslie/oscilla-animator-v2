@@ -171,7 +171,7 @@ export function compileFrontend(patch: Patch, options?: FrontendOptions): Fronte
 
           // Check if there's an inbound edge for this required input
           const hasInboundEdge = fixpointResult.strict.graph.edges.some(
-            (e: any) => e.toBlock === block.id && e.toPort === portId
+            (e) => e.to.blockId === block.id && e.to.port === portId
           );
           if (!hasInboundEdge) {
             errors.push({

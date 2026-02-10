@@ -44,6 +44,7 @@ function makeBlock(id: string, type: string): DraftBlock {
     id,
     type,
     params: {},
+    portDefaults: {},
     origin: 'user',
     displayName: type,
     domainId: null,

@@ -102,6 +102,7 @@ export const adapterPolicyV1: AdapterPolicyInterface = {
         id: blockId,
         type: step.blockType,
         params: {},
+        portDefaults: {},
         origin: { kind: 'elaboration', obligationId: obligation.id, role },
         displayName: `${step.blockType} (adapter)`,
         domainId,

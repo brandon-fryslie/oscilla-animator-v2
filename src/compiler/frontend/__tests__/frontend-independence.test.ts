@@ -61,7 +61,7 @@ describe('Frontend Independence', () => {
         const time = b.addBlock('InfiniteTimeRoot');
         b.setPortDefault(time, 'periodAMs', 1000);
         const osc = b.addBlock('Oscillator');
-        b.setPortDefault(osc, 'mode', 0);
+        b.setConfig(osc, 'mode', 0);
         b.wire(time, 'phaseA', osc, 'phase');
       });
 
@@ -206,8 +206,10 @@ describe('Frontend Independence', () => {
       });
     });
 
-    it('reports illegal cycles without backend failure', () => {
-      // Create an instantaneous illegal cycle (no delay)
+    it('auto-resolves cycles via cycle break policy (UnitDelay insertion)', () => {
+      // Create an instantaneous cycle: add1 -> add2 -> add1
+      // The cycle break policy automatically inserts UnitDelay blocks
+      // to convert illegal instantaneous cycles into legal feedback loops.
       const patch = buildPatch((b) => {
         b.addBlock('InfiniteTimeRoot');
         const add1 = b.addBlock('Add');
@@ -215,7 +217,6 @@ describe('Frontend Independence', () => {
         const c = b.addBlock('Const');
         b.setConfig(c, 'value', 1);
 
-        // Instantaneous cycle: add1 -> add2 -> add1
         b.wire(add1, 'out', add2, 'a');
         b.wire(add2, 'out', add1, 'a');
         b.wire(c, 'out', add1, 'b');
@@ -223,21 +224,21 @@ describe('Frontend Independence', () => {
       });
 
       const result = compileFrontend(patch);
-
-      // Frontend should succeed but report cycle as illegal
       const { cycleSummary, backendReady } = result;
 
-      // Should detect illegal cycle
-      expect(cycleSummary.hasIllegalCycles).toBe(true);
+      // Cycle break policy inserted UnitDelay → cycle is now legal feedback
+      expect(cycleSummary.hasIllegalCycles).toBe(false);
+      expect(backendReady).toBe(true);
 
-      // Backend should NOT be ready
-      expect(backendReady).toBe(false);
+      // UnitDelay blocks were inserted
+      const unitDelays = result.typedPatch.blocks.filter(b => b.type === 'UnitDelay');
+      expect(unitDelays.length).toBeGreaterThan(0);
 
-      // Should have at least one illegal cycle
-      const illegalCycles = cycleSummary.sccs.filter(
-        (scc) => scc.legality === 'instantaneous-illegal'
+      // Cycle is classified as legal-feedback (has state boundary)
+      const feedbackCycles = cycleSummary.sccs.filter(
+        (scc) => scc.legality === 'legal-feedback' && scc.classification === 'cyclic'
       );
-      expect(illegalCycles.length).toBeGreaterThan(0);
+      expect(feedbackCycles.length).toBeGreaterThan(0);
     });
   });
 
@@ -261,8 +262,9 @@ describe('Frontend Independence', () => {
       expect(errors.length).toBe(0);
     });
 
-    it('sets backendReady=false for illegal cycles', () => {
-      // Already tested in cycle classification above
+    it('auto-resolves illegal cycles by inserting UnitDelay (cycle break policy)', () => {
+      // The cycle break policy automatically inserts UnitDelay blocks
+      // to convert illegal instantaneous cycles into legal feedback loops.
       const patch = buildPatch((b) => {
         b.addBlock('InfiniteTimeRoot');
         const add1 = b.addBlock('Add');
@@ -274,7 +276,13 @@ describe('Frontend Independence', () => {
 
       const result = compileFrontend(patch);
 
-      expect(result.backendReady).toBe(false);
+      // Cycle is auto-broken → backend can proceed
+      expect(result.backendReady).toBe(true);
+      // Cycle classified as legal feedback (UnitDelay provides state boundary)
+      expect(result.cycleSummary.hasIllegalCycles).toBe(false);
+      // UnitDelay blocks were inserted by cycle break policy
+      const unitDelays = result.typedPatch.blocks.filter(b => b.type === 'UnitDelay');
+      expect(unitDelays.length).toBeGreaterThan(0);
     });
 
     it('sets backendReady=false for type resolution errors', () => {

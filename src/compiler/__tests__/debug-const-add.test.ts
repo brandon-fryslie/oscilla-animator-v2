@@ -94,7 +94,7 @@ describe('Debug fixpoint harness', () => {
       b.setPortDefault(time, 'periodAMs', 1000);
       b.setPortDefault(time, 'periodBMs', 2000);
       const osc = b.addBlock('Oscillator');
-      b.setPortDefault(osc, 'mode', 0);
+      b.setConfig(osc, 'mode', 0);
       b.wire(time, 'phaseA', osc, 'phase');
     });
 
@@ -112,21 +112,18 @@ describe('Debug fixpoint harness', () => {
     const solverResult = traceConstraintsAndSolver('Expanded graph', fixpoint.graph);
 
     // Verify: each Const block's var resolution is independent
-    // periodAMs/periodBMs Consts should resolve to float, mode Const should resolve to int
+    // periodAMs/periodBMs Consts should resolve to float (mode is config, no Const block created)
     for (const [key, payload] of solverResult.portPayloads) {
       if (key.includes('_ds_b0_periodAMs') || key.includes('_ds_b0_periodBMs')) {
         expect(payload.kind).toBe('float');
       }
-      if (key.includes('_ds_b1_mode')) {
-        expect(payload.kind).toBe('int');
-      }
     }
 
     // Verify: var-level substitution map has distinct entries per block
+    // mode has exposedAsPort: false → config param, no Const block → 2 scoped vars (periodAMs, periodBMs)
     const varKeys = [...solverResult.payloads.keys()];
     const constPayloadVars = varKeys.filter(k => k.includes('const_payload'));
-    // Should have 3 distinct scoped vars (one per Const instance)
-    expect(constPayloadVars.length).toBe(3);
+    expect(constPayloadVars.length).toBe(2);
 
     // Full frontend should succeed
     const result = compileFrontend(patch);

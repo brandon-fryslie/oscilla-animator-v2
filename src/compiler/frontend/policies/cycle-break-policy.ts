@@ -47,6 +47,7 @@ export const cycleBreakPolicyV1: CycleBreakPolicyInterface = {
         id: blockId,
         type: 'UnitDelay',
         params: {},
+        portDefaults: {},
         origin: { kind: 'elaboration', obligationId: obligation.id, role },
         displayName: 'UnitDelay (cycle break)',
         domainId: sourceBlock?.domainId ?? null,

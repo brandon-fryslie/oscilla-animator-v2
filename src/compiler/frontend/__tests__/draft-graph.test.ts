@@ -117,18 +117,17 @@ describe('buildDraftGraph', () => {
     expect(g.obligations).toEqual([]);
   });
 
-  it('obligation deps reference the correct port', () => {
+  it('obligation deps are empty (policy idempotency handles gating)', () => {
     const patch = buildPatch((b) => {
       b.addBlock('Add');
     });
 
     const { graph: g } = buildDraftGraph(patch);
 
+    // [LAW:dataflow-not-control-flow] No deps — obligations fire immediately;
+    // the policy's idempotency guard (hasEdge check) handles already-wired ports.
     for (const obl of g.obligations) {
-      expect(obl.deps.length).toBe(1);
-      expect(obl.deps[0].kind).toBe('portCanonicalizable');
-      // Port should match obligation anchor
-      expect(obl.deps[0].port).toEqual(obl.anchor.port);
+      expect(obl.deps).toEqual([]);
     }
   });
 });

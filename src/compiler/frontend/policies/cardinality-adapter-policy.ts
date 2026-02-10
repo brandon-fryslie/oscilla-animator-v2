@@ -46,6 +46,7 @@ export const cardinalityAdapterPolicyV1: CardinalityAdapterPolicyInterface = {
         id: blockId,
         type: 'Broadcast',
         params: {},
+        portDefaults: {},
         origin: { kind: 'elaboration', obligationId: obligation.id, role },
         displayName: 'Broadcast (cardinality adapter)',
         domainId: sourceBlock?.domainId ?? null,

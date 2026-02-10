@@ -30,11 +30,13 @@ import type { InputDef } from '../../../blocks/registry';
  * Resolve the effective default source strategy for an input port.
  *
  * Resolution order:
- * 1. InputDef.defaultSource (port-level spec on block definition)
- * 2. (Future: domain-wide registry lookup by type shape — not implemented yet)
- * 3. Polymorphic DefaultSource block fallback
+ * 1. Per-instance portDefaults (from HCL params or setPortDefault — lives on DraftBlock)
+ * 2. InputDef.defaultSource (port-level spec on block definition)
+ * 3. (Future: domain-wide registry lookup by type shape — not implemented yet)
+ * 4. Polymorphic DefaultSource block fallback
  */
-function resolveDefaultStrategy(inputDef: InputDef): DefaultSource {
+function resolveDefaultStrategy(inputDef: InputDef, perInstance: DefaultSource | undefined): DefaultSource {
+  if (perInstance) return perInstance;
   if (inputDef.defaultSource) return inputDef.defaultSource;
   return { blockType: 'DefaultSource', output: 'out', params: {} };
 }
@@ -91,7 +93,9 @@ export const defaultSourcePolicyV1: DefaultSourcePolicyInterface = {
     }
 
     // Resolve effective default source strategy
-    const effectiveDefault = resolveDefaultStrategy(inputDef);
+    // [LAW:single-enforcer] Per-instance portDefaults (from HCL/setPortDefault) take priority
+    const perInstanceDefault = targetBlock.portDefaults[targetPortId];
+    const effectiveDefault = resolveDefaultStrategy(inputDef, perInstanceDefault);
 
     // Build the elaboration plan
     return buildDefaultSourcePlan(
@@ -143,6 +147,7 @@ function buildDefaultSourcePlan(
     id: derivedBlockId,
     type: ds.blockType,
     params: ds.params ?? {},
+    portDefaults: {},
     origin: { kind: 'elaboration', obligationId, role },
     displayName: `${ds.blockType} (default)`,
     domainId: targetBlock.domainId,

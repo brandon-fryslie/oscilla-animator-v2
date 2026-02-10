@@ -57,8 +57,8 @@ describe('createCardinalityAdapterObligations', () => {
     // but to is also in zipPorts (it's part of the conflicting zipBroadcast).
     const g = makeGraph(
       [
-        { id: 'sig', type: 'Sig', params: {}, origin: 'user', displayName: 'Sig', domainId: null, role: { kind: 'user', meta: {} } },
-        { id: 'phasor', type: 'Phasor', params: {}, origin: 'user', displayName: 'Phasor', domainId: null, role: { kind: 'user', meta: {} } },
+        { id: 'sig', type: 'Sig', params: {}, portDefaults: {}, origin: 'user', displayName: 'Sig', domainId: null, role: { kind: 'user', meta: {} } },
+        { id: 'phasor', type: 'Phasor', params: {}, portDefaults: {}, origin: 'user', displayName: 'Phasor', domainId: null, role: { kind: 'user', meta: {} } },
       ],
       [
         {
@@ -95,8 +95,8 @@ describe('createCardinalityAdapterObligations', () => {
   it('skips edges with elaboration origin', () => {
     const g = makeGraph(
       [
-        { id: 'sig', type: 'Sig', params: {}, origin: 'user', displayName: 'Sig', domainId: null, role: { kind: 'user', meta: {} } },
-        { id: 'phasor', type: 'Phasor', params: {}, origin: 'user', displayName: 'Phasor', domainId: null, role: { kind: 'user', meta: {} } },
+        { id: 'sig', type: 'Sig', params: {}, portDefaults: {}, origin: 'user', displayName: 'Sig', domainId: null, role: { kind: 'user', meta: {} } },
+        { id: 'phasor', type: 'Phasor', params: {}, portDefaults: {}, origin: 'user', displayName: 'Phasor', domainId: null, role: { kind: 'user', meta: {} } },
       ],
       [
         {
@@ -129,9 +129,9 @@ describe('createCardinalityAdapterObligations', () => {
   it('selects smallest semantic key when multiple candidates exist', () => {
     const g = makeGraph(
       [
-        { id: 'sig', type: 'Sig', params: {}, origin: 'user', displayName: 'Sig', domainId: null, role: { kind: 'user', meta: {} } },
-        { id: 'a', type: 'A', params: {}, origin: 'user', displayName: 'A', domainId: null, role: { kind: 'user', meta: {} } },
-        { id: 'b', type: 'B', params: {}, origin: 'user', displayName: 'B', domainId: null, role: { kind: 'user', meta: {} } },
+        { id: 'sig', type: 'Sig', params: {}, portDefaults: {}, origin: 'user', displayName: 'Sig', domainId: null, role: { kind: 'user', meta: {} } },
+        { id: 'a', type: 'A', params: {}, portDefaults: {}, origin: 'user', displayName: 'A', domainId: null, role: { kind: 'user', meta: {} } },
+        { id: 'b', type: 'B', params: {}, portDefaults: {}, origin: 'user', displayName: 'B', domainId: null, role: { kind: 'user', meta: {} } },
       ],
       [
         {

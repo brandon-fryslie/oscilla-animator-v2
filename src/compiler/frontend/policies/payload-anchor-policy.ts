@@ -62,6 +62,7 @@ export const payloadAnchorPolicyV1: PayloadAnchorPolicyInterface = {
         id: blockId,
         type: 'Adapter_PayloadAnchorFloat',
         params: {},
+        portDefaults: {},
         origin: { kind: 'elaboration', obligationId: obligation.id, role },
         displayName: 'Float Anchor (cheater)',
         domainId: sourceBlock?.domainId ?? null,

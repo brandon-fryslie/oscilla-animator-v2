@@ -103,11 +103,12 @@ export function finalizeNormalizationFixpoint(
     lastFacts = facts;
     lastSolveDiagnostics = solveDiagnostics;
 
-    // 2) Create derived obligations (pure) — adapter + cardinality adapter + cycle break obligations
+    // 2) Create derived obligations (pure) — adapter + cardinality adapter + cycle break + missing input obligations
     const derivedObs = createDerivedObligations(g, facts);
     const cardObs = createCardinalityAdapterObligations(g, cardinalityConflicts);
     const cycleObs = createCycleBreakObligations(g, registry);
-    const { graph: g2, added } = addObligationsIfMissing(g, [...derivedObs, ...cardObs, ...cycleObs]);
+    const missingInputObs = createMissingInputObligations(g, registry);
+    const { graph: g2, added } = addObligationsIfMissing(g, [...derivedObs, ...cardObs, ...cycleObs, ...missingInputObs]);
     if (added > 0) didMutateGraph = true;
     g = g2;
 
@@ -589,4 +590,66 @@ function buildInstanceIndex(
     instances.set(k, { ref: v.ref, ports: v.ports.sort() });
   }
   return instances;
+}
+
+// =============================================================================
+// Missing Input Obligation Scanner
+// =============================================================================
+
+/**
+ * Scan all blocks in the DraftGraph for exposed ports with no inbound edge
+ * and create missingInputSource obligations for them.
+ *
+ * This is the fixpoint-loop counterpart to buildDraftGraph's initial obligation
+ * creation. When elaboration plans add new blocks (e.g., Ellipse as a default
+ * source for Array.element), those blocks' unconnected ports also need
+ * missingInputSource obligations so the fixpoint can wire their defaults too.
+ *
+ * Idempotent: addObligationsIfMissing deduplicates by obligation ID.
+ *
+ * // [LAW:single-enforcer] Uses the same obligation ID scheme as buildDraftGraph.
+ */
+function createMissingInputObligations(
+  g: DraftGraph,
+  registry: ReadonlyMap<string, BlockDef>,
+): readonly Obligation[] {
+  const obligations: Obligation[] = [];
+
+  for (const block of g.blocks) {
+    const blockDef = registry.get(block.type);
+    if (!blockDef) continue;
+
+    for (const [portId, inputDef] of Object.entries(blockDef.inputs)) {
+      // Skip config-only inputs
+      if (inputDef.exposedAsPort === false) continue;
+      // Skip collect ports (explicit connections only)
+      if (inputDef.collectAccepts) continue;
+      // Skip optional inputs
+      if (inputDef.optional) continue;
+      // Skip if defaulting is forbidden (buildDraftGraph emits a diagnostic for these)
+      if (inputDef.defaulting === 'forbidden') continue;
+
+      // Skip if already connected
+      const hasEdge = g.edges.some(
+        (e) => e.to.blockId === block.id && e.to.port === portId,
+      );
+      if (hasEdge) continue;
+
+      const oblId = `missingInput:${block.id}:${portId}` as ObligationId;
+      obligations.push({
+        id: oblId,
+        kind: 'missingInputSource',
+        anchor: {
+          port: { blockId: block.id, port: portId, dir: 'in' },
+          blockId: block.id,
+        },
+        status: { kind: 'open' },
+        deps: [],
+        policy: { name: 'defaultSources.v1', version: 1 },
+        debug: { createdBy: 'createMissingInputObligations' },
+      });
+    }
+  }
+
+  return obligations;
 }

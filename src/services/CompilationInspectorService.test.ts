@@ -842,7 +842,7 @@ describe('CompilationInspectorService', () => {
         const patch = buildPatch((b) => {
           const time = b.addBlock('InfiniteTimeRoot');
           const osc = b.addBlock('Oscillator');
-          b.setPortDefault(osc, 'mode', 0);
+          b.setConfig(osc, 'mode', 0);
           b.wire(time, 'phaseA', osc, 'phase');
         });
 
@@ -891,7 +891,7 @@ describe('CompilationInspectorService', () => {
         const patch = buildPatch((b) => {
           const time = b.addBlock('InfiniteTimeRoot');
           const osc = b.addBlock('Oscillator');
-          b.setPortDefault(osc, 'mode', 0);
+          b.setConfig(osc, 'mode', 0);
           b.wire(time, 'phaseA', osc, 'phase');
         });
 
@@ -940,7 +940,7 @@ describe('CompilationInspectorService', () => {
         const patch = buildPatch((b) => {
           const time = b.addBlock('InfiniteTimeRoot');
           const osc = b.addBlock('Oscillator');
-          b.setPortDefault(osc, 'mode', 0);
+          b.setConfig(osc, 'mode', 0);
           b.wire(time, 'phaseA', osc, 'phase');
         });
 
