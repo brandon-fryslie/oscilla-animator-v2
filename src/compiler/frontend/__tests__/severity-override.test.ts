@@ -132,7 +132,7 @@ describe('severity overrides', () => {
   });
 
   describe('structural resolution diagnostics', () => {
-    it('structural diagnostics default to ignore (not in errors)', () => {
+    it('structural diagnostics default to info (visible in diagnostics panel)', () => {
       // A graph that triggers adapter insertion
       const patch = buildPatch((b) => {
         b.addBlock('InfiniteTimeRoot');
@@ -144,17 +144,18 @@ describe('severity overrides', () => {
         b.wire(arr, 'elements', grid, 'elements');
       });
       const result = compileFrontend(patch);
-      // Structural diagnostics (CardinalityAdapterInserted, CheaterAdapterUsed, CycleBreakInserted)
-      // default to 'ignore' and should NOT appear in errors
+      // Structural diagnostics default to 'info' — they should appear
       const structural = result.errors.filter(e =>
         e.diagnosticFlagCode === 'CardinalityAdapterInserted' ||
         e.diagnosticFlagCode === 'CheaterAdapterUsed' ||
         e.diagnosticFlagCode === 'CycleBreakInserted',
       );
-      expect(structural).toHaveLength(0);
+      for (const s of structural) {
+        expect(s.severity).toBe('info');
+      }
     });
 
-    it('structural diagnostics appear when overridden to warn', () => {
+    it('structural diagnostics appear as warn when overridden', () => {
       // A graph that triggers adapter insertion
       const patch = buildPatch((b) => {
         b.addBlock('InfiniteTimeRoot');
@@ -171,7 +172,7 @@ describe('severity overrides', () => {
           CheaterAdapterUsed: 'warn',
         },
       });
-      // Now structural diagnostics should appear with severity 'info'
+      // Overridden to 'warn'
       const structural = result.errors.filter(e =>
         e.diagnosticFlagCode === 'CardinalityAdapterInserted' ||
         e.diagnosticFlagCode === 'CheaterAdapterUsed',
@@ -179,6 +180,32 @@ describe('severity overrides', () => {
       for (const s of structural) {
         expect(s.severity).toBe('warn');
       }
+    });
+
+    it('structural diagnostics hidden when overridden to ignore', () => {
+      const patch = buildPatch((b) => {
+        b.addBlock('InfiniteTimeRoot');
+        const arr = b.addBlock('Array');
+        b.setPortDefault(arr, 'count', 4);
+        const ellipse = b.addBlock('Ellipse');
+        b.wire(ellipse, 'shape', arr, 'element');
+        const grid = b.addBlock('GridLayoutUV');
+        b.wire(arr, 'elements', grid, 'elements');
+      });
+      const result = compileFrontend(patch, {
+        diagnosticOverrides: {
+          CardinalityAdapterInserted: 'ignore',
+          CheaterAdapterUsed: 'ignore',
+          CycleBreakInserted: 'ignore',
+        },
+      });
+      // Overridden to 'ignore' — should not appear
+      const structural = result.errors.filter(e =>
+        e.diagnosticFlagCode === 'CardinalityAdapterInserted' ||
+        e.diagnosticFlagCode === 'CheaterAdapterUsed' ||
+        e.diagnosticFlagCode === 'CycleBreakInserted',
+      );
+      expect(structural).toHaveLength(0);
     });
   });
 });

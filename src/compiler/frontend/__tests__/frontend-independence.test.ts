@@ -259,7 +259,10 @@ describe('Frontend Independence', () => {
 
       // Should be ready for backend
       expect(backendReady).toBe(true);
-      expect(errors.length).toBe(0);
+      // Info-level structural diagnostics (e.g., CheaterAdapterUsed) may be present
+      // but should not include any blocking errors
+      const blockingErrors = errors.filter(e => e.severity === 'error');
+      expect(blockingErrors.length).toBe(0);
     });
 
     it('auto-resolves illegal cycles by inserting UnitDelay (cycle break policy)', () => {

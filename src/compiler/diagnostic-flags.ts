@@ -13,7 +13,7 @@
  * a FixpointDiagnostic with a matching diagnosticFlagCode.
  */
 
-export type DiagnosticSeverityOverride = 'error' | 'warn' | 'ignore';
+export type DiagnosticSeverityOverride = 'error' | 'warn' | 'info' | 'ignore';
 
 export interface DiagnosticFlagDef {
   readonly code: string;
@@ -125,21 +125,21 @@ export const DIAGNOSTIC_FLAGS: readonly DiagnosticFlagDef[] = Object.freeze([
     code: 'CardinalityAdapterInserted',
     label: 'Broadcast Inserted',
     description: 'Broadcast adapter auto-inserted for signal-to-field boundary',
-    defaultSeverity: 'ignore',
+    defaultSeverity: 'info',
     category: 'structural',
   },
   {
     code: 'CheaterAdapterUsed',
     label: 'Payload Anchor Inserted',
     description: 'Payload anchor auto-inserted to break polymorphic chain',
-    defaultSeverity: 'ignore',
+    defaultSeverity: 'info',
     category: 'structural',
   },
   {
     code: 'CycleBreakInserted',
     label: 'Cycle Break Inserted',
     description: 'UnitDelay inserted to break algebraic cycle',
-    defaultSeverity: 'ignore',
+    defaultSeverity: 'info',
     category: 'structural',
   },
 ]);

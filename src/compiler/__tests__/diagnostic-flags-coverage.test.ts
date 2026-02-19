@@ -126,9 +126,9 @@ describe('diagnostic flags coverage', () => {
     }
   });
 
-  it('structural resolution codes default to ignore', () => {
+  it('structural resolution codes default to info', () => {
     for (const code of POLICY_CODES) {
-      expect(getDefaultSeverity(code), `${code} should default to ignore`).toBe('ignore');
+      expect(getDefaultSeverity(code), `${code} should default to info`).toBe('info');
     }
   });
 

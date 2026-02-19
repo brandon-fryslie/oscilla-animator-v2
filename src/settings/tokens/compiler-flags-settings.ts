@@ -2,7 +2,7 @@
  * Compiler Diagnostic Flags Settings
  *
  * GCC-style severity overrides for compiler diagnostic codes.
- * Each flag can be set to 'error', 'warn', or 'ignore'.
+ * Each flag can be set to 'error', 'warn', 'info', or 'ignore'.
  *
  * Single source of truth: DIAGNOSTIC_FLAGS registry in diagnostic-flags.ts.
  * Fields are generated dynamically from the registry.
@@ -32,6 +32,7 @@ for (const flag of DIAGNOSTIC_FLAGS) {
     options: [
       { label: 'Error', value: 'error' },
       { label: 'Warning', value: 'warn' },
+      { label: 'Info', value: 'info' },
       { label: 'Ignore', value: 'ignore' },
     ],
   };

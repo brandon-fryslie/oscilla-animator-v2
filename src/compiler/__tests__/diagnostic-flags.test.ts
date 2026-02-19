@@ -18,7 +18,7 @@ describe('DIAGNOSTIC_FLAGS registry', () => {
       expect(flag.code).toBeTruthy();
       expect(flag.label).toBeTruthy();
       expect(flag.description).toBeTruthy();
-      expect(['error', 'warn', 'ignore']).toContain(flag.defaultSeverity);
+      expect(['error', 'warn', 'info', 'ignore']).toContain(flag.defaultSeverity);
       expect(flag.category).toBeTruthy();
     }
   });

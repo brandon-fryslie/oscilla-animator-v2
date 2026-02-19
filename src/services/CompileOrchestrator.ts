@@ -333,6 +333,8 @@ export async function compileAndSwap(deps: CompileOrchestratorDeps, isInitial: b
     ? convertCompileErrorsToDiagnostics(result.warnings, patchRevision, compileId, 'warn')
     : [];
 
+  const allDiagnostics = [...frontendDiagnostics, ...backendWarningDiagnostics];
+
   store.events.emit({
     type: 'CompileEnd',
     compileId,
@@ -340,7 +342,19 @@ export async function compileAndSwap(deps: CompileOrchestratorDeps, isInitial: b
     patchRevision,
     status: 'success',
     durationMs: Date.now() - startTime,
-    diagnostics: [...frontendDiagnostics, ...backendWarningDiagnostics],
+    diagnostics: allDiagnostics,
+  });
+
+  // [LAW:dataflow-not-control-flow] Always log compile outcome (success + failure paths both log).
+  const durationMs = Date.now() - startTime;
+  const warnCount = allDiagnostics.filter(d => d.severity === 'warn').length;
+  const infoCount = allDiagnostics.filter(d => d.severity === 'info').length;
+  const diagSuffix = (warnCount + infoCount) > 0
+    ? ` (${warnCount} warning(s), ${infoCount} info)`
+    : '';
+  store.diagnostics.log({
+    level: 'info',
+    message: `Compile succeeded in ${durationMs}ms${diagSuffix}`,
   });
 
   // Emit ProgramSwapped event
