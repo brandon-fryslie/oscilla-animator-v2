@@ -265,8 +265,8 @@ describe('AdapterPolicy (adapters.v1)', () => {
     }
   });
 
-  it('multi-step chain: degrees → phase01 inserts 2 adapters and 3 edges', () => {
-    // degrees → radians → phase01 (two-step chain)
+  it('degrees → phase01 uses direct Adapter_DegreesToPhase (single step)', () => {
+    // BFS finds Adapter_DegreesToPhase (degrees→phase01 in one step)
     const DEGREES_FLOAT = canonicalType(FLOAT, unitDegrees());
     const PHASE_FLOAT = canonicalType(FLOAT, unitTurns(), undefined, contractWrap01());
 
@@ -286,29 +286,24 @@ describe('AdapterPolicy (adapters.v1)', () => {
 
     expect(result.kind).toBe('plan');
     if (result.kind === 'plan') {
-      // 2 adapter blocks
-      expect(result.plan.addBlocks!.length).toBe(2);
-      expect(result.plan.addBlocks![0].type).toBe('Adapter_DegreesToRadians');
-      expect(result.plan.addBlocks![1].type).toBe('Adapter_RadiansToPhase01');
+      // 1 adapter block — direct conversion
+      expect(result.plan.addBlocks!.length).toBe(1);
+      expect(result.plan.addBlocks![0].type).toBe('Adapter_DegreesToPhase');
 
-      // Block IDs are indexed
+      // Block ID keyed by obligation
       expect(result.plan.addBlocks![0].id).toBe(`_adapter_${oblId}_0`);
-      expect(result.plan.addBlocks![1].id).toBe(`_adapter_${oblId}_1`);
 
-      // 3 edges: source→adapter0, adapter0→adapter1, adapter1→sink
+      // 2 edges: source→adapter, adapter→sink
       const edges = result.plan.replaceEdges![0].add;
-      expect(edges.length).toBe(3);
+      expect(edges.length).toBe(2);
       expect(edges[0].id).toBe(`_e_${oblId}_0`);
       expect(edges[1].id).toBe(`_e_${oblId}_1`);
-      expect(edges[2].id).toBe(`_e_${oblId}_2`);
 
-      // Edge connectivity: source → adapter0 → adapter1 → sink
+      // Edge connectivity: source → adapter → sink
       expect(edges[0].from.blockId).toBe('b1');
       expect(edges[0].to.blockId).toBe(`_adapter_${oblId}_0`);
       expect(edges[1].from.blockId).toBe(`_adapter_${oblId}_0`);
-      expect(edges[1].to.blockId).toBe(`_adapter_${oblId}_1`);
-      expect(edges[2].from.blockId).toBe(`_adapter_${oblId}_1`);
-      expect(edges[2].to.blockId).toBe('b2');
+      expect(edges[1].to.blockId).toBe('b2');
 
       // All edges are implicitCoerce
       for (const edge of edges) {

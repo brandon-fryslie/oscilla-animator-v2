@@ -124,9 +124,9 @@ describe('Backend Preconditions', () => {
     });
   });
 
-  describe('Illegal Cycle Rejection', () => {
-    it('fails when Frontend indicates backendReady=false', () => {
-      // Create an instantaneous illegal cycle
+  describe('Cycle Auto-Resolution', () => {
+    it('frontend auto-resolves instantaneous cycle via UnitDelay insertion', () => {
+      // Create an instantaneous cycle — fixpoint auto-inserts UnitDelay
       const patch = buildPatch((b) => {
         b.addBlock('InfiniteTimeRoot');
         const add1 = b.addBlock('Add');
@@ -137,34 +137,11 @@ describe('Backend Preconditions', () => {
       });
 
       const frontendResult = compileFrontend(patch);
-      const { typedPatch, backendReady, cycleSummary } = frontendResult;
+      const { backendReady, cycleSummary } = frontendResult;
 
-      // Frontend should detect illegal cycle
-      expect(cycleSummary.hasIllegalCycles).toBe(true);
-      expect(backendReady).toBe(false);
-
-      // Backend should fail with illegal cycle
-      const backendResult = compileBackend(
-        typedPatch,
-        testProgramConverter
-      );
-
-      // Backend should fail
-      expect(backendResult.kind).toBe('error');
-      if (backendResult.kind === 'error') {
-        // Should have errors
-        expect(backendResult.errors.length).toBeGreaterThan(0);
-
-        // Errors should mention cycle or compilation failure
-        const hasRelevantError = backendResult.errors.some(
-          (e) =>
-            e.kind.includes('Cycle') ||
-            e.kind.includes('Illegal') ||
-            e.kind.includes('Backend') ||
-            e.message.toLowerCase().includes('cycle')
-        );
-        expect(hasRelevantError).toBe(true);
-      }
+      // Fixpoint auto-inserts UnitDelay — no illegal cycles remain
+      expect(cycleSummary.hasIllegalCycles).toBe(false);
+      expect(backendReady).toBe(true);
     });
 
     it('succeeds with legal feedback loops', () => {

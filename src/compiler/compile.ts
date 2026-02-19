@@ -150,7 +150,12 @@ export function compile(patch: Patch, options?: CompileOptions): CompileResult {
 
     // Check for errors from pass 6 - Filter by reachability
     // Collect warnings for unreachable blocks to surface on result
-    let unreachableBlockWarnings: CompileError[] = [];
+    // Start with frontend-detected unreachable blocks
+    let unreachableBlockWarnings: CompileError[] = frontend.unreachableBlockIds.map((blockId) => ({
+      code: 'W_BLOCK_UNREACHABLE_ERROR',
+      message: `Block '${blockId}' is not connected to render pipeline`,
+      where: { blockId },
+    }));
 
     if (unlinkedIR.errors.length > 0) {
       // Compute which blocks are reachable from render blocks

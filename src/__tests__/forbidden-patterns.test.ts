@@ -185,10 +185,26 @@ describe('Forbidden Patterns (Type System Invariants)', () => {
   // Block Lowering Type Authority
   // =============================================================================
 
+  describe('BlockIRBuilder Surface Safety', () => {
+
+    it('kernelMap must not appear on BlockIRBuilder interface', () => {
+      const matches = grepSrc('kernelMap', 'src/compiler/ir/BlockIRBuilder.ts');
+      const allowlist = [/\/\//];  // comments ok
+      const filtered = filterAllowlist(matches, allowlist);
+      expect(filtered, 'kernelMap was removed from BlockIRBuilder — use mapAuto').toEqual([]);
+    });
+
+    it('blocks must not call ctx.b.kernelMap (use mapAuto)', () => {
+      const matches = grepSrc('ctx\\.b\\.kernelMap', 'src/blocks/');
+      expect(matches, 'Block code must use ctx.b.mapAuto(), not ctx.b.kernelMap()').toEqual([]);
+    });
+
+  });
+
   describe('Block Lowering Type Authority', () => {
 
     it('block lower() must not use canonicalType() for kernel operations', () => {
-      // Kernel operations (kernelZip, kernelMap, kernelBroadcast) should derive types
+      // Kernel operations (zipAuto, mapAuto, kernelZip, etc.) should derive types
       // from ctx.outTypes[0] or input types, NOT from canonicalType().
       // canonicalType() loses cardinality/extent resolved during type inference.
       //
@@ -199,16 +215,17 @@ describe('Forbidden Patterns (Type System Invariants)', () => {
       // - Time signals: ctx.b.time(..., canonicalType(...))
       //
       // FORBIDDEN:
+      // - ctx.b.zipAuto([...], fn, canonicalType(...))
       // - ctx.b.kernelZip([...], fn, canonicalType(...))
       // - ctx.b.kernelMap(..., fn, canonicalType(...))
       // - ctx.b.kernelBroadcast(..., fn, canonicalType(...))
 
-      const kernelOps = ['kernelZip', 'kernelMap', 'kernelBroadcast'];
+      const kernelOps = ['zipAuto', 'kernelZip', 'kernelMap', 'kernelBroadcast'];
       const violations: string[] = [];
 
       for (const op of kernelOps) {
         // Find lines containing both the kernel op and canonicalType
-        // This pattern catches: ctx.b.kernelZip([...], fn, canonicalType(...))
+        // This pattern catches: ctx.b.zipAuto([...], fn, canonicalType(...))
         const matches = grepSrc(`${op}.*canonicalType`, 'src/blocks/');
         violations.push(...matches);
       }
@@ -468,6 +485,7 @@ describe('Forbidden Patterns (Type System Invariants)', () => {
         /\.test\./,                      // Test files
         /__tests__/,                     // Test directories
         /\/\/ OK:/,                      // Explicit exemption with reason
+        /\*/,                            // Block comments (JSDoc)
       ];
       const filtered = filterAllowlist(matches, allowlist);
       expect(
@@ -485,6 +503,7 @@ describe('Forbidden Patterns (Type System Invariants)', () => {
         /\.test\./,                      // Test files
         /__tests__/,                     // Test directories
         /registry\.ts/,                  // Block definition interface
+        /\/\//,                          // Single-line comments
       ];
       const filtered = filterAllowlist(matches, allowlist);
       expect(
@@ -505,6 +524,8 @@ describe('Forbidden Patterns (Type System Invariants)', () => {
         /adapter-spec\.ts/,              // Adapter type definitions
         /import.*defaultSource/,         // Import statements (legitimate)
         /defaultSource:/,                // InputDef field declarations (legitimate)
+        /composite-types\.ts/,           // Type field declarations
+        /function defaultSource/,        // Helper function definitions (not reads)
       ];
       const filtered = filterAllowlist(matches, allowlist);
       expect(

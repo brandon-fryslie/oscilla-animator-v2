@@ -537,6 +537,19 @@ function isRuleOutputCompatibleWithDest(
     if (!contractsEqual(fromContract, toContract)) return false;
   }
 
+  // For non-Broadcast extent-preserving rules (to.extent is 'any'), the adapter
+  // output has the SAME extent as the input. Reject if source and dest extents differ.
+  // Broadcast is exempt — it intentionally changes cardinality (one→many).
+  // [LAW:single-enforcer] Extent preservation check for non-Broadcast adapters lives here.
+  if (rule.to.extent === 'any' && rule.blockType !== 'Broadcast') {
+    const fromExt = fromPattern.extent;
+    const toExt = toPattern.extent;
+    if (fromExt !== 'any' && toExt !== 'any' &&
+        typeof fromExt === 'object' && typeof toExt === 'object') {
+      if (!extentsEqual(fromExt as Extent, toExt as Extent)) return false;
+    }
+  }
+
   return true;
 }
 

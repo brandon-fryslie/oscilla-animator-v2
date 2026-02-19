@@ -305,3 +305,47 @@ function classifyEdgeOrigin(edge: Edge): EdgeOrigin {
     default: return 'user';
   }
 }
+
+// =============================================================================
+// Reachability
+// =============================================================================
+
+/**
+ * Compute the set of DraftBlock IDs reachable from render output sinks.
+ *
+ * BFS backward from render blocks (capability: 'render') and time roots
+ * (capability: 'time') through DraftEdge connections.
+ *
+ * Blocks not in the returned set are disconnected from the render pipeline
+ * and can be excluded from normalization to prevent fixpoint divergence.
+ */
+export function computeReachableDraftBlockIds(
+  blocks: readonly DraftBlock[],
+  edges: readonly DraftEdge[],
+): Set<string> {
+  // Seed: render sinks + time roots (both needed for fixpoint convergence)
+  const reachable = new Set<string>();
+  const queue: string[] = [];
+
+  for (const block of blocks) {
+    const def = getBlockDefinition(block.type);
+    if (def?.capability === 'render' || def?.capability === 'time') {
+      queue.push(block.id);
+    }
+  }
+
+  // BFS backward through edges: to → from
+  while (queue.length > 0) {
+    const blockId = queue.shift()!;
+    if (reachable.has(blockId)) continue;
+    reachable.add(blockId);
+
+    for (const edge of edges) {
+      if (edge.to.blockId === blockId && !reachable.has(edge.from.blockId)) {
+        queue.push(edge.from.blockId);
+      }
+    }
+  }
+
+  return reachable;
+}

@@ -34,10 +34,11 @@ import { validateTypes, validateNoVarAxes, type AxisViolation } from './axis-val
 // Composite expansion
 import { expandComposites, type ExpansionDiagnostic, type ExpansionProvenance } from './composite-expansion';
 
-import { buildDraftGraph } from './draft-graph';
+import { buildDraftGraph, computeReachableDraftBlockIds } from './draft-graph';
+import type { DraftGraph } from './draft-graph';
 import { finalizeNormalizationFixpoint } from './final-normalization';
 import { bridgeToNormalizedPatch, bridgePartialToNormalizedPatch } from './draft-graph-bridge';
-import { BLOCK_DEFS_BY_TYPE, requireBlockDef } from '../../blocks/registry';
+import { BLOCK_DEFS_BY_TYPE, requireBlockDef, getBlockDefinition } from '../../blocks/registry';
 
 // Re-export types for consumers
 export type { TypeResolvedPatch, PortKey } from '../ir/patches';
@@ -88,6 +89,8 @@ export interface FrontendResult {
   readonly normalizedPatch: NormalizedPatch;
   /** Provenance from composite expansion (block/edge/boundary maps) */
   readonly expansionProvenance?: ExpansionProvenance;
+  /** Block IDs excluded from compilation (disconnected from render pipeline) */
+  readonly unreachableBlockIds: readonly string[];
 }
 
 // =============================================================================
@@ -128,19 +131,52 @@ export function compileFrontend(patch: Patch, options?: FrontendOptions): Fronte
 
   // Step 2: Build DraftGraph from expanded patch (always)
   const { graph: draftGraph, diagnostics: buildDiagnostics } = buildDraftGraph(expandedPatch);
+
+  // Step 2.5: Filter unreachable blocks before fixpoint
+  // Only applies when the graph has render blocks (output sinks).
+  // Without render blocks, every block is potentially useful — pass everything through.
+  const hasRenderBlocks = draftGraph.blocks.some((b) => {
+    const def = getBlockDefinition(b.type);
+    return def?.capability === 'render';
+  });
+
+  const reachableBlockIds = hasRenderBlocks
+    ? computeReachableDraftBlockIds(draftGraph.blocks, draftGraph.edges)
+    : new Set(draftGraph.blocks.map((b) => b.id)); // All blocks reachable when no render sinks
+
+  const unreachableBlockIds = draftGraph.blocks
+    .filter((b) => !reachableBlockIds.has(b.id))
+    .map((b) => b.id);
+
+  // Only report build diagnostics for reachable blocks
   errors.push(
-    ...buildDiagnostics.map((d) => ({
-      kind: `Build/${d.kind}` as const,
-      message: `Required input "${d.portName}" on block "${d.blockId}" is not connected`,
-      blockId: d.blockId,
-      portId: d.portName,
-      severity: 'error' as const,
-    })),
+    ...buildDiagnostics
+      .filter((d) => reachableBlockIds.has(d.blockId))
+      .map((d) => ({
+        kind: `Build/${d.kind}` as const,
+        message: `Required input "${d.portName}" on block "${d.blockId}" is not connected`,
+        blockId: d.blockId,
+        portId: d.portName,
+        severity: 'error' as const,
+      })),
   );
+
+  const filteredDraftGraph: DraftGraph = hasRenderBlocks
+    ? {
+        ...draftGraph,
+        blocks: draftGraph.blocks.filter((b) => reachableBlockIds.has(b.id)),
+        edges: draftGraph.edges.filter(
+          (e) => reachableBlockIds.has(e.from.blockId) && reachableBlockIds.has(e.to.blockId),
+        ),
+        obligations: draftGraph.obligations.filter(
+          (o) => !o.anchor.blockId || reachableBlockIds.has(o.anchor.blockId!),
+        ),
+      }
+    : draftGraph; // No render blocks — pass everything (avoid stripping the whole graph)
 
   // Step 3: Run fixpoint engine (always)
   const fixpointResult = finalizeNormalizationFixpoint(
-    draftGraph,
+    filteredDraftGraph,
     BLOCK_DEFS_BY_TYPE,
     { maxIterations: 20 },
   );
@@ -166,8 +202,10 @@ export function compileFrontend(patch: Patch, options?: FrontendOptions): Fronte
       try {
         const blockDef = requireBlockDef(block.type);
         for (const [portId, inputDef] of Object.entries(blockDef.inputs)) {
-          // Skip config-only inputs (exposedAsPort: false) and optional inputs
-          if (inputDef.exposedAsPort === false || inputDef.optional) continue;
+          // Skip config-only inputs (exposedAsPort: false)
+          if (inputDef.exposedAsPort === false) continue;
+          // Skip collect ports (connections are optional by design)
+          if (inputDef.collectAccepts) continue;
 
           // Check if there's an inbound edge for this required input
           const hasInboundEdge = fixpointResult.strict.graph.edges.some(
@@ -231,6 +269,7 @@ export function compileFrontend(patch: Patch, options?: FrontendOptions): Fronte
     backendReady,
     normalizedPatch,
     expansionProvenance: expansion.provenance,
+    unreachableBlockIds,
   };
 }
 

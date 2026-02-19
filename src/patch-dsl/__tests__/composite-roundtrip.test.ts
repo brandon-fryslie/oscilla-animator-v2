@@ -35,7 +35,7 @@ function compositeDefsEqual(a: CompositeBlockDef, b: CompositeBlockDef): boolean
     const blockB = b.internalBlocks.get(id);
     if (!blockB) return false;
     if (blockA.type !== blockB.type) return false;
-    if (JSON.stringify(blockA.params) !== JSON.stringify(blockB.params)) return false;
+    if (JSON.stringify(blockA.params ?? {}) !== JSON.stringify(blockB.params ?? {})) return false;
 
     // Normalize displayName: undefined is equivalent to blockId as string
     const displayNameA = blockA.displayName ?? (id as string);

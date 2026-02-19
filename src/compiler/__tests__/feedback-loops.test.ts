@@ -79,8 +79,9 @@ describe('Feedback Loops with UnitDelay', () => {
     }
   });
 
-  it('rejects cycle without stateful block', () => {
-    // Add -> Multiply -> back to Add (no UnitDelay, illegal cycle)
+  it('auto-resolves cycle without stateful block via UnitDelay insertion', () => {
+    // Add -> Multiply -> back to Add (no UnitDelay in user graph)
+    // Fixpoint normalization auto-inserts UnitDelay to break the cycle.
     const patch = buildPatch((b) => {
       b.addBlock('InfiniteTimeRoot');
       const constBlock = b.addBlock('Const');
@@ -88,7 +89,7 @@ describe('Feedback Loops with UnitDelay', () => {
       const add = b.addBlock('Add');
       const mul = b.addBlock('Multiply');
 
-      // Create an illegal cycle: Add -> Multiply -> Add
+      // Create a cycle: Add -> Multiply -> Add
       b.wire(add, 'out', mul, 'a');
       b.wire(mul, 'out', add, 'a');
 
@@ -99,15 +100,11 @@ describe('Feedback Loops with UnitDelay', () => {
 
     const result = compile(patch);
 
-    // Should fail with IllegalCycle error
-    expect(result.kind).toBe('error');
-    if (result.kind === 'error') {
-      const hasCycleError = result.errors.some(e =>
-        e.message?.includes('cycle') ||
-        e.message?.includes('Cycle') ||
-        e.code === 'IllegalCycle'
-      );
-      expect(hasCycleError).toBe(true);
+    // Fixpoint auto-inserts UnitDelay to break cycle — compilation succeeds
+    expect(result.kind).toBe('ok');
+    if (result.kind === 'ok') {
+      expect(result.program.schedule).toBeDefined();
+      expect(result.program.schedule.steps.length).toBeGreaterThan(0);
     }
   });
 });

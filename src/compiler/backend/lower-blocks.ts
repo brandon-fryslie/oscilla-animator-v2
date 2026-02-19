@@ -34,21 +34,6 @@ function portKey(blockIndex: BlockIndex, portName: string, direction: 'in' | 'ou
   return `${blockIndex}:${portName}:${direction}` as PortKey;
 }
 
-/**
- * Get a port's const value from registry default only.
- * Used for extracting compile-time structural values for event emission.
- *
- * NOTE: This is a last resort for event metadata only. Block lowering should NOT use this.
- * Blocks must use inputsById (for wired inputs) or config (for exposedAsPort:false inputs).
- */
-function getPortConstValue(blockType: string, portId: string): unknown {
-  const def = getBlockDefinition(blockType);
-  const inputDef = def?.inputs[portId];
-  if (inputDef?.defaultSource?.blockType === 'Const') {
-    return inputDef.defaultSource.params?.value;
-  }
-  return undefined;
-}
 
 // =============================================================================
 // Types
@@ -161,13 +146,7 @@ function resolveInputsWithMultiInput(
   const inputRefs = new Map<string, ValueRefExpr>();
 
   for (const [slotId, spec] of resolved.entries()) {
-    const { writers, combine, portType, endpoint, optional } = spec;
-
-    // Handle optional inputs with no writers - skip them
-    if (writers.length === 0 && optional) {
-      // Optional input with no connection - lowering function should handle undefined
-      continue;
-    }
+    const { writers, combine, portType, endpoint } = spec;
 
     // Validate combine policy against writer count
     const policyValidation = validateCombinePolicy(combine, writers.length);
@@ -275,9 +254,17 @@ function getWriterValueRef(
     }
 
     // Wire not found in blockOutputs - this is an error
+    // Distinguish "block not lowered at all" vs "block lowered but port missing"
+    const sourceBlockIndex = blockIdToIndex?.get(writer.from.blockId);
+    const sourceBlockOutputs = sourceBlockIndex !== undefined ? blockOutputs?.get(sourceBlockIndex) : undefined;
+    const detail = sourceBlockIndex === undefined
+      ? '(source block not in index)'
+      : sourceBlockOutputs === undefined
+        ? '(source block produced no outputs — check upstream lowering errors)'
+        : `(source block has outputs [${[...sourceBlockOutputs.keys()].join(', ')}] but not '${writer.from.slotId}')`;
     errors.push({
       code: 'UpstreamError',
-      message: `Wire source not found: ${writer.from.blockId}.${writer.from.slotId}`,
+      message: `Wire source not found: ${writer.from.blockId}.${writer.from.slotId} ${detail}`,
       where: { blockId: writer.from.blockId, port: writer.from.slotId },
     });
     return null;
@@ -395,12 +382,12 @@ function lowerBlockInstance(
       // These are not wirable ports and should not require resolution
       if (inputDef.exposedAsPort === false) continue;
 
+      // Skip collect ports — resolved separately via collectInputsById
+      if (inputDef.collectAccepts) continue;
+
       const resolved = inputsById[portId];
       if (resolved !== undefined) {
         inputs.push(resolved);
-      } else if (inputDef.optional) {
-        // Optional inputs can be undefined - lowering function must handle this
-        // Don't add to inputs array, but allow lowering to proceed
       } else {
         // Accumulate error for unresolved required input
         errors.push({
@@ -494,7 +481,7 @@ function lowerBlockInstance(
         `This is a compiler bug — all blocks must have solver-resolved port types.`
       );
     }
-    const outTypes: CanonicalType[] = Object.keys(blockDef.outputs)
+    let outTypes: CanonicalType[] = Object.keys(blockDef.outputs)
       .map(portName => {
         const resolved = portTypes.get(portKey(blockIndex, portName, 'out'));
         if (!resolved) {
@@ -505,9 +492,19 @@ function lowerBlockInstance(
         }
         return resolved;
       });
-    // Backend reads portTypes from TypedPatch - never modifies them.
-    // Blocks with 'preserve' cardinality must rewrite placeholder instance IDs
-    // in their own lower() function using withInstance() (see Array, GridLayoutUV, etc.)
+
+    // Pre-populate outTypes with instance info from inferredInstance.
+    // This eliminates withInstance() ternaries from preserve-cardinality blocks.
+    if (inferredInstance !== undefined) {
+      const instanceDecl = builder.getInstances().get(inferredInstance);
+      if (instanceDecl !== undefined) {
+        const inst = { domainTypeId: instanceDecl.domainType, instanceId: inferredInstance };
+        outTypes = outTypes.map(t => {
+          const card = requireInst(t.extent.cardinality, 'cardinality');
+          return card.kind === 'many' ? withInstance(t, inst) : t;
+        });
+      }
+    }
 
     // Build lowering context
     const ctx: LowerCtx = {
@@ -545,8 +542,8 @@ function lowerBlockInstance(
           );
         }
       } else {
-        // Config source-of-truth: config MUST contain this key (unless optional)
-        if (!inputDef.optional && config[portId] === undefined) {
+        // Config source-of-truth: config MUST contain this key (unless it has a defaultValue)
+        if (inputDef.defaultValue === undefined && config[portId] === undefined) {
           throw new Error(
             `HARD ERROR: Block ${block.type}#${block.id} missing config key '${portId}'. ` +
             `exposedAsPort is false — value must be in block.params.`
@@ -988,7 +985,7 @@ function lowerSCCTwoPass(
     if (options?.events) {
       const instanceContext = instanceContextByBlock.get(blockIndex);
       const instanceCount = block.type === 'Array'
-        ? (getPortConstValue(block.type, 'count') as number | undefined)
+        ? (block.params.count as number | undefined)
         : undefined;
 
       options.events.emit({
@@ -1303,7 +1300,7 @@ export function pass6BlockLowering(
           const instanceContext = instanceContextByBlock.get(blockIndex);
           // For instance-creating blocks (Array), get the count from params
           const instanceCount = block.type === 'Array'
-            ? (getPortConstValue(block.type, 'count') as number | undefined)
+            ? (block.params.count as number | undefined)
             : undefined;
 
           options.events.emit({

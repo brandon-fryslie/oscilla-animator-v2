@@ -288,7 +288,7 @@ function processInternalBlock(
 
   const internalBlockDef: InternalBlockDef = {
     type,
-    params: Object.keys(params).length > 0 ? params : undefined,
+    params: Object.keys(params).length > 0 ? params : {},
     displayName,
   };
 
