@@ -10,7 +10,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { debugService, type EdgeValueResult } from '../../services/DebugService';
 import type { EdgeMetadata } from '../../services/mapDebugEdges';
-import type { DebugTargetKey, HistoryView } from './types';
+import type { DebugTargetKey, HistoryView, FieldHistoryView } from './types';
 import type { TrackedEntry } from './HistoryService';
 
 /** Poll interval for value updates (ms). */
@@ -30,6 +30,8 @@ export interface MiniViewData {
   value: EdgeValueResult | null;
   /** History ring buffer (null if not tracked or not a signal) */
   history: TrackedEntry | null;
+  /** Field temporal history (null if not a field or not tracked) */
+  fieldHistory: FieldHistoryView | null;
 }
 
 /**
@@ -79,11 +81,17 @@ export function useDebugMiniView(
     ? debugService.historyService.getHistory(key) ?? null
     : null;
 
+  // Resolve field history (only for field edges)
+  const fieldHistory = meta.cardinality === 'field'
+    ? debugService.getFieldHistory(meta.slotId) ?? null
+    : null;
+
   return {
     key,
     label: edgeLabel || hoveredEdgeId,
     meta,
     value,
     history,
+    fieldHistory,
   };
 }

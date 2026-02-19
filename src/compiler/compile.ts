@@ -340,7 +340,9 @@ function convertLinkedIRToProgram(
   }
 
   // Add slotMeta entries for slots allocated by Pass 7 (continuity pipeline buffers).
-  // These slots store object references (Float32Array buffers) and start after the builder's slot range.
+  // These include outputSlots (always fresh) and possibly baseSlots (fresh only if no ref.slot existed).
+  // [LAW:one-source-of-truth] Some materialize targets now reuse binding-pass ref.slots (< builderSlotCount)
+  // and already have slotMeta from the first loop above. Only generate entries for slots >= builderSlotCount.
   const builderSlotCount = builder.getSlotCount?.() || 0;
   const steps = scheduleIR.steps;
   let maxSlotUsed = builderSlotCount - 1;
@@ -349,16 +351,24 @@ function convertLinkedIRToProgram(
       maxSlotUsed = Math.max(maxSlotUsed, step.target as number);
     }
     if (step.kind === 'continuityApply') {
-      maxSlotUsed = Math.max(maxSlotUsed, step.baseSlot as number, step.outputSlot as number);
+      if ((step.baseSlot as number) >= builderSlotCount) {
+        maxSlotUsed = Math.max(maxSlotUsed, step.baseSlot as number);
+      }
+      if ((step.outputSlot as number) >= builderSlotCount) {
+        maxSlotUsed = Math.max(maxSlotUsed, step.outputSlot as number);
+      }
     }
   }
   for (let slotId = builderSlotCount; slotId <= maxSlotUsed; slotId++) {
+    // Use registered type from builder if available (outputSlots registered via registerSlotType),
+    // otherwise fall back to generic FLOAT.
+    const registered = slotTypes.get(slotId as ValueSlot);
     slotMeta.push({
       slot: slotId as ValueSlot,
       storage: 'object',
       offset: storageOffsets.object++,
-      stride: 1, // Object slots store a single reference
-      type: canonicalType(FLOAT),
+      stride: 1, // Object slots store a single reference (Float32Array buffer)
+      type: registered?.type ?? canonicalType(FLOAT),
     });
   }
 

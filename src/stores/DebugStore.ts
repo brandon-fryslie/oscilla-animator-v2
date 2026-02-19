@@ -177,7 +177,7 @@ export class DebugStore {
       const meta = debugService.getEdgeMetadata(edgeId);
       if (meta?.cardinality === 'field') {
         // Field edge: track for demand-driven materialization
-        debugService.trackField(meta.slotId);
+        debugService.trackField(meta.slotId, meta.type);
         this._trackedFieldSlot = meta.slotId;
       } else if (meta?.cardinality === 'signal') {
         // Signal edge: track in HistoryService for micro-history
@@ -241,7 +241,7 @@ export class DebugStore {
       case 'signal':
         return formatDebugValue(this._cachedEdgeValue.value, this._cachedEdgeValue.type);
       case 'field':
-        return `[${this._cachedEdgeValue.count}] ${this._cachedEdgeValue.mean.toFixed(2)}`;
+        return `[${this._cachedEdgeValue.stats.count}] ${this._cachedEdgeValue.stats.mean[0].toFixed(2)}`;
       case 'field-untracked':
         return null;
       case 'constant':

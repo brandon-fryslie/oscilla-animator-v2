@@ -137,21 +137,12 @@ function renderAggregateFull(stats: AggregateStats): React.ReactElement {
   return React.createElement('div', { style: styles.container },
     React.createElement('div', { style: styles.row },
       React.createElement(ColorSwatch, { r: meanR, g: meanG, b: meanB, a: meanA, large: true }),
-      React.createElement('div', { style: styles.channelBars },
-        ...Array.from({ length: 4 }, (_, i) =>
-          React.createElement(ChannelBar, {
-            key: i,
-            channel: i,
-            min: stats.min[i],
-            max: stats.max[i],
-            mean: stats.mean[i],
-          })
-        )
+      React.createElement('div', { style: { display: 'flex', flexDirection: 'column', gap: '2px', justifyContent: 'center' } },
+        React.createElement('div', { style: styles.hexLabel },
+          `${toHex(meanR, meanG, meanB)} (α=${formatFloat(meanA)})`),
+        React.createElement('div', { style: styles.countBadge }, `n=${stats.count}`)
       )
-    ),
-    React.createElement('div', { style: styles.hexLabel },
-      `${toHex(meanR, meanG, meanB)} (α=${formatFloat(meanA)})`),
-    React.createElement('div', { style: styles.countBadge }, `n=${stats.count}`)
+    )
   );
 }
 

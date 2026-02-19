@@ -13,10 +13,13 @@
 
 import type { ValueSlot } from '../types';
 import type { CanonicalType } from '../core/canonical-types';
+import { payloadStride } from '../core/canonical-types';
 import type { UnmappedEdgeInfo, EdgeMetadata } from './mapDebugEdges';
 import type { ConstantValue } from './ConstantValueTracker';
 import { HistoryService, type KeyResolver, type ResolvedKeyMetadata } from '../ui/debug-viz/HistoryService';
-import type { DebugTargetKey } from '../ui/debug-viz/types';
+import type { DebugTargetKey, Stride } from '../ui/debug-viz/types';
+import type { FieldHistoryView, AggregateFieldStats } from '../ui/debug-viz/FieldStatsAccumulator';
+import { FieldStatsAccumulator } from '../ui/debug-viz/FieldStatsAccumulator';
 
 /**
  * Signal value result - scalar value from evalValue step.
@@ -29,15 +32,12 @@ export interface SignalValueResult {
 }
 
 /**
- * Field value result - summary stats from materialized buffer.
+ * Field value result - accumulated stats + raw buffer for direct visualization.
  */
 export interface FieldValueResult {
   kind: 'field';
-  count: number;
-  min: number;
-  max: number;
-  mean: number;
-  first: number;
+  stats: AggregateFieldStats;
+  buffer: Float32Array;
   slotId: ValueSlot;
   type: CanonicalType;
 }
@@ -115,6 +115,9 @@ class DebugService {
   /** Field slots currently being tracked for debug inspection */
   private trackedFieldSlots = new Set<ValueSlot>();
 
+  /** Per-slot accumulated field stats (created on trackField, cleared on recompile) */
+  private fieldAccumulators = new Map<ValueSlot, FieldStatsAccumulator>();
+
   /** Whether runtime has started (at least one value written) */
   private runtimeStarted = false;
 
@@ -159,6 +162,7 @@ class DebugService {
     // Reset so queries return undefined (graceful) instead of throwing (scheduling bug).
     this.signalValues.clear();
     this.fieldBuffers.clear();
+    this.fieldAccumulators.clear();
     this.runtimeStarted = false;
     this.historyService.onMappingChanged();
   }
@@ -198,9 +202,14 @@ class DebugService {
   /**
    * Track a field slot for demand-driven materialization.
    * Called by UI when user hovers a field edge or opens a field inspector.
+   * Creates a FieldStatsAccumulator for the slot if one doesn't exist.
    */
-  trackField(slotId: ValueSlot): void {
+  trackField(slotId: ValueSlot, type: CanonicalType): void {
     this.trackedFieldSlots.add(slotId);
+    if (!this.fieldAccumulators.has(slotId)) {
+      const stride = payloadStride(type.payload) as Stride;
+      this.fieldAccumulators.set(slotId, new FieldStatsAccumulator(stride));
+    }
   }
 
   /**
@@ -210,6 +219,7 @@ class DebugService {
   untrackField(slotId: ValueSlot): void {
     this.trackedFieldSlots.delete(slotId);
     this.fieldBuffers.delete(slotId);
+    this.fieldAccumulators.delete(slotId);
   }
 
   /**
@@ -244,7 +254,7 @@ class DebugService {
   /**
    * Update a field (buffer) slot value.
    * Called by runtime tap after each field materialization.
-   * Stores a copy of the buffer for stats computation.
+   * Stores a copy of the buffer and feeds the accumulator.
    */
   updateFieldValue(slotId: ValueSlot, buffer: ArrayBufferView): void {
     this.runtimeStarted = true;
@@ -256,6 +266,14 @@ class DebugService {
       this.fieldBuffers.set(slotId, copy);
     }
     copy.set(src);
+
+    // Feed accumulator for accumulated stats + temporal history
+    const acc = this.fieldAccumulators.get(slotId);
+    if (acc) {
+      const stride = acc.stride as number;
+      const count = stride > 0 ? src.length / stride : 0;
+      acc.update(src, count);
+    }
   }
 
   // ===========================================================================
@@ -315,6 +333,14 @@ class DebugService {
   }
 
   /**
+   * Get temporal history for a field slot.
+   * Returns undefined if slot is not tracked or has no accumulator.
+   */
+  getFieldHistory(slotId: ValueSlot): FieldHistoryView | undefined {
+    return this.fieldAccumulators.get(slotId)?.getHistory();
+  }
+
+  /**
    * Clear all stored data.
    * Called when patch is unloaded or recompiled.
    */
@@ -324,6 +350,7 @@ class DebugService {
     this.signalValues.clear();
     this.fieldBuffers.clear();
     this.trackedFieldSlots.clear();
+    this.fieldAccumulators.clear();
     this.unmappedEdges = [];
     this.runtimeStarted = false;
     this.historyService.clear();
@@ -365,38 +392,16 @@ class DebugService {
       );
     }
 
-    // Compute stats from buffer
-    const count = buffer.length;
-    if (count === 0) {
-      return {
-        kind: 'field',
-        count: 0,
-        min: 0,
-        max: 0,
-        mean: 0,
-        first: 0,
-        slotId: meta.slotId,
-        type: meta.type,
-      };
-    }
-
-    let min = buffer[0];
-    let max = buffer[0];
-    let sum = 0;
-    for (let i = 0; i < count; i++) {
-      const v = buffer[i];
-      if (v < min) min = v;
-      if (v > max) max = v;
-      sum += v;
-    }
+    // Read accumulated stats from accumulator (or fallback to zeros)
+    const acc = this.fieldAccumulators.get(meta.slotId);
+    const stats: AggregateFieldStats = acc
+      ? acc.getAccumulatedStats()
+      : { count: 0, stride: 0 as Stride, min: new Float32Array(4), max: new Float32Array(4), mean: new Float32Array(4) };
 
     return {
       kind: 'field',
-      count,
-      min,
-      max,
-      mean: sum / count,
-      first: buffer[0],
+      stats,
+      buffer,
       slotId: meta.slotId,
       type: meta.type,
     };

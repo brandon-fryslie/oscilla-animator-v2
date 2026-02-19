@@ -194,15 +194,25 @@ function evaluateSignalExtent(
 
     case 'extract': {
       // Extract a component from a multi-component signal.
-      // Since slotRead is removed, we always evaluate the input recursively.
-      // For componentIndex === 0, we can return the evaluated input directly.
-      // For other components, extract should only appear on construct expressions
-      // (or other multi-component expressions that can be evaluated component-wise).
+      // Since slotRead is removed, we resolve components via the input expression.
+      // For construct inputs, directly evaluate the target component sub-expression.
+      const inputExpr = valueExprs[expr.input as number];
+
+      if (inputExpr?.kind === 'construct') {
+        if (expr.componentIndex >= inputExpr.components.length) {
+          throw new Error(
+            `extract(${expr.componentIndex}) out of range for construct with ${inputExpr.components.length} components`
+          );
+        }
+        return evaluateValueExprSignal(inputExpr.components[expr.componentIndex], valueExprs, state);
+      }
+
+      // Non-construct input: componentIndex=0 works via recursive evaluation
       const inputVal = evaluateValueExprSignal(expr.input, valueExprs, state);
       if (expr.componentIndex === 0) return inputVal;
 
       throw new Error(
-        `extract(${expr.componentIndex}) on signal-extent: only componentIndex=0 supported for evaluated expressions`
+        `extract(${expr.componentIndex}) on signal-extent: input is ${inputExpr?.kind ?? 'unknown'}, not construct — cannot resolve component`
       );
     }
 

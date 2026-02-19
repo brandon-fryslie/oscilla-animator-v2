@@ -30,7 +30,7 @@ export const TYPE_COLORS: Record<ConcretePayloadType["kind"], string> = {
   int: '#6366f1',     // Indigo
   vec2: '#22c55e',    // Green
   vec3: '#10b981',    // Emerald (darker green for 3D)
-
+  vec4: '#059669',    // Teal (4D vector)
   color: '#ec4899',   // Magenta/Pink
   bool: '#f97316',    // Orange
   // TODO: Q6 shape: '#facc15',   // Yellow

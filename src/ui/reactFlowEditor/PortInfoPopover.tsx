@@ -303,7 +303,7 @@ export const PortInfoPopover: React.FC<PortInfoPopoverProps> = observer(({
               <Divider color="#444" />
               <Box>
                 <Text size="xs" c="dimmed">
-                  Field [{debugValue.count}]
+                  Field [{debugValue.stats.count}]
                 </Text>
                 <Text
                   size="sm"
@@ -312,7 +312,7 @@ export const PortInfoPopover: React.FC<PortInfoPopoverProps> = observer(({
                   mt={2}
                   style={{ fontFamily: 'monospace' }}
                 >
-                  mean: {debugValue.mean.toFixed(3)}
+                  mean: {debugValue.stats.mean[0].toFixed(3)}
                 </Text>
               </Box>
             </>

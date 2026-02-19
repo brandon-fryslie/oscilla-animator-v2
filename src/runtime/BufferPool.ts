@@ -22,6 +22,7 @@ export type BufferFormat =
   | 'f32'      // Single float
   | 'vec2f32'  // 2D vector
   | 'vec3f32'  // 3D vector
+  | 'vec4f32'  // 4D vector
   | 'rgba8'    // Color (RGBA, clamped uint8)
   | 'shape2d'; // Shape descriptor (8 x u32 words per shape)
 
@@ -49,6 +50,10 @@ export function getBufferFormat(payload: PayloadType): BufferFormat {
     // 3D vectors
     case 'vec3':
       return 'vec3f32';
+
+    // 4D vectors
+    case 'vec4':
+      return 'vec4f32';
 
     // Colors
     case 'color':
@@ -323,6 +328,9 @@ function allocateBuffer(format: BufferFormat, count: number): ArrayBufferView {
 
     case 'vec3f32':
       return new Float32Array(count * 3);
+
+    case 'vec4f32':
+      return new Float32Array(count * 4);
 
     case 'rgba8':
       return new Uint8ClampedArray(count * 4);

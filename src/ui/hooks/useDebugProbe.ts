@@ -31,7 +31,7 @@ export function useDebugProbe(edgeId: string | null): EdgeValueResult | null {
     // Check if this is a field edge and track it
     const meta = debugService.getEdgeMetadata(edgeId);
     if (meta?.cardinality === 'field') {
-      debugService.trackField(meta.slotId);
+      debugService.trackField(meta.slotId, meta.type);
     }
 
     const queryValue = () => {

@@ -200,7 +200,7 @@ describe('DebugService', () => {
             ]);
 
             debugService.setEdgeToSlotMap(edgeMap);
-            debugService.trackField(30 as ValueSlot);
+            debugService.trackField(30 as ValueSlot, canonicalType(FLOAT));
 
             expect(debugService.isFieldTracked(30 as ValueSlot)).toBe(true);
 
@@ -291,7 +291,7 @@ describe('DebugService', () => {
             ]);
 
             debugService.setEdgeToSlotMap(edgeMap);
-            debugService.trackField(30 as ValueSlot);
+            debugService.trackField(30 as ValueSlot, canonicalType(FLOAT));
 
             // Runtime hasn't started - should return undefined
             const result = debugService.getEdgeValue('field-edge');
@@ -304,7 +304,7 @@ describe('DebugService', () => {
             ]);
 
             debugService.setEdgeToSlotMap(edgeMap);
-            debugService.trackField(30 as ValueSlot);
+            debugService.trackField(30 as ValueSlot, canonicalType(FLOAT));
 
             // Start runtime by writing to a signal slot
             debugService.updateSlotValue(99 as ValueSlot, 1.0);
@@ -316,36 +316,39 @@ describe('DebugService', () => {
         });
 
         it('should return field stats for tracked field with data', () => {
+            const floatType = canonicalType(FLOAT);
             const edgeMap = new Map([
-                ['field-edge', { slotId: 30 as ValueSlot, type: canonicalType(FLOAT), cardinality: 'field' as const }],
+                ['field-edge', { slotId: 30 as ValueSlot, type: floatType, cardinality: 'field' as const }],
             ]);
 
             debugService.setEdgeToSlotMap(edgeMap);
-            debugService.trackField(30 as ValueSlot);
+            debugService.trackField(30 as ValueSlot, floatType);
 
-            // Simulate field materialization
+            // Simulate field materialization (4 scalar floats)
             const buffer = new Float32Array([0.25, 0.5, 0.75, 1.0]);
             debugService.updateFieldValue(30 as ValueSlot, buffer);
 
             const result = debugService.getEdgeValue('field-edge');
             expect(result?.kind).toBe('field');
             if (result?.kind === 'field') {
-                expect(result.count).toBe(4);
-                expect(result.min).toBe(0.25);
-                expect(result.max).toBe(1.0);
-                expect(result.mean).toBeCloseTo(0.625);
-                expect(result.first).toBe(0.25);
+                expect(result.stats.count).toBe(4);
+                expect(result.stats.min[0]).toBe(0.25);
+                expect(result.stats.max[0]).toBe(1.0);
+                expect(result.stats.mean[0]).toBeCloseTo(0.625);
                 expect(result.slotId).toBe(30 as ValueSlot);
+                expect(result.buffer).toBeInstanceOf(Float32Array);
+                expect(result.buffer.length).toBe(4);
             }
         });
 
         it('should return zero stats for tracked field with empty buffer', () => {
+            const floatType = canonicalType(FLOAT);
             const edgeMap = new Map([
-                ['empty-field', { slotId: 31 as ValueSlot, type: canonicalType(FLOAT), cardinality: 'field' as const }],
+                ['empty-field', { slotId: 31 as ValueSlot, type: floatType, cardinality: 'field' as const }],
             ]);
 
             debugService.setEdgeToSlotMap(edgeMap);
-            debugService.trackField(31 as ValueSlot);
+            debugService.trackField(31 as ValueSlot, floatType);
 
             const buffer = new Float32Array(0);
             debugService.updateFieldValue(31 as ValueSlot, buffer);
@@ -353,15 +356,12 @@ describe('DebugService', () => {
             const result = debugService.getEdgeValue('empty-field');
             expect(result?.kind).toBe('field');
             if (result?.kind === 'field') {
-                expect(result.count).toBe(0);
-                expect(result.min).toBe(0);
-                expect(result.max).toBe(0);
-                expect(result.mean).toBe(0);
+                expect(result.stats.count).toBe(0);
             }
         });
 
         it('should track and untrack field slots', () => {
-            debugService.trackField(30 as ValueSlot);
+            debugService.trackField(30 as ValueSlot, canonicalType(FLOAT));
             expect(debugService.isFieldTracked(30 as ValueSlot)).toBe(true);
 
             debugService.untrackField(30 as ValueSlot);
@@ -369,8 +369,8 @@ describe('DebugService', () => {
         });
 
         it('should report tracked slots via getTrackedFieldSlots', () => {
-            debugService.trackField(30 as ValueSlot);
-            debugService.trackField(31 as ValueSlot);
+            debugService.trackField(30 as ValueSlot, canonicalType(FLOAT));
+            debugService.trackField(31 as ValueSlot, canonicalType(FLOAT));
 
             const tracked = debugService.getTrackedFieldSlots();
             expect(tracked.has(30 as ValueSlot)).toBe(true);
@@ -384,7 +384,7 @@ describe('DebugService', () => {
             ]);
 
             debugService.setEdgeToSlotMap(edgeMap);
-            debugService.trackField(30 as ValueSlot);
+            debugService.trackField(30 as ValueSlot, canonicalType(FLOAT));
 
             const buffer = new Float32Array([1.0, 2.0, 3.0]);
             debugService.updateFieldValue(30 as ValueSlot, buffer);
@@ -493,9 +493,10 @@ describe('DebugService', () => {
         });
 
         it('should simulate demand-driven field tracking flow', () => {
+            const floatType = canonicalType(FLOAT);
             // 1. Compiler produces edge map with field edge
             const edgeMap = new Map([
-                ['add-out->render', { slotId: 30 as ValueSlot, type: canonicalType(FLOAT), cardinality: 'field' as const }],
+                ['add-out->render', { slotId: 30 as ValueSlot, type: floatType, cardinality: 'field' as const }],
             ]);
             debugService.setEdgeToSlotMap(edgeMap);
 
@@ -503,21 +504,23 @@ describe('DebugService', () => {
             const r1 = debugService.getEdgeValue('add-out->render');
             expect(r1?.kind).toBe('field-untracked');
 
-            // 3. User hovers edge - UI calls trackField
-            debugService.trackField(30 as ValueSlot);
+            // 3. User hovers edge - UI calls trackField with type
+            debugService.trackField(30 as ValueSlot, floatType);
 
             // 4. Runtime materializes and writes buffer
             const buffer = new Float32Array([0.1, 0.2, 0.3, 0.4, 0.5]);
             debugService.updateFieldValue(30 as ValueSlot, buffer);
 
-            // 5. UI queries - gets stats
+            // 5. UI queries - gets accumulated stats + raw buffer
             const r2 = debugService.getEdgeValue('add-out->render');
             expect(r2?.kind).toBe('field');
             if (r2?.kind === 'field') {
-                expect(r2.count).toBe(5);
-                expect(r2.min).toBeCloseTo(0.1);
-                expect(r2.max).toBeCloseTo(0.5);
-                expect(r2.mean).toBeCloseTo(0.3);
+                expect(r2.stats.count).toBe(5);
+                expect(r2.stats.min[0]).toBeCloseTo(0.1);
+                expect(r2.stats.max[0]).toBeCloseTo(0.5);
+                expect(r2.stats.mean[0]).toBeCloseTo(0.3);
+                expect(r2.buffer).toBeInstanceOf(Float32Array);
+                expect(r2.buffer.length).toBe(5);
             }
 
             // 6. User stops hovering - UI calls untrackField
@@ -635,6 +638,139 @@ describe('DebugService', () => {
             // Position 0 and 1 should have been overwritten with values 128, 129
             expect(history!.buffer[0]).toBe(128);
             expect(history!.buffer[1]).toBe(129);
+        });
+    });
+
+    // =========================================================================
+    // Field Accumulator Integration
+    // =========================================================================
+
+    describe('field accumulator integration', () => {
+        it('all-time min/max only expand over multiple frames', () => {
+            const floatType = canonicalType(FLOAT);
+            const edgeMap = new Map([
+                ['field-edge', { slotId: 30 as ValueSlot, type: floatType, cardinality: 'field' as const }],
+            ]);
+            debugService.setEdgeToSlotMap(edgeMap);
+            debugService.trackField(30 as ValueSlot, floatType);
+
+            // Frame 1: range [0.3, 0.7]
+            debugService.updateFieldValue(30 as ValueSlot, new Float32Array([0.3, 0.5, 0.7]));
+            let r = debugService.getEdgeValue('field-edge');
+            expect(r?.kind).toBe('field');
+            if (r?.kind === 'field') {
+                expect(r.stats.min[0]).toBeCloseTo(0.3);
+                expect(r.stats.max[0]).toBeCloseTo(0.7);
+            }
+
+            // Frame 2: narrower range [0.4, 0.6] — all-time min/max should NOT shrink
+            debugService.updateFieldValue(30 as ValueSlot, new Float32Array([0.4, 0.5, 0.6]));
+            r = debugService.getEdgeValue('field-edge');
+            if (r?.kind === 'field') {
+                expect(r.stats.min[0]).toBeCloseTo(0.3);  // Still 0.3 from frame 1
+                expect(r.stats.max[0]).toBeCloseTo(0.7);  // Still 0.7 from frame 1
+            }
+
+            // Frame 3: wider range [0.1, 0.9] — all-time min/max should expand
+            debugService.updateFieldValue(30 as ValueSlot, new Float32Array([0.1, 0.5, 0.9]));
+            r = debugService.getEdgeValue('field-edge');
+            if (r?.kind === 'field') {
+                expect(r.stats.min[0]).toBeCloseTo(0.1);  // Expanded to 0.1
+                expect(r.stats.max[0]).toBeCloseTo(0.9);  // Expanded to 0.9
+            }
+        });
+
+        it('EMA mean smooths over time', () => {
+            const floatType = canonicalType(FLOAT);
+            const edgeMap = new Map([
+                ['field-edge', { slotId: 30 as ValueSlot, type: floatType, cardinality: 'field' as const }],
+            ]);
+            debugService.setEdgeToSlotMap(edgeMap);
+            debugService.trackField(30 as ValueSlot, floatType);
+
+            // Push 100 frames of value 1.0
+            for (let i = 0; i < 100; i++) {
+                debugService.updateFieldValue(30 as ValueSlot, new Float32Array([1.0]));
+            }
+            let r = debugService.getEdgeValue('field-edge');
+            if (r?.kind === 'field') {
+                expect(r.stats.mean[0]).toBeCloseTo(1.0, 2);
+            }
+
+            // Push 1 frame of value 100.0 — mean should barely move
+            debugService.updateFieldValue(30 as ValueSlot, new Float32Array([100.0]));
+            r = debugService.getEdgeValue('field-edge');
+            if (r?.kind === 'field') {
+                // EMA with alpha ~0.000385 means mean moves <0.04 per frame
+                expect(r.stats.mean[0]).toBeLessThan(1.1);
+            }
+        });
+
+        it('accumulators reset on setEdgeToSlotMap', () => {
+            const floatType = canonicalType(FLOAT);
+            const edgeMap1 = new Map([
+                ['field-edge', { slotId: 30 as ValueSlot, type: floatType, cardinality: 'field' as const }],
+            ]);
+            debugService.setEdgeToSlotMap(edgeMap1);
+            debugService.trackField(30 as ValueSlot, floatType);
+            debugService.updateFieldValue(30 as ValueSlot, new Float32Array([0.1, 0.9]));
+
+            // Re-set mapping (simulates recompile)
+            debugService.setEdgeToSlotMap(edgeMap1);
+
+            // Accumulator should be gone
+            expect(debugService.getFieldHistory(30 as ValueSlot)).toBeUndefined();
+        });
+
+        it('getFieldHistory returns temporal history', () => {
+            const floatType = canonicalType(FLOAT);
+            const edgeMap = new Map([
+                ['field-edge', { slotId: 30 as ValueSlot, type: floatType, cardinality: 'field' as const }],
+            ]);
+            debugService.setEdgeToSlotMap(edgeMap);
+            debugService.trackField(30 as ValueSlot, floatType);
+
+            // Push 5 frames
+            for (let i = 0; i < 5; i++) {
+                debugService.updateFieldValue(30 as ValueSlot, new Float32Array([i * 0.1, i * 0.2]));
+            }
+
+            const history = debugService.getFieldHistory(30 as ValueSlot);
+            expect(history).toBeDefined();
+            expect(history!.writeIndex).toBe(5);
+            expect(history!.stride).toBe(1);
+            expect(history!.filled).toBe(false);
+        });
+
+        it('multi-stride color field accumulation', () => {
+            const colorType = canonicalType(COLOR);
+            const edgeMap = new Map([
+                ['color-edge', { slotId: 40 as ValueSlot, type: colorType, cardinality: 'field' as const }],
+            ]);
+            debugService.setEdgeToSlotMap(edgeMap);
+            debugService.trackField(40 as ValueSlot, colorType);
+
+            // 2 lanes of RGBA: [r1,g1,b1,a1, r2,g2,b2,a2]
+            const buffer = new Float32Array([
+                0.2, 0.4, 0.6, 1.0,
+                0.8, 0.6, 0.4, 0.5,
+            ]);
+            debugService.updateFieldValue(40 as ValueSlot, buffer);
+
+            const r = debugService.getEdgeValue('color-edge');
+            expect(r?.kind).toBe('field');
+            if (r?.kind === 'field') {
+                expect(r.stats.stride).toBe(4);
+                expect(r.stats.count).toBe(2);
+                // R channel: min=0.2, max=0.8
+                expect(r.stats.min[0]).toBeCloseTo(0.2);
+                expect(r.stats.max[0]).toBeCloseTo(0.8);
+                // G channel: min=0.4, max=0.6
+                expect(r.stats.min[1]).toBeCloseTo(0.4);
+                expect(r.stats.max[1]).toBeCloseTo(0.6);
+                // Raw buffer is available
+                expect(r.buffer.length).toBe(8);
+            }
         });
     });
 });

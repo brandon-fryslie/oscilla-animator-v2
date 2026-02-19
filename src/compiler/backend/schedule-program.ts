@@ -21,6 +21,7 @@ import type { UnlinkedIRFragments } from './lower-blocks';
 import type { AcyclicOrLegalGraph, NormalizedEdge, Block, BlockIndex } from '../ir/patches';
 import type { TimeModelIR } from '../ir/schedule';
 import type { ValueRefPacked } from '../ir/lowerTypes';
+import { isExprRef } from '../ir/lowerTypes';
 import type { TopologyId } from '../../shapes/types';
 import { getBlockDefinition } from '../../blocks/registry';
 import { getPolicyForSemantic } from '../../runtime/ContinuityDefaults';
@@ -451,7 +452,11 @@ function buildContinuityPipeline(
   targets: RenderTargetInfo[],
   instances: ReadonlyMap<InstanceId, InstanceDecl>,
   valueExprs: readonly ValueExpr[],
-  slotAllocator: () => ValueSlot
+  slotAllocator: () => ValueSlot,
+  /** Map from field ValueExprId → binding-pass-allocated ref.slot. Used to reuse existing slots as materialize targets. */
+  fieldExprToRefSlot: ReadonlyMap<number, ValueSlot>,
+  /** Register slot type metadata for newly allocated slots (continuity outputSlots). */
+  registerSlotType: (slot: ValueSlot, type: CanonicalType) => void
 ): {
   mapBuildSteps: StepContinuityMapBuild[];
   materializeSteps: StepMaterialize[];
@@ -493,8 +498,24 @@ function buildContinuityPipeline(
       const key = `${instanceId}:${semantic}:${fieldId}`;
       let slots = fieldSlots.get(key);
       if (!slots) {
-        const baseSlot = slotAllocator();
+        // [LAW:one-source-of-truth] Reuse the binding-pass-allocated ref.slot as baseSlot
+        // so materialize writes to the same slot the debug index references.
+        // Fall back to allocating a fresh slot if no ref.slot exists (safety net).
+        const existingSlot = fieldExprToRefSlot.get(fieldId as number);
+        const baseSlot = existingSlot ?? slotAllocator();
         const outputSlot = slotAllocator();
+
+        // Register outputSlot type metadata (baseSlot already has metadata from binding pass
+        // when reused; outputSlot is always freshly allocated and needs registration).
+        const expr = valueExprs[fieldId as number];
+        if (expr) {
+          registerSlotType(outputSlot, expr.type);
+          // If baseSlot was freshly allocated (no existing ref.slot), register it too
+          if (existingSlot === undefined) {
+            registerSlotType(baseSlot, expr.type);
+          }
+        }
+
         slots = { baseSlot, outputSlot };
         fieldSlots.set(key, slots);
 
@@ -630,6 +651,27 @@ export function pass7Schedule(
   // Get expressions for instance inference and shape resolution
   const valueExprs = unlinkedIR.builder.getValueExprs();
 
+  // [LAW:one-source-of-truth] Build map from field ValueExprId → binding-pass-allocated ref.slot.
+  // This allows buildContinuityPipeline to reuse ref.slot as the materialize target,
+  // so the debug index (which maps edges to ref.slot) and runtime (which writes to materialize target)
+  // reference the same slot.
+  const fieldExprToRefSlot = new Map<number, ValueSlot>();
+  for (const [, outputs] of unlinkedIR.blockOutputs.entries()) {
+    for (const [, ref] of outputs.entries()) {
+      if (!isExprRef(ref) || ref.slot === undefined) continue;
+      const veId = ref.id as unknown as number;
+      const expr = valueExprs[veId];
+      if (!expr) continue;
+      // Only map field-extent outputs (many cardinality)
+      try {
+        requireManyInstance(expr.type);
+        fieldExprToRefSlot.set(veId, ref.slot);
+      } catch {
+        // Not a field - skip
+      }
+    }
+  }
+
   // Collect render targets from render blocks (instance inferred from position field)
   const renderTargets = collectRenderTargets(
     validated.blocks,
@@ -645,7 +687,14 @@ export function pass7Schedule(
     materializeSteps,
     continuityApplySteps,
     renderSteps,
-  } = buildContinuityPipeline(renderTargets, instances, valueExprs, slotAllocator);
+  } = buildContinuityPipeline(
+    renderTargets,
+    instances,
+    valueExprs,
+    slotAllocator,
+    fieldExprToRefSlot,
+    (slot, type) => unlinkedIR.builder.registerSlotType(slot, type)
+  );
 
   // Collect steps from builder (stateWrite steps from stateful blocks)
   const builderSteps = unlinkedIR.builder.getSteps();

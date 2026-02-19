@@ -101,6 +101,8 @@ export function getSampleEncoding(payload: PayloadType): SampleEncoding {
       return { payload: concretePayload, stride, components: ['x', 'y'], sampleable: true };
     case 'vec3':
       return { payload: concretePayload, stride, components: ['x', 'y', 'z'], sampleable: true };
+    case 'vec4':
+      return { payload: concretePayload, stride, components: ['x', 'y', 'z', 'w'], sampleable: true };
     case 'color':
       return { payload: concretePayload, stride, components: ['r', 'g', 'b', 'a'], sampleable: true };
     case 'bool':
@@ -174,3 +176,9 @@ export interface AggregateStats {
 export type RendererSample =
   | { readonly type: 'scalar'; readonly components: Float32Array; readonly stride: Stride }
   | { readonly type: 'aggregate'; readonly stats: AggregateStats };
+
+// =============================================================================
+// Re-exports from FieldStatsAccumulator
+// =============================================================================
+
+export type { FieldFrameSnapshot, FieldHistoryView, AggregateFieldStats } from './FieldStatsAccumulator';

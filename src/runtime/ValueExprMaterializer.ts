@@ -328,6 +328,13 @@ function fillBufferWithConst(
       buf[i * 3 + 1] = value.value[1];
       buf[i * 3 + 2] = value.value[2];
     }
+  } else if (value.kind === 'vec4') {
+    for (let i = 0; i < count; i++) {
+      buf[i * 4] = value.value[0];
+      buf[i * 4 + 1] = value.value[1];
+      buf[i * 4 + 2] = value.value[2];
+      buf[i * 4 + 3] = value.value[3];
+    }
   } else if (value.kind === 'color') {
     for (let i = 0; i < count; i++) {
       buf[i * 4] = value.value[0];

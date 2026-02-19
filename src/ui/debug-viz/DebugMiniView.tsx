@@ -16,10 +16,13 @@ import { getValueRenderer } from './ValueRenderer';
 import { Sparkline } from './charts/Sparkline';
 import { DistributionBar } from './charts/DistributionBar';
 import { WarmupIndicator } from './charts/WarmupIndicator';
-import type { RendererSample, AggregateStats, Stride } from './types';
+import { ColorPalette } from './charts/ColorPalette';
+import { FieldBandChart } from './charts/FieldBandChart';
+import type { RendererSample, AggregateStats, Stride, FieldHistoryView } from './types';
 import type { EdgeValueResult } from '../../services/DebugService';
 import type { EdgeMetadata } from '../../services/mapDebugEdges';
 import type { CanonicalType } from '../../core/canonical-types';
+import { payloadStride } from '../../core/canonical-types';
 
 // Side-effect import: registers all renderers
 import './renderers/register';
@@ -229,8 +232,10 @@ export function SignalValueSection({ value, meta, history }: {
   return React.createElement('div', { style: debugMiniViewStyles.valueSection }, ...children);
 }
 
-export function FieldValueSection({ value }: {
+export function FieldValueSection({ value, meta, fieldHistory }: {
   value: EdgeValueResult | null;
+  meta: EdgeMetadata;
+  fieldHistory: FieldHistoryView | null;
 }): React.ReactElement {
   if (!value || value.kind !== 'field') {
     if (value?.kind === 'field-untracked') {
@@ -239,34 +244,92 @@ export function FieldValueSection({ value }: {
     return React.createElement('div', { style: { color: '#555' } }, 'awaiting value...');
   }
 
-  const stats: AggregateStats = {
-    count: value.count,
-    stride: 1 as Stride,
-    min: new Float32Array([value.min, 0, 0, 0]),
-    max: new Float32Array([value.max, 0, 0, 0]),
-    mean: new Float32Array([value.mean, 0, 0, 0]),
-  };
+  const { stats, buffer } = value;
+  const isColor = meta.type.payload.kind === 'color';
+  const stride = payloadStride(meta.type.payload);
+  const laneCount = stride > 0 ? buffer.length / stride : 0;
 
-  return React.createElement('div', { style: debugMiniViewStyles.fieldStats },
-    React.createElement('div', { style: debugMiniViewStyles.statRow },
-      React.createElement('span', null, `N=${value.count}`)
-    ),
-    React.createElement('div', { style: debugMiniViewStyles.statRow },
-      React.createElement('span', { style: debugMiniViewStyles.statLabel }, 'min'),
-      React.createElement('span', null, value.min.toFixed(4)),
-    ),
-    React.createElement('div', { style: debugMiniViewStyles.statRow },
-      React.createElement('span', { style: debugMiniViewStyles.statLabel }, 'mean'),
-      React.createElement('span', null, value.mean.toFixed(4)),
-    ),
-    React.createElement('div', { style: debugMiniViewStyles.statRow },
-      React.createElement('span', { style: debugMiniViewStyles.statLabel }, 'max'),
-      React.createElement('span', null, value.max.toFixed(4)),
-    ),
-    React.createElement('div', { style: { marginTop: '4px' } },
-      React.createElement(DistributionBar, { stats, width: 280 })
-    )
+  if (isColor) {
+    // Color field: sorted palette strip + mean swatch + count
+    const children: React.ReactElement[] = [];
+
+    // Color palette strip — THE main visualization
+    children.push(
+      React.createElement('div', { key: 'palette' },
+        React.createElement(ColorPalette, {
+          buffer,
+          count: laneCount,
+          width: 280,
+          height: 24,
+        })
+      )
+    );
+
+    // Mean swatch + hex reference
+    const meanR = stats.mean[0], meanG = stats.mean[1], meanB = stats.mean[2], meanA = stats.mean[3];
+    const hex = (v: number) => Math.round(Math.max(0, Math.min(1, v)) * 255).toString(16).padStart(2, '0');
+    const hexStr = `#${hex(meanR)}${hex(meanG)}${hex(meanB)}`;
+    const rgba = `rgba(${Math.round(meanR * 255)}, ${Math.round(meanG * 255)}, ${Math.round(meanB * 255)}, ${meanA})`;
+
+    children.push(
+      React.createElement('div', { key: 'mean-ref', style: { display: 'flex', alignItems: 'center', gap: '6px', marginTop: '4px' } },
+        React.createElement('div', {
+          style: {
+            width: '14px', height: '14px', borderRadius: '2px',
+            border: '1px solid rgba(255,255,255,0.2)',
+            background: rgba, position: 'relative' as const,
+          },
+        }),
+        React.createElement('span', { style: { color: '#aaa', fontSize: '11px', fontFamily: 'monospace' } }, `mean: ${hexStr}`),
+      )
+    );
+
+    // Count badge
+    children.push(
+      React.createElement('div', { key: 'count', style: { color: '#666', fontSize: '10px', fontFamily: 'monospace' } },
+        `N=${stats.count}`)
+    );
+
+    return React.createElement('div', { style: debugMiniViewStyles.fieldStats }, ...children);
+  }
+
+  // Numeric field: renderer + band chart + count
+  const children: React.ReactElement[] = [];
+
+  // Renderer with aggregate sample (stable accumulated stats)
+  const aggStats: AggregateStats = {
+    count: stats.count,
+    stride: stats.stride,
+    min: stats.min,
+    max: stats.max,
+    mean: stats.mean,
+  };
+  const renderer = getValueRenderer(meta.type);
+  const sample: RendererSample = { type: 'aggregate', stats: aggStats };
+  children.push(
+    React.createElement('div', { key: 'renderer' }, renderer.renderFull(sample))
   );
+
+  // Band chart (temporal distribution)
+  if (fieldHistory) {
+    children.push(
+      React.createElement('div', { key: 'band-chart', style: { marginTop: '4px' } },
+        React.createElement(FieldBandChart, {
+          history: fieldHistory,
+          width: 280,
+          height: 40,
+        })
+      )
+    );
+  }
+
+  // Count badge
+  children.push(
+    React.createElement('div', { key: 'count', style: { color: '#666', fontSize: '10px', fontFamily: 'monospace' } },
+      `N=${stats.count}`)
+  );
+
+  return React.createElement('div', { style: debugMiniViewStyles.fieldStats }, ...children);
 }
 
 // =============================================================================
@@ -299,6 +362,8 @@ export function DebugEdgeValueDisplay({ data }: { data: MiniViewData }): React.R
         })
       : React.createElement(FieldValueSection, {
           value: data.value,
+          meta: data.meta,
+          fieldHistory: data.fieldHistory,
         }),
 
     // Storage line

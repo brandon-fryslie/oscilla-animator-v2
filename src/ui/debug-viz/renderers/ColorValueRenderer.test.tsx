@@ -116,7 +116,7 @@ describe('ColorValueRenderer', () => {
       expect(checkerboard).toBeTruthy();
     });
 
-    it('renders per-channel bars (R, G, B, A labels)', () => {
+    it('renders mean swatch with hex label and count', () => {
       const sample = colorAggregate(
         [0, 0, 0, 0],
         [0.5, 0.5, 0.5, 0.5],
@@ -125,10 +125,9 @@ describe('ColorValueRenderer', () => {
       );
       const el = colorValueRenderer.renderFull(sample);
       const { container } = render(el);
-      expect(container.textContent).toContain('R');
-      expect(container.textContent).toContain('G');
-      expect(container.textContent).toContain('B');
-      expect(container.textContent).toContain('A');
+      // Should contain hex and count
+      expect(container.textContent).toContain('#808080');
+      expect(container.textContent).toContain('n=10');
     });
   });
 

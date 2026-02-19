@@ -98,27 +98,27 @@ const FieldValueDisplay: React.FC<{ value: EdgeValueResult & { kind: 'field' }; 
     <div style={{ marginBottom: 6 }}>
       <span style={{ color: '#94a3b8' }}>Count: </span>
       <span style={{ color: '#4ecdc4', fontWeight: 600 }}>
-        {value.count}
+        {value.stats.count}
       </span>
     </div>
     <div style={{ marginBottom: 4, display: 'flex', gap: 16 }}>
       <div>
         <span style={{ color: '#94a3b8', fontSize: 11 }}>Min: </span>
         <span style={{ color: '#60a5fa', fontFamily: 'monospace', fontSize: 13 }}>
-          {value.min.toFixed(3)}
+          {value.stats.min[0].toFixed(3)}
         </span>
       </div>
       <div>
         <span style={{ color: '#94a3b8', fontSize: 11 }}>Max: </span>
         <span style={{ color: '#f472b6', fontFamily: 'monospace', fontSize: 13 }}>
-          {value.max.toFixed(3)}
+          {value.stats.max[0].toFixed(3)}
         </span>
       </div>
     </div>
     <div style={{ marginBottom: 6 }}>
       <span style={{ color: '#94a3b8', fontSize: 11 }}>Mean: </span>
       <span style={{ color: '#4ecdc4', fontWeight: 600, fontSize: 14 }}>
-        {value.mean.toFixed(3)}
+        {value.stats.mean[0].toFixed(3)}
       </span>
     </div>
     <div style={{ fontSize: 11, color: '#64748b' }}>
