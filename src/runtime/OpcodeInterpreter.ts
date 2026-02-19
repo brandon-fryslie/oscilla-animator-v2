@@ -38,6 +38,7 @@
  *   div      - Division: a / b
  *   mod      - Modulo: a % b
  *   pow      - Power: a^b
+ *   atan2    - Arc tangent: Math.atan2(y, x)
  *   hash     - Deterministic hash: (value, seed) → [0,1)
  *
  * TERNARY (exactly 3 arguments):
@@ -197,6 +198,9 @@ function applyNaryOp(op: string, values: number[]): number {
     case 'pow':
       expectArity('pow', values.length, 2);
       return Math.pow(values[0], values[1]);
+    case 'atan2':
+      expectArity('atan2', values.length, 2);
+      return Math.atan2(values[0], values[1]);
     case 'hash': {
       // Deterministic hash function for seeded randomness
       // Input: (value, seed) → Output: [0, 1)

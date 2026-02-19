@@ -54,7 +54,8 @@ export type KernelId =
   | 'broadcast'
   | 'reduce'
   | 'zipSig'
-  | 'pathDerivative';
+  | 'pathDerivative'
+  | 'pathSample';
 
 // =============================================================================
 // ValueExpr - Canonical Expression Union (10 kinds)
@@ -201,6 +202,15 @@ export type ValueExprKernel =
       readonly field: ValueExprId;
       readonly op: 'tangent' | 'arcLength';
       readonly topologyId: TopologyId;
+    }
+  | {
+      readonly kind: 'kernel';
+      readonly type: CanonicalType;
+      readonly kernelKind: 'pathSample';
+      readonly controlPoints: ValueExprId;  // Field<vec2> over source instance (N points)
+      readonly tField: ValueExprId;          // Field<float> over target instance (M elements, 0..1)
+      readonly topologyId: TopologyId;
+      readonly op: 'position' | 'tangentAngle';
     };
 
 /**

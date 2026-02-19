@@ -211,6 +211,19 @@ describe('getValueExprChildren', () => {
     expect(getValueExprChildren(expr)).toEqual([id(9)]);
   });
 
+  it('kernel(pathSample) — two children (controlPoints, tField)', () => {
+    const expr: ValueExpr = {
+      kind: 'kernel',
+      type: SIG_FLOAT,
+      kernelKind: 'pathSample',
+      controlPoints: id(15),
+      tField: id(16),
+      topologyId: 1 as any,
+      op: 'position',
+    };
+    expect(getValueExprChildren(expr)).toEqual([id(15), id(16)]);
+  });
+
   it('event(pulse) — leaf', () => {
     const expr: ValueExpr = {
       kind: 'event',

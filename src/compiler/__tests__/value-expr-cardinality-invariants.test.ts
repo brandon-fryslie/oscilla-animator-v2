@@ -123,6 +123,12 @@ describe('ValueExpr cardinality invariants', () => {
           expect(cardKind(nodes[expr.field as number])).toBe('many');
           break;
         }
+        case 'pathSample': {
+          expect(out).toBe('many');
+          expect(cardKind(nodes[expr.controlPoints as number])).toBe('many');
+          expect(cardKind(nodes[expr.tField as number])).toBe('many');
+          break;
+        }
         default: {
           const _exhaustive: never = expr;
           void _exhaustive;

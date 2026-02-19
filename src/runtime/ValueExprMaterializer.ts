@@ -250,6 +250,42 @@ function materializeKernel(
       break;
     }
 
+    case 'pathSample': {
+      // Cross-instance arc-length parameterized path sampling
+      // controlPoints: Field<vec2> over source instance (N points)
+      // tField: Field<float> over target instance (M elements, 0..1)
+      const sourceExpr = table.nodes[expr.controlPoints];
+      const sourceInstanceId = requireInst(sourceExpr.type.extent.cardinality, 'cardinality');
+      if (sourceInstanceId.kind !== 'many') {
+        throw new Error('pathSample: controlPoints must be field (many cardinality)');
+      }
+      // Resolve source instance count from program schedule
+      const sourceInstRef = sourceInstanceId.instance;
+      const sourceInstId = (typeof sourceInstRef === 'object' ? sourceInstRef.instanceId : sourceInstRef) as InstanceId;
+      const sourceDecl = program.schedule.instances.get(sourceInstId);
+      const rawCount = sourceDecl ? sourceDecl.count : 0;
+      const sourceCount = typeof rawCount === 'number' ? rawCount : 0;
+
+      // Materialize controlPoints with source instance count
+      const cpBuf = materializeValueExpr(expr.controlPoints, table, sourceInstId, sourceCount, state, program, pool);
+      // Materialize tField with target count (M, the normal count parameter)
+      const tBuf = materializeValueExpr(expr.tField, table, instanceId, count, state, program, pool);
+
+      // Look up topology for closed flag
+      const topology = getTopology(expr.topologyId) as PathTopologyDef | undefined;
+      const closed = topology ? topology.closed : false;
+
+      if (expr.op === 'position') {
+        fillBufferPathSamplePosition(buf, cpBuf, sourceCount, tBuf, count, closed, stride);
+      } else if (expr.op === 'tangentAngle') {
+        fillBufferPathSampleTangentAngle(buf, cpBuf, sourceCount, tBuf, count, closed);
+      } else {
+        const _exhaustive: never = expr.op;
+        throw new Error(`Unknown pathSample op: ${_exhaustive}`);
+      }
+      break;
+    }
+
     case 'reduce': {
       // WI-4: Reduce is handled during signal evaluation, not materialization
       // This case should not be reached during field materialization
@@ -744,5 +780,203 @@ function fillBufferArcLength(
     totalDistance += segmentLength;
 
     out[i] = totalDistance;
+  }
+}
+
+// =============================================================================
+// Path Sample Kernels (Cross-Instance Arc-Length Parameterized Sampling)
+// =============================================================================
+
+/**
+ * Build cumulative arc-length table from control points (vec2).
+ *
+ * @param cpBuf - Control points buffer (vec2, stride=2, length N*2)
+ * @param N - Number of control points
+ * @param closed - Whether path is closed (adds segment from last→first)
+ * @returns { table: cumulative arc lengths per segment end, totalLength }
+ */
+export function buildArcLengthTable(
+  cpBuf: Float32Array,
+  N: number,
+  closed: boolean
+): { table: Float32Array; totalLength: number } {
+  const segCount = closed ? N : N - 1;
+  if (segCount <= 0) return { table: new Float32Array(0), totalLength: 0 };
+
+  const table = new Float32Array(segCount);
+  let cumulative = 0;
+
+  for (let s = 0; s < segCount; s++) {
+    const i0 = s;
+    const i1 = (s + 1) % N;
+    const dx = cpBuf[i1 * 2] - cpBuf[i0 * 2];
+    const dy = cpBuf[i1 * 2 + 1] - cpBuf[i0 * 2 + 1];
+    cumulative += Math.sqrt(dx * dx + dy * dy);
+    table[s] = cumulative;
+  }
+
+  return { table, totalLength: cumulative };
+}
+
+/**
+ * Binary search to find segment index and fractional position for a target distance.
+ *
+ * @param table - Cumulative arc-length table
+ * @param targetDist - Target distance along path
+ * @returns { segIndex, frac } where frac is 0..1 within the segment
+ */
+export function findSegment(
+  table: Float32Array,
+  targetDist: number
+): { segIndex: number; frac: number } {
+  const segCount = table.length;
+  if (segCount === 0) return { segIndex: 0, frac: 0 };
+
+  // Binary search for first table[i] >= targetDist
+  let lo = 0;
+  let hi = segCount - 1;
+  while (lo < hi) {
+    const mid = (lo + hi) >>> 1;
+    if (table[mid] < targetDist) {
+      lo = mid + 1;
+    } else {
+      hi = mid;
+    }
+  }
+
+  const segIndex = lo;
+  const segEnd = table[segIndex];
+  const segStart = segIndex > 0 ? table[segIndex - 1] : 0;
+  const segLen = segEnd - segStart;
+  const frac = segLen > 0 ? (targetDist - segStart) / segLen : 0;
+
+  return { segIndex, frac };
+}
+
+/**
+ * Fill buffer with path-sampled positions.
+ *
+ * For each target lane i:
+ *   t = tBuf[i] (0..1)
+ *   targetDist = t * totalLength
+ *   binary search → segment + frac
+ *   LERP between segment endpoints → vec2 (z=0 for vec3)
+ *
+ * @param out - Output buffer (vec2 or vec3 depending on stride)
+ * @param cpBuf - Control points (vec2, N*2)
+ * @param N - Number of control points
+ * @param tBuf - T values (float, M*1)
+ * @param M - Number of target lanes
+ * @param closed - Whether path is closed
+ * @param outStride - Output stride (2 for vec2, 3 for vec3)
+ */
+function fillBufferPathSamplePosition(
+  out: Float32Array,
+  cpBuf: Float32Array,
+  N: number,
+  tBuf: Float32Array,
+  M: number,
+  closed: boolean,
+  outStride: number
+): void {
+  // Degenerate: no control points → all zeros
+  if (N === 0) {
+    out.fill(0);
+    return;
+  }
+
+  // Single point → all outputs at that point
+  if (N === 1) {
+    const px = cpBuf[0];
+    const py = cpBuf[1];
+    for (let i = 0; i < M; i++) {
+      out[i * outStride] = px;
+      out[i * outStride + 1] = py;
+      if (outStride >= 3) out[i * outStride + 2] = 0;
+    }
+    return;
+  }
+
+  const { table, totalLength } = buildArcLengthTable(cpBuf, N, closed);
+
+  if (totalLength === 0) {
+    // Zero-length path → all outputs at first point
+    const px = cpBuf[0];
+    const py = cpBuf[1];
+    for (let i = 0; i < M; i++) {
+      out[i * outStride] = px;
+      out[i * outStride + 1] = py;
+      if (outStride >= 3) out[i * outStride + 2] = 0;
+    }
+    return;
+  }
+
+  for (let i = 0; i < M; i++) {
+    const t = tBuf[i];
+    const targetDist = t * totalLength;
+    const { segIndex, frac } = findSegment(table, targetDist);
+
+    const i0 = segIndex;
+    const i1 = (segIndex + 1) % N;
+
+    const x0 = cpBuf[i0 * 2];
+    const y0 = cpBuf[i0 * 2 + 1];
+    const x1 = cpBuf[i1 * 2];
+    const y1 = cpBuf[i1 * 2 + 1];
+
+    out[i * outStride] = x0 + (x1 - x0) * frac;
+    out[i * outStride + 1] = y0 + (y1 - y0) * frac;
+    if (outStride >= 3) out[i * outStride + 2] = 0;
+  }
+}
+
+/**
+ * Fill buffer with path-sampled tangent angles.
+ *
+ * For each target lane i:
+ *   t = tBuf[i] → find segment via arc-length table
+ *   angle = atan2(dy, dx) of that segment
+ *
+ * @param out - Output buffer (float, M)
+ * @param cpBuf - Control points (vec2, N*2)
+ * @param N - Number of control points
+ * @param tBuf - T values (float, M)
+ * @param M - Number of target lanes
+ * @param closed - Whether path is closed
+ */
+function fillBufferPathSampleTangentAngle(
+  out: Float32Array,
+  cpBuf: Float32Array,
+  N: number,
+  tBuf: Float32Array,
+  M: number,
+  closed: boolean
+): void {
+  // Degenerate cases
+  if (N <= 1) {
+    out.fill(0);
+    return;
+  }
+
+  const { table, totalLength } = buildArcLengthTable(cpBuf, N, closed);
+
+  if (totalLength === 0) {
+    out.fill(0);
+    return;
+  }
+
+  for (let i = 0; i < M; i++) {
+    const t = tBuf[i];
+    const targetDist = t * totalLength;
+    const { segIndex } = findSegment(table, targetDist);
+
+    const i0 = segIndex;
+    const i1 = (segIndex + 1) % N;
+
+    const dx = cpBuf[i1 * 2] - cpBuf[i0 * 2];
+    const dy = cpBuf[i1 * 2 + 1] - cpBuf[i0 * 2 + 1];
+
+    // Zero-length segment → angle 0
+    out[i] = (dx === 0 && dy === 0) ? 0 : Math.atan2(dy, dx);
   }
 }

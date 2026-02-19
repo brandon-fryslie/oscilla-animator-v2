@@ -164,7 +164,7 @@ describe('ValueExpr structural invariants', () => {
 
   describe('sub-discriminant correctness', () => {
     it('ValueExprKernel.kernelKind covers all kernel operations', () => {
-      const expectedKernelKinds = ['map', 'zip', 'broadcast', 'reduce', 'zipSig', 'pathDerivative'];
+      const expectedKernelKinds = ['map', 'zip', 'broadcast', 'reduce', 'zipSig', 'pathDerivative', 'pathSample'];
       const mockType = {} as CanonicalType;
       const mockFn = { kind: 'opcode', opcode: 'add' } as any;
 
@@ -176,6 +176,7 @@ describe('ValueExpr structural invariants', () => {
         { kind: 'kernel', type: mockType, kernelKind: 'reduce', field: 0 as any, op: 'sum' },
         { kind: 'kernel', type: mockType, kernelKind: 'zipSig', field: 0 as any, signals: [], fn: mockFn },
         { kind: 'kernel', type: mockType, kernelKind: 'pathDerivative', field: 0 as any, op: 'tangent', topologyId: 100 },
+        { kind: 'kernel', type: mockType, kernelKind: 'pathSample', controlPoints: 0 as any, tField: 1 as any, topologyId: 100, op: 'position' },
       ];
 
       expect(kernels.length).toBe(expectedKernelKinds.length);
@@ -271,6 +272,21 @@ describe('ValueExpr structural invariants', () => {
       };
       expect(pathDerivKernel.op).toBe('tangent');
       expect(pathDerivKernel.topologyId).toBe(100);
+    });
+
+    it('pathSample kernel has controlPoints, tField, op, and topologyId fields', () => {
+      const mockType = {} as CanonicalType;
+      const pathSampleKernel: ValueExprKernel = {
+        kind: 'kernel',
+        type: mockType,
+        kernelKind: 'pathSample',
+        controlPoints: 0 as any,
+        tField: 1 as any,
+        topologyId: 200,
+        op: 'position',
+      };
+      expect(pathSampleKernel.op).toBe('position');
+      expect(pathSampleKernel.topologyId).toBe(200);
     });
   });
 

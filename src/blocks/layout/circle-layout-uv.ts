@@ -44,6 +44,8 @@
     },
     outputs: {
       position: { label: 'Position', type: canonicalFieldDef(VEC3, unitWorld3()) },
+      rotation: { label: 'Rotation', type: canonicalFieldDef(FLOAT, { kind: 'none' }) },
+      scale: { label: 'Scale', type: canonicalFieldDef(FLOAT, { kind: 'none' }) },
     },
     lower: ({ ctx, inputsById }) => {
       const elementsInput = inputsById.elements;
@@ -119,13 +121,21 @@
       // pos = constructAuto([x, y, 0]) → vec3 (auto-broadcasts const0 signal)
       const positionField = ctx.b.constructAuto([x, y, const0], posType);
 
+      // rotation = angle (the circle angle per element, already computed)
+      // scale = broadcast constant 1.0
+      const scaleField = ctx.b.broadcast(const1, floatFieldType);
+
       return {
         outputsById: {
           position: { id: positionField, slot: undefined, type: posType, stride: payloadStride(posType.payload) },
+          rotation: { id: angle, slot: undefined, type: floatFieldType, stride: 1 },
+          scale: { id: scaleField, slot: undefined, type: floatFieldType, stride: 1 },
         },
         effects: {
           slotRequests: [
             { portId: 'position', type: posType },
+            { portId: 'rotation', type: floatFieldType },
+            { portId: 'scale', type: floatFieldType },
           ],
         },
         instanceContext: instanceId,

@@ -62,6 +62,8 @@ export function getValueExprChildren(expr: ValueExpr): readonly ValueExprId[] {
         case 'reduce':
         case 'pathDerivative':
           return [expr.field];
+        case 'pathSample':
+          return [expr.controlPoints, expr.tField];
         default: {
           const _exhaustive: never = expr;
           throw new Error(`Unknown kernel kind: ${(_exhaustive as any).kernelKind}`);

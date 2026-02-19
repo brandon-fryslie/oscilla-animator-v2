@@ -277,6 +277,11 @@ function evaluateKernelSignal(
       throw new Error('pathDerivative kernels are field-extent, not signal-extent');
     }
 
+    case 'pathSample': {
+      // PathSample is field-extent only (cross-instance sampling)
+      throw new Error('pathSample kernels are field-extent, not signal-extent');
+    }
+
     default: {
       const _exhaustive: never = expr;
       throw new Error(`Unknown kernel kind: ${(_exhaustive as Extract<ValueExpr, { kind: 'kernel' }>).kernelKind}`);

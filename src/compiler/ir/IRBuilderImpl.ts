@@ -288,6 +288,28 @@ export class IRBuilderImpl implements OrchestratorIRBuilder {
     return this.pushExpr({ kind: 'kernel', kernelKind: 'pathDerivative', field: input, op, topologyId, type });
   }
 
+  pathSample(controlPoints: ValueExprId, tField: ValueExprId, topologyId: TopologyId, op: 'position' | 'tangentAngle', type: CanonicalType): ValueExprId {
+    const outCard = requireInst(type.extent.cardinality, 'cardinality').kind;
+    if (outCard !== 'many') {
+      throw new Error(
+        `IRBuilder.pathSample: output must be many, got ${outCard}`
+      );
+    }
+    const cpCard = this.cardKindOf(controlPoints);
+    if (cpCard !== 'many') {
+      throw new Error(
+        `IRBuilder.pathSample: controlPoints id=${controlPoints} must be many, got ${cpCard}`
+      );
+    }
+    const tCard = this.cardKindOf(tField);
+    if (tCard !== 'many') {
+      throw new Error(
+        `IRBuilder.pathSample: tField id=${tField} must be many, got ${tCard}`
+      );
+    }
+    return this.pushExpr({ kind: 'kernel', kernelKind: 'pathSample', controlPoints, tField, topologyId, op, type });
+  }
+
   shapeRef(
     topologyId: TopologyId,
     paramArgs: readonly ValueExprId[],

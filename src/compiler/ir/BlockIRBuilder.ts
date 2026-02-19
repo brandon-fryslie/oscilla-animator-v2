@@ -80,6 +80,9 @@ export interface BlockIRBuilder {
   /** Create a path derivative expression (tangent or arcLength). */
   pathDerivative(input: ValueExprId, op: 'tangent' | 'arcLength', topologyId: TopologyId, type: CanonicalType): ValueExprId;
 
+  /** Create a path sample expression (cross-instance arc-length parameterized sampling). */
+  pathSample(controlPoints: ValueExprId, tField: ValueExprId, topologyId: TopologyId, op: 'position' | 'tangentAngle', type: CanonicalType): ValueExprId;
+
   /** Create a shape reference expression. */
   shapeRef(
     topologyId: TopologyId,

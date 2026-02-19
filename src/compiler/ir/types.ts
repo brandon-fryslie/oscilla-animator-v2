@@ -138,6 +138,9 @@ export enum OpCode {
   Cos = 'cos',
   Tan = 'tan',
 
+  // Inverse trigonometric
+  Atan2 = 'atan2',
+
   // Range
   Min = 'min',
   Max = 'max',

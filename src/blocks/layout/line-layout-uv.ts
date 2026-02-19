@@ -10,6 +10,7 @@ import { canonicalType, canonicalFieldDef, unitWorld3, payloadStride, floatConst
 import { FLOAT, VEC3 } from '../../core/canonical-types';
 import { defaultSourceConst } from '../../types';
 import { OpCode } from '../../compiler/ir/types';
+import { rewriteFieldType } from './_helpers';
 
 /**
  * LineLayoutUV - Gauge-invariant line layout using placement basis
@@ -46,6 +47,8 @@ registerBlock({
   },
   outputs: {
     position: { label: 'Position', type: canonicalFieldDef(VEC3, unitWorld3()) },
+    rotation: { label: 'Rotation', type: canonicalFieldDef(FLOAT, { kind: 'none' }) },
+    scale: { label: 'Scale', type: canonicalFieldDef(FLOAT, { kind: 'none' }) },
   },
   lower: ({ ctx, inputsById }) => {
     const elementsInput = inputsById.elements;
@@ -59,8 +62,8 @@ registerBlock({
       throw new Error('LineLayoutUV requires instance context from upstream Array block');
     }
 
-    // Get resolved output type first
-    const posType = ctx.outTypes[0];
+    // Rewrite output type with actual instance (ctx.outTypes has placeholder 'default')
+    const posType = rewriteFieldType(ctx.outTypes[0], instanceId, ctx.instances);
     const floatFieldType = { ...posType, payload: FLOAT, unit: { kind: 'none' as const } };
     const vec2FieldType = { ...posType, payload: { kind: 'vec2' as const }, unit: { kind: 'none' as const } };
 
@@ -108,15 +111,29 @@ registerBlock({
     // pos = constructAuto([x, y, 0]) → vec3 (auto-broadcasts const0 signal)
     const positionField = ctx.b.constructAuto([x, y, const0], posType);
 
-    // Slot will be allocated by orchestrator
+    // rotation = atan2(y1-y0, x1-x0) — constant along line, broadcast signal→field
+    const sub = ctx.b.opcode(OpCode.Sub);
+    const atan2 = ctx.b.opcode(OpCode.Atan2);
+    const floatSignalType = canonicalType(FLOAT); // signal-extent type for signal computations
+    const dy = ctx.b.zipAuto([y1Input.id, y0Input.id], sub, floatSignalType);
+    const dx = ctx.b.zipAuto([x1Input.id, x0Input.id], sub, floatSignalType);
+    const lineAngle = ctx.b.zipAuto([dy, dx], atan2, floatSignalType);
+    const rotationField = ctx.b.broadcast(lineAngle, floatFieldType);
+
+    // scale = broadcast constant 1.0
+    const scaleField = ctx.b.broadcast(const1, floatFieldType);
 
     return {
       outputsById: {
         position: { id: positionField, slot: undefined, type: posType, stride: payloadStride(posType.payload) },
+        rotation: { id: rotationField, slot: undefined, type: floatFieldType, stride: 1 },
+        scale: { id: scaleField, slot: undefined, type: floatFieldType, stride: 1 },
       },
       effects: {
         slotRequests: [
           { portId: 'position', type: posType },
+          { portId: 'rotation', type: floatFieldType },
+          { portId: 'scale', type: floatFieldType },
         ],
       },
       instanceContext: instanceId,
