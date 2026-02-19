@@ -5,6 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Critical Rules (NEVER BREAK)
 
 - **NEVER use `git stash`**. Do not stash, pop, or manipulate the stash in any way. This is a destructive operation that can lose work and interact badly with linters. If you need to test old code, use `git diff` or `git show` to read it — never modify the working tree state.
+- **Visual patch validation MUST use `scripts/get-screenshot-of-demo-patch.sh`**. When you need to verify that a demo patch renders correctly (e.g., after changing block definitions, compiler passes, runtime behavior, or rendering code), you MUST take a screenshot using this script and inspect the result. Do NOT skip visual validation or claim a patch "looks fine" without evidence. Usage: `./scripts/get-screenshot-of-demo-patch.sh <demo-patch.hcl> [--output <path>]`. Requires the dev server to be running (`npm run dev`).
 
 ## Project Overview
 
@@ -40,6 +41,30 @@ npx vitest run --include "**/cardinality*.test.ts"
 # Run with coverage for specific file
 npx vitest run --coverage src/compiler/
 ```
+
+### Visual Patch Validation
+
+Any time you need to verify that a demo patch renders correctly, use the screenshot script. This is the **only** accepted method for visual validation — never assume a patch renders correctly without taking a screenshot.
+
+```bash
+# Default: burst montage (9 frames across ~3s of animation)
+./scripts/get-screenshot-of-demo-patch.sh breathing-ring.hcl
+
+# Single screenshot (no montage)
+./scripts/get-screenshot-of-demo-patch.sh simple.hcl --no-burst
+
+# Custom output path
+./scripts/get-screenshot-of-demo-patch.sh golden-spiral.hcl --output ./evidence/
+
+# Custom burst: 5 bursts of 2 shots
+./scripts/get-screenshot-of-demo-patch.sh mouse-spiral.hcl --burst-count 5 --burst-size 2
+```
+
+By default, the script captures a **burst montage**: 3 bursts of 3 screenshots (9 frames) with 100ms between shots and 1s between bursts. Frame labels show accurate `performance.now()` deltas from the browser's JS context. Use `--help` for all options.
+
+Screenshots are saved to `/tmp/oscilla-test-screenshots/` by default, with timestamped filenames (e.g., `breathing-ring_20260219-103045.png`) that distinguish fresh captures from stale ones. The script prints the final path as `SCREENSHOT_PATH=<path>`.
+
+Requires: Chrome/Chromium, Node.js, ImageMagick (`brew install imagemagick`), dev server. Set `CHROME_BIN` to override Chrome location.
 
 ## Architecture Overview
 
