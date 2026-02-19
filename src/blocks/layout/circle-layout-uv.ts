@@ -82,23 +82,11 @@
       // u = extract(uvField, 0) — component 0 = X
       const u = ctx.b.extract(uvField, 0, floatFieldType);
 
-      // Constants
+      // Constants (signal — zipAuto/constructAuto handle signal→field broadcasting)
       const const0 = ctx.b.constant(floatConst(0), canonicalType(FLOAT));
       const const1 = ctx.b.constant(floatConst(1), canonicalType(FLOAT));
       const const0_5 = ctx.b.constant(floatConst(0.5), canonicalType(FLOAT));
       const twoPi = ctx.b.constant(floatConst(Math.PI * 2), canonicalType(FLOAT));
-
-      // Broadcast constants and signals to fields
-      const const0Broadcast = ctx.b.broadcast(const0, floatFieldType);
-      const const1Broadcast = ctx.b.broadcast(const1, floatFieldType);
-      const const0_5Broadcast = ctx.b.broadcast(const0_5, floatFieldType);
-      const twoPiBroadcast = ctx.b.broadcast(twoPi, floatFieldType);
-      // allowZipSig: signal inputs may have been resolved to field cardinality by solver.
-      // Broadcast only when input is actually a signal; fields pass through.
-      const phaseBroadcast = requireInst(phaseInput.type.extent.cardinality, 'cardinality').kind === 'one'
-        ? ctx.b.broadcast(phaseInput.id, floatFieldType) : phaseInput.id;
-      const radiusBroadcast = requireInst(radiusInput.type.extent.cardinality, 'cardinality').kind === 'one'
-        ? ctx.b.broadcast(radiusInput.id, floatFieldType) : radiusInput.id;
 
       // Opcodes
       const clamp = ctx.b.opcode(OpCode.Clamp);
@@ -108,31 +96,28 @@
       const sin = ctx.b.opcode(OpCode.Sin);
 
       // u_clamped = clamp(u, 0, 1)
-      const u_clamped = ctx.b.zipAuto([u, const0Broadcast, const1Broadcast], clamp, floatFieldType);
+      const u_clamped = ctx.b.zipAuto([u, const0, const1], clamp, floatFieldType);
 
-      // angle_base = add(u_clamped, phase_field)
-      const angle_base = ctx.b.zipAuto([u_clamped, phaseBroadcast], add, floatFieldType);
+      // angle_base = add(u_clamped, phase)
+      const angle_base = ctx.b.zipAuto([u_clamped, phaseInput.id], add, floatFieldType);
 
       // angle = mul(angle_base, twoPi)
-      const angle = ctx.b.zipAuto([angle_base, twoPiBroadcast], mul, floatFieldType);
+      const angle = ctx.b.zipAuto([angle_base, twoPi], mul, floatFieldType);
 
       // x_raw = cos(angle), y_raw = sin(angle)
       const x_raw = ctx.b.mapAuto(angle, cos, floatFieldType);
       const y_raw = ctx.b.mapAuto(angle, sin, floatFieldType);
 
       // x_scaled = mul(x_raw, radius), y_scaled = mul(y_raw, radius)
-      const x_scaled = ctx.b.zipAuto([x_raw, radiusBroadcast], mul, floatFieldType);
-      const y_scaled = ctx.b.zipAuto([y_raw, radiusBroadcast], mul, floatFieldType);
+      const x_scaled = ctx.b.zipAuto([x_raw, radiusInput.id], mul, floatFieldType);
+      const y_scaled = ctx.b.zipAuto([y_raw, radiusInput.id], mul, floatFieldType);
 
       // x = add(x_scaled, 0.5), y = add(y_scaled, 0.5)
-      const x = ctx.b.zipAuto([x_scaled, const0_5Broadcast], add, floatFieldType);
-      const y = ctx.b.zipAuto([y_scaled, const0_5Broadcast], add, floatFieldType);
+      const x = ctx.b.zipAuto([x_scaled, const0_5], add, floatFieldType);
+      const y = ctx.b.zipAuto([y_scaled, const0_5], add, floatFieldType);
 
-      // z = broadcast(0)
-      const z = const0Broadcast;
-
-      // pos = construct([x, y, z]) → vec3
-      const positionField = ctx.b.construct([x, y, z], posType);
+      // pos = constructAuto([x, y, 0]) → vec3 (auto-broadcasts const0 signal)
+      const positionField = ctx.b.constructAuto([x, y, const0], posType);
 
       return {
         outputsById: {

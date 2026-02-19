@@ -476,6 +476,59 @@ describe('Forbidden Patterns (Type System Invariants)', () => {
   // Nullish Coalescing Audit - Config Access Patterns
   // =============================================================================
 
+  // =============================================================================
+  // Cardinality Neutrality (oscilla-animator-v2-cpc)
+  // =============================================================================
+
+  describe('Cardinality Neutrality in Block Lowering', () => {
+
+    it('no isMany() in block lower functions', () => {
+      const matches = grepSrc('isMany\\(', 'src/blocks/');
+      const allowlist = [
+        /forbidden-patterns\.test\.ts/,  // This file
+        /\.test\./,                      // Test files
+        /__tests__/,                     // Test directories
+      ];
+      const filtered = filterAllowlist(matches, allowlist);
+      expect(
+        filtered,
+        'Block lower() must not call isMany() — use zipAuto/constructAuto for cardinality-safe ops.\n' +
+        'Found violations:\n' + filtered.join('\n')
+      ).toEqual([]);
+    });
+
+    it('no broadcastIfNeeded pattern in block lower functions', () => {
+      const matches = grepSrc('broadcastIfNeeded', 'src/blocks/');
+      const allowlist = [
+        /forbidden-patterns\.test\.ts/,  // This file
+        /\.test\./,                      // Test files
+        /__tests__/,                     // Test directories
+      ];
+      const filtered = filterAllowlist(matches, allowlist);
+      expect(
+        filtered,
+        'broadcastIfNeeded was removed — use zipAuto/constructAuto instead.\n' +
+        'Found violations:\n' + filtered.join('\n')
+      ).toEqual([]);
+    });
+
+    it('no ensureField pattern in block lower functions', () => {
+      const matches = grepSrc('ensureField', 'src/blocks/');
+      const allowlist = [
+        /forbidden-patterns\.test\.ts/,  // This file
+        /\.test\./,                      // Test files
+        /__tests__/,                     // Test directories
+      ];
+      const filtered = filterAllowlist(matches, allowlist);
+      expect(
+        filtered,
+        'ensureField was removed — use constructAuto for cardinality-safe component assembly.\n' +
+        'Found violations:\n' + filtered.join('\n')
+      ).toEqual([]);
+    });
+
+  });
+
   describe('Config Access Patterns', () => {
 
     it('no config?. in block lower() functions', () => {

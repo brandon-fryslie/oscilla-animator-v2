@@ -53,14 +53,11 @@ export interface BlockIRBuilder {
   /** Create an external input expression. */
   external(channel: string, type: CanonicalType): ValueExprId;
 
-  /** Map a function over an expression (unary kernel). */
-  kernelMap(input: ValueExprId, fn: PureFn, type: CanonicalType): ValueExprId;
+  /** Cardinality-safe unary map: auto-broadcasts signal→field when needed. */
+  mapAuto(input: ValueExprId, fn: PureFn, type: CanonicalType): ValueExprId;
 
-  /** Zip multiple expressions with a function (n-ary kernel). */
-  kernelZip(inputs: readonly ValueExprId[], fn: PureFn, type: CanonicalType): ValueExprId;
-
-  /** Zip a field with signals. */
-  kernelZipSig(field: ValueExprId, signals: readonly ValueExprId[], fn: PureFn, type: CanonicalType): ValueExprId;
+  /** Cardinality-safe n-ary zip: auto-broadcasts/uses zipSig when inputs have mixed cardinality. */
+  zipAuto(inputs: readonly ValueExprId[], fn: PureFn, type: CanonicalType): ValueExprId;
 
   /** Broadcast a signal to a field (cardinality one → many). */
   broadcast(signal: ValueExprId, type: CanonicalType, signalComponents?: readonly ValueExprId[]): ValueExprId;
@@ -107,6 +104,9 @@ export interface BlockIRBuilder {
 
   /** Construct a composite from components. */
   construct(components: readonly ValueExprId[], type: CanonicalType): ValueExprId;
+
+  /** Cardinality-safe construct: auto-broadcasts signal components to field extent when output is field. */
+  constructAuto(components: readonly ValueExprId[], type: CanonicalType): ValueExprId;
 
   /** Convert color from HSL to RGB (alpha passthrough). */
   hslToRgb(input: ValueExprId, type: CanonicalType): ValueExprId;

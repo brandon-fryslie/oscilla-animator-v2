@@ -88,42 +88,25 @@ registerBlock({
     // u = extract(uvField, 0) — component 0 = X
     const u = ctx.b.extract(uvField, 0, floatFieldType);
 
-    // Constants
+    // Constants (signal — zipAuto/constructAuto handle signal→field broadcasting)
     const const0 = ctx.b.constant(floatConst(0), canonicalType(FLOAT));
     const const1 = ctx.b.constant(floatConst(1), canonicalType(FLOAT));
-
-    // Broadcast constants and signals to fields
-    const const0Broadcast = ctx.b.broadcast(const0, floatFieldType);
-    const const1Broadcast = ctx.b.broadcast(const1, floatFieldType);
-    // allowZipSig: signal inputs may have been resolved to field cardinality by solver.
-    // Broadcast only when input is actually a signal; fields pass through.
-    const x0Broadcast = requireInst(x0Input.type.extent.cardinality, 'cardinality').kind === 'one'
-      ? ctx.b.broadcast(x0Input.id, floatFieldType) : x0Input.id;
-    const y0Broadcast = requireInst(y0Input.type.extent.cardinality, 'cardinality').kind === 'one'
-      ? ctx.b.broadcast(y0Input.id, floatFieldType) : y0Input.id;
-    const x1Broadcast = requireInst(x1Input.type.extent.cardinality, 'cardinality').kind === 'one'
-      ? ctx.b.broadcast(x1Input.id, floatFieldType) : x1Input.id;
-    const y1Broadcast = requireInst(y1Input.type.extent.cardinality, 'cardinality').kind === 'one'
-      ? ctx.b.broadcast(y1Input.id, floatFieldType) : y1Input.id;
 
     // Opcodes
     const clamp = ctx.b.opcode(OpCode.Clamp);
     const lerp = ctx.b.opcode(OpCode.Lerp);
 
     // u_clamped = clamp(u, 0, 1)
-    const u_clamped = ctx.b.zipAuto([u, const0Broadcast, const1Broadcast], clamp, floatFieldType);
+    const u_clamped = ctx.b.zipAuto([u, const0, const1], clamp, floatFieldType);
 
     // x = lerp(x0, x1, u_clamped)
-    const x = ctx.b.zipAuto([x0Broadcast, x1Broadcast, u_clamped], lerp, floatFieldType);
+    const x = ctx.b.zipAuto([x0Input.id, x1Input.id, u_clamped], lerp, floatFieldType);
 
     // y = lerp(y0, y1, u_clamped)
-    const y = ctx.b.zipAuto([y0Broadcast, y1Broadcast, u_clamped], lerp, floatFieldType);
+    const y = ctx.b.zipAuto([y0Input.id, y1Input.id, u_clamped], lerp, floatFieldType);
 
-    // z = broadcast(0)
-    const z = const0Broadcast;
-
-    // pos = construct([x, y, z]) → vec3
-    const positionField = ctx.b.construct([x, y, z], posType);
+    // pos = constructAuto([x, y, 0]) → vec3 (auto-broadcasts const0 signal)
+    const positionField = ctx.b.constructAuto([x, y, const0], posType);
 
     // Slot will be allocated by orchestrator
 

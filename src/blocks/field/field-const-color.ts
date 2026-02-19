@@ -5,8 +5,7 @@
  */
 
 import { registerBlock, ALL_CONCRETE_PAYLOADS } from '../registry';
-import { domainTypeId as makeDomainTypeId } from '../../core/ids';
-import { canonicalType, canonicalField, canonicalFieldDef, requireInst, payloadStride, unitNone, contractClamp01 } from '../../core/canonical-types';
+import { canonicalType, canonicalFieldDef, requireInst, payloadStride, unitNone, contractClamp01 } from '../../core/canonical-types';
 import { FLOAT, COLOR } from '../../core/canonical-types';
 import { defaultSourceConst } from '../../types';
 
@@ -64,19 +63,8 @@ registerBlock({
     const aInput = inputsById.a;
     if (!aInput) throw new Error('FieldConstColor: a input not wired — normalization bug');
 
-    // Build a scalar float field type matching the instance extent
-    const floatFieldType = canonicalField(FLOAT, { kind: 'none' }, { instanceId, domainTypeId: makeDomainTypeId('default') });
-
-    // allowZipSig: signal inputs may have been resolved to field cardinality by solver.
-    // Broadcast only when input is actually a signal; fields pass through.
-    const ensureField = (input: typeof rInput) =>
-      requireInst(input.type.extent.cardinality, 'cardinality').kind === 'one'
-        ? ctx.b.broadcast(input.id, floatFieldType) : input.id;
-    const rField = ensureField(rInput);
-    const gField = ensureField(gInput);
-    const bField = ensureField(bInput);
-    const aField = ensureField(aInput);
-    const result = ctx.b.construct([rField, gField, bField, aField], colorType);
+    // constructAuto handles signal→field broadcasting for mixed-cardinality components
+    const result = ctx.b.constructAuto([rInput.id, gInput.id, bInput.id, aInput.id], colorType);
 
     return {
       outputsById: {

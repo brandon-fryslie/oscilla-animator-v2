@@ -84,21 +84,10 @@ registerBlock({
     const u = ctx.b.extract(uvField, 0, floatFieldType);
     const v = ctx.b.extract(uvField, 1, floatFieldType);
 
-    // Constants
+    // Constants (signal — zipAuto/constructAuto handle signal→field broadcasting)
     const const0 = ctx.b.constant(floatConst(0), canonicalType(FLOAT));
     const const1 = ctx.b.constant(floatConst(1), canonicalType(FLOAT));
     const const0_5 = ctx.b.constant(floatConst(0.5), canonicalType(FLOAT));
-
-    // Broadcast constants and signals to fields
-    const const0Broadcast = ctx.b.broadcast(const0, floatFieldType);
-    const const1Broadcast = ctx.b.broadcast(const1, floatFieldType);
-    const const0_5Broadcast = ctx.b.broadcast(const0_5, floatFieldType);
-    // allowZipSig: signal inputs may have been resolved to field cardinality by solver.
-    // Broadcast only when input is actually a signal; fields pass through.
-    const colsBroadcast = requireInst(colsInput.type.extent.cardinality, 'cardinality').kind === 'one'
-      ? ctx.b.broadcast(colsInput.id, floatFieldType) : colsInput.id;
-    const rowsBroadcast = requireInst(rowsInput.type.extent.cardinality, 'cardinality').kind === 'one'
-      ? ctx.b.broadcast(rowsInput.id, floatFieldType) : rowsInput.id;
 
     // Opcodes
     const clamp = ctx.b.opcode(OpCode.Clamp);
@@ -110,20 +99,20 @@ registerBlock({
     const select = ctx.b.opcode(OpCode.Select);
 
     // u_clamped = clamp(u, 0, 1), v_clamped = clamp(v, 0, 1)
-    const u_clamped = ctx.b.zipAuto([u, const0Broadcast, const1Broadcast], clamp, floatFieldType);
-    const v_clamped = ctx.b.zipAuto([v, const0Broadcast, const1Broadcast], clamp, floatFieldType);
+    const u_clamped = ctx.b.zipAuto([u, const0, const1], clamp, floatFieldType);
+    const v_clamped = ctx.b.zipAuto([v, const0, const1], clamp, floatFieldType);
 
     // u_scaled = mul(u_clamped, cols), v_scaled = mul(v_clamped, rows)
-    const u_scaled = ctx.b.zipAuto([u_clamped, colsBroadcast], mul, floatFieldType);
-    const v_scaled = ctx.b.zipAuto([v_clamped, rowsBroadcast], mul, floatFieldType);
+    const u_scaled = ctx.b.zipAuto([u_clamped, colsInput.id], mul, floatFieldType);
+    const v_scaled = ctx.b.zipAuto([v_clamped, rowsInput.id], mul, floatFieldType);
 
     // col = floor(u_scaled), row = floor(v_scaled)
     const col = ctx.b.mapAuto(u_scaled, floor, floatFieldType);
     const row = ctx.b.mapAuto(v_scaled, floor, floatFieldType);
 
     // cols_m1 = sub(cols, 1), rows_m1 = sub(rows, 1)
-    const cols_m1 = ctx.b.zipAuto([colsBroadcast, const1Broadcast], sub, floatFieldType);
-    const rows_m1 = ctx.b.zipAuto([rowsBroadcast, const1Broadcast], sub, floatFieldType);
+    const cols_m1 = ctx.b.zipAuto([colsInput.id, const1], sub, floatFieldType);
+    const rows_m1 = ctx.b.zipAuto([rowsInput.id, const1], sub, floatFieldType);
 
     // col_safe = min(col, cols_m1), row_safe = min(row, rows_m1)
     const col_safe = ctx.b.zipAuto([col, cols_m1], min, floatFieldType);
@@ -133,17 +122,14 @@ registerBlock({
     const x_ratio = ctx.b.zipAuto([col_safe, cols_m1], div, floatFieldType);
     const y_ratio = ctx.b.zipAuto([row_safe, rows_m1], div, floatFieldType);
 
-    // x = select(cols_m1 > 0, x_ratio, 0.5) - use cols_m1 as condition (truthy if > 0)
-    const x = ctx.b.zipAuto([cols_m1, x_ratio, const0_5Broadcast], select, floatFieldType);
+    // x = select(cols_m1 > 0, x_ratio, 0.5)
+    const x = ctx.b.zipAuto([cols_m1, x_ratio, const0_5], select, floatFieldType);
 
-    // y = select(rows_m1 > 0, y_ratio, 0.5) - use rows_m1 as condition (truthy if > 0)
-    const y = ctx.b.zipAuto([rows_m1, y_ratio, const0_5Broadcast], select, floatFieldType);
+    // y = select(rows_m1 > 0, y_ratio, 0.5)
+    const y = ctx.b.zipAuto([rows_m1, y_ratio, const0_5], select, floatFieldType);
 
-    // z = broadcast(0)
-    const z = const0Broadcast;
-
-    // pos = construct([x, y, z]) → vec3
-    const positionField = ctx.b.construct([x, y, z], posType);
+    // pos = constructAuto([x, y, 0]) → vec3 (auto-broadcasts const0 signal)
+    const positionField = ctx.b.constructAuto([x, y, const0], posType);
 
     // Slot will be allocated by orchestrator
 
