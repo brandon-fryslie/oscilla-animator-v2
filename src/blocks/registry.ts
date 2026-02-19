@@ -375,7 +375,6 @@ export interface InputDef {
   readonly defaultSource?: DefaultSource;
   readonly uiHint?: UIControlHint;
   readonly exposedAsPort?: boolean;  // Default: true (backward compat)
-  readonly optional?: boolean;       // For ports: optional wiring?
   readonly hidden?: boolean;         // Hide from UI (normalizer params)
 
   /**

@@ -620,9 +620,6 @@ function TypePreview({ type }: TypePreviewProps) {
               <li key={inputId} style={{ marginBottom: '8px', fontSize: '13px' }}>
                 <div>
                   <strong>{input.label}</strong>: {formatSignalType(input.type!)}
-                  {input.optional && (
-                    <span style={{ color: colors.textSecondary }}> (optional)</span>
-                  )}
                 </div>
                 {hasDefaultSource && (
                   <div style={{
@@ -1156,12 +1153,6 @@ function PortInspector({ portRef, block, typeInfo, patch, onBack }: PortInspecto
 
       {isInput && inputPort && (
         <>
-          {inputPort.optional && (
-            <div style={{ marginBottom: '16px', fontSize: '12px', color: colors.textSecondary }}>
-              Optional port
-            </div>
-          )}
-
           {/* Show default source editor for ALL input ports - whether connected or not */}
           {effectiveDefaultSource && (
             <PortDefaultSourceEditor

@@ -5,11 +5,12 @@
  */
 
 import { registerBlock } from '../registry';
-import { canonicalType, canonicalSignal, payloadStride, floatConst, requireInst, withInstance } from '../../core/canonical-types';
+import { defaultSourceConst } from '../../types';
+import { canonicalType, canonicalSignal, payloadStride, floatConst, requireInst } from '../../core/canonical-types';
 import { FLOAT } from '../../core/canonical-types';
 import { OpCode } from '../../compiler/ir/types';
 import type { ValueExprId } from '../../compiler/ir/Indices';
-import { alignInputs, withoutContract } from '../lower-utils';
+import { withoutContract } from '../lower-utils';
 
 registerBlock({
   type: 'Hash',
@@ -26,7 +27,7 @@ registerBlock({
   },
   inputs: {
     value: { label: 'Value', type: canonicalType(FLOAT) },
-    seed: { label: 'Seed', type: canonicalType(FLOAT), optional: true },
+    seed: { label: 'Seed', type: canonicalType(FLOAT), defaultSource: defaultSourceConst(0) },
   },
   outputs: {
     out: { label: 'Output', type: canonicalType(FLOAT) },
@@ -41,29 +42,24 @@ registerBlock({
       throw new Error('Hash requires continuous (non-event) input');
     }
 
-    const baseOutType = ctx.outTypes[0];
-    const valueCard = requireInst(value.type.extent.cardinality, 'cardinality');
-    const outType = valueCard.kind === 'many' ? withInstance(baseOutType, valueCard.instance) : baseOutType;
+    // outTypes[0] already has instance info pre-populated by orchestrator
+    const outType = ctx.outTypes[0];
     const intermediateType = withoutContract(outType);
 
     const seed = inputsById.seed;
     let seedId: ValueExprId;
-    let seedType = canonicalSignal(FLOAT);
     if (seed && 'type' in seed) {
       const seedTemp = requireInst(seed.type.extent.temporality, 'temporality');
       if (seedTemp.kind !== 'continuous') {
         throw new Error('Hash seed must be continuous (non-event) when provided');
       }
       seedId = seed.id;
-      seedType = seed.type;
     } else {
-      seedType = canonicalType(FLOAT, outType.unit);
-      seedId = ctx.b.constant(floatConst(0), seedType);
+      seedId = ctx.b.constant(floatConst(0), canonicalType(FLOAT, outType.unit));
     }
 
     const hashFn = ctx.b.opcode(OpCode.Hash);
-    const [valueAligned, seedAligned] = alignInputs(value.id, value.type, seedId, seedType, intermediateType, ctx.b);
-    const hashId = ctx.b.kernelZip([valueAligned, seedAligned], hashFn, intermediateType);
+    const hashId = ctx.b.zipAuto([value.id, seedId], hashFn, intermediateType);
 
     return {
       outputsById: {

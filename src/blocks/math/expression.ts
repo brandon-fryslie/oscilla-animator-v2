@@ -48,7 +48,6 @@ registerBlock({
       type: inferType(payloadVar('expr_refs'), unitVar('expr_refs'), {
         cardinality: axisVar(cardinalityVarId('expr_refs')),
       }),
-      optional: true,
       exposedAsPort: true,
       collectAccepts: {
         payloads: [FLOAT, INT, VEC2, VEC3, COLOR],

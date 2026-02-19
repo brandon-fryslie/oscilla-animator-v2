@@ -41,7 +41,6 @@ registerBlock({
     element: {
       label: 'Element',
       type: canonicalType(FLOAT),
-      optional: true,
       defaultSource: defaultSource('Ellipse', 'shape'),
     },
     count: {

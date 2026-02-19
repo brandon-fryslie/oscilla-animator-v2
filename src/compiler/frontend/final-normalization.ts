@@ -142,12 +142,11 @@ export function finalizeNormalizationFixpoint(
       diagnostics.push(...lastSolveDiagnostics);
       // Emit remaining cardinality conflicts as diagnostics (could not resolve structurally)
       for (const conflict of cardinalityConflicts) {
-        const conflictPorts = conflict.kind === 'ZipBroadcastClampOneConflict' ? conflict.zipPorts : [];
         diagnostics.push({
           diagnosticFlagCode: conflict.kind,
           message: conflict.message,
-          stableKey: `${conflict.kind}:${conflictPorts.join(',')}`,
-          ports: conflictPorts,
+          stableKey: `${conflict.kind}:${conflict.ports.join(',')}`,
+          ports: conflict.ports,
         });
       }
       const strict = tryFinalizeStrict(g, facts, collectPorts);
@@ -247,11 +246,11 @@ function solveAndComputeFacts(
     constraints: extracted.cardinality,
   });
 
-  // Separate cardinality errors: ZipBroadcastClampOneConflict are structural
-  // issues resolved via obligations, not terminal errors.
+  // Separate cardinality errors: ZipBroadcastClampOneConflict and ClampManyConflict
+  // are structural issues resolved via obligations (Broadcast insertion), not terminal errors.
   const cardinalityConflicts: CardinalitySolveError[] = [];
   for (const error of cardResult.errors) {
-    if (error.kind === 'ZipBroadcastClampOneConflict') {
+    if (error.kind === 'ZipBroadcastClampOneConflict' || error.kind === 'ClampManyConflict') {
       cardinalityConflicts.push(error);
     } else {
       solveDiagnostics.push({
@@ -624,8 +623,6 @@ function createMissingInputObligations(
       if (inputDef.exposedAsPort === false) continue;
       // Skip collect ports (explicit connections only)
       if (inputDef.collectAccepts) continue;
-      // Skip optional inputs
-      if (inputDef.optional) continue;
       // Skip if defaulting is forbidden (buildDraftGraph emits a diagnostic for these)
       if (inputDef.defaulting === 'forbidden') continue;
 

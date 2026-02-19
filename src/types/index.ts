@@ -219,7 +219,6 @@ export interface Slot {
   readonly label: string;
   readonly type: CanonicalType;
   readonly direction: SlotDirection;
-  readonly optional?: boolean;
   readonly defaultSource: DefaultSource;
 }
 

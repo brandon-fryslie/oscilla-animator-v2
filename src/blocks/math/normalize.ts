@@ -5,6 +5,7 @@
  */
 
 import { registerBlock } from '../registry';
+import { defaultSourceConst } from '../../types';
 import { canonicalType, payloadStride, floatConst } from '../../core/canonical-types';
 import { FLOAT } from '../../core/canonical-types';
 import { OpCode } from '../../compiler/ir/types';
@@ -26,7 +27,7 @@ registerBlock({
   inputs: {
     x: { label: 'X', type: canonicalType(FLOAT) },
     y: { label: 'Y', type: canonicalType(FLOAT) },
-    z: { label: 'Z', type: canonicalType(FLOAT), optional: true },
+    z: { label: 'Z', type: canonicalType(FLOAT), defaultSource: defaultSourceConst(0) },
   },
   outputs: {
     outX: { label: 'X', type: canonicalType(FLOAT) },

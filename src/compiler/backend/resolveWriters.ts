@@ -66,8 +66,6 @@ export interface ResolvedInputSpec {
   /** Combine policy (from Slot.combine or default) */
   readonly combine: CombinePolicy;
 
-  /** Whether this input is optional (can have 0 writers). */
-  readonly optional: boolean;
 }
 
 /**
@@ -297,7 +295,6 @@ export function resolveBlockInputs(
       portType,
       writers: sortedWriters,
       combine,
-      optional: inputSlot.optional === true,
     });
   }
 
@@ -340,6 +337,5 @@ export function resolveInput(
     portType,
     writers: sortedWriters,
     combine,
-    optional: false,
   };
 }
