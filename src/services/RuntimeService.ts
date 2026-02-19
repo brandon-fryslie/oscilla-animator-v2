@@ -12,6 +12,7 @@
 import { initGlobalRenderArena, type RenderBufferArena } from '../render';
 import type { RootStore } from '../stores';
 import { loadPatchFromStorage, savePatchToStorage } from './PatchPersistence';
+import { consumeTestDemoFilename } from '../testing/test-params';
 import {
   compileAndSwap,
   type CompileOrchestratorState,
@@ -70,13 +71,25 @@ export class RuntimeService {
     const { compilerFlagsSettings } = await import('../settings/tokens/compiler-flags-settings');
     store.settings.register(compilerFlagsSettings);
 
-    // Try to restore from localStorage, otherwise load default demo
-    const saved = loadPatchFromStorage();
-    if (saved) {
-      store.demo.currentFilename = null;
-      store.patch.loadPatch(saved.patch);
+    // Check for test automation demo marker (set by ?loadDemoPatch= before reload)
+    const testDemo = consumeTestDemoFilename();
+    if (testDemo) {
+      const loaded = store.demo.selectDemo(testDemo);
+      if (!loaded) {
+        console.error(
+          `[test-params] Demo not found: "${testDemo}". Available: ${store.demo.demos.map(d => d.filename).join(', ')}`
+        );
+        store.demo.loadDefault();
+      }
     } else {
-      store.demo.loadDefault();
+      // Try to restore from localStorage, otherwise load default demo
+      const saved = loadPatchFromStorage();
+      if (saved) {
+        store.demo.currentFilename = null;
+        store.patch.loadPatch(saved.patch);
+      } else {
+        store.demo.loadDefault();
+      }
     }
 
     // Initial compile (isInitial=true — hard swap)

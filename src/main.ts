@@ -9,14 +9,29 @@
  * All persistence is owned by PatchStore.
  */
 
+import { interceptLoadDemoPatch, validateShowPreview } from './testing/test-params';
+
+// ─── Pre-React test parameter handling ───────────────────────────────────────
+// [LAW:single-enforcer] These run once before React mounts.
+// interceptLoadDemoPatch: clears localStorage, stashes filename, triggers reload.
+// validateShowPreview: throws on invalid values (fast feedback for test runners).
+const navigating = interceptLoadDemoPatch();
+if (!navigating) {
+  validateShowPreview();
+}
+
+// ─── Normal boot (only if not redirecting) ───────────────────────────────────
+
 import React from 'react';
 import { createRoot } from 'react-dom/client';
+import { NuqsAdapter } from 'nuqs/adapters/react';
 import { App } from './ui/components';
 import { StoreProvider, type RootStore } from './stores';
 import { RuntimeService } from './services/RuntimeService';
 import { initializeComposites } from './blocks/composites';
 
 let runtimeService: RuntimeService | null = null;
+let pendingCanvas: HTMLCanvasElement | null = null;
 
 async function main() {
   initializeComposites();
@@ -29,20 +44,34 @@ async function main() {
   const renderApp = () => {
     root.render(
       React.createElement(
-        StoreProvider,
+        NuqsAdapter,
         null,
-        React.createElement(App, {
-          onCanvasReady: (canvasEl: HTMLCanvasElement) => {
-            runtimeService?.setCanvas(canvasEl);
-          },
-          onStoreReady: (rootStore: RootStore) => {
-            runtimeService = new RuntimeService(rootStore);
-            runtimeService.init().catch((err) => {
-              console.error('Failed to initialize runtime:', err);
-            });
-          },
-          externalWriteBus: runtimeService?.compileState.currentState?.externalChannels.writeBus,
-        })
+        React.createElement(
+          StoreProvider,
+          null,
+          React.createElement(App, {
+            onCanvasReady: (canvasEl: HTMLCanvasElement) => {
+              if (runtimeService) {
+                runtimeService.setCanvas(canvasEl);
+              } else {
+                // TestPreviewPanel fires onCanvasReady before onStoreReady
+                // (child effects run before parent effects). Buffer the element.
+                pendingCanvas = canvasEl;
+              }
+            },
+            onStoreReady: (rootStore: RootStore) => {
+              runtimeService = new RuntimeService(rootStore);
+              if (pendingCanvas) {
+                runtimeService.setCanvas(pendingCanvas);
+                pendingCanvas = null;
+              }
+              runtimeService.init().catch((err) => {
+                console.error('Failed to initialize runtime:', err);
+              });
+            },
+            externalWriteBus: runtimeService?.compileState.currentState?.externalChannels.writeBus,
+          })
+        )
       )
     );
   };
@@ -58,4 +87,6 @@ if (import.meta.hot) {
   });
 }
 
-main();
+if (!navigating) {
+  main();
+}

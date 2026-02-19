@@ -24,6 +24,8 @@ import { Toast } from '../common/Toast';
 import { useStores, type RootStore } from '../../../stores';
 import type { ExternalWriteBus } from '../../../runtime/ExternalChannel';
 import { ExternalWriteBusContext } from '../../ExternalWriteBusContext';
+import { useShowPreview } from '../../../testing/test-params';
+import { TestPreviewPanel } from '../../../testing/TestPreviewPanel';
 
 // Mantine dark theme configuration - gorgeous modern look
 const mantineTheme = createMantineTheme({
@@ -110,6 +112,7 @@ interface AppProps {
 }
 
 export const App: React.FC<AppProps> = ({ onCanvasReady, onStoreReady, externalWriteBus }) => {
+  const showPreview = useShowPreview();
   const [stats, setStats] = useState('FPS: --');
 
   // Get store from context and expose to non-React code via callback
@@ -206,44 +209,48 @@ export const App: React.FC<AppProps> = ({ onCanvasReady, onStoreReady, externalW
     <MantineProvider theme={mantineTheme} defaultColorScheme="dark">
       <ThemeProvider theme={darkTheme}>
         <ExternalWriteBusContext.Provider value={externalWriteBus}>
-          <EditorProvider>
-          {/* Capture EditorContext methods */}
-          <EditorContextCapture contextRef={editorContextRef} />
-          <GlobalHotkeys onFeedback={handleHotkeyFeedback} />
+          {showPreview ? (
+            /* Test automation: full-viewport canvas or errors, zero chrome */
+            <TestPreviewPanel onCanvasReady={handleCanvasReady} />
+          ) : (
+            <EditorProvider>
+            {/* Capture EditorContext methods */}
+            <EditorContextCapture contextRef={editorContextRef} />
+            <GlobalHotkeys onFeedback={handleHotkeyFeedback} />
 
-          <div
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              height: '100vh',
-              overflow: 'hidden',
-              background: '#1a1a2e',
-              color: '#eee',
-              fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
-            }}
-          >
-            {/* Toolbar - outside Dockview, receives API via prop */}
-            <Toolbar stats={stats} dockviewApi={dockviewApi} />
+            <div
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                height: '100vh',
+                overflow: 'hidden',
+                background: '#1a1a2e',
+                color: '#eee',
+                fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+              }}
+            >
+              <Toolbar stats={stats} dockviewApi={dockviewApi} />
 
-            {/* Dockview workspace - all panels managed by Dockview */}
-            <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
-              <DockviewProvider
-                onReactFlowEditorReady={handleReactFlowEditorReady}
-                onCanvasReady={handleCanvasReady}
-                onActivePanelChange={handleActivePanelChange}
-                onApiReady={setDockviewApi}
-              />
+              {/* Dockview workspace - all panels managed by Dockview */}
+              <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
+                <DockviewProvider
+                  onReactFlowEditorReady={handleReactFlowEditorReady}
+                  onCanvasReady={handleCanvasReady}
+                  onActivePanelChange={handleActivePanelChange}
+                  onApiReady={setDockviewApi}
+                />
+              </div>
             </div>
-          </div>
 
-          {/* Toast for keyboard shortcut feedback */}
-          <Toast
-            open={toastOpen}
-            message={toastMessage}
-            severity={toastSeverity}
-            onClose={handleToastClose}
-          />
-        </EditorProvider>
+            {/* Toast for keyboard shortcut feedback */}
+            <Toast
+              open={toastOpen}
+              message={toastMessage}
+              severity={toastSeverity}
+              onClose={handleToastClose}
+            />
+          </EditorProvider>
+          )}
         </ExternalWriteBusContext.Provider>
       </ThemeProvider>
     </MantineProvider>
