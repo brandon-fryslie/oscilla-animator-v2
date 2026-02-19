@@ -16,13 +16,14 @@ import type { PayloadType, ConcretePayloadType } from './payloads';
  * Per resolution Q7: This is the single authority for stride.
  * Per resolution Q4: Exhaustive switch with explicit case for every PayloadType kind.
  */
-export function payloadStride(p: PayloadType): number {
+export function payloadStride(p: PayloadType): 1 | 2 | 3 | 4 {
   switch (p.kind) {
     case 'float': return 1;
     case 'int': return 1;
     case 'bool': return 1;
     case 'vec2': return 2;
     case 'vec3': return 3;
+    case 'vec4': return 4;
     case 'color': return 4;
     case 'cameraProjection': return 1;
     default: {

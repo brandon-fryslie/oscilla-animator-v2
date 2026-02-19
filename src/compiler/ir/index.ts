@@ -41,6 +41,3 @@ export type { BlockIRBuilder } from './BlockIRBuilder';
 export type { OrchestratorIRBuilder } from './OrchestratorIRBuilder';
 export type { IRBuilder } from './IRBuilder'; // Legacy - deprecated
 export { IRBuilderImpl, createIRBuilder } from './IRBuilderImpl';
-
-// Signal expression types
-export * from './signalExpr';
