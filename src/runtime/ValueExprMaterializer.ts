@@ -299,6 +299,12 @@ function fillBufferWithConst(
       buf[i * 4 + 2] = value.value[2];
       buf[i * 4 + 3] = value.value[3];
     }
+  } else if (value.kind === 'int' || value.kind === 'bool') {
+    // Scalar types stored as float in the buffer
+    const numVal = value.kind === 'bool' ? (value.value ? 1 : 0) : value.value;
+    for (let i = 0; i < count * stride; i++) {
+      buf[i] = numVal;
+    }
   } else {
     throw new Error(`Unsupported const value kind: ${value.kind}`);
   }

@@ -205,42 +205,42 @@ registerBlock({
     // Step 2: Compute angle (same as polygon)
     // totalPoints = points * 2
     const mul = ctx.b.opcode(OpCode.Mul);
-    const totalPoints = ctx.b.kernelZip([pointsBroadcast, twoBroadcast], mul, floatFieldType);
+    const totalPoints = ctx.b.zipAuto([pointsBroadcast, twoBroadcast], mul, floatFieldType);
 
     // angleFrac = index / totalPoints
     const div = ctx.b.opcode(OpCode.Div);
-    const angleFrac = ctx.b.kernelZip([indexField, totalPoints], div, floatFieldType);
+    const angleFrac = ctx.b.zipAuto([indexField, totalPoints], div, floatFieldType);
 
     // angleScaled = angleFrac * 2π
-    const angleScaled = ctx.b.kernelZip([angleFrac, twoPiBroadcast], mul, floatFieldType);
+    const angleScaled = ctx.b.zipAuto([angleFrac, twoPiBroadcast], mul, floatFieldType);
 
     // angle = angleScaled - π/2
     const sub = ctx.b.opcode(OpCode.Sub);
-    const angle = ctx.b.kernelZip([angleScaled, halfPiBroadcast], sub, floatFieldType);
+    const angle = ctx.b.zipAuto([angleScaled, halfPiBroadcast], sub, floatFieldType);
 
     // Step 3: Radius selection using Select opcode
     // indexFloor = floor(index)
     const floor = ctx.b.opcode(OpCode.Floor);
-    const indexFloor = ctx.b.kernelMap(indexField, floor, floatFieldType);
+    const indexFloor = ctx.b.mapAuto(indexField, floor, floatFieldType);
 
     // indexMod2 = mod(indexFloor, 2)
     const mod = ctx.b.opcode(OpCode.Mod);
-    const indexMod2 = ctx.b.kernelZip([indexFloor, twoBroadcast], mod, floatFieldType);
+    const indexMod2 = ctx.b.zipAuto([indexFloor, twoBroadcast], mod, floatFieldType);
 
     // radius = select(indexMod2, innerRadius, outerRadius)
     // Select semantics: select(cond, ifTrue, ifFalse) → returns ifTrue when cond > 0
     // indexMod2 = 0 (outer): returns ifFalse = outerRadius
     // indexMod2 = 1 (inner): returns ifTrue = innerRadius
     const select = ctx.b.opcode(OpCode.Select);
-    const radius = ctx.b.kernelZip([indexMod2, innerRadiusBroadcast, outerRadiusBroadcast], select, floatFieldType);
+    const radius = ctx.b.zipAuto([indexMod2, innerRadiusBroadcast, outerRadiusBroadcast], select, floatFieldType);
 
     // Step 4: Position computation
     const cos = ctx.b.opcode(OpCode.Cos);
     const sin = ctx.b.opcode(OpCode.Sin);
-    const cosAngle = ctx.b.kernelMap(angle, cos, floatFieldType);
-    const sinAngle = ctx.b.kernelMap(angle, sin, floatFieldType);
-    const xField = ctx.b.kernelZip([radius, cosAngle], mul, floatFieldType);
-    const yField = ctx.b.kernelZip([radius, sinAngle], mul, floatFieldType);
+    const cosAngle = ctx.b.mapAuto(angle, cos, floatFieldType);
+    const sinAngle = ctx.b.mapAuto(angle, sin, floatFieldType);
+    const xField = ctx.b.zipAuto([radius, cosAngle], mul, floatFieldType);
+    const yField = ctx.b.zipAuto([radius, sinAngle], mul, floatFieldType);
 
     // Step 5: construct([x, y]) → vec2
     const computedPositions = ctx.b.construct(

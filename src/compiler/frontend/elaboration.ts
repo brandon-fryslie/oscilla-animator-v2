@@ -33,6 +33,8 @@ export interface ElaborationPlan {
   readonly addEdges?: readonly DraftEdge[];
   /** Edges to replace (remove old, add new) */
   readonly replaceEdges?: readonly EdgeReplacement[];
+  /** Block IDs to remove (along with all their connected edges) */
+  readonly removeBlockIds?: readonly string[];
   /** Diagnostics emitted by this plan (warnings, info) */
   readonly diagnostics?: readonly FixpointDiagnostic[];
   /** Human-readable notes for debugging */

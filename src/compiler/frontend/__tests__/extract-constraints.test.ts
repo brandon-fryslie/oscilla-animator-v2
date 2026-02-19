@@ -207,4 +207,73 @@ describe('extractConstraints', () => {
     const valueKey = draftPortKey(constBlock.id, 'value', 'in');
     expect(constraints.portBaseTypes.has(valueKey)).toBe(false);
   });
+
+  it('Reduce signal output keeps cardinality one (not rewritten to many)', () => {
+    const patch = buildPatch((b) => {
+      b.addBlock('Reduce');
+    });
+    const { graph: g } = buildDraftGraph(patch);
+    const constraints = extractConstraints(g, BLOCK_DEFS_BY_TYPE);
+
+    const reduceBlock = g.blocks.find((b) => b.type === 'Reduce')!;
+    const signalKey = draftPortKey(reduceBlock.id, 'signal', 'out');
+
+    // Signal output should have cardinality one in baseCardinalityAxis
+    const axis = constraints.baseCardinalityAxis.get(signalKey);
+    expect(axis).toBeDefined();
+    expect(isAxisInst(axis!)).toBe(true);
+    if (isAxisInst(axis!)) {
+      expect(axis!.value.kind).toBe('one');
+    }
+
+    // Should emit clampOne, not forceMany
+    const clampOnes = constraints.cardinality.filter(
+      (c) => c.kind === 'clampOne' && c.port === signalKey,
+    );
+    expect(clampOnes.length).toBe(1);
+
+    const forceManyForSignal = constraints.cardinality.filter(
+      (c) => c.kind === 'forceMany' && c.port === signalKey,
+    );
+    expect(forceManyForSignal.length).toBe(0);
+  });
+
+  it('ProceduralPolygon: shape output is one, controlPoints output is many', () => {
+    const patch = buildPatch((b) => {
+      b.addBlock('ProceduralPolygon');
+    });
+    const { graph: g } = buildDraftGraph(patch);
+    const constraints = extractConstraints(g, BLOCK_DEFS_BY_TYPE);
+
+    const polyBlock = g.blocks.find((b) => b.type === 'ProceduralPolygon')!;
+    const shapeKey = draftPortKey(polyBlock.id, 'shape', 'out');
+    const cpKey = draftPortKey(polyBlock.id, 'controlPoints', 'out');
+
+    // shape output: cardinality one (signal)
+    const shapeAxis = constraints.baseCardinalityAxis.get(shapeKey);
+    expect(shapeAxis).toBeDefined();
+    expect(isAxisInst(shapeAxis!)).toBe(true);
+    if (isAxisInst(shapeAxis!)) {
+      expect(shapeAxis!.value.kind).toBe('one');
+    }
+
+    // controlPoints output: cardinality many (field)
+    const cpAxis = constraints.baseCardinalityAxis.get(cpKey);
+    expect(cpAxis).toBeDefined();
+    expect(isAxisInst(cpAxis!)).toBe(true);
+    if (isAxisInst(cpAxis!)) {
+      expect(cpAxis!.value.kind).toBe('many');
+    }
+
+    // shape should get clampOne, controlPoints should get forceMany
+    const shapeClamp = constraints.cardinality.filter(
+      (c) => c.kind === 'clampOne' && c.port === shapeKey,
+    );
+    expect(shapeClamp.length).toBe(1);
+
+    const cpForce = constraints.cardinality.filter(
+      (c) => c.kind === 'forceMany' && c.port === cpKey,
+    );
+    expect(cpForce.length).toBe(1);
+  });
 });

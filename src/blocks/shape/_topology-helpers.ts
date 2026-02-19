@@ -2,7 +2,7 @@
  * Shared topology creation helpers for shape blocks.
  *
  * Extracts the common line-path topology pattern used by
- * ProceduralPolygon, ProceduralStar, MakeShape2D, SpiralGenerator, etc.
+ * ProceduralPolygon, ProceduralStar, MakeShape2D, etc.
  */
 
 import { PathVerb, type PathTopologyDefInput } from '../../shapes/types';

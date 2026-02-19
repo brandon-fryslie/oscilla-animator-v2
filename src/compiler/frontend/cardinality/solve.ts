@@ -69,7 +69,15 @@ export type CardinalitySolveError =
       readonly manyEvidenceOrigins: readonly ConstraintOrigin[];
       readonly message: string;
     }
-  | { readonly kind: 'ClampManyConflict'; readonly ports: readonly DraftPortKey[]; readonly message: string }
+  | {
+      readonly kind: 'ClampManyConflict';
+      readonly ports: readonly DraftPortKey[];
+      readonly clampOneMembers: readonly DraftPortKey[];
+      readonly forceManyMembers: readonly DraftPortKey[];
+      readonly clampOneOrigins: readonly ConstraintOrigin[];
+      readonly forceManyOrigins: readonly ConstraintOrigin[];
+      readonly message: string;
+    }
   | { readonly kind: 'InstanceConflict'; readonly ports: readonly DraftPortKey[]; readonly message: string }
   | { readonly kind: 'UnresolvedInstanceVar'; readonly ports: readonly DraftPortKey[]; readonly message: string };
 
@@ -400,9 +408,32 @@ export function solveCardinality(input: CardinalitySolveInput): CardinalitySolve
 
     if (facts.forcedOne && hasForcedMany) {
       // Conflict: clampOne AND forceMany in same group
+      const members = uf.members(root);
+      // Collect ports directly referenced in clampOne/forceMany constraints
+      const clampOneDirect = new Set<DraftPortKey>();
+      const forceManyDirect = new Set<DraftPortKey>();
+      for (const c of constraints) {
+        if (c.kind === 'clampOne' && uf.find(c.port) === root) {
+          clampOneDirect.add(c.port);
+        }
+        if (c.kind === 'forceMany' && uf.find(c.port) === root) {
+          forceManyDirect.add(c.port);
+        }
+      }
+      // Also check base axis for concrete many evidence
+      for (const port of members) {
+        const axis = baseCardinalityAxis.get(port);
+        if (axis && isAxisInst(axis) && axis.value.kind === 'many') {
+          forceManyDirect.add(port);
+        }
+      }
       errors.push({
         kind: 'ClampManyConflict',
-        ports: uf.members(root),
+        ports: members,
+        clampOneMembers: clampOneDirect.size > 0 ? [...clampOneDirect].sort() : members,
+        forceManyMembers: forceManyDirect.size > 0 ? [...forceManyDirect].sort() : members,
+        clampOneOrigins: facts.clampOneOrigins,
+        forceManyOrigins: facts.forceManyOrigins,
         message: `Cardinality conflict: ports constrained to both one and many`,
       });
       continue;

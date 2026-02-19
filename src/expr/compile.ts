@@ -2,7 +2,7 @@
  * Expression DSL IR Compiler
  *
  * Compiles typed AST to IR expressions using IRBuilder.
- * Maps AST nodes to IR primitives (constant, kernelMap, kernelZip, etc.).
+ * Maps AST nodes to IR primitives (constant, mapAuto, zipAuto, etc.).
  *
  * IR mapping reference: src/expr/FUNCTIONS.md
  */
@@ -110,13 +110,13 @@ function compileUnary(node: ExprNode & { kind: 'unary' }, ctx: CompileContext): 
       // Logical NOT: Use comparison to false (0)
       const zero = ctx.builder.constant(intConst(0), canonicalType(INT));
       const eqFn = ctx.builder.opcode(OpCode.Eq);
-      return ctx.builder.kernelZip([arg, zero], eqFn, type);
+      return ctx.builder.zipAuto([arg, zero], eqFn, type);
     }
 
     case '-': {
       // Negation: Use Neg opcode
       const negFn = ctx.builder.opcode(OpCode.Neg);
-      return ctx.builder.kernelMap(arg, negFn, type);
+      return ctx.builder.mapAuto(arg, negFn, type);
     }
 
     case '+': {
@@ -151,50 +151,50 @@ function compileBinary(node: ExprNode & { kind: 'binary' }, ctx: CompileContext)
     case '==': {
       const opcode = binaryOpToOpCode(node.op);
       const opFn = ctx.builder.opcode(opcode);
-      return ctx.builder.kernelZip([left, right], opFn, type);
+      return ctx.builder.zipAuto([left, right], opFn, type);
     }
 
     // Synthesized operators
     case '<=': {
       // a <= b → !(a > b)
       const gtFn = ctx.builder.opcode(OpCode.Gt);
-      const gt = ctx.builder.kernelZip([left, right], gtFn, canonicalType(BOOL));
+      const gt = ctx.builder.zipAuto([left, right], gtFn, canonicalType(BOOL));
       const zero = ctx.builder.constant(intConst(0), canonicalType(INT));
       const eqFn = ctx.builder.opcode(OpCode.Eq);
-      return ctx.builder.kernelZip([gt, zero], eqFn, type);
+      return ctx.builder.zipAuto([gt, zero], eqFn, type);
     }
 
     case '>=': {
       // a >= b → !(a < b)
       const ltFn = ctx.builder.opcode(OpCode.Lt);
-      const lt = ctx.builder.kernelZip([left, right], ltFn, canonicalType(BOOL));
+      const lt = ctx.builder.zipAuto([left, right], ltFn, canonicalType(BOOL));
       const zero = ctx.builder.constant(intConst(0), canonicalType(INT));
       const eqFn = ctx.builder.opcode(OpCode.Eq);
-      return ctx.builder.kernelZip([lt, zero], eqFn, type);
+      return ctx.builder.zipAuto([lt, zero], eqFn, type);
     }
 
     case '!=': {
       // a != b → !(a == b)
       const eqFn = ctx.builder.opcode(OpCode.Eq);
-      const eq = ctx.builder.kernelZip([left, right], eqFn, canonicalType(BOOL));
+      const eq = ctx.builder.zipAuto([left, right], eqFn, canonicalType(BOOL));
       const zero = ctx.builder.constant(intConst(0), canonicalType(INT));
       const eqZeroFn = ctx.builder.opcode(OpCode.Eq);
-      return ctx.builder.kernelZip([eq, zero], eqZeroFn, type);
+      return ctx.builder.zipAuto([eq, zero], eqZeroFn, type);
     }
 
     case '&&': {
       // a && b → a * b (since bool is 0 or 1)
       const mulFn = ctx.builder.opcode(OpCode.Mul);
-      return ctx.builder.kernelZip([left, right], mulFn, type);
+      return ctx.builder.zipAuto([left, right], mulFn, type);
     }
 
     case '||': {
       // a || b → min(a + b, 1)
       const addFn = ctx.builder.opcode(OpCode.Add);
-      const sum = ctx.builder.kernelZip([left, right], addFn, canonicalType(INT));
+      const sum = ctx.builder.zipAuto([left, right], addFn, canonicalType(INT));
       const one = ctx.builder.constant(intConst(1), canonicalType(INT));
       const minFn = ctx.builder.opcode(OpCode.Min);
-      return ctx.builder.kernelZip([sum, one], minFn, type);
+      return ctx.builder.zipAuto([sum, one], minFn, type);
     }
 
     default:
@@ -219,19 +219,19 @@ function compileTernary(node: ExprNode & { kind: 'ternary' }, ctx: CompileContex
 
   // cond * then
   const mulFn = ctx.builder.opcode(OpCode.Mul);
-  const condThen = ctx.builder.kernelZip([cond, thenBranch], mulFn, type);
+  const condThen = ctx.builder.zipAuto([cond, thenBranch], mulFn, type);
 
   // 1 - cond
   const one = ctx.builder.constant(intConst(1), canonicalType(INT));
   const subFn = ctx.builder.opcode(OpCode.Sub);
-  const oneMinusCond = ctx.builder.kernelZip([one, cond], subFn, canonicalType(INT));
+  const oneMinusCond = ctx.builder.zipAuto([one, cond], subFn, canonicalType(INT));
 
   // (1 - cond) * else
-  const condElse = ctx.builder.kernelZip([oneMinusCond, elseBranch], mulFn, type);
+  const condElse = ctx.builder.zipAuto([oneMinusCond, elseBranch], mulFn, type);
 
   // result = condThen + condElse
   const addFn = ctx.builder.opcode(OpCode.Add);
-  return ctx.builder.kernelZip([condThen, condElse], addFn, type);
+  return ctx.builder.zipAuto([condThen, condElse], addFn, type);
 }
 
 /**
@@ -246,84 +246,84 @@ function compileCall(node: ExprNode & { kind: 'call' }, ctx: CompileContext): Va
     // Trigonometric
     case 'sin': {
       const fn = ctx.builder.opcode(OpCode.Sin);
-      return ctx.builder.kernelMap(args[0], fn, type);
+      return ctx.builder.mapAuto(args[0], fn, type);
     }
 
     case 'cos': {
       const fn = ctx.builder.opcode(OpCode.Cos);
-      return ctx.builder.kernelMap(args[0], fn, type);
+      return ctx.builder.mapAuto(args[0], fn, type);
     }
 
     case 'tan': {
       const fn = ctx.builder.opcode(OpCode.Tan);
-      return ctx.builder.kernelMap(args[0], fn, type);
+      return ctx.builder.mapAuto(args[0], fn, type);
     }
 
     // Unary functions
     case 'abs': {
       const fn = ctx.builder.opcode(OpCode.Abs);
-      return ctx.builder.kernelMap(args[0], fn, type);
+      return ctx.builder.mapAuto(args[0], fn, type);
     }
 
     case 'sqrt': {
       const fn = ctx.builder.opcode(OpCode.Sqrt);
-      return ctx.builder.kernelMap(args[0], fn, type);
+      return ctx.builder.mapAuto(args[0], fn, type);
     }
 
     case 'floor': {
       const fn = ctx.builder.opcode(OpCode.Floor);
-      return ctx.builder.kernelMap(args[0], fn, type);
+      return ctx.builder.mapAuto(args[0], fn, type);
     }
 
     case 'ceil': {
       const fn = ctx.builder.opcode(OpCode.Ceil);
-      return ctx.builder.kernelMap(args[0], fn, type);
+      return ctx.builder.mapAuto(args[0], fn, type);
     }
 
     case 'round': {
       const fn = ctx.builder.opcode(OpCode.Round);
-      return ctx.builder.kernelMap(args[0], fn, type);
+      return ctx.builder.mapAuto(args[0], fn, type);
     }
 
     // Binary functions
     case 'min': {
       const fn = ctx.builder.opcode(OpCode.Min);
-      return ctx.builder.kernelZip(args, fn, type);
+      return ctx.builder.zipAuto(args, fn, type);
     }
 
     case 'max': {
       const fn = ctx.builder.opcode(OpCode.Max);
-      return ctx.builder.kernelZip(args, fn, type);
+      return ctx.builder.zipAuto(args, fn, type);
     }
 
     // Interpolation functions
     case 'lerp':
     case 'mix': {
       const fn = ctx.builder.opcode(OpCode.Lerp);
-      return ctx.builder.kernelZip(args, fn, type);
+      return ctx.builder.zipAuto(args, fn, type);
     }
 
     case 'smoothstep': {
       // Synthesize: t = clamp((x - edge0) / (edge1 - edge0), 0, 1); return t * t * (3 - 2 * t)
       // For simplicity, use kernel 'smoothstep'
       const fn = ctx.builder.kernel('smoothstep');
-      return ctx.builder.kernelZip(args, fn, type);
+      return ctx.builder.zipAuto(args, fn, type);
     }
 
     case 'clamp': {
       const fn = ctx.builder.opcode(OpCode.Clamp);
-      return ctx.builder.kernelZip(args, fn, type);
+      return ctx.builder.zipAuto(args, fn, type);
     }
 
     // Phase functions
     case 'wrap': {
       const fn = ctx.builder.opcode(OpCode.Wrap01);
-      return ctx.builder.kernelMap(args[0], fn, type);
+      return ctx.builder.mapAuto(args[0], fn, type);
     }
 
     case 'fract': {
       const fn = ctx.builder.opcode(OpCode.Wrap01);
-      return ctx.builder.kernelMap(args[0], fn, type);
+      return ctx.builder.mapAuto(args[0], fn, type);
     }
 
     default:

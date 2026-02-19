@@ -1,12 +1,9 @@
 /**
  * DefaultSource Field Cardinality Tests
  *
- * Verifies that DefaultSource correctly produces field-cardinality outputs
- * for blocks like RenderInstances2D that require field inputs.
- *
- * TODO(oscilla-animator-v2-cpc): Remove this test file when cardinality
- * typevars are fully implemented and DefaultSource no longer needs to
- * manually handle field outputs.
+ * Verifies that DefaultSource (now signalOnly) works correctly with the
+ * cardinality adapter system — Broadcast adapters are auto-inserted at
+ * signal→field boundaries by the fixpoint solver.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -14,7 +11,7 @@ import { buildPatch } from '../../graph';
 import { compile } from '../../compiler/compile';
 import { compileFrontend } from '../../compiler/frontend';
 
-describe('DefaultSource field cardinality', () => {
+describe('DefaultSource field cardinality (via adapter system)', () => {
   it('frontend compiles RenderInstances2D with default sources on field inputs', () => {
     const patch = buildPatch((b) => {
       b.addBlock('InfiniteTimeRoot');
@@ -26,8 +23,7 @@ describe('DefaultSource field cardinality', () => {
       b.wire(arr, 'elements', grid, 'elements');
       const render = b.addBlock('RenderInstances2D');
       b.wire(grid, 'position', render, 'pos');
-      // Shape port removed - automatically looked up from instance
-      // color is unconnected — DefaultSource should provide a field-cardinality color
+      // color is unconnected — DefaultSource (signalOnly) + Broadcast adapter
     });
 
     const result = compileFrontend(patch);
@@ -48,8 +44,7 @@ describe('DefaultSource field cardinality', () => {
       b.wire(arr, 'elements', grid, 'elements');
       const render = b.addBlock('RenderInstances2D');
       b.wire(grid, 'position', render, 'pos');
-      // Shape port removed - automatically looked up from instance
-      // color unconnected — should get a field-cardinality DefaultSource
+      // color unconnected — should get a signalOnly DefaultSource + Broadcast adapter
     });
 
     const result = compile(patch);

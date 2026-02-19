@@ -7,3 +7,4 @@
 import './circle-layout-uv';
 import './line-layout-uv';
 import './grid-layout-uv';
+import './spiral-layout';

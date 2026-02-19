@@ -56,9 +56,16 @@ export function applyElaborationPlan(g: DraftGraph, plan: ElaborationPlan): Draf
     );
   }
 
-  // Apply additions
+  // Apply mutations
   let blocks = [...g.blocks];
   let edges = [...g.edges];
+
+  // Remove blocks (and all connected edges)
+  if (plan.removeBlockIds && plan.removeBlockIds.length > 0) {
+    const removeSet = new Set(plan.removeBlockIds);
+    blocks = blocks.filter((b) => !removeSet.has(b.id));
+    edges = edges.filter((e) => !removeSet.has(e.from.blockId) && !removeSet.has(e.to.blockId));
+  }
 
   // Add blocks
   if (plan.addBlocks) {

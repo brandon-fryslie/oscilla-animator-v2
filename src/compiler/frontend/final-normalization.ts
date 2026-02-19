@@ -142,11 +142,15 @@ export function finalizeNormalizationFixpoint(
       diagnostics.push(...lastSolveDiagnostics);
       // Emit remaining cardinality conflicts as diagnostics (could not resolve structurally)
       for (const conflict of cardinalityConflicts) {
+        // [LAW:dataflow-not-control-flow] Extract ports uniformly; each conflict type names them differently.
+        const ports = 'ports' in conflict
+          ? conflict.ports
+          : [...conflict.zipPorts, ...conflict.clampOneMembers];
         diagnostics.push({
           diagnosticFlagCode: conflict.kind,
           message: conflict.message,
-          stableKey: `${conflict.kind}:${conflict.ports.join(',')}`,
-          ports: conflict.ports,
+          stableKey: `${conflict.kind}:${ports.join(',')}`,
+          ports,
         });
       }
       const strict = tryFinalizeStrict(g, facts, collectPorts);

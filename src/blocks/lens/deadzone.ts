@@ -8,11 +8,11 @@
  */
 
 import { registerBlock } from '../registry';
-import { canonicalType, payloadStride, floatConst, requireInst, withInstance } from '../../core/canonical-types';
+import { canonicalType, payloadStride, floatConst } from '../../core/canonical-types';
 import { FLOAT } from '../../core/canonical-types';
 import { inferType, unitVar } from '../../core/inference-types';
 import { OpCode } from '../../compiler/ir/types';
-import { alignInputs, withoutContract } from '../lower-utils';
+import { withoutContract } from '../lower-utils';
 
 registerBlock({
   type: 'Deadzone',
@@ -40,46 +40,31 @@ registerBlock({
     if (!input) throw new Error('Deadzone: in is required');
     if (!threshold) throw new Error('Deadzone: threshold is required');
 
+    // outTypes[0] already has instance info pre-populated by orchestrator
     const outType = ctx.outTypes[0];
-    const inCard = requireInst(input.type.extent.cardinality, 'cardinality');
-    const outTypeWithInstance = inCard.kind === 'many' ? withInstance(outType, inCard.instance) : outType;
-    const intermediateType = withoutContract(outTypeWithInstance);
-    const intermediateSignalType = withoutContract(threshold.type);
+    const intermediateType = withoutContract(outType);
 
     // Implementation: abs(x) - threshold > 0 ? x : 0
     // Using Select opcode: select(cond, ifTrue, ifFalse) → cond > 0 ? ifTrue : ifFalse
 
     const absFn = ctx.b.opcode(OpCode.Abs);
-    const absVal = ctx.b.kernelMap(input.id, absFn, inCard.kind === 'many' ? intermediateType : intermediateSignalType);
+    const absVal = ctx.b.mapAuto(input.id, absFn, intermediateType);
 
     const subFn = ctx.b.opcode(OpCode.Sub);
-    const diff =
-      inCard.kind === 'many'
-        ? (() => {
-          const [ab, th] = alignInputs(absVal, intermediateType, threshold.id, threshold.type, intermediateType, ctx.b);
-          return ctx.b.kernelZip([ab, th], subFn, intermediateType);
-        })()
-        : ctx.b.kernelZip([absVal, threshold.id], subFn, intermediateSignalType);
+    const diff = ctx.b.zipAuto([absVal, threshold.id], subFn, intermediateType);
 
     // If diff > 0 (i.e., |x| > threshold), use x; otherwise use 0
     const zeroConst = ctx.b.constant(floatConst(0), canonicalType(FLOAT));
     const selectFn = ctx.b.opcode(OpCode.Select);
-    const result =
-      inCard.kind === 'many'
-        ? (() => {
-          const zeroField = ctx.b.broadcast(zeroConst, intermediateType);
-          const [inpField] = alignInputs(input.id, input.type, zeroField, intermediateType, intermediateType, ctx.b);
-          return ctx.b.kernelZip([diff, inpField, zeroField], selectFn, outTypeWithInstance);
-        })()
-        : ctx.b.kernelZip([diff, input.id, zeroConst], selectFn, outTypeWithInstance);
+    const result = ctx.b.zipAuto([diff, input.id, zeroConst], selectFn, outType);
 
     return {
       outputsById: {
-        out: { id: result, slot: undefined, type: outTypeWithInstance, stride: payloadStride(outTypeWithInstance.payload) },
+        out: { id: result, slot: undefined, type: outType, stride: payloadStride(outType.payload) },
       },
       effects: {
         slotRequests: [
-          { portId: 'out', type: outTypeWithInstance },
+          { portId: 'out', type: outType },
         ],
       },
     };

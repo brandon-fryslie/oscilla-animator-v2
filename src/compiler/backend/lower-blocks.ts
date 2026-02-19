@@ -301,12 +301,29 @@ function inferInstanceContext(
   // Find all edges that target this block
   const incomingEdges = edges.filter((e) => e.toBlock === blockIndex);
 
-
   // Check each incoming edge's source block for instance context
   for (const edge of incomingEdges) {
     const instanceContext = instanceContextByBlock.get(edge.fromBlock);
     if (instanceContext !== undefined) {
       return instanceContext;
+    }
+  }
+
+  // Fallback for source blocks (no inputs): look at siblings through shared downstream targets.
+  // This handles DefaultSourceField → RenderInstances2D ← Array,
+  // where DefaultSourceField gets Array's instance via RenderInstances2D's other inputs.
+  if (incomingEdges.length === 0) {
+    const outgoingEdges = edges.filter((e) => e.fromBlock === blockIndex);
+    for (const outEdge of outgoingEdges) {
+      const targetBlock = outEdge.toBlock;
+      for (const edge of edges) {
+        if (edge.toBlock === targetBlock && edge.fromBlock !== blockIndex) {
+          const instanceContext = instanceContextByBlock.get(edge.fromBlock);
+          if (instanceContext !== undefined) {
+            return instanceContext;
+          }
+        }
+      }
     }
   }
 

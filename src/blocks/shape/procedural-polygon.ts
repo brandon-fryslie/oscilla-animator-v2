@@ -196,15 +196,15 @@ registerBlock({
     const cos = ctx.b.opcode(OpCode.Cos);
     const sin = ctx.b.opcode(OpCode.Sin);
 
-    const angleFrac = ctx.b.kernelZip([indexField, sidesBroadcast], div, floatFieldType);
-    const angleScaled = ctx.b.kernelZip([angleFrac, twoPiBroadcast], mul, floatFieldType);
-    const angle = ctx.b.kernelZip([angleScaled, halfPiBroadcast], sub, floatFieldType);
+    const angleFrac = ctx.b.zipAuto([indexField, sidesBroadcast], div, floatFieldType);
+    const angleScaled = ctx.b.zipAuto([angleFrac, twoPiBroadcast], mul, floatFieldType);
+    const angle = ctx.b.zipAuto([angleScaled, halfPiBroadcast], sub, floatFieldType);
 
     // Step 3: x = radiusX * cos(angle), y = radiusY * sin(angle)
-    const cosAngle = ctx.b.kernelMap(angle, cos, floatFieldType);
-    const sinAngle = ctx.b.kernelMap(angle, sin, floatFieldType);
-    const xField = ctx.b.kernelZip([radiusXBroadcast, cosAngle], mul, floatFieldType);
-    const yField = ctx.b.kernelZip([radiusYBroadcast, sinAngle], mul, floatFieldType);
+    const cosAngle = ctx.b.mapAuto(angle, cos, floatFieldType);
+    const sinAngle = ctx.b.mapAuto(angle, sin, floatFieldType);
+    const xField = ctx.b.zipAuto([radiusXBroadcast, cosAngle], mul, floatFieldType);
+    const yField = ctx.b.zipAuto([radiusYBroadcast, sinAngle], mul, floatFieldType);
 
     // Step 4: construct([x, y]) → vec2
     const computedPositions = ctx.b.construct(

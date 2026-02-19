@@ -1,9 +1,9 @@
 /**
- * Create Cardinality Adapter Obligations from ZipBroadcast Conflicts
+ * Create Cardinality Adapter Obligations from Cardinality Conflicts
  *
- * Given ZipBroadcastClampOneConflict errors from the cardinality solver,
- * identifies boundary edges (signal→field) and creates at most ONE
- * needsCardinalityAdapter obligation per fixpoint iteration.
+ * Given ZipBroadcastClampOneConflict and ClampManyConflict errors from the
+ * cardinality solver, identifies boundary edges (signal→field) and creates
+ * at most ONE needsCardinalityAdapter obligation per fixpoint iteration.
  *
  * Monotone strategy: one obligation per iteration keeps the fixpoint
  * predictable and prevents oscillation.
@@ -18,26 +18,40 @@ import type { CardinalitySolveError } from './cardinality/solve';
 import { draftPortKey } from './type-facts';
 
 // =============================================================================
+// Internal: Candidate type
+// =============================================================================
+
+interface BoundaryCandidate {
+  edgeId: string;
+  semanticKey: string;
+  fromBlockId: string;
+  fromPort: string;
+  toBlockId: string;
+  toPort: string;
+}
+
+// =============================================================================
 // Public API
 // =============================================================================
 
 /**
- * Create cardinality adapter obligations from ZipBroadcast conflicts.
+ * Create cardinality adapter obligations from cardinality conflicts.
  *
- * Boundary edge identification:
- * Edge equality merges both endpoints into the same UF group. When the
- * clampOne side merges with a zipBroadcast member, both end up in
- * clampOneMembers. The boundary edge connects two ports that are BOTH
- * in clampOneMembers, where the `to` port is ALSO in the conflict's
- * zipPorts. Inserting Broadcast breaks the edge equality, allowing the
- * `to` port to resolve independently in a subsequent iteration.
+ * Handles two conflict types:
+ *
+ * 1. ZipBroadcastClampOneConflict: Edge equality merges both endpoints into
+ *    the same UF group. The boundary edge connects two ports that are BOTH
+ *    in clampOneMembers, where the `to` port is ALSO in the conflict's
+ *    zipPorts. Inserting Broadcast breaks the edge equality.
+ *
+ * 2. ClampManyConflict: Edge equality merges a clampOne port with a forceMany
+ *    port into the same UF group. The boundary edge connects a port from the
+ *    clampOne side (from) to a port from the forceMany side (to), or vice versa.
+ *    Inserting Broadcast breaks the edge equality, allowing each side to
+ *    resolve independently.
  *
  * Algorithm:
- * 1. For each ZipBroadcastClampOneConflict:
- *    - S = conflict.clampOneMembers (UF group forced to one)
- *    - Z = conflict.zipPorts (ports in the conflicting zipBroadcast)
- *    - Scan edges: from port in S, to port in S ∩ Z
- *    - Skip edges with elaboration origin (prevents loops)
+ * 1. Collect boundary edge candidates from both conflict types
  * 2. Deduplicate by semantic key across all conflicts
  * 3. Sort by semantic key, pick exactly ONE (monotone)
  *
@@ -47,43 +61,69 @@ export function createCardinalityAdapterObligations(
   g: DraftGraph,
   conflicts: readonly CardinalitySolveError[],
 ): readonly Obligation[] {
-  // Filter to ZipBroadcastClampOneConflict only
+  // [LAW:dataflow-not-control-flow] Always compute; empty arrays flow through.
+  const candidatesByKey = new Map<string, BoundaryCandidate>();
+
+  // --- ZipBroadcastClampOneConflict candidates ---
   const zbConflicts = conflicts.filter(
     (e): e is Extract<CardinalitySolveError, { kind: 'ZipBroadcastClampOneConflict' }> =>
       e.kind === 'ZipBroadcastClampOneConflict',
   );
-
-  // [LAW:dataflow-not-control-flow] Always compute; empty arrays flow through.
-  // Collect boundary edge candidates across all conflicts
-  const candidatesByKey = new Map<string, { edgeId: string; semanticKey: string; fromBlockId: string; fromPort: string; toBlockId: string; toPort: string }>();
 
   for (const conflict of zbConflicts) {
     const clampOneSet = new Set(conflict.clampOneMembers);
     const zipPortSet = new Set(conflict.zipPorts);
 
     for (const edge of g.edges) {
-      // Skip elaboration edges (prevents infinite loops)
-      if (typeof edge.origin === 'object' && edge.origin.kind === 'elaboration') continue;
+      if (isCardinalityAdapterEdge(edge)) continue;
 
       const fromKey = draftPortKey(edge.from.blockId, edge.from.port, 'out');
       const toKey = draftPortKey(edge.to.blockId, edge.to.port, 'in');
 
       // Boundary: from is in clampOne, to is in clampOne ∩ zipPorts
-      // The to port was pulled into the clampOne group via edge equality,
-      // but also participates in the conflicting zipBroadcast.
-      // Inserting Broadcast breaks the edge equality, freeing the to port.
       if (clampOneSet.has(fromKey) && clampOneSet.has(toKey) && zipPortSet.has(toKey)) {
-        const semanticKey = `${edge.from.blockId}:${edge.from.port}:out->${edge.to.blockId}:${edge.to.port}:in`;
-        if (!candidatesByKey.has(semanticKey)) {
-          candidatesByKey.set(semanticKey, {
-            edgeId: edge.id,
-            semanticKey,
-            fromBlockId: edge.from.blockId,
-            fromPort: edge.from.port,
-            toBlockId: edge.to.blockId,
-            toPort: edge.to.port,
-          });
-        }
+        addCandidate(candidatesByKey, edge);
+      }
+    }
+  }
+
+  // --- ClampManyConflict candidates ---
+  // For ClampManyConflict, both clampOne and forceMany evidence exist in the same
+  // UF group. The boundary edge is any edge connecting a clampOne port to any other
+  // port in the group — breaking it with Broadcast separates the groups.
+  // Strategy: find edges where from is directly constrained as clampOne, and to is
+  // any other member of the conflict (in the same UF group but not itself clampOne).
+  // Fallback: if clampOne ports don't directly have edges to other members,
+  // find any edge whose both endpoints are in the conflict's port set.
+  const cmConflicts = conflicts.filter(
+    (e): e is Extract<CardinalitySolveError, { kind: 'ClampManyConflict' }> =>
+      e.kind === 'ClampManyConflict',
+  );
+
+  for (const conflict of cmConflicts) {
+    const allPorts = new Set(conflict.ports);
+    const clampOneSet = new Set(conflict.clampOneMembers);
+
+    for (const edge of g.edges) {
+      if (isCardinalityAdapterEdge(edge)) continue;
+
+      const fromKey = draftPortKey(edge.from.blockId, edge.from.port, 'out');
+      const toKey = draftPortKey(edge.to.blockId, edge.to.port, 'in');
+
+      // Both endpoints must be in the conflict group (same UF group)
+      if (!allPorts.has(fromKey) || !allPorts.has(toKey)) continue;
+
+      // Prefer edges where from is clampOne and to is not (signal→field boundary)
+      // Also accept edges where to is clampOne and from is not (field→signal boundary)
+      // Either direction works — Broadcast insertion breaks the edge equality.
+      const fromIsClampOne = clampOneSet.has(fromKey);
+      const toIsClampOne = clampOneSet.has(toKey);
+      if (fromIsClampOne !== toIsClampOne) {
+        addCandidate(candidatesByKey, edge);
+      } else if (fromIsClampOne && toIsClampOne) {
+        // Both are clampOne — edge between two clampOne ports, still a valid
+        // boundary if they're in a group with forceMany evidence
+        addCandidate(candidatesByKey, edge);
       }
     }
   }
@@ -116,4 +156,36 @@ export function createCardinalityAdapterObligations(
       note: `boundary edge: ${pick.semanticKey}`,
     },
   }];
+}
+
+// =============================================================================
+// Internal Helpers
+// =============================================================================
+
+/**
+ * Check if edge was inserted by the cardinality adapter policy.
+ * Only skip THESE edges to prevent infinite loops — other elaboration edges
+ * (e.g., from default-source policy) are valid boundary candidates.
+ */
+function isCardinalityAdapterEdge(edge: { origin: unknown }): boolean {
+  if (typeof edge.origin !== 'object' || (edge.origin as any)?.kind !== 'elaboration') return false;
+  const oblId = (edge.origin as any)?.obligationId as string | undefined;
+  return oblId !== undefined && oblId.startsWith('needsCardinalityAdapter:');
+}
+
+function addCandidate(
+  map: Map<string, BoundaryCandidate>,
+  edge: { id: string; from: { blockId: string; port: string }; to: { blockId: string; port: string } },
+): void {
+  const semanticKey = `${edge.from.blockId}:${edge.from.port}:out->${edge.to.blockId}:${edge.to.port}:in`;
+  if (!map.has(semanticKey)) {
+    map.set(semanticKey, {
+      edgeId: edge.id,
+      semanticKey,
+      fromBlockId: edge.from.blockId,
+      fromPort: edge.from.port,
+      toBlockId: edge.to.blockId,
+      toPort: edge.to.port,
+    });
+  }
 }

@@ -58,7 +58,7 @@ registerBlock({
     const zero = ctx.b.constant({ kind: 'float', value: 0 }, canonicalConst(FLOAT, unitNone()));
     const one = ctx.b.constant({ kind: 'float', value: 1 }, canonicalConst(FLOAT, unitNone()));
 
-    const hWrapped = ctx.b.kernelMap(hInput.id, wrap01, intermediateFloat);
+    const hWrapped = ctx.b.mapAuto(hInput.id, wrap01, intermediateFloat);
     const sClamped = zipAuto([sInput.id, zero, one], clamp, intermediateFloat, ctx.b);
     const lClamped = zipAuto([lInput.id, zero, one], clamp, intermediateFloat, ctx.b);
     const aClamped = zipAuto([aInput.id, zero, one], clamp, intermediateFloat, ctx.b);

@@ -10,4 +10,3 @@ import './procedural-polygon';
 import './procedural-star';
 import './path-field';
 import './make-shape2d';
-import './spiral-generator';

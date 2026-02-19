@@ -41,11 +41,11 @@ describe('createCardinalityAdapterObligations', () => {
     expect(result).toHaveLength(0);
   });
 
-  it('returns empty for non-ZipBroadcast errors', () => {
+  it('returns empty for non-boundary errors (InstanceConflict, UnresolvedInstanceVar)', () => {
     const g = makeGraph([], []);
     const errors: CardinalitySolveError[] = [
-      { kind: 'ClampManyConflict', ports: [pk('a:x:in')], message: 'test' },
       { kind: 'InstanceConflict', ports: [pk('a:x:in')], message: 'test' },
+      { kind: 'UnresolvedInstanceVar', ports: [pk('a:x:in')], message: 'test' },
     ];
     const result = createCardinalityAdapterObligations(g, errors);
     expect(result).toHaveLength(0);
@@ -92,7 +92,7 @@ describe('createCardinalityAdapterObligations', () => {
     expect(result[0].anchor.edgeId).toBe('e1');
   });
 
-  it('skips edges with elaboration origin', () => {
+  it('skips edges inserted by cardinality adapter policy (prevents loops)', () => {
     const g = makeGraph(
       [
         { id: 'sig', type: 'Sig', params: {}, portDefaults: {}, origin: 'user', displayName: 'Sig', domainId: null, role: { kind: 'user', meta: {} } },
@@ -104,7 +104,7 @@ describe('createCardinalityAdapterObligations', () => {
           from: { blockId: 'sig', port: 'time', dir: 'out' },
           to: { blockId: 'phasor', port: 'time', dir: 'in' },
           role: 'implicitCoerce',
-          origin: { kind: 'elaboration', obligationId: 'ob1' as any, role: 'adapter' },
+          origin: { kind: 'elaboration', obligationId: 'needsCardinalityAdapter:sig:time:out->phasor:time:in' as any, role: 'adapter' },
         },
       ],
     );
@@ -118,6 +118,78 @@ describe('createCardinalityAdapterObligations', () => {
         zipOrigin,
         clampOneOrigins: [clampOrigin],
         manyEvidenceOrigins: [],
+        message: 'test',
+      },
+    ];
+
+    const result = createCardinalityAdapterObligations(g, conflicts);
+    expect(result).toHaveLength(0);
+  });
+
+  it('identifies boundary edge for ClampManyConflict (signalOnly→fieldOnly)', () => {
+    // When a signalOnly block connects directly to a fieldOnly port,
+    // edge equality merges them into the same UF group. The clampOne (from signalOnly)
+    // and forceMany (from fieldOnly) create a ClampManyConflict. The boundary edge
+    // is the one connecting them — inserting Broadcast breaks edge equality.
+    const g = makeGraph(
+      [
+        { id: 'ds', type: 'DefaultSource', params: {}, portDefaults: {}, origin: 'user', displayName: 'DS', domainId: null, role: { kind: 'user', meta: {} } },
+        { id: 'render', type: 'RenderInstances2D', params: {}, portDefaults: {}, origin: 'user', displayName: 'Render', domainId: null, role: { kind: 'user', meta: {} } },
+      ],
+      [
+        {
+          id: 'e1',
+          from: { blockId: 'ds', port: 'out', dir: 'out' },
+          to: { blockId: 'render', port: 'color', dir: 'in' },
+          role: 'userWire',
+          origin: 'user',
+        },
+      ],
+    );
+
+    const conflicts: CardinalitySolveError[] = [
+      {
+        kind: 'ClampManyConflict',
+        ports: [pk('ds:out:out'), pk('render:color:in')],
+        clampOneMembers: [pk('ds:out:out')],
+        forceManyMembers: [pk('render:color:in')],
+        clampOneOrigins: [clampOrigin],
+        forceManyOrigins: [manyOrigin],
+        message: 'test ClampMany conflict',
+      },
+    ];
+
+    const result = createCardinalityAdapterObligations(g, conflicts);
+    expect(result).toHaveLength(1);
+    expect(result[0].kind).toBe('needsCardinalityAdapter');
+    expect(result[0].anchor.edgeId).toBe('e1');
+  });
+
+  it('skips cardinality adapter edges for ClampManyConflict (prevents loops)', () => {
+    const g = makeGraph(
+      [
+        { id: 'ds', type: 'DefaultSource', params: {}, portDefaults: {}, origin: 'user', displayName: 'DS', domainId: null, role: { kind: 'user', meta: {} } },
+        { id: 'render', type: 'RenderInstances2D', params: {}, portDefaults: {}, origin: 'user', displayName: 'Render', domainId: null, role: { kind: 'user', meta: {} } },
+      ],
+      [
+        {
+          id: 'e1',
+          from: { blockId: 'ds', port: 'out', dir: 'out' },
+          to: { blockId: 'render', port: 'color', dir: 'in' },
+          role: 'implicitCoerce',
+          origin: { kind: 'elaboration', obligationId: 'needsCardinalityAdapter:ds:out:out->render:color:in' as any, role: 'adapter' },
+        },
+      ],
+    );
+
+    const conflicts: CardinalitySolveError[] = [
+      {
+        kind: 'ClampManyConflict',
+        ports: [pk('ds:out:out'), pk('render:color:in')],
+        clampOneMembers: [pk('ds:out:out')],
+        forceManyMembers: [pk('render:color:in')],
+        clampOneOrigins: [clampOrigin],
+        forceManyOrigins: [manyOrigin],
         message: 'test',
       },
     ];

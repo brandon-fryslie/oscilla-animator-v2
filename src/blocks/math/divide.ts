@@ -8,7 +8,6 @@ import { registerBlock, STANDARD_NUMERIC_PAYLOADS } from '../registry';
 import { canonicalType, payloadStride } from '../../core/canonical-types';
 import { FLOAT } from '../../core/canonical-types';
 import { OpCode } from '../../compiler/ir/types';
-import { alignInputs } from '../lower-utils';
 
 registerBlock({
   type: 'Divide',
@@ -45,8 +44,7 @@ registerBlock({
     if (!a || !b) throw new Error(`Divide requires both inputs`);
 
     const outType = ctx.outTypes[0];
-    const [aId, bId] = alignInputs(a.id, a.type, b.id, b.type, outType, ctx.b);
-    const resultId = ctx.b.kernelZip([aId, bId], ctx.b.opcode(OpCode.Div), outType);
+    const resultId = ctx.b.zipAuto([a.id, b.id], ctx.b.opcode(OpCode.Div), outType);
 
     return {
       outputsById: {
