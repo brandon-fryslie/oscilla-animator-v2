@@ -6,7 +6,7 @@
 
 import { registerBlock, ALL_CONCRETE_PAYLOADS } from '../registry';
 
-import { canonicalType, canonicalField, canonicalFieldDef, unitWorld3, payloadStride, floatConst, requireInst } from '../../core/canonical-types';
+import { canonicalType, canonicalFieldDef, unitWorld3, payloadStride, floatConst, requireInst } from '../../core/canonical-types';
 import { FLOAT, VEC3 } from '../../core/canonical-types';
 import { defaultSourceConst } from '../../types';
 import { OpCode } from '../../compiler/ir/types';
@@ -64,19 +64,16 @@ registerBlock({
     const floatFieldType = { ...posType, payload: FLOAT, unit: { kind: 'none' as const } };
     const vec2FieldType = { ...posType, payload: { kind: 'vec2' as const }, unit: { kind: 'none' as const } };
 
-    // Get line endpoints as signals
-    const x0Sig = ('type' in inputsById.x0! && requireInst(inputsById.x0!.type.extent.cardinality, 'cardinality').kind === 'one')
-      ? inputsById.x0!.id
-      : ctx.b.constant(floatConst(0.2), canonicalType(FLOAT));
-    const y0Sig = ('type' in inputsById.y0! && requireInst(inputsById.y0!.type.extent.cardinality, 'cardinality').kind === 'one')
-      ? inputsById.y0!.id
-      : ctx.b.constant(floatConst(0.2), canonicalType(FLOAT));
-    const x1Sig = ('type' in inputsById.x1! && requireInst(inputsById.x1!.type.extent.cardinality, 'cardinality').kind === 'one')
-      ? inputsById.x1!.id
-      : ctx.b.constant(floatConst(0.8), canonicalType(FLOAT));
-    const y1Sig = ('type' in inputsById.y1! && requireInst(inputsById.y1!.type.extent.cardinality, 'cardinality').kind === 'one')
-      ? inputsById.y1!.id
-      : ctx.b.constant(floatConst(0.8), canonicalType(FLOAT));
+    // Post-normalization: all inputs guaranteed wired — no fallback needed
+    // [LAW:one-source-of-truth] inputs are the single source; config was a dead fallback
+    const x0Input = inputsById.x0;
+    if (!x0Input) throw new Error('LineLayoutUV: x0 input not wired — normalization bug');
+    const y0Input = inputsById.y0;
+    if (!y0Input) throw new Error('LineLayoutUV: y0 input not wired — normalization bug');
+    const x1Input = inputsById.x1;
+    if (!x1Input) throw new Error('LineLayoutUV: x1 input not wired — normalization bug');
+    const y1Input = inputsById.y1;
+    if (!y1Input) throw new Error('LineLayoutUV: y1 input not wired — normalization bug');
 
     // Use halton2D as default basis kind (user-configurable when BlockDef supports config)
     const basisKind: import('../../compiler/ir/types').BasisKind = 'halton2D';
@@ -98,23 +95,29 @@ registerBlock({
     // Broadcast constants and signals to fields
     const const0Broadcast = ctx.b.broadcast(const0, floatFieldType);
     const const1Broadcast = ctx.b.broadcast(const1, floatFieldType);
-    const x0Broadcast = ctx.b.broadcast(x0Sig, floatFieldType);
-    const y0Broadcast = ctx.b.broadcast(y0Sig, floatFieldType);
-    const x1Broadcast = ctx.b.broadcast(x1Sig, floatFieldType);
-    const y1Broadcast = ctx.b.broadcast(y1Sig, floatFieldType);
+    // allowZipSig: signal inputs may have been resolved to field cardinality by solver.
+    // Broadcast only when input is actually a signal; fields pass through.
+    const x0Broadcast = requireInst(x0Input.type.extent.cardinality, 'cardinality').kind === 'one'
+      ? ctx.b.broadcast(x0Input.id, floatFieldType) : x0Input.id;
+    const y0Broadcast = requireInst(y0Input.type.extent.cardinality, 'cardinality').kind === 'one'
+      ? ctx.b.broadcast(y0Input.id, floatFieldType) : y0Input.id;
+    const x1Broadcast = requireInst(x1Input.type.extent.cardinality, 'cardinality').kind === 'one'
+      ? ctx.b.broadcast(x1Input.id, floatFieldType) : x1Input.id;
+    const y1Broadcast = requireInst(y1Input.type.extent.cardinality, 'cardinality').kind === 'one'
+      ? ctx.b.broadcast(y1Input.id, floatFieldType) : y1Input.id;
 
     // Opcodes
     const clamp = ctx.b.opcode(OpCode.Clamp);
     const lerp = ctx.b.opcode(OpCode.Lerp);
 
     // u_clamped = clamp(u, 0, 1)
-    const u_clamped = ctx.b.kernelZip([u, const0Broadcast, const1Broadcast], clamp, floatFieldType);
+    const u_clamped = ctx.b.zipAuto([u, const0Broadcast, const1Broadcast], clamp, floatFieldType);
 
     // x = lerp(x0, x1, u_clamped)
-    const x = ctx.b.kernelZip([x0Broadcast, x1Broadcast, u_clamped], lerp, floatFieldType);
+    const x = ctx.b.zipAuto([x0Broadcast, x1Broadcast, u_clamped], lerp, floatFieldType);
 
     // y = lerp(y0, y1, u_clamped)
-    const y = ctx.b.kernelZip([y0Broadcast, y1Broadcast, u_clamped], lerp, floatFieldType);
+    const y = ctx.b.zipAuto([y0Broadcast, y1Broadcast, u_clamped], lerp, floatFieldType);
 
     // z = broadcast(0)
     const z = const0Broadcast;

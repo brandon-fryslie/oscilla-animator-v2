@@ -62,13 +62,12 @@
       const floatFieldType = { ...posType, payload: FLOAT, unit: { kind: 'none' as const } };
       const vec2FieldType = { ...posType, payload: { kind: 'vec2' as const }, unit: { kind: 'none' as const } };
 
-      // Get radius and phase as signals
-      const radiusSig = ('type' in inputsById.radius! && requireInst(inputsById.radius!.type.extent.cardinality, 'cardinality').kind === 'one')
-        ? inputsById.radius!.id
-        : ctx.b.constant(floatConst(0.3), canonicalType(FLOAT));
-      const phaseSig = ('type' in inputsById.phase! && requireInst(inputsById.phase!.type.extent.cardinality, 'cardinality').kind === 'one')
-        ? inputsById.phase!.id
-        : ctx.b.constant(floatConst(0), canonicalType(FLOAT, unitTurns(), undefined, contractWrap01()));
+      // Post-normalization: all inputs guaranteed wired — no fallback needed
+      // [LAW:one-source-of-truth] inputs are the single source; config was a dead fallback
+      const radiusInput = inputsById.radius;
+      if (!radiusInput) throw new Error('CircleLayoutUV: radius input not wired — normalization bug');
+      const phaseInput = inputsById.phase;
+      if (!phaseInput) throw new Error('CircleLayoutUV: phase input not wired — normalization bug');
 
       // Use halton2D as default basis kind (user-configurable when BlockDef supports config)
       const basisKind: import('../../compiler/ir/types').BasisKind = 'halton2D';
@@ -94,8 +93,12 @@
       const const1Broadcast = ctx.b.broadcast(const1, floatFieldType);
       const const0_5Broadcast = ctx.b.broadcast(const0_5, floatFieldType);
       const twoPiBroadcast = ctx.b.broadcast(twoPi, floatFieldType);
-      const phaseBroadcast = ctx.b.broadcast(phaseSig, floatFieldType);
-      const radiusBroadcast = ctx.b.broadcast(radiusSig, floatFieldType);
+      // allowZipSig: signal inputs may have been resolved to field cardinality by solver.
+      // Broadcast only when input is actually a signal; fields pass through.
+      const phaseBroadcast = requireInst(phaseInput.type.extent.cardinality, 'cardinality').kind === 'one'
+        ? ctx.b.broadcast(phaseInput.id, floatFieldType) : phaseInput.id;
+      const radiusBroadcast = requireInst(radiusInput.type.extent.cardinality, 'cardinality').kind === 'one'
+        ? ctx.b.broadcast(radiusInput.id, floatFieldType) : radiusInput.id;
 
       // Opcodes
       const clamp = ctx.b.opcode(OpCode.Clamp);
@@ -105,25 +108,25 @@
       const sin = ctx.b.opcode(OpCode.Sin);
 
       // u_clamped = clamp(u, 0, 1)
-      const u_clamped = ctx.b.kernelZip([u, const0Broadcast, const1Broadcast], clamp, floatFieldType);
+      const u_clamped = ctx.b.zipAuto([u, const0Broadcast, const1Broadcast], clamp, floatFieldType);
 
       // angle_base = add(u_clamped, phase_field)
-      const angle_base = ctx.b.kernelZip([u_clamped, phaseBroadcast], add, floatFieldType);
+      const angle_base = ctx.b.zipAuto([u_clamped, phaseBroadcast], add, floatFieldType);
 
       // angle = mul(angle_base, twoPi)
-      const angle = ctx.b.kernelZip([angle_base, twoPiBroadcast], mul, floatFieldType);
+      const angle = ctx.b.zipAuto([angle_base, twoPiBroadcast], mul, floatFieldType);
 
       // x_raw = cos(angle), y_raw = sin(angle)
-      const x_raw = ctx.b.kernelMap(angle, cos, floatFieldType);
-      const y_raw = ctx.b.kernelMap(angle, sin, floatFieldType);
+      const x_raw = ctx.b.mapAuto(angle, cos, floatFieldType);
+      const y_raw = ctx.b.mapAuto(angle, sin, floatFieldType);
 
       // x_scaled = mul(x_raw, radius), y_scaled = mul(y_raw, radius)
-      const x_scaled = ctx.b.kernelZip([x_raw, radiusBroadcast], mul, floatFieldType);
-      const y_scaled = ctx.b.kernelZip([y_raw, radiusBroadcast], mul, floatFieldType);
+      const x_scaled = ctx.b.zipAuto([x_raw, radiusBroadcast], mul, floatFieldType);
+      const y_scaled = ctx.b.zipAuto([y_raw, radiusBroadcast], mul, floatFieldType);
 
       // x = add(x_scaled, 0.5), y = add(y_scaled, 0.5)
-      const x = ctx.b.kernelZip([x_scaled, const0_5Broadcast], add, floatFieldType);
-      const y = ctx.b.kernelZip([y_scaled, const0_5Broadcast], add, floatFieldType);
+      const x = ctx.b.zipAuto([x_scaled, const0_5Broadcast], add, floatFieldType);
+      const y = ctx.b.zipAuto([y_scaled, const0_5Broadcast], add, floatFieldType);
 
       // z = broadcast(0)
       const z = const0Broadcast;

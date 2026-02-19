@@ -6,8 +6,9 @@
 
 import { registerBlock, ALL_CONCRETE_PAYLOADS } from '../registry';
 import { domainTypeId as makeDomainTypeId } from '../../core/ids';
-import { canonicalType, canonicalField, canonicalFieldDef, floatConst, requireInst, payloadStride, unitNone, contractClamp01 } from '../../core/canonical-types';
+import { canonicalType, canonicalField, canonicalFieldDef, requireInst, payloadStride, unitNone, contractClamp01 } from '../../core/canonical-types';
 import { FLOAT, COLOR } from '../../core/canonical-types';
+import { defaultSourceConst } from '../../types';
 
 registerBlock({
   type: 'FieldConstColor',
@@ -30,10 +31,10 @@ registerBlock({
   },
   inputs: {
     elements: { label: 'Elements', type: canonicalFieldDef(FLOAT, { kind: 'none' }) },
-    r: { label: 'Red', type: canonicalType(FLOAT, unitNone(), undefined, contractClamp01()), defaultValue: 1.0, exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
-    g: { label: 'Green', type: canonicalType(FLOAT, unitNone(), undefined, contractClamp01()), defaultValue: 1.0, exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
-    b: { label: 'Blue', type: canonicalType(FLOAT, unitNone(), undefined, contractClamp01()), defaultValue: 1.0, exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
-    a: { label: 'Alpha', type: canonicalType(FLOAT, unitNone(), undefined, contractClamp01()), defaultValue: 1.0, exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
+    r: { label: 'Red', type: canonicalType(FLOAT, unitNone(), undefined, contractClamp01()), defaultValue: 1.0, defaultSource: defaultSourceConst(1.0), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
+    g: { label: 'Green', type: canonicalType(FLOAT, unitNone(), undefined, contractClamp01()), defaultValue: 1.0, defaultSource: defaultSourceConst(1.0), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
+    b: { label: 'Blue', type: canonicalType(FLOAT, unitNone(), undefined, contractClamp01()), defaultValue: 1.0, defaultSource: defaultSourceConst(1.0), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
+    a: { label: 'Alpha', type: canonicalType(FLOAT, unitNone(), undefined, contractClamp01()), defaultValue: 1.0, defaultSource: defaultSourceConst(1.0), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
   },
   outputs: {
     color: { label: 'Color', type: canonicalFieldDef(COLOR, { kind: 'none' }) },
@@ -52,28 +53,29 @@ registerBlock({
 
     const colorType = ctx.outTypes[0];
 
-    // Get r, g, b, a as signals (using defaults if not connected)
-    const rSig = (inputsById.r && 'type' in inputsById.r && requireInst(inputsById.r.type.extent.cardinality, 'cardinality').kind === 'one')
-      ? inputsById.r.id
-      : ctx.b.constant(floatConst(1.0), canonicalType(FLOAT, unitNone(), undefined, contractClamp01()));
-    const gSig = (inputsById.g && 'type' in inputsById.g && requireInst(inputsById.g.type.extent.cardinality, 'cardinality').kind === 'one')
-      ? inputsById.g.id
-      : ctx.b.constant(floatConst(1.0), canonicalType(FLOAT, unitNone(), undefined, contractClamp01()));
-    const bSig = (inputsById.b && 'type' in inputsById.b && requireInst(inputsById.b.type.extent.cardinality, 'cardinality').kind === 'one')
-      ? inputsById.b.id
-      : ctx.b.constant(floatConst(1.0), canonicalType(FLOAT, unitNone(), undefined, contractClamp01()));
-    const aSig = (inputsById.a && 'type' in inputsById.a && requireInst(inputsById.a.type.extent.cardinality, 'cardinality').kind === 'one')
-      ? inputsById.a.id
-      : ctx.b.constant(floatConst(1.0), canonicalType(FLOAT, unitNone(), undefined, contractClamp01()));
+    // Post-normalization: all inputs guaranteed wired — no fallback needed
+    // [LAW:one-source-of-truth] inputs are the single source; config was a dead fallback
+    const rInput = inputsById.r;
+    if (!rInput) throw new Error('FieldConstColor: r input not wired — normalization bug');
+    const gInput = inputsById.g;
+    if (!gInput) throw new Error('FieldConstColor: g input not wired — normalization bug');
+    const bInput = inputsById.b;
+    if (!bInput) throw new Error('FieldConstColor: b input not wired — normalization bug');
+    const aInput = inputsById.a;
+    if (!aInput) throw new Error('FieldConstColor: a input not wired — normalization bug');
 
     // Build a scalar float field type matching the instance extent
     const floatFieldType = canonicalField(FLOAT, { kind: 'none' }, { instanceId, domainTypeId: makeDomainTypeId('default') });
 
-    // Broadcast each scalar signal to field, then construct color
-    const rField = ctx.b.broadcast(rSig, floatFieldType);
-    const gField = ctx.b.broadcast(gSig, floatFieldType);
-    const bField = ctx.b.broadcast(bSig, floatFieldType);
-    const aField = ctx.b.broadcast(aSig, floatFieldType);
+    // allowZipSig: signal inputs may have been resolved to field cardinality by solver.
+    // Broadcast only when input is actually a signal; fields pass through.
+    const ensureField = (input: typeof rInput) =>
+      requireInst(input.type.extent.cardinality, 'cardinality').kind === 'one'
+        ? ctx.b.broadcast(input.id, floatFieldType) : input.id;
+    const rField = ensureField(rInput);
+    const gField = ensureField(gInput);
+    const bField = ensureField(bInput);
+    const aField = ensureField(aInput);
     const result = ctx.b.construct([rField, gField, bField, aField], colorType);
 
     return {
