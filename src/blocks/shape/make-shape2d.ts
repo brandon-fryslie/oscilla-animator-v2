@@ -12,6 +12,7 @@
 import { registerBlock, requireConfig } from '../registry';
 import { canonicalType, canonicalFieldDef, payloadStride, requireInst } from '../../core/canonical-types';
 import { FLOAT, VEC2 } from '../../core/canonical-types';
+import { DOMAIN_CONTROL } from '../../core/domain-registry';
 import { registerDynamicTopology } from '../../shapes/registry';
 import { createLinePathTopology } from './_topology-helpers';
 
@@ -44,9 +45,10 @@ registerBlock({
   capability: 'pure',
   loweringPurity: 'pure',
   cardinality: {
-    cardinalityMode: 'preserve',
+    cardinalityMode: 'transform',
     laneCoupling: 'laneLocal',
     broadcastPolicy: 'disallowSignalMix',
+    domainType: DOMAIN_CONTROL,  // Assembler consumes control-point fields (no new instances created)
   },
   inputs: {
     controlPoints: {

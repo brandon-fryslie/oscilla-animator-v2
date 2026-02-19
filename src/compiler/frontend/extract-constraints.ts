@@ -441,17 +441,25 @@ function rewriteTransform(
         const instVar: InstanceTerm = { kind: 'var', id: instanceVarId(`adapter:${block.id}`) };
         constraints.push({ kind: 'forceMany', port: key, instance: instVar, origin: { kind: 'blockRule', blockId: block.id, blockType: block.type, rule: 'transform.forceMany' } });
       } else {
-        // Normal transform outputs → deterministic axisInst(many(ref))
         const type = portBaseTypes.get(key)!;
-        const rewritten: InferenceCanonicalType = {
-          ...type,
-          extent: {
-            ...type.extent,
-            cardinality: axisInst({ kind: 'many', instance: ref }),
-          },
-        };
-        portBaseTypes.set(key, rewritten);
-        constraints.push({ kind: 'forceMany', port: key, instance: { kind: 'inst', ref }, origin: { kind: 'blockRule', blockId: block.id, blockType: block.type, rule: 'transform.forceMany' } });
+        const declaredCard = type.extent.cardinality;
+        // [LAW:one-source-of-truth] Signal-declared outputs stay signal on transform blocks.
+        // Only field-declared outputs (cardinality many) get forced to many(ref).
+        // This enables generators/assemblers to output both shapes (signal) and fields.
+        if (isAxisInst(declaredCard) && declaredCard.value.kind === 'one') {
+          constraints.push({ kind: 'clampOne', port: key, origin: { kind: 'blockRule', blockId: block.id, blockType: block.type, rule: 'transform.signalOutput.clampOne' } });
+        } else {
+          // Normal transform outputs → deterministic axisInst(many(ref))
+          const rewritten: InferenceCanonicalType = {
+            ...type,
+            extent: {
+              ...type.extent,
+              cardinality: axisInst({ kind: 'many', instance: ref }),
+            },
+          };
+          portBaseTypes.set(key, rewritten);
+          constraints.push({ kind: 'forceMany', port: key, instance: { kind: 'inst', ref }, origin: { kind: 'blockRule', blockId: block.id, blockType: block.type, rule: 'transform.forceMany' } });
+        }
       }
     } else {
       // Transform inputs → axisVar
