@@ -5,7 +5,7 @@
  */
 
 import { registerBlock, ALL_CONCRETE_PAYLOADS } from '../registry';
-import { canonicalType, type PayloadType, type CameraProjection, payloadStride, floatConst, intConst, boolConst, vec2Const, colorConst, cameraProjectionConst } from '../../core/canonical-types';
+import { canonicalType, type PayloadType, type CameraProjection, payloadStride, floatConst, intConst, boolConst, vec2Const, vec3Const, vec4Const, colorConst, cameraProjectionConst } from '../../core/canonical-types';
 import { FLOAT, INT, BOOL, CAMERA_PROJECTION } from '../../core/canonical-types';
 import { inferType, payloadVar, unitVar } from '../../core/inference-types';
 
@@ -121,22 +121,64 @@ registerBlock({
         };
       }
       case 'vec2': {
-        const val = rawValue as { x?: number; y?: number };
-        if (typeof val !== 'object' || val === null) {
-          throw new Error(`Const<vec2> requires {x, y} object, got ${typeof rawValue}`);
-        }
-        if (typeof val.x !== 'number' || typeof val.y !== 'number') {
-          throw new Error(`Const<vec2> requires {x: number, y: number}, got {x: ${typeof val.x}, y: ${typeof val.y}}`);
+        const val = rawValue as unknown[];
+        if (!Array.isArray(val) || val.length !== 2 ||
+          typeof val[0] !== 'number' || typeof val[1] !== 'number') {
+          throw new Error(`Const<vec2> requires [x, y] array of numbers, got ${JSON.stringify(rawValue)}`);
         }
 
         // Pure lowering: construct multi-component signal from scalar components
-        const xSig = ctx.b.constantWithKey(floatConst(val.x), canonicalType(FLOAT), ctx.instanceId);
-        const ySig = ctx.b.constantWithKey(floatConst(val.y), canonicalType(FLOAT), ctx.instanceId);
+        const xSig = ctx.b.constantWithKey(floatConst(val[0]), canonicalType(FLOAT), ctx.instanceId);
+        const ySig = ctx.b.constantWithKey(floatConst(val[1]), canonicalType(FLOAT), ctx.instanceId);
         const vec2Sig = ctx.b.construct([xSig, ySig], outType);
 
         return {
           outputsById: {
             out: { id: vec2Sig, slot: undefined, type: outType, stride, components: [xSig, ySig] },
+          },
+          effects: {
+            slotRequests: [{ portId: 'out', type: outType }],
+          },
+        };
+      }
+      case 'vec3': {
+        const val = rawValue as unknown[];
+        if (!Array.isArray(val) || val.length !== 3 ||
+          typeof val[0] !== 'number' || typeof val[1] !== 'number' || typeof val[2] !== 'number') {
+          throw new Error(`Const<vec3> requires [x, y, z] array of numbers, got ${JSON.stringify(rawValue)}`);
+        }
+
+        const x3Sig = ctx.b.constantWithKey(floatConst(val[0]), canonicalType(FLOAT), ctx.instanceId);
+        const y3Sig = ctx.b.constantWithKey(floatConst(val[1]), canonicalType(FLOAT), ctx.instanceId);
+        const z3Sig = ctx.b.constantWithKey(floatConst(val[2]), canonicalType(FLOAT), ctx.instanceId);
+        const vec3Sig = ctx.b.construct([x3Sig, y3Sig, z3Sig], outType);
+
+        return {
+          outputsById: {
+            out: { id: vec3Sig, slot: undefined, type: outType, stride, components: [x3Sig, y3Sig, z3Sig] },
+          },
+          effects: {
+            slotRequests: [{ portId: 'out', type: outType }],
+          },
+        };
+      }
+      case 'vec4': {
+        const val = rawValue as unknown[];
+        if (!Array.isArray(val) || val.length !== 4 ||
+          typeof val[0] !== 'number' || typeof val[1] !== 'number' ||
+          typeof val[2] !== 'number' || typeof val[3] !== 'number') {
+          throw new Error(`Const<vec4> requires [x, y, z, w] array of numbers, got ${JSON.stringify(rawValue)}`);
+        }
+
+        const x4Sig = ctx.b.constantWithKey(floatConst(val[0]), canonicalType(FLOAT), ctx.instanceId);
+        const y4Sig = ctx.b.constantWithKey(floatConst(val[1]), canonicalType(FLOAT), ctx.instanceId);
+        const z4Sig = ctx.b.constantWithKey(floatConst(val[2]), canonicalType(FLOAT), ctx.instanceId);
+        const w4Sig = ctx.b.constantWithKey(floatConst(val[3]), canonicalType(FLOAT), ctx.instanceId);
+        const vec4Sig = ctx.b.construct([x4Sig, y4Sig, z4Sig, w4Sig], outType);
+
+        return {
+          outputsById: {
+            out: { id: vec4Sig, slot: undefined, type: outType, stride, components: [x4Sig, y4Sig, z4Sig, w4Sig] },
           },
           effects: {
             slotRequests: [{ portId: 'out', type: outType }],

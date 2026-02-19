@@ -24,6 +24,7 @@ export type ConstValue =
   | { readonly kind: 'bool'; readonly value: boolean }
   | { readonly kind: 'vec2'; readonly value: readonly [number, number] }
   | { readonly kind: 'vec3'; readonly value: readonly [number, number, number] }
+  | { readonly kind: 'vec4'; readonly value: readonly [number, number, number, number] }
   | { readonly kind: 'color'; readonly value: readonly [number, number, number, number] }
   | { readonly kind: 'cameraProjection'; readonly value: CameraProjection };
 
@@ -71,6 +72,11 @@ export function vec3Const(x: number, y: number, z: number): ConstValue {
   return { kind: 'vec3', value: [x, y, z] as const };
 }
 
+/** Create a vec4 constant value. */
+export function vec4Const(x: number, y: number, z: number, w: number): ConstValue {
+  return { kind: 'vec4', value: [x, y, z, w] as const };
+}
+
 /** Create a color constant value (RGBA). */
 export function colorConst(r: number, g: number, b: number, a: number): ConstValue {
   return { kind: 'color', value: [r, g, b, a] as const };
@@ -101,6 +107,7 @@ export function constValueAsNumber(cv: ConstValue): number {
       return cv.value === 'perspective' ? 1 : 0;
     case 'vec2':
     case 'vec3':
+    case 'vec4':
     case 'color':
       throw new Error(`Cannot convert ${cv.kind} const value to scalar number (use component access instead)`);
     default: {

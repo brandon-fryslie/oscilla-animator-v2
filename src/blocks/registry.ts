@@ -6,7 +6,7 @@
  */
 
 import type { CanonicalType, PayloadType } from '../core/canonical-types';
-import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, CAMERA_PROJECTION, payloadsEqual } from '../core/canonical-types';
+import { FLOAT, INT, BOOL, VEC2, VEC3, VEC4, COLOR, CAMERA_PROJECTION, payloadsEqual } from '../core/canonical-types';
 import type { InferenceCanonicalType, InferencePayloadType } from '../core/inference-types';
 import { isPayloadVar } from '../core/inference-types';
 import type { UIControlHint, DefaultSource } from '../types';
@@ -331,6 +331,7 @@ export const ALL_CONCRETE_PAYLOADS: readonly PayloadType[] = [
   BOOL,
   VEC2,
   VEC3,
+  VEC4,
   COLOR,
   CAMERA_PROJECTION,
 ];

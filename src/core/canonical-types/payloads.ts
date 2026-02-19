@@ -37,6 +37,7 @@ export type ConcretePayloadType =
   | { readonly kind: 'bool' }
   | { readonly kind: 'vec2' }
   | { readonly kind: 'vec3' }
+  | { readonly kind: 'vec4' }
   | { readonly kind: 'color' }
   | { readonly kind: 'cameraProjection' };
 
@@ -68,6 +69,8 @@ export const BOOL: ConcretePayloadType = { kind: 'bool' } as const;
 export const VEC2: ConcretePayloadType = { kind: 'vec2' } as const;
 /** Vec3 payload type (stride: 3) */
 export const VEC3: ConcretePayloadType = { kind: 'vec3' } as const;
+/** Vec4 payload type (stride: 4) */
+export const VEC4: ConcretePayloadType = { kind: 'vec4' } as const;
 /** Color payload type (stride: 4) */
 export const COLOR: ConcretePayloadType = { kind: 'color' } as const;
 /** Camera projection payload type (stride: 1) */
@@ -83,6 +86,7 @@ const PAYLOAD_BY_KIND: Record<PayloadKind, ConcretePayloadType> = {
   bool: BOOL,
   vec2: VEC2,
   vec3: VEC3,
+  vec4: VEC4,
   color: COLOR,
   cameraProjection: CAMERA_PROJECTION,
 };
@@ -101,6 +105,7 @@ const ALLOWED_UNITS: Record<PayloadKind, readonly UnitType['kind'][]> = {
   int: ['count', 'time'],
   vec2: ['space'],
   vec3: ['space'],
+  vec4: ['none'],
   color: ['color'],
   bool: ['none'],
   cameraProjection: ['none'],
@@ -134,6 +139,7 @@ export function defaultUnitForPayload(payload: PayloadType): UnitType {
     case 'int': return unitCount(); // TODO: what should this be?  changed it from unit 'count' to unit 'none' because that seems better.  still fails because we need a float -> int adapter
     case 'vec2': return unitWorld2();
     case 'vec3': return unitWorld3();
+    case 'vec4': return unitNone();
     case 'color': return unitRgba01();
     case 'bool': return unitNone();
     case 'cameraProjection': return unitNone();
