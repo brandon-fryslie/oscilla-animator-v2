@@ -57,7 +57,7 @@ export { executeFrameStepped } from './executeFrameStepped';
 export { StepDebugSession } from './StepDebugSession';
 export { getValueExprChildren, walkValueExprTree } from './ValueExprTreeWalker';
 export { readSlotValue, readEventSlotValue, detectAnomalies, inspectBlockSlots } from './ValueInspector';
-export { getSlotLookupMap, getFieldExprToSlotMap, getSigToSlotMap, type SlotLookup } from './SlotLookupCache';
+export { getExprAddressTable, type ExprAddressTable, type SlotLookup } from './ExprAddressTable';
 export type {
   ExecutionPhase,
   StepSnapshot,

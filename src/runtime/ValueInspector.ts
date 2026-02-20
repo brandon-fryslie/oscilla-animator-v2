@@ -10,8 +10,8 @@ import { readShape2D } from './RuntimeState';
 import type { CompiledProgramIR, SlotMetaEntry } from '../compiler/ir/program';
 import type { ValueSlot } from '../compiler/ir/Indices';
 import type { BlockId, PortId } from '../types';
-import type { SlotLookup } from './SlotLookupCache';
-import { getSlotLookupMap } from './SlotLookupCache';
+import type { SlotLookup } from './ExprAddressTable';
+import { getExprAddressTable } from './ExprAddressTable';
 import type { SlotValue, ValueAnomaly, LaneIdentity } from './StepDebugTypes';
 import type { InstanceId } from '../core/ids';
 import type { ContinuityState } from './ContinuityState';
@@ -20,7 +20,7 @@ import type { ContinuityState } from './ContinuityState';
  * Read the current value of a slot from runtime state.
  *
  * @param state - Runtime state to read from
- * @param lookup - Pre-computed slot lookup (from SlotLookupCache)
+ * @param lookup - Pre-computed slot lookup (from ExprAddressTable)
  * @param meta - Slot metadata (for type information)
  * @returns Typed slot value snapshot
  */
@@ -164,7 +164,7 @@ export function inspectBlockSlots(
   state: RuntimeState,
   slotLookupMap?: Map<ValueSlot, SlotLookup>,
 ): Map<ValueSlot, SlotValue> {
-  const lookupMap = slotLookupMap ?? getSlotLookupMap(program);
+  const lookupMap = slotLookupMap ?? getExprAddressTable(program).slotLookup;
   const result = new Map<ValueSlot, SlotValue>();
 
   // Build a slot-to-meta index for quick lookup

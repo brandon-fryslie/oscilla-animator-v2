@@ -36,11 +36,9 @@ import { evaluateValueExprEvent } from './ValueExprEventEvaluator';
 import { materializeValueExpr } from './ValueExprMaterializer';
 import {
   type SlotLookup,
-  getSlotLookupMap,
-  getFieldExprToSlotMap,
-  getSigToSlotMap,
+  getExprAddressTable,
   assertF64Stride,
-} from './SlotLookupCache';
+} from './ExprAddressTable';
 
 function writeF64Scalar(state: RuntimeState, lookup: SlotLookup, value: number): void {
   if (lookup.storage !== 'f64') {
@@ -100,13 +98,9 @@ export function executeFrame(
   const instances = schedule.instances;
   const steps = schedule.steps;
 
-  // Precompute where each field ValueExprId materializes so other steps (eg shapeRef) can reference the produced slot.
-  // Cached per program since schedule steps are deterministic.
-  const fieldExprToSlot = getFieldExprToSlotMap(program);
-
-  // C-16: Pre-compute slot lookup map to eliminate O(n*m) runtime dispatch
-  // Use module-level cache for slot lookup tables.
-  const slotLookupMap = getSlotLookupMap(program);
+  // [LAW:one-source-of-truth] Single address table for all slot/expr/field queries.
+  const addressTable = getExprAddressTable(program);
+  const { slotLookup: slotLookupMap, fieldExprToSlot } = addressTable;
 
   // Helper uses module-level resolveSlotOffsetFromMap() — no closure needed
 
@@ -166,7 +160,7 @@ export function executeFrame(
 
   // [LAW:one-source-of-truth] Populate sigToSlot before Phase 1 so extract
   // can read multi-component signals directly from f64 during evaluation.
-  state.cache.sigToSlot = getSigToSlotMap(program, slotLookupMap);
+  state.cache.sigToSlot = addressTable.sigToF64Offset;
 
   // PHASE 1: Execute all non-stateWrite steps
   for (const step of steps) {

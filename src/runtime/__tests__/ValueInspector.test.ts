@@ -4,7 +4,7 @@ import {
   readEventSlotValue,
   detectAnomalies,
 } from '../ValueInspector';
-import type { SlotLookup } from '../SlotLookupCache';
+import type { SlotLookup } from '../ExprAddressTable';
 import type { SlotMetaEntry } from '../../compiler/ir/program';
 import type { ValueSlot } from '../../compiler/ir/Indices';
 import { createRuntimeState } from '../RuntimeState';

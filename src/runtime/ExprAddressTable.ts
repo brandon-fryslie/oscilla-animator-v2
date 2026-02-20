@@ -1,0 +1,103 @@
+/**
+ * ExprAddressTable — single address-resolution structure per compiled program.
+ *
+ * [LAW:one-source-of-truth] All slot/expr/field address queries go through here.
+ * WeakMap-cached per CompiledProgramIR (immutable after construction).
+ *
+ * Replaces the former three separate caches (SLOT_LOOKUP_CACHE,
+ * FIELD_EXPR_SLOT_CACHE, SIG_TO_SLOT_CACHE) with one unified table
+ * built in a single pass over slotMeta + schedule steps.
+ */
+
+import type { CompiledProgramIR } from '../compiler/ir/program';
+import type { ValueSlot } from '../compiler/ir/Indices';
+import type { ScheduleIR } from '../compiler/backend/schedule-program';
+
+/**
+ * Slot lookup entry — maps a ValueSlot to its physical storage location.
+ */
+export interface SlotLookup {
+  storage: 'f64' | 'f32' | 'i32' | 'u32' | 'object' | 'shape2d';
+  offset: number;
+  stride: number;
+  slot: ValueSlot;
+}
+
+/**
+ * Unified address table: all slot/expr/field address queries in one structure.
+ */
+export interface ExprAddressTable {
+  /** ValueSlot → physical storage location */
+  readonly slotLookup: ReadonlyMap<ValueSlot, SlotLookup>;
+  /** FieldExprId → materialization target ValueSlot */
+  readonly fieldExprToSlot: ReadonlyMap<number, ValueSlot>;
+  /** Signal ValueExprId → f64 physical offset */
+  readonly sigToF64Offset: ReadonlyMap<number, number>;
+}
+
+const TABLE_CACHE = new WeakMap<CompiledProgramIR, ExprAddressTable>();
+
+/**
+ * Get (or build) the ExprAddressTable for a compiled program.
+ * Cached per program identity — safe to call every frame.
+ */
+export function getExprAddressTable(program: CompiledProgramIR): ExprAddressTable {
+  const cached = TABLE_CACHE.get(program);
+  if (cached) return cached;
+
+  // 1. Build slotLookup from slotMeta
+  const slotLookup = new Map<ValueSlot, SlotLookup>();
+  for (const meta of program.slotMeta) {
+    if (meta.stride == null) {
+      throw new Error('slotMeta missing required stride for slot ' + meta.slot);
+    }
+    slotLookup.set(meta.slot, {
+      storage: meta.storage,
+      offset: meta.offset,
+      stride: meta.stride,
+      slot: meta.slot,
+    });
+  }
+
+  // 2. Build fieldExprToSlot and sigToF64Offset from schedule steps
+  const fieldExprToSlot = new Map<number, ValueSlot>();
+  const sigToF64Offset = new Map<number, number>();
+  const steps = (program.schedule as ScheduleIR).steps;
+  for (const step of steps) {
+    if (step.kind === 'materialize') {
+      fieldExprToSlot.set(step.field as number, step.target);
+    }
+    if (step.kind === 'evalValue' && step.target.storage === 'value') {
+      const lookup = slotLookup.get(step.target.slot);
+      if (lookup) {
+        sigToF64Offset.set(step.expr as number, lookup.offset);
+      }
+    }
+  }
+
+  const table: ExprAddressTable = { slotLookup, fieldExprToSlot, sigToF64Offset };
+  TABLE_CACHE.set(program, table);
+  return table;
+}
+
+export function assertSlotExists(slotLookupMap: ReadonlyMap<ValueSlot, SlotLookup>, slot: ValueSlot, what: string): SlotLookup {
+  const lookup = slotLookupMap.get(slot);
+  if (!lookup) throw new Error('Missing slotMeta entry for ' + what + ' (slot ' + slot + ')');
+  return lookup;
+}
+
+export function assertF64Stride(
+  slotLookupMap: ReadonlyMap<ValueSlot, SlotLookup>,
+  slot: ValueSlot,
+  expectedStride: number,
+  what: string,
+): SlotLookup {
+  const lookup = assertSlotExists(slotLookupMap, slot, what);
+  if (lookup.storage !== 'f64') {
+    throw new Error(what + ' must be f64 storage, got ' + lookup.storage);
+  }
+  if (lookup.stride !== expectedStride) {
+    throw new Error(what + ' must have stride=' + expectedStride + ', got ' + lookup.stride);
+  }
+  return lookup;
+}

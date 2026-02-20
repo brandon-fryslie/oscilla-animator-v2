@@ -36,11 +36,9 @@ import { evaluateValueExprEvent } from './ValueExprEventEvaluator';
 import { materializeValueExpr } from './ValueExprMaterializer';
 import {
   type SlotLookup,
-  getSlotLookupMap,
-  getFieldExprToSlotMap,
-  getSigToSlotMap,
+  getExprAddressTable,
   assertF64Stride,
-} from './SlotLookupCache';
+} from './ExprAddressTable';
 import type { StepSnapshot, SlotValue, StateSlotValue, ExecutionPhase } from './StepDebugTypes';
 import { readSlotValue, readEventSlotValue, detectAnomalies } from './ValueInspector';
 
@@ -169,8 +167,9 @@ export function* executeFrameStepped(
 
   const prevValues = previousFrameValues ?? null;
 
-  const fieldExprToSlot = getFieldExprToSlotMap(program);
-  const slotLookupMap = getSlotLookupMap(program);
+  // [LAW:one-source-of-truth] Single address table for all slot/expr/field queries.
+  const addressTable = getExprAddressTable(program);
+  const { slotLookup: slotLookupMap, fieldExprToSlot } = addressTable;
 
   const resolveSlotOffset = (slot: ValueSlot): SlotLookup => {
     const lookup = slotLookupMap.get(slot);
@@ -215,7 +214,7 @@ export function* executeFrameStepped(
 
   // [LAW:one-source-of-truth] Populate sigToSlot before Phase 1 so extract
   // can read multi-component signals directly from f64 during evaluation.
-  state.cache.sigToSlot = getSigToSlotMap(program, slotLookupMap);
+  state.cache.sigToSlot = addressTable.sigToF64Offset;
 
   // --- PHASE 1: Execute all non-stateWrite steps ---
   const valueExprs = program.valueExprs.nodes;

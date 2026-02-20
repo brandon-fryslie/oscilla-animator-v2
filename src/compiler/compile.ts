@@ -23,7 +23,8 @@ import type { UnlinkedIRFragments } from './backend/lower-blocks';
 import type { ScheduleIR } from './backend/schedule-program';
 import type { AcyclicOrLegalGraph } from './ir/patches';
 import type { EventHub } from '../events/EventHub';
-import { canonicalType, requireManyInstance, requireInst, isMany, payloadStride } from '../core/canonical-types';
+import { canonicalType, requireManyInstance } from '../core/canonical-types';
+import { deriveStorageLayout } from './ir/storage-class';
 import type { ValueExpr, ValueExprId } from './ir/value-expr';
 import type { Step } from './ir/types';
 import { FLOAT } from '../core/canonical-types';
@@ -322,15 +323,8 @@ function convertLinkedIRToProgram(
     if (!slotInfo?.type) throw new Error(`Slot ${slot} has no registered type — IR builder bug`);
     const type = slotInfo.type;
 
-    // [LAW:one-source-of-truth] Derive storage from the type's cardinality axis.
-    // Backend types are fully instantiated — no vars allowed here.
-    const card = requireInst(type.extent.cardinality, 'cardinality');
-    const storage: SlotMetaEntry['storage'] = isMany(card) ? 'object' : 'f64';
-
-    // Object slots store a single buffer reference; scalar slots need stride for multi-component payloads
-    const stride = storage === 'object'
-      ? 1
-      : (slotInfo.stride !== undefined ? slotInfo.stride : payloadStride(type.payload));
+    // [LAW:one-source-of-truth] Single derivation point for storage class + stride.
+    const { storage, stride } = deriveStorageLayout(type, slotInfo.stride);
 
     const offset = storageOffsets[storage];
     storageOffsets[storage] += stride;
