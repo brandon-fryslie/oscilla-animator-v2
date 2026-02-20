@@ -17,7 +17,7 @@ import { payloadStride } from '../core/canonical-types';
 import type { UnmappedEdgeInfo, EdgeMetadata } from './mapDebugEdges';
 import type { ConstantValue } from './ConstantValueTracker';
 import { HistoryService, type KeyResolver, type ResolvedKeyMetadata } from '../ui/debug-viz/HistoryService';
-import type { DebugTargetKey, Stride } from '../ui/debug-viz/types';
+import type { DebugTargetKey, HistoryView, Stride } from '../ui/debug-viz/types';
 import type { FieldHistoryView, AggregateFieldStats } from '../ui/debug-viz/FieldStatsAccumulator';
 import { FieldStatsAccumulator } from '../ui/debug-viz/FieldStatsAccumulator';
 
@@ -338,6 +338,14 @@ class DebugService {
    */
   getFieldHistory(slotId: ValueSlot): FieldHistoryView | undefined {
     return this.fieldAccumulators.get(slotId)?.getHistory();
+  }
+
+  /**
+   * Get instance-0 sparkline history for a field slot.
+   * Returns undefined if slot is not tracked or has no accumulator.
+   */
+  getFieldInstanceHistory(slotId: ValueSlot): HistoryView | undefined {
+    return this.fieldAccumulators.get(slotId)?.getInstanceHistory();
   }
 
   /**

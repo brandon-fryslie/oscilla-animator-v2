@@ -32,6 +32,8 @@ export interface MiniViewData {
   history: TrackedEntry | null;
   /** Field temporal history (null if not a field or not tracked) */
   fieldHistory: FieldHistoryView | null;
+  /** Instance-0 sparkline history (null if not a field or not tracked) */
+  fieldInstanceHistory: HistoryView | null;
 }
 
 /**
@@ -86,6 +88,11 @@ export function useDebugMiniView(
     ? debugService.getFieldHistory(meta.slotId) ?? null
     : null;
 
+  // Resolve instance-0 sparkline history (only for field edges)
+  const fieldInstanceHistory = meta.cardinality === 'field'
+    ? debugService.getFieldInstanceHistory(meta.slotId) ?? null
+    : null;
+
   return {
     key,
     label: edgeLabel || hoveredEdgeId,
@@ -93,5 +100,6 @@ export function useDebugMiniView(
     value,
     history,
     fieldHistory,
+    fieldInstanceHistory,
   };
 }

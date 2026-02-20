@@ -8,7 +8,7 @@
  * - Percentile computation (p25, p75) via pre-allocated sort buffer
  */
 
-import type { Stride } from './types';
+import type { HistoryView, Stride } from './types';
 
 // =============================================================================
 // Types
@@ -56,6 +56,9 @@ export interface AggregateFieldStats {
 /** Ring buffer capacity: 256 frames (~4.3s at 60fps). */
 const HISTORY_CAPACITY = 256;
 
+/** Instance-0 sparkline ring buffer capacity: 128 frames (~2.1s at 60fps). */
+const INSTANCE_HISTORY_CAPACITY = 128;
+
 /** EMA alpha: `1 - 0.5^(1/1800)` for ~30s half-life at 60fps. */
 const EMA_ALPHA = 1 - Math.pow(0.5, 1 / 1800);
 
@@ -96,6 +99,15 @@ export class FieldStatsAccumulator {
   /** Maximum lane count the sort buffer can handle. */
   private _sortBufCapacity = 0;
 
+  /** Instance-0 sparkline ring buffer (stride 1, component 0 only). */
+  private _instBuffer: Float32Array;
+
+  /** Monotonically increasing write position for instance ring buffer. */
+  private _instWriteIndex = 0;
+
+  /** Whether instance ring buffer has wrapped at least once. */
+  private _instFilled = false;
+
   constructor(stride: Stride) {
     this.stride = stride;
 
@@ -123,6 +135,9 @@ export class FieldStatsAccumulator {
     // Initial sort buffer (will grow if needed)
     this._sortBuf = new Float32Array(1024);
     this._sortBufCapacity = 1024;
+
+    // Instance-0 sparkline ring buffer
+    this._instBuffer = new Float32Array(INSTANCE_HISTORY_CAPACITY);
   }
 
   /**
@@ -133,6 +148,14 @@ export class FieldStatsAccumulator {
    */
   update(buffer: Float32Array, count: number): void {
     this._lastCount = count;
+
+    // Sample instance 0, component 0 into sparkline ring buffer
+    this._instBuffer[this._instWriteIndex % INSTANCE_HISTORY_CAPACITY] =
+      count === 0 ? NaN : buffer[0];
+    this._instWriteIndex++;
+    if (this._instWriteIndex >= INSTANCE_HISTORY_CAPACITY && !this._instFilled) {
+      this._instFilled = true;
+    }
 
     if (count === 0) {
       // Push empty snapshot
@@ -230,6 +253,20 @@ export class FieldStatsAccumulator {
   }
 
   /**
+   * Get instance-0 sparkline history as a HistoryView.
+   * Samples component 0 of instance 0 every frame (stride 1).
+   */
+  getInstanceHistory(): HistoryView {
+    return {
+      buffer: this._instBuffer,
+      writeIndex: this._instWriteIndex,
+      capacity: INSTANCE_HISTORY_CAPACITY,
+      stride: 1,
+      filled: this._instFilled,
+    };
+  }
+
+  /**
    * Reset all accumulated state.
    */
   reset(): void {
@@ -240,6 +277,9 @@ export class FieldStatsAccumulator {
     this._writeIndex = 0;
     this._filled = false;
     this._lastCount = 0;
+    this._instBuffer.fill(0);
+    this._instWriteIndex = 0;
+    this._instFilled = false;
   }
 
   // ---------------------------------------------------------------------------

@@ -18,7 +18,7 @@ import { DistributionBar } from './charts/DistributionBar';
 import { WarmupIndicator } from './charts/WarmupIndicator';
 import { ColorPalette } from './charts/ColorPalette';
 import { FieldBandChart } from './charts/FieldBandChart';
-import type { RendererSample, AggregateStats, Stride, FieldHistoryView } from './types';
+import type { RendererSample, AggregateStats, HistoryView, Stride, FieldHistoryView } from './types';
 import type { EdgeValueResult } from '../../services/DebugService';
 import type { EdgeMetadata } from '../../services/mapDebugEdges';
 import type { CanonicalType } from '../../core/canonical-types';
@@ -232,10 +232,11 @@ export function SignalValueSection({ value, meta, history }: {
   return React.createElement('div', { style: debugMiniViewStyles.valueSection }, ...children);
 }
 
-export function FieldValueSection({ value, meta, fieldHistory }: {
+export function FieldValueSection({ value, meta, fieldHistory, fieldInstanceHistory }: {
   value: EdgeValueResult | null;
   meta: EdgeMetadata;
   fieldHistory: FieldHistoryView | null;
+  fieldInstanceHistory: HistoryView | null;
 }): React.ReactElement {
   if (!value || value.kind !== 'field') {
     if (value?.kind === 'field-untracked') {
@@ -310,6 +311,20 @@ export function FieldValueSection({ value, meta, fieldHistory }: {
     React.createElement('div', { key: 'renderer' }, renderer.renderFull(sample))
   );
 
+  // Instance-0 sparkline (above band chart)
+  if (fieldInstanceHistory) {
+    children.push(
+      React.createElement('div', { key: 'instance-sparkline', style: debugMiniViewStyles.sparklineContainer },
+        React.createElement(Sparkline, {
+          history: fieldInstanceHistory,
+          width: 280,
+          height: 30,
+          unit: meta.type.unit,
+        })
+      )
+    );
+  }
+
   // Band chart (temporal distribution)
   if (fieldHistory) {
     children.push(
@@ -364,6 +379,7 @@ export function DebugEdgeValueDisplay({ data }: { data: MiniViewData }): React.R
           value: data.value,
           meta: data.meta,
           fieldHistory: data.fieldHistory,
+          fieldInstanceHistory: data.fieldInstanceHistory,
         }),
 
     // Storage line
