@@ -13,9 +13,16 @@ import { instanceId as makeInstanceId } from '../core/ids';
 import type { RuntimeState } from './RuntimeState';
 import type { RenderFrameIR } from '../render/types';
 import type { RenderBufferArena } from '../render/RenderBufferArena';
-import { BufferPool } from './BufferPool';
 import { resolveTime } from './timeResolution';
 import { writeShape2D } from './RuntimeState';
+import {
+  MATERIALIZER_POOL,
+  renderStepsBuffer as _renderSteps,
+  shapeRecord as _shapeRecord,
+  continuityResolverState as _continuityResolverState,
+  resolveContinuityBuffer as _resolveContinuityBuffer,
+  assemblerCtx as _assemblerCtx,
+} from './executor-init';
 import { detectDomainChange } from './ContinuityMapping';
 import { applyContinuity, finalizeContinuityFrame } from './ContinuityApply';
 import { createStableDomainInstance, createUnstableDomainInstance } from './DomainIdentity';
@@ -35,35 +42,41 @@ import {
   assertF64Stride,
 } from './SlotLookupCache';
 
-// Module-level pool for Materializer buffers.
-// These buffers are CACHED in RuntimeState.cache.valueExprFieldBuffers and reused across frames,
-// so they don't need arena semantics. The pool grows once and then stabilizes.
-const MATERIALIZER_POOL = new BufferPool();
-
-// Module-level render steps array — reused across frames to avoid per-frame allocation.
-const _renderSteps: StepRender[] = [];
-
 function writeF64Scalar(state: RuntimeState, lookup: SlotLookup, value: number): void {
   if (lookup.storage !== 'f64') {
-    throw new Error(`writeF64Scalar: expected f64 storage for slot ${lookup.slot}, got ${lookup.storage}`);
+    throw new Error('writeF64Scalar: expected f64 storage for slot ' + lookup.slot + ', got ' + lookup.storage);
   }
   if (lookup.stride !== 1) {
-    throw new Error(`writeF64Scalar: expected stride=1 for slot ${lookup.slot}, got stride=${lookup.stride}`);
+    throw new Error('writeF64Scalar: expected stride=1 for slot ' + lookup.slot + ', got stride=' + lookup.stride);
   }
   state.values.f64[lookup.offset] = value;
 }
 
 function writeF64Strided(state: RuntimeState, lookup: SlotLookup, src: ArrayLike<number>, stride: number): void {
   if (lookup.storage !== 'f64') {
-    throw new Error(`writeF64Strided: expected f64 storage for slot ${lookup.slot}, got ${lookup.storage}`);
+    throw new Error('writeF64Strided: expected f64 storage for slot ' + lookup.slot + ', got ' + lookup.storage);
   }
   if (lookup.stride !== stride) {
-    throw new Error(`writeF64Strided: expected stride=${stride} for slot ${lookup.slot}, got ${lookup.stride}`);
+    throw new Error('writeF64Strided: expected stride=' + stride + ' for slot ' + lookup.slot + ', got ' + lookup.stride);
   }
   const o = lookup.offset;
   for (let i = 0; i < stride; i++) {
     state.values.f64[o + i] = src[i] as number;
   }
+}
+
+// Module-level helper: resolve slot to storage offset (hoisted to avoid per-frame closure)
+function resolveSlotOffsetFromMap(slotLookupMap: ReadonlyMap<ValueSlot, SlotLookup>, slot: ValueSlot): SlotLookup {
+  const lookup = slotLookupMap.get(slot);
+  if (!lookup) {
+    throw new Error('Slot ' + slot + ' not found in slotMeta');
+  }
+  return lookup;
+}
+
+// Module-level callback for events.forEach (hoisted to avoid per-frame closure)
+function _clearEventPayloads(payloads: unknown[]): void {
+  payloads.length = 0;
 }
 
 /**
@@ -95,14 +108,7 @@ export function executeFrame(
   // Use module-level cache for slot lookup tables.
   const slotLookupMap = getSlotLookupMap(program);
 
-  // Helper: Resolve slot to storage offset using pre-computed map (O(1) lookup)
-  const resolveSlotOffset = (slot: ValueSlot): SlotLookup => {
-    const lookup = slotLookupMap.get(slot);
-    if (!lookup) {
-      throw new Error(`Slot ${slot} not found in slotMeta`);
-    }
-    return lookup;
-  };
+  // Helper uses module-level resolveSlotOffsetFromMap() — no closure needed
 
   // 1. Advance frame (cache owns frameId)
   state.cache.frameId++;
@@ -119,9 +125,7 @@ export function executeFrame(
 
   // Clear event payload arrays (spec-compliant event storage)
   // Monotone OR semantics: clear at frame start, only append during frame
-  state.events.forEach((payloads) => {
-    payloads.length = 0; // Clear array but reuse allocation
-  });
+  state.events.forEach(_clearEventPayloads);
 
   // === System-reserved time outputs ===
   // These are part of the runtime contract: they are written deterministically from resolved time each frame.
@@ -175,11 +179,11 @@ export function executeFrame(
         if (strategy === 0 /* EvalStrategy.ContinuousScalar */ || strategy === 1 /* EvalStrategy.ContinuousField */) {
           // Continuous path (signals) - was evalSig
           if (step.target.storage !== 'value') {
-            throw new Error(`evalValue: ContinuousScalar/Field requires value storage, got ${step.target.storage}`);
+            throw new Error('evalValue: ContinuousScalar/Field requires value storage, got ' + step.target.storage);
           }
           
           const targetSlot = step.target.slot;
-          const lookup = resolveSlotOffset(targetSlot);
+          const lookup = resolveSlotOffsetFromMap(slotLookupMap,targetSlot);
           const { storage, offset, slot, stride } = lookup;
 
           if (storage === 'shape2d') {
@@ -187,22 +191,20 @@ export function executeFrame(
             const veId = step.expr;
             const exprNode = valueExprs[veId as number];
             if (exprNode.kind === 'shapeRef') {
-              writeShape2D(state.values.shape2d, offset, {
-                topologyId: exprNode.topologyId,
-                // TODO: if Shape2D slot encoding changes, update this mapping.
-                // For now we preserve prior behavior: store the field slot index as a number.
-                pointsFieldSlot:
-                  (exprNode.kind === 'shapeRef' && exprNode.controlPointField != null
-                    ? (() => {
-                        const cpSlot = fieldExprToSlot.get(exprNode.controlPointField as number);
-                        if (cpSlot === undefined) throw new Error(`Control point field ${exprNode.controlPointField} not in fieldExprToSlot — compiler bug`);
-                        return cpSlot;
-                      })()
-                    : 0),
-                pointsCount: 0,
-                styleRef: 0,
-                flags: 0,
-              });
+              // Resolve control point field slot (avoid IIFE closure)
+              let cpFieldSlot = 0;
+              if (exprNode.controlPointField != null) {
+                const cpSlot = fieldExprToSlot.get(exprNode.controlPointField as number);
+                if (cpSlot === undefined) throw new Error('Control point field ' + exprNode.controlPointField + ' not in fieldExprToSlot — compiler bug');
+                cpFieldSlot = cpSlot;
+              }
+              // Write shape record — populate reusable record fields
+              _shapeRecord.topologyId = exprNode.topologyId;
+              _shapeRecord.pointsFieldSlot = cpFieldSlot;
+              _shapeRecord.pointsCount = 0;
+              _shapeRecord.styleRef = 0;
+              _shapeRecord.flags = 0;
+              writeShape2D(state.values.shape2d, offset, _shapeRecord);
             }
           } else if (storage === 'f64') {
             // Check if this is a multi-component construct expression
@@ -220,7 +222,7 @@ export function executeFrame(
 
               if (written !== stride) {
                 throw new Error(
-                  `evalValue: construct wrote ${written} components but slot stride is ${stride}`
+                  'evalValue: construct wrote ' + written + ' components but slot stride is ' + stride
                 );
               }
 
@@ -247,16 +249,16 @@ export function executeFrame(
             } else {
               // stride>1 but not construct - invalid
               throw new Error(
-                `evalValue: stride=${stride} slot ${slot} requires construct expression, got ${exprNode?.kind ?? 'unknown'}`
+                'evalValue: stride=' + stride + ' slot ' + slot + ' requires construct expression, got ' + (exprNode ? exprNode.kind : 'unknown')
               );
             }
           } else {
-            throw new Error(`evalValue: unsupported storage type '${storage}' for slot ${slot} expr ${step.expr} strategy ${strategy}`);
+            throw new Error('evalValue: unsupported storage type \'' + storage + '\' for slot ' + slot + ' expr ' + step.expr + ' strategy ' + strategy);
           }
         } else if (strategy === 2 /* EvalStrategy.DiscreteScalar */ || strategy === 3 /* EvalStrategy.DiscreteField */) {
           // Discrete path (events) - was evalEvent
           if (step.target.storage !== 'event') {
-            throw new Error(`evalValue: DiscreteScalar/Field requires event storage, got ${step.target.storage}`);
+            throw new Error('evalValue: DiscreteScalar/Field requires event storage, got ' + step.target.storage);
           }
           
           // ValueExpr-only event evaluation (cutover complete)
@@ -267,7 +269,7 @@ export function executeFrame(
             state.eventScalars[step.target.slot as number] = 1;
           }
         } else {
-          throw new Error(`evalValue: unknown strategy ${strategy}`);
+          throw new Error('evalValue: unknown strategy ' + strategy);
         }
         break;
       }
@@ -275,16 +277,16 @@ export function executeFrame(
       case 'slotWriteStrided': {
         // P2: Execute strided slot write
         // Evaluate each component signal and write to contiguous slots
-        const lookup = resolveSlotOffset(step.slotBase);
+        const lookup = resolveSlotOffsetFromMap(slotLookupMap,step.slotBase);
         const { storage, offset, stride } = lookup;
 
         if (storage !== 'f64') {
-          throw new Error(`slotWriteStrided: expected f64 storage for slot ${step.slotBase}, got ${storage}`);
+          throw new Error('slotWriteStrided: expected f64 storage for slot ' + step.slotBase + ', got ' + storage);
         }
 
         if (step.inputs.length !== stride) {
           throw new Error(
-            `slotWriteStrided: inputs.length (${step.inputs.length}) must equal stride (${stride}) for slot ${step.slotBase}`
+            'slotWriteStrided: inputs.length (' + step.inputs.length + ') must equal stride (' + stride + ') for slot ' + step.slotBase
           );
         }
 
@@ -425,23 +427,13 @@ export function executeFrame(
         }
 
         // Apply continuity policy (gauge, slew, crossfade, or project)
-        applyContinuity(
-          step,
-          state,
-          (slot: ValueSlot) => {
-            if (slot === baseSlot) {
-              return baseBuffer;
-            }
-            if (slot === outputSlot) {
-              return outputBuffer!;
-            }
-            const buffer = state.values.objects.get(slot) as Float32Array | undefined;
-            if (!buffer) {
-              throw new Error(`Continuity: Buffer not found for slot ${slot}`);
-            }
-            return buffer;
-          }
-        );
+        // Set up module-level resolver state to avoid per-frame closure
+        _continuityResolverState.baseSlot = baseSlot;
+        _continuityResolverState.baseBuffer = baseBuffer;
+        _continuityResolverState.outputSlot = outputSlot;
+        _continuityResolverState.outputBuffer = outputBuffer!;
+        _continuityResolverState.objects = state.values.objects as Map<import('../compiler/ir/Indices').ValueSlot, ArrayBufferView | object>;
+        applyContinuity(step, state, _resolveContinuityBuffer);
         break;
       }
 
@@ -454,7 +446,7 @@ export function executeFrame(
 
       default: {
         const _exhaustive: never = step;
-        throw new Error(`Unknown step kind: ${(_exhaustive as Step).kind}`);
+        throw new Error('Unknown step kind: ' + (_exhaustive as Step).kind);
       }
     }
   }
@@ -508,13 +500,13 @@ export function executeFrame(
   const resolvedCamera = resolveCameraFromGlobals(program, state);
 
   // Build assembler context with resolved camera and arena
-  assemblerContext = {
-    instances: instances as ReadonlyMap<string, InstanceDecl>,
-    state,
-    resolvedCamera,
-    arena,
-    sigToSlot: state.cache.sigToSlot!,
-  };
+  // Populate reusable module-level context to avoid per-frame object literal
+  _assemblerCtx.instances = instances as ReadonlyMap<string, InstanceDecl>;
+  _assemblerCtx.state = state;
+  _assemblerCtx.resolvedCamera = resolvedCamera;
+  _assemblerCtx.arena = arena;
+  _assemblerCtx.sigToSlot = state.cache.sigToSlot!;
+  assemblerContext = _assemblerCtx as AssemblerContext;
 
   // Build v2 frame from collected render steps (zero allocations - uses arena)
   const frame = assembleRenderFrame(_renderSteps, assemblerContext);
@@ -571,14 +563,14 @@ export function executeFrame(
   // 5. Store frame in output slot (DoD: outputs contract)
   if (program.outputs.length > 0) {
     const outputSpec = program.outputs[0];
-    const { storage, slot } = resolveSlotOffset(outputSpec.slot);
+    const { storage, slot } = resolveSlotOffsetFromMap(slotLookupMap,outputSpec.slot);
 
     if (storage === 'object') {
       // For object storage, use slot as Map key
       state.values.objects.set(slot, frame);
     } else {
       throw new Error(
-        `Output slot expects object storage, got ${storage}`
+        'Output slot expects object storage, got ' + storage
       );
     }
 

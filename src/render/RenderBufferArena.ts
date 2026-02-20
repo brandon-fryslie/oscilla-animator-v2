@@ -27,6 +27,18 @@
  * - u8:      Uint8Array (1 element per instance)
  */
 
+import {
+  createFloat32Array,
+  createUint8ClampedArray,
+  createUint32Array,
+  createUint8Array,
+  buildInitLogMessage,
+  buildOverflowMessage,
+  populateFrameStats,
+  populatePeakStats,
+  createArenaInstance,
+} from './arena-init';
+
 /** Maximum supported element count - set at construction */
 const DEFAULT_MAX_ELEMENTS = 50_000;
 
@@ -85,12 +97,12 @@ export class RenderBufferArena {
     const N = this.maxElements;
 
     // Pre-allocate all buffers to max capacity
-    this.f32Buffer = new Float32Array(N);
-    this.vec2Buffer = new Float32Array(N * 2);
-    this.vec3Buffer = new Float32Array(N * 3);
-    this.rgbaBuffer = new Uint8ClampedArray(N * 4);
-    this.u32Buffer = new Uint32Array(N);
-    this.u8Buffer = new Uint8Array(N);
+    this.f32Buffer = createFloat32Array(N);
+    this.vec2Buffer = createFloat32Array(N * 2);
+    this.vec3Buffer = createFloat32Array(N * 3);
+    this.rgbaBuffer = createUint8ClampedArray(N * 4);
+    this.u32Buffer = createUint32Array(N);
+    this.u8Buffer = createUint8Array(N);
 
     this.initialized = true;
 
@@ -103,9 +115,8 @@ export class RenderBufferArena {
       this.u32Buffer.byteLength +
       this.u8Buffer.byteLength;
 
-    console.log(
-      `RenderBufferArena: pre-allocated ${(totalBytes / 1024 / 1024).toFixed(2)} MB for ${N} elements`
-    );
+    const message = buildInitLogMessage(totalBytes, N);
+    console.log(message);
   }
 
   /**
@@ -145,10 +156,8 @@ export class RenderBufferArena {
     const end = start + count;
 
     if (end > this.maxElements) {
-      throw new Error(
-        `RenderBufferArena: f32 overflow! Requested ${count} elements at offset ${start}, ` +
-        `but max is ${this.maxElements}. Total requested: ${end}`
-      );
+      const message = buildOverflowMessage('f32', count, start, this.maxElements, end);
+      throw new Error(message);
     }
 
     this.f32Head = end;
@@ -167,10 +176,8 @@ export class RenderBufferArena {
     const end = start + count;
 
     if (end > this.maxElements) {
-      throw new Error(
-        `RenderBufferArena: vec2 overflow! Requested ${count} elements at offset ${start}, ` +
-        `but max is ${this.maxElements}. Total requested: ${end}`
-      );
+      const message = buildOverflowMessage('vec2', count, start, this.maxElements, end);
+      throw new Error(message);
     }
 
     this.vec2Head = end;
@@ -189,10 +196,8 @@ export class RenderBufferArena {
     const end = start + count;
 
     if (end > this.maxElements) {
-      throw new Error(
-        `RenderBufferArena: vec3 overflow! Requested ${count} elements at offset ${start}, ` +
-        `but max is ${this.maxElements}. Total requested: ${end}`
-      );
+      const message = buildOverflowMessage('vec3', count, start, this.maxElements, end);
+      throw new Error(message);
     }
 
     this.vec3Head = end;
@@ -211,10 +216,8 @@ export class RenderBufferArena {
     const end = start + count;
 
     if (end > this.maxElements) {
-      throw new Error(
-        `RenderBufferArena: rgba overflow! Requested ${count} elements at offset ${start}, ` +
-        `but max is ${this.maxElements}. Total requested: ${end}`
-      );
+      const message = buildOverflowMessage('rgba', count, start, this.maxElements, end);
+      throw new Error(message);
     }
 
     this.rgbaHead = end;
@@ -233,10 +236,8 @@ export class RenderBufferArena {
     const end = start + count;
 
     if (end > this.maxElements) {
-      throw new Error(
-        `RenderBufferArena: u32 overflow! Requested ${count} elements at offset ${start}, ` +
-        `but max is ${this.maxElements}. Total requested: ${end}`
-      );
+      const message = buildOverflowMessage('u32', count, start, this.maxElements, end);
+      throw new Error(message);
     }
 
     this.u32Head = end;
@@ -255,10 +256,8 @@ export class RenderBufferArena {
     const end = start + count;
 
     if (end > this.maxElements) {
-      throw new Error(
-        `RenderBufferArena: u8 overflow! Requested ${count} elements at offset ${start}, ` +
-        `but max is ${this.maxElements}. Total requested: ${end}`
-      );
+      const message = buildOverflowMessage('u8', count, start, this.maxElements, end);
+      throw new Error(message);
     }
 
     this.u8Head = end;
@@ -277,15 +276,15 @@ export class RenderBufferArena {
     u32Used: number;
     u8Used: number;
   } {
-    return {
-      allocCount: this.allocCountThisFrame,
-      f32Used: this.f32Head,
-      vec2Used: this.vec2Head,
-      vec3Used: this.vec3Head,
-      rgbaUsed: this.rgbaHead,
-      u32Used: this.u32Head,
-      u8Used: this.u8Head,
-    };
+    return populateFrameStats(
+      this.allocCountThisFrame,
+      this.f32Head,
+      this.vec2Head,
+      this.vec3Head,
+      this.rgbaHead,
+      this.u32Head,
+      this.u8Head
+    );
   }
 
   /**
@@ -300,15 +299,15 @@ export class RenderBufferArena {
     peakU8: number;
     maxElements: number;
   } {
-    return {
-      peakF32: this.peakF32,
-      peakVec2: this.peakVec2,
-      peakVec3: this.peakVec3,
-      peakRGBA: this.peakRGBA,
-      peakU32: this.peakU32,
-      peakU8: this.peakU8,
-      maxElements: this.maxElements,
-    };
+    return populatePeakStats(
+      this.peakF32,
+      this.peakVec2,
+      this.peakVec3,
+      this.peakRGBA,
+      this.peakU32,
+      this.peakU8,
+      this.maxElements
+    );
   }
 
   /**
@@ -408,7 +407,7 @@ export function initGlobalRenderArena(maxElements: number = DEFAULT_MAX_ELEMENTS
     console.warn('RenderBufferArena: global arena already initialized, returning existing');
     return globalArena;
   }
-  globalArena = new RenderBufferArena(maxElements);
+  globalArena = createArenaInstance(RenderBufferArena, maxElements);
   globalArena.init();
   return globalArena;
 }

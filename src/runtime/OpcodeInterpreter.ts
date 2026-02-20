@@ -80,6 +80,10 @@
  * ══════════════════════════════════════════════════════════════════════
  */
 
+// Module-level reducer functions (hoisted to avoid per-call closure allocation)
+function _reduceAdd(a: number, b: number): number { return a + b; }
+function _reduceMul(a: number, b: number): number { return a * b; }
+
 /**
  * Apply an opcode to a list of values
  *
@@ -100,7 +104,7 @@ export function applyOpcode(opcode: string, values: number[]): number {
  */
 function expectArity(op: string, got: number, expected: number): void {
   if (got !== expected) {
-    throw new Error(`OpCode '${op}' requires exactly ${expected} argument(s), got ${got}`);
+    throw new Error('OpCode \'' + op + '\' requires exactly ' + expected + ' argument(s), got ' + got);
   }
 }
 
@@ -159,7 +163,7 @@ function applyUnaryOp(op: string, x: number): number {
     case 'identity':
       return x; // Identity — used by cheater adapters
     default:
-      throw new Error(`OpCode ${op} is not unary`);
+      throw new Error('OpCode ' + op + ' is not unary');
   }
 }
 
@@ -173,12 +177,12 @@ function applyUnaryOp(op: string, x: number): number {
 function applyNaryOp(op: string, values: number[]): number {
   switch (op) {
     case 'add':
-      return values.reduce((a, b) => a + b, 0);
+      return values.reduce(_reduceAdd, 0);
     case 'sub':
       expectArity('sub', values.length, 2);
       return values[0] - values[1];
     case 'mul':
-      return values.reduce((a, b) => a * b, 1);
+      return values.reduce(_reduceMul, 1);
     case 'div':
       expectArity('div', values.length, 2);
       return values[0] / values[1];
@@ -220,6 +224,6 @@ function applyNaryOp(op: string, values: number[]): number {
       // select(condition, valueIfTrue, valueIfFalse)
       return values[0] > 0 ? values[1] : values[2];
     default:
-      throw new Error(`OpCode ${op} not implemented for ${values.length} args`);
+      throw new Error('OpCode ' + op + ' not implemented for ' + values.length + ' args');
   }
 }

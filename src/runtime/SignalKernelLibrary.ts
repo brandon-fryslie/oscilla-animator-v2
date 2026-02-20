@@ -15,6 +15,7 @@
 
 import type { PureFn } from '@/compiler/ir/types';
 import { applyOpcode } from './OpcodeInterpreter';
+import { singleArgBuf as _singleArgBuf } from './executor-init';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // SIGNAL KERNEL IMPLEMENTATION
@@ -27,7 +28,7 @@ import { applyOpcode } from './OpcodeInterpreter';
  * references will throw at runtime, surfacing stale call sites.
  */
 export function applySignalKernel(name: string, _values: number[]): number {
-  throw new Error(`Unknown signal kernel: ${name}`);
+  throw new Error('Unknown signal kernel: ' + name);
 }
 
 /**
@@ -52,24 +53,25 @@ export function applyPureFn(
     case 'kernelResolved':
       // Phase D: This will call registry.callScalar(fn.handle, values)
       throw new Error(
-        `kernelResolved not yet implemented (Phase D pending). Handle: ${fn.handle}, ABI: ${fn.abi}`
+        'kernelResolved not yet implemented (Phase D pending). Handle: ' + fn.handle + ', ABI: ' + fn.abi
       );
 
     case 'expr':
-      throw new Error(`PureFn kind 'expr' not yet implemented`);
+      throw new Error('PureFn kind \'expr\' not yet implemented');
 
     case 'composed': {
       // Apply each opcode in sequence
       let result = values[0];
       for (const op of fn.ops) {
-        result = applyOpcode(op, [result]);
+        _singleArgBuf[0] = result;
+        result = applyOpcode(op, _singleArgBuf);
       }
       return result;
     }
 
     default: {
       const _exhaustive: never = fn;
-      throw new Error(`Unknown PureFn kind: ${(_exhaustive as PureFn).kind}`);
+      throw new Error('Unknown PureFn kind: ' + (_exhaustive as PureFn).kind);
     }
   }
 }
