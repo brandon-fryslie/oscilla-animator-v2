@@ -64,6 +64,7 @@ function createTestRuntimeState(): RuntimeState {
     
       valueExprFieldBuffers: [],
       valueExprFieldStamps: [],
+      sigToSlot: null,
     },
     timeState: {
       prevTAbsMs: null,

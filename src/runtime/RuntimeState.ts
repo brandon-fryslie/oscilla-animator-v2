@@ -212,6 +212,9 @@ export interface FrameCache {
    * Frame stamps for ValueExpr field cache validation (indexed by ValueExprId).
    */
   valueExprFieldStamps: number[];
+
+  /** Signal ValueExprId -> physical f64 offset mapping for multi-component extract */
+  sigToSlot: ReadonlyMap<number, number> | null;
 }
 
 /**
@@ -229,6 +232,7 @@ export function createFrameCache(
     valueExprStamps: new Uint32Array(maxValueExprs),
     valueExprFieldBuffers: new Array(maxValueExprs).fill(null),
     valueExprFieldStamps: new Array(maxValueExprs).fill(-1),
+    sigToSlot: null,
   };
 }
 

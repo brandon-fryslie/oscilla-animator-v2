@@ -193,27 +193,18 @@ function evaluateSignalExtent(
     }
 
     case 'extract': {
-      // Extract a component from a multi-component signal.
-      // Since slotRead is removed, we resolve components via the input expression.
-      // For construct inputs, directly evaluate the target component sub-expression.
-      const inputExpr = valueExprs[expr.input as number];
-
-      if (inputExpr?.kind === 'construct') {
-        if (expr.componentIndex >= inputExpr.components.length) {
-          throw new Error(
-            `extract(${expr.componentIndex}) out of range for construct with ${inputExpr.components.length} components`
-          );
-        }
-        return evaluateValueExprSignal(inputExpr.components[expr.componentIndex], valueExprs, state);
+      // [LAW:one-source-of-truth] Multi-component signals live in f64 slots.
+      // Read directly from the materialized slot — schedule ordering guarantees
+      // the input was written before this extract evaluates.
+      const sigToSlot = state.cache.sigToSlot;
+      const offset = sigToSlot?.get(expr.input as number);
+      if (offset === undefined) {
+        throw new Error(
+          `extract(${expr.componentIndex}): input ${expr.input} has no slot mapping — ` +
+          `multi-component signal was not materialized (compiler bug)`
+        );
       }
-
-      // Non-construct input: componentIndex=0 works via recursive evaluation
-      const inputVal = evaluateValueExprSignal(expr.input, valueExprs, state);
-      if (expr.componentIndex === 0) return inputVal;
-
-      throw new Error(
-        `extract(${expr.componentIndex}) on signal-extent: input is ${inputExpr?.kind ?? 'unknown'}, not construct — cannot resolve component`
-      );
+      return state.values.f64[offset + expr.componentIndex];
     }
 
     case 'construct': {

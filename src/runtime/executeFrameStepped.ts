@@ -213,6 +213,10 @@ export function* executeFrameStepped(
   // Yield pre-frame snapshot
   yield buildSnapshot(-1, null, 'pre-frame', totalSteps, program, state, tAbsMs, new Map(), prevValues);
 
+  // [LAW:one-source-of-truth] Populate sigToSlot before Phase 1 so extract
+  // can read multi-component signals directly from f64 during evaluation.
+  state.cache.sigToSlot = getSigToSlotMap(program, slotLookupMap);
+
   // --- PHASE 1: Execute all non-stateWrite steps ---
   const valueExprs = program.valueExprs.nodes;
   const renderSteps: StepRender[] = [];
@@ -439,13 +443,12 @@ export function* executeFrameStepped(
 
   // --- PHASE BOUNDARY: Render assembly ---
   const resolvedCamera = resolveCameraFromGlobals(program, state);
-  const sigToSlot = getSigToSlotMap(program, slotLookupMap);
   const assemblerContext: AssemblerContext = {
     instances: instances as ReadonlyMap<string, InstanceDecl>,
     state,
     resolvedCamera,
     arena,
-    sigToSlot,
+    sigToSlot: state.cache.sigToSlot!,
   };
   const frame = assembleRenderFrame(renderSteps, assemblerContext);
 

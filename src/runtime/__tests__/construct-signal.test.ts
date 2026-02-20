@@ -148,3 +148,166 @@ describe('construct signal evaluation', () => {
     expect(value).toBe(3.14);
   });
 });
+
+describe('extract signal evaluation', () => {
+  let state: RuntimeState;
+
+  beforeEach(() => {
+    state = createRuntimeState(64, 64, 8);
+    state.cache.frameId = 1;
+    state.time = {
+      tMs: 0,
+      dt: 16.67,
+      tAbsMs: 0,
+      phaseA: 0,
+      phaseB: 0,
+      pulse: 0,
+      progress: 0,
+      palette: new Float32Array([1, 1, 1, 1]),
+      energy: 0,
+    };
+  });
+
+  it('reads component from f64 slot via sigToSlot mapping', () => {
+    // Write vec3 values (10, 20, 30) to f64 at a known offset
+    const offset = 5;
+    state.values.f64[offset + 0] = 10;
+    state.values.f64[offset + 1] = 20;
+    state.values.f64[offset + 2] = 30;
+
+    // Set up sigToSlot: input expression 3 maps to offset 5
+    const inputId = 3;
+    state.cache.sigToSlot = new Map([[inputId, offset]]);
+
+    // Build extract expressions referencing input 3
+    const valueExprs: ValueExpr[] = [
+      // [0] placeholder (unused)
+      { kind: 'const', value: floatConst(0), type: canonicalSignal({ kind: 'float' }, { kind: 'none' }) },
+      // [1] placeholder (unused)
+      { kind: 'const', value: floatConst(0), type: canonicalSignal({ kind: 'float' }, { kind: 'none' }) },
+      // [2] placeholder (unused)
+      { kind: 'const', value: floatConst(0), type: canonicalSignal({ kind: 'float' }, { kind: 'none' }) },
+      // [3] construct (the input — never evaluated by extract, just needs to exist in the array)
+      {
+        kind: 'construct',
+        components: [0 as ValueExprId, 1 as ValueExprId, 2 as ValueExprId],
+        type: canonicalSignal({ kind: 'vec3' }, { kind: 'none' }),
+      },
+      // [4] extract(input=3, component=0)
+      {
+        kind: 'extract',
+        input: inputId as ValueExprId,
+        componentIndex: 0,
+        type: canonicalSignal({ kind: 'float' }, { kind: 'none' }),
+      },
+      // [5] extract(input=3, component=1)
+      {
+        kind: 'extract',
+        input: inputId as ValueExprId,
+        componentIndex: 1,
+        type: canonicalSignal({ kind: 'float' }, { kind: 'none' }),
+      },
+      // [6] extract(input=3, component=2)
+      {
+        kind: 'extract',
+        input: inputId as ValueExprId,
+        componentIndex: 2,
+        type: canonicalSignal({ kind: 'float' }, { kind: 'none' }),
+      },
+    ];
+
+    expect(evaluateValueExprSignal(4 as ValueExprId, valueExprs, state)).toBe(10);
+    expect(evaluateValueExprSignal(5 as ValueExprId, valueExprs, state)).toBe(20);
+    expect(evaluateValueExprSignal(6 as ValueExprId, valueExprs, state)).toBe(30);
+  });
+
+  it('works end-to-end with construct written to f64', () => {
+    // Build construct expression and write it to f64
+    const valueExprs: ValueExpr[] = [
+      { kind: 'const', value: floatConst(100), type: canonicalSignal({ kind: 'float' }, { kind: 'none' }) },
+      { kind: 'const', value: floatConst(200), type: canonicalSignal({ kind: 'float' }, { kind: 'none' }) },
+      {
+        kind: 'construct',
+        components: [0 as ValueExprId, 1 as ValueExprId],
+        type: canonicalSignal({ kind: 'vec2' }, { kind: 'none' }),
+      },
+      // [3] extract(input=2, component=0)
+      {
+        kind: 'extract',
+        input: 2 as ValueExprId,
+        componentIndex: 0,
+        type: canonicalSignal({ kind: 'float' }, { kind: 'none' }),
+      },
+      // [4] extract(input=2, component=1)
+      {
+        kind: 'extract',
+        input: 2 as ValueExprId,
+        componentIndex: 1,
+        type: canonicalSignal({ kind: 'float' }, { kind: 'none' }),
+      },
+    ];
+
+    // Write construct to f64 (simulating what ScheduleExecutor does)
+    const offset = 10;
+    const constructExpr = valueExprs[2] as Extract<ValueExpr, { kind: 'construct' }>;
+    evaluateConstructSignal(constructExpr, valueExprs, state, state.values.f64, offset);
+
+    // Set up sigToSlot mapping
+    state.cache.sigToSlot = new Map([[2, offset]]);
+
+    expect(evaluateValueExprSignal(3 as ValueExprId, valueExprs, state)).toBe(100);
+    expect(evaluateValueExprSignal(4 as ValueExprId, valueExprs, state)).toBe(200);
+  });
+
+  it('throws when input has no slot mapping', () => {
+    // sigToSlot is null (not populated)
+    state.cache.sigToSlot = null;
+
+    const valueExprs: ValueExpr[] = [
+      {
+        kind: 'extract',
+        input: 99 as ValueExprId,
+        componentIndex: 0,
+        type: canonicalSignal({ kind: 'float' }, { kind: 'none' }),
+      },
+    ];
+
+    expect(() => evaluateValueExprSignal(0 as ValueExprId, valueExprs, state)).toThrow(
+      'compiler bug'
+    );
+  });
+
+  it('reads all components of vec4/color (stride=4)', () => {
+    const offset = 0;
+    state.values.f64[offset + 0] = 0.1;
+    state.values.f64[offset + 1] = 0.2;
+    state.values.f64[offset + 2] = 0.3;
+    state.values.f64[offset + 3] = 1.0;
+
+    const inputId = 4;
+    state.cache.sigToSlot = new Map([[inputId, offset]]);
+
+    const valueExprs: ValueExpr[] = [
+      { kind: 'const', value: floatConst(0), type: canonicalSignal({ kind: 'float' }, { kind: 'none' }) },
+      { kind: 'const', value: floatConst(0), type: canonicalSignal({ kind: 'float' }, { kind: 'none' }) },
+      { kind: 'const', value: floatConst(0), type: canonicalSignal({ kind: 'float' }, { kind: 'none' }) },
+      { kind: 'const', value: floatConst(0), type: canonicalSignal({ kind: 'float' }, { kind: 'none' }) },
+      // [4] construct (the input)
+      {
+        kind: 'construct',
+        components: [0 as ValueExprId, 1 as ValueExprId, 2 as ValueExprId, 3 as ValueExprId],
+        type: canonicalSignal({ kind: 'color' }, { kind: 'none' }),
+      },
+      // [5..8] extract components
+      { kind: 'extract', input: inputId as ValueExprId, componentIndex: 0, type: canonicalSignal({ kind: 'float' }, { kind: 'none' }) },
+      { kind: 'extract', input: inputId as ValueExprId, componentIndex: 1, type: canonicalSignal({ kind: 'float' }, { kind: 'none' }) },
+      { kind: 'extract', input: inputId as ValueExprId, componentIndex: 2, type: canonicalSignal({ kind: 'float' }, { kind: 'none' }) },
+      { kind: 'extract', input: inputId as ValueExprId, componentIndex: 3, type: canonicalSignal({ kind: 'float' }, { kind: 'none' }) },
+    ];
+
+    expect(evaluateValueExprSignal(5 as ValueExprId, valueExprs, state)).toBe(0.1);
+    expect(evaluateValueExprSignal(6 as ValueExprId, valueExprs, state)).toBe(0.2);
+    expect(evaluateValueExprSignal(7 as ValueExprId, valueExprs, state)).toBe(0.3);
+    expect(evaluateValueExprSignal(8 as ValueExprId, valueExprs, state)).toBe(1.0);
+  });
+});

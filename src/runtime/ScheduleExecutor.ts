@@ -160,6 +160,10 @@ export function executeFrame(
   // Collect render steps for v2 batch assembly (reuse module-level array)
   _renderSteps.length = 0;
 
+  // [LAW:one-source-of-truth] Populate sigToSlot before Phase 1 so extract
+  // can read multi-component signals directly from f64 during evaluation.
+  state.cache.sigToSlot = getSigToSlotMap(program, slotLookupMap);
+
   // PHASE 1: Execute all non-stateWrite steps
   for (const step of steps) {
     switch (step.kind) {
@@ -503,16 +507,13 @@ export function executeFrame(
   // Resolve camera from program render globals (slots now populated by signal evaluation)
   const resolvedCamera = resolveCameraFromGlobals(program, state);
 
-  // Signal ID → physical f64 offset mapping (cached per program since schedule is deterministic)
-  const sigToSlot = getSigToSlotMap(program, slotLookupMap);
-
   // Build assembler context with resolved camera and arena
   assemblerContext = {
     instances: instances as ReadonlyMap<string, InstanceDecl>,
     state,
     resolvedCamera,
     arena,
-    sigToSlot,
+    sigToSlot: state.cache.sigToSlot!,
   };
 
   // Build v2 frame from collected render steps (zero allocations - uses arena)
