@@ -67,6 +67,9 @@ export type {
   SessionMode,
 } from './StepDebugTypes';
 
+// Float32 arena (cardinality unification)
+export { type ArenaSlotDescriptor, createArena, arenaRead, arenaWrite, arenaSlice } from './ArenaValueStore';
+
 // Re-export v2 types (now the only types)
 export type {
   DrawPathInstancesOp,

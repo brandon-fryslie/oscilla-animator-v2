@@ -5,17 +5,15 @@ All tickets use the `oscilla-animator-v2-` prefix (shortened below).
 
 ---
 
-## Pre-Work (before arena begins)
+## Pre-Work (before arena begins) — COMPLETE
 
 These reduce the arena migration's touch surface from ~6 files with ~3 caches
 to ~2 files with ~1 addressing structure.
 
-| # | Ticket | Title | Why first |
-|---|--------|-------|-----------|
-| 1 | **f433** | Unify slot lookup maps into single ExprAddressTable | Three overlapping caches (SLOT_LOOKUP_CACHE, FIELD_EXPR_SLOT_CACHE, SIG_TO_SLOT_CACHE) all map slot data. Adding arena offsets to one structure is tractable; threading them through three is not. |
-| 2 | **9t64** | Centralize storage class derivation into single deriveStorageClass() | Storage class (f64/object/shape2d) is derived inline in 3+ places. Single function means the arena migration changes one call site instead of hunting every `isMany()` check. |
-
-These two can be done in parallel.
+| # | Ticket | Title | Status |
+|---|--------|-------|--------|
+| 1 | **f433** | Unify slot lookup maps into single ExprAddressTable | **DONE** (63a7aac1) — `SlotLookupCache.ts` → `ExprAddressTable.ts`. Three WeakMap caches unified into single `ExprAddressTable` interface. All consumers migrated. |
+| 2 | **9t64** | Centralize storage class derivation into single deriveStorageClass() | **DONE** (63a7aac1) — `src/compiler/ir/storage-class.ts` with `deriveStorageLayout()`. `compile.ts` inline derivation replaced with single call. |
 
 ---
 

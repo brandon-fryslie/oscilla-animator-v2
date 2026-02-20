@@ -22,11 +22,11 @@ This means: once the arena replaces f64/objects as storage, both evaluators can 
 
 ### The Fork Point
 
-The split is created in `src/compiler/compile.ts` `convertLinkedIRToProgram()` (lines 322-325):
+The split is created via `deriveStorageLayout()` in `src/compiler/ir/storage-class.ts`
+(called from `compile.ts` `convertLinkedIRToProgram()`):
 
 ```typescript
-const card = requireInst(type.extent.cardinality, 'cardinality');
-const storage: SlotMetaEntry['storage'] = isMany(card) ? 'object' : 'f64';
+const { storage, stride } = deriveStorageLayout(type, slotInfo.stride);
 ```
 
 This single decision cascades into every downstream consumer.
@@ -138,7 +138,7 @@ Migrate readers one at a time:
 - `SignalValueResult` → read `arena[desc.offset]`
 - `FieldValueResult` → read `arenaSlice(arena, desc)`
 
-**SlotLookupCache** (`src/runtime/SlotLookupCache.ts`):
+**ExprAddressTable** (`src/runtime/ExprAddressTable.ts`):
 - Update `SlotLookup` to carry `arenaOffset` instead of (or alongside) `offset` + `storage`
 - Eventually, `storage` field disappears — everything is arena
 
@@ -158,7 +158,7 @@ Once all writers and readers use the arena:
 - `src/runtime/ValueExprMaterializer.ts` — optional target buffer parameter
 - `src/runtime/RenderAssembler.ts` — arena reads
 - `src/services/DebugService.ts` — arena reads
-- `src/runtime/SlotLookupCache.ts` — arena-aware lookups
+- `src/runtime/ExprAddressTable.ts` — arena-aware lookups
 - `src/runtime/RuntimeState.ts` — delete f64/objects (keep objects for renderFrameSlot)
 
 ### Success Criteria
@@ -269,7 +269,7 @@ All use `cardinalityMode: 'preserve'`. Same mechanical change as Const.
 7. `evaluateConstructSignal()` — DELETE
 8. `BufferPool.ts` — DELETE (arena replaces it)
 9. `fieldSlotSet`, `objectSlots` tracking — DELETE
-10. `SlotMetaEntry.storage` field — DELETE (everything is arena)
+10. `SlotMetaEntry.storage` field — DELETE (everything is arena); `deriveStorageLayout()` also becomes trivial
 11. `SCALAR_INSTANCE_ID` — may keep or replace with proper cardinality-one instance semantics
 
 ### Forbidden Pattern Tests
