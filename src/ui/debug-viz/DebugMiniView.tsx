@@ -8,7 +8,7 @@
  * Performance: O(1) render for signals (reads pre-computed HistoryView).
  */
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import { observer } from 'mobx-react-lite';
 import { useStores } from '../../stores';
 import { useDebugMiniView, type MiniViewData } from './useDebugMiniView';
@@ -18,7 +18,9 @@ import { DistributionBar } from './charts/DistributionBar';
 import { WarmupIndicator } from './charts/WarmupIndicator';
 import { ColorPalette } from './charts/ColorPalette';
 import { FieldBandChart } from './charts/FieldBandChart';
-import type { RendererSample, AggregateStats, HistoryView, Stride, FieldHistoryView } from './types';
+import { RasterHeatmap } from './charts/RasterHeatmap';
+import { selectFieldCharts, type FieldChartId } from './vizSelector';
+import type { RendererSample, AggregateStats, HistoryView, BufferHistoryView, Stride, FieldHistoryView } from './types';
 import type { EdgeValueResult } from '../../services/DebugService';
 import type { EdgeMetadata } from '../../services/mapDebugEdges';
 import type { CanonicalType } from '../../core/canonical-types';
@@ -232,11 +234,12 @@ export function SignalValueSection({ value, meta, history }: {
   return React.createElement('div', { style: debugMiniViewStyles.valueSection }, ...children);
 }
 
-export function FieldValueSection({ value, meta, fieldHistory, fieldInstanceHistory }: {
+export function FieldValueSection({ value, meta, fieldHistory, fieldInstanceHistory, fieldBufferHistory }: {
   value: EdgeValueResult | null;
   meta: EdgeMetadata;
   fieldHistory: FieldHistoryView | null;
   fieldInstanceHistory: HistoryView | null;
+  fieldBufferHistory: BufferHistoryView | null;
 }): React.ReactElement {
   if (!value || value.kind !== 'field') {
     if (value?.kind === 'field-untracked') {
@@ -246,26 +249,13 @@ export function FieldValueSection({ value, meta, fieldHistory, fieldInstanceHist
   }
 
   const { stats, buffer } = value;
-  const isColor = meta.type.payload.kind === 'color';
-  const stride = payloadStride(meta.type.payload);
+  const stride = payloadStride(meta.type.payload) as Stride;
   const laneCount = stride > 0 ? buffer.length / stride : 0;
+  const children: React.ReactElement[] = [];
 
+  // Value display (always shown before charts)
+  const isColor = meta.type.payload.kind === 'color';
   if (isColor) {
-    // Color field: sorted palette strip + mean swatch + count
-    const children: React.ReactElement[] = [];
-
-    // Color palette strip — THE main visualization
-    children.push(
-      React.createElement('div', { key: 'palette' },
-        React.createElement(ColorPalette, {
-          buffer,
-          count: laneCount,
-          width: 280,
-          height: 24,
-        })
-      )
-    );
-
     // Mean swatch + hex reference
     const meanR = stats.mean[0], meanG = stats.mean[1], meanB = stats.mean[2], meanA = stats.mean[3];
     const hex = (v: number) => Math.round(Math.max(0, Math.min(1, v)) * 255).toString(16).padStart(2, '0');
@@ -273,7 +263,7 @@ export function FieldValueSection({ value, meta, fieldHistory, fieldInstanceHist
     const rgba = `rgba(${Math.round(meanR * 255)}, ${Math.round(meanG * 255)}, ${Math.round(meanB * 255)}, ${meanA})`;
 
     children.push(
-      React.createElement('div', { key: 'mean-ref', style: { display: 'flex', alignItems: 'center', gap: '6px', marginTop: '4px' } },
+      React.createElement('div', { key: 'mean-ref', style: { display: 'flex', alignItems: 'center', gap: '6px' } },
         React.createElement('div', {
           style: {
             width: '14px', height: '14px', borderRadius: '2px',
@@ -284,67 +274,107 @@ export function FieldValueSection({ value, meta, fieldHistory, fieldInstanceHist
         React.createElement('span', { style: { color: '#aaa', fontSize: '11px', fontFamily: 'monospace' } }, `mean: ${hexStr}`),
       )
     );
-
-    // Count badge
+  } else {
+    // Numeric: renderer with aggregate sample
+    const aggStats: AggregateStats = {
+      count: stats.count,
+      stride: stats.stride,
+      min: stats.min,
+      max: stats.max,
+      mean: stats.mean,
+    };
+    const renderer = getValueRenderer(meta.type);
+    const sample: RendererSample = { type: 'aggregate', stats: aggStats };
     children.push(
-      React.createElement('div', { key: 'count', style: { color: '#666', fontSize: '10px', fontFamily: 'monospace' } },
-        `N=${stats.count}`)
-    );
-
-    return React.createElement('div', { style: debugMiniViewStyles.fieldStats }, ...children);
-  }
-
-  // Numeric field: renderer + band chart + count
-  const children: React.ReactElement[] = [];
-
-  // Renderer with aggregate sample (stable accumulated stats)
-  const aggStats: AggregateStats = {
-    count: stats.count,
-    stride: stats.stride,
-    min: stats.min,
-    max: stats.max,
-    mean: stats.mean,
-  };
-  const renderer = getValueRenderer(meta.type);
-  const sample: RendererSample = { type: 'aggregate', stats: aggStats };
-  children.push(
-    React.createElement('div', { key: 'renderer' }, renderer.renderFull(sample))
-  );
-
-  // Instance-0 sparkline (above band chart)
-  if (fieldInstanceHistory) {
-    children.push(
-      React.createElement('div', { key: 'instance-sparkline', style: debugMiniViewStyles.sparklineContainer },
-        React.createElement(Sparkline, {
-          history: fieldInstanceHistory,
-          width: 280,
-          height: 30,
-          unit: meta.type.unit,
-        })
-      )
+      React.createElement('div', { key: 'renderer' }, renderer.renderFull(sample))
     );
   }
 
-  // Band chart (temporal distribution)
-  if (fieldHistory) {
-    children.push(
-      React.createElement('div', { key: 'band-chart', style: { marginTop: '4px' } },
-        React.createElement(FieldBandChart, {
-          history: fieldHistory,
-          width: 280,
-          height: 40,
-        })
-      )
-    );
+  // Charts (from viz selector)
+  const charts = selectFieldCharts({
+    payloadKind: meta.type.payload.kind,
+    stride,
+    instanceCount: laneCount,
+  });
+
+  for (const chartId of charts) {
+    const el = renderFieldChart(chartId, {
+      buffer, laneCount, meta, fieldHistory, fieldInstanceHistory, fieldBufferHistory,
+    });
+    if (el) children.push(el);
   }
 
-  // Count badge
+  // Count badge (always)
   children.push(
     React.createElement('div', { key: 'count', style: { color: '#666', fontSize: '10px', fontFamily: 'monospace' } },
       `N=${stats.count}`)
   );
 
   return React.createElement('div', { style: debugMiniViewStyles.fieldStats }, ...children);
+}
+
+// =============================================================================
+// Chart Rendering Dispatch
+// =============================================================================
+
+interface ChartRenderContext {
+  buffer: Float32Array;
+  laneCount: number;
+  meta: EdgeMetadata;
+  fieldHistory: FieldHistoryView | null;
+  fieldInstanceHistory: HistoryView | null;
+  fieldBufferHistory: BufferHistoryView | null;
+}
+
+function renderFieldChart(
+  chartId: FieldChartId,
+  ctx: ChartRenderContext,
+): React.ReactElement | null {
+  switch (chartId) {
+    case 'color-palette':
+      return React.createElement('div', { key: 'color-palette' },
+        React.createElement(ColorPalette, {
+          buffer: ctx.buffer,
+          count: ctx.laneCount,
+          width: 280,
+          height: 24,
+        })
+      );
+
+    case 'instance-sparkline':
+      return ctx.fieldInstanceHistory
+        ? React.createElement('div', { key: 'instance-sparkline', style: debugMiniViewStyles.sparklineContainer },
+            React.createElement(Sparkline, {
+              history: ctx.fieldInstanceHistory,
+              width: 280,
+              height: 30,
+              unit: ctx.meta.type.unit,
+            })
+          )
+        : null;
+
+    case 'raster-heatmap':
+      return ctx.fieldBufferHistory
+        ? React.createElement('div', { key: 'raster-heatmap', style: { marginTop: '4px' } },
+            React.createElement(RasterHeatmap, {
+              history: ctx.fieldBufferHistory,
+              width: 280,
+              height: 40,
+            })
+          )
+        : null;
+
+    case 'band-chart':
+      return ctx.fieldHistory
+        ? React.createElement('div', { key: 'band-chart', style: { marginTop: '4px' } },
+            React.createElement(FieldBandChart, {
+              history: ctx.fieldHistory,
+              width: 280,
+              height: 40,
+            })
+          )
+        : null;
+  }
 }
 
 // =============================================================================
@@ -380,6 +410,7 @@ export function DebugEdgeValueDisplay({ data }: { data: MiniViewData }): React.R
           meta: data.meta,
           fieldHistory: data.fieldHistory,
           fieldInstanceHistory: data.fieldInstanceHistory,
+          fieldBufferHistory: data.fieldBufferHistory,
         }),
 
     // Storage line
@@ -393,19 +424,27 @@ export function DebugEdgeValueDisplay({ data }: { data: MiniViewData }): React.R
 // =============================================================================
 
 export const DebugMiniView: React.FC = observer(() => {
-  const { debug, patch: patchStore } = useStores();
-  const hoveredEdgeId = debug.hoveredEdgeId;
+  const { debug, selection, patch: patchStore } = useStores();
+
+  // Sync SelectionStore.selectedEdgeId → DebugStore.selectedDebugEdgeId
+  const selectedEdgeId = selection.selectedEdgeId;
+  useEffect(() => {
+    debug.setSelectedDebugEdge(selectedEdgeId);
+  }, [selectedEdgeId, debug]);
+
+  // Active edge: hover takes priority over selection
+  const activeEdgeId = debug.activeEdgeId;
 
   // Resolve edge label from patch
   let edgeLabel: string | null = null;
-  if (hoveredEdgeId && patchStore.patch) {
-    const edge = patchStore.patch.edges.find(e => e.id === hoveredEdgeId);
+  if (activeEdgeId && patchStore.patch) {
+    const edge = patchStore.patch.edges.find(e => e.id === activeEdgeId);
     if (edge) {
       edgeLabel = `${edge.from.blockId}.${edge.from.slotId} → ${edge.to.blockId}.${edge.to.slotId}`;
     }
   }
 
-  const data = useDebugMiniView(hoveredEdgeId, edgeLabel);
+  const data = useDebugMiniView(activeEdgeId, edgeLabel);
 
   if (!debug.enabled) {
     return React.createElement('div', { style: { ...debugMiniViewStyles.container, ...debugMiniViewStyles.placeholder } },
@@ -414,11 +453,10 @@ export const DebugMiniView: React.FC = observer(() => {
 
   if (!data) {
     // Check if this edge is unmapped
-    const { debug: debugStore } = useStores();
-    const status = debugStore.status;
-    
-    if (hoveredEdgeId && status) {
-      const unmapped = status.unmappedEdges.find((e: any) => e.edgeId === hoveredEdgeId);
+    const status = debug.status;
+
+    if (activeEdgeId && status) {
+      const unmapped = status.unmappedEdges.find((e: any) => e.edgeId === activeEdgeId);
       if (unmapped) {
         return React.createElement('div', { style: { ...debugMiniViewStyles.container, maxHeight: '300px' } },
           React.createElement('div', { style: { ...debugMiniViewStyles.header, color: '#ff6b6b' } },
@@ -429,7 +467,7 @@ export const DebugMiniView: React.FC = observer(() => {
             `${unmapped.fromBlockId}.${unmapped.fromPort} → ${unmapped.toBlockId}.${unmapped.toPort}`
           ),
           React.createElement('div', { style: { marginTop: '12px', fontSize: '12px' } },
-            React.createElement('div', { style: { color: '#ffaa00', marginBottom: '6px', fontWeight: 'bold' } }, 
+            React.createElement('div', { style: { color: '#ffaa00', marginBottom: '6px', fontWeight: 'bold' } },
               getReasonLabel(unmapped.reason)
             ),
             unmapped.details && React.createElement('div', { style: { color: '#aaa', fontSize: '11px', lineHeight: '1.4' } },
@@ -442,9 +480,9 @@ export const DebugMiniView: React.FC = observer(() => {
         );
       }
     }
-    
+
     return React.createElement('div', { style: { ...debugMiniViewStyles.container, ...debugMiniViewStyles.placeholder } },
-      'Hover an edge to inspect');
+      'Hover or select an edge to inspect');
   }
 
   return React.createElement(DebugEdgeValueDisplay, { data });

@@ -17,7 +17,7 @@ import { payloadStride } from '../core/canonical-types';
 import type { UnmappedEdgeInfo, EdgeMetadata } from './mapDebugEdges';
 import type { ConstantValue } from './ConstantValueTracker';
 import { HistoryService, type KeyResolver, type ResolvedKeyMetadata } from '../ui/debug-viz/HistoryService';
-import type { DebugTargetKey, HistoryView, Stride } from '../ui/debug-viz/types';
+import type { DebugTargetKey, HistoryView, BufferHistoryView, Stride } from '../ui/debug-viz/types';
 import type { FieldHistoryView, AggregateFieldStats } from '../ui/debug-viz/FieldStatsAccumulator';
 import { FieldStatsAccumulator } from '../ui/debug-viz/FieldStatsAccumulator';
 
@@ -346,6 +346,15 @@ class DebugService {
    */
   getFieldInstanceHistory(slotId: ValueSlot): HistoryView | undefined {
     return this.fieldAccumulators.get(slotId)?.getInstanceHistory();
+  }
+
+  /**
+   * Get buffer history (2D time×instance) for a field slot.
+   * Used by RasterHeatmap visualization.
+   * Returns undefined if slot is not tracked or has no accumulator.
+   */
+  getFieldBufferHistory(slotId: ValueSlot): BufferHistoryView | undefined {
+    return this.fieldAccumulators.get(slotId)?.getBufferHistory();
   }
 
   /**

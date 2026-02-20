@@ -10,7 +10,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { debugService, type EdgeValueResult } from '../../services/DebugService';
 import type { EdgeMetadata } from '../../services/mapDebugEdges';
-import type { DebugTargetKey, HistoryView, FieldHistoryView } from './types';
+import type { DebugTargetKey, HistoryView, BufferHistoryView, FieldHistoryView } from './types';
 import type { TrackedEntry } from './HistoryService';
 
 /** Poll interval for value updates (ms). */
@@ -34,6 +34,8 @@ export interface MiniViewData {
   fieldHistory: FieldHistoryView | null;
   /** Instance-0 sparkline history (null if not a field or not tracked) */
   fieldInstanceHistory: HistoryView | null;
+  /** Buffer history for raster heatmap (null if not a field or not tracked) */
+  fieldBufferHistory: BufferHistoryView | null;
 }
 
 /**
@@ -93,6 +95,11 @@ export function useDebugMiniView(
     ? debugService.getFieldInstanceHistory(meta.slotId) ?? null
     : null;
 
+  // Resolve buffer history for raster heatmap (only for field edges)
+  const fieldBufferHistory = meta.cardinality === 'field'
+    ? debugService.getFieldBufferHistory(meta.slotId) ?? null
+    : null;
+
   return {
     key,
     label: edgeLabel || hoveredEdgeId,
@@ -101,5 +108,6 @@ export function useDebugMiniView(
     history,
     fieldHistory,
     fieldInstanceHistory,
+    fieldBufferHistory,
   };
 }

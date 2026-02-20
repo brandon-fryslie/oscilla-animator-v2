@@ -178,6 +178,30 @@ export type RendererSample =
   | { readonly type: 'aggregate'; readonly stats: AggregateStats };
 
 // =============================================================================
+// BufferHistoryView - 2D ring buffer for raster heatmap
+// =============================================================================
+
+/**
+ * Read-only view of a 2D temporal history ring buffer.
+ *
+ * Stores `capacity` frames, each a Float32Array of `rowCount` values
+ * (one per instance, component 0). Used by RasterHeatmap to render
+ * a time × instance × value visualization.
+ */
+export interface BufferHistoryView {
+  /** Pre-allocated frame buffers (length = capacity). */
+  readonly frames: readonly Float32Array[];
+  /** Monotonically increasing write position (unbounded). */
+  readonly writeIndex: number;
+  /** Maximum number of frames the buffer can hold. */
+  readonly capacity: number;
+  /** Number of rows (instances) per frame. */
+  readonly rowCount: number;
+  /** Whether the ring buffer has wrapped at least once. */
+  readonly filled: boolean;
+}
+
+// =============================================================================
 // Re-exports from FieldStatsAccumulator
 // =============================================================================
 

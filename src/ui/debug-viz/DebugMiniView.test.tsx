@@ -3,7 +3,7 @@
  *
  * Tests rendering behavior for the three main states:
  * - Debug disabled: shows "Debug disabled"
- * - Nothing hovered: shows "Hover an edge to inspect"
+ * - Nothing hovered: shows "Hover or select an edge to inspect"
  * - Edge hovered (signal): shows header, type line, value section
  * - Edge hovered (field): shows field stats
  *
@@ -60,9 +60,9 @@ describe('DebugMiniView', () => {
   });
 
   describe('idle state (nothing hovered)', () => {
-    it('should show "Hover an edge to inspect" when no edge hovered', () => {
+    it('should show "Hover or select an edge to inspect" when no edge hovered', () => {
       renderWithStore(store);
-      expect(screen.getByText('Hover an edge to inspect')).toBeDefined();
+      expect(screen.getByText('Hover or select an edge to inspect')).toBeDefined();
     });
   });
 
@@ -172,7 +172,7 @@ describe('DebugMiniView', () => {
         )
       );
       act(() => { vi.advanceTimersByTime(300); });
-      expect(screen.getByText('Hover an edge to inspect')).toBeDefined();
+      expect(screen.getByText('Hover or select an edge to inspect')).toBeDefined();
     });
   });
 });

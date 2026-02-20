@@ -8,7 +8,7 @@
  * - Percentile computation (p25, p75) via pre-allocated sort buffer
  */
 
-import type { HistoryView, Stride } from './types';
+import type { HistoryView, BufferHistoryView, Stride } from './types';
 
 // =============================================================================
 // Types
@@ -59,6 +59,12 @@ const HISTORY_CAPACITY = 256;
 /** Instance-0 sparkline ring buffer capacity: 128 frames (~2.1s at 60fps). */
 const INSTANCE_HISTORY_CAPACITY = 128;
 
+/** Buffer history capacity: 64 frames (~1.1s at 60fps). */
+const BUFFER_HISTORY_CAPACITY = 64;
+
+/** Max instance rows stored per frame in the buffer history. */
+const BUFFER_HISTORY_MAX_ROWS = 128;
+
 /** EMA alpha: `1 - 0.5^(1/1800)` for ~30s half-life at 60fps. */
 const EMA_ALPHA = 1 - Math.pow(0.5, 1 / 1800);
 
@@ -108,6 +114,18 @@ export class FieldStatsAccumulator {
   /** Whether instance ring buffer has wrapped at least once. */
   private _instFilled = false;
 
+  /** Buffer history: ring of per-frame Float32Array snapshots (component 0, one per instance). */
+  private _bufFrames: Float32Array[];
+
+  /** Monotonically increasing write position for buffer history. */
+  private _bufWriteIndex = 0;
+
+  /** Whether buffer history has wrapped at least once. */
+  private _bufFilled = false;
+
+  /** Current row count in buffer history (may be less than BUFFER_HISTORY_MAX_ROWS). */
+  private _bufRowCount = 0;
+
   constructor(stride: Stride) {
     this.stride = stride;
 
@@ -138,6 +156,12 @@ export class FieldStatsAccumulator {
 
     // Instance-0 sparkline ring buffer
     this._instBuffer = new Float32Array(INSTANCE_HISTORY_CAPACITY);
+
+    // Buffer history: pre-allocate frame buffers
+    this._bufFrames = new Array(BUFFER_HISTORY_CAPACITY);
+    for (let i = 0; i < BUFFER_HISTORY_CAPACITY; i++) {
+      this._bufFrames[i] = new Float32Array(BUFFER_HISTORY_MAX_ROWS);
+    }
   }
 
   /**
@@ -155,6 +179,37 @@ export class FieldStatsAccumulator {
     this._instWriteIndex++;
     if (this._instWriteIndex >= INSTANCE_HISTORY_CAPACITY && !this._instFilled) {
       this._instFilled = true;
+    }
+
+    // Record component 0 of each instance into buffer history frame
+    {
+      const frame = this._bufFrames[this._bufWriteIndex % BUFFER_HISTORY_CAPACITY];
+      const s = this.stride as number;
+      const rowCount = Math.min(count, BUFFER_HISTORY_MAX_ROWS);
+      this._bufRowCount = rowCount;
+
+      // Copy component 0 from each lane (strided access)
+      if (s > 0 && count > 0) {
+        if (count <= BUFFER_HISTORY_MAX_ROWS) {
+          // Direct copy — one value per lane
+          for (let i = 0; i < rowCount; i++) {
+            frame[i] = buffer[i * s];
+          }
+        } else {
+          // Downsample: evenly spread across max rows
+          for (let i = 0; i < BUFFER_HISTORY_MAX_ROWS; i++) {
+            const srcIdx = Math.floor((i / BUFFER_HISTORY_MAX_ROWS) * count);
+            frame[i] = buffer[srcIdx * s];
+          }
+        }
+      }
+      // Zero-fill remainder
+      frame.fill(0, rowCount);
+
+      this._bufWriteIndex++;
+      if (this._bufWriteIndex >= BUFFER_HISTORY_CAPACITY && !this._bufFilled) {
+        this._bufFilled = true;
+      }
     }
 
     if (count === 0) {
@@ -267,6 +322,20 @@ export class FieldStatsAccumulator {
   }
 
   /**
+   * Get buffer history as a read-only view for raster heatmap rendering.
+   * Each frame contains component 0 of up to 128 instances.
+   */
+  getBufferHistory(): BufferHistoryView {
+    return {
+      frames: this._bufFrames,
+      writeIndex: this._bufWriteIndex,
+      capacity: BUFFER_HISTORY_CAPACITY,
+      rowCount: this._bufRowCount,
+      filled: this._bufFilled,
+    };
+  }
+
+  /**
    * Reset all accumulated state.
    */
   reset(): void {
@@ -280,6 +349,10 @@ export class FieldStatsAccumulator {
     this._instBuffer.fill(0);
     this._instWriteIndex = 0;
     this._instFilled = false;
+    for (const frame of this._bufFrames) frame.fill(0);
+    this._bufWriteIndex = 0;
+    this._bufFilled = false;
+    this._bufRowCount = 0;
   }
 
   // ---------------------------------------------------------------------------

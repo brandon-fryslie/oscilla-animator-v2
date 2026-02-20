@@ -50,17 +50,23 @@ export class DebugStore {
   /** Whether cardinality solver trace is enabled */
   traceCardinalitySolver: boolean = false;
 
-  /** Currently hovered edge ID for probing */
+  /** Currently hovered edge ID (transient, from mouse enter/leave) */
   hoveredEdgeId: string | null = null;
+
+  /** Selected edge ID for persistent debug inspection (from SelectionStore) */
+  selectedDebugEdgeId: string | null = null;
 
   /** Cached edge value result (updated via polling) */
   private _cachedEdgeValue: EdgeValueResult | null = null;
 
-  /** Currently tracked field slot (for cleanup on unhover) */
+  /** Currently tracked field slot (for cleanup on edge change) */
   private _trackedFieldSlot: ValueSlot | null = null;
 
   /** Currently tracked history key (for signal micro-history) */
   private _trackedHistoryKey: DebugTargetKey | null = null;
+
+  /** The edge ID currently being tracked/polled (to detect changes) */
+  private _currentlyTrackedEdgeId: string | null = null;
 
   /** Polling interval handle */
   private pollInterval: ReturnType<typeof setInterval> | null = null;
@@ -78,6 +84,14 @@ export class DebugStore {
     if (settingsStore) {
       this.setupSettingsSync(settingsStore);
     }
+  }
+
+  /**
+   * The edge currently shown in the debug mini view.
+   * Hover takes priority over selection.
+   */
+  get activeEdgeId(): string | null {
+    return this.hoveredEdgeId ?? this.selectedDebugEdgeId;
   }
 
   /** Reference to settings store for two-way sync */
@@ -112,6 +126,8 @@ export class DebugStore {
           if (!enabled) {
             this.stopPolling();
             this.untrackCurrentField();
+            this.untrackCurrentHistory();
+            this._currentlyTrackedEdgeId = null;
             this._cachedEdgeValue = null;
           }
         }
@@ -141,6 +157,8 @@ export class DebugStore {
     if (!this.enabled) {
       this.stopPolling();
       this.untrackCurrentField();
+      this.untrackCurrentHistory();
+      this._currentlyTrackedEdgeId = null;
       this._cachedEdgeValue = null;
     }
     this.updateSettingsEnabled();
@@ -156,40 +174,28 @@ export class DebugStore {
     if (!enabled) {
       this.stopPolling();
       this.untrackCurrentField();
+      this.untrackCurrentHistory();
+      this._currentlyTrackedEdgeId = null;
       this._cachedEdgeValue = null;
     }
   }
 
   /**
    * Set the hovered edge ID for probing.
-   * If edge is a field, automatically tracks it for demand-driven materialization.
+   * Hover takes priority over selection for the active edge.
    */
   setHoveredEdge(edgeId: string | null): void {
-    // Untrack previous if switching edges
-    if (this.hoveredEdgeId !== edgeId) {
-      this.untrackCurrentField();
-      this.untrackCurrentHistory();
-    }
-
     this.hoveredEdgeId = edgeId;
+    this.syncActiveEdge();
+  }
 
-    if (edgeId && this.enabled) {
-      const meta = debugService.getEdgeMetadata(edgeId);
-      if (meta?.cardinality === 'field') {
-        // Field edge: track for demand-driven materialization
-        debugService.trackField(meta.slotId, meta.type);
-        this._trackedFieldSlot = meta.slotId;
-      } else if (meta?.cardinality === 'signal') {
-        // Signal edge: track in HistoryService for micro-history
-        const key: DebugTargetKey = { kind: 'edge', edgeId };
-        debugService.historyService.track(key);
-        this._trackedHistoryKey = key;
-      }
-      this.startPolling();
-    } else {
-      this.stopPolling();
-      this._cachedEdgeValue = null;
-    }
+  /**
+   * Set the selected edge for persistent debug inspection.
+   * Called by UI when SelectionStore.selectedEdgeId changes.
+   */
+  setSelectedDebugEdge(edgeId: string | null): void {
+    this.selectedDebugEdgeId = edgeId;
+    this.syncActiveEdge();
   }
 
   /**
@@ -259,6 +265,39 @@ export class DebugStore {
   }
 
   /**
+   * Synchronize field/history tracking and polling to match the current activeEdgeId.
+   * Called whenever hoveredEdgeId or selectedDebugEdgeId changes.
+   */
+  private syncActiveEdge(): void {
+    const newActiveId = this.activeEdgeId;
+
+    // No change — nothing to do
+    if (newActiveId === this._currentlyTrackedEdgeId) return;
+
+    // Untrack previous
+    this.untrackCurrentField();
+    this.untrackCurrentHistory();
+    this.stopPolling();
+    this._currentlyTrackedEdgeId = newActiveId;
+
+    // Track new
+    if (newActiveId && this.enabled) {
+      const meta = debugService.getEdgeMetadata(newActiveId);
+      if (meta?.cardinality === 'field') {
+        debugService.trackField(meta.slotId, meta.type);
+        this._trackedFieldSlot = meta.slotId;
+      } else if (meta?.cardinality === 'signal') {
+        const key: DebugTargetKey = { kind: 'edge', edgeId: newActiveId };
+        debugService.historyService.track(key);
+        this._trackedHistoryKey = key;
+      }
+      this.startPolling();
+    } else {
+      this._cachedEdgeValue = null;
+    }
+  }
+
+  /**
    * Start polling for edge value updates (1Hz).
    */
   private startPolling(): void {
@@ -281,7 +320,8 @@ export class DebugStore {
    * Poll current value from debug service.
    */
   private pollValue(): void {
-    if (!this.hoveredEdgeId || !this.enabled) {
+    const edgeId = this._currentlyTrackedEdgeId;
+    if (!edgeId || !this.enabled) {
       runInAction(() => {
         this._cachedEdgeValue = null;
       });
@@ -289,14 +329,14 @@ export class DebugStore {
     }
 
     try {
-      const result = debugService.getEdgeValue(this.hoveredEdgeId);
+      const result = debugService.getEdgeValue(edgeId);
       runInAction(() => {
         this._cachedEdgeValue = result || null;
       });
     } catch (err) {
       // Log but don't crash - polling shouldn't bring down the app
-      // Note: This fires at 1Hz while hovered, so use console.debug to reduce noise
-      console.debug(`[DebugStore.pollValue] Failed for edge '${this.hoveredEdgeId}':`, err instanceof Error ? err.message : err);
+      // Note: This fires at 1Hz while active, so use console.debug to reduce noise
+      console.debug(`[DebugStore.pollValue] Failed for edge '${edgeId}':`, err instanceof Error ? err.message : err);
       runInAction(() => {
         this._cachedEdgeValue = null;
       });
@@ -330,6 +370,7 @@ export class DebugStore {
     this.stopPolling();
     this.untrackCurrentField();
     this.untrackCurrentHistory();
+    this._currentlyTrackedEdgeId = null;
     this.settingsSyncDisposer?.();
     this.settingsSyncDisposer = null;
   }
