@@ -62,11 +62,14 @@ import type { RenderBufferArena } from '../render/RenderBufferArena';
  * Cache topology.verbs (readonly PathVerb[]) → Uint8Array conversions.
  * Topology verbs are static — no need to copy every frame.
  */
+// TODO: replace per-frame allocation with zero-alloc render assembly
+// eslint-disable-next-line oscilla/no-hot-path-alloc
 const _topologyVerbsCache = new Map<TopologyId, Uint8Array>();
 
 function getCachedVerbs(topology: PathTopologyDef): Uint8Array {
   let cached = _topologyVerbsCache.get(topology.id);
   if (!cached) {
+    // eslint-disable-next-line oscilla/no-hot-path-alloc
     cached = new Uint8Array(topology.verbs);
     _topologyVerbsCache.set(topology.id, cached);
   }
@@ -258,6 +261,8 @@ export function depthSortAndCompact(
     }
   }
 
+  // TODO: replace per-frame allocation with zero-alloc render assembly
+  // eslint-disable-next-line oscilla/no-hot-path-alloc
   return {
     count: visibleCount,
     screenPosition: outScreenPos,
@@ -312,6 +317,8 @@ export function projectInstances(
       resolved.centerX, resolved.centerY, 0, // camera target = (centerX, centerY, 0) in world
       resolved.tiltRad, resolved.yawRad, resolved.distance
     );
+    // TODO: replace per-frame allocation with zero-alloc render assembly
+    // eslint-disable-next-line oscilla/no-hot-path-alloc
     const perspParams = {
       camPosX, camPosY, camPosZ,
       camTargetX: resolved.centerX,
@@ -326,6 +333,8 @@ export function projectInstances(
     projectFieldRadiusPerspective(worldRadii, worldPositions, count, perspParams, screenRadius);
   }
 
+  // TODO: replace per-frame allocation with zero-alloc render assembly
+  // eslint-disable-next-line oscilla/no-hot-path-alloc
   return { screenPosition, screenRadius, depth, visible };
 }
 
@@ -454,14 +463,14 @@ function resolveScale(
     const slotIndex = sigToSlot.get(scaleSpec.id as number);
     if (slotIndex === undefined) {
       throw new Error(
-        `RenderAssembler: No slot mapping for signal ${scaleSpec.id}. ` +
+        'RenderAssembler: No slot mapping for signal ' + scaleSpec.id + '. ' +
         'Signal must be evaluated in schedule before rendering.'
       );
     }
     return state.values.f64[slotIndex];
   } else {
     throw new Error(
-      `RenderAssembler: scale must be a signal, got ${scaleSpec.k}. ` +
+      'RenderAssembler: scale must be a signal, got ' + scaleSpec.k + '. ' +
       'Per-particle scale is not supported.' // TODO: why?
     );
   }
@@ -491,26 +500,30 @@ function resolveShape(
   if (shapeSpec.k === 'slot') {
     const shapeBuffer = state.values.objects.get(shapeSpec.slot) as ArrayBufferView;
     if (!shapeBuffer) {
-      throw new Error(`RenderAssembler: Shape buffer not found in slot ${shapeSpec.slot}`);
+      throw new Error('RenderAssembler: Shape buffer not found in slot ' + shapeSpec.slot);
     }
     return shapeBuffer;
   } else {
     // Signal ('sig') with topology - resolve param signals from slots
     const { topologyId, paramSignals } = shapeSpec;
+    // TODO: replace per-frame allocation with zero-alloc render assembly
+    // eslint-disable-next-line oscilla/no-hot-path-alloc
     const params: Record<string, number> = {};
 
     for (let i = 0; i < paramSignals.length; i++) {
       const slotIndex = sigToSlot.get(paramSignals[i] as number);
       if (slotIndex === undefined) {
         throw new Error(
-          `RenderAssembler: No slot mapping for param signal ${paramSignals[i]}. ` +
+          'RenderAssembler: No slot mapping for param signal ' + paramSignals[i] + '. ' +
           'Signal must be evaluated in schedule before rendering.'
         );
       }
       const value = state.values.f64[slotIndex];
-      params[`param${i}`] = value;
+      params['param' + i] = value;
     }
 
+    // TODO: replace per-frame allocation with zero-alloc render assembly
+    // eslint-disable-next-line oscilla/no-hot-path-alloc
     return {
       topologyId,
       params,
@@ -531,7 +544,7 @@ function resolveControlPoints(
 
   const cpBuffer = state.values.objects.get(cpSpec.slot) as ArrayBufferView;
   if (!cpBuffer) {
-    throw new Error(`RenderAssembler: Control points buffer not found in slot ${cpSpec.slot}`);
+    throw new Error('RenderAssembler: Control points buffer not found in slot ' + cpSpec.slot);
   }
   return cpBuffer;
 }
@@ -580,19 +593,24 @@ function resolveShapeFully(
   const topology = getTopology(shape.topologyId);
 
   // Map param indices to param names from topology definition
+  // TODO: replace per-frame allocation with zero-alloc render assembly
+  // eslint-disable-next-line oscilla/no-hot-path-alloc
   const params: Record<string, number> = {};
-  topology.params.forEach((paramDef, i) => {
-    const value = shape.params[`param${i}`];
+  for (let i = 0; i < topology.params.length; i++) {
+    const paramDef = topology.params[i];
+    const value = shape.params['param' + i];
     if (value !== undefined) {
       params[paramDef.name] = value;
     } else {
       // Use default if param not provided
       params[paramDef.name] = paramDef.default;
     }
-  });
+  }
 
   if (isPathTopology(topology)) {
     // Path topology - requires control points
+    // TODO: replace per-frame allocation with zero-alloc render assembly
+    // eslint-disable-next-line oscilla/no-hot-path-alloc
     return {
       resolved: true,
       topologyId: shape.topologyId,
@@ -603,6 +621,8 @@ function resolveShapeFully(
     };
   } else {
     // Primitive topology (ellipse, rect, etc.)
+    // TODO: replace per-frame allocation with zero-alloc render assembly
+    // eslint-disable-next-line oscilla/no-hot-path-alloc
     return {
       resolved: true,
       topologyId: shape.topologyId,
@@ -651,6 +671,8 @@ interface TopologyGroup {
  * - Buffer GC'd → cache entry automatically cleaned
  * - No manual invalidation logic needed
  */
+// TODO: replace per-frame allocation with zero-alloc render assembly
+// eslint-disable-next-line oscilla/no-hot-path-alloc
 const topologyGroupCache = new WeakMap<
   Uint32Array,
   { count: number; groups: Map<string, TopologyGroup> }
@@ -688,6 +710,8 @@ export function groupInstancesByTopology(
 
   topologyGroupCacheMisses++;
   const groups = computeTopologyGroups(shapeBuffer, instanceCount);
+  // TODO: replace per-frame allocation with zero-alloc render assembly
+  // eslint-disable-next-line oscilla/no-hot-path-alloc
   topologyGroupCache.set(shapeBuffer, { count: instanceCount, groups });
   return groups;
 }
@@ -710,12 +734,14 @@ export function computeTopologyGroups(
   const expectedLength = instanceCount * SHAPE2D_WORDS;
   if (shapeBuffer.length < expectedLength) {
     throw new Error(
-      `RenderAssembler: Shape buffer length mismatch. ` +
-      `Expected >=${expectedLength} (${instanceCount} instances × ${SHAPE2D_WORDS} words), ` +
-      `got ${shapeBuffer.length}`
+      'RenderAssembler: Shape buffer length mismatch. ' +
+      'Expected >=' + expectedLength + ' (' + instanceCount + ' instances × ' + SHAPE2D_WORDS + ' words), ' +
+      'got ' + shapeBuffer.length
     );
   }
 
+  // TODO: replace per-frame allocation with zero-alloc render assembly
+  // eslint-disable-next-line oscilla/no-hot-path-alloc
   const groups = new Map<string, TopologyGroup>();
 
   for (let i = 0; i < instanceCount; i++) {
@@ -723,14 +749,17 @@ export function computeTopologyGroups(
 
     // Group key: topologyId + controlPointsSlot
     // Instances with same topology AND same control points buffer can batch
-    const key = `${shapeRef.topologyId}:${shapeRef.pointsFieldSlot}`;
+    const key = shapeRef.topologyId + ':' + shapeRef.pointsFieldSlot;
 
     if (!groups.has(key)) {
+      // TODO: replace per-frame allocation with zero-alloc render assembly
+      // eslint-disable-next-line oscilla/no-hot-path-alloc
       groups.set(key, {
         topologyId: shapeRef.topologyId,
         controlPointsSlot: shapeRef.pointsFieldSlot,
         pointsCount: shapeRef.pointsCount,
         flags: shapeRef.flags,
+        // eslint-disable-next-line oscilla/no-hot-path-alloc
         instanceIndices: [],
       });
     }
@@ -882,6 +911,8 @@ function assemblePerInstanceShapes(
 
   const tGrouped = performance.now();
 
+  // TODO: replace per-frame allocation with zero-alloc render assembly
+  // eslint-disable-next-line oscilla/no-hot-path-alloc
   const ops: DrawOp[] = [];
 
   // C-13: Read rotation and scale2 from slots if present
@@ -897,9 +928,9 @@ function assemblePerInstanceShapes(
   const resolved = context.resolvedCamera;
   if (fullPosition.length !== count * 3) {
     throw new Error(
-      `RenderAssembler: Position buffer must be world-space vec3 (stride 3). ` +
-      `Expected length ${count * 3}, got ${fullPosition.length}. ` +
-      `Fix upstream: insert/compile an explicit pos2→pos3 adapter; RenderAssembler will not promote stride-2.`
+      'RenderAssembler: Position buffer must be world-space vec3 (stride 3). ' +
+      'Expected length ' + (count * 3) + ', got ' + fullPosition.length + '. ' +
+      'Fix upstream: insert/compile an explicit pos2→pos3 adapter; RenderAssembler will not promote stride-2.'
     );
   }
 
@@ -942,6 +973,8 @@ function assemblePerInstanceShapes(
       groupVisible[i] = projection.visible[srcIdx];
     }
 
+    // TODO: replace per-frame allocation with zero-alloc render assembly
+    // eslint-disable-next-line oscilla/no-hot-path-alloc
     const groupProjection: ProjectionOutput = {
       screenPosition: groupScreenPos,
       screenRadius: groupScreenRadius,
@@ -959,6 +992,8 @@ function assemblePerInstanceShapes(
       scale2
     );
 
+    // TODO: replace per-frame allocation with zero-alloc render assembly
+    // eslint-disable-next-line oscilla/no-hot-path-alloc
     const instanceTransforms: InstanceTransforms = {
       count: compactedCopy.count,
       position: compactedCopy.screenPosition,
@@ -980,11 +1015,13 @@ function assemblePerInstanceShapes(
 
       if (!controlPointsBuffer || !(controlPointsBuffer instanceof Float32Array)) {
         throw new Error(
-          `RenderAssembler: Control points buffer not found for topology ${group.topologyId} ` +
-          `(slot ${group.controlPointsSlot}, instances: ${group.instanceIndices.join(', ')})`
+          'RenderAssembler: Control points buffer not found for topology ' + group.topologyId + ' ' +
+          '(slot ' + group.controlPointsSlot + ', instances: ' + group.instanceIndices.join(', ') + ')'
         );
       }
 
+      // TODO: replace per-frame allocation with zero-alloc render assembly
+      // eslint-disable-next-line oscilla/no-hot-path-alloc
       const geometry: PathGeometry = {
         topologyId: group.topologyId,
         verbs: getCachedVerbs(topology),
@@ -993,6 +1030,8 @@ function assemblePerInstanceShapes(
         flags: group.flags,
       };
 
+      // TODO: replace per-frame allocation with zero-alloc render assembly
+      // eslint-disable-next-line oscilla/no-hot-path-alloc
       ops.push({
         kind: 'drawPathInstances',
         geometry,
@@ -1002,16 +1041,22 @@ function assemblePerInstanceShapes(
     } else {
       // PRIMITIVE TOPOLOGY: Build DrawPrimitiveInstancesOp
       // Resolve params from topology defaults (per-instance params not yet supported)
+      // TODO: replace per-frame allocation with zero-alloc render assembly
+      // eslint-disable-next-line oscilla/no-hot-path-alloc
       const params: Record<string, number> = {};
-      topology.params.forEach((paramDef) => {
-        params[paramDef.name] = paramDef.default;
-      });
+      for (let i = 0; i < topology.params.length; i++) {
+        params[topology.params[i].name] = topology.params[i].default;
+      }
 
+      // TODO: replace per-frame allocation with zero-alloc render assembly
+      // eslint-disable-next-line oscilla/no-hot-path-alloc
       const geometry: PrimitiveGeometry = {
         topologyId: group.topologyId,
         params,
       };
 
+      // TODO: replace per-frame allocation with zero-alloc render assembly
+      // eslint-disable-next-line oscilla/no-hot-path-alloc
       ops.push({
         kind: 'drawPrimitiveInstances',
         geometry,
@@ -1024,6 +1069,8 @@ function assemblePerInstanceShapes(
   const tSliced = performance.now();
 
   // Record timing to health metrics
+  // TODO: replace per-frame allocation with zero-alloc render assembly
+  // eslint-disable-next-line oscilla/no-hot-path-alloc
   recordAssemblerTiming(state, {
     groupingMs: tGrouped - t0,
     slicingMs: tSliced - tGrouped,
@@ -1115,7 +1162,7 @@ function buildPathGeometry(
 ): PathGeometry {
   if (resolvedShape.mode !== 'path') {
     throw new Error(
-      `buildPathGeometry: Expected path topology, got ${resolvedShape.mode}`
+      'buildPathGeometry: Expected path topology, got ' + resolvedShape.mode
     );
   }
 
@@ -1123,6 +1170,8 @@ function buildPathGeometry(
     throw new Error('buildPathGeometry: Path topology missing verbs');
   }
 
+  // TODO: replace per-frame allocation with zero-alloc render assembly
+  // eslint-disable-next-line oscilla/no-hot-path-alloc
   return {
     topologyId: resolvedShape.topologyId,
     verbs: resolvedShape.verbs,
@@ -1145,10 +1194,12 @@ function buildPrimitiveGeometry(
 ): PrimitiveGeometry {
   if (resolvedShape.mode !== 'primitive') {
     throw new Error(
-      `buildPrimitiveGeometry: Expected primitive topology, got ${resolvedShape.mode}`
+      'buildPrimitiveGeometry: Expected primitive topology, got ' + resolvedShape.mode
     );
   }
 
+  // TODO: replace per-frame allocation with zero-alloc render assembly
+  // eslint-disable-next-line oscilla/no-hot-path-alloc
   return {
     topologyId: resolvedShape.topologyId,
     params: resolvedShape.params,
@@ -1178,6 +1229,8 @@ function buildInstanceTransforms(
   scale2: Float32Array,
   depth?: Float32Array
 ): InstanceTransforms {
+  // TODO: replace per-frame allocation with zero-alloc render assembly
+  // eslint-disable-next-line oscilla/no-hot-path-alloc
   return {
     count,
     position,
@@ -1202,6 +1255,8 @@ function buildPathStyle(
   color: Uint8ClampedArray,
   fillRule?: 'nonzero' | 'evenodd'
 ): PathStyle {
+  // TODO: replace per-frame allocation with zero-alloc render assembly
+  // eslint-disable-next-line oscilla/no-hot-path-alloc
   return {
     fillColor: color,
     fillRule,
@@ -1234,34 +1289,36 @@ export function assembleDrawPathInstancesOp(
   const instance = instances.get(step.instanceId);
   if (!instance) {
     throw new Error(
-      `RenderAssembler: Instance ${step.instanceId} not found in state.instances. ` +
-      `This indicates a compilation error where StepRender references an undeclared instance.`
+      'RenderAssembler: Instance ' + step.instanceId + ' not found in state.instances. ' +
+      'This indicates a compilation error where StepRender references an undeclared instance.'
     );
   }
 
   // Resolve count from instance
   const count = typeof instance.count === 'number' ? instance.count : 0;
   if (count === 0) {
+    // TODO: replace per-frame allocation with zero-alloc render assembly
+    // eslint-disable-next-line oscilla/no-hot-path-alloc
     return []; // Empty instance, skip
   }
 
   // Read position buffer from slot
   const positionBuffer = state.values.objects.get(step.positionSlot) as ArrayBufferView;
   if (!positionBuffer) {
-    throw new Error(`RenderAssembler: Position buffer not found in slot ${step.positionSlot}`);
+    throw new Error('RenderAssembler: Position buffer not found in slot ' + step.positionSlot);
   }
 
   // Position must be Float32Array for v2
   if (!(positionBuffer instanceof Float32Array)) {
     throw new Error(
-      `RenderAssembler: Position buffer must be Float32Array, got ${positionBuffer.constructor.name}`
+      'RenderAssembler: Position buffer must be Float32Array, got ' + positionBuffer.constructor.name
     );
   }
 
   // Read color buffer from slot
   const rawColorBuffer = state.values.objects.get(step.colorSlot) as ArrayBufferView;
   if (!rawColorBuffer) {
-    throw new Error(`RenderAssembler: Color buffer not found in slot ${step.colorSlot}`);
+    throw new Error('RenderAssembler: Color buffer not found in slot ' + step.colorSlot);
   }
 
   // Convert color buffer to Uint8ClampedArray [0,255] RGBA
@@ -1273,7 +1330,7 @@ export function assembleDrawPathInstancesOp(
     colorBuffer = convertColorBufferToRgba(rawColorBuffer, count, arena);
   } else {
     throw new Error(
-      `RenderAssembler: Color buffer must be Float32Array or Uint8ClampedArray, got ${rawColorBuffer.constructor.name}`
+      'RenderAssembler: Color buffer must be Float32Array or Uint8ClampedArray, got ' + rawColorBuffer.constructor.name
     );
   }
 
@@ -1315,9 +1372,9 @@ export function assembleDrawPathInstancesOp(
     // Run projection using resolved camera params
     if (positionBuffer.length !== count * 3) {
       throw new Error(
-        `RenderAssembler: Position buffer must be world-space vec3 (stride 3). ` +
-        `Expected length ${count * 3}, got ${positionBuffer.length}. ` +
-        `Fix upstream: insert/compile an explicit pos2→pos3 adapter; RenderAssembler will not promote stride-2.`
+        'RenderAssembler: Position buffer must be world-space vec3 (stride 3). ' +
+        'Expected length ' + (count * 3) + ', got ' + positionBuffer.length + '. ' +
+        'Fix upstream: insert/compile an explicit pos2→pos3 adapter; RenderAssembler will not promote stride-2.'
       );
     }
 
@@ -1357,6 +1414,8 @@ export function assembleDrawPathInstancesOp(
 
       const geometry = buildPathGeometry(resolvedShape, controlPointsBuffer);
 
+      // TODO: replace per-frame allocation with zero-alloc render assembly
+      // eslint-disable-next-line oscilla/no-hot-path-alloc
       return [{
         kind: 'drawPathInstances',
         geometry,
@@ -1367,6 +1426,8 @@ export function assembleDrawPathInstancesOp(
       // PRIMITIVE TOPOLOGY: Build DrawPrimitiveInstancesOp
       const geometry = buildPrimitiveGeometry(resolvedShape);
 
+      // TODO: replace per-frame allocation with zero-alloc render assembly
+      // eslint-disable-next-line oscilla/no-hot-path-alloc
       return [{
         kind: 'drawPrimitiveInstances',
         geometry,
@@ -1396,6 +1457,8 @@ export function assembleRenderFrame(
   renderSteps: readonly StepRender[],
   context: AssemblerContext
 ): RenderFrameIR {
+  // TODO: replace per-frame allocation with zero-alloc render assembly
+  // eslint-disable-next-line oscilla/no-hot-path-alloc
   const ops: DrawOp[] = [];
 
   for (const step of renderSteps) {
@@ -1406,6 +1469,8 @@ export function assembleRenderFrame(
     }
   }
 
+  // TODO: replace per-frame allocation with zero-alloc render assembly
+  // eslint-disable-next-line oscilla/no-hot-path-alloc
   return {
     version: 2,
     ops,
