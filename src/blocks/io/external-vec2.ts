@@ -39,8 +39,7 @@ registerBlock({
     position: { label: 'Position', type: canonicalType(VEC2) },
   },
   lower: ({ ctx, config }) => {
-    const cfg = config ?? {};
-    const channelBase = requireConfig<string>(cfg, 'channelBase', 'string');
+    const channelBase = requireConfig<string>(config, 'channelBase', 'string');
 
     const xSig = ctx.b.external(`${channelBase}.x`, canonicalType(FLOAT));
     const ySig = ctx.b.external(`${channelBase}.y`, canonicalType(FLOAT));

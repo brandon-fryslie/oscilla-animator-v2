@@ -40,9 +40,8 @@ registerBlock({
       throw new Error('Lag requires target signal input');
     }
 
-    const cfg = config ?? {};
-    const smoothing = requireConfig<number>(cfg, 'smoothing', 'number');
-    const initialValue = requireConfig<number>(cfg, 'initialValue', 'number');
+    const smoothing = requireConfig<number>(config, 'smoothing', 'number');
+    const initialValue = requireConfig<number>(config, 'initialValue', 'number');
     const outType = ctx.outTypes[0];
 
     // Symbolic state key

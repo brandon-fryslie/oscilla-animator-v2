@@ -178,13 +178,15 @@ export default {
       ArrowFunctionExpression(node) {
         // Don't flag top-level (module scope) arrow functions —
         // only flag closures created inside other functions.
+        // Exclude the immediate parent: a class method's FunctionExpression
+        // has MethodDefinition as parent, but is on the prototype (not per-call).
         const ancestors = context.getAncestors ? context.getAncestors() : context.sourceCode.getAncestors(node);
-        const insideFunction = ancestors.some(
+        const ancestorsExceptParent = ancestors.slice(0, -1);
+        const insideFunction = ancestorsExceptParent.some(
           (a) =>
             a.type === 'FunctionDeclaration' ||
             a.type === 'FunctionExpression' ||
-            a.type === 'ArrowFunctionExpression' ||
-            a.type === 'MethodDefinition',
+            a.type === 'ArrowFunctionExpression',
         );
         if (insideFunction) {
           context.report({ node, messageId: 'closureCreation' });
@@ -192,13 +194,16 @@ export default {
       },
 
       FunctionExpression(node) {
+        // Exclude the immediate parent from ancestor check.
+        // A class method body is a FunctionExpression with MethodDefinition parent —
+        // it's on the prototype, not allocated per-call.
         const ancestors = context.getAncestors ? context.getAncestors() : context.sourceCode.getAncestors(node);
-        const insideFunction = ancestors.some(
+        const ancestorsExceptParent = ancestors.slice(0, -1);
+        const insideFunction = ancestorsExceptParent.some(
           (a) =>
             a.type === 'FunctionDeclaration' ||
             a.type === 'FunctionExpression' ||
-            a.type === 'ArrowFunctionExpression' ||
-            a.type === 'MethodDefinition',
+            a.type === 'ArrowFunctionExpression',
         );
         if (insideFunction) {
           context.report({ node, messageId: 'closureCreation' });

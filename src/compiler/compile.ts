@@ -100,7 +100,9 @@ export function compile(patch: Patch, options?: CompileOptions): CompileResult {
     // Frontend: Use precomputed result or run compileFrontend()
     // [LAW:dataflow-not-control-flow] compileFrontend always returns FrontendResult.
     // =========================================================================
-    const frontend: FrontendResult = options?.precomputedFrontend ?? compileFrontend(patch);
+    const frontend: FrontendResult = options?.precomputedFrontend
+      ? options.precomputedFrontend
+      : compileFrontend(patch);
 
     if (!frontend.backendReady) {
       return makeFailure(frontend.errors.map(frontendErrorToCompileError));
@@ -326,7 +328,9 @@ function convertLinkedIRToProgram(
     const storage: SlotMetaEntry['storage'] = isMany(card) ? 'object' : 'f64';
 
     // Object slots store a single buffer reference; scalar slots need stride for multi-component payloads
-    const stride = storage === 'object' ? 1 : (slotInfo.stride ?? payloadStride(type.payload));
+    const stride = storage === 'object'
+      ? 1
+      : (slotInfo.stride !== undefined ? slotInfo.stride : payloadStride(type.payload));
 
     const offset = storageOffsets[storage];
     storageOffsets[storage] += stride;
@@ -464,7 +468,8 @@ function convertLinkedIRToProgram(
       const block = stringIdToBlock.get(blockStr);
       if (!block) continue;
 
-      const portName = exprIdToPortName.get(exprId as unknown as number) ?? null;
+      const portNameResult = exprIdToPortName.get(exprId as unknown as number);
+      const portName = portNameResult !== undefined ? portNameResult : null;
       let userTarget: ExprUserTarget | null = null;
 
       if (block.role.kind === 'derived') {
@@ -579,7 +584,7 @@ function getStepExprId(step: Step): ValueExprId | null {
     case 'fieldStateWrite':
       return step.value;
     case 'render':
-      return step.scale?.id ?? null;
+      return step.scale ? step.scale.id : null;
     case 'continuityMapBuild':
     case 'continuityApply':
       return null;

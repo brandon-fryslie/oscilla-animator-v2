@@ -162,22 +162,5 @@ something real about the field.
 Next-Level Enhancements for the Other Tiers
 
 
-Histogram — KDE overlay:
-Instead of (or on top of) blocky bins, render a smooth kernel density estimate curve. A Gaussian KDE with bandwidth =
-range / 20 turns 400 discrete samples into a smooth probability density. Render it as a filled curve with the same teal
-gradient. This looks dramatically more polished than bar charts AND is more informative (you can see subtle bimodality
-that bins might straddle). The KDE computation for 400 samples with ~50 evaluation points is trivial (<1ms).
 
-Histogram — reference distribution ghost:
-Overlay a dim "expected" distribution behind the actual distribution. For a phasor (0→1 sawtooth), the expected
-distribution is uniform. For a sine wave, the expected distribution is the arcsine distribution (high density near peaks,
-low near zero crossings). Render this as a dim dashed outline. Deviations from expected immediately pop — "why are there
-more instances near 0.7 than expected?" This turns a simple histogram into a diagnostic tool.
-
-Single-instance sparkline — frequency annotation:
-Auto-detect the dominant frequency from the sparkline buffer (zero-crossing count or simple autocorrelation — don't need
-FFT for a single dominant frequency). Display as a subtle label: ~3.2 Hz or ~192 BPM. For a phasor, this directly tells
-you the oscillation rate. For a position field, it tells you if something is vibrating. The autocorrelation peak also
-gives you a confidence measure — if the peak is sharp, annotate with the frequency. If it's broad/absent, don't show
-anything (the signal isn't periodic).
 

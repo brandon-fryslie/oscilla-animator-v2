@@ -12,7 +12,7 @@ describe('LowerSandbox field-extent types', () => {
     const builder = new IRBuilderImpl();
     const instances = new Map();
 
-    const sandbox = new LowerSandbox(builder, 'TestParent', 'test-parent-1', instances);
+    const sandbox = new LowerSandbox(builder, 'test-parent-1', instances);
 
     // Create a field-extent color type (many cardinality)
     const ref = instanceRef('circle-domain', 'inst-1');
@@ -43,7 +43,7 @@ describe('LowerSandbox field-extent types', () => {
   it('HueRainbow macro with signal-extent outTypes produces signal-extent expressions', () => {
     const builder = new IRBuilderImpl();
     const instances = new Map();
-    const sandbox = new LowerSandbox(builder, 'TestParent', 'test-parent-1', instances);
+    const sandbox = new LowerSandbox(builder, 'test-parent-1', instances);
 
     const signalColorType = canonicalSignal(COLOR, unitHsl());
     const phaseType = canonicalSignal(FLOAT, unitTurns());

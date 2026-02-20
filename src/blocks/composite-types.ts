@@ -207,7 +207,6 @@ export function isCompositeBlockDef(def: BlockDef | CompositeBlockDef): def is C
  */
 export function isCompositeBlockType(blockType: string): boolean {
   // Import here to avoid circular dependency
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
   const { getCompositeDefinition } = require('./registry');
   return getCompositeDefinition(blockType) !== undefined;
 }

@@ -142,7 +142,7 @@ function evaluateSignalExtent(
         case 'phaseB':
           return state.time.phaseB;
         case 'progress':
-          return state.time.progress ?? 0;
+          return state.time.progress !== undefined ? state.time.progress : 0;
         case 'palette':
           // Palette is stored in objects map at reserved slot 0
           return 0; // Slot number for palette
@@ -180,7 +180,8 @@ function evaluateSignalExtent(
 
     case 'eventRead': {
       // Read event scalar as float: 0 → 0.0, 1 → 1.0 (spec §9.2)
-      return state.eventScalars[expr.eventSlot as number] ?? 0;
+      const scalar = state.eventScalars[expr.eventSlot as number];
+      return scalar !== undefined ? scalar : 0;
     }
 
     case 'intrinsic': {

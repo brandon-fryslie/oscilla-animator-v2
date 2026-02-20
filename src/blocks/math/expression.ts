@@ -75,8 +75,7 @@ registerBlock({
 
   lower: ({ ctx, collectInputsById, config }) => {
     // Step 1: Extract expression text from config (default to empty string)
-    // Config is guaranteed non-null by lower-blocks.ts (uses ?? {})
-    const cfg = config ?? {};
+    const cfg = config;
     const exprText = cfg.expression !== undefined
       ? (cfg.expression as string)
       : '';
@@ -110,7 +109,7 @@ registerBlock({
     const inputSignals = new Map<string, ValueExprId>();
     const signalsByShorthand = new Map<string, ValueExprId>();
 
-    const refsEntries = collectInputsById?.refs ?? [];
+    const refsEntries = collectInputsById ? collectInputsById.refs : [];
     for (const entry of refsEntries) {
       const inputType = getExprType(entry.value.id);
 
@@ -119,7 +118,7 @@ registerBlock({
       signalsByShorthand.set(shorthand, entry.value.id);
 
       // Register as regular input using alias or shorthand
-      const alias = entry.alias ?? shorthand;
+      const alias = entry.alias !== undefined ? entry.alias : shorthand;
       inputs.set(alias, inputType);
       inputSignals.set(alias, entry.value.id);
     }

@@ -29,7 +29,7 @@ registerBlock({
   },
   lower: ({ ctx }) => {
     // Get instance context from Array block or inferred from inputs
-    const instance = ctx.inferredInstance ?? ctx.instance;
+    const instance = ctx.inferredInstance !== undefined ? ctx.inferredInstance : ctx.instance;
     if (!instance) {
       throw new Error('FromDomainId requires instance context');
     }

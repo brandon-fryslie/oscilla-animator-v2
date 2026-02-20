@@ -6,6 +6,10 @@ import noNullishCoalescingDefaults from './eslint-rules/no-nullish-coalescing-de
 import noHotPathAlloc from './eslint-rules/no-hot-path-alloc.js';
 
 export default tseslint.config(
+  // Ignore build output
+  {
+    ignores: ['dist/**'],
+  },
   // Block definitions: lower() function constraints
   {
     files: ['src/blocks/**/*.ts'],

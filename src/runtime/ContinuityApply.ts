@@ -399,7 +399,7 @@ export function applyContinuity(
   const targetState = getOrCreateTargetState(state.continuity, targetId, bufferLength);
 
   // Compute dt for slew (I30: use t_model_ms only)
-  const tModelMs = state.time?.tMs ?? 0;
+  const tModelMs = state.time !== null ? state.time.tMs : 0;
   const dtMs = Math.max(0, tModelMs - state.continuity.lastTModelMs);
 
   // If this is a newly created target state (slew buffer is all zeros),
@@ -412,7 +412,8 @@ export function applyContinuity(
   }
 
   // Get mapping if domain changed
-  const mapping = state.continuity.mappings.get(instanceId) ?? null;
+  const mappingResult = state.continuity.mappings.get(instanceId);
+  const mapping = mappingResult !== undefined ? mappingResult : null;
 
   // For crossfade, capture old effective values for blending
   // Use the pre-captured snapshot (before getOrCreateTargetState zeroed it)
@@ -488,9 +489,9 @@ export function applyContinuity(
 
   // Read config for decay exponent, tau multiplier, and base tau
   const config = state.continuityConfig;
-  const decayExponent = config?.decayExponent ?? 0.7;
-  const tauMultiplier = config?.tauMultiplier ?? 1.0;
-  const baseTauMs = config?.baseTauMs ?? 150;
+  const decayExponent = config && config.decayExponent !== undefined ? config.decayExponent : 0.7;
+  const tauMultiplier = config && config.tauMultiplier !== undefined ? config.tauMultiplier : 1.0;
+  const baseTauMs = config && config.baseTauMs !== undefined ? config.baseTauMs : 150;
 
   // Compute base tau factor: (baseTauMs / 150)
   // This normalizes around the canonical 150ms average semantic tau
@@ -603,7 +604,7 @@ export function applyContinuity(
       }
 
       // Compute blend weight based on elapsed time
-      const startMs = targetState.crossfadeStartMs ?? tModelMs;
+      const startMs = targetState.crossfadeStartMs !== undefined ? targetState.crossfadeStartMs : tModelMs;
       const elapsed = Math.max(0, tModelMs - startMs);
       const t = Math.min(1.0, elapsed / windowMs);
 
@@ -640,7 +641,8 @@ export function applyContinuity(
  * @param state - Runtime state
  */
 export function finalizeContinuityFrame(state: RuntimeState): void {
-  state.continuity.lastTModelMs = state.time?.tMs ?? 0;
+  // time is always set before continuity runs
+  state.continuity.lastTModelMs = state.time !== null ? state.time.tMs : 0;
   state.continuity.domainChangeThisFrame = false;
 
   // Clear test pulse request after it's been applied

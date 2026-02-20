@@ -59,9 +59,8 @@ registerBlock({
     gate: { label: 'Gate', type: canonicalType(FLOAT) }, // 0 or 1
   },
   lower: ({ ctx, config }) => {
-    const cfg = config ?? {};
-    const channel = requireConfig<string>(cfg, 'channel', 'string');
-    const threshold = requireConfig<number>(cfg, 'threshold', 'number');
+    const channel = requireConfig<string>(config, 'channel', 'string');
+    const threshold = requireConfig<number>(config, 'threshold', 'number');
     const outType = ctx.outTypes[0];
 
     const inputSig = ctx.b.external(channel, canonicalType(FLOAT));

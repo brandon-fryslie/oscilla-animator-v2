@@ -10,7 +10,7 @@
  *
  * Usage:
  * ```typescript
- * const sandbox = new LowerSandbox(ctx.b, ctx.blockType, ctx.instanceId);
+ * const sandbox = new LowerSandbox(ctx.b, ctx.instanceId, ctx.instances);
  * const outputExprs = sandbox.lowerBlock('HueRainbow', { t: phaseExpr }, {}, outTypes);
  * // outputExprs['out'] is a ValueExprId (no slot allocated yet)
  * ```
@@ -34,7 +34,6 @@ import type { ValueRefExpr } from './lowerTypes';
 export class LowerSandbox {
   constructor(
     private readonly builder: BlockIRBuilder,
-    private readonly parentBlockType: string,
     private readonly parentInstanceId: string,
     private readonly instances: ReadonlyMap<import('./Indices').InstanceId, import('./types').InstanceDecl>,
   ) {}
@@ -66,7 +65,7 @@ export class LowerSandbox {
     if (blockDef.loweringPurity !== 'pure') {
       throw new Error(
         `LowerSandbox.lowerBlock: block "${blockType}" is not tagged loweringPurity:'pure' ` +
-        `(parent: ${this.parentBlockType}#${this.parentInstanceId}). ` +
+        `(parent instance: ${this.parentInstanceId}). ` +
         `Only pure blocks can be macro-expanded.`
       );
     }

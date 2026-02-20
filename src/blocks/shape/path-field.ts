@@ -112,7 +112,7 @@ registerBlock({
     const topologyId = findTopologyIdForField(ctx.b, controlPointsFieldId);
 
     // Get instance from context (inferred from input fields by lowering system)
-    const instance = ctx.inferredInstance ?? ctx.instance;
+    const instance = ctx.inferredInstance !== undefined ? ctx.inferredInstance : ctx.instance;
     if (!instance) {
       throw new Error('PathField requires instance context from control points field');
     }

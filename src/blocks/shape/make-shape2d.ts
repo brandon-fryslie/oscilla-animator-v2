@@ -82,7 +82,7 @@ registerBlock({
     }
 
     // Get instance from context (inferred from input field)
-    const instance = ctx.inferredInstance ?? ctx.instance;
+    const instance = ctx.inferredInstance !== undefined ? ctx.inferredInstance : ctx.instance;
     if (!instance) {
       throw new Error('MakeShape2D: no instance context — controlPoints must come from a field-producing block');
     }
@@ -98,7 +98,7 @@ registerBlock({
     }
 
     // Read closed config (default: true) — stored as 0/1 number
-    const closedVal = requireConfig<number>(config!, 'closed', 'number');
+    const closedVal = requireConfig<number>(config, 'closed', 'number');
     const closed = closedVal !== 0;
 
     // Create and register topology

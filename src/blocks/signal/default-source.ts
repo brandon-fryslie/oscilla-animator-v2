@@ -126,7 +126,7 @@ registerBlock({
     // ── Signal path (cardinality one) ──────────────────────────────────
     if (payload.kind === 'color') {
       // Color → HueRainbow(phaseA) via macro expansion
-      const sandbox = new LowerSandbox(ctx.b, ctx.blockType, ctx.instanceId, ctx.instances);
+      const sandbox = new LowerSandbox(ctx.b, ctx.instanceId, ctx.instances);
       const phaseType = canonicalType(FLOAT);
       const phaseA = ctx.b.time('phaseA', phaseType);
       const rainbowDef = requireBlockDef('HueRainbow');

@@ -53,8 +53,7 @@ registerBlock({
     value: { label: 'Value', type: canonicalType(FLOAT) },
   },
   lower: ({ ctx, config }) => {
-    const cfg = config ?? {};
-    const channel = requireConfig<string>(cfg, 'channel', 'string');
+    const channel = requireConfig<string>(config, 'channel', 'string');
     const sig = ctx.b.external(channel, canonicalType(FLOAT));
     const outType = ctx.outTypes[0];
 

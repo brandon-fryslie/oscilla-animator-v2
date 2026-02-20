@@ -134,7 +134,8 @@ function evaluateEventKind(
       const predicate = (Number.isFinite(signalValue) && signalValue >= 0.5) ? 1 : 0;
 
       // Read previous predicate (separate array for ValueExpr)
-      const prevPredicate = state.eventPrevPredicateValue[veId as number] ?? 0;
+      const prev = state.eventPrevPredicateValue[veId as number];
+      const prevPredicate = prev !== undefined ? prev : 0;
 
       // Write current predicate
       state.eventPrevPredicateValue[veId as number] = predicate;
