@@ -5,8 +5,9 @@
  * No logic — only type definitions.
  */
 
-import type { Step, StateSlotId, StableStateId } from '../compiler/ir/types';
-import type { ValueSlot, BlockId, PortId } from '../compiler/ir/program';
+import type { Step, StableStateId } from '../compiler/ir/types';
+import type { ValueSlot, StateSlotId } from '../compiler/ir/Indices';
+import type { BlockId, PortId } from '../types';
 import type { CanonicalType } from '../core/canonical-types';
 import type { InstanceId } from '../core/ids';
 

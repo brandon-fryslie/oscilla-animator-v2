@@ -7,7 +7,9 @@
 
 import type { RuntimeState } from './RuntimeState';
 import { readShape2D } from './RuntimeState';
-import type { CompiledProgramIR, ValueSlot, BlockId, PortId, SlotMetaEntry } from '../compiler/ir/program';
+import type { CompiledProgramIR, SlotMetaEntry } from '../compiler/ir/program';
+import type { ValueSlot } from '../compiler/ir/Indices';
+import type { BlockId, PortId } from '../types';
 import type { SlotLookup } from './SlotLookupCache';
 import { getSlotLookupMap } from './SlotLookupCache';
 import type { SlotValue, ValueAnomaly, LaneIdentity } from './StepDebugTypes';

@@ -10,7 +10,9 @@
 import { describe, it, expect } from 'vitest';
 import type { Step } from '../../compiler/ir/types';
 import type { ValueExprId } from '../../compiler/ir/Indices';
-import type { ValueSlot, DebugIndexIR, BlockId, PortId, PortBindingIR } from '../../compiler/ir/program';
+import type { DebugIndexIR, PortBindingIR } from '../../compiler/ir/program';
+import type { ValueSlot } from '../../compiler/ir/Indices';
+import type { BlockId, PortId } from '../../types';
 import type { Breakpoint, StepSnapshot } from '../StepDebugTypes';
 
 // =============================================================================

@@ -22,7 +22,7 @@ import type { CompiledProgramIR } from '../compiler/ir/program';
 import type { ConstValue } from '../core/canonical-types';
 import { floatConst, intConst, boolConst } from '../core/canonical-types';
 import type { ValueExpr } from '../compiler/ir/value-expr';
-import type { InstanceId } from '../compiler/ir/types';
+import type { InstanceId } from '../compiler/ir/Indices';
 import type { ScheduleIR } from '../compiler/backend/schedule-program';
 
 /**

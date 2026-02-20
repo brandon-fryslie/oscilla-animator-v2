@@ -10,7 +10,8 @@
  * incomplete Phase 2 writes.
  */
 
-import type { CompiledProgramIR, ValueSlot } from '../compiler/ir/program';
+import type { CompiledProgramIR } from '../compiler/ir/program';
+import type { ValueSlot } from '../compiler/ir/Indices';
 import type { RuntimeState } from './RuntimeState';
 import type { RenderBufferArena } from '../render/RenderBufferArena';
 import type { RenderFrameIR } from '../render/types';

@@ -17,44 +17,8 @@
 // Import canonical types as source of truth
 import type { CanonicalType, ConstValue } from '../../core/canonical-types';
 
-// Import ValueSlot and StateSlotId for use in this file
-import type { ValueSlot as _ValueSlot, StateSlotId as _StateSlotId, ValueExprId, EventSlotId } from './Indices';
-type ValueSlot = _ValueSlot;
-type StateSlotId = _StateSlotId;
-
-// Re-export branded indices
-export type {
-  NodeIndex,
-  PortIndex,
-  ValueSlot,
-  StateSlotId,
-  StepIndex,
-  ValueExprId,
-  EventSlotId,
-  TransformChainId,
-  NodeId,
-  StepId,
-  ExprId,
-  StateId,
-  SlotId,
-  InstanceId,
-} from './Indices';
-
-export {
-  nodeIndex,
-  portIndex,
-  valueSlot,
-  stateSlotId,
-  stepIndex,
-  valueExprId,
-  eventSlotId,
-  nodeId,
-  stepId,
-  exprId,
-  stateId,
-  slotId,
-  instanceId,
-} from './Indices';
+// Import branded indices for use in this file's type definitions
+import type { ValueSlot, StateSlotId, ValueExprId, EventSlotId } from './Indices';
 
 // Import shape types
 import type { TopologyId } from '../../shapes/types';

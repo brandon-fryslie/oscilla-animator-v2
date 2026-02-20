@@ -5,7 +5,7 @@
  * Simplified for v2 - pure IR path, no legacy complexity.
  */
 
-import type { CompiledProgramIR, ValueSlot } from '../compiler/ir/program';
+import type { CompiledProgramIR } from '../compiler/ir/program';
 import type { ScheduleIR } from '../compiler/backend/schedule-program';
 import type { Step, InstanceDecl, DomainInstance, StepRender } from '../compiler/ir/types';
 import type { IrInstanceId as InstanceId } from '../types';
@@ -22,6 +22,7 @@ import { createStableDomainInstance, createUnstableDomainInstance } from './Doma
 import { assembleRenderFrame, type AssemblerContext } from './RenderAssembler';
 import { resolveCameraFromGlobals } from './CameraResolver';
 import { requireManyInstance } from '../core/canonical-types';
+import type { ValueSlot } from '../compiler/ir/Indices';
 import { SYSTEM_PALETTE_SLOT } from '../compiler/ir/Indices';
 import { evaluateValueExprSignal, evaluateConstructSignal } from './ValueExprSignalEvaluator';
 import { evaluateValueExprEvent } from './ValueExprEventEvaluator';

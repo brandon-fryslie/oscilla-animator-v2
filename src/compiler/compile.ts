@@ -16,13 +16,14 @@
 
 import type { Patch } from '../graph';
 import type { NormalizedPatch } from '../graph/normalize';
-import type { CompiledProgramIR, SlotMetaEntry, ValueSlot, FieldSlotEntry, OutputSpecIR, ExprProvenanceIR, ExprUserTarget } from './ir/program';
+import type { CompiledProgramIR, SlotMetaEntry, FieldSlotEntry, OutputSpecIR, ExprProvenanceIR, ExprUserTarget } from './ir/program';
+import type { ValueSlot } from './ir/Indices';
 import type { BlockId } from '../types';
 import type { UnlinkedIRFragments } from './backend/lower-blocks';
 import type { ScheduleIR } from './backend/schedule-program';
 import type { AcyclicOrLegalGraph } from './ir/patches';
 import type { EventHub } from '../events/EventHub';
-import { canonicalType, requireManyInstance, payloadStride } from '../core/canonical-types';
+import { canonicalType, requireManyInstance, requireInst, isMany, payloadStride } from '../core/canonical-types';
 import type { ValueExpr, ValueExprId } from './ir/value-expr';
 import type { Step } from './ir/types';
 import { FLOAT } from '../core/canonical-types';
@@ -42,6 +43,7 @@ import { pass4DepGraph } from './backend/derive-dep-graph';
 import { pass5CycleValidation } from './backend/schedule-scc';
 import { pass6BlockLowering } from './backend/lower-blocks';
 import { pass7Schedule } from './backend/schedule-program';
+import { allocateContinuityPipeline } from './backend/continuity-pipeline';
 import { AddressRegistry } from '../graph/address-registry';
 
 // =============================================================================
@@ -203,8 +205,12 @@ export function compile(patch: Patch, options?: CompileOptions): CompileResult {
     }
 
 
-    // Pass 7: Schedule Construction
-    const scheduleIR = pass7Schedule(unlinkedIR, acyclicPatch);
+    // Pass 6b: Continuity Pipeline Allocation
+    // [LAW:single-enforcer] All continuity pipeline slots allocated through builder.
+    const continuityPipeline = allocateContinuityPipeline(unlinkedIR, acyclicPatch);
+
+    // Pass 7: Schedule Construction (pure ordering, no allocation)
+    const scheduleIR = pass7Schedule(unlinkedIR, acyclicPatch, continuityPipeline);
 
     compilationInspector.capturePass('schedule', unlinkedIR, scheduleIR);
 
@@ -278,26 +284,26 @@ function convertLinkedIRToProgram(
 
   // Build fieldSlotRegistry from blockOutputs (field outputs that can be materialized on demand)
   const fieldSlotRegistry = new Map<ValueSlot, FieldSlotEntry>();
-  const fieldSlotSet = new Set<number>(); // Track which slots are field outputs
   if (unlinkedIR.blockOutputs) {
     for (const [, outputs] of unlinkedIR.blockOutputs.entries()) {
       for (const [, ref] of outputs.entries()) {
-        // Treat ref.id as ValueExprId and infer field instance
         const valueId = ref.id as unknown as ValueExprId;
         const instanceId = inferFieldInstanceFromValueExprs(valueId, valueExprNodes);
         if (instanceId) {
           fieldSlotRegistry.set(ref.slot!, { fieldId: valueId, instanceId });
-          fieldSlotSet.add(ref.slot! as number);
         }
       }
     }
   }
 
   // Build slot metadata from slot types
+  // [LAW:one-source-of-truth] Storage class is derived from the slot's CanonicalType cardinality axis.
+  // many cardinality → object storage (Float32Array buffers)
+  // one/zero cardinality → f64 storage (scalar values)
+  // No parallel tracking sets needed.
   const slotTypes = builder.getSlotMetaInputs();
   const slotMeta: SlotMetaEntry[] = [];
 
-  // Track offsets per storage class
   const storageOffsets = {
     f64: 0,
     f32: 0,
@@ -307,85 +313,41 @@ function convertLinkedIRToProgram(
     shape2d: 0,
   };
 
-  // Build slotMeta entries for all allocated slots
-  // Slots are indexed from 0, so iterate through all slot IDs
-  for (let slotId = 0; slotId < (builder.getSlotCount?.() || 0); slotId++) {
+  const slotCount = builder.getSlotCount();
+  for (let slotId = 0; slotId < slotCount; slotId++) {
     const slot = slotId as ValueSlot;
     const slotInfo = slotTypes.get(slot);
     if (!slotInfo?.type) throw new Error(`Slot ${slot} has no registered type — IR builder bug`);
     const type = slotInfo.type;
 
-    // Determine storage class from type
-    // Field output slots store buffer references in the objects Map
-    // Shape payloads use dedicated shape2d bank; all other signals go to f64
-    const storage: SlotMetaEntry['storage'] = fieldSlotSet.has(slotId)
-      ? 'object'
-      : 'f64'; // TODO: Q6 — shape2d storage removed with shape payload; will use resource graph
+    // [LAW:one-source-of-truth] Derive storage from the type's cardinality axis.
+    // Backend types are fully instantiated — no vars allowed here.
+    const card = requireInst(type.extent.cardinality, 'cardinality');
+    const storage: SlotMetaEntry['storage'] = isMany(card) ? 'object' : 'f64';
 
-    // Use stride from slotInfo (which comes from registered type), fallback to computing from payload
-    // Objects/fields have stride=1 since they store a single reference
+    // Object slots store a single buffer reference; scalar slots need stride for multi-component payloads
     const stride = storage === 'object' ? 1 : (slotInfo.stride ?? payloadStride(type.payload));
 
-    // Offset must increment by stride, not 1 - multi-component types (color=4, vec3=3, vec2=2) need space
     const offset = storageOffsets[storage];
     storageOffsets[storage] += stride;
 
-    slotMeta.push({
-      slot,
-      storage,
-      offset,
-      stride,
-      type,
-    });
-  }
-
-  // Add slotMeta entries for slots allocated by Pass 7 (continuity pipeline buffers).
-  // These include outputSlots (always fresh) and possibly baseSlots (fresh only if no ref.slot existed).
-  // [LAW:one-source-of-truth] Some materialize targets now reuse binding-pass ref.slots (< builderSlotCount)
-  // and already have slotMeta from the first loop above. Only generate entries for slots >= builderSlotCount.
-  const builderSlotCount = builder.getSlotCount?.() || 0;
-  const steps = scheduleIR.steps;
-  let maxSlotUsed = builderSlotCount - 1;
-  for (const step of steps) {
-    if (step.kind === 'materialize' && (step.target as number) >= builderSlotCount) {
-      maxSlotUsed = Math.max(maxSlotUsed, step.target as number);
-    }
-    if (step.kind === 'continuityApply') {
-      if ((step.baseSlot as number) >= builderSlotCount) {
-        maxSlotUsed = Math.max(maxSlotUsed, step.baseSlot as number);
-      }
-      if ((step.outputSlot as number) >= builderSlotCount) {
-        maxSlotUsed = Math.max(maxSlotUsed, step.outputSlot as number);
-      }
-    }
-  }
-  for (let slotId = builderSlotCount; slotId <= maxSlotUsed; slotId++) {
-    // Use registered type from builder if available (outputSlots registered via registerSlotType),
-    // otherwise fall back to generic FLOAT.
-    const registered = slotTypes.get(slotId as ValueSlot);
-    slotMeta.push({
-      slot: slotId as ValueSlot,
-      storage: 'object',
-      offset: storageOffsets.object++,
-      stride: 1, // Object slots store a single reference (Float32Array buffer)
-      type: registered?.type ?? canonicalType(FLOAT),
-    });
+    slotMeta.push({ slot, storage, offset, stride, type });
   }
 
   // Build output specs
-  // Allocate a slot for the render frame output (RenderFrameIR object)
-  const renderFrameSlot = (maxSlotUsed + 1) as ValueSlot;
-
-  // Add SlotMetaEntry for render frame slot (object storage for RenderFrameIR)
+  // TECH DEBT: renderFrameSlot is not a real value slot — it stores a RenderFrameIR object reference.
+  // It should be modeled as part of OutputSpecIR, not jammed into slotMeta with a fake type.
+  // For now, allocate through builder to avoid shadow allocation, but add slotMeta manually
+  // since the loop above has already completed.
+  const renderFrameSlot = builder.allocTypedSlot(canonicalType(FLOAT), 'renderFrame');
   slotMeta.push({
     slot: renderFrameSlot,
     storage: 'object',
     offset: storageOffsets.object++,
-    stride: 1, // Object slots store a single reference
-    type: canonicalType(FLOAT), // Type is irrelevant for RenderFrameIR object slot
+    stride: 1,
+    type: canonicalType(FLOAT),
   });
 
-  // Create OutputSpecIR for render frame
   const outputs: OutputSpecIR[] = [{
     kind: 'renderFrame',
     slot: renderFrameSlot,

@@ -16,7 +16,8 @@
  * @module runtime/ContinuityApply
  */
 
-import type { StepContinuityApply, ValueSlot } from '../compiler/ir/types';
+import type { StepContinuityApply } from '../compiler/ir/types';
+import type { ValueSlot } from '../compiler/ir/Indices';
 import type { RuntimeState } from './RuntimeState';
 import type { ContinuityState, MappingState, StableTargetId } from './ContinuityState';
 import { getOrCreateTargetState } from './ContinuityState';

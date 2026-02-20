@@ -12,9 +12,9 @@
  * Abandoning mid-frame would leave incomplete Phase 2 writes.
  */
 
-import type { CompiledProgramIR, ValueSlot } from '../compiler/ir/program';
+import type { CompiledProgramIR } from '../compiler/ir/program';
 import type { ScheduleIR } from '../compiler/backend/schedule-program';
-import type { Step, InstanceDecl, DomainInstance, StepRender, StateMapping, StableStateId, StateSlotId } from '../compiler/ir/types';
+import type { Step, InstanceDecl, DomainInstance, StepRender, StateMapping, StableStateId } from '../compiler/ir/types';
 import type { IrInstanceId as InstanceId } from '../types';
 import { instanceId as makeInstanceId } from '../core/ids';
 import type { RuntimeState } from './RuntimeState';
@@ -29,6 +29,7 @@ import { createStableDomainInstance, createUnstableDomainInstance } from './Doma
 import { assembleRenderFrame, type AssemblerContext } from './RenderAssembler';
 import { resolveCameraFromGlobals } from './CameraResolver';
 import { requireManyInstance } from '../core/canonical-types';
+import type { ValueSlot, StateSlotId } from '../compiler/ir/Indices';
 import { SYSTEM_PALETTE_SLOT } from '../compiler/ir/Indices';
 import { evaluateValueExprSignal, evaluateConstructSignal } from './ValueExprSignalEvaluator';
 import { evaluateValueExprEvent } from './ValueExprEventEvaluator';

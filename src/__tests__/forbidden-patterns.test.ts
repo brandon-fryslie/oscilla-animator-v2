@@ -529,6 +529,68 @@ describe('Forbidden Patterns (Type System Invariants)', () => {
 
   });
 
+  // =============================================================================
+  // Scheduler Slot Allocation Prevention
+  // =============================================================================
+
+  describe('Scheduler Slot Allocation Prevention', () => {
+    // [LAW:one-source-of-truth] All slot allocation goes through IRBuilder.
+    // The scheduler (pass 7) must be pure ordering — no resource allocation.
+    // Shadow allocators bypass the builder, causing slotMeta gaps, debug probe
+    // mismatches, and storage class errors.
+
+    const schedulerFile = 'src/compiler/backend/schedule-program.ts';
+
+    it('scheduler must not call allocTypedSlot', () => {
+      const matches = grepSrc('allocTypedSlot', schedulerFile);
+      expect(
+        matches,
+        'schedule-program.ts must not allocate slots — use continuity-pipeline.ts instead'
+      ).toEqual([]);
+    });
+
+    it('scheduler must not call allocSlot', () => {
+      const matches = grepSrc('allocSlot', schedulerFile);
+      expect(
+        matches,
+        'schedule-program.ts must not allocate slots — use continuity-pipeline.ts instead'
+      ).toEqual([]);
+    });
+
+    it('scheduler must not call registerSlotType', () => {
+      const matches = grepSrc('registerSlotType', schedulerFile);
+      expect(
+        matches,
+        'schedule-program.ts must not register slot types — allocation belongs in continuity-pipeline.ts'
+      ).toEqual([]);
+    });
+
+    it('scheduler must not fabricate ValueSlot via cast', () => {
+      const matches = grepSrc('as ValueSlot', schedulerFile);
+      expect(
+        matches,
+        'schedule-program.ts must not cast to ValueSlot — slots come pre-allocated from continuity-pipeline.ts'
+      ).toEqual([]);
+    });
+
+    it('scheduler must not contain a shadow slot counter', () => {
+      // Pattern: let nextSlot = ...; or let slotCounter = ...
+      const matches = grepSrc('let nextSlot\\|let slotCounter\\|slotAllocator', schedulerFile);
+      expect(
+        matches,
+        'schedule-program.ts must not contain shadow slot counters — allocation belongs in continuity-pipeline.ts'
+      ).toEqual([]);
+    });
+
+    it('scheduler must not import getSlotCount', () => {
+      const matches = grepSrc('getSlotCount', schedulerFile);
+      expect(
+        matches,
+        'schedule-program.ts must not use getSlotCount — it has no allocation responsibilities'
+      ).toEqual([]);
+    });
+  });
+
   describe('Config Access Patterns', () => {
 
     it('no config?. in block lower() functions', () => {

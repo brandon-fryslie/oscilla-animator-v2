@@ -175,9 +175,9 @@ case 'extract': {
 Pro: Minimal change, construct fast path preserved, generic fallback.
 Con: Three code paths (but clearly prioritized).
 
-### Recommended: Option C (hybrid)
+### Recommended: Option B (slot read on RuntimeState)
 
-Option C is the smallest delta from the current workaround and adds the generic capability. The construct traversal is a valid optimization (avoids slot lookup), and the f64 fallback handles everything else.
+The construct traversal "fast path" in Option C is premature optimization. Benchmarking estimate: ~10-30ns difference per call. A typical frame has 5-50 extract evaluations; at 60fps the total difference is <0.1ms/sec — unmeasurable. One clean code path (f64 slot read) is better than three. Drop the construct special-case entirely.
 
 ### Patterns to Follow
 - `SlotLookupCache.ts` caching pattern (WeakMap keyed by program)

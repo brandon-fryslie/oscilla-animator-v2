@@ -6,7 +6,7 @@
  */
 
 import { makeAutoObservable, runInAction } from 'mobx';
-import type { CompiledProgramIR, ValueSlot, DebugIndexIR } from '../compiler/ir/program';
+import type { CompiledProgramIR, DebugIndexIR } from '../compiler/ir/program';
 import type { RuntimeState } from '../runtime/RuntimeState';
 import type { RenderBufferArena } from '../render/RenderBufferArena';
 import type { RenderFrameIR } from '../render/types';
@@ -23,8 +23,7 @@ import type {
   BlockSummary,
   BlockGroup,
 } from '../runtime/StepDebugTypes';
-import type { StateSlotId } from '../compiler/ir/types';
-import type { ValueExprId } from '../compiler/ir/Indices';
+import type { ValueSlot, StateSlotId, ValueExprId } from '../compiler/ir/Indices';
 import type { BlockId, PortId } from '../types';
 import { analyzeWhyNotEvaluated, type WhyNotResult } from '../runtime/WhyNotEvaluated';
 import { compilationInspector } from '../services/CompilationInspectorService';

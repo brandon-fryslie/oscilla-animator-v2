@@ -15,7 +15,8 @@ import { executeFrame } from '../../runtime/ScheduleExecutor';
 import { createRuntimeState, type RuntimeState } from '../../runtime/RuntimeState';
 import { getTestArena } from '../../runtime/__tests__/test-arena-helper';
 import type { ResolvedCameraParams } from '../../runtime/CameraResolver';
-import type { CompiledProgramIR, ValueSlot } from '../../compiler/ir/program';
+import type { CompiledProgramIR } from '../../compiler/ir/program';
+import type { ValueSlot } from '../../compiler/ir/Indices';
 
 
 // =============================================================================

@@ -8,7 +8,8 @@
  * caching lookup tables keyed on the (immutable) CompiledProgramIR.
  */
 
-import type { CompiledProgramIR, ValueSlot } from '../compiler/ir/program';
+import type { CompiledProgramIR } from '../compiler/ir/program';
+import type { ValueSlot } from '../compiler/ir/Indices';
 import type { ScheduleIR } from '../compiler/backend/schedule-program';
 
 /**

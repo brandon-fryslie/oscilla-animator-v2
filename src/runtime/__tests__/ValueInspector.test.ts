@@ -5,7 +5,8 @@ import {
   detectAnomalies,
 } from '../ValueInspector';
 import type { SlotLookup } from '../SlotLookupCache';
-import type { SlotMetaEntry, ValueSlot } from '../../compiler/ir/program';
+import type { SlotMetaEntry } from '../../compiler/ir/program';
+import type { ValueSlot } from '../../compiler/ir/Indices';
 import { createRuntimeState } from '../RuntimeState';
 import { canonicalSignal } from '../../core/canonical-types';
 import { FLOAT } from '../../core/canonical-types/payloads';

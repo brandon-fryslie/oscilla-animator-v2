@@ -3,7 +3,7 @@ import { describe, it, expect } from 'vitest';
 import { mapDebugEdges } from './mapDebugEdges';
 import type { Patch, Edge } from '../graph/Patch';
 import type { CompiledProgramIR, DebugIndexIR, PortBindingIR } from '../compiler/ir/program';
-import type { ValueSlot } from '../compiler/ir/program';
+import type { ValueSlot } from '../compiler/ir/Indices';
 import type { BlockId, PortId } from '../types';
 
 describe('mapDebugEdges', () => {
