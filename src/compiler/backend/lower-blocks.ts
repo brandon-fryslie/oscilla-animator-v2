@@ -140,10 +140,12 @@ function resolveInputsWithMultiInput(
   builder: OrchestratorIRBuilder,
   errors: CompileError[],
   blockOutputs?: Map<BlockIndex, Map<string, ValueRefExpr>>,
-  blockIdToIndex?: Map<string, BlockIndex>
-): Map<string, ValueRefExpr> {
+  blockIdToIndex?: Map<string, BlockIndex>,
+  failedBlocks?: ReadonlySet<BlockIndex>
+): MultiInputResolution {
   const resolved = resolveBlockInputs(block, edges, blocks);
   const inputRefs = new Map<string, ValueRefExpr>();
+  const upstreamFailedPorts = new Set<string>();
 
   for (const [slotId, spec] of resolved.entries()) {
     const { writers, combine, portType, endpoint } = spec;
@@ -159,9 +161,15 @@ function resolveInputsWithMultiInput(
       continue;
     }
 
-    // Convert writers to ValueRefs
+    // Convert writers to ValueRefs, skipping writers from failed upstream blocks
     const writerRefs: ValueRefExpr[] = [];
+    let failedWriterCount = 0;
     for (const writer of writers) {
+      // Skip writers whose source block already failed — cascade suppression
+      if (failedBlocks && blockIdToIndex && isWriterSourceFailed(writer, failedBlocks, blockIdToIndex)) {
+        failedWriterCount++;
+        continue;
+      }
       const writerRef = getWriterValueRef(writer, errors, blockOutputs, blockIdToIndex);
       if (writerRef !== null) {
         writerRefs.push(writerRef);
@@ -170,12 +178,17 @@ function resolveInputsWithMultiInput(
 
     // Handle different writer counts
     if (writerRefs.length === 0) {
-      // Should not happen - defaults are injected by resolveWriters
-      errors.push({
-        code: 'UpstreamError',
-        message: `No writers for required input ${endpoint.blockId}.${endpoint.slotId}`,
-        where: { blockId: endpoint.blockId, port: endpoint.slotId },
-      });
+      if (failedWriterCount > 0 && failedWriterCount === writers.length) {
+        // ALL writers came from failed blocks — suppress "No writers" error
+        upstreamFailedPorts.add(slotId);
+      } else {
+        // Genuine missing writer (not caused by upstream failure)
+        errors.push({
+          code: 'UpstreamError',
+          message: `No writers for required input ${endpoint.blockId}.${endpoint.slotId}`,
+          where: { blockId: endpoint.blockId, port: endpoint.slotId },
+        });
+      }
       continue;
     }
 
@@ -217,7 +230,7 @@ function resolveInputsWithMultiInput(
     inputRefs.set(slotId, combinedRef);
   }
 
-  return inputRefs;
+  return { inputRefs, upstreamFailedPorts };
 }
 
 /**
@@ -276,6 +289,35 @@ function getWriterValueRef(
   // If we reach here with an unresolved wire, it's a real error.
 
   return null;
+}
+
+// =============================================================================
+// Cascade Suppression Helpers
+// =============================================================================
+
+/**
+ * Result of multi-input resolution with cascade tracking.
+ */
+interface MultiInputResolution {
+  /** Resolved input ValueRefs (same as before) */
+  inputRefs: Map<string, ValueRefExpr>;
+  /** Ports where ALL writers came from failed upstream blocks */
+  upstreamFailedPorts: Set<string>;
+}
+
+/**
+ * Check if a writer's source block is in the failed set.
+ *
+ * Pure predicate — no side effects or error accumulation.
+ */
+function isWriterSourceFailed(
+  writer: Writer,
+  failedBlocks: ReadonlySet<BlockIndex>,
+  blockIdToIndex: ReadonlyMap<string, BlockIndex>
+): boolean {
+  if (writer.kind !== 'wire') return false;
+  const sourceIndex = blockIdToIndex.get(writer.from.blockId);
+  return sourceIndex !== undefined && failedBlocks.has(sourceIndex);
 }
 
 // =============================================================================
@@ -367,7 +409,8 @@ function lowerBlockInstance(
   portTypes?: ReadonlyMap<PortKey, CanonicalType>,
   existingOutputs?: Partial<LowerResult>,
   addressRegistry?: import('../../graph/address-registry').AddressRegistry,
-  collectEdgeTypes?: ReadonlyMap<CollectEdgeKey, CanonicalType>
+  collectEdgeTypes?: ReadonlyMap<CollectEdgeKey, CanonicalType>,
+  failedBlocks?: ReadonlySet<BlockIndex>
 ): Map<string, ValueRefExpr> {
   const outputRefs = new Map<string, ValueRefExpr>();
   const blockDef = getBlockDefinition(block.type);
@@ -388,9 +431,13 @@ function lowerBlockInstance(
   try {
     // Collect input ValueRefs
     // Use resolveInputsWithMultiInput if edges and blocks available
-    const inputsById: Record<string, ValueRefExpr> = (edges !== undefined && blocks !== undefined)
-      ? Object.fromEntries(resolveInputsWithMultiInput(block, edges, blocks, builder, errors, blockOutputs, blockIdToIndex).entries())
+    const multiInputResult: MultiInputResolution | undefined = (edges !== undefined && blocks !== undefined)
+      ? resolveInputsWithMultiInput(block, edges, blocks, builder, errors, blockOutputs, blockIdToIndex, failedBlocks)
+      : undefined;
+    const inputsById: Record<string, ValueRefExpr> = multiInputResult
+      ? Object.fromEntries(multiInputResult.inputRefs.entries())
       : {};
+    const upstreamFailedPorts = multiInputResult?.upstreamFailedPorts ?? new Set<string>();
 
     const inputs: ValueRefExpr[] = [];
     let hasUnresolvedInputs = false;
@@ -405,8 +452,11 @@ function lowerBlockInstance(
       const resolved = inputsById[portId];
       if (resolved !== undefined) {
         inputs.push(resolved);
+      } else if (upstreamFailedPorts.has(portId)) {
+        // Suppress "Unresolved input" — caused by upstream failure, not this block
+        hasUnresolvedInputs = true;
       } else {
-        // Accumulate error for unresolved required input
+        // Genuine unresolved input — not caused by upstream failure
         errors.push({
           code: "NotImplemented",
           message: `Unresolved input "${portId}" for block "${block.type}" (${block.id}). All inputs should be resolved by multi-input resolution.`,
@@ -829,7 +879,8 @@ function lowerSCCTwoPass(
   instanceContextByBlock: Map<BlockIndex, InstanceId>,
   portTypes: ReadonlyMap<PortKey, CanonicalType>,
   options?: Pass6Options,
-  collectEdgeTypes?: ReadonlyMap<CollectEdgeKey, CanonicalType>
+  collectEdgeTypes?: ReadonlyMap<CollectEdgeKey, CanonicalType>,
+  failedBlocks?: Set<BlockIndex>
 ): void {
   // Storage for phase 1 results
   // Phase 1 returns symbolic outputs + effects; binding happens before registration
@@ -990,12 +1041,19 @@ function lowerSCCTwoPass(
       portTypes,
       existingOutputs,
       options?.addressRegistry,
-      collectEdgeTypes
+      collectEdgeTypes,
+      failedBlocks
     );
 
     // Update blockOutputs (may overwrite phase 1 results, but should be identical)
     if (outputRefs.size > 0) {
       blockOutputs.set(blockIndex, outputRefs);
+    } else {
+      // Block produced no outputs — if it has declared outputs, mark as failed
+      const blockDef = getBlockDefinition(block.type);
+      if (blockDef && Object.keys(blockDef.outputs).length > 0 && failedBlocks) {
+        failedBlocks.add(blockIndex);
+      }
     }
 
     // Emit BlockLowered event
@@ -1064,8 +1122,9 @@ function lowerSCCTwoPass(
         const sourceIdx = edge.fromBlock;
         if (!sccBlockIndices.has(sourceIdx)) continue; // External dependency, already available
 
-        // Is the source lowered?
-        if (!lowered.has(sourceIdx)) {
+        // Is the source lowered or failed? (failed blocks won't produce outputs,
+        // but their failure is recorded — don't stall progress for downstream)
+        if (!lowered.has(sourceIdx) && !(failedBlocks?.has(sourceIdx))) {
           canLower = false;
           break;
         }
@@ -1234,6 +1293,9 @@ export function pass6BlockLowering(
   const blockOutputs = new Map<BlockIndex, Map<string, ValueRefExpr>>();
   const errors: CompileError[] = [];
 
+  // Track blocks that failed to lower — downstream blocks skip cascade errors
+  const failedBlocks = new Set<BlockIndex>();
+
   // Track instance context for propagation
   const instanceContextByBlock = new Map<BlockIndex, InstanceId>();
 
@@ -1267,7 +1329,8 @@ export function pass6BlockLowering(
         instanceContextByBlock,
         validated.portTypes,
         options,
-        validated.collectEdgeTypes
+        validated.collectEdgeTypes,
+        failedBlocks
       );
     } else {
       // Single-pass lowering for trivial SCCs (no cycles)
@@ -1305,11 +1368,18 @@ export function pass6BlockLowering(
           validated.portTypes,
           undefined, // existingOutputs
           options?.addressRegistry,
-          validated.collectEdgeTypes
+          validated.collectEdgeTypes,
+          failedBlocks
         );
 
         if (outputRefs.size > 0) {
           blockOutputs.set(blockIndex, outputRefs);
+        } else {
+          // Block produced no outputs — if it has declared outputs, mark as failed
+          const blockDef = getBlockDefinition(block.type);
+          if (blockDef && Object.keys(blockDef.outputs).length > 0) {
+            failedBlocks.add(blockIndex);
+          }
         }
 
         // Emit BlockLowered event if EventHub is available
