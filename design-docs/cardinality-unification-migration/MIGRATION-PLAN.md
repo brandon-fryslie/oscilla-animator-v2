@@ -184,12 +184,20 @@ Once all writers and readers use the arena:
 - Schedule: emits `StepMaterialize(count=1)` instead of `StepEvalValue`
 - Materializer handles count=1 natively → writes to arena slice
 
-### 3c. Convert Simple Math Blocks
+### 3c. Prime the Pipeline (~10-20 easy/medium blocks)
 
-- `src/blocks/math/add.ts`, `sub.ts`, `mul.ts`, `div.ts`
-- `src/blocks/math/sin.ts`, `cos.ts`
-- These use `zipAuto()` and have `cardinalityMode: 'preserve'`
-- Change: produce `LoweredField(count=1)` for cardinality-one outputs
+Convert a batch of straightforward blocks to exercise the pattern at scale:
+
+**Math blocks** (cardinality-generic, use `zipAuto()`):
+- `add.ts`, `sub.ts`, `mul.ts`, `div.ts`, `modulo.ts`
+- `sin.ts`, `cos.ts`
+- `clamp.ts`, `smoothstep.ts`, `wrap01.ts` (if signal-capable)
+- `scale-bias.ts`
+
+**Simple signal blocks:**
+- `oscillator.ts`, `phasor.ts`, `hash.ts`
+
+All use `cardinalityMode: 'preserve'`. Same mechanical change as Const.
 
 ### 3d. Validate
 
@@ -199,39 +207,48 @@ Once all writers and readers use the arena:
 - State write/read still works for converted blocks
 
 ### Success Criteria
-- Const + core math blocks fully materialized through arena
+- 10-20 blocks converted via materialization through arena
 - Mix of old-path (signal evaluator) and new-path (materializer) blocks coexist
 - All demo patches work
+- Pattern is proven, pipeline is primed
 
-## Phase 4: Convert Remaining Blocks
+## Phase 4: Convert Remaining Blocks — Hardest First
 
 **Goal:** All blocks produce `LoweredField`. No more `LoweredSignal`.
 
+**Strategy: hardest first.** Tackle the blocks that are most likely to reveal fundamental assumption failures BEFORE converting the remaining 90%. If Expression or Broadcast break the model, we find out now — not after converting everything else.
+
 ### Conversion Order
 
-**Wave 1 — Signal generators:**
-- `oscillator.ts`, `phasor.ts`, `hash.ts`
+**Wave 1 — Expression block (HARDEST):**
+- `src/blocks/math/expression.ts` — component reconstruction logic needs update
+- Dynamic type resolution + runtime reconstruction of components at lowering time
+- Special logic (lines ~161-197) extracts components and reconstructs — assumes signal evaluation
+- This is the block most likely to reveal if the model needs adjustment
+- If this works, everything else is easier
 
-**Wave 2 — Stateful blocks:**
+**Wave 2 — Broadcast semantics change (HARD):**
+- `src/blocks/field/broadcast.ts` — input changes from "signal" to "field of cardinality 1"
+- Semantically: now a cardinality-1-to-many expansion (still correct, but adapter matching changes)
+- Adapter spec: `from: { extent: 'any' }` — does auto-insertion still work?
+- Materializer broadcast kernel reads signal inputs via `evaluateValueExprSignal()` — needs arena read
+- Multi-component broadcast passes `signalComponents` separately — rethink with materialized inputs
+
+**Wave 3 — Multi-component / construct (MEDIUM-HARD):**
+- Blocks producing vec3/vec4/color construct expressions
+- Materializer already handles construct for fields (ValueExprMaterializer.ts:96-104)
+- For count=1, loop runs once. Each component materializes to single float. Works.
+- Delete `evaluateConstructSignal()` from ScheduleExecutor after this wave
+
+**Wave 4 — Stateful blocks (MEDIUM):**
 - `accumulator.ts`, `unit-delay.ts`, `lag.ts`
 - State allocation unchanged (1 value per state slot, still Float64 in `state.state[]`)
 - State read/write steps are independent of value storage
+- Two-phase lowering (lowerOutputsOnly + lower) — verify stateRead expr types are correct for materialization
 
-**Wave 3 — Multi-component (vec3, color):**
-- Blocks producing construct expressions
-- Materializer already handles construct for fields (ValueExprMaterializer.ts:96-104)
-- For count=1, loop runs once. Each component materializes to single float. Works.
-- Delete `evaluateConstructSignal()` from ScheduleExecutor
-
-**Wave 4 — Expression block + remaining:**
-- `src/blocks/math/expression.ts` — component reconstruction logic needs update
-- Any remaining unconverted blocks
-- Adapter blocks, lens blocks
-
-**Wave 5 — Broadcast becomes cardinality upgrade:**
-- `src/blocks/field/broadcast.ts` — input changes from "signal" to "field of cardinality 1"
-- Semantically: now a cardinality-1-to-many expansion (still correct)
-- Lower function may need minor adjustment
+**Wave 5 — Remaining easy blocks (MOP UP):**
+- Any remaining unconverted adapter blocks, lens blocks, color blocks, layout blocks
+- Mechanical conversions following established pattern
 
 ### Per-wave verification
 - `npm run typecheck` passes
