@@ -20,6 +20,8 @@ import { ColorPalette } from './charts/ColorPalette';
 import { FieldBandChart } from './charts/FieldBandChart';
 import { RasterHeatmap } from './charts/RasterHeatmap';
 import { selectFieldCharts, type FieldChartId } from './vizSelector';
+import { ChartHelpButton } from './charts/ChartHelpButton';
+import type { HelpTopicId } from '../../help/types';
 import type { RendererSample, AggregateStats, HistoryView, BufferHistoryView, Stride, FieldHistoryView } from './types';
 import type { EdgeValueResult } from '../../services/DebugService';
 import type { EdgeMetadata } from '../../services/mapDebugEdges';
@@ -210,6 +212,12 @@ export function SignalValueSection({ value, meta, history }: {
   if (history) {
     const sampleCount = history.filled ? history.capacity : Math.min(history.writeIndex, history.capacity);
     children.push(
+      React.createElement('div', { key: 'sparkline-label', style: chartLabelRowStyle },
+        React.createElement('span', { style: chartLabelTextStyle }, 'sparkline'),
+        React.createElement(ChartHelpButton, { topicId: 'viz-sparkline' }),
+      )
+    );
+    children.push(
       React.createElement('div', { key: 'sparkline', style: debugMiniViewStyles.sparklineContainer },
         React.createElement(Sparkline, {
           history,
@@ -314,6 +322,39 @@ export function FieldValueSection({ value, meta, fieldHistory, fieldInstanceHist
 }
 
 // =============================================================================
+// Chart-to-Help-Topic Mapping (compile-time exhaustive via satisfies)
+// =============================================================================
+
+const CHART_HELP_TOPIC: Record<FieldChartId, HelpTopicId> = {
+  'color-palette': 'viz-color-palette',
+  'instance-sparkline': 'viz-sparkline',
+  'raster-heatmap': 'viz-raster-heatmap',
+  'band-chart': 'viz-band-chart',
+} satisfies Record<FieldChartId, HelpTopicId>;
+
+const CHART_LABELS: Record<FieldChartId, string> = {
+  'color-palette': 'palette',
+  'instance-sparkline': 'sparkline',
+  'raster-heatmap': 'heatmap',
+  'band-chart': 'band',
+};
+
+const chartLabelRowStyle: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  marginTop: '4px',
+};
+
+const chartLabelTextStyle: React.CSSProperties = {
+  fontSize: '9px',
+  color: '#555',
+  fontFamily: 'monospace',
+  textTransform: 'uppercase',
+  letterSpacing: '0.5px',
+};
+
+// =============================================================================
 // Chart Rendering Dispatch
 // =============================================================================
 
@@ -326,6 +367,13 @@ interface ChartRenderContext {
   fieldBufferHistory: BufferHistoryView | null;
 }
 
+function chartLabelRow(chartId: FieldChartId): React.ReactElement {
+  return React.createElement('div', { style: chartLabelRowStyle },
+    React.createElement('span', { style: chartLabelTextStyle }, CHART_LABELS[chartId]),
+    React.createElement(ChartHelpButton, { topicId: CHART_HELP_TOPIC[chartId] }),
+  );
+}
+
 function renderFieldChart(
   chartId: FieldChartId,
   ctx: ChartRenderContext,
@@ -333,6 +381,7 @@ function renderFieldChart(
   switch (chartId) {
     case 'color-palette':
       return React.createElement('div', { key: 'color-palette' },
+        chartLabelRow(chartId),
         React.createElement(ColorPalette, {
           buffer: ctx.buffer,
           count: ctx.laneCount,
@@ -344,6 +393,7 @@ function renderFieldChart(
     case 'instance-sparkline':
       return ctx.fieldInstanceHistory
         ? React.createElement('div', { key: 'instance-sparkline', style: debugMiniViewStyles.sparklineContainer },
+            chartLabelRow(chartId),
             React.createElement(Sparkline, {
               history: ctx.fieldInstanceHistory,
               width: 280,
@@ -356,6 +406,7 @@ function renderFieldChart(
     case 'raster-heatmap':
       return ctx.fieldBufferHistory
         ? React.createElement('div', { key: 'raster-heatmap', style: { marginTop: '4px' } },
+            chartLabelRow(chartId),
             React.createElement(RasterHeatmap, {
               history: ctx.fieldBufferHistory,
               width: 280,
@@ -367,6 +418,7 @@ function renderFieldChart(
     case 'band-chart':
       return ctx.fieldHistory
         ? React.createElement('div', { key: 'band-chart', style: { marginTop: '4px' } },
+            chartLabelRow(chartId),
             React.createElement(FieldBandChart, {
               history: ctx.fieldHistory,
               width: 280,

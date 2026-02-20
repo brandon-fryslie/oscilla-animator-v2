@@ -19,6 +19,7 @@ import { DebugMiniViewPanel } from './panels/DebugMiniViewPanel';
 import { SettingsPanelWrapper } from './panels/SettingsPanelWrapper';
 import { CompositeEditorPanel } from './panels/CompositeEditorPanel';
 import { StepDebugPanel } from './panels/StepDebugPanel';
+import { HelpPanelWrapper } from './panels/HelpPanelWrapper';
 
 /**
  * Panel group assignments for layout.
@@ -39,7 +40,8 @@ export interface PanelDefinition {
   component: string;
   title: string;
   group: PanelGroup;
-  floating?: boolean;  // true for floating panels
+  floating?: boolean;       // true for floating panels
+  initiallyHidden?: boolean; // true for panels opened on-demand only
 }
 
 /**
@@ -71,6 +73,9 @@ export const PANEL_DEFINITIONS: PanelDefinition[] = [
   { id: 'debug-miniview', component: 'debug-miniview', title: 'Debug', group: 'bottom-right' },
   { id: 'step-debugger', component: 'step-debugger', title: 'Step Debugger', group: 'bottom-right' },
 
+  // Help (not in default layout — opened on demand by ChartHelpButton)
+  { id: 'help', component: 'help', title: 'Help', group: 'bottom-right', initiallyHidden: true },
+
   // Floating
   { id: 'preview', component: 'preview', title: 'Preview', group: 'preview-float', floating: true },
 ];
@@ -94,4 +99,5 @@ export const PANEL_COMPONENTS = {
   'debug-miniview': DebugMiniViewPanel,
   'settings': SettingsPanelWrapper,
   'step-debugger': StepDebugPanel,
+  'help': HelpPanelWrapper,
 };

@@ -44,13 +44,14 @@ interface LayoutCallbacks {
  */
 export function createDefaultLayout(api: DockviewApi, callbacks: LayoutCallbacks = {}): void {
   // Get panel definitions by group
-  const leftTopPanels = PANEL_DEFINITIONS.filter((p) => p.group === 'left-top');
-  const leftBottomPanels = PANEL_DEFINITIONS.filter((p) => p.group === 'left-bottom');
-  const centerPanels = PANEL_DEFINITIONS.filter((p) => p.group === 'center');
-  const rightTopPanels = PANEL_DEFINITIONS.filter((p) => p.group === 'right-top');
-  const bottomLeftPanels = PANEL_DEFINITIONS.filter((p) => p.group === 'bottom-left');
-  const bottomRightPanels = PANEL_DEFINITIONS.filter((p) => p.group === 'bottom-right');
-  const floatingPanels = PANEL_DEFINITIONS.filter((p) => p.floating);
+  const visible = PANEL_DEFINITIONS.filter((p) => !p.initiallyHidden);
+  const leftTopPanels = visible.filter((p) => p.group === 'left-top');
+  const leftBottomPanels = visible.filter((p) => p.group === 'left-bottom');
+  const centerPanels = visible.filter((p) => p.group === 'center');
+  const rightTopPanels = visible.filter((p) => p.group === 'right-top');
+  const bottomLeftPanels = visible.filter((p) => p.group === 'bottom-left');
+  const bottomRightPanels = visible.filter((p) => p.group === 'bottom-right');
+  const floatingPanels = visible.filter((p) => p.floating);
 
   // Validate we have required panels
   if (leftTopPanels.length === 0) {
