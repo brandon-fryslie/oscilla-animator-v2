@@ -41,6 +41,21 @@ you the oscillation rate. For a position field, it tells you if something is vib
 gives you a confidence measure — if the peak is sharp, annotate with the frequency. If it's broad/absent, don't show
 anything (the signal isn't periodic).
 
+WHEN TO USE
+
+Great for: Anything periodic or time-varying where the waveform shape matters. Phasor output (sawtooth), Oscillator output
+(sine), Accumulator output (ramp), Lag/Slew output (smoothed transitions), Noise output (random walk character),
+SampleHold output (staircase). Also ExternalInput/ExternalVec2 — "is the mouse doing what I think?"
+
+Dud when: The field's value is spatially interesting but temporally static. GridLayoutUV position output is a great
+example — 400 positions that are constant over time. The sparkline would show a flat line for whichever instance you
+picked. You'd learn "instance 0 is at x=0.05" which tells you nothing about the layout pattern. Same for Broadcast of a
+Const — every instance has the same constant value, sparkline shows a flat line forever. Also a dud for FieldConstColor —
+constant field, no temporal variation.
+
+Also a dud for: DomainIndex / StableIdHash — these are integer/hash fields where the per-instance identity is the point,
+not the waveform. A sparkline of "instance 0's domain index = 0" is tautological.
+
 
 ===
 
@@ -97,8 +112,26 @@ becomes visible as contiguous colored bands. A traveling wave through the field 
 instead of random noise. The sort should be computed once when the heatmap first fills, then held stable (re-sorting every
 frame would be nauseating). A subtle divider line or fade at the boundary between "similar groups" makes clusters pop.
 
+WHEN TO USE
+
+Great for: Revealing spatiotemporal structure — patterns across instances AND across time simultaneously. GridLayoutUV
+position fed through Oscillator or Phasor: traveling wave patterns appear as diagonal stripes. Noise with different seeds
+per instance: reveals correlation (are instances independent or coupled?). Lag/Slew applied to a field: you can literally
+see the smoothing propagate. HueRainbow → HueShift with animated shift: the color wheel rotation is visible as a scrolling
+gradient.
+
+Dud when: Instance count is very small (< ~8). With 3 instances, you get 3 rows — it's just 3 sparklines stacked, and a
+sparkline overlay would be clearer. Also poor when instance ordering is meaningless — the heatmap rows are ordered by
+instance index, and if instance index has no spatial meaning (e.g., randomly assigned IDs), the vertical axis is noise.
+The instance-reordering enhancement fixes this, but without it, a field of 400 random-phase oscillators looks like TV
+static.
+
+Also a dud for: color payload — you'd need an RGB heatmap (3 channels) or HSL conversion. A single-channel intensity
+heatmap loses the color information that the palette strip shows perfectly.
+
 
 ===
+
 
 
 Current-frame histogram — 7/10
@@ -153,7 +186,24 @@ Overlay a dim "expected" distribution behind the actual distribution. For a phas
 distribution is uniform. For a sine wave, the expected distribution is the arcsine distribution (high density near peaks,
 low near zero crossings). Render this as a dim dashed outline. Deviations from expected immediately pop — "why are there
 more instances near 0.7 than expected?" This turns a simple histogram into a diagnostic tool.
-’
+
+WHEN TO USE
+
+2. Current-Frame Histogram
+
+Great for: Understanding the distribution shape across instances right now. Phasor → Broadcast → Add (phase-staggered
+oscillators): are the phases uniformly spread or clustered? Noise field: is the noise Gaussian-ish or uniform? HueRainbow
+output: are the hues evenly spread across the spectrum? NormalizeRange / DenormalizeRange output: did the normalization
+actually map to [0,1]? Clamp output: how many instances are hitting the clamp boundaries (spikes at edges = many clamped)?
+
+Dud when: The field has very few distinct values. CameraProjectionConst output: it's either 0 or 1, the histogram is two
+spikes — the percentage bar we already built is strictly better. EventToSignalMask (bool field): same, two bins.
+DomainIndex with 400 instances: you get 400 bins each with count 1 — it's just a uniform bar, tells you nothing. Also poor
+for color payload: a 1D histogram can't show color distribution (you need the palette strip we already have).
+
+Also awkward for: Very high-stride payloads (vec3, vec4) — a histogram of which component? You'd need to pick one, or show
+3-4 overlaid histograms, which gets noisy.
+
 
   ---
 Tier 2: Useful in Specific Cases
@@ -194,6 +244,17 @@ Visual design: Three band opacities: outer (p5↔p95) = rgba(78, 205, 196, 0.06)
 0.12), inner (p25↔p75) = rgba(78, 205, 196, 0.22) (current IQR opacity). Median line stays #4ecdc4. The gradient of
 opacity from outer to inner creates the "fan" effect — dense in the middle, fading at the edges.
 
+WHEN TO USE
+
+Great for: Same situations as the band chart, but gives more information about distribution shape. If p25-p75 is narrow
+but p10-p90 is wide, you know there are outliers. Clamp output over time: watching the percentile bands compress as values
+get squeezed to the clamp range. Position convergence scenarios where you want finer-grained envelope information than
+just min/max.
+
+Dud when: Same duds as the band chart — fundamentally useless for periodic data. The extra percentile bands don't help
+when all percentiles are approximately constant.
+
+
 ===
 
 Multi-instance overlay (2-4 traces) — 6/10
@@ -232,93 +293,18 @@ across the field's spatial structure. For a CircleLayout with 400 instances, thi
 Interaction (future): If the heatmap is also implemented, clicking a row in the heatmap could add that instance to the
 overlay set. But for v1, the automatic evenly-spaced selection is good enough and requires no UI interaction.
 
+Great for: Debugging specific phase relationships. "Instance 0 and instance 200 should be exactly 180 degrees out of phase
+— are they?" Two Lag outputs with different smoothing times overlaid. Comparing Oscillator output at different points in
+the signal chain (before/after Slew, before/after Clamp). Targeted debugging where you know which instances to compare.
+
+Dud when: You don't know which instances matter (most of the time). With 400 instances, picking "instance 0 and instance
+1" is arbitrary. Also bad when instances are identical (after a Broadcast of a signal, all instances have the same value —
+overlaying 4 of them shows one line).
+
 ===
 
-  ---
-Tier 3: Diminishing Returns
+WHAT WE HAVE NOW (Basic and lame)
 
-Triggered waveform — 5/10 (usefulness ÷ complexity)
-True oscilloscope-style: detect rising-edge crossings in one instance, phase-align all sweeps. Shows stable waveform even
-for high-frequency oscillators. Gorgeous when it works.
-
-- But: requires trigger detection, sweep buffering, edge-case handling for non-periodic signals
-- High complexity for a debug hover tooltip
-- The single-instance sparkline gets you 80% of this value at 20% of the cost
-
-Phosphor persistence — 4/10 (usefulness ÷ complexity)
-Overlay multiple frames with luminance decay. Shows distribution stability over time as brightness variation.
-
-- Beautiful, but the raster heatmap shows the same information more legibly
-- High implementation complexity (accumulation buffer, decay, blending)
-
-Current band chart (status quo) — 2/10 for phased data, 5/10 for position/color
-Shows temporal evolution of statistics. Useful when the statistics themselves are the interesting thing (e.g., "are
-positions converging?"). Useless when the per-frame distribution is constant (phased oscillators, uniform random).
-
-  ---
-My recommendation
-
-The single-instance sparkline and current-frame histogram are high-value, low-cost additions that work with existing
-infrastructure. The raster heatmap is the killer feature but needs a small buffer history addition. All three together
-would give you spatial distribution (histogram), temporal waveform (sparkline), and spatiotemporal structure (heatmap).
-
-
-=======
-
-When to use them
-
-When Each Visualization Is a Dud
-
-1. Single-Instance Sparkline
-
-Great for: Anything periodic or time-varying where the waveform shape matters. Phasor output (sawtooth), Oscillator output
-(sine), Accumulator output (ramp), Lag/Slew output (smoothed transitions), Noise output (random walk character),
-SampleHold output (staircase). Also ExternalInput/ExternalVec2 — "is the mouse doing what I think?"
-
-Dud when: The field's value is spatially interesting but temporally static. GridLayoutUV position output is a great
-example — 400 positions that are constant over time. The sparkline would show a flat line for whichever instance you
-picked. You'd learn "instance 0 is at x=0.05" which tells you nothing about the layout pattern. Same for Broadcast of a
-Const — every instance has the same constant value, sparkline shows a flat line forever. Also a dud for FieldConstColor —
-constant field, no temporal variation.
-
-Also a dud for: DomainIndex / StableIdHash — these are integer/hash fields where the per-instance identity is the point,
-not the waveform. A sparkline of "instance 0's domain index = 0" is tautological.
-
-  ---
-2. Current-Frame Histogram
-
-Great for: Understanding the distribution shape across instances right now. Phasor → Broadcast → Add (phase-staggered
-oscillators): are the phases uniformly spread or clustered? Noise field: is the noise Gaussian-ish or uniform? HueRainbow
-output: are the hues evenly spread across the spectrum? NormalizeRange / DenormalizeRange output: did the normalization
-actually map to [0,1]? Clamp output: how many instances are hitting the clamp boundaries (spikes at edges = many clamped)?
-
-Dud when: The field has very few distinct values. CameraProjectionConst output: it's either 0 or 1, the histogram is two
-spikes — the percentage bar we already built is strictly better. EventToSignalMask (bool field): same, two bins.
-DomainIndex with 400 instances: you get 400 bins each with count 1 — it's just a uniform bar, tells you nothing. Also poor
-for color payload: a 1D histogram can't show color distribution (you need the palette strip we already have).
-
-Also awkward for: Very high-stride payloads (vec3, vec4) — a histogram of which component? You'd need to pick one, or show
-3-4 overlaid histograms, which gets noisy.
-
-  ---
-3. Raster Heatmap
-
-Great for: Revealing spatiotemporal structure — patterns across instances AND across time simultaneously. GridLayoutUV
-position fed through Oscillator or Phasor: traveling wave patterns appear as diagonal stripes. Noise with different seeds
-per instance: reveals correlation (are instances independent or coupled?). Lag/Slew applied to a field: you can literally
-see the smoothing propagate. HueRainbow → HueShift with animated shift: the color wheel rotation is visible as a scrolling
-gradient.
-
-Dud when: Instance count is very small (< ~8). With 3 instances, you get 3 rows — it's just 3 sparklines stacked, and a
-sparkline overlay would be clearer. Also poor when instance ordering is meaningless — the heatmap rows are ordered by
-instance index, and if instance index has no spatial meaning (e.g., randomly assigned IDs), the vertical axis is noise.
-The instance-reordering enhancement fixes this, but without it, a field of 400 random-phase oscillators looks like TV
-static.
-
-Also a dud for: color payload — you'd need an RGB heatmap (3 channels) or HSL conversion. A single-channel intensity
-heatmap loses the color information that the palette strip shows perfectly.
-
-  ---
 4. Band Chart (min/max/p25/p75/mean — what we have now)
 
 Great for: Fields where the envelope is the interesting thing. GridLayoutUV position over time: are the positions
@@ -330,46 +316,6 @@ lost. Position fields in general where you want to know "are things spreading ou
 Dud when: Everything you just saw. Phased periodic data (Phasor, Oscillator fields): min/max are constants, mean is a
 constant, the chart shows nothing. Hash/StableIdHash fields: statistics of hash values are meaningless. Any field where
 the distribution is stable but the individual values are interesting — which is most animation fields.
-
-  ---
-5. DPO (Triggered Waveform + Phosphor Persistence)
-
-Great for: This is THE visualization for periodic field data. Phasor field, Oscillator field, anything downstream of them
-(Smoothstep of a phasor, Multiply of an oscillator and a position). Shows the actual waveform shape with phase/amplitude
-spread across instances visible as band thickness. Slew applied to a square wave field: you'd see the rounding of the
-edges with the slew rate visible as the transition slope. PowerGamma of a phasor: the gamma curve distortion is directly
-visible as waveform shape change. Any time you want to answer "what does this oscillation actually look like across
-instances?"
-
-Dud when: The signal isn't periodic. GridLayoutUV positions (constant), Noise (aperiodic random), DomainIndex (constant
-integers), ExternalInput (user-driven, no trigger rhythm). The trigger detection would either never fire (no crossings) or
-fire on noise and show garbage. Non-periodic signals need the untriggered sparkline, not a triggered sweep.
-
-Also awkward for: Very low frequency signals where the period is longer than a few seconds — the sweep would be extremely
-slow to fill, and the display would feel laggy. And for multi-frequency signals (sum of two incommensurate oscillators)
-where there's no single trigger period that phase-aligns the waveform.
-
-  ---
-6. Animated Percentile Fan (enhanced band chart)
-
-Great for: Same situations as the band chart, but gives more information about distribution shape. If p25-p75 is narrow
-but p10-p90 is wide, you know there are outliers. Clamp output over time: watching the percentile bands compress as values
-get squeezed to the clamp range. Position convergence scenarios where you want finer-grained envelope information than
-just min/max.
-
-Dud when: Same duds as the band chart — fundamentally useless for periodic data. The extra percentile bands don't help
-when all percentiles are approximately constant.
-
-  ---
-7. Multi-Instance Overlay (2-4 traces)
-
-Great for: Debugging specific phase relationships. "Instance 0 and instance 200 should be exactly 180 degrees out of phase
-— are they?" Two Lag outputs with different smoothing times overlaid. Comparing Oscillator output at different points in
-the signal chain (before/after Slew, before/after Clamp). Targeted debugging where you know which instances to compare.
-
-Dud when: You don't know which instances matter (most of the time). With 400 instances, picking "instance 0 and instance
-1" is arbitrary. Also bad when instances are identical (after a Broadcast of a signal, all instances have the same value —
-overlaying 4 of them shows one line).
 
   ---
 Quick Reference: What to Show by Block Output Type
@@ -404,13 +350,7 @@ Quick Reference: What to Show by Block Output Type
 │ phasor)                                              │                               │                                 │
 └──────────────────────────────────────────────────────┴───────────────────────────────┴─────────────────────────────────┘
 
-✻ Sautéed for 1m 27s
-
-❯ BTW ports are more important to reference than blocks.  And be aware that adapters will almost certainly be involved
-
 ⏺ Good point — you hover edges which connect ports, not blocks. Let me grab the actual port names.
-
-⏺ Searched for 4 patterns (ctrl+o to expand)
 
 ⏺ Now I have the port-level picture. Here's the corrected reference:
 
@@ -542,6 +482,7 @@ Dud: Broadcast.field — all traces overlap perfectly
 Shines: Before/after comparison (same instance, different points in chain)
 Dud: High-instance-count fields where instances aren't individually meaningful
   ---
+
 Adapter Edge Gotcha
 
 When the user hovers an edge like Adapter_UnitCast.out → Oscillator.phase, the type on that edge is float:turns (the

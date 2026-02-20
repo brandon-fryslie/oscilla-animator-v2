@@ -18,31 +18,16 @@ Current band chart (status quo) — 2/10 for phased data, 5/10 for position/colo
 Shows temporal evolution of statistics. Useful when the statistics themselves are the interesting thing (e.g., "are
 positions converging?"). Useless when the per-frame distribution is constant (phased oscillators, uniform random).
 
-  ---
-My recommendation
 
-The single-instance sparkline and current-frame histogram are high-value, low-cost additions that work with existing
-infrastructure. The raster heatmap is the killer feature but needs a small buffer history addition. All three together
-would give you spatial distribution (histogram), temporal waveform (sparkline), and spatiotemporal structure (heatmap).
 
-Want me to design these, or do you want to marinate on which ones are worth building?
-
-✻ Sautéed for 57s
-
-❯ I love all the ideas!  I've written them down.  I'm wondering if you can provide a bit more context about each so it
-doesn't get lost.  Anything that would be useful to an agent implementing it, but nothing that you need to search for
-or read any files.
-
-I have the core ideas for the Tier 1 and 2 visualizations recorded.  Now let's say we have unlimited time and money,
-and we want to be ostentatiously 'extra' and say 'Diminishing Returns?  Hold my 3am pot of coffee!'
+---
 
 How can you expand on Triggered waveform and Phosphor persistence to make THE MOST gorgeous and utterly dazzling
 display that makes people's first thought "WOW!" and second thought "I can't believe they spent so much time on
 that!".  But this is critical - DO NOT compromise usefulness in any way.  Improvements must be genuinely useful and
 can't be 'all looks no substance'.  Just don't let cost-benefit deter you.
 
-And if you have any recommendations for taking any of the other visualizations to the next level, provide them!  But
-you can rest assured the other animations are fully fleshed out and will be implemented already.
+---
 
 ⏺ The Triggered Waveform — Done Right
 
@@ -158,9 +143,21 @@ phases are spread). The thickness of the band directly shows the phase spread. I
 razor-thin bright line. If uniformly spread, it'd be a uniformly bright rectangle. Any structure in between tells you
 something real about the field.
 
-  ---
-Next-Level Enhancements for the Other Tiers
 
 
+WHEN TO USE
 
+Great for: This is THE visualization for periodic field data. Phasor field, Oscillator field, anything downstream of them
+(Smoothstep of a phasor, Multiply of an oscillator and a position). Shows the actual waveform shape with phase/amplitude
+spread across instances visible as band thickness. Slew applied to a square wave field: you'd see the rounding of the
+edges with the slew rate visible as the transition slope. PowerGamma of a phasor: the gamma curve distortion is directly
+visible as waveform shape change. Any time you want to answer "what does this oscillation actually look like across
+instances?"
 
+Dud when: The signal isn't periodic. GridLayoutUV positions (constant), Noise (aperiodic random), DomainIndex (constant
+integers), ExternalInput (user-driven, no trigger rhythm). The trigger detection would either never fire (no crossings) or
+fire on noise and show garbage. Non-periodic signals need the untriggered sparkline, not a triggered sweep.
+
+Also awkward for: Very low frequency signals where the period is longer than a few seconds — the sweep would be extremely
+slow to fill, and the display would feel laggy. And for multi-frequency signals (sum of two incommensurate oscillators)
+where there's no single trigger period that phase-aligns the waveform.
