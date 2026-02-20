@@ -24,7 +24,8 @@ import type { ScheduleIR } from './backend/schedule-program';
 import type { AcyclicOrLegalGraph } from './ir/patches';
 import type { EventHub } from '../events/EventHub';
 import { canonicalType, requireManyInstance } from '../core/canonical-types';
-import { deriveStorageLayout } from './ir/storage-class';
+import { deriveStorageLayout, deriveArenaDescriptor } from './ir/storage-class';
+import type { ArenaSlotDescriptor } from '../runtime/ArenaValueStore';
 import type { ValueExpr, ValueExprId } from './ir/value-expr';
 import type { Step } from './ir/types';
 import { FLOAT } from '../core/canonical-types';
@@ -306,6 +307,9 @@ function convertLinkedIRToProgram(
   // No parallel tracking sets needed.
   const slotTypes = builder.getSlotMetaInputs();
   const slotMeta: SlotMetaEntry[] = [];
+  const instances = builder.getInstances();
+  const arenaLayout: ArenaSlotDescriptor[] = [];
+  let arenaOffset = 0;
 
   const storageOffsets = {
     f64: 0,
@@ -330,6 +334,11 @@ function convertLinkedIRToProgram(
     storageOffsets[storage] += stride;
 
     slotMeta.push({ slot, storage, offset, stride, type });
+
+    // Arena descriptor: flat Float32Array layout for all numeric slots.
+    const desc = deriveArenaDescriptor(type, arenaOffset, instances, slotInfo.stride);
+    arenaLayout.push(desc);
+    arenaOffset += desc.length;
   }
 
   // Build output specs
@@ -345,6 +354,8 @@ function convertLinkedIRToProgram(
     stride: 1,
     type: canonicalType(FLOAT),
   });
+  // renderFrameSlot stores an object reference, not numeric data — excluded from arena.
+  arenaLayout.push({ offset: -1, stride: 0, laneCount: 0, length: 0 });
 
   const outputs: OutputSpecIR[] = [{
     kind: 'renderFrame',
@@ -556,6 +567,8 @@ function convertLinkedIRToProgram(
     instanceCountProvenance: unlinkedIR.instanceCountProvenance.size > 0
       ? unlinkedIR.instanceCountProvenance
       : undefined,
+    arenaLayout,
+    arenaTotalFloats: arenaOffset,
   };
 
   return program;

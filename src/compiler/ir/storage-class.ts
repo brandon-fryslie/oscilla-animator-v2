@@ -8,6 +8,9 @@
 
 import type { CanonicalType } from '../../core/canonical-types';
 import type { SlotMetaEntry } from './program';
+import type { ArenaSlotDescriptor } from '../../runtime/ArenaValueStore';
+import type { InstanceId } from './Indices';
+import type { InstanceDecl } from './types';
 import { requireInst, isMany, payloadStride } from '../../core/canonical-types';
 
 export interface StorageLayout {
@@ -36,4 +39,51 @@ export function deriveStorageLayout(
     ? 1
     : (overrideStride ?? payloadStride(type.payload));
   return { storage, stride };
+}
+
+// =============================================================================
+// Arena Descriptor Derivation
+// =============================================================================
+
+/**
+ * Resolve instance count from a many-cardinality value.
+ * For static counts returns count directly; for dynamic returns maxCount.
+ */
+function resolveInstanceCount(
+  instanceId: InstanceId,
+  instances: ReadonlyMap<InstanceId, InstanceDecl>,
+): number {
+  const decl = instances.get(instanceId);
+  if (!decl) throw new Error(`Unknown instance ${instanceId}`);
+  return typeof decl.count === 'number' ? decl.count : decl.maxCount;
+}
+
+/**
+ * Derive an ArenaSlotDescriptor for a slot.
+ *
+ * Unlike deriveStorageLayout (which models the old dual-store — object for many,
+ * f64 for scalars), the arena stores actual floats for ALL numeric slots.
+ * many-cardinality slots get laneCount from InstanceDecl rather than stride=1.
+ *
+ * [LAW:one-source-of-truth] Arena stride is always payloadStride(payload),
+ * arena laneCount is always from cardinality. No parallel derivation.
+ *
+ * @param type - Fully instantiated CanonicalType
+ * @param arenaOffset - Current bump-allocation offset
+ * @param instances - Instance declarations for resolving many-cardinality counts
+ * @param overrideStride - Optional stride override (from IRBuilder slot registration)
+ */
+export function deriveArenaDescriptor(
+  type: CanonicalType,
+  arenaOffset: number,
+  instances: ReadonlyMap<InstanceId, InstanceDecl>,
+  overrideStride?: number,
+): ArenaSlotDescriptor {
+  const card = requireInst(type.extent.cardinality, 'cardinality');
+  const stride = overrideStride ?? payloadStride(type.payload);
+  const laneCount = isMany(card)
+    ? resolveInstanceCount(card.instance.instanceId, instances)
+    : 1;
+  const length = stride * laneCount;
+  return { offset: arenaOffset, stride, laneCount, length };
 }

@@ -18,6 +18,7 @@ import type {
 import type { BlockId, PortId } from '../../types';
 import type { ValueExpr } from './value-expr';
 import type { KernelRegistry } from '../../runtime/KernelRegistry';
+import type { ArenaSlotDescriptor } from '../../runtime/ArenaValueStore';
 
 // =============================================================================
 // Version and Core Types
@@ -152,6 +153,19 @@ export interface CompiledProgramIR {
    * instance count ports (semantic: 'instanceCount').
    */
   readonly instanceCountProvenance?: InstanceCountProvenanceMap;
+
+  /**
+   * Arena layout — flat Float32Array descriptor for every slot.
+   * Indexed by slot ID (same ordering as slotMeta). Slots excluded from the
+   * arena (e.g. renderFrameSlot) get a sentinel: { offset: -1, stride: 0, laneCount: 0, length: 0 }.
+   *
+   * [LAW:one-source-of-truth] Arena layout is computed once during compilation
+   * from CanonicalType + InstanceDecl — no parallel derivation.
+   */
+  readonly arenaLayout: readonly ArenaSlotDescriptor[];
+
+  /** Total number of floats in the arena (sum of all descriptor lengths). */
+  readonly arenaTotalFloats: number;
 }
 
 // =============================================================================
