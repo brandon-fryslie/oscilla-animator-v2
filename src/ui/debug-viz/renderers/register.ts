@@ -12,17 +12,22 @@ import { genericNumericRenderer } from './GenericNumericRenderer';
 import { floatValueRenderer, createFloatValueRenderer } from './FloatValueRenderer';
 import { colorValueRenderer } from './ColorValueRenderer';
 import { vec2ValueRenderer } from './Vec2ValueRenderer';
+import { vec3ValueRenderer } from './Vec3ValueRenderer';
+import { vec4ValueRenderer } from './Vec4ValueRenderer';
+import { cameraProjectionRenderer } from './CameraProjectionRenderer';
 import { boolValueRenderer, eventValueRenderer } from './BoolEventValueRenderer';
 
 // Category fallbacks (tier 3)
 registerRenderer('category:numeric', genericNumericRenderer);
 registerRenderer('category:color', colorValueRenderer);
-registerRenderer('category:shape', genericNumericRenderer); // shape uses generic for now
 
 // Payload-level (tier 2)
 registerRenderer('float', floatValueRenderer);
 registerRenderer('color', colorValueRenderer);
 registerRenderer('vec2', vec2ValueRenderer);
+registerRenderer('vec3', vec3ValueRenderer);
+registerRenderer('vec4', vec4ValueRenderer);
+registerRenderer('cameraProjection', cameraProjectionRenderer);
 registerRenderer('bool', boolValueRenderer);
 // Note: 'event' is not a payload type in the current system, events are bool-valued
 

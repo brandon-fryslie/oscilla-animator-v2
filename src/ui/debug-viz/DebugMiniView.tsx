@@ -34,8 +34,8 @@ import './renderers/register';
 export const debugMiniViewStyles = {
   container: {
     maxWidth: '360px',
-    maxHeight: '220px',
-    overflow: 'hidden',
+    maxHeight: '340px',
+    overflow: 'auto',
     padding: '8px 10px',
     fontFamily: 'monospace',
     fontSize: '11px',

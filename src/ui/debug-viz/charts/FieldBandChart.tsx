@@ -4,8 +4,13 @@
  * Shows distribution evolution over time:
  * - Outer band: min ↔ max
  * - Inner band: p25 ↔ p75 (IQR)
- * - Mean line
+ * - Mean line (un-smoothed — already stable from accumulator)
  * - Scale labels at right edge
+ *
+ * Improvements over raw full-buffer rendering:
+ * - 64-frame visible window (~1s at 60fps)
+ * - Percentile-based Y range (5th/95th) to clip extreme spikes
+ * - 3-point moving average on band edges for visual smoothing
  *
  * Same pattern as Sparkline.tsx (2x DPR retina rendering, canvas-based).
  */
@@ -28,6 +33,9 @@ const SCALE_COLOR = '#666666';
 /** Minimum range to avoid division by zero. */
 const EPSILON = 1e-10;
 
+/** Maximum frames shown in the visible window (~1s at 60fps). */
+const MAX_VISIBLE_FRAMES = 64;
+
 /**
  * Format a scale label (compact).
  */
@@ -38,6 +46,38 @@ function scaleLabel(value: number): string {
   if (abs >= 1) return value.toFixed(1);
   if (abs >= 0.01) return value.toFixed(3);
   return value.toExponential(1);
+}
+
+/**
+ * 3-point moving average smoother for band edge arrays.
+ * Averages each point with its neighbors. First and last points
+ * average with their single neighbor.
+ */
+function smooth3(values: number[]): number[] {
+  const n = values.length;
+  if (n < 3) return values;
+  const out = new Array<number>(n);
+  out[0] = (values[0] + values[1]) / 2;
+  for (let i = 1; i < n - 1; i++) {
+    out[i] = (values[i - 1] + values[i] + values[i + 1]) / 3;
+  }
+  out[n - 1] = (values[n - 2] + values[n - 1]) / 2;
+  return out;
+}
+
+/**
+ * Compute percentile value from a sorted array.
+ * Uses linear interpolation between nearest ranks.
+ */
+function percentile(sorted: number[], p: number): number {
+  if (sorted.length === 0) return 0;
+  if (sorted.length === 1) return sorted[0];
+  const idx = (p / 100) * (sorted.length - 1);
+  const lo = Math.floor(idx);
+  const hi = Math.ceil(idx);
+  if (lo === hi) return sorted[lo];
+  const frac = idx - lo;
+  return sorted[lo] * (1 - frac) + sorted[hi] * frac;
 }
 
 /**
@@ -56,9 +96,9 @@ function drawBandChart(
   ctx.clearRect(0, 0, w, h);
 
   const { snapshots, writeIndex, capacity, filled } = history;
-  const sampleCount = filled ? capacity : Math.min(writeIndex, capacity);
+  const totalSamples = filled ? capacity : Math.min(writeIndex, capacity);
 
-  if (sampleCount < 2) {
+  if (totalSamples < 2) {
     ctx.fillStyle = '#555';
     ctx.font = `${10 * dpr}px monospace`;
     ctx.textAlign = 'center';
@@ -66,20 +106,30 @@ function drawBandChart(
     return;
   }
 
-  // Read snapshots chronologically (oldest first)
-  const startIdx = filled ? writeIndex : 0;
+  // Limit visible window to most recent MAX_VISIBLE_FRAMES
+  const visibleCount = Math.min(totalSamples, MAX_VISIBLE_FRAMES);
+  // startIdx points to the oldest visible snapshot in the ring buffer
+  const ringStart = filled ? writeIndex : 0;
+  const skipCount = totalSamples - visibleCount;
+  const startIdx = ringStart + skipCount;
 
-  // Find global Y range across all visible snapshots (component 0)
-  let globalMin = Infinity;
-  let globalMax = -Infinity;
-  for (let i = 0; i < sampleCount; i++) {
+  // Collect min/max values for percentile-based Y range
+  const minValues: number[] = [];
+  const maxValues: number[] = [];
+  for (let i = 0; i < visibleCount; i++) {
     const snap = snapshots[(startIdx + i) % capacity];
     if (snap.count === 0) continue;
-    const sMin = snap.min[0];
-    const sMax = snap.max[0];
-    if (sMin < globalMin) globalMin = sMin;
-    if (sMax > globalMax) globalMax = sMax;
+    minValues.push(snap.min[0]);
+    maxValues.push(snap.max[0]);
   }
+
+  if (minValues.length === 0) return;
+
+  // Percentile-based Y range: 5th percentile of mins, 95th percentile of maxes
+  minValues.sort((a, b) => a - b);
+  maxValues.sort((a, b) => a - b);
+  const globalMin = percentile(minValues, 5);
+  const globalMax = percentile(maxValues, 95);
 
   if (!Number.isFinite(globalMin) || !Number.isFinite(globalMax)) return;
 
@@ -89,27 +139,44 @@ function drawBandChart(
   const yMax = isFlatLine ? globalMax + 0.5 : globalMax;
   const yRange = yMax - yMin;
 
-  // Map value to canvas Y (inverted: high values at top)
-  const toY = (v: number) => h - ((v - yMin) / yRange) * h;
-  const toX = (i: number) => (i / (sampleCount - 1)) * w;
+  // Map value to canvas Y (inverted: high values at top), clamped to chart bounds
+  const toY = (v: number) => {
+    const normalized = (v - yMin) / yRange;
+    const clamped = Math.max(0, Math.min(1, normalized));
+    return h - clamped * h;
+  };
+  const toX = (i: number) => (i / (visibleCount - 1)) * w;
+
+  // Extract raw band edge arrays for smoothing
+  const rawMin: number[] = [];
+  const rawMax: number[] = [];
+  const rawP25: number[] = [];
+  const rawP75: number[] = [];
+  for (let i = 0; i < visibleCount; i++) {
+    const snap = snapshots[(startIdx + i) % capacity];
+    rawMin.push(snap.count > 0 ? snap.min[0] : globalMin);
+    rawMax.push(snap.count > 0 ? snap.max[0] : globalMax);
+    rawP25.push(snap.count > 0 ? snap.p25[0] : globalMin);
+    rawP75.push(snap.count > 0 ? snap.p75[0] : globalMax);
+  }
+
+  // Apply 3-point moving average to band edges
+  const smoothedMin = smooth3(rawMin);
+  const smoothedMax = smooth3(rawMax);
+  const smoothedP25 = smooth3(rawP25);
+  const smoothedP75 = smooth3(rawP75);
 
   // Draw outer band (min ↔ max)
   ctx.fillStyle = OUTER_BAND_COLOR;
   ctx.beginPath();
-  // Top edge (max, left to right)
-  for (let i = 0; i < sampleCount; i++) {
-    const snap = snapshots[(startIdx + i) % capacity];
+  for (let i = 0; i < visibleCount; i++) {
     const x = toX(i);
-    const y = toY(snap.count > 0 ? snap.max[0] : globalMax);
+    const y = toY(smoothedMax[i]);
     if (i === 0) ctx.moveTo(x, y);
     else ctx.lineTo(x, y);
   }
-  // Bottom edge (min, right to left)
-  for (let i = sampleCount - 1; i >= 0; i--) {
-    const snap = snapshots[(startIdx + i) % capacity];
-    const x = toX(i);
-    const y = toY(snap.count > 0 ? snap.min[0] : globalMin);
-    ctx.lineTo(x, y);
+  for (let i = visibleCount - 1; i >= 0; i--) {
+    ctx.lineTo(toX(i), toY(smoothedMin[i]));
   }
   ctx.closePath();
   ctx.fill();
@@ -117,30 +184,26 @@ function drawBandChart(
   // Draw inner band (p25 ↔ p75)
   ctx.fillStyle = INNER_BAND_COLOR;
   ctx.beginPath();
-  for (let i = 0; i < sampleCount; i++) {
-    const snap = snapshots[(startIdx + i) % capacity];
+  for (let i = 0; i < visibleCount; i++) {
     const x = toX(i);
-    const y = toY(snap.count > 0 ? snap.p75[0] : globalMax);
+    const y = toY(smoothedP75[i]);
     if (i === 0) ctx.moveTo(x, y);
     else ctx.lineTo(x, y);
   }
-  for (let i = sampleCount - 1; i >= 0; i--) {
-    const snap = snapshots[(startIdx + i) % capacity];
-    const x = toX(i);
-    const y = toY(snap.count > 0 ? snap.p25[0] : globalMin);
-    ctx.lineTo(x, y);
+  for (let i = visibleCount - 1; i >= 0; i--) {
+    ctx.lineTo(toX(i), toY(smoothedP25[i]));
   }
   ctx.closePath();
   ctx.fill();
 
-  // Draw mean line
+  // Draw mean line (un-smoothed — already stable from accumulator)
   ctx.strokeStyle = MEAN_LINE_COLOR;
   ctx.lineWidth = 1.5 * dpr;
   ctx.lineJoin = 'round';
   ctx.lineCap = 'round';
   ctx.beginPath();
   let started = false;
-  for (let i = 0; i < sampleCount; i++) {
+  for (let i = 0; i < visibleCount; i++) {
     const snap = snapshots[(startIdx + i) % capacity];
     if (snap.count === 0) { started = false; continue; }
     const x = toX(i);

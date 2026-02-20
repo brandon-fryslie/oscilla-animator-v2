@@ -38,15 +38,17 @@ export interface ValueRenderer {
  * Payload type to category mapping.
  * Categories are the lowest fallback tier.
  */
-type Category = 'numeric' | 'color' | 'shape';
+type Category = 'numeric' | 'color';
 
 const PAYLOAD_TO_CATEGORY: Record<string, Category> = {
   float: 'numeric',
   int: 'numeric',
   vec2: 'numeric',
+  vec3: 'numeric',
+  vec4: 'numeric',
   color: 'color',
-  shape: 'shape',
   bool: 'numeric',
+  cameraProjection: 'numeric',
 };
 
 // =============================================================================
