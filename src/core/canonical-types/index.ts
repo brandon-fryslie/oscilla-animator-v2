@@ -42,6 +42,7 @@ export {
   VEC4,
   COLOR,
   CAMERA_PROJECTION,
+  SHAPE2D,
   payloadFromKind,
   payloadsEqual,
   isValidPayloadUnit,

@@ -336,9 +336,12 @@ function convertLinkedIRToProgram(
     slotMeta.push({ slot, storage, offset, stride, type });
 
     // Arena descriptor: flat Float32Array layout for all numeric slots.
-    const desc = deriveArenaDescriptor(type, arenaOffset, instances, slotInfo.stride);
-    arenaLayout.push(desc);
-    arenaOffset += desc.length;
+    // shape2d slots use the Uint32Array bank — not the float arena.
+    if (storage !== 'shape2d') {
+      const desc = deriveArenaDescriptor(type, arenaOffset, instances, slotInfo.stride);
+      arenaLayout.push(desc);
+      arenaOffset += desc.length;
+    }
   }
 
   // Build output specs

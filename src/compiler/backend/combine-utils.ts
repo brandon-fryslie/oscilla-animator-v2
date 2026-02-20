@@ -122,7 +122,7 @@ export function validateCombineMode(
     };
   }
 
-  if (payloadKind === 'shape') {
+  if (payloadKind === 'shape2d') {
     // Shape domain only supports 'last', 'first', and 'layer' (not numeric combines)
     if (mode === 'layer') {
       return { valid: true };

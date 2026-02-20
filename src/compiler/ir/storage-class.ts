@@ -13,6 +13,9 @@ import type { InstanceId } from './Indices';
 import type { InstanceDecl } from './types';
 import { requireInst, isMany, payloadStride } from '../../core/canonical-types';
 
+/** Shape2D words per record (must match RuntimeState.SHAPE2D_WORDS) */
+const SHAPE2D_WORDS = 8;
+
 export interface StorageLayout {
   readonly storage: SlotMetaEntry['storage'];
   readonly stride: number;
@@ -31,6 +34,10 @@ export function deriveStorageLayout(
   type: CanonicalType,
   overrideStride?: number,
 ): StorageLayout {
+  // Shape2d has its own storage class — Uint32Array bank, not f64 or object
+  if (type.payload.kind === 'shape2d') {
+    return { storage: 'shape2d', stride: SHAPE2D_WORDS };
+  }
   const card = requireInst(type.extent.cardinality, 'cardinality');
   const storage: SlotMetaEntry['storage'] = isMany(card) ? 'object' : 'f64';
   // [LAW:one-source-of-truth] Object slots store a single buffer reference (stride 1).
@@ -79,6 +86,10 @@ export function deriveArenaDescriptor(
   instances: ReadonlyMap<InstanceId, InstanceDecl>,
   overrideStride?: number,
 ): ArenaSlotDescriptor {
+  // Shape2d slots use the Uint32Array bank, not the float arena
+  if (type.payload.kind === 'shape2d') {
+    throw new Error('shape2d slots do not go into the float arena');
+  }
   const card = requireInst(type.extent.cardinality, 'cardinality');
   const stride = overrideStride ?? payloadStride(type.payload);
   const laneCount = isMany(card)

@@ -123,9 +123,20 @@ function fieldBroadcastDefault(
     case 'vec3':
       sigId = ctx.b.constant({ kind: 'vec3', value: [0, 0, 0] }, canonicalSignal(payload));
       break;
-    default:
-      sigId = ctx.b.constant({ kind: 'float', value: 0 }, canonicalSignal(FLOAT));
+    case 'vec4':
+      sigId = ctx.b.constant({ kind: 'vec4', value: [0, 0, 0, 0] }, canonicalSignal(payload));
       break;
+    case 'color':
+      // Should not reach here — handled by fieldColorDefault above
+      throw new Error('DefaultSourceField: color should be handled by fieldColorDefault');
+    case 'cameraProjection':
+      throw new Error('DefaultSourceField: cameraProjection has no field default');
+    case 'shape2d':
+      throw new Error('DefaultSourceField: shape2d has no field default');
+    default: {
+      const _exhaustive: never = payload;
+      throw new Error(`DefaultSourceField: unsupported payload type: ${(_exhaustive as any).kind}`);
+    }
   }
   return ctx.b.broadcast(sigId, outType);
 }

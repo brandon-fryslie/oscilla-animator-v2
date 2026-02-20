@@ -37,6 +37,9 @@ export function formatDebugValue(value: number, type: CanonicalType): string {
       // Numeric values, show 2 decimal places
       return value.toFixed(2);
 
+    case 'shape2d':
+      return '[Shape2D]';
+
     default:
       // Unknown type, show raw value
       return value.toFixed(3);

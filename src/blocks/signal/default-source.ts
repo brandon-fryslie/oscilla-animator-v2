@@ -68,8 +68,16 @@ function signalDefault(
       throw new Error(
         `DefaultSource: camera projection type requires explicit source (no meaningful default)`
       );
-    default:
-      throw new Error(`DefaultSource: unsupported payload type: ${(payload as any).kind}`);
+    case 'shape2d':
+      throw new Error(
+        `DefaultSource: shape2d type requires explicit source (no meaningful default)`
+      );
+    case 'vec4':
+      return ctx.b.constant({ kind: 'vec4', value: [0, 0, 0, 0] }, canonicalSignal(payload));
+    default: {
+      const _exhaustive: never = payload;
+      throw new Error(`DefaultSource: unsupported payload type: ${(_exhaustive as any).kind}`);
+    }
   }
 }
 

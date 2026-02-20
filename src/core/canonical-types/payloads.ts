@@ -29,7 +29,6 @@ export type CameraProjection = 'orthographic' | 'perspective';
  *
  * Note: 'phase' is NOT a payload - it's float with unit:turns.
  * Note: 'event' and 'domain' are NOT PayloadTypes - they are axis/resource concepts.
- * Note: 'shape' removed per Q6 - shapes are resources, not payloads.
  */
 export type ConcretePayloadType =
   | { readonly kind: 'float' }
@@ -39,7 +38,8 @@ export type ConcretePayloadType =
   | { readonly kind: 'vec3' }
   | { readonly kind: 'vec4' }
   | { readonly kind: 'color' }
-  | { readonly kind: 'cameraProjection' };
+  | { readonly kind: 'cameraProjection' }
+  | { readonly kind: 'shape2d' };
 
 /**
  * PayloadType is the final, concrete payload type.
@@ -75,6 +75,8 @@ export const VEC4: ConcretePayloadType = { kind: 'vec4' } as const;
 export const COLOR: ConcretePayloadType = { kind: 'color' } as const;
 /** Camera projection payload type (stride: 1) */
 export const CAMERA_PROJECTION: ConcretePayloadType = { kind: 'cameraProjection' } as const;
+/** Shape2D payload type (stride: 1 nominal — real stride from storage class) */
+export const SHAPE2D: ConcretePayloadType = { kind: 'shape2d' } as const;
 
 /**
  * Map from kind string to singleton instance.
@@ -89,6 +91,7 @@ const PAYLOAD_BY_KIND: Record<PayloadKind, ConcretePayloadType> = {
   vec4: VEC4,
   color: COLOR,
   cameraProjection: CAMERA_PROJECTION,
+  shape2d: SHAPE2D,
 };
 
 // =============================================================================
@@ -109,6 +112,7 @@ const ALLOWED_UNITS: Record<PayloadKind, readonly UnitType['kind'][]> = {
   color: ['color'],
   bool: ['none'],
   cameraProjection: ['none'],
+  shape2d: ['none'],
 };
 
 // =============================================================================
@@ -143,6 +147,7 @@ export function defaultUnitForPayload(payload: PayloadType): UnitType {
     case 'color': return unitRgba01();
     case 'bool': return unitNone();
     case 'cameraProjection': return unitNone();
+    case 'shape2d': return unitNone();
     default: {
       const _exhaustive: never = payload;
       throw new Error(`Unknown payload kind: ${(_exhaustive as ConcretePayloadType).kind}`);

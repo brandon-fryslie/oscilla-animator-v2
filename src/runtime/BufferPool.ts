@@ -40,8 +40,9 @@ export function getBufferFormat(payload: PayloadType): BufferFormat {
     case 'cameraProjection':
       return 'f32';
 
-    // NOTE: 'shape' removed per Q6 - shapes are resources, not payloads.
-    // SHAPE was aliased to FLOAT and handled by the float case above.
+    // Shape2D (8 x u32 words per shape)
+    case 'shape2d':
+      return 'shape2d';
 
     // 2D vectors
     case 'vec2':

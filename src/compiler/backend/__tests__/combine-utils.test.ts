@@ -49,41 +49,41 @@ describe('validateCombineMode', () => {
 
   describe('shape payload', () => {
     it('allows last for shape', () => {
-      expect(validateCombineMode('last', 'signal', 'shape').valid).toBe(true);
+      expect(validateCombineMode('last', 'signal', 'shape2d').valid).toBe(true);
     });
 
     it('allows first for shape', () => {
-      expect(validateCombineMode('first', 'signal', 'shape').valid).toBe(true);
+      expect(validateCombineMode('first', 'signal', 'shape2d').valid).toBe(true);
     });
 
     it('allows layer for shape', () => {
-      expect(validateCombineMode('layer', 'signal', 'shape').valid).toBe(true);
+      expect(validateCombineMode('layer', 'signal', 'shape2d').valid).toBe(true);
     });
 
     it('rejects sum for shape', () => {
-      const result = validateCombineMode('sum', 'signal', 'shape');
+      const result = validateCombineMode('sum', 'signal', 'shape2d');
       expect(result.valid).toBe(false);
       expect(result.reason).toContain('Shape domain');
     });
 
     it('rejects average for shape', () => {
-      const result = validateCombineMode('average', 'signal', 'shape');
+      const result = validateCombineMode('average', 'signal', 'shape2d');
       expect(result.valid).toBe(false);
       expect(result.reason).toContain('Shape domain');
     });
 
     it('rejects mul for shape', () => {
-      const result = validateCombineMode('mul' as any, 'signal', 'shape');
+      const result = validateCombineMode('mul' as any, 'signal', 'shape2d');
       expect(result.valid).toBe(false);
     });
 
     it('rejects min for shape', () => {
-      const result = validateCombineMode('min', 'signal', 'shape');
+      const result = validateCombineMode('min', 'signal', 'shape2d');
       expect(result.valid).toBe(false);
     });
 
     it('rejects max for shape', () => {
-      const result = validateCombineMode('max', 'signal', 'shape');
+      const result = validateCombineMode('max', 'signal', 'shape2d');
       expect(result.valid).toBe(false);
     });
   });

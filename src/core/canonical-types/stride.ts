@@ -26,6 +26,7 @@ export function payloadStride(p: PayloadType): 1 | 2 | 3 | 4 {
     case 'vec4': return 4;
     case 'color': return 4;
     case 'cameraProjection': return 1;
+    case 'shape2d': return 1; // nominal — real stride from storage class
     default: {
       const _exhaustive: never = p as never;
       throw new Error(`Unknown payload kind: ${(_exhaustive as ConcretePayloadType).kind}`);

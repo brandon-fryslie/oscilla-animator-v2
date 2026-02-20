@@ -17,7 +17,7 @@
 
 import { registerBlock, ALL_CONCRETE_PAYLOADS } from '../registry';
 import { canonicalType, canonicalFieldDef, unitWorld3, unitTurns, contractWrap01, payloadStride, floatConst, requireInst } from '../../core/canonical-types';
-import { FLOAT, VEC3 } from '../../core/canonical-types';
+import { FLOAT, VEC3, SHAPE2D } from '../../core/canonical-types';
 import { defaultSourceConst } from '../../types';
 import { OpCode } from '../../compiler/ir/types';
 import { rewriteFieldType, resolveShapeRef } from './_helpers';
@@ -43,7 +43,7 @@ registerBlock({
   },
   inputs: {
     elements: { label: 'Elements', type: canonicalFieldDef(FLOAT, { kind: 'none' }) },
-    shape: { label: 'Shape', type: canonicalType(FLOAT), defaulting: 'forbidden' },
+    shape: { label: 'Shape', type: canonicalType(SHAPE2D), defaulting: 'forbidden' },
     spacing: { label: 'Spacing', type: canonicalType(FLOAT), defaultValue: 1.0, defaultSource: defaultSourceConst(1.0), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 5, step: 0.01 } },
     offset: { label: 'Offset', type: canonicalType(FLOAT, unitTurns(), undefined, contractWrap01()), defaultValue: 0, defaultSource: defaultSourceConst(0), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
   },

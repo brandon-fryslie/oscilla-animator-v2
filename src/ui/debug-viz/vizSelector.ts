@@ -38,7 +38,7 @@ interface ChartRule {
 }
 
 /** Payload kinds that don't get numeric charts. */
-const NON_NUMERIC_KINDS = new Set(['color', 'bool', 'cameraProjection']);
+const NON_NUMERIC_KINDS = new Set(['color', 'bool', 'cameraProjection', 'shape2d']);
 
 function isNumericField(ctx: FieldVizContext): boolean {
   return ctx.stride > 0 && !NON_NUMERIC_KINDS.has(ctx.payloadKind);

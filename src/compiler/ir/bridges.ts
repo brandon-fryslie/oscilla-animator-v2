@@ -239,7 +239,8 @@ export function payloadTypeToShapeDescIR(payload: PayloadType): ShapeDescIR {
     case 'bool':
       return { kind: 'bool' };
 
-    // TODO: Q6 - shape handling deferred
+    case 'shape2d':
+      return { kind: 'shape' };
 
     case 'cameraProjection':
       // cameraProjection is a scalar enum stored as number (0=ortho, 1=persp)

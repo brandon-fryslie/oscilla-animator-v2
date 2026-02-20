@@ -6,7 +6,7 @@
 
 import { registerBlock } from '../registry';
 import { canonicalType, payloadStride } from '../../core/canonical-types';
-import { FLOAT } from '../../core/canonical-types';
+import { FLOAT, SHAPE2D } from '../../core/canonical-types';
 import { TOPOLOGY_ID_ELLIPSE } from '../../shapes/registry';
 import { defaultSourceConst } from '../../types';
 
@@ -57,7 +57,7 @@ registerBlock({
     },
   },
   outputs: {
-    shape: { label: 'Shape', type: canonicalType(FLOAT) },
+    shape: { label: 'Shape', type: canonicalType(SHAPE2D) },
   },
   lower: ({ ctx, inputsById }) => {
     // Post-normalization: all inputs guaranteed wired — no fallback needed
@@ -78,7 +78,7 @@ registerBlock({
     const shapeRefSig = ctx.b.shapeRef(
       TOPOLOGY_ID_ELLIPSE,
       [rxSig, rySig, rotationSig],
-      canonicalType(FLOAT)
+      canonicalType(SHAPE2D)
     );
 
     const shapeType = ctx.outTypes[0];
