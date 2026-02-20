@@ -12,6 +12,7 @@ import type { ContinuityState } from './ContinuityState';
 import { createContinuityState } from './ContinuityState';
 import type { DebugTap } from './DebugTap';
 import { ExternalChannelSystem } from './ExternalChannel';
+import { createArena } from './ArenaValueStore';
 
 /**
  * Shape2D packed record word layout (8 x u32 words per shape)
@@ -476,6 +477,9 @@ export interface ProgramState {
   /** Per-frame value storage (slot-based) */
   values: ValueStore;
 
+  /** Float32 arena for unified value store (cardinality unification migration) */
+  arena: Float32Array;
+
   /** Frame cache (per-frame memoization) - cache owns frameId */
   cache: FrameCache;
 
@@ -525,6 +529,9 @@ export interface RuntimeState {
 
   /** Per-frame value storage (slot-based) */
   values: ValueStore;
+
+  /** Float32 arena for unified value store (cardinality unification migration) */
+  arena: Float32Array;
 
   /** Frame cache (per-frame memoization) - cache owns frameId */
   cache: FrameCache;
@@ -606,10 +613,12 @@ export function createProgramState(
   stateSlotCount: number = 0,
   eventSlotCount: number = 0,
   eventExprCount: number = 0,
-  valueExprCount: number = 0
+  valueExprCount: number = 0,
+  arenaTotalFloats: number = 0
 ): ProgramState {
   return {
     values: createValueStore(slotCount),
+    arena: createArena(arenaTotalFloats),
     cache: createFrameCache(1000, valueExprCount),
     time: null,
     state: new Float64Array(stateSlotCount),
@@ -631,10 +640,11 @@ export function createRuntimeState(
   stateSlotCount: number = 0,
   eventSlotCount: number = 0,
   eventExprCount: number = 0,
-  valueExprCount: number = 0
+  valueExprCount: number = 0,
+  arenaTotalFloats: number = 0
 ): RuntimeState {
   const session = createSessionState();
-  return createRuntimeStateFromSession(session, slotCount, stateSlotCount, eventSlotCount, eventExprCount, valueExprCount);
+  return createRuntimeStateFromSession(session, slotCount, stateSlotCount, eventSlotCount, eventExprCount, valueExprCount, arenaTotalFloats);
 }
 
 /**
@@ -648,12 +658,14 @@ export function createRuntimeStateFromSession(
   stateSlotCount: number = 0,
   eventSlotCount: number = 0,
   eventExprCount: number = 0,
-  valueExprCount: number = 0
+  valueExprCount: number = 0,
+  arenaTotalFloats: number = 0
 ): RuntimeState {
-  const program = createProgramState(slotCount, stateSlotCount, eventSlotCount, eventExprCount, valueExprCount);
+  const program = createProgramState(slotCount, stateSlotCount, eventSlotCount, eventExprCount, valueExprCount, arenaTotalFloats);
   return {
     // ProgramState (fresh)
     values: program.values,
+    arena: program.arena,
     cache: program.cache,
     time: program.time,
     state: program.state,

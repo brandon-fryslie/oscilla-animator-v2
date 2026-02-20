@@ -20,6 +20,7 @@ import type { InstanceId } from '../../core/ids';
 import type { InstanceDecl } from '../ir/types';
 import { buildPatch } from '../../graph';
 import { compile } from '../compile';
+import { createRuntimeState } from '../../runtime';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -156,5 +157,32 @@ describe('arenaLayout integration', () => {
 
     // arenaTotalFloats > 0 (a compiled program with blocks must have slots)
     expect(program.arenaTotalFloats).toBeGreaterThan(0);
+  });
+
+  it('runtime state arena length matches compiled arenaTotalFloats', () => {
+    const patch = buildPatch((b) => {
+      const time = b.addBlock('InfiniteTimeRoot');
+      b.setPortDefault(time, 'periodAMs', 1000);
+      const osc = b.addBlock('Oscillator');
+      b.wire(time, 'phaseA', osc, 'phase');
+    });
+
+    const result = compile(patch);
+    if (result.kind === 'error') {
+      throw new Error(`Compile failed: ${result.errors.map((e) => e.message).join(', ')}`);
+    }
+    const program = result.program;
+
+    const state = createRuntimeState(
+      program.slotMeta.length,
+      0, // stateSlotCount
+      0, // eventSlotCount
+      0, // eventExprCount
+      0, // valueExprCount
+      program.arenaTotalFloats,
+    );
+
+    expect(state.arena).toBeInstanceOf(Float32Array);
+    expect(state.arena.length).toBe(program.arenaTotalFloats);
   });
 });

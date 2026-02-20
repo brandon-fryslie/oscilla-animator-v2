@@ -262,7 +262,8 @@ export async function compileAndSwap(deps: CompileOrchestratorDeps, isInitial: b
     newStateSlotCount,
     newEventSlotCount,
     newEventCount,
-    newValueExprCount
+    newValueExprCount,
+    program.arenaTotalFloats
   );
 
   // Handle primitive state migration
