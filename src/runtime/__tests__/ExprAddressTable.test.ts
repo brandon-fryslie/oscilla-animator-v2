@@ -46,6 +46,8 @@ function mockProgram(opts: {
     fieldSlotRegistry: new Map(),
     renderGlobals: [],
     kernelRegistry: { resolve: () => undefined, entries: () => [] } as any,
+    arenaLayout: [],
+    arenaTotalFloats: 0,
   } as CompiledProgramIR;
 }
 

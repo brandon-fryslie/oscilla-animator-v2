@@ -53,6 +53,8 @@ function testProgramConverter(
     fieldSlotRegistry: new Map(),
     renderGlobals: [],
     kernelRegistry: createDefaultRegistry(),
+    arenaLayout: [],
+    arenaTotalFloats: 0,
   };
 }
 

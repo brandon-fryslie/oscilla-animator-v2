@@ -67,6 +67,8 @@ function makeMinimalProgram(opts: {
     slotMeta: [],
     renderGlobals: [],
     kernelRegistry: {} as any,
+    arenaLayout: [],
+    arenaTotalFloats: 0,
   } as CompiledProgramIR;
 }
 
