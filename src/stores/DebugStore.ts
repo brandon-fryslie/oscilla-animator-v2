@@ -16,6 +16,7 @@
 import { makeAutoObservable, runInAction, reaction } from 'mobx';
 import { debugService, type EdgeValueResult, type DebugServiceStatus } from '../services/DebugService';
 import type { CanonicalType } from '../core/canonical-types';
+import { requireInst } from '../core/canonical-types';
 import type { ValueSlot } from '../types';
 import type { DebugTargetKey } from '../ui/debug-viz/types';
 import type { SettingsStore } from './SettingsStore';
@@ -283,10 +284,12 @@ export class DebugStore {
     // Track new
     if (newActiveId && this.enabled) {
       const meta = debugService.getEdgeMetadata(newActiveId);
-      if (meta?.cardinality === 'field') {
+      // [LAW:one-source-of-truth] Tracking policy derives from CanonicalType cardinality axis.
+      const cardinality = meta ? requireInst(meta.type.extent.cardinality, 'cardinality').kind : null;
+      if (meta && cardinality === 'many') {
         debugService.trackField(meta.slotId, meta.type);
         this._trackedFieldSlot = meta.slotId;
-      } else if (meta?.cardinality === 'signal') {
+      } else if (meta && cardinality === 'one') {
         const key: DebugTargetKey = { kind: 'edge', edgeId: newActiveId };
         debugService.historyService.track(key);
         this._trackedHistoryKey = key;

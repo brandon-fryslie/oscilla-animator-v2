@@ -13,7 +13,7 @@
 
 import type { ValueSlot } from '../types';
 import type { CanonicalType } from '../core/canonical-types';
-import { payloadStride } from '../core/canonical-types';
+import { payloadStride, requireInst } from '../core/canonical-types';
 import type { UnmappedEdgeInfo, EdgeMetadata } from './mapDebugEdges';
 import type { ConstantValue } from './ConstantValueTracker';
 import { HistoryService, type KeyResolver, type ResolvedKeyMetadata } from '../ui/debug-viz/HistoryService';
@@ -153,8 +153,7 @@ class DebugService {
       if (!meta) return undefined;
       return {
         slotId: meta.slotId,
-        cardinality: meta.cardinality,
-        payloadType: meta.type.payload,
+        type: meta.type,
       };
     };
     this.historyService = new HistoryService(resolver);
@@ -325,7 +324,7 @@ class DebugService {
       );
     }
 
-    if (meta.cardinality === 'field') {
+    if (requireInst(meta.type.extent.cardinality, 'cardinality').kind === 'many') {
       return this.queryFieldValue(meta);
     }
     return this.querySignalValue(meta);
@@ -341,7 +340,7 @@ class DebugService {
       return undefined;
     }
 
-    if (meta.cardinality === 'field') {
+    if (requireInst(meta.type.extent.cardinality, 'cardinality').kind === 'many') {
       return this.queryFieldValue(meta);
     }
     return this.querySignalValue(meta);

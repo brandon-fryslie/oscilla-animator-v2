@@ -13,7 +13,8 @@
  */
 
 import type { ValueSlot } from '../../types';
-import type { PayloadType } from '../../core/canonical-types';
+import type { CanonicalType } from '../../core/canonical-types';
+import { requireInst } from '../../core/canonical-types';
 import type { DebugTargetKey, HistoryView, Stride } from './types';
 import { serializeKey, getSampleEncoding } from './types';
 
@@ -38,10 +39,8 @@ const MAX_TRACKED_KEYS = 32;
 export interface ResolvedKeyMetadata {
   /** The runtime slot this key maps to (null if unmapped) */
   slotId: ValueSlot | null;
-  /** Cardinality of this edge/port */
-  cardinality: 'signal' | 'field';
-  /** Payload type for stride computation */
-  payloadType: PayloadType;
+  /** Canonical type for cardinality and payload derivation */
+  type: CanonicalType;
 }
 
 /**
@@ -111,7 +110,7 @@ export class HistoryService {
    *
    * Guards (silently rejects, no throw):
    * - Key must resolve to metadata
-   * - Cardinality must be 'signal' (not 'field')
+   * - Cardinality must be one
    * - Payload must be sampleable
    * - Stride must be 1 (scalar signals only in v1)
    *
@@ -127,11 +126,12 @@ export class HistoryService {
     const meta = this.resolver(key);
     if (!meta) return;
 
-    // Guard: cardinality must be signal (one)
-    if (meta.cardinality !== 'signal') return;
+    // [LAW:one-source-of-truth] Derive cardinality from CanonicalType, not debug-domain labels.
+    const cardinality = requireInst(meta.type.extent.cardinality, 'cardinality').kind;
+    if (cardinality !== 'one') return;
 
     // Guard: must be sampleable with stride=1
-    const encoding = getSampleEncoding(meta.payloadType);
+    const encoding = getSampleEncoding(meta.type.payload);
     if (!encoding.sampleable) return;
     if (encoding.stride !== 1) return;
 
@@ -226,7 +226,7 @@ export class HistoryService {
     for (const [serialized, entry] of this.entries) {
       const meta = this.resolver(entry.key);
 
-      if (!meta || meta.cardinality !== 'signal') {
+      if (!meta || requireInst(meta.type.extent.cardinality, 'cardinality').kind !== 'one') {
         // Key no longer valid — pause (set slot to null)
         if (entry.slotId !== null) {
           this.removeFromReverseMap(entry.slotId, serialized);
@@ -235,7 +235,7 @@ export class HistoryService {
         continue;
       }
 
-      const encoding = getSampleEncoding(meta.payloadType);
+      const encoding = getSampleEncoding(meta.type.payload);
       if (!encoding.sampleable || encoding.stride !== 1) {
         // Stride incompatible — pause
         if (entry.slotId !== null) {

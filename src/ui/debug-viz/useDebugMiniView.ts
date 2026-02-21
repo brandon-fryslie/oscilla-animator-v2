@@ -10,6 +10,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { debugService, type EdgeValueResult } from '../../services/DebugService';
 import type { EdgeMetadata } from '../../services/mapDebugEdges';
+import { requireInst } from '../../core/canonical-types';
 import type { DebugTargetKey, HistoryView, BufferHistoryView, FieldHistoryView } from './types';
 import type { TrackedEntry } from './HistoryService';
 
@@ -79,24 +80,27 @@ export function useDebugMiniView(
   const meta = debugService.getEdgeMetadata(hoveredEdgeId);
   if (!meta) return null;
 
-  // Resolve history (only for signal edges)
+  // [LAW:one-source-of-truth] UI branches on CanonicalType cardinality, not debug-domain aliases.
+  const cardinality = requireInst(meta.type.extent.cardinality, 'cardinality').kind;
+
+  // Resolve history (only for cardinality-one edges)
   const key: DebugTargetKey = { kind: 'edge', edgeId: hoveredEdgeId };
-  const history = meta.cardinality === 'signal'
+  const history = cardinality === 'one'
     ? debugService.historyService.getHistory(key) ?? null
     : null;
 
-  // Resolve field history (only for field edges)
-  const fieldHistory = meta.cardinality === 'field'
+  // Resolve field history (only for cardinality-many edges)
+  const fieldHistory = cardinality === 'many'
     ? debugService.getFieldHistory(meta.slotId) ?? null
     : null;
 
-  // Resolve instance-0 sparkline history (only for field edges)
-  const fieldInstanceHistory = meta.cardinality === 'field'
+  // Resolve instance-0 sparkline history (only for cardinality-many edges)
+  const fieldInstanceHistory = cardinality === 'many'
     ? debugService.getFieldInstanceHistory(meta.slotId) ?? null
     : null;
 
-  // Resolve buffer history for raster heatmap (only for field edges)
-  const fieldBufferHistory = meta.cardinality === 'field'
+  // Resolve buffer history for raster heatmap (only for cardinality-many edges)
+  const fieldBufferHistory = cardinality === 'many'
     ? debugService.getFieldBufferHistory(meta.slotId) ?? null
     : null;
 

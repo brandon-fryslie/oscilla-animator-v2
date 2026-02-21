@@ -2,7 +2,6 @@ import type { Patch } from '../graph';
 import type { CompiledProgramIR } from '../compiler/ir/program';
 import type { ValueSlot, PortId } from '../types';
 import type { CanonicalType } from '../core/canonical-types';
-import { FLOAT, canonicalType } from '../core/canonical-types';
 
 /**
  * Edge metadata stored alongside slot mapping.
@@ -12,11 +11,8 @@ export interface EdgeMetadata {
     /** Target slot ID that stores this edge's value */
     slotId: ValueSlot;
 
-    /** Signal type for formatting (e.g., "Float", "Phase", "Color") */
+    /** Canonical value type for formatting and cardinality derivation */
     type: CanonicalType;
-
-    /** Cardinality: signal (scalar) or field (buffer of N values) */
-    cardinality: 'signal' | 'field';
 }
 
 /**
@@ -120,9 +116,8 @@ export function mapDebugMappings(patch: Patch, program: CompiledProgramIR): Debu
         portToSlot.set(portId, slot);
     }
 
-    // Build main lookup map and track cardinality per port
+    // Build main lookup map
     const targetToSlot = new Map<string, ValueSlot>();
-    const portCardinality = new Map<string, 'signal' | 'field'>();
 
     for (const portBinding of debugIndex.ports) {
         // Resolve BlockIndex to StringID
@@ -149,9 +144,6 @@ export function mapDebugMappings(patch: Patch, program: CompiledProgramIR): Debu
 
         if (slot !== undefined) {
             targetToSlot.set(key, slot);
-            // Track cardinality from port binding domain
-            const cardinality: 'signal' | 'field' = portBinding.domain === 'field' ? 'field' : 'signal';
-            portCardinality.set(key, cardinality);
         }
     }
 
@@ -169,15 +161,10 @@ export function mapDebugMappings(patch: Patch, program: CompiledProgramIR): Debu
               throw new Error(`Slot ${slotId} has no type metadata — compiler bug`);
             }
             const type = meta.type;
-            const cardinality = portCardinality.get(sourceKey);
-            if (!cardinality) {
-              throw new Error(`Port ${sourceKey} has no cardinality classification — type solver bug`);
-            }
 
             edgeMetaMap.set(edge.id, {
                 slotId,
                 type,
-                cardinality,
             });
         } else {
             // Track unmapped edge with detailed reason
@@ -227,9 +214,7 @@ export function mapDebugMappings(patch: Patch, program: CompiledProgramIR): Debu
           throw new Error(`Slot ${slotId} has no type metadata — compiler bug`);
         }
         const type = meta.type;
-        const cardinality = portCardinality.get(portKey);
-        if (!cardinality) throw new Error(`Port ${portKey} missing cardinality after type solve`);
-        portMetaMap.set(portKey, { slotId, type, cardinality });
+        portMetaMap.set(portKey, { slotId, type });
     }
 
     return { edgeMap: edgeMetaMap, portMap: portMetaMap, unmappedEdges };

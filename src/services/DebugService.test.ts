@@ -13,7 +13,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { debugService } from './DebugService';
 import type { ValueSlot } from '../types';
-import { canonicalType } from '../core/canonical-types';
+import { canonicalType, canonicalFieldDef } from '../core/canonical-types';
 import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR,  CAMERA_PROJECTION } from '../core/canonical-types';
 import type { ArenaSlotDescriptor } from '../runtime/ArenaValueStore';
 
@@ -26,8 +26,8 @@ describe('DebugService', () => {
     describe('edge-to-slot mapping', () => {
         it('should store and retrieve edge-to-slot mapping', () => {
             const edgeMap = new Map([
-                ['edge1', { slotId: 10 as ValueSlot, type: canonicalType(FLOAT), cardinality: 'signal' as const }],
-                ['edge2', { slotId: 20 as ValueSlot, type: canonicalType(FLOAT), cardinality: 'signal' as const }],
+                ['edge1', { slotId: 10 as ValueSlot, type: canonicalType(FLOAT) }],
+                ['edge2', { slotId: 20 as ValueSlot, type: canonicalType(FLOAT) }],
             ]);
 
             debugService.setEdgeToSlotMap(edgeMap);
@@ -60,7 +60,7 @@ describe('DebugService', () => {
         // in the debug index. The fix is in the compiler, NOT here.
         it('should throw for unmapped edge (compiler bug)', () => {
             const edgeMap = new Map([
-                ['edge1', { slotId: 10 as ValueSlot, type: canonicalType(FLOAT), cardinality: 'signal' as const }],
+                ['edge1', { slotId: 10 as ValueSlot, type: canonicalType(FLOAT) }],
             ]);
 
             debugService.setEdgeToSlotMap(edgeMap);
@@ -76,7 +76,7 @@ describe('DebugService', () => {
 
         it('should return undefined for signal edge whose slot has no value before runtime starts', () => {
             const edgeMap = new Map([
-                ['edge1', { slotId: 10 as ValueSlot, type: canonicalType(FLOAT), cardinality: 'signal' as const }],
+                ['edge1', { slotId: 10 as ValueSlot, type: canonicalType(FLOAT) }],
             ]);
 
             debugService.setEdgeToSlotMap(edgeMap);
@@ -88,8 +88,8 @@ describe('DebugService', () => {
 
         it('should throw for signal edge whose slot has no value after runtime starts (scheduling bug)', () => {
             const edgeMap = new Map([
-                ['edge1', { slotId: 10 as ValueSlot, type: canonicalType(FLOAT), cardinality: 'signal' as const }],
-                ['edge2', { slotId: 20 as ValueSlot, type: canonicalType(FLOAT), cardinality: 'signal' as const }],
+                ['edge1', { slotId: 10 as ValueSlot, type: canonicalType(FLOAT) }],
+                ['edge2', { slotId: 20 as ValueSlot, type: canonicalType(FLOAT) }],
             ]);
 
             debugService.setEdgeToSlotMap(edgeMap);
@@ -107,7 +107,7 @@ describe('DebugService', () => {
     describe('slot value updates', () => {
         it('should update slot values from runtime tap', () => {
             const edgeMap = new Map([
-                ['edge1', { slotId: 10 as ValueSlot, type: canonicalType(FLOAT), cardinality: 'signal' as const }],
+                ['edge1', { slotId: 10 as ValueSlot, type: canonicalType(FLOAT) }],
             ]);
 
             debugService.setEdgeToSlotMap(edgeMap);
@@ -132,8 +132,8 @@ describe('DebugService', () => {
         it('should handle multiple edges pointing to same slot', () => {
             // This can happen if the same output is connected to multiple inputs
             const edgeMap = new Map([
-                ['edge1', { slotId: 10 as ValueSlot, type: canonicalType(FLOAT), cardinality: 'signal' as const }],
-                ['edge2', { slotId: 10 as ValueSlot, type: canonicalType(FLOAT), cardinality: 'signal' as const }],
+                ['edge1', { slotId: 10 as ValueSlot, type: canonicalType(FLOAT) }],
+                ['edge2', { slotId: 10 as ValueSlot, type: canonicalType(FLOAT) }],
             ]);
 
             debugService.setEdgeToSlotMap(edgeMap);
@@ -151,7 +151,7 @@ describe('DebugService', () => {
     describe('clear', () => {
         it('should clear all data and reset runtime state on recompile', () => {
             const edgeMap = new Map([
-                ['edge1', { slotId: 10 as ValueSlot, type: canonicalType(FLOAT), cardinality: 'signal' as const }],
+                ['edge1', { slotId: 10 as ValueSlot, type: canonicalType(FLOAT) }],
             ]);
 
             debugService.setEdgeToSlotMap(edgeMap);
@@ -176,7 +176,7 @@ describe('DebugService', () => {
 
         it('should reset runtimeStarted flag on clear', () => {
             const edgeMap1 = new Map([
-                ['edge1', { slotId: 10 as ValueSlot, type: canonicalType(FLOAT), cardinality: 'signal' as const }],
+                ['edge1', { slotId: 10 as ValueSlot, type: canonicalType(FLOAT) }],
             ]);
 
             debugService.setEdgeToSlotMap(edgeMap1);
@@ -186,7 +186,7 @@ describe('DebugService', () => {
 
             // Re-set the mapping with a new map
             const edgeMap2 = new Map([
-                ['edge1', { slotId: 10 as ValueSlot, type: canonicalType(FLOAT), cardinality: 'signal' as const }],
+                ['edge1', { slotId: 10 as ValueSlot, type: canonicalType(FLOAT) }],
             ]);
             debugService.setEdgeToSlotMap(edgeMap2);
 
@@ -197,11 +197,11 @@ describe('DebugService', () => {
 
         it('should clear tracked field slots on clear', () => {
             const edgeMap = new Map([
-                ['field-edge', { slotId: 30 as ValueSlot, type: canonicalType(FLOAT), cardinality: 'field' as const }],
+                ['field-edge', { slotId: 30 as ValueSlot, type: canonicalFieldDef(FLOAT) }],
             ]);
 
             debugService.setEdgeToSlotMap(edgeMap);
-            debugService.trackField(30 as ValueSlot, canonicalType(FLOAT));
+            debugService.trackField(30 as ValueSlot, canonicalFieldDef(FLOAT));
 
             expect(debugService.isFieldTracked(30 as ValueSlot)).toBe(true);
 
@@ -222,7 +222,7 @@ describe('DebugService', () => {
 
         it('should return value for mapped signal port', () => {
             const portMap = new Map([
-                ['blockA:out', { slotId: 10 as ValueSlot, type: canonicalType(FLOAT), cardinality: 'signal' as const }],
+                ['blockA:out', { slotId: 10 as ValueSlot, type: canonicalType(FLOAT) }],
             ]);
 
             debugService.setPortToSlotMap(portMap);
@@ -239,7 +239,7 @@ describe('DebugService', () => {
 
         it('should throw for mapped signal port with no value after runtime starts (scheduling bug)', () => {
             const portMap = new Map([
-                ['blockA:out', { slotId: 10 as ValueSlot, type: canonicalType(FLOAT), cardinality: 'signal' as const }],
+                ['blockA:out', { slotId: 10 as ValueSlot, type: canonicalType(FLOAT) }],
             ]);
 
             debugService.setPortToSlotMap(portMap);
@@ -255,7 +255,7 @@ describe('DebugService', () => {
 
         it('should return field-untracked for untracked field port', () => {
             const portMap = new Map([
-                ['blockA:fieldOut', { slotId: 30 as ValueSlot, type: canonicalType(FLOAT), cardinality: 'field' as const }],
+                ['blockA:fieldOut', { slotId: 30 as ValueSlot, type: canonicalFieldDef(FLOAT) }],
             ]);
 
             debugService.setPortToSlotMap(portMap);
@@ -264,7 +264,7 @@ describe('DebugService', () => {
             expect(result).toEqual({
                 kind: 'field-untracked',
                 slotId: 30 as ValueSlot,
-                type: canonicalType(FLOAT),
+                type: canonicalFieldDef(FLOAT),
             });
         });
     });
@@ -272,7 +272,7 @@ describe('DebugService', () => {
     describe('field tracking (demand-driven)', () => {
         it('should return field-untracked for untracked field edge', () => {
             const edgeMap = new Map([
-                ['field-edge', { slotId: 30 as ValueSlot, type: canonicalType(FLOAT), cardinality: 'field' as const }],
+                ['field-edge', { slotId: 30 as ValueSlot, type: canonicalFieldDef(FLOAT) }],
             ]);
 
             debugService.setEdgeToSlotMap(edgeMap);
@@ -282,17 +282,17 @@ describe('DebugService', () => {
             expect(result).toEqual({
                 kind: 'field-untracked',
                 slotId: 30 as ValueSlot,
-                type: canonicalType(FLOAT),
+                type: canonicalFieldDef(FLOAT),
             });
         });
 
         it('should return undefined for tracked field before runtime starts', () => {
             const edgeMap = new Map([
-                ['field-edge', { slotId: 30 as ValueSlot, type: canonicalType(FLOAT), cardinality: 'field' as const }],
+                ['field-edge', { slotId: 30 as ValueSlot, type: canonicalFieldDef(FLOAT) }],
             ]);
 
             debugService.setEdgeToSlotMap(edgeMap);
-            debugService.trackField(30 as ValueSlot, canonicalType(FLOAT));
+            debugService.trackField(30 as ValueSlot, canonicalFieldDef(FLOAT));
 
             // Runtime hasn't started - should return undefined
             const result = debugService.getEdgeValue('field-edge');
@@ -301,11 +301,11 @@ describe('DebugService', () => {
 
         it('should throw for tracked field with no data after runtime starts (scheduling bug)', () => {
             const edgeMap = new Map([
-                ['field-edge', { slotId: 30 as ValueSlot, type: canonicalType(FLOAT), cardinality: 'field' as const }],
+                ['field-edge', { slotId: 30 as ValueSlot, type: canonicalFieldDef(FLOAT) }],
             ]);
 
             debugService.setEdgeToSlotMap(edgeMap);
-            debugService.trackField(30 as ValueSlot, canonicalType(FLOAT));
+            debugService.trackField(30 as ValueSlot, canonicalFieldDef(FLOAT));
 
             // Start runtime by writing to a signal slot
             debugService.updateSlotValue(99 as ValueSlot, 1.0);
@@ -317,9 +317,9 @@ describe('DebugService', () => {
         });
 
         it('should return field stats for tracked field with data', () => {
-            const floatType = canonicalType(FLOAT);
+            const floatType = canonicalFieldDef(FLOAT);
             const edgeMap = new Map([
-                ['field-edge', { slotId: 30 as ValueSlot, type: floatType, cardinality: 'field' as const }],
+                ['field-edge', { slotId: 30 as ValueSlot, type: floatType }],
             ]);
 
             debugService.setEdgeToSlotMap(edgeMap);
@@ -343,9 +343,9 @@ describe('DebugService', () => {
         });
 
         it('should return zero stats for tracked field with empty buffer', () => {
-            const floatType = canonicalType(FLOAT);
+            const floatType = canonicalFieldDef(FLOAT);
             const edgeMap = new Map([
-                ['empty-field', { slotId: 31 as ValueSlot, type: floatType, cardinality: 'field' as const }],
+                ['empty-field', { slotId: 31 as ValueSlot, type: floatType }],
             ]);
 
             debugService.setEdgeToSlotMap(edgeMap);
@@ -362,7 +362,7 @@ describe('DebugService', () => {
         });
 
         it('should track and untrack field slots', () => {
-            debugService.trackField(30 as ValueSlot, canonicalType(FLOAT));
+            debugService.trackField(30 as ValueSlot, canonicalFieldDef(FLOAT));
             expect(debugService.isFieldTracked(30 as ValueSlot)).toBe(true);
 
             debugService.untrackField(30 as ValueSlot);
@@ -370,8 +370,8 @@ describe('DebugService', () => {
         });
 
         it('should report tracked slots via getTrackedFieldSlots', () => {
-            debugService.trackField(30 as ValueSlot, canonicalType(FLOAT));
-            debugService.trackField(31 as ValueSlot, canonicalType(FLOAT));
+            debugService.trackField(30 as ValueSlot, canonicalFieldDef(FLOAT));
+            debugService.trackField(31 as ValueSlot, canonicalFieldDef(FLOAT));
 
             const tracked = debugService.getTrackedFieldSlots();
             expect(tracked.has(30 as ValueSlot)).toBe(true);
@@ -381,11 +381,11 @@ describe('DebugService', () => {
 
         it('should clear field buffer on untrack', () => {
             const edgeMap = new Map([
-                ['field-edge', { slotId: 30 as ValueSlot, type: canonicalType(FLOAT), cardinality: 'field' as const }],
+                ['field-edge', { slotId: 30 as ValueSlot, type: canonicalFieldDef(FLOAT) }],
             ]);
 
             debugService.setEdgeToSlotMap(edgeMap);
-            debugService.trackField(30 as ValueSlot, canonicalType(FLOAT));
+            debugService.trackField(30 as ValueSlot, canonicalFieldDef(FLOAT));
 
             const buffer = new Float32Array([1.0, 2.0, 3.0]);
             debugService.updateFieldValue(30 as ValueSlot, buffer);
@@ -406,7 +406,7 @@ describe('DebugService', () => {
     describe('edge metadata', () => {
         it('should return metadata for mapped edge', () => {
             const edgeMap = new Map([
-                ['edge1', { slotId: 10 as ValueSlot, type: canonicalType(FLOAT), cardinality: 'signal' as const }],
+                ['edge1', { slotId: 10 as ValueSlot, type: canonicalType(FLOAT) }],
             ]);
 
             debugService.setEdgeToSlotMap(edgeMap);
@@ -415,7 +415,6 @@ describe('DebugService', () => {
             expect(meta).toEqual({
                 slotId: 10 as ValueSlot,
                 type: canonicalType(FLOAT),
-                cardinality: 'signal',
             });
         });
 
@@ -437,11 +436,11 @@ describe('DebugService', () => {
 
         it('should report edge and port counts', () => {
             const edgeMap = new Map([
-                ['e1', { slotId: 10 as ValueSlot, type: canonicalType(FLOAT), cardinality: 'signal' as const }],
-                ['e2', { slotId: 20 as ValueSlot, type: canonicalType(FLOAT), cardinality: 'signal' as const }],
+                ['e1', { slotId: 10 as ValueSlot, type: canonicalType(FLOAT) }],
+                ['e2', { slotId: 20 as ValueSlot, type: canonicalType(FLOAT) }],
             ]);
             const portMap = new Map([
-                ['b:out', { slotId: 10 as ValueSlot, type: canonicalType(FLOAT), cardinality: 'signal' as const }],
+                ['b:out', { slotId: 10 as ValueSlot, type: canonicalType(FLOAT) }],
             ]);
 
             debugService.setEdgeToSlotMap(edgeMap);
@@ -457,8 +456,8 @@ describe('DebugService', () => {
         it('should simulate runtime→debugService→UI flow for signal edges', () => {
             // 1. Compiler produces edge-to-slot map
             const edgeMap = new Map([
-                ['osc1-out->sin1-phase', { slotId: 5 as ValueSlot, type: canonicalType(FLOAT), cardinality: 'signal' as const }],
-                ['sin1-out->render', { slotId: 8 as ValueSlot, type: canonicalType(FLOAT), cardinality: 'signal' as const }],
+                ['osc1-out->sin1-phase', { slotId: 5 as ValueSlot, type: canonicalType(FLOAT) }],
+                ['sin1-out->render', { slotId: 8 as ValueSlot, type: canonicalType(FLOAT) }],
             ]);
             debugService.setEdgeToSlotMap(edgeMap);
 
@@ -494,10 +493,10 @@ describe('DebugService', () => {
         });
 
         it('should simulate demand-driven field tracking flow', () => {
-            const floatType = canonicalType(FLOAT);
+            const floatType = canonicalFieldDef(FLOAT);
             // 1. Compiler produces edge map with field edge
             const edgeMap = new Map([
-                ['add-out->render', { slotId: 30 as ValueSlot, type: floatType, cardinality: 'field' as const }],
+                ['add-out->render', { slotId: 30 as ValueSlot, type: floatType }],
             ]);
             debugService.setEdgeToSlotMap(edgeMap);
 
@@ -540,7 +539,7 @@ describe('DebugService', () => {
     describe('HistoryService integration', () => {
         it('updateSlotValue pushes to historyService', () => {
             const edgeMap = new Map([
-                ['edge1', { slotId: 10 as ValueSlot, type: canonicalType(FLOAT), cardinality: 'signal' as const }],
+                ['edge1', { slotId: 10 as ValueSlot, type: canonicalType(FLOAT) }],
             ]);
             debugService.setEdgeToSlotMap(edgeMap);
 
@@ -562,7 +561,7 @@ describe('DebugService', () => {
         it('setEdgeToSlotMap triggers onMappingChanged', () => {
             // Setup initial mapping
             const edgeMap1 = new Map([
-                ['edge1', { slotId: 10 as ValueSlot, type: canonicalType(FLOAT), cardinality: 'signal' as const }],
+                ['edge1', { slotId: 10 as ValueSlot, type: canonicalType(FLOAT) }],
             ]);
             debugService.setEdgeToSlotMap(edgeMap1);
             debugService.historyService.track({ kind: 'edge', edgeId: 'edge1' });
@@ -570,7 +569,7 @@ describe('DebugService', () => {
 
             // Change mapping — edge1 now points to slot 20
             const edgeMap2 = new Map([
-                ['edge1', { slotId: 20 as ValueSlot, type: canonicalType(FLOAT), cardinality: 'signal' as const }],
+                ['edge1', { slotId: 20 as ValueSlot, type: canonicalType(FLOAT) }],
             ]);
             debugService.setEdgeToSlotMap(edgeMap2);
 
@@ -587,7 +586,7 @@ describe('DebugService', () => {
 
         it('setPortToSlotMap triggers onMappingChanged', () => {
             const portMap = new Map([
-                ['block-1:out', { slotId: 10 as ValueSlot, type: canonicalType(FLOAT), cardinality: 'signal' as const }],
+                ['block-1:out', { slotId: 10 as ValueSlot, type: canonicalType(FLOAT) }],
             ]);
             debugService.setPortToSlotMap(portMap);
             debugService.historyService.track({ kind: 'port', blockId: 'block-1', portName: 'out' });
@@ -600,7 +599,7 @@ describe('DebugService', () => {
 
         it('clear() also clears historyService', () => {
             const edgeMap = new Map([
-                ['edge1', { slotId: 10 as ValueSlot, type: canonicalType(FLOAT), cardinality: 'signal' as const }],
+                ['edge1', { slotId: 10 as ValueSlot, type: canonicalType(FLOAT) }],
             ]);
             debugService.setEdgeToSlotMap(edgeMap);
             debugService.historyService.track({ kind: 'edge', edgeId: 'edge1' });
@@ -613,7 +612,7 @@ describe('DebugService', () => {
 
         it('resolver correctly rejects field-cardinality edges', () => {
             const edgeMap = new Map([
-                ['field-edge', { slotId: 40 as ValueSlot, type: canonicalType(FLOAT), cardinality: 'field' as const }],
+                ['field-edge', { slotId: 40 as ValueSlot, type: canonicalFieldDef(FLOAT) }],
             ]);
             debugService.setEdgeToSlotMap(edgeMap);
 
@@ -623,7 +622,7 @@ describe('DebugService', () => {
 
         it('ring buffer wraps correctly through DebugService integration', () => {
             const edgeMap = new Map([
-                ['edge1', { slotId: 10 as ValueSlot, type: canonicalType(FLOAT), cardinality: 'signal' as const }],
+                ['edge1', { slotId: 10 as ValueSlot, type: canonicalType(FLOAT) }],
             ]);
             debugService.setEdgeToSlotMap(edgeMap);
             debugService.historyService.track({ kind: 'edge', edgeId: 'edge1' });
@@ -648,9 +647,9 @@ describe('DebugService', () => {
 
     describe('field accumulator integration', () => {
         it('all-time min/max only expand over multiple frames', () => {
-            const floatType = canonicalType(FLOAT);
+            const floatType = canonicalFieldDef(FLOAT);
             const edgeMap = new Map([
-                ['field-edge', { slotId: 30 as ValueSlot, type: floatType, cardinality: 'field' as const }],
+                ['field-edge', { slotId: 30 as ValueSlot, type: floatType }],
             ]);
             debugService.setEdgeToSlotMap(edgeMap);
             debugService.trackField(30 as ValueSlot, floatType);
@@ -682,9 +681,9 @@ describe('DebugService', () => {
         });
 
         it('EMA mean smooths over time', () => {
-            const floatType = canonicalType(FLOAT);
+            const floatType = canonicalFieldDef(FLOAT);
             const edgeMap = new Map([
-                ['field-edge', { slotId: 30 as ValueSlot, type: floatType, cardinality: 'field' as const }],
+                ['field-edge', { slotId: 30 as ValueSlot, type: floatType }],
             ]);
             debugService.setEdgeToSlotMap(edgeMap);
             debugService.trackField(30 as ValueSlot, floatType);
@@ -708,9 +707,9 @@ describe('DebugService', () => {
         });
 
         it('accumulators reset on setEdgeToSlotMap', () => {
-            const floatType = canonicalType(FLOAT);
+            const floatType = canonicalFieldDef(FLOAT);
             const edgeMap1 = new Map([
-                ['field-edge', { slotId: 30 as ValueSlot, type: floatType, cardinality: 'field' as const }],
+                ['field-edge', { slotId: 30 as ValueSlot, type: floatType }],
             ]);
             debugService.setEdgeToSlotMap(edgeMap1);
             debugService.trackField(30 as ValueSlot, floatType);
@@ -724,9 +723,9 @@ describe('DebugService', () => {
         });
 
         it('getFieldHistory returns temporal history', () => {
-            const floatType = canonicalType(FLOAT);
+            const floatType = canonicalFieldDef(FLOAT);
             const edgeMap = new Map([
-                ['field-edge', { slotId: 30 as ValueSlot, type: floatType, cardinality: 'field' as const }],
+                ['field-edge', { slotId: 30 as ValueSlot, type: floatType }],
             ]);
             debugService.setEdgeToSlotMap(edgeMap);
             debugService.trackField(30 as ValueSlot, floatType);
@@ -744,9 +743,9 @@ describe('DebugService', () => {
         });
 
         it('multi-stride color field accumulation', () => {
-            const colorType = canonicalType(COLOR);
+            const colorType = canonicalFieldDef(COLOR);
             const edgeMap = new Map([
-                ['color-edge', { slotId: 40 as ValueSlot, type: colorType, cardinality: 'field' as const }],
+                ['color-edge', { slotId: 40 as ValueSlot, type: colorType }],
             ]);
             debugService.setEdgeToSlotMap(edgeMap);
             debugService.trackField(40 as ValueSlot, colorType);
@@ -793,7 +792,7 @@ describe('DebugService', () => {
 
         it('reads signal value from arena when arenaRef is set', () => {
             const edgeMap = new Map([
-                ['edge1', { slotId: 10 as ValueSlot, type: canonicalType(FLOAT), cardinality: 'signal' as const }],
+                ['edge1', { slotId: 10 as ValueSlot, type: canonicalType(FLOAT) }],
             ]);
             debugService.setEdgeToSlotMap(edgeMap);
 
@@ -818,7 +817,7 @@ describe('DebugService', () => {
 
         it('returns undefined for arena signal before runtime starts', () => {
             const edgeMap = new Map([
-                ['edge1', { slotId: 10 as ValueSlot, type: canonicalType(FLOAT), cardinality: 'signal' as const }],
+                ['edge1', { slotId: 10 as ValueSlot, type: canonicalType(FLOAT) }],
             ]);
             debugService.setEdgeToSlotMap(edgeMap);
 
@@ -832,9 +831,9 @@ describe('DebugService', () => {
         });
 
         it('reads field buffer from arena as a zero-copy view', () => {
-            const floatType = canonicalType(FLOAT);
+            const floatType = canonicalFieldDef(FLOAT);
             const edgeMap = new Map([
-                ['field-edge', { slotId: 30 as ValueSlot, type: floatType, cardinality: 'field' as const }],
+                ['field-edge', { slotId: 30 as ValueSlot, type: floatType }],
             ]);
             debugService.setEdgeToSlotMap(edgeMap);
 
@@ -869,9 +868,9 @@ describe('DebugService', () => {
         });
 
         it('returns field-untracked from arena path for untracked field', () => {
-            const floatType = canonicalType(FLOAT);
+            const floatType = canonicalFieldDef(FLOAT);
             const edgeMap = new Map([
-                ['field-edge', { slotId: 30 as ValueSlot, type: floatType, cardinality: 'field' as const }],
+                ['field-edge', { slotId: 30 as ValueSlot, type: floatType }],
             ]);
             debugService.setEdgeToSlotMap(edgeMap);
 
@@ -886,7 +885,7 @@ describe('DebugService', () => {
 
         it('falls back to Map for slots with sentinel descriptor (offset < 0)', () => {
             const edgeMap = new Map([
-                ['edge1', { slotId: 10 as ValueSlot, type: canonicalType(FLOAT), cardinality: 'signal' as const }],
+                ['edge1', { slotId: 10 as ValueSlot, type: canonicalType(FLOAT) }],
             ]);
             debugService.setEdgeToSlotMap(edgeMap);
 
@@ -908,7 +907,7 @@ describe('DebugService', () => {
 
         it('clears arenaRef on setEdgeToSlotMap (recompile)', () => {
             const edgeMap = new Map([
-                ['edge1', { slotId: 10 as ValueSlot, type: canonicalType(FLOAT), cardinality: 'signal' as const }],
+                ['edge1', { slotId: 10 as ValueSlot, type: canonicalType(FLOAT) }],
             ]);
             debugService.setEdgeToSlotMap(edgeMap);
 
@@ -928,7 +927,7 @@ describe('DebugService', () => {
 
         it('clears arenaRef on clear()', () => {
             const edgeMap = new Map([
-                ['edge1', { slotId: 10 as ValueSlot, type: canonicalType(FLOAT), cardinality: 'signal' as const }],
+                ['edge1', { slotId: 10 as ValueSlot, type: canonicalType(FLOAT) }],
             ]);
             debugService.setEdgeToSlotMap(edgeMap);
 

@@ -15,7 +15,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { debugService } from '../../services/DebugService';
 import type { ValueSlot } from '../../types';
-import { canonicalType } from '../../core/canonical-types';
+import { canonicalType, canonicalFieldDef } from '../../core/canonical-types';
 import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR,  CAMERA_PROJECTION } from '../../core/canonical-types';
 import { useDebugMiniView } from './useDebugMiniView';
 
@@ -43,7 +43,7 @@ describe('useDebugMiniView', () => {
   it('should return MiniViewData for a mapped signal edge', () => {
     const type = canonicalType(FLOAT);
     const edgeMap = new Map([
-      ['edge-1', { slotId: 10 as ValueSlot, type, cardinality: 'signal' as const }],
+      ['edge-1', { slotId: 10 as ValueSlot, type }],
     ]);
     debugService.setEdgeToSlotMap(edgeMap);
 
@@ -53,12 +53,11 @@ describe('useDebugMiniView', () => {
     expect(result.current!.key).toEqual({ kind: 'edge', edgeId: 'edge-1' });
     expect(result.current!.label).toBe('LFO.out → Gain.mod');
     expect(result.current!.meta.slotId).toBe(10);
-    expect(result.current!.meta.cardinality).toBe('signal');
   });
 
   it('should fall back to edgeId when no label provided', () => {
     const edgeMap = new Map([
-      ['edge-1', { slotId: 10 as ValueSlot, type: canonicalType(FLOAT), cardinality: 'signal' as const }],
+      ['edge-1', { slotId: 10 as ValueSlot, type: canonicalType(FLOAT) }],
     ]);
     debugService.setEdgeToSlotMap(edgeMap);
 
@@ -69,7 +68,7 @@ describe('useDebugMiniView', () => {
 
   it('should resolve history for tracked signal edge', () => {
     const edgeMap = new Map([
-      ['sig-edge', { slotId: 10 as ValueSlot, type: canonicalType(FLOAT), cardinality: 'signal' as const }],
+      ['sig-edge', { slotId: 10 as ValueSlot, type: canonicalType(FLOAT) }],
     ]);
     debugService.setEdgeToSlotMap(edgeMap);
 
@@ -86,7 +85,7 @@ describe('useDebugMiniView', () => {
 
   it('should return null history for untracked signal edge', () => {
     const edgeMap = new Map([
-      ['sig-edge', { slotId: 10 as ValueSlot, type: canonicalType(FLOAT), cardinality: 'signal' as const }],
+      ['sig-edge', { slotId: 10 as ValueSlot, type: canonicalType(FLOAT) }],
     ]);
     debugService.setEdgeToSlotMap(edgeMap);
 
@@ -97,7 +96,7 @@ describe('useDebugMiniView', () => {
 
   it('should return null history for field edge', () => {
     const edgeMap = new Map([
-      ['field-edge', { slotId: 30 as ValueSlot, type: canonicalType(FLOAT), cardinality: 'field' as const }],
+      ['field-edge', { slotId: 30 as ValueSlot, type: canonicalFieldDef(FLOAT) }],
     ]);
     debugService.setEdgeToSlotMap(edgeMap);
 
@@ -108,7 +107,7 @@ describe('useDebugMiniView', () => {
 
   it('should resolve value after poll', () => {
     const edgeMap = new Map([
-      ['edge-1', { slotId: 10 as ValueSlot, type: canonicalType(FLOAT), cardinality: 'signal' as const }],
+      ['edge-1', { slotId: 10 as ValueSlot, type: canonicalType(FLOAT) }],
     ]);
     debugService.setEdgeToSlotMap(edgeMap);
     debugService.updateSlotValue(10 as ValueSlot, 0.42);
@@ -127,7 +126,7 @@ describe('useDebugMiniView', () => {
 
   it('should update value on subsequent polls', () => {
     const edgeMap = new Map([
-      ['edge-1', { slotId: 10 as ValueSlot, type: canonicalType(FLOAT), cardinality: 'signal' as const }],
+      ['edge-1', { slotId: 10 as ValueSlot, type: canonicalType(FLOAT) }],
     ]);
     debugService.setEdgeToSlotMap(edgeMap);
     debugService.updateSlotValue(10 as ValueSlot, 0.1);
@@ -148,7 +147,7 @@ describe('useDebugMiniView', () => {
 
   it('should clear value when edge changes to null', () => {
     const edgeMap = new Map([
-      ['edge-1', { slotId: 10 as ValueSlot, type: canonicalType(FLOAT), cardinality: 'signal' as const }],
+      ['edge-1', { slotId: 10 as ValueSlot, type: canonicalType(FLOAT) }],
     ]);
     debugService.setEdgeToSlotMap(edgeMap);
     debugService.updateSlotValue(10 as ValueSlot, 0.5);
@@ -167,7 +166,7 @@ describe('useDebugMiniView', () => {
 
   it('should handle getEdgeValue throwing gracefully', () => {
     const edgeMap = new Map([
-      ['edge-1', { slotId: 10 as ValueSlot, type: canonicalType(FLOAT), cardinality: 'signal' as const }],
+      ['edge-1', { slotId: 10 as ValueSlot, type: canonicalType(FLOAT) }],
     ]);
     debugService.setEdgeToSlotMap(edgeMap);
 
@@ -184,7 +183,7 @@ describe('useDebugMiniView', () => {
 
   it('should return field-untracked value for untracked field edge', () => {
     const edgeMap = new Map([
-      ['field-edge', { slotId: 30 as ValueSlot, type: canonicalType(FLOAT), cardinality: 'field' as const }],
+      ['field-edge', { slotId: 30 as ValueSlot, type: canonicalFieldDef(FLOAT) }],
     ]);
     debugService.setEdgeToSlotMap(edgeMap);
 

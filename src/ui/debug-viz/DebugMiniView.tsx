@@ -26,7 +26,7 @@ import type { RendererSample, AggregateStats, HistoryView, BufferHistoryView, St
 import type { EdgeValueResult } from '../../services/DebugService';
 import type { EdgeMetadata } from '../../services/mapDebugEdges';
 import type { CanonicalType } from '../../core/canonical-types';
-import { payloadStride } from '../../core/canonical-types';
+import { payloadStride, requireInst } from '../../core/canonical-types';
 
 // Side-effect import: registers all renderers
 import './renderers/register';
@@ -140,14 +140,14 @@ function getReasonLabel(reason: string): string {
 // Helper Components
 // =============================================================================
 
-export function formatTypeLine(type: CanonicalType, cardinality: 'signal' | 'field'): string {
+export function formatTypeLine(type: CanonicalType): string {
   const unitKind = type.unit.kind;
   // PayloadType is an object with a 'kind' property (e.g., { kind: 'float', stride: 1 })
   const payloadKind = type.payload.kind;
   const payloadUnit = unitKind === 'none'
     ? payloadKind
     : `${payloadKind}:${unitKind}`;
-  const card = cardinality === 'signal' ? 'one' : 'many';
+  const card = requireInst(type.extent.cardinality, 'cardinality').kind;
   return `${payloadUnit} · ${card} · cont`;
 }
 
@@ -448,10 +448,10 @@ export function DebugEdgeValueDisplay({ data }: { data: MiniViewData }): React.R
 
     // Type line
     React.createElement('div', { style: debugMiniViewStyles.typeLine },
-      formatTypeLine(data.meta.type, data.meta.cardinality)),
+      formatTypeLine(data.meta.type)),
 
     // Value section
-    data.meta.cardinality === 'signal'
+    requireInst(data.meta.type.extent.cardinality, 'cardinality').kind === 'one'
       ? React.createElement(SignalValueSection, {
           value: data.value,
           meta: data.meta,
