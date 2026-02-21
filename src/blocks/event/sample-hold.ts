@@ -21,11 +21,6 @@ registerBlock({
   capability: 'state',
   loweringPurity: 'stateful',
   isStateful: true,
-  cardinality: {
-    cardinalityMode: 'signalOnly',
-    laneCoupling: 'laneLocal',
-    broadcastPolicy: 'disallowSignalMix',
-  },
   inputs: {
     value: { label: 'Value', type: inferType(FLOAT, unitVar('sh_U')) },
     trigger: { label: 'Trigger', type: canonicalEvent() },

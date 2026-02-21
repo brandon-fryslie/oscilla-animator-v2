@@ -35,11 +35,6 @@ registerBlock({
   capability: 'render',
   loweringPurity: 'impure',
   description: 'Declares camera projection parameters for 3D rendering',
-  cardinality: {
-    cardinalityMode: 'signalOnly',
-    laneCoupling: 'laneLocal',
-    broadcastPolicy: 'disallowSignalMix',
-  },
   inputs: {
     projection: {
       label: 'Projection',
