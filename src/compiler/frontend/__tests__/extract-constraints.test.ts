@@ -166,14 +166,14 @@ describe('extractConstraints', () => {
     expect(edgeEquals.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('transform zipBroadcast only contains axisVar ports (not concrete outputs)', () => {
+  it('transform promoteToMany only contains axisVar ports (not concrete outputs)', () => {
     const patch = buildPatch((b) => {
       b.addBlock('Array');
     });
     const { graph: g } = buildDraftGraph(patch);
     const constraints = extractConstraints(g, BLOCK_DEFS_BY_TYPE);
 
-    const zips = constraints.cardinality.filter((c) => c.kind === 'zipBroadcast');
+    const zips = constraints.cardinality.filter((c) => c.kind === 'promoteToMany');
     for (const zip of zips) {
       for (const port of zip.ports) {
         const axis = constraints.baseCardinalityAxis.get(port);

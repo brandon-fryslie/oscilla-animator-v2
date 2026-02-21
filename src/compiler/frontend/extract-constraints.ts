@@ -208,14 +208,14 @@ export function extractConstraints(
     rewriteCardinalityAxes(block, def, portBaseTypes, baseCardinalityAxis, cardinality);
   }
 
-  // Assertion: zipBroadcast members must all have axisVar in baseCardinalityAxis.
-  // If a concrete (axisInst) port is in a zipBroadcast, the filtering logic above is broken.
+  // Assertion: promoteToMany members must all have axisVar in baseCardinalityAxis.
+  // If a concrete (axisInst) port is in a promoteToMany, the filtering logic above is broken.
   for (const c of cardinality) {
-    if (c.kind !== 'zipBroadcast') continue;
+    if (c.kind !== 'promoteToMany') continue;
     for (const p of c.ports) {
       const ax = baseCardinalityAxis.get(p);
       if (!ax || !isAxisVar(ax)) {
-        throw new Error(`zipBroadcast includes non-var port ${p} (axis: ${ax ? 'inst' : 'missing'})`);
+        throw new Error(`promoteToMany includes non-var port ${p} (axis: ${ax ? 'inst' : 'missing'})`);
       }
     }
   }
@@ -380,7 +380,7 @@ function rewriteCardinalityAxes(
  * Read cardinality behavior directly from declared CT/ICT cardinality vars.
  *
  * - shared var id => group membership
- * - relation => equal vs zipBroadcast
+ * - relation => equal vs promoteToMany
  * - acceptance => clampOne / forceMany
  * - instanceBinding => inherit vs create(domainType) for many-only ports
  */
@@ -468,7 +468,7 @@ function rewriteFromDeclaredCardinalityPolicy(
     const sorted = [...members].sort();
     if (relation === 'promoteToMany') {
       constraints.push({
-        kind: 'zipBroadcast',
+        kind: 'promoteToMany',
         ports: sorted,
         origin: { kind: 'blockRule', blockId: block.id, blockType: block.type, rule: 'declared.relation.promoteToMany' },
       });

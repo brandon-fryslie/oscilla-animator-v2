@@ -41,7 +41,7 @@ export type CardinalityConstraint =
   | { readonly kind: 'equal'; readonly a: DraftPortKey; readonly b: DraftPortKey; readonly origin: ConstraintOrigin }
   | { readonly kind: 'clampOne'; readonly port: DraftPortKey; readonly origin: ConstraintOrigin }
   | { readonly kind: 'forceMany'; readonly port: DraftPortKey; readonly instance: InstanceTerm; readonly origin: ConstraintOrigin }
-  | { readonly kind: 'zipBroadcast'; readonly ports: readonly DraftPortKey[]; readonly origin: ConstraintOrigin };
+  | { readonly kind: 'promoteToMany'; readonly ports: readonly DraftPortKey[]; readonly origin: ConstraintOrigin };
 
 // =============================================================================
 // Input
@@ -510,13 +510,13 @@ export function solveCardinality(input: CardinalitySolveInput): CardinalitySolve
     }
   }
 
-  // ---- Phase 4: ZipBroadcast fixpoint ----
-  if (trace) console.log('[CardSolver] Phase 4: ZipBroadcast fixpoint');
+  // ---- Phase 4: PromoteToMany fixpoint ----
+  if (trace) console.log('[CardSolver] Phase 4: PromoteToMany fixpoint');
 
   // Collect zip sets from constraints (with origins for provenance)
   const zipSets: Array<{ ports: DraftPortKey[]; origin: ConstraintOrigin }> = [];
   for (const c of constraints) {
-    if (c.kind === 'zipBroadcast') {
+    if (c.kind === 'promoteToMany') {
       // Sort and dedup
       const sorted = [...new Set(c.ports)].sort();
       if (sorted.length > 0) zipSets.push({ ports: sorted, origin: c.origin });
@@ -564,7 +564,7 @@ export function solveCardinality(input: CardinalitySolveInput): CardinalitySolve
       if (hasConflict || !manyGroup) continue;
 
       // Propagate many to all groups in this zip set.
-      // zipBroadcast semantics: signal (one) ports coexist with field (many) ports.
+      // promoteToMany semantics: signal (one) ports coexist with field (many) ports.
       // clampOne groups stay at one — runtime broadcasts them via kernelZipSig.
       // This is NOT a conflict; it's expected for relation:'promoteToMany' groups.
       for (const root of groupRoots) {
