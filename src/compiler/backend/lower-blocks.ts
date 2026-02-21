@@ -359,6 +359,10 @@ function inferInstanceContext(
   const outgoingEdges = edges.filter((e) => e.fromBlock === blockIndex);
   for (const outEdge of outgoingEdges) {
     const targetBlock = outEdge.toBlock;
+    const targetContext = instanceContextByBlock.get(targetBlock);
+    if (targetContext !== undefined) {
+      return targetContext;
+    }
     for (const edge of edges) {
       if (edge.toBlock === targetBlock && edge.fromBlock !== blockIndex) {
         const instanceContext = instanceContextByBlock.get(edge.fromBlock);
@@ -1267,52 +1271,93 @@ function repairUnresolvedOutputInstances(
   const instances = builder.getInstances();
   const slotMeta = builder.getSlotMetaInputs() as unknown as Map<number, { readonly type: CanonicalType; readonly stride: number }>;
 
-  for (const [blockIndex, outputs] of blockOutputs) {
-    let hasUndeclaredMany = false;
-    for (const ref of outputs.values()) {
-      const card = requireInst(ref.type.extent.cardinality, 'cardinality');
-      if (card.kind === 'many' && !instances.has(card.instance.instanceId)) {
-        hasUndeclaredMany = true;
-        break;
-      }
-    }
-    if (!hasUndeclaredMany) continue;
-
-    const inferred = inferInstanceContext(blockIndex, edges, instanceContextByBlock);
-    if (!inferred) continue;
-    const decl = instances.get(inferred);
-    if (!decl) continue;
-
-    const resolvedInstance = { domainTypeId: decl.domainType, instanceId: inferred };
-    instanceContextByBlock.set(blockIndex, inferred);
-
-    for (const [portId, ref] of outputs) {
-      const card = requireInst(ref.type.extent.cardinality, 'cardinality');
-      if (card.kind !== 'many' || instances.has(card.instance.instanceId)) continue;
-
-      const rewrittenType = withInstance(ref.type, resolvedInstance);
-      const rewrittenRef: ValueRefExpr = {
-        ...ref,
-        type: rewrittenType,
-        stride: payloadStride(rewrittenType.payload),
-      };
-      outputs.set(portId, rewrittenRef);
-
-      const expr = builder.getValueExpr(ref.id);
-      if (expr) {
-        (expr as { type: CanonicalType }).type = rewrittenType;
-      }
-
-      if (ref.slot !== undefined) {
-        const slotInfo = slotMeta.get(ref.slot as number);
-        if (slotInfo) {
-          slotMeta.set(ref.slot as number, {
-            ...slotInfo,
-            type: rewrittenType,
-            stride: payloadStride(rewrittenType.payload),
-          });
+  // [LAW:dataflow-not-control-flow] Repair executes to fixpoint; convergence is data.
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const [blockIndex, outputs] of blockOutputs) {
+      let hasUndeclaredMany = false;
+      for (const ref of outputs.values()) {
+        const card = requireInst(ref.type.extent.cardinality, 'cardinality');
+        if (card.kind === 'many' && !instances.has(card.instance.instanceId)) {
+          hasUndeclaredMany = true;
+          break;
         }
       }
+      if (!hasUndeclaredMany) continue;
+
+      const inferred = inferInstanceContext(blockIndex, edges, instanceContextByBlock);
+      if (!inferred) continue;
+      const decl = instances.get(inferred);
+      if (!decl) continue;
+
+      const resolvedInstance = { domainTypeId: decl.domainType, instanceId: inferred };
+      instanceContextByBlock.set(blockIndex, inferred);
+
+      for (const [portId, ref] of outputs) {
+        const card = requireInst(ref.type.extent.cardinality, 'cardinality');
+        if (card.kind !== 'many' || instances.has(card.instance.instanceId)) continue;
+
+        const rewrittenType = withInstance(ref.type, resolvedInstance);
+        const rewrittenRef: ValueRefExpr = {
+          ...ref,
+          type: rewrittenType,
+          stride: payloadStride(rewrittenType.payload),
+        };
+        outputs.set(portId, rewrittenRef);
+
+        const expr = builder.getValueExpr(ref.id);
+        if (expr) {
+          (expr as { type: CanonicalType }).type = rewrittenType;
+        }
+
+        if (ref.slot !== undefined) {
+          const slotInfo = slotMeta.get(ref.slot as number);
+          if (slotInfo) {
+            slotMeta.set(ref.slot as number, {
+              ...slotInfo,
+              type: rewrittenType,
+              stride: payloadStride(rewrittenType.payload),
+            });
+          }
+        }
+
+        changed = true;
+      }
+    }
+  }
+}
+
+/**
+ * Emit compile diagnostics for any many-cardinality outputs that still reference
+ * unknown instances after repair.
+ */
+function reportUnresolvedOutputInstances(
+  blocks: readonly Block[],
+  builder: OrchestratorIRBuilder,
+  blockOutputs: Map<BlockIndex, Map<string, ValueRefExpr>>,
+  errors: CompileError[],
+): void {
+  const instances = builder.getInstances();
+  for (const [blockIndex, outputs] of blockOutputs) {
+    const block = blocks[blockIndex as number];
+    if (!block) continue;
+    for (const [portId, ref] of outputs) {
+      if (!isExprRef(ref)) continue;
+      const card = requireInst(ref.type.extent.cardinality, 'cardinality');
+      if (card.kind !== 'many') continue;
+      const inst = card.instance.instanceId;
+      if (instances.has(inst)) continue;
+
+      errors.push({
+        code: 'InstanceMismatch',
+        message: `Unresolved instance context on ${block.type}#${block.id}.${portId}: ${card.instance.domainTypeId}:${inst}.`,
+        where: { blockId: block.id, port: portId },
+        details: {
+          unresolvedDomainTypeId: card.instance.domainTypeId,
+          unresolvedInstanceId: inst,
+        },
+      });
     }
   }
 }
@@ -1482,6 +1527,8 @@ export function pass6BlockLowering(
     blockOutputs,
     instanceContextByBlock,
   );
+  // [LAW:single-enforcer] Pass 6 emits unresolved instance diagnostics before backend slot derivation.
+  reportUnresolvedOutputInstances(blocks, builder, blockOutputs, errors);
 
   // Build provenance maps post-lowering (source-agnostic, scans edges)
   const { constantProvenance, instanceCountProvenance } = buildProvenanceMaps(
