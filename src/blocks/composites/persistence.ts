@@ -42,13 +42,34 @@ export interface StoredComposite {
  * synchronous and handle errors gracefully (no exceptions thrown).
  */
 export class CompositeStorage {
+  // [LAW:single-enforcer] Storage capability checks are centralized here.
+  private getStorage(): Pick<Storage, 'getItem' | 'setItem'> | null {
+    const candidate = (globalThis as { localStorage?: unknown }).localStorage as
+      | Partial<Storage>
+      | undefined;
+    if (!candidate) {
+      return null;
+    }
+    if (typeof candidate.getItem !== 'function' || typeof candidate.setItem !== 'function') {
+      return null;
+    }
+    return {
+      getItem: candidate.getItem.bind(candidate),
+      setItem: candidate.setItem.bind(candidate),
+    };
+  }
+
   /**
    * Load all stored composites from localStorage.
    *
    * @returns Map of type name to stored composite. Empty map if storage is empty or corrupted.
    */
   load(): Map<string, StoredComposite> {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const storage = this.getStorage();
+    if (!storage) {
+      return new Map();
+    }
+    const raw = storage.getItem(STORAGE_KEY);
     if (!raw) {
       return new Map();
     }
@@ -76,13 +97,18 @@ export class CompositeStorage {
    * @returns true if save succeeded, false if quota exceeded or other error
    */
   save(composites: Map<string, StoredComposite>): boolean {
+    const storage = this.getStorage();
+    if (!storage) {
+      return false;
+    }
+
     const data: StorageSchema = {
       version: 1,
       composites: Object.fromEntries(composites),
     };
 
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+      storage.setItem(STORAGE_KEY, JSON.stringify(data));
       return true;
     } catch (e) {
       // Most likely quota exceeded

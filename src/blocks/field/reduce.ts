@@ -6,9 +6,16 @@
 
 import { registerBlock, ALL_CONCRETE_PAYLOADS, requireConfigEnum } from '../registry';
 import { canonicalType, payloadStride, type PayloadType, requireInst, INT } from '../../core/canonical-types';
-import { unitVar, payloadVar, inferType, inferFieldDef } from '../../core/inference-types';
+import { unitVar, payloadVar, inferType, cardinalityVar } from '../../core/inference-types';
+import { cardinalityVarId } from '../../core/ids';
 import { DOMAIN_SHAPE } from '../../core/domain-registry';
 import { defaultSourceConst } from '../../types';
+
+// [LAW:one-source-of-truth] Reduce input cardinality behavior is declared on CT/ICT.
+const REDUCE_FIELD_INPUT_CARD = cardinalityVar(cardinalityVarId('reduce_field_input'), {
+  acceptance: 'manyOnly',
+  instanceBinding: 'inherit',
+});
 
 registerBlock({
   type: 'Reduce',
@@ -38,7 +45,7 @@ registerBlock({
   inputs: {
     field: {
       label: 'Field',
-      type: inferFieldDef(payloadVar('reduce_payload'), unitVar('reduce_in'))
+      type: inferType(payloadVar('reduce_payload'), unitVar('reduce_in'), { cardinality: REDUCE_FIELD_INPUT_CARD })
     },
     op: {
       label: 'Operation',
