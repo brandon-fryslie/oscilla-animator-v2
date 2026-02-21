@@ -34,7 +34,7 @@ describe('solveCardinality', () => {
     expect(result.errors).toHaveLength(0);
   });
 
-  it('signalOnly → all vars bound to one via clampOne', () => {
+  it('clampOne-only ports → all vars bound to one', () => {
     const result = solve(
       ['A:x:in', 'A:y:in', 'A:out:out'],
       {
@@ -98,7 +98,7 @@ describe('solveCardinality', () => {
     expect(result.cardinalities.get(cv('card:P:out:out'))).toEqual({ kind: 'many', instance: ref });
   });
 
-  it('zipBroadcast → var + many → all many; no-op when all unknown', () => {
+  it('promoteToMany → var + many → all many; no-op when all unknown', () => {
     const ref = instanceRef('circle', 'arr1');
 
     // Case 1: one member many → propagates to others
@@ -186,13 +186,13 @@ describe('solveCardinality', () => {
     expect(result.errors[0].kind).toBe('UnresolvedInstanceVar');
   });
 
-  it('zipBroadcast with clampOne + many: clampOne stays at one, many propagates to non-clampOne groups', () => {
-    // zipBroadcast semantics: signal (one) ports coexist with field (many) ports.
+  it('promoteToMany with clampOne + many: clampOne stays at one, many propagates', () => {
+    // promoteToMany semantics: oneOnly (signal) ports coexist with manyOnly (field) ports.
     // clampOne groups stay at one — runtime broadcasts them via kernelZipSig.
     const ref = instanceRef('circle', 'arr1');
-    const clampOrigin: ConstraintOrigin = { kind: 'blockRule', blockId: 'Sig', blockType: 'SignalOnly', rule: 'signalOnly.clampOne' };
-    const manyOrigin: ConstraintOrigin = { kind: 'blockRule', blockId: 'Field', blockType: 'Transform', rule: 'transform.forceMany' };
-    const zipOrigin: ConstraintOrigin = { kind: 'blockRule', blockId: 'zip', blockType: 'Zip', rule: 'zipBroadcast' };
+    const clampOrigin: ConstraintOrigin = { kind: 'blockRule', blockId: 'Sig', blockType: 'SignalOnly', rule: 'declared.clampOne' };
+    const manyOrigin: ConstraintOrigin = { kind: 'blockRule', blockId: 'Field', blockType: 'Transform', rule: 'declared.forceMany' };
+    const zipOrigin: ConstraintOrigin = { kind: 'blockRule', blockId: 'zip', blockType: 'Zip', rule: 'declared.promoteToMany' };
 
     const result = solve(
       ['Sig:out:out', 'Field:x:in'],
@@ -259,7 +259,7 @@ describe('solveCardinality', () => {
     expect(result.errors.some(e => e.kind === 'ClampManyConflict')).toBe(true);
   });
 
-  it('fieldOnly-only unresolved instance: fieldOnly block with only var instance → UnresolvedInstanceVar', () => {
+  it('manyOnly unresolved instance: forceMany with only var instance → UnresolvedInstanceVar', () => {
     const result = solve(
       ['F:data:in'],
       {

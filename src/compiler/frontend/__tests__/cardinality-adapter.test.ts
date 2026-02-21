@@ -33,7 +33,7 @@ describe('createCardinalityAdapterObligations', () => {
 
   const clampOrigin: ConstraintOrigin = { kind: 'blockRule', blockId: 'sig', blockType: 'Sig', rule: 'policy.clampOne' };
   const manyOrigin: ConstraintOrigin = { kind: 'blockRule', blockId: 'arr', blockType: 'Array', rule: 'policy.forceMany' };
-  const zipOrigin: ConstraintOrigin = { kind: 'blockRule', blockId: 'add', blockType: 'Add', rule: 'policy.zipBroadcast' };
+  const zipOrigin: ConstraintOrigin = { kind: 'blockRule', blockId: 'add', blockType: 'Add', rule: 'policy.promoteToMany' };
 
   it('returns empty for no conflicts', () => {
     const g = makeGraph([], []);
@@ -54,7 +54,7 @@ describe('createCardinalityAdapterObligations', () => {
   it('identifies boundary edge where to port is in clampOne AND zipPorts', () => {
     // When edge equality merges both endpoints into clampOne group,
     // the boundary edge has both from AND to in clampOneMembers,
-    // but to is also in zipPorts (it's part of the conflicting zipBroadcast).
+    // but to is also in zipPorts (it's part of the conflicting promoteToMany group).
     const g = makeGraph(
       [
         { id: 'sig', type: 'Sig', params: {}, portDefaults: {}, origin: 'user', displayName: 'Sig', domainId: null, role: { kind: 'user', meta: {} } },
@@ -126,10 +126,10 @@ describe('createCardinalityAdapterObligations', () => {
     expect(result).toHaveLength(0);
   });
 
-  it('identifies boundary edge for ClampManyConflict (signalOnly→fieldOnly)', () => {
-    // When a signalOnly block connects directly to a fieldOnly port,
-    // edge equality merges them into the same UF group. The clampOne (from signalOnly)
-    // and forceMany (from fieldOnly) create a ClampManyConflict. The boundary edge
+  it('identifies boundary edge for ClampManyConflict (oneOnly→manyOnly boundary)', () => {
+    // When a oneOnly block connects directly to a manyOnly port,
+    // edge equality merges them into the same UF group. The clampOne (from oneOnly)
+    // and forceMany (from manyOnly) create a ClampManyConflict. The boundary edge
     // is the one connecting them — inserting Broadcast breaks edge equality.
     const g = makeGraph(
       [
@@ -249,10 +249,9 @@ describe('createCardinalityAdapterObligations', () => {
 // =============================================================================
 
 describe('cardinality adapter fixpoint integration', () => {
-  it('InfiniteTimeRoot → Phasor → Add ← Array: no ZipBroadcast errors (transform zip filtered by axisVar)', () => {
-    // The root fix is in extract-constraints: transform zipBroadcast only includes
-    // axisVar ports, not concrete output ports. This prevents many evidence from
-    // propagating through the zipBroadcast to clampOne groups.
+  it('InfiniteTimeRoot → Phasor → Add ← Array: no cardinality conflicts', () => {
+    // promoteToMany constraint only includes axisVar ports, not concrete output ports.
+    // This prevents many evidence from propagating to clampOne groups.
     const patch = buildPatch((b) => {
       const timeRoot = b.addBlock('InfiniteTimeRoot');
       const phasor = b.addBlock('Phasor');
@@ -280,11 +279,11 @@ describe('cardinality adapter fixpoint integration', () => {
     expect(result.iterations).toBeLessThan(20);
   });
 
-  it('mixed cardinality: clampOne ports stay at one in zipBroadcast group with many evidence', () => {
+  it('mixed cardinality: clampOne ports stay at one in promoteToMany group with many evidence', () => {
     // InfiniteTimeRoot → Phasor → Add ← Array
-    // InfiniteTimeRoot:time is clampOne (signalOnly)
+    // InfiniteTimeRoot:time is clampOne (oneOnly acceptance)
     // Array:elements is forceMany (transform)
-    // Add is preserve+allowZipSig → zipBroadcast over all ports
+    // Add has promoteToMany policy → mixed cardinality over all ports
     // Result: Add:a (from Phasor) stays at one, Add:b (from Array) resolves to many
     // Runtime uses kernelZipSig for mixed cardinality — no Broadcast adapter needed
     const patch = buildPatch((b) => {

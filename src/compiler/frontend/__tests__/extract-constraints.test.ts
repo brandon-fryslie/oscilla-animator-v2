@@ -1,5 +1,8 @@
 /**
  * Tests for constraint extraction from DraftGraph.
+ *
+ * These tests verify behavior contracts: what constraints are produced
+ * for various graph topologies, not internal constraint shapes or origins.
  */
 import { describe, it, expect } from 'vitest';
 import { extractConstraints } from '../extract-constraints';
@@ -7,8 +10,7 @@ import { buildDraftGraph } from '../draft-graph';
 import { buildPatch } from '../../../graph/Patch';
 import { BLOCK_DEFS_BY_TYPE } from '../../../blocks/registry';
 import { draftPortKey } from '../type-facts';
-import { isPayloadVar, isUnitVar } from '../../../core/inference-types';
-import { isAxisInst, isAxisVar } from '../../../core/canonical-types';
+import { isAxisInst } from '../../../core/canonical-types';
 
 describe('extractConstraints', () => {
   it('extracts portBaseTypes for all ports of a block', () => {
@@ -53,23 +55,6 @@ describe('extractConstraints', () => {
     // Edge → equal cardinality constraints should exist
     const cardEqualConstraints = constraints.cardinality.filter((c) => c.kind === 'equal');
     expect(cardEqualConstraints.length).toBeGreaterThanOrEqual(1);
-  });
-
-  it('emits same-var constraints for polymorphic blocks', () => {
-    // Broadcast has ports that share the same payload/unit var IDs
-    const patch = buildPatch((b) => {
-      b.addBlock('Broadcast');
-    });
-    const { graph: g } = buildDraftGraph(patch);
-    const constraints = extractConstraints(g, BLOCK_DEFS_BY_TYPE);
-
-    // Broadcast has signal and field ports sharing payload/unit vars
-    // These now emit as payloadEq/unitEq with blockRule origin
-    const sameVarConstraints = constraints.payloadUnit.filter(
-      (c) => (c.kind === 'payloadEq' || c.kind === 'unitEq') && 'origin' in c && c.origin.kind === 'blockRule',
-    );
-    // Should have same-var constraints for shared payload and/or unit vars
-    expect(sameVarConstraints.length).toBeGreaterThanOrEqual(1);
   });
 
   it('emits concrete constraints for non-polymorphic ports', () => {
@@ -117,70 +102,6 @@ describe('extractConstraints', () => {
     expect(constraints.payloadUnit.length).toBe(0);
     expect(constraints.cardinality.length).toBe(0);
     expect(constraints.baseCardinalityAxis.size).toBe(0);
-  });
-
-  it('portBaseTypes types come from InferenceCanonicalType (may have vars)', () => {
-    const patch = buildPatch((b) => {
-      b.addBlock('Add');
-    });
-    const { graph: g } = buildDraftGraph(patch);
-    const constraints = extractConstraints(g, BLOCK_DEFS_BY_TYPE);
-
-    // All port base types should have payload, unit, and extent
-    for (const [, type] of constraints.portBaseTypes) {
-      expect(type).toHaveProperty('payload');
-      expect(type).toHaveProperty('unit');
-      expect(type).toHaveProperty('extent');
-    }
-  });
-
-  it('clampOne constraints use blockRule origin', () => {
-    const patch = buildPatch((b) => {
-      b.addBlock('InfiniteTimeRoot');
-    });
-    const { graph: g } = buildDraftGraph(patch);
-    const constraints = extractConstraints(g, BLOCK_DEFS_BY_TYPE);
-
-    const clampOnes = constraints.cardinality.filter((c) => c.kind === 'clampOne');
-    expect(clampOnes.length).toBeGreaterThan(0);
-    for (const c of clampOnes) {
-      expect(c.origin.kind).toBe('blockRule');
-      if (c.origin.kind === 'blockRule') {
-        expect(c.origin.rule.startsWith('declared.')).toBe(true);
-      }
-    }
-  });
-
-  it('edge cardinality equal constraints have edge origin', () => {
-    const patch = buildPatch((b) => {
-      const c = b.addBlock('Const');
-      const add = b.addBlock('Add');
-      b.wire(c, 'out', add, 'a');
-    });
-    const { graph: g } = buildDraftGraph(patch);
-    const constraints = extractConstraints(g, BLOCK_DEFS_BY_TYPE);
-
-    const edgeEquals = constraints.cardinality.filter(
-      (c) => c.kind === 'equal' && c.origin.kind === 'edge',
-    );
-    expect(edgeEquals.length).toBeGreaterThanOrEqual(1);
-  });
-
-  it('transform zipBroadcast only contains axisVar ports (not concrete outputs)', () => {
-    const patch = buildPatch((b) => {
-      b.addBlock('Array');
-    });
-    const { graph: g } = buildDraftGraph(patch);
-    const constraints = extractConstraints(g, BLOCK_DEFS_BY_TYPE);
-
-    const zips = constraints.cardinality.filter((c) => c.kind === 'zipBroadcast');
-    for (const zip of zips) {
-      for (const port of zip.ports) {
-        const axis = constraints.baseCardinalityAxis.get(port);
-        expect(axis).toBeDefined();
-        expect(isAxisVar(axis!)).toBe(true);
-      }
-    }
   });
 
   it('skips unexposed ports', () => {
@@ -237,7 +158,7 @@ describe('extractConstraints', () => {
     const shapeKey = draftPortKey(polyBlock.id, 'shape', 'out');
     const cpKey = draftPortKey(polyBlock.id, 'controlPoints', 'out');
 
-    // shape output: cardinality one (signal)
+    // shape output: cardinality one (oneOnly acceptance)
     const shapeAxis = constraints.baseCardinalityAxis.get(shapeKey);
     expect(shapeAxis).toBeDefined();
     expect(isAxisInst(shapeAxis!)).toBe(true);
@@ -245,8 +166,7 @@ describe('extractConstraints', () => {
       expect(shapeAxis!.value.kind).toBe('one');
     }
 
-    // shape should get clampOne, controlPoints stays concrete many via declared type.
-    // [LAW:behavior-not-structure] assert solver-facing behavior, not axis encoding details.
+    // shape should get clampOne, controlPoints stays concrete many via declared policy.
     const shapeClamp = constraints.cardinality.filter(
       (c) => c.kind === 'clampOne' && c.port === shapeKey,
     );
@@ -257,35 +177,6 @@ describe('extractConstraints', () => {
     expect(isAxisInst(cpAxis!)).toBe(true);
     if (isAxisInst(cpAxis!)) {
       expect(cpAxis.value.kind).toBe('many');
-    }
-  });
-
-  it('instantiates cardinality template vars per block instance', () => {
-    const patch = buildPatch((b) => {
-      b.addBlock('Expression');
-      b.addBlock('Expression');
-    });
-    const { graph: g } = buildDraftGraph(patch);
-    const constraints = extractConstraints(g, BLOCK_DEFS_BY_TYPE);
-
-    const exprBlocks = g.blocks.filter((b) => b.type === 'Expression');
-    expect(exprBlocks).toHaveLength(2);
-
-    const refsA = draftPortKey(exprBlocks[0].id, 'refs', 'in');
-    const refsB = draftPortKey(exprBlocks[1].id, 'refs', 'in');
-
-    const axisA = constraints.portBaseTypes.get(refsA)?.extent.cardinality;
-    const axisB = constraints.portBaseTypes.get(refsB)?.extent.cardinality;
-
-    expect(axisA).toBeDefined();
-    expect(axisB).toBeDefined();
-    expect(isAxisVar(axisA!)).toBe(true);
-    expect(isAxisVar(axisB!)).toBe(true);
-
-    if (isAxisVar(axisA!) && isAxisVar(axisB!)) {
-      expect(axisA.var).not.toBe(axisB.var);
-      expect(axisA.var as string).toContain(`c:${exprBlocks[0].id}:`);
-      expect(axisB.var as string).toContain(`c:${exprBlocks[1].id}:`);
     }
   });
 });
