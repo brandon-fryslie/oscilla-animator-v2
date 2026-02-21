@@ -6,11 +6,20 @@
  */
 
 import { registerBlock, ALL_CONCRETE_PAYLOADS } from '../registry';
-import { canonicalType, canonicalFieldDef, payloadStride, type PayloadType, boolConst, withInstance, instanceRef, requireInst, unitNone, contractClamp01 } from '../../core/canonical-types';
+import { canonicalType, payloadStride, type PayloadType, boolConst, withInstance, instanceRef, requireInst, unitNone, contractClamp01 } from '../../core/canonical-types';
 import { FLOAT, INT, BOOL } from '../../core/canonical-types';
+import { cardinalityVar } from '../../core/inference-types';
+import { cardinalityVarId } from '../../core/ids';
 import { DOMAIN_CIRCLE } from '../../core/domain-registry';
 import { defaultSourceConst, defaultSource } from '../../types';
 import { resolveInputConstant } from '../lower-utils';
+
+// [LAW:one-source-of-truth] Array output cardinality behavior is declared on CT/ICT.
+const ARRAY_OUTPUT_CARD = cardinalityVar(cardinalityVarId('array_outputs'), {
+  relation: 'uniform',
+  acceptance: 'manyOnly',
+  instanceBinding: { kind: 'create', domainType: DOMAIN_CIRCLE },
+});
 
 registerBlock({
   type: 'Array',
@@ -53,10 +62,22 @@ registerBlock({
     },
   },
   outputs: {
-    elements: { label: 'Elements', type: canonicalFieldDef(FLOAT, { kind: 'none' }, contractClamp01()) },
-    index: { label: 'Index', type: canonicalFieldDef(INT, { kind: 'none' }, contractClamp01()) },
-    t: { label: 'T (0-1)', type: canonicalFieldDef(FLOAT, unitNone(), contractClamp01()) },
-    active: { label: 'Active', type: canonicalFieldDef(BOOL, { kind: 'none' }, contractClamp01()) },
+    elements: {
+      label: 'Elements',
+      type: canonicalType(FLOAT, { kind: 'none' }, { cardinality: ARRAY_OUTPUT_CARD }, contractClamp01()),
+    },
+    index: {
+      label: 'Index',
+      type: canonicalType(INT, { kind: 'none' }, { cardinality: ARRAY_OUTPUT_CARD }, contractClamp01()),
+    },
+    t: {
+      label: 'T (0-1)',
+      type: canonicalType(FLOAT, unitNone(), { cardinality: ARRAY_OUTPUT_CARD }, contractClamp01()),
+    },
+    active: {
+      label: 'Active',
+      type: canonicalType(BOOL, { kind: 'none' }, { cardinality: ARRAY_OUTPUT_CARD }, contractClamp01()),
+    },
   },
   lower: ({ ctx, inputsById }) => {
     const countInput = inputsById.count;

@@ -6,9 +6,16 @@
 
 import { registerBlock, ALL_CONCRETE_PAYLOADS } from '../registry';
 import { payloadStride, type PayloadType, requireInst } from '../../core/canonical-types';
-import { unitVar, payloadVar, inferType, inferFieldDef } from '../../core/inference-types';
+import { unitVar, payloadVar, inferType, cardinalityVar } from '../../core/inference-types';
+import { cardinalityVarId } from '../../core/ids';
 import { DOMAIN_SHAPE } from '../../core/domain-registry';
 import { rewriteFieldType } from '../layout/_helpers';
+
+// [LAW:one-source-of-truth] Broadcast output field behavior is declared on CT/ICT.
+const BROADCAST_FIELD_CARD = cardinalityVar(cardinalityVarId('broadcast_field'), {
+  acceptance: 'manyOnly',
+  instanceBinding: 'inherit',
+});
 
 /**
  * Payload-Generic, Unit-Generic field broadcast block.
@@ -66,7 +73,7 @@ registerBlock({
     signal: { label: 'Signal', type: inferType(payloadVar('broadcast_payload'), unitVar('broadcast_in')) },
   },
   outputs: {
-    field: { label: 'Field', type: inferFieldDef(payloadVar('broadcast_payload'), unitVar('broadcast_in')) },
+    field: { label: 'Field', type: inferType(payloadVar('broadcast_payload'), unitVar('broadcast_in'), { cardinality: BROADCAST_FIELD_CARD }) },
   },
   lower: ({ ctx, inputsById }) => {
     // Get resolved payload type from ctx.outTypes (populated from pass1 portTypes)

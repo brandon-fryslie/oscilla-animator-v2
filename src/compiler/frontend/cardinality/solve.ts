@@ -17,7 +17,7 @@
  */
 
 import type { CardinalityValue, InstanceRef } from '../../../core/canonical-types';
-import { isAxisVar, isAxisInst, type Axis } from '../../../core/canonical-types';
+import { isAxisVar, isAxisInst, type Axis, UNBOUND_INSTANCE } from '../../../core/canonical-types';
 import type { CardinalityVarId } from '../../../core/ids';
 import type { InstanceVarId } from '../../../core/ids';
 import type { DraftPortKey } from '../type-facts';
@@ -597,12 +597,29 @@ export function solveCardinality(input: CardinalitySolveInput): CardinalitySolve
           finalResolved = { kind: 'many', instance: resolvedRef };
           facts.resolved = finalResolved;
         } else {
-          errors.push({
-            kind: 'UnresolvedInstanceVar',
-            ports: members,
-            message: `Instance variable unresolved for group`,
+          // [LAW:one-source-of-truth] CT/ICT-declared inherit groups can defer concrete instance binding.
+          // Keep cardinality as many with UNBOUND_INSTANCE; backend repair pass rewrites it when context exists.
+          const allowsDeferredInstance = members.some((port) => {
+            const axis = baseCardinalityAxis.get(port);
+            if (!axis || !isAxisVar(axis)) return false;
+            const cardAxis = axis as any;
+            const hasDeclaredPolicy = cardAxis.relation !== undefined
+              || cardAxis.acceptance !== undefined
+              || cardAxis.instanceBinding !== undefined;
+            if (!hasDeclaredPolicy) return false;
+            return cardAxis.instanceBinding === undefined || cardAxis.instanceBinding === 'inherit';
           });
-          continue;
+          if (allowsDeferredInstance) {
+            finalResolved = { kind: 'many', instance: UNBOUND_INSTANCE };
+            facts.resolved = finalResolved;
+          } else {
+            errors.push({
+              kind: 'UnresolvedInstanceVar',
+              ports: members,
+              message: `Instance variable unresolved for group`,
+            });
+            continue;
+          }
         }
       }
     }
