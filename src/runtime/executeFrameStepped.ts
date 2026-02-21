@@ -31,7 +31,7 @@ import { resolveCameraFromGlobals } from './CameraResolver';
 import { requireManyInstance } from '../core/canonical-types';
 import type { ValueSlot, StateSlotId } from '../compiler/ir/Indices';
 import { SYSTEM_PALETTE_SLOT } from '../compiler/ir/Indices';
-import { evaluateValueExprSignal, evaluateConstructSignal } from './ValueExprSignalEvaluator';
+import { evaluateValueExprScalar, evaluateConstructScalar } from './ValueExprSignalEvaluator';
 import { evaluateValueExprEvent } from './ValueExprEventEvaluator';
 import { materializeValueExpr } from './ValueExprMaterializer';
 import { arenaSlice, type ArenaSlotDescriptor } from './ArenaValueStore';
@@ -339,7 +339,7 @@ export function* executeFrameStepped(
 
             if (stride > 1 && exprNode?.kind === 'construct') {
               const arenaDesc = resolveArenaDescriptor(slotToArena, lookup);
-              const written = evaluateConstructSignal(exprNode, valueExprs, state, state.arena, arenaDesc.offset);
+              const written = evaluateConstructScalar(exprNode, valueExprs, state, state.arena, arenaDesc.offset);
               if (written !== stride) {
                 throw new Error(`evalValue: construct wrote ${written} components but slot stride is ${stride}`);
               }
@@ -355,7 +355,7 @@ export function* executeFrameStepped(
                 writtenSlots.set(targetSlot, readSlotValue(state, lookup, meta, slotToArena));
               }
             } else if (stride === 1) {
-              const value = evaluateValueExprSignal(step.expr as any, program.valueExprs.nodes, state);
+              const value = evaluateValueExprScalar(step.expr as any, program.valueExprs.nodes, state);
               writeArenaScalar(slotToArena, state, lookup, value);
               state.tap?.recordSlotValue?.(slot, value);
               state.cache.values[step.expr as number] = value;
@@ -508,7 +508,7 @@ export function* executeFrameStepped(
     const step = steps[stepIdx];
 
     if (step.kind === 'stateWrite') {
-      const value = evaluateValueExprSignal(step.value as any, program.valueExprs.nodes, state);
+      const value = evaluateValueExprScalar(step.value as any, program.valueExprs.nodes, state);
       state.state[step.stateSlot as number] = value;
 
       const writtenStateSlots = new Map<StateSlotId, StateSlotValue>();

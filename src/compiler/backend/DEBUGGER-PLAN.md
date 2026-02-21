@@ -128,7 +128,7 @@
 │ ): Generator<StepSnapshot, RenderFrameIR, void>                                                                       │
 │                                                                                                                       │
 │ Mirrors executeFrame() structure (lines 163–671 of ScheduleExecutor.ts) using the same imported helpers               │
-│ (evaluateValueExprSignal, materializeValueExpr, evaluateValueExprEvent, resolveTime, assembleRenderFrame, etc.).      │
+│ (evaluateValueExprScalar, materializeValueExpr, evaluateValueExprEvent, resolveTime, assembleRenderFrame, etc.).      │
 │                                                                                                                       │
 │ Yield points:                                                                                                         │
 │ 1. After pre-frame setup (time resolve, cache advance, event clear) → phase: 'pre-frame'                              │

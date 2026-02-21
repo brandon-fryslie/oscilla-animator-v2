@@ -29,7 +29,7 @@ import { resolveCameraFromGlobals } from './CameraResolver';
 import { requireManyInstance } from '../core/canonical-types';
 import type { ValueSlot } from '../compiler/ir/Indices';
 import { SYSTEM_PALETTE_SLOT } from '../compiler/ir/Indices';
-import { evaluateValueExprSignal, evaluateConstructSignal } from './ValueExprSignalEvaluator';
+import { evaluateValueExprScalar, evaluateConstructScalar } from './ValueExprSignalEvaluator';
 import { evaluateValueExprEvent } from './ValueExprEventEvaluator';
 import { materializeValueExpr } from './ValueExprMaterializer';
 import { arenaSlice, type ArenaSlotDescriptor } from './ArenaValueStore';
@@ -296,7 +296,7 @@ export function executeFrame(
             if (stride > 1 && exprNode?.kind === 'construct') {
               // Multi-component signal: use construct evaluator to write all components
               const arenaDesc = resolveArenaDescriptor(slotToArena, lookup);
-              const written = evaluateConstructSignal(
+              const written = evaluateConstructScalar(
                 exprNode,
                 valueExprs,
                 state,
@@ -319,7 +319,7 @@ export function executeFrame(
               state.cache.stamps[step.expr as number] = state.cache.frameId;
             } else if (stride === 1) {
               // Scalar signal: evaluate and write single value
-              const value = evaluateValueExprSignal(step.expr as any, program.valueExprs.nodes, state);
+              const value = evaluateValueExprScalar(step.expr as any, program.valueExprs.nodes, state);
 
               writeArenaScalar(slotToArena, state, lookup, value);
 
@@ -551,7 +551,7 @@ export function executeFrame(
   for (const step of steps) {
     if (step.kind === 'stateWrite') {
       // Write to persistent state array using ValueExpr evaluation
-      const value = evaluateValueExprSignal(step.value as any, program.valueExprs.nodes, state);
+      const value = evaluateValueExprScalar(step.value as any, program.valueExprs.nodes, state);
       state.state[step.stateSlot as number] = value;
     }
     if (step.kind === 'fieldStateWrite') {

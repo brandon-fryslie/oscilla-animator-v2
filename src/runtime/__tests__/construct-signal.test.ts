@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import { evaluateConstructSignal, evaluateValueExprSignal } from '../ValueExprSignalEvaluator';
+import { evaluateConstructScalar, evaluateValueExprScalar } from '../ValueExprSignalEvaluator';
 import type { ValueExpr } from '../../compiler/ir/value-expr';
 import type { RuntimeState } from '../RuntimeState';
 import { createRuntimeState } from '../RuntimeState';
@@ -60,7 +60,7 @@ describe('construct signal evaluation', () => {
     const targetBuffer = new Float64Array(10);
     const targetOffset = 3;
 
-    const written = evaluateConstructSignal(constructExpr, valueExprs, state, targetBuffer, targetOffset);
+    const written = evaluateConstructScalar(constructExpr, valueExprs, state, targetBuffer, targetOffset);
 
     expect(written).toBe(2);
     expect(targetBuffer[3]).toBe(1.5);
@@ -85,7 +85,7 @@ describe('construct signal evaluation', () => {
     const targetBuffer = new Float64Array(10);
     const targetOffset = 0;
 
-    const written = evaluateConstructSignal(constructExpr, valueExprs, state, targetBuffer, targetOffset);
+    const written = evaluateConstructScalar(constructExpr, valueExprs, state, targetBuffer, targetOffset);
 
     expect(written).toBe(4);
     expect(targetBuffer[0]).toBe(0.1);
@@ -111,7 +111,7 @@ describe('construct signal evaluation', () => {
     const targetBuffer = new Float64Array(10);
     const targetOffset = 5;
 
-    const written = evaluateConstructSignal(constructExpr, valueExprs, state, targetBuffer, targetOffset);
+    const written = evaluateConstructScalar(constructExpr, valueExprs, state, targetBuffer, targetOffset);
 
     expect(written).toBe(3);
     expect(targetBuffer[5]).toBe(10);
@@ -132,7 +132,7 @@ describe('construct signal evaluation', () => {
     ];
 
     // Evaluate construct recursively (not as a step root)
-    const value = evaluateValueExprSignal(2 as ValueExprId, valueExprs, state);
+    const value = evaluateValueExprScalar(2 as ValueExprId, valueExprs, state);
 
     // Should return first component
     expect(value).toBe(42);
@@ -143,7 +143,7 @@ describe('construct signal evaluation', () => {
       { kind: 'const', value: floatConst(3.14), type: canonicalSignal({ kind: 'float' }, { kind: 'none' }) },
     ];
 
-    const value = evaluateValueExprSignal(0 as ValueExprId, valueExprs, state);
+    const value = evaluateValueExprScalar(0 as ValueExprId, valueExprs, state);
 
     expect(value).toBe(3.14);
   });
@@ -216,9 +216,9 @@ describe('extract signal evaluation', () => {
       },
     ];
 
-    expect(evaluateValueExprSignal(4 as ValueExprId, valueExprs, state)).toBe(10);
-    expect(evaluateValueExprSignal(5 as ValueExprId, valueExprs, state)).toBe(20);
-    expect(evaluateValueExprSignal(6 as ValueExprId, valueExprs, state)).toBe(30);
+    expect(evaluateValueExprScalar(4 as ValueExprId, valueExprs, state)).toBe(10);
+    expect(evaluateValueExprScalar(5 as ValueExprId, valueExprs, state)).toBe(20);
+    expect(evaluateValueExprScalar(6 as ValueExprId, valueExprs, state)).toBe(30);
   });
 
   it('works end-to-end with construct values mirrored to arena', () => {
@@ -250,13 +250,13 @@ describe('extract signal evaluation', () => {
     // Write construct directly to arena (runtime canonical numeric store).
     const offset = 10;
     const constructExpr = valueExprs[2] as Extract<ValueExpr, { kind: 'construct' }>;
-    evaluateConstructSignal(constructExpr, valueExprs, state, state.arena, offset);
+    evaluateConstructScalar(constructExpr, valueExprs, state, state.arena, offset);
 
     // Set up scalarExprToArenaOffset mapping
     state.cache.scalarExprToArenaOffset = new Map([[2, offset]]);
 
-    expect(evaluateValueExprSignal(3 as ValueExprId, valueExprs, state)).toBe(100);
-    expect(evaluateValueExprSignal(4 as ValueExprId, valueExprs, state)).toBe(200);
+    expect(evaluateValueExprScalar(3 as ValueExprId, valueExprs, state)).toBe(100);
+    expect(evaluateValueExprScalar(4 as ValueExprId, valueExprs, state)).toBe(200);
   });
 
   it('throws when input has no slot mapping', () => {
@@ -272,7 +272,7 @@ describe('extract signal evaluation', () => {
       },
     ];
 
-    expect(() => evaluateValueExprSignal(0 as ValueExprId, valueExprs, state)).toThrow(
+    expect(() => evaluateValueExprScalar(0 as ValueExprId, valueExprs, state)).toThrow(
       'compiler bug'
     );
   });
@@ -305,9 +305,9 @@ describe('extract signal evaluation', () => {
       { kind: 'extract', input: inputId as ValueExprId, componentIndex: 3, type: canonicalSignal({ kind: 'float' }, { kind: 'none' }) },
     ];
 
-    expect(evaluateValueExprSignal(5 as ValueExprId, valueExprs, state)).toBeCloseTo(0.1, 6);
-    expect(evaluateValueExprSignal(6 as ValueExprId, valueExprs, state)).toBeCloseTo(0.2, 6);
-    expect(evaluateValueExprSignal(7 as ValueExprId, valueExprs, state)).toBeCloseTo(0.3, 6);
-    expect(evaluateValueExprSignal(8 as ValueExprId, valueExprs, state)).toBeCloseTo(1.0, 6);
+    expect(evaluateValueExprScalar(5 as ValueExprId, valueExprs, state)).toBeCloseTo(0.1, 6);
+    expect(evaluateValueExprScalar(6 as ValueExprId, valueExprs, state)).toBeCloseTo(0.2, 6);
+    expect(evaluateValueExprScalar(7 as ValueExprId, valueExprs, state)).toBeCloseTo(0.3, 6);
+    expect(evaluateValueExprScalar(8 as ValueExprId, valueExprs, state)).toBeCloseTo(1.0, 6);
   });
 });

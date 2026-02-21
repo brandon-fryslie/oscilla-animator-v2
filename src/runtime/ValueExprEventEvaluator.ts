@@ -29,7 +29,7 @@ import type { ValueExpr, ValueExprEvent } from '../compiler/ir/value-expr';
 import type { ValueExprId } from '../compiler/ir/Indices';
 import type { RuntimeState } from './RuntimeState';
 import type { CompiledProgramIR } from '../compiler/ir/program';
-import { evaluateValueExprSignal } from './ValueExprSignalEvaluator';
+import { evaluateValueExprScalar } from './ValueExprSignalEvaluator';
 
 /**
  * Cycle detection error for combine recursion
@@ -128,7 +128,7 @@ function evaluateEventKind(
     case 'wrap': {
       // Edge detection: rising edge of (signalValue >= 0.5)
       // Same logic as EventEvaluator.ts:57-64
-      const signalValue = evaluateValueExprSignal(expr.input, table.nodes, state);
+      const signalValue = evaluateValueExprScalar(expr.input, table.nodes, state);
 
       // NaN and Inf treated as false (spec §8.6.3)
       const predicate = (Number.isFinite(signalValue) && signalValue >= 0.5) ? 1 : 0;

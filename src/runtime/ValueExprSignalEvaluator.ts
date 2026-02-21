@@ -44,7 +44,7 @@ import { applyPureFn } from './SignalKernelLibrary';
  * @param targetOffset - Starting offset in buffer
  * @returns Number of components written (stride)
  */
-export function evaluateConstructSignal(
+export function evaluateConstructScalar(
   expr: Extract<ValueExpr, { kind: 'construct' }>,
   valueExprs: readonly ValueExpr[],
   state: RuntimeState,
@@ -53,7 +53,7 @@ export function evaluateConstructSignal(
 ): number {
   // Evaluate each component and write contiguously
   for (let i = 0; i < expr.components.length; i++) {
-    const componentValue = evaluateValueExprSignal(expr.components[i], valueExprs, state);
+    const componentValue = evaluateValueExprScalar(expr.components[i], valueExprs, state);
     targetBuffer[targetOffset + i] = componentValue;
   }
   return expr.components.length;
@@ -67,7 +67,7 @@ export function evaluateConstructSignal(
  * @param state - Runtime state with cache
  * @returns Evaluated signal value
  */
-export function evaluateValueExprSignal(
+export function evaluateValueExprScalar(
   veId: ValueExprId,
   valueExprs: readonly ValueExpr[],
   state: RuntimeState
@@ -217,7 +217,7 @@ function evaluateSignalExtent(
         throw new Error('construct expression has no components');
       }
       // Return first component value (caller may write all components if this is a step root)
-      return evaluateValueExprSignal(expr.components[0], valueExprs, state);
+      return evaluateValueExprScalar(expr.components[0], valueExprs, state);
     }
 
     case 'hslToRgb': {
@@ -248,13 +248,13 @@ function evaluateKernelSignal(
   switch (expr.kernelKind) {
     case 'map': {
       // Unary kernel: fn(input)
-      const inputVal = evaluateValueExprSignal(expr.input, valueExprs, state);
+      const inputVal = evaluateValueExprScalar(expr.input, valueExprs, state);
       return applyPureFn(expr.fn, [inputVal]);
     }
 
     case 'zip': {
       // N-ary kernel: fn(inputs...)
-      const inputVals = expr.inputs.map(id => evaluateValueExprSignal(id, valueExprs, state));
+      const inputVals = expr.inputs.map(id => evaluateValueExprScalar(id, valueExprs, state));
       return applyPureFn(expr.fn, inputVals);
     }
 

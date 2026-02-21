@@ -7,7 +7,7 @@
  * Key design principles:
  * - Unified ValueExpr table (no separate field/signal/event tables)
  * - Materialization is for field-extent expressions only
- * - Signals are evaluated via evaluateValueExprSignal() (not materialized)
+ * - Signals are evaluated via evaluateValueExprScalar() (not materialized)
  * - Buffer reuse via BufferPool (no allocation in hot path)
  */
 
@@ -18,7 +18,7 @@ import type { PureFn } from '../compiler/ir/types';
 import type { InstanceId } from '../compiler/ir/Indices';
 import type { CompiledProgramIR } from '../compiler/ir/program';
 import type { BufferPool } from './BufferPool';
-import { evaluateValueExprSignal } from './ValueExprSignalEvaluator';
+import { evaluateValueExprScalar } from './ValueExprSignalEvaluator';
 import { requireInst } from '../core/canonical-types';
 import { payloadStride } from '../core/canonical-types';
 import { getTopology } from '../shapes/registry';
@@ -153,7 +153,7 @@ export function materializeValueExpr(
     case 'eventRead': {
       // [LAW:dataflow-not-control-flow] Scalar signal reads materialize by writing
       // their evaluated value through the same buffer path as all other materialize ops.
-      const signalValue = evaluateValueExprSignal(exprId, table.nodes, state);
+      const signalValue = evaluateValueExprScalar(exprId, table.nodes, state);
       fillBufferWithSignal(buf, signalValue, count, stride);
       break;
     }
@@ -217,7 +217,7 @@ function materializeKernel(
         const compCount = expr.signalComponents.length;
         const componentValues = new Array<number>(compCount);
         for (let j = 0; j < compCount; j++) {
-          componentValues[j] = evaluateValueExprSignal(expr.signalComponents[j], table.nodes, state);
+          componentValues[j] = evaluateValueExprScalar(expr.signalComponents[j], table.nodes, state);
         }
         for (let i = 0; i < count; i++) {
           for (let c = 0; c < componentValues.length; c++) {
@@ -226,7 +226,7 @@ function materializeKernel(
         }
       } else {
         // Single-component broadcast: fill entire buffer with signal value
-        const signalValue = evaluateValueExprSignal(expr.signal, table.nodes, state);
+        const signalValue = evaluateValueExprScalar(expr.signal, table.nodes, state);
         fillBufferWithSignal(buf, signalValue, count, stride);
       }
       break;
@@ -238,7 +238,7 @@ function materializeKernel(
       const sigCount = expr.signals.length;
       const sigValues = new Array<number>(sigCount);
       for (let j = 0; j < sigCount; j++) {
-        sigValues[j] = evaluateValueExprSignal(expr.signals[j], table.nodes, state);
+        sigValues[j] = evaluateValueExprScalar(expr.signals[j], table.nodes, state);
       }
       applyZipSig(buf, fieldInput, sigValues, expr.fn, count, stride, instanceId, program);
       break;

@@ -7,7 +7,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { createRuntimeState } from '../../runtime';
-import { evaluateValueExprSignal } from '../../runtime/ValueExprSignalEvaluator';
+import { evaluateValueExprScalar } from '../../runtime/ValueExprSignalEvaluator';
 import { valueExprId, eventSlotId } from '../../compiler/ir/Indices';
 import { canonicalType, FLOAT } from '../../core/canonical-types';
 
@@ -31,7 +31,7 @@ describe('EventToSignalMask', () => {
 
 describe('SampleHold', () => {
   it('returns 0.0 when event has not fired', () => {
-    // Unit test: directly test evaluateValueExprSignal with an eventRead expr
+    // Unit test: directly test evaluateValueExprScalar with an eventRead expr
     // when eventScalars[slot] is 0.
     const state = createRuntimeState(4, 0, 4, 0);
     state.time = {
@@ -52,7 +52,7 @@ describe('SampleHold', () => {
       { kind: 'eventRead' as const, eventSlot: eventSlotId(0), type: canonicalType(FLOAT) },
     ];
 
-    const result = evaluateValueExprSignal(valueExprId(0), signals, state);
+    const result = evaluateValueExprScalar(valueExprId(0), signals, state);
     expect(result).toBe(0);
   });
 });
