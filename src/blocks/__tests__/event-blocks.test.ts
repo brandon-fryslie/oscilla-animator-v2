@@ -7,7 +7,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { createRuntimeState } from '../../runtime';
-import { evaluateValueExprScalar } from '../../runtime/ValueExprSignalEvaluator';
+import { evaluateValueExprScalar } from '../../runtime/ValueExprScalarEvaluator';
 import { valueExprId, eventSlotId } from '../../compiler/ir/Indices';
 import { canonicalType, FLOAT } from '../../core/canonical-types';
 

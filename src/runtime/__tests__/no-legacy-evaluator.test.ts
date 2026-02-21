@@ -72,7 +72,7 @@ describe('Legacy Evaluator Tripwire', () => {
             /export\s+\{[^}]*\}\s+from\s+['"]\.\/SignalEvaluator['"]/.test(line) ||
             /export\s+\{[^}]*\}\s+from\s+['"]\.\/EventEvaluator['"]/.test(line) ||
             /export\s+\{[^}]*\}\s+from\s+['"]\.\/Materializer['"]/.test(line)) &&
-            !line.includes('ValueExpr')) || // Allow ValueExprSignalEvaluator, etc.
+            !line.includes('ValueExpr')) || // Allow ValueExprScalarEvaluator, etc.
           // Also catch direct exports of legacy symbols
           (/export\s+\{[^}]*(materialize|evaluateSignal|evaluateEvent)[^}]*\}/.test(line) &&
             !line.includes('ValueExpr'))
@@ -96,7 +96,7 @@ describe('Legacy Evaluator Tripwire', () => {
         `Legacy evaluator imports found in production code:\n\n${report}\n\n` +
         `These modules should only be imported by tests or by other legacy modules ` +
         `(EventEvaluator, Materializer, SignalEvaluator themselves).\n` +
-        `Use ValueExprSignalEvaluator, ValueExprEventEvaluator, or ValueExprMaterializer instead.`
+        `Use ValueExprScalarEvaluator, ValueExprEventEvaluator, or ValueExprMaterializer instead.`
       );
     }
 
@@ -112,7 +112,7 @@ describe('Legacy Evaluator Tripwire', () => {
     //
     // If this test fails:
     // 1. Check if you're importing from SignalEvaluator/EventEvaluator/Materializer
-    // 2. Use ValueExprSignalEvaluator/ValueExprEventEvaluator/ValueExprMaterializer instead
+    // 2. Use ValueExprScalarEvaluator/ValueExprEventEvaluator/ValueExprMaterializer instead
     // 3. If you need legacy code for migration, mark it with a TODO and expiry date
 
     expect(true).toBe(true);

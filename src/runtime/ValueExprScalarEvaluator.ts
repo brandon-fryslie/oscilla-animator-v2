@@ -1,10 +1,10 @@
 /**
  * ══════════════════════════════════════════════════════════════════════
- * VALUEEXPR SIGNAL EVALUATOR
+ * VALUEEXPR SCALAR EVALUATOR
  * ══════════════════════════════════════════════════════════════════════
  *
- * Signal evaluation for the unified ValueExpr table.
- * This evaluator handles signal-extent ValueExpr nodes (cardinality one,
+ * Scalar evaluation for the unified ValueExpr table.
+ * This evaluator handles scalar-extent ValueExpr nodes (cardinality one,
  * temporality continuous).
  *
  * Migration Status: Shadow mode implementation for incremental ValueExpr adoption.
@@ -12,10 +12,10 @@
  * validating equivalence before cutover.
  *
  * ──────────────────────────────────────────────────────────────────────
- * IMPORTANT: SIGNAL-EXTENT ONLY
+ * IMPORTANT: SCALAR-EXTENT ONLY
  * ──────────────────────────────────────────────────────────────────────
  *
- * This evaluator handles ONLY signal-extent expressions:
+ * This evaluator handles ONLY scalar-extent expressions:
  * - Cardinality: one (not zero, not many)
  * - Temporality: continuous (not discrete)
  *
@@ -60,12 +60,12 @@ export function evaluateConstructScalar(
 }
 
 /**
- * Evaluate a ValueExpr signal with caching
+ * Evaluate a scalar ValueExpr with caching
  *
  * @param veId - ValueExpr ID to evaluate
  * @param valueExprs - Dense array of ValueExpr nodes
  * @param state - Runtime state with cache
- * @returns Evaluated signal value
+ * @returns Evaluated scalar value
  */
 export function evaluateValueExprScalar(
   veId: ValueExprId,
@@ -86,7 +86,7 @@ export function evaluateValueExprScalar(
   }
 
   // Evaluate based on kind
-  const value = evaluateSignalExtent(expr, valueExprs, state);
+  const value = evaluateScalarExtent(expr, valueExprs, state);
 
   // NaN/Inf detection (batched)
   // Note: sourceBlockId not yet tracked in IR - will pass null for now
@@ -106,14 +106,14 @@ export function evaluateValueExprScalar(
 }
 
 /**
- * Evaluate a signal-extent ValueExpr recursively
+ * Evaluate a scalar-extent ValueExpr recursively
  *
  * @param expr - ValueExpr to evaluate
  * @param valueExprs - Dense array of all ValueExpr nodes (for recursive evaluation)
  * @param state - Runtime state
  * @returns Evaluated value
  */
-function evaluateSignalExtent(
+function evaluateScalarExtent(
   expr: ValueExpr,
   valueExprs: readonly ValueExpr[],
   state: RuntimeState
@@ -160,7 +160,7 @@ function evaluateSignalExtent(
     }
 
     case 'kernel': {
-      return evaluateKernelSignal(expr, valueExprs, state);
+      return evaluateKernelScalar(expr, valueExprs, state);
     }
 
     case 'state': {
@@ -186,7 +186,7 @@ function evaluateSignalExtent(
 
     case 'intrinsic': {
       const intrinsicName = expr.intrinsicKind === 'property' ? expr.intrinsic : expr.field;
-      throw new Error(`Intrinsic expressions are field-extent, not signal-extent (intrinsic=${intrinsicName})`);
+      throw new Error(`Intrinsic expressions are field-extent, not scalar-extent (intrinsic=${intrinsicName})`);
     }
 
     case 'event': {
@@ -194,7 +194,7 @@ function evaluateSignalExtent(
     }
 
     case 'extract': {
-      // [LAW:one-source-of-truth] Multi-component signals live in arena slots.
+      // [LAW:one-source-of-truth] Multi-component scalar expressions live in arena slots.
       // Read directly from the materialized slot — schedule ordering guarantees
       // the input was written before this extract evaluates.
       const scalarExprToArenaOffset = state.cache.scalarExprToArenaOffset;
@@ -202,7 +202,7 @@ function evaluateSignalExtent(
       if (offset === undefined) {
         throw new Error(
           `extract(${expr.componentIndex}): input ${expr.input} has no slot mapping — ` +
-          `multi-component signal was not materialized (compiler bug)`
+          `multi-component scalar expression was not materialized (compiler bug)`
         );
       }
       return state.arena[offset + expr.componentIndex];
@@ -210,7 +210,7 @@ function evaluateSignalExtent(
 
     case 'construct': {
       // Construct evaluates component expressions and returns the first component's value.
-      // For multi-component signals (vec2, vec3, color), the evaluator is responsible
+      // For multi-component scalar expressions (vec2, vec3, color), the evaluator is responsible
       // for writing ALL components contiguously when this expression is used as a step target.
       // When construct is evaluated recursively (not as a step root), we return component[0].
       if (expr.components.length === 0) {
@@ -222,7 +222,7 @@ function evaluateSignalExtent(
 
     case 'hslToRgb': {
       // HSL→RGB is field-extent only.
-      throw new Error('hslToRgb expressions are field-extent, not signal-extent');
+      throw new Error('hslToRgb expressions are field-extent, not scalar-extent');
     }
 
     default: {
@@ -233,14 +233,14 @@ function evaluateSignalExtent(
 }
 
 /**
- * Evaluate kernel operations for signal-extent expressions
+ * Evaluate kernel operations for scalar-extent expressions
  *
  * @param expr - Kernel ValueExpr
  * @param valueExprs - Dense array of ValueExpr nodes
  * @param state - Runtime state
  * @returns Evaluated value
  */
-function evaluateKernelSignal(
+function evaluateKernelScalar(
   expr: Extract<ValueExpr, { kind: 'kernel' }>,
   valueExprs: readonly ValueExpr[],
   state: RuntimeState
@@ -260,28 +260,28 @@ function evaluateKernelSignal(
 
     case 'zipSig': {
       // ZipSig is field-extent only (requires field input)
-      throw new Error('zipSig kernels are field-extent, not signal-extent');
+      throw new Error('zipSig kernels are field-extent, not scalar-extent');
     }
 
     case 'broadcast': {
       // Broadcast is signal → field (changes cardinality to many)
-      throw new Error('broadcast kernels are field-extent, not signal-extent');
+      throw new Error('broadcast kernels are field-extent, not scalar-extent');
     }
 
     case 'reduce': {
-      // Reduce is field → signal, but should never appear in signal evaluator
-      // (reduce itself is evaluated at field level, result is read as signal)
-      throw new Error('reduce kernels should be evaluated at field level, not signal level');
+      // Reduce is field → scalar, but should never appear in scalar evaluator
+      // (reduce itself is evaluated at field level, result is read as scalar)
+      throw new Error('reduce kernels should be evaluated at field level, not scalar level');
     }
 
     case 'pathDerivative': {
       // PathDerivative is field-extent only
-      throw new Error('pathDerivative kernels are field-extent, not signal-extent');
+      throw new Error('pathDerivative kernels are field-extent, not scalar-extent');
     }
 
     case 'pathSample': {
       // PathSample is field-extent only (cross-instance sampling)
-      throw new Error('pathSample kernels are field-extent, not signal-extent');
+      throw new Error('pathSample kernels are field-extent, not scalar-extent');
     }
 
     default: {

@@ -31,7 +31,7 @@ import { resolveCameraFromGlobals } from './CameraResolver';
 import { requireManyInstance } from '../core/canonical-types';
 import type { ValueSlot, StateSlotId } from '../compiler/ir/Indices';
 import { SYSTEM_PALETTE_SLOT } from '../compiler/ir/Indices';
-import { evaluateValueExprScalar, evaluateConstructScalar } from './ValueExprSignalEvaluator';
+import { evaluateValueExprScalar, evaluateConstructScalar } from './ValueExprScalarEvaluator';
 import { evaluateValueExprEvent } from './ValueExprEventEvaluator';
 import { materializeValueExpr } from './ValueExprMaterializer';
 import { arenaSlice, type ArenaSlotDescriptor } from './ArenaValueStore';

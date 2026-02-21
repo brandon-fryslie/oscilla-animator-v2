@@ -3,7 +3,7 @@
  * SIGNAL KERNEL LIBRARY
  * ══════════════════════════════════════════════════════════════════════
  *
- * Signal kernel dispatch used by ValueExprSignalEvaluator.
+ * Signal kernel dispatch used by ValueExprScalarEvaluator.
  *
  * applyPureFn is the single entry point for evaluating PureFn nodes.
  * It dispatches to opcodes (primary path), registry-resolved kernels,

@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import { evaluateConstructScalar, evaluateValueExprScalar } from '../ValueExprSignalEvaluator';
+import { evaluateConstructScalar, evaluateValueExprScalar } from '../ValueExprScalarEvaluator';
 import type { ValueExpr } from '../../compiler/ir/value-expr';
 import type { RuntimeState } from '../RuntimeState';
 import { createRuntimeState } from '../RuntimeState';

@@ -29,7 +29,7 @@ import type { ValueExpr, ValueExprEvent } from '../compiler/ir/value-expr';
 import type { ValueExprId } from '../compiler/ir/Indices';
 import type { RuntimeState } from './RuntimeState';
 import type { CompiledProgramIR } from '../compiler/ir/program';
-import { evaluateValueExprScalar } from './ValueExprSignalEvaluator';
+import { evaluateValueExprScalar } from './ValueExprScalarEvaluator';
 
 /**
  * Cycle detection error for combine recursion

@@ -11,7 +11,7 @@ import { buildPatch } from '../../graph';
 import { executeFrame } from '../../runtime/ScheduleExecutor';
 import { createSessionState, createRuntimeStateFromSession, createRuntimeState } from '../../runtime';
 import { getTestArena } from '../../runtime/__tests__/test-arena-helper';
-import { evaluateValueExprScalar } from '../../runtime/ValueExprSignalEvaluator';
+import { evaluateValueExprScalar } from '../../runtime/ValueExprScalarEvaluator';
 
 /**
  * Helper to find TestSignal output offsets.

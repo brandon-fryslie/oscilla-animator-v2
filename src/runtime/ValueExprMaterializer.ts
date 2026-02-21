@@ -18,7 +18,7 @@ import type { PureFn } from '../compiler/ir/types';
 import type { InstanceId } from '../compiler/ir/Indices';
 import type { CompiledProgramIR } from '../compiler/ir/program';
 import type { BufferPool } from './BufferPool';
-import { evaluateValueExprScalar } from './ValueExprSignalEvaluator';
+import { evaluateValueExprScalar } from './ValueExprScalarEvaluator';
 import { requireInst } from '../core/canonical-types';
 import { payloadStride } from '../core/canonical-types';
 import { getTopology } from '../shapes/registry';
