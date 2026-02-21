@@ -111,7 +111,7 @@ describe('solveCardinality', () => {
       },
       [
         { kind: 'forceMany', port: pk('A:x:in'), instance: { kind: 'inst', ref }, origin: o },
-        { kind: 'zipBroadcast', ports: [pk('A:x:in'), pk('A:y:in'), pk('A:out:out')], origin: o },
+        { kind: 'promoteToMany', ports: [pk('A:x:in'), pk('A:y:in'), pk('A:out:out')], origin: o },
       ],
     );
 
@@ -127,7 +127,7 @@ describe('solveCardinality', () => {
         'B:y:in': axisVar(cv('card:B:y:in')),
       },
       [
-        { kind: 'zipBroadcast', ports: [pk('B:x:in'), pk('B:y:in')], origin: o },
+        { kind: 'promoteToMany', ports: [pk('B:x:in'), pk('B:y:in')], origin: o },
       ],
     );
 
@@ -149,7 +149,7 @@ describe('solveCardinality', () => {
       [
         { kind: 'forceMany', port: pk('A:x:in'), instance: { kind: 'inst', ref: ref1 }, origin: o },
         { kind: 'forceMany', port: pk('B:x:in'), instance: { kind: 'inst', ref: ref2 }, origin: o },
-        { kind: 'zipBroadcast', ports: [pk('A:x:in'), pk('B:x:in')], origin: o },
+        { kind: 'promoteToMany', ports: [pk('A:x:in'), pk('B:x:in')], origin: o },
       ],
     );
 
@@ -203,7 +203,7 @@ describe('solveCardinality', () => {
       [
         { kind: 'clampOne', port: pk('Sig:out:out'), origin: clampOrigin },
         { kind: 'forceMany', port: pk('Field:x:in'), instance: { kind: 'inst', ref }, origin: manyOrigin },
-        { kind: 'zipBroadcast', ports: [pk('Sig:out:out'), pk('Field:x:in')], origin: zipOrigin },
+        { kind: 'promoteToMany', ports: [pk('Sig:out:out'), pk('Field:x:in')], origin: zipOrigin },
       ],
     );
 
@@ -323,7 +323,7 @@ describe('solveCardinality', () => {
       [
         { kind: 'forceMany', port: pk('Arr:out:out'), instance: { kind: 'inst', ref }, origin: o },
         { kind: 'forceMany', port: pk('F:data:in'), instance: { kind: 'var', id: varId }, origin: o },
-        { kind: 'zipBroadcast', ports: [pk('Arr:out:out'), pk('F:data:in')], origin: o },
+        { kind: 'promoteToMany', ports: [pk('Arr:out:out'), pk('F:data:in')], origin: o },
       ],
     );
 
