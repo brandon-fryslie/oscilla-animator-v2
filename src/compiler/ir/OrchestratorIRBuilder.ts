@@ -69,9 +69,6 @@ export interface OrchestratorIRBuilder extends BlockIRBuilder {
   /** Emit a field state write step. */
   stepFieldStateWrite(stateSlot: StateSlotId, value: ValueExprId): void;
 
-  /** Emit a signal evaluation step. */
-  stepEvalSig(expr: ValueExprId, target: ValueSlot): void;
-
   /** Emit a field materialization step. */
   stepMaterialize(field: ValueExprId, instanceId: InstanceId, target: ValueSlot): void;
 

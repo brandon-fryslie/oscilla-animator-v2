@@ -28,7 +28,7 @@ import type {
   StableStateId,
   StateMapping,
 } from './types';
-import { OpCode, EvalStrategy } from './types';
+import { OpCode } from './types';
 import type { CameraDeclIR } from './program';
 import type { ValueExpr } from './value-expr';
 import type { OrchestratorIRBuilder } from './OrchestratorIRBuilder';
@@ -458,15 +458,6 @@ export class IRBuilderImpl implements OrchestratorIRBuilder {
 
   stepFieldStateWrite(stateSlot: StateSlotId, value: ValueExprId): void {
     this.steps.push({ kind: 'fieldStateWrite', stateSlot, value });
-  }
-
-  stepEvalSig(expr: ValueExprId, target: ValueSlot): void {
-    this.steps.push({
-      kind: 'evalValue',
-      expr,
-      target: { storage: 'value', slot: target },
-      strategy: EvalStrategy.ContinuousScalar
-    });
   }
 
   stepMaterialize(field: ValueExprId, instanceId: InstanceId, target: ValueSlot): void {

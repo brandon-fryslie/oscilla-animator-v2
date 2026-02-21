@@ -14,7 +14,7 @@
  * Pure blocks CANNOT:
  * - Allocate slots (allocSlot, allocTypedSlot, allocStateSlot, allocEventSlot)
  * - Register slot mappings (registerSlotType, registerSigSlot, registerFieldSlot)
- * - Emit execution steps (stepSlotWriteStrided, stepStateWrite, stepEvalSig, etc.)
+ * - Emit execution steps (stepStateWrite, stepMaterialize, etc.)
  * - Add render globals (addRenderGlobal)
  *
  * The orchestrator (lower-blocks.ts) allocates slots on behalf of pure blocks
