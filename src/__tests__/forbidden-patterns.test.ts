@@ -480,6 +480,29 @@ describe('Forbidden Patterns (Type System Invariants)', () => {
   // Cardinality Neutrality (oscilla-animator-v2-cpc)
   // =============================================================================
 
+  describe('Cardinality Metadata Decision Boundary', () => {
+
+    it('frontend decision paths must not read getBlockCardinalityMetadata', () => {
+      // [LAW:single-enforcer] Legacy metadata fallback stays isolated in extract-constraints.ts only.
+      const decisionPathFiles = [
+        'src/compiler/frontend/analyze-type-graph.ts',
+        'src/compiler/frontend/create-derived-obligations.ts',
+        'src/compiler/frontend/normalize-adapters.ts',
+        'src/compiler/frontend/policies/cardinality-adapter-policy.ts',
+        'src/compiler/frontend/policies/default-source-policy.ts',
+      ];
+
+      for (const file of decisionPathFiles) {
+        const matches = grepSrc('getBlockCardinalityMetadata', file);
+        expect(
+          matches,
+          `Frontend decision path must not read getBlockCardinalityMetadata: ${file}`
+        ).toEqual([]);
+      }
+    });
+
+  });
+
   describe('Cardinality Neutrality in Block Lowering', () => {
 
     it('no isMany() in block lower functions', () => {

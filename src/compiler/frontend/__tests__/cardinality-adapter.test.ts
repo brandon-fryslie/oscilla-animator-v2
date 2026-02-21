@@ -31,9 +31,9 @@ describe('createCardinalityAdapterObligations', () => {
     };
   }
 
-  const clampOrigin: ConstraintOrigin = { kind: 'blockRule', blockId: 'sig', blockType: 'Sig', rule: 'signalOnly.clampOne' };
-  const manyOrigin: ConstraintOrigin = { kind: 'blockRule', blockId: 'arr', blockType: 'Array', rule: 'transform.forceMany' };
-  const zipOrigin: ConstraintOrigin = { kind: 'blockRule', blockId: 'add', blockType: 'Add', rule: 'preserve.allowZipSig.zipBroadcast' };
+  const clampOrigin: ConstraintOrigin = { kind: 'blockRule', blockId: 'sig', blockType: 'Sig', rule: 'policy.clampOne' };
+  const manyOrigin: ConstraintOrigin = { kind: 'blockRule', blockId: 'arr', blockType: 'Array', rule: 'policy.forceMany' };
+  const zipOrigin: ConstraintOrigin = { kind: 'blockRule', blockId: 'add', blockType: 'Add', rule: 'policy.zipBroadcast' };
 
   it('returns empty for no conflicts', () => {
     const g = makeGraph([], []);

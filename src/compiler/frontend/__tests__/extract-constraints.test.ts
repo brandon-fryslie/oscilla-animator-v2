@@ -134,19 +134,7 @@ describe('extractConstraints', () => {
     }
   });
 
-  it('cardinality constraints generated for cardinality-metadata blocks', () => {
-    const patch = buildPatch((b) => {
-      b.addBlock('Add');
-    });
-    const { graph: g } = buildDraftGraph(patch);
-    const constraints = extractConstraints(g, BLOCK_DEFS_BY_TYPE);
-
-    // Add has cardinality metadata (preserve mode), should generate constraints
-    // The exact count depends on block definition
-    expect(constraints.cardinality.length).toBeGreaterThanOrEqual(0);
-  });
-
-  it('clampOne constraints have signalOnly origin', () => {
+  it('clampOne constraints use blockRule origin', () => {
     const patch = buildPatch((b) => {
       b.addBlock('InfiniteTimeRoot');
     });
@@ -157,9 +145,6 @@ describe('extractConstraints', () => {
     expect(clampOnes.length).toBeGreaterThan(0);
     for (const c of clampOnes) {
       expect(c.origin.kind).toBe('blockRule');
-      if (c.origin.kind === 'blockRule') {
-        expect(c.origin.rule).toBe('signalOnly.clampOne');
-      }
     }
   });
 

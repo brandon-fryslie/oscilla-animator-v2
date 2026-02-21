@@ -18,7 +18,7 @@ import {
   resolveCardinalityPolicy,
 } from "../../core/canonical-types";
 import type { TypedPatch, BlockIndex, TypeResolvedPatch, PortKey } from "../ir/patches";
-import { getBlockDefinition, getBlockCardinalityMetadata } from "../../blocks/registry";
+import { getBlockDefinition } from "../../blocks/registry";
 
 // =============================================================================
 // Port Type Lookup (inlined from analyze-type-constraints.ts)
@@ -40,9 +40,7 @@ function getPortType(
 /**
  * Determine whether a destination input port allows signal→field compatibility.
  *
- * Priority:
- * 1) CT/ICT declared acceptance on the input cardinality var (new authority)
- * 2) legacy block-level broadcastPolicy fallback (transitional)
+ * // [LAW:one-source-of-truth] Port type declarations are the only authority.
  */
 function destinationAllowsSignalBroadcast(blockType: string, inputPort: string): boolean {
   const def = getBlockDefinition(blockType);
@@ -58,9 +56,7 @@ function destinationAllowsSignalBroadcast(blockType: string, inputPort: string):
       return policy?.acceptance === 'oneOrMany';
     }
   }
-
-  const legacy = getBlockCardinalityMetadata(blockType);
-  return legacy?.broadcastPolicy === 'allowZipSig';
+  return false;
 }
 
 // =============================================================================
@@ -204,7 +200,7 @@ export function pass2TypeGraph(typeResolved: TypeResolvedPatch): TypedPatch {
       continue;
     }
 
-    // Check if destination accepts signal→field by CT/ICT declaration (legacy fallback kept).
+    // Check if destination accepts signal→field by CT/ICT declaration.
     const allowsBroadcast = destinationAllowsSignalBroadcast(toBlock.type, edge.toPort);
 
     // Validate type compatibility
@@ -309,7 +305,7 @@ export function pass2TypeGraphSafe(typeResolved: TypeResolvedPatch): Pass2TypeGr
       continue;
     }
 
-    // Check if destination accepts signal→field by CT/ICT declaration (legacy fallback kept).
+    // Check if destination accepts signal→field by CT/ICT declaration.
     const allowsBroadcast = destinationAllowsSignalBroadcast(toBlock.type, edge.toPort);
 
     // Validate type compatibility
