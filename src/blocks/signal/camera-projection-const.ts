@@ -7,7 +7,15 @@
 import { registerBlock, requireConfigInt } from '../registry';
 import { canonicalType, payloadStride, cameraProjectionConst } from '../../core/canonical-types';
 import { INT, CAMERA_PROJECTION } from '../../core/canonical-types';
+import { cardinalityVar } from '../../core/inference-types';
+import { cardinalityVarId } from '../../core/ids';
 import { defaultSourceConst } from '../../types';
+
+// [LAW:one-source-of-truth] CameraProjectionConst cardinality policy is declared on CT/ICT.
+const CAMERA_PROJECTION_CONST_CARD = cardinalityVar(cardinalityVarId('camera_projection_const_cardinality'), {
+  acceptance: 'oneOnly',
+  instanceBinding: 'inherit',
+});
 
 registerBlock({
   type: 'CameraProjectionConst',
@@ -32,7 +40,7 @@ registerBlock({
     },
   },
   outputs: {
-    out: { label: 'Output', type: canonicalType(CAMERA_PROJECTION) },
+    out: { label: 'Output', type: canonicalType(CAMERA_PROJECTION, undefined, { cardinality: CAMERA_PROJECTION_CONST_CARD }) },
   },
   lower: ({ ctx, config }) => {
     const rawValue = requireConfigInt(config!, 'value', 0, 1);

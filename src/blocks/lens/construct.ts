@@ -10,6 +10,15 @@
 import { registerBlock } from '../registry';
 import { canonicalType, payloadStride } from '../../core/canonical-types';
 import { FLOAT, VEC3 } from '../../core/canonical-types';
+import { cardinalityVar } from '../../core/inference-types';
+import { cardinalityVarId } from '../../core/ids';
+
+// [LAW:one-source-of-truth] Per-port cardinality behavior is declared on CT/ICT.
+const CONSTRUCT_CARD = cardinalityVar(cardinalityVarId('construct_cardinality'), {
+  relation: 'promoteToMany',
+  acceptance: 'oneOrMany',
+  instanceBinding: 'inherit',
+});
 
 registerBlock({
   type: 'Construct',
@@ -25,12 +34,12 @@ registerBlock({
     broadcastPolicy: 'allowZipSig',
   },
   inputs: {
-    x: { label: 'X', type: canonicalType(FLOAT), defaultValue: 0.0 },
-    y: { label: 'Y', type: canonicalType(FLOAT), defaultValue: 0.0 },
-    z: { label: 'Z', type: canonicalType(FLOAT), defaultValue: 0.0 },
+    x: { label: 'X', type: canonicalType(FLOAT, undefined, { cardinality: CONSTRUCT_CARD }), defaultValue: 0.0 },
+    y: { label: 'Y', type: canonicalType(FLOAT, undefined, { cardinality: CONSTRUCT_CARD }), defaultValue: 0.0 },
+    z: { label: 'Z', type: canonicalType(FLOAT, undefined, { cardinality: CONSTRUCT_CARD }), defaultValue: 0.0 },
   },
   outputs: {
-    out: { label: 'Out', type: canonicalType(VEC3) },
+    out: { label: 'Out', type: canonicalType(VEC3, undefined, { cardinality: CONSTRUCT_CARD }) },
   },
   lower: ({ inputsById, ctx }) => {
     const xInput = inputsById.x;

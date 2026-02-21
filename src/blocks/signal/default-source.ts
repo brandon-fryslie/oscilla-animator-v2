@@ -33,9 +33,16 @@ import {
   requireInst,
 } from '../../core/canonical-types';
 import type { PayloadType, CanonicalType } from '../../core/canonical-types';
-import { isPayloadVar, payloadVar, unitVar, inferType } from '../../core/inference-types';
+import { isPayloadVar, payloadVar, unitVar, inferType, cardinalityVar } from '../../core/inference-types';
+import { cardinalityVarId } from '../../core/ids';
 import { LowerSandbox } from '../../compiler/ir/LowerSandbox';
 import type { ValueExprId } from '../../compiler/ir/value-expr';
+
+// [LAW:one-source-of-truth] DefaultSource cardinality policy is declared on CT/ICT.
+const DEFAULT_SOURCE_OUT_CARD = cardinalityVar(cardinalityVarId('default_source_out_cardinality'), {
+  acceptance: 'oneOnly',
+  instanceBinding: 'inherit',
+});
 
 // ============================================================================
 // Signal default helper
@@ -96,7 +103,7 @@ registerBlock({
     // from the target port that this DefaultSource is wired to.
     out: {
       label: 'Output',
-      type: inferType(payloadVar('ds_payload'), unitVar('ds_unit')),
+      type: inferType(payloadVar('ds_payload'), unitVar('ds_unit'), { cardinality: DEFAULT_SOURCE_OUT_CARD }),
     },
   },
   lower: ({ ctx }) => {

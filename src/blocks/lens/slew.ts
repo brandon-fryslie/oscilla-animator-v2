@@ -10,9 +10,17 @@
 import { registerBlock } from '../registry';
 import { canonicalType, payloadStride, requireInst, unitNone, contractClamp01 } from '../../core/canonical-types';
 import { FLOAT } from '../../core/canonical-types';
-import { inferType, unitVar } from '../../core/inference-types';
+import { inferType, unitVar, cardinalityVar } from '../../core/inference-types';
+import { cardinalityVarId } from '../../core/ids';
 import { OpCode, stableStateId } from '../../compiler/ir/types';
 import { zipAuto } from '../lower-utils';
+
+// [LAW:one-source-of-truth] Per-port cardinality behavior is declared on CT/ICT.
+const SLEW_CARD = cardinalityVar(cardinalityVarId('slew_cardinality'), {
+  relation: 'promoteToMany',
+  acceptance: 'oneOrMany',
+  instanceBinding: 'inherit',
+});
 
 registerBlock({
   type: 'Slew',
@@ -29,11 +37,11 @@ registerBlock({
     broadcastPolicy: 'allowZipSig',
   },
   inputs: {
-    in: { label: 'In', type: inferType(FLOAT, unitVar('slew_U')) },
-    rate: { label: 'Rate', type: canonicalType(FLOAT, unitNone(), undefined, contractClamp01()), defaultValue: 0.5 },
+    in: { label: 'In', type: inferType(FLOAT, unitVar('slew_U'), { cardinality: SLEW_CARD }) },
+    rate: { label: 'Rate', type: canonicalType(FLOAT, unitNone(), { cardinality: SLEW_CARD }, contractClamp01()), defaultValue: 0.5 },
   },
   outputs: {
-    out: { label: 'Out', type: inferType(FLOAT, unitVar('slew_U')) },
+    out: { label: 'Out', type: inferType(FLOAT, unitVar('slew_U'), { cardinality: SLEW_CARD }) },
   },
   lower: ({ ctx, inputsById }) => {
     const input = inputsById.in;

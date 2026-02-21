@@ -10,8 +10,16 @@
 import { registerBlock } from '../registry';
 import { canonicalType, payloadStride, floatConst } from '../../core/canonical-types';
 import { FLOAT } from '../../core/canonical-types';
-import { inferType, unitVar } from '../../core/inference-types';
+import { inferType, unitVar, cardinalityVar } from '../../core/inference-types';
+import { cardinalityVarId } from '../../core/ids';
 import { OpCode } from '../../compiler/ir/types';
+
+// [LAW:one-source-of-truth] Per-port cardinality behavior is declared on CT/ICT.
+const MASK_CARD = cardinalityVar(cardinalityVarId('mask_cardinality'), {
+  relation: 'promoteToMany',
+  acceptance: 'oneOrMany',
+  instanceBinding: 'inherit',
+});
 
 registerBlock({
   type: 'Mask',
@@ -27,11 +35,11 @@ registerBlock({
     broadcastPolicy: 'allowZipSig',
   },
   inputs: {
-    in: { label: 'In', type: inferType(FLOAT, unitVar('mask_U')) },
-    mask: { label: 'Mask', type: canonicalType(FLOAT), exposedAsPort: true },
+    in: { label: 'In', type: inferType(FLOAT, unitVar('mask_U'), { cardinality: MASK_CARD }) },
+    mask: { label: 'Mask', type: canonicalType(FLOAT, undefined, { cardinality: MASK_CARD }), exposedAsPort: true },
   },
   outputs: {
-    out: { label: 'Out', type: inferType(FLOAT, unitVar('mask_U')) },
+    out: { label: 'Out', type: inferType(FLOAT, unitVar('mask_U'), { cardinality: MASK_CARD }) },
   },
   lower: ({ inputsById, ctx }) => {
     const input = inputsById.in;

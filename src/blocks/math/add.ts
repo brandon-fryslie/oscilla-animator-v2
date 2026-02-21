@@ -7,7 +7,16 @@
 import { registerBlock, STANDARD_NUMERIC_PAYLOADS } from '../registry';
 import { canonicalType, payloadStride } from '../../core/canonical-types';
 import { FLOAT } from '../../core/canonical-types';
+import { cardinalityVar } from '../../core/inference-types';
+import { cardinalityVarId } from '../../core/ids';
 import { OpCode } from '../../compiler/ir/types';
+
+// [LAW:one-source-of-truth] Per-port cardinality behavior is declared on CT/ICT.
+const ADD_CARD = cardinalityVar(cardinalityVarId('add_cardinality'), {
+  relation: 'promoteToMany',
+  acceptance: 'oneOrMany',
+  instanceBinding: 'inherit',
+});
 
 registerBlock({
   type: 'Add',
@@ -32,11 +41,11 @@ registerBlock({
     unitBehavior: 'preserve',
   },
   inputs: {
-    a: { label: 'A', type: canonicalType(FLOAT) },
-    b: { label: 'B', type: canonicalType(FLOAT) },
+    a: { label: 'A', type: canonicalType(FLOAT, undefined, { cardinality: ADD_CARD }) },
+    b: { label: 'B', type: canonicalType(FLOAT, undefined, { cardinality: ADD_CARD }) },
   },
   outputs: {
-    out: { label: 'Output', type: canonicalType(FLOAT) },
+    out: { label: 'Output', type: canonicalType(FLOAT, undefined, { cardinality: ADD_CARD }) },
   },
   lower: ({ ctx, inputsById }) => {
     const a = inputsById.a;

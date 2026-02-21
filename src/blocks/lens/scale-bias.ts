@@ -9,9 +9,17 @@
 import { registerBlock } from '../registry';
 import { canonicalType, payloadStride } from '../../core/canonical-types';
 import { FLOAT } from '../../core/canonical-types';
-import { inferType, unitVar } from '../../core/inference-types';
+import { inferType, unitVar, cardinalityVar } from '../../core/inference-types';
+import { cardinalityVarId } from '../../core/ids';
 import { OpCode } from '../../compiler/ir/types';
 import { zipAuto } from '../lower-utils';
+
+// [LAW:one-source-of-truth] Per-port cardinality behavior is declared on CT/ICT.
+const SCALE_BIAS_CARD = cardinalityVar(cardinalityVarId('scale_bias_cardinality'), {
+  relation: 'promoteToMany',
+  acceptance: 'oneOrMany',
+  instanceBinding: 'inherit',
+});
 
 registerBlock({
   type: 'ScaleBias',
@@ -27,12 +35,12 @@ registerBlock({
     broadcastPolicy: 'allowZipSig',
   },
   inputs: {
-    in: { label: 'In', type: inferType(FLOAT, unitVar('sb_U')) },
-    scale: { label: 'Scale', type: canonicalType(FLOAT), defaultValue: 1.0 },
-    bias: { label: 'Bias', type: inferType(FLOAT, unitVar('sb_U')), defaultValue: 0.0 },
+    in: { label: 'In', type: inferType(FLOAT, unitVar('sb_U'), { cardinality: SCALE_BIAS_CARD }) },
+    scale: { label: 'Scale', type: canonicalType(FLOAT, undefined, { cardinality: SCALE_BIAS_CARD }), defaultValue: 1.0 },
+    bias: { label: 'Bias', type: inferType(FLOAT, unitVar('sb_U'), { cardinality: SCALE_BIAS_CARD }), defaultValue: 0.0 },
   },
   outputs: {
-    out: { label: 'Out', type: inferType(FLOAT, unitVar('sb_U')) },
+    out: { label: 'Out', type: inferType(FLOAT, unitVar('sb_U'), { cardinality: SCALE_BIAS_CARD }) },
   },
   lower: ({ inputsById, ctx }) => {
     const input = inputsById.in;

@@ -9,8 +9,17 @@
 import { registerBlock } from '../registry';
 import { canonicalType, payloadStride, floatConst } from '../../core/canonical-types';
 import { FLOAT } from '../../core/canonical-types';
+import { cardinalityVar } from '../../core/inference-types';
+import { cardinalityVarId } from '../../core/ids';
 import { OpCode } from '../../compiler/ir/types';
 import { zipAuto } from '../lower-utils';
+
+// [LAW:one-source-of-truth] Per-port cardinality behavior is declared on CT/ICT.
+const POWER_GAMMA_CARD = cardinalityVar(cardinalityVarId('power_gamma_cardinality'), {
+  relation: 'promoteToMany',
+  acceptance: 'oneOrMany',
+  instanceBinding: 'inherit',
+});
 
 registerBlock({
   type: 'PowerGamma',
@@ -26,11 +35,11 @@ registerBlock({
     broadcastPolicy: 'allowZipSig',
   },
   inputs: {
-    in: { label: 'In', type: canonicalType(FLOAT) },
-    gamma: { label: 'Gamma', type: canonicalType(FLOAT), defaultValue: 1.0 },
+    in: { label: 'In', type: canonicalType(FLOAT, undefined, { cardinality: POWER_GAMMA_CARD }) },
+    gamma: { label: 'Gamma', type: canonicalType(FLOAT, undefined, { cardinality: POWER_GAMMA_CARD }), defaultValue: 1.0 },
   },
   outputs: {
-    out: { label: 'Out', type: canonicalType(FLOAT) },
+    out: { label: 'Out', type: canonicalType(FLOAT, undefined, { cardinality: POWER_GAMMA_CARD }) },
   },
   lower: ({ inputsById, ctx }) => {
     const input = inputsById.in;

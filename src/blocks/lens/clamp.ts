@@ -9,9 +9,17 @@
 import { registerBlock } from '../registry';
 import { canonicalType, payloadStride } from '../../core/canonical-types';
 import { FLOAT } from '../../core/canonical-types';
-import { inferType, unitVar } from '../../core/inference-types';
+import { inferType, unitVar, cardinalityVar } from '../../core/inference-types';
+import { cardinalityVarId } from '../../core/ids';
 import { OpCode } from '../../compiler/ir/types';
 import { zipAuto } from '../lower-utils';
+
+// [LAW:one-source-of-truth] Per-port cardinality behavior is declared on CT/ICT.
+const CLAMP_CARD = cardinalityVar(cardinalityVarId('clamp_cardinality'), {
+  relation: 'promoteToMany',
+  acceptance: 'oneOrMany',
+  instanceBinding: 'inherit',
+});
 
 registerBlock({
   type: 'Clamp',
@@ -27,12 +35,12 @@ registerBlock({
     broadcastPolicy: 'allowZipSig',
   },
   inputs: {
-    in: { label: 'In', type: inferType(FLOAT, unitVar('clamp_U')) },
-    min: { label: 'Min', type: inferType(FLOAT, unitVar('clamp_U')), defaultValue: 0.0 },
-    max: { label: 'Max', type: inferType(FLOAT, unitVar('clamp_U')), defaultValue: 1.0 },
+    in: { label: 'In', type: inferType(FLOAT, unitVar('clamp_U'), { cardinality: CLAMP_CARD }) },
+    min: { label: 'Min', type: inferType(FLOAT, unitVar('clamp_U'), { cardinality: CLAMP_CARD }), defaultValue: 0.0 },
+    max: { label: 'Max', type: inferType(FLOAT, unitVar('clamp_U'), { cardinality: CLAMP_CARD }), defaultValue: 1.0 },
   },
   outputs: {
-    out: { label: 'Out', type: inferType(FLOAT, unitVar('clamp_U')) },
+    out: { label: 'Out', type: inferType(FLOAT, unitVar('clamp_U'), { cardinality: CLAMP_CARD }) },
   },
   lower: ({ inputsById, ctx }) => {
     const input = inputsById.in;

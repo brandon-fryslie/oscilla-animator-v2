@@ -10,6 +10,15 @@
 import { registerBlock } from '../registry';
 import { canonicalType, payloadStride } from '../../core/canonical-types';
 import { FLOAT, VEC3 } from '../../core/canonical-types';
+import { cardinalityVar } from '../../core/inference-types';
+import { cardinalityVarId } from '../../core/ids';
+
+// [LAW:one-source-of-truth] Per-port cardinality behavior is declared on CT/ICT.
+const EXTRACT_CARD = cardinalityVar(cardinalityVarId('extract_cardinality'), {
+  relation: 'promoteToMany',
+  acceptance: 'oneOrMany',
+  instanceBinding: 'inherit',
+});
 
 registerBlock({
   type: 'Extract',
@@ -25,7 +34,7 @@ registerBlock({
     broadcastPolicy: 'allowZipSig',
   },
   inputs: {
-    in: { label: 'In', type: canonicalType(VEC3) },
+    in: { label: 'In', type: canonicalType(VEC3, undefined, { cardinality: EXTRACT_CARD }) },
     component: {
       label: 'Component',
       type: canonicalType(FLOAT),
@@ -34,7 +43,7 @@ registerBlock({
     },
   },
   outputs: {
-    out: { label: 'Out', type: canonicalType(FLOAT) },
+    out: { label: 'Out', type: canonicalType(FLOAT, undefined, { cardinality: EXTRACT_CARD }) },
   },
   lower: ({ inputsById, ctx, config }) => {
     const input = inputsById.in;
