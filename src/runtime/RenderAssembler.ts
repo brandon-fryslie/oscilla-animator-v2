@@ -154,6 +154,7 @@ export function depthSortAndCompact(
   arena: RenderBufferArena,
   rotation?: Float32Array,
   scale2?: Float32Array,
+  isotropicScale?: Float32Array,
 ): {
   count: number;
   screenPosition: Float32Array;
@@ -220,7 +221,8 @@ export function depthSortAndCompact(
     const src = indices[out];
     outScreenPos[out * 2] = screenPosition[src * 2];
     outScreenPos[out * 2 + 1] = screenPosition[src * 2 + 1];
-    outRadius[out] = screenRadius[src];
+    // [LAW:dataflow-not-control-flow] Radius compaction always executes; optional scale is data.
+    outRadius[out] = isotropicScale ? screenRadius[src] * isotropicScale[src] : screenRadius[src];
     outDepth[out] = depth[src];
   }
 
@@ -371,6 +373,7 @@ export function projectAndCompact(
   arena: RenderBufferArena,
   rotation?: Float32Array,
   scale2?: Float32Array,
+  isotropicScale?: Float32Array,
 ): {
   count: number;
   screenPosition: Float32Array;
@@ -384,7 +387,7 @@ export function projectAndCompact(
   const projection = projectInstances(worldPositions, worldRadius, count, camera, arena);
 
   // Step 2: Compact & sort (returns arena views directly)
-  return depthSortAndCompact(projection, count, color, arena, rotation, scale2);
+  return depthSortAndCompact(projection, count, color, arena, rotation, scale2, isotropicScale);
 }
 
 /**
@@ -413,6 +416,7 @@ export function compactAndCopy(
   arena: RenderBufferArena,
   rotation?: Float32Array,
   scale2?: Float32Array,
+  isotropicScale?: Float32Array,
 ): {
   count: number;
   screenPosition: Float32Array;
@@ -423,7 +427,7 @@ export function compactAndCopy(
   scale2: Float32Array;
 } {
   // Compact & sort (returns arena views directly)
-  return depthSortAndCompact(projection, count, color, arena, rotation, scale2);
+  return depthSortAndCompact(projection, count, color, arena, rotation, scale2, isotropicScale);
 }
 
 /**
@@ -447,14 +451,19 @@ export interface AssemblerContext {
 /**
  * Resolve scale from step specification
  *
- * Scale is a uniform multiplier for shape dimensions.
+ * Scale is either a uniform multiplier or a per-instance field.
  * MUST be provided - no fallback values in render pipeline.
  */
+type ResolvedScale =
+  | { kind: 'uniform'; value: number }
+  | { kind: 'perInstance'; values: Float32Array };
+
 function resolveScale(
   scaleSpec: StepRender['scale'],
   scalarExprToArenaOffset: ReadonlyMap<number, number>,
-  state: RuntimeState
-): number {
+  state: RuntimeState,
+  slotToArena: ReadonlyMap<ValueSlot, ArenaSlotDescriptor> | undefined,
+): ResolvedScale {
   if (scaleSpec === undefined) {
     throw new Error(
       'RenderAssembler: scale is required. ' +
@@ -466,19 +475,23 @@ function resolveScale(
     // [LAW:one-source-of-truth] Render reads numeric signal values from arena only.
     const arenaOffset = scalarExprToArenaOffset.get(scaleSpec.id as number);
     if (arenaOffset !== undefined) {
-      return state.arena[arenaOffset];
+      return { kind: 'uniform', value: state.arena[arenaOffset] };
     }
 
     throw new Error(
       'RenderAssembler: No slot mapping for signal ' + scaleSpec.id + '. ' +
       'Signal must be evaluated in schedule before rendering.'
     );
-  } else {
+  }
+
+  const scaleBuffer = resolveNumericSlotBuffer(scaleSpec.slot, state, slotToArena);
+  if (!(scaleBuffer instanceof Float32Array)) {
     throw new Error(
-      'RenderAssembler: scale must be a signal, got ' + scaleSpec.k + '. ' +
-      'Per-particle scale is not supported.' // TODO: why?
+      'RenderAssembler: scale slot must be Float32Array, got ' +
+      (scaleBuffer ? scaleBuffer.constructor.name : 'undefined')
     );
   }
+  return { kind: 'perInstance', values: scaleBuffer };
 }
 
 /**
@@ -931,7 +944,8 @@ function recordAssemblerTiming(
  * @param shapeBuffer - Shape2D buffer (Uint32Array)
  * @param fullPosition - Full position buffer
  * @param fullColor - Full color buffer
- * @param scale - Uniform scale
+ * @param projectionScale - Uniform projection scale
+ * @param isotropicScale - Optional per-instance isotropic scale (stride 1)
  * @param count - Instance count
  * @param context - Assembly context (includes camera, arena)
  * @returns Array of DrawOp operations (path or primitive)
@@ -941,7 +955,8 @@ function assemblePerInstanceShapes(
   shapeBuffer: Uint32Array,
   fullPosition: Float32Array,
   fullColor: Uint8ClampedArray,
-  scale: number,
+  projectionScale: number,
+  isotropicScale: Float32Array | undefined,
   count: number,
   context: AssemblerContext
 ): DrawOp[] {
@@ -976,7 +991,7 @@ function assemblePerInstanceShapes(
     );
   }
 
-  const projection = projectInstances(fullPosition, scale, count, resolved, arena);
+  const projection = projectInstances(fullPosition, projectionScale, count, resolved, arena);
 
   for (const [key, group] of groups) {
     // Skip empty groups
@@ -997,6 +1012,16 @@ function assemblePerInstanceShapes(
 
     const scale2 = fullScale2
       ? sliceScale2Buffer(fullScale2, group.instanceIndices, arena)
+      : undefined;
+
+    const groupIsotropicScale = isotropicScale
+      ? (() => {
+          const out = arena.allocF32(group.instanceIndices.length);
+          for (let i = 0; i < group.instanceIndices.length; i++) {
+            out[i] = isotropicScale[group.instanceIndices[i]];
+          }
+          return out;
+        })()
       : undefined;
 
     // Slice projection outputs for this group (use arena)
@@ -1031,7 +1056,8 @@ function assemblePerInstanceShapes(
       color,
       arena,
       rotation,
-      scale2
+      scale2,
+      groupIsotropicScale,
     );
 
     // TODO: replace per-frame allocation with zero-alloc render assembly
@@ -1386,8 +1412,9 @@ export function assembleDrawPathInstancesOp(
     );
   }
 
-  // Resolve scale (uniform signal)
-  const scale = resolveScale(step.scale, scalarExprToArenaOffset, state);
+  const resolvedScale = resolveScale(step.scale, scalarExprToArenaOffset, state, slotToArena);
+  const projectionScale = resolvedScale.kind === 'uniform' ? resolvedScale.value : 1;
+  const isotropicScale = resolvedScale.kind === 'perInstance' ? resolvedScale.values : undefined;
 
   // Resolve shape
   const shape = resolveShape(step.shape, scalarExprToArenaOffset, state);
@@ -1400,7 +1427,8 @@ export function assembleDrawPathInstancesOp(
       shape,
       positionBuffer,
       colorBuffer,
-      scale,
+      projectionScale,
+      isotropicScale,
       count,
       context  // Pass full context (includes camera and arena)
     );
@@ -1433,13 +1461,14 @@ export function assembleDrawPathInstancesOp(
     // Project, compact, and copy in one step (uses arena from context)
     const compactedCopy = projectAndCompact(
       positionBuffer,
-      scale,
+      projectionScale,
       count,
       colorBuffer,
       context.resolvedCamera,
       arena,
       rotation,
-      scale2
+      scale2,
+      isotropicScale,
     );
 
     // Build instance transforms with copied data

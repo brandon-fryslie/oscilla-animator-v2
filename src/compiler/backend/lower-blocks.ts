@@ -1351,14 +1351,45 @@ function reportUnresolvedOutputInstances(
 
       errors.push({
         code: 'InstanceMismatch',
-        message: `Unresolved instance context on ${block.type}#${block.id}.${portId}: ${card.instance.domainTypeId}:${inst}.`,
+        message: `Compiler invariant violation: unresolved placeholder instance on ${block.type}#${block.id}.${portId}: ${card.instance.domainTypeId}:${inst}.`,
         where: { blockId: block.id, port: portId },
         details: {
+          compilerInvariant: 'unresolvedPlaceholderInstance',
           unresolvedDomainTypeId: card.instance.domainTypeId,
           unresolvedInstanceId: inst,
         },
       });
     }
+  }
+}
+
+/**
+ * Emit compile diagnostics for any lowered slot metadata that still references
+ * unknown instances after output repair.
+ */
+function reportUnresolvedSlotInstances(
+  builder: OrchestratorIRBuilder,
+  errors: CompileError[],
+): void {
+  const instances = builder.getInstances();
+  const slotMeta = builder.getSlotMetaInputs();
+  for (const [slot, meta] of slotMeta) {
+    const card = requireInst(meta.type.extent.cardinality, 'cardinality');
+    if (card.kind !== 'many') continue;
+    const inst = card.instance.instanceId;
+    if (instances.has(inst)) continue;
+
+    errors.push({
+      code: 'InstanceMismatch',
+      message: `Compiler invariant violation: unresolved placeholder instance in slot ${slot}: ${card.instance.domainTypeId}:${inst}.`,
+      details: {
+        // [LAW:single-enforcer] Pass 6 is the single boundary for unresolved placeholder-instance enforcement.
+        compilerInvariant: 'unresolvedPlaceholderInstance',
+        slot,
+        unresolvedDomainTypeId: card.instance.domainTypeId,
+        unresolvedInstanceId: inst,
+      },
+    });
   }
 }
 
@@ -1529,6 +1560,7 @@ export function pass6BlockLowering(
   );
   // [LAW:single-enforcer] Pass 6 emits unresolved instance diagnostics before backend slot derivation.
   reportUnresolvedOutputInstances(blocks, builder, blockOutputs, errors);
+  reportUnresolvedSlotInstances(builder, errors);
 
   // Build provenance maps post-lowering (source-agnostic, scans edges)
   const { constantProvenance, instanceCountProvenance } = buildProvenanceMaps(

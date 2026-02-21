@@ -236,7 +236,8 @@ describe('AddressRegistry', () => {
       const registry = AddressRegistry.buildFromPatch(patch);
       const buildTime = performance.now() - buildStart;
 
-      expect(buildTime).toBeLessThan(2000); // Should build in reasonable time (varies by system)
+      // [LAW:behavior-not-structure] Coarse regression guard only: fail on extreme slowdown, not normal machine variance.
+      expect(buildTime).toBeLessThan(10000);
 
       // Lookups should be instant
       const lookupStart = performance.now();

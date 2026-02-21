@@ -62,7 +62,9 @@ interface RenderTargetInfo {
   instanceId: InstanceId;
   position: { id: ValueExprId; stride: number };
   color: { id: ValueExprId; stride: number };
-  scale?: { k: 'sig'; id: ValueExprId };
+  scale?:
+    | { k: 'sig'; id: ValueExprId }
+    | { k: 'field'; id: ValueExprId; stride: number };
   shape?:
     | { k: 'sig'; id: ValueExprId }
     | { k: 'field'; id: ValueExprId; stride: number };
@@ -259,8 +261,12 @@ function collectRenderTargets(
       );
     }
 
-    const scale = scaleExpr && isCardinalityOneExpr(scaleExpr.id, valueExprs)
-      ? { k: 'sig' as const, id: scaleExpr.id }
+    const scale = scaleExpr
+      ? isCardinalityOneExpr(scaleExpr.id, valueExprs)
+        ? { k: 'sig' as const, id: scaleExpr.id }
+        : isFieldExtent(scaleExpr.id, valueExprs)
+          ? { k: 'field' as const, id: scaleExpr.id, stride: scaleExpr.stride }
+          : undefined
       : undefined;
 
     const shapeFieldId = instanceDecl.shapeField;
@@ -426,10 +432,16 @@ export function allocateContinuityPipeline(
     // Process color (semantic: color)
     const colorSlots = getFieldSlots(color.id, 'color', color.stride);
 
-    // Process scale (uniform signal only - no per-particle scale)
+    // [LAW:dataflow-not-control-flow] Scale is always processed through one of the declared variants.
     let scaleOutput: StepRender['scale'] = undefined;
     if (scale) {
-      scaleOutput = scale;
+      if (scale.k === 'sig') {
+        scaleOutput = scale;
+      } else {
+        // [LAW:one-source-of-truth] Field scale follows the same materialize+continuity path as other field inputs.
+        const scaleSlots = getFieldSlots(scale.id, 'custom', scale.stride);
+        scaleOutput = { k: 'slot', slot: scaleSlots.outputSlot };
+      }
     }
 
     // Process shape

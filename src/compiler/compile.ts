@@ -181,6 +181,11 @@ export function compile(patch: Patch, options?: CompileOptions): CompileResult {
       const unreachableErrors: CompileError[] = [];
 
       for (const error of unlinkedIR.errors) {
+        // [LAW:single-enforcer] Compiler invariants must fail compilation regardless of graph reachability.
+        if (isAlwaysFatalInvariantError(error)) {
+          reachableErrors.push(error);
+          continue;
+        }
         const blockIdx = error.where?.blockId
           ? blockIdToIndex.get(error.where.blockId)
           : undefined;
@@ -265,6 +270,14 @@ function frontendErrorToCompileError(e: FrontendError): CompileError {
 function makeFailure(errors: CompileError[]): CompileFailure {
   compilationInspector.endCompile('failure');
   return { kind: 'error', errors };
+}
+
+/**
+ * Compiler invariants are non-negotiable backend correctness checks and must
+ * not be downgraded to unreachable warnings.
+ */
+function isAlwaysFatalInvariantError(error: CompileError): boolean {
+  return error.details?.compilerInvariant === 'unresolvedPlaceholderInstance';
 }
 
 /**
@@ -589,7 +602,7 @@ function getStepExprId(step: Step): ValueExprId | null {
     case 'fieldStateWrite':
       return step.value;
     case 'render':
-      return step.scale ? step.scale.id : null;
+      return step.scale?.k === 'sig' ? step.scale.id : null;
     case 'continuityMapBuild':
     case 'continuityApply':
       return null;

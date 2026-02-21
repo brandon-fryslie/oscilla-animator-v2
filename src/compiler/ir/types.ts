@@ -323,8 +323,12 @@ export interface StepRender {
   readonly positionSlot: ValueSlot;
   /** Slot containing color buffer (after continuity applied) */
   readonly colorSlot: ValueSlot;
-  /** Scale multiplier for shape dimensions (uniform signal, default 1.0) */
-  readonly scale?: { readonly k: 'sig'; readonly id: ValueExprId };
+  /**
+   * Scale multiplier for shape dimensions.
+   * - `sig`: uniform scale (cardinality one)
+   * - `slot`: per-instance isotropic scale (cardinality many; stride 1)
+   */
+  readonly scale?: { readonly k: 'sig'; readonly id: ValueExprId } | { readonly k: 'slot'; readonly slot: ValueSlot };
   /** Shape - topology + param signals (REQUIRED at runtime, types now enforce this) */
   readonly shape:
     | { readonly k: 'sig'; readonly topologyId: TopologyId; readonly paramSignals: readonly ValueExprId[] }
