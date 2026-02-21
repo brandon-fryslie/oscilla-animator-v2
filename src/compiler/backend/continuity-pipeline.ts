@@ -359,21 +359,21 @@ export function allocateContinuityPipeline(
   // Track which instances we've already emitted mapBuild for
   const mapBuildEmitted = new Set<InstanceId>();
 
-  // Track field+semantic → slot mappings to avoid duplicate materializations
+  // Track materialize-instance+field+semantic → slot mappings to avoid duplicate materializations
   const fieldSlots = new Map<string, { baseSlot: ValueSlot; outputSlot: ValueSlot }>();
+
+  const ensureMapBuildStep = (instanceId: InstanceId): void => {
+    if (mapBuildEmitted.has(instanceId)) return;
+    mapBuildSteps.push({
+      kind: 'continuityMapBuild',
+      instanceId,
+      outputMapping: `mapping_${instanceId}`,
+    });
+    mapBuildEmitted.add(instanceId);
+  };
 
   for (const target of renderTargets) {
     const { instanceId, position, color, scale, shape } = target;
-
-    // 1. Emit ContinuityMapBuild for this instance (if not already)
-    if (!mapBuildEmitted.has(instanceId)) {
-      mapBuildSteps.push({
-        kind: 'continuityMapBuild',
-        instanceId,
-        outputMapping: `mapping_${instanceId}`,
-      });
-      mapBuildEmitted.add(instanceId);
-    }
 
     // Helper to get or create slots for a field
     const getFieldSlots = (
@@ -381,9 +381,13 @@ export function allocateContinuityPipeline(
       semantic: 'position' | 'radius' | 'opacity' | 'color' | 'custom',
       stride: number
     ): { baseSlot: ValueSlot; outputSlot: ValueSlot } => {
-      const key = `${instanceId}:${semantic}:${fieldId}`;
+      // [LAW:one-source-of-truth] Materialization count/continuity mapping are derived from the field's own instance.
+      const fieldInstanceId = inferFieldInstanceFromExprs(fieldId, valueExprs) ?? instanceId;
+      const key = `${fieldInstanceId}:${semantic}:${fieldId}`;
       let slots = fieldSlots.get(key);
       if (!slots) {
+        ensureMapBuildStep(fieldInstanceId);
+
         // [LAW:one-source-of-truth] Reuse the binding-pass-allocated ref.slot as baseSlot
         // so materialize writes to the same slot the debug index references.
         const existingSlot = fieldExprToRefSlot.get(fieldId as number);
@@ -405,17 +409,17 @@ export function allocateContinuityPipeline(
         materializeSteps.push({
           kind: 'materialize',
           field: fieldId,
-          instanceId,
+          instanceId: fieldInstanceId,
           target: baseSlot,
         });
 
         // 3. Emit ContinuityApply step
         const policy = getPolicyForSemantic(semantic);
-        const targetKey = `${instanceId}_${semantic}_${fieldId}`;
+        const targetKey = `${fieldInstanceId}_${semantic}_${fieldId}`;
         continuityApplySteps.push({
           kind: 'continuityApply',
           targetKey,
-          instanceId,
+          instanceId: fieldInstanceId,
           policy,
           baseSlot,
           outputSlot,
