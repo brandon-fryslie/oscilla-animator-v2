@@ -7,18 +7,10 @@
 import { registerBlock, requireConfig, type LowerResult } from '../registry';
 import { canonicalType, payloadStride, requireInst, cardinalityVar } from '../../core/canonical-types';
 import { FLOAT } from '../../core/canonical-types';
-import { inferType, unitVar, payloadVar, cardinalityVar } from '../../core/inference-types';
-import { cardinalityVarId } from '../../core/ids';
+import { inferType, unitVar, payloadVar } from '../../core/inference-types';
 import { stableStateId } from '../../compiler/ir/types';
 import { defaultSourceConst } from '../../types';
 import { cardinalityVarId } from '../../core/ids';
-
-// [LAW:one-source-of-truth] Cardinality behavior is declared directly on CT/ICT.
-const UNIT_DELAY_CARD = cardinalityVar(cardinalityVarId('unit_delay_cardinality'), {
-  relation: 'promoteToMany',
-  acceptance: 'oneOrMany',
-  instanceBinding: 'inherit',
-});
 
 // [LAW:one-source-of-truth] Per-port cardinality behavior is declared on CT/ICT.
 const UNIT_DELAY_CARD = cardinalityVar(cardinalityVarId('unit_delay_cardinality'), {
