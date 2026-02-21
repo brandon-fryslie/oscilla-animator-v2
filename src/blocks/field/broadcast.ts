@@ -1,11 +1,11 @@
 /**
  * Broadcast Block
  *
- * Broadcasts a signal value to all elements of a field.
+ * Broadcasts a one-cardinality value to all elements of a field (one→many).
  */
 
 import { registerBlock, ALL_CONCRETE_PAYLOADS } from '../registry';
-import { payloadStride, type PayloadType, requireInst } from '../../core/canonical-types';
+import { payloadStride, type PayloadType } from '../../core/canonical-types';
 import { unitVar, payloadVar, inferType, cardinalityVar } from '../../core/inference-types';
 import { cardinalityVarId } from '../../core/ids';
 import { rewriteFieldType } from '../layout/_helpers';
@@ -79,10 +79,7 @@ registerBlock({
       outType = rewriteFieldType(outType, ctx.inferredInstance, ctx.instances);
     }
     const signalValue = inputsById.signal;
-    const isSignalValue = signalValue && 'type' in signalValue && requireInst(signalValue.type.extent.temporality, 'temporality').kind === 'continuous';
-    if (!signalValue || !isSignalValue) {
-      throw new Error('Broadcast signal input must be a signal');
-    }
+    if (!signalValue) throw new Error('Broadcast input required');
 
     const stride = payloadStride(outType.payload);
 

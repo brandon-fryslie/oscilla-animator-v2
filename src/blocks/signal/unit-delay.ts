@@ -5,7 +5,7 @@
  */
 
 import { registerBlock, requireConfig, type LowerResult } from '../registry';
-import { canonicalType, payloadStride, requireInst, cardinalityVar } from '../../core/canonical-types';
+import { canonicalType, payloadStride, cardinalityVar } from '../../core/canonical-types';
 import { FLOAT } from '../../core/canonical-types';
 import { inferType, unitVar, payloadVar } from '../../core/inference-types';
 import { stableStateId } from '../../compiler/ir/types';
@@ -66,9 +66,8 @@ registerBlock({
   // Phase 2: Generate state write step using resolved input
   lower: ({ ctx, inputsById, config, existingOutputs }): LowerResult => {
     const input = inputsById.in;
-    const isInputSignal = input && 'type' in input && requireInst(input.type.extent.temporality, 'temporality').kind === 'continuous';
-    if (!input || !isInputSignal) {
-      throw new Error('UnitDelay requires signal input');
+    if (!input) {
+      throw new Error('UnitDelay input required');
     }
 
     // If called from two-phase lowering, reuse existing outputs and add state write effect

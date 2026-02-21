@@ -5,7 +5,7 @@
  */
 
 import { registerBlock } from '../registry';
-import { canonicalType, payloadStride, floatConst, requireInst, cardinalityVar } from '../../core/canonical-types';
+import { canonicalType, payloadStride, floatConst, cardinalityVar } from '../../core/canonical-types';
 import { FLOAT, BOOL } from '../../core/canonical-types';
 import { inferType, unitVar } from '../../core/inference-types';
 import { OpCode, stableStateId } from '../../compiler/ir/types';
@@ -39,14 +39,11 @@ registerBlock({
     const delta = inputsById.delta;
     const reset = inputsById.reset;
 
-    const isDeltaSignal = delta && 'type' in delta && requireInst(delta.type.extent.temporality, 'temporality').kind === 'continuous';
-    const isResetSignal = reset && 'type' in reset && requireInst(reset.type.extent.temporality, 'temporality').kind === 'continuous';
-
-    if (!delta || !isDeltaSignal) {
-      throw new Error('Accumulator delta required as signal');
+    if (!delta) {
+      throw new Error('Accumulator delta input required');
     }
-    if (!reset || !isResetSignal) {
-      throw new Error('Accumulator reset required as signal');
+    if (!reset) {
+      throw new Error('Accumulator reset input required');
     }
 
     const outType = ctx.outTypes[0];

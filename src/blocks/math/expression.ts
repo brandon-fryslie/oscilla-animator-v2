@@ -25,7 +25,7 @@ registerBlock({
   type: 'Expression',
   label: 'Expression',
   category: 'math',
-  description: 'Compute signal from mathematical expression',
+  description: 'Compute value from mathematical expression',
   form: 'primitive',
   capability: 'pure',
   payload: {
@@ -54,7 +54,7 @@ registerBlock({
       collectAccepts: {
         payloads: [FLOAT, INT, VEC2, VEC3, COLOR],
         units: { kind: 'any' },
-        extent: { kind: 'signalOnly' },
+        extent: { kind: 'any' },
       },
     },
     // Config parameter (not a port - cannot be wired)

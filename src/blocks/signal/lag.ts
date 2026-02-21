@@ -5,7 +5,7 @@
  */
 
 import { registerBlock, requireConfig } from '../registry';
-import { canonicalType, payloadStride, floatConst, requireInst, unitNone, contractClamp01, cardinalityVar } from '../../core/canonical-types';
+import { canonicalType, payloadStride, floatConst, unitNone, contractClamp01, cardinalityVar } from '../../core/canonical-types';
 import { FLOAT } from '../../core/canonical-types';
 import { inferType, unitVar } from '../../core/inference-types';
 import { OpCode, stableStateId } from '../../compiler/ir/types';
@@ -38,9 +38,8 @@ registerBlock({
   },
   lower: ({ ctx, inputsById, config }) => {
     const target = inputsById.target;
-    const isTargetSignal = target && 'type' in target && requireInst(target.type.extent.temporality, 'temporality').kind === 'continuous';
-    if (!target || !isTargetSignal) {
-      throw new Error('Lag requires target signal input');
+    if (!target) {
+      throw new Error('Lag target input required');
     }
 
     const smoothing = requireConfig<number>(config, 'smoothing', 'number');
