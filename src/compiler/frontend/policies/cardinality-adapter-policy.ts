@@ -16,6 +16,7 @@ import type { DraftBlock, DraftEdge, ElaboratedRole } from '../draft-graph';
 import type { Obligation } from '../obligations';
 import type { ElaborationPlan } from '../elaboration';
 import type { PolicyContext, PolicyResult, CardinalityAdapterPolicy as CardinalityAdapterPolicyInterface } from './policy-types';
+import { isSignalDefaultSource } from '../structural-predicates';
 
 // =============================================================================
 // Policy Implementation
@@ -37,9 +38,10 @@ export const cardinalityAdapterPolicyV1: CardinalityAdapterPolicyInterface = {
       return { kind: 'blocked', reason: `Edge ${anchor.edgeId} not found in graph`, diagIds: [] };
     }
 
-    // Check if the source block is a DefaultSource — if so, replace with DefaultSourceField
+    // Check if the source block is a signal-only default source — if so, replace with field default source
+    // [LAW:one-source-of-truth] Block identity from CT/ICT port policy, not name string.
     const sourceBlock = ctx.graph.blocks.find((b) => b.id === edge.from.blockId);
-    if (sourceBlock && sourceBlock.type === 'DefaultSource') {
+    if (sourceBlock && isSignalDefaultSource(sourceBlock.type)) {
       return buildDefaultSourceFieldReplacementPlan(obligation, edge, sourceBlock, ctx);
     }
 

@@ -513,6 +513,35 @@ describe('Forbidden Patterns (Type System Invariants)', () => {
       ).toEqual([]);
     });
 
+    it('frontend decision paths must not use block-name dispatch', () => {
+      // [LAW:one-source-of-truth] Frontend decisions use structural CT/ICT predicates,
+      // not .type === 'BlockName' or .blockType === 'BlockName' string matching.
+      // Use predicates from structural-predicates.ts instead.
+      const decisionPathFiles = [
+        'src/compiler/frontend/create-derived-obligations.ts',
+        'src/compiler/frontend/normalize-adapters.ts',
+        'src/compiler/frontend/policies/cardinality-adapter-policy.ts',
+        'src/compiler/frontend/policies/default-source-policy.ts',
+      ];
+
+      for (const file of decisionPathFiles) {
+        const typeMatches = grepSrc("\\.type === '", file);
+        const blockTypeMatches = grepSrc("\\.blockType === '", file);
+        const matches = [...typeMatches, ...blockTypeMatches];
+        const allowlist = [
+          /\/\//,   // Single-line comments
+          /\*/,     // Block comments
+        ];
+        const filtered = filterAllowlist(matches, allowlist);
+        expect(
+          filtered,
+          `Frontend decision path must not use block-name dispatch (.type === / .blockType ===): ${file}\n` +
+          `Use structural predicates from structural-predicates.ts instead.\n` +
+          `Found violations:\n${filtered.join('\n')}`
+        ).toEqual([]);
+      }
+    });
+
   });
 
   describe('Cardinality Neutrality in Block Lowering', () => {
