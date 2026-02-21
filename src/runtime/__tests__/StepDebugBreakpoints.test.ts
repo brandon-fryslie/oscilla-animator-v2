@@ -199,7 +199,7 @@ describe('resolveSlotName', () => {
       stepToBlock: new Map(),
       slotToBlock: new Map(),
       exprToBlock: new Map(),
-      ports: [{ port: 0 as unknown as PortId, block: 0 as unknown as BlockId, portName: 'out', direction: 'out', domain: 'signal', role: 'userWire' } as PortBindingIR],
+      ports: [{ port: 0 as unknown as PortId, block: 0 as unknown as BlockId, portName: 'out', direction: 'out', cardinality: 'one', temporality: 'continuous', role: 'userWire' } as PortBindingIR],
       slotToPort: new Map([[5 as ValueSlot, 0 as unknown as PortId]]),
       blockMap: new Map([[0 as unknown as BlockId, 'b0']]),
       blockDisplayNames: new Map([[0 as unknown as BlockId, 'Oscillator 1']]),
@@ -228,7 +228,7 @@ describe('resolveSlotName', () => {
       stepToBlock: new Map(),
       slotToBlock: new Map(),
       exprToBlock: new Map(),
-      ports: [{ port: 0 as unknown as PortId, block: 0 as unknown as BlockId, portName: 'phase', direction: 'out', domain: 'signal', role: 'userWire' } as PortBindingIR],
+      ports: [{ port: 0 as unknown as PortId, block: 0 as unknown as BlockId, portName: 'phase', direction: 'out', cardinality: 'one', temporality: 'continuous', role: 'userWire' } as PortBindingIR],
       slotToPort: new Map([[3 as ValueSlot, 0 as unknown as PortId]]),
       blockMap: new Map([[0 as unknown as BlockId, 'b0']]),
     };
@@ -241,7 +241,7 @@ describe('resolveSlotName', () => {
       stepToBlock: new Map(),
       slotToBlock: new Map(),
       exprToBlock: new Map(),
-      ports: [{ port: 0 as unknown as PortId, block: 0 as unknown as BlockId, portName: 'out', direction: 'out', domain: 'signal', role: 'userWire' } as PortBindingIR],
+      ports: [{ port: 0 as unknown as PortId, block: 0 as unknown as BlockId, portName: 'out', direction: 'out', cardinality: 'one', temporality: 'continuous', role: 'userWire' } as PortBindingIR],
       slotToPort: new Map([[7 as ValueSlot, 0 as unknown as PortId]]),
       blockMap: new Map([[0 as unknown as BlockId, 'b0']]),
     };

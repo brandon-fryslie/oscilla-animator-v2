@@ -293,7 +293,7 @@ function checkEventNotFired(
 ): string | undefined {
   for (const port of program.debugIndex.ports) {
     if ((port.block as unknown as number) !== numericBlockIndex) continue;
-    if (port.domain === 'event') {
+    if (port.temporality === 'discrete') {
       // Resolve the block's string name for the message
       let blockName: string = String(numericBlockIndex);
       for (const [key, strId] of program.debugIndex.blockMap) {

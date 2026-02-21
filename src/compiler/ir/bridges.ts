@@ -81,26 +81,26 @@ export function bridgeExtentToAxesDescIR(extent: Extent): {
 // =============================================================================
 
 /**
- * Bridge Cardinality to IR domain classification string.
+ * Bridge Cardinality to IR cardinality classification string.
  *
- * This is a test helper that maps cardinality to the old "domain" vocabulary.
- * Production code should use the cardinality directly.
+ * This is a test helper for legacy bridge tests.
+ * Production code should use canonical cardinality directly.
  *
  * Mapping:
- * - zero → "value" (compile-time constant, not world-resident)
- * - one → "signal" (single-lane time-varying value)
- * - many(domain) → "field" (multi-lane spatially-indexed value)
+ * - zero → "zero"
+ * - one → "one"
+ * - many(instance) → "many"
  */
 export function bridgeCardinalityToIR(
   cardinality: Cardinality
-): 'value' | 'signal' | 'field' {
+): 'zero' | 'one' | 'many' {
   switch (cardinality.kind) {
     case 'zero':
-      return 'value';
+      return 'zero';
     case 'one':
-      return 'signal';
+      return 'one';
     case 'many':
-      return 'field';
+      return 'many';
     default:
       exhaustiveCheck(cardinality);
   }

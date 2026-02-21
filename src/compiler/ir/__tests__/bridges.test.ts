@@ -47,23 +47,23 @@ type Temporality = TemporalityValue;
 type Binding = BindingValue;
 
 // =============================================================================
-// Cardinality → Domain Axis
+// Cardinality → Cardinality Class
 // =============================================================================
 
 describe('bridgeCardinalityToIR', () => {
-//   it('maps zero cardinality to "value" domain', () => {
+//   it('maps zero cardinality to "zero"', () => {
 //     const card: Cardinality = cardinalityZero();
-//     expect(bridgeCardinalityToIR(card)).toBe('value');
+//     expect(bridgeCardinalityToIR(card)).toBe('zero');
 //   });
 
-  it('maps one cardinality to "signal" domain', () => {
+  it('maps one cardinality to "one"', () => {
     const card: Cardinality = cardinalityOne();
-    expect(bridgeCardinalityToIR(card)).toBe('signal');
+    expect(bridgeCardinalityToIR(card)).toBe('one');
   });
 
-  it('maps many cardinality to "field" domain', () => {
+  it('maps many cardinality to "many"', () => {
     const card: Cardinality = cardinalityMany(testInstanceRef(instanceId('particles'), domainTypeId('circle')));
-    expect(bridgeCardinalityToIR(card)).toBe('field');
+    expect(bridgeCardinalityToIR(card)).toBe('many');
   });
 });
 

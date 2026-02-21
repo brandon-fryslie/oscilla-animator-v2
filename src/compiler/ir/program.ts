@@ -406,11 +406,9 @@ export interface PortBindingIR {
   readonly portName: string; // "in.color", "out.field", etc.
   readonly direction: 'in' | 'out';
 
-  /**
-   * Domain classification based on cardinality.
-   * Maps to canonical: zero='value', one='signal', many='field'
-   */
-  readonly domain: 'signal' | 'field' | 'event' | 'value';
+  // [LAW:one-source-of-truth] Port debug classification mirrors canonical extent axes directly.
+  readonly cardinality: 'zero' | 'one' | 'many';
+  readonly temporality: 'continuous' | 'discrete';
 
   /** Why does this value exist? */
   readonly role: 'userWire' | 'defaultSource' | 'implicitCoerce' | 'internalHelper';

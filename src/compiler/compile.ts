@@ -23,7 +23,7 @@ import type { UnlinkedIRFragments } from './backend/lower-blocks';
 import type { ScheduleIR } from './backend/schedule-program';
 import type { AcyclicOrLegalGraph } from './ir/patches';
 import type { EventHub } from '../events/EventHub';
-import { canonicalType, requireManyInstance } from '../core/canonical-types';
+import { canonicalType, requireInst, requireManyInstance } from '../core/canonical-types';
 import { deriveStorageLayout, deriveArenaDescriptor } from './ir/storage-class';
 import type { ArenaSlotDescriptor } from '../runtime/ArenaValueStore';
 import type { ValueExpr, ValueExprId } from './ir/value-expr';
@@ -397,25 +397,21 @@ function convertLinkedIRToProgram(
 
     for (const [blockIndex, outputs] of unlinkedIR.blockOutputs.entries()) {
       for (const [portId, ref] of outputs.entries()) {
-        // Only map slot-backed outputs (signals/fields) to debug index.
-        // Events (discrete temporality) don't have debug slot support yet.
         const valueId = ref.id as unknown as ValueExprId;
         const expr = valueExprNodes[valueId as unknown as number];
         if (!expr) continue;
-
-        const tempAxis = expr.type.extent.temporality;
-        if (tempAxis.kind === 'inst' && tempAxis.value.kind === 'discrete') {
-          continue;
-        }
-
-        const domain = inferFieldInstanceFromValueExprs(valueId, valueExprNodes) ? 'field' : 'signal';
+        const card = requireInst(expr.type.extent.cardinality, 'cardinality').kind;
+        const temp = requireInst(expr.type.extent.temporality, 'temporality').kind;
         const slot = ref.slot;
 
         // Generate stable port ID
         const portIndex = portCounter++;
 
-        // Record slot->port mapping
-        slotToPort.set(slot, portIndex);
+        // [LAW:one-source-of-truth] Slot mapping is only for slot-backed outputs.
+        // Discrete outputs are represented in ports metadata but do not require slot aliases.
+        if (slot !== undefined) {
+          slotToPort.set(slot, portIndex);
+        }
 
         // Add port binding info
         ports.push({
@@ -423,7 +419,8 @@ function convertLinkedIRToProgram(
           block: blockIndex,
           portName: portId,
           direction: 'out',
-          domain,
+          cardinality: card,
+          temporality: temp,
           role: 'userWire',
         });
       }

@@ -40,7 +40,8 @@ describe('mapDebugEdges', () => {
             block: 'b0' as BlockId,
             portName: 'out',
             direction: 'out' as const,
-            domain: 'signal' as const,
+            cardinality: 'one' as const,
+            temporality: 'continuous' as const,
             role: 'userWire' as const
         }];
 
@@ -88,8 +89,8 @@ describe('mapDebugEdges', () => {
         slotToPort.set(11 as ValueSlot, 'p1' as PortId); // out2 -> slot 11
 
         const ports: PortBindingIR[] = [
-            { port: 'p0' as PortId, block: 'b0' as BlockId, portName: 'out1', direction: 'out' as const, domain: 'signal' as const, role: 'userWire' as const },
-            { port: 'p1' as PortId, block: 'b0' as BlockId, portName: 'out2', direction: 'out' as const, domain: 'signal' as const, role: 'userWire' as const },
+            { port: 'p0' as PortId, block: 'b0' as BlockId, portName: 'out1', direction: 'out' as const, cardinality: 'one' as const, temporality: 'continuous' as const, role: 'userWire' as const },
+            { port: 'p1' as PortId, block: 'b0' as BlockId, portName: 'out2', direction: 'out' as const, cardinality: 'one' as const, temporality: 'continuous' as const, role: 'userWire' as const },
         ];
 
         const mockProgram = {
