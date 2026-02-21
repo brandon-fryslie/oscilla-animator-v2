@@ -171,9 +171,17 @@ function deriveStrategy(type: CanonicalType): EvalStrategy {
   return isMany ? 1 /* EvalStrategy.ContinuousField */ : 0 /* EvalStrategy.ContinuousScalar */;
 }
 
-function isScalarNumericPayload(expr: ValueExpr): boolean {
+function isArenaScalarPayload(expr: ValueExpr): boolean {
   const payloadKind = expr.type.payload.kind;
-  return payloadKind === 'float' || payloadKind === 'int' || payloadKind === 'bool';
+  return (
+    payloadKind === 'float' ||
+    payloadKind === 'int' ||
+    payloadKind === 'bool' ||
+    payloadKind === 'vec2' ||
+    payloadKind === 'vec3' ||
+    payloadKind === 'vec4' ||
+    payloadKind === 'color'
+  );
 }
 
 function canMaterializeScalarExpr(
@@ -318,10 +326,10 @@ export function pass7Schedule(
     const expr = valueExprs[exprId as number];
     if (!expr) continue;
 
-    // [LAW:one-source-of-truth] Eligible scalar numeric signal DAGs are migrated to the
+    // [LAW:one-source-of-truth] Eligible arena-compatible scalar signal DAGs are migrated to the
     // materializer path via SCALAR_INSTANCE_ID instead of evalValue.
     if (
-      isScalarNumericPayload(expr) &&
+      isArenaScalarPayload(expr) &&
       canMaterializeScalarExpr(exprId as number, valueExprs, scalarMaterializeEligibility, new Set())
     ) {
       const scalarStep: StepMaterialize = {
