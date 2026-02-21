@@ -15,6 +15,7 @@ import { debugService } from './DebugService';
 import type { ValueSlot } from '../types';
 import { canonicalType } from '../core/canonical-types';
 import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR,  CAMERA_PROJECTION } from '../core/canonical-types';
+import type { ArenaSlotDescriptor } from '../runtime/ArenaValueStore';
 
 describe('DebugService', () => {
     beforeEach(() => {
@@ -771,6 +772,176 @@ describe('DebugService', () => {
                 // Raw buffer is available
                 expect(r.buffer.length).toBe(8);
             }
+        });
+    });
+
+    // =========================================================================
+    // Arena Reads (zdru.4)
+    // =========================================================================
+
+    describe('arena reads (zdru.4)', () => {
+        /**
+         * Build a minimal arena layout: one entry at slot `slotId` with the
+         * given descriptor, all others left as sentinel (offset:-1).
+         */
+        function makeArenaLayout(slotId: number, desc: ArenaSlotDescriptor): ArenaSlotDescriptor[] {
+            const sentinel: ArenaSlotDescriptor = { offset: -1, stride: 0, laneCount: 0, length: 0 };
+            const layout: ArenaSlotDescriptor[] = Array.from({ length: slotId + 1 }, () => sentinel);
+            layout[slotId] = desc;
+            return layout;
+        }
+
+        it('reads signal value from arena when arenaRef is set', () => {
+            const edgeMap = new Map([
+                ['edge1', { slotId: 10 as ValueSlot, type: canonicalType(FLOAT), cardinality: 'signal' as const }],
+            ]);
+            debugService.setEdgeToSlotMap(edgeMap);
+
+            // Build arena: slot 10 → offset 0, stride 1, laneCount 1
+            const arena = new Float32Array(1);
+            const layout = makeArenaLayout(10, { offset: 0, stride: 1, laneCount: 1, length: 1 });
+            debugService.setArenaRef(arena, layout);
+
+            // Write a distinct value directly to the arena (not via updateSlotValue)
+            arena[0] = 0.42;
+
+            // Trigger runtimeStarted without touching slot 10 in the Map
+            debugService.updateSlotValue(99 as ValueSlot, 0);
+
+            const result = debugService.getEdgeValue('edge1');
+            expect(result?.kind).toBe('signal');
+            if (result?.kind === 'signal') {
+                // Must come from arena (0.42), not from signalValues Map (undefined/0 for slot 10)
+                expect(result.value).toBeCloseTo(0.42);
+            }
+        });
+
+        it('returns undefined for arena signal before runtime starts', () => {
+            const edgeMap = new Map([
+                ['edge1', { slotId: 10 as ValueSlot, type: canonicalType(FLOAT), cardinality: 'signal' as const }],
+            ]);
+            debugService.setEdgeToSlotMap(edgeMap);
+
+            const arena = new Float32Array(1);
+            const layout = makeArenaLayout(10, { offset: 0, stride: 1, laneCount: 1, length: 1 });
+            debugService.setArenaRef(arena, layout);
+
+            // Do NOT call updateSlotValue — runtime has not started
+            const result = debugService.getEdgeValue('edge1');
+            expect(result).toBeUndefined();
+        });
+
+        it('reads field buffer from arena as a zero-copy view', () => {
+            const floatType = canonicalType(FLOAT);
+            const edgeMap = new Map([
+                ['field-edge', { slotId: 30 as ValueSlot, type: floatType, cardinality: 'field' as const }],
+            ]);
+            debugService.setEdgeToSlotMap(edgeMap);
+
+            // Arena: slot 30 → offset 0, stride 1, laneCount 4 (4 float lanes)
+            const arena = new Float32Array(4);
+            const layout = makeArenaLayout(30, { offset: 0, stride: 1, laneCount: 4, length: 4 });
+            debugService.setArenaRef(arena, layout);
+
+            debugService.trackField(30 as ValueSlot, floatType);
+
+            // Write values directly to arena
+            arena[0] = 0.1; arena[1] = 0.2; arena[2] = 0.3; arena[3] = 0.4;
+
+            // Trigger runtimeStarted + feed accumulator for stats
+            debugService.updateFieldValue(30 as ValueSlot, new Float32Array([0.1, 0.2, 0.3, 0.4]));
+
+            const result = debugService.getEdgeValue('field-edge');
+            expect(result?.kind).toBe('field');
+            if (result?.kind === 'field') {
+                // Buffer comes from arena (zero-copy view)
+                expect(result.buffer[0]).toBeCloseTo(0.1);
+                expect(result.buffer[1]).toBeCloseTo(0.2);
+                expect(result.buffer.length).toBe(4);
+
+                // Verify zero-copy: mutating arena is reflected in the view
+                arena[0] = 0.99;
+                const result2 = debugService.getEdgeValue('field-edge');
+                if (result2?.kind === 'field') {
+                    expect(result2.buffer[0]).toBeCloseTo(0.99);
+                }
+            }
+        });
+
+        it('returns field-untracked from arena path for untracked field', () => {
+            const floatType = canonicalType(FLOAT);
+            const edgeMap = new Map([
+                ['field-edge', { slotId: 30 as ValueSlot, type: floatType, cardinality: 'field' as const }],
+            ]);
+            debugService.setEdgeToSlotMap(edgeMap);
+
+            const arena = new Float32Array(4);
+            const layout = makeArenaLayout(30, { offset: 0, stride: 1, laneCount: 4, length: 4 });
+            debugService.setArenaRef(arena, layout);
+
+            // Do NOT track the field
+            const result = debugService.getEdgeValue('field-edge');
+            expect(result?.kind).toBe('field-untracked');
+        });
+
+        it('falls back to Map for slots with sentinel descriptor (offset < 0)', () => {
+            const edgeMap = new Map([
+                ['edge1', { slotId: 10 as ValueSlot, type: canonicalType(FLOAT), cardinality: 'signal' as const }],
+            ]);
+            debugService.setEdgeToSlotMap(edgeMap);
+
+            // Arena with sentinel for slot 10 (offset -1 = excluded from arena)
+            const arena = new Float32Array(0);
+            const sentinel: ArenaSlotDescriptor = { offset: -1, stride: 0, laneCount: 0, length: 0 };
+            const layout: ArenaSlotDescriptor[] = new Array(11).fill(sentinel);
+            debugService.setArenaRef(arena, layout);
+
+            // Write via Map path
+            debugService.updateSlotValue(10 as ValueSlot, 0.77);
+
+            const result = debugService.getEdgeValue('edge1');
+            expect(result?.kind).toBe('signal');
+            if (result?.kind === 'signal') {
+                expect(result.value).toBeCloseTo(0.77);
+            }
+        });
+
+        it('clears arenaRef on setEdgeToSlotMap (recompile)', () => {
+            const edgeMap = new Map([
+                ['edge1', { slotId: 10 as ValueSlot, type: canonicalType(FLOAT), cardinality: 'signal' as const }],
+            ]);
+            debugService.setEdgeToSlotMap(edgeMap);
+
+            const arena = new Float32Array(1);
+            const layout = makeArenaLayout(10, { offset: 0, stride: 1, laneCount: 1, length: 1 });
+            debugService.setArenaRef(arena, layout);
+            arena[0] = 0.5;
+            debugService.updateSlotValue(10 as ValueSlot, 0.5); // sets runtimeStarted
+
+            // Re-set mapping (simulates recompile — invalidates old arena)
+            debugService.setEdgeToSlotMap(edgeMap);
+
+            // Arena is now null; runtime not started yet after recompile
+            const result = debugService.getEdgeValue('edge1');
+            expect(result).toBeUndefined();
+        });
+
+        it('clears arenaRef on clear()', () => {
+            const edgeMap = new Map([
+                ['edge1', { slotId: 10 as ValueSlot, type: canonicalType(FLOAT), cardinality: 'signal' as const }],
+            ]);
+            debugService.setEdgeToSlotMap(edgeMap);
+
+            const arena = new Float32Array(1);
+            const layout = makeArenaLayout(10, { offset: 0, stride: 1, laneCount: 1, length: 1 });
+            debugService.setArenaRef(arena, layout);
+
+            debugService.clear();
+
+            // After clear, edge map is gone — must throw
+            expect(() => debugService.getEdgeValue('edge1')).toThrow(
+                "[DebugService.getEdgeValue] Edge 'edge1' not found in edge-to-slot mapping"
+            );
         });
     });
 });
