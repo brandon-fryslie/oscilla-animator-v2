@@ -11,7 +11,7 @@
 import type { Patch } from '../graph/Patch';
 import type { CanonicalType } from '../core/canonical-types';
 import { FLOAT } from '../core/canonical-types';
-import { canonicalSignal } from '../core/canonical-types/canonical-type';
+import { canonicalScalar } from '../core/canonical-types/canonical-type';
 import { getAnyBlockDefinition } from '../blocks/registry';
 
 /**
@@ -62,7 +62,7 @@ export function extractConstantValues(
 
       if (valueParam !== undefined && outputPort) {
         // Use basic float signal type
-        const floatType = canonicalSignal(FLOAT);
+        const floatType = canonicalScalar(FLOAT);
         constants.set(unmapped.edgeId, {
           value: valueParam,
           type: floatType,
@@ -90,7 +90,7 @@ export function extractConstantValues(
           continue;
       }
 
-      const floatType = canonicalSignal(FLOAT);
+      const floatType = canonicalScalar(FLOAT);
       constants.set(unmapped.edgeId, {
         value,
         type: floatType,

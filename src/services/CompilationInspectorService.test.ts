@@ -917,7 +917,7 @@ describe('CompilationInspectorService', () => {
         }
       });
 
-      it('derives signal/field/event/const from CanonicalType axes', () => {
+      it('derives one/many/discrete/zero from CanonicalType axes', () => {
         const patch = buildPatch((b) => {
           b.addBlock('InfiniteTimeRoot');
           const array = b.addBlock('Array');
@@ -929,8 +929,8 @@ describe('CompilationInspectorService', () => {
 
         const stats = compilationInspector.getValueExprStats();
 
-        // Should have signal (cardinality one, continuous)
-        expect(stats.byDerivedKind.signal).toBeGreaterThan(0);
+        // Should have one (cardinality one, continuous)
+        expect(stats.byDerivedKind.one).toBeGreaterThan(0);
 
         // May have field expressions (cardinality many, continuous)
         // May have const expressions (cardinality zero)

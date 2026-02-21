@@ -100,7 +100,7 @@ export interface ValueExprStats {
   /** Count by top-level kind */
   byKind: Record<string, number>;
 
-  /** Count by derived kind (signal/field/event/const) */
+  /** Count by derived extent family (one/many/discrete/zero) */
   byDerivedKind: Record<string, number>;
 
   /** Count by payload type */
@@ -468,7 +468,7 @@ class CompilationInspectorService {
       // Count by top-level kind
       byKind[expr.kind] = (byKind[expr.kind] || 0) + 1;
 
-      // Count by derived kind (signal/field/event/const)
+      // Count by derived extent family (one/many/discrete/zero)
       const derivedKind = deriveDerivedKind(expr);
       byDerivedKind[derivedKind] = (byDerivedKind[derivedKind] || 0) + 1;
 
@@ -491,8 +491,8 @@ class CompilationInspectorService {
 // =============================================================================
 
 /**
- * Derive the signal/field/event/const family from CanonicalType.
- * Mirrors derivedKindLabel from axis-validate.ts but accessible here.
+ * Derive extent family labels from CanonicalType.
+ * Mirrors axis-based derivation in validation, but uses migration naming.
  *
  * @param expr - ValueExpr with CanonicalType
  * @returns Derived kind label
@@ -504,7 +504,7 @@ function deriveDerivedKind(expr: ValueExpr): string {
   if (extent.temporality.kind === 'inst') {
     const tempo = extent.temporality.value;
     if (tempo.kind === 'discrete') {
-      return 'event';
+      return 'discrete';
     }
   }
 
@@ -512,14 +512,14 @@ function deriveDerivedKind(expr: ValueExpr): string {
   if (extent.cardinality.kind === 'inst') {
     const card = extent.cardinality.value;
     if (card.kind === 'many') {
-      return 'field';
+      return 'many';
     }
     if (card.kind === 'zero') {
-      return 'const';
+      return 'zero';
     }
   }
 
-  return 'signal';
+  return 'one';
 }
 
 /**

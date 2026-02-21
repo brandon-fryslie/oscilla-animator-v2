@@ -60,12 +60,13 @@ export function canonicalType(
   };
 }
 
-/** Create a signal type (one + continuous). */
-export function canonicalSignal(
+/** Create a scalar type (cardinality one + continuous). */
+export function canonicalScalar(
   payload: PayloadType,
   unit?: UnitType,
   contract?: ValueContract
 ): CanonicalType {
+  // [LAW:one-source-of-truth] Scalar semantics are defined by canonical one+continuous extent only.
   return canonicalType(payload, unit, {
     cardinality: cardinalityOne(),
     temporality: temporalityContinuous(),
@@ -118,7 +119,7 @@ export function canonicalEvent(): CanonicalType {
 
 /**
  * Compile-time constant type (zero cardinality + continuous).
- * Zero-cardinality values are universal donors — consumable by signal or field
+ * Zero-cardinality values are universal donors — consumable by one/many
  * contexts without explicit lifting. The evaluator reads the constant directly.
  */
 export function canonicalConst(

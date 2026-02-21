@@ -139,7 +139,7 @@ export {
 export {
   type CanonicalType,
   canonicalType,
-  canonicalSignal,
+  canonicalScalar,
   canonicalField,
   canonicalFieldDef,
   canonicalEvent,
@@ -148,6 +148,9 @@ export {
   withInstance,
   UNBOUND_INSTANCE,
 } from './canonical-type';
+
+// [LAW:locality-or-seam] Keep a barrel-level alias while callsites migrate to canonicalScalar.
+export { canonicalScalar as canonicalSignal } from './canonical-type';
 
 export {
   cardinalitiesEqual,
