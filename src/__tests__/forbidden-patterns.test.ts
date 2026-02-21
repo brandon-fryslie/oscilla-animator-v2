@@ -594,6 +594,126 @@ describe('Forbidden Patterns (Type System Invariants)', () => {
   });
 
   // =============================================================================
+  // CT/ICT Compatibility Regression Prevention (y2yd.1)
+  // =============================================================================
+
+  describe('CT/ICT Compatibility Regression Prevention', () => {
+    // [LAW:single-enforcer] Compatibility decisions in the frontend are routed
+    // through the CT/ICT oracle (type-compatibility.ts) and structural predicates
+    // (structural-predicates.ts). These inline helpers were removed when the
+    // oracle was unified in cpc.8. Re-introducing them bypasses the single enforcer.
+
+    const frontendDir = 'src/compiler/frontend/';
+
+    it('no removed blockType+port compatibility helpers in frontend', () => {
+      // Each of these was an inline blockType+port lookup that replicated
+      // compatibility logic outside the oracle. They were removed in cpc.8.
+      const removedHelpers = [
+        { name: 'portDeclaresOneOrManyFlex', replacement: 'portAcceptsBroadcast from type-compatibility.ts' },
+        { name: 'destinationAllowsSignalBroadcast', replacement: 'portAcceptsBroadcast from type-compatibility.ts' },
+        { name: 'portDeclaresSignalOnly', replacement: 'CT/ICT structural predicates' },
+        { name: 'isOneManyCardinalityMismatchOnly', replacement: 'isOneManyMismatchOnly from type-compatibility.ts' },
+      ];
+
+      const allowlist = [
+        /\.test\./,
+        /__tests__/,
+      ];
+
+      for (const { name, replacement } of removedHelpers) {
+        const matches = grepSrc(name, frontendDir);
+        const filtered = filterAllowlist(matches, allowlist);
+        expect(
+          filtered,
+          `${name} was removed — use ${replacement}.\n` +
+          `Found violations:\n${filtered.join('\n')}`
+        ).toEqual([]);
+      }
+    });
+
+    it('no local isTypeCompatible function definitions in frontend decision paths', () => {
+      // [LAW:single-enforcer] isEdgeTypeCompatible in type-compatibility.ts is
+      // the single compatibility oracle. Local "function isTypeCompatible"
+      // definitions in decision paths duplicate that authority.
+      const decisionPaths = [
+        'src/compiler/frontend/analyze-type-graph.ts',
+        'src/compiler/frontend/create-derived-obligations.ts',
+        'src/compiler/frontend/normalize-adapters.ts',
+      ];
+
+      for (const file of decisionPaths) {
+        const matches = grepSrc('function isTypeCompatible', file);
+        expect(
+          matches,
+          `Local isTypeCompatible in ${file} — use isEdgeTypeCompatible from type-compatibility.ts`
+        ).toEqual([]);
+      }
+    });
+
+  });
+
+  // =============================================================================
+  // Legacy Cardinality Mode Terms in Frontend (y2yd.1)
+  // =============================================================================
+
+  describe('Legacy Cardinality Mode Terms in Frontend', () => {
+    // [LAW:one-source-of-truth] Cardinality behavior is declared on CT/ICT
+    // port types (relation, acceptance, instanceBinding), not in block-level
+    // metadata enums. These terms were removed and must not reappear in
+    // frontend decision modules.
+
+    const frontendDir = 'src/compiler/frontend/';
+
+    it('no legacy cardinality metadata types or helpers in frontend', () => {
+      const legacyTerms = [
+        { name: 'BlockCardinalityMetadata', what: 'block-level cardinality metadata type' },
+        { name: 'isCardinalityGeneric', what: 'block-level cardinality predicate' },
+        { name: 'BlockLaneTopology', what: 'block-level lane topology type' },
+      ];
+
+      const allowlist = [
+        /\.test\./,
+        /__tests__/,
+      ];
+
+      for (const { name, what } of legacyTerms) {
+        const matches = grepSrc(name, frontendDir);
+        const filtered = filterAllowlist(matches, allowlist);
+        expect(
+          filtered,
+          `${name} (${what}) was removed — cardinality is declared on CT/ICT port types.\n` +
+          `Found violations:\n${filtered.join('\n')}`
+        ).toEqual([]);
+      }
+    });
+
+    it('no legacy cardinality mode field names in frontend', () => {
+      const modeFields = [
+        { name: 'cardinalityMode', what: 'block cardinality mode discriminant' },
+        { name: 'broadcastPolicy', what: 'block broadcast policy field' },
+        { name: 'laneCoupling', what: 'block lane coupling field' },
+        { name: 'laneTopology', what: 'block lane topology field' },
+      ];
+
+      const allowlist = [
+        /\.test\./,
+        /__tests__/,
+      ];
+
+      for (const { name, what } of modeFields) {
+        const matches = grepSrc(name, frontendDir);
+        const filtered = filterAllowlist(matches, allowlist);
+        expect(
+          filtered,
+          `${name} (${what}) was removed — declare cardinality behavior on CT/ICT vars.\n` +
+          `Found violations:\n${filtered.join('\n')}`
+        ).toEqual([]);
+      }
+    });
+
+  });
+
+  // =============================================================================
   // Scheduler Slot Allocation Prevention
   // =============================================================================
 
