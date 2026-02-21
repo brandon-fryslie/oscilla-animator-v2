@@ -12,13 +12,10 @@
 import {
   type CanonicalType,
   requireInst,
-  payloadsEqual,
-  unitsEqual,
-  isAxisVar,
-  resolveCardinalityPolicy,
 } from "../../core/canonical-types";
 import type { TypedPatch, BlockIndex, TypeResolvedPatch, PortKey } from "../ir/patches";
 import { getBlockDefinition } from "../../blocks/registry";
+import { portAcceptsBroadcast, isEdgeTypeCompatible } from "./policies/type-compatibility";
 
 // =============================================================================
 // Port Type Lookup (inlined from analyze-type-constraints.ts)
@@ -35,29 +32,6 @@ function getPortType(
   direction: 'in' | 'out',
 ): import("../../core/canonical-types").CanonicalType | undefined {
   return patch.portTypes.get(portKey(blockIndex, portName, direction));
-}
-
-/**
- * Determine whether a destination input port allows signal→field compatibility.
- *
- * Uses CT/ICT declared acceptance on the destination input cardinality axis.
- * // [LAW:one-source-of-truth] Cardinality compatibility is declared on port types.
- */
-function destinationAllowsSignalBroadcast(blockType: string, inputPort: string): boolean {
-  const def = getBlockDefinition(blockType);
-  const inDef = def?.inputs[inputPort];
-  const axis = inDef?.type?.extent?.cardinality;
-  if (axis && isAxisVar(axis)) {
-    const cardAxis = axis as any;
-    const hasDeclaredPolicy = cardAxis.relation !== undefined
-      || cardAxis.acceptance !== undefined
-      || cardAxis.instanceBinding !== undefined;
-    if (hasDeclaredPolicy) {
-      const policy = resolveCardinalityPolicy(axis);
-      return policy?.acceptance === 'oneOrMany';
-    }
-  }
-  return false;
 }
 
 // =============================================================================
@@ -80,59 +54,6 @@ export interface NoConversionPathError {
 }
 
 export type Pass2Error = PortTypeUnknownError | NoConversionPathError;
-
-// =============================================================================
-// Type Compatibility
-// =============================================================================
-
-/**
- * Type compatibility check for wired connections.
- * Pure function that checks only CanonicalType structure.
- *
- * Sprint 1: Removed block-name parameters and cardinality-generic exceptions.
- * Sprint 2 will add proper constraint-based cardinality resolution in the frontend solver.
- */
-function isTypeCompatible(from: CanonicalType, to: CanonicalType, allowsBroadcast = false): boolean {
-  const fromCard = requireInst(from.extent.cardinality, 'cardinality');
-  const fromTemp = requireInst(from.extent.temporality, 'temporality');
-  const toCard = requireInst(to.extent.cardinality, 'cardinality');
-  const toTemp = requireInst(to.extent.temporality, 'temporality');
-
-  // Payload must match (structural equality — solver may produce non-singleton objects)
-  if (!payloadsEqual(from.payload, to.payload)) {
-    return false;
-  }
-
-  // Unit must match (structural equality — handles nested fields like angle subkind)
-  if (!unitsEqual(from.unit, to.unit)) {
-    return false;
-  }
-
-  // Temporality must match
-  if (fromTemp.kind !== toTemp.kind) {
-    return false;
-  }
-
-  // Cardinality must match, with broadcast exception
-  if (fromCard.kind !== toCard.kind) {
-    // Allow one → many when destination policy permits signal-to-field promotion.
-    if (allowsBroadcast && fromCard.kind === 'one' && toCard.kind === 'many') {
-      return true;
-    }
-    return false;
-  }
-
-  // For 'many' cardinality, instance must also match
-  if (fromCard.kind === 'many' && toCard.kind === 'many') {
-    const fromInstance = fromCard.instance;
-    const toInstance = toCard.instance;
-    if (!fromInstance || !toInstance) return false;
-    return fromInstance.domainTypeId === toInstance.domainTypeId &&
-      fromInstance.instanceId === toInstance.instanceId;
-  }
-
-  return true;
-}
 
 // =============================================================================
 // Pass 2: Type Graph
@@ -202,10 +123,11 @@ export function pass2TypeGraph(typeResolved: TypeResolvedPatch): TypedPatch {
     }
 
     // Check if destination accepts signal→field by CT/ICT declaration.
-    const allowsBroadcast = destinationAllowsSignalBroadcast(toBlock.type, edge.toPort);
+    // [LAW:one-source-of-truth] Routed through type-compatibility oracle.
+    const allowsBroadcast = portAcceptsBroadcast(toBlock.type, edge.toPort);
 
     // Validate type compatibility
-    if (!isTypeCompatible(fromType, toType, allowsBroadcast)) {
+    if (!isEdgeTypeCompatible(fromType, toType, allowsBroadcast)) {
       const fromCard = requireInst(fromType.extent.cardinality, 'cardinality');
       const fromTemp = requireInst(fromType.extent.temporality, 'temporality');
       const toCard = requireInst(toType.extent.cardinality, 'cardinality');
@@ -307,10 +229,11 @@ export function pass2TypeGraphSafe(typeResolved: TypeResolvedPatch): Pass2TypeGr
     }
 
     // Check if destination accepts signal→field by CT/ICT declaration.
-    const allowsBroadcast = destinationAllowsSignalBroadcast(toBlock.type, edge.toPort);
+    // [LAW:one-source-of-truth] Routed through type-compatibility oracle.
+    const allowsBroadcast = portAcceptsBroadcast(toBlock.type, edge.toPort);
 
     // Validate type compatibility
-    if (!isTypeCompatible(fromType, toType, allowsBroadcast)) {
+    if (!isEdgeTypeCompatible(fromType, toType, allowsBroadcast)) {
       const fromCard = requireInst(fromType.extent.cardinality, 'cardinality');
       const fromTemp = requireInst(fromType.extent.temporality, 'temporality');
       const toCard = requireInst(toType.extent.cardinality, 'cardinality');

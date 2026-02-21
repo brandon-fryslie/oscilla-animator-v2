@@ -129,17 +129,17 @@ describe('Forbidden Patterns (Type System Invariants)', () => {
       expect(matches, 'Backend must not import from frontend').toEqual([]);
     });
 
-    it('isTypeCompatible is pure (no block-name parameters)', () => {
-      // isTypeCompatible itself must be pure — it takes only type facts,
-      // not block metadata or block-name dispatch.
+    it('isEdgeTypeCompatible is pure (no block-name parameters)', () => {
+      // isEdgeTypeCompatible (type-compatibility oracle) must be pure — it takes
+      // only type facts, not block metadata or block-name dispatch.
       const forbiddenInTypeCompat = [
         'sourceBlockType',
         'targetBlockType',
       ];
 
       for (const forbidden of forbiddenInTypeCompat) {
-        const matches = grepSrc(forbidden, 'src/compiler/frontend/analyze-type-graph.ts');
-        expect(matches, `isTypeCompatible must not use ${forbidden}`).toEqual([]);
+        const matches = grepSrc(forbidden, 'src/compiler/frontend/policies/type-compatibility.ts');
+        expect(matches, `isEdgeTypeCompatible must not use ${forbidden}`).toEqual([]);
       }
     });
 
