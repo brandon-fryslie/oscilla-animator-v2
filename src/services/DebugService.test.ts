@@ -41,14 +41,14 @@ describe('DebugService', () => {
             const result2 = debugService.getEdgeValue('edge2');
 
             expect(result1).toEqual({
-                kind: 'signal',
+                kind: 'scalar',
                 value: 0.5,
                 slotId: 10 as ValueSlot,
                 type: canonicalType(FLOAT),
             });
 
             expect(result2).toEqual({
-                kind: 'signal',
+                kind: 'scalar',
                 value: 0.75,
                 slotId: 20 as ValueSlot,
                 type: canonicalType(FLOAT),
@@ -115,18 +115,18 @@ describe('DebugService', () => {
             // Simulate runtime tap updates
             debugService.updateSlotValue(10 as ValueSlot, 0.0);
             const r1 = debugService.getEdgeValue('edge1');
-            expect(r1?.kind).toBe('signal');
-            if (r1?.kind === 'signal') expect(r1.value).toBe(0.0);
+            expect(r1?.kind).toBe('scalar');
+            if (r1?.kind === 'scalar') expect(r1.value).toBe(0.0);
 
             debugService.updateSlotValue(10 as ValueSlot, 0.5);
             const r2 = debugService.getEdgeValue('edge1');
-            expect(r2?.kind).toBe('signal');
-            if (r2?.kind === 'signal') expect(r2.value).toBe(0.5);
+            expect(r2?.kind).toBe('scalar');
+            if (r2?.kind === 'scalar') expect(r2.value).toBe(0.5);
 
             debugService.updateSlotValue(10 as ValueSlot, 1.0);
             const r3 = debugService.getEdgeValue('edge1');
-            expect(r3?.kind).toBe('signal');
-            if (r3?.kind === 'signal') expect(r3.value).toBe(1.0);
+            expect(r3?.kind).toBe('scalar');
+            if (r3?.kind === 'scalar') expect(r3.value).toBe(1.0);
         });
 
         it('should handle multiple edges pointing to same slot', () => {
@@ -141,10 +141,10 @@ describe('DebugService', () => {
 
             const r1 = debugService.getEdgeValue('edge1');
             const r2 = debugService.getEdgeValue('edge2');
-            expect(r1?.kind).toBe('signal');
-            expect(r2?.kind).toBe('signal');
-            if (r1?.kind === 'signal') expect(r1.value).toBe(0.42);
-            if (r2?.kind === 'signal') expect(r2.value).toBe(0.42);
+            expect(r1?.kind).toBe('scalar');
+            expect(r2?.kind).toBe('scalar');
+            if (r1?.kind === 'scalar') expect(r1.value).toBe(0.42);
+            if (r2?.kind === 'scalar') expect(r2.value).toBe(0.42);
         });
     });
 
@@ -159,8 +159,8 @@ describe('DebugService', () => {
 
             // Verify data exists
             const r = debugService.getEdgeValue('edge1');
-            expect(r?.kind).toBe('signal');
-            if (r?.kind === 'signal') expect(r.value).toBe(0.5);
+            expect(r?.kind).toBe('scalar');
+            if (r?.kind === 'scalar') expect(r.value).toBe(0.5);
 
             // Clear
             debugService.clear();
@@ -230,7 +230,7 @@ describe('DebugService', () => {
 
             const result = debugService.getPortValue('blockA', 'out');
             expect(result).toEqual({
-                kind: 'signal',
+                kind: 'scalar',
                 value: 0.75,
                 slotId: 10 as ValueSlot,
                 type: canonicalType(FLOAT),
@@ -468,10 +468,10 @@ describe('DebugService', () => {
 
             const r1 = debugService.getEdgeValue('osc1-out->sin1-phase');
             const r2 = debugService.getEdgeValue('sin1-out->render');
-            expect(r1?.kind).toBe('signal');
-            expect(r2?.kind).toBe('signal');
-            if (r1?.kind === 'signal') expect(r1.value).toBe(0.0);
-            if (r2?.kind === 'signal') expect(r2.value).toBe(0.0);
+            expect(r1?.kind).toBe('scalar');
+            expect(r2?.kind).toBe('scalar');
+            if (r1?.kind === 'scalar') expect(r1.value).toBe(0.0);
+            if (r2?.kind === 'scalar') expect(r2.value).toBe(0.0);
 
             // Frame 2
             debugService.updateSlotValue(5 as ValueSlot, 0.25);
@@ -479,14 +479,14 @@ describe('DebugService', () => {
 
             const r3 = debugService.getEdgeValue('osc1-out->sin1-phase');
             const r4 = debugService.getEdgeValue('sin1-out->render');
-            if (r3?.kind === 'signal') expect(r3.value).toBe(0.25);
-            if (r4?.kind === 'signal') expect(r4.value).toBe(0.707);
+            if (r3?.kind === 'scalar') expect(r3.value).toBe(0.25);
+            if (r4?.kind === 'scalar') expect(r4.value).toBe(0.707);
 
             // 3. UI queries values (DebugStore or useDebugProbe)
             const phaseEdgeResult = debugService.getEdgeValue('osc1-out->sin1-phase');
             expect(phaseEdgeResult).toBeDefined();
-            expect(phaseEdgeResult?.kind).toBe('signal');
-            if (phaseEdgeResult?.kind === 'signal') {
+            expect(phaseEdgeResult?.kind).toBe('scalar');
+            if (phaseEdgeResult?.kind === 'scalar') {
                 expect(phaseEdgeResult.type).toEqual(canonicalType(FLOAT));
                 expect(phaseEdgeResult.value).toBe(0.25);
             }
@@ -808,8 +808,8 @@ describe('DebugService', () => {
             debugService.updateSlotValue(99 as ValueSlot, 0);
 
             const result = debugService.getEdgeValue('edge1');
-            expect(result?.kind).toBe('signal');
-            if (result?.kind === 'signal') {
+            expect(result?.kind).toBe('scalar');
+            if (result?.kind === 'scalar') {
                 // Must come from arena (0.42), not from signalValues Map (undefined/0 for slot 10)
                 expect(result.value).toBeCloseTo(0.42);
             }
@@ -899,8 +899,8 @@ describe('DebugService', () => {
             debugService.updateSlotValue(10 as ValueSlot, 0.77);
 
             const result = debugService.getEdgeValue('edge1');
-            expect(result?.kind).toBe('signal');
-            if (result?.kind === 'signal') {
+            expect(result?.kind).toBe('scalar');
+            if (result?.kind === 'scalar') {
                 expect(result.value).toBeCloseTo(0.77);
             }
         });

@@ -279,7 +279,7 @@ export const PortInfoPopover: React.FC<PortInfoPopoverProps> = observer(({
           )}
 
           {/* Debug Value (when connected and debug enabled) */}
-          {debugValue && debugValue.kind === 'signal' && (
+          {debugValue && debugValue.kind === 'scalar' && (
             <>
               <Divider color="#444" />
               <Box>

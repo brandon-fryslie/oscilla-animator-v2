@@ -118,8 +118,8 @@ describe('useDebugMiniView', () => {
     act(() => { vi.advanceTimersByTime(300); });
 
     expect(result.current!.value).not.toBe(null);
-    expect(result.current!.value!.kind).toBe('signal');
-    if (result.current!.value!.kind === 'signal') {
+    expect(result.current!.value!.kind).toBe('scalar');
+    if (result.current!.value!.kind === 'scalar') {
       expect(result.current!.value!.value).toBe(0.42);
     }
   });
@@ -134,13 +134,13 @@ describe('useDebugMiniView', () => {
     const { result } = renderHook(() => useDebugMiniView('edge-1', null));
 
     act(() => { vi.advanceTimersByTime(250); });
-    expect(result.current!.value?.kind).toBe('signal');
+    expect(result.current!.value?.kind).toBe('scalar');
 
     // Update value and advance timer
     debugService.updateSlotValue(10 as ValueSlot, 0.9);
     act(() => { vi.advanceTimersByTime(250); });
 
-    if (result.current!.value?.kind === 'signal') {
+    if (result.current!.value?.kind === 'scalar') {
       expect(result.current!.value.value).toBe(0.9);
     }
   });

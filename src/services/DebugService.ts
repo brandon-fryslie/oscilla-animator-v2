@@ -2,7 +2,7 @@
  * DebugService - Runtime Value Observation
  *
  * Singleton service that bridges runtime slot values to UI queries.
- * Supports both signal (scalar) and field (buffer) debug inspection.
+ * Supports both scalar and field (buffer) debug inspection.
  *
  * Field tracking is demand-driven: fields are only materialized when
  * actively tracked (hovered or inspected). This avoids unnecessary
@@ -24,10 +24,10 @@ import type { ArenaSlotDescriptor } from '../runtime/ArenaValueStore';
 import { arenaRead, arenaSlice } from '../runtime/ArenaValueStore';
 
 /**
- * Signal value result - scalar value from evalValue step.
+ * Scalar value result - scalar value from evalValue step.
  */
-export interface SignalValueResult {
-  kind: 'signal';
+export interface ScalarValueResult {
+  kind: 'scalar';
   value: number;
   slotId: ValueSlot;
   type: CanonicalType;
@@ -71,7 +71,7 @@ export interface ConstantValueResult {
 /**
  * Discriminated union of all possible debug value results.
  */
-export type EdgeValueResult = SignalValueResult | FieldValueResult | FieldUntrackedResult | ConstantValueResult;
+export type EdgeValueResult = ScalarValueResult | FieldValueResult | FieldUntrackedResult | ConstantValueResult;
 
 /**
  * Debug service health status.
@@ -108,8 +108,8 @@ class DebugService {
   /** Port-to-slot-and-type mapping (for unconnected output queries) */
   private portToSlotMap = new Map<string, EdgeMetadata>();
 
-  /** Signal slot values (updated by runtime via tap) */
-  private signalValues = new Map<ValueSlot, number>();
+  /** Scalar slot values (updated by runtime via tap) */
+  private scalarValues = new Map<ValueSlot, number>();
 
   /** Field buffer data (updated by runtime via tap) */
   private fieldBuffers = new Map<ValueSlot, Float32Array>();
@@ -168,7 +168,7 @@ class DebugService {
     this.constantValues = constantValues ?? new Map();
     // Slot namespace changed — old values are stale and new slots haven't been written yet.
     // Reset so queries return undefined (graceful) instead of throwing (scheduling bug).
-    this.signalValues.clear();
+    this.scalarValues.clear();
     this.fieldBuffers.clear();
     this.fieldAccumulators.clear();
     this.runtimeStarted = false;
@@ -265,11 +265,11 @@ class DebugService {
 
   /**
    * Update a scalar slot value.
-   * Called by runtime tap after each signal slot write.
+   * Called by runtime tap after each scalar slot write.
    */
   updateSlotValue(slotId: ValueSlot, value: number): void {
     this.runtimeStarted = true;
-    this.signalValues.set(slotId, value);
+    this.scalarValues.set(slotId, value);
     this.historyService.onSlotWrite(slotId, value);
   }
 
@@ -306,12 +306,12 @@ class DebugService {
    * Query edge value by edge ID.
    *
    * Behavior by cardinality:
-   * - Signal: returns SignalValueResult (throws if no value after runtime started)
+   * - Scalar: returns ScalarValueResult (throws if no value after runtime started)
    * - Field + tracked: returns FieldValueResult (throws if no value after runtime started)
    * - Field + untracked: returns FieldUntrackedResult (no throw)
    *
    * @returns undefined if edge not in mapping (runtime not yet compiled this edge)
-   * @throws If signal/tracked-field slot has no value after runtime started (scheduling bug)
+   * @throws If scalar/tracked-field slot has no value after runtime started (scheduling bug)
    */
   getEdgeValue(edgeId: string): EdgeValueResult | undefined {
     const meta = this.edgeToSlotMap.get(edgeId);
@@ -327,7 +327,7 @@ class DebugService {
     if (requireInst(meta.type.extent.cardinality, 'cardinality').kind === 'many') {
       return this.queryFieldValue(meta);
     }
-    return this.querySignalValue(meta);
+    return this.queryScalarValue(meta);
   }
 
   /**
@@ -343,7 +343,7 @@ class DebugService {
     if (requireInst(meta.type.extent.cardinality, 'cardinality').kind === 'many') {
       return this.queryFieldValue(meta);
     }
-    return this.querySignalValue(meta);
+    return this.queryScalarValue(meta);
   }
 
   /**
@@ -386,7 +386,7 @@ class DebugService {
   clear(): void {
     this.edgeToSlotMap.clear();
     this.portToSlotMap.clear();
-    this.signalValues.clear();
+    this.scalarValues.clear();
     this.fieldBuffers.clear();
     this.trackedFieldSlots.clear();
     this.fieldAccumulators.clear();
@@ -400,7 +400,7 @@ class DebugService {
   // Private Query Helpers
   // ===========================================================================
 
-  private querySignalValue(meta: EdgeMetadata): SignalValueResult | undefined {
+  private queryScalarValue(meta: EdgeMetadata): ScalarValueResult | undefined {
     // [LAW:one-source-of-truth] Arena is the canonical value source post-zdru.1.
     // Read directly from arena when available and the slot has a valid descriptor.
     if (this.arenaRef) {
@@ -408,11 +408,11 @@ class DebugService {
       if (desc && desc.offset >= 0) {
         if (!this.runtimeStarted) return undefined;
         const value = arenaRead(this.arenaRef.arena, desc, 0, 0);
-        return { kind: 'signal', value, slotId: meta.slotId, type: meta.type };
+        return { kind: 'scalar', value, slotId: meta.slotId, type: meta.type };
       }
     }
-    // Fallback: read from signalValues Map (pre-arena path or slot excluded from arena)
-    const value = this.signalValues.get(meta.slotId);
+    // Fallback: read from scalarValues Map (pre-arena path or slot excluded from arena)
+    const value = this.scalarValues.get(meta.slotId);
     if (value === undefined) {
       if (!this.runtimeStarted) {
         return undefined;
@@ -422,7 +422,7 @@ class DebugService {
         `Runtime has started but this slot was never written to - this is a scheduling bug.`
       );
     }
-    return { kind: 'signal', value, slotId: meta.slotId, type: meta.type };
+    return { kind: 'scalar', value, slotId: meta.slotId, type: meta.type };
   }
 
   private queryFieldValue(meta: EdgeMetadata): FieldValueResult | FieldUntrackedResult | undefined {

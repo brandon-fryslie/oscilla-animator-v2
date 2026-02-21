@@ -192,7 +192,7 @@ export function SignalValueSection({ value, meta, history }: {
   }
 
   // Current value via renderer (runtime signal)
-  if (value && value.kind === 'signal') {
+  if (value && value.kind === 'scalar') {
     const sample: RendererSample = {
       type: 'scalar',
       components: new Float32Array([value.value]),

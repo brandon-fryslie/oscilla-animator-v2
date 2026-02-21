@@ -245,7 +245,7 @@ export class DebugStore {
   get formattedValue(): string | null {
     if (!this._cachedEdgeValue) return null;
     switch (this._cachedEdgeValue.kind) {
-      case 'signal':
+      case 'scalar':
         return formatDebugValue(this._cachedEdgeValue.value, this._cachedEdgeValue.type);
       case 'field':
         return `[${this._cachedEdgeValue.stats.count}] ${this._cachedEdgeValue.stats.mean[0].toFixed(2)}`;
