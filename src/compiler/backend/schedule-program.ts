@@ -321,7 +321,7 @@ export function pass7Schedule(
         instanceId: SCALAR_INSTANCE_ID,
         target: slot,
       };
-      if (sigDependsOnEvent(scalarExprId as number, valueExprs)) {
+      if (valueExprDependsOnEvent(scalarExprId as number, valueExprs)) {
         scalarMaterializeStepsPost.push(scalarStep);
       } else {
         scalarMaterializeStepsPre.push(scalarStep);
@@ -339,7 +339,7 @@ export function pass7Schedule(
       strategy,
     };
 
-    if (sigDependsOnEvent(scalarExprId as number, valueExprs)) {
+    if (valueExprDependsOnEvent(scalarExprId as number, valueExprs)) {
       evalValueStepsPost.push(step);
     } else {
       evalValueStepsPre.push(step);
@@ -415,10 +415,10 @@ export function pass7Schedule(
 }
 
 /**
- * Check if a signal expression transitively depends on an eventRead.
- * Used to schedule event-dependent signals after event evaluation.
+ * Check if a value expression transitively depends on an eventRead.
+ * Used to schedule event-dependent cardinality-one values after event evaluation.
  */
-function sigDependsOnEvent(sigId: number, valueExprs: readonly ValueExpr[]): boolean {
+function valueExprDependsOnEvent(valueExprId: number, valueExprs: readonly ValueExpr[]): boolean {
   const visited = new Set<number>();
 
   function check(id: number): boolean {
@@ -468,7 +468,7 @@ function sigDependsOnEvent(sigId: number, valueExprs: readonly ValueExpr[]): boo
     }
   }
 
-  return check(sigId);
+  return check(valueExprId);
 }
 
 /**

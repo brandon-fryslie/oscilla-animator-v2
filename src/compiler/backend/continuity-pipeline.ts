@@ -138,7 +138,7 @@ function isFieldExtent(id: ValueExprId, valueExprs: readonly ValueExpr[]): boole
   }
 }
 
-function isSignalExpr(id: ValueExprId, valueExprs: readonly ValueExpr[]): boolean {
+function isCardinalityOneExpr(id: ValueExprId, valueExprs: readonly ValueExpr[]): boolean {
   const expr = valueExprs[id as number];
   if (!expr) return false;
   if (expr.kind === 'event') return false;
@@ -164,11 +164,11 @@ function inferFieldInstanceFromExprs(
 }
 
 /**
- * Resolve shape info from a signal expression.
+ * Resolve shape info from a cardinality-one expression.
  * Returns topologyId, paramSignals, and optional controlPointField with stride.
  */
 function resolveShapeInfo(
-  sigId: ValueExprId,
+  shapeExprId: ValueExprId,
   valueExprs: readonly ValueExpr[]
 ):
   | {
@@ -177,9 +177,9 @@ function resolveShapeInfo(
       controlPointField?: { id: ValueExprId; stride: number };
     }
   | undefined {
-  const expr = valueExprs[sigId as number];
+  const expr = valueExprs[shapeExprId as number];
   if (!expr) return undefined;
-  if (isEventExtent(sigId, valueExprs)) return undefined;
+  if (isEventExtent(shapeExprId, valueExprs)) return undefined;
 
   if (expr.kind === 'shapeRef') {
     const topologyId = (expr as any).topologyId as TopologyId;
@@ -259,7 +259,7 @@ function collectRenderTargets(
       );
     }
 
-    const scale = scaleExpr && isSignalExpr(scaleExpr.id, valueExprs)
+    const scale = scaleExpr && isCardinalityOneExpr(scaleExpr.id, valueExprs)
       ? { k: 'sig' as const, id: scaleExpr.id }
       : undefined;
 
