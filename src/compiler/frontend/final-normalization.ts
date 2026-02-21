@@ -221,6 +221,8 @@ function solveAndComputeFacts(
 
   // 1) Extract constraints
   const extracted = extractConstraints(g, registry);
+  // [LAW:dataflow-not-control-flow] Policy diagnostics flow unconditionally into solve output.
+  solveDiagnostics.push(...extracted.policyDiagnostics);
 
   // 2) Build port-to-var mapping
   const portVarMapping = buildPortVarMapping(extracted.portBaseTypes);

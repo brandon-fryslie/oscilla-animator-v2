@@ -68,6 +68,9 @@ const FRONTEND_ERROR_KIND_TO_DIAGNOSTIC_CODE: Record<string, DiagnosticCode> = {
   InstanceConflict: 'E_INSTANCE_MISMATCH',
   UnresolvedInstanceVar: 'E_INSTANCE_MISMATCH',
   PromoteToManyClampOneConflict: 'E_CARDINALITY_MISMATCH',
+  // Cardinality policy conflicts (extraction-time)
+  ConflictingCardinalityRelation: 'E_CARDINALITY_MISMATCH',
+  ConflictingInstanceBinding: 'E_INSTANCE_MISMATCH',
   // Escape hatches & structural
   UnitDefaultedToNone: 'I_UNIT_DEFAULTED_TO_NONE',
   CardinalityDefaultedToOne: 'I_CARDINALITY_DEFAULTED_TO_ONE',

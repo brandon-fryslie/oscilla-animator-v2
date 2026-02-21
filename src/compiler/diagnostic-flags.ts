@@ -103,6 +103,20 @@ export const DIAGNOSTIC_FLAGS: readonly DiagnosticFlagDef[] = Object.freeze([
     defaultSeverity: 'error',
     category: 'cardinality',
   },
+  {
+    code: 'ConflictingCardinalityRelation',
+    label: 'Conflicting Relation',
+    description: 'Ports sharing a cardinality var declare contradictory relation policies (e.g., uniform vs promoteToMany)',
+    defaultSeverity: 'error',
+    category: 'cardinality',
+  },
+  {
+    code: 'ConflictingInstanceBinding',
+    label: 'Conflicting Instance Binding',
+    description: 'Ports sharing a cardinality var declare contradictory instanceBinding policies (e.g., inherit vs create)',
+    defaultSeverity: 'error',
+    category: 'cardinality',
+  },
 
   // --- Escape Hatch Diagnostics (currently silent — now configurable) ---
   {

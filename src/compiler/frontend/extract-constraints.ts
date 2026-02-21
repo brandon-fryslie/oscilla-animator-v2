@@ -31,6 +31,7 @@ import { axisInst, isAxisInst, isAxisVar, resolveCardinalityPolicy, instanceRef 
 import { cardinalityVarId, instanceVarId, type CardinalityVarId } from '../../core/ids';
 import type { CardinalityConstraint, InstanceTerm } from './cardinality/solve';
 import type { PayloadUnitConstraint, ConstraintOrigin } from './payload-unit/solve';
+import type { FixpointDiagnostic } from './fixpoint-diagnostic';
 
 // =============================================================================
 // ExtractedConstraints
@@ -52,6 +53,13 @@ export interface ExtractedConstraints {
    * // [LAW:one-type-per-behavior] Collect ports use normal edges, not a parallel mechanism.
    */
   readonly collectPorts: ReadonlySet<DraftPortKey>;
+  /**
+   * Diagnostics from contradictory cardinality policy declarations within a block.
+   * Produced when ports sharing the same cardinality var declare incompatible
+   * relation or instanceBinding policies.
+   * // [LAW:single-enforcer] Policy conflicts detected at extraction boundary, not scattered.
+   */
+  readonly policyDiagnostics: readonly FixpointDiagnostic[];
 }
 
 // =============================================================================
@@ -72,6 +80,7 @@ export function extractConstraints(
   const cardinality: CardinalityConstraint[] = [];
   const baseCardinalityAxis = new Map<DraftPortKey, Axis<CardinalityValue, CardinalityVarId>>();
   const collectPorts = new Set<DraftPortKey>();
+  const policyDiagnostics: FixpointDiagnostic[] = [];
 
   // Phase A: Collect port types and intra-block constraints
   for (const block of g.blocks) {
@@ -205,7 +214,7 @@ export function extractConstraints(
     // Rewrite cardinality axes and gather cardinality constraints
     // [LAW:single-enforcer] This is the only place that interprets declared CT/ICT
     // cardinality policy and rewrites port cardinality axes for the solver.
-    rewriteCardinalityAxes(block, def, portBaseTypes, baseCardinalityAxis, cardinality);
+    rewriteCardinalityAxes(block, def, portBaseTypes, baseCardinalityAxis, cardinality, policyDiagnostics);
   }
 
   // Assertion: promoteToMany members must all have axisVar in baseCardinalityAxis.
@@ -238,7 +247,7 @@ export function extractConstraints(
     }
   }
 
-  return { portBaseTypes, payloadUnit, cardinality, baseCardinalityAxis, collectPorts };
+  return { portBaseTypes, payloadUnit, cardinality, baseCardinalityAxis, collectPorts, policyDiagnostics };
 }
 
 // =============================================================================
@@ -357,6 +366,7 @@ function rewriteCardinalityAxes(
   portBaseTypes: Map<DraftPortKey, InferenceCanonicalType>,
   baseCardinalityAxis: Map<DraftPortKey, Axis<CardinalityValue, CardinalityVarId>>,
   constraints: CardinalityConstraint[],
+  policyDiagnostics: FixpointDiagnostic[],
 ): void {
   // Collect block ports (before rewriting)
   const blockPorts: DraftPortKey[] = [];
@@ -365,7 +375,7 @@ function rewriteCardinalityAxes(
     blockPorts.push(key);
   }
 
-  rewriteFromDeclaredCardinalityPolicy(block, portBaseTypes, constraints, blockPorts);
+  rewriteFromDeclaredCardinalityPolicy(block, portBaseTypes, constraints, blockPorts, policyDiagnostics);
 
   // Record solver-facing axes (normalized zero→one).
   for (const key of blockPorts) {
@@ -389,10 +399,13 @@ function rewriteFromDeclaredCardinalityPolicy(
   portBaseTypes: Map<DraftPortKey, InferenceCanonicalType>,
   constraints: CardinalityConstraint[],
   blockPorts: DraftPortKey[],
+  policyDiagnostics: FixpointDiagnostic[],
 ): void {
   const groupMembers = new Map<string, DraftPortKey[]>();
   const groupRelation = new Map<string, 'uniform' | 'promoteToMany'>();
   const groupInstanceBinding = new Map<string, 'inherit' | { kind: 'create'; domainType: string }>();
+  // Track groups with detected policy conflicts — skip constraint emission for these.
+  const conflictedGroups = new Set<string>();
 
   for (const key of blockPorts) {
     const type = portBaseTypes.get(key);
@@ -411,7 +424,18 @@ function rewriteFromDeclaredCardinalityPolicy(
       const relation = policy.relation;
       const existingRelation = groupRelation.get(groupId);
       if (existingRelation && existingRelation !== relation) {
-        throw new Error(`Conflicting cardinality relation for group ${groupId} in block ${block.type}`);
+        // [LAW:single-enforcer] Policy conflict detected at extraction boundary.
+        conflictedGroups.add(groupId);
+        policyDiagnostics.push({
+          diagnosticFlagCode: 'ConflictingCardinalityRelation',
+          message: `Contradictory cardinality relation in block ${block.type}: group ${groupId} declares both '${existingRelation}' and '${relation}'`,
+          stableKey: `ConflictingCardinalityRelation:${block.id}:${groupId}`,
+          ports: members,
+          origins: [
+            { kind: 'blockRule', blockId: block.id, blockType: block.type, rule: `declared.relation.${existingRelation}` },
+            { kind: 'blockRule', blockId: block.id, blockType: block.type, rule: `declared.relation.${relation}` },
+          ],
+        });
       }
       groupRelation.set(groupId, relation);
 
@@ -430,7 +454,20 @@ function rewriteFromDeclaredCardinalityPolicy(
             && existingBinding.kind === policy.instanceBinding.kind
             && existingBinding.domainType === (policy.instanceBinding.domainType as string);
         if (!sameKind) {
-          throw new Error(`Conflicting instanceBinding for cardinality group ${groupId} in block ${block.type}`);
+          // [LAW:single-enforcer] Policy conflict detected at extraction boundary.
+          conflictedGroups.add(groupId);
+          const existingLabel = existingBinding === 'inherit' ? 'inherit' : `create(${existingBinding.domainType})`;
+          const newLabel = policy.instanceBinding === 'inherit' ? 'inherit' : `create(${policy.instanceBinding.domainType})`;
+          policyDiagnostics.push({
+            diagnosticFlagCode: 'ConflictingInstanceBinding',
+            message: `Contradictory instanceBinding in block ${block.type}: group ${groupId} declares both '${existingLabel}' and '${newLabel}'`,
+            stableKey: `ConflictingInstanceBinding:${block.id}:${groupId}`,
+            ports: members,
+            origins: [
+              { kind: 'blockRule', blockId: block.id, blockType: block.type, rule: `declared.instanceBinding.${existingLabel}` },
+              { kind: 'blockRule', blockId: block.id, blockType: block.type, rule: `declared.instanceBinding.${newLabel}` },
+            ],
+          });
         }
       }
 
@@ -464,6 +501,9 @@ function rewriteFromDeclaredCardinalityPolicy(
 
   for (const [groupId, members] of groupMembers) {
     if (members.length <= 1) continue;
+    // Skip constraint emission for groups with contradictory policy declarations.
+    // [LAW:dataflow-not-control-flow] Conflicted groups produce diagnostics, not constraints.
+    if (conflictedGroups.has(groupId)) continue;
     const relation = groupRelation.get(groupId) ?? 'uniform';
     const sorted = [...members].sort();
     if (relation === 'promoteToMany') {
