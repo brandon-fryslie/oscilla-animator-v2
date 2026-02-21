@@ -150,7 +150,14 @@ export function materializeValueExpr(
 
     case 'external':
     case 'time':
-    case 'eventRead':
+    case 'eventRead': {
+      // [LAW:dataflow-not-control-flow] Scalar signal reads materialize by writing
+      // their evaluated value through the same buffer path as all other materialize ops.
+      const signalValue = evaluateValueExprSignal(exprId, table.nodes, state);
+      fillBufferWithSignal(buf, signalValue, count, stride);
+      break;
+    }
+
     case 'event':
       throw new Error(`Cannot materialize signal/event expression as field: ${expr.kind}`);
 

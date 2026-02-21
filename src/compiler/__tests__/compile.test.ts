@@ -9,6 +9,7 @@ import { buildPatch } from '../../graph';
 import { compile } from '../compile';
 import type { ScheduleIR } from '../backend/schedule-program';
 import { SCALAR_INSTANCE_ID } from '../ir/Indices';
+import type { StepEvalValue, StepMaterialize } from '../ir/types';
 
 describe('compile', () => {
   describe('TimeRoot validation', () => {
@@ -222,7 +223,7 @@ describe('TimeModel', () => {
 });
 
 describe('Debug Probe Support', () => {
-  it('generates evalValue steps for signals with registered slots (enables debug tap)', () => {
+  it('generates scalar write steps for signals with registered slots (enables debug tap)', () => {
     // This test verifies that the compiler generates evalValue steps,
     // which are necessary for the runtime tap to record slot values.
     // Without evalValue steps, the debug probe cannot show signal values.
@@ -240,16 +241,22 @@ describe('Debug Probe Support', () => {
     expect(result.kind).toBe('ok');
     if (result.kind === 'ok') {
       const schedule = result.program.schedule as ScheduleIR;
-      const evalValueSteps = schedule.steps.filter(s => s.kind === 'evalValue');
+      const scalarWriteSteps = schedule.steps.filter(
+        (s): s is StepEvalValue | StepMaterialize =>
+          s.kind === 'evalValue' ||
+          (s.kind === 'materialize' && s.instanceId === SCALAR_INSTANCE_ID),
+      );
 
-      // Should have at least one evalValue step for the oscillator output
-      expect(evalValueSteps.length).toBeGreaterThan(0);
+      // Should have at least one scalar write step for scheduled signal slots
+      expect(scalarWriteSteps.length).toBeGreaterThan(0);
 
-      // Each evalValue step should have expr and target
-      for (const step of evalValueSteps) {
+      for (const step of scalarWriteSteps) {
         if (step.kind === 'evalValue') {
           expect(typeof step.expr).toBe('number');
           expect(typeof step.target.slot).toBe('number');
+        } else {
+          expect(typeof step.field).toBe('number');
+          expect(typeof step.target).toBe('number');
         }
       }
     }
@@ -308,16 +315,74 @@ describe('Debug Probe Support', () => {
     }
   });
 
-  it('evalValue steps come before materialize steps in schedule', () => {
-    // Execution order matters: signals must be evaluated before fields materialize
-    // Use a simple patch that compiles - just TimeRoot + Oscillator
+  it('routes scalar kernel outputs through materialize with SCALAR_INSTANCE_ID', () => {
     const patch = buildPatch((b) => {
       const time = b.addBlock('InfiniteTimeRoot');
-      b.setPortDefault(time, 'periodAMs', 1000);
-      b.setPortDefault(time, 'periodBMs', 2000);
+      b.setPortDefault(time, 'periodAMs', 2000);
+      b.setPortDefault(time, 'periodBMs', 4000);
+
       const osc = b.addBlock('Oscillator');
       b.setConfig(osc, 'mode', 0);
       b.wire(time, 'phaseA', osc, 'phase');
+
+      const ellipse = b.addBlock('Ellipse');
+      const array = b.addBlock('Array');
+      b.setPortDefault(array, 'count', 4);
+      b.wire(ellipse, 'shape', array, 'element');
+      const grid = b.addBlock('GridLayoutUV');
+      b.setPortDefault(grid, 'rows', 2);
+      b.setPortDefault(grid, 'cols', 2);
+      b.wire(array, 'elements', grid, 'elements');
+      const color = b.addBlock('Const');
+      b.setConfig(color, 'value', { r: 1, g: 0.5, b: 0.2, a: 1 });
+      const render = b.addBlock('RenderInstances2D');
+      b.wire(grid, 'position', render, 'pos');
+      b.wire(color, 'out', render, 'color');
+      b.wire(osc, 'out', render, 'scale');
+    });
+
+    const result = compile(patch);
+    expect(result.kind).toBe('ok');
+    if (result.kind === 'ok') {
+      const schedule = result.program.schedule as ScheduleIR;
+      type MaterializeStep = Extract<ScheduleIR['steps'][number], { kind: 'materialize' }>;
+      const scalarKernelMat = schedule.steps.find((step): step is MaterializeStep => {
+        if (step.kind !== 'materialize' || step.instanceId !== SCALAR_INSTANCE_ID) {
+          return false;
+        }
+        const expr = result.program.valueExprs.nodes[step.field as number];
+        return expr?.kind === 'kernel';
+      });
+
+      expect(scalarKernelMat).toBeDefined();
+      if (!scalarKernelMat) return;
+
+      const hasEvalValueForSameSlot = schedule.steps.some(
+        (step) =>
+          step.kind === 'evalValue' &&
+          step.target.storage === 'value' &&
+          step.target.slot === scalarKernelMat.target,
+      );
+      expect(hasEvalValueForSameSlot).toBe(false);
+    }
+  });
+
+  it('scalar write steps execute before render steps', () => {
+    const patch = buildPatch((b) => {
+      b.addBlock('InfiniteTimeRoot');
+      const ellipse = b.addBlock('Ellipse');
+      const array = b.addBlock('Array');
+      b.setPortDefault(array, 'count', 2);
+      b.wire(ellipse, 'shape', array, 'element');
+      const grid = b.addBlock('GridLayoutUV');
+      b.setPortDefault(grid, 'rows', 1);
+      b.setPortDefault(grid, 'cols', 2);
+      b.wire(array, 'elements', grid, 'elements');
+      const color = b.addBlock('Const');
+      b.setConfig(color, 'value', { r: 1, g: 0.5, b: 0.2, a: 1 });
+      const render = b.addBlock('RenderInstances2D');
+      b.wire(grid, 'position', render, 'pos');
+      b.wire(color, 'out', render, 'color');
     });
 
     const result = compile(patch);
@@ -326,23 +391,17 @@ describe('Debug Probe Support', () => {
     if (result.kind === 'ok') {
       const schedule = result.program.schedule as ScheduleIR;
       const steps = schedule.steps;
-
-      // Find indices of step types
-      const firstEvalSig = steps.findIndex(s => s.kind === 'evalValue');
-      const firstMaterialize = steps.findIndex(s => s.kind === 'materialize');
       const firstRender = steps.findIndex(s => s.kind === 'render');
-
-      // evalValue should exist (for signal outputs)
-      expect(firstEvalSig).toBeGreaterThanOrEqual(0);
-
-      // If materialize exists, evalValue should come first
-      if (firstMaterialize !== -1) {
-        expect(firstEvalSig).toBeLessThan(firstMaterialize);
-      }
-
-      // If render exists, evalValue should come first
+      const scalarWriteIndices = steps
+        .map((s, i) =>
+          s.kind === 'evalValue' || (s.kind === 'materialize' && s.instanceId === SCALAR_INSTANCE_ID)
+            ? i
+            : -1,
+        )
+        .filter((i) => i >= 0);
+      expect(scalarWriteIndices.length).toBeGreaterThan(0);
       if (firstRender !== -1) {
-        expect(firstEvalSig).toBeLessThan(firstRender);
+        expect(Math.max(...scalarWriteIndices)).toBeLessThan(firstRender);
       }
     }
   });

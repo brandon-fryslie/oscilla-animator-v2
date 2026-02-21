@@ -171,6 +171,87 @@ function deriveStrategy(type: CanonicalType): EvalStrategy {
   return isMany ? 1 /* EvalStrategy.ContinuousField */ : 0 /* EvalStrategy.ContinuousScalar */;
 }
 
+function isScalarNumericPayload(expr: ValueExpr): boolean {
+  const payloadKind = expr.type.payload.kind;
+  return payloadKind === 'float' || payloadKind === 'int' || payloadKind === 'bool';
+}
+
+function canMaterializeScalarExpr(
+  exprId: number,
+  valueExprs: readonly ValueExpr[],
+  cache: Map<number, boolean>,
+  visiting: Set<number>,
+): boolean {
+  const cached = cache.get(exprId);
+  if (cached !== undefined) return cached;
+  if (visiting.has(exprId)) {
+    cache.set(exprId, false);
+    return false;
+  }
+  visiting.add(exprId);
+
+  const expr = valueExprs[exprId];
+  if (!expr) {
+    cache.set(exprId, false);
+    visiting.delete(exprId);
+    return false;
+  }
+
+  let result = false;
+  switch (expr.kind) {
+    case 'const':
+    case 'time':
+    case 'external':
+    case 'state':
+    case 'eventRead':
+    case 'intrinsic':
+      result = true;
+      break;
+    case 'kernel':
+      switch (expr.kernelKind) {
+        case 'map':
+          result = canMaterializeScalarExpr(expr.input as number, valueExprs, cache, visiting);
+          break;
+        case 'zip':
+          result = expr.inputs.every((id) =>
+            canMaterializeScalarExpr(id as number, valueExprs, cache, visiting),
+          );
+          break;
+        case 'reduce':
+        case 'zipSig':
+        case 'broadcast':
+        case 'pathDerivative':
+        case 'pathSample':
+          result = false;
+          break;
+      }
+      break;
+    case 'extract':
+      result = canMaterializeScalarExpr(expr.input as number, valueExprs, cache, visiting);
+      break;
+    case 'construct':
+      result = expr.components.every((id) =>
+        canMaterializeScalarExpr(id as number, valueExprs, cache, visiting),
+      );
+      break;
+    case 'hslToRgb':
+      result = canMaterializeScalarExpr(expr.input as number, valueExprs, cache, visiting);
+      break;
+    case 'shapeRef':
+    case 'event':
+      result = false;
+      break;
+    default: {
+      const _exhaustive: never = expr;
+      throw new Error(`Unknown ValueExpr kind during scalar materialize eligibility check: ${(_exhaustive as ValueExpr).kind}`);
+    }
+  }
+
+  cache.set(exprId, result);
+  visiting.delete(exprId);
+  return result;
+}
+
 // =============================================================================
 // Pass 7 Entry Point
 // =============================================================================
@@ -224,7 +305,9 @@ export function pass7Schedule(
   const sigSlots = unlinkedIR.builder.getSigSlots();
   const evalValueStepsPre: Step[] = [];
   const evalValueStepsPost: Step[] = [];
-  const scalarConstMaterializeSteps: StepMaterialize[] = [];
+  const scalarMaterializeStepsPre: StepMaterialize[] = [];
+  const scalarMaterializeStepsPost: StepMaterialize[] = [];
+  const scalarMaterializeEligibility = new Map<number, boolean>();
   for (const [sigId, slot] of sigSlots) {
     // Skip slots that are written by slotWriteStrided
     if (stridedWriteSlots.has(slot)) {
@@ -235,21 +318,23 @@ export function pass7Schedule(
     const expr = valueExprs[exprId as number];
     if (!expr) continue;
 
-    // [LAW:one-source-of-truth] Scalar const values are migrated to the materializer path
-    // via SCALAR_INSTANCE_ID instead of evalValue. This proves cardinality-one
-    // materialization without changing the expression table contract.
+    // [LAW:one-source-of-truth] Eligible scalar numeric signal DAGs are migrated to the
+    // materializer path via SCALAR_INSTANCE_ID instead of evalValue.
     if (
-      expr.kind === 'const' &&
-      (expr.type.payload.kind === 'float' ||
-        expr.type.payload.kind === 'int' ||
-        expr.type.payload.kind === 'bool')
+      isScalarNumericPayload(expr) &&
+      canMaterializeScalarExpr(exprId as number, valueExprs, scalarMaterializeEligibility, new Set())
     ) {
-      scalarConstMaterializeSteps.push({
+      const scalarStep: StepMaterialize = {
         kind: 'materialize',
         field: exprId,
         instanceId: SCALAR_INSTANCE_ID,
         target: slot,
-      });
+      };
+      if (sigDependsOnEvent(sigId as number, valueExprs)) {
+        scalarMaterializeStepsPost.push(scalarStep);
+      } else {
+        scalarMaterializeStepsPre.push(scalarStep);
+      }
       continue;
     }
 
@@ -314,11 +399,12 @@ export function pass7Schedule(
   const steps: Step[] = [
     ...evalValueStepsPre,
     ...slotWriteStridedSteps,
-    ...scalarConstMaterializeSteps,
+    ...scalarMaterializeStepsPre,
     ...continuityPipeline.mapBuildSteps,
     ...continuityPipeline.materializeSteps,
     ...continuityPipeline.continuityApplySteps,
     ...evalEventSteps,
+    ...scalarMaterializeStepsPost,
     ...evalValueStepsPost,
     ...continuityPipeline.renderSteps,
     ...stateWriteSteps,
