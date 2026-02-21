@@ -11,7 +11,7 @@ import type { ValueExpr } from '../../compiler/ir/value-expr';
 import type { RuntimeState } from '../RuntimeState';
 import { createRuntimeState } from '../RuntimeState';
 import { valueExprId } from '../../compiler/ir/Indices';
-import { canonicalEvent, canonicalSignal } from '../../core/canonical-types';
+import { canonicalEvent, canonicalScalar } from '../../core/canonical-types';
 import type { CompiledProgramIR } from '../../compiler/ir/program';
 
 describe('ValueExprEventEvaluator', () => {
@@ -262,7 +262,7 @@ describe('ValueExprEventEvaluator', () => {
         // 0: const signal (value 1.0)
         {
           kind: 'const',
-          type: canonicalSignal({ kind: 'float' }),
+          type: canonicalScalar({ kind: 'float' }),
           value: { kind: 'float', value: 1.0 },
         },
         // 1: wrap(const 1.0)
@@ -302,7 +302,7 @@ describe('ValueExprEventEvaluator', () => {
         // 0: const signal (value 1.0)
         {
           kind: 'const',
-          type: canonicalSignal({ kind: 'float' }),
+          type: canonicalScalar({ kind: 'float' }),
           value: { kind: 'float', value: 1.0 },
         },
         // 1: wrap(const 1.0)
@@ -341,7 +341,7 @@ describe('ValueExprEventEvaluator', () => {
         // 0: const signal (value NaN)
         {
           kind: 'const',
-          type: canonicalSignal({ kind: 'float' }),
+          type: canonicalScalar({ kind: 'float' }),
           value: { kind: 'float', value: NaN },
         },
         // 1: wrap(const NaN)
@@ -377,7 +377,7 @@ describe('ValueExprEventEvaluator', () => {
         // 0: const signal (value 0.5)
         {
           kind: 'const',
-          type: canonicalSignal({ kind: 'float' }),
+          type: canonicalScalar({ kind: 'float' }),
           value: { kind: 'float', value: 0.5 },
         },
         // 1: wrap(const 0.5)
@@ -477,7 +477,7 @@ describe('ValueExprEventEvaluator', () => {
       const nodes: ValueExpr[] = [
         {
           kind: 'const',
-          type: canonicalSignal({ kind: 'float' }),
+          type: canonicalScalar({ kind: 'float' }),
           value: { kind: 'float', value: 42 },
         },
       ];

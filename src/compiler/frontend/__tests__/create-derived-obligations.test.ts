@@ -6,7 +6,7 @@ import { createDerivedObligations } from '../create-derived-obligations';
 import type { DraftGraph, DraftBlock, DraftEdge } from '../draft-graph';
 import type { TypeFacts, DraftPortKey, PortTypeHint } from '../type-facts';
 import { draftPortKey } from '../type-facts';
-import { canonicalSignal, canonicalField, canonicalType, FLOAT, instanceRef, unitNone, contractClamp01, cardinalityOne, temporalityContinuous, axisInst, DEFAULT_BINDING, DEFAULT_PERSPECTIVE, DEFAULT_BRANCH } from '../../../core/canonical-types';
+import { canonicalScalar, canonicalField, canonicalType, FLOAT, instanceRef, unitNone, contractClamp01, cardinalityOne, temporalityContinuous, axisInst, DEFAULT_BINDING, DEFAULT_PERSPECTIVE, DEFAULT_BRANCH } from '../../../core/canonical-types';
 import type { CanonicalType, Extent } from '../../../core/canonical-types';
 import type { ObligationId } from '../obligations';
 import type { InferenceCanonicalType } from '../../../core/inference-types';
@@ -44,7 +44,7 @@ function unresolvedPayloadHint(payloadVarId: string): PortTypeHint {
   return { status: 'unknown', inference, diagIds: [] };
 }
 
-const SIGNAL_FLOAT = canonicalSignal(FLOAT);
+const SIGNAL_FLOAT = canonicalScalar(FLOAT);
 const FIELD_FLOAT = canonicalField(FLOAT, undefined, instanceRef('circle', 'inst0'));
 
 function emptyGraph(overrides?: Partial<DraftGraph>): DraftGraph {

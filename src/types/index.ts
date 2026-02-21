@@ -55,7 +55,7 @@ export {
 
 export {
   canonicalType,
-  canonicalSignal,
+  canonicalScalar,
   canonicalField,
   canonicalEvent,
   canonicalConst,

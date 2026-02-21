@@ -16,7 +16,7 @@ import { buildDraftGraph, type BuildDiagnostic } from '../draft-graph';
 import { buildPatch } from '../../../graph/Patch';
 import { BLOCK_DEFS_BY_TYPE, registerBlock, type BlockDef } from '../../../blocks/registry';
 import { compileFrontend } from '../index';
-import { canonicalSignal } from '../../../core/canonical-types';
+import { canonicalScalar } from '../../../core/canonical-types';
 
 // Ensure all blocks are registered
 import '../../../blocks/all';

@@ -21,7 +21,7 @@ import {
   canonicalType,
 
   // Derived types
-  canonicalSignal,
+  canonicalScalar,
   canonicalField,
   canonicalEvent,
 
@@ -88,8 +88,8 @@ describe('CanonicalType', () => {
 // =============================================================================
 
 describe('derived CanonicalType helpers', () => {
-  it('canonicalSignal creates one + continuous', () => {
-    const st = canonicalSignal(FLOAT);
+  it('canonicalScalar creates one + continuous', () => {
+    const st = canonicalScalar(FLOAT);
     expect(st.payload.kind).toBe('float');
     const card = st.extent.cardinality;
     const temp = st.extent.temporality;

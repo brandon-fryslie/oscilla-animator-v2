@@ -24,7 +24,7 @@ import { registerBlock, requireBlockDef } from '../registry';
 import type { LowerCtx } from '../registry';
 import {
   canonicalType,
-  canonicalSignal,
+  canonicalScalar,
   payloadStride,
   FLOAT,
   COLOR,
@@ -58,15 +58,15 @@ function signalDefault(
 ): ValueExprId {
   switch (payload.kind) {
     case 'float':
-      return ctx.b.constant({ kind: 'float', value: 1.0 }, canonicalSignal(FLOAT));
+      return ctx.b.constant({ kind: 'float', value: 1.0 }, canonicalScalar(FLOAT));
     case 'int':
-      return ctx.b.constant({ kind: 'int', value: 0 }, canonicalSignal(payload));
+      return ctx.b.constant({ kind: 'int', value: 0 }, canonicalScalar(payload));
     case 'bool':
-      return ctx.b.constant({ kind: 'bool', value: false }, canonicalSignal(payload));
+      return ctx.b.constant({ kind: 'bool', value: false }, canonicalScalar(payload));
     case 'vec2':
-      return ctx.b.constant({ kind: 'vec2', value: [0, 0] }, canonicalSignal(payload));
+      return ctx.b.constant({ kind: 'vec2', value: [0, 0] }, canonicalScalar(payload));
     case 'vec3':
-      return ctx.b.constant({ kind: 'vec3', value: [0, 0, 0] }, canonicalSignal(payload));
+      return ctx.b.constant({ kind: 'vec3', value: [0, 0, 0] }, canonicalScalar(payload));
     case 'color': {
       // Handled separately (HueRainbow macro) — should not reach here
       throw new Error('DefaultSource: color signal default must use lowerColorSignal');

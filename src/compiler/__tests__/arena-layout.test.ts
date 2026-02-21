@@ -8,7 +8,7 @@
 import { describe, it, expect } from 'vitest';
 import { deriveArenaDescriptor } from '../ir/storage-class';
 import {
-  canonicalSignal,
+  canonicalScalar,
   canonicalField,
   FLOAT,
   VEC3,
@@ -51,13 +51,13 @@ const emptyInstances: ReadonlyMap<InstanceId, InstanceDecl> = new Map();
 
 describe('deriveArenaDescriptor', () => {
   it('signal (one, float): stride=1, laneCount=1, length=1', () => {
-    const type = canonicalSignal(FLOAT);
+    const type = canonicalScalar(FLOAT);
     const desc = deriveArenaDescriptor(type, 0, emptyInstances);
     expect(desc).toEqual({ offset: 0, stride: 1, laneCount: 1, length: 1 });
   });
 
   it('signal (one, vec3): stride=3, laneCount=1, length=3', () => {
-    const type = canonicalSignal(VEC3);
+    const type = canonicalScalar(VEC3);
     const desc = deriveArenaDescriptor(type, 0, emptyInstances);
     expect(desc).toEqual({ offset: 0, stride: 3, laneCount: 1, length: 3 });
   });
@@ -88,22 +88,22 @@ describe('deriveArenaDescriptor', () => {
   });
 
   it('respects arenaOffset for bump allocation', () => {
-    const type = canonicalSignal(VEC3);
+    const type = canonicalScalar(VEC3);
     const desc = deriveArenaDescriptor(type, 100, emptyInstances);
     expect(desc.offset).toBe(100);
     expect(desc.length).toBe(3);
   });
 
   it('respects overrideStride', () => {
-    const type = canonicalSignal(FLOAT);
+    const type = canonicalScalar(FLOAT);
     const desc = deriveArenaDescriptor(type, 0, emptyInstances, 4);
     expect(desc.stride).toBe(4);
     expect(desc.length).toBe(4);
   });
 
   it('two sequential descriptors do not overlap', () => {
-    const type1 = canonicalSignal(VEC3);
-    const type2 = canonicalSignal(COLOR);
+    const type1 = canonicalScalar(VEC3);
+    const type2 = canonicalScalar(COLOR);
 
     let offset = 0;
     const desc1 = deriveArenaDescriptor(type1, offset, emptyInstances);

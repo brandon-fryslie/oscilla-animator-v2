@@ -18,7 +18,7 @@ import { registerBlock } from '../registry';
 import type { LowerCtx } from '../registry';
 import {
   canonicalType,
-  canonicalSignal,
+  canonicalScalar,
   payloadStride,
   FLOAT,
   COLOR,
@@ -42,10 +42,10 @@ import { rewriteFieldType } from '../layout/_helpers';
  * Returns a field expression where each element has a unique value in [0,1)+time.
  */
 function perElementPhase(ctx: LowerCtx, outType: CanonicalType): ValueExprId {
-  const floatFieldType = { ...canonicalSignal(FLOAT), extent: outType.extent };
+  const floatFieldType = { ...canonicalScalar(FLOAT), extent: outType.extent };
   const normIdx = ctx.b.intrinsic('normalizedIndex', floatFieldType);
 
-  const phaseSignal = ctx.b.time('phaseA', canonicalSignal(FLOAT, unitTurns()));
+  const phaseSignal = ctx.b.time('phaseA', canonicalScalar(FLOAT, unitTurns()));
   const phaseField = ctx.b.broadcast(phaseSignal, floatFieldType);
 
   const addFn = ctx.b.opcode(OpCode.Add);
@@ -59,10 +59,10 @@ function perElementPhase(ctx: LowerCtx, outType: CanonicalType): ValueExprId {
  * z = 0
  */
 function fieldVec3Default(ctx: LowerCtx, outType: CanonicalType): ValueExprId {
-  const floatFieldType = { ...canonicalSignal(FLOAT), extent: outType.extent };
+  const floatFieldType = { ...canonicalScalar(FLOAT), extent: outType.extent };
   const phase = perElementPhase(ctx, outType);
 
-  const tau = ctx.b.constant({ kind: 'float', value: Math.PI * 2 }, canonicalSignal(FLOAT));
+  const tau = ctx.b.constant({ kind: 'float', value: Math.PI * 2 }, canonicalScalar(FLOAT));
   const tauField = ctx.b.broadcast(tau, floatFieldType);
   const mulFn = ctx.b.opcode(OpCode.Mul);
   const angle = ctx.b.zipAuto([phase, tauField], mulFn, floatFieldType);
@@ -72,7 +72,7 @@ function fieldVec3Default(ctx: LowerCtx, outType: CanonicalType): ValueExprId {
   const x = ctx.b.mapAuto(angle, cosFn, floatFieldType);
   const y = ctx.b.mapAuto(angle, sinFn, floatFieldType);
 
-  const zero = ctx.b.constant({ kind: 'float', value: 0 }, canonicalSignal(FLOAT));
+  const zero = ctx.b.constant({ kind: 'float', value: 0 }, canonicalScalar(FLOAT));
   const z = ctx.b.broadcast(zero, floatFieldType);
 
   return ctx.b.construct([x, y, z], outType);
@@ -85,12 +85,12 @@ function fieldVec3Default(ctx: LowerCtx, outType: CanonicalType): ValueExprId {
  * Output is HSL — conversion to RGB happens at render boundary.
  */
 function fieldColorDefault(ctx: LowerCtx, outType: CanonicalType): ValueExprId {
-  const floatFieldType = { ...canonicalSignal(FLOAT), extent: outType.extent };
+  const floatFieldType = { ...canonicalScalar(FLOAT), extent: outType.extent };
   const hue = perElementPhase(ctx, outType);
 
-  const sat = ctx.b.constant({ kind: 'float', value: 0.8 }, canonicalSignal(FLOAT));
-  const light = ctx.b.constant({ kind: 'float', value: 0.5 }, canonicalSignal(FLOAT));
-  const alpha = ctx.b.constant({ kind: 'float', value: 1.0 }, canonicalSignal(FLOAT));
+  const sat = ctx.b.constant({ kind: 'float', value: 0.8 }, canonicalScalar(FLOAT));
+  const light = ctx.b.constant({ kind: 'float', value: 0.5 }, canonicalScalar(FLOAT));
+  const alpha = ctx.b.constant({ kind: 'float', value: 1.0 }, canonicalScalar(FLOAT));
   const satField = ctx.b.broadcast(sat, floatFieldType);
   const lightField = ctx.b.broadcast(light, floatFieldType);
   const alphaField = ctx.b.broadcast(alpha, floatFieldType);
@@ -110,22 +110,22 @@ function fieldBroadcastDefault(
   let sigId: ValueExprId;
   switch (payload.kind) {
     case 'float':
-      sigId = ctx.b.constant({ kind: 'float', value: 1.0 }, canonicalSignal(FLOAT));
+      sigId = ctx.b.constant({ kind: 'float', value: 1.0 }, canonicalScalar(FLOAT));
       break;
     case 'int':
-      sigId = ctx.b.constant({ kind: 'float', value: 0 }, canonicalSignal(FLOAT));
+      sigId = ctx.b.constant({ kind: 'float', value: 0 }, canonicalScalar(FLOAT));
       break;
     case 'bool':
-      sigId = ctx.b.constant({ kind: 'float', value: 0 }, canonicalSignal(FLOAT));
+      sigId = ctx.b.constant({ kind: 'float', value: 0 }, canonicalScalar(FLOAT));
       break;
     case 'vec2':
-      sigId = ctx.b.constant({ kind: 'vec2', value: [0, 0] }, canonicalSignal(payload));
+      sigId = ctx.b.constant({ kind: 'vec2', value: [0, 0] }, canonicalScalar(payload));
       break;
     case 'vec3':
-      sigId = ctx.b.constant({ kind: 'vec3', value: [0, 0, 0] }, canonicalSignal(payload));
+      sigId = ctx.b.constant({ kind: 'vec3', value: [0, 0, 0] }, canonicalScalar(payload));
       break;
     default:
-      sigId = ctx.b.constant({ kind: 'float', value: 0 }, canonicalSignal(FLOAT));
+      sigId = ctx.b.constant({ kind: 'float', value: 0 }, canonicalScalar(FLOAT));
       break;
   }
   return ctx.b.broadcast(sigId, outType);

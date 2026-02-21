@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { IRBuilderImpl } from '../IRBuilderImpl';
 import { LowerSandbox } from '../LowerSandbox';
 import {
-  canonicalField, canonicalSignal,
+  canonicalField, canonicalScalar,
   FLOAT, COLOR, instanceRef, unitHsl, unitTurns,
   requireInst, isMany, isOne,
 } from '../../../core/canonical-types';
@@ -19,7 +19,7 @@ describe('LowerSandbox field-extent types', () => {
     const fieldColorType = canonicalField(COLOR, unitHsl(), ref);
 
     // Create a signal-level float input (phase)
-    const phaseType = canonicalSignal(FLOAT, unitTurns());
+    const phaseType = canonicalScalar(FLOAT, unitTurns());
     const phaseExpr = builder.constant({ kind: 'float', value: 0.5 }, phaseType);
 
     // Macro-expand HueRainbow with field-extent output types
@@ -45,8 +45,8 @@ describe('LowerSandbox field-extent types', () => {
     const instances = new Map();
     const sandbox = new LowerSandbox(builder, 'test-parent-1', instances);
 
-    const signalColorType = canonicalSignal(COLOR, unitHsl());
-    const phaseType = canonicalSignal(FLOAT, unitTurns());
+    const signalColorType = canonicalScalar(COLOR, unitHsl());
+    const phaseType = canonicalScalar(FLOAT, unitTurns());
     const phaseExpr = builder.constant({ kind: 'float', value: 0.5 }, phaseType);
 
     const outputs = sandbox.lowerBlock(

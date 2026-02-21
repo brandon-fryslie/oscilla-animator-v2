@@ -16,7 +16,7 @@ import { IRBuilderImpl } from '../ir/IRBuilderImpl';
 import { OpCode } from '../ir/types';
 import {
   canonicalField,
-  canonicalSignal,
+  canonicalScalar,
   canonicalConst,
   floatConst,
   intConst,
@@ -70,7 +70,7 @@ describe('Instance Identity (type-derived)', () => {
       const instance = b.createInstance(DOMAIN_CIRCLE, 10);
       const ref = instanceRef(DOMAIN_CIRCLE as string, instance as string);
       const fieldType = canonicalField(FLOAT, { kind: 'none' }, ref);
-      const sig = b.constant(floatConst(1.0), canonicalSignal(FLOAT));
+      const sig = b.constant(floatConst(1.0), canonicalScalar(FLOAT));
       const broadcast = b.broadcast(sig, fieldType);
 
       // Broadcast has many cardinality (it's a field), so type carries instance
@@ -105,7 +105,7 @@ describe('Instance Identity (type-derived)', () => {
       const instance = b.createInstance(DOMAIN_CIRCLE, 10);
       const ref = instanceRef(DOMAIN_CIRCLE as string, instance as string);
       const fieldType = canonicalField(FLOAT, { kind: 'none' }, ref);
-      const sigType = canonicalSignal(FLOAT);
+      const sigType = canonicalScalar(FLOAT);
       const intrinsic = b.intrinsic('index', fieldType);
       const signal = b.constant(floatConst(2.0), sigType);
       const zipped = b.kernelZipSig(intrinsic, [signal], { kind: 'opcode', opcode: OpCode.Mul }, fieldType);
@@ -133,7 +133,7 @@ describe('Instance Identity (type-derived)', () => {
       const ref = instanceRef(DOMAIN_CIRCLE as string, instance as string);
       const type = canonicalField(FLOAT, { kind: 'none' }, ref);
       const intrinsic = b.intrinsic('index', type);
-      const sig = b.constant(floatConst(1.0), canonicalSignal(FLOAT));
+      const sig = b.constant(floatConst(1.0), canonicalScalar(FLOAT));
       const broadcast = b.broadcast(sig, type);
       const zipped = b.kernelZip([intrinsic, broadcast], { kind: 'opcode', opcode: OpCode.Add }, type);
 
@@ -165,8 +165,8 @@ describe('Instance Identity (type-derived)', () => {
       const vec2Type = canonicalField(VEC2, { kind: 'none' }, ref);
 
       const normalizedIndex = b.intrinsic('normalizedIndex', floatType);
-      const colsSig = b.constant(intConst(5), canonicalSignal(INT));
-      const rowsSig = b.constant(intConst(2), canonicalSignal(INT));
+      const colsSig = b.constant(intConst(5), canonicalScalar(INT));
+      const rowsSig = b.constant(intConst(2), canonicalScalar(INT));
       const layoutField = b.kernelZipSig(
         normalizedIndex,
         [colsSig, rowsSig],

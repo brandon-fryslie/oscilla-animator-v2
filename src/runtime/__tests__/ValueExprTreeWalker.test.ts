@@ -3,11 +3,11 @@ import { getValueExprChildren, walkValueExprTree } from '../ValueExprTreeWalker'
 import type { ValueExpr } from '../../compiler/ir/value-expr';
 import type { ValueExprId } from '../../compiler/ir/Indices';
 import { valueExprId } from '../../compiler/ir/Indices';
-import { canonicalSignal, canonicalEvent } from '../../core/canonical-types';
+import { canonicalScalar, canonicalEvent } from '../../core/canonical-types';
 import { FLOAT } from '../../core/canonical-types/payloads';
 import { unitNone } from '../../core/canonical-types/units';
 
-const SIG_FLOAT = canonicalSignal(FLOAT, unitNone());
+const SIG_FLOAT = canonicalScalar(FLOAT, unitNone());
 const EVENT_TYPE = canonicalEvent();
 
 /**

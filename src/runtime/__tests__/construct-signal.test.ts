@@ -10,7 +10,7 @@ import type { ValueExpr } from '../../compiler/ir/value-expr';
 import type { RuntimeState } from '../RuntimeState';
 import { createRuntimeState } from '../RuntimeState';
 import type { ValueExprId } from '../../compiler/ir/Indices';
-import { floatConst, canonicalSignal } from '../../core/canonical-types';
+import { floatConst, canonicalScalar } from '../../core/canonical-types';
 
 describe('construct signal evaluation', () => {
   let state: RuntimeState;
@@ -40,19 +40,19 @@ describe('construct signal evaluation', () => {
       {
         kind: 'const',
         value: floatConst(1.5),
-        type: canonicalSignal({ kind: 'float' }, { kind: 'none' }),
+        type: canonicalScalar({ kind: 'float' }, { kind: 'none' }),
       },
       // [1] const(2.5)
       {
         kind: 'const',
         value: floatConst(2.5),
-        type: canonicalSignal({ kind: 'float' }, { kind: 'none' }),
+        type: canonicalScalar({ kind: 'float' }, { kind: 'none' }),
       },
       // [2] construct([0, 1])
       {
         kind: 'construct',
         components: [0 as ValueExprId, 1 as ValueExprId],
-        type: canonicalSignal({ kind: 'vec2' }, { kind: 'none' }),
+        type: canonicalScalar({ kind: 'vec2' }, { kind: 'none' }),
       },
     ];
 
@@ -70,14 +70,14 @@ describe('construct signal evaluation', () => {
   it('evaluates color construct into contiguous buffer', () => {
     // Build ValueExpr nodes: construct([const(0.1), const(0.2), const(0.3), const(1.0)])
     const valueExprs: ValueExpr[] = [
-      { kind: 'const', value: floatConst(0.1), type: canonicalSignal({ kind: 'float' }, { kind: 'none' }) },
-      { kind: 'const', value: floatConst(0.2), type: canonicalSignal({ kind: 'float' }, { kind: 'none' }) },
-      { kind: 'const', value: floatConst(0.3), type: canonicalSignal({ kind: 'float' }, { kind: 'none' }) },
-      { kind: 'const', value: floatConst(1.0), type: canonicalSignal({ kind: 'float' }, { kind: 'none' }) },
+      { kind: 'const', value: floatConst(0.1), type: canonicalScalar({ kind: 'float' }, { kind: 'none' }) },
+      { kind: 'const', value: floatConst(0.2), type: canonicalScalar({ kind: 'float' }, { kind: 'none' }) },
+      { kind: 'const', value: floatConst(0.3), type: canonicalScalar({ kind: 'float' }, { kind: 'none' }) },
+      { kind: 'const', value: floatConst(1.0), type: canonicalScalar({ kind: 'float' }, { kind: 'none' }) },
       {
         kind: 'construct',
         components: [0 as ValueExprId, 1 as ValueExprId, 2 as ValueExprId, 3 as ValueExprId],
-        type: canonicalSignal({ kind: 'color' }, { kind: 'none' }),
+        type: canonicalScalar({ kind: 'color' }, { kind: 'none' }),
       },
     ];
 
@@ -97,13 +97,13 @@ describe('construct signal evaluation', () => {
   it('evaluates vec3 construct into contiguous buffer', () => {
     // Build ValueExpr nodes: construct([const(10), const(20), const(30)])
     const valueExprs: ValueExpr[] = [
-      { kind: 'const', value: floatConst(10), type: canonicalSignal({ kind: 'float' }, { kind: 'none' }) },
-      { kind: 'const', value: floatConst(20), type: canonicalSignal({ kind: 'float' }, { kind: 'none' }) },
-      { kind: 'const', value: floatConst(30), type: canonicalSignal({ kind: 'float' }, { kind: 'none' }) },
+      { kind: 'const', value: floatConst(10), type: canonicalScalar({ kind: 'float' }, { kind: 'none' }) },
+      { kind: 'const', value: floatConst(20), type: canonicalScalar({ kind: 'float' }, { kind: 'none' }) },
+      { kind: 'const', value: floatConst(30), type: canonicalScalar({ kind: 'float' }, { kind: 'none' }) },
       {
         kind: 'construct',
         components: [0 as ValueExprId, 1 as ValueExprId, 2 as ValueExprId],
-        type: canonicalSignal({ kind: 'vec3' }, { kind: 'none' }),
+        type: canonicalScalar({ kind: 'vec3' }, { kind: 'none' }),
       },
     ];
 
@@ -122,12 +122,12 @@ describe('construct signal evaluation', () => {
   it('returns first component when construct is evaluated recursively', () => {
     // Build ValueExpr nodes
     const valueExprs: ValueExpr[] = [
-      { kind: 'const', value: floatConst(42), type: canonicalSignal({ kind: 'float' }, { kind: 'none' }) },
-      { kind: 'const', value: floatConst(99), type: canonicalSignal({ kind: 'float' }, { kind: 'none' }) },
+      { kind: 'const', value: floatConst(42), type: canonicalScalar({ kind: 'float' }, { kind: 'none' }) },
+      { kind: 'const', value: floatConst(99), type: canonicalScalar({ kind: 'float' }, { kind: 'none' }) },
       {
         kind: 'construct',
         components: [0 as ValueExprId, 1 as ValueExprId],
-        type: canonicalSignal({ kind: 'vec2' }, { kind: 'none' }),
+        type: canonicalScalar({ kind: 'vec2' }, { kind: 'none' }),
       },
     ];
 
@@ -140,7 +140,7 @@ describe('construct signal evaluation', () => {
 
   it('ensures scalar signals still work (no regression)', () => {
     const valueExprs: ValueExpr[] = [
-      { kind: 'const', value: floatConst(3.14), type: canonicalSignal({ kind: 'float' }, { kind: 'none' }) },
+      { kind: 'const', value: floatConst(3.14), type: canonicalScalar({ kind: 'float' }, { kind: 'none' }) },
     ];
 
     const value = evaluateValueExprScalar(0 as ValueExprId, valueExprs, state);
@@ -182,37 +182,37 @@ describe('extract signal evaluation', () => {
     // Build extract expressions referencing input 3
     const valueExprs: ValueExpr[] = [
       // [0] placeholder (unused)
-      { kind: 'const', value: floatConst(0), type: canonicalSignal({ kind: 'float' }, { kind: 'none' }) },
+      { kind: 'const', value: floatConst(0), type: canonicalScalar({ kind: 'float' }, { kind: 'none' }) },
       // [1] placeholder (unused)
-      { kind: 'const', value: floatConst(0), type: canonicalSignal({ kind: 'float' }, { kind: 'none' }) },
+      { kind: 'const', value: floatConst(0), type: canonicalScalar({ kind: 'float' }, { kind: 'none' }) },
       // [2] placeholder (unused)
-      { kind: 'const', value: floatConst(0), type: canonicalSignal({ kind: 'float' }, { kind: 'none' }) },
+      { kind: 'const', value: floatConst(0), type: canonicalScalar({ kind: 'float' }, { kind: 'none' }) },
       // [3] construct (the input — never evaluated by extract, just needs to exist in the array)
       {
         kind: 'construct',
         components: [0 as ValueExprId, 1 as ValueExprId, 2 as ValueExprId],
-        type: canonicalSignal({ kind: 'vec3' }, { kind: 'none' }),
+        type: canonicalScalar({ kind: 'vec3' }, { kind: 'none' }),
       },
       // [4] extract(input=3, component=0)
       {
         kind: 'extract',
         input: inputId as ValueExprId,
         componentIndex: 0,
-        type: canonicalSignal({ kind: 'float' }, { kind: 'none' }),
+        type: canonicalScalar({ kind: 'float' }, { kind: 'none' }),
       },
       // [5] extract(input=3, component=1)
       {
         kind: 'extract',
         input: inputId as ValueExprId,
         componentIndex: 1,
-        type: canonicalSignal({ kind: 'float' }, { kind: 'none' }),
+        type: canonicalScalar({ kind: 'float' }, { kind: 'none' }),
       },
       // [6] extract(input=3, component=2)
       {
         kind: 'extract',
         input: inputId as ValueExprId,
         componentIndex: 2,
-        type: canonicalSignal({ kind: 'float' }, { kind: 'none' }),
+        type: canonicalScalar({ kind: 'float' }, { kind: 'none' }),
       },
     ];
 
@@ -224,26 +224,26 @@ describe('extract signal evaluation', () => {
   it('works end-to-end with construct values mirrored to arena', () => {
     // Build construct expression and mirror written values into arena (runtime does this via write-through).
     const valueExprs: ValueExpr[] = [
-      { kind: 'const', value: floatConst(100), type: canonicalSignal({ kind: 'float' }, { kind: 'none' }) },
-      { kind: 'const', value: floatConst(200), type: canonicalSignal({ kind: 'float' }, { kind: 'none' }) },
+      { kind: 'const', value: floatConst(100), type: canonicalScalar({ kind: 'float' }, { kind: 'none' }) },
+      { kind: 'const', value: floatConst(200), type: canonicalScalar({ kind: 'float' }, { kind: 'none' }) },
       {
         kind: 'construct',
         components: [0 as ValueExprId, 1 as ValueExprId],
-        type: canonicalSignal({ kind: 'vec2' }, { kind: 'none' }),
+        type: canonicalScalar({ kind: 'vec2' }, { kind: 'none' }),
       },
       // [3] extract(input=2, component=0)
       {
         kind: 'extract',
         input: 2 as ValueExprId,
         componentIndex: 0,
-        type: canonicalSignal({ kind: 'float' }, { kind: 'none' }),
+        type: canonicalScalar({ kind: 'float' }, { kind: 'none' }),
       },
       // [4] extract(input=2, component=1)
       {
         kind: 'extract',
         input: 2 as ValueExprId,
         componentIndex: 1,
-        type: canonicalSignal({ kind: 'float' }, { kind: 'none' }),
+        type: canonicalScalar({ kind: 'float' }, { kind: 'none' }),
       },
     ];
 
@@ -268,7 +268,7 @@ describe('extract signal evaluation', () => {
         kind: 'extract',
         input: 99 as ValueExprId,
         componentIndex: 0,
-        type: canonicalSignal({ kind: 'float' }, { kind: 'none' }),
+        type: canonicalScalar({ kind: 'float' }, { kind: 'none' }),
       },
     ];
 
@@ -288,21 +288,21 @@ describe('extract signal evaluation', () => {
     state.cache.scalarExprToArenaOffset = new Map([[inputId, offset]]);
 
     const valueExprs: ValueExpr[] = [
-      { kind: 'const', value: floatConst(0), type: canonicalSignal({ kind: 'float' }, { kind: 'none' }) },
-      { kind: 'const', value: floatConst(0), type: canonicalSignal({ kind: 'float' }, { kind: 'none' }) },
-      { kind: 'const', value: floatConst(0), type: canonicalSignal({ kind: 'float' }, { kind: 'none' }) },
-      { kind: 'const', value: floatConst(0), type: canonicalSignal({ kind: 'float' }, { kind: 'none' }) },
+      { kind: 'const', value: floatConst(0), type: canonicalScalar({ kind: 'float' }, { kind: 'none' }) },
+      { kind: 'const', value: floatConst(0), type: canonicalScalar({ kind: 'float' }, { kind: 'none' }) },
+      { kind: 'const', value: floatConst(0), type: canonicalScalar({ kind: 'float' }, { kind: 'none' }) },
+      { kind: 'const', value: floatConst(0), type: canonicalScalar({ kind: 'float' }, { kind: 'none' }) },
       // [4] construct (the input)
       {
         kind: 'construct',
         components: [0 as ValueExprId, 1 as ValueExprId, 2 as ValueExprId, 3 as ValueExprId],
-        type: canonicalSignal({ kind: 'color' }, { kind: 'none' }),
+        type: canonicalScalar({ kind: 'color' }, { kind: 'none' }),
       },
       // [5..8] extract components
-      { kind: 'extract', input: inputId as ValueExprId, componentIndex: 0, type: canonicalSignal({ kind: 'float' }, { kind: 'none' }) },
-      { kind: 'extract', input: inputId as ValueExprId, componentIndex: 1, type: canonicalSignal({ kind: 'float' }, { kind: 'none' }) },
-      { kind: 'extract', input: inputId as ValueExprId, componentIndex: 2, type: canonicalSignal({ kind: 'float' }, { kind: 'none' }) },
-      { kind: 'extract', input: inputId as ValueExprId, componentIndex: 3, type: canonicalSignal({ kind: 'float' }, { kind: 'none' }) },
+      { kind: 'extract', input: inputId as ValueExprId, componentIndex: 0, type: canonicalScalar({ kind: 'float' }, { kind: 'none' }) },
+      { kind: 'extract', input: inputId as ValueExprId, componentIndex: 1, type: canonicalScalar({ kind: 'float' }, { kind: 'none' }) },
+      { kind: 'extract', input: inputId as ValueExprId, componentIndex: 2, type: canonicalScalar({ kind: 'float' }, { kind: 'none' }) },
+      { kind: 'extract', input: inputId as ValueExprId, componentIndex: 3, type: canonicalScalar({ kind: 'float' }, { kind: 'none' }) },
     ];
 
     expect(evaluateValueExprScalar(5 as ValueExprId, valueExprs, state)).toBeCloseTo(0.1, 6);

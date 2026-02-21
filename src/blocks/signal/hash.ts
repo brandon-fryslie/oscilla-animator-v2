@@ -6,7 +6,7 @@
 
 import { registerBlock } from '../registry';
 import { defaultSourceConst } from '../../types';
-import { canonicalType, canonicalSignal, payloadStride, floatConst, requireInst, cardinalityVar } from '../../core/canonical-types';
+import { canonicalType, canonicalScalar, payloadStride, floatConst, requireInst, cardinalityVar } from '../../core/canonical-types';
 import { FLOAT } from '../../core/canonical-types';
 import { cardinalityVarId } from '../../core/ids';
 import { OpCode } from '../../compiler/ir/types';

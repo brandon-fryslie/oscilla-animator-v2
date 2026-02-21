@@ -7,7 +7,7 @@ import type { PolicyContext } from '../policies/policy-types';
 import type { DraftGraph, DraftBlock, DraftEdge } from '../draft-graph';
 import type { TypeFacts, DraftPortKey, PortTypeHint } from '../type-facts';
 import { draftPortKey, getPortHint } from '../type-facts';
-import { canonicalSignal, canonicalField, canonicalType, FLOAT, unitDegrees, unitTurns, contractWrap01 } from '../../../core/canonical-types';
+import { canonicalScalar, canonicalField, canonicalType, FLOAT, unitDegrees, unitTurns, contractWrap01 } from '../../../core/canonical-types';
 import { instanceRef } from '../../../core/canonical-types';
 import type { CanonicalType } from '../../../core/canonical-types';
 import type { Obligation, ObligationId } from '../obligations';
@@ -17,7 +17,7 @@ import { BLOCK_DEFS_BY_TYPE } from '../../../blocks/registry';
 // Helpers
 // =============================================================================
 
-const SIGNAL_FLOAT = canonicalSignal(FLOAT);
+const SIGNAL_FLOAT = canonicalScalar(FLOAT);
 const FIELD_FLOAT = canonicalField(FLOAT, undefined, instanceRef('circle', 'inst0'));
 
 function makeBlock(id: string, type: string): DraftBlock {

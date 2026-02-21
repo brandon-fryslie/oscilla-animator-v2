@@ -12,7 +12,7 @@ import { bindEffects, applyBinding, bindOutputs } from '../binding-pass';
 import type { LowerEffects, ValueRefExpr } from '../../ir/lowerTypes';
 import type { StableStateId } from '../../ir/types';
 import { IRBuilderImpl } from '../../ir/IRBuilderImpl';
-import { canonicalSignal } from '../../../core/canonical-types';
+import { canonicalScalar } from '../../../core/canonical-types';
 import { FLOAT } from '../../../core/canonical-types/payloads';
 
 describe('bindEffects', () => {
@@ -42,7 +42,7 @@ describe('bindEffects', () => {
   });
 
   it('allocates slots deterministically (lexical order)', () => {
-    const type = canonicalSignal(FLOAT);
+    const type = canonicalScalar(FLOAT);
 
     const effects: LowerEffects = {
       slotRequests: [
@@ -142,7 +142,7 @@ describe('bindEffects', () => {
 
 describe('bindOutputs', () => {
   it('binds slots from slotMap', () => {
-    const type = canonicalSignal(FLOAT);
+    const type = canonicalScalar(FLOAT);
     const builder = new IRBuilderImpl();
 
     const outputsById: Record<string, ValueRefExpr> = {
@@ -163,7 +163,7 @@ describe('bindOutputs', () => {
   });
 
   it('allocates slots for pure blocks', () => {
-    const type = canonicalSignal(FLOAT);
+    const type = canonicalScalar(FLOAT);
     const builder = new IRBuilderImpl();
 
     const outputsById: Record<string, ValueRefExpr> = {
@@ -184,7 +184,7 @@ describe('bindOutputs', () => {
   });
 
   it('throws for impure blocks with missing slots', () => {
-    const type = canonicalSignal(FLOAT);
+    const type = canonicalScalar(FLOAT);
     const builder = new IRBuilderImpl();
 
     const outputsById: Record<string, ValueRefExpr> = {

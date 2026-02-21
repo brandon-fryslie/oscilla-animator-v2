@@ -8,13 +8,13 @@ import type { SlotLookup } from '../ExprAddressTable';
 import type { SlotMetaEntry } from '../../compiler/ir/program';
 import type { ValueSlot } from '../../compiler/ir/Indices';
 import { createRuntimeState } from '../RuntimeState';
-import { canonicalSignal } from '../../core/canonical-types';
+import { canonicalScalar } from '../../core/canonical-types';
 import { FLOAT } from '../../core/canonical-types/payloads';
 import { unitNone } from '../../core/canonical-types/units';
 import { valueSlot } from '../../compiler/ir/Indices';
 import type { SlotValue } from '../StepDebugTypes';
 
-const SIG_FLOAT = canonicalSignal(FLOAT, unitNone());
+const SIG_FLOAT = canonicalScalar(FLOAT, unitNone());
 
 function makeLookup(slot: number, storage: SlotLookup['storage'], offset: number, stride: number): SlotLookup {
   return { storage, offset, stride, slot: valueSlot(slot) };

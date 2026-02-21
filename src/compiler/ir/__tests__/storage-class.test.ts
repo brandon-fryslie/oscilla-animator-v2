@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { deriveStorageLayout } from '../storage-class';
 import {
-  canonicalSignal,
+  canonicalScalar,
   canonicalField,
   FLOAT,
   VEC3,
@@ -16,25 +16,25 @@ const INST = instanceRef('testDomain', 'testInstance');
 
 describe('deriveStorageLayout', () => {
   it('float/one → f64/stride 1', () => {
-    const type = canonicalSignal(FLOAT, unitNone());
+    const type = canonicalScalar(FLOAT, unitNone());
     const layout = deriveStorageLayout(type);
     expect(layout).toEqual({ storage: 'f64', stride: 1 });
   });
 
   it('vec3/one → f64/stride 3', () => {
-    const type = canonicalSignal(VEC3, unitNone());
+    const type = canonicalScalar(VEC3, unitNone());
     const layout = deriveStorageLayout(type);
     expect(layout).toEqual({ storage: 'f64', stride: 3 });
   });
 
   it('color/one → f64/stride 4', () => {
-    const type = canonicalSignal(COLOR, unitNone());
+    const type = canonicalScalar(COLOR, unitNone());
     const layout = deriveStorageLayout(type);
     expect(layout).toEqual({ storage: 'f64', stride: 4 });
   });
 
   it('vec4/one → f64/stride 4', () => {
-    const type = canonicalSignal(VEC4, unitNone());
+    const type = canonicalScalar(VEC4, unitNone());
     const layout = deriveStorageLayout(type);
     expect(layout).toEqual({ storage: 'f64', stride: 4 });
   });
@@ -52,7 +52,7 @@ describe('deriveStorageLayout', () => {
   });
 
   it('overrideStride respected for f64 storage', () => {
-    const type = canonicalSignal(FLOAT, unitNone());
+    const type = canonicalScalar(FLOAT, unitNone());
     const layout = deriveStorageLayout(type, 7);
     expect(layout).toEqual({ storage: 'f64', stride: 7 });
   });
