@@ -8,6 +8,7 @@ import type {
   CompileBeginEvent,
   CompileEndEvent,
   ProgramSwappedEvent,
+  RuntimeErrorEvent,
 } from '../../events/types';
 import { blockId } from '../../types';
 
@@ -64,6 +65,19 @@ function makeProgramSwapped(
     patchRevision,
     compileId,
     swapMode: 'hard',
+  };
+}
+
+function makeRuntimeError(
+  patchRevision: number,
+  message: string
+): RuntimeErrorEvent {
+  return {
+    type: 'RuntimeError',
+    patchId: 'patch-0',
+    patchRevision,
+    errorType: 'other',
+    message,
   };
 }
 
@@ -317,5 +331,16 @@ describe('DiagnosticHub', () => {
 
     // After dispose, no diagnostics should be returned
     expect(hub.getCompileSnapshot(1)).toEqual([]);
+  });
+
+  it('surfaces RuntimeError events as runtime diagnostics', () => {
+    events.emit(makeRuntimeError(3, 'RenderAssembler: scale is required'));
+
+    const runtime = hub.getRuntimeDiagnostics();
+    expect(runtime.length).toBe(1);
+    expect(runtime[0].domain).toBe('runtime');
+    expect(runtime[0].severity).toBe('error');
+    expect(runtime[0].code).toBe('E_RUNTIME_ERROR');
+    expect(runtime[0].message).toContain('scale is required');
   });
 });

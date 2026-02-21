@@ -160,11 +160,32 @@ export class RuntimeService {
       },
       this.animationState,
       (err) => {
+        const message = err instanceof Error ? err.message : String(err);
+        const errorType: 'nan' | 'infinity' | 'overflow' | 'other' =
+          message.toLowerCase().includes('nan')
+            ? 'nan'
+            : message.toLowerCase().includes('infinity') || message.toLowerCase().includes('inf')
+              ? 'infinity'
+              : message.toLowerCase().includes('overflow')
+                ? 'overflow'
+                : 'other';
+
+        // [LAW:single-enforcer] RuntimeService is the single owner that transitions playback to paused on runtime failure.
+        if (store.playback.isPlaying) {
+          store.playback.pause();
+        }
+        store.events.emit({
+          type: 'RuntimeError',
+          patchId: 'patch-0',
+          patchRevision: store.getPatchRevision(),
+          errorType,
+          message,
+        });
         store.diagnostics.log({
           level: 'error',
-          message: `Runtime error: ${err}`,
+          message: `Runtime error (execution halted): ${message}`,
         });
-        console.error(err);
+        console.error('Runtime error (execution halted):', err);
       }
     );
 

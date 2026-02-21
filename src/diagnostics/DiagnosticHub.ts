@@ -19,7 +19,8 @@
 
 import { untracked } from 'mobx';
 import type { EventHub } from '../events/EventHub';
-import type { Diagnostic, DiagnosticFilter } from './types';
+import { createDiagnostic, type Diagnostic, type DiagnosticFilter } from './types';
+import { generateDiagnosticId } from './diagnosticId';
 import { runAuthoringValidators } from './validators/authoringValidators';
 
 // =============================================================================
@@ -115,6 +116,9 @@ export class DiagnosticHub {
     );
     this.unsubscribers.push(
       events.on('RuntimeHealthSnapshot', (event) => this.handleRuntimeHealthSnapshot(event))
+    );
+    this.unsubscribers.push(
+      events.on('RuntimeError', (event) => this.handleRuntimeError(event))
     );
 
     // Subscribe to param flow visibility events
@@ -271,6 +275,48 @@ export class DiagnosticHub {
     }
 
     // Increment revision to trigger UI updates
+    this.incrementRevision();
+  }
+
+  /**
+   * Handles RuntimeError event.
+   *
+   * Action:
+   * - Convert runtime exception to a stable diagnostic and merge into runtime snapshot
+   */
+  private handleRuntimeError(event: {
+    type: 'RuntimeError';
+    patchId: string;
+    patchRevision: number;
+    errorType: 'nan' | 'infinity' | 'overflow' | 'other';
+    blockId?: string;
+    fieldName?: string;
+    message: string;
+  }): void {
+    if (event.patchId !== this.patchId) return;
+
+    const code = event.errorType === 'nan'
+      ? 'P_NAN_DETECTED'
+      : event.errorType === 'infinity'
+        ? 'P_INFINITY_DETECTED'
+        : 'E_RUNTIME_ERROR';
+
+    const primaryTarget = event.blockId
+      ? { kind: 'block' as const, blockId: event.blockId }
+      : { kind: 'graphSpan' as const, blockIds: [] as string[] };
+
+    const diag = createDiagnostic({
+      code,
+      severity: 'error',
+      domain: 'runtime',
+      primaryTarget,
+      title: 'Runtime execution error',
+      message: event.message,
+      scope: { patchRevision: event.patchRevision },
+    });
+    // [LAW:one-source-of-truth] Diagnostic identity is derived from canonical code+target+revision.
+    const id = generateDiagnosticId(diag.code, diag.primaryTarget, event.patchRevision, event.message);
+    this.runtimeDiagnostics.set(id, { ...diag, id });
     this.incrementRevision();
   }
 

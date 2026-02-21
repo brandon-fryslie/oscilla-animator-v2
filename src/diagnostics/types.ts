@@ -116,6 +116,7 @@ export type DiagnosticCode =
   | 'E_CYCLE_DETECTED' // Cycle with no stateful boundary
   | 'E_MISSING_INPUT' // Required input not connected
   | 'E_UNKNOWN_BLOCK_TYPE' // Block type not registered
+  | 'E_RUNTIME_ERROR' // Unhandled runtime exception during frame execution
 
   // --- Graph Quality Warnings ---
   | 'W_GRAPH_DISCONNECTED_BLOCK' // Block not reachable from TimeRoot
