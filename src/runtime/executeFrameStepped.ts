@@ -34,7 +34,7 @@ import { SYSTEM_PALETTE_SLOT } from '../compiler/ir/Indices';
 import { evaluateValueExprSignal, evaluateConstructSignal } from './ValueExprSignalEvaluator';
 import { evaluateValueExprEvent } from './ValueExprEventEvaluator';
 import { materializeValueExpr } from './ValueExprMaterializer';
-import { arenaSlice } from './ArenaValueStore';
+import { arenaSlice, type ArenaSlotDescriptor } from './ArenaValueStore';
 import {
   type SlotLookup,
   getExprAddressTable,
@@ -51,14 +51,15 @@ const STEPPED_MATERIALIZER_POOL = new BufferPool();
 // =============================================================================
 
 // [LAW:one-source-of-truth] Arena is the canonical numeric store; f64 is transitional.
+// slotToArena comes from ExprAddressTable — no direct program.arenaLayout accesses here.
 function mirrorF64ToArena(
-  program: CompiledProgramIR,
+  slotToArena: ReadonlyMap<ValueSlot, ArenaSlotDescriptor>,
   state: RuntimeState,
   lookup: SlotLookup,
   stride: number,
 ): void {
-  const arenaDesc = program.arenaLayout[lookup.slot as number];
-  if (!arenaDesc || arenaDesc.offset < 0) return;
+  const arenaDesc = slotToArena.get(lookup.slot);
+  if (!arenaDesc) return;  // sentinel slots (offset < 0) excluded during table build
 
   const copyLength = Math.min(stride, lookup.stride, arenaDesc.length);
   const srcOffset = lookup.offset;
@@ -68,7 +69,7 @@ function mirrorF64ToArena(
   }
 }
 
-function writeF64Scalar(program: CompiledProgramIR, state: RuntimeState, lookup: SlotLookup, value: number): void {
+function writeF64Scalar(slotToArena: ReadonlyMap<ValueSlot, ArenaSlotDescriptor>, state: RuntimeState, lookup: SlotLookup, value: number): void {
   if (lookup.storage !== 'f64') {
     throw new Error(`writeF64Scalar: expected f64 storage for slot ${lookup.slot}, got ${lookup.storage}`);
   }
@@ -76,11 +77,11 @@ function writeF64Scalar(program: CompiledProgramIR, state: RuntimeState, lookup:
     throw new Error(`writeF64Scalar: expected stride=1 for slot ${lookup.slot}, got stride=${lookup.stride}`);
   }
   state.values.f64[lookup.offset] = value;
-  mirrorF64ToArena(program, state, lookup, 1);
+  mirrorF64ToArena(slotToArena, state, lookup, 1);
 }
 
 function writeF64Strided(
-  program: CompiledProgramIR,
+  slotToArena: ReadonlyMap<ValueSlot, ArenaSlotDescriptor>,
   state: RuntimeState,
   lookup: SlotLookup,
   src: ArrayLike<number>,
@@ -96,7 +97,7 @@ function writeF64Strided(
   for (let i = 0; i < stride; i++) {
     state.values.f64[o + i] = src[i] as number;
   }
-  mirrorF64ToArena(program, state, lookup, stride);
+  mirrorF64ToArena(slotToArena, state, lookup, stride);
 }
 
 // =============================================================================
@@ -195,8 +196,9 @@ export function* executeFrameStepped(
   const prevValues = previousFrameValues ?? null;
 
   // [LAW:one-source-of-truth] Single address table for all slot/expr/field queries.
+  // slotToArena replaces all direct program.arenaLayout[slot] accesses in this file.
   const addressTable = getExprAddressTable(program);
-  const { slotLookup: slotLookupMap, fieldExprToSlot } = addressTable;
+  const { slotLookup: slotLookupMap, fieldExprToSlot, slotToArena } = addressTable;
 
   const resolveSlotOffset = (slot: ValueSlot): SlotLookup => {
     const lookup = slotLookupMap.get(slot);
@@ -234,7 +236,7 @@ export function* executeFrameStepped(
     throw new Error('time.palette must be Float32Array(4) in RGBA [0..1]');
   }
   const palette = assertF64Stride(slotLookupMap, TIME_PALETTE_SLOT, 4, 'time.palette slot');
-  writeF64Strided(program, state, palette, time.palette, 4);
+  writeF64Strided(slotToArena, state, palette, time.palette, 4);
 
   // Yield pre-frame snapshot
   yield buildSnapshot(-1, null, 'pre-frame', totalSteps, program, state, tAbsMs, new Map(), prevValues);
@@ -296,7 +298,7 @@ export function* executeFrameStepped(
               if (written !== stride) {
                 throw new Error(`evalValue: construct wrote ${written} components but slot stride is ${stride}`);
               }
-              mirrorF64ToArena(program, state, lookup, stride);
+              mirrorF64ToArena(slotToArena, state, lookup, stride);
               for (let i = 0; i < stride; i++) {
                 state.tap?.recordSlotValue?.((slot + i) as ValueSlot, state.values.f64[offset + i]);
               }
@@ -310,7 +312,7 @@ export function* executeFrameStepped(
               }
             } else if (stride === 1) {
               const value = evaluateValueExprSignal(step.expr as any, program.valueExprs.nodes, state);
-              writeF64Scalar(program, state, lookup, value);
+              writeF64Scalar(slotToArena, state, lookup, value);
               state.tap?.recordSlotValue?.(slot, value);
               state.cache.values[step.expr as number] = value;
               state.cache.stamps[step.expr as number] = state.cache.frameId;
@@ -366,7 +368,7 @@ export function* executeFrameStepped(
           state.values.f64[offset + i] = componentValue;
           state.tap?.recordSlotValue?.((step.slotBase + i) as ValueSlot, componentValue);
         }
-        mirrorF64ToArena(program, state, lookup, stride);
+        mirrorF64ToArena(slotToArena, state, lookup, stride);
         // Capture written strided slot
         const meta = slotToMeta.get(step.slotBase);
         if (meta) {
@@ -379,9 +381,10 @@ export function* executeFrameStepped(
         const veId = step.field;
         const instanceDecl = instances.get(step.instanceId);
         const count = instanceDecl && typeof instanceDecl.count === 'number' ? instanceDecl.count : 0;
-        const arenaDesc = program.arenaLayout[step.target as number];
+        // [LAW:one-source-of-truth] Arena lookup via ExprAddressTable — no direct arenaLayout access.
+        const arenaDesc = slotToArena.get(step.target);
         const arenaTarget =
-          state.arena.length > 0 && arenaDesc && arenaDesc.offset >= 0
+          state.arena.length > 0 && arenaDesc
             ? arenaSlice(state.arena, arenaDesc)
             : undefined;
         const buffer = materializeValueExpr(
