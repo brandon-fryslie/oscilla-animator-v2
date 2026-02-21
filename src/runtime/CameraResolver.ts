@@ -108,12 +108,12 @@ export function resolveCameraDecl(
   program: CompiledProgramIR,
   state: RuntimeState,
 ): ResolvedCameraParams {
-  // Build slot→offset lookup (O(n) scan, acceptable for 9 lookups per frame)
+  // [LAW:one-source-of-truth] Read camera slots from arena descriptors.
+  // Camera params are numeric value slots and should always be arena-backed.
   const readSlot = (slot: ValueSlot): number => {
-    for (const meta of program.slotMeta) {
-      if (meta.slot === slot) {
-        return state.values.f64[meta.offset];
-      }
+    const desc = program.arenaLayout[slot as number];
+    if (desc && desc.offset >= 0) {
+      return state.arena[desc.offset];
     }
     return 0;
   };

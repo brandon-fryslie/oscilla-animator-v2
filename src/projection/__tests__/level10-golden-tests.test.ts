@@ -72,12 +72,11 @@ function setCameraParams(
     return;
   }
   const decl = program.renderGlobals[0];
-  const slotMeta = program.slotMeta;
 
   const writeSlot = (slot: ValueSlot, value: number) => {
-    const meta = slotMeta.find((m) => m.slot === slot);
-    if (meta) {
-      state.values.f64[meta.offset] = value;
+    const arenaDesc = program.arenaLayout[slot as number];
+    if (arenaDesc && arenaDesc.offset >= 0) {
+      state.arena[arenaDesc.offset] = value;
     }
   };
 

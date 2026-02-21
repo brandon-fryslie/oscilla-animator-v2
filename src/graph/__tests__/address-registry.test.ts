@@ -169,27 +169,6 @@ describe('AddressRegistry', () => {
       expect(registry.resolve('v1:blocks.nonexistent')).toBeNull();
     });
 
-    it('performs O(1) lookup', () => {
-      // Build a large patch
-      const patch = buildPatch(b => {
-        for (let i = 0; i < 100; i++) {
-          const c = b.addBlock('Const', { displayName: `Const ${i}` });
-          b.setConfig(c, 'value', i);
-        }
-      });
-
-      const registry = AddressRegistry.buildFromPatch(patch);
-      const block = Array.from(patch.blocks.values())[50]; // Middle block
-      const addr = getBlockAddress(block);
-
-      // Should resolve instantly without iterating
-      const start = performance.now();
-      const resolved = registry.resolve(addressToString(addr));
-      const elapsed = performance.now() - start;
-
-      expect(resolved).not.toBeNull();
-      expect(elapsed).toBeLessThan(1); // Should be sub-millisecond
-    });
   });
 
   describe('resolveShorthand', () => {

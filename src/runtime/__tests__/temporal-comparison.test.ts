@@ -66,6 +66,7 @@ function createStateForProgram(program: CompiledProgramIR) {
     (schedule as any).eventSlotCount ?? 0,
     (schedule as any).eventCount ?? 0,
     program.valueExprs.nodes.length,
+    program.arenaTotalFloats,
   );
 }
 

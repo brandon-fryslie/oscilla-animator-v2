@@ -40,7 +40,7 @@ import { applyPureFn } from './SignalKernelLibrary';
  * @param expr - Construct ValueExpr node
  * @param valueExprs - Dense array of ValueExpr nodes
  * @param state - Runtime state
- * @param targetBuffer - Target f64 buffer
+ * @param targetBuffer - Target numeric buffer (Float32Array or Float64Array)
  * @param targetOffset - Starting offset in buffer
  * @returns Number of components written (stride)
  */
@@ -48,7 +48,7 @@ export function evaluateConstructSignal(
   expr: Extract<ValueExpr, { kind: 'construct' }>,
   valueExprs: readonly ValueExpr[],
   state: RuntimeState,
-  targetBuffer: Float64Array,
+  targetBuffer: Float32Array | Float64Array,
   targetOffset: number
 ): number {
   // Evaluate each component and write contiguously
@@ -194,7 +194,7 @@ function evaluateSignalExtent(
     }
 
     case 'extract': {
-      // [LAW:one-source-of-truth] Multi-component signals live in f64 slots.
+      // [LAW:one-source-of-truth] Multi-component signals live in arena slots.
       // Read directly from the materialized slot — schedule ordering guarantees
       // the input was written before this extract evaluates.
       const sigToSlot = state.cache.sigToSlot;
@@ -205,7 +205,7 @@ function evaluateSignalExtent(
           `multi-component signal was not materialized (compiler bug)`
         );
       }
-      return state.values.f64[offset + expr.componentIndex];
+      return state.arena[offset + expr.componentIndex];
     }
 
     case 'construct': {

@@ -90,14 +90,11 @@ export interface EventBuffer {
 /**
  * ValueStore - Slot-based value storage
  *
- * Stores evaluated signal values by slot ID.
- * Uses typed arrays for performance, Map for complex types.
+ * Stores non-numeric slot payloads by slot ID.
+ * // [LAW:one-source-of-truth] Numeric slot values live only in RuntimeState.arena.
  */
 export interface ValueStore {
-  /** Numeric values (most signals) */
-  f64: Float64Array;
-
-  /** Object values (colors, complex types) */
+  /** Object values (non-numeric payloads, e.g. render frame references) */
   objects: Map<ValueSlot, unknown>;
 
   /**
@@ -112,12 +109,12 @@ export interface ValueStore {
 /**
  * Create a ValueStore with the given slot count
  *
- * @param slotCount - Total number of slots for f64 storage
+ * @param slotCount - Legacy parameter retained for callsite compatibility
  * @param shape2dSlotCount - Number of shape2d slots (defaults to 0)
  */
 export function createValueStore(slotCount: number, shape2dSlotCount: number = 0): ValueStore {
+  void slotCount;
   return {
-    f64: new Float64Array(slotCount),
     objects: new Map(),
     shape2d: new Uint32Array(shape2dSlotCount * SHAPE2D_WORDS),
   };
@@ -214,7 +211,7 @@ export interface FrameCache {
    */
   valueExprFieldStamps: number[];
 
-  /** Signal ValueExprId -> physical f64 offset mapping for multi-component extract */
+  /** Signal ValueExprId -> arena scalar offset mapping for multi-component extract */
   sigToSlot: ReadonlyMap<number, number> | null;
 }
 

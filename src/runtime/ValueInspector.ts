@@ -15,6 +15,7 @@ import { getExprAddressTable } from './ExprAddressTable';
 import type { SlotValue, ValueAnomaly, LaneIdentity } from './StepDebugTypes';
 import type { InstanceId } from '../core/ids';
 import type { ContinuityState } from './ContinuityState';
+import type { ArenaSlotDescriptor } from './ArenaValueStore';
 
 /**
  * Read the current value of a slot from runtime state.
@@ -28,20 +29,25 @@ export function readSlotValue(
   state: RuntimeState,
   lookup: SlotLookup,
   meta: SlotMetaEntry,
+  slotToArena?: ReadonlyMap<ValueSlot, ArenaSlotDescriptor>,
 ): SlotValue {
   switch (lookup.storage) {
     case 'f64': {
+      const arenaDesc = slotToArena?.get(lookup.slot);
+      if (!arenaDesc) {
+        throw new Error(`readSlotValue: missing arena descriptor for numeric slot ${lookup.slot}`);
+      }
       if (lookup.stride === 1) {
         return {
           kind: 'scalar',
-          value: state.values.f64[lookup.offset],
+          value: state.arena[arenaDesc.offset],
           type: meta.type,
         };
       }
       // Multi-component: copy the values into a snapshot buffer
       const buffer = new Float64Array(lookup.stride);
       for (let i = 0; i < lookup.stride; i++) {
-        buffer[i] = state.values.f64[lookup.offset + i];
+        buffer[i] = state.arena[arenaDesc.offset + i];
       }
       return {
         kind: 'buffer',
@@ -164,7 +170,8 @@ export function inspectBlockSlots(
   state: RuntimeState,
   slotLookupMap?: Map<ValueSlot, SlotLookup>,
 ): Map<ValueSlot, SlotValue> {
-  const lookupMap = slotLookupMap ?? getExprAddressTable(program).slotLookup;
+  const addressTable = getExprAddressTable(program);
+  const lookupMap = slotLookupMap ?? addressTable.slotLookup;
   const result = new Map<ValueSlot, SlotValue>();
 
   // Build a slot-to-meta index for quick lookup
@@ -181,7 +188,7 @@ export function inspectBlockSlots(
     const meta = slotToMeta.get(slot);
     if (!lookup || !meta) continue;
 
-    result.set(slot, readSlotValue(state, lookup, meta));
+    result.set(slot, readSlotValue(state, lookup, meta, addressTable.slotToArena));
   }
 
   return result;

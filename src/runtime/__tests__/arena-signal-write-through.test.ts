@@ -9,7 +9,6 @@ import { executeFrame } from '../ScheduleExecutor';
 import { executeFrameStepped } from '../executeFrameStepped';
 import type { RuntimeState } from '../RuntimeState';
 import { createRuntimeState } from '../RuntimeState';
-import { assertF64Stride, getExprAddressTable } from '../ExprAddressTable';
 import { getTestArena } from './test-arena-helper';
 
 import '../../blocks/all';
@@ -59,57 +58,53 @@ function createStateForProgram(program: CompiledProgramIR): RuntimeState {
   );
 }
 
-function assertMirroredF64Slot(program: CompiledProgramIR, state: RuntimeState, slot: number): number {
-  const table = getExprAddressTable(program);
-  const lookup = table.slotLookup.get(slot as any);
-  if (!lookup || lookup.storage !== 'f64') return 0;
+function readArenaSlot(program: CompiledProgramIR, state: RuntimeState, slot: number): number[] {
   const arenaDesc = program.arenaLayout[slot];
-  if (!arenaDesc || arenaDesc.offset < 0) return 0;
-
-  const copyLength = Math.min(lookup.stride, arenaDesc.length);
-  for (let i = 0; i < copyLength; i++) {
-    const f64Value = state.values.f64[lookup.offset + i];
-    const arenaValue = state.arena[arenaDesc.offset + i];
-    expect(arenaValue).toBeCloseTo(f64Value, 6);
-  }
-  return lookup.stride;
+  if (!arenaDesc || arenaDesc.offset < 0 || arenaDesc.length <= 0) return [];
+  return Array.from(state.arena.subarray(arenaDesc.offset, arenaDesc.offset + arenaDesc.length));
 }
 
-function assertSignalWritesMirrored(program: CompiledProgramIR, state: RuntimeState): void {
+function assertSignalWritesInArena(program: CompiledProgramIR, state: RuntimeState): void {
   const schedule = program.schedule as ScheduleIR;
-  const table = getExprAddressTable(program);
-
-  const paletteLookup = assertF64Stride(table.slotLookup, SYSTEM_PALETTE_SLOT, 4, 'time.palette slot');
   const paletteDesc = program.arenaLayout[SYSTEM_PALETTE_SLOT as number];
   if (!paletteDesc) {
     throw new Error('Missing arena descriptor for SYSTEM_PALETTE_SLOT');
   }
   expect(paletteDesc.offset).toBeGreaterThanOrEqual(0);
-  for (let i = 0; i < 4; i++) {
-    expect(state.arena[paletteDesc.offset + i]).toBeCloseTo(state.values.f64[paletteLookup.offset + i], 6);
+  const palette = Array.from(state.arena.subarray(paletteDesc.offset, paletteDesc.offset + 4));
+  for (const value of palette) {
+    expect(Number.isFinite(value)).toBe(true);
   }
+  expect(Math.abs(palette[0]) + Math.abs(palette[1]) + Math.abs(palette[2])).toBeGreaterThan(0);
+  expect(palette[3]).toBeGreaterThanOrEqual(0);
+  expect(palette[3]).toBeLessThanOrEqual(1);
 
-  let scalarSignalSlots = 0;
+  let scalarArenaSlots = 0;
   for (const step of schedule.steps) {
     if (step.kind === 'evalValue' && step.target.storage === 'value') {
-      const stride = assertMirroredF64Slot(program, state, step.target.slot as number);
-      if (stride === 1) scalarSignalSlots++;
+      const values = readArenaSlot(program, state, step.target.slot as number);
+      if (values.length === 1) {
+        scalarArenaSlots++;
+      }
+      for (const value of values) {
+        expect(Number.isFinite(value)).toBe(true);
+      }
     }
   }
 
-  expect(scalarSignalSlots).toBeGreaterThan(0);
+  expect(scalarArenaSlots).toBeGreaterThan(0);
 }
 
-describe('signal write-through mirrors f64 values into arena', () => {
-  it('executeFrame mirrors scalar signal writes (and system palette stride writes)', () => {
+describe('signal writes target arena storage', () => {
+  it('executeFrame writes scalar signal values and system palette into arena', () => {
     const program = compileSignalPatch();
     const state = createStateForProgram(program);
 
     executeFrame(program, state, getTestArena(), 100);
-    assertSignalWritesMirrored(program, state);
+    assertSignalWritesInArena(program, state);
   });
 
-  it('executeFrameStepped mirrors scalar signal writes (and system palette stride writes)', () => {
+  it('executeFrameStepped writes scalar signal values and system palette into arena', () => {
     const program = compileSignalPatch();
     const state = createStateForProgram(program);
 
@@ -119,6 +114,32 @@ describe('signal write-through mirrors f64 values into arena', () => {
       step = gen.next();
     }
 
-    assertSignalWritesMirrored(program, state);
+    assertSignalWritesInArena(program, state);
+  });
+
+  it('executeFrame and executeFrameStepped produce equivalent arena values for value slots', () => {
+    const program = compileSignalPatch();
+    const frameState = createStateForProgram(program);
+    const steppedState = createStateForProgram(program);
+
+    executeFrame(program, frameState, getTestArena(), 100);
+
+    const gen = executeFrameStepped(program, steppedState, getTestArena(), 100);
+    let step = gen.next();
+    while (!step.done) {
+      step = gen.next();
+    }
+
+    const schedule = program.schedule as ScheduleIR;
+    for (const irStep of schedule.steps) {
+      if (irStep.kind !== 'evalValue' || irStep.target.storage !== 'value') continue;
+      const slot = irStep.target.slot as number;
+      const a = readArenaSlot(program, frameState, slot);
+      const b = readArenaSlot(program, steppedState, slot);
+      expect(a.length).toBe(b.length);
+      for (let i = 0; i < a.length; i++) {
+        expect(a[i]).toBeCloseTo(b[i], 6);
+      }
+    }
   });
 });

@@ -1,12 +1,11 @@
 /**
  * Arena Continuity Write-Through Tests (zdru.6)
  *
- * Verifies that after executeFrame, state.arena contains the continuity-processed
- * output values for every continuityApply outputSlot — matching state.values.objects.
+ * Verifies that after executeFrame, state.arena contains continuity-processed
+ * output values for every continuityApply outputSlot, without numeric objects mirrors.
  *
- * [LAW:one-source-of-truth] Arena is the canonical flat buffer. After zdru.6,
- * arena[arenaLayout[outputSlot]] must equal objects.get(outputSlot) every frame.
- * This is what unblocks zdru.3 (RenderAssembler arena reads).
+ * [LAW:one-source-of-truth] Arena is the canonical flat buffer.
+ * Continuity output slots should be written directly to arena.
  */
 import { describe, it, expect } from 'vitest';
 import { buildPatch } from '../../graph';
@@ -85,7 +84,8 @@ function makeRenderPatch() {
 // ── assertion helper ──────────────────────────────────────────────────────────
 
 /**
- * For each continuityApply outputSlot, assert arena matches objects map.
+ * For each continuityApply outputSlot, assert arena contains finite data and
+ * that no Float32 objects mirror is retained for that slot.
  * Returns number of slots actually verified (must be > 0).
  */
 function assertContinuityOutputsInArena(
@@ -99,13 +99,11 @@ function assertContinuityOutputsInArena(
     if (!desc || desc.offset < 0) continue; // non-arena slot — skip
 
     const arenaRegion = arenaSlice(state.arena, desc);
-    const objectsBuf = state.values.objects.get(outputSlot as any) as Float32Array | undefined;
-    if (!objectsBuf || objectsBuf.length === 0) continue;
-
-    const compareLen = Math.min(objectsBuf.length, desc.length);
-    for (let i = 0; i < compareLen; i++) {
-      expect(arenaRegion[i], `policy=${policyKind} outputSlot=${outputSlot} i=${i}`).toBe(objectsBuf[i]);
+    for (let i = 0; i < arenaRegion.length; i++) {
+      expect(Number.isFinite(arenaRegion[i]), `policy=${policyKind} outputSlot=${outputSlot} i=${i}`).toBe(true);
     }
+    const objectsValue = state.values.objects.get(outputSlot as any);
+    expect(objectsValue instanceof Float32Array).toBe(false);
     checked++;
   }
   return checked;
@@ -114,7 +112,7 @@ function assertContinuityOutputsInArena(
 // ── tests ─────────────────────────────────────────────────────────────────────
 
 describe('arena continuity write-through (zdru.6)', () => {
-  it('frame 1: arena[outputSlot] matches objects map for all continuityApply targets', () => {
+  it('frame 1: arena has continuity output values for all continuityApply targets', () => {
     const program = compileOk(makeRenderPatch());
     const state = stateFor(program);
     const outputs = collectContinuityOutputs(program);
@@ -127,7 +125,7 @@ describe('arena continuity write-through (zdru.6)', () => {
     expect(checked).toBeGreaterThan(0);
   });
 
-  it('frame 2: arena[outputSlot] remains in sync with objects map after slew update', () => {
+  it('frame 2: arena continuity outputs remain available after slew update', () => {
     const program = compileOk(makeRenderPatch());
     const state = stateFor(program);
     const outputs = collectContinuityOutputs(program);

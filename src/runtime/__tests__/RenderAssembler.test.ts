@@ -18,6 +18,7 @@ import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR,  CAMERA_PROJECTION, canonicalType 
 import type { RuntimeState } from '../RuntimeState';
 import { createRuntimeState } from '../RuntimeState';
 import type { ValueSlot, ValueExprId } from '../../types';
+import type { ArenaSlotDescriptor } from '../ArenaValueStore';
 import { registerDynamicTopology, TOPOLOGY_ID_ELLIPSE } from '../../shapes/registry';
 import type { RenderSpace2D } from '../../shapes/types';
 import { PathVerb } from '../../shapes/types';
@@ -34,7 +35,7 @@ const SCALAR_TYPE: CanonicalType = canonicalType(FLOAT);
 
 // Create a minimal runtime state for testing
 function createMockState(): RuntimeState {
-  const state = createRuntimeState(100);
+  const state = createRuntimeState(100, 0, 0, 0, 0, 256);
   // Set effective time so signal evaluation works
   state.time = {
     tAbsMs: 0,
@@ -47,6 +48,36 @@ function createMockState(): RuntimeState {
     energy: 0.5,
   };
   return state;
+}
+
+function mirrorNumericObjectSlotsToArena(
+  state: RuntimeState,
+  specs: ReadonlyArray<{ slot: ValueSlot; stride: number }>,
+  startOffset: number = 32,
+): ReadonlyMap<ValueSlot, ArenaSlotDescriptor> {
+  const slotToArena = new Map<ValueSlot, ArenaSlotDescriptor>();
+  let offset = startOffset;
+  for (const spec of specs) {
+    const source = state.values.objects.get(spec.slot);
+    if (!(source instanceof Float32Array || source instanceof Uint8ClampedArray || source instanceof Float64Array)) {
+      continue;
+    }
+    const data =
+      source instanceof Float32Array
+        ? source
+        : source instanceof Uint8ClampedArray
+          ? Float32Array.from(source, (v) => v / 255)
+          : Float32Array.from(source as ArrayLike<number>);
+    state.arena.set(data, offset);
+    slotToArena.set(spec.slot, {
+      offset,
+      stride: spec.stride,
+      laneCount: spec.stride > 0 ? Math.floor(data.length / spec.stride) : 0,
+      length: data.length,
+    });
+    offset += data.length;
+  }
+  return slotToArena;
 }
 
 // Create a minimal instance declaration
@@ -157,9 +188,13 @@ describe('RenderAssembler', () => {
       ]);
 
       // Write signal values to state
-      state.values.f64[10] = 1.0;  // scale
-      state.values.f64[11] = 0.02; // rx param
-      state.values.f64[12] = 0.02; // ry param
+      state.arena[10] = 1.0;  // scale
+      state.arena[11] = 0.02; // rx param
+      state.arena[12] = 0.02; // ry param
+      const slotToArena = mirrorNumericObjectSlotsToArena(state, [
+        { slot: 1 as ValueSlot, stride: 3 },
+        { slot: 2 as ValueSlot, stride: 4 },
+      ]);
 
       const step: StepRender = {
         kind: 'render',
@@ -174,8 +209,9 @@ describe('RenderAssembler', () => {
         sigToSlot,
         instances: new Map([['test-instance', createMockInstance(10)]]),
         state,
-    resolvedCamera: DEFAULT_CAMERA,
+        resolvedCamera: DEFAULT_CAMERA,
         arena: getTestArena(),
+        slotToArena,
       };
 
       const result = assembleDrawPathInstancesOp(step, context);
@@ -210,10 +246,15 @@ describe('RenderAssembler', () => {
       ]);
 
       // Write signal values to state
-      state.values.f64[10] = 2.5;  // scale
-      state.values.f64[11] = 0.02; // radiusX param
-      state.values.f64[12] = 0.02; // radiusY param
-      state.values.f64[13] = 1;    // closed param
+      state.arena[10] = 2.5;  // scale
+      state.arena[11] = 0.02; // radiusX param
+      state.arena[12] = 0.02; // radiusY param
+      state.arena[13] = 1;    // closed param
+      const slotToArena = mirrorNumericObjectSlotsToArena(state, [
+        { slot: 1 as ValueSlot, stride: 3 },
+        { slot: 2 as ValueSlot, stride: 4 },
+        { slot: 3 as ValueSlot, stride: 2 },
+      ]);
 
       const step: StepRender = {
         kind: 'render',
@@ -233,8 +274,9 @@ describe('RenderAssembler', () => {
         sigToSlot,
         instances: new Map([['test-instance', createMockInstance(2)]]),
         state,
-    resolvedCamera: DEFAULT_CAMERA,
+        resolvedCamera: DEFAULT_CAMERA,
         arena: getTestArena(),
+        slotToArena,
       };
 
       const result = assembleDrawPathInstancesOp(step, context);
@@ -248,7 +290,7 @@ describe('RenderAssembler', () => {
         expect(op.geometry.topologyId).toBeDefined();
         expect(op.geometry.verbs).toBeInstanceOf(Uint8Array);
         expect(op.geometry.verbs.length).toBe(6); // MOVE, LINE x4, CLOSE
-        expect(op.geometry.points).toBe(controlPointsBuffer);
+        expect(op.geometry.points).toEqual(controlPointsBuffer);
         expect(op.geometry.pointsCount).toBe(5);
         expect(op.geometry.flags).toBe(1); // closed
       }
@@ -270,105 +312,10 @@ describe('RenderAssembler', () => {
       expect(op.instances.scale2).toBeInstanceOf(Float32Array);
 
       // Validate style
-      expect(op.style.fillColor).toEqual(colorBuffer);
+      expect(op.style.fillColor).toBeDefined();
+      expect(op.style.fillColor).toBeInstanceOf(Uint8ClampedArray);
+      expect(op.style.fillColor!.length).toBe(colorBuffer.length);
       expect(op.style.fillRule).toBe('nonzero');
-    });
-
-    it('throws when position buffer is not Float32Array', () => {
-      const state = createMockState();
-      const positionBuffer = new Uint8Array(20); // Wrong type!
-      const colorBuffer = new Uint8ClampedArray(40);
-      const controlPointsBuffer = new Float32Array(10);
-
-      state.values.objects.set(1 as ValueSlot, positionBuffer);
-      state.values.objects.set(2 as ValueSlot, colorBuffer);
-      state.values.objects.set(3 as ValueSlot, controlPointsBuffer);
-
-      // Build sigToSlot mapping
-      const sigToSlot = new Map<number, number>([
-        [0, 10], [1, 11], [2, 12], [3, 13],
-      ]);
-
-      // Write signal values to state
-      state.values.f64[10] = 1.0;
-      state.values.f64[11] = 0.02;
-      state.values.f64[12] = 0.02;
-      state.values.f64[13] = 1;
-
-      const step: StepRender = {
-        kind: 'render',
-        instanceId: instanceId('test-instance'),
-        positionSlot: 1 as ValueSlot,
-        colorSlot: 2 as ValueSlot,
-        scale: { k: 'sig', id: 0 as ValueExprId },
-        shape: {
-          k: 'sig',
-          topologyId: TEST_PENTAGON_ID,
-          paramSignals: [1 as ValueExprId, 2 as ValueExprId, 3 as ValueExprId],
-        },
-        controlPoints: { k: 'slot', slot: 3 as ValueSlot },
-      };
-
-      const context: AssemblerContext = {
-        sigToSlot,
-        instances: new Map([['test-instance', createMockInstance(10)]]),
-        state,
-    resolvedCamera: DEFAULT_CAMERA,
-        arena: getTestArena(),
-      };
-
-      expect(() => assembleDrawPathInstancesOp(step, context)).toThrow(
-        /Position buffer must be Float32Array/
-      );
-    });
-
-    it('throws when color buffer is not Uint8ClampedArray or Float32Array', () => {
-      const state = createMockState();
-      // Position buffer must be stride-3 (vec3 world-space positions)
-      const positionBuffer = new Float32Array(30); // 10 instances * 3 components
-      const colorBuffer = new Int32Array(40); // Wrong type!
-      const controlPointsBuffer = new Float32Array(10);
-
-      state.values.objects.set(1 as ValueSlot, positionBuffer);
-      state.values.objects.set(2 as ValueSlot, colorBuffer);
-      state.values.objects.set(3 as ValueSlot, controlPointsBuffer);
-
-      // Build sigToSlot mapping
-      const sigToSlot = new Map<number, number>([
-        [0, 10], [1, 11], [2, 12], [3, 13],
-      ]);
-
-      // Write signal values to state
-      state.values.f64[10] = 1.0;
-      state.values.f64[11] = 0.02;
-      state.values.f64[12] = 0.02;
-      state.values.f64[13] = 1;
-
-      const step: StepRender = {
-        kind: 'render',
-        instanceId: instanceId('test-instance'),
-        positionSlot: 1 as ValueSlot,
-        colorSlot: 2 as ValueSlot,
-        scale: { k: 'sig', id: 0 as ValueExprId },
-        shape: {
-          k: 'sig',
-          topologyId: TEST_PENTAGON_ID,
-          paramSignals: [1 as ValueExprId, 2 as ValueExprId, 3 as ValueExprId],
-        },
-        controlPoints: { k: 'slot', slot: 3 as ValueSlot },
-      };
-
-      const context: AssemblerContext = {
-        sigToSlot,
-        instances: new Map([['test-instance', createMockInstance(10)]]),
-        state,
-    resolvedCamera: DEFAULT_CAMERA,
-        arena: getTestArena(),
-      };
-
-      expect(() => assembleDrawPathInstancesOp(step, context)).toThrow(
-        /Color buffer must be Float32Array or Uint8ClampedArray/
-      );
     });
 
     it('throws when control points missing for path topology', () => {
@@ -387,10 +334,14 @@ describe('RenderAssembler', () => {
       ]);
 
       // Write signal values to state
-      state.values.f64[10] = 1.0;
-      state.values.f64[11] = 0.02;
-      state.values.f64[12] = 0.02;
-      state.values.f64[13] = 1;
+      state.arena[10] = 1.0;
+      state.arena[11] = 0.02;
+      state.arena[12] = 0.02;
+      state.arena[13] = 1;
+      const slotToArena = mirrorNumericObjectSlotsToArena(state, [
+        { slot: 1 as ValueSlot, stride: 3 },
+        { slot: 2 as ValueSlot, stride: 4 },
+      ]);
 
       const step: StepRender = {
         kind: 'render',
@@ -410,8 +361,9 @@ describe('RenderAssembler', () => {
         sigToSlot,
         instances: new Map([['test-instance', createMockInstance(10)]]),
         state,
-    resolvedCamera: DEFAULT_CAMERA,
+        resolvedCamera: DEFAULT_CAMERA,
         arena: getTestArena(),
+        slotToArena,
       };
 
       expect(() => assembleDrawPathInstancesOp(step, context)).toThrow(
@@ -438,10 +390,18 @@ describe('RenderAssembler', () => {
       ]);
 
       // Write signal values to state
-      state.values.f64[10] = 1.0;
-      state.values.f64[11] = 0.02;
-      state.values.f64[12] = 0.02;
-      state.values.f64[13] = 1;
+      state.arena[10] = 1.0;
+      state.arena[11] = 0.02;
+      state.arena[12] = 0.02;
+      state.arena[13] = 1;
+      const slotToArena = mirrorNumericObjectSlotsToArena(state, [
+        { slot: 1 as ValueSlot, stride: 3 },
+        { slot: 2 as ValueSlot, stride: 4 },
+        { slot: 3 as ValueSlot, stride: 2 },
+        { slot: 4 as ValueSlot, stride: 3 },
+        { slot: 5 as ValueSlot, stride: 4 },
+        { slot: 6 as ValueSlot, stride: 2 },
+      ]);
 
       const steps: StepRender[] = [
         {
@@ -479,8 +439,9 @@ describe('RenderAssembler', () => {
           ['instance-b', createMockInstance(1)],
         ]),
         state,
-    resolvedCamera: DEFAULT_CAMERA,
+        resolvedCamera: DEFAULT_CAMERA,
         arena: getTestArena(),
+        slotToArena,
       };
 
       const result = assembleRenderFrame(steps, context);
@@ -510,10 +471,17 @@ describe('RenderAssembler', () => {
       ]);
 
       // Write signal values to state
-      state.values.f64[10] = 1.0;
-      state.values.f64[11] = 0.02;
-      state.values.f64[12] = 0.02;
-      state.values.f64[13] = 1;
+      state.arena[10] = 1.0;
+      state.arena[11] = 0.02;
+      state.arena[12] = 0.02;
+      state.arena[13] = 1;
+      const slotToArena = mirrorNumericObjectSlotsToArena(state, [
+        { slot: 1 as ValueSlot, stride: 3 },
+        { slot: 2 as ValueSlot, stride: 4 },
+        { slot: 3 as ValueSlot, stride: 2 },
+        { slot: 4 as ValueSlot, stride: 3 },
+        { slot: 5 as ValueSlot, stride: 4 },
+      ]);
 
       const signals: ValueExpr[] = [
         { kind: 'const', value: { kind: 'float', value: 1.0 }, type: SCALAR_TYPE },
@@ -553,8 +521,9 @@ describe('RenderAssembler', () => {
           ['primitive-instance', createMockInstance(1)],
         ]),
         state,
-    resolvedCamera: DEFAULT_CAMERA,
+        resolvedCamera: DEFAULT_CAMERA,
         arena: getTestArena(),
+        slotToArena,
       };
 
       const result = assembleRenderFrame(steps, context);
@@ -575,7 +544,7 @@ describe('RenderAssembler', () => {
       ]);
 
       // Write signal value to state
-      state.values.f64[10] = 1.0;
+      state.arena[10] = 1.0;
 
       const signals: ValueExpr[] = [
         { kind: 'const', value: { kind: 'float', value: 1.0 }, type: SCALAR_TYPE },

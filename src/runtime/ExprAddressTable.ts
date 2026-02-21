@@ -34,6 +34,8 @@ export interface ExprAddressTable {
   readonly fieldExprToSlot: ReadonlyMap<number, ValueSlot>;
   /** Signal ValueExprId → f64 physical offset */
   readonly sigToF64Offset: ReadonlyMap<number, number>;
+  /** Signal ValueExprId → arena scalar offset */
+  readonly sigToArenaOffset: ReadonlyMap<number, number>;
   /**
    * ValueSlot → arena descriptor (excludes sentinels with offset < 0).
    * [LAW:one-source-of-truth] Single lookup replacing all direct program.arenaLayout[slot] accesses.
@@ -72,9 +74,10 @@ export function getExprAddressTable(program: CompiledProgramIR): ExprAddressTabl
     }
   }
 
-  // 2. Build fieldExprToSlot and sigToF64Offset from schedule steps
+  // 2. Build fieldExprToSlot and signal lookup maps from schedule steps
   const fieldExprToSlot = new Map<number, ValueSlot>();
   const sigToF64Offset = new Map<number, number>();
+  const sigToArenaOffset = new Map<number, number>();
   const steps = (program.schedule as ScheduleIR).steps;
   for (const step of steps) {
     if (step.kind === 'materialize') {
@@ -85,10 +88,14 @@ export function getExprAddressTable(program: CompiledProgramIR): ExprAddressTabl
       if (lookup) {
         sigToF64Offset.set(step.expr as number, lookup.offset);
       }
+      const arenaDesc = slotToArena.get(step.target.slot);
+      if (arenaDesc) {
+        sigToArenaOffset.set(step.expr as number, arenaDesc.offset);
+      }
     }
   }
 
-  const table: ExprAddressTable = { slotLookup, fieldExprToSlot, sigToF64Offset, slotToArena };
+  const table: ExprAddressTable = { slotLookup, fieldExprToSlot, sigToF64Offset, sigToArenaOffset, slotToArena };
   TABLE_CACHE.set(program, table);
   return table;
 }

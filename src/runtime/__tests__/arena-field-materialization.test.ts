@@ -1,8 +1,8 @@
 /**
  * Arena Field Materialization Tests
  *
- * Verifies that field materialization writes to the arena region
- * (in addition to the objects map) for many-cardinality slots.
+ * Verifies that field materialization writes to arena for many-cardinality slots
+ * without relying on legacy numeric buffer mirrors in values.objects.
  *
  * [LAW:one-source-of-truth] Arena is the canonical flat buffer for all numeric
  * values. These tests prove materialized field data appears in the arena at the
@@ -63,7 +63,7 @@ function materializeTargets(program: ReturnType<typeof compileOk>): Set<number> 
 // ---------------------------------------------------------------------------
 
 describe('arena field materialization', () => {
-  it('arena contains materialized field values matching objects map for materialize targets', () => {
+  it('arena contains materialized field values for materialize targets without objects mirror', () => {
     const patch = buildPatch((b) => {
       const time = b.addBlock('InfiniteTimeRoot');
       b.setPortDefault(time, 'periodAMs', 1000);
@@ -99,23 +99,23 @@ describe('arena field materialization', () => {
     expect(targets.size).toBeGreaterThan(0);
 
     let checked = 0;
+    let sawNonZero = false;
     for (const slotId of targets) {
       const desc = program.arenaLayout[slotId];
       if (!desc || desc.offset < 0) continue;
 
       const arenaRegion = arenaSlice(state.arena, desc);
-      const objectsBuf = state.values.objects.get(slotId as any) as Float32Array | undefined;
-      if (!objectsBuf || objectsBuf.length === 0) continue;
-
-      // Arena region must match the objects buffer (byte-for-byte for materialized range)
-      const compareLen = Math.min(objectsBuf.length, desc.length);
-      for (let i = 0; i < compareLen; i++) {
-        expect(arenaRegion[i]).toBe(objectsBuf[i]);
+      for (let i = 0; i < arenaRegion.length; i++) {
+        expect(Number.isFinite(arenaRegion[i])).toBe(true);
+        if (arenaRegion[i] !== 0) sawNonZero = true;
       }
+      const objectsValue = state.values.objects.get(slotId as any);
+      expect(objectsValue instanceof Float32Array).toBe(false);
       checked++;
     }
 
     expect(checked).toBeGreaterThan(0);
+    expect(sawNonZero).toBe(true);
   });
 
   it('arena region is non-zero for circle layout position field', () => {

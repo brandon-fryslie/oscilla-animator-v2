@@ -12,6 +12,27 @@ The type system already knows they're the same thing — `CanonicalType.extent.c
 
 **Strategy:** Arena first. Build the unified storage, shim the old evaluators to write to it, remove old storage, then incrementally unify the evaluation paths.
 
+## Status Snapshot (2026-02-21)
+
+Completed:
+- CT/ICT cardinality policy refactor is complete (`cpc`, `cpc.1`, `cpc.2`, `cpc.3`, `cpc.4` are closed).
+- Arena foundation is complete (`objx`, `objx.1`, `objx.2`, `objx.3` are closed).
+- Phase 2 read/write migration is complete (`zdru.1` through `zdru.7` are complete for numeric arena unification).
+- `RuntimeState.ValueStore.f64` has been removed (arena is the only numeric store in runtime state).
+- Signal `extract` evaluation and stepped-debug slot reads now consume arena offsets in active runtime paths.
+- RenderAssembler and CameraResolver numeric signal reads now consume arena-backed offsets; ValueInspector no longer falls back to f64 for numeric slot snapshots.
+- Schedule executors now require arena descriptors for numeric materialize/continuity paths; numeric `values.objects` fallback has been removed.
+- Scalar instance bootstrap is complete (`99dq.1` is closed).
+
+Remaining critical path:
+1. `99dq.2` + `99dq.3`: convert Const + initial block tranche to cardinality-one field materialization.
+2. `wbhc.*`: convert all remaining blocks.
+3. `v91n.*`: delete dual-path IR/runtime vestiges.
+
+Completion condition:
+- No runtime/compiler concept of "signal path" remains.
+- Cardinality one vs many is expressed purely as field lane count semantics.
+
 ## Why This Works Incrementally
 
 **Key finding:** Signal evaluation is expression-DAG recursive with per-frame caching. When signal B depends on signal A, B's evaluator recursively walks the ValueExpr DAG — it does NOT read from `f64` storage. The materializer also reads signal inputs by calling `evaluateValueExprSignal()` directly.
@@ -70,24 +91,24 @@ Helpers:
 
 ### 1b. Compiler Emits Arena Layout
 
-In `src/compiler/compile.ts` `convertLinkedIRToProgram()` (lines 316-334):
+In `src/compiler/compile.ts` `convertLinkedIRToProgram()`:
 - Compute `ArenaSlotDescriptor` for every slot
 - Signals: `laneCount = 1`, `length = stride`
 - Fields: `laneCount = instanceCount`, `length = stride * instanceCount`
 - Bump-allocate: each slot gets next available offset, no overlap
-- Add to `CompiledProgramIR`: `arenaLayout: ArenaSlotDescriptor[]` + `arenaSize: number`
+- Add to `CompiledProgramIR`: `arenaLayout: ArenaSlotDescriptor[]` + `arenaTotalFloats: number`
 
 ### 1c. Allocate Arena in `createProgramState()`
 
 In `src/runtime/RuntimeState.ts`:
 - Add `arena: Float32Array` to `RuntimeState` (or `ValueStore`)
-- Allocate `new Float32Array(program.arenaSize)` alongside existing f64/objects
+- Allocate `new Float32Array(program.arenaTotalFloats)` alongside existing f64/objects
 - Both storage systems active simultaneously during transition
 
 ### Files
 - `src/runtime/ArenaValueStore.ts` — NEW: arena types + helpers
 - `src/compiler/compile.ts` — arena layout computation in slot loop
-- `src/compiler/ir/program.ts` — `CompiledProgramIR` gets `arenaLayout`, `arenaSize`
+- `src/compiler/ir/program.ts` — `CompiledProgramIR` gets `arenaLayout`, `arenaTotalFloats`
 - `src/runtime/RuntimeState.ts` — arena allocation
 
 ### Success Criteria

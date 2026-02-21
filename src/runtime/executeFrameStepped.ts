@@ -50,37 +50,31 @@ const STEPPED_MATERIALIZER_POOL = new BufferPool();
 // Helpers (duplicated from ScheduleExecutor — these are private in the original)
 // =============================================================================
 
-// [LAW:one-source-of-truth] Arena is the canonical numeric store; f64 is transitional.
+// [LAW:one-source-of-truth] Arena is the canonical numeric store.
 // slotToArena comes from ExprAddressTable — no direct program.arenaLayout accesses here.
-function mirrorF64ToArena(
+function resolveArenaDescriptor(
   slotToArena: ReadonlyMap<ValueSlot, ArenaSlotDescriptor>,
-  state: RuntimeState,
   lookup: SlotLookup,
-  stride: number,
-): void {
+): ArenaSlotDescriptor {
   const arenaDesc = slotToArena.get(lookup.slot);
-  if (!arenaDesc) return;  // sentinel slots (offset < 0) excluded during table build
-
-  const copyLength = Math.min(stride, lookup.stride, arenaDesc.length);
-  const srcOffset = lookup.offset;
-  const dstOffset = arenaDesc.offset;
-  for (let i = 0; i < copyLength; i++) {
-    state.arena[dstOffset + i] = state.values.f64[srcOffset + i] as number;
+  if (!arenaDesc) {
+    throw new Error(`resolveArenaDescriptor: missing arena descriptor for numeric slot ${lookup.slot}`);
   }
+  return arenaDesc;
 }
 
-function writeF64Scalar(slotToArena: ReadonlyMap<ValueSlot, ArenaSlotDescriptor>, state: RuntimeState, lookup: SlotLookup, value: number): void {
+function writeArenaScalar(slotToArena: ReadonlyMap<ValueSlot, ArenaSlotDescriptor>, state: RuntimeState, lookup: SlotLookup, value: number): void {
   if (lookup.storage !== 'f64') {
-    throw new Error(`writeF64Scalar: expected f64 storage for slot ${lookup.slot}, got ${lookup.storage}`);
+    throw new Error(`writeArenaScalar: expected f64-class storage for slot ${lookup.slot}, got ${lookup.storage}`);
   }
   if (lookup.stride !== 1) {
-    throw new Error(`writeF64Scalar: expected stride=1 for slot ${lookup.slot}, got stride=${lookup.stride}`);
+    throw new Error(`writeArenaScalar: expected stride=1 for slot ${lookup.slot}, got stride=${lookup.stride}`);
   }
-  state.values.f64[lookup.offset] = value;
-  mirrorF64ToArena(slotToArena, state, lookup, 1);
+  const arenaDesc = resolveArenaDescriptor(slotToArena, lookup);
+  state.arena[arenaDesc.offset] = value;
 }
 
-function writeF64Strided(
+function writeArenaStrided(
   slotToArena: ReadonlyMap<ValueSlot, ArenaSlotDescriptor>,
   state: RuntimeState,
   lookup: SlotLookup,
@@ -88,16 +82,66 @@ function writeF64Strided(
   stride: number,
 ): void {
   if (lookup.storage !== 'f64') {
-    throw new Error(`writeF64Strided: expected f64 storage for slot ${lookup.slot}, got ${lookup.storage}`);
+    throw new Error(`writeArenaStrided: expected f64-class storage for slot ${lookup.slot}, got ${lookup.storage}`);
   }
   if (lookup.stride !== stride) {
-    throw new Error(`writeF64Strided: expected stride=${stride} for slot ${lookup.slot}, got ${lookup.stride}`);
+    throw new Error(`writeArenaStrided: expected stride=${stride} for slot ${lookup.slot}, got ${lookup.stride}`);
   }
-  const o = lookup.offset;
+  const arenaDesc = resolveArenaDescriptor(slotToArena, lookup);
+  const o = arenaDesc.offset;
   for (let i = 0; i < stride; i++) {
-    state.values.f64[o + i] = src[i] as number;
+    state.arena[o + i] = src[i] as number;
   }
-  mirrorF64ToArena(slotToArena, state, lookup, stride);
+}
+
+function readCanonicalNumeric(
+  slotToArena: ReadonlyMap<ValueSlot, ArenaSlotDescriptor>,
+  state: RuntimeState,
+  lookup: SlotLookup,
+  component: number = 0,
+): number {
+  const arenaDesc = resolveArenaDescriptor(slotToArena, lookup);
+  return state.arena[arenaDesc.offset + component];
+}
+
+function resolveNumericBuffer(
+  slotToArena: ReadonlyMap<ValueSlot, ArenaSlotDescriptor>,
+  state: RuntimeState,
+  slot: ValueSlot,
+): Float32Array {
+  const arenaDesc = slotToArena.get(slot);
+  if (!arenaDesc || arenaDesc.offset < 0 || arenaDesc.length <= 0) {
+    throw new Error(`resolveNumericBuffer: missing arena descriptor for numeric slot ${slot}`);
+  }
+  if (state.arena.length < arenaDesc.offset + arenaDesc.length) {
+    throw new Error(
+      `resolveNumericBuffer: arena too small for slot ${slot} (need ${arenaDesc.offset + arenaDesc.length}, have ${state.arena.length})`,
+    );
+  }
+  return arenaSlice(state.arena, arenaDesc);
+}
+
+function ensureOutputBuffer(
+  slotToArena: ReadonlyMap<ValueSlot, ArenaSlotDescriptor>,
+  state: RuntimeState,
+  slot: ValueSlot,
+  length: number,
+): Float32Array {
+  const arenaDesc = slotToArena.get(slot);
+  if (!arenaDesc || arenaDesc.offset < 0 || arenaDesc.length <= 0) {
+    throw new Error(`ensureOutputBuffer: missing arena descriptor for numeric slot ${slot}`);
+  }
+  if (arenaDesc.length < length) {
+    throw new Error(
+      `ensureOutputBuffer: arena descriptor too small for slot ${slot} (need length ${length}, have ${arenaDesc.length})`,
+    );
+  }
+  if (state.arena.length < arenaDesc.offset + arenaDesc.length) {
+    throw new Error(
+      `ensureOutputBuffer: arena too small for slot ${slot} (need ${arenaDesc.offset + arenaDesc.length}, have ${state.arena.length})`,
+    );
+  }
+  return arenaSlice(state.arena, arenaDesc);
 }
 
 // =============================================================================
@@ -236,14 +280,14 @@ export function* executeFrameStepped(
     throw new Error('time.palette must be Float32Array(4) in RGBA [0..1]');
   }
   const palette = assertF64Stride(slotLookupMap, TIME_PALETTE_SLOT, 4, 'time.palette slot');
-  writeF64Strided(slotToArena, state, palette, time.palette, 4);
+  writeArenaStrided(slotToArena, state, palette, time.palette, 4);
 
   // Yield pre-frame snapshot
   yield buildSnapshot(-1, null, 'pre-frame', totalSteps, program, state, tAbsMs, new Map(), prevValues);
 
   // [LAW:one-source-of-truth] Populate sigToSlot before Phase 1 so extract
-  // can read multi-component signals directly from f64 during evaluation.
-  state.cache.sigToSlot = addressTable.sigToF64Offset;
+  // reads multi-component signals from arena using canonical ExprAddressTable offsets.
+  state.cache.sigToSlot = addressTable.sigToArenaOffset;
 
   // --- PHASE 1: Execute all non-stateWrite steps ---
   const valueExprs = program.valueExprs.nodes;
@@ -288,31 +332,31 @@ export function* executeFrameStepped(
             // Capture written shape
             const meta = slotToMeta.get(targetSlot);
             if (meta) {
-              writtenSlots.set(targetSlot, readSlotValue(state, lookup, meta));
+              writtenSlots.set(targetSlot, readSlotValue(state, lookup, meta, slotToArena));
             }
           } else if (storage === 'f64') {
             const exprNode = valueExprs[step.expr as number];
 
             if (stride > 1 && exprNode?.kind === 'construct') {
-              const written = evaluateConstructSignal(exprNode, valueExprs, state, state.values.f64, offset);
+              const arenaDesc = resolveArenaDescriptor(slotToArena, lookup);
+              const written = evaluateConstructSignal(exprNode, valueExprs, state, state.arena, arenaDesc.offset);
               if (written !== stride) {
                 throw new Error(`evalValue: construct wrote ${written} components but slot stride is ${stride}`);
               }
-              mirrorF64ToArena(slotToArena, state, lookup, stride);
               for (let i = 0; i < stride; i++) {
-                state.tap?.recordSlotValue?.((slot + i) as ValueSlot, state.values.f64[offset + i]);
+                state.tap?.recordSlotValue?.((slot + i) as ValueSlot, readCanonicalNumeric(slotToArena, state, lookup, i));
               }
-              state.cache.values[step.expr as number] = state.values.f64[offset];
+              state.cache.values[step.expr as number] = readCanonicalNumeric(slotToArena, state, lookup, 0);
               state.cache.stamps[step.expr as number] = state.cache.frameId;
 
               // Capture written slot
               const meta = slotToMeta.get(targetSlot);
               if (meta) {
-                writtenSlots.set(targetSlot, readSlotValue(state, lookup, meta));
+                writtenSlots.set(targetSlot, readSlotValue(state, lookup, meta, slotToArena));
               }
             } else if (stride === 1) {
               const value = evaluateValueExprSignal(step.expr as any, program.valueExprs.nodes, state);
-              writeF64Scalar(slotToArena, state, lookup, value);
+              writeArenaScalar(slotToArena, state, lookup, value);
               state.tap?.recordSlotValue?.(slot, value);
               state.cache.values[step.expr as number] = value;
               state.cache.stamps[step.expr as number] = state.cache.frameId;
@@ -353,7 +397,7 @@ export function* executeFrameStepped(
 
       case 'slotWriteStrided': {
         const lookup = resolveSlotOffset(step.slotBase);
-        const { storage, offset, stride } = lookup;
+        const { storage, stride } = lookup;
         if (storage !== 'f64') {
           throw new Error(`slotWriteStrided: expected f64 storage for slot ${step.slotBase}, got ${storage}`);
         }
@@ -362,17 +406,17 @@ export function* executeFrameStepped(
             `slotWriteStrided: inputs.length (${step.inputs.length}) must equal stride (${stride}) for slot ${step.slotBase}`
           );
         }
+        const arenaDesc = resolveArenaDescriptor(slotToArena, lookup);
         for (let i = 0; i < step.inputs.length; i++) {
           const veId = step.inputs[i];
           const componentValue = evaluateValueExprSignal(veId as any, program.valueExprs.nodes, state);
-          state.values.f64[offset + i] = componentValue;
+          state.arena[arenaDesc.offset + i] = componentValue;
           state.tap?.recordSlotValue?.((step.slotBase + i) as ValueSlot, componentValue);
         }
-        mirrorF64ToArena(slotToArena, state, lookup, stride);
         // Capture written strided slot
         const meta = slotToMeta.get(step.slotBase);
         if (meta) {
-          writtenSlots.set(step.slotBase, readSlotValue(state, lookup, meta));
+          writtenSlots.set(step.slotBase, readSlotValue(state, lookup, meta, slotToArena));
         }
         break;
       }
@@ -383,14 +427,18 @@ export function* executeFrameStepped(
         const count = instanceDecl && typeof instanceDecl.count === 'number' ? instanceDecl.count : 0;
         // [LAW:one-source-of-truth] Arena lookup via ExprAddressTable — no direct arenaLayout access.
         const arenaDesc = slotToArena.get(step.target);
-        const arenaTarget =
-          state.arena.length > 0 && arenaDesc
-            ? arenaSlice(state.arena, arenaDesc)
-            : undefined;
+        if (!arenaDesc || arenaDesc.offset < 0 || arenaDesc.length <= 0) {
+          throw new Error(`materialize: missing arena descriptor for slot ${step.target}`);
+        }
+        if (state.arena.length < arenaDesc.offset + arenaDesc.length) {
+          throw new Error(
+            `materialize: arena too small for slot ${step.target} (need ${arenaDesc.offset + arenaDesc.length}, have ${state.arena.length})`,
+          );
+        }
+        const arenaTarget = arenaSlice(state.arena, arenaDesc);
         const buffer = materializeValueExpr(
           veId, program.valueExprs, step.instanceId, count, state, program, STEPPED_MATERIALIZER_POOL, arenaTarget,
         );
-        state.values.objects.set(step.target, buffer);
 
         state.tap?.recordFieldValue?.(step.target, buffer);
 
@@ -439,25 +487,14 @@ export function* executeFrameStepped(
 
       case 'continuityApply': {
         const { policy, baseSlot, outputSlot } = step;
-        const baseBuffer = state.values.objects.get(baseSlot) as ArrayBufferView | undefined;
-        if (!baseBuffer) break;
-        if (!(baseBuffer instanceof Float32Array)) {
-          state.values.objects.set(outputSlot, baseBuffer);
-          break;
-        }
-        if (policy.kind === 'none') {
-          state.values.objects.set(outputSlot, baseBuffer);
-          break;
-        }
-        let outputBuffer = state.values.objects.get(outputSlot) as Float32Array | undefined;
-        if (!outputBuffer || outputBuffer.length !== baseBuffer.length) {
-          outputBuffer = STEPPED_MATERIALIZER_POOL.alloc('f32', baseBuffer.length) as Float32Array;
-          state.values.objects.set(outputSlot, outputBuffer);
-        }
+        const baseBuffer = resolveNumericBuffer(slotToArena, state, baseSlot);
+        const outputBuffer = baseSlot === outputSlot
+          ? baseBuffer
+          : ensureOutputBuffer(slotToArena, state, outputSlot, baseBuffer.length);
         applyContinuity(step, state, (slot: ValueSlot) => {
           if (slot === baseSlot) return baseBuffer;
-          if (slot === outputSlot) return outputBuffer!;
-          const buffer = state.values.objects.get(slot) as Float32Array | undefined;
+          if (slot === outputSlot) return outputBuffer;
+          const buffer = resolveNumericBuffer(slotToArena, state, slot);
           if (!buffer) throw new Error(`Continuity: Buffer not found for slot ${slot}`);
           return buffer;
         });
@@ -486,6 +523,8 @@ export function* executeFrameStepped(
     resolvedCamera,
     arena,
     sigToSlot: state.cache.sigToSlot!,
+    sigToArena: addressTable.sigToArenaOffset,
+    slotToArena: addressTable.slotToArena,
   };
   const frame = assembleRenderFrame(renderSteps, assemblerContext);
 

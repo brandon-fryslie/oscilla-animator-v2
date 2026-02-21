@@ -5,8 +5,8 @@ import type { ScheduleIR } from '../../compiler/backend/schedule-program';
 import { createRuntimeState, executeFrame } from '..';
 import { getTestArena } from './test-arena-helper';
 
-describe('Render scale reads f64 by slotMeta.offset', () => {
-  it('uses slotMeta.offset (not ValueSlot id) for RenderInstances2D.scale', () => {
+describe('Render scale reads arena by slot descriptor offset', () => {
+  it('uses arena descriptor offset (not ValueSlot id) for RenderInstances2D.scale', () => {
     const SCALE = 0.12345;
 
     const patch = buildPatch((b) => {
@@ -63,9 +63,11 @@ describe('Render scale reads f64 by slotMeta.offset', () => {
     const scaleMeta = program.slotMeta.find((m: any) => m.slot === scaleSlot);
     expect(scaleMeta).toBeTruthy();
 
-    const offset = (scaleMeta as any).offset as number;
-    expect(offset).toBeTypeOf('number');
-    expect(offset).not.toBe(scaleSlot);
+    const arenaDesc = program.arenaLayout[scaleSlot];
+    expect(arenaDesc).toBeTruthy();
+    const arenaOffset = (arenaDesc as any).offset as number;
+    expect(arenaOffset).toBeTypeOf('number');
+    expect(arenaOffset).not.toBe(scaleSlot);
 
     const state = createRuntimeState(
       program.slotMeta.length,
@@ -73,6 +75,7 @@ describe('Render scale reads f64 by slotMeta.offset', () => {
       0,
       0,
       program.valueExprs.nodes.length,
+      program.arenaTotalFloats,
     );
     const arena = getTestArena();
 
@@ -82,15 +85,14 @@ describe('Render scale reads f64 by slotMeta.offset', () => {
     const op0: any = frame.ops[0];
     expect(op0.instances.count).toBe(1);
 
-    // Runtime evaluation writes scale to state.values.f64[slotMeta.offset].
-    expect(state.values.f64[offset]).toBeCloseTo(SCALE, 6);
+    // Runtime evaluation mirrors scale into state.arena at slot descriptor offset.
+    expect(state.arena[arenaOffset]).toBeCloseTo(SCALE, 6);
 
-    // RenderAssembler must read by offset; the resulting screenRadius (ortho) should match SCALE.
-    expect(op0.instances.size[0]).toBeCloseTo(state.values.f64[offset], 5);
+    // RenderAssembler must read by arena descriptor offset; resulting screenRadius should match SCALE.
+    expect(op0.instances.size[0]).toBeCloseTo(state.arena[arenaOffset], 5);
 
     // This should generally differ, and is the regression we're guarding:
-    // reading by ValueSlot id instead of slotMeta.offset.
-    expect(op0.instances.size[0]).not.toBeCloseTo(state.values.f64[scaleSlot], 6);
+    // reading by ValueSlot id instead of arena descriptor offset.
+    expect(op0.instances.size[0]).not.toBeCloseTo(state.arena[scaleSlot], 6);
   });
 });
-

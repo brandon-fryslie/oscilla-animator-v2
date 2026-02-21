@@ -5,6 +5,22 @@ All tickets use the `oscilla-animator-v2-` prefix (shortened below).
 
 ---
 
+## Runtime Prerequisite (Now Complete)
+
+The CT/ICT cardinality-policy refactor that unblocked this migration is complete:
+
+| Ticket | Title | Status |
+|--------|-------|--------|
+| **cpc** | Implement cardinalityVar system for compile-time cardinality resolution | **DONE** |
+| **cpc.1** | Migrate math/signal/lens blocks to explicit CT/ICT cardinality policies | **DONE** |
+| **cpc.2** | Migrate layout/render/field/domain blocks to explicit CT/ICT cardinality policies | **DONE** |
+| **cpc.3** | Remove legacy cardinality fallback from frontend extraction and adapter planning | **DONE** |
+| **cpc.4** | Delete obsolete mode-based tests and enforce no-legacy-cardinality-patterns | **DONE** |
+
+This ticket list now tracks the remaining runtime/compiler migration to remove the signal concept.
+
+---
+
 ## Pre-Work (before arena begins) — COMPLETE
 
 These reduce the arena migration's touch surface from ~6 files with ~3 caches
@@ -17,51 +33,51 @@ to ~2 files with ~1 addressing structure.
 
 ---
 
-## Phase 1 — Build the Arena
+## Phase 1 — Build the Arena (COMPLETE)
 
 Build a contiguous Float32Array that holds all numeric values. Both old storage
 and arena active simultaneously — zero risk to existing code.
 
-| # | Ticket | Title | Notes |
-|---|--------|-------|-------|
-| 3 | **objx** | (EPIC) Build the Float32 Arena | Parent epic. |
-| 4 | **objx.1** | Create ArenaValueStore module with types and helpers | `ArenaSlotDescriptor`, `createArena`, `arenaRead`, `arenaWrite`, `arenaSlice`. New file: `src/runtime/ArenaValueStore.ts`. |
-| 5 | **objx.2** | Compiler emits arena layout in convertLinkedIRToProgram | Bump-allocate descriptors in the slot loop. Add `arenaLayout` and `arenaSize` to `CompiledProgramIR`. Depends on objx.1. |
-| 6 | **objx.3** | Allocate arena Float32Array in createProgramState | Add `arena: Float32Array` to `RuntimeState`. Allocate alongside existing storage. Depends on objx.1, objx.2. |
+| # | Ticket | Title | Notes | Status |
+|---|--------|-------|-------|--------|
+| 3 | **objx** | (EPIC) Build the Float32 Arena | Parent epic. | **DONE** |
+| 4 | **objx.1** | Create ArenaValueStore module with types and helpers | `ArenaSlotDescriptor`, `createArena`, `arenaRead`, `arenaWrite`, `arenaSlice`. New file: `src/runtime/ArenaValueStore.ts`. | **DONE** |
+| 5 | **objx.2** | Compiler emits arena layout in convertLinkedIRToProgram | Bump-allocate descriptors in the slot loop. Add `arenaLayout` and `arenaTotalFloats` to `CompiledProgramIR`. Depends on objx.1. | **DONE** |
+| 6 | **objx.3** | Allocate arena Float32Array in createProgramState | Add `arena: Float32Array` to `RuntimeState`. Allocate alongside existing storage. Depends on objx.1, objx.2. | **DONE** |
 
 ---
 
-## Phase 2 — Shim Old Evaluators to Arena + Delete Old Storage
+## Phase 2 — Shim Old Evaluators to Arena + Delete Old Storage (COMPLETE)
 
 Wire both evaluators to write through to arena, migrate all readers, then delete
 old storage.
 
-| # | Ticket | Title | Notes |
-|---|--------|-------|-------|
-| 7 | **zdru** | (EPIC) Shim to Arena + Delete Old Storage | Parent epic. Depends on objx. |
-| 8 | **zdru.1** | Wire signal evaluation writes to arena | Write-through: both f64 AND arena get written. |
-| 9 | **zdru.2** | Wire field materialization writes to arena | `materializeValueExpr()` gets optional target buffer param. |
-| 10 | **zdru.3** | Migrate RenderAssembler to read from arena | Hot render path. Depends on zdru.1, zdru.2. |
-| 11 | **zdru.4** | Migrate DebugService to read from arena | Update EdgeValueResult construction. Depends on zdru.1, zdru.2. |
-| 12 | **zdru.5** | Update SlotLookupCache for arena-only lookups | Arena-aware lookups from `program.arenaLayout`. Depends on zdru.1, zdru.2. |
-| 13 | **zdru.6** | Migrate continuity system to read/write arena | Base buffers from arena slices. Depends on zdru.1, zdru.2. |
-| 14 | **zdru.7** | Delete f64 and objects storage | Remove `ValueStore.f64`, `objects` (keep renderFrameSlot). Depends on zdru.1–6. |
+| # | Ticket | Title | Notes | Status |
+|---|--------|-------|-------|--------|
+| 7 | **zdru** | (EPIC) Shim to Arena + Delete Old Storage | Parent epic. Depends on objx. | OPEN |
+| 8 | **zdru.1** | Wire signal evaluation writes to arena | Write-through: both f64 AND arena get written. | **DONE** |
+| 9 | **zdru.2** | Wire field materialization writes to arena | `materializeValueExpr()` gets optional target buffer param. | **DONE** |
+| 10 | **zdru.3** | Migrate RenderAssembler to read from arena | Hot render path. Depends on zdru.1, zdru.2. | **DONE** |
+| 11 | **zdru.4** | Migrate DebugService to read from arena | Update EdgeValueResult construction. Depends on zdru.1, zdru.2. | **DONE** |
+| 12 | **zdru.5** | Update SlotLookupCache for arena-only lookups | Arena-aware lookups from `program.arenaLayout`. Depends on zdru.1, zdru.2. | **DONE** |
+| 13 | **zdru.6** | Migrate continuity system to read/write arena | Base buffers from arena slices. Depends on zdru.1, zdru.2. | **DONE** |
+| 14 | **zdru.7** | Delete f64 and objects storage | `ValueStore.f64` removed. Numeric materialize/continuity paths now require arena descriptors; numeric object-map fallback is removed. `values.objects` is constrained to render-frame and non-numeric payload references. Depends on zdru.1–6. | **DONE** |
 
 zdru.1 and zdru.2 can be done in parallel. zdru.3–6 can be done in parallel
 after both writers land.
 
 ---
 
-## Phase 3 — Prove the Pattern (Const + Math)
+## Phase 3 — Prove the Pattern (Const + Math) (IN PROGRESS)
 
 Convert Const as proof-of-concept, then prime the pipeline with easy blocks.
 
-| # | Ticket | Title | Notes |
-|---|--------|-------|-------|
-| 15 | **99dq** | (EPIC) Prove the Pattern | Parent epic. Depends on zdru. |
-| 16 | **99dq.1** | Create SCALAR_INSTANCE_ID for cardinality-one materialization | Well-known InstanceId with count=1. |
-| 17 | **99dq.2** | Convert Const block to LoweredField(count=1) | Proof-of-concept. Depends on 99dq.1. |
-| 18 | **99dq.3** | Convert ~10–20 easy/medium blocks | Math, simple signal generators. Depends on 99dq.2. |
+| # | Ticket | Title | Notes | Status |
+|---|--------|-------|-------|--------|
+| 15 | **99dq** | (EPIC) Prove the Pattern | Parent epic. Depends on zdru. | OPEN |
+| 16 | **99dq.1** | Create SCALAR_INSTANCE_ID for cardinality-one materialization | Well-known InstanceId with count=1. | **DONE** |
+| 17 | **99dq.2** | Convert Const block to LoweredField(count=1) | Proof-of-concept. Depends on 99dq.1. | OPEN |
+| 18 | **99dq.3** | Convert ~10–20 easy/medium blocks | Math, simple signal generators. Depends on 99dq.2. | OPEN |
 
 ---
 
@@ -98,10 +114,26 @@ Delete everything left over from the old signal/field split.
 
 ---
 
+## Active Workstreams (Current Beads State)
+
+`IN_PROGRESS`:
+- **wbhc.1** — Wave 1: Expression conversion
+- **wbhc.2** — Wave 2: Broadcast conversion
+- **v91n.1** — LoweredSignal/LoweredField unification
+- **v91n.3** — Step/EvalStrategy unification
+- **v91n.4** — zipSig removal
+- **v91n.5** — ValueExprSignalEvaluator/evaluateConstructSignal deletion
+- **v91n.6** — BufferPool deletion
+
+This list should mirror beads; if it drifts, beads is authoritative.
+
+---
+
 ## Closed / Not Applicable
 
 | Ticket | Title | Disposition |
 |--------|-------|-------------|
+| **cpc**, **cpc.1**, **cpc.2**, **cpc.3**, **cpc.4** | CT/ICT cardinality policy refactor | Closed. This blocker is complete; migration now focuses on runtime/compiler dual-path deletion. |
 | **73lv** | Zero-cardinality enforcement | Closed (will not do). "Put constants in a lookup table" is a separate optimization with no change in effort if done later. |
 | **0l3** | Typed scalar banks (f32/i32/shape2d) | Closed (subsumed). The arena IS the typed Float32 bank; shape2d bank already exists. |
 

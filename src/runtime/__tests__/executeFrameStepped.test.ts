@@ -64,6 +64,7 @@ function createStateForProgram(program: CompiledProgramIR) {
     (schedule as any).eventSlotCount ?? 0,
     (schedule as any).eventCount ?? 0,
     program.valueExprs.nodes.length,
+    program.arenaTotalFloats,
   );
 }
 
@@ -124,36 +125,6 @@ describe('executeFrameStepped', () => {
     expect(frame).toBeDefined();
     expect(frame.ops).toBeDefined();
     expect(frame.ops.length).toBeGreaterThan(0);
-  });
-
-  it('f64 slot values match executeFrame output', () => {
-    const program = compileSimplePatch();
-
-    // Run executeFrame
-    const state1 = createStateForProgram(program);
-    const arena1 = getTestArena();
-    executeFrame(program, state1, arena1, 100);
-
-    // Run executeFrameStepped
-    const state2 = createStateForProgram(program);
-    const arena2 = getTestArena();
-    const gen = executeFrameStepped(program, state2, arena2, 100);
-    let result = gen.next();
-    while (!result.done) {
-      result = gen.next();
-    }
-
-    // Compare f64 value stores
-    expect(state2.values.f64.length).toBe(state1.values.f64.length);
-    for (let i = 0; i < state1.values.f64.length; i++) {
-      const v1 = state1.values.f64[i];
-      const v2 = state2.values.f64[i];
-      if (Number.isNaN(v1)) {
-        expect(Number.isNaN(v2)).toBe(true);
-      } else {
-        expect(v2).toBeCloseTo(v1, 10);
-      }
-    }
   });
 
   it('phase1 snapshots have valid step indices and step references', () => {

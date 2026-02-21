@@ -44,6 +44,7 @@ import {
   deriveCamPos,
 } from '../projection/perspective-kernel';
 import type { ResolvedCameraParams } from './CameraResolver';
+import { arenaSlice, type ArenaSlotDescriptor } from './ArenaValueStore';
 
 // =============================================================================
 // RenderBufferArena Integration
@@ -437,8 +438,12 @@ export interface AssemblerContext {
   resolvedCamera: ResolvedCameraParams;
   /** Pre-allocated buffer arena for zero-allocation rendering */
   arena: RenderBufferArena;
-  /** Signal ValueExprId -> physical f64 offset mapping (from schedule slotMeta.offset) */
+  /** Legacy signal map (ValueExprId -> f64 offset). Retained for transition compatibility. */
   sigToSlot: ReadonlyMap<number, number>;
+  /** Preferred signal map (ValueExprId -> arena scalar offset). */
+  sigToArena?: ReadonlyMap<number, number>;
+  /** Slot -> arena descriptor map (for numeric field reads). */
+  slotToArena?: ReadonlyMap<ValueSlot, ArenaSlotDescriptor>;
 }
 
 /**
@@ -450,6 +455,7 @@ export interface AssemblerContext {
 function resolveScale(
   scaleSpec: StepRender['scale'],
   sigToSlot: ReadonlyMap<number, number>,
+  sigToArena: ReadonlyMap<number, number> | undefined,
   state: RuntimeState
 ): number {
   if (scaleSpec === undefined) {
@@ -460,14 +466,17 @@ function resolveScale(
   }
 
   if (scaleSpec.k === 'sig') {
-    const slotIndex = sigToSlot.get(scaleSpec.id as number);
-    if (slotIndex === undefined) {
-      throw new Error(
-        'RenderAssembler: No slot mapping for signal ' + scaleSpec.id + '. ' +
-        'Signal must be evaluated in schedule before rendering.'
-      );
+    // [LAW:one-source-of-truth] Render reads numeric signal values from arena only.
+    // sigToSlot is retained as transitional alias for arena offsets.
+    const arenaOffset = sigToArena?.get(scaleSpec.id as number) ?? sigToSlot.get(scaleSpec.id as number);
+    if (arenaOffset !== undefined) {
+      return state.arena[arenaOffset];
     }
-    return state.values.f64[slotIndex];
+
+    throw new Error(
+      'RenderAssembler: No slot mapping for signal ' + scaleSpec.id + '. ' +
+      'Signal must be evaluated in schedule before rendering.'
+    );
   } else {
     throw new Error(
       'RenderAssembler: scale must be a signal, got ' + scaleSpec.k + '. ' +
@@ -488,6 +497,7 @@ function resolveScale(
 function resolveShape(
   shapeSpec: StepRender['shape'],
   sigToSlot: ReadonlyMap<number, number>,
+  sigToArena: ReadonlyMap<number, number> | undefined,
   state: RuntimeState
 ): ShapeDescriptor | ArrayBufferView {
   if (shapeSpec === undefined) {
@@ -511,15 +521,16 @@ function resolveShape(
     const params: Record<string, number> = {};
 
     for (let i = 0; i < paramSignals.length; i++) {
-      const slotIndex = sigToSlot.get(paramSignals[i] as number);
-      if (slotIndex === undefined) {
+      // [LAW:one-source-of-truth] Render reads numeric signal values from arena only.
+      // sigToSlot is retained as transitional alias for arena offsets.
+      const arenaOffset = sigToArena?.get(paramSignals[i] as number) ?? sigToSlot.get(paramSignals[i] as number);
+      if (arenaOffset === undefined) {
         throw new Error(
           'RenderAssembler: No slot mapping for param signal ' + paramSignals[i] + '. ' +
           'Signal must be evaluated in schedule before rendering.'
         );
       }
-      const value = state.values.f64[slotIndex];
-      params['param' + i] = value;
+      params['param' + i] = state.arena[arenaOffset];
     }
 
     // TODO: replace per-frame allocation with zero-alloc render assembly
@@ -536,17 +547,54 @@ function resolveShape(
  */
 function resolveControlPoints(
   cpSpec: StepRender['controlPoints'],
-  state: RuntimeState
+  state: RuntimeState,
+  slotToArena: ReadonlyMap<ValueSlot, ArenaSlotDescriptor> | undefined,
 ): ArrayBufferView | undefined {
   if (!cpSpec) {
     return undefined;
   }
 
-  const cpBuffer = state.values.objects.get(cpSpec.slot) as ArrayBufferView;
-  if (!cpBuffer) {
-    throw new Error('RenderAssembler: Control points buffer not found in slot ' + cpSpec.slot);
+  const arenaDesc = slotToArena?.get(cpSpec.slot);
+  if (arenaDesc) {
+    if (state.arena.length < arenaDesc.offset + arenaDesc.length) {
+      throw new Error(
+        'RenderAssembler: arena too small for control points slot ' +
+          cpSpec.slot +
+          ' (need ' +
+          (arenaDesc.offset + arenaDesc.length) +
+          ', have ' +
+          state.arena.length +
+          ')',
+      );
+    }
+    return arenaSlice(state.arena, arenaDesc);
   }
-  return cpBuffer;
+
+  throw new Error('RenderAssembler: missing arena descriptor for control points slot ' + cpSpec.slot);
+}
+
+function resolveNumericSlotBuffer(
+  slot: ValueSlot,
+  state: RuntimeState,
+  slotToArena: ReadonlyMap<ValueSlot, ArenaSlotDescriptor> | undefined,
+): ArrayBufferView {
+  const arenaDesc = slotToArena?.get(slot);
+  if (arenaDesc) {
+    if (state.arena.length < arenaDesc.offset + arenaDesc.length) {
+      throw new Error(
+        'RenderAssembler: arena too small for numeric slot ' +
+          slot +
+          ' (need ' +
+          (arenaDesc.offset + arenaDesc.length) +
+          ', have ' +
+          state.arena.length +
+          ')',
+      );
+    }
+    return arenaSlice(state.arena, arenaDesc);
+  }
+
+  throw new Error('RenderAssembler: missing arena descriptor for numeric slot ' + slot);
 }
 
 /**
@@ -903,7 +951,7 @@ function assemblePerInstanceShapes(
   count: number,
   context: AssemblerContext
 ): DrawOp[] {
-  const { state, arena } = context;
+  const { state, arena, slotToArena } = context;
   const t0 = performance.now();
 
   // Group instances by topology
@@ -917,11 +965,11 @@ function assemblePerInstanceShapes(
 
   // C-13: Read rotation and scale2 from slots if present
   const fullRotation = step.rotationSlot
-    ? (state.values.objects.get(step.rotationSlot) as Float32Array | undefined)
+    ? (resolveNumericSlotBuffer(step.rotationSlot, state, slotToArena) as Float32Array)
     : undefined;
 
   const fullScale2 = step.scale2Slot
-    ? (state.values.objects.get(step.scale2Slot) as Float32Array | undefined)
+    ? (resolveNumericSlotBuffer(step.scale2Slot, state, slotToArena) as Float32Array)
     : undefined;
 
   // Run projection using resolved camera params
@@ -1009,11 +1057,21 @@ function assemblePerInstanceShapes(
 
     if (isPathTopology(topology)) {
       // PATH TOPOLOGY: Build DrawPathInstancesOp
-      const controlPointsBuffer = state.values.objects.get(
-        group.controlPointsSlot as ValueSlot
-      ) as Float32Array;
+      let arenaControlPointsBuffer: Float32Array;
+      try {
+        arenaControlPointsBuffer = resolveNumericSlotBuffer(
+          group.controlPointsSlot as ValueSlot,
+          state,
+          slotToArena,
+        ) as Float32Array;
+      } catch {
+        throw new Error(
+          'RenderAssembler: Control points buffer not found for topology ' + group.topologyId + ' ' +
+          '(slot ' + group.controlPointsSlot + ', instances: ' + group.instanceIndices.join(', ') + ')'
+        );
+      }
 
-      if (!controlPointsBuffer || !(controlPointsBuffer instanceof Float32Array)) {
+      if (!(arenaControlPointsBuffer instanceof Float32Array)) {
         throw new Error(
           'RenderAssembler: Control points buffer not found for topology ' + group.topologyId + ' ' +
           '(slot ' + group.controlPointsSlot + ', instances: ' + group.instanceIndices.join(', ') + ')'
@@ -1025,7 +1083,7 @@ function assemblePerInstanceShapes(
       const geometry: PathGeometry = {
         topologyId: group.topologyId,
         verbs: getCachedVerbs(topology),
-        points: controlPointsBuffer,
+        points: arenaControlPointsBuffer,
         pointsCount: group.pointsCount,
         flags: group.flags,
       };
@@ -1283,7 +1341,7 @@ export function assembleDrawPathInstancesOp(
   step: StepRender,
   context: AssemblerContext
 ): DrawOp[] {
-  const { sigToSlot, instances, state, arena } = context;
+  const { sigToSlot, sigToArena, slotToArena, instances, state, arena } = context;
 
   // Get instance declaration
   const instance = instances.get(step.instanceId);
@@ -1303,7 +1361,7 @@ export function assembleDrawPathInstancesOp(
   }
 
   // Read position buffer from slot
-  const positionBuffer = state.values.objects.get(step.positionSlot) as ArrayBufferView;
+  const positionBuffer = resolveNumericSlotBuffer(step.positionSlot, state, slotToArena);
   if (!positionBuffer) {
     throw new Error('RenderAssembler: Position buffer not found in slot ' + step.positionSlot);
   }
@@ -1316,7 +1374,7 @@ export function assembleDrawPathInstancesOp(
   }
 
   // Read color buffer from slot
-  const rawColorBuffer = state.values.objects.get(step.colorSlot) as ArrayBufferView;
+  const rawColorBuffer = resolveNumericSlotBuffer(step.colorSlot, state, slotToArena);
   if (!rawColorBuffer) {
     throw new Error('RenderAssembler: Color buffer not found in slot ' + step.colorSlot);
   }
@@ -1335,10 +1393,10 @@ export function assembleDrawPathInstancesOp(
   }
 
   // Resolve scale (uniform signal)
-  const scale = resolveScale(step.scale, sigToSlot, state);
+  const scale = resolveScale(step.scale, sigToSlot, sigToArena, state);
 
   // Resolve shape
-  const shape = resolveShape(step.shape, sigToSlot, state);
+  const shape = resolveShape(step.shape, sigToSlot, sigToArena, state);
 
   // Check if per-instance shapes (shape buffer)
   if (shape instanceof Uint32Array) {
@@ -1355,16 +1413,16 @@ export function assembleDrawPathInstancesOp(
   }
 
   // Uniform shape: resolve fully and emit single op
-  const controlPointsBuffer = resolveControlPoints(step.controlPoints, state);
+  const controlPointsBuffer = resolveControlPoints(step.controlPoints, state, slotToArena);
   const resolvedShape = resolveShapeFully(shape, controlPointsBuffer);
 
   // C-13: Read rotation and scale2 from slots if present
   const rotation = step.rotationSlot
-    ? (state.values.objects.get(step.rotationSlot) as Float32Array | undefined)
+    ? (resolveNumericSlotBuffer(step.rotationSlot, state, slotToArena) as Float32Array)
     : undefined;
 
   const scale2 = step.scale2Slot
-    ? (state.values.objects.get(step.scale2Slot) as Float32Array | undefined)
+    ? (resolveNumericSlotBuffer(step.scale2Slot, state, slotToArena) as Float32Array)
     : undefined;
 
   // Run projection using resolved camera params

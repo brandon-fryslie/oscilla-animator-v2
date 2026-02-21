@@ -11,6 +11,7 @@ import { describe, it, expect } from 'vitest';
 import { buildPatch } from '../../graph';
 import { compile } from '../compile';
 import type { ScheduleIR } from '../backend/schedule-program';
+import { computeStorageSizes } from '../ir/program';
 import { createRuntimeState, executeFrame } from '../../runtime';
 import { getTestArena } from '../../runtime/__tests__/test-arena-helper';
 
@@ -32,12 +33,14 @@ function compileOk(patch: ReturnType<typeof buildPatch>) {
  */
 function stateFor(program: ReturnType<typeof compileOk>) {
   const schedule = program.schedule as ScheduleIR;
+  const sizes = computeStorageSizes(program.slotMeta);
   return createRuntimeState(
-    program.slotMeta.length,
+    sizes.f64,
     schedule.stateSlotCount,
     0, // eventSlotCount
     0, // eventExprCount
     program.valueExprs.nodes.length,
+    program.arenaTotalFloats,
   );
 }
 

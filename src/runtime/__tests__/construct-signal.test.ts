@@ -153,7 +153,7 @@ describe('extract signal evaluation', () => {
   let state: RuntimeState;
 
   beforeEach(() => {
-    state = createRuntimeState(64, 64, 8);
+    state = createRuntimeState(64, 64, 8, 0, 0, 64);
     state.cache.frameId = 1;
     state.time = {
       tMs: 0,
@@ -168,12 +168,12 @@ describe('extract signal evaluation', () => {
     };
   });
 
-  it('reads component from f64 slot via sigToSlot mapping', () => {
-    // Write vec3 values (10, 20, 30) to f64 at a known offset
+  it('reads component from arena slot via sigToSlot mapping', () => {
+    // Write vec3 values (10, 20, 30) to arena at a known offset
     const offset = 5;
-    state.values.f64[offset + 0] = 10;
-    state.values.f64[offset + 1] = 20;
-    state.values.f64[offset + 2] = 30;
+    state.arena[offset + 0] = 10;
+    state.arena[offset + 1] = 20;
+    state.arena[offset + 2] = 30;
 
     // Set up sigToSlot: input expression 3 maps to offset 5
     const inputId = 3;
@@ -221,8 +221,8 @@ describe('extract signal evaluation', () => {
     expect(evaluateValueExprSignal(6 as ValueExprId, valueExprs, state)).toBe(30);
   });
 
-  it('works end-to-end with construct written to f64', () => {
-    // Build construct expression and write it to f64
+  it('works end-to-end with construct values mirrored to arena', () => {
+    // Build construct expression and mirror written values into arena (runtime does this via write-through).
     const valueExprs: ValueExpr[] = [
       { kind: 'const', value: floatConst(100), type: canonicalSignal({ kind: 'float' }, { kind: 'none' }) },
       { kind: 'const', value: floatConst(200), type: canonicalSignal({ kind: 'float' }, { kind: 'none' }) },
@@ -247,10 +247,10 @@ describe('extract signal evaluation', () => {
       },
     ];
 
-    // Write construct to f64 (simulating what ScheduleExecutor does)
+    // Write construct directly to arena (runtime canonical numeric store).
     const offset = 10;
     const constructExpr = valueExprs[2] as Extract<ValueExpr, { kind: 'construct' }>;
-    evaluateConstructSignal(constructExpr, valueExprs, state, state.values.f64, offset);
+    evaluateConstructSignal(constructExpr, valueExprs, state, state.arena, offset);
 
     // Set up sigToSlot mapping
     state.cache.sigToSlot = new Map([[2, offset]]);
@@ -279,10 +279,10 @@ describe('extract signal evaluation', () => {
 
   it('reads all components of vec4/color (stride=4)', () => {
     const offset = 0;
-    state.values.f64[offset + 0] = 0.1;
-    state.values.f64[offset + 1] = 0.2;
-    state.values.f64[offset + 2] = 0.3;
-    state.values.f64[offset + 3] = 1.0;
+    state.arena[offset + 0] = 0.1;
+    state.arena[offset + 1] = 0.2;
+    state.arena[offset + 2] = 0.3;
+    state.arena[offset + 3] = 1.0;
 
     const inputId = 4;
     state.cache.sigToSlot = new Map([[inputId, offset]]);
@@ -305,9 +305,9 @@ describe('extract signal evaluation', () => {
       { kind: 'extract', input: inputId as ValueExprId, componentIndex: 3, type: canonicalSignal({ kind: 'float' }, { kind: 'none' }) },
     ];
 
-    expect(evaluateValueExprSignal(5 as ValueExprId, valueExprs, state)).toBe(0.1);
-    expect(evaluateValueExprSignal(6 as ValueExprId, valueExprs, state)).toBe(0.2);
-    expect(evaluateValueExprSignal(7 as ValueExprId, valueExprs, state)).toBe(0.3);
-    expect(evaluateValueExprSignal(8 as ValueExprId, valueExprs, state)).toBe(1.0);
+    expect(evaluateValueExprSignal(5 as ValueExprId, valueExprs, state)).toBeCloseTo(0.1, 6);
+    expect(evaluateValueExprSignal(6 as ValueExprId, valueExprs, state)).toBeCloseTo(0.2, 6);
+    expect(evaluateValueExprSignal(7 as ValueExprId, valueExprs, state)).toBeCloseTo(0.3, 6);
+    expect(evaluateValueExprSignal(8 as ValueExprId, valueExprs, state)).toBeCloseTo(1.0, 6);
   });
 });

@@ -16,24 +16,6 @@ export const MATERIALIZER_POOL = new BufferPool();
 // Module-level render steps array — reused across frames to avoid per-frame allocation.
 export const renderStepsBuffer: StepRender[] = [];
 
-// Module-level continuity buffer resolver state (avoids per-frame closure in ScheduleExecutor)
-export const continuityResolverState = {
-  baseSlot: 0 as import('../compiler/ir/Indices').ValueSlot,
-  baseBuffer: null as Float32Array | null,
-  outputSlot: 0 as import('../compiler/ir/Indices').ValueSlot,
-  outputBuffer: null as Float32Array | null,
-  objects: null as Map<import('../compiler/ir/Indices').ValueSlot, ArrayBufferView | object> | null,
-};
-
-export function resolveContinuityBuffer(slot: import('../compiler/ir/Indices').ValueSlot): Float32Array {
-  const s = continuityResolverState;
-  if (slot === s.baseSlot) return s.baseBuffer!;
-  if (slot === s.outputSlot) return s.outputBuffer!;
-  const buffer = s.objects!.get(slot) as Float32Array | undefined;
-  if (!buffer) throw new Error('Continuity: Buffer not found for slot ' + slot);
-  return buffer;
-}
-
 // Reusable Shape2D record — populated in-place before each writeShape2D call.
 export const shapeRecord = {
   topologyId: 0,
@@ -54,4 +36,6 @@ export const assemblerCtx = {
   resolvedCamera: null as any,
   arena: null as any,
   sigToSlot: null as any,
+  sigToArena: null as any,
+  slotToArena: null as any,
 };

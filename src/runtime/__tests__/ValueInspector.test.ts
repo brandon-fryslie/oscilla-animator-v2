@@ -26,12 +26,17 @@ function makeMeta(slot: number, storage: SlotMetaEntry['storage'], offset: numbe
 
 describe('readSlotValue', () => {
   it('reads scalar f64 value', () => {
-    const state = createRuntimeState(10);
-    state.values.f64[3] = 42.5;
+    const state = createRuntimeState(10, 0, 0, 0, 0, 20);
+    state.arena[3] = 42.5;
 
     const lookup = makeLookup(3, 'f64', 3, 1);
     const meta = makeMeta(3, 'f64', 3, 1);
-    const value = readSlotValue(state, lookup, meta);
+    const value = readSlotValue(
+      state,
+      lookup,
+      meta,
+      new Map([[valueSlot(3), { offset: 3, stride: 1, laneCount: 1, length: 1 }]])
+    );
 
     expect(value.kind).toBe('scalar');
     if (value.kind === 'scalar') {
@@ -41,14 +46,19 @@ describe('readSlotValue', () => {
   });
 
   it('reads strided f64 value (vec3)', () => {
-    const state = createRuntimeState(20);
-    state.values.f64[5] = 1.0;
-    state.values.f64[6] = 2.0;
-    state.values.f64[7] = 3.0;
+    const state = createRuntimeState(20, 0, 0, 0, 0, 40);
+    state.arena[5] = 1.0;
+    state.arena[6] = 2.0;
+    state.arena[7] = 3.0;
 
     const lookup = makeLookup(5, 'f64', 5, 3);
     const meta = makeMeta(5, 'f64', 5, 3);
-    const value = readSlotValue(state, lookup, meta);
+    const value = readSlotValue(
+      state,
+      lookup,
+      meta,
+      new Map([[valueSlot(5), { offset: 5, stride: 3, laneCount: 1, length: 3 }]])
+    );
 
     expect(value.kind).toBe('buffer');
     if (value.kind === 'buffer') {
