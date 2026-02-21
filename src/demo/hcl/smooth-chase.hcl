@@ -1,15 +1,14 @@
 # Smooth Chase
 #
 # An oscillator drives a target value. A Lag block smoothly chases it.
-# Both the raw and smoothed values drive separate ring scales,
-# so you can see the Lag "catch up" to the oscillator.
+# Both raw and smoothed values drive separate ring scales.
+# Per-element rainbow on both rings for visual clarity.
 #
-# Demonstrates: Lag (exponential smoothing), dual render passes for comparison.
+# Demonstrates: Lag (exponential smoothing), dual render passes, per-element color.
 
 patch "Smooth Chase" {
   block "InfiniteTimeRoot" "clock" {
     periodAMs = 2500
-    periodBMs = 15000
     role = "timeRoot"
     outputs {
       phaseA = source.phase
@@ -33,7 +32,6 @@ patch "Smooth Chase" {
   }
 
   # --- Scale mapping for both signals ---
-  # Map oscillator [-1,1] → scale [0.5, 1.5]: scale = 1 + 0.5 * value
 
   block "Const" "half" {
     value = 0.5
@@ -49,7 +47,6 @@ patch "Smooth Chase" {
     }
   }
 
-  # Raw oscillator scale
   block "Multiply" "raw-half" {
     outputs {
       out = raw-scale.b
@@ -62,7 +59,6 @@ patch "Smooth Chase" {
     }
   }
 
-  # Smoothed scale
   block "Multiply" "smooth-half" {
     outputs {
       out = smooth-scale.b
@@ -75,7 +71,7 @@ patch "Smooth Chase" {
     }
   }
 
-  # --- Outer ring: raw oscillator (jumpy) ---
+  # --- Outer ring: raw oscillator (jumpy), per-element rainbow ---
 
   block "Ellipse" "outer-dot" {
     rx = 0.012
@@ -89,6 +85,7 @@ patch "Smooth Chase" {
     count = 24
     outputs {
       elements = outer-ring.elements
+      t = outer-color.h
     }
   }
 
@@ -99,16 +96,22 @@ patch "Smooth Chase" {
     }
   }
 
-  block "Const" "outer-color" {
-    value = { r = 1, g = 0.3, b = 0.3, a = 0.7 }
+  block "Const" "outer-sat" {
+    value = 0.5
     outputs {
-      out = render-raw.color
+      out = outer-color.s
+    }
+  }
+
+  block "MakeColorHSL" "outer-color" {
+    outputs {
+      color = render-raw.color
     }
   }
 
   block "RenderInstances2D" "render-raw" {}
 
-  # --- Inner ring: smoothed (silky) ---
+  # --- Inner ring: smoothed (silky), per-element rainbow ---
 
   block "Ellipse" "inner-dot" {
     rx = 0.02
@@ -122,6 +125,7 @@ patch "Smooth Chase" {
     count = 12
     outputs {
       elements = inner-ring.elements
+      t = inner-color.h
     }
   }
 
@@ -132,10 +136,9 @@ patch "Smooth Chase" {
     }
   }
 
-  block "Const" "inner-color" {
-    value = { r = 0.3, g = 1, b = 0.5, a = 1 }
+  block "MakeColorHSL" "inner-color" {
     outputs {
-      out = render-smooth.color
+      color = render-smooth.color
     }
   }
 

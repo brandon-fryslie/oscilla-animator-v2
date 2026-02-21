@@ -1,13 +1,16 @@
 # Neon Grid
 #
-# 625 tiny rectangles in a 25x25 grid.
-# Demonstrates: GridLayoutUV, Rect shape, large instance counts.
+# 625 rectangles in a 25x25 grid with StepQuantize stepped pulsing
+# and per-element rainbow color. Previously static, now animated.
+# Demonstrates: StepQuantize, per-element rainbow, GridLayoutUV.
 
 patch "Neon Grid" {
   block "InfiniteTimeRoot" "clock" {
-    periodAMs = 5000
-    periodBMs = 20000
+    periodAMs = 2000
     role = "timeRoot"
+    outputs {
+      phaseA = pulse.phase
+    }
   }
 
   block "Rect" "tile" {
@@ -23,6 +26,7 @@ patch "Neon Grid" {
     count = 625
     outputs {
       elements = grid.elements
+      t = color.h
     }
   }
 
@@ -34,11 +38,57 @@ patch "Neon Grid" {
     }
   }
 
-  # Neon green
-  block "Const" "color" {
-    value = { r = 0.2, g = 1, b = 0.4, a = 0.9 }
+  # Stepped pulsing: Oscillator → StepQuantize (discrete sizes)
+  block "Oscillator" "pulse" {
     outputs {
-      out = render.color
+      out = quantize.in
+    }
+  }
+
+  block "Const" "step-size" {
+    value = 0.5
+    outputs {
+      out = quantize.step
+    }
+  }
+
+  block "StepQuantize" "quantize" {
+    outputs {
+      out = scale-map.in
+    }
+  }
+
+  block "Const" "scale-amt" {
+    value = 0.3
+    outputs {
+      out = scale-map.scale
+    }
+  }
+
+  block "Const" "scale-center" {
+    value = 1.0
+    outputs {
+      out = scale-map.bias
+    }
+  }
+
+  block "ScaleBias" "scale-map" {
+    outputs {
+      out = render.scale
+    }
+  }
+
+  # Per-element rainbow
+  block "Const" "saturation" {
+    value = 1.0
+    outputs {
+      out = color.s
+    }
+  }
+
+  block "MakeColorHSL" "color" {
+    outputs {
+      color = render.color
     }
   }
 

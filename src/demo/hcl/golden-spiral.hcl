@@ -1,43 +1,72 @@
 # Golden Spiral
 #
-# 5000 ellipses in a slowly rotating circle layout.
-# Static rainbow gradient across all elements — each element a unique hue.
-# Demonstrates: large instance counts, per-element hue gradient, slow animation.
+# 200 ellipses in a slowly rotating Archimedean spiral with gentle pulsing
+# scale and vivid per-element rainbow gradient.
+# Demonstrates: SpiralLayout, ScaleBias, per-element rainbow.
 
 patch "Golden Spiral" {
   block "InfiniteTimeRoot" "clock" {
     periodAMs = 30000
-    periodBMs = 120000
+    periodBMs = 12000
     role = "timeRoot"
     outputs {
       phaseA = layout.phase
+      phaseB = scale-osc.phase
     }
   }
 
   block "Ellipse" "dot" {
-    rx = 0.02
-    ry = 0.02
+    rx = 0.008
+    ry = 0.008
     outputs {
       shape = instances.element
     }
   }
 
   block "Array" "instances" {
-    count = 5000
+    count = 200
     outputs {
       elements = layout.elements
       t = color.h
     }
   }
 
-  block "CircleLayoutUV" "layout" {
-    radius = 0.35
+  block "SpiralLayout" "layout" {
+    turns = 8
+    expansion = 0.4
     outputs {
       position = render.pos
     }
   }
 
-  # Per-element hue: each element gets its own slice of the spectrum
+  # Gentle pulsing scale
+  block "Oscillator" "scale-osc" {
+    outputs {
+      out = scale-map.in
+    }
+  }
+
+  block "Const" "scale-amt" {
+    value = 0.3
+    outputs {
+      out = scale-map.scale
+    }
+  }
+
+  block "Const" "scale-center" {
+    value = 0.85
+    outputs {
+      out = scale-map.bias
+    }
+  }
+
+  block "ScaleBias" "scale-map" {
+    outputs {
+      out = render.scale
+    }
+  }
+
+  # Per-element rainbow from Array.t
   block "MakeColorHSL" "color" {
     outputs {
       color = render.color

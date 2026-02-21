@@ -1,24 +1,21 @@
 # Feedback Accumulator
 #
 # A ring of dots whose rotation speed modulates over time.
-# Uses a feedback loop: phase accumulates with variable delta.
+# Smoothstep eases the speed oscillator for snappy acceleration.
+# Per-element rainbow color differentiates from other feedback demos.
 #
-# The key insight: delta = base_speed + amplitude * sin(time)
-# So the ring speeds up and slows down — impossible without feedback.
-#
-# Demonstrates: UnitDelay feedback loop, Modulo wrap, variable-rate accumulation.
+# Demonstrates: UnitDelay, Smoothstep easing, per-element color on feedback.
 
 patch "Feedback Accumulator" {
   block "InfiniteTimeRoot" "clock" {
     periodAMs = 3000
-    periodBMs = 8000
     role = "timeRoot"
     outputs {
       phaseA = speed-lfo.phase
     }
   }
 
-  # --- Speed modulation: oscillating delta ---
+  # --- Speed modulation with Smoothstep easing ---
 
   block "Const" "base-speed" {
     value = 0.01
@@ -30,17 +27,24 @@ patch "Feedback Accumulator" {
   block "Const" "speed-swing" {
     value = 0.008
     outputs {
-      out = speed-variation.b
+      out = speed-scaled.b
     }
   }
 
   block "Oscillator" "speed-lfo" {
     outputs {
-      out = speed-variation.a
+      out = speed-ease.in
     }
   }
 
-  block "Multiply" "speed-variation" {
+  # Smoothstep on oscillator: S-curve easing for snappy accel/decel
+  block "Smoothstep" "speed-ease" {
+    outputs {
+      out = speed-scaled.a
+    }
+  }
+
+  block "Multiply" "speed-scaled" {
     outputs {
       out = delta.b
     }
@@ -80,7 +84,7 @@ patch "Feedback Accumulator" {
     }
   }
 
-  # --- Visuals: ring of 24 circles ---
+  # --- Visuals: ring of 24 circles with per-element rainbow ---
 
   block "Ellipse" "dot" {
     rx = 0.025
@@ -94,6 +98,7 @@ patch "Feedback Accumulator" {
     count = 24
     outputs {
       elements = ring.elements
+      t = color.h
     }
   }
 
@@ -104,10 +109,9 @@ patch "Feedback Accumulator" {
     }
   }
 
-  block "Const" "color" {
-    value = { r = 0.2, g = 0.9, b = 0.8, a = 1 }
+  block "MakeColorHSL" "color" {
     outputs {
-      out = render.color
+      color = render.color
     }
   }
 

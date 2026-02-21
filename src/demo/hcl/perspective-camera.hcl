@@ -1,22 +1,26 @@
 # Perspective Camera
 #
-# 10x10 grid of ellipses viewed through a perspective camera with animated yaw.
-# Per-element warm gradient (red→yellow) that shifts with time.
-# Demonstrates: Camera block, perspective projection, GridLayoutUV, color animation.
+# 10x10 grid viewed through a perspective camera with Slew-smoothed yaw.
+# Per-element rainbow gradient.
+# Demonstrates: Camera, Slew rate-limiting, perspective projection.
 
 patch "Perspective Camera" {
   block "InfiniteTimeRoot" "clock" {
     periodAMs = 12000
-    periodBMs = 8000
     role = "timeRoot"
     outputs {
       phaseA = yaw-deg.in
-      phaseB = hue-animated.b
     }
   }
 
-  # Camera with animated yaw driven by phaseA → degrees
+  # Camera with animated yaw — Slew smooths the rotation
   block "Adapter_PhaseToDegrees" "yaw-deg" {
+    outputs {
+      out = smooth-yaw.in
+    }
+  }
+
+  block "Slew" "smooth-yaw" {
     outputs {
       out = camera.yawDeg
     }
@@ -26,8 +30,8 @@ patch "Perspective Camera" {
 
   # Shape + instancing
   block "Ellipse" "dot" {
-    rx = 0.03
-    ry = 0.03
+    rx = 0.015
+    ry = 0.015
     outputs {
       shape = grid-elements.element
     }
@@ -37,7 +41,7 @@ patch "Perspective Camera" {
     count = 100
     outputs {
       elements = grid.elements
-      t = hue-scaled.a
+      t = color.h
     }
   }
 
@@ -49,26 +53,7 @@ patch "Perspective Camera" {
     }
   }
 
-  # Per-element hue: warm range (0.0→0.15 = red→yellow), shifting with time
-  block "Const" "hue-range" {
-    value = 0.15
-    outputs {
-      out = hue-scaled.b
-    }
-  }
-
-  block "Multiply" "hue-scaled" {
-    outputs {
-      out = hue-animated.a
-    }
-  }
-
-  block "Add" "hue-animated" {
-    outputs {
-      out = color.h
-    }
-  }
-
+  # Per-element rainbow
   block "MakeColorHSL" "color" {
     outputs {
       color = render.color

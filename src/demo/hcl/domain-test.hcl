@@ -1,17 +1,17 @@
 # Domain Test
 #
-# 50 large ellipses with rotating motion and animated per-element rainbow.
-# Slow spiral for continuity testing.
-# Demonstrates: continuity state preservation, smooth animation transitions.
+# 50 ellipses with rotating motion, per-element rainbow,
+# and pulsing scale.
+# Demonstrates: per-element color, ScaleBias pulsing, continuity.
 
 patch "Domain Test" {
   block "InfiniteTimeRoot" "clock" {
     periodAMs = 8000
-    periodBMs = 20000
+    periodBMs = 5000
     role = "timeRoot"
     outputs {
       phaseA = layout.phase
-      phaseB = hue-add.b
+      phaseB = scale-osc.phase
     }
   }
 
@@ -27,7 +27,7 @@ patch "Domain Test" {
     count = 50
     outputs {
       elements = layout.elements
-      t = hue-add.a
+      t = color.h
     }
   }
 
@@ -38,16 +38,37 @@ patch "Domain Test" {
     }
   }
 
-  # Per-element animated hue: rainbow shifts over time
-  block "Add" "hue-add" {
-    outputs {
-      out = color.h
-    }
-  }
-
+  # Per-element rainbow
   block "MakeColorHSL" "color" {
     outputs {
       color = render.color
+    }
+  }
+
+  # Pulsing scale via oscillator
+  block "Oscillator" "scale-osc" {
+    outputs {
+      out = scale-map.in
+    }
+  }
+
+  block "Const" "scale-amt" {
+    value = 0.2
+    outputs {
+      out = scale-map.scale
+    }
+  }
+
+  block "Const" "scale-center" {
+    value = 1.0
+    outputs {
+      out = scale-map.bias
+    }
+  }
+
+  block "ScaleBias" "scale-map" {
+    outputs {
+      out = render.scale
     }
   }
 

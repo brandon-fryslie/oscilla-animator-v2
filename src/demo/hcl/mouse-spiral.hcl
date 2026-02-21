@@ -1,27 +1,32 @@
 # Mouse Spiral
 #
-# 24 circles responding to mouse input with per-element rainbow colors
-# that shift over time. Click to grow circles.
-# Demonstrates: ExternalInput blocks, mouse interaction, click-responsive scale.
+# 24 circles responding to mouse input with Lag for silky tracking.
+# Per-element rainbow colors. Click to grow circles.
+# Demonstrates: Lag smoothing, ExternalInput, click-responsive scale.
 
 patch "Mouse Spiral" {
   block "InfiniteTimeRoot" "clock" {
     periodAMs = 4000
-    periodBMs = 6000
     role = "timeRoot"
     outputs {
       phaseA = layout.phase
-      phaseB = hue-add.b
     }
   }
 
-  # Mouse inputs
+  # Mouse inputs — Lag smooths the raw mouse.x for silky tracking
   block "ExternalInput" "mouse-x" {
     channel = "mouse.x"
+    outputs {
+      value = smooth-mouse.target
+    }
   }
 
-  block "ExternalInput" "mouse-y" {
-    channel = "mouse.y"
+  block "Lag" "smooth-mouse" {
+    smoothing = 0.9
+    initialValue = 0.5
+    outputs {
+      out = mouse-contrib.a
+    }
   }
 
   block "ExternalInput" "click-state" {
@@ -44,7 +49,7 @@ patch "Mouse Spiral" {
     count = 24
     outputs {
       elements = layout.elements
-      t = hue-add.a
+      t = color.h
     }
   }
 
@@ -55,22 +60,22 @@ patch "Mouse Spiral" {
     }
   }
 
-  # Click-responsive scale: baseSize + clickState * clickScale
-  block "Const" "base-size" {
-    value = 0.015
+  # Scale: smoothed mouse modulates base size, click adds bonus
+  block "Const" "mouse-scale" {
+    value = 0.8
+    outputs {
+      out = mouse-contrib.b
+    }
+  }
+
+  block "Multiply" "mouse-contrib" {
     outputs {
       out = final-size.a
     }
   }
 
-  block "Const" "click-scale" {
-    value = 0.015
-    outputs {
-      out = click-bonus.b
-    }
-  }
-
-  block "Multiply" "click-bonus" {
+  block "Const" "base-size" {
+    value = 0.4
     outputs {
       out = final-size.b
     }
@@ -78,17 +83,30 @@ patch "Mouse Spiral" {
 
   block "Add" "final-size" {
     outputs {
+      out = with-click.a
+    }
+  }
+
+  block "Const" "click-scale" {
+    value = 0.5
+    outputs {
+      out = click-bonus.b
+    }
+  }
+
+  block "Multiply" "click-bonus" {
+    outputs {
+      out = with-click.b
+    }
+  }
+
+  block "Add" "with-click" {
+    outputs {
       out = render.scale
     }
   }
 
-  # Per-element animated rainbow
-  block "Add" "hue-add" {
-    outputs {
-      out = color.h
-    }
-  }
-
+  # Per-element rainbow
   block "MakeColorHSL" "color" {
     outputs {
       color = render.color

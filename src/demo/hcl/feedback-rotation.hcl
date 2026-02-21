@@ -1,28 +1,15 @@
 # Feedback Rotation
 #
-# UnitDelay showcase demo demonstrating feedback-driven animation.
-# Uses UnitDelay to implement a phase accumulator with variable speed.
-# The rotation speed oscillates between fast and slow, creating dynamic
-# acceleration and deceleration.
+# UnitDelay showcase: feedback-driven rotation with variable speed.
+# Scale breathes in sync with speed — dots grow when fast, shrink when slow.
+# Per-element rainbow on outer ring differentiates from feedback-simple.
 #
-# This pattern is IMPOSSIBLE without UnitDelay because:
-#   phase[t] = phase[t-1] + delta
-# creates a dependency cycle. UnitDelay breaks the cycle by providing
-# the previous frame's value, enabling feedback loops.
-#
-# The demo shows two rings:
-# - Inner ring: Direct time-driven rotation (constant speed)
-# - Outer ring: Feedback-driven rotation (variable speed via accumulator)
-#
-# Watch how the outer ring accelerates and decelerates while the inner
-# ring maintains constant speed - the visual difference shows the power
-# of stateful feedback.
-# Demonstrates: UnitDelay, feedback loops, Modulo wrap, phase accumulation.
+# Demonstrates: UnitDelay, ScaleBias speed-responsive scale, per-element color.
 
 patch "Feedback Rotation" {
   block "InfiniteTimeRoot" "clock" {
     periodAMs = 3000
-    periodBMs = 8000
+    periodBMs = 3000
     role = "timeRoot"
     outputs {
       phaseA = speed-osc.phase
@@ -31,16 +18,9 @@ patch "Feedback Rotation" {
   }
 
   # ===========================================================================
-  # FEEDBACK ACCUMULATOR (the core UnitDelay pattern)
+  # FEEDBACK ACCUMULATOR
   # ===========================================================================
-  #
-  # This implements: phase[t] = (phase[t-1] + delta) mod 1
-  #
-  # The delta varies with time, creating acceleration/deceleration.
-  # Without UnitDelay, this feedback loop would be impossible.
 
-  # Speed modulation: oscillates between 0.005 and 0.025 per frame
-  # This creates the "breathing" rotation effect
   block "Const" "speed-base" {
     value = 0.015
     outputs {
@@ -57,7 +37,7 @@ patch "Feedback Rotation" {
 
   block "Oscillator" "speed-osc" {
     outputs {
-      out = speed-modulation.a
+      out = [speed-modulation.a, scale-map.in]
     }
   }
 
@@ -73,8 +53,6 @@ patch "Feedback Rotation" {
     }
   }
 
-  # The feedback loop using UnitDelay
-  # accumulatedPhase = UnitDelay(accumulatedPhase + speedDelta)
   block "UnitDelay" "phase-delay" {
     initialValue = 0
     outputs {
@@ -101,8 +79,29 @@ patch "Feedback Rotation" {
     }
   }
 
+  # Speed-responsive scale: scale = osc * 0.4 + 1.0 → [0.6, 1.4]
+  block "Const" "scale-amt" {
+    value = 0.4
+    outputs {
+      out = scale-map.scale
+    }
+  }
+
+  block "Const" "scale-center" {
+    value = 1.0
+    outputs {
+      out = scale-map.bias
+    }
+  }
+
+  block "ScaleBias" "scale-map" {
+    outputs {
+      out = render-outer.scale
+    }
+  }
+
   # ===========================================================================
-  # OUTER RING: Feedback-driven rotation (variable speed)
+  # OUTER RING: Feedback-driven, per-element rainbow
   # ===========================================================================
 
   block "Ellipse" "outer-dot" {
@@ -117,10 +116,10 @@ patch "Feedback Rotation" {
     count = 24
     outputs {
       elements = outer-layout.elements
+      t = outer-color.h
     }
   }
 
-  # Use CircleLayoutUV for outer ring with slow rotation from phaseB
   block "CircleLayoutUV" "outer-layout" {
     radius = 0.35
     outputs {
@@ -128,16 +127,14 @@ patch "Feedback Rotation" {
     }
   }
 
-  # Simple constant color - cyan
-  block "Const" "outer-color" {
-    value = { r = 0.3, g = 0.9, b = 0.9, a = 1.0 }
+  block "MakeColorHSL" "outer-color" {
     outputs {
-      out = render-outer.color
+      color = render-outer.color
     }
   }
 
   # ===========================================================================
-  # INNER RING: Direct time-driven rotation (constant speed for comparison)
+  # INNER RING: Constant speed, warm orange
   # ===========================================================================
 
   block "Ellipse" "inner-dot" {
@@ -155,7 +152,6 @@ patch "Feedback Rotation" {
     }
   }
 
-  # Use CircleLayoutUV for inner ring
   block "CircleLayoutUV" "inner-layout" {
     radius = 0.18
     outputs {
@@ -163,7 +159,6 @@ patch "Feedback Rotation" {
     }
   }
 
-  # Simple constant color - orange
   block "Const" "inner-color" {
     value = { r = 1.0, g = 0.6, b = 0.3, a = 1.0 }
     outputs {
@@ -171,11 +166,6 @@ patch "Feedback Rotation" {
     }
   }
 
-  # ===========================================================================
-  # RENDER BOTH RINGS
-  # ===========================================================================
-
   block "RenderInstances2D" "render-outer" {}
-
   block "RenderInstances2D" "render-inner" {}
 }

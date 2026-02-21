@@ -3,17 +3,16 @@
 # Demonstrates feedback-driven rotation with VARIABLE SPEED.
 # The rotation accelerates and decelerates - impossible without feedback!
 #
-# Two rings for comparison:
-# - OUTER (cyan): Feedback-driven - speeds up and slows down
-# - INNER (orange): Time-driven - constant speed
+# Two rings with per-element rainbow color:
+# - OUTER (32 dots): Feedback-driven - speeds up and slows down
+# - INNER (12 dots): Time-driven - constant speed
 #
-# Watch the outer ring "breathe" while the inner ring stays steady.
-# Demonstrates: UnitDelay feedback loop, Modulo wrap, variable-rate accumulation.
+# Demonstrates: UnitDelay feedback loop, Modulo wrap, per-element rainbow.
 
 patch "Feedback Simple" {
   block "InfiniteTimeRoot" "clock" {
     periodAMs = 3000
-    periodBMs = 5000
+    periodBMs = 3000
     role = "timeRoot"
     outputs {
       phaseA = speed-osc.phase
@@ -24,8 +23,6 @@ patch "Feedback Simple" {
   # ===========================================================================
   # FEEDBACK ACCUMULATOR WITH VARIABLE SPEED
   # ===========================================================================
-  # phase[t] = (phase[t-1] + delta) mod 1
-  # delta oscillates between 0.002 and 0.018 (9x speed variation!)
 
   block "Const" "one" {
     value = 1.0
@@ -34,7 +31,6 @@ patch "Feedback Simple" {
     }
   }
 
-  # Speed modulation: base + amplitude * sin(time)
   block "Const" "speed-base" {
     value = 0.01
     outputs {
@@ -68,7 +64,6 @@ patch "Feedback Simple" {
     }
   }
 
-  # The feedback loop
   block "UnitDelay" "prev-phase" {
     initialValue = 0
     outputs {
@@ -89,25 +84,25 @@ patch "Feedback Simple" {
   }
 
   # ===========================================================================
-  # OUTER RING: Feedback-driven (variable speed)
+  # OUTER RING: Feedback-driven (variable speed), 32 dots, rainbow
   # ===========================================================================
 
   block "Ellipse" "outer-dot" {
-    rx = 0.025
-    ry = 0.025
+    rx = 0.02
+    ry = 0.02
     outputs {
       shape = outer-instances.element
     }
   }
 
   block "Array" "outer-instances" {
-    count = 16
+    count = 32
     outputs {
       elements = outer-layout.elements
+      t = outer-color.h
     }
   }
 
-  # Use CircleLayoutUV with slow rotation from phaseB
   block "CircleLayoutUV" "outer-layout" {
     radius = 0.35
     outputs {
@@ -115,16 +110,14 @@ patch "Feedback Simple" {
     }
   }
 
-  # Color: cyan
-  block "Const" "outer-color" {
-    value = { r = 0.3, g = 0.9, b = 0.9, a = 1.0 }
+  block "MakeColorHSL" "outer-color" {
     outputs {
-      out = render-outer.color
+      color = render-outer.color
     }
   }
 
   # ===========================================================================
-  # INNER RING: Time-driven (constant speed) - for comparison
+  # INNER RING: Time-driven (constant speed), 12 dots, rainbow
   # ===========================================================================
 
   block "Ellipse" "inner-dot" {
@@ -139,10 +132,10 @@ patch "Feedback Simple" {
     count = 12
     outputs {
       elements = inner-layout.elements
+      t = inner-color.h
     }
   }
 
-  # Use CircleLayoutUV
   block "CircleLayoutUV" "inner-layout" {
     radius = 0.18
     outputs {
@@ -150,11 +143,9 @@ patch "Feedback Simple" {
     }
   }
 
-  # Color: orange
-  block "Const" "inner-color" {
-    value = { r = 1.0, g = 0.6, b = 0.3, a = 1.0 }
+  block "MakeColorHSL" "inner-color" {
     outputs {
-      out = render-inner.color
+      color = render-inner.color
     }
   }
 

@@ -1,24 +1,29 @@
 # Mouse Reactive
 #
-# A ring of circles that responds to mouse input.
-# Click to enlarge, move to... well, the mouse position is a signal,
-# it doesn't directly move the ring — but it modulates the scale.
+# A ring of circles that responds to mouse input with Slew rate-limiting.
+# Slew creates smooth, rate-limited tracking unlike Lag's exponential chase.
+# Per-element rainbow color differentiates from mouse-spiral.
 #
-# Demonstrates: ExternalInput blocks, math chains, interactive patches.
+# Demonstrates: Slew rate-limiting, ExternalInput, per-element rainbow.
 
 patch "Mouse Reactive" {
   block "InfiniteTimeRoot" "clock" {
     periodAMs = 4000
-    periodBMs = 12000
     role = "timeRoot"
   }
 
-  # --- Mouse input ---
+  # --- Mouse input with Slew rate-limiting ---
 
   block "ExternalInput" "mouse-x" {
     channel = "mouse.x"
     outputs {
-      value = mouse-contrib.a
+      value = slew-mouse.in
+    }
+  }
+
+  block "Slew" "slew-mouse" {
+    outputs {
+      out = mouse-contrib.a
     }
   }
 
@@ -29,10 +34,7 @@ patch "Mouse Reactive" {
     }
   }
 
-  # --- Scale: base + click bonus ---
-  #   base_scale = 0.8 + 0.4 * mouse_x   (mouse_x is ~0..1)
-  #   click_bonus = 0.5 * click_state     (0 or 1)
-  #   final_scale = base_scale + click_bonus
+  # --- Scale: base + slewed mouse + click bonus ---
 
   block "Const" "scale-base" {
     value = 0.8
@@ -79,7 +81,7 @@ patch "Mouse Reactive" {
     }
   }
 
-  # --- Visuals ---
+  # --- Visuals with per-element rainbow ---
 
   block "Ellipse" "dot" {
     rx = 0.025
@@ -93,6 +95,7 @@ patch "Mouse Reactive" {
     count = 16
     outputs {
       elements = ring.elements
+      t = color.h
     }
   }
 
@@ -103,10 +106,9 @@ patch "Mouse Reactive" {
     }
   }
 
-  block "Const" "color" {
-    value = { r = 0.9, g = 0.5, b = 1, a = 1 }
+  block "MakeColorHSL" "color" {
     outputs {
-      out = render.color
+      color = render.color
     }
   }
 

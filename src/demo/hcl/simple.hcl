@@ -1,17 +1,15 @@
 # Simple
 #
-# 4 circles in a rotating circle layout with per-element rainbow that shifts over time.
+# 8 circles in a rotating circle layout with per-element rainbow.
 # Minimum viable patch demonstrating core concepts.
-# Demonstrates: InfiniteTimeRoot, Array, CircleLayoutUV, per-element color animation.
+# Demonstrates: InfiniteTimeRoot, Array, CircleLayoutUV, per-element color.
 
 patch "Simple" {
   block "InfiniteTimeRoot" "clock" {
     periodAMs = 4000
-    periodBMs = 12000
     role = "timeRoot"
     outputs {
       phaseA = layout.phase
-      phaseB = hue-add.b
     }
   }
 
@@ -24,10 +22,10 @@ patch "Simple" {
   }
 
   block "Array" "instances" {
-    count = 4
+    count = 8
     outputs {
       elements = layout.elements
-      t = hue-add.a
+      t = color.h
     }
   }
 
@@ -38,23 +36,12 @@ patch "Simple" {
     }
   }
 
-  # Per-element rainbow: hue = normalizedIndex + time
-  block "Add" "hue-add" {
-    outputs {
-      out = color.h
-    }
-  }
-
+  # Per-element rainbow: each dot gets its own hue from Array.t
   block "MakeColorHSL" "color" {
     outputs {
       color = render.color
     }
   }
 
-  block "RenderInstances2D" "render" {
-    inputs {
-      color = color.color
-      pos = layout.position
-    }
-  }
+  block "RenderInstances2D" "render" {}
 }

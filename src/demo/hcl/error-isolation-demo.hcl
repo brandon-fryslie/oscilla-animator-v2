@@ -1,10 +1,10 @@
 # Error Isolation Demo
 #
 # Demonstrates that disconnected broken blocks don't stop compilation.
-# The main grid animates with per-element purple-to-pink gradient.
+# The main grid animates with per-element rainbow and pulsing scale.
 #
 # Check the diagnostic console for W_BLOCK_UNREACHABLE_ERROR warnings.
-# Demonstrates: error isolation, partial compilation, diagnostic warnings.
+# Demonstrates: error isolation, partial compilation, ScaleBias pulsing.
 
 patch "Error Isolation Demo" {
   # ========================================================================
@@ -13,10 +13,9 @@ patch "Error Isolation Demo" {
 
   block "InfiniteTimeRoot" "clock" {
     periodAMs = 2000
-    periodBMs = 10000
     role = "timeRoot"
     outputs {
-      phaseA = hue-animated.b
+      phaseA = pulse.phase
     }
   }
 
@@ -24,7 +23,6 @@ patch "Error Isolation Demo" {
     rx = 0.03
     ry = 0.03
     outputs {
-
       shape = instances.element
     }
   }
@@ -33,7 +31,7 @@ patch "Error Isolation Demo" {
     count = 100
     outputs {
       elements = grid.elements
-      t = hue-scaled.a
+      t = color.h
     }
   }
 
@@ -45,42 +43,37 @@ patch "Error Isolation Demo" {
     }
   }
 
-  # Per-element purple-to-pink (hue 0.75→0.95), shifting with time
-  block "Const" "hue-range" {
-    value = 0.2
-    outputs {
-      out = hue-scaled.b
-    }
-  }
-
-  block "Const" "hue-base" {
-    value = 0.75
-    outputs {
-      out = hue-offset.b
-    }
-  }
-
-  block "Multiply" "hue-scaled" {
-    outputs {
-      out = hue-offset.a
-    }
-  }
-
-  block "Add" "hue-offset" {
-    outputs {
-      out = hue-animated.a
-    }
-  }
-
-  block "Add" "hue-animated" {
-    outputs {
-      out = color.h
-    }
-  }
-
+  # Per-element rainbow
   block "MakeColorHSL" "color" {
     outputs {
       color = render.color
+    }
+  }
+
+  # Pulsing scale
+  block "Oscillator" "pulse" {
+    outputs {
+      out = scale-map.in
+    }
+  }
+
+  block "Const" "scale-amt" {
+    value = 0.3
+    outputs {
+      out = scale-map.scale
+    }
+  }
+
+  block "Const" "scale-center" {
+    value = 1.0
+    outputs {
+      out = scale-map.bias
+    }
+  }
+
+  block "ScaleBias" "scale-map" {
+    outputs {
+      out = render.scale
     }
   }
 

@@ -1,15 +1,14 @@
 # Tile Grid UV
 #
-# Same as Tile Grid but with per-element desaturated blue-to-cyan gradient.
-# Demonstrates: GridLayoutUV, constrained hue range, saturation control.
+# 20x20 grid with per-element rainbow and pulsing scale.
+# Demonstrates: GridLayoutUV, oscillator scale, per-element rainbow.
 
 patch "Tile Grid UV" {
   block "InfiniteTimeRoot" "clock" {
     periodAMs = 3000
-    periodBMs = 10000
     role = "timeRoot"
     outputs {
-      phaseB = hue-animated.b
+      phaseA = pulse.phase
     }
   }
 
@@ -25,7 +24,7 @@ patch "Tile Grid UV" {
     count = 400
     outputs {
       elements = grid.elements
-      t = hue-scaled.a
+      t = color.h
     }
   }
 
@@ -37,42 +36,8 @@ patch "Tile Grid UV" {
     }
   }
 
-  # Per-element hue in the blue-cyan range (0.5–0.75), shifting with time
-  # Multiply t by 0.25 to compress the hue range, then add 0.5 base + time offset
-  block "Const" "hue-range" {
-    value = 0.25
-    outputs {
-      out = hue-scaled.b
-    }
-  }
-
-  block "Const" "hue-base" {
-    value = 0.5
-    outputs {
-      out = hue-offset.b
-    }
-  }
-
-  block "Multiply" "hue-scaled" {
-    outputs {
-      out = hue-offset.a
-    }
-  }
-
-  block "Add" "hue-offset" {
-    outputs {
-      out = hue-animated.a
-    }
-  }
-
-  block "Add" "hue-animated" {
-    outputs {
-      out = color.h
-    }
-  }
-
   block "Const" "saturation" {
-    value = 0.6
+    value = 0.8
     outputs {
       out = color.s
     }
@@ -81,6 +46,33 @@ patch "Tile Grid UV" {
   block "MakeColorHSL" "color" {
     outputs {
       color = render.color
+    }
+  }
+
+  # Pulsing scale
+  block "Oscillator" "pulse" {
+    outputs {
+      out = scale-map.in
+    }
+  }
+
+  block "Const" "scale-amt" {
+    value = 0.25
+    outputs {
+      out = scale-map.scale
+    }
+  }
+
+  block "Const" "scale-center" {
+    value = 1.0
+    outputs {
+      out = scale-map.bias
+    }
+  }
+
+  block "ScaleBias" "scale-map" {
+    outputs {
+      out = render.scale
     }
   }
 

@@ -1,17 +1,16 @@
 # Rect Mosaic
 #
 # 400 rectangles in a rotating circle layout with pulsing scale
-# and per-element green-to-teal gradient that shifts over time.
-# Demonstrates: Expression block with collect refs, pulsing scale animation.
+# via Oscillator → ScaleBias and per-element rainbow.
+# Demonstrates: ScaleBias pulsing, per-element rainbow.
 
 patch "Rect Mosaic" {
   block "InfiniteTimeRoot" "time" {
     periodAMs = 4000
-    periodBMs = 7000
+    periodBMs = 3000
     role = "timeRoot"
     outputs {
-      phaseA = layout.phase
-      phaseB = hue-animated.b
+      phaseA = [layout.phase, pulse.phase]
     }
   }
 
@@ -27,7 +26,7 @@ patch "Rect Mosaic" {
     count = 400
     outputs {
       elements = layout.elements
-      t = hue-scaled.a
+      t = color.h
     }
   }
 
@@ -38,47 +37,39 @@ patch "Rect Mosaic" {
     }
   }
 
-  # Per-element green-to-teal (hue 0.25→0.5), shifting with time
-  block "Const" "hue-range" {
-    value = 0.25
-    outputs {
-      out = hue-scaled.b
-    }
-  }
-
-  block "Multiply" "hue-scaled" {
-    outputs {
-      out = hue-offset.a
-    }
-  }
-
-  block "Add" "hue-offset" {
-    outputs {
-      out = hue-animated.a
-    }
-  }
-
-  block "Add" "hue-animated" {
-    outputs {
-      out = color.h
-    }
-  }
-
+  # Per-element rainbow
   block "MakeColorHSL" "color" {
     outputs {
       color = render.color
     }
   }
 
-  # Pulsing scale using Expression with collect edge reference
-  # block "Expression" "scale-expr" {
-    # expression = "1.0 + 0.5 * sin(phase * 6.28 + 1.57)"
-    # expression = "1.0"
-    # collect edges from time.phaseA → refs (alias "phase")
-    # outputs {
-    #   out = render.scale
-    # }
-  # }
+  # Pulsing scale: Oscillator → ScaleBias(0.5, 1.0) → [0.5, 1.5]
+  block "Oscillator" "pulse" {
+    outputs {
+      out = scale-map.in
+    }
+  }
+
+  block "Const" "scale-amt" {
+    value = 0.5
+    outputs {
+      out = scale-map.scale
+    }
+  }
+
+  block "Const" "scale-center" {
+    value = 1.0
+    outputs {
+      out = scale-map.bias
+    }
+  }
+
+  block "ScaleBias" "scale-map" {
+    outputs {
+      out = render.scale
+    }
+  }
 
   block "RenderInstances2D" "render" {}
 }

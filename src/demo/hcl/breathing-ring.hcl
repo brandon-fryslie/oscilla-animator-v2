@@ -1,12 +1,12 @@
 # Breathing Ring
 #
-# A ring of circles that pulses in size using a sine wave.
-# Demonstrates: oscillator → math → render scale, named blocks for clarity.
+# A ring of circles that pulses in size with per-element rainbow.
+# The oscillator drives scale through ScaleBias for clean value mapping.
+# Demonstrates: ScaleBias, per-element rainbow, Oscillator → scale.
 
 patch "Breathing Ring" {
   block "InfiniteTimeRoot" "clock" {
     periodAMs = 2000
-    periodBMs = 10000
     role = "timeRoot"
     outputs {
       phaseA = breath.phase
@@ -26,6 +26,7 @@ patch "Breathing Ring" {
     count = 20
     outputs {
       elements = ring.elements
+      t = color.h
     }
   }
 
@@ -36,44 +37,37 @@ patch "Breathing Ring" {
     }
   }
 
-  # Breathing animation: scale oscillates between 0.5 and 1.5
+  # Breathing animation: scale = oscillator * 0.5 + 1.0 → [0.5, 1.5]
   block "Oscillator" "breath" {
     outputs {
-      out = breath-scaled.a
+      out = scale-map.in
     }
   }
 
-  block "Const" "half" {
+  block "Const" "scale-amt" {
     value = 0.5
     outputs {
-      out = breath-scaled.b
+      out = scale-map.scale
     }
   }
 
-  block "Const" "one" {
-    value = 1
+  block "Const" "scale-center" {
+    value = 1.0
     outputs {
-      out = breath-offset.a
+      out = scale-map.bias
     }
   }
 
-  block "Multiply" "breath-scaled" {
-    outputs {
-      out = breath-offset.b
-    }
-  }
-
-  block "Add" "breath-offset" {
+  block "ScaleBias" "scale-map" {
     outputs {
       out = render.scale
     }
   }
 
-  # Color: warm pink
-  block "Const" "color" {
-    value = { r = 1, g = 0.4, b = 0.6, a = 1 }
+  # Per-element rainbow: each dot gets its own hue from Array.t
+  block "MakeColorHSL" "color" {
     outputs {
-      out = render.color
+      color = render.color
     }
   }
 

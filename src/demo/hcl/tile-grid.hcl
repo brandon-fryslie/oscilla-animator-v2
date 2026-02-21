@@ -1,16 +1,14 @@
 # Tile Grid
 #
-# 20x20 grid of rectangles. Each tile gets a unique hue from the spectrum,
-# slowly cycling over time.
-# Demonstrates: GridLayoutUV, Rect shape, per-element hue cycling.
+# 20x20 grid of rectangles with per-element rainbow and pulsing scale.
+# Demonstrates: GridLayoutUV, Rect shape, ScaleBias scale animation.
 
 patch "Tile Grid" {
   block "InfiniteTimeRoot" "clock" {
     periodAMs = 3000
-    periodBMs = 15000
     role = "timeRoot"
     outputs {
-      phaseA = hue-add.b
+      phaseA = pulse.phase
     }
   }
 
@@ -26,7 +24,7 @@ patch "Tile Grid" {
     count = 400
     outputs {
       elements = grid.elements
-      t = hue-add.a
+      t = color.h
     }
   }
 
@@ -38,13 +36,34 @@ patch "Tile Grid" {
     }
   }
 
-  # Per-element cycling hue
-  block "Add" "hue-add" {
+  # Pulsing scale: oscillator * 0.3 + 1.0 → [0.7, 1.3]
+  block "Oscillator" "pulse" {
     outputs {
-      out = color.h
+      out = scale-map.in
     }
   }
 
+  block "Const" "scale-amt" {
+    value = 0.3
+    outputs {
+      out = scale-map.scale
+    }
+  }
+
+  block "Const" "scale-center" {
+    value = 1.0
+    outputs {
+      out = scale-map.bias
+    }
+  }
+
+  block "ScaleBias" "scale-map" {
+    outputs {
+      out = render.scale
+    }
+  }
+
+  # Per-element rainbow
   block "MakeColorHSL" "color" {
     outputs {
       color = render.color
