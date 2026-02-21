@@ -18,15 +18,6 @@ export type {
 // Lowering types - value references and types for compiler passes
 export type {
   ValueRefPacked,
-  LowerContext,
-  LoweredOutput,
-  LoweredSignal,
-  LoweredField,
-  LoweredScalar,
-  LoweredInstance,
-  LoweredBlock,
-  BlockLowerFn,
-  LoweredIR,
 } from './lowerTypes';
 
 // Block definition types are now in blocks/registry

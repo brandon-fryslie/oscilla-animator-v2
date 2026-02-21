@@ -26,10 +26,8 @@ import type {
   EventSlotId,
   ValueSlot,
   InstanceId,
-  StateId,
   StateSlotId,
 } from './Indices';
-import type { IRBuilder } from './IRBuilder';
 import type { StableStateId, ContinuityPolicy } from './types';
 
 // =============================================================================
@@ -210,85 +208,4 @@ export interface LowerEffects {
   readonly eventSlotRequests?: readonly EventSlotRequest[];
   /** Eval requests for sink blocks (e.g., TestSignal) */
   readonly evalRequests?: readonly { exprId: ValueExprId }[];
-}
-
-
-// =============================================================================
-// Lowered Types (compiler pass contract)
-// =============================================================================
-
-/**
- * Lowered output - result of lowering a block output.
- */
-export type LoweredOutput =
-  | LoweredSignal
-  | LoweredField
-  | LoweredScalar
-  | LoweredInstance;
-
-export interface LoweredSignal {
-  readonly kind: 'signal';
-  readonly sigId: ValueExprId;
-  readonly slot: ValueSlot;
-  readonly stride: number;
-  readonly type: CanonicalType;
-}
-
-export interface LoweredField {
-  readonly kind: 'field';
-  readonly fieldId: ValueExprId;
-  readonly slot: ValueSlot;
-  readonly stride: number;
-  readonly type: CanonicalType;
-}
-
-export interface LoweredScalar {
-  readonly kind: 'scalar';
-  readonly value: unknown;
-  readonly type: CanonicalType;
-}
-
-export interface LoweredInstance {
-  readonly kind: 'instance';
-  readonly instanceId: InstanceId;
-  readonly count: number;
-}
-
-/**
- * Result of lowering a single block.
- */
-export interface LoweredBlock {
-  readonly blockId: string;
-  readonly blockType: string;
-  readonly outputs: ReadonlyMap<string, LoweredOutput>;
-  readonly stateReads?: readonly StateId[];
-  readonly stateWrites?: readonly StateId[];
-}
-
-
-
-/**
- * Context for block lowering.
- *
- * Invariant: after graph normalization, every input port is connected,
- * so lowering never receives an "unconnected" input or a defaultValue fallback.
- */
-export interface LowerContext {
-  readonly builder: IRBuilder;
-  readonly resolvedInputs: ReadonlyMap<string, ValueRefPacked>;
-  readonly params: Readonly<Record<string, unknown>>;
-}
-
-/**
- * Block lowering function - transforms a block into IR expressions.
- */
-export type BlockLowerFn = (ctx: LowerContext) => LoweredBlock;
-
-/**
- * Complete lowered IR - result of the lowering pass.
- */
-export interface LoweredIR {
-  readonly blocks: ReadonlyMap<string, LoweredBlock>;
-  readonly outputs: ReadonlyMap<string, ReadonlyMap<string, LoweredOutput>>;
-  readonly instances: ReadonlyMap<InstanceId, { count: number }>;
 }

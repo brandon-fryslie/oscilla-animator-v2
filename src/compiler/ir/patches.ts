@@ -10,7 +10,7 @@
  *       -> TimeResolvedPatch (Pass 3)
  *       -> DepGraph (Pass 4)
  *       -> AcyclicOrLegalGraph (Pass 5)
- *       -> LoweredIR (Pass 6)
+ *       -> UnlinkedIRFragments (Pass 6)
  *
  * IMPORTANT: The compiler receives NormalizedPatch from the Graph Normalizer.
  * It never sees raw Patch directly.
