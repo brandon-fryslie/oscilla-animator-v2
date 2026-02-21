@@ -27,8 +27,6 @@ function getStepExprId(step: Step): ValueExprId | null {
   switch (step.kind) {
     case 'evalValue':
       return step.expr;
-    case 'slotWriteStrided':
-      return step.inputs.length > 0 ? step.inputs[0] : null;
     case 'materialize':
       return step.field;
     case 'stateWrite':
@@ -55,24 +53,6 @@ describe('getStepExprId', () => {
       strategy: 0,
     };
     expect(getStepExprId(step)).toBe(42);
-  });
-
-  it('extracts first input from slotWriteStrided', () => {
-    const step: Step = {
-      kind: 'slotWriteStrided',
-      slotBase: 10 as ValueSlot,
-      inputs: [5 as ValueExprId, 6 as ValueExprId],
-    };
-    expect(getStepExprId(step)).toBe(5);
-  });
-
-  it('returns null for empty slotWriteStrided inputs', () => {
-    const step: Step = {
-      kind: 'slotWriteStrided',
-      slotBase: 10 as ValueSlot,
-      inputs: [],
-    };
-    expect(getStepExprId(step)).toBeNull();
   });
 
   it('extracts field from materialize step', () => {

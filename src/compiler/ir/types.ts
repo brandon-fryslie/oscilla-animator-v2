@@ -302,35 +302,12 @@ export interface StepEvalValue {
 
 export type Step =
   | StepEvalValue
-  | StepSlotWriteStrided
   | StepMaterialize
   | StepRender
   | StepStateWrite
   | StepFieldStateWrite
   | StepContinuityMapBuild
   | StepContinuityApply;
-
-/**
- * Strided slot write step - writes multiple scalar signal components to contiguous slots.
- *
- * This is the canonical way to materialize multi-component signal values (vec2, vec3, color)
- * into value slots without requiring array-returning evaluators or side-effect kernels.
- *
- * Contract:
- * - inputs.length must equal the stride of slotBase (from slotMeta)
- * - Each input is evaluated as a scalar signal
- * - Results are written sequentially: values.f64[slotBase + i] = evaluateSignal(inputs[i])
- *
- * Example: vec2 output
- *   slotBase = allocSlot(stride=2)
- *   inputs = [sigExprX, sigExprY]
- *   → writes values.f64[slotBase+0] = eval(sigExprX), values.f64[slotBase+1] = eval(sigExprY)
- */
-export interface StepSlotWriteStrided {
-  readonly kind: 'slotWriteStrided';
-  readonly slotBase: ValueSlot;
-  readonly inputs: readonly ValueExprId[];
-}
 
 export interface StepMaterialize {
   readonly kind: 'materialize';

@@ -357,36 +357,6 @@ export function executeFrame(
         break;
       }
 
-      case 'slotWriteStrided': {
-        // P2: Execute strided slot write
-        // Evaluate each component signal and write to contiguous slots
-        const lookup = resolveSlotOffsetFromMap(slotLookupMap,step.slotBase);
-        const { storage, stride } = lookup;
-
-        if (storage !== 'f64') {
-          throw new Error('slotWriteStrided: expected f64 storage for slot ' + step.slotBase + ', got ' + storage);
-        }
-
-        if (step.inputs.length !== stride) {
-          throw new Error(
-            'slotWriteStrided: inputs.length (' + step.inputs.length + ') must equal stride (' + stride + ') for slot ' + step.slotBase
-          );
-        }
-
-        const arenaDesc = resolveArenaDescriptor(slotToArena, lookup);
-        // Evaluate each component and write sequentially
-        for (let i = 0; i < step.inputs.length; i++) {
-          const veId = step.inputs[i];
-          const componentValue = evaluateValueExprSignal(veId as any, program.valueExprs.nodes, state);
-
-          state.arena[arenaDesc.offset + i] = componentValue;
-
-          // Debug tap: Record slot value for each component
-          state.tap?.recordSlotValue?.((step.slotBase + i) as ValueSlot, componentValue);
-        }
-        break;
-      }
-
       case 'materialize': {
         // ValueExpr-only materialization (cutover complete)
         const veId = step.field;

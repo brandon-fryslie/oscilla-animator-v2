@@ -63,9 +63,6 @@ export interface OrchestratorIRBuilder extends BlockIRBuilder {
   // Execution Steps (orchestrator-only)
   // =========================================================================
 
-  /** Emit a strided slot write step. */
-  stepSlotWriteStrided(slotBase: ValueSlot, inputs: readonly ValueExprId[]): void;
-
   /** Emit a state write step. */
   stepStateWrite(stateSlot: StateSlotId, value: ValueExprId): void;
 

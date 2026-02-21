@@ -456,10 +456,6 @@ export class StepDebugStore {
       case 'materialize': return step.field;
       case 'stateWrite': return step.value;
       case 'fieldStateWrite': return step.value;
-      case 'slotWriteStrided': {
-        if (step.inputs.length === 0) throw new Error('slotWriteStrided step has no inputs — malformed IR');
-        return step.inputs[0];
-      }
       default: return null;
     }
   }

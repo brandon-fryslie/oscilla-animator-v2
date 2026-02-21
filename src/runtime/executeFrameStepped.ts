@@ -395,32 +395,6 @@ export function* executeFrameStepped(
         break;
       }
 
-      case 'slotWriteStrided': {
-        const lookup = resolveSlotOffset(step.slotBase);
-        const { storage, stride } = lookup;
-        if (storage !== 'f64') {
-          throw new Error(`slotWriteStrided: expected f64 storage for slot ${step.slotBase}, got ${storage}`);
-        }
-        if (step.inputs.length !== stride) {
-          throw new Error(
-            `slotWriteStrided: inputs.length (${step.inputs.length}) must equal stride (${stride}) for slot ${step.slotBase}`
-          );
-        }
-        const arenaDesc = resolveArenaDescriptor(slotToArena, lookup);
-        for (let i = 0; i < step.inputs.length; i++) {
-          const veId = step.inputs[i];
-          const componentValue = evaluateValueExprSignal(veId as any, program.valueExprs.nodes, state);
-          state.arena[arenaDesc.offset + i] = componentValue;
-          state.tap?.recordSlotValue?.((step.slotBase + i) as ValueSlot, componentValue);
-        }
-        // Capture written strided slot
-        const meta = slotToMeta.get(step.slotBase);
-        if (meta) {
-          writtenSlots.set(step.slotBase, readSlotValue(state, lookup, meta, slotToArena));
-        }
-        break;
-      }
-
       case 'materialize': {
         const veId = step.field;
         const instanceDecl = instances.get(step.instanceId);

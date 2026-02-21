@@ -452,10 +452,6 @@ export class IRBuilderImpl implements OrchestratorIRBuilder {
   // Steps (orchestrator-only)
   // ===========================================================================
 
-  stepSlotWriteStrided(slotBase: ValueSlot, inputs: readonly ValueExprId[]): void {
-    this.steps.push({ kind: 'slotWriteStrided', slotBase, inputs });
-  }
-
   stepStateWrite(stateSlot: StateSlotId, value: ValueExprId): void {
     this.steps.push({ kind: 'stateWrite', stateSlot, value });
   }

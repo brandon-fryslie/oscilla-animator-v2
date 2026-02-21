@@ -221,7 +221,7 @@ function evaluateSignalExtent(
     }
 
     case 'hslToRgb': {
-      // HSL→RGB is field-extent only (signal color uses slotWriteStrided).
+      // HSL→RGB is field-extent only.
       throw new Error('hslToRgb expressions are field-extent, not signal-extent');
     }
 

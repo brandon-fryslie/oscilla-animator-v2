@@ -19,7 +19,7 @@
  */
 
 import type { Step, StepEvalValue, StepMaterialize, TimeModel, StateMapping, ScalarSlotDecl, FieldSlotDecl, EvalStrategy, EvalTarget } from '../ir/types';
-import { SCALAR_INSTANCE_ID, type ValueSlot, type InstanceId } from '../ir/Indices';
+import { SCALAR_INSTANCE_ID, type InstanceId } from '../ir/Indices';
 import type { ValueExpr, ValueExprId } from '../ir/value-expr';
 import type { UnlinkedIRFragments } from './lower-blocks';
 import type { AcyclicOrLegalGraph } from '../ir/patches';
@@ -295,21 +295,9 @@ export function pass7Schedule(
   // Collect steps from builder (stateWrite steps from stateful blocks)
   const builderSteps = unlinkedIR.builder.getSteps();
 
-  // Collect slots that are targets of slotWriteStrided steps.
-  // These slots are written by the strided write step, not evalValue.
-  const stridedWriteSlots = new Set<ValueSlot>();
-  for (const step of builderSteps) {
-    if (step.kind === 'slotWriteStrided') {
-      stridedWriteSlots.add(step.slotBase);
-    }
-  }
-
   // Generate evalValue steps for all signals with registered slots.
   // Signals that depend on eventRead must be evaluated AFTER events.
   // Pre-event signals go in Phase 1, post-event signals go after evalEvent.
-  //
-  // CRITICAL: Skip slots that are targets of slotWriteStrided steps.
-  // Those slots have stride > 1 and are written by the strided write, not evalValue.
   const sigSlots = unlinkedIR.builder.getSigSlots();
   const evalValueStepsPre: Step[] = [];
   const evalValueStepsPost: Step[] = [];
@@ -317,11 +305,6 @@ export function pass7Schedule(
   const scalarMaterializeStepsPost: StepMaterialize[] = [];
   const scalarMaterializeEligibility = new Map<number, boolean>();
   for (const [sigId, slot] of sigSlots) {
-    // Skip slots that are written by slotWriteStrided
-    if (stridedWriteSlots.has(slot)) {
-      continue;
-    }
-
     const exprId = sigId as ValueExprId;
     const expr = valueExprs[exprId as number];
     if (!expr) continue;
@@ -383,20 +366,16 @@ export function pass7Schedule(
   }
 
   // Separate builder steps by kind:
-  // - slotWriteStrided goes in Phase 1 (with evalValue)
   // - stateWrite/fieldStateWrite goes in Phase 8 (end)
-  const slotWriteStridedSteps: Step[] = [];
   const stateWriteSteps: Step[] = [];
   for (const step of builderSteps) {
-    if (step.kind === 'slotWriteStrided') {
-      slotWriteStridedSteps.push(step);
-    } else if (step.kind === 'stateWrite' || step.kind === 'fieldStateWrite') {
+    if (step.kind === 'stateWrite' || step.kind === 'fieldStateWrite') {
       stateWriteSteps.push(step);
     }
   }
 
   // Combine all steps in correct execution order:
-  // 1. EvalValue-pre + SlotWriteStrided (signals NOT dependent on events)
+  // 1. EvalValue-pre (signals NOT dependent on events)
   // 2. ContinuityMapBuild (detect domain changes, compute mappings)
   // 3. Materialize (evaluate fields to buffers)
   // 4. ContinuityApply (apply gauge/slew/crossfade to buffers)
@@ -406,7 +385,6 @@ export function pass7Schedule(
   // 8. StateWrite (persist state for next frame)
   const steps: Step[] = [
     ...evalValueStepsPre,
-    ...slotWriteStridedSteps,
     ...scalarMaterializeStepsPre,
     ...continuityPipeline.mapBuildSteps,
     ...continuityPipeline.materializeSteps,

@@ -583,8 +583,6 @@ function getStepExprId(step: Step): ValueExprId | null {
   switch (step.kind) {
     case 'evalValue':
       return step.expr;
-    case 'slotWriteStrided':
-      return step.inputs.length > 0 ? step.inputs[0] : null;
     case 'materialize':
       return step.field;
     case 'stateWrite':
@@ -610,8 +608,6 @@ function getStepTargetSlot(step: Step): ValueSlot | null {
   switch (step.kind) {
     case 'evalValue':
       return step.target.storage === 'value' ? step.target.slot : null;
-    case 'slotWriteStrided':
-      return step.slotBase;
     case 'materialize':
       return step.target;
     case 'render':
