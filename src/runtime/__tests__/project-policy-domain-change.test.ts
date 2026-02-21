@@ -64,7 +64,7 @@ function createTestRuntimeState(): RuntimeState {
     
       valueExprFieldBuffers: [],
       valueExprFieldStamps: [],
-      sigToSlot: null,
+      scalarExprToArenaOffset: null,
     },
     timeState: {
       prevTAbsMs: null,

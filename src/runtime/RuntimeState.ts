@@ -211,8 +211,8 @@ export interface FrameCache {
    */
   valueExprFieldStamps: number[];
 
-  /** Signal ValueExprId -> arena scalar offset mapping for multi-component extract */
-  sigToSlot: ReadonlyMap<number, number> | null;
+  /** Scalar ValueExprId -> arena offset mapping for multi-component extract */
+  scalarExprToArenaOffset: ReadonlyMap<number, number> | null;
 }
 
 /**
@@ -230,7 +230,7 @@ export function createFrameCache(
     valueExprStamps: new Uint32Array(maxValueExprs),
     valueExprFieldBuffers: new Array(maxValueExprs).fill(null),
     valueExprFieldStamps: new Array(maxValueExprs).fill(-1),
-    sigToSlot: null,
+    scalarExprToArenaOffset: null,
   };
 }
 

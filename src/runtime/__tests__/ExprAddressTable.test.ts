@@ -89,7 +89,7 @@ describe('getExprAddressTable', () => {
     expect(table.fieldExprToSlot.get(10)).toBe(valueSlot(5));
   });
 
-  it('builds sigToF64Offset from evalValue steps', () => {
+  it('builds scalarExprToF64Offset from evalValue steps', () => {
     const program = mockProgram({
       slotMeta: [
         { slot: valueSlot(3), storage: 'f64', offset: 7, stride: 1, type: SIG_FLOAT },
@@ -105,7 +105,7 @@ describe('getExprAddressTable', () => {
     });
 
     const table = getExprAddressTable(program);
-    expect(table.sigToF64Offset.get(42)).toBe(7);
+    expect(table.scalarExprToF64Offset.get(42)).toBe(7);
   });
 
   it('caches table per program identity', () => {

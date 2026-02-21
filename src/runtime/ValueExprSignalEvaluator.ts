@@ -197,8 +197,8 @@ function evaluateSignalExtent(
       // [LAW:one-source-of-truth] Multi-component signals live in arena slots.
       // Read directly from the materialized slot — schedule ordering guarantees
       // the input was written before this extract evaluates.
-      const sigToSlot = state.cache.sigToSlot;
-      const offset = sigToSlot?.get(expr.input as number);
+      const scalarExprToArenaOffset = state.cache.scalarExprToArenaOffset;
+      const offset = scalarExprToArenaOffset?.get(expr.input as number);
       if (offset === undefined) {
         throw new Error(
           `extract(${expr.componentIndex}): input ${expr.input} has no slot mapping — ` +

@@ -155,8 +155,8 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
       state.values.objects.set(2 as ValueSlot, colorBuffer);
       state.values.objects.set(3 as ValueSlot, shapeBuffer);
 
-      // Build sigToSlot mapping
-      const sigToSlot = new Map<number, number>([[0, 10]]);
+      // Build scalarExprToArenaOffset mapping
+      const scalarExprToArenaOffset = new Map<number, number>([[0, 10]]);
       state.arena[10] = 1.0;
       const slotToArena = mirrorNumericObjectSlotsToArena(state, [
         { slot: 1 as ValueSlot, stride: 3 },
@@ -173,7 +173,7 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
       };
 
       const context: AssemblerContext = {
-        sigToSlot,
+        scalarExprToArenaOffset,
         instances: new Map([['test-instance', createMockInstance(10)]]),
         state,
         resolvedCamera: DEFAULT_CAMERA,
@@ -226,8 +226,8 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
       state.values.objects.set(3 as ValueSlot, shapeBuffer);
       state.values.objects.set(4 as ValueSlot, controlPointsBuffer);
 
-      // Build sigToSlot mapping
-      const sigToSlot = new Map<number, number>([[0, 10]]);
+      // Build scalarExprToArenaOffset mapping
+      const scalarExprToArenaOffset = new Map<number, number>([[0, 10]]);
       state.arena[10] = 1.0;
       const slotToArena = mirrorNumericObjectSlotsToArena(state, [
         { slot: 1 as ValueSlot, stride: 3 },
@@ -245,7 +245,7 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
       };
 
       const context: AssemblerContext = {
-        sigToSlot,
+        scalarExprToArenaOffset,
         instances: new Map([['test-instance', createMockInstance(instanceCount)]]),
         state,
         resolvedCamera: DEFAULT_CAMERA,
@@ -310,8 +310,8 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
         });
       }
 
-      // Build sigToSlot mapping
-      const sigToSlot = new Map<number, number>([[0, 10]]);
+      // Build scalarExprToArenaOffset mapping
+      const scalarExprToArenaOffset = new Map<number, number>([[0, 10]]);
       state.arena[10] = 2.0;
       const slotToArena = mirrorNumericObjectSlotsToArena(state, [
         { slot: 1 as ValueSlot, stride: 3 },
@@ -331,7 +331,7 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
       };
 
       const context: AssemblerContext = {
-        sigToSlot,
+        scalarExprToArenaOffset,
         instances: new Map([['test-instance', createMockInstance(instanceCount)]]),
         state,
         resolvedCamera: DEFAULT_CAMERA,
@@ -399,8 +399,8 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
         });
       }
 
-      // Build sigToSlot mapping
-      const sigToSlot = new Map<number, number>([[0, 10]]);
+      // Build scalarExprToArenaOffset mapping
+      const scalarExprToArenaOffset = new Map<number, number>([[0, 10]]);
       state.arena[10] = 1.0;
       const slotToArena = mirrorNumericObjectSlotsToArena(state, [
         { slot: 1 as ValueSlot, stride: 3 },
@@ -419,7 +419,7 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
       };
 
       const context: AssemblerContext = {
-        sigToSlot,
+        scalarExprToArenaOffset,
         instances: new Map([['test-instance', createMockInstance(instanceCount)]]),
         state,
         resolvedCamera: DEFAULT_CAMERA,
@@ -475,8 +475,8 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
       writeShape2D(shapeBuffer, 2, { topologyId: SQUARE_ID, pointsFieldSlot: 5, pointsCount: 4, styleRef: 0, flags: 1 });
       writeShape2D(shapeBuffer, 3, { topologyId: CIRCLE_ID, pointsFieldSlot: 4, pointsCount: 4, styleRef: 0, flags: 1 });
 
-      // Build sigToSlot mapping
-      const sigToSlot = new Map<number, number>([[0, 10]]);
+      // Build scalarExprToArenaOffset mapping
+      const scalarExprToArenaOffset = new Map<number, number>([[0, 10]]);
       state.arena[10] = 1.0;
       const slotToArena = mirrorNumericObjectSlotsToArena(state, [
         { slot: 1 as ValueSlot, stride: 3 },
@@ -495,7 +495,7 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
       };
 
       const context: AssemblerContext = {
-        sigToSlot,
+        scalarExprToArenaOffset,
         instances: new Map([['test-instance', createMockInstance(instanceCount)]]),
         state,
         resolvedCamera: DEFAULT_CAMERA,
@@ -559,8 +559,8 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
         });
       }
 
-      // Build sigToSlot mapping
-      const sigToSlot = new Map<number, number>([[0, 10]]);
+      // Build scalarExprToArenaOffset mapping
+      const scalarExprToArenaOffset = new Map<number, number>([[0, 10]]);
       state.arena[10] = 1.0;
       const slotToArena = mirrorNumericObjectSlotsToArena(state, [
         { slot: 1 as ValueSlot, stride: 3 },
@@ -578,7 +578,7 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
       };
 
       const context: AssemblerContext = {
-        sigToSlot,
+        scalarExprToArenaOffset,
         instances: new Map([['test-instance', createMockInstance(instanceCount)]]),
         state,
         resolvedCamera: DEFAULT_CAMERA,
@@ -615,8 +615,8 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
         });
       }
 
-      // Build sigToSlot mapping
-      const sigToSlot = new Map<number, number>([[0, 10]]);
+      // Build scalarExprToArenaOffset mapping
+      const scalarExprToArenaOffset = new Map<number, number>([[0, 10]]);
       state.arena[10] = 1.0;
       const slotToArena = mirrorNumericObjectSlotsToArena(state, [
         { slot: 1 as ValueSlot, stride: 3 },
@@ -633,7 +633,7 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
       };
 
       const context: AssemblerContext = {
-        sigToSlot,
+        scalarExprToArenaOffset,
         instances: new Map([['test-instance', createMockInstance(instanceCount)]]),
         state,
         resolvedCamera: DEFAULT_CAMERA,
@@ -694,8 +694,8 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
         { kind: 'const', value: { kind: 'float', value: 1.0 }, type: SCALAR_TYPE },
       ];
 
-      // Build sigToSlot mapping for scale signal
-      const sigToSlot = new Map<number, number>([
+      // Build scalarExprToArenaOffset mapping for scale signal
+      const scalarExprToArenaOffset = new Map<number, number>([
         [0, 10], // scale signal at slot 10
       ]);
 
@@ -730,7 +730,7 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
       ];
 
       const context: AssemblerContext = {
-        sigToSlot,
+        scalarExprToArenaOffset,
         instances: new Map([
           ['instance-a', createMockInstance(3)],
           ['instance-b', createMockInstance(4)],

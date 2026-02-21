@@ -432,16 +432,14 @@ export function compactAndCopy(
 export interface AssemblerContext {
   /** Instance declarations */
   instances: ReadonlyMap<string, InstanceDecl>;
-  /** Runtime state for reading signal slots and field buffers */
+  /** Runtime state for reading scalar-expression slots and field buffers */
   state: RuntimeState;
   /** Resolved camera params from frame globals (always present, defaults if no Camera block) */
   resolvedCamera: ResolvedCameraParams;
   /** Pre-allocated buffer arena for zero-allocation rendering */
   arena: RenderBufferArena;
-  /** Legacy signal map (ValueExprId -> f64 offset). Retained for transition compatibility. */
-  sigToSlot: ReadonlyMap<number, number>;
-  /** Preferred signal map (ValueExprId -> arena scalar offset). */
-  sigToArena?: ReadonlyMap<number, number>;
+  /** Scalar ValueExprId -> arena scalar offset map. */
+  scalarExprToArenaOffset: ReadonlyMap<number, number>;
   /** Slot -> arena descriptor map (for numeric field reads). */
   slotToArena?: ReadonlyMap<ValueSlot, ArenaSlotDescriptor>;
 }
@@ -454,8 +452,7 @@ export interface AssemblerContext {
  */
 function resolveScale(
   scaleSpec: StepRender['scale'],
-  sigToSlot: ReadonlyMap<number, number>,
-  sigToArena: ReadonlyMap<number, number> | undefined,
+  scalarExprToArenaOffset: ReadonlyMap<number, number>,
   state: RuntimeState
 ): number {
   if (scaleSpec === undefined) {
@@ -467,8 +464,7 @@ function resolveScale(
 
   if (scaleSpec.k === 'sig') {
     // [LAW:one-source-of-truth] Render reads numeric signal values from arena only.
-    // sigToSlot is retained as transitional alias for arena offsets.
-    const arenaOffset = sigToArena?.get(scaleSpec.id as number) ?? sigToSlot.get(scaleSpec.id as number);
+    const arenaOffset = scalarExprToArenaOffset.get(scaleSpec.id as number);
     if (arenaOffset !== undefined) {
       return state.arena[arenaOffset];
     }
@@ -496,8 +492,7 @@ function resolveScale(
  */
 function resolveShape(
   shapeSpec: StepRender['shape'],
-  sigToSlot: ReadonlyMap<number, number>,
-  sigToArena: ReadonlyMap<number, number> | undefined,
+  scalarExprToArenaOffset: ReadonlyMap<number, number>,
   state: RuntimeState
 ): ShapeDescriptor | ArrayBufferView {
   if (shapeSpec === undefined) {
@@ -522,8 +517,7 @@ function resolveShape(
 
     for (let i = 0; i < paramSignals.length; i++) {
       // [LAW:one-source-of-truth] Render reads numeric signal values from arena only.
-      // sigToSlot is retained as transitional alias for arena offsets.
-      const arenaOffset = sigToArena?.get(paramSignals[i] as number) ?? sigToSlot.get(paramSignals[i] as number);
+      const arenaOffset = scalarExprToArenaOffset.get(paramSignals[i] as number);
       if (arenaOffset === undefined) {
         throw new Error(
           'RenderAssembler: No slot mapping for param signal ' + paramSignals[i] + '. ' +
@@ -1341,7 +1335,7 @@ export function assembleDrawPathInstancesOp(
   step: StepRender,
   context: AssemblerContext
 ): DrawOp[] {
-  const { sigToSlot, sigToArena, slotToArena, instances, state, arena } = context;
+  const { scalarExprToArenaOffset, slotToArena, instances, state, arena } = context;
 
   // Get instance declaration
   const instance = instances.get(step.instanceId);
@@ -1393,10 +1387,10 @@ export function assembleDrawPathInstancesOp(
   }
 
   // Resolve scale (uniform signal)
-  const scale = resolveScale(step.scale, sigToSlot, sigToArena, state);
+  const scale = resolveScale(step.scale, scalarExprToArenaOffset, state);
 
   // Resolve shape
-  const shape = resolveShape(step.shape, sigToSlot, sigToArena, state);
+  const shape = resolveShape(step.shape, scalarExprToArenaOffset, state);
 
   // Check if per-instance shapes (shape buffer)
   if (shape instanceof Uint32Array) {

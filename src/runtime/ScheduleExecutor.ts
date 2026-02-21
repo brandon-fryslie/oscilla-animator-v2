@@ -247,9 +247,9 @@ export function executeFrame(
   // Collect render steps for v2 batch assembly (reuse module-level array)
   _renderSteps.length = 0;
 
-  // [LAW:one-source-of-truth] Populate sigToSlot before Phase 1 so extract
+  // [LAW:one-source-of-truth] Populate scalarExprToArenaOffset before Phase 1 so extract
   // reads multi-component signals from arena using canonical ExprAddressTable offsets.
-  state.cache.sigToSlot = addressTable.sigToArenaOffset;
+  state.cache.scalarExprToArenaOffset = addressTable.scalarExprToArenaOffset;
 
   // PHASE 1: Execute all non-stateWrite steps
   for (const step of steps) {
@@ -539,8 +539,7 @@ export function executeFrame(
   _assemblerCtx.state = state;
   _assemblerCtx.resolvedCamera = resolvedCamera;
   _assemblerCtx.arena = arena;
-  _assemblerCtx.sigToSlot = state.cache.sigToSlot!;
-  _assemblerCtx.sigToArena = addressTable.sigToArenaOffset;
+  _assemblerCtx.scalarExprToArenaOffset = state.cache.scalarExprToArenaOffset!;
   _assemblerCtx.slotToArena = addressTable.slotToArena;
   assemblerContext = _assemblerCtx as AssemblerContext;
 

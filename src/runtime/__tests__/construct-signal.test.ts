@@ -168,16 +168,16 @@ describe('extract signal evaluation', () => {
     };
   });
 
-  it('reads component from arena slot via sigToSlot mapping', () => {
+  it('reads component from arena slot via scalarExprToArenaOffset mapping', () => {
     // Write vec3 values (10, 20, 30) to arena at a known offset
     const offset = 5;
     state.arena[offset + 0] = 10;
     state.arena[offset + 1] = 20;
     state.arena[offset + 2] = 30;
 
-    // Set up sigToSlot: input expression 3 maps to offset 5
+    // Set up scalarExprToArenaOffset: input expression 3 maps to offset 5
     const inputId = 3;
-    state.cache.sigToSlot = new Map([[inputId, offset]]);
+    state.cache.scalarExprToArenaOffset = new Map([[inputId, offset]]);
 
     // Build extract expressions referencing input 3
     const valueExprs: ValueExpr[] = [
@@ -252,16 +252,16 @@ describe('extract signal evaluation', () => {
     const constructExpr = valueExprs[2] as Extract<ValueExpr, { kind: 'construct' }>;
     evaluateConstructSignal(constructExpr, valueExprs, state, state.arena, offset);
 
-    // Set up sigToSlot mapping
-    state.cache.sigToSlot = new Map([[2, offset]]);
+    // Set up scalarExprToArenaOffset mapping
+    state.cache.scalarExprToArenaOffset = new Map([[2, offset]]);
 
     expect(evaluateValueExprSignal(3 as ValueExprId, valueExprs, state)).toBe(100);
     expect(evaluateValueExprSignal(4 as ValueExprId, valueExprs, state)).toBe(200);
   });
 
   it('throws when input has no slot mapping', () => {
-    // sigToSlot is null (not populated)
-    state.cache.sigToSlot = null;
+    // scalarExprToArenaOffset is null (not populated)
+    state.cache.scalarExprToArenaOffset = null;
 
     const valueExprs: ValueExpr[] = [
       {
@@ -285,7 +285,7 @@ describe('extract signal evaluation', () => {
     state.arena[offset + 3] = 1.0;
 
     const inputId = 4;
-    state.cache.sigToSlot = new Map([[inputId, offset]]);
+    state.cache.scalarExprToArenaOffset = new Map([[inputId, offset]]);
 
     const valueExprs: ValueExpr[] = [
       { kind: 'const', value: floatConst(0), type: canonicalSignal({ kind: 'float' }, { kind: 'none' }) },

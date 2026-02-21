@@ -285,9 +285,9 @@ export function* executeFrameStepped(
   // Yield pre-frame snapshot
   yield buildSnapshot(-1, null, 'pre-frame', totalSteps, program, state, tAbsMs, new Map(), prevValues);
 
-  // [LAW:one-source-of-truth] Populate sigToSlot before Phase 1 so extract
+  // [LAW:one-source-of-truth] Populate scalarExprToArenaOffset before Phase 1 so extract
   // reads multi-component signals from arena using canonical ExprAddressTable offsets.
-  state.cache.sigToSlot = addressTable.sigToArenaOffset;
+  state.cache.scalarExprToArenaOffset = addressTable.scalarExprToArenaOffset;
 
   // --- PHASE 1: Execute all non-stateWrite steps ---
   const valueExprs = program.valueExprs.nodes;
@@ -496,8 +496,7 @@ export function* executeFrameStepped(
     state,
     resolvedCamera,
     arena,
-    sigToSlot: state.cache.sigToSlot!,
-    sigToArena: addressTable.sigToArenaOffset,
+    scalarExprToArenaOffset: state.cache.scalarExprToArenaOffset!,
     slotToArena: addressTable.slotToArena,
   };
   const frame = assembleRenderFrame(renderSteps, assemblerContext);

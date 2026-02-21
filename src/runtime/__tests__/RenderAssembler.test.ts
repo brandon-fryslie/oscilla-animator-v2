@@ -138,7 +138,7 @@ describe('RenderAssembler', () => {
       };
 
       const context: AssemblerContext = {
-        sigToSlot: new Map(),
+        scalarExprToArenaOffset: new Map(),
         instances: new Map(),
         state,
         resolvedCamera: DEFAULT_CAMERA,
@@ -161,7 +161,7 @@ describe('RenderAssembler', () => {
       };
 
       const context: AssemblerContext = {
-        sigToSlot: new Map(),
+        scalarExprToArenaOffset: new Map(),
         instances: new Map([['empty-instance', createMockInstance(0)]]),
         state,
         resolvedCamera: DEFAULT_CAMERA,
@@ -180,8 +180,8 @@ describe('RenderAssembler', () => {
       state.values.objects.set(1 as ValueSlot, positionBuffer);
       state.values.objects.set(2 as ValueSlot, colorBuffer);
 
-      // Build sigToSlot mapping for scale and shape params
-      const sigToSlot = new Map<number, number>([
+      // Build scalarExprToArenaOffset mapping for scale and shape params
+      const scalarExprToArenaOffset = new Map<number, number>([
         [0, 10], // scale signal at slot 10
         [1, 11], // rx param at slot 11
         [2, 12], // ry param at slot 12
@@ -206,7 +206,7 @@ describe('RenderAssembler', () => {
       };
 
       const context: AssemblerContext = {
-        sigToSlot,
+        scalarExprToArenaOffset,
         instances: new Map([['test-instance', createMockInstance(10)]]),
         state,
         resolvedCamera: DEFAULT_CAMERA,
@@ -237,8 +237,8 @@ describe('RenderAssembler', () => {
       state.values.objects.set(2 as ValueSlot, colorBuffer);
       state.values.objects.set(3 as ValueSlot, controlPointsBuffer);
 
-      // Build sigToSlot mapping for scale and shape params
-      const sigToSlot = new Map<number, number>([
+      // Build scalarExprToArenaOffset mapping for scale and shape params
+      const scalarExprToArenaOffset = new Map<number, number>([
         [0, 10], // scale signal
         [1, 11], // radiusX param
         [2, 12], // radiusY param
@@ -271,7 +271,7 @@ describe('RenderAssembler', () => {
       };
 
       const context: AssemblerContext = {
-        sigToSlot,
+        scalarExprToArenaOffset,
         instances: new Map([['test-instance', createMockInstance(2)]]),
         state,
         resolvedCamera: DEFAULT_CAMERA,
@@ -328,8 +328,8 @@ describe('RenderAssembler', () => {
       state.values.objects.set(1 as ValueSlot, positionBuffer);
       state.values.objects.set(2 as ValueSlot, colorBuffer);
 
-      // Build sigToSlot mapping
-      const sigToSlot = new Map<number, number>([
+      // Build scalarExprToArenaOffset mapping
+      const scalarExprToArenaOffset = new Map<number, number>([
         [0, 10], [1, 11], [2, 12], [3, 13],
       ]);
 
@@ -358,7 +358,7 @@ describe('RenderAssembler', () => {
       };
 
       const context: AssemblerContext = {
-        sigToSlot,
+        scalarExprToArenaOffset,
         instances: new Map([['test-instance', createMockInstance(10)]]),
         state,
         resolvedCamera: DEFAULT_CAMERA,
@@ -384,8 +384,8 @@ describe('RenderAssembler', () => {
       state.values.objects.set(5 as ValueSlot, new Uint8ClampedArray([0, 255, 0, 255]));
       state.values.objects.set(6 as ValueSlot, new Float32Array([0, 1, 0.95, 0.31, 0.59, -0.81, -0.59, -0.81, -0.95, 0.31]));
 
-      // Build sigToSlot mapping
-      const sigToSlot = new Map<number, number>([
+      // Build scalarExprToArenaOffset mapping
+      const scalarExprToArenaOffset = new Map<number, number>([
         [0, 10], [1, 11], [2, 12], [3, 13],
       ]);
 
@@ -433,7 +433,7 @@ describe('RenderAssembler', () => {
       ];
 
       const context: AssemblerContext = {
-        sigToSlot,
+        scalarExprToArenaOffset,
         instances: new Map([
           ['instance-a', createMockInstance(1)],
           ['instance-b', createMockInstance(1)],
@@ -462,8 +462,8 @@ describe('RenderAssembler', () => {
       state.values.objects.set(4 as ValueSlot, new Float32Array([0.5, 0.6, 0.0])); // 1 instance * 3 components
       state.values.objects.set(5 as ValueSlot, new Uint8ClampedArray([0, 255, 0, 255]));
 
-      // Build sigToSlot mapping for scale and shape params
-      const sigToSlot = new Map<number, number>([
+      // Build scalarExprToArenaOffset mapping for scale and shape params
+      const scalarExprToArenaOffset = new Map<number, number>([
         [0, 10], // scale signal
         [1, 11], // param signals for shapes
         [2, 12],
@@ -515,7 +515,7 @@ describe('RenderAssembler', () => {
       ];
 
       const context: AssemblerContext = {
-        sigToSlot,
+        scalarExprToArenaOffset,
         instances: new Map([
           ['path-instance', createMockInstance(1)],
           ['primitive-instance', createMockInstance(1)],
@@ -538,8 +538,8 @@ describe('RenderAssembler', () => {
     it('returns empty ops array when all instances are empty', () => {
       const state = createMockState();
 
-      // Build sigToSlot mapping for scale signal
-      const sigToSlot = new Map<number, number>([
+      // Build scalarExprToArenaOffset mapping for scale signal
+      const scalarExprToArenaOffset = new Map<number, number>([
         [0, 10], // scale signal
       ]);
 
@@ -562,7 +562,7 @@ describe('RenderAssembler', () => {
       ];
 
       const context: AssemblerContext = {
-        sigToSlot,
+        scalarExprToArenaOffset,
         instances: new Map([
           ['empty-instance', createMockInstance(0)], // count = 0
         ]),
