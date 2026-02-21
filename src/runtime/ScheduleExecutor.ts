@@ -40,7 +40,25 @@ import {
   assertF64Stride,
 } from './ExprAddressTable';
 
-function writeF64Scalar(state: RuntimeState, lookup: SlotLookup, value: number): void {
+// [LAW:one-source-of-truth] Arena is the canonical numeric store; f64 is transitional.
+function mirrorF64ToArena(
+  program: CompiledProgramIR,
+  state: RuntimeState,
+  lookup: SlotLookup,
+  stride: number,
+): void {
+  const arenaDesc = program.arenaLayout[lookup.slot as number];
+  if (!arenaDesc || arenaDesc.offset < 0) return;
+
+  const copyLength = Math.min(stride, lookup.stride, arenaDesc.length);
+  const srcOffset = lookup.offset;
+  const dstOffset = arenaDesc.offset;
+  for (let i = 0; i < copyLength; i++) {
+    state.arena[dstOffset + i] = state.values.f64[srcOffset + i] as number;
+  }
+}
+
+function writeF64Scalar(program: CompiledProgramIR, state: RuntimeState, lookup: SlotLookup, value: number): void {
   if (lookup.storage !== 'f64') {
     throw new Error('writeF64Scalar: expected f64 storage for slot ' + lookup.slot + ', got ' + lookup.storage);
   }
@@ -48,9 +66,16 @@ function writeF64Scalar(state: RuntimeState, lookup: SlotLookup, value: number):
     throw new Error('writeF64Scalar: expected stride=1 for slot ' + lookup.slot + ', got stride=' + lookup.stride);
   }
   state.values.f64[lookup.offset] = value;
+  mirrorF64ToArena(program, state, lookup, 1);
 }
 
-function writeF64Strided(state: RuntimeState, lookup: SlotLookup, src: ArrayLike<number>, stride: number): void {
+function writeF64Strided(
+  program: CompiledProgramIR,
+  state: RuntimeState,
+  lookup: SlotLookup,
+  src: ArrayLike<number>,
+  stride: number,
+): void {
   if (lookup.storage !== 'f64') {
     throw new Error('writeF64Strided: expected f64 storage for slot ' + lookup.slot + ', got ' + lookup.storage);
   }
@@ -61,6 +86,7 @@ function writeF64Strided(state: RuntimeState, lookup: SlotLookup, src: ArrayLike
   for (let i = 0; i < stride; i++) {
     state.values.f64[o + i] = src[i] as number;
   }
+  mirrorF64ToArena(program, state, lookup, stride);
 }
 
 // Module-level helper: resolve slot to storage offset (hoisted to avoid per-frame closure)
@@ -129,7 +155,7 @@ export function executeFrame(
     throw new Error('time.palette must be Float32Array(4) in RGBA [0..1]');
   }
   const palette = assertF64Stride(slotLookupMap, TIME_PALETTE_SLOT, 4, 'time.palette slot');
-  writeF64Strided(state, palette, time.palette, 4);
+  writeF64Strided(program, state, palette, time.palette, 4);
 
   // ═══════════════════════════════════════════════════════════════════════════
   // TWO-PHASE EXECUTION MODEL
@@ -219,6 +245,7 @@ export function executeFrame(
                   'evalValue: construct wrote ' + written + ' components but slot stride is ' + stride
                 );
               }
+              mirrorF64ToArena(program, state, lookup, stride);
 
               // Debug tap: Record each component value
               for (let i = 0; i < stride; i++) {
@@ -232,7 +259,7 @@ export function executeFrame(
               // Scalar signal: evaluate and write single value
               const value = evaluateValueExprSignal(step.expr as any, program.valueExprs.nodes, state);
 
-              writeF64Scalar(state, lookup, value);
+              writeF64Scalar(program, state, lookup, value);
 
               // Debug tap: Record slot value (Sprint 1: Debug Probe)
               state.tap?.recordSlotValue?.(slot, value);
@@ -294,6 +321,7 @@ export function executeFrame(
           // Debug tap: Record slot value for each component
           state.tap?.recordSlotValue?.((step.slotBase + i) as ValueSlot, componentValue);
         }
+        mirrorF64ToArena(program, state, lookup, stride);
         break;
       }
 
