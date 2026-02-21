@@ -5,7 +5,15 @@
  */
 
 import { registerBlock, requireConfig } from '../registry';
-import { canonicalType, payloadStride, FLOAT, VEC2 } from '../../core/canonical-types';
+import { canonicalType, payloadStride, FLOAT, VEC2, cardinalityVar } from '../../core/canonical-types';
+import { cardinalityVarId } from '../../core/ids';
+
+// [LAW:one-source-of-truth] Cardinality behavior is declared directly on CT/ICT.
+const EXTERNAL_VEC2_CARD = cardinalityVar(cardinalityVarId('external_vec2_cardinality'), {
+  relation: 'promoteToMany',
+  acceptance: 'oneOrMany',
+  instanceBinding: 'inherit',
+});
 
 registerBlock({
   type: 'ExternalVec2',
@@ -15,11 +23,6 @@ registerBlock({
   form: 'primitive',
   capability: 'io',
   loweringPurity: 'pure',
-  cardinality: {
-    cardinalityMode: 'preserve',
-    laneCoupling: 'laneLocal',
-    broadcastPolicy: 'allowZipSig',
-  },
   inputs: {
     channelBase: {
       label: 'Channel Base',
@@ -36,7 +39,7 @@ registerBlock({
     },
   },
   outputs: {
-    position: { label: 'Position', type: canonicalType(VEC2) },
+    position: { label: 'Position', type: canonicalType(VEC2, undefined, { cardinality: EXTERNAL_VEC2_CARD }) },
   },
   lower: ({ ctx, config }) => {
     const channelBase = requireConfig<string>(config, 'channelBase', 'string');

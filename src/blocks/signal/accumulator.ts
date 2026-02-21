@@ -5,12 +5,12 @@
  */
 
 import { registerBlock } from '../registry';
-import { canonicalType, payloadStride, floatConst, requireInst } from '../../core/canonical-types';
+import { canonicalType, payloadStride, floatConst, requireInst, cardinalityVar } from '../../core/canonical-types';
 import { FLOAT, BOOL } from '../../core/canonical-types';
-import { inferType, unitVar, cardinalityVar } from '../../core/inference-types';
-import { cardinalityVarId } from '../../core/ids';
+import { inferType, unitVar } from '../../core/inference-types';
 import { OpCode, stableStateId } from '../../compiler/ir/types';
 import { zipAuto } from '../lower-utils';
+import { cardinalityVarId } from '../../core/ids';
 
 // [LAW:one-source-of-truth] Per-port cardinality behavior is declared on CT/ICT.
 const ACCUMULATOR_CARD = cardinalityVar(cardinalityVarId('accumulator_cardinality'), {
@@ -28,11 +28,6 @@ registerBlock({
   capability: 'state',
   loweringPurity: 'stateful',
   isStateful: true,  // Allows feedback cycles - reads from previous frame
-  cardinality: {
-    cardinalityMode: 'preserve',
-    laneCoupling: 'laneLocal',
-    broadcastPolicy: 'allowZipSig',
-  },
   inputs: {
     delta: { label: 'Delta', type: inferType(FLOAT, unitVar('accum_U'), { cardinality: ACCUMULATOR_CARD }) },
     reset: { label: 'Reset', type: canonicalType(BOOL, undefined, { cardinality: ACCUMULATOR_CARD }) },

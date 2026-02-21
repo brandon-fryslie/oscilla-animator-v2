@@ -5,14 +5,13 @@
  */
 
 import { registerBlock, requireConfigInt } from '../registry';
-import { canonicalType, unitTurns, unitNone, payloadStride, floatConst, requireInst, contractWrap01, contractClamp11 } from '../../core/canonical-types';
+import { canonicalType, unitTurns, unitNone, payloadStride, floatConst, requireInst, contractWrap01, contractClamp11, cardinalityVar } from '../../core/canonical-types';
 import { FLOAT, INT } from '../../core/canonical-types';
-import { cardinalityVar } from '../../core/inference-types';
-import { cardinalityVarId } from '../../core/ids';
 import { OpCode } from '../../compiler/ir/types';
 import { defaultSourceConst } from '../../types';
 import type { ValueExprId } from '../../compiler/ir/Indices';
 import { zipAuto, mapAuto } from '../lower-utils';
+import { cardinalityVarId } from '../../core/ids';
 
 // [LAW:one-source-of-truth] Per-port cardinality behavior is declared on CT/ICT.
 const OSCILLATOR_CARD = cardinalityVar(cardinalityVarId('oscillator_cardinality'), {
@@ -29,11 +28,6 @@ registerBlock({
   form: 'primitive',
   capability: 'pure',
   loweringPurity: 'pure',
-  cardinality: {
-    cardinalityMode: 'preserve',
-    laneCoupling: 'laneLocal',
-    broadcastPolicy: 'allowZipSig',
-  },
   inputs: {
     phase: {
       label: 'Phase',
@@ -71,7 +65,7 @@ registerBlock({
     let id: ValueExprId;
 
     // Use zipAuto/mapAuto for cardinality-aware operations:
-    // phase may be signal (one) while outType is field (many) in allowZipSig contexts.
+    // phase may be signal (one) while outType is field (many) in promoteToMany contexts.
     switch (mode) {
       case 0: {
         // Sin

@@ -5,12 +5,20 @@
  */
 
 import { registerBlock, requireConfig } from '../registry';
-import { canonicalType, payloadStride, floatConst, requireInst, unitNone, contractClamp01 } from '../../core/canonical-types';
+import { canonicalType, payloadStride, floatConst, requireInst, unitNone, contractClamp01, cardinalityVar } from '../../core/canonical-types';
 import { FLOAT } from '../../core/canonical-types';
 import { inferType, unitVar, cardinalityVar } from '../../core/inference-types';
 import { cardinalityVarId } from '../../core/ids';
 import { OpCode, stableStateId } from '../../compiler/ir/types';
 import { zipAuto } from '../lower-utils';
+import { cardinalityVarId } from '../../core/ids';
+
+// [LAW:one-source-of-truth] Cardinality behavior is declared directly on CT/ICT.
+const LAG_CARD = cardinalityVar(cardinalityVarId('lag_cardinality'), {
+  relation: 'promoteToMany',
+  acceptance: 'oneOrMany',
+  instanceBinding: 'inherit',
+});
 
 // [LAW:one-source-of-truth] Per-port cardinality behavior is declared on CT/ICT.
 const LAG_CARD = cardinalityVar(cardinalityVarId('lag_cardinality'), {
@@ -28,11 +36,6 @@ registerBlock({
   capability: 'state',
   loweringPurity: 'stateful',
   isStateful: true,  // Allows feedback cycles - reads from previous frame
-  cardinality: {
-    cardinalityMode: 'preserve',
-    laneCoupling: 'laneLocal',
-    broadcastPolicy: 'allowZipSig',
-  },
   inputs: {
     target: { label: 'Target', type: inferType(FLOAT, unitVar('lag_U'), { cardinality: LAG_CARD }) },
     smoothing: { type: canonicalType(FLOAT, unitNone(), undefined, contractClamp01()), defaultValue: 0.5, exposedAsPort: false },

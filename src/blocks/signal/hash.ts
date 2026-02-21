@@ -6,13 +6,21 @@
 
 import { registerBlock } from '../registry';
 import { defaultSourceConst } from '../../types';
-import { canonicalType, canonicalSignal, payloadStride, floatConst, requireInst } from '../../core/canonical-types';
+import { canonicalType, canonicalSignal, payloadStride, floatConst, requireInst, cardinalityVar } from '../../core/canonical-types';
 import { FLOAT } from '../../core/canonical-types';
 import { cardinalityVar } from '../../core/inference-types';
 import { cardinalityVarId } from '../../core/ids';
 import { OpCode } from '../../compiler/ir/types';
 import type { ValueExprId } from '../../compiler/ir/Indices';
 import { withoutContract } from '../lower-utils';
+import { cardinalityVarId } from '../../core/ids';
+
+// [LAW:one-source-of-truth] Cardinality behavior is declared directly on CT/ICT.
+const HASH_CARD = cardinalityVar(cardinalityVarId('hash_cardinality'), {
+  relation: 'promoteToMany',
+  acceptance: 'oneOrMany',
+  instanceBinding: 'inherit',
+});
 
 // [LAW:one-source-of-truth] Per-port cardinality behavior is declared on CT/ICT.
 const HASH_CARD = cardinalityVar(cardinalityVarId('hash_cardinality'), {
@@ -29,11 +37,6 @@ registerBlock({
   form: 'primitive',
   capability: 'pure',
   loweringPurity: 'pure',
-  cardinality: {
-    cardinalityMode: 'preserve',
-    laneCoupling: 'laneLocal',
-    broadcastPolicy: 'allowZipSig',
-  },
   inputs: {
     value: { label: 'Value', type: canonicalType(FLOAT, undefined, { cardinality: HASH_CARD }) },
     seed: { label: 'Seed', type: canonicalType(FLOAT, undefined, { cardinality: HASH_CARD }), defaultSource: defaultSourceConst(0) },

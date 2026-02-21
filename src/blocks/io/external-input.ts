@@ -5,9 +5,17 @@
  */
 
 import { registerBlock, requireConfig } from '../registry';
-import { canonicalType, payloadStride, floatConst, intConst, FLOAT } from '../../core/canonical-types';
+import { canonicalType, payloadStride, floatConst, intConst, FLOAT, cardinalityVar } from '../../core/canonical-types';
 import { OpCode } from '../../compiler/ir/types';
 import { defaultSourceConst } from '../../types';
+import { cardinalityVarId } from '../../core/ids';
+
+// [LAW:one-source-of-truth] Cardinality behavior is declared directly on CT/ICT.
+const EXTERNAL_INPUT_CARD = cardinalityVar(cardinalityVarId('external_input_cardinality'), {
+  relation: 'promoteToMany',
+  acceptance: 'oneOrMany',
+  instanceBinding: 'inherit',
+});
 
 registerBlock({
   type: 'ExternalInput',
@@ -17,11 +25,6 @@ registerBlock({
   form: 'primitive',
   capability: 'io',
   loweringPurity: 'impure',
-  cardinality: {
-    cardinalityMode: 'preserve',
-    laneCoupling: 'laneLocal',
-    broadcastPolicy: 'allowZipSig',
-  },
   inputs: {
     channel: {
       label: 'Channel',
@@ -50,7 +53,7 @@ registerBlock({
     },
   },
   outputs: {
-    value: { label: 'Value', type: canonicalType(FLOAT) },
+    value: { label: 'Value', type: canonicalType(FLOAT, undefined, { cardinality: EXTERNAL_INPUT_CARD }) },
   },
   lower: ({ ctx, config }) => {
     const channel = requireConfig<string>(config, 'channel', 'string');
