@@ -5,7 +5,16 @@
  */
 
 import { registerBlock } from '../registry';
-import { canonicalFieldDef, payloadStride, FLOAT, INT } from '../../core/canonical-types';
+import { payloadStride, FLOAT, INT } from '../../core/canonical-types';
+import { inferType, cardinalityVar } from '../../core/inference-types';
+import { cardinalityVarId } from '../../core/ids';
+
+// [LAW:one-source-of-truth] DomainIndex field outputs share one declared cardinality policy.
+const DOMAIN_INDEX_CARD = cardinalityVar(cardinalityVarId('domain_index_fields'), {
+  relation: 'uniform',
+  acceptance: 'manyOnly',
+  instanceBinding: 'inherit',
+});
 
 registerBlock({
   type: 'DomainIndex',
@@ -21,8 +30,8 @@ registerBlock({
   },
   inputs: {},
   outputs: {
-    index: { label: 'Index', type: canonicalFieldDef(FLOAT, { kind: 'none' }) },
-    indexInt: { label: 'Index (int)', type: canonicalFieldDef(INT, { kind: 'none' }) },
+    index: { label: 'Index', type: inferType(FLOAT, { kind: 'none' }, { cardinality: DOMAIN_INDEX_CARD }) },
+    indexInt: { label: 'Index (int)', type: inferType(INT, { kind: 'none' }, { cardinality: DOMAIN_INDEX_CARD }) },
   },
   lower: ({ ctx }) => {
     // Get instance context from Array block or inferred from inputs

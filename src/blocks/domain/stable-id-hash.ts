@@ -5,8 +5,17 @@
  */
 
 import { registerBlock } from '../registry';
-import { canonicalType, canonicalFieldDef, payloadStride, FLOAT, INT } from '../../core/canonical-types';
+import { canonicalType, payloadStride, FLOAT, INT } from '../../core/canonical-types';
+import { inferType, cardinalityVar } from '../../core/inference-types';
+import { cardinalityVarId } from '../../core/ids';
 import { defaultSourceConst } from '../../types';
+
+// [LAW:one-source-of-truth] StableIdHash field outputs declare their cardinality policy on CT/ICT.
+const STABLE_ID_HASH_CARD = cardinalityVar(cardinalityVarId('stable_id_hash_fields'), {
+  relation: 'uniform',
+  acceptance: 'manyOnly',
+  instanceBinding: 'inherit',
+});
 
 registerBlock({
   type: 'StableIdHash',
@@ -26,8 +35,8 @@ registerBlock({
     seed: { type: canonicalType(INT), defaultValue: 0, defaultSource: defaultSourceConst(0), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1000, step: 1 } },
   },
   outputs: {
-    rand: { label: 'Random [0,1]', type: canonicalFieldDef(FLOAT, { kind: 'none' }) },
-    id01: { label: 'ID [0,1]', type: canonicalFieldDef(FLOAT, { kind: 'none' }) },
+    rand: { label: 'Random [0,1]', type: inferType(FLOAT, { kind: 'none' }, { cardinality: STABLE_ID_HASH_CARD }) },
+    id01: { label: 'ID [0,1]', type: inferType(FLOAT, { kind: 'none' }, { cardinality: STABLE_ID_HASH_CARD }) },
   },
   lower: ({ ctx }) => {
     // Get instance context from Array block or inferred from inputs

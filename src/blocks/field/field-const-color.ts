@@ -5,9 +5,23 @@
  */
 
 import { registerBlock, ALL_CONCRETE_PAYLOADS } from '../registry';
-import { canonicalType, canonicalFieldDef, requireInst, payloadStride, unitNone, contractClamp01 } from '../../core/canonical-types';
+import { requireInst, payloadStride, unitNone, contractClamp01 } from '../../core/canonical-types';
 import { FLOAT, COLOR } from '../../core/canonical-types';
+import { inferType, cardinalityVar } from '../../core/inference-types';
+import { cardinalityVarId } from '../../core/ids';
 import { defaultSourceConst } from '../../types';
+
+// [LAW:one-source-of-truth] Field+signal mixing behavior is declared on CT/ICT cardinality vars.
+const FIELD_CONST_COLOR_CARD_MANY = cardinalityVar(cardinalityVarId('field_const_color'), {
+  relation: 'promoteToMany',
+  acceptance: 'manyOnly',
+  instanceBinding: 'inherit',
+});
+const FIELD_CONST_COLOR_CARD_FLEX = cardinalityVar(cardinalityVarId('field_const_color'), {
+  relation: 'promoteToMany',
+  acceptance: 'oneOrMany',
+  instanceBinding: 'inherit',
+});
 
 registerBlock({
   type: 'FieldConstColor',
@@ -29,14 +43,14 @@ registerBlock({
     semantics: 'typeSpecific',
   },
   inputs: {
-    elements: { label: 'Elements', type: canonicalFieldDef(FLOAT, { kind: 'none' }) },
-    r: { label: 'Red', type: canonicalType(FLOAT, unitNone(), undefined, contractClamp01()), defaultValue: 1.0, defaultSource: defaultSourceConst(1.0), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
-    g: { label: 'Green', type: canonicalType(FLOAT, unitNone(), undefined, contractClamp01()), defaultValue: 1.0, defaultSource: defaultSourceConst(1.0), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
-    b: { label: 'Blue', type: canonicalType(FLOAT, unitNone(), undefined, contractClamp01()), defaultValue: 1.0, defaultSource: defaultSourceConst(1.0), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
-    a: { label: 'Alpha', type: canonicalType(FLOAT, unitNone(), undefined, contractClamp01()), defaultValue: 1.0, defaultSource: defaultSourceConst(1.0), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
+    elements: { label: 'Elements', type: inferType(FLOAT, { kind: 'none' }, { cardinality: FIELD_CONST_COLOR_CARD_MANY }) },
+    r: { label: 'Red', type: inferType(FLOAT, unitNone(), { cardinality: FIELD_CONST_COLOR_CARD_FLEX }, contractClamp01()), defaultValue: 1.0, defaultSource: defaultSourceConst(1.0), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
+    g: { label: 'Green', type: inferType(FLOAT, unitNone(), { cardinality: FIELD_CONST_COLOR_CARD_FLEX }, contractClamp01()), defaultValue: 1.0, defaultSource: defaultSourceConst(1.0), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
+    b: { label: 'Blue', type: inferType(FLOAT, unitNone(), { cardinality: FIELD_CONST_COLOR_CARD_FLEX }, contractClamp01()), defaultValue: 1.0, defaultSource: defaultSourceConst(1.0), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
+    a: { label: 'Alpha', type: inferType(FLOAT, unitNone(), { cardinality: FIELD_CONST_COLOR_CARD_FLEX }, contractClamp01()), defaultValue: 1.0, defaultSource: defaultSourceConst(1.0), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
   },
   outputs: {
-    color: { label: 'Color', type: canonicalFieldDef(COLOR, { kind: 'none' }) },
+    color: { label: 'Color', type: inferType(COLOR, { kind: 'none' }, { cardinality: FIELD_CONST_COLOR_CARD_MANY }) },
   },
   lower: ({ ctx, inputsById }) => {
     const elementsInput = inputsById.elements;

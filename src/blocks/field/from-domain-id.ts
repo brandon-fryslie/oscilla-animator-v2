@@ -5,8 +5,16 @@
  */
 
 import { registerBlock } from '../registry';
-import { canonicalType, canonicalFieldDef, payloadStride } from '../../core/canonical-types';
+import { canonicalType, payloadStride } from '../../core/canonical-types';
 import { FLOAT, INT } from '../../core/canonical-types';
+import { inferType, cardinalityVar } from '../../core/inference-types';
+import { cardinalityVarId } from '../../core/ids';
+
+// [LAW:one-source-of-truth] Output field cardinality behavior is declared on CT/ICT.
+const FROM_DOMAIN_ID_OUT_CARD = cardinalityVar(cardinalityVarId('from_domain_id_out'), {
+  acceptance: 'manyOnly',
+  instanceBinding: 'inherit',
+});
 
 registerBlock({
   type: 'FromDomainId',
@@ -25,7 +33,7 @@ registerBlock({
     domain: { label: 'Domain', type: canonicalType(INT) }, // Domain count
   },
   outputs: {
-    id01: { label: 'ID (0..1)', type: canonicalFieldDef(FLOAT, { kind: 'none' }) },
+    id01: { label: 'ID (0..1)', type: inferType(FLOAT, { kind: 'none' }, { cardinality: FROM_DOMAIN_ID_OUT_CARD }) },
   },
   lower: ({ ctx }) => {
     // Get instance context from Array block or inferred from inputs

@@ -26,7 +26,8 @@ import {
   unitHsl,
 } from '../../core/canonical-types';
 import type { PayloadType, CanonicalType } from '../../core/canonical-types';
-import { isPayloadVar, payloadVar, unitVar, inferFieldDef } from '../../core/inference-types';
+import { isPayloadVar, payloadVar, unitVar, inferType, cardinalityVar } from '../../core/inference-types';
+import { cardinalityVarId } from '../../core/ids';
 import { OpCode } from '../../compiler/ir/types';
 import type { ValueExprId } from '../../compiler/ir/value-expr';
 import { rewriteFieldType } from '../layout/_helpers';
@@ -134,6 +135,12 @@ function fieldBroadcastDefault(
 // Block registration
 // ============================================================================
 
+// [LAW:one-source-of-truth] Field default cardinality behavior is declared on CT/ICT.
+const DEFAULT_SOURCE_FIELD_OUT_CARD = cardinalityVar(cardinalityVarId('default_source_field_out'), {
+  acceptance: 'manyOnly',
+  instanceBinding: 'inherit',
+});
+
 registerBlock({
   type: 'DefaultSourceField',
   label: 'Default Source (Field)',
@@ -152,7 +159,7 @@ registerBlock({
     // Polymorphic output — payload and unit resolve via constraint propagation
     out: {
       label: 'Output',
-      type: inferFieldDef(payloadVar('dsf_payload'), unitVar('dsf_unit')),
+      type: inferType(payloadVar('dsf_payload'), unitVar('dsf_unit'), { cardinality: DEFAULT_SOURCE_FIELD_OUT_CARD }),
     },
   },
   lower: ({ ctx }) => {

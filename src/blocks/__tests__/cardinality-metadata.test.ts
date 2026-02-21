@@ -160,4 +160,35 @@ describe('Cardinality Metadata', () => {
       expect(missingMetadata).toEqual([]);
     });
   });
+
+  describe('Declared CT/ICT cardinality policies', () => {
+    // [LAW:one-source-of-truth] Migrated block ports declare cardinality behavior directly on CT/ICT.
+    const migratedPorts: Array<{ blockType: string; dir: 'inputs' | 'outputs'; port: string }> = [
+      { blockType: 'DefaultSourceField', dir: 'outputs', port: 'out' },
+      { blockType: 'FieldConstColor', dir: 'inputs', port: 'elements' },
+      { blockType: 'FieldConstColor', dir: 'inputs', port: 'r' },
+      { blockType: 'FieldConstColor', dir: 'outputs', port: 'color' },
+      { blockType: 'FromDomainId', dir: 'outputs', port: 'id01' },
+      { blockType: 'Reduce', dir: 'inputs', port: 'field' },
+      { blockType: 'DomainIndex', dir: 'outputs', port: 'index' },
+      { blockType: 'DomainIndex', dir: 'outputs', port: 'indexInt' },
+      { blockType: 'StableIdHash', dir: 'outputs', port: 'rand' },
+      { blockType: 'StableIdHash', dir: 'outputs', port: 'id01' },
+    ];
+
+    it.each(migratedPorts)('$blockType $dir.$port declares explicit cardinality policy', ({ blockType, dir, port }) => {
+      const def = getBlockDefinition(blockType);
+      expect(def).toBeDefined();
+      const table = dir === 'inputs' ? def!.inputs : def!.outputs;
+      const type = table[port]?.type;
+      expect(type).toBeDefined();
+      const axis = type!.extent.cardinality as any;
+      expect(axis.kind).toBe('var');
+      expect(
+        axis.relation !== undefined
+          || axis.acceptance !== undefined
+          || axis.instanceBinding !== undefined
+      ).toBe(true);
+    });
+  });
 });
