@@ -27,11 +27,6 @@ registerBlock({
   form: 'primitive',
   capability: 'pure',
   loweringPurity: 'pure',
-  cardinality: {
-    cardinalityMode: 'preserve',
-    laneCoupling: 'laneLocal',
-    broadcastPolicy: 'disallowSignalMix',
-  },
   payload: {
     allowedPayloads: {
       input: STANDARD_NUMERIC_PAYLOADS,

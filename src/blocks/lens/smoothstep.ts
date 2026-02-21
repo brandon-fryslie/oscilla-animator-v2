@@ -30,11 +30,6 @@ registerBlock({
   form: 'primitive',
   capability: 'pure',
   loweringPurity: 'pure',
-  cardinality: {
-    cardinalityMode: 'preserve',
-    laneCoupling: 'laneLocal',
-    broadcastPolicy: 'allowZipSig',
-  },
   inputs: {
     in: { label: 'In', type: inferType(FLOAT, unitVar('ss_U'), { cardinality: SMOOTHSTEP_CARD }) },
     edge0: { label: 'Edge 0', type: inferType(FLOAT, unitVar('ss_U'), { cardinality: SMOOTHSTEP_CARD }), defaultValue: 0.0 },

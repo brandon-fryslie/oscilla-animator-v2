@@ -8,9 +8,17 @@
 import { registerBlock } from '../registry';
 import { payloadStride } from '../../core/canonical-types';
 import { FLOAT, INT } from '../../core/canonical-types';
-import { inferType, unitVar } from '../../core/inference-types';
+import { inferType, unitVar, cardinalityVar } from '../../core/inference-types';
+import { cardinalityVarId } from '../../core/ids';
 import { OpCode } from '../../compiler/ir/types';
 import { zipAuto, mapAuto } from '../lower-utils';
+
+// [LAW:one-source-of-truth] Per-port cardinality behavior is declared on CT/ICT.
+const CAST_INT_TO_FLOAT_CARD = cardinalityVar(cardinalityVarId('cast_int_to_float_cardinality'), {
+  relation: 'promoteToMany',
+  acceptance: 'oneOrMany',
+  instanceBinding: 'inherit',
+});
 
 registerBlock({
   type: 'Adapter_CastIntToFloat',
@@ -20,11 +28,6 @@ registerBlock({
   form: 'primitive',
   capability: 'pure',
   loweringPurity: 'pure',
-  cardinality: {
-    cardinalityMode: 'preserve',
-    laneCoupling: 'laneLocal',
-    broadcastPolicy: 'allowZipSig',
-  },
   adapterSpec: {
     from: { payload: INT, unit: 'any', extent: 'any' },
     to: { payload: FLOAT, unit: 'same', extent: 'any' },
@@ -35,10 +38,10 @@ registerBlock({
     stability: 'stable',
   },
   inputs: {
-    in: { label: 'In', type: inferType(INT, unitVar('cast_U')) },
+    in: { label: 'In', type: inferType(INT, unitVar('cast_U'), { cardinality: CAST_INT_TO_FLOAT_CARD }) },
   },
   outputs: {
-    out: { label: 'Out', type: inferType(FLOAT, unitVar('cast_U')) },
+    out: { label: 'Out', type: inferType(FLOAT, unitVar('cast_U'), { cardinality: CAST_INT_TO_FLOAT_CARD }) },
   },
   lower: ({ inputsById, ctx }) => {
     const input = inputsById.in;

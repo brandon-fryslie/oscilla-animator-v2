@@ -30,11 +30,6 @@ registerBlock({
   form: 'primitive',
   capability: 'pure',
   loweringPurity: 'pure',
-  cardinality: {
-    cardinalityMode: 'preserve',
-    laneCoupling: 'laneLocal',
-    broadcastPolicy: 'allowZipSig',
-  },
   inputs: {
     in: { label: 'In', type: inferType(FLOAT, unitVar('w01_U'), { cardinality: WRAP01_CARD }) },
   },

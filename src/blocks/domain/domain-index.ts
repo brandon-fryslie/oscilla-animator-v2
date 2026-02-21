@@ -23,11 +23,6 @@ registerBlock({
   description: 'Provides the normalized index [0,1] for each domain element',
   form: 'primitive',
   capability: 'identity',
-  cardinality: {
-    cardinalityMode: 'fieldOnly',
-    laneCoupling: 'laneLocal',
-    broadcastPolicy: 'disallowSignalMix',
-  },
   inputs: {},
   outputs: {
     index: { label: 'Index', type: inferType(FLOAT, { kind: 'none' }, { cardinality: DOMAIN_INDEX_CARD }) },

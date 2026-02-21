@@ -28,11 +28,6 @@ registerBlock({
   form: 'primitive',
   capability: 'pure',
   loweringPurity: 'pure',
-  cardinality: {
-    cardinalityMode: 'preserve',
-    laneCoupling: 'laneLocal',
-    broadcastPolicy: 'allowZipSig',
-  },
   inputs: {
     x: { label: 'X', type: canonicalType(FLOAT, undefined, { cardinality: CONSTRUCT_CARD }), defaultValue: 0.0 },
     y: { label: 'Y', type: canonicalType(FLOAT, undefined, { cardinality: CONSTRUCT_CARD }), defaultValue: 0.0 },

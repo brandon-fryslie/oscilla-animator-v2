@@ -481,7 +481,7 @@ describe('Forbidden Patterns (Type System Invariants)', () => {
   describe('Cardinality Metadata Decision Boundary', () => {
 
     it('frontend decision paths must not read getBlockCardinalityMetadata', () => {
-      // [LAW:single-enforcer] Legacy metadata fallback stays isolated in extract-constraints.ts only.
+      // [LAW:one-source-of-truth] Frontend decisions must read CT/ICT only.
       const decisionPathFiles = [
         'src/compiler/frontend/analyze-type-graph.ts',
         'src/compiler/frontend/create-derived-obligations.ts',
@@ -497,6 +497,20 @@ describe('Forbidden Patterns (Type System Invariants)', () => {
           `Frontend decision path must not read getBlockCardinalityMetadata: ${file}`
         ).toEqual([]);
       }
+    });
+
+    it('block registry surface must not reintroduce mode-style cardinality metadata', () => {
+      const matches = grepSrc('cardinalityMode\\|broadcastPolicy\\|laneCoupling\\|BlockCardinalityMetadata', 'src/blocks/');
+      const allowlist = [
+        /forbidden-patterns\\.test\\.ts/,
+        /\\.test\\./,
+        /__tests__/,
+      ];
+      const filtered = filterAllowlist(matches, allowlist);
+      expect(
+        filtered,
+        'Mode-style cardinality metadata was removed. Declare cardinality behavior on CT/ICT port types.'
+      ).toEqual([]);
     });
 
   });

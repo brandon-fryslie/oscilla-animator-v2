@@ -83,11 +83,6 @@ registerBlock({
   form: 'primitive',
   capability: 'pure',
   loweringPurity: 'pure',
-  cardinality: {
-    cardinalityMode: 'preserve',
-    laneCoupling: 'laneLocal',
-    broadcastPolicy: 'disallowSignalMix',
-  },
   inputs: {
     controlPoints: {
       label: 'Control Points',

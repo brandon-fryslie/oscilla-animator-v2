@@ -25,11 +25,6 @@ registerBlock({
   form: 'primitive',
   capability: 'identity',
   loweringPurity: 'pure',
-  cardinality: {
-    cardinalityMode: 'fieldOnly',
-    laneCoupling: 'laneLocal',
-    broadcastPolicy: 'disallowSignalMix',
-  },
   inputs: {
     domain: { label: 'Domain', type: canonicalType(FLOAT) },
     seed: { type: canonicalType(INT), defaultValue: 0, defaultSource: defaultSourceConst(0), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1000, step: 1 } },

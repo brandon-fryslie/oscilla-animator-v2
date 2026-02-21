@@ -8,9 +8,18 @@
 import { registerBlock } from '../registry';
 import { canonicalType, payloadStride, unitHsl, unitNone, contractClamp01 } from '../../core/canonical-types';
 import { FLOAT, COLOR } from '../../core/canonical-types';
+import { cardinalityVar } from '../../core/inference-types';
+import { cardinalityVarId } from '../../core/ids';
 import { OpCode } from '../../compiler/ir/types';
 import { defaultSourceConst } from '../../types';
 import { zipAuto } from '../lower-utils';
+
+// [LAW:one-source-of-truth] Per-port cardinality behavior is declared on CT/ICT.
+const ALPHA_MULTIPLY_CARD = cardinalityVar(cardinalityVarId('alpha_multiply_cardinality'), {
+  relation: 'promoteToMany',
+  acceptance: 'oneOrMany',
+  instanceBinding: 'inherit',
+});
 
 registerBlock({
   type: 'AlphaMultiply',
@@ -20,17 +29,12 @@ registerBlock({
   form: 'primitive',
   capability: 'pure',
   loweringPurity: 'pure',
-  cardinality: {
-    cardinalityMode: 'preserve',
-    laneCoupling: 'laneLocal',
-    broadcastPolicy: 'allowZipSig',
-  },
   inputs: {
-    in: { label: 'Color', type: canonicalType(COLOR, unitHsl()) },
-    alpha: { label: 'Alpha', type: canonicalType(FLOAT, unitNone(), undefined, contractClamp01()), defaultSource: defaultSourceConst(1.0) },
+    in: { label: 'Color', type: canonicalType(COLOR, unitHsl(), { cardinality: ALPHA_MULTIPLY_CARD }) },
+    alpha: { label: 'Alpha', type: canonicalType(FLOAT, unitNone(), { cardinality: ALPHA_MULTIPLY_CARD }, contractClamp01()), defaultSource: defaultSourceConst(1.0) },
   },
   outputs: {
-    out: { label: 'Color', type: canonicalType(COLOR, unitHsl()) },
+    out: { label: 'Color', type: canonicalType(COLOR, unitHsl(), { cardinality: ALPHA_MULTIPLY_CARD }) },
   },
   lower: ({ ctx, inputsById }) => {
     const colorInput = inputsById.in;

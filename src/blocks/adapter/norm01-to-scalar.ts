@@ -7,6 +7,15 @@
 import { registerBlock } from '../registry';
 import { canonicalType, unitNone, payloadStride, contractClamp01 } from '../../core/canonical-types';
 import { FLOAT } from '../../core/canonical-types';
+import { cardinalityVar } from '../../core/inference-types';
+import { cardinalityVarId } from '../../core/ids';
+
+// [LAW:one-source-of-truth] Per-port cardinality behavior is declared on CT/ICT.
+const NORM01_TO_SCALAR_CARD = cardinalityVar(cardinalityVarId('norm01_to_scalar_cardinality'), {
+  relation: 'promoteToMany',
+  acceptance: 'oneOrMany',
+  instanceBinding: 'inherit',
+});
 
 registerBlock({
   type: 'Adapter_Norm01ToScalar',
@@ -16,11 +25,6 @@ registerBlock({
   form: 'primitive',
   capability: 'pure',
   loweringPurity: 'pure',
-  cardinality: {
-    cardinalityMode: 'preserve',
-    laneCoupling: 'laneLocal',
-    broadcastPolicy: 'allowZipSig',
-  },
   adapterSpec: {
     from: { payload: FLOAT, unit: { kind: 'none' }, contract: { kind: 'clamp01' }, extent: 'any' },
     to: { payload: FLOAT, unit: { kind: 'none' }, extent: 'any' },
@@ -31,10 +35,10 @@ registerBlock({
     stability: 'stable',
   },
   inputs: {
-    in: { label: 'In', type: canonicalType(FLOAT, unitNone(), undefined, contractClamp01()) },
+    in: { label: 'In', type: canonicalType(FLOAT, unitNone(), { cardinality: NORM01_TO_SCALAR_CARD }, contractClamp01()) },
   },
   outputs: {
-    out: { label: 'Out', type: canonicalType(FLOAT, unitNone()) },
+    out: { label: 'Out', type: canonicalType(FLOAT, unitNone(), { cardinality: NORM01_TO_SCALAR_CARD }) },
   },
   lower: ({ inputsById, ctx }) => {
     const input = inputsById.in;

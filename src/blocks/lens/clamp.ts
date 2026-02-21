@@ -29,11 +29,6 @@ registerBlock({
   form: 'primitive',
   capability: 'pure',
   loweringPurity: 'pure',
-  cardinality: {
-    cardinalityMode: 'preserve',
-    laneCoupling: 'laneLocal',
-    broadcastPolicy: 'allowZipSig',
-  },
   inputs: {
     in: { label: 'In', type: inferType(FLOAT, unitVar('clamp_U'), { cardinality: CLAMP_CARD }) },
     min: { label: 'Min', type: inferType(FLOAT, unitVar('clamp_U'), { cardinality: CLAMP_CARD }), defaultValue: 0.0 },

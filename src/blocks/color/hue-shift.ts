@@ -8,9 +8,18 @@
 import { registerBlock } from '../registry';
 import { canonicalType, payloadStride, unitHsl, unitNone } from '../../core/canonical-types';
 import { FLOAT, COLOR } from '../../core/canonical-types';
+import { cardinalityVar } from '../../core/inference-types';
+import { cardinalityVarId } from '../../core/ids';
 import { OpCode } from '../../compiler/ir/types';
 import { defaultSourceConst } from '../../types';
 import { withoutContract, zipAuto, mapAuto } from '../lower-utils';
+
+// [LAW:one-source-of-truth] Per-port cardinality behavior is declared on CT/ICT.
+const HUE_SHIFT_CARD = cardinalityVar(cardinalityVarId('hue_shift_cardinality'), {
+  relation: 'promoteToMany',
+  acceptance: 'oneOrMany',
+  instanceBinding: 'inherit',
+});
 
 registerBlock({
   type: 'HueShift',
@@ -20,17 +29,12 @@ registerBlock({
   form: 'primitive',
   capability: 'pure',
   loweringPurity: 'pure',
-  cardinality: {
-    cardinalityMode: 'preserve',
-    laneCoupling: 'laneLocal',
-    broadcastPolicy: 'allowZipSig',
-  },
   inputs: {
-    in: { label: 'Color', type: canonicalType(COLOR, unitHsl()) },
-    shift: { label: 'Shift', type: canonicalType(FLOAT, unitNone()), defaultSource: defaultSourceConst(0.0) },
+    in: { label: 'Color', type: canonicalType(COLOR, unitHsl(), { cardinality: HUE_SHIFT_CARD }) },
+    shift: { label: 'Shift', type: canonicalType(FLOAT, unitNone(), { cardinality: HUE_SHIFT_CARD }), defaultSource: defaultSourceConst(0.0) },
   },
   outputs: {
-    out: { label: 'Color', type: canonicalType(COLOR, unitHsl()) },
+    out: { label: 'Color', type: canonicalType(COLOR, unitHsl(), { cardinality: HUE_SHIFT_CARD }) },
   },
   lower: ({ ctx, inputsById }) => {
     const colorInput = inputsById.in;

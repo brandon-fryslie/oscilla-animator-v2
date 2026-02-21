@@ -7,6 +7,15 @@
 import { registerBlock } from '../registry';
 import { canonicalType, unitTurns, unitNone, payloadStride, contractWrap01 } from '../../core/canonical-types';
 import { FLOAT } from '../../core/canonical-types';
+import { cardinalityVar } from '../../core/inference-types';
+import { cardinalityVarId } from '../../core/ids';
+
+// [LAW:one-source-of-truth] Per-port cardinality behavior is declared on CT/ICT.
+const PHASE_TO_SCALAR_CARD = cardinalityVar(cardinalityVarId('phase_to_scalar_cardinality'), {
+  relation: 'promoteToMany',
+  acceptance: 'oneOrMany',
+  instanceBinding: 'inherit',
+});
 
 registerBlock({
   type: 'Adapter_PhaseToScalar01',
@@ -16,11 +25,6 @@ registerBlock({
   form: 'primitive',
   capability: 'pure',
   loweringPurity: 'pure',
-  cardinality: {
-    cardinalityMode: 'preserve',
-    laneCoupling: 'laneLocal',
-    broadcastPolicy: 'allowZipSig',
-  },
   adapterSpec: {
     from: { payload: FLOAT, unit: { kind: 'angle', unit: 'turns' }, contract: { kind: 'wrap01' }, extent: 'any' },
     to: { payload: FLOAT, unit: { kind: 'none' }, extent: 'any' },
@@ -31,10 +35,10 @@ registerBlock({
     stability: 'stable',
   },
   inputs: {
-    in: { label: 'In', type: canonicalType(FLOAT, unitTurns(), undefined, contractWrap01()) },
+    in: { label: 'In', type: canonicalType(FLOAT, unitTurns(), { cardinality: PHASE_TO_SCALAR_CARD }, contractWrap01()) },
   },
   outputs: {
-    out: { label: 'Out', type: canonicalType(FLOAT, unitNone()) },
+    out: { label: 'Out', type: canonicalType(FLOAT, unitNone(), { cardinality: PHASE_TO_SCALAR_CARD }) },
   },
   lower: ({ inputsById, ctx }) => {
     const input = inputsById.in;

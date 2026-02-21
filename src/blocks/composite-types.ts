@@ -10,7 +10,7 @@
 
 import type { CanonicalType } from '../core/canonical-types';
 import type { DefaultSource, UIControlHint } from '../types';
-import type { BlockDef, InputDef, OutputDef, Capability, BlockCardinalityMetadata, BlockPayloadMetadata } from './registry';
+import type { BlockDef, InputDef, OutputDef, Capability, BlockPayloadMetadata } from './registry';
 
 // =============================================================================
 // Internal Block Types
@@ -135,12 +135,6 @@ export interface CompositeBlockDef {
    * Library composites cannot be edited or deleted by users.
    */
   readonly readonly?: boolean;
-
-  /**
-   * Cardinality metadata for cardinality-generic composites.
-   * Usually derived from internal block metadata.
-   */
-  readonly cardinality?: BlockCardinalityMetadata;
 
   /**
    * Payload metadata for payload-generic composites.

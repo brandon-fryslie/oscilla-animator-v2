@@ -7,8 +7,17 @@
 import { registerBlock } from '../registry';
 import { canonicalType, unitNone, payloadStride, floatConst, contractClamp01 } from '../../core/canonical-types';
 import { FLOAT } from '../../core/canonical-types';
+import { cardinalityVar } from '../../core/inference-types';
+import { cardinalityVarId } from '../../core/ids';
 import { OpCode } from '../../compiler/ir/types';
 import { zipAuto, mapAuto } from '../lower-utils';
+
+// [LAW:one-source-of-truth] Per-port cardinality behavior is declared on CT/ICT.
+const CLAMP01_CARD = cardinalityVar(cardinalityVarId('clamp01_cardinality'), {
+  relation: 'promoteToMany',
+  acceptance: 'oneOrMany',
+  instanceBinding: 'inherit',
+});
 
 registerBlock({
   type: 'Adapter_Clamp01',
@@ -18,11 +27,6 @@ registerBlock({
   form: 'primitive',
   capability: 'pure',
   loweringPurity: 'pure',
-  cardinality: {
-    cardinalityMode: 'preserve',
-    laneCoupling: 'laneLocal',
-    broadcastPolicy: 'allowZipSig',
-  },
   adapterSpec: {
     from: { payload: FLOAT, unit: { kind: 'none' }, extent: 'any' },
     to: { payload: FLOAT, unit: { kind: 'none' }, contract: { kind: 'clamp01' }, extent: 'any' },
@@ -33,10 +37,10 @@ registerBlock({
     stability: 'stable',
   },
   inputs: {
-    in: { label: 'In', type: canonicalType(FLOAT, unitNone()) },
+    in: { label: 'In', type: canonicalType(FLOAT, unitNone(), { cardinality: CLAMP01_CARD }) },
   },
   outputs: {
-    out: { label: 'Out', type: canonicalType(FLOAT, unitNone(), undefined, contractClamp01()) },
+    out: { label: 'Out', type: canonicalType(FLOAT, unitNone(), { cardinality: CLAMP01_CARD }, contractClamp01()) },
   },
   lower: ({ inputsById, ctx }) => {
     const input = inputsById.in;

@@ -352,7 +352,7 @@ Semantics:
 
 Group membership is derived from shared `CardinalityVarId` on port types. No external group bookkeeping is canonical.
 
-`BlockCardinalityMetadata` (mode-style declarations) is legacy compatibility input only; it may be translated to this CT/ICT form at registration boundaries but is not a canonical runtime or frontend type representation.
+`BlockCardinalityMetadata` (mode-style declarations) has been removed from production block definitions and registry normalization. CT/ICT port declarations are the only authoritative cardinality source.
 
 The solver still resolves to concrete substitutions:
 - `cardinalities: Map<CardinalityVarId, CardinalityValue>`

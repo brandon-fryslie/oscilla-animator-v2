@@ -7,8 +7,17 @@
 import { registerBlock } from '../registry';
 import { canonicalType, unitDegrees, unitNone, unitRadians, payloadStride, floatConst } from '../../core/canonical-types';
 import { FLOAT } from '../../core/canonical-types';
+import { cardinalityVar } from '../../core/inference-types';
+import { cardinalityVarId } from '../../core/ids';
 import { OpCode } from '../../compiler/ir/types';
 import { zipAuto } from '../lower-utils';
+
+// [LAW:one-source-of-truth] Per-port cardinality behavior is declared on CT/ICT.
+const DEGREES_TO_RADIANS_CARD = cardinalityVar(cardinalityVarId('degrees_to_radians_cardinality'), {
+  relation: 'promoteToMany',
+  acceptance: 'oneOrMany',
+  instanceBinding: 'inherit',
+});
 
 registerBlock({
   type: 'Adapter_DegreesToRadians',
@@ -18,11 +27,6 @@ registerBlock({
   form: 'primitive',
   capability: 'pure',
   loweringPurity: 'pure',
-  cardinality: {
-    cardinalityMode: 'preserve',
-    laneCoupling: 'laneLocal',
-    broadcastPolicy: 'allowZipSig',
-  },
   adapterSpec: {
     from: { payload: FLOAT, unit: { kind: 'angle', unit: 'degrees' }, extent: 'any' },
     to: { payload: FLOAT, unit: { kind: 'angle', unit: 'radians' }, extent: 'any' },
@@ -33,10 +37,10 @@ registerBlock({
     stability: 'stable',
   },
   inputs: {
-    in: { label: 'In', type: canonicalType(FLOAT, unitDegrees()) },
+    in: { label: 'In', type: canonicalType(FLOAT, unitDegrees(), { cardinality: DEGREES_TO_RADIANS_CARD }) },
   },
   outputs: {
-    out: { label: 'Out', type: canonicalType(FLOAT, unitRadians()) },
+    out: { label: 'Out', type: canonicalType(FLOAT, unitRadians(), { cardinality: DEGREES_TO_RADIANS_CARD }) },
   },
   lower: ({ inputsById, ctx }) => {
     const input = inputsById.in;

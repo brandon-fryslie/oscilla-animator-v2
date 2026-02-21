@@ -29,11 +29,6 @@ registerBlock({
   form: 'primitive',
   capability: 'pure',
   loweringPurity: 'pure',
-  cardinality: {
-    cardinalityMode: 'preserve',
-    laneCoupling: 'laneLocal',
-    broadcastPolicy: 'allowZipSig',
-  },
   inputs: {
     in: { label: 'In', type: inferType(FLOAT, unitVar('sb_U'), { cardinality: SCALE_BIAS_CARD }) },
     scale: { label: 'Scale', type: canonicalType(FLOAT, undefined, { cardinality: SCALE_BIAS_CARD }), defaultValue: 1.0 },

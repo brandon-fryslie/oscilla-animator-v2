@@ -7,8 +7,17 @@
 import { registerBlock } from '../registry';
 import { canonicalType, unitTurns, unitNone, unitRadians, payloadStride, floatConst, contractWrap01 } from '../../core/canonical-types';
 import { FLOAT } from '../../core/canonical-types';
+import { cardinalityVar } from '../../core/inference-types';
+import { cardinalityVarId } from '../../core/ids';
 import { OpCode } from '../../compiler/ir/types';
 import { zipAuto, mapAuto } from '../lower-utils';
+
+// [LAW:one-source-of-truth] Per-port cardinality behavior is declared on CT/ICT.
+const RADIANS_TO_PHASE_CARD = cardinalityVar(cardinalityVarId('radians_to_phase_cardinality'), {
+  relation: 'promoteToMany',
+  acceptance: 'oneOrMany',
+  instanceBinding: 'inherit',
+});
 
 registerBlock({
   type: 'Adapter_RadiansToPhase01',
@@ -18,11 +27,6 @@ registerBlock({
   form: 'primitive',
   capability: 'pure',
   loweringPurity: 'pure',
-  cardinality: {
-    cardinalityMode: 'preserve',
-    laneCoupling: 'laneLocal',
-    broadcastPolicy: 'allowZipSig',
-  },
   adapterSpec: {
     from: { payload: FLOAT, unit: { kind: 'angle', unit: 'radians' }, extent: 'any' },
     to: { payload: FLOAT, unit: { kind: 'angle', unit: 'turns' }, contract: { kind: 'wrap01' }, extent: 'any' },
@@ -33,10 +37,10 @@ registerBlock({
     stability: 'stable',
   },
   inputs: {
-    in: { label: 'In', type: canonicalType(FLOAT, unitRadians()) },
+    in: { label: 'In', type: canonicalType(FLOAT, unitRadians(), { cardinality: RADIANS_TO_PHASE_CARD }) },
   },
   outputs: {
-    out: { label: 'Out', type: canonicalType(FLOAT, unitTurns(), undefined, contractWrap01()) },
+    out: { label: 'Out', type: canonicalType(FLOAT, unitTurns(), { cardinality: RADIANS_TO_PHASE_CARD }, contractWrap01()) },
   },
   lower: ({ inputsById, ctx }) => {
     const input = inputsById.in;

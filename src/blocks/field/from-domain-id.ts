@@ -24,11 +24,6 @@ registerBlock({
   form: 'primitive',
   capability: 'identity',
   loweringPurity: 'pure',
-  cardinality: {
-    cardinalityMode: 'fieldOnly',
-    laneCoupling: 'laneLocal',
-    broadcastPolicy: 'disallowSignalMix',
-  },
   inputs: {
     domain: { label: 'Domain', type: canonicalType(INT) }, // Domain count
   },

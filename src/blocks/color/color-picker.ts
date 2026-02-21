@@ -9,9 +9,18 @@
 import { registerBlock } from '../registry';
 import { canonicalType, payloadStride, unitHsl, unitTurns, unitNone, contractWrap01, contractClamp01 } from '../../core/canonical-types';
 import { FLOAT, COLOR } from '../../core/canonical-types';
+import { cardinalityVar } from '../../core/inference-types';
+import { cardinalityVarId } from '../../core/ids';
 import { OpCode } from '../../compiler/ir/types';
 import { defaultSourceConst } from '../../types';
 import { zipAuto, mapAuto } from '../lower-utils';
+
+// [LAW:one-source-of-truth] Per-port cardinality behavior is declared on CT/ICT.
+const COLOR_PICKER_CARD = cardinalityVar(cardinalityVarId('color_picker_cardinality'), {
+  relation: 'promoteToMany',
+  acceptance: 'oneOrMany',
+  instanceBinding: 'inherit',
+});
 
 registerBlock({
   type: 'ColorPicker',
@@ -21,19 +30,14 @@ registerBlock({
   form: 'primitive',
   capability: 'pure',
   loweringPurity: 'pure',
-  cardinality: {
-    cardinalityMode: 'preserve',
-    laneCoupling: 'laneLocal',
-    broadcastPolicy: 'allowZipSig',
-  },
   inputs: {
-    h: { label: 'Hue', type: canonicalType(FLOAT, unitTurns(), undefined, contractWrap01()), defaultSource: defaultSourceConst(0.0), uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
-    s: { label: 'Saturation', type: canonicalType(FLOAT, unitNone(), undefined, contractClamp01()), defaultSource: defaultSourceConst(1.0), uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
-    l: { label: 'Lightness', type: canonicalType(FLOAT, unitNone(), undefined, contractClamp01()), defaultSource: defaultSourceConst(0.5), uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
-    a: { label: 'Alpha', type: canonicalType(FLOAT, unitNone(), undefined, contractClamp01()), defaultSource: defaultSourceConst(1.0), uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
+    h: { label: 'Hue', type: canonicalType(FLOAT, unitTurns(), { cardinality: COLOR_PICKER_CARD }, contractWrap01()), defaultSource: defaultSourceConst(0.0), uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
+    s: { label: 'Saturation', type: canonicalType(FLOAT, unitNone(), { cardinality: COLOR_PICKER_CARD }, contractClamp01()), defaultSource: defaultSourceConst(1.0), uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
+    l: { label: 'Lightness', type: canonicalType(FLOAT, unitNone(), { cardinality: COLOR_PICKER_CARD }, contractClamp01()), defaultSource: defaultSourceConst(0.5), uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
+    a: { label: 'Alpha', type: canonicalType(FLOAT, unitNone(), { cardinality: COLOR_PICKER_CARD }, contractClamp01()), defaultSource: defaultSourceConst(1.0), uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
   },
   outputs: {
-    color: { label: 'Color', type: canonicalType(COLOR, unitHsl()) },
+    color: { label: 'Color', type: canonicalType(COLOR, unitHsl(), { cardinality: COLOR_PICKER_CARD }) },
   },
   lower: ({ ctx, inputsById }) => {
     const hInput = inputsById.h;

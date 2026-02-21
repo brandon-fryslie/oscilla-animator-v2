@@ -31,11 +31,6 @@ registerBlock({
   capability: 'state',
   loweringPurity: 'stateful',
   isStateful: true,  // Allows feedback cycles - reads from previous frame
-  cardinality: {
-    cardinalityMode: 'preserve',
-    laneCoupling: 'laneLocal',
-    broadcastPolicy: 'allowZipSig',
-  },
   inputs: {
     in: { label: 'In', type: inferType(FLOAT, unitVar('slew_U'), { cardinality: SLEW_CARD }) },
     rate: { label: 'Rate', type: canonicalType(FLOAT, unitNone(), { cardinality: SLEW_CARD }, contractClamp01()), defaultValue: 0.5 },

@@ -9,9 +9,18 @@
 import { registerBlock } from '../registry';
 import { canonicalType, canonicalConst, payloadStride, unitHsl, unitTurns, unitNone, contractWrap01, contractClamp01 } from '../../core/canonical-types';
 import { FLOAT, COLOR } from '../../core/canonical-types';
+import { cardinalityVar } from '../../core/inference-types';
+import { cardinalityVarId } from '../../core/ids';
 import { OpCode } from '../../compiler/ir/types';
 import { defaultSourceConst } from '../../types';
 import { withoutContract, zipAuto } from '../lower-utils';
+
+// [LAW:one-source-of-truth] Per-port cardinality behavior is declared on CT/ICT.
+const MAKE_COLOR_HSL_CARD = cardinalityVar(cardinalityVarId('make_color_hsl_cardinality'), {
+  relation: 'promoteToMany',
+  acceptance: 'oneOrMany',
+  instanceBinding: 'inherit',
+});
 
 registerBlock({
   type: 'MakeColorHSL',
@@ -21,19 +30,14 @@ registerBlock({
   form: 'primitive',
   capability: 'pure',
   loweringPurity: 'pure',
-  cardinality: {
-    cardinalityMode: 'preserve',
-    laneCoupling: 'laneLocal',
-    broadcastPolicy: 'allowZipSig',
-  },
   inputs: {
-    h: { label: 'Hue', type: canonicalType(FLOAT, unitTurns(), undefined, contractWrap01()), defaultSource: defaultSourceConst(0.0) },
-    s: { label: 'Saturation', type: canonicalType(FLOAT, unitNone(), undefined, contractClamp01()), defaultSource: defaultSourceConst(1.0) },
-    l: { label: 'Lightness', type: canonicalType(FLOAT, unitNone(), undefined, contractClamp01()), defaultSource: defaultSourceConst(0.5) },
-    a: { label: 'Alpha', type: canonicalType(FLOAT, unitNone(), undefined, contractClamp01()), defaultSource: defaultSourceConst(1.0) },
+    h: { label: 'Hue', type: canonicalType(FLOAT, unitTurns(), { cardinality: MAKE_COLOR_HSL_CARD }, contractWrap01()), defaultSource: defaultSourceConst(0.0) },
+    s: { label: 'Saturation', type: canonicalType(FLOAT, unitNone(), { cardinality: MAKE_COLOR_HSL_CARD }, contractClamp01()), defaultSource: defaultSourceConst(1.0) },
+    l: { label: 'Lightness', type: canonicalType(FLOAT, unitNone(), { cardinality: MAKE_COLOR_HSL_CARD }, contractClamp01()), defaultSource: defaultSourceConst(0.5) },
+    a: { label: 'Alpha', type: canonicalType(FLOAT, unitNone(), { cardinality: MAKE_COLOR_HSL_CARD }, contractClamp01()), defaultSource: defaultSourceConst(1.0) },
   },
   outputs: {
-    color: { label: 'Color', type: canonicalType(COLOR, unitHsl()) },
+    color: { label: 'Color', type: canonicalType(COLOR, unitHsl(), { cardinality: MAKE_COLOR_HSL_CARD }) },
   },
   lower: ({ ctx, inputsById }) => {
     const hInput = inputsById.h;

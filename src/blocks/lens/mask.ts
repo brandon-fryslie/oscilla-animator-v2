@@ -29,11 +29,6 @@ registerBlock({
   form: 'primitive',
   capability: 'pure',
   loweringPurity: 'pure',
-  cardinality: {
-    cardinalityMode: 'preserve',
-    laneCoupling: 'laneLocal',
-    broadcastPolicy: 'allowZipSig',
-  },
   inputs: {
     in: { label: 'In', type: inferType(FLOAT, unitVar('mask_U'), { cardinality: MASK_CARD }) },
     mask: { label: 'Mask', type: canonicalType(FLOAT, undefined, { cardinality: MASK_CARD }), exposedAsPort: true },

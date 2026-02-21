@@ -30,11 +30,6 @@ registerBlock({
   form: 'primitive',
   capability: 'pure',
   loweringPurity: 'pure',
-  cardinality: {
-    cardinalityMode: 'preserve',
-    laneCoupling: 'laneLocal',
-    broadcastPolicy: 'allowZipSig',
-  },
   inputs: {
     in: { label: 'In', type: canonicalType(FLOAT, undefined, { cardinality: DENORMALIZE_RANGE_CARD }, contractClamp01()) },
     min: { label: 'Min', type: inferType(FLOAT, unitVar('dnr_U'), { cardinality: DENORMALIZE_RANGE_CARD }), defaultValue: 0.0 },

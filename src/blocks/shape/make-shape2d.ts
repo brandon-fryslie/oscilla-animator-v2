@@ -44,12 +44,6 @@ registerBlock({
   form: 'primitive',
   capability: 'pure',
   loweringPurity: 'pure',
-  cardinality: {
-    cardinalityMode: 'transform',
-    laneCoupling: 'laneLocal',
-    broadcastPolicy: 'disallowSignalMix',
-    domainType: DOMAIN_CONTROL,  // Assembler consumes control-point fields (no new instances created)
-  },
   inputs: {
     controlPoints: {
       label: 'Control Points',

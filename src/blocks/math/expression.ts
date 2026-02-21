@@ -28,11 +28,6 @@ registerBlock({
   description: 'Compute signal from mathematical expression',
   form: 'primitive',
   capability: 'pure',
-  cardinality: {
-    cardinalityMode: 'preserve',
-    laneCoupling: 'laneLocal',
-    broadcastPolicy: 'allowZipSig',
-  },
   payload: {
     allowedPayloads: {
       refs: ALL_CONCRETE_PAYLOADS,

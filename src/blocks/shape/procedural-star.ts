@@ -5,9 +5,8 @@
  */
 
 import { registerBlock } from '../registry';
-import { canonicalType, canonicalField, payloadStride, floatConst, intConst, withInstance, instanceRef } from '../../core/canonical-types';
+import { canonicalType, canonicalField, canonicalFieldDef, payloadStride, floatConst, intConst, withInstance, instanceRef } from '../../core/canonical-types';
 import { FLOAT, INT, VEC2 } from '../../core/canonical-types';
-import { instanceId as makeInstanceId, domainTypeId as makeDomainTypeId } from '../../core/ids';
 import { DOMAIN_CONTROL } from '../../core/domain-registry';
 import { PathVerb, type PathTopologyDef, PathTopologyDefInput } from '../../shapes/types';
 import { registerDynamicTopology } from '../../shapes/registry';
@@ -94,12 +93,6 @@ registerBlock({
   form: 'primitive',
   capability: 'pure',
   loweringPurity: 'pure',
-  cardinality: {
-    cardinalityMode: 'transform',
-    laneCoupling: 'laneLocal',
-    broadcastPolicy: 'disallowSignalMix',
-    domainType: DOMAIN_CONTROL,
-  },
   inputs: {
     points: {
       label: 'Points',
@@ -125,7 +118,7 @@ registerBlock({
   },
   outputs: {
     shape: { label: 'Shape', type: canonicalType(FLOAT) },
-    controlPoints: { label: 'Control Points', type: canonicalField(VEC2, { kind: 'none' }, { instanceId: makeInstanceId('control'), domainTypeId: makeDomainTypeId('default') }) },
+    controlPoints: { label: 'Control Points', type: canonicalFieldDef(VEC2, { kind: 'none' }) },
   },
   lower: ({ ctx, inputsById }) => {
     // Get points from input (must be compile-time constant)

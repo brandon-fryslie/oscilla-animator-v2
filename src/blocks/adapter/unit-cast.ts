@@ -16,7 +16,15 @@
 
 import { registerBlock } from '../registry';
 import { payloadStride, unitNone } from '../../core/canonical-types';
-import { inferType, payloadVar, unitVar } from '../../core/inference-types';
+import { inferType, payloadVar, unitVar, cardinalityVar } from '../../core/inference-types';
+import { cardinalityVarId } from '../../core/ids';
+
+// [LAW:one-source-of-truth] Per-port cardinality behavior is declared on CT/ICT.
+const UNIT_CAST_CARD = cardinalityVar(cardinalityVarId('unit_cast_cardinality'), {
+  relation: 'promoteToMany',
+  acceptance: 'oneOrMany',
+  instanceBinding: 'inherit',
+});
 
 registerBlock({
   type: 'Adapter_UnitCast',
@@ -26,11 +34,6 @@ registerBlock({
   form: 'primitive',
   capability: 'pure',
   loweringPurity: 'pure',
-  cardinality: {
-    cardinalityMode: 'preserve',
-    laneCoupling: 'laneLocal',
-    broadcastPolicy: 'allowZipSig',
-  },
   adapterSpec: {
     // [LAW:dataflow-not-control-flow] Both 'any' payloads trigger the existing
     // payload-equality check in findAdapter — no special-case needed.
@@ -44,10 +47,10 @@ registerBlock({
     priority: 1, // Fallback — specific adapters (ScalarToPhase01, ScalarToDeg) win at priority 0
   },
   inputs: {
-    in: { label: 'In', type: inferType(payloadVar('unit_cast_payload'), unitNone()) },
+    in: { label: 'In', type: inferType(payloadVar('unit_cast_payload'), unitNone(), { cardinality: UNIT_CAST_CARD }) },
   },
   outputs: {
-    out: { label: 'Out', type: inferType(payloadVar('unit_cast_payload'), unitVar('unit_cast_unit')) },
+    out: { label: 'Out', type: inferType(payloadVar('unit_cast_payload'), unitVar('unit_cast_unit'), { cardinality: UNIT_CAST_CARD }) },
   },
   lower: ({ inputsById, ctx }) => {
     const input = inputsById.in;

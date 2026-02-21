@@ -29,11 +29,6 @@ registerBlock({
   form: 'primitive',
   capability: 'pure',
   loweringPurity: 'pure',
-  cardinality: {
-    cardinalityMode: 'preserve',
-    laneCoupling: 'laneLocal',
-    broadcastPolicy: 'allowZipSig',
-  },
   inputs: {
     in: { label: 'In', type: canonicalType(FLOAT, undefined, { cardinality: POWER_GAMMA_CARD }) },
     gamma: { label: 'Gamma', type: canonicalType(FLOAT, undefined, { cardinality: POWER_GAMMA_CARD }), defaultValue: 1.0 },

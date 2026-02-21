@@ -11,7 +11,16 @@
 import { registerBlock } from '../registry';
 import { canonicalType, payloadStride, unitTurns, unitHsl } from '../../core/canonical-types';
 import { FLOAT, COLOR } from '../../core/canonical-types';
+import { cardinalityVar } from '../../core/inference-types';
+import { cardinalityVarId } from '../../core/ids';
 import { defaultSourceConst } from '../../types';
+
+// [LAW:one-source-of-truth] Per-port cardinality behavior is declared on CT/ICT.
+const HUE_RAINBOW_CARD = cardinalityVar(cardinalityVarId('hue_rainbow_cardinality'), {
+  relation: 'promoteToMany',
+  acceptance: 'oneOrMany',
+  instanceBinding: 'inherit',
+});
 
 registerBlock({
   type: 'HueRainbow',
@@ -21,20 +30,15 @@ registerBlock({
   form: 'primitive',
   capability: 'pure',
   loweringPurity: 'pure', // Pure block for macro expansion
-  cardinality: {
-    cardinalityMode: 'preserve',
-    laneCoupling: 'laneLocal',
-    broadcastPolicy: 'allowZipSig',
-  },
   inputs: {
     t: {
       label: 'Phase',
-      type: canonicalType(FLOAT, unitTurns()),
+      type: canonicalType(FLOAT, unitTurns(), { cardinality: HUE_RAINBOW_CARD }),
       defaultSource: defaultSourceConst(0.0),
     },
   },
   outputs: {
-    out: { label: 'Color', type: canonicalType(COLOR, unitHsl()) },
+    out: { label: 'Color', type: canonicalType(COLOR, unitHsl(), { cardinality: HUE_RAINBOW_CARD }) },
   },
   lower: ({ ctx, inputsById }) => {
     const tInput = inputsById.t;

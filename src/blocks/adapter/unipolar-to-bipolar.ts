@@ -8,8 +8,17 @@
 import { registerBlock } from '../registry';
 import { canonicalType, unitNone, payloadStride, floatConst, contractClamp01, contractClamp11 } from '../../core/canonical-types';
 import { FLOAT } from '../../core/canonical-types';
+import { cardinalityVar } from '../../core/inference-types';
+import { cardinalityVarId } from '../../core/ids';
 import { OpCode } from '../../compiler/ir/types';
 import { zipAuto } from '../lower-utils';
+
+// [LAW:one-source-of-truth] Per-port cardinality behavior is declared on CT/ICT.
+const UNIPOLAR_TO_BIPOLAR_CARD = cardinalityVar(cardinalityVarId('unipolar_to_bipolar_cardinality'), {
+  relation: 'promoteToMany',
+  acceptance: 'oneOrMany',
+  instanceBinding: 'inherit',
+});
 
 registerBlock({
   type: 'Adapter_UnipolarToBipolar',
@@ -19,11 +28,6 @@ registerBlock({
   form: 'primitive',
   capability: 'pure',
   loweringPurity: 'pure',
-  cardinality: {
-    cardinalityMode: 'preserve',
-    laneCoupling: 'laneLocal',
-    broadcastPolicy: 'allowZipSig',
-  },
   adapterSpec: {
     from: { payload: FLOAT, unit: { kind: 'none' }, contract: { kind: 'clamp01' }, extent: 'any' },
     to: { payload: FLOAT, unit: { kind: 'none' }, contract: { kind: 'clamp11' }, extent: 'any' },
@@ -35,10 +39,10 @@ registerBlock({
     priority: -10, // Higher priority than general Clamp11 adapter (more specific conversion)
   },
   inputs: {
-    in: { label: 'In', type: canonicalType(FLOAT, unitNone(), undefined, contractClamp01()) },
+    in: { label: 'In', type: canonicalType(FLOAT, unitNone(), { cardinality: UNIPOLAR_TO_BIPOLAR_CARD }, contractClamp01()) },
   },
   outputs: {
-    out: { label: 'Out', type: canonicalType(FLOAT, unitNone(), undefined, contractClamp11()) },
+    out: { label: 'Out', type: canonicalType(FLOAT, unitNone(), { cardinality: UNIPOLAR_TO_BIPOLAR_CARD }, contractClamp11()) },
   },
   lower: ({ inputsById, ctx }) => {
     const input = inputsById.in;

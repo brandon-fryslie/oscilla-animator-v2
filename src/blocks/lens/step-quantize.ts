@@ -29,11 +29,6 @@ registerBlock({
   form: 'primitive',
   capability: 'pure',
   loweringPurity: 'pure',
-  cardinality: {
-    cardinalityMode: 'preserve',
-    laneCoupling: 'laneLocal',
-    broadcastPolicy: 'allowZipSig',
-  },
   inputs: {
     in: { label: 'In', type: inferType(FLOAT, unitVar('stepQ_U'), { cardinality: STEP_QUANTIZE_CARD }) },
     step: { label: 'Step', type: inferType(FLOAT, unitVar('stepQ_U'), { cardinality: STEP_QUANTIZE_CARD }), defaultValue: 0.1 },

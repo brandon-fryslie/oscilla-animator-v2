@@ -9,6 +9,15 @@
 import { registerBlock } from '../registry';
 import { canonicalType, payloadStride, unitHsl, unitRgba01 } from '../../core/canonical-types';
 import { COLOR } from '../../core/canonical-types';
+import { cardinalityVar } from '../../core/inference-types';
+import { cardinalityVarId } from '../../core/ids';
+
+// [LAW:one-source-of-truth] Per-port cardinality behavior is declared on CT/ICT.
+const HSL_TO_RGBA_CARD = cardinalityVar(cardinalityVarId('hsl_to_rgba_cardinality'), {
+  relation: 'promoteToMany',
+  acceptance: 'oneOrMany',
+  instanceBinding: 'inherit',
+});
 
 registerBlock({
   type: 'Adapter_HslToRgba',
@@ -18,11 +27,6 @@ registerBlock({
   form: 'primitive',
   capability: 'pure',
   loweringPurity: 'pure',
-  cardinality: {
-    cardinalityMode: 'preserve',
-    laneCoupling: 'laneLocal',
-    broadcastPolicy: 'allowZipSig',
-  },
   adapterSpec: {
     from: { payload: COLOR, unit: { kind: 'color', unit: 'hsl' }, extent: 'any' },
     to: { payload: COLOR, unit: { kind: 'color', unit: 'rgba01' }, extent: 'any' },
@@ -33,10 +37,10 @@ registerBlock({
     stability: 'stable',
   },
   inputs: {
-    in: { label: 'HSL', type: canonicalType(COLOR, unitHsl()) },
+    in: { label: 'HSL', type: canonicalType(COLOR, unitHsl(), { cardinality: HSL_TO_RGBA_CARD }) },
   },
   outputs: {
-    out: { label: 'RGBA', type: canonicalType(COLOR, unitRgba01()) },
+    out: { label: 'RGBA', type: canonicalType(COLOR, unitRgba01(), { cardinality: HSL_TO_RGBA_CARD }) },
   },
   lower: ({ ctx, inputsById }) => {
     const input = inputsById.in;

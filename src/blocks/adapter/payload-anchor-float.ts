@@ -15,9 +15,17 @@
 import { registerBlock } from '../registry';
 import { payloadStride } from '../../core/canonical-types';
 import { FLOAT } from '../../core/canonical-types';
-import { inferType, unitVar } from '../../core/inference-types';
+import { inferType, unitVar, cardinalityVar } from '../../core/inference-types';
+import { cardinalityVarId } from '../../core/ids';
 import { OpCode } from '../../compiler/ir/types';
 import { zipAuto, mapAuto } from '../lower-utils';
+
+// [LAW:one-source-of-truth] Per-port cardinality behavior is declared on CT/ICT.
+const PAYLOAD_ANCHOR_FLOAT_CARD = cardinalityVar(cardinalityVarId('payload_anchor_float_cardinality'), {
+  relation: 'promoteToMany',
+  acceptance: 'oneOrMany',
+  instanceBinding: 'inherit',
+});
 
 registerBlock({
   type: 'Adapter_PayloadAnchorFloat',
@@ -27,16 +35,11 @@ registerBlock({
   form: 'primitive',
   capability: 'pure',
   loweringPurity: 'pure',
-  cardinality: {
-    cardinalityMode: 'preserve',
-    laneCoupling: 'laneLocal',
-    broadcastPolicy: 'allowZipSig',
-  },
   // NO adapterSpec — not a normal adapter. Only inserted by cheater policy.
   inputs: {
     in: {
       label: 'In',
-      type: inferType(FLOAT, unitVar('anchor_U')),
+      type: inferType(FLOAT, unitVar('anchor_U'), { cardinality: PAYLOAD_ANCHOR_FLOAT_CARD }),
       // NOTE: unitVar ID is a template — gets alpha-renamed per block instance
       // by extractConstraints() template var instantiation (u:{blockId}:anchor_U)
     },
@@ -44,7 +47,7 @@ registerBlock({
   outputs: {
     out: {
       label: 'Out',
-      type: inferType(FLOAT, unitVar('anchor_U')),
+      type: inferType(FLOAT, unitVar('anchor_U'), { cardinality: PAYLOAD_ANCHOR_FLOAT_CARD }),
     },
   },
   lower: ({ inputsById, ctx }) => {

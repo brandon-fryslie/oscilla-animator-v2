@@ -30,11 +30,6 @@ registerBlock({
   form: 'primitive',
   capability: 'pure',
   loweringPurity: 'pure',
-  cardinality: {
-    cardinalityMode: 'preserve',
-    laneCoupling: 'laneLocal',
-    broadcastPolicy: 'allowZipSig',
-  },
   inputs: {
     in: { label: 'In', type: inferType(FLOAT, unitVar('dz_U'), { cardinality: DEADZONE_CARD }) },
     threshold: { label: 'Threshold', type: inferType(FLOAT, unitVar('dz_U'), { cardinality: DEADZONE_CARD }), defaultValue: 0.01 },

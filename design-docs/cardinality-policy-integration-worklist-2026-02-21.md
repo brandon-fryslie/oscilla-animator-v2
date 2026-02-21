@@ -2,12 +2,17 @@
 
 This worklist covers full migration from legacy block-level cardinality modes to CT/ICT cardinality-var policy.
 
+## Current Status (2026-02-21)
+
+- Completed: Tracks 1, 3, 4, 5, 10 (mode-dispatch removed, block definitions migrated, registry fallback removed).
+- Remaining: Track 2 depth hardening, Track 6 structural dispatch cleanup, Track 7/8/9 policy diagnostics and adapter revalidation.
+
 ## Track 1: Compiler Extraction Rewrite
 
 1. Replace `rewriteSignalOnly` / `rewritePreserve` / `rewriteTransform` / `rewriteFieldOnly` with one CT/ICT-driven extraction path.
 2. Build cardinality groups exclusively from shared cardinality var ids.
 3. Emit constraints from var policy (`relation`, `acceptance`, `instanceBinding`).
-4. Keep legacy metadata fallback behind a temporary migration gate.
+4. Legacy metadata fallback removed after migration completion.
 
 Completion criteria:
 - `src/compiler/frontend/extract-constraints.ts` has no mode-dispatch switch.
@@ -37,9 +42,9 @@ Completion criteria:
 
 ## Track 4: Registry and Metadata Cleanup
 
-1. Deprecate `BlockCardinalityMetadata` as compatibility-only.
+1. Remove `BlockCardinalityMetadata` from registry/type surfaces.
 2. Remove mode query helpers from active compiler paths.
-3. Delete legacy mode types after full migration.
+3. Delete legacy mode types and translation logic.
 
 Completion criteria:
 - `getBlockCardinalityMetadata` unused by frontend type solving.
@@ -102,7 +107,7 @@ Completion criteria:
 
 ## Track 10: Final Removal and Hardening
 
-1. Remove compatibility gate and legacy mode fallback.
+1. Compatibility gate and legacy mode fallback removed.
 2. Remove dead docs referencing legacy modes as canonical.
 3. Add CI checks preventing reintroduction of mode-dispatch logic.
 

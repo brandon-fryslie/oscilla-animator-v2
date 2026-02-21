@@ -7,8 +7,17 @@
 import { registerBlock } from '../registry';
 import { canonicalType, unitMs, unitNone, unitSeconds, payloadStride, floatConst } from '../../core/canonical-types';
 import { INT, FLOAT } from '../../core/canonical-types';
+import { cardinalityVar } from '../../core/inference-types';
+import { cardinalityVarId } from '../../core/ids';
 import { OpCode } from '../../compiler/ir/types';
 import { zipAuto, mapAuto } from '../lower-utils';
+
+// [LAW:one-source-of-truth] Per-port cardinality behavior is declared on CT/ICT.
+const MS_TO_SECONDS_CARD = cardinalityVar(cardinalityVarId('ms_to_seconds_cardinality'), {
+  relation: 'promoteToMany',
+  acceptance: 'oneOrMany',
+  instanceBinding: 'inherit',
+});
 
 registerBlock({
   type: 'Adapter_MsToSeconds',
@@ -18,11 +27,6 @@ registerBlock({
   form: 'primitive',
   capability: 'pure',
   loweringPurity: 'pure',
-  cardinality: {
-    cardinalityMode: 'preserve',
-    laneCoupling: 'laneLocal',
-    broadcastPolicy: 'allowZipSig',
-  },
   adapterSpec: {
     from: { payload: INT, unit: { kind: 'time', unit: 'ms' }, extent: 'any' },
     to: { payload: FLOAT, unit: { kind: 'time', unit: 'seconds' }, extent: 'any' },
@@ -33,10 +37,10 @@ registerBlock({
     stability: 'stable',
   },
   inputs: {
-    in: { label: 'In', type: canonicalType(INT, unitMs()) },
+    in: { label: 'In', type: canonicalType(INT, unitMs(), { cardinality: MS_TO_SECONDS_CARD }) },
   },
   outputs: {
-    out: { label: 'Out', type: canonicalType(FLOAT, unitSeconds()) },
+    out: { label: 'Out', type: canonicalType(FLOAT, unitSeconds(), { cardinality: MS_TO_SECONDS_CARD }) },
   },
   lower: ({ inputsById, ctx }) => {
     const input = inputsById.in;

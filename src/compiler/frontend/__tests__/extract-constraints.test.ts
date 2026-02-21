@@ -245,17 +245,19 @@ describe('extractConstraints', () => {
       expect(shapeAxis!.value.kind).toBe('one');
     }
 
-    // shape should get clampOne, controlPoints should get forceMany.
+    // shape should get clampOne, controlPoints stays concrete many via declared type.
     // [LAW:behavior-not-structure] assert solver-facing behavior, not axis encoding details.
     const shapeClamp = constraints.cardinality.filter(
       (c) => c.kind === 'clampOne' && c.port === shapeKey,
     );
     expect(shapeClamp.length).toBe(1);
 
-    const cpForce = constraints.cardinality.filter(
-      (c) => c.kind === 'forceMany' && c.port === cpKey,
-    );
-    expect(cpForce.length).toBe(1);
+    const cpAxis = constraints.baseCardinalityAxis.get(cpKey);
+    expect(cpAxis).toBeDefined();
+    expect(isAxisInst(cpAxis!)).toBe(true);
+    if (isAxisInst(cpAxis!)) {
+      expect(cpAxis.value.kind).toBe('many');
+    }
   });
 
   it('instantiates cardinality template vars per block instance', () => {

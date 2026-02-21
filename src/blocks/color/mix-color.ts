@@ -9,9 +9,18 @@
 import { registerBlock } from '../registry';
 import { canonicalType, payloadStride, unitHsl, unitNone, contractClamp01 } from '../../core/canonical-types';
 import { FLOAT, COLOR } from '../../core/canonical-types';
+import { cardinalityVar } from '../../core/inference-types';
+import { cardinalityVarId } from '../../core/ids';
 import { OpCode } from '../../compiler/ir/types';
 import { defaultSourceConst } from '../../types';
 import { withoutContract, zipAuto, mapAuto } from '../lower-utils';
+
+// [LAW:one-source-of-truth] Per-port cardinality behavior is declared on CT/ICT.
+const MIX_COLOR_CARD = cardinalityVar(cardinalityVarId('mix_color_cardinality'), {
+  relation: 'promoteToMany',
+  acceptance: 'oneOrMany',
+  instanceBinding: 'inherit',
+});
 
 registerBlock({
   type: 'MixColor',
@@ -21,18 +30,13 @@ registerBlock({
   form: 'primitive',
   capability: 'pure',
   loweringPurity: 'pure',
-  cardinality: {
-    cardinalityMode: 'preserve',
-    laneCoupling: 'laneLocal',
-    broadcastPolicy: 'allowZipSig',
-  },
   inputs: {
-    a: { label: 'Color A', type: canonicalType(COLOR, unitHsl()) },
-    b: { label: 'Color B', type: canonicalType(COLOR, unitHsl()) },
-    t: { label: 'Mix', type: canonicalType(FLOAT, unitNone(), undefined, contractClamp01()), defaultSource: defaultSourceConst(0.5) },
+    a: { label: 'Color A', type: canonicalType(COLOR, unitHsl(), { cardinality: MIX_COLOR_CARD }) },
+    b: { label: 'Color B', type: canonicalType(COLOR, unitHsl(), { cardinality: MIX_COLOR_CARD }) },
+    t: { label: 'Mix', type: canonicalType(FLOAT, unitNone(), { cardinality: MIX_COLOR_CARD }, contractClamp01()), defaultSource: defaultSourceConst(0.5) },
   },
   outputs: {
-    color: { label: 'Color', type: canonicalType(COLOR, unitHsl()) },
+    color: { label: 'Color', type: canonicalType(COLOR, unitHsl(), { cardinality: MIX_COLOR_CARD }) },
   },
   lower: ({ ctx, inputsById }) => {
     const aInput = inputsById.a;

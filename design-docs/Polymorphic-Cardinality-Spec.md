@@ -28,4 +28,4 @@ Canonical direction is now CT/ICT-first:
 
 ## Migration Directive
 
-Treat this file as compatibility guidance only. New architecture and implementation work must use the CT/ICT model from the canonical docs listed above.
+Treat this file as historical compatibility guidance only. Mode-style metadata and registry fallback translation have been removed; new architecture and implementation work must use the CT/ICT model from the canonical docs listed above.
