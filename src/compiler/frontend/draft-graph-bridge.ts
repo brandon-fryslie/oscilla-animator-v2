@@ -18,6 +18,7 @@ import type { NormalizedPatch, NormalizedEdge, BlockIndex } from './normalize-in
 import { blockIndex } from './normalize-indexing';
 import type { TypeResolvedPatch, PortKey, CollectEdgeKey } from '../ir/patches';
 import type { CanonicalType } from '../../core/canonical-types';
+import type { CardinalityAcceptance } from '../../core/canonical-types/cardinality';
 import type { StrictTypedGraph, DraftPortKey, TypeFacts } from './type-facts';
 import type { DraftBlock, DraftEdge, DraftEdgeRole, DraftGraph } from './draft-graph';
 import type { BlockDef } from '../../blocks/registry';
@@ -37,11 +38,13 @@ export interface BridgeResult {
  * @param strict - Fully resolved graph from fixpoint engine
  * @param expandedPatch - The composite-expanded Patch (for port override preservation)
  * @param registry - Block definitions indexed by type
+ * @param draftPortAcceptance - Per-port cardinality acceptance from TypeFacts
  */
 export function bridgeToNormalizedPatch(
   strict: StrictTypedGraph,
   expandedPatch: Patch,
   registry: ReadonlyMap<string, BlockDef>,
+  draftPortAcceptance?: ReadonlyMap<DraftPortKey, CardinalityAcceptance>,
 ): BridgeResult {
   const g = strict.graph;
 
@@ -80,10 +83,16 @@ export function bridgeToNormalizedPatch(
     edges: normalizedEdges,
   };
 
+  // Step 7: Translate portAcceptance (DraftPortKey → PortKey)
+  const portAcceptance = draftPortAcceptance
+    ? translatePortAcceptance(draftPortAcceptance, stringIndexMap)
+    : undefined;
+
   const typeResolved: TypeResolvedPatch = {
     ...normalizedPatch,
     portTypes,
     collectEdgeTypes: collectEdgeTypes.size > 0 ? collectEdgeTypes : undefined,
+    portAcceptance: portAcceptance && portAcceptance.size > 0 ? portAcceptance : undefined,
   };
 
   return { normalizedPatch, typeResolved };
@@ -145,9 +154,13 @@ export function bridgePartialToNormalizedPatch(
     edges: normalizedEdges,
   };
 
+  // Step 6: Translate portAcceptance from TypeFacts
+  const portAcceptance = translatePortAcceptance(facts.portAcceptance, stringIndexMap);
+
   const typeResolved: TypeResolvedPatch = {
     ...normalizedPatch,
     portTypes,
+    portAcceptance: portAcceptance.size > 0 ? portAcceptance : undefined,
   };
 
   return { normalizedPatch, typeResolved };
@@ -388,5 +401,26 @@ function translateCollectEdgeTypes(
     result.set(collectKey, type);
   }
 
+  return result;
+}
+
+// =============================================================================
+// Port Acceptance Translation
+// =============================================================================
+
+/**
+ * Translate portAcceptance from DraftPortKey-space to PortKey-space.
+ */
+function translatePortAcceptance(
+  draftAcceptance: ReadonlyMap<DraftPortKey, CardinalityAcceptance>,
+  blockIndexMap: ReadonlyMap<string, BlockIndex>,
+): ReadonlyMap<PortKey, CardinalityAcceptance> {
+  const result = new Map<PortKey, CardinalityAcceptance>();
+  for (const [draftKey, acceptance] of draftAcceptance) {
+    const translated = translatePortKey(draftKey, blockIndexMap);
+    if (translated !== null) {
+      result.set(translated, acceptance);
+    }
+  }
   return result;
 }

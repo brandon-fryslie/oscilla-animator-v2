@@ -236,7 +236,7 @@ export function compileFrontend(patch: Patch, options?: FrontendOptions): Fronte
   // Step 4: Bridge (always — strict when available, partial otherwise)
   // [LAW:dataflow-not-control-flow] Both paths produce the same shape; variability is in the data.
   const { normalizedPatch, typeResolved } = fixpointResult.strict
-    ? bridgeToNormalizedPatch(fixpointResult.strict, expandedPatch, BLOCK_DEFS_BY_TYPE)
+    ? bridgeToNormalizedPatch(fixpointResult.strict, expandedPatch, BLOCK_DEFS_BY_TYPE, fixpointResult.facts.portAcceptance)
     : bridgePartialToNormalizedPatch(fixpointResult.graph, fixpointResult.facts, expandedPatch, BLOCK_DEFS_BY_TYPE);
 
   // Step 5: Type graph (always — total, never throws)

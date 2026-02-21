@@ -13,6 +13,7 @@
  */
 
 import type { CanonicalType, InstanceRef } from '../../core/canonical-types';
+import type { CardinalityAcceptance } from '../../core/canonical-types/cardinality';
 import type { InferenceCanonicalType } from '../../core/inference-types';
 import type { DraftGraph } from './draft-graph';
 
@@ -69,12 +70,19 @@ export interface TypeFacts {
   readonly ports: ReadonlyMap<DraftPortKey, PortTypeHint>;
   /** Index of InstanceRef → ports sharing that instance. Key is instanceKey(ref). */
   readonly instances: ReadonlyMap<string, InstancePorts>;
+  /**
+   * Per-port cardinality acceptance derived from CT/ICT declarations.
+   * Only populated for ports whose cardinality var has an explicit policy.
+   * // [LAW:one-source-of-truth] Acceptance flows from CT/ICT axis data, not BlockDef lookups.
+   */
+  readonly portAcceptance: ReadonlyMap<DraftPortKey, CardinalityAcceptance>;
 }
 
 /** Empty TypeFacts (all ports unknown). */
 export const EMPTY_TYPE_FACTS: TypeFacts = {
   ports: new Map(),
   instances: new Map(),
+  portAcceptance: new Map(),
 };
 
 // =============================================================================
