@@ -14,6 +14,8 @@ import {
   requireInst,
   payloadsEqual,
   unitsEqual,
+  isAxisVar,
+  resolveCardinalityPolicy,
 } from "../../core/canonical-types";
 import type { TypedPatch, BlockIndex, TypeResolvedPatch, PortKey } from "../ir/patches";
 import { getBlockDefinition, getBlockCardinalityMetadata } from "../../blocks/registry";
@@ -33,6 +35,32 @@ function getPortType(
   direction: 'in' | 'out',
 ): import("../../core/canonical-types").CanonicalType | undefined {
   return patch.portTypes.get(portKey(blockIndex, portName, direction));
+}
+
+/**
+ * Determine whether a destination input port allows signal→field compatibility.
+ *
+ * Priority:
+ * 1) CT/ICT declared acceptance on the input cardinality var (new authority)
+ * 2) legacy block-level broadcastPolicy fallback (transitional)
+ */
+function destinationAllowsSignalBroadcast(blockType: string, inputPort: string): boolean {
+  const def = getBlockDefinition(blockType);
+  const inDef = def?.inputs[inputPort];
+  const axis = inDef?.type?.extent?.cardinality;
+  if (axis && isAxisVar(axis)) {
+    const cardAxis = axis as any;
+    const hasDeclaredPolicy = cardAxis.relation !== undefined
+      || cardAxis.acceptance !== undefined
+      || cardAxis.instanceBinding !== undefined;
+    if (hasDeclaredPolicy) {
+      const policy = resolveCardinalityPolicy(axis);
+      return policy?.acceptance === 'oneOrMany';
+    }
+  }
+
+  const legacy = getBlockCardinalityMetadata(blockType);
+  return legacy?.broadcastPolicy === 'allowZipSig';
 }
 
 // =============================================================================
@@ -176,9 +204,8 @@ export function pass2TypeGraph(typeResolved: TypeResolvedPatch): TypedPatch {
       continue;
     }
 
-    // Check if the destination block allows signal→field broadcast
-    const toMeta = getBlockCardinalityMetadata(toBlock.type);
-    const allowsBroadcast = toMeta?.broadcastPolicy === 'allowZipSig';
+    // Check if destination accepts signal→field by CT/ICT declaration (legacy fallback kept).
+    const allowsBroadcast = destinationAllowsSignalBroadcast(toBlock.type, edge.toPort);
 
     // Validate type compatibility
     if (!isTypeCompatible(fromType, toType, allowsBroadcast)) {
@@ -282,9 +309,8 @@ export function pass2TypeGraphSafe(typeResolved: TypeResolvedPatch): Pass2TypeGr
       continue;
     }
 
-    // Check if the destination block allows signal→field broadcast
-    const toMeta = getBlockCardinalityMetadata(toBlock.type);
-    const allowsBroadcast = toMeta?.broadcastPolicy === 'allowZipSig';
+    // Check if destination accepts signal→field by CT/ICT declaration (legacy fallback kept).
+    const allowsBroadcast = destinationAllowsSignalBroadcast(toBlock.type, edge.toPort);
 
     // Validate type compatibility
     if (!isTypeCompatible(fromType, toType, allowsBroadcast)) {
