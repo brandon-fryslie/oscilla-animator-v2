@@ -490,8 +490,8 @@ export function solveCardinality(input: CardinalitySolveInput): CardinalitySolve
       continue;
     }
 
-    // No evidence → default to one (signal chain).
-    // [LAW:dataflow-not-control-flow] Groups without many evidence are signal-only.
+    // No evidence → default to one.
+    // [LAW:dataflow-not-control-flow] Groups without many evidence resolve to one-cardinality.
     // Emit diagnostic unconditionally; severity applied downstream.
     facts.resolved = { kind: 'one' };
     const members = uf.members(root);
@@ -503,7 +503,7 @@ export function solveCardinality(input: CardinalitySolveInput): CardinalitySolve
     if (hasVars) {
       escapeDiagnostics.push({
         diagnosticFlagCode: 'CardinalityDefaultedToOne',
-        message: `Cardinality group defaulted to one (signal) — no many evidence`,
+        message: `Cardinality group defaulted to one — no many evidence`,
         stableKey: `CardinalityDefaultedToOne:${root}`,
         ports: members,
       });

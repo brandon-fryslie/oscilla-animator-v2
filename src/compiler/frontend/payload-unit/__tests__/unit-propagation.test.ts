@@ -5,7 +5,7 @@
  * These tests exercise the full frontend pipeline (not just the solver).
  *
  * NOTE: Some tests may be skipped when the cardinality solver cannot
- * resolve signal-only patches (pre-existing V2 solver limitation).
+ * resolve one-cardinality-only patches (pre-existing V2 solver limitation).
  */
 import { describe, it, expect } from 'vitest';
 import { buildPatch } from '../../../../graph';

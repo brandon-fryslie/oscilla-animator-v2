@@ -17,7 +17,7 @@ import { isAxisVar, resolveCardinalityPolicy } from '../../core/canonical-types'
  * Is this block type a time source (e.g. TimeRoot, InfiniteTimeRoot)?
  *
  * Structural: capability === 'time'.
- * Time sources are unique singleton blocks that provide time signals.
+ * Time sources are unique singleton blocks that provide time values.
  * The default-source policy wires to existing time sources instead of
  * creating new derived blocks.
  */
@@ -48,16 +48,16 @@ export function isPayloadAnchorAdapter(blockType: string): boolean {
 }
 
 /**
- * Is this block type a signal-only default source?
+ * Is this block type a one-only default source?
  *
  * Structural: no inputs + at least one output port with a cardinality var
  * declaring acceptance:'oneOnly'.
  *
- * Signal-only default sources produce scalar signal defaults. When the
- * cardinality adapter policy encounters one feeding a field port, it
- * replaces it with a field default source (acceptance:'manyOnly').
+ * One-only default sources produce one-cardinality defaults. When the
+ * cardinality adapter policy encounters one feeding a many port, it
+ * replaces it with a many default source (acceptance:'manyOnly').
  */
-export function isSignalDefaultSource(blockType: string): boolean {
+export function isOneOnlyDefaultSource(blockType: string): boolean {
   const def = getBlockDefinition(blockType);
   if (!def) return false;
   if (Object.keys(def.inputs).length > 0) return false;

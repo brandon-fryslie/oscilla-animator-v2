@@ -611,7 +611,7 @@ describe('Forbidden Patterns (Type System Invariants)', () => {
       const removedHelpers = [
         { name: 'portDeclaresOneOrManyFlex', replacement: 'portAcceptsBroadcast from type-compatibility.ts' },
         { name: 'destinationAllowsSignalBroadcast', replacement: 'portAcceptsBroadcast from type-compatibility.ts' },
-        { name: 'portDeclaresSignalOnly', replacement: 'CT/ICT structural predicates' },
+        { name: 'portDeclaresOneContinuousOnly', replacement: 'CT/ICT structural predicates' },
         { name: 'isOneManyCardinalityMismatchOnly', replacement: 'isOneManyMismatchOnly from type-compatibility.ts' },
       ];
 

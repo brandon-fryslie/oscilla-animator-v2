@@ -5,18 +5,18 @@
  *
  * Two strategies:
  * 1. If the source block is a DefaultSource → replace it with DefaultSourceField
- *    (produces per-element field defaults instead of broadcasting a uniform signal)
- * 2. Otherwise → insert Broadcast on the boundary edge (signal→field)
+ *    (produces per-element many defaults instead of broadcasting a uniform one value)
+ * 2. Otherwise → insert Broadcast on the boundary edge (one→many)
  *
  * // [LAW:single-enforcer] This is the only place that decides HOW to insert cardinality adapters.
- * // [LAW:one-type-per-behavior] DefaultSource = signal defaults, DefaultSourceField = field defaults.
+ * // [LAW:one-type-per-behavior] DefaultSource = one defaults, DefaultSourceField = many defaults.
  */
 
 import type { DraftBlock, DraftEdge, ElaboratedRole } from '../draft-graph';
 import type { Obligation } from '../obligations';
 import type { ElaborationPlan } from '../elaboration';
 import type { PolicyContext, PolicyResult, CardinalityAdapterPolicy as CardinalityAdapterPolicyInterface } from './policy-types';
-import { isSignalDefaultSource } from '../structural-predicates';
+import { isOneOnlyDefaultSource } from '../structural-predicates';
 
 // =============================================================================
 // Policy Implementation
@@ -38,10 +38,10 @@ export const cardinalityAdapterPolicyV1: CardinalityAdapterPolicyInterface = {
       return { kind: 'blocked', reason: `Edge ${anchor.edgeId} not found in graph`, diagIds: [] };
     }
 
-    // Check if the source block is a signal-only default source — if so, replace with field default source
+    // Check if the source block is a one-only default source — if so, replace with many default source
     // [LAW:one-source-of-truth] Block identity from CT/ICT port policy, not name string.
     const sourceBlock = ctx.graph.blocks.find((b) => b.id === edge.from.blockId);
-    if (sourceBlock && isSignalDefaultSource(sourceBlock.type)) {
+    if (sourceBlock && isOneOnlyDefaultSource(sourceBlock.type)) {
       return buildDefaultSourceFieldReplacementPlan(obligation, edge, sourceBlock, ctx);
     }
 
@@ -58,7 +58,7 @@ export const cardinalityAdapterPolicyV1: CardinalityAdapterPolicyInterface = {
  * Replace a DefaultSource block with a DefaultSourceField block.
  *
  * The DefaultSource (acceptance:'oneOnly') was inserted by the default-source policy for an
- * unconnected field port. Since the port needs field cardinality, we replace the
+ * unconnected many port. Since the port needs many cardinality, we replace the
  * DefaultSource with DefaultSourceField (acceptance:'manyOnly') which produces per-element
  * field defaults (rainbow colors, circular positions).
  *
@@ -83,7 +83,7 @@ function buildDefaultSourceFieldReplacementPlan(
       params: {},
       portDefaults: {},
       origin: { kind: 'elaboration', obligationId: obligation.id, role },
-      displayName: 'DefaultSourceField (field default)',
+      displayName: 'DefaultSourceField (many default)',
       domainId: sourceBlock.domainId,
       role: sourceBlock.role, // Preserve the derived/defaultSource role from the original
     },
@@ -112,7 +112,7 @@ function buildDefaultSourceFieldReplacementPlan(
       diagnostics: [
         {
           diagnosticFlagCode: 'CardinalityAdapterInserted',
-          message: `DefaultSourceField replacement on ${edgeKey}: signal→field default source upgrade`,
+          message: `DefaultSourceField replacement on ${edgeKey}: one→many default source upgrade`,
           stableKey: `CardinalityAdapterInserted:${edgeKey}`,
         },
       ],
@@ -121,7 +121,7 @@ function buildDefaultSourceFieldReplacementPlan(
 }
 
 /**
- * Insert a Broadcast block on the boundary edge (signal→field).
+ * Insert a Broadcast block on the boundary edge (one→many).
  *   source → Broadcast:signal, Broadcast:field → target
  */
 function buildBroadcastPlan(
@@ -182,7 +182,7 @@ function buildBroadcastPlan(
       diagnostics: [
         {
           diagnosticFlagCode: 'CardinalityAdapterInserted',
-          message: `Broadcast adapter inserted on ${edgeKey}: signal→field cardinality boundary`,
+          message: `Broadcast adapter inserted on ${edgeKey}: one→many cardinality boundary`,
           stableKey: `CardinalityAdapterInserted:${edgeKey}`,
         },
       ],

@@ -2,7 +2,7 @@
  * Tests for the fixpoint frontend pipeline.
  *
  * Tests:
- * 1. Basic compilation: signal-only patches compile successfully
+ * 1. Basic compilation: one-cardinality-only patches compile successfully
  * 2. Edge cases: empty graph, result shape
  */
 import { describe, it, expect } from 'vitest';

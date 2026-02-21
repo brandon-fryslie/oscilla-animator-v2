@@ -187,10 +187,10 @@ describe('solveCardinality', () => {
   });
 
   it('promoteToMany with clampOne + many: clampOne stays at one, many propagates', () => {
-    // promoteToMany semantics: oneOnly (signal) ports coexist with manyOnly (field) ports.
+    // promoteToMany semantics: oneOnly ports coexist with manyOnly ports.
     // clampOne groups stay at one — runtime broadcasts them via kernelZipSig.
     const ref = instanceRef('circle', 'arr1');
-    const clampOrigin: ConstraintOrigin = { kind: 'blockRule', blockId: 'Sig', blockType: 'SignalOnly', rule: 'declared.clampOne' };
+    const clampOrigin: ConstraintOrigin = { kind: 'blockRule', blockId: 'Sig', blockType: 'OneOnly', rule: 'declared.clampOne' };
     const manyOrigin: ConstraintOrigin = { kind: 'blockRule', blockId: 'Field', blockType: 'Transform', rule: 'declared.forceMany' };
     const zipOrigin: ConstraintOrigin = { kind: 'blockRule', blockId: 'zip', blockType: 'Zip', rule: 'declared.promoteToMany' };
 
@@ -234,7 +234,7 @@ describe('solveCardinality', () => {
 
   it('preserve-block broadcast rejection: mixed one/many without zip → ClampManyConflict via equality group', () => {
     // A preserve block with strict equality among all ports.
-    // One input connected to signalOnly producer (clampOne) and another
+    // One input connected to oneOnly producer (clampOne) and another
     // connected to transform output (forceMany) → Conflict in the equality group
     const ref = instanceRef('circle', 'arr1');
     const result = solve(
@@ -248,7 +248,7 @@ describe('solveCardinality', () => {
         // Strict preserve: all ports equal
         { kind: 'equal', a: pk('P:a:in'), b: pk('P:b:in'), origin: o },
         { kind: 'equal', a: pk('P:b:in'), b: pk('P:out:out'), origin: o },
-        // clampOne from signal producer (propagated through edge equality to a)
+        // clampOne from one-cardinality producer (propagated through edge equality to a)
         { kind: 'clampOne', port: pk('P:a:in'), origin: o },
         // forceMany from transform producer (propagated through edge equality to b)
         { kind: 'forceMany', port: pk('P:b:in'), instance: { kind: 'inst', ref }, origin: o },

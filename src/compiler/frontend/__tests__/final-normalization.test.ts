@@ -364,7 +364,7 @@ describe('finalizeNormalizationFixpoint (cardinality solving)', () => {
 
     // All types resolve → strict succeeds
     expect(result.strict).not.toBeNull();
-    // No cardinality errors — default-to-one is valid for signal chains
+    // No cardinality errors — default-to-one is valid for one-cardinality chains
     expect(result.diagnostics.filter(
       (d: any) => d.kind === 'CardinalityConstraintError',
     )).toHaveLength(0);
@@ -380,7 +380,7 @@ describe('finalizeNormalizationFixpoint (cardinality solving)', () => {
     expect(cheaterDiags.length).toBeGreaterThan(0);
   });
 
-  it('instances index is empty for signal-only graphs', () => {
+  it('instances index is empty for one-cardinality-only graphs', () => {
     const patch = buildPatch((b) => {
       const c1 = b.addBlock('Const');
       const c2 = b.addBlock('Const');
