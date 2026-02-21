@@ -23,12 +23,11 @@
 import type { DraftGraph, DraftBlock } from './draft-graph';
 import type { DraftPortKey } from './type-facts';
 import { draftPortKey } from './type-facts';
-import type { BlockDef, BlockCardinalityMetadata } from '../../blocks/registry';
-import { getBlockCardinalityMetadata } from '../../blocks/registry';
+import type { BlockDef } from '../../blocks/registry';
 import type { InferenceCanonicalType } from '../../core/inference-types';
 import { isPayloadVar, isUnitVar, isConcretePayload, isConcreteUnit } from '../../core/inference-types';
 import type { PayloadType, UnitType, CardinalityValue, Axis } from '../../core/canonical-types';
-import { axisVar, axisInst, isAxisInst, isAxisVar, instanceRef, isMany, resolveCardinalityPolicy } from '../../core/canonical-types';
+import { axisInst, isAxisInst, isAxisVar, resolveCardinalityPolicy, instanceRef } from '../../core/canonical-types';
 import { cardinalityVarId, instanceVarId, type CardinalityVarId } from '../../core/ids';
 import type { CardinalityConstraint, InstanceTerm } from './cardinality/solve';
 import type { PayloadUnitConstraint, ConstraintOrigin } from './payload-unit/solve';
@@ -348,25 +347,13 @@ function collectVarConstraints(
 }
 
 /**
- * Rewrite cardinality axes for solvable ports and emit cardinality constraints.
- *
- * For each port, records the original cardinality in baseCardinalityAxis,
- * then rewrites the portBaseTypes entry to use axisVar for solvable ports.
- *
- * Constraint emission per cardinalityMode:
- * - signalOnly → keep axisInst(one), emit clampOne(port)
- * - transform outputs → deterministic axisInst(many(instanceRef(domainType, blockId)))
- * - transform inputs → axisVar, zipBroadcast if allowZipSig
- * - preserve (strict) → axisVar, pairwise equal
- * - preserve + allowZipSig → axisVar, zipBroadcast
- * - fieldOnly inputs → axisVar, forceMany with instance var
- * - fieldOnly outputs → axisVar
- *
- * When laneTopology is present, it takes priority over legacy metadata.
+ * Emit cardinality constraints from declared CT/ICT cardinality axes.
+ * // [LAW:one-source-of-truth] Cardinality behavior is read only from port types.
+ * // [LAW:single-enforcer] Constraint extraction is the only boundary that converts CT/ICT policy to solver constraints.
  */
 function rewriteCardinalityAxes(
   block: DraftBlock,
-  def: BlockDef,
+  _def: BlockDef,
   portBaseTypes: Map<DraftPortKey, InferenceCanonicalType>,
   baseCardinalityAxis: Map<DraftPortKey, Axis<CardinalityValue, CardinalityVarId>>,
   constraints: CardinalityConstraint[],
@@ -378,67 +365,15 @@ function rewriteCardinalityAxes(
     blockPorts.push(key);
   }
 
-  // CT/ICT cardinality policy takes precedence when explicitly declared.
-  // [LAW:one-source-of-truth] Port type declarations are the authority for cardinality behavior.
-  if (hasExplicitCardinalityPolicy(portBaseTypes, blockPorts)) {
-    rewriteFromDeclaredCardinalityPolicy(block, portBaseTypes, constraints, blockPorts);
-    for (const key of blockPorts) {
-      const type = portBaseTypes.get(key);
-      if (type) {
-        baseCardinalityAxis.set(key, normalizeCardinalityForSolver(type.extent.cardinality));
-      }
-    }
-    return;
-  }
+  rewriteFromDeclaredCardinalityPolicy(block, portBaseTypes, constraints, blockPorts);
 
-  // Lane topology takes priority if present
-  if (def.laneTopology) {
-    rewriteForLaneTopology(block, def, portBaseTypes, baseCardinalityAxis, constraints, blockPorts);
-    return;
-  }
-
-  // Fallback: legacy BlockCardinalityMetadata
-  const meta = getBlockCardinalityMetadata(block.type);
-  if (!meta) return;
-
-  switch (meta.cardinalityMode) {
-    case 'signalOnly':
-      rewriteSignalOnly(block, portBaseTypes, constraints, blockPorts);
-      break;
-    case 'transform':
-      rewriteTransform(block, meta, portBaseTypes, baseCardinalityAxis, constraints, blockPorts);
-      break;
-    case 'preserve':
-      rewritePreserve(block, meta, portBaseTypes, constraints, blockPorts);
-      break;
-    case 'fieldOnly':
-      rewriteFieldOnly(block, meta, portBaseTypes, constraints, blockPorts);
-      break;
-  }
-
-  // Record baseCardinalityAxis AFTER rewriting — solver needs to see axisVar for solvable ports.
-  // Normalize zero → one: solver only reasons about one vs many.
+  // Record solver-facing axes (normalized zero→one).
   for (const key of blockPorts) {
     const type = portBaseTypes.get(key);
     if (type) {
       baseCardinalityAxis.set(key, normalizeCardinalityForSolver(type.extent.cardinality));
     }
   }
-}
-
-function hasExplicitCardinalityPolicy(
-  portBaseTypes: Map<DraftPortKey, InferenceCanonicalType>,
-  blockPorts: DraftPortKey[],
-): boolean {
-  for (const key of blockPorts) {
-    const type = portBaseTypes.get(key);
-    if (!type || !isAxisVar(type.extent.cardinality)) continue;
-    const axis = type.extent.cardinality as any;
-    if (axis.relation !== undefined || axis.acceptance !== undefined || axis.instanceBinding !== undefined) {
-      return true;
-    }
-  }
-  return false;
 }
 
 /**
@@ -548,234 +483,6 @@ function rewriteFromDeclaredCardinalityPolicy(
       }
     }
   }
-}
-
-/** signalOnly → keep axisInst(one), emit clampOne */
-function rewriteSignalOnly(
-  block: DraftBlock,
-  portBaseTypes: Map<DraftPortKey, InferenceCanonicalType>,
-  constraints: CardinalityConstraint[],
-  blockPorts: DraftPortKey[],
-): void {
-  const origin: ConstraintOrigin = { kind: 'blockRule', blockId: block.id, blockType: block.type, rule: 'signalOnly.clampOne' };
-  for (const key of blockPorts) {
-    // Keep cardinality as axisInst(one) — no rewrite needed
-    constraints.push({ kind: 'clampOne', port: key, origin });
-  }
-}
-
-/** transform → outputs get deterministic many(ref), inputs get axisVar */
-function rewriteTransform(
-  block: DraftBlock,
-  meta: BlockCardinalityMetadata & { cardinalityMode: 'transform' },
-  portBaseTypes: Map<DraftPortKey, InferenceCanonicalType>,
-  baseCardinalityAxis: Map<DraftPortKey, Axis<CardinalityValue, CardinalityVarId>>,
-  constraints: CardinalityConstraint[],
-  blockPorts: DraftPortKey[],
-): void {
-  // [LAW:single-enforcer] Adapter-inserted Broadcast uses instanceVar, not concrete instanceRef.
-  // This lets the solver unify the Broadcast's instance with downstream instances.
-  // Gate specifically on block type 'Broadcast' with adapter origin — other adapters keep concrete refs.
-  const isBroadcastAdapter = block.type === 'Broadcast'
-    && typeof block.origin === 'object'
-    && (block.origin as { kind: string }).kind === 'elaboration'
-    && (block.origin as { role: string }).role === 'adapter';
-
-  const ref = instanceRef(meta.domainType as string, block.id);
-
-  for (const key of blockPorts) {
-    const dir = key.endsWith(':out') ? 'out' : 'in';
-
-    if (dir === 'out') {
-      if (isBroadcastAdapter) {
-        // Adapter-inserted Broadcast: use instanceVar so solver can unify with downstream
-        rewritePortToVar(key, block.id, portBaseTypes);
-        const instVar: InstanceTerm = { kind: 'var', id: instanceVarId(`adapter:${block.id}`) };
-        constraints.push({ kind: 'forceMany', port: key, instance: instVar, origin: { kind: 'blockRule', blockId: block.id, blockType: block.type, rule: 'transform.forceMany' } });
-      } else {
-        const type = portBaseTypes.get(key)!;
-        const declaredCard = type.extent.cardinality;
-        // [LAW:one-source-of-truth] Signal-declared outputs stay signal on transform blocks.
-        // Only field-declared outputs (cardinality many) get forced to many(ref).
-        // This enables generators/assemblers to output both shapes (signal) and fields.
-        if (isAxisInst(declaredCard) && declaredCard.value.kind === 'one') {
-          constraints.push({ kind: 'clampOne', port: key, origin: { kind: 'blockRule', blockId: block.id, blockType: block.type, rule: 'transform.signalOutput.clampOne' } });
-        } else {
-          // Normal transform outputs → deterministic axisInst(many(ref))
-          const rewritten: InferenceCanonicalType = {
-            ...type,
-            extent: {
-              ...type.extent,
-              cardinality: axisInst({ kind: 'many', instance: ref }),
-            },
-          };
-          portBaseTypes.set(key, rewritten);
-          constraints.push({ kind: 'forceMany', port: key, instance: { kind: 'inst', ref }, origin: { kind: 'blockRule', blockId: block.id, blockType: block.type, rule: 'transform.forceMany' } });
-        }
-      }
-    } else {
-      // Transform inputs → axisVar
-      rewritePortToVar(key, block.id, portBaseTypes);
-    }
-  }
-
-  // If allowZipSig, zipBroadcast over axisVar ports only (not concrete outputs)
-  if (meta.broadcastPolicy === 'allowZipSig') {
-    const varPorts = blockPorts.filter(key => {
-      const type = portBaseTypes.get(key);
-      return type && isAxisVar(type.extent.cardinality);
-    });
-    if (varPorts.length > 0) {
-      constraints.push({ kind: 'zipBroadcast', ports: [...varPorts].sort(), origin: { kind: 'blockRule', blockId: block.id, blockType: block.type, rule: 'transform.allowZipSig.zipBroadcast' } });
-    }
-  }
-}
-
-/** preserve → all ports get axisVar, equal or zipBroadcast */
-function rewritePreserve(
-  block: DraftBlock,
-  meta: BlockCardinalityMetadata,
-  portBaseTypes: Map<DraftPortKey, InferenceCanonicalType>,
-  constraints: CardinalityConstraint[],
-  blockPorts: DraftPortKey[],
-): void {
-  // Rewrite all ports to axisVar
-  for (const key of blockPorts) {
-    rewritePortToVar(key, block.id, portBaseTypes);
-  }
-
-  if (blockPorts.length === 0) return;
-
-  if (meta.broadcastPolicy === 'allowZipSig') {
-    // zipBroadcast over all ports
-    constraints.push({ kind: 'zipBroadcast', ports: [...blockPorts].sort(), origin: { kind: 'blockRule', blockId: block.id, blockType: block.type, rule: 'preserve.allowZipSig.zipBroadcast' } });
-  } else {
-    // strict equality: pairwise equal
-    const sorted = [...blockPorts].sort();
-    for (let i = 1; i < sorted.length; i++) {
-      constraints.push({ kind: 'equal', a: sorted[0], b: sorted[i], origin: { kind: 'blockRule', blockId: block.id, blockType: block.type, rule: 'preserve.strict.equal' } });
-    }
-  }
-}
-
-/** fieldOnly → inputs get axisVar + forceMany(var), outputs get axisVar */
-function rewriteFieldOnly(
-  block: DraftBlock,
-  meta: BlockCardinalityMetadata,
-  portBaseTypes: Map<DraftPortKey, InferenceCanonicalType>,
-  constraints: CardinalityConstraint[],
-  blockPorts: DraftPortKey[],
-): void {
-  // [LAW:one-source-of-truth] Capture original cardinality BEFORE rewritePortToVar overwrites it
-  const originalCardinality = new Map<DraftPortKey, CardinalityValue>();
-  for (const key of blockPorts) {
-    const type = portBaseTypes.get(key);
-    if (type && isAxisInst(type.extent.cardinality)) {
-      originalCardinality.set(key, type.extent.cardinality.value);
-    }
-  }
-
-  // Field-typed ports for zipBroadcast (exclude signal-typed ports)
-  const fieldPorts: DraftPortKey[] = [];
-
-  for (const key of blockPorts) {
-    const origCard = originalCardinality.get(key);
-    const isFieldTyped = origCard && isMany(origCard);
-
-    rewritePortToVar(key, block.id, portBaseTypes);
-    const dir = key.endsWith(':out') ? 'out' : 'in';
-
-    if (dir === 'in' && isFieldTyped) {
-      // Only emit forceMany for field-typed inputs (cardinality: many)
-      // Signal-typed inputs (cardinality: one) keep their var and default to one
-      const parts = key.split(':');
-      const portName = parts.slice(1, -1).join(':');
-      const instVar: InstanceTerm = { kind: 'var', id: instanceVarId(`fieldOnly:${block.id}:${portName}`) };
-      constraints.push({ kind: 'forceMany', port: key, instance: instVar, origin: { kind: 'blockRule', blockId: block.id, blockType: block.type, rule: 'fieldOnly.forceMany' } });
-      fieldPorts.push(key);
-    } else if (dir === 'out' && isFieldTyped) {
-      // Outputs with field typing also go in the zipBroadcast group
-      fieldPorts.push(key);
-    }
-    // Signal-typed ports (both in and out) are excluded from zipBroadcast
-  }
-
-  // Only include field-typed ports in zipBroadcast
-  if (meta.broadcastPolicy === 'allowZipSig' && fieldPorts.length > 0) {
-    constraints.push({ kind: 'zipBroadcast', ports: [...fieldPorts].sort(), origin: { kind: 'blockRule', blockId: block.id, blockType: block.type, rule: 'fieldOnly.allowZipSig.zipBroadcast' } });
-  }
-}
-
-/** Lane topology → use groups directly */
-function rewriteForLaneTopology(
-  block: DraftBlock,
-  def: BlockDef,
-  portBaseTypes: Map<DraftPortKey, InferenceCanonicalType>,
-  baseCardinalityAxis: Map<DraftPortKey, Axis<CardinalityValue, CardinalityVarId>>,
-  constraints: CardinalityConstraint[],
-  blockPorts: DraftPortKey[],
-): void {
-  // Rewrite all ports to axisVar
-  for (const key of blockPorts) {
-    rewritePortToVar(key, block.id, portBaseTypes);
-  }
-
-  for (const group of def.laneTopology!.groups) {
-    const ports: DraftPortKey[] = [];
-    for (const member of group.members) {
-      const inKey = draftPortKey(block.id, member, 'in');
-      const outKey = draftPortKey(block.id, member, 'out');
-      if (portBaseTypes.has(inKey)) ports.push(inKey);
-      if (portBaseTypes.has(outKey)) ports.push(outKey);
-    }
-    if (ports.length === 0) continue;
-
-    if (group.relation === 'zipBroadcast') {
-      constraints.push({ kind: 'zipBroadcast', ports: [...ports].sort(), origin: { kind: 'blockRule', blockId: block.id, blockType: block.type, rule: 'laneTopology.zipBroadcast' } });
-    } else {
-      // allEqual, reducible, broadcastOnly, custom → pairwise equal
-      const sorted = [...ports].sort();
-      for (let i = 1; i < sorted.length; i++) {
-        constraints.push({ kind: 'equal', a: sorted[0], b: sorted[i], origin: { kind: 'blockRule', blockId: block.id, blockType: block.type, rule: 'laneTopology.equal' } });
-      }
-    }
-  }
-
-  // Record baseCardinalityAxis AFTER rewriting.
-  // Normalize zero → one: solver only reasons about one vs many.
-  for (const key of blockPorts) {
-    const type = portBaseTypes.get(key);
-    if (type) {
-      baseCardinalityAxis.set(key, normalizeCardinalityForSolver(type.extent.cardinality));
-    }
-  }
-}
-
-/**
- * Rewrite a port's cardinality axis to axisVar in portBaseTypes.
- * Generates a deterministic CardinalityVarId from the port key.
- */
-function rewritePortToVar(
-  key: DraftPortKey,
-  blockId: string,
-  portBaseTypes: Map<DraftPortKey, InferenceCanonicalType>,
-): void {
-  const type = portBaseTypes.get(key);
-  if (!type) return;
-
-  // Only rewrite if the axis is currently concrete (axisInst)
-  // If it's already axisVar, leave it (shouldn't happen with well-formed block defs)
-  if (isAxisVar(type.extent.cardinality)) return;
-
-  const varId = cardinalityVarId(`card:${key}`);
-  const rewritten: InferenceCanonicalType = {
-    ...type,
-    extent: {
-      ...type.extent,
-      cardinality: axisVar(varId),
-    },
-  };
-  portBaseTypes.set(key, rewritten);
 }
 
 /**

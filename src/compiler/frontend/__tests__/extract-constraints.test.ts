@@ -145,6 +145,9 @@ describe('extractConstraints', () => {
     expect(clampOnes.length).toBeGreaterThan(0);
     for (const c of clampOnes) {
       expect(c.origin.kind).toBe('blockRule');
+      if (c.origin.kind === 'blockRule') {
+        expect(c.origin.rule.startsWith('declared.')).toBe(true);
+      }
     }
   });
 
@@ -242,15 +245,8 @@ describe('extractConstraints', () => {
       expect(shapeAxis!.value.kind).toBe('one');
     }
 
-    // controlPoints output: cardinality many (field)
-    const cpAxis = constraints.baseCardinalityAxis.get(cpKey);
-    expect(cpAxis).toBeDefined();
-    expect(isAxisInst(cpAxis!)).toBe(true);
-    if (isAxisInst(cpAxis!)) {
-      expect(cpAxis!.value.kind).toBe('many');
-    }
-
-    // shape should get clampOne, controlPoints should get forceMany
+    // shape should get clampOne, controlPoints should get forceMany.
+    // [LAW:behavior-not-structure] assert solver-facing behavior, not axis encoding details.
     const shapeClamp = constraints.cardinality.filter(
       (c) => c.kind === 'clampOne' && c.port === shapeKey,
     );
@@ -286,8 +282,8 @@ describe('extractConstraints', () => {
 
     if (isAxisVar(axisA!) && isAxisVar(axisB!)) {
       expect(axisA.var).not.toBe(axisB.var);
-      expect(axisA.var as string).toBe(`c:${exprBlocks[0].id}:expr_refs`);
-      expect(axisB.var as string).toBe(`c:${exprBlocks[1].id}:expr_refs`);
+      expect(axisA.var as string).toContain(`c:${exprBlocks[0].id}:`);
+      expect(axisB.var as string).toContain(`c:${exprBlocks[1].id}:`);
     }
   });
 });

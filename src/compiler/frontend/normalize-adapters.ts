@@ -45,16 +45,6 @@ import { getBlockDefinition, requireBlockDef } from '../../blocks/registry';
 import { findAdapter } from '../../blocks/adapter-spec';
 
 /**
- * Check if a block has cardinalityMode: 'preserve'.
- * Such blocks adapt their output cardinality to match their input cardinality.
- */
-function isCardinalityPreserving(blockType: string): boolean {
-  const blockDef = getBlockDefinition(blockType);
-  if (!blockDef?.cardinality) return false;
-  return blockDef.cardinality.cardinalityMode === 'preserve';
-}
-
-/**
  * Parse sourceAddress to extract blockId and portId.
  * Format: "v1:blocks.{blockId}.outputs.{portId}"
  * Returns null if format doesn't match.
@@ -361,9 +351,8 @@ function expandExplicitLenses(patch: Patch): Pass2Result | Pass2Error {
 /**
  * PHASE 2: Auto-insert adapters when type mismatch is detected.
  *
- * Adapter insertion dispatches on CanonicalType via findAdapter(). The
- * isCardinalityPreserving check prevents spurious Broadcast adapter insertion
- * for blocks that naturally preserve cardinality.
+ * Adapter insertion dispatches on CanonicalType via findAdapter().
+ * // [LAW:one-source-of-truth] Cardinality compatibility comes from resolved port types, not block metadata.
  *
  * CONTRACT:
  *   - Input: Patch (after Phase 1 lens expansion)
@@ -418,11 +407,6 @@ function autoInsertAdapters(patch: Patch): Pass2Result | Pass2Error {
     const adapterSpec = findAdapter(fromType, toType);
 
     if (adapterSpec) {
-      // Skip Broadcast adapter for cardinality-preserving source blocks
-      if (adapterSpec.blockType === 'Broadcast' && isCardinalityPreserving(fromBlock.type)) {
-        continue;
-      }
-
       // Auto-insert adapter block for type mismatch
       const adapterId = `_adapter_${edge.id}` as BlockId;
       const adapterBlockDef = requireBlockDef(adapterSpec.blockType);

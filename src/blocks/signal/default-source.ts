@@ -136,8 +136,9 @@ registerBlock({
       const sandbox = new LowerSandbox(ctx.b, ctx.instanceId, ctx.instances);
       const phaseType = canonicalType(FLOAT);
       const phaseA = ctx.b.time('phaseA', phaseType);
-      const rainbowDef = requireBlockDef('HueRainbow');
-      const rainbowOutTypes = Object.values(rainbowDef.outputs).map(o => o.type as CanonicalType);
+      // [LAW:one-source-of-truth] Use solver-resolved output type from ctx, not raw block-def types.
+      requireBlockDef('HueRainbow');
+      const rainbowOutTypes = [outType];
       const rainbowOutputs = sandbox.lowerBlock('HueRainbow', { t: phaseA }, {}, rainbowOutTypes);
 
       return {

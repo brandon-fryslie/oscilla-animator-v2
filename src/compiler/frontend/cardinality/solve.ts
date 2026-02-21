@@ -334,7 +334,31 @@ function writeGroupSubstitutions(
   for (const port of members) {
     const axis = baseCardinalityAxis.get(port);
     if (axis && isAxisVar(axis)) {
-      cardinalities.set(axis.var, resolved);
+      const existing = cardinalities.get(axis.var);
+      if (!existing) {
+        cardinalities.set(axis.var, resolved);
+        continue;
+      }
+
+      // [LAW:dataflow-not-control-flow] Merge repeated var writes deterministically.
+      // A cardinality var may appear in multiple UF groups when relation=promoteToMany.
+      // In that case, any many evidence wins over one.
+      if (existing.kind === 'many' && resolved.kind === 'one') continue;
+      if (existing.kind === 'one' && resolved.kind === 'many') {
+        cardinalities.set(axis.var, resolved);
+        continue;
+      }
+      if (existing.kind === 'many' && resolved.kind === 'many') {
+        const existingInst = existing.instance;
+        const resolvedInst = resolved.instance;
+        const existingIsUnbound = existingInst.domainTypeId === UNBOUND_INSTANCE.domainTypeId
+          && existingInst.instanceId === UNBOUND_INSTANCE.instanceId;
+        const resolvedIsUnbound = resolvedInst.domainTypeId === UNBOUND_INSTANCE.domainTypeId
+          && resolvedInst.instanceId === UNBOUND_INSTANCE.instanceId;
+        if (existingIsUnbound && !resolvedIsUnbound) {
+          cardinalities.set(axis.var, resolved);
+        }
+      }
     }
   }
 }

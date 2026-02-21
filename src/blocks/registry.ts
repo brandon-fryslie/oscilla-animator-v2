@@ -6,13 +6,14 @@
  */
 
 import type { CanonicalType, PayloadType } from '../core/canonical-types';
-import { FLOAT, INT, BOOL, VEC2, VEC3, VEC4, COLOR, CAMERA_PROJECTION, payloadsEqual } from '../core/canonical-types';
+import { FLOAT, INT, BOOL, VEC2, VEC3, VEC4, COLOR, CAMERA_PROJECTION, payloadsEqual, cardinalityVar, isAxisVar, isAxisInst } from '../core/canonical-types';
 import type { InferenceCanonicalType, InferencePayloadType } from '../core/inference-types';
 import { isPayloadVar } from '../core/inference-types';
 import type { UIControlHint, DefaultSource } from '../types';
 import type { BlockIRBuilder } from '../compiler/ir/BlockIRBuilder';
 import type { BlockIndex } from '../graph/normalize';
 import type { InstanceId, StateSlotId } from '../compiler/ir/Indices';
+import { cardinalityVarId } from '../core/ids';
 
 import type { AdapterBlockSpec } from './adapter-spec';
 import type { DomainTypeId } from '../core/domain-registry';
@@ -590,6 +591,189 @@ export function requireBlockDef(blockType: string): BlockDef {
   return def;
 }
 
+function hasDeclaredCardinalityPolicy(type: InferenceCanonicalType): boolean {
+  const axis = type.extent.cardinality;
+  if (!isAxisVar(axis)) return false;
+  const cardAxis = axis as any;
+  return cardAxis.relation !== undefined
+    || cardAxis.acceptance !== undefined
+    || cardAxis.instanceBinding !== undefined;
+}
+
+function withCardinality(
+  type: InferenceCanonicalType,
+  cardinality: InferenceCanonicalType['extent']['cardinality'],
+): InferenceCanonicalType {
+  return {
+    ...type,
+    extent: {
+      ...type.extent,
+      cardinality,
+    },
+  };
+}
+
+/**
+ * Compile legacy block-level cardinality metadata into per-port CT/ICT policy.
+ * // [LAW:one-source-of-truth] Frontend consumes only per-port type declarations.
+ * // [LAW:locality-or-seam] Keep metadata translation at registration seam while migration is in flight.
+ */
+function applyLegacyCardinalityToPorts(def: BlockDef): BlockDef {
+  if (!def.cardinality) return def;
+
+  const meta = def.cardinality;
+  const inputEntries = Object.entries(def.inputs);
+  const outputEntries = Object.entries(def.outputs);
+
+  const preserveCard = cardinalityVar(cardinalityVarId(`legacy:${def.type}:preserve`), {
+    relation: meta.broadcastPolicy === 'allowZipSig' ? 'promoteToMany' : 'uniform',
+    acceptance: 'oneOrMany',
+    instanceBinding: 'inherit',
+  });
+  const transformInCard = cardinalityVar(cardinalityVarId(`legacy:${def.type}:transform:in`), {
+    relation: meta.broadcastPolicy === 'allowZipSig' ? 'promoteToMany' : 'uniform',
+    acceptance: 'oneOrMany',
+    instanceBinding: 'inherit',
+  });
+  const transformOutCard = meta.cardinalityMode === 'transform'
+    ? cardinalityVar(cardinalityVarId(`legacy:${def.type}:transform:out`), {
+        relation: 'uniform',
+        acceptance: 'manyOnly',
+        instanceBinding: { kind: 'create', domainType: meta.domainType },
+      })
+    : null;
+  const fieldCard = cardinalityVar(cardinalityVarId(`legacy:${def.type}:field`), {
+    relation: meta.broadcastPolicy === 'allowZipSig' ? 'promoteToMany' : 'uniform',
+    acceptance: 'manyOnly',
+    instanceBinding: 'inherit',
+  });
+
+  const rewrittenInputs: Record<string, InputDef> = {};
+  const rewrittenOutputs: Record<string, OutputDef> = {};
+  let changed = false;
+
+  for (const [portId, inDef] of inputEntries) {
+    const existing = inDef.type;
+    if (hasDeclaredCardinalityPolicy(existing)) {
+      rewrittenInputs[portId] = inDef;
+      continue;
+    }
+
+    if (meta.cardinalityMode === 'signalOnly') {
+      // [LAW:single-enforcer] oneOnly policy emits clampOne in extractor.
+      rewrittenInputs[portId] = {
+        ...inDef,
+        type: withCardinality(existing, cardinalityVar(cardinalityVarId(`legacy:${def.type}:${portId}:signal`), {
+          acceptance: 'oneOnly',
+          instanceBinding: 'inherit',
+        })),
+      };
+      changed = true;
+      continue;
+    }
+
+    if (meta.cardinalityMode === 'preserve') {
+      rewrittenInputs[portId] = { ...inDef, type: withCardinality(existing, preserveCard) };
+      changed = true;
+      continue;
+    }
+
+    if (meta.cardinalityMode === 'transform') {
+      rewrittenInputs[portId] = { ...inDef, type: withCardinality(existing, transformInCard) };
+      changed = true;
+      continue;
+    }
+
+    if (meta.cardinalityMode === 'fieldOnly') {
+      const axis = existing.extent.cardinality;
+      const isFieldTyped = isAxisInst(axis) && axis.value.kind === 'many';
+      rewrittenInputs[portId] = {
+        ...inDef,
+        type: withCardinality(
+          existing,
+          isFieldTyped
+            ? fieldCard
+            : cardinalityVar(cardinalityVarId(`legacy:${def.type}:${portId}:fieldOnlySignal`), {
+                acceptance: 'oneOrMany',
+                instanceBinding: 'inherit',
+              }),
+        ),
+      };
+      changed = true;
+      continue;
+    }
+
+    rewrittenInputs[portId] = inDef;
+  }
+
+  for (const [portId, outDef] of outputEntries) {
+    const existing = outDef.type;
+    if (hasDeclaredCardinalityPolicy(existing)) {
+      rewrittenOutputs[portId] = outDef;
+      continue;
+    }
+
+    if (meta.cardinalityMode === 'signalOnly') {
+      rewrittenOutputs[portId] = {
+        ...outDef,
+        type: withCardinality(existing, cardinalityVar(cardinalityVarId(`legacy:${def.type}:${portId}:signalOut`), {
+          acceptance: 'oneOnly',
+          instanceBinding: 'inherit',
+        })),
+      };
+      changed = true;
+      continue;
+    }
+
+    if (meta.cardinalityMode === 'preserve') {
+      rewrittenOutputs[portId] = { ...outDef, type: withCardinality(existing, preserveCard) };
+      changed = true;
+      continue;
+    }
+
+    if (meta.cardinalityMode === 'transform') {
+      const axis = existing.extent.cardinality;
+      const isConcreteOne = isAxisInst(axis) && axis.value.kind === 'one';
+      rewrittenOutputs[portId] = {
+        ...outDef,
+        type: isConcreteOne || !transformOutCard
+          ? existing
+          : withCardinality(existing, transformOutCard),
+      };
+      changed = changed || !isConcreteOne;
+      continue;
+    }
+
+    if (meta.cardinalityMode === 'fieldOnly') {
+      const axis = existing.extent.cardinality;
+      const isFieldTyped = isAxisInst(axis) && axis.value.kind === 'many';
+      rewrittenOutputs[portId] = {
+        ...outDef,
+        type: withCardinality(
+          existing,
+          isFieldTyped
+            ? fieldCard
+            : cardinalityVar(cardinalityVarId(`legacy:${def.type}:${portId}:fieldOnlySignalOut`), {
+                acceptance: 'oneOrMany',
+                instanceBinding: 'inherit',
+              }),
+        ),
+      };
+      changed = true;
+      continue;
+    }
+
+    rewrittenOutputs[portId] = outDef;
+  }
+
+  if (!changed) return def;
+  return {
+    ...def,
+    inputs: rewrittenInputs,
+    outputs: rewrittenOutputs,
+  };
+}
+
 /**
  * Register a block definition.
  */
@@ -618,7 +802,9 @@ export function registerBlock(def: BlockDef): void {
     }
   }
 
-  registry.set(def.type, def);
+  // [LAW:one-source-of-truth] Normalize legacy metadata into port-local CT/ICT at the registry boundary.
+  const normalized = applyLegacyCardinalityToPorts(def);
+  registry.set(def.type, normalized);
 }
 
 // [LAW:single-enforcer] One validation gate for all config access

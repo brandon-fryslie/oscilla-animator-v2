@@ -40,7 +40,8 @@ function getPortType(
 /**
  * Determine whether a destination input port allows signal→field compatibility.
  *
- * // [LAW:one-source-of-truth] Port type declarations are the only authority.
+ * Uses CT/ICT declared acceptance on the destination input cardinality axis.
+ * // [LAW:one-source-of-truth] Cardinality compatibility is declared on port types.
  */
 function destinationAllowsSignalBroadcast(blockType: string, inputPort: string): boolean {
   const def = getBlockDefinition(blockType);
