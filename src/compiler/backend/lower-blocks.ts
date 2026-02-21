@@ -796,9 +796,9 @@ function lowerBlockInstance(
             builder.registerFieldSlot(finalRef.id, finalRef.slot!);
             builder.registerSlotType(finalRef.slot!, finalRef.type);
           } else {
-            // Signal — register sig slot (if stride=1) and slot type
+            // Cardinality-one scalar — register scalar slot (if stride=1) and slot type
             if (finalRef.stride === 1) {
-              builder.registerSigSlot(finalRef.id, finalRef.slot!);
+              builder.registerScalarSlot(finalRef.id, finalRef.slot!);
             }
             builder.registerSlotType(finalRef.slot!, finalRef.type);
           }
@@ -982,9 +982,9 @@ function lowerSCCTwoPass(
                   builder.registerFieldSlot(finalRef.id, finalRef.slot!);
                   builder.registerSlotType(finalRef.slot!, finalRef.type);
                 } else {
-                  // Signal — register sig slot (if stride=1) and slot type
+                  // Cardinality-one scalar — register scalar slot (if stride=1) and slot type
                   if (finalRef.stride === 1) {
-                    builder.registerSigSlot(finalRef.id, finalRef.slot!);
+                    builder.registerScalarSlot(finalRef.id, finalRef.slot!);
                   }
                   builder.registerSlotType(finalRef.slot!, finalRef.type);
                 }

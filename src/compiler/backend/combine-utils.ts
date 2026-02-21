@@ -285,7 +285,7 @@ export function createCombineNode(
 
       const sigId = builder.combine(exprIds, combineMode, type);
       const slot = builder.allocTypedSlot(type, `combine_sig_${combineMode}`);
-      builder.registerSigSlot(sigId, slot);
+      builder.registerScalarSlot(sigId, slot);
       return { id: sigId, slot, type, stride: payloadStride(type.payload) };
     }
   } else {

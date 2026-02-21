@@ -295,17 +295,17 @@ export function pass7Schedule(
   // Collect steps from builder (stateWrite steps from stateful blocks)
   const builderSteps = unlinkedIR.builder.getSteps();
 
-  // Generate evalValue steps for all signals with registered slots.
-  // Signals that depend on eventRead must be evaluated AFTER events.
+  // Generate scalar write steps for all registered cardinality-one slots.
+  // Scalar expressions that depend on eventRead must be evaluated AFTER events.
   // Pre-event signals go in Phase 1, post-event signals go after evalEvent.
-  const sigSlots = unlinkedIR.builder.getSigSlots();
+  const scalarSlots = unlinkedIR.builder.getScalarSlots();
   const evalValueStepsPre: Step[] = [];
   const evalValueStepsPost: Step[] = [];
   const scalarMaterializeStepsPre: StepMaterialize[] = [];
   const scalarMaterializeStepsPost: StepMaterialize[] = [];
   const scalarMaterializeEligibility = new Map<number, boolean>();
-  for (const [sigId, slot] of sigSlots) {
-    const exprId = sigId as ValueExprId;
+  for (const [scalarExprId, slot] of scalarSlots) {
+    const exprId = scalarExprId as ValueExprId;
     const expr = valueExprs[exprId as number];
     if (!expr) continue;
 
@@ -321,7 +321,7 @@ export function pass7Schedule(
         instanceId: SCALAR_INSTANCE_ID,
         target: slot,
       };
-      if (sigDependsOnEvent(sigId as number, valueExprs)) {
+      if (sigDependsOnEvent(scalarExprId as number, valueExprs)) {
         scalarMaterializeStepsPost.push(scalarStep);
       } else {
         scalarMaterializeStepsPre.push(scalarStep);
@@ -339,7 +339,7 @@ export function pass7Schedule(
       strategy,
     };
 
-    if (sigDependsOnEvent(sigId as number, valueExprs)) {
+    if (sigDependsOnEvent(scalarExprId as number, valueExprs)) {
       evalValueStepsPost.push(step);
     } else {
       evalValueStepsPre.push(step);

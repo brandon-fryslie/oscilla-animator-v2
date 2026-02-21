@@ -50,8 +50,8 @@ export interface OrchestratorIRBuilder extends BlockIRBuilder {
   /** Register a slot's type metadata. */
   registerSlotType(slot: ValueSlot, type: CanonicalType): void;
 
-  /** Register a signal expression -> slot binding. */
-  registerSigSlot(sigId: ValueExprId, slot: ValueSlot): void;
+  /** Register a cardinality-one expression -> slot binding. */
+  registerScalarSlot(exprId: ValueExprId, slot: ValueSlot): void;
 
   /** Register a field expression -> slot binding. */
   registerFieldSlot(fieldId: ValueExprId, slot: ValueSlot): void;
@@ -141,7 +141,7 @@ export interface OrchestratorIRBuilder extends BlockIRBuilder {
   /** Get all value expressions. */
   getValueExprs(): readonly ValueExpr[];
 
-  getSigSlots(): ReadonlyMap<number, ValueSlot>;
+  getScalarSlots(): ReadonlyMap<number, ValueSlot>;
   getEventSlots(): ReadonlyMap<ValueExprId, any>;
   getEventSlotCount(): number;
 

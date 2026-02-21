@@ -54,7 +54,7 @@ export class IRBuilderImpl implements OrchestratorIRBuilder {
   private eventSlotCounter = 0;
   private instanceCounter = 0;
   private instances = new Map<InstanceId, InstanceDecl>();
-  private sigSlots = new Map<number, ValueSlot>();
+  private scalarSlots = new Map<number, ValueSlot>();
   private fieldSlots = new Map<number, ValueSlot>();
   private eventSlots = new Map<ValueExprId, EventSlotId>();
   private slotMeta = new Map<ValueSlot, { type: CanonicalType; stride: number }>();
@@ -426,8 +426,8 @@ export class IRBuilderImpl implements OrchestratorIRBuilder {
     this.slotMeta.set(slot, { type, stride });
   }
 
-  registerSigSlot(sigId: ValueExprId, slot: ValueSlot): void {
-    this.sigSlots.set(sigId, slot);
+  registerScalarSlot(exprId: ValueExprId, slot: ValueSlot): void {
+    this.scalarSlots.set(exprId, slot);
   }
 
   registerFieldSlot(fieldId: ValueExprId, slot: ValueSlot): void {
@@ -663,8 +663,8 @@ export class IRBuilderImpl implements OrchestratorIRBuilder {
     }
   }
 
-  getSigSlots(): ReadonlyMap<number, ValueSlot> {
-    return this.sigSlots;
+  getScalarSlots(): ReadonlyMap<number, ValueSlot> {
+    return this.scalarSlots;
   }
 
   getEventSlots(): ReadonlyMap<ValueExprId, EventSlotId> {

@@ -138,7 +138,7 @@ export interface IRBuilder {
   // =========================================================================
   // Slot Registration & Allocation
   // =========================================================================
-  // REMOVED: allocSlot, allocTypedSlot, registerSigSlot, registerSlotType, registerFieldSlot
+  // REMOVED: allocSlot, allocTypedSlot, registerScalarSlot, registerSlotType, registerFieldSlot
   // Pure blocks use effects.slotRequests instead
   // Only the binder/orchestrator allocates slots
 
@@ -233,7 +233,7 @@ export interface IRBuilder {
   /** Get all value expressions. */
   getValueExprs(): readonly ValueExpr[];
 
-  getSigSlots(): ReadonlyMap<number, ValueSlot>;
+  getScalarSlots(): ReadonlyMap<number, ValueSlot>;
   getEventSlots(): ReadonlyMap<ValueExprId, EventSlotId>;
   getEventSlotCount(): number;
 

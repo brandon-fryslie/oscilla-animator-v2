@@ -13,7 +13,7 @@
  *
  * Pure blocks CANNOT:
  * - Allocate slots (allocSlot, allocTypedSlot, allocStateSlot, allocEventSlot)
- * - Register slot mappings (registerSlotType, registerSigSlot, registerFieldSlot)
+ * - Register slot mappings (registerSlotType, registerScalarSlot, registerFieldSlot)
  * - Emit execution steps (stepStateWrite, stepMaterialize, etc.)
  * - Add render globals (addRenderGlobal)
  *
