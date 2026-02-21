@@ -303,7 +303,7 @@ export function* executeFrameStepped(
 
         if (strategy === 0 || strategy === 1) {
           if (step.target.storage !== 'value') {
-            throw new Error(`evalValue: ContinuousScalar/Field requires value storage, got ${step.target.storage}`);
+            throw new Error(`evalValue: ContinuousOne/Many requires value storage, got ${step.target.storage}`);
           }
 
           const targetSlot = step.target.slot;
@@ -376,7 +376,7 @@ export function* executeFrameStepped(
           }
         } else if (strategy === 2 || strategy === 3) {
           if (step.target.storage !== 'event') {
-            throw new Error(`evalValue: DiscreteScalar/Field requires event storage, got ${step.target.storage}`);
+            throw new Error(`evalValue: DiscreteOne/Many requires event storage, got ${step.target.storage}`);
           }
 
           const fired = evaluateValueExprEvent(step.expr as any, program.valueExprs, state, program);

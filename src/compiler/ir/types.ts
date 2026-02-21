@@ -270,10 +270,10 @@ export type TimeModel = TimeModelIR;
  * const enum inlines to integer constants for zero-overhead dispatch.
  */
 export const enum EvalStrategy {
-  ContinuousScalar = 0,  // Continuous temporality, cardinality one (scalar signal)
-  ContinuousField  = 1,  // Continuous temporality, cardinality many (field)
-  DiscreteScalar   = 2,  // Discrete temporality, cardinality one (scalar event)
-  DiscreteField    = 3,  // Discrete temporality, cardinality many (field event, future)
+  ContinuousOne  = 0,  // Continuous temporality, cardinality one
+  ContinuousMany = 1,  // Continuous temporality, cardinality many
+  DiscreteOne    = 2,  // Discrete temporality, cardinality one
+  DiscreteMany   = 3,  // Discrete temporality, cardinality many (future)
 }
 
 /**

@@ -166,9 +166,9 @@ function deriveStrategy(type: CanonicalType): EvalStrategy {
   const isMany = card.kind === 'many';
 
   if (isDiscrete) {
-    return isMany ? 3 /* EvalStrategy.DiscreteField */ : 2 /* EvalStrategy.DiscreteScalar */;
+    return isMany ? 3 /* EvalStrategy.DiscreteMany */ : 2 /* EvalStrategy.DiscreteOne */;
   }
-  return isMany ? 1 /* EvalStrategy.ContinuousField */ : 0 /* EvalStrategy.ContinuousScalar */;
+  return isMany ? 1 /* EvalStrategy.ContinuousMany */ : 0 /* EvalStrategy.ContinuousOne */;
 }
 
 function isArenaScalarPayload(expr: ValueExpr): boolean {

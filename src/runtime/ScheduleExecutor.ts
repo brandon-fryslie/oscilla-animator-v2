@@ -259,10 +259,10 @@ export function executeFrame(
         // Strategy is pre-resolved at compile time to avoid runtime type inspection
         const strategy = step.strategy;
         
-        if (strategy === 0 /* EvalStrategy.ContinuousScalar */ || strategy === 1 /* EvalStrategy.ContinuousField */) {
-          // Continuous path (signals) - was evalSig
+        if (strategy === 0 /* EvalStrategy.ContinuousOne */ || strategy === 1 /* EvalStrategy.ContinuousMany */) {
+          // Continuous path (cardinality-one/many values)
           if (step.target.storage !== 'value') {
-            throw new Error('evalValue: ContinuousScalar/Field requires value storage, got ' + step.target.storage);
+            throw new Error('evalValue: ContinuousOne/Many requires value storage, got ' + step.target.storage);
           }
           
           const targetSlot = step.target.slot;
@@ -294,7 +294,7 @@ export function executeFrame(
             const exprNode = valueExprs[step.expr as number];
 
             if (stride > 1 && exprNode?.kind === 'construct') {
-              // Multi-component signal: use construct evaluator to write all components
+              // Multi-component cardinality-one value: write all components
               const arenaDesc = resolveArenaDescriptor(slotToArena, lookup);
               const written = evaluateConstructScalar(
                 exprNode,
@@ -318,7 +318,7 @@ export function executeFrame(
               state.cache.scalarValues[step.expr as number] = readCanonicalNumeric(slotToArena, state, lookup, 0);
               state.cache.scalarStamps[step.expr as number] = state.cache.frameId;
             } else if (stride === 1) {
-              // Scalar signal: evaluate and write single value
+              // Scalar cardinality-one value: evaluate and write single value
               const value = evaluateValueExprScalar(step.expr as any, program.valueExprs.nodes, state);
 
               writeArenaScalar(slotToArena, state, lookup, value);
@@ -338,10 +338,10 @@ export function executeFrame(
           } else {
             throw new Error('evalValue: unsupported storage type \'' + storage + '\' for slot ' + slot + ' expr ' + step.expr + ' strategy ' + strategy);
           }
-        } else if (strategy === 2 /* EvalStrategy.DiscreteScalar */ || strategy === 3 /* EvalStrategy.DiscreteField */) {
-          // Discrete path (events) - was evalEvent
+        } else if (strategy === 2 /* EvalStrategy.DiscreteOne */ || strategy === 3 /* EvalStrategy.DiscreteMany */) {
+          // Discrete path (events)
           if (step.target.storage !== 'event') {
-            throw new Error('evalValue: DiscreteScalar/Field requires event storage, got ' + step.target.storage);
+            throw new Error('evalValue: DiscreteOne/Many requires event storage, got ' + step.target.storage);
           }
           
           // ValueExpr-only event evaluation (cutover complete)
