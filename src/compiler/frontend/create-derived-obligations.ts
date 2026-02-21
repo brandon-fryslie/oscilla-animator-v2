@@ -16,17 +16,10 @@ import type { Obligation, ObligationId } from './obligations';
 import type { TypeFacts, PortTypeHint } from './type-facts';
 import { getPortHint, draftPortKey } from './type-facts';
 import { isAssignable } from '../../blocks/adapter-spec';
-import { getBlockDefinition } from '../../blocks/registry';
-import { isPayloadVar, isUnitVar } from '../../core/inference-types';
-import {
-  isAxisVar,
-  payloadsEqual,
-  requireInst,
-  resolveCardinalityPolicy,
-  unitsEqual,
-  type CanonicalType,
-} from '../../core/canonical-types';
+import { isPayloadVar } from '../../core/inference-types';
+import type { CanonicalType } from '../../core/canonical-types';
 import { isPayloadAnchorAdapter } from './structural-predicates';
+import { portAcceptsBroadcast, isOneManyMismatchOnly } from './policies/type-compatibility';
 
 // =============================================================================
 // Public API
@@ -79,11 +72,12 @@ export function createDerivedObligations(
 
     // [LAW:one-source-of-truth] Flexibility comes from CT/ICT-declared port policy.
     // Defer cardinality-only coercion when either side is oneOrMany-flexible.
+    // [LAW:single-enforcer] Routed through type-compatibility oracle.
     if (
-      isOneManyCardinalityMismatchOnly(fromHint.canonical, toHint.canonical)
+      isOneManyMismatchOnly(fromHint.canonical, toHint.canonical)
       && (
-        portDeclaresOneOrManyFlex(blockTypeById, edge.from.blockId, edge.from.port, 'out')
-        || portDeclaresOneOrManyFlex(blockTypeById, edge.to.blockId, edge.to.port, 'in')
+        portAcceptsBroadcast(blockTypeById.get(edge.from.blockId) ?? '', edge.from.port, 'out')
+        || portAcceptsBroadcast(blockTypeById.get(edge.to.blockId) ?? '', edge.to.port, 'in')
       )
     ) {
       continue;
@@ -126,37 +120,6 @@ export function createDerivedObligations(
 // =============================================================================
 // Helpers
 // =============================================================================
-
-function isOneManyCardinalityMismatchOnly(from: CanonicalType, to: CanonicalType): boolean {
-  if (!payloadsEqual(from.payload, to.payload)) return false;
-  if (!unitsEqual(from.unit, to.unit)) return false;
-  const fromTemp = requireInst(from.extent.temporality, 'temporality');
-  const toTemp = requireInst(to.extent.temporality, 'temporality');
-  if (fromTemp.kind !== toTemp.kind) return false;
-  const fromCard = requireInst(from.extent.cardinality, 'cardinality');
-  const toCard = requireInst(to.extent.cardinality, 'cardinality');
-  return (
-    (fromCard.kind === 'one' && toCard.kind === 'many')
-    || (fromCard.kind === 'many' && toCard.kind === 'one')
-  );
-}
-
-function portDeclaresOneOrManyFlex(
-  blockTypeById: ReadonlyMap<string, string>,
-  blockId: string,
-  port: string,
-  dir: 'in' | 'out',
-): boolean {
-  const blockType = blockTypeById.get(blockId);
-  if (!blockType) return false;
-  const def = getBlockDefinition(blockType);
-  if (!def) return false;
-  const portDef = dir === 'in' ? def.inputs[port] : def.outputs[port];
-  const axis = portDef?.type?.extent?.cardinality;
-  if (!axis || !isAxisVar(axis)) return false;
-  const policy = resolveCardinalityPolicy(axis);
-  return policy?.acceptance === 'oneOrMany';
-}
 
 /**
  * Generate deterministic obligation ID for an adapter need.
