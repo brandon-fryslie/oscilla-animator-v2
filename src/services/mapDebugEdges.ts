@@ -171,7 +171,7 @@ export function mapDebugMappings(patch: Patch, program: CompiledProgramIR): Debu
             const type = meta.type;
             const cardinality = portCardinality.get(sourceKey);
             if (!cardinality) {
-              throw new Error(`Port ${sourceKey} has no cardinality metadata — type solver bug`);
+              throw new Error(`Port ${sourceKey} has no cardinality classification — type solver bug`);
             }
 
             edgeMetaMap.set(edge.id, {

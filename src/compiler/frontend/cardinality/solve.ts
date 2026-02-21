@@ -566,7 +566,7 @@ export function solveCardinality(input: CardinalitySolveInput): CardinalitySolve
       // Propagate many to all groups in this zip set.
       // zipBroadcast semantics: signal (one) ports coexist with field (many) ports.
       // clampOne groups stay at one — runtime broadcasts them via kernelZipSig.
-      // This is NOT a conflict; it's the expected behavior for allowZipSig blocks.
+      // This is NOT a conflict; it's expected for relation:'promoteToMany' groups.
       for (const root of groupRoots) {
         if (root === manyRoot) continue;
         const facts = uf.getOrCreateFacts(root);

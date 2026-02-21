@@ -115,7 +115,7 @@ function isTypeCompatible(from: CanonicalType, to: CanonicalType, allowsBroadcas
 
   // Cardinality must match, with broadcast exception
   if (fromCard.kind !== toCard.kind) {
-    // Allow one → many when the destination block permits signal broadcast (allowZipSig)
+    // Allow one → many when destination policy permits signal-to-field promotion.
     if (allowsBroadcast && fromCard.kind === 'one' && toCard.kind === 'many') {
       return true;
     }

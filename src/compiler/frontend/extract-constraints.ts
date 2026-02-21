@@ -203,8 +203,8 @@ export function extractConstraints(
     }
 
     // Rewrite cardinality axes and gather cardinality constraints
-    // [LAW:single-enforcer] This is the only place that interprets cardinality metadata
-    // and rewrites port cardinality axes for the solver.
+    // [LAW:single-enforcer] This is the only place that interprets declared CT/ICT
+    // cardinality policy and rewrites port cardinality axes for the solver.
     rewriteCardinalityAxes(block, def, portBaseTypes, baseCardinalityAxis, cardinality);
   }
 

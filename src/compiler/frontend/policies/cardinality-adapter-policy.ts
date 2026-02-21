@@ -55,9 +55,9 @@ export const cardinalityAdapterPolicyV1: CardinalityAdapterPolicyInterface = {
 /**
  * Replace a DefaultSource block with a DefaultSourceField block.
  *
- * The DefaultSource (signalOnly) was inserted by the default-source policy for an
+ * The DefaultSource (acceptance:'oneOnly') was inserted by the default-source policy for an
  * unconnected field port. Since the port needs field cardinality, we replace the
- * DefaultSource with DefaultSourceField (fieldOnly) which produces per-element
+ * DefaultSource with DefaultSourceField (acceptance:'manyOnly') which produces per-element
  * field defaults (rainbow colors, circular positions).
  *
  * Plan:

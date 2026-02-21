@@ -2,7 +2,7 @@
  * DefaultSourceField Block
  *
  * Field-cardinality default source for unconnected field inputs.
- * Inserted by the cardinality adapter policy when a signalOnly DefaultSource
+ * Inserted by the cardinality adapter policy when a one-only DefaultSource
  * connects to a field port (ClampManyConflict resolution).
  *
  * // [LAW:one-type-per-behavior] DefaultSource = signal defaults, DefaultSourceField = field defaults.

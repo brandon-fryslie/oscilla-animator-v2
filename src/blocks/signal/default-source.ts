@@ -5,7 +5,7 @@
  * Output type resolves to match target port type via constraint propagation.
  * Lowering dispatches on resolved type to produce appropriate default values.
  *
- * // [LAW:one-source-of-truth] DefaultSource is signalOnly — the cardinality solver
+ * // [LAW:one-source-of-truth] DefaultSource declares acceptance:'oneOnly' — the cardinality solver
  * // inserts Broadcast adapters when connecting to field ports.
  *
  * Policy table (signals — cardinality one):
