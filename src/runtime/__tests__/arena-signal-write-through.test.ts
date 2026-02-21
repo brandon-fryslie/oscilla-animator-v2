@@ -3,7 +3,7 @@ import { compile } from '../../compiler/compile';
 import type { ScheduleIR } from '../../compiler/backend/schedule-program';
 import type { CompiledProgramIR } from '../../compiler/ir/program';
 import { computeStorageSizes } from '../../compiler/ir/program';
-import { SYSTEM_PALETTE_SLOT } from '../../compiler/ir/Indices';
+import { SCALAR_INSTANCE_ID, SYSTEM_PALETTE_SLOT } from '../../compiler/ir/Indices';
 import { buildPatch } from '../../graph/Patch';
 import { executeFrame } from '../ScheduleExecutor';
 import { executeFrameStepped } from '../executeFrameStepped';
@@ -13,7 +13,7 @@ import { getTestArena } from './test-arena-helper';
 
 import '../../blocks/all';
 
-function compileSignalPatch(): CompiledProgramIR {
+function compileScalarValuePatch(): CompiledProgramIR {
   const patch = buildPatch((b) => {
     b.addBlock('InfiniteTimeRoot');
 
@@ -64,7 +64,7 @@ function readArenaSlot(program: CompiledProgramIR, state: RuntimeState, slot: nu
   return Array.from(state.arena.subarray(arenaDesc.offset, arenaDesc.offset + arenaDesc.length));
 }
 
-function assertSignalWritesInArena(program: CompiledProgramIR, state: RuntimeState): void {
+function assertScalarWritesInArena(program: CompiledProgramIR, state: RuntimeState): void {
   const schedule = program.schedule as ScheduleIR;
   const paletteDesc = program.arenaLayout[SYSTEM_PALETTE_SLOT as number];
   if (!paletteDesc) {
@@ -81,8 +81,14 @@ function assertSignalWritesInArena(program: CompiledProgramIR, state: RuntimeSta
 
   let scalarArenaSlots = 0;
   for (const step of schedule.steps) {
-    if (step.kind === 'evalValue' && step.target.storage === 'value') {
-      const values = readArenaSlot(program, state, step.target.slot as number);
+    const targetSlot =
+      step.kind === 'evalValue' && step.target.storage === 'value'
+        ? (step.target.slot as number)
+        : step.kind === 'materialize' && step.instanceId === SCALAR_INSTANCE_ID
+          ? (step.target as number)
+          : null;
+    if (targetSlot !== null) {
+      const values = readArenaSlot(program, state, targetSlot);
       if (values.length === 1) {
         scalarArenaSlots++;
       }
@@ -95,17 +101,17 @@ function assertSignalWritesInArena(program: CompiledProgramIR, state: RuntimeSta
   expect(scalarArenaSlots).toBeGreaterThan(0);
 }
 
-describe('signal writes target arena storage', () => {
-  it('executeFrame writes scalar signal values and system palette into arena', () => {
-    const program = compileSignalPatch();
+describe('scalar writes target arena storage', () => {
+  it('executeFrame writes scalar values and system palette into arena', () => {
+    const program = compileScalarValuePatch();
     const state = createStateForProgram(program);
 
     executeFrame(program, state, getTestArena(), 100);
-    assertSignalWritesInArena(program, state);
+    assertScalarWritesInArena(program, state);
   });
 
-  it('executeFrameStepped writes scalar signal values and system palette into arena', () => {
-    const program = compileSignalPatch();
+  it('executeFrameStepped writes scalar values and system palette into arena', () => {
+    const program = compileScalarValuePatch();
     const state = createStateForProgram(program);
 
     const gen = executeFrameStepped(program, state, getTestArena(), 100);
@@ -114,11 +120,11 @@ describe('signal writes target arena storage', () => {
       step = gen.next();
     }
 
-    assertSignalWritesInArena(program, state);
+    assertScalarWritesInArena(program, state);
   });
 
   it('executeFrame and executeFrameStepped produce equivalent arena values for value slots', () => {
-    const program = compileSignalPatch();
+    const program = compileScalarValuePatch();
     const frameState = createStateForProgram(program);
     const steppedState = createStateForProgram(program);
 
@@ -131,9 +137,16 @@ describe('signal writes target arena storage', () => {
     }
 
     const schedule = program.schedule as ScheduleIR;
+    const scalarWriteSlots = new Set<number>();
     for (const irStep of schedule.steps) {
-      if (irStep.kind !== 'evalValue' || irStep.target.storage !== 'value') continue;
-      const slot = irStep.target.slot as number;
+      if (irStep.kind === 'evalValue' && irStep.target.storage === 'value') {
+        scalarWriteSlots.add(irStep.target.slot as number);
+      }
+      if (irStep.kind === 'materialize' && irStep.instanceId === SCALAR_INSTANCE_ID) {
+        scalarWriteSlots.add(irStep.target as number);
+      }
+    }
+    for (const slot of scalarWriteSlots) {
       const a = readArenaSlot(program, frameState, slot);
       const b = readArenaSlot(program, steppedState, slot);
       expect(a.length).toBe(b.length);
