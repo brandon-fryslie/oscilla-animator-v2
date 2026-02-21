@@ -33,7 +33,6 @@ patch "Orbit" {
   block "Array" "instances" {
     count = 100
     outputs {
-      elements = render.elements
       t = [theta-scale.a, r-scale.a, color-shift.a, dot-scale.in]
     }
   }

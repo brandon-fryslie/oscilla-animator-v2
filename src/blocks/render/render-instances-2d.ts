@@ -18,8 +18,8 @@
  */
 
 import { registerBlock } from '../registry';
-import { unitWorld3, unitHsl, requireInst, VEC3, COLOR, FLOAT } from '../../core/canonical-types';
-import { inferType, cardinalityVar } from '../../core/inference-types';
+import { unitWorld3, unitHsl, unitNone, requireInst, VEC3, COLOR, FLOAT } from '../../core/canonical-types';
+import { inferType, cardinalityVar, unitVar } from '../../core/inference-types';
 import { cardinalityVarId } from '../../core/ids';
 import { defaultSourceConst, canonicalType } from '../../types';
 
@@ -29,6 +29,10 @@ const RENDER_POS_CARD = cardinalityVar(cardinalityVarId('render_pos'), {
   instanceBinding: 'inherit',
 });
 const RENDER_COLOR_CARD = cardinalityVar(cardinalityVarId('render_color'), {
+  acceptance: 'oneOrMany',
+  instanceBinding: 'inherit',
+});
+const RENDER_SCALE_CARD = cardinalityVar(cardinalityVarId('render_scale'), {
   acceptance: 'oneOrMany',
   instanceBinding: 'inherit',
 });
@@ -47,7 +51,7 @@ registerBlock({
     // Shape input REMOVED - now looked up automatically from instance
     scale: {
       label: 'Scale',
-      type: canonicalType(FLOAT),
+      type: inferType(FLOAT, unitVar('render_scale_U'), { cardinality: RENDER_SCALE_CARD }),
       defaultValue: 1.0,
       defaultSource: defaultSourceConst(1.0),
       uiHint: { kind: 'slider', min: 0.1, max: 1, step: 0.1 },
