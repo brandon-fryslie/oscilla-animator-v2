@@ -73,8 +73,8 @@ export function canonicalScalar(
   }, contract);
 }
 
-/** Create a field type (many + continuous). */
-export function canonicalField(
+/** Create a many-cardinality type (many + continuous). */
+export function canonicalMany(
   payload: PayloadType,
   unit: UnitType | undefined,
   instance: InstanceRef,
@@ -97,16 +97,16 @@ export const UNBOUND_INSTANCE: InstanceRef = {
 };
 
 /**
- * Create a field type for block definitions where the instance is not yet known.
+ * Create a many-cardinality type for block definitions where the instance is not yet known.
  * The cardinality uses UNBOUND_INSTANCE which the frontend solver replaces with
- * inference variables. Use canonicalField() when a concrete instance is available.
+ * inference variables. Use canonicalMany() when a concrete instance is available.
  */
-export function canonicalFieldDef(
+export function canonicalManyDef(
   payload: PayloadType,
   unit?: UnitType,
   contract?: ValueContract
 ): CanonicalType {
-  return canonicalField(payload, unit, UNBOUND_INSTANCE, contract);
+  return canonicalMany(payload, unit, UNBOUND_INSTANCE, contract);
 }
 
 /** Create an event type (discrete + bool + none). */

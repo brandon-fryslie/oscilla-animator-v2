@@ -158,9 +158,9 @@ export function inferType(
 }
 
 /**
- * Create an inference field type (many + continuous). Accepts vars.
+ * Create an inference many-cardinality type (many + continuous). Accepts vars.
  */
-export function inferField(
+export function inferMany(
   payload: InferencePayloadType,
   unit: InferenceUnitType,
   instance: InstanceRef,
@@ -181,16 +181,16 @@ export function inferField(
 }
 
 /**
- * Create an inference field type for block definitions where the instance is not yet known.
+ * Create an inference many-cardinality type for block definitions where the instance is not yet known.
  * The cardinality uses UNBOUND_INSTANCE which the frontend solver replaces with
- * inference variables. Use inferField() when a concrete instance is available.
+ * inference variables. Use inferMany() when a concrete instance is available.
  */
-export function inferFieldDef(
+export function inferManyDef(
   payload: InferencePayloadType,
   unit: InferenceUnitType,
   contract?: ValueContract
 ): InferenceCanonicalType {
-  return inferField(payload, unit, UNBOUND_INSTANCE, contract);
+  return inferMany(payload, unit, UNBOUND_INSTANCE, contract);
 }
 
 // =============================================================================

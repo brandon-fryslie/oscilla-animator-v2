@@ -5,7 +5,7 @@
  */
 
 import { registerBlock } from '../registry';
-import { canonicalType, canonicalField, canonicalFieldDef, payloadStride, floatConst, intConst, withInstance, instanceRef } from '../../core/canonical-types';
+import { canonicalType, canonicalMany, canonicalManyDef, payloadStride, floatConst, intConst, withInstance, instanceRef } from '../../core/canonical-types';
 import { FLOAT, INT, VEC2 } from '../../core/canonical-types';
 import { DOMAIN_CONTROL } from '../../core/domain-registry';
 import { PathVerb, type PathTopologyDef, PathTopologyDefInput } from '../../shapes/types';
@@ -118,7 +118,7 @@ registerBlock({
   },
   outputs: {
     shape: { label: 'Shape', type: canonicalType(FLOAT) },
-    controlPoints: { label: 'Control Points', type: canonicalFieldDef(VEC2, { kind: 'none' }) },
+    controlPoints: { label: 'Control Points', type: canonicalManyDef(VEC2, { kind: 'none' }) },
   },
   lower: ({ ctx, inputsById }) => {
     // Get points from input (must be compile-time constant)
@@ -149,7 +149,7 @@ registerBlock({
 
     // Use index to determine if outer (even) or inner (odd)
     const indexField = ctx.b.intrinsic('index',
-      canonicalField(INT, { kind: 'none' }, ref)
+      canonicalMany(INT, { kind: 'none' }, ref)
     );
 
     // Post-normalization: all inputs guaranteed wired — no fallback needed
@@ -185,7 +185,7 @@ registerBlock({
     const two = ctx.b.constant(floatConst(2), canonicalType(FLOAT));
 
     // The field type for intermediates (float, same instance ref as index)
-    const floatFieldType = canonicalField(FLOAT, { kind: 'none' }, ref);
+    const floatFieldType = canonicalMany(FLOAT, { kind: 'none' }, ref);
 
     // Step 1: broadcast signals to field extent
     const pointsBroadcast = ctx.b.broadcast(pointsSig, floatFieldType);
@@ -238,7 +238,7 @@ registerBlock({
     // Step 5: construct([x, y]) → vec2
     const computedPositions = ctx.b.construct(
       [xField, yField],
-      canonicalField(VEC2, { kind: 'none' }, ref)
+      canonicalMany(VEC2, { kind: 'none' }, ref)
     );
 
     // Create shape reference with numeric topology ID

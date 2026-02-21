@@ -13,7 +13,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { debugService } from './DebugService';
 import type { ValueSlot } from '../types';
-import { canonicalType, canonicalFieldDef } from '../core/canonical-types';
+import { canonicalType, canonicalManyDef } from '../core/canonical-types';
 import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR,  CAMERA_PROJECTION } from '../core/canonical-types';
 import type { ArenaSlotDescriptor } from '../runtime/ArenaValueStore';
 
@@ -197,11 +197,11 @@ describe('DebugService', () => {
 
         it('should clear tracked field slots on clear', () => {
             const edgeMap = new Map([
-                ['field-edge', { slotId: 30 as ValueSlot, type: canonicalFieldDef(FLOAT) }],
+                ['field-edge', { slotId: 30 as ValueSlot, type: canonicalManyDef(FLOAT) }],
             ]);
 
             debugService.setEdgeToSlotMap(edgeMap);
-            debugService.trackField(30 as ValueSlot, canonicalFieldDef(FLOAT));
+            debugService.trackField(30 as ValueSlot, canonicalManyDef(FLOAT));
 
             expect(debugService.isFieldTracked(30 as ValueSlot)).toBe(true);
 
@@ -255,7 +255,7 @@ describe('DebugService', () => {
 
         it('should return field-untracked for untracked field port', () => {
             const portMap = new Map([
-                ['blockA:fieldOut', { slotId: 30 as ValueSlot, type: canonicalFieldDef(FLOAT) }],
+                ['blockA:fieldOut', { slotId: 30 as ValueSlot, type: canonicalManyDef(FLOAT) }],
             ]);
 
             debugService.setPortToSlotMap(portMap);
@@ -264,7 +264,7 @@ describe('DebugService', () => {
             expect(result).toEqual({
                 kind: 'field-untracked',
                 slotId: 30 as ValueSlot,
-                type: canonicalFieldDef(FLOAT),
+                type: canonicalManyDef(FLOAT),
             });
         });
     });
@@ -272,7 +272,7 @@ describe('DebugService', () => {
     describe('field tracking (demand-driven)', () => {
         it('should return field-untracked for untracked field edge', () => {
             const edgeMap = new Map([
-                ['field-edge', { slotId: 30 as ValueSlot, type: canonicalFieldDef(FLOAT) }],
+                ['field-edge', { slotId: 30 as ValueSlot, type: canonicalManyDef(FLOAT) }],
             ]);
 
             debugService.setEdgeToSlotMap(edgeMap);
@@ -282,17 +282,17 @@ describe('DebugService', () => {
             expect(result).toEqual({
                 kind: 'field-untracked',
                 slotId: 30 as ValueSlot,
-                type: canonicalFieldDef(FLOAT),
+                type: canonicalManyDef(FLOAT),
             });
         });
 
         it('should return undefined for tracked field before runtime starts', () => {
             const edgeMap = new Map([
-                ['field-edge', { slotId: 30 as ValueSlot, type: canonicalFieldDef(FLOAT) }],
+                ['field-edge', { slotId: 30 as ValueSlot, type: canonicalManyDef(FLOAT) }],
             ]);
 
             debugService.setEdgeToSlotMap(edgeMap);
-            debugService.trackField(30 as ValueSlot, canonicalFieldDef(FLOAT));
+            debugService.trackField(30 as ValueSlot, canonicalManyDef(FLOAT));
 
             // Runtime hasn't started - should return undefined
             const result = debugService.getEdgeValue('field-edge');
@@ -301,11 +301,11 @@ describe('DebugService', () => {
 
         it('should throw for tracked field with no data after runtime starts (scheduling bug)', () => {
             const edgeMap = new Map([
-                ['field-edge', { slotId: 30 as ValueSlot, type: canonicalFieldDef(FLOAT) }],
+                ['field-edge', { slotId: 30 as ValueSlot, type: canonicalManyDef(FLOAT) }],
             ]);
 
             debugService.setEdgeToSlotMap(edgeMap);
-            debugService.trackField(30 as ValueSlot, canonicalFieldDef(FLOAT));
+            debugService.trackField(30 as ValueSlot, canonicalManyDef(FLOAT));
 
             // Start runtime by writing to a signal slot
             debugService.updateSlotValue(99 as ValueSlot, 1.0);
@@ -317,7 +317,7 @@ describe('DebugService', () => {
         });
 
         it('should return field stats for tracked field with data', () => {
-            const floatType = canonicalFieldDef(FLOAT);
+            const floatType = canonicalManyDef(FLOAT);
             const edgeMap = new Map([
                 ['field-edge', { slotId: 30 as ValueSlot, type: floatType }],
             ]);
@@ -343,7 +343,7 @@ describe('DebugService', () => {
         });
 
         it('should return zero stats for tracked field with empty buffer', () => {
-            const floatType = canonicalFieldDef(FLOAT);
+            const floatType = canonicalManyDef(FLOAT);
             const edgeMap = new Map([
                 ['empty-field', { slotId: 31 as ValueSlot, type: floatType }],
             ]);
@@ -362,7 +362,7 @@ describe('DebugService', () => {
         });
 
         it('should track and untrack field slots', () => {
-            debugService.trackField(30 as ValueSlot, canonicalFieldDef(FLOAT));
+            debugService.trackField(30 as ValueSlot, canonicalManyDef(FLOAT));
             expect(debugService.isFieldTracked(30 as ValueSlot)).toBe(true);
 
             debugService.untrackField(30 as ValueSlot);
@@ -370,8 +370,8 @@ describe('DebugService', () => {
         });
 
         it('should report tracked slots via getTrackedFieldSlots', () => {
-            debugService.trackField(30 as ValueSlot, canonicalFieldDef(FLOAT));
-            debugService.trackField(31 as ValueSlot, canonicalFieldDef(FLOAT));
+            debugService.trackField(30 as ValueSlot, canonicalManyDef(FLOAT));
+            debugService.trackField(31 as ValueSlot, canonicalManyDef(FLOAT));
 
             const tracked = debugService.getTrackedFieldSlots();
             expect(tracked.has(30 as ValueSlot)).toBe(true);
@@ -381,11 +381,11 @@ describe('DebugService', () => {
 
         it('should clear field buffer on untrack', () => {
             const edgeMap = new Map([
-                ['field-edge', { slotId: 30 as ValueSlot, type: canonicalFieldDef(FLOAT) }],
+                ['field-edge', { slotId: 30 as ValueSlot, type: canonicalManyDef(FLOAT) }],
             ]);
 
             debugService.setEdgeToSlotMap(edgeMap);
-            debugService.trackField(30 as ValueSlot, canonicalFieldDef(FLOAT));
+            debugService.trackField(30 as ValueSlot, canonicalManyDef(FLOAT));
 
             const buffer = new Float32Array([1.0, 2.0, 3.0]);
             debugService.updateFieldValue(30 as ValueSlot, buffer);
@@ -493,7 +493,7 @@ describe('DebugService', () => {
         });
 
         it('should simulate demand-driven field tracking flow', () => {
-            const floatType = canonicalFieldDef(FLOAT);
+            const floatType = canonicalManyDef(FLOAT);
             // 1. Compiler produces edge map with field edge
             const edgeMap = new Map([
                 ['add-out->render', { slotId: 30 as ValueSlot, type: floatType }],
@@ -612,7 +612,7 @@ describe('DebugService', () => {
 
         it('resolver correctly rejects field-cardinality edges', () => {
             const edgeMap = new Map([
-                ['field-edge', { slotId: 40 as ValueSlot, type: canonicalFieldDef(FLOAT) }],
+                ['field-edge', { slotId: 40 as ValueSlot, type: canonicalManyDef(FLOAT) }],
             ]);
             debugService.setEdgeToSlotMap(edgeMap);
 
@@ -647,7 +647,7 @@ describe('DebugService', () => {
 
     describe('field accumulator integration', () => {
         it('all-time min/max only expand over multiple frames', () => {
-            const floatType = canonicalFieldDef(FLOAT);
+            const floatType = canonicalManyDef(FLOAT);
             const edgeMap = new Map([
                 ['field-edge', { slotId: 30 as ValueSlot, type: floatType }],
             ]);
@@ -681,7 +681,7 @@ describe('DebugService', () => {
         });
 
         it('EMA mean smooths over time', () => {
-            const floatType = canonicalFieldDef(FLOAT);
+            const floatType = canonicalManyDef(FLOAT);
             const edgeMap = new Map([
                 ['field-edge', { slotId: 30 as ValueSlot, type: floatType }],
             ]);
@@ -707,7 +707,7 @@ describe('DebugService', () => {
         });
 
         it('accumulators reset on setEdgeToSlotMap', () => {
-            const floatType = canonicalFieldDef(FLOAT);
+            const floatType = canonicalManyDef(FLOAT);
             const edgeMap1 = new Map([
                 ['field-edge', { slotId: 30 as ValueSlot, type: floatType }],
             ]);
@@ -723,7 +723,7 @@ describe('DebugService', () => {
         });
 
         it('getFieldHistory returns temporal history', () => {
-            const floatType = canonicalFieldDef(FLOAT);
+            const floatType = canonicalManyDef(FLOAT);
             const edgeMap = new Map([
                 ['field-edge', { slotId: 30 as ValueSlot, type: floatType }],
             ]);
@@ -743,7 +743,7 @@ describe('DebugService', () => {
         });
 
         it('multi-stride color field accumulation', () => {
-            const colorType = canonicalFieldDef(COLOR);
+            const colorType = canonicalManyDef(COLOR);
             const edgeMap = new Map([
                 ['color-edge', { slotId: 40 as ValueSlot, type: colorType }],
             ]);
@@ -831,7 +831,7 @@ describe('DebugService', () => {
         });
 
         it('reads field buffer from arena as a zero-copy view', () => {
-            const floatType = canonicalFieldDef(FLOAT);
+            const floatType = canonicalManyDef(FLOAT);
             const edgeMap = new Map([
                 ['field-edge', { slotId: 30 as ValueSlot, type: floatType }],
             ]);
@@ -868,7 +868,7 @@ describe('DebugService', () => {
         });
 
         it('returns field-untracked from arena path for untracked field', () => {
-            const floatType = canonicalFieldDef(FLOAT);
+            const floatType = canonicalManyDef(FLOAT);
             const edgeMap = new Map([
                 ['field-edge', { slotId: 30 as ValueSlot, type: floatType }],
             ]);

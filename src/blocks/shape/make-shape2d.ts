@@ -10,7 +10,7 @@
  */
 
 import { registerBlock, requireConfig } from '../registry';
-import { canonicalType, canonicalFieldDef, payloadStride, requireInst } from '../../core/canonical-types';
+import { canonicalType, canonicalManyDef, payloadStride, requireInst } from '../../core/canonical-types';
 import { FLOAT, VEC2 } from '../../core/canonical-types';
 import { DOMAIN_CONTROL } from '../../core/domain-registry';
 import { registerDynamicTopology } from '../../shapes/registry';
@@ -47,7 +47,7 @@ registerBlock({
   inputs: {
     controlPoints: {
       label: 'Control Points',
-      type: canonicalFieldDef(VEC2, { kind: 'none' }),
+      type: canonicalManyDef(VEC2, { kind: 'none' }),
     },
     closed: {
       label: 'Closed',

@@ -56,7 +56,7 @@ export {
 export {
   canonicalType,
   canonicalScalar,
-  canonicalField,
+  canonicalMany,
   canonicalEvent,
   canonicalConst,
   axisInst,

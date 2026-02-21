@@ -15,7 +15,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { debugService } from '../../services/DebugService';
 import type { ValueSlot } from '../../types';
-import { canonicalType, canonicalFieldDef } from '../../core/canonical-types';
+import { canonicalType, canonicalManyDef } from '../../core/canonical-types';
 import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR,  CAMERA_PROJECTION } from '../../core/canonical-types';
 import { useDebugMiniView } from './useDebugMiniView';
 
@@ -96,7 +96,7 @@ describe('useDebugMiniView', () => {
 
   it('should return null history for field edge', () => {
     const edgeMap = new Map([
-      ['field-edge', { slotId: 30 as ValueSlot, type: canonicalFieldDef(FLOAT) }],
+      ['field-edge', { slotId: 30 as ValueSlot, type: canonicalManyDef(FLOAT) }],
     ]);
     debugService.setEdgeToSlotMap(edgeMap);
 
@@ -183,7 +183,7 @@ describe('useDebugMiniView', () => {
 
   it('should return field-untracked value for untracked field edge', () => {
     const edgeMap = new Map([
-      ['field-edge', { slotId: 30 as ValueSlot, type: canonicalFieldDef(FLOAT) }],
+      ['field-edge', { slotId: 30 as ValueSlot, type: canonicalManyDef(FLOAT) }],
     ]);
     debugService.setEdgeToSlotMap(edgeMap);
 

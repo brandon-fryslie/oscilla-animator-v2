@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { deriveStorageLayout } from '../storage-class';
 import {
   canonicalScalar,
-  canonicalField,
+  canonicalMany,
   FLOAT,
   VEC3,
   VEC4,
@@ -40,13 +40,13 @@ describe('deriveStorageLayout', () => {
   });
 
   it('float/many → object/stride 1', () => {
-    const type = canonicalField(FLOAT, unitNone(), INST);
+    const type = canonicalMany(FLOAT, unitNone(), INST);
     const layout = deriveStorageLayout(type);
     expect(layout).toEqual({ storage: 'object', stride: 1 });
   });
 
   it('vec3/many → object/stride 1', () => {
-    const type = canonicalField(VEC3, unitNone(), INST);
+    const type = canonicalMany(VEC3, unitNone(), INST);
     const layout = deriveStorageLayout(type);
     expect(layout).toEqual({ storage: 'object', stride: 1 });
   });
@@ -58,7 +58,7 @@ describe('deriveStorageLayout', () => {
   });
 
   it('overrideStride ignored for object storage', () => {
-    const type = canonicalField(FLOAT, unitNone(), INST);
+    const type = canonicalMany(FLOAT, unitNone(), INST);
     const layout = deriveStorageLayout(type, 7);
     expect(layout).toEqual({ storage: 'object', stride: 1 });
   });

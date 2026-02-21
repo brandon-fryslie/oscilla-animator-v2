@@ -12,7 +12,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { DebugStore } from '../DebugStore';
 import { debugService } from '../../services/DebugService';
 import type { ValueSlot } from '../../types';
-import { canonicalType, canonicalFieldDef } from '../../core/canonical-types';
+import { canonicalType, canonicalManyDef } from '../../core/canonical-types';
 import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR,  CAMERA_PROJECTION } from '../../core/canonical-types';
 
 describe('DebugStore', () => {
@@ -65,7 +65,7 @@ describe('DebugStore', () => {
 
     it('should not track field edges in HistoryService', () => {
       const edgeMap = new Map([
-        ['field-edge', { slotId: 30 as ValueSlot, type: canonicalFieldDef(FLOAT) }],
+        ['field-edge', { slotId: 30 as ValueSlot, type: canonicalManyDef(FLOAT) }],
       ]);
       debugService.setEdgeToSlotMap(edgeMap);
 
@@ -95,7 +95,7 @@ describe('DebugStore', () => {
   describe('setHoveredEdge - field tracking', () => {
     it('should track field slot on hover', () => {
       const edgeMap = new Map([
-        ['field-edge', { slotId: 30 as ValueSlot, type: canonicalFieldDef(FLOAT) }],
+        ['field-edge', { slotId: 30 as ValueSlot, type: canonicalManyDef(FLOAT) }],
       ]);
       debugService.setEdgeToSlotMap(edgeMap);
 
@@ -105,7 +105,7 @@ describe('DebugStore', () => {
 
     it('should untrack field slot when hovering null', () => {
       const edgeMap = new Map([
-        ['field-edge', { slotId: 30 as ValueSlot, type: canonicalFieldDef(FLOAT) }],
+        ['field-edge', { slotId: 30 as ValueSlot, type: canonicalManyDef(FLOAT) }],
       ]);
       debugService.setEdgeToSlotMap(edgeMap);
 
@@ -118,8 +118,8 @@ describe('DebugStore', () => {
 
     it('should untrack previous field when switching to different edge', () => {
       const edgeMap = new Map([
-        ['field-edge-1', { slotId: 30 as ValueSlot, type: canonicalFieldDef(FLOAT) }],
-        ['field-edge-2', { slotId: 31 as ValueSlot, type: canonicalFieldDef(FLOAT) }],
+        ['field-edge-1', { slotId: 30 as ValueSlot, type: canonicalManyDef(FLOAT) }],
+        ['field-edge-2', { slotId: 31 as ValueSlot, type: canonicalManyDef(FLOAT) }],
       ]);
       debugService.setEdgeToSlotMap(edgeMap);
 
@@ -136,7 +136,7 @@ describe('DebugStore', () => {
     it('should clean up signal history when switching to field edge', () => {
       const edgeMap = new Map([
         ['sig-edge', { slotId: 10 as ValueSlot, type: canonicalType(FLOAT) }],
-        ['field-edge', { slotId: 30 as ValueSlot, type: canonicalFieldDef(FLOAT) }],
+        ['field-edge', { slotId: 30 as ValueSlot, type: canonicalManyDef(FLOAT) }],
       ]);
       debugService.setEdgeToSlotMap(edgeMap);
 
@@ -150,7 +150,7 @@ describe('DebugStore', () => {
 
     it('should clean up field tracking when switching to signal edge', () => {
       const edgeMap = new Map([
-        ['field-edge', { slotId: 30 as ValueSlot, type: canonicalFieldDef(FLOAT) }],
+        ['field-edge', { slotId: 30 as ValueSlot, type: canonicalManyDef(FLOAT) }],
         ['sig-edge', { slotId: 10 as ValueSlot, type: canonicalType(FLOAT) }],
       ]);
       debugService.setEdgeToSlotMap(edgeMap);
@@ -179,7 +179,7 @@ describe('DebugStore', () => {
 
     it('should not track field when disabled', () => {
       const edgeMap = new Map([
-        ['field-edge', { slotId: 30 as ValueSlot, type: canonicalFieldDef(FLOAT) }],
+        ['field-edge', { slotId: 30 as ValueSlot, type: canonicalManyDef(FLOAT) }],
       ]);
       debugService.setEdgeToSlotMap(edgeMap);
 
@@ -206,7 +206,7 @@ describe('DebugStore', () => {
 
     it('should untrack field on dispose', () => {
       const edgeMap = new Map([
-        ['field-edge', { slotId: 30 as ValueSlot, type: canonicalFieldDef(FLOAT) }],
+        ['field-edge', { slotId: 30 as ValueSlot, type: canonicalManyDef(FLOAT) }],
       ]);
       debugService.setEdgeToSlotMap(edgeMap);
 

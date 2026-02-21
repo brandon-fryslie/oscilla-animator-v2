@@ -1,7 +1,7 @@
 /**
  * Temporality Axis — Does it vary over time?
  *
- * continuous: varies every frame (signals, fields)
+ * continuous: varies every frame (one-cardinality and many-cardinality values)
  * discrete: fires at specific moments (events)
  */
 

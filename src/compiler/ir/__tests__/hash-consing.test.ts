@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { IRBuilderImpl } from '../IRBuilderImpl';
-import { canonicalType, canonicalField, floatConst, vec2Const, intConst, instanceRef } from '../../../core/canonical-types';
+import { canonicalType, canonicalMany, floatConst, vec2Const, intConst, instanceRef } from '../../../core/canonical-types';
 import { FLOAT, INT, VEC2 } from '../../../core/canonical-types';
 import { OpCode } from '../types';
 import { instanceId } from '../Indices';
@@ -128,7 +128,7 @@ describe('Hash-consing (I13)', () => {
     it('deduplicates identical ReduceField', () => {
       const b = new IRBuilderImpl();
       const sigType = canonicalType(FLOAT);
-      const fieldType = canonicalField(FLOAT, undefined, instanceRef('test', 'inst-0'));
+      const fieldType = canonicalMany(FLOAT, undefined, instanceRef('test', 'inst-0'));
 
       const sig = b.constant(floatConst(1.0), sigType);
       const field = b.broadcast(sig, fieldType);
@@ -209,7 +209,7 @@ describe('Hash-consing (I13)', () => {
     it('deduplicates identical Broadcast', () => {
       const b = new IRBuilderImpl();
       const sigType = canonicalType(FLOAT);
-      const fieldType = canonicalField(FLOAT, undefined, instanceRef('test', 'inst-0'));
+      const fieldType = canonicalMany(FLOAT, undefined, instanceRef('test', 'inst-0'));
 
       const sig = b.constant(floatConst(1.0), sigType);
       const id1 = b.broadcast(sig, fieldType);
@@ -421,7 +421,7 @@ describe('Hash-consing (I13)', () => {
     it('deduplicates broadcast patterns', () => {
       const b = new IRBuilderImpl();
       const type = canonicalType(FLOAT);
-      const fieldType = canonicalField(FLOAT, undefined, instanceRef('test', 'inst-0'));
+      const fieldType = canonicalMany(FLOAT, undefined, instanceRef('test', 'inst-0'));
 
       const time = b.time('tMs', type);
 

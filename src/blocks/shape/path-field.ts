@@ -5,7 +5,7 @@
  */
 
 import { registerBlock } from '../registry';
-import { canonicalType, canonicalFieldDef, payloadStride, floatConst, requireInst } from '../../core/canonical-types';
+import { canonicalType, canonicalManyDef, payloadStride, floatConst, requireInst } from '../../core/canonical-types';
 import { FLOAT, INT, VEC2, VEC3 } from '../../core/canonical-types';
 import type { ValueExprId } from '../../compiler/ir/Indices';
 import type { TopologyId } from '../../shapes/types';
@@ -86,14 +86,14 @@ registerBlock({
   inputs: {
     controlPoints: {
       label: 'Control Points',
-      type: canonicalFieldDef(VEC2, { kind: 'none' }),
+      type: canonicalManyDef(VEC2, { kind: 'none' }),
     },
   },
   outputs: {
-    position: { label: 'Position', type: canonicalFieldDef(VEC3, { kind: 'none' }) },
-    index: { label: 'Index', type: canonicalFieldDef(INT, { kind: 'none' }) },
-    tangent: { label: 'Tangent', type: canonicalFieldDef(VEC3, { kind: 'none' }) },
-    arcLength: { label: 'Arc Length', type: canonicalFieldDef(FLOAT, { kind: 'none' }) },
+    position: { label: 'Position', type: canonicalManyDef(VEC3, { kind: 'none' }) },
+    index: { label: 'Index', type: canonicalManyDef(INT, { kind: 'none' }) },
+    tangent: { label: 'Tangent', type: canonicalManyDef(VEC3, { kind: 'none' }) },
+    arcLength: { label: 'Arc Length', type: canonicalManyDef(FLOAT, { kind: 'none' }) },
   },
   lower: ({ ctx, inputsById }) => {
     const controlPointsInput = inputsById.controlPoints;

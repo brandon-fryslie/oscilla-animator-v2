@@ -7,8 +7,8 @@
  * ENFORCEMENT SCOPE (D4):
  * - **Hard invariants (enforce)**:
  *   - Event: payload=bool, unit=none, temporality=discrete
- *   - Field: cardinality=many(instance), temporality=continuous
- *   - Signal: cardinality=one, temporality=continuous
+ *   - Many: cardinality=many(instance), temporality=continuous
+ *   - One: cardinality=one, temporality=continuous
  *   - Const: cardinality=zero, temporality=continuous (no const events)
  * - **Avoid over-enforcing**: payload/unit combos unless genuinely non-negotiable
  */
@@ -87,15 +87,15 @@ export function validateTypes(types: readonly CanonicalType[]): AxisViolation[] 
 
 /**
  * Derive a kind label from extent axes (local to this module, not exported).
- * Used for diagnostics only. Zero-cardinality → 'const'.
+ * Used for diagnostics only.
  */
 function derivedKindLabel(t: CanonicalType): string {
   const card = requireInst(t.extent.cardinality, 'cardinality');
   const tempo = requireInst(t.extent.temporality, 'temporality');
-  if (tempo.kind === 'discrete') return 'event';
-  if (card.kind === 'many') return 'field';
-  if (card.kind === 'zero') return 'const';
-  return 'signal';
+  if (tempo.kind === 'discrete') return 'discrete';
+  if (card.kind === 'many') return 'many';
+  if (card.kind === 'zero') return 'zero';
+  return 'one';
 }
 
 /**
@@ -110,42 +110,42 @@ export function validateType(t: CanonicalType): void {
   if (tempo.kind === 'discrete') {
     assertEventInvariants(t);
   } else if (card.kind === 'many') {
-    assertFieldInvariants(t);
+    assertManyContinuousInvariants(t);
   } else if (card.kind === 'zero') {
     assertConstInvariants(t);
   } else {
-    // one cardinality + continuous = signal
-    assertSignalInvariants(t);
+    // one cardinality + continuous = scalar one-lane value
+    assertOneContinuousInvariants(t);
   }
 }
 
 /**
- * Assert signal type invariants (one + continuous).
+ * Assert one-cardinality continuous invariants.
  */
-function assertSignalInvariants(t: CanonicalType): void {
+function assertOneContinuousInvariants(t: CanonicalType): void {
   const card = t.extent.cardinality;
   const tempo = t.extent.temporality;
 
   if (!isAxisInst(card) || card.value.kind !== 'one') {
-    throw new Error('Signal types must have cardinality=one (instantiated)');
+    throw new Error('One-cardinality types must have cardinality=one (instantiated)');
   }
   if (!isAxisInst(tempo) || tempo.value.kind !== 'continuous') {
-    throw new Error('Signal types must have temporality=continuous (instantiated)');
+    throw new Error('One-cardinality types must have temporality=continuous (instantiated)');
   }
 }
 
 /**
- * Assert field type invariants (many + continuous).
+ * Assert many-cardinality continuous invariants.
  */
-function assertFieldInvariants(t: CanonicalType): void {
+function assertManyContinuousInvariants(t: CanonicalType): void {
   const card = t.extent.cardinality;
   const tempo = t.extent.temporality;
 
   if (!isAxisInst(card) || card.value.kind !== 'many') {
-    throw new Error('Field types must have cardinality=many(instance) (instantiated)');
+    throw new Error('Many-cardinality types must have cardinality=many(instance) (instantiated)');
   }
   if (!isAxisInst(tempo) || tempo.value.kind !== 'continuous') {
-    throw new Error('Field types must have temporality=continuous (instantiated)');
+    throw new Error('Many-cardinality types must have temporality=continuous (instantiated)');
   }
 }
 
@@ -298,19 +298,19 @@ function formatBindingMismatch(
 }
 
 /**
- * Validate that a type is a valid signal.
+ * Validate that a type is a valid one-cardinality continuous type.
  * Throws if not.
  */
-export function validateSignal(t: CanonicalType): void {
-  assertSignalInvariants(t);
+export function validateOneContinuous(t: CanonicalType): void {
+  assertOneContinuousInvariants(t);
 }
 
 /**
- * Validate that a type is a valid field.
+ * Validate that a type is a valid many-cardinality continuous type.
  * Throws if not.
  */
-export function validateField(t: CanonicalType): void {
-  assertFieldInvariants(t);
+export function validateManyContinuous(t: CanonicalType): void {
+  assertManyContinuousInvariants(t);
 }
 
 /**

@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { IRBuilderImpl } from '../IRBuilderImpl';
 import { LowerSandbox } from '../LowerSandbox';
 import {
-  canonicalField, canonicalScalar,
+  canonicalMany, canonicalScalar,
   FLOAT, COLOR, instanceRef, unitHsl, unitTurns,
   requireInst, isMany, isOne,
 } from '../../../core/canonical-types';
@@ -16,7 +16,7 @@ describe('LowerSandbox field-extent types', () => {
 
     // Create a field-extent color type (many cardinality)
     const ref = instanceRef('circle-domain', 'inst-1');
-    const fieldColorType = canonicalField(COLOR, unitHsl(), ref);
+    const fieldColorType = canonicalMany(COLOR, unitHsl(), ref);
 
     // Create a signal-level float input (phase)
     const phaseType = canonicalScalar(FLOAT, unitTurns());

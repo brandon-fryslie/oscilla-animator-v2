@@ -9,7 +9,7 @@ import { describe, it, expect } from 'vitest';
 import { deriveArenaDescriptor } from '../ir/storage-class';
 import {
   canonicalScalar,
-  canonicalField,
+  canonicalMany,
   FLOAT,
   VEC3,
   COLOR,
@@ -65,7 +65,7 @@ describe('deriveArenaDescriptor', () => {
   it('field (many, float, count=10): stride=1, laneCount=10, length=10', () => {
     const ref = instanceRef('grid', 'inst_a');
     const instances = makeInstances([{ id: 'inst_a', count: 10, maxCount: 10 }]);
-    const type = canonicalField(FLOAT, undefined, ref);
+    const type = canonicalMany(FLOAT, undefined, ref);
     const desc = deriveArenaDescriptor(type, 0, instances);
     expect(desc).toEqual({ offset: 0, stride: 1, laneCount: 10, length: 10 });
   });
@@ -73,7 +73,7 @@ describe('deriveArenaDescriptor', () => {
   it('field (many, color, count=5): stride=4, laneCount=5, length=20', () => {
     const ref = instanceRef('grid', 'inst_b');
     const instances = makeInstances([{ id: 'inst_b', count: 5, maxCount: 5 }]);
-    const type = canonicalField(COLOR, undefined, ref);
+    const type = canonicalMany(COLOR, undefined, ref);
     const desc = deriveArenaDescriptor(type, 0, instances);
     expect(desc).toEqual({ offset: 0, stride: 4, laneCount: 5, length: 20 });
   });
@@ -81,7 +81,7 @@ describe('deriveArenaDescriptor', () => {
   it('dynamic count uses maxCount', () => {
     const ref = instanceRef('grid', 'inst_dyn');
     const instances = makeInstances([{ id: 'inst_dyn', count: 'dynamic', maxCount: 32 }]);
-    const type = canonicalField(FLOAT, undefined, ref);
+    const type = canonicalMany(FLOAT, undefined, ref);
     const desc = deriveArenaDescriptor(type, 0, instances);
     expect(desc.laneCount).toBe(32);
     expect(desc.length).toBe(32);

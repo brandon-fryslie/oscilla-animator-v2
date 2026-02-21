@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { HistoryService, type KeyResolver, type ResolvedKeyMetadata } from './HistoryService';
 import type { DebugTargetKey } from './types';
 import type { ValueSlot } from '../../types';
-import { FLOAT, BOOL, VEC2, canonicalType, canonicalFieldDef } from '../../core/canonical-types';
+import { FLOAT, BOOL, VEC2, canonicalType, canonicalManyDef } from '../../core/canonical-types';
 
 function slot(n: number): ValueSlot {
   return n as ValueSlot;
@@ -44,7 +44,7 @@ describe('HistoryService', () => {
       ['e1', { slotId: slot(10), type: canonicalType(FLOAT) }],
       ['e2', { slotId: slot(20), type: canonicalType(FLOAT) }],
       ['e3', { slotId: slot(30), type: canonicalType(FLOAT) }],
-      ['field1', { slotId: slot(40), type: canonicalFieldDef(FLOAT) }],
+      ['field1', { slotId: slot(40), type: canonicalManyDef(FLOAT) }],
       ['bool1', { slotId: slot(50), type: canonicalType(BOOL) }],
       ['vec2-1', { slotId: slot(60), type: canonicalType(VEC2) }],
     ]);
@@ -343,7 +343,7 @@ describe('HistoryService', () => {
     it('sets slotId=null if cardinality changes to field', () => {
       service.track(edgeKey('e1'));
 
-      resolverMap.set('e1', { slotId: slot(10), type: canonicalFieldDef(FLOAT) });
+      resolverMap.set('e1', { slotId: slot(10), type: canonicalManyDef(FLOAT) });
       service.onMappingChanged();
 
       const history = service.getHistory(edgeKey('e1'))!;

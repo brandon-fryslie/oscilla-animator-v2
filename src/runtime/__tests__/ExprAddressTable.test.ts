@@ -7,10 +7,10 @@ import {
 import type { CompiledProgramIR, SlotMetaEntry } from '../../compiler/ir/program';
 import type { ScheduleIR } from '../../compiler/backend/schedule-program';
 import { valueSlot, type ValueSlot } from '../../compiler/ir/Indices';
-import { canonicalScalar, canonicalField, FLOAT, unitNone, instanceRef } from '../../core/canonical-types';
+import { canonicalScalar, canonicalMany, FLOAT, unitNone, instanceRef } from '../../core/canonical-types';
 
 const SIG_FLOAT = canonicalScalar(FLOAT, unitNone());
-const FIELD_FLOAT = canonicalField(FLOAT, unitNone(), instanceRef('d', 'i'));
+const FIELD_FLOAT = canonicalMany(FLOAT, unitNone(), instanceRef('d', 'i'));
 
 /**
  * Build a minimal mock CompiledProgramIR sufficient for ExprAddressTable tests.
