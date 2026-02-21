@@ -11,6 +11,7 @@
 
 import type { CompiledProgramIR } from '../compiler/ir/program';
 import type { ValueSlot } from '../compiler/ir/Indices';
+import { SCALAR_INSTANCE_ID } from '../compiler/ir/Indices';
 import type { ScheduleIR } from '../compiler/backend/schedule-program';
 import type { ArenaSlotDescriptor } from './ArenaValueStore';
 
@@ -82,6 +83,18 @@ export function getExprAddressTable(program: CompiledProgramIR): ExprAddressTabl
   for (const step of steps) {
     if (step.kind === 'materialize') {
       fieldExprToSlot.set(step.field as number, step.target);
+      // [LAW:one-source-of-truth] Scalar const materialization (SCALAR_INSTANCE_ID)
+      // still produces signal-addressable slots for RenderAssembler/extract lookups.
+      if (step.instanceId === SCALAR_INSTANCE_ID) {
+        const lookup = slotLookup.get(step.target);
+        if (lookup) {
+          sigToF64Offset.set(step.field as number, lookup.offset);
+        }
+        const arenaDesc = slotToArena.get(step.target);
+        if (arenaDesc) {
+          sigToArenaOffset.set(step.field as number, arenaDesc.offset);
+        }
+      }
     }
     if (step.kind === 'evalValue' && step.target.storage === 'value') {
       const lookup = slotLookup.get(step.target.slot);

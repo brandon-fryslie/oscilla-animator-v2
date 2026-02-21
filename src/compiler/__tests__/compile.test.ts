@@ -255,6 +255,59 @@ describe('Debug Probe Support', () => {
     }
   });
 
+  it('routes scalar const outputs through materialize with SCALAR_INSTANCE_ID', () => {
+    const patch = buildPatch((b) => {
+      b.addBlock('InfiniteTimeRoot');
+
+      const ellipse = b.addBlock('Ellipse');
+      const array = b.addBlock('Array');
+      b.setPortDefault(array, 'count', 4);
+      b.wire(ellipse, 'shape', array, 'element');
+
+      const grid = b.addBlock('GridLayoutUV');
+      b.setPortDefault(grid, 'rows', 2);
+      b.setPortDefault(grid, 'cols', 2);
+      b.wire(array, 'elements', grid, 'elements');
+
+      const color = b.addBlock('Const');
+      b.setConfig(color, 'value', { r: 1, g: 0.25, b: 0.1, a: 1 });
+      const scale = b.addBlock('Const');
+      b.setConfig(scale, 'value', 0.8);
+
+      const render = b.addBlock('RenderInstances2D');
+      b.wire(grid, 'position', render, 'pos');
+      b.wire(color, 'out', render, 'color');
+      b.wire(scale, 'out', render, 'scale');
+    });
+
+    const result = compile(patch);
+    expect(result.kind).toBe('ok');
+    if (result.kind === 'ok') {
+      const schedule = result.program.schedule as ScheduleIR;
+      type MaterializeStep = Extract<ScheduleIR['steps'][number], { kind: 'materialize' }>;
+      const scalarConstMat = schedule.steps.find(
+        (step): step is MaterializeStep =>
+          step.kind === 'materialize' && step.instanceId === SCALAR_INSTANCE_ID,
+      );
+      expect(scalarConstMat).toBeDefined();
+      if (!scalarConstMat) return;
+
+      const expr = result.program.valueExprs.nodes[scalarConstMat.field as number];
+      expect(expr?.kind).toBe('const');
+      if (expr?.kind === 'const') {
+        expect(['float', 'int', 'bool']).toContain(expr.type.payload.kind);
+      }
+
+      const hasEvalValueForSameSlot = schedule.steps.some(
+        (step) =>
+          step.kind === 'evalValue' &&
+          step.target.storage === 'value' &&
+          step.target.slot === scalarConstMat.target,
+      );
+      expect(hasEvalValueForSameSlot).toBe(false);
+    }
+  });
+
   it('evalValue steps come before materialize steps in schedule', () => {
     // Execution order matters: signals must be evaluated before fields materialize
     // Use a simple patch that compiles - just TimeRoot + Oscillator

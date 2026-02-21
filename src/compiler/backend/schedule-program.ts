@@ -18,8 +18,8 @@
  * All slots are allocated by Pass 6 (block lowering) and Pass 6b (continuity pipeline).
  */
 
-import type { Step, StepEvalValue, TimeModel, StateMapping, ScalarSlotDecl, FieldSlotDecl, EvalStrategy, EvalTarget } from '../ir/types';
-import type { ValueSlot, InstanceId } from '../ir/Indices';
+import type { Step, StepEvalValue, StepMaterialize, TimeModel, StateMapping, ScalarSlotDecl, FieldSlotDecl, EvalStrategy, EvalTarget } from '../ir/types';
+import { SCALAR_INSTANCE_ID, type ValueSlot, type InstanceId } from '../ir/Indices';
 import type { ValueExpr, ValueExprId } from '../ir/value-expr';
 import type { UnlinkedIRFragments } from './lower-blocks';
 import type { AcyclicOrLegalGraph } from '../ir/patches';
@@ -224,6 +224,7 @@ export function pass7Schedule(
   const sigSlots = unlinkedIR.builder.getSigSlots();
   const evalValueStepsPre: Step[] = [];
   const evalValueStepsPost: Step[] = [];
+  const scalarConstMaterializeSteps: StepMaterialize[] = [];
   for (const [sigId, slot] of sigSlots) {
     // Skip slots that are written by slotWriteStrided
     if (stridedWriteSlots.has(slot)) {
@@ -233,6 +234,24 @@ export function pass7Schedule(
     const exprId = sigId as ValueExprId;
     const expr = valueExprs[exprId as number];
     if (!expr) continue;
+
+    // [LAW:one-source-of-truth] Scalar const values are migrated to the materializer path
+    // via SCALAR_INSTANCE_ID instead of evalValue. This proves cardinality-one
+    // materialization without changing the expression table contract.
+    if (
+      expr.kind === 'const' &&
+      (expr.type.payload.kind === 'float' ||
+        expr.type.payload.kind === 'int' ||
+        expr.type.payload.kind === 'bool')
+    ) {
+      scalarConstMaterializeSteps.push({
+        kind: 'materialize',
+        field: exprId,
+        instanceId: SCALAR_INSTANCE_ID,
+        target: slot,
+      });
+      continue;
+    }
 
     const strategy = deriveStrategy(expr.type);
     const target: EvalTarget = { storage: 'value', slot };
@@ -295,6 +314,7 @@ export function pass7Schedule(
   const steps: Step[] = [
     ...evalValueStepsPre,
     ...slotWriteStridedSteps,
+    ...scalarConstMaterializeSteps,
     ...continuityPipeline.mapBuildSteps,
     ...continuityPipeline.materializeSteps,
     ...continuityPipeline.continuityApplySteps,

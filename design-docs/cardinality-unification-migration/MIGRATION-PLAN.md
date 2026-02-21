@@ -23,9 +23,10 @@ Completed:
 - RenderAssembler and CameraResolver numeric signal reads now consume arena-backed offsets; ValueInspector no longer falls back to f64 for numeric slot snapshots.
 - Schedule executors now require arena descriptors for numeric materialize/continuity paths; numeric `values.objects` fallback has been removed.
 - Scalar instance bootstrap is complete (`99dq.1` is closed).
+- Scalar Const proof-of-concept materialization is complete (`99dq.2` is closed).
 
 Remaining critical path:
-1. `99dq.2` + `99dq.3`: convert Const + initial block tranche to cardinality-one field materialization.
+1. `99dq.3`: convert initial easy/medium block tranche to cardinality-one field materialization.
 2. `wbhc.*`: convert all remaining blocks.
 3. `v91n.*`: delete dual-path IR/runtime vestiges.
 

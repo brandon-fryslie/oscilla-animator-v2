@@ -76,7 +76,7 @@ Convert Const as proof-of-concept, then prime the pipeline with easy blocks.
 |---|--------|-------|-------|--------|
 | 15 | **99dq** | (EPIC) Prove the Pattern | Parent epic. Depends on zdru. | OPEN |
 | 16 | **99dq.1** | Create SCALAR_INSTANCE_ID for cardinality-one materialization | Well-known InstanceId with count=1. | **DONE** |
-| 17 | **99dq.2** | Convert Const block to LoweredField(count=1) | Proof-of-concept. Depends on 99dq.1. | OPEN |
+| 17 | **99dq.2** | Convert Const block to LoweredField(count=1) | Proof-of-concept scalar materialization path complete (`StepMaterialize` via `SCALAR_INSTANCE_ID`). Depends on 99dq.1. | **DONE** |
 | 18 | **99dq.3** | Convert ~10–20 easy/medium blocks | Math, simple signal generators. Depends on 99dq.2. | OPEN |
 
 ---
