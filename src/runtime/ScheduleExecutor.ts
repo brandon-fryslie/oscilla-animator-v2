@@ -34,6 +34,7 @@ import { SYSTEM_PALETTE_SLOT } from '../compiler/ir/Indices';
 import { evaluateValueExprSignal, evaluateConstructSignal } from './ValueExprSignalEvaluator';
 import { evaluateValueExprEvent } from './ValueExprEventEvaluator';
 import { materializeValueExpr } from './ValueExprMaterializer';
+import { arenaSlice } from './ArenaValueStore';
 import {
   type SlotLookup,
   getExprAddressTable,
@@ -305,6 +306,11 @@ export function executeFrame(
         // rather than deriving from the ValueExpr type, which may have a stale placeholder
         const instanceDecl = instances.get(step.instanceId);
         const count = instanceDecl && typeof instanceDecl.count === 'number' ? instanceDecl.count : 0;
+        const arenaDesc = program.arenaLayout[step.target as number];
+        const arenaTarget =
+          state.arena.length > 0 && arenaDesc && arenaDesc.offset >= 0
+            ? arenaSlice(state.arena, arenaDesc)
+            : undefined;
 
         const buffer = materializeValueExpr(
           veId,
@@ -313,11 +319,11 @@ export function executeFrame(
           count,
           state,
           program,
-          MATERIALIZER_POOL
+          MATERIALIZER_POOL,
+          arenaTarget,
         );
 
-        // Store directly in objects map using slot as key
-        // (Object storage doesn't need slotMeta offset lookup)
+        // Store directly in objects map using slot as key (compatibility)
         state.values.objects.set(step.target, buffer);
 
         // Debug tap: Record field value
@@ -472,6 +478,11 @@ export function executeFrame(
         const instanceIdStr = entry.instanceId as unknown as string;
         const instanceDecl = instances.get(makeInstanceId(instanceIdStr));
         const count = instanceDecl && typeof instanceDecl.count === 'number' ? instanceDecl.count : 0;
+        const arenaDesc = program.arenaLayout[slot as number];
+        const arenaTarget =
+          state.arena.length > 0 && arenaDesc && arenaDesc.offset >= 0
+            ? arenaSlice(state.arena, arenaDesc)
+            : undefined;
 
         const buffer = materializeValueExpr(
           veId,
@@ -480,7 +491,8 @@ export function executeFrame(
           count,
           state,
           program,
-          MATERIALIZER_POOL
+          MATERIALIZER_POOL,
+          arenaTarget,
         );
 
         // Store in objects map and notify debug tap

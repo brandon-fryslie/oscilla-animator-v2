@@ -57,7 +57,8 @@ export function materializeValueExpr(
   count: number,
   state: RuntimeState,
   program: CompiledProgramIR,
-  pool: BufferPool
+  pool: BufferPool,
+  target?: Float32Array,
 ): Float32Array {
   const expr = table.nodes[exprId];
   if (!expr) {
@@ -65,7 +66,13 @@ export function materializeValueExpr(
   }
 
   const stride = payloadStride(expr.type.payload);
-  const buf = pool.alloc('f32', count * stride) as Float32Array;
+  const requiredLength = count * stride;
+  const buf = target ?? (pool.alloc('f32', requiredLength) as Float32Array);
+  if (buf.length < requiredLength) {
+    throw new Error(
+      `materializeValueExpr target too small: need ${requiredLength}, got ${buf.length} for expr ${exprId}`,
+    );
+  }
 
   // Dispatch based on expr.kind
   switch (expr.kind) {

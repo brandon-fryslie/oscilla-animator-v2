@@ -34,6 +34,7 @@ import { SYSTEM_PALETTE_SLOT } from '../compiler/ir/Indices';
 import { evaluateValueExprSignal, evaluateConstructSignal } from './ValueExprSignalEvaluator';
 import { evaluateValueExprEvent } from './ValueExprEventEvaluator';
 import { materializeValueExpr } from './ValueExprMaterializer';
+import { arenaSlice } from './ArenaValueStore';
 import {
   type SlotLookup,
   getExprAddressTable,
@@ -350,10 +351,16 @@ export function* executeFrameStepped(
         const veId = step.field;
         const instanceDecl = instances.get(step.instanceId);
         const count = instanceDecl && typeof instanceDecl.count === 'number' ? instanceDecl.count : 0;
+        const arenaDesc = program.arenaLayout[step.target as number];
+        const arenaTarget =
+          state.arena.length > 0 && arenaDesc && arenaDesc.offset >= 0
+            ? arenaSlice(state.arena, arenaDesc)
+            : undefined;
         const buffer = materializeValueExpr(
-          veId, program.valueExprs, step.instanceId, count, state, program, STEPPED_MATERIALIZER_POOL,
+          veId, program.valueExprs, step.instanceId, count, state, program, STEPPED_MATERIALIZER_POOL, arenaTarget,
         );
         state.values.objects.set(step.target, buffer);
+
         state.tap?.recordFieldValue?.(step.target, buffer);
 
         // Capture materialized buffer (materializeValueExpr returns Float32Array)
