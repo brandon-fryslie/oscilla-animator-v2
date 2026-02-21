@@ -67,7 +67,7 @@ const FRONTEND_ERROR_KIND_TO_DIAGNOSTIC_CODE: Record<string, DiagnosticCode> = {
   ClampManyConflict: 'E_CARDINALITY_MISMATCH',
   InstanceConflict: 'E_INSTANCE_MISMATCH',
   UnresolvedInstanceVar: 'E_INSTANCE_MISMATCH',
-  ZipBroadcastClampOneConflict: 'E_CARDINALITY_MISMATCH',
+  PromoteToManyClampOneConflict: 'E_CARDINALITY_MISMATCH',
   // Escape hatches & structural
   UnitDefaultedToNone: 'I_UNIT_DEFAULTED_TO_NONE',
   CardinalityDefaultedToOne: 'I_CARDINALITY_DEFAULTED_TO_ONE',

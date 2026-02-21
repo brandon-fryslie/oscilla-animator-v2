@@ -250,11 +250,11 @@ function solveAndComputeFacts(
     constraints: extracted.cardinality,
   });
 
-  // Separate cardinality errors: ZipBroadcastClampOneConflict and ClampManyConflict
+  // Separate cardinality errors: PromoteToManyClampOneConflict and ClampManyConflict
   // are structural issues resolved via obligations (Broadcast insertion), not terminal errors.
   const cardinalityConflicts: CardinalitySolveError[] = [];
   for (const error of cardResult.errors) {
-    if (error.kind === 'ZipBroadcastClampOneConflict' || error.kind === 'ClampManyConflict') {
+    if (error.kind === 'PromoteToManyClampOneConflict' || error.kind === 'ClampManyConflict') {
       cardinalityConflicts.push(error);
     } else {
       solveDiagnostics.push({

@@ -26,7 +26,7 @@ const PU_SOLVER_ERROR_KINDS = [
 
 // =============================================================================
 // Cardinality Solver Error Kinds (non-structural)
-// ZipBroadcastClampOneConflict is structural, handled via obligations, but still
+// PromoteToManyClampOneConflict is structural, handled via obligations, but still
 // needs a flag entry since it emits a FixpointDiagnostic when unresolved.
 // =============================================================================
 

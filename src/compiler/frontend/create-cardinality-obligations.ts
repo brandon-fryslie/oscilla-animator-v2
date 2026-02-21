@@ -1,7 +1,7 @@
 /**
  * Create Cardinality Adapter Obligations from Cardinality Conflicts
  *
- * Given ZipBroadcastClampOneConflict and ClampManyConflict errors from the
+ * Given PromoteToManyClampOneConflict and ClampManyConflict errors from the
  * cardinality solver, identifies boundary edges (signal→field) and creates
  * at most ONE needsCardinalityAdapter obligation per fixpoint iteration.
  *
@@ -39,7 +39,7 @@ interface BoundaryCandidate {
  *
  * Handles two conflict types:
  *
- * 1. ZipBroadcastClampOneConflict: Edge equality merges both endpoints into
+ * 1. PromoteToManyClampOneConflict: Edge equality merges both endpoints into
  *    the same UF group. The boundary edge connects two ports that are BOTH
  *    in clampOneMembers, where the `to` port is ALSO in the conflict's
  *    zipPorts. Inserting Broadcast breaks the edge equality.
@@ -64,13 +64,13 @@ export function createCardinalityAdapterObligations(
   // [LAW:dataflow-not-control-flow] Always compute; empty arrays flow through.
   const candidatesByKey = new Map<string, BoundaryCandidate>();
 
-  // --- ZipBroadcastClampOneConflict candidates ---
-  const zbConflicts = conflicts.filter(
-    (e): e is Extract<CardinalitySolveError, { kind: 'ZipBroadcastClampOneConflict' }> =>
-      e.kind === 'ZipBroadcastClampOneConflict',
+  // --- PromoteToMany clampOne conflict candidates ---
+  const promoteConflicts = conflicts.filter(
+    (e): e is Extract<CardinalitySolveError, { kind: 'PromoteToManyClampOneConflict' }> =>
+      e.kind === 'PromoteToManyClampOneConflict',
   );
 
-  for (const conflict of zbConflicts) {
+  for (const conflict of promoteConflicts) {
     const clampOneSet = new Set(conflict.clampOneMembers);
     const zipPortSet = new Set(conflict.zipPorts);
 

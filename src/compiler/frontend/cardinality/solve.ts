@@ -8,7 +8,7 @@
  *   1. Build equality UF from equal(a,b) constraints
  *   2. Collect group facts: forcedOne (from clampOne), forcedMany (from forceMany/base axis)
  *   3. Local group resolution: detect conflicts, resolve to one/many/unknown
- *   4. ZipBroadcast fixpoint: propagate many across zip groups
+ *   4. PromoteToMany fixpoint: propagate many across promoteToMany groups
  *   5. Finalize: build substitution maps, report unresolved vars
  *
  * // [LAW:one-source-of-truth] Substitution maps are the only output.
@@ -60,7 +60,7 @@ export interface CardinalitySolveInput {
 
 export type CardinalitySolveError =
   | {
-      readonly kind: 'ZipBroadcastClampOneConflict';
+      readonly kind: 'PromoteToManyClampOneConflict';
       readonly zipPorts: readonly DraftPortKey[];
       readonly clampOneMembers: readonly DraftPortKey[];
       readonly manyMembers: readonly DraftPortKey[];
