@@ -12,6 +12,7 @@
 import type { CompiledProgramIR } from '../compiler/ir/program';
 import type { ValueSlot } from '../compiler/ir/Indices';
 import type { ScheduleIR } from '../compiler/backend/schedule-program';
+import type { ArenaSlotDescriptor } from './ArenaValueStore';
 
 /**
  * Slot lookup entry — maps a ValueSlot to its physical storage location.
@@ -33,6 +34,11 @@ export interface ExprAddressTable {
   readonly fieldExprToSlot: ReadonlyMap<number, ValueSlot>;
   /** Signal ValueExprId → f64 physical offset */
   readonly sigToF64Offset: ReadonlyMap<number, number>;
+  /**
+   * ValueSlot → arena descriptor (excludes sentinels with offset < 0).
+   * [LAW:one-source-of-truth] Single lookup replacing all direct program.arenaLayout[slot] accesses.
+   */
+  readonly slotToArena: ReadonlyMap<ValueSlot, ArenaSlotDescriptor>;
 }
 
 const TABLE_CACHE = new WeakMap<CompiledProgramIR, ExprAddressTable>();
@@ -45,8 +51,11 @@ export function getExprAddressTable(program: CompiledProgramIR): ExprAddressTabl
   const cached = TABLE_CACHE.get(program);
   if (cached) return cached;
 
-  // 1. Build slotLookup from slotMeta
+  // 1. Build slotLookup from slotMeta, and slotToArena from arenaLayout (excludes sentinels).
+  // [LAW:one-source-of-truth] All per-slot arena lookups go through slotToArena — no direct
+  // program.arenaLayout[slot] accesses in consumers.
   const slotLookup = new Map<ValueSlot, SlotLookup>();
+  const slotToArena = new Map<ValueSlot, ArenaSlotDescriptor>();
   for (const meta of program.slotMeta) {
     if (meta.stride == null) {
       throw new Error('slotMeta missing required stride for slot ' + meta.slot);
@@ -57,6 +66,10 @@ export function getExprAddressTable(program: CompiledProgramIR): ExprAddressTabl
       stride: meta.stride,
       slot: meta.slot,
     });
+    const arenaDesc = program.arenaLayout[meta.slot as number];
+    if (arenaDesc && arenaDesc.offset >= 0) {
+      slotToArena.set(meta.slot, arenaDesc);
+    }
   }
 
   // 2. Build fieldExprToSlot and sigToF64Offset from schedule steps
@@ -75,7 +88,7 @@ export function getExprAddressTable(program: CompiledProgramIR): ExprAddressTabl
     }
   }
 
-  const table: ExprAddressTable = { slotLookup, fieldExprToSlot, sigToF64Offset };
+  const table: ExprAddressTable = { slotLookup, fieldExprToSlot, sigToF64Offset, slotToArena };
   TABLE_CACHE.set(program, table);
   return table;
 }
