@@ -1,7 +1,7 @@
 /**
  * Tests for cardinality adapter obligation creation and fixpoint integration.
  *
- * Verifies that ZipBroadcast clampOne conflicts are resolved structurally
+ * Verifies that promoteToMany clampOne conflicts are resolved structurally
  * via Broadcast adapter insertion at signal/field boundaries.
  */
 import { describe, it, expect } from 'vitest';
@@ -73,7 +73,7 @@ describe('createCardinalityAdapterObligations', () => {
 
     const conflicts: CardinalitySolveError[] = [
       {
-        kind: 'ZipBroadcastClampOneConflict',
+        kind: 'PromoteToManyClampOneConflict',
         // zipPorts includes phasor:time:in (the port that's in both clampOne and zip)
         zipPorts: [pk('phasor:time:in'), pk('phasor:phase:out')],
         // clampOneMembers includes BOTH endpoints (unified by edge equality)
@@ -111,7 +111,7 @@ describe('createCardinalityAdapterObligations', () => {
 
     const conflicts: CardinalitySolveError[] = [
       {
-        kind: 'ZipBroadcastClampOneConflict',
+        kind: 'PromoteToManyClampOneConflict',
         zipPorts: [pk('phasor:time:in')],
         clampOneMembers: [pk('sig:time:out'), pk('phasor:time:in')],
         manyMembers: [],
@@ -225,7 +225,7 @@ describe('createCardinalityAdapterObligations', () => {
 
     const conflicts: CardinalitySolveError[] = [
       {
-        kind: 'ZipBroadcastClampOneConflict',
+        kind: 'PromoteToManyClampOneConflict',
         // Both to-ports are in zipPorts and clampOneMembers (boundary detection)
         zipPorts: [pk('a:x:in'), pk('b:x:in')],
         clampOneMembers: [pk('sig:a:out'), pk('sig:z:out'), pk('a:x:in'), pk('b:x:in')],
@@ -269,11 +269,11 @@ describe('cardinality adapter fixpoint integration', () => {
     const { graph: dg } = buildDraftGraph(patch);
     const result = finalizeNormalizationFixpoint(dg, BLOCK_DEFS_BY_TYPE, { maxIterations: 20 });
 
-    // Should not have ZipBroadcast conflict errors
-    const zbErrors = result.diagnostics.filter(
-      (d: any) => d.kind === 'CardinalityConstraintError' && d.subKind === 'ZipBroadcastClampOneConflict',
+    // Should not have PromoteToMany clampOne conflict errors
+    const promoteErrors = result.diagnostics.filter(
+      (d: any) => d.kind === 'CardinalityConstraintError' && d.subKind === 'PromoteToManyClampOneConflict',
     );
-    expect(zbErrors).toHaveLength(0);
+    expect(promoteErrors).toHaveLength(0);
 
     // Should converge
     expect(result.iterations).toBeLessThan(20);
