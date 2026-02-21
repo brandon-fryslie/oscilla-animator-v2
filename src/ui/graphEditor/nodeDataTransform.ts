@@ -17,6 +17,7 @@ import { FLOAT, canonicalType } from '../../core/canonical-types';
 import type { InferenceCanonicalType, InferencePayloadType } from '../../core/inference-types';
 import { formatTypeForTooltip, getTypeColor } from '../reactFlowEditor/typeValidation';
 import type { OscillaEdgeData } from '../reactFlowEditor/nodes';
+import { lensTargetsConnection } from '../reactFlowEditor/lensUtils';
 import type { PortProvenance } from '../../stores/FrontendResultStore';
 
 /**
@@ -243,9 +244,17 @@ export function createEdgeFromEdgeLike(
   diagnosticsGetter?: (edge: EdgeLike) => any[]
 ): ReactFlowEdge<OscillaEdgeData> {
   // Look up lenses from target port
+  const sourceBlock = blocks?.get(edge.sourceBlockId);
   const targetBlock = blocks?.get(edge.targetBlockId);
   const targetPort = targetBlock?.inputPorts.get(edge.targetPortId);
-  const lenses = targetPort?.lenses;
+  const lenses = targetPort?.lenses?.filter((lens) =>
+    lensTargetsConnection(
+      lens,
+      edge.sourceBlockId,
+      edge.sourcePortId,
+      sourceBlock?.displayName,
+    ),
+  );
   const hasLenses = lenses != null && lenses.length > 0;
 
   // Get diagnostics for this edge

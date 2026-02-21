@@ -31,8 +31,18 @@ registerBlock({
   loweringPurity: 'pure',
   inputs: {
     in: { label: 'In', type: inferType(FLOAT, unitVar('sb_U'), { cardinality: SCALE_BIAS_CARD }) },
-    scale: { label: 'Scale', type: inferType(FLOAT, unitVar('sb_U'), { cardinality: SCALE_BIAS_CARD }), defaultValue: 1.0 },
-    bias: { label: 'Bias', type: inferType(FLOAT, unitVar('sb_U'), { cardinality: SCALE_BIAS_CARD }), defaultValue: 0.0 },
+    scale: {
+      label: 'Scale',
+      type: inferType(FLOAT, unitVar('sb_U'), { cardinality: SCALE_BIAS_CARD }),
+      defaultValue: 1.0,
+      uiHint: { kind: 'slider', min: 0, max: 4, step: 0.01 },
+    },
+    bias: {
+      label: 'Bias',
+      type: inferType(FLOAT, unitVar('sb_U'), { cardinality: SCALE_BIAS_CARD }),
+      defaultValue: 0.0,
+      uiHint: { kind: 'slider', min: -2, max: 2, step: 0.01 },
+    },
   },
   outputs: {
     out: { label: 'Out', type: inferType(FLOAT, unitVar('sb_U'), { cardinality: SCALE_BIAS_CARD }) },

@@ -20,9 +20,16 @@ import type { CanonicalType } from '../../core/canonical-types';
 import type { TransformStep } from '../../types';
 import type { PortProvenance } from '../../stores/FrontendResultStore';
 import { requireAnyBlockDef } from '../../blocks/registry';
-import { findCompatibleLenses, getLensLabel, type LensTypeInfo } from '../reactFlowEditor/lensUtils';
+import {
+  findCompatibleLenses,
+  getLensLabel,
+  getLensDefaultParams,
+  lensTargetsConnection,
+  type LensTypeInfo,
+} from '../reactFlowEditor/lensUtils';
 import { useDebugMiniView } from '../debug-viz/useDebugMiniView';
 import { DebugEdgeValueDisplay } from '../debug-viz/DebugMiniView';
+import { LensParamControls } from './LensParamControls';
 
 // =============================================================================
 // EdgeEndpoint - Shows a single endpoint (source or target)
@@ -234,14 +241,21 @@ const LensManagementSection = observer(function LensManagementSection({ edge, pa
   const [showLensDropdown, setShowLensDropdown] = useState(false);
 
   const targetBlock = patch.blocks.get(edge.to.blockId as BlockId);
+  const sourceBlock = patch.blocks.get(edge.from.blockId as BlockId);
   const targetPort = targetBlock?.inputPorts.get(edge.to.slotId);
-  const sourceAddress = `v1:blocks.${edge.from.blockId}.outputs.${edge.from.slotId}`;
 
   // Filter lenses for this specific source connection
   const existingLenses = useMemo(() => {
     if (!targetPort?.lenses) return [];
-    return targetPort.lenses.filter(l => l.sourceAddress === sourceAddress);
-  }, [targetPort?.lenses, sourceAddress]);
+    return targetPort.lenses.filter((lens) =>
+      lensTargetsConnection(
+        lens,
+        edge.from.blockId,
+        edge.from.slotId,
+        sourceBlock?.displayName,
+      ),
+    );
+  }, [targetPort?.lenses, edge.from.blockId, edge.from.slotId, sourceBlock?.displayName]);
 
   // Find compatible lenses based on static block def types
   const compatibleLenses = useMemo((): LensTypeInfo[] => {
@@ -257,14 +271,16 @@ const LensManagementSection = observer(function LensManagementSection({ edge, pa
   }, [edge, patch, targetBlock]);
 
   const handleAddLens = useCallback((lensType: string) => {
+    const params = getLensDefaultParams(lensType);
     patchStore.addLens(
       edge.to.blockId as BlockId,
       edge.to.slotId,
       lensType,
-      sourceAddress,
+      `v1:blocks.${edge.from.blockId}.outputs.${edge.from.slotId}`,
+      params,
     );
     setShowLensDropdown(false);
-  }, [patchStore, edge, sourceAddress]);
+  }, [patchStore, edge]);
 
   const handleRemoveLens = useCallback((lensId: string) => {
     patchStore.removeLens(edge.to.blockId as BlockId, edge.to.slotId, lensId);
@@ -281,9 +297,6 @@ const LensManagementSection = observer(function LensManagementSection({ edge, pa
         <div
           key={lens.id}
           style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
             padding: '6px 8px',
             background: colors.bgPanel,
             borderRadius: '4px',
@@ -291,23 +304,31 @@ const LensManagementSection = observer(function LensManagementSection({ edge, pa
             fontSize: '12px',
           }}
         >
-          <span style={{ color: colors.primary }}>
-            {getLensLabel(lens.lensType)}
-          </span>
-          <button
-            onClick={() => handleRemoveLens(lens.id)}
-            style={{
-              padding: '2px 6px',
-              background: 'rgba(255, 107, 107, 0.2)',
-              color: colors.error,
-              border: 'none',
-              borderRadius: '3px',
-              cursor: 'pointer',
-              fontSize: '11px',
-            }}
-          >
-            Remove
-          </button>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+            <span style={{ color: colors.primary }}>
+              {getLensLabel(lens.lensType)}
+            </span>
+            <button
+              onClick={() => handleRemoveLens(lens.id)}
+              style={{
+                padding: '2px 6px',
+                background: 'rgba(255, 107, 107, 0.2)',
+                color: colors.error,
+                border: 'none',
+                borderRadius: '3px',
+                cursor: 'pointer',
+                fontSize: '11px',
+              }}
+            >
+              Remove
+            </button>
+          </div>
+          <LensParamControls
+            lens={lens}
+            targetBlockId={edge.to.blockId as BlockId}
+            targetPortId={edge.to.slotId}
+            compact
+          />
         </div>
       ))}
 

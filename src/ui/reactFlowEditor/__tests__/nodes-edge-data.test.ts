@@ -81,6 +81,18 @@ describe('createEdgeFromEdgeLike - lens data population', () => {
     expect(rfEdge.data!.lenses![1].lensType).toBe('Lens_Scale');
   });
 
+  it('filters out lenses that target a different source connection', () => {
+    const lenses: LensAttachment[] = [
+      { id: 'lens1', lensType: 'Adapter_PhaseToScalar01', sourceAddress: 'v1:blocks.source.outputs.out', sortKey: 0 },
+      { id: 'lens2', lensType: 'ScaleBias', sourceAddress: 'v1:blocks.other.outputs.out', sortKey: 1 },
+    ];
+
+    const rfEdge = createEdgeFromEdgeLike(edge, makeBlocks(lenses));
+
+    expect(rfEdge.data!.lenses).toHaveLength(1);
+    expect(rfEdge.data!.lenses![0].id).toBe('lens1');
+  });
+
   it('leaves lens data undefined when no lenses attached', () => {
     const rfEdge = createEdgeFromEdgeLike(edge, makeBlocks());
     expect(rfEdge.data!.lenses).toBeUndefined();

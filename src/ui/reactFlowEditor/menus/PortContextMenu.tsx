@@ -30,37 +30,11 @@ import { ContextMenu, type ContextMenuItem } from '../ContextMenu';
 import { validateConnection } from '../typeValidation';
 import { requireAnyBlockDef, getBlockCategories, getBlockTypesByCategory } from '../../../blocks/registry';
 import { isPayloadVar, type InferencePayloadType } from '../../../core/inference-types';
-import { getLensLabel, findCompatibleLenses } from '../lensUtils';
+import { getLensLabel, findCompatibleLenses, getLensDefaultParams } from '../lensUtils';
 import { internalBlockId } from '../../../blocks/composite-types';
 
 /** Maximum number of "add block" suggestions to show */
 const MAX_ADD_BLOCK = 3;
-
-function getDefaultLensParams(lensType: string): Record<string, unknown> | undefined {
-  const lensDef = requireAnyBlockDef(lensType);
-  const params: Record<string, unknown> = {};
-  for (const [inputId, inputDef] of Object.entries(lensDef.inputs)) {
-    if (inputId === 'in') continue;
-    if (inputDef.defaultValue !== undefined) {
-      params[inputId] = inputDef.defaultValue;
-    }
-  }
-  return Object.keys(params).length > 0 ? params : undefined;
-}
-
-function maybePromptScaleBiasParams(
-  initial: Record<string, unknown> | undefined,
-): Record<string, unknown> | null {
-  const scale = typeof initial?.scale === 'number' ? initial.scale : 1;
-  const bias = typeof initial?.bias === 'number' ? initial.bias : 0;
-  const raw = window.prompt('ScaleBias params as "scale,bias"', `${scale},${bias}`);
-  if (raw == null) return null;
-  const [scaleRaw, biasRaw = '0'] = raw.split(',').map(s => s.trim());
-  const parsedScale = Number(scaleRaw);
-  const parsedBias = Number(biasRaw);
-  if (!Number.isFinite(parsedScale) || !Number.isFinite(parsedBias)) return null;
-  return { ...(initial ?? {}), scale: parsedScale, bias: parsedBias };
-}
 
 /**
  * Compatible port info for quick connect menu items.
@@ -411,12 +385,7 @@ export const PortContextMenu: React.FC<PortContextMenuProps> = ({
                   label: `Insert Lens: ${lens.label}`,
                   icon: <LensIcon fontSize="small" />,
                   action: () => {
-                    let params = getDefaultLensParams(lens.blockType);
-                    if (lens.blockType === 'ScaleBias') {
-                      const configured = maybePromptScaleBiasParams(params);
-                      if (!configured) return;
-                      params = configured;
-                    }
+                    const params = getLensDefaultParams(lens.blockType);
                     const sourceAddress = `v1:blocks.${incomingEdge.from.blockId}.outputs.${incomingEdge.from.slotId}`;
                     patch.addLens(blockId, portId, lens.blockType, sourceAddress, params);
                   },

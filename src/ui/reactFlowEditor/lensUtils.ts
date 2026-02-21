@@ -14,7 +14,8 @@ import {
   cardinalitiesEqual,
   temporalitiesEqual,
 } from '../../core/canonical-types';
-import { getBlockTypesByCategory } from '../../blocks/registry';
+import { getBlockTypesByCategory, requireAnyBlockDef } from '../../blocks/registry';
+import type { LensAttachment } from '../../graph/Patch';
 
 /**
  * Information about an available lens type for UI display.
@@ -65,6 +66,51 @@ export function getLensLabel(lensType: string): string {
   const lenses = getAvailableLensTypes();
   const lens = lenses.find(l => l.blockType === lensType);
   return lens?.label ?? lensType.replace('Adapter_', '').replace(/([A-Z])/g, ' $1').trim();
+}
+
+/**
+ * Get default params for a lens block by reading its non-primary input defaults.
+ * Primary signal input is conventionally "in" and is excluded.
+ */
+export function getLensDefaultParams(lensType: string): Record<string, unknown> | undefined {
+  const lensDef = requireAnyBlockDef(lensType);
+  const params: Record<string, unknown> = {};
+  for (const [inputId, inputDef] of Object.entries(lensDef.inputs)) {
+    if (inputId === 'in') continue;
+    if (inputDef.defaultValue !== undefined) {
+      params[inputId] = inputDef.defaultValue;
+    }
+  }
+  return Object.keys(params).length > 0 ? params : undefined;
+}
+
+/**
+ * Build all accepted source-address forms for a connection.
+ * // [LAW:one-source-of-truth] Address construction is centralized to avoid per-callsite drift.
+ */
+export function buildLensSourceAddresses(
+  sourceBlockId: string,
+  sourcePortId: string,
+  sourceDisplayName?: string,
+): readonly string[] {
+  const addresses = [`v1:blocks.${sourceBlockId}.outputs.${sourcePortId}`];
+  if (sourceDisplayName && sourceDisplayName !== sourceBlockId) {
+    addresses.push(`v1:blocks.${sourceDisplayName}.outputs.${sourcePortId}`);
+  }
+  return addresses;
+}
+
+/**
+ * Returns true when a lens attachment targets the given source connection.
+ */
+export function lensTargetsConnection(
+  lens: LensAttachment,
+  sourceBlockId: string,
+  sourcePortId: string,
+  sourceDisplayName?: string,
+): boolean {
+  const accepted = buildLensSourceAddresses(sourceBlockId, sourcePortId, sourceDisplayName);
+  return accepted.includes(lens.sourceAddress);
 }
 
 /**
