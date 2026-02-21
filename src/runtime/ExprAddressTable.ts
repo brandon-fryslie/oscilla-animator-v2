@@ -33,8 +33,6 @@ export interface ExprAddressTable {
   readonly slotLookup: ReadonlyMap<ValueSlot, SlotLookup>;
   /** FieldExprId → materialization target ValueSlot */
   readonly fieldExprToSlot: ReadonlyMap<number, ValueSlot>;
-  /** Scalar ValueExprId → f64 physical offset */
-  readonly scalarExprToF64Offset: ReadonlyMap<number, number>;
   /** Scalar ValueExprId → arena scalar offset */
   readonly scalarExprToArenaOffset: ReadonlyMap<number, number>;
   /**
@@ -77,7 +75,6 @@ export function getExprAddressTable(program: CompiledProgramIR): ExprAddressTabl
 
   // 2. Build fieldExprToSlot and scalar lookup maps from schedule steps
   const fieldExprToSlot = new Map<number, ValueSlot>();
-  const scalarExprToF64Offset = new Map<number, number>();
   const scalarExprToArenaOffset = new Map<number, number>();
   const steps = (program.schedule as ScheduleIR).steps;
   for (const step of steps) {
@@ -87,9 +84,6 @@ export function getExprAddressTable(program: CompiledProgramIR): ExprAddressTabl
       // produces scalar-expression addressable slots for RenderAssembler/extract lookups.
       if (step.instanceId === SCALAR_INSTANCE_ID) {
         const lookup = slotLookup.get(step.target);
-        if (lookup) {
-          scalarExprToF64Offset.set(step.field as number, lookup.offset);
-        }
         const arenaDesc = slotToArena.get(step.target);
         if (arenaDesc) {
           scalarExprToArenaOffset.set(step.field as number, arenaDesc.offset);
@@ -98,9 +92,6 @@ export function getExprAddressTable(program: CompiledProgramIR): ExprAddressTabl
     }
     if (step.kind === 'evalValue' && step.target.storage === 'value') {
       const lookup = slotLookup.get(step.target.slot);
-      if (lookup) {
-        scalarExprToF64Offset.set(step.expr as number, lookup.offset);
-      }
       const arenaDesc = slotToArena.get(step.target.slot);
       if (arenaDesc) {
         scalarExprToArenaOffset.set(step.expr as number, arenaDesc.offset);
@@ -111,7 +102,6 @@ export function getExprAddressTable(program: CompiledProgramIR): ExprAddressTabl
   const table: ExprAddressTable = {
     slotLookup,
     fieldExprToSlot,
-    scalarExprToF64Offset,
     scalarExprToArenaOffset,
     slotToArena,
   };

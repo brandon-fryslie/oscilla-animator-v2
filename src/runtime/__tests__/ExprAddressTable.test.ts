@@ -19,6 +19,24 @@ function mockProgram(opts: {
   slotMeta: SlotMetaEntry[];
   steps: ScheduleIR['steps'];
 }): CompiledProgramIR {
+  const maxSlot = opts.slotMeta.reduce((max, meta) => Math.max(max, Number(meta.slot)), -1);
+  const arenaLayout = Array.from({ length: maxSlot + 1 }, () => ({
+    offset: -1,
+    stride: 0,
+    laneCount: 0,
+    length: 0,
+  }));
+  for (const meta of opts.slotMeta) {
+    if (meta.storage === 'object' || meta.storage === 'shape2d') {
+      continue;
+    }
+    arenaLayout[Number(meta.slot)] = {
+      offset: meta.offset,
+      stride: meta.stride,
+      laneCount: 1,
+      length: meta.stride,
+    };
+  }
   return {
     slotMeta: opts.slotMeta,
     schedule: {
@@ -46,7 +64,7 @@ function mockProgram(opts: {
     fieldSlotRegistry: new Map(),
     renderGlobals: [],
     kernelRegistry: { resolve: () => undefined, entries: () => [] } as any,
-    arenaLayout: [],
+    arenaLayout,
     arenaTotalFloats: 0,
   } as CompiledProgramIR;
 }
@@ -89,7 +107,7 @@ describe('getExprAddressTable', () => {
     expect(table.fieldExprToSlot.get(10)).toBe(valueSlot(5));
   });
 
-  it('builds scalarExprToF64Offset from evalValue steps', () => {
+  it('builds scalarExprToArenaOffset from evalValue steps', () => {
     const program = mockProgram({
       slotMeta: [
         { slot: valueSlot(3), storage: 'f64', offset: 7, stride: 1, type: SIG_FLOAT },
@@ -105,7 +123,7 @@ describe('getExprAddressTable', () => {
     });
 
     const table = getExprAddressTable(program);
-    expect(table.scalarExprToF64Offset.get(42)).toBe(7);
+    expect(table.scalarExprToArenaOffset.get(42)).toBe(7);
   });
 
   it('caches table per program identity', () => {
