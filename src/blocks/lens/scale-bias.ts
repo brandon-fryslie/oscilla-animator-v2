@@ -7,7 +7,7 @@
  */
 
 import { registerBlock } from '../registry';
-import { canonicalType, payloadStride } from '../../core/canonical-types';
+import { payloadStride } from '../../core/canonical-types';
 import { FLOAT } from '../../core/canonical-types';
 import { inferType, unitVar, cardinalityVar } from '../../core/inference-types';
 import { cardinalityVarId } from '../../core/ids';
@@ -31,7 +31,7 @@ registerBlock({
   loweringPurity: 'pure',
   inputs: {
     in: { label: 'In', type: inferType(FLOAT, unitVar('sb_U'), { cardinality: SCALE_BIAS_CARD }) },
-    scale: { label: 'Scale', type: canonicalType(FLOAT, undefined, { cardinality: SCALE_BIAS_CARD }), defaultValue: 1.0 },
+    scale: { label: 'Scale', type: inferType(FLOAT, unitVar('sb_U'), { cardinality: SCALE_BIAS_CARD }), defaultValue: 1.0 },
     bias: { label: 'Bias', type: inferType(FLOAT, unitVar('sb_U'), { cardinality: SCALE_BIAS_CARD }), defaultValue: 0.0 },
   },
   outputs: {
