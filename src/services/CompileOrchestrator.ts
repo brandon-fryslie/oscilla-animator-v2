@@ -65,6 +65,10 @@ function setupDebugProbe(state: RuntimeState, patch: Patch, program: any): void 
   debugService.setEdgeToSlotMap(edgeMap, constantValues);
   debugService.setPortToSlotMap(portMap);
   debugService.setUnmappedEdges(unmappedEdges);
+
+  // [LAW:one-source-of-truth] Wire arena reference — arena is the canonical value
+  // store post-zdru.1/zdru.2. Called after setEdgeToSlotMap (which clears stale ref).
+  debugService.setArenaRef(state.arena, program.arenaLayout);
 }
 
 function frontendErrorDetails(errors: readonly FrontendError[], patch: Patch): LogDetail[] {

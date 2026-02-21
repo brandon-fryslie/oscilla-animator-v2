@@ -20,6 +20,8 @@ import { HistoryService, type KeyResolver, type ResolvedKeyMetadata } from '../u
 import type { DebugTargetKey, HistoryView, BufferHistoryView, Stride } from '../ui/debug-viz/types';
 import type { FieldHistoryView, AggregateFieldStats } from '../ui/debug-viz/FieldStatsAccumulator';
 import { FieldStatsAccumulator } from '../ui/debug-viz/FieldStatsAccumulator';
+import type { ArenaSlotDescriptor } from '../runtime/ArenaValueStore';
+import { arenaRead, arenaSlice } from '../runtime/ArenaValueStore';
 
 /**
  * Signal value result - scalar value from evalValue step.
@@ -121,6 +123,13 @@ class DebugService {
   /** Whether runtime has started (at least one value written) */
   private runtimeStarted = false;
 
+  /**
+   * Arena reference for direct value reads post-zdru.1/zdru.2.
+   * [LAW:one-source-of-truth] Arena is the canonical value store once set.
+   * Cleared on setEdgeToSlotMap (recompile invalidates old ProgramState arena).
+   */
+  private arenaRef: { arena: Float32Array; arenaLayout: readonly ArenaSlotDescriptor[] } | null = null;
+
   /** Edges that couldn't be mapped (for error reporting) */
   private unmappedEdges: UnmappedEdgeInfo[] = [];
 
@@ -164,6 +173,9 @@ class DebugService {
     this.fieldBuffers.clear();
     this.fieldAccumulators.clear();
     this.runtimeStarted = false;
+    // [LAW:one-source-of-truth] Arena belongs to ProgramState; clear stale ref on recompile.
+    // setArenaRef() will restore it after this call in setupDebugProbe.
+    this.arenaRef = null;
     this.historyService.onMappingChanged();
   }
 
@@ -181,6 +193,17 @@ class DebugService {
    */
   setUnmappedEdges(edges: UnmappedEdgeInfo[]): void {
     this.unmappedEdges = edges;
+  }
+
+  /**
+   * Wire the arena for direct value reads.
+   * Called by CompileOrchestrator after every compile/recompile, after setEdgeToSlotMap.
+   *
+   * [LAW:one-source-of-truth] Arena is the canonical value store post-zdru.1/zdru.2.
+   * Must be called AFTER setEdgeToSlotMap (which clears any stale arena ref).
+   */
+  setArenaRef(arena: Float32Array, arenaLayout: readonly ArenaSlotDescriptor[]): void {
+    this.arenaRef = { arena, arenaLayout };
   }
 
   /**
@@ -370,6 +393,7 @@ class DebugService {
     this.fieldAccumulators.clear();
     this.unmappedEdges = [];
     this.runtimeStarted = false;
+    this.arenaRef = null;
     this.historyService.clear();
   }
 
@@ -378,6 +402,17 @@ class DebugService {
   // ===========================================================================
 
   private querySignalValue(meta: EdgeMetadata): SignalValueResult | undefined {
+    // [LAW:one-source-of-truth] Arena is the canonical value source post-zdru.1.
+    // Read directly from arena when available and the slot has a valid descriptor.
+    if (this.arenaRef) {
+      const desc = this.arenaRef.arenaLayout[meta.slotId as number];
+      if (desc && desc.offset >= 0) {
+        if (!this.runtimeStarted) return undefined;
+        const value = arenaRead(this.arenaRef.arena, desc, 0, 0);
+        return { kind: 'signal', value, slotId: meta.slotId, type: meta.type };
+      }
+    }
+    // Fallback: read from signalValues Map (pre-arena path or slot excluded from arena)
     const value = this.signalValues.get(meta.slotId);
     if (value === undefined) {
       if (!this.runtimeStarted) {
@@ -397,7 +432,22 @@ class DebugService {
       return { kind: 'field-untracked', slotId: meta.slotId, type: meta.type };
     }
 
-    // Field is tracked — it MUST have a value after runtime starts
+    // [LAW:one-source-of-truth] Arena is the canonical value source post-zdru.2.
+    // Zero-copy view into the arena — always current without a per-query copy.
+    if (this.arenaRef) {
+      const desc = this.arenaRef.arenaLayout[meta.slotId as number];
+      if (desc && desc.offset >= 0) {
+        if (!this.runtimeStarted) return undefined;
+        const buffer = arenaSlice(this.arenaRef.arena, desc);
+        const acc = this.fieldAccumulators.get(meta.slotId);
+        const stats: AggregateFieldStats = acc
+          ? acc.getAccumulatedStats()
+          : { count: 0, stride: 0 as Stride, min: new Float32Array(4), max: new Float32Array(4), mean: new Float32Array(4) };
+        return { kind: 'field', stats, buffer, slotId: meta.slotId, type: meta.type };
+      }
+    }
+
+    // Fallback: read from fieldBuffers Map (pre-arena path or slot excluded from arena)
     const buffer = this.fieldBuffers.get(meta.slotId);
     if (!buffer) {
       if (!this.runtimeStarted) {
