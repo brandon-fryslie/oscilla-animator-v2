@@ -33,7 +33,7 @@ describe('createCardinalityAdapterObligations', () => {
 
   const clampOrigin: ConstraintOrigin = { kind: 'blockRule', blockId: 'sig', blockType: 'Sig', rule: 'policy.clampOne' };
   const manyOrigin: ConstraintOrigin = { kind: 'blockRule', blockId: 'arr', blockType: 'Array', rule: 'policy.forceMany' };
-  const zipOrigin: ConstraintOrigin = { kind: 'blockRule', blockId: 'add', blockType: 'Add', rule: 'policy.zipBroadcast' };
+  const zipOrigin: ConstraintOrigin = { kind: 'blockRule', blockId: 'add', blockType: 'Add', rule: 'policy.promoteToMany' };
 
   it('returns empty for no conflicts', () => {
     const g = makeGraph([], []);
@@ -54,7 +54,7 @@ describe('createCardinalityAdapterObligations', () => {
   it('identifies boundary edge where to port is in clampOne AND zipPorts', () => {
     // When edge equality merges both endpoints into clampOne group,
     // the boundary edge has both from AND to in clampOneMembers,
-    // but to is also in zipPorts (it's part of the conflicting zipBroadcast).
+    // but to is also in zipPorts (it's part of the conflicting promoteToMany).
     const g = makeGraph(
       [
         { id: 'sig', type: 'Sig', params: {}, portDefaults: {}, origin: 'user', displayName: 'Sig', domainId: null, role: { kind: 'user', meta: {} } },
@@ -250,9 +250,9 @@ describe('createCardinalityAdapterObligations', () => {
 
 describe('cardinality adapter fixpoint integration', () => {
   it('InfiniteTimeRoot → Phasor → Add ← Array: no ZipBroadcast errors (transform zip filtered by axisVar)', () => {
-    // The root fix is in extract-constraints: transform zipBroadcast only includes
+    // The root fix is in extract-constraints: transform promoteToMany only includes
     // axisVar ports, not concrete output ports. This prevents many evidence from
-    // propagating through the zipBroadcast to clampOne groups.
+    // propagating through the promoteToMany to clampOne groups.
     const patch = buildPatch((b) => {
       const timeRoot = b.addBlock('InfiniteTimeRoot');
       const phasor = b.addBlock('Phasor');
@@ -280,11 +280,11 @@ describe('cardinality adapter fixpoint integration', () => {
     expect(result.iterations).toBeLessThan(20);
   });
 
-  it('mixed cardinality: clampOne ports stay at one in zipBroadcast group with many evidence', () => {
+  it('mixed cardinality: clampOne ports stay at one in promoteToMany group with many evidence', () => {
     // InfiniteTimeRoot → Phasor → Add ← Array
     // InfiniteTimeRoot:time is clampOne (signalOnly)
     // Array:elements is forceMany (transform)
-    // Add is preserve+allowZipSig → zipBroadcast over all ports
+    // Add is preserve+allowZipSig → promoteToMany over all ports
     // Result: Add:a (from Phasor) stays at one, Add:b (from Array) resolves to many
     // Runtime uses kernelZipSig for mixed cardinality — no Broadcast adapter needed
     const patch = buildPatch((b) => {
