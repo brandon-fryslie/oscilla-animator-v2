@@ -139,15 +139,15 @@ describe('lensUtils', () => {
   });
 
   describe('findCompatibleLenses', () => {
-    it('returns empty array when no lenses match', () => {
-      // Create types that no adapter will match
+    it('returns value-shaping lenses for same-type edges', () => {
       const sourceType = canonicalType(FLOAT, unitTurns(), undefined, contractWrap01());
-      const targetType = canonicalType(FLOAT, unitTurns(), undefined, contractWrap01()); // Same type, no adapter needed
+      const targetType = canonicalType(FLOAT, unitTurns(), undefined, contractWrap01());
 
       const lenses = findCompatibleLenses(sourceType, targetType);
 
-      // No adapter needed for same type
-      expect(lenses.length).toBe(0);
+      expect(lenses.length).toBeGreaterThan(0);
+      const hasScaleBias = lenses.some(l => l.blockType === 'ScaleBias');
+      expect(hasScaleBias).toBe(true);
     });
 
     it('returns matching lenses for phase → scalar conversion', () => {

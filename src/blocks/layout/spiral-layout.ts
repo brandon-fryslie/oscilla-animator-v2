@@ -6,7 +6,7 @@
  *
  * Spiral math:
  *   u       = UV placement basis x-component (0..1)
- *   angle   = (u + phase) * turns * 2PI
+ *   angle   = (u * turns + phase * spin) * 2PI
  *   r       = u * expansion
  *   x       = cos(angle) * r + 0.5
  *   y       = sin(angle) * r + 0.5
@@ -45,6 +45,7 @@ registerBlock({
   inputs: {
     elements: { label: 'Elements', type: inferType(payloadVar('spiral_elements_payload'), { kind: 'none' }, { cardinality: SPIRAL_FIELD_CARD }) },
     turns: { label: 'Turns', type: canonicalType(FLOAT), defaultValue: 3.0, defaultSource: defaultSourceConst(3.0), exposedAsPort: true, uiHint: { kind: 'slider', min: 0.1, max: 20, step: 0.1 } },
+    spin: { label: 'Spin', type: canonicalType(FLOAT), defaultValue: 1.0, defaultSource: defaultSourceConst(1.0), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 5, step: 0.05 } },
     expansion: { label: 'Expansion', type: canonicalType(FLOAT), defaultValue: 0.3, defaultSource: defaultSourceConst(0.3), exposedAsPort: true, uiHint: { kind: 'slider', min: 0.01, max: 0.5, step: 0.01 } },
     phase: { label: 'Phase', type: canonicalType(FLOAT, unitTurns(), undefined, contractWrap01()), defaultValue: 0, defaultSource: defaultSourceConst(0), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
   },
@@ -74,6 +75,8 @@ registerBlock({
     // [LAW:one-source-of-truth] inputs are the single source
     const turnsInput = inputsById.turns;
     if (!turnsInput) throw new Error('SpiralLayout: turns input not wired — normalization bug');
+    const spinInput = inputsById.spin;
+    if (!spinInput) throw new Error('SpiralLayout: spin input not wired — normalization bug');
     const expansionInput = inputsById.expansion;
     if (!expansionInput) throw new Error('SpiralLayout: expansion input not wired — normalization bug');
     const phaseInput = inputsById.phase;
@@ -103,10 +106,12 @@ registerBlock({
     // u_clamped = clamp(u, 0, 1)
     const u_clamped = ctx.b.zipAuto([u, const0, const1], clamp, floatFieldType);
 
-    // angle = (u + phase) * turns * 2PI
-    const angle_base = ctx.b.zipAuto([u_clamped, phaseInput.id], add, floatFieldType);
-    const angle_scaled = ctx.b.zipAuto([angle_base, turnsInput.id], mul, floatFieldType);
-    const angle = ctx.b.zipAuto([angle_scaled, twoPi], mul, floatFieldType);
+    // angle = (u * turns + phase * spin) * 2PI
+    // [LAW:one-source-of-truth] turns controls spatial winding; spin controls time-driven rotation amount.
+    const spiralTurns = ctx.b.zipAuto([u_clamped, turnsInput.id], mul, floatFieldType);
+    const phaseTurns = ctx.b.zipAuto([phaseInput.id, spinInput.id], mul, floatFieldType);
+    const angleTurns = ctx.b.zipAuto([spiralTurns, phaseTurns], add, floatFieldType);
+    const angle = ctx.b.zipAuto([angleTurns, twoPi], mul, floatFieldType);
 
     // radius = u * expansion (linear growth from center)
     const radius = ctx.b.zipAuto([u_clamped, expansionInput.id], mul, floatFieldType);

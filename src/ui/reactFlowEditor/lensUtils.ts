@@ -5,6 +5,15 @@
  */
 
 import type { InferenceCanonicalType, InferenceUnitType } from '../../core/inference-types';
+import { isPayloadVar, isUnitVar } from '../../core/inference-types';
+import {
+  isAxisInst,
+  isAxisVar,
+  unitsEqual,
+  payloadsEqual,
+  cardinalitiesEqual,
+  temporalitiesEqual,
+} from '../../core/canonical-types';
 import { getBlockTypesByCategory } from '../../blocks/registry';
 
 /**
@@ -73,10 +82,19 @@ export function canApplyLens(
   lensOutputType: InferenceCanonicalType,
   targetType: InferenceCanonicalType
 ): boolean {
-  // Simple compatibility: exact type matches
-  // Source must match lens input, lens output must match target
-  const sourceMatches = typesMatch(sourceType, lensInputType);
-  const outputMatches = typesMatch(lensOutputType, targetType);
+  // Match in two phases with shared var bindings from the lens types:
+  // source -> lens input, then lens output -> target.
+  const env: MatchEnv = {
+    payloadVars: new Map(),
+    unitVars: new Map(),
+    cardVars: new Map(),
+    tempVars: new Map(),
+    bindingVars: new Map(),
+    perspectiveVars: new Map(),
+    branchVars: new Map(),
+  };
+  const sourceMatches = matchesLensPattern(sourceType, lensInputType, env);
+  const outputMatches = matchesLensPattern(targetType, lensOutputType, env);
   return sourceMatches && outputMatches;
 }
 
@@ -84,60 +102,99 @@ export function canApplyLens(
  * Check if two signal types match.
  * Handles payload and unit comparison with full structural equality.
  */
-function typesMatch(a: InferenceCanonicalType, b: InferenceCanonicalType): boolean {
-  // Payload must match
-  if (a.payload.kind !== b.payload.kind) return false;
-
-  // Unit comparison - must be structurally equal
-  const aUnit = a.unit;
-  const bUnit = b.unit;
-
-  // If both have no unit, match
-  if (!aUnit && !bUnit) return true;
-
-  // If one has unit and other doesn't, no match
-  if (!aUnit || !bUnit) return false;
-
-  // Both have units - check structural equality
-  return unitsEqualInference(aUnit, bUnit);
+interface MatchEnv {
+  payloadVars: Map<string, import('../../core/inference-types').InferencePayloadType>;
+  unitVars: Map<string, InferenceUnitType>;
+  cardVars: Map<string, unknown>;
+  tempVars: Map<string, unknown>;
+  bindingVars: Map<string, unknown>;
+  perspectiveVars: Map<string, unknown>;
+  branchVars: Map<string, unknown>;
 }
 
-/**
- * Check if two inference unit types are equal.
- * Handles both concrete units and unit variables.
- */
-function unitsEqualInference(a: InferenceUnitType, b: InferenceUnitType): boolean {
-  // Handle unit variables
-  if (a.kind === 'var' || b.kind === 'var') {
-    // Variables only match if same id
-    if (a.kind === 'var' && b.kind === 'var') {
-      return a.id === b.id;
+function matchesLensPattern(
+  actual: InferenceCanonicalType,
+  pattern: InferenceCanonicalType,
+  env: MatchEnv,
+): boolean {
+  if (!matchPayload(actual.payload, pattern.payload, env)) return false;
+  if (!matchUnit(actual.unit, pattern.unit, env)) return false;
+  if (!matchAxis(actual.extent.cardinality, pattern.extent.cardinality, env.cardVars, cardinalitiesEqual)) return false;
+  if (!matchAxis(actual.extent.temporality, pattern.extent.temporality, env.tempVars, temporalitiesEqual)) return false;
+  if (!matchAxis(actual.extent.binding, pattern.extent.binding, env.bindingVars, jsonEqual)) return false;
+  if (!matchAxis(actual.extent.perspective, pattern.extent.perspective, env.perspectiveVars, jsonEqual)) return false;
+  if (!matchAxis(actual.extent.branch, pattern.extent.branch, env.branchVars, jsonEqual)) return false;
+  return true;
+}
+
+function matchPayload(
+  actual: import('../../core/inference-types').InferencePayloadType,
+  pattern: import('../../core/inference-types').InferencePayloadType,
+  env: MatchEnv,
+): boolean {
+  if (isPayloadVar(pattern)) {
+    const bound = env.payloadVars.get(pattern.id);
+    if (!bound) {
+      env.payloadVars.set(pattern.id, actual);
+      return true;
     }
-    return false;
+    if (isPayloadVar(bound) || isPayloadVar(actual)) return true;
+    return payloadsEqual(bound as import('../../core/canonical-types').PayloadType, actual as import('../../core/canonical-types').PayloadType);
   }
+  if (isPayloadVar(actual)) return true;
+  return payloadsEqual(actual as import('../../core/canonical-types').PayloadType, pattern as import('../../core/canonical-types').PayloadType);
+}
 
-  // Both are concrete units - structural comparison
-  if (a.kind !== b.kind) return false;
-
-  // For units with nested fields, check them
-  switch (a.kind) {
-    case 'angle':
-      return (b as Extract<InferenceUnitType, { kind: 'angle' }>).unit === a.unit;
-    case 'time':
-      return (b as Extract<InferenceUnitType, { kind: 'time' }>).unit === a.unit;
-    case 'space': {
-      const bSpace = b as Extract<InferenceUnitType, { kind: 'space' }>;
-      return bSpace.unit === a.unit && bSpace.dims === a.dims;
+function matchUnit(
+  actual: InferenceUnitType,
+  pattern: InferenceUnitType,
+  env: MatchEnv,
+): boolean {
+  if (isUnitVar(pattern)) {
+    const bound = env.unitVars.get(pattern.id);
+    if (!bound) {
+      env.unitVars.set(pattern.id, actual);
+      return true;
     }
-    case 'color':
-      return (b as Extract<InferenceUnitType, { kind: 'color' }>).unit === a.unit;
-    case 'none':
-    case 'count':
-      return true; // Kind match is sufficient for simple units
-    default:
-      // Exhaustiveness check
-      const _exhaustive: never = a;
-      return false;
+    if (isUnitVar(bound) || isUnitVar(actual)) return true;
+    return unitsEqual(bound as import('../../core/canonical-types').UnitType, actual as import('../../core/canonical-types').UnitType);
+  }
+  if (isUnitVar(actual)) return true;
+  return unitsEqual(actual as import('../../core/canonical-types').UnitType, pattern as import('../../core/canonical-types').UnitType);
+}
+
+function matchAxis<T, V extends string>(
+  actual: import('../../core/canonical-types').Axis<T, V>,
+  pattern: import('../../core/canonical-types').Axis<T, V>,
+  env: Map<string, unknown>,
+  equals: (a: T, b: T) => boolean,
+): boolean {
+  if (isAxisVar(pattern)) {
+    const key = String(pattern.var);
+    const bound = env.get(key) as T | undefined;
+    if (!isAxisInst(actual)) {
+      return bound === undefined || true;
+    }
+    if (bound === undefined) {
+      env.set(key, actual.value as unknown);
+      return true;
+    }
+    return equals(bound, actual.value);
+  }
+  if (!isAxisInst(actual)) {
+    return true;
+  }
+  if (!isAxisInst(pattern)) {
+    return true;
+  }
+  return equals(actual.value, pattern.value);
+}
+
+function jsonEqual<T>(a: T, b: T): boolean {
+  try {
+    return JSON.stringify(a) === JSON.stringify(b);
+  } catch {
+    return false;
   }
 }
 
