@@ -118,6 +118,50 @@ type CanonicalType = {
 
 ---
 
+### CardinalityPolicy
+
+**Definition**: Per-port behavioral contract declared on cardinality var axes in CT/ICT.
+
+**Type**: type
+
+**Canonical Form**:
+- `relation?: 'uniform' | 'promoteToMany'`
+- `acceptance?: 'oneOrMany' | 'oneOnly' | 'manyOnly'`
+- `instanceBinding?: 'inherit' | { kind:'create'; domainType: DomainTypeId }`
+
+**Source**: [01-type-system.md](./topics/01-type-system.md)
+
+---
+
+### CardinalityRelation
+
+**Definition**: How ports sharing the same cardinality var propagate evidence.
+
+**Type**: concept
+
+**Values**:
+- `uniform` - all ports in group resolve equal
+- `promoteToMany` - many evidence propagates while one-only ports may remain one
+
+**Source**: [01-type-system.md](./topics/01-type-system.md)
+
+---
+
+### CardinalityAcceptance
+
+**Definition**: Per-port flexibility bound for a cardinality var.
+
+**Type**: concept
+
+**Values**:
+- `oneOrMany` - flexible
+- `oneOnly` - fixed one
+- `manyOnly` - fixed many
+
+**Source**: [01-type-system.md](./topics/01-type-system.md)
+
+---
+
 ### Temporality
 
 **Definition**: When a value exists.

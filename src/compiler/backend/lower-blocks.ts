@@ -351,19 +351,19 @@ function inferInstanceContext(
     }
   }
 
-  // Fallback for source blocks (no inputs): look at siblings through shared downstream targets.
+  // Fallback: look at siblings through shared downstream targets.
   // This handles DefaultSourceField → RenderInstances2D ← Array,
   // where DefaultSourceField gets Array's instance via RenderInstances2D's other inputs.
-  if (incomingEdges.length === 0) {
-    const outgoingEdges = edges.filter((e) => e.fromBlock === blockIndex);
-    for (const outEdge of outgoingEdges) {
-      const targetBlock = outEdge.toBlock;
-      for (const edge of edges) {
-        if (edge.toBlock === targetBlock && edge.fromBlock !== blockIndex) {
-          const instanceContext = instanceContextByBlock.get(edge.fromBlock);
-          if (instanceContext !== undefined) {
-            return instanceContext;
-          }
+  // [LAW:one-source-of-truth] Instance ownership still comes from upstream creators;
+  // this only discovers that same instance via shared downstream topology.
+  const outgoingEdges = edges.filter((e) => e.fromBlock === blockIndex);
+  for (const outEdge of outgoingEdges) {
+    const targetBlock = outEdge.toBlock;
+    for (const edge of edges) {
+      if (edge.toBlock === targetBlock && edge.fromBlock !== blockIndex) {
+        const instanceContext = instanceContextByBlock.get(edge.fromBlock);
+        if (instanceContext !== undefined) {
+          return instanceContext;
         }
       }
     }
@@ -1250,6 +1250,73 @@ function buildProvenanceMaps(
   return { constantProvenance, instanceCountProvenance };
 }
 
+/**
+ * Repair unresolved many-cardinality output types that still reference placeholder
+ * block IDs (e.g., Broadcast lowered before an instance context was available).
+ *
+ * This runs after all blocks have been lowered so instance contexts from sibling
+ * branches are available, and rewrites output refs + expr types + slot metadata
+ * to the resolved runtime instance.
+ */
+function repairUnresolvedOutputInstances(
+  builder: OrchestratorIRBuilder,
+  edges: readonly NormalizedEdge[],
+  blockOutputs: Map<BlockIndex, Map<string, ValueRefExpr>>,
+  instanceContextByBlock: Map<BlockIndex, InstanceId>,
+): void {
+  const instances = builder.getInstances();
+  const slotMeta = builder.getSlotMetaInputs() as unknown as Map<number, { readonly type: CanonicalType; readonly stride: number }>;
+
+  for (const [blockIndex, outputs] of blockOutputs) {
+    let hasUndeclaredMany = false;
+    for (const ref of outputs.values()) {
+      const card = requireInst(ref.type.extent.cardinality, 'cardinality');
+      if (card.kind === 'many' && !instances.has(card.instance.instanceId)) {
+        hasUndeclaredMany = true;
+        break;
+      }
+    }
+    if (!hasUndeclaredMany) continue;
+
+    const inferred = inferInstanceContext(blockIndex, edges, instanceContextByBlock);
+    if (!inferred) continue;
+    const decl = instances.get(inferred);
+    if (!decl) continue;
+
+    const resolvedInstance = { domainTypeId: decl.domainType, instanceId: inferred };
+    instanceContextByBlock.set(blockIndex, inferred);
+
+    for (const [portId, ref] of outputs) {
+      const card = requireInst(ref.type.extent.cardinality, 'cardinality');
+      if (card.kind !== 'many' || instances.has(card.instance.instanceId)) continue;
+
+      const rewrittenType = withInstance(ref.type, resolvedInstance);
+      const rewrittenRef: ValueRefExpr = {
+        ...ref,
+        type: rewrittenType,
+        stride: payloadStride(rewrittenType.payload),
+      };
+      outputs.set(portId, rewrittenRef);
+
+      const expr = builder.getValueExpr(ref.id);
+      if (expr) {
+        (expr as { type: CanonicalType }).type = rewrittenType;
+      }
+
+      if (ref.slot !== undefined) {
+        const slotInfo = slotMeta.get(ref.slot as number);
+        if (slotInfo) {
+          slotMeta.set(ref.slot as number, {
+            ...slotInfo,
+            type: rewrittenType,
+            stride: payloadStride(rewrittenType.payload),
+          });
+        }
+      }
+    }
+  }
+}
+
 // =============================================================================
 // Pass 6 Implementation
 // =============================================================================
@@ -1406,6 +1473,15 @@ export function pass6BlockLowering(
 
   // Clear block ID after processing all blocks
   builder.clearCurrentBlock();
+
+  // [LAW:one-source-of-truth] Runtime instance IDs are declared by createInstance();
+  // any placeholder IDs on lowered outputs are repaired once the full graph context is known.
+  repairUnresolvedOutputInstances(
+    builder,
+    edges,
+    blockOutputs,
+    instanceContextByBlock,
+  );
 
   // Build provenance maps post-lowering (source-agnostic, scans edges)
   const { constantProvenance, instanceCountProvenance } = buildProvenanceMaps(

@@ -7,7 +7,14 @@
 import { registerBlock, ALL_CONCRETE_PAYLOADS } from '../registry';
 import { canonicalType, type PayloadType, type CameraProjection, payloadStride, floatConst, intConst, boolConst, vec2Const, vec3Const, vec4Const, colorConst, cameraProjectionConst } from '../../core/canonical-types';
 import { FLOAT, INT, BOOL, CAMERA_PROJECTION } from '../../core/canonical-types';
-import { inferType, payloadVar, unitVar } from '../../core/inference-types';
+import { inferType, payloadVar, unitVar, cardinalityVar } from '../../core/inference-types';
+import { cardinalityVarId } from '../../core/ids';
+
+// [LAW:one-source-of-truth] Const cardinality behavior is declared on CT/ICT.
+const CONST_OUT_CARD = cardinalityVar(cardinalityVarId('const_out_cardinality'), {
+  acceptance: 'oneOnly',
+  instanceBinding: 'inherit',
+});
 
 /**
  * Payload-Generic constant block.
@@ -58,7 +65,7 @@ registerBlock({
   outputs: {
     // Unit is polymorphic (UnitVar) - resolved by pass1 constraint solver
     // Payload is polymorphic (payloadVar) - resolved by pass1 constraint solver
-    out: { label: 'Output', type: inferType(payloadVar('const_payload'), unitVar('const_out')) },
+    out: { label: 'Output', type: inferType(payloadVar('const_payload'), unitVar('const_out'), { cardinality: CONST_OUT_CARD }) },
   },
   lower: ({ ctx, config }) => {
     // Get resolved payload type from ctx.outTypes (populated from pass1 portTypes)

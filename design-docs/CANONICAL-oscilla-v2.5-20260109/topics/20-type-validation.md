@@ -218,6 +218,11 @@ Operational DO/DON'T pairs that encode the enforcement principles into concrete 
 - DO NOT implicitly convert signal↔field/event in evaluator
 - Instead: small named set of ops (broadcast, reduce, state, adapter)
 
+### G9b: Cardinality Policy Declared On Axis Vars
+- DO NOT encode cardinality flexibility/propagation in opaque block mode enums
+- Instead: declare `relation`, `acceptance`, and `instanceBinding` on CT/ICT cardinality vars
+- Instead: compiler derives constraints from those axis declarations
+
 ### G10: Instance Identity Lives in Type
 - DO NOT attach instanceId as separate field when it's in extent.cardinality
 - DO NOT use `string` for IDs when branded IDs exist

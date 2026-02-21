@@ -19,6 +19,7 @@ import {
 import {
   axisInst,
   axisVar,
+  cardinalityVar,
   DEFAULT_BINDING,
   DEFAULT_PERSPECTIVE,
   DEFAULT_BRANCH,
@@ -51,6 +52,23 @@ function makeTypeWithCardinalityVar(varId: string): InferenceCanonicalType {
     unit: { kind: 'none' },
     extent: {
       cardinality: axisVar<CardinalityValue, CardinalityVarId>(varId as CardinalityVarId),
+      temporality: axisInst<TemporalityValue, TemporalityVarId>({ kind: 'continuous' }),
+      binding: axisInst(DEFAULT_BINDING),
+      perspective: axisInst(DEFAULT_PERSPECTIVE),
+      branch: axisInst(DEFAULT_BRANCH),
+    },
+  };
+}
+
+function makeTypeWithCardinalityPolicyVar(varId: string): InferenceCanonicalType {
+  return {
+    payload: { kind: 'float' },
+    unit: { kind: 'none' },
+    extent: {
+      cardinality: cardinalityVar(varId as CardinalityVarId, {
+        relation: 'promoteToMany',
+        acceptance: 'oneOnly',
+      }),
       temporality: axisInst<TemporalityValue, TemporalityVarId>({ kind: 'continuous' }),
       binding: axisInst(DEFAULT_BINDING),
       perspective: axisInst(DEFAULT_PERSPECTIVE),
@@ -193,6 +211,17 @@ describe('applyPartialSubstitution', () => {
     const t = makeTypeWithCardinalityVar('c0');
     const result = applyPartialSubstitution(t, EMPTY_SUBSTITUTION);
     expect(result.extent.cardinality).toEqual(axisVar('c0'));
+  });
+
+  it('preserves cardinality var policy when unresolved', () => {
+    const t = makeTypeWithCardinalityPolicyVar('c0');
+    const result = applyPartialSubstitution(t, EMPTY_SUBSTITUTION);
+    expect(result.extent.cardinality).toMatchObject({
+      kind: 'var',
+      var: 'c0',
+      relation: 'promoteToMany',
+      acceptance: 'oneOnly',
+    });
   });
 
   it('preserves contract through substitution', () => {

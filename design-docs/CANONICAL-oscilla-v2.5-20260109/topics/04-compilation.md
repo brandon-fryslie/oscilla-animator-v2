@@ -234,6 +234,16 @@ Applied to all five axes.
 - **Multi-input op**: Inputs unify for required axes
 - **Combine point**: All incoming edges unify before combine mode applies
 
+### Cardinality Constraint Extraction (CT/ICT-First)
+
+Cardinality constraints are extracted from per-port CT/ICT declarations:
+- Shared cardinality var IDs define port groups
+- Var `relation` defines group propagation (`uniform` or `promoteToMany`)
+- Var `acceptance` defines per-port bounds (`oneOnly`, `manyOnly`, `oneOrMany`)
+- Var `instanceBinding` defines instance source (`inherit` vs `create(domainType)`)
+
+Compiler metadata may assist migration, but is non-canonical. The canonical source for cardinality behavior is the port type axis declaration.
+
 ### Default Resolution (v0)
 
 After unification, resolve all `AxisTag.default`:

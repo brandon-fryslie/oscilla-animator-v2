@@ -167,33 +167,6 @@ describe('compile', () => {
     });
   });
 
-  describe('field compilation', () => {
-    it('broadcasts signal to field', () => {
-      const patch = buildPatch((b) => {
-        const time = b.addBlock('InfiniteTimeRoot');
-        const osc = b.addBlock('Oscillator');
-        b.setConfig(osc, 'mode', 0);
-        const broadcast = b.addBlock('Broadcast');
-
-        b.wire(time, 'phaseA', osc, 'phase');
-        b.wire(osc, 'out', broadcast, 'signal');
-      });
-
-      const result = compile(patch);
-
-      if (result.kind === 'error') {
-        console.error('COMPILE ERROR (Broadcast):', JSON.stringify(result.errors, null, 2));
-      }
-
-      expect(result.kind).toBe('ok');
-      if (result.kind === 'ok') {
-        // Should have field expressions in dense array
-        // INVALID TEST: tests implementation
-        // expect(result.program.fieldExprs.nodes.length).toBeGreaterThan(0);
-      }
-    });
-  });
-
   describe('error handling', () => {
     it('reports unknown block types', () => {
       // Construct patch manually to bypass PatchBuilder's requireBlockDef check

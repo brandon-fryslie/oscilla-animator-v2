@@ -6,11 +6,20 @@
 
 import { registerBlock, ALL_CONCRETE_PAYLOADS } from '../registry';
 
-import { canonicalType, canonicalFieldDef, unitWorld3, payloadStride, floatConst, requireInst } from '../../core/canonical-types';
+import { canonicalType, unitWorld3, payloadStride, floatConst, requireInst } from '../../core/canonical-types';
 import { FLOAT, VEC3 } from '../../core/canonical-types';
+import { inferType, payloadVar, cardinalityVar } from '../../core/inference-types';
+import { cardinalityVarId } from '../../core/ids';
 import { defaultSourceConst } from '../../types';
 import { OpCode } from '../../compiler/ir/types';
 import { rewriteFieldType } from './_helpers';
+
+// [LAW:one-source-of-truth] Field cardinality behavior is declared on CT/ICT port types.
+const LINE_FIELD_CARD = cardinalityVar(cardinalityVarId('line_fields'), {
+  relation: 'promoteToMany',
+  acceptance: 'manyOnly',
+  instanceBinding: 'inherit',
+});
 
 /**
  * LineLayoutUV - Gauge-invariant line layout using placement basis
@@ -39,16 +48,16 @@ registerBlock({
     semantics: 'typeSpecific',
   },
   inputs: {
-    elements: { label: 'Elements', type: canonicalFieldDef(FLOAT, { kind: 'none' }) },
+    elements: { label: 'Elements', type: inferType(payloadVar('line_elements_payload'), { kind: 'none' }, { cardinality: LINE_FIELD_CARD }) },
     x0: { label: 'Start X', type: canonicalType(FLOAT), defaultValue: 0.2, defaultSource: defaultSourceConst(0.2), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
     y0: { label: 'Start Y', type: canonicalType(FLOAT), defaultValue: 0.2, defaultSource: defaultSourceConst(0.2), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
     x1: { label: 'End X', type: canonicalType(FLOAT), defaultValue: 0.8, defaultSource: defaultSourceConst(0.8), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
     y1: { label: 'End Y', type: canonicalType(FLOAT), defaultValue: 0.8, defaultSource: defaultSourceConst(0.8), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
   },
   outputs: {
-    position: { label: 'Position', type: canonicalFieldDef(VEC3, unitWorld3()) },
-    rotation: { label: 'Rotation', type: canonicalFieldDef(FLOAT, { kind: 'none' }) },
-    scale: { label: 'Scale', type: canonicalFieldDef(FLOAT, { kind: 'none' }) },
+    position: { label: 'Position', type: inferType(VEC3, unitWorld3(), { cardinality: LINE_FIELD_CARD }) },
+    rotation: { label: 'Rotation', type: inferType(FLOAT, { kind: 'none' }, { cardinality: LINE_FIELD_CARD }) },
+    scale: { label: 'Scale', type: inferType(FLOAT, { kind: 'none' }, { cardinality: LINE_FIELD_CARD }) },
   },
   lower: ({ ctx, inputsById }) => {
     const elementsInput = inputsById.elements;

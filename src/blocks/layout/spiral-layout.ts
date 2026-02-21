@@ -13,11 +13,20 @@
  */
 
 import { registerBlock, ALL_CONCRETE_PAYLOADS } from '../registry';
-import { canonicalType, canonicalFieldDef, unitWorld3, unitTurns, contractWrap01, payloadStride, floatConst, requireInst } from '../../core/canonical-types';
+import { canonicalType, unitWorld3, unitTurns, contractWrap01, payloadStride, floatConst, requireInst } from '../../core/canonical-types';
 import { FLOAT, VEC3 } from '../../core/canonical-types';
+import { inferType, payloadVar, cardinalityVar } from '../../core/inference-types';
+import { cardinalityVarId } from '../../core/ids';
 import { defaultSourceConst } from '../../types';
 import { OpCode } from '../../compiler/ir/types';
 import { rewriteFieldType } from './_helpers';
+
+// [LAW:one-source-of-truth] Field cardinality behavior is declared on CT/ICT port types.
+const SPIRAL_FIELD_CARD = cardinalityVar(cardinalityVarId('spiral_fields'), {
+  relation: 'promoteToMany',
+  acceptance: 'manyOnly',
+  instanceBinding: 'inherit',
+});
 
 registerBlock({
   type: 'SpiralLayout',
@@ -39,15 +48,15 @@ registerBlock({
     semantics: 'typeSpecific',
   },
   inputs: {
-    elements: { label: 'Elements', type: canonicalFieldDef(FLOAT, { kind: 'none' }) },
+    elements: { label: 'Elements', type: inferType(payloadVar('spiral_elements_payload'), { kind: 'none' }, { cardinality: SPIRAL_FIELD_CARD }) },
     turns: { label: 'Turns', type: canonicalType(FLOAT), defaultValue: 3.0, defaultSource: defaultSourceConst(3.0), exposedAsPort: true, uiHint: { kind: 'slider', min: 0.1, max: 20, step: 0.1 } },
     expansion: { label: 'Expansion', type: canonicalType(FLOAT), defaultValue: 0.3, defaultSource: defaultSourceConst(0.3), exposedAsPort: true, uiHint: { kind: 'slider', min: 0.01, max: 0.5, step: 0.01 } },
     phase: { label: 'Phase', type: canonicalType(FLOAT, unitTurns(), undefined, contractWrap01()), defaultValue: 0, defaultSource: defaultSourceConst(0), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
   },
   outputs: {
-    position: { label: 'Position', type: canonicalFieldDef(VEC3, unitWorld3()) },
-    rotation: { label: 'Rotation', type: canonicalFieldDef(FLOAT, { kind: 'none' }) },
-    scale: { label: 'Scale', type: canonicalFieldDef(FLOAT, { kind: 'none' }) },
+    position: { label: 'Position', type: inferType(VEC3, unitWorld3(), { cardinality: SPIRAL_FIELD_CARD }) },
+    rotation: { label: 'Rotation', type: inferType(FLOAT, { kind: 'none' }, { cardinality: SPIRAL_FIELD_CARD }) },
+    scale: { label: 'Scale', type: inferType(FLOAT, { kind: 'none' }, { cardinality: SPIRAL_FIELD_CARD }) },
   },
   lower: ({ ctx, inputsById }) => {
     const elementsInput = inputsById.elements;

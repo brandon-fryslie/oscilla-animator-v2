@@ -66,6 +66,11 @@ CanonicalType Guardrails
 - Instead: require an explicit adapter/lens node.
 - Example: signal→field uses Broadcast (explicit).
 
+9b) Cardinality Flexibility Is Axis Data
+- DO NOT encode cardinality flexibility/propagation in block-mode enums or ad-hoc compiler tables.
+- Instead: declare cardinality behavior on CT/ICT cardinality vars (`relation`, `acceptance`, `instanceBinding`) and derive constraints from those declarations.
+- Example: mixed layout block uses signal ports with `acceptance:'oneOnly'` and field ports sharing a var with `relation:'promoteToMany'`.
+
 10) Instance Identity Lives in Type, Not Node Fields
 - DO NOT attach instanceId as a separate field on field expressions/steps when it’s already in extent.cardinality.
 - Instead: require/derive via requireManyInstance(type).

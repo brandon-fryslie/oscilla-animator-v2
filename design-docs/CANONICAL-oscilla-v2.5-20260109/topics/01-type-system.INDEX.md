@@ -15,6 +15,7 @@ index_version: 2.0
 - **Single Type Authority**: CanonicalType is the ONLY type authority for all values [L17-41]
 - **MUST NOT** store signal/field/event as authoritative — derive via `deriveKind()` [L23-31]
 - **MUST** use `Axis<T, V>` (var|inst) for all axis representations [L222-237]
+- **MUST** declare cardinality flexibility/propagation on cardinality var policy (`relation`, `acceptance`, `instanceBinding`) [L340+]
 - **MUST** distinguish PayloadType (domain model) from TypeScript `number` (implementation detail) [L108]
 - **Domain is NOT a wire value** — compile-time resource only, erased at runtime [L700-704]
 - **Discrete never implicitly fills time** — requires explicit stateful operator [L344-346]
@@ -35,6 +36,7 @@ index_version: 2.0
 - **Extent** [L202-208] - Five-axis coordinate (cardinality, temporality, binding, perspective, branch)
 - **Axis\<T, V\>** [L228-231] - Polymorphic axis: `{ kind: 'var'; var: V } | { kind: 'inst'; value: T }`
 - **CardinalityValue** [L255-258] - 3-variant union (zero, one, many with InstanceRef)
+- **CardinalityPolicy** [L340+] - Per-var contract for propagation, flexibility bounds, and instance source
 - **TemporalityValue** [L324-326] - 2-variant union (continuous, discrete)
 - **BindingValue** [L361-365] - 4 nominal tags (unbound, weak, strong, identity)
 - **PerspectiveValue** [L399] - v0: `{ kind: 'default' }` only; v1+: world, view, screen [L402-406]

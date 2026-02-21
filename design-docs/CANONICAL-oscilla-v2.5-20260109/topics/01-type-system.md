@@ -331,15 +331,34 @@ Two `many` values are aligned iff they reference the **same InstanceId**. No map
 
 ### Cardinality Type Variables (Implemented)
 
-The cardinality axis supports type variables via `Axis<CardinalityValue, CardinalityVarId>`:
-- Blocks declare ports with cardinality vars for polymorphic behavior (signal OR field)
-- A dedicated 5-phase cardinality solver resolves all vars to concrete values
-- `Substitution` maps carry `cardinalities: Map<CardinalityVarId, CardinalityValue>` and `instances: Map<InstanceVarId, InstanceRef>`
-- After solving, `finalizeInferenceType()` replaces all vars with concrete values
+Cardinality polymorphism is declared directly on CT/ICT, not in parallel block-mode metadata.
 
-Constraint types: `equal` (ports share cardinality), `clampOne` (force signal), `forceMany` (force field), `zipBroadcast` (mixed one+many allowed, many wins).
+```typescript
+type CardinalityPolicy = {
+  relation?: 'uniform' | 'promoteToMany';
+  acceptance?: 'oneOrMany' | 'oneOnly' | 'manyOnly';
+  instanceBinding?: 'inherit' | { kind: 'create'; domainType: DomainTypeId };
+};
 
-Evidence-free groups default to `one` (signal chain). This is correct — signals are the common case; field semantics require explicit evidence.
+type Cardinality =
+  | { kind: 'inst'; value: CardinalityValue }
+  | { kind: 'var'; var: CardinalityVarId } & CardinalityPolicy;
+```
+
+Semantics:
+- `relation`: cross-port propagation for ports sharing the same cardinality var
+- `acceptance`: per-port flexibility bound (fixed one, fixed many, or flexible)
+- `instanceBinding`: where many-cardinality instance identity comes from (inherit or create)
+
+Group membership is derived from shared `CardinalityVarId` on port types. No external group bookkeeping is canonical.
+
+The solver still resolves to concrete substitutions:
+- `cardinalities: Map<CardinalityVarId, CardinalityValue>`
+- `instances: Map<InstanceVarId, InstanceRef>`
+
+After solving, `finalizeInferenceType()` replaces all cardinality vars with concrete instantiated axes.
+
+Evidence-free groups default to `one` (signal chain). Field behavior requires explicit many evidence or `manyOnly`.
 
 ---
 

@@ -16,11 +16,20 @@
  */
 
 import { registerBlock, ALL_CONCRETE_PAYLOADS } from '../registry';
-import { canonicalType, canonicalFieldDef, unitWorld3, unitTurns, contractWrap01, payloadStride, floatConst, requireInst } from '../../core/canonical-types';
+import { canonicalType, unitWorld3, unitTurns, contractWrap01, payloadStride, floatConst, requireInst } from '../../core/canonical-types';
 import { FLOAT, VEC3 } from '../../core/canonical-types';
+import { inferType, payloadVar, cardinalityVar } from '../../core/inference-types';
+import { cardinalityVarId } from '../../core/ids';
 import { defaultSourceConst } from '../../types';
 import { OpCode } from '../../compiler/ir/types';
 import { rewriteFieldType, resolveShapeRef } from './_helpers';
+
+// [LAW:one-source-of-truth] Field cardinality behavior is declared on CT/ICT port types.
+const PATH_FIELD_CARD = cardinalityVar(cardinalityVarId('path_fields'), {
+  relation: 'promoteToMany',
+  acceptance: 'manyOnly',
+  instanceBinding: 'inherit',
+});
 
 registerBlock({
   type: 'PathLayout',
@@ -42,14 +51,14 @@ registerBlock({
     semantics: 'typeSpecific',
   },
   inputs: {
-    elements: { label: 'Elements', type: canonicalFieldDef(FLOAT, { kind: 'none' }) },
+    elements: { label: 'Elements', type: inferType(payloadVar('path_elements_payload'), { kind: 'none' }, { cardinality: PATH_FIELD_CARD }) },
     shape: { label: 'Shape', type: canonicalType(FLOAT), defaulting: 'forbidden' },
     spacing: { label: 'Spacing', type: canonicalType(FLOAT), defaultValue: 1.0, defaultSource: defaultSourceConst(1.0), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 5, step: 0.01 } },
     offset: { label: 'Offset', type: canonicalType(FLOAT, unitTurns(), undefined, contractWrap01()), defaultValue: 0, defaultSource: defaultSourceConst(0), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
   },
   outputs: {
-    position: { label: 'Position', type: canonicalFieldDef(VEC3, unitWorld3()) },
-    rotation: { label: 'Rotation', type: canonicalFieldDef(FLOAT, { kind: 'none' }) },
+    position: { label: 'Position', type: inferType(VEC3, unitWorld3(), { cardinality: PATH_FIELD_CARD }) },
+    rotation: { label: 'Rotation', type: inferType(FLOAT, { kind: 'none' }, { cardinality: PATH_FIELD_CARD }) },
   },
   lower: ({ ctx, inputsById }) => {
     const elementsInput = inputsById.elements;

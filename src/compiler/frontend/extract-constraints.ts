@@ -28,7 +28,7 @@ import { getBlockCardinalityMetadata } from '../../blocks/registry';
 import type { InferenceCanonicalType } from '../../core/inference-types';
 import { isPayloadVar, isUnitVar, isConcretePayload, isConcreteUnit } from '../../core/inference-types';
 import type { PayloadType, UnitType, CardinalityValue, Axis } from '../../core/canonical-types';
-import { axisVar, axisInst, isAxisInst, isAxisVar, instanceRef, isMany } from '../../core/canonical-types';
+import { axisVar, axisInst, isAxisInst, isAxisVar, instanceRef, isMany, resolveCardinalityPolicy } from '../../core/canonical-types';
 import { cardinalityVarId, instanceVarId, type CardinalityVarId } from '../../core/ids';
 import type { CardinalityConstraint, InstanceTerm } from './cardinality/solve';
 import type { PayloadUnitConstraint, ConstraintOrigin } from './payload-unit/solve';
@@ -257,6 +257,7 @@ export function extractConstraints(
  * Format:
  * - payloadVar: `p:{blockId}:{templateVarName}` (block-scoped generic)
  * - unitVar:    `u:{blockId}:{templateVarName}` (block-scoped generic)
+ * - cardVar:    `c:{blockId}:{templateVarName}` (block-scoped cardinality generic)
  *
  * This preserves the "ports sharing the same template var within one block instance
  * resolve to the same type" property, while ensuring different block instances get
@@ -282,6 +283,20 @@ function instantiateTemplateVars(
   if (isUnitVar(type.unit)) {
     const scopedId = `u:${blockId}:${type.unit.id}`;
     result = { ...result, unit: { kind: 'var' as const, id: scopedId } };
+  }
+  if (isAxisVar(type.extent.cardinality)) {
+    // [LAW:one-source-of-truth] Cardinality template vars are instance-scoped exactly like payload/unit vars.
+    const scopedVar = cardinalityVarId(`c:${blockId}:${type.extent.cardinality.var as string}`);
+    result = {
+      ...result,
+      extent: {
+        ...result.extent,
+        cardinality: {
+          ...type.extent.cardinality,
+          var: scopedVar,
+        },
+      },
+    };
   }
   return result;
 }
@@ -363,6 +378,19 @@ function rewriteCardinalityAxes(
     blockPorts.push(key);
   }
 
+  // CT/ICT cardinality policy takes precedence when explicitly declared.
+  // [LAW:one-source-of-truth] Port type declarations are the authority for cardinality behavior.
+  if (hasExplicitCardinalityPolicy(portBaseTypes, blockPorts)) {
+    rewriteFromDeclaredCardinalityPolicy(block, portBaseTypes, constraints, blockPorts);
+    for (const key of blockPorts) {
+      const type = portBaseTypes.get(key);
+      if (type) {
+        baseCardinalityAxis.set(key, normalizeCardinalityForSolver(type.extent.cardinality));
+      }
+    }
+    return;
+  }
+
   // Lane topology takes priority if present
   if (def.laneTopology) {
     rewriteForLaneTopology(block, def, portBaseTypes, baseCardinalityAxis, constraints, blockPorts);
@@ -394,6 +422,130 @@ function rewriteCardinalityAxes(
     const type = portBaseTypes.get(key);
     if (type) {
       baseCardinalityAxis.set(key, normalizeCardinalityForSolver(type.extent.cardinality));
+    }
+  }
+}
+
+function hasExplicitCardinalityPolicy(
+  portBaseTypes: Map<DraftPortKey, InferenceCanonicalType>,
+  blockPorts: DraftPortKey[],
+): boolean {
+  for (const key of blockPorts) {
+    const type = portBaseTypes.get(key);
+    if (!type || !isAxisVar(type.extent.cardinality)) continue;
+    const axis = type.extent.cardinality as any;
+    if (axis.relation !== undefined || axis.acceptance !== undefined || axis.instanceBinding !== undefined) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Read cardinality behavior directly from declared CT/ICT cardinality vars.
+ *
+ * - shared var id => group membership
+ * - relation => equal vs zipBroadcast
+ * - acceptance => clampOne / forceMany
+ * - instanceBinding => inherit vs create(domainType) for many-only ports
+ */
+function rewriteFromDeclaredCardinalityPolicy(
+  block: DraftBlock,
+  portBaseTypes: Map<DraftPortKey, InferenceCanonicalType>,
+  constraints: CardinalityConstraint[],
+  blockPorts: DraftPortKey[],
+): void {
+  const groupMembers = new Map<string, DraftPortKey[]>();
+  const groupRelation = new Map<string, 'uniform' | 'promoteToMany'>();
+  const groupInstanceBinding = new Map<string, 'inherit' | { kind: 'create'; domainType: string }>();
+
+  for (const key of blockPorts) {
+    const type = portBaseTypes.get(key);
+    if (!type) continue;
+
+    const axis = type.extent.cardinality;
+    if (isAxisVar(axis)) {
+      const policy = resolveCardinalityPolicy(axis);
+      if (!policy) continue;
+
+      const groupId = axis.var as string;
+      const members = groupMembers.get(groupId) ?? [];
+      members.push(key);
+      groupMembers.set(groupId, members);
+
+      const relation = policy.relation;
+      const existingRelation = groupRelation.get(groupId);
+      if (existingRelation && existingRelation !== relation) {
+        throw new Error(`Conflicting cardinality relation for group ${groupId} in block ${block.type}`);
+      }
+      groupRelation.set(groupId, relation);
+
+      const existingBinding = groupInstanceBinding.get(groupId);
+      if (!existingBinding) {
+        groupInstanceBinding.set(
+          groupId,
+          policy.instanceBinding === 'inherit'
+            ? 'inherit'
+            : { kind: 'create', domainType: policy.instanceBinding.domainType as string },
+        );
+      } else {
+        const sameKind = existingBinding === 'inherit'
+          ? policy.instanceBinding === 'inherit'
+          : policy.instanceBinding !== 'inherit'
+            && existingBinding.kind === policy.instanceBinding.kind
+            && existingBinding.domainType === (policy.instanceBinding.domainType as string);
+        if (!sameKind) {
+          throw new Error(`Conflicting instanceBinding for cardinality group ${groupId} in block ${block.type}`);
+        }
+      }
+
+      if (policy.acceptance === 'oneOnly') {
+        constraints.push({
+          kind: 'clampOne',
+          port: key,
+          origin: { kind: 'blockRule', blockId: block.id, blockType: block.type, rule: 'declared.acceptance.oneOnly' },
+        });
+      } else if (policy.acceptance === 'manyOnly') {
+        const binding = groupInstanceBinding.get(groupId);
+        const instTerm: InstanceTerm = (!binding || binding === 'inherit')
+          ? { kind: 'var', id: instanceVarId(`declared:${block.id}:${groupId}`) }
+          : { kind: 'inst', ref: instanceRef(binding.domainType, block.id) };
+        constraints.push({
+          kind: 'forceMany',
+          port: key,
+          instance: instTerm,
+          origin: { kind: 'blockRule', blockId: block.id, blockType: block.type, rule: 'declared.acceptance.manyOnly' },
+        });
+      }
+    } else if (axis.value.kind === 'one') {
+      // Concrete one ports are fixed signal by declaration.
+      constraints.push({
+        kind: 'clampOne',
+        port: key,
+        origin: { kind: 'blockRule', blockId: block.id, blockType: block.type, rule: 'declared.inst.one' },
+      });
+    }
+  }
+
+  for (const [groupId, members] of groupMembers) {
+    if (members.length <= 1) continue;
+    const relation = groupRelation.get(groupId) ?? 'uniform';
+    const sorted = [...members].sort();
+    if (relation === 'promoteToMany') {
+      constraints.push({
+        kind: 'zipBroadcast',
+        ports: sorted,
+        origin: { kind: 'blockRule', blockId: block.id, blockType: block.type, rule: 'declared.relation.promoteToMany' },
+      });
+    } else {
+      for (let i = 1; i < sorted.length; i++) {
+        constraints.push({
+          kind: 'equal',
+          a: sorted[0],
+          b: sorted[i],
+          origin: { kind: 'blockRule', blockId: block.id, blockType: block.type, rule: 'declared.relation.uniform' },
+        });
+      }
     }
   }
 }

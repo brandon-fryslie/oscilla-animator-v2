@@ -18,8 +18,20 @@
  */
 
 import { registerBlock } from '../registry';
-import { canonicalFieldDef, unitWorld3, unitHsl, requireInst, VEC3, COLOR, FLOAT } from '../../core/canonical-types';
+import { unitWorld3, unitHsl, requireInst, VEC3, COLOR, FLOAT } from '../../core/canonical-types';
+import { inferType, cardinalityVar } from '../../core/inference-types';
+import { cardinalityVarId } from '../../core/ids';
 import { defaultSourceConst, canonicalType } from '../../types';
+
+// [LAW:one-source-of-truth] Per-port cardinality behavior is declared on CT/ICT.
+const RENDER_POS_CARD = cardinalityVar(cardinalityVarId('render_pos'), {
+  acceptance: 'manyOnly',
+  instanceBinding: 'inherit',
+});
+const RENDER_COLOR_CARD = cardinalityVar(cardinalityVarId('render_color'), {
+  acceptance: 'oneOrMany',
+  instanceBinding: 'inherit',
+});
 
 registerBlock({
   type: 'RenderInstances2D',
@@ -35,8 +47,8 @@ registerBlock({
     broadcastPolicy: 'allowZipSig',
   },
   inputs: {
-    pos: { label: 'Position', type: canonicalFieldDef(VEC3, unitWorld3()) },
-    color: { label: 'Color', type: canonicalFieldDef(COLOR, unitHsl()) },
+    pos: { label: 'Position', type: inferType(VEC3, unitWorld3(), { cardinality: RENDER_POS_CARD }) },
+    color: { label: 'Color', type: inferType(COLOR, unitHsl(), { cardinality: RENDER_COLOR_CARD }) },
     // Shape input REMOVED - now looked up automatically from instance
     scale: {
       label: 'Scale',

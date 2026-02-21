@@ -407,6 +407,7 @@ A **cardinality-generic block** is a block whose semantic function is defined pe
 - **Field** (cardinality: many(instance)) — N lanes aligned to a specific InstanceRef
 
 Cardinality-generic blocks are lane-local and do not perform reduction or aggregation across lanes.
+Cardinality behavior is declared per-port in CT/ICT via cardinality var policy (`relation`, `acceptance`, `instanceBinding`), not by block-level mode names.
 
 ### Formal Contract
 
@@ -419,6 +420,12 @@ A block B is cardinality-generic iff:
 3. **Instance alignment preservation**: If cardinality is many(instance), all many inputs and outputs carry the same InstanceRef after type resolution. Mismatch is a type error.
 
 4. **Deterministic per-lane execution**: Given identical inputs, state, and time, the block produces identical outputs per lane independent of physical ordering or batching.
+
+5. **Type-declared behavior**: Cardinality flexibility and propagation are derivable from port types alone:
+   - Shared var id = same cardinality group
+   - `relation` = group propagation rule
+   - `acceptance` = per-port fixed/flexible bound
+   - `instanceBinding` = inherit vs create semantics for many
 
 ### Which Blocks Are Cardinality-Generic
 

@@ -76,10 +76,18 @@ export {
 
 export {
   type CardinalityValue,
+  type CardinalityRelation,
+  type CardinalityAcceptance,
+  type CardinalityInstanceBinding,
+  type CardinalityPolicy,
+  type ResolvedCardinalityPolicy,
   type Cardinality,
   cardinalityZero,
   cardinalityOne,
   cardinalityMany,
+  cardinalityVar,
+  DEFAULT_CARDINALITY_POLICY,
+  resolveCardinalityPolicy,
   isMany,
   isOne,
   isZero,

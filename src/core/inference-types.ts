@@ -11,8 +11,32 @@
  * - One function (finalizeInferenceType) converts inference → canonical, or fails
  */
 
-import type { PayloadType, UnitType, Extent, CanonicalType, InstanceRef, ValueContract, CardinalityValue, TemporalityValue, BindingValue, PerspectiveValue, BranchValue } from './canonical-types';
-import { axisInst, isAxisVar, isAxisInst, type Axis, DEFAULT_BINDING, DEFAULT_PERSPECTIVE, DEFAULT_BRANCH, UNBOUND_INSTANCE } from './canonical-types';
+import type {
+  PayloadType,
+  UnitType,
+  Extent,
+  CanonicalType,
+  InstanceRef,
+  ValueContract,
+  CardinalityValue,
+  TemporalityValue,
+  BindingValue,
+  PerspectiveValue,
+  BranchValue,
+  CardinalityPolicy,
+  Cardinality,
+} from './canonical-types';
+import {
+  axisInst,
+  isAxisVar,
+  isAxisInst,
+  type Axis,
+  DEFAULT_BINDING,
+  DEFAULT_PERSPECTIVE,
+  DEFAULT_BRANCH,
+  UNBOUND_INSTANCE,
+  cardinalityVar as canonicalCardinalityVar,
+} from './canonical-types';
 import type { CardinalityVarId, TemporalityVarId, BindingVarId, PerspectiveVarId, BranchVarId } from './ids';
 
 // =============================================================================
@@ -64,6 +88,24 @@ export function isConcreteUnit(u: InferenceUnitType): u is UnitType {
 }
 
 // =============================================================================
+// Inference Cardinality Axis Helpers
+// =============================================================================
+
+/**
+ * Create a cardinality var axis for inference-time CT/ICT declarations.
+ * // [LAW:one-source-of-truth] Cardinality behavior is declared on CT/ICT, not external metadata.
+ */
+export function inferCardinalityVar(
+  id: CardinalityVarId,
+  policy?: CardinalityPolicy,
+): Cardinality {
+  return canonicalCardinalityVar(id, policy);
+}
+
+// Keep ergonomic alias for block authors
+export const cardinalityVar = inferCardinalityVar;
+
+// =============================================================================
 // InferenceCanonicalType
 // =============================================================================
 
@@ -73,6 +115,9 @@ export function isConcreteUnit(u: InferenceUnitType): u is UnitType {
  *
  * CanonicalType is assignable to InferenceCanonicalType (every final type
  * is also a valid inference type), but not vice versa.
+ *
+ * Cardinality flexibility lives on extent.cardinality when that axis is a var
+ * (via CardinalityPolicy fields declared on CT/ICT).
  *
  * Note: contract is NOT inferred. It's an explicit declaration that can be
  * specified on block definitions, but there are no contract variables.

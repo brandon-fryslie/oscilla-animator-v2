@@ -276,4 +276,33 @@ describe('extractConstraints', () => {
     );
     expect(cpForce.length).toBe(1);
   });
+
+  it('instantiates cardinality template vars per block instance', () => {
+    const patch = buildPatch((b) => {
+      b.addBlock('Expression');
+      b.addBlock('Expression');
+    });
+    const { graph: g } = buildDraftGraph(patch);
+    const constraints = extractConstraints(g, BLOCK_DEFS_BY_TYPE);
+
+    const exprBlocks = g.blocks.filter((b) => b.type === 'Expression');
+    expect(exprBlocks).toHaveLength(2);
+
+    const refsA = draftPortKey(exprBlocks[0].id, 'refs', 'in');
+    const refsB = draftPortKey(exprBlocks[1].id, 'refs', 'in');
+
+    const axisA = constraints.portBaseTypes.get(refsA)?.extent.cardinality;
+    const axisB = constraints.portBaseTypes.get(refsB)?.extent.cardinality;
+
+    expect(axisA).toBeDefined();
+    expect(axisB).toBeDefined();
+    expect(isAxisVar(axisA!)).toBe(true);
+    expect(isAxisVar(axisB!)).toBe(true);
+
+    if (isAxisVar(axisA!) && isAxisVar(axisB!)) {
+      expect(axisA.var).not.toBe(axisB.var);
+      expect(axisA.var as string).toBe(`c:${exprBlocks[0].id}:expr_refs`);
+      expect(axisB.var as string).toBe(`c:${exprBlocks[1].id}:expr_refs`);
+    }
+  });
 });

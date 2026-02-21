@@ -6,11 +6,20 @@
 
 import { registerBlock, ALL_CONCRETE_PAYLOADS } from '../registry';
 
-import { canonicalType, canonicalFieldDef, unitWorld3, payloadStride, floatConst, requireInst } from '../../core/canonical-types';
+import { canonicalType, unitWorld3, payloadStride, floatConst, requireInst } from '../../core/canonical-types';
 import { FLOAT, INT, VEC3 } from '../../core/canonical-types';
+import { inferType, payloadVar, cardinalityVar } from '../../core/inference-types';
+import { cardinalityVarId } from '../../core/ids';
 import { defaultSourceConst } from '../../types';
 import { OpCode } from '../../compiler/ir/types';
 import { rewriteFieldType } from './_helpers';
+
+// [LAW:one-source-of-truth] Field cardinality behavior is declared on CT/ICT port types.
+const GRID_FIELD_CARD = cardinalityVar(cardinalityVarId('grid_fields'), {
+  relation: 'promoteToMany',
+  acceptance: 'manyOnly',
+  instanceBinding: 'inherit',
+});
 
 /**
  * GridLayoutUV - Gauge-invariant grid layout using placement basis
@@ -39,14 +48,14 @@ registerBlock({
     semantics: 'typeSpecific',
   },
   inputs: {
-    elements: { label: 'Elements', type: canonicalFieldDef(FLOAT, { kind: 'none' }) },
+    elements: { label: 'Elements', type: inferType(payloadVar('grid_elements_payload'), { kind: 'none' }, { cardinality: GRID_FIELD_CARD }) },
     cols: { label: 'Columns', type: canonicalType(INT), defaultValue: 5, defaultSource: defaultSourceConst(5), exposedAsPort: true, uiHint: { kind: 'slider', min: 1, max: 100, step: 1 } },
     rows: { label: 'Rows', type: canonicalType(INT), defaultValue: 5, defaultSource: defaultSourceConst(5), exposedAsPort: true, uiHint: { kind: 'slider', min: 1, max: 100, step: 1 } },
   },
   outputs: {
-    position: { label: 'Position', type: canonicalFieldDef(VEC3, unitWorld3()) },
-    rotation: { label: 'Rotation', type: canonicalFieldDef(FLOAT, { kind: 'none' }) },
-    scale: { label: 'Scale', type: canonicalFieldDef(FLOAT, { kind: 'none' }) },
+    position: { label: 'Position', type: inferType(VEC3, unitWorld3(), { cardinality: GRID_FIELD_CARD }) },
+    rotation: { label: 'Rotation', type: inferType(FLOAT, { kind: 'none' }, { cardinality: GRID_FIELD_CARD }) },
+    scale: { label: 'Scale', type: inferType(FLOAT, { kind: 'none' }, { cardinality: GRID_FIELD_CARD }) },
   },
   lower: ({ ctx, inputsById }) => {
     const elementsInput = inputsById.elements;

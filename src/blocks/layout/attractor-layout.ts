@@ -14,11 +14,20 @@
  */
 
 import { registerBlock } from '../registry';
-import { canonicalType, canonicalFieldDef, unitWorld3, payloadStride, floatConst, requireInst } from '../../core/canonical-types';
+import { canonicalType, unitWorld3, payloadStride, floatConst, requireInst } from '../../core/canonical-types';
 import { FLOAT, VEC3 } from '../../core/canonical-types';
+import { inferType, cardinalityVar } from '../../core/inference-types';
+import { cardinalityVarId } from '../../core/ids';
 import { defaultSourceConst } from '../../types';
 import { OpCode } from '../../compiler/ir/types';
 import { rewriteFieldType } from './_helpers';
+
+// [LAW:one-source-of-truth] Field cardinality behavior is declared on CT/ICT port types.
+const ATTRACTOR_FIELD_CARD = cardinalityVar(cardinalityVarId('attractor_fields'), {
+  relation: 'promoteToMany',
+  acceptance: 'manyOnly',
+  instanceBinding: 'inherit',
+});
 
 registerBlock({
   type: 'AttractorLayout',
@@ -34,12 +43,12 @@ registerBlock({
     broadcastPolicy: 'allowZipSig',
   },
   inputs: {
-    positions: { label: 'Positions', type: canonicalFieldDef(VEC3, unitWorld3()), defaulting: 'forbidden' },
+    positions: { label: 'Positions', type: inferType(VEC3, unitWorld3(), { cardinality: ATTRACTOR_FIELD_CARD }), defaulting: 'forbidden' },
     target: { label: 'Target', type: canonicalType(VEC3, unitWorld3()), defaultValue: [0.5, 0.5, 0], defaultSource: defaultSourceConst([0.5, 0.5, 0]), exposedAsPort: true },
     strength: { label: 'Strength', type: canonicalType(FLOAT), defaultValue: 0.5, defaultSource: defaultSourceConst(0.5), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
   },
   outputs: {
-    position: { label: 'Position', type: canonicalFieldDef(VEC3, unitWorld3()) },
+    position: { label: 'Position', type: inferType(VEC3, unitWorld3(), { cardinality: ATTRACTOR_FIELD_CARD }) },
   },
   lower: ({ ctx, inputsById }) => {
     const positionsInput = inputsById.positions;

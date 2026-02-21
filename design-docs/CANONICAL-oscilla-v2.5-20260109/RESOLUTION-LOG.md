@@ -2066,3 +2066,31 @@ PathGeometryTemplate references `topologyId: number` but the spec never defines 
 | **Phase 11 (External Input System)** | 2026-02-06 | +4 | +1 | +3 |
 | **Total** | — | **106** | **23** | **124** |
 
+
+---
+
+### D43: Cardinality Policy Moves Into CT/ICT
+
+**Date**: 2026-02-21
+
+**Category**: Structural Update (T2)
+
+**Source**: Cardinality redesign handoff (per-port flexibility + propagation)
+
+**The Problem**:
+Cardinality behavior was expressed through block-level mode names (`preserve`, `transform`, `signalOnly`, `fieldOnly`) plus broadcast policy. That model cannot represent mixed per-port requirements without extractor-specific rewrites and drift.
+
+**Resolution**:
+Canonical type declarations now own cardinality behavior via cardinality var policy:
+- `relation` (`uniform` | `promoteToMany`)
+- `acceptance` (`oneOrMany` | `oneOnly` | `manyOnly`)
+- `instanceBinding` (`inherit` | `create(domainType)`)
+
+Shared cardinality var IDs define groups. Extractors/solvers read this directly from CT/ICT.
+
+**Impact**:
+- Topic 01 updated with policy-based cardinality axis
+- Topic 04 updated with CT/ICT-first extraction contract
+- Legacy mode metadata reclassified as migration-only compatibility
+
+**Approved**: 2026-02-21 by Brandon Fryslie

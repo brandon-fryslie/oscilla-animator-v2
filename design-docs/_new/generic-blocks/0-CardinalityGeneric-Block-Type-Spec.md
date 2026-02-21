@@ -155,23 +155,23 @@ Diagnostics must include TargetRef attribution to the block and the specific por
 
 ⸻
 
-8. Registry Metadata (Required for Crispness)
+8. Port Type Declaration Contract (Required)
 
-Each block kind must declare, in a table-driven registry used by the compiler:
-	•	cardinalityMode:
-	•	'preserve' (cardinality-generic)
-	•	'transform' (explicitly changes cardinality)
-	•	'signalOnly'
-	•	'fieldOnly'
-	•	laneCoupling:
-	•	'laneLocal' (eligible for cardinality-generic)
-	•	'laneCoupled' (ineligible)
-	•	broadcastPolicy:
-	•	'allowZipSig' (signals may be consumed alongside fields via zipSig)
-	•	'requireBroadcastExpr' (compiler must materialize broadcasts explicitly)
-	•	'disallowSignalMix' (only all-field or all-signal instantiations)
+Each block kind must declare cardinality behavior on per-port CT/ICT declarations:
+	•	`cardinality var id`: ports sharing id are in one propagation group
+	•	`relation`:
+	•	`uniform` (all members resolve equal)
+	•	`promoteToMany` (many evidence propagates; one-only ports can stay one)
+	•	`acceptance`:
+	•	`oneOrMany` (flexible)
+	•	`oneOnly` (fixed signal)
+	•	`manyOnly` (fixed field)
+	•	`instanceBinding`:
+	•	`inherit` (instance comes from edges)
+	•	`create(domainType)` (block creates instance)
 
-This metadata is compile-time only and does not exist at runtime.
+No separate block-level cardinality mode table is required for canonical behavior.
+Any legacy mode metadata is migration-only and must not override port type declarations.
 
 ⸻
 
@@ -203,4 +203,4 @@ No separate “FieldSlew” block exists.
 
 ⸻
 
-This is the complete nuts-and-bolts contract: cardinality-generic is a compile-time specialization + lane-local semantics + instance alignment + dense state, with explicit registry metadata to prevent drift.
+This is the complete nuts-and-bolts contract: cardinality-generic is a compile-time specialization + lane-local semantics + instance alignment + dense state, with cardinality behavior declared directly on CT/ICT port types.
