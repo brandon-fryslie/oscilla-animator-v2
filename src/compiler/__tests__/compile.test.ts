@@ -439,7 +439,7 @@ describe('error isolation for unreachable blocks', () => {
 describe('zipBroadcast cardinality', () => {
   it('allows signal Const wired directly to fieldOnly RenderInstances2D.color (golden-spiral pattern)', () => {
     // Reproduces the golden-spiral demo: Const (signal, one) → RenderInstances2D.color (field, many).
-    // RenderInstances2D has broadcastPolicy: 'allowZipSig', so this must compile without error.
+    // RenderInstances2D color input declares oneOrMany acceptance, so this compiles without adapter insertion.
     const patch = buildPatch((b) => {
       const time = b.addBlock('InfiniteTimeRoot');
       b.setPortDefault(time, 'periodAMs', 4000);
