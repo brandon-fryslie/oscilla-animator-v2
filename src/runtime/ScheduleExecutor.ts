@@ -60,6 +60,23 @@ function mirrorF64ToArena(
   }
 }
 
+// [LAW:one-source-of-truth] Mirror continuity field output buffer to arena.
+// Parallels mirrorF64ToArena for scalar slots; applied to Float32Array field buffers.
+// Guards arena.length === 0 (tests that create state without arenaTotalFloats): TypedArray.set()
+// throws RangeError on out-of-bounds writes, unlike index assignment used by mirrorF64ToArena.
+function mirrorBufferToArena(
+  slotToArena: ReadonlyMap<ValueSlot, ArenaSlotDescriptor>,
+  state: RuntimeState,
+  slot: ValueSlot,
+  buffer: Float32Array,
+): void {
+  if (state.arena.length === 0) return;
+  const arenaDesc = slotToArena.get(slot);
+  if (!arenaDesc) return;
+  const copyLen = Math.min(buffer.length, arenaDesc.length);
+  state.arena.set(buffer.subarray(0, copyLen), arenaDesc.offset);
+}
+
 function writeF64Scalar(slotToArena: ReadonlyMap<ValueSlot, ArenaSlotDescriptor>, state: RuntimeState, lookup: SlotLookup, value: number): void {
   if (lookup.storage !== 'f64') {
     throw new Error('writeF64Scalar: expected f64 storage for slot ' + lookup.slot + ', got ' + lookup.storage);
@@ -446,6 +463,8 @@ export function executeFrame(
         if (policy.kind === 'none') {
           // For 'none' policy, just copy base to output
           state.values.objects.set(outputSlot, baseBuffer);
+          // [LAW:one-source-of-truth] Mirror passthrough output to arena (zdru.6)
+          mirrorBufferToArena(slotToArena, state, outputSlot, baseBuffer as Float32Array);
           break;
         }
 
@@ -465,6 +484,8 @@ export function executeFrame(
         _continuityResolverState.outputBuffer = outputBuffer!;
         _continuityResolverState.objects = state.values.objects as Map<import('../compiler/ir/Indices').ValueSlot, ArrayBufferView | object>;
         applyContinuity(step, state, _resolveContinuityBuffer);
+        // [LAW:one-source-of-truth] Mirror continuity output to arena (zdru.6)
+        mirrorBufferToArena(slotToArena, state, outputSlot, outputBuffer!);
         break;
       }
 
