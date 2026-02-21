@@ -26,6 +26,7 @@ import {
   unitsEqual,
   type CanonicalType,
 } from '../../core/canonical-types';
+import { isPayloadAnchorAdapter } from './structural-predicates';
 
 // =============================================================================
 // Public API
@@ -224,9 +225,10 @@ function derivePayloadAnchorObligation(
       if (typeof edge.origin === 'object' && edge.origin.kind === 'elaboration') continue;
 
       // Skip edges that already have a payload anchor
+      // [LAW:one-source-of-truth] Block identity from CT/ICT port policy, not name string.
       const fromBlock = g.blocks.find((b) => b.id === edge.from.blockId);
       const toBlock = g.blocks.find((b) => b.id === edge.to.blockId);
-      if (fromBlock?.type === 'Adapter_PayloadAnchorFloat' || toBlock?.type === 'Adapter_PayloadAnchorFloat') {
+      if ((fromBlock && isPayloadAnchorAdapter(fromBlock.type)) || (toBlock && isPayloadAnchorAdapter(toBlock.type))) {
         continue;
       }
 

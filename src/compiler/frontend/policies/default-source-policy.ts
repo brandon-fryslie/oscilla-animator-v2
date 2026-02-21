@@ -21,6 +21,7 @@ import type { ElaborationPlan } from '../elaboration';
 import type { PolicyContext, PolicyResult, DefaultSourcePolicy as DefaultSourcePolicyInterface } from './policy-types';
 import type { DefaultSource, BlockId, PortId, BlockRole } from '../../../types';
 import type { InputDef } from '../../../blocks/registry';
+import { isTimeSourceBlock } from '../structural-predicates';
 
 // =============================================================================
 // Strategy Resolution
@@ -123,8 +124,9 @@ function buildDefaultSourcePlan(
 ): PolicyResult {
   const role: ElaboratedRole = 'defaultSource';
 
-  if (ds.blockType === 'TimeRoot' || ds.blockType === 'InfiniteTimeRoot') {
-    // TimeRoot special case: wire to existing TimeRoot block (edge only, no new block)
+  // [LAW:one-source-of-truth] Block identity from capability, not name string.
+  if (isTimeSourceBlock(ds.blockType)) {
+    // Time source special case: wire to existing time source block (edge only, no new block)
     return buildTimeRootPlan(obligationId, ds, targetBlockId, targetPortId, graph, role);
   }
 
@@ -180,9 +182,10 @@ function buildTimeRootPlan(
   graph: DraftGraph,
   role: ElaboratedRole,
 ): PolicyResult {
-  // Find existing TimeRoot/InfiniteTimeRoot block
+  // Find existing time source block
+  // [LAW:one-source-of-truth] Block identity from capability, not name string.
   const timeRoot = graph.blocks.find(
-    (b) => b.type === 'TimeRoot' || b.type === 'InfiniteTimeRoot',
+    (b) => isTimeSourceBlock(b.type),
   );
 
   if (!timeRoot) {
