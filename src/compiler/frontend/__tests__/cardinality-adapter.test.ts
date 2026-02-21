@@ -126,10 +126,10 @@ describe('createCardinalityAdapterObligations', () => {
     expect(result).toHaveLength(0);
   });
 
-  it('identifies boundary edge for ClampManyConflict (signalOnly→fieldOnly)', () => {
-    // When a signalOnly block connects directly to a fieldOnly port,
-    // edge equality merges them into the same UF group. The clampOne (from signalOnly)
-    // and forceMany (from fieldOnly) create a ClampManyConflict. The boundary edge
+  it('identifies boundary edge for ClampManyConflict (oneOnly→manyOnly boundary)', () => {
+    // When a oneOnly block connects directly to a manyOnly port,
+    // edge equality merges them into the same UF group. The clampOne (from oneOnly acceptance)
+    // and forceMany (from manyOnly acceptance) create a ClampManyConflict. The boundary edge
     // is the one connecting them — inserting Broadcast breaks edge equality.
     const g = makeGraph(
       [
@@ -282,9 +282,9 @@ describe('cardinality adapter fixpoint integration', () => {
 
   it('mixed cardinality: clampOne ports stay at one in zipBroadcast group with many evidence', () => {
     // InfiniteTimeRoot → Phasor → Add ← Array
-    // InfiniteTimeRoot:time is clampOne (signalOnly)
-    // Array:elements is forceMany (transform)
-    // Add is preserve+allowZipSig → zipBroadcast over all ports
+    // InfiniteTimeRoot:time is clampOne (oneOnly acceptance)
+    // Array:elements is forceMany (instance creator)
+    // Add uses promoteToMany relation → zipBroadcast over all ports
     // Result: Add:a (from Phasor) stays at one, Add:b (from Array) resolves to many
     // Runtime uses kernelZipSig for mixed cardinality — no Broadcast adapter needed
     const patch = buildPatch((b) => {

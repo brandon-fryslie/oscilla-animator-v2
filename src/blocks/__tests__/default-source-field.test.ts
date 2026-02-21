@@ -1,7 +1,7 @@
 /**
  * DefaultSource Field Cardinality Tests
  *
- * Verifies that DefaultSource (now signalOnly) works correctly with the
+ * Verifies that DefaultSource (oneOnly acceptance) works correctly with the
  * cardinality adapter system — Broadcast adapters are auto-inserted at
  * signal→field boundaries by the fixpoint solver.
  */
@@ -23,7 +23,7 @@ describe('DefaultSource field cardinality (via adapter system)', () => {
       b.wire(arr, 'elements', grid, 'elements');
       const render = b.addBlock('RenderInstances2D');
       b.wire(grid, 'position', render, 'pos');
-      // color is unconnected — DefaultSource (signalOnly) + Broadcast adapter
+      // color is unconnected — DefaultSource (oneOnly) + Broadcast adapter
     });
 
     const result = compileFrontend(patch);
@@ -44,7 +44,7 @@ describe('DefaultSource field cardinality (via adapter system)', () => {
       b.wire(arr, 'elements', grid, 'elements');
       const render = b.addBlock('RenderInstances2D');
       b.wire(grid, 'position', render, 'pos');
-      // color unconnected — should get a signalOnly DefaultSource + Broadcast adapter
+      // color unconnected — should get a oneOnly DefaultSource + Broadcast adapter
     });
 
     const result = compile(patch);

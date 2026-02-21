@@ -41,7 +41,7 @@ describe('finalizeNormalizationFixpoint (skeleton)', () => {
       maxIterations: 10,
     });
 
-    // Add is preserve+allowZipSig — cardinality defaults to one (signal chain).
+    // Add uses promoteToMany relation — cardinality defaults to one (signal chain).
     expect(result.iterations).toBeLessThanOrEqual(10);
     // No cardinality errors — default-to-one is valid
     expect(result.diagnostics.filter(
@@ -268,7 +268,7 @@ describe('finalizeNormalizationFixpoint (cardinality solving)', () => {
       maxIterations: 10,
     });
 
-    // Const and Add are preserve+allowZipSig — evidence-free groups
+    // Const and Add use promoteToMany relation — evidence-free groups
     // default to one (signal chain). No cardinality error.
     expect(result.diagnostics.filter(
       (d: any) => d.kind === 'CardinalityConstraintError',

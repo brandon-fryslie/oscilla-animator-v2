@@ -9,7 +9,7 @@ This worklist covers full migration from legacy block-level cardinality modes to
 
 ## Track 1: Compiler Extraction Rewrite
 
-1. Replace `rewriteSignalOnly` / `rewritePreserve` / `rewriteTransform` / `rewriteFieldOnly` with one CT/ICT-driven extraction path.
+1. ~~Replace legacy mode-dispatch rewriters (`rewriteSignalOnly`/`rewritePreserve`/`rewriteTransform`/`rewriteFieldOnly`)~~ **Done** — replaced with one CT/ICT-driven extraction path.
 2. Build cardinality groups exclusively from shared cardinality var ids.
 3. Emit constraints from var policy (`relation`, `acceptance`, `instanceBinding`).
 4. Legacy metadata fallback removed after migration completion.
@@ -34,7 +34,7 @@ Completion criteria:
 1. Add cardinality var policy declarations to all port types that were mode-driven.
 2. Migrate mixed layout blocks first (`GridLayoutUV`, `LineLayoutUV`, `CircleLayoutUV`, `SpiralLayout`, `AttractorLayout`, `PathLayout`).
 3. Migrate transform blocks (`Array`, `Broadcast`, `Reduce`, shape generators) to `instanceBinding:create(...)` style declarations.
-4. Migrate remaining preserve/signal/field-only blocks.
+4. ~~Migrate remaining blocks (formerly categorized as preserve/signal-only/field-only).~~ **Done** — all blocks use CT/ICT policy declarations.
 
 Completion criteria:
 - No block requires `cardinalityMode` for correctness.

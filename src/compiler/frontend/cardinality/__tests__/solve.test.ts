@@ -34,7 +34,7 @@ describe('solveCardinality', () => {
     expect(result.errors).toHaveLength(0);
   });
 
-  it('signalOnly → all vars bound to one via clampOne', () => {
+  it('oneOnly acceptance → all vars bound to one via clampOne', () => {
     const result = solve(
       ['A:x:in', 'A:y:in', 'A:out:out'],
       {
@@ -190,9 +190,9 @@ describe('solveCardinality', () => {
     // zipBroadcast semantics: signal (one) ports coexist with field (many) ports.
     // clampOne groups stay at one — runtime broadcasts them via kernelZipSig.
     const ref = instanceRef('circle', 'arr1');
-    const clampOrigin: ConstraintOrigin = { kind: 'blockRule', blockId: 'Sig', blockType: 'SignalOnly', rule: 'signalOnly.clampOne' };
-    const manyOrigin: ConstraintOrigin = { kind: 'blockRule', blockId: 'Field', blockType: 'Transform', rule: 'transform.forceMany' };
-    const zipOrigin: ConstraintOrigin = { kind: 'blockRule', blockId: 'zip', blockType: 'Zip', rule: 'zipBroadcast' };
+    const clampOrigin: ConstraintOrigin = { kind: 'blockRule', blockId: 'Sig', blockType: 'Sig', rule: 'declared.acceptance.oneOnly' };
+    const manyOrigin: ConstraintOrigin = { kind: 'blockRule', blockId: 'Field', blockType: 'Field', rule: 'declared.acceptance.manyOnly' };
+    const zipOrigin: ConstraintOrigin = { kind: 'blockRule', blockId: 'zip', blockType: 'Zip', rule: 'declared.relation.promoteToMany' };
 
     const result = solve(
       ['Sig:out:out', 'Field:x:in'],
@@ -234,7 +234,7 @@ describe('solveCardinality', () => {
 
   it('preserve-block broadcast rejection: mixed one/many without zip → ClampManyConflict via equality group', () => {
     // A preserve block with strict equality among all ports.
-    // One input connected to signalOnly producer (clampOne) and another
+    // One input connected to oneOnly producer (clampOne) and another
     // connected to transform output (forceMany) → Conflict in the equality group
     const ref = instanceRef('circle', 'arr1');
     const result = solve(
@@ -259,14 +259,14 @@ describe('solveCardinality', () => {
     expect(result.errors.some(e => e.kind === 'ClampManyConflict')).toBe(true);
   });
 
-  it('fieldOnly-only unresolved instance: fieldOnly block with only var instance → UnresolvedInstanceVar', () => {
+  it('manyOnly unresolved instance: manyOnly block with only var instance → UnresolvedInstanceVar', () => {
     const result = solve(
       ['F:data:in'],
       {
         'F:data:in': axisVar(cv('card:F:data:in')),
       },
       [
-        { kind: 'forceMany', port: pk('F:data:in'), instance: { kind: 'var', id: iv('fieldOnly:F:data') }, origin: o },
+        { kind: 'forceMany', port: pk('F:data:in'), instance: { kind: 'var', id: iv('manyOnly:F:data') }, origin: o },
       ],
     );
 
