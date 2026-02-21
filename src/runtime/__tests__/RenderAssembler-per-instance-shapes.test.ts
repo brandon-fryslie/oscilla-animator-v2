@@ -30,7 +30,7 @@ function createPalette(r = 1, g = 1, b = 1, a = 1): Float32Array {
   return new Float32Array([r, g, b, a]);
 }
 
-// Helper to create a scalar signal type
+// Helper to create a scalar one-cardinality type
 const SCALAR_TYPE: CanonicalType = canonicalType(FLOAT);
 
 // Create a minimal runtime state for testing
@@ -694,12 +694,12 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
         { kind: 'const', value: { kind: 'float', value: 1.0 }, type: SCALAR_TYPE },
       ];
 
-      // Build scalarExprToArenaOffset mapping for scale signal
+      // Build scalarExprToArenaOffset mapping for scale one-cardinality value
       const scalarExprToArenaOffset = new Map<number, number>([
-        [0, 10], // scale signal at slot 10
+        [0, 10], // scale one-cardinality value at slot 10
       ]);
 
-      // Write signal value to state
+      // Write one-cardinality value to state
       state.arena[10] = 1.0;
       const slotToArena = mirrorNumericObjectSlotsToArena(state, [
         { slot: 1 as ValueSlot, stride: 3 },

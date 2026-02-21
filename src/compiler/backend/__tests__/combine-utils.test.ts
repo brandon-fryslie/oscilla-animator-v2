@@ -15,7 +15,7 @@ describe('validateCombineMode', () => {
     for (const payload of numericPayloads) {
       for (const mode of allModes) {
         it(`allows ${mode} for ${payload}`, () => {
-          const result = validateCombineMode(mode, 'signal', payload);
+          const result = validateCombineMode(mode, 'one', payload);
           expect(result.valid).toBe(true);
         });
       }
@@ -24,81 +24,81 @@ describe('validateCombineMode', () => {
 
   describe('color payload', () => {
     it('allows last for color', () => {
-      expect(validateCombineMode('last', 'signal', 'color').valid).toBe(true);
+      expect(validateCombineMode('last', 'one', 'color').valid).toBe(true);
     });
 
     it('allows first for color', () => {
-      expect(validateCombineMode('first', 'signal', 'color').valid).toBe(true);
+      expect(validateCombineMode('first', 'one', 'color').valid).toBe(true);
     });
 
     it('allows layer for color', () => {
-      expect(validateCombineMode('layer', 'signal', 'color').valid).toBe(true);
+      expect(validateCombineMode('layer', 'one', 'color').valid).toBe(true);
     });
 
     it('rejects sum for color', () => {
-      const result = validateCombineMode('sum', 'signal', 'color');
+      const result = validateCombineMode('sum', 'one', 'color');
       expect(result.valid).toBe(false);
       expect(result.reason).toContain('Color domain');
     });
 
     it('rejects average for color', () => {
-      const result = validateCombineMode('average', 'signal', 'color');
+      const result = validateCombineMode('average', 'one', 'color');
       expect(result.valid).toBe(false);
     });
   });
 
   describe('shape payload', () => {
     it('allows last for shape', () => {
-      expect(validateCombineMode('last', 'signal', 'shape').valid).toBe(true);
+      expect(validateCombineMode('last', 'one', 'shape').valid).toBe(true);
     });
 
     it('allows first for shape', () => {
-      expect(validateCombineMode('first', 'signal', 'shape').valid).toBe(true);
+      expect(validateCombineMode('first', 'one', 'shape').valid).toBe(true);
     });
 
     it('allows layer for shape', () => {
-      expect(validateCombineMode('layer', 'signal', 'shape').valid).toBe(true);
+      expect(validateCombineMode('layer', 'one', 'shape').valid).toBe(true);
     });
 
     it('rejects sum for shape', () => {
-      const result = validateCombineMode('sum', 'signal', 'shape');
+      const result = validateCombineMode('sum', 'one', 'shape');
       expect(result.valid).toBe(false);
       expect(result.reason).toContain('Shape domain');
     });
 
     it('rejects average for shape', () => {
-      const result = validateCombineMode('average', 'signal', 'shape');
+      const result = validateCombineMode('average', 'one', 'shape');
       expect(result.valid).toBe(false);
       expect(result.reason).toContain('Shape domain');
     });
 
     it('rejects mul for shape', () => {
-      const result = validateCombineMode('mul' as any, 'signal', 'shape');
+      const result = validateCombineMode('mul' as any, 'one', 'shape');
       expect(result.valid).toBe(false);
     });
 
     it('rejects min for shape', () => {
-      const result = validateCombineMode('min', 'signal', 'shape');
+      const result = validateCombineMode('min', 'one', 'shape');
       expect(result.valid).toBe(false);
     });
 
     it('rejects max for shape', () => {
-      const result = validateCombineMode('max', 'signal', 'shape');
+      const result = validateCombineMode('max', 'one', 'shape');
       expect(result.valid).toBe(false);
     });
   });
 
   describe('bool payload', () => {
     it('allows last for bool', () => {
-      expect(validateCombineMode('last', 'signal', 'bool').valid).toBe(true);
+      expect(validateCombineMode('last', 'one', 'bool').valid).toBe(true);
     });
 
     it('allows first for bool', () => {
-      expect(validateCombineMode('first', 'signal', 'bool').valid).toBe(true);
+      expect(validateCombineMode('first', 'one', 'bool').valid).toBe(true);
     });
 
     it('rejects sum for bool', () => {
-      const result = validateCombineMode('sum', 'signal', 'bool');
+      const result = validateCombineMode('sum', 'one', 'bool');
       expect(result.valid).toBe(false);
     });
   });

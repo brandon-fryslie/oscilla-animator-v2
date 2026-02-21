@@ -274,8 +274,8 @@ function getValidCombineModes(payload: string): CombineMode[] {
   const allModes: CombineMode[] = ['last', 'first', 'sum', 'average', 'max', 'min', 'mul', 'layer', 'or', 'and'];
 
   return allModes.filter(mode => {
-    // For signal world (most common for ports)
-    const result = validateCombineMode(mode, 'signal', payload);
+    // For one-cardinality world (most common for ports)
+    const result = validateCombineMode(mode, 'one', payload);
     return result.valid;
   });
 }

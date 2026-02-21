@@ -436,13 +436,13 @@ export function compactAndCopy(
 export interface AssemblerContext {
   /** Instance declarations */
   instances: ReadonlyMap<string, InstanceDecl>;
-  /** Runtime state for reading scalar-expression slots and field buffers */
+  /** Runtime state for reading one-cardinality expression slots and many buffers */
   state: RuntimeState;
   /** Resolved camera params from frame globals (always present, defaults if no Camera block) */
   resolvedCamera: ResolvedCameraParams;
   /** Pre-allocated buffer arena for zero-allocation rendering */
   arena: RenderBufferArena;
-  /** Scalar ValueExprId -> arena scalar offset map. */
+  /** One-cardinality ValueExprId -> arena scalar offset map. */
   scalarExprToArenaOffset: ReadonlyMap<number, number>;
   /** Slot -> arena descriptor map (for numeric field reads). */
   slotToArena?: ReadonlyMap<ValueSlot, ArenaSlotDescriptor>;
@@ -472,15 +472,15 @@ function resolveScale(
   }
 
   if (scaleSpec.k === 'sig') {
-    // [LAW:one-source-of-truth] Render reads numeric signal values from arena only.
+    // [LAW:one-source-of-truth] Render reads numeric one-cardinality values from arena only.
     const arenaOffset = scalarExprToArenaOffset.get(scaleSpec.id as number);
     if (arenaOffset !== undefined) {
       return { kind: 'uniform', value: state.arena[arenaOffset] };
     }
 
     throw new Error(
-      'RenderAssembler: No slot mapping for signal ' + scaleSpec.id + '. ' +
-      'Signal must be evaluated in schedule before rendering.'
+      'RenderAssembler: No slot mapping for one-cardinality expression ' + scaleSpec.id + '. ' +
+      'One-cardinality values must be evaluated in schedule before rendering.'
     );
   }
 
@@ -522,19 +522,19 @@ function resolveShape(
     }
     return shapeBuffer;
   } else {
-    // Signal ('sig') with topology - resolve param signals from slots
+    // One-cardinality shape descriptor ('sig') with topology: resolve scalar params from arena
     const { topologyId, paramSignals } = shapeSpec;
     // TODO: replace per-frame allocation with zero-alloc render assembly
     // eslint-disable-next-line oscilla/no-hot-path-alloc
     const params: Record<string, number> = {};
 
     for (let i = 0; i < paramSignals.length; i++) {
-      // [LAW:one-source-of-truth] Render reads numeric signal values from arena only.
+      // [LAW:one-source-of-truth] Render reads numeric one-cardinality values from arena only.
       const arenaOffset = scalarExprToArenaOffset.get(paramSignals[i] as number);
       if (arenaOffset === undefined) {
         throw new Error(
-          'RenderAssembler: No slot mapping for param signal ' + paramSignals[i] + '. ' +
-          'Signal must be evaluated in schedule before rendering.'
+          'RenderAssembler: No slot mapping for one-cardinality shape param ' + paramSignals[i] + '. ' +
+          'One-cardinality values must be evaluated in schedule before rendering.'
         );
       }
       params['param' + i] = state.arena[arenaOffset];
@@ -640,7 +640,7 @@ function resolveShapeFully(
   if (!isShapeDescriptor(shape)) {
     throw new Error(
       'Per-particle shapes (Field<shape>) are not yet implemented. ' +
-      'Use a uniform shape signal (Signal<shape>) instead.'
+      'Use a uniform one-cardinality shape value instead.'
     );
   }
 
@@ -1354,7 +1354,7 @@ function buildPathStyle(
  * SUPPORTS PROJECTION: When camera is present, applies 3D projection and depth-sorting.
  *
  * @param step - The render step to assemble
- * @param context - Assembly context with signals, instances, state, and arena
+ * @param context - Assembly context with one-cardinality values, instances, state, and arena
  * @returns Array of DrawOp operations (one or more, path or primitive)
  */
 export function assembleDrawPathInstancesOp(

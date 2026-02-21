@@ -30,13 +30,13 @@ function createPalette(r = 1, g = 1, b = 1, a = 1): Float32Array {
   return new Float32Array([r, g, b, a]);
 }
 
-// Helper to create a scalar signal type
+// Helper to create a scalar one-cardinality type
 const SCALAR_TYPE: CanonicalType = canonicalType(FLOAT);
 
 // Create a minimal runtime state for testing
 function createMockState(): RuntimeState {
   const state = createRuntimeState(100, 0, 0, 0, 0, 256);
-  // Set effective time so signal evaluation works
+  // Set effective time so one-cardinality evaluation works
   state.time = {
     tAbsMs: 0,
     tMs: 0,
@@ -182,12 +182,12 @@ describe('RenderAssembler', () => {
 
       // Build scalarExprToArenaOffset mapping for scale and shape params
       const scalarExprToArenaOffset = new Map<number, number>([
-        [0, 10], // scale signal at slot 10
+        [0, 10], // scale one-cardinality value at slot 10
         [1, 11], // rx param at slot 11
         [2, 12], // ry param at slot 12
       ]);
 
-      // Write signal values to state
+      // Write one-cardinality values to state
       state.arena[10] = 1.0;  // scale
       state.arena[11] = 0.02; // rx param
       state.arena[12] = 0.02; // ry param
@@ -239,13 +239,13 @@ describe('RenderAssembler', () => {
 
       // Build scalarExprToArenaOffset mapping for scale and shape params
       const scalarExprToArenaOffset = new Map<number, number>([
-        [0, 10], // scale signal
+        [0, 10], // scale one-cardinality value
         [1, 11], // radiusX param
         [2, 12], // radiusY param
         [3, 13], // closed param
       ]);
 
-      // Write signal values to state
+      // Write one-cardinality values to state
       state.arena[10] = 2.5;  // scale
       state.arena[11] = 0.02; // radiusX param
       state.arena[12] = 0.02; // radiusY param
@@ -333,7 +333,7 @@ describe('RenderAssembler', () => {
         [0, 10], [1, 11], [2, 12], [3, 13],
       ]);
 
-      // Write signal values to state
+      // Write one-cardinality values to state
       state.arena[10] = 1.0;
       state.arena[11] = 0.02;
       state.arena[12] = 0.02;
@@ -389,7 +389,7 @@ describe('RenderAssembler', () => {
         [0, 10], [1, 11], [2, 12], [3, 13],
       ]);
 
-      // Write signal values to state
+      // Write one-cardinality values to state
       state.arena[10] = 1.0;
       state.arena[11] = 0.02;
       state.arena[12] = 0.02;
@@ -464,13 +464,13 @@ describe('RenderAssembler', () => {
 
       // Build scalarExprToArenaOffset mapping for scale and shape params
       const scalarExprToArenaOffset = new Map<number, number>([
-        [0, 10], // scale signal
-        [1, 11], // param signals for shapes
+        [0, 10], // scale one-cardinality value
+        [1, 11], // shape params for shapes
         [2, 12],
         [3, 13],
       ]);
 
-      // Write signal values to state
+      // Write one-cardinality values to state
       state.arena[10] = 1.0;
       state.arena[11] = 0.02;
       state.arena[12] = 0.02;
@@ -538,12 +538,12 @@ describe('RenderAssembler', () => {
     it('returns empty ops array when all instances are empty', () => {
       const state = createMockState();
 
-      // Build scalarExprToArenaOffset mapping for scale signal
+      // Build scalarExprToArenaOffset mapping for scale one-cardinality value
       const scalarExprToArenaOffset = new Map<number, number>([
-        [0, 10], // scale signal
+        [0, 10], // scale one-cardinality value
       ]);
 
-      // Write signal value to state
+      // Write one-cardinality value to state
       state.arena[10] = 1.0;
 
       const signals: ValueExpr[] = [

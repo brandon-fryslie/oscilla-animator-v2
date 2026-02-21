@@ -4,7 +4,7 @@
  * Combine logic reused by Pass 6 (multi-input port resolution).
  *
  * Key responsibilities:
- * - Create combine nodes for Signal/Field/Event worlds
+ * - Create combine nodes for one/many/event worlds
  * - Validate combineMode against world/domain constraints
  * - Handle edge ordering for deterministic combine (sortKey)
  * - Support all combine modes (sum, average, max, min, last, layer, first, error)
@@ -54,12 +54,12 @@ export interface CombineModeValidation {
 // =============================================================================
 
 /**
- * Validate that a combine mode is compatible with a slot's world and domain.
+ * Validate that a combine mode is compatible with a slot's cardinality world and domain.
  *
  * Validation rules:
  * - 'last' is always valid (all worlds/domains)
  * - 'first' is always valid (all worlds/domains, opposite of 'last')
- * - Signal/Field worlds: All modes valid
+ * - One/Many worlds: All modes valid
  * - Config world: Only 'last'/'first' valid (stepwise changes)
  * - Scalar world: Multi-input not allowed (should emit error if N > 1)
  * - Numeric domains (float, int, vec2, vec3): All modes valid
@@ -67,13 +67,13 @@ export interface CombineModeValidation {
  * - String/boolean domains: Only 'last'/'first' valid
  *
  * @param mode - The combine mode to validate
- * @param world - The slot's world (signal, field, config, scalar)
+ * @param world - The slot's world (one, many, config, scalar)
  * @param payload - The slot's payload type (float, color, vec2, etc.)
  * @returns Validation result with reason if invalid
  */
 export function validateCombineMode(
   mode: CombineMode | 'error' | 'layer',
-  world: 'signal' | 'field' | 'scalar' | 'config',
+  world: 'one' | 'many' | 'scalar' | 'config',
   payload: CorePayload | string
 ): CombineModeValidation {
   // 'error' mode is special - it rejects multiple writers
@@ -102,7 +102,7 @@ export function validateCombineMode(
     };
   }
 
-  // Domain-specific validation for signal/field worlds
+  // Domain-specific validation for one/many worlds
   // Normalize payload to kind string (handles both string and object forms)
   const payloadKind = typeof payload === 'string' ? payload : payload;
   const numericPayloads = ['float', 'int', 'vec2', 'vec3'];
