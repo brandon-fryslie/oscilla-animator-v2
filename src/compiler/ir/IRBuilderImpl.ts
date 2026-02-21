@@ -32,7 +32,8 @@ import { OpCode, EvalStrategy } from './types';
 import type { CameraDeclIR } from './program';
 import type { ValueExpr } from './value-expr';
 import type { OrchestratorIRBuilder } from './OrchestratorIRBuilder';
-import { valueExprId } from './Indices';
+import { valueExprId, SCALAR_INSTANCE_ID } from './Indices';
+import { domainTypeId } from '../../core/ids';
 import { canonicalType, canonicalEvent, FLOAT, unitNone, payloadStride, requireInst } from '../../core/canonical-types';
 
 /**
@@ -61,6 +62,21 @@ export class IRBuilderImpl implements OrchestratorIRBuilder {
   private renderGlobals: CameraDeclIR[] = [];
   private _currentBlockId: BlockId | null = null;
   private _exprToBlock = new Map<ValueExprId, BlockId>();
+
+  constructor() {
+    // [LAW:one-source-of-truth] SCALAR_INSTANCE_ID is always registered with count=1.
+    // Every compiled program has a scalar context for cardinality-one (signal) materialization.
+    // StepMaterialize steps referencing scalar expressions use SCALAR_INSTANCE_ID so the
+    // executor's instances.get() lookup yields count=1 via the standard field-materialization path.
+    this.instances.set(SCALAR_INSTANCE_ID, {
+      id: SCALAR_INSTANCE_ID,
+      domainType: domainTypeId('__scalar__'),
+      count: 1,
+      maxCount: 1,
+      lifecycle: 'static',
+      identityMode: 'none',
+    });
+  }
 
   // ===========================================================================
   // Value Expression Construction

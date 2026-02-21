@@ -8,6 +8,7 @@ import { describe, it, expect } from 'vitest';
 import { buildPatch } from '../../graph';
 import { compile } from '../compile';
 import type { ScheduleIR } from '../backend/schedule-program';
+import { SCALAR_INSTANCE_ID } from '../ir/Indices';
 
 describe('compile', () => {
   describe('TimeRoot validation', () => {
@@ -129,11 +130,14 @@ describe('compile', () => {
 
       expect(result.kind).toBe('ok');
       if (result.kind === 'ok') {
-        // Instances are in schedule wrapper
+        // Instances are in schedule wrapper.
+        // Filter out SCALAR_INSTANCE_ID (always-present sentinel for cardinality-one materialization).
         const schedule = result.program.schedule as ScheduleIR;
-        const instances = schedule.instances;
-        expect(instances.size).toBe(1);
-        const instance = [...instances.values()][0];
+        const userInstances = [...schedule.instances.values()].filter(
+          (inst) => inst.id !== SCALAR_INSTANCE_ID,
+        );
+        expect(userInstances.length).toBe(1);
+        const instance = userInstances[0];
         expect(instance.count).toBe(16);
         // Array creates instances, GridLayout applies positions via gridLayout kernel
         // Instance no longer has layout property - layout is purely via field kernels
@@ -157,11 +161,14 @@ describe('compile', () => {
 
       expect(result.kind).toBe('ok');
       if (result.kind === 'ok') {
-        // Instances are in schedule wrapper
+        // Instances are in schedule wrapper.
+        // Filter out SCALAR_INSTANCE_ID (always-present sentinel for cardinality-one materialization).
         const schedule = result.program.schedule as ScheduleIR;
-        const instances = schedule.instances;
-        expect(instances.size).toBe(1);
-        const instance = [...instances.values()][0];
+        const userInstances = [...schedule.instances.values()].filter(
+          (inst) => inst.id !== SCALAR_INSTANCE_ID,
+        );
+        expect(userInstances.length).toBe(1);
+        const instance = userInstances[0];
         expect(instance.count).toBe(100);
       }
     });

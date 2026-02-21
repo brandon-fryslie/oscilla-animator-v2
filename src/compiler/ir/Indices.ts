@@ -9,7 +9,8 @@
  */
 
 // Re-export InstanceId and DomainTypeId from core (single source of truth)
-export type { InstanceId, DomainTypeId } from '../../core/ids';
+import type { InstanceId, DomainTypeId } from '../../core/ids';
+export type { InstanceId, DomainTypeId };
 export { instanceId, domainTypeId } from '../../core/ids';
 
 // =============================================================================
@@ -137,6 +138,24 @@ export function stateId(s: string): StateId {
  * Written each frame by ScheduleExecutor before phase execution.
  */
 export const SYSTEM_PALETTE_SLOT = 0 as ValueSlot;
+
+// =============================================================================
+// System-Reserved Instance Constants (compiler ↔ runtime contract)
+// =============================================================================
+
+/**
+ * Well-known sentinel InstanceId for cardinality-one (scalar signal) materialization.
+ *
+ * [LAW:one-source-of-truth] All StepMaterialize steps targeting cardinality-one
+ * expressions reference this instance. IRBuilderImpl registers it with count=1
+ * at construction time, so every compiled program's instances map includes it.
+ *
+ * Usage: StepMaterialize { field, instanceId: SCALAR_INSTANCE_ID, target }
+ * Runtime: instances.get(SCALAR_INSTANCE_ID).count === 1 → laneCount=1 buffer
+ *
+ * See: design-docs/cardinality-unification-migration/MIGRATION-PLAN.md §3a
+ */
+export const SCALAR_INSTANCE_ID = '__scalar__' as InstanceId;
 
 export function slotId(s: string): SlotId {
   return s as SlotId;
