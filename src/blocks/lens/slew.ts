@@ -8,7 +8,7 @@
  */
 
 import { registerBlock } from '../registry';
-import { canonicalType, payloadStride, requireInst, unitNone, contractClamp01 } from '../../core/canonical-types';
+import { canonicalType, payloadStride, unitNone, contractClamp01 } from '../../core/canonical-types';
 import { FLOAT } from '../../core/canonical-types';
 import { inferType, unitVar, cardinalityVar } from '../../core/inference-types';
 import { cardinalityVarId } from '../../core/ids';
@@ -41,8 +41,7 @@ registerBlock({
   lower: ({ ctx, inputsById }) => {
     const input = inputsById.in;
     const rate = inputsById.rate;
-    const isInputSignal = input && 'type' in input && requireInst(input.type.extent.temporality, 'temporality').kind === 'continuous';
-    if (!input || !isInputSignal) throw new Error('Slew requires input signal');
+    if (!input) throw new Error('Slew input required');
     if (!rate) throw new Error('Slew: rate is required');
 
     const outType = ctx.outTypes[0];
