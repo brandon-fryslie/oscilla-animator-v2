@@ -122,7 +122,7 @@ function buildDefaultSourceFieldReplacementPlan(
 
 /**
  * Insert a Broadcast block on the boundary edge (one→many).
- *   source → Broadcast:signal, Broadcast:field → target
+ *   source → Broadcast:'signal', Broadcast:'field' → target
  */
 function buildBroadcastPlan(
   obligation: Obligation,

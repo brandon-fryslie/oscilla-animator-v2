@@ -564,7 +564,7 @@ export function solveCardinality(input: CardinalitySolveInput): CardinalitySolve
       if (hasConflict || !manyGroup) continue;
 
       // Propagate many to all groups in this zip set.
-      // promoteToMany semantics: signal (one) ports coexist with field (many) ports.
+      // promoteToMany semantics: one ports coexist with many ports.
       // clampOne groups stay at one — runtime broadcasts them via kernelZipSig.
       // This is NOT a conflict; it's expected for relation:'promoteToMany' groups.
       for (const root of groupRoots) {

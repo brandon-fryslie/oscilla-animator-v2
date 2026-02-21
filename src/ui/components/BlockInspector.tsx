@@ -64,7 +64,7 @@ function getDerivedDefaultSourceId(blockId: BlockId, portId: string): BlockId {
 }
 
 /**
- * Check if two signal types are compatible for wiring.
+ * Check if two one-cardinality types are compatible for wiring.
  * Payload types must match. Payload-generic blocks use BlockPayloadMetadata.
  */
 function areTypesCompatible(sourceType: InferenceCanonicalType | undefined, targetType: InferenceCanonicalType | undefined): boolean {

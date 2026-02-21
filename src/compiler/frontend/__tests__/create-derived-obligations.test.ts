@@ -105,7 +105,7 @@ describe('createDerivedObligations', () => {
     expect(createDerivedObligations(g, facts)).toEqual([]);
   });
 
-  it('creates adapter obligation when types differ (signal→field)', () => {
+  it('creates adapter obligation when types differ (one→many)', () => {
     const g = emptyGraph({
       blocks: [makeBlock('c1', 'Const'), makeBlock('ri', 'RenderInstances2D')],
       edges: [makeEdge('e1', 'c1', 'out', 'ri', 'pos')],

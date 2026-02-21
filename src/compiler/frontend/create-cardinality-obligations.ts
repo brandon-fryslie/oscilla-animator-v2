@@ -2,7 +2,7 @@
  * Create Cardinality Adapter Obligations from Cardinality Conflicts
  *
  * Given PromoteToManyClampOneConflict and ClampManyConflict errors from the
- * cardinality solver, identifies boundary edges (signal→field) and creates
+ * cardinality solver, identifies boundary edges (one→many) and creates
  * at most ONE needsCardinalityAdapter obligation per fixpoint iteration.
  *
  * Monotone strategy: one obligation per iteration keeps the fixpoint
@@ -113,8 +113,8 @@ export function createCardinalityAdapterObligations(
       // Both endpoints must be in the conflict group (same UF group)
       if (!allPorts.has(fromKey) || !allPorts.has(toKey)) continue;
 
-      // Prefer edges where from is clampOne and to is not (signal→field boundary)
-      // Also accept edges where to is clampOne and from is not (field→signal boundary)
+      // Prefer edges where from is clampOne and to is not (one→many boundary)
+      // Also accept edges where to is clampOne and from is not (many→one boundary)
       // Either direction works — Broadcast insertion breaks the edge equality.
       const fromIsClampOne = clampOneSet.has(fromKey);
       const toIsClampOne = clampOneSet.has(toKey);

@@ -490,7 +490,7 @@ function rewriteFromDeclaredCardinalityPolicy(
         });
       }
     } else if (axis.value.kind === 'one') {
-      // Concrete one ports are fixed signal by declaration.
+      // Concrete one ports are fixed one-cardinality by declaration.
       constraints.push({
         kind: 'clampOne',
         port: key,
@@ -528,7 +528,7 @@ function rewriteFromDeclaredCardinalityPolicy(
 /**
  * Normalize cardinality axis for the solver.
  * The solver only reasons about one vs many(instance).
- * Zero is a payload-level optimization signal, not a cardinality distinction.
+ * Zero is a payload-level optimization indicator, not a cardinality distinction.
  */
 function normalizeCardinalityForSolver(
   axis: Axis<CardinalityValue, CardinalityVarId>,

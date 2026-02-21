@@ -25,7 +25,7 @@ import type { CardinalityAcceptance } from '../../../core/canonical-types/cardin
  * Does a pre-extracted acceptance value indicate broadcast flexibility?
  *
  * Returns true when the acceptance is 'oneOrMany', meaning the port accepts
- * both signal (one) and field (many) cardinality sources.
+ * both one and many cardinality sources.
  *
  * Callers supply acceptance from TypeFacts.portAcceptance or
  * TypeResolvedPatch.portAcceptance — no BlockDef lookup needed.
@@ -84,7 +84,7 @@ export function isEdgeTypeCompatible(
 
   // Cardinality must match, with broadcast exception
   if (fromCard.kind !== toCard.kind) {
-    // Allow one → many when destination policy permits signal-to-field promotion.
+    // Allow one → many when destination policy permits one-to-many promotion.
     if (allowsBroadcast && fromCard.kind === 'one' && toCard.kind === 'many') {
       return true;
     }

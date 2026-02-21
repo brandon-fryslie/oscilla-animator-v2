@@ -117,7 +117,7 @@ describe('extractConstraints', () => {
     expect(constraints.portBaseTypes.has(valueKey)).toBe(false);
   });
 
-  it('Reduce signal output keeps cardinality one (not rewritten to many)', () => {
+  it('Reduce output keeps cardinality one (not rewritten to many)', () => {
     const patch = buildPatch((b) => {
       b.addBlock('Reduce');
     });
@@ -125,10 +125,10 @@ describe('extractConstraints', () => {
     const constraints = extractConstraints(g, BLOCK_DEFS_BY_TYPE);
 
     const reduceBlock = g.blocks.find((b) => b.type === 'Reduce')!;
-    const signalKey = draftPortKey(reduceBlock.id, 'signal', 'out');
+    const outputKey = draftPortKey(reduceBlock.id, 'signal', 'out');
 
-    // Signal output should have cardinality one in baseCardinalityAxis
-    const axis = constraints.baseCardinalityAxis.get(signalKey);
+    // Output should have cardinality one in baseCardinalityAxis
+    const axis = constraints.baseCardinalityAxis.get(outputKey);
     expect(axis).toBeDefined();
     expect(isAxisInst(axis!)).toBe(true);
     if (isAxisInst(axis!)) {
@@ -137,14 +137,14 @@ describe('extractConstraints', () => {
 
     // Should emit clampOne, not forceMany
     const clampOnes = constraints.cardinality.filter(
-      (c) => c.kind === 'clampOne' && c.port === signalKey,
+      (c) => c.kind === 'clampOne' && c.port === outputKey,
     );
     expect(clampOnes.length).toBe(1);
 
-    const forceManyForSignal = constraints.cardinality.filter(
-      (c) => c.kind === 'forceMany' && c.port === signalKey,
+    const forceManyForOutput = constraints.cardinality.filter(
+      (c) => c.kind === 'forceMany' && c.port === outputKey,
     );
-    expect(forceManyForSignal.length).toBe(0);
+    expect(forceManyForOutput.length).toBe(0);
   });
 
   it('ProceduralPolygon: shape output is one, controlPoints output is many', () => {

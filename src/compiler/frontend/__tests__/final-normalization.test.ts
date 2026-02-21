@@ -41,7 +41,7 @@ describe('finalizeNormalizationFixpoint (skeleton)', () => {
       maxIterations: 10,
     });
 
-    // Add has promoteToMany policy — cardinality defaults to one (signal chain).
+    // Add has promoteToMany policy — cardinality defaults to one (one-cardinality chain).
     expect(result.iterations).toBeLessThanOrEqual(10);
     // No cardinality errors — default-to-one is valid
     expect(result.diagnostics.filter(
@@ -179,7 +179,7 @@ describe('finalizeNormalizationFixpoint (type solving)', () => {
     }
   });
 
-  it('signal ports have cardinality one in their base type', () => {
+  it('one-cardinality ports have cardinality one in their base type', () => {
     const patch = buildPatch((b) => {
       b.addBlock('Const');
     });
@@ -189,7 +189,7 @@ describe('finalizeNormalizationFixpoint (type solving)', () => {
       maxIterations: 10,
     });
 
-    // Const.out should be a signal (cardinality one)
+    // Const.out should be one-cardinality
     const constBlock = g.blocks.find((b) => b.type === 'Const')!;
     const outHint = result.facts.ports.get(draftPortKey(constBlock.id, 'out', 'out'));
     expect(outHint).toBeDefined();
@@ -269,7 +269,7 @@ describe('finalizeNormalizationFixpoint (cardinality solving)', () => {
     });
 
     // Const and Add have promoteToMany policy — evidence-free groups
-    // default to one (signal chain). No cardinality error.
+    // default to one (one-cardinality chain). No cardinality error.
     expect(result.diagnostics.filter(
       (d: any) => d.kind === 'CardinalityConstraintError',
     )).toHaveLength(0);
@@ -348,7 +348,7 @@ describe('finalizeNormalizationFixpoint (cardinality solving)', () => {
 
   it('Const → Add: strict succeeds (payload anchors to float, cardinality defaults to one)', () => {
     // Const and Add are both polymorphic — payload anchors to float via
-    // Adapter_PayloadAnchorFloat. Cardinality defaults to one (signal chain).
+    // Adapter_PayloadAnchorFloat. Cardinality defaults to one (one-cardinality chain).
     const patch = buildPatch((b) => {
       const c1 = b.addBlock('Const');
       const c2 = b.addBlock('Const');

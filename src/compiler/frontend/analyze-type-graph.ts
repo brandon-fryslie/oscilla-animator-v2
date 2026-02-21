@@ -130,7 +130,7 @@ function evaluateTypeGraph(typeResolved: TypeResolvedPatch): Pass2TypeGraphResul
       continue;
     }
 
-    // Check if destination accepts signal→field by CT/ICT-derived acceptance data.
+    // Check if destination accepts one→many by CT/ICT-derived acceptance data.
     // [LAW:one-source-of-truth] Acceptance derives from TypeResolvedPatch.portAcceptance, not BlockDef.
     const toPortKey = portKey(edge.toBlock, edge.toPort, 'in');
     const allowsBroadcast = acceptsBroadcast(typeResolved.portAcceptance?.get(toPortKey));

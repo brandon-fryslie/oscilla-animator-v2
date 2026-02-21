@@ -119,7 +119,7 @@ describe('solveCardinality', () => {
     expect(result1.cardinalities.get(cv('card:A:y:in'))).toEqual({ kind: 'many', instance: ref });
     expect(result1.cardinalities.get(cv('card:A:out:out'))).toEqual({ kind: 'many', instance: ref });
 
-    // Case 2: all unknown → evidence-free default to one (signal chain)
+    // Case 2: all unknown → evidence-free default to one (one-cardinality chain)
     const result2 = solve(
       ['B:x:in', 'B:y:in'],
       {
@@ -166,7 +166,7 @@ describe('solveCardinality', () => {
       [],
     );
 
-    // No evidence → defaults to one (signal chain), no error
+    // No evidence → defaults to one (one-cardinality chain), no error
     expect(result.errors).toHaveLength(0);
     expect(result.cardinalities.get(cv('card:A:x:in'))).toEqual({ kind: 'one' });
   });
