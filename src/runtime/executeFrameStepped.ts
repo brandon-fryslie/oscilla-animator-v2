@@ -346,8 +346,8 @@ export function* executeFrameStepped(
               for (let i = 0; i < stride; i++) {
                 state.tap?.recordSlotValue?.((slot + i) as ValueSlot, readCanonicalNumeric(slotToArena, state, lookup, i));
               }
-              state.cache.values[step.expr as number] = readCanonicalNumeric(slotToArena, state, lookup, 0);
-              state.cache.stamps[step.expr as number] = state.cache.frameId;
+              state.cache.scalarValues[step.expr as number] = readCanonicalNumeric(slotToArena, state, lookup, 0);
+              state.cache.scalarStamps[step.expr as number] = state.cache.frameId;
 
               // Capture written slot
               const meta = slotToMeta.get(targetSlot);
@@ -358,8 +358,8 @@ export function* executeFrameStepped(
               const value = evaluateValueExprScalar(step.expr as any, program.valueExprs.nodes, state);
               writeArenaScalar(slotToArena, state, lookup, value);
               state.tap?.recordSlotValue?.(slot, value);
-              state.cache.values[step.expr as number] = value;
-              state.cache.stamps[step.expr as number] = state.cache.frameId;
+              state.cache.scalarValues[step.expr as number] = value;
+              state.cache.scalarStamps[step.expr as number] = state.cache.frameId;
 
               // Capture written scalar
               const meta = slotToMeta.get(targetSlot);

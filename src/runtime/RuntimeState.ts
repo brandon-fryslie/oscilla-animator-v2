@@ -188,17 +188,17 @@ export interface FrameCache {
   /** Current frame ID (monotonic, starts at 0) */
   frameId: number;
 
-  /** Cached scalar signal values (indexed by step expr ID) */
-  values: Float64Array;
+  /** Cached scalar values (indexed by step expr ID) */
+  scalarValues: Float64Array;
 
-  /** Frame stamps for signal cache validation */
-  stamps: Uint32Array;
+  /** Frame stamps for scalar cache validation */
+  scalarStamps: Uint32Array;
 
-  /** Cached ValueExpr signal values (indexed by ValueExprId) */
-  valueExprValues: Float64Array;
+  /** Cached scalar ValueExpr values (indexed by ValueExprId) */
+  scalarValueExprValues: Float64Array;
 
-  /** Frame stamps for ValueExpr cache validation */
-  valueExprStamps: Uint32Array;
+  /** Frame stamps for scalar ValueExpr cache validation */
+  scalarValueExprStamps: Uint32Array;
 
   /**
    * Cached ValueExpr field buffers (indexed by ValueExprId, simple array).
@@ -219,15 +219,15 @@ export interface FrameCache {
  * Create a FrameCache
  */
 export function createFrameCache(
-  maxSignalExprs: number = 1000,
+  maxScalarExprs: number = 1000,
   maxValueExprs: number = 0
 ): FrameCache {
   return {
     frameId: 1, // Start at 1 so initial stamps[n]=0 don't match
-    values: new Float64Array(maxSignalExprs),
-    stamps: new Uint32Array(maxSignalExprs),
-    valueExprValues: new Float64Array(maxValueExprs),
-    valueExprStamps: new Uint32Array(maxValueExprs),
+    scalarValues: new Float64Array(maxScalarExprs),
+    scalarStamps: new Uint32Array(maxScalarExprs),
+    scalarValueExprValues: new Float64Array(maxValueExprs),
+    scalarValueExprStamps: new Uint32Array(maxValueExprs),
     valueExprFieldBuffers: new Array(maxValueExprs).fill(null),
     valueExprFieldStamps: new Array(maxValueExprs).fill(-1),
     scalarExprToArenaOffset: null,

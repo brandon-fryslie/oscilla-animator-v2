@@ -57,11 +57,11 @@ function createTestRuntimeState(): RuntimeState {
     events: new Map(),
     cache: {
       frameId: 0,
-      values: new Float64Array(100),
-      stamps: new Uint32Array(100),
-      valueExprValues: new Float64Array(0),
-      valueExprStamps: new Uint32Array(0),
-    
+      scalarValues: new Float64Array(100),
+      scalarStamps: new Uint32Array(100),
+      scalarValueExprValues: new Float64Array(0),
+      scalarValueExprStamps: new Uint32Array(0),
+
       valueExprFieldBuffers: [],
       valueExprFieldStamps: [],
       scalarExprToArenaOffset: null,

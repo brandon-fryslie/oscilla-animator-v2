@@ -315,8 +315,8 @@ export function executeFrame(
               }
 
               // Cache first component (for backward compatibility)
-              state.cache.values[step.expr as number] = readCanonicalNumeric(slotToArena, state, lookup, 0);
-              state.cache.stamps[step.expr as number] = state.cache.frameId;
+              state.cache.scalarValues[step.expr as number] = readCanonicalNumeric(slotToArena, state, lookup, 0);
+              state.cache.scalarStamps[step.expr as number] = state.cache.frameId;
             } else if (stride === 1) {
               // Scalar signal: evaluate and write single value
               const value = evaluateValueExprScalar(step.expr as any, program.valueExprs.nodes, state);
@@ -327,8 +327,8 @@ export function executeFrame(
               state.tap?.recordSlotValue?.(slot, value);
 
               // Cache (indexed by expr id). Under Option B these ids are ValueExprIds.
-              state.cache.values[step.expr as number] = value;
-              state.cache.stamps[step.expr as number] = state.cache.frameId;
+              state.cache.scalarValues[step.expr as number] = value;
+              state.cache.scalarStamps[step.expr as number] = state.cache.frameId;
             } else {
               // stride>1 but not construct - invalid
               throw new Error(

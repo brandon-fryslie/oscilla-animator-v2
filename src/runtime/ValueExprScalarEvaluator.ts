@@ -73,8 +73,8 @@ export function evaluateValueExprScalar(
   state: RuntimeState
 ): number {
   // Check cache first
-  const cached = state.cache.valueExprValues[veId as number];
-  const cachedStamp = state.cache.valueExprStamps[veId as number];
+  const cached = state.cache.scalarValueExprValues[veId as number];
+  const cachedStamp = state.cache.scalarValueExprStamps[veId as number];
   if (cachedStamp === state.cache.frameId) {
     return cached;
   }
@@ -99,8 +99,8 @@ export function evaluateValueExprScalar(
   }
 
   // Cache result
-  state.cache.valueExprValues[veId as number] = value;
-  state.cache.valueExprStamps[veId as number] = state.cache.frameId;
+  state.cache.scalarValueExprValues[veId as number] = value;
+  state.cache.scalarValueExprStamps[veId as number] = state.cache.frameId;
 
   return value;
 }
