@@ -142,6 +142,15 @@ function hasUnresolvedPayload(hint: PortTypeHint): boolean {
   return isPayloadVar(hint.inference.payload);
 }
 
+/** Lexicographically smallest key in a set. */
+function smallestKey(keys: ReadonlySet<string>): string {
+  let min: string | undefined;
+  for (const k of keys) {
+    if (min === undefined || k < min) min = k;
+  }
+  return min ?? '';
+}
+
 /**
  * Derive a single payload anchor obligation for the first unresolved polymorphic component.
  *
@@ -163,21 +172,26 @@ function derivePayloadAnchorObligation(
   facts: TypeFacts,
 ): Obligation | null {
   // Step 1: Build unresolved payload components
-  const payloadGroups = new Map<string, string[]>(); // payload var ID → port keys
+  const payloadGroups = new Map<string, Set<string>>(); // payload var ID → port keys
 
   for (const [portKey, hint] of facts.ports) {
     if (hint.status !== 'unknown' || !hint.inference) continue;
     if (!isPayloadVar(hint.inference.payload)) continue;
     const varId = hint.inference.payload.id;
-    const ports = payloadGroups.get(varId) ?? [];
-    ports.push(portKey);
-    payloadGroups.set(varId, ports);
+    let ports = payloadGroups.get(varId);
+    if (!ports) {
+      ports = new Set();
+      payloadGroups.set(varId, ports);
+    }
+    ports.add(portKey);
   }
 
   // Step 2: For each component, collect eligible edges
+  // [LAW:one-source-of-truth] Block type lookup via pre-built Map, not per-edge scan.
+  const blockTypeById = new Map(g.blocks.map((b) => [b.id, b.type] as const));
   const componentEdges = new Map<string, Array<{ edge: typeof g.edges[0]; key: string }>>();
 
-  for (const [varId, portKeys] of payloadGroups) {
+  for (const [varId, portKeySet] of payloadGroups) {
     const eligible: Array<{ edge: typeof g.edges[0]; key: string }> = [];
 
     for (const edge of g.edges) {
@@ -189,17 +203,17 @@ function derivePayloadAnchorObligation(
 
       // Skip edges that already have a payload anchor
       // [LAW:one-source-of-truth] Block identity from CT/ICT port policy, not name string.
-      const fromBlock = g.blocks.find((b) => b.id === edge.from.blockId);
-      const toBlock = g.blocks.find((b) => b.id === edge.to.blockId);
-      if ((fromBlock && isPayloadAnchorAdapter(fromBlock.type)) || (toBlock && isPayloadAnchorAdapter(toBlock.type))) {
+      const fromType = blockTypeById.get(edge.from.blockId);
+      const toType = blockTypeById.get(edge.to.blockId);
+      if ((fromType && isPayloadAnchorAdapter(fromType)) || (toType && isPayloadAnchorAdapter(toType))) {
         continue;
       }
 
-      // Check if both endpoints are in this component and satisfy the constraint
+      // Check if either endpoint is in this component — O(1) Set lookup
       const fromKey = draftPortKey(edge.from.blockId, edge.from.port, 'out');
       const toKey = draftPortKey(edge.to.blockId, edge.to.port, 'in');
 
-      if (!portKeys.includes(fromKey) && !portKeys.includes(toKey)) continue;
+      if (!portKeySet.has(fromKey) && !portKeySet.has(toKey)) continue;
 
       const fromHint = getPortHint(facts, edge.from.blockId, edge.from.port, 'out');
       const toHint = getPortHint(facts, edge.to.blockId, edge.to.port, 'in');
@@ -218,11 +232,11 @@ function derivePayloadAnchorObligation(
     }
   }
 
-  // Step 3: Sort components by smallest member port key (for determinism)
+  // Step 3: Sort components by lexicographically smallest member port key (full key, not charCodeAt(0))
   const sortedComponents = Array.from(componentEdges.entries()).sort((a, b) => {
-    const minA = Math.min(...payloadGroups.get(a[0])!.map((k) => k.charCodeAt(0)));
-    const minB = Math.min(...payloadGroups.get(b[0])!.map((k) => k.charCodeAt(0)));
-    return minA - minB;
+    const minA = smallestKey(payloadGroups.get(a[0])!);
+    const minB = smallestKey(payloadGroups.get(b[0])!);
+    return minA.localeCompare(minB);
   });
 
   if (sortedComponents.length === 0) return null;

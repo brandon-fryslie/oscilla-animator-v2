@@ -6,9 +6,10 @@ import { createDerivedObligations } from '../create-derived-obligations';
 import type { DraftGraph, DraftBlock, DraftEdge } from '../draft-graph';
 import type { TypeFacts, DraftPortKey, PortTypeHint } from '../type-facts';
 import { draftPortKey } from '../type-facts';
-import { canonicalSignal, canonicalField, canonicalType, FLOAT, instanceRef, unitNone, contractClamp01 } from '../../../core/canonical-types';
-import type { CanonicalType } from '../../../core/canonical-types';
+import { canonicalSignal, canonicalField, canonicalType, FLOAT, instanceRef, unitNone, contractClamp01, cardinalityOne, temporalityContinuous, axisInst, DEFAULT_BINDING, DEFAULT_PERSPECTIVE, DEFAULT_BRANCH } from '../../../core/canonical-types';
+import type { CanonicalType, Extent } from '../../../core/canonical-types';
 import type { ObligationId } from '../obligations';
+import type { InferenceCanonicalType } from '../../../core/inference-types';
 
 // =============================================================================
 // Helpers
@@ -24,6 +25,23 @@ function okHint(ct: CanonicalType): PortTypeHint {
 
 function unknownHint(): PortTypeHint {
   return { status: 'unknown', diagIds: [] };
+}
+
+/** Create a hint with an unresolved payload var — the shape derivePayloadAnchorObligation looks for. */
+function unresolvedPayloadHint(payloadVarId: string): PortTypeHint {
+  const SIGNAL_EXTENT: Extent = {
+    cardinality: cardinalityOne(),
+    temporality: temporalityContinuous(),
+    binding: axisInst(DEFAULT_BINDING),
+    perspective: axisInst(DEFAULT_PERSPECTIVE),
+    branch: axisInst(DEFAULT_BRANCH),
+  };
+  const inference: InferenceCanonicalType = {
+    payload: { kind: 'var', id: payloadVarId },
+    unit: unitNone(),
+    extent: SIGNAL_EXTENT,
+  };
+  return { status: 'unknown', inference, diagIds: [] };
 }
 
 const SIGNAL_FLOAT = canonicalSignal(FLOAT);
@@ -215,5 +233,123 @@ describe('createDerivedObligations', () => {
     expect(obs[0].deps.length).toBe(2);
     expect(obs[0].deps[0]).toEqual({ kind: 'portCanonicalizable', port: { blockId: 'c1', port: 'out', dir: 'out' } });
     expect(obs[0].deps[1]).toEqual({ kind: 'portCanonicalizable', port: { blockId: 'ri', port: 'pos', dir: 'in' } });
+  });
+});
+
+// =============================================================================
+// Payload anchor determinism tests
+// =============================================================================
+
+describe('derivePayloadAnchorObligation determinism', () => {
+  it('same-prefix port keys are distinguished by full key, not first char', () => {
+    // Two components whose smallest port keys share a prefix ('add' vs 'addExtra').
+    // With charCodeAt(0) both start with 'a' (97) — tie-break was arbitrary.
+    // With full-key sort, 'add:out:out' < 'addExtra:out:out' deterministically.
+    const g = emptyGraph({
+      blocks: [
+        makeBlock('add', 'Generic'),
+        makeBlock('addExtra', 'Generic'),
+        makeBlock('sink1', 'Generic'),
+        makeBlock('sink2', 'Generic'),
+      ],
+      edges: [
+        makeEdge('e1', 'add', 'out', 'sink1', 'in'),
+        makeEdge('e2', 'addExtra', 'out', 'sink2', 'in'),
+      ],
+    });
+
+    // Component 1 (var 'pv_A'): ports on 'add' and 'sink1'
+    // Component 2 (var 'pv_B'): ports on 'addExtra' and 'sink2'
+    const facts = makeFacts([
+      [draftPortKey('add', 'out', 'out'), unresolvedPayloadHint('pv_A')],
+      [draftPortKey('sink1', 'in', 'in'), unresolvedPayloadHint('pv_A')],
+      [draftPortKey('addExtra', 'out', 'out'), unresolvedPayloadHint('pv_B')],
+      [draftPortKey('sink2', 'in', 'in'), unresolvedPayloadHint('pv_B')],
+    ]);
+
+    const obs = createDerivedObligations(g, facts);
+    const anchor = obs.find((o) => o.kind === 'needsPayloadAnchor');
+    expect(anchor).toBeDefined();
+    // Component with 'add:out:out' sorts before 'addExtra:out:out'
+    expect(anchor!.id).toBe('needsPayloadAnchor:add:out:out->sink1:in:in');
+  });
+
+  it('produces identical output across repeated calls (idempotent determinism)', () => {
+    const g = emptyGraph({
+      blocks: [
+        makeBlock('b1', 'Generic'),
+        makeBlock('b2', 'Generic'),
+      ],
+      edges: [
+        makeEdge('e1', 'b1', 'out', 'b2', 'in'),
+      ],
+    });
+
+    const facts = makeFacts([
+      [draftPortKey('b1', 'out', 'out'), unresolvedPayloadHint('pv_X')],
+      [draftPortKey('b2', 'in', 'in'), unresolvedPayloadHint('pv_X')],
+    ]);
+
+    const results = Array.from({ length: 5 }, () => createDerivedObligations(g, facts));
+    const ids = results.map((r) => r.find((o) => o.kind === 'needsPayloadAnchor')?.id);
+    // All five calls produce the same obligation ID
+    expect(new Set(ids).size).toBe(1);
+  });
+
+  it('selects component with lexicographically smaller full port key when prefixes match', () => {
+    // Port keys: 'x1:p:out' vs 'x10:p:out' — charCodeAt(0) identical ('x'),
+    // but full string sort picks 'x1:p:out' before 'x10:p:out'.
+    const g = emptyGraph({
+      blocks: [
+        makeBlock('x1', 'Generic'),
+        makeBlock('x10', 'Generic'),
+        makeBlock('dst1', 'Generic'),
+        makeBlock('dst10', 'Generic'),
+      ],
+      edges: [
+        makeEdge('e1', 'x1', 'p', 'dst1', 'q'),
+        makeEdge('e2', 'x10', 'p', 'dst10', 'q'),
+      ],
+    });
+
+    const facts = makeFacts([
+      [draftPortKey('x1', 'p', 'out'), unresolvedPayloadHint('pv_short')],
+      [draftPortKey('dst1', 'q', 'in'), unresolvedPayloadHint('pv_short')],
+      [draftPortKey('x10', 'p', 'out'), unresolvedPayloadHint('pv_long')],
+      [draftPortKey('dst10', 'q', 'in'), unresolvedPayloadHint('pv_long')],
+    ]);
+
+    const obs = createDerivedObligations(g, facts);
+    const anchor = obs.find((o) => o.kind === 'needsPayloadAnchor');
+    expect(anchor).toBeDefined();
+    // 'dst1:q:in' < 'dst10:q:in' and 'x1:p:out' < 'x10:p:out'
+    // Component pv_short has smallest key 'dst1:q:in' < 'dst10:q:in'
+    expect(anchor!.id).toBe('needsPayloadAnchor:x1:p:out->dst1:q:in');
+  });
+
+  it('emits at most one payload anchor obligation per call', () => {
+    const g = emptyGraph({
+      blocks: [
+        makeBlock('a', 'Generic'),
+        makeBlock('b', 'Generic'),
+        makeBlock('c', 'Generic'),
+        makeBlock('d', 'Generic'),
+      ],
+      edges: [
+        makeEdge('e1', 'a', 'out', 'b', 'in'),
+        makeEdge('e2', 'c', 'out', 'd', 'in'),
+      ],
+    });
+
+    const facts = makeFacts([
+      [draftPortKey('a', 'out', 'out'), unresolvedPayloadHint('pv_1')],
+      [draftPortKey('b', 'in', 'in'), unresolvedPayloadHint('pv_1')],
+      [draftPortKey('c', 'out', 'out'), unresolvedPayloadHint('pv_2')],
+      [draftPortKey('d', 'in', 'in'), unresolvedPayloadHint('pv_2')],
+    ]);
+
+    const obs = createDerivedObligations(g, facts);
+    const anchors = obs.filter((o) => o.kind === 'needsPayloadAnchor');
+    expect(anchors.length).toBe(1);
   });
 });
