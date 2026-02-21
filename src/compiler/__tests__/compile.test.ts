@@ -436,8 +436,8 @@ describe('error isolation for unreachable blocks', () => {
   });
 });
 
-describe('promoteToMany cardinality', () => {
-  it('allows signal Const wired directly to fieldOnly RenderInstances2D.color (golden-spiral pattern)', () => {
+describe('mixed cardinality (signal→field broadcast)', () => {
+  it('allows signal Const wired directly to RenderInstances2D.color (oneOrMany acceptance, golden-spiral pattern)', () => {
     // Reproduces the golden-spiral demo: Const (signal, one) → RenderInstances2D.color (field, many).
     // RenderInstances2D color input declares oneOrMany acceptance, so this compiles without adapter insertion.
     const patch = buildPatch((b) => {

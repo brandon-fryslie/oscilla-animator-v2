@@ -34,7 +34,7 @@ describe('solveCardinality', () => {
     expect(result.errors).toHaveLength(0);
   });
 
-  it('signalOnly → all vars bound to one via clampOne', () => {
+  it('clampOne-only ports → all vars bound to one', () => {
     const result = solve(
       ['A:x:in', 'A:y:in', 'A:out:out'],
       {
@@ -111,7 +111,7 @@ describe('solveCardinality', () => {
       },
       [
         { kind: 'forceMany', port: pk('A:x:in'), instance: { kind: 'inst', ref }, origin: o },
-        { kind: 'promoteToMany', ports: [pk('A:x:in'), pk('A:y:in'), pk('A:out:out')], origin: o },
+        { kind: 'zipBroadcast', ports: [pk('A:x:in'), pk('A:y:in'), pk('A:out:out')], origin: o },
       ],
     );
 
@@ -127,7 +127,7 @@ describe('solveCardinality', () => {
         'B:y:in': axisVar(cv('card:B:y:in')),
       },
       [
-        { kind: 'promoteToMany', ports: [pk('B:x:in'), pk('B:y:in')], origin: o },
+        { kind: 'zipBroadcast', ports: [pk('B:x:in'), pk('B:y:in')], origin: o },
       ],
     );
 
@@ -149,7 +149,7 @@ describe('solveCardinality', () => {
       [
         { kind: 'forceMany', port: pk('A:x:in'), instance: { kind: 'inst', ref: ref1 }, origin: o },
         { kind: 'forceMany', port: pk('B:x:in'), instance: { kind: 'inst', ref: ref2 }, origin: o },
-        { kind: 'promoteToMany', ports: [pk('A:x:in'), pk('B:x:in')], origin: o },
+        { kind: 'zipBroadcast', ports: [pk('A:x:in'), pk('B:x:in')], origin: o },
       ],
     );
 
@@ -186,13 +186,13 @@ describe('solveCardinality', () => {
     expect(result.errors[0].kind).toBe('UnresolvedInstanceVar');
   });
 
-  it('promoteToMany with clampOne + many: clampOne stays at one, many propagates to non-clampOne groups', () => {
-    // promoteToMany semantics: signal (one) ports coexist with field (many) ports.
+  it('promoteToMany with clampOne + many: clampOne stays at one, many propagates', () => {
+    // promoteToMany semantics: oneOnly (signal) ports coexist with manyOnly (field) ports.
     // clampOne groups stay at one — runtime broadcasts them via kernelZipSig.
     const ref = instanceRef('circle', 'arr1');
-    const clampOrigin: ConstraintOrigin = { kind: 'blockRule', blockId: 'Sig', blockType: 'SignalOnly', rule: 'signalOnly.clampOne' };
-    const manyOrigin: ConstraintOrigin = { kind: 'blockRule', blockId: 'Field', blockType: 'Transform', rule: 'transform.forceMany' };
-    const zipOrigin: ConstraintOrigin = { kind: 'blockRule', blockId: 'zip', blockType: 'Zip', rule: 'promoteToMany' };
+    const clampOrigin: ConstraintOrigin = { kind: 'blockRule', blockId: 'Sig', blockType: 'SignalOnly', rule: 'declared.clampOne' };
+    const manyOrigin: ConstraintOrigin = { kind: 'blockRule', blockId: 'Field', blockType: 'Transform', rule: 'declared.forceMany' };
+    const zipOrigin: ConstraintOrigin = { kind: 'blockRule', blockId: 'zip', blockType: 'Zip', rule: 'declared.promoteToMany' };
 
     const result = solve(
       ['Sig:out:out', 'Field:x:in'],
@@ -203,7 +203,7 @@ describe('solveCardinality', () => {
       [
         { kind: 'clampOne', port: pk('Sig:out:out'), origin: clampOrigin },
         { kind: 'forceMany', port: pk('Field:x:in'), instance: { kind: 'inst', ref }, origin: manyOrigin },
-        { kind: 'promoteToMany', ports: [pk('Sig:out:out'), pk('Field:x:in')], origin: zipOrigin },
+        { kind: 'zipBroadcast', ports: [pk('Sig:out:out'), pk('Field:x:in')], origin: zipOrigin },
       ],
     );
 
@@ -259,7 +259,7 @@ describe('solveCardinality', () => {
     expect(result.errors.some(e => e.kind === 'ClampManyConflict')).toBe(true);
   });
 
-  it('fieldOnly-only unresolved instance: fieldOnly block with only var instance → UnresolvedInstanceVar', () => {
+  it('manyOnly unresolved instance: forceMany with only var instance → UnresolvedInstanceVar', () => {
     const result = solve(
       ['F:data:in'],
       {
@@ -323,7 +323,7 @@ describe('solveCardinality', () => {
       [
         { kind: 'forceMany', port: pk('Arr:out:out'), instance: { kind: 'inst', ref }, origin: o },
         { kind: 'forceMany', port: pk('F:data:in'), instance: { kind: 'var', id: varId }, origin: o },
-        { kind: 'promoteToMany', ports: [pk('Arr:out:out'), pk('F:data:in')], origin: o },
+        { kind: 'zipBroadcast', ports: [pk('Arr:out:out'), pk('F:data:in')], origin: o },
       ],
     );
 
