@@ -26,7 +26,8 @@ import { BLOCK_DEFS_BY_TYPE } from '../../blocks/registry';
 import { extractConstraints, type ExtractedConstraints } from './extract-constraints';
 import { solvePayloadUnit, buildPortVarMapping } from './payload-unit/solve';
 import type { CanonicalType, InstanceRef } from '../../core/canonical-types';
-import { isAxisInst, isAxisVar } from '../../core/canonical-types';
+import { isAxisInst, isAxisVar, resolveCardinalityPolicy } from '../../core/canonical-types';
+import type { CardinalityAcceptance } from '../../core/canonical-types/cardinality';
 import type { InferenceCanonicalType } from '../../core/inference-types';
 import { isPayloadVar, isUnitVar, isInferenceCanonicalizable, finalizeInferenceType, applyPartialSubstitution, type Substitution, EMPTY_SUBSTITUTION } from '../../core/inference-types';
 import { solveCardinality, type CardinalitySolveError } from './cardinality/solve';
@@ -287,7 +288,11 @@ function solveAndComputeFacts(
   // 7) Build instance index from resolved port hints
   const instances = buildInstanceIndex(ports);
 
-  return { facts: { ports, instances }, solveDiagnostics, cardinalityConflicts, collectPorts: extracted.collectPorts };
+  // 8) Build portAcceptance from solver-facing cardinality axes
+  // // [LAW:one-source-of-truth] Acceptance derives from CT/ICT axis policy, extracted once here.
+  const portAcceptance = buildPortAcceptance(extracted.baseCardinalityAxis);
+
+  return { facts: { ports, instances, portAcceptance }, solveDiagnostics, cardinalityConflicts, collectPorts: extracted.collectPorts };
 }
 
 /**
@@ -593,6 +598,46 @@ function buildInstanceIndex(
     instances.set(k, { ref: v.ref, ports: v.ports.sort() });
   }
   return instances;
+}
+
+// =============================================================================
+// Port Acceptance Builder
+// =============================================================================
+
+/**
+ * Build a port acceptance map from solver-facing cardinality axes.
+ *
+ * Only includes ports whose cardinality axis is a var with at least one
+ * explicitly declared policy field (relation, acceptance, instanceBinding).
+ * Ports without declared policy are excluded — matching the prior semantics
+ * where undeclared vars were not considered broadcast-flexible.
+ *
+ * // [LAW:one-source-of-truth] Derives acceptance from CT/ICT axis data.
+ * // [LAW:single-enforcer] This is the single place that materializes acceptance into TypeFacts.
+ */
+function buildPortAcceptance(
+  baseCardinalityAxis: ReadonlyMap<DraftPortKey, import('../../core/canonical-types').Axis<import('../../core/canonical-types').CardinalityValue, import('../../core/ids').CardinalityVarId>>,
+): ReadonlyMap<DraftPortKey, CardinalityAcceptance> {
+  const result = new Map<DraftPortKey, CardinalityAcceptance>();
+
+  for (const [key, axis] of baseCardinalityAxis) {
+    if (!isAxisVar(axis)) continue;
+
+    // Only include ports with explicitly declared policy — bare vars are not flexible.
+    const cardAxis = axis as import('../../core/canonical-types/cardinality').CardinalityVarAxis;
+    const hasDeclaredPolicy =
+      cardAxis.relation !== undefined ||
+      cardAxis.acceptance !== undefined ||
+      cardAxis.instanceBinding !== undefined;
+    if (!hasDeclaredPolicy) continue;
+
+    const policy = resolveCardinalityPolicy(axis);
+    if (policy) {
+      result.set(key, policy.acceptance);
+    }
+  }
+
+  return result;
 }
 
 // =============================================================================

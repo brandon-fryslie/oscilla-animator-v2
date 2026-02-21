@@ -70,7 +70,7 @@ function makeObligation(
 }
 
 function makeFacts(entries: [DraftPortKey, PortTypeHint][]): TypeFacts {
-  return { ports: new Map(entries), instances: new Map() };
+  return { ports: new Map(entries), instances: new Map(), portAcceptance: new Map() };
 }
 
 function okHint(ct: CanonicalType): PortTypeHint {

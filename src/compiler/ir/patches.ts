@@ -18,6 +18,7 @@
 
 import type { ValueExprId } from "./Indices";
 import type { CanonicalType, InstanceRef } from "../../core/canonical-types";
+import type { CardinalityAcceptance } from "../../core/canonical-types/cardinality";
 import type { TimeModelIR } from "./schedule";
 
 // Re-export from graph/normalize for convenience - these are the authoritative types
@@ -84,6 +85,11 @@ export interface TypeResolvedPatch extends NormalizedPatch {
    * gets its own independently validated CanonicalType.
    */
   readonly collectEdgeTypes?: ReadonlyMap<CollectEdgeKey, CanonicalType>;
+  /**
+   * Per-port cardinality acceptance from CT/ICT declarations.
+   * // [LAW:one-source-of-truth] Threaded from TypeFacts via bridge.
+   */
+  readonly portAcceptance?: ReadonlyMap<PortKey, CardinalityAcceptance>;
 }
 
 // =============================================================================

@@ -14,46 +14,29 @@ import {
   requireInst,
   payloadsEqual,
   unitsEqual,
-  isAxisVar,
-  resolveCardinalityPolicy,
 } from '../../../core/canonical-types';
-import { getBlockDefinition } from '../../../blocks/registry';
+import type { CardinalityAcceptance } from '../../../core/canonical-types/cardinality';
 
 // =============================================================================
 // Port Policy Queries
 // =============================================================================
 
 /**
- * Does this port's CT/ICT cardinality axis declare oneOrMany acceptance?
+ * Does a pre-extracted acceptance value indicate broadcast flexibility?
  *
- * Returns true when the port's cardinality var has a declared policy with
- * acceptance:'oneOrMany', meaning it accepts both signal (one) and field (many)
- * cardinality sources.
+ * Returns true when the acceptance is 'oneOrMany', meaning the port accepts
+ * both signal (one) and field (many) cardinality sources.
  *
- * Used by:
- * - Pass 2 type graph: determines the allowsBroadcast flag for edge validation
- * - Obligation creation: defers cardinality-only mismatches when either endpoint
- *   is flexible (letting the solver handle unification)
+ * Callers supply acceptance from TypeFacts.portAcceptance or
+ * TypeResolvedPatch.portAcceptance — no BlockDef lookup needed.
  *
- * // [LAW:one-source-of-truth] Cardinality compatibility is declared on port types.
+ * // [LAW:one-source-of-truth] Acceptance is derived from CT/ICT axis data,
+ *    pre-extracted during constraint extraction and threaded through TypeFacts.
  */
-export function portAcceptsBroadcast(
-  blockType: string,
-  port: string,
-  dir: 'in' | 'out' = 'in',
+export function acceptsBroadcast(
+  acceptance: CardinalityAcceptance | undefined,
 ): boolean {
-  const def = getBlockDefinition(blockType);
-  if (!def) return false;
-  const portDef = dir === 'in' ? def.inputs[port] : def.outputs[port];
-  const axis = portDef?.type?.extent?.cardinality;
-  if (!axis || !isAxisVar(axis)) return false;
-  const cardAxis = axis as any;
-  const hasDeclaredPolicy = cardAxis.relation !== undefined
-    || cardAxis.acceptance !== undefined
-    || cardAxis.instanceBinding !== undefined;
-  if (!hasDeclaredPolicy) return false;
-  const policy = resolveCardinalityPolicy(axis);
-  return policy?.acceptance === 'oneOrMany';
+  return acceptance === 'oneOrMany';
 }
 
 // =============================================================================

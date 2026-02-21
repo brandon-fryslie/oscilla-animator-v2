@@ -19,7 +19,7 @@ import { isAssignable } from '../../blocks/adapter-spec';
 import { isPayloadVar } from '../../core/inference-types';
 import type { CanonicalType } from '../../core/canonical-types';
 import { isPayloadAnchorAdapter } from './structural-predicates';
-import { portAcceptsBroadcast, isOneManyMismatchOnly } from './policies/type-compatibility';
+import { acceptsBroadcast, isOneManyMismatchOnly } from './policies/type-compatibility';
 
 // =============================================================================
 // Public API
@@ -48,7 +48,6 @@ export function createDerivedObligations(
   facts: TypeFacts,
 ): readonly Obligation[] {
   const obligations: Obligation[] = [];
-  const blockTypeById = new Map(g.blocks.map((b) => [b.id, b.type] as const));
 
   // ===== First pass: adapter obligations =====
   for (const edge of g.edges) {
@@ -70,14 +69,15 @@ export function createDerivedObligations(
     // (looser than typesEqual: contract dropping is OK)
     if (isAssignable(fromHint.canonical, toHint.canonical)) continue;
 
-    // [LAW:one-source-of-truth] Flexibility comes from CT/ICT-declared port policy.
+    // [LAW:one-source-of-truth] Flexibility comes from CT/ICT-declared port policy,
+    // pre-extracted into facts.portAcceptance — no BlockDef lookup.
     // Defer cardinality-only coercion when either side is oneOrMany-flexible.
     // [LAW:single-enforcer] Routed through type-compatibility oracle.
     if (
       isOneManyMismatchOnly(fromHint.canonical, toHint.canonical)
       && (
-        portAcceptsBroadcast(blockTypeById.get(edge.from.blockId) ?? '', edge.from.port, 'out')
-        || portAcceptsBroadcast(blockTypeById.get(edge.to.blockId) ?? '', edge.to.port, 'in')
+        acceptsBroadcast(facts.portAcceptance.get(draftPortKey(edge.from.blockId, edge.from.port, 'out')))
+        || acceptsBroadcast(facts.portAcceptance.get(draftPortKey(edge.to.blockId, edge.to.port, 'in')))
       )
     ) {
       continue;

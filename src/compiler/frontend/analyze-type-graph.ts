@@ -15,7 +15,7 @@ import {
 } from "../../core/canonical-types";
 import type { TypedPatch, BlockIndex, TypeResolvedPatch, PortKey } from "../ir/patches";
 import { getBlockDefinition } from "../../blocks/registry";
-import { portAcceptsBroadcast, isEdgeTypeCompatible } from "./policies/type-compatibility";
+import { acceptsBroadcast, isEdgeTypeCompatible } from "./policies/type-compatibility";
 
 // =============================================================================
 // Port Type Lookup (inlined from analyze-type-constraints.ts)
@@ -122,9 +122,10 @@ export function pass2TypeGraph(typeResolved: TypeResolvedPatch): TypedPatch {
       continue;
     }
 
-    // Check if destination accepts signal→field by CT/ICT declaration.
-    // [LAW:one-source-of-truth] Routed through type-compatibility oracle.
-    const allowsBroadcast = portAcceptsBroadcast(toBlock.type, edge.toPort);
+    // Check if destination accepts signal→field by CT/ICT-derived acceptance data.
+    // [LAW:one-source-of-truth] Acceptance derives from TypeResolvedPatch.portAcceptance, not BlockDef.
+    const toPortKey = portKey(edge.toBlock, edge.toPort, 'in');
+    const allowsBroadcast = acceptsBroadcast(typeResolved.portAcceptance?.get(toPortKey));
 
     // Validate type compatibility
     if (!isEdgeTypeCompatible(fromType, toType, allowsBroadcast)) {
@@ -228,9 +229,10 @@ export function pass2TypeGraphSafe(typeResolved: TypeResolvedPatch): Pass2TypeGr
       continue;
     }
 
-    // Check if destination accepts signal→field by CT/ICT declaration.
-    // [LAW:one-source-of-truth] Routed through type-compatibility oracle.
-    const allowsBroadcast = portAcceptsBroadcast(toBlock.type, edge.toPort);
+    // Check if destination accepts signal→field by CT/ICT-derived acceptance data.
+    // [LAW:one-source-of-truth] Acceptance derives from TypeResolvedPatch.portAcceptance, not BlockDef.
+    const toPortKey = portKey(edge.toBlock, edge.toPort, 'in');
+    const allowsBroadcast = acceptsBroadcast(typeResolved.portAcceptance?.get(toPortKey));
 
     // Validate type compatibility
     if (!isEdgeTypeCompatible(fromType, toType, allowsBroadcast)) {
