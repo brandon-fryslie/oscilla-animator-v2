@@ -10,9 +10,17 @@
 import { registerBlock } from '../registry';
 import { canonicalType, payloadStride } from '../../core/canonical-types';
 import { FLOAT } from '../../core/canonical-types';
-import { inferType, unitVar } from '../../core/inference-types';
+import { inferType, unitVar, cardinalityVar } from '../../core/inference-types';
+import { cardinalityVarId } from '../../core/ids';
 import { OpCode } from '../../compiler/ir/types';
 import { mapAuto } from '../lower-utils';
+
+// [LAW:one-source-of-truth] Per-port cardinality behavior is declared on CT/ICT.
+const WRAP01_CARD = cardinalityVar(cardinalityVarId('wrap01_cardinality'), {
+  relation: 'promoteToMany',
+  acceptance: 'oneOrMany',
+  instanceBinding: 'inherit',
+});
 
 registerBlock({
   type: 'Wrap01',
@@ -28,10 +36,10 @@ registerBlock({
     broadcastPolicy: 'allowZipSig',
   },
   inputs: {
-    in: { label: 'In', type: inferType(FLOAT, unitVar('w01_U')) },
+    in: { label: 'In', type: inferType(FLOAT, unitVar('w01_U'), { cardinality: WRAP01_CARD }) },
   },
   outputs: {
-    out: { label: 'Out', type: inferType(FLOAT, unitVar('w01_U')) },
+    out: { label: 'Out', type: inferType(FLOAT, unitVar('w01_U'), { cardinality: WRAP01_CARD }) },
   },
   lower: ({ inputsById, ctx }) => {
     const input = inputsById.in;

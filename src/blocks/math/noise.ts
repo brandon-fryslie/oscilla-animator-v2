@@ -7,8 +7,17 @@
 import { registerBlock } from '../registry';
 import { canonicalType, payloadStride, floatConst } from '../../core/canonical-types';
 import { FLOAT } from '../../core/canonical-types';
+import { cardinalityVar } from '../../core/inference-types';
+import { cardinalityVarId } from '../../core/ids';
 import { OpCode } from '../../compiler/ir/types';
 import { zipAuto } from '../lower-utils';
+
+// [LAW:one-source-of-truth] Per-port cardinality behavior is declared on CT/ICT.
+const NOISE_CARD = cardinalityVar(cardinalityVarId('noise_cardinality'), {
+  relation: 'promoteToMany',
+  acceptance: 'oneOrMany',
+  instanceBinding: 'inherit',
+});
 
 registerBlock({
   type: 'Noise',
@@ -24,10 +33,10 @@ registerBlock({
     broadcastPolicy: 'allowZipSig',
   },
   inputs: {
-    x: { label: 'X', type: canonicalType(FLOAT) },
+    x: { label: 'X', type: canonicalType(FLOAT, undefined, { cardinality: NOISE_CARD }) },
   },
   outputs: {
-    out: { label: 'Output', type: canonicalType(FLOAT) },
+    out: { label: 'Output', type: canonicalType(FLOAT, undefined, { cardinality: NOISE_CARD }) },
   },
   lower: ({ ctx, inputsById }) => {
     const x = inputsById.x;

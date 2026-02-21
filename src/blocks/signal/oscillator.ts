@@ -7,10 +7,19 @@
 import { registerBlock, requireConfigInt } from '../registry';
 import { canonicalType, unitTurns, unitNone, payloadStride, floatConst, requireInst, contractWrap01, contractClamp11 } from '../../core/canonical-types';
 import { FLOAT, INT } from '../../core/canonical-types';
+import { cardinalityVar } from '../../core/inference-types';
+import { cardinalityVarId } from '../../core/ids';
 import { OpCode } from '../../compiler/ir/types';
 import { defaultSourceConst } from '../../types';
 import type { ValueExprId } from '../../compiler/ir/Indices';
 import { zipAuto, mapAuto } from '../lower-utils';
+
+// [LAW:one-source-of-truth] Per-port cardinality behavior is declared on CT/ICT.
+const OSCILLATOR_CARD = cardinalityVar(cardinalityVarId('oscillator_cardinality'), {
+  relation: 'promoteToMany',
+  acceptance: 'oneOrMany',
+  instanceBinding: 'inherit',
+});
 
 registerBlock({
   type: 'Oscillator',
@@ -28,7 +37,7 @@ registerBlock({
   inputs: {
     phase: {
       label: 'Phase',
-      type: canonicalType(FLOAT, unitTurns(), undefined, contractWrap01()),
+      type: canonicalType(FLOAT, unitTurns(), { cardinality: OSCILLATOR_CARD }, contractWrap01()),
     },
     mode: {
       type: canonicalType(INT),
@@ -47,7 +56,7 @@ registerBlock({
     },
   },
   outputs: {
-    out: { label: 'Output', type: canonicalType(FLOAT, unitNone(), undefined, contractClamp11()) },
+    out: { label: 'Output', type: canonicalType(FLOAT, unitNone(), { cardinality: OSCILLATOR_CARD }, contractClamp11()) },
   },
   lower: ({ ctx, inputsById, config }) => {
     const phase = inputsById.phase;

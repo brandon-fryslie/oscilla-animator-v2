@@ -7,8 +7,17 @@
 import { registerBlock, requireConfig } from '../registry';
 import { canonicalType, unitTurns, payloadStride, floatConst, requireInst, contractWrap01 } from '../../core/canonical-types';
 import { FLOAT } from '../../core/canonical-types';
+import { cardinalityVar } from '../../core/inference-types';
+import { cardinalityVarId } from '../../core/ids';
 import { OpCode, stableStateId } from '../../compiler/ir/types';
 import { zipAuto, mapAuto } from '../lower-utils';
+
+// [LAW:one-source-of-truth] Per-port cardinality behavior is declared on CT/ICT.
+const PHASOR_CARD = cardinalityVar(cardinalityVarId('phasor_cardinality'), {
+  relation: 'promoteToMany',
+  acceptance: 'oneOrMany',
+  instanceBinding: 'inherit',
+});
 
 registerBlock({
   type: 'Phasor',
@@ -24,11 +33,11 @@ registerBlock({
     broadcastPolicy: 'allowZipSig',
   },
   inputs: {
-    frequency: { label: 'Frequency (Hz)', type: canonicalType(FLOAT) },
+    frequency: { label: 'Frequency (Hz)', type: canonicalType(FLOAT, undefined, { cardinality: PHASOR_CARD }) },
     initialPhase: { type: canonicalType(FLOAT), defaultValue: 0, exposedAsPort: false },
   },
   outputs: {
-    out: { label: 'Phase', type: canonicalType(FLOAT, unitTurns(), undefined, contractWrap01()) },
+    out: { label: 'Phase', type: canonicalType(FLOAT, unitTurns(), { cardinality: PHASOR_CARD }, contractWrap01()) },
   },
   lower: ({ ctx, inputsById, config }) => {
     const frequency = inputsById.frequency;

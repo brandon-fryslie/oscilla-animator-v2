@@ -5,14 +5,21 @@
  */
 
 import { registerBlock, ALL_CONCRETE_PAYLOADS } from '../registry';
-import { canonicalType, payloadStride, floatConst, axisVar } from '../../core/canonical-types';
+import { canonicalType, payloadStride, floatConst } from '../../core/canonical-types';
 import { FLOAT, INT, VEC2, VEC3, COLOR } from '../../core/canonical-types';
 import type { CanonicalType } from '../../core/canonical-types';
-import { payloadVar, unitVar, inferType } from '../../core/inference-types';
+import { payloadVar, unitVar, inferType, cardinalityVar } from '../../core/inference-types';
 import { compileExpression, type BlockRefsContext } from '../../expr';
 import type { ValueExprId } from '../../compiler/ir/Indices';
 
 import { cardinalityVarId } from '../../core/ids';
+
+// [LAW:one-source-of-truth] Expression cardinality behavior is declared on CT/ICT.
+const EXPRESSION_CARD = cardinalityVar(cardinalityVarId('expr_refs'), {
+  relation: 'promoteToMany',
+  acceptance: 'oneOrMany',
+  instanceBinding: 'inherit',
+});
 
 registerBlock({
   type: 'Expression',
@@ -46,7 +53,7 @@ registerBlock({
     refs: {
       label: 'Block Refs',
       type: inferType(payloadVar('expr_refs'), unitVar('expr_refs'), {
-        cardinality: axisVar(cardinalityVarId('expr_refs')),
+        cardinality: EXPRESSION_CARD,
       }),
       exposedAsPort: true,
       collectAccepts: {
@@ -69,7 +76,7 @@ registerBlock({
   outputs: {
     out: {
       label: 'Output',
-      type: canonicalType(FLOAT), // Default - actual type inferred during lowering
+      type: canonicalType(FLOAT, undefined, { cardinality: EXPRESSION_CARD }), // Default - actual type inferred during lowering
     },
   },
 

@@ -7,9 +7,17 @@
 import { registerBlock, requireConfig, type LowerResult } from '../registry';
 import { canonicalType, payloadStride, requireInst } from '../../core/canonical-types';
 import { FLOAT } from '../../core/canonical-types';
-import { inferType, unitVar, payloadVar } from '../../core/inference-types';
+import { inferType, unitVar, payloadVar, cardinalityVar } from '../../core/inference-types';
+import { cardinalityVarId } from '../../core/ids';
 import { stableStateId } from '../../compiler/ir/types';
 import { defaultSourceConst } from '../../types';
+
+// [LAW:one-source-of-truth] Per-port cardinality behavior is declared on CT/ICT.
+const UNIT_DELAY_CARD = cardinalityVar(cardinalityVarId('unit_delay_cardinality'), {
+  relation: 'promoteToMany',
+  acceptance: 'oneOrMany',
+  instanceBinding: 'inherit',
+});
 
 registerBlock({
   type: 'UnitDelay',
@@ -26,11 +34,11 @@ registerBlock({
     broadcastPolicy: 'allowZipSig',
   },
   inputs: {
-    in: { label: 'Input', type: inferType(payloadVar('unitDelay_T'), unitVar('unitDelay_U')), defaultSource: defaultSourceConst(0) },
+    in: { label: 'Input', type: inferType(payloadVar('unitDelay_T'), unitVar('unitDelay_U'), { cardinality: UNIT_DELAY_CARD }), defaultSource: defaultSourceConst(0) },
     initialValue: { type: canonicalType(FLOAT), defaultValue: 0, exposedAsPort: false },
   },
   outputs: {
-    out: { label: 'Output', type: inferType(payloadVar('unitDelay_T'), unitVar('unitDelay_U')) },
+    out: { label: 'Output', type: inferType(payloadVar('unitDelay_T'), unitVar('unitDelay_U'), { cardinality: UNIT_DELAY_CARD }) },
   },
   // Phase 1: Generate output (reading from state) without needing input resolved
   lowerOutputsOnly: ({ ctx, config }) => {

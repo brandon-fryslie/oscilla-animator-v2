@@ -7,9 +7,17 @@
 import { registerBlock } from '../registry';
 import { canonicalType, payloadStride, floatConst, requireInst } from '../../core/canonical-types';
 import { FLOAT, BOOL } from '../../core/canonical-types';
-import { inferType, unitVar } from '../../core/inference-types';
+import { inferType, unitVar, cardinalityVar } from '../../core/inference-types';
+import { cardinalityVarId } from '../../core/ids';
 import { OpCode, stableStateId } from '../../compiler/ir/types';
 import { zipAuto } from '../lower-utils';
+
+// [LAW:one-source-of-truth] Per-port cardinality behavior is declared on CT/ICT.
+const ACCUMULATOR_CARD = cardinalityVar(cardinalityVarId('accumulator_cardinality'), {
+  relation: 'promoteToMany',
+  acceptance: 'oneOrMany',
+  instanceBinding: 'inherit',
+});
 
 registerBlock({
   type: 'Accumulator',
@@ -26,11 +34,11 @@ registerBlock({
     broadcastPolicy: 'allowZipSig',
   },
   inputs: {
-    delta: { label: 'Delta', type: inferType(FLOAT, unitVar('accum_U')) },
-    reset: { label: 'Reset', type: canonicalType(BOOL) },
+    delta: { label: 'Delta', type: inferType(FLOAT, unitVar('accum_U'), { cardinality: ACCUMULATOR_CARD }) },
+    reset: { label: 'Reset', type: canonicalType(BOOL, undefined, { cardinality: ACCUMULATOR_CARD }) },
   },
   outputs: {
-    value: { label: 'Value', type: inferType(FLOAT, unitVar('accum_U')) },
+    value: { label: 'Value', type: inferType(FLOAT, unitVar('accum_U'), { cardinality: ACCUMULATOR_CARD }) },
   },
   lower: ({ ctx, inputsById }) => {
     const delta = inputsById.delta;

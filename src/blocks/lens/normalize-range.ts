@@ -10,9 +10,17 @@
 import { registerBlock } from '../registry';
 import { canonicalType, payloadStride, contractClamp01 } from '../../core/canonical-types';
 import { FLOAT } from '../../core/canonical-types';
-import { inferType, unitVar } from '../../core/inference-types';
+import { inferType, unitVar, cardinalityVar } from '../../core/inference-types';
+import { cardinalityVarId } from '../../core/ids';
 import { OpCode } from '../../compiler/ir/types';
 import { withoutContract } from '../lower-utils';
+
+// [LAW:one-source-of-truth] Per-port cardinality behavior is declared on CT/ICT.
+const NORMALIZE_RANGE_CARD = cardinalityVar(cardinalityVarId('normalize_range_cardinality'), {
+  relation: 'promoteToMany',
+  acceptance: 'oneOrMany',
+  instanceBinding: 'inherit',
+});
 
 registerBlock({
   type: 'Lens_NormalizeRange',
@@ -28,12 +36,12 @@ registerBlock({
     broadcastPolicy: 'allowZipSig',
   },
   inputs: {
-    in: { label: 'In', type: inferType(FLOAT, unitVar('nr_U')) },
-    min: { label: 'Min', type: inferType(FLOAT, unitVar('nr_U')), defaultValue: 0.0 },
-    max: { label: 'Max', type: inferType(FLOAT, unitVar('nr_U')), defaultValue: 1.0 },
+    in: { label: 'In', type: inferType(FLOAT, unitVar('nr_U'), { cardinality: NORMALIZE_RANGE_CARD }) },
+    min: { label: 'Min', type: inferType(FLOAT, unitVar('nr_U'), { cardinality: NORMALIZE_RANGE_CARD }), defaultValue: 0.0 },
+    max: { label: 'Max', type: inferType(FLOAT, unitVar('nr_U'), { cardinality: NORMALIZE_RANGE_CARD }), defaultValue: 1.0 },
   },
   outputs: {
-    out: { label: 'Out', type: canonicalType(FLOAT, undefined, undefined, contractClamp01()) },
+    out: { label: 'Out', type: canonicalType(FLOAT, undefined, { cardinality: NORMALIZE_RANGE_CARD }, contractClamp01()) },
   },
   lower: ({ inputsById, ctx }) => {
     const input = inputsById.in;

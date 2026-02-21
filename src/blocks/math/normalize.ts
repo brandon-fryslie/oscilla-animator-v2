@@ -8,8 +8,17 @@ import { registerBlock } from '../registry';
 import { defaultSourceConst } from '../../types';
 import { canonicalType, payloadStride, floatConst } from '../../core/canonical-types';
 import { FLOAT } from '../../core/canonical-types';
+import { cardinalityVar } from '../../core/inference-types';
+import { cardinalityVarId } from '../../core/ids';
 import { OpCode } from '../../compiler/ir/types';
 import { zipAuto, mapAuto } from '../lower-utils';
+
+// [LAW:one-source-of-truth] Per-port cardinality behavior is declared on CT/ICT.
+const NORMALIZE_CARD = cardinalityVar(cardinalityVarId('normalize_cardinality'), {
+  relation: 'promoteToMany',
+  acceptance: 'oneOrMany',
+  instanceBinding: 'inherit',
+});
 
 registerBlock({
   type: 'Normalize',
@@ -25,14 +34,14 @@ registerBlock({
     broadcastPolicy: 'allowZipSig',
   },
   inputs: {
-    x: { label: 'X', type: canonicalType(FLOAT) },
-    y: { label: 'Y', type: canonicalType(FLOAT) },
-    z: { label: 'Z', type: canonicalType(FLOAT), defaultSource: defaultSourceConst(0) },
+    x: { label: 'X', type: canonicalType(FLOAT, undefined, { cardinality: NORMALIZE_CARD }) },
+    y: { label: 'Y', type: canonicalType(FLOAT, undefined, { cardinality: NORMALIZE_CARD }) },
+    z: { label: 'Z', type: canonicalType(FLOAT, undefined, { cardinality: NORMALIZE_CARD }), defaultSource: defaultSourceConst(0) },
   },
   outputs: {
-    outX: { label: 'X', type: canonicalType(FLOAT) },
-    outY: { label: 'Y', type: canonicalType(FLOAT) },
-    outZ: { label: 'Z', type: canonicalType(FLOAT) },
+    outX: { label: 'X', type: canonicalType(FLOAT, undefined, { cardinality: NORMALIZE_CARD }) },
+    outY: { label: 'Y', type: canonicalType(FLOAT, undefined, { cardinality: NORMALIZE_CARD }) },
+    outZ: { label: 'Z', type: canonicalType(FLOAT, undefined, { cardinality: NORMALIZE_CARD }) },
   },
   lower: ({ ctx, inputsById }) => {
     const x = inputsById.x;

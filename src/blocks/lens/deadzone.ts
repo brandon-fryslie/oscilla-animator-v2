@@ -10,9 +10,17 @@
 import { registerBlock } from '../registry';
 import { canonicalType, payloadStride, floatConst } from '../../core/canonical-types';
 import { FLOAT } from '../../core/canonical-types';
-import { inferType, unitVar } from '../../core/inference-types';
+import { inferType, unitVar, cardinalityVar } from '../../core/inference-types';
+import { cardinalityVarId } from '../../core/ids';
 import { OpCode } from '../../compiler/ir/types';
 import { withoutContract } from '../lower-utils';
+
+// [LAW:one-source-of-truth] Per-port cardinality behavior is declared on CT/ICT.
+const DEADZONE_CARD = cardinalityVar(cardinalityVarId('deadzone_cardinality'), {
+  relation: 'promoteToMany',
+  acceptance: 'oneOrMany',
+  instanceBinding: 'inherit',
+});
 
 registerBlock({
   type: 'Deadzone',
@@ -28,11 +36,11 @@ registerBlock({
     broadcastPolicy: 'allowZipSig',
   },
   inputs: {
-    in: { label: 'In', type: inferType(FLOAT, unitVar('dz_U')) },
-    threshold: { label: 'Threshold', type: inferType(FLOAT, unitVar('dz_U')), defaultValue: 0.01 },
+    in: { label: 'In', type: inferType(FLOAT, unitVar('dz_U'), { cardinality: DEADZONE_CARD }) },
+    threshold: { label: 'Threshold', type: inferType(FLOAT, unitVar('dz_U'), { cardinality: DEADZONE_CARD }), defaultValue: 0.01 },
   },
   outputs: {
-    out: { label: 'Out', type: inferType(FLOAT, unitVar('dz_U')) },
+    out: { label: 'Out', type: inferType(FLOAT, unitVar('dz_U'), { cardinality: DEADZONE_CARD }) },
   },
   lower: ({ inputsById, ctx }) => {
     const input = inputsById.in;

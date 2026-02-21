@@ -8,8 +8,17 @@ import { registerBlock } from '../registry';
 import { defaultSourceConst } from '../../types';
 import { canonicalType, payloadStride } from '../../core/canonical-types';
 import { FLOAT } from '../../core/canonical-types';
+import { cardinalityVar } from '../../core/inference-types';
+import { cardinalityVarId } from '../../core/ids';
 import { OpCode } from '../../compiler/ir/types';
 import { zipAuto, mapAuto } from '../lower-utils';
+
+// [LAW:one-source-of-truth] Per-port cardinality behavior is declared on CT/ICT.
+const LENGTH_CARD = cardinalityVar(cardinalityVarId('length_cardinality'), {
+  relation: 'promoteToMany',
+  acceptance: 'oneOrMany',
+  instanceBinding: 'inherit',
+});
 
 registerBlock({
   type: 'Length',
@@ -25,12 +34,12 @@ registerBlock({
     broadcastPolicy: 'allowZipSig',
   },
   inputs: {
-    x: { label: 'X', type: canonicalType(FLOAT) },
-    y: { label: 'Y', type: canonicalType(FLOAT) },
-    z: { label: 'Z', type: canonicalType(FLOAT), defaultSource: defaultSourceConst(0) },
+    x: { label: 'X', type: canonicalType(FLOAT, undefined, { cardinality: LENGTH_CARD }) },
+    y: { label: 'Y', type: canonicalType(FLOAT, undefined, { cardinality: LENGTH_CARD }) },
+    z: { label: 'Z', type: canonicalType(FLOAT, undefined, { cardinality: LENGTH_CARD }), defaultSource: defaultSourceConst(0) },
   },
   outputs: {
-    out: { label: 'Output', type: canonicalType(FLOAT) },
+    out: { label: 'Output', type: canonicalType(FLOAT, undefined, { cardinality: LENGTH_CARD }) },
   },
   lower: ({ ctx, inputsById }) => {
     const x = inputsById.x;
