@@ -29,12 +29,6 @@ registerBlock({
   form: 'primitive',
   capability: 'identity',
   loweringPurity: 'pure',
-  cardinality: {
-    cardinalityMode: 'transform',
-    laneCoupling: 'laneLocal',
-    broadcastPolicy: 'allowZipSig',
-    domainType: DOMAIN_CIRCLE,  // Array creates Circle domain instances
-  },
   payload: {
     allowedPayloads: {
       element: ALL_CONCRETE_PAYLOADS,

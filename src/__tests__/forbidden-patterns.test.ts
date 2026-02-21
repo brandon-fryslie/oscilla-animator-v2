@@ -130,11 +130,9 @@ describe('Forbidden Patterns (Type System Invariants)', () => {
     });
 
     it('isTypeCompatible is pure (no block-name parameters)', () => {
-      // isTypeCompatible itself must be pure — it takes a boolean `allowsBroadcast`,
-      // not block metadata. The caller (pass2TypeGraph) may use getBlockCardinalityMetadata
-      // to compute that boolean, which is fine.
+      // isTypeCompatible itself must be pure — it takes only type facts,
+      // not block metadata or block-name dispatch.
       const forbiddenInTypeCompat = [
-        'isCardinalityGeneric',
         'sourceBlockType',
         'targetBlockType',
       ];
@@ -169,10 +167,10 @@ describe('Forbidden Patterns (Type System Invariants)', () => {
       );
       expect(hasTypeParams, 'findAdapter must dispatch on CanonicalType only').toBe(true);
 
-      // Check 2: normalize-adapters.ts must NOT import isCardinalityGeneric
+      // Check 2: normalize-adapters.ts must NOT depend on registry cardinality helpers
       const normalizeAdaptersFile = 'src/compiler/frontend/normalize-adapters.ts';
-      const cardinalityGenericImports = grepSrc('isCardinalityGeneric', normalizeAdaptersFile);
-      expect(cardinalityGenericImports, 'normalize-adapters.ts must not import isCardinalityGeneric').toEqual([]);
+      const cardinalityMetadataImports = grepSrc('getBlockCardinalityMetadata\\|isCardinalityGeneric', normalizeAdaptersFile);
+      expect(cardinalityMetadataImports, 'normalize-adapters.ts must not import cardinality metadata helpers').toEqual([]);
     });
 
   });

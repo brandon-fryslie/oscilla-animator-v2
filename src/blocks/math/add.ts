@@ -5,11 +5,19 @@
  */
 
 import { registerBlock, STANDARD_NUMERIC_PAYLOADS } from '../registry';
-import { canonicalType, payloadStride } from '../../core/canonical-types';
+import { canonicalType, payloadStride, cardinalityVar } from '../../core/canonical-types';
 import { FLOAT } from '../../core/canonical-types';
 import { cardinalityVar } from '../../core/inference-types';
 import { cardinalityVarId } from '../../core/ids';
 import { OpCode } from '../../compiler/ir/types';
+import { cardinalityVarId } from '../../core/ids';
+
+// [LAW:one-source-of-truth] Cardinality behavior is declared directly on CT/ICT.
+const ADD_CARD = cardinalityVar(cardinalityVarId('add_cardinality'), {
+  relation: 'promoteToMany',
+  acceptance: 'oneOrMany',
+  instanceBinding: 'inherit',
+});
 
 // [LAW:one-source-of-truth] Per-port cardinality behavior is declared on CT/ICT.
 const ADD_CARD = cardinalityVar(cardinalityVarId('add_cardinality'), {
@@ -26,11 +34,6 @@ registerBlock({
   form: 'primitive',
   capability: 'pure',
   loweringPurity: 'pure', // MIGRATION (2026-02-03): Pure block for macro expansion
-  cardinality: {
-    cardinalityMode: 'preserve',
-    laneCoupling: 'laneLocal',
-    broadcastPolicy: 'allowZipSig',
-  },
   payload: {
     allowedPayloads: {
       a: STANDARD_NUMERIC_PAYLOADS,

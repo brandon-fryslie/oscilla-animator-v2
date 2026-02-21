@@ -5,11 +5,10 @@
  */
 
 import { registerBlock, STANDARD_NUMERIC_PAYLOADS } from '../registry';
-import { canonicalType, payloadStride } from '../../core/canonical-types';
+import { canonicalType, payloadStride, cardinalityVar } from '../../core/canonical-types';
 import { FLOAT } from '../../core/canonical-types';
-import { cardinalityVar } from '../../core/inference-types';
-import { cardinalityVarId } from '../../core/ids';
 import { OpCode } from '../../compiler/ir/types';
+import { cardinalityVarId } from '../../core/ids';
 
 // [LAW:one-source-of-truth] Per-port cardinality behavior is declared on CT/ICT.
 const MULTIPLY_CARD = cardinalityVar(cardinalityVarId('multiply_cardinality'), {
@@ -26,11 +25,6 @@ registerBlock({
   form: 'primitive',
   capability: 'pure',
   loweringPurity: 'pure',
-  cardinality: {
-    cardinalityMode: 'preserve',
-    laneCoupling: 'laneLocal',
-    broadcastPolicy: 'allowZipSig',
-  },
   payload: {
     allowedPayloads: {
       a: STANDARD_NUMERIC_PAYLOADS,

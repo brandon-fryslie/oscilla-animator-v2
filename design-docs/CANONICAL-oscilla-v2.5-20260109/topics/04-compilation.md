@@ -241,8 +241,8 @@ Cardinality constraints are extracted from per-port CT/ICT declarations:
 - Var `relation` defines group propagation (`uniform` or `promoteToMany`)
 - Var `acceptance` defines per-port bounds (`oneOnly`, `manyOnly`, `oneOrMany`)
 - Var `instanceBinding` defines instance source (`inherit` vs `create(domainType)`)
-
-Compiler metadata may assist migration, but is non-canonical. The canonical source for cardinality behavior is the port type axis declaration.
+- Block-level mode metadata is compatibility-only; the frontend never treats it as a type authority.
+- Canonical source for cardinality behavior is the port type axis declaration.
 
 ### Default Resolution (v0)
 

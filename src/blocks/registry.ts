@@ -928,38 +928,6 @@ export function getExposedOutputs(def: BlockDef): Array<[string, OutputDef]> {
 }
 
 // =============================================================================
-// Cardinality Query Functions (for compiler passes)
-// =============================================================================
-
-/**
- * Get cardinality metadata for a block type.
- * Throws if block type is not registered.
- * Returns undefined if block has no cardinality metadata (fixed cardinality).
- */
-export function getBlockCardinalityMetadata(blockType: string): BlockCardinalityMetadata | undefined {
-  return requireBlockDef(blockType).cardinality;
-}
-
-/**
- * Check if a block is cardinality-generic (preserve mode + lane-local).
- * Throws if block type is not registered.
- */
-export function isCardinalityGeneric(blockType: string): boolean {
-  const meta = getBlockCardinalityMetadata(blockType);
-  return meta?.cardinalityMode === 'preserve' && meta?.laneCoupling === 'laneLocal';
-}
-
-/**
- * Default cardinality metadata for blocks that don't specify it.
- * Assumes signalOnly for backwards compatibility with existing blocks.
- */
-export const DEFAULT_CARDINALITY_METADATA: BlockCardinalityMetadata = {
-  cardinalityMode: 'signalOnly',
-  laneCoupling: 'laneLocal',
-  broadcastPolicy: 'disallowSignalMix',
-};
-
-// =============================================================================
 // Payload-Generic Metadata Query Functions
 // =============================================================================
 

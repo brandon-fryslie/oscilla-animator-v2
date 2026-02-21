@@ -8,7 +8,6 @@ import { registerBlock, ALL_CONCRETE_PAYLOADS, requireConfigEnum } from '../regi
 import { canonicalType, payloadStride, type PayloadType, requireInst, INT } from '../../core/canonical-types';
 import { unitVar, payloadVar, inferType, cardinalityVar } from '../../core/inference-types';
 import { cardinalityVarId } from '../../core/ids';
-import { DOMAIN_SHAPE } from '../../core/domain-registry';
 import { defaultSourceConst } from '../../types';
 
 // [LAW:one-source-of-truth] Reduce input cardinality behavior is declared on CT/ICT.
@@ -25,12 +24,6 @@ registerBlock({
   form: 'primitive',
   capability: 'pure',
   loweringPurity: 'pure',
-  cardinality: {
-    cardinalityMode: 'transform',
-    laneCoupling: 'laneCoupled',
-    broadcastPolicy: 'disallowSignalMix',
-    domainType: DOMAIN_SHAPE,  // Reduce works with any domain (consumes from inferred instance)
-  },
   payload: {
     allowedPayloads: {
       field: ALL_CONCRETE_PAYLOADS,

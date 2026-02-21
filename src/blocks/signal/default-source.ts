@@ -92,11 +92,6 @@ registerBlock({
   form: 'primitive',
   capability: 'pure',
   loweringPurity: 'pure', // Pure block (uses LowerSandbox for macro expansion)
-  cardinality: {
-    cardinalityMode: 'signalOnly',
-    laneCoupling: 'laneLocal',
-    broadcastPolicy: 'disallowSignalMix',
-  },
   inputs: {},
   outputs: {
     // Polymorphic output — payload and unit resolve via constraint propagation

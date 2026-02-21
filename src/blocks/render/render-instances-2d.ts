@@ -41,11 +41,6 @@ registerBlock({
   form: 'primitive',
   capability: 'render',
   loweringPurity: 'impure',
-  cardinality: {
-    cardinalityMode: 'fieldOnly',
-    laneCoupling: 'laneLocal',
-    broadcastPolicy: 'allowZipSig',
-  },
   inputs: {
     pos: { label: 'Position', type: inferType(VEC3, unitWorld3(), { cardinality: RENDER_POS_CARD }) },
     color: { label: 'Color', type: inferType(COLOR, unitHsl(), { cardinality: RENDER_COLOR_CARD }) },
@@ -71,7 +66,7 @@ registerBlock({
     if (!color) {
       throw new Error('RenderInstances2D color input is required');
     }
-    // color may be a signal (one) when wired from a Const via allowZipSig broadcast — that's valid
+    // color may be a signal (one) or field (many); CT/ICT declares oneOrMany acceptance.
 
     // Shape is automatically looked up from instance.shapeField in schedule-program.ts
     // No need to extract it here - the backend handles it

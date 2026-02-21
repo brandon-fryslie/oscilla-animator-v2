@@ -10,8 +10,6 @@ import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR,  CAMERA_PROJECTION } from '../../c
 import {
   getBlockDefinition,
   requireBlockDef,
-  getBlockCardinalityMetadata,
-  isCardinalityGeneric,
   getBlockPayloadMetadata,
   isPayloadAllowed,
   getPayloadCombinations,
@@ -65,39 +63,6 @@ describe('getBlockDefinition (nullable version)', () => {
 });
 
 describe('Metadata functions throw on unknown block type', () => {
-  describe('getBlockCardinalityMetadata', () => {
-    it('throws for non-existent block type', () => {
-      expect(() => getBlockCardinalityMetadata('Bogus')).toThrow(
-        'Unknown block type: "Bogus" is not registered'
-      );
-    });
-
-    it('returns metadata for block with cardinality', () => {
-      const meta = getBlockCardinalityMetadata('Add');
-      expect(meta).toBeDefined();
-      expect(meta!.cardinalityMode).toBe('preserve');
-    });
-
-    it('returns undefined for block without cardinality metadata', () => {
-      // InfiniteTimeRoot has cardinality, so let's check a block that might not
-      // Actually all blocks should have cardinality now - just verify the function works
-      const meta = getBlockCardinalityMetadata('Add');
-      expect(meta).toBeDefined();
-    });
-  });
-
-  describe('isCardinalityGeneric', () => {
-    it('throws for non-existent block type', () => {
-      expect(() => isCardinalityGeneric('Bogus')).toThrow(
-        'Unknown block type: "Bogus" is not registered'
-      );
-    });
-
-    it('returns true for preserve+laneLocal blocks', () => {
-      expect(isCardinalityGeneric('Add')).toBe(true);
-    });
-  });
-
   describe('getBlockPayloadMetadata', () => {
     it('throws for non-existent block type', () => {
       expect(() => getBlockPayloadMetadata('Bogus')).toThrow(

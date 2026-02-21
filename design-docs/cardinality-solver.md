@@ -65,7 +65,7 @@ Required extraction behavior:
 5. Emit instance-source constraints from each var port's `instanceBinding`.
 6. Emit edge-equality cardinality constraints for graph wires.
 
-Legacy metadata (`cardinalityMode`, `broadcastPolicy`, etc.) may be read only as fallback while migration is incomplete.
+Block-level mode metadata is non-canonical. If present in legacy block definitions, it is translated once at registry registration into per-port CT/ICT declarations and is never read by the extractor/solver pipeline.
 
 ## 5. Solver Semantics
 
@@ -119,9 +119,9 @@ index:    C(uniform, manyOnly, create(circle))
 ## 7. Migration Rules
 
 1. New blocks must declare cardinality behavior in CT/ICT.
-2. Existing blocks may continue using mode metadata temporarily.
-3. Extraction must prefer CT/ICT declarations when both are present.
-4. Migration is complete when extractor has no mode-dispatch rewrite paths.
+2. Extractor/solver/frontend compatibility must depend only on CT/ICT declarations.
+3. Any legacy mode declaration is a registration-time compatibility input, not a frontend type authority.
+4. Migration is complete when no block definitions require registration-time translation.
 
 ## 8. Non-Goals
 

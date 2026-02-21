@@ -38,11 +38,6 @@ registerBlock({
   description: 'Outputs a constant value (type inferred from target)',
   form: 'primitive',
   capability: 'pure',
-  cardinality: {
-    cardinalityMode: 'preserve',
-    laneCoupling: 'laneLocal',
-    broadcastPolicy: 'allowZipSig',
-  },
   payload: {
     allowedPayloads: {
       out: ALL_CONCRETE_PAYLOADS,

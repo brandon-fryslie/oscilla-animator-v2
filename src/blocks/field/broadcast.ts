@@ -8,7 +8,6 @@ import { registerBlock, ALL_CONCRETE_PAYLOADS } from '../registry';
 import { payloadStride, type PayloadType, requireInst } from '../../core/canonical-types';
 import { unitVar, payloadVar, inferType, cardinalityVar } from '../../core/inference-types';
 import { cardinalityVarId } from '../../core/ids';
-import { DOMAIN_SHAPE } from '../../core/domain-registry';
 import { rewriteFieldType } from '../layout/_helpers';
 
 // [LAW:one-source-of-truth] Broadcast output field behavior is declared on CT/ICT.
@@ -42,12 +41,6 @@ registerBlock({
   form: 'primitive',
   capability: 'pure',
   loweringPurity: 'pure',
-  cardinality: {
-    cardinalityMode: 'transform',
-    laneCoupling: 'laneLocal',
-    broadcastPolicy: 'requireBroadcastExpr',
-    domainType: DOMAIN_SHAPE,  // Broadcast works with any domain (uses inferred instance)
-  },
   adapterSpec: {
     from: { payload: 'any', unit: 'any', extent: 'any' },
     to: { payload: 'same', unit: 'same', extent: 'any' },

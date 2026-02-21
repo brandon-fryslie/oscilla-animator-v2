@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { FLOAT, VEC2 } from '../../core/canonical-types';
+import { FLOAT, VEC2, isAxisVar, resolveCardinalityPolicy } from '../../core/canonical-types';
 import {
   getBlockDefinition,
   requireBlockDef,
@@ -80,11 +80,16 @@ describe('ExternalInput Block', () => {
     expect(def.outputs.value.type.payload).toBe(FLOAT);
   });
 
-  it('is cardinality-generic with preserve mode', () => {
-    expect(def.cardinality).toBeDefined();
-    expect(def.cardinality!.cardinalityMode).toBe('preserve');
-    expect(def.cardinality!.laneCoupling).toBe('laneLocal');
-    expect(def.cardinality!.broadcastPolicy).toBe('allowZipSig');
+  it('declares flexible output cardinality policy on CT/ICT', () => {
+    const axis = def.outputs.value.type.extent.cardinality;
+    expect(isAxisVar(axis)).toBe(true);
+    if (!isAxisVar(axis)) return;
+    const policy = resolveCardinalityPolicy(axis);
+    expect(policy).not.toBeNull();
+    if (!policy) return;
+    expect(policy.relation).toBe('promoteToMany');
+    expect(policy.acceptance).toBe('oneOrMany');
+    expect(policy.instanceBinding).toBe('inherit');
   });
 });
 
@@ -113,9 +118,16 @@ describe('ExternalGate Block', () => {
     expect(def.outputs.gate.type.payload).toBe(FLOAT);
   });
 
-  it('is cardinality-generic', () => {
-    expect(def.cardinality).toBeDefined();
-    expect(def.cardinality!.cardinalityMode).toBe('preserve');
+  it('declares flexible output cardinality policy on CT/ICT', () => {
+    const axis = def.outputs.gate.type.extent.cardinality;
+    expect(isAxisVar(axis)).toBe(true);
+    if (!isAxisVar(axis)) return;
+    const policy = resolveCardinalityPolicy(axis);
+    expect(policy).not.toBeNull();
+    if (!policy) return;
+    expect(policy.relation).toBe('promoteToMany');
+    expect(policy.acceptance).toBe('oneOrMany');
+    expect(policy.instanceBinding).toBe('inherit');
   });
 });
 
@@ -139,8 +151,15 @@ describe('ExternalVec2 Block', () => {
     expect(def.outputs.position.type.payload).toBe(VEC2);
   });
 
-  it('is cardinality-generic', () => {
-    expect(def.cardinality).toBeDefined();
-    expect(def.cardinality!.cardinalityMode).toBe('preserve');
+  it('declares flexible output cardinality policy on CT/ICT', () => {
+    const axis = def.outputs.position.type.extent.cardinality;
+    expect(isAxisVar(axis)).toBe(true);
+    if (!isAxisVar(axis)) return;
+    const policy = resolveCardinalityPolicy(axis);
+    expect(policy).not.toBeNull();
+    if (!policy) return;
+    expect(policy.relation).toBe('promoteToMany');
+    expect(policy.acceptance).toBe('oneOrMany');
+    expect(policy.instanceBinding).toBe('inherit');
   });
 });

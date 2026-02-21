@@ -37,11 +37,6 @@ registerBlock({
   form: 'primitive',
   capability: 'pure',
   loweringPurity: 'pure',
-  cardinality: {
-    cardinalityMode: 'preserve',
-    laneCoupling: 'laneLocal',
-    broadcastPolicy: 'allowZipSig',
-  },
   inputs: {
     positions: { label: 'Positions', type: inferType(VEC3, unitWorld3(), { cardinality: ATTRACTOR_FIELD_CARD }), defaulting: 'forbidden' },
     target: { label: 'Target', type: canonicalType(VEC3, unitWorld3()), defaultValue: [0.5, 0.5, 0], defaultSource: defaultSourceConst([0.5, 0.5, 0]), exposedAsPort: true },
