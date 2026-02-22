@@ -41,7 +41,7 @@ export interface UnmappedEdgeInfo {
 export interface DebugMappings {
     /** Map from edge ID to slot metadata */
     edgeMap: Map<string, EdgeMetadata>;
-    /** Map from "blockId:portName" to slot metadata (for unconnected outputs) */
+    /** Map from "blockId:portName" to slot metadata (outputs + unambiguous connected inputs) */
     portMap: Map<string, EdgeMetadata>;
     /** Edges that couldn't be mapped (for error reporting) */
     unmappedEdges: UnmappedEdgeInfo[];
@@ -147,6 +147,11 @@ export function mapDebugMappings(patch: Patch, program: CompiledProgramIR): Debu
         }
     }
 
+    // Track connected-input slot candidates for port probes.
+    // [LAW:one-source-of-truth] Slot source stays compiler-owned; inputs only alias an existing source slot.
+    const inputPortSlotCandidates = new Map<string, ValueSlot>();
+    const ambiguousInputPorts = new Set<string>();
+
     // Iterate edges and resolve, tracking unmapped edges
     const unmappedEdges: UnmappedEdgeInfo[] = [];
 
@@ -166,6 +171,18 @@ export function mapDebugMappings(patch: Patch, program: CompiledProgramIR): Debu
                 slotId,
                 type,
             });
+
+            // Record target input mapping when the input has a single unambiguous source slot.
+            const targetKey = debugPortKey(edge.to.blockId, edge.to.slotId);
+            if (!ambiguousInputPorts.has(targetKey)) {
+                const existing = inputPortSlotCandidates.get(targetKey);
+                if (existing === undefined) {
+                    inputPortSlotCandidates.set(targetKey, slotId);
+                } else if (existing !== slotId) {
+                    inputPortSlotCandidates.delete(targetKey);
+                    ambiguousInputPorts.add(targetKey);
+                }
+            }
         } else {
             // Track unmapped edge with detailed reason
             // Try to determine why the edge couldn't be mapped
@@ -215,6 +232,16 @@ export function mapDebugMappings(patch: Patch, program: CompiledProgramIR): Debu
         }
         const type = meta.type;
         portMetaMap.set(portKey, { slotId, type });
+    }
+
+    // Add connected-input aliases when unambiguous and non-colliding.
+    for (const [portKey, slotId] of inputPortSlotCandidates.entries()) {
+        if (portMetaMap.has(portKey)) continue;
+        const meta = program.slotMeta.find(m => m.slot === slotId);
+        if (!meta?.type) {
+            throw new Error(`Slot ${slotId} has no type metadata — compiler bug`);
+        }
+        portMetaMap.set(portKey, { slotId, type: meta.type });
     }
 
     return { edgeMap: edgeMetaMap, portMap: portMetaMap, unmappedEdges };

@@ -19,8 +19,7 @@ import type { BlockId } from '../../types';
 import { useStores } from '../../stores';
 import { LensParamControls } from '../components/LensParamControls';
 import { graphColors } from '../graphEditor/graph-tokens';
-import { derivedLensBlockId } from '../../graph/lens-block-id';
-import { useDebugPortMiniView } from '../debug-viz/useDebugMiniView';
+import { useDebugMiniView, useDebugPortMiniView } from '../debug-viz/useDebugMiniView';
 import { DebugEdgeValueDisplay } from '../debug-viz/DebugMiniView';
 
 /**
@@ -32,6 +31,7 @@ export interface OscillaEdgeDataWithDiagnostics extends OscillaEdgeData {
 }
 
 interface LensImpactPreviewProps {
+  beforeEdgeId: string | null;
   beforeBlockId: string | null;
   beforePortId: string | null;
   afterBlockId: string | null;
@@ -41,11 +41,16 @@ interface LensImpactPreviewProps {
 }
 
 function LensImpactPreview(props: LensImpactPreviewProps): React.ReactElement {
-  const beforeData = useDebugPortMiniView(
+  const beforeEdgeData = useDebugMiniView(
+    props.beforeEdgeId,
+    props.beforeLabel,
+  );
+  const beforePortData = useDebugPortMiniView(
     props.beforeBlockId,
     props.beforePortId,
     props.beforeLabel,
   );
+  const beforeData = beforeEdgeData ?? beforePortData;
   const afterData = useDebugPortMiniView(
     props.afterBlockId,
     props.afterPortId,
@@ -265,20 +270,20 @@ export const OscillaEdge = observer(function OscillaEdge(
                   setChipAnchorPosition({ top: event.clientY, left: event.clientX });
                 }}
                 style={{
-                  height: 18,
-                  borderRadius: 9,
+                  minHeight: 24,
+                  borderRadius: 12,
                   background: graphColors.lensBadge,
                   border: '1px solid #d97706',
-                  fontSize: 9,
+                  fontSize: 10,
                   fontWeight: 700,
                   color: '#111',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  padding: '0 6px',
+                  padding: '2px 10px',
                   boxShadow: '0 1px 2px rgba(0,0,0,0.25)',
                   cursor: 'pointer',
-                  maxWidth: 110,
+                  maxWidth: 140,
                   whiteSpace: 'nowrap',
                   overflow: 'hidden',
                   textOverflow: 'ellipsis',
@@ -348,20 +353,15 @@ export const OscillaEdge = observer(function OscillaEdge(
             }}
           >
             <LensImpactPreview
-              beforeBlockId={
-                hoverLensContext.lensIndex === 0
-                  ? source
-                  : (edgeLenses[hoverLensContext.lensIndex - 1]
-                    ? derivedLensBlockId(hoverTargetPortId, edgeLenses[hoverLensContext.lensIndex - 1].id)
-                    : null)
-              }
-              beforePortId={hoverLensContext.lensIndex === 0 ? sourceHandle : 'out'}
-              afterBlockId={derivedLensBlockId(hoverTargetPortId, hoverLens.id)}
-              afterPortId="out"
+              beforeEdgeId={hoverLensContext.lensIndex === 0 ? id : null}
+              beforeBlockId={hoverLensContext.lensIndex === 0 ? null : target}
+              beforePortId={hoverLensContext.lensIndex === 0 ? null : hoverTargetPortId}
+              afterBlockId={target}
+              afterPortId={hoverTargetPortId}
               beforeLabel={hoverLensContext.lensIndex === 0
                 ? `before · ${source}.${sourceHandle}`
-                : `before · lens ${hoverLensContext.lensIndex}`}
-              afterLabel={`after · ${getLensLabel(hoverLens.lensType)}`}
+                : `before · ${target}.${hoverTargetPortId}`}
+              afterLabel={`after · ${target}.${hoverTargetPortId}`}
             />
           </div>
         )}

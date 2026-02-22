@@ -18,6 +18,9 @@ import type { CanonicalType } from '../core/canonical-types';
 import type { SettingsStore } from './SettingsStore';
 import { debugSettings, type DebugSettings } from '../settings/tokens/debug-settings';
 
+/** Poll interval for active-edge UI refresh (roughly frame-rate). */
+const DEBUG_POLL_INTERVAL_MS = 16;
+
 /**
  * Format a numeric value based on its value type.
  */
@@ -75,6 +78,8 @@ export class DebugStore {
     if (settingsStore) {
       this.setupSettingsSync(settingsStore);
     }
+
+    debugService.setAutoTrackAllDebugData(this.enabled);
   }
 
   /**
@@ -114,6 +119,7 @@ export class DebugStore {
       ({ enabled, traceCardinalitySolver }) => {
         if (this.enabled !== enabled) {
           this.enabled = enabled;
+          debugService.setAutoTrackAllDebugData(enabled);
           if (!enabled) {
             this.stopPolling();
             this._currentlyTrackedEdgeId = null;
@@ -143,6 +149,7 @@ export class DebugStore {
    */
   toggleEnabled(): void {
     this.enabled = !this.enabled;
+    debugService.setAutoTrackAllDebugData(this.enabled);
     if (!this.enabled) {
       this.stopPolling();
       this._currentlyTrackedEdgeId = null;
@@ -157,6 +164,7 @@ export class DebugStore {
    */
   setEnabled(enabled: boolean): void {
     this.enabled = enabled;
+    debugService.setAutoTrackAllDebugData(enabled);
     this.updateSettingsEnabled();
     if (!enabled) {
       this.stopPolling();
@@ -273,12 +281,12 @@ export class DebugStore {
   }
 
   /**
-   * Start polling for edge value updates (1Hz).
+   * Start polling for edge value updates.
    */
   private startPolling(): void {
     this.stopPolling();
     this.pollValue();
-    this.pollInterval = setInterval(() => this.pollValue(), 1000);
+    this.pollInterval = setInterval(() => this.pollValue(), DEBUG_POLL_INTERVAL_MS);
   }
 
   /**
@@ -324,6 +332,7 @@ export class DebugStore {
   dispose(): void {
     this.stopPolling();
     this._currentlyTrackedEdgeId = null;
+    debugService.setAutoTrackAllDebugData(false);
     this.settingsSyncDisposer?.();
     this.settingsSyncDisposer = null;
   }

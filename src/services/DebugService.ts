@@ -4,9 +4,9 @@
  * Singleton service that bridges runtime slot values to UI queries.
  * Supports both scalar and field (buffer) debug inspection.
  *
- * Field tracking is demand-driven: fields are only materialized when
- * actively tracked (hovered or inspected). This avoids unnecessary
- * materialization overhead.
+ * Field/history tracking supports two modes:
+ * - demand-driven (default): only actively inspected targets are tracked
+ * - global scalar history mode: scalar history keys are pre-tracked from mapped outputs
  *
  * Data flow: Compiler → (edge-to-slot map) → Runtime → (tap) → DebugService → (query) → UI
  */
@@ -17,7 +17,7 @@ import { payloadStride, requireInst } from '../core/canonical-types';
 import type { UnmappedEdgeInfo, EdgeMetadata } from './mapDebugEdges';
 import type { ConstantValue } from './ConstantValueTracker';
 import { HistoryService, type KeyResolver, type ResolvedKeyMetadata } from '../ui/debug-viz/HistoryService';
-import { serializeKey, type DebugTargetKey, type HistoryView, type BufferHistoryView, type Stride } from '../ui/debug-viz/types';
+import { getSampleEncoding, serializeKey, type DebugTargetKey, type HistoryView, type BufferHistoryView, type Stride } from '../ui/debug-viz/types';
 import type { FieldHistoryView, AggregateFieldStats } from '../ui/debug-viz/FieldStatsAccumulator';
 import { FieldStatsAccumulator } from '../ui/debug-viz/FieldStatsAccumulator';
 import type { ArenaSlotDescriptor } from '../runtime/ArenaValueStore';
@@ -88,7 +88,7 @@ export interface DebugServiceStatus {
 }
 
 /**
- * DebugService - Observation service with demand-driven field tracking
+ * DebugService - Observation service with demand-driven or global debug tracking
  *
  * Responsibilities:
  * - Store edge-to-slot mapping (set by compiler)
@@ -128,6 +128,12 @@ class DebugService {
 
   /** Reference counts for scalar history tracking keys (supports multiple observers). */
   private trackedHistoryRefs = new Map<string, number>();
+
+  /** Global scalar history mode: pre-track mapped scalar history keys. */
+  private autoTrackAllDebugData = false;
+
+  /** History keys currently tracked by global sampling mode. */
+  private globalHistoryKeys = new Map<string, DebugTargetKey>();
 
   /** Per-slot accumulated field stats (created on trackField, cleared on recompile) */
   private fieldAccumulators = new Map<ValueSlot, FieldStatsAccumulator>();
@@ -192,6 +198,7 @@ class DebugService {
     // setArenaRef() will restore it after this call in setupDebugProbe.
     this.arenaRef = null;
     this.historyService.onMappingChanged();
+    this.syncGlobalDebugTracking();
   }
 
   /**
@@ -201,6 +208,19 @@ class DebugService {
   setPortToSlotMap(map: Map<string, EdgeMetadata>): void {
     this.portToSlotMap = map;
     this.historyService.onMappingChanged();
+    this.syncGlobalDebugTracking();
+  }
+
+  /**
+   * Toggle global debug sampling mode.
+   *
+   * When enabled, scalar history is tracked for all mapped scalar targets.
+   * Field tracking remains demand-driven to avoid eager field materialization.
+   */
+  setAutoTrackAllDebugData(enabled: boolean): void {
+    if (this.autoTrackAllDebugData === enabled) return;
+    this.autoTrackAllDebugData = enabled;
+    this.syncGlobalDebugTracking();
   }
 
   /**
@@ -296,7 +316,9 @@ class DebugService {
     const refs = this.trackedHistoryRefs.get(serialized) ?? 0;
     this.trackedHistoryRefs.set(serialized, refs + 1);
     if (refs > 0) return;
-    this.historyService.track(key);
+    if (!this.globalHistoryKeys.has(serialized)) {
+      this.historyService.track(key);
+    }
   }
 
   /**
@@ -307,7 +329,9 @@ class DebugService {
     const refs = this.trackedHistoryRefs.get(serialized) ?? 0;
     if (refs <= 1) {
       this.trackedHistoryRefs.delete(serialized);
-      this.historyService.untrack(key);
+      if (!this.globalHistoryKeys.has(serialized)) {
+        this.historyService.untrack(key);
+      }
       return;
     }
     this.trackedHistoryRefs.set(serialized, refs - 1);
@@ -457,11 +481,75 @@ class DebugService {
     this.trackedFieldSlots.clear();
     this.trackedFieldSlotRefs.clear();
     this.trackedHistoryRefs.clear();
+    this.globalHistoryKeys.clear();
     this.fieldAccumulators.clear();
     this.unmappedEdges = [];
     this.runtimeStarted = false;
     this.arenaRef = null;
     this.historyService.clear();
+  }
+
+  /**
+   * Build desired global tracking sets and reconcile with current tracking state.
+   */
+  private syncGlobalDebugTracking(): void {
+    const desiredHistory = new Map<string, DebugTargetKey>();
+
+    if (this.autoTrackAllDebugData) {
+      for (const [edgeId, meta] of this.edgeToSlotMap) {
+        if (this.isScalarHistoryEligible(meta.type)) {
+          const key: DebugTargetKey = { kind: 'edge', edgeId };
+          desiredHistory.set(serializeKey(key), key);
+        }
+      }
+
+      for (const [portKey, meta] of this.portToSlotMap) {
+        if (this.isScalarHistoryEligible(meta.type)) {
+          const parsed = this.parseDebugPortKey(portKey);
+          if (parsed) {
+            const key: DebugTargetKey = { kind: 'port', blockId: parsed.blockId, portName: parsed.portName };
+            desiredHistory.set(serializeKey(key), key);
+          }
+        }
+      }
+    }
+
+    for (const [serialized, key] of desiredHistory) {
+      if (this.globalHistoryKeys.has(serialized)) continue;
+      this.globalHistoryKeys.set(serialized, key);
+      if ((this.trackedHistoryRefs.get(serialized) ?? 0) === 0) {
+        this.historyService.track(key);
+      }
+    }
+
+    for (const [serialized, key] of Array.from(this.globalHistoryKeys.entries())) {
+      if (desiredHistory.has(serialized)) continue;
+      this.globalHistoryKeys.delete(serialized);
+      if ((this.trackedHistoryRefs.get(serialized) ?? 0) === 0) {
+        this.historyService.untrack(key);
+      }
+    }
+  }
+
+  /**
+   * Scalar history supports one-cardinality sampleable payloads only.
+   */
+  private isScalarHistoryEligible(type: CanonicalType): boolean {
+    const cardinality = requireInst(type.extent.cardinality, 'cardinality').kind;
+    if (cardinality !== 'one') return false;
+    return getSampleEncoding(type.payload).sampleable;
+  }
+
+  /**
+   * Parse debug port key `${blockId}:${portName}` from the right.
+   */
+  private parseDebugPortKey(portKey: string): { blockId: string; portName: string } | null {
+    const idx = portKey.lastIndexOf(':');
+    if (idx <= 0 || idx >= portKey.length - 1) return null;
+    return {
+      blockId: portKey.slice(0, idx),
+      portName: portKey.slice(idx + 1),
+    };
   }
 
   // ===========================================================================

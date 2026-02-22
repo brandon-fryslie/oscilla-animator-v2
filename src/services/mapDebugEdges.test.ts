@@ -1,6 +1,6 @@
 
 import { describe, it, expect } from 'vitest';
-import { mapDebugEdges } from './mapDebugEdges';
+import { mapDebugEdges, mapDebugMappings } from './mapDebugEdges';
 import type { Patch, Edge } from '../graph/Patch';
 import type { CompiledProgramIR, DebugIndexIR, PortBindingIR } from '../compiler/ir/program';
 import type { ValueSlot } from '../compiler/ir/Indices';
@@ -106,6 +106,56 @@ describe('mapDebugEdges', () => {
         expect(result.size).toBe(2);
         expect(result.get('edge1')?.slotId).toBe(10);
         expect(result.get('edge2')?.slotId).toBe(11);
+    });
+
+    it('maps unambiguous connected input ports for port probes', () => {
+        const mockPatch = {
+            edges: [
+                {
+                    id: 'edge1',
+                    from: { kind: 'port', blockId: 'source', slotId: 'out' },
+                    to: { kind: 'port', blockId: 'sink', slotId: 'in' },
+                    enabled: true,
+                    sortKey: 0,
+                    role: { kind: 'user', meta: {} as Record<string, never> },
+                },
+            ],
+        } as unknown as Patch;
+
+        const blockMap = new Map<BlockId, string>();
+        blockMap.set('b0' as BlockId, 'source');
+
+        const slotToPort = new Map<ValueSlot, PortId>();
+        slotToPort.set(21 as ValueSlot, 'p0' as PortId);
+
+        const ports: PortBindingIR[] = [{
+            port: 'p0' as PortId,
+            block: 'b0' as BlockId,
+            portName: 'out',
+            direction: 'out' as const,
+            cardinality: 'one' as const,
+            temporality: 'continuous' as const,
+            role: 'userWire' as const
+        }];
+
+        const mockProgram = {
+            debugIndex: {
+                blockMap,
+                slotToPort,
+                ports,
+                stepToBlock: new Map(),
+                slotToBlock: new Map(),
+                exprToBlock: new Map(),
+            } as DebugIndexIR,
+            slotMeta: [
+                { slot: 21 as ValueSlot, type: { kind: 'float' }, storage: 'f64', offset: 0 }
+            ]
+        } as unknown as CompiledProgramIR;
+
+        const mappings = mapDebugMappings(mockPatch, mockProgram);
+
+        expect(mappings.portMap.get('source:out')?.slotId).toBe(21);
+        expect(mappings.portMap.get('sink:in')?.slotId).toBe(21);
     });
 
     it('should return empty map for patch with no edges', () => {
