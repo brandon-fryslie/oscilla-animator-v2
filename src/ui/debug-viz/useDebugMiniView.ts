@@ -7,7 +7,7 @@
  * Returns null when nothing is hovered.
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { debugService, type EdgeValueResult } from '../../services/DebugService';
 import type { EdgeMetadata } from '../../services/mapDebugEdges';
 import { requireInst } from '../../core/canonical-types';
@@ -39,29 +39,86 @@ export interface MiniViewData {
   fieldBufferHistory: BufferHistoryView | null;
 }
 
-/**
- * Hook that resolves all data needed by DebugMiniView.
- *
- * @param hoveredEdgeId - Currently hovered edge ID (from DebugStore)
- * @param edgeLabel - Pre-computed label for the edge (from patch)
- */
-export function useDebugMiniView(
-  hoveredEdgeId: string | null,
-  edgeLabel: string | null,
+type MiniViewTarget =
+  | { readonly kind: 'edge'; readonly edgeId: string }
+  | { readonly kind: 'port'; readonly blockId: string; readonly portName: string };
+
+function getTargetKey(target: MiniViewTarget): DebugTargetKey {
+  if (target.kind === 'edge') {
+    return { kind: 'edge', edgeId: target.edgeId };
+  }
+  return { kind: 'port', blockId: target.blockId, portName: target.portName };
+}
+
+function getTargetLabel(target: MiniViewTarget): string {
+  if (target.kind === 'edge') return target.edgeId;
+  return `${target.blockId}.${target.portName}`;
+}
+
+function getTargetMetadata(target: MiniViewTarget): EdgeMetadata | undefined {
+  if (target.kind === 'edge') {
+    return debugService.getEdgeMetadata(target.edgeId);
+  }
+  return debugService.getPortMetadata(target.blockId, target.portName);
+}
+
+function getTargetValue(target: MiniViewTarget): EdgeValueResult | undefined {
+  if (target.kind === 'edge') {
+    return debugService.getEdgeValue(target.edgeId);
+  }
+  return debugService.getPortValue(target.blockId, target.portName);
+}
+
+function useDebugTargetMiniView(
+  target: MiniViewTarget | null,
+  label: string | null,
 ): MiniViewData | null {
   const [value, setValue] = useState<EdgeValueResult | null>(null);
   const [tick, setTick] = useState(0);
 
-  // Poll for value updates at 4Hz
+  const edgeId = target?.kind === 'edge' ? target.edgeId : null;
+  const blockId = target?.kind === 'port' ? target.blockId : null;
+  const portName = target?.kind === 'port' ? target.portName : null;
+
+  const meta = target ? getTargetMetadata(target) : undefined;
+  const cardinality = meta
+    ? requireInst(meta.type.extent.cardinality, 'cardinality').kind
+    : null;
+  const key = edgeId
+    ? ({ kind: 'edge', edgeId } as const)
+    : (blockId && portName
+      ? ({ kind: 'port', blockId, portName } as const)
+      : null);
+
+  // [LAW:single-enforcer] Target hook owns history/field tracking lifecycle.
   useEffect(() => {
-    if (!hoveredEdgeId) {
+    if (!target || !meta || !key || !cardinality) return;
+
+    if (cardinality === 'many') {
+      debugService.trackField(meta.slotId, meta.type);
+      return () => {
+        debugService.untrackField(meta.slotId);
+      };
+    }
+
+    debugService.trackHistoryKey(key);
+    return () => {
+      debugService.untrackHistoryKey(key);
+    };
+  }, [edgeId, blockId, portName, meta?.slotId, meta?.type, cardinality, key]);
+
+  // [LAW:dataflow-not-control-flow] Polling pipeline is identical for edge/port targets.
+  useEffect(() => {
+    if (!edgeId && !(blockId && portName)) {
       setValue(null);
       return;
     }
 
     const poll = () => {
       try {
-        const result = debugService.getEdgeValue(hoveredEdgeId);
+        const result = edgeId
+          ? debugService.getEdgeValue(edgeId)
+          : debugService.getPortValue(blockId!, portName!);
         setValue(result ?? null);
       } catch {
         setValue(null);
@@ -72,41 +129,26 @@ export function useDebugMiniView(
     poll();
     const interval = setInterval(poll, POLL_INTERVAL_MS);
     return () => clearInterval(interval);
-  }, [hoveredEdgeId]);
+  }, [edgeId, blockId, portName]);
 
-  if (!hoveredEdgeId) return null;
+  if (!target || !meta || !key || !cardinality) return null;
 
-  // Resolve metadata
-  const meta = debugService.getEdgeMetadata(hoveredEdgeId);
-  if (!meta) return null;
-
-  // [LAW:one-source-of-truth] UI branches on CanonicalType cardinality, not debug-domain aliases.
-  const cardinality = requireInst(meta.type.extent.cardinality, 'cardinality').kind;
-
-  // Resolve history (only for cardinality-one edges)
-  const key: DebugTargetKey = { kind: 'edge', edgeId: hoveredEdgeId };
   const history = cardinality === 'one'
     ? debugService.historyService.getHistory(key) ?? null
     : null;
-
-  // Resolve field history (only for cardinality-many edges)
   const fieldHistory = cardinality === 'many'
     ? debugService.getFieldHistory(meta.slotId) ?? null
     : null;
-
-  // Resolve instance-0 sparkline history (only for cardinality-many edges)
   const fieldInstanceHistory = cardinality === 'many'
     ? debugService.getFieldInstanceHistory(meta.slotId) ?? null
     : null;
-
-  // Resolve buffer history for raster heatmap (only for cardinality-many edges)
   const fieldBufferHistory = cardinality === 'many'
     ? debugService.getFieldBufferHistory(meta.slotId) ?? null
     : null;
 
   return {
     key,
-    label: edgeLabel || hoveredEdgeId,
+    label: label || getTargetLabel(target),
     meta,
     value,
     history,
@@ -114,4 +156,33 @@ export function useDebugMiniView(
     fieldInstanceHistory,
     fieldBufferHistory,
   };
+}
+
+/**
+ * Hook that resolves all data needed by DebugMiniView.
+ *
+ * @param hoveredEdgeId - Currently hovered edge ID (from DebugStore)
+ * @param edgeLabel - Pre-computed label for the edge (from patch)
+ */
+export function useDebugMiniView(
+  hoveredEdgeId: string | null,
+  edgeLabel: string | null,
+): MiniViewData | null {
+  const target = hoveredEdgeId ? ({ kind: 'edge', edgeId: hoveredEdgeId } as const) : null;
+  return useDebugTargetMiniView(target, edgeLabel);
+}
+
+/**
+ * Port variant of mini-view data hook.
+ * Used for source/derived probe views (e.g. lens impact previews).
+ */
+export function useDebugPortMiniView(
+  blockId: string | null,
+  portName: string | null,
+  portLabel: string | null,
+): MiniViewData | null {
+  const target = blockId && portName
+    ? ({ kind: 'port', blockId, portName } as const)
+    : null;
+  return useDebugTargetMiniView(target, portLabel);
 }

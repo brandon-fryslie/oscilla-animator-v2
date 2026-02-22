@@ -121,12 +121,12 @@ describe('Block Lowering - No Arithmetic Kernel Names', () => {
     for (const expr of program.valueExprs.nodes) {
       // Filter to kernel expressions (kind === 'kernel')
       if (expr.kind === 'kernel') {
-        // Only map, zip, and zipSig kernel kinds have an 'fn' field
+        // Only map, zip, and zipPromote kernel kinds have an 'fn' field
         // (broadcast, reduce, pathDerivative do not)
         if (
           expr.kernelKind === 'map' ||
           expr.kernelKind === 'zip' ||
-          expr.kernelKind === 'zipSig'
+          expr.kernelKind === 'zipPromote'
         ) {
           // Kernel expressions with fn have a 'fn' field that can be either { kind: 'opcode', opcode: ... }
           // or { kind: 'kernel', name: ... }

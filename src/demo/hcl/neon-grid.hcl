@@ -1,8 +1,8 @@
 # Neon Grid
 #
 # 625 rectangles in a 25x25 grid with StepQuantize stepped pulsing
-# and per-element rainbow color. Previously static, now animated.
-# Demonstrates: StepQuantize, per-element rainbow, GridLayoutUV.
+# and per-element rainbow color plus per-tile jitter.
+# Demonstrates: StepQuantize, NoisyBroadcast, per-element rainbow, GridLayoutUV.
 
 patch "Neon Grid" {
   block "InfiniteTimeRoot" "clock" {
@@ -73,6 +73,26 @@ patch "Neon Grid" {
   }
 
   block "ScaleBias" "scale-map" {
+    outputs {
+      out = scale-jitter.amount
+    }
+  }
+
+  block "Const" "base-scale" {
+    value = 1.0
+    outputs {
+      out = scale-jitter.value
+    }
+  }
+
+  block "Const" "jitter-seed" {
+    value = 31
+    outputs {
+      out = scale-jitter.seed
+    }
+  }
+
+  block "NoisyBroadcast" "scale-jitter" {
     outputs {
       out = render.scale
     }

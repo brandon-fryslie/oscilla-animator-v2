@@ -35,7 +35,7 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
     ],
     duds: [
       'GridLayoutUV.position — constant per instance, flat line',
-      'Broadcast.field — every instance identical, sparkline equals the input signal',
+      'Broadcast.field — every instance identical, sparkline equals the input one value',
       'DomainIndex.out — constant integer per instance, flat line',
       'Any adapter output where the input was already constant',
     ],
@@ -58,7 +58,7 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
     ],
     duds: [
       'Instance count < 8 — too few rows, sparkline overlay is better',
-      'Broadcast.field of signal — all rows identical, solid horizontal bands',
+      'Broadcast.field of one value — all rows identical, solid horizontal bands',
       'Color payload — single-channel heatmap loses color information',
       'Static fields (e.g. GridLayoutUV.position alone) — solid stripes, no temporal info',
     ],

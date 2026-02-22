@@ -202,6 +202,15 @@ function applyNaryOp(op: string, values: number[]): number {
     case 'pow':
       expectArity('pow', values.length, 2);
       return Math.pow(values[0], values[1]);
+    case 'eq':
+      expectArity('eq', values.length, 2);
+      return values[0] === values[1] ? 1 : 0;
+    case 'lt':
+      expectArity('lt', values.length, 2);
+      return values[0] < values[1] ? 1 : 0;
+    case 'gt':
+      expectArity('gt', values.length, 2);
+      return values[0] > values[1] ? 1 : 0;
     case 'atan2':
       expectArity('atan2', values.length, 2);
       return Math.atan2(values[0], values[1]);

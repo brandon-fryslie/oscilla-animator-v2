@@ -16,7 +16,6 @@ import type { BlockId, UIControlHint } from '../../types';
 import { useStores } from '../../stores';
 import {
   SliderWithInput,
-  NumberInput,
   SelectInput,
   CheckboxInput,
   TextInput,
@@ -36,27 +35,26 @@ interface NumericRange {
   step: number;
 }
 
-function fallbackNumericRange(paramId: string, value: number): NumericRange {
+function fallbackNumericRange(paramId: string): NumericRange {
   const key = paramId.toLowerCase();
   if (key.includes('scale')) return { min: 0, max: 4, step: 0.01 };
   if (key.includes('bias') || key.includes('offset')) return { min: -2, max: 2, step: 0.01 };
-  const span = Math.max(1, Math.abs(value) * 2);
-  return { min: value - span, max: value + span, step: 0.01 };
+  return { min: -100, max: 100, step: 0.01 };
 }
 
-function numericRangeFromHint(paramId: string, value: number, hint?: UIControlHint): NumericRange {
+function numericRangeFromHint(paramId: string, hint?: UIControlHint): NumericRange {
   if (hint?.kind === 'slider') {
     return { min: hint.min, max: hint.max, step: hint.step };
   }
   if (hint?.kind === 'int' || hint?.kind === 'float') {
-    const fallback = fallbackNumericRange(paramId, value);
+    const fallback = fallbackNumericRange(paramId);
     return {
       min: hint.min ?? fallback.min,
       max: hint.max ?? fallback.max,
       step: hint.step ?? (hint.kind === 'int' ? 1 : fallback.step),
     };
   }
-  return fallbackNumericRange(paramId, value);
+  return fallbackNumericRange(paramId);
 }
 
 function defaultParamValue(inputDef: InputDef): unknown {
@@ -91,8 +89,8 @@ export function LensParamControls({
         const value = (lens.params?.[paramId] ?? defaultParamValue(inputDef)) as unknown;
         const hint = inputDef.uiHint;
 
-        if (typeof value === 'number' && (hint?.kind === 'slider' || hint?.kind === 'int' || hint?.kind === 'float' || hint == null)) {
-          const range = numericRangeFromHint(paramId, value, hint);
+        if (typeof value === 'number') {
+          const range = numericRangeFromHint(paramId, hint);
           return (
             <SliderWithInput
               key={paramId}
@@ -102,6 +100,7 @@ export function LensParamControls({
               min={range.min}
               max={range.max}
               step={range.step}
+              editableBounds
             />
           );
         }
@@ -151,21 +150,6 @@ export function LensParamControls({
           );
         }
 
-        if (typeof value === 'number') {
-          const range = numericRangeFromHint(paramId, value, hint);
-          return (
-            <NumberInput
-              key={paramId}
-              label={label}
-              value={value}
-              min={range.min}
-              max={range.max}
-              step={range.step}
-              onChange={(next) => updateParam(paramId, next)}
-            />
-          );
-        }
-
         return (
           <div key={paramId} style={{ fontSize: 12, opacity: 0.8 }}>
             {label}: {String(value)}
@@ -175,4 +159,3 @@ export function LensParamControls({
     </div>
   );
 }
-

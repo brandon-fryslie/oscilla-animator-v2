@@ -82,7 +82,7 @@ registerBlock({
     const lerp = ctx.b.opcode(OpCode.Lerp);
 
     // Component-wise lerp: lerp(inComponent, targetComponent, strength)
-    // zipAuto handles mixed cardinality (field inX + signal tX/strength → zipSig internally)
+    // zipAuto handles mixed cardinality (field inX + signal tX/strength → zipPromote internally)
     const outX = ctx.b.zipAuto([inX, tX, strengthInput.id], lerp, floatFieldType);
     const outY = ctx.b.zipAuto([inY, tY, strengthInput.id], lerp, floatFieldType);
     const outZ = ctx.b.zipAuto([inZ, tZ, strengthInput.id], lerp, floatFieldType);

@@ -86,6 +86,53 @@ registerBlock({
   lower: () => ({ outputsById: {} }),
 });
 
+// Sink block that expects scalar
+registerBlock({
+  type: 'TestAdapterScalarSink',
+  label: 'Scalar Sink',
+  category: 'test',
+  description: 'Test: expects float:scalar',
+  form: 'primitive',
+  capability: 'pure',
+  inputs: {
+    in: { label: 'In', type: canonicalType(FLOAT, unitNone()) },
+  },
+  outputs: {},
+  lower: () => ({ outputsById: {} }),
+});
+
+registerBlock({
+  type: 'TestLensChainA',
+  label: 'Test Lens Chain A',
+  category: 'lens',
+  description: 'Test lens for chain expansion',
+  form: 'primitive',
+  capability: 'pure',
+  inputs: {
+    in: { label: 'In', type: canonicalType(FLOAT, unitNone()) },
+  },
+  outputs: {
+    out: { label: 'Out', type: canonicalType(FLOAT, unitNone()) },
+  },
+  lower: () => ({ outputsById: {} }),
+});
+
+registerBlock({
+  type: 'TestLensChainB',
+  label: 'Test Lens Chain B',
+  category: 'lens',
+  description: 'Test lens for chain expansion',
+  form: 'primitive',
+  capability: 'pure',
+  inputs: {
+    in: { label: 'In', type: canonicalType(FLOAT, unitNone()) },
+  },
+  outputs: {
+    out: { label: 'Out', type: canonicalType(FLOAT, unitNone()) },
+  },
+  lower: () => ({ outputsById: {} }),
+});
+
 // =============================================================================
 // Tests
 // =============================================================================
@@ -309,6 +356,33 @@ describe('pass2Adapters - Adapter Materialization', () => {
         .sort();
 
       expect(adapterTypes).toEqual(['Adapter_PhaseToRadians', 'Adapter_ScalarToPhase01']);
+    });
+  });
+
+  describe('explicit lens chaining', () => {
+    it('expands multiple lenses on the same source connection as an ordered chain', () => {
+      const patch = buildPatch((b) => {
+        const src = b.addBlock('TestAdapterScalarSource');
+        const sink = b.addBlock('TestAdapterScalarSink');
+        b.wire(src, 'out', sink, 'in');
+        b.addLens(sink, 'in', 'TestLensChainA', `v1:blocks.${src}.outputs.out`);
+        b.addLens(sink, 'in', 'TestLensChainB', `v1:blocks.${src}.outputs.out`);
+      });
+
+      const result = pass2Adapters(patch);
+      expect(result.kind).toBe('ok');
+
+      const expanded = (result as { kind: 'ok'; patch: Patch }).patch;
+      const lensBlocks = Array.from(expanded.blocks.values()).filter(
+        (block) => block.type === 'TestLensChainA' || block.type === 'TestLensChainB',
+      );
+
+      expect(lensBlocks).toHaveLength(2);
+      expect(expanded.edges).toHaveLength(3);
+
+      const sink = Array.from(expanded.blocks.values()).find((block) => block.type === 'TestAdapterScalarSink');
+      expect(sink).toBeDefined();
+      expect(sink?.inputPorts.get('in')?.lenses).toBeUndefined();
     });
   });
 });

@@ -1,71 +1,153 @@
 # Path Field Demo
 #
-# Simple demo showing PathField extracting positions from a star shape.
-# Uses Array to create renderable instances and CircleLayout for positioning.
+# Star path rendered with flowing instances while PathField derivatives are used
+# as live data. The star radii are animated, so PathField.arcLength changes over
+# time and modulates render scale.
 #
-# This demonstrates that PathField compiles correctly with proper cardinality
-# propagation from ProceduralStar.
+# Demonstrates:
+# - PathField extraction from ProceduralStar control points
+# - PathLayout distribution along the animated shape path
+# - PathField.arcLength -> Reduce -> scale modulation
 
 patch "Path Field Demo" {
   block "InfiniteTimeRoot" "clock" {
-    periodAMs = 4000
+    periodAMs = 7000
+    periodBMs = 5000
     role = "timeRoot"
     outputs {
-      phaseA = hue-rainbow.t
+      phaseA = hue-shift.b
+      phaseB = star-breath.phase
     }
   }
 
-  # Create the star shape
+  # Animated star source path
+  block "Oscillator" "star-breath" {
+    outputs {
+      out = [star-outer.in, star-inner.in, scale-map.in]
+    }
+  }
+
+  block "Const" "outer-amt" {
+    value = 0.07
+    outputs {
+      out = star-outer.scale
+    }
+  }
+
+  block "Const" "outer-base" {
+    value = 0.23
+    outputs {
+      out = star-outer.bias
+    }
+  }
+
+  block "ScaleBias" "star-outer" {
+    outputs {
+      out = star.outerRadius
+    }
+  }
+
+  block "Const" "inner-amt" {
+    value = 0.035
+    outputs {
+      out = star-inner.scale
+    }
+  }
+
+  block "Const" "inner-base" {
+    value = 0.10
+    outputs {
+      out = star-inner.bias
+    }
+  }
+
+  block "ScaleBias" "star-inner" {
+    outputs {
+      out = star.innerRadius
+    }
+  }
+
   block "ProceduralStar" "star" {
     points = 5
-    outerRadius = 0.25
-    innerRadius = 0.1
     outputs {
       controlPoints = path-field.controlPoints
+      shape = path-layout.shape
     }
   }
 
-  # Extract per-point properties from the star's control points
+  # Extract dynamic path properties; arc length is used as live modulation data.
   block "PathField" "path-field" {
-    # For a 5-point star, there are 10 control points (alternating outer/inner)
-    # PathField extracts: position, index, tangent, arcLength
-    # (outputs not connected for now - just testing compilation)
+    outputs {
+      arcLength = path-length.field
+    }
   }
 
-  # Create 10 instances with ellipse markers (matching star control point count)
+  block "Reduce" "path-length" {
+    op = "max"
+    outputs {
+      one = length-scale.a
+    }
+  }
+
+  block "Const" "length-scale-amt" {
+    value = 0.08
+    outputs {
+      out = length-scale.b
+    }
+  }
+
+  block "Multiply" "length-scale" {
+    outputs {
+      out = scale-map.bias
+    }
+  }
+
+  # Render instances distributed along the star path
   block "Ellipse" "marker" {
-    rx = 0.015
-    ry = 0.015
+    rx = 0.013
+    ry = 0.013
     outputs {
       shape = instances.element
     }
   }
 
   block "Array" "instances" {
-    count = 10
+    count = 80
     outputs {
-      elements = layout.elements
+      elements = path-layout.elements
+      t = hue-shift.a
     }
   }
 
-  # Use CircleLayout for positioning
-  block "CircleLayoutUV" "layout" {
-    radius = 0.3
+  block "PathLayout" "path-layout" {
+    spacing = 1.0
     outputs {
       position = render.pos
     }
   }
 
-  # Cycling rainbow color (signal-level, broadcast to field)
-  block "HueRainbow" "hue-rainbow" {
+  block "Add" "hue-shift" {
     outputs {
-      out = color-field.signal
+      out = color.h
     }
   }
 
-  block "Broadcast" "color-field" {
+  block "Const" "scale-amt" {
+    value = 0.14
     outputs {
-      field = render.color
+      out = scale-map.scale
+    }
+  }
+
+  block "ScaleBias" "scale-map" {
+    outputs {
+      out = render.scale
+    }
+  }
+
+  block "MakeColorHSL" "color" {
+    outputs {
+      color = render.color
     }
   }
 

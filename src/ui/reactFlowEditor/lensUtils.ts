@@ -33,6 +33,18 @@ export interface LensTypeInfo {
   outputType: InferenceCanonicalType;
 }
 
+export interface LensMenuGroups {
+  common: LensTypeInfo[];
+  others: LensTypeInfo[];
+}
+
+const COMMON_LENS_TYPES: readonly string[] = [
+  'ScaleBias',
+  'Clamp',
+  'Wrap01',
+  'Deadzone',
+];
+
 /**
  * Get all available lens types for UI selection.
  * Includes both adapter blocks (type converters) and lens blocks (value shapers).
@@ -259,4 +271,18 @@ export function findCompatibleLenses(
   return allLenses.filter(lens =>
     canApplyLens(sourceType, lens.inputType, lens.outputType, targetType)
   );
+}
+
+/**
+ * Split compatible lenses into top-level common actions and overflow submenu actions.
+ * // [LAW:dataflow-not-control-flow] Menu structure is a pure derivation of compatible lens data.
+ */
+export function groupLensMenuOptions(compatibleLenses: readonly LensTypeInfo[]): LensMenuGroups {
+  const byType = new Map(compatibleLenses.map((lens) => [lens.blockType, lens]));
+  const common = COMMON_LENS_TYPES
+    .map((type) => byType.get(type))
+    .filter((lens): lens is LensTypeInfo => lens != null);
+  const commonSet = new Set(common.map((lens) => lens.blockType));
+  const others = compatibleLenses.filter((lens) => !commonSet.has(lens.blockType));
+  return { common, others };
 }

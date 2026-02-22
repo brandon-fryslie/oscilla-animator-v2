@@ -285,7 +285,7 @@ describe('cardinality adapter fixpoint integration', () => {
     // Array:elements is forceMany (transform)
     // Add has promoteToMany policy → mixed cardinality over all ports
     // Result: Add:a (from Phasor) stays at one, Add:b (from Array) resolves to many
-    // Runtime uses kernelZipSig for mixed cardinality — no Broadcast adapter needed
+    // Runtime uses kernelZipPromote for mixed cardinality — no Broadcast adapter needed
     const patch = buildPatch((b) => {
       const timeRoot = b.addBlock('InfiniteTimeRoot');
       const phasor = b.addBlock('Phasor');

@@ -5,6 +5,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { PatchStore } from '../PatchStore';
 import type { BlockId } from '../../types';
+import { derivedLensParamKey } from '../../graph/lens-block-id';
 
 // Import block registrations
 // Import blocks to trigger registration
@@ -45,7 +46,7 @@ describe('PatchStore Lens Methods', () => {
       expect(lenses[1].sortKey).toBe(1);
     });
 
-    it('generates deterministic lens ID from source address', () => {
+    it('generates deterministic lens ID from source + lens type', () => {
       const blockId = store.addBlock('Add', {});
       const sourceAddr = 'v1:blocks.phasor_1.outputs.phase';
       const lensId1 = store.addLens(blockId, 'a', 'Adapter_ScalarToPhase01', sourceAddr);
@@ -54,18 +55,23 @@ describe('PatchStore Lens Methods', () => {
       const blockId2 = store.addBlock('Add', {});
       const lensId2 = store.addLens(blockId2, 'a', 'Adapter_ScalarToPhase01', sourceAddr);
 
-      // IDs should be the same (deterministic based on source address)
+      // IDs should be the same (deterministic based on source + lens type)
       expect(lensId1).toBe(lensId2);
     });
 
-    it('throws if lens already exists for source', () => {
+    it('allows multiple chained lenses for the same source address', () => {
       const blockId = store.addBlock('Add', {});
       const sourceAddr = 'v1:blocks.phasor_1.outputs.phase';
-      store.addLens(blockId, 'a', 'Adapter_ScalarToPhase01', sourceAddr);
+      const lensId1 = store.addLens(blockId, 'a', 'ScaleBias', sourceAddr);
+      const lensId2 = store.addLens(blockId, 'a', 'Clamp', sourceAddr);
 
-      expect(() => {
-        store.addLens(blockId, 'a', 'Adapter_ScalarToPhase01', sourceAddr);
-      }).toThrow(/already exists/);
+      expect(lensId1).not.toBe(lensId2);
+      const lenses = store.getLensesForPort(blockId, 'a');
+      expect(lenses).toHaveLength(2);
+      expect(lenses[0].sourceAddress).toBe(sourceAddr);
+      expect(lenses[1].sourceAddress).toBe(sourceAddr);
+      expect(lenses[0].sortKey).toBe(0);
+      expect(lenses[1].sortKey).toBe(1);
     });
 
     it('throws if block not found', () => {
@@ -210,6 +216,37 @@ describe('PatchStore Lens Methods', () => {
 
       const lenses = store.getLensesForPort(blockId, 'a');
       expect(lenses[0].params).toEqual({ scale: 2.0, offset: 0 });
+    });
+
+    it('tracks lens param updates as value-only fast-path changes', () => {
+      const blockId = store.addBlock('Add', {});
+      const lensId = store.addLens(
+        blockId, 'a', 'ScaleBias', 'v1:blocks.a.outputs.x',
+        { scale: 1.0, bias: 0.0 }
+      );
+      store.consumePendingChanges();
+
+      store.updateLensParams(blockId, 'a', lensId, { scale: 2.5 });
+      const pending = store.consumePendingChanges();
+
+      expect(pending.kind).toBe('valueOnly');
+      if (pending.kind === 'valueOnly') {
+        expect(pending.changes.get(derivedLensParamKey('a', lensId, 'scale'))).toBe(2.5);
+      }
+    });
+
+    it('is a no-op when lens params are unchanged', () => {
+      const blockId = store.addBlock('Add', {});
+      const lensId = store.addLens(
+        blockId, 'a', 'ScaleBias', 'v1:blocks.a.outputs.x',
+        { scale: 1.0 }
+      );
+      store.consumePendingChanges();
+
+      store.updateLensParams(blockId, 'a', lensId, { scale: 1.0 });
+      const pending = store.consumePendingChanges();
+
+      expect(pending.kind).toBe('structural');
     });
 
     it('throws if lens not found', () => {

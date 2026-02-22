@@ -73,7 +73,7 @@ export interface ParamAddress {
  * Address to a lens on an input port.
  * Format: `v1:blocks.{canonical_name}.inputs.{port_id}.lenses.{lens_id}`
  *
- * Lenses are per-port-per-connection signal transformations. Each lens has a unique ID
+ * Lenses are per-port-per-connection value transformations. Each lens has a unique ID
  * within its port, generated deterministically from the source address it transforms.
  *
  * Sprint 2 Redesign (2026-01-27):

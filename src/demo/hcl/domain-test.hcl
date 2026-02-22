@@ -1,8 +1,8 @@
 # Domain Test
 #
 # 50 ellipses with rotating motion, per-element rainbow,
-# and pulsing scale.
-# Demonstrates: per-element color, ScaleBias pulsing, continuity.
+# and pulsing per-instance scale jitter.
+# Demonstrates: per-element color, ScaleBias pulsing, NoisyBroadcast variation.
 
 patch "Domain Test" {
   block "InfiniteTimeRoot" "clock" {
@@ -67,6 +67,26 @@ patch "Domain Test" {
   }
 
   block "ScaleBias" "scale-map" {
+    outputs {
+      out = scale-jitter.amount
+    }
+  }
+
+  block "Const" "base-scale" {
+    value = 1.0
+    outputs {
+      out = scale-jitter.value
+    }
+  }
+
+  block "Const" "jitter-seed" {
+    value = 13
+    outputs {
+      out = scale-jitter.seed
+    }
+  }
+
+  block "NoisyBroadcast" "scale-jitter" {
     outputs {
       out = render.scale
     }

@@ -2,7 +2,7 @@
 #
 # Pentagons in an Archimedean spiral with animated rotation and pulsing scale.
 # Per-element rainbow color.
-# Demonstrates: ProceduralPolygon, SpiralLayout, ScaleBias pulsing.
+# Demonstrates: ProceduralPolygon, SpiralLayout, ScaleBias pulsing, NoisyBroadcast.
 
 patch "Spiral Garden" {
   block "InfiniteTimeRoot" "clock" {
@@ -84,6 +84,26 @@ patch "Spiral Garden" {
   }
 
   block "ScaleBias" "scale-map" {
+    outputs {
+      out = scale-jitter.amount
+    }
+  }
+
+  block "Const" "base-scale" {
+    value = 0.95
+    outputs {
+      out = scale-jitter.value
+    }
+  }
+
+  block "Const" "jitter-seed" {
+    value = 17
+    outputs {
+      out = scale-jitter.seed
+    }
+  }
+
+  block "NoisyBroadcast" "scale-jitter" {
     outputs {
       out = render.scale
     }

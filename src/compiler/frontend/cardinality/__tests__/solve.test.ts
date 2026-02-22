@@ -188,7 +188,7 @@ describe('solveCardinality', () => {
 
   it('promoteToMany with clampOne + many: clampOne stays at one, many propagates', () => {
     // promoteToMany semantics: oneOnly ports coexist with manyOnly ports.
-    // clampOne groups stay at one — runtime broadcasts them via kernelZipSig.
+    // clampOne groups stay at one — runtime broadcasts them via kernelZipPromote.
     const ref = instanceRef('circle', 'arr1');
     const clampOrigin: ConstraintOrigin = { kind: 'blockRule', blockId: 'Sig', blockType: 'OneOnly', rule: 'declared.clampOne' };
     const manyOrigin: ConstraintOrigin = { kind: 'blockRule', blockId: 'Field', blockType: 'Transform', rule: 'declared.forceMany' };

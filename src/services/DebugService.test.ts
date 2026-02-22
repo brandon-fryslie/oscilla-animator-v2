@@ -369,6 +369,19 @@ describe('DebugService', () => {
             expect(debugService.isFieldTracked(30 as ValueSlot)).toBe(false);
         });
 
+        it('uses ref-count semantics for repeated field tracking', () => {
+            const type = canonicalManyDef(FLOAT);
+            debugService.trackField(30 as ValueSlot, type);
+            debugService.trackField(30 as ValueSlot, type);
+            expect(debugService.isFieldTracked(30 as ValueSlot)).toBe(true);
+
+            debugService.untrackField(30 as ValueSlot);
+            expect(debugService.isFieldTracked(30 as ValueSlot)).toBe(true);
+
+            debugService.untrackField(30 as ValueSlot);
+            expect(debugService.isFieldTracked(30 as ValueSlot)).toBe(false);
+        });
+
         it('should report tracked slots via getTrackedFieldSlots', () => {
             debugService.trackField(30 as ValueSlot, canonicalManyDef(FLOAT));
             debugService.trackField(31 as ValueSlot, canonicalManyDef(FLOAT));
@@ -423,6 +436,19 @@ describe('DebugService', () => {
 
             const meta = debugService.getEdgeMetadata('unknown');
             expect(meta).toBeUndefined();
+        });
+
+        it('should return metadata for mapped port', () => {
+            const portMap = new Map([
+                ['block-1:out', { slotId: 10 as ValueSlot, type: canonicalType(FLOAT) }],
+            ]);
+            debugService.setPortToSlotMap(portMap);
+
+            const meta = debugService.getPortMetadata('block-1', 'out');
+            expect(meta).toEqual({
+                slotId: 10 as ValueSlot,
+                type: canonicalType(FLOAT),
+            });
         });
     });
 
@@ -639,6 +665,24 @@ describe('DebugService', () => {
             expect(history!.buffer[0]).toBe(128);
             expect(history!.buffer[1]).toBe(129);
         });
+
+        it('uses ref-count semantics for key-based history tracking', () => {
+            const key = { kind: 'edge', edgeId: 'edge1' } as const;
+            const edgeMap = new Map([
+                ['edge1', { slotId: 10 as ValueSlot, type: canonicalType(FLOAT) }],
+            ]);
+            debugService.setEdgeToSlotMap(edgeMap);
+
+            debugService.trackHistoryKey(key);
+            debugService.trackHistoryKey(key);
+            expect(debugService.historyService.isTracked(key)).toBe(true);
+
+            debugService.untrackHistoryKey(key);
+            expect(debugService.historyService.isTracked(key)).toBe(true);
+
+            debugService.untrackHistoryKey(key);
+            expect(debugService.historyService.isTracked(key)).toBe(false);
+        });
     });
 
     // =========================================================================
@@ -815,6 +859,30 @@ describe('DebugService', () => {
             }
         });
 
+        it('backfills scalar history from arena query when slot has no tap writes', () => {
+            const edgeMap = new Map([
+                ['edge1', { slotId: 10 as ValueSlot, type: canonicalType(FLOAT) }],
+            ]);
+            debugService.setEdgeToSlotMap(edgeMap);
+
+            const arena = new Float32Array(1);
+            const layout = makeArenaLayout(10, { offset: 0, stride: 1, laneCount: 1, length: 1 });
+            debugService.setArenaRef(arena, layout);
+            arena[0] = 0.33;
+
+            // Start runtime without writing slot 10 via tap path.
+            debugService.updateSlotValue(99 as ValueSlot, 0);
+            debugService.trackHistoryKey({ kind: 'edge', edgeId: 'edge1' });
+
+            const result = debugService.getEdgeValue('edge1');
+            expect(result?.kind).toBe('scalar');
+
+            const history = debugService.historyService.getHistory({ kind: 'edge', edgeId: 'edge1' });
+            expect(history).toBeDefined();
+            expect(history!.writeIndex).toBeGreaterThan(0);
+            expect(history!.buffer[0]).toBeCloseTo(0.33);
+        });
+
         it('returns undefined for arena signal before runtime starts', () => {
             const edgeMap = new Map([
                 ['edge1', { slotId: 10 as ValueSlot, type: canonicalType(FLOAT) }],
@@ -865,6 +933,34 @@ describe('DebugService', () => {
                     expect(result2.buffer[0]).toBeCloseTo(0.99);
                 }
             }
+        });
+
+        it('backfills field histories from arena query when slot has no tap writes', () => {
+            const floatType = canonicalManyDef(FLOAT);
+            const edgeMap = new Map([
+                ['field-edge', { slotId: 30 as ValueSlot, type: floatType }],
+            ]);
+            debugService.setEdgeToSlotMap(edgeMap);
+
+            const arena = new Float32Array([0.1, 0.2, 0.3, 0.4]);
+            const layout = makeArenaLayout(30, { offset: 0, stride: 1, laneCount: 4, length: 4 });
+            debugService.setArenaRef(arena, layout);
+
+            debugService.trackField(30 as ValueSlot, floatType);
+            debugService.updateSlotValue(99 as ValueSlot, 0); // mark runtime started
+
+            const result = debugService.getEdgeValue('field-edge');
+            expect(result?.kind).toBe('field');
+
+            const fieldHistory = debugService.getFieldHistory(30 as ValueSlot);
+            const instanceHistory = debugService.getFieldInstanceHistory(30 as ValueSlot);
+            const bufferHistory = debugService.getFieldBufferHistory(30 as ValueSlot);
+            expect(fieldHistory).toBeDefined();
+            expect(fieldHistory!.writeIndex).toBeGreaterThan(0);
+            expect(instanceHistory).toBeDefined();
+            expect(instanceHistory!.writeIndex).toBeGreaterThan(0);
+            expect(bufferHistory).toBeDefined();
+            expect(bufferHistory!.writeIndex).toBeGreaterThan(0);
         });
 
         it('returns field-untracked from arena path for untracked field', () => {

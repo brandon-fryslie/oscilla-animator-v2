@@ -479,10 +479,10 @@ describe('CompilationInspectorService', () => {
 
       compilationInspector.capturePass('type-graph', {}, {
         blocks: [
-          { id: 'oscillator-1', type: 'Oscillator', outputType: 'signal' },
-          { id: 'gain-1', type: 'Gain', outputType: 'signal' },
+          { id: 'oscillator-1', type: 'Oscillator', outputType: 'one' },
+          { id: 'gain-1', type: 'Gain', outputType: 'one' },
         ],
-        types: { oscillator: 'signal', gain: 'signal' },
+        types: { oscillator: 'one', gain: 'one' },
       });
 
       compilationInspector.endCompile('success');
@@ -509,7 +509,7 @@ describe('CompilationInspectorService', () => {
     });
 
     it('searches across all passes', () => {
-      const results = compilationInspector.search('signal');
+      const results = compilationInspector.search('one');
 
       const passNames = new Set(results.map((r) => r.passName));
       expect(passNames.has('type-graph')).toBe(true);

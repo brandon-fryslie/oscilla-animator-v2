@@ -30,7 +30,12 @@ import { ContextMenu, type ContextMenuItem } from '../ContextMenu';
 import { validateConnection } from '../typeValidation';
 import { requireAnyBlockDef, getBlockCategories, getBlockTypesByCategory } from '../../../blocks/registry';
 import { isPayloadVar, type InferencePayloadType } from '../../../core/inference-types';
-import { getLensLabel, findCompatibleLenses, getLensDefaultParams } from '../lensUtils';
+import {
+  getLensLabel,
+  findCompatibleLenses,
+  getLensDefaultParams,
+  groupLensMenuOptions,
+} from '../lensUtils';
 import { internalBlockId } from '../../../blocks/composite-types';
 
 /** Maximum number of "add block" suggestions to show */
@@ -377,18 +382,38 @@ export const PortContextMenu: React.FC<PortContextMenuProps> = ({
           if (sourceType && targetType) {
             // Find compatible lenses
             const compatibleLenses = findCompatibleLenses(sourceType, targetType);
+            const grouped = groupLensMenuOptions(compatibleLenses);
+            const describeLens = (label: string, description: string): string =>
+              description.trim().length > 0 ? `${label} - ${description}` : label;
 
-            if (compatibleLenses.length > 0) {
-              // Add each lens as a direct menu item
-              for (const lens of compatibleLenses) {
+            const addLens = (lensType: string): void => {
+              const params = getLensDefaultParams(lensType);
+              const sourceAddress = `v1:blocks.${incomingEdge.from.blockId}.outputs.${incomingEdge.from.slotId}`;
+              patch.addLens(blockId, portId, lensType, sourceAddress, params);
+            };
+
+            if (grouped.common.length > 0 || grouped.others.length > 0) {
+              for (const lens of grouped.common) {
                 menuItems.push({
-                  label: `Insert Lens: ${lens.label}`,
+                  label: `Insert Lens: ${describeLens(lens.label, lens.description)}`,
                   icon: <LensIcon fontSize="small" />,
-                  action: () => {
-                    const params = getLensDefaultParams(lens.blockType);
-                    const sourceAddress = `v1:blocks.${incomingEdge.from.blockId}.outputs.${incomingEdge.from.slotId}`;
-                    patch.addLens(blockId, portId, lens.blockType, sourceAddress, params);
-                  },
+                  action: () => addLens(lens.blockType),
+                });
+              }
+
+              if (grouped.others.length > 0) {
+                const overflowChildren: ContextMenuItem[] = grouped.others.map((lens) => ({
+                  label: lens.blockType.startsWith('Adapter_')
+                    ? `[Adapter] ${describeLens(lens.label, lens.description)}`
+                    : `[Lens] ${describeLens(lens.label, lens.description)}`,
+                  icon: <LensIcon fontSize="small" />,
+                  action: () => addLens(lens.blockType),
+                }));
+                menuItems.push({
+                  label: 'Insert Lens: More...',
+                  icon: <LensIcon fontSize="small" />,
+                  action: () => {},
+                  children: overflowChildren,
                 });
               }
             }

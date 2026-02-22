@@ -69,11 +69,11 @@ describe('Cardinality Diagnostics', () => {
     it('supports E_IMPLICIT_BROADCAST_DISALLOWED payload', () => {
       const payload: DiagnosticPayload = {
         code: 'E_IMPLICIT_BROADCAST_DISALLOWED',
-        signalPort: 'time',
+        onePort: 'time',
         fieldContext: 'Field<float>(circles-1)',
       };
       expect(payload.code).toBe('E_IMPLICIT_BROADCAST_DISALLOWED');
-      expect(payload.signalPort).toBe('time');
+      expect(payload.onePort).toBe('time');
     });
   });
 

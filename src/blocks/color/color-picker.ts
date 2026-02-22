@@ -49,18 +49,19 @@ registerBlock({
     }
 
     const outType = ctx.outTypes[0];
-    const floatType = canonicalType(FLOAT, unitTurns(), undefined, contractWrap01());
+    const hType = canonicalType(FLOAT, unitTurns(), outType.extent, contractWrap01());
+    const unitType = canonicalType(FLOAT, unitNone(), outType.extent, contractClamp01());
 
     // Enforce color validity: wrap hue, clamp s/l/a
     const wrap01 = ctx.b.opcode(OpCode.Wrap01);
     const clamp = ctx.b.opcode(OpCode.Clamp);
-    const zero = ctx.b.constant({ kind: 'float', value: 0 }, floatType);
-    const one = ctx.b.constant({ kind: 'float', value: 1 }, floatType);
+    const zero = ctx.b.constant({ kind: 'float', value: 0 }, unitType);
+    const one = ctx.b.constant({ kind: 'float', value: 1 }, unitType);
 
-    const hWrapped = mapAuto(hInput.id, wrap01, floatType, ctx.b);
-    const sClamped = zipAuto([sInput.id, zero, one], clamp, floatType, ctx.b);
-    const lClamped = zipAuto([lInput.id, zero, one], clamp, floatType, ctx.b);
-    const aClamped = zipAuto([aInput.id, zero, one], clamp, floatType, ctx.b);
+    const hWrapped = mapAuto(hInput.id, wrap01, hType, ctx.b);
+    const sClamped = zipAuto([sInput.id, zero, one], clamp, unitType, ctx.b);
+    const lClamped = zipAuto([lInput.id, zero, one], clamp, unitType, ctx.b);
+    const aClamped = zipAuto([aInput.id, zero, one], clamp, unitType, ctx.b);
 
     const result = ctx.b.construct([hWrapped, sClamped, lClamped, aClamped], outType);
 

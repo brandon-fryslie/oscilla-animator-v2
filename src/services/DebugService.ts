@@ -17,7 +17,7 @@ import { payloadStride, requireInst } from '../core/canonical-types';
 import type { UnmappedEdgeInfo, EdgeMetadata } from './mapDebugEdges';
 import type { ConstantValue } from './ConstantValueTracker';
 import { HistoryService, type KeyResolver, type ResolvedKeyMetadata } from '../ui/debug-viz/HistoryService';
-import type { DebugTargetKey, HistoryView, BufferHistoryView, Stride } from '../ui/debug-viz/types';
+import { serializeKey, type DebugTargetKey, type HistoryView, type BufferHistoryView, type Stride } from '../ui/debug-viz/types';
 import type { FieldHistoryView, AggregateFieldStats } from '../ui/debug-viz/FieldStatsAccumulator';
 import { FieldStatsAccumulator } from '../ui/debug-viz/FieldStatsAccumulator';
 import type { ArenaSlotDescriptor } from '../runtime/ArenaValueStore';
@@ -111,11 +111,23 @@ class DebugService {
   /** Scalar slot values (updated by runtime via tap) */
   private scalarValues = new Map<ValueSlot, number>();
 
+  /** Scalar slots that have received runtime tap writes this compile epoch. */
+  private scalarTapSlots = new Set<ValueSlot>();
+
   /** Field buffer data (updated by runtime via tap) */
   private fieldBuffers = new Map<ValueSlot, Float32Array>();
 
+  /** Field slots that have received runtime tap writes this compile epoch. */
+  private fieldTapSlots = new Set<ValueSlot>();
+
   /** Field slots currently being tracked for debug inspection */
   private trackedFieldSlots = new Set<ValueSlot>();
+
+  /** Reference counts for field slot tracking (supports multiple observers). */
+  private trackedFieldSlotRefs = new Map<ValueSlot, number>();
+
+  /** Reference counts for scalar history tracking keys (supports multiple observers). */
+  private trackedHistoryRefs = new Map<string, number>();
 
   /** Per-slot accumulated field stats (created on trackField, cleared on recompile) */
   private fieldAccumulators = new Map<ValueSlot, FieldStatsAccumulator>();
@@ -169,7 +181,11 @@ class DebugService {
     // Slot namespace changed — old values are stale and new slots haven't been written yet.
     // Reset so queries return undefined (graceful) instead of throwing (scheduling bug).
     this.scalarValues.clear();
+    this.scalarTapSlots.clear();
     this.fieldBuffers.clear();
+    this.fieldTapSlots.clear();
+    this.trackedFieldSlots.clear();
+    this.trackedFieldSlotRefs.clear();
     this.fieldAccumulators.clear();
     this.runtimeStarted = false;
     // [LAW:one-source-of-truth] Arena belongs to ProgramState; clear stale ref on recompile.
@@ -227,6 +243,10 @@ class DebugService {
    * Creates a FieldStatsAccumulator for the slot if one doesn't exist.
    */
   trackField(slotId: ValueSlot, type: CanonicalType): void {
+    const refs = this.trackedFieldSlotRefs.get(slotId) ?? 0;
+    this.trackedFieldSlotRefs.set(slotId, refs + 1);
+    if (refs > 0) return;
+
     this.trackedFieldSlots.add(slotId);
     if (!this.fieldAccumulators.has(slotId)) {
       const stride = payloadStride(type.payload) as Stride;
@@ -239,6 +259,14 @@ class DebugService {
    * Called when user stops hovering or closes inspector.
    */
   untrackField(slotId: ValueSlot): void {
+    const refs = this.trackedFieldSlotRefs.get(slotId) ?? 0;
+    if (refs <= 1) {
+      this.trackedFieldSlotRefs.delete(slotId);
+    } else {
+      this.trackedFieldSlotRefs.set(slotId, refs - 1);
+      return;
+    }
+
     this.trackedFieldSlots.delete(slotId);
     this.fieldBuffers.delete(slotId);
     this.fieldAccumulators.delete(slotId);
@@ -259,6 +287,32 @@ class DebugService {
     return this.trackedFieldSlots;
   }
 
+  /**
+   * Track scalar history for a debug target key with ref-count semantics.
+   * Mirrors trackField/untrackField behavior so multiple views can observe safely.
+   */
+  trackHistoryKey(key: DebugTargetKey): void {
+    const serialized = serializeKey(key);
+    const refs = this.trackedHistoryRefs.get(serialized) ?? 0;
+    this.trackedHistoryRefs.set(serialized, refs + 1);
+    if (refs > 0) return;
+    this.historyService.track(key);
+  }
+
+  /**
+   * Stop tracking scalar history for a debug target key with ref-count semantics.
+   */
+  untrackHistoryKey(key: DebugTargetKey): void {
+    const serialized = serializeKey(key);
+    const refs = this.trackedHistoryRefs.get(serialized) ?? 0;
+    if (refs <= 1) {
+      this.trackedHistoryRefs.delete(serialized);
+      this.historyService.untrack(key);
+      return;
+    }
+    this.trackedHistoryRefs.set(serialized, refs - 1);
+  }
+
   // ===========================================================================
   // Value Update API (called by runtime tap)
   // ===========================================================================
@@ -270,6 +324,7 @@ class DebugService {
   updateSlotValue(slotId: ValueSlot, value: number): void {
     this.runtimeStarted = true;
     this.scalarValues.set(slotId, value);
+    this.scalarTapSlots.add(slotId);
     this.historyService.onSlotWrite(slotId, value);
   }
 
@@ -280,6 +335,7 @@ class DebugService {
    */
   updateFieldValue(slotId: ValueSlot, buffer: ArrayBufferView): void {
     this.runtimeStarted = true;
+    this.fieldTapSlots.add(slotId);
     // Reuse existing buffer if same length to avoid per-frame allocation
     const src = buffer as Float32Array;
     let copy = this.fieldBuffers.get(slotId);
@@ -347,6 +403,14 @@ class DebugService {
   }
 
   /**
+   * Get port metadata (cardinality, slot, type) without querying value.
+   * Used by UI to derive tracking policy and chart shape for port probes.
+   */
+  getPortMetadata(blockId: string, portName: string): EdgeMetadata | undefined {
+    return this.portToSlotMap.get(`${blockId}:${portName}`);
+  }
+
+  /**
    * Get edge metadata (cardinality, slot, type) without querying value.
    * Used by UI to determine whether to track a field before polling.
    */
@@ -387,8 +451,12 @@ class DebugService {
     this.edgeToSlotMap.clear();
     this.portToSlotMap.clear();
     this.scalarValues.clear();
+    this.scalarTapSlots.clear();
     this.fieldBuffers.clear();
+    this.fieldTapSlots.clear();
     this.trackedFieldSlots.clear();
+    this.trackedFieldSlotRefs.clear();
+    this.trackedHistoryRefs.clear();
     this.fieldAccumulators.clear();
     this.unmappedEdges = [];
     this.runtimeStarted = false;
@@ -408,6 +476,11 @@ class DebugService {
       if (desc && desc.offset >= 0) {
         if (!this.runtimeStarted) return undefined;
         const value = arenaRead(this.arenaRef.arena, desc, 0, 0);
+        // Backfill history from queried arena values when runtime tap doesn't write this slot.
+        // [LAW:single-enforcer] HistoryService remains the single history storage path.
+        if (!this.scalarTapSlots.has(meta.slotId)) {
+          this.historyService.onSlotWrite(meta.slotId, value);
+        }
         return { kind: 'scalar', value, slotId: meta.slotId, type: meta.type };
       }
     }
@@ -438,6 +511,16 @@ class DebugService {
       if (desc && desc.offset >= 0) {
         if (!this.runtimeStarted) return undefined;
         const buffer = arenaSlice(this.arenaRef.arena, desc);
+        // Backfill accumulator histories from queried arena values when runtime tap
+        // doesn't write this field slot (common for derived/arena-only paths).
+        if (!this.fieldTapSlots.has(meta.slotId)) {
+          const fallbackAcc = this.fieldAccumulators.get(meta.slotId);
+          if (fallbackAcc) {
+            const stride = fallbackAcc.stride as number;
+            const count = stride > 0 ? buffer.length / stride : 0;
+            fallbackAcc.update(buffer, count);
+          }
+        }
         const acc = this.fieldAccumulators.get(meta.slotId);
         const stats: AggregateFieldStats = acc
           ? acc.getAccumulatedStats()

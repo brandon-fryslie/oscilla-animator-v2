@@ -65,9 +65,7 @@ describe('Level 9 Integration: Continuity Unaffected by Toggle', () => {
 
     return {
       version: 1,
-      signalExprs: { nodes: [], idMap: new Map() },
-      fieldExprs: { nodes: [], idMap: new Map() },
-      eventExprs: { nodes: [], idMap: new Map() },
+      valueExprs: { nodes: [] },
       slotMeta: [
         // System-reserved slots that executeFrame writes to
         { slot: 0 as ValueSlot, storage: 'f64', offset: 0, stride: 4 }, // time.palette

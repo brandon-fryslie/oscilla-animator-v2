@@ -800,10 +800,8 @@ function lowerBlockInstance(
             builder.registerFieldSlot(finalRef.id, finalRef.slot!);
             builder.registerSlotType(finalRef.slot!, finalRef.type);
           } else {
-            // Cardinality-one scalar — register scalar slot (if stride=1) and slot type
-            if (finalRef.stride === 1) {
-              builder.registerScalarSlot(finalRef.id, finalRef.slot!);
-            }
+            // [LAW:one-source-of-truth] All cardinality-one outputs must be scalar-slot addressable.
+            builder.registerScalarSlot(finalRef.id, finalRef.slot!);
             builder.registerSlotType(finalRef.slot!, finalRef.type);
           }
         } else {
@@ -986,10 +984,8 @@ function lowerSCCTwoPass(
                   builder.registerFieldSlot(finalRef.id, finalRef.slot!);
                   builder.registerSlotType(finalRef.slot!, finalRef.type);
                 } else {
-                  // Cardinality-one scalar — register scalar slot (if stride=1) and slot type
-                  if (finalRef.stride === 1) {
-                    builder.registerScalarSlot(finalRef.id, finalRef.slot!);
-                  }
+                  // [LAW:one-source-of-truth] All cardinality-one outputs must be scalar-slot addressable.
+                  builder.registerScalarSlot(finalRef.id, finalRef.slot!);
                   builder.registerSlotType(finalRef.slot!, finalRef.type);
                 }
               } else {

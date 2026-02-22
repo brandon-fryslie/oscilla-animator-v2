@@ -41,6 +41,7 @@
 import type { BlockId, BlockRole } from '../../types';
 import type { InferenceCanonicalType } from '../../core/inference-types';
 import type { Block, Edge, Patch, LensAttachment } from '../../graph/Patch';
+import { derivedLensBlockId } from '../../graph/lens-block-id';
 import { getBlockDefinition, requireBlockDef } from '../../blocks/registry';
 import { findAdapter } from '../../blocks/adapter-spec';
 
@@ -77,26 +78,10 @@ export interface Pass2Error {
 // Lens Expansion (Phase 1)
 // =============================================================================
 
-interface LensInsertion {
-  /** The lens block to insert */
-  block: Block;
-  /** The edge from original source to lens input */
-  edgeToLens: Edge;
-  /** The edge from lens output to original target */
-  edgeFromLens: Edge;
-  /** The original edge ID being replaced */
-  originalEdgeId: string;
-  /** The block and port being modified */
-  targetBlockId: BlockId;
-  targetPortId: string;
-}
-
-/**
- * Generate a deterministic lens block ID.
- * Format: _lens_{portId}_{lensId}
- */
-function generateLensBlockId(portId: string, lensId: string): BlockId {
-  return `_lens_${portId}_${lensId}` as BlockId;
+interface LensExpansionPlan {
+  lensBlocks: Map<BlockId, Block>;
+  replacementEdgesByOriginal: Map<string, Edge[]>;
+  portsToClear: Set<string>;
 }
 
 /**
@@ -172,41 +157,59 @@ function createLensBlock(
 }
 
 /**
- * Analyze lenses and determine needed lens block insertions.
- *
- * Returns a list of lens blocks to insert and how to rewire edges.
+ * Returns true when the lens targets the given edge source endpoint.
  */
-function analyzeLenses(
+function lensTargetsEdgeSource(
+  lens: LensAttachment,
+  sourceBlockId: string,
+  sourcePortId: string,
+): boolean {
+  const expectedSource = parseSourceAddress(lens.sourceAddress);
+  if (!expectedSource) return true;
+  return expectedSource.blockId === sourceBlockId && expectedSource.portId === sourcePortId;
+}
+
+/**
+ * Analyze lenses and determine needed chain rewrites per original edge.
+ */
+function planLensExpansion(
   patch: Patch,
   errors: AdapterError[]
-): LensInsertion[] {
-  const insertions: LensInsertion[] = [];
+): LensExpansionPlan {
+  const lensBlocks = new Map<BlockId, Block>();
+  const replacementEdgesByOriginal = new Map<string, Edge[]>();
+  const portsToClear = new Set<string>();
 
   for (const [blockId, block] of patch.blocks) {
     for (const [portId, port] of block.inputPorts) {
       // Skip if no lenses defined for this port
       if (!port.lenses || port.lenses.length === 0) continue;
+      portsToClear.add(`${blockId}:${portId}`);
+      const orderedLenses = [...port.lenses].sort((a, b) => a.sortKey - b.sortKey);
 
-      for (const lens of port.lenses) {
-        // Find edges targeting this (block, port) pair that match the lens's sourceAddress
-        const expectedSource = parseSourceAddress(lens.sourceAddress);
+      for (const edge of patch.edges) {
+        if (edge.enabled === false) continue;
+        if (edge.to.kind !== 'port') continue;
+        if (edge.from.kind !== 'port') continue;
+        if (edge.to.blockId !== blockId || edge.to.slotId !== portId) continue;
 
-        for (const edge of patch.edges) {
-          if (edge.enabled === false) continue;
-          if (edge.to.kind !== 'port') continue;
-          if (edge.from.kind !== 'port') continue;
-          if (edge.to.blockId !== blockId || edge.to.slotId !== portId) continue;
+        const matchedLenses = orderedLenses.filter((lens) =>
+          lensTargetsEdgeSource(lens, edge.from.blockId, edge.from.slotId),
+        );
+        if (matchedLenses.length === 0) continue;
+        const firstLensBlockId = derivedLensBlockId(portId, matchedLenses[0].id);
 
-          // Match lens to the specific source edge via sourceAddress
-          if (expectedSource &&
-              (edge.from.blockId !== expectedSource.blockId ||
-               edge.from.slotId !== expectedSource.portId)) {
-            continue;
-          }
+        const replacementEdges: Edge[] = [];
+        let currentFrom = edge.from;
+        let currentAdapterId: BlockId | null = null;
 
+        for (const lens of matchedLenses) {
           // Create lens block
-          const lensBlockId = generateLensBlockId(portId, lens.id);
-          const lensBlock = createLensBlock(portId, lens, block, lensBlockId);
+          const lensBlockId = derivedLensBlockId(portId, lens.id);
+          if (!lensBlocks.has(lensBlockId)) {
+            const lensBlock = createLensBlock(portId, lens, block, lensBlockId);
+            lensBlocks.set(lensBlockId, lensBlock);
+          }
 
           // Find the lens block definition to get input/output port IDs
           const lensBlockDef = getBlockDefinition(lens.lensType);
@@ -223,10 +226,9 @@ function analyzeLenses(
           const inputPortId = Object.keys(lensBlockDef.inputs)[0] ?? 'in';
           const outputPortId = Object.keys(lensBlockDef.outputs)[0] ?? 'out';
 
-          // Create edges: source → lens input, lens output → target
           const edgeToLens: Edge = {
-            id: `${edge.id}_to_lens`,
-            from: edge.from,
+            id: `${edge.id}_to_lens_${lens.id}`,
+            from: currentFrom,
             to: {
               kind: 'port',
               blockId: lensBlockId,
@@ -236,34 +238,36 @@ function analyzeLenses(
             sortKey: edge.sortKey,
             role: { kind: 'adapter', meta: { adapterId: lensBlockId, originalEdgeId: edge.id } },
           };
+          replacementEdges.push(edgeToLens);
 
-          const edgeFromLens: Edge = {
-            id: `${edge.id}_from_lens`,
-            from: {
-              kind: 'port',
-              blockId: lensBlockId,
-              slotId: outputPortId,
-            },
-            to: edge.to,
-            enabled: true,
-            sortKey: edge.sortKey,
-            role: { kind: 'adapter', meta: { adapterId: lensBlockId, originalEdgeId: edge.id } },
+          currentFrom = {
+            kind: 'port',
+            blockId: lensBlockId,
+            slotId: outputPortId,
           };
-
-          insertions.push({
-            block: lensBlock,
-            edgeToLens,
-            edgeFromLens,
-            originalEdgeId: edge.id,
-            targetBlockId: blockId,
-            targetPortId: portId,
-          });
+          currentAdapterId = lensBlockId;
         }
+
+        const lastLens = matchedLenses[matchedLenses.length - 1];
+        replacementEdges.push({
+          id: `${edge.id}_from_lens_${lastLens.id}`,
+          from: currentFrom,
+          to: edge.to,
+          enabled: true,
+          sortKey: edge.sortKey,
+          role: { kind: 'adapter', meta: { adapterId: currentAdapterId ?? firstLensBlockId, originalEdgeId: edge.id } },
+        });
+
+        replacementEdgesByOriginal.set(edge.id, replacementEdges);
       }
     }
   }
 
-  return insertions;
+  return {
+    lensBlocks,
+    replacementEdgesByOriginal,
+    portsToClear,
+  };
 }
 
 /**
@@ -273,34 +277,32 @@ function analyzeLenses(
  */
 function applyLensInsertions(
   patch: Patch,
-  insertions: LensInsertion[]
+  plan: LensExpansionPlan
 ): Patch {
-  if (insertions.length === 0) {
+  if (plan.replacementEdgesByOriginal.size === 0) {
     return patch;
   }
-
-  // Build set of edge IDs being replaced
-  const replacedEdgeIds = new Set(insertions.map(i => i.originalEdgeId));
 
   // Create new blocks map with lens blocks
   const newBlocks = new Map(patch.blocks);
 
   // Add lens blocks
-  for (const ins of insertions) {
-    newBlocks.set(ins.block.id, ins.block);
+  for (const [blockId, lensBlock] of plan.lensBlocks) {
+    newBlocks.set(blockId, lensBlock);
   }
 
   // Clear lenses from ports (they've been expanded to blocks)
-  for (const ins of insertions) {
-    const block = newBlocks.get(ins.targetBlockId);
+  for (const entry of plan.portsToClear) {
+    const [targetBlockId, targetPortId] = entry.split(':');
+    const block = newBlocks.get(targetBlockId as BlockId);
     if (block) {
-      const port = block.inputPorts.get(ins.targetPortId);
+      const port = block.inputPorts.get(targetPortId);
       if (port && port.lenses) {
         const newPort = { ...port, lenses: undefined };
         const newInputPorts = new Map(block.inputPorts);
-        newInputPorts.set(ins.targetPortId, newPort);
+        newInputPorts.set(targetPortId, newPort);
         const newBlock = { ...block, inputPorts: newInputPorts };
-        newBlocks.set(ins.targetBlockId, newBlock);
+        newBlocks.set(targetBlockId as BlockId, newBlock);
       }
     }
   }
@@ -310,15 +312,14 @@ function applyLensInsertions(
 
   // Keep edges that aren't being replaced
   for (const edge of patch.edges) {
-    if (!replacedEdgeIds.has(edge.id)) {
+    if (!plan.replacementEdgesByOriginal.has(edge.id)) {
       newEdges.push(edge);
     }
   }
 
   // Add lens edges
-  for (const ins of insertions) {
-    newEdges.push(ins.edgeToLens);
-    newEdges.push(ins.edgeFromLens);
+  for (const replacementEdges of plan.replacementEdgesByOriginal.values()) {
+    newEdges.push(...replacementEdges);
   }
 
   return {
@@ -335,13 +336,13 @@ function applyLensInsertions(
  */
 function expandExplicitLenses(patch: Patch): Pass2Result | Pass2Error {
   const errors: AdapterError[] = [];
-  const insertions = analyzeLenses(patch, errors);
+  const plan = planLensExpansion(patch, errors);
 
   if (errors.length > 0) {
     return { kind: 'error', errors };
   }
 
-  return { kind: 'ok', patch: applyLensInsertions(patch, insertions) };
+  return { kind: 'ok', patch: applyLensInsertions(patch, plan) };
 }
 
 // =============================================================================

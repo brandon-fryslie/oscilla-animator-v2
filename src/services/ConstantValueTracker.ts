@@ -61,7 +61,7 @@ export function extractConstantValues(
       const outputPort = blockDef.outputs[0]; // Const has one output
 
       if (valueParam !== undefined && outputPort) {
-        // Use basic float signal type
+        // Use basic one-cardinality float type
         const floatType = canonicalScalar(FLOAT);
         constants.set(unmapped.edgeId, {
           value: valueParam,

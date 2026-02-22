@@ -64,7 +64,7 @@ export function patchProgramConstants(
     result = patched;
   }
 
-  // If nothing changed, return null to signal no-op
+  // If nothing changed, return null to indicate no-op
   if (result === program) return null;
 
   return result;

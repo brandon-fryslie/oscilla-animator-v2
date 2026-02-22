@@ -8,6 +8,7 @@
 import type { CompiledProgramIR } from '../compiler/ir/program';
 import type { ScheduleIR } from '../compiler/backend/schedule-program';
 import type { Step, InstanceDecl, DomainInstance, StepRender } from '../compiler/ir/types';
+import type { ValueExpr } from '../compiler/ir/value-expr';
 import type { IrInstanceId as InstanceId } from '../types';
 import { instanceId as makeInstanceId } from '../core/ids';
 import type { RuntimeState } from './RuntimeState';
@@ -26,10 +27,11 @@ import { applyContinuity, finalizeContinuityFrame } from './ContinuityApply';
 import { createStableDomainInstance, createUnstableDomainInstance } from './DomainIdentity';
 import { assembleRenderFrame, type AssemblerContext } from './RenderAssembler';
 import { resolveCameraFromGlobals } from './CameraResolver';
-import { requireManyInstance } from '../core/canonical-types';
+import { payloadStride, requireInst, requireManyInstance } from '../core/canonical-types';
 import type { ValueSlot } from '../compiler/ir/Indices';
 import { SYSTEM_PALETTE_SLOT } from '../compiler/ir/Indices';
 import { evaluateValueExprScalar, evaluateConstructScalar } from './ValueExprScalarEvaluator';
+import type { ScalarEvalContext } from './ValueExprScalarEvaluator';
 import { evaluateValueExprEvent } from './ValueExprEventEvaluator';
 import { materializeValueExpr } from './ValueExprMaterializer';
 import { arenaSlice, type ArenaSlotDescriptor } from './ArenaValueStore';
@@ -151,6 +153,29 @@ function readCanonicalNumeric(
   return state.arena[arenaDesc.offset + component];
 }
 
+function reduceScalarBuffer(buffer: ArrayLike<number>, count: number, op: 'min' | 'max' | 'sum' | 'avg'): number {
+  if (count <= 0) return 0;
+  if (op === 'sum' || op === 'avg') {
+    let acc = 0;
+    for (let i = 0; i < count; i++) acc += buffer[i] as number;
+    return op === 'avg' ? acc / count : acc;
+  }
+  if (op === 'min') {
+    let acc = Number.POSITIVE_INFINITY;
+    for (let i = 0; i < count; i++) {
+      const v = buffer[i] as number;
+      if (v < acc) acc = v;
+    }
+    return acc;
+  }
+  let acc = Number.NEGATIVE_INFINITY;
+  for (let i = 0; i < count; i++) {
+    const v = buffer[i] as number;
+    if (v > acc) acc = v;
+  }
+  return acc;
+}
+
 // Module-level helper: resolve slot to storage offset (hoisted to avoid per-frame closure)
 function resolveSlotOffsetFromMap(slotLookupMap: ReadonlyMap<ValueSlot, SlotLookup>, slot: ValueSlot): SlotLookup {
   const lookup = slotLookupMap.get(slot);
@@ -251,6 +276,42 @@ export function executeFrame(
   // reads multi-component signals from arena using canonical ExprAddressTable offsets.
   state.cache.scalarExprToArenaOffset = addressTable.scalarExprToArenaOffset;
 
+  // [LAW:one-source-of-truth] Reduce kernels are evaluated through this single
+  // injected context so all scalar evaluation paths share identical reduce behavior.
+  const scalarEvalContext: ScalarEvalContext = {
+    evaluateReduceKernel: (
+      expr: Extract<ValueExpr, { kind: 'kernel'; kernelKind: 'reduce' }>,
+      valueExprTable: readonly ValueExpr[],
+      runtimeState: RuntimeState
+    ): number => {
+      const fieldExpr = valueExprTable[expr.field];
+      if (!fieldExpr) throw new Error(`Reduce field expression ${expr.field} not found`);
+      const card = requireInst(fieldExpr.type.extent.cardinality, 'cardinality');
+      if (card.kind !== 'many') throw new Error('Reduce input must be many-cardinality');
+      const instanceRef = card.instance;
+      const reduceInstanceId = (typeof instanceRef === 'object' ? instanceRef.instanceId : instanceRef) as InstanceId;
+      const instanceDecl = instances.get(reduceInstanceId);
+      const laneCount = instanceDecl && typeof instanceDecl.count === 'number' ? instanceDecl.count : 0;
+      if (laneCount <= 0) return 0;
+
+      const stride = payloadStride(fieldExpr.type.payload);
+      if (stride !== 1) {
+        throw new Error(`Reduce scalar evaluation supports scalar payload only (stride=${stride})`);
+      }
+
+      const fieldValues = materializeValueExpr(
+        expr.field,
+        program.valueExprs,
+        makeInstanceId(String(reduceInstanceId)),
+        laneCount,
+        runtimeState,
+        program,
+        MATERIALIZER_POOL,
+      );
+      return reduceScalarBuffer(fieldValues, laneCount, expr.op);
+    },
+  };
+
   // PHASE 1: Execute all non-stateWrite steps
   for (const step of steps) {
     switch (step.kind) {
@@ -302,6 +363,7 @@ export function executeFrame(
                 state,
                 state.arena,
                 arenaDesc.offset,
+                scalarEvalContext,
               );
 
               if (written !== stride) {
@@ -319,7 +381,7 @@ export function executeFrame(
               state.cache.scalarStamps[step.expr as number] = state.cache.frameId;
             } else if (stride === 1) {
               // Scalar cardinality-one value: evaluate and write single value
-              const value = evaluateValueExprScalar(step.expr as any, program.valueExprs.nodes, state);
+              const value = evaluateValueExprScalar(step.expr as any, program.valueExprs.nodes, state, scalarEvalContext);
 
               writeArenaScalar(slotToArena, state, lookup, value);
 
@@ -551,7 +613,7 @@ export function executeFrame(
   for (const step of steps) {
     if (step.kind === 'stateWrite') {
       // Write to persistent state array using ValueExpr evaluation
-      const value = evaluateValueExprScalar(step.value as any, program.valueExprs.nodes, state);
+      const value = evaluateValueExprScalar(step.value as any, program.valueExprs.nodes, state, scalarEvalContext);
       state.state[step.stateSlot as number] = value;
     }
     if (step.kind === 'fieldStateWrite') {

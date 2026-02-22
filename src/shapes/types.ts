@@ -85,7 +85,7 @@ export type AbstractTopologyDef = Omit<TopologyDef, 'id'>;
  * - topologyId: Which topology to use (compile-time constant)
  * - paramSlots: Where to find parameter values at runtime
  *
- * This is what flows through the signal/field system.
+ * This is what flows through the one/many value system.
  */
 export interface ShapeRef {
   readonly topologyId: TopologyId;

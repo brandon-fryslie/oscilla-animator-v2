@@ -148,6 +148,15 @@ describe('OpcodeInterpreter - Binary Operations', () => {
     expect(applyOpcode('pow', [2, -1])).toBe(0.5);
   });
 
+  it('eq/lt/gt: comparison ops return 0/1 mask', () => {
+    expect(applyOpcode('eq', [3, 3])).toBe(1);
+    expect(applyOpcode('eq', [3, 4])).toBe(0);
+    expect(applyOpcode('lt', [2, 3])).toBe(1);
+    expect(applyOpcode('lt', [3, 2])).toBe(0);
+    expect(applyOpcode('gt', [4, 2])).toBe(1);
+    expect(applyOpcode('gt', [2, 4])).toBe(0);
+  });
+
   it('hash: deterministic hash to [0,1)', () => {
     // Hash should be deterministic
     const h1 = applyOpcode('hash', [42, 0]);

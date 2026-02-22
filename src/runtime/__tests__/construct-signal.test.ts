@@ -273,7 +273,25 @@ describe('extract signal evaluation', () => {
     ];
 
     expect(() => evaluateValueExprScalar(0 as ValueExprId, valueExprs, state)).toThrow(
-      'compiler bug'
+      'not found in ValueExpr table'
+    );
+  });
+
+  it('throws when slot mapping is unavailable for non-construct input', () => {
+    state.cache.scalarExprToArenaOffset = null;
+
+    const valueExprs: ValueExpr[] = [
+      { kind: 'const', value: floatConst(0), type: canonicalScalar({ kind: 'float' }, { kind: 'none' }) },
+      {
+        kind: 'extract',
+        input: 0 as ValueExprId,
+        componentIndex: 0,
+        type: canonicalScalar({ kind: 'float' }, { kind: 'none' }),
+      },
+    ];
+
+    expect(() => evaluateValueExprScalar(1 as ValueExprId, valueExprs, state)).toThrow(
+      'has no slot mapping',
     );
   });
 
@@ -309,5 +327,61 @@ describe('extract signal evaluation', () => {
     expect(evaluateValueExprScalar(6 as ValueExprId, valueExprs, state)).toBeCloseTo(0.2, 6);
     expect(evaluateValueExprScalar(7 as ValueExprId, valueExprs, state)).toBeCloseTo(0.3, 6);
     expect(evaluateValueExprScalar(8 as ValueExprId, valueExprs, state)).toBeCloseTo(1.0, 6);
+  });
+});
+
+describe('reduce kernel scalar evaluation', () => {
+  let state: RuntimeState;
+
+  beforeEach(() => {
+    state = createRuntimeState(16, 16, 4);
+    state.cache.frameId = 1;
+    state.time = {
+      tMs: 0,
+      dt: 16.67,
+      tAbsMs: 0,
+      phaseA: 0,
+      phaseB: 0,
+      pulse: 0,
+      progress: 0,
+      palette: new Float32Array([1, 1, 1, 1]),
+      energy: 0,
+    };
+  });
+
+  it('throws for reduce kernel when no scalar evaluation context is provided', () => {
+    const valueExprs: ValueExpr[] = [
+      { kind: 'const', value: floatConst(0), type: canonicalScalar({ kind: 'float' }, { kind: 'none' }) },
+      {
+        kind: 'kernel',
+        kernelKind: 'reduce',
+        field: 0 as ValueExprId,
+        op: 'sum',
+        type: canonicalScalar({ kind: 'float' }, { kind: 'none' }),
+      },
+    ];
+
+    expect(() => evaluateValueExprScalar(1 as ValueExprId, valueExprs, state)).toThrow(
+      'reduce kernels require scalar evaluation context',
+    );
+  });
+
+  it('uses injected scalar evaluation context for reduce kernels', () => {
+    const valueExprs: ValueExpr[] = [
+      { kind: 'const', value: floatConst(0), type: canonicalScalar({ kind: 'float' }, { kind: 'none' }) },
+      {
+        kind: 'kernel',
+        kernelKind: 'reduce',
+        field: 0 as ValueExprId,
+        op: 'avg',
+        type: canonicalScalar({ kind: 'float' }, { kind: 'none' }),
+      },
+    ];
+
+    const value = evaluateValueExprScalar(1 as ValueExprId, valueExprs, state, {
+      evaluateReduceKernel: () => 7.25,
+    });
+
+    expect(value).toBe(7.25);
   });
 });

@@ -45,7 +45,7 @@ registerBlock({
       throw new Error('Construct requires all inputs (x, y, z)');
     }
 
-    // [LAW:dataflow-not-control-flow] Adapter policy handles signal→field broadcast before lowering.
+    // [LAW:dataflow-not-control-flow] Adapter policy handles one→many broadcast before lowering.
     const outType = ctx.outTypes[0];
     const result = ctx.b.construct([xInput.id, yInput.id, zInput.id], outType);
 

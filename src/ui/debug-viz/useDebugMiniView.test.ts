@@ -5,8 +5,8 @@
  * - Returns null when no edge hovered
  * - Returns null when metadata unavailable
  * - Returns MiniViewData with correct key, label, meta
- * - Resolves history for signal edges
- * - Does not resolve history for field edges
+ * - Resolves history for scalar edges via hook-owned tracking
+ * - Resolves field histories via hook-owned tracking
  * - Falls back to edgeId when no label provided
  * - Polls for value updates
  */
@@ -16,8 +16,8 @@ import { renderHook, act } from '@testing-library/react';
 import { debugService } from '../../services/DebugService';
 import type { ValueSlot } from '../../types';
 import { canonicalType, canonicalManyDef } from '../../core/canonical-types';
-import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR,  CAMERA_PROJECTION } from '../../core/canonical-types';
-import { useDebugMiniView } from './useDebugMiniView';
+import { FLOAT } from '../../core/canonical-types';
+import { useDebugMiniView, useDebugPortMiniView } from './useDebugMiniView';
 
 describe('useDebugMiniView', () => {
   beforeEach(() => {
@@ -83,7 +83,7 @@ describe('useDebugMiniView', () => {
     expect(result.current!.history!.writeIndex).toBe(1);
   });
 
-  it('should return null history for untracked signal edge', () => {
+  it('should auto-track history for scalar edge', () => {
     const edgeMap = new Map([
       ['sig-edge', { slotId: 10 as ValueSlot, type: canonicalType(FLOAT) }],
     ]);
@@ -91,7 +91,7 @@ describe('useDebugMiniView', () => {
 
     const { result } = renderHook(() => useDebugMiniView('sig-edge', null));
 
-    expect(result.current!.history).toBe(null);
+    expect(result.current!.history).not.toBe(null);
   });
 
   it('should return null history for field edge', () => {
@@ -181,16 +181,38 @@ describe('useDebugMiniView', () => {
     expect(result.current!.value).toBe(null);
   });
 
-  it('should return field-untracked value for untracked field edge', () => {
+  it('should resolve tracked field value and field histories', () => {
     const edgeMap = new Map([
       ['field-edge', { slotId: 30 as ValueSlot, type: canonicalManyDef(FLOAT) }],
     ]);
     debugService.setEdgeToSlotMap(edgeMap);
 
     const { result } = renderHook(() => useDebugMiniView('field-edge', null));
-
+    debugService.updateFieldValue(30 as ValueSlot, new Float32Array([0.25, 0.5, 0.75, 1.0]));
     act(() => { vi.advanceTimersByTime(300); });
     expect(result.current!.value).not.toBe(null);
-    expect(result.current!.value!.kind).toBe('field-untracked');
+    expect(result.current!.value!.kind).toBe('field');
+    expect(result.current!.fieldHistory).not.toBe(null);
+    expect(result.current!.fieldInstanceHistory).not.toBe(null);
+    expect(result.current!.fieldBufferHistory).not.toBe(null);
+  });
+
+  it('should return MiniViewData for mapped output port', () => {
+    const portMap = new Map([
+      ['block-1:out', { slotId: 42 as ValueSlot, type: canonicalType(FLOAT) }],
+    ]);
+    debugService.setPortToSlotMap(portMap);
+
+    const { result } = renderHook(() => useDebugPortMiniView('block-1', 'out', 'before'));
+    expect(result.current).not.toBe(null);
+    expect(result.current!.key).toEqual({ kind: 'port', blockId: 'block-1', portName: 'out' });
+    expect(result.current!.label).toBe('before');
+    expect(result.current!.meta.slotId).toBe(42);
+  });
+
+  it('should return null for unmapped output port', () => {
+    debugService.setPortToSlotMap(new Map());
+    const { result } = renderHook(() => useDebugPortMiniView('missing', 'out', null));
+    expect(result.current).toBe(null);
   });
 });

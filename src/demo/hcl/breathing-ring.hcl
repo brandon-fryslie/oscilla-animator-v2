@@ -1,8 +1,8 @@
 # Breathing Ring
 #
-# A ring of circles that pulses in size with per-element rainbow.
-# The oscillator drives scale through ScaleBias for clean value mapping.
-# Demonstrates: ScaleBias, per-element rainbow, Oscillator → scale.
+# A ring of circles that pulses in size with per-element rainbow and
+# per-instance jitter. The oscillator drives jitter amount through ScaleBias.
+# Demonstrates: ScaleBias, NoisyBroadcast, per-element rainbow.
 
 patch "Breathing Ring" {
   block "InfiniteTimeRoot" "clock" {
@@ -59,6 +59,26 @@ patch "Breathing Ring" {
   }
 
   block "ScaleBias" "scale-map" {
+    outputs {
+      out = scale-jitter.amount
+    }
+  }
+
+  block "Const" "base-scale" {
+    value = 1.0
+    outputs {
+      out = scale-jitter.value
+    }
+  }
+
+  block "Const" "jitter-seed" {
+    value = 7
+    outputs {
+      out = scale-jitter.seed
+    }
+  }
+
+  block "NoisyBroadcast" "scale-jitter" {
     outputs {
       out = render.scale
     }

@@ -48,7 +48,8 @@
 
 import type { BlockId, PortId, BlockRole, DefaultSource, EdgeRole, CombineMode } from '../types';
 import { requireBlockDef } from '../blocks/registry';
-import { detectCanonicalNameCollisions, normalizeCanonicalName, generateLensId } from '../core/canonical-name';
+import { detectCanonicalNameCollisions, normalizeCanonicalName } from '../core/canonical-name';
+import { nextLensAttachmentId } from './lens-id';
 
 // =============================================================================
 // Lens Attachments (Sprint 2: Lenses System Redesign - 2026-01-27)
@@ -78,7 +79,7 @@ import { detectCanonicalNameCollisions, normalizeCanonicalName, generateLensId }
 export interface LensAttachment {
   /**
    * Unique ID within this port's lenses.
-   * Generated deterministically from source address.
+   * Generated deterministically from source + lens type, with stable suffixing for chains.
    * Used in resource addressing: `my_block.inputs.count.lenses.{id}`
    */
   readonly id: string;
@@ -97,7 +98,7 @@ export interface LensAttachment {
    * Format: "v1:blocks.{block}.outputs.{port}"
    *
    * This identifies which incoming connection the lens transforms.
-   * A port can have multiple lenses if it has multiple incoming connections.
+   * A port can have multiple lenses for the same source; sortKey defines chain order.
    */
   readonly sourceAddress: string;
 
@@ -148,7 +149,7 @@ export interface InputPort {
    * Lens attachments for incoming connections (Sprint 2: 2026-01-27).
    *
    * Each lens specifies a signal transformation for a specific source connection.
-   * Lenses are keyed by source address - one lens per (port, source) pair.
+   * Multiple lenses may target the same source connection; sortKey defines chain order.
    *
    * During normalization, lenses are expanded to real lens blocks.
    * The lens ID is used for resource addressing:
@@ -531,8 +532,8 @@ export class PatchBuilder {
       throw new Error(`Input port ${portId} not found on block ${blockId}`);
     }
 
-    const lensId = generateLensId(sourceAddress);
     const existingLenses = port.lenses ?? [];
+    const lensId = nextLensAttachmentId(existingLenses, sourceAddress, lensType);
 
     const lens: LensAttachment = {
       id: lensId,

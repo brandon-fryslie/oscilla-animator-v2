@@ -16,8 +16,10 @@ import type { BlockId, BlockRole, CombineMode, EdgeRole, PortId } from '../types
 import { emptyPatchData, type PatchData } from './internal';
 import type { EventHub } from '../events/EventHub';
 import { requireAnyBlockDef } from '../blocks/registry';
-import { normalizeCanonicalName, detectCanonicalNameCollisions, generateLensId } from '../core/canonical-name';
+import { normalizeCanonicalName, detectCanonicalNameCollisions } from '../core/canonical-name';
 import { exportPatchAsHCL, importPatchFromHCL, savePatchToStorage } from '../services/PatchPersistence';
+import { derivedLensParamKey } from '../graph/lens-block-id';
+import { nextLensAttachmentId } from '../graph/lens-id';
 
 /**
  * Opaque type for immutable patch access.
@@ -636,14 +638,8 @@ export class PatchStore {
     // Validate lens type is registered
     requireAnyBlockDef(lensType);
 
-    // Generate deterministic lens ID
-    const lensId = generateLensId(sourceAddress);
-
-    // Check for duplicate
     const existingLenses = port.lenses ?? [];
-    if (existingLenses.some(l => l.sourceAddress === sourceAddress)) {
-      throw new Error(`Lens already exists for source ${sourceAddress} on port ${portId}`);
-    }
+    const lensId = nextLensAttachmentId(existingLenses, sourceAddress, lensType);
 
     // Create lens attachment
     const lens: LensAttachment = {
@@ -790,7 +786,6 @@ export class PatchStore {
     lensId: string,
     params: Record<string, unknown>
   ): void {
-    this._hasStructuralChange = true;
     const block = this._data.blocks.get(blockId);
     if (!block) {
       throw new Error(`Block ${blockId} not found`);
@@ -802,6 +797,20 @@ export class PatchStore {
 
     if (lensIndex === -1) {
       throw new Error(`Lens ${lensId} not found on port ${portId}`);
+    }
+
+    const previousLens = existingLenses[lensIndex];
+    let hasAnyValueChange = false;
+    for (const [paramId, nextValue] of Object.entries(params)) {
+      const prevValue = previousLens.params?.[paramId];
+      if (prevValue !== nextValue) {
+        hasAnyValueChange = true;
+        // [LAW:one-source-of-truth] Fast-path key matches derived lens block + exposed param port.
+        this._pendingValueChanges.set(derivedLensParamKey(portId, lensId, paramId), nextValue);
+      }
+    }
+    if (!hasAnyValueChange) {
+      return;
     }
 
     // Update the lens with merged params

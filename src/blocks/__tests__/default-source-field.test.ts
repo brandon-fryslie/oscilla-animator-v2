@@ -3,7 +3,7 @@
  *
  * Verifies that DefaultSource (oneOnly acceptance) works correctly with the
  * cardinality adapter system — Broadcast adapters are auto-inserted at
- * signal→field boundaries by the fixpoint solver.
+ * one→many boundaries by the fixpoint solver.
  */
 
 import { describe, it, expect } from 'vitest';

@@ -565,14 +565,14 @@ export function solveCardinality(input: CardinalitySolveInput): CardinalitySolve
 
       // Propagate many to all groups in this zip set.
       // promoteToMany semantics: one ports coexist with many ports.
-      // clampOne groups stay at one — runtime broadcasts them via kernelZipSig.
+      // clampOne groups stay at one — runtime broadcasts them via kernelZipPromote.
       // This is NOT a conflict; it's expected for relation:'promoteToMany' groups.
       for (const root of groupRoots) {
         if (root === manyRoot) continue;
         const facts = uf.getOrCreateFacts(root);
 
         // clampOne groups stay at one — skip propagation, no conflict.
-        // The runtime handles mixed cardinality via kernelZipSig.
+        // The runtime handles mixed cardinality via kernelZipPromote.
         if (facts.forcedOne) continue;
 
         if (facts.resolved === null || facts.resolved?.kind === 'one') {

@@ -16,7 +16,7 @@ patch "Feedback Simple" {
     role = "timeRoot"
     outputs {
       phaseA = speed-osc.phase
-      phaseB = outer-layout.phase
+      phaseB = inner-layout.phase
     }
   }
 
@@ -79,7 +79,13 @@ patch "Feedback Simple" {
 
   block "Modulo" "wrap" {
     outputs {
-      out = prev-phase.in
+      out = [prev-phase.in, feedback-phase.in]
+    }
+  }
+
+  block "Adapter_ScalarToPhase01" "feedback-phase" {
+    outputs {
+      out = outer-layout.phase
     }
   }
 

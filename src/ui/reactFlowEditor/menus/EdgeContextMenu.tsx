@@ -18,7 +18,7 @@ import type { BlockId } from '../../../types';
 import { useStores } from '../../../stores';
 import { ContextMenu, type ContextMenuItem } from '../ContextMenu';
 import { requireAnyBlockDef } from '../../../blocks/registry';
-import { findCompatibleLenses, getLensDefaultParams } from '../lensUtils';
+import { findCompatibleLenses, getLensDefaultParams, groupLensMenuOptions } from '../lensUtils';
 
 export interface EdgeContextMenuProps {
   edgeId: string;
@@ -72,18 +72,38 @@ export const EdgeContextMenu: React.FC<EdgeContextMenuProps> = ({
 
       if (sourceOutput?.type && targetInput?.type) {
         const compatibleLenses = findCompatibleLenses(sourceOutput.type, targetInput.type);
+        const grouped = groupLensMenuOptions(compatibleLenses);
+        const describeLens = (label: string, description: string): string =>
+          description.trim().length > 0 ? `${label} - ${description}` : label;
 
-        if (compatibleLenses.length > 0) {
-          // Add each lens as a direct menu item
-          for (const lens of compatibleLenses) {
+        const addLens = (lensType: string): void => {
+          const params = getLensDefaultParams(lensType);
+          const sourceAddress = `v1:blocks.${edge.from.blockId}.outputs.${edge.from.slotId}`;
+          patch.addLens(edge.to.blockId as BlockId, edge.to.slotId, lensType, sourceAddress, params);
+        };
+
+        if (grouped.common.length > 0 || grouped.others.length > 0) {
+          for (const lens of grouped.common) {
             menuItems.push({
-              label: `Insert Lens: ${lens.label}`,
+              label: `Insert Lens: ${describeLens(lens.label, lens.description)}`,
               icon: <LensIcon fontSize="small" />,
-              action: () => {
-                const params = getLensDefaultParams(lens.blockType);
-                const sourceAddress = `v1:blocks.${edge.from.blockId}.outputs.${edge.from.slotId}`;
-                patch.addLens(edge.to.blockId as BlockId, edge.to.slotId, lens.blockType, sourceAddress, params);
-              },
+              action: () => addLens(lens.blockType),
+            });
+          }
+
+          if (grouped.others.length > 0) {
+            const overflowChildren: ContextMenuItem[] = grouped.others.map((lens) => ({
+              label: lens.blockType.startsWith('Adapter_')
+                ? `[Adapter] ${describeLens(lens.label, lens.description)}`
+                : `[Lens] ${describeLens(lens.label, lens.description)}`,
+              icon: <LensIcon fontSize="small" />,
+              action: () => addLens(lens.blockType),
+            }));
+            menuItems.push({
+              label: 'Insert Lens: More...',
+              icon: <LensIcon fontSize="small" />,
+              action: () => {},
+              children: overflowChildren,
             });
           }
         }

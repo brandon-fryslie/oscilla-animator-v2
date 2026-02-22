@@ -101,7 +101,7 @@ export type DiagnosticCode =
   | 'E_CARDINALITY_MISMATCH' // Block output cardinality differs from required preserved cardinality
   | 'E_INSTANCE_MISMATCH' // Two many inputs unify to different InstanceRefs
   | 'E_LANE_COUPLED_DISALLOWED' // Block is lane-coupled but used in generic context
-  | 'E_IMPLICIT_BROADCAST_DISALLOWED' // Signal consumed in Field context without explicit broadcast
+  | 'E_IMPLICIT_BROADCAST_DISALLOWED' // One value consumed in many context without explicit broadcast
 
   // --- Payload Errors (Sprint 2B - Payload-Generic Blocks) ---
   | 'E_PAYLOAD_NOT_ALLOWED' // Payload type not in block's allowedPayloads for port
@@ -143,7 +143,7 @@ export type DiagnosticCode =
 
   // --- Fixpoint Escape Hatch Info ---
   | 'I_UNIT_DEFAULTED_TO_NONE' // Polymorphic unit chain defaulted to unitless
-  | 'I_CARDINALITY_DEFAULTED_TO_ONE' // Evidence-free group defaulted to signal
+  | 'I_CARDINALITY_DEFAULTED_TO_ONE' // Evidence-free group defaulted to one
   | 'I_CARDINALITY_ADAPTER_INSERTED' // Broadcast adapter auto-inserted
   | 'I_CHEATER_ADAPTER_USED' // Payload anchor auto-inserted
   | 'I_CYCLE_BREAK_INSERTED' // UnitDelay inserted to break cycle
@@ -170,7 +170,7 @@ export type DiagnosticPayload =
   | { code: 'E_CARDINALITY_MISMATCH'; inputCardinality: string; outputCardinality: string }
   | { code: 'E_INSTANCE_MISMATCH'; instanceA: string; instanceB: string; portA: string; portB: string }
   | { code: 'E_LANE_COUPLED_DISALLOWED'; blockType: string; reason: string }
-  | { code: 'E_IMPLICIT_BROADCAST_DISALLOWED'; signalPort: string; fieldContext: string }
+  | { code: 'E_IMPLICIT_BROADCAST_DISALLOWED'; onePort: string; fieldContext: string }
   | { code: 'E_PAYLOAD_NOT_ALLOWED'; port: string; payload: string; allowedPayloads: string[] }
   | { code: 'E_PAYLOAD_COMBINATION_NOT_ALLOWED'; inputPayloads: string[]; blockType: string }
   | { code: 'E_UNIT_MISMATCH'; port: string; expectedUnit: string; actualUnit: string }
@@ -263,7 +263,7 @@ export interface RemoveBlockAction {
 
 /**
  * Add an adapter block between two ports to fix type mismatches.
- * Used for automatic type coercion (e.g., Signal → Value, Field → Signal).
+ * Used for automatic type coercion (e.g., One → Value, Many → One).
  *
  * @example
  * { kind: 'addAdapter', label: 'Insert Adapter', fromPort: { blockId: 'a', portId: 'out', portKind: 'output' }, adapterType: 'SignalToValue' }

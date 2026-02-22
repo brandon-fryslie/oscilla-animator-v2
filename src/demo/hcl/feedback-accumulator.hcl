@@ -4,7 +4,7 @@
 # Smoothstep eases the speed oscillator for snappy acceleration.
 # Per-element rainbow color differentiates from other feedback demos.
 #
-# Demonstrates: UnitDelay, Smoothstep easing, per-element color on feedback.
+# Demonstrates: UnitDelay, Smoothstep easing, feedback-driven phase, per-element color.
 
 patch "Feedback Accumulator" {
   block "InfiniteTimeRoot" "clock" {
@@ -80,7 +80,13 @@ patch "Feedback Accumulator" {
 
   block "Modulo" "wrap" {
     outputs {
-      out = prev-phase.in
+      out = [prev-phase.in, feedback-phase.in]
+    }
+  }
+
+  block "Adapter_ScalarToPhase01" "feedback-phase" {
+    outputs {
+      out = [ring.phase, hue-shift.b]
     }
   }
 
@@ -98,7 +104,13 @@ patch "Feedback Accumulator" {
     count = 24
     outputs {
       elements = ring.elements
-      t = color.h
+      t = hue-shift.a
+    }
+  }
+
+  block "Add" "hue-shift" {
+    outputs {
+      out = color.h
     }
   }
 

@@ -1,8 +1,8 @@
 /**
  * Event Consumer Blocks Tests
  *
- * End-to-end compile+execute tests for EventToSignalMask and SampleHold.
- * These blocks bridge the event→signal domain (spec §9.2).
+ * End-to-end compile+execute tests for EventToOneMask and SampleHold.
+ * These blocks bridge the event→one domain (spec §9.2).
  */
 
 import { describe, it, expect } from 'vitest';
@@ -15,10 +15,10 @@ import { canonicalType, FLOAT } from '../../core/canonical-types';
 import '../all';
 
 // =============================================================================
-// EventToSignalMask Tests
+// EventToOneMask Tests
 // =============================================================================
 
-describe('EventToSignalMask', () => {
+describe('EventToOneMask', () => {
   // Tests removed during type system refactor
   it.skip('placeholder', () => {
     expect(true).toBe(true);
@@ -48,11 +48,11 @@ describe('SampleHold', () => {
     // Event slot 0 is NOT fired (stays at 0 after frame clear)
     state.eventScalars[0] = 0;
 
-    const signals = [
+    const oneValues = [
       { kind: 'eventRead' as const, eventSlot: eventSlotId(0), type: canonicalType(FLOAT) },
     ];
 
-    const result = evaluateValueExprScalar(valueExprId(0), signals, state);
+    const result = evaluateValueExprScalar(valueExprId(0), oneValues, state);
     expect(result).toBe(0);
   });
 });

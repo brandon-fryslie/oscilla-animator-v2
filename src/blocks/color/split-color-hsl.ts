@@ -39,27 +39,32 @@ registerBlock({
     const colorInput = inputsById.color;
     if (!colorInput) throw new Error('SplitColorHSL requires color input');
 
-    const hueType = canonicalType(FLOAT, unitTurns(), undefined, contractWrap01());
-    const normType = canonicalType(FLOAT, unitNone(), undefined, contractClamp01());
+    const hueType = ctx.outTypes[0];
+    const satType = ctx.outTypes[1];
+    const lightType = ctx.outTypes[2];
+    const alphaType = ctx.outTypes[3];
+    if (!hueType || !satType || !lightType || !alphaType) {
+      throw new Error('SplitColorHSL missing resolved output types from pass1');
+    }
 
     const h = ctx.b.extract(colorInput.id, 0, hueType);
-    const s = ctx.b.extract(colorInput.id, 1, normType);
-    const l = ctx.b.extract(colorInput.id, 2, normType);
-    const a = ctx.b.extract(colorInput.id, 3, normType);
+    const s = ctx.b.extract(colorInput.id, 1, satType);
+    const l = ctx.b.extract(colorInput.id, 2, lightType);
+    const a = ctx.b.extract(colorInput.id, 3, alphaType);
 
     return {
       outputsById: {
         h: { id: h, slot: undefined, type: hueType, stride: payloadStride(hueType.payload) },
-        s: { id: s, slot: undefined, type: normType, stride: payloadStride(normType.payload) },
-        l: { id: l, slot: undefined, type: normType, stride: payloadStride(normType.payload) },
-        a: { id: a, slot: undefined, type: normType, stride: payloadStride(normType.payload) },
+        s: { id: s, slot: undefined, type: satType, stride: payloadStride(satType.payload) },
+        l: { id: l, slot: undefined, type: lightType, stride: payloadStride(lightType.payload) },
+        a: { id: a, slot: undefined, type: alphaType, stride: payloadStride(alphaType.payload) },
       },
       effects: {
         slotRequests: [
           { portId: 'h', type: hueType },
-          { portId: 's', type: normType },
-          { portId: 'l', type: normType },
-          { portId: 'a', type: normType },
+          { portId: 's', type: satType },
+          { portId: 'l', type: lightType },
+          { portId: 'a', type: alphaType },
         ],
       },
     };

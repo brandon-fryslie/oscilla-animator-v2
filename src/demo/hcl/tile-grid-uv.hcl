@@ -1,7 +1,7 @@
 # Tile Grid UV
 #
-# 20x20 grid with per-element rainbow and pulsing scale.
-# Demonstrates: GridLayoutUV, oscillator scale, per-element rainbow.
+# 20x20 grid with per-element rainbow and pulsing per-tile jitter.
+# Demonstrates: GridLayoutUV, oscillator scale, NoisyBroadcast variation.
 
 patch "Tile Grid UV" {
   block "InfiniteTimeRoot" "clock" {
@@ -71,6 +71,26 @@ patch "Tile Grid UV" {
   }
 
   block "ScaleBias" "scale-map" {
+    outputs {
+      out = scale-jitter.amount
+    }
+  }
+
+  block "Const" "base-scale" {
+    value = 1.0
+    outputs {
+      out = scale-jitter.value
+    }
+  }
+
+  block "Const" "jitter-seed" {
+    value = 37
+    outputs {
+      out = scale-jitter.seed
+    }
+  }
+
+  block "NoisyBroadcast" "scale-jitter" {
     outputs {
       out = render.scale
     }

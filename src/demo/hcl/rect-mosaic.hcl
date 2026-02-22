@@ -1,8 +1,8 @@
 # Rect Mosaic
 #
 # 400 rectangles in a rotating circle layout with pulsing scale
-# via Oscillator → ScaleBias and per-element rainbow.
-# Demonstrates: ScaleBias pulsing, per-element rainbow.
+# via Oscillator → ScaleBias and per-instance jitter.
+# Demonstrates: ScaleBias pulsing, NoisyBroadcast, per-element rainbow.
 
 patch "Rect Mosaic" {
   block "InfiniteTimeRoot" "time" {
@@ -66,6 +66,26 @@ patch "Rect Mosaic" {
   }
 
   block "ScaleBias" "scale-map" {
+    outputs {
+      out = scale-jitter.amount
+    }
+  }
+
+  block "Const" "base-scale" {
+    value = 1.0
+    outputs {
+      out = scale-jitter.value
+    }
+  }
+
+  block "Const" "jitter-seed" {
+    value = 41
+    outputs {
+      out = scale-jitter.seed
+    }
+  }
+
+  block "NoisyBroadcast" "scale-jitter" {
     outputs {
       out = render.scale
     }

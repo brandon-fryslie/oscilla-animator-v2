@@ -1,7 +1,8 @@
 # Tile Grid
 #
-# 20x20 grid of rectangles with per-element rainbow and pulsing scale.
-# Demonstrates: GridLayoutUV, Rect shape, ScaleBias scale animation.
+# 20x20 grid of rectangles with per-element rainbow and pulsing
+# per-tile scale jitter.
+# Demonstrates: GridLayoutUV, Rect shape, ScaleBias, NoisyBroadcast.
 
 patch "Tile Grid" {
   block "InfiniteTimeRoot" "clock" {
@@ -58,6 +59,26 @@ patch "Tile Grid" {
   }
 
   block "ScaleBias" "scale-map" {
+    outputs {
+      out = scale-jitter.amount
+    }
+  }
+
+  block "Const" "base-scale" {
+    value = 1.0
+    outputs {
+      out = scale-jitter.value
+    }
+  }
+
+  block "Const" "jitter-seed" {
+    value = 23
+    outputs {
+      out = scale-jitter.seed
+    }
+  }
+
+  block "NoisyBroadcast" "scale-jitter" {
     outputs {
       out = render.scale
     }

@@ -19,6 +19,9 @@ import type { BlockId } from '../../types';
 import { useStores } from '../../stores';
 import { LensParamControls } from '../components/LensParamControls';
 import { graphColors } from '../graphEditor/graph-tokens';
+import { derivedLensBlockId } from '../../graph/lens-block-id';
+import { useDebugPortMiniView } from '../debug-viz/useDebugMiniView';
+import { DebugEdgeValueDisplay } from '../debug-viz/DebugMiniView';
 
 /**
  * Extended edge data including diagnostics.
@@ -26,6 +29,50 @@ import { graphColors } from '../graphEditor/graph-tokens';
 export interface OscillaEdgeDataWithDiagnostics extends OscillaEdgeData {
   /** Diagnostics affecting this edge */
   diagnostics?: Diagnostic[];
+}
+
+interface LensImpactPreviewProps {
+  beforeBlockId: string | null;
+  beforePortId: string | null;
+  afterBlockId: string | null;
+  afterPortId: string | null;
+  beforeLabel: string;
+  afterLabel: string;
+}
+
+function LensImpactPreview(props: LensImpactPreviewProps): React.ReactElement {
+  const beforeData = useDebugPortMiniView(
+    props.beforeBlockId,
+    props.beforePortId,
+    props.beforeLabel,
+  );
+  const afterData = useDebugPortMiniView(
+    props.afterBlockId,
+    props.afterPortId,
+    props.afterLabel,
+  );
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div style={{ fontSize: 11, color: '#bbb', fontWeight: 700 }}>
+        Lens Impact
+      </div>
+      {beforeData ? (
+        <DebugEdgeValueDisplay data={beforeData} />
+      ) : (
+        <div style={{ fontSize: 11, color: '#888' }}>
+          Before value unavailable.
+        </div>
+      )}
+      {afterData ? (
+        <DebugEdgeValueDisplay data={afterData} />
+      ) : (
+        <div style={{ fontSize: 11, color: '#888' }}>
+          After value unavailable.
+        </div>
+      )}
+    </div>
+  );
 }
 
 /**
@@ -84,8 +131,15 @@ export const OscillaEdge = observer(function OscillaEdge(
     ?? (props as { targetHandleId?: string }).targetHandleId
     ?? '';
   const { selection, frontend, patch } = useStores();
-  const [chipAnchorEl, setChipAnchorEl] = useState<HTMLElement | null>(null);
-  const [activeLensId, setActiveLensId] = useState<string | null>(null);
+  const [chipAnchorPosition, setChipAnchorPosition] = useState<{ top: number; left: number } | null>(null);
+  const [activeLensContext, setActiveLensContext] = useState<{ lensId: string; targetPortId: string } | null>(null);
+  const [hoverLensContext, setHoverLensContext] = useState<{
+    lensId: string;
+    lensIndex: number;
+    targetPortId: string;
+    top: number;
+    left: number;
+  } | null>(null);
 
   // Compute bezier path
   const [edgePath] = getBezierPath({
@@ -148,11 +202,18 @@ export const OscillaEdge = observer(function OscillaEdge(
     tooltipText = labels.join(', ');
   }
 
-  const activeLens = edgeLenses.find((lens) => lens.id === activeLensId) ?? null;
+  const activeLens = edgeLenses.find((lens) => lens.id === activeLensContext?.lensId) ?? null;
+  const activeTargetPortId = activeLensContext?.targetPortId ?? '';
+  const hoverLens = edgeLenses.find((lens) => lens.id === hoverLensContext?.lensId) ?? null;
+  const hoverTargetPortId = hoverLensContext?.targetPortId ?? '';
 
   const closeLensPopover = (): void => {
-    setChipAnchorEl(null);
-    setActiveLensId(null);
+    setChipAnchorPosition(null);
+    setActiveLensContext(null);
+  };
+
+  const closeHoverPreview = (): void => {
+    setHoverLensContext(null);
   };
 
   return (
@@ -177,14 +238,31 @@ export const OscillaEdge = observer(function OscillaEdge(
             }}
             title={tooltipText}
           >
-            {edgeLenses.map((lens) => (
+            {edgeLenses.map((lens, lensIndex) => (
               <button
                 key={lens.id}
+                onMouseDown={(event) => {
+                  event.stopPropagation();
+                }}
+                onMouseEnter={(event) => {
+                  event.stopPropagation();
+                  if (!targetHandle) return;
+                  setHoverLensContext({
+                    lensId: lens.id,
+                    lensIndex,
+                    targetPortId: targetHandle,
+                    top: event.clientY,
+                    left: event.clientX,
+                  });
+                }}
+                onMouseLeave={closeHoverPreview}
                 onClick={(event) => {
                   event.stopPropagation();
                   selection.selectEdge(id);
-                  setActiveLensId(lens.id);
-                  setChipAnchorEl(event.currentTarget as HTMLElement);
+                  if (!targetHandle) return;
+                  closeHoverPreview();
+                  setActiveLensContext({ lensId: lens.id, targetPortId: targetHandle });
+                  setChipAnchorPosition({ top: event.clientY, left: event.clientX });
                 }}
                 style={{
                   height: 18,
@@ -205,7 +283,7 @@ export const OscillaEdge = observer(function OscillaEdge(
                   overflow: 'hidden',
                   textOverflow: 'ellipsis',
                 }}
-                title={`Edit ${getLensLabel(lens.lensType)}`}
+                title={`${getLensLabel(lens.lensType)} (hover: preview, click: edit)`}
               >
                 {getLensLabel(lens.lensType)}
               </button>
@@ -242,14 +320,68 @@ export const OscillaEdge = observer(function OscillaEdge(
       )}
 
       <Popover
-        open={Boolean(chipAnchorEl && activeLens && targetHandle)}
-        anchorEl={chipAnchorEl}
+        open={Boolean(hoverLensContext && hoverLens && hoverTargetPortId)}
+        anchorReference="anchorPosition"
+        anchorPosition={hoverLensContext ? { top: hoverLensContext.top, left: hoverLensContext.left } : undefined}
+        onClose={closeHoverPreview}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+        transformOrigin={{ vertical: 'top', horizontal: 'left' }}
+        disableAutoFocus
+        disableEnforceFocus
+        disableRestoreFocus
+        slotProps={{
+          paper: {
+            style: { pointerEvents: 'none' },
+          },
+        }}
+      >
+        {hoverLens && hoverLensContext && (
+          <div
+            style={{
+              minWidth: 320,
+              maxWidth: 420,
+              maxHeight: 520,
+              overflow: 'auto',
+              padding: 10,
+              background: 'linear-gradient(135deg, rgba(22, 24, 30, 0.98) 0%, rgba(14, 16, 22, 0.98) 100%)',
+              border: '1px solid rgba(217, 119, 6, 0.35)',
+            }}
+          >
+            <LensImpactPreview
+              beforeBlockId={
+                hoverLensContext.lensIndex === 0
+                  ? source
+                  : (edgeLenses[hoverLensContext.lensIndex - 1]
+                    ? derivedLensBlockId(hoverTargetPortId, edgeLenses[hoverLensContext.lensIndex - 1].id)
+                    : null)
+              }
+              beforePortId={hoverLensContext.lensIndex === 0 ? sourceHandle : 'out'}
+              afterBlockId={derivedLensBlockId(hoverTargetPortId, hoverLens.id)}
+              afterPortId="out"
+              beforeLabel={hoverLensContext.lensIndex === 0
+                ? `before · ${source}.${sourceHandle}`
+                : `before · lens ${hoverLensContext.lensIndex}`}
+              afterLabel={`after · ${getLensLabel(hoverLens.lensType)}`}
+            />
+          </div>
+        )}
+      </Popover>
+
+      <Popover
+        open={Boolean(chipAnchorPosition && activeLens && activeTargetPortId)}
+        anchorReference="anchorPosition"
+        anchorPosition={chipAnchorPosition ?? undefined}
         onClose={closeLensPopover}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
         transformOrigin={{ vertical: 'top', horizontal: 'left' }}
+        disableAutoFocus
+        disableEnforceFocus
+        disableRestoreFocus
       >
-        {activeLens && targetHandle && (
+        {activeLens && activeTargetPortId && (
           <div
+            onMouseDown={(event) => event.stopPropagation()}
+            onClick={(event) => event.stopPropagation()}
             style={{
               minWidth: 280,
               maxWidth: 360,
@@ -264,7 +396,7 @@ export const OscillaEdge = observer(function OscillaEdge(
             <LensParamControls
               lens={activeLens}
               targetBlockId={target as BlockId}
-              targetPortId={targetHandle}
+              targetPortId={activeTargetPortId}
               compact
             />
           </div>

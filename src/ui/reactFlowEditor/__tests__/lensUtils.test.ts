@@ -9,7 +9,8 @@ import {
   getAvailableLensTypes,
   getLensLabel,
   canApplyLens,
-  findCompatibleLenses
+  findCompatibleLenses,
+  groupLensMenuOptions,
 } from '../lensUtils';
 import {
   canonicalType,
@@ -183,6 +184,20 @@ describe('lensUtils', () => {
       // Should NOT find radians→degrees (source is phase01, not radians)
       const hasRadiansToDegrees = lenses.some(l => l.blockType === 'Adapter_RadiansToDegrees');
       expect(hasRadiansToDegrees).toBe(false);
+    });
+  });
+
+  describe('groupLensMenuOptions', () => {
+    it('promotes common lenses to top-level actions', () => {
+      const sourceType = canonicalType(FLOAT, unitTurns(), undefined, contractWrap01());
+      const targetType = canonicalType(FLOAT, unitTurns(), undefined, contractWrap01());
+      const compatible = findCompatibleLenses(sourceType, targetType);
+
+      const grouped = groupLensMenuOptions(compatible);
+
+      const commonTypes = grouped.common.map((lens) => lens.blockType);
+      expect(commonTypes).toContain('ScaleBias');
+      expect(commonTypes).toContain('Clamp');
     });
   });
 });

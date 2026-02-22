@@ -7,8 +7,7 @@
  * Responsibilities:
  * - Track debug panel enabled state (synced with settings)
  * - Track currently hovered edge for probing
- * - Manage field tracking (demand-driven materialization)
- * - Provide reactive value lookups
+ * - Provide reactive value lookups and polling cache
  * - Format values based on signal type
  * - Report debug service health status
  */
@@ -16,9 +15,6 @@
 import { makeAutoObservable, runInAction, reaction } from 'mobx';
 import { debugService, type EdgeValueResult, type DebugServiceStatus } from '../services/DebugService';
 import type { CanonicalType } from '../core/canonical-types';
-import { requireInst } from '../core/canonical-types';
-import type { ValueSlot } from '../types';
-import type { DebugTargetKey } from '../ui/debug-viz/types';
 import type { SettingsStore } from './SettingsStore';
 import { debugSettings, type DebugSettings } from '../settings/tokens/debug-settings';
 
@@ -59,12 +55,6 @@ export class DebugStore {
 
   /** Cached edge value result (updated via polling) */
   private _cachedEdgeValue: EdgeValueResult | null = null;
-
-  /** Currently tracked field slot (for cleanup on edge change) */
-  private _trackedFieldSlot: ValueSlot | null = null;
-
-  /** Currently tracked history key (for signal micro-history) */
-  private _trackedHistoryKey: DebugTargetKey | null = null;
 
   /** The edge ID currently being tracked/polled (to detect changes) */
   private _currentlyTrackedEdgeId: string | null = null;
@@ -126,8 +116,6 @@ export class DebugStore {
           this.enabled = enabled;
           if (!enabled) {
             this.stopPolling();
-            this.untrackCurrentField();
-            this.untrackCurrentHistory();
             this._currentlyTrackedEdgeId = null;
             this._cachedEdgeValue = null;
           }
@@ -157,8 +145,6 @@ export class DebugStore {
     this.enabled = !this.enabled;
     if (!this.enabled) {
       this.stopPolling();
-      this.untrackCurrentField();
-      this.untrackCurrentHistory();
       this._currentlyTrackedEdgeId = null;
       this._cachedEdgeValue = null;
     }
@@ -174,8 +160,6 @@ export class DebugStore {
     this.updateSettingsEnabled();
     if (!enabled) {
       this.stopPolling();
-      this.untrackCurrentField();
-      this.untrackCurrentHistory();
       this._currentlyTrackedEdgeId = null;
       this._cachedEdgeValue = null;
     }
@@ -275,25 +259,13 @@ export class DebugStore {
     // No change — nothing to do
     if (newActiveId === this._currentlyTrackedEdgeId) return;
 
-    // Untrack previous
-    this.untrackCurrentField();
-    this.untrackCurrentHistory();
+    // Untrack previous (polling only; debug target tracking is owned by useDebugMiniView).
+    // [LAW:single-enforcer] Avoid duplicate track/untrack ownership in DebugStore.
     this.stopPolling();
     this._currentlyTrackedEdgeId = newActiveId;
 
     // Track new
     if (newActiveId && this.enabled) {
-      const meta = debugService.getEdgeMetadata(newActiveId);
-      // [LAW:one-source-of-truth] Tracking policy derives from CanonicalType cardinality axis.
-      const cardinality = meta ? requireInst(meta.type.extent.cardinality, 'cardinality').kind : null;
-      if (meta && cardinality === 'many') {
-        debugService.trackField(meta.slotId, meta.type);
-        this._trackedFieldSlot = meta.slotId;
-      } else if (meta && cardinality === 'one') {
-        const key: DebugTargetKey = { kind: 'edge', edgeId: newActiveId };
-        debugService.historyService.track(key);
-        this._trackedHistoryKey = key;
-      }
       this.startPolling();
     } else {
       this._cachedEdgeValue = null;
@@ -347,32 +319,10 @@ export class DebugStore {
   }
 
   /**
-   * Untrack the currently tracked field slot.
-   */
-  private untrackCurrentField(): void {
-    if (this._trackedFieldSlot !== null) {
-      debugService.untrackField(this._trackedFieldSlot);
-      this._trackedFieldSlot = null;
-    }
-  }
-
-  /**
-   * Untrack the currently tracked history key.
-   */
-  private untrackCurrentHistory(): void {
-    if (this._trackedHistoryKey !== null) {
-      debugService.historyService.untrack(this._trackedHistoryKey);
-      this._trackedHistoryKey = null;
-    }
-  }
-
-  /**
    * Cleanup resources.
    */
   dispose(): void {
     this.stopPolling();
-    this.untrackCurrentField();
-    this.untrackCurrentHistory();
     this._currentlyTrackedEdgeId = null;
     this.settingsSyncDisposer?.();
     this.settingsSyncDisposer = null;

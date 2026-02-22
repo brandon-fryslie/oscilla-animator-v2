@@ -6,7 +6,7 @@
  */
 
 import { registerBlock } from '../registry';
-import { canonicalType, payloadStride, unitHsl, unitNone, contractClamp01 } from '../../core/canonical-types';
+import { canonicalType, payloadStride, unitHsl, unitTurns, unitNone, contractWrap01, contractClamp01 } from '../../core/canonical-types';
 import { FLOAT, COLOR } from '../../core/canonical-types';
 import { cardinalityVar } from '../../core/inference-types';
 import { cardinalityVarId } from '../../core/ids';
@@ -42,22 +42,23 @@ registerBlock({
     if (!colorInput || !alphaInput) throw new Error('AlphaMultiply requires in and alpha inputs');
 
     const outType = ctx.outTypes[0];
-    const floatType = canonicalType(FLOAT, unitNone(), undefined, contractClamp01());
+    const hueType = canonicalType(FLOAT, unitTurns(), outType.extent, contractWrap01());
+    const normType = canonicalType(FLOAT, unitNone(), outType.extent, contractClamp01());
 
     // Extract channels
-    const h = ctx.b.extract(colorInput.id, 0, floatType);
-    const s = ctx.b.extract(colorInput.id, 1, floatType);
-    const l = ctx.b.extract(colorInput.id, 2, floatType);
-    const a = ctx.b.extract(colorInput.id, 3, floatType);
+    const h = ctx.b.extract(colorInput.id, 0, hueType);
+    const s = ctx.b.extract(colorInput.id, 1, normType);
+    const l = ctx.b.extract(colorInput.id, 2, normType);
+    const a = ctx.b.extract(colorInput.id, 3, normType);
 
     // a2 = clamp01(a * alpha) — clamp output only, not input
     const mulFn = ctx.b.opcode(OpCode.Mul);
     const clampFn = ctx.b.opcode(OpCode.Clamp);
-    const zero = ctx.b.constant({ kind: 'float', value: 0 }, floatType);
-    const one = ctx.b.constant({ kind: 'float', value: 1 }, floatType);
+    const zero = ctx.b.constant({ kind: 'float', value: 0 }, normType);
+    const one = ctx.b.constant({ kind: 'float', value: 1 }, normType);
 
-    const aMultiplied = zipAuto([a, alphaInput.id], mulFn, floatType, ctx.b);
-    const aClamped = zipAuto([aMultiplied, zero, one], clampFn, floatType, ctx.b);
+    const aMultiplied = zipAuto([a, alphaInput.id], mulFn, normType, ctx.b);
+    const aClamped = zipAuto([aMultiplied, zero, one], clampFn, normType, ctx.b);
 
     // Reconstruct with modified alpha
     const result = ctx.b.construct([h, s, l, aClamped], outType);

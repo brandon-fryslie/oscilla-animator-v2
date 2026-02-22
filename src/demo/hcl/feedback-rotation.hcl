@@ -13,7 +13,7 @@ patch "Feedback Rotation" {
     role = "timeRoot"
     outputs {
       phaseA = speed-osc.phase
-      phaseB = outer-layout.phase
+      phaseB = inner-layout.phase
     }
   }
 
@@ -75,7 +75,13 @@ patch "Feedback Rotation" {
 
   block "Modulo" "phase-wrap" {
     outputs {
-      out = phase-delay.in
+      out = [phase-delay.in, feedback-phase.in]
+    }
+  }
+
+  block "Adapter_ScalarToPhase01" "feedback-phase" {
+    outputs {
+      out = outer-layout.phase
     }
   }
 

@@ -1,8 +1,8 @@
 # Golden Spiral
 #
 # 200 ellipses in a slowly rotating Archimedean spiral with gentle pulsing
-# scale and vivid per-element rainbow gradient.
-# Demonstrates: SpiralLayout, ScaleBias, per-element rainbow.
+# scale jitter and vivid per-element rainbow gradient.
+# Demonstrates: SpiralLayout, ScaleBias, NoisyBroadcast, per-element rainbow.
 
 patch "Golden Spiral" {
   block "InfiniteTimeRoot" "clock" {
@@ -61,6 +61,26 @@ patch "Golden Spiral" {
   }
 
   block "ScaleBias" "scale-map" {
+    outputs {
+      out = scale-jitter.amount
+    }
+  }
+
+  block "Const" "base-scale" {
+    value = 0.9
+    outputs {
+      out = scale-jitter.value
+    }
+  }
+
+  block "Const" "jitter-seed" {
+    value = 29
+    outputs {
+      out = scale-jitter.seed
+    }
+  }
+
+  block "NoisyBroadcast" "scale-jitter" {
     outputs {
       out = render.scale
     }

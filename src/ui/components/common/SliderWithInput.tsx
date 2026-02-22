@@ -13,7 +13,7 @@
  */
 
 import React, { useState } from 'react';
-import { Slider, TextInput, Text, Group, Box, rem } from '@mantine/core';
+import { Slider, TextInput, Text, Group, Box, rem, Modal, Button } from '@mantine/core';
 
 export interface SliderWithInputProps {
   /** Control label */
@@ -34,6 +34,16 @@ export interface SliderWithInputProps {
   disabled?: boolean;
   /** Unit label (e.g., "ms") */
   unit?: string;
+  /**
+   * When true, slider drag updates are buffered locally and committed on release.
+   * // [LAW:dataflow-not-control-flow] Same render path; only commit timing varies by data flag.
+   */
+  commitOnRelease?: boolean;
+  /**
+   * Enables inline editable min/max bounds next to the slider.
+   * // [LAW:dataflow-not-control-flow] Bound edits flow as data into one control path.
+   */
+  editableBounds?: boolean;
 }
 
 /**
@@ -49,17 +59,42 @@ export function SliderWithInput({
   helperText,
   disabled = false,
   unit,
+  commitOnRelease = false,
+  editableBounds = false,
 }: SliderWithInputProps): React.ReactElement {
   // Local state for text field to allow typing without immediate validation
   const [inputValue, setInputValue] = useState<string>(value.toString());
+  const [sliderValue, setSliderValue] = useState<number>(value);
+  const [boundMin, setBoundMin] = useState<number>(min);
+  const [boundMax, setBoundMax] = useState<number>(max);
+  const [editingBound, setEditingBound] = useState<'min' | 'max' | null>(null);
+  const [boundDraft, setBoundDraft] = useState<string>('');
+
+  const sliderMin = editableBounds ? boundMin : min;
+  const sliderMax = editableBounds ? boundMax : max;
 
   // Sync input when value changes externally
   React.useEffect(() => {
     setInputValue(value.toString());
+    setSliderValue(value);
   }, [value]);
+
+  React.useEffect(() => {
+    setBoundMin(min);
+    setBoundMax(max);
+  }, [min, max]);
 
   // Handle slider change
   const handleSliderChange = (newValue: number) => {
+    if (commitOnRelease) {
+      setSliderValue(newValue);
+      return;
+    }
+    onChange(newValue);
+  };
+
+  const handleSliderChangeEnd = (newValue: number) => {
+    if (!commitOnRelease) return;
     onChange(newValue);
   };
 
@@ -76,7 +111,7 @@ export function SliderWithInput({
       setInputValue(value.toString());
     } else {
       // Clamp to range and commit
-      const clamped = Math.max(min, Math.min(max, parsed));
+      const clamped = Math.max(sliderMin, Math.min(sliderMax, parsed));
       onChange(clamped);
       setInputValue(clamped.toString());
     }
@@ -89,18 +124,68 @@ export function SliderWithInput({
     }
   };
 
+  const commitBounds = (nextMin: number, nextMax: number): void => {
+    if (nextMin >= nextMax) {
+      const delta = Math.max(step, 1e-6);
+      nextMax = nextMin + delta;
+    }
+
+    setBoundMin(nextMin);
+    setBoundMax(nextMax);
+    const clamped = Math.max(nextMin, Math.min(nextMax, value));
+    if (clamped !== value) {
+      onChange(clamped);
+    }
+  };
+
+  const openBoundEditor = (bound: 'min' | 'max', event: React.MouseEvent): void => {
+    if (!editableBounds || disabled) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const current = bound === 'min' ? boundMin : boundMax;
+    setBoundDraft(current.toString());
+    setEditingBound(bound);
+  };
+
+  const closeBoundEditor = (): void => {
+    setEditingBound(null);
+    setBoundDraft('');
+  };
+
+  const saveBoundDraft = (): void => {
+    if (!editingBound) return;
+    const parsed = parseFloat(boundDraft);
+    if (!Number.isFinite(parsed)) {
+      closeBoundEditor();
+      return;
+    }
+    if (editingBound === 'min') {
+      commitBounds(parsed, boundMax);
+    } else {
+      commitBounds(boundMin, parsed);
+    }
+    closeBoundEditor();
+  };
+
+  const handleBoundDraftKeyDown = (event: React.KeyboardEvent): void => {
+    if (event.key === 'Enter') {
+      saveBoundDraft();
+    }
+  };
+
   return (
     <Box mb="xs">
       <Text size="xs" fw={500} c="gray.4" mb={4}>
         {label}
       </Text>
-      <Group gap="sm" align="center">
+      <Group gap="xs" align="center">
         <Box style={{ flex: 1 }}>
           <Slider
-            value={value}
+            value={commitOnRelease ? sliderValue : value}
             onChange={handleSliderChange}
-            min={min}
-            max={max}
+            onChangeEnd={handleSliderChangeEnd}
+            min={sliderMin}
+            max={sliderMax}
             step={step}
             disabled={disabled}
             size="sm"
@@ -123,6 +208,34 @@ export function SliderWithInput({
               },
             }}
           />
+          {editableBounds && (
+            <Group justify="space-between" mt={4} wrap="nowrap">
+              <Text
+                size="xs"
+                c="dimmed"
+                onContextMenu={(event) => openBoundEditor('min', event)}
+                style={{
+                  cursor: disabled ? 'default' : 'context-menu',
+                  userSelect: 'none',
+                }}
+                title={disabled ? undefined : 'Right-click to edit minimum'}
+              >
+                {sliderMin.toFixed(2)}
+              </Text>
+              <Text
+                size="xs"
+                c="dimmed"
+                onContextMenu={(event) => openBoundEditor('max', event)}
+                style={{
+                  cursor: disabled ? 'default' : 'context-menu',
+                  userSelect: 'none',
+                }}
+                title={disabled ? undefined : 'Right-click to edit maximum'}
+              >
+                {sliderMax.toFixed(2)}
+              </Text>
+            </Group>
+          )}
         </Box>
         <TextInput
           value={inputValue}
@@ -140,7 +253,7 @@ export function SliderWithInput({
           }
           styles={{
             root: {
-              width: unit ? rem(85) : rem(65),
+              width: unit ? rem(90) : rem(70),
             },
             input: {
               background: 'rgba(0, 0, 0, 0.2)',
@@ -162,6 +275,31 @@ export function SliderWithInput({
           {helperText}
         </Text>
       )}
+      <Modal
+        opened={editingBound !== null}
+        onClose={closeBoundEditor}
+        title={editingBound === 'min' ? 'Edit Minimum' : 'Edit Maximum'}
+        centered
+        size="xs"
+      >
+        <TextInput
+          value={boundDraft}
+          onChange={(event) => setBoundDraft(event.target.value)}
+          onKeyDown={handleBoundDraftKeyDown}
+          autoFocus
+          type="number"
+          inputMode="decimal"
+          size="sm"
+        />
+        <Group justify="flex-end" mt="md">
+          <Button variant="default" size="xs" onClick={closeBoundEditor}>
+            Cancel
+          </Button>
+          <Button size="xs" onClick={saveBoundDraft}>
+            Save
+          </Button>
+        </Group>
+      </Modal>
     </Box>
   );
 }
