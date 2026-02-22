@@ -253,10 +253,9 @@ export function materializeValueExpr(
       throw new Error(`Cannot materialize one/event expression as field: ${expr.kind}`);
 
     case 'shapeRef': {
-      // [LAW:dataflow-not-control-flow] Keep evalOne/materialize on the unified
-      // numeric write path; shapeRef contributes no numeric payload, so write zeros.
-      fillBufferWithOne(buf, 0, count, stride);
-      break;
+      // [LAW:no-silent-fallbacks] shapeRef is a non-numeric resource handle.
+      // Writing numeric zeros here masks schedule/type-routing bugs.
+      throw new Error('Cannot materialize shapeRef as numeric field data');
     }
 
     default: {
