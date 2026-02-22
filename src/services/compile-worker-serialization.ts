@@ -1,7 +1,6 @@
 import type { CompiledProgramIR } from '../compiler/ir/program';
 import type { TopologyId } from '../shapes/types';
-
-export type SerializableCompiledProgramIR = Omit<CompiledProgramIR, 'kernelRegistry'>;
+import type { SerializableCompiledProgramIR } from './compile-worker-protocol';
 
 // [LAW:one-source-of-truth] Worker payload serialization rules live in one module
 // so runtime worker code and clone-safety tests cannot diverge.
