@@ -4,7 +4,7 @@
  * Verify PatchStore is the single source of truth and all mutations work correctly.
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { PatchStore } from '../PatchStore';
 import { reaction } from 'mobx';
 import type { Endpoint } from '../../graph/Patch';
@@ -197,6 +197,28 @@ describe('PatchStore', () => {
   });
 
   describe('computed properties', () => {
+    it('allows direct blocks and edges reads without reactive-context warnings', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      try {
+        const id = store.addBlock('Oscillator');
+        const from: Endpoint = { kind: 'port', blockId: id, slotId: 'out' };
+        const to: Endpoint = { kind: 'port', blockId: id, slotId: 'phase' };
+        store.addEdge(from, to);
+
+        // [LAW:dataflow-not-control-flow] Accessors execute unconditionally and
+        // return canonical data views regardless of reaction context.
+        expect(store.blocks.size).toBe(1);
+        expect(store.edges.length).toBe(1);
+
+        const mobxWarnings = warnSpy.mock.calls
+          .flatMap((args) => args.map(String))
+          .filter((msg) => msg.includes('outside a reactive context'));
+        expect(mobxWarnings).toEqual([]);
+      } finally {
+        warnSpy.mockRestore();
+      }
+    });
+
     it('should reactively update buses computed', () => {
       const calls: number[] = [];
 

@@ -111,8 +111,8 @@ export class PatchStore {
       _data: observable,
       _dataVersion: observable,
       patch: computed,
-      blocks: computed,
-      edges: computed,
+      // [LAW:one-source-of-truth] blocks/edges expose canonical patch data;
+      // they are direct state accessors, not derived computations.
       buses: computed,
       domains: computed,
       addBlock: action,
