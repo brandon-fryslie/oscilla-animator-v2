@@ -155,6 +155,9 @@ export function finalizeNormalizationFixpoint(
         });
       }
       const strict = tryFinalizeStrict(g, facts, collectPorts);
+      if (!strict) {
+        diagnostics.push(...collectStrictFailureDiagnostics(g, facts, collectPorts));
+      }
       const deduped = deduplicateDiagnostics(diagnostics);
       return { graph: g, facts, strict, diagnostics: deduped, iterations: i + 1, ...(tracing ? { trace } : {}) };
     }
@@ -551,6 +554,40 @@ function tryFinalizeStrict(
     collectEdgeTypes: collectEdgeTypes && collectEdgeTypes.size > 0 ? collectEdgeTypes : undefined,
     diagnostics: [],
   };
+}
+
+function collectStrictFailureDiagnostics(
+  g: DraftGraph,
+  facts: TypeFacts,
+  collectPortKeys?: ReadonlySet<DraftPortKey>,
+): FixpointDiagnostic[] {
+  const diagnostics: FixpointDiagnostic[] = [];
+  const openObligations = g.obligations.filter((o) => isOpen(o));
+
+  for (const obligation of openObligations) {
+    const depsReady = areDependenciesSatisfied(obligation.deps, facts);
+    const reason = depsReady
+      ? 'depsReadyNoPlan'
+      : 'depsNotReady';
+    diagnostics.push({
+      diagnosticFlagCode: 'OpenObligation',
+      message: `Open obligation '${obligation.id}' (${obligation.kind}, policy=${obligation.policy.name}, ${reason})`,
+      stableKey: `OpenObligation:${obligation.id}:${reason}`,
+    });
+  }
+
+  for (const [key, hint] of facts.ports) {
+    if (hint.status === 'ok') continue;
+    if (collectPortKeys?.has(key)) continue;
+    diagnostics.push({
+      diagnosticFlagCode: 'UnresolvedPortType',
+      message: `Port '${key}' is unresolved at strict finalization (${hint.status})`,
+      stableKey: `UnresolvedPortType:${key}:${hint.status}`,
+      port: key,
+    });
+  }
+
+  return diagnostics;
 }
 
 // =============================================================================

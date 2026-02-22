@@ -22,7 +22,7 @@ import {
   perspectivesEqual,
   branchesEqual,
 } from '../core/canonical-types/equality';
-import { BLOCK_DEFS_BY_TYPE } from './registry';
+import { BLOCK_DEFS_BY_TYPE, getBlockRegistryRevision } from './registry';
 
 // =============================================================================
 // Adapter Specification Types
@@ -308,13 +308,16 @@ function buildAdapterRules(): AdapterRule[] {
 
 // Lazy-initialized adapter rules cache
 let cachedRules: AdapterRule[] | null = null;
+let cachedRulesRevision = -1;
 
 /**
  * Get adapter rules (builds from registry on first call).
  */
 function getAdapterRules(): AdapterRule[] {
-  if (!cachedRules) {
+  const revision = getBlockRegistryRevision();
+  if (!cachedRules || cachedRulesRevision !== revision) {
     cachedRules = buildAdapterRules();
+    cachedRulesRevision = revision;
   }
   return cachedRules;
 }

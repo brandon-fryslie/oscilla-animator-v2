@@ -434,12 +434,21 @@ export function hasLowerOutputsOnly(blockDef: BlockDef): boolean {
 // =============================================================================
 
 const registry = new Map<string, BlockDef>();
+let registryRevision = 0;
 
 /**
  * Block definitions indexed by type.
  * Exported for direct access by compiler passes.
  */
 export const BLOCK_DEFS_BY_TYPE: ReadonlyMap<string, BlockDef> = registry;
+
+/**
+ * Monotonic registry revision.
+ * Increments after every successful block registration.
+ */
+export function getBlockRegistryRevision(): number {
+  return registryRevision;
+}
 
 /**
  * Get block definition by type, or undefined if not registered.
@@ -503,6 +512,7 @@ export function registerBlock(def: BlockDef): void {
   }
 
   registry.set(def.type, def);
+  registryRevision++;
 }
 
 // [LAW:single-enforcer] One validation gate for all config access
