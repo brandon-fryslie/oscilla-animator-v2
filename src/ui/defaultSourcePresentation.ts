@@ -12,7 +12,7 @@ function formatDefaultLiteralValue(value: unknown): string {
 }
 
 export function isTimeDefaultSource(source: DefaultSource): boolean {
-  return source.blockType === 'TimeRoot';
+  return source.blockType === 'TimeRoot' || source.blockType === 'InfiniteTimeRoot';
 }
 
 type ConstLiteralDefaultSource = DefaultSource & {
