@@ -38,23 +38,15 @@ let _initialized = false;
  * Safe to call multiple times (only runs once).
  */
 export function initializeComposites(): void {
-  console.log('[Composites] Starting initialization...');
   if (_initialized) {
-    console.log('[Composites] Already initialized, skipping');
     return;
   }
   _initialized = true;
 
-  // Register library composites
-  let registered = 0;
+  // [LAW:one-source-of-truth] Library composites are canonical startup data.
+  // If registration fails, startup must fail rather than silently diverge.
   for (const composite of LIBRARY_COMPOSITES) {
-    try {
-      registerComposite(composite);
-      registered++;
-      console.log(`[Composites] Registered library composite: ${composite.type}`);
-    } catch (e) {
-      console.error(`Failed to register library composite ${composite.type}:`, e);
-    }
+    registerComposite(composite);
   }
 
   // Load user composites from localStorage
@@ -67,8 +59,4 @@ export function initializeComposites(): void {
       console.warn(`Failed to load user composite ${stored.json.type}:`, e);
     }
   }
-
-  console.log(
-    `[Composites] Initialized: ${registered}/${LIBRARY_COMPOSITES.length} library, ${userComposites.size} user`
-  );
 }
