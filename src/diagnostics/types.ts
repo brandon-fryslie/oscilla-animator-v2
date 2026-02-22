@@ -266,7 +266,7 @@ export interface RemoveBlockAction {
  * Used for automatic type coercion (e.g., One → Value, Many → One).
  *
  * @example
- * { kind: 'addAdapter', label: 'Insert Adapter', fromPort: { blockId: 'a', portId: 'out', portKind: 'output' }, adapterType: 'OneToMany' }
+ * { kind: 'addAdapter', label: 'Insert Adapter', fromPort: { blockId: 'a', portId: 'out', portKind: 'output' }, adapterType: 'Broadcast' }
  */
 export interface AddAdapterAction {
   readonly kind: 'addAdapter';

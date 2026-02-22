@@ -20,6 +20,8 @@ import type {
 import type { PatchStore } from '../stores/PatchStore';
 import type { SelectionStore } from '../stores/SelectionStore';
 import type { EventHub } from '../events/EventHub';
+import { requireAnyBlockDef } from '../blocks/registry';
+import type { Endpoint } from '../graph/Patch';
 
 /**
  * Dependencies required for action execution.
@@ -206,8 +208,11 @@ function handleRemoveBlock(
 
 /**
  * Add an adapter block between two ports to fix type mismatches.
- * Note: This is a complex operation requiring edge manipulation.
- * Current implementation is basic - creates adapter block but does not rewire edges.
+ *
+ * Behavior:
+ * - Finds a single edge to adapt from fromPort (input or output side)
+ * - Rejects ambiguous cases (multiple edges) with explicit error
+ * - Rewires source -> adapter -> target
  */
 function handleAddAdapter(
   action: AddAdapterAction,
@@ -216,21 +221,82 @@ function handleAddAdapter(
   const { patchStore, selectionStore } = deps;
 
   try {
+    const patch = patchStore.patch;
+    const matchingEdges = patch.edges.filter((edge) => {
+      if (edge.from.kind !== 'port' || edge.to.kind !== 'port') return false;
+      if (action.fromPort.portKind === 'output') {
+        return edge.from.blockId === action.fromPort.blockId && edge.from.slotId === action.fromPort.portId;
+      }
+      return edge.to.blockId === action.fromPort.blockId && edge.to.slotId === action.fromPort.portId;
+    });
+
+    if (matchingEdges.length === 0) {
+      return {
+        success: false,
+        error: `No edge found for ${action.fromPort.blockId}.${action.fromPort.portId}`,
+      };
+    }
+    if (matchingEdges.length > 1) {
+      // [LAW:no-silent-fallbacks] Action schema is ambiguous for fan-out/fan-in; fail
+      // explicitly instead of applying an arbitrary rewire.
+      return {
+        success: false,
+        error: `Adapter insertion is ambiguous for ${action.fromPort.blockId}.${action.fromPort.portId} (${matchingEdges.length} edges)`,
+      };
+    }
+
+    const edgeToAdapt = matchingEdges[0];
+    if (edgeToAdapt.from.kind !== 'port' || edgeToAdapt.to.kind !== 'port') {
+      return {
+        success: false,
+        error: 'Adapter insertion only supports port-to-port edges',
+      };
+    }
+
+    const adapterDef = requireAnyBlockDef(action.adapterType);
+    const adapterInputPort = Object.keys(adapterDef.inputs)[0];
+    const adapterOutputPort = Object.keys(adapterDef.outputs)[0];
+    if (!adapterInputPort || !adapterOutputPort) {
+      return {
+        success: false,
+        error: `Adapter ${action.adapterType} must define at least one input and one output port`,
+      };
+    }
+
     // Create adapter block
     const adapterId = patchStore.addBlock(
-      action.adapterType, // e.g., 'OneToMany'
+      action.adapterType, // e.g., 'Broadcast'
       {},
       { label: 'Adapter' }
     );
 
+    const sourceEndpoint: Endpoint = {
+      kind: 'port',
+      blockId: edgeToAdapt.from.blockId,
+      slotId: edgeToAdapt.from.slotId,
+    };
+    const adapterInputEndpoint: Endpoint = {
+      kind: 'port',
+      blockId: adapterId,
+      slotId: adapterInputPort,
+    };
+    const adapterOutputEndpoint: Endpoint = {
+      kind: 'port',
+      blockId: adapterId,
+      slotId: adapterOutputPort,
+    };
+    const targetEndpoint: Endpoint = {
+      kind: 'port',
+      blockId: edgeToAdapt.to.blockId,
+      slotId: edgeToAdapt.to.slotId,
+    };
+
+    patchStore.removeEdge(edgeToAdapt.id as any);
+    patchStore.addEdge(sourceEndpoint, adapterInputEndpoint);
+    patchStore.addEdge(adapterOutputEndpoint, targetEndpoint);
+
     // Select adapter block
     selectionStore.selectBlock(adapterId);
-
-    // TODO: Rewire edges: source → adapter → target
-    // This requires:
-    // 1. Find existing edge connected to fromPort
-    // 2. Remove old edge
-    // 3. Add two new edges: source → adapter → target
 
     return { success: true };
   } catch (err) {

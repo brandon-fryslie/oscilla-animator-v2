@@ -21,10 +21,18 @@ describe('actionExecutor', () => {
     mockDeps = {
       patchStore: {
         addBlock: vi.fn(() => 'block-123'),
+        addEdge: vi.fn(() => 'edge-new'),
         removeBlock: vi.fn(),
+        removeEdge: vi.fn(),
         patch: {
           blocks: new Map([['block-123', { id: 'block-123', type: 'Gain' }]]),
-          edges: [],
+          edges: [
+            {
+              id: 'edge-1',
+              from: { kind: 'port', blockId: 'block-a', slotId: 'out' },
+              to: { kind: 'port', blockId: 'block-b', slotId: 'in' },
+            },
+          ],
         },
       },
       selectionStore: {
@@ -322,7 +330,7 @@ describe('actionExecutor', () => {
   });
 
   describe('addAdapter', () => {
-    it('creates adapter block and selects it', () => {
+    it('rewires edge through adapter block and selects it', () => {
       const action: AddAdapterAction = {
         kind: 'addAdapter',
         label: 'Insert Adapter',
@@ -331,16 +339,28 @@ describe('actionExecutor', () => {
           portId: 'out',
           portKind: 'output',
         },
-        adapterType: 'OneToMany',
+        adapterType: 'Broadcast',
       };
 
       const result = executeAction(action, mockDeps);
 
       expect(result.success).toBe(true);
       expect(mockDeps.patchStore.addBlock).toHaveBeenCalledWith(
-        'OneToMany',
+        'Broadcast',
         {},
         { label: 'Adapter' }
+      );
+      expect(mockDeps.patchStore.removeEdge).toHaveBeenCalledWith('edge-1');
+      expect(mockDeps.patchStore.addEdge).toHaveBeenCalledTimes(2);
+      expect(mockDeps.patchStore.addEdge).toHaveBeenNthCalledWith(
+        1,
+        { kind: 'port', blockId: 'block-a', slotId: 'out' },
+        { kind: 'port', blockId: 'block-123', slotId: 'one' }
+      );
+      expect(mockDeps.patchStore.addEdge).toHaveBeenNthCalledWith(
+        2,
+        { kind: 'port', blockId: 'block-123', slotId: 'field' },
+        { kind: 'port', blockId: 'block-b', slotId: 'in' }
       );
       expect(mockDeps.selectionStore.selectBlock).toHaveBeenCalledWith('block-123');
     });
@@ -358,13 +378,45 @@ describe('actionExecutor', () => {
           portId: 'out',
           portKind: 'output',
         },
-        adapterType: 'OneToMany',
+        adapterType: 'Broadcast',
       };
 
       const result = executeAction(action, mockDeps);
 
       expect(result.success).toBe(false);
       expect(result.error).toContain('Failed to add adapter');
+    });
+
+    it('fails when fromPort fan-out is ambiguous', () => {
+      (mockDeps.patchStore.patch as any).edges = [
+        {
+          id: 'edge-1',
+          from: { kind: 'port', blockId: 'block-a', slotId: 'out' },
+          to: { kind: 'port', blockId: 'block-b', slotId: 'in' },
+        },
+        {
+          id: 'edge-2',
+          from: { kind: 'port', blockId: 'block-a', slotId: 'out' },
+          to: { kind: 'port', blockId: 'block-c', slotId: 'in' },
+        },
+      ];
+
+      const action: AddAdapterAction = {
+        kind: 'addAdapter',
+        label: 'Insert Adapter',
+        fromPort: {
+          blockId: 'block-a',
+          portId: 'out',
+          portKind: 'output',
+        },
+        adapterType: 'Broadcast',
+      };
+
+      const result = executeAction(action, mockDeps);
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('ambiguous');
+      expect(mockDeps.patchStore.addBlock).not.toHaveBeenCalled();
     });
   });
 
