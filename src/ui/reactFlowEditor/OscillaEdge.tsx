@@ -19,8 +19,8 @@ import type { BlockId } from '../../types';
 import { useStores } from '../../stores';
 import { LensParamControls } from '../components/LensParamControls';
 import { graphColors } from '../graphEditor/graph-tokens';
-import { useDebugMiniView, useDebugPortMiniView } from '../debug-viz/useDebugMiniView';
-import { DebugEdgeValueDisplay } from '../debug-viz/DebugMiniView';
+import { useDebugMiniView, useDebugPortMiniView, type MiniViewData } from '../debug-viz/useDebugMiniView';
+import type { HistoryView } from '../debug-viz/types';
 
 /**
  * Extended edge data including diagnostics.
@@ -40,6 +40,87 @@ interface LensImpactPreviewProps {
   afterLabel: string;
 }
 
+interface ExtractedSeries {
+  readonly samples: readonly number[];
+  readonly latest: number | null;
+}
+
+function readHistorySamples(history: HistoryView): number[] {
+  const count = history.filled ? history.capacity : Math.min(history.writeIndex, history.capacity);
+  if (count <= 0) return [];
+
+  const startIndex = history.filled ? history.writeIndex % history.capacity : 0;
+  const series: number[] = new Array(count);
+
+  // [LAW:dataflow-not-control-flow] Sample read path is identical for before/after series.
+  for (let i = 0; i < count; i += 1) {
+    const idx = (startIndex + i) % history.capacity;
+    series[i] = history.buffer[idx];
+  }
+  return series;
+}
+
+function latestFiniteValue(values: readonly number[]): number | null {
+  for (let i = values.length - 1; i >= 0; i -= 1) {
+    const value = values[i];
+    if (Number.isFinite(value)) return value;
+  }
+  return null;
+}
+
+function extractComparableSeries(data: MiniViewData | null): ExtractedSeries {
+  if (!data) {
+    return { samples: [], latest: null };
+  }
+
+  const history = data.history ?? data.fieldInstanceHistory ?? null;
+  if (history) {
+    const samples = readHistorySamples(history);
+    return {
+      samples,
+      latest: latestFiniteValue(samples),
+    };
+  }
+
+  if (data.value?.kind === 'scalar') {
+    return { samples: [], latest: data.value.value };
+  }
+  if (data.value?.kind === 'field') {
+    return { samples: [], latest: data.value.stats.mean[0] ?? null };
+  }
+  return { samples: [], latest: null };
+}
+
+function formatNumber(value: number | null, digits = 4): string {
+  if (value == null || !Number.isFinite(value)) return 'n/a';
+  return value.toFixed(digits);
+}
+
+function buildPolylinePoints(
+  samples: readonly number[],
+  min: number,
+  max: number,
+  width: number,
+  height: number,
+): string {
+  const finite = samples.filter((sample) => Number.isFinite(sample));
+  if (finite.length < 2) return '';
+
+  const range = Math.max(max - min, 1e-9);
+  const lastIndex = samples.length - 1;
+
+  return samples
+    .map((value, index) => {
+      if (!Number.isFinite(value)) return null;
+      const x = lastIndex <= 0 ? width * 0.5 : (index / lastIndex) * width;
+      const normalizedY = (value - min) / range;
+      const y = height - normalizedY * height;
+      return `${x.toFixed(2)},${y.toFixed(2)}`;
+    })
+    .filter((point): point is string => point != null)
+    .join(' ');
+}
+
 function LensImpactPreview(props: LensImpactPreviewProps): React.ReactElement {
   const beforeEdgeData = useDebugMiniView(
     props.beforeEdgeId,
@@ -56,26 +137,100 @@ function LensImpactPreview(props: LensImpactPreviewProps): React.ReactElement {
     props.afterPortId,
     props.afterLabel,
   );
+  const beforeSeries = extractComparableSeries(beforeData);
+  const afterSeries = extractComparableSeries(afterData);
+
+  const combinedSamples = [...beforeSeries.samples, ...afterSeries.samples]
+    .filter((sample) => Number.isFinite(sample));
+  const hasChartData = combinedSamples.length >= 2;
+  const minY = hasChartData ? Math.min(...combinedSamples) : 0;
+  const maxY = hasChartData ? Math.max(...combinedSamples) : 1;
+
+  const chartWidth = 380;
+  const chartHeight = 120;
+  const beforeLine = buildPolylinePoints(beforeSeries.samples, minY, maxY, chartWidth, chartHeight);
+  const afterLine = buildPolylinePoints(afterSeries.samples, minY, maxY, chartWidth, chartHeight);
+
+  const beforeValue = beforeSeries.latest;
+  const afterValue = afterSeries.latest;
+  const deltaValue = beforeValue != null && afterValue != null
+    ? afterValue - beforeValue
+    : null;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      <div style={{ fontSize: 11, color: '#bbb', fontWeight: 700 }}>
-        Lens Impact
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: '1fr auto',
+          gap: 8,
+          alignItems: 'center',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11 }}>
+          <span style={{ color: '#93a4b7' }}>Before</span>
+          <span style={{ color: '#4ecdc4' }}>After</span>
+        </div>
+        <div style={{ color: '#9ca3af', fontSize: 10 }}>
+          y-range: {formatNumber(minY, 3)} to {formatNumber(maxY, 3)}
+        </div>
       </div>
-      {beforeData ? (
-        <DebugEdgeValueDisplay data={beforeData} />
+
+      {hasChartData ? (
+        <div
+          style={{
+            position: 'relative',
+            width: chartWidth,
+            height: chartHeight,
+            border: '1px solid rgba(255,255,255,0.14)',
+            borderRadius: 6,
+            background: 'rgba(0,0,0,0.25)',
+          }}
+        >
+          <svg width={chartWidth} height={chartHeight} style={{ display: 'block' }}>
+            {beforeLine && (
+              <polyline
+                fill="none"
+                stroke="rgba(148, 163, 184, 0.65)"
+                strokeWidth={1.5}
+                points={beforeLine}
+              />
+            )}
+            {afterLine && (
+              <polyline
+                fill="none"
+                stroke="#4ecdc4"
+                strokeWidth={2}
+                points={afterLine}
+              />
+            )}
+          </svg>
+        </div>
       ) : (
         <div style={{ fontSize: 11, color: '#888' }}>
-          Before value unavailable.
+          History unavailable yet. Hover/select this edge briefly to warm up debug buffers.
         </div>
       )}
-      {afterData ? (
-        <DebugEdgeValueDisplay data={afterData} />
-      ) : (
-        <div style={{ fontSize: 11, color: '#888' }}>
-          After value unavailable.
+
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: '1fr 1fr auto',
+          gap: 10,
+          alignItems: 'baseline',
+          fontFamily: 'monospace',
+        }}
+      >
+        <div style={{ fontSize: 10, color: '#93a4b7' }}>
+          before {formatNumber(beforeValue, 4)}
         </div>
-      )}
+        <div style={{ fontSize: 10, color: '#4ecdc4' }}>
+          after {formatNumber(afterValue, 4)}
+        </div>
+        <div style={{ fontSize: 15, fontWeight: 700, color: '#f59e0b' }}>
+          Δ {deltaValue == null ? 'n/a' : formatNumber(deltaValue, 4)}
+        </div>
+      </div>
     </div>
   );
 }
@@ -258,21 +413,21 @@ export const OscillaEdge = observer(function OscillaEdge(
                   setChipAnchorPosition(nextPosition);
                 }}
                 style={{
-                  minHeight: 34,
-                  minWidth: 92,
-                  borderRadius: 17,
+                  minHeight: 26,
+                  minWidth: 74,
+                  borderRadius: 13,
                   background: graphColors.lensBadge,
                   border: '1px solid #d97706',
-                  fontSize: 11,
+                  fontSize: 10,
                   fontWeight: 700,
                   color: '#111',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  padding: '6px 14px',
+                  padding: '3px 9px',
                   boxShadow: '0 1px 2px rgba(0,0,0,0.25)',
                   cursor: 'pointer',
-                  maxWidth: 220,
+                  maxWidth: 160,
                   whiteSpace: 'nowrap',
                   overflow: 'hidden',
                   textOverflow: 'ellipsis',
@@ -317,12 +472,22 @@ export const OscillaEdge = observer(function OscillaEdge(
         open={Boolean(chipAnchorPosition && activeLens && activeTargetPortId)}
         anchorReference="anchorPosition"
         anchorPosition={chipAnchorPosition ?? undefined}
-        onClose={closeLensPopover}
+        onClose={(_, reason) => {
+          // [LAW:dataflow-not-control-flow] Keep editor open while parameters mutate; close only on explicit dismiss.
+          if (reason === 'backdropClick') return;
+          closeLensPopover();
+        }}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
         transformOrigin={{ vertical: 'top', horizontal: 'left' }}
         disableAutoFocus
         disableEnforceFocus
         disableRestoreFocus
+        slotProps={{
+          paper: {
+            onMouseDown: (event) => event.stopPropagation(),
+            onClick: (event) => event.stopPropagation(),
+          },
+        }}
       >
         {activeLens && activeTargetPortId && (
           <div
@@ -340,7 +505,7 @@ export const OscillaEdge = observer(function OscillaEdge(
             }}
           >
             <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 8 }}>
-              {getLensLabel(activeLens.lensType)}
+              Lens: {getLensLabel(activeLens.lensType)}
             </div>
 
             <div
