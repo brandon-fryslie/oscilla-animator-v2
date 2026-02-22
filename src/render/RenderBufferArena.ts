@@ -32,7 +32,6 @@ import {
   createUint8ClampedArray,
   createUint32Array,
   createUint8Array,
-  buildInitLogMessage,
   buildOverflowMessage,
   populateFrameStats,
   populatePeakStats,
@@ -105,18 +104,6 @@ export class RenderBufferArena {
     this.u8Buffer = createUint8Array(N);
 
     this.initialized = true;
-
-    // Log total pre-allocated memory
-    const totalBytes =
-      this.f32Buffer.byteLength +
-      this.vec2Buffer.byteLength +
-      this.vec3Buffer.byteLength +
-      this.rgbaBuffer.byteLength +
-      this.u32Buffer.byteLength +
-      this.u8Buffer.byteLength;
-
-    const message = buildInitLogMessage(totalBytes, N);
-    console.log(message);
   }
 
   /**
