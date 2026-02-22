@@ -35,35 +35,16 @@ import {
 } from './portTooltipFormatters';
 import { resolvePortStyle } from './port-style';
 import { graphColors } from './graph-tokens';
-
-/**
- * Format a default source for display in tooltip.
- */
-function formatDefaultSource(ds: DefaultSource): string {
-  if (ds.blockType === 'TimeRoot') {
-    return `Default: TimeRoot.${ds.output}`;
-  }
-
-  if (ds.blockType === 'Const' && ds.params?.value !== undefined) {
-    const value = ds.params.value;
-    if (typeof value === 'number') {
-      return `Default: ${value}`;
-    } else if (Array.isArray(value)) {
-      return `Default: [${value.join(', ')}]`;
-    } else if (typeof value === 'object' && value !== null) {
-      return `Default: ${JSON.stringify(value)}`;
-    }
-    return `Default: ${String(value)}`;
-  }
-
-  return `Default: ${ds.blockType}.${ds.output}`;
-}
+import {
+  isConstLiteralDefaultSource,
+  isTimeDefaultSource,
+} from '../defaultSourcePresentation';
 
 /**
  * Get indicator color based on default source type.
  */
 function getIndicatorColor(ds: DefaultSource): string {
-  if (ds.blockType === 'TimeRoot') {
+  if (isTimeDefaultSource(ds)) {
     return graphColors.timeRootIndicator;
   }
   return graphColors.defaultSourceIndicator;
@@ -503,7 +484,7 @@ export const UnifiedNode: React.FC<NodeProps<UnifiedNodeData>> = observer(({ dat
       {canEditDefaultSource &&
         (() => {
           const editableDefaults = data.inputs.filter(
-            (input) => !input.isConnected && input.defaultSource?.blockType === 'Const'
+            (input) => !input.isConnected && isConstLiteralDefaultSource(input.defaultSource)
           );
           if (editableDefaults.length === 0) return null;
           return (

@@ -16,6 +16,11 @@ import type { Block, Patch, Edge, PortRef } from '../../graph/Patch';
 import type { BlockId, PortId, DefaultSource, UIControlHint } from '../../types';
 import type { CombineMode } from '../../types';
 import type { InferenceCanonicalType } from '../../core/inference-types';
+import {
+  formatDefaultSourceLabel,
+  isConstLiteralDefaultSource,
+  isTimeDefaultSource,
+} from '../defaultSourcePresentation';
 import { formatValueType } from './typeFormatters';
 import {
   NumberInput as MuiNumberInput,
@@ -35,19 +40,6 @@ import { SharedExpressionEditor } from './SharedExpressionEditor';
 // =============================================================================
 // Helper Functions
 // =============================================================================
-
-/**
- * Format a DefaultSource for display.
- */
-function formatDefaultSource(source: DefaultSource): string {
-  if (source.blockType === 'TimeRoot') {
-    return `TimeRoot.${source.output}`;
-  }
-  if (source.blockType === 'Const' && source.params?.value !== undefined) {
-    return `${JSON.stringify(source.params.value)}`;
-  }
-  return `${source.blockType}.${source.output}`;
-}
 
 /**
  * Generate the deterministic ID for a derived default source block.
@@ -620,9 +612,9 @@ function TypePreview({ type }: TypePreviewProps) {
                     marginLeft: '16px',
                     fontSize: '12px',
                     color: colors.textSecondary,
-                    fontStyle: input.defaultSource?.blockType === 'TimeRoot' ? 'italic' : 'normal'
+                    fontStyle: isTimeDefaultSource(input.defaultSource!) ? 'italic' : 'normal'
                   }}>
-                    Default: {formatDefaultSource(input.defaultSource!)}
+                    Default: {formatDefaultSourceLabel(input.defaultSource!)}
                   </div>
                 )}
               </li>
@@ -870,7 +862,7 @@ const PortItem = function PortItem({ port, portId, blockId, isConnected, connect
           color: colors.textSecondary
         }}>
           <span style={{ color: colors.textMuted }}>(not connected)</span>
-          {port.defaultSource!.blockType === 'Const' && derivedBlock ? (
+          {isConstLiteralDefaultSource(port.defaultSource) && derivedBlock ? (
             <DefaultSourceEditor
               derivedBlockId={derivedBlockId!}
               value={derivedBlock.params.value}
@@ -878,10 +870,10 @@ const PortItem = function PortItem({ port, portId, blockId, isConnected, connect
             />
           ) : (
             <div style={{
-              fontStyle: port.defaultSource?.blockType === 'TimeRoot' ? 'italic' : 'normal',
-              color: port.defaultSource?.blockType === 'TimeRoot' ? colors.primary : colors.textSecondary
+              fontStyle: isTimeDefaultSource(port.defaultSource!) ? 'italic' : 'normal',
+              color: isTimeDefaultSource(port.defaultSource!) ? colors.primary : colors.textSecondary
             }}>
-              Default: {formatDefaultSource(port.defaultSource!)}
+              Default: {formatDefaultSourceLabel(port.defaultSource!)}
             </div>
           )}
         </div>

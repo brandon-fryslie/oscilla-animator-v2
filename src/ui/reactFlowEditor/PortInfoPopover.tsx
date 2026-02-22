@@ -21,6 +21,10 @@ import {
   getAdapterBadgeLabel,
   getUnresolvedWarning,
 } from '../graphEditor/portTooltipFormatters';
+import {
+  formatDefaultSourceLabel,
+  isTimeDefaultSource,
+} from '../defaultSourcePresentation';
 
 interface PortInfoPopoverProps {
   port: PortData | null;
@@ -33,22 +37,8 @@ interface PortInfoPopoverProps {
   blockId?: string;
 }
 
-function formatDefaultSource(ds: DefaultSource): string {
-  if (ds.blockType === 'TimeRoot') {
-    return `TimeRoot.${ds.output}`;
-  }
-  if (ds.blockType === 'Const' && ds.params?.value !== undefined) {
-    const value = ds.params.value;
-    if (typeof value === 'number') return String(value);
-    if (Array.isArray(value)) return `[${value.join(', ')}]`;
-    if (typeof value === 'object' && value !== null) return JSON.stringify(value);
-    return String(value);
-  }
-  return `${ds.blockType}.${ds.output}`;
-}
-
 function getDefaultSourceBadgeColor(ds: DefaultSource): string {
-  if (ds.blockType === 'TimeRoot') return 'blue';
+  if (isTimeDefaultSource(ds)) return 'blue';
   return 'teal';
 }
 
@@ -314,7 +304,7 @@ export const PortInfoPopover: React.FC<PortInfoPopoverProps> = observer(({
                 variant="light"
                 mt={2}
               >
-                {formatDefaultSource(port.defaultSource)}
+                {formatDefaultSourceLabel(port.defaultSource)}
               </Badge>
             </Box>
           )}
