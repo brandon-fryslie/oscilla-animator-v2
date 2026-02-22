@@ -170,6 +170,9 @@ function processPatchContents(
       to,
       enabled: true,
       sortKey,
+      // [LAW:one-source-of-truth] Derive edge alias from source block/port once at parse boundary.
+      // Expression collect refs use this alias as a stable shorthand (e.g., "osc.out").
+      alias: deriveEdgeAlias(from, patchBlocks),
       role: { kind: 'user', meta: {} as Record<string, never> },
     });
     sortKey++;
@@ -177,6 +180,14 @@ function processPatchContents(
 
   const patch: Patch = { blocks: patchBlocks, edges };
   return { patch, errors, warnings };
+}
+
+function deriveEdgeAlias(from: Endpoint, patchBlocks: ReadonlyMap<BlockId, Block>): string | undefined {
+  const source = patchBlocks.get(from.blockId as BlockId);
+  if (!source) return undefined;
+  if (!source.outputPorts.has(from.slotId)) return undefined;
+  const canonical = source.displayName ? normalizeCanonicalName(source.displayName) : source.id;
+  return `${canonical}.${from.slotId}`;
 }
 
 /**

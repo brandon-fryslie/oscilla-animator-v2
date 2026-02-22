@@ -14,6 +14,7 @@ import type { InstanceId } from "../ir/Indices";
 import { getBlockDefinition, type LowerCtx, type LowerResult, hasLowerOutputsOnly } from "../../blocks/registry";
 import type { EventHub } from "../../events/EventHub";
 import { payloadStride, type CanonicalType, requireInst, withInstance } from "../../core/canonical-types";
+import { normalizeCanonicalName } from "../../core/canonical-name";
 import type { PortKey, CollectEdgeKey } from "../ir/patches";
 // Multi-Input Blocks Integration
 import {
@@ -518,13 +519,9 @@ function lowerBlockInstance(
           const sourceBlock = blocks[edge.fromBlock];
           const sourceBlockId = sourceBlock?.id ?? '';
 
-          // Get alias from the original Edge (search in patch edges)
-          const originalEdge = block.inputPorts.get(portId);
-          // For now, alias comes from the Patch-level edge; we search for it
-          let alias: string | undefined;
-          // Search patch edges for this specific connection to find alias
-          // NormalizedEdge doesn't have alias, but the Patch-level Edge does.
-          // We match by source block/port.
+          const alias = sourceBlock
+            ? `${normalizeCanonicalName(sourceBlock.displayName ?? sourceBlock.id)}.${edge.fromPort}`
+            : undefined;
 
           entries.push({
             value: sourceRef,

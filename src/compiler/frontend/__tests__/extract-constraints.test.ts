@@ -179,4 +179,37 @@ describe('extractConstraints', () => {
       expect(cpAxis.value.kind).toBe('many');
     }
   });
+
+  it('collect edges constrain source payloads without unifying collect port', () => {
+    const patch = buildPatch((b) => {
+      const c = b.addBlock('Const');
+      const expr = b.addBlock('Expression');
+      b.wire(c, 'out', expr, 'refs');
+    });
+    const { graph: g } = buildDraftGraph(patch);
+    const constraints = extractConstraints(g, BLOCK_DEFS_BY_TYPE);
+
+    const constBlock = g.blocks.find((b) => b.type === 'Const')!;
+    const exprBlock = g.blocks.find((b) => b.type === 'Expression')!;
+    const fromKey = draftPortKey(constBlock.id, 'out', 'out');
+    const toKey = draftPortKey(exprBlock.id, 'refs', 'in');
+
+    const payloadEqEdge = constraints.payloadUnit.find(
+      (c) => c.kind === 'payloadEq' && c.a === fromKey && c.b === toKey,
+    );
+    expect(payloadEqEdge).toBeUndefined();
+
+    const collectAllowed = constraints.payloadUnit.find(
+      (c) => c.kind === 'requirePayloadIn' && c.port === fromKey,
+    );
+    expect(collectAllowed).toBeDefined();
+    if (collectAllowed && collectAllowed.kind === 'requirePayloadIn') {
+      const allowedKinds = collectAllowed.allowed.map((p) => p.kind);
+      expect(allowedKinds).toContain('float');
+      expect(allowedKinds).toContain('vec2');
+      expect(allowedKinds).toContain('vec3');
+      expect(allowedKinds).toContain('vec4');
+      expect(allowedKinds).not.toContain('bool');
+    }
+  });
 });

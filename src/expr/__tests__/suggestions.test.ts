@@ -56,9 +56,9 @@ function createTestBlock(id: string, type: string, displayName?: string | null):
 // =============================================================================
 
 describe('getFunctionSignatures', () => {
-  it('returns all 16 function signatures', () => {
+  it('returns all 20 function signatures', () => {
     const signatures = getFunctionSignatures();
-    expect(signatures).toHaveLength(16);
+    expect(signatures).toHaveLength(20);
   });
 
   it('includes trigonometric functions', () => {
@@ -100,6 +100,20 @@ describe('getFunctionSignatures', () => {
     const names = signatures.map(s => s.name);
     expect(names).toContain('wrap');
     expect(names).toContain('fract');
+  });
+
+  it('includes vector constructors', () => {
+    const signatures = getFunctionSignatures();
+    const names = signatures.map(s => s.name);
+    expect(names).toContain('vec2');
+    expect(names).toContain('vec3');
+    expect(names).toContain('vec4');
+  });
+
+  it('includes field operators', () => {
+    const signatures = getFunctionSignatures();
+    const names = signatures.map(s => s.name);
+    expect(names).toContain('mapField');
   });
 
   it('each signature has required fields', () => {

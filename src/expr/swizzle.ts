@@ -16,7 +16,7 @@
  * - color.bgra → color (blue-green-red-alpha)
  */
 
-import { FLOAT, VEC2, VEC3, COLOR, type PayloadType } from '../core/canonical-types';
+import { FLOAT, VEC2, VEC3, VEC4, COLOR, type PayloadType } from '../core/canonical-types';
 
 /** Position component set (vec3) */
 export const POSITION_COMPONENTS = ['x', 'y', 'z'] as const;
@@ -43,7 +43,7 @@ export function componentIndex(char: string): number {
 
 /** Check if payload type supports component access */
 export function isVectorType(payload: PayloadType): boolean {
-  return payload.kind === 'vec2' || payload.kind === 'vec3' || payload.kind === 'color';
+  return payload.kind === 'vec2' || payload.kind === 'vec3' || payload.kind === 'vec4' || payload.kind === 'color';
 }
 
 /** Get max component count for a vector type */
@@ -51,6 +51,7 @@ export function vectorComponentCount(payload: PayloadType): number {
   switch (payload.kind) {
     case 'vec2': return 2;
     case 'vec3': return 3;
+    case 'vec4': return 4;
     case 'color': return 4;
     default: return 0;
   }
@@ -90,12 +91,12 @@ export function validateSwizzle(pattern: string, sourceType: PayloadType): strin
  * Compute the result type of a swizzle operation.
  * Assumes pattern is valid (call validateSwizzle first).
  */
-export function swizzleResultType(pattern: string): PayloadType {
+export function swizzleResultType(pattern: string, sourceType?: PayloadType): PayloadType {
   switch (pattern.length) {
     case 1: return FLOAT;
     case 2: return VEC2;
     case 3: return VEC3;
-    case 4: return COLOR;
+    case 4: return sourceType?.kind === 'vec4' ? VEC4 : COLOR;
     default: throw new Error(`Invalid swizzle length: ${pattern.length}`);
   }
 }

@@ -505,7 +505,12 @@ function tryFinalizeStrict(
   // (empty graph = trivially strict)
   const portTypes = new Map<DraftPortKey, import('../../core/canonical-types').CanonicalType>();
   for (const [key, hint] of facts.ports) {
-    if (hint.status !== 'ok' || !hint.canonical) return null;
+    if (hint.status !== 'ok' || !hint.canonical) {
+      // [LAW:one-type-per-behavior] Collect ports are edge-typed; their port node
+      // does not need a single resolved canonical type in strict output.
+      if (collectPortKeys?.has(key)) continue;
+      return null;
+    }
     portTypes.set(key, hint.canonical);
   }
 

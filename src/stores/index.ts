@@ -29,6 +29,7 @@ export { CompositeEditorStore } from './CompositeEditorStore';
 export { StepDebugStore } from './StepDebugStore';
 export { DemoStore } from './DemoStore';
 export { HelpStore } from './HelpStore';
+export { ExpressionEditorStore } from './ExpressionEditorStore';
 
 // React integration
 export { StoreProvider, useStores, useStore } from './context';

@@ -120,7 +120,16 @@ export class IRBuilderImpl implements OrchestratorIRBuilder {
     const outCard = requireInst(type.extent.cardinality, 'cardinality').kind;
     const inCard = this.cardKindOf(input);
     if (outCard === 'many' && inCard !== 'many') {
-      const broadcasted = this.broadcast(input, type);
+      const inputExpr = this.valueExprs[input];
+      if (!inputExpr) {
+        throw new Error(`IRBuilder.mapAuto: invalid input id=${input}`);
+      }
+      const broadcastType: CanonicalType = {
+        payload: inputExpr.type.payload,
+        unit: inputExpr.type.unit,
+        extent: type.extent,
+      };
+      const broadcasted = this.broadcast(input, broadcastType);
       return this.kernelMap(broadcasted, fn, type);
     }
     return this.kernelMap(input, fn, type);
@@ -155,7 +164,12 @@ export class IRBuilderImpl implements OrchestratorIRBuilder {
       return this.kernelZip(inputs, fn, type);
     }
 
-    if (fieldIds.length === 1) {
+    const hasCompositeOneInput = oneIds.some((id) => {
+      const expr = this.valueExprs[id];
+      return !!expr && payloadStride(expr.type.payload) > 1;
+    });
+
+    if (fieldIds.length === 1 && !hasCompositeOneInput) {
       // Exactly one field + N ones → kernelZipPromote
       return this.kernelZipPromote(fieldIds[0], oneIds, fn, type);
     }
@@ -164,7 +178,16 @@ export class IRBuilderImpl implements OrchestratorIRBuilder {
     const aligned = inputs.map((id) => {
       const card = this.cardKindOf(id);
       if (card === 'many') return id;
-      return this.broadcast(id, type);
+      const expr = this.valueExprs[id];
+      if (!expr) {
+        throw new Error(`IRBuilder.zipAuto: invalid input id=${id}`);
+      }
+      const broadcastType: CanonicalType = {
+        payload: expr.type.payload,
+        unit: expr.type.unit,
+        extent: type.extent,
+      };
+      return this.broadcast(id, broadcastType);
     });
     return this.kernelZip(aligned, fn, type);
   }
@@ -245,7 +268,24 @@ export class IRBuilderImpl implements OrchestratorIRBuilder {
         `IRBuilder.broadcast: one input id=${one} must not be many (already many)`
       );
     }
-    return this.pushExpr({ kind: 'kernel', type, kernelKind: 'broadcast', one, oneComponents });
+    let resolvedComponents = oneComponents;
+    const oneExpr = this.valueExprs[one];
+    if (!resolvedComponents && oneExpr && payloadStride(oneExpr.type.payload) > 1) {
+      // [LAW:one-source-of-truth] Multi-component one-cardinality broadcasts must carry
+      // explicit component ids so runtime materialization preserves vector structure.
+      const componentCount = payloadStride(oneExpr.type.payload);
+      const componentType: CanonicalType = {
+        payload: FLOAT,
+        unit: oneExpr.type.unit,
+        extent: oneExpr.type.extent,
+      };
+      const components: ValueExprId[] = [];
+      for (let i = 0; i < componentCount; i++) {
+        components.push(this.extract(one, i, componentType));
+      }
+      resolvedComponents = components;
+    }
+    return this.pushExpr({ kind: 'kernel', type, kernelKind: 'broadcast', one, oneComponents: resolvedComponents });
   }
 
   reduce(field: ValueExprId, op: 'min' | 'max' | 'sum' | 'avg', type: CanonicalType): ValueExprId {

@@ -14,7 +14,7 @@
 import type { Patch } from '../graph/Patch';
 import { AddressRegistry } from '../graph/address-registry';
 import type { PayloadType } from '../core/canonical-types';
-import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR,  CAMERA_PROJECTION } from '../core/canonical-types';
+import { FLOAT, INT, VEC2, VEC3, VEC4 } from '../core/canonical-types';
 import { BLOCK_DEFS_BY_TYPE } from '../blocks/registry';
 import { addressToString } from '../types/canonical-address';
 import { getOutputAddress } from '../graph/addressing';
@@ -92,6 +92,10 @@ export interface OutputSuggestion extends Suggestion {
   readonly payloadType: string;
 }
 
+function isExpressionPayloadKind(kind: string): kind is 'float' | 'vec2' | 'vec3' | 'vec4' {
+  return kind === 'float' || kind === 'vec2' || kind === 'vec3' || kind === 'vec4';
+}
+
 // =============================================================================
 // Function Signature Export
 // =============================================================================
@@ -140,6 +144,14 @@ const FUNCTION_SIGNATURES: readonly FunctionSignature[] = [
   // Phase/fractional
   { name: 'wrap', arity: 1, returnType: FLOAT, description: 'Wrap to [0, 1) range' },
   { name: 'fract', arity: 1, returnType: FLOAT, description: 'Fractional part (same as wrap)' },
+
+  // Constructors
+  { name: 'vec2', arity: 2, returnType: VEC2, description: 'Build vec2(x, y)' },
+  { name: 'vec3', arity: 3, returnType: VEC3, description: 'Build vec3(x, y, z)' },
+  { name: 'vec4', arity: 4, returnType: VEC4, description: 'Build vec4(x, y, z, w)' },
+
+  // Field operators
+  { name: 'mapField', arity: 2, returnType: FLOAT, description: 'Map value over field extent: mapField(value, overField)' },
 ] as const;
 
 /**
@@ -270,16 +282,16 @@ export class SuggestionProvider {
     const suggestions: PortSuggestion[] = [];
 
     for (const [portId, outputDef] of Object.entries(blockDef.outputs)) {
-      // Filter: only float or int payloads are compatible with expressions
-      const defPayloadKind = outputDef.type.payload.kind;
-      if (defPayloadKind !== 'float' && defPayloadKind !== 'int') continue;
-
       // Resolve port type from registry if available
       const sourceAddress = addressToString(getOutputAddress(block, portId as PortId));
       const resolved = this.registry.resolve(sourceAddress);
-      let payloadTypeStr: string = defPayloadKind;
+      const defaultPayloadKind = outputDef.type.payload.kind;
+      const resolvedPayloadKind = resolved?.kind === 'output' ? resolved.type.payload.kind : defaultPayloadKind;
+      if (!isExpressionPayloadKind(resolvedPayloadKind)) continue;
+
+      let payloadTypeStr: string = resolvedPayloadKind;
       let cardinality: 'one' | 'many' = 'one';
-      let typeDesc: string = defPayloadKind;
+      let typeDesc: string = resolvedPayloadKind;
 
       if (resolved?.kind === 'output') {
         payloadTypeStr = resolved.type.payload.kind;
@@ -330,15 +342,16 @@ export class SuggestionProvider {
         : block.id;
 
       for (const [portId, outputDef] of Object.entries(blockDef.outputs)) {
-        // Filter: only float or int payloads are compatible with expressions
-        const payloadKind = outputDef.type.payload.kind;
-        if (payloadKind !== 'float' && payloadKind !== 'int') continue;
-
         const sourceAddress = addressToString(getOutputAddress(block, portId as PortId));
 
         // Resolve type info for description
-        let typeDesc: string = payloadKind;
         const resolved = this.registry.resolve(sourceAddress);
+        const defaultPayloadKind = outputDef.type.payload.kind;
+        const resolvedPayloadKind = resolved?.kind === 'output' ? resolved.type.payload.kind : defaultPayloadKind;
+        if (!isExpressionPayloadKind(resolvedPayloadKind)) continue;
+
+        const payloadKind = resolvedPayloadKind;
+        let typeDesc: string = payloadKind;
         if (resolved?.kind === 'output') {
           const cardAxis = resolved.type.extent.cardinality;
           const card = cardAxis.kind === 'inst'

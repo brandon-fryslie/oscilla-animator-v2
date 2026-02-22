@@ -20,6 +20,7 @@ import { SettingsPanelWrapper } from './panels/SettingsPanelWrapper';
 import { CompositeEditorPanel } from './panels/CompositeEditorPanel';
 import { StepDebugPanel } from './panels/StepDebugPanel';
 import { HelpPanelWrapper } from './panels/HelpPanelWrapper';
+import { ExpressionEditorPanel } from './panels/ExpressionEditorPanel';
 
 /**
  * Panel group assignments for layout.
@@ -61,6 +62,7 @@ export const PANEL_DEFINITIONS: PanelDefinition[] = [
   { id: 'table-view', component: 'table-view', title: 'Table', group: 'center' },
   { id: 'connection-matrix', component: 'connection-matrix', title: 'Matrix', group: 'center' },
   { id: 'composite-editor', component: 'composite-editor', title: 'Composite', group: 'center' },
+  { id: 'expression-editor', component: 'expression-editor', title: 'Expression Editor', group: 'center', initiallyHidden: true },
 
   // Right sidebar (settings not in default layout - can be opened manually)
   { id: 'settings', component: 'settings', title: 'Settings', group: 'right-top' },
@@ -100,4 +102,5 @@ export const PANEL_COMPONENTS = {
   'settings': SettingsPanelWrapper,
   'step-debugger': StepDebugPanel,
   'help': HelpPanelWrapper,
+  'expression-editor': ExpressionEditorPanel,
 };

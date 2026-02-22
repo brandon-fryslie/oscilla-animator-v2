@@ -335,13 +335,13 @@ describe('Type Checker', () => {
       it('floatInput.x throws error (not a vector)', () => {
         const ast = parse(tokenize('f.x'));
         const env = new Map([['f', FLOAT]]);
-        expect(() => typecheck(ast, { inputs: env })).toThrow(/not a vector type/);
+        expect(() => typecheck(ast, { inputs: env })).toThrow(/Cannot access member/);
       });
 
       it('intInput.x throws error (not a vector)', () => {
         const ast = parse(tokenize('i.x'));
         const env = new Map([['i', INT]]);
-        expect(() => typecheck(ast, { inputs: env })).toThrow(/not a vector type/);
+        expect(() => typecheck(ast, { inputs: env })).toThrow(/Cannot access member/);
       });
 
       it('vec3Input.q throws error (invalid component)', () => {

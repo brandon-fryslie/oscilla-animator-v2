@@ -6,7 +6,17 @@
 
 import { describe, it, expect, beforeEach } from 'vitest';
 import { compileExpression } from '../index';
-import { canonicalType, floatConst, intConst, boolConst, vec3Const, colorConst } from '../../core/canonical-types';
+import {
+  canonicalType,
+  canonicalMany,
+  requireInst,
+  instanceRef,
+  floatConst,
+  intConst,
+  boolConst,
+  vec3Const,
+  colorConst,
+} from '../../core/canonical-types';
 import { FLOAT, INT, BOOL, VEC3, COLOR } from '../../core/canonical-types';
 import { IRBuilderImpl } from '../../compiler/ir/IRBuilderImpl';
 
@@ -168,7 +178,131 @@ describe('compileExpression Integration', () => {
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error.code).toBe('ExprTypeError');
-        expect(result.error.message).toMatch(/not a vector type/);
+        expect(result.error.message).toMatch(/Cannot access member/);
+      }
+    });
+  });
+
+  describe('Many-cardinality propagation', () => {
+    it('preserves many extent for arithmetic with scalar literals', () => {
+      const inst = instanceRef('grid', 'inst_expr_many');
+      const manyFloat = canonicalMany(FLOAT, undefined, inst);
+      const field = builder.intrinsic('normalizedIndex', manyFloat);
+
+      const result = compileExpression(
+        'x + 1',
+        new Map([['x', manyFloat]]),
+        builder,
+        new Map([['x', field]])
+      );
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        const expr = builder.getValueExpr(result.value);
+        expect(expr).toBeDefined();
+        const card = requireInst(expr!.type.extent.cardinality, 'cardinality');
+        expect(card.kind).toBe('many');
+        if (card.kind === 'many') {
+          expect(card.instance.instanceId).toBe(inst.instanceId);
+        }
+      }
+    });
+
+    it('preserves many extent for vector swizzle on field inputs', () => {
+      const inst = instanceRef('grid', 'inst_expr_swizzle');
+      const manyFloat = canonicalMany(FLOAT, undefined, inst);
+      const manyVec3 = canonicalMany(VEC3, undefined, inst);
+
+      const x = builder.intrinsic('normalizedIndex', manyFloat);
+      const y = builder.intrinsic('normalizedIndex', manyFloat);
+      const z = builder.intrinsic('normalizedIndex', manyFloat);
+      const v = builder.constructAuto([x, y, z], manyVec3);
+
+      const result = compileExpression(
+        'v.xy',
+        new Map([['v', manyVec3]]),
+        builder,
+        new Map([['v', v]])
+      );
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        const expr = builder.getValueExpr(result.value);
+        expect(expr).toBeDefined();
+        const card = requireInst(expr!.type.extent.cardinality, 'cardinality');
+        expect(card.kind).toBe('many');
+      }
+    });
+
+    it('mapField broadcasts one values over field extent', () => {
+      const inst = instanceRef('grid', 'inst_expr_mapfield');
+      const manyFloat = canonicalMany(FLOAT, undefined, inst);
+      const oneFloat = canonicalType(FLOAT);
+      const field = builder.intrinsic('normalizedIndex', manyFloat);
+      const one = builder.constant(floatConst(0.5), oneFloat);
+
+      const result = compileExpression(
+        'mapField(v, f)',
+        new Map([
+          ['v', oneFloat],
+          ['f', manyFloat],
+        ]),
+        builder,
+        new Map([
+          ['v', one],
+          ['f', field],
+        ])
+      );
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        const expr = builder.getValueExpr(result.value);
+        expect(expr).toBeDefined();
+        const card = requireInst(expr!.type.extent.cardinality, 'cardinality');
+        expect(card.kind).toBe('many');
+      }
+    });
+  });
+
+  describe('Multiline program syntax', () => {
+    it('compiles assignments + output expression', () => {
+      const xSig = builder.constant(floatConst(0.25), canonicalType(FLOAT));
+
+      const result = compileExpression(
+        [
+          'phase = x * 6.2832',
+          'phase + 1.0',
+        ].join('\n'),
+        new Map([['x', canonicalType(FLOAT)]]),
+        builder,
+        new Map([['x', xSig]])
+      );
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        const expr = builder.getValueExpr(result.value);
+        expect(expr).toBeDefined();
+      }
+    });
+
+    it('supports // comments and returns reassignment warnings', () => {
+      const xSig = builder.constant(floatConst(0.25), canonicalType(FLOAT));
+
+      const result = compileExpression(
+        [
+          '// setup',
+          'phase = x * 6.2832',
+          'phase = phase + 0.5 // bump',
+          'sin(phase)',
+        ].join('\n'),
+        new Map([['x', canonicalType(FLOAT)]]),
+        builder,
+        new Map([['x', xSig]])
+      );
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.warnings?.length ?? 0).toBe(1);
       }
     });
   });

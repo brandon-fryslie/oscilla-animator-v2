@@ -29,6 +29,11 @@ import { tokenize } from './lexer';
 import { parse, ParseError } from './parser';
 import { typecheck, TypeError } from './typecheck';
 import { compile, type CompileContext } from './compile';
+import {
+  lowerExpressionProgram,
+  ExpressionProgramError,
+  type ExpressionProgramWarning,
+} from './program';
 
 /**
  * Block reference context for member access support (e.g., circle_1.radius).
@@ -54,7 +59,7 @@ export interface ExpressionCompileError {
  * Result type for compilation.
  */
 export type CompileResult =
-  | { ok: true; value: ValueExprId }
+  | { ok: true; value: ValueExprId; warnings?: readonly ExpressionProgramWarning[] }
   | { ok: false; error: ExpressionCompileError };
 
 /**
@@ -93,8 +98,10 @@ export function compileExpression(
   blockRefs?: BlockRefsContext
 ): CompileResult {
   try {
+    const loweredProgram = lowerExpressionProgram(exprText);
+
     // Step 1: Tokenize
-    const tokens = tokenize(exprText);
+    const tokens = tokenize(loweredProgram.expression);
 
     // Step 2: Parse
     const ast = parse(tokens);
@@ -117,8 +124,24 @@ export function compileExpression(
     };
     const exprId = compile(typedAst, ctx);
 
-    return { ok: true, value: exprId };
+    return {
+      ok: true,
+      value: exprId,
+      warnings: loweredProgram.warnings,
+    };
   } catch (err) {
+    if (err instanceof ExpressionProgramError) {
+      const absolute = err.absolutePosition;
+      return {
+        ok: false,
+        error: {
+          code: 'ExprSyntaxError',
+          message: err.message,
+          position: absolute === undefined ? undefined : { start: absolute, end: absolute },
+        },
+      };
+    }
+
     // Convert internal errors to public ExpressionCompileError
     if (err instanceof ParseError) {
       return {

@@ -107,8 +107,26 @@ function evaluateTypeGraph(typeResolved: TypeResolvedPatch): Pass2TypeGraphResul
 
     if (!fromBlock || !toBlock) continue;
 
+    const toBlockDef = getBlockDefinition(toBlock.type);
+    const toInputDef = toBlockDef?.inputs?.[edge.toPort];
+    const toIsCollect = !!toInputDef?.collectAccepts;
+
     const fromType = getPortType(typeResolved, edge.fromBlock, edge.fromPort, 'out');
     const toType = getPortType(typeResolved, edge.toBlock, edge.toPort, 'in');
+
+    // [LAW:one-source-of-truth] Collect edges are typed per-edge via collectEdgeTypes
+    // and collect AcceptsSpec constraints, not by a single unified input port type.
+    if (toIsCollect) {
+      if (!fromType) {
+        errors.push({
+          kind: "PortTypeUnknown",
+          blockIndex: edge.fromBlock,
+          slotId: edge.fromPort,
+          message: `Unknown output port type: block[${edge.fromBlock}].${edge.fromPort}`,
+        });
+      }
+      continue;
+    }
 
     if (!fromType || !toType) {
       if (!fromType) {

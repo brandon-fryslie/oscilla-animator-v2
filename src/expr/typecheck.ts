@@ -15,7 +15,7 @@
 import type { ExprNode, Position } from './ast';
 import { withType } from './ast';
 import type { PayloadType } from '../core/canonical-types';
-import { FLOAT, INT, BOOL } from '../core/canonical-types';
+import { FLOAT, INT, BOOL, VEC2, VEC3, VEC4 } from '../core/canonical-types';
 import { isConcretePayload } from '../core/inference-types';
 import type { AddressRegistry } from '../graph/address-registry';
 import { addressToString } from '../types/canonical-address';
@@ -108,6 +108,14 @@ const FUNCTION_SIGNATURES: Record<string, FunctionSignature> = {
   // Phase (now returns float - unit annotation happens at higher level)
   wrap: { params: [FLOAT], returnType: FLOAT },
   fract: { params: [FLOAT], returnType: FLOAT },
+
+  // Constructors
+  vec2: { params: [FLOAT, FLOAT], returnType: VEC2 },
+  vec3: { params: [FLOAT, FLOAT, FLOAT], returnType: VEC3 },
+  vec4: { params: [FLOAT, FLOAT, FLOAT, FLOAT], returnType: VEC4 },
+
+  // Field operators (validated with custom rule in typecheckCall)
+  mapField: { params: [FLOAT, FLOAT], returnType: FLOAT },
 };
 
 /**
@@ -197,11 +205,11 @@ function typecheckUnary(node: ExprNode & { kind: 'unary' }, ctx: TypeCheckContex
 
     case '-': {
       // Negation: numeric types only
-      if (!isNumeric(argType)) {
+      if (!isArithmeticType(argType)) {
         throw new TypeError(
-          `Unary negation requires numeric operand, got ${argType}`,
+          `Unary negation requires scalar/vector numeric operand, got ${argType}`,
           node.pos,
-          [INT, FLOAT],
+          [INT, FLOAT, VEC2, VEC3, VEC4],
           argType
         );
       }
@@ -210,11 +218,11 @@ function typecheckUnary(node: ExprNode & { kind: 'unary' }, ctx: TypeCheckContex
 
     case '+': {
       // Unary plus: numeric types only, no-op
-      if (!isNumeric(argType)) {
+      if (!isArithmeticType(argType)) {
         throw new TypeError(
-          `Unary plus requires numeric operand, got ${argType}`,
+          `Unary plus requires scalar/vector numeric operand, got ${argType}`,
           node.pos,
-          [INT, FLOAT],
+          [INT, FLOAT, VEC2, VEC3, VEC4],
           argType
         );
       }
@@ -278,16 +286,14 @@ function typecheckArithmetic(
   leftType: PayloadType,
   rightType: PayloadType
 ): ExprNode {
-  // Both must be numeric
-  if (!isNumeric(leftType) || !isNumeric(rightType)) {
+  const resultType = unifyArithmetic(leftType, rightType);
+  if (!resultType) {
     throw new TypeError(
-      `Arithmetic operator '${node.op}' requires numeric operands, got ${leftType} ${node.op} ${rightType}`,
+      `Arithmetic operator '${node.op}' requires compatible scalar/vector numeric operands, got ${leftType} ${node.op} ${rightType}`,
       node.pos
     );
   }
 
-  // Determine result type
-  const resultType = unifyNumeric(leftType, rightType);
   return withType({ ...node, left, right }, resultType);
 }
 
@@ -303,9 +309,9 @@ function typecheckComparison(
 ): ExprNode {
   // Ordering comparisons (<, >, <=, >=) require numeric types
   if (node.op !== '==' && node.op !== '!=') {
-    if (!isNumeric(leftType) || !isNumeric(rightType)) {
+    if (!isScalarNumeric(leftType) || !isScalarNumeric(rightType)) {
       throw new TypeError(
-        `Comparison operator '${node.op}' requires numeric operands, got ${leftType} ${node.op} ${rightType}`,
+        `Comparison operator '${node.op}' requires scalar numeric operands, got ${leftType} ${node.op} ${rightType}`,
         node.pos
       );
     }
@@ -313,6 +319,12 @@ function typecheckComparison(
 
   // Equality comparisons (==, !=) allow bool or numeric
   if (node.op === '==' || node.op === '!=') {
+    if (isVectorType(leftType) || isVectorType(rightType)) {
+      throw new TypeError(
+        `Equality operators do not support vectors in expressions. Compare components explicitly.`,
+        node.pos
+      );
+    }
     if (leftType.kind === 'bool' && rightType.kind !== 'bool') {
       throw new TypeError(
         `Cannot compare ${leftType} with ${rightType}`,
@@ -401,6 +413,24 @@ function typecheckTernary(node: ExprNode & { kind: 'ternary' }, ctx: TypeCheckCo
  * Type check function call node.
  */
 function typecheckCall(node: ExprNode & { kind: 'call' }, ctx: TypeCheckContext): ExprNode {
+  if (node.fn === 'mapField') {
+    if (node.args.length !== 2) {
+      throw new TypeError(
+        `Function 'mapField' expects 2 arguments, got ${node.args.length}`,
+        node.pos
+      );
+    }
+    const typedArgs = node.args.map(arg => typecheck(arg, ctx));
+    const valueType = typedArgs[0].type!;
+    if (!isArithmeticType(valueType)) {
+      throw new TypeError(
+        `Function 'mapField' expects a float/vec value argument, got ${valueType}`,
+        typedArgs[0].pos
+      );
+    }
+    return withType({ ...node, args: typedArgs }, valueType);
+  }
+
   const signature = FUNCTION_SIGNATURES[node.fn];
 
   // Check if function exists
@@ -432,7 +462,7 @@ function typecheckCall(node: ExprNode & { kind: 'call' }, ctx: TypeCheckContext)
     // Polymorphic functions (min, max, abs)
     if (signature.polymorphic && i === 0) {
       // First argument determines the type
-      if (!isNumeric(argType)) {
+      if (!isScalarNumeric(argType)) {
         throw new TypeError(
           `Function '${node.fn}' expects numeric type, got ${argType} for argument ${i + 1}`,
           typedArgs[i].pos,
@@ -480,6 +510,15 @@ function typecheckCall(node: ExprNode & { kind: 'call' }, ctx: TypeCheckContext)
  * Type check member access node (component access or block output reference).
  */
 function typecheckMemberAccess(node: ExprNode & { kind: 'member' }, ctx: TypeCheckContext): ExprNode {
+  // [LAW:dataflow-not-control-flow] Resolve member access by data category:
+  // typed input vectors use swizzle semantics; unresolved identifiers use block refs.
+  if (node.object.kind === 'identifier') {
+    const directType = ctx.inputs.get(node.object.name);
+    if (!directType && ctx.blockRefs) {
+      return resolveBlockOutputReference(node, ctx);
+    }
+  }
+
   // First, type-check the object expression
   const typedObject = typecheck(node.object, ctx);
   const objectType = typedObject.type!;
@@ -491,14 +530,27 @@ function typecheckMemberAccess(node: ExprNode & { kind: 'member' }, ctx: TypeChe
       throw new TypeError(error, node.pos, undefined, undefined,
         objectType.kind === 'vec3' ? 'Valid components: x, y, z (or r, g, b)' :
         objectType.kind === 'color' ? 'Valid components: r, g, b, a (or x, y, z, w)' :
+        objectType.kind === 'vec4' ? 'Valid components: x, y, z, w (or r, g, b, a)' :
         objectType.kind === 'vec2' ? 'Valid components: x, y (or r, g)' : undefined
       );
     }
-    const resultType = swizzleResultType(node.member);
+    const resultType = swizzleResultType(node.member, objectType);
     return withType({ ...node, object: typedObject }, resultType);
   }
 
-  // Case 2: Block output reference (existing logic)
+  // Case 2: Block output reference
+  if (node.object.kind === 'identifier' && ctx.inputs.has(node.object.name)) {
+    throw new TypeError(
+      `Cannot access member '${node.member}' on type '${objectType.kind}'`,
+      node.pos,
+      undefined,
+      undefined,
+      objectType.kind === 'float' || objectType.kind === 'int'
+        ? 'Scalar types do not have components'
+        : undefined
+    );
+  }
+
   if (!ctx.blockRefs) {
     throw new TypeError(
       `Cannot access member '${node.member}' on type '${objectType.kind}' (not a vector type, and block references not available)`,
@@ -512,6 +564,119 @@ function typecheckMemberAccess(node: ExprNode & { kind: 'member' }, ctx: TypeChe
 
   // The object must be an identifier (block name)
   if (node.object.kind !== 'identifier') {
+    throw new TypeError(
+      'Block reference must be in the form BlockName.port (e.g., Circle1.radius)',
+      node.object.pos,
+      undefined,
+      undefined,
+      'Only simple block references are supported'
+    );
+  }
+
+  return resolveBlockOutputReference(node, ctx);
+}
+
+// =============================================================================
+// Type Unification and Coercion
+// =============================================================================
+
+/**
+ * Check if a type is numeric.
+ */
+function isScalarNumeric(type: PayloadType): boolean {
+  return type.kind === 'int' || type.kind === 'float';
+}
+
+function isArithmeticType(type: PayloadType): boolean {
+  return isScalarNumeric(type) || isVectorType(type);
+}
+
+/**
+ * Unify two numeric types (for arithmetic operations).
+ * Returns most general type or throws if incompatible.
+ */
+function unifyNumeric(left: PayloadType, right: PayloadType): PayloadType {
+  // int + int → int
+  if (left.kind === 'int' && right.kind === 'int') return INT;
+
+  // int + float → float (coerce int)
+  if ((left.kind === 'int' && right.kind === 'float') || (left.kind === 'float' && right.kind === 'int')) {
+    return FLOAT;
+  }
+
+  // float + float → float
+  if (left.kind === 'float' && right.kind === 'float') return FLOAT;
+
+  // Fallback to float for other numeric combinations
+  if (isScalarNumeric(left) && isScalarNumeric(right)) {
+    return FLOAT;
+  }
+
+  throw new Error(`Cannot unify types: ${left} and ${right}`);
+}
+
+/**
+ * Unify arithmetic operands (scalar/vector component-wise semantics).
+ *
+ * Allowed:
+ * - scalar op scalar -> scalar (int/float widening)
+ * - vecN op vecN -> vecN
+ * - vecN op scalar -> vecN
+ * - scalar op vecN -> vecN
+ */
+function unifyArithmetic(left: PayloadType, right: PayloadType): PayloadType | undefined {
+  if (isScalarNumeric(left) && isScalarNumeric(right)) {
+    return unifyNumeric(left, right);
+  }
+  if (isVectorType(left) && isVectorType(right)) {
+    return left.kind === right.kind ? left : undefined;
+  }
+  if (isVectorType(left) && isScalarNumeric(right)) {
+    return left;
+  }
+  if (isScalarNumeric(left) && isVectorType(right)) {
+    return right;
+  }
+  return undefined;
+}
+
+/**
+ * Unify two types (for ternary branches).
+ * Returns common type or undefined if incompatible.
+ */
+function unifyTypes(left: PayloadType, right: PayloadType): PayloadType | undefined {
+  // Same type
+  if (left === right) return left;
+
+  // int + float → float
+  if ((left.kind === 'int' && right.kind === 'float') || (left.kind === 'float' && right.kind === 'int')) {
+    return FLOAT;
+  }
+
+  // Same vector kind
+  if (isVectorType(left) && isVectorType(right) && left.kind === right.kind) {
+    return left;
+  }
+
+  // Incompatible
+  return undefined;
+}
+
+/**
+ * Check if a type can be coerced to another type.
+ */
+function canCoerceTo(from: PayloadType, to: PayloadType): boolean {
+  // Same type
+  if (from === to) return true;
+
+  // int → float (safe)
+  if (from.kind === 'int' && to.kind === 'float') return true;
+
+  return false;
+}
+
+function resolveBlockOutputReference(node: ExprNode & { kind: 'member' }, ctx: TypeCheckContext): ExprNode {
+  if (!ctx.blockRefs || node.object.kind !== 'identifier') {
     throw new TypeError(
       'Block reference must be in the form BlockName.port (e.g., Circle1.radius)',
       node.object.pos,
@@ -579,71 +744,6 @@ function typecheckMemberAccess(node: ExprNode & { kind: 'member' }, ctx: TypeChe
   }
 
   return withType(node, payload);
-}
-
-// =============================================================================
-// Type Unification and Coercion
-// =============================================================================
-
-/**
- * Check if a type is numeric.
- */
-function isNumeric(type: PayloadType): boolean {
-  return type.kind === 'int' || type.kind === 'float';
-}
-
-/**
- * Unify two numeric types (for arithmetic operations).
- * Returns most general type or throws if incompatible.
- */
-function unifyNumeric(left: PayloadType, right: PayloadType): PayloadType {
-  // int + int → int
-  if (left.kind === 'int' && right.kind === 'int') return INT;
-
-  // int + float → float (coerce int)
-  if ((left.kind === 'int' && right.kind === 'float') || (left.kind === 'float' && right.kind === 'int')) {
-    return FLOAT;
-  }
-
-  // float + float → float
-  if (left.kind === 'float' && right.kind === 'float') return FLOAT;
-
-  // Fallback to float for other numeric combinations
-  if (isNumeric(left) && isNumeric(right)) {
-    return FLOAT;
-  }
-
-  throw new Error(`Cannot unify types: ${left} and ${right}`);
-}
-
-/**
- * Unify two types (for ternary branches).
- * Returns common type or undefined if incompatible.
- */
-function unifyTypes(left: PayloadType, right: PayloadType): PayloadType | undefined {
-  // Same type
-  if (left === right) return left;
-
-  // int + float → float
-  if ((left.kind === 'int' && right.kind === 'float') || (left.kind === 'float' && right.kind === 'int')) {
-    return FLOAT;
-  }
-
-  // Incompatible
-  return undefined;
-}
-
-/**
- * Check if a type can be coerced to another type.
- */
-function canCoerceTo(from: PayloadType, to: PayloadType): boolean {
-  // Same type
-  if (from === to) return true;
-
-  // int → float (safe)
-  if (from.kind === 'int' && to.kind === 'float') return true;
-
-  return false;
 }
 
 // =============================================================================

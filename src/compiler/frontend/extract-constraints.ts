@@ -23,11 +23,11 @@
 import type { DraftGraph, DraftBlock } from './draft-graph';
 import type { DraftPortKey } from './type-facts';
 import { draftPortKey } from './type-facts';
-import type { BlockDef } from '../../blocks/registry';
+import type { BlockDef, AcceptsSpec } from '../../blocks/registry';
 import type { InferenceCanonicalType } from '../../core/inference-types';
 import { isPayloadVar, isUnitVar, isConcretePayload, isConcreteUnit } from '../../core/inference-types';
 import type { PayloadType, UnitType, CardinalityValue, Axis } from '../../core/canonical-types';
-import { axisInst, isAxisInst, isAxisVar, resolveCardinalityPolicy, instanceRef } from '../../core/canonical-types';
+import { axisInst, isAxisInst, isAxisVar, resolveCardinalityPolicy, instanceRef, unitNone, unitsEqual } from '../../core/canonical-types';
 import { cardinalityVarId, instanceVarId, type CardinalityVarId } from '../../core/ids';
 import type { CardinalityConstraint, InstanceTerm } from './cardinality/solve';
 import type { PayloadUnitConstraint, ConstraintOrigin } from './payload-unit/solve';
@@ -80,7 +80,9 @@ export function extractConstraints(
   const cardinality: CardinalityConstraint[] = [];
   const baseCardinalityAxis = new Map<DraftPortKey, Axis<CardinalityValue, CardinalityVarId>>();
   const collectPorts = new Set<DraftPortKey>();
+  const collectAcceptsByPort = new Map<DraftPortKey, AcceptsSpec>();
   const policyDiagnostics: FixpointDiagnostic[] = [];
+  const blockTypeById = new Map(g.blocks.map((b) => [b.id, b.type]));
 
   // Phase A: Collect port types and intra-block constraints
   for (const block of g.blocks) {
@@ -164,6 +166,7 @@ export function extractConstraints(
       // [LAW:one-type-per-behavior] Collect ports use normal edges, validated per-edge.
       if (inDef.collectAccepts) {
         collectPorts.add(key);
+        collectAcceptsByPort.set(key, inDef.collectAccepts);
       } else {
         // Only non-collect ports participate in same-var constraints
         collectVarConstraints(key, type, payloadVarPorts, unitVarPorts, payloadUnit, block.type, portName, 'in');
@@ -235,7 +238,42 @@ export function extractConstraints(
     const toKey = draftPortKey(edge.to.blockId, edge.to.port, 'in');
 
     // Skip edges targeting collect ports — each edge validated independently
-    if (collectPorts.has(toKey)) continue;
+    if (collectPorts.has(toKey)) {
+      const accepts = collectAcceptsByPort.get(toKey);
+      if (accepts && portBaseTypes.has(fromKey)) {
+        // [LAW:single-enforcer] Collect-port payload compatibility is enforced here
+        // as allowed-set constraints on each source edge.
+        payloadUnit.push({
+          kind: 'requirePayloadIn',
+          port: fromKey,
+          allowed: accepts.payloads,
+          origin: {
+            kind: 'blockRule',
+            blockId: edge.to.blockId,
+            blockType: blockTypeById.get(edge.to.blockId) ?? 'UnknownBlock',
+            rule: `collectAccepts.payloads(${edge.to.port})`,
+          },
+        });
+
+        if (
+          accepts.units.kind === 'set'
+          && accepts.units.values.length === 1
+          && unitsEqual(accepts.units.values[0], unitNone())
+        ) {
+          payloadUnit.push({
+            kind: 'requireUnitless',
+            port: fromKey,
+            origin: {
+              kind: 'blockRule',
+              blockId: edge.to.blockId,
+              blockType: blockTypeById.get(edge.to.blockId) ?? 'UnknownBlock',
+              rule: `collectAccepts.unitless(${edge.to.port})`,
+            },
+          });
+        }
+      }
+      continue;
+    }
 
     // Only emit constraints for ports we have types for
     if (portBaseTypes.has(fromKey) && portBaseTypes.has(toKey)) {

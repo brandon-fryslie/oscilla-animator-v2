@@ -4,9 +4,9 @@
  * User-defined mathematical expressions compiled to IR via Expression DSL.
  */
 
-import { registerBlock, ALL_CONCRETE_PAYLOADS } from '../registry';
+import { registerBlock } from '../registry';
 import { canonicalType, payloadStride, floatConst } from '../../core/canonical-types';
-import { FLOAT, INT, VEC2, VEC3, COLOR } from '../../core/canonical-types';
+import { FLOAT, VEC2, VEC3, VEC4 } from '../../core/canonical-types';
 import type { CanonicalType } from '../../core/canonical-types';
 import { payloadVar, unitVar, inferType, cardinalityVar } from '../../core/inference-types';
 import { compileExpression, type BlockRefsContext } from '../../expr';
@@ -21,6 +21,8 @@ const EXPRESSION_CARD = cardinalityVar(cardinalityVarId('expr_refs'), {
   instanceBinding: 'inherit',
 });
 
+const EXPRESSION_ALLOWED_PAYLOADS = [FLOAT, VEC2, VEC3, VEC4] as const;
+
 registerBlock({
   type: 'Expression',
   label: 'Expression',
@@ -30,8 +32,8 @@ registerBlock({
   capability: 'pure',
   payload: {
     allowedPayloads: {
-      refs: ALL_CONCRETE_PAYLOADS,
-      out: ALL_CONCRETE_PAYLOADS,
+      refs: EXPRESSION_ALLOWED_PAYLOADS,
+      out: EXPRESSION_ALLOWED_PAYLOADS,
     },
     // Expression block has dynamic type resolution based on expression text
     // The output type depends on the expression, not a fixed combination
@@ -52,7 +54,7 @@ registerBlock({
       }),
       exposedAsPort: true,
       collectAccepts: {
-        payloads: [FLOAT, INT, VEC2, VEC3, COLOR],
+        payloads: EXPRESSION_ALLOWED_PAYLOADS,
         units: { kind: 'any' },
         extent: { kind: 'any' },
       },
@@ -118,6 +120,9 @@ registerBlock({
       // Build shorthand key from sourceBlockId.sourcePort (canonical address format)
       const shorthand = `${entry.sourceBlockId}.${entry.sourcePort}`;
       valuesByShorthand.set(shorthand, entry.value.id);
+      if (entry.alias) {
+        valuesByShorthand.set(entry.alias, entry.value.id);
+      }
 
       // Register as regular input using alias or shorthand
       const alias = entry.alias !== undefined ? entry.alias : shorthand;
@@ -130,7 +135,7 @@ registerBlock({
     if (ctx.addressRegistry && valuesByShorthand.size > 0) {
       blockRefs = {
         addressRegistry: ctx.addressRegistry,
-        allowedPayloads: [FLOAT, INT, VEC2, VEC3, COLOR],
+        allowedPayloads: EXPRESSION_ALLOWED_PAYLOADS,
         valuesByShorthand,
       };
     }
@@ -156,7 +161,12 @@ registerBlock({
 
     // Compilation succeeded - return output expression
     const outExprId = result.value;
-    const outType = ctx.outTypes[0];
+    const outExpr = ctx.b.getValueExpr(outExprId);
+    if (!outExpr) {
+      throw new Error(`Expression output ${outExprId} not found in value table (compiler bug)`);
+    }
+    // [LAW:one-source-of-truth] Expression result type drives output type for this block.
+    const outType = outExpr.type as CanonicalType;
     const stride = payloadStride(outType.payload);
 
     // For multi-component values (stride > 1), ensure we have a construct expression
@@ -184,9 +194,9 @@ registerBlock({
         // Generate extract nodes and reconstruct
         const components: ValueExprId[] = [];
         for (let i = 0; i < stride; i++) {
-          components.push(ctx.b.extract(outExprId, i, canonicalType(FLOAT)));
+          components.push(ctx.b.extract(outExprId, i, canonicalType(FLOAT, undefined, outType.extent)));
         }
-        const constructedExpr = ctx.b.construct(components, outType);
+        const constructedExpr = ctx.b.constructAuto(components, outType);
         return {
           outputsById: {
             out: { id: constructedExpr, slot: undefined, type: outType, stride, components },

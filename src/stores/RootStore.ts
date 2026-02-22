@@ -28,6 +28,7 @@ import { CompositeEditorStore } from './CompositeEditorStore';
 import { StepDebugStore } from './StepDebugStore';
 import { DemoStore } from './DemoStore';
 import { HelpStore } from './HelpStore';
+import { ExpressionEditorStore } from './ExpressionEditorStore';
 import { executeAction, type ActionResult } from '../diagnostics/actionExecutor';
 import type { DiagnosticAction } from '../diagnostics/types';
 
@@ -49,6 +50,7 @@ export class RootStore {
   readonly stepDebug: StepDebugStore;
   readonly demo: DemoStore;
   readonly help: HelpStore;
+  readonly expressionEditor: ExpressionEditorStore;
 
   // Patch revision tracking (for diagnostics)
   private patchRevision: number = 0;
@@ -108,6 +110,9 @@ export class RootStore {
 
     // Create HelpStore (no dependencies)
     this.help = new HelpStore();
+
+    // Create ExpressionEditorStore (active block for docked expression workbench)
+    this.expressionEditor = new ExpressionEditorStore();
 
     // Wire up callback for MobX reactivity
     this.diagnosticHub.setOnRevisionChange(() => this.diagnostics.incrementRevision());

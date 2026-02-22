@@ -16,6 +16,7 @@ import {
 import 'dockview/dist/styles/dockview.css';
 import { PANEL_COMPONENTS } from './panelRegistry';
 import { createDefaultLayout } from './defaultLayout';
+import { setDockviewApiRef } from './apiRef';
 import type { EditorHandle } from '../editorCommon';
 import './theme.css';
 
@@ -60,6 +61,7 @@ export const DockviewProvider: React.FC<DockviewProviderProps> = ({
   const handleReady = useCallback(
     (event: DockviewReadyEvent) => {
       setApi(event.api);
+      setDockviewApiRef(event.api);
 
       // Build default layout
       createDefaultLayout(event.api, {
@@ -85,6 +87,12 @@ export const DockviewProvider: React.FC<DockviewProviderProps> = ({
       disposable.dispose();
     };
   }, [api, onActivePanelChange]);
+
+  useEffect(() => {
+    return () => {
+      setDockviewApiRef(null);
+    };
+  }, []);
 
   return (
     <DockviewContext.Provider value={{ api }}>

@@ -10,6 +10,7 @@ import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react'
 import { observer } from 'mobx-react-lite';
 import { useStores } from '../../stores';
 import { colors } from '../theme';
+import OpenInNewRoundedIcon from '@mui/icons-material/OpenInNewRounded';
 import { getAnyBlockDefinition, type AnyBlockDef, type InputDef, type OutputDef, BLOCK_DEFS_BY_TYPE } from '../../blocks/registry';
 import './BlockInspector.css';
 import type { Block, Patch, Edge, PortRef } from '../../graph/Patch';
@@ -37,6 +38,7 @@ import type { TokenExpressionEditorHandle } from '../expression-editor/TokenExpr
 import { DisplayNameEditor } from './DisplayNameEditor';
 import { compilationInspector } from '../../services/CompilationInspectorService';
 import { EdgeInspector } from './EdgeInspector';
+import { DockviewContext, getDockviewApiRef, openExpressionEditorPanel } from '../dockview';
 
 // =============================================================================
 // Helper Functions
@@ -1791,7 +1793,9 @@ function computeSuggestionInsertion(
 }
 
 const ExpressionEditor = observer(function ExpressionEditor({ blockId, value, patch }: ExpressionEditorProps) {
-  const { patch: patchStore, diagnostics: diagnosticsStore } = useStores();
+  const { patch: patchStore, diagnostics: diagnosticsStore, expressionEditor } = useStores();
+  const dockview = React.useContext(DockviewContext);
+  const api = dockview?.api ?? getDockviewApiRef();
   const [localValue, setLocalValue] = useState(value);
   const tokenEditorRef = useRef<TokenExpressionEditorHandle>(null);
 
@@ -1986,11 +1990,51 @@ const ExpressionEditor = observer(function ExpressionEditor({ blockId, value, pa
 
   const hasError = expressionError !== null;
 
+  const handlePopOut = useCallback(() => {
+    // Persist current local edits before opening shared docked editor.
+    // [LAW:one-source-of-truth] Patch params remain canonical expression source.
+    if (localValue !== value) {
+      patchStore.updateBlockParams(blockId, { expression: localValue });
+    }
+
+    expressionEditor.openForBlock(blockId);
+    const resolvedApi = api ?? getDockviewApiRef();
+    if (!resolvedApi) {
+      // [LAW:verifiable-goals] Surface explicit failure instead of silent no-op.
+      // eslint-disable-next-line no-console
+      console.error('Expression pop-out failed: Dockview API unavailable');
+      return;
+    }
+    openExpressionEditorPanel(resolvedApi, blockId);
+  }, [api, blockId, expressionEditor, localValue, patchStore, value]);
+
   return (
     <div style={{ position: 'relative' }}>
-      <label style={{ fontSize: '12px', color: colors.textSecondary, display: 'block', marginBottom: '4px' }}>
-        Expression
-      </label>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+        <label style={{ fontSize: '12px', color: colors.textSecondary, display: 'block' }}>
+          Expression
+        </label>
+        <button
+          type="button"
+          onClick={handlePopOut}
+          title="Open in docked Expression Editor panel"
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '4px',
+            border: '1px solid #355187',
+            background: '#12213f',
+            color: '#d9deea',
+            fontSize: '11px',
+            borderRadius: '4px',
+            padding: '2px 6px',
+            cursor: 'pointer',
+          }}
+        >
+          <OpenInNewRoundedIcon sx={{ fontSize: 13 }} />
+          Pop out
+        </button>
+      </div>
       <TokenExpressionEditor
         ref={tokenEditorRef}
         blockId={blockId}
@@ -1999,12 +2043,12 @@ const ExpressionEditor = observer(function ExpressionEditor({ blockId, value, pa
         onChange={handleEditorChange}
         onBlur={handleBlur}
         onKeyDown={handleKeyDown}
-        maxLength={500}
+        maxLength={4000}
         placeholder="e.g., sin(circle_1.radius * 2)"
         hasError={hasError}
       />
       <div style={{ fontSize: '10px', color: colors.textSecondary, textAlign: 'right', marginTop: '2px' }}>
-        {localValue.length} / 500
+        {localValue.length} / 4000
       </div>
       {hasError && (
         <div style={{
