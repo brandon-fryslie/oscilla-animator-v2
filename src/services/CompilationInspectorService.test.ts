@@ -111,6 +111,32 @@ describe('CompilationInspectorService', () => {
       vi.restoreAllMocks();
     });
 
+    it('records beginCompile overlap and retains both snapshots', () => {
+      compilationInspector.beginCompile('compile-1');
+      compilationInspector.capturePass('pass-1', {}, {});
+
+      // Lifecycle misuse: start a second compile without ending the first.
+      compilationInspector.beginCompile('compile-2');
+      compilationInspector.capturePass('pass-2', {}, {});
+      compilationInspector.endCompile('success');
+
+      const errors = compilationInspector.getInternalErrors();
+      expect(
+        errors.some(
+          (e) =>
+            e.phase === 'beginCompile' &&
+            e.error instanceof Error &&
+            e.error.message.includes('before endCompile() for compile-1')
+        )
+      ).toBe(true);
+
+      expect(compilationInspector.snapshots.length).toBe(2);
+      expect(compilationInspector.snapshots[0].compileId).toBe('compile-1');
+      expect(compilationInspector.snapshots[0].status).toBe('failure');
+      expect(compilationInspector.snapshots[1].compileId).toBe('compile-2');
+      expect(compilationInspector.snapshots[1].status).toBe('success');
+    });
+
     it('records lifecycle misuse when capturePass called without beginCompile', () => {
       expect(() => compilationInspector.capturePass('test-pass', {}, {})).not.toThrow();
       const latest = compilationInspector.getInternalErrors().at(-1);
