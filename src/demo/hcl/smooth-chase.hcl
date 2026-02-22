@@ -15,7 +15,7 @@ patch "Smooth Chase" {
     }
   }
 
-  # --- Signal chain: oscillator → lag ---
+  # --- One-cardinality chain: oscillator → lag ---
 
   block "Oscillator" "source" {
     outputs {
@@ -31,7 +31,7 @@ patch "Smooth Chase" {
     }
   }
 
-  # --- Scale mapping for both signals ---
+  # --- Scale mapping for both one-cardinality values ---
 
   block "Const" "half" {
     value = 0.5

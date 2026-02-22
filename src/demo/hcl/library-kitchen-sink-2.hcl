@@ -63,7 +63,7 @@ patch "Library Kitchen Sink 2" {
   block "Oscillator" "pulse-osc" {
     mode = 0
     outputs {
-      out = edge.signal
+      out = edge.both
     }
   }
 
@@ -141,7 +141,7 @@ patch "Library Kitchen Sink 2" {
     }
   }
 
-  # --- Vector graph + derived control signals ---
+  # --- Vector graph + derived control values ---
 
   block "Construct" "vec-a" {
     outputs {

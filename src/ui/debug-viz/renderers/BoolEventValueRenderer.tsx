@@ -167,7 +167,7 @@ function renderInline(value: number, isEvent: boolean = false): React.ReactEleme
 }
 
 /**
- * Bool value renderer (for discrete bool signals/fields).
+ * Bool value renderer (for discrete bool one/many values).
  */
 export const boolValueRenderer: ValueRenderer = {
   renderFull(sample: RendererSample): React.ReactElement {
@@ -185,7 +185,7 @@ export const boolValueRenderer: ValueRenderer = {
 };
 
 /**
- * Event value renderer (for event signals/fields).
+ * Event value renderer (for event one/many values).
  * Similar to bool but with different labels and styling.
  */
 export const eventValueRenderer: ValueRenderer = {

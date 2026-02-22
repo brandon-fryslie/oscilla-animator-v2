@@ -65,7 +65,7 @@ patch "Path Flow" {
 
   # --- Pentagon path definition ---
   # ProceduralPolygon creates:
-  #   shape         → Signal<shape2d> (shapeRef with topology + controlPointField)
+  #   shape         → One<shape2d> (shapeRef with topology + controlPointField)
   #   controlPoints → Field<vec2> over control instance (5 vertices)
 
   block "ProceduralPolygon" "polygon" {

@@ -87,12 +87,12 @@ vec3Input.q    // ERROR: Invalid component 'q' (not in x/y/z/w/r/g/b/a)
 
 ### Implementation Status (2026-02-02)
 
-**Component access is FULLY IMPLEMENTED** for both signal and field extents using generic extract/construct IR ops.
+**Component access is FULLY IMPLEMENTED** for both one and many extents using generic extract/construct IR ops.
 
-**Signal-level usage:**
-- Single component extraction (`.x`, `.r`) works at signal extent
-- Multi-component swizzle (`.xy`, `.rgb`) works at signal extent
-- Signal evaluator reads from strided slots for component access
+**One-cardinality usage:**
+- Single component extraction (`.x`, `.r`) works at one-cardinality extent
+- Multi-component swizzle (`.xy`, `.rgb`) works at one-cardinality extent
+- Value evaluator reads from strided slots for component access
 
 **Field-level usage:**
 - Single component extraction works at field extent
@@ -128,14 +128,14 @@ Component access is implemented using generic structural IR operations:
 - **Multi-component**: `construct([extract0, extract1, ...], resultType)`
   - Example: `v.xy` → `construct([extract(v, 0), extract(v, 1)], canonicalType(VEC2))`
 
-These operations are structural (not compute kernels) and work at all extent levels (signal/field/event).
+These operations are structural (not compute kernels) and work at all extent levels (one/many/event).
 
 **Block lowering** for multi-component outputs:
 - Allocate strided slot: `allocSlot(stride)`
 - Decompose construct into components via extract
 - Emit strided slot write: `stepSlotWriteStrided(slot, components)`
 
-**Signal evaluation**:
+**One-cardinality evaluation**:
 - Extract reads from strided slots: `state.values.f64[baseSlot + componentIndex]`
 - Construct is decomposed at lowering time (not evaluated at runtime)
 
@@ -678,7 +678,7 @@ color.rgb
 
 Verify each function compiles to correct IR:
 1. Check OpCode used
-2. Check signal types match
+2. Check type compatibility
 3. Check synthesized functions produce correct IR tree
 
 ## Related Documents
@@ -691,10 +691,10 @@ Verify each function compiles to correct IR:
 ## Version History
 
 - **2026-02-02**: Implemented extract/construct IR operations
-  - Component access fully functional at signal and field extents
+  - Component access fully functional at one and many extents
   - Multi-component swizzle works via construct/extract decomposition
   - Block lowering handles strided slot writes for multi-component outputs
-  - Signal evaluator reads from strided slots
+  - Value evaluator reads from strided slots
   - Removed "field-only" limitation
 - **2026-01-27**: Added component access and swizzle documentation
   - GLSL-style component access (.x, .y, .z, .r, .g, .b, .a)

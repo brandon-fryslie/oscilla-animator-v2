@@ -458,7 +458,7 @@ export const CompositeEditor = observer(function CompositeEditor() {
             }
           >
             <option value="user">User</option>
-            <option value="signal">One</option>
+            <option value="one">One</option>
             <option value="math">Math</option>
             <option value="layout">Layout</option>
             <option value="render">Render</option>

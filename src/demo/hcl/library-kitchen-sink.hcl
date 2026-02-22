@@ -1,7 +1,7 @@
 # Library Kitchen Sink
 #
 # Broad block-library coverage in one patch:
-# - signal/math/lens/adapter chain (signal-only)
+# - one/math/lens/adapter chain (one-only)
 # - event + IO controls
 # - camera control path
 # - multiple independent render branches (grid/circle/line/spiral/path)
@@ -53,7 +53,7 @@ patch "Library Kitchen Sink" {
     }
   }
 
-  # --- Signal + math + lens + adapter chain (signal-only) ---
+  # --- One + math + lens + adapter chain (one-only) ---
 
   block "ScaleBias" "speed-map" {
     scale = 1.3

@@ -5,7 +5,7 @@
  * - Connect to...: Submenu of all compatible ports in the patch
  * - Combine Mode: Cycle through valid combine modes (input ports only)
  * - Add Block: Create new block that auto-connects
- * - Add/Remove Lens: Signal transformations (input ports only)
+ * - Add/Remove Lens: Value transformations (input ports only)
  * - Expose as Input/Output: Expose ports when editing composites
  * - Disconnect: Remove incoming/outgoing edges
  * - Reset to Default: Clear connection and use default source

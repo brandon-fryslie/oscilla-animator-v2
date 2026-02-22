@@ -11,7 +11,7 @@
 
 .block-library {
   /* Category colors */
-  --category-signal: #4ecdc4;
+  --category-one: #4ecdc4;
   --category-math: #f9a826;
   --category-color: #ff6b6b;
   --category-geometry: #9b59b6;
@@ -184,7 +184,7 @@
 }
 
 /* Category-specific accent colors via data attribute */
-.block-category[data-category="signal"] { --category-accent: var(--category-signal); }
+.block-category[data-category="one"] { --category-accent: var(--category-one); }
 .block-category[data-category="math"] { --category-accent: var(--category-math); }
 .block-category[data-category="color"] { --category-accent: var(--category-color); }
 .block-category[data-category="geometry"] { --category-accent: var(--category-geometry); }

@@ -7,7 +7,7 @@
  * - Hex representation of mean color
  * - Count badge
  *
- * Scalar mode: falls through to generic numeric (color signals not emitted in v1).
+ * Scalar mode: falls through to generic numeric (single-value color lanes not emitted in v1).
  */
 
 import React from 'react';
@@ -160,7 +160,7 @@ export const colorValueRenderer: ValueRenderer = {
     if (sample.type === 'aggregate') {
       return renderAggregateFull(sample.stats);
     }
-    // Scalar color signals not emitted in v1 — fall through to generic
+    // Scalar color one-cardinality lanes not emitted in v1 — fall through to generic
     return genericNumericRenderer.renderFull(sample);
   },
 

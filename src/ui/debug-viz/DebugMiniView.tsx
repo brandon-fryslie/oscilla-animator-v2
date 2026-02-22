@@ -5,7 +5,7 @@
  * micro-history sparkline, and aggregate stats for fields.
  *
  * Non-interactive: no clicking, no selection changes, no navigation.
- * Performance: O(1) render for signals (reads pre-computed HistoryView).
+ * Performance: O(1) render for one-cardinality values (reads pre-computed HistoryView).
  */
 
 import React, { useEffect } from 'react';
@@ -151,7 +151,7 @@ export function formatTypeLine(type: CanonicalType): string {
   return `${payloadUnit} · ${card} · cont`;
 }
 
-export function SignalValueSection({ value, meta, history }: {
+export function OneValueSection({ value, meta, history }: {
   value: EdgeValueResult | null;
   meta: EdgeMetadata;
   history: { buffer: Float32Array; writeIndex: number; capacity: number; stride: 0 | 1 | 2 | 3 | 4; filled: boolean } | null;
@@ -452,7 +452,7 @@ export function DebugEdgeValueDisplay({ data }: { data: MiniViewData }): React.R
 
     // Value section
     requireInst(data.meta.type.extent.cardinality, 'cardinality').kind === 'one'
-      ? React.createElement(SignalValueSection, {
+      ? React.createElement(OneValueSection, {
           value: data.value,
           meta: data.meta,
           history: data.history,

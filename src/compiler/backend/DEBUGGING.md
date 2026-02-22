@@ -38,7 +38,7 @@ StepDebugStore (MobX)
 
 Each frame executes in two phases (mirroring the production executor):
 
-- **Phase 1**: Evaluates all signals/fields, reads from previous frame's state
+- **Phase 1**: Evaluates all one/many values, reads from previous frame's state
 - **Phase Boundary**: Assembles render frame from collected render steps
 - **Phase 2**: Writes new state values for the next frame (stateWrite, fieldStateWrite)
 

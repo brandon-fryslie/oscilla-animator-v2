@@ -107,7 +107,7 @@ Invariants
 Root causes
 •	Upstream culling (visible mask) vs GPU clip space culling disagree.
 •	NaNs in instance attributes poison vertices.
-•	Radius/size hits zero/negative due to upstream signals.
+•	Radius/size hits zero/negative due to upstream one-cardinality values.
 
 Invariants
 •	Sanitize at assembler boundary: no NaNs/Inf in any instance attribute; enforce with a debug assertion pass that can be enabled in tests.

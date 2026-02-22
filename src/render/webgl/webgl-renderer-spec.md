@@ -5,7 +5,7 @@ Scope: Replace (or sit alongside) Canvas2DRenderer/SVGRenderer with a GPU-backed
 ⸻
 
 0. Non-Negotiable Invariants
-    1.	Renderer is a sink. It does not interpret graph semantics, does not evaluate signals/fields, and does not resolve topology IDs. It only consumes RenderFrameIR.
+    1.	Renderer is a sink. It does not interpret graph semantics, does not evaluate one/many values, and does not resolve topology IDs. It only consumes RenderFrameIR.
     2.	World→screen projection is upstream. RenderAssembler produces screen-space instance position (vec2, normalized [0,1]), size (radius/scale), and optional rotation/scale2, already depth-sorted (painter’s order) inside each DrawOp.
     3.	No per-frame allocations in hot path. Every per-frame GPU upload uses pre-allocated CPU staging buffers and persistent GL buffers sized with growth strategy.
     4.	One canonical GPU format. All instance attributes are uploaded in a fixed interleaved layout. No alternate layouts. No “special cases” per topology.
