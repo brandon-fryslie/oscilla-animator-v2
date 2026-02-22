@@ -226,7 +226,8 @@ export const UnifiedNode: React.FC<NodeProps<UnifiedNodeData>> = observer(({ dat
         border: '1px solid rgba(78, 205, 196, 0.2)',
         background: 'linear-gradient(180deg, #1a1a2e 0%, #16213e 100%)',
         color: '#e2e8f0',
-        minWidth: '180px',
+        minWidth: data.commentText ? '320px' : '180px',
+        maxWidth: data.commentText ? '520px' : 'none',
         fontSize: '13px',
         boxShadow: '0 4px 16px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(255, 255, 255, 0.05) inset',
         backdropFilter: 'blur(4px)',
@@ -411,6 +412,29 @@ export const UnifiedNode: React.FC<NodeProps<UnifiedNodeData>> = observer(({ dat
           <span>{data.displayName}</span>
         )}
       </div>
+
+      {/* Comment Block Body */}
+      {typeof data.commentText === 'string' && data.commentText.trim().length > 0 && (
+        <div
+          style={{
+            marginTop: '8px',
+            padding: '10px 12px',
+            borderRadius: '8px',
+            border: '1px solid rgba(148, 163, 184, 0.35)',
+            background: 'rgba(15, 23, 42, 0.55)',
+            color: '#e2e8f0',
+            fontSize: '12px',
+            lineHeight: 1.45,
+            whiteSpace: 'pre-wrap',
+            wordBreak: 'break-word',
+            maxHeight: '240px',
+            overflowY: 'auto',
+          }}
+          title={data.commentText}
+        >
+          {data.commentText}
+        </div>
+      )}
 
       {/* Port Count Summary */}
       <div

@@ -3,7 +3,7 @@
 # Demonstrates the v2.5 layout system:
 #   - PathLayout (Type B Relation): distributes elements along an arc-length
 #     parameterized path defined by a ProceduralPolygon
-#   - AttractorLayout (Type C Deformer): pulls distributed positions toward
+#   - AttractorLayout (Type C Deformer): pulls distributed control points toward
 #     a target point, centering them in the viewport
 #   - Animated offset: elements flow continuously around the pentagon path
 #
@@ -15,7 +15,7 @@
 #   - 40 small ellipses arranged in a pentagonal pattern near the center
 #     of the viewport
 #   - The pentagon is "softened" (pulled inward) because AttractorLayout
-#     lerps each position 60% toward the center point (0.5, 0.5)
+#     lerps each control point 60% toward the center point (0.5, 0.5)
 #   - Each ellipse has a unique hue from the rainbow spectrum (red → orange
 #     → yellow → green → cyan → blue → violet), cycling across the 40
 #     elements based on their normalized index
@@ -39,13 +39,13 @@
 #     radius 0.2, so vertices lie at distance 0.2 from origin
 #   - PathLayout samples M=40 positions along these 5 edges
 #   - AttractorLayout with strength=0.6 lerps: output = 0.4*path + 0.6*target
-#     where target defaults to (0.5, 0.5, 0)
-#   - Result: positions are roughly in the range (0.2, 0.15) to (0.4, 0.38),
+#     where target defaults to (0.5, 0.5)
+#   - Result: control points are roughly in the range (0.2, 0.15) to (0.4, 0.38),
 #     visible in the center-left area of the viewport
 #
 # Blocks exercised:
 #   PathLayout       — arc-length path sampling via pathSample kernel
-#   AttractorLayout  — component-wise lerp deformer
+#   AttractorLayout  — component-wise control-point lerp deformer
 #   ProceduralPolygon — pentagon path source (shapeRef + controlPoints)
 #   MakeShape2D      — topology assembler (consumes controlPoints)
 #
@@ -59,7 +59,7 @@ patch "Path Flow" {
     periodAMs = 8000
     role = "timeRoot"
     outputs {
-      phaseA = pathLayout.offset
+      phaseA = [pathLayout.offset, polygon-wobble.phase]
     }
   }
 
@@ -73,13 +73,23 @@ patch "Path Flow" {
     radiusX = 0.2
     radiusY = 0.2
     outputs {
-      controlPoints = assembler.controlPoints
-      shape = pathLayout.shape
+      controlPoints = polygon-wobble.controlPoints
+    }
+  }
+
+  block "ShapeWobble2D" "polygon-wobble" {
+    amount = 0.02
+    frequency = 5
+    outputs {
+      points = assembler.controlPoints
     }
   }
 
   block "MakeShape2D" "assembler" {
     closed = 1
+    outputs {
+      shape = pathLayout.shape
+    }
   }
 
   # --- Visual stamp: small ellipses for each instance ---
@@ -108,12 +118,12 @@ patch "Path Flow" {
 
   block "PathLayout" "pathLayout" {
     outputs {
-      position = attractor.positions
+      controlPoints = attractor.points
     }
   }
 
-  # --- AttractorLayout: pull positions toward viewport center ---
-  # target defaults to (0.5, 0.5, 0), strength=0.6 → gentle centering
+  # --- AttractorLayout: pull control points toward viewport center ---
+  # target defaults to (0.5, 0.5), strength=0.6 → gentle centering
 
   block "AttractorLayout" "attractor" {
     strength = 0.6

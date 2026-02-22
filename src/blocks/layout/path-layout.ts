@@ -17,7 +17,7 @@
 
 import { registerBlock, ALL_CONCRETE_PAYLOADS } from '../registry';
 import { canonicalType, unitWorld3, unitTurns, contractWrap01, payloadStride, floatConst, requireInst } from '../../core/canonical-types';
-import { FLOAT, VEC3 } from '../../core/canonical-types';
+import { FLOAT, VEC2, VEC3 } from '../../core/canonical-types';
 import { inferType, payloadVar, cardinalityVar } from '../../core/inference-types';
 import { cardinalityVarId } from '../../core/ids';
 import { defaultSourceConst } from '../../types';
@@ -54,6 +54,7 @@ registerBlock({
   outputs: {
     position: { label: 'Position', type: inferType(VEC3, unitWorld3(), { cardinality: PATH_FIELD_CARD }) },
     rotation: { label: 'Rotation', type: inferType(FLOAT, { kind: 'none' }, { cardinality: PATH_FIELD_CARD }) },
+    controlPoints: { label: 'Control Points', type: inferType(VEC2, { kind: 'none' }, { cardinality: PATH_FIELD_CARD }) },
   },
   lower: ({ ctx, inputsById }) => {
     const elementsInput = inputsById.elements;
@@ -71,6 +72,7 @@ registerBlock({
     const posType = rewriteFieldType(ctx.outTypes[0], instanceId, ctx.instances);
     const floatFieldType = { ...posType, payload: FLOAT, unit: { kind: 'none' as const } };
     const vec2FieldType = { ...posType, payload: { kind: 'vec2' as const }, unit: { kind: 'none' as const } };
+    const controlPointsType = rewriteFieldType(ctx.outTypes[2], instanceId, ctx.instances);
 
     // Post-normalization: all inputs guaranteed wired
     // [LAW:one-source-of-truth] inputs are the single source
@@ -105,6 +107,7 @@ registerBlock({
     const py = ctx.b.extract(posVec2, 1, floatFieldType);
     const const0 = ctx.b.constant(floatConst(0), canonicalType(FLOAT));
     const positionField = ctx.b.constructAuto([px, py, const0], posType);
+    const controlPointsField = ctx.b.constructAuto([px, py], controlPointsType);
 
     // Rotation: pathSample with 'tangentAngle' op → float
     const rotationField = ctx.b.pathSample(controlPointField, t, topologyId, 'tangentAngle', floatFieldType);
@@ -113,11 +116,13 @@ registerBlock({
       outputsById: {
         position: { id: positionField, slot: undefined, type: posType, stride: payloadStride(posType.payload) },
         rotation: { id: rotationField, slot: undefined, type: floatFieldType, stride: 1 },
+        controlPoints: { id: controlPointsField, slot: undefined, type: controlPointsType, stride: payloadStride(controlPointsType.payload) },
       },
       effects: {
         slotRequests: [
           { portId: 'position', type: posType },
           { portId: 'rotation', type: floatFieldType },
+          { portId: 'controlPoints', type: controlPointsType },
         ],
       },
       instanceContext: instanceId,

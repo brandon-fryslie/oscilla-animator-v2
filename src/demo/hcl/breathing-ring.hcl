@@ -9,7 +9,7 @@ patch "Breathing Ring" {
     periodAMs = 2000
     role = "timeRoot"
     outputs {
-      phaseA = breath.phase
+      phaseA = [breath.phase, dot-wobble.phase]
     }
   }
 
@@ -17,6 +17,21 @@ patch "Breathing Ring" {
   block "Ellipse" "dot" {
     rx = 0.03
     ry = 0.03
+    outputs {
+      controlPoints = dot-wobble.controlPoints
+    }
+  }
+
+  block "ShapeWobble2D" "dot-wobble" {
+    amount = 0.003
+    frequency = 8
+    outputs {
+      points = dot-shape.controlPoints
+    }
+  }
+
+  block "MakeShape2D" "dot-shape" {
+    closed = 1
     outputs {
       shape = instances.element
     }

@@ -135,7 +135,7 @@ describe('compile', () => {
         // Filter out SCALAR_INSTANCE_ID (always-present sentinel for cardinality-one materialization).
         const schedule = result.program.schedule as ScheduleIR;
         const userInstances = [...schedule.instances.values()].filter(
-          (inst) => inst.id !== SCALAR_INSTANCE_ID,
+          (inst) => inst.id !== SCALAR_INSTANCE_ID && inst.shapeField !== undefined,
         );
         expect(userInstances.length).toBe(1);
         const instance = userInstances[0];
@@ -166,7 +166,7 @@ describe('compile', () => {
         // Filter out SCALAR_INSTANCE_ID (always-present sentinel for cardinality-one materialization).
         const schedule = result.program.schedule as ScheduleIR;
         const userInstances = [...schedule.instances.values()].filter(
-          (inst) => inst.id !== SCALAR_INSTANCE_ID,
+          (inst) => inst.id !== SCALAR_INSTANCE_ID && inst.shapeField !== undefined,
         );
         expect(userInstances.length).toBe(1);
         const instance = userInstances[0];

@@ -28,7 +28,9 @@ describe('createEdgeFromEdgeLike - lens data population', () => {
         displayName: 'Source',
         params: {},
         inputPorts: new Map(),
-        outputPorts: new Map(),
+        outputPorts: new Map([
+          ['out', { id: 'out' }],
+        ]),
       }],
       ['target', {
         id: 'target',
@@ -57,15 +59,17 @@ describe('createEdgeFromEdgeLike - lens data population', () => {
     ];
 
     const rfEdge = createEdgeFromEdgeLike(edge, makeBlocks(lenses));
+    expect(rfEdge).not.toBeNull();
 
-    expect(rfEdge.data).toBeDefined();
-    expect(rfEdge.data!.lenses).toHaveLength(1);
-    expect(rfEdge.data!.lenses![0].lensType).toBe('Adapter_PhaseToScalar01');
+    expect(rfEdge!.data).toBeDefined();
+    expect(rfEdge!.data!.lenses).toHaveLength(1);
+    expect(rfEdge!.data!.lenses![0].lensType).toBe('Adapter_PhaseToScalar01');
   });
 
   it('sets edge type to oscilla for custom rendering', () => {
     const rfEdge = createEdgeFromEdgeLike(edge, makeBlocks());
-    expect(rfEdge.type).toBe('oscilla');
+    expect(rfEdge).not.toBeNull();
+    expect(rfEdge!.type).toBe('oscilla');
   });
 
   it('populates edge data with multiple lenses', () => {
@@ -75,10 +79,11 @@ describe('createEdgeFromEdgeLike - lens data population', () => {
     ];
 
     const rfEdge = createEdgeFromEdgeLike(edge, makeBlocks(lenses));
+    expect(rfEdge).not.toBeNull();
 
-    expect(rfEdge.data!.lenses).toHaveLength(2);
-    expect(rfEdge.data!.lenses![0].lensType).toBe('Adapter_PhaseToScalar01');
-    expect(rfEdge.data!.lenses![1].lensType).toBe('Lens_Scale');
+    expect(rfEdge!.data!.lenses).toHaveLength(2);
+    expect(rfEdge!.data!.lenses![0].lensType).toBe('Adapter_PhaseToScalar01');
+    expect(rfEdge!.data!.lenses![1].lensType).toBe('Lens_Scale');
   });
 
   it('filters out lenses that target a different source connection', () => {
@@ -88,19 +93,28 @@ describe('createEdgeFromEdgeLike - lens data population', () => {
     ];
 
     const rfEdge = createEdgeFromEdgeLike(edge, makeBlocks(lenses));
+    expect(rfEdge).not.toBeNull();
 
-    expect(rfEdge.data!.lenses).toHaveLength(1);
-    expect(rfEdge.data!.lenses![0].id).toBe('lens1');
+    expect(rfEdge!.data!.lenses).toHaveLength(1);
+    expect(rfEdge!.data!.lenses![0].id).toBe('lens1');
   });
 
   it('leaves lens data undefined when no lenses attached', () => {
     const rfEdge = createEdgeFromEdgeLike(edge, makeBlocks());
-    expect(rfEdge.data!.lenses).toBeUndefined();
+    expect(rfEdge).not.toBeNull();
+    expect(rfEdge!.data!.lenses).toBeUndefined();
   });
 
   it('works without blocks map (graceful degradation)', () => {
     const rfEdge = createEdgeFromEdgeLike(edge);
-    expect(rfEdge.type).toBe('oscilla');
-    expect(rfEdge.data!.lenses).toBeUndefined();
+    expect(rfEdge).not.toBeNull();
+    expect(rfEdge!.type).toBe('oscilla');
+    expect(rfEdge!.data!.lenses).toBeUndefined();
+  });
+
+  it('returns null when edge target handle does not exist on target block', () => {
+    const invalid: EdgeLike = { ...edge, targetPortId: 'missing-port' };
+    const rfEdge = createEdgeFromEdgeLike(invalid, makeBlocks());
+    expect(rfEdge).toBeNull();
   });
 });

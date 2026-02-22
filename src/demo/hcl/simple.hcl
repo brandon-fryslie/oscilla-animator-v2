@@ -9,13 +9,28 @@ patch "Simple" {
     periodAMs = 4000
     role = "timeRoot"
     outputs {
-      phaseA = layout.phase
+      phaseA = [layout.phase, dot-wobble.phase]
     }
   }
 
   block "Ellipse" "dot" {
     rx = 0.04
     ry = 0.04
+    outputs {
+      controlPoints = dot-wobble.controlPoints
+    }
+  }
+
+  block "ShapeWobble2D" "dot-wobble" {
+    amount = 0.004
+    frequency = 6
+    outputs {
+      points = dot-shape.controlPoints
+    }
+  }
+
+  block "MakeShape2D" "dot-shape" {
+    closed = 1
     outputs {
       shape = instances.element
     }

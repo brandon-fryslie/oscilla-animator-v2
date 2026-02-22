@@ -46,7 +46,7 @@ patch "Path Flow" {
 
   block "PathLayout" "pathLayout" {
     outputs {
-      position = attractor.positions
+      controlPoints = attractor.points
     }
   }
 

@@ -59,6 +59,7 @@ export interface ContinuityPipelineIR {
  * Used to generate materialize → continuity → render chain.
  */
 interface RenderTargetInfo {
+  renderBlockId: string;
   instanceId: InstanceId;
   position: { id: ValueExprId; stride: number };
   color: { id: ValueExprId; stride: number };
@@ -284,6 +285,7 @@ function collectRenderTargets(
       : { k: 'one' as const, id: shapeFieldId };
 
     targets.push({
+      renderBlockId: block.id,
       instanceId,
       position: { id: pos.id, stride: pos.stride },
       color: { id: color.id, stride: color.stride },
@@ -373,17 +375,20 @@ export function allocateContinuityPipeline(
   };
 
   for (const target of renderTargets) {
-    const { instanceId, position, color, scale, shape } = target;
+    const { renderBlockId, instanceId, position, color, scale, shape } = target;
 
     // Helper to get or create slots for a field
     const getFieldSlots = (
       fieldId: ValueExprId,
       semantic: 'position' | 'radius' | 'opacity' | 'color' | 'custom',
-      stride: number
+      stride: number,
+      roleKey: string,
     ): { baseSlot: ValueSlot; outputSlot: ValueSlot } => {
       // [LAW:one-source-of-truth] Materialization count/continuity mapping are derived from the field's own instance.
       const fieldInstanceId = inferFieldInstanceFromExprs(fieldId, valueExprs) ?? instanceId;
-      const key = `${fieldInstanceId}:${semantic}:${fieldId}`;
+      // [LAW:one-source-of-truth] Continuity keys must be stable across recompiles.
+      // Compile-ephemeral ValueExprIds are excluded from runtime continuity identity.
+      const key = `${fieldInstanceId}:${semantic}:${roleKey}`;
       let slots = fieldSlots.get(key);
       if (!slots) {
         ensureMapBuildStep(fieldInstanceId);
@@ -415,7 +420,7 @@ export function allocateContinuityPipeline(
 
         // 3. Emit ContinuityApply step
         const policy = getPolicyForSemantic(semantic);
-        const targetKey = `${fieldInstanceId}_${semantic}_${fieldId}`;
+        const targetKey = `${semantic}:${fieldInstanceId}:${roleKey}`;
         continuityApplySteps.push({
           kind: 'continuityApply',
           targetKey,
@@ -431,10 +436,10 @@ export function allocateContinuityPipeline(
     };
 
     // Process position (semantic: position)
-    const posSlots = getFieldSlots(position.id, 'position', position.stride);
+    const posSlots = getFieldSlots(position.id, 'position', position.stride, `${renderBlockId}:pos`);
 
     // Process color (semantic: color)
-    const colorSlots = getFieldSlots(color.id, 'color', color.stride);
+    const colorSlots = getFieldSlots(color.id, 'color', color.stride, `${renderBlockId}:color`);
 
     // [LAW:dataflow-not-control-flow] Scale is always processed through one of the declared variants.
     let scaleOutput: StepRender['scale'] = undefined;
@@ -443,7 +448,7 @@ export function allocateContinuityPipeline(
         scaleOutput = scale;
       } else {
         // [LAW:one-source-of-truth] Field scale follows the same materialize+continuity path as other field inputs.
-        const scaleSlots = getFieldSlots(scale.id, 'custom', scale.stride);
+        const scaleSlots = getFieldSlots(scale.id, 'custom', scale.stride, `${renderBlockId}:scale`);
         scaleOutput = { k: 'slot', slot: scaleSlots.outputSlot };
       }
     }
@@ -454,7 +459,7 @@ export function allocateContinuityPipeline(
 
     if (shape) {
       if (shape.k === 'field') {
-        const shapeSlots = getFieldSlots(shape.id, 'custom', shape.stride);
+        const shapeSlots = getFieldSlots(shape.id, 'custom', shape.stride, `${renderBlockId}:shape`);
         shapeOutput = { k: 'slot', slot: shapeSlots.outputSlot };
       } else {
         // One-cardinality shape - resolve topology + param expressions + control points
@@ -470,7 +475,8 @@ export function allocateContinuityPipeline(
             const cpSlots = getFieldSlots(
               shapeInfo.controlPointField.id,
               'custom',
-              shapeInfo.controlPointField.stride
+              shapeInfo.controlPointField.stride,
+              `${renderBlockId}:controlPoints`,
             );
             controlPointsOutput = { k: 'slot', slot: cpSlots.outputSlot };
           }

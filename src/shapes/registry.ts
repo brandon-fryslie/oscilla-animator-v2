@@ -2,16 +2,19 @@
  * Topology Registry
  *
  * Provides O(1) array-indexed lookup for topology definitions.
- * Registry is populated at module load time with built-in topologies
- * and can be extended at compile-time with dynamically created topologies (paths).
+ * Registry is populated at compile-time with dynamically created topologies (paths).
  *
  * ID Allocation:
- * - Built-in topologies: IDs 0-99 (reserved)
  * - Dynamic topologies: IDs 100+ (auto-assigned)
  */
 
 import type { TopologyId, TopologyDef, PathTopologyDef, AbstractTopologyDef, PathSegmentKind } from './types';
 import { PathVerb } from './types';
+
+export type SerializableTopologyDef = Omit<TopologyDef, 'render'> & Partial<Pick<
+  PathTopologyDef,
+  'verbs' | 'pointsPerVerb' | 'totalControlPoints' | 'closed' | 'segmentKind' | 'segmentPointBase' | 'hasQuad' | 'hasCubic'
+>>;
 
 /**
  * Registry of all available topologies (array-indexed by TopologyId)
@@ -29,17 +32,17 @@ const TOPOLOGY_REGISTRY: TopologyDef[] = [];
  * NOT used in hot paths - use numeric ID directly.
  */
 const TOPOLOGY_BY_NAME: Map<string, TopologyId> = new Map();
-
 /**
- * Reserved numeric IDs for built-in topologies
+ * Structural interning map: canonical topology shape signature -> topology ID.
+ *
+ * Keeps topology IDs stable for structurally identical dynamic topologies.
  */
-export const TOPOLOGY_ID_ELLIPSE = 0;
-export const TOPOLOGY_ID_RECT = 1;
+const TOPOLOGY_BY_SHAPE_SIGNATURE: Map<string, TopologyId> = new Map();
 
 /**
  * Dynamic topology ID allocation
  *
- * Dynamic topologies start at 100 to leave room for future built-ins.
+ * Dynamic topologies start at 100 for stable separation from historical IDs.
  */
 const NEXT_DYNAMIC_ID_START = 100;
 let nextDynamicId = NEXT_DYNAMIC_ID_START;
@@ -137,7 +140,9 @@ function computePathDispatchData(verbs: readonly PathVerb[]): {
  * Register a dynamic topology (e.g., path topologies created by blocks)
  *
  * This is called during block lowering to register procedurally-created topologies.
- * Assigns a new numeric ID and returns it to the caller.
+ * Returns a stable numeric ID for the topology shape:
+ * - Reuses existing ID for structurally identical topology definitions
+ * - Allocates a new ID only for unseen topology shapes
  *
  * For PathTopologyDef, automatically computes precomputed dispatch data (Sprint 1 WI-1):
  * - segmentKind[], segmentPointBase[], hasQuad, hasCubic
@@ -150,19 +155,30 @@ export function registerDynamicTopology(
   topology: AbstractTopologyDef | Omit<PathTopologyDef, 'id'>,
   debugName?: string
 ): TopologyId {
-  const id = nextDynamicId++;
-
   // Check if this is a PathTopologyDef (has 'verbs' field)
   // If so, compute precomputed dispatch data
-  let fullTopology: TopologyDef;
+  let shapeTopology: Omit<TopologyDef, 'id'>;
   if ('verbs' in topology) {
     const dispatchData = computePathDispatchData(topology.verbs);
-    fullTopology = { ...topology, ...dispatchData, id } as PathTopologyDef;
+    shapeTopology = { ...topology, ...dispatchData } as Omit<PathTopologyDef, 'id'>;
   } else {
-    fullTopology = { ...topology, id } as TopologyDef;
+    shapeTopology = { ...topology } as Omit<TopologyDef, 'id'>;
   }
 
+  // [LAW:one-source-of-truth] Dynamic topology IDs are canonical per shape.
+  const shapeSig = topologyShapeSignature(shapeTopology as Omit<SerializableTopologyDef, 'id'>);
+  const existingId = TOPOLOGY_BY_SHAPE_SIGNATURE.get(shapeSig);
+  if (existingId !== undefined) {
+    if (debugName) {
+      TOPOLOGY_BY_NAME.set(debugName, existingId);
+    }
+    return existingId;
+  }
+
+  const id = nextDynamicId++;
+  const fullTopology = { ...shapeTopology, id } as TopologyDef;
   TOPOLOGY_REGISTRY[id] = fullTopology;
+  TOPOLOGY_BY_SHAPE_SIGNATURE.set(shapeSig, id);
   if (debugName) {
     TOPOLOGY_BY_NAME.set(debugName, id);
   }
@@ -179,25 +195,77 @@ export function getTopologyIdByName(name: string): TopologyId | undefined {
   return TOPOLOGY_BY_NAME.get(name);
 }
 
-/**
- * Initialize built-in topologies at module load time
- *
- * Must be called AFTER topologies are defined but BEFORE any code uses the registry.
- */
-function initializeBuiltinTopologies(
-  ellipse: AbstractTopologyDef,
-  rect: AbstractTopologyDef
-): void {
-  // Pre-assign reserved IDs
-  TOPOLOGY_REGISTRY[TOPOLOGY_ID_ELLIPSE] = { ...ellipse, id: TOPOLOGY_ID_ELLIPSE } as TopologyDef;
-  TOPOLOGY_REGISTRY[TOPOLOGY_ID_RECT] = { ...rect, id: TOPOLOGY_ID_RECT } as TopologyDef;
-
-  // Register debug names
-  TOPOLOGY_BY_NAME.set('ellipse', TOPOLOGY_ID_ELLIPSE);
-  TOPOLOGY_BY_NAME.set('rect', TOPOLOGY_ID_RECT);
+function toSerializableTopology(topology: TopologyDef): SerializableTopologyDef {
+  const { render: _render, ...serializable } = topology as TopologyDef & { render?: TopologyDef['render'] };
+  return serializable as SerializableTopologyDef;
 }
 
-// Import built-in topologies and initialize registry
-// Note: Import is at bottom to avoid circular dependency issues
-import { TOPOLOGY_ELLIPSE, TOPOLOGY_RECT } from './topologies';
-initializeBuiltinTopologies(TOPOLOGY_ELLIPSE, TOPOLOGY_RECT);
+function topologyShapeSignature(topology: Omit<SerializableTopologyDef, 'id'> | SerializableTopologyDef): string {
+  const pathFields =
+    'verbs' in topology && Array.isArray(topology.verbs)
+      ? {
+          verbs: topology.verbs,
+          pointsPerVerb: topology.pointsPerVerb,
+          totalControlPoints: topology.totalControlPoints,
+          closed: topology.closed,
+          segmentKind: topology.segmentKind,
+          segmentPointBase: topology.segmentPointBase,
+          hasQuad: topology.hasQuad,
+          hasCubic: topology.hasCubic,
+        }
+      : null;
+  return JSON.stringify({
+    params: topology.params,
+    path: pathFields,
+  });
+}
+
+function topologySignatureWithId(topology: SerializableTopologyDef): string {
+  return JSON.stringify({
+    id: topology.id,
+    shape: topologyShapeSignature(topology),
+  });
+}
+
+/**
+ * Export clone-safe topology definitions (no function fields) for thread/message transfer.
+ *
+ * @param ids - Optional subset of topology IDs to export. Defaults to all registered IDs.
+ */
+export function exportSerializableTopologies(ids?: readonly TopologyId[]): readonly SerializableTopologyDef[] {
+  const topologyIds = ids ?? getAllTopologyIds();
+  return topologyIds.map((id) => toSerializableTopology(getTopology(id)));
+}
+
+/**
+ * Install topology definitions received across thread/process boundaries.
+ *
+ * Existing IDs must match exactly; mismatched redefinitions throw.
+ */
+export function installSerializableTopologies(topologies: readonly SerializableTopologyDef[]): void {
+  for (const topology of topologies) {
+    const existing = TOPOLOGY_REGISTRY[topology.id];
+    const shapeSig = topologyShapeSignature(topology);
+    if (existing) {
+      const existingSignature = topologySignatureWithId(toSerializableTopology(existing));
+      const incomingSignature = topologySignatureWithId(topology);
+      if (existingSignature !== incomingSignature) {
+        throw new Error(`Topology ID collision with incompatible definitions: ${topology.id}`);
+      }
+      if (!TOPOLOGY_BY_SHAPE_SIGNATURE.has(shapeSig)) {
+        TOPOLOGY_BY_SHAPE_SIGNATURE.set(shapeSig, topology.id);
+      }
+      continue;
+    }
+
+    // [LAW:one-source-of-truth] Main-thread topology registry is synchronized from
+    // compile artifacts instead of re-deriving runtime-only IDs.
+    TOPOLOGY_REGISTRY[topology.id] = { ...topology } as TopologyDef;
+    if (!TOPOLOGY_BY_SHAPE_SIGNATURE.has(shapeSig)) {
+      TOPOLOGY_BY_SHAPE_SIGNATURE.set(shapeSig, topology.id);
+    }
+    if (topology.id >= nextDynamicId) {
+      nextDynamicId = topology.id + 1;
+    }
+  }
+}

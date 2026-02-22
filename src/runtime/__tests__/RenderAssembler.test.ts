@@ -19,7 +19,7 @@ import type { RuntimeState } from '../RuntimeState';
 import { createRuntimeState } from '../RuntimeState';
 import type { ValueSlot, ValueExprId } from '../../types';
 import type { ArenaSlotDescriptor } from '../ArenaValueStore';
-import { registerDynamicTopology, TOPOLOGY_ID_ELLIPSE } from '../../shapes/registry';
+import { registerDynamicTopology } from '../../shapes/registry';
 import type { RenderSpace2D } from '../../shapes/types';
 import { PathVerb } from '../../shapes/types';
 import { DEFAULT_CAMERA } from '../CameraResolver';
@@ -112,6 +112,16 @@ const TEST_PENTAGON_ID = registerDynamicTopology({
   closed: true,
 }, 'test-pentagon');
 
+const TEST_NON_PATH_TOPOLOGY_ID = registerDynamicTopology({
+  params: [
+    { name: 'radiusX', type: 'float', default: 0.02 },
+    { name: 'radiusY', type: 'float', default: 0.02 },
+  ],
+  render: (_ctx: CanvasRenderingContext2D, _p: Record<string, number>, _space: RenderSpace2D) => {
+    // Intentionally non-path topology for error-path validation.
+  },
+}, 'test-non-path');
+
 describe('RenderAssembler', () => {
   describe('isRenderStep', () => {
     it('returns true for render steps', () => {
@@ -173,7 +183,7 @@ describe('RenderAssembler', () => {
       expect(result).toEqual([]);
     });
 
-    it('returns DrawPrimitiveInstancesOp for primitive topologies', () => {
+    it('rejects non-path topologies', () => {
       const state = createMockState();
       // Position buffer must be stride-3 (vec3 world-space positions)
       const positionBuffer = new Float32Array(30); // 10 instances * 3 components
@@ -203,7 +213,7 @@ describe('RenderAssembler', () => {
         positionSlot: 1 as ValueSlot,
         colorSlot: 2 as ValueSlot,
         scale: { k: 'one', id: 0 as ValueExprId },
-        shape: { k: 'one', topologyId: TOPOLOGY_ID_ELLIPSE, paramExprs: [1 as ValueExprId, 2 as ValueExprId] },
+        shape: { k: 'one', topologyId: TEST_NON_PATH_TOPOLOGY_ID, paramExprs: [1 as ValueExprId, 2 as ValueExprId] },
       };
 
       const context: AssemblerContext = {
@@ -215,10 +225,9 @@ describe('RenderAssembler', () => {
         slotToArena,
       };
 
-      const result = assembleDrawPathInstancesOp(step, context);
-      // Primitive topologies now produce DrawPrimitiveInstancesOp
-      expect(result).toHaveLength(1);
-      expect(result[0].kind).toBe('drawPrimitiveInstances');
+      expect(() => assembleDrawPathInstancesOp(step, context)).toThrow(
+        /not a path topology/
+      );
     });
 
     it('assembles DrawPathInstancesOp for path topologies', () => {
@@ -368,7 +377,7 @@ describe('RenderAssembler', () => {
       };
 
       expect(() => assembleDrawPathInstancesOp(step, context)).toThrow(
-        /Path topology requires control points buffer/
+        /requires control points buffer/
       );
     });
   });
@@ -453,82 +462,6 @@ describe('RenderAssembler', () => {
       expect(result.ops[1].kind).toBe('drawPathInstances');
     });
 
-    it('includes both path and primitive operations', () => {
-      const state = createMockState();
-
-      // One path instance, one primitive instance (stride-3 positions for vec3 world-space)
-      state.values.objects.set(1 as ValueSlot, new Float32Array([0.1, 0.2, 0.0])); // 1 instance * 3 components
-      state.values.objects.set(2 as ValueSlot, new Uint8ClampedArray([255, 0, 0, 255]));
-      state.values.objects.set(3 as ValueSlot, new Float32Array([0, 1, 0.95, 0.31, 0.59, -0.81, -0.59, -0.81, -0.95, 0.31]));
-      state.values.objects.set(4 as ValueSlot, new Float32Array([0.5, 0.6, 0.0])); // 1 instance * 3 components
-      state.values.objects.set(5 as ValueSlot, new Uint8ClampedArray([0, 255, 0, 255]));
-
-      // Build scalarExprToArenaOffset mapping for scale and shape params
-      const scalarExprToArenaOffset = new Map<number, number>([
-        [0, 10], // scale one-cardinality value
-        [1, 11], // shape params for shapes
-        [2, 12],
-        [3, 13],
-      ]);
-
-      // Write one-cardinality values to state
-      state.arena[10] = 1.0;
-      state.arena[11] = 0.02;
-      state.arena[12] = 0.02;
-      state.arena[13] = 1;
-      const slotToArena = mirrorNumericObjectSlotsToArena(state, [
-        { slot: 1 as ValueSlot, stride: 3 },
-        { slot: 2 as ValueSlot, stride: 4 },
-        { slot: 3 as ValueSlot, stride: 2 },
-        { slot: 4 as ValueSlot, stride: 3 },
-        { slot: 5 as ValueSlot, stride: 4 },
-      ]);
-
-      const steps: StepRender[] = [
-        {
-          kind: 'render',
-          instanceId: instanceId('path-instance'),
-          positionSlot: 1 as ValueSlot,
-          colorSlot: 2 as ValueSlot,
-          scale: { k: 'one', id: 0 as ValueExprId },
-          shape: {
-            k: 'one',
-            topologyId: TEST_PENTAGON_ID,
-            paramExprs: [1 as ValueExprId, 2 as ValueExprId, 3 as ValueExprId],
-          },
-          controlPoints: { k: 'slot', slot: 3 as ValueSlot },
-        },
-        {
-          kind: 'render',
-          instanceId: instanceId('primitive-instance'),
-          positionSlot: 4 as ValueSlot,
-          colorSlot: 5 as ValueSlot,
-          scale: { k: 'one', id: 0 as ValueExprId },
-          shape: { k: 'one', topologyId: TOPOLOGY_ID_ELLIPSE, paramExprs: [1 as ValueExprId, 2 as ValueExprId] },
-        },
-      ];
-
-      const context: AssemblerContext = {
-        scalarExprToArenaOffset,
-        instances: new Map([
-          ['path-instance', createMockInstance(1)],
-          ['primitive-instance', createMockInstance(1)],
-        ]),
-        state,
-        resolvedCamera: DEFAULT_CAMERA,
-        arena: getTestArena(),
-        slotToArena,
-      };
-
-      const result = assembleRenderFrame(steps, context);
-
-      // Both path and primitive instances produce ops
-      expect(result.version).toBe(2);
-      expect(result.ops).toHaveLength(2);
-      expect(result.ops[0].kind).toBe('drawPathInstances');
-      expect(result.ops[1].kind).toBe('drawPrimitiveInstances');
-    });
-
     it('returns empty ops array when all instances are empty', () => {
       const state = createMockState();
 
@@ -547,7 +480,7 @@ describe('RenderAssembler', () => {
           positionSlot: 1 as ValueSlot,
           colorSlot: 2 as ValueSlot,
           scale: { k: 'one', id: 0 as ValueExprId },
-          shape: { k: 'one', topologyId: TOPOLOGY_ID_ELLIPSE, paramExprs: [] },
+          shape: { k: 'one', topologyId: TEST_PENTAGON_ID, paramExprs: [] },
         },
       ];
 

@@ -16,22 +16,27 @@ import { consumeTestDemoFilename } from '../testing/test-params';
 import {
   compileAndSwap,
   type CompileOrchestratorState,
+  type PrecomputedCompileArtifacts,
 } from './CompileOrchestrator';
-import { detectAndLogDomainChanges, getPrevInstanceCounts } from './DomainChangeDetector';
-import { setupLiveRecompileReaction, cleanupReaction } from './LiveRecompile';
+import { CompileWorkerClient, CompileSupersededError } from './CompileWorkerClient';
+import { createDomainChangeDetector, type DomainChangeDetector } from './DomainChangeDetector';
+import { createLiveRecompileController, type LiveRecompileController } from './LiveRecompile';
 import { patchProgramConstants } from './ConstantPatcher';
 import {
   startAnimationLoop,
   createAnimationLoopState,
   type AnimationLoopState,
 } from './AnimationLoop';
+import { debugSettings } from '../settings/tokens/debug-settings';
+import { compilerFlagsSettings } from '../settings/tokens/compiler-flags-settings';
 
 export class RuntimeService {
+  private readonly domainChangeDetector: DomainChangeDetector = createDomainChangeDetector();
+
   readonly compileState: CompileOrchestratorState = {
     currentProgram: null,
     currentState: null,
     sessionState: null,
-    prevInstanceCounts: getPrevInstanceCounts(),
   };
 
   private animationState: AnimationLoopState = createAnimationLoopState();
@@ -41,8 +46,76 @@ export class RuntimeService {
 
   private cancelAnimationLoop: (() => void) | null = null;
   private unsubCompileEnd: (() => void) | null = null;
+  private compileWorkerClient: CompileWorkerClient | null = null;
+  private pendingSwap: PrecomputedCompileArtifacts | null = null;
+  private pendingMainThreadCompile = false;
+  private swapInFlight = false;
+  private swapRafId: number | null = null;
+  private lastWorkerFallbackLog = { message: '', atMs: 0 };
+  private readonly liveRecompile: LiveRecompileController = createLiveRecompileController();
 
   constructor(private readonly store: RootStore) {}
+
+  private logWorkerFallback(err: unknown): void {
+    const message = err instanceof Error ? err.message : String(err);
+    const now = performance.now();
+    const unchanged = this.lastWorkerFallbackLog.message === message;
+    const withinWindow = now - this.lastWorkerFallbackLog.atMs < 2000;
+    if (unchanged && withinWindow) return;
+
+    this.lastWorkerFallbackLog = { message, atMs: now };
+    this.store.diagnostics.log({
+      level: 'warn',
+      message: `Compile worker failed, falling back to main-thread compile: ${message}`,
+    });
+  }
+
+  private requestSwapFlush(): void {
+    if (this.swapRafId !== null) return;
+    this.swapRafId = requestAnimationFrame(() => {
+      this.swapRafId = null;
+      void this.flushPendingSwap();
+    });
+  }
+
+  private async flushPendingSwap(): Promise<void> {
+    if (this.swapInFlight) return;
+    const next = this.pendingSwap;
+    const shouldRunMainThreadCompile = next == null && this.pendingMainThreadCompile;
+    if (!next && !shouldRunMainThreadCompile) return;
+
+    this.pendingSwap = null;
+    this.pendingMainThreadCompile = false;
+    this.swapInFlight = true;
+    try {
+      // [LAW:single-enforcer] All compile/swap application goes through this queue.
+      if (next) {
+        await compileAndSwap(
+          {
+            store: this.store,
+            state: this.compileState,
+            onDomainChange: (oldProg, newProg) => this.domainChangeDetector.detectAndLogDomainChanges(this.store, oldProg, newProg),
+          },
+          false,
+          next,
+        );
+      } else {
+        await compileAndSwap(
+          {
+            store: this.store,
+            state: this.compileState,
+            onDomainChange: (oldProg, newProg) => this.domainChangeDetector.detectAndLogDomainChanges(this.store, oldProg, newProg),
+          },
+          false,
+        );
+      }
+    } finally {
+      this.swapInFlight = false;
+      if (this.pendingSwap || this.pendingMainThreadCompile) {
+        this.requestSwapFlush();
+      }
+    }
+  }
 
   /**
    * Called by React when the canvas element is available.
@@ -61,6 +134,7 @@ export class RuntimeService {
    */
   async init(): Promise<void> {
     const { store } = this;
+    this.compileWorkerClient = new CompileWorkerClient();
 
     // Initialize render buffer arena (50k elements, zero allocations after init)
     this.arena = initGlobalRenderArena(50_000);
@@ -98,7 +172,7 @@ export class RuntimeService {
         {
           store,
           state: this.compileState,
-          onDomainChange: (oldProg, newProg) => detectAndLogDomainChanges(store, oldProg, newProg),
+          onDomainChange: (oldProg, newProg) => this.domainChangeDetector.detectAndLogDomainChanges(store, oldProg, newProg),
         },
         true
       );
@@ -118,15 +192,31 @@ export class RuntimeService {
     store.patch.startPersistence();
 
     // Set up live recompile reaction with fast-path for constant value changes
-    setupLiveRecompileReaction(store, async () => {
-      await compileAndSwap(
-        {
-          store,
-          state: this.compileState,
-          onDomainChange: (oldProg, newProg) => detectAndLogDomainChanges(store, oldProg, newProg),
-        },
-        false
-      );
+    this.liveRecompile.setup(store, async () => {
+      try {
+        const debugValues = store.settings.get(debugSettings);
+        const flagOverrides = store.settings.get(compilerFlagsSettings);
+        const precomputed = await this.compileWorkerClient!.compile({
+          patch: store.patch.patch,
+          patchRevision: store.getPatchRevision(),
+          frontendOptions: {
+            traceCardinalitySolver: debugValues?.traceCardinalitySolver,
+            diagnosticOverrides: flagOverrides ?? undefined,
+          },
+        });
+
+        // [LAW:dataflow-not-control-flow] Swap application is always driven through
+        // the same queue; variability is the queued payload, not execution path.
+        this.pendingSwap = precomputed;
+        this.requestSwapFlush();
+      } catch (err) {
+        if (err instanceof CompileSupersededError) {
+          return;
+        }
+        this.logWorkerFallback(err);
+        this.pendingMainThreadCompile = true;
+        this.requestSwapFlush();
+      }
     }, (changes) => {
       const program = this.compileState.currentProgram;
       if (!program) return false;
@@ -200,9 +290,19 @@ export class RuntimeService {
   dispose(): void {
     this.cancelAnimationLoop?.();
     this.cancelAnimationLoop = null;
+    if (this.swapRafId !== null) {
+      cancelAnimationFrame(this.swapRafId);
+      this.swapRafId = null;
+    }
+    this.pendingSwap = null;
+    this.pendingMainThreadCompile = false;
+    this.swapInFlight = false;
     this.unsubCompileEnd?.();
     this.unsubCompileEnd = null;
+    this.compileWorkerClient?.dispose();
+    this.compileWorkerClient = null;
     this.store.patch.stopPersistence();
-    cleanupReaction();
+    this.domainChangeDetector.cleanup();
+    this.liveRecompile.cleanup();
   }
 }

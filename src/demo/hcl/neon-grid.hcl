@@ -9,7 +9,7 @@ patch "Neon Grid" {
     periodAMs = 2000
     role = "timeRoot"
     outputs {
-      phaseA = pulse.phase
+      phaseA = [pulse.phase, tile-wobble.phase]
     }
   }
 
@@ -17,6 +17,21 @@ patch "Neon Grid" {
     width = 0.012
     height = 0.012
     cornerRadius = 0.002
+    outputs {
+      controlPoints = tile-wobble.controlPoints
+    }
+  }
+
+  block "ShapeWobble2D" "tile-wobble" {
+    amount = 0.0015
+    frequency = 7
+    outputs {
+      points = tile-shape.controlPoints
+    }
+  }
+
+  block "MakeShape2D" "tile-shape" {
+    closed = 1
     outputs {
       shape = grid-elements.element
     }

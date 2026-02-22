@@ -13,11 +13,8 @@
 import type {
   RenderFrameIR,
   DrawPathInstancesOp,
-  DrawPrimitiveInstancesOp,
   PathGeometry
 } from '../types';
-import { getTopology } from '../../shapes/registry';
-import type { PathTopologyDef } from '../../shapes/types';
 
 /**
  * Convert path geometry to SVG d-string.
@@ -207,11 +204,7 @@ export class SVGRenderer {
     this.clearFrameInstances();
 
     for (const op of frame.ops) {
-      if (op.kind === 'drawPathInstances') {
-        this.renderDrawPathInstancesOp(op);
-      } else if (op.kind === 'drawPrimitiveInstances') {
-        this.renderDrawPrimitiveInstancesOp(op);
-      }
+      this.renderDrawPathInstancesOp(op);
     }
   }
 
@@ -292,117 +285,6 @@ export class SVGRenderer {
       }
 
       this.renderGroup.appendChild(use);
-    }
-  }
-
-  /**
-   * Render primitives (ellipse, rect) as inline SVG elements.
-   */
-  private renderDrawPrimitiveInstancesOp(op: DrawPrimitiveInstancesOp): void {
-    const { geometry, instances, style } = op;
-    const { count, position, size, rotation, scale2 } = instances;
-
-    const topology = getTopology(geometry.topologyId);
-    const D = Math.min(this.width, this.height);
-
-    // [LAW:dataflow-not-control-flow] exception: same SVG API boundary as path ops above.
-    const hasFill = style.fillColor !== undefined && style.fillColor.length > 0;
-    const uniformFill = hasFill && style.fillColor!.length === 4;
-
-    const hasStroke = style.strokeColor !== undefined && style.strokeColor.length > 0;
-    const uniformStroke = hasStroke && style.strokeColor!.length === 4;
-
-    // Pre-compute dash string outside the per-instance loop (style & D are uniform)
-    const primDashStr = style.dashPattern && style.dashPattern.length > 0
-      ? style.dashPattern.map(d => d * D).join(' ')
-      : null;
-    const primDashOffsetStr = primDashStr && style.dashOffset ? String(style.dashOffset * D) : null;
-
-    for (let i = 0; i < count; i++) {
-      const x = position[i * 2] * this.width;
-      const y = position[i * 2 + 1] * this.height;
-
-      const instanceSize = typeof size === 'number' ? size : size[i];
-      const sizePx = instanceSize * D;
-
-      // [LAW:dataflow-not-control-flow] scale2 is always present (identity = [1,1])
-      const sx = scale2[i * 2];
-      const sy = scale2[i * 2 + 1];
-
-      let element: SVGElement;
-
-      if (topology.id === 0) { // ellipse
-        const rx = geometry.params.rx ?? 0.5;
-        const ry = geometry.params.ry ?? 0.5;
-
-        const ellipse = document.createElementNS('http://www.w3.org/2000/svg', 'ellipse');
-        ellipse.setAttribute('cx', String(x));
-        ellipse.setAttribute('cy', String(y));
-        ellipse.setAttribute('rx', String(rx * sizePx * sx));
-        ellipse.setAttribute('ry', String(ry * sizePx * sy));
-        element = ellipse;
-      } else if (topology.id === 1) { // rect
-        const w0 = geometry.params.width ?? 1.0;
-        const h0 = geometry.params.height ?? 1.0;
-
-        const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-        const w = w0 * sizePx * sx;
-        const h = h0 * sizePx * sy;
-        rect.setAttribute('x', String(x - w / 2));
-        rect.setAttribute('y', String(y - h / 2));
-        rect.setAttribute('width', String(w));
-        rect.setAttribute('height', String(h));
-        element = rect;
-      } else {
-        const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-        circle.setAttribute('cx', String(x));
-        circle.setAttribute('cy', String(y));
-        circle.setAttribute('r', String(sizePx));
-        element = circle;
-      }
-
-      // [LAW:dataflow-not-control-flow] rotation is always present (identity = 0)
-      const rotDeg = rotation[i] * (180 / Math.PI);
-      element.setAttribute('transform', `rotate(${rotDeg} ${x} ${y})`);
-
-      // Fill
-      if (hasFill) {
-        element.setAttribute(
-            'fill',
-            uniformFill ? rgbaToCSS(style.fillColor!, 0) : rgbaToCSS(style.fillColor!, i * 4)
-        );
-      } else {
-        element.setAttribute('fill', 'none');
-      }
-
-      // Stroke
-      if (hasStroke) {
-        element.setAttribute(
-            'stroke',
-            uniformStroke ? rgbaToCSS(style.strokeColor!, 0) : rgbaToCSS(style.strokeColor!, i * 4)
-        );
-
-        const strokeWidthLocal = typeof style.strokeWidth === 'number'
-            ? style.strokeWidth
-            : style.strokeWidth
-                ? (style.strokeWidth as Float32Array)[i]
-                : 0.01;
-
-        element.setAttribute('vector-effect', 'non-scaling-stroke');
-        element.setAttribute('stroke-width', String(strokeWidthLocal * D));
-
-        if (style.lineJoin) element.setAttribute('stroke-linejoin', style.lineJoin);
-        if (style.lineCap) element.setAttribute('stroke-linecap', style.lineCap);
-
-        if (primDashStr) {
-          element.setAttribute('stroke-dasharray', primDashStr);
-          if (primDashOffsetStr) {
-            element.setAttribute('stroke-dashoffset', primDashOffsetStr);
-          }
-        }
-      }
-
-      this.renderGroup.appendChild(element);
     }
   }
 

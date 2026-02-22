@@ -80,6 +80,7 @@ function makeEmptyContinuity(): ContinuityState {
     placementBasis: new Map(),
     lastTModelMs: 0,
     domainChangeThisFrame: false,
+    changedInstancesThisFrame: new Set(),
   };
 }
 

@@ -125,6 +125,13 @@ export interface ContinuityState {
 
   /** Flag indicating domain change occurred this frame */
   domainChangeThisFrame: boolean;
+
+  /**
+   * Instances whose domains changed during the current frame.
+   * // [LAW:one-source-of-truth] Per-instance change tracking is the canonical continuity
+   * change signal; global booleans are derived compatibility surfaces.
+   */
+  changedInstancesThisFrame: Set<string>;
 }
 
 /**
@@ -140,6 +147,7 @@ export function createContinuityState(): ContinuityState {
     placementBasis: new Map(),
     lastTModelMs: 0,
     domainChangeThisFrame: false,
+    changedInstancesThisFrame: new Set(),
   };
 }
 
@@ -220,6 +228,7 @@ export function clearContinuityState(continuity: ContinuityState): void {
   continuity.placementBasis.clear();
   continuity.lastTModelMs = 0;
   continuity.domainChangeThisFrame = false;
+  continuity.changedInstancesThisFrame.clear();
 }
 
 /**
@@ -265,6 +274,7 @@ export function pruneStaleContinuity(
  */
 export function beginContinuityFrame(continuity: ContinuityState): void {
   continuity.domainChangeThisFrame = false;
+  continuity.changedInstancesThisFrame.clear();
 }
 
 /**
@@ -280,4 +290,5 @@ export function finalizeContinuityFrame(
 ): void {
   continuity.lastTModelMs = tModelMs;
   continuity.domainChangeThisFrame = false;
+  continuity.changedInstancesThisFrame.clear();
 }

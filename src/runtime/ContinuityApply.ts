@@ -381,6 +381,7 @@ export function applyContinuity(
 ): void {
   const { targetKey, instanceId, policy, baseSlot, outputSlot, semantic, stride } = step;
   const targetId = targetKey as StableTargetId;
+  const instanceChangedThisFrame = state.continuity.changedInstancesThisFrame.has(instanceId);
 
   // Get current base buffer
   const baseBuffer = getBuffer(baseSlot);
@@ -418,7 +419,7 @@ export function applyContinuity(
   // For crossfade, capture old effective values for blending
   // Use the pre-captured snapshot (before getOrCreateTargetState zeroed it)
   let oldEffectiveSnapshot: Float32Array | null = null;
-  if (state.continuity.domainChangeThisFrame && ctx.hadPreviousState) {
+  if (instanceChangedThisFrame && ctx.hadPreviousState) {
     // Buffer size changed - use pre-captured snapshot (safer, buffers may have been reallocated)
     if (ctx.sizeChanged) {
       oldEffectiveSnapshot = ctx.oldSlewSnapshot;
@@ -435,7 +436,7 @@ export function applyContinuity(
 
   // Handle domain change - reinitialize buffers (for non-crossfade policies)
   // Crossfade handles its own initialization differently
-  if (state.continuity.domainChangeThisFrame && policy.kind !== 'crossfade') {
+  if (instanceChangedThisFrame && policy.kind !== 'crossfade') {
     // Determine old effective values (for gauge initialization)
     let oldEffective: Float32Array | null = null;
     if (ctx.sizeChanged) {
@@ -577,7 +578,7 @@ export function applyContinuity(
 
       // On domain change, snapshot the old effective values to blend from
       // We use the pre-captured oldEffectiveSnapshot to get values before any reinitialization
-      if (state.continuity.domainChangeThisFrame) {
+      if (instanceChangedThisFrame) {
         // Allocate buffer for old values if needed
         if (!targetState.crossfadeOldBuffer || targetState.crossfadeOldBuffer.length !== bufferLength) {
           targetState.crossfadeOldBuffer = new Float32Array(bufferLength);
@@ -644,6 +645,7 @@ export function finalizeContinuityFrame(state: RuntimeState): void {
   // time is always set before continuity runs
   state.continuity.lastTModelMs = state.time !== null ? state.time.tMs : 0;
   state.continuity.domainChangeThisFrame = false;
+  state.continuity.changedInstancesThisFrame.clear();
 
   // Clear test pulse request after it's been applied
   // (Note: appliedFrameId check prevents double-apply within same frame)

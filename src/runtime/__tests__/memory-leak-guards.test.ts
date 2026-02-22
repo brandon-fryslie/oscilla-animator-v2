@@ -120,14 +120,11 @@ describe('pruneStaleContinuity', () => {
 // =============================================================================
 
 describe('DomainChangeDetector throttle cleanup', () => {
-  // We test indirectly: detectAndLogDomainChanges should clean up
-  // domainChangeLogThrottle entries for removed instances.
-  // Since the throttle map is module-level, we test the function behavior.
-
   it('prevInstanceCounts map does not accumulate removed instances', async () => {
-    const { detectAndLogDomainChanges, getPrevInstanceCounts } = await import(
+    const { createDomainChangeDetector } = await import(
       '../../services/DomainChangeDetector'
     );
+    const detector = createDomainChangeDetector();
 
     // Mock store with minimal interface
     const store = {
@@ -140,18 +137,18 @@ describe('DomainChangeDetector throttle cleanup', () => {
       schedule: {
         instances: new Map(Object.entries(instances).map(([k, v]) => [k, { count: v }])),
       },
-    });
+    }) as any;
 
     // Simulate adding instances
     const prog1 = makeProgram({ a: 10, b: 20, c: 5 });
-    detectAndLogDomainChanges(store, makeProgram({}), prog1);
+    detector.detectAndLogDomainChanges(store, makeProgram({}), prog1);
 
-    const counts = getPrevInstanceCounts();
+    const counts = detector.getPrevInstanceCounts();
     expect(counts.size).toBe(3);
 
     // Simulate removing instance 'c'
     const prog2 = makeProgram({ a: 10, b: 20 });
-    detectAndLogDomainChanges(store, prog1, prog2);
+    detector.detectAndLogDomainChanges(store, prog1, prog2);
 
     expect(counts.size).toBe(2);
     expect(counts.has('c')).toBe(false);

@@ -236,6 +236,7 @@ export class ContinuityStore {
       this.runtimeStateRef.continuity.mappings.clear();
       this.runtimeStateRef.continuity.lastTModelMs = 0;
       this.runtimeStateRef.continuity.domainChangeThisFrame = false;
+      this.runtimeStateRef.continuity.changedInstancesThisFrame.clear();
     }
   }
 

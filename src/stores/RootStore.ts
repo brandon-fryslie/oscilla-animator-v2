@@ -146,10 +146,11 @@ export class RootStore {
    */
   private setupGraphCommittedEmission(): void {
     this.graphCommittedDisposer = reaction(
-      () => ({
-        blockCount: this.patch.blocks.size,
-        edgeCount: this.patch.edges.length,
-      }),
+      () => {
+        // [LAW:one-source-of-truth] PatchStore snapshot identity is the canonical
+        // signal for any graph mutation (structure + params + port settings).
+        return this.patch.patch;
+      },
       () => {
         this.patchRevision++;
         this.events.emit({

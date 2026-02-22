@@ -11,13 +11,28 @@ patch "Golden Spiral" {
     role = "timeRoot"
     outputs {
       phaseA = layout.phase
-      phaseB = scale-osc.phase
+      phaseB = [scale-osc.phase, dot-wobble.phase]
     }
   }
 
   block "Ellipse" "dot" {
     rx = 0.008
     ry = 0.008
+    outputs {
+      controlPoints = dot-wobble.controlPoints
+    }
+  }
+
+  block "ShapeWobble2D" "dot-wobble" {
+    amount = 0.0018
+    frequency = 10
+    outputs {
+      points = dot-shape.controlPoints
+    }
+  }
+
+  block "MakeShape2D" "dot-shape" {
+    closed = 1
     outputs {
       shape = instances.element
     }

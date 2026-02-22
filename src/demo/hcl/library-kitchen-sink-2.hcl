@@ -63,7 +63,7 @@ patch "Library Kitchen Sink 2" {
   block "Oscillator" "pulse-osc" {
     mode = 0
     outputs {
-      out = edge.both
+      out = edge.value
     }
   }
 

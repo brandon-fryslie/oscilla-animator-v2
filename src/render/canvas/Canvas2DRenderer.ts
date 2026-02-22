@@ -1,8 +1,8 @@
 /**
  * Canvas 2D Renderer - Unified Shape Model with Path Support
  *
- * Uses canvas API with topology-based shape dispatch.
- * No more hardcoded shape switches - dispatches to topology.render() or path rendering.
+ * Uses canvas API with path topology dispatch.
+ * No hardcoded shape switches - all geometry is control points + path verbs.
  *
  * Architecture:
  * - Renderer is a pure sink: receives pre-resolved RenderFrameIR
@@ -26,12 +26,8 @@
  * - Per-instance rotation and anisotropic scale
  */
 
-import { isPathTopology } from '../../runtime/RenderAssembler';
-import { getTopology } from '../../shapes/registry';
-import type { PathTopologyDef, PathVerb, TopologyDef } from '../../shapes/types';
 import type {
   DrawPathInstancesOp,
-  DrawPrimitiveInstancesOp,
   PathStyle,
   RenderFrameIR,
 } from '../types';
@@ -86,11 +82,7 @@ export function renderFrame(
 ): void {
   // Render each operation
   for (const op of frame.ops) {
-    if (op.kind === 'drawPathInstances') {
-      renderDrawPathInstancesOp(ctx, op, width, height);
-    } else if (op.kind === 'drawPrimitiveInstances') {
-      renderDrawPrimitiveInstancesOp(ctx, op, width, height);
-    }
+    renderDrawPathInstancesOp(ctx, op, width, height);
   }
 }
 
@@ -215,69 +207,6 @@ export function renderDrawPathInstancesOp(
   // Reset dash pattern after pass
   if (hasStroke && style.dashPattern && style.dashPattern.length > 0) {
     ctx.setLineDash(EMPTY_DASH);
-  }
-}
-
-/**
- * Render a single DrawPrimitiveInstancesOp.
- *
- * Renders primitive topologies (ellipse, rect) using topology.render().
- * Applies instance transforms (position, size, rotation, scale2) per instance.
- */
-export function renderDrawPrimitiveInstancesOp(
-  ctx: CanvasRenderingContext2D,
-  op: DrawPrimitiveInstancesOp,
-  width: number,
-  height: number
-): void {
-  const { geometry, instances, style } = op;
-  const { count, position, size, rotation, scale2 } = instances;
-
-  // Get topology for render function
-  const topology = getTopology(geometry.topologyId);
-
-  // Determine rendering mode
-  const hasFill = style.fillColor !== undefined && style.fillColor.length > 0;
-
-  if (!hasFill) {
-    // No-op: nothing to render (primitives only support fill for now)
-    console.warn('DrawPrimitiveInstancesOp has no fill color, skipping');
-    return;
-  }
-
-  const uniformFillColor = style.fillColor!.length === 4;
-
-  // Fast inner loop - no validation checks
-  for (let i = 0; i < count; i++) {
-    const x = position[i * 2] * width;
-    const y = position[i * 2 + 1] * height;
-
-    // Set fill color
-    if (uniformFillColor) {
-      ctx.fillStyle = rgbaToCSS(style.fillColor!, 0);
-    } else {
-      ctx.fillStyle = rgbaToCSS(style.fillColor!, i * 4);
-    }
-
-    ctx.save();
-    ctx.translate(x, y);
-
-    // [LAW:dataflow-not-control-flow] rotation and scale2 are always present
-    ctx.rotate(rotation[i]);
-    ctx.scale(scale2[i * 2], scale2[i * 2 + 1]);
-
-    // Calculate instance size
-    const instanceSize = typeof size === 'number' ? size : size[i];
-
-    // Call topology.render() with params and RenderSpace2D
-    // The topology will handle its own drawing (ellipse, rect, etc.)
-    topology.render(ctx, geometry.params, {
-      width,
-      height,
-      scale: instanceSize,
-    });
-
-    ctx.restore();
   }
 }
 

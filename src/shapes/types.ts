@@ -4,10 +4,10 @@
  * Shape = TopologyDef (compile-time) + ParamSlots (runtime)
  *
  * Design:
- * - All shapes use same mechanism: ellipse, rect, paths
- * - TopologyDef defines what to draw (static, immutable)
- * - ParamSlots reference runtime values (dynamic, per-frame)
- * - Renderer dispatches on topology.render() - no hardcoded switches
+ * - All shapes use the path mechanism (topology + control points)
+ * - TopologyDef defines static path structure (verbs + arity)
+ * - Control-point fields provide runtime geometry values
+ * - Renderer dispatches on path verbs only
  */
 
 /**
@@ -62,7 +62,7 @@ export interface RenderSpace2D {
 export interface TopologyDef {
   readonly id: TopologyId;
   readonly params: readonly ParamDef[];
-  readonly render: (
+  readonly render?: (
     ctx: CanvasRenderingContext2D,
     params: Record<string, number>,
     space: RenderSpace2D

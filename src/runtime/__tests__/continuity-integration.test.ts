@@ -224,11 +224,13 @@ describe('Continuity Integration', () => {
         energy: 0.5,
       };
       state.continuity.domainChangeThisFrame = true;
+      state.continuity.changedInstancesThisFrame.add('instance_0');
 
       finalizeContinuityFrame(state);
 
       expect(state.continuity.lastTModelMs).toBe(100);
       expect(state.continuity.domainChangeThisFrame).toBe(false);
+      expect(state.continuity.changedInstancesThisFrame.size).toBe(0);
     });
   });
 
@@ -420,6 +422,7 @@ describe('Continuity Integration', () => {
 
       // Trigger domain change
       continuity.domainChangeThisFrame = true;
+      continuity.changedInstancesThisFrame.add('inst');
 
       // Create crossfade step
       const step: StepContinuityApply = {
@@ -443,6 +446,7 @@ describe('Continuity Integration', () => {
 
       // Clear domain change flag
       continuity.domainChangeThisFrame = false;
+      continuity.changedInstancesThisFrame.clear();
 
       // Advance time to 50ms (halfway through 100ms window)
       state.time = makeTime(50);
@@ -478,6 +482,7 @@ describe('Continuity Integration', () => {
       state.values.objects.set(valueSlot(1), outputBuffer);
 
       continuity.domainChangeThisFrame = true;
+      continuity.changedInstancesThisFrame.add('inst');
 
       const step: StepContinuityApply = {
         kind: 'continuityApply',
@@ -496,6 +501,7 @@ describe('Continuity Integration', () => {
       expect(outputBuffer[0]).toBeCloseTo(0, 2);
 
       continuity.domainChangeThisFrame = false;
+      continuity.changedInstancesThisFrame.clear();
 
       // At t=50ms, smoothstep(0.5) = 0.5
       state.time = makeTime(50);
@@ -528,6 +534,7 @@ describe('Continuity Integration', () => {
       state.values.objects.set(valueSlot(1), outputBuffer);
 
       continuity.domainChangeThisFrame = true;
+      continuity.changedInstancesThisFrame.add('new');
 
       const targetId = testStableTargetId('custom', 'new:z');
       const step: StepContinuityApply = {

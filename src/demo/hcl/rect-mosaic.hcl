@@ -10,13 +10,28 @@ patch "Rect Mosaic" {
     periodBMs = 3000
     role = "timeRoot"
     outputs {
-      phaseA = [layout.phase, pulse.phase]
+      phaseA = [layout.phase, pulse.phase, tile-wobble.phase]
     }
   }
 
   block "Rect" "tile" {
     width = 0.03
     height = 0.015
+    outputs {
+      controlPoints = tile-wobble.controlPoints
+    }
+  }
+
+  block "ShapeWobble2D" "tile-wobble" {
+    amount = 0.0025
+    frequency = 4
+    outputs {
+      points = tile-shape.controlPoints
+    }
+  }
+
+  block "MakeShape2D" "tile-shape" {
+    closed = 1
     outputs {
       shape = instances.element
     }

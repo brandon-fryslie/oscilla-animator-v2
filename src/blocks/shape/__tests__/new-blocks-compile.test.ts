@@ -89,6 +89,69 @@ patch "Test Pipeline" {
   });
 });
 
+describe('ShapeWobble2D block', () => {
+  it('is registered', () => {
+    expect(getBlockDefinition('ShapeWobble2D')).toBeDefined();
+  });
+
+  it('frontend compiles generator -> wobble -> assembler pipeline', () => {
+    const hcl = `
+patch "Test Shape Wobble" {
+  block "InfiniteTimeRoot" "clock" {
+    periodAMs = 4000
+    role = "timeRoot"
+    outputs {
+      phaseA = wobble.phase
+    }
+  }
+
+  block "Rect" "shape" {
+    width = 0.08
+    height = 0.04
+    outputs {
+      controlPoints = wobble.controlPoints
+    }
+  }
+
+  block "ShapeWobble2D" "wobble" {
+    amount = 0.01
+    frequency = 5
+    outputs {
+      points = assemble.controlPoints
+    }
+  }
+
+  block "MakeShape2D" "assemble" {
+    closed = 1
+    outputs {
+      shape = arr.element
+    }
+  }
+
+  block "Array" "arr" {
+    count = 24
+    outputs {
+      elements = layout.elements
+    }
+  }
+
+  block "CircleLayoutUV" "layout" {
+    radius = 0.3
+    outputs {
+      position = render.pos
+    }
+  }
+
+  block "RenderInstances2D" "render" {}
+}`;
+
+    const { patch, errors } = deserializePatchFromHCL(hcl);
+    expect(errors).toEqual([]);
+    const result = compileFrontend(patch);
+    expect(result.typedPatch.blocks.some((b) => b.type === 'ShapeWobble2D')).toBe(true);
+  });
+});
+
 describe('createLinePathTopology', () => {
   it('produces correct verbs for closed path', () => {
     const closed5 = createLinePathTopology(5, true);

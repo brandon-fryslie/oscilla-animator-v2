@@ -72,9 +72,7 @@ export { type ArenaSlotDescriptor, createArena, arenaRead, arenaWrite, arenaSlic
 // Re-export v2 types (now the only types)
 export type {
   DrawPathInstancesOp,
-  DrawPrimitiveInstancesOp,
   PathGeometry,
-  PrimitiveGeometry,
   InstanceTransforms,
   PathStyle,
   RenderFrameIR,

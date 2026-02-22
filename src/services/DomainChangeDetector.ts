@@ -6,81 +6,93 @@
  */
 
 import type { RootStore } from '../stores';
+import type { CompiledProgramIR } from '../compiler/ir/program';
 
-/** Track previous instance counts for domain change detection */
-const prevInstanceCounts: Map<string, number> = new Map();
-
-/** Throttle state for domain change logging */
-const domainChangeLogThrottle = new Map<string, number>();
 const DOMAIN_LOG_INTERVAL_MS = 200; // Max 5 logs/sec per instance
 
-/**
- * Log domain change if not throttled.
- * Also records to ContinuityStore for UI display.
- */
-function logDomainChange(
-  store: RootStore,
-  instanceId: string,
-  oldCount: number,
-  newCount: number,
-  tMs: number = 0
-) {
-  const now = performance.now();
-  const lastLog = domainChangeLogThrottle.get(instanceId) ?? 0;
-
-  if (now - lastLog >= DOMAIN_LOG_INTERVAL_MS) {
-    // Record to ContinuityStore for UI
-    store.continuity.recordDomainChange(
-      instanceId,
-      oldCount,
-      newCount,
-      tMs || now
-    );
-
-    domainChangeLogThrottle.set(instanceId, now);
-  }
+export interface DomainChangeDetector {
+  detectAndLogDomainChanges(
+    store: RootStore,
+    oldProgram: CompiledProgramIR | null,
+    newProgram: CompiledProgramIR | null,
+  ): void;
+  getPrevInstanceCounts(): Map<string, number>;
+  cleanup(): void;
 }
 
 /**
- * Detect domain changes by comparing old/new instance counts
+ * Create a domain-change detector with explicit lifecycle ownership.
  */
-export function detectAndLogDomainChanges(
-  store: RootStore,
-  oldProgram: any,
-  newProgram: any
-): void {
-  if (!oldProgram?.schedule?.instances || !newProgram?.schedule?.instances) {
-    return;
-  }
+export function createDomainChangeDetector(
+  logIntervalMs: number = DOMAIN_LOG_INTERVAL_MS,
+): DomainChangeDetector {
+  const prevInstanceCounts: Map<string, number> = new Map();
+  const domainChangeLogThrottle = new Map<string, number>();
 
-  const oldInstances = oldProgram.schedule.instances as Map<string, { count: number }>;
-  const newInstances = newProgram.schedule.instances as Map<string, { count: number }>;
+  function logDomainChange(
+    store: RootStore,
+    instanceId: string,
+    oldCount: number,
+    newCount: number,
+    tMs: number = 0,
+  ): void {
+    const now = performance.now();
+    const lastLog = domainChangeLogThrottle.get(instanceId) ?? 0;
 
-  // Check for changes in existing instances
-  for (const [id, newDecl] of newInstances) {
-    const oldCount = prevInstanceCounts.get(id) ?? 0;
-    const newCount = typeof newDecl.count === 'number' ? newDecl.count : 0;
+    if (now - lastLog >= logIntervalMs) {
+      store.continuity.recordDomainChange(
+        instanceId,
+        oldCount,
+        newCount,
+        tMs || now,
+      );
 
-    if (oldCount !== newCount && oldCount > 0) {
-      logDomainChange(store, id, oldCount, newCount);
-    }
-
-    // Update tracking
-    prevInstanceCounts.set(id, newCount);
-  }
-
-  // Check for removed instances — clean up both tracking maps
-  for (const [id, _oldDecl] of oldInstances) {
-    if (!newInstances.has(id)) {
-      prevInstanceCounts.delete(id);
-      domainChangeLogThrottle.delete(id);
+      domainChangeLogThrottle.set(instanceId, now);
     }
   }
-}
 
-/**
- * Get the current instance counts map (for CompileOrchestrator initialization)
- */
-export function getPrevInstanceCounts(): Map<string, number> {
-  return prevInstanceCounts;
+  return {
+    detectAndLogDomainChanges(
+      store: RootStore,
+      oldProgram: CompiledProgramIR | null,
+      newProgram: CompiledProgramIR | null,
+    ): void {
+      if (!oldProgram?.schedule?.instances || !newProgram?.schedule?.instances) {
+        return;
+      }
+
+      const oldInstances = oldProgram.schedule.instances;
+      const newInstances = newProgram.schedule.instances;
+
+      // Check for changes in existing instances
+      for (const [id, newDecl] of newInstances) {
+        const oldCount = prevInstanceCounts.get(id) ?? 0;
+        const newCount = typeof newDecl.count === 'number' ? newDecl.count : 0;
+
+        if (oldCount !== newCount && oldCount > 0) {
+          logDomainChange(store, id, oldCount, newCount);
+        }
+
+        // Update tracking
+        prevInstanceCounts.set(id, newCount);
+      }
+
+      // Check for removed instances — clean up both tracking maps
+      for (const [id] of oldInstances) {
+        if (!newInstances.has(id)) {
+          prevInstanceCounts.delete(id);
+          domainChangeLogThrottle.delete(id);
+        }
+      }
+    },
+
+    getPrevInstanceCounts(): Map<string, number> {
+      return prevInstanceCounts;
+    },
+
+    cleanup(): void {
+      prevInstanceCounts.clear();
+      domainChangeLogThrottle.clear();
+    },
+  };
 }

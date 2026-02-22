@@ -12,8 +12,8 @@
  *
  * This is where we enforce the invariant "Renderer is sink-only."
  *
- * Assembles RenderFrameIR using DrawOp operations (v2 format).
- * Produces DrawPathInstancesOp and DrawPrimitiveInstancesOp (see types.ts)
+ * Assembles RenderFrameIR using path-only DrawOp operations (v2 format).
+ * Produces DrawPathInstancesOp.
  */
 
 import type { StepRender, InstanceDecl } from '../compiler/ir/types';
@@ -22,10 +22,8 @@ import { getTopology } from '../shapes/registry';
 import type { PathTopologyDef, TopologyDef, TopologyId } from '../shapes/types';
 import type {
   DrawPathInstancesOp,
-  DrawPrimitiveInstancesOp,
   DrawOp,
   PathGeometry,
-  PrimitiveGeometry,
   InstanceTransforms,
   PathStyle,
   RenderFrameIR,
@@ -97,10 +95,10 @@ interface ShapeDescriptor {
 interface ResolvedShape {
   resolved: true;
   topologyId: TopologyId;
-  mode: 'path' | 'primitive';
+  mode: 'path';
   params: Record<string, number>;
-  verbs?: Uint8Array;
-  controlPoints?: ArrayBufferView;
+  verbs: Uint8Array;
+  controlPoints: ArrayBufferView;
 }
 
 // =============================================================================
@@ -662,29 +660,29 @@ function resolveShapeFully(
     }
   }
 
-  if (isPathTopology(topology)) {
-    // Path topology - requires control points
-    // TODO: replace per-frame allocation with zero-alloc render assembly
-    // eslint-disable-next-line oscilla/no-hot-path-alloc
-    return {
-      resolved: true,
-      topologyId: shape.topologyId,
-      mode: 'path',
-      params,
-      verbs: getCachedVerbs(topology),
-      controlPoints,
-    };
-  } else {
-    // Primitive topology (ellipse, rect, etc.)
-    // TODO: replace per-frame allocation with zero-alloc render assembly
-    // eslint-disable-next-line oscilla/no-hot-path-alloc
-    return {
-      resolved: true,
-      topologyId: shape.topologyId,
-      mode: 'primitive',
-      params,
-    };
+  if (!isPathTopology(topology)) {
+    throw new Error(
+      `RenderAssembler: topology ${shape.topologyId} is not a path topology. ` +
+      'Shapes must provide Field<vec2> control points and path topology.'
+    );
   }
+
+  if (!controlPoints) {
+    throw new Error(
+      `RenderAssembler: path topology ${shape.topologyId} requires control points buffer`
+    );
+  }
+
+  // TODO: replace per-frame allocation with zero-alloc render assembly
+  // eslint-disable-next-line oscilla/no-hot-path-alloc
+  return {
+    resolved: true,
+    topologyId: shape.topologyId,
+    mode: 'path',
+    params,
+    verbs: getCachedVerbs(topology),
+    controlPoints,
+  };
 }
 
 /**
@@ -695,7 +693,7 @@ export function isRenderStep(step: { kind: string }): step is StepRender {
 }
 
 // ============================================================================
-// V2 RENDER ASSEMBLY - DrawPathInstancesOp and DrawPrimitiveInstancesOp
+// V2 RENDER ASSEMBLY - DrawPathInstancesOp
 // ============================================================================
 
 /**
@@ -938,7 +936,7 @@ function recordAssemblerTiming(
  * Assemble DrawOp operations for per-instance shapes
  *
  * Handles the `{ k: 'slot' }` shape case by grouping instances by topology
- * and emitting one DrawPathInstancesOp or DrawPrimitiveInstancesOp per group.
+ * and emitting one DrawPathInstancesOp per group.
  *
  * @param step - Render step with per-instance shapes
  * @param shapeBuffer - Shape2D buffer (Uint32Array)
@@ -948,7 +946,7 @@ function recordAssemblerTiming(
  * @param isotropicScale - Optional per-instance isotropic scale (stride 1)
  * @param count - Instance count
  * @param context - Assembly context (includes camera, arena)
- * @returns Array of DrawOp operations (path or primitive)
+ * @returns Array of DrawPathInstancesOp operations
  */
 function assemblePerInstanceShapes(
   step: StepRender,
@@ -1075,73 +1073,51 @@ function assemblePerInstanceShapes(
     // Build style (shared by both path and primitive)
     const style = buildPathStyle(compactedColor, 'nonzero');
 
-    if (isPathTopology(topology)) {
-      // PATH TOPOLOGY: Build DrawPathInstancesOp
-      let arenaControlPointsBuffer: Float32Array;
-      try {
-        arenaControlPointsBuffer = resolveNumericSlotBuffer(
-          group.controlPointsSlot as ValueSlot,
-          state,
-          slotToArena,
-        ) as Float32Array;
-      } catch {
-        throw new Error(
-          'RenderAssembler: Control points buffer not found for topology ' + group.topologyId + ' ' +
-          '(slot ' + group.controlPointsSlot + ', instances: ' + group.instanceIndices.join(', ') + ')'
-        );
-      }
-
-      if (!(arenaControlPointsBuffer instanceof Float32Array)) {
-        throw new Error(
-          'RenderAssembler: Control points buffer not found for topology ' + group.topologyId + ' ' +
-          '(slot ' + group.controlPointsSlot + ', instances: ' + group.instanceIndices.join(', ') + ')'
-        );
-      }
-
-      // TODO: replace per-frame allocation with zero-alloc render assembly
-      // eslint-disable-next-line oscilla/no-hot-path-alloc
-      const geometry: PathGeometry = {
-        topologyId: group.topologyId,
-        verbs: getCachedVerbs(topology),
-        points: arenaControlPointsBuffer,
-        pointsCount: group.pointsCount,
-        flags: group.flags,
-      };
-
-      // TODO: replace per-frame allocation with zero-alloc render assembly
-      // eslint-disable-next-line oscilla/no-hot-path-alloc
-      ops.push({
-        kind: 'drawPathInstances',
-        geometry,
-        instances: instanceTransforms,
-        style,
-      });
-    } else {
-      // PRIMITIVE TOPOLOGY: Build DrawPrimitiveInstancesOp
-      // Resolve params from topology defaults (per-instance params not yet supported)
-      // TODO: replace per-frame allocation with zero-alloc render assembly
-      // eslint-disable-next-line oscilla/no-hot-path-alloc
-      const params: Record<string, number> = {};
-      for (let i = 0; i < topology.params.length; i++) {
-        params[topology.params[i].name] = topology.params[i].default;
-      }
-
-      // TODO: replace per-frame allocation with zero-alloc render assembly
-      // eslint-disable-next-line oscilla/no-hot-path-alloc
-      const geometry: PrimitiveGeometry = {
-        topologyId: group.topologyId,
-        params,
-      };
-
-      // TODO: replace per-frame allocation with zero-alloc render assembly
-      // eslint-disable-next-line oscilla/no-hot-path-alloc
-      ops.push({
-        kind: 'drawPrimitiveInstances',
-        geometry,
-        instances: instanceTransforms,
-        style,
-      });
+    if (!isPathTopology(topology)) {
+      throw new Error(
+        `RenderAssembler: topology ${group.topologyId} is not path-renderable`
+      );
     }
+
+    let arenaControlPointsBuffer: Float32Array;
+    try {
+      arenaControlPointsBuffer = resolveNumericSlotBuffer(
+        group.controlPointsSlot as ValueSlot,
+        state,
+        slotToArena,
+      ) as Float32Array;
+    } catch {
+      throw new Error(
+        'RenderAssembler: Control points buffer not found for topology ' + group.topologyId + ' ' +
+        '(slot ' + group.controlPointsSlot + ', instances: ' + group.instanceIndices.join(', ') + ')'
+      );
+    }
+
+    if (!(arenaControlPointsBuffer instanceof Float32Array)) {
+      throw new Error(
+        'RenderAssembler: Control points buffer not found for topology ' + group.topologyId + ' ' +
+        '(slot ' + group.controlPointsSlot + ', instances: ' + group.instanceIndices.join(', ') + ')'
+      );
+    }
+
+    // TODO: replace per-frame allocation with zero-alloc render assembly
+    // eslint-disable-next-line oscilla/no-hot-path-alloc
+    const geometry: PathGeometry = {
+      topologyId: group.topologyId,
+      verbs: getCachedVerbs(topology),
+      points: arenaControlPointsBuffer,
+      pointsCount: group.pointsCount,
+      flags: group.flags,
+    };
+
+    // TODO: replace per-frame allocation with zero-alloc render assembly
+    // eslint-disable-next-line oscilla/no-hot-path-alloc
+    ops.push({
+      kind: 'drawPathInstances',
+      geometry,
+      instances: instanceTransforms,
+      style,
+    });
   }
 
   const tSliced = performance.now();
@@ -1238,16 +1214,6 @@ function buildPathGeometry(
   resolvedShape: ResolvedShape,
   controlPoints: Float32Array
 ): PathGeometry {
-  if (resolvedShape.mode !== 'path') {
-    throw new Error(
-      'buildPathGeometry: Expected path topology, got ' + resolvedShape.mode
-    );
-  }
-
-  if (!resolvedShape.verbs) {
-    throw new Error('buildPathGeometry: Path topology missing verbs');
-  }
-
   // TODO: replace per-frame allocation with zero-alloc render assembly
   // eslint-disable-next-line oscilla/no-hot-path-alloc
   return {
@@ -1256,31 +1222,6 @@ function buildPathGeometry(
     points: controlPoints,
     pointsCount: controlPoints.length / 2,
     flags: resolvedShape.params.closed ? 1 : 0,
-  };
-}
-
-/**
- * Build PrimitiveGeometry from resolved shape
- *
- * Extracts topology ID and parameter values into PrimitiveGeometry structure.
- *
- * @param resolvedShape - Resolved shape with topology and params
- * @returns PrimitiveGeometry structure for v2 rendering
- */
-function buildPrimitiveGeometry(
-  resolvedShape: ResolvedShape
-): PrimitiveGeometry {
-  if (resolvedShape.mode !== 'primitive') {
-    throw new Error(
-      'buildPrimitiveGeometry: Expected primitive topology, got ' + resolvedShape.mode
-    );
-  }
-
-  // TODO: replace per-frame allocation with zero-alloc render assembly
-  // eslint-disable-next-line oscilla/no-hot-path-alloc
-  return {
-    topologyId: resolvedShape.topologyId,
-    params: resolvedShape.params,
   };
 }
 
@@ -1350,12 +1291,11 @@ function buildPathStyle(
  * NOW SUPPORTS PER-INSTANCE SHAPES: When shape is a buffer (`{ k: 'slot' }`),
  * instances are grouped by topology and multiple ops are emitted.
  *
- * SUPPORTS PRIMITIVES: Emits DrawPrimitiveInstancesOp for ellipse, rect, etc.
  * SUPPORTS PROJECTION: When camera is present, applies 3D projection and depth-sorting.
  *
  * @param step - The render step to assemble
  * @param context - Assembly context with one-cardinality values, instances, state, and arena
- * @returns Array of DrawOp operations (one or more, path or primitive)
+ * @returns Array of DrawPathInstancesOp operations
  */
 export function assembleDrawPathInstancesOp(
   step: StepRender,
@@ -1484,38 +1424,22 @@ export function assembleDrawPathInstancesOp(
     // Build style
     const style = buildPathStyle(compactedCopy.color, 'nonzero');
 
-    // Dispatch based on topology mode
-    if (resolvedShape.mode === 'path') {
-      // PATH TOPOLOGY: Build DrawPathInstancesOp
-      if (!controlPointsBuffer || !(controlPointsBuffer instanceof Float32Array)) {
-        throw new Error(
-          'RenderAssembler: Path topology requires control points buffer (Float32Array)'
-        );
-      }
-
-      const geometry = buildPathGeometry(resolvedShape, controlPointsBuffer);
-
-      // TODO: replace per-frame allocation with zero-alloc render assembly
-      // eslint-disable-next-line oscilla/no-hot-path-alloc
-      return [{
-        kind: 'drawPathInstances',
-        geometry,
-        instances: instanceTransforms,
-        style,
-      }];
-    } else {
-      // PRIMITIVE TOPOLOGY: Build DrawPrimitiveInstancesOp
-      const geometry = buildPrimitiveGeometry(resolvedShape);
-
-      // TODO: replace per-frame allocation with zero-alloc render assembly
-      // eslint-disable-next-line oscilla/no-hot-path-alloc
-      return [{
-        kind: 'drawPrimitiveInstances',
-        geometry,
-        instances: instanceTransforms,
-        style,
-      }];
+    if (!controlPointsBuffer || !(controlPointsBuffer instanceof Float32Array)) {
+      throw new Error(
+        'RenderAssembler: Path topology requires control points buffer (Float32Array)'
+      );
     }
+
+    const geometry = buildPathGeometry(resolvedShape, controlPointsBuffer);
+
+    // TODO: replace per-frame allocation with zero-alloc render assembly
+    // eslint-disable-next-line oscilla/no-hot-path-alloc
+    return [{
+      kind: 'drawPathInstances',
+      geometry,
+      instances: instanceTransforms,
+      style,
+    }];
   }
 }
 
@@ -1526,7 +1450,7 @@ export function assembleDrawPathInstancesOp(
  * Unlike v1, this uses local-space geometry with world-space instance transforms.
  *
  * NOW SUPPORTS PER-INSTANCE SHAPES: Multiple ops can be emitted per render step.
- * SUPPORTS PRIMITIVES: Handles both DrawPathInstancesOp and DrawPrimitiveInstancesOp.
+ * Path-only: emits DrawPathInstancesOp operations.
  * SUPPORTS PROJECTION: Always applies projection from resolved camera params.
  * ZERO ALLOCATIONS: All buffers come from the pre-allocated arena in context.
  *

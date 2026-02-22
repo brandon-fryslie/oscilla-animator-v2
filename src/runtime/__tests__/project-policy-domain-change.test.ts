@@ -185,6 +185,7 @@ describe('Project Policy Domain Change', () => {
     // Store mapping in continuity state
     state.continuity.mappings.set('test_instance', mapping);
     state.continuity.domainChangeThisFrame = true;
+    state.continuity.changedInstancesThisFrame.add('test_instance');
 
     // Capture old slew state before reallocation
     const oldSlewSnapshot = new Float32Array(initialState.slewBuffer);
@@ -293,6 +294,7 @@ describe('Project Policy Domain Change', () => {
     };
     state.continuity.mappings.set('test_instance', mapping);
     state.continuity.domainChangeThisFrame = true;
+    state.continuity.changedInstancesThisFrame.add('test_instance');
 
     // Create step
     const step: StepContinuityApply = {
@@ -384,6 +386,7 @@ describe('Project Policy Domain Change', () => {
 
     state.continuity.mappings.set('test_instance', mapping);
     state.continuity.domainChangeThisFrame = true;
+    state.continuity.changedInstancesThisFrame.add('test_instance');
 
     const oldSlewSnapshot = new Float32Array(initialState.slewBuffer);
     const newTargetState = getOrCreateTargetState(state.continuity, targetId, 6);
@@ -499,8 +502,10 @@ describe('Project Policy Domain Change', () => {
         };
         state.continuity.mappings.set(instId, mapping);
         state.continuity.domainChangeThisFrame = true;
+        state.continuity.changedInstancesThisFrame.add(instId);
       } else {
         state.continuity.domainChangeThisFrame = false;
+        state.continuity.changedInstancesThisFrame.clear();
         state.continuity.mappings.delete(instId);
       }
 
@@ -660,6 +665,7 @@ describe('Project Policy Domain Change', () => {
         energy: 0.5,
       };
       state.continuity.domainChangeThisFrame = false;
+      state.continuity.changedInstancesThisFrame.clear();
       applyContinuity(step, state, (slot) => state.values.objects.get(slot) as Float32Array);
       state.continuity.lastTModelMs = t;
     }
@@ -683,6 +689,7 @@ describe('Project Policy Domain Change', () => {
     };
     state.continuity.mappings.set(instId, mapping);
     state.continuity.domainChangeThisFrame = true;
+    state.continuity.changedInstancesThisFrame.add(instId);
     state.time = { 
       tAbsMs: 116, 
       tMs: 116, 
@@ -709,6 +716,7 @@ describe('Project Policy Domain Change', () => {
     // Run frames with the NEW base positions (simulating continued animation)
     // As time passes, gauge should decay toward zero
     state.continuity.domainChangeThisFrame = false;
+    state.continuity.changedInstancesThisFrame.clear();
     state.continuity.mappings.delete(instId);
 
     // Collect gauge samples over time

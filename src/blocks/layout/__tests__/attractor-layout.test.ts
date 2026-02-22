@@ -27,7 +27,7 @@ patch "Test Attractor Layout" {
   }
 
   block "CircleLayoutUV" "circle" {
-    outputs { position = attractor.positions }
+    outputs { controlPoints = attractor.points }
   }
 
   block "AttractorLayout" "attractor" {}
@@ -73,7 +73,7 @@ patch "Test AttractorLayout Full" {
   }
 
   block "CircleLayoutUV" "circle" {
-    outputs { position = attractor.positions }
+    outputs { controlPoints = attractor.points }
   }
 
   block "AttractorLayout" "attractor" {

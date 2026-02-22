@@ -625,7 +625,7 @@ patch "Library Kitchen Sink" {
   block "PathLayout" "path" {
     spacing = 1.0
     outputs {
-      position = attract-layout.positions
+      controlPoints = attract-layout.points
     }
   }
 

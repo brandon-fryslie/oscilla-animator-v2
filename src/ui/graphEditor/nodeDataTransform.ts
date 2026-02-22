@@ -67,6 +67,7 @@ export interface UnifiedNodeData {
   blockType: string;
   label: string;
   displayName: string;
+  commentText?: string;
   inputs: PortData[];
   outputs: PortData[];
   params: ParamData[];
@@ -176,10 +177,7 @@ export function createNodeFromBlockLike(
       createPortData(
         inputId,
         inputDef.label || inputId, // Fallback to inputId if label undefined
-        portState?.resolvedType ?? (() => {
-          console.warn(`Port '${inputId}' on block '${block.id}' has no resolved type — using static def type`);
-          return inputDef.type;
-        })(),
+        portState?.resolvedType ?? inputDef.type,
         isConnected,
         defaultSource,
         connection,
@@ -201,10 +199,7 @@ export function createNodeFromBlockLike(
       createPortData(
         outputId,
         outputDef.label || outputId, // Fallback to outputId if label undefined
-        outputPortState?.resolvedType ?? (() => {
-          console.warn(`Port '${outputId}' on block '${block.id}' has no resolved type — using static def type`);
-          return outputDef.type;
-        })(),
+        outputPortState?.resolvedType ?? outputDef.type,
         isConnected,
         undefined,
         connection
@@ -213,9 +208,38 @@ export function createNodeFromBlockLike(
   }
 
   // Build params (blocks don't expose params in BlockDef directly - they're in the block instance)
-  // For now, we'll skip params rendering unless explicitly needed
   const params: ParamData[] = [];
-  // TODO: If param editing is needed, extract param metadata from block.params
+  for (const [inputId, inputDef] of Object.entries(blockDef.inputs)) {
+    if (inputDef.exposedAsPort === false) {
+      const value = block.params[inputId] ?? inputDef.defaultValue;
+      if (value !== undefined) {
+        params.push({
+          id: inputId,
+          label: inputDef.label || inputId,
+          value,
+          hint: inputDef.uiHint,
+        });
+      }
+    }
+  }
+
+  // Add any extra persisted params not represented by config inputs
+  for (const [paramId, value] of Object.entries(block.params)) {
+    if (params.some((param) => param.id === paramId)) continue;
+    params.push({
+      id: paramId,
+      label: paramId,
+      value,
+    });
+  }
+
+  const commentText = block.type === 'Comment'
+    ? (typeof block.params.text === 'string'
+      ? block.params.text
+      : typeof block.params.message === 'string'
+        ? block.params.message
+        : undefined)
+    : undefined;
 
   return {
     id: block.id,
@@ -226,6 +250,7 @@ export function createNodeFromBlockLike(
       blockType: block.type,
       label: blockDef.label,
       displayName: block.displayName,
+      commentText,
       inputs,
       outputs,
       params,
@@ -242,10 +267,16 @@ export function createEdgeFromEdgeLike(
   edge: EdgeLike,
   blocks?: ReadonlyMap<string, BlockLike>,
   diagnosticsGetter?: (edge: EdgeLike) => any[]
-): ReactFlowEdge<OscillaEdgeData> {
+): ReactFlowEdge<OscillaEdgeData> | null {
   // Look up lenses from target port
   const sourceBlock = blocks?.get(edge.sourceBlockId);
   const targetBlock = blocks?.get(edge.targetBlockId);
+
+  // [LAW:single-enforcer] GraphEditor transform is the single boundary that
+  // enforces ReactFlow handle validity for projected edges.
+  if (sourceBlock && !sourceBlock.outputPorts.has(edge.sourcePortId)) return null;
+  if (targetBlock && !targetBlock.inputPorts.has(edge.targetPortId)) return null;
+
   const targetPort = targetBlock?.inputPorts.get(edge.targetPortId);
   const lenses = targetPort?.lenses?.filter((lens) =>
     lensTargetsConnection(
@@ -289,7 +320,7 @@ export function reconcileNodesFromAdapter(
   currentNodes: Node[],
   getBlockPosition: (blockId: string) => { x: number; y: number } | undefined,
   diagnosticsGetter?: (edge: EdgeLike) => any[]
-): { nodes: Node[]; edges: ReactFlowEdge[] } {
+): { nodes: Node[]; edges: ReactFlowEdge[]; droppedInvalidEdgeIds: readonly string[] } {
   // Build map of existing nodes by ID for fast lookup
   const existingNodeMap = new Map<string, Node>();
   for (const node of currentNodes) {
@@ -329,8 +360,17 @@ export function reconcileNodesFromAdapter(
     nodes.push(node);
   }
 
-  // Create edges (pass blocks for lens data population)
-  const edges = adapter.edges.map(e => createEdgeFromEdgeLike(e, adapter.blocks, diagnosticsGetter));
+  // Create edges (pass blocks for lens data population), filtering invalid endpoints.
+  const edges: ReactFlowEdge[] = [];
+  const droppedInvalidEdgeIds: string[] = [];
+  for (const edge of adapter.edges) {
+    const projected = createEdgeFromEdgeLike(edge, adapter.blocks, diagnosticsGetter);
+    if (projected) {
+      edges.push(projected);
+    } else {
+      droppedInvalidEdgeIds.push(edge.id);
+    }
+  }
 
-  return { nodes, edges };
+  return { nodes, edges, droppedInvalidEdgeIds };
 }

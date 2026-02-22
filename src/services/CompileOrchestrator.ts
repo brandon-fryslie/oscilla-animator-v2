@@ -10,6 +10,10 @@
 import { compile } from '../compiler';
 import { compileFrontend } from '../compiler/frontend';
 import type { FrontendError } from '../compiler/frontend';
+import type { FrontendResult } from '../compiler/frontend';
+import type { CompileResult } from '../compiler/compile';
+import type { CompiledProgramIR } from '../compiler/ir/program';
+import type { Diagnostic } from '../diagnostics/types';
 import { convertFrontendErrorsToDiagnostics } from '../compiler/frontend/frontendDiagnosticConversion';
 import { convertCompileErrorsToDiagnostics } from '../compiler/diagnosticConversion';
 import type { CompileError } from '../compiler/types';
@@ -40,7 +44,12 @@ import { pruneStaleContinuity } from '../runtime/ContinuityState';
  * Wire DebugService to the runtime state and update debug mappings.
  * Called after every compile/recompile to ensure debug state stays in sync.
  */
-function setupDebugProbe(state: RuntimeState, patch: Patch, program: any): void {
+function setupDebugProbe(
+  store: RootStore,
+  state: RuntimeState,
+  patch: Patch,
+  program: CompiledProgramIR,
+): void {
   // Wire tap callbacks for runtime value observation
   state.tap = {
     recordSlotValue: (slotId: ValueSlot, value: number) => debugService.updateSlotValue(slotId, value),
@@ -57,9 +66,12 @@ function setupDebugProbe(state: RuntimeState, patch: Patch, program: any): void 
   if (unmappedEdges.length > 0) {
     const mappedCount = constantValues.size;
     const unmappedCount = unmappedEdges.length - mappedCount;
-    console.warn(
-      `[DebugProbe] ${unmappedEdges.length} unmapped edges: ${mappedCount} resolved as constants, ${unmappedCount} remain unmapped`
-    );
+    // [LAW:single-enforcer] Route debug probe warnings through diagnostics store
+    // so all runtime compile diagnostics share one reporting channel.
+    store.diagnostics.log({
+      level: 'warn',
+      message: `[DebugProbe] ${unmappedEdges.length} unmapped edges: ${mappedCount} resolved as constants, ${unmappedCount} remain unmapped`,
+    });
   }
   
   debugService.setEdgeToSlotMap(edgeMap, constantValues);
@@ -89,17 +101,82 @@ function backendErrorDetails(errors: readonly CompileError[], patch: Patch): Log
   }));
 }
 
+interface CompileReportBase {
+  readonly store: RootStore;
+  readonly compileId: string;
+  readonly patchRevision: number;
+  readonly durationMs: number;
+}
+
+function emitCompileFailure(
+  args: CompileReportBase & {
+    readonly patch: Patch;
+    readonly phase: 'frontend' | 'backend';
+    readonly diagnostics: readonly Diagnostic[];
+    readonly details: readonly LogDetail[];
+    readonly errorCount: number;
+  },
+): void {
+  args.store.events.emit({
+    type: 'CompileEnd',
+    compileId: args.compileId,
+    patchId: 'patch-0',
+    patchRevision: args.patchRevision,
+    status: 'failure',
+    durationMs: args.durationMs,
+    diagnostics: args.diagnostics,
+  });
+
+  args.store.diagnostics.log({
+    level: 'error',
+    message: `Compile failed (${args.phase}): ${args.errorCount} error(s)`,
+    details: args.details as LogDetail[],
+  });
+}
+
+function emitCompileSuccess(
+  args: CompileReportBase & {
+    readonly diagnostics: readonly Diagnostic[];
+  },
+): void {
+  args.store.events.emit({
+    type: 'CompileEnd',
+    compileId: args.compileId,
+    patchId: 'patch-0',
+    patchRevision: args.patchRevision,
+    status: 'success',
+    durationMs: args.durationMs,
+    diagnostics: args.diagnostics,
+  });
+
+  const warnCount = args.diagnostics.filter(d => d.severity === 'warn').length;
+  const infoCount = args.diagnostics.filter(d => d.severity === 'info').length;
+  const diagSuffix = (warnCount + infoCount) > 0
+    ? ` (${warnCount} warning(s), ${infoCount} info)`
+    : '';
+  args.store.diagnostics.log({
+    level: 'info',
+    message: `Compile succeeded in ${args.durationMs}ms${diagSuffix}`,
+  });
+}
+
 export interface CompileOrchestratorState {
-  currentProgram: any | null;
+  currentProgram: CompiledProgramIR | null;
   currentState: RuntimeState | null;
   sessionState: SessionState | null;
-  prevInstanceCounts: Map<string, number>;
+}
+
+export interface PrecomputedCompileArtifacts {
+  readonly sourcePatchRevision: number;
+  readonly frontendResult: FrontendResult;
+  readonly backendResult: CompileResult | null;
+  readonly compileDurationMs: number;
 }
 
 export interface CompileOrchestratorDeps {
   store: RootStore;
   state: CompileOrchestratorState;
-  onDomainChange?: (oldProgram: any, newProgram: any) => void;
+  onDomainChange?: (oldProgram: CompiledProgramIR, newProgram: CompiledProgramIR) => void;
 }
 
 /**
@@ -115,16 +192,29 @@ export interface CompileOrchestratorDeps {
  *
  * @param isInitial - True for first compile (hard swap), false for recompile (soft swap)
  */
-export async function compileAndSwap(deps: CompileOrchestratorDeps, isInitial: boolean = false): Promise<void> {
+export async function compileAndSwap(
+  deps: CompileOrchestratorDeps,
+  isInitial: boolean = false,
+  precomputed?: PrecomputedCompileArtifacts,
+): Promise<void> {
   const { store, state, onDomainChange } = deps;
   const patch = untracked(() => store.patch.patch);
   if (!patch) {
     return;
   }
 
-  const patchRevision = store.getPatchRevision();
+  const currentPatchRevision = store.getPatchRevision();
+  if (precomputed && precomputed.sourcePatchRevision !== currentPatchRevision) {
+    store.diagnostics.log({
+      level: 'info',
+      message: `Compile dropped as stale (compiled r${precomputed.sourcePatchRevision}, current r${currentPatchRevision})`,
+    });
+    return;
+  }
+
+  const patchRevision = precomputed?.sourcePatchRevision ?? currentPatchRevision;
   const compileId = isInitial ? 'compile-0' : `compile-live-${Date.now()}`;
-  const startTime = Date.now();
+  const compileStartMs = Date.now();
 
   // Emit CompileBegin event
   store.events.emit({
@@ -135,15 +225,13 @@ export async function compileAndSwap(deps: CompileOrchestratorDeps, isInitial: b
     trigger: isInitial ? 'startup' : 'graphCommitted',
   });
 
-  // =========================================================================
-  // Step 1: Run Frontend Compilation
-  // =========================================================================
   const debugValues = store.settings.get(debugSettings);
   const flagOverrides = store.settings.get(compilerFlagsSettings);
-  const frontendResult = compileFrontend(patch, {
+  const frontendResult = precomputed?.frontendResult ?? compileFrontend(patch, {
     traceCardinalitySolver: debugValues?.traceCardinalitySolver,
     diagnosticOverrides: flagOverrides ?? undefined,
   });
+  let compileDurationMs = precomputed?.compileDurationMs ?? (Date.now() - compileStartMs);
 
   // Store frontend snapshot (always available now)
   // [LAW:dataflow-not-control-flow] Frontend always produces a FrontendResult.
@@ -157,22 +245,16 @@ export async function compileAndSwap(deps: CompileOrchestratorDeps, isInitial: b
   // If backend is not ready, emit diagnostics and bail early
   if (!frontendResult.backendReady) {
     const errorMsg = frontendResult.errors.map((e: { message: string }) => e.message).join(', ');
-
-    // Emit CompileEnd with frontend errors
-    store.events.emit({
-      type: 'CompileEnd',
+    emitCompileFailure({
+      store,
+      patch,
       compileId,
-      patchId: 'patch-0',
       patchRevision,
-      status: 'failure',
-      durationMs: Date.now() - startTime,
+      durationMs: compileDurationMs,
+      phase: 'frontend',
       diagnostics: frontendDiagnostics,
-    });
-
-    store.diagnostics.log({
-      level: 'error',
-      message: `Compile failed (frontend): ${frontendResult.errors.length} error(s)`,
       details: frontendErrorDetails(frontendResult.errors, patch),
+      errorCount: frontendResult.errors.length,
     });
 
     if (isInitial) {
@@ -187,39 +269,32 @@ export async function compileAndSwap(deps: CompileOrchestratorDeps, isInitial: b
     return;
   }
 
-  // =========================================================================
-  // Step 2: Run Backend Compilation (reuse precomputed frontend)
-  // =========================================================================
-
-  // Compile the patch (with precomputed frontend result)
-  const result = compile(patch, {
-    events: store.events,
-    patchRevision,
-    patchId: 'patch-0',
-    precomputedFrontend: frontendResult,
-  });
+  let result: CompileResult | null = precomputed?.backendResult ?? null;
+  if (!result) {
+    result = compile(patch, {
+      events: store.events,
+      patchRevision,
+      patchId: 'patch-0',
+      precomputedFrontend: frontendResult,
+    });
+    compileDurationMs = Date.now() - compileStartMs;
+  }
 
   if (result.kind !== 'ok') {
     const errorMsg = result.errors.map(e => e.message).join(', ');
-
-    // Emit CompileEnd with backend errors + frontend diagnostics
-    store.events.emit({
-      type: 'CompileEnd',
+    emitCompileFailure({
+      store,
+      patch,
       compileId,
-      patchId: 'patch-0',
       patchRevision,
-      status: 'failure',
-      durationMs: Date.now() - startTime,
+      durationMs: compileDurationMs,
+      phase: 'backend',
       diagnostics: [
         ...convertCompileErrorsToDiagnostics(result.errors, patchRevision, compileId),
         ...frontendDiagnostics,
       ],
-    });
-
-    store.diagnostics.log({
-      level: 'error',
-      message: `Compile failed (backend): ${result.errors.length} error(s)`,
       details: backendErrorDetails(result.errors, patch),
+      errorCount: result.errors.length,
     });
 
     if (isInitial) {
@@ -310,7 +385,7 @@ export async function compileAndSwap(deps: CompileOrchestratorDeps, isInitial: b
   store.continuity.setRuntimeStateRef(state.currentState);
 
   // ALWAYS update debug probe (mappings can change even if slot count doesn't)
-  setupDebugProbe(state.currentState!, patch, program);
+  setupDebugProbe(store, state.currentState!, patch, program);
 
   // Update program
   state.currentProgram = program;
@@ -321,9 +396,6 @@ export async function compileAndSwap(deps: CompileOrchestratorDeps, isInitial: b
     for (const [id, decl] of newSchedule.instances) {
       const count = typeof decl.count === 'number' ? decl.count : 0;
       instanceCounts.set(id, count);
-      if (isInitial) {
-        state.prevInstanceCounts.set(id, count);
-      }
     }
   }
 
@@ -340,26 +412,12 @@ export async function compileAndSwap(deps: CompileOrchestratorDeps, isInitial: b
 
   const allDiagnostics = [...frontendDiagnostics, ...backendWarningDiagnostics];
 
-  store.events.emit({
-    type: 'CompileEnd',
+  emitCompileSuccess({
+    store,
     compileId,
-    patchId: 'patch-0',
     patchRevision,
-    status: 'success',
-    durationMs: Date.now() - startTime,
+    durationMs: compileDurationMs,
     diagnostics: allDiagnostics,
-  });
-
-  // [LAW:dataflow-not-control-flow] Always log compile outcome (success + failure paths both log).
-  const durationMs = Date.now() - startTime;
-  const warnCount = allDiagnostics.filter(d => d.severity === 'warn').length;
-  const infoCount = allDiagnostics.filter(d => d.severity === 'info').length;
-  const diagSuffix = (warnCount + infoCount) > 0
-    ? ` (${warnCount} warning(s), ${infoCount} info)`
-    : '';
-  store.diagnostics.log({
-    level: 'info',
-    message: `Compile succeeded in ${durationMs}ms${diagSuffix}`,
   });
 
   // Emit ProgramSwapped event

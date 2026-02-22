@@ -21,6 +21,7 @@ import type { MaterializeScratch } from './MaterializeScratch';
 import { evaluateValueExprScalar, type ScalarEvalContext } from './ValueExprScalarEvaluator';
 import { requireInst } from '../core/canonical-types';
 import { payloadStride } from '../core/canonical-types';
+import { constValueAsNumber, type ConstValue } from '../core/canonical-types';
 import { getTopology } from '../shapes/registry';
 import type { PathTopologyDef } from '../shapes/types';
 import { applyOpcode } from './OpcodeInterpreter';
@@ -422,7 +423,7 @@ function materializeKernel(
  */
 function fillBufferWithConst(
   buf: Float32Array,
-  value: any, // ConstValue
+  value: ConstValue,
   count: number,
   stride: number
 ): void {
@@ -455,14 +456,15 @@ function fillBufferWithConst(
       buf[i * 4 + 2] = value.value[2];
       buf[i * 4 + 3] = value.value[3];
     }
-  } else if (value.kind === 'int' || value.kind === 'bool') {
-    // Scalar types stored as float in the buffer
-    const numVal = value.kind === 'bool' ? (value.value ? 1 : 0) : value.value;
+  } else if (value.kind === 'int' || value.kind === 'bool' || value.kind === 'cameraProjection') {
+    // Scalar-like types are encoded as float in the field buffer.
+    const numVal = constValueAsNumber(value);
     for (let i = 0; i < count * stride; i++) {
       buf[i] = numVal;
     }
   } else {
-    throw new Error(`Unsupported const value kind: ${value.kind}`);
+    const _exhaustive: never = value;
+    throw new Error(`Unsupported const value kind: ${String((_exhaustive as { kind?: string }).kind ?? 'unknown')}`);
   }
 }
 

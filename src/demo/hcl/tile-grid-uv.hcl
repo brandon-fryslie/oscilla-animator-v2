@@ -8,13 +8,28 @@ patch "Tile Grid UV" {
     periodAMs = 3000
     role = "timeRoot"
     outputs {
-      phaseA = pulse.phase
+      phaseA = [pulse.phase, tile-wobble.phase]
     }
   }
 
   block "Rect" "tile" {
     width = 0.018
     height = 0.012
+    outputs {
+      controlPoints = tile-wobble.controlPoints
+    }
+  }
+
+  block "ShapeWobble2D" "tile-wobble" {
+    amount = 0.0018
+    frequency = 6
+    outputs {
+      points = tile-shape.controlPoints
+    }
+  }
+
+  block "MakeShape2D" "tile-shape" {
+    closed = 1
     outputs {
       shape = instances.element
     }

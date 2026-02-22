@@ -32,7 +32,7 @@ import ReactFlow, {
   type EdgeMouseHandler,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
-import type { GraphDataAdapter } from './types';
+import type { GraphDataAdapter, BlockLike, EdgeLike } from './types';
 import { GraphEditorProvider, type GraphEditorContextValue } from './GraphEditorContext';
 import { reconcileNodesFromAdapter } from './nodeDataTransform';
 import { UnifiedNode as UnifiedNodeComponent } from './UnifiedNode';
@@ -123,6 +123,39 @@ export interface GraphEditorCoreHandle {
   zoomToFit(): Promise<void>;
 }
 
+function stableParamsSignature(params: Readonly<Record<string, unknown>>): string {
+  const entries = Object.entries(params).sort(([a], [b]) => a.localeCompare(b));
+  return entries.map(([k, v]) => `${k}:${JSON.stringify(v)}`).join(',');
+}
+
+function blockSignature(block: BlockLike): string {
+  const inputSig = Array.from(block.inputPorts.values())
+    .map((port) => `${port.id}:${port.combineMode}:${port.defaultSource?.blockType ?? ''}:${port.lenses?.length ?? 0}:${port.resolvedType ? 1 : 0}`)
+    .join(';');
+  const outputSig = Array.from(block.outputPorts.values())
+    .map((port) => `${port.id}:${port.resolvedType ? 1 : 0}`)
+    .join(';');
+
+  return [
+    block.id,
+    block.type,
+    block.displayName,
+    stableParamsSignature(block.params),
+    inputSig,
+    outputSig,
+  ].join('|');
+}
+
+function edgeSignature(edge: EdgeLike): string {
+  return [
+    edge.id,
+    edge.sourceBlockId,
+    edge.sourcePortId,
+    edge.targetBlockId,
+    edge.targetPortId,
+  ].join(':');
+}
+
 /**
  * GraphEditorCore component.
  * Must be wrapped in ReactFlowProvider by parent.
@@ -163,8 +196,54 @@ export const GraphEditorCoreInner = observer(
       // Refs for stable access to latest state
       const nodesRef = useRef(nodes);
       const edgesRef = useRef(edges);
+      const warnedInvalidEdgeIdsRef = useRef<Set<string>>(new Set());
       nodesRef.current = nodes;
       edgesRef.current = edges;
+
+      const diagnosticsGetter = useCallback(
+        (edge: EdgeLike) => {
+          if (!diagnostics) return [];
+          return diagnostics.getDiagnosticsForEdge({
+            from: { blockId: edge.sourceBlockId, slotId: edge.sourcePortId },
+            to: { blockId: edge.targetBlockId, slotId: edge.targetPortId },
+          });
+        },
+        [diagnostics]
+      );
+
+      const projectGraphSnapshot = useCallback(
+        (current: Node[]) => {
+          const projected = reconcileNodesFromAdapter(
+            adapter,
+            current,
+            (blockId) => adapter.getBlockPosition(blockId),
+            diagnosticsGetter
+          );
+
+          // [LAW:no-shared-mutable-globals] Prune warning cache to current edge IDs
+          // so long-running sessions cannot accumulate stale warning keys.
+          const liveEdgeIds = new Set(adapter.edges.map((edge) => edge.id));
+          for (const warnedId of warnedInvalidEdgeIdsRef.current) {
+            if (!liveEdgeIds.has(warnedId)) {
+              warnedInvalidEdgeIdsRef.current.delete(warnedId);
+            }
+          }
+
+          if (diagnostics && projected.droppedInvalidEdgeIds.length > 0) {
+            for (const edgeId of projected.droppedInvalidEdgeIds) {
+              if (warnedInvalidEdgeIdsRef.current.has(edgeId)) continue;
+              warnedInvalidEdgeIdsRef.current.add(edgeId);
+              diagnostics.log({
+                level: 'warn',
+                message: `Dropped invalid edge '${edgeId}' from graph projection (missing source/target handle).`,
+              });
+            }
+          }
+
+          return projected;
+        },
+        [adapter, diagnostics, diagnosticsGetter]
+      );
 
       // Node types - default to unified node
       const nodeTypes = useMemo(() => {
@@ -396,20 +475,7 @@ export const GraphEditorCoreInner = observer(
           }
 
           // Build nodes/edges
-          // Create diagnostics getter if diagnostics store available
-          const diagnosticsGetter = diagnostics
-            ? (edge: any) => diagnostics.getDiagnosticsForEdge({
-                from: { blockId: edge.sourceBlockId, slotId: edge.sourcePortId },
-                to: { blockId: edge.targetBlockId, slotId: edge.targetPortId },
-              })
-            : undefined;
-
-          const { nodes: initialNodes, edges: initialEdges } = reconcileNodesFromAdapter(
-            adapter,
-            [],
-            (blockId) => adapter.getBlockPosition(blockId),
-            diagnosticsGetter
-          );
+          const { nodes: initialNodes, edges: initialEdges } = projectGraphSnapshot([]);
 
           // Single node: just center it
           if (initialNodes.length === 1) {
@@ -467,7 +533,7 @@ export const GraphEditorCoreInner = observer(
 
         return () => { cancelled = true; };
       // eslint-disable-next-line react-hooks/exhaustive-deps
-      }, [adapter, adapter.blocks.size, setNodes, setEdges, fitView]);
+      }, [adapter, adapter.blocks.size, setNodes, setEdges, fitView, projectGraphSnapshot]);
 
       // -------------------------------------------------------------------------
       // MobX Reaction - Sync Adapter Changes to ReactFlow (after initialization)
@@ -479,30 +545,15 @@ export const GraphEditorCoreInner = observer(
 
         const disposer = reaction(
           () => ({
-            blockCount: adapter.blocks.size,
-            edgeCount: adapter.edges.length,
-            // Track structural changes
-            blockIds: Array.from(adapter.blocks.keys()).join(','),
-            edgeIds: adapter.edges.map((e) => e.id).join(','),
+            // [LAW:one-source-of-truth] Graph sync key derives from adapter state only.
+            blockSignature: Array.from(adapter.blocks.values()).map(blockSignature).join('||'),
+            edgeSignature: adapter.edges.map(edgeSignature).join('||'),
             // Track data-only changes (port types, default sources from frontend snapshot)
             dataVersion: adapter.dataVersion ?? 0,
           }),
           () => {
             // Adapter changed - reconcile nodes/edges
-            // Create diagnostics getter if diagnostics store available
-            const diagnosticsGetter = diagnostics
-              ? (edge: any) => diagnostics.getDiagnosticsForEdge({
-                  from: { blockId: edge.sourceBlockId, slotId: edge.sourcePortId },
-                  to: { blockId: edge.targetBlockId, slotId: edge.targetPortId },
-                })
-              : undefined;
-
-            const { nodes: reconciledNodes, edges: reconciledEdges } = reconcileNodesFromAdapter(
-              adapter,
-              nodesRef.current,
-              (blockId) => adapter.getBlockPosition(blockId),
-              diagnosticsGetter
-            );
+            const { nodes: reconciledNodes, edges: reconciledEdges } = projectGraphSnapshot(nodesRef.current);
 
             setNodes(reconciledNodes);
             setEdges(reconciledEdges);
@@ -510,7 +561,7 @@ export const GraphEditorCoreInner = observer(
         );
 
         return disposer;
-      }, [adapter, setNodes, setEdges, isInitialized]);
+      }, [adapter, setNodes, setEdges, isInitialized, projectGraphSnapshot]);
 
       // -------------------------------------------------------------------------
       // Render
