@@ -197,8 +197,19 @@ export const GraphEditorCoreInner = observer(
       const nodesRef = useRef(nodes);
       const edgesRef = useRef(edges);
       const warnedInvalidEdgeIdsRef = useRef<Set<string>>(new Set());
+      const fitViewTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
       nodesRef.current = nodes;
       edgesRef.current = edges;
+
+      const scheduleFitView = useCallback(() => {
+        if (fitViewTimeoutRef.current) {
+          clearTimeout(fitViewTimeoutRef.current);
+        }
+        fitViewTimeoutRef.current = setTimeout(() => {
+          fitViewTimeoutRef.current = null;
+          fitView({ padding: 0.1 });
+        }, 50);
+      }, [fitView]);
 
       const diagnosticsGetter = useCallback(
         (edge: EdgeLike) => {
@@ -486,7 +497,7 @@ export const GraphEditorCoreInner = observer(
               setNodes(initialNodes);
               setEdges(initialEdges);
               setIsInitialized(true);
-              setTimeout(() => fitView({ padding: 0.1 }), 50);
+              scheduleFitView();
             }
             return;
           }
@@ -507,7 +518,7 @@ export const GraphEditorCoreInner = observer(
             setNodes(layoutedNodes);
             setEdges(initialEdges);
             setIsInitialized(true);
-            setTimeout(() => fitView({ padding: 0.1 }), 50);
+            scheduleFitView();
           } catch (error) {
             console.warn('Initial layout failed, using grid fallback:', error);
 
@@ -531,9 +542,15 @@ export const GraphEditorCoreInner = observer(
 
         initializeLayout();
 
-        return () => { cancelled = true; };
+        return () => {
+          cancelled = true;
+          if (fitViewTimeoutRef.current) {
+            clearTimeout(fitViewTimeoutRef.current);
+            fitViewTimeoutRef.current = null;
+          }
+        };
       // eslint-disable-next-line react-hooks/exhaustive-deps
-      }, [adapter, adapter.blocks.size, setNodes, setEdges, fitView, projectGraphSnapshot]);
+      }, [adapter, adapter.blocks.size, setNodes, setEdges, projectGraphSnapshot, scheduleFitView]);
 
       // -------------------------------------------------------------------------
       // MobX Reaction - Sync Adapter Changes to ReactFlow (after initialization)

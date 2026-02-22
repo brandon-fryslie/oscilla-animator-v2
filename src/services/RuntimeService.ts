@@ -22,6 +22,7 @@ import { CompileWorkerClient, CompileSupersededError } from './CompileWorkerClie
 import { createDomainChangeDetector, type DomainChangeDetector } from './DomainChangeDetector';
 import { createLiveRecompileController, type LiveRecompileController } from './LiveRecompile';
 import { patchProgramConstants } from './ConstantPatcher';
+import { debugService } from './DebugService';
 import {
   startAnimationLoop,
   createAnimationLoopState,
@@ -129,6 +130,8 @@ export class RuntimeService {
   async init(): Promise<void> {
     const { store } = this;
     this.compileWorkerClient = new CompileWorkerClient();
+    // [LAW:single-enforcer] RuntimeService owns debug lifecycle boundaries.
+    debugService.clear();
 
     // Initialize render buffer arena (50k elements, zero allocations after init)
     this.arena = initGlobalRenderArena(50_000);
@@ -294,5 +297,6 @@ export class RuntimeService {
     this.store.patch.stopPersistence();
     this.domainChangeDetector.cleanup();
     this.liveRecompile.cleanup();
+    debugService.clear();
   }
 }

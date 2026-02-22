@@ -64,9 +64,9 @@ function getTargetMetadata(target: MiniViewTarget): EdgeMetadata | undefined {
 
 function getTargetValue(target: MiniViewTarget): EdgeValueResult | undefined {
   if (target.kind === 'edge') {
-    return debugService.getEdgeValue(target.edgeId);
+    return debugService.tryGetEdgeValue(target.edgeId);
   }
-  return debugService.getPortValue(target.blockId, target.portName);
+  return debugService.tryGetPortValue(target.blockId, target.portName);
 }
 
 function useDebugTargetMiniView(
@@ -117,14 +117,10 @@ function useDebugTargetMiniView(
     }
 
     const poll = () => {
-      try {
-        const result = edgeId
-          ? debugService.getEdgeValue(edgeId)
-          : debugService.getPortValue(blockId!, portName!);
-        setValue(result ?? null);
-      } catch {
-        setValue(null);
-      }
+      const result = edgeId
+        ? debugService.tryGetEdgeValue(edgeId)
+        : debugService.tryGetPortValue(blockId!, portName!);
+      setValue(result ?? null);
       setTick(t => t + 1); // Force Sparkline re-render
     };
 

@@ -232,14 +232,7 @@ export class DebugStore {
    */
   getEdgeValue(edgeId: string): EdgeValueResult | undefined {
     if (!this.enabled) return undefined;
-    try {
-      return debugService.getEdgeValue(edgeId);
-    } catch (err) {
-      // Log but don't crash - hover shouldn't bring down the app
-      // TODO: Route this through a proper diagnostics channel once available
-      console.warn(`[DebugStore.getEdgeValue] Failed for edge '${edgeId}':`, err instanceof Error ? err.message : err);
-      return undefined;
-    }
+    return debugService.tryGetEdgeValue(edgeId);
   }
 
   /**
@@ -248,14 +241,7 @@ export class DebugStore {
    */
   getPortValue(blockId: string, portName: string): EdgeValueResult | undefined {
     if (!this.enabled) return undefined;
-    try {
-      return debugService.getPortValue(blockId, portName);
-    } catch (err) {
-      // Log but don't crash - hover shouldn't bring down the app
-      // TODO: Route this through a proper diagnostics channel once available
-      console.warn(`[DebugStore.getPortValue] Failed for port '${blockId}:${portName}':`, err instanceof Error ? err.message : err);
-      return undefined;
-    }
+    return debugService.tryGetPortValue(blockId, portName);
   }
 
   /**
@@ -338,19 +324,10 @@ export class DebugStore {
       return;
     }
 
-    try {
-      const result = debugService.getEdgeValue(edgeId);
-      runInAction(() => {
-        this._cachedEdgeValue = result || null;
-      });
-    } catch (err) {
-      // Log but don't crash - polling shouldn't bring down the app
-      // Note: This fires at 1Hz while active, so use console.debug to reduce noise
-      console.debug(`[DebugStore.pollValue] Failed for edge '${edgeId}':`, err instanceof Error ? err.message : err);
-      runInAction(() => {
-        this._cachedEdgeValue = null;
-      });
-    }
+    const result = debugService.tryGetEdgeValue(edgeId);
+    runInAction(() => {
+      this._cachedEdgeValue = result || null;
+    });
   }
 
   /**

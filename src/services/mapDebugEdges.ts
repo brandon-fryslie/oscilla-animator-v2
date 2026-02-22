@@ -87,6 +87,9 @@ export function mapDebugEdges(patch: Patch, program: CompiledProgramIR): Map<str
 export function mapDebugMappings(patch: Patch, program: CompiledProgramIR): DebugMappings {
     const edgeMetaMap = new Map<string, EdgeMetadata>();
     const debugIndex = program.debugIndex;
+    const slotTypeById = new Map<ValueSlot, CanonicalType>(
+      program.slotMeta.map((meta) => [meta.slot, meta.type]),
+    );
 
     // Guard: If debug index is missing required data, throw - silent failures hide bugs
     if (!debugIndex) {
@@ -118,6 +121,7 @@ export function mapDebugMappings(patch: Patch, program: CompiledProgramIR): Debu
 
     // Build main lookup map
     const targetToSlot = new Map<string, ValueSlot>();
+    const debugBlockIds = new Set(Array.from(debugIndex.blockMap.values()));
 
     for (const portBinding of debugIndex.ports) {
         // Resolve BlockIndex to StringID
@@ -161,11 +165,10 @@ export function mapDebugMappings(patch: Patch, program: CompiledProgramIR): Debu
         const slotId = targetToSlot.get(sourceKey);
 
         if (slotId !== undefined) {
-            const meta = program.slotMeta.find(m => m.slot === slotId);
-            if (!meta?.type) {
+            const type = slotTypeById.get(slotId);
+            if (!type) {
               throw new Error(`Slot ${slotId} has no type metadata — compiler bug`);
             }
-            const type = meta.type;
 
             edgeMetaMap.set(edge.id, {
                 slotId,
@@ -190,7 +193,7 @@ export function mapDebugMappings(patch: Patch, program: CompiledProgramIR): Debu
             let details: string | undefined;
 
             // Check if source block exists in debug index
-            const sourceBlockExists = Array.from(debugIndex.blockMap.values()).includes(edge.from.blockId);
+            const sourceBlockExists = debugBlockIds.has(edge.from.blockId);
             if (!sourceBlockExists) {
                 reason = 'block-eliminated';
                 details = `Source block '${edge.from.blockId}' was eliminated during compilation (likely constant-folding or dead code elimination)`;
@@ -226,22 +229,21 @@ export function mapDebugMappings(patch: Patch, program: CompiledProgramIR): Debu
     // Build port map for direct port queries (useful for unconnected outputs)
     const portMetaMap = new Map<string, EdgeMetadata>();
     for (const [portKey, slotId] of targetToSlot.entries()) {
-        const meta = program.slotMeta.find(m => m.slot === slotId);
-        if (!meta?.type) {
+        const type = slotTypeById.get(slotId);
+        if (!type) {
           throw new Error(`Slot ${slotId} has no type metadata — compiler bug`);
         }
-        const type = meta.type;
         portMetaMap.set(portKey, { slotId, type });
     }
 
     // Add connected-input aliases when unambiguous and non-colliding.
     for (const [portKey, slotId] of inputPortSlotCandidates.entries()) {
         if (portMetaMap.has(portKey)) continue;
-        const meta = program.slotMeta.find(m => m.slot === slotId);
-        if (!meta?.type) {
+        const type = slotTypeById.get(slotId);
+        if (!type) {
             throw new Error(`Slot ${slotId} has no type metadata — compiler bug`);
         }
-        portMetaMap.set(portKey, { slotId, type: meta.type });
+        portMetaMap.set(portKey, { slotId, type });
     }
 
     return { edgeMap: edgeMetaMap, portMap: portMetaMap, unmappedEdges };

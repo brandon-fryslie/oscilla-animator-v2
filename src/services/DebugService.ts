@@ -411,6 +411,25 @@ class DebugService {
   }
 
   /**
+   * Non-throwing edge query for UI polling/hover paths.
+   *
+   * Missing mapping or transient runtime unavailability returns undefined.
+   * Strict callers should use getEdgeValue() to preserve invariant exceptions.
+   */
+  tryGetEdgeValue(edgeId: string): EdgeValueResult | undefined {
+    const meta = this.edgeToSlotMap.get(edgeId);
+    if (!meta) return undefined;
+    try {
+      if (requireInst(meta.type.extent.cardinality, 'cardinality').kind === 'many') {
+        return this.queryFieldValue(meta);
+      }
+      return this.queryScalarValue(meta);
+    } catch {
+      return undefined;
+    }
+  }
+
+  /**
    * Query port value by block ID and port name.
    */
   getPortValue(blockId: string, portName: string): EdgeValueResult | undefined {
@@ -424,6 +443,26 @@ class DebugService {
       return this.queryFieldValue(meta);
     }
     return this.queryScalarValue(meta);
+  }
+
+  /**
+   * Non-throwing port query for UI polling/hover paths.
+   *
+   * Missing mapping or transient runtime unavailability returns undefined.
+   * Strict callers should use getPortValue() for invariant exceptions.
+   */
+  tryGetPortValue(blockId: string, portName: string): EdgeValueResult | undefined {
+    const key = `${blockId}:${portName}`;
+    const meta = this.portToSlotMap.get(key);
+    if (!meta) return undefined;
+    try {
+      if (requireInst(meta.type.extent.cardinality, 'cardinality').kind === 'many') {
+        return this.queryFieldValue(meta);
+      }
+      return this.queryScalarValue(meta);
+    } catch {
+      return undefined;
+    }
   }
 
   /**
