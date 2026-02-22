@@ -14,8 +14,8 @@ export interface LiveRecompileController {
   setup(
     store: RootStore,
     onRecompile: () => Promise<void>,
-    onValuePatch?: (changes: ReadonlyMap<string, unknown>) => boolean,
-    onRecompileError?: (error: unknown) => void,
+    onValuePatch: ((changes: ReadonlyMap<string, unknown>) => boolean) | undefined,
+    onRecompileError: (error: unknown) => void,
   ): void;
   cleanup(): void;
 }
@@ -29,7 +29,7 @@ export function createLiveRecompileController(
 
   const scheduleRecompile = (
     onRecompile: () => Promise<void>,
-    onRecompileError?: (error: unknown) => void,
+    onRecompileError: (error: unknown) => void,
   ): void => {
     if (recompileTimeout) {
       clearTimeout(recompileTimeout);
@@ -39,11 +39,7 @@ export function createLiveRecompileController(
         await onRecompile();
       } catch (err) {
         // [LAW:single-enforcer] Recompile error handling delegates to caller boundary.
-        if (onRecompileError) {
-          onRecompileError(err);
-        } else {
-          console.error('Recompile error:', err);
-        }
+        onRecompileError(err);
       }
     }, debounceMs);
   };
@@ -52,8 +48,8 @@ export function createLiveRecompileController(
     setup(
       store: RootStore,
       onRecompile: () => Promise<void>,
-      onValuePatch?: (changes: ReadonlyMap<string, unknown>) => boolean,
-      onRecompileError?: (error: unknown) => void,
+      onValuePatch: ((changes: ReadonlyMap<string, unknown>) => boolean) | undefined,
+      onRecompileError: (error: unknown) => void,
     ): void {
       if (reactionSetup) return;
       reactionSetup = true;

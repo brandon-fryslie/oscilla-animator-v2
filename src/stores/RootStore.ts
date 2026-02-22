@@ -89,7 +89,6 @@ export class RootStore {
         message: `EventHub listener failure (${scope}:${eventType}): ${message}`,
       });
     });
-
     // Create ContinuityStore
     this.continuity = new ContinuityStore();
 
@@ -144,6 +143,14 @@ export class RootStore {
 
     // Wire up EventHub to PatchStore for ParamChanged events
     this.patch.setEventHub(this.events, 'patch-0', () => this.patchRevision);
+    this.patch.setIssueReporter((issue) => {
+      // [LAW:single-enforcer] RootStore is the canonical diagnostics boundary
+      // for non-fatal operational issues emitted by child stores.
+      this.diagnostics.log({
+        level: issue.level,
+        message: `PatchStore: ${issue.message}`,
+      });
+    });
 
     // Wire up EventHub to SelectionStore for selection/hover events and automatic cleanup
     this.selection.setEventHub(this.events, 'patch-0', () => this.patchRevision);

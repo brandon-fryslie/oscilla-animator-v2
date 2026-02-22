@@ -303,7 +303,7 @@ export function executeAnimationFrame(
 export function startAnimationLoop(
   deps: AnimationLoopDeps,
   state: AnimationLoopState,
-  onError?: (err: unknown) => void
+  onError: (err: unknown) => void
 ): () => void {
   let cancelled = false;
   let rafId = 0;
@@ -315,11 +315,7 @@ export function startAnimationLoop(
     } catch (err) {
       // [LAW:single-enforcer] AnimationLoop is the single runtime boundary that fail-stops frame execution on exceptions.
       cancelled = true;
-      if (onError) {
-        onError(err);
-      } else {
-        console.error('Runtime error:', err);
-      }
+      onError(err);
       return;
     }
     if (!cancelled) {

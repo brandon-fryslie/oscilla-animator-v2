@@ -4,11 +4,13 @@
  * Verify stores work together correctly and maintain architectural invariants.
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { autorun } from 'mobx';
 import { RootStore } from '../RootStore';
 import type { Endpoint } from '../../graph/Patch';
 import { blockId } from '../../types';
+import * as PatchPersistence from '../../services/PatchPersistence';
+import { PatchDslError } from '../../patch-dsl';
 
 // Import blocks to trigger registration
 import '../../blocks/all';
@@ -46,6 +48,24 @@ describe('Store Integration', () => {
       expect(readComputed(() => root.selection.selectedBlock)).toBe(
         readComputed(() => root.patch.blocks.get(id)),
       );
+    });
+
+    it('routes PatchStore operational issues through diagnostics', () => {
+      const importSpy = vi
+        .spyOn(PatchPersistence, 'importPatchFromHCL')
+        .mockReturnValue({
+          patch: { blocks: new Map(), edges: [] },
+          errors: [new PatchDslError('recoverable parse issue', { start: 0, end: 1 })],
+        });
+      const result = root.patch.loadFromHCL('patch "Test" {}');
+      expect(result.errors.length).toBeGreaterThan(0);
+
+      // [LAW:single-enforcer] RootStore owns diagnostics routing for store issues.
+      expect(readComputed(() =>
+        root.diagnostics.logs.some((entry) => entry.message === 'PatchStore: HCL import had recoverable errors')
+      )).toBe(true);
+
+      importSpy.mockRestore();
     });
   });
 
