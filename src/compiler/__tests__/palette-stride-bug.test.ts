@@ -1,8 +1,8 @@
 /**
  * Regression test for palette slot allocation bug.
  *
- * Bug: SYSTEM_PALETTE_SLOT (slot 0, stride=4) was being registered for evalValue,
- * causing a runtime error: "evalValue: expected stride=1 for scalar scalar slot 0, got stride=4"
+ * Bug: SYSTEM_PALETTE_SLOT (slot 0, stride=4) was being registered for evalOne,
+ * causing a runtime error: "evalOne: expected stride=1 for scalar slot 0, got stride=4"
  *
  * Root causes:
  * 1. IRBuilderImpl slotCounter started at 0, so first allocSlot() returned 0 (same as SYSTEM_PALETTE_SLOT)
@@ -31,16 +31,13 @@ describe('SYSTEM_PALETTE_SLOT reservation', () => {
       return;
     }
 
-    // Verify no evalValue steps reference palette slot (stride=4)
-    // Events use separate EventSlot namespace, so filter for storage='value'
+    // Verify no evalOne steps reference palette slot (stride=4)
     const steps = result.program.schedule.steps;
     const paletteEvalSteps = steps.filter((step: any) => {
-      return step.kind === 'evalValue'
-        && step.target?.storage === 'value'
-        && step.target?.slot === SYSTEM_PALETTE_SLOT;
+      return step.kind === 'evalOne' && step.target === SYSTEM_PALETTE_SLOT;
     });
 
-    // Palette slot (stride=4) should NOT have evalValue step (only stride=1 single-instance values do)
+    // Palette slot (stride=4) should NOT have evalOne step (only stride=1 single-instance values do)
     expect(paletteEvalSteps.length).toBe(0);
 
     // Verify palette slot metadata is correctly registered with stride=4

@@ -10,7 +10,7 @@
  * @module runtime/StateMigration
  */
 
-import type { StateMapping, StableStateId } from '../compiler/ir/types';
+import type { FieldSlotDecl, ScalarSlotDecl, StateMapping, StableStateId } from '../compiler/ir/types';
 import type { MappingState } from './ContinuityState';
 
 /**
@@ -37,6 +37,18 @@ export interface StateMigrationDetail {
   kind: 'scalar' | 'field';
   lanesMigrated?: number;
   lanesInitialized?: number;
+}
+
+function isScalarStateMapping(mapping: StateMapping): mapping is ScalarSlotDecl {
+  return mapping.laneCount === 1 && mapping.instanceId === undefined;
+}
+
+function isFieldStateMapping(mapping: StateMapping): mapping is FieldSlotDecl {
+  return mapping.instanceId !== undefined && mapping.laneCount > 1;
+}
+
+function mappingKind(mapping: StateMapping): 'scalar' | 'field' {
+  return isScalarStateMapping(mapping) ? 'scalar' : 'field';
 }
 
 /**
@@ -88,7 +100,7 @@ export function migrateState(
       result.details.push({
         stateId: newMapping.stateId,
         action: 'initialized',
-        kind: newMapping.kind,
+        kind: mappingKind(newMapping),
       });
       continue;
     }
@@ -96,7 +108,7 @@ export function migrateState(
     // State exists in both - migrate
     migratedOldIds.add(newMapping.stateId);
 
-    if (newMapping.kind === 'scalar' && oldMapping.kind === 'scalar') {
+    if (isScalarStateMapping(newMapping) && isScalarStateMapping(oldMapping)) {
       // Scalar to scalar: direct copy
       migrateScalarState(oldState, newState, oldMapping, newMapping);
       result.scalarsMigrated++;
@@ -105,7 +117,7 @@ export function migrateState(
         action: 'migrated',
         kind: 'scalar',
       });
-    } else if (newMapping.kind === 'field' && oldMapping.kind === 'field') {
+    } else if (isFieldStateMapping(newMapping) && isFieldStateMapping(oldMapping)) {
       // Field to field: use lane mapping
       const laneMapping = getLaneMapping(newMapping.instanceId);
       const migrationInfo = migrateFieldState(
@@ -131,7 +143,7 @@ export function migrateState(
       result.details.push({
         stateId: newMapping.stateId,
         action: 'initialized',
-        kind: newMapping.kind,
+        kind: mappingKind(newMapping),
       });
     }
   }
@@ -143,7 +155,7 @@ export function migrateState(
       result.details.push({
         stateId: oldMapping.stateId,
         action: 'discarded',
-        kind: oldMapping.kind,
+        kind: mappingKind(oldMapping),
       });
     }
   }
@@ -159,16 +171,9 @@ function initializeState(
   state: Float64Array,
   mapping: StateMapping
 ): void {
-  if (mapping.kind === 'scalar') {
+  for (let lane = 0; lane < mapping.laneCount; lane++) {
     for (let i = 0; i < mapping.stride; i++) {
-      state[mapping.slotIndex + i] = mapping.initial[i];
-    }
-  } else {
-    // Field: initialize all lanes
-    for (let lane = 0; lane < mapping.laneCount; lane++) {
-      for (let i = 0; i < mapping.stride; i++) {
-        state[mapping.slotStart + lane * mapping.stride + i] = mapping.initial[i];
-      }
+      state[mapping.slotStart + lane * mapping.stride + i] = mapping.initial[i];
     }
   }
 }
@@ -179,17 +184,17 @@ function initializeState(
 function migrateScalarState(
   oldState: Float64Array,
   newState: Float64Array,
-  oldMapping: StateMapping & { kind: 'scalar' },
-  newMapping: StateMapping & { kind: 'scalar' }
+  oldMapping: ScalarSlotDecl,
+  newMapping: ScalarSlotDecl
 ): void {
   // Copy each element of the stride
   const copyStride = Math.min(oldMapping.stride, newMapping.stride);
   for (let i = 0; i < copyStride; i++) {
-    newState[newMapping.slotIndex + i] = oldState[oldMapping.slotIndex + i];
+    newState[newMapping.slotStart + i] = oldState[oldMapping.slotStart + i];
   }
   // Initialize any new stride elements with defaults
   for (let i = copyStride; i < newMapping.stride; i++) {
-    newState[newMapping.slotIndex + i] = newMapping.initial[i];
+    newState[newMapping.slotStart + i] = newMapping.initial[i];
   }
 }
 
@@ -199,8 +204,8 @@ function migrateScalarState(
 function migrateFieldState(
   oldState: Float64Array,
   newState: Float64Array,
-  oldMapping: StateMapping & { kind: 'field' },
-  newMapping: StateMapping & { kind: 'field' },
+  oldMapping: FieldSlotDecl,
+  newMapping: FieldSlotDecl,
   laneMapping: MappingState | null
 ): { lanesMigrated: number; lanesInitialized: number } {
   let lanesMigrated = 0;

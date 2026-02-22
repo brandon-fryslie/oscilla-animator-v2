@@ -7,7 +7,7 @@
  * Returns null when nothing is hovered.
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { debugService, type EdgeValueResult } from '../../services/DebugService';
 import type { EdgeMetadata } from '../../services/mapDebugEdges';
 import { requireInst } from '../../core/canonical-types';
@@ -84,11 +84,13 @@ function useDebugTargetMiniView(
   const cardinality = meta
     ? requireInst(meta.type.extent.cardinality, 'cardinality').kind
     : null;
-  const key = edgeId
-    ? ({ kind: 'edge', edgeId } as const)
-    : (blockId && portName
-      ? ({ kind: 'port', blockId, portName } as const)
-      : null);
+  const key = useMemo(() => (
+    edgeId
+      ? ({ kind: 'edge', edgeId } as const)
+      : (blockId && portName
+        ? ({ kind: 'port', blockId, portName } as const)
+        : null)
+  ), [edgeId, blockId, portName]);
 
   // [LAW:single-enforcer] Target hook owns history/field tracking lifecycle.
   useEffect(() => {
@@ -105,7 +107,7 @@ function useDebugTargetMiniView(
     return () => {
       debugService.untrackHistoryKey(key);
     };
-  }, [edgeId, blockId, portName, meta?.slotId, meta?.type, cardinality, key]);
+  }, [meta?.slotId, meta?.type, cardinality, key]);
 
   // [LAW:dataflow-not-control-flow] Polling pipeline is identical for edge/port targets.
   useEffect(() => {

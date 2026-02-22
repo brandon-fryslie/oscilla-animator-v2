@@ -591,7 +591,8 @@ function convertLinkedIRToProgram(
  */
 function getStepExprId(step: Step): ValueExprId | null {
   switch (step.kind) {
-    case 'evalValue':
+    case 'evalOne':
+    case 'eventDispatch':
       return step.expr;
     case 'materialize':
       return step.field;
@@ -616,8 +617,10 @@ function getStepExprId(step: Step): ValueExprId | null {
  */
 function getStepTargetSlot(step: Step): ValueSlot | null {
   switch (step.kind) {
-    case 'evalValue':
-      return step.target.storage === 'value' ? step.target.slot : null;
+    case 'evalOne':
+      return step.target;
+    case 'eventDispatch':
+      return null;
     case 'materialize':
       return step.target;
     case 'render':

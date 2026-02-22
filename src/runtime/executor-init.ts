@@ -6,12 +6,10 @@
  */
 
 import type { StepRender } from '../compiler/ir/types';
-import { BufferPool } from './BufferPool';
+import { createMaterializeScratch } from './MaterializeScratch';
 
-// Module-level pool for Materializer buffers.
-// These buffers are CACHED in RuntimeState.cache.valueExprFieldBuffers and reused across frames,
-// so they don't need arena semantics. The pool grows once and then stabilizes.
-export const MATERIALIZER_POOL = new BufferPool();
+// Module-level scratch allocator for Materializer buffers.
+export const MATERIALIZE_SCRATCH = createMaterializeScratch();
 
 // Module-level render steps array — reused across frames to avoid per-frame allocation.
 export const renderStepsBuffer: StepRender[] = [];

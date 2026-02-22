@@ -82,11 +82,10 @@ describe('Forbidden Patterns (Type System Invariants)', () => {
       const content = m.substring(m.indexOf(':', m.indexOf(':') + 1) + 1).trim();
       return !content.startsWith('//') && !content.startsWith('*');
     });
-    // Current state: 6 occurrences, all on Step types (not expression types)
-    // Lines: 56 (import), 322, 328, 369, 380, 453 (all Step variants)
+    // Current state: up to 7 occurrences, all on step/state declarations (not expression types).
     // This is acceptable - steps need instanceId for runtime execution.
     // Expression types (ValueExpr variants) no longer have instanceId.
-    expect(filtered.length).toBeLessThanOrEqual(6);
+    expect(filtered.length).toBeLessThanOrEqual(7);
   });
 
   // =============================================================================
@@ -145,7 +144,7 @@ describe('Forbidden Patterns (Type System Invariants)', () => {
 
     it('schedule steps contain no evalSig/evalEvent (Sprint 3)', () => {
       // TODO: Sprint 3 - after IR unification
-      // Schedule steps should use unified ValueExpr, not separate evalSig/evalEvent
+      // Schedule steps should use unified ValueExpr, not legacy evalSig/evalEvent naming.
       const matches = grepSrc('evalSig\\|evalEvent', 'src/compiler/ir/types.ts');
       expect(matches, 'Schedule steps must use unified ValueExpr').toEqual([]);
     });

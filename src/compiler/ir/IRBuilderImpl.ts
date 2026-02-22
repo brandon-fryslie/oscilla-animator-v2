@@ -564,22 +564,21 @@ export class IRBuilderImpl implements OrchestratorIRBuilder {
     const initial = Array.from({ length: stride }, () => initialValue);
 
     if (options?.instanceId !== undefined && options?.laneCount !== undefined) {
-      // Field state mapping
+      // // [LAW:one-source-of-truth] State mappings use one unified shape; laneCount/instanceId
+      // encode cardinality semantics instead of a parallel scalar/field union.
       this.stateMappings.push({
-        kind: 'field',
         stateId: stableId,
-        instanceId: options.instanceId,
         slotStart: slot,
         laneCount: options.laneCount,
         stride,
         initial,
+        instanceId: options.instanceId,
       });
     } else {
-      // Scalar state mapping
       this.stateMappings.push({
-        kind: 'scalar',
         stateId: stableId,
-        slotIndex: slot,
+        slotStart: slot,
+        laneCount: 1,
         stride,
         initial,
       });
@@ -595,11 +594,7 @@ export class IRBuilderImpl implements OrchestratorIRBuilder {
   findStateSlot(stableId: StableStateId): StateSlotId | undefined {
     for (const mapping of this.stateMappings) {
       if (mapping.stateId === stableId) {
-        if (mapping.kind === 'scalar') {
-          return mapping.slotIndex as StateSlotId;
-        } else {
-          return mapping.slotStart as StateSlotId;
-        }
+        return mapping.slotStart as StateSlotId;
       }
     }
     return undefined;

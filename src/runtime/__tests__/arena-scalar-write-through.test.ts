@@ -82,8 +82,8 @@ function assertScalarWritesInArena(program: CompiledProgramIR, state: RuntimeSta
   let scalarArenaSlots = 0;
   for (const step of schedule.steps) {
     const targetSlot =
-      step.kind === 'evalValue' && step.target.storage === 'value'
-        ? (step.target.slot as number)
+      step.kind === 'evalOne'
+        ? (step.target as number)
         : step.kind === 'materialize' && step.instanceId === SCALAR_INSTANCE_ID
           ? (step.target as number)
           : null;
@@ -139,8 +139,8 @@ describe('scalar writes target arena storage', () => {
     const schedule = program.schedule as ScheduleIR;
     const scalarWriteSlots = new Set<number>();
     for (const irStep of schedule.steps) {
-      if (irStep.kind === 'evalValue' && irStep.target.storage === 'value') {
-        scalarWriteSlots.add(irStep.target.slot as number);
+      if (irStep.kind === 'evalOne') {
+        scalarWriteSlots.add(irStep.target as number);
       }
       if (irStep.kind === 'materialize' && irStep.instanceId === SCALAR_INSTANCE_ID) {
         scalarWriteSlots.add(irStep.target as number);

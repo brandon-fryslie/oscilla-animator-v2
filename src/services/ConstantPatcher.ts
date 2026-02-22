@@ -149,7 +149,7 @@ function patchInstanceCounts(
   // StateMappingField gate: If any StateMappingField references an affected instance,
   // fall back to full recompile (per-lane state requires schedule/state array rebuild).
   for (const mapping of program.schedule.stateMappings) {
-    if (mapping.kind === 'field' && instancePatches.has(mapping.instanceId)) {
+    if (mapping.instanceId !== undefined && mapping.laneCount > 1 && instancePatches.has(mapping.instanceId)) {
       return null; // Fall back to full recompile
     }
   }

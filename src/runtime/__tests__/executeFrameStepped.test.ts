@@ -172,7 +172,7 @@ describe('executeFrameStepped', () => {
     }
   });
 
-  it('evalValue steps capture written slots', () => {
+  it('phase1 value steps capture written slots', () => {
     const program = compileSimplePatch();
     const state = createStateForProgram(program);
     const arena = getTestArena();

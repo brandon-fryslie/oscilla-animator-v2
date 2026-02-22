@@ -115,6 +115,8 @@ function getCursorOffsetInPlainText(element: HTMLDivElement): number {
       if (elem.classList?.contains('expr-ref-chip')) {
         const refText = elem.getAttribute('data-ref');
         length += refText?.length || 0;
+      } else if (elem.tagName === 'BR') {
+        length += 1;
       } else {
         elem.childNodes.forEach(walk);
       }
@@ -162,6 +164,17 @@ function setCursorByPlainTextOffset(element: HTMLDivElement, targetOffset: numbe
           }
         }
         currentOffset += refLength;
+      } else if (elem.tagName === 'BR') {
+        if (currentOffset + 1 >= targetOffset) {
+          const parent = elem.parentNode;
+          if (parent) {
+            const childIndex = Array.from(parent.childNodes).indexOf(elem as ChildNode);
+            targetNode = parent;
+            nodeOffset = childIndex + 1;
+            return true;
+          }
+        }
+        currentOffset += 1;
       } else {
         for (const child of Array.from(node.childNodes)) {
           if (walk(child)) return true;
@@ -216,10 +229,11 @@ function buildInnerHTML(
           .replace(/>/g, '&gt;');
         return `<span class="${chipClass}" contenteditable="false" data-ref="${escapedRef}">${escapedText}</span>`;
       } else {
-        return segment.text
+        const escaped = segment.text
           .replace(/&/g, '&amp;')
           .replace(/</g, '&lt;')
           .replace(/>/g, '&gt;');
+        return escaped.replace(/\n/g, '<br>');
       }
     })
     .join('');

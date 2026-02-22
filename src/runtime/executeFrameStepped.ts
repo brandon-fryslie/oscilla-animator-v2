@@ -21,7 +21,7 @@ import { instanceId as makeInstanceId } from '../core/ids';
 import type { RuntimeState } from './RuntimeState';
 import type { RenderFrameIR } from '../render/types';
 import type { RenderBufferArena } from '../render/RenderBufferArena';
-import { BufferPool } from './BufferPool';
+import { createMaterializeScratch } from './MaterializeScratch';
 import { resolveTime } from './timeResolution';
 import { writeShape2D } from './RuntimeState';
 import { detectDomainChange } from './ContinuityMapping';
@@ -45,8 +45,8 @@ import {
 import type { StepSnapshot, SlotValue, StateSlotValue, ExecutionPhase } from './StepDebugTypes';
 import { readSlotValue, readEventSlotValue, detectAnomalies } from './ValueInspector';
 
-// Separate pool for stepped execution (avoid interference with production pool)
-const STEPPED_MATERIALIZER_POOL = new BufferPool();
+// Separate scratch allocator for stepped execution (avoid interference with production scratch)
+const STEPPED_MATERIALIZE_SCRATCH = createMaterializeScratch();
 
 // =============================================================================
 // Helpers (duplicated from ScheduleExecutor — these are private in the original)
@@ -256,6 +256,8 @@ export function* executeFrameStepped(
   tAbsMs: number,
   previousFrameValues?: ReadonlyMap<ValueSlot, number> | null,
 ): Generator<StepSnapshot, RenderFrameIR, void> {
+  STEPPED_MATERIALIZE_SCRATCH.reset();
+
   const schedule = program.schedule as ScheduleIR;
   const timeModel = schedule.timeModel;
   const instances = schedule.instances;
@@ -284,11 +286,7 @@ export function* executeFrameStepped(
   // Build reverse lookup from state slot index to StateMapping for debug labeling
   const stateSlotToMapping = new Map<number, StateMapping>();
   for (const mapping of schedule.stateMappings) {
-    if (mapping.kind === 'scalar') {
-      stateSlotToMapping.set(mapping.slotIndex, mapping);
-    } else {
-      stateSlotToMapping.set(mapping.slotStart, mapping);
-    }
+    stateSlotToMapping.set(mapping.slotStart, mapping);
   }
 
   // --- PRE-FRAME SETUP ---
@@ -344,7 +342,8 @@ export function* executeFrameStepped(
         laneCount,
         runtimeState,
         program,
-        STEPPED_MATERIALIZER_POOL,
+        undefined,
+        STEPPED_MATERIALIZE_SCRATCH,
       );
       return reduceScalarBuffer(fieldValues, laneCount, expr.op);
     },
@@ -359,107 +358,96 @@ export function* executeFrameStepped(
     const writtenSlots = new Map<ValueSlot, SlotValue>();
 
     switch (step.kind) {
-      case 'evalValue': {
-        const strategy = step.strategy;
+      case 'evalOne': {
+        const targetSlot = step.target;
+        const lookup = resolveSlotOffset(targetSlot);
+        const { storage, offset, slot, stride } = lookup;
 
-        if (strategy === 0 || strategy === 1) {
-          if (step.target.storage !== 'value') {
-            throw new Error(`evalValue: ContinuousOne/Many requires value storage, got ${step.target.storage}`);
+        if (storage === 'shape2d') {
+          const veId = step.expr;
+          const exprNode = valueExprs[veId as number];
+          if (exprNode.kind === 'shapeRef') {
+            writeShape2D(state.values.shape2d, offset, {
+              topologyId: exprNode.topologyId,
+              pointsFieldSlot:
+                (exprNode.kind === 'shapeRef' && exprNode.controlPointField != null
+                  ? (() => {
+                      const cpSlot = fieldExprToSlot.get(exprNode.controlPointField as number);
+                      if (cpSlot === undefined) throw new Error(`Control point field ${exprNode.controlPointField} not in fieldExprToSlot — compiler bug`);
+                      return cpSlot;
+                    })()
+                  : 0),
+              pointsCount: 0,
+              styleRef: 0,
+              flags: 0,
+            });
           }
+          // Capture written shape
+          const meta = slotToMeta.get(targetSlot);
+          if (meta) {
+            writtenSlots.set(targetSlot, readSlotValue(state, lookup, meta, slotToArena));
+          }
+        } else if (storage === 'f64') {
+          const exprNode = valueExprs[step.expr as number];
 
-          const targetSlot = step.target.slot;
-          const lookup = resolveSlotOffset(targetSlot);
-          const { storage, offset, slot, stride } = lookup;
-
-          if (storage === 'shape2d') {
-            const veId = step.expr;
-            const exprNode = valueExprs[veId as number];
-            if (exprNode.kind === 'shapeRef') {
-              writeShape2D(state.values.shape2d, offset, {
-                topologyId: exprNode.topologyId,
-                pointsFieldSlot:
-                  (exprNode.kind === 'shapeRef' && exprNode.controlPointField != null
-                    ? (() => {
-                        const cpSlot = fieldExprToSlot.get(exprNode.controlPointField as number);
-                        if (cpSlot === undefined) throw new Error(`Control point field ${exprNode.controlPointField} not in fieldExprToSlot — compiler bug`);
-                        return cpSlot;
-                      })()
-                    : 0),
-                pointsCount: 0,
-                styleRef: 0,
-                flags: 0,
-              });
+          if (stride > 1 && exprNode?.kind === 'construct') {
+            const arenaDesc = resolveArenaDescriptor(slotToArena, lookup);
+            const written = evaluateConstructScalar(
+              exprNode,
+              valueExprs,
+              state,
+              state.arena,
+              arenaDesc.offset,
+              scalarEvalContext,
+            );
+            if (written !== stride) {
+              throw new Error(`evalOne: construct wrote ${written} components but slot stride is ${stride}`);
             }
-            // Capture written shape
+            for (let i = 0; i < stride; i++) {
+              state.tap?.recordSlotValue?.((slot + i) as ValueSlot, readCanonicalNumeric(slotToArena, state, lookup, i));
+            }
+            state.cache.scalarValues[step.expr as number] = readCanonicalNumeric(slotToArena, state, lookup, 0);
+            state.cache.scalarStamps[step.expr as number] = state.cache.frameId;
+
+            // Capture written slot
             const meta = slotToMeta.get(targetSlot);
             if (meta) {
               writtenSlots.set(targetSlot, readSlotValue(state, lookup, meta, slotToArena));
             }
-          } else if (storage === 'f64') {
-            const exprNode = valueExprs[step.expr as number];
+          } else if (stride === 1) {
+            const value = evaluateValueExprScalar(step.expr as any, program.valueExprs.nodes, state, scalarEvalContext);
+            writeArenaScalar(slotToArena, state, lookup, value);
+            state.tap?.recordSlotValue?.(slot, value);
+            state.cache.scalarValues[step.expr as number] = value;
+            state.cache.scalarStamps[step.expr as number] = state.cache.frameId;
 
-            if (stride > 1 && exprNode?.kind === 'construct') {
-              const arenaDesc = resolveArenaDescriptor(slotToArena, lookup);
-              const written = evaluateConstructScalar(
-                exprNode,
-                valueExprs,
-                state,
-                state.arena,
-                arenaDesc.offset,
-                scalarEvalContext,
-              );
-              if (written !== stride) {
-                throw new Error(`evalValue: construct wrote ${written} components but slot stride is ${stride}`);
-              }
-              for (let i = 0; i < stride; i++) {
-                state.tap?.recordSlotValue?.((slot + i) as ValueSlot, readCanonicalNumeric(slotToArena, state, lookup, i));
-              }
-              state.cache.scalarValues[step.expr as number] = readCanonicalNumeric(slotToArena, state, lookup, 0);
-              state.cache.scalarStamps[step.expr as number] = state.cache.frameId;
-
-              // Capture written slot
-              const meta = slotToMeta.get(targetSlot);
-              if (meta) {
-                writtenSlots.set(targetSlot, readSlotValue(state, lookup, meta, slotToArena));
-              }
-            } else if (stride === 1) {
-              const value = evaluateValueExprScalar(step.expr as any, program.valueExprs.nodes, state, scalarEvalContext);
-              writeArenaScalar(slotToArena, state, lookup, value);
-              state.tap?.recordSlotValue?.(slot, value);
-              state.cache.scalarValues[step.expr as number] = value;
-              state.cache.scalarStamps[step.expr as number] = state.cache.frameId;
-
-              // Capture written scalar
-              const meta = slotToMeta.get(targetSlot);
-              if (meta) {
-                writtenSlots.set(targetSlot, { kind: 'scalar', value, type: meta.type });
-              }
-            } else {
-              throw new Error(
-                `evalValue: stride=${stride} slot ${slot} requires construct expression, got ${exprNode?.kind ?? 'unknown'}`
-              );
+            // Capture written scalar
+            const meta = slotToMeta.get(targetSlot);
+            if (meta) {
+              writtenSlots.set(targetSlot, { kind: 'scalar', value, type: meta.type });
             }
           } else {
-            throw new Error(`evalValue: unsupported storage type '${storage}' for slot ${slot} expr ${step.expr} strategy ${strategy}`);
+            throw new Error(
+              `evalOne: stride=${stride} slot ${slot} requires construct expression, got ${exprNode?.kind ?? 'unknown'}`
+            );
           }
-        } else if (strategy === 2 || strategy === 3) {
-          if (step.target.storage !== 'event') {
-            throw new Error(`evalValue: DiscreteOne/Many requires event storage, got ${step.target.storage}`);
-          }
-
-          const fired = evaluateValueExprEvent(step.expr as any, program.valueExprs, state, program);
-          if (fired) {
-            state.eventScalars[step.target.slot as number] = 1;
-          }
-
-          // Capture event value
-          writtenSlots.set(
-            step.target.slot as unknown as ValueSlot,
-            readEventSlotValue(state, step.target.slot as number),
-          );
         } else {
-          throw new Error(`evalValue: unknown strategy ${strategy}`);
+          throw new Error(`evalOne: unsupported storage type '${storage}' for slot ${slot} expr ${step.expr}`);
         }
+        break;
+      }
+
+      case 'eventDispatch': {
+        const fired = evaluateValueExprEvent(step.expr as any, program.valueExprs, state, program);
+        if (fired) {
+          state.eventScalars[step.target as number] = 1;
+        }
+
+        // Capture event value
+        writtenSlots.set(
+          step.target as unknown as ValueSlot,
+          readEventSlotValue(state, step.target as number),
+        );
         break;
       }
 
@@ -479,7 +467,7 @@ export function* executeFrameStepped(
         }
         const arenaTarget = arenaSlice(state.arena, arenaDesc);
         const buffer = materializeValueExpr(
-          veId, program.valueExprs, step.instanceId, count, state, program, STEPPED_MATERIALIZER_POOL, arenaTarget,
+          veId, program.valueExprs, step.instanceId, count, state, program, arenaTarget, STEPPED_MATERIALIZE_SCRATCH,
         );
 
         state.tap?.recordFieldValue?.(step.target, buffer);
@@ -605,7 +593,7 @@ export function* executeFrameStepped(
       if (count > 0) {
         const instanceIdStr = String(instanceRef.instanceId);
         const tempBuffer = materializeValueExpr(
-          veId, program.valueExprs, makeInstanceId(instanceIdStr), count, state, program, STEPPED_MATERIALIZER_POOL,
+          veId, program.valueExprs, makeInstanceId(instanceIdStr), count, state, program, undefined, STEPPED_MATERIALIZE_SCRATCH,
         );
         const baseSlot = step.stateSlot as number;
         const src = tempBuffer as Float32Array;
@@ -646,6 +634,8 @@ export function* executeFrameStepped(
   }
 
   yield buildSnapshot(-1, null, 'post-frame', totalSteps, program, state, tAbsMs, new Map(), prevValues);
+
+  STEPPED_MATERIALIZE_SCRATCH.reset();
 
   // Return the frame result
   if (program.outputs.length > 0) {

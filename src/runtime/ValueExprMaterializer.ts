@@ -8,7 +8,7 @@
  * - Unified ValueExpr table (no separate scalar/field/event tables)
  * - Materialization is for field-extent expressions only
  * - One-cardinality expressions are evaluated via evaluateValueExprScalar() (not materialized)
- * - Buffer reuse via BufferPool (no allocation in hot path)
+ * - Buffer reuse via MaterializeScratch (no allocation in hot path)
  */
 
 import type { RuntimeState } from './RuntimeState';
@@ -17,7 +17,7 @@ import type { ValueExprId } from '../compiler/ir/Indices';
 import type { PureFn } from '../compiler/ir/types';
 import type { InstanceId } from '../compiler/ir/Indices';
 import type { CompiledProgramIR } from '../compiler/ir/program';
-import type { BufferPool } from './BufferPool';
+import type { MaterializeScratch } from './MaterializeScratch';
 import { evaluateValueExprScalar } from './ValueExprScalarEvaluator';
 import { requireInst } from '../core/canonical-types';
 import { payloadStride } from '../core/canonical-types';
@@ -35,6 +35,16 @@ export interface ValueExprTable {
   readonly nodes: readonly ValueExpr[];
 }
 
+function resolveMaterializeBuffer(
+  target: Float32Array | undefined,
+  length: number,
+  scratch: MaterializeScratch | undefined,
+): Float32Array {
+  if (target) return target;
+  if (scratch) return scratch.allocF32(length);
+  return new Float32Array(length);
+}
+
 /**
  * Materialize a field-extent ValueExpr to a Float32Array buffer.
  *
@@ -47,7 +57,8 @@ export interface ValueExprTable {
  * @param count - Number of lanes to materialize
  * @param state - Runtime state
  * @param program - Compiled program
- * @param pool - Buffer pool for allocation
+ * @param target - Optional destination buffer
+ * @param scratch - Scratch allocator for recursive materialization
  * @returns Float32Array buffer with materialized values
  */
 export function materializeValueExpr(
@@ -57,8 +68,8 @@ export function materializeValueExpr(
   count: number,
   state: RuntimeState,
   program: CompiledProgramIR,
-  pool: BufferPool,
   target?: Float32Array,
+  scratch?: MaterializeScratch,
 ): Float32Array {
   const expr = table.nodes[exprId];
   if (!expr) {
@@ -67,7 +78,7 @@ export function materializeValueExpr(
 
   const stride = payloadStride(expr.type.payload);
   const requiredLength = count * stride;
-  const buf = target ?? (pool.alloc('f32', requiredLength) as Float32Array);
+  const buf = resolveMaterializeBuffer(target, requiredLength, scratch);
   if (buf.length < requiredLength) {
     throw new Error(
       `materializeValueExpr target too small: need ${requiredLength}, got ${buf.length} for expr ${exprId}`,
@@ -96,7 +107,7 @@ export function materializeValueExpr(
 
     case 'kernel': {
       // WI-4: Kernel - dispatch to kernel-specific materialization
-      materializeKernel(expr, buf, table, instanceId, count, state, program, pool, stride);
+      materializeKernel(expr, buf, table, instanceId, count, state, program, scratch, stride);
       break;
     }
 
@@ -105,7 +116,7 @@ export function materializeValueExpr(
       const componentCount = expr.components.length;
       const componentBufs = new Array<Float32Array>(componentCount);
       for (let c = 0; c < componentCount; c++) {
-        componentBufs[c] = materializeValueExpr(expr.components[c], table, instanceId, count, state, program, pool);
+        componentBufs[c] = materializeValueExpr(expr.components[c], table, instanceId, count, state, program, undefined, scratch);
       }
       // Interleave components into output buffer
       for (let i = 0; i < count; i++) {
@@ -118,7 +129,7 @@ export function materializeValueExpr(
 
     case 'extract': {
       // WI-4: Extract - extract single component from composite
-      const inputBuf = materializeValueExpr(expr.input, table, instanceId, count, state, program, pool);
+      const inputBuf = materializeValueExpr(expr.input, table, instanceId, count, state, program, undefined, scratch);
       const inputExpr = table.nodes[expr.input];
       const inputStride = payloadStride(inputExpr.type.payload);
       for (let i = 0; i < count; i++) {
@@ -129,7 +140,7 @@ export function materializeValueExpr(
 
     case 'hslToRgb': {
       // WI-4: HSL→RGB color space conversion
-      const inputBuf = materializeValueExpr(expr.input, table, instanceId, count, state, program, pool);
+      const inputBuf = materializeValueExpr(expr.input, table, instanceId, count, state, program, undefined, scratch);
       hslToRgbConversion(buf, inputBuf, count);
       break;
     }
@@ -187,13 +198,13 @@ function materializeKernel(
   count: number,
   state: RuntimeState,
   program: CompiledProgramIR,
-  pool: BufferPool,
+  scratch: MaterializeScratch | undefined,
   stride: number
 ): void {
   switch (expr.kernelKind) {
     case 'map': {
       // WI-4: Map - apply function to each lane
-      const input = materializeValueExpr(expr.input, table, instanceId, count, state, program, pool);
+      const input = materializeValueExpr(expr.input, table, instanceId, count, state, program, undefined, scratch);
       applyMap(buf, input, expr.fn, count, stride);
       break;
     }
@@ -203,7 +214,7 @@ function materializeKernel(
       const inputCount = expr.inputs.length;
       const inputs = new Array<Float32Array>(inputCount);
       for (let j = 0; j < inputCount; j++) {
-        inputs[j] = materializeValueExpr(expr.inputs[j], table, instanceId, count, state, program, pool);
+        inputs[j] = materializeValueExpr(expr.inputs[j], table, instanceId, count, state, program, undefined, scratch);
       }
       applyZip(buf, inputs, expr.fn, count, stride);
       break;
@@ -237,7 +248,7 @@ function materializeKernel(
 
     case 'zipPromote': {
       // WI-4: ZipPromote - combine field with ones
-      const fieldInput = materializeValueExpr(expr.field, table, instanceId, count, state, program, pool);
+      const fieldInput = materializeValueExpr(expr.field, table, instanceId, count, state, program, undefined, scratch);
       const oneCount = expr.ones.length;
       const oneValues = new Array<number>(oneCount);
       for (let j = 0; j < oneCount; j++) {
@@ -249,7 +260,7 @@ function materializeKernel(
 
     case 'pathDerivative': {
       // WI-4: PathDerivative - materialize input, compute derivative
-      const input = materializeValueExpr(expr.field, table, instanceId, count, state, program, pool) as Float32Array;
+      const input = materializeValueExpr(expr.field, table, instanceId, count, state, program, undefined, scratch) as Float32Array;
       // Read topology ID from expression (Phase 1: available but not yet used for dispatch)
       const topologyId = expr.topologyId;
       // Future: Look up topology for bezier dispatch
@@ -284,9 +295,9 @@ function materializeKernel(
       const sourceCount = typeof rawCount === 'number' ? rawCount : 0;
 
       // Materialize controlPoints with source instance count
-      const cpBuf = materializeValueExpr(expr.controlPoints, table, sourceInstId, sourceCount, state, program, pool);
+      const cpBuf = materializeValueExpr(expr.controlPoints, table, sourceInstId, sourceCount, state, program, undefined, scratch);
       // Materialize tField with target count (M, the normal count parameter)
-      const tBuf = materializeValueExpr(expr.tField, table, instanceId, count, state, program, pool);
+      const tBuf = materializeValueExpr(expr.tField, table, instanceId, count, state, program, undefined, scratch);
 
       // Look up topology for closed flag
       const topology = getTopology(expr.topologyId) as PathTopologyDef | undefined;

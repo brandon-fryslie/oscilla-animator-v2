@@ -3,11 +3,11 @@
  *
  * Builds execution schedule with explicit phase ordering:
  * 1. Update rails/time inputs
- * 2. Execute continuous scalars (evalValue)
+ * 2. Execute cardinality-one values (evalOne/materialize)
  * 3. Build continuity mappings (continuityMapBuild)
  * 4. Execute continuous fields (materialize)
  * 5. Apply continuity to field targets (continuityApply)
- * 6. Apply discrete ops (events)
+ * 6. Apply discrete ops (eventDispatch)
  * 7. Sinks (render)
  * 8. State writes (stateWrite)
  *
@@ -18,7 +18,7 @@
  * All slots are allocated by Pass 6 (block lowering) and Pass 6b (continuity pipeline).
  */
 
-import type { Step, StepEvalValue, StepMaterialize, TimeModel, StateMapping, ScalarSlotDecl, FieldSlotDecl, EvalStrategy, EvalTarget } from '../ir/types';
+import type { Step, StepEvalOne, StepEvalEvent, StepMaterialize, TimeModel, StateMapping, ScalarSlotDecl, FieldSlotDecl } from '../ir/types';
 import { SCALAR_INSTANCE_ID, type InstanceId } from '../ir/Indices';
 import type { ValueExpr, ValueExprId } from '../ir/value-expr';
 import type { UnlinkedIRFragments } from './lower-blocks';
@@ -26,7 +26,6 @@ import type { AcyclicOrLegalGraph } from '../ir/patches';
 import type { TimeModelIR } from '../ir/schedule';
 import type { ContinuityPipelineIR } from './continuity-pipeline';
 import { requireInst } from '../../core/canonical-types';
-import type { CanonicalType } from '../../core/canonical-types';
 import type { InstanceDecl } from '../ir/types';
 import { payloadStride } from '../../core/canonical-types';
 
@@ -128,7 +127,9 @@ export interface ScheduleIR {
  * ```
  */
 export function getScalarSlots(schedule: ScheduleIR): ScalarSlotDecl[] {
-  return schedule.stateMappings.filter((m): m is ScalarSlotDecl => m.kind === 'scalar');
+  return schedule.stateMappings.filter(
+    (m): m is ScalarSlotDecl => m.laneCount === 1 && m.instanceId === undefined,
+  );
 }
 
 /**
@@ -149,27 +150,9 @@ export function getScalarSlots(schedule: ScheduleIR): ScalarSlotDecl[] {
  * ```
  */
 export function getFieldSlots(schedule: ScheduleIR): FieldSlotDecl[] {
-  return schedule.stateMappings.filter((m): m is FieldSlotDecl => m.kind === 'field');
-}
-
-/**
- * Derive evaluation strategy from CanonicalType at compile time.
- * Pre-resolving strategy avoids runtime type inspection in the hot loop.
- *
- * @param type - Fully resolved canonical type (no vars)
- * @returns Evaluation strategy for executor dispatch
- */
-function deriveStrategy(type: CanonicalType): EvalStrategy {
-  const temp = requireInst(type.extent.temporality, 'temporality');
-  const card = requireInst(type.extent.cardinality, 'cardinality');
-
-  const isDiscrete = temp.kind === 'discrete';
-  const isMany = card.kind === 'many';
-
-  if (isDiscrete) {
-    return isMany ? 3 /* EvalStrategy.DiscreteMany */ : 2 /* EvalStrategy.DiscreteOne */;
-  }
-  return isMany ? 1 /* EvalStrategy.ContinuousMany */ : 0 /* EvalStrategy.ContinuousOne */;
+  return schedule.stateMappings.filter(
+    (m): m is FieldSlotDecl => m.instanceId !== undefined && m.laneCount > 1,
+  );
 }
 
 function isArenaScalarPayload(expr: ValueExpr): boolean {
@@ -468,11 +451,11 @@ export function pass7Schedule(
 
   // Generate scalar write steps for all registered cardinality-one slots.
   // Scalar expressions that depend on eventRead must be evaluated AFTER events.
-  // Pre-event ones go in Phase 1, post-event ones go after evalEvent.
+  // Pre-event ones go in Phase 1, post-event ones go after eventDispatch.
   const scalarSlots = unlinkedIR.builder.getScalarSlots();
   const scalarRootExprIds = new Set<number>(scalarSlots.keys());
-  const evalValueStepsPre: Step[] = [];
-  const evalValueStepsPost: Step[] = [];
+  const evalOneStepsPre: StepEvalOne[] = [];
+  const evalOneStepsPost: StepEvalOne[] = [];
   const scalarMaterializeStepsPre: StepMaterialize[] = [];
   const scalarMaterializeStepsPost: StepMaterialize[] = [];
   const scalarMaterializeEligibility = new Map<number, boolean>();
@@ -507,20 +490,16 @@ export function pass7Schedule(
       continue;
     }
 
-    const strategy = deriveStrategy(expr.type);
-    const target: EvalTarget = { storage: 'value', slot };
-
-    const step: StepEvalValue = {
-      kind: 'evalValue',
+    const step: StepEvalOne = {
+      kind: 'evalOne',
       expr: exprId,
-      target,
-      strategy,
+      target: slot,
     };
 
     if (valueExprDependsOnEvent(scalarExprId as number, valueExprs)) {
-      evalValueStepsPost.push(step);
+      evalOneStepsPost.push(step);
     } else {
-      evalValueStepsPre.push(step);
+      evalOneStepsPre.push(step);
     }
   }
 
@@ -529,22 +508,18 @@ export function pass7Schedule(
   validateBroadcastKernelInputs(valueExprs);
   validateScalarExtractInputs(valueExprs, scalarRootExprIds);
 
-  // Generate evalValue steps for all registered event slots.
+  // Generate eventDispatch steps for all registered event slots.
   // Events are evaluated after continuityApply and before render.
   const eventSlots = unlinkedIR.builder.getEventSlots();
-  const evalEventSteps: Step[] = [];
+  const eventDispatchSteps: StepEvalEvent[] = [];
   for (const [eventId, eventSlot] of eventSlots) {
     const expr = valueExprs[eventId as number];
     if (!expr) continue;
 
-    const strategy = deriveStrategy(expr.type);
-    const target: EvalTarget = { storage: 'event', slot: eventSlot };
-
-    evalEventSteps.push({
-      kind: 'evalValue',
+    eventDispatchSteps.push({
+      kind: 'eventDispatch',
       expr: eventId,
-      target,
-      strategy,
+      target: eventSlot,
     });
   }
 
@@ -558,23 +533,23 @@ export function pass7Schedule(
   }
 
   // Combine all steps in correct execution order:
-  // 1. EvalValue-pre (ones NOT dependent on events)
+  // 1. EvalOne-pre (ones NOT dependent on events)
   // 2. ContinuityMapBuild (detect domain changes, compute mappings)
   // 3. Materialize (evaluate fields to buffers)
   // 4. ContinuityApply (apply gauge/slew/crossfade to buffers)
   // 5. EvalEvent (evaluate discrete events → eventScalars)
-  // 6. EvalValue-post (ones that depend on eventRead)
+  // 6. EvalOne-post (ones that depend on eventRead)
   // 7. Render (use continuity-applied buffers)
   // 8. StateWrite (persist state for next frame)
   const steps: Step[] = [
-    ...evalValueStepsPre,
+    ...evalOneStepsPre,
     ...scalarMaterializeStepsPre,
     ...continuityPipeline.mapBuildSteps,
     ...continuityPipeline.materializeSteps,
     ...continuityPipeline.continuityApplySteps,
-    ...evalEventSteps,
+    ...eventDispatchSteps,
     ...scalarMaterializeStepsPost,
-    ...evalValueStepsPost,
+    ...evalOneStepsPost,
     ...continuityPipeline.renderSteps,
     ...stateWriteSteps,
   ];

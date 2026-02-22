@@ -264,44 +264,28 @@ export type TimeModel = TimeModelIR;
 // =============================================================================
 
 /**
- * Evaluation strategy for value expressions.
- * Pre-resolved at compile time to avoid runtime type inspection.
- *
- * const enum inlines to integer constants for zero-overhead dispatch.
+ * Evaluate a cardinality-one expression into a value slot.
+ * // [LAW:one-source-of-truth] One-lane values are still field data; this step
+ * // writes directly to the canonical slot backing store instead of a signal-only path.
  */
-export const enum EvalStrategy {
-  ContinuousOne  = 0,  // Continuous temporality, cardinality one
-  ContinuousMany = 1,  // Continuous temporality, cardinality many
-  DiscreteOne    = 2,  // Discrete temporality, cardinality one
-  DiscreteMany   = 3,  // Discrete temporality, cardinality many (future)
+export interface StepEvalOne {
+  readonly kind: 'evalOne';
+  readonly expr: ValueExprId;
+  readonly target: ValueSlot;
 }
 
 /**
- * Evaluation target discriminated union.
- * Keeps ValueSlot and EventSlotId separate for type safety at storage backend boundary.
+ * Evaluate an event expression into an event slot.
  */
-export type EvalTarget =
-  | { readonly storage: 'value'; readonly slot: ValueSlot }
-  | { readonly storage: 'event'; readonly slot: EventSlotId };
-
-/**
- * Unified value evaluation step.
- * Replaces StepEvalSig and StepEvalEvent with strategy-based dispatch.
- *
- * Sprint 3: Step Format Unification
- * - Strategy is pre-resolved from CanonicalType during schedule construction
- * - No runtime type inspection in hot loop
- * - Executor dispatches on step.strategy (integer enum)
- */
-export interface StepEvalValue {
-  readonly kind: 'evalValue';
+export interface StepEvalEvent {
+  readonly kind: 'eventDispatch';
   readonly expr: ValueExprId;
-  readonly target: EvalTarget;
-  readonly strategy: EvalStrategy;
+  readonly target: EventSlotId;
 }
 
 export type Step =
-  | StepEvalValue
+  | StepEvalOne
+  | StepEvalEvent
   | StepMaterialize
   | StepRender
   | StepStateWrite
@@ -407,71 +391,31 @@ export function stableStateId(blockId: string, stateKind: string): StableStateId
 }
 
 /**
- * State mapping for scalar (one-cardinality) state.
- *
- * Used for stateful primitives operating on a single value per frame.
+ * State mapping with lane semantics.
+ * // [LAW:one-source-of-truth] A single shape models state slots; laneCount encodes
+ * // one-vs-many semantics without parallel scalar/field types.
  */
-export interface StateMappingScalar {
-  readonly kind: 'scalar';
+export interface StateMapping {
   /** Stable semantic identity */
   readonly stateId: StableStateId;
-  /** Positional slot index (changes each compile) */
-  readonly slotIndex: number;
-  /** Floats per state element (usually 1) */
-  readonly stride: number;
-  /** Initial values (length = stride) */
-  readonly initial: readonly number[];
-}
-
-/**
- * Spec-aligned type alias for scalar state slot declarations.
- *
- * This is the name used in the specification (04-compilation.md §I9).
- * The implementation uses `StateMappingScalar` as the canonical name
- * because it clarifies the "mapping" between semantic state IDs and
- * positional slots.
- *
- * @see StateMappingScalar
- * @see design-docs/CANONICAL-oscilla-v2.5-20260109/topics/04-compilation.md §I9
- */
-export type ScalarSlotDecl = StateMappingScalar;
-
-/**
- * State mapping for field (many cardinality) state.
- *
- * Used for stateful primitives operating on per-lane state arrays.
- * Lane remapping during hot-swap uses the continuity mapping service.
- */
-export interface StateMappingField {
-  readonly kind: 'field';
-  /** Stable semantic identity */
-  readonly stateId: StableStateId;
-  /** Instance this state tracks (for lane mapping) */
-  readonly instanceId: InstanceId;
   /** Start offset in state array (positional, changes each compile) */
   readonly slotStart: number;
-  /** Number of lanes at compile time */
+  /** Number of lanes for this state entry (1 for one-cardinality state) */
   readonly laneCount: number;
   /** Floats per lane (>=1) */
   readonly stride: number;
   /** Per-lane initial values template (length = stride) */
   readonly initial: readonly number[];
+  /** Instance tracked by many-lane state (undefined for laneCount === 1) */
+  readonly instanceId?: InstanceId;
 }
 
-/**
- * Spec-aligned type alias for field state slot declarations.
- *
- * This is the name used in the specification (04-compilation.md §I9).
- * The implementation uses `StateMappingField` as the canonical name
- * because it clarifies the "mapping" between semantic state IDs and
- * positional slots, with lane remapping for hot-swap.
- *
- * @see StateMappingField
- * @see design-docs/CANONICAL-oscilla-v2.5-20260109/topics/04-compilation.md §I9
- */
-export type FieldSlotDecl = StateMappingField;
+export type ScalarSlotDecl = StateMapping & {
+  readonly laneCount: 1;
+  readonly instanceId?: undefined;
+};
 
-/**
- * Union of scalar and field state mappings.
- */
-export type StateMapping = StateMappingScalar | StateMappingField;
+export type FieldSlotDecl = StateMapping & {
+  readonly laneCount: number;
+  readonly instanceId: InstanceId;
+};

@@ -107,17 +107,16 @@ describe('getExprAddressTable', () => {
     expect(table.fieldExprToSlot.get(10)).toBe(valueSlot(5));
   });
 
-  it('builds scalarExprToArenaOffset from evalValue steps', () => {
+  it('builds scalarExprToArenaOffset from evalOne steps', () => {
     const program = mockProgram({
       slotMeta: [
         { slot: valueSlot(3), storage: 'f64', offset: 7, stride: 1, type: SIG_FLOAT },
       ],
       steps: [
         {
-          kind: 'evalValue',
+          kind: 'evalOne',
           expr: 42 as any,
-          target: { storage: 'value' as const, slot: valueSlot(3) },
-          strategy: 0 as any,
+          target: valueSlot(3),
         },
       ],
     });

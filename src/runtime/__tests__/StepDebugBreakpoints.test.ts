@@ -25,7 +25,8 @@ import type { Breakpoint, StepSnapshot } from '../StepDebugTypes';
  */
 function getStepExprId(step: Step): ValueExprId | null {
   switch (step.kind) {
-    case 'evalValue':
+    case 'evalOne':
+    case 'eventDispatch':
       return step.expr;
     case 'materialize':
       return step.field;
@@ -45,12 +46,11 @@ function getStepExprId(step: Step): ValueExprId | null {
 }
 
 describe('getStepExprId', () => {
-  it('extracts expr from evalValue step', () => {
+  it('extracts expr from evalOne step', () => {
     const step: Step = {
-      kind: 'evalValue',
+      kind: 'evalOne',
       expr: 42 as ValueExprId,
-      target: { storage: 'value', slot: 0 as ValueSlot },
-      strategy: 0,
+      target: 0 as ValueSlot,
     };
     expect(getStepExprId(step)).toBe(42);
   });

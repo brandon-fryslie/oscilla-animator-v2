@@ -90,9 +90,8 @@ export function getExprAddressTable(program: CompiledProgramIR): ExprAddressTabl
         }
       }
     }
-    if (step.kind === 'evalValue' && step.target.storage === 'value') {
-      const lookup = slotLookup.get(step.target.slot);
-      const arenaDesc = slotToArena.get(step.target.slot);
+    if (step.kind === 'evalOne') {
+      const arenaDesc = slotToArena.get(step.target);
       if (arenaDesc) {
         scalarExprToArenaOffset.set(step.expr as number, arenaDesc.offset);
       }

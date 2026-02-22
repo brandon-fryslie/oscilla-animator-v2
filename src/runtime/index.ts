@@ -4,7 +4,6 @@
  * Executes compiled IR programs frame-by-frame.
  */
 
-export { BufferPool, getBufferFormat, type BufferFormat } from './BufferPool';
 export {
   type EffectiveTime,
   type TimeState,

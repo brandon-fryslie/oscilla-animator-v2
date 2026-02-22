@@ -17,7 +17,7 @@ import type { RenderBufferArena } from '../render/RenderBufferArena';
 import { resolveTime } from './timeResolution';
 import { writeShape2D } from './RuntimeState';
 import {
-  MATERIALIZER_POOL,
+  MATERIALIZE_SCRATCH,
   renderStepsBuffer as _renderSteps,
   shapeRecord as _shapeRecord,
   assemblerCtx as _assemblerCtx,
@@ -205,6 +205,8 @@ export function executeFrame(
   arena: RenderBufferArena,
   tAbsMs: number,
 ): RenderFrameIR {
+  MATERIALIZE_SCRATCH.reset();
+
   // Extract schedule components
   const schedule = program.schedule as ScheduleIR;
   const timeModel = schedule.timeModel;
@@ -306,7 +308,8 @@ export function executeFrame(
         laneCount,
         runtimeState,
         program,
-        MATERIALIZER_POOL,
+        undefined,
+        MATERIALIZE_SCRATCH,
       );
       return reduceScalarBuffer(fieldValues, laneCount, expr.op);
     },
@@ -315,106 +318,91 @@ export function executeFrame(
   // PHASE 1: Execute all non-stateWrite steps
   for (const step of steps) {
     switch (step.kind) {
-      case 'evalValue': {
-        // Unified value evaluation with strategy-based dispatch (Sprint 3)
-        // Strategy is pre-resolved at compile time to avoid runtime type inspection
-        const strategy = step.strategy;
-        
-        if (strategy === 0 /* EvalStrategy.ContinuousOne */ || strategy === 1 /* EvalStrategy.ContinuousMany */) {
-          // Continuous path (cardinality-one/many values)
-          if (step.target.storage !== 'value') {
-            throw new Error('evalValue: ContinuousOne/Many requires value storage, got ' + step.target.storage);
-          }
-          
-          const targetSlot = step.target.slot;
-          const lookup = resolveSlotOffsetFromMap(slotLookupMap,targetSlot);
-          const { storage, offset, slot, stride } = lookup;
+      case 'evalOne': {
+        const targetSlot = step.target;
+        const lookup = resolveSlotOffsetFromMap(slotLookupMap, targetSlot);
+        const { storage, offset, slot, stride } = lookup;
 
-          if (storage === 'shape2d') {
-            // Shape value: write Shape2D record to shape2d bank
-            const veId = step.expr;
-            const exprNode = valueExprs[veId as number];
-            if (exprNode.kind === 'shapeRef') {
-              // Resolve control point field slot (avoid IIFE closure)
-              let cpFieldSlot = 0;
-              if (exprNode.controlPointField != null) {
-                const cpSlot = fieldExprToSlot.get(exprNode.controlPointField as number);
-                if (cpSlot === undefined) throw new Error('Control point field ' + exprNode.controlPointField + ' not in fieldExprToSlot — compiler bug');
-                cpFieldSlot = cpSlot;
-              }
-              // Write shape record — populate reusable record fields
-              _shapeRecord.topologyId = exprNode.topologyId;
-              _shapeRecord.pointsFieldSlot = cpFieldSlot;
-              _shapeRecord.pointsCount = 0;
-              _shapeRecord.styleRef = 0;
-              _shapeRecord.flags = 0;
-              writeShape2D(state.values.shape2d, offset, _shapeRecord);
+        if (storage === 'shape2d') {
+          // Shape value: write Shape2D record to shape2d bank
+          const veId = step.expr;
+          const exprNode = valueExprs[veId as number];
+          if (exprNode.kind === 'shapeRef') {
+            // Resolve control point field slot (avoid IIFE closure)
+            let cpFieldSlot = 0;
+            if (exprNode.controlPointField != null) {
+              const cpSlot = fieldExprToSlot.get(exprNode.controlPointField as number);
+              if (cpSlot === undefined) throw new Error('Control point field ' + exprNode.controlPointField + ' not in fieldExprToSlot — compiler bug');
+              cpFieldSlot = cpSlot;
             }
-          } else if (storage === 'f64') {
-            // Check if this is a multi-component construct expression
-            const exprNode = valueExprs[step.expr as number];
+            // Write shape record — populate reusable record fields
+            _shapeRecord.topologyId = exprNode.topologyId;
+            _shapeRecord.pointsFieldSlot = cpFieldSlot;
+            _shapeRecord.pointsCount = 0;
+            _shapeRecord.styleRef = 0;
+            _shapeRecord.flags = 0;
+            writeShape2D(state.values.shape2d, offset, _shapeRecord);
+          }
+        } else if (storage === 'f64') {
+          // Check if this is a multi-component construct expression
+          const exprNode = valueExprs[step.expr as number];
 
-            if (stride > 1 && exprNode?.kind === 'construct') {
-              // Multi-component cardinality-one value: write all components
-              const arenaDesc = resolveArenaDescriptor(slotToArena, lookup);
-              const written = evaluateConstructScalar(
-                exprNode,
-                valueExprs,
-                state,
-                state.arena,
-                arenaDesc.offset,
-                scalarEvalContext,
-              );
+          if (stride > 1 && exprNode?.kind === 'construct') {
+            // Multi-component cardinality-one value: write all components
+            const arenaDesc = resolveArenaDescriptor(slotToArena, lookup);
+            const written = evaluateConstructScalar(
+              exprNode,
+              valueExprs,
+              state,
+              state.arena,
+              arenaDesc.offset,
+              scalarEvalContext,
+            );
 
-              if (written !== stride) {
-                throw new Error(
-                  'evalValue: construct wrote ' + written + ' components but slot stride is ' + stride
-                );
-              }
-              // Debug tap: Record each component value
-              for (let i = 0; i < stride; i++) {
-                state.tap?.recordSlotValue?.((slot + i) as ValueSlot, readCanonicalNumeric(slotToArena, state, lookup, i));
-              }
-
-              // Cache first component (for backward compatibility)
-              state.cache.scalarValues[step.expr as number] = readCanonicalNumeric(slotToArena, state, lookup, 0);
-              state.cache.scalarStamps[step.expr as number] = state.cache.frameId;
-            } else if (stride === 1) {
-              // Scalar cardinality-one value: evaluate and write single value
-              const value = evaluateValueExprScalar(step.expr as any, program.valueExprs.nodes, state, scalarEvalContext);
-
-              writeArenaScalar(slotToArena, state, lookup, value);
-
-              // Debug tap: Record slot value (Sprint 1: Debug Probe)
-              state.tap?.recordSlotValue?.(slot, value);
-
-              // Cache (indexed by expr id). Under Option B these ids are ValueExprIds.
-              state.cache.scalarValues[step.expr as number] = value;
-              state.cache.scalarStamps[step.expr as number] = state.cache.frameId;
-            } else {
-              // stride>1 but not construct - invalid
+            if (written !== stride) {
               throw new Error(
-                'evalValue: stride=' + stride + ' slot ' + slot + ' requires construct expression, got ' + (exprNode ? exprNode.kind : 'unknown')
+                'evalOne: construct wrote ' + written + ' components but slot stride is ' + stride
               );
             }
-          } else {
-            throw new Error('evalValue: unsupported storage type \'' + storage + '\' for slot ' + slot + ' expr ' + step.expr + ' strategy ' + strategy);
-          }
-        } else if (strategy === 2 /* EvalStrategy.DiscreteOne */ || strategy === 3 /* EvalStrategy.DiscreteMany */) {
-          // Discrete path (events)
-          if (step.target.storage !== 'event') {
-            throw new Error('evalValue: DiscreteOne/Many requires event storage, got ' + step.target.storage);
-          }
-          
-          // ValueExpr-only event evaluation (cutover complete)
-          const fired = evaluateValueExprEvent(step.expr as any, program.valueExprs, state, program);
+            // Debug tap: Record each component value
+            for (let i = 0; i < stride; i++) {
+              state.tap?.recordSlotValue?.((slot + i) as ValueSlot, readCanonicalNumeric(slotToArena, state, lookup, i));
+            }
 
-          // Monotone OR: only write 1, never write 0 back — ensures any-fired-stays-fired
-          if (fired) {
-            state.eventScalars[step.target.slot as number] = 1;
+            // Cache first component (for backward compatibility)
+            state.cache.scalarValues[step.expr as number] = readCanonicalNumeric(slotToArena, state, lookup, 0);
+            state.cache.scalarStamps[step.expr as number] = state.cache.frameId;
+          } else if (stride === 1) {
+            // Scalar cardinality-one value: evaluate and write single value
+            const value = evaluateValueExprScalar(step.expr as any, program.valueExprs.nodes, state, scalarEvalContext);
+
+            writeArenaScalar(slotToArena, state, lookup, value);
+
+            // Debug tap: Record slot value (Sprint 1: Debug Probe)
+            state.tap?.recordSlotValue?.(slot, value);
+
+            // Cache (indexed by expr id). Under Option B these ids are ValueExprIds.
+            state.cache.scalarValues[step.expr as number] = value;
+            state.cache.scalarStamps[step.expr as number] = state.cache.frameId;
+          } else {
+            // stride>1 but not construct - invalid
+            throw new Error(
+              'evalOne: stride=' + stride + ' slot ' + slot + ' requires construct expression, got ' + (exprNode ? exprNode.kind : 'unknown')
+            );
           }
         } else {
-          throw new Error('evalValue: unknown strategy ' + strategy);
+          throw new Error('evalOne: unsupported storage type \'' + storage + '\' for slot ' + slot + ' expr ' + step.expr);
+        }
+        break;
+      }
+
+      case 'eventDispatch': {
+        // ValueExpr-only event evaluation (cutover complete)
+        const fired = evaluateValueExprEvent(step.expr as any, program.valueExprs, state, program);
+
+        // Monotone OR: only write 1, never write 0 back — ensures any-fired-stays-fired
+        if (fired) {
+          state.eventScalars[step.target as number] = 1;
         }
         break;
       }
@@ -452,8 +440,8 @@ export function executeFrame(
           count,
           state,
           program,
-          MATERIALIZER_POOL,
           arenaTarget,
+          MATERIALIZE_SCRATCH,
         );
 
         // Debug tap: Record field value
@@ -637,7 +625,8 @@ export function executeFrame(
         count,
         state,
         program,
-        MATERIALIZER_POOL
+        undefined,
+        MATERIALIZE_SCRATCH,
       );
 
       // Write each lane to state
@@ -649,9 +638,8 @@ export function executeFrame(
     }
   }
 
-  // Release all materializer pool buffers back to the pool for reuse next frame.
-  // At this point all materialized buffers have been consumed into arena/state.
-  MATERIALIZER_POOL.releaseAll();
+  // Reset scratch allocator after all materialized buffers have been consumed.
+  MATERIALIZE_SCRATCH.reset();
 
   // 3.5 Finalize continuity frame (spec §5.1)
   // Updates time tracking and clears frame-local flags
