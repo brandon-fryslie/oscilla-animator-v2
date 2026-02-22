@@ -137,13 +137,10 @@ export const OscillaEdge = observer(function OscillaEdge(
     ?? '';
   const { selection, frontend, patch } = useStores();
   const [chipAnchorPosition, setChipAnchorPosition] = useState<{ top: number; left: number } | null>(null);
-  const [activeLensContext, setActiveLensContext] = useState<{ lensId: string; targetPortId: string } | null>(null);
-  const [hoverLensContext, setHoverLensContext] = useState<{
+  const [activeLensContext, setActiveLensContext] = useState<{
     lensId: string;
     lensIndex: number;
     targetPortId: string;
-    top: number;
-    left: number;
   } | null>(null);
 
   // Compute bezier path
@@ -209,16 +206,10 @@ export const OscillaEdge = observer(function OscillaEdge(
 
   const activeLens = edgeLenses.find((lens) => lens.id === activeLensContext?.lensId) ?? null;
   const activeTargetPortId = activeLensContext?.targetPortId ?? '';
-  const hoverLens = edgeLenses.find((lens) => lens.id === hoverLensContext?.lensId) ?? null;
-  const hoverTargetPortId = hoverLensContext?.targetPortId ?? '';
 
   const closeLensPopover = (): void => {
     setChipAnchorPosition(null);
     setActiveLensContext(null);
-  };
-
-  const closeHoverPreview = (): void => {
-    setHoverLensContext(null);
   };
 
   return (
@@ -249,46 +240,44 @@ export const OscillaEdge = observer(function OscillaEdge(
                 onMouseDown={(event) => {
                   event.stopPropagation();
                 }}
-                onMouseEnter={(event) => {
-                  event.stopPropagation();
-                  if (!targetHandle) return;
-                  setHoverLensContext({
-                    lensId: lens.id,
-                    lensIndex,
-                    targetPortId: targetHandle,
-                    top: event.clientY,
-                    left: event.clientX,
-                  });
-                }}
-                onMouseLeave={closeHoverPreview}
                 onClick={(event) => {
                   event.stopPropagation();
                   selection.selectEdge(id);
                   if (!targetHandle) return;
-                  closeHoverPreview();
-                  setActiveLensContext({ lensId: lens.id, targetPortId: targetHandle });
-                  setChipAnchorPosition({ top: event.clientY, left: event.clientX });
+
+                  const nextPosition = { top: event.clientY + 12, left: event.clientX + 12 };
+                  const isSameLens = activeLensContext?.lensId === lens.id;
+
+                  // [LAW:single-enforcer] One interactive surface handles lens preview + editing.
+                  if (isSameLens) {
+                    closeLensPopover();
+                    return;
+                  }
+
+                  setActiveLensContext({ lensId: lens.id, lensIndex, targetPortId: targetHandle });
+                  setChipAnchorPosition(nextPosition);
                 }}
                 style={{
-                  minHeight: 24,
-                  borderRadius: 12,
+                  minHeight: 34,
+                  minWidth: 92,
+                  borderRadius: 17,
                   background: graphColors.lensBadge,
                   border: '1px solid #d97706',
-                  fontSize: 10,
+                  fontSize: 11,
                   fontWeight: 700,
                   color: '#111',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  padding: '2px 10px',
+                  padding: '6px 14px',
                   boxShadow: '0 1px 2px rgba(0,0,0,0.25)',
                   cursor: 'pointer',
-                  maxWidth: 140,
+                  maxWidth: 220,
                   whiteSpace: 'nowrap',
                   overflow: 'hidden',
                   textOverflow: 'ellipsis',
                 }}
-                title={`${getLensLabel(lens.lensType)} (hover: preview, click: edit)`}
+                title={`${getLensLabel(lens.lensType)} (click: preview + edit)`}
               >
                 {getLensLabel(lens.lensType)}
               </button>
@@ -325,49 +314,6 @@ export const OscillaEdge = observer(function OscillaEdge(
       )}
 
       <Popover
-        open={Boolean(hoverLensContext && hoverLens && hoverTargetPortId)}
-        anchorReference="anchorPosition"
-        anchorPosition={hoverLensContext ? { top: hoverLensContext.top, left: hoverLensContext.left } : undefined}
-        onClose={closeHoverPreview}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
-        transformOrigin={{ vertical: 'top', horizontal: 'left' }}
-        disableAutoFocus
-        disableEnforceFocus
-        disableRestoreFocus
-        slotProps={{
-          paper: {
-            style: { pointerEvents: 'none' },
-          },
-        }}
-      >
-        {hoverLens && hoverLensContext && (
-          <div
-            style={{
-              minWidth: 320,
-              maxWidth: 420,
-              maxHeight: 520,
-              overflow: 'auto',
-              padding: 10,
-              background: 'linear-gradient(135deg, rgba(22, 24, 30, 0.98) 0%, rgba(14, 16, 22, 0.98) 100%)',
-              border: '1px solid rgba(217, 119, 6, 0.35)',
-            }}
-          >
-            <LensImpactPreview
-              beforeEdgeId={hoverLensContext.lensIndex === 0 ? id : null}
-              beforeBlockId={hoverLensContext.lensIndex === 0 ? null : target}
-              beforePortId={hoverLensContext.lensIndex === 0 ? null : hoverTargetPortId}
-              afterBlockId={target}
-              afterPortId={hoverTargetPortId}
-              beforeLabel={hoverLensContext.lensIndex === 0
-                ? `before · ${source}.${sourceHandle}`
-                : `before · ${target}.${hoverTargetPortId}`}
-              afterLabel={`after · ${target}.${hoverTargetPortId}`}
-            />
-          </div>
-        )}
-      </Popover>
-
-      <Popover
         open={Boolean(chipAnchorPosition && activeLens && activeTargetPortId)}
         anchorReference="anchorPosition"
         anchorPosition={chipAnchorPosition ?? undefined}
@@ -383,16 +329,41 @@ export const OscillaEdge = observer(function OscillaEdge(
             onMouseDown={(event) => event.stopPropagation()}
             onClick={(event) => event.stopPropagation()}
             style={{
-              minWidth: 280,
-              maxWidth: 360,
-              padding: 12,
+              minWidth: 420,
+              maxWidth: 620,
+              padding: 14,
               background: 'linear-gradient(135deg, rgba(30, 30, 40, 0.98) 0%, rgba(20, 20, 30, 0.98) 100%)',
               border: '1px solid rgba(139, 92, 246, 0.3)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 12,
             }}
           >
             <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 8 }}>
               {getLensLabel(activeLens.lensType)}
             </div>
+
+            <div
+              style={{
+                padding: 10,
+                borderRadius: 8,
+                border: '1px solid rgba(217, 119, 6, 0.35)',
+                background: 'linear-gradient(135deg, rgba(22, 24, 30, 0.98) 0%, rgba(14, 16, 22, 0.98) 100%)',
+              }}
+            >
+              <LensImpactPreview
+                beforeEdgeId={activeLensContext?.lensIndex === 0 ? id : null}
+                beforeBlockId={activeLensContext?.lensIndex === 0 ? null : target}
+                beforePortId={activeLensContext?.lensIndex === 0 ? null : activeTargetPortId}
+                afterBlockId={target}
+                afterPortId={activeTargetPortId}
+                beforeLabel={activeLensContext?.lensIndex === 0
+                  ? `before · ${source}.${sourceHandle}`
+                  : `before · ${target}.${activeTargetPortId}`}
+                afterLabel={`after · ${target}.${activeTargetPortId}`}
+              />
+            </div>
+
             <LensParamControls
               lens={activeLens}
               targetBlockId={target as BlockId}
