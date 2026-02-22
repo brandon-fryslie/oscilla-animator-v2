@@ -81,7 +81,7 @@ function sanitize(v: number, fallback: number): number {
  * Reads slot values, applies sanitization, returns ResolvedCameraParams.
  *
  * @param program - Compiled program with renderGlobals
- * @param state - Runtime state with slot values populated by signal evaluation
+ * @param state - Runtime state with slot values populated by scalar evaluation
  */
 export function resolveCameraFromGlobals(
   program: CompiledProgramIR,

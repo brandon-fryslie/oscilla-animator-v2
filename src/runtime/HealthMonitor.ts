@@ -319,7 +319,7 @@ export function emitHealthSnapshot(
       domain: 'perf',
       primaryTarget: target,
       title: 'NaN value detected',
-      message: `Signal produced NaN during evaluation (${h.nanCount} batch(es) detected in last snapshot window)`,
+      message: `Scalar value produced NaN during evaluation (${h.nanCount} batch(es) detected in last snapshot window)`,
       scope: { patchRevision: activePatchRevision },
     });
     // Generate stable ID using the helper
@@ -339,7 +339,7 @@ export function emitHealthSnapshot(
       domain: 'perf',
       primaryTarget: target,
       title: 'Infinity value detected',
-      message: `Signal produced Infinity during evaluation (${h.infCount} batch(es) detected in last snapshot window)`,
+      message: `Scalar value produced Infinity during evaluation (${h.infCount} batch(es) detected in last snapshot window)`,
       scope: { patchRevision: activePatchRevision },
     });
     const id = generateDiagnosticId(diag.code, diag.primaryTarget, activePatchRevision);

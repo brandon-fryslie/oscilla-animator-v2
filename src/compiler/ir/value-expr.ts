@@ -9,7 +9,7 @@
  * - Every variant carries CanonicalType (payload + unit + extent)
  * - No instanceId stored — derive from requireManyInstance(type)
  * - No op discriminant — only kind at top level
- * - No sig/field/event family tags — derive from extent by checking temporality and cardinality
+ * - No one/many/event family tags — derive from extent by checking temporality and cardinality
  *
  * This is the canonical expression type. Legacy SigExpr/FieldExpr/EventExpr have been deleted.
  * Migration complete.
@@ -65,7 +65,7 @@ export type KernelId =
  * Canonical value expression type.
  *
  * Replaces legacy SigExpr/FieldExpr/EventExpr with a unified table.
- * CanonicalType.extent determines signal/field/event semantics.
+ * CanonicalType.extent determines one/many/event semantics.
  *
  * Top-level kinds (11):
  * - const: Constant values (zero/one/many cardinality)
@@ -75,7 +75,7 @@ export type KernelId =
  * - state: State reads (stateful blocks)
  * - time: Time reads (tMs, phaseA, etc.)
  * - shapeRef: Shape topology references
- * - eventRead: Event→signal bridge
+ * - eventRead: Event→one bridge
  * - event: Event-specific operations (pulse, wrap, combine, never)
  * - extract: Extract component from composite payload (structural, not compute)
  * - construct: Construct composite from components (structural, not compute)
@@ -261,9 +261,9 @@ export interface ValueExprShapeRef {
 }
 
 /**
- * Event→signal bridge.
+ * Event→one bridge.
  *
- * Reads event state as a boolean signal (persistent across frames).
+ * Reads event state as a boolean one-cardinality value (persistent across frames).
  */
 export interface ValueExprEventRead {
   readonly kind: 'eventRead';
@@ -276,7 +276,7 @@ export interface ValueExprEventRead {
  *
  * Event-specific operations:
  * - pulse: Single-frame pulse from time root (fires every tick)
- * - wrap: Signal→event (rising edge)
+ * - wrap: One→event (rising edge)
  * - combine: Merge multiple events (any/all semantics)
  * - never: Empty event (never triggers)
  * - const: Constant event (always true or always false)

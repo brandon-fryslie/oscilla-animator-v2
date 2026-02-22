@@ -44,7 +44,7 @@ export interface IRBuilder {
   // Canonical Value Expression Methods (unified)
   // =========================================================================
 
-  /** Create a constant expression. Works for signal, field, or event extent. */
+  /** Create a constant expression. Works for one-cardinality, many-cardinality, or event extent. */
   constant(value: ConstValue, type: CanonicalType): ValueExprId;
 
   /** Create a constant with a stable provenance key (prevents cross-origin dedup). */
@@ -126,8 +126,8 @@ export interface IRBuilder {
   /** Create a pulse event (fires every tick from time root). */
   eventPulse(source: 'InfiniteTimeRoot'): ValueExprId;
 
-  /** Create a wrap event from a signal (rising edge). */
-  eventWrap(signal: ValueExprId): ValueExprId;
+  /** Create a wrap event from a one-cardinality input (rising edge). */
+  eventWrap(input: ValueExprId): ValueExprId;
 
   /** Combine multiple events (any/all). */
   eventCombine(events: readonly ValueExprId[], mode: 'any' | 'all' | 'merge' | 'last', type?: CanonicalType): ValueExprId;
@@ -201,7 +201,7 @@ export interface IRBuilder {
    *
    * @param domainType - The domain type ID (e.g., DOMAIN_CIRCLE)
    * @param count - Number of elements in this instance
-   * @param shapeField - ValueExprId of the shape field/signal for this instance (optional - only needed for renderable instances)
+   * @param shapeField - ValueExprId of the shape expression (one or many) for this instance (optional - only needed for renderable instances)
    * @param lifecycle - Lifecycle mode (default: 'static')
    * @returns The created InstanceId
    */

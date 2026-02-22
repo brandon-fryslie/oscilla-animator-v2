@@ -13,7 +13,7 @@
  * This pattern ensures consistent input values throughout a frame:
  * 1. main.ts stages input events as they occur
  * 2. executeFrame() calls commit() at frame start
- * 3. Signal evaluation reads consistent committed values
+ * 3. Scalar evaluation reads consistent committed values
  */
 
 export class DoubleBufferedChannelMap {

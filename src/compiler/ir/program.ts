@@ -232,10 +232,10 @@ export type { ScheduleIR } from '../backend/schedule-program';
  * Dense, cache-friendly unified execution table.
  *
  * This is the ONLY execution-node table in the runtime. All evaluation dispatch
- * (signal/field/event) is derived from `ValueExpr.type.extent`.
+ * (one/many/event) is derived from `ValueExpr.type.extent`.
  */
 export interface ValueExprTable {
-  /** Unified value expression nodes (all signal/field/event expressions) */
+  /** Unified value expression nodes (all one/many/event expressions) */
   readonly nodes: readonly ValueExpr[];
 }
 

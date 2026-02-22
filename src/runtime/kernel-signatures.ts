@@ -1,7 +1,7 @@
 /**
  * Kernel Signatures
  *
- * Declares unit expectations for kernel functions used in signal and field evaluation.
+ * Declares unit expectations for kernel functions used in one and many evaluation.
  * This enables compile-time validation of unit compatibility.
  *
  * IMPORTANT: These signatures are for DOCUMENTATION and VALIDATION only.

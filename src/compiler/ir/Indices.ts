@@ -144,7 +144,7 @@ export const SYSTEM_PALETTE_SLOT = 0 as ValueSlot;
 // =============================================================================
 
 /**
- * Well-known sentinel InstanceId for cardinality-one (scalar signal) materialization.
+ * Well-known sentinel InstanceId for cardinality-one scalar materialization.
  *
  * [LAW:one-source-of-truth] All StepMaterialize steps targeting cardinality-one
  * expressions reference this instance. IRBuilderImpl registers it with count=1

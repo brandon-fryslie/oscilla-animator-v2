@@ -27,7 +27,7 @@ import type { ValueSlot } from '../types';
 export interface DebugTap {
   /**
    * Record a scalar slot value after it's written.
-   * Called by ScheduleExecutor after each signal slot write.
+   * Called by ScheduleExecutor after each scalar slot write.
    *
    * Sprint 1: Records every slot, every frame.
    * Sprint 2: Will add DebugLevel filtering.

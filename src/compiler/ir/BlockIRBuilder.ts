@@ -108,7 +108,7 @@ export interface BlockIRBuilder {
   /** Construct a composite from components. */
   construct(components: readonly ValueExprId[], type: CanonicalType): ValueExprId;
 
-  /** Cardinality-safe construct: auto-broadcasts signal components to field extent when output is field. */
+  /** Cardinality-safe construct: auto-broadcasts one-cardinality components to many extent when output is many. */
   constructAuto(components: readonly ValueExprId[], type: CanonicalType): ValueExprId;
 
   /** Convert color from HSL to RGB (alpha passthrough). */
@@ -121,8 +121,8 @@ export interface BlockIRBuilder {
   /** Create a pulse event (fires every tick). */
   eventPulse(source: 'InfiniteTimeRoot'): ValueExprId;
 
-  /** Create a wrap event from a signal (rising edge). */
-  eventWrap(signal: ValueExprId): ValueExprId;
+  /** Create a wrap event from a one-cardinality input (rising edge). */
+  eventWrap(input: ValueExprId): ValueExprId;
 
   /** Combine multiple events (any/all/merge/last). */
   eventCombine(events: readonly ValueExprId[], mode: 'any' | 'all' | 'merge' | 'last', type?: CanonicalType): ValueExprId;

@@ -38,10 +38,10 @@ import type { StableStateId, ContinuityPolicy } from './types';
  * Packed value reference — unified around ValueExprId.
  *
  * The legacy k:'sig'|'field'|'event' discriminant is REMOVED.
- * Signal/field/event semantics are derived from type.extent by checking axes.
+ * One/many/event semantics are derived from type.extent by checking axes.
  *
  * Variants:
- * - ValueRefExpr: Any expression (signal, field, or event)
+ * - ValueRefExpr: Any expression (one, many, or event)
  * - ValueRefInstance: Instance context
  * - ValueRefScalar: Scalar config value
  */
@@ -52,7 +52,7 @@ export type ValueRefPacked =
 
 /**
  * Unified expression reference.
- * No k discriminant — derive signal/field/event from type.extent.
+ * No k discriminant — derive one/many/event from type.extent.
  *
  * PURE LOWERING (2026-02-03):
  * - slot is now OPTIONAL
@@ -206,6 +206,6 @@ export interface LowerEffects {
   readonly slotRequests?: readonly SlotRequest[];
   /** Event slot requests (allocated by binding pass) */
   readonly eventSlotRequests?: readonly EventSlotRequest[];
-  /** Eval requests for sink blocks (e.g., TestSignal) */
+  /** Eval requests for sink blocks (for runtime probes/test sinks). */
   readonly evalRequests?: readonly { exprId: ValueExprId }[];
 }

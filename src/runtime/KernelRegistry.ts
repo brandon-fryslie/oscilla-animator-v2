@@ -17,7 +17,7 @@
  * ──────────────────────────────────────────────────────────────────────
  *
  * ScalarKernel: (args: number[]) => number
- * - Used in signal evaluation (always)
+ * - Used in scalar evaluation (always)
  * - Used in field evaluation (per-lane, when outStride === inStride)
  * - Example: noise3(px, py, pz, seed) -> scalar
  *
@@ -84,7 +84,7 @@ export type KernelABI = 'scalar' | 'lane';
  * ScalarKernel: Pure function returning a single number.
  *
  * Used in:
- * - Signal evaluation (always)
+ * - Scalar evaluation (always)
  * - Field evaluation (per-lane, when outStride === inStride)
  *
  * Contract:

@@ -2,7 +2,7 @@
  * HSL → RGB color space conversion (sRGB-encoded).
  *
  * Single enforcer for HSL→RGB math. Used by both
- * ValueExprMaterializer (field-extent) and ValueExprScalarEvaluator (signal-extent).
+ * ValueExprMaterializer (many extent) and ValueExprScalarEvaluator (one extent).
  *
  * Input: h ∈ [0,1), s ∈ [0,1], l ∈ [0,1] (all normalized floats)
  * Output: [r, g, b] each ∈ [0,1] (sRGB-encoded)

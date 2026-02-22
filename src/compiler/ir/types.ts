@@ -83,7 +83,7 @@ export type PureFn =
 /**
  * OpCode - Primitive operations available in the IR
  *
- * Used in map/zip functions to transform signals/fields.
+ * Used in map/zip functions to transform one/many values.
  * All operations are pure (no side effects).
  */
 export enum OpCode {
@@ -161,14 +161,14 @@ import type { DomainTypeId, InstanceId } from './Indices';
  * Instance declaration - metadata for a set of elements created by transform blocks.
  *
  * SHAPE FIELD REFERENCE (2026-02-04):
- * Instances store a reference to their shape field/signal via shapeField.
+ * Instances store a reference to their shape expression via shapeField.
  * This enables automatic shape lookup during rendering without requiring
  * separate wiring of shape data.
  *
  * Design rationale:
  * - ONE SOURCE OF TRUTH: Shape data lives in the field, InstanceDecl just points to it
  * - SIMPLIFIED WIRING: RenderInstances2D only needs position input (shape looked up via instance)
- * - PRESERVES CAPABILITY: Supports both uniform (Signal<shape>) and per-element (Field<shape>) shapes
+ * - PRESERVES CAPABILITY: Supports both uniform (one<shape>) and per-element (many<shape>) shapes
  *
  * Example:
  *   Ellipse.shape → Array.element (creates instance with shapeField = elements field)
@@ -197,8 +197,8 @@ export interface InstanceDecl {
    *
    * Set by instance-creating blocks (Array, etc.) when they create instances
    * intended for rendering. Contains either:
-   * - Signal<shape>: All elements share the same shape (common case)
-   * - Field<shape>: Each element can have different shape (heterogeneous, rare)
+   * - one<shape>: All elements share the same shape (common case)
+   * - many<shape>: Each element can have different shape (heterogeneous, rare)
    *
    * Optional because some instances are not meant for rendering (e.g., control
    * point instances in ProceduralStar are internal data structures, not visual elements).
@@ -407,7 +407,7 @@ export function stableStateId(blockId: string, stateKind: string): StableStateId
 }
 
 /**
- * State mapping for scalar (signal cardinality) state.
+ * State mapping for scalar (one-cardinality) state.
  *
  * Used for stateful primitives operating on a single value per frame.
  */

@@ -65,7 +65,7 @@ export class IRBuilderImpl implements OrchestratorIRBuilder {
 
   constructor() {
     // [LAW:one-source-of-truth] SCALAR_INSTANCE_ID is always registered with count=1.
-    // Every compiled program has a scalar context for cardinality-one (signal) materialization.
+    // Every compiled program has a scalar context for cardinality-one materialization.
     // StepMaterialize steps referencing scalar expressions use SCALAR_INSTANCE_ID so the
     // executor's instances.get() lookup yields count=1 via the standard field-materialization path.
     this.instances.set(SCALAR_INSTANCE_ID, {
@@ -113,7 +113,7 @@ export class IRBuilderImpl implements OrchestratorIRBuilder {
   }
 
   /**
-   * Cardinality-safe unary map: auto-broadcasts signal→field when needed.
+   * Cardinality-safe unary map: auto-broadcasts one→many when needed.
    * Blocks use this via BlockIRBuilder.mapAuto().
    */
   mapAuto(input: ValueExprId, fn: PureFn, type: CanonicalType): ValueExprId {
@@ -134,30 +134,30 @@ export class IRBuilderImpl implements OrchestratorIRBuilder {
     const outCard = requireInst(type.extent.cardinality, 'cardinality');
 
     if (outCard.kind !== 'many') {
-      // Signal/zero output — all inputs must be non-field, delegate directly
+      // One/zero output — all inputs must be non-field, delegate directly
       return this.kernelZip(inputs, fn, type);
     }
 
     // Output is field (many). Partition inputs into fields vs ones.
     const fieldIds: ValueExprId[] = [];
-    const signalIds: ValueExprId[] = [];
+    const oneIds: ValueExprId[] = [];
     for (const id of inputs) {
       const card = this.cardKindOf(id);
       if (card === 'many') {
         fieldIds.push(id);
       } else {
-        signalIds.push(id);
+        oneIds.push(id);
       }
     }
 
-    if (signalIds.length === 0) {
+    if (oneIds.length === 0) {
       // All inputs are fields — plain zip
       return this.kernelZip(inputs, fn, type);
     }
 
     if (fieldIds.length === 1) {
       // Exactly one field + N ones → kernelZipPromote
-      return this.kernelZipPromote(fieldIds[0], signalIds, fn, type);
+      return this.kernelZipPromote(fieldIds[0], oneIds, fn, type);
     }
 
     // Multiple fields + ones → broadcast ones to field extent, then zip all
@@ -222,8 +222,8 @@ export class IRBuilderImpl implements OrchestratorIRBuilder {
       );
     }
     for (const id of ones) {
-      const sigCard = this.cardKindOf(id);
-      if (sigCard === 'many') {
+      const inputCard = this.cardKindOf(id);
+      if (inputCard === 'many') {
         throw new Error(
         `IRBuilder.kernelZipPromote: one input id=${id} must not be many — use kernelZip for all-many inputs`
         );
@@ -239,8 +239,8 @@ export class IRBuilderImpl implements OrchestratorIRBuilder {
         `IRBuilder.broadcast: output must be many, got ${outCard}`
       );
     }
-    const sigCard = this.cardKindOf(one);
-    if (sigCard === 'many') {
+    const inputCard = this.cardKindOf(one);
+    if (inputCard === 'many') {
       throw new Error(
         `IRBuilder.broadcast: one input id=${one} must not be many (already many)`
       );
@@ -382,7 +382,7 @@ export class IRBuilderImpl implements OrchestratorIRBuilder {
     if (outCard.kind !== 'many') {
       return this.construct(components, type);
     }
-    // Auto-broadcast signal components to field extent
+    // Auto-broadcast one-cardinality components to field extent
     const aligned = components.map(id => {
       if (this.cardKindOf(id) === 'many') return id;
       const expr = this.valueExprs[id];
@@ -404,8 +404,8 @@ export class IRBuilderImpl implements OrchestratorIRBuilder {
     return this.pushExpr({ kind: 'event', type: canonicalEvent(), eventKind: 'pulse', source: 'timeRoot' });
   }
 
-  eventWrap(signal: ValueExprId): ValueExprId {
-    return this.pushExpr({ kind: 'event', type: canonicalEvent(), eventKind: 'wrap', input: signal });
+  eventWrap(input: ValueExprId): ValueExprId {
+    return this.pushExpr({ kind: 'event', type: canonicalEvent(), eventKind: 'wrap', input });
   }
 
   eventCombine(events: readonly ValueExprId[], mode: 'any' | 'all' | 'merge' | 'last', type?: CanonicalType): ValueExprId {
