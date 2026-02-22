@@ -60,6 +60,7 @@ function createMockIR(options?: {
 describe('CompilationInspectorService', () => {
   beforeEach(() => {
     compilationInspector.clear();
+    compilationInspector.setErrorReporter(null);
   });
 
   describe('Basic lifecycle', () => {
@@ -122,6 +123,59 @@ describe('CompilationInspectorService', () => {
   });
 
   describe('Pass capture', () => {
+    it('reports internal capture failures through the configured reporter', () => {
+      const reporter = vi.fn();
+      compilationInspector.setErrorReporter(reporter);
+      compilationInspector.beginCompile('compile-1');
+
+      const badOutput: Record<string, unknown> = {};
+      Object.defineProperty(badOutput, 'boom', {
+        enumerable: true,
+        get() {
+          throw new Error('serialize exploded');
+        },
+      });
+
+      expect(() => {
+        compilationInspector.capturePass('bad-pass', {}, badOutput);
+      }).not.toThrow();
+
+      const errors = compilationInspector.getInternalErrors();
+      const captureError = errors.find((e) => e.phase === 'capturePass');
+      expect(captureError).toBeDefined();
+      expect(captureError?.passName).toBe('bad-pass');
+      expect(reporter).toHaveBeenCalledTimes(1);
+      expect(reporter.mock.calls[0]?.[0]).toMatchObject({
+        phase: 'capturePass',
+        passName: 'bad-pass',
+      });
+    });
+
+    it('records reporter exceptions without breaking compilation flow', () => {
+      compilationInspector.setErrorReporter(() => {
+        throw new Error('reporter failed');
+      });
+      compilationInspector.beginCompile('compile-1');
+
+      const badOutput: Record<string, unknown> = {};
+      Object.defineProperty(badOutput, 'boom', {
+        enumerable: true,
+        get() {
+          throw new Error('serialize exploded');
+        },
+      });
+
+      expect(() => {
+        compilationInspector.capturePass('bad-pass', {}, badOutput);
+      }).not.toThrow();
+
+      const errors = compilationInspector.getInternalErrors();
+      expect(errors.some((e) => e.phase === 'capturePass')).toBe(true);
+      expect(
+        errors.some((e) => e.phase === 'reporter' && e.sourcePhase === 'capturePass')
+      ).toBe(true);
+    });
+
     it('captures all passes correctly', () => {
       const passes = [
         'normalization',
@@ -647,7 +701,8 @@ describe('CompilationInspectorService', () => {
 
   describe('Error handling', () => {
     it('handles serialization errors gracefully', () => {
-      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const reporter = vi.fn();
+      compilationInspector.setErrorReporter(reporter);
 
       // Create an object that will throw during serialization
       const problematic = {};
@@ -666,18 +721,19 @@ describe('CompilationInspectorService', () => {
 
       compilationInspector.endCompile('success');
 
-      expect(consoleErrorSpy).toHaveBeenCalledWith(
-        expect.stringContaining('[CompilationInspector] Failed to capture pass:'),
-        'test',
-        expect.any(Error)
+      expect(reporter).toHaveBeenCalledWith(
+        expect.objectContaining({
+          phase: 'capturePass',
+          passName: 'test',
+          error: expect.any(Error),
+        })
       );
-
-      consoleErrorSpy.mockRestore();
+      expect(
+        compilationInspector.getInternalErrors().some((e) => e.phase === 'capturePass' && e.passName === 'test')
+      ).toBe(true);
     });
 
     it('continues capturing subsequent passes after error', () => {
-      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-
       const problematic = {};
       Object.defineProperty(problematic, 'bad', {
         get() {
@@ -701,8 +757,6 @@ describe('CompilationInspectorService', () => {
       // Only the successful pass should be captured
       expect(snapshot?.passes.length).toBe(1);
       expect(snapshot?.passes[0].passName).toBe('pass-2');
-
-      consoleErrorSpy.mockRestore();
     });
   });
 

@@ -66,7 +66,12 @@ async function main() {
                 pendingCanvas = null;
               }
               runtimeService.init().catch((err) => {
-                console.error('Failed to initialize runtime:', err);
+                const message = err instanceof Error ? err.message : String(err);
+                // [LAW:single-enforcer] Main boot reports runtime init failures via diagnostics.
+                rootStore.diagnostics.log({
+                  level: 'error',
+                  message: `Failed to initialize runtime: ${message}`,
+                });
               });
             },
             externalWriteBus: runtimeService?.compileState.currentState?.externalChannels.writeBus,

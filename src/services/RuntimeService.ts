@@ -23,6 +23,7 @@ import { createDomainChangeDetector, type DomainChangeDetector } from './DomainC
 import { createLiveRecompileController, type LiveRecompileController } from './LiveRecompile';
 import { patchProgramConstants } from './ConstantPatcher';
 import { debugService } from './DebugService';
+import { compilationInspector } from './CompilationInspectorService';
 import {
   startAnimationLoop,
   createAnimationLoopState,
@@ -133,6 +134,16 @@ export class RuntimeService {
     this.compileWorkerClient = new CompileWorkerClient();
     // [LAW:single-enforcer] RuntimeService owns debug lifecycle boundaries.
     debugService.clear();
+    compilationInspector.setErrorReporter((payload) => {
+      const phase = payload.passName ? `${payload.phase}(${payload.passName})` : payload.phase;
+      const message = payload.error instanceof Error ? payload.error.message : String(payload.error);
+      // [LAW:single-enforcer] RuntimeService is the single app-runtime boundary that
+      // forwards inspector internal failures to diagnostics.
+      store.diagnostics.log({
+        level: 'warn',
+        message: `Compilation inspector failure at ${phase}: ${message}`,
+      });
+    });
 
     // Initialize render buffer arena (50k elements, zero allocations after init)
     this.arena = initGlobalRenderArena(50_000);
@@ -290,6 +301,7 @@ export class RuntimeService {
    * Dispose all long-lived resources (HMR cleanup).
    */
   dispose(): void {
+    compilationInspector.setErrorReporter(null);
     this.cancelAnimationLoop?.();
     this.cancelAnimationLoop = null;
     if (this.swapRafId !== null) {

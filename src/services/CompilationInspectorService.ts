@@ -108,6 +108,20 @@ export interface ValueExprStats {
 }
 
 /**
+ * Internal inspector failure payload.
+ *
+ * These errors are captured so the inspector stays non-fatal for compilation
+ * while still surfacing failures to diagnostics/UI.
+ */
+export interface CompilationInspectorError {
+  phase: 'beginCompile' | 'capturePass' | 'endCompile' | 'reporter';
+  timestamp: number;
+  error: unknown;
+  passName?: string;
+  sourcePhase?: 'beginCompile' | 'capturePass' | 'endCompile';
+}
+
+/**
  * CompilationInspectorService - Captures compiler pass outputs
  *
  * Responsibilities:
@@ -130,9 +144,49 @@ class CompilationInspectorService {
 
   /** Pass start time for duration tracking */
   private passStartTime = 0;
+  private readonly internalErrors: CompilationInspectorError[] = [];
+  private errorReporter: ((payload: CompilationInspectorError) => void) | null = null;
 
   constructor() {
     makeAutoObservable(this);
+  }
+
+  /**
+   * Configure optional error reporting sink.
+   */
+  setErrorReporter(reporter: ((payload: CompilationInspectorError) => void) | null): void {
+    this.errorReporter = reporter;
+  }
+
+  /**
+   * Get captured internal inspector failures.
+   */
+  getInternalErrors(): readonly CompilationInspectorError[] {
+    return this.internalErrors;
+  }
+
+  private recordInternalError(payload: CompilationInspectorError): void {
+    this.internalErrors.push(payload);
+    // Keep memory bounded.
+    if (this.internalErrors.length > 50) {
+      this.internalErrors.shift();
+    }
+
+    try {
+      // [LAW:single-enforcer] CompilationInspector classifies and reports its own
+      // internal failures so compiler callers remain side-effect free.
+      this.errorReporter?.(payload);
+    } catch (reporterError) {
+      this.internalErrors.push({
+        phase: 'reporter',
+        sourcePhase: payload.phase as 'beginCompile' | 'capturePass' | 'endCompile',
+        timestamp: Date.now(),
+        error: reporterError,
+      });
+      if (this.internalErrors.length > 50) {
+        this.internalErrors.shift();
+      }
+    }
   }
 
   /**
@@ -152,7 +206,11 @@ class CompilationInspectorService {
         status: 'success',
       };
     } catch (e) {
-      console.error('[CompilationInspector] Failed in beginCompile:', e);
+      this.recordInternalError({
+        phase: 'beginCompile',
+        timestamp: Date.now(),
+        error: e,
+      });
     }
   }
 
@@ -200,7 +258,12 @@ class CompilationInspectorService {
 
       this.currentSnapshot.passes.push(passSnapshot);
     } catch (e) {
-      console.error('[CompilationInspector] Failed to capture pass:', passName, e);
+      this.recordInternalError({
+        phase: 'capturePass',
+        passName,
+        timestamp: Date.now(),
+        error: e,
+      });
     }
   }
 
@@ -227,7 +290,11 @@ class CompilationInspectorService {
         this.snapshots.shift();
       }
     } catch (e) {
-      console.error('[CompilationInspector] Failed in endCompile:', e);
+      this.recordInternalError({
+        phase: 'endCompile',
+        timestamp: Date.now(),
+        error: e,
+      });
     } finally {
       this.currentSnapshot = null;
       this.passStartTime = 0;
@@ -292,6 +359,7 @@ class CompilationInspectorService {
     this.snapshots = [];
     this.currentSnapshot = null;
     this.passStartTime = 0;
+    this.internalErrors.splice(0, this.internalErrors.length);
   }
 
   /**
