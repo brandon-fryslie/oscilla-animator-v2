@@ -523,7 +523,9 @@ export const PortContextMenu: React.FC<PortContextMenuProps> = ({
           if (connectedEdge) {
             patch.removeEdge(connectedEdge.id);
           }
-          // TODO: Implement clearInputPortDefaultSource() in PatchStore
+          // [LAW:single-enforcer] PatchStore.updateInputPort is the sole mutator
+          // for per-port default source overrides.
+          patch.updateInputPort(blockId, portId, { defaultSource: undefined });
         },
         disabled: !hasConnection && !hasDefault,
       });

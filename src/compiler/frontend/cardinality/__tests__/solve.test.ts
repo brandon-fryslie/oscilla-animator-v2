@@ -331,4 +331,21 @@ describe('solveCardinality', () => {
     expect(result.instances.get(varId)).toEqual(ref);
     expect(result.cardinalities.get(cv('card:F:data:in'))).toEqual({ kind: 'many', instance: ref });
   });
+
+  it('emits deterministic phase trace log when trace=true', () => {
+    const input: CardinalitySolveInput = {
+      ports: [pk('A:x:in')],
+      baseCardinalityAxis: new Map([[pk('A:x:in'), axisVar(cv('card:A:x:in'))]]),
+      constraints: [],
+      trace: true,
+    };
+    const result = solveCardinality(input);
+    expect(result.traceLog).toEqual([
+      '[CardSolver] Phase 1: Equality UF',
+      '[CardSolver] Phase 2: Collect group facts',
+      '[CardSolver] Phase 3: Local group resolution',
+      '[CardSolver] Phase 4: PromoteToMany fixpoint',
+      '[CardSolver] Phase 5: Finalize',
+    ]);
+  });
 });

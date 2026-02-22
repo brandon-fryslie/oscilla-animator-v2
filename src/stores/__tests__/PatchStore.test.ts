@@ -128,6 +128,20 @@ describe('PatchStore', () => {
     });
   });
 
+  describe('updateInputPort', () => {
+    it('supports clearing a per-port defaultSource override back to registry default behavior', () => {
+      const id = store.addBlock('Add');
+
+      store.updateInputPort(id, 'a', {
+        defaultSource: { blockType: 'Const', output: 'out', params: { value: 2 } },
+      });
+      expect(store.blocks.get(id)?.inputPorts.get('a')?.defaultSource).toBeDefined();
+
+      store.updateInputPort(id, 'a', { defaultSource: undefined });
+      expect(store.blocks.get(id)?.inputPorts.get('a')?.defaultSource).toBeUndefined();
+    });
+  });
+
   describe('addEdge', () => {
     it('should add an edge with generated ID', () => {
       const id1 = store.addBlock('Oscillator');

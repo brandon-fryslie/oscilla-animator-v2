@@ -32,7 +32,7 @@ export const BlockContextMenu: React.FC<BlockContextMenuProps> = ({
   onClose,
   onCenter,
 }) => {
-  const { patch } = useStores();
+  const { patch, layout } = useStores();
 
   const items = useMemo<ContextMenuItem[]>(() => {
     const block = patch.blocks.get(blockId);
@@ -56,8 +56,15 @@ export const BlockContextMenu: React.FC<BlockContextMenuProps> = ({
             role: block.role,
           });
 
-          // TODO: Position the new block offset from original (requires access to node position)
-          // For now, just create it at default position
+          const sourcePos = layout.getPosition(blockId);
+          if (sourcePos) {
+            // [LAW:single-enforcer] LayoutStore remains the single owner of node positions.
+            // Duplication uses an offset write through that boundary.
+            layout.setPosition(newId, {
+              x: sourcePos.x + 48,
+              y: sourcePos.y + 48,
+            });
+          }
         },
         dividerAfter: true,
       },
@@ -89,7 +96,7 @@ export const BlockContextMenu: React.FC<BlockContextMenuProps> = ({
         danger: true,
       },
     ];
-  }, [blockId, onCenter, patch]);
+  }, [blockId, onCenter, patch, layout]);
 
   return <ContextMenu items={items} anchorPosition={anchorPosition} onClose={onClose} />;
 };
