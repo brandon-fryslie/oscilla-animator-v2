@@ -3,37 +3,10 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { compile } from '../../compiler/compile';
 import { compileFrontend } from '../../compiler/frontend';
-import type { CompiledProgramIR } from '../../compiler/ir/program';
 import { EventHub } from '../../events/EventHub';
 import { deserializePatchFromHCL } from '../../patch-dsl';
 import { exportSerializableTopologies } from '../../shapes/registry';
-import type { TopologyId } from '../../shapes/types';
-
-type SerializableCompiledProgramIR = Omit<CompiledProgramIR, 'kernelRegistry'>;
-
-function stripKernelRegistry(program: CompiledProgramIR): SerializableCompiledProgramIR {
-  const { kernelRegistry: _drop, ...serializableProgram } = program;
-  return serializableProgram;
-}
-
-function collectProgramTopologyIds(program: SerializableCompiledProgramIR): readonly TopologyId[] {
-  const ids = new Set<TopologyId>();
-  for (const expr of program.valueExprs.nodes as readonly any[]) {
-    if (!expr || typeof expr !== 'object') continue;
-    if (expr.kind === 'shapeRef' && typeof expr.topologyId === 'number') {
-      ids.add(expr.topologyId as TopologyId);
-      continue;
-    }
-    if (
-      expr.kind === 'kernel' &&
-      (expr.kernelKind === 'pathDerivative' || expr.kernelKind === 'pathSample') &&
-      typeof expr.topologyId === 'number'
-    ) {
-      ids.add(expr.topologyId as TopologyId);
-    }
-  }
-  return [...ids];
-}
+import { collectProgramTopologyIds, stripKernelRegistry } from '../compile-worker-serialization';
 
 function listDemoFiles(): readonly string[] {
   const demoDir = join(process.cwd(), 'src', 'demo', 'hcl');

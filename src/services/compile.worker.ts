@@ -2,41 +2,15 @@
 
 import { compile } from '../compiler';
 import { compileFrontend } from '../compiler/frontend';
-import type { CompiledProgramIR } from '../compiler/ir/program';
 import { EventHub } from '../events/EventHub';
 import { deserializePatch } from './PatchPersistence';
-import type { TopologyId } from '../shapes/types';
 import { exportSerializableTopologies } from '../shapes/registry';
 import type {
   CompileWorkerRequest,
   CompileWorkerResponse,
   CompileWorkerBackendResult,
-  SerializableCompiledProgramIR,
 } from './compile-worker-protocol';
-
-function stripKernelRegistry(program: CompiledProgramIR): SerializableCompiledProgramIR {
-  const { kernelRegistry: _drop, ...serializableProgram } = program;
-  return serializableProgram;
-}
-
-function collectProgramTopologyIds(program: SerializableCompiledProgramIR): readonly TopologyId[] {
-  const ids = new Set<TopologyId>();
-  for (const expr of program.valueExprs.nodes as readonly any[]) {
-    if (!expr || typeof expr !== 'object') continue;
-    if (expr.kind === 'shapeRef' && typeof expr.topologyId === 'number') {
-      ids.add(expr.topologyId as TopologyId);
-      continue;
-    }
-    if (
-      expr.kind === 'kernel' &&
-      (expr.kernelKind === 'pathDerivative' || expr.kernelKind === 'pathSample') &&
-      typeof expr.topologyId === 'number'
-    ) {
-      ids.add(expr.topologyId as TopologyId);
-    }
-  }
-  return [...ids];
-}
+import { collectProgramTopologyIds, stripKernelRegistry } from './compile-worker-serialization';
 
 function toBackendResult(
   result: ReturnType<typeof compile>,
