@@ -392,27 +392,27 @@ describe('Unit Display Functions', () => {
   });
 
   describe('formatTypeForDisplay', () => {
-    it('displays Signal<float> for scalar float', () => {
+    it('displays One<float> for scalar float', () => {
       const type = canonicalType(FLOAT, unitNone());
-      expect(formatTypeForDisplay(type)).toBe('Signal<float>');
+      expect(formatTypeForDisplay(type)).toBe('One<float>');
     });
 
-    it('displays Signal<float:rad> for radians', () => {
+    it('displays One<float:rad> for radians', () => {
       const type = canonicalType(FLOAT, unitRadians());
-      expect(formatTypeForDisplay(type)).toBe('Signal<float:rad>');
+      expect(formatTypeForDisplay(type)).toBe('One<float:rad>');
     });
 
-    it('displays Signal<int:ms> for milliseconds', () => {
+    it('displays One<int:ms> for milliseconds', () => {
       const type = canonicalType(INT, unitMs());
-      expect(formatTypeForDisplay(type)).toBe('Signal<int:ms>');
+      expect(formatTypeForDisplay(type)).toBe('One<int:ms>');
     });
 
-    it('displays Signal<float:phase> for phase01 (turns)', () => {
+    it('displays One<float:phase> for phase01 (turns)', () => {
       const type = canonicalType(FLOAT, unitTurns(), undefined, contractWrap01());
-      expect(formatTypeForDisplay(type)).toBe('Signal<float:phase>');
+      expect(formatTypeForDisplay(type)).toBe('One<float:phase>');
     });
 
-    it('displays Field<float> for field float', () => {
+    it('displays Many<float> for field float', () => {
       // This would require a field type which needs an extent with cardinality many
       // Skipping for now since it requires more complex setup
     });
