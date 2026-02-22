@@ -19,39 +19,41 @@ const NOISE_CARD = cardinalityVar(cardinalityVarId('noise_cardinality'), {
   instanceBinding: 'inherit',
 });
 
-registerBlock({
-  type: 'Noise',
-  label: 'Noise',
-  category: 'math',
-  description: 'Deterministic procedural noise. Output in [0, 1)',
-  form: 'primitive',
-  capability: 'pure',
-  loweringPurity: 'pure',
-  inputs: {
-    x: { label: 'X', type: canonicalType(FLOAT, undefined, { cardinality: NOISE_CARD }) },
-  },
-  outputs: {
-    out: { label: 'Output', type: canonicalType(FLOAT, undefined, { cardinality: NOISE_CARD }) },
-  },
-  lower: ({ ctx, inputsById }) => {
-    const x = inputsById.x;
-    if (!x) throw new Error('Noise x input is required');
-
-    // Use Hash opcode with fixed seed=0 for deterministic noise
-    const outType = ctx.outTypes[0];
-    const seedId = ctx.b.constant(floatConst(0), canonicalType(FLOAT));
-    const hashFn = ctx.b.opcode(OpCode.Hash);
-    const hashId = zipAuto([x.id, seedId], hashFn, outType, ctx.b);
-
-    return {
-      outputsById: {
-        out: { id: hashId, slot: undefined, type: outType, stride: payloadStride(outType.payload) },
-      },
-      effects: {
-        slotRequests: [
-          { portId: 'out', type: outType },
-        ],
-      },
-    };
-  },
-});
+export function register(): void {
+  registerBlock({
+    type: 'Noise',
+    label: 'Noise',
+    category: 'math',
+    description: 'Deterministic procedural noise. Output in [0, 1)',
+    form: 'primitive',
+    capability: 'pure',
+    loweringPurity: 'pure',
+    inputs: {
+      x: { label: 'X', type: canonicalType(FLOAT, undefined, { cardinality: NOISE_CARD }) },
+    },
+    outputs: {
+      out: { label: 'Output', type: canonicalType(FLOAT, undefined, { cardinality: NOISE_CARD }) },
+    },
+    lower: ({ ctx, inputsById }) => {
+      const x = inputsById.x;
+      if (!x) throw new Error('Noise x input is required');
+  
+      // Use Hash opcode with fixed seed=0 for deterministic noise
+      const outType = ctx.outTypes[0];
+      const seedId = ctx.b.constant(floatConst(0), canonicalType(FLOAT));
+      const hashFn = ctx.b.opcode(OpCode.Hash);
+      const hashId = zipAuto([x.id, seedId], hashFn, outType, ctx.b);
+  
+      return {
+        outputsById: {
+          out: { id: hashId, slot: undefined, type: outType, stride: payloadStride(outType.payload) },
+        },
+        effects: {
+          slotRequests: [
+            { portId: 'out', type: outType },
+          ],
+        },
+      };
+    },
+  });
+}

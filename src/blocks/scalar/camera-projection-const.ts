@@ -17,39 +17,41 @@ const CAMERA_PROJECTION_CONST_CARD = cardinalityVar(cardinalityVarId('camera_pro
   instanceBinding: 'inherit',
 });
 
-registerBlock({
-  type: 'CameraProjectionConst',
-  label: 'Camera Projection',
-  category: 'scalar',
-  description: 'Outputs a constant camera projection mode (0=ortho, 1=persp)',
-  form: 'primitive',
-  capability: 'pure',
-  loweringPurity: 'pure',
-  inputs: {
-    value: {
-      type: canonicalType(INT),
-      defaultValue: 0,
-      defaultSource: defaultSourceConst(0),
-      uiHint: { kind: 'select', options: [{ value: '0', label: 'Orthographic' }, { value: '1', label: 'Perspective' }] },
-      exposedAsPort: false,
+export function register(): void {
+  registerBlock({
+    type: 'CameraProjectionConst',
+    label: 'Camera Projection',
+    category: 'scalar',
+    description: 'Outputs a constant camera projection mode (0=ortho, 1=persp)',
+    form: 'primitive',
+    capability: 'pure',
+    loweringPurity: 'pure',
+    inputs: {
+      value: {
+        type: canonicalType(INT),
+        defaultValue: 0,
+        defaultSource: defaultSourceConst(0),
+        uiHint: { kind: 'select', options: [{ value: '0', label: 'Orthographic' }, { value: '1', label: 'Perspective' }] },
+        exposedAsPort: false,
+      },
     },
-  },
-  outputs: {
-    out: { label: 'Output', type: canonicalType(CAMERA_PROJECTION, undefined, { cardinality: CAMERA_PROJECTION_CONST_CARD }) },
-  },
-  lower: ({ ctx, config }) => {
-    const rawValue = requireConfigInt(config!, 'value', 0, 1);
-    const sigId = ctx.b.constant(cameraProjectionConst(rawValue === 1 ? 'perspective' : 'orthographic'), canonicalType(CAMERA_PROJECTION));
-    const outType = ctx.outTypes[0];
-    return {
-      outputsById: {
-        out: { id: sigId, slot: undefined, type: outType, stride: payloadStride(outType.payload) },
-      },
-      effects: {
-        slotRequests: [
-          { portId: 'out', type: outType },
-        ],
-      },
-    };
-  },
-});
+    outputs: {
+      out: { label: 'Output', type: canonicalType(CAMERA_PROJECTION, undefined, { cardinality: CAMERA_PROJECTION_CONST_CARD }) },
+    },
+    lower: ({ ctx, config }) => {
+      const rawValue = requireConfigInt(config!, 'value', 0, 1);
+      const sigId = ctx.b.constant(cameraProjectionConst(rawValue === 1 ? 'perspective' : 'orthographic'), canonicalType(CAMERA_PROJECTION));
+      const outType = ctx.outTypes[0];
+      return {
+        outputsById: {
+          out: { id: sigId, slot: undefined, type: outType, stride: payloadStride(outType.payload) },
+        },
+        effects: {
+          slotRequests: [
+            { portId: 'out', type: outType },
+          ],
+        },
+      };
+    },
+  });
+}

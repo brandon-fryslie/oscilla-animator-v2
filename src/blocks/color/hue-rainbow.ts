@@ -22,57 +22,59 @@ const HUE_RAINBOW_CARD = cardinalityVar(cardinalityVarId('hue_rainbow_cardinalit
   instanceBinding: 'inherit',
 });
 
-registerBlock({
-  type: 'HueRainbow',
-  label: 'Hue Rainbow',
-  category: 'color',
-  description: 'Creates a cycling rainbow color from phase input (0→1)',
-  form: 'primitive',
-  capability: 'pure',
-  loweringPurity: 'pure', // Pure block for macro expansion
-  inputs: {
-    t: {
-      label: 'Phase',
-      type: canonicalType(FLOAT, unitTurns(), { cardinality: HUE_RAINBOW_CARD }),
-      defaultSource: defaultSourceConst(0.0),
+export function register(): void {
+  registerBlock({
+    type: 'HueRainbow',
+    label: 'Hue Rainbow',
+    category: 'color',
+    description: 'Creates a cycling rainbow color from phase input (0→1)',
+    form: 'primitive',
+    capability: 'pure',
+    loweringPurity: 'pure', // Pure block for macro expansion
+    inputs: {
+      t: {
+        label: 'Phase',
+        type: canonicalType(FLOAT, unitTurns(), { cardinality: HUE_RAINBOW_CARD }),
+        defaultSource: defaultSourceConst(0.0),
+      },
     },
-  },
-  outputs: {
-    out: { label: 'Color', type: canonicalType(COLOR, unitHsl(), { cardinality: HUE_RAINBOW_CARD }) },
-  },
-  lower: ({ ctx, inputsById }) => {
-    const tInput = inputsById.t;
-    if (!tInput) {
-      throw new Error('HueRainbow requires input t (phase)');
-    }
-
-    const outType = ctx.outTypes[0];
-    // Derive intermediate float type from resolved output extent (preserves cardinality)
-    const intermediateFloat = {
-      payload: FLOAT,
-      unit: unitTurns(),
-      extent: outType.extent,
-    };
-
-    // Fixed saturation (~0.8), lightness (~0.5), alpha (1.0)
-    const sat = ctx.b.constant({ kind: 'float', value: 0.8 }, intermediateFloat);
-    const light = ctx.b.constant({ kind: 'float', value: 0.5 }, intermediateFloat);
-    const alpha = ctx.b.constant({ kind: 'float', value: 1.0 }, intermediateFloat);
-
-    // Construct HSL color (t as hue, fixed s/l/a)
-    // Output is HSL - conversion to RGB happens at render boundary (single enforcer)
-    const hsl = ctx.b.construct([tInput.id, sat, light, alpha], outType);
-
-    // Pure block: no slot allocation (orchestrator handles it)
-    return {
-      outputsById: {
-        out: { id: hsl, slot: undefined, type: outType, stride: payloadStride(outType.payload) },
-      },
-      effects: {
-        slotRequests: [
-          { portId: 'out', type: outType },
-        ],
-      },
-    };
-  },
-});
+    outputs: {
+      out: { label: 'Color', type: canonicalType(COLOR, unitHsl(), { cardinality: HUE_RAINBOW_CARD }) },
+    },
+    lower: ({ ctx, inputsById }) => {
+      const tInput = inputsById.t;
+      if (!tInput) {
+        throw new Error('HueRainbow requires input t (phase)');
+      }
+  
+      const outType = ctx.outTypes[0];
+      // Derive intermediate float type from resolved output extent (preserves cardinality)
+      const intermediateFloat = {
+        payload: FLOAT,
+        unit: unitTurns(),
+        extent: outType.extent,
+      };
+  
+      // Fixed saturation (~0.8), lightness (~0.5), alpha (1.0)
+      const sat = ctx.b.constant({ kind: 'float', value: 0.8 }, intermediateFloat);
+      const light = ctx.b.constant({ kind: 'float', value: 0.5 }, intermediateFloat);
+      const alpha = ctx.b.constant({ kind: 'float', value: 1.0 }, intermediateFloat);
+  
+      // Construct HSL color (t as hue, fixed s/l/a)
+      // Output is HSL - conversion to RGB happens at render boundary (single enforcer)
+      const hsl = ctx.b.construct([tInput.id, sat, light, alpha], outType);
+  
+      // Pure block: no slot allocation (orchestrator handles it)
+      return {
+        outputsById: {
+          out: { id: hsl, slot: undefined, type: outType, stride: payloadStride(outType.payload) },
+        },
+        effects: {
+          slotRequests: [
+            { portId: 'out', type: outType },
+          ],
+        },
+      };
+    },
+  });
+}

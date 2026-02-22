@@ -22,39 +22,41 @@ const WRAP01_CARD = cardinalityVar(cardinalityVarId('wrap01_cardinality'), {
   instanceBinding: 'inherit',
 });
 
-registerBlock({
-  type: 'Wrap01',
-  label: 'Wrap [0,1)',
-  category: 'lens',
-  description: 'y = fract(x) - wrap to [0,1) without changing type',
-  form: 'primitive',
-  capability: 'pure',
-  loweringPurity: 'pure',
-  inputs: {
-    in: { label: 'In', type: inferType(FLOAT, unitVar('w01_U'), { cardinality: WRAP01_CARD }) },
-  },
-  outputs: {
-    out: { label: 'Out', type: inferType(FLOAT, unitVar('w01_U'), { cardinality: WRAP01_CARD }) },
-  },
-  lower: ({ inputsById, ctx }) => {
-    const input = inputsById.in;
-    if (!input) throw new Error('Wrap01 input is required');
-
-    const outType = ctx.outTypes[0];
-
-    // fract(x) using Wrap01 opcode
-    const wrapFn = ctx.b.opcode(OpCode.Wrap01);
-    const result = mapAuto(input.id, wrapFn, outType, ctx.b);
-
-    return {
-      outputsById: {
-        out: { id: result, slot: undefined, type: outType, stride: payloadStride(outType.payload) },
-      },
-      effects: {
-        slotRequests: [
-          { portId: 'out', type: outType },
-        ],
-      },
-    };
-  },
-});
+export function register(): void {
+  registerBlock({
+    type: 'Wrap01',
+    label: 'Wrap [0,1)',
+    category: 'lens',
+    description: 'y = fract(x) - wrap to [0,1) without changing type',
+    form: 'primitive',
+    capability: 'pure',
+    loweringPurity: 'pure',
+    inputs: {
+      in: { label: 'In', type: inferType(FLOAT, unitVar('w01_U'), { cardinality: WRAP01_CARD }) },
+    },
+    outputs: {
+      out: { label: 'Out', type: inferType(FLOAT, unitVar('w01_U'), { cardinality: WRAP01_CARD }) },
+    },
+    lower: ({ inputsById, ctx }) => {
+      const input = inputsById.in;
+      if (!input) throw new Error('Wrap01 input is required');
+  
+      const outType = ctx.outTypes[0];
+  
+      // fract(x) using Wrap01 opcode
+      const wrapFn = ctx.b.opcode(OpCode.Wrap01);
+      const result = mapAuto(input.id, wrapFn, outType, ctx.b);
+  
+      return {
+        outputsById: {
+          out: { id: result, slot: undefined, type: outType, stride: payloadStride(outType.payload) },
+        },
+        effects: {
+          slotRequests: [
+            { portId: 'out', type: outType },
+          ],
+        },
+      };
+    },
+  });
+}

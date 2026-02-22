@@ -19,47 +19,49 @@ const MS_TO_SECONDS_CARD = cardinalityVar(cardinalityVarId('ms_to_seconds_cardin
   instanceBinding: 'inherit',
 });
 
-registerBlock({
-  type: 'Adapter_MsToSeconds',
-  label: 'Ms → Seconds',
-  category: 'adapter',
-  description: 'Convert milliseconds to seconds',
-  form: 'primitive',
-  capability: 'pure',
-  loweringPurity: 'pure',
-  adapterSpec: {
-    from: { payload: INT, unit: { kind: 'time', unit: 'ms' }, extent: 'any' },
-    to: { payload: FLOAT, unit: { kind: 'time', unit: 'seconds' }, extent: 'any' },
-    inputPortId: 'in',
-    outputPortId: 'out',
-    description: 'Milliseconds (int) → seconds (float)',
-    purity: 'pure',
-    stability: 'stable',
-  },
-  inputs: {
-    in: { label: 'In', type: canonicalType(INT, unitMs(), { cardinality: MS_TO_SECONDS_CARD }) },
-  },
-  outputs: {
-    out: { label: 'Out', type: canonicalType(FLOAT, unitSeconds(), { cardinality: MS_TO_SECONDS_CARD }) },
-  },
-  lower: ({ inputsById, ctx }) => {
-    const input = inputsById.in;
-    if (!input) throw new Error('Lens block input is required');
-
-    const outType = ctx.outTypes[0];
-    // int:ms → float division → float:seconds
-    const divisor = ctx.b.constant(floatConst(1000), canonicalType(FLOAT, unitNone()));
-    const divFn = ctx.b.opcode(OpCode.Div);
-    const seconds = zipAuto([input.id, divisor], divFn, outType, ctx.b);
-    return {
-      outputsById: {
-        out: { id: seconds, slot: undefined, type: outType, stride: payloadStride(outType.payload) },
-      },
-      effects: {
-        slotRequests: [
-          { portId: 'out', type: outType },
-        ],
-      },
-    };
-  },
-});
+export function register(): void {
+  registerBlock({
+    type: 'Adapter_MsToSeconds',
+    label: 'Ms → Seconds',
+    category: 'adapter',
+    description: 'Convert milliseconds to seconds',
+    form: 'primitive',
+    capability: 'pure',
+    loweringPurity: 'pure',
+    adapterSpec: {
+      from: { payload: INT, unit: { kind: 'time', unit: 'ms' }, extent: 'any' },
+      to: { payload: FLOAT, unit: { kind: 'time', unit: 'seconds' }, extent: 'any' },
+      inputPortId: 'in',
+      outputPortId: 'out',
+      description: 'Milliseconds (int) → seconds (float)',
+      purity: 'pure',
+      stability: 'stable',
+    },
+    inputs: {
+      in: { label: 'In', type: canonicalType(INT, unitMs(), { cardinality: MS_TO_SECONDS_CARD }) },
+    },
+    outputs: {
+      out: { label: 'Out', type: canonicalType(FLOAT, unitSeconds(), { cardinality: MS_TO_SECONDS_CARD }) },
+    },
+    lower: ({ inputsById, ctx }) => {
+      const input = inputsById.in;
+      if (!input) throw new Error('Lens block input is required');
+  
+      const outType = ctx.outTypes[0];
+      // int:ms → float division → float:seconds
+      const divisor = ctx.b.constant(floatConst(1000), canonicalType(FLOAT, unitNone()));
+      const divFn = ctx.b.opcode(OpCode.Div);
+      const seconds = zipAuto([input.id, divisor], divFn, outType, ctx.b);
+      return {
+        outputsById: {
+          out: { id: seconds, slot: undefined, type: outType, stride: payloadStride(outType.payload) },
+        },
+        effects: {
+          slotRequests: [
+            { portId: 'out', type: outType },
+          ],
+        },
+      };
+    },
+  });
+}

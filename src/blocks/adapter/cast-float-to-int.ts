@@ -21,45 +21,47 @@ const CAST_FLOAT_TO_INT_CARD = cardinalityVar(cardinalityVarId('cast_float_to_in
   instanceBinding: 'inherit',
 });
 
-registerBlock({
-  type: 'Adapter_CastFloatToInt',
-  label: 'Float \u2192 Int',
-  category: 'adapter',
-  description: 'Cast float to int (truncation toward zero)',
-  form: 'primitive',
-  capability: 'pure',
-  loweringPurity: 'pure',
-  adapterSpec: {
-    from: { payload: FLOAT, unit: 'any', extent: 'any' },
-    to: { payload: INT, unit: 'same', extent: 'any' },
-    inputPortId: 'in',
-    outputPortId: 'out',
-    description: 'Float \u2192 int (truncation)',
-    purity: 'pure',
-    stability: 'stable',
-  },
-  inputs: {
-    in: { label: 'In', type: inferType(FLOAT, unitVar('cast_U'), { cardinality: CAST_FLOAT_TO_INT_CARD }) },
-  },
-  outputs: {
-    out: { label: 'Out', type: inferType(INT, unitVar('cast_U'), { cardinality: CAST_FLOAT_TO_INT_CARD }) },
-  },
-  lower: ({ inputsById, ctx }) => {
-    const input = inputsById.in;
-    if (!input) throw new Error('Adapter block input is required');
-
-    const outType = ctx.outTypes[0];
-    const truncFn = ctx.b.opcode(OpCode.F64ToI32Trunc);
-    const result = mapAuto(input.id, truncFn, outType, ctx.b);
-    return {
-      outputsById: {
-        out: { id: result, slot: undefined, type: outType, stride: payloadStride(outType.payload) },
-      },
-      effects: {
-        slotRequests: [
-          { portId: 'out', type: outType },
-        ],
-      },
-    };
-  },
-});
+export function register(): void {
+  registerBlock({
+    type: 'Adapter_CastFloatToInt',
+    label: 'Float \u2192 Int',
+    category: 'adapter',
+    description: 'Cast float to int (truncation toward zero)',
+    form: 'primitive',
+    capability: 'pure',
+    loweringPurity: 'pure',
+    adapterSpec: {
+      from: { payload: FLOAT, unit: 'any', extent: 'any' },
+      to: { payload: INT, unit: 'same', extent: 'any' },
+      inputPortId: 'in',
+      outputPortId: 'out',
+      description: 'Float \u2192 int (truncation)',
+      purity: 'pure',
+      stability: 'stable',
+    },
+    inputs: {
+      in: { label: 'In', type: inferType(FLOAT, unitVar('cast_U'), { cardinality: CAST_FLOAT_TO_INT_CARD }) },
+    },
+    outputs: {
+      out: { label: 'Out', type: inferType(INT, unitVar('cast_U'), { cardinality: CAST_FLOAT_TO_INT_CARD }) },
+    },
+    lower: ({ inputsById, ctx }) => {
+      const input = inputsById.in;
+      if (!input) throw new Error('Adapter block input is required');
+  
+      const outType = ctx.outTypes[0];
+      const truncFn = ctx.b.opcode(OpCode.F64ToI32Trunc);
+      const result = mapAuto(input.id, truncFn, outType, ctx.b);
+      return {
+        outputsById: {
+          out: { id: result, slot: undefined, type: outType, stride: payloadStride(outType.payload) },
+        },
+        effects: {
+          slotRequests: [
+            { portId: 'out', type: outType },
+          ],
+        },
+      };
+    },
+  });
+}

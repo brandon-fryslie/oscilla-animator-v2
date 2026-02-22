@@ -21,57 +21,59 @@ const HUE_SHIFT_CARD = cardinalityVar(cardinalityVarId('hue_shift_cardinality'),
   instanceBinding: 'inherit',
 });
 
-registerBlock({
-  type: 'HueShift',
-  label: 'Hue Shift',
-  category: 'color',
-  description: 'Shift hue by an offset with wrapping, preserving s/l/a',
-  form: 'primitive',
-  capability: 'pure',
-  loweringPurity: 'pure',
-  inputs: {
-    in: { label: 'Color', type: canonicalType(COLOR, unitHsl(), { cardinality: HUE_SHIFT_CARD }) },
-    shift: { label: 'Shift', type: canonicalType(FLOAT, unitNone(), { cardinality: HUE_SHIFT_CARD }), defaultSource: defaultSourceConst(0.0) },
-  },
-  outputs: {
-    out: { label: 'Color', type: canonicalType(COLOR, unitHsl(), { cardinality: HUE_SHIFT_CARD }) },
-  },
-  lower: ({ ctx, inputsById }) => {
-    const colorInput = inputsById.in;
-    const shiftInput = inputsById.shift;
-    if (!colorInput || !shiftInput) throw new Error('HueShift requires color and shift inputs');
-
-    const outType = ctx.outTypes[0];
-    // Derive intermediate float type from resolved output extent (preserves cardinality)
-    const intermediateFloat = withoutContract({
-      payload: FLOAT,
-      unit: unitNone(),
-      extent: outType.extent,
-    });
-
-    // Extract channels
-    const h = ctx.b.extract(colorInput.id, 0, intermediateFloat);
-    const s = ctx.b.extract(colorInput.id, 1, intermediateFloat);
-    const l = ctx.b.extract(colorInput.id, 2, intermediateFloat);
-    const a = ctx.b.extract(colorInput.id, 3, intermediateFloat);
-
-    // h2 = wrap01(h + shift)
-    const addFn = ctx.b.opcode(OpCode.Add);
-    const wrap01 = ctx.b.opcode(OpCode.Wrap01);
-    const hShifted = zipAuto([h, shiftInput.id], addFn, intermediateFloat, ctx.b);
-    const hWrapped = mapAuto(hShifted, wrap01, intermediateFloat, ctx.b);
-
-    // Reconstruct with shifted hue
-    const result = ctx.b.construct([hWrapped, s, l, a], outType);
-    return {
-      outputsById: {
-        out: { id: result, slot: undefined, type: outType, stride: payloadStride(outType.payload) },
-      },
-      effects: {
-        slotRequests: [
-          { portId: 'out', type: outType },
-        ],
-      },
-    };
-  },
-});
+export function register(): void {
+  registerBlock({
+    type: 'HueShift',
+    label: 'Hue Shift',
+    category: 'color',
+    description: 'Shift hue by an offset with wrapping, preserving s/l/a',
+    form: 'primitive',
+    capability: 'pure',
+    loweringPurity: 'pure',
+    inputs: {
+      in: { label: 'Color', type: canonicalType(COLOR, unitHsl(), { cardinality: HUE_SHIFT_CARD }) },
+      shift: { label: 'Shift', type: canonicalType(FLOAT, unitNone(), { cardinality: HUE_SHIFT_CARD }), defaultSource: defaultSourceConst(0.0) },
+    },
+    outputs: {
+      out: { label: 'Color', type: canonicalType(COLOR, unitHsl(), { cardinality: HUE_SHIFT_CARD }) },
+    },
+    lower: ({ ctx, inputsById }) => {
+      const colorInput = inputsById.in;
+      const shiftInput = inputsById.shift;
+      if (!colorInput || !shiftInput) throw new Error('HueShift requires color and shift inputs');
+  
+      const outType = ctx.outTypes[0];
+      // Derive intermediate float type from resolved output extent (preserves cardinality)
+      const intermediateFloat = withoutContract({
+        payload: FLOAT,
+        unit: unitNone(),
+        extent: outType.extent,
+      });
+  
+      // Extract channels
+      const h = ctx.b.extract(colorInput.id, 0, intermediateFloat);
+      const s = ctx.b.extract(colorInput.id, 1, intermediateFloat);
+      const l = ctx.b.extract(colorInput.id, 2, intermediateFloat);
+      const a = ctx.b.extract(colorInput.id, 3, intermediateFloat);
+  
+      // h2 = wrap01(h + shift)
+      const addFn = ctx.b.opcode(OpCode.Add);
+      const wrap01 = ctx.b.opcode(OpCode.Wrap01);
+      const hShifted = zipAuto([h, shiftInput.id], addFn, intermediateFloat, ctx.b);
+      const hWrapped = mapAuto(hShifted, wrap01, intermediateFloat, ctx.b);
+  
+      // Reconstruct with shifted hue
+      const result = ctx.b.construct([hWrapped, s, l, a], outType);
+      return {
+        outputsById: {
+          out: { id: result, slot: undefined, type: outType, stride: payloadStride(outType.payload) },
+        },
+        effects: {
+          slotRequests: [
+            { portId: 'out', type: outType },
+          ],
+        },
+      };
+    },
+  });
+}

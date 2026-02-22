@@ -84,87 +84,89 @@ function oneDefault(
 // Block registration
 // ============================================================================
 
-registerBlock({
-  type: 'DefaultSource',
-  label: 'Default Source',
-  category: 'scalar',
-  description: 'Polymorphic default value source (type-indexed dispatch)',
-  form: 'primitive',
-  capability: 'pure',
-  loweringPurity: 'pure', // Pure block (uses LowerSandbox for macro expansion)
-  inputs: {},
-  outputs: {
-    // Polymorphic output — payload and unit resolve via constraint propagation
-    // from the target port that this DefaultSource is wired to.
-    out: {
-      label: 'Output',
-      type: inferType(payloadVar('ds_payload'), unitVar('ds_unit'), { cardinality: DEFAULT_SOURCE_OUT_CARD }),
+export function register(): void {
+  registerBlock({
+    type: 'DefaultSource',
+    label: 'Default Source',
+    category: 'scalar',
+    description: 'Polymorphic default value source (type-indexed dispatch)',
+    form: 'primitive',
+    capability: 'pure',
+    loweringPurity: 'pure', // Pure block (uses LowerSandbox for macro expansion)
+    inputs: {},
+    outputs: {
+      // Polymorphic output — payload and unit resolve via constraint propagation
+      // from the target port that this DefaultSource is wired to.
+      out: {
+        label: 'Output',
+        type: inferType(payloadVar('ds_payload'), unitVar('ds_unit'), { cardinality: DEFAULT_SOURCE_OUT_CARD }),
+      },
     },
-  },
-  lower: ({ ctx }) => {
-    const outType = ctx.outTypes[0];
-
-    // Check if type is still unresolved (payload or unit var)
-    if (isPayloadVar(outType.payload)) {
-      throw new Error(
-        `DefaultSource: output type is still unresolved (payload var). ` +
-        `This indicates a type inference failure upstream.`
-      );
-    }
-
-    const payload = outType.payload as PayloadType;
-    const temporal = requireInst(outType.extent.temporality, 'temporality');
-
-    // Event-typed defaults are represented as "never fire" event streams.
-    // [LAW:one-source-of-truth] Event semantics are declared on CanonicalType
-    // (temporality=discrete, payload=bool, unit=none).
-    if (temporal.kind === 'discrete') {
-      if (payload.kind !== 'bool' || outType.unit.kind !== 'none') {
+    lower: ({ ctx }) => {
+      const outType = ctx.outTypes[0];
+  
+      // Check if type is still unresolved (payload or unit var)
+      if (isPayloadVar(outType.payload)) {
         throw new Error(
-          `DefaultSource: invalid discrete output type (expected event bool+none, got payload=${payload.kind}, unit=${outType.unit.kind})`
+          `DefaultSource: output type is still unresolved (payload var). ` +
+          `This indicates a type inference failure upstream.`
         );
       }
-      const neverId = ctx.b.eventNever();
-      return {
-        outputsById: {
-          out: { id: neverId, slot: undefined, type: outType, stride: 0 },
-        },
-      };
-    }
-
-    // ── One-cardinality path ───────────────────────────────────────────
-    if (payload.kind === 'color') {
-      // Color → HueRainbow(phaseA) via macro expansion
-      const sandbox = new LowerSandbox(ctx.b, ctx.instanceId, ctx.instances);
-      const phaseType = canonicalType(FLOAT);
-      const phaseA = ctx.b.time('phaseA', phaseType);
-      // [LAW:one-source-of-truth] Use solver-resolved output type from ctx, not raw block-def types.
-      requireBlockDef('HueRainbow');
-      const rainbowOutTypes = [outType];
-      const rainbowOutputs = sandbox.lowerBlock('HueRainbow', { t: phaseA }, {}, rainbowOutTypes);
-
+  
+      const payload = outType.payload as PayloadType;
+      const temporal = requireInst(outType.extent.temporality, 'temporality');
+  
+      // Event-typed defaults are represented as "never fire" event streams.
+      // [LAW:one-source-of-truth] Event semantics are declared on CanonicalType
+      // (temporality=discrete, payload=bool, unit=none).
+      if (temporal.kind === 'discrete') {
+        if (payload.kind !== 'bool' || outType.unit.kind !== 'none') {
+          throw new Error(
+            `DefaultSource: invalid discrete output type (expected event bool+none, got payload=${payload.kind}, unit=${outType.unit.kind})`
+          );
+        }
+        const neverId = ctx.b.eventNever();
+        return {
+          outputsById: {
+            out: { id: neverId, slot: undefined, type: outType, stride: 0 },
+          },
+        };
+      }
+  
+      // ── One-cardinality path ───────────────────────────────────────────
+      if (payload.kind === 'color') {
+        // Color → HueRainbow(phaseA) via macro expansion
+        const sandbox = new LowerSandbox(ctx.b, ctx.instanceId, ctx.instances);
+        const phaseType = canonicalType(FLOAT);
+        const phaseA = ctx.b.time('phaseA', phaseType);
+        // [LAW:one-source-of-truth] Use solver-resolved output type from ctx, not raw block-def types.
+        requireBlockDef('HueRainbow');
+        const rainbowOutTypes = [outType];
+        const rainbowOutputs = sandbox.lowerBlock('HueRainbow', { t: phaseA }, {}, rainbowOutTypes);
+  
+        return {
+          outputsById: {
+            out: {
+              id: rainbowOutputs.out,
+              slot: undefined,
+              type: outType,
+              stride: payloadStride(outType.payload),
+            },
+          },
+        };
+      }
+  
+      const constId = oneDefault(ctx, payload);
       return {
         outputsById: {
           out: {
-            id: rainbowOutputs.out,
+            id: constId,
             slot: undefined,
             type: outType,
             stride: payloadStride(outType.payload),
           },
         },
       };
-    }
-
-    const constId = oneDefault(ctx, payload);
-    return {
-      outputsById: {
-        out: {
-          id: constId,
-          slot: undefined,
-          type: outType,
-          stride: payloadStride(outType.payload),
-        },
-      },
-    };
-  },
-});
+    },
+  });
+}

@@ -37,46 +37,48 @@ const RENDER_SCALE_CARD = cardinalityVar(cardinalityVarId('render_scale'), {
   instanceBinding: 'inherit',
 });
 
-registerBlock({
-  type: 'RenderInstances2D',
-  label: 'Render Instances 2D',
-  category: 'render',
-  description: 'Renders 2D instances at positions with color. Shape is automatically looked up from the instance.',
-  form: 'primitive',
-  capability: 'render',
-  loweringPurity: 'impure',
-  inputs: {
-    pos: { label: 'Position', type: inferType(VEC3, unitWorld3(), { cardinality: RENDER_POS_CARD }) },
-    color: { label: 'Color', type: inferType(COLOR, unitHsl(), { cardinality: RENDER_COLOR_CARD }) },
-    // Shape input REMOVED - now looked up automatically from instance
-    scale: {
-      label: 'Scale',
-      type: inferType(FLOAT, unitVar('render_scale_U'), { cardinality: RENDER_SCALE_CARD }),
-      defaultValue: 1.0,
-      defaultSource: defaultSourceConst(1.0),
-      uiHint: { kind: 'slider', min: 0.1, max: 1, step: 0.1 },
+export function register(): void {
+  registerBlock({
+    type: 'RenderInstances2D',
+    label: 'Render Instances 2D',
+    category: 'render',
+    description: 'Renders 2D instances at positions with color. Shape is automatically looked up from the instance.',
+    form: 'primitive',
+    capability: 'render',
+    loweringPurity: 'impure',
+    inputs: {
+      pos: { label: 'Position', type: inferType(VEC3, unitWorld3(), { cardinality: RENDER_POS_CARD }) },
+      color: { label: 'Color', type: inferType(COLOR, unitHsl(), { cardinality: RENDER_COLOR_CARD }) },
+      // Shape input REMOVED - now looked up automatically from instance
+      scale: {
+        label: 'Scale',
+        type: inferType(FLOAT, unitVar('render_scale_U'), { cardinality: RENDER_SCALE_CARD }),
+        defaultValue: 1.0,
+        defaultSource: defaultSourceConst(1.0),
+        uiHint: { kind: 'slider', min: 0.1, max: 1, step: 0.1 },
+      },
     },
-  },
-  outputs: {},
-  lower: ({ ctx, inputsById }) => {
-    const pos = inputsById.pos;
-    const color = inputsById.color;
-
-    const posIsField = pos && 'type' in pos && requireInst(pos.type.extent.cardinality, 'cardinality').kind === 'many';
-
-    if (!pos || !posIsField) {
-      throw new Error('RenderInstances2D pos input must be a field');
-    }
-    if (!color) {
-      throw new Error('RenderInstances2D color input is required');
-    }
-    // color may be one or many; CT/ICT declares oneOrMany acceptance.
-
-    // Shape is automatically looked up from instance.shapeField in schedule-program.ts
-    // No need to extract it here - the backend handles it
-
-    return {
-      outputsById: {},
-    };
-  },
-});
+    outputs: {},
+    lower: ({ ctx, inputsById }) => {
+      const pos = inputsById.pos;
+      const color = inputsById.color;
+  
+      const posIsField = pos && 'type' in pos && requireInst(pos.type.extent.cardinality, 'cardinality').kind === 'many';
+  
+      if (!pos || !posIsField) {
+        throw new Error('RenderInstances2D pos input must be a field');
+      }
+      if (!color) {
+        throw new Error('RenderInstances2D color input is required');
+      }
+      // color may be one or many; CT/ICT declares oneOrMany acceptance.
+  
+      // Shape is automatically looked up from instance.shapeField in schedule-program.ts
+      // No need to extract it here - the backend handles it
+  
+      return {
+        outputsById: {},
+      };
+    },
+  });
+}

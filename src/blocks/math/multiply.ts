@@ -17,47 +17,49 @@ const MULTIPLY_CARD = cardinalityVar(cardinalityVarId('multiply_cardinality'), {
   instanceBinding: 'inherit',
 });
 
-registerBlock({
-  type: 'Multiply',
-  label: 'Multiply',
-  category: 'math',
-  description: 'Multiplies two numbers (single-instance or per-instance fields)',
-  form: 'primitive',
-  capability: 'pure',
-  loweringPurity: 'pure',
-  payload: {
-    allowedPayloads: {
-      a: STANDARD_NUMERIC_PAYLOADS,
-      b: STANDARD_NUMERIC_PAYLOADS,
-      out: STANDARD_NUMERIC_PAYLOADS,
+export function register(): void {
+  registerBlock({
+    type: 'Multiply',
+    label: 'Multiply',
+    category: 'math',
+    description: 'Multiplies two numbers (single-instance or per-instance fields)',
+    form: 'primitive',
+    capability: 'pure',
+    loweringPurity: 'pure',
+    payload: {
+      allowedPayloads: {
+        a: STANDARD_NUMERIC_PAYLOADS,
+        b: STANDARD_NUMERIC_PAYLOADS,
+        out: STANDARD_NUMERIC_PAYLOADS,
+      },
+      semantics: 'componentwise',
+      unitBehavior: 'requireUnitless',
     },
-    semantics: 'componentwise',
-    unitBehavior: 'requireUnitless',
-  },
-  inputs: {
-    a: { label: 'A', type: canonicalType(FLOAT, undefined, { cardinality: MULTIPLY_CARD }) },
-    b: { label: 'B', type: canonicalType(FLOAT, undefined, { cardinality: MULTIPLY_CARD }) },
-  },
-  outputs: {
-    out: { label: 'Output', type: canonicalType(FLOAT, undefined, { cardinality: MULTIPLY_CARD }) },
-  },
-  lower: ({ ctx, inputsById }) => {
-    const a = inputsById.a;
-    const b = inputsById.b;
-    if (!a || !b) throw new Error(`Multiply requires both inputs`);
-
-    const outType = ctx.outTypes[0];
-    const resultId = ctx.b.zipAuto([a.id, b.id], ctx.b.opcode(OpCode.Mul), outType);
-
-    return {
-      outputsById: {
-        out: { id: resultId, slot: undefined, type: outType, stride: payloadStride(outType.payload) },
-      },
-      effects: {
-        slotRequests: [
-          { portId: 'out', type: outType },
-        ],
-      },
-    };
-  },
-});
+    inputs: {
+      a: { label: 'A', type: canonicalType(FLOAT, undefined, { cardinality: MULTIPLY_CARD }) },
+      b: { label: 'B', type: canonicalType(FLOAT, undefined, { cardinality: MULTIPLY_CARD }) },
+    },
+    outputs: {
+      out: { label: 'Output', type: canonicalType(FLOAT, undefined, { cardinality: MULTIPLY_CARD }) },
+    },
+    lower: ({ ctx, inputsById }) => {
+      const a = inputsById.a;
+      const b = inputsById.b;
+      if (!a || !b) throw new Error(`Multiply requires both inputs`);
+  
+      const outType = ctx.outTypes[0];
+      const resultId = ctx.b.zipAuto([a.id, b.id], ctx.b.opcode(OpCode.Mul), outType);
+  
+      return {
+        outputsById: {
+          out: { id: resultId, slot: undefined, type: outType, stride: payloadStride(outType.payload) },
+        },
+        effects: {
+          slotRequests: [
+            { portId: 'out', type: outType },
+          ],
+        },
+      };
+    },
+  });
+}

@@ -1,30 +1,25 @@
 /**
  * Block Registration Aggregator
  *
- * Imports all block declarations, then exposes an explicit registration function.
+ * Registers all block declarations explicitly, then activates them in the live registry.
  */
 
 import { activateDeclaredBlocks } from './registry';
-
-// Primitive block categories
-import './time';
-import './scalar';
-import './math';
-import './field';
-import './shape';
-import './layout';
-import './color';
-import './adapter';
-import './lens';
-import './event';
-import './io';
-import './render';
-import './domain';
-import './instance';
-import './dev';
-
-// Composite block library
-import './composites';
+import { registerTimeBlocks } from './time';
+import { registerScalarBlocks } from './scalar';
+import { registerMathBlocks } from './math';
+import { registerFieldBlocks } from './field';
+import { registerShapeBlocks } from './shape';
+import { registerLayoutBlocks } from './layout';
+import { registerColorBlocks } from './color';
+import { registerAdapterBlocks } from './adapter';
+import { registerLensBlocks } from './lens';
+import { registerEventBlocks } from './event';
+import { registerIoBlocks } from './io';
+import { registerRenderBlocks } from './render';
+import { registerDomainBlocks } from './domain';
+import { registerInstanceBlocks } from './instance';
+import { registerDevBlocks } from './dev';
 
 let didRegisterAllBlocks = false;
 
@@ -33,6 +28,21 @@ let didRegisterAllBlocks = false;
  */
 export function registerAllBlocks(): void {
   if (didRegisterAllBlocks) return;
+  registerTimeBlocks();
+  registerScalarBlocks();
+  registerMathBlocks();
+  registerFieldBlocks();
+  registerShapeBlocks();
+  registerLayoutBlocks();
+  registerColorBlocks();
+  registerAdapterBlocks();
+  registerLensBlocks();
+  registerEventBlocks();
+  registerIoBlocks();
+  registerRenderBlocks();
+  registerDomainBlocks();
+  registerInstanceBlocks();
+  registerDevBlocks();
   activateDeclaredBlocks();
   didRegisterAllBlocks = true;
 }

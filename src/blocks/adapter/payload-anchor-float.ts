@@ -27,48 +27,50 @@ const PAYLOAD_ANCHOR_FLOAT_CARD = cardinalityVar(cardinalityVarId('payload_ancho
   instanceBinding: 'inherit',
 });
 
-registerBlock({
-  type: 'Adapter_PayloadAnchorFloat',
-  label: 'Float Anchor',
-  category: 'adapter',
-  description: 'Anchors polymorphic payload chain to float (cheater adapter)',
-  form: 'primitive',
-  capability: 'pure',
-  loweringPurity: 'pure',
-  // NO adapterSpec — not a normal adapter. Only inserted by cheater policy.
-  inputs: {
-    in: {
-      label: 'In',
-      type: inferType(FLOAT, unitVar('anchor_U'), { cardinality: PAYLOAD_ANCHOR_FLOAT_CARD }),
-      // NOTE: unitVar ID is a template — gets alpha-renamed per block instance
-      // by extractConstraints() template var instantiation (u:{blockId}:anchor_U)
+export function register(): void {
+  registerBlock({
+    type: 'Adapter_PayloadAnchorFloat',
+    label: 'Float Anchor',
+    category: 'adapter',
+    description: 'Anchors polymorphic payload chain to float (cheater adapter)',
+    form: 'primitive',
+    capability: 'pure',
+    loweringPurity: 'pure',
+    // NO adapterSpec — not a normal adapter. Only inserted by cheater policy.
+    inputs: {
+      in: {
+        label: 'In',
+        type: inferType(FLOAT, unitVar('anchor_U'), { cardinality: PAYLOAD_ANCHOR_FLOAT_CARD }),
+        // NOTE: unitVar ID is a template — gets alpha-renamed per block instance
+        // by extractConstraints() template var instantiation (u:{blockId}:anchor_U)
+      },
     },
-  },
-  outputs: {
-    out: {
-      label: 'Out',
-      type: inferType(FLOAT, unitVar('anchor_U'), { cardinality: PAYLOAD_ANCHOR_FLOAT_CARD }),
+    outputs: {
+      out: {
+        label: 'Out',
+        type: inferType(FLOAT, unitVar('anchor_U'), { cardinality: PAYLOAD_ANCHOR_FLOAT_CARD }),
+      },
     },
-  },
-  lower: ({ inputsById, ctx }) => {
-    // Real identity op — must allocate new ValueExprId, not alias input
-    const input = inputsById.in;
-    if (!input) throw new Error('PayloadAnchorFloat: input required');
-    const outType = ctx.outTypes[0];
-    const identityFn = ctx.b.opcode(OpCode.Identity);
-    const result = mapAuto(input.id, identityFn, outType, ctx.b);
-    return {
-      outputsById: {
-        out: {
-          id: result,
-          slot: undefined,
-          type: outType,
-          stride: payloadStride(outType.payload),
+    lower: ({ inputsById, ctx }) => {
+      // Real identity op — must allocate new ValueExprId, not alias input
+      const input = inputsById.in;
+      if (!input) throw new Error('PayloadAnchorFloat: input required');
+      const outType = ctx.outTypes[0];
+      const identityFn = ctx.b.opcode(OpCode.Identity);
+      const result = mapAuto(input.id, identityFn, outType, ctx.b);
+      return {
+        outputsById: {
+          out: {
+            id: result,
+            slot: undefined,
+            type: outType,
+            stride: payloadStride(outType.payload),
+          },
         },
-      },
-      effects: {
-        slotRequests: [{ portId: 'out', type: outType }],
-      },
-    };
-  },
-});
+        effects: {
+          slotRequests: [{ portId: 'out', type: outType }],
+        },
+      };
+    },
+  });
+}

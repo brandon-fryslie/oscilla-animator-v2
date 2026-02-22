@@ -12,73 +12,75 @@ import { OpCode, stableStateId } from '../../compiler/ir/types';
 import type { ValueExprId } from '../../compiler/ir/Indices';
 import { zipAuto, planStatefulStorage } from '../lower-utils';
 
-registerBlock({
-  type: 'SampleHold',
-  label: 'Sample & Hold',
-  category: 'event',
-  description: 'Latches input value when event fires, holds until next fire',
-  form: 'primitive',
-  capability: 'state',
-  loweringPurity: 'stateful',
-  isStateful: true,
-  inputs: {
-    value: { label: 'Value', type: inferType(FLOAT, unitVar('sh_U')) },
-    trigger: { label: 'Trigger', type: canonicalEvent() },
-    initialValue: { type: canonicalType(FLOAT), defaultValue: 0, exposedAsPort: false },
-  },
-  outputs: {
-    out: { label: 'Held', type: inferType(FLOAT, unitVar('sh_U')) },
-  },
-  lower: ({ ctx, inputsById, config }) => {
-    const valueInput = inputsById.value;
-    const triggerInput = inputsById.trigger;
-
-    if (!valueInput || !('type' in valueInput) || requireInst(valueInput.type.extent.temporality, 'temporality').kind !== 'continuous') {
-      throw new Error('SampleHold: value input must be continuous');
-    }
-    if (!triggerInput || !('type' in triggerInput) || requireInst(triggerInput.type.extent.temporality, 'temporality').kind !== 'discrete') {
-      throw new Error('SampleHold: trigger input must be an event');
-    }
-
-    const initialValue = requireConfig<number>(config, 'initialValue', 'number');
-    const outType = ctx.outTypes[0];
-
-    // Symbolic state key
-    const stateKey = stableStateId(ctx.instanceId, 'sample');
-    const stateStorage = planStatefulStorage(ctx, stateKey, outType, initialValue);
-
-    // Read previous held value (Phase 1 — reads previous frame's state, symbolic key)
-    const prevId = ctx.b.stateRead(stateKey, outType);
-
-    // Read event scalar as float (0.0 or 1.0)
-    const triggerScalar = ctx.b.eventRead(triggerInput.id);
-
-    // Conditional via lerp: lerp(prev, value, trigger)
-    // trigger=0 → output=prev (hold), trigger=1 → output=value (sample)
-    const lerpFn = ctx.b.opcode(OpCode.Lerp);
-    const outputId = zipAuto(
-      [prevId, valueInput.id as ValueExprId, triggerScalar],
-      lerpFn,
-      outType,
-      ctx.b
-    );
-
-    // Return effects-as-data (no imperative calls)
-    return {
-      outputsById: {
-        out: { id: outputId, slot: undefined, type: outType, stride: payloadStride(outType.payload) },
-      },
-      effects: {
-        stateDecls: [
-          stateStorage.stateDecl,
-        ],
-        stepRequests: [
-          { kind: stateStorage.writeKind, stateKey, value: outputId },
-        ],
-        slotRequests: [
-          { portId: 'out', type: outType },
-        ],
-      },
-    };
-  },
-});
+export function register(): void {
+  registerBlock({
+    type: 'SampleHold',
+    label: 'Sample & Hold',
+    category: 'event',
+    description: 'Latches input value when event fires, holds until next fire',
+    form: 'primitive',
+    capability: 'state',
+    loweringPurity: 'stateful',
+    isStateful: true,
+    inputs: {
+      value: { label: 'Value', type: inferType(FLOAT, unitVar('sh_U')) },
+      trigger: { label: 'Trigger', type: canonicalEvent() },
+      initialValue: { type: canonicalType(FLOAT), defaultValue: 0, exposedAsPort: false },
+    },
+    outputs: {
+      out: { label: 'Held', type: inferType(FLOAT, unitVar('sh_U')) },
+    },
+    lower: ({ ctx, inputsById, config }) => {
+      const valueInput = inputsById.value;
+      const triggerInput = inputsById.trigger;
+  
+      if (!valueInput || !('type' in valueInput) || requireInst(valueInput.type.extent.temporality, 'temporality').kind !== 'continuous') {
+        throw new Error('SampleHold: value input must be continuous');
+      }
+      if (!triggerInput || !('type' in triggerInput) || requireInst(triggerInput.type.extent.temporality, 'temporality').kind !== 'discrete') {
+        throw new Error('SampleHold: trigger input must be an event');
+      }
+  
+      const initialValue = requireConfig<number>(config, 'initialValue', 'number');
+      const outType = ctx.outTypes[0];
+  
+      // Symbolic state key
+      const stateKey = stableStateId(ctx.instanceId, 'sample');
+      const stateStorage = planStatefulStorage(ctx, stateKey, outType, initialValue);
+  
+      // Read previous held value (Phase 1 — reads previous frame's state, symbolic key)
+      const prevId = ctx.b.stateRead(stateKey, outType);
+  
+      // Read event scalar as float (0.0 or 1.0)
+      const triggerScalar = ctx.b.eventRead(triggerInput.id);
+  
+      // Conditional via lerp: lerp(prev, value, trigger)
+      // trigger=0 → output=prev (hold), trigger=1 → output=value (sample)
+      const lerpFn = ctx.b.opcode(OpCode.Lerp);
+      const outputId = zipAuto(
+        [prevId, valueInput.id as ValueExprId, triggerScalar],
+        lerpFn,
+        outType,
+        ctx.b
+      );
+  
+      // Return effects-as-data (no imperative calls)
+      return {
+        outputsById: {
+          out: { id: outputId, slot: undefined, type: outType, stride: payloadStride(outType.payload) },
+        },
+        effects: {
+          stateDecls: [
+            stateStorage.stateDecl,
+          ],
+          stepRequests: [
+            { kind: stateStorage.writeKind, stateKey, value: outputId },
+          ],
+          slotRequests: [
+            { portId: 'out', type: outType },
+          ],
+        },
+      };
+    },
+  });
+}

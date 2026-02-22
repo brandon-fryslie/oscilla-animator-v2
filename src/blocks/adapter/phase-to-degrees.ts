@@ -19,46 +19,48 @@ const PHASE_TO_DEGREES_CARD = cardinalityVar(cardinalityVarId('phase_to_degrees_
   instanceBinding: 'inherit',
 });
 
-registerBlock({
-  type: 'Adapter_PhaseToDegrees',
-  label: 'Phase → Degrees',
-  category: 'adapter',
-  description: 'Convert phase [0,1) to degrees [0,360)',
-  form: 'primitive',
-  capability: 'pure',
-  loweringPurity: 'pure',
-  adapterSpec: {
-    from: { payload: FLOAT, unit: { kind: 'angle', unit: 'turns' }, contract: { kind: 'wrap01' }, extent: 'any' },
-    to: { payload: FLOAT, unit: { kind: 'angle', unit: 'degrees' }, extent: 'any' },
-    inputPortId: 'in',
-    outputPortId: 'out',
-    description: 'Phase [0,1) → degrees [0,360)',
-    purity: 'pure',
-    stability: 'stable',
-  },
-  inputs: {
-    in: { label: 'In', type: canonicalType(FLOAT, unitTurns(), { cardinality: PHASE_TO_DEGREES_CARD }, contractWrap01()) },
-  },
-  outputs: {
-    out: { label: 'Out', type: canonicalType(FLOAT, unitDegrees(), { cardinality: PHASE_TO_DEGREES_CARD }) },
-  },
-  lower: ({ inputsById, ctx }) => {
-    const input = inputsById.in;
-    if (!input) throw new Error('Adapter block input is required');
-
-    const outType = ctx.outTypes[0];
-    const threeSixty = ctx.b.constant(floatConst(360), canonicalType(FLOAT, unitDegrees()));
-    const mulFn = ctx.b.opcode(OpCode.Mul);
-    const degrees = zipAuto([input.id, threeSixty], mulFn, outType, ctx.b);
-    return {
-      outputsById: {
-        out: { id: degrees, slot: undefined, type: outType, stride: payloadStride(outType.payload) },
-      },
-      effects: {
-        slotRequests: [
-          { portId: 'out', type: outType },
-        ],
-      },
-    };
-  },
-});
+export function register(): void {
+  registerBlock({
+    type: 'Adapter_PhaseToDegrees',
+    label: 'Phase → Degrees',
+    category: 'adapter',
+    description: 'Convert phase [0,1) to degrees [0,360)',
+    form: 'primitive',
+    capability: 'pure',
+    loweringPurity: 'pure',
+    adapterSpec: {
+      from: { payload: FLOAT, unit: { kind: 'angle', unit: 'turns' }, contract: { kind: 'wrap01' }, extent: 'any' },
+      to: { payload: FLOAT, unit: { kind: 'angle', unit: 'degrees' }, extent: 'any' },
+      inputPortId: 'in',
+      outputPortId: 'out',
+      description: 'Phase [0,1) → degrees [0,360)',
+      purity: 'pure',
+      stability: 'stable',
+    },
+    inputs: {
+      in: { label: 'In', type: canonicalType(FLOAT, unitTurns(), { cardinality: PHASE_TO_DEGREES_CARD }, contractWrap01()) },
+    },
+    outputs: {
+      out: { label: 'Out', type: canonicalType(FLOAT, unitDegrees(), { cardinality: PHASE_TO_DEGREES_CARD }) },
+    },
+    lower: ({ inputsById, ctx }) => {
+      const input = inputsById.in;
+      if (!input) throw new Error('Adapter block input is required');
+  
+      const outType = ctx.outTypes[0];
+      const threeSixty = ctx.b.constant(floatConst(360), canonicalType(FLOAT, unitDegrees()));
+      const mulFn = ctx.b.opcode(OpCode.Mul);
+      const degrees = zipAuto([input.id, threeSixty], mulFn, outType, ctx.b);
+      return {
+        outputsById: {
+          out: { id: degrees, slot: undefined, type: outType, stride: payloadStride(outType.payload) },
+        },
+        effects: {
+          slotRequests: [
+            { portId: 'out', type: outType },
+          ],
+        },
+      };
+    },
+  });
+}

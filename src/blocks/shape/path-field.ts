@@ -75,99 +75,101 @@ function findTopologyIdForField(builder: import('../../compiler/ir/BlockIRBuilde
  * // fields.arcLength contains cumulative distances [0, d1, d1+d2, ...]
  * ```
  */
-registerBlock({
-  type: 'PathField',
-  label: 'Path Field',
-  category: 'shape',
-  description: 'Extract per-point properties from path control points (MVP: polygonal paths)',
-  form: 'primitive',
-  capability: 'pure',
-  loweringPurity: 'pure',
-  inputs: {
-    controlPoints: {
-      label: 'Control Points',
-      type: canonicalManyDef(VEC2, { kind: 'none' }),
+export function register(): void {
+  registerBlock({
+    type: 'PathField',
+    label: 'Path Field',
+    category: 'shape',
+    description: 'Extract per-point properties from path control points (MVP: polygonal paths)',
+    form: 'primitive',
+    capability: 'pure',
+    loweringPurity: 'pure',
+    inputs: {
+      controlPoints: {
+        label: 'Control Points',
+        type: canonicalManyDef(VEC2, { kind: 'none' }),
+      },
     },
-  },
-  outputs: {
-    position: { label: 'Position', type: canonicalManyDef(VEC3, { kind: 'none' }) },
-    index: { label: 'Index', type: canonicalManyDef(INT, { kind: 'none' }) },
-    tangent: { label: 'Tangent', type: canonicalManyDef(VEC3, { kind: 'none' }) },
-    arcLength: { label: 'Arc Length', type: canonicalManyDef(FLOAT, { kind: 'none' }) },
-  },
-  lower: ({ ctx, inputsById }) => {
-    const controlPointsInput = inputsById.controlPoints;
-    if (!controlPointsInput || !('type' in controlPointsInput && requireInst(controlPointsInput.type.extent.cardinality, 'cardinality').kind === 'many')) {
-      throw new Error('PathField requires a controlPoints field input');
-    }
-
-    const controlPointsFieldId = controlPointsInput.id;
-
-    // Resolve topology ID from the shapeRef that produced this field
-    const topologyId = findTopologyIdForField(ctx.b, controlPointsFieldId);
-
-    // Get instance from context (inferred from input fields by lowering system)
-    const instance = ctx.inferredInstance !== undefined ? ctx.inferredInstance : ctx.instance;
-    if (!instance) {
-      throw new Error('PathField requires instance context from control points field');
-    }
-
-    const posType = ctx.outTypes[0];
-    const idxType = ctx.outTypes[1];
-    const tanType = ctx.outTypes[2];
-    const arcType = ctx.outTypes[3];
-
-    // Position output: convert VEC2 control points to VEC3 (z=0)
-    // vec2ToVec3 logic: extract x and y, then construct vec3 with z=0
-    const floatFieldType = { ...posType, payload: FLOAT, unit: { kind: 'none' as const } };
-    const xField = ctx.b.extract(controlPointsFieldId, 0, floatFieldType);  // X component
-    const yField = ctx.b.extract(controlPointsFieldId, 1, floatFieldType);  // Y component
-    const const0 = ctx.b.constant(floatConst(0), canonicalType(FLOAT));
-    const zField = ctx.b.broadcast(const0, floatFieldType);  // Z = 0
-
-    const positionFieldId = ctx.b.construct(
-      [xField, yField, zField],
-      posType
-    );
-
-    // Create index field
-    const indexField = ctx.b.intrinsic('index',
-      idxType
-    );
-
-    // Create tangent field (MVP: polygonal paths, linear approximation)
-    // Outputs VEC3 (z=0) for compatibility with render pipeline
-    const tangentField = ctx.b.pathDerivative(
-      controlPointsFieldId,
-      'tangent',
-      topologyId,
-      tanType
-    );
-
-    // Create arc length field (MVP: cumulative Euclidean distance)
-    const arcLengthField = ctx.b.pathDerivative(
-      controlPointsFieldId,
-      'arcLength',
-      topologyId,
-      arcType
-    );
-
-    return {
-      outputsById: {
-        position: { id: positionFieldId, slot: undefined, type: posType, stride: payloadStride(posType.payload) },
-        index: { id: indexField, slot: undefined, type: idxType, stride: payloadStride(idxType.payload) },
-        tangent: { id: tangentField, slot: undefined, type: tanType, stride: payloadStride(tanType.payload) },
-        arcLength: { id: arcLengthField, slot: undefined, type: arcType, stride: payloadStride(arcType.payload) },
-      },
-      effects: {
-        slotRequests: [
-          { portId: 'position', type: posType },
-          { portId: 'index', type: idxType },
-          { portId: 'tangent', type: tanType },
-          { portId: 'arcLength', type: arcType },
-        ],
-      },
-      instanceContext: instance,
-    };
-  },
-});
+    outputs: {
+      position: { label: 'Position', type: canonicalManyDef(VEC3, { kind: 'none' }) },
+      index: { label: 'Index', type: canonicalManyDef(INT, { kind: 'none' }) },
+      tangent: { label: 'Tangent', type: canonicalManyDef(VEC3, { kind: 'none' }) },
+      arcLength: { label: 'Arc Length', type: canonicalManyDef(FLOAT, { kind: 'none' }) },
+    },
+    lower: ({ ctx, inputsById }) => {
+      const controlPointsInput = inputsById.controlPoints;
+      if (!controlPointsInput || !('type' in controlPointsInput && requireInst(controlPointsInput.type.extent.cardinality, 'cardinality').kind === 'many')) {
+        throw new Error('PathField requires a controlPoints field input');
+      }
+  
+      const controlPointsFieldId = controlPointsInput.id;
+  
+      // Resolve topology ID from the shapeRef that produced this field
+      const topologyId = findTopologyIdForField(ctx.b, controlPointsFieldId);
+  
+      // Get instance from context (inferred from input fields by lowering system)
+      const instance = ctx.inferredInstance !== undefined ? ctx.inferredInstance : ctx.instance;
+      if (!instance) {
+        throw new Error('PathField requires instance context from control points field');
+      }
+  
+      const posType = ctx.outTypes[0];
+      const idxType = ctx.outTypes[1];
+      const tanType = ctx.outTypes[2];
+      const arcType = ctx.outTypes[3];
+  
+      // Position output: convert VEC2 control points to VEC3 (z=0)
+      // vec2ToVec3 logic: extract x and y, then construct vec3 with z=0
+      const floatFieldType = { ...posType, payload: FLOAT, unit: { kind: 'none' as const } };
+      const xField = ctx.b.extract(controlPointsFieldId, 0, floatFieldType);  // X component
+      const yField = ctx.b.extract(controlPointsFieldId, 1, floatFieldType);  // Y component
+      const const0 = ctx.b.constant(floatConst(0), canonicalType(FLOAT));
+      const zField = ctx.b.broadcast(const0, floatFieldType);  // Z = 0
+  
+      const positionFieldId = ctx.b.construct(
+        [xField, yField, zField],
+        posType
+      );
+  
+      // Create index field
+      const indexField = ctx.b.intrinsic('index',
+        idxType
+      );
+  
+      // Create tangent field (MVP: polygonal paths, linear approximation)
+      // Outputs VEC3 (z=0) for compatibility with render pipeline
+      const tangentField = ctx.b.pathDerivative(
+        controlPointsFieldId,
+        'tangent',
+        topologyId,
+        tanType
+      );
+  
+      // Create arc length field (MVP: cumulative Euclidean distance)
+      const arcLengthField = ctx.b.pathDerivative(
+        controlPointsFieldId,
+        'arcLength',
+        topologyId,
+        arcType
+      );
+  
+      return {
+        outputsById: {
+          position: { id: positionFieldId, slot: undefined, type: posType, stride: payloadStride(posType.payload) },
+          index: { id: indexField, slot: undefined, type: idxType, stride: payloadStride(idxType.payload) },
+          tangent: { id: tangentField, slot: undefined, type: tanType, stride: payloadStride(tanType.payload) },
+          arcLength: { id: arcLengthField, slot: undefined, type: arcType, stride: payloadStride(arcType.payload) },
+        },
+        effects: {
+          slotRequests: [
+            { portId: 'position', type: posType },
+            { portId: 'index', type: idxType },
+            { portId: 'tangent', type: tanType },
+            { portId: 'arcLength', type: arcType },
+          ],
+        },
+        instanceContext: instance,
+      };
+    },
+  });
+}

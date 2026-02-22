@@ -21,48 +21,50 @@ const STEP_QUANTIZE_CARD = cardinalityVar(cardinalityVarId('step_quantize_cardin
   instanceBinding: 'inherit',
 });
 
-registerBlock({
-  type: 'StepQuantize',
-  label: 'Step Quantize',
-  category: 'lens',
-  description: 'y = round(x / step) * step - discretize to step grid',
-  form: 'primitive',
-  capability: 'pure',
-  loweringPurity: 'pure',
-  inputs: {
-    in: { label: 'In', type: inferType(FLOAT, unitVar('stepQ_U'), { cardinality: STEP_QUANTIZE_CARD }) },
-    step: { label: 'Step', type: inferType(FLOAT, unitVar('stepQ_U'), { cardinality: STEP_QUANTIZE_CARD }), defaultValue: 0.1 },
-  },
-  outputs: {
-    out: { label: 'Out', type: inferType(FLOAT, unitVar('stepQ_U'), { cardinality: STEP_QUANTIZE_CARD }) },
-  },
-  lower: ({ inputsById, ctx }) => {
-    const input = inputsById.in;
-    const step = inputsById.step;
-    if (!input) throw new Error('StepQuantize: in is required');
-    if (!step) throw new Error('StepQuantize: step is required');
-
-    const outType = ctx.outTypes[0];
-
-    // y = round(x / step) * step
-    const divFn = ctx.b.opcode(OpCode.Div);
-    const divided = zipAuto([input.id, step.id], divFn, outType, ctx.b);
-
-    const roundFn = ctx.b.opcode(OpCode.Round);
-    const rounded = mapAuto(divided, roundFn, outType, ctx.b);
-
-    const mulFn = ctx.b.opcode(OpCode.Mul);
-    const result = zipAuto([rounded, step.id], mulFn, outType, ctx.b);
-
-    return {
-      outputsById: {
-        out: { id: result, slot: undefined, type: outType, stride: payloadStride(outType.payload) },
-      },
-      effects: {
-        slotRequests: [
-          { portId: 'out', type: outType },
-        ],
-      },
-    };
-  },
-});
+export function register(): void {
+  registerBlock({
+    type: 'StepQuantize',
+    label: 'Step Quantize',
+    category: 'lens',
+    description: 'y = round(x / step) * step - discretize to step grid',
+    form: 'primitive',
+    capability: 'pure',
+    loweringPurity: 'pure',
+    inputs: {
+      in: { label: 'In', type: inferType(FLOAT, unitVar('stepQ_U'), { cardinality: STEP_QUANTIZE_CARD }) },
+      step: { label: 'Step', type: inferType(FLOAT, unitVar('stepQ_U'), { cardinality: STEP_QUANTIZE_CARD }), defaultValue: 0.1 },
+    },
+    outputs: {
+      out: { label: 'Out', type: inferType(FLOAT, unitVar('stepQ_U'), { cardinality: STEP_QUANTIZE_CARD }) },
+    },
+    lower: ({ inputsById, ctx }) => {
+      const input = inputsById.in;
+      const step = inputsById.step;
+      if (!input) throw new Error('StepQuantize: in is required');
+      if (!step) throw new Error('StepQuantize: step is required');
+  
+      const outType = ctx.outTypes[0];
+  
+      // y = round(x / step) * step
+      const divFn = ctx.b.opcode(OpCode.Div);
+      const divided = zipAuto([input.id, step.id], divFn, outType, ctx.b);
+  
+      const roundFn = ctx.b.opcode(OpCode.Round);
+      const rounded = mapAuto(divided, roundFn, outType, ctx.b);
+  
+      const mulFn = ctx.b.opcode(OpCode.Mul);
+      const result = zipAuto([rounded, step.id], mulFn, outType, ctx.b);
+  
+      return {
+        outputsById: {
+          out: { id: result, slot: undefined, type: outType, stride: payloadStride(outType.payload) },
+        },
+        effects: {
+          slotRequests: [
+            { portId: 'out', type: outType },
+          ],
+        },
+      };
+    },
+  });
+}

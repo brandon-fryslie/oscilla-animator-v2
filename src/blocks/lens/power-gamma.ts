@@ -21,48 +21,50 @@ const POWER_GAMMA_CARD = cardinalityVar(cardinalityVarId('power_gamma_cardinalit
   instanceBinding: 'inherit',
 });
 
-registerBlock({
-  type: 'PowerGamma',
-  label: 'Power/Gamma',
-  category: 'lens',
-  description: 'y = pow(clamp01(x), gamma) - gamma curve control',
-  form: 'primitive',
-  capability: 'pure',
-  loweringPurity: 'pure',
-  inputs: {
-    in: { label: 'In', type: canonicalType(FLOAT, undefined, { cardinality: POWER_GAMMA_CARD }) },
-    gamma: { label: 'Gamma', type: canonicalType(FLOAT, undefined, { cardinality: POWER_GAMMA_CARD }), defaultValue: 1.0 },
-  },
-  outputs: {
-    out: { label: 'Out', type: canonicalType(FLOAT, undefined, { cardinality: POWER_GAMMA_CARD }) },
-  },
-  lower: ({ inputsById, ctx }) => {
-    const input = inputsById.in;
-    const gamma = inputsById.gamma;
-    if (!input) throw new Error('PowerGamma: in is required');
-    if (!gamma) throw new Error('PowerGamma: gamma is required');
-
-    const outType = ctx.outTypes[0];
-
-    // clamp(x, 0, 1)
-    const zeroConst = ctx.b.constant(floatConst(0.0), canonicalType(FLOAT));
-    const oneConst = ctx.b.constant(floatConst(1.0), canonicalType(FLOAT));
-    const clampFn = ctx.b.opcode(OpCode.Clamp);
-    const clamped = zipAuto([input.id, zeroConst, oneConst], clampFn, outType, ctx.b);
-
-    // pow(clamped, gamma)
-    const powFn = ctx.b.opcode(OpCode.Pow);
-    const result = zipAuto([clamped, gamma.id], powFn, outType, ctx.b);
-
-    return {
-      outputsById: {
-        out: { id: result, slot: undefined, type: outType, stride: payloadStride(outType.payload) },
-      },
-      effects: {
-        slotRequests: [
-          { portId: 'out', type: outType },
-        ],
-      },
-    };
-  },
-});
+export function register(): void {
+  registerBlock({
+    type: 'PowerGamma',
+    label: 'Power/Gamma',
+    category: 'lens',
+    description: 'y = pow(clamp01(x), gamma) - gamma curve control',
+    form: 'primitive',
+    capability: 'pure',
+    loweringPurity: 'pure',
+    inputs: {
+      in: { label: 'In', type: canonicalType(FLOAT, undefined, { cardinality: POWER_GAMMA_CARD }) },
+      gamma: { label: 'Gamma', type: canonicalType(FLOAT, undefined, { cardinality: POWER_GAMMA_CARD }), defaultValue: 1.0 },
+    },
+    outputs: {
+      out: { label: 'Out', type: canonicalType(FLOAT, undefined, { cardinality: POWER_GAMMA_CARD }) },
+    },
+    lower: ({ inputsById, ctx }) => {
+      const input = inputsById.in;
+      const gamma = inputsById.gamma;
+      if (!input) throw new Error('PowerGamma: in is required');
+      if (!gamma) throw new Error('PowerGamma: gamma is required');
+  
+      const outType = ctx.outTypes[0];
+  
+      // clamp(x, 0, 1)
+      const zeroConst = ctx.b.constant(floatConst(0.0), canonicalType(FLOAT));
+      const oneConst = ctx.b.constant(floatConst(1.0), canonicalType(FLOAT));
+      const clampFn = ctx.b.opcode(OpCode.Clamp);
+      const clamped = zipAuto([input.id, zeroConst, oneConst], clampFn, outType, ctx.b);
+  
+      // pow(clamped, gamma)
+      const powFn = ctx.b.opcode(OpCode.Pow);
+      const result = zipAuto([clamped, gamma.id], powFn, outType, ctx.b);
+  
+      return {
+        outputsById: {
+          out: { id: result, slot: undefined, type: outType, stride: payloadStride(outType.payload) },
+        },
+        effects: {
+          slotRequests: [
+            { portId: 'out', type: outType },
+          ],
+        },
+      };
+    },
+  });
+}

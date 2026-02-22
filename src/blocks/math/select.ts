@@ -18,50 +18,52 @@ const SELECT_CARD = cardinalityVar(cardinalityVarId('select_cardinality'), {
   instanceBinding: 'inherit',
 });
 
-registerBlock({
-  type: 'Select',
-  label: 'Select',
-  category: 'math',
-  description: 'Select between A/B using cond > 0',
-  form: 'primitive',
-  capability: 'pure',
-  loweringPurity: 'pure',
-  payload: {
-    allowedPayloads: {
-      ifTrue: SELECT_PAYLOADS,
-      ifFalse: SELECT_PAYLOADS,
-      out: SELECT_PAYLOADS,
+export function register(): void {
+  registerBlock({
+    type: 'Select',
+    label: 'Select',
+    category: 'math',
+    description: 'Select between A/B using cond > 0',
+    form: 'primitive',
+    capability: 'pure',
+    loweringPurity: 'pure',
+    payload: {
+      allowedPayloads: {
+        ifTrue: SELECT_PAYLOADS,
+        ifFalse: SELECT_PAYLOADS,
+        out: SELECT_PAYLOADS,
+      },
+      semantics: 'componentwise',
     },
-    semantics: 'componentwise',
-  },
-  inputs: {
-    cond: { label: 'Cond', type: canonicalType(FLOAT, unitNone(), { cardinality: SELECT_CARD }) },
-    ifTrue: { label: 'If True', type: canonicalType(FLOAT, undefined, { cardinality: SELECT_CARD }) },
-    ifFalse: { label: 'If False', type: canonicalType(FLOAT, undefined, { cardinality: SELECT_CARD }) },
-  },
-  outputs: {
-    out: { label: 'Out', type: canonicalType(FLOAT, undefined, { cardinality: SELECT_CARD }) },
-  },
-  lower: ({ ctx, inputsById }) => {
-    const cond = inputsById.cond;
-    const ifTrue = inputsById.ifTrue;
-    const ifFalse = inputsById.ifFalse;
-    if (!cond || !ifTrue || !ifFalse) {
-      throw new Error('Select requires cond, ifTrue, and ifFalse inputs');
-    }
-
-    const outType = ctx.outTypes[0];
-    const result = ctx.b.zipAuto([cond.id, ifTrue.id, ifFalse.id], ctx.b.opcode(OpCode.Select), outType);
-
-    return {
-      outputsById: {
-        out: { id: result, slot: undefined, type: outType, stride: payloadStride(outType.payload) },
-      },
-      effects: {
-        slotRequests: [
-          { portId: 'out', type: outType },
-        ],
-      },
-    };
-  },
-});
+    inputs: {
+      cond: { label: 'Cond', type: canonicalType(FLOAT, unitNone(), { cardinality: SELECT_CARD }) },
+      ifTrue: { label: 'If True', type: canonicalType(FLOAT, undefined, { cardinality: SELECT_CARD }) },
+      ifFalse: { label: 'If False', type: canonicalType(FLOAT, undefined, { cardinality: SELECT_CARD }) },
+    },
+    outputs: {
+      out: { label: 'Out', type: canonicalType(FLOAT, undefined, { cardinality: SELECT_CARD }) },
+    },
+    lower: ({ ctx, inputsById }) => {
+      const cond = inputsById.cond;
+      const ifTrue = inputsById.ifTrue;
+      const ifFalse = inputsById.ifFalse;
+      if (!cond || !ifTrue || !ifFalse) {
+        throw new Error('Select requires cond, ifTrue, and ifFalse inputs');
+      }
+  
+      const outType = ctx.outTypes[0];
+      const result = ctx.b.zipAuto([cond.id, ifTrue.id, ifFalse.id], ctx.b.opcode(OpCode.Select), outType);
+  
+      return {
+        outputsById: {
+          out: { id: result, slot: undefined, type: outType, stride: payloadStride(outType.payload) },
+        },
+        effects: {
+          slotRequests: [
+            { portId: 'out', type: outType },
+          ],
+        },
+      };
+    },
+  });
+}

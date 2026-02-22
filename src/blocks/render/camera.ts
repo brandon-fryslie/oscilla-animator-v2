@@ -27,104 +27,106 @@ function defaultSourceCameraProjection(value: number): DefaultSource {
   return { blockType: 'CameraProjectionConst', output: 'out', params: { value } };
 }
 
-registerBlock({
-  type: 'Camera',
-  label: 'Camera',
-  category: 'render',
-  form: 'primitive',
-  capability: 'render',
-  loweringPurity: 'impure',
-  description: 'Declares camera projection parameters for 3D rendering',
-  inputs: {
-    projection: {
-      label: 'Projection',
-      type: canonicalType(CAMERA_PROJECTION),
-      defaultValue: 1,
-      defaultSource: defaultSourceCameraProjection(1),
-      uiHint: { kind: 'select', options: [{ value: '0', label: 'Orthographic' }, { value: '1', label: 'Perspective' }] },
+export function register(): void {
+  registerBlock({
+    type: 'Camera',
+    label: 'Camera',
+    category: 'render',
+    form: 'primitive',
+    capability: 'render',
+    loweringPurity: 'impure',
+    description: 'Declares camera projection parameters for 3D rendering',
+    inputs: {
+      projection: {
+        label: 'Projection',
+        type: canonicalType(CAMERA_PROJECTION),
+        defaultValue: 1,
+        defaultSource: defaultSourceCameraProjection(1),
+        uiHint: { kind: 'select', options: [{ value: '0', label: 'Orthographic' }, { value: '1', label: 'Perspective' }] },
+      },
+      centerX: {
+        label: 'Center X',
+        type: canonicalType(FLOAT, unitNone(), undefined, contractClamp01()),
+        defaultValue: 0.5,
+        defaultSource: defaultSourceConst(0.5),
+        uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 },
+      },
+      centerY: {
+        label: 'Center Y',
+        type: canonicalType(FLOAT, unitNone(), undefined, contractClamp01()),
+        defaultValue: 0.5,
+        defaultSource: defaultSourceConst(0.5),
+        uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 },
+      },
+      distance: {
+        label: 'Distance',
+        type: canonicalType(FLOAT, unitNone()),
+        defaultValue: 0.87,
+        defaultSource: defaultSourceConst(0.87),
+        uiHint: { kind: 'slider', min: 0.1, max: 5, step: 0.01 },
+      },
+      tiltDeg: {
+        label: 'Tilt',
+        type: canonicalType(FLOAT, unitDegrees()),
+        defaultValue: 35.0,
+        defaultSource: defaultSourceDeg(35.0),
+        uiHint: { kind: 'slider', min: -90, max: 90, step: 1 },
+      },
+      yawDeg: {
+        label: 'Yaw',
+        type: canonicalType(FLOAT, unitDegrees()),
+        defaultValue: 0.0,
+        defaultSource: defaultSourceDeg(0.0),
+        uiHint: { kind: 'slider', min: -180, max: 180, step: 1 },
+      },
+      fovYDeg: {
+        label: 'FOV',
+        type: canonicalType(FLOAT, unitDegrees()),
+        defaultValue: 60.0,
+        defaultSource: defaultSourceDeg(60.0),
+        uiHint: { kind: 'slider', min: 10, max: 120, step: 1 },
+      },
+      near: {
+        label: 'Near',
+        type: canonicalType(FLOAT, unitNone()),
+        defaultValue: 0.01,
+        defaultSource: defaultSourceConst(0.01),
+        uiHint: { kind: 'slider', min: 0.001, max: 1, step: 0.001 },
+      },
+      far: {
+        label: 'Far',
+        type: canonicalType(FLOAT, unitNone()),
+        defaultValue: 100.0,
+        defaultSource: defaultSourceConst(100.0),
+        uiHint: { kind: 'slider', min: 1, max: 1000, step: 1 },
+      },
     },
-    centerX: {
-      label: 'Center X',
-      type: canonicalType(FLOAT, unitNone(), undefined, contractClamp01()),
-      defaultValue: 0.5,
-      defaultSource: defaultSourceConst(0.5),
-      uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 },
+    outputs: {},
+    lower: ({ ctx, inputsById }) => {
+      const getSlot = (portId: string) => {
+        const ref = inputsById[portId];
+        const isOneCardinality = ref && 'type' in ref && requireInst(ref.type.extent.cardinality, 'cardinality').kind !== 'many';
+        if (!ref || !isOneCardinality) {
+          throw new Error(`Camera block: input '${portId}' must be one-cardinality (got ${ref ? 'many' : 'undefined'})`);
+        }
+        return ref.slot!; // Slot is always present after orchestrator allocation
+      };
+  
+      const cameraDecl: CameraDeclIR = {
+        kind: 'camera',
+        projectionSlot: getSlot('projection'),
+        centerXSlot: getSlot('centerX'),
+        centerYSlot: getSlot('centerY'),
+        distanceSlot: getSlot('distance'),
+        tiltDegSlot: getSlot('tiltDeg'),
+        yawDegSlot: getSlot('yawDeg'),
+        fovYDegSlot: getSlot('fovYDeg'),
+        nearSlot: getSlot('near'),
+        farSlot: getSlot('far'),
+      };
+  
+      ctx.b.addRenderGlobal(cameraDecl);
+      return { outputsById: {} };
     },
-    centerY: {
-      label: 'Center Y',
-      type: canonicalType(FLOAT, unitNone(), undefined, contractClamp01()),
-      defaultValue: 0.5,
-      defaultSource: defaultSourceConst(0.5),
-      uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 },
-    },
-    distance: {
-      label: 'Distance',
-      type: canonicalType(FLOAT, unitNone()),
-      defaultValue: 0.87,
-      defaultSource: defaultSourceConst(0.87),
-      uiHint: { kind: 'slider', min: 0.1, max: 5, step: 0.01 },
-    },
-    tiltDeg: {
-      label: 'Tilt',
-      type: canonicalType(FLOAT, unitDegrees()),
-      defaultValue: 35.0,
-      defaultSource: defaultSourceDeg(35.0),
-      uiHint: { kind: 'slider', min: -90, max: 90, step: 1 },
-    },
-    yawDeg: {
-      label: 'Yaw',
-      type: canonicalType(FLOAT, unitDegrees()),
-      defaultValue: 0.0,
-      defaultSource: defaultSourceDeg(0.0),
-      uiHint: { kind: 'slider', min: -180, max: 180, step: 1 },
-    },
-    fovYDeg: {
-      label: 'FOV',
-      type: canonicalType(FLOAT, unitDegrees()),
-      defaultValue: 60.0,
-      defaultSource: defaultSourceDeg(60.0),
-      uiHint: { kind: 'slider', min: 10, max: 120, step: 1 },
-    },
-    near: {
-      label: 'Near',
-      type: canonicalType(FLOAT, unitNone()),
-      defaultValue: 0.01,
-      defaultSource: defaultSourceConst(0.01),
-      uiHint: { kind: 'slider', min: 0.001, max: 1, step: 0.001 },
-    },
-    far: {
-      label: 'Far',
-      type: canonicalType(FLOAT, unitNone()),
-      defaultValue: 100.0,
-      defaultSource: defaultSourceConst(100.0),
-      uiHint: { kind: 'slider', min: 1, max: 1000, step: 1 },
-    },
-  },
-  outputs: {},
-  lower: ({ ctx, inputsById }) => {
-    const getSlot = (portId: string) => {
-      const ref = inputsById[portId];
-      const isOneCardinality = ref && 'type' in ref && requireInst(ref.type.extent.cardinality, 'cardinality').kind !== 'many';
-      if (!ref || !isOneCardinality) {
-        throw new Error(`Camera block: input '${portId}' must be one-cardinality (got ${ref ? 'many' : 'undefined'})`);
-      }
-      return ref.slot!; // Slot is always present after orchestrator allocation
-    };
-
-    const cameraDecl: CameraDeclIR = {
-      kind: 'camera',
-      projectionSlot: getSlot('projection'),
-      centerXSlot: getSlot('centerX'),
-      centerYSlot: getSlot('centerY'),
-      distanceSlot: getSlot('distance'),
-      tiltDegSlot: getSlot('tiltDeg'),
-      yawDegSlot: getSlot('yawDeg'),
-      fovYDegSlot: getSlot('fovYDeg'),
-      nearSlot: getSlot('near'),
-      farSlot: getSlot('far'),
-    };
-
-    ctx.b.addRenderGlobal(cameraDecl);
-    return { outputsById: {} };
-  },
-});
+  });
+}

@@ -141,59 +141,61 @@ const DEFAULT_SOURCE_FIELD_OUT_CARD = cardinalityVar(cardinalityVarId('default_s
   instanceBinding: 'inherit',
 });
 
-registerBlock({
-  type: 'DefaultSourceField',
-  label: 'Default Source (Field)',
-  category: 'field',
-  description: 'Polymorphic field-cardinality default value source',
-  form: 'primitive',
-  capability: 'pure',
-  loweringPurity: 'pure',
-  inputs: {},
-  outputs: {
-    // Polymorphic output — payload and unit resolve via constraint propagation
-    out: {
-      label: 'Output',
-      type: inferType(payloadVar('dsf_payload'), unitVar('dsf_unit'), { cardinality: DEFAULT_SOURCE_FIELD_OUT_CARD }),
-    },
-  },
-  lower: ({ ctx }) => {
-    let outType = ctx.outTypes[0];
-
-    if (isPayloadVar(outType.payload)) {
-      throw new Error(
-        `DefaultSourceField: output type is still unresolved (payload var). ` +
-        `This indicates a type inference failure upstream.`
-      );
-    }
-
-    const payload = outType.payload as PayloadType;
-
-    // Rewrite output type with real backend instance if available
-    // (inferInstanceContext provides this via sibling lookup through shared downstream targets)
-    if (ctx.inferredInstance) {
-      outType = rewriteFieldType(outType, ctx.inferredInstance, ctx.instances);
-    }
-
-    // Dispatch on payload for per-element field defaults
-    let id: ValueExprId;
-    switch (payload.kind) {
-      case 'vec3':
-        id = fieldVec3Default(ctx, outType);
-        break;
-      case 'color':
-        id = fieldColorDefault(ctx, outType);
-        break;
-      default:
-        id = fieldBroadcastDefault(ctx, payload, outType);
-        break;
-    }
-
-    return {
-      outputsById: {
-        out: { id, type: outType, stride: payloadStride(outType.payload) },
+export function register(): void {
+  registerBlock({
+    type: 'DefaultSourceField',
+    label: 'Default Source (Field)',
+    category: 'field',
+    description: 'Polymorphic field-cardinality default value source',
+    form: 'primitive',
+    capability: 'pure',
+    loweringPurity: 'pure',
+    inputs: {},
+    outputs: {
+      // Polymorphic output — payload and unit resolve via constraint propagation
+      out: {
+        label: 'Output',
+        type: inferType(payloadVar('dsf_payload'), unitVar('dsf_unit'), { cardinality: DEFAULT_SOURCE_FIELD_OUT_CARD }),
       },
-      instanceContext: ctx.inferredInstance,
-    };
-  },
-});
+    },
+    lower: ({ ctx }) => {
+      let outType = ctx.outTypes[0];
+  
+      if (isPayloadVar(outType.payload)) {
+        throw new Error(
+          `DefaultSourceField: output type is still unresolved (payload var). ` +
+          `This indicates a type inference failure upstream.`
+        );
+      }
+  
+      const payload = outType.payload as PayloadType;
+  
+      // Rewrite output type with real backend instance if available
+      // (inferInstanceContext provides this via sibling lookup through shared downstream targets)
+      if (ctx.inferredInstance) {
+        outType = rewriteFieldType(outType, ctx.inferredInstance, ctx.instances);
+      }
+  
+      // Dispatch on payload for per-element field defaults
+      let id: ValueExprId;
+      switch (payload.kind) {
+        case 'vec3':
+          id = fieldVec3Default(ctx, outType);
+          break;
+        case 'color':
+          id = fieldColorDefault(ctx, outType);
+          break;
+        default:
+          id = fieldBroadcastDefault(ctx, payload, outType);
+          break;
+      }
+  
+      return {
+        outputsById: {
+          out: { id, type: outType, stride: payloadStride(outType.payload) },
+        },
+        instanceContext: ctx.inferredInstance,
+      };
+    },
+  });
+}

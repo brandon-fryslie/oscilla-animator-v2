@@ -17,58 +17,60 @@ const EXTERNAL_INPUT_CARD = cardinalityVar(cardinalityVarId('external_input_card
   instanceBinding: 'inherit',
 });
 
-registerBlock({
-  type: 'ExternalInput',
-  label: 'External Input',
-  category: 'io',
-  description: 'Read a named external channel as a float one-cardinality value',
-  form: 'primitive',
-  capability: 'io',
-  loweringPurity: 'impure',
-  inputs: {
-    channel: {
-      label: 'Channel',
-      type: canonicalType(FLOAT),
-      defaultValue: 'mouse.x',
-      exposedAsPort: false,
-      uiHint: {
-        kind: 'select',
-        options: [
-          // Value channels (sample-and-hold)
-          { value: 'mouse.x', label: 'Mouse X' },
-          { value: 'mouse.y', label: 'Mouse Y' },
-          { value: 'mouse.over', label: 'Mouse Over Canvas' },
-          { value: 'mouse.button.left.held', label: 'Left Button Held' },
-          { value: 'mouse.button.right.held', label: 'Right Button Held' },
-          // Pulse channels (1 for one frame, then 0)
-          { value: 'mouse.button.left.down', label: 'Left Button Down (pulse)' },
-          { value: 'mouse.button.left.up', label: 'Left Button Up (pulse)' },
-          { value: 'mouse.button.right.down', label: 'Right Button Down (pulse)' },
-          { value: 'mouse.button.right.up', label: 'Right Button Up (pulse)' },
-          // Accumulator channels (sums deltas, clears each frame)
-          { value: 'mouse.wheel.dx', label: 'Mouse Wheel Horizontal (delta)' },
-          { value: 'mouse.wheel.dy', label: 'Mouse Wheel Vertical (delta)' },
-        ],
+export function register(): void {
+  registerBlock({
+    type: 'ExternalInput',
+    label: 'External Input',
+    category: 'io',
+    description: 'Read a named external channel as a float one-cardinality value',
+    form: 'primitive',
+    capability: 'io',
+    loweringPurity: 'impure',
+    inputs: {
+      channel: {
+        label: 'Channel',
+        type: canonicalType(FLOAT),
+        defaultValue: 'mouse.x',
+        exposedAsPort: false,
+        uiHint: {
+          kind: 'select',
+          options: [
+            // Value channels (sample-and-hold)
+            { value: 'mouse.x', label: 'Mouse X' },
+            { value: 'mouse.y', label: 'Mouse Y' },
+            { value: 'mouse.over', label: 'Mouse Over Canvas' },
+            { value: 'mouse.button.left.held', label: 'Left Button Held' },
+            { value: 'mouse.button.right.held', label: 'Right Button Held' },
+            // Pulse channels (1 for one frame, then 0)
+            { value: 'mouse.button.left.down', label: 'Left Button Down (pulse)' },
+            { value: 'mouse.button.left.up', label: 'Left Button Up (pulse)' },
+            { value: 'mouse.button.right.down', label: 'Right Button Down (pulse)' },
+            { value: 'mouse.button.right.up', label: 'Right Button Up (pulse)' },
+            // Accumulator channels (sums deltas, clears each frame)
+            { value: 'mouse.wheel.dx', label: 'Mouse Wheel Horizontal (delta)' },
+            { value: 'mouse.wheel.dy', label: 'Mouse Wheel Vertical (delta)' },
+          ],
+        },
       },
     },
-  },
-  outputs: {
-    value: { label: 'Value', type: canonicalType(FLOAT, undefined, { cardinality: EXTERNAL_INPUT_CARD }) },
-  },
-  lower: ({ ctx, config }) => {
-    const channel = requireConfig<string>(config, 'channel', 'string');
-    const sig = ctx.b.external(channel, canonicalType(FLOAT));
-    const outType = ctx.outTypes[0];
-
-    return {
-      outputsById: {
-        value: { id: sig, slot: undefined, type: outType, stride: payloadStride(outType.payload) },
-      },
-      effects: {
-        slotRequests: [
-          { portId: 'value', type: outType },
-        ],
-      },
-    };
-  },
-});
+    outputs: {
+      value: { label: 'Value', type: canonicalType(FLOAT, undefined, { cardinality: EXTERNAL_INPUT_CARD }) },
+    },
+    lower: ({ ctx, config }) => {
+      const channel = requireConfig<string>(config, 'channel', 'string');
+      const sig = ctx.b.external(channel, canonicalType(FLOAT));
+      const outType = ctx.outTypes[0];
+  
+      return {
+        outputsById: {
+          value: { id: sig, slot: undefined, type: outType, stride: payloadStride(outType.payload) },
+        },
+        effects: {
+          slotRequests: [
+            { portId: 'value', type: outType },
+          ],
+        },
+      };
+    },
+  });
+}

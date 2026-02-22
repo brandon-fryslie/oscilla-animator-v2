@@ -19,67 +19,69 @@ const ACCUMULATOR_CARD = cardinalityVar(cardinalityVarId('accumulator_cardinalit
   instanceBinding: 'inherit',
 });
 
-registerBlock({
-  type: 'Accumulator',
-  label: 'Accumulator',
-  category: 'scalar',
-  description: 'Accumulates value over time with delta input',
-  form: 'primitive',
-  capability: 'state',
-  loweringPurity: 'stateful',
-  isStateful: true,  // Allows feedback cycles - reads from previous frame
-  inputs: {
-    delta: { label: 'Delta', type: inferType(FLOAT, unitVar('accum_U'), { cardinality: ACCUMULATOR_CARD }) },
-    reset: { label: 'Reset', type: canonicalType(BOOL, undefined, { cardinality: ACCUMULATOR_CARD }) },
-  },
-  outputs: {
-    value: { label: 'Value', type: inferType(FLOAT, unitVar('accum_U'), { cardinality: ACCUMULATOR_CARD }) },
-  },
-  lower: ({ ctx, inputsById }) => {
-    const delta = inputsById.delta;
-    const reset = inputsById.reset;
-
-    if (!delta) {
-      throw new Error('Accumulator delta input required');
-    }
-    if (!reset) {
-      throw new Error('Accumulator reset input required');
-    }
-
-    const outType = ctx.outTypes[0];
-
-    // Symbolic state key
-    const stateKey = stableStateId(ctx.instanceId, 'accumulator');
-    const stateStorage = planStatefulStorage(ctx, stateKey, outType, 0);
-
-    // Read current state (symbolic key, no allocation)
-    const currentValue = ctx.b.stateRead(stateKey, outType);
-
-    // Compute new value: reset ? 0 : (currentValue + delta)
-    const add = ctx.b.opcode(OpCode.Add);
-    const zero = ctx.b.constant(floatConst(0), canonicalType(FLOAT));
-    const newValue = zipAuto([currentValue, delta.id], add, outType, ctx.b);
-
-    // Select: reset ? 0 : newValue
-    const select = ctx.b.opcode(OpCode.Select);
-    const finalValue = zipAuto([reset.id, zero, newValue], select, outType, ctx.b);
-
-    // Return effects-as-data (no imperative calls)
-    return {
-      outputsById: {
-        value: { id: finalValue, slot: undefined, type: outType, stride: payloadStride(outType.payload) },
-      },
-      effects: {
-        stateDecls: [
-          stateStorage.stateDecl,
-        ],
-        stepRequests: [
-          { kind: stateStorage.writeKind, stateKey, value: finalValue },
-        ],
-        slotRequests: [
-          { portId: 'value', type: outType },
-        ],
-      },
-    };
-  },
-});
+export function register(): void {
+  registerBlock({
+    type: 'Accumulator',
+    label: 'Accumulator',
+    category: 'scalar',
+    description: 'Accumulates value over time with delta input',
+    form: 'primitive',
+    capability: 'state',
+    loweringPurity: 'stateful',
+    isStateful: true,  // Allows feedback cycles - reads from previous frame
+    inputs: {
+      delta: { label: 'Delta', type: inferType(FLOAT, unitVar('accum_U'), { cardinality: ACCUMULATOR_CARD }) },
+      reset: { label: 'Reset', type: canonicalType(BOOL, undefined, { cardinality: ACCUMULATOR_CARD }) },
+    },
+    outputs: {
+      value: { label: 'Value', type: inferType(FLOAT, unitVar('accum_U'), { cardinality: ACCUMULATOR_CARD }) },
+    },
+    lower: ({ ctx, inputsById }) => {
+      const delta = inputsById.delta;
+      const reset = inputsById.reset;
+  
+      if (!delta) {
+        throw new Error('Accumulator delta input required');
+      }
+      if (!reset) {
+        throw new Error('Accumulator reset input required');
+      }
+  
+      const outType = ctx.outTypes[0];
+  
+      // Symbolic state key
+      const stateKey = stableStateId(ctx.instanceId, 'accumulator');
+      const stateStorage = planStatefulStorage(ctx, stateKey, outType, 0);
+  
+      // Read current state (symbolic key, no allocation)
+      const currentValue = ctx.b.stateRead(stateKey, outType);
+  
+      // Compute new value: reset ? 0 : (currentValue + delta)
+      const add = ctx.b.opcode(OpCode.Add);
+      const zero = ctx.b.constant(floatConst(0), canonicalType(FLOAT));
+      const newValue = zipAuto([currentValue, delta.id], add, outType, ctx.b);
+  
+      // Select: reset ? 0 : newValue
+      const select = ctx.b.opcode(OpCode.Select);
+      const finalValue = zipAuto([reset.id, zero, newValue], select, outType, ctx.b);
+  
+      // Return effects-as-data (no imperative calls)
+      return {
+        outputsById: {
+          value: { id: finalValue, slot: undefined, type: outType, stride: payloadStride(outType.payload) },
+        },
+        effects: {
+          stateDecls: [
+            stateStorage.stateDecl,
+          ],
+          stepRequests: [
+            { kind: stateStorage.writeKind, stateKey, value: finalValue },
+          ],
+          slotRequests: [
+            { portId: 'value', type: outType },
+          ],
+        },
+      };
+    },
+  });
+}

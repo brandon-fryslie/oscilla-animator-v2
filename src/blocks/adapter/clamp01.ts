@@ -19,47 +19,49 @@ const CLAMP01_CARD = cardinalityVar(cardinalityVarId('clamp01_cardinality'), {
   instanceBinding: 'inherit',
 });
 
-registerBlock({
-  type: 'Adapter_Clamp01',
-  label: 'Clamp [0,1]',
-  category: 'adapter',
-  description: 'Clamp scalar to normalized [0,1] with contract guarantee',
-  form: 'primitive',
-  capability: 'pure',
-  loweringPurity: 'pure',
-  adapterSpec: {
-    from: { payload: FLOAT, unit: { kind: 'none' }, extent: 'any' },
-    to: { payload: FLOAT, unit: { kind: 'none' }, contract: { kind: 'clamp01' }, extent: 'any' },
-    inputPortId: 'in',
-    outputPortId: 'out',
-    description: 'Scalar → normalized [0,1] with clamping',
-    purity: 'pure',
-    stability: 'stable',
-  },
-  inputs: {
-    in: { label: 'In', type: canonicalType(FLOAT, unitNone(), { cardinality: CLAMP01_CARD }) },
-  },
-  outputs: {
-    out: { label: 'Out', type: canonicalType(FLOAT, unitNone(), { cardinality: CLAMP01_CARD }, contractClamp01()) },
-  },
-  lower: ({ inputsById, ctx }) => {
-    const input = inputsById.in;
-    if (!input) throw new Error('Adapter_Clamp01: input is required');
-
-    const outType = ctx.outTypes[0];
-    const zero = ctx.b.constant(floatConst(0), canonicalType(FLOAT, unitNone()));
-    const one = ctx.b.constant(floatConst(1), canonicalType(FLOAT, unitNone()));
-    const clampFn = ctx.b.opcode(OpCode.Clamp);
-    const clamped = zipAuto([input.id, zero, one], clampFn, outType, ctx.b);
-    return {
-      outputsById: {
-        out: { id: clamped, slot: undefined, type: outType, stride: payloadStride(outType.payload) },
-      },
-      effects: {
-        slotRequests: [
-          { portId: 'out', type: outType },
-        ],
-      },
-    };
-  },
-});
+export function register(): void {
+  registerBlock({
+    type: 'Adapter_Clamp01',
+    label: 'Clamp [0,1]',
+    category: 'adapter',
+    description: 'Clamp scalar to normalized [0,1] with contract guarantee',
+    form: 'primitive',
+    capability: 'pure',
+    loweringPurity: 'pure',
+    adapterSpec: {
+      from: { payload: FLOAT, unit: { kind: 'none' }, extent: 'any' },
+      to: { payload: FLOAT, unit: { kind: 'none' }, contract: { kind: 'clamp01' }, extent: 'any' },
+      inputPortId: 'in',
+      outputPortId: 'out',
+      description: 'Scalar → normalized [0,1] with clamping',
+      purity: 'pure',
+      stability: 'stable',
+    },
+    inputs: {
+      in: { label: 'In', type: canonicalType(FLOAT, unitNone(), { cardinality: CLAMP01_CARD }) },
+    },
+    outputs: {
+      out: { label: 'Out', type: canonicalType(FLOAT, unitNone(), { cardinality: CLAMP01_CARD }, contractClamp01()) },
+    },
+    lower: ({ inputsById, ctx }) => {
+      const input = inputsById.in;
+      if (!input) throw new Error('Adapter_Clamp01: input is required');
+  
+      const outType = ctx.outTypes[0];
+      const zero = ctx.b.constant(floatConst(0), canonicalType(FLOAT, unitNone()));
+      const one = ctx.b.constant(floatConst(1), canonicalType(FLOAT, unitNone()));
+      const clampFn = ctx.b.opcode(OpCode.Clamp);
+      const clamped = zipAuto([input.id, zero, one], clampFn, outType, ctx.b);
+      return {
+        outputsById: {
+          out: { id: clamped, slot: undefined, type: outType, stride: payloadStride(outType.payload) },
+        },
+        effects: {
+          slotRequests: [
+            { portId: 'out', type: outType },
+          ],
+        },
+      };
+    },
+  });
+}

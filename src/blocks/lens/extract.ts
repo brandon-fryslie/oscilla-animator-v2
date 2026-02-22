@@ -20,48 +20,50 @@ const EXTRACT_CARD = cardinalityVar(cardinalityVarId('extract_cardinality'), {
   instanceBinding: 'inherit',
 });
 
-registerBlock({
-  type: 'Extract',
-  label: 'Extract Component',
-  category: 'lens',
-  description: 'Extract a single scalar component from vec3 (x=0, y=1, z=2)',
-  form: 'primitive',
-  capability: 'pure',
-  loweringPurity: 'pure',
-  inputs: {
-    in: { label: 'In', type: canonicalType(VEC3, undefined, { cardinality: EXTRACT_CARD }) },
-    component: {
-      label: 'Component',
-      type: canonicalType(FLOAT),
-      defaultValue: 0,
-      exposedAsPort: false,
+export function register(): void {
+  registerBlock({
+    type: 'Extract',
+    label: 'Extract Component',
+    category: 'lens',
+    description: 'Extract a single scalar component from vec3 (x=0, y=1, z=2)',
+    form: 'primitive',
+    capability: 'pure',
+    loweringPurity: 'pure',
+    inputs: {
+      in: { label: 'In', type: canonicalType(VEC3, undefined, { cardinality: EXTRACT_CARD }) },
+      component: {
+        label: 'Component',
+        type: canonicalType(FLOAT),
+        defaultValue: 0,
+        exposedAsPort: false,
+      },
     },
-  },
-  outputs: {
-    out: { label: 'Out', type: canonicalType(FLOAT, undefined, { cardinality: EXTRACT_CARD }) },
-  },
-  lower: ({ inputsById, ctx, config }) => {
-    const input = inputsById.in;
-    if (!input) throw new Error('Extract: in is required');
-
-    // Component index is compile-time only (IR extract takes a literal integer).
-    // Read from config — defaultValue in block def ensures it's always present.
-    const componentIndex = requireConfigInt(config ?? {}, 'component', 0, 2);
-
-    const outType = ctx.outTypes[0];
-
-    // Use IR extract operation
-    const result = ctx.b.extract(input.id, componentIndex, outType);
-
-    return {
-      outputsById: {
-        out: { id: result, slot: undefined, type: outType, stride: payloadStride(outType.payload) },
-      },
-      effects: {
-        slotRequests: [
-          { portId: 'out', type: outType },
-        ],
-      },
-    };
-  },
-});
+    outputs: {
+      out: { label: 'Out', type: canonicalType(FLOAT, undefined, { cardinality: EXTRACT_CARD }) },
+    },
+    lower: ({ inputsById, ctx, config }) => {
+      const input = inputsById.in;
+      if (!input) throw new Error('Extract: in is required');
+  
+      // Component index is compile-time only (IR extract takes a literal integer).
+      // Read from config — defaultValue in block def ensures it's always present.
+      const componentIndex = requireConfigInt(config ?? {}, 'component', 0, 2);
+  
+      const outType = ctx.outTypes[0];
+  
+      // Use IR extract operation
+      const result = ctx.b.extract(input.id, componentIndex, outType);
+  
+      return {
+        outputsById: {
+          out: { id: result, slot: undefined, type: outType, stride: payloadStride(outType.payload) },
+        },
+        effects: {
+          slotRequests: [
+            { portId: 'out', type: outType },
+          ],
+        },
+      };
+    },
+  });
+}
