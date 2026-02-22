@@ -27,6 +27,8 @@ import ReactFlow, {
   useReactFlow,
   type Node,
   type Edge,
+  type NodeChange,
+  type EdgeChange,
   type Connection,
   type NodeMouseHandler,
   type EdgeMouseHandler,
@@ -34,9 +36,10 @@ import ReactFlow, {
 import 'reactflow/dist/style.css';
 import type { GraphDataAdapter, BlockLike, EdgeLike } from './types';
 import { GraphEditorProvider, type GraphEditorContextValue } from './GraphEditorContext';
-import { reconcileNodesFromAdapter } from './nodeDataTransform';
+import { reconcileNodesFromAdapter, type UnifiedNodeData } from './nodeDataTransform';
 import { UnifiedNode as UnifiedNodeComponent } from './UnifiedNode';
 import { OscillaEdge } from '../reactFlowEditor/OscillaEdge';
+import type { OscillaEdgeData } from '../reactFlowEditor/nodes';
 import { getLayoutedElements } from '../reactFlowEditor/layout';
 import { validateConnection } from '../reactFlowEditor/typeValidation';
 // import { ErrorBadgeOverlay } from './ErrorBadgeOverlay'; // DISABLED: Errors now shown in port popovers
@@ -187,8 +190,8 @@ export const GraphEditorCoreInner = observer(
       const mergedFeatures = useMemo(() => ({ ...DEFAULT_FEATURES, ...features }), [features]);
 
       // ReactFlow state with explicit types
-      const [nodes, setNodes, onNodesChange] = useNodesState<any>([]);
-      const [edges, setEdges, onEdgesChange] = useEdgesState<any>([]);
+      const [nodes, setNodes, onNodesChange] = useNodesState<UnifiedNodeData>([]);
+      const [edges, setEdges, onEdgesChange] = useEdgesState<OscillaEdgeData>([]);
       const [isLayouting, setIsLayouting] = useState(false);
       const [isInitialized, setIsInitialized] = useState(false);
       const { fitView } = useReactFlow();
@@ -311,7 +314,7 @@ export const GraphEditorCoreInner = observer(
        * Persists position changes to adapter.
        */
       const handleNodesChange = useCallback(
-        (changes: any[]) => {
+        (changes: NodeChange[]) => {
           // Apply changes to local state first
           onNodesChange(changes);
 
@@ -334,7 +337,7 @@ export const GraphEditorCoreInner = observer(
        * Persists to adapter.
        */
       const handleEdgesChange = useCallback(
-        (changes: any[]) => {
+        (changes: EdgeChange[]) => {
           // Apply changes to local state first
           onEdgesChange(changes);
 
