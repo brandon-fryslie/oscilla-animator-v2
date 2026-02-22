@@ -146,9 +146,11 @@ export class RuntimeService {
     if (testDemo) {
       const loaded = store.demo.selectDemo(testDemo);
       if (!loaded) {
-        console.error(
-          `[test-params] Demo not found: "${testDemo}". Available: ${store.demo.demos.map(d => d.filename).join(', ')}`
-        );
+        store.diagnostics.log({
+          level: 'warn',
+          // [LAW:single-enforcer] RuntimeService owns startup diagnostics emission.
+          message: `[test-params] Demo not found: "${testDemo}". Available: ${store.demo.demos.map(d => d.filename).join(', ')}`,
+        });
         store.demo.loadDefault();
       }
     } else {
@@ -169,10 +171,12 @@ export class RuntimeService {
         true
       );
     } catch (err) {
-      // compileAndSwap already logs structured errors to diagnostics before throwing.
-      // Only console.error here for developer debugging — no duplicate log entry.
-      // [LAW:one-source-of-truth] Single structured log in CompileOrchestrator.
-      console.error('Initial compilation failed:', err);
+      // [LAW:single-enforcer] RuntimeService logs unexpected startup failures once.
+      const message = err instanceof Error ? err.message : String(err);
+      store.diagnostics.log({
+        level: 'error',
+        message: `Initial compilation failed: ${message}`,
+      });
     }
 
     // Re-render App to update externalWriteBus prop now that runtime state exists
@@ -216,6 +220,13 @@ export class RuntimeService {
       if (!patched) return false;
       this.compileState.currentProgram = patched;
       return true;
+    }, (err) => {
+      // [LAW:single-enforcer] RuntimeService is the sole boundary for recompile failures.
+      const message = err instanceof Error ? err.message : String(err);
+      store.diagnostics.log({
+        level: 'error',
+        message: `Recompile failed: ${message}`,
+      });
     });
 
     // Subscribe to CompileEnd events for compilation statistics
@@ -267,7 +278,6 @@ export class RuntimeService {
           level: 'error',
           message: `Runtime error (execution halted): ${message}`,
         });
-        console.error('Runtime error (execution halted):', err);
       }
     );
 

@@ -15,6 +15,7 @@ export interface LiveRecompileController {
     store: RootStore,
     onRecompile: () => Promise<void>,
     onValuePatch?: (changes: ReadonlyMap<string, unknown>) => boolean,
+    onRecompileError?: (error: unknown) => void,
   ): void;
   cleanup(): void;
 }
@@ -26,7 +27,10 @@ export function createLiveRecompileController(
   let reactionDisposer: (() => void) | null = null;
   let reactionSetup = false;
 
-  const scheduleRecompile = (onRecompile: () => Promise<void>): void => {
+  const scheduleRecompile = (
+    onRecompile: () => Promise<void>,
+    onRecompileError?: (error: unknown) => void,
+  ): void => {
     if (recompileTimeout) {
       clearTimeout(recompileTimeout);
     }
@@ -34,7 +38,12 @@ export function createLiveRecompileController(
       try {
         await onRecompile();
       } catch (err) {
-        console.error('Recompile error:', err);
+        // [LAW:single-enforcer] Recompile error handling delegates to caller boundary.
+        if (onRecompileError) {
+          onRecompileError(err);
+        } else {
+          console.error('Recompile error:', err);
+        }
       }
     }, debounceMs);
   };
@@ -44,6 +53,7 @@ export function createLiveRecompileController(
       store: RootStore,
       onRecompile: () => Promise<void>,
       onValuePatch?: (changes: ReadonlyMap<string, unknown>) => boolean,
+      onRecompileError?: (error: unknown) => void,
     ): void {
       if (reactionSetup) return;
       reactionSetup = true;
@@ -61,7 +71,7 @@ export function createLiveRecompileController(
             const handled = onValuePatch(pending.changes);
             if (handled) return; // Fast path succeeded, skip full recompile
           }
-          scheduleRecompile(onRecompile);
+          scheduleRecompile(onRecompile, onRecompileError);
         },
         {
           fireImmediately: false,

@@ -15,6 +15,12 @@
 
 import type { EditorEvent } from './types';
 
+export interface EventHubListenerError {
+  scope: 'typed' | 'global';
+  eventType: EditorEvent['type'];
+  error: unknown;
+}
+
 // =============================================================================
 // EventHub Class
 // =============================================================================
@@ -52,6 +58,33 @@ export class EventHub {
 
   // Global listeners (receive all events)
   private globalListeners = new Set<(event: EditorEvent) => void>();
+  private errorReporter: ((payload: EventHubListenerError) => void) | null = null;
+
+  /**
+   * Configure an optional error reporter for listener failures.
+   */
+  setErrorReporter(reporter: ((payload: EventHubListenerError) => void) | null): void {
+    this.errorReporter = reporter;
+  }
+
+  private reportListenerError(payload: EventHubListenerError): void {
+    try {
+      // [LAW:single-enforcer] EventHub is the sole boundary that classifies
+      // listener exceptions and forwards them to the configured reporter.
+      if (this.errorReporter) {
+        this.errorReporter(payload);
+        return;
+      }
+    } catch (reportError) {
+      console.error('[EventHub] Error reporter failed:', reportError);
+    }
+
+    if (payload.scope === 'typed') {
+      console.error(`[EventHub] Listener failed for ${payload.eventType}:`, payload.error);
+      return;
+    }
+    console.error('[EventHub] Global listener failed:', payload.error);
+  }
 
   // =============================================================================
   // Public API
@@ -75,7 +108,7 @@ export class EventHub {
         try {
           listener(event);
         } catch (err) {
-          console.error(`[EventHub] Listener failed for ${event.type}:`, err);
+          this.reportListenerError({ scope: 'typed', eventType: event.type, error: err });
           // Continue executing other listeners
         }
       }
@@ -86,7 +119,7 @@ export class EventHub {
       try {
         listener(event);
       } catch (err) {
-        console.error('[EventHub] Global listener failed:', err);
+        this.reportListenerError({ scope: 'global', eventType: event.type, error: err });
         // Continue executing other listeners
       }
     }
