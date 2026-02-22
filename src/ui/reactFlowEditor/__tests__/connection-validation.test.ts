@@ -95,6 +95,27 @@ registerBlock({
   lower: () => ({ outputsById: {} }),
 });
 
+// A sink with payloadVar constrained to numeric payloads (float, int)
+registerBlock({
+  type: 'TestNumericVarSink',
+  label: 'Numeric Var Sink',
+  category: 'test',
+  description: 'Test: payloadVar input constrained to float and int',
+  form: 'primitive',
+  capability: 'pure',
+  payload: {
+    allowedPayloads: {
+      in: [FLOAT, INT],
+    },
+    semantics: 'typeSpecific',
+  },
+  inputs: {
+    in: { label: 'In', type: inferType(payloadVar('test_numeric_sink'), unitVar('test_numeric_sink_unit')) },
+  },
+  outputs: {},
+  lower: () => ({ outputsById: {} }),
+});
+
 // A concrete float source (no payload metadata, no payloadVar)
 registerBlock({
   type: 'TestFloatSource',
@@ -230,6 +251,29 @@ describe('Payload constraint validation', () => {
         const constId = b.addBlock('Const');
         b.setConfig(constId, 'value', { r: 1, g: 0, b: 0, a: 1 });
         b.addBlock('TestColorSink');
+      });
+
+      const result = validateConnection('b0', 'out', 'b1', 'in', patch);
+      expect(result.valid).toBe(true);
+    });
+
+    it('disallows payloadVar→payloadVar when constraint sets are disjoint', () => {
+      // Source allows [FLOAT, INT], sink allows [VEC2, COLOR] -> empty intersection.
+      const patch = buildPatch((b) => {
+        b.addBlock('TestConstrainedVarSource');
+        b.addBlock('TestVec2ColorSink');
+      });
+
+      const result = validateConnection('b0', 'out', 'b1', 'in', patch);
+      expect(result.valid).toBe(false);
+      expect(result.reason).toContain('Type mismatch');
+    });
+
+    it('allows payloadVar→payloadVar when constraint sets overlap', () => {
+      // Source allows [FLOAT, INT], sink allows [FLOAT, INT] -> non-empty intersection.
+      const patch = buildPatch((b) => {
+        b.addBlock('TestConstrainedVarSource');
+        b.addBlock('TestNumericVarSink');
       });
 
       const result = validateConnection('b0', 'out', 'b1', 'in', patch);

@@ -12,7 +12,17 @@ import type {
   CardinalityValue,
   TemporalityValue,
 } from '../../core/canonical-types';
-import { unitsEqual } from '../../core/canonical-types';
+import {
+  unitsEqual,
+  FLOAT,
+  INT,
+  BOOL,
+  VEC2,
+  VEC3,
+  VEC4,
+  COLOR,
+  CAMERA_PROJECTION,
+} from '../../core/canonical-types';
 import { isPayloadVar, type InferenceCanonicalType, type InferencePayloadType, type InferenceUnitType } from '../../core/inference-types';
 import { isAxisVar } from '../../core/canonical-types';
 import { getAnyBlockDefinition, isPayloadAllowed } from '../../blocks/registry';
@@ -107,6 +117,16 @@ export const TYPE_COLORS: Record<ConcretePayloadType["kind"], string> = {
 
 const DEFAULT_CARDINALITY: CardinalityValue = { kind: 'one' };
 const DEFAULT_TEMPORALITY: TemporalityValue = { kind: 'continuous' };
+const ALL_CONCRETE_PAYLOADS: readonly ConcretePayloadType[] = [
+  FLOAT,
+  INT,
+  BOOL,
+  VEC2,
+  VEC3,
+  VEC4,
+  COLOR,
+  CAMERA_PROJECTION,
+];
 
 function getInstantiatedCardinality(t: InferenceCanonicalType): CardinalityValue {
   return t.extent.cardinality.kind === 'inst' ? t.extent.cardinality.value : DEFAULT_CARDINALITY;
@@ -340,6 +360,12 @@ interface PortContext {
   portId: string;
 }
 
+function payloadAllowedByContext(context: PortContext, payload: ConcretePayloadType): boolean {
+  const allowed = isPayloadAllowed(context.blockType, context.portId, payload);
+  // undefined => unconstrained port metadata => allowed
+  return allowed !== false;
+}
+
 /**
  * Check if two payloads are compatible, consulting block metadata when needed.
  *
@@ -411,9 +437,13 @@ function arePayloadsCompatible(
 
   // Both are vars → check if their constraint sets overlap
   if (fromIsVar && toIsVar) {
-    // For now, allow all var-to-var connections (constraint solver will validate)
-    // TODO: Could check if allowedPayloads sets have non-empty intersection
-    return true;
+    // [LAW:one-source-of-truth] Var payload compatibility is derived from
+    // canonical block payload constraints (allowedPayloads), not UI-local rules.
+    return ALL_CONCRETE_PAYLOADS.some(
+      (payload) =>
+        payloadAllowedByContext(fromContext, payload) &&
+        payloadAllowedByContext(toContext, payload)
+    );
   }
 
   return false;
