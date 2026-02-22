@@ -194,7 +194,7 @@ function validateConnectivity(patch: Patch, patchRevision: number): Diagnostic[]
           domain: 'authoring',
           primaryTarget: target,
           title: 'Disconnected TimeRoot',
-          message: `TimeRoot "${block.displayName || blockId}" has no outgoing connections. Its time signals are unused.`,
+          message: `TimeRoot "${block.displayName || blockId}" has no outgoing connections. Its time channels are unused.`,
           scope: { patchRevision },
           metadata: {
             firstSeenAt: Date.now(),

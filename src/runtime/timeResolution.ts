@@ -1,13 +1,13 @@
 /**
  * Time Resolution - Convert Player Time to Effective Time
  *
- * Resolves absolute player time into effective time signals based on the time model.
+ * Resolves absolute player time into effective time channels based on the time model.
  */
 
 import type { TimeModel } from '../compiler/ir/types';
 
 /**
- * EffectiveTime - Resolved time signals for a frame
+ * EffectiveTime - Resolved time channels for a frame
  */
 export interface EffectiveTime {
   /** Absolute time in milliseconds (input) */
@@ -25,7 +25,7 @@ export interface EffectiveTime {
   /** Phase B: secondary phase [0,1) */
   phaseB: number;
 
-  /** Pulse signal: 1.0 every frame (frame-tick trigger) */
+  /** Pulse channel: 1.0 every frame (frame-tick trigger) */
   pulse: number;
 
   /** Progress within finite time (0-1), only set for finite time roots */

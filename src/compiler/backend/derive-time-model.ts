@@ -1,11 +1,11 @@
 /**
  * Pass 3: Time Model Pass
  *
- * Determines the time model (infinite) and generates time-derived signals.
+ * Determines the time model (infinite) and generates time-derived channels.
  */
 
 import type { Block } from '../../graph/Patch';
-import type { TimeModelIR, TimeSignals, TypedPatch, TimeResolvedPatch } from '../ir';
+import type { TimeModelIR, TimeChannels, TypedPatch, TimeResolvedPatch } from '../ir';
 import { IRBuilderImpl } from '../ir/IRBuilderImpl';
 import { canonicalType, unitTurns, contractWrap01 } from '../../core/canonical-types';
 import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR,  CAMERA_PROJECTION } from '../../core/canonical-types';
@@ -32,10 +32,10 @@ export class Pass3Error extends Error {
 // =============================================================================
 
 /**
- * Extract time model and generate time signals.
+ * Extract time model and generate time channels.
  *
  * @param typedPatch - The typed patch from Pass 2
- * @returns Time-resolved patch with time model and signals
+ * @returns Time-resolved patch with time model and channels
  */
 export function pass3Time(typedPatch: TypedPatch): TimeResolvedPatch {
   // Find TimeRoot block
@@ -56,13 +56,13 @@ export function pass3Time(typedPatch: TypedPatch): TimeResolvedPatch {
   // Extract time model from TimeRoot
   const timeModel = extractTimeModel(timeRoot);
 
-  // Generate time signals based on model
-  const timeSignals = generateTimeSignals(timeModel);
+  // Generate time channels based on model
+  const timeChannels = generateTimeChannels(timeModel);
 
   return {
     ...typedPatch,
     timeModel,
-    timeSignals,
+    timeChannels,
   };
 }
 
@@ -88,9 +88,9 @@ function extractTimeModel(
 }
 
 /**
- * Generate time signals for the time model.
+ * Generate time channels for the time model.
  */
-function generateTimeSignals(timeModel: TimeModelIR): TimeSignals {
+function generateTimeChannels(timeModel: TimeModelIR): TimeChannels {
   const builder = new IRBuilderImpl();
 
   // All models have tModelMs - float scalar

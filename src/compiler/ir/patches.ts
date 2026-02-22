@@ -112,41 +112,41 @@ export interface TypedPatch extends TypeResolvedPatch {
 // =============================================================================
 
 /**
- * Patch with time signals resolved and validated.
+ * Patch with time channels resolved and validated.
  *
- * Pass 3 determines the time model and generates derived time signals.
+ * Pass 3 determines the time model and generates derived time channels.
  */
 export interface TimeResolvedPatch extends TypedPatch {
   /** Time model (authoritative for the patch) */
   readonly timeModel: TimeModelIR;
 
-  /** Derived time signals available to all blocks */
-  readonly timeSignals: TimeSignals;
+  /** Derived time channels available to all blocks */
+  readonly timeChannels: TimeChannels;
 }
 
 /**
- * Derived time signals generated from the time model.
+ * Derived time channels generated from the time model.
  */
-export interface TimeSignals {
-  /** Signal expression ID for tModelMs (model time) */
+export interface TimeChannels {
+  /** One-cardinality expression ID for tModelMs (model time) */
   readonly tModelMs: ValueExprId;
 
-  /** Signal expression ID for phaseA (primary phase) */
+  /** One-cardinality expression ID for phaseA (primary phase) */
   readonly phaseA?: ValueExprId;
 
-  /** Signal expression ID for phaseB (secondary phase) */
+  /** One-cardinality expression ID for phaseB (secondary phase) */
   readonly phaseB?: ValueExprId;
 
-  /** Signal expression ID for dt (delta time) */
+  /** One-cardinality expression ID for dt (delta time) */
   readonly dt?: ValueExprId;
 
   /** Event expression ID for pulse (fires on phase wrap) */
   readonly pulse: ValueExprId | null;
 
-  /** Signal expression ID for palette (phase-derived color) */
+  /** One-cardinality expression ID for palette (phase-derived color) */
   readonly palette?: ValueExprId;
 
-  /** Signal expression ID for energy (phase-derived energy) */
+  /** One-cardinality expression ID for energy (phase-derived energy) */
   readonly energy?: ValueExprId;
 }
 

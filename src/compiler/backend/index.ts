@@ -5,7 +5,7 @@
  * Backend has NO knowledge of block origins (adapter, lens, user-created, etc.)
  *
  * Pipeline:
- * 1. Derive.TimeModel    - Generate time signals (tMs, phaseA/B, dt, pulse)
+ * 1. Derive.TimeModel    - Generate time channels (tMs, phaseA/B, dt, pulse)
  * 2. Derive.DepGraph     - Build execution dependency graph
  * 3. Schedule.SCC        - SCC decomposition for execution ordering
  * 4. Lower.Blocks        - Convert blocks to IR fragments

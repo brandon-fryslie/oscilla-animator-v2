@@ -329,9 +329,9 @@ describe('ValueExpr structural invariants', () => {
   describe('time variant completeness', () => {
     it('ValueExprTime.which accepts all 7 time ones', () => {
       const mockType = {} as CanonicalType;
-      const timeSignals = ['tMs', 'phaseA', 'phaseB', 'dt', 'progress', 'palette', 'energy'] as const;
+      const timeChannels = ['tMs', 'phaseA', 'phaseB', 'dt', 'progress', 'palette', 'energy'] as const;
 
-      for (const which of timeSignals) {
+      for (const which of timeChannels) {
         const timeExpr: ValueExprTime = {
           kind: 'time',
           type: mockType,
