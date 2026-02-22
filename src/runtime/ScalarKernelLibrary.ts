@@ -1,15 +1,15 @@
 /**
  * ══════════════════════════════════════════════════════════════════════
- * SIGNAL KERNEL LIBRARY
+ * SCALAR KERNEL LIBRARY
  * ══════════════════════════════════════════════════════════════════════
  *
- * Signal kernel dispatch used by ValueExprScalarEvaluator.
+ * Scalar kernel dispatch used by ValueExprScalarEvaluator.
  *
  * applyPureFn is the single entry point for evaluating PureFn nodes.
  * It dispatches to opcodes (primary path), registry-resolved kernels,
  * composed pipelines, or throws for unresolved kernel names.
  *
- * applySignalKernel exists as a runtime safety net — any unresolved
+ * applyScalarKernel exists as a runtime safety net — any unresolved
  * kernel name that reaches runtime will throw, surfacing stale references.
  */
 
@@ -18,17 +18,17 @@ import { applyOpcode } from './OpcodeInterpreter';
 import { singleArgBuf as _singleArgBuf } from './executor-init';
 
 // ═══════════════════════════════════════════════════════════════════════════
-// SIGNAL KERNEL IMPLEMENTATION
+// SCALAR KERNEL IMPLEMENTATION
 // ═══════════════════════════════════════════════════════════════════════════
 
 /**
- * Apply kernel function at signal level.
+ * Apply kernel function at scalar level.
  *
- * All named signal kernels have been removed. Any remaining kernel name
+ * All named scalar kernels have been removed. Any remaining kernel name
  * references will throw at runtime, surfacing stale call sites.
  */
-export function applySignalKernel(name: string, _values: number[]): number {
-  throw new Error('Unknown signal kernel: ' + name);
+export function applyScalarKernel(name: string, _values: number[]): number {
+  throw new Error('Unknown scalar kernel: ' + name);
 }
 
 /**
@@ -48,7 +48,7 @@ export function applyPureFn(
       return applyOpcode(fn.opcode, values);
 
     case 'kernel':
-      return applySignalKernel(fn.name, values);
+      return applyScalarKernel(fn.name, values);
 
     case 'kernelResolved':
       // Phase D: This will call registry.callScalar(fn.handle, values)
@@ -81,9 +81,9 @@ export function applyPureFn(
 // ═══════════════════════════════════════════════════════════════════════════
 
 /**
- * Test helper to directly invoke applySignalKernel.
+ * Test helper to directly invoke applyScalarKernel.
  * ONLY use in tests - not for production code.
  */
-export function testApplySignalKernel(name: string, values: number[]): number {
-  return applySignalKernel(name, values);
+export function testApplyScalarKernel(name: string, values: number[]): number {
+  return applyScalarKernel(name, values);
 }

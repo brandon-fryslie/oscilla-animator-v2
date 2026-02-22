@@ -32,7 +32,15 @@ import type { ValueExprId } from '../compiler/ir/Indices';
 import type { RuntimeState } from './RuntimeState';
 import { recordNaN, recordInfinity } from './HealthMonitor';
 import { constValueAsNumber } from '../core/canonical-types';
-import { applyPureFn } from './SignalKernelLibrary';
+import { applyPureFn } from './ScalarKernelLibrary';
+
+export interface ScalarEvalContext {
+  evaluateReduceKernel?: (
+    expr: Extract<ValueExpr, { kind: 'kernel'; kernelKind: 'reduce' }>,
+    valueExprs: readonly ValueExpr[],
+    state: RuntimeState
+  ) => number;
+}
 
 /**
  * Evaluate a construct expression and write all components contiguously to a buffer
@@ -49,11 +57,12 @@ export function evaluateConstructScalar(
   valueExprs: readonly ValueExpr[],
   state: RuntimeState,
   targetBuffer: Float32Array | Float64Array,
-  targetOffset: number
+  targetOffset: number,
+  context?: ScalarEvalContext
 ): number {
   // Evaluate each component and write contiguously
   for (let i = 0; i < expr.components.length; i++) {
-    const componentValue = evaluateValueExprScalar(expr.components[i], valueExprs, state);
+    const componentValue = evaluateValueExprScalar(expr.components[i], valueExprs, state, context);
     targetBuffer[targetOffset + i] = componentValue;
   }
   return expr.components.length;
@@ -70,7 +79,8 @@ export function evaluateConstructScalar(
 export function evaluateValueExprScalar(
   veId: ValueExprId,
   valueExprs: readonly ValueExpr[],
-  state: RuntimeState
+  state: RuntimeState,
+  context?: ScalarEvalContext
 ): number {
   // Check cache first
   const cached = state.cache.scalarValueExprValues[veId as number];
@@ -86,7 +96,7 @@ export function evaluateValueExprScalar(
   }
 
   // Evaluate based on kind
-  const value = evaluateScalarExtent(expr, valueExprs, state);
+  const value = evaluateScalarExtent(expr, valueExprs, state, context);
 
   // NaN/Inf detection (batched)
   // Note: sourceBlockId not yet tracked in IR - will pass null for now
@@ -116,7 +126,8 @@ export function evaluateValueExprScalar(
 function evaluateScalarExtent(
   expr: ValueExpr,
   valueExprs: readonly ValueExpr[],
-  state: RuntimeState
+  state: RuntimeState,
+  context?: ScalarEvalContext
 ): number {
   if (!state.time) {
     throw new Error('Effective time not set');
@@ -160,7 +171,7 @@ function evaluateScalarExtent(
     }
 
     case 'kernel': {
-      return evaluateKernelScalar(expr, valueExprs, state);
+      return evaluateKernelScalar(expr, valueExprs, state, context);
     }
 
     case 'state': {
@@ -200,9 +211,27 @@ function evaluateScalarExtent(
       const scalarExprToArenaOffset = state.cache.scalarExprToArenaOffset;
       const offset = scalarExprToArenaOffset?.get(expr.input as number);
       if (offset === undefined) {
+        const inputExpr = valueExprs[expr.input as number];
+        if (!inputExpr) {
+          throw new Error(
+            `extract(${expr.componentIndex}): input ${expr.input} not found in ValueExpr table`
+          );
+        }
+
+        // [LAW:single-enforcer] Structural extract-from-construct is handled directly
+        // here; all other extract addressability is enforced at schedule construction.
+        if (inputExpr.kind === 'construct') {
+          const componentExpr = inputExpr.components[expr.componentIndex];
+          if (componentExpr === undefined) {
+            throw new Error(
+              `extract(${expr.componentIndex}): input ${expr.input} has only ${inputExpr.components.length} components`
+            );
+          }
+          return evaluateValueExprScalar(componentExpr, valueExprs, state, context);
+        }
+
         throw new Error(
-          `extract(${expr.componentIndex}): input ${expr.input} has no slot mapping — ` +
-          `multi-component scalar expression was not materialized (compiler bug)`
+          `extract(${expr.componentIndex}): input ${expr.input} has no slot mapping`
         );
       }
       return state.arena[offset + expr.componentIndex];
@@ -217,7 +246,7 @@ function evaluateScalarExtent(
         throw new Error('construct expression has no components');
       }
       // Return first component value (caller may write all components if this is a step root)
-      return evaluateValueExprScalar(expr.components[0], valueExprs, state);
+      return evaluateValueExprScalar(expr.components[0], valueExprs, state, context);
     }
 
     case 'hslToRgb': {
@@ -243,24 +272,25 @@ function evaluateScalarExtent(
 function evaluateKernelScalar(
   expr: Extract<ValueExpr, { kind: 'kernel' }>,
   valueExprs: readonly ValueExpr[],
-  state: RuntimeState
+  state: RuntimeState,
+  context?: ScalarEvalContext
 ): number {
   switch (expr.kernelKind) {
     case 'map': {
       // Unary kernel: fn(input)
-      const inputVal = evaluateValueExprScalar(expr.input, valueExprs, state);
+      const inputVal = evaluateValueExprScalar(expr.input, valueExprs, state, context);
       return applyPureFn(expr.fn, [inputVal]);
     }
 
     case 'zip': {
       // N-ary kernel: fn(inputs...)
-      const inputVals = expr.inputs.map(id => evaluateValueExprScalar(id, valueExprs, state));
+      const inputVals = expr.inputs.map(id => evaluateValueExprScalar(id, valueExprs, state, context));
       return applyPureFn(expr.fn, inputVals);
     }
 
-    case 'zipSig': {
+    case 'zipPromote': {
       // ZipSig is field-extent only (requires field input)
-      throw new Error('zipSig kernels are field-extent, not scalar-extent');
+      throw new Error('zipPromote kernels are field-extent, not scalar-extent');
     }
 
     case 'broadcast': {
@@ -269,9 +299,13 @@ function evaluateKernelScalar(
     }
 
     case 'reduce': {
-      // Reduce is field → scalar, but should never appear in scalar evaluator
-      // (reduce itself is evaluated at field level, result is read as scalar)
-      throw new Error('reduce kernels should be evaluated at field level, not scalar level');
+      // [LAW:one-source-of-truth] Reduce evaluation strategy is injected by the
+      // active executor/materializer context so scalar evaluation has one canonical
+      // reduce path rather than ad hoc fallback logic.
+      if (!context?.evaluateReduceKernel) {
+        throw new Error('reduce kernels require scalar evaluation context');
+      }
+      return context.evaluateReduceKernel(expr, valueExprs, state);
     }
 
     case 'pathDerivative': {

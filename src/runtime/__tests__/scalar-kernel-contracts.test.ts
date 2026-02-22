@@ -1,20 +1,20 @@
 /**
  * ══════════════════════════════════════════════════════════════════════
- * SIGNAL KERNEL CONTRACT TESTS
+ * SCALAR KERNEL CONTRACT TESTS
  * ══════════════════════════════════════════════════════════════════════
  *
- * All named signal kernels (oscillators, easing, shaping, combine,
+ * All named scalar kernels (oscillators, easing, shaping, combine,
  * extraction, construction) have been removed. This test file verifies
  * that removed kernels throw as expected.
  */
 
 import { describe, it, expect } from 'vitest';
 
-// Import from shared SignalKernelLibrary (single source of truth)
-import { testApplySignalKernel } from '../SignalKernelLibrary';
+// Import from shared ScalarKernelLibrary (single source of truth)
+import { testApplyScalarKernel } from '../ScalarKernelLibrary';
 
-describe('Signal Kernel Contract Tests', () => {
-  it('removed kernels throw "Unknown signal kernel"', () => {
+describe('Scalar Kernel Contract Tests', () => {
+  it('removed kernels throw "Unknown scalar kernel"', () => {
     const removedKernels = [
       'oscSin', 'oscCos', 'oscTan',
       'triangle', 'square', 'sawtooth',
@@ -31,7 +31,7 @@ describe('Signal Kernel Contract Tests', () => {
     ];
 
     for (const name of removedKernels) {
-      expect(() => testApplySignalKernel(name, [0])).toThrow(/Unknown signal kernel/);
+      expect(() => testApplyScalarKernel(name, [0])).toThrow(/Unknown scalar kernel/);
     }
   });
 });

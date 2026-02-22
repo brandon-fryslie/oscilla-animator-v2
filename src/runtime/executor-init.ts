@@ -25,7 +25,7 @@ export const shapeRecord = {
   flags: 0,
 };
 
-// Pre-allocated single-element buffer for composed opcode pipeline in SignalKernelLibrary
+// Pre-allocated single-element buffer for composed opcode pipeline in ScalarKernelLibrary
 export const singleArgBuf: number[] = [0];
 
 // Reusable AssemblerContext — populated in-place each frame to avoid per-frame object literal.

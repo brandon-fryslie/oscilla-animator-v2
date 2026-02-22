@@ -126,7 +126,7 @@ function resolvePureFn(
 
   // Resolve kernel ID to handle + ABI.
   // Unresolved kernels are left as-is — they will throw at runtime
-  // via applySignalKernel in SignalKernelLibrary.ts, surfacing stale references.
+  // via applyScalarKernel in ScalarKernelLibrary.ts, surfacing stale references.
   let resolved: { handle: KernelHandle; abi: KernelABI; meta: any };
   try {
     resolved = registry.resolve(kid);

@@ -7,7 +7,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { applyOpcode } from '../OpcodeInterpreter';
-import { applyPureFn } from '../SignalKernelLibrary';
+import { applyPureFn } from '../ScalarKernelLibrary';
 import { OpCode } from '../../compiler/ir/types';
 
 describe('Cast consistency: applyOpcode vs applyPureFn', () => {

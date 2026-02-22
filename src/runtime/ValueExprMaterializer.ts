@@ -504,7 +504,7 @@ function evaluatePureFn(fn: PureFn, args: number[]): number {
       throw new Error(`Expression evaluation not yet implemented: ${fn.expr}`);
 
     case 'composed': {
-      // Apply each opcode in sequence (same pattern as SignalKernelLibrary)
+      // Apply each opcode in sequence (same pattern as ScalarKernelLibrary)
       let result = args[0];
       for (const op of fn.ops) {
         result = applyOpcode(op, [result]);
