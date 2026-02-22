@@ -12,20 +12,10 @@ import type {
   CardinalityValue,
   TemporalityValue,
 } from '../../core/canonical-types';
-import {
-  unitsEqual,
-  FLOAT,
-  INT,
-  BOOL,
-  VEC2,
-  VEC3,
-  VEC4,
-  COLOR,
-  CAMERA_PROJECTION,
-} from '../../core/canonical-types';
+import { unitsEqual } from '../../core/canonical-types';
 import { isPayloadVar, type InferenceCanonicalType, type InferencePayloadType, type InferenceUnitType } from '../../core/inference-types';
 import { isAxisVar } from '../../core/canonical-types';
-import { getAnyBlockDefinition, isPayloadAllowed } from '../../blocks/registry';
+import { ALL_CONCRETE_PAYLOADS, getAnyBlockDefinition, isPayloadAllowed } from '../../blocks/registry';
 import { findAdapter, type AdapterSpec } from '../../blocks/adapter-spec';
 
 const missingPortWarnings = new Set<string>();
@@ -117,16 +107,6 @@ export const TYPE_COLORS: Record<ConcretePayloadType["kind"], string> = {
 
 const DEFAULT_CARDINALITY: CardinalityValue = { kind: 'one' };
 const DEFAULT_TEMPORALITY: TemporalityValue = { kind: 'continuous' };
-const ALL_CONCRETE_PAYLOADS: readonly ConcretePayloadType[] = [
-  FLOAT,
-  INT,
-  BOOL,
-  VEC2,
-  VEC3,
-  VEC4,
-  COLOR,
-  CAMERA_PROJECTION,
-];
 
 function getInstantiatedCardinality(t: InferenceCanonicalType): CardinalityValue {
   return t.extent.cardinality.kind === 'inst' ? t.extent.cardinality.value : DEFAULT_CARDINALITY;
