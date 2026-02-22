@@ -1,7 +1,7 @@
 /**
  * ArenaValueStore — Float32 arena types and accessors for the unified value store.
  *
- * All runtime values (signals and fields) live in a single contiguous Float32Array.
+ * All runtime values (one-cardinality and many-cardinality) live in one contiguous Float32Array.
  * Descriptors are computed at compile time; read/write/slice are unchecked hot-path ops.
  */
 
@@ -9,7 +9,7 @@
 export interface ArenaSlotDescriptor {
   readonly offset: number;     // Start index in Float32Array
   readonly stride: number;     // Components per element (1=float, 2=vec2, 3=vec3, 4=color)
-  readonly laneCount: number;  // 1=signal, N=field
+  readonly laneCount: number;  // 1=one-cardinality, N=many-cardinality
   readonly length: number;     // = stride * laneCount (stored for fast bounds/subarray)
 }
 

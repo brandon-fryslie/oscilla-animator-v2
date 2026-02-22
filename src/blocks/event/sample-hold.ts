@@ -34,7 +34,7 @@ registerBlock({
     const triggerInput = inputsById.trigger;
 
     if (!valueInput || !('type' in valueInput) || requireInst(valueInput.type.extent.temporality, 'temporality').kind !== 'continuous') {
-      throw new Error('SampleHold: value input must be a signal');
+      throw new Error('SampleHold: value input must be continuous');
     }
     if (!triggerInput || !('type' in triggerInput) || requireInst(triggerInput.type.extent.temporality, 'temporality').kind !== 'discrete') {
       throw new Error('SampleHold: trigger input must be an event');
@@ -49,14 +49,14 @@ registerBlock({
     const prevId = ctx.b.stateRead(stateKey, canonicalType(FLOAT));
 
     // Read event scalar as float (0.0 or 1.0)
-    const triggerSig = ctx.b.eventRead(triggerInput.id);
+    const triggerScalar = ctx.b.eventRead(triggerInput.id);
 
     // Conditional via lerp: lerp(prev, value, trigger)
     // trigger=0 → output=prev (hold), trigger=1 → output=value (sample)
     const lerpFn = ctx.b.opcode(OpCode.Lerp);
     const outType = ctx.outTypes[0];
     const outputId = zipAuto(
-      [prevId, valueInput.id as ValueExprId, triggerSig],
+      [prevId, valueInput.id as ValueExprId, triggerScalar],
       lerpFn,
       outType,
       ctx.b

@@ -2,12 +2,12 @@
  * ValueExpr Materializer - Field Materialization
  *
  * Evaluates ValueExpr nodes to produce Float32Array buffers.
- * Works alongside signal evaluation to materialize field-extent expressions.
+ * Works alongside scalar evaluation to materialize field-extent expressions.
  *
  * Key design principles:
- * - Unified ValueExpr table (no separate field/signal/event tables)
+ * - Unified ValueExpr table (no separate scalar/field/event tables)
  * - Materialization is for field-extent expressions only
- * - Signals are evaluated via evaluateValueExprScalar() (not materialized)
+ * - One-cardinality expressions are evaluated via evaluateValueExprScalar() (not materialized)
  * - Buffer reuse via BufferPool (no allocation in hot path)
  */
 
@@ -151,15 +151,15 @@ export function materializeValueExpr(
     case 'external':
     case 'time':
     case 'eventRead': {
-      // [LAW:dataflow-not-control-flow] Scalar signal reads materialize by writing
+      // [LAW:dataflow-not-control-flow] Scalar reads materialize by writing
       // their evaluated value through the same buffer path as all other materialize ops.
-      const signalValue = evaluateValueExprScalar(exprId, table.nodes, state);
-      fillBufferWithSignal(buf, signalValue, count, stride);
+      const oneValue = evaluateValueExprScalar(exprId, table.nodes, state);
+      fillBufferWithOne(buf, oneValue, count, stride);
       break;
     }
 
     case 'event':
-      throw new Error(`Cannot materialize signal/event expression as field: ${expr.kind}`);
+      throw new Error(`Cannot materialize one/event expression as field: ${expr.kind}`);
 
     case 'shapeRef':
       throw new Error(`Shape references are not yet supported in materialize`);
@@ -230,20 +230,20 @@ function materializeKernel(
       } else {
         // Single-component broadcast: fill entire buffer with one-cardinality value
         const oneValue = evaluateValueExprScalar(expr.one, table.nodes, state);
-        fillBufferWithSignal(buf, oneValue, count, stride);
+        fillBufferWithOne(buf, oneValue, count, stride);
       }
       break;
     }
 
     case 'zipPromote': {
-      // WI-4: ZipSig - combine field with ones
+      // WI-4: ZipPromote - combine field with ones
       const fieldInput = materializeValueExpr(expr.field, table, instanceId, count, state, program, pool);
-      const sigCount = expr.ones.length;
-      const sigValues = new Array<number>(sigCount);
-      for (let j = 0; j < sigCount; j++) {
-        sigValues[j] = evaluateValueExprScalar(expr.ones[j], table.nodes, state);
+      const oneCount = expr.ones.length;
+      const oneValues = new Array<number>(oneCount);
+      for (let j = 0; j < oneCount; j++) {
+        oneValues[j] = evaluateValueExprScalar(expr.ones[j], table.nodes, state);
       }
-      applyZipSig(buf, fieldInput, sigValues, expr.fn, count, stride, instanceId, program);
+      applyZipPromote(buf, fieldInput, oneValues, expr.fn, count, stride, instanceId, program);
       break;
     }
 
@@ -304,9 +304,9 @@ function materializeKernel(
     }
 
     case 'reduce': {
-      // WI-4: Reduce is handled during signal evaluation, not materialization
+      // WI-4: Reduce is handled during scalar evaluation, not materialization
       // This case should not be reached during field materialization
-      throw new Error('Reduce is signal-extent, not field-extent');
+      throw new Error('Reduce is one-cardinality extent, not field-extent');
     }
 
     default: {
@@ -371,21 +371,21 @@ function fillBufferWithConst(
 }
 
 /**
- * Fill buffer by broadcasting a signal value to all lanes.
+ * Fill buffer by broadcasting a one-cardinality value to all lanes.
  *
  * @param buf - Output buffer
- * @param signalValue - Signal value to broadcast
+ * @param oneValue - One-cardinality value to broadcast
  * @param count - Number of elements
  * @param stride - Stride per element
  */
-function fillBufferWithSignal(
+function fillBufferWithOne(
   buf: Float32Array,
-  signalValue: number,
+  oneValue: number,
   count: number,
   stride: number
 ): void {
   for (let i = 0; i < count * stride; i++) {
-    buf[i] = signalValue;
+    buf[i] = oneValue;
   }
 }
 
@@ -400,7 +400,7 @@ const _mapArgs: number[] = [0];
 /** Reusable args buffer for applyZip (resized as needed) */
 const _zipArgs: number[] = [];
 
-/** Reusable args buffer for applyZipSig (resized as needed) */
+/** Reusable args buffer for applyZipPromote (resized as needed) */
 const _zipPromoteArgs: number[] = [];
 
 /**
@@ -452,21 +452,21 @@ function applyZip(
  * Apply a zipPromote function (field + ones).
  * One allocation per call (args array) — not per instance.
  */
-function applyZipSig(
+function applyZipPromote(
   out: Float32Array,
   fieldInput: Float32Array,
-  sigValues: number[],
+  oneValues: number[],
   fn: PureFn,
   count: number,
   stride: number,
   instanceId: InstanceId,
   program: CompiledProgramIR
 ): void {
-  const argCount = 1 + sigValues.length;
+  const argCount = 1 + oneValues.length;
   _zipPromoteArgs.length = argCount;
-  // Copy signal values once (constant across all instances)
-  for (let s = 0; s < sigValues.length; s++) {
-    _zipPromoteArgs[1 + s] = sigValues[s];
+  // Copy one-cardinality values once (constant across all instances)
+  for (let s = 0; s < oneValues.length; s++) {
+    _zipPromoteArgs[1 + s] = oneValues[s];
   }
 
   for (let i = 0; i < count; i++) {

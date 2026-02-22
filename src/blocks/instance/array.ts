@@ -1,7 +1,7 @@
 /**
  * Array Block (Payload-Generic)
  *
- * Creates multiple copies of an element (Signal<T> → Field<T>).
+ * Creates multiple copies of an element (one<T> → many<T>).
  * Stage 2: Cardinality transform block.
  */
 
@@ -25,7 +25,7 @@ registerBlock({
   type: 'Array',
   label: 'Array',
   category: 'instance',
-  description: 'Creates multiple copies of an element (Signal<T> → Field<T>)',
+  description: 'Creates multiple copies of an element (one<T> → many<T>)',
   form: 'primitive',
   capability: 'identity',
   loweringPurity: 'pure',
@@ -81,18 +81,18 @@ registerBlock({
 
     // Validate element input
     if (!elementInput || !('type' in elementInput && requireInst(elementInput.type.extent.cardinality, 'cardinality').kind === 'one')) {
-      throw new Error('Array block requires an element signal input');
+      throw new Error('Array block requires an element with one-cardinality');
     }
 
     /**
      * Create instance with shape field reference.
      *
-     * The elementInput.id points to the shape signal (e.g., from Ellipse.shape).
+     * The elementInput.id points to the shape value (e.g., from Ellipse.shape).
      * This gets stored in InstanceDecl.shapeField, enabling RenderInstances2D
      * to automatically look up the shape without requiring separate wiring.
      *
      * Flow:
-     *   Ellipse.shape (Signal<shape>) → Array.element → stored as instance.shapeField
+     *   Ellipse.shape (one<shape>) → Array.element → stored as instance.shapeField
      *   Array.elements (Field<shape>) → Layout → position → RenderInstances2D
      *   RenderInstances2D extracts instanceId from position → looks up shapeField
      */
@@ -111,8 +111,8 @@ registerBlock({
     // Intrinsic fields (index, t, active)
     const indexField = ctx.b.intrinsic('index', outType1);
     const tField = ctx.b.intrinsic('normalizedIndex', outType2);
-    const activeSignal = ctx.b.constant(boolConst(true), canonicalType(BOOL));
-    const activeField = ctx.b.broadcast(activeSignal, outType3);
+    const activeOne = ctx.b.constant(boolConst(true), canonicalType(BOOL));
+    const activeField = ctx.b.broadcast(activeOne, outType3);
 
     return {
       outputsById: {

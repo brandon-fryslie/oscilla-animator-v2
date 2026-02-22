@@ -1,7 +1,7 @@
 /**
  * Oscillator Block
  *
- * Generates oscillating signals (sin, saw, square, noise).
+ * Generates oscillating values (sin, saw, square, noise).
  */
 
 import { registerBlock, requireConfigInt } from '../registry';
@@ -24,7 +24,7 @@ registerBlock({
   type: 'Oscillator',
   label: 'Oscillator',
   category: 'scalar',
-  description: 'Generates oscillating signals (sin, saw, square, noise)',
+  description: 'Generates oscillating values (sin, saw, square, noise)',
   form: 'primitive',
   capability: 'pure',
   loweringPurity: 'pure',
@@ -54,9 +54,9 @@ registerBlock({
   },
   lower: ({ ctx, inputsById, config }) => {
     const phase = inputsById.phase;
-    const isPhaseSignal = phase && 'type' in phase && requireInst(phase.type.extent.temporality, 'temporality').kind === 'continuous';
-    if (!phase || !isPhaseSignal) {
-      throw new Error('Oscillator phase required as signal');
+    const isPhaseContinuous = phase && 'type' in phase && requireInst(phase.type.extent.temporality, 'temporality').kind === 'continuous';
+    if (!phase || !isPhaseContinuous) {
+      throw new Error('Oscillator phase input must be continuous');
     }
 
     const mode = requireConfigInt(config!, 'mode', 0, 3);
@@ -65,7 +65,7 @@ registerBlock({
     let id: ValueExprId;
 
     // Use zipAuto/mapAuto for cardinality-aware operations:
-    // phase may be signal (one) while outType is field (many) in promoteToMany contexts.
+    // phase may be one-cardinality while outType is many-cardinality in promoteToMany contexts.
     switch (mode) {
       case 0: {
         // Sin

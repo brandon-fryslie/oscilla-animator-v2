@@ -17,7 +17,7 @@
  * This evaluator handles ONLY event-extent expressions:
  * - Temporality: discrete (not continuous)
  *
- * Signal-extent (temporality continuous) → SignalEvaluator
+ * Scalar-extent (temporality continuous) → ValueExprScalarEvaluator
  * Field-extent (cardinality many) → Materializer
  *
  * Runtime assertions enforce this constraint.
@@ -51,7 +51,7 @@ export class CycleInEventEvalError extends Error {
  * @param veId - ValueExpr ID to evaluate
  * @param table - ValueExpr table (program.valueExprs)
  * @param state - Runtime state
- * @param program - Compiled program (for cross-evaluator signal calls)
+ * @param program - Compiled program (for cross-evaluator scalar calls)
  * @returns true if event fires this tick, false otherwise
  */
 export function evaluateValueExprEvent(
@@ -126,12 +126,12 @@ function evaluateEventKind(
     }
 
     case 'wrap': {
-      // Edge detection: rising edge of (signalValue >= 0.5)
+      // Edge detection: rising edge of (oneValue >= 0.5)
       // Same logic as EventEvaluator.ts:57-64
-      const signalValue = evaluateValueExprScalar(expr.input, table.nodes, state);
+      const oneValue = evaluateValueExprScalar(expr.input, table.nodes, state);
 
       // NaN and Inf treated as false (spec §8.6.3)
-      const predicate = (Number.isFinite(signalValue) && signalValue >= 0.5) ? 1 : 0;
+      const predicate = (Number.isFinite(oneValue) && oneValue >= 0.5) ? 1 : 0;
 
       // Read previous predicate (separate array for ValueExpr)
       const prev = state.eventPrevPredicateValue[veId as number];

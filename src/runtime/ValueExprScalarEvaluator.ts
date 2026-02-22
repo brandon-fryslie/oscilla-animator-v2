@@ -8,7 +8,7 @@
  * temporality continuous).
  *
  * Migration Status: Shadow mode implementation for incremental ValueExpr adoption.
- * This evaluator runs in parallel with legacy SignalEvaluator during migration,
+ * This evaluator runs in parallel with legacy scalar evaluators during migration,
  * validating equivalence before cutover.
  *
  * ──────────────────────────────────────────────────────────────────────
@@ -161,7 +161,7 @@ function evaluateScalarExtent(
           return state.time.energy;
         default: {
           const _exhaustive: never = expr.which;
-          throw new Error(`Unknown time signal: ${String(_exhaustive)}`);
+          throw new Error(`Unknown time channel: ${String(_exhaustive)}`);
         }
       }
     }
@@ -183,7 +183,7 @@ function evaluateScalarExtent(
     }
 
     case 'shapeRef': {
-      // ShapeRef signals are not evaluated as numeric values.
+      // ShapeRef expressions are not evaluated as numeric values.
       // The ScheduleExecutor handles shape2d record writes directly.
       // Return 0 as a safe numeric fallback if this is ever called.
       return 0;
@@ -294,7 +294,7 @@ function evaluateKernelScalar(
     }
 
     case 'broadcast': {
-      // Broadcast is signal → field (changes cardinality to many)
+      // Broadcast is one → many (changes cardinality to many)
       throw new Error('broadcast kernels are field-extent, not scalar-extent');
     }
 

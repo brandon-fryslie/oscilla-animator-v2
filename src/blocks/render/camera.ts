@@ -2,7 +2,7 @@
  * Camera Block
  *
  * Declares camera projection parameters for 3D rendering.
- * Camera parameters are ordinary signals whose values are written to slots
+ * Camera parameters are ordinary one-cardinality values whose slots are written
  * during normal schedule execution.
  *
  * ONE SOURCE OF TRUTH: Only one Camera block is allowed per program.
@@ -104,9 +104,9 @@ registerBlock({
   lower: ({ ctx, inputsById }) => {
     const getSlot = (portId: string) => {
       const ref = inputsById[portId];
-      const isSignal = ref && 'type' in ref && requireInst(ref.type.extent.cardinality, 'cardinality').kind !== 'many';
-      if (!ref || !isSignal) {
-        throw new Error(`Camera block: input '${portId}' must be a signal (got ${ref ? 'field' : 'undefined'})`);
+      const isOneCardinality = ref && 'type' in ref && requireInst(ref.type.extent.cardinality, 'cardinality').kind !== 'many';
+      if (!ref || !isOneCardinality) {
+        throw new Error(`Camera block: input '${portId}' must be one-cardinality (got ${ref ? 'many' : 'undefined'})`);
       }
       return ref.slot!; // Slot is always present after orchestrator allocation
     };

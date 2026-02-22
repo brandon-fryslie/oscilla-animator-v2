@@ -8,7 +8,7 @@
  * // [LAW:one-source-of-truth] DefaultSource declares acceptance:'oneOnly' — the cardinality solver
  * // inserts Broadcast adapters when connecting to field ports.
  *
- * Policy table (signals — cardinality one):
+ * Policy table (one-cardinality values):
  * - float (scalar) → const(1) [identity for multiplication]
  * - int → const(0)
  * - bool → const(false)
@@ -45,14 +45,14 @@ const DEFAULT_SOURCE_OUT_CARD = cardinalityVar(cardinalityVarId('default_source_
 });
 
 // ============================================================================
-// Signal default helper
+// One-cardinality default helper
 // ============================================================================
 
 /**
- * Create a signal-cardinality default constant for the given payload.
+ * Create a one-cardinality default constant for the given payload.
  * Returns the expression ID.
  */
-function signalDefault(
+function oneDefault(
   ctx: LowerCtx,
   payload: PayloadType,
 ): ValueExprId {
@@ -69,7 +69,7 @@ function signalDefault(
       return ctx.b.constant({ kind: 'vec3', value: [0, 0, 0] }, canonicalScalar(payload));
     case 'color': {
       // Handled separately (HueRainbow macro) — should not reach here
-      throw new Error('DefaultSource: color signal default must use lowerColorSignal');
+      throw new Error('DefaultSource: color one-cardinality default must use lowerColorOne');
     }
     case 'cameraProjection':
       throw new Error(
@@ -125,7 +125,7 @@ registerBlock({
       };
     }
 
-    // ── Signal path (cardinality one) ──────────────────────────────────
+    // ── One-cardinality path ───────────────────────────────────────────
     if (payload.kind === 'color') {
       // Color → HueRainbow(phaseA) via macro expansion
       const sandbox = new LowerSandbox(ctx.b, ctx.instanceId, ctx.instances);
@@ -148,7 +148,7 @@ registerBlock({
       };
     }
 
-    const constId = signalDefault(ctx, payload);
+    const constId = oneDefault(ctx, payload);
     return {
       outputsById: {
         out: {
