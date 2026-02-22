@@ -210,24 +210,28 @@ describe('OpcodeInterpreter - Ternary Operations', () => {
 
 describe('OpcodeInterpreter - Variadic Operations', () => {
   it('add: sums all values', () => {
+    expect(applyOpcode('add', [5])).toBe(5);
     expect(applyOpcode('add', [1, 2])).toBe(3);
     expect(applyOpcode('add', [1, 2, 3])).toBe(6);
     expect(applyOpcode('add', [1, 2, 3, 4, 5])).toBe(15);
   });
 
   it('mul: multiplies all values', () => {
+    expect(applyOpcode('mul', [7])).toBe(7);
     expect(applyOpcode('mul', [2, 3])).toBe(6);
     expect(applyOpcode('mul', [2, 3, 4])).toBe(24);
     expect(applyOpcode('mul', [1, 2, 3, 4, 5])).toBe(120);
   });
 
   it('min: finds minimum', () => {
+    expect(applyOpcode('min', [5])).toBe(5);
     expect(applyOpcode('min', [5, 3])).toBe(3);
     expect(applyOpcode('min', [5, 3, 8, 1, 9])).toBe(1);
     expect(applyOpcode('min', [-5, -3, -8])).toBe(-8);
   });
 
   it('max: finds maximum', () => {
+    expect(applyOpcode('max', [5])).toBe(5);
     expect(applyOpcode('max', [5, 3])).toBe(5);
     expect(applyOpcode('max', [5, 3, 8, 1, 9])).toBe(9);
     expect(applyOpcode('max', [-5, -3, -8])).toBe(-3);
@@ -310,7 +314,7 @@ describe('OpcodeInterpreter - I32ToF64', () => {
 describe('OpcodeInterpreter - Strict Arity Enforcement', () => {
   describe('Binary ops require exactly 2 arguments', () => {
     it('sub: throws on 1 argument', () => {
-      expect(() => applyOpcode('sub', [5])).toThrow(/not unary/);
+      expect(() => applyOpcode('sub', [5])).toThrow(/exactly 2 argument/);
     });
 
     it('sub: throws on 3+ arguments', () => {
@@ -318,7 +322,7 @@ describe('OpcodeInterpreter - Strict Arity Enforcement', () => {
     });
 
     it('div: throws on 1 argument', () => {
-      expect(() => applyOpcode('div', [6])).toThrow(/not unary/);
+      expect(() => applyOpcode('div', [6])).toThrow(/exactly 2 argument/);
     });
 
     it('div: throws on 3+ arguments', () => {
@@ -326,7 +330,7 @@ describe('OpcodeInterpreter - Strict Arity Enforcement', () => {
     });
 
     it('mod: throws on 1 argument', () => {
-      expect(() => applyOpcode('mod', [7])).toThrow(/not unary/);
+      expect(() => applyOpcode('mod', [7])).toThrow(/exactly 2 argument/);
     });
 
     it('mod: throws on 3+ arguments', () => {
@@ -357,6 +361,34 @@ describe('OpcodeInterpreter - Strict Arity Enforcement', () => {
 
     it('select: throws on 4+ arguments', () => {
       expect(() => applyOpcode('select', [1, 10, 20, 30])).toThrow(/exactly 3 argument/);
+    });
+  });
+
+  describe('Variadic ops require at least 1 argument', () => {
+    it('add: throws on 0 arguments', () => {
+      expect(() => applyOpcode('add', [])).toThrow(/at least 1 argument/);
+    });
+
+    it('mul: throws on 0 arguments', () => {
+      expect(() => applyOpcode('mul', [])).toThrow(/at least 1 argument/);
+    });
+
+    it('min: throws on 0 arguments', () => {
+      expect(() => applyOpcode('min', [])).toThrow(/at least 1 argument/);
+    });
+
+    it('max: throws on 0 arguments', () => {
+      expect(() => applyOpcode('max', [])).toThrow(/at least 1 argument/);
+    });
+  });
+
+  describe('Hash arity', () => {
+    it('hash: throws on 1 argument', () => {
+      expect(() => applyOpcode('hash', [42])).toThrow(/exactly 2 argument/);
+    });
+
+    it('hash: throws on 3 arguments', () => {
+      expect(() => applyOpcode('hash', [42, 1, 2])).toThrow(/exactly 2 argument/);
     });
   });
 });

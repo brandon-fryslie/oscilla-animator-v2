@@ -83,6 +83,25 @@
 // Module-level reducer functions (hoisted to avoid per-call closure allocation)
 function _reduceAdd(a: number, b: number): number { return a + b; }
 function _reduceMul(a: number, b: number): number { return a * b; }
+const UNARY_OPS = new Set<string>([
+  'neg',
+  'abs',
+  'sin',
+  'cos',
+  'tan',
+  'wrap01',
+  'floor',
+  'ceil',
+  'round',
+  'fract',
+  'sqrt',
+  'exp',
+  'log',
+  'sign',
+  'f64_to_i32_trunc',
+  'i32_to_f64',
+  'identity',
+]);
 
 /**
  * Apply an opcode to a list of values
@@ -92,10 +111,9 @@ function _reduceMul(a: number, b: number): number { return a * b; }
  * @returns Result of applying the opcode
  */
 export function applyOpcode(opcode: string, values: number[]): number {
-  // Dispatch based on arity
-  if (values.length === 1) {
-    return applyUnaryOp(opcode, values[0]);
-  }
+  // [LAW:single-enforcer] Arity dispatch is centralized here so all scalar
+  // opcode callsites share one behavior contract.
+  if (UNARY_OPS.has(opcode)) return applyUnaryOp(opcode, values[0], values.length);
   return applyNaryOp(opcode, values);
 }
 
@@ -108,6 +126,12 @@ function expectArity(op: string, got: number, expected: number): void {
   }
 }
 
+function expectMinArity(op: string, got: number, expectedMin: number): void {
+  if (got < expectedMin) {
+    throw new Error('OpCode \'' + op + '\' requires at least ' + expectedMin + ' argument(s), got ' + got);
+  }
+}
+
 /**
  * Apply a unary opcode to a single value
  *
@@ -115,7 +139,8 @@ function expectArity(op: string, got: number, expected: number): void {
  * @param x - Input value
  * @returns Result
  */
-function applyUnaryOp(op: string, x: number): number {
+function applyUnaryOp(op: string, x: number, got: number): number {
+  expectArity(op, got, 1);
   switch (op) {
     case 'neg':
       return -x;
@@ -177,11 +202,13 @@ function applyUnaryOp(op: string, x: number): number {
 function applyNaryOp(op: string, values: number[]): number {
   switch (op) {
     case 'add':
+      expectMinArity('add', values.length, 1);
       return values.reduce(_reduceAdd, 0);
     case 'sub':
       expectArity('sub', values.length, 2);
       return values[0] - values[1];
     case 'mul':
+      expectMinArity('mul', values.length, 1);
       return values.reduce(_reduceMul, 1);
     case 'div':
       expectArity('div', values.length, 2);
@@ -190,8 +217,10 @@ function applyNaryOp(op: string, values: number[]): number {
       expectArity('mod', values.length, 2);
       return values[0] % values[1];
     case 'min':
+      expectMinArity('min', values.length, 1);
       return Math.min(...values);
     case 'max':
+      expectMinArity('max', values.length, 1);
       return Math.max(...values);
     case 'clamp':
       expectArity('clamp', values.length, 3);
@@ -215,9 +244,10 @@ function applyNaryOp(op: string, values: number[]): number {
       expectArity('atan2', values.length, 2);
       return Math.atan2(values[0], values[1]);
     case 'hash': {
+      expectArity('hash', values.length, 2);
       // Deterministic hash function for seeded randomness
       // Input: (value, seed) → Output: [0, 1)
-      const [value, seed = 0] = values;
+      const [value, seed] = values;
 
       // xxHash-style mixing for good distribution
       let h = Math.floor(value * 2654435761) ^ Math.floor(seed * 2246822519);
