@@ -102,9 +102,7 @@ function handleGoToTarget(
         return { success: true };
 
       case 'port':
-        // Select the block containing the port
-        selectionStore.selectBlock(target.blockId as any);
-        // TODO: Port-specific highlighting if supported
+        selectionStore.selectPort(target.blockId as any, target.portId as any);
         return { success: true };
 
       case 'timeRoot':

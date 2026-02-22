@@ -38,6 +38,7 @@ describe('actionExecutor', () => {
       selectionStore: {
         selectBlock: vi.fn(),
         selectEdge: vi.fn(),
+        selectPort: vi.fn(),
       },
       eventHub: {},
     } as any;
@@ -85,7 +86,7 @@ describe('actionExecutor', () => {
       expect(mockDeps.selectionStore.selectBlock).toHaveBeenCalledWith('block-123');
     });
 
-    it('selects block for port target', () => {
+    it('selects port target', () => {
       const action: GoToTargetAction = {
         kind: 'goToTarget',
         label: 'Go to Port',
@@ -95,7 +96,7 @@ describe('actionExecutor', () => {
       const result = executeAction(action, mockDeps);
 
       expect(result.success).toBe(true);
-      expect(mockDeps.selectionStore.selectBlock).toHaveBeenCalledWith('block-123');
+      expect(mockDeps.selectionStore.selectPort).toHaveBeenCalledWith('block-123', 'in');
     });
 
     it('selects block for timeRoot target', () => {
