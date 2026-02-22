@@ -7,6 +7,7 @@
 import type { Patch } from '../graph';
 import type { BlockId, EdgeRole } from '../types';
 import { serializePatchToHCL, deserializePatchFromHCL, type PatchDslError } from '../patch-dsl';
+import { resolveLocalStorageCapability } from './local-storage-capability';
 
 export const STORAGE_KEY = 'oscilla-v2-patch-v10'; // Bumped to invalidate stale patches after block genericization (FieldSin->Sin, etc.)
 
@@ -132,7 +133,10 @@ export function importPatchFromHCL(hcl: string): { patch: Patch; errors: PatchDs
  */
 export function savePatchToStorage(patch: Patch, presetIndex: number): void {
   try {
-    localStorage.setItem(STORAGE_KEY, serializePatch(patch, presetIndex));
+    // [LAW:single-enforcer] localStorage capability detection is centralized.
+    const storage = resolveLocalStorageCapability();
+    if (!storage) return;
+    storage.setItem(STORAGE_KEY, serializePatch(patch, presetIndex));
   } catch {
     // Storage full or unavailable - silently ignore
   }
@@ -144,7 +148,10 @@ export function savePatchToStorage(patch: Patch, presetIndex: number): void {
  */
 export function loadPatchFromStorage(): { patch: Patch; presetIndex: number } | null {
   try {
-    const json = localStorage.getItem(STORAGE_KEY);
+    // [LAW:single-enforcer] localStorage capability detection is centralized.
+    const storage = resolveLocalStorageCapability();
+    if (!storage) return null;
+    const json = storage.getItem(STORAGE_KEY);
     if (!json) return null;
     return deserializePatch(json);
   } catch {
@@ -157,6 +164,10 @@ export function loadPatchFromStorage(): { patch: Patch; presetIndex: number } | 
  * Exposed globally for UI.
  */
 export function clearStorageAndReload(): void {
-  localStorage.removeItem(STORAGE_KEY);
-  window.location.reload();
+  // [LAW:single-enforcer] localStorage capability detection is centralized.
+  const storage = resolveLocalStorageCapability();
+  storage?.removeItem?.(STORAGE_KEY);
+  if (typeof window !== 'undefined' && window.location) {
+    window.location.reload();
+  }
 }
