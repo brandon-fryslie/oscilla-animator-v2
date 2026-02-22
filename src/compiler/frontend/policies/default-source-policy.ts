@@ -22,6 +22,7 @@ import type { PolicyContext, PolicyResult, DefaultSourcePolicy as DefaultSourceP
 import type { DefaultSource, BlockId, PortId, BlockRole } from '../../../types';
 import type { InputDef } from '../../../blocks/registry';
 import { isTimeSourceBlock } from '../structural-predicates';
+import { isAxisInst } from '../../../core/canonical-types';
 
 // =============================================================================
 // Strategy Resolution
@@ -39,6 +40,11 @@ import { isTimeSourceBlock } from '../structural-predicates';
 function resolveDefaultStrategy(inputDef: InputDef, perInstance: DefaultSource | undefined): DefaultSource {
   if (perInstance) return perInstance;
   if (inputDef.defaultSource) return inputDef.defaultSource;
+  const temporality = inputDef.type.extent.temporality;
+  if (isAxisInst(temporality) && temporality.value.kind === 'discrete') {
+    // [LAW:one-type-per-behavior] Discrete ports use an explicit discrete source type.
+    return { blockType: 'DefaultSourceEvent', output: 'out', params: {} };
+  }
   return { blockType: 'DefaultSource', output: 'out', params: {} };
 }
 

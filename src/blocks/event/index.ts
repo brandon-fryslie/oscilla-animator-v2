@@ -3,3 +3,4 @@ import './sample-hold';
 import './edge-trigger';
 import './pulse-divider';
 import './chance-gate';
+import './default-source-event';

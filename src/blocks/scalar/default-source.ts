@@ -115,8 +115,15 @@ registerBlock({
     const payload = outType.payload as PayloadType;
     const temporal = requireInst(outType.extent.temporality, 'temporality');
 
-    // TODO: REMOVE THIS
+    // Event-typed defaults are represented as "never fire" event streams.
+    // [LAW:one-source-of-truth] Event semantics are declared on CanonicalType
+    // (temporality=discrete, payload=bool, unit=none).
     if (temporal.kind === 'discrete') {
+      if (payload.kind !== 'bool' || outType.unit.kind !== 'none') {
+        throw new Error(
+          `DefaultSource: invalid discrete output type (expected event bool+none, got payload=${payload.kind}, unit=${outType.unit.kind})`
+        );
+      }
       const neverId = ctx.b.eventNever();
       return {
         outputsById: {
