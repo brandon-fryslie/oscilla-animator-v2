@@ -15,6 +15,7 @@ import type {
   DrawPathInstancesOp,
   PathGeometry
 } from '../types';
+import { reportRenderIssue } from '../render-issues';
 
 /**
  * Convert path geometry to SVG d-string.
@@ -81,7 +82,7 @@ export function pathToSvgD(
   }
 
   if (pi !== pointsCount) {
-    console.warn(`pathToSvgD: Expected ${pointsCount} points, consumed ${pi}`);
+    reportRenderIssue('warn', `pathToSvgD expected ${pointsCount} points, consumed ${pi}`);
   }
 
   return parts.join(' ');

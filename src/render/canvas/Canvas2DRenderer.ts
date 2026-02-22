@@ -31,6 +31,7 @@ import type {
   PathStyle,
   RenderFrameIR,
 } from '../types';
+import { reportRenderIssue } from '../render-issues';
 
 /** Singleton empty dash array — avoids per-frame allocation from setLineDash([]) */
 const EMPTY_DASH: number[] = [];
@@ -110,7 +111,7 @@ export function renderDrawPathInstancesOp(
 
   if (!hasFill && !hasStroke) {
     // No-op: nothing to render
-    console.warn('DrawPathInstancesOp has neither fill nor stroke, skipping');
+    reportRenderIssue('warn', 'DrawPathInstancesOp has neither fill nor stroke, skipping');
     return;
   }
 

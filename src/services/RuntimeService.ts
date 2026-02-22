@@ -9,7 +9,13 @@
  * [LAW:single-enforcer] Single place that wires compile + animation + persistence.
  */
 
-import { initGlobalRenderArena, type RenderBufferArena } from '../render';
+import {
+  initGlobalRenderArena,
+  type RenderBufferArena,
+  setRenderIssueReporter,
+  getRenderIssues,
+  clearRenderIssues,
+} from '../render';
 import type { RootStore } from '../stores';
 import { loadPatchFromStorage, savePatchToStorage } from './PatchPersistence';
 import { consumeTestDemoFilename } from '../testing/test-params';
@@ -147,6 +153,20 @@ export class RuntimeService {
 
     // Initialize render buffer arena (50k elements, zero allocations after init)
     this.arena = initGlobalRenderArena(50_000);
+    setRenderIssueReporter((issue) => {
+      // [LAW:single-enforcer] RuntimeService owns render issue routing into diagnostics.
+      store.diagnostics.log({
+        level: issue.level,
+        message: `Render: ${issue.message}`,
+      });
+    });
+    for (const issue of getRenderIssues()) {
+      store.diagnostics.log({
+        level: issue.level,
+        message: `Render: ${issue.message}`,
+      });
+    }
+    clearRenderIssues();
 
     // Register settings tokens (before any compile call)
     store.settings.register(appSettings);
@@ -302,6 +322,7 @@ export class RuntimeService {
    */
   dispose(): void {
     compilationInspector.setErrorReporter(null);
+    setRenderIssueReporter(null);
     this.cancelAnimationLoop?.();
     this.cancelAnimationLoop = null;
     if (this.swapRafId !== null) {

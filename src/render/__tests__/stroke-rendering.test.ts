@@ -5,6 +5,7 @@ import {
 } from '../canvas/Canvas2DRenderer';
 import type { DrawPathInstancesOp } from '../types';
 import { createMockCanvas2DContext } from '../../__tests__/test-utils';
+import { clearRenderIssues, getRenderIssues } from '../render-issues';
 
 describe('Stroke Rendering', () => {
   describe('calculateStrokeWidthPx', () => {
@@ -35,6 +36,7 @@ describe('Stroke Rendering', () => {
 
     beforeEach(() => {
       ctx = createMockCanvas2DContext();
+      clearRenderIssues();
     });
 
     function createSquareOp(style: Partial<DrawPathInstancesOp['style']>): DrawPathInstancesOp {
@@ -206,6 +208,21 @@ describe('Stroke Rendering', () => {
       renderDrawPathInstancesOp(ctx, op, 1000, 600);
 
       expect(ctx.stroke).toHaveBeenCalledTimes(2);
+    });
+
+    it('records issue when neither fill nor stroke exists', () => {
+      const op = createSquareOp({
+        fillColor: undefined,
+        strokeColor: undefined,
+      });
+
+      renderDrawPathInstancesOp(ctx, op, 800, 600);
+
+      expect(getRenderIssues()).toHaveLength(1);
+      expect(getRenderIssues()[0]).toMatchObject({
+        level: 'warn',
+        message: 'DrawPathInstancesOp has neither fill nor stroke, skipping',
+      });
     });
   });
 });

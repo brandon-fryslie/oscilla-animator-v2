@@ -1,8 +1,13 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { pathToSvgD, SVGRenderer } from '../svg/SVGRenderer';
 import type { RenderFrameIR, DrawPathInstancesOp } from '../types';
+import { clearRenderIssues, getRenderIssues } from '../render-issues';
 
 describe('SVGRenderer', () => {
+  beforeEach(() => {
+    clearRenderIssues();
+  });
+
   describe('pathToSvgD', () => {
     it('converts MOVE and LINE to M and L commands', () => {
       const verbs = new Uint8Array([0, 1, 1, 1, 4]); // MOVE, LINE, LINE, LINE, CLOSE
@@ -59,6 +64,16 @@ describe('SVGRenderer', () => {
       const points = new Float32Array([0, 0]);
 
       expect(() => pathToSvgD(verbs, points, 1)).toThrow('Unknown path verb: 99');
+    });
+
+    it('records issue when consumed point count differs from expected', () => {
+      const d = pathToSvgD(new Uint8Array([0]), new Float32Array([0, 0]), 2);
+      expect(d).toBe('M 0 0');
+      expect(getRenderIssues()).toHaveLength(1);
+      expect(getRenderIssues()[0]).toMatchObject({
+        level: 'warn',
+        message: 'pathToSvgD expected 2 points, consumed 1',
+      });
     });
   });
 

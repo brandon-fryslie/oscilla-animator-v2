@@ -7,6 +7,11 @@ export { renderFrame, renderDrawPathInstancesOp } from './canvas/Canvas2DRendere
 
 // SVG renderer
 export { SVGRenderer } from './svg/SVGRenderer';
+export {
+  setRenderIssueReporter,
+  getRenderIssues,
+  clearRenderIssues,
+} from './render-issues';
 
 // Re-export v2 types (now the only types)
 export type {
