@@ -7,7 +7,8 @@
 import { describe, it, expect } from 'vitest';
 import { tokenize, TokenKind } from '../lexer';
 import { deserializePatchFromHCL, serializePatchToHCL } from '../index';
-import '../../blocks/all';
+import { registerAllBlocks } from '../../blocks/all';
+registerAllBlocks();
 
 describe('tripwire: lexer exceptions', () => {
   it('does not throw on garbage input', () => {

@@ -1,9 +1,10 @@
 /**
  * Block Registration Aggregator
  *
- * Imports all block category indexes to trigger registerBlock() side effects.
- * This is the single entry point for loading all primitive blocks.
+ * Imports all block declarations, then exposes an explicit registration function.
  */
+
+import { activateDeclaredBlocks } from './registry';
 
 // Primitive block categories
 import './time';
@@ -24,3 +25,14 @@ import './dev';
 
 // Composite block library
 import './composites';
+
+let didRegisterAllBlocks = false;
+
+/**
+ * Explicitly activate all declared blocks in the live registry.
+ */
+export function registerAllBlocks(): void {
+  if (didRegisterAllBlocks) return;
+  activateDeclaredBlocks();
+  didRegisterAllBlocks = true;
+}

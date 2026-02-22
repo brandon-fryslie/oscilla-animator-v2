@@ -15,7 +15,8 @@ import { analyzeWhyNotEvaluated } from '../WhyNotEvaluated';
 import { blockId, portId } from '../../types';
 
 // Ensure all blocks are registered
-import '../../blocks/all';
+import { registerAllBlocks } from '../../blocks/all';
+registerAllBlocks();
 
 // =============================================================================
 // Helpers

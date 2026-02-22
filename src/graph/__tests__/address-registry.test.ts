@@ -9,7 +9,8 @@ import { addressToString } from '../../types/canonical-address';
 import { getBlockAddress, getOutputAddress, getInputAddress, getShorthandForOutput } from '../addressing';
 
 // Import blocks to trigger registration
-import '../../blocks/all';
+import { registerAllBlocks } from '../../blocks/all';
+registerAllBlocks();
 
 describe('AddressRegistry', () => {
   describe('buildFromPatch', () => {

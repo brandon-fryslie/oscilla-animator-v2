@@ -21,7 +21,8 @@ import type { DraftGraph, DraftBlock, DraftEdge } from '../draft-graph';
 import type { Obligation, ObligationId } from '../obligations';
 
 // Ensure all blocks are registered
-import '../../../blocks/all';
+import { registerAllBlocks } from '../../../blocks/all';
+registerAllBlocks();
 
 describe('DefaultSourcePolicy', () => {
   it('does not create default sources for connected inputs', () => {

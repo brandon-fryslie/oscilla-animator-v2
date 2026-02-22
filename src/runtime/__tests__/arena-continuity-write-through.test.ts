@@ -17,7 +17,8 @@ import { executeFrame } from '../ScheduleExecutor';
 import { arenaSlice } from '../ArenaValueStore';
 import { getTestArena } from './test-arena-helper';
 import type { Step } from '../../compiler/ir/types';
-import '../../blocks/all';
+import { registerAllBlocks } from '../../blocks/all';
+registerAllBlocks();
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 

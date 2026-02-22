@@ -19,7 +19,8 @@ import { compileFrontend } from '../index';
 import { canonicalScalar } from '../../../core/canonical-types';
 
 // Ensure all blocks are registered
-import '../../../blocks/all';
+import { registerAllBlocks } from '../../../blocks/all';
+registerAllBlocks();
 
 describe('Default source fixpoint integration', () => {
   it('creates missingInputSource obligations for unconnected inputs', () => {

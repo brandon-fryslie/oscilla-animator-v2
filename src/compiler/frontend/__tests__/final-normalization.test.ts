@@ -10,7 +10,8 @@ import { draftPortKey } from '../type-facts';
 import { isAxisInst, isMany, isOne } from '../../../core/canonical-types';
 import { DOMAIN_CIRCLE } from '../../../core/domain-registry';
 // Ensure all adapter blocks are registered
-import '../../../blocks/all';
+import { registerAllBlocks } from '../../../blocks/all';
+registerAllBlocks();
 
 describe('finalizeNormalizationFixpoint (skeleton)', () => {
   it('terminates immediately for empty graph (no plans = stop)', () => {

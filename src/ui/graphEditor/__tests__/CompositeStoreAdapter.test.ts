@@ -12,7 +12,8 @@ import { CompositeStoreAdapter } from '../CompositeStoreAdapter';
 import type { InternalEdge } from '../../../blocks/composite-types';
 
 // Import blocks to trigger registration
-import '../../../blocks/all';
+import { registerAllBlocks } from '../../../blocks/all';
+registerAllBlocks();
 
 
 describe('CompositeStoreAdapter', () => {

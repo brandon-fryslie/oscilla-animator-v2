@@ -13,7 +13,8 @@ import { readFileSync, readdirSync } from 'fs';
 import { join } from 'path';
 import { deserializePatchFromHCL, serializePatchToHCL } from '../../../patch-dsl/index';
 import { compile } from '../../../compiler/compile';
-import '../../../blocks/all';
+import { registerAllBlocks } from '../../../blocks/all';
+registerAllBlocks();
 
 const HCL_DIR = join(__dirname, '..');
 const hclFiles = readdirSync(HCL_DIR).filter(f => f.endsWith('.hcl'));

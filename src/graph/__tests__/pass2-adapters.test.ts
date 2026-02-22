@@ -19,7 +19,8 @@ import { registerBlock } from '../../blocks/registry';
 
 // Ensure adapter blocks are registered
 // Import blocks to trigger registration
-import '../../blocks/all';
+import { registerAllBlocks } from '../../blocks/all';
+registerAllBlocks();
 
 
 // =============================================================================

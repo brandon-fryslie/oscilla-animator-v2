@@ -13,7 +13,8 @@ import { FrontendResultStore } from '../../../stores/FrontendResultStore';
 import { PatchStoreAdapter } from '../PatchStoreAdapter';
 
 // Import blocks to trigger registration
-import '../../../blocks/all';
+import { registerAllBlocks } from '../../../blocks/all';
+registerAllBlocks();
 
 
 describe('PatchStoreAdapter', () => {

@@ -15,7 +15,8 @@ import { isPayloadVar } from '../core/inference-types';
 import { FLOAT, INT, BOOL, VEC2, COLOR } from '../core/canonical-types';
 
 // Import all blocks to register them
-import '../blocks/all';
+import { registerAllBlocks } from '../blocks/all';
+registerAllBlocks();
 
 describe('Const Block Payload Generic', () => {
   it('should have polymorphic payload type (payloadVar), not hardcoded float', () => {

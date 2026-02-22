@@ -8,7 +8,8 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { PatchStore } from '../PatchStore';
 
 // Import blocks to trigger registration
-import '../../blocks/all';
+import { registerAllBlocks } from '../../blocks/all';
+registerAllBlocks();
 
 
 describe('PatchStore - Display Name Auto-generation', () => {

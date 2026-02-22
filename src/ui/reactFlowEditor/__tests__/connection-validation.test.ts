@@ -31,7 +31,8 @@ import { inferType, payloadVar, unitVar } from '../../../core/inference-types';
 import { registerBlock } from '../../../blocks/registry';
 
 // Import block definitions to register them
-import '../../../blocks/all';
+import { registerAllBlocks } from '../../../blocks/all';
+registerAllBlocks();
 
 
 // =============================================================================

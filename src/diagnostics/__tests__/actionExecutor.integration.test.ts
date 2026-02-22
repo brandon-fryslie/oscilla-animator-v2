@@ -12,7 +12,8 @@ import type { Diagnostic } from '../types';
 
 // Import block registrations (needed for PatchStore.addBlock)
 // Import blocks to trigger registration
-import '../../blocks/all';
+import { registerAllBlocks } from '../../blocks/all';
+registerAllBlocks();
 
 function readComputed<T>(reader: () => T): T {
   let value!: T;

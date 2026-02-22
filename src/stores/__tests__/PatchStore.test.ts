@@ -14,7 +14,8 @@ import * as PatchPersistence from '../../services/PatchPersistence';
 import { PatchDslError } from '../../patch-dsl';
 
 // Import blocks to trigger registration
-import '../../blocks/all';
+import { registerAllBlocks } from '../../blocks/all';
+registerAllBlocks();
 
 
 describe('PatchStore', () => {

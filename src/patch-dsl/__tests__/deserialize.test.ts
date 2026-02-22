@@ -6,7 +6,8 @@ import { describe, it, expect } from 'vitest';
 import { deserializePatchFromHCL } from '../deserialize';
 
 // Import blocks to trigger registration
-import '../../blocks/all';
+import { registerAllBlocks } from '../../blocks/all';
+registerAllBlocks();
 
 describe('deserialize', () => {
   it('deserializes empty patch', () => {

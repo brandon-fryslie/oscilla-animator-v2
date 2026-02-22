@@ -5,7 +5,8 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import '../../blocks/all'; // Trigger block registrations
+import { registerAllBlocks } from '../../blocks/all';
+registerAllBlocks(); // Trigger block registrations
 import { FrontendResultStore } from '../FrontendResultStore';
 import { buildPatch } from '../../graph';
 import { compileFrontend } from '../../compiler/frontend';

@@ -10,7 +10,8 @@ import type { DraftGraph, DraftEdge, DraftBlock, EdgeOrigin } from '../draft-gra
 import type { ObligationId } from '../obligations';
 import { buildDraftGraph } from '../draft-graph';
 import { buildPatch } from '../../../graph/Patch';
-import '../../../blocks/all'; // Register all blocks
+import { registerAllBlocks } from '../../../blocks/all';
+registerAllBlocks(); // Register all blocks
 import { BLOCK_DEFS_BY_TYPE } from '../../../blocks/registry';
 import { finalizeNormalizationFixpoint } from '../final-normalization';
 

@@ -9,7 +9,8 @@ import { derivedLensParamKey } from '../../graph/lens-block-id';
 
 // Import block registrations
 // Import blocks to trigger registration
-import '../../blocks/all';
+import { registerAllBlocks } from '../../blocks/all';
+registerAllBlocks();
 
 
 describe('PatchStore Lens Methods', () => {

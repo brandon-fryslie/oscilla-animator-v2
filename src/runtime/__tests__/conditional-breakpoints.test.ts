@@ -17,7 +17,8 @@ import { StepDebugSession } from '../StepDebugSession';
 import type { Breakpoint, StepSnapshot } from '../StepDebugTypes';
 
 // Ensure all blocks are registered
-import '../../blocks/all';
+import { registerAllBlocks } from '../../blocks/all';
+registerAllBlocks();
 
 function compileSimplePatch(): CompiledProgramIR {
   const patch = buildPatch((b) => {

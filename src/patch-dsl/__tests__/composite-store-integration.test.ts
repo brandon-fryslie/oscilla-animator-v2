@@ -11,7 +11,8 @@ import { CompositeEditorStore } from '../../stores/CompositeEditorStore';
 import { initializeComposites } from '../../blocks/composites';
 
 // Trigger primitive block registration via side-effect imports
-import '../../blocks/all';
+import { registerAllBlocks } from '../../blocks/all';
+registerAllBlocks();
 
 describe('Store Integration', () => {
   beforeAll(() => {

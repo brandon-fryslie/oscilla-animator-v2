@@ -11,7 +11,8 @@ import type { LensAttachment } from '../../../graph/Patch';
 import type { BlockLike, EdgeLike } from '../../graphEditor/types';
 
 // Ensure blocks are registered
-import '../../../blocks/all';
+import { registerAllBlocks } from '../../../blocks/all';
+registerAllBlocks();
 
 // ---------------------------------------------------------------------------
 // Active code path: createEdgeFromEdgeLike (nodeDataTransform.ts)

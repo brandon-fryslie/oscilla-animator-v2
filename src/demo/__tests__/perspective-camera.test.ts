@@ -6,7 +6,8 @@ import { readFileSync } from 'fs';
 import { join } from 'path';
 import { deserializePatchFromHCL } from '../../patch-dsl/index';
 import { compile } from '../../compiler/compile';
-import '../../blocks/all';
+import { registerAllBlocks } from '../../blocks/all';
+registerAllBlocks();
 
 const hcl = readFileSync(join(__dirname, '../hcl/perspective-camera.hcl'), 'utf-8');
 

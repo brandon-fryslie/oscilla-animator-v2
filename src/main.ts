@@ -26,6 +26,7 @@ import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { NuqsAdapter } from 'nuqs/adapters/react';
 import { App } from './ui/components';
+import { registerAllBlocks } from './blocks/all';
 import { StoreProvider, type RootStore } from './stores';
 import { RuntimeService } from './services/RuntimeService';
 import {
@@ -40,6 +41,7 @@ let runtimeService: RuntimeService | null = null;
 let pendingCanvas: HTMLCanvasElement | null = null;
 
 async function main() {
+  registerAllBlocks();
   initializeComposites();
 
   const appContainer = document.getElementById('app-container');

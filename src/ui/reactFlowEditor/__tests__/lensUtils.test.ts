@@ -23,7 +23,8 @@ import {
 } from '../../../core/canonical-types';
 
 // Ensure adapter blocks are registered
-import '../../../blocks/all';
+import { registerAllBlocks } from '../../../blocks/all';
+registerAllBlocks();
 
 describe('lensUtils', () => {
   describe('getAvailableLensTypes', () => {

@@ -3,7 +3,8 @@ import { buildPatch } from '../../graph/Patch';
 import { extractConstantValues } from '../ConstantValueTracker';
 import type { BlockId } from '../../types';
 
-import '../../blocks/all';
+import { registerAllBlocks } from '../../blocks/all';
+registerAllBlocks();
 
 describe('ConstantValueTracker', () => {
   it('extracts literal Const values for unmapped edges', () => {

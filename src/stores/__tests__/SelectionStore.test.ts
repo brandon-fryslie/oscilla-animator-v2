@@ -13,7 +13,8 @@ import { EventHub } from '../../events/EventHub';
 import type { EditorEvent } from '../../events/types';
 
 // Import blocks to trigger registration
-import '../../blocks/all';
+import { registerAllBlocks } from '../../blocks/all';
+registerAllBlocks();
 
 
 describe('SelectionStore', () => {

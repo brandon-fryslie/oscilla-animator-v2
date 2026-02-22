@@ -434,7 +434,9 @@ export function hasLowerOutputsOnly(blockDef: BlockDef): boolean {
 // =============================================================================
 
 const registry = new Map<string, BlockDef>();
+const declaredRegistry = new Map<string, BlockDef>();
 let registryRevision = 0;
+let registryActivated = false;
 
 /**
  * Block definitions indexed by type.
@@ -448,6 +450,20 @@ export const BLOCK_DEFS_BY_TYPE: ReadonlyMap<string, BlockDef> = registry;
  */
 export function getBlockRegistryRevision(): number {
   return registryRevision;
+}
+
+/**
+ * Activate all declared blocks into the live registry.
+ *
+ * This is the explicit registration boundary for the application.
+ */
+export function activateDeclaredBlocks(): void {
+  registry.clear();
+  for (const [type, def] of declaredRegistry) {
+    registry.set(type, def);
+  }
+  registryActivated = true;
+  registryRevision++;
 }
 
 /**
@@ -487,7 +503,7 @@ export function requireBlockDef(blockType: string): BlockDef {
  * Register a block definition.
  */
 export function registerBlock(def: BlockDef): void {
-  if (registry.has(def.type)) {
+  if (declaredRegistry.has(def.type)) {
     throw new Error(`Block type already registered: ${def.type}`);
   }
 
@@ -511,8 +527,11 @@ export function registerBlock(def: BlockDef): void {
     }
   }
 
-  registry.set(def.type, def);
-  registryRevision++;
+  declaredRegistry.set(def.type, def);
+  if (registryActivated) {
+    registry.set(def.type, def);
+    registryRevision++;
+  }
 }
 
 // [LAW:single-enforcer] One validation gate for all config access

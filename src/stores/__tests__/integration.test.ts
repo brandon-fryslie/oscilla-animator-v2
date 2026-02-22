@@ -15,7 +15,8 @@ import { debugService } from '../../services/DebugService';
 import { canonicalType, FLOAT } from '../../core/canonical-types';
 
 // Import blocks to trigger registration
-import '../../blocks/all';
+import { registerAllBlocks } from '../../blocks/all';
+registerAllBlocks();
 
 function readComputed<T>(reader: () => T): T {
   let value!: T;

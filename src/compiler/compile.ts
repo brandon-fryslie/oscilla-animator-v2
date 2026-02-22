@@ -36,8 +36,7 @@ import { createDefaultRegistry } from '../runtime/kernels/default-registry';
 import { compileFrontend, type FrontendResult, type FrontendError } from './frontend';
 import type { CompileError } from './types';
 
-// Import all block registrations (side-effect import)
-import '../blocks/all';
+import { registerAllBlocks } from '../blocks/all';
 
 // Import passes
 import { pass3Time } from './backend/derive-time-model';
@@ -47,6 +46,8 @@ import { pass6BlockLowering } from './backend/lower-blocks';
 import { pass7Schedule } from './backend/schedule-program';
 import { allocateContinuityPipeline } from './backend/continuity-pipeline';
 import { AddressRegistry } from '../graph/address-registry';
+
+registerAllBlocks();
 
 // =============================================================================
 // Compile Errors & Results

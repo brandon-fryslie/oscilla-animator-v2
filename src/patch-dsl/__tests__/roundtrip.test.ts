@@ -12,7 +12,8 @@ import { serializePatchToHCL, deserializePatchFromHCL } from '../index';
 import { buildPatch } from '../../graph/Patch';
 
 // CRITICAL: Import all blocks to trigger registry side effects
-import '../../blocks/all';
+import { registerAllBlocks } from '../../blocks/all';
+registerAllBlocks();
 /**
  * Demo patches to test.
  * Each entry is a {name, builder} pair.

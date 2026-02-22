@@ -20,7 +20,8 @@ import type { StepSnapshot, SlotValue } from '../StepDebugTypes';
 import { computeSlotDeltas } from '../ValueInspector';
 
 // Ensure all blocks are registered
-import '../../blocks/all';
+import { registerAllBlocks } from '../../blocks/all';
+registerAllBlocks();
 
 function compileSimplePatch(): CompiledProgramIR {
   const patch = buildPatch((b) => {

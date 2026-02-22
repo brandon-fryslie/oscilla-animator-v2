@@ -18,7 +18,8 @@ import { getTestArena } from './test-arena-helper';
 import type { StepSnapshot, ExecutionPhase } from '../StepDebugTypes';
 
 // Ensure all blocks are registered
-import '../../blocks/all';
+import { registerAllBlocks } from '../../blocks/all';
+registerAllBlocks();
 
 function compileSimplePatch() {
   const patch = buildPatch((b) => {

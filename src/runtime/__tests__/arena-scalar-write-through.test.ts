@@ -11,7 +11,8 @@ import type { RuntimeState } from '../RuntimeState';
 import { createRuntimeState } from '../RuntimeState';
 import { getTestArena } from './test-arena-helper';
 
-import '../../blocks/all';
+import { registerAllBlocks } from '../../blocks/all';
+registerAllBlocks();
 
 function compileScalarValuePatch(): CompiledProgramIR {
   const patch = buildPatch((b) => {

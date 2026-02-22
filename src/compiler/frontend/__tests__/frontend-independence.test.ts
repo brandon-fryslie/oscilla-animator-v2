@@ -17,7 +17,8 @@ import { compileFrontend } from '../index';
 import type { FrontendResult } from '../index';
 
 // Import blocks to trigger registration
-import '../../../blocks/all';
+import { registerAllBlocks } from '../../../blocks/all';
+registerAllBlocks();
 
 
 describe('Frontend Independence', () => {

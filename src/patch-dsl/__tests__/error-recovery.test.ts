@@ -7,7 +7,8 @@
 
 import { describe, it, expect } from 'vitest';
 import { deserializePatchFromHCL } from '../index';
-import '../../blocks/all';
+import { registerAllBlocks } from '../../blocks/all';
+registerAllBlocks();
 
 describe('error recovery', () => {
   it('handles unresolvable block reference in outputs', () => {

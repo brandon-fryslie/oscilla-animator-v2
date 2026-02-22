@@ -7,7 +7,8 @@ import { serializePatchToHCL } from '../serialize';
 import { PatchBuilder } from '../../graph/Patch';
 
 // Import blocks to trigger registration
-import '../../blocks/all';
+import { registerAllBlocks } from '../../blocks/all';
+registerAllBlocks();
 
 describe('serialize', () => {
   it('serializes empty patch', () => {

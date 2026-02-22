@@ -34,7 +34,8 @@ import type { BlockId, BlockRole } from '../../../types';
 import { userRole } from '../../../types';
 
 // Import blocks to trigger registration
-import '../../../blocks/all';
+import { registerAllBlocks } from '../../../blocks/all';
+registerAllBlocks();
 
 
 // =============================================================================

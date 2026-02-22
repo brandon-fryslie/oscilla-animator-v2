@@ -16,7 +16,8 @@ import {
 import { buildPatch } from '../../graph/Patch';
 
 // Import blocks to register them
-import '../../blocks/all';
+import { registerAllBlocks } from '../../blocks/all';
+registerAllBlocks();
 
 // =============================================================================
 // normalizeCanonicalName Tests
