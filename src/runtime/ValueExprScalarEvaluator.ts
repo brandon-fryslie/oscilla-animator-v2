@@ -289,7 +289,7 @@ function evaluateKernelScalar(
     }
 
     case 'zipPromote': {
-      // ZipSig is field-extent only (requires field input)
+      // zipPromote is field-extent only (requires field input)
       throw new Error('zipPromote kernels are field-extent, not scalar-extent');
     }
 

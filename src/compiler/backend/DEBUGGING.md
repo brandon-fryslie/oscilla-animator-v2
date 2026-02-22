@@ -138,5 +138,5 @@ Provenance covers all 5 `DerivedBlockMeta` kinds: `defaultSource`, `adapter`, `w
 
 1. **Frame completion guarantee**: Once `startFrame()` is called, the frame MUST complete (via `finishFrame()` or `dispose()`) before the next frame starts. Abandoning mid-frame leaves `RuntimeState` with incomplete Phase 2 writes.
 2. **Production code untouched**: The debug executor uses the same imported helpers as `ScheduleExecutor` but never modifies it.
-3. **Separate buffer pool**: `STEPPED_MATERIALIZER_POOL` avoids interference with the production `BufferPool`.
+3. **Separate materialize scratch**: stepped execution uses its own `MaterializeScratch` instance to avoid interference with production execution.
 4. **Debug index is read-only**: All provenance data flows from `CompiledProgramIR.debugIndex`. The debugger never writes back to compiler artifacts.

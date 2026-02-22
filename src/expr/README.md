@@ -7,7 +7,7 @@ This module implements a compile-time expression DSL for Oscilla blocks. Express
 The expression compiler follows a traditional compiler pipeline:
 
 ```
-Expression String → Lexer → Parser → Type Checker → IR Compiler → SigExprId
+Expression String → Lexer → Parser → Type Checker → IR Compiler → ValueExprId
 ```
 
 ### Pipeline Stages
@@ -29,7 +29,7 @@ Expression String → Lexer → Parser → Type Checker → IR Compiler → SigE
 
 4. **IR Compiler** (`compile.ts`): Generates IR from typed AST
    - Input: Typed AST + IRBuilder + input values
-   - Output: IR expression ID (`SigExprId`)
+   - Output: IR expression ID (`ValueExprId`)
    - Errors: None (assumes AST is well-typed)
 
 ## Public API
@@ -47,7 +47,7 @@ const result = compileExpression(
 );
 
 if (result.ok) {
-  const sigId = result.value;  // Use in block lowering
+  const exprId = result.value;  // Use in block lowering
 } else {
   console.error(result.error.message);  // Handle error
 }

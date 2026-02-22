@@ -24,9 +24,9 @@ import { evaluateValueExprScalar } from '../../runtime/ValueExprScalarEvaluator'
 //   const schedule = program.schedule;
 //   const values = program.valueExprs.nodes as readonly ValueExpr[];
 //
-//   // Find evalValue steps that are NOT time or const expressions
-//   const evalValueSteps = schedule.steps.filter((s): s is StepEvalValue => s.kind === 'evalValue');
-//   const targetSteps = evalValueSteps.filter((step) => {
+//   // Find evalOne steps that are NOT time or const expressions
+//   const evalOneSteps = schedule.steps.filter((s): s is StepEvalOne => s.kind === 'evalOne');
+//   const targetSteps = evalOneSteps.filter((step) => {
 //     const value = values[step.expr as number];
 //     // Exclude time and const expressions - we want computed values
 //     return value && value.kind !== 'time' && value.kind !== 'const';
