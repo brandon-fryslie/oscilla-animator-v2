@@ -361,6 +361,15 @@ describe('findAdapterChain', () => {
     expect(chain!.steps[0].blockType).toBe('Broadcast');
   });
 
+  it('single-step: phase → wrapped phase uses phase adapter', () => {
+    const src = canonicalType(FLOAT, unitTurns());
+    const dst = canonicalType(FLOAT, unitTurns(), undefined, contractWrap01());
+    const chain = findAdapterChain(src, dst);
+    expect(chain).not.toBeNull();
+    expect(chain!.steps.length).toBe(1);
+    expect(chain!.steps[0].blockType).toBe('Adapter_PhaseWrap01');
+  });
+
   it('single-step: color none → color rgba01 uses unit cast', () => {
     const src = canonicalType(COLOR, unitNone());
     const dst = canonicalType(COLOR, { kind: 'color', unit: 'rgba01' });

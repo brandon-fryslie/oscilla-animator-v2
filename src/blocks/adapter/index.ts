@@ -16,6 +16,7 @@ import './ms-to-seconds';
 import './seconds-to-ms';
 import './clamp01';
 import './wrap01';
+import './phase-wrap01';
 import './clamp11';
 import './bipolar-to-unipolar';
 import './unipolar-to-bipolar';
