@@ -37,7 +37,7 @@ import { compile, type CompileContext } from './compile';
 export interface BlockRefsContext {
   readonly addressRegistry: AddressRegistry;
   readonly allowedPayloads: readonly PayloadType[];
-  readonly signalsByShorthand: ReadonlyMap<string, ValueExprId>;
+  readonly valuesByShorthand: ReadonlyMap<string, ValueExprId>;
 }
 
 /**
@@ -58,14 +58,14 @@ export type CompileResult =
   | { ok: false; error: ExpressionCompileError };
 
 /**
- * Compile expression string to IR signal expression.
+ * Compile expression string to an IR value expression.
  *
  * @param exprText Expression string (e.g., "sin(phase * 2) + 0.5")
- * @param inputs Input type environment (maps input names to signal types)
+ * @param inputs Input type environment (maps input names to value types)
  * @param builder IRBuilder instance
- * @param inputSignals Compiled input signal IDs (maps input names to ValueExprIds)
+ * @param inputExprs Compiled input IDs (maps input names to ValueExprIds)
  * @param blockRefs Optional block reference context for member access (e.g., circle_1.radius)
- * @returns Compiled signal ID or error
+ * @returns Compiled ValueExprId or error
  *
  * @example
  * ```typescript
@@ -73,7 +73,7 @@ export type CompileResult =
  *   ['phase', canonicalType('phase')],
  *   ['radius', canonicalType(FLOAT)],
  * ]);
- * const inputSignals = new Map([
+ * const inputExprs = new Map([
  *   ['phase', phaseSignalId],
  *   ['radius', radiusSignalId],
  * ]);
@@ -81,7 +81,7 @@ export type CompileResult =
  *   "sin(phase) * radius",
  *   inputs,
  *   builder,
- *   inputSignals
+ *   inputExprs
  * );
  * ```
  */
@@ -89,7 +89,7 @@ export function compileExpression(
   exprText: string,
   inputs: ReadonlyMap<string, CanonicalType>,
   builder: import('../compiler/ir/BlockIRBuilder').BlockIRBuilder,
-  inputSignals: ReadonlyMap<string, ValueExprId>,
+  inputExprs: ReadonlyMap<string, ValueExprId>,
   blockRefs?: BlockRefsContext
 ): CompileResult {
   try {
@@ -112,8 +112,8 @@ export function compileExpression(
     // Step 4: Compile to IR
     const ctx: CompileContext = {
       builder,
-      inputs: inputSignals,
-      blockRefs: blockRefs?.signalsByShorthand,
+      inputs: inputExprs,
+      blockRefs: blockRefs?.valuesByShorthand,
     };
     const exprId = compile(typedAst, ctx);
 
@@ -156,7 +156,7 @@ export function compileExpression(
 }
 
 /**
- * Extract payload types from signal types.
+ * Extract payload types from value types.
  */
 function extractPayloadTypes(inputs: ReadonlyMap<string, CanonicalType>): ReadonlyMap<string, PayloadType> {
   const typeMap = new Map<string, PayloadType>();

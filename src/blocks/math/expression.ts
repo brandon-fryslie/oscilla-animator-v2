@@ -108,8 +108,8 @@ registerBlock({
     // Step 3: Build input map and blockRefs from collect refs
     // [LAW:one-type-per-behavior] Collect entries come from normal edges.
     const inputs = new Map<string, CanonicalType>();
-    const inputSignals = new Map<string, ValueExprId>();
-    const signalsByShorthand = new Map<string, ValueExprId>();
+    const inputExprs = new Map<string, ValueExprId>();
+    const valuesByShorthand = new Map<string, ValueExprId>();
 
     const refsEntries = collectInputsById ? collectInputsById.refs : [];
     for (const entry of refsEntries) {
@@ -117,26 +117,26 @@ registerBlock({
 
       // Build shorthand key from sourceBlockId.sourcePort (canonical address format)
       const shorthand = `${entry.sourceBlockId}.${entry.sourcePort}`;
-      signalsByShorthand.set(shorthand, entry.value.id);
+      valuesByShorthand.set(shorthand, entry.value.id);
 
       // Register as regular input using alias or shorthand
       const alias = entry.alias !== undefined ? entry.alias : shorthand;
       inputs.set(alias, inputType);
-      inputSignals.set(alias, entry.value.id);
+      inputExprs.set(alias, entry.value.id);
     }
 
     // Step 4: Build blockRefs context for member access resolution
     let blockRefs: BlockRefsContext | undefined;
-    if (ctx.addressRegistry && signalsByShorthand.size > 0) {
+    if (ctx.addressRegistry && valuesByShorthand.size > 0) {
       blockRefs = {
         addressRegistry: ctx.addressRegistry,
         allowedPayloads: [FLOAT, INT, VEC2, VEC3, COLOR],
-        signalsByShorthand,
+        valuesByShorthand,
       };
     }
 
     // Step 5: Compile expression using Expression DSL
-    const result = compileExpression(exprText, inputs, ctx.b, inputSignals, blockRefs);
+    const result = compileExpression(exprText, inputs, ctx.b, inputExprs, blockRefs);
 
     // Step 6 & 7: Handle compilation result
     if (!result.ok) {
@@ -154,15 +154,15 @@ registerBlock({
       );
     }
 
-    // Compilation succeeded - return output signal
-    const sigId = result.value;
+    // Compilation succeeded - return output expression
+    const outExprId = result.value;
     const outType = ctx.outTypes[0];
     const stride = payloadStride(outType.payload);
 
     // For multi-component signals (stride > 1), ensure we have a construct expression
     if (stride > 1) {
       // Check if the result is already a construct node
-      const expr = ctx.b.getValueExpr(sigId);
+      const expr = ctx.b.getValueExpr(outExprId);
       if (expr && expr.kind === 'construct') {
         // Use the construct directly
         const components = expr.components;
@@ -173,23 +173,23 @@ registerBlock({
         }
         return {
           outputsById: {
-            out: { id: sigId, slot: undefined, type: outType, stride, components: [...components] },
+            out: { id: outExprId, slot: undefined, type: outType, stride, components: [...components] },
           },
           effects: {
             slotRequests: [{ portId: 'out', type: outType }],
           },
         };
       } else {
-        // The result is not a construct (e.g., a vec3 input signal)
+        // The result is not a construct (e.g., a vec3 input expression)
         // Generate extract nodes and reconstruct
         const components: ValueExprId[] = [];
         for (let i = 0; i < stride; i++) {
-          components.push(ctx.b.extract(sigId, i, canonicalType(FLOAT)));
+          components.push(ctx.b.extract(outExprId, i, canonicalType(FLOAT)));
         }
-        const constructedSig = ctx.b.construct(components, outType);
+        const constructedExpr = ctx.b.construct(components, outType);
         return {
           outputsById: {
-            out: { id: constructedSig, slot: undefined, type: outType, stride, components },
+            out: { id: constructedExpr, slot: undefined, type: outType, stride, components },
           },
           effects: {
             slotRequests: [{ portId: 'out', type: outType }],
@@ -200,7 +200,7 @@ registerBlock({
       // Scalar output (stride 1)
       return {
         outputsById: {
-          out: { id: sigId, slot: undefined, type: outType, stride },
+          out: { id: outExprId, slot: undefined, type: outType, stride },
         },
         effects: {
           slotRequests: [{ portId: 'out', type: outType }],

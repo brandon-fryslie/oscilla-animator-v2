@@ -17,12 +17,12 @@ import { isVectorType, swizzleResultType, componentIndex } from './swizzle';
 
 /**
  * Compilation context.
- * Maps identifier names to their IR signal expressions.
+ * Maps identifier names to their IR value expressions.
  */
 export interface CompileContext {
   readonly builder: BlockIRBuilder;
   readonly inputs: ReadonlyMap<string, ValueExprId>;
-  /** Block reference signals by canonical address (optional - for member access support) */
+  /** Block reference values by canonical address (optional - for member access support) */
   readonly blockRefs?: ReadonlyMap<string, ValueExprId>;
 }
 
@@ -32,7 +32,7 @@ export interface CompileContext {
  *
  * @param node Typed AST node
  * @param ctx Compilation context
- * @returns IR signal expression ID
+ * @returns IR value expression ID
  */
 export function compile(node: ExprNode, ctx: CompileContext): ValueExprId {
   // All nodes must be typed at this point
@@ -69,7 +69,7 @@ export function compile(node: ExprNode, ctx: CompileContext): ValueExprId {
 }
 
 /**
- * Compile literal node to constant signal.
+ * Compile literal node to constant expression.
  */
 function compileLiteral(node: ExprNode & { kind: 'literal' }, ctx: CompileContext): ValueExprId {
   const type = canonicalType(node.type as PayloadType);
@@ -89,7 +89,7 @@ function compileLiteral(node: ExprNode & { kind: 'literal' }, ctx: CompileContex
 }
 
 /**
- * Compile identifier node to input signal reference.
+ * Compile identifier node to input expression reference.
  */
 function compileIdentifier(node: ExprNode & { kind: 'identifier' }, ctx: CompileContext): ValueExprId {
   if (!ctx.inputs.has(node.name)) {
