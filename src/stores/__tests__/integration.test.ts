@@ -4,7 +4,7 @@
  * Verify stores work together correctly and maintain architectural invariants.
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { autorun } from 'mobx';
 import { RootStore } from '../RootStore';
 import type { Endpoint } from '../../graph/Patch';
@@ -26,9 +26,21 @@ function readComputed<T>(reader: () => T): T {
 
 describe('Store Integration', () => {
   let root: RootStore;
+  const originalLocalStorage = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
 
   beforeEach(() => {
     root = new RootStore();
+  });
+
+  afterEach(() => {
+    if (originalLocalStorage) {
+      Object.defineProperty(globalThis, 'localStorage', originalLocalStorage);
+    } else {
+      // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
+      delete (globalThis as { localStorage?: unknown }).localStorage;
+    }
+    PatchPersistence.clearPatchPersistenceIssues();
+    PatchPersistence.setPatchPersistenceIssueReporter(null);
   });
 
   describe('RootStore composition', () => {
@@ -66,6 +78,26 @@ describe('Store Integration', () => {
       )).toBe(true);
 
       importSpy.mockRestore();
+    });
+
+    it('routes PatchPersistence operational issues through diagnostics', () => {
+      Object.defineProperty(globalThis, 'localStorage', {
+        configurable: true,
+        value: {
+          getItem: vi.fn(() => null),
+          setItem: vi.fn(() => {
+            throw new Error('quota exceeded');
+          }),
+        },
+      });
+
+      PatchPersistence.savePatchToStorage(root.patch.patch, 0);
+
+      expect(readComputed(() =>
+        root.diagnostics.logs.some((entry) =>
+          entry.message === 'PatchPersistence(save): Failed to persist patch to local storage'
+        )
+      )).toBe(true);
     });
   });
 

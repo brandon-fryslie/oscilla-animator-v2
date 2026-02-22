@@ -10,6 +10,41 @@ import { serializePatchToHCL, deserializePatchFromHCL, type PatchDslError } from
 import { resolveLocalStorageCapability } from './local-storage-capability';
 
 export const STORAGE_KEY = 'oscilla-v2-patch-v10'; // Bumped to invalidate stale patches after block genericization (FieldSin->Sin, etc.)
+const MAX_PERSISTENCE_ISSUES = 128;
+
+export type PatchPersistenceIssueLevel = 'warn' | 'error';
+
+export interface PatchPersistenceIssue {
+  readonly level: PatchPersistenceIssueLevel;
+  readonly op: 'deserialize' | 'save' | 'load' | 'clear';
+  readonly message: string;
+  readonly detail?: unknown;
+}
+
+let issueReporter: ((issue: PatchPersistenceIssue) => void) | null = null;
+const persistenceIssues: PatchPersistenceIssue[] = [];
+
+function recordIssue(issue: PatchPersistenceIssue): void {
+  persistenceIssues.push(issue);
+  if (persistenceIssues.length > MAX_PERSISTENCE_ISSUES) {
+    persistenceIssues.splice(0, persistenceIssues.length - MAX_PERSISTENCE_ISSUES);
+  }
+  issueReporter?.(issue);
+}
+
+export function setPatchPersistenceIssueReporter(
+  reporter: ((issue: PatchPersistenceIssue) => void) | null
+): void {
+  issueReporter = reporter;
+}
+
+export function getPatchPersistenceIssues(): readonly PatchPersistenceIssue[] {
+  return persistenceIssues;
+}
+
+export function clearPatchPersistenceIssues(): void {
+  persistenceIssues.length = 0;
+}
 
 export interface SerializedPatch {
   blocks: Array<{
@@ -91,7 +126,14 @@ export function deserializePatch(json: string): { patch: Patch; presetIndex: num
       patch,
       presetIndex: data.presetIndex,
     };
-  } catch {
+  } catch (error) {
+    // [LAW:no-silent-fallbacks] Persisted patch decode failures must be visible.
+    recordIssue({
+      level: 'warn',
+      op: 'deserialize',
+      message: 'Failed to deserialize persisted patch JSON',
+      detail: error,
+    });
     return null;
   }
 }
@@ -129,7 +171,6 @@ export function importPatchFromHCL(hcl: string): { patch: Patch; errors: PatchDs
 
 /**
  * Save a patch to localStorage.
- * Silently ignores failures (e.g., quota exceeded).
  */
 export function savePatchToStorage(patch: Patch, presetIndex: number): void {
   try {
@@ -137,8 +178,14 @@ export function savePatchToStorage(patch: Patch, presetIndex: number): void {
     const storage = resolveLocalStorageCapability();
     if (!storage) return;
     storage.setItem(STORAGE_KEY, serializePatch(patch, presetIndex));
-  } catch {
-    // Storage full or unavailable - silently ignore
+  } catch (error) {
+    // [LAW:no-silent-fallbacks] Storage write failures must be surfaced.
+    recordIssue({
+      level: 'warn',
+      op: 'save',
+      message: 'Failed to persist patch to local storage',
+      detail: error,
+    });
   }
 }
 
@@ -154,7 +201,14 @@ export function loadPatchFromStorage(): { patch: Patch; presetIndex: number } | 
     const json = storage.getItem(STORAGE_KEY);
     if (!json) return null;
     return deserializePatch(json);
-  } catch {
+  } catch (error) {
+    // [LAW:no-silent-fallbacks] Storage read failures must be surfaced.
+    recordIssue({
+      level: 'warn',
+      op: 'load',
+      message: 'Failed to load patch from local storage',
+      detail: error,
+    });
     return null;
   }
 }
@@ -164,9 +218,19 @@ export function loadPatchFromStorage(): { patch: Patch; presetIndex: number } | 
  * Exposed globally for UI.
  */
 export function clearStorageAndReload(): void {
-  // [LAW:single-enforcer] localStorage capability detection is centralized.
-  const storage = resolveLocalStorageCapability();
-  storage?.removeItem?.(STORAGE_KEY);
+  try {
+    // [LAW:single-enforcer] localStorage capability detection is centralized.
+    const storage = resolveLocalStorageCapability();
+    storage?.removeItem?.(STORAGE_KEY);
+  } catch (error) {
+    // [LAW:no-silent-fallbacks] Clear failures should be visible as operational warnings.
+    recordIssue({
+      level: 'warn',
+      op: 'clear',
+      message: 'Failed to clear stored patch',
+      detail: error,
+    });
+  }
   if (typeof window !== 'undefined' && window.location) {
     window.location.reload();
   }

@@ -31,6 +31,11 @@ import { HelpStore } from './HelpStore';
 import { ExpressionEditorStore } from './ExpressionEditorStore';
 import { executeAction, type ActionResult } from '../diagnostics/actionExecutor';
 import type { DiagnosticAction } from '../diagnostics/types';
+import {
+  setPatchPersistenceIssueReporter,
+  getPatchPersistenceIssues,
+  clearPatchPersistenceIssues,
+} from '../services/PatchPersistence';
 
 export class RootStore {
   readonly patch: PatchStore;
@@ -151,6 +156,21 @@ export class RootStore {
         message: `PatchStore: ${issue.message}`,
       });
     });
+    // [LAW:single-enforcer] RootStore is also the diagnostics boundary for
+    // persistence service failures.
+    setPatchPersistenceIssueReporter((issue) => {
+      this.diagnostics.log({
+        level: issue.level,
+        message: `PatchPersistence(${issue.op}): ${issue.message}`,
+      });
+    });
+    for (const issue of getPatchPersistenceIssues()) {
+      this.diagnostics.log({
+        level: issue.level,
+        message: `PatchPersistence(${issue.op}): ${issue.message}`,
+      });
+    }
+    clearPatchPersistenceIssues();
 
     // Wire up EventHub to SelectionStore for selection/hover events and automatic cleanup
     this.selection.setEventHub(this.events, 'patch-0', () => this.patchRevision);
@@ -246,5 +266,8 @@ export class RootStore {
 
     // Dispose StepDebugStore
     this.stepDebug.dispose();
+
+    // [LAW:single-enforcer] Release persistence reporter when RootStore is disposed.
+    setPatchPersistenceIssueReporter(null);
   }
 }
