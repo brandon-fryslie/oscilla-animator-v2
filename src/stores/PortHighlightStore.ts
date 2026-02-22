@@ -16,12 +16,16 @@ import type { BlockId, PortId } from '../types';
 import { validateConnection } from '../ui/reactFlowEditor/typeValidation';
 import { requireAnyBlockDef } from '../blocks/registry';
 import type { PatchStore } from './PatchStore';
+import type { FrontendResultStore } from './FrontendResultStore';
 
 export class PortHighlightStore {
   // Observable state - hover tracking only
   hoveredPort: PortRef & { direction: 'input' | 'output' } | null = null;
 
-  constructor(private patchStore: PatchStore) {
+  constructor(
+    private patchStore: PatchStore,
+    private readonly frontendStore?: FrontendResultStore,
+  ) {
     makeObservable(this, {
       hoveredPort: observable,
       compatiblePorts: computed,
@@ -68,7 +72,8 @@ export class PortHighlightStore {
             hoveredPortId,
             blockId,
             portId as PortId,
-            patch
+            patch,
+            this.resolvePortType,
           );
           isCompatible = result.valid;
         } else {
@@ -78,7 +83,8 @@ export class PortHighlightStore {
             portId as PortId,
             hoveredBlockId,
             hoveredPortId,
-            patch
+            patch,
+            this.resolvePortType,
           );
           isCompatible = result.valid;
         }
@@ -130,5 +136,18 @@ export class PortHighlightStore {
     // Compatible port
     return this.isPortCompatible(blockId, portId);
   }
+
+  private readonly resolvePortType = (
+    blockId: string,
+    portId: string,
+    direction: 'input' | 'output',
+  ) => {
+    if (!this.frontendStore) return undefined;
+    return this.frontendStore.getResolvedPortTypeByIds(
+      blockId as BlockId,
+      portId as PortId,
+      direction === 'input' ? 'in' : 'out',
+    );
+  };
 
 }

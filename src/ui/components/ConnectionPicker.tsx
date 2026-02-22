@@ -10,7 +10,11 @@ import { Autocomplete, TextField } from '@mui/material';
 import type { BlockId, PortId } from '../../types';
 import type { Patch } from '../../graph/Patch';
 import { requireAnyBlockDef } from '../../blocks/registry';
-import { validateConnection, formatTypeForDisplay } from '../reactFlowEditor/typeValidation';
+import {
+  validateConnection,
+  formatTypeForDisplay,
+  type PortTypeLookupFn,
+} from '../reactFlowEditor/typeValidation';
 import { colors } from '../theme';
 
 /**
@@ -36,6 +40,8 @@ interface ConnectionPickerProps {
   direction: 'input' | 'output';
   /** Current patch to search for compatible ports */
   patch: Patch;
+  /** Optional compiler-resolved type lookup (preferred over static block-def types) */
+  resolvedPortTypeLookup?: PortTypeLookupFn;
   /** Callback when a port is selected */
   onSelect: (sourceBlockId: BlockId, sourcePortId: PortId) => void;
   /** Callback when picker is cancelled */
@@ -50,6 +56,7 @@ export const ConnectionPicker: React.FC<ConnectionPickerProps> = function Connec
   targetPortId,
   direction,
   patch,
+  resolvedPortTypeLookup,
   onSelect,
   onCancel,
 }: ConnectionPickerProps) {
@@ -82,10 +89,24 @@ export const ConnectionPicker: React.FC<ConnectionPickerProps> = function Connec
         let validationResult;
         if (direction === 'input') {
           // Target is INPUT, source is OUTPUT
-          validationResult = validateConnection(blockId, portId, targetBlockId, targetPortId, patch);
+          validationResult = validateConnection(
+            blockId,
+            portId,
+            targetBlockId,
+            targetPortId,
+            patch,
+            resolvedPortTypeLookup,
+          );
         } else {
           // Target is OUTPUT, source is INPUT
-          validationResult = validateConnection(targetBlockId, targetPortId, blockId, portId, patch);
+          validationResult = validateConnection(
+            targetBlockId,
+            targetPortId,
+            blockId,
+            portId,
+            patch,
+            resolvedPortTypeLookup,
+          );
         }
 
         const isCompatible = validationResult.valid;
@@ -108,7 +129,7 @@ export const ConnectionPicker: React.FC<ConnectionPickerProps> = function Connec
       }
       return a.blockName.localeCompare(b.blockName);
     });
-  }, [patch, targetBlockId, targetPortId, direction]);
+  }, [patch, targetBlockId, targetPortId, direction, resolvedPortTypeLookup]);
 
   // Only show compatible options
   const compatibleOptions = portOptions.filter((opt) => opt.isCompatible);

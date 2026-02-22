@@ -362,8 +362,8 @@ describe('Adapter-aware Connection Validation', () => {
     });
   });
 
-  describe('connections without adapters should remain BLOCKED', () => {
-    it('blocks phase01 → norm01 if no direct adapter (requires two hops)', () => {
+  describe('connections with multi-step adapters should be ALLOWED', () => {
+    it('allows phase01 → norm01 through a two-hop adapter chain', () => {
       registerBlock({
         type: 'TestUIPhaseSrc2',
         label: 'Phase Source 2',
@@ -395,17 +395,11 @@ describe('Adapter-aware Connection Validation', () => {
       });
 
       const result = validateConnection('b0', 'out', 'b1', 'in', patch);
-      // After migration: if an adapter path exists (phase→scalar→norm01),
-      // this may now be allowed. Update expectation based on actual behavior.
-      // If the test fails with "expected true to be false", then adapters ARE being found
-      if (result.valid) {
-        // Adapter path exists (may be two-hop)
-        expect(result.valid).toBe(true);
-      } else {
-        // No adapter path (expected per spec)
-        expect(result.valid).toBe(false);
-        expect(result.reason).toContain('Type mismatch');
-      }
+      expect(result.valid).toBe(true);
+      // Multi-step routes return chain metadata; single-step `adapter` should be absent.
+      expect(result.adapter).toBeUndefined();
+      expect(result.adapterChain).toBeDefined();
+      expect(result.adapterChain?.length).toBeGreaterThanOrEqual(2);
     });
   });
 });
@@ -530,6 +524,27 @@ describe('Type Compatibility Edge Cases', () => {
     const result = validateConnection('b0', 'out', 'b1', 'in', patch);
     expect(result.valid).toBe(true);
     expect(result.adapter).toBeDefined();
+  });
+
+  it('prefers resolved lookup types over static block-definition types', () => {
+    const patch = buildPatch((b) => {
+      b.addBlock('Add');
+      b.addBlock('Add');
+    });
+
+    const resolvedLookup = (blockId: string, portId: string, direction: 'input' | 'output') => {
+      if (blockId === 'b0' && portId === 'out' && direction === 'output') {
+        return canonicalType(FLOAT, unitDegrees());
+      }
+      if (blockId === 'b1' && portId === 'a' && direction === 'input') {
+        return canonicalType(FLOAT, unitRadians());
+      }
+      return undefined;
+    };
+
+    const result = validateConnection('b0', 'out', 'b1', 'a', patch, resolvedLookup);
+    expect(result.valid).toBe(true);
+    expect(result.adapter?.blockType).toBe('Adapter_DegreesToRadians');
   });
 
   it('records missing-port warnings once without console side effects', () => {

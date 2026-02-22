@@ -299,8 +299,17 @@ interface PortInspectorStandaloneProps {
 }
 
 const PortInspectorStandalone = observer(function PortInspectorStandalone({ portRef, block, blockDef, patch }: PortInspectorStandaloneProps) {
-  const { selection, patch: patchStore } = useStores();
+  const { selection, patch: patchStore, frontend } = useStores();
   const [showConnectionPicker, setShowConnectionPicker] = useState(false);
+  const resolvedPortTypeLookup = useCallback(
+    (blockIdValue: string, portIdValue: string, direction: 'input' | 'output') =>
+      frontend.getResolvedPortTypeByIds(
+        blockIdValue as BlockId,
+        portIdValue as PortId,
+        direction === 'input' ? 'in' : 'out',
+      ),
+    [frontend],
+  );
 
   const inputDef = blockDef.inputs[portRef.portId];
   const outputDef = blockDef.outputs[portRef.portId];
@@ -452,6 +461,7 @@ const PortInspectorStandalone = observer(function PortInspectorStandalone({ port
             targetPortId={portRef.portId as PortId}
             direction={isInput ? 'input' : 'output'}
             patch={patch}
+            resolvedPortTypeLookup={resolvedPortTypeLookup}
             onSelect={handleConnect}
             onCancel={() => setShowConnectionPicker(false)}
           />

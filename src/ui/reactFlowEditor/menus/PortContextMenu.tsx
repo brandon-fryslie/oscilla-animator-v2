@@ -27,7 +27,7 @@ import type { BlockId, PortId, CombineMode } from '../../../types';
 import { COMBINE_MODE_CATEGORY } from '../../../types';
 import { useStores } from '../../../stores';
 import { ContextMenu, type ContextMenuItem } from '../ContextMenu';
-import { validateConnection } from '../typeValidation';
+import { validateConnection, type PortTypeLookupFn } from '../typeValidation';
 import { requireAnyBlockDef, getBlockCategories, getBlockTypesByCategory } from '../../../blocks/registry';
 import { isPayloadVar, type InferencePayloadType } from '../../../core/inference-types';
 import {
@@ -69,7 +69,8 @@ function findCompatiblePorts(
   patch: ReturnType<typeof useStores>['patch']['patch'],
   blockId: BlockId,
   portId: PortId,
-  isInput: boolean
+  isInput: boolean,
+  resolvedPortTypeLookup?: PortTypeLookupFn,
 ): CompatiblePort[] {
   const compatible: CompatiblePort[] = [];
 
@@ -93,7 +94,8 @@ function findCompatiblePorts(
           otherPortId as PortId,
           blockId,
           portId,
-          patch
+          patch,
+          resolvedPortTypeLookup,
         );
       } else {
         // We want to connect this.output -> otherBlock.input
@@ -102,7 +104,8 @@ function findCompatiblePorts(
           portId,
           otherBlockId,
           otherPortId as PortId,
-          patch
+          patch,
+          resolvedPortTypeLookup,
         );
       }
 
@@ -235,7 +238,16 @@ export const PortContextMenu: React.FC<PortContextMenuProps> = ({
   anchorPosition,
   onClose,
 }) => {
-  const { patch, layout, selection, compositeEditor } = useStores();
+  const { patch, layout, selection, compositeEditor, frontend } = useStores();
+  const resolvedPortTypeLookup = useMemo<PortTypeLookupFn>(
+    () => (blockIdValue, portIdValue, direction) =>
+      frontend.getResolvedPortTypeByIds(
+        blockIdValue as BlockId,
+        portIdValue as PortId,
+        direction === 'input' ? 'in' : 'out',
+      ),
+    [frontend],
+  );
 
   const items = useMemo<ContextMenuItem[]>(() => {
     const block = patch.blocks.get(blockId);
@@ -247,7 +259,13 @@ export const PortContextMenu: React.FC<PortContextMenuProps> = ({
     // ==========================================================================
     // Section 1: Connect to... (submenu of all compatible ports)
     // ==========================================================================
-    const compatiblePorts = findCompatiblePorts(patch.patch, blockId, portId, isInput);
+    const compatiblePorts = findCompatiblePorts(
+      patch.patch,
+      blockId,
+      portId,
+      isInput,
+      resolvedPortTypeLookup,
+    );
 
     if (compatiblePorts.length > 0) {
       const children: ContextMenuItem[] = compatiblePorts.map((port) => ({
@@ -549,7 +567,7 @@ export const PortContextMenu: React.FC<PortContextMenuProps> = ({
     }
 
     return menuItems;
-  }, [blockId, portId, isInput, patch, layout, selection, compositeEditor]);
+  }, [blockId, portId, isInput, patch, layout, selection, compositeEditor, resolvedPortTypeLookup]);
 
   return <ContextMenu items={items} anchorPosition={anchorPosition} onClose={onClose} />;
 };

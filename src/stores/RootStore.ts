@@ -74,7 +74,9 @@ export class RootStore {
     this.selection = new SelectionStore(this.patch); // Inject PatchStore dependency
     this.viewport = new ViewportStore();
     this.playback = new PlaybackStore();
-    this.portHighlight = new PortHighlightStore(this.patch); // Inject PatchStore dependency
+    // Create FrontendResultStore (frontend compilation results for UI)
+    this.frontend = new FrontendResultStore();
+    this.portHighlight = new PortHighlightStore(this.patch, this.frontend);
 
     // Create EventHub
     this.events = new EventHub();
@@ -125,9 +127,6 @@ export class RootStore {
         message: `CompositeEditor: ${issue.message}`,
       });
     });
-
-    // Create FrontendResultStore (frontend compilation results for UI)
-    this.frontend = new FrontendResultStore();
 
     // Create StepDebugStore (step-through schedule debugger)
     this.stepDebug = new StepDebugStore();

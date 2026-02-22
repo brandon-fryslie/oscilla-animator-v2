@@ -16,7 +16,7 @@ import { unitsEqual } from '../../core/canonical-types';
 import { isPayloadVar, type InferenceCanonicalType, type InferencePayloadType, type InferenceUnitType } from '../../core/inference-types';
 import { isAxisVar } from '../../core/canonical-types';
 import { ALL_CONCRETE_PAYLOADS, getAnyBlockDefinition, isPayloadAllowed } from '../../blocks/registry';
-import { findAdapter, type AdapterSpec } from '../../blocks/adapter-spec';
+import { findAdapterChain, type AdapterSpec } from '../../blocks/adapter-spec';
 
 const missingPortWarnings = new Set<string>();
 const typeValidationIssues: Array<{
@@ -498,6 +498,52 @@ export interface ConnectionValidationResult {
   reason?: string;
   /** Set when connection is valid only because an adapter will be auto-inserted */
   adapter?: AdapterSpec;
+  /** Set when connection is valid only via a multi-step adapter chain */
+  adapterChain?: ReadonlyArray<{
+    blockType: string;
+    inputPortId: string;
+    outputPortId: string;
+  }>;
+}
+
+function adapterSpecFromChainStep(
+  step: { blockType: string; inputPortId: string; outputPortId: string }
+): AdapterSpec | undefined {
+  const blockDef = getAnyBlockDefinition(step.blockType);
+  const spec = blockDef && 'adapterSpec' in blockDef ? blockDef.adapterSpec : undefined;
+  if (!spec) {
+    return undefined;
+  }
+  return {
+    blockType: step.blockType,
+    inputPortId: step.inputPortId,
+    outputPortId: step.outputPortId,
+    description: spec.description,
+    purity: spec.purity,
+    stability: spec.stability,
+  };
+}
+
+export type PortTypeLookupFn = (
+  blockId: string,
+  portId: string,
+  direction: 'input' | 'output'
+) => InferenceCanonicalType | null | undefined;
+
+function resolvePortType(
+  patch: Patch,
+  blockId: string,
+  portId: string,
+  direction: 'input' | 'output',
+  resolvedPortTypeLookup?: PortTypeLookupFn,
+): InferenceCanonicalType | null {
+  // [LAW:one-source-of-truth] Prefer compiler-resolved port types when available;
+  // static block-definition types remain a fallback for pre-frontend states.
+  const resolved = resolvedPortTypeLookup?.(blockId, portId, direction);
+  if (resolved) {
+    return resolved;
+  }
+  return getPortType(patch, blockId, portId, direction);
 }
 
 /**
@@ -508,7 +554,8 @@ export function validateConnection(
   sourcePortId: string,
   targetBlockId: string,
   targetPortId: string,
-  patch: Patch
+  patch: Patch,
+  resolvedPortTypeLookup?: PortTypeLookupFn,
 ): ConnectionValidationResult {
   // Prevent self-connections on same port
   if (sourceBlockId === targetBlockId && sourcePortId === targetPortId) {
@@ -516,13 +563,25 @@ export function validateConnection(
   }
 
   // Get source type (output port)
-  const sourceType = getPortType(patch, sourceBlockId, sourcePortId, 'output');
+  const sourceType = resolvePortType(
+    patch,
+    sourceBlockId,
+    sourcePortId,
+    'output',
+    resolvedPortTypeLookup,
+  );
   if (!sourceType) {
     return { valid: false, reason: 'Unknown source port' };
   }
 
   // Get target type (input port)
-  const targetType = getPortType(patch, targetBlockId, targetPortId, 'input');
+  const targetType = resolvePortType(
+    patch,
+    targetBlockId,
+    targetPortId,
+    'input',
+    resolvedPortTypeLookup,
+  );
   if (!targetType) {
     return { valid: false, reason: 'Unknown target port' };
   }
@@ -548,15 +607,32 @@ export function validateConnection(
     portId: targetPortId,
   };
 
+  const payloadsCompatible = arePayloadsCompatible(
+    sourceType.payload,
+    targetType.payload,
+    sourceContext,
+    targetContext
+  );
+
   // Check direct compatibility (with metadata-aware checking)
   if (arePortsCompatible(sourceContext, targetContext)) {
     return { valid: true };
   }
 
-  // Types don't match directly — check if an adapter can bridge them
-  const adapter = findAdapter(sourceType, targetType);
-  if (adapter) {
-    return { valid: true, adapter };
+  // If payload vars have disjoint constraints, adapters must not bypass explicit metadata.
+  if (!payloadsCompatible && (isPayloadVar(sourceType.payload) || isPayloadVar(targetType.payload))) {
+    return {
+      valid: false,
+      reason: `Type mismatch: ${formatTypeForDisplay(sourceType)} → ${formatTypeForDisplay(targetType)}`,
+    };
+  }
+
+  // [LAW:one-source-of-truth] UI connection validity follows the same adapter-chain
+  // authority used by frontend adapter policy.
+  const chain = findAdapterChain(sourceType, targetType);
+  if (chain) {
+    const adapter = chain.steps.length === 1 ? adapterSpecFromChainStep(chain.steps[0]) : undefined;
+    return { valid: true, adapter, adapterChain: chain.steps };
   }
 
   return {

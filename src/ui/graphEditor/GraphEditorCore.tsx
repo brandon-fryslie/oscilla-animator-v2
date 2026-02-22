@@ -41,7 +41,11 @@ import { UnifiedNode as UnifiedNodeComponent } from './UnifiedNode';
 import { OscillaEdge } from '../reactFlowEditor/OscillaEdge';
 import type { OscillaEdgeData } from '../reactFlowEditor/nodes';
 import { getLayoutedElements } from '../reactFlowEditor/layout';
-import { setTypeValidationIssueReporter, validateConnection } from '../reactFlowEditor/typeValidation';
+import {
+  setTypeValidationIssueReporter,
+  validateConnection,
+  type PortTypeLookupFn,
+} from '../reactFlowEditor/typeValidation';
 // import { ErrorBadgeOverlay } from './ErrorBadgeOverlay'; // DISABLED: Errors now shown in port popovers
 import type { SelectionStore } from '../../stores/SelectionStore';
 import type { PortHighlightStore } from '../../stores/PortHighlightStore';
@@ -235,6 +239,20 @@ export const GraphEditorCoreInner = observer(
         [diagnostics]
       );
 
+      const resolvedPortTypeLookup = useCallback<PortTypeLookupFn>(
+        (blockId, portId, direction) => {
+          const blocksById = adapter.blocks as ReadonlyMap<string, BlockLike>;
+          const block = blocksById.get(blockId);
+          if (!block) {
+            return undefined;
+          }
+          return direction === 'input'
+            ? block.inputPorts.get(portId)?.resolvedType
+            : block.outputPorts.get(portId)?.resolvedType;
+        },
+        [adapter]
+      );
+
       const projectGraphSnapshot = useCallback(
         (current: Node[]) => {
           const projected = reconcileNodesFromAdapter(
@@ -411,11 +429,12 @@ export const GraphEditorCoreInner = observer(
             connection.sourceHandle || '',
             connection.target,
             connection.targetHandle || '',
-            patch
+            patch,
+            resolvedPortTypeLookup,
           );
           return result.valid;
         },
-        [patch]
+        [patch, resolvedPortTypeLookup]
       );
 
       // -------------------------------------------------------------------------
