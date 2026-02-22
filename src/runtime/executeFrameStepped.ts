@@ -15,7 +15,6 @@
 import type { CompiledProgramIR } from '../compiler/ir/program';
 import type { ScheduleIR } from '../compiler/backend/schedule-program';
 import type { Step, InstanceDecl, DomainInstance, StepRender, StateMapping, StableStateId } from '../compiler/ir/types';
-import type { ValueExpr } from '../compiler/ir/value-expr';
 import type { IrInstanceId as InstanceId } from '../types';
 import { instanceId as makeInstanceId } from '../core/ids';
 import type { RuntimeState } from './RuntimeState';
@@ -29,11 +28,9 @@ import { applyContinuity, finalizeContinuityFrame } from './ContinuityApply';
 import { createStableDomainInstance, createUnstableDomainInstance } from './DomainIdentity';
 import { assembleRenderFrame, type AssemblerContext } from './RenderAssembler';
 import { resolveCameraFromGlobals } from './CameraResolver';
-import { payloadStride, requireInst, requireManyInstance } from '../core/canonical-types';
+import { requireManyInstance } from '../core/canonical-types';
 import type { ValueSlot, StateSlotId } from '../compiler/ir/Indices';
-import { SYSTEM_PALETTE_SLOT } from '../compiler/ir/Indices';
-import { evaluateValueExprScalar, evaluateConstructScalar } from './ValueExprScalarEvaluator';
-import type { ScalarEvalContext } from './ValueExprScalarEvaluator';
+import { SCALAR_INSTANCE_ID, SYSTEM_PALETTE_SLOT } from '../compiler/ir/Indices';
 import { evaluateValueExprEvent } from './ValueExprEventEvaluator';
 import { materializeValueExpr } from './ValueExprMaterializer';
 import { arenaSlice, type ArenaSlotDescriptor } from './ArenaValueStore';
@@ -65,17 +62,6 @@ function resolveArenaDescriptor(
   return arenaDesc;
 }
 
-function writeArenaScalar(slotToArena: ReadonlyMap<ValueSlot, ArenaSlotDescriptor>, state: RuntimeState, lookup: SlotLookup, value: number): void {
-  if (lookup.storage !== 'f64') {
-    throw new Error(`writeArenaScalar: expected f64-class storage for slot ${lookup.slot}, got ${lookup.storage}`);
-  }
-  if (lookup.stride !== 1) {
-    throw new Error(`writeArenaScalar: expected stride=1 for slot ${lookup.slot}, got stride=${lookup.stride}`);
-  }
-  const arenaDesc = resolveArenaDescriptor(slotToArena, lookup);
-  state.arena[arenaDesc.offset] = value;
-}
-
 function writeArenaStrided(
   slotToArena: ReadonlyMap<ValueSlot, ArenaSlotDescriptor>,
   state: RuntimeState,
@@ -104,29 +90,6 @@ function readCanonicalNumeric(
 ): number {
   const arenaDesc = resolveArenaDescriptor(slotToArena, lookup);
   return state.arena[arenaDesc.offset + component];
-}
-
-function reduceScalarBuffer(buffer: ArrayLike<number>, count: number, op: 'min' | 'max' | 'sum' | 'avg'): number {
-  if (count <= 0) return 0;
-  if (op === 'sum' || op === 'avg') {
-    let acc = 0;
-    for (let i = 0; i < count; i++) acc += buffer[i] as number;
-    return op === 'avg' ? acc / count : acc;
-  }
-  if (op === 'min') {
-    let acc = Number.POSITIVE_INFINITY;
-    for (let i = 0; i < count; i++) {
-      const v = buffer[i] as number;
-      if (v < acc) acc = v;
-    }
-    return acc;
-  }
-  let acc = Number.NEGATIVE_INFINITY;
-  for (let i = 0; i < count; i++) {
-    const v = buffer[i] as number;
-    if (v > acc) acc = v;
-  }
-  return acc;
 }
 
 function resolveNumericBuffer(
@@ -312,43 +275,6 @@ export function* executeFrameStepped(
   // reads multi-component values from arena using canonical ExprAddressTable offsets.
   state.cache.scalarExprToArenaOffset = addressTable.scalarExprToArenaOffset;
 
-  // [LAW:one-source-of-truth] Reduce kernels are evaluated through this single
-  // injected context so all scalar evaluation paths share identical reduce behavior.
-  const scalarEvalContext: ScalarEvalContext = {
-    evaluateReduceKernel: (
-      expr: Extract<ValueExpr, { kind: 'kernel'; kernelKind: 'reduce' }>,
-      valueExprTable: readonly ValueExpr[],
-      runtimeState: RuntimeState
-    ): number => {
-      const fieldExpr = valueExprTable[expr.field];
-      if (!fieldExpr) throw new Error(`Reduce field expression ${expr.field} not found`);
-      const card = requireInst(fieldExpr.type.extent.cardinality, 'cardinality');
-      if (card.kind !== 'many') throw new Error('Reduce input must be many-cardinality');
-      const instanceRef = card.instance;
-      const reduceInstanceId = (typeof instanceRef === 'object' ? instanceRef.instanceId : instanceRef) as InstanceId;
-      const instanceDecl = instances.get(reduceInstanceId);
-      const laneCount = instanceDecl && typeof instanceDecl.count === 'number' ? instanceDecl.count : 0;
-      if (laneCount <= 0) return 0;
-
-      const stride = payloadStride(fieldExpr.type.payload);
-      if (stride !== 1) {
-        throw new Error(`Reduce scalar evaluation supports scalar payload only (stride=${stride})`);
-      }
-
-      const fieldValues = materializeValueExpr(
-        expr.field,
-        program.valueExprs,
-        makeInstanceId(String(reduceInstanceId)),
-        laneCount,
-        runtimeState,
-        program,
-        undefined,
-        STEPPED_MATERIALIZE_SCRATCH,
-      );
-      return reduceScalarBuffer(fieldValues, laneCount, expr.op);
-    },
-  };
-
   // --- PHASE 1: Execute all non-stateWrite steps ---
   const valueExprs = program.valueExprs.nodes;
   const renderSteps: StepRender[] = [];
@@ -388,48 +314,34 @@ export function* executeFrameStepped(
             writtenSlots.set(targetSlot, readSlotValue(state, lookup, meta, slotToArena));
           }
         } else if (storage === 'f64') {
-          const exprNode = valueExprs[step.expr as number];
+          const arenaDesc = resolveArenaDescriptor(slotToArena, lookup);
+          const arenaTarget = arenaSlice(state.arena, arenaDesc);
 
-          if (stride > 1 && exprNode?.kind === 'construct') {
-            const arenaDesc = resolveArenaDescriptor(slotToArena, lookup);
-            const written = evaluateConstructScalar(
-              exprNode,
-              valueExprs,
-              state,
-              state.arena,
-              arenaDesc.offset,
-              scalarEvalContext,
-            );
-            if (written !== stride) {
-              throw new Error(`evalOne: construct wrote ${written} components but slot stride is ${stride}`);
-            }
-            for (let i = 0; i < stride; i++) {
-              state.tap?.recordSlotValue?.((slot + i) as ValueSlot, readCanonicalNumeric(slotToArena, state, lookup, i));
-            }
-            state.cache.scalarValues[step.expr as number] = readCanonicalNumeric(slotToArena, state, lookup, 0);
-            state.cache.scalarStamps[step.expr as number] = state.cache.frameId;
-
-            // Capture written slot
-            const meta = slotToMeta.get(targetSlot);
-            if (meta) {
-              writtenSlots.set(targetSlot, readSlotValue(state, lookup, meta, slotToArena));
-            }
-          } else if (stride === 1) {
-            const value = evaluateValueExprScalar(step.expr as any, program.valueExprs.nodes, state, scalarEvalContext);
-            writeArenaScalar(slotToArena, state, lookup, value);
-            state.tap?.recordSlotValue?.(slot, value);
-            state.cache.scalarValues[step.expr as number] = value;
-            state.cache.scalarStamps[step.expr as number] = state.cache.frameId;
-
-            // Capture written scalar
-            const meta = slotToMeta.get(targetSlot);
-            if (meta) {
-              writtenSlots.set(targetSlot, { kind: 'scalar', value, type: meta.type });
-            }
-          } else {
+          const buffer = materializeValueExpr(
+            step.expr,
+            program.valueExprs,
+            SCALAR_INSTANCE_ID,
+            1,
+            state,
+            program,
+            arenaTarget,
+            STEPPED_MATERIALIZE_SCRATCH,
+          );
+          if (buffer.length < stride) {
             throw new Error(
-              `evalOne: stride=${stride} slot ${slot} requires construct expression, got ${exprNode?.kind ?? 'unknown'}`
+              `evalOne: materialized buffer too small for slot ${slot} (need ${stride}, got ${buffer.length})`
             );
+          }
+          for (let i = 0; i < stride; i++) {
+            state.tap?.recordSlotValue?.((slot + i) as ValueSlot, readCanonicalNumeric(slotToArena, state, lookup, i));
+          }
+          state.cache.scalarValues[step.expr as number] = readCanonicalNumeric(slotToArena, state, lookup, 0);
+          state.cache.scalarStamps[step.expr as number] = state.cache.frameId;
+
+          // Capture written slot
+          const meta = slotToMeta.get(targetSlot);
+          if (meta) {
+            writtenSlots.set(targetSlot, readSlotValue(state, lookup, meta, slotToArena));
           }
         } else {
           throw new Error(`evalOne: unsupported storage type '${storage}' for slot ${slot} expr ${step.expr}`);
@@ -564,7 +476,17 @@ export function* executeFrameStepped(
     const step = steps[stepIdx];
 
     if (step.kind === 'stateWrite') {
-      const value = evaluateValueExprScalar(step.value as any, program.valueExprs.nodes, state, scalarEvalContext);
+      const oneValue = materializeValueExpr(
+        step.value as any,
+        program.valueExprs,
+        SCALAR_INSTANCE_ID,
+        1,
+        state,
+        program,
+        undefined,
+        STEPPED_MATERIALIZE_SCRATCH,
+      );
+      const value = oneValue[0] ?? 0;
       state.state[step.stateSlot as number] = value;
 
       const writtenStateSlots = new Map<StateSlotId, StateSlotValue>();

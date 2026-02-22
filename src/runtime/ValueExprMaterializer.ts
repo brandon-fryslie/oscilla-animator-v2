@@ -6,8 +6,8 @@
  *
  * Key design principles:
  * - Unified ValueExpr table (no separate scalar/field/event tables)
- * - Materialization is for field-extent expressions only
- * - One-cardinality expressions are evaluated via evaluateValueExprScalar() (not materialized)
+ * - Materialization is primarily for field-extent expressions
+ * - One-cardinality expressions may be evaluated here when writing unified buffers
  * - Buffer reuse via MaterializeScratch (no allocation in hot path)
  */
 
@@ -18,12 +18,91 @@ import type { PureFn } from '../compiler/ir/types';
 import type { InstanceId } from '../compiler/ir/Indices';
 import type { CompiledProgramIR } from '../compiler/ir/program';
 import type { MaterializeScratch } from './MaterializeScratch';
-import { evaluateValueExprScalar } from './ValueExprScalarEvaluator';
+import { evaluateValueExprScalar, type ScalarEvalContext } from './ValueExprScalarEvaluator';
 import { requireInst } from '../core/canonical-types';
 import { payloadStride } from '../core/canonical-types';
 import { getTopology } from '../shapes/registry';
 import type { PathTopologyDef } from '../shapes/types';
 import { applyOpcode } from './OpcodeInterpreter';
+
+function reduceScalarBuffer(buffer: ArrayLike<number>, count: number, op: 'min' | 'max' | 'sum' | 'avg'): number {
+  if (count <= 0) return 0;
+  if (op === 'sum' || op === 'avg') {
+    let acc = 0;
+    for (let i = 0; i < count; i++) acc += buffer[i] as number;
+    return op === 'avg' ? acc / count : acc;
+  }
+  if (op === 'min') {
+    let acc = Number.POSITIVE_INFINITY;
+    for (let i = 0; i < count; i++) {
+      const v = buffer[i] as number;
+      if (v < acc) acc = v;
+    }
+    return acc;
+  }
+  let acc = Number.NEGATIVE_INFINITY;
+  for (let i = 0; i < count; i++) {
+    const v = buffer[i] as number;
+    if (v > acc) acc = v;
+  }
+  return acc;
+}
+
+function materializeReduceScalar(
+  expr: Extract<ValueExprKernel, { kernelKind: 'reduce' }>,
+  table: ValueExprTable,
+  state: RuntimeState,
+  program: CompiledProgramIR,
+  scratch: MaterializeScratch | undefined,
+): number {
+  const fieldExpr = table.nodes[expr.field];
+  if (!fieldExpr) {
+    throw new Error(`Reduce field expression ${expr.field} not found`);
+  }
+  const card = requireInst(fieldExpr.type.extent.cardinality, 'cardinality');
+  if (card.kind !== 'many') {
+    throw new Error('Reduce input must be many-cardinality');
+  }
+  const instanceRef = card.instance;
+  const reduceInstanceId = (typeof instanceRef === 'object' ? instanceRef.instanceId : instanceRef) as InstanceId;
+  const instanceDecl = program.schedule.instances.get(reduceInstanceId);
+  const laneCount = instanceDecl && typeof instanceDecl.count === 'number' ? instanceDecl.count : 0;
+  if (laneCount <= 0) {
+    return 0;
+  }
+
+  const reduceStride = payloadStride(fieldExpr.type.payload);
+  if (reduceStride !== 1) {
+    throw new Error(`Reduce scalar evaluation supports scalar payload only (stride=${reduceStride})`);
+  }
+
+  const fieldValues = materializeValueExpr(
+    expr.field,
+    table,
+    reduceInstanceId,
+    laneCount,
+    state,
+    program,
+    undefined,
+    scratch,
+  );
+  return reduceScalarBuffer(fieldValues, laneCount, expr.op);
+}
+
+function evaluateScalarForMaterialize(
+  exprId: ValueExprId,
+  table: ValueExprTable,
+  state: RuntimeState,
+  program: CompiledProgramIR,
+  scratch: MaterializeScratch | undefined,
+): number {
+  const context: ScalarEvalContext = {
+    // [LAW:one-source-of-truth] Reduce has exactly one runtime implementation.
+    // Scalar evaluation delegates reduce kernels back to the materializer path.
+    evaluateReduceKernel: (expr, _valueExprs, runtimeState) => materializeReduceScalar(expr, table, runtimeState, program, scratch),
+  };
+  return evaluateValueExprScalar(exprId, table.nodes, state, context);
+}
 
 /**
  * Value expression table for materialization.
@@ -164,7 +243,7 @@ export function materializeValueExpr(
     case 'eventRead': {
       // [LAW:dataflow-not-control-flow] Scalar reads materialize by writing
       // their evaluated value through the same buffer path as all other materialize ops.
-      const oneValue = evaluateValueExprScalar(exprId, table.nodes, state);
+      const oneValue = evaluateScalarForMaterialize(exprId, table, state, program, scratch);
       fillBufferWithOne(buf, oneValue, count, stride);
       break;
     }
@@ -172,8 +251,12 @@ export function materializeValueExpr(
     case 'event':
       throw new Error(`Cannot materialize one/event expression as field: ${expr.kind}`);
 
-    case 'shapeRef':
-      throw new Error(`Shape references are not yet supported in materialize`);
+    case 'shapeRef': {
+      // [LAW:dataflow-not-control-flow] Keep evalOne/materialize on the unified
+      // numeric write path; shapeRef contributes no numeric payload, so write zeros.
+      fillBufferWithOne(buf, 0, count, stride);
+      break;
+    }
 
     default: {
       const _exhaustive: never = expr;
@@ -231,7 +314,7 @@ function materializeKernel(
         const compCount = expr.oneComponents.length;
         const componentValues = new Array<number>(compCount);
         for (let j = 0; j < compCount; j++) {
-          componentValues[j] = evaluateValueExprScalar(expr.oneComponents[j], table.nodes, state);
+          componentValues[j] = evaluateScalarForMaterialize(expr.oneComponents[j], table, state, program, scratch);
         }
         for (let i = 0; i < count; i++) {
           for (let c = 0; c < componentValues.length; c++) {
@@ -240,7 +323,7 @@ function materializeKernel(
         }
       } else {
         // Single-component broadcast: fill entire buffer with one-cardinality value
-        const oneValue = evaluateValueExprScalar(expr.one, table.nodes, state);
+        const oneValue = evaluateScalarForMaterialize(expr.one, table, state, program, scratch);
         fillBufferWithOne(buf, oneValue, count, stride);
       }
       break;
@@ -252,7 +335,7 @@ function materializeKernel(
       const oneCount = expr.ones.length;
       const oneValues = new Array<number>(oneCount);
       for (let j = 0; j < oneCount; j++) {
-        oneValues[j] = evaluateValueExprScalar(expr.ones[j], table.nodes, state);
+        oneValues[j] = evaluateScalarForMaterialize(expr.ones[j], table, state, program, scratch);
       }
       applyZipPromote(buf, fieldInput, oneValues, expr.fn, count, stride, instanceId, program);
       break;
@@ -315,9 +398,11 @@ function materializeKernel(
     }
 
     case 'reduce': {
-      // WI-4: Reduce is handled during scalar evaluation, not materialization
-      // This case should not be reached during field materialization
-      throw new Error('Reduce is one-cardinality extent, not field-extent');
+      // [LAW:one-source-of-truth] Reduce is materialized through the same kernel
+      // implementation used by scalar fallback evaluation.
+      const reducedValue = materializeReduceScalar(expr, table, state, program, scratch);
+      fillBufferWithOne(buf, reducedValue, count, stride);
+      break;
     }
 
     default: {
