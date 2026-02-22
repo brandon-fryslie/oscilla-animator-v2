@@ -231,35 +231,27 @@ describe('EventHub', () => {
       hub.on('CompileEnd', handler2);
       hub.on('CompileEnd', handler3);
 
-      const originalError = console.error;
-      console.error = vi.fn();
-
       hub.emit(createCompileEndEvent());
-
-      console.error = originalError;
 
       expect(handler1).toHaveBeenCalledTimes(1);
       expect(handler2).toHaveBeenCalledTimes(1);
       expect(handler3).toHaveBeenCalledTimes(1);
+      expect(hub.getListenerErrors()).toHaveLength(1);
     });
 
-    it('should log error when listener throws', () => {
-      const mockError = vi.fn();
-      const originalError = console.error;
-      console.error = mockError;
-
+    it('captures listener error details when listener throws', () => {
       hub.on('GraphCommitted', () => {
         throw new Error('Test error');
       });
 
       hub.emit(createGraphCommittedEvent());
 
-      console.error = originalError;
-
-      expect(mockError).toHaveBeenCalledWith(
-        expect.stringContaining('[EventHub] Listener failed for GraphCommitted:'),
-        expect.any(Error)
-      );
+      expect(hub.getListenerErrors()).toHaveLength(1);
+      expect(hub.getListenerErrors()[0]).toMatchObject({
+        scope: 'typed',
+        eventType: 'GraphCommitted',
+        error: expect.any(Error),
+      });
     });
 
     it('should continue executing global listeners after one throws', () => {
@@ -273,16 +265,12 @@ describe('EventHub', () => {
       hub.subscribe(global2);
       hub.subscribe(global3);
 
-      const originalError = console.error;
-      console.error = vi.fn();
-
       hub.emit(createGraphCommittedEvent());
-
-      console.error = originalError;
 
       expect(global1).toHaveBeenCalledTimes(1);
       expect(global2).toHaveBeenCalledTimes(1);
       expect(global3).toHaveBeenCalledTimes(1);
+      expect(hub.getListenerErrors()).toHaveLength(1);
     });
 
     it('should route listener errors through configured error reporter', () => {
@@ -307,6 +295,31 @@ describe('EventHub', () => {
       expect(report).toHaveBeenNthCalledWith(2, {
         scope: 'global',
         eventType: 'CompileEnd',
+        error: expect.any(Error),
+      });
+      expect(hub.getListenerErrors()).toHaveLength(2);
+    });
+
+    it('captures reporter failures without using console fallback', () => {
+      hub.setErrorReporter(() => {
+        throw new Error('report fail');
+      });
+      hub.on('CompileBegin', () => {
+        throw new Error('listener fail');
+      });
+
+      hub.emit(createCompileBeginEvent());
+
+      // Original listener failure + reporter failure are both captured.
+      expect(hub.getListenerErrors()).toHaveLength(2);
+      expect(hub.getListenerErrors()[0]).toMatchObject({
+        scope: 'typed',
+        eventType: 'CompileBegin',
+        error: expect.any(Error),
+      });
+      expect(hub.getListenerErrors()[1]).toMatchObject({
+        scope: 'typed',
+        eventType: 'CompileBegin',
         error: expect.any(Error),
       });
     });
@@ -340,14 +353,20 @@ describe('EventHub', () => {
       hub.on('CompileEnd', () => {});
       hub.on('GraphCommitted', () => {});
       hub.subscribe(() => {});
+      hub.on('CompileBegin', () => {
+        throw new Error('boom');
+      });
+      hub.emit(createCompileBeginEvent());
 
       expect(hub.listenerCount()).toBeGreaterThan(0);
+      expect(hub.getListenerErrors().length).toBeGreaterThan(0);
 
       hub.clear();
 
       expect(hub.listenerCount()).toBe(0);
       expect(hub.listenerCount('CompileEnd')).toBe(0);
       expect(hub.listenerCount('GraphCommitted')).toBe(0);
+      expect(hub.getListenerErrors()).toHaveLength(0);
     });
 
     it('should handle unsubscribing multiple times safely', () => {
@@ -465,9 +484,6 @@ describe('EventHub', () => {
         throw new Error('Handler error');
       });
 
-      const originalError = console.error;
-      console.error = vi.fn();
-
       hub.once('EdgeRemoved', handler);
 
       const event: EdgeRemovedEvent = {
@@ -480,10 +496,9 @@ describe('EventHub', () => {
       hub.emit(event);
       hub.emit(event); // Second emit
 
-      console.error = originalError;
-
       // Should have been called only once even though it threw
       expect(handler).toHaveBeenCalledTimes(1);
+      expect(hub.getListenerErrors()).toHaveLength(1);
     });
   });
 

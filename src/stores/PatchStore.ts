@@ -20,6 +20,7 @@ import { normalizeCanonicalName, detectCanonicalNameCollisions } from '../core/c
 import { exportPatchAsHCL, importPatchFromHCL, savePatchToStorage } from '../services/PatchPersistence';
 import { derivedLensParamKey } from '../graph/lens-block-id';
 import { nextLensAttachmentId } from '../graph/lens-id';
+import type { PatchDslError } from '../patch-dsl';
 
 /**
  * Opaque type for immutable patch access.
@@ -40,6 +41,14 @@ export interface EdgeOptions {
   sortKey?: number;
   role?: EdgeRole;
   alias?: string;
+}
+
+export type PatchStoreIssueLevel = 'warn' | 'error';
+
+export interface PatchStoreIssue {
+  readonly level: PatchStoreIssueLevel;
+  readonly message: string;
+  readonly detail?: unknown;
 }
 
 /**
@@ -103,6 +112,8 @@ export class PatchStore {
   private eventHub: EventHub | null = null;
   private patchId: string = 'patch-0';
   private getPatchRevision: (() => number) | null = null;
+  private issueReporter?: (issue: PatchStoreIssue) => void;
+  lastIssue: PatchStoreIssue | null = null;
 
   constructor() {
     this._data = emptyPatchData();
@@ -161,6 +172,13 @@ export class PatchStore {
     this.eventHub = eventHub;
     this.patchId = patchId;
     this.getPatchRevision = getPatchRevision;
+  }
+
+  /**
+   * Sets issue reporting sink for non-fatal operational warnings/errors.
+   */
+  setIssueReporter(issueReporter: (issue: PatchStoreIssue) => void): void {
+    this.issueReporter = issueReporter;
   }
 
   // =============================================================================
@@ -1042,7 +1060,7 @@ export class PatchStore {
    * @param hcl - HCL text to deserialize
    * @throws Error if total parse failure
    */
-  loadFromHCL(hcl: string): void {
+  loadFromHCL(hcl: string): { errors: readonly PatchDslError[] } {
     this._hasStructuralChange = true;
     const result = importPatchFromHCL(hcl);
     if (!result) {
@@ -1050,11 +1068,11 @@ export class PatchStore {
     }
 
     if (result.errors.length > 0) {
-      console.warn('HCL import had errors:', result.errors);
-      // TODO: Optionally add errors to DiagnosticHub
+      this.reportIssue('warn', 'HCL import had recoverable errors', result.errors);
     }
 
     this.loadPatch(result.patch);
+    return { errors: result.errors };
   }
 
   /**
@@ -1092,6 +1110,12 @@ export class PatchStore {
   stopPersistence(): void {
     this.persistDisposer?.();
     this.persistDisposer = null;
+  }
+
+  private reportIssue(level: PatchStoreIssueLevel, message: string, detail?: unknown): void {
+    const issue: PatchStoreIssue = { level, message, detail };
+    this.lastIssue = issue;
+    this.issueReporter?.(issue);
   }
 
   // =============================================================================

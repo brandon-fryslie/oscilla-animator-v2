@@ -10,6 +10,8 @@ import { reaction } from 'mobx';
 import type { Endpoint } from '../../graph/Patch';
 import { blockId } from '../../types';
 import { createTestBlock, resetBlockFactory } from '../../test-utils/block-factory';
+import * as PatchPersistence from '../../services/PatchPersistence';
+import { PatchDslError } from '../../patch-dsl';
 
 // Import blocks to trigger registration
 import '../../blocks/all';
@@ -321,6 +323,36 @@ describe('PatchStore', () => {
       expect(() => {
         store.addBlock('Oscillator');
       }).not.toThrow();
+    });
+  });
+
+  describe('loadFromHCL', () => {
+    it('reports recoverable import errors through issue reporter', () => {
+      const reportIssue = vi.fn();
+      store.setIssueReporter(reportIssue);
+
+      const importSpy = vi
+        .spyOn(PatchPersistence, 'importPatchFromHCL')
+        .mockReturnValue({
+          patch: {
+            blocks: new Map(),
+            edges: [],
+          },
+          errors: [new PatchDslError('recoverable parse issue', { start: 0, end: 1 })],
+        });
+
+      const result = store.loadFromHCL('patch "Test" {}');
+
+      expect(result.errors).toHaveLength(1);
+      expect(reportIssue).toHaveBeenCalledTimes(1);
+      expect(reportIssue).toHaveBeenCalledWith(
+        expect.objectContaining({
+          level: 'warn',
+          message: 'HCL import had recoverable errors',
+        })
+      );
+
+      importSpy.mockRestore();
     });
   });
 });

@@ -53,12 +53,15 @@ export interface EventHubListenerError {
  * ```
  */
 export class EventHub {
+  private static readonly MAX_LISTENER_ERRORS = 100;
+
   // Type-specific listeners (keyed by event type)
   private listeners = new Map<string, Set<(event: EditorEvent) => void>>();
 
   // Global listeners (receive all events)
   private globalListeners = new Set<(event: EditorEvent) => void>();
   private errorReporter: ((payload: EventHubListenerError) => void) | null = null;
+  private listenerErrors: EventHubListenerError[] = [];
 
   /**
    * Configure an optional error reporter for listener failures.
@@ -67,23 +70,43 @@ export class EventHub {
     this.errorReporter = reporter;
   }
 
+  /**
+   * Returns a snapshot of recent listener failures captured by EventHub.
+   * Useful for diagnostics in runtimes without an external error reporter.
+   */
+  getListenerErrors(): readonly EventHubListenerError[] {
+    return this.listenerErrors;
+  }
+
+  /**
+   * Clears the captured listener failure history.
+   */
+  clearListenerErrors(): void {
+    this.listenerErrors = [];
+  }
+
+  private recordListenerError(payload: EventHubListenerError): void {
+    this.listenerErrors.push(payload);
+    if (this.listenerErrors.length > EventHub.MAX_LISTENER_ERRORS) {
+      this.listenerErrors.shift();
+    }
+  }
+
   private reportListenerError(payload: EventHubListenerError): void {
+    this.recordListenerError(payload);
     try {
       // [LAW:single-enforcer] EventHub is the sole boundary that classifies
       // listener exceptions and forwards them to the configured reporter.
       if (this.errorReporter) {
         this.errorReporter(payload);
-        return;
       }
     } catch (reportError) {
-      console.error('[EventHub] Error reporter failed:', reportError);
+      this.recordListenerError({
+        scope: payload.scope,
+        eventType: payload.eventType,
+        error: reportError,
+      });
     }
-
-    if (payload.scope === 'typed') {
-      console.error(`[EventHub] Listener failed for ${payload.eventType}:`, payload.error);
-      return;
-    }
-    console.error('[EventHub] Global listener failed:', payload.error);
   }
 
   // =============================================================================
@@ -230,6 +253,7 @@ export class EventHub {
   clear(): void {
     this.listeners.clear();
     this.globalListeners.clear();
+    this.clearListenerErrors();
   }
 
   /**
