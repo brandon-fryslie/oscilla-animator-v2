@@ -54,7 +54,7 @@ old storage.
 
 | # | Ticket | Title | Notes | Status |
 |---|--------|-------|-------|--------|
-| 7 | **zdru** | (EPIC) Shim to Arena + Delete Old Storage | Parent epic. Depends on objx. | OPEN |
+| 7 | **zdru** | (EPIC) Shim to Arena + Delete Old Storage | Parent epic. Depends on objx. | DONE |
 | 8 | **zdru.1** | Wire signal evaluation writes to arena | Write-through: both f64 AND arena get written. | **DONE** |
 | 9 | **zdru.2** | Wire field materialization writes to arena | `materializeValueExpr()` gets optional target buffer param. | **DONE** |
 | 10 | **zdru.3** | Migrate RenderAssembler to read from arena | Hot render path. Depends on zdru.1, zdru.2. | **DONE** |
@@ -107,7 +107,7 @@ Canonical remaining Phase-5 work is tracked by migration batches:
 | **sddl** | Migration Batch B2: Schedule/eval step unification (includes state mapping unification scope) | DONE |
 | **a38l** | Migration Batch C1: Remove scalar/signal evaluator vestiges from active runtime flow | DONE |
 | **261z** | Migration Batch C2: Remove BufferPool vestiges | DONE |
-| **xx9c** | Migration Batch C3: Final cleanup + forbidden guards | OPEN |
+| **xx9c** | Migration Batch C3: Final cleanup + forbidden guards | DONE |
 
 Milestones already closed:
 - **j1fn** (Lowered IR type unification) — DONE
@@ -119,7 +119,7 @@ Milestones already closed:
 ## Active Workstreams (Current Beads State)
 
 Open migration streams:
-- **xx9c** — final vestige cleanup + forbidden-pattern enforcement
+- None. Core migration streams are complete.
 
 This list should mirror beads; if it drifts, beads is authoritative.
 
@@ -164,5 +164,5 @@ f433 (unify slot maps) ──┐
                                 sddl (B2: done)
                                  ├──→ a38l (C1: done)
                                  ├──→ 261z (C2: done)
-                                 └──→ xx9c (C3: open)
+                                 └──→ xx9c (C3: done)
 ```

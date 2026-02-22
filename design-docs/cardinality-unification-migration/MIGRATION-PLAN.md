@@ -29,7 +29,8 @@ Completed:
 - Event wrap one-value evaluation now uses canonical materialization (`a38l` scope completed).
 
 Remaining critical path:
-1. `xx9c` (Migration Batch C3): final vestige cleanup + forbidden-pattern guards.
+- Core cardinality/signal-field unification migration workstreams are complete.
+- Follow-on work now lives in post-migration enhancements (event count semantics, lens planning, etc.).
 
 Completion condition:
 - No runtime/compiler concept of "signal path" remains.
