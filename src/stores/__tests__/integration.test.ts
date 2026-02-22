@@ -5,6 +5,7 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
+import { autorun } from 'mobx';
 import { RootStore } from '../RootStore';
 import type { Endpoint } from '../../graph/Patch';
 import { blockId } from '../../types';
@@ -12,6 +13,14 @@ import { blockId } from '../../types';
 // Import blocks to trigger registration
 import '../../blocks/all';
 
+function readComputed<T>(reader: () => T): T {
+  let value!: T;
+  const disposer = autorun(() => {
+    value = reader();
+  });
+  disposer();
+  return value;
+}
 
 describe('Store Integration', () => {
   let root: RootStore;
@@ -34,7 +43,9 @@ describe('Store Integration', () => {
       root.selection.selectBlock(id);
 
       // Selection should derive from patch
-      expect(root.selection.selectedBlock).toBe(root.patch.blocks.get(id));
+      expect(readComputed(() => root.selection.selectedBlock)).toBe(
+        readComputed(() => root.patch.blocks.get(id)),
+      );
     });
   });
 
@@ -43,13 +54,13 @@ describe('Store Integration', () => {
       const id = root.patch.addBlock('Oscillator');
       root.selection.selectBlock(id);
 
-      expect(root.selection.selectedBlock).toBeDefined();
+      expect(readComputed(() => root.selection.selectedBlock)).toBeDefined();
 
       root.patch.removeBlock(id);
 
       // Selection is automatically cleared via BlockRemoved event
       expect(root.selection.selectedBlockId).toBe(null);
-      expect(root.selection.selectedBlock).toBeUndefined();
+      expect(readComputed(() => root.selection.selectedBlock)).toBeUndefined();
     });
 
     it('should clear selectedEdge when edge is deleted', () => {
@@ -61,13 +72,13 @@ describe('Store Integration', () => {
       const edgeId = root.patch.addEdge(from, to);
 
       root.selection.selectEdge(edgeId);
-      expect(root.selection.selectedEdge).toBeDefined();
+      expect(readComputed(() => root.selection.selectedEdge)).toBeDefined();
 
       root.patch.removeEdge(edgeId);
 
       // Selection is automatically cleared via EdgeRemoved event
       expect(root.selection.selectedEdgeId).toBe(null);
-      expect(root.selection.selectedEdge).toBeUndefined();
+      expect(readComputed(() => root.selection.selectedEdge)).toBeUndefined();
     });
 
     it('should clear selectedEdge when source block is deleted', () => {
@@ -79,14 +90,14 @@ describe('Store Integration', () => {
       const edgeId = root.patch.addEdge(from, to);
 
       root.selection.selectEdge(edgeId);
-      expect(root.selection.selectedEdge).toBeDefined();
+      expect(readComputed(() => root.selection.selectedEdge)).toBeDefined();
 
       // Deleting source block removes the edge, which triggers EdgeRemoved event
       root.patch.removeBlock(id1);
 
       // Selection is automatically cleared via EdgeRemoved event cascade
       expect(root.selection.selectedEdgeId).toBe(null);
-      expect(root.selection.selectedEdge).toBeUndefined();
+      expect(readComputed(() => root.selection.selectedEdge)).toBeUndefined();
     });
   });
 
@@ -130,8 +141,8 @@ describe('Store Integration', () => {
       root.selection.selectBlock(id);
 
       // SelectionStore returns same reference from PatchStore
-      const fromPatch = root.patch.blocks.get(id);
-      const fromSelection = root.selection.selectedBlock;
+      const fromPatch = readComputed(() => root.patch.blocks.get(id));
+      const fromSelection = readComputed(() => root.selection.selectedBlock);
 
       expect(fromSelection).toBe(fromPatch);
     });
@@ -140,8 +151,10 @@ describe('Store Integration', () => {
       const busId = root.patch.addBlock('Oscillator', {}, { role: { kind: 'bus', meta: {} } });
 
       // Buses are computed from patch blocks
-      expect(root.patch.buses.length).toBe(1);
-      expect(root.patch.buses[0]).toBe(root.patch.blocks.get(busId));
+      expect(readComputed(() => root.patch.buses.length)).toBe(1);
+      expect(readComputed(() => root.patch.buses[0])).toBe(
+        readComputed(() => root.patch.blocks.get(busId)),
+      );
     });
   });
 
@@ -166,13 +179,13 @@ describe('Store Integration', () => {
       const id = root.patch.addBlock('Oscillator', { frequency: 440 });
       root.selection.selectBlock(id);
 
-      expect(root.selection.selectedBlock?.params.frequency).toBe(440);
+      expect(readComputed(() => root.selection.selectedBlock?.params.frequency)).toBe(440);
 
       // Update params through action
       root.patch.updateBlockParams(id, { frequency: 880 });
 
       // Computed property updates automatically
-      expect(root.selection.selectedBlock?.params.frequency).toBe(880);
+      expect(readComputed(() => root.selection.selectedBlock?.params.frequency)).toBe(880);
     });
   });
 });

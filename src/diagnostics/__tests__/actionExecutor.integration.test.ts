@@ -6,6 +6,7 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
+import { autorun } from 'mobx';
 import { RootStore } from '../../stores/RootStore';
 import type { Diagnostic } from '../types';
 
@@ -13,6 +14,14 @@ import type { Diagnostic } from '../types';
 // Import blocks to trigger registration
 import '../../blocks/all';
 
+function readComputed<T>(reader: () => T): T {
+  let value!: T;
+  const disposer = autorun(() => {
+    value = reader();
+  });
+  disposer();
+  return value;
+}
 
 describe('actionExecutor integration', () => {
   let rootStore: RootStore;
@@ -41,7 +50,7 @@ describe('actionExecutor integration', () => {
       expect(result.success).toBe(true);
 
       // Verify block was created
-      const blocks = Array.from(rootStore.patch.blocks.values());
+      const blocks = Array.from(readComputed(() => rootStore.patch.blocks).values());
       const timeRootBlock = blocks.find((b) => b.type === 'InfiniteTimeRoot');
       expect(timeRootBlock).toBeDefined();
       expect(timeRootBlock?.role.kind).toBe('timeRoot');
@@ -59,7 +68,7 @@ describe('actionExecutor integration', () => {
 
       // Verify selection
       expect(rootStore.selection.selectedBlockId).toBeDefined();
-      expect(rootStore.selection.selectedBlock?.type).toBe('InfiniteTimeRoot');
+      expect(readComputed(() => rootStore.selection.selectedBlock?.type)).toBe('InfiniteTimeRoot');
     });
 
     it('resolves E_TIME_ROOT_MISSING diagnostic', async () => {
@@ -80,12 +89,12 @@ describe('actionExecutor integration', () => {
       await new Promise((resolve) => setTimeout(resolve, 50));
 
       // Verify that a TimeRoot block now exists
-      const blocks = Array.from(rootStore.patch.blocks.values());
+      const blocks = Array.from(readComputed(() => rootStore.patch.blocks).values());
       const timeRootBlocks = blocks.filter((b) => b.role.kind === 'timeRoot');
       expect(timeRootBlocks.length).toBeGreaterThan(0);
 
       // If diagnostics store has E_TIME_ROOT_MISSING, it should be resolved after this
-      const diagnostics = rootStore.diagnostics.activeDiagnostics;
+      const diagnostics = readComputed(() => rootStore.diagnostics.activeDiagnostics);
       const timeRootMissing = diagnostics.find((d) => d.code === 'E_TIME_ROOT_MISSING');
 
       // After adding a TimeRoot, this diagnostic should not be present
@@ -103,7 +112,7 @@ describe('actionExecutor integration', () => {
     it('removes block from patch', () => {
       // First create a block (using a registered block type)
       const blockId = rootStore.patch.addBlock('Adapter_PhaseToScalar01', {});
-      expect(rootStore.patch.blocks.has(blockId)).toBe(true);
+      expect(readComputed(() => rootStore.patch.blocks.has(blockId))).toBe(true);
 
       // Execute removeBlock action
       const action = {
@@ -118,7 +127,7 @@ describe('actionExecutor integration', () => {
       expect(result.success).toBe(true);
 
       // Verify block was removed
-      expect(rootStore.patch.blocks.has(blockId)).toBe(false);
+      expect(readComputed(() => rootStore.patch.blocks.has(blockId))).toBe(false);
     });
 
     it('fails for non-existent block', () => {
@@ -177,7 +186,7 @@ describe('actionExecutor integration', () => {
       expect(result.success).toBe(true);
 
       // Verify block was created
-      const blocks = Array.from(rootStore.patch.blocks.values());
+      const blocks = Array.from(readComputed(() => rootStore.patch.blocks).values());
       const adapterBlock = blocks.find((b) => b.type === 'Adapter_PhaseToScalar01');
       expect(adapterBlock).toBeDefined();
 
