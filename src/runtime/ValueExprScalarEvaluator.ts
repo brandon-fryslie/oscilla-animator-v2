@@ -183,10 +183,9 @@ function evaluateScalarExtent(
     }
 
     case 'shapeRef': {
-      // ShapeRef expressions are not evaluated as numeric values.
-      // The ScheduleExecutor handles shape2d record writes directly.
-      // Return 0 as a safe numeric fallback if this is ever called.
-      return 0;
+      // [LAW:no-silent-fallbacks] Shape references are non-numeric resources.
+      // Evaluating them as scalar numbers would mask schedule bugs.
+      throw new Error('ShapeRef expressions are not scalar-evaluable; evaluate via shape2d write path');
     }
 
     case 'eventRead': {

@@ -147,6 +147,21 @@ describe('construct one-cardinality evaluation', () => {
 
     expect(value).toBe(3.14);
   });
+
+  it('throws when shapeRef is evaluated through scalar path', () => {
+    const valueExprs: ValueExpr[] = [
+      {
+        kind: 'shapeRef',
+        type: canonicalScalar({ kind: 'float' }, { kind: 'none' }),
+        topologyId: 0 as any,
+        paramArgs: [],
+      },
+    ];
+
+    expect(() => evaluateValueExprScalar(0 as ValueExprId, valueExprs, state)).toThrow(
+      /not scalar-evaluable/
+    );
+  });
 });
 
 describe('extract one-cardinality evaluation', () => {
