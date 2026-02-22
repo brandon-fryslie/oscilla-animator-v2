@@ -40,12 +40,12 @@ function compileSimplePatch() {
     const colorSig = b.addBlock('Const');
     b.setConfig(colorSig, 'value', { r: 1, g: 0.5, b: 0.2, a: 1 });
     const colorField = b.addBlock('Broadcast');
-    b.wire(colorSig, 'out', colorField, 'signal');
+    b.wire(colorSig, 'out', colorField, 'input');
 
     b.wire(ellipse, 'shape', array, 'element');
     b.wire(array, 'elements', layout, 'elements');
     b.wire(layout, 'position', render, 'pos');
-    b.wire(colorField, 'field', render, 'color');
+    b.wire(colorField, 'out', render, 'color');
   });
 
   const result = compile(patch);
@@ -172,7 +172,7 @@ describe('executeFrameStepped', () => {
     }
   });
 
-  it('evalValue steps capture written slots', () => {
+  it('materialize steps capture written slots', () => {
     const program = compileSimplePatch();
     const state = createStateForProgram(program);
     const arena = getTestArena();

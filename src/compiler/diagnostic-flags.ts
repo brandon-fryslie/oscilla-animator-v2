@@ -138,7 +138,7 @@ export const DIAGNOSTIC_FLAGS: readonly DiagnosticFlagDef[] = Object.freeze([
   {
     code: 'CardinalityAdapterInserted',
     label: 'Broadcast Inserted',
-    description: 'Broadcast adapter auto-inserted for signal-to-field boundary',
+    description: 'Broadcast adapter auto-inserted for one→many cardinality boundary',
     defaultSeverity: 'info',
     category: 'structural',
   },

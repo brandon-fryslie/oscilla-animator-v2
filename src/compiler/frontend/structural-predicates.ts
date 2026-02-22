@@ -48,16 +48,16 @@ export function isPayloadAnchorAdapter(blockType: string): boolean {
 }
 
 /**
- * Is this block type a signal-only default source?
+ * Is this block type a one-cardinality-only default source?
  *
  * Structural: no inputs + at least one output port with a cardinality var
  * declaring acceptance:'oneOnly'.
  *
- * Signal-only default sources produce scalar signal defaults. When the
- * cardinality adapter policy encounters one feeding a field port, it
+ * One-cardinality default sources produce scalar defaults. When the
+ * cardinality adapter policy encounters one feeding a many-cardinality port, it
  * replaces it with a field default source (acceptance:'manyOnly').
  */
-export function isSignalDefaultSource(blockType: string): boolean {
+export function isOneCardinalityDefaultSource(blockType: string): boolean {
   const def = getBlockDefinition(blockType);
   if (!def) return false;
   if (Object.keys(def.inputs).length > 0) return false;

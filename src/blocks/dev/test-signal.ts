@@ -24,7 +24,7 @@ registerBlock({
     const value = inputsById.value;
 
     if (!value || requireInst(value.type.extent.temporality, 'temporality').kind !== 'continuous') {
-      throw new Error('TestSignal value input must be a signal');
+      throw new Error('TestSignal: value input must be continuous (not an event)');
     }
 
     // Sink block - no outputs, but needs to evaluate the signal

@@ -14,7 +14,7 @@ export function withoutContract(type: CanonicalType): CanonicalType {
 
 /**
  * Cardinality-aware zip: delegates to b.zipAuto() — the builder owns the
- * broadcast/zipSig logic.
+ * broadcast logic.
  */
 export function zipAuto(
   inputs: readonly ValueExprId[],

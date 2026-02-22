@@ -60,7 +60,6 @@ describe('AnimationLoop', () => {
         diagnostics: {
           recordJank: vi.fn(),
           updateFrameTiming: vi.fn(),
-          updateMemoryStats: vi.fn(),
         },
         continuity: { updateFromRuntime: vi.fn() },
         viewport: { zoom: 1, pan: { x: 0, y: 0 }, setContentBounds: vi.fn() },

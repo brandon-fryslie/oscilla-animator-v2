@@ -35,9 +35,8 @@ registerBlock({
   },
   lower: ({ ctx, inputsById, config }) => {
     const frequency = inputsById.frequency;
-    const isFrequencySignal = frequency && 'type' in frequency && requireInst(frequency.type.extent.temporality, 'temporality').kind === 'continuous';
-    if (!frequency || !isFrequencySignal) {
-      throw new Error('Phasor requires frequency signal input');
+    if (!frequency || !('type' in frequency) || requireInst(frequency.type.extent.temporality, 'temporality').kind !== 'continuous') {
+      throw new Error('Phasor: frequency input must be continuous (not an event)');
     }
 
     const initialPhase = requireConfig<number>(config, 'initialPhase', 'number');

@@ -2,13 +2,11 @@
  * Shape Payload Tests
  *
  * Verifies that the shape2d payload type flows correctly through:
- * 1. BufferPool: shape → shape2d format → Uint32Array allocation
- * 2. IR bridges: shape → {kind:'shape'} ShapeDescIR
- * 3. ScheduleExecutor: shape2d storage → writeShape2D to packed bank
+ * 1. IR bridges: shape → {kind:'shape'} ShapeDescIR
+ * 2. ScheduleExecutor: shape2d storage → writeShape2D to packed bank
  */
 
 import { describe, it, expect } from 'vitest';
-import { BufferPool, getBufferFormat } from '../BufferPool';
 import { payloadTypeToShapeDescIR } from '../../compiler/ir/bridges';
 import {
   SHAPE2D_WORDS,
@@ -16,60 +14,7 @@ import {
   readShape2D,
   writeShape2D,
 } from '../RuntimeState';
-import { FLOAT, INT, BOOL, } from '../../core/canonical-types';
-
-// =============================================================================
-// BufferPool: shape2d format
-// =============================================================================
-
-describe('BufferPool shape2d format', () => {
-  it('maps FLOAT to f32 format', () => {
-    // Per Q6: shapes are resources, not payloads. SHAPE was aliased to FLOAT.
-    expect(getBufferFormat(FLOAT)).toBe('f32');
-  });
-
-  it('does NOT map numeric payloads to shape2d', () => {
-    expect(getBufferFormat(FLOAT)).toBe('f32');
-    expect(getBufferFormat(INT)).toBe('f32');
-    expect(getBufferFormat(BOOL)).toBe('f32');
-  });
-
-  it('allocates Uint32Array for shape2d format', () => {
-    const pool = new BufferPool();
-    const buffer = pool.alloc('shape2d', 5);
-
-    expect(buffer).toBeInstanceOf(Uint32Array);
-    expect(buffer.byteLength).toBe(5 * SHAPE2D_WORDS * 4); // 5 shapes × 8 words × 4 bytes
-  });
-
-  it('allocates Float32Array for f32 format', () => {
-    const pool = new BufferPool();
-    const buffer = pool.alloc('f32', 10);
-
-    expect(buffer).toBeInstanceOf(Float32Array);
-    expect((buffer as Float32Array).length).toBe(10);
-  });
-
-  it('reuses shape2d buffers from pool', () => {
-    const pool = new BufferPool();
-    const buf1 = pool.alloc('shape2d', 3);
-    pool.releaseAll();
-    const buf2 = pool.alloc('shape2d', 3);
-
-    // Should reuse the same buffer
-    expect(buf2).toBe(buf1);
-  });
-
-  it('does not cross-contaminate shape2d and f32 pools', () => {
-    const pool = new BufferPool();
-    const shapeBuf = pool.alloc('shape2d', 10);
-    const floatBuf = pool.alloc('f32', 10);
-
-    expect(shapeBuf).toBeInstanceOf(Uint32Array);
-    expect(floatBuf).toBeInstanceOf(Float32Array);
-    expect(shapeBuf).not.toBe(floatBuf);
-  });
-});
+import { FLOAT } from '../../core/canonical-types';
 
 // =============================================================================
 // IR Bridges: shape → ShapeDescIR

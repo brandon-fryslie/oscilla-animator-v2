@@ -239,14 +239,6 @@ export function executeAnimationFrame(
     // Update diagnostics store with timing stats
     store.diagnostics.updateFrameTiming(timingStats);
 
-    // Update diagnostics store with memory stats (arena is zero-alloc after init)
-    store.diagnostics.updateMemoryStats({
-      poolAllocs: 0,
-      poolReleases: 0,
-      pooledBytes: arena.getTotalAllocatedBytes(),
-      poolKeyCount: 6, // f32, vec2f32, vec3f32, rgba8, u32, u8
-    });
-
     emitHealthSnapshot(
       currentState,
       store.events,

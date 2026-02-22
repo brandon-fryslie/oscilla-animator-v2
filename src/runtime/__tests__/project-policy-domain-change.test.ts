@@ -52,7 +52,6 @@ function createTestRuntimeState(): RuntimeState {
     arena: new Float32Array(0),
     state: new Float64Array(0),
     eventScalars: new Uint8Array(0),
-    eventPrevPredicate: new Uint8Array(0),
     eventPrevPredicateValue: new Uint8Array(0),
     events: new Map(),
     cache: {
@@ -107,11 +106,6 @@ function createTestRuntimeState(): RuntimeState {
       frameDeltaSumSq: 0,
       minFrameDelta: Infinity,
       maxFrameDelta: 0,
-      // Buffer pool metrics
-      poolAllocs: 0,
-      poolReleases: 0,
-      pooledBytes: 0,
-      poolKeyCount: 0,
     },
     continuity: createContinuityState(),
     continuityConfig: {

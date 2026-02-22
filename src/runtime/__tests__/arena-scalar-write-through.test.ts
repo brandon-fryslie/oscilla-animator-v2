@@ -29,13 +29,13 @@ function compileScalarValuePatch(): CompiledProgramIR {
     const color = b.addBlock('Const');
     b.setConfig(color, 'value', { r: 1, g: 0.5, b: 0.2, a: 1 });
     const colorField = b.addBlock('Broadcast');
-    b.wire(color, 'out', colorField, 'signal');
+    b.wire(color, 'out', colorField, 'input');
 
     const render = b.addBlock('RenderInstances2D');
     b.wire(ellipse, 'shape', array, 'element');
     b.wire(array, 'elements', layout, 'elements');
     b.wire(layout, 'position', render, 'pos');
-    b.wire(colorField, 'field', render, 'color');
+    b.wire(colorField, 'out', render, 'color');
   });
 
   const result = compile(patch);
@@ -79,15 +79,11 @@ function assertScalarWritesInArena(program: CompiledProgramIR, state: RuntimeSta
   expect(palette[3]).toBeGreaterThanOrEqual(0);
   expect(palette[3]).toBeLessThanOrEqual(1);
 
+  // [LAW:one-source-of-truth] All scalar values go through StepMaterialize(SCALAR_INSTANCE_ID).
   let scalarArenaSlots = 0;
   for (const step of schedule.steps) {
-    const targetSlot =
-      step.kind === 'evalValue' && step.target.storage === 'value'
-        ? (step.target.slot as number)
-        : step.kind === 'materialize' && step.instanceId === SCALAR_INSTANCE_ID
-          ? (step.target as number)
-          : null;
-    if (targetSlot !== null) {
+    if (step.kind === 'materialize' && step.instanceId === SCALAR_INSTANCE_ID) {
+      const targetSlot = step.target as number;
       const values = readArenaSlot(program, state, targetSlot);
       if (values.length === 1) {
         scalarArenaSlots++;
@@ -137,11 +133,9 @@ describe('scalar writes target arena storage', () => {
     }
 
     const schedule = program.schedule as ScheduleIR;
+    // [LAW:one-source-of-truth] All scalar values go through StepMaterialize(SCALAR_INSTANCE_ID).
     const scalarWriteSlots = new Set<number>();
     for (const irStep of schedule.steps) {
-      if (irStep.kind === 'evalValue' && irStep.target.storage === 'value') {
-        scalarWriteSlots.add(irStep.target.slot as number);
-      }
       if (irStep.kind === 'materialize' && irStep.instanceId === SCALAR_INSTANCE_ID) {
         scalarWriteSlots.add(irStep.target as number);
       }

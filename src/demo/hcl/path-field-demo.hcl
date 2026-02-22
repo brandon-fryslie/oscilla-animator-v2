@@ -56,16 +56,16 @@ patch "Path Field Demo" {
     }
   }
 
-  # Cycling rainbow color (signal-level, broadcast to field)
+  # Cycling rainbow color (one-cardinality, broadcast to many)
   block "HueRainbow" "hue-rainbow" {
     outputs {
-      out = color-field.signal
+      out = color-field.input
     }
   }
 
   block "Broadcast" "color-field" {
     outputs {
-      field = render.color
+      out = render.color
     }
   }
 

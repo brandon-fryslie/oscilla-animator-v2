@@ -9,7 +9,7 @@ import { buildPatch } from '../../graph';
 import { compile } from '../compile';
 import type { ScheduleIR } from '../backend/schedule-program';
 import { SCALAR_INSTANCE_ID } from '../ir/Indices';
-import type { StepEvalValue, StepMaterialize } from '../ir/types';
+import type { StepMaterialize } from '../ir/types';
 
 describe('compile', () => {
   describe('TimeRoot validation', () => {
@@ -59,33 +59,7 @@ describe('compile', () => {
   });
 
   describe('signal compilation', () => {
-    // INVALID TEST: tests implementation
-    // it('compiles constant signals', () => {
-    //   // Const block must be wired to something so its type can be inferred
-    //   const patch = buildPatch((b) => {
-    //     b.addBlock('InfiniteTimeRoot');
-    //     const c = b.addBlock('Const');
-    //     b.setConfig(c, 'value', 42);
-    //     const add = b.addBlock('Add');
-    //     b.wire(c, 'out', add, 'a');
-    //     b.wire(c, 'out', add, 'b');
-    //   });
-    //
-    //   const result = compile(patch);
-    //
-    //   if (result.kind === 'error') {
-    //     console.error('COMPILE ERROR (Const):', JSON.stringify(result.errors, null, 2));
-    //   }
-    //
-    //   expect(result.kind).toBe('ok');
-    //   if (result.kind === 'ok') {
-    //     // Should have signal expressions in dense array
-    //     expect(result.program.signalExprs.nodes.length).toBeGreaterThan(0);
-    //   }
-    // });
-
     it('compiles connected signal blocks', () => {
-      // INVALID TEST: tests implementation
       const patch = buildPatch((b) => {
         const time = b.addBlock('InfiniteTimeRoot');
         b.setPortDefault(time, 'periodAMs', 1000);
@@ -102,10 +76,6 @@ describe('compile', () => {
       }
 
       expect(result.kind).toBe('ok');
-      // if (result.kind === 'ok') {
-      //   // Should have oscillator output
-      //   //   expect(result.program.signalExprs.nodes.length).toBeGreaterThan(0);
-      // }
     });
   });
 
@@ -224,9 +194,7 @@ describe('TimeModel', () => {
 
 describe('Debug Probe Support', () => {
   it('generates scalar write steps for signals with registered slots (enables debug tap)', () => {
-    // This test verifies that the compiler generates evalValue steps,
-    // which are necessary for the runtime tap to record slot values.
-    // Without evalValue steps, the debug probe cannot show signal values.
+    // [LAW:one-source-of-truth] All scalar values route through StepMaterialize(SCALAR_INSTANCE_ID).
     const patch = buildPatch((b) => {
       const time = b.addBlock('InfiniteTimeRoot');
       b.setPortDefault(time, 'periodAMs', 1000);
@@ -242,22 +210,16 @@ describe('Debug Probe Support', () => {
     if (result.kind === 'ok') {
       const schedule = result.program.schedule as ScheduleIR;
       const scalarWriteSteps = schedule.steps.filter(
-        (s): s is StepEvalValue | StepMaterialize =>
-          s.kind === 'evalValue' ||
-          (s.kind === 'materialize' && s.instanceId === SCALAR_INSTANCE_ID),
+        (s): s is StepMaterialize =>
+          s.kind === 'materialize' && s.instanceId === SCALAR_INSTANCE_ID,
       );
 
       // Should have at least one scalar write step for scheduled signal slots
       expect(scalarWriteSteps.length).toBeGreaterThan(0);
 
       for (const step of scalarWriteSteps) {
-        if (step.kind === 'evalValue') {
-          expect(typeof step.expr).toBe('number');
-          expect(typeof step.target.slot).toBe('number');
-        } else {
-          expect(typeof step.field).toBe('number');
-          expect(typeof step.target).toBe('number');
-        }
+        expect(typeof step.field).toBe('number');
+        expect(typeof step.target).toBe('number');
       }
     }
   });
@@ -392,11 +354,10 @@ describe('Debug Probe Support', () => {
       const schedule = result.program.schedule as ScheduleIR;
       const steps = schedule.steps;
       const firstRender = steps.findIndex(s => s.kind === 'render');
+      // [LAW:one-source-of-truth] All scalar values go through StepMaterialize(SCALAR_INSTANCE_ID).
       const scalarWriteIndices = steps
         .map((s, i) =>
-          s.kind === 'evalValue' || (s.kind === 'materialize' && s.instanceId === SCALAR_INSTANCE_ID)
-            ? i
-            : -1,
+          s.kind === 'materialize' && s.instanceId === SCALAR_INSTANCE_ID ? i : -1,
         )
         .filter((i) => i >= 0);
       expect(scalarWriteIndices.length).toBeGreaterThan(0);
@@ -555,9 +516,9 @@ describe('error isolation for unreachable blocks', () => {
   });
 });
 
-describe('mixed cardinality (signal→field broadcast)', () => {
-  it('allows signal Const wired directly to RenderInstances2D.color (oneOrMany acceptance, golden-spiral pattern)', () => {
-    // Reproduces the golden-spiral demo: Const (signal, one) → RenderInstances2D.color (field, many).
+describe('mixed cardinality (one→many broadcast)', () => {
+  it('allows one-cardinality Const wired directly to RenderInstances2D.color (oneOrMany acceptance, golden-spiral pattern)', () => {
+    // Reproduces the golden-spiral demo: Const (one) → RenderInstances2D.color (many).
     // RenderInstances2D color input declares oneOrMany acceptance, so this compiles without adapter insertion.
     const patch = buildPatch((b) => {
       const time = b.addBlock('InfiniteTimeRoot');

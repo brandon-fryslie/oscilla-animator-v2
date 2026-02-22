@@ -1,5 +1,5 @@
 /**
- * Tests for construct() expression evaluation in signal context
+ * Tests for construct() expression evaluation in scalar context
  *
  * Validates WI-0: Runtime stride support for signal slots
  */
@@ -12,7 +12,7 @@ import { createRuntimeState } from '../RuntimeState';
 import type { ValueExprId } from '../../compiler/ir/Indices';
 import { floatConst, canonicalScalar } from '../../core/canonical-types';
 
-describe('construct signal evaluation', () => {
+describe('construct scalar evaluation', () => {
   let state: RuntimeState;
 
   beforeEach(() => {
@@ -149,7 +149,7 @@ describe('construct signal evaluation', () => {
   });
 });
 
-describe('extract signal evaluation', () => {
+describe('extract scalar evaluation', () => {
   let state: RuntimeState;
 
   beforeEach(() => {

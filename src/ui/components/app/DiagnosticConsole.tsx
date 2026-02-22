@@ -67,9 +67,6 @@ export const DiagnosticConsole: React.FC = observer(() => {
   // Get jank events (reactive)
   const jankLog = diagnosticsStore.jankLog;
 
-  // Get memory stats (reactive) - Sprint: memory-instrumentation
-  const memory = diagnosticsStore.memoryStats;
-
   return (
     <div
       style={{
@@ -189,30 +186,6 @@ export const DiagnosticConsole: React.FC = observer(() => {
               </div>
             );
           })}
-        </div>
-      )}
-
-      {/* Memory Stats Bar (Sprint: memory-instrumentation) */}
-      {memory.pooledBytes > 0 && (
-        <div
-          style={{
-            padding: '6px 12px',
-            borderBottom: '1px solid #0f3460',
-            fontFamily: 'monospace',
-            fontSize: '11px',
-            background: '#0a0a18',
-            color: memory.poolAllocs !== memory.poolReleases ? '#f88' : '#8a8',
-          }}
-        >
-          <span style={{ color: '#8af' }}>Memory:</span>{' '}
-          {formatBytes(memory.pooledBytes)} pooled |{' '}
-          <span style={{ color: memory.poolAllocs !== memory.poolReleases ? '#f88' : '#8a8' }}>
-            {memory.poolAllocs} alloc / {memory.poolReleases} release
-          </span>{' '}
-          {memory.poolAllocs !== memory.poolReleases && (
-            <span style={{ color: '#f88' }}>(LEAK!)</span>
-          )}
-          | {memory.poolKeyCount} sizes
         </div>
       )}
 

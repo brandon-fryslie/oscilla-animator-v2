@@ -11,7 +11,7 @@
  * Instance resolution:
  * - Uses ctx.inferredInstance from sibling lookup (e.g., Array on same downstream block)
  * - Per-element defaults (rainbow, circular) when instance is available
- * - Broadcast of signal constant as fallback
+ * - Broadcast of scalar constant as fallback
  */
 
 import { registerBlock } from '../registry';

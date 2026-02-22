@@ -48,9 +48,9 @@ describe('exprToBlock mapping', () => {
 
       b.wire(ellipse, 'shape', array, 'element');
       b.wire(array, 'elements', layout, 'elements');
-      b.wire(colorSig, 'out', colorField, 'signal');
+      b.wire(colorSig, 'out', colorField, 'input');
       b.wire(layout, 'position', render, 'pos');
-      b.wire(colorField, 'field', render, 'color');
+      b.wire(colorField, 'out', render, 'color');
     });
 
     const program = compileOk(patch);
@@ -84,9 +84,9 @@ describe('exprToBlock mapping', () => {
 
       b.wire(ellipse, 'shape', array, 'element');
       b.wire(array, 'elements', layout, 'elements');
-      b.wire(colorSig, 'out', colorField, 'signal');
+      b.wire(colorSig, 'out', colorField, 'input');
       b.wire(layout, 'position', render, 'pos');
-      b.wire(colorField, 'field', render, 'color');
+      b.wire(colorField, 'out', render, 'color');
     });
 
     const program = compileOk(patch);
@@ -126,9 +126,9 @@ describe('exprToBlock mapping', () => {
 
       b.wire(ellipse, 'shape', array, 'element');
       b.wire(array, 'elements', layout, 'elements');
-      b.wire(colorSig, 'out', colorField, 'signal');
+      b.wire(colorSig, 'out', colorField, 'input');
       b.wire(layout, 'position', render, 'pos');
-      b.wire(colorField, 'field', render, 'color');
+      b.wire(colorField, 'out', render, 'color');
     });
 
     const program = compileOk(patch);
@@ -198,9 +198,9 @@ describe('exprProvenance mapping', () => {
 
       b.wire(ellipse, 'shape', array, 'element');
       b.wire(array, 'elements', layout, 'elements');
-      b.wire(colorSig, 'out', colorField, 'signal');
+      b.wire(colorSig, 'out', colorField, 'input');
       b.wire(layout, 'position', render, 'pos');
-      b.wire(colorField, 'field', render, 'color');
+      b.wire(colorField, 'out', render, 'color');
     });
 
     const program = compileOk(patch);
@@ -234,9 +234,9 @@ describe('exprProvenance mapping', () => {
 
       b.wire(ellipse, 'shape', array, 'element');
       b.wire(array, 'elements', layout, 'elements');
-      b.wire(colorSig, 'out', colorField, 'signal');
+      b.wire(colorSig, 'out', colorField, 'input');
       b.wire(layout, 'position', render, 'pos');
-      b.wire(colorField, 'field', render, 'color');
+      b.wire(colorField, 'out', render, 'color');
     });
 
     const program = compileOk(patch);
@@ -289,9 +289,9 @@ describe('exprProvenance mapping', () => {
 
       b.wire(ellipse, 'shape', array, 'element');
       b.wire(array, 'elements', layout, 'elements');
-      b.wire(colorSig, 'out', colorField, 'signal');
+      b.wire(colorSig, 'out', colorField, 'input');
       b.wire(layout, 'position', render, 'pos');
-      b.wire(colorField, 'field', render, 'color');
+      b.wire(colorField, 'out', render, 'color');
     });
 
     const program = compileOk(patch);

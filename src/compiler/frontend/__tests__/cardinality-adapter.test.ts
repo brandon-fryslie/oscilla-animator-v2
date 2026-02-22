@@ -2,7 +2,7 @@
  * Tests for cardinality adapter obligation creation and fixpoint integration.
  *
  * Verifies that promoteToMany clampOne conflicts are resolved structurally
- * via Broadcast adapter insertion at signal/field boundaries.
+ * via Broadcast adapter insertion at one→many cardinality boundaries.
  */
 import { describe, it, expect } from 'vitest';
 import { createCardinalityAdapterObligations } from '../create-cardinality-obligations';
@@ -285,7 +285,7 @@ describe('cardinality adapter fixpoint integration', () => {
     // Array:elements is forceMany (transform)
     // Add has promoteToMany policy → mixed cardinality over all ports
     // Result: Add:a (from Phasor) stays at one, Add:b (from Array) resolves to many
-    // Runtime uses kernelZipSig for mixed cardinality — no Broadcast adapter needed
+    // Runtime uses broadcast+zip for mixed cardinality — no Broadcast adapter needed
     const patch = buildPatch((b) => {
       const timeRoot = b.addBlock('InfiniteTimeRoot');
       const phasor = b.addBlock('Phasor');
@@ -311,7 +311,7 @@ describe('cardinality adapter fixpoint integration', () => {
     expect(broadcastAdapters).toHaveLength(0);
   });
 
-  it('no conflict without signal→field boundary: pure signal chain has no Broadcast insertion', () => {
+  it('no conflict without one→many boundary: pure one-cardinality chain has no Broadcast insertion', () => {
     const patch = buildPatch((b) => {
       const timeRoot = b.addBlock('InfiniteTimeRoot');
       const phasor = b.addBlock('Phasor');

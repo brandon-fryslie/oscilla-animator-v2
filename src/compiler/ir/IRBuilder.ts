@@ -64,14 +64,8 @@ export interface IRBuilder {
   /** Zip multiple expressions with a function (n-ary kernel). */
   kernelZip(inputs: readonly ValueExprId[], fn: PureFn, type: CanonicalType): ValueExprId;
 
-  /**
-   * Zip a field expression with signal expressions.
-   * The field provides per-lane values, signals provide uniform values.
-   */
-  kernelZipSig(field: ValueExprId, signals: readonly ValueExprId[], fn: PureFn, type: CanonicalType): ValueExprId;
-
-  /** Broadcast a signal to a field (cardinality one → many). */
-  broadcast(signal: ValueExprId, type: CanonicalType, signalComponents?: readonly ValueExprId[]): ValueExprId;
+  /** Broadcast one→many (cardinality one → many). */
+  broadcast(input: ValueExprId, type: CanonicalType, inputComponents?: readonly ValueExprId[]): ValueExprId;
 
   /** Reduce a field to a signal (cardinality many → one). */
   reduce(field: ValueExprId, op: 'min' | 'max' | 'sum' | 'avg', type: CanonicalType): ValueExprId;

@@ -7,10 +7,6 @@
  * This evaluator handles scalar-extent ValueExpr nodes (cardinality one,
  * temporality continuous).
  *
- * Migration Status: Shadow mode implementation for incremental ValueExpr adoption.
- * This evaluator runs in parallel with legacy SignalEvaluator during migration,
- * validating equivalence before cutover.
- *
  * ──────────────────────────────────────────────────────────────────────
  * IMPORTANT: SCALAR-EXTENT ONLY
  * ──────────────────────────────────────────────────────────────────────
@@ -19,8 +15,8 @@
  * - Cardinality: one (not zero, not many)
  * - Temporality: continuous (not discrete)
  *
- * Field-extent (cardinality many) → Materializer
- * Event-extent (temporality discrete) → EventEvaluator
+ * Field-extent (cardinality many) → ValueExprMaterializer
+ * Event-extent (temporality discrete) → ValueExprEventEvaluator
  *
  * Runtime assertions enforce this constraint.
  *
@@ -258,13 +254,8 @@ function evaluateKernelScalar(
       return applyPureFn(expr.fn, inputVals);
     }
 
-    case 'zipSig': {
-      // ZipSig is field-extent only (requires field input)
-      throw new Error('zipSig kernels are field-extent, not scalar-extent');
-    }
-
     case 'broadcast': {
-      // Broadcast is signal → field (changes cardinality to many)
+      // Broadcast is one → many (changes cardinality to many)
       throw new Error('broadcast kernels are field-extent, not scalar-extent');
     }
 

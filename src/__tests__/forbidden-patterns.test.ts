@@ -836,4 +836,139 @@ describe('Forbidden Patterns (Type System Invariants)', () => {
     });
 
   });
+
+  // =============================================================================
+  // Signal/Field Unification Regression Prevention
+  // =============================================================================
+
+  describe('Signal/Field Unification Regression Prevention', () => {
+    // These patterns were removed during the signal/field unification migration
+    // (waves A, B, C). Guards prevent reintroduction of dual-path concepts.
+
+    it('no LoweredSignal or LoweredField type names (unified as LoweredOp)', () => {
+      const patterns = ['LoweredSignal', 'LoweredField'];
+      const allowlist = [
+        /forbidden-patterns\.test\.ts/,
+        /\.test\./,
+        /__tests__/,
+        /\/\//,
+        /\*/,
+      ];
+
+      for (const pattern of patterns) {
+        const matches = grepSrc(pattern);
+        const filtered = filterAllowlist(matches, allowlist);
+        expect(
+          filtered,
+          `${pattern} was removed in B1 — use LoweredOp instead.\n` +
+          `Found violations:\n${filtered.join('\n')}`
+        ).toEqual([]);
+      }
+    });
+
+    it('no kernelZipSig (unified as kernelKind zip)', () => {
+      const matches = grepSrc('kernelZipSig');
+      const allowlist = [
+        /forbidden-patterns\.test\.ts/,
+        /\.test\./,
+        /__tests__/,
+        /\/\//,
+        /\*/,
+      ];
+      const filtered = filterAllowlist(matches, allowlist);
+      expect(
+        filtered,
+        'kernelZipSig was removed in B3 — use kernelKind: zip instead.\n' +
+        `Found violations:\n${filtered.join('\n')}`
+      ).toEqual([]);
+    });
+
+    it('no broadcastSignal op (unified as kernelKind broadcast)', () => {
+      const matches = grepSrc('broadcastSignal');
+      const allowlist = [
+        /forbidden-patterns\.test\.ts/,
+        /\.test\./,
+        /__tests__/,
+        /\/\//,
+        /\*/,
+      ];
+      const filtered = filterAllowlist(matches, allowlist);
+      expect(
+        filtered,
+        'broadcastSignal was removed — use kernelKind: broadcast instead.\n' +
+        `Found violations:\n${filtered.join('\n')}`
+      ).toEqual([]);
+    });
+
+    it('no evaluateConstructSignal function (unified as evaluateConstructScalar)', () => {
+      const matches = grepSrc('evaluateConstructSignal');
+      const allowlist = [
+        /forbidden-patterns\.test\.ts/,
+        /\.test\./,
+        /__tests__/,
+        /\/\//,
+        /\*/,
+      ];
+      const filtered = filterAllowlist(matches, allowlist);
+      expect(
+        filtered,
+        'evaluateConstructSignal was removed — use evaluateConstructScalar instead.\n' +
+        `Found violations:\n${filtered.join('\n')}`
+      ).toEqual([]);
+    });
+
+    it('no legacy per-family expression tables on program IR', () => {
+      // signalExprs, fieldExprs, eventExprs were separate expression tables.
+      // Now unified as a single ValueExpr table via ValueExprTable.
+      const patterns = ['signalExprs', 'fieldExprs', 'eventExprs'];
+      const allowlist = [
+        /forbidden-patterns\.test\.ts/,
+        /\.test\./,
+        /__tests__/,
+        /\/\//,
+        /\*/,
+      ];
+
+      for (const pattern of patterns) {
+        const matches = grepSrc(pattern);
+        const filtered = filterAllowlist(matches, allowlist);
+        expect(
+          filtered,
+          `${pattern} was removed — expressions are unified in a single ValueExpr table.\n` +
+          `Found violations:\n${filtered.join('\n')}`
+        ).toEqual([]);
+      }
+    });
+
+    it('no SigExpr/FieldExpr/EventExpr type declarations', () => {
+      // Legacy expression type families. Now unified as ValueExpr.
+      const patterns = [
+        'type SigExpr',
+        'type FieldExpr',
+        'type EventExpr',
+        'interface SigExpr',
+        'interface FieldExpr',
+        'interface EventExpr',
+      ];
+      const allowlist = [
+        /forbidden-patterns\.test\.ts/,
+        /\.test\./,
+        /__tests__/,
+        /\/\//,
+        /\*/,
+      ];
+
+      for (const pattern of patterns) {
+        const matches = grepSrc(pattern);
+        const filtered = filterAllowlist(matches, allowlist);
+        expect(
+          filtered,
+          `${pattern} was removed — use ValueExpr union instead.\n` +
+          `Found violations:\n${filtered.join('\n')}`
+        ).toEqual([]);
+      }
+    });
+
+  });
+
 });

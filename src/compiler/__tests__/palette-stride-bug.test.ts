@@ -31,8 +31,9 @@ describe('SYSTEM_PALETTE_SLOT reservation', () => {
       return;
     }
 
-    // Verify no evalValue steps reference palette slot (stride=4)
-    // Events use separate EventSlot namespace, so filter for storage='value'
+    // Verify no evalValue steps reference palette slot.
+    // [LAW:one-source-of-truth] All numeric scalars go through StepMaterialize, not StepEvalValue.
+    // StepEvalValue is reserved for events and shape2d only.
     const steps = result.program.schedule.steps;
     const paletteEvalSteps = steps.filter((step: any) => {
       return step.kind === 'evalValue'
@@ -40,7 +41,6 @@ describe('SYSTEM_PALETTE_SLOT reservation', () => {
         && step.target?.slot === SYSTEM_PALETTE_SLOT;
     });
 
-    // Palette slot (stride=4) should NOT have evalValue step (only stride=1 signals do)
     expect(paletteEvalSteps.length).toBe(0);
 
     // Verify palette slot metadata is correctly registered with stride=4

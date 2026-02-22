@@ -13,40 +13,7 @@ import { createSessionState, createRuntimeStateFromSession, createRuntimeState }
 import { getTestArena } from '../../runtime/__tests__/test-arena-helper';
 import { evaluateValueExprScalar } from '../../runtime/ValueExprScalarEvaluator';
 
-/**
- * Helper to find TestSignal output offsets.
- * Filters out 'time' signals to find TestSignal slots,
- * then resolves them to actual f64 array offsets via slotMeta.
- *
- * USES ILLEGAL signalExprs property - all tests must be rewritten
- */
-// function findTestSignalOffsets(program: CompiledProgramIR, count = 1): number[] {
-//   const schedule = program.schedule;
-//   const signals = program.signalExprs.nodes as readonly SigExpr[];
-//
-//   // Find evalValue steps that are NOT time signals or const signals
-//   const evalValueSteps = schedule.steps.filter((s): s is StepEvalValue => s.kind === 'evalValue');
-//   const targetSteps = evalValueSteps.filter((step) => {
-//     const sig = signals[step.expr as number];
-//     // Exclude time and const signals - we want computed values
-//     return sig && sig.kind !== 'time' && sig.kind !== 'const';
-//   });
-//
-//   const slots = targetSteps.slice(-count).map(s => s.target as number);
-//
-//   const slotToOffset = new Map<number, number>();
-//   for (const meta of program.slotMeta) {
-//     slotToOffset.set(meta.slot as number, meta.offset);
-//   }
-//
-//   return slots.map(slot => {
-//     const offset = slotToOffset.get(slot);
-//     if (offset === undefined) {
-//       throw new Error(`Slot ${slot} not found in slotMeta`);
-//     }
-//     return offset;
-//   });
-// }
+// Legacy findTestSignalOffsets helper removed — used deleted signalExprs/SigExpr API.
 
 describe('UnitDelay Block', () => {
   // Tests removed during type system refactor

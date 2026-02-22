@@ -2,13 +2,13 @@
  * ValueExpr Materializer - Field Materialization
  *
  * Evaluates ValueExpr nodes to produce Float32Array buffers.
- * Works alongside signal evaluation to materialize field-extent expressions.
+ * Works alongside scalar evaluation to materialize field-extent expressions.
  *
  * Key design principles:
  * - Unified ValueExpr table (no separate field/signal/event tables)
  * - Materialization is for field-extent expressions only
  * - Signals are evaluated via evaluateValueExprScalar() (not materialized)
- * - Buffer reuse via BufferPool (no allocation in hot path)
+ * - Arena-backed final output; plain Float32Array for intermediates
  */
 
 import type { RuntimeState } from './RuntimeState';
@@ -17,7 +17,6 @@ import type { ValueExprId } from '../compiler/ir/Indices';
 import type { PureFn } from '../compiler/ir/types';
 import type { InstanceId } from '../compiler/ir/Indices';
 import type { CompiledProgramIR } from '../compiler/ir/program';
-import type { BufferPool } from './BufferPool';
 import { evaluateValueExprScalar } from './ValueExprScalarEvaluator';
 import { requireInst } from '../core/canonical-types';
 import { payloadStride } from '../core/canonical-types';
@@ -47,7 +46,7 @@ export interface ValueExprTable {
  * @param count - Number of lanes to materialize
  * @param state - Runtime state
  * @param program - Compiled program
- * @param pool - Buffer pool for allocation
+ * @param target - Optional pre-allocated target buffer (arena subarray)
  * @returns Float32Array buffer with materialized values
  */
 export function materializeValueExpr(
@@ -57,7 +56,6 @@ export function materializeValueExpr(
   count: number,
   state: RuntimeState,
   program: CompiledProgramIR,
-  pool: BufferPool,
   target?: Float32Array,
 ): Float32Array {
   const expr = table.nodes[exprId];
@@ -67,7 +65,7 @@ export function materializeValueExpr(
 
   const stride = payloadStride(expr.type.payload);
   const requiredLength = count * stride;
-  const buf = target ?? (pool.alloc('f32', requiredLength) as Float32Array);
+  const buf = target ?? new Float32Array(requiredLength);
   if (buf.length < requiredLength) {
     throw new Error(
       `materializeValueExpr target too small: need ${requiredLength}, got ${buf.length} for expr ${exprId}`,
@@ -96,7 +94,7 @@ export function materializeValueExpr(
 
     case 'kernel': {
       // WI-4: Kernel - dispatch to kernel-specific materialization
-      materializeKernel(expr, buf, table, instanceId, count, state, program, pool, stride);
+      materializeKernel(expr, buf, table, instanceId, count, state, program, stride);
       break;
     }
 
@@ -105,7 +103,7 @@ export function materializeValueExpr(
       const componentCount = expr.components.length;
       const componentBufs = new Array<Float32Array>(componentCount);
       for (let c = 0; c < componentCount; c++) {
-        componentBufs[c] = materializeValueExpr(expr.components[c], table, instanceId, count, state, program, pool);
+        componentBufs[c] = materializeValueExpr(expr.components[c], table, instanceId, count, state, program);
       }
       // Interleave components into output buffer
       for (let i = 0; i < count; i++) {
@@ -118,7 +116,7 @@ export function materializeValueExpr(
 
     case 'extract': {
       // WI-4: Extract - extract single component from composite
-      const inputBuf = materializeValueExpr(expr.input, table, instanceId, count, state, program, pool);
+      const inputBuf = materializeValueExpr(expr.input, table, instanceId, count, state, program);
       const inputExpr = table.nodes[expr.input];
       const inputStride = payloadStride(inputExpr.type.payload);
       for (let i = 0; i < count; i++) {
@@ -129,7 +127,7 @@ export function materializeValueExpr(
 
     case 'hslToRgb': {
       // WI-4: HSL→RGB color space conversion
-      const inputBuf = materializeValueExpr(expr.input, table, instanceId, count, state, program, pool);
+      const inputBuf = materializeValueExpr(expr.input, table, instanceId, count, state, program);
       hslToRgbConversion(buf, inputBuf, count);
       break;
     }
@@ -153,8 +151,8 @@ export function materializeValueExpr(
     case 'eventRead': {
       // [LAW:dataflow-not-control-flow] Scalar signal reads materialize by writing
       // their evaluated value through the same buffer path as all other materialize ops.
-      const signalValue = evaluateValueExprScalar(exprId, table.nodes, state);
-      fillBufferWithSignal(buf, signalValue, count, stride);
+      const scalarValue = evaluateValueExprScalar(exprId, table.nodes, state);
+      fillBufferWithScalar(buf, scalarValue, count, stride);
       break;
     }
 
@@ -187,13 +185,12 @@ function materializeKernel(
   count: number,
   state: RuntimeState,
   program: CompiledProgramIR,
-  pool: BufferPool,
   stride: number
 ): void {
   switch (expr.kernelKind) {
     case 'map': {
       // WI-4: Map - apply function to each lane
-      const input = materializeValueExpr(expr.input, table, instanceId, count, state, program, pool);
+      const input = materializeValueExpr(expr.input, table, instanceId, count, state, program);
       applyMap(buf, input, expr.fn, count, stride);
       break;
     }
@@ -203,21 +200,21 @@ function materializeKernel(
       const inputCount = expr.inputs.length;
       const inputs = new Array<Float32Array>(inputCount);
       for (let j = 0; j < inputCount; j++) {
-        inputs[j] = materializeValueExpr(expr.inputs[j], table, instanceId, count, state, program, pool);
+        inputs[j] = materializeValueExpr(expr.inputs[j], table, instanceId, count, state, program);
       }
       applyZip(buf, inputs, expr.fn, count, stride);
       break;
     }
 
     case 'broadcast': {
-      // WI-4: Broadcast - expand signal to field
-      // For multi-component signals (vec2, color, etc), evaluate each component separately
-      if (expr.signalComponents && expr.signalComponents.length > 1) {
+      // WI-4: Broadcast - expand one→many
+      // For multi-component values (vec2, color, etc), evaluate each component separately
+      if (expr.inputComponents && expr.inputComponents.length > 1) {
         // Multi-component broadcast: evaluate and interleave components
-        const compCount = expr.signalComponents.length;
+        const compCount = expr.inputComponents.length;
         const componentValues = new Array<number>(compCount);
         for (let j = 0; j < compCount; j++) {
-          componentValues[j] = evaluateValueExprScalar(expr.signalComponents[j], table.nodes, state);
+          componentValues[j] = evaluateValueExprScalar(expr.inputComponents[j], table.nodes, state);
         }
         for (let i = 0; i < count; i++) {
           for (let c = 0; c < componentValues.length; c++) {
@@ -225,28 +222,16 @@ function materializeKernel(
           }
         }
       } else {
-        // Single-component broadcast: fill entire buffer with signal value
-        const signalValue = evaluateValueExprScalar(expr.signal, table.nodes, state);
-        fillBufferWithSignal(buf, signalValue, count, stride);
+        // Single-component broadcast: fill entire buffer with scalar value
+        const scalarValue = evaluateValueExprScalar(expr.input, table.nodes, state);
+        fillBufferWithScalar(buf, scalarValue, count, stride);
       }
-      break;
-    }
-
-    case 'zipSig': {
-      // WI-4: ZipSig - combine field with signals
-      const fieldInput = materializeValueExpr(expr.field, table, instanceId, count, state, program, pool);
-      const sigCount = expr.signals.length;
-      const sigValues = new Array<number>(sigCount);
-      for (let j = 0; j < sigCount; j++) {
-        sigValues[j] = evaluateValueExprScalar(expr.signals[j], table.nodes, state);
-      }
-      applyZipSig(buf, fieldInput, sigValues, expr.fn, count, stride, instanceId, program);
       break;
     }
 
     case 'pathDerivative': {
       // WI-4: PathDerivative - materialize input, compute derivative
-      const input = materializeValueExpr(expr.field, table, instanceId, count, state, program, pool) as Float32Array;
+      const input = materializeValueExpr(expr.field, table, instanceId, count, state, program) as Float32Array;
       // Read topology ID from expression (Phase 1: available but not yet used for dispatch)
       const topologyId = expr.topologyId;
       // Future: Look up topology for bezier dispatch
@@ -281,9 +266,9 @@ function materializeKernel(
       const sourceCount = typeof rawCount === 'number' ? rawCount : 0;
 
       // Materialize controlPoints with source instance count
-      const cpBuf = materializeValueExpr(expr.controlPoints, table, sourceInstId, sourceCount, state, program, pool);
+      const cpBuf = materializeValueExpr(expr.controlPoints, table, sourceInstId, sourceCount, state, program);
       // Materialize tField with target count (M, the normal count parameter)
-      const tBuf = materializeValueExpr(expr.tField, table, instanceId, count, state, program, pool);
+      const tBuf = materializeValueExpr(expr.tField, table, instanceId, count, state, program);
 
       // Look up topology for closed flag
       const topology = getTopology(expr.topologyId) as PathTopologyDef | undefined;
@@ -368,21 +353,21 @@ function fillBufferWithConst(
 }
 
 /**
- * Fill buffer by broadcasting a signal value to all lanes.
+ * Fill buffer by broadcasting a scalar value to all lanes.
  *
  * @param buf - Output buffer
- * @param signalValue - Signal value to broadcast
+ * @param scalarValue - Scalar value to broadcast
  * @param count - Number of elements
  * @param stride - Stride per element
  */
-function fillBufferWithSignal(
+function fillBufferWithScalar(
   buf: Float32Array,
-  signalValue: number,
+  scalarValue: number,
   count: number,
   stride: number
 ): void {
   for (let i = 0; i < count * stride; i++) {
-    buf[i] = signalValue;
+    buf[i] = scalarValue;
   }
 }
 
@@ -396,9 +381,6 @@ const _mapArgs: number[] = [0];
 
 /** Reusable args buffer for applyZip (resized as needed) */
 const _zipArgs: number[] = [];
-
-/** Reusable args buffer for applyZipSig (resized as needed) */
-const _zipSigArgs: number[] = [];
 
 /**
  * Apply a map function (unary kernel).
@@ -441,36 +423,6 @@ function applyZip(
         _zipArgs[j] = inputs[j][base + c];
       }
       out[base + c] = evaluatePureFn(fn, _zipArgs);
-    }
-  }
-}
-
-/**
- * Apply a zipSig function (field + signals).
- * One allocation per call (args array) — not per instance.
- */
-function applyZipSig(
-  out: Float32Array,
-  fieldInput: Float32Array,
-  sigValues: number[],
-  fn: PureFn,
-  count: number,
-  stride: number,
-  instanceId: InstanceId,
-  program: CompiledProgramIR
-): void {
-  const argCount = 1 + sigValues.length;
-  _zipSigArgs.length = argCount;
-  // Copy signal values once (constant across all instances)
-  for (let s = 0; s < sigValues.length; s++) {
-    _zipSigArgs[1 + s] = sigValues[s];
-  }
-
-  for (let i = 0; i < count; i++) {
-    const base = i * stride;
-    for (let c = 0; c < stride; c++) {
-      _zipSigArgs[0] = fieldInput[base + c];
-      out[base + c] = evaluatePureFn(fn, _zipSigArgs);
     }
   }
 }

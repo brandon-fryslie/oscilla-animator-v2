@@ -2,12 +2,12 @@
  * Pass 7: Schedule Construction
  *
  * Builds execution schedule with explicit phase ordering:
- * 1. Update rails/time inputs
- * 2. Execute continuous scalars (evalValue)
- * 3. Build continuity mappings (continuityMapBuild)
- * 4. Execute continuous fields (materialize)
- * 5. Apply continuity to field targets (continuityApply)
- * 6. Apply discrete ops (events)
+ * 1. Materialize scalars (cardinality-one values via SCALAR_INSTANCE_ID)
+ * 2. Build continuity mappings (continuityMapBuild)
+ * 3. Materialize fields (cardinality-many values)
+ * 4. Apply continuity to field targets (continuityApply)
+ * 5. Evaluate discrete ops (events via evalValue)
+ * 6. Materialize post-event scalars (scalar values depending on eventRead)
  * 7. Sinks (render)
  * 8. State writes (stateWrite)
  *
@@ -16,9 +16,12 @@
  *
  * [LAW:single-enforcer] This pass is PURE ORDERING — no slot allocation.
  * All slots are allocated by Pass 6 (block lowering) and Pass 6b (continuity pipeline).
+ *
+ * [LAW:one-source-of-truth] All continuous numeric values go through StepMaterialize.
+ * StepEvalValue is reserved for discrete events and shape2d signals only.
  */
 
-import type { Step, StepEvalValue, StepMaterialize, TimeModel, StateMapping, ScalarSlotDecl, FieldSlotDecl, EvalStrategy, EvalTarget } from '../ir/types';
+import type { Step, StepMaterialize, TimeModel, StateMapping, ScalarSlotDecl, FieldSlotDecl, EvalStrategy, EvalTarget } from '../ir/types';
 import { SCALAR_INSTANCE_ID, type InstanceId } from '../ir/Indices';
 import type { ValueExpr, ValueExprId } from '../ir/value-expr';
 import type { UnlinkedIRFragments } from './lower-blocks';
@@ -100,7 +103,7 @@ export interface ScheduleIR {
   /** Number of event slots (for sizing eventScalars Uint8Array) */
   readonly eventSlotCount: number;
 
-  /** Number of event expressions (for sizing eventPrevPredicate Uint8Array) */
+  /** Number of event expressions (for sizing event-related Uint8Arrays) */
   readonly eventCount: number;
 }
 
@@ -171,95 +174,6 @@ function deriveStrategy(type: CanonicalType): EvalStrategy {
   return isMany ? 1 /* EvalStrategy.ContinuousMany */ : 0 /* EvalStrategy.ContinuousOne */;
 }
 
-function isArenaScalarPayload(expr: ValueExpr): boolean {
-  const payloadKind = expr.type.payload.kind;
-  return (
-    payloadKind === 'float' ||
-    payloadKind === 'int' ||
-    payloadKind === 'bool' ||
-    payloadKind === 'vec2' ||
-    payloadKind === 'vec3' ||
-    payloadKind === 'vec4' ||
-    payloadKind === 'color'
-  );
-}
-
-function canMaterializeScalarExpr(
-  exprId: number,
-  valueExprs: readonly ValueExpr[],
-  cache: Map<number, boolean>,
-  visiting: Set<number>,
-): boolean {
-  const cached = cache.get(exprId);
-  if (cached !== undefined) return cached;
-  if (visiting.has(exprId)) {
-    cache.set(exprId, false);
-    return false;
-  }
-  visiting.add(exprId);
-
-  const expr = valueExprs[exprId];
-  if (!expr) {
-    cache.set(exprId, false);
-    visiting.delete(exprId);
-    return false;
-  }
-
-  let result = false;
-  switch (expr.kind) {
-    case 'const':
-    case 'time':
-    case 'external':
-    case 'state':
-    case 'eventRead':
-    case 'intrinsic':
-      result = true;
-      break;
-    case 'kernel':
-      switch (expr.kernelKind) {
-        case 'map':
-          result = canMaterializeScalarExpr(expr.input as number, valueExprs, cache, visiting);
-          break;
-        case 'zip':
-          result = expr.inputs.every((id) =>
-            canMaterializeScalarExpr(id as number, valueExprs, cache, visiting),
-          );
-          break;
-        case 'reduce':
-        case 'zipSig':
-        case 'broadcast':
-        case 'pathDerivative':
-        case 'pathSample':
-          result = false;
-          break;
-      }
-      break;
-    case 'extract':
-      result = canMaterializeScalarExpr(expr.input as number, valueExprs, cache, visiting);
-      break;
-    case 'construct':
-      result = expr.components.every((id) =>
-        canMaterializeScalarExpr(id as number, valueExprs, cache, visiting),
-      );
-      break;
-    case 'hslToRgb':
-      result = canMaterializeScalarExpr(expr.input as number, valueExprs, cache, visiting);
-      break;
-    case 'shapeRef':
-    case 'event':
-      result = false;
-      break;
-    default: {
-      const _exhaustive: never = expr;
-      throw new Error(`Unknown ValueExpr kind during scalar materialize eligibility check: ${(_exhaustive as ValueExpr).kind}`);
-    }
-  }
-
-  cache.set(exprId, result);
-  visiting.delete(exprId);
-  return result;
-}
-
 // =============================================================================
 // Pass 7 Entry Point
 // =============================================================================
@@ -295,54 +209,45 @@ export function pass7Schedule(
   // Collect steps from builder (stateWrite steps from stateful blocks)
   const builderSteps = unlinkedIR.builder.getSteps();
 
-  // Generate scalar write steps for all registered cardinality-one slots.
+  // Generate steps for all registered cardinality-one slots.
+  // [LAW:one-source-of-truth] All numeric scalar slots go through StepMaterialize(SCALAR_INSTANCE_ID).
+  // shapeRef expressions remain on StepEvalValue — the materializer doesn't handle shape records.
   // Scalar expressions that depend on eventRead must be evaluated AFTER events.
-  // Pre-event signals go in Phase 1, post-event signals go after evalEvent.
   const scalarSlots = unlinkedIR.builder.getScalarSlots();
-  const evalValueStepsPre: Step[] = [];
-  const evalValueStepsPost: Step[] = [];
   const scalarMaterializeStepsPre: StepMaterialize[] = [];
   const scalarMaterializeStepsPost: StepMaterialize[] = [];
-  const scalarMaterializeEligibility = new Map<number, boolean>();
+  const evalValueStepsPre: Step[] = [];
+  const evalValueStepsPost: Step[] = [];
   for (const [scalarExprId, slot] of scalarSlots) {
     const exprId = scalarExprId as ValueExprId;
     const expr = valueExprs[exprId as number];
     if (!expr) continue;
 
-    // [LAW:one-source-of-truth] Eligible arena-compatible scalar signal DAGs are migrated to the
-    // materializer path via SCALAR_INSTANCE_ID instead of evalValue.
-    if (
-      isArenaScalarPayload(expr) &&
-      canMaterializeScalarExpr(exprId as number, valueExprs, scalarMaterializeEligibility, new Set())
-    ) {
-      const scalarStep: StepMaterialize = {
+    const dependsOnEvent = valueExprDependsOnEvent(scalarExprId as number, valueExprs);
+
+    if (expr.kind === 'shapeRef') {
+      // Shape references write Shape2D records, not numeric data — keep on StepEvalValue
+      const strategy = deriveStrategy(expr.type);
+      const target: EvalTarget = { storage: 'value', slot };
+      const step: Step = { kind: 'evalValue', expr: exprId, target, strategy };
+      if (dependsOnEvent) {
+        evalValueStepsPost.push(step);
+      } else {
+        evalValueStepsPre.push(step);
+      }
+    } else {
+      // Numeric scalar — route through StepMaterialize(SCALAR_INSTANCE_ID)
+      const step: StepMaterialize = {
         kind: 'materialize',
         field: exprId,
         instanceId: SCALAR_INSTANCE_ID,
         target: slot,
       };
-      if (valueExprDependsOnEvent(scalarExprId as number, valueExprs)) {
-        scalarMaterializeStepsPost.push(scalarStep);
+      if (dependsOnEvent) {
+        scalarMaterializeStepsPost.push(step);
       } else {
-        scalarMaterializeStepsPre.push(scalarStep);
+        scalarMaterializeStepsPre.push(step);
       }
-      continue;
-    }
-
-    const strategy = deriveStrategy(expr.type);
-    const target: EvalTarget = { storage: 'value', slot };
-
-    const step: StepEvalValue = {
-      kind: 'evalValue',
-      expr: exprId,
-      target,
-      strategy,
-    };
-
-    if (valueExprDependsOnEvent(scalarExprId as number, valueExprs)) {
-      evalValueStepsPost.push(step);
-    } else {
-      evalValueStepsPre.push(step);
     }
   }
 
@@ -375,12 +280,12 @@ export function pass7Schedule(
   }
 
   // Combine all steps in correct execution order:
-  // 1. EvalValue-pre (signals NOT dependent on events)
+  // 1. Shape2D evalValue-pre + scalar materialize-pre (NOT dependent on events)
   // 2. ContinuityMapBuild (detect domain changes, compute mappings)
-  // 3. Materialize (evaluate fields to buffers)
+  // 3. Field materialize (evaluate fields to buffers)
   // 4. ContinuityApply (apply gauge/slew/crossfade to buffers)
   // 5. EvalEvent (evaluate discrete events → eventScalars)
-  // 6. EvalValue-post (signals that depend on eventRead)
+  // 6. Shape2D evalValue-post + scalar materialize-post (depend on eventRead)
   // 7. Render (use continuity-applied buffers)
   // 8. StateWrite (persist state for next frame)
   const steps: Step[] = [
@@ -390,8 +295,8 @@ export function pass7Schedule(
     ...continuityPipeline.materializeSteps,
     ...continuityPipeline.continuityApplySteps,
     ...evalEventSteps,
-    ...scalarMaterializeStepsPost,
     ...evalValueStepsPost,
+    ...scalarMaterializeStepsPost,
     ...continuityPipeline.renderSteps,
     ...stateWriteSteps,
   ];
@@ -438,13 +343,8 @@ function valueExprDependsOnEvent(valueExprId: number, valueExprs: readonly Value
             return check(expr.input as number);
           case 'zip':
             return expr.inputs.some(input => check(input as number));
-          case 'zipSig':
-            return (
-              check(expr.field as number) ||
-              expr.signals.some(sig => check(sig as number))
-            );
           case 'broadcast':
-            return check(expr.signal as number);
+            return check(expr.input as number);
           case 'reduce':
             return check(expr.field as number);
           case 'pathDerivative':

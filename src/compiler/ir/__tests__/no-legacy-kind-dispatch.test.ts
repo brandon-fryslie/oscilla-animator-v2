@@ -46,7 +46,6 @@ describe('no-legacy-kind-dispatch', () => {
       "kind === 'intrinsic'",
       "kind === 'placement'",
       "kind === 'broadcast'",
-      "kind === 'zipSig'",
       "kind === 'pathDerivative'",
       // EventExpr kind checks
       "kind === 'pulse'",

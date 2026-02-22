@@ -53,7 +53,6 @@ export type KernelId =
   | 'zip'
   | 'broadcast'
   | 'reduce'
-  | 'zipSig'
   | 'pathDerivative'
   | 'pathSample';
 
@@ -151,8 +150,7 @@ export type ValueExprIntrinsic =
  *
  * Discriminated sub-union on kernelKind:
  * - map: Unary pure function (per-lane)
- * - zip: Binary pure function (per-lane)
- * - zipSig: Binary zip for signals only (strict signal typing)
+ * - zip: N-ary pure function (per-lane, all inputs same cardinality)
  * - broadcast: Cardinality one → many
  * - reduce: Cardinality many → one
  * - pathDerivative: Path → tangent/arcLength (field operation)
@@ -168,14 +166,6 @@ export type ValueExprKernel =
   | {
       readonly kind: 'kernel';
       readonly type: CanonicalType;
-      readonly kernelKind: 'zipSig';
-      readonly field: ValueExprId;
-      readonly signals: readonly ValueExprId[];
-      readonly fn: PureFn;
-    }
-  | {
-      readonly kind: 'kernel';
-      readonly type: CanonicalType;
       readonly kernelKind: 'zip';
       readonly inputs: readonly ValueExprId[];
       readonly fn: PureFn;
@@ -184,9 +174,9 @@ export type ValueExprKernel =
       readonly kind: 'kernel';
       readonly type: CanonicalType;
       readonly kernelKind: 'broadcast';
-      readonly signal: ValueExprId;
-      /** For multi-component signals (vec2, color, etc), the per-component signal IDs */
-      readonly signalComponents?: readonly ValueExprId[];
+      readonly input: ValueExprId;
+      /** For multi-component values (vec2, color, etc), the per-component scalar IDs */
+      readonly inputComponents?: readonly ValueExprId[];
     }
   | {
       readonly kind: 'kernel';

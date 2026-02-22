@@ -104,9 +104,9 @@ registerBlock({
   lower: ({ ctx, inputsById }) => {
     const getSlot = (portId: string) => {
       const ref = inputsById[portId];
-      const isSignal = ref && 'type' in ref && requireInst(ref.type.extent.cardinality, 'cardinality').kind !== 'many';
-      if (!ref || !isSignal) {
-        throw new Error(`Camera block: input '${portId}' must be a signal (got ${ref ? 'field' : 'undefined'})`);
+      const isScalar = ref && 'type' in ref && requireInst(ref.type.extent.cardinality, 'cardinality').kind !== 'many';
+      if (!ref || !isScalar) {
+        throw new Error(`Camera block: input '${portId}' must be scalar (cardinality one), got ${ref ? 'field (cardinality many)' : 'undefined'}`);
       }
       return ref.slot!; // Slot is always present after orchestrator allocation
     };

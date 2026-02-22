@@ -155,35 +155,23 @@ describe('getValueExprChildren', () => {
     expect(getValueExprChildren(expr)).toEqual([id(1), id(2)]);
   });
 
-  it('kernel(zipSig) — field + signals', () => {
-    const expr: ValueExpr = {
-      kind: 'kernel',
-      type: SIG_FLOAT,
-      kernelKind: 'zipSig',
-      field: id(10),
-      signals: [id(11), id(12)],
-      fn: { kind: 'opcode', opcode: 'add' as any },
-    };
-    expect(getValueExprChildren(expr)).toEqual([id(10), id(11), id(12)]);
-  });
-
-  it('kernel(broadcast) — signal only', () => {
+  it('kernel(broadcast) — input only', () => {
     const expr: ValueExpr = {
       kind: 'kernel',
       type: SIG_FLOAT,
       kernelKind: 'broadcast',
-      signal: id(3),
+      input: id(3),
     };
     expect(getValueExprChildren(expr)).toEqual([id(3)]);
   });
 
-  it('kernel(broadcast) — signal + signalComponents', () => {
+  it('kernel(broadcast) — input + inputComponents', () => {
     const expr: ValueExpr = {
       kind: 'kernel',
       type: SIG_FLOAT,
       kernelKind: 'broadcast',
-      signal: id(3),
-      signalComponents: [id(4), id(5)],
+      input: id(3),
+      inputComponents: [id(4), id(5)],
     };
     expect(getValueExprChildren(expr)).toEqual([id(3), id(4), id(5)]);
   });

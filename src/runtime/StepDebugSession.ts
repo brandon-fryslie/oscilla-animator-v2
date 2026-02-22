@@ -265,12 +265,23 @@ export class StepDebugSession {
   /**
    * Read the cached scalar value for an expression from runtime state.
    * Returns null if the expression hasn't been evaluated this frame or isn't a scalar.
+   *
+   * Checks two caches:
+   * - Step-level cache (scalarValues): populated by StepEvalValue steps (shape2d signals)
+   * - Evaluator cache (scalarValueExprValues): populated by evaluateValueExprScalar()
+   *   during materialization — covers all scalar expressions including those routed
+   *   through StepMaterialize(SCALAR_INSTANCE_ID)
    */
   getCachedValue(exprId: ValueExprId): number | null {
     const numId = exprId as number;
     const cache = this._state.cache;
+    // Try step-level cache (shape2d signals)
     if (cache.scalarStamps[numId] === cache.frameId) {
       return cache.scalarValues[numId];
+    }
+    // Fall back to evaluator cache (populated by materializer's recursive calls)
+    if (cache.scalarValueExprStamps[numId] === cache.frameId) {
+      return cache.scalarValueExprValues[numId];
     }
     return null;
   }

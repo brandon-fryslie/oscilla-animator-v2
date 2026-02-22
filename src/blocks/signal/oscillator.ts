@@ -54,9 +54,8 @@ registerBlock({
   },
   lower: ({ ctx, inputsById, config }) => {
     const phase = inputsById.phase;
-    const isPhaseSignal = phase && 'type' in phase && requireInst(phase.type.extent.temporality, 'temporality').kind === 'continuous';
-    if (!phase || !isPhaseSignal) {
-      throw new Error('Oscillator phase required as signal');
+    if (!phase || !('type' in phase) || requireInst(phase.type.extent.temporality, 'temporality').kind !== 'continuous') {
+      throw new Error('Oscillator: phase input must be continuous (not an event)');
     }
 
     const mode = requireConfigInt(config!, 'mode', 0, 3);

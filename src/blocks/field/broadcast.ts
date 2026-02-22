@@ -10,17 +10,17 @@ import { unitVar, payloadVar, inferType, cardinalityVar } from '../../core/infer
 import { cardinalityVarId } from '../../core/ids';
 import { rewriteFieldType } from '../layout/_helpers';
 
-// [LAW:one-source-of-truth] Broadcast output field behavior is declared on CT/ICT.
-const BROADCAST_FIELD_CARD = cardinalityVar(cardinalityVarId('broadcast_field'), {
+// [LAW:one-source-of-truth] Broadcast output cardinality behavior is declared on CT/ICT.
+const BROADCAST_OUT_CARD = cardinalityVar(cardinalityVarId('broadcast_field'), {
   acceptance: 'manyOnly',
   instanceBinding: 'inherit',
 });
 
 /**
- * Payload-Generic, Unit-Generic field broadcast block.
+ * Payload-Generic, Unit-Generic broadcast block (one→many).
  *
- * Broadcasts a signal value to all elements of a field.
- * The payload type and unit are resolved by pass1 constraint solver
+ * Broadcasts a one-cardinality value to all elements of a field.
+ * The payload type and unit are resolved by the constraint solver
  * through constraint propagation from connected ports.
  *
  * Payload-Generic Contract (per spec §1):
@@ -30,31 +30,31 @@ const BROADCAST_FIELD_CARD = cardinalityVar(cardinalityVarId('broadcast_field'),
  * - Deterministic resolution via payloadType param
  *
  * Unit-Generic Contract:
- * - Output unit matches input signal unit (via unitVar constraint)
+ * - Output unit matches input unit (via unitVar constraint)
  * - No unit conversion or adaptation applied
  */
 registerBlock({
   type: 'Broadcast',
   label: 'Broadcast',
   category: 'field',
-  description: 'Broadcasts a signal value to all elements of a field (type inferred)',
+  description: 'Broadcasts a one-cardinality value to all elements (one→many, type inferred)',
   form: 'primitive',
   capability: 'pure',
   loweringPurity: 'pure',
   adapterSpec: {
     from: { payload: 'any', unit: 'any', extent: 'any' },
     to: { payload: 'same', unit: 'same', extent: 'any' },
-    inputPortId: 'signal',
-    outputPortId: 'field',
-    description: 'Broadcast signal to field',
+    inputPortId: 'input',
+    outputPortId: 'out',
+    description: 'Broadcast one→many',
     purity: 'pure',
     stability: 'stable',
     priority: 100,
   },
   payload: {
     allowedPayloads: {
-      signal: ALL_CONCRETE_PAYLOADS,
-      field: ALL_CONCRETE_PAYLOADS,
+      input: ALL_CONCRETE_PAYLOADS,
+      out: ALL_CONCRETE_PAYLOADS,
     },
     combinations: ALL_CONCRETE_PAYLOADS.map(p => ({
       inputs: [p] as PayloadType[],
@@ -63,10 +63,10 @@ registerBlock({
     semantics: 'typeSpecific',
   },
   inputs: {
-    signal: { label: 'Signal', type: inferType(payloadVar('broadcast_payload'), unitVar('broadcast_in')) },
+    input: { label: 'Input', type: inferType(payloadVar('broadcast_payload'), unitVar('broadcast_in')) },
   },
   outputs: {
-    field: { label: 'Field', type: inferType(payloadVar('broadcast_payload'), unitVar('broadcast_in'), { cardinality: BROADCAST_FIELD_CARD }) },
+    out: { label: 'Output', type: inferType(payloadVar('broadcast_payload'), unitVar('broadcast_in'), { cardinality: BROADCAST_OUT_CARD }) },
   },
   lower: ({ ctx, inputsById }) => {
     // Get resolved payload type from ctx.outTypes (populated from pass1 portTypes)
@@ -78,28 +78,28 @@ registerBlock({
     if (ctx.inferredInstance) {
       outType = rewriteFieldType(outType, ctx.inferredInstance, ctx.instances);
     }
-    const signalValue = inputsById.signal;
-    if (!signalValue) throw new Error('Broadcast input required');
+    const inputValue = inputsById.input;
+    if (!inputValue) throw new Error('Broadcast input required');
 
     const stride = payloadStride(outType.payload);
 
-    // For multi-component signals (vec2, vec3, color), pass component IDs
+    // For multi-component values (vec2, vec3, color), pass component IDs
     // so the materializer can evaluate each component separately
-    const fieldId = ctx.b.broadcast(
-      signalValue.id,
+    const outId = ctx.b.broadcast(
+      inputValue.id,
       outType,
-      signalValue.components && signalValue.components.length > 1
-        ? signalValue.components
+      inputValue.components && inputValue.components.length > 1
+        ? inputValue.components
         : undefined
     );
 
     return {
       outputsById: {
-        field: { id: fieldId, slot: undefined, type: outType, stride },
+        out: { id: outId, slot: undefined, type: outType, stride },
       },
       effects: {
         slotRequests: [
-          { portId: 'field', type: outType },
+          { portId: 'out', type: outType },
         ],
       },
       instanceContext: ctx.inferredInstance,

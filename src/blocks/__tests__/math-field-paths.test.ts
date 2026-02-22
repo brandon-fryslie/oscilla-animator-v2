@@ -41,14 +41,14 @@ describe('Field-Path Math Integration', () => {
         const colorSignal = b.addBlock('Const');
         b.setConfig(colorSignal, 'value', { r: 1.0, g: 1.0, b: 1.0, a: 1.0 });
         const colorField = b.addBlock('Broadcast');
-        b.wire(colorSignal, 'out', colorField, 'signal');
+        b.wire(colorSignal, 'out', colorField, 'input');
 
         const render = b.addBlock('RenderInstances2D');
 
         b.wire(ellipse, 'shape', array, 'element');
         b.wire(array, 'elements', layout, 'elements');
         b.wire(layout, 'position', render, 'pos');
-        b.wire(colorField, 'field', render, 'color');
+        b.wire(colorField, 'out', render, 'color');
         // Shape port removed - automatically looked up from instance
       });
 
@@ -74,14 +74,14 @@ describe('Field-Path Math Integration', () => {
         const colorSignal = b.addBlock('Const');
         b.setConfig(colorSignal, 'value', { r: 0.2, g: 0.8, b: 1.0, a: 1.0 });
         const colorField = b.addBlock('Broadcast');
-        b.wire(colorSignal, 'out', colorField, 'signal');
+        b.wire(colorSignal, 'out', colorField, 'input');
 
         const render = b.addBlock('RenderInstances2D');
 
         b.wire(ellipse, 'shape', array, 'element');
         b.wire(array, 'elements', layout, 'elements');
         b.wire(layout, 'position', render, 'pos');
-        b.wire(colorField, 'field', render, 'color');
+        b.wire(colorField, 'out', render, 'color');
         // Shape port removed - automatically looked up from instance
       });
 
@@ -105,14 +105,14 @@ describe('Field-Path Math Integration', () => {
         const colorSignal = b.addBlock('Const');
         b.setConfig(colorSignal, 'value', { r: 1.0, g: 1.0, b: 0.0, a: 1.0 });
         const colorField = b.addBlock('Broadcast');
-        b.wire(colorSignal, 'out', colorField, 'signal');
+        b.wire(colorSignal, 'out', colorField, 'input');
 
         const render = b.addBlock('RenderInstances2D');
 
         b.wire(ellipse, 'shape', array, 'element');
         b.wire(array, 'elements', layout, 'elements');
         b.wire(layout, 'position', render, 'pos');
-        b.wire(colorField, 'field', render, 'color');
+        b.wire(colorField, 'out', render, 'color');
         // Shape port removed - automatically looked up from instance
       });
 
@@ -142,14 +142,14 @@ describe('Field-Path Math Integration', () => {
           const colorSignal = b.addBlock('Const');
           b.setConfig(colorSignal, 'value', { r: 0.5, g: 0.5, b: 0.5, a: 1.0 });
           const colorField = b.addBlock('Broadcast');
-          b.wire(colorSignal, 'out', colorField, 'signal');
+          b.wire(colorSignal, 'out', colorField, 'input');
 
           const render = b.addBlock('RenderInstances2D');
 
           b.wire(ellipse, 'shape', array, 'element');
           b.wire(array, 'elements', layout, 'elements');
           b.wire(layout, 'position', render, 'pos');
-          b.wire(colorField, 'field', render, 'color');
+          b.wire(colorField, 'out', render, 'color');
           // Shape port removed - automatically looked up from instance
         });
 
@@ -180,14 +180,14 @@ describe('Field-Path Math Integration', () => {
         const colorSignal = b.addBlock('Const');
         b.setConfig(colorSignal, 'value', { r: 1.0, g: 1.0, b: 1.0, a: 1.0 });
         const colorField = b.addBlock('Broadcast');
-        b.wire(colorSignal, 'out', colorField, 'signal');
+        b.wire(colorSignal, 'out', colorField, 'input');
 
         const render = b.addBlock('RenderInstances2D');
 
         b.wire(ellipse, 'shape', array, 'element');
         b.wire(array, 'elements', layout, 'elements');
         b.wire(layout, 'position', render, 'pos');
-        b.wire(colorField, 'field', render, 'color');
+        b.wire(colorField, 'out', render, 'color');
         // Shape port removed - automatically looked up from instance
       });
 
@@ -219,14 +219,14 @@ describe('Field-Path Math Integration', () => {
         const colorSignal = b.addBlock('Const');
         b.setConfig(colorSignal, 'value', { r: 1.0, g: 0.5, b: 0.2, a: 1.0 });
         const colorField = b.addBlock('Broadcast');
-        b.wire(colorSignal, 'out', colorField, 'signal');
+        b.wire(colorSignal, 'out', colorField, 'input');
 
         const render = b.addBlock('RenderInstances2D');
 
         b.wire(ellipse, 'shape', array, 'element');
         b.wire(array, 'elements', layout, 'elements');
         b.wire(layout, 'position', render, 'pos');
-        b.wire(colorField, 'field', render, 'color');
+        b.wire(colorField, 'out', render, 'color');
         // Shape port removed - automatically looked up from instance
       });
 
@@ -256,14 +256,14 @@ describe('Field-Path Math Integration', () => {
         const colorSignal = b.addBlock('Const');
         b.setConfig(colorSignal, 'value', { r: 0.8, g: 0.2, b: 0.9, a: 1.0 });
         const colorField = b.addBlock('Broadcast');
-        b.wire(colorSignal, 'out', colorField, 'signal');
+        b.wire(colorSignal, 'out', colorField, 'input');
 
         const render = b.addBlock('RenderInstances2D');
 
         b.wire(ellipse, 'shape', array, 'element');
         b.wire(array, 'elements', layout, 'elements');
         b.wire(layout, 'position', render, 'pos');
-        b.wire(colorField, 'field', render, 'color');
+        b.wire(colorField, 'out', render, 'color');
         // Shape port removed - automatically looked up from instance
       });
 

@@ -56,11 +56,11 @@ export interface BlockIRBuilder {
   /** Cardinality-safe unary map: auto-broadcasts signal→field when needed. */
   mapAuto(input: ValueExprId, fn: PureFn, type: CanonicalType): ValueExprId;
 
-  /** Cardinality-safe n-ary zip: auto-broadcasts/uses zipSig when inputs have mixed cardinality. */
+  /** Cardinality-safe n-ary zip: auto-broadcasts when inputs have mixed cardinality. */
   zipAuto(inputs: readonly ValueExprId[], fn: PureFn, type: CanonicalType): ValueExprId;
 
-  /** Broadcast a signal to a field (cardinality one → many). */
-  broadcast(signal: ValueExprId, type: CanonicalType, signalComponents?: readonly ValueExprId[]): ValueExprId;
+  /** Broadcast one→many (cardinality one → many). */
+  broadcast(input: ValueExprId, type: CanonicalType, inputComponents?: readonly ValueExprId[]): ValueExprId;
 
   /** Reduce a field to a signal (cardinality many → one). */
   reduce(field: ValueExprId, op: 'min' | 'max' | 'sum' | 'avg', type: CanonicalType): ValueExprId;
@@ -108,7 +108,7 @@ export interface BlockIRBuilder {
   /** Construct a composite from components. */
   construct(components: readonly ValueExprId[], type: CanonicalType): ValueExprId;
 
-  /** Cardinality-safe construct: auto-broadcasts signal components to field extent when output is field. */
+  /** Cardinality-safe construct: auto-broadcasts scalar components to many-cardinality extent when output is many. */
   constructAuto(components: readonly ValueExprId[], type: CanonicalType): ValueExprId;
 
   /** Convert color from HSL to RGB (alpha passthrough). */

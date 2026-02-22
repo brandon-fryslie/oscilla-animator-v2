@@ -327,20 +327,6 @@ export interface HealthMetrics {
 
   /** Maximum frame delta in current window */
   maxFrameDelta: number;
-
-  // === Memory Instrumentation (Sprint: memory-instrumentation) ===
-
-  /** Pool allocations in last frame */
-  poolAllocs: number;
-
-  /** Pool releases in last frame */
-  poolReleases: number;
-
-  /** Total pooled bytes across all pools */
-  pooledBytes: number;
-
-  /** Number of distinct pool keys */
-  poolKeyCount: number;
 }
 
 /**
@@ -364,11 +350,6 @@ export function createHealthMetrics(): HealthMetrics {
     assemblerGroupingMsIndex: 0,
     assemblerSlicingMs: new Array(10).fill(0),
     assemblerSlicingMsIndex: 0,
-    // Memory instrumentation
-    poolAllocs: 0,
-    poolReleases: 0,
-    pooledBytes: 0,
-    poolKeyCount: 0,
     assemblerTotalMs: new Array(10).fill(0),
     assemblerTotalMsIndex: 0,
     topologyGroupCacheHits: 0,
@@ -489,16 +470,7 @@ export interface ProgramState {
   /** Event scalar storage (0=not fired, 1=fired this tick). Cleared each frame. */
   eventScalars: Uint8Array;
 
-  /**
-   * Previous predicate values for wrap edge detection (indexed by ValueExprId).
-   * Used by legacy EventEvaluator during migration.
-   */
-  eventPrevPredicate: Uint8Array;
-
-  /**
-   * Previous predicate values for wrap edge detection (indexed by ValueExprId).
-   * Used by ValueExpr EventEvaluator during migration and post-cutover.
-   */
+  /** Previous predicate values for wrap edge detection (indexed by ValueExprId). */
   eventPrevPredicateValue: Uint8Array;
 
   /**
@@ -542,16 +514,7 @@ export interface RuntimeState {
   /** Event scalar storage (0=not fired, 1=fired this tick). Cleared each frame. */
   eventScalars: Uint8Array;
 
-  /**
-   * Previous predicate values for wrap edge detection (indexed by ValueExprId).
-   * Used by legacy EventEvaluator during migration.
-   */
-  eventPrevPredicate: Uint8Array;
-
-  /**
-   * Previous predicate values for wrap edge detection (indexed by ValueExprId).
-   * Used by ValueExpr EventEvaluator during migration and post-cutover.
-   */
+  /** Previous predicate values for wrap edge detection (indexed by ValueExprId). */
   eventPrevPredicateValue: Uint8Array;
 
   /**
@@ -620,7 +583,6 @@ export function createProgramState(
     time: null,
     state: new Float64Array(stateSlotCount),
     eventScalars: new Uint8Array(eventSlotCount),
-    eventPrevPredicate: new Uint8Array(eventExprCount),
     eventPrevPredicateValue: new Uint8Array(valueExprCount),
     events: new Map(),
   };
@@ -667,7 +629,6 @@ export function createRuntimeStateFromSession(
     time: program.time,
     state: program.state,
     eventScalars: program.eventScalars,
-    eventPrevPredicate: program.eventPrevPredicate,
     eventPrevPredicateValue: program.eventPrevPredicateValue,
     events: program.events,
     // SessionState (preserved)

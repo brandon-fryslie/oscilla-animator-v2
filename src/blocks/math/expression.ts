@@ -28,6 +28,7 @@ registerBlock({
   description: 'Compute value from mathematical expression',
   form: 'primitive',
   capability: 'pure',
+  loweringPurity: 'pure',
   payload: {
     allowedPayloads: {
       refs: ALL_CONCRETE_PAYLOADS,
@@ -108,8 +109,8 @@ registerBlock({
     // Step 3: Build input map and blockRefs from collect refs
     // [LAW:one-type-per-behavior] Collect entries come from normal edges.
     const inputs = new Map<string, CanonicalType>();
-    const inputSignals = new Map<string, ValueExprId>();
-    const signalsByShorthand = new Map<string, ValueExprId>();
+    const inputExprs = new Map<string, ValueExprId>();
+    const exprsByShorthand = new Map<string, ValueExprId>();
 
     const refsEntries = collectInputsById ? collectInputsById.refs : [];
     for (const entry of refsEntries) {
@@ -117,26 +118,26 @@ registerBlock({
 
       // Build shorthand key from sourceBlockId.sourcePort (canonical address format)
       const shorthand = `${entry.sourceBlockId}.${entry.sourcePort}`;
-      signalsByShorthand.set(shorthand, entry.value.id);
+      exprsByShorthand.set(shorthand, entry.value.id);
 
       // Register as regular input using alias or shorthand
       const alias = entry.alias !== undefined ? entry.alias : shorthand;
       inputs.set(alias, inputType);
-      inputSignals.set(alias, entry.value.id);
+      inputExprs.set(alias, entry.value.id);
     }
 
     // Step 4: Build blockRefs context for member access resolution
     let blockRefs: BlockRefsContext | undefined;
-    if (ctx.addressRegistry && signalsByShorthand.size > 0) {
+    if (ctx.addressRegistry && exprsByShorthand.size > 0) {
       blockRefs = {
         addressRegistry: ctx.addressRegistry,
         allowedPayloads: [FLOAT, INT, VEC2, VEC3, COLOR],
-        signalsByShorthand,
+        exprsByShorthand,
       };
     }
 
     // Step 5: Compile expression using Expression DSL
-    const result = compileExpression(exprText, inputs, ctx.b, inputSignals, blockRefs);
+    const result = compileExpression(exprText, inputs, ctx.b, inputExprs, blockRefs);
 
     // Step 6 & 7: Handle compilation result
     if (!result.ok) {
@@ -154,12 +155,12 @@ registerBlock({
       );
     }
 
-    // Compilation succeeded - return output signal
+    // Compilation succeeded - return output value
     const sigId = result.value;
     const outType = ctx.outTypes[0];
     const stride = payloadStride(outType.payload);
 
-    // For multi-component signals (stride > 1), ensure we have a construct expression
+    // For multi-component values (stride > 1), ensure we have a construct expression
     if (stride > 1) {
       // Check if the result is already a construct node
       const expr = ctx.b.getValueExpr(sigId);
@@ -180,7 +181,7 @@ registerBlock({
           },
         };
       } else {
-        // The result is not a construct (e.g., a vec3 input signal)
+        // The result is not a construct (e.g., a vec3 input value)
         // Generate extract nodes and reconstruct
         const components: ValueExprId[] = [];
         for (let i = 0; i < stride; i++) {

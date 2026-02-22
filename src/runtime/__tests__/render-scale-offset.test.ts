@@ -25,11 +25,11 @@ describe('Render scale reads arena by slot descriptor offset', () => {
 
       const render = b.addBlock('RenderInstances2D');
 
-      // Color: signal -> field
+      // Color: one→many
       const colorSig = b.addBlock('Const');
       b.setConfig(colorSig, 'value', { r: 1, g: 0.5, b: 0.2, a: 1 });
       const colorField = b.addBlock('Broadcast');
-      b.wire(colorSig, 'out', colorField, 'signal');
+      b.wire(colorSig, 'out', colorField, 'input');
 
       // Scale: explicit signal
       const scaleSig = b.addBlock('Const');
@@ -39,7 +39,7 @@ describe('Render scale reads arena by slot descriptor offset', () => {
       b.wire(ellipse, 'shape', array, 'element');
       b.wire(array, 'elements', layout, 'elements');
       b.wire(layout, 'position', render, 'pos');
-      b.wire(colorField, 'field', render, 'color');
+      b.wire(colorField, 'out', render, 'color');
     });
 
     const result = compile(patch);
@@ -53,20 +53,14 @@ describe('Render scale reads arena by slot descriptor offset', () => {
     expect(renderStep).toBeTruthy();
     expect(renderStep?.scale).toBeTruthy();
 
+    // [LAW:one-source-of-truth] All scalar values go through StepMaterialize.
     const scaleExprId = (renderStep as any).scale.id as number;
     const scaleWriteStep = schedule.steps.find(
-      (s: any) =>
-        (s.kind === 'evalValue' &&
-          s.target?.storage === 'value' &&
-          s.expr === scaleExprId) ||
-        (s.kind === 'materialize' && s.field === scaleExprId),
+      (s: any) => s.kind === 'materialize' && s.field === scaleExprId,
     );
     expect(scaleWriteStep).toBeTruthy();
 
-    const scaleSlot =
-      (scaleWriteStep as any).kind === 'materialize'
-        ? ((scaleWriteStep as any).target as number)
-        : ((scaleWriteStep as any).target.slot as number);
+    const scaleSlot = (scaleWriteStep as any).target as number;
     const scaleMeta = program.slotMeta.find((m: any) => m.slot === scaleSlot);
     expect(scaleMeta).toBeTruthy();
 

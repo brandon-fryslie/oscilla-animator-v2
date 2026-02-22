@@ -20,7 +20,6 @@ import { instanceId as makeInstanceId } from '../core/ids';
 import type { RuntimeState } from './RuntimeState';
 import type { RenderFrameIR } from '../render/types';
 import type { RenderBufferArena } from '../render/RenderBufferArena';
-import { BufferPool } from './BufferPool';
 import { resolveTime } from './timeResolution';
 import { writeShape2D } from './RuntimeState';
 import { detectDomainChange } from './ContinuityMapping';
@@ -31,7 +30,7 @@ import { resolveCameraFromGlobals } from './CameraResolver';
 import { requireManyInstance } from '../core/canonical-types';
 import type { ValueSlot, StateSlotId } from '../compiler/ir/Indices';
 import { SYSTEM_PALETTE_SLOT } from '../compiler/ir/Indices';
-import { evaluateValueExprScalar, evaluateConstructScalar } from './ValueExprScalarEvaluator';
+import { evaluateValueExprScalar } from './ValueExprScalarEvaluator';
 import { evaluateValueExprEvent } from './ValueExprEventEvaluator';
 import { materializeValueExpr } from './ValueExprMaterializer';
 import { arenaSlice, type ArenaSlotDescriptor } from './ArenaValueStore';
@@ -42,9 +41,6 @@ import {
 } from './ExprAddressTable';
 import type { StepSnapshot, SlotValue, StateSlotValue, ExecutionPhase } from './StepDebugTypes';
 import { readSlotValue, readEventSlotValue, detectAnomalies } from './ValueInspector';
-
-// Separate pool for stepped execution (avoid interference with production pool)
-const STEPPED_MATERIALIZER_POOL = new BufferPool();
 
 // =============================================================================
 // Helpers (duplicated from ScheduleExecutor — these are private in the original)
@@ -61,17 +57,6 @@ function resolveArenaDescriptor(
     throw new Error(`resolveArenaDescriptor: missing arena descriptor for numeric slot ${lookup.slot}`);
   }
   return arenaDesc;
-}
-
-function writeArenaScalar(slotToArena: ReadonlyMap<ValueSlot, ArenaSlotDescriptor>, state: RuntimeState, lookup: SlotLookup, value: number): void {
-  if (lookup.storage !== 'f64') {
-    throw new Error(`writeArenaScalar: expected f64-class storage for slot ${lookup.slot}, got ${lookup.storage}`);
-  }
-  if (lookup.stride !== 1) {
-    throw new Error(`writeArenaScalar: expected stride=1 for slot ${lookup.slot}, got stride=${lookup.stride}`);
-  }
-  const arenaDesc = resolveArenaDescriptor(slotToArena, lookup);
-  state.arena[arenaDesc.offset] = value;
 }
 
 function writeArenaStrided(
@@ -92,16 +77,6 @@ function writeArenaStrided(
   for (let i = 0; i < stride; i++) {
     state.arena[o + i] = src[i] as number;
   }
-}
-
-function readCanonicalNumeric(
-  slotToArena: ReadonlyMap<ValueSlot, ArenaSlotDescriptor>,
-  state: RuntimeState,
-  lookup: SlotLookup,
-  component: number = 0,
-): number {
-  const arenaDesc = resolveArenaDescriptor(slotToArena, lookup);
-  return state.arena[arenaDesc.offset + component];
 }
 
 function resolveNumericBuffer(
@@ -299,80 +274,46 @@ export function* executeFrameStepped(
 
     switch (step.kind) {
       case 'evalValue': {
+        // [LAW:one-source-of-truth] evalValue handles only shape2d signals and discrete events.
+        // All continuous numeric values go through StepMaterialize (via SCALAR_INSTANCE_ID for scalars).
         const strategy = step.strategy;
 
         if (strategy === 0 || strategy === 1) {
+          // Continuous path: only shape2d signals remain here
           if (step.target.storage !== 'value') {
             throw new Error(`evalValue: ContinuousOne/Many requires value storage, got ${step.target.storage}`);
           }
 
           const targetSlot = step.target.slot;
           const lookup = resolveSlotOffset(targetSlot);
-          const { storage, offset, slot, stride } = lookup;
+          const { storage, offset } = lookup;
 
-          if (storage === 'shape2d') {
-            const veId = step.expr;
-            const exprNode = valueExprs[veId as number];
-            if (exprNode.kind === 'shapeRef') {
-              writeShape2D(state.values.shape2d, offset, {
-                topologyId: exprNode.topologyId,
-                pointsFieldSlot:
-                  (exprNode.kind === 'shapeRef' && exprNode.controlPointField != null
-                    ? (() => {
-                        const cpSlot = fieldExprToSlot.get(exprNode.controlPointField as number);
-                        if (cpSlot === undefined) throw new Error(`Control point field ${exprNode.controlPointField} not in fieldExprToSlot — compiler bug`);
-                        return cpSlot;
-                      })()
-                    : 0),
-                pointsCount: 0,
-                styleRef: 0,
-                flags: 0,
-              });
+          // shapeRef: write Shape2D record (shapeRef slots have f64 storage but write to shape2d bank)
+          const veId = step.expr;
+          const exprNode = valueExprs[veId as number];
+          if (exprNode.kind === 'shapeRef') {
+            // Resolve control point field slot
+            let cpFieldSlot = 0;
+            if (exprNode.controlPointField != null) {
+              const cpSlot = fieldExprToSlot.get(exprNode.controlPointField as number);
+              if (cpSlot === undefined) throw new Error(`Control point field ${exprNode.controlPointField} not in fieldExprToSlot — compiler bug`);
+              cpFieldSlot = cpSlot;
             }
+            writeShape2D(state.values.shape2d, offset, {
+              topologyId: exprNode.topologyId,
+              pointsFieldSlot: cpFieldSlot,
+              pointsCount: 0,
+              styleRef: 0,
+              flags: 0,
+            });
             // Capture written shape
             const meta = slotToMeta.get(targetSlot);
             if (meta) {
               writtenSlots.set(targetSlot, readSlotValue(state, lookup, meta, slotToArena));
             }
-          } else if (storage === 'f64') {
-            const exprNode = valueExprs[step.expr as number];
-
-            if (stride > 1 && exprNode?.kind === 'construct') {
-              const arenaDesc = resolveArenaDescriptor(slotToArena, lookup);
-              const written = evaluateConstructScalar(exprNode, valueExprs, state, state.arena, arenaDesc.offset);
-              if (written !== stride) {
-                throw new Error(`evalValue: construct wrote ${written} components but slot stride is ${stride}`);
-              }
-              for (let i = 0; i < stride; i++) {
-                state.tap?.recordSlotValue?.((slot + i) as ValueSlot, readCanonicalNumeric(slotToArena, state, lookup, i));
-              }
-              state.cache.scalarValues[step.expr as number] = readCanonicalNumeric(slotToArena, state, lookup, 0);
-              state.cache.scalarStamps[step.expr as number] = state.cache.frameId;
-
-              // Capture written slot
-              const meta = slotToMeta.get(targetSlot);
-              if (meta) {
-                writtenSlots.set(targetSlot, readSlotValue(state, lookup, meta, slotToArena));
-              }
-            } else if (stride === 1) {
-              const value = evaluateValueExprScalar(step.expr as any, program.valueExprs.nodes, state);
-              writeArenaScalar(slotToArena, state, lookup, value);
-              state.tap?.recordSlotValue?.(slot, value);
-              state.cache.scalarValues[step.expr as number] = value;
-              state.cache.scalarStamps[step.expr as number] = state.cache.frameId;
-
-              // Capture written scalar
-              const meta = slotToMeta.get(targetSlot);
-              if (meta) {
-                writtenSlots.set(targetSlot, { kind: 'scalar', value, type: meta.type });
-              }
-            } else {
-              throw new Error(
-                `evalValue: stride=${stride} slot ${slot} requires construct expression, got ${exprNode?.kind ?? 'unknown'}`
-              );
-            }
           } else {
-            throw new Error(`evalValue: unsupported storage type '${storage}' for slot ${slot} expr ${step.expr} strategy ${strategy}`);
+            // All numeric scalars now go through StepMaterialize — this path is unreachable
+            throw new Error(`evalValue: numeric scalars must use StepMaterialize, got storage=${storage} slot ${lookup.slot} expr ${step.expr}`);
           }
         } else if (strategy === 2 || strategy === 3) {
           if (step.target.storage !== 'event') {
@@ -411,7 +352,7 @@ export function* executeFrameStepped(
         }
         const arenaTarget = arenaSlice(state.arena, arenaDesc);
         const buffer = materializeValueExpr(
-          veId, program.valueExprs, step.instanceId, count, state, program, STEPPED_MATERIALIZER_POOL, arenaTarget,
+          veId, program.valueExprs, step.instanceId, count, state, program, arenaTarget,
         );
 
         state.tap?.recordFieldValue?.(step.target, buffer);
@@ -537,7 +478,7 @@ export function* executeFrameStepped(
       if (count > 0) {
         const instanceIdStr = String(instanceRef.instanceId);
         const tempBuffer = materializeValueExpr(
-          veId, program.valueExprs, makeInstanceId(instanceIdStr), count, state, program, STEPPED_MATERIALIZER_POOL,
+          veId, program.valueExprs, makeInstanceId(instanceIdStr), count, state, program,
         );
         const baseSlot = step.stateSlot as number;
         const src = tempBuffer as Float32Array;

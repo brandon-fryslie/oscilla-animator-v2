@@ -91,7 +91,7 @@ function makeCtx(g: DraftGraph, facts: TypeFacts): PolicyContext {
 // =============================================================================
 
 describe('AdapterPolicy (adapters.v1)', () => {
-  it('produces a plan with Broadcast adapter for signal→field mismatch', () => {
+  it('produces a plan with Broadcast adapter for one→many cardinality mismatch', () => {
     const g = emptyGraph({
       blocks: [makeBlock('c1', 'Const'), makeBlock('ri', 'RenderInstances2D')],
       edges: [makeEdge('e1', 'c1', 'out', 'ri', 'pos')],

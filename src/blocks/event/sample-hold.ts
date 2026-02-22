@@ -34,7 +34,7 @@ registerBlock({
     const triggerInput = inputsById.trigger;
 
     if (!valueInput || !('type' in valueInput) || requireInst(valueInput.type.extent.temporality, 'temporality').kind !== 'continuous') {
-      throw new Error('SampleHold: value input must be a signal');
+      throw new Error('SampleHold: value input must be continuous (not an event)');
     }
     if (!triggerInput || !('type' in triggerInput) || requireInst(triggerInput.type.extent.temporality, 'temporality').kind !== 'discrete') {
       throw new Error('SampleHold: trigger input must be an event');
