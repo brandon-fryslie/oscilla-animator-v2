@@ -9,7 +9,7 @@ import type { InferenceCanonicalType } from '../../core/inference-types';
 /**
  * Format a CanonicalType for display, non-throwing, shows unit if meaningful.
  */
-export function formatSignalType(type: InferenceCanonicalType | undefined): string {
+export function formatValueType(type: InferenceCanonicalType | undefined): string {
   if (!type) return 'unknown';
 
   const payload = type.payload.kind;

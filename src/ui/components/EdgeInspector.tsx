@@ -13,7 +13,7 @@ import React, { useCallback, useMemo, useState } from 'react';
 import { observer } from 'mobx-react-lite';
 import { useStores } from '../../stores';
 import { colors } from '../theme';
-import { formatSignalType } from './typeFormatters';
+import { formatValueType } from './typeFormatters';
 import type { Edge, Patch } from '../../graph/Patch';
 import type { BlockId } from '../../types';
 import type { CanonicalType } from '../../core/canonical-types';
@@ -73,7 +73,7 @@ function EdgeEndpoint({ label, blockId, slotId, patch, resolvedType, onBlockClic
             borderRadius: '3px',
             color: colors.primary,
           }}>
-            {formatSignalType(resolvedType)}
+            {formatValueType(resolvedType)}
           </span>
         )}
       </div>
@@ -99,7 +99,7 @@ function TypeChainDisplay({ chain, sourceType, targetType }: TypeChainDisplayPro
         <div style={{ textAlign: 'center', color: colors.textSecondary, fontSize: '12px', padding: '4px 0' }}>
           {sourceType && targetType ? (
             <span>
-              {formatSignalType(sourceType)} <span style={{ color: colors.primary }}>→</span> {formatSignalType(targetType)}
+              {formatValueType(sourceType)} <span style={{ color: colors.primary }}>→</span> {formatValueType(targetType)}
             </span>
           ) : (
             '↓ direct'
@@ -167,7 +167,7 @@ function ChainStep({ step }: { step: TransformStep }) {
         {step.adapter.replace('Adapter_', '').replace(/([A-Z])/g, ' $1').trim()}
       </span>
       <div style={{ fontSize: '10px', color: colors.textMuted, marginTop: '2px' }}>
-        {formatSignalType(step.from)} → {formatSignalType(step.to)}
+        {formatValueType(step.from)} → {formatValueType(step.to)}
       </div>
     </div>
   );
