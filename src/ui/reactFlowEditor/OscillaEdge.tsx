@@ -8,7 +8,7 @@
  */
 
 import { BaseEdge, EdgeLabelRenderer, getBezierPath, type EdgeProps } from 'reactflow';
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { Popover } from '@mui/material';
 import { observer } from 'mobx-react-lite';
 import type { OscillaEdgeData } from './nodes';
@@ -292,6 +292,7 @@ export const OscillaEdge = observer(function OscillaEdge(
     ?? '';
   const { selection, frontend, patch } = useStores();
   const [chipAnchorPosition, setChipAnchorPosition] = useState<{ top: number; left: number } | null>(null);
+  const ignoreNextBackdropCloseRef = useRef(false);
   const [activeLensContext, setActiveLensContext] = useState<{
     lensId: string;
     lensIndex: number;
@@ -365,6 +366,13 @@ export const OscillaEdge = observer(function OscillaEdge(
   const closeLensPopover = (): void => {
     setChipAnchorPosition(null);
     setActiveLensContext(null);
+  };
+
+  const markPopoverInteraction = (): void => {
+    ignoreNextBackdropCloseRef.current = true;
+    window.setTimeout(() => {
+      ignoreNextBackdropCloseRef.current = false;
+    }, 0);
   };
 
   return (
@@ -473,8 +481,10 @@ export const OscillaEdge = observer(function OscillaEdge(
         anchorReference="anchorPosition"
         anchorPosition={chipAnchorPosition ?? undefined}
         onClose={(_, reason) => {
-          // [LAW:dataflow-not-control-flow] Keep editor open while parameters mutate; close only on explicit dismiss.
-          if (reason === 'backdropClick') return;
+          // [LAW:single-enforcer] Popover close policy is enforced at the popover boundary.
+          if (reason === 'backdropClick' && ignoreNextBackdropCloseRef.current) {
+            return;
+          }
           closeLensPopover();
         }}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
@@ -484,6 +494,8 @@ export const OscillaEdge = observer(function OscillaEdge(
         disableRestoreFocus
         slotProps={{
           paper: {
+            onMouseDownCapture: markPopoverInteraction,
+            onClickCapture: markPopoverInteraction,
             onMouseDown: (event) => event.stopPropagation(),
             onClick: (event) => event.stopPropagation(),
           },
