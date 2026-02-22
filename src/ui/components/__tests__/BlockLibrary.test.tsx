@@ -11,6 +11,7 @@
  */
 
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
+import { autorun } from 'mobx';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { MantineProvider } from '@mantine/core';
@@ -19,6 +20,15 @@ import { EditorProvider, useEditor, type EditorHandle } from '../../editorCommon
 import { RootStore, StoreProvider } from '../../../stores';
 import { getBlockCategories, getBlockTypesByCategory } from '../../../blocks/registry';
 import { useEffect } from 'react';
+
+function readComputed<T>(reader: () => T): T {
+  let value!: T;
+  const disposer = autorun(() => {
+    value = reader();
+  });
+  disposer();
+  return value;
+}
 
 // Create a fresh store instance for tests (not the global singleton)
 let testStore: RootStore;
@@ -258,12 +268,12 @@ describe('BlockLibrary', () => {
       const firstType = types[0];
       const blockElement = screen.getByText(firstType.label);
 
-      const initialBlockCount = testStore.patch.blocks.size;
+      const initialBlockCount = readComputed(() => testStore.patch.blocks.size);
       fireEvent.doubleClick(blockElement);
 
       await waitFor(() => {
         // Block should be added to PatchStore
-        expect(testStore.patch.blocks.size).toBe(initialBlockCount + 1);
+        expect(readComputed(() => testStore.patch.blocks.size)).toBe(initialBlockCount + 1);
       });
     });
   });
