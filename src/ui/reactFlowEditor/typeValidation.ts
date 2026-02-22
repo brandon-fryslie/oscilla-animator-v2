@@ -18,6 +18,18 @@ import { isAxisVar } from '../../core/canonical-types';
 import { getAnyBlockDefinition, isPayloadAllowed } from '../../blocks/registry';
 import { findAdapter, type AdapterSpec } from '../../blocks/adapter-spec';
 
+const missingPortWarnings = new Set<string>();
+
+function warnMissingPort(blockType: string, portId: string, direction: 'input' | 'output'): void {
+  const key = `${blockType}:${direction}:${portId}`;
+  if (missingPortWarnings.has(key)) {
+    return;
+  }
+  missingPortWarnings.add(key);
+  // [LAW:single-enforcer] Missing-port warnings are emitted once at this projection boundary.
+  console.warn(`[typeValidation] Missing ${direction} port '${portId}' on block '${blockType}'`);
+}
+
 // =============================================================================
 // Type Colors - Visual differentiation by payload type
 // =============================================================================
@@ -209,7 +221,7 @@ export function getPortType(
   const slots = direction === 'input' ? blockDef.inputs : blockDef.outputs;
   const slot = slots[portId];
   if (!slot) {
-    console.error(`Port '${portId}' not found in block def for '${block.type}'`);
+    warnMissingPort(block.type, portId, direction);
     return null;
   }
   return slot.type ?? null;
@@ -230,7 +242,7 @@ export function getPortTypeFromBlockType(
   const slots = direction === 'input' ? blockDef.inputs : blockDef.outputs;
   const slot = slots[portId];
   if (!slot) {
-    console.error(`Port '${portId}' not found in block def for '${blockType}'`);
+    warnMissingPort(blockType, portId, direction);
     return null;
   }
   return slot.type ?? null;
