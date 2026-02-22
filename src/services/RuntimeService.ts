@@ -70,6 +70,15 @@ export class RuntimeService {
     });
   }
 
+  private compileDeps() {
+    return {
+      store: this.store,
+      state: this.compileState,
+      onDomainChange: (oldProg: NonNullable<typeof this.compileState.currentProgram>, newProg: NonNullable<typeof this.compileState.currentProgram>) =>
+        this.domainChangeDetector.detectAndLogDomainChanges(this.store, oldProg, newProg),
+    };
+  }
+
   private requestSwapFlush(): void {
     if (this.swapRafId !== null) return;
     this.swapRafId = requestAnimationFrame(() => {
@@ -90,24 +99,9 @@ export class RuntimeService {
     try {
       // [LAW:single-enforcer] All compile/swap application goes through this queue.
       if (next) {
-        await compileAndSwap(
-          {
-            store: this.store,
-            state: this.compileState,
-            onDomainChange: (oldProg, newProg) => this.domainChangeDetector.detectAndLogDomainChanges(this.store, oldProg, newProg),
-          },
-          false,
-          next,
-        );
+        await compileAndSwap(this.compileDeps(), false, next);
       } else {
-        await compileAndSwap(
-          {
-            store: this.store,
-            state: this.compileState,
-            onDomainChange: (oldProg, newProg) => this.domainChangeDetector.detectAndLogDomainChanges(this.store, oldProg, newProg),
-          },
-          false,
-        );
+        await compileAndSwap(this.compileDeps(), false);
       }
     } finally {
       this.swapInFlight = false;
@@ -169,11 +163,7 @@ export class RuntimeService {
     // Initial compile (isInitial=true — hard swap)
     try {
       await compileAndSwap(
-        {
-          store,
-          state: this.compileState,
-          onDomainChange: (oldProg, newProg) => this.domainChangeDetector.detectAndLogDomainChanges(store, oldProg, newProg),
-        },
+        this.compileDeps(),
         true
       );
     } catch (err) {
