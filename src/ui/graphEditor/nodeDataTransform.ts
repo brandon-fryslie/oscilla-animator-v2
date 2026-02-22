@@ -319,7 +319,8 @@ export function reconcileNodesFromAdapter(
   adapter: GraphDataAdapter,
   currentNodes: Node[],
   getBlockPosition: (blockId: string) => { x: number; y: number } | undefined,
-  diagnosticsGetter?: (edge: EdgeLike) => any[]
+  diagnosticsGetter?: (edge: EdgeLike) => any[],
+  onProjectionIssue?: (issue: { kind: 'missingBlockDef'; blockId: string; blockType: string }) => void,
 ): { nodes: Node[]; edges: ReactFlowEdge[]; droppedInvalidEdgeIds: readonly string[] } {
   // Build map of existing nodes by ID for fast lookup
   const existingNodeMap = new Map<string, Node>();
@@ -335,7 +336,9 @@ export function reconcileNodesFromAdapter(
 
     const blockDef = getAnyBlockDefinition(block.type);
     if (!blockDef) {
-      console.warn(`Block definition not found: ${block.type}`);
+      // [LAW:single-enforcer] Projection issue reporting is delegated to caller,
+      // so this transform stays pure and does not emit direct side effects.
+      onProjectionIssue?.({ kind: 'missingBlockDef', blockId, blockType: block.type });
       continue;
     }
 

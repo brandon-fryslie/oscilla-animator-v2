@@ -197,6 +197,7 @@ export const GraphEditorCoreInner = observer(
       const nodesRef = useRef(nodes);
       const edgesRef = useRef(edges);
       const warnedInvalidEdgeIdsRef = useRef<Set<string>>(new Set());
+      const warnedMissingBlockDefIdsRef = useRef<Set<string>>(new Set());
       const fitViewTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
       nodesRef.current = nodes;
       edgesRef.current = edges;
@@ -228,7 +229,17 @@ export const GraphEditorCoreInner = observer(
             adapter,
             current,
             (blockId) => adapter.getBlockPosition(blockId),
-            diagnosticsGetter
+            diagnosticsGetter,
+            (issue) => {
+              if (issue.kind !== 'missingBlockDef') return;
+              const key = `${issue.blockId}:${issue.blockType}`;
+              if (warnedMissingBlockDefIdsRef.current.has(key)) return;
+              warnedMissingBlockDefIdsRef.current.add(key);
+              diagnostics?.log({
+                level: 'warn',
+                message: `Dropped block '${issue.blockId}' from graph projection because block type '${issue.blockType}' is not registered.`,
+              });
+            },
           );
 
           // [LAW:no-shared-mutable-globals] Prune warning cache to current edge IDs
@@ -237,6 +248,15 @@ export const GraphEditorCoreInner = observer(
           for (const warnedId of warnedInvalidEdgeIdsRef.current) {
             if (!liveEdgeIds.has(warnedId)) {
               warnedInvalidEdgeIdsRef.current.delete(warnedId);
+            }
+          }
+
+          const liveMissingBlockKeys = new Set(
+            Array.from(adapter.blocks.values()).map((block) => `${block.id}:${block.type}`),
+          );
+          for (const warnedKey of warnedMissingBlockDefIdsRef.current) {
+            if (!liveMissingBlockKeys.has(warnedKey)) {
+              warnedMissingBlockDefIdsRef.current.delete(warnedKey);
             }
           }
 
@@ -520,7 +540,14 @@ export const GraphEditorCoreInner = observer(
             setIsInitialized(true);
             scheduleFitView();
           } catch (error) {
-            console.warn('Initial layout failed, using grid fallback:', error);
+            const message = `Initial layout failed, using grid fallback: ${
+              error instanceof Error ? error.message : String(error)
+            }`;
+            if (diagnostics) {
+              diagnostics.log({ level: 'warn', message, data: { error } });
+            } else {
+              console.error(message, error);
+            }
 
             // Grid fallback
             let x = 100, y = 100;

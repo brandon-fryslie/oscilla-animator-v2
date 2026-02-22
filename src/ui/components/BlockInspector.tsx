@@ -1256,12 +1256,10 @@ const PortDefaultSourceEditor = observer(function PortDefaultSourceEditor({
 
   // Use resolved type for slider config, fall back to static port type
   const sliderType = useMemo(() => {
-    if (!resolvedType) {
-      console.warn(`BlockInspector: No resolved type for port '${portId}' on block '${blockId}' — using static type`);
-      return portType;
-    }
-    return resolvedType;
-  }, [resolvedType, portType, portId, blockId]);
+    // [LAW:dataflow-not-control-flow] Inspector controls always render;
+    // unresolved compiler data is represented as fallback type data.
+    return resolvedType ?? portType;
+  }, [resolvedType, portType]);
 
   // Current selection
   const currentBlockType = currentDefaultSource.blockType;

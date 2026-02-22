@@ -9,6 +9,8 @@ import type {
   CompileWorkerRequest,
   CompileWorkerResponse,
   CompileWorkerCompiledMessage,
+  WorkerFrontendOptions,
+  WorkerDiagnosticSeverityOverride,
 } from './compile-worker-protocol';
 
 export class CompileSupersededError extends Error {
@@ -36,11 +38,33 @@ interface InFlightRequest {
   resolve: (value: CompileWorkerRunResult) => void;
 }
 
-function sanitizeFrontendOptions(options: FrontendOptions | undefined): FrontendOptions | undefined {
+const ALLOWED_SEVERITY_OVERRIDES = new Set<WorkerDiagnosticSeverityOverride>([
+  'error',
+  'warn',
+  'info',
+  'ignore',
+]);
+
+function sanitizeDiagnosticOverrides(
+  overrides: FrontendOptions['diagnosticOverrides'],
+): Readonly<Record<string, WorkerDiagnosticSeverityOverride>> | undefined {
+  if (!overrides || typeof overrides !== 'object') return undefined;
+
+  const plain: Record<string, WorkerDiagnosticSeverityOverride> = {};
+  // [LAW:single-enforcer] Worker boundary is the one place that normalizes
+  // frontend options to a clone-safe plain object payload.
+  for (const [code, raw] of Object.entries(overrides as Record<string, unknown>)) {
+    if (typeof code !== 'string' || code.length === 0) continue;
+    if (typeof raw !== 'string' || !ALLOWED_SEVERITY_OVERRIDES.has(raw as WorkerDiagnosticSeverityOverride)) continue;
+    plain[code] = raw as WorkerDiagnosticSeverityOverride;
+  }
+
+  return Object.keys(plain).length > 0 ? plain : undefined;
+}
+
+function sanitizeFrontendOptions(options: FrontendOptions | undefined): WorkerFrontendOptions | undefined {
   if (!options) return undefined;
-  const sanitizedOverrides = options.diagnosticOverrides
-    ? { ...options.diagnosticOverrides }
-    : undefined;
+  const sanitizedOverrides = sanitizeDiagnosticOverrides(options.diagnosticOverrides);
   return {
     traceCardinalitySolver: options.traceCardinalitySolver === true,
     diagnosticOverrides: sanitizedOverrides,

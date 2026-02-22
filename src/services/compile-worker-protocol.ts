@@ -1,4 +1,4 @@
-import type { FrontendOptions, FrontendResult } from '../compiler/frontend';
+import type { FrontendResult } from '../compiler/frontend';
 import type { CompileError } from '../compiler/types';
 import type { CompiledProgramIR } from '../compiler/ir/program';
 import type { SerializableTopologyDef } from '../shapes/registry';
@@ -17,6 +17,17 @@ export type CompileWorkerBackendResult =
       readonly errors: readonly CompileError[];
     };
 
+export type WorkerDiagnosticSeverityOverride = 'error' | 'warn' | 'info' | 'ignore';
+
+/**
+ * Clone-safe frontend options payload for worker transport.
+ * [LAW:single-enforcer] Worker boundary owns clone-safe shape constraints.
+ */
+export interface WorkerFrontendOptions {
+  readonly traceCardinalitySolver?: boolean;
+  readonly diagnosticOverrides?: Readonly<Record<string, WorkerDiagnosticSeverityOverride>>;
+}
+
 export interface CompileWorkerRequest {
   readonly kind: 'compile';
   readonly requestId: number;
@@ -26,7 +37,7 @@ export interface CompileWorkerRequest {
    * [LAW:single-enforcer] Worker message boundary is the single clone-safety boundary.
    */
   readonly serializedPatch: string;
-  readonly frontendOptions?: FrontendOptions;
+  readonly frontendOptions?: WorkerFrontendOptions;
 }
 
 export interface CompileWorkerCompiledMessage {
