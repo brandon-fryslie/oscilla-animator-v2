@@ -68,62 +68,61 @@ after both writers land.
 
 ---
 
-## Phase 3 — Prove the Pattern (Const + Math) (IN PROGRESS)
+## Phase 3 — Prove the Pattern (Const + Math) (COMPLETE)
 
 Convert Const as proof-of-concept, then prime the pipeline with easy blocks.
 
 | # | Ticket | Title | Notes | Status |
 |---|--------|-------|-------|--------|
-| 15 | **99dq** | (EPIC) Prove the Pattern | Parent epic. Depends on zdru. | OPEN |
+| 15 | **99dq** | (EPIC) Prove the Pattern | Parent epic. Depends on zdru. | **DONE** |
 | 16 | **99dq.1** | Create SCALAR_INSTANCE_ID for cardinality-one materialization | Well-known InstanceId with count=1. | **DONE** |
 | 17 | **99dq.2** | Convert Const block to LoweredField(count=1) | Proof-of-concept scalar materialization path complete (`StepMaterialize` via `SCALAR_INSTANCE_ID`). Depends on 99dq.1. | **DONE** |
-| 18 | **99dq.3** | Convert ~10–20 easy/medium blocks | Math, simple signal generators. Depends on 99dq.2. | OPEN |
+| 18 | **99dq.3** | Convert ~10–20 easy/medium blocks | Math, simple signal generators. Depends on 99dq.2. | **DONE** |
 
 ---
 
-## Phase 4 — Convert All Remaining Blocks
+## Phase 4 — Convert All Remaining Blocks (CLOSED / SUPERSEDED)
 
 Hardest first. Validate assumptions before converting the long tail.
 
-| # | Ticket | Title | Notes |
-|---|--------|-------|-------|
-| 19 | **wbhc** | (EPIC) Convert All Remaining Blocks | Parent epic. Depends on 99dq. |
-| 20 | **wbhc.1** | Wave 1: Expression block (HARDEST) | Dynamic type resolution, component reconstruction. |
-| 21 | **wbhc.2** | Wave 2: Broadcast block (HARD) | field-of-1 to field-of-N, adapter system implications. Depends on wbhc.1. |
-| 22 | **wbhc.3** | Wave 3: Multi-component blocks (MEDIUM-HARD) | vec3, color, construct. Delete `evaluateConstructSignal()`. Depends on wbhc.1, wbhc.2. |
-| 23 | **wbhc.4** | Wave 4: Stateful blocks (MEDIUM) | accumulator, unit-delay, lag. Two-phase lowering. Depends on wbhc.2, wbhc.3. |
-| 24 | **wbhc.5** | Wave 5: Remaining blocks (EASY) | Adapters, lenses, mop up. Depends on wbhc.3, wbhc.4. |
+| # | Ticket | Title | Notes | Status |
+|---|--------|-------|-------|--------|
+| 19 | **wbhc** | (EPIC) Convert All Remaining Blocks | Superseded by Migration Batch A1/A2/A3/A4 tracking. | **DONE** |
+| 20 | **wbhc.1** | Wave 1: Expression block (HARDEST) | Superseded/completed by `9fa1`. | **DONE** |
+| 21 | **wbhc.2** | Wave 2: Broadcast block (HARD) | Superseded/completed by `aifw`. | **DONE** |
+| 22 | **wbhc.3** | Wave 3: Multi-component blocks (MEDIUM-HARD) | Superseded/completed by `rbs9` (+ child tickets closed). | **DONE** |
+| 23 | **wbhc.4** | Wave 4: Stateful blocks (MEDIUM) | Superseded/completed by `op2j`. | **DONE** |
+| 24 | **wbhc.5** | Wave 5: Remaining blocks (EASY) | Superseded by Batch B/C cleanup tickets. | **DONE** |
 
 ---
 
-## Phase 5 — IR & Type Cleanup: Delete Dual-Path Vestiges
+## Phase 5 — IR & Type Cleanup: Delete Dual-Path Vestiges (IN PROGRESS)
 
 Delete everything left over from the old signal/field split.
 
-| # | Ticket | Title | Notes |
-|---|--------|-------|-------|
-| 25 | **v91n** | (EPIC) Delete Dual-Path Vestiges | Parent epic. Depends on wbhc. |
-| 26 | **v91n.1** | Merge LoweredSignal + LoweredField into unified LoweredValue | Single IR type. |
-| 27 | **v91n.2** | Unify StateMappingScalar + StateMappingField | Single StateMapping with laneCount. Depends on v91n.1. |
-| 28 | **v91n.3** | Simplify EvalStrategy, merge StepEvalValue + StepMaterialize | Continuous or Discrete only. Depends on v91n.1. |
-| 29 | **v91n.4** | Replace zipSig kernel with zip + implicit broadcast | Depends on v91n.3. |
-| 30 | **v91n.5** | Delete ValueExprSignalEvaluator and evaluateConstructSignal | DELETE entire file. Depends on v91n.3, v91n.4. |
-| 31 | **v91n.6** | Delete BufferPool | DELETE `src/runtime/BufferPool.ts`. Depends on v91n.5. |
-| 32 | **v91n.7** | Delete remaining dual-path vestiges | fieldSlotSet, objectSlots, storage field. Depends on v91n.1–6. |
-| 33 | **v91n.8** | Add forbidden pattern tests | CI grep checks prevent regression. Depends on v91n.7. |
+Canonical remaining Phase-5 work is tracked by migration batches:
+
+| Ticket | Title | Status |
+|--------|-------|--------|
+| **sddl** | Migration Batch B2: Schedule/eval step unification (includes state mapping unification scope) | OPEN |
+| **a38l** | Migration Batch C1: Remove scalar/signal evaluator vestiges from active runtime flow | OPEN |
+| **261z** | Migration Batch C2: Remove BufferPool vestiges | OPEN |
+| **xx9c** | Migration Batch C3: Final cleanup + forbidden guards | OPEN |
+
+Milestones already closed:
+- **j1fn** (Lowered IR type unification) — DONE
+- **cqna** (zipSig removal) — DONE
+- **v91n**/`v91n.*` legacy ticket family — closed or superseded into the canonical batch set above.
 
 ---
 
 ## Active Workstreams (Current Beads State)
 
-`IN_PROGRESS`:
-- **wbhc.1** — Wave 1: Expression conversion
-- **wbhc.2** — Wave 2: Broadcast conversion
-- **v91n.1** — LoweredSignal/LoweredField unification
-- **v91n.3** — Step/EvalStrategy unification
-- **v91n.4** — zipSig removal
-- **v91n.5** — ValueExprSignalEvaluator/evaluateConstructSignal deletion
-- **v91n.6** — BufferPool deletion
+Open migration streams:
+- **sddl** — unify schedule/eval model and state mapping data model
+- **a38l** — remove scalar evaluator vestiges from active runtime path
+- **261z** — remove BufferPool from runtime path
+- **xx9c** — final vestige cleanup + forbidden-pattern enforcement
 
 This list should mirror beads; if it drifts, beads is authoritative.
 
@@ -134,6 +133,10 @@ This list should mirror beads; if it drifts, beads is authoritative.
 | Ticket | Title | Disposition |
 |--------|-------|-------------|
 | **cpc**, **cpc.1**, **cpc.2**, **cpc.3**, **cpc.4** | CT/ICT cardinality policy refactor | Closed. This blocker is complete; migration now focuses on runtime/compiler dual-path deletion. |
+| **9fa1**, **aifw**, **op2j**, **rbs9** | Migration Batch A1/A2/A3/A4 | Closed. Remaining block-level unification batches were completed and closed. |
+| **j1fn**, **cqna** | Migration Batch B1/B3 | Closed. Lowered IR split and zipSig vestiges were removed. |
+| **wbhc**, **wbhc.\*** | Legacy Phase-4 wave tickets | Closed/superseded by A/B/C migration batch tickets. |
+| **v91n**, **v91n.\*** | Legacy Phase-5 cleanup tickets | Closed/superseded into canonical open batch tickets (`sddl`, `a38l`, `261z`, `xx9c`). |
 | **73lv** | Zero-cardinality enforcement | Closed (will not do). "Put constants in a lookup table" is a separate optimization with no change in effort if done later. |
 | **0l3** | Typed scalar banks (f32/i32/shape2d) | Closed (subsumed). The arena IS the typed Float32 bank; shape2d bank already exists. |
 
@@ -156,18 +159,13 @@ f433 (unify slot maps) ──┐
                                                         │
                                                         ↓
                               99dq.1 → 99dq.2 → 99dq.3
-                                                   │
-                                                   ↓
-                        wbhc.1 → wbhc.2 → wbhc.3 → wbhc.4 → wbhc.5
-                                                                │
-                                                                ↓
-               v91n.1 → v91n.2              v91n.1 → v91n.3 → v91n.4
-                                                               │
-                                                               ↓
-                                                    v91n.5 → v91n.6
-                                                               │
-                                                               ↓
-                                                    v91n.7 → v91n.8
+                                                         │
+                                                         ↓
+                          A1/A2/A3/A4 + B1 + B3 (DONE)
+                                                         │
+                                                         ↓
+                                sddl (B2: open)
+                                 ├──→ a38l (C1: open)
+                                 ├──→ 261z (C2: open)
+                                 └──→ xx9c (C3: open)
 ```
-
-**Total**: 2 pre-work + 3 Phase 1 + 7 Phase 2 + 3 Phase 3 + 5 Phase 4 + 8 Phase 5 = **28 tasks** across 5 epics.

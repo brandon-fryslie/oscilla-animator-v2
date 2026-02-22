@@ -12,7 +12,7 @@ The type system already knows they're the same thing — `CanonicalType.extent.c
 
 **Strategy:** Arena first. Build the unified storage, shim the old evaluators to write to it, remove old storage, then incrementally unify the evaluation paths.
 
-## Status Snapshot (2026-02-21)
+## Status Snapshot (2026-02-22)
 
 Completed:
 - CT/ICT cardinality policy refactor is complete (`cpc`, `cpc.1`, `cpc.2`, `cpc.3`, `cpc.4` are closed).
@@ -26,9 +26,10 @@ Completed:
 - Scalar Const proof-of-concept materialization is complete (`99dq.2` is closed).
 
 Remaining critical path:
-1. `99dq.3`: convert initial easy/medium block tranche to cardinality-one field materialization.
-2. `wbhc.*`: convert all remaining blocks.
-3. `v91n.*`: delete dual-path IR/runtime vestiges.
+1. `sddl` (Migration Batch B2): unify schedule/eval step model and collapse state mapping split into one data contract.
+2. `a38l` (Migration Batch C1): remove remaining scalar-evaluator vestiges from active runtime flow.
+3. `261z` (Migration Batch C2): remove BufferPool from active runtime path.
+4. `xx9c` (Migration Batch C3): final vestige cleanup + forbidden-pattern guards.
 
 Completion condition:
 - No runtime/compiler concept of "signal path" remains.
