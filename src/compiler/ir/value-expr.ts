@@ -2,7 +2,7 @@
  * Canonical ValueExpr Type System
  *
  * This module defines the unified ValueExpr type that replaces the legacy
- * SigExpr/FieldExpr/EventExpr split with a single canonical table.
+ * the legacy split expression unions with a single canonical table.
  *
  * Design Principles:
  * - Small top-level kind discriminant (10 values)
@@ -11,7 +11,7 @@
  * - No op discriminant — only kind at top level
  * - No one/many/event family tags — derive from extent by checking temporality and cardinality
  *
- * This is the canonical expression type. Legacy SigExpr/FieldExpr/EventExpr have been deleted.
+ * This is the canonical expression type. Legacy split expression unions have been deleted.
  * Migration complete.
  *
  * Spec Reference: TYPE-SYSTEM-INVARIANTS.md
@@ -64,7 +64,7 @@ export type KernelId =
 /**
  * Canonical value expression type.
  *
- * Replaces legacy SigExpr/FieldExpr/EventExpr with a unified table.
+ * Replaces legacy split expression unions with a unified table.
  * CanonicalType.extent determines one/many/event semantics.
  *
  * Top-level kinds (11):

@@ -313,6 +313,38 @@ describe('Forbidden Patterns (Type System Invariants)', () => {
 
   });
 
+  // =============================================================================
+  // Cardinality Unification Runtime Vestiges
+  // =============================================================================
+
+  describe('Runtime Vestige Cleanup', () => {
+
+    it('no BufferPool usage in runtime/compiler/services production code', () => {
+      const matches = grepSrc('BufferPool');
+      const allowlist = [
+        /forbidden-patterns\.test\.ts/,  // This file
+        /\.test\./,                      // Tests may mention removed symbols historically
+        /__tests__/,                     // Test directories
+        /MIGRATION-PLAN\.md/,            // Migration docs
+      ];
+      const filtered = filterAllowlist(matches, allowlist);
+      expect(filtered, 'BufferPool runtime path was removed; do not reintroduce it').toEqual([]);
+    });
+
+    it('ValueExprScalarEvaluator imports are restricted to materializer and tests', () => {
+      const matches = grepSrc("from './ValueExprScalarEvaluator'", 'src/runtime/');
+      const allowlist = [
+        /ValueExprMaterializer\.ts/,     // Canonical one-value helper dependency
+        /ValueExprScalarEvaluator\.ts/,  // Self-file
+        /\.test\./,                      // Tests
+        /__tests__/,                     // Test directories
+      ];
+      const filtered = filterAllowlist(matches, allowlist);
+      expect(filtered, 'Do not add new active runtime dependencies on ValueExprScalarEvaluator').toEqual([]);
+    });
+
+  });
+
   describe('Opcode Single Enforcer', () => {
 
     it('ValueExprMaterializer must not contain inline opcode implementations', () => {

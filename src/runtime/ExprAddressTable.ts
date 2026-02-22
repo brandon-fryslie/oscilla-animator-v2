@@ -31,7 +31,7 @@ export interface SlotLookup {
 export interface ExprAddressTable {
   /** ValueSlot → physical storage location */
   readonly slotLookup: ReadonlyMap<ValueSlot, SlotLookup>;
-  /** FieldExprId → materialization target ValueSlot */
+  /** ValueExprId (materialized field expression) → target ValueSlot */
   readonly fieldExprToSlot: ReadonlyMap<number, ValueSlot>;
   /** Scalar ValueExprId → arena scalar offset */
   readonly scalarExprToArenaOffset: ReadonlyMap<number, number>;

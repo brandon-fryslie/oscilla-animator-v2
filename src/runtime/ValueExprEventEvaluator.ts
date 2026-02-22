@@ -17,7 +17,7 @@
  * This evaluator handles ONLY event-extent expressions:
  * - Temporality: discrete (not continuous)
  *
- * Scalar-extent (temporality continuous) → ValueExprScalarEvaluator
+ * Cardinality-one continuous values → Materializer (count=1)
  * Field-extent (cardinality many) → Materializer
  *
  * Runtime assertions enforce this constraint.
@@ -29,7 +29,11 @@ import type { ValueExpr, ValueExprEvent } from '../compiler/ir/value-expr';
 import type { ValueExprId } from '../compiler/ir/Indices';
 import type { RuntimeState } from './RuntimeState';
 import type { CompiledProgramIR } from '../compiler/ir/program';
-import { evaluateValueExprScalar } from './ValueExprScalarEvaluator';
+import { SCALAR_INSTANCE_ID } from '../compiler/ir/Indices';
+import { createMaterializeScratch } from './MaterializeScratch';
+import { materializeValueExpr } from './ValueExprMaterializer';
+
+const EVENT_MATERIALIZE_SCRATCH = createMaterializeScratch();
 
 /**
  * Cycle detection error for combine recursion
@@ -128,7 +132,20 @@ function evaluateEventKind(
     case 'wrap': {
       // Edge detection: rising edge of (oneValue >= 0.5)
       // Same logic as EventEvaluator.ts:57-64
-      const oneValue = evaluateValueExprScalar(expr.input, table.nodes, state);
+      // [LAW:one-source-of-truth] Event wrap reads cardinality-one values through
+      // the canonical materialization path (count=1), not a parallel evaluator path.
+      EVENT_MATERIALIZE_SCRATCH.reset();
+      const oneValueBuf = materializeValueExpr(
+        expr.input,
+        table,
+        SCALAR_INSTANCE_ID,
+        1,
+        state,
+        program,
+        undefined,
+        EVENT_MATERIALIZE_SCRATCH,
+      );
+      const oneValue = oneValueBuf[0] ?? 0;
 
       // NaN and Inf treated as false (spec §8.6.3)
       const predicate = (Number.isFinite(oneValue) && oneValue >= 0.5) ? 1 : 0;

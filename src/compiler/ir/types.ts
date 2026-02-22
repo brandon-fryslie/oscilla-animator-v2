@@ -266,7 +266,7 @@ export type TimeModel = TimeModelIR;
 /**
  * Evaluate a cardinality-one expression into a value slot.
  * // [LAW:one-source-of-truth] One-lane values are still field data; this step
- * // writes directly to the canonical slot backing store instead of a signal-only path.
+ * // writes directly to the canonical slot backing store instead of any legacy split path.
  */
 export interface StepEvalOne {
   readonly kind: 'evalOne';

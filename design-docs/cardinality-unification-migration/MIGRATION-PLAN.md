@@ -24,12 +24,12 @@ Completed:
 - Schedule executors now require arena descriptors for numeric materialize/continuity paths; numeric `values.objects` fallback has been removed.
 - Scalar instance bootstrap is complete (`99dq.1` is closed).
 - Scalar Const proof-of-concept materialization is complete (`99dq.2` is closed).
+- Schedule/eval/state-mapping unification is complete (`sddl` is closed).
+- BufferPool is fully removed from runtime and tests (`261z` is closed).
+- Event wrap one-value evaluation now uses canonical materialization (`a38l` scope completed).
 
 Remaining critical path:
-1. `sddl` (Migration Batch B2): unify schedule/eval step model and collapse state mapping split into one data contract.
-2. `a38l` (Migration Batch C1): remove remaining scalar-evaluator vestiges from active runtime flow.
-3. `261z` (Migration Batch C2): remove BufferPool from active runtime path.
-4. `xx9c` (Migration Batch C3): final vestige cleanup + forbidden-pattern guards.
+1. `xx9c` (Migration Batch C3): final vestige cleanup + forbidden-pattern guards.
 
 Completion condition:
 - No runtime/compiler concept of "signal path" remains.

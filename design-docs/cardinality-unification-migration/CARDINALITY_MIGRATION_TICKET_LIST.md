@@ -104,9 +104,9 @@ Canonical remaining Phase-5 work is tracked by migration batches:
 
 | Ticket | Title | Status |
 |--------|-------|--------|
-| **sddl** | Migration Batch B2: Schedule/eval step unification (includes state mapping unification scope) | OPEN |
-| **a38l** | Migration Batch C1: Remove scalar/signal evaluator vestiges from active runtime flow | OPEN |
-| **261z** | Migration Batch C2: Remove BufferPool vestiges | OPEN |
+| **sddl** | Migration Batch B2: Schedule/eval step unification (includes state mapping unification scope) | DONE |
+| **a38l** | Migration Batch C1: Remove scalar/signal evaluator vestiges from active runtime flow | DONE |
+| **261z** | Migration Batch C2: Remove BufferPool vestiges | DONE |
 | **xx9c** | Migration Batch C3: Final cleanup + forbidden guards | OPEN |
 
 Milestones already closed:
@@ -119,9 +119,6 @@ Milestones already closed:
 ## Active Workstreams (Current Beads State)
 
 Open migration streams:
-- **sddl** — unify schedule/eval model and state mapping data model
-- **a38l** — remove scalar evaluator vestiges from active runtime path
-- **261z** — remove BufferPool from runtime path
 - **xx9c** — final vestige cleanup + forbidden-pattern enforcement
 
 This list should mirror beads; if it drifts, beads is authoritative.
@@ -136,7 +133,7 @@ This list should mirror beads; if it drifts, beads is authoritative.
 | **9fa1**, **aifw**, **op2j**, **rbs9** | Migration Batch A1/A2/A3/A4 | Closed. Remaining block-level unification batches were completed and closed. |
 | **j1fn**, **cqna** | Migration Batch B1/B3 | Closed. Lowered IR split and zipSig vestiges were removed. |
 | **wbhc**, **wbhc.\*** | Legacy Phase-4 wave tickets | Closed/superseded by A/B/C migration batch tickets. |
-| **v91n**, **v91n.\*** | Legacy Phase-5 cleanup tickets | Closed/superseded into canonical open batch tickets (`sddl`, `a38l`, `261z`, `xx9c`). |
+| **v91n**, **v91n.\*** | Legacy Phase-5 cleanup tickets | Closed/superseded into canonical batch tickets (`sddl`, `a38l`, `261z`, `xx9c`). |
 | **73lv** | Zero-cardinality enforcement | Closed (will not do). "Put constants in a lookup table" is a separate optimization with no change in effort if done later. |
 | **0l3** | Typed scalar banks (f32/i32/shape2d) | Closed (subsumed). The arena IS the typed Float32 bank; shape2d bank already exists. |
 
@@ -164,8 +161,8 @@ f433 (unify slot maps) ──┐
                           A1/A2/A3/A4 + B1 + B3 (DONE)
                                                          │
                                                          ↓
-                                sddl (B2: open)
-                                 ├──→ a38l (C1: open)
-                                 ├──→ 261z (C2: open)
+                                sddl (B2: done)
+                                 ├──→ a38l (C1: done)
+                                 ├──→ 261z (C2: done)
                                  └──→ xx9c (C3: open)
 ```
