@@ -348,12 +348,18 @@ export class PatchStore {
    * Emits EdgeRemoved for each edge, then BlockRemoved.
    */
   removeBlock(id: BlockId): void {
-    this._hasStructuralChange = true;
-    // Protect TimeRoot blocks from deletion (silently ignore)
     const block = this._data.blocks.get(id);
-    if (block?.type === 'InfiniteTimeRoot') {
+    if (!block) {
+      this.reportIssue('warn', `Attempted to remove missing block '${id}'`);
       return;
     }
+    // [LAW:no-silent-fallbacks] Protected blocks reject user mutation with an
+    // explicit issue instead of a silent no-op.
+    if (block.type === 'InfiniteTimeRoot') {
+      this.reportIssue('warn', `Cannot remove protected block '${id}' of type InfiniteTimeRoot`);
+      return;
+    }
+    this._hasStructuralChange = true;
 
     // Find edges to remove (for event emission)
     const edgesToRemove = this._data.edges.filter(
