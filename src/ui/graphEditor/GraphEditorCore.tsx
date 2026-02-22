@@ -101,6 +101,7 @@ export interface GraphEditorCoreProps {
   /** Context menu event handlers (optional) */
   onNodeContextMenu?: NodeMouseHandler;
   onEdgeContextMenu?: EdgeMouseHandler;
+  onEdgeClick?: EdgeMouseHandler;
 
   /** Edge hover event handlers (optional - for debug mode) */
   onEdgeMouseEnter?: EdgeMouseHandler;
@@ -141,6 +142,7 @@ export const GraphEditorCoreInner = observer(
         onEditorReady,
         onNodeContextMenu,
         onEdgeContextMenu,
+        onEdgeClick,
         onEdgeMouseEnter,
         onEdgeMouseLeave,
         onPaneClick,
@@ -291,13 +293,16 @@ export const GraphEditorCoreInner = observer(
         [selection]
       );
 
-      const handleEdgeClick = useCallback(
-        (_event: React.MouseEvent, edge: Edge) => {
+      const handleEdgeClick = useCallback<EdgeMouseHandler>(
+        (event, edge) => {
           if (selection) {
             selection.selectEdge(edge.id);
           }
+          if (onEdgeClick) {
+            onEdgeClick(event, edge);
+          }
         },
-        [selection]
+        [selection, onEdgeClick]
       );
 
       const handlePaneClick = useCallback((event: React.MouseEvent) => {
@@ -535,6 +540,7 @@ export const GraphEditorCoreInner = observer(
             <ReactFlow
               nodes={nodes}
               edges={edges}
+              elevateEdgesOnSelect={false}
               onNodesChange={handleNodesChange}
               onEdgesChange={handleEdgesChange}
               onConnect={handleConnect}

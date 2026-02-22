@@ -8,12 +8,12 @@
  */
 
 import { BaseEdge, EdgeLabelRenderer, getBezierPath, type EdgeProps } from 'reactflow';
-import React, { useMemo, useRef, useState } from 'react';
-import { Popover } from '@mui/material';
+import React, { useEffect, useMemo } from 'react';
 import { observer } from 'mobx-react-lite';
 import type { OscillaEdgeData } from './nodes';
 import { getLensLabel } from './lensUtils';
 import { lensTargetsConnection } from './lensUtils';
+import { BasePopover, POPUP_SURFACE_STYLE, usePinPopoverState } from './BasePopover';
 import type { Diagnostic } from '../../diagnostics/types';
 import type { BlockId } from '../../types';
 import { useStores } from '../../stores';
@@ -38,6 +38,12 @@ interface LensImpactPreviewProps {
   afterPortId: string | null;
   beforeLabel: string;
   afterLabel: string;
+}
+
+interface LensPopoverContext {
+  lensId: string;
+  lensIndex: number;
+  targetPortId: string;
 }
 
 interface ExtractedSeries {
@@ -290,14 +296,10 @@ export const OscillaEdge = observer(function OscillaEdge(
   const targetHandle = (props as { targetHandle?: string; targetHandleId?: string }).targetHandle
     ?? (props as { targetHandleId?: string }).targetHandleId
     ?? '';
-  const { selection, frontend, patch } = useStores();
-  const [chipAnchorPosition, setChipAnchorPosition] = useState<{ top: number; left: number } | null>(null);
-  const ignoreNextBackdropCloseRef = useRef(false);
-  const [activeLensContext, setActiveLensContext] = useState<{
-    lensId: string;
-    lensIndex: number;
-    targetPortId: string;
-  } | null>(null);
+  const { selection, frontend, patch, debug } = useStores();
+  const lensPopover = usePinPopoverState<LensPopoverContext>({
+    isSame: (a, b) => a.lensId === b.lensId && a.targetPortId === b.targetPortId,
+  });
 
   // Compute bezier path
   const [edgePath] = getBezierPath({
@@ -360,20 +362,24 @@ export const OscillaEdge = observer(function OscillaEdge(
     tooltipText = labels.join(', ');
   }
 
-  const activeLens = edgeLenses.find((lens) => lens.id === activeLensContext?.lensId) ?? null;
-  const activeTargetPortId = activeLensContext?.targetPortId ?? '';
+  const lensContext = lensPopover.active?.data ?? null;
+  const activeLens = edgeLenses.find((lens) => lens.id === lensContext?.lensId) ?? null;
+  const activeTargetPortId = lensContext?.targetPortId ?? '';
 
-  const closeLensPopover = (): void => {
-    setChipAnchorPosition(null);
-    setActiveLensContext(null);
-  };
-
-  const markPopoverInteraction = (): void => {
-    ignoreNextBackdropCloseRef.current = true;
-    window.setTimeout(() => {
-      ignoreNextBackdropCloseRef.current = false;
-    }, 0);
-  };
+  useEffect(() => {
+    if (lensPopover.active) {
+      debug.setHoveredLensEdge(id);
+      return () => {
+        if (debug.hoveredLensEdgeId === id) {
+          debug.setHoveredLensEdge(null);
+        }
+      };
+    }
+    if (debug.hoveredLensEdgeId === id) {
+      debug.setHoveredLensEdge(null);
+    }
+    return undefined;
+  }, [lensPopover.active, debug, id]);
 
   return (
     <>
@@ -394,6 +400,14 @@ export const OscillaEdge = observer(function OscillaEdge(
               display: 'flex',
               gap: 4,
               alignItems: 'center',
+              zIndex: 20,
+            }}
+            onMouseEnter={() => {
+              // [LAW:single-enforcer] Edge-popover suppression is controlled by one hover signal for the full transform chip cluster.
+              debug.setHoveredLensEdge(id);
+            }}
+            onMouseLeave={() => {
+              debug.setHoveredLensEdge(null);
             }}
             title={tooltipText}
           >
@@ -402,23 +416,36 @@ export const OscillaEdge = observer(function OscillaEdge(
                 key={lens.id}
                 onMouseDown={(event) => {
                   event.stopPropagation();
+                  debug.markSuppressNextEdgePopoverPin();
+                }}
+                onMouseEnter={(event) => {
+                  if (!targetHandle) return;
+                  lensPopover.setHover({
+                    data: {
+                      lensId: lens.id,
+                      lensIndex,
+                      targetPortId: targetHandle,
+                    },
+                    anchorPosition: { top: event.clientY + 12, left: event.clientX + 12 },
+                  });
+                }}
+                onMouseLeave={() => {
+                  lensPopover.clearHover();
                 }}
                 onClick={(event) => {
                   event.stopPropagation();
                   selection.selectEdge(id);
                   if (!targetHandle) return;
-
                   const nextPosition = { top: event.clientY + 12, left: event.clientX + 12 };
-                  const isSameLens = activeLensContext?.lensId === lens.id;
-
-                  // [LAW:single-enforcer] One interactive surface handles lens preview + editing.
-                  if (isSameLens) {
-                    closeLensPopover();
-                    return;
-                  }
-
-                  setActiveLensContext({ lensId: lens.id, lensIndex, targetPortId: targetHandle });
-                  setChipAnchorPosition(nextPosition);
+                  // [LAW:single-enforcer] Click-pin capability is centralized in BasePopover; state remains local here.
+                  lensPopover.togglePinned({
+                    data: {
+                      lensId: lens.id,
+                      lensIndex,
+                      targetPortId: targetHandle,
+                    },
+                    anchorPosition: nextPosition,
+                  });
                 }}
                 style={{
                   minHeight: 26,
@@ -448,6 +475,10 @@ export const OscillaEdge = observer(function OscillaEdge(
 
             {adapterCount > 0 && (
               <div
+                onMouseDown={(event) => {
+                  event.stopPropagation();
+                  debug.markSuppressNextEdgePopoverPin();
+                }}
                 onClick={(event) => {
                   event.stopPropagation();
                   selection.selectEdge(id);
@@ -476,41 +507,24 @@ export const OscillaEdge = observer(function OscillaEdge(
         </EdgeLabelRenderer>
       )}
 
-      <Popover
-        open={Boolean(chipAnchorPosition && activeLens && activeTargetPortId)}
-        anchorReference="anchorPosition"
-        anchorPosition={chipAnchorPosition ?? undefined}
-        onClose={(_, reason) => {
-          // [LAW:single-enforcer] Popover close policy is enforced at the popover boundary.
-          if (reason === 'backdropClick' && ignoreNextBackdropCloseRef.current) {
-            return;
-          }
-          closeLensPopover();
+      <BasePopover
+        open={Boolean(lensPopover.active && activeLens && activeTargetPortId)}
+        anchorPosition={lensPopover.active?.anchorPosition ?? null}
+        interactive={lensPopover.interactive}
+        onClose={() => {
+          lensPopover.closeAll();
+          debug.setHoveredLensEdge(null);
         }}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
-        transformOrigin={{ vertical: 'top', horizontal: 'left' }}
-        disableAutoFocus
-        disableEnforceFocus
-        disableRestoreFocus
-        slotProps={{
-          paper: {
-            onMouseDownCapture: markPopoverInteraction,
-            onClickCapture: markPopoverInteraction,
-            onMouseDown: (event) => event.stopPropagation(),
-            onClick: (event) => event.stopPropagation(),
-          },
+        paperStyle={{
+          ...POPUP_SURFACE_STYLE,
+          minWidth: 420,
+          maxWidth: 620,
+          padding: 14,
         }}
       >
         {activeLens && activeTargetPortId && (
           <div
-            onMouseDown={(event) => event.stopPropagation()}
-            onClick={(event) => event.stopPropagation()}
             style={{
-              minWidth: 420,
-              maxWidth: 620,
-              padding: 14,
-              background: 'linear-gradient(135deg, rgba(30, 30, 40, 0.98) 0%, rgba(20, 20, 30, 0.98) 100%)',
-              border: '1px solid rgba(139, 92, 246, 0.3)',
               display: 'flex',
               flexDirection: 'column',
               gap: 12,
@@ -529,27 +543,29 @@ export const OscillaEdge = observer(function OscillaEdge(
               }}
             >
               <LensImpactPreview
-                beforeEdgeId={activeLensContext?.lensIndex === 0 ? id : null}
-                beforeBlockId={activeLensContext?.lensIndex === 0 ? null : target}
-                beforePortId={activeLensContext?.lensIndex === 0 ? null : activeTargetPortId}
+                beforeEdgeId={lensContext?.lensIndex === 0 ? id : null}
+                beforeBlockId={lensContext?.lensIndex === 0 ? null : target}
+                beforePortId={lensContext?.lensIndex === 0 ? null : activeTargetPortId}
                 afterBlockId={target}
                 afterPortId={activeTargetPortId}
-                beforeLabel={activeLensContext?.lensIndex === 0
+                beforeLabel={lensContext?.lensIndex === 0
                   ? `before · ${source}.${sourceHandle}`
                   : `before · ${target}.${activeTargetPortId}`}
                 afterLabel={`after · ${target}.${activeTargetPortId}`}
               />
             </div>
 
-            <LensParamControls
-              lens={activeLens}
-              targetBlockId={target as BlockId}
-              targetPortId={activeTargetPortId}
-              compact
-            />
+            {lensPopover.mode === 'pinned' && (
+              <LensParamControls
+                lens={activeLens}
+                targetBlockId={target as BlockId}
+                targetPortId={activeTargetPortId}
+                compact
+              />
+            )}
           </div>
         )}
-      </Popover>
+      </BasePopover>
     </>
   );
 });

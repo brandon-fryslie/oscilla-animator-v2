@@ -59,6 +59,25 @@
   filter: drop-shadow(0 0 8px rgba(125, 211, 252, 0.6));
 }
 
+/* [LAW:one-source-of-truth] Layer contract is centralized here (viewport-local):
+   edges svg < nodes < edge labels/chips < popovers.
+   This keeps port labels/chips reliably above strokes. */
+.react-flow__viewport > .react-flow__edges {
+  z-index: 1 !important;
+}
+
+.react-flow__viewport > .react-flow__nodes {
+  z-index: 4 !important;
+}
+
+.react-flow__viewport > .react-flow__edgelabel-renderer {
+  z-index: 8 !important;
+}
+
+.react-flow__node .osc-port-label {
+  z-index: 3;
+}
+
 /* Animated edge for data flow */
 .react-flow__edge.animated .react-flow__edge-path {
   stroke-dasharray: 5;

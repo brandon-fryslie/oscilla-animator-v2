@@ -53,6 +53,15 @@ export class DebugStore {
   /** Currently hovered edge ID (transient, from mouse enter/leave) */
   hoveredEdgeId: string | null = null;
 
+  /** Edge ID whose lens chip is currently hovered (suppresses edge-level popover). */
+  hoveredLensEdgeId: string | null = null;
+
+  /** True while any port popover is open (suppresses edge-level popover). */
+  portPopoverActive: boolean = false;
+
+  /** One-shot suppression for edge-click pinning after transform-chip interactions. */
+  private suppressNextEdgePopoverPin: boolean = false;
+
   /** Selected edge ID for persistent debug inspection (from SelectionStore) */
   selectedDebugEdgeId: string | null = null;
 
@@ -180,6 +189,24 @@ export class DebugStore {
   setHoveredEdge(edgeId: string | null): void {
     this.hoveredEdgeId = edgeId;
     this.syncActiveEdge();
+  }
+
+  setHoveredLensEdge(edgeId: string | null): void {
+    this.hoveredLensEdgeId = edgeId;
+  }
+
+  setPortPopoverActive(active: boolean): void {
+    this.portPopoverActive = active;
+  }
+
+  markSuppressNextEdgePopoverPin(): void {
+    this.suppressNextEdgePopoverPin = true;
+  }
+
+  consumeSuppressNextEdgePopoverPin(): boolean {
+    const value = this.suppressNextEdgePopoverPin;
+    this.suppressNextEdgePopoverPin = false;
+    return value;
   }
 
   /**

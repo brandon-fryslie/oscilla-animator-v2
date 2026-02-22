@@ -26,6 +26,8 @@ import { PatchStoreAdapter } from '../graphEditor/PatchStoreAdapter';
 import { BlockContextMenu } from './menus/BlockContextMenu';
 import { EdgeContextMenu } from './menus/EdgeContextMenu';
 import { PortContextMenu } from './menus/PortContextMenu';
+import { EdgeInfoPopover } from './EdgeInfoPopover';
+import { usePinPopoverState } from './BasePopover';
 import './ReactFlowEditor.css';
 
 export interface ReactFlowEditorHandle {
@@ -63,6 +65,11 @@ interface PortMenuState {
 }
 
 type ContextMenuState = BlockMenuState | EdgeMenuState | PortMenuState | null;
+
+function isEdgePathTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof Element)) return false;
+  return target.closest('.react-flow__edge-path, .react-flow__edge-interaction') != null;
+}
 
 /**
  * Create EditorHandle adapter for ReactFlowEditorHandle.
@@ -118,6 +125,9 @@ const ReactFlowEditorInner: React.FC<ReactFlowEditorProps> = observer(({
 
   // Context menu state
   const [contextMenu, setContextMenu] = useState<ContextMenuState>(null);
+  const edgePopover = usePinPopoverState<{ edgeId: string }>({
+    isSame: (a, b) => a.edgeId === b.edgeId,
+  });
 
   // Ref to GraphEditorCore imperative handle
   const coreRef = useRef<GraphEditorCoreHandle>(null);
@@ -188,23 +198,47 @@ const ReactFlowEditorInner: React.FC<ReactFlowEditorProps> = observer(({
 
   // Edge hover handlers (for debug mode)
   const handleEdgeMouseEnter = useCallback<EdgeMouseHandler>(
-    (_event, edge) => {
+    (event, edge) => {
+      if (!isEdgePathTarget(event.target)) return;
       debug.setHoveredEdge(edge.id);
+      edgePopover.setHover({
+        data: { edgeId: edge.id },
+        anchorPosition: { top: event.clientY + 12, left: event.clientX + 12 },
+      });
     },
-    [debug]
+    [debug, edgePopover]
   );
 
   const handleEdgeMouseLeave = useCallback<EdgeMouseHandler>(
-    () => {
+    (_event, edge) => {
       debug.setHoveredEdge(null);
+      if (edgePopover.hovered?.data.edgeId === edge.id) {
+        edgePopover.clearHover();
+      }
     },
-    [debug]
+    [debug, edgePopover]
+  );
+
+  const handleEdgeClick = useCallback<EdgeMouseHandler>(
+    (event, edge) => {
+      if (debug.consumeSuppressNextEdgePopoverPin()) {
+        return;
+      }
+      edgePopover.togglePinned({
+        data: { edgeId: edge.id },
+        anchorPosition: { top: event.clientY + 12, left: event.clientX + 12 },
+      });
+      debug.setSelectedDebugEdge(edge.id);
+    },
+    [debug, edgePopover]
   );
 
   // Close context menu on pane click
   const handlePaneClick = useCallback(() => {
     setContextMenu(null);
-  }, []);
+    edgePopover.clearPinned();
+    debug.setSelectedDebugEdge(null);
+  }, [debug, edgePopover]);
 
   // Drag-and-drop handlers for dropping blocks from BlockLibrary
   const handleDropOnCanvas = useCallback(
@@ -231,6 +265,14 @@ const ReactFlowEditorInner: React.FC<ReactFlowEditorProps> = observer(({
     event.preventDefault();
     event.dataTransfer.dropEffect = 'copy';
   }, []);
+
+  const handleWrapperMouseMove = useCallback((event: React.MouseEvent) => {
+    if (edgePopover.mode !== 'hover') return;
+    if (isEdgePathTarget(event.target)) return;
+    // [LAW:single-enforcer] Edge-hover popover visibility is enforced at the editor boundary.
+    edgePopover.clearHover();
+    debug.setHoveredEdge(null);
+  }, [edgePopover, debug]);
 
   // Create handle for EditorContext
   useEffect(() => {
@@ -264,15 +306,25 @@ const ReactFlowEditorInner: React.FC<ReactFlowEditorProps> = observer(({
     onEditorReady?.(editorAdapter);
   }, [onEditorReady, adapter]);
 
-  // Build edge label for debug panel
-  const edgeLabel = useMemo(() => {
-    if (!debug.hoveredEdgeId) return null;
-
-    const edge = adapter.edges.find((e) => e.id === debug.hoveredEdgeId);
+  const edgeLabelForId = useCallback((edgeId: string | null): string | null => {
+    if (!edgeId) return null;
+    const edge = adapter.edges.find((e) => e.id === edgeId);
     if (!edge) return null;
-
     return `${edge.sourceBlockId}:${edge.sourcePortId} → ${edge.targetBlockId}:${edge.targetPortId}`;
-  }, [debug.hoveredEdgeId, adapter.edges]);
+  }, [adapter.edges]);
+
+  const lensSuppressesEdgePopover = Boolean(
+    edgePopover.active?.data.edgeId
+    && debug.hoveredLensEdgeId === edgePopover.active.data.edgeId,
+  );
+  const portSuppressesEdgePopover = debug.portPopoverActive;
+
+  // [LAW:dataflow-not-control-flow] Popover source resolution is data-driven (pinned over hovered).
+  const activeEdgePopover = (lensSuppressesEdgePopover || portSuppressesEdgePopover)
+    ? null
+    : edgePopover.active;
+  const activeEdgePopoverPinned = edgePopover.mode === 'pinned';
+  const activeEdgePopoverLabel = edgeLabelForId(activeEdgePopover?.data.edgeId ?? null);
 
   return (
     <>
@@ -281,6 +333,7 @@ const ReactFlowEditorInner: React.FC<ReactFlowEditorProps> = observer(({
         style={{ width: '100%', height: '100%', position: 'relative' }}
         onDrop={handleDropOnCanvas}
         onDragOver={handleDragOverCanvas}
+        onMouseMove={handleWrapperMouseMove}
       >
         <GraphEditorCore
           ref={coreRef}
@@ -299,6 +352,7 @@ const ReactFlowEditorInner: React.FC<ReactFlowEditorProps> = observer(({
           patch={patchStore.patch}
           onNodeContextMenu={handleNodeContextMenu}
           onEdgeContextMenu={handleEdgeContextMenu}
+          onEdgeClick={handleEdgeClick}
           onEdgeMouseEnter={handleEdgeMouseEnter}
           onEdgeMouseLeave={handleEdgeMouseLeave}
           onPaneClick={handlePaneClick}
@@ -346,6 +400,16 @@ const ReactFlowEditorInner: React.FC<ReactFlowEditorProps> = observer(({
             </Button>
           </Panel>
         </GraphEditorCore>
+
+        {debug.enabled && (
+          <EdgeInfoPopover
+            edgeId={activeEdgePopover?.data.edgeId ?? null}
+            edgeLabel={activeEdgePopoverLabel}
+            anchorPosition={activeEdgePopover?.anchorPosition ?? null}
+            pinned={activeEdgePopoverPinned}
+            onClose={() => edgePopover.closeAll()}
+          />
+        )}
 
       </div>
 

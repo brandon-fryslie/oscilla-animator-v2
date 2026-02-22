@@ -1,23 +1,20 @@
 /**
  * PortInfoPopover - Floating popover for detailed port information.
  *
- * Displays rich port metadata on hover including:
- * - Port name and type
- * - Connection info (what it's connected to)
- * - Debug value (when debug mode enabled)
- * - Default source info (for unconnected inputs)
- *
- * Renders as a portal positioned relative to the hovered element.
- * Does not wrap the Handle element to avoid interfering with ReactFlow.
+ * Uses BasePopover so behavior matches other graph popovers:
+ * - hover preview
+ * - click pin
+ * - interactive while pinned
  */
 
-import React, { useEffect, useState } from 'react';
-import { Portal, Text, Stack, Group, Badge, Box, Paper, Divider } from '@mantine/core';
+import React, { useEffect } from 'react';
+import { Text, Stack, Group, Badge, Box, Divider } from '@mantine/core';
 import { observer } from 'mobx-react-lite';
 import type { PortData } from '../graphEditor/nodeDataTransform';
 import type { DefaultSource } from '../../types';
 import { useStores, formatDebugValue } from '../../stores';
 import { getLensLabel } from './lensUtils';
+import { BasePopover, POPUP_SURFACE_STYLE, type PopoverAnchorPosition } from './BasePopover';
 import {
   formatProvenanceTooltip,
   formatCanonicalTypeTooltip,
@@ -28,136 +25,81 @@ import {
 interface PortInfoPopoverProps {
   port: PortData | null;
   isInput: boolean;
-  anchorEl: HTMLElement | null;
+  arrowOnRight: boolean;
+  anchorPosition: PopoverAnchorPosition | null;
+  pinned: boolean;
+  onClose: () => void;
   /** Block ID for port-based debug queries (output ports without connections) */
   blockId?: string;
 }
 
-/**
- * Format a default source for display.
- */
 function formatDefaultSource(ds: DefaultSource): string {
   if (ds.blockType === 'TimeRoot') {
     return `TimeRoot.${ds.output}`;
   }
-
   if (ds.blockType === 'Const' && ds.params?.value !== undefined) {
     const value = ds.params.value;
-    if (typeof value === 'number') {
-      return String(value);
-    } else if (Array.isArray(value)) {
-      return `[${value.join(', ')}]`;
-    } else if (typeof value === 'object' && value !== null) {
-      return JSON.stringify(value);
-    }
+    if (typeof value === 'number') return String(value);
+    if (Array.isArray(value)) return `[${value.join(', ')}]`;
+    if (typeof value === 'object' && value !== null) return JSON.stringify(value);
     return String(value);
   }
-
   return `${ds.blockType}.${ds.output}`;
 }
 
-/**
- * Get badge color based on default source type.
- */
 function getDefaultSourceBadgeColor(ds: DefaultSource): string {
-  if (ds.blockType === 'TimeRoot') {
-    return 'blue';
-  }
+  if (ds.blockType === 'TimeRoot') return 'blue';
   return 'teal';
 }
 
 export const PortInfoPopover: React.FC<PortInfoPopoverProps> = observer(({
   port,
   isInput,
-  anchorEl,
+  arrowOnRight,
+  anchorPosition,
+  pinned,
+  onClose,
   blockId,
 }) => {
   const { debug, diagnostics } = useStores();
-  // Read an observable before any early return so MobX observer tracks it.
-  // Without this, renders where port=null would trigger "observer without observables" warning.
   const debugEnabled = debug.enabled;
-  const [position, setPosition] = useState<{ top: number; left: number; flipped?: boolean } | null>(null);
 
-  // Calculate position when anchor changes
   useEffect(() => {
-    if (anchorEl && port) {
-      const rect = anchorEl.getBoundingClientRect();
-      const popoverWidth = 240;
-      const offset = 16;
-      const minEdgeDistance = 10;
+    const active = Boolean(port && anchorPosition);
+    debug.setPortPopoverActive(active);
+    return () => {
+      debug.setPortPopoverActive(false);
+    };
+  }, [debug, port, anchorPosition]);
 
-      let left: number;
-      let actualIsInput = isInput;
-
-      // Try preferred side first, flip if needed
-      if (isInput) {
-        // Prefer left side for inputs
-        left = rect.left - popoverWidth - offset;
-        if (left < minEdgeDistance) {
-          // Flip to right side
-          left = rect.right + offset;
-          actualIsInput = false;
-        }
-      } else {
-        // Prefer right side for outputs
-        left = rect.right + offset;
-        if (left + popoverWidth > window.innerWidth - minEdgeDistance) {
-          // Flip to left side
-          left = rect.left - popoverWidth - offset;
-          actualIsInput = true;
-        }
-      }
-
-      // Clamp top position to stay within viewport
-      const top = Math.max(
-        100, // min from top
-        Math.min(rect.top + rect.height / 2, window.innerHeight - 150)
-      );
-
-      setPosition({ top, left, flipped: actualIsInput !== isInput });
-    } else {
-      setPosition(null);
-    }
-  }, [anchorEl, port, isInput]);
-
-  if (!port || !position) {
+  if (!port || !anchorPosition) {
     return null;
   }
 
-  // Get debug value:
-  // - For connected ports: use edge-based lookup
-  // - For unconnected output ports: use port-based lookup
   let debugValue = undefined;
   if (debugEnabled) {
     if (port.connection) {
       debugValue = debug.getEdgeValue(port.connection.edgeId);
     } else if (!isInput && blockId) {
-      // Unconnected output port - query by blockId:portName
       debugValue = debug.getPortValue(blockId, port.id);
     }
   }
 
-  // Determine effective side for arrow (accounts for flip)
-  const arrowOnRight = position.flipped ? !isInput : isInput;
-
   return (
-    <Portal>
-      <Paper
-        shadow="md"
-        style={{
-          position: 'fixed',
-          top: position.top,
-          left: position.left,
-          transform: 'translateY(-50%)',
-          background: '#2a2a2a',
-          border: '1px solid #444',
-          padding: '12px',
-          width: '240px',
-          zIndex: 10000,
-          pointerEvents: 'none',
-        }}
-      >
-        {/* Arrow - points toward the port */}
+    <BasePopover
+      open={Boolean(port && anchorPosition)}
+      anchorPosition={anchorPosition}
+      interactive={pinned}
+      onClose={onClose}
+      anchorOrigin={{ vertical: 'center', horizontal: 'left' }}
+      transformOrigin={{ vertical: 'center', horizontal: 'left' }}
+      paperStyle={{
+        ...POPUP_SURFACE_STYLE,
+        padding: '12px',
+        width: '260px',
+      }}
+    >
+      <div style={{ position: 'relative' }}>
         <div
           style={{
             position: 'absolute',
@@ -168,7 +110,7 @@ export const PortInfoPopover: React.FC<PortInfoPopoverProps> = observer(({
             height: 0,
             borderTop: '6px solid transparent',
             borderBottom: '6px solid transparent',
-            [arrowOnRight ? 'borderLeft' : 'borderRight']: '6px solid #444',
+            [arrowOnRight ? 'borderLeft' : 'borderRight']: '6px solid rgba(139, 92, 246, 0.35)',
           }}
         />
         <div
@@ -181,22 +123,25 @@ export const PortInfoPopover: React.FC<PortInfoPopoverProps> = observer(({
             height: 0,
             borderTop: '5px solid transparent',
             borderBottom: '5px solid transparent',
-            [arrowOnRight ? 'borderLeft' : 'borderRight']: '5px solid #2a2a2a',
+            [arrowOnRight ? 'borderLeft' : 'borderRight']: '5px solid rgba(24, 24, 34, 0.98)',
           }}
         />
 
         <Stack gap="xs">
-          {/* Port Name and Direction */}
           <Group justify="space-between" wrap="nowrap">
-            <Text size="sm" fw={600} c="white">
+            <Text size="sm" fw={700} c="white">
               {port.label}
             </Text>
-            <Badge size="xs" variant="outline" color="gray">
-              {isInput ? 'input' : 'output'}
-            </Badge>
+            <Group gap={6} wrap="nowrap">
+              <Badge size="xs" variant="outline" color="gray">
+                {isInput ? 'input' : 'output'}
+              </Badge>
+              <Badge size="xs" variant="light" color={pinned ? 'violet' : 'gray'}>
+                {pinned ? 'pinned' : 'hover'}
+              </Badge>
+            </Group>
           </Group>
 
-          {/* Type Info */}
           <Box>
             <Text size="xs" c="dimmed">
               Type
@@ -215,7 +160,6 @@ export const PortInfoPopover: React.FC<PortInfoPopoverProps> = observer(({
                 <Text size="sm" c="white" style={{ fontFamily: 'monospace' }}>
                   {port.typeTooltip}
                 </Text>
-                {/* Enhanced canonical type breakdown */}
                 {port.resolvedType && (
                   <Text size="xs" c="dimmed" style={{ fontFamily: 'monospace', whiteSpace: 'pre-line' }}>
                     {formatCanonicalTypeTooltip(port.resolvedType)}
@@ -225,20 +169,17 @@ export const PortInfoPopover: React.FC<PortInfoPopoverProps> = observer(({
             </Group>
           </Box>
 
-          {/* Provenance Info */}
           {port.provenance && (
             <Box>
               <Text size="xs" c="dimmed">
                 Provenance
               </Text>
               <Group gap="xs" mt={2}>
-                {/* Adapter badge */}
                 {getAdapterBadgeLabel(port.provenance) && (
                   <Badge size="xs" color="orange" variant="filled">
                     Adapter
                   </Badge>
                 )}
-                {/* Unresolved warning */}
                 {getUnresolvedWarning(port.provenance) && (
                   <Badge size="xs" color="red" variant="filled">
                     Unresolved
@@ -251,7 +192,6 @@ export const PortInfoPopover: React.FC<PortInfoPopoverProps> = observer(({
             </Box>
           )}
 
-          {/* Connection Info */}
           {port.connection ? (
             <Box>
               <Text size="xs" c="dimmed">
@@ -261,7 +201,7 @@ export const PortInfoPopover: React.FC<PortInfoPopoverProps> = observer(({
                 <Text span fw={500} c="cyan">
                   {port.connection.blockLabel}
                 </Text>
-                <Text span c="dimmed">{' → '}</Text>
+                <Text span c="dimmed">{' -> '}</Text>
                 <Text span style={{ fontFamily: 'monospace' }}>
                   {port.connection.portId}
                 </Text>
@@ -278,7 +218,6 @@ export const PortInfoPopover: React.FC<PortInfoPopoverProps> = observer(({
             </Box>
           )}
 
-          {/* Debug Value (when connected and debug enabled) */}
           {debugValue && debugValue.kind === 'scalar' && (
             <>
               <Divider color="#444" />
@@ -286,13 +225,7 @@ export const PortInfoPopover: React.FC<PortInfoPopoverProps> = observer(({
                 <Text size="xs" c="dimmed">
                   Current Value
                 </Text>
-                <Text
-                  size="lg"
-                  fw={600}
-                  c="cyan"
-                  mt={2}
-                  style={{ fontFamily: 'monospace' }}
-                >
+                <Text size="lg" fw={600} c="cyan" mt={2} style={{ fontFamily: 'monospace' }}>
                   {formatDebugValue(debugValue.value, debugValue.type)}
                 </Text>
               </Box>
@@ -305,28 +238,18 @@ export const PortInfoPopover: React.FC<PortInfoPopoverProps> = observer(({
                 <Text size="xs" c="dimmed">
                   Field [{debugValue.stats.count}]
                 </Text>
-                <Text
-                  size="sm"
-                  fw={600}
-                  c="violet"
-                  mt={2}
-                  style={{ fontFamily: 'monospace' }}
-                >
+                <Text size="sm" fw={600} c="violet" mt={2} style={{ fontFamily: 'monospace' }}>
                   mean: {debugValue.stats.mean[0].toFixed(3)}
                 </Text>
               </Box>
             </>
           )}
 
-          {/* Port Diagnostics (errors/warnings) */}
           {blockId && port.id && (() => {
             const portDiags = diagnostics.getDiagnosticsForPort(blockId, port.id);
             const errors = portDiags.filter(d => d.severity === 'error' || d.severity === 'fatal');
             const warnings = portDiags.filter(d => d.severity === 'warn');
-
-            if (errors.length === 0 && warnings.length === 0) {
-              return null;
-            }
+            if (errors.length === 0 && warnings.length === 0) return null;
 
             return (
               <Box>
@@ -380,7 +303,6 @@ export const PortInfoPopover: React.FC<PortInfoPopoverProps> = observer(({
             );
           })()}
 
-          {/* Default Source (for unconnected inputs) */}
           {isInput && !port.isConnected && port.defaultSource && (
             <Box>
               <Text size="xs" c="dimmed">
@@ -397,7 +319,6 @@ export const PortInfoPopover: React.FC<PortInfoPopoverProps> = observer(({
             </Box>
           )}
 
-          {/* Lenses (for inputs with attached lenses) */}
           {isInput && port.lenses && port.lenses.length > 0 && (
             <Box>
               <Text size="xs" c="dimmed">
@@ -425,7 +346,7 @@ export const PortInfoPopover: React.FC<PortInfoPopoverProps> = observer(({
             </Box>
           )}
         </Stack>
-      </Paper>
-    </Portal>
+      </div>
+    </BasePopover>
   );
 });

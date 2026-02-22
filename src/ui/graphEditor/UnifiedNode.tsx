@@ -16,7 +16,7 @@
  * ARCHITECTURAL: No direct store imports - uses context for adapter and stores.
  */
 
-import React, { useCallback, useState } from 'react';
+import React, { useCallback } from 'react';
 import { Handle, Position, type NodeProps } from 'reactflow';
 import { observer } from 'mobx-react-lite';
 import { useGraphEditor } from './GraphEditorContext';
@@ -25,6 +25,7 @@ import type { UnifiedNodeData, PortData } from './nodeDataTransform';
 import type { DefaultSource, PortId, BlockId } from '../../types';
 import { ParameterControl, DefaultSourceControl } from '../reactFlowEditor/ParameterControls';
 import { PortInfoPopover } from '../reactFlowEditor/PortInfoPopover';
+import { usePinPopoverState, type PopoverAnchorPosition } from '../reactFlowEditor/BasePopover';
 import { DisplayNameEditor } from '../components/DisplayNameEditor';
 import {
   formatProvenanceTooltip,
@@ -100,11 +101,49 @@ function getPortState(
   return 'none';
 }
 
-/** State for hovered port popover */
-interface HoveredPortState {
+interface PortPopoverData {
   port: PortData;
   isInput: boolean;
-  anchorEl: HTMLElement;
+  arrowOnRight: boolean;
+}
+
+interface PortPopoverPlacement {
+  anchorPosition: PopoverAnchorPosition;
+  arrowOnRight: boolean;
+}
+
+function computePortPopoverPlacement(anchorEl: HTMLElement, isInput: boolean): PortPopoverPlacement {
+  const rect = anchorEl.getBoundingClientRect();
+  const popoverWidth = 260;
+  const offset = 16;
+  const minEdgeDistance = 10;
+
+  let left: number;
+  let placeLeftOfPort = isInput;
+
+  if (placeLeftOfPort) {
+    left = rect.left - popoverWidth - offset;
+    if (left < minEdgeDistance) {
+      left = rect.right + offset;
+      placeLeftOfPort = false;
+    }
+  } else {
+    left = rect.right + offset;
+    if (left + popoverWidth > window.innerWidth - minEdgeDistance) {
+      left = rect.left - popoverWidth - offset;
+      placeLeftOfPort = true;
+    }
+  }
+
+  const top = Math.max(
+    100,
+    Math.min(rect.top + rect.height / 2, window.innerHeight - 150),
+  );
+
+  return {
+    anchorPosition: { top, left },
+    arrowOnRight: placeLeftOfPort,
+  };
 }
 
 /**
@@ -114,8 +153,9 @@ export const UnifiedNode: React.FC<NodeProps<UnifiedNodeData>> = observer(({ dat
   const { adapter, enableParamEditing, selection, portHighlight } = useGraphEditor();
   const { diagnostics } = useStores();
 
-  // Track hovered port for popover
-  const [hoveredPortState, setHoveredPortState] = useState<HoveredPortState | null>(null);
+  const portPopover = usePinPopoverState<PortPopoverData>({
+    isSame: (a, b) => a.port.id === b.port.id && a.isInput === b.isInput,
+  });
 
   // Check adapter capabilities
   const canEditParams = enableParamEditing && typeof adapter.updateBlockParams === 'function';
@@ -124,13 +164,20 @@ export const UnifiedNode: React.FC<NodeProps<UnifiedNodeData>> = observer(({ dat
 
   // Port click handler
   const handlePortClick = useCallback(
-    (portId: PortId, e: React.MouseEvent) => {
+    (port: PortData, isInput: boolean, e: React.MouseEvent) => {
       e.stopPropagation();
       if (selection) {
-        selection.selectPort(data.blockId as BlockId, portId);
+        selection.selectPort(data.blockId as BlockId, port.id as PortId);
       }
+
+      const placement = computePortPopoverPlacement(e.currentTarget as HTMLElement, isInput);
+      // [LAW:single-enforcer] click-pin behavior is provided by shared popover capability, with local state per popover.
+      portPopover.togglePinned({
+        data: { port, isInput, arrowOnRight: placement.arrowOnRight },
+        anchorPosition: placement.anchorPosition,
+      });
     },
-    [data.blockId, selection]
+    [data.blockId, selection, portPopover]
   );
 
   // Port context menu handler
@@ -153,21 +200,21 @@ export const UnifiedNode: React.FC<NodeProps<UnifiedNodeData>> = observer(({ dat
         const direction = isInput ? 'input' : 'output';
         portHighlight.setHoveredPort(data.blockId as BlockId, port.id as PortId, direction);
       }
-      setHoveredPortState({
-        port,
-        isInput,
-        anchorEl: e.currentTarget as HTMLElement,
+      const placement = computePortPopoverPlacement(e.currentTarget as HTMLElement, isInput);
+      portPopover.setHover({
+        data: { port, isInput, arrowOnRight: placement.arrowOnRight },
+        anchorPosition: placement.anchorPosition,
       });
     },
-    [data.blockId, portHighlight]
+    [data.blockId, portHighlight, portPopover]
   );
 
   const handlePortMouseLeave = useCallback(() => {
     if (portHighlight) {
       portHighlight.clearHoveredPort();
     }
-    setHoveredPortState(null);
-  }, [portHighlight]);
+    portPopover.clearHover();
+  }, [portHighlight, portPopover]);
 
   const selectedPort = selection?.selectedPort;
 
@@ -220,6 +267,7 @@ export const UnifiedNode: React.FC<NodeProps<UnifiedNodeData>> = observer(({ dat
           <React.Fragment key={`input-${input.id}`}>
             {/* Port Label */}
             <div
+              className="osc-port-label osc-port-label-input"
               style={{
                 position: 'absolute',
                 left: '-8px',
@@ -241,7 +289,7 @@ export const UnifiedNode: React.FC<NodeProps<UnifiedNodeData>> = observer(({ dat
               type="target"
               position={Position.Left}
               id={input.id}
-              onClick={(e) => handlePortClick(input.id as PortId, e)}
+              onClick={(e) => handlePortClick(input, true, e)}
               onContextMenu={(e) => handlePortContextMenu(input.id as PortId, true, e)}
               onMouseEnter={(e) => handlePortMouseEnter(input, true, e)}
               onMouseLeave={handlePortMouseLeave}
@@ -491,6 +539,7 @@ export const UnifiedNode: React.FC<NodeProps<UnifiedNodeData>> = observer(({ dat
           <React.Fragment key={`output-${output.id}`}>
             {/* Port Label */}
             <div
+              className="osc-port-label osc-port-label-output"
               style={{
                 position: 'absolute',
                 right: '-8px',
@@ -512,7 +561,7 @@ export const UnifiedNode: React.FC<NodeProps<UnifiedNodeData>> = observer(({ dat
               type="source"
               position={Position.Right}
               id={output.id}
-              onClick={(e) => handlePortClick(output.id as PortId, e)}
+              onClick={(e) => handlePortClick(output, false, e)}
               onContextMenu={(e) => handlePortContextMenu(output.id as PortId, false, e)}
               onMouseEnter={(e) => handlePortMouseEnter(output, false, e)}
               onMouseLeave={handlePortMouseLeave}
@@ -528,9 +577,12 @@ export const UnifiedNode: React.FC<NodeProps<UnifiedNodeData>> = observer(({ dat
 
       {/* Port Info Popover */}
       <PortInfoPopover
-        port={hoveredPortState?.port ?? null}
-        isInput={hoveredPortState?.isInput ?? true}
-        anchorEl={hoveredPortState?.anchorEl ?? null}
+        port={portPopover.active?.data.port ?? null}
+        isInput={portPopover.active?.data.isInput ?? true}
+        arrowOnRight={portPopover.active?.data.arrowOnRight ?? true}
+        anchorPosition={portPopover.active?.anchorPosition ?? null}
+        pinned={portPopover.mode === 'pinned'}
+        onClose={() => portPopover.closeAll()}
         blockId={data.blockId as BlockId}
       />
     </div>
