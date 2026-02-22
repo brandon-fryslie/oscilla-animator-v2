@@ -111,14 +111,23 @@ describe('CompilationInspectorService', () => {
       vi.restoreAllMocks();
     });
 
-    it('silently no-ops when capturePass called without beginCompile', () => {
-      // Internally resilient — no crash, no warn
+    it('records lifecycle misuse when capturePass called without beginCompile', () => {
       expect(() => compilationInspector.capturePass('test-pass', {}, {})).not.toThrow();
+      const latest = compilationInspector.getInternalErrors().at(-1);
+      expect(latest).toBeDefined();
+      expect(latest).toMatchObject({
+        phase: 'capturePass',
+        passName: 'test-pass',
+      });
     });
 
-    it('silently no-ops when endCompile called without beginCompile', () => {
-      // Idempotent — safe to call without beginCompile
+    it('records lifecycle misuse when endCompile called without beginCompile', () => {
       expect(() => compilationInspector.endCompile('success')).not.toThrow();
+      const latest = compilationInspector.getInternalErrors().at(-1);
+      expect(latest).toBeDefined();
+      expect(latest).toMatchObject({
+        phase: 'endCompile',
+      });
     });
   });
 
