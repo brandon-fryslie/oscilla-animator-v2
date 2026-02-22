@@ -6,6 +6,7 @@
  */
 
 import type { CompositeDefJSON } from './schema';
+import { resolveLocalStorageCapability } from '../../services/local-storage-capability';
 
 // =============================================================================
 // Storage Schema
@@ -44,19 +45,7 @@ export interface StoredComposite {
 export class CompositeStorage {
   // [LAW:single-enforcer] Storage capability checks are centralized here.
   private getStorage(): Pick<Storage, 'getItem' | 'setItem'> | null {
-    const candidate = (globalThis as { localStorage?: unknown }).localStorage as
-      | Partial<Storage>
-      | undefined;
-    if (!candidate) {
-      return null;
-    }
-    if (typeof candidate.getItem !== 'function' || typeof candidate.setItem !== 'function') {
-      return null;
-    }
-    return {
-      getItem: candidate.getItem.bind(candidate),
-      setItem: candidate.setItem.bind(candidate),
-    };
+    return resolveLocalStorageCapability();
   }
 
   /**

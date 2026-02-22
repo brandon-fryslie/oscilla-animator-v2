@@ -16,14 +16,13 @@
 
 import { makeAutoObservable, reaction, observable } from 'mobx';
 import type { SettingsToken } from '../settings/types';
+import {
+  resolveLocalStorageCapability,
+  type LocalStorageCapability,
+} from '../services/local-storage-capability';
 
 const STORAGE_PREFIX = 'oscilla-v2-settings:';
 const PERSIST_DEBOUNCE_MS = 500;
-
-interface SettingsStorage {
-  getItem(key: string): string | null;
-  setItem(key: string, value: string): void;
-}
 
 export class SettingsStore {
   /**
@@ -42,10 +41,10 @@ export class SettingsStore {
    * Disposers for auto-persist reactions, one per namespace.
    */
   private persistDisposers = new Map<string, () => void>();
-  private readonly storage: SettingsStorage | null;
+  private readonly storage: LocalStorageCapability | null;
 
   constructor() {
-    this.storage = this.resolveStorage();
+    this.storage = resolveLocalStorageCapability();
     makeAutoObservable<SettingsStore, 'persistDisposers' | 'storage'>(this, {
       // tokens must be observable so getRegisteredTokens() triggers re-renders
       persistDisposers: false,
@@ -234,21 +233,5 @@ export class SettingsStore {
   dispose(): void {
     this.persistDisposers.forEach((disposer) => disposer());
     this.persistDisposers.clear();
-  }
-
-  /**
-   * Resolve browser storage capability once at startup.
-   * // [LAW:single-enforcer] Storage capability detection is centralized here.
-   */
-  private resolveStorage(): SettingsStorage | null {
-    try {
-      const candidate = (globalThis as { localStorage?: unknown }).localStorage as Partial<SettingsStorage> | undefined;
-      if (!candidate) return null;
-      if (typeof candidate.getItem !== 'function') return null;
-      if (typeof candidate.setItem !== 'function') return null;
-      return candidate as SettingsStorage;
-    } catch {
-      return null;
-    }
   }
 }

@@ -16,7 +16,13 @@ import '../../blocks/all';
 describe('Store Integration', () => {
   beforeAll(() => {
     // [LAW:single-enforcer] Test owns environment setup for browser storage APIs.
-    if (typeof globalThis.localStorage?.getItem !== 'function') {
+    const descriptor = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
+    const hasStorageValue =
+      !!descriptor &&
+      'value' in descriptor &&
+      typeof (descriptor.value as { getItem?: unknown } | undefined)?.getItem === 'function';
+
+    if (!hasStorageValue) {
       const store = new Map<string, string>();
       Object.defineProperty(globalThis, 'localStorage', {
         configurable: true,
