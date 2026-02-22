@@ -16,6 +16,7 @@ import {
 } from '../../blocks/registry';
 import { type CompositeBlockDef, isCompositeBlockDef } from '../../blocks/composite-types';
 import { useEditor } from '../editorCommon';
+import { resolveLocalStorageCapability } from '../../services/local-storage-capability';
 import './BlockLibrary.css';
 
 // Type aliases for clarity
@@ -33,7 +34,10 @@ const SEARCH_DEBOUNCE_MS = 150;
  */
 function loadCollapsedCategories(diagnostics: any): Set<BlockCategory> {
   try {
-    const stored = localStorage.getItem(COLLAPSE_STATE_KEY);
+    // [LAW:single-enforcer] localStorage capability detection is centralized.
+    const storage = resolveLocalStorageCapability();
+    if (!storage) return new Set();
+    const stored = storage.getItem(COLLAPSE_STATE_KEY);
     if (!stored) return new Set();
     const parsed = JSON.parse(stored);
     return new Set(Array.isArray(parsed) ? parsed : []);
@@ -52,7 +56,10 @@ function loadCollapsedCategories(diagnostics: any): Set<BlockCategory> {
  */
 function saveCollapsedCategories(collapsed: Set<BlockCategory>, diagnostics: any): void {
   try {
-    localStorage.setItem(COLLAPSE_STATE_KEY, JSON.stringify(Array.from(collapsed)));
+    // [LAW:single-enforcer] localStorage capability detection is centralized.
+    const storage = resolveLocalStorageCapability();
+    if (!storage) return;
+    storage.setItem(COLLAPSE_STATE_KEY, JSON.stringify(Array.from(collapsed)));
   } catch (e) {
     diagnostics.log({
       level: 'warn',
