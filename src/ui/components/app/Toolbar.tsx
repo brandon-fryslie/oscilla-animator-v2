@@ -34,6 +34,7 @@ export const Toolbar: React.FC<ToolbarProps> = observer(({ stats = 'FPS: --', do
   const camera = useStore('camera');
   const patch = useStore('patch');
   const demo = useStore('demo');
+  const diagnostics = useStore('diagnostics');
   const exportPatch = useExportPatch();
   const [toastOpen, setToastOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
@@ -57,7 +58,11 @@ export const Toolbar: React.FC<ToolbarProps> = observer(({ stats = 'FPS: --', do
     setToastOpen(true);
 
     if (!result.success && result.error) {
-      console.error('Export error:', result.error);
+      // [LAW:single-enforcer] Toolbar routes export failures through diagnostics.
+      diagnostics.log({
+        level: 'error',
+        message: `Export error: ${result.error}`,
+      });
     }
   };
 

@@ -303,9 +303,11 @@ export const SharedExpressionEditor = observer(function SharedExpressionEditor({
     expressionEditor.openForBlock(blockId);
     const resolvedApi = api ?? getDockviewApiRef();
     if (!resolvedApi) {
-      // [LAW:verifiable-goals] explicit error surface for a failed action.
-      // eslint-disable-next-line no-console
-      console.error('Expression pop-out failed: Dockview API unavailable');
+      // [LAW:single-enforcer] UI action failures are logged through diagnostics.
+      diagnosticsStore.log({
+        level: 'error',
+        message: 'Expression pop-out failed: Dockview API unavailable',
+      });
       return;
     }
     openExpressionEditorPanel(resolvedApi, blockId);

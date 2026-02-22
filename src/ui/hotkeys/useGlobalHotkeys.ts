@@ -39,7 +39,11 @@ export function useGlobalHotkeys(options: UseGlobalHotkeysOptions = {}): void {
       const result = await exportPatch();
       showFeedback(result.message, result.success ? 'success' : 'error');
       if (!result.success && result.error) {
-        console.error('Export error:', result.error);
+        // [LAW:single-enforcer] Global hotkey failures are reported via diagnostics store.
+        rootStore.diagnostics.log({
+          level: 'error',
+          message: `Export error: ${result.error}`,
+        });
       }
     },
 

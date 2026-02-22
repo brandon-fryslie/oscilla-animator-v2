@@ -388,13 +388,21 @@ const DiagnosticRow: React.FC<DiagnosticRowProps> = ({ diagnostic, rootStore }) 
 
       if (!result.success) {
         setActionError(result.error || 'Action failed');
-        console.error('Diagnostic action failed:', result.error);
+        // [LAW:single-enforcer] Diagnostic action failures flow through diagnostics store.
+        rootStore.diagnostics.log({
+          level: 'error',
+          message: `Diagnostic action failed: ${result.error ?? 'unknown error'}`,
+        });
       }
     } catch (err) {
       setExecutingActionIdx(null);
       const errorMsg = err instanceof Error ? err.message : 'Unknown error';
       setActionError(errorMsg);
-      console.error('Diagnostic action exception:', err);
+      // [LAW:single-enforcer] Diagnostic action exceptions flow through diagnostics store.
+      rootStore.diagnostics.log({
+        level: 'error',
+        message: `Diagnostic action exception: ${errorMsg}`,
+      });
     }
   };
 

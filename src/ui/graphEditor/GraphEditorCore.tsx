@@ -215,6 +215,15 @@ export const GraphEditorCoreInner = observer(
         }, 50);
       }, [fitView]);
 
+      const reportUiError = useCallback((message: string, error: unknown, level: 'warn' | 'error' = 'error') => {
+        // [LAW:single-enforcer] GraphEditorCore routes UI operation failures through diagnostics boundary.
+        diagnostics?.log({
+          level,
+          message,
+          data: { error },
+        });
+      }, [diagnostics]);
+
       const diagnosticsGetter = useCallback(
         (edge: EdgeLike) => {
           if (!diagnostics) return [];
@@ -459,19 +468,11 @@ export const GraphEditorCoreInner = observer(
 
           // fitView will be called by the dedicated effect after render
         } catch (error) {
-          if (diagnostics) {
-            diagnostics.log({
-              level: 'error',
-              message: `Auto-arrange failed: ${error instanceof Error ? error.message : String(error)}`,
-              data: { error },
-            });
-          } else {
-            console.error('Auto-arrange failed:', error);
-          }
+          reportUiError(`Auto-arrange failed: ${error instanceof Error ? error.message : String(error)}`, error, 'error');
         } finally {
           setIsLayouting(false);
         }
-      }, [isLayouting, setNodes, fitView, adapter, diagnostics]);
+      }, [isLayouting, setNodes, fitView, adapter, reportUiError]);
 
       // -------------------------------------------------------------------------
       // Imperative Handle
@@ -546,11 +547,7 @@ export const GraphEditorCoreInner = observer(
             const message = `Initial layout failed, using grid fallback: ${
               error instanceof Error ? error.message : String(error)
             }`;
-            if (diagnostics) {
-              diagnostics.log({ level: 'warn', message, data: { error } });
-            } else {
-              console.error(message, error);
-            }
+            reportUiError(message, error, 'warn');
 
             // Grid fallback
             let x = 100, y = 100;
@@ -580,7 +577,7 @@ export const GraphEditorCoreInner = observer(
           }
         };
       // eslint-disable-next-line react-hooks/exhaustive-deps
-      }, [adapter, adapter.blocks.size, setNodes, setEdges, projectGraphSnapshot, scheduleFitView]);
+      }, [adapter, adapter.blocks.size, setNodes, setEdges, projectGraphSnapshot, scheduleFitView, reportUiError]);
 
       // -------------------------------------------------------------------------
       // MobX Reaction - Sync Adapter Changes to ReactFlow (after initialization)
