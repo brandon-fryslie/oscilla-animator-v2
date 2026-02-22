@@ -11,6 +11,7 @@ import { inferType, unitVar, payloadVar } from '../../core/inference-types';
 import { stableStateId } from '../../compiler/ir/types';
 import { defaultSourceConst } from '../../types';
 import { cardinalityVarId } from '../../core/ids';
+import { planStatefulStorage } from '../lower-utils';
 
 // [LAW:one-source-of-truth] Per-port cardinality behavior is declared on CT/ICT.
 const UNIT_DELAY_CARD = cardinalityVar(cardinalityVarId('unit_delay_cardinality'), {
@@ -42,6 +43,7 @@ registerBlock({
 
     // Symbolic state key (will be reused in phase 2)
     const stateKey = stableStateId(ctx.instanceId, 'delay');
+    const stateStorage = planStatefulStorage(ctx, stateKey, outType, initialValue);
 
     // Read previous state (this is the output - delayed by 1 frame, symbolic key)
     const outputId = ctx.b.stateRead(stateKey, outType);
@@ -53,7 +55,7 @@ registerBlock({
       },
       effects: {
         stateDecls: [
-          { key: stateKey, initialValue },
+          stateStorage.stateDecl,
         ],
         stepRequests: [], // Phase 2 will add the state write
         slotRequests: [
@@ -73,12 +75,13 @@ registerBlock({
     // If called from two-phase lowering, reuse existing outputs and add state write effect
     if (existingOutputs?.outputsById && existingOutputs?.stateKey !== undefined) {
       const stateKey = existingOutputs.stateKey;
+      const stateStorage = planStatefulStorage(ctx, stateKey, ctx.outTypes[0], 0);
       // Return existing outputs with additional step request for state write
       return {
         outputsById: existingOutputs.outputsById,
         effects: {
           stepRequests: [
-            { kind: 'stateWrite' as const, stateKey, value: input.id },
+            { kind: stateStorage.writeKind, stateKey, value: input.id },
           ],
         },
       };
@@ -90,6 +93,7 @@ registerBlock({
 
     // Symbolic state key
     const stateKey = stableStateId(ctx.instanceId, 'delay');
+    const stateStorage = planStatefulStorage(ctx, stateKey, outType, initialValue);
 
     // Read previous state (this is the output - delayed by 1 frame, symbolic key)
     const outputId = ctx.b.stateRead(stateKey, outType);
@@ -101,10 +105,10 @@ registerBlock({
       },
       effects: {
         stateDecls: [
-          { key: stateKey, initialValue },
+          stateStorage.stateDecl,
         ],
         stepRequests: [
-          { kind: 'stateWrite' as const, stateKey, value: input.id },
+          { kind: stateStorage.writeKind, stateKey, value: input.id },
         ],
         slotRequests: [
           { portId: 'out', type: outType },

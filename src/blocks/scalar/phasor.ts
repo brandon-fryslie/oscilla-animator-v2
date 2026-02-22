@@ -8,7 +8,7 @@ import { registerBlock, requireConfig } from '../registry';
 import { canonicalType, unitTurns, payloadStride, floatConst, requireInst, contractWrap01, cardinalityVar } from '../../core/canonical-types';
 import { FLOAT } from '../../core/canonical-types';
 import { OpCode, stableStateId } from '../../compiler/ir/types';
-import { zipAuto, mapAuto } from '../lower-utils';
+import { zipAuto, mapAuto, planStatefulStorage } from '../lower-utils';
 import { cardinalityVarId } from '../../core/ids';
 
 // [LAW:one-source-of-truth] Per-port cardinality behavior is declared on CT/ICT.
@@ -45,9 +45,10 @@ registerBlock({
 
     // Symbolic state key
     const stateKey = stableStateId(ctx.instanceId, 'phasor');
+    const stateStorage = planStatefulStorage(ctx, stateKey, outType, initialPhase);
 
     // Read previous phase (symbolic key, no allocation)
-    const prevPhase = ctx.b.stateRead(stateKey, canonicalType(FLOAT, unitTurns(), undefined, contractWrap01()));
+    const prevPhase = ctx.b.stateRead(stateKey, outType);
 
     // Read dt from time system (in seconds)
     const dtSig = ctx.b.time('dt', canonicalType(FLOAT));
@@ -74,10 +75,10 @@ registerBlock({
       },
       effects: {
         stateDecls: [
-          { key: stateKey, initialValue: initialPhase },
+          stateStorage.stateDecl,
         ],
         stepRequests: [
-          { kind: 'stateWrite' as const, stateKey, value: wrappedPhase },
+          { kind: stateStorage.writeKind, stateKey, value: wrappedPhase },
         ],
         slotRequests: [
           { portId: 'out', type: outType },

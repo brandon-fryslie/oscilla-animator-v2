@@ -13,7 +13,7 @@ import { FLOAT } from '../../core/canonical-types';
 import { inferType, unitVar, cardinalityVar } from '../../core/inference-types';
 import { cardinalityVarId } from '../../core/ids';
 import { OpCode, stableStateId } from '../../compiler/ir/types';
-import { zipAuto } from '../lower-utils';
+import { zipAuto, planStatefulStorage } from '../lower-utils';
 
 // [LAW:one-source-of-truth] Per-port cardinality behavior is declared on CT/ICT.
 const SLEW_CARD = cardinalityVar(cardinalityVarId('slew_cardinality'), {
@@ -48,6 +48,7 @@ registerBlock({
 
     // Symbolic state key
     const stateKey = stableStateId(ctx.instanceId, 'slew');
+    const stateStorage = planStatefulStorage(ctx, stateKey, outType, 0);
 
     // Read previous state (symbolic key, no allocation)
     const prevValue = ctx.b.stateRead(stateKey, outType);
@@ -63,10 +64,10 @@ registerBlock({
       },
       effects: {
         stateDecls: [
-          { key: stateKey, initialValue: 0 },
+          stateStorage.stateDecl,
         ],
         stepRequests: [
-          { kind: 'stateWrite' as const, stateKey, value: newValue },
+          { kind: stateStorage.writeKind, stateKey, value: newValue },
         ],
         slotRequests: [
           { portId: 'out', type: outType },

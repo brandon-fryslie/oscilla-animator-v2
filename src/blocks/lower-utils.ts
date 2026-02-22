@@ -4,8 +4,12 @@
 
 import type { ValueExprId } from '../compiler/ir/Indices';
 import type { PureFn } from '../compiler/ir/types';
+import type { StableStateId } from '../compiler/ir/types';
 import type { CanonicalType } from '../core/canonical-types';
+import { payloadStride, requireInst } from '../core/canonical-types';
 import type { BlockIRBuilder } from '../compiler/ir/BlockIRBuilder';
+import type { LowerCtx } from './registry';
+import type { StateDecl } from '../compiler/ir/lowerTypes';
 
 export function withoutContract(type: CanonicalType): CanonicalType {
   const { contract: _contract, ...rest } = type as CanonicalType & { contract?: unknown };
@@ -70,4 +74,49 @@ export function resolveInputConstant(
     throw new Error(`Input '${portId}' must be <= ${opts.max}, got ${val}`);
   }
   return val;
+}
+
+export interface StatefulStoragePlan {
+  readonly stateDecl: StateDecl;
+  readonly writeKind: 'stateWrite' | 'fieldStateWrite';
+}
+
+/**
+ * Derive state declaration/write kind from resolved output type cardinality.
+ * // [LAW:one-source-of-truth] State storage shape comes from CT cardinality, never block-local modes.
+ */
+export function planStatefulStorage(
+  ctx: LowerCtx,
+  stateKey: StableStateId,
+  stateType: CanonicalType,
+  initialValue: number,
+): StatefulStoragePlan {
+  const stride = payloadStride(stateType.payload);
+  const cardinality = requireInst(stateType.extent.cardinality, 'cardinality');
+  if (cardinality.kind !== 'many') {
+    return {
+      stateDecl: { key: stateKey, initialValue, stride },
+      writeKind: 'stateWrite',
+    };
+  }
+
+  const instanceId = cardinality.instance.instanceId;
+  const instanceDecl = ctx.instances.get(instanceId);
+  if (!instanceDecl) {
+    throw new Error(`Stateful lowering: missing instance declaration for ${instanceId}`);
+  }
+  if (instanceDecl.count === 'dynamic') {
+    throw new Error(`Stateful lowering: dynamic instance count is not supported for state slot ${stateKey}`);
+  }
+
+  return {
+    stateDecl: {
+      key: stateKey,
+      initialValue,
+      stride,
+      instanceId,
+      laneCount: instanceDecl.count,
+    },
+    writeKind: 'fieldStateWrite',
+  };
 }

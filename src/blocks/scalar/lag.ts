@@ -9,7 +9,7 @@ import { canonicalType, payloadStride, floatConst, unitNone, contractClamp01, ca
 import { FLOAT } from '../../core/canonical-types';
 import { inferType, unitVar } from '../../core/inference-types';
 import { OpCode, stableStateId } from '../../compiler/ir/types';
-import { zipAuto } from '../lower-utils';
+import { zipAuto, planStatefulStorage } from '../lower-utils';
 import { cardinalityVarId } from '../../core/ids';
 
 // [LAW:one-source-of-truth] Per-port cardinality behavior is declared on CT/ICT.
@@ -48,9 +48,10 @@ registerBlock({
 
     // Symbolic state key
     const stateKey = stableStateId(ctx.instanceId, 'lag');
+    const stateStorage = planStatefulStorage(ctx, stateKey, outType, initialValue);
 
     // Read previous state (symbolic key, no allocation)
-    const prevValue = ctx.b.stateRead(stateKey, canonicalType(FLOAT));
+    const prevValue = ctx.b.stateRead(stateKey, outType);
 
     // Compute: lerp(prev, target, smoothing)
     const lerpFn = ctx.b.opcode(OpCode.Lerp);
@@ -64,10 +65,10 @@ registerBlock({
       },
       effects: {
         stateDecls: [
-          { key: stateKey, initialValue },
+          stateStorage.stateDecl,
         ],
         stepRequests: [
-          { kind: 'stateWrite' as const, stateKey, value: newValue },
+          { kind: stateStorage.writeKind, stateKey, value: newValue },
         ],
         slotRequests: [
           { portId: 'out', type: outType },

@@ -10,7 +10,7 @@ import { canonicalType, canonicalEvent, payloadStride, requireInst, FLOAT } from
 import { inferType, unitVar } from '../../core/inference-types';
 import { OpCode, stableStateId } from '../../compiler/ir/types';
 import type { ValueExprId } from '../../compiler/ir/Indices';
-import { zipAuto } from '../lower-utils';
+import { zipAuto, planStatefulStorage } from '../lower-utils';
 
 registerBlock({
   type: 'SampleHold',
@@ -41,12 +41,14 @@ registerBlock({
     }
 
     const initialValue = requireConfig<number>(config, 'initialValue', 'number');
+    const outType = ctx.outTypes[0];
 
     // Symbolic state key
     const stateKey = stableStateId(ctx.instanceId, 'sample');
+    const stateStorage = planStatefulStorage(ctx, stateKey, outType, initialValue);
 
     // Read previous held value (Phase 1 — reads previous frame's state, symbolic key)
-    const prevId = ctx.b.stateRead(stateKey, canonicalType(FLOAT));
+    const prevId = ctx.b.stateRead(stateKey, outType);
 
     // Read event scalar as float (0.0 or 1.0)
     const triggerScalar = ctx.b.eventRead(triggerInput.id);
@@ -54,7 +56,6 @@ registerBlock({
     // Conditional via lerp: lerp(prev, value, trigger)
     // trigger=0 → output=prev (hold), trigger=1 → output=value (sample)
     const lerpFn = ctx.b.opcode(OpCode.Lerp);
-    const outType = ctx.outTypes[0];
     const outputId = zipAuto(
       [prevId, valueInput.id as ValueExprId, triggerScalar],
       lerpFn,
@@ -69,10 +70,10 @@ registerBlock({
       },
       effects: {
         stateDecls: [
-          { key: stateKey, initialValue },
+          stateStorage.stateDecl,
         ],
         stepRequests: [
-          { kind: 'stateWrite' as const, stateKey, value: outputId },
+          { kind: stateStorage.writeKind, stateKey, value: outputId },
         ],
         slotRequests: [
           { portId: 'out', type: outType },

@@ -9,7 +9,7 @@ import { canonicalType, payloadStride, floatConst, cardinalityVar } from '../../
 import { FLOAT, BOOL } from '../../core/canonical-types';
 import { inferType, unitVar } from '../../core/inference-types';
 import { OpCode, stableStateId } from '../../compiler/ir/types';
-import { zipAuto } from '../lower-utils';
+import { zipAuto, planStatefulStorage } from '../lower-utils';
 import { cardinalityVarId } from '../../core/ids';
 
 // [LAW:one-source-of-truth] Per-port cardinality behavior is declared on CT/ICT.
@@ -50,9 +50,10 @@ registerBlock({
 
     // Symbolic state key
     const stateKey = stableStateId(ctx.instanceId, 'accumulator');
+    const stateStorage = planStatefulStorage(ctx, stateKey, outType, 0);
 
     // Read current state (symbolic key, no allocation)
-    const currentValue = ctx.b.stateRead(stateKey, canonicalType(FLOAT));
+    const currentValue = ctx.b.stateRead(stateKey, outType);
 
     // Compute new value: reset ? 0 : (currentValue + delta)
     const add = ctx.b.opcode(OpCode.Add);
@@ -70,10 +71,10 @@ registerBlock({
       },
       effects: {
         stateDecls: [
-          { key: stateKey, initialValue: 0 },
+          stateStorage.stateDecl,
         ],
         stepRequests: [
-          { kind: 'stateWrite' as const, stateKey, value: finalValue },
+          { kind: stateStorage.writeKind, stateKey, value: finalValue },
         ],
         slotRequests: [
           { portId: 'value', type: outType },
