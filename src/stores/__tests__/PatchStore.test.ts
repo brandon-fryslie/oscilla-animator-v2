@@ -81,6 +81,38 @@ describe('PatchStore', () => {
       store.removeBlock(id1);
       expect(store.edges.length).toBe(0);
     });
+
+    it('reports warning when removing a missing block', () => {
+      const reportIssue = vi.fn();
+      store.setIssueReporter(reportIssue);
+
+      store.removeBlock(blockId('missing-block'));
+
+      expect(reportIssue).toHaveBeenCalledTimes(1);
+      expect(reportIssue).toHaveBeenCalledWith(
+        expect.objectContaining({
+          level: 'warn',
+          message: "Attempted to remove missing block 'missing-block'",
+        })
+      );
+    });
+
+    it('reports warning and keeps protected InfiniteTimeRoot block', () => {
+      const reportIssue = vi.fn();
+      store.setIssueReporter(reportIssue);
+      const timeRootId = store.addBlock('InfiniteTimeRoot');
+
+      store.removeBlock(timeRootId);
+
+      expect(store.blocks.has(timeRootId)).toBe(true);
+      expect(reportIssue).toHaveBeenCalledTimes(1);
+      expect(reportIssue).toHaveBeenCalledWith(
+        expect.objectContaining({
+          level: 'warn',
+          message: `Cannot remove protected block '${timeRootId}' of type InfiniteTimeRoot`,
+        })
+      );
+    });
   });
 
   describe('updateBlockParams', () => {

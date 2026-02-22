@@ -105,6 +105,17 @@ describe('Store Integration', () => {
       )).toBe(true);
     });
 
+    it('routes protected block deletion warnings through diagnostics', () => {
+      const timeRootId = root.patch.addBlock('InfiniteTimeRoot');
+      root.patch.removeBlock(timeRootId);
+
+      expect(readComputed(() =>
+        root.diagnostics.logs.some((entry) =>
+          entry.message === `PatchStore: Cannot remove protected block '${timeRootId}' of type InfiniteTimeRoot`
+        )
+      )).toBe(true);
+    });
+
     it('routes DebugService suppressed query failures through diagnostics', () => {
       debugService.setEdgeToSlotMap(new Map([
         ['edge1', { slotId: 10 as ValueSlot, type: canonicalType(FLOAT) }],
