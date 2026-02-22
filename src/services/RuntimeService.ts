@@ -30,6 +30,7 @@ import {
 } from './AnimationLoop';
 import { debugSettings } from '../settings/tokens/debug-settings';
 import { compilerFlagsSettings } from '../settings/tokens/compiler-flags-settings';
+import { appSettings } from '../settings/tokens/app-settings';
 
 export class RuntimeService {
   private readonly domainChangeDetector: DomainChangeDetector = createDomainChangeDetector();
@@ -137,9 +138,7 @@ export class RuntimeService {
     this.arena = initGlobalRenderArena(50_000);
 
     // Register settings tokens (before any compile call)
-    const { appSettings } = await import('../settings/tokens/app-settings');
     store.settings.register(appSettings);
-    const { compilerFlagsSettings } = await import('../settings/tokens/compiler-flags-settings');
     store.settings.register(compilerFlagsSettings);
 
     // Check for test automation demo marker (set by ?loadDemoPatch= before reload)
