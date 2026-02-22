@@ -127,4 +127,24 @@ describe('ConstantValueTracker', () => {
     expect(constant?.value).toBe('perspective');
     expect(constant?.type.payload.kind).toBe('cameraProjection');
   });
+
+  it('computes cast adapter constants and preserves declared payload type', () => {
+    let castId!: BlockId;
+    const patch = buildPatch((b) => {
+      const source = b.addBlock('Const');
+      b.setConfig(source, 'value', 3.7);
+      castId = b.addBlock('Adapter_CastFloatToInt');
+      b.wire(source, 'out', castId, 'in');
+    });
+
+    const result = extractConstantValues(patch, [
+      { edgeId: 'e_cast', fromBlockId: castId, fromPort: 'out' },
+    ]);
+
+    const constant = result.get('e_cast');
+    expect(constant).toBeDefined();
+    expect(constant?.value).toBe(3);
+    expect(constant?.reason).toBe('computed-constant');
+    expect(constant?.type.payload.kind).toBe('int');
+  });
 });

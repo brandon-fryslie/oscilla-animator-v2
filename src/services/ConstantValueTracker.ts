@@ -12,6 +12,7 @@ import type { Patch } from '../graph/Patch';
 import type { CanonicalType } from '../core/canonical-types';
 import { BOOL, CAMERA_PROJECTION, COLOR, FLOAT, VEC2, VEC3, canonicalType } from '../core/canonical-types';
 import { canonicalScalar } from '../core/canonical-types/canonical-type';
+import { EMPTY_SUBSTITUTION, finalizeInferenceType, isInferenceCanonicalizable } from '../core/inference-types';
 import { getAnyBlockDefinition } from '../blocks/registry';
 
 /**
@@ -110,6 +111,33 @@ function resolveDefaultValue(
   }
 
   return undefined;
+}
+
+function resolveDeclaredOutputType(
+  patch: Patch,
+  blockId: string,
+  outputPort: string,
+): CanonicalType | undefined {
+  const block = patch.blocks.get(blockId as any);
+  if (!block) return undefined;
+  const blockDef = getAnyBlockDefinition(block.type);
+  if (!blockDef) return undefined;
+  const outputDef = blockDef.outputs[outputPort];
+  if (!outputDef?.type) return undefined;
+
+  const outputType = outputDef.type;
+  if (isInferenceCanonicalizable(outputType, EMPTY_SUBSTITUTION)) {
+    return finalizeInferenceType(outputType, EMPTY_SUBSTITUTION);
+  }
+
+  if (outputType.payload.kind === 'var') {
+    return undefined;
+  }
+
+  if (outputType.unit.kind !== 'var') {
+    return canonicalType(outputType.payload, outputType.unit);
+  }
+  return canonicalScalar(outputType.payload);
 }
 
 function resolveOutputConstant(
@@ -246,6 +274,28 @@ function resolveOutputConstant(
         }
         break;
       }
+      case 'Adapter_CastFloatToInt': {
+        const input = numeric('in');
+        if (input !== undefined) {
+          resolved = {
+            value: Math.trunc(input),
+            reason: 'computed-constant',
+            description: `Computed CastFloatToInt(${input})`,
+          };
+        }
+        break;
+      }
+      case 'Adapter_CastIntToFloat': {
+        const input = numeric('in');
+        if (input !== undefined) {
+          resolved = {
+            value: input,
+            reason: 'computed-constant',
+            description: `Computed CastIntToFloat(${input})`,
+          };
+        }
+        break;
+      }
       default:
         break;
     }
@@ -314,9 +364,15 @@ export function extractConstantValues(
     );
     if (!resolved) continue;
 
+    const declaredType = resolveDeclaredOutputType(
+      patch,
+      unmapped.fromBlockId,
+      unmapped.fromPort,
+    );
+
     constants.set(unmapped.edgeId, {
       value: resolved.value,
-      type: inferConstantType(resolved.value),
+      type: declaredType ?? inferConstantType(resolved.value),
       reason: resolved.reason,
       description: resolved.description,
     });
