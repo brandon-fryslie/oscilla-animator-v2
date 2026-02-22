@@ -388,7 +388,7 @@ const PortInspectorStandalone = observer(function PortInspectorStandalone({ port
 
       <div style={{ marginBottom: '16px' }}>
         <h4 style={{ margin: '0 0 8px', fontSize: '14px', color: colors.textSecondary }}>
-          Signal Type
+          Value Type
         </h4>
         <div style={{
           padding: '8px',
@@ -1139,7 +1139,7 @@ function PortInspector({ portRef, block, typeInfo, patch, onBack }: PortInspecto
 
       <div style={{ marginBottom: '16px' }}>
         <h4 style={{ margin: '0 0 8px', fontSize: '14px', color: colors.textSecondary }}>
-          Signal Type
+          Value Type
         </h4>
         <div style={{
           padding: '8px',

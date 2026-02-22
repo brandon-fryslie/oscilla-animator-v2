@@ -234,7 +234,7 @@ describe('solveCardinality', () => {
 
   it('preserve-block broadcast rejection: mixed one/many without zip → ClampManyConflict via equality group', () => {
     // A preserve block with strict equality among all ports.
-    // One input connected to signalOnly producer (clampOne) and another
+    // One input connected to oneOnly producer (clampOne) and another
     // connected to transform output (forceMany) → Conflict in the equality group
     const ref = instanceRef('circle', 'arr1');
     const result = solve(

@@ -136,7 +136,7 @@ export function formatUnitForDisplay(unit: UnitType | InferenceUnitType): string
 
 /**
  * Format a CanonicalType for display.
- * Returns strings like "Signal<float:phase>" or "Field<color>"
+ * Returns strings like "One<float:phase>" or "Many<color>"
  */
 export function formatTypeForDisplay(type: InferenceCanonicalType): string {
   const card = getInstantiatedCardinality(type);
@@ -149,10 +149,10 @@ export function formatTypeForDisplay(type: InferenceCanonicalType): string {
       cardStr = 'Const';
       break;
     case 'one':
-      cardStr = 'Signal';
+      cardStr = 'One';
       break;
     case 'many':
-      cardStr = 'Field';
+      cardStr = 'Many';
       break;
     default: {
       const _exhaustive: never = card;

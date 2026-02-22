@@ -249,8 +249,8 @@ export interface AcceptsSpec {
   readonly payloads: readonly PayloadType[];
   /** Unit constraint: 'any' accepts all units, 'set' restricts to specific values */
   readonly units: { readonly kind: 'any' } | { readonly kind: 'set'; readonly values: readonly import('../core/canonical-types').UnitType[] };
-  /** Extent constraint: 'any' accepts all, 'signalOnly' requires one+continuous (signal) */
-  readonly extent: { readonly kind: 'any' } | { readonly kind: 'signalOnly' };
+  /** Extent constraint: 'any' accepts all, 'oneOnly' requires cardinality-one + continuous. */
+  readonly extent: { readonly kind: 'any' } | { readonly kind: 'oneOnly' };
 }
 
 /**

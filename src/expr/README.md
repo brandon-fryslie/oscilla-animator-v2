@@ -1,13 +1,13 @@
 # Expression DSL Module
 
-This module implements a compile-time expression DSL for Oscilla blocks. Expressions are compiled to IR signal expressions during block lowering.
+This module implements a compile-time expression DSL for Oscilla blocks. Expressions are compiled to unified IR value expressions during block lowering.
 
 ## Architecture
 
 The expression compiler follows a traditional compiler pipeline:
 
 ```
-Expression String → Lexer → Parser → Type Checker → IR Compiler → SigExprId
+Expression String → Lexer → Parser → Type Checker → IR Compiler → ValueExprId
 ```
 
 ### Pipeline Stages
@@ -28,8 +28,8 @@ Expression String → Lexer → Parser → Type Checker → IR Compiler → SigE
    - Errors: Type errors (incompatible types, undefined identifiers)
 
 4. **IR Compiler** (`compile.ts`): Generates IR from typed AST
-   - Input: Typed AST + IRBuilder + input signals
-   - Output: IR signal expression ID (`SigExprId`)
+   - Input: Typed AST + IRBuilder + input values
+   - Output: IR value expression ID (`ValueExprId`)
    - Errors: None (assumes AST is well-typed)
 
 ## Public API

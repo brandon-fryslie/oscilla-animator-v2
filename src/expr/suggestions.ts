@@ -287,7 +287,7 @@ export class SuggestionProvider {
         if (cardAxis.kind === 'inst') {
           cardinality = cardAxis.value.kind === 'one' ? 'one' : 'many';
         }
-        const kind = cardinality === 'one' ? 'Signal' : 'Field';
+        const kind = cardinality === 'one' ? 'One' : 'Many';
         typeDesc = `${kind}<${payloadTypeStr}>`;
       }
 
@@ -344,7 +344,7 @@ export class SuggestionProvider {
           const card = cardAxis.kind === 'inst'
             ? cardAxis.value.kind
             : '?';
-          const kind = card === 'one' ? 'Signal' : card === 'many' ? 'Field' : card === 'zero' ? 'Const' : 'Signal';
+          const kind = card === 'one' ? 'One' : card === 'many' ? 'Many' : card === 'zero' ? 'Const' : 'One';
           typeDesc = `${kind}<${payloadKind}>`;
         }
 

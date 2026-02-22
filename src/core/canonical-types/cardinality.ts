@@ -2,8 +2,8 @@
  * Cardinality Axis — How many instances exist?
  *
  * zero: compile-time constant (universal donor)
- * one: signal (single value)
- * many: field (one value per instance)
+ * one: single-lane value
+ * many: multi-lane value (one value per instance)
  */
 
 import type { CardinalityVarId, DomainTypeId } from '../ids.js';
@@ -32,8 +32,8 @@ export type CardinalityRelation = 'uniform' | 'promoteToMany';
  * Per-port acceptance bounds for a cardinality var.
  *
  * - oneOrMany: flexible (solver can resolve to one or many)
- * - oneOnly: fixed signal cardinality
- * - manyOnly: fixed field cardinality
+ * - oneOnly: fixed one-lane cardinality
+ * - manyOnly: fixed many-lane cardinality
  */
 export type CardinalityAcceptance = 'oneOrMany' | 'oneOnly' | 'manyOnly';
 
