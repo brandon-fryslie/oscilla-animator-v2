@@ -21,7 +21,7 @@ const PHASOR_CARD = cardinalityVar(cardinalityVarId('phasor_cardinality'), {
 registerBlock({
   type: 'Phasor',
   label: 'Phasor',
-  category: 'signal',
+  category: 'scalar',
   description: 'Phase accumulator that wraps at 1.0',
   form: 'primitive',
   capability: 'state',

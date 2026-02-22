@@ -27,7 +27,7 @@ registerBlock({
   payload: {
     allowedPayloads: {
       field: ALL_CONCRETE_PAYLOADS,
-      signal: ALL_CONCRETE_PAYLOADS,
+      one: ALL_CONCRETE_PAYLOADS,
     },
     combinations: ALL_CONCRETE_PAYLOADS.map(p => ({
       inputs: [p] as PayloadType[],
@@ -58,7 +58,7 @@ registerBlock({
     },
   },
   outputs: {
-    signal: {
+    one: {
       label: 'Result',
       type: inferType(payloadVar('reduce_payload'), unitVar('reduce_in'))
     },
@@ -80,8 +80,8 @@ registerBlock({
 
     const op = requireConfigEnum(config!, 'op', ['min', 'max', 'sum', 'avg'] as const);
 
-    // Create reduce signal expression
-    const sigId = ctx.b.reduce(
+    // Create reduce one-cardinality expression
+    const oneId = ctx.b.reduce(
       fieldInput.id,
       op,
       canonicalType(payloadType)
@@ -89,11 +89,11 @@ registerBlock({
 
     return {
       outputsById: {
-        signal: { id: sigId, slot: undefined, type: outType, stride: payloadStride(outType.payload) },
+        one: { id: oneId, slot: undefined, type: outType, stride: payloadStride(outType.payload) },
       },
       effects: {
         slotRequests: [
-          { portId: 'signal', type: outType },
+          { portId: 'one', type: outType },
         ],
       },
       instanceContext: undefined,

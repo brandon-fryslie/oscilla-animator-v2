@@ -67,7 +67,7 @@ export function resolveKernels(
       continue;
     }
 
-    // Check each fn field (map, zip, zipSig have PureFn)
+    // Check each fn field (map, zip, zipPromote have PureFn)
     if (expr.kernelKind === 'map') {
       const result = resolvePureFn(expr.fn, expr.type, registry, i, 1);
       if (result.error) {
@@ -83,9 +83,9 @@ export function resolveKernels(
       } else if (result.fn) {
         valueExprs[i] = { ...expr, fn: result.fn };
       }
-    } else if (expr.kernelKind === 'zipSig') {
-      // zipSig: field + signals, so argCount = 1 (field) + signals.length
-      const expectedArgCount = 1 + expr.signals.length;
+    } else if (expr.kernelKind === 'zipPromote') {
+      // zipPromote: field + ones, so argCount = 1 (field) + ones.length
+      const expectedArgCount = 1 + expr.ones.length;
       const result = resolvePureFn(expr.fn, expr.type, registry, i, expectedArgCount);
       if (result.error) {
         errors.push(result.error);

@@ -134,7 +134,7 @@ describe('RenderAssembler', () => {
         instanceId: instanceId('missing-instance'),
         positionSlot: 1 as ValueSlot,
         colorSlot: 2 as ValueSlot,
-        shape: { k: 'sig', topologyId: 1, paramSignals: [] },
+        shape: { k: 'one', topologyId: 1, paramExprs: [] },
       };
 
       const context: AssemblerContext = {
@@ -157,7 +157,7 @@ describe('RenderAssembler', () => {
         instanceId: instanceId('empty-instance'),
         positionSlot: 1 as ValueSlot,
         colorSlot: 2 as ValueSlot,
-        shape: { k: 'sig', topologyId: 1, paramSignals: [] },
+        shape: { k: 'one', topologyId: 1, paramExprs: [] },
       };
 
       const context: AssemblerContext = {
@@ -201,8 +201,8 @@ describe('RenderAssembler', () => {
         instanceId: instanceId('test-instance'),
         positionSlot: 1 as ValueSlot,
         colorSlot: 2 as ValueSlot,
-        scale: { k: 'sig', id: 0 as ValueExprId },
-        shape: { k: 'sig', topologyId: TOPOLOGY_ID_ELLIPSE, paramSignals: [1 as ValueExprId, 2 as ValueExprId] },
+        scale: { k: 'one', id: 0 as ValueExprId },
+        shape: { k: 'one', topologyId: TOPOLOGY_ID_ELLIPSE, paramExprs: [1 as ValueExprId, 2 as ValueExprId] },
       };
 
       const context: AssemblerContext = {
@@ -261,11 +261,11 @@ describe('RenderAssembler', () => {
         instanceId: instanceId('test-instance'),
         positionSlot: 1 as ValueSlot,
         colorSlot: 2 as ValueSlot,
-        scale: { k: 'sig', id: 0 as ValueExprId },
+        scale: { k: 'one', id: 0 as ValueExprId },
         shape: {
-          k: 'sig',
+          k: 'one',
           topologyId: TEST_PENTAGON_ID,
-          paramSignals: [1 as ValueExprId, 2 as ValueExprId, 3 as ValueExprId],
+          paramExprs: [1 as ValueExprId, 2 as ValueExprId, 3 as ValueExprId],
         },
         controlPoints: { k: 'slot', slot: 3 as ValueSlot },
       };
@@ -348,11 +348,11 @@ describe('RenderAssembler', () => {
         instanceId: instanceId('test-instance'),
         positionSlot: 1 as ValueSlot,
         colorSlot: 2 as ValueSlot,
-        scale: { k: 'sig', id: 0 as ValueExprId },
+        scale: { k: 'one', id: 0 as ValueExprId },
         shape: {
-          k: 'sig',
+          k: 'one',
           topologyId: TEST_PENTAGON_ID,
-          paramSignals: [1 as ValueExprId, 2 as ValueExprId, 3 as ValueExprId],
+          paramExprs: [1 as ValueExprId, 2 as ValueExprId, 3 as ValueExprId],
         },
         // controlPoints not specified!
       };
@@ -409,11 +409,11 @@ describe('RenderAssembler', () => {
           instanceId: instanceId('instance-a'),
           positionSlot: 1 as ValueSlot,
           colorSlot: 2 as ValueSlot,
-          scale: { k: 'sig', id: 0 as ValueExprId },
+          scale: { k: 'one', id: 0 as ValueExprId },
           shape: {
-            k: 'sig',
+            k: 'one',
             topologyId: TEST_PENTAGON_ID,
-            paramSignals: [1 as ValueExprId, 2 as ValueExprId, 3 as ValueExprId],
+            paramExprs: [1 as ValueExprId, 2 as ValueExprId, 3 as ValueExprId],
           },
           controlPoints: { k: 'slot', slot: 3 as ValueSlot },
         },
@@ -422,11 +422,11 @@ describe('RenderAssembler', () => {
           instanceId: instanceId('instance-b'),
           positionSlot: 4 as ValueSlot,
           colorSlot: 5 as ValueSlot,
-          scale: { k: 'sig', id: 0 as ValueExprId },
+          scale: { k: 'one', id: 0 as ValueExprId },
           shape: {
-            k: 'sig',
+            k: 'one',
             topologyId: TEST_PENTAGON_ID,
-            paramSignals: [1 as ValueExprId, 2 as ValueExprId, 3 as ValueExprId],
+            paramExprs: [1 as ValueExprId, 2 as ValueExprId, 3 as ValueExprId],
           },
           controlPoints: { k: 'slot', slot: 6 as ValueSlot },
         },
@@ -496,11 +496,11 @@ describe('RenderAssembler', () => {
           instanceId: instanceId('path-instance'),
           positionSlot: 1 as ValueSlot,
           colorSlot: 2 as ValueSlot,
-          scale: { k: 'sig', id: 0 as ValueExprId },
+          scale: { k: 'one', id: 0 as ValueExprId },
           shape: {
-            k: 'sig',
+            k: 'one',
             topologyId: TEST_PENTAGON_ID,
-            paramSignals: [1 as ValueExprId, 2 as ValueExprId, 3 as ValueExprId],
+            paramExprs: [1 as ValueExprId, 2 as ValueExprId, 3 as ValueExprId],
           },
           controlPoints: { k: 'slot', slot: 3 as ValueSlot },
         },
@@ -509,8 +509,8 @@ describe('RenderAssembler', () => {
           instanceId: instanceId('primitive-instance'),
           positionSlot: 4 as ValueSlot,
           colorSlot: 5 as ValueSlot,
-          scale: { k: 'sig', id: 0 as ValueExprId },
-          shape: { k: 'sig', topologyId: TOPOLOGY_ID_ELLIPSE, paramSignals: [1 as ValueExprId, 2 as ValueExprId] },
+          scale: { k: 'one', id: 0 as ValueExprId },
+          shape: { k: 'one', topologyId: TOPOLOGY_ID_ELLIPSE, paramExprs: [1 as ValueExprId, 2 as ValueExprId] },
         },
       ];
 
@@ -556,8 +556,8 @@ describe('RenderAssembler', () => {
           instanceId: instanceId('empty-instance'),
           positionSlot: 1 as ValueSlot,
           colorSlot: 2 as ValueSlot,
-          scale: { k: 'sig', id: 0 as ValueExprId },
-          shape: { k: 'sig', topologyId: TOPOLOGY_ID_ELLIPSE, paramSignals: [] },
+          scale: { k: 'one', id: 0 as ValueExprId },
+          shape: { k: 'one', topologyId: TOPOLOGY_ID_ELLIPSE, paramExprs: [] },
         },
       ];
 

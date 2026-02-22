@@ -164,7 +164,7 @@ describe('ValueExpr structural invariants', () => {
 
   describe('sub-discriminant correctness', () => {
     it('ValueExprKernel.kernelKind covers all kernel operations', () => {
-      const expectedKernelKinds = ['map', 'zip', 'broadcast', 'reduce', 'zipSig', 'pathDerivative', 'pathSample'];
+      const expectedKernelKinds = ['map', 'zip', 'broadcast', 'reduce', 'zipPromote', 'pathDerivative', 'pathSample'];
       const mockType = {} as CanonicalType;
       const mockFn = { kind: 'opcode', opcode: 'add' } as any;
 
@@ -172,9 +172,9 @@ describe('ValueExpr structural invariants', () => {
       const kernels: ValueExprKernel[] = [
         { kind: 'kernel', type: mockType, kernelKind: 'map', input: 0 as any, fn: mockFn },
         { kind: 'kernel', type: mockType, kernelKind: 'zip', inputs: [], fn: mockFn },
-        { kind: 'kernel', type: mockType, kernelKind: 'broadcast', signal: 0 as any },
+        { kind: 'kernel', type: mockType, kernelKind: 'broadcast', one: 0 as any },
         { kind: 'kernel', type: mockType, kernelKind: 'reduce', field: 0 as any, op: 'sum' },
-        { kind: 'kernel', type: mockType, kernelKind: 'zipSig', field: 0 as any, signals: [], fn: mockFn },
+        { kind: 'kernel', type: mockType, kernelKind: 'zipPromote', field: 0 as any, ones: [], fn: mockFn },
         { kind: 'kernel', type: mockType, kernelKind: 'pathDerivative', field: 0 as any, op: 'tangent', topologyId: 100 },
         { kind: 'kernel', type: mockType, kernelKind: 'pathSample', controlPoints: 0 as any, tField: 1 as any, topologyId: 100, op: 'position' },
       ];
@@ -243,7 +243,7 @@ describe('ValueExpr structural invariants', () => {
         kind: 'kernel',
         type: mockType,
         kernelKind: 'broadcast',
-        signal: 0 as any,
+        one: 0 as any,
       };
       expect('fn' in broadcastKernel).toBe(false);
     });
@@ -327,7 +327,7 @@ describe('ValueExpr structural invariants', () => {
   });
 
   describe('time variant completeness', () => {
-    it('ValueExprTime.which accepts all 7 time signals', () => {
+    it('ValueExprTime.which accepts all 7 time ones', () => {
       const mockType = {} as CanonicalType;
       const timeSignals = ['tMs', 'phaseA', 'phaseB', 'dt', 'progress', 'palette', 'energy'] as const;
 

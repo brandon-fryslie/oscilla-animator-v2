@@ -51,13 +51,13 @@ export function getValueExprChildren(expr: ValueExpr): readonly ValueExprId[] {
           return [expr.input];
         case 'zip':
           return expr.inputs;
-        case 'zipSig':
-          return [expr.field, ...expr.signals];
+        case 'zipPromote':
+          return [expr.field, ...expr.ones];
         case 'broadcast': {
-          if (expr.signalComponents && expr.signalComponents.length > 0) {
-            return [expr.signal, ...expr.signalComponents];
+          if (expr.oneComponents && expr.oneComponents.length > 0) {
+            return [expr.one, ...expr.oneComponents];
           }
-          return [expr.signal];
+          return [expr.one];
         }
         case 'reduce':
         case 'pathDerivative':

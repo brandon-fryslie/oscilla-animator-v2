@@ -34,7 +34,7 @@ const CONST_OUT_CARD = cardinalityVar(cardinalityVarId('const_out_cardinality'),
 registerBlock({
   type: 'Const',
   label: 'Constant',
-  category: 'signal',
+  category: 'scalar',
   description: 'Outputs a constant value (type inferred from target)',
   form: 'primitive',
   capability: 'pure',

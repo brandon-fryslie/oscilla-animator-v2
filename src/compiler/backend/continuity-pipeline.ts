@@ -63,10 +63,10 @@ interface RenderTargetInfo {
   position: { id: ValueExprId; stride: number };
   color: { id: ValueExprId; stride: number };
   scale?:
-    | { k: 'sig'; id: ValueExprId }
+    | { k: 'one'; id: ValueExprId }
     | { k: 'field'; id: ValueExprId; stride: number };
   shape?:
-    | { k: 'sig'; id: ValueExprId }
+    | { k: 'one'; id: ValueExprId }
     | { k: 'field'; id: ValueExprId; stride: number };
 }
 
@@ -167,7 +167,7 @@ function inferFieldInstanceFromExprs(
 
 /**
  * Resolve shape info from a cardinality-one expression.
- * Returns topologyId, paramSignals, and optional controlPointField with stride.
+ * Returns topologyId, paramExprs, and optional controlPointField with stride.
  */
 function resolveShapeInfo(
   shapeExprId: ValueExprId,
@@ -175,7 +175,7 @@ function resolveShapeInfo(
 ):
   | {
       topologyId: TopologyId;
-      paramSignals: readonly ValueExprId[];
+      paramExprs: readonly ValueExprId[];
       controlPointField?: { id: ValueExprId; stride: number };
     }
   | undefined {
@@ -186,8 +186,8 @@ function resolveShapeInfo(
   if (expr.kind === 'shapeRef') {
     const topologyId = (expr as any).topologyId as TopologyId;
 
-    const paramSignals = (expr as any).paramArgs as readonly ValueExprId[];
-    if (!paramSignals) throw new Error('shapeRef missing paramArgs field — malformed ValueExprShapeRef');
+    const paramExprs = (expr as any).paramArgs as readonly ValueExprId[];
+    if (!paramExprs) throw new Error('shapeRef missing paramArgs field — malformed ValueExprShapeRef');
 
     const cpId = (expr as any).controlPointField as ValueExprId | undefined;
     const controlPointField = cpId !== undefined
@@ -200,7 +200,7 @@ function resolveShapeInfo(
 
     return {
       topologyId,
-      paramSignals,
+      paramExprs,
       controlPointField,
     };
   }
@@ -263,7 +263,7 @@ function collectRenderTargets(
 
     const scale = scaleExpr
       ? isCardinalityOneExpr(scaleExpr.id, valueExprs)
-        ? { k: 'sig' as const, id: scaleExpr.id }
+        ? { k: 'one' as const, id: scaleExpr.id }
         : isFieldExtent(scaleExpr.id, valueExprs)
           ? { k: 'field' as const, id: scaleExpr.id, stride: scaleExpr.stride }
           : undefined
@@ -281,7 +281,7 @@ function collectRenderTargets(
     const shapeFieldStride = payloadStride(shapeExpr.type.payload);
     const shape = isFieldExtent(shapeFieldId, valueExprs)
       ? { k: 'field' as const, id: shapeFieldId, stride: shapeFieldStride }
-      : { k: 'sig' as const, id: shapeFieldId };
+      : { k: 'one' as const, id: shapeFieldId };
 
     targets.push({
       instanceId,
@@ -439,7 +439,7 @@ export function allocateContinuityPipeline(
     // [LAW:dataflow-not-control-flow] Scale is always processed through one of the declared variants.
     let scaleOutput: StepRender['scale'] = undefined;
     if (scale) {
-      if (scale.k === 'sig') {
+      if (scale.k === 'one') {
         scaleOutput = scale;
       } else {
         // [LAW:one-source-of-truth] Field scale follows the same materialize+continuity path as other field inputs.
@@ -461,9 +461,9 @@ export function allocateContinuityPipeline(
         const shapeInfo = resolveShapeInfo(shape.id, valueExprs);
         if (shapeInfo) {
           shapeOutput = {
-            k: 'sig',
+            k: 'one',
             topologyId: shapeInfo.topologyId,
-            paramSignals: shapeInfo.paramSignals,
+            paramExprs: shapeInfo.paramExprs,
           };
 
           if (shapeInfo.controlPointField !== undefined) {

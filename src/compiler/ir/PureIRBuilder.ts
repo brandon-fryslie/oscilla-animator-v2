@@ -46,7 +46,7 @@ export interface PureIRBuilder {
   // Canonical Value Expression Methods (pure subset)
   // =========================================================================
 
-  /** Create a constant expression. Works for signal, field, or event extent. */
+  /** Create a constant expression. Works for one, many, or event extent. */
   constant(value: ConstValue, type: CanonicalType): ValueExprId;
 
   /** Create a time-derived expression. */
@@ -59,15 +59,15 @@ export interface PureIRBuilder {
   kernelZip(inputs: readonly ValueExprId[], fn: PureFn, type: CanonicalType): ValueExprId;
 
   /**
-   * Zip a field expression with signal expressions.
-   * The field provides per-lane values, signals provide uniform values.
+   * Zip a field expression with one-cardinality expressions.
+   * The field provides per-lane values, ones provide uniform values.
    */
-  kernelZipSig(field: ValueExprId, signals: readonly ValueExprId[], fn: PureFn, type: CanonicalType): ValueExprId;
+  kernelZipPromote(field: ValueExprId, ones: readonly ValueExprId[], fn: PureFn, type: CanonicalType): ValueExprId;
 
-  /** Broadcast a signal to a field (cardinality one → many). */
-  broadcast(signal: ValueExprId, type: CanonicalType, signalComponents?: readonly ValueExprId[]): ValueExprId;
+  /** Broadcast a one-cardinality value to a many-cardinality value. */
+  broadcast(one: ValueExprId, type: CanonicalType, oneComponents?: readonly ValueExprId[]): ValueExprId;
 
-  /** Reduce a field to a signal (cardinality many → one). */
+  /** Reduce a field to one-cardinality (cardinality many → one). */
   reduce(field: ValueExprId, op: 'min' | 'max' | 'sum' | 'avg', type: CanonicalType): ValueExprId;
 
   /** Combine multiple expressions (sum, average, max, min, last, product). */

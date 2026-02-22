@@ -23,7 +23,7 @@ const HASH_CARD = cardinalityVar(cardinalityVarId('hash_cardinality'), {
 registerBlock({
   type: 'Hash',
   label: 'Hash',
-  category: 'signal',
+  category: 'scalar',
   description: 'Deterministic hash function. Output in [0, 1)',
   form: 'primitive',
   capability: 'pure',

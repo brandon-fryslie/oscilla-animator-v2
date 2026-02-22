@@ -328,10 +328,10 @@ export interface StepRender {
    * - `sig`: uniform scale (cardinality one)
    * - `slot`: per-instance isotropic scale (cardinality many; stride 1)
    */
-  readonly scale?: { readonly k: 'sig'; readonly id: ValueExprId } | { readonly k: 'slot'; readonly slot: ValueSlot };
-  /** Shape - topology + param signals (REQUIRED at runtime, types now enforce this) */
+  readonly scale?: { readonly k: 'one'; readonly id: ValueExprId } | { readonly k: 'slot'; readonly slot: ValueSlot };
+  /** Shape - topology + param expressions (REQUIRED at runtime, types now enforce this) */
   readonly shape:
-    | { readonly k: 'sig'; readonly topologyId: TopologyId; readonly paramSignals: readonly ValueExprId[] }
+    | { readonly k: 'one'; readonly topologyId: TopologyId; readonly paramExprs: readonly ValueExprId[] }
     | { readonly k: 'slot'; readonly slot: ValueSlot };
   /** Optional control points for path rendering - P5c: Add control points field */
   readonly controlPoints?: { readonly k: 'slot'; readonly slot: ValueSlot };

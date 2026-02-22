@@ -7,7 +7,7 @@
 
 // Primitive block categories
 import './time';
-import './signal';
+import './scalar';
 import './math';
 import './field';
 import './shape';

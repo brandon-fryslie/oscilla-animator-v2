@@ -53,16 +53,16 @@ export interface BlockIRBuilder {
   /** Create an external input expression. */
   external(channel: string, type: CanonicalType): ValueExprId;
 
-  /** Cardinality-safe unary map: auto-broadcasts signal→field when needed. */
+  /** Cardinality-safe unary map: auto-broadcasts one→many when needed. */
   mapAuto(input: ValueExprId, fn: PureFn, type: CanonicalType): ValueExprId;
 
-  /** Cardinality-safe n-ary zip: auto-broadcasts/uses zipSig when inputs have mixed cardinality. */
+  /** Cardinality-safe n-ary zip: auto-broadcasts/uses zipPromote when inputs have mixed cardinality. */
   zipAuto(inputs: readonly ValueExprId[], fn: PureFn, type: CanonicalType): ValueExprId;
 
-  /** Broadcast a signal to a field (cardinality one → many). */
-  broadcast(signal: ValueExprId, type: CanonicalType, signalComponents?: readonly ValueExprId[]): ValueExprId;
+  /** Broadcast a one-cardinality value to a many-cardinality value. */
+  broadcast(one: ValueExprId, type: CanonicalType, oneComponents?: readonly ValueExprId[]): ValueExprId;
 
-  /** Reduce a field to a signal (cardinality many → one). */
+  /** Reduce a field to one-cardinality (cardinality many → one). */
   reduce(field: ValueExprId, op: 'min' | 'max' | 'sum' | 'avg', type: CanonicalType): ValueExprId;
 
   /** Create an intrinsic field expression (index, randomId, normalizedIndex). */
@@ -74,7 +74,7 @@ export interface BlockIRBuilder {
   /** Create a state-read expression (symbolic - resolved by orchestrator). */
   stateRead(stateKey: StableStateId, type: CanonicalType): ValueExprId;
 
-  /** Read an event expression as a float signal (0.0 or 1.0). */
+  /** Read an event expression as a float one-cardinality value (0.0 or 1.0). */
   eventRead(eventExpr: ValueExprId): ValueExprId;
 
   /** Create a path derivative expression (tangent or arcLength). */

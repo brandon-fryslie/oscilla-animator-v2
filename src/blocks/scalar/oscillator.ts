@@ -23,7 +23,7 @@ const OSCILLATOR_CARD = cardinalityVar(cardinalityVarId('oscillator_cardinality'
 registerBlock({
   type: 'Oscillator',
   label: 'Oscillator',
-  category: 'signal',
+  category: 'scalar',
   description: 'Generates oscillating signals (sin, saw, square, noise)',
   form: 'primitive',
   capability: 'pure',

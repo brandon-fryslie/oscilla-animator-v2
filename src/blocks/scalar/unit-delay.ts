@@ -22,7 +22,7 @@ const UNIT_DELAY_CARD = cardinalityVar(cardinalityVarId('unit_delay_cardinality'
 registerBlock({
   type: 'UnitDelay',
   label: 'Unit Delay',
-  category: 'signal',
+  category: 'scalar',
   description: 'Delays input by one frame',
   form: 'primitive',
   capability: 'state',

@@ -127,7 +127,7 @@ export class IRBuilderImpl implements OrchestratorIRBuilder {
   }
 
   /**
-   * Cardinality-safe n-ary zip: auto-broadcasts/uses zipSig when inputs have mixed cardinality.
+   * Cardinality-safe n-ary zip: auto-broadcasts/uses zipPromote when inputs have mixed cardinality.
    * Blocks use this via BlockIRBuilder.zipAuto().
    */
   zipAuto(inputs: readonly ValueExprId[], fn: PureFn, type: CanonicalType): ValueExprId {
@@ -138,7 +138,7 @@ export class IRBuilderImpl implements OrchestratorIRBuilder {
       return this.kernelZip(inputs, fn, type);
     }
 
-    // Output is field (many). Partition inputs into fields vs signals.
+    // Output is field (many). Partition inputs into fields vs ones.
     const fieldIds: ValueExprId[] = [];
     const signalIds: ValueExprId[] = [];
     for (const id of inputs) {
@@ -156,11 +156,11 @@ export class IRBuilderImpl implements OrchestratorIRBuilder {
     }
 
     if (fieldIds.length === 1) {
-      // Exactly one field + N signals → kernelZipSig
-      return this.kernelZipSig(fieldIds[0], signalIds, fn, type);
+      // Exactly one field + N ones → kernelZipPromote
+      return this.kernelZipPromote(fieldIds[0], signalIds, fn, type);
     }
 
-    // Multiple fields + signals → broadcast signals to field extent, then zip all
+    // Multiple fields + ones → broadcast ones to field extent, then zip all
     const aligned = inputs.map((id) => {
       const card = this.cardKindOf(id);
       if (card === 'many') return id;
@@ -171,7 +171,7 @@ export class IRBuilderImpl implements OrchestratorIRBuilder {
 
   /**
    * Raw kernel map — internal only (not on BlockIRBuilder).
-   * Throws on cardinality mismatch. Used by mapAuto, combine, kernelZipSig.
+   * Throws on cardinality mismatch. Used by mapAuto, combine, kernelZipPromote.
    */
   kernelMap(input: ValueExprId, fn: PureFn, type: CanonicalType): ValueExprId {
     const outCard = requireInst(type.extent.cardinality, 'cardinality').kind;
@@ -191,7 +191,7 @@ export class IRBuilderImpl implements OrchestratorIRBuilder {
         const inCard = this.cardKindOf(id);
         if (inCard !== 'many') {
           throw new Error(
-            `IRBuilder.kernelZip: output is many but input id=${id} is ${inCard} — use kernelZipSig for mixed cardinality`
+            `IRBuilder.kernelZip: output is many but input id=${id} is ${inCard} — use kernelZipPromote for mixed cardinality`
           );
         }
       }
@@ -208,44 +208,44 @@ export class IRBuilderImpl implements OrchestratorIRBuilder {
     return this.pushExpr({ kind: 'kernel', type, kernelKind: 'zip', inputs, fn });
   }
 
-  kernelZipSig(field: ValueExprId, signals: readonly ValueExprId[], fn: PureFn, type: CanonicalType): ValueExprId {
+  kernelZipPromote(field: ValueExprId, ones: readonly ValueExprId[], fn: PureFn, type: CanonicalType): ValueExprId {
     const outCard = requireInst(type.extent.cardinality, 'cardinality').kind;
     if (outCard !== 'many') {
       throw new Error(
-        `IRBuilder.kernelZipSig: output must be many, got ${outCard}`
+        `IRBuilder.kernelZipPromote: output must be many, got ${outCard}`
       );
     }
     const fieldCard = this.cardKindOf(field);
     if (fieldCard !== 'many') {
       throw new Error(
-        `IRBuilder.kernelZipSig: field input id=${field} must be many, got ${fieldCard}`
+        `IRBuilder.kernelZipPromote: field input id=${field} must be many, got ${fieldCard}`
       );
     }
-    for (const id of signals) {
+    for (const id of ones) {
       const sigCard = this.cardKindOf(id);
       if (sigCard === 'many') {
         throw new Error(
-          `IRBuilder.kernelZipSig: signal input id=${id} must not be many — use kernelZip for all-field inputs`
+        `IRBuilder.kernelZipPromote: one input id=${id} must not be many — use kernelZip for all-many inputs`
         );
       }
     }
-    return this.pushExpr({ kind: 'kernel', type, kernelKind: 'zipSig', field, signals, fn });
+    return this.pushExpr({ kind: 'kernel', type, kernelKind: 'zipPromote', field, ones, fn });
   }
 
-  broadcast(signal: ValueExprId, type: CanonicalType, signalComponents?: readonly ValueExprId[]): ValueExprId {
+  broadcast(one: ValueExprId, type: CanonicalType, oneComponents?: readonly ValueExprId[]): ValueExprId {
     const outCard = requireInst(type.extent.cardinality, 'cardinality').kind;
     if (outCard !== 'many') {
       throw new Error(
         `IRBuilder.broadcast: output must be many, got ${outCard}`
       );
     }
-    const sigCard = this.cardKindOf(signal);
+    const sigCard = this.cardKindOf(one);
     if (sigCard === 'many') {
       throw new Error(
-        `IRBuilder.broadcast: signal input id=${signal} must not be many (already a field)`
+        `IRBuilder.broadcast: one input id=${one} must not be many (already many)`
       );
     }
-    return this.pushExpr({ kind: 'kernel', type, kernelKind: 'broadcast', signal, signalComponents });
+    return this.pushExpr({ kind: 'kernel', type, kernelKind: 'broadcast', one, oneComponents });
   }
 
   reduce(field: ValueExprId, op: 'min' | 'max' | 'sum' | 'avg', type: CanonicalType): ValueExprId {
@@ -358,6 +358,18 @@ export class IRBuilderImpl implements OrchestratorIRBuilder {
   // ===========================================================================
 
   extract(input: ValueExprId, componentIndex: number, type: CanonicalType): ValueExprId {
+    const inputExpr = this.valueExprs[input as number];
+    if (inputExpr?.kind === 'construct') {
+      const componentExpr = inputExpr.components[componentIndex];
+      if (componentExpr === undefined) {
+        throw new Error(
+          `IRBuilder.extract: component ${componentIndex} out of range for construct ${input} (components=${inputExpr.components.length})`
+        );
+      }
+      // [LAW:one-source-of-truth] Reuse canonical component expressions directly
+      // instead of manufacturing extra extract nodes that require slot mapping.
+      return componentExpr;
+    }
     return this.pushExpr({ kind: 'extract', type, input, componentIndex });
   }
 

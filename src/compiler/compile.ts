@@ -599,7 +599,7 @@ function getStepExprId(step: Step): ValueExprId | null {
     case 'fieldStateWrite':
       return step.value;
     case 'render':
-      return step.scale?.k === 'sig' ? step.scale.id : null;
+      return step.scale?.k === 'one' ? step.scale.id : null;
     case 'continuityMapBuild':
     case 'continuityApply':
       return null;

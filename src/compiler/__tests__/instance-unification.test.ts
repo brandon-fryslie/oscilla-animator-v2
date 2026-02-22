@@ -100,7 +100,7 @@ describe('Instance Identity (type-derived)', () => {
       expect(requireManyInstance(expr.type).instanceId).toBe(instance);
     });
 
-    it('zipSig preserves instance from field type', () => {
+    it('zipPromote preserves instance from field type', () => {
       const b = new IRBuilderImpl();
       const instance = b.createInstance(DOMAIN_CIRCLE, 10);
       const ref = instanceRef(DOMAIN_CIRCLE as string, instance as string);
@@ -108,7 +108,7 @@ describe('Instance Identity (type-derived)', () => {
       const sigType = canonicalScalar(FLOAT);
       const intrinsic = b.intrinsic('index', fieldType);
       const signal = b.constant(floatConst(2.0), sigType);
-      const zipped = b.kernelZipSig(intrinsic, [signal], { kind: 'opcode', opcode: OpCode.Mul }, fieldType);
+      const zipped = b.kernelZipPromote(intrinsic, [signal], { kind: 'opcode', opcode: OpCode.Mul }, fieldType);
 
       const expr = b.getValueExprs()[zipped as number];
       expect(requireManyInstance(expr.type).instanceId).toBe(instance);
@@ -167,7 +167,7 @@ describe('Instance Identity (type-derived)', () => {
       const normalizedIndex = b.intrinsic('normalizedIndex', floatType);
       const colsSig = b.constant(intConst(5), canonicalScalar(INT));
       const rowsSig = b.constant(intConst(2), canonicalScalar(INT));
-      const layoutField = b.kernelZipSig(
+      const layoutField = b.kernelZipPromote(
         normalizedIndex,
         [colsSig, rowsSig],
         { kind: 'kernel', name: 'gridLayout' },

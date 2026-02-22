@@ -471,7 +471,7 @@ function resolveScale(
     );
   }
 
-  if (scaleSpec.k === 'sig') {
+  if (scaleSpec.k === 'one') {
     // [LAW:one-source-of-truth] Render reads numeric one-cardinality values from arena only.
     const arenaOffset = scalarExprToArenaOffset.get(scaleSpec.id as number);
     if (arenaOffset !== undefined) {
@@ -523,17 +523,17 @@ function resolveShape(
     return shapeBuffer;
   } else {
     // One-cardinality shape descriptor ('sig') with topology: resolve scalar params from arena
-    const { topologyId, paramSignals } = shapeSpec;
+    const { topologyId, paramExprs } = shapeSpec;
     // TODO: replace per-frame allocation with zero-alloc render assembly
     // eslint-disable-next-line oscilla/no-hot-path-alloc
     const params: Record<string, number> = {};
 
-    for (let i = 0; i < paramSignals.length; i++) {
+    for (let i = 0; i < paramExprs.length; i++) {
       // [LAW:one-source-of-truth] Render reads numeric one-cardinality values from arena only.
-      const arenaOffset = scalarExprToArenaOffset.get(paramSignals[i] as number);
+      const arenaOffset = scalarExprToArenaOffset.get(paramExprs[i] as number);
       if (arenaOffset === undefined) {
         throw new Error(
-          'RenderAssembler: No slot mapping for one-cardinality shape param ' + paramSignals[i] + '. ' +
+          'RenderAssembler: No slot mapping for one-cardinality shape param ' + paramExprs[i] + '. ' +
           'One-cardinality values must be evaluated in schedule before rendering.'
         );
       }

@@ -32,7 +32,7 @@ describe('ValueExpr cardinality invariants', () => {
 
       // Field input to NormalizeRange (this historically produced kernelZip nodes typed as signal).
       // Route through Mask using a TIME signal to ensure we don't accidentally
-      // materialize time as a field via kernelZip (must broadcast / zipSig instead).
+      // materialize time as a field via kernelZip (must broadcast / zipPromote instead).
       const mask = b.addBlock('Mask');
       b.wire(array, 't', mask, 'in');
       b.wire(time, 'tMs', mask, 'mask');
@@ -104,13 +104,13 @@ describe('ValueExpr cardinality invariants', () => {
         }
         case 'broadcast': {
           expect(out).toBe('many');
-          expect(cardKind(nodes[expr.signal as number])).not.toBe('many');
+          expect(cardKind(nodes[expr.one as number])).not.toBe('many');
           break;
         }
-        case 'zipSig': {
+        case 'zipPromote': {
           expect(out).toBe('many');
           expect(cardKind(nodes[expr.field as number])).toBe('many');
-          for (const id of expr.signals) {
+          for (const id of expr.ones) {
             expect(cardKind(nodes[id as number])).not.toBe('many');
           }
           break;

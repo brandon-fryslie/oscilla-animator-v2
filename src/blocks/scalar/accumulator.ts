@@ -22,7 +22,7 @@ const ACCUMULATOR_CARD = cardinalityVar(cardinalityVarId('accumulator_cardinalit
 registerBlock({
   type: 'Accumulator',
   label: 'Accumulator',
-  category: 'signal',
+  category: 'scalar',
   description: 'Accumulates value over time with delta input',
   form: 'primitive',
   capability: 'state',

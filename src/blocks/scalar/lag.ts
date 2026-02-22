@@ -22,7 +22,7 @@ const LAG_CARD = cardinalityVar(cardinalityVarId('lag_cardinality'), {
 registerBlock({
   type: 'Lag',
   label: 'Lag',
-  category: 'signal',
+  category: 'scalar',
   description: 'Exponential smoothing filter',
   form: 'primitive',
   capability: 'state',

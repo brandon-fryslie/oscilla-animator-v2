@@ -125,7 +125,7 @@ describe('extractConstraints', () => {
     const constraints = extractConstraints(g, BLOCK_DEFS_BY_TYPE);
 
     const reduceBlock = g.blocks.find((b) => b.type === 'Reduce')!;
-    const outputKey = draftPortKey(reduceBlock.id, 'signal', 'out');
+    const outputKey = draftPortKey(reduceBlock.id, 'one', 'out');
 
     // Output should have cardinality one in baseCardinalityAxis
     const axis = constraints.baseCardinalityAxis.get(outputKey);

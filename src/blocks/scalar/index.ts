@@ -1,7 +1,7 @@
 /**
- * Signal Blocks
+ * Scalar Blocks
  *
- * Blocks that produce and transform scalar signals.
+ * Blocks that produce and transform scalar one-cardinality values.
  */
 
 import './const';

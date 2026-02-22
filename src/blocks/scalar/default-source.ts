@@ -87,7 +87,7 @@ function signalDefault(
 registerBlock({
   type: 'DefaultSource',
   label: 'Default Source',
-  category: 'signal',
+  category: 'scalar',
   description: 'Polymorphic default value source (type-indexed dispatch)',
   form: 'primitive',
   capability: 'pure',

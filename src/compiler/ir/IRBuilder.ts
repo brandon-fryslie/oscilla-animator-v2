@@ -65,15 +65,15 @@ export interface IRBuilder {
   kernelZip(inputs: readonly ValueExprId[], fn: PureFn, type: CanonicalType): ValueExprId;
 
   /**
-   * Zip a field expression with signal expressions.
-   * The field provides per-lane values, signals provide uniform values.
+   * Zip a field expression with one-cardinality expressions.
+   * The field provides per-lane values, ones provide uniform values.
    */
-  kernelZipSig(field: ValueExprId, signals: readonly ValueExprId[], fn: PureFn, type: CanonicalType): ValueExprId;
+  kernelZipPromote(field: ValueExprId, ones: readonly ValueExprId[], fn: PureFn, type: CanonicalType): ValueExprId;
 
-  /** Broadcast a signal to a field (cardinality one → many). */
-  broadcast(signal: ValueExprId, type: CanonicalType, signalComponents?: readonly ValueExprId[]): ValueExprId;
+  /** Broadcast a one-cardinality value to a many-cardinality value. */
+  broadcast(one: ValueExprId, type: CanonicalType, oneComponents?: readonly ValueExprId[]): ValueExprId;
 
-  /** Reduce a field to a signal (cardinality many → one). */
+  /** Reduce a field to one-cardinality (cardinality many → one). */
   reduce(field: ValueExprId, op: 'min' | 'max' | 'sum' | 'avg', type: CanonicalType): ValueExprId;
 
   /** Create an intrinsic field expression (index, randomId, normalizedIndex). */
@@ -85,7 +85,7 @@ export interface IRBuilder {
   /** Create a state-read expression. */
   stateRead(stateKey: StableStateId, type: CanonicalType): ValueExprId;
 
-  /** Read an event expression as a float signal (0.0 or 1.0). */
+  /** Read an event expression as a float one-cardinality value (0.0 or 1.0). */
   eventRead(eventExpr: ValueExprId): ValueExprId;
 
   /** Create a path derivative expression (tangent or arcLength). */

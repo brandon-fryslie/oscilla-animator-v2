@@ -28,6 +28,7 @@ import type { ContinuityPipelineIR } from './continuity-pipeline';
 import { requireInst } from '../../core/canonical-types';
 import type { CanonicalType } from '../../core/canonical-types';
 import type { InstanceDecl } from '../ir/types';
+import { payloadStride } from '../../core/canonical-types';
 
 // =============================================================================
 // Schedule IR Types
@@ -226,7 +227,7 @@ function canMaterializeScalarExpr(
           );
           break;
         case 'reduce':
-        case 'zipSig':
+        case 'zipPromote':
         case 'broadcast':
         case 'pathDerivative':
         case 'pathSample':
@@ -258,6 +259,176 @@ function canMaterializeScalarExpr(
   cache.set(exprId, result);
   visiting.delete(exprId);
   return result;
+}
+
+function validateBroadcastKernelInputs(valueExprs: readonly ValueExpr[]): void {
+  for (let exprId = 0; exprId < valueExprs.length; exprId++) {
+    const expr = valueExprs[exprId];
+    if (!expr || expr.kind !== 'kernel' || expr.kernelKind !== 'broadcast') continue;
+
+    const oneExpr = valueExprs[expr.one as number];
+    if (!oneExpr) {
+      throw new Error(
+        `Schedule invariant violated: broadcast expr ${exprId} references missing source expr ${expr.one}`,
+      );
+    }
+
+    const oneCard = requireInst(oneExpr.type.extent.cardinality, 'cardinality').kind;
+    if (oneCard === 'many') {
+      throw new Error(
+        `Schedule invariant violated: broadcast expr ${exprId} source expr ${expr.one} is many-cardinality`,
+      );
+    }
+
+    for (const componentExprId of expr.oneComponents ?? []) {
+      const componentExpr = valueExprs[componentExprId as number];
+      if (!componentExpr) {
+        throw new Error(
+          `Schedule invariant violated: broadcast expr ${exprId} references missing component expr ${componentExprId}`,
+        );
+      }
+      const componentCard = requireInst(componentExpr.type.extent.cardinality, 'cardinality').kind;
+      if (componentCard === 'many') {
+        throw new Error(
+          `Schedule invariant violated: broadcast expr ${exprId} component expr ${componentExprId} is many-cardinality`,
+        );
+      }
+    }
+  }
+}
+
+function validateScalarExtractInputs(
+  valueExprs: readonly ValueExpr[],
+  scalarRootExprIds: ReadonlySet<number>,
+): void {
+  const visited = new Set<number>();
+  const stack = Array.from(scalarRootExprIds.values());
+
+  while (stack.length > 0) {
+    const exprId = stack.pop()!;
+    if (visited.has(exprId)) continue;
+    visited.add(exprId);
+
+    const expr = valueExprs[exprId];
+    if (!expr) {
+      throw new Error(`Schedule invariant violated: scalar root references missing expr ${exprId}`);
+    }
+
+    switch (expr.kind) {
+      case 'const':
+      case 'time':
+      case 'external':
+      case 'state':
+      case 'eventRead':
+      case 'shapeRef':
+      case 'event':
+        continue;
+
+      case 'intrinsic': {
+        const card = requireInst(expr.type.extent.cardinality, 'cardinality').kind;
+        if (card === 'many') {
+          // [LAW:single-enforcer] Scalar-evaluation compatibility is enforced once at schedule construction.
+          throw new Error(
+            `Schedule invariant violated: scalar root depends on field intrinsic expr ${exprId}`,
+          );
+        }
+        continue;
+      }
+
+      case 'hslToRgb': {
+        throw new Error(
+          `Schedule invariant violated: scalar root depends on field-only hslToRgb expr ${exprId}`,
+        );
+      }
+
+      case 'construct': {
+        for (const componentId of expr.components) {
+          stack.push(componentId as number);
+        }
+        continue;
+      }
+
+      case 'extract': {
+        const inputExprId = expr.input as number;
+        const inputExpr = valueExprs[inputExprId];
+        if (!inputExpr) {
+          throw new Error(
+            `Schedule invariant violated: extract expr ${exprId} references missing input expr ${inputExprId}`,
+          );
+        }
+
+        const inputCard = requireInst(inputExpr.type.extent.cardinality, 'cardinality').kind;
+        if (inputCard === 'many') {
+          throw new Error(
+            `Schedule invariant violated: scalar extract expr ${exprId} input expr ${inputExprId} is many-cardinality`,
+          );
+        }
+
+        const inputStride = payloadStride(inputExpr.type.payload);
+        if (expr.componentIndex < 0 || expr.componentIndex >= inputStride) {
+          throw new Error(
+            `Schedule invariant violated: extract expr ${exprId} requests component ${expr.componentIndex} but input stride is ${inputStride}`,
+          );
+        }
+
+        const inputIsAddressable = scalarRootExprIds.has(inputExprId);
+        if (!inputIsAddressable && inputExpr.kind !== 'construct') {
+          throw new Error(
+            `Schedule invariant violated: scalar extract expr ${exprId} input expr ${inputExprId} has no scalar slot mapping`,
+          );
+        }
+
+        if (!inputIsAddressable && inputExpr.kind === 'construct') {
+          const componentExprId = inputExpr.components[expr.componentIndex];
+          if (componentExprId === undefined) {
+            throw new Error(
+              `Schedule invariant violated: extract expr ${exprId} component ${expr.componentIndex} missing in construct expr ${inputExprId}`,
+            );
+          }
+          stack.push(componentExprId as number);
+        } else {
+          stack.push(inputExprId);
+        }
+        continue;
+      }
+
+      case 'kernel': {
+        switch (expr.kernelKind) {
+          case 'map':
+            stack.push(expr.input as number);
+            continue;
+          case 'zip':
+            for (const inputId of expr.inputs) {
+              stack.push(inputId as number);
+            }
+            continue;
+          case 'reduce':
+            // [LAW:single-enforcer] Reduce sub-graph evaluation is delegated to executor context.
+            continue;
+          case 'zipPromote':
+          case 'broadcast':
+          case 'pathDerivative':
+          case 'pathSample':
+            throw new Error(
+              `Schedule invariant violated: scalar root depends on field-only kernel ${expr.kernelKind} (expr ${exprId})`,
+            );
+          default: {
+            const _exhaustive: never = expr;
+            throw new Error(
+              `Unknown kernel kind during scalar invariant validation: ${(_exhaustive as ValueExpr).kind}`,
+            );
+          }
+        }
+      }
+
+      default: {
+        const _exhaustive: never = expr;
+        throw new Error(
+          `Unknown ValueExpr kind during scalar invariant validation: ${(_exhaustive as ValueExpr).kind}`,
+        );
+      }
+    }
+  }
 }
 
 // =============================================================================
@@ -297,8 +468,9 @@ export function pass7Schedule(
 
   // Generate scalar write steps for all registered cardinality-one slots.
   // Scalar expressions that depend on eventRead must be evaluated AFTER events.
-  // Pre-event signals go in Phase 1, post-event signals go after evalEvent.
+  // Pre-event ones go in Phase 1, post-event ones go after evalEvent.
   const scalarSlots = unlinkedIR.builder.getScalarSlots();
+  const scalarRootExprIds = new Set<number>(scalarSlots.keys());
   const evalValueStepsPre: Step[] = [];
   const evalValueStepsPost: Step[] = [];
   const scalarMaterializeStepsPre: StepMaterialize[] = [];
@@ -308,6 +480,12 @@ export function pass7Schedule(
     const exprId = scalarExprId as ValueExprId;
     const expr = valueExprs[exprId as number];
     if (!expr) continue;
+
+    if (expr.kind === 'time' && expr.which === 'palette') {
+      // [LAW:single-enforcer] Palette slot is authored once by executor pre-frame setup.
+      // Do not emit a competing eval/materialize step from ValueExpr scheduling.
+      continue;
+    }
 
     // [LAW:one-source-of-truth] Eligible arena-compatible scalar signal DAGs are migrated to the
     // materializer path via SCALAR_INSTANCE_ID instead of evalValue.
@@ -346,6 +524,11 @@ export function pass7Schedule(
     }
   }
 
+  // [LAW:single-enforcer] Schedule construction is the single compile-time boundary
+  // that validates ValueExpr runtime invariants before execution.
+  validateBroadcastKernelInputs(valueExprs);
+  validateScalarExtractInputs(valueExprs, scalarRootExprIds);
+
   // Generate evalValue steps for all registered event slots.
   // Events are evaluated after continuityApply and before render.
   const eventSlots = unlinkedIR.builder.getEventSlots();
@@ -375,12 +558,12 @@ export function pass7Schedule(
   }
 
   // Combine all steps in correct execution order:
-  // 1. EvalValue-pre (signals NOT dependent on events)
+  // 1. EvalValue-pre (ones NOT dependent on events)
   // 2. ContinuityMapBuild (detect domain changes, compute mappings)
   // 3. Materialize (evaluate fields to buffers)
   // 4. ContinuityApply (apply gauge/slew/crossfade to buffers)
   // 5. EvalEvent (evaluate discrete events → eventScalars)
-  // 6. EvalValue-post (signals that depend on eventRead)
+  // 6. EvalValue-post (ones that depend on eventRead)
   // 7. Render (use continuity-applied buffers)
   // 8. StateWrite (persist state for next frame)
   const steps: Step[] = [
@@ -438,13 +621,13 @@ function valueExprDependsOnEvent(valueExprId: number, valueExprs: readonly Value
             return check(expr.input as number);
           case 'zip':
             return expr.inputs.some(input => check(input as number));
-          case 'zipSig':
+          case 'zipPromote':
             return (
               check(expr.field as number) ||
-              expr.signals.some(sig => check(sig as number))
+              expr.ones.some(sig => check(sig as number))
             );
           case 'broadcast':
-            return check(expr.signal as number);
+            return check(expr.one as number);
           case 'reduce':
             return check(expr.field as number);
           case 'pathDerivative':

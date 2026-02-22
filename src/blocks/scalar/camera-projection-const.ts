@@ -20,7 +20,7 @@ const CAMERA_PROJECTION_CONST_CARD = cardinalityVar(cardinalityVarId('camera_pro
 registerBlock({
   type: 'CameraProjectionConst',
   label: 'Camera Projection',
-  category: 'signal',
+  category: 'scalar',
   description: 'Outputs a constant camera projection mode (0=ortho, 1=persp)',
   form: 'primitive',
   capability: 'pure',

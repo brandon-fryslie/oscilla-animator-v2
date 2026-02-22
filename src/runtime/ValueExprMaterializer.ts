@@ -28,7 +28,7 @@ import { applyOpcode } from './OpcodeInterpreter';
 /**
  * Value expression table for materialization.
  *
- * Contains all ValueExpr nodes (signals, fields, events).
+ * Contains all ValueExpr nodes (ones, fields, events).
  * Materialization traverses this table to compute field outputs.
  */
 export interface ValueExprTable {
@@ -210,14 +210,17 @@ function materializeKernel(
     }
 
     case 'broadcast': {
-      // WI-4: Broadcast - expand signal to field
-      // For multi-component signals (vec2, color, etc), evaluate each component separately
-      if (expr.signalComponents && expr.signalComponents.length > 1) {
+      // WI-4: Broadcast - expand one to many
+      // [LAW:single-enforcer] Illegal many-cardinality broadcast sources are rejected
+      // during schedule construction; runtime only executes the canonical one→many path.
+
+      // For multi-component one values (vec2, color, etc), evaluate each component separately
+      if (expr.oneComponents && expr.oneComponents.length > 1) {
         // Multi-component broadcast: evaluate and interleave components
-        const compCount = expr.signalComponents.length;
+        const compCount = expr.oneComponents.length;
         const componentValues = new Array<number>(compCount);
         for (let j = 0; j < compCount; j++) {
-          componentValues[j] = evaluateValueExprScalar(expr.signalComponents[j], table.nodes, state);
+          componentValues[j] = evaluateValueExprScalar(expr.oneComponents[j], table.nodes, state);
         }
         for (let i = 0; i < count; i++) {
           for (let c = 0; c < componentValues.length; c++) {
@@ -225,20 +228,20 @@ function materializeKernel(
           }
         }
       } else {
-        // Single-component broadcast: fill entire buffer with signal value
-        const signalValue = evaluateValueExprScalar(expr.signal, table.nodes, state);
-        fillBufferWithSignal(buf, signalValue, count, stride);
+        // Single-component broadcast: fill entire buffer with one-cardinality value
+        const oneValue = evaluateValueExprScalar(expr.one, table.nodes, state);
+        fillBufferWithSignal(buf, oneValue, count, stride);
       }
       break;
     }
 
-    case 'zipSig': {
-      // WI-4: ZipSig - combine field with signals
+    case 'zipPromote': {
+      // WI-4: ZipSig - combine field with ones
       const fieldInput = materializeValueExpr(expr.field, table, instanceId, count, state, program, pool);
-      const sigCount = expr.signals.length;
+      const sigCount = expr.ones.length;
       const sigValues = new Array<number>(sigCount);
       for (let j = 0; j < sigCount; j++) {
-        sigValues[j] = evaluateValueExprScalar(expr.signals[j], table.nodes, state);
+        sigValues[j] = evaluateValueExprScalar(expr.ones[j], table.nodes, state);
       }
       applyZipSig(buf, fieldInput, sigValues, expr.fn, count, stride, instanceId, program);
       break;
@@ -398,7 +401,7 @@ const _mapArgs: number[] = [0];
 const _zipArgs: number[] = [];
 
 /** Reusable args buffer for applyZipSig (resized as needed) */
-const _zipSigArgs: number[] = [];
+const _zipPromoteArgs: number[] = [];
 
 /**
  * Apply a map function (unary kernel).
@@ -446,7 +449,7 @@ function applyZip(
 }
 
 /**
- * Apply a zipSig function (field + signals).
+ * Apply a zipPromote function (field + ones).
  * One allocation per call (args array) — not per instance.
  */
 function applyZipSig(
@@ -460,17 +463,17 @@ function applyZipSig(
   program: CompiledProgramIR
 ): void {
   const argCount = 1 + sigValues.length;
-  _zipSigArgs.length = argCount;
+  _zipPromoteArgs.length = argCount;
   // Copy signal values once (constant across all instances)
   for (let s = 0; s < sigValues.length; s++) {
-    _zipSigArgs[1 + s] = sigValues[s];
+    _zipPromoteArgs[1 + s] = sigValues[s];
   }
 
   for (let i = 0; i < count; i++) {
     const base = i * stride;
     for (let c = 0; c < stride; c++) {
-      _zipSigArgs[0] = fieldInput[base + c];
-      out[base + c] = evaluatePureFn(fn, _zipSigArgs);
+      _zipPromoteArgs[0] = fieldInput[base + c];
+      out[base + c] = evaluatePureFn(fn, _zipPromoteArgs);
     }
   }
 }
