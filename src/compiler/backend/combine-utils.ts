@@ -278,7 +278,7 @@ export function createCombineNode(
       builder.registerFieldSlot(fieldId, slot);
       return { id: fieldId, slot, type, stride: payloadStride(type.payload) };
     } else {
-      // Signal combine
+      // One-cardinality combine
       const validModes = ["sum", "average", "max", "min", "last"];
       const safeMode = validModes.includes(normalizedMode) ? normalizedMode : "last";
       const combineMode = safeMode as "sum" | "average" | "max" | "min" | "last";

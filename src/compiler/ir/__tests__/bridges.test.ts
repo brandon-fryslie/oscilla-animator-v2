@@ -200,7 +200,7 @@ describe('payloadTypeToShapeDescIR', () => {
 
 describe('bridgeExtentToAxesDescIR', () => {
   it.todo('bridges extent axes to IR descriptors (pending Extent API stabilization)');
-//   it('bridges signal extent (one + continuous)', () => {
+//   it('bridges one extent (one + continuous)', () => {
 //     const extent: Extent = {
 //       cardinality: axisInst(cardinalityOne()),
 //       temporality: axisInst(temporalityContinuous()),

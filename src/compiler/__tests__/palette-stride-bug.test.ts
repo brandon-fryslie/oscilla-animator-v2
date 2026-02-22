@@ -2,7 +2,7 @@
  * Regression test for palette slot allocation bug.
  *
  * Bug: SYSTEM_PALETTE_SLOT (slot 0, stride=4) was being registered for evalValue,
- * causing a runtime error: "evalValue: expected stride=1 for scalar signal slot 0, got stride=4"
+ * causing a runtime error: "evalValue: expected stride=1 for scalar scalar slot 0, got stride=4"
  *
  * Root causes:
  * 1. IRBuilderImpl slotCounter started at 0, so first allocSlot() returned 0 (same as SYSTEM_PALETTE_SLOT)

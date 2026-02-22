@@ -32,14 +32,14 @@ describe('Zero-cardinality type constructors', () => {
 
   it('IRBuilder.constant() preserves caller-provided type (pending solver update)', () => {
     const builder = createIRBuilder();
-    const signalType = canonicalType(FLOAT);
-    const constId = builder.constant(floatConst(42), signalType);
+    const oneType = canonicalType(FLOAT);
+    const constId = builder.constant(floatConst(42), oneType);
 
     const expr = builder.getValueExpr(constId);
     expect(expr).toBeDefined();
     expect(expr!.kind).toBe('const');
 
-    // Currently preserves caller type (cardinality=one for signal)
+    // Currently preserves caller type (cardinality=one)
     // TODO: After cardinality solver supports zero as universal donor,
     // constant() should enforce zero-cardinality here
     const card = requireInst<CardinalityValue, CardinalityVarId>(expr!.type.extent.cardinality, 'cardinality');

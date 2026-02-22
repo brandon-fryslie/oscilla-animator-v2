@@ -20,7 +20,7 @@ export const DelayedTriggerComposite = composite('DelayedTrigger', 'Delayed Trig
   .connect('sampleHold.out', 'delay.in') // feed latched value into delay
   //  .in(externalId, ref, label?) — label auto-titlecases externalId when omitted ("value" → "Value")
   .in('value', 'sampleHold.value')       // expose the value to latch
-  .in('trigger', 'sampleHold.trigger')   // expose the trigger signal
+  .in('trigger', 'sampleHold.trigger')   // expose the trigger one input
   //  .out(externalId, ref, label?) — label can contain any string, including punctuation
   .out('out', 'delay.out', 'Output (Delayed)') // expose delayed result
   .out('immediate', 'sampleHold.out')    // expose un-delayed latch (label auto → "Immediate")

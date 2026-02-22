@@ -95,7 +95,7 @@ registerBlock({
     // u = extract(uvField, 0) — component 0 = X
     const u = ctx.b.extract(uvField, 0, floatFieldType);
 
-    // Constants (signal — zipAuto/constructAuto handle signal→field broadcasting)
+    // Constants (one-cardinality — zipAuto/constructAuto handle one→many broadcasting)
     const const0 = ctx.b.constant(floatConst(0), canonicalType(FLOAT));
     const const1 = ctx.b.constant(floatConst(1), canonicalType(FLOAT));
 
@@ -112,16 +112,16 @@ registerBlock({
     // y = lerp(y0, y1, u_clamped)
     const y = ctx.b.zipAuto([y0Input.id, y1Input.id, u_clamped], lerp, floatFieldType);
 
-    // pos = constructAuto([x, y, 0]) → vec3 (auto-broadcasts const0 signal)
+    // pos = constructAuto([x, y, 0]) → vec3 (auto-broadcasts const0 one value)
     const positionField = ctx.b.constructAuto([x, y, const0], posType);
 
-    // rotation = atan2(y1-y0, x1-x0) — constant along line, broadcast signal→field
+    // rotation = atan2(y1-y0, x1-x0) — constant along line, broadcast one→many
     const sub = ctx.b.opcode(OpCode.Sub);
     const atan2 = ctx.b.opcode(OpCode.Atan2);
-    const floatSignalType = canonicalType(FLOAT); // signal-extent type for signal computations
-    const dy = ctx.b.zipAuto([y1Input.id, y0Input.id], sub, floatSignalType);
-    const dx = ctx.b.zipAuto([x1Input.id, x0Input.id], sub, floatSignalType);
-    const lineAngle = ctx.b.zipAuto([dy, dx], atan2, floatSignalType);
+    const floatOneType = canonicalType(FLOAT); // one-extent type for one-cardinality computations
+    const dy = ctx.b.zipAuto([y1Input.id, y0Input.id], sub, floatOneType);
+    const dx = ctx.b.zipAuto([x1Input.id, x0Input.id], sub, floatOneType);
+    const lineAngle = ctx.b.zipAuto([dy, dx], atan2, floatOneType);
     const rotationField = ctx.b.broadcast(lineAngle, floatFieldType);
 
     // scale = broadcast constant 1.0

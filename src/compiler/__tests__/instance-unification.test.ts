@@ -107,8 +107,8 @@ describe('Instance Identity (type-derived)', () => {
       const fieldType = canonicalMany(FLOAT, { kind: 'none' }, ref);
       const sigType = canonicalScalar(FLOAT);
       const intrinsic = b.intrinsic('index', fieldType);
-      const signal = b.constant(floatConst(2.0), sigType);
-      const zipped = b.kernelZipPromote(intrinsic, [signal], { kind: 'opcode', opcode: OpCode.Mul }, fieldType);
+      const oneValue = b.constant(floatConst(2.0), sigType);
+      const zipped = b.kernelZipPromote(intrinsic, [oneValue], { kind: 'opcode', opcode: OpCode.Mul }, fieldType);
 
       const expr = b.getValueExprs()[zipped as number];
       expect(requireManyInstance(expr.type).instanceId).toBe(instance);

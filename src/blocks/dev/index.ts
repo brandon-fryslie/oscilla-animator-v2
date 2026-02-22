@@ -1,1 +1,1 @@
-import './test-signal';
+import './test-one';

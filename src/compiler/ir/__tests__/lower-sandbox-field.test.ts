@@ -18,7 +18,7 @@ describe('LowerSandbox field-extent types', () => {
     const ref = instanceRef('circle-domain', 'inst-1');
     const fieldColorType = canonicalMany(COLOR, unitHsl(), ref);
 
-    // Create a signal-level float input (phase)
+    // Create a one-cardinality float input (phase)
     const phaseType = canonicalScalar(FLOAT, unitTurns());
     const phaseExpr = builder.constant({ kind: 'float', value: 0.5 }, phaseType);
 
@@ -40,12 +40,12 @@ describe('LowerSandbox field-extent types', () => {
     expect(isMany(card)).toBe(true);
   });
 
-  it('HueRainbow macro with signal-extent outTypes produces signal-extent expressions', () => {
+  it('HueRainbow macro with one-extent outTypes produces one-extent expressions', () => {
     const builder = new IRBuilderImpl();
     const instances = new Map();
     const sandbox = new LowerSandbox(builder, 'test-parent-1', instances);
 
-    const signalColorType = canonicalScalar(COLOR, unitHsl());
+    const oneColorType = canonicalScalar(COLOR, unitHsl());
     const phaseType = canonicalScalar(FLOAT, unitTurns());
     const phaseExpr = builder.constant({ kind: 'float', value: 0.5 }, phaseType);
 
@@ -53,7 +53,7 @@ describe('LowerSandbox field-extent types', () => {
       'HueRainbow',
       { t: phaseExpr },
       {},
-      [signalColorType]
+      [oneColorType]
     );
 
     const outExpr = builder.getValueExpr(outputs.out);

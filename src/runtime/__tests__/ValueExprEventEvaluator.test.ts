@@ -259,7 +259,7 @@ describe('ValueExprEventEvaluator', () => {
   describe('wrap event', () => {
     it('fires on rising edge (0.0 → 1.0)', () => {
       const nodes: ValueExpr[] = [
-        // 0: const signal (value 1.0)
+        // 0: const one value (1.0)
         {
           kind: 'const',
           type: canonicalScalar({ kind: 'float' }),
@@ -276,7 +276,7 @@ describe('ValueExprEventEvaluator', () => {
       const state = createRuntimeState(0, 0, 0, 0, 2);
       const program = {} as CompiledProgramIR;
 
-      // Initialize time (required for signal evaluation)
+      // Initialize time (required for scalar evaluation)
       state.time = {
         tAbsMs: 0,
         tMs: 0,
@@ -297,9 +297,9 @@ describe('ValueExprEventEvaluator', () => {
       expect(secondResult).toBe(false);
     });
 
-    it('does not fire when signal stays high', () => {
+    it('does not fire when one stays high', () => {
       const nodes: ValueExpr[] = [
-        // 0: const signal (value 1.0)
+        // 0: const one value (1.0)
         {
           kind: 'const',
           type: canonicalScalar({ kind: 'float' }),
@@ -336,9 +336,9 @@ describe('ValueExprEventEvaluator', () => {
       expect(result).toBe(false);
     });
 
-    it('does not fire on NaN signal', () => {
+    it('does not fire on NaN one value', () => {
       const nodes: ValueExpr[] = [
-        // 0: const signal (value NaN)
+        // 0: const one value (NaN)
         {
           kind: 'const',
           type: canonicalScalar({ kind: 'float' }),
@@ -374,7 +374,7 @@ describe('ValueExprEventEvaluator', () => {
 
     it('uses exact threshold of 0.5', () => {
       const nodes: ValueExpr[] = [
-        // 0: const signal (value 0.5)
+        // 0: const one value (0.5)
         {
           kind: 'const',
           type: canonicalScalar({ kind: 'float' }),

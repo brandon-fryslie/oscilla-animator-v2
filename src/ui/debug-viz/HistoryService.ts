@@ -1,12 +1,12 @@
 /**
  * HistoryService - Temporal history ring buffer for debug probes.
  *
- * Maintains per-key ring buffers of scalar signal values over time.
+ * Maintains per-key ring buffers of scalar values over time.
  * Values are pushed from DebugService via onSlotWrite callback.
  *
  * Design constraints:
  * - Only tracks cardinality:one, temporality:continuous, sampleable payloads
- * - Stride is always 1 in v1 (scalar signals only)
+ * - Stride is always 1 in v1 (scalar one-cardinality values only)
  * - MAX_TRACKED_KEYS=32, eviction from hoverProbes (never pinned)
  * - TrackedEntry IS the HistoryView (object-stable, no allocation on read)
  * - writeIndex is monotonically increasing (never resets)
@@ -192,7 +192,7 @@ export class HistoryService {
 
   /**
    * Push a value into all entries observing the given slot.
-   * Called by DebugService after each signal slot write.
+   * Called by DebugService after each scalar slot write.
    *
    * Uses safe JS modulo: ((writeIndex % capacity) + capacity) % capacity
    */

@@ -6,9 +6,9 @@
  *
  * Inputs:
  *   elements — Field<T> from upstream Array (required)
- *   shape    — Signal<shape2d> from MakeShape2D/ProceduralPolygon (no defaulting)
- *   spacing  — Signal<float> distribution multiplier (default 1.0)
- *   offset   — Signal<float> unitTurns wrap01 flow animation (default 0.0)
+ *   shape    — One<shape2d> from MakeShape2D/ProceduralPolygon (no defaulting)
+ *   spacing  — One<float> distribution multiplier (default 1.0)
+ *   offset   — One<float> unitTurns wrap01 flow animation (default 0.0)
  *
  * Outputs:
  *   position — Field<vec3> arc-length sampled positions

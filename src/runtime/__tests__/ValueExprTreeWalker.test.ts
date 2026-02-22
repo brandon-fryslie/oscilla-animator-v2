@@ -167,7 +167,7 @@ describe('getValueExprChildren', () => {
     expect(getValueExprChildren(expr)).toEqual([id(10), id(11), id(12)]);
   });
 
-  it('kernel(broadcast) — signal only', () => {
+  it('kernel(broadcast) — one only', () => {
     const expr: ValueExpr = {
       kind: 'kernel',
       type: SIG_FLOAT,
@@ -177,7 +177,7 @@ describe('getValueExprChildren', () => {
     expect(getValueExprChildren(expr)).toEqual([id(3)]);
   });
 
-  it('kernel(broadcast) — signal + oneComponents', () => {
+  it('kernel(broadcast) — one + oneComponents', () => {
     const expr: ValueExpr = {
       kind: 'kernel',
       type: SIG_FLOAT,

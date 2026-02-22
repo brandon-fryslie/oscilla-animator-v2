@@ -70,7 +70,7 @@ registerBlock({
     if (!color) {
       throw new Error('RenderInstances2D color input is required');
     }
-    // color may be a signal (one) or field (many); CT/ICT declares oneOrMany acceptance.
+    // color may be one or many; CT/ICT declares oneOrMany acceptance.
 
     // Shape is automatically looked up from instance.shapeField in schedule-program.ts
     // No need to extract it here - the backend handles it

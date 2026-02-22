@@ -112,7 +112,7 @@ export interface ScheduleIR {
 /**
  * Get scalar state slot declarations from a schedule.
  *
- * Filters the `stateMappings` array to return only scalar (signal cardinality) state slots.
+ * Filters the `stateMappings` array to return only scalar (one-cardinality) state slots.
  * This provides the spec-aligned API name while maintaining the single-source-of-truth
  * implementation via the union array.
  *
@@ -487,7 +487,7 @@ export function pass7Schedule(
       continue;
     }
 
-    // [LAW:one-source-of-truth] Eligible arena-compatible scalar signal DAGs are migrated to the
+    // [LAW:one-source-of-truth] Eligible arena-compatible scalar DAGs are migrated to the
     // materializer path via SCALAR_INSTANCE_ID instead of evalValue.
     if (
       isArenaScalarPayload(expr) &&

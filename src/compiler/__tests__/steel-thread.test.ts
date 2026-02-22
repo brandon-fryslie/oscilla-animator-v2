@@ -61,7 +61,7 @@ describe('Steel Thread - Animated Particles', () => {
       b.setPortDefault(layout, 'cols', 2);
       const render = b.addBlock('RenderInstances2D');
 
-      // Color requires explicit Broadcast (signal→field)
+      // Color requires explicit Broadcast (one→many)
       const colorSig = b.addBlock('Const');
       b.setConfig(colorSig, 'value', { r: 1, g: 0.5, b: 0.2, a: 1 });
       const colorField = b.addBlock('Broadcast');
@@ -115,7 +115,7 @@ describe('Steel Thread - Animated Particles', () => {
       b.setPortDefault(layout, 'radius', 0.3);
       const render = b.addBlock('RenderInstances2D');
 
-      // Color requires explicit Broadcast (signal→field)
+      // Color requires explicit Broadcast (one→many)
       const colorSig = b.addBlock('Const');
       b.setConfig(colorSig, 'value', { r: 0, g: 1, b: 0, a: 1 });
       const colorField = b.addBlock('Broadcast');

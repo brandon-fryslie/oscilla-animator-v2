@@ -11,7 +11,7 @@ import { inferType, cardinalityVar } from '../../core/inference-types';
 import { cardinalityVarId } from '../../core/ids';
 import { defaultSourceConst } from '../../types';
 
-// [LAW:one-source-of-truth] Field+signal mixing behavior is declared on CT/ICT cardinality vars.
+// [LAW:one-source-of-truth] One+many mixing behavior is declared on CT/ICT cardinality vars.
 const FIELD_CONST_COLOR_CARD_MANY = cardinalityVar(cardinalityVarId('field_const_color'), {
   relation: 'promoteToMany',
   acceptance: 'manyOnly',
@@ -72,7 +72,7 @@ registerBlock({
     const aInput = inputsById.a;
     if (!aInput) throw new Error('FieldConstColor: a input not wired — normalization bug');
 
-    // constructAuto handles signal→field broadcasting for mixed-cardinality components
+    // constructAuto handles one→many broadcasting for mixed-cardinality components
     const result = ctx.b.constructAuto([rInput.id, gInput.id, bInput.id, aInput.id], colorType);
 
     return {

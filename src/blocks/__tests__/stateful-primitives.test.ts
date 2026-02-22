@@ -2,7 +2,7 @@
  * Stateful Primitives Test
  *
  * Tests for UnitDelay, Lag, Phasor, Hash, and Id01 blocks.
- * Tests the behavior of stateful and utility signal blocks.
+ * Tests the behavior of stateful and utility scalar blocks.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -14,22 +14,22 @@ import { getTestArena } from '../../runtime/__tests__/test-arena-helper';
 import { evaluateValueExprScalar } from '../../runtime/ValueExprScalarEvaluator';
 
 /**
- * Helper to find TestSignal output offsets.
- * Filters out 'time' signals to find TestSignal slots,
+ * Helper to find TestOne output offsets.
+ * Filters out 'time' expressions to find TestOne slots,
  * then resolves them to actual f64 array offsets via slotMeta.
  *
- * USES ILLEGAL signalExprs property - all tests must be rewritten
+ * USES ILLEGAL valueExprs shape assumptions - all tests must be rewritten
  */
-// function findTestSignalOffsets(program: CompiledProgramIR, count = 1): number[] {
+// function findTestOneOffsets(program: CompiledProgramIR, count = 1): number[] {
 //   const schedule = program.schedule;
-//   const signals = program.signalExprs.nodes as readonly SigExpr[];
+//   const values = program.valueExprs.nodes as readonly ValueExpr[];
 //
-//   // Find evalValue steps that are NOT time signals or const signals
+//   // Find evalValue steps that are NOT time or const expressions
 //   const evalValueSteps = schedule.steps.filter((s): s is StepEvalValue => s.kind === 'evalValue');
 //   const targetSteps = evalValueSteps.filter((step) => {
-//     const sig = signals[step.expr as number];
-//     // Exclude time and const signals - we want computed values
-//     return sig && sig.kind !== 'time' && sig.kind !== 'const';
+//     const value = values[step.expr as number];
+//     // Exclude time and const expressions - we want computed values
+//     return value && value.kind !== 'time' && value.kind !== 'const';
 //   });
 //
 //   const slots = targetSteps.slice(-count).map(s => s.target as number);
@@ -80,7 +80,7 @@ describe('Hash Block', () => {
   //     const valueBlock = b.addBlock('Const', { value: 42 });
   //     const seedBlock = b.addBlock('Const', { value: 0 });
   //     const hashBlock = b.addBlock('Hash', {});
-  //     const testSig = b.addBlock('TestSignal', {});
+  //     const testSig = b.addBlock('TestOne', {});
   //     b.wire(valueBlock, 'out', hashBlock, 'value');
   //     b.wire(seedBlock, 'out', hashBlock, 'seed');
   //     b.wire(hashBlock, 'out', testSig, 'value');
@@ -95,8 +95,8 @@ describe('Hash Block', () => {
   //   const state = createRuntimeStateFromSession(session, program.slotMeta.length);
   //   const arena = getTestArena();
   //
-  //   // Find the TestSignal output offset
-  //   const [offset] = findTestSignalOffsets(program);
+  //   // Find the TestOne output offset
+  //   const [offset] = findTestOneOffsets(program);
   //
   //   // Execute multiple times - should get same result
   //   arena.reset(); executeFrame(program, state, arena, 0);
@@ -118,8 +118,8 @@ describe('Hash Block', () => {
   //     const seed2 = b.addBlock('Const', { value: 1 });
   //     const hash1 = b.addBlock('Hash', {});
   //     const hash2 = b.addBlock('Hash', {});
-  //     const test1 = b.addBlock('TestSignal', {});
-  //     const test2 = b.addBlock('TestSignal', {});
+  //     const test1 = b.addBlock('TestOne', {});
+  //     const test2 = b.addBlock('TestOne', {});
   //
   //     b.wire(value, 'out', hash1, 'value');
   //     b.wire(seed1, 'out', hash1, 'seed');
@@ -138,12 +138,12 @@ describe('Hash Block', () => {
   //   const state = createRuntimeStateFromSession(session, result.program.slotMeta.length);
   //   const arena = getTestArena();
   //
-  //   // Find the two TestSignal output offsets
-  //   const [offset1, offset2] = findTestSignalOffsets(result.program, 2);
+  //   // Find the two TestOne output offsets
+  //   const [offset1, offset2] = findTestOneOffsets(result.program, 2);
   //
   //   executeFrame(result.program, state, arena, 0);
   //
-  //   // Get values from offsets where TestSignal stored them
+  //   // Get values from offsets where TestOne stored them
   //   const val1 = state.values.f64[offset1];
   //   const val2 = state.values.f64[offset2];
   //

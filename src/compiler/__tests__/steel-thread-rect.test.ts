@@ -5,7 +5,7 @@
  * Rect (shape) → Array (cardinality) → position/color fields → Render
  *
  * This test ensures the shape2d payload flows correctly:
- * - Rect block produces shapeRef signal with numeric rect topologyId
+ * - Rect block produces one shapeRef with numeric rect topologyId
  * - Compile produces correct IR with shape2d storage
  * - RenderAssembler resolves shape via topology registry
  * - Output v2 DrawOp has geometry with correct topology and params

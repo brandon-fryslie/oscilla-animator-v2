@@ -191,7 +191,7 @@ export function SignalValueSection({ value, meta, history }: {
     return React.createElement('div', { style: debugMiniViewStyles.valueSection }, ...children);
   }
 
-  // Current value via renderer (runtime signal)
+  // Current value via renderer (runtime scalar)
   if (value && value.kind === 'scalar') {
     const sample: RendererSample = {
       type: 'scalar',

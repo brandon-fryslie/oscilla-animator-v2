@@ -8,7 +8,7 @@
  *
  * Tests verify:
  * 1. Opcode layer: scalar math operations
- * 2. Signal kernel layer: oscillators, easing, noise
+ * 2. Scalar kernel layer: oscillators, easing, noise
  * 3. Field kernel layer: vec2/color outputs, coord-space correctness
  * 4. End-to-end workflows: patch → compile → execute → render
  */
@@ -36,7 +36,7 @@ describe('Phase 7 - Layer 1: Opcode Sanity', () => {
 // LAYER 2: SIGNAL KERNEL TESTS (via compiled blocks)
 // ══════════════════════════════════════════════════════════════════════
 
-describe('Phase 7 - Layer 2: Signal Kernel Sanity', () => {
+describe('Phase 7 - Layer 2: Scalar Kernel Sanity', () => {
   // Tests removed during type system refactor
   it('_placeholder_Phase_wrapping_and_basic_execution', () => {
     // Test removed during type system refactor

@@ -2,7 +2,7 @@
  * MakeShape2D Block
  *
  * Assembler: accepts deformed Field<vec2> control points and packs them
- * back into a Signal<shape2d> with auto-generated LINE-based topology.
+ * back into a One<shape2d> with auto-generated LINE-based topology.
  *
  * This is the critical piece that closes the Generator -> Deform -> Assemble loop.
  * Any Field<vec2> (e.g. from ProceduralPolygon.controlPoints run through
@@ -17,7 +17,7 @@ import { registerDynamicTopology } from '../../shapes/registry';
 import { createLinePathTopology } from './_topology-helpers';
 
 /**
- * MakeShape2D - Assemble Field<vec2> into Signal<shape2d>
+ * MakeShape2D - Assemble Field<vec2> into One<shape2d>
  *
  * Takes a control-points field (possibly deformed by upstream math) and
  * produces a renderable shape with auto-generated line topology.
@@ -27,7 +27,7 @@ import { createLinePathTopology } from './_topology-helpers';
  * - closed: bool               (config only, default true)
  *
  * Outputs:
- * - shape: Signal<shape2d>     (assembled shape with topology)
+ * - shape: One<shape2d>     (assembled shape with topology)
  *
  * Example:
  * ```

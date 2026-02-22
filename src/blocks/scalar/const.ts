@@ -129,7 +129,7 @@ registerBlock({
           throw new Error(`Const<vec2> requires [x, y] array of numbers, got ${JSON.stringify(rawValue)}`);
         }
 
-        // Pure lowering: construct multi-component signal from scalar components
+        // Pure lowering: construct multi-component one value from scalar components
         const xSig = ctx.b.constantWithKey(floatConst(val[0]), canonicalType(FLOAT), ctx.instanceId);
         const ySig = ctx.b.constantWithKey(floatConst(val[1]), canonicalType(FLOAT), ctx.instanceId);
         const vec2Sig = ctx.b.construct([xSig, ySig], outType);
@@ -197,7 +197,7 @@ registerBlock({
           throw new Error(`Const<color> requires {r, g, b, a} as numbers`);
         }
 
-        // Pure lowering: construct multi-component signal from scalar components
+        // Pure lowering: construct multi-component one value from scalar components
         const rSig = ctx.b.constantWithKey(floatConst(val.r), canonicalType(FLOAT), ctx.instanceId);
         const gSig = ctx.b.constantWithKey(floatConst(val.g), canonicalType(FLOAT), ctx.instanceId);
         const bSig = ctx.b.constantWithKey(floatConst(val.b), canonicalType(FLOAT), ctx.instanceId);

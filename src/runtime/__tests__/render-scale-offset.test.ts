@@ -25,13 +25,13 @@ describe('Render scale reads arena by slot descriptor offset', () => {
 
       const render = b.addBlock('RenderInstances2D');
 
-      // Color: signal -> field
+      // Color: one -> many
       const colorSig = b.addBlock('Const');
       b.setConfig(colorSig, 'value', { r: 1, g: 0.5, b: 0.2, a: 1 });
       const colorField = b.addBlock('Broadcast');
       b.wire(colorSig, 'out', colorField, 'one');
 
-      // Scale: explicit signal
+      // Scale: explicit one value
       const scaleSig = b.addBlock('Const');
       b.setConfig(scaleSig, 'value', SCALE);
       b.wire(scaleSig, 'out', render, 'scale');

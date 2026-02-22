@@ -58,7 +58,7 @@ describe('compile', () => {
     });
   });
 
-  describe('signal compilation', () => {
+  describe('one-cardinality compilation', () => {
     // INVALID TEST: tests implementation
     // it('compiles constant signals', () => {
     //   // Const block must be wired to something so its type can be inferred
@@ -79,12 +79,12 @@ describe('compile', () => {
     //
     //   expect(result.kind).toBe('ok');
     //   if (result.kind === 'ok') {
-    //     // Should have signal expressions in dense array
-    //     expect(result.program.signalExprs.nodes.length).toBeGreaterThan(0);
+    //     // Should have one expressions in dense array
+    //     expect(result.program.valueExprs.nodes.length).toBeGreaterThan(0);
     //   }
     // });
 
-    it('compiles connected signal blocks', () => {
+    it('compiles connected one-cardinality blocks', () => {
       // INVALID TEST: tests implementation
       const patch = buildPatch((b) => {
         const time = b.addBlock('InfiniteTimeRoot');
@@ -104,7 +104,7 @@ describe('compile', () => {
       expect(result.kind).toBe('ok');
       // if (result.kind === 'ok') {
       //   // Should have oscillator output
-      //   //   expect(result.program.signalExprs.nodes.length).toBeGreaterThan(0);
+      //   //   expect(result.program.valueExprs.nodes.length).toBeGreaterThan(0);
       // }
     });
   });
@@ -226,7 +226,7 @@ describe('Debug Probe Support', () => {
   it('generates scalar write steps for signals with registered slots (enables debug tap)', () => {
     // This test verifies that the compiler generates evalValue steps,
     // which are necessary for the runtime tap to record slot values.
-    // Without evalValue steps, the debug probe cannot show signal values.
+    // Without evalValue steps, the debug probe cannot show scalar values.
     const patch = buildPatch((b) => {
       const time = b.addBlock('InfiniteTimeRoot');
       b.setPortDefault(time, 'periodAMs', 1000);
@@ -247,7 +247,7 @@ describe('Debug Probe Support', () => {
           (s.kind === 'materialize' && s.instanceId === SCALAR_INSTANCE_ID),
       );
 
-      // Should have at least one scalar write step for scheduled signal slots
+      // Should have at least one scalar write step for scheduled scalar slots
       expect(scalarWriteSteps.length).toBeGreaterThan(0);
 
       for (const step of scalarWriteSteps) {
@@ -555,9 +555,9 @@ describe('error isolation for unreachable blocks', () => {
   });
 });
 
-describe('mixed cardinality (signal→field broadcast)', () => {
-  it('allows signal Const wired directly to RenderInstances2D.color (oneOrMany acceptance, golden-spiral pattern)', () => {
-    // Reproduces the golden-spiral demo: Const (signal, one) → RenderInstances2D.color (field, many).
+describe('mixed cardinality (one→many broadcast)', () => {
+  it('allows one Const wired directly to RenderInstances2D.color (oneOrMany acceptance, golden-spiral pattern)', () => {
+    // Reproduces the golden-spiral demo: Const (one) → RenderInstances2D.color (many).
     // RenderInstances2D color input declares oneOrMany acceptance, so this compiles without adapter insertion.
     const patch = buildPatch((b) => {
       const time = b.addBlock('InfiniteTimeRoot');

@@ -90,7 +90,7 @@ registerBlock({
     const u = ctx.b.extract(uvField, 0, floatFieldType);
     const v = ctx.b.extract(uvField, 1, floatFieldType);
 
-    // Constants (signal — zipAuto/constructAuto handle signal→field broadcasting)
+    // Constants (one-cardinality — zipAuto/constructAuto handle one→many broadcasting)
     const const0 = ctx.b.constant(floatConst(0), canonicalType(FLOAT));
     const const1 = ctx.b.constant(floatConst(1), canonicalType(FLOAT));
     const const0_5 = ctx.b.constant(floatConst(0.5), canonicalType(FLOAT));
@@ -134,7 +134,7 @@ registerBlock({
     // y = select(rows_m1 > 0, y_ratio, 0.5)
     const y = ctx.b.zipAuto([rows_m1, y_ratio, const0_5], select, floatFieldType);
 
-    // pos = constructAuto([x, y, 0]) → vec3 (auto-broadcasts const0 signal)
+    // pos = constructAuto([x, y, 0]) → vec3 (auto-broadcasts const0 one value)
     const positionField = ctx.b.constructAuto([x, y, const0], posType);
 
     // rotation = broadcast constant 0.0 (grid has no inherent rotation)

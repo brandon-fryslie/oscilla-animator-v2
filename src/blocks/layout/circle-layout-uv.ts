@@ -88,7 +88,7 @@
       // u = extract(uvField, 0) — component 0 = X
       const u = ctx.b.extract(uvField, 0, floatFieldType);
 
-      // Constants (signal — zipAuto/constructAuto handle signal→field broadcasting)
+      // Constants (one-cardinality — zipAuto/constructAuto handle one→many broadcasting)
       const const0 = ctx.b.constant(floatConst(0), canonicalType(FLOAT));
       const const1 = ctx.b.constant(floatConst(1), canonicalType(FLOAT));
       const const0_5 = ctx.b.constant(floatConst(0.5), canonicalType(FLOAT));
@@ -122,7 +122,7 @@
       const x = ctx.b.zipAuto([x_scaled, const0_5], add, floatFieldType);
       const y = ctx.b.zipAuto([y_scaled, const0_5], add, floatFieldType);
 
-      // pos = constructAuto([x, y, 0]) → vec3 (auto-broadcasts const0 signal)
+      // pos = constructAuto([x, y, 0]) → vec3 (auto-broadcasts const0 one value)
       const positionField = ctx.b.constructAuto([x, y, const0], posType);
 
       // rotation = angle (the circle angle per element, already computed)

@@ -129,7 +129,7 @@ export const DIAGNOSTIC_FLAGS: readonly DiagnosticFlagDef[] = Object.freeze([
   {
     code: 'CardinalityDefaultedToOne',
     label: 'Cardinality Defaulted to One',
-    description: 'Evidence-free cardinality group defaulted to signal (one)',
+    description: 'Evidence-free cardinality group defaulted to one',
     defaultSeverity: 'ignore',
     category: 'escape-hatch',
   },
@@ -138,7 +138,7 @@ export const DIAGNOSTIC_FLAGS: readonly DiagnosticFlagDef[] = Object.freeze([
   {
     code: 'CardinalityAdapterInserted',
     label: 'Broadcast Inserted',
-    description: 'Broadcast adapter auto-inserted for signal-to-field boundary',
+    description: 'Broadcast adapter auto-inserted for one-to-many boundary',
     defaultSeverity: 'info',
     category: 'structural',
   },

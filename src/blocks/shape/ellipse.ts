@@ -16,7 +16,7 @@ import { defaultSourceConst } from '../../types';
  * Maps directly to Canvas ellipse() API.
  * For circles, just set rx=ry.
  *
- * Outputs a shape signal that can be:
+ * Outputs a shape one-cardinality input that can be:
  * 1. Passed to Array to create many instances
  * 2. Connected directly to a renderer
  */

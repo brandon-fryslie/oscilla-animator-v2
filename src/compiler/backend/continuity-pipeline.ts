@@ -457,7 +457,7 @@ export function allocateContinuityPipeline(
         const shapeSlots = getFieldSlots(shape.id, 'custom', shape.stride);
         shapeOutput = { k: 'slot', slot: shapeSlots.outputSlot };
       } else {
-        // Signal - resolve topology + param signals + control points
+        // One-cardinality shape - resolve topology + param expressions + control points
         const shapeInfo = resolveShapeInfo(shape.id, valueExprs);
         if (shapeInfo) {
           shapeOutput = {

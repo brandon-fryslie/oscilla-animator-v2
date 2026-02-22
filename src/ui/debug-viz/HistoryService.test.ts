@@ -57,7 +57,7 @@ describe('HistoryService', () => {
   // ===========================================================================
 
   describe('track()', () => {
-    it('tracks a valid signal key', () => {
+    it('tracks a valid scalar key', () => {
       service.track(edgeKey('e1'));
       expect(service.isTracked(edgeKey('e1'))).toBe(true);
     });

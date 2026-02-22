@@ -12,12 +12,12 @@ import type { TopologyId } from '../../shapes/types';
 import type { BlockIRBuilder } from '../../compiler/ir/BlockIRBuilder';
 
 /**
- * Resolve shapeRef expression data from a shape signal input.
+ * Resolve shapeRef expression data from a shape one-cardinality input input.
  *
  * Searches the IR expression table for a shapeRef that matches the given
  * expression ID, returning the controlPointField and topologyId.
  *
- * Used by PathLayout to access path geometry from Signal<shape2d> inputs.
+ * Used by PathLayout to access path geometry from One<shape2d> inputs.
  */
 export function resolveShapeRef(
   builder: BlockIRBuilder,

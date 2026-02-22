@@ -411,9 +411,9 @@ export const TokenExpressionEditor = forwardRef<TokenExpressionEditorHandle, Tok
       if (resolved?.kind === 'output') {
         const payloadStr = resolved.type.payload.kind;
         const cardAxis = resolved.type.extent.cardinality;
-        let kindStr = 'Signal';
+        let kindStr = 'One';
         if (cardAxis.kind === 'inst') {
-          kindStr = cardAxis.value.kind === 'many' ? 'Field' : cardAxis.value.kind === 'zero' ? 'Const' : 'Signal';
+          kindStr = cardAxis.value.kind === 'many' ? 'Many' : cardAxis.value.kind === 'zero' ? 'Const' : 'One';
         }
         return {
           blockType: resolved.block.type,

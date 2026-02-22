@@ -70,7 +70,7 @@ function createPolygonTopology(sides: number): PathTopologyDefInput {
  * - Control points: Field<vec2> with positions computed from radiusX/radiusY (runtime)
  *
  * Outputs:
- * - shape: Signal<shape> with path topology + control point field
+ * - shape: One<shape> with path topology + control point field
  * - controlPoints: Field<vec2> for control point positions (can be modified via FieldMap)
  *
  * Example usage:

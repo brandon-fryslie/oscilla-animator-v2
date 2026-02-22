@@ -357,7 +357,7 @@ describe('Hash-consing (I13)', () => {
       expect(id1).toBe(id2); // JS number normalization
     });
 
-    it('distinguishes different signal types', () => {
+    it('distinguishes different one-cardinality variants', () => {
       const b = new IRBuilderImpl();
       const floatType = canonicalType(FLOAT);
       const intType = canonicalType(INT);
@@ -425,7 +425,7 @@ describe('Hash-consing (I13)', () => {
 
       const time = b.time('tMs', type);
 
-      // Multiple broadcasts of same signal
+      // Multiple broadcasts of the same one value
       const broadcast1 = b.broadcast(time, fieldType);
       const broadcast2 = b.broadcast(time, fieldType);
       const broadcast3 = b.broadcast(time, fieldType);

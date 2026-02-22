@@ -3,7 +3,7 @@
  *
  * y = mask > 0 ? x : 0
  *
- * Gate/hold values based on a mask signal.
+ * Gate/hold values based on a mask one-cardinality input.
  * When mask > 0, pass through input; when mask ≤ 0, output zero.
  */
 

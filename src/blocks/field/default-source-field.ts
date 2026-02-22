@@ -5,13 +5,13 @@
  * Inserted by the cardinality adapter policy when a one-only DefaultSource
  * connects to a field port (ClampManyConflict resolution).
  *
- * // [LAW:one-type-per-behavior] DefaultSource = signal defaults, DefaultSourceField = field defaults.
+ * // [LAW:one-type-per-behavior] DefaultSource = one defaults, DefaultSourceField = field defaults.
  * // [LAW:single-enforcer] Cardinality adapter policy is the single place that decides to use this block.
  *
  * Instance resolution:
  * - Uses ctx.inferredInstance from sibling lookup (e.g., Array on same downstream block)
  * - Per-element defaults (rainbow, circular) when instance is available
- * - Broadcast of signal constant as fallback
+ * - Broadcast of one constant as fallback
  */
 
 import { registerBlock } from '../registry';
@@ -100,35 +100,35 @@ function fieldColorDefault(ctx: LowerCtx, outType: CanonicalType): ValueExprId {
 }
 
 /**
- * Signal-level constant for the given payload, then broadcast to field.
+ * One-cardinality constant for the given payload, then broadcast to field.
  */
 function fieldBroadcastDefault(
   ctx: LowerCtx,
   payload: PayloadType,
   outType: CanonicalType,
 ): ValueExprId {
-  let sigId: ValueExprId;
+  let oneId: ValueExprId;
   switch (payload.kind) {
     case 'float':
-      sigId = ctx.b.constant({ kind: 'float', value: 1.0 }, canonicalScalar(FLOAT));
+      oneId = ctx.b.constant({ kind: 'float', value: 1.0 }, canonicalScalar(FLOAT));
       break;
     case 'int':
-      sigId = ctx.b.constant({ kind: 'float', value: 0 }, canonicalScalar(FLOAT));
+      oneId = ctx.b.constant({ kind: 'float', value: 0 }, canonicalScalar(FLOAT));
       break;
     case 'bool':
-      sigId = ctx.b.constant({ kind: 'float', value: 0 }, canonicalScalar(FLOAT));
+      oneId = ctx.b.constant({ kind: 'float', value: 0 }, canonicalScalar(FLOAT));
       break;
     case 'vec2':
-      sigId = ctx.b.constant({ kind: 'vec2', value: [0, 0] }, canonicalScalar(payload));
+      oneId = ctx.b.constant({ kind: 'vec2', value: [0, 0] }, canonicalScalar(payload));
       break;
     case 'vec3':
-      sigId = ctx.b.constant({ kind: 'vec3', value: [0, 0, 0] }, canonicalScalar(payload));
+      oneId = ctx.b.constant({ kind: 'vec3', value: [0, 0, 0] }, canonicalScalar(payload));
       break;
     default:
-      sigId = ctx.b.constant({ kind: 'float', value: 0 }, canonicalScalar(FLOAT));
+      oneId = ctx.b.constant({ kind: 'float', value: 0 }, canonicalScalar(FLOAT));
       break;
   }
-  return ctx.b.broadcast(sigId, outType);
+  return ctx.b.broadcast(oneId, outType);
 }
 
 // ============================================================================

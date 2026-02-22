@@ -50,13 +50,13 @@ const emptyInstances: ReadonlyMap<InstanceId, InstanceDecl> = new Map();
 // ---------------------------------------------------------------------------
 
 describe('deriveArenaDescriptor', () => {
-  it('signal (one, float): stride=1, laneCount=1, length=1', () => {
+  it('one (float): stride=1, laneCount=1, length=1', () => {
     const type = canonicalScalar(FLOAT);
     const desc = deriveArenaDescriptor(type, 0, emptyInstances);
     expect(desc).toEqual({ offset: 0, stride: 1, laneCount: 1, length: 1 });
   });
 
-  it('signal (one, vec3): stride=3, laneCount=1, length=3', () => {
+  it('one (vec3): stride=3, laneCount=1, length=3', () => {
     const type = canonicalScalar(VEC3);
     const desc = deriveArenaDescriptor(type, 0, emptyInstances);
     expect(desc).toEqual({ offset: 0, stride: 3, laneCount: 1, length: 3 });

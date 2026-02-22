@@ -50,7 +50,7 @@ registerBlock({
     const outType = ctx.outTypes[0];
     const stride = payloadStride(outType.payload);
 
-    // Pure lowering: construct multi-component signal from scalar components
+    // Pure lowering: construct multi-component one value from scalar components
     const vec2Sig = ctx.b.construct([xSig, ySig], outType);
 
     return {

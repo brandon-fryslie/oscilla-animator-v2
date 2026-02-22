@@ -1,7 +1,7 @@
 /**
  * ExternalInput Block
  *
- * Read a named external channel as a float signal.
+ * Read a named external channel as a float one-cardinality value.
  */
 
 import { registerBlock, requireConfig } from '../registry';
@@ -21,7 +21,7 @@ registerBlock({
   type: 'ExternalInput',
   label: 'External Input',
   category: 'io',
-  description: 'Read a named external channel as a float signal',
+  description: 'Read a named external channel as a float one-cardinality value',
   form: 'primitive',
   capability: 'io',
   loweringPurity: 'impure',
