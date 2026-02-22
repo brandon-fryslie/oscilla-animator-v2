@@ -487,70 +487,63 @@ function isRuleApplicable(
 }
 
 /**
- * Check whether an adapter rule's output satisfies a given destination.
+ * Check whether a rule can produce an output assignable to the destination type.
  *
- * Handles 'any'/'same' payload, unit, and contract constraints between
- * the rule's `to` pattern and the actual destination type.
+ * This is stricter than pattern matching alone:
+ * - Preserves payload identity for any→any adapters
+ * - Preserves unit identity for any→any adapters
+ * - Treats `to.contract: undefined` as no guarantee (cannot satisfy specific contracts)
+ * - Models Broadcast as one→many by aligning output extent to destination extent
  */
 function isRuleOutputCompatibleWithDest(
   rule: AdapterRule,
-  fromPattern: TypePattern,
-  toPattern: TypePattern,
+  fromType: InferenceCanonicalType,
+  dstType: InferenceCanonicalType,
 ): boolean {
-  if (!patternMatches(toPattern, rule.to)) return false;
+  const fromPattern = extractPattern(fromType);
+  const dstPattern = extractPattern(dstType);
 
-  // For rules with 'any' payload on both sides, require actual payloads to match
+  // any→any payload adapters are identity on payload domain.
   if (rule.from.payload === 'any' && rule.to.payload === 'any') {
-    if (fromPattern.payload !== toPattern.payload) return false;
-  }
-
-  // For rules with 'same' payload, require actual payloads to match
-  if (rule.to.payload === 'same') {
-    const fromPay = fromPattern.payload;
-    const toPay = toPattern.payload;
-    if (fromPay !== 'any' && toPay !== 'any' && fromPay !== 'same' && toPay !== 'same') {
-      if (typeof fromPay === 'object' && typeof toPay === 'object') {
-        if (fromPay.kind !== 'var' && toPay.kind !== 'var') {
-          if (!payloadsEqual(fromPay, toPay)) return false;
-        }
+    const fromPayload = fromPattern.payload;
+    const dstPayload = dstPattern.payload;
+    if (typeof fromPayload === 'object' && typeof dstPayload === 'object') {
+      if (fromPayload.kind !== 'var' && dstPayload.kind !== 'var' && !payloadsEqual(fromPayload, dstPayload)) {
+        return false;
       }
     }
   }
 
-  // For rules with 'same'/'any' unit, require actual units to match
-  if (rule.to.unit === 'same' || (rule.from.unit === 'any' && rule.to.unit === 'any')) {
+  // any→any unit adapters are identity on unit domain.
+  if (rule.from.unit === 'any' && rule.to.unit === 'any') {
     const fromUnit = fromPattern.unit;
-    const toUnit = toPattern.unit;
-    if (fromUnit !== 'any' && toUnit !== 'any' && fromUnit !== 'same' && toUnit !== 'same') {
-      if (typeof fromUnit === 'object' && typeof toUnit === 'object') {
-        if (fromUnit.kind !== 'var' && toUnit.kind !== 'var') {
-          if (!unitsEqual(fromUnit as UnitType, toUnit as UnitType)) return false;
-        }
+    const dstUnit = dstPattern.unit;
+    if (typeof fromUnit === 'object' && typeof dstUnit === 'object') {
+      if (fromUnit.kind !== 'var' && dstUnit.kind !== 'var' && !unitsEqual(fromUnit as UnitType, dstUnit as UnitType)) {
+        return false;
       }
     }
   }
 
-  // For rules with 'same' contract, require actual contracts to match
-  if (rule.to.contract === 'same') {
-    const fromContract = fromPattern.contract as ValueContract | undefined;
-    const toContract = toPattern.contract as ValueContract | undefined;
-    if (!contractsEqual(fromContract, toContract)) return false;
+  let output = applyAdapterTransform(rule, fromType);
+
+  // Destination-driven wildcard resolution for one-step completion.
+  if (rule.to.payload === 'any') {
+    output = { ...output, payload: dstType.payload };
+  }
+  if (rule.to.unit === 'any') {
+    output = { ...output, unit: dstType.unit };
+  }
+  if (rule.to.contract === 'any') {
+    output = { ...output, contract: dstType.contract };
   }
 
-  // For non-Broadcast extent-preserving rules (to.extent is 'any'), the adapter
-  // output has the SAME extent as the input. Reject if source and dest extents differ.
-  // Broadcast is exempt — it intentionally changes cardinality (one→many).
-  // [LAW:single-enforcer] Extent preservation check for non-Broadcast adapters lives here.
-  if (rule.to.extent === 'any' && rule.blockType !== 'Broadcast') {
-    const fromExt = fromPattern.extent;
-    const toExt = toPattern.extent;
-    if (fromExt !== 'any' && toExt !== 'any' &&
-        typeof fromExt === 'object' && typeof toExt === 'object') {
-      if (!extentsEqual(fromExt as Extent, toExt as Extent)) return false;
-    }
+  // Broadcast semantics: this adapter creates a many-cardinality value.
+  if (rule.blockType === 'Broadcast') {
+    output = { ...output, extent: dstType.extent };
   }
 
-  return true;
+  return patternsAreCompatible(extractPattern(output), dstPattern);
 }
 
 /**
@@ -683,8 +676,10 @@ export function findAdapterChain(
 
       // Check if output is assignable to destination
       const outputPattern = extractPattern(outputType);
-      if (isRuleOutputCompatibleWithDest(rule, nodePattern, dstPattern) ||
-          patternsAreCompatible(outputPattern, dstPattern)) {
+      if (
+        isRuleOutputCompatibleWithDest(rule, node.type, dst) ||
+        patternsAreCompatible(outputPattern, dstPattern)
+      ) {
         const chain: AdapterChain = { steps: newSteps, cost: newSteps.length };
         if (newSteps.length < solutionDepth) {
           solutionDepth = newSteps.length;
@@ -717,4 +712,3 @@ export function findAdapterChain(
 
   return solutions[0];
 }
-

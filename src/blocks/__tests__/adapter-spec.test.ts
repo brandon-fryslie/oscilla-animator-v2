@@ -9,6 +9,7 @@ import { describe, it, expect } from 'vitest';
 import { findAdapter, needsAdapter, extractPattern, isAssignable, findAdapterChain } from '../adapter-spec';
 import {
   canonicalType,
+  canonicalMany,
   unitTurns, contractWrap01,
   unitNone, contractClamp01,
   unitRadians,
@@ -17,6 +18,7 @@ import {
   unitSeconds,
 } from '../../core/canonical-types';
 import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR,  CAMERA_PROJECTION } from '../../core/canonical-types';
+import { instanceRef } from '../../core/canonical-types';
 
 // Ensure adapter blocks are registered
 // Import blocks to trigger registration
@@ -338,5 +340,33 @@ describe('findAdapterChain', () => {
     expect(chain).not.toBeNull();
     expect(chain!.steps.length).toBe(1);
     expect(chain!.steps[0].blockType).toBe('Adapter_Clamp01');
+  });
+
+  it('multi-step: phase01 → clamp01 requires semantic + contract adapters', () => {
+    const src = canonicalType(FLOAT, unitTurns(), undefined, contractWrap01());
+    const dst = canonicalType(FLOAT, unitNone(), undefined, contractClamp01());
+    const chain = findAdapterChain(src, dst);
+    expect(chain).not.toBeNull();
+    expect(chain!.steps.length).toBe(2);
+    expect(chain!.steps[0].blockType).toBe('Adapter_PhaseToScalar01');
+    expect(chain!.steps[1].blockType).toBe('Adapter_Clamp01');
+  });
+
+  it('single-step: one → many uses Broadcast adapter', () => {
+    const src = canonicalType(FLOAT, unitNone());
+    const dst = canonicalMany(FLOAT, unitNone(), instanceRef('shape', 'inst0'));
+    const chain = findAdapterChain(src, dst);
+    expect(chain).not.toBeNull();
+    expect(chain!.steps.length).toBe(1);
+    expect(chain!.steps[0].blockType).toBe('Broadcast');
+  });
+
+  it('single-step: color none → color rgba01 uses unit cast', () => {
+    const src = canonicalType(COLOR, unitNone());
+    const dst = canonicalType(COLOR, { kind: 'color', unit: 'rgba01' });
+    const chain = findAdapterChain(src, dst);
+    expect(chain).not.toBeNull();
+    expect(chain!.steps.length).toBe(1);
+    expect(chain!.steps[0].blockType).toBe('Adapter_UnitCast');
   });
 });
