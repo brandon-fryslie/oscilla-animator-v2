@@ -20,6 +20,11 @@ import type { SettingsToken } from '../settings/types';
 const STORAGE_PREFIX = 'oscilla-v2-settings:';
 const PERSIST_DEBOUNCE_MS = 500;
 
+interface SettingsStorage {
+  getItem(key: string): string | null;
+  setItem(key: string, value: string): void;
+}
+
 export class SettingsStore {
   /**
    * Registry of all settings tokens by namespace.
@@ -37,11 +42,14 @@ export class SettingsStore {
    * Disposers for auto-persist reactions, one per namespace.
    */
   private persistDisposers = new Map<string, () => void>();
+  private readonly storage: SettingsStorage | null;
 
   constructor() {
-    makeAutoObservable<SettingsStore, 'persistDisposers'>(this, {
+    this.storage = this.resolveStorage();
+    makeAutoObservable<SettingsStore, 'persistDisposers' | 'storage'>(this, {
       // tokens must be observable so getRegisteredTokens() triggers re-renders
       persistDisposers: false,
+      storage: false,
     });
   }
 
@@ -151,9 +159,12 @@ export class SettingsStore {
   private loadFromStorage<T extends Record<string, unknown>>(
     token: SettingsToken<T>
   ): Record<string, unknown> {
+    if (!this.storage) {
+      return { ...token.defaults };
+    }
     try {
       const key = `${STORAGE_PREFIX}${token.namespace}`;
-      const raw = localStorage.getItem(key);
+      const raw = this.storage.getItem(key);
       if (!raw) {
         return { ...token.defaults };
       }
@@ -200,11 +211,11 @@ export class SettingsStore {
         return values ? JSON.stringify(values) : null;
       },
       (serialized) => {
-        if (!serialized) return;
+        if (!serialized || !this.storage) return;
 
         try {
           const key = `${STORAGE_PREFIX}${namespace}`;
-          localStorage.setItem(key, serialized);
+          this.storage.setItem(key, serialized);
         } catch (err) {
           // Quota exceeded or other error - silently fail
           console.warn(`Failed to persist settings for '${namespace}':`, err);
@@ -223,5 +234,21 @@ export class SettingsStore {
   dispose(): void {
     this.persistDisposers.forEach((disposer) => disposer());
     this.persistDisposers.clear();
+  }
+
+  /**
+   * Resolve browser storage capability once at startup.
+   * // [LAW:single-enforcer] Storage capability detection is centralized here.
+   */
+  private resolveStorage(): SettingsStorage | null {
+    try {
+      const candidate = (globalThis as { localStorage?: unknown }).localStorage as Partial<SettingsStorage> | undefined;
+      if (!candidate) return null;
+      if (typeof candidate.getItem !== 'function') return null;
+      if (typeof candidate.setItem !== 'function') return null;
+      return candidate as SettingsStorage;
+    } catch {
+      return null;
+    }
   }
 }
