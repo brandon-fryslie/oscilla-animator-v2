@@ -311,7 +311,7 @@ export function* executeFrameStepped(
   yield buildSnapshot(-1, null, 'pre-frame', totalSteps, program, state, tAbsMs, new Map(), prevValues);
 
   // [LAW:one-source-of-truth] Populate scalarExprToArenaOffset before Phase 1 so extract
-  // reads multi-component signals from arena using canonical ExprAddressTable offsets.
+  // reads multi-component values from arena using canonical ExprAddressTable offsets.
   state.cache.scalarExprToArenaOffset = addressTable.scalarExprToArenaOffset;
 
   // [LAW:one-source-of-truth] Reduce kernels are evaluated through this single

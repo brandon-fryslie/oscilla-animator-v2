@@ -1,7 +1,7 @@
 /**
  * Subtract Block
  *
- * Subtracts two numbers (signals or fields).
+ * Subtracts two numbers (single-instance or per-instance fields).
  */
 
 import { registerBlock, STANDARD_NUMERIC_PAYLOADS } from '../registry';
@@ -21,7 +21,7 @@ registerBlock({
   type: 'Subtract',
   label: 'Subtract',
   category: 'math',
-  description: 'Subtracts two numbers (signals or fields)',
+  description: 'Subtracts two numbers (single-instance or per-instance fields)',
   form: 'primitive',
   capability: 'pure',
   loweringPurity: 'pure',

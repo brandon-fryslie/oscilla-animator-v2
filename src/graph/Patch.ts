@@ -58,9 +58,9 @@ import { nextLensAttachmentId } from './lens-id';
 /**
  * Lens attachment on a port.
  *
- * Describes a signal interpretation/transformation applied to a specific connection.
+ * Describes a value interpretation/transformation applied to a specific connection.
  * Lenses are stored on ports (not edges) because they conceptually belong to the
- * receiving or sending port - they interpret signals flowing through that port.
+ * receiving or sending port - they interpret values flowing through that port.
  *
  * Key properties:
  * - Per-port-per-connection: A port can have different lenses for each connection
@@ -69,7 +69,7 @@ import { nextLensAttachmentId } from './lens-id';
  * - Normalized to blocks: During normalization, lenses become real blocks
  *
  * Lenses vs Type Checking (Sprint 2 Redesign):
- * - Lenses: User explicitly controls signal transformation (this system)
+ * - Lenses: User explicitly controls value transformation (this system)
  * - Type Checking: Compiler validates type compatibility (separate system)
  * - These are completely independent - no fallback logic between them
  *
@@ -148,7 +148,7 @@ export interface InputPort {
   /**
    * Lens attachments for incoming connections (Sprint 2: 2026-01-27).
    *
-   * Each lens specifies a signal transformation for a specific source connection.
+   * Each lens specifies a value transformation for a specific source connection.
    * Multiple lenses may target the same source connection; sortKey defines chain order.
    *
    * During normalization, lenses are expanded to real lens blocks.
@@ -165,7 +165,7 @@ export interface InputPort {
  *
  * LENSES EXTENSION (Sprint 2: 2026-01-27 - Future-proofing):
  * - Output lenses reserved for future use
- * - Will allow transforming outgoing signals (e.g., scaling, normalization)
+ * - Will allow transforming outgoing values (e.g., scaling, normalization)
  * - Address format: `v1:blocks.{block}.outputs.{port}.lenses.{id}`
  * - Currently unused but designed in to avoid breaking changes later
  */
@@ -179,7 +179,7 @@ export interface OutputPort {
    * Not yet implemented, but the interface is defined to support future expansion
    * without breaking changes to the data model.
    *
-   * When implemented, output lenses will transform signals before they reach
+   * When implemented, output lenses will transform values before they reach
    * connected input ports.
    */
   readonly lenses?: readonly LensAttachment[];

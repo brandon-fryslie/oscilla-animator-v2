@@ -33,7 +33,7 @@ describe('Phase 7 - Layer 1: Opcode Sanity', () => {
 });
 
 // ══════════════════════════════════════════════════════════════════════
-// LAYER 2: SIGNAL KERNEL TESTS (via compiled blocks)
+// LAYER 2: ONE-CARDINALITY KERNEL TESTS (via compiled blocks)
 // ══════════════════════════════════════════════════════════════════════
 
 describe('Phase 7 - Layer 2: Scalar Kernel Sanity', () => {

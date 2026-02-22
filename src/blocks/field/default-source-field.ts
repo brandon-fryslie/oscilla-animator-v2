@@ -45,8 +45,8 @@ function perElementPhase(ctx: LowerCtx, outType: CanonicalType): ValueExprId {
   const floatFieldType = { ...canonicalScalar(FLOAT), extent: outType.extent };
   const normIdx = ctx.b.intrinsic('normalizedIndex', floatFieldType);
 
-  const phaseSignal = ctx.b.time('phaseA', canonicalScalar(FLOAT, unitTurns()));
-  const phaseField = ctx.b.broadcast(phaseSignal, floatFieldType);
+  const phaseValue = ctx.b.time('phaseA', canonicalScalar(FLOAT, unitTurns()));
+  const phaseField = ctx.b.broadcast(phaseValue, floatFieldType);
 
   const addFn = ctx.b.opcode(OpCode.Add);
   return ctx.b.zipAuto([normIdx, phaseField], addFn, floatFieldType);

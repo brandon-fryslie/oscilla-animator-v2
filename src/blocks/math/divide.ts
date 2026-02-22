@@ -1,7 +1,7 @@
 /**
  * Divide Block
  *
- * Divides two numbers (signals or fields).
+ * Divides two numbers (single-instance or per-instance fields).
  */
 
 import { registerBlock, STANDARD_NUMERIC_PAYLOADS } from '../registry';
@@ -21,7 +21,7 @@ registerBlock({
   type: 'Divide',
   label: 'Divide',
   category: 'math',
-  description: 'Divides two numbers (signals or fields)',
+  description: 'Divides two numbers (single-instance or per-instance fields)',
   form: 'primitive',
   capability: 'pure',
   loweringPurity: 'pure',

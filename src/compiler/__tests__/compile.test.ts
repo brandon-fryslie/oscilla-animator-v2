@@ -60,7 +60,7 @@ describe('compile', () => {
 
   describe('one-cardinality compilation', () => {
     // INVALID TEST: tests implementation
-    // it('compiles constant signals', () => {
+    // it('compiles constant one-cardinality values', () => {
     //   // Const block must be wired to something so its type can be inferred
     //   const patch = buildPatch((b) => {
     //     b.addBlock('InfiniteTimeRoot');
@@ -223,7 +223,7 @@ describe('TimeModel', () => {
 });
 
 describe('Debug Probe Support', () => {
-  it('generates scalar write steps for signals with registered slots (enables debug tap)', () => {
+  it('generates scalar write steps for one-cardinality values with registered slots (enables debug tap)', () => {
     // This test verifies that the compiler generates evalValue steps,
     // which are necessary for the runtime tap to record slot values.
     // Without evalValue steps, the debug probe cannot show scalar values.

@@ -1,7 +1,7 @@
 /**
  * Add Block
  *
- * Adds two numbers (signals or fields).
+ * Adds two numbers (single-instance or per-instance fields).
  */
 
 import { registerBlock, STANDARD_NUMERIC_PAYLOADS } from '../registry';
@@ -21,7 +21,7 @@ registerBlock({
   type: 'Add',
   label: 'Add',
   category: 'math',
-  description: 'Adds two numbers (signals or fields)',
+  description: 'Adds two numbers (single-instance or per-instance fields)',
   form: 'primitive',
   capability: 'pure',
   loweringPurity: 'pure', // MIGRATION (2026-02-03): Pure block for macro expansion

@@ -331,14 +331,14 @@ describe('actionExecutor', () => {
           portId: 'out',
           portKind: 'output',
         },
-        adapterType: 'SignalToValue',
+        adapterType: 'OneToMany',
       };
 
       const result = executeAction(action, mockDeps);
 
       expect(result.success).toBe(true);
       expect(mockDeps.patchStore.addBlock).toHaveBeenCalledWith(
-        'SignalToValue',
+        'OneToMany',
         {},
         { label: 'Adapter' }
       );
@@ -358,7 +358,7 @@ describe('actionExecutor', () => {
           portId: 'out',
           portKind: 'output',
         },
-        adapterType: 'SignalToValue',
+        adapterType: 'OneToMany',
       };
 
       const result = executeAction(action, mockDeps);
@@ -391,14 +391,14 @@ describe('actionExecutor', () => {
       const action: OpenDocsAction = {
         kind: 'openDocs',
         label: 'Learn More',
-        docUrl: 'https://docs.example.com/signals',
+        docUrl: 'https://docs.example.com/fields',
       };
 
       const result = executeAction(action, mockDeps);
 
       expect(result.success).toBe(true);
       expect(mockOpen).toHaveBeenCalledWith(
-        'https://docs.example.com/signals',
+        'https://docs.example.com/fields',
         '_blank',
         'noopener,noreferrer'
       );
@@ -410,7 +410,7 @@ describe('actionExecutor', () => {
       const action: OpenDocsAction = {
         kind: 'openDocs',
         label: 'Learn More',
-        docUrl: 'https://docs.example.com/signals',
+        docUrl: 'https://docs.example.com/fields',
       };
 
       const result = executeAction(action, mockDeps);
@@ -429,7 +429,7 @@ describe('actionExecutor', () => {
       const action: OpenDocsAction = {
         kind: 'openDocs',
         label: 'Learn More',
-        docUrl: 'https://docs.example.com/signals',
+        docUrl: 'https://docs.example.com/fields',
       };
 
       const result = executeAction(action, mockDeps);

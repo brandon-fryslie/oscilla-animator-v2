@@ -74,7 +74,7 @@ describe('DebugService', () => {
             );
         });
 
-        it('should return undefined for signal edge whose slot has no value before runtime starts', () => {
+        it('should return undefined for single-instance edge whose slot has no value before runtime starts', () => {
             const edgeMap = new Map([
                 ['edge1', { slotId: 10 as ValueSlot, type: canonicalType(FLOAT) }],
             ]);
@@ -86,7 +86,7 @@ describe('DebugService', () => {
             expect(result).toBeUndefined();
         });
 
-        it('should throw for signal edge whose slot has no value after runtime starts (scheduling bug)', () => {
+        it('should throw for single-instance edge whose slot has no value after runtime starts (scheduling bug)', () => {
             const edgeMap = new Map([
                 ['edge1', { slotId: 10 as ValueSlot, type: canonicalType(FLOAT) }],
                 ['edge2', { slotId: 20 as ValueSlot, type: canonicalType(FLOAT) }],
@@ -220,7 +220,7 @@ describe('DebugService', () => {
             expect(result).toBeUndefined();
         });
 
-        it('should return value for mapped signal port', () => {
+        it('should return value for mapped single-instance port', () => {
             const portMap = new Map([
                 ['blockA:out', { slotId: 10 as ValueSlot, type: canonicalType(FLOAT) }],
             ]);
@@ -237,7 +237,7 @@ describe('DebugService', () => {
             });
         });
 
-        it('should throw for mapped signal port with no value after runtime starts (scheduling bug)', () => {
+        it('should throw for mapped single-instance port with no value after runtime starts (scheduling bug)', () => {
             const portMap = new Map([
                 ['blockA:out', { slotId: 10 as ValueSlot, type: canonicalType(FLOAT) }],
             ]);
@@ -307,7 +307,7 @@ describe('DebugService', () => {
             debugService.setEdgeToSlotMap(edgeMap);
             debugService.trackField(30 as ValueSlot, canonicalManyDef(FLOAT));
 
-            // Start runtime by writing to a signal slot
+            // Start runtime by writing to a single-instance slot
             debugService.updateSlotValue(99 as ValueSlot, 1.0);
 
             // Tracked field with no buffer data - scheduling bug
@@ -479,7 +479,7 @@ describe('DebugService', () => {
     });
 
     describe('integration: full debug data flow simulation', () => {
-        it('should simulate runtime→debugService→UI flow for signal edges', () => {
+        it('should simulate runtime→debugService→UI flow for single-instance edges', () => {
             // 1. Compiler produces edge-to-slot map
             const edgeMap = new Map([
                 ['osc1-out->sin1-phase', { slotId: 5 as ValueSlot, type: canonicalType(FLOAT) }],
@@ -834,7 +834,7 @@ describe('DebugService', () => {
             return layout;
         }
 
-        it('reads signal value from arena when arenaRef is set', () => {
+        it('reads one-cardinality value from arena when arenaRef is set', () => {
             const edgeMap = new Map([
                 ['edge1', { slotId: 10 as ValueSlot, type: canonicalType(FLOAT) }],
             ]);
@@ -854,7 +854,7 @@ describe('DebugService', () => {
             const result = debugService.getEdgeValue('edge1');
             expect(result?.kind).toBe('scalar');
             if (result?.kind === 'scalar') {
-                // Must come from arena (0.42), not from signalValues Map (undefined/0 for slot 10)
+                // Must come from arena (0.42), not from slotValues map (undefined/0 for slot 10)
                 expect(result.value).toBeCloseTo(0.42);
             }
         });
@@ -883,7 +883,7 @@ describe('DebugService', () => {
             expect(history!.buffer[0]).toBeCloseTo(0.33);
         });
 
-        it('returns undefined for arena signal before runtime starts', () => {
+        it('returns undefined for arena value before runtime starts', () => {
             const edgeMap = new Map([
                 ['edge1', { slotId: 10 as ValueSlot, type: canonicalType(FLOAT) }],
             ]);

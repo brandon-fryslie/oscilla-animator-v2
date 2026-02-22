@@ -29,7 +29,7 @@ export interface MiniViewData {
   meta: EdgeMetadata;
   /** Current value result (may be null before runtime starts) */
   value: EdgeValueResult | null;
-  /** History ring buffer (null if not tracked or not a signal) */
+  /** History ring buffer (null if not tracked or not single-instance) */
   history: TrackedEntry | null;
   /** Field temporal history (null if not a field or not tracked) */
   fieldHistory: FieldHistoryView | null;

@@ -4,7 +4,7 @@
  * ══════════════════════════════════════════════════════════════════════
  *
  * This is the ONLY place that defines scalar numeric operations.
- * All runtime modules (SignalEvaluator, Materializer) delegate here.
+ * All runtime modules (legacy evaluators, materializers) delegate here.
  *
  * ARCHITECTURAL LAW: SINGLE ENFORCER
  * - No other module may implement scalar math
@@ -74,7 +74,7 @@
  * Use these for field-level math where angles are already in radians.
  *
  * For PHASE-based oscillators (input [0,1) → output [-1,1]):
- * Use SignalEvaluator kernels: oscSin, oscCos, oscTan, triangle, etc.
+ * Use oscillator kernels: oscSin, oscCos, oscTan, triangle, etc.
  * These convert phase to radians internally (phase * 2π).
  *
  * ══════════════════════════════════════════════════════════════════════

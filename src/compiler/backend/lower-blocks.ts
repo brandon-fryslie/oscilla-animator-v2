@@ -785,7 +785,7 @@ function lowerBlockInstance(
         }
       }
 
-      // Register slot for signal/field/event outputs
+      // Register slot for one/many/event outputs
       // Check extent directly instead of using deriveKind
       if (isExprRef(finalRef)) {
         const temp = requireInst(finalRef.type.extent.temporality, 'temporality');

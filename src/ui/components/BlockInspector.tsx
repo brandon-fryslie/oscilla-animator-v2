@@ -16,7 +16,7 @@ import type { Block, Patch, Edge, PortRef } from '../../graph/Patch';
 import type { BlockId, PortId, DefaultSource, UIControlHint } from '../../types';
 import type { CombineMode } from '../../types';
 import type { InferenceCanonicalType } from '../../core/inference-types';
-import { formatSignalType } from './typeFormatters';
+import { formatValueType } from './typeFormatters';
 import {
   NumberInput as MuiNumberInput,
   TextInput as MuiTextInput,
@@ -396,7 +396,7 @@ const PortInspectorStandalone = observer(function PortInspectorStandalone({ port
           borderRadius: '4px',
           fontSize: '13px',
         }}>
-          {formatSignalType(portDef.type!)}
+          {formatValueType(portDef.type!)}
         </div>
       </div>
 
@@ -619,7 +619,7 @@ function TypePreview({ type }: TypePreviewProps) {
             return (
               <li key={inputId} style={{ marginBottom: '8px', fontSize: '13px' }}>
                 <div>
-                  <strong>{input.label}</strong>: {formatSignalType(input.type!)}
+                  <strong>{input.label}</strong>: {formatValueType(input.type!)}
                 </div>
                 {hasDefaultSource && (
                   <div style={{
@@ -644,7 +644,7 @@ function TypePreview({ type }: TypePreviewProps) {
         <ul style={{ margin: 0, paddingLeft: '20px', listStyle: 'none' }}>
           {Object.entries(typeInfo.outputs).map(([outputId, output]) => (
             <li key={outputId} style={{ marginBottom: '4px', fontSize: '13px' }}>
-              <strong>{output.label}</strong>: {formatSignalType(output.type!)}
+              <strong>{output.label}</strong>: {formatValueType(output.type!)}
             </li>
           ))}
         </ul>
@@ -848,7 +848,7 @@ const PortItem = function PortItem({ port, portId, blockId, isConnected, connect
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
           <strong>{port.label}</strong>
-          <span style={{ color: colors.textSecondary }}> ({formatSignalType(port.type!)})</span>
+          <span style={{ color: colors.textSecondary }}> ({formatValueType(port.type!)})</span>
         </div>
         <span style={{ fontSize: '11px', color: colors.textMuted }}>→</span>
       </div>
@@ -1017,7 +1017,7 @@ function OutputPortItem({ port, edges, patch, onClick }: OutputPortItemProps) {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
           <strong>{port.label}</strong>
-          <span style={{ color: colors.textSecondary }}> ({formatSignalType(port.type!)})</span>
+          <span style={{ color: colors.textSecondary }}> ({formatValueType(port.type!)})</span>
         </div>
         <span style={{ fontSize: '11px', color: colors.textMuted }}>→</span>
       </div>
@@ -1147,7 +1147,7 @@ function PortInspector({ portRef, block, typeInfo, patch, onBack }: PortInspecto
           borderRadius: '4px',
           fontSize: '13px',
         }}>
-          {formatSignalType(port.type!)}
+          {formatValueType(port.type!)}
         </div>
       </div>
 

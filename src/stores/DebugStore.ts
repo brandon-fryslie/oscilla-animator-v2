@@ -8,7 +8,7 @@
  * - Track debug panel enabled state (synced with settings)
  * - Track currently hovered edge for probing
  * - Provide reactive value lookups and polling cache
- * - Format values based on signal type
+ * - Format values based on value type
  * - Report debug service health status
  */
 
@@ -19,7 +19,7 @@ import type { SettingsStore } from './SettingsStore';
 import { debugSettings, type DebugSettings } from '../settings/tokens/debug-settings';
 
 /**
- * Format a numeric value based on its signal type.
+ * Format a numeric value based on its value type.
  */
 export function formatDebugValue(value: number, type: CanonicalType): string {
   const payload = type.payload;

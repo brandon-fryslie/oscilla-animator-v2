@@ -249,23 +249,23 @@ export function executeFrame(
   // TWO-PHASE EXECUTION MODEL
   // ═══════════════════════════════════════════════════════════════════════════
   //
-  // Phase 1 (below): Evaluate all signals, materialize fields, fire events,
+  // Phase 1 (below): Evaluate all one-cardinality values, materialize fields, fire events,
   //                  collect render ops. Reads state from PREVIOUS frame.
   // Phase 2 (line ~464): Write new state values for NEXT frame.
   //
   // This separation is NON-NEGOTIABLE. It ensures:
   // - Stateful blocks (UnitDelay, Lag, etc.) maintain proper delay semantics
   // - Cycles only cross frame boundaries via state (invariant I7)
-  // - All signals see consistent state within a frame
+  // - All one-cardinality values see consistent state within a frame
   // - Hot-swap can migrate state without corruption
   //
   // See: docs/runtime/execution-model.md for full rationale and examples.
   // ═══════════════════════════════════════════════════════════════════════════
 
-  // Unified ValueExpr table (signals/fields/events live here)
+  // Unified ValueExpr table (one/many/event values live here)
   const valueExprs = program.valueExprs.nodes;
 
-  // Resolve camera from program render globals (will be populated after signal evaluation)
+  // Resolve camera from program render globals (will be populated after value evaluation)
   // Note: assemblerContext is constructed after Phase 1 when slots are populated
   let assemblerContext: AssemblerContext;
 
@@ -273,7 +273,7 @@ export function executeFrame(
   _renderSteps.length = 0;
 
   // [LAW:one-source-of-truth] Populate scalarExprToArenaOffset before Phase 1 so extract
-  // reads multi-component signals from arena using canonical ExprAddressTable offsets.
+  // reads multi-component values from arena using canonical ExprAddressTable offsets.
   state.cache.scalarExprToArenaOffset = addressTable.scalarExprToArenaOffset;
 
   // [LAW:one-source-of-truth] Reduce kernels are evaluated through this single
@@ -331,7 +331,7 @@ export function executeFrame(
           const { storage, offset, slot, stride } = lookup;
 
           if (storage === 'shape2d') {
-            // Shape signal: write Shape2D record to shape2d bank
+            // Shape value: write Shape2D record to shape2d bank
             const veId = step.expr;
             const exprNode = valueExprs[veId as number];
             if (exprNode.kind === 'shapeRef') {
@@ -592,7 +592,7 @@ export function executeFrame(
     }
   }
 
-  // Resolve camera from program render globals (slots now populated by signal evaluation)
+  // Resolve camera from program render globals (slots now populated by value evaluation)
   const resolvedCamera = resolveCameraFromGlobals(program, state);
 
   // Build assembler context with resolved camera and arena

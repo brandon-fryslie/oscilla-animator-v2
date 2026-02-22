@@ -29,7 +29,7 @@ function unknownHint(): PortTypeHint {
 
 /** Create a hint with an unresolved payload var — the shape derivePayloadAnchorObligation looks for. */
 function unresolvedPayloadHint(payloadVarId: string): PortTypeHint {
-  const SIGNAL_EXTENT: Extent = {
+  const ONE_EXTENT: Extent = {
     cardinality: cardinalityOne(),
     temporality: temporalityContinuous(),
     binding: axisInst(DEFAULT_BINDING),
@@ -39,12 +39,12 @@ function unresolvedPayloadHint(payloadVarId: string): PortTypeHint {
   const inference: InferenceCanonicalType = {
     payload: { kind: 'var', id: payloadVarId },
     unit: unitNone(),
-    extent: SIGNAL_EXTENT,
+    extent: ONE_EXTENT,
   };
   return { status: 'unknown', inference, diagIds: [] };
 }
 
-const SIGNAL_FLOAT = canonicalScalar(FLOAT);
+const ONE_FLOAT = canonicalScalar(FLOAT);
 const FIELD_FLOAT = canonicalMany(FLOAT, undefined, instanceRef('circle', 'inst0'));
 
 function emptyGraph(overrides?: Partial<DraftGraph>): DraftGraph {
@@ -98,8 +98,8 @@ describe('createDerivedObligations', () => {
     });
 
     const facts = makeFacts([
-      [draftPortKey('c1', 'out', 'out'), okHint(SIGNAL_FLOAT)],
-      [draftPortKey('add', 'a', 'in'), okHint(SIGNAL_FLOAT)],
+      [draftPortKey('c1', 'out', 'out'), okHint(ONE_FLOAT)],
+      [draftPortKey('add', 'a', 'in'), okHint(ONE_FLOAT)],
     ]);
 
     expect(createDerivedObligations(g, facts)).toEqual([]);
@@ -112,7 +112,7 @@ describe('createDerivedObligations', () => {
     });
 
     const facts = makeFacts([
-      [draftPortKey('c1', 'out', 'out'), okHint(SIGNAL_FLOAT)],
+      [draftPortKey('c1', 'out', 'out'), okHint(ONE_FLOAT)],
       [draftPortKey('ri', 'pos', 'in'), okHint(FIELD_FLOAT)],
     ]);
 
@@ -130,7 +130,7 @@ describe('createDerivedObligations', () => {
     });
 
     const facts = makeFacts([
-      [draftPortKey('c1', 'out', 'out'), okHint(SIGNAL_FLOAT)],
+      [draftPortKey('c1', 'out', 'out'), okHint(ONE_FLOAT)],
       [draftPortKey('ri', 'pos', 'in'), okHint(FIELD_FLOAT)],
     ]);
 
@@ -147,7 +147,7 @@ describe('createDerivedObligations', () => {
     });
 
     const facts = makeFacts([
-      [draftPortKey('c1', 'out', 'out'), okHint(SIGNAL_FLOAT)],
+      [draftPortKey('c1', 'out', 'out'), okHint(ONE_FLOAT)],
       [draftPortKey('add', 'a', 'in'), unknownHint()],
     ]);
 
@@ -171,7 +171,7 @@ describe('createDerivedObligations', () => {
     });
 
     const facts = makeFacts([
-      [draftPortKey('c1', 'out', 'out'), okHint(SIGNAL_FLOAT)],
+      [draftPortKey('c1', 'out', 'out'), okHint(ONE_FLOAT)],
       [draftPortKey('ri', 'pos', 'in'), okHint(FIELD_FLOAT)],
     ]);
 
@@ -193,7 +193,7 @@ describe('createDerivedObligations', () => {
     });
 
     const facts = makeFacts([
-      [draftPortKey('c1', 'out', 'out'), okHint(SIGNAL_FLOAT)],
+      [draftPortKey('c1', 'out', 'out'), okHint(ONE_FLOAT)],
       [draftPortKey('ri', 'pos', 'in'), okHint(FIELD_FLOAT)],
     ]);
 
@@ -225,7 +225,7 @@ describe('createDerivedObligations', () => {
     });
 
     const facts = makeFacts([
-      [draftPortKey('c1', 'out', 'out'), okHint(SIGNAL_FLOAT)],
+      [draftPortKey('c1', 'out', 'out'), okHint(ONE_FLOAT)],
       [draftPortKey('ri', 'pos', 'in'), okHint(FIELD_FLOAT)],
     ]);
 

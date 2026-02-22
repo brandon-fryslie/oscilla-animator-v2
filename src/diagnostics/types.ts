@@ -266,7 +266,7 @@ export interface RemoveBlockAction {
  * Used for automatic type coercion (e.g., One → Value, Many → One).
  *
  * @example
- * { kind: 'addAdapter', label: 'Insert Adapter', fromPort: { blockId: 'a', portId: 'out', portKind: 'output' }, adapterType: 'SignalToValue' }
+ * { kind: 'addAdapter', label: 'Insert Adapter', fromPort: { blockId: 'a', portId: 'out', portKind: 'output' }, adapterType: 'OneToMany' }
  */
 export interface AddAdapterAction {
   readonly kind: 'addAdapter';
@@ -306,7 +306,7 @@ export interface MuteDiagnosticAction {
  * Used for "Learn More" links on diagnostics.
  *
  * @example
- * { kind: 'openDocs', label: 'Learn More', docUrl: 'https://docs.example.com/signals' }
+ * { kind: 'openDocs', label: 'Learn More', docUrl: 'https://docs.example.com/fields' }
  */
 export interface OpenDocsAction {
   readonly kind: 'openDocs';

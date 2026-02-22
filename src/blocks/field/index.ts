@@ -1,7 +1,7 @@
 /**
  * Field Blocks
  *
- * Blocks that work with fields (signal arrays over domains).
+ * Blocks that work with fields (per-instance values over domains).
  */
 
 import './broadcast';

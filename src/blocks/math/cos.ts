@@ -1,7 +1,7 @@
 /**
  * Cos Block
  *
- * Per-element cosine (works with both signals and fields).
+ * Per-element cosine (works with both single-instance and per-instance fields).
  */
 
 import { registerBlock, STANDARD_NUMERIC_PAYLOADS } from '../registry';
@@ -23,7 +23,7 @@ registerBlock({
   type: 'Cos',
   label: 'Cos',
   category: 'math',
-  description: 'Per-element cosine (works with both signals and fields)',
+  description: 'Per-element cosine (works with both single-instance and per-instance fields)',
   form: 'primitive',
   capability: 'pure',
   loweringPurity: 'pure',

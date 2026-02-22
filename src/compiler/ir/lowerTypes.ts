@@ -73,7 +73,7 @@ export interface ValueRefExpr {
   /** Components per sample (derived from payload stride) */
   readonly stride: number;
   /**
-   * For multi-component signals (stride > 1), scalar ValueExprIds
+   * For multi-component values (stride > 1), scalar ValueExprIds
    * producing each component. Required when stride > 1.
    */
   readonly components?: readonly ValueExprId[];

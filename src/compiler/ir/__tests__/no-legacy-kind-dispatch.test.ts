@@ -19,9 +19,8 @@ import * as path from 'path';
 describe('no-legacy-kind-dispatch', () => {
   it('should not dispatch on legacy expression kinds outside allowed files', () => {
     // Allowed files (legacy evaluators + type definitions + lowering pass)
-    const allowedFiles = [
-      'SignalEvaluator.ts',
-      // 'Materializer.ts',
+    const allowedFiles: string[] = [
+            // 'Materializer.ts',
       // 'EventEvaluator.ts',
       // 'types.ts',
       // 'value-expr.ts',

@@ -40,7 +40,7 @@ describe('SYSTEM_PALETTE_SLOT reservation', () => {
         && step.target?.slot === SYSTEM_PALETTE_SLOT;
     });
 
-    // Palette slot (stride=4) should NOT have evalValue step (only stride=1 signals do)
+    // Palette slot (stride=4) should NOT have evalValue step (only stride=1 single-instance values do)
     expect(paletteEvalSteps.length).toBe(0);
 
     // Verify palette slot metadata is correctly registered with stride=4

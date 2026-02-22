@@ -1,7 +1,7 @@
 /**
  * Sin Block
  *
- * Per-element sine (works with both signals and fields).
+ * Per-element sine (works with both single-instance and per-instance fields).
  */
 
 import { registerBlock, STANDARD_NUMERIC_PAYLOADS } from '../registry';
@@ -23,7 +23,7 @@ registerBlock({
   type: 'Sin',
   label: 'Sin',
   category: 'math',
-  description: 'Per-element sine (works with both signals and fields)',
+  description: 'Per-element sine (works with both single-instance and per-instance fields)',
   form: 'primitive',
   capability: 'pure',
   loweringPurity: 'pure',

@@ -80,7 +80,7 @@ registerBlock({
     if (!cornerRadiusInput) throw new Error('Rect: cornerRadius input not wired — normalization bug');
     const cornerRadiusSig = cornerRadiusInput.id;
 
-    // Create shape reference with rect topology and param signals
+    // Create shape reference with rect topology and parameter values
     const shapeRefSig = ctx.b.shapeRef(
       TOPOLOGY_ID_RECT,
       [widthSig, heightSig, rotationSig, cornerRadiusSig],

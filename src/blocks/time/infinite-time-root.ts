@@ -35,7 +35,7 @@ registerBlock({
   lower: ({ ctx }): import('../registry').LowerResult => {
     // TimeRoot blocks don't produce IR directly
     // Their outputs are provided by the time system (pass 3)
-    // We create placeholder signals that reference the time system
+    // We create placeholder values that reference the time system
     const tMs = ctx.b.time('tMs', canonicalType(FLOAT));
     const dt = ctx.b.time('dt', canonicalType(FLOAT));
     const phaseA = ctx.b.time('phaseA', canonicalType(FLOAT, unitTurns(), undefined, contractWrap01()));

@@ -38,10 +38,10 @@ describe('Field-Path Math Integration', () => {
         b.setPortDefault(layout, 'rows', 3);
         b.setPortDefault(layout, 'cols', 3);
 
-        const colorSignal = b.addBlock('Const');
-        b.setConfig(colorSignal, 'value', { r: 1.0, g: 1.0, b: 1.0, a: 1.0 });
+        const colorConst = b.addBlock('Const');
+        b.setConfig(colorConst, 'value', { r: 1.0, g: 1.0, b: 1.0, a: 1.0 });
         const colorField = b.addBlock('Broadcast');
-        b.wire(colorSignal, 'out', colorField, 'one');
+        b.wire(colorConst, 'out', colorField, 'one');
 
         const render = b.addBlock('RenderInstances2D');
 
@@ -71,10 +71,10 @@ describe('Field-Path Math Integration', () => {
         const layout = b.addBlock('CircleLayoutUV');
         b.setPortDefault(layout, 'radius', 0.3);
 
-        const colorSignal = b.addBlock('Const');
-        b.setConfig(colorSignal, 'value', { r: 0.2, g: 0.8, b: 1.0, a: 1.0 });
+        const colorConst = b.addBlock('Const');
+        b.setConfig(colorConst, 'value', { r: 0.2, g: 0.8, b: 1.0, a: 1.0 });
         const colorField = b.addBlock('Broadcast');
-        b.wire(colorSignal, 'out', colorField, 'one');
+        b.wire(colorConst, 'out', colorField, 'one');
 
         const render = b.addBlock('RenderInstances2D');
 
@@ -102,10 +102,10 @@ describe('Field-Path Math Integration', () => {
         b.setPortDefault(array, 'count', 8);
         const layout = b.addBlock('LineLayoutUV');
 
-        const colorSignal = b.addBlock('Const');
-        b.setConfig(colorSignal, 'value', { r: 1.0, g: 1.0, b: 0.0, a: 1.0 });
+        const colorConst = b.addBlock('Const');
+        b.setConfig(colorConst, 'value', { r: 1.0, g: 1.0, b: 0.0, a: 1.0 });
         const colorField = b.addBlock('Broadcast');
-        b.wire(colorSignal, 'out', colorField, 'one');
+        b.wire(colorConst, 'out', colorField, 'one');
 
         const render = b.addBlock('RenderInstances2D');
 
@@ -139,10 +139,10 @@ describe('Field-Path Math Integration', () => {
           b.setPortDefault(layout, 'rows', rows);
           b.setPortDefault(layout, 'cols', cols);
 
-          const colorSignal = b.addBlock('Const');
-          b.setConfig(colorSignal, 'value', { r: 0.5, g: 0.5, b: 0.5, a: 1.0 });
+          const colorConst = b.addBlock('Const');
+          b.setConfig(colorConst, 'value', { r: 0.5, g: 0.5, b: 0.5, a: 1.0 });
           const colorField = b.addBlock('Broadcast');
-          b.wire(colorSignal, 'out', colorField, 'one');
+          b.wire(colorConst, 'out', colorField, 'one');
 
           const render = b.addBlock('RenderInstances2D');
 
@@ -177,10 +177,10 @@ describe('Field-Path Math Integration', () => {
         b.setPortDefault(layout, 'rows', 6);
         b.setPortDefault(layout, 'cols', 6);
 
-        const colorSignal = b.addBlock('Const');
-        b.setConfig(colorSignal, 'value', { r: 1.0, g: 1.0, b: 1.0, a: 1.0 });
+        const colorConst = b.addBlock('Const');
+        b.setConfig(colorConst, 'value', { r: 1.0, g: 1.0, b: 1.0, a: 1.0 });
         const colorField = b.addBlock('Broadcast');
-        b.wire(colorSignal, 'out', colorField, 'one');
+        b.wire(colorConst, 'out', colorField, 'one');
 
         const render = b.addBlock('RenderInstances2D');
 
@@ -216,10 +216,10 @@ describe('Field-Path Math Integration', () => {
         b.setPortDefault(layout, 'radius', 0.4);
         b.setPortDefault(layout, 'phase', 0.0);
 
-        const colorSignal = b.addBlock('Const');
-        b.setConfig(colorSignal, 'value', { r: 1.0, g: 0.5, b: 0.2, a: 1.0 });
+        const colorConst = b.addBlock('Const');
+        b.setConfig(colorConst, 'value', { r: 1.0, g: 0.5, b: 0.2, a: 1.0 });
         const colorField = b.addBlock('Broadcast');
-        b.wire(colorSignal, 'out', colorField, 'one');
+        b.wire(colorConst, 'out', colorField, 'one');
 
         const render = b.addBlock('RenderInstances2D');
 
@@ -253,10 +253,10 @@ describe('Field-Path Math Integration', () => {
         b.setPortDefault(array, 'count', 10);
         const layout = b.addBlock('LineLayoutUV');
 
-        const colorSignal = b.addBlock('Const');
-        b.setConfig(colorSignal, 'value', { r: 0.8, g: 0.2, b: 0.9, a: 1.0 });
+        const colorConst = b.addBlock('Const');
+        b.setConfig(colorConst, 'value', { r: 0.8, g: 0.2, b: 0.9, a: 1.0 });
         const colorField = b.addBlock('Broadcast');
-        b.wire(colorSignal, 'out', colorField, 'one');
+        b.wire(colorConst, 'out', colorField, 'one');
 
         const render = b.addBlock('RenderInstances2D');
 

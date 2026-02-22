@@ -1,7 +1,7 @@
 /**
  * Modulo Block
  *
- * Computes modulo of two numbers (signals or fields).
+ * Computes modulo of two numbers (single-instance or per-instance fields).
  */
 
 import { registerBlock, STANDARD_NUMERIC_PAYLOADS } from '../registry';
@@ -21,7 +21,7 @@ registerBlock({
   type: 'Modulo',
   label: 'Modulo',
   category: 'math',
-  description: 'Computes modulo of two numbers (signals or fields)',
+  description: 'Computes modulo of two numbers (single-instance or per-instance fields)',
   form: 'primitive',
   capability: 'pure',
   loweringPurity: 'pure',

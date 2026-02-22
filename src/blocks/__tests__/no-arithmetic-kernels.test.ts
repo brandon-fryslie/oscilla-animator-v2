@@ -57,7 +57,6 @@ describe('Block Lowering - No Arithmetic Kernel Names', () => {
       'math-blocks.ts',
       'field-operations-blocks.ts',
       'math-utility-blocks.ts',
-      'signal-blocks.ts',
       'path-blocks.ts',
       'instance-blocks.ts',
     ];
@@ -103,7 +102,7 @@ describe('Block Lowering - No Arithmetic Kernel Names', () => {
       // Create an Add block (represents all binary math blocks)
       const add = b.addBlock('Add');
 
-      // Wire phase to both inputs (signal+signal → signal)
+      // Wire phase to both inputs (one+one → one)
       b.wire(time, 'phaseA', add, 'a');
       b.wire(time, 'phaseB', add, 'b');
     });

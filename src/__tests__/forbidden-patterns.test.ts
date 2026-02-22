@@ -70,8 +70,8 @@ describe('Forbidden Patterns (Type System Invariants)', () => {
     }
   });
 
-  // Note: "SignalType" is NOT checked because valid function names like
-  // "assertSignalType" contain this substring. The actual legacy type was
+  // Note: a broad "legacy type alias" token check is intentionally avoided because
+  // helper names can contain that phrase as a substring. The actual legacy type was
   // already removed in previous sprints.
 
   it('no instanceId field on expression types in IR types', () => {
@@ -210,7 +210,7 @@ describe('Forbidden Patterns (Type System Invariants)', () => {
       // - Constants: ctx.b.constant(..., canonicalType(...))
       // - State reads: ctx.b.stateRead(..., canonicalType(...))
       // - External inputs: ctx.b.external(..., canonicalType(...))
-      // - Time signals: ctx.b.time(..., canonicalType(...))
+      // - Time channels: ctx.b.time(..., canonicalType(...))
       //
       // FORBIDDEN:
       // - ctx.b.zipAuto([...], fn, canonicalType(...))
@@ -610,7 +610,7 @@ describe('Forbidden Patterns (Type System Invariants)', () => {
       // compatibility logic outside the oracle. They were removed in cpc.8.
       const removedHelpers = [
         { name: 'portDeclaresOneOrManyFlex', replacement: 'portAcceptsBroadcast from type-compatibility.ts' },
-        { name: 'destinationAllowsSignalBroadcast', replacement: 'portAcceptsBroadcast from type-compatibility.ts' },
+        { name: 'destinationAllowsOneBroadcast', replacement: 'portAcceptsBroadcast from type-compatibility.ts' },
         { name: 'portDeclaresOneContinuousOnly', replacement: 'CT/ICT structural predicates' },
         { name: 'isOneManyCardinalityMismatchOnly', replacement: 'isOneManyMismatchOnly from type-compatibility.ts' },
       ];

@@ -483,13 +483,6 @@ describe('RenderAssembler', () => {
         { slot: 5 as ValueSlot, stride: 4 },
       ]);
 
-      const signals: ValueExpr[] = [
-        { kind: 'const', value: { kind: 'float', value: 1.0 }, type: SCALAR_TYPE },
-        { kind: 'const', value: { kind: 'float', value: 0.02 }, type: SCALAR_TYPE },
-        { kind: 'const', value: { kind: 'float', value: 0.02 }, type: SCALAR_TYPE },
-        { kind: 'const', value: { kind: 'int', value: 1 }, type: SCALAR_TYPE },
-      ];
-
       const steps: StepRender[] = [
         {
           kind: 'render',
@@ -545,10 +538,6 @@ describe('RenderAssembler', () => {
 
       // Write one-cardinality value to state
       state.arena[10] = 1.0;
-
-      const signals: ValueExpr[] = [
-        { kind: 'const', value: { kind: 'float', value: 1.0 }, type: SCALAR_TYPE },
-      ];
 
       const steps: StepRender[] = [
         {

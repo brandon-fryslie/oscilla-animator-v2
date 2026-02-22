@@ -112,7 +112,7 @@ export class HistoryService {
    * - Key must resolve to metadata
    * - Cardinality must be one
    * - Payload must be sampleable
-   * - Stride must be 1 (scalar signals only in v1)
+   * - Stride must be 1 (single-instance scalars only in v1)
    *
    * If MAX_TRACKED_KEYS is reached, evicts the oldest hover probe.
    */

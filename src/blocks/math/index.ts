@@ -1,7 +1,7 @@
 /**
  * Math Blocks
  *
- * Blocks that perform mathematical operations on signals and fields.
+ * Blocks that perform mathematical operations on single-instance and per-instance fields.
  */
 
 import './add';

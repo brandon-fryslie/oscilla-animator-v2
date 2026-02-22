@@ -74,8 +74,8 @@ export type CompileResult =
  *   ['radius', canonicalType(FLOAT)],
  * ]);
  * const inputExprs = new Map([
- *   ['phase', phaseSignalId],
- *   ['radius', radiusSignalId],
+ *   ['phase', phaseExprId],
+ *   ['radius', radiusExprId],
  * ]);
  * const result = compileExpression(
  *   "sin(phase) * radius",

@@ -8,7 +8,7 @@
  */
 
 import {
-  canonicalType as makeSignalType,
+  canonicalType as makeCanonicalType,
   unitCount,
   unitTurns, contractWrap01, contractClamp01,
   unitRadians,
@@ -81,24 +81,24 @@ export function testInstanceRef(instId: string, domainType: string = 'default'):
  * Create a test CanonicalType with specified payload and optional unit.
  *
  * Uses sensible defaults for the extent (cardinality: one, temporality: continuous, etc.).
- * For custom extent, use testSignalTypeWithExtent instead.
+ * For custom extent, use testValueTypeWithExtent instead.
  *
  * @param payload - The payload type (float, int, vec2, etc.)
  * @param unit - Optional unit; if omitted, uses default for payload
  * @returns A properly typed CanonicalType
  *
  * @example
- * const floatType = testSignalType(FLOAT);
- * const phaseType = testSignalType(FLOAT, unitTurns(), undefined, contractWrap01());
- * const posType = testSignalType(VEC2, unitWorld2());
+ * const floatType = testValueType(FLOAT);
+ * const phaseType = testValueType(FLOAT, unitTurns(), undefined, contractWrap01());
+ * const posType = testValueType(VEC2, unitWorld2());
  */
-export function testSignalType(
+export function testValueType(
   payload: PayloadType,
   unit?: UnitType
 ): CanonicalType {
   return unit
-    ? makeSignalType(payload, unit)
-    : makeSignalType(payload);
+    ? makeCanonicalType(payload, unit)
+    : makeCanonicalType(payload);
 }
 
 /**
@@ -114,18 +114,18 @@ export function testSignalType(
  *
  * @example
  * // Field type over instances
- * const fieldType = testSignalTypeWithExtent(
+ * const fieldType = testValueTypeWithExtent(
  *   FLOAT,
  *   unitNone(),
  *   { cardinality: cardinalityMany(instanceRef('circle')) }
  * );
  */
-export function testSignalTypeWithExtent(
+export function testValueTypeWithExtent(
   payload: PayloadType,
   unit: UnitType,
   extentOverrides: Partial<Extent>
 ): CanonicalType {
-  return makeSignalType(payload, unit, extentOverrides);
+  return makeCanonicalType(payload, unit, extentOverrides);
 }
 
 /**
@@ -142,7 +142,7 @@ export function testSignalTypeWithExtent(
  * const angle = testFloat(unitRadians());
  */
 export function testFloat(unit?: UnitType): CanonicalType {
-  return makeSignalType(FLOAT, unit ?? unitNone());
+  return makeCanonicalType(FLOAT, unit ?? unitNone());
 }
 
 /**
@@ -156,7 +156,7 @@ export function testFloat(unit?: UnitType): CanonicalType {
  * const timeMs = testInt(unitMs());
  */
 export function testInt(unit?: UnitType): CanonicalType {
-  return makeSignalType(INT, unit ?? unitCount());
+  return makeCanonicalType(INT, unit ?? unitCount());
 }
 
 /**
@@ -170,7 +170,7 @@ export function testInt(unit?: UnitType): CanonicalType {
  * const normalized = testVec2(unitNdc2());
  */
 export function testVec2(unit?: UnitType): CanonicalType {
-  return makeSignalType(VEC2, unit ?? unitWorld2());
+  return makeCanonicalType(VEC2, unit ?? unitWorld2());
 }
 
 /**
@@ -180,7 +180,7 @@ export function testVec2(unit?: UnitType): CanonicalType {
  * @returns A CanonicalType with payload='vec3'
  */
 export function testVec3(unit?: UnitType): CanonicalType {
-  return makeSignalType(VEC3, unit ?? unitWorld3());
+  return makeCanonicalType(VEC3, unit ?? unitWorld3());
 }
 
 /**
@@ -193,7 +193,7 @@ export function testVec3(unit?: UnitType): CanonicalType {
  * const color = testColor();
  */
 export function testColor(unit?: UnitType): CanonicalType {
-  return makeSignalType(COLOR, unit ?? unitRgba01());
+  return makeCanonicalType(COLOR, unit ?? unitRgba01());
 }
 
 /**
@@ -202,7 +202,7 @@ export function testColor(unit?: UnitType): CanonicalType {
  * @returns A CanonicalType with payload='bool'
  */
 export function testBool(): CanonicalType {
-  return makeSignalType(BOOL, unitNone());
+  return makeCanonicalType(BOOL, unitNone());
 }
 
 /**
@@ -211,7 +211,7 @@ export function testBool(): CanonicalType {
  * @returns A CanonicalType with payload='shape'
  */
 export function testShape(): CanonicalType {
-  return makeSignalType(FLOAT, unitNone());
+  return makeCanonicalType(FLOAT, unitNone());
 }
 
 /**
@@ -232,7 +232,7 @@ export function testFieldType(
   unit: UnitType,
   instance: InstanceRef
 ): CanonicalType {
-  return makeSignalType(payload, unit, {
+  return makeCanonicalType(payload, unit, {
     cardinality: axisInst(cardinalityMany(instance)),
   });
 }
@@ -251,7 +251,7 @@ export function testEventType(
   payload: PayloadType,
   unit: UnitType
 ): CanonicalType {
-  return makeSignalType(payload, unit, {
+  return makeCanonicalType(payload, unit, {
     temporality: axisInst(temporalityDiscrete()),
   });
 }

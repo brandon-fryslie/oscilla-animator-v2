@@ -1,7 +1,7 @@
 /**
  * Multiply Block
  *
- * Multiplies two numbers (signals or fields).
+ * Multiplies two numbers (single-instance or per-instance fields).
  */
 
 import { registerBlock, STANDARD_NUMERIC_PAYLOADS } from '../registry';
@@ -21,7 +21,7 @@ registerBlock({
   type: 'Multiply',
   label: 'Multiply',
   category: 'math',
-  description: 'Multiplies two numbers (signals or fields)',
+  description: 'Multiplies two numbers (single-instance or per-instance fields)',
   form: 'primitive',
   capability: 'pure',
   loweringPurity: 'pure',

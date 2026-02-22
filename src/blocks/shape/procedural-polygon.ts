@@ -175,7 +175,7 @@ registerBlock({
     // The field type for intermediates (float, same instance ref as index)
     const floatFieldType = canonicalMany(FLOAT, { kind: 'none' }, ref);
 
-    // Step 1: broadcast signals to field extent
+    // Step 1: broadcast single-instance values to field extent
     const sidesBroadcast = ctx.b.broadcast(sidesSig, floatFieldType);
     const radiusXBroadcast = ctx.b.broadcast(radiusXSig, floatFieldType);
     const radiusYBroadcast = ctx.b.broadcast(radiusYSig, floatFieldType);

@@ -69,7 +69,7 @@ registerBlock({
     if (!rotationInput) throw new Error('Ellipse: rotation input not wired — normalization bug');
     const rotationSig = rotationInput.id;
 
-    // Create shape reference with ellipse topology and param signals
+    // Create shape reference with ellipse topology and parameter values
     const shapeRefSig = ctx.b.shapeRef(
       TOPOLOGY_ID_ELLIPSE,
       [rxSig, rySig, rotationSig],

@@ -21,7 +21,7 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
     category: 'debug-viz',
     summary: 'Temporal waveform of a single value over recent frames.',
     body: [
-      'The sparkline shows how a value changes over time. For signals, it plots the full recent history. For fields, it plots instance 0 only (a representative sample).',
+      'The sparkline shows how a value changes over time. For one-cardinality values, it plots the full recent history. For many-cardinality values, it plots instance 0 only (a representative sample).',
       'The horizontal axis is time (recent frames). The vertical axis auto-scales to the observed range. A unit-aware overlay shows the current value.',
     ],
     shines: [

@@ -18,7 +18,7 @@ describe('Runtime Integration', () => {
     expect(true).toBe(true);
   });
 
-  it('_placeholder_evaluates_constant_signals', () => {
+  it('_placeholder_evaluates_constant_values', () => {
     expect(true).toBe(true);
   });
 

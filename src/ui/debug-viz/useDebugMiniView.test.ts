@@ -40,7 +40,7 @@ describe('useDebugMiniView', () => {
     expect(result.current).toBe(null);
   });
 
-  it('should return MiniViewData for a mapped signal edge', () => {
+  it('should return MiniViewData for a mapped single-instance edge', () => {
     const type = canonicalType(FLOAT);
     const edgeMap = new Map([
       ['edge-1', { slotId: 10 as ValueSlot, type }],
@@ -66,7 +66,7 @@ describe('useDebugMiniView', () => {
     expect(result.current!.label).toBe('edge-1');
   });
 
-  it('should resolve history for tracked signal edge', () => {
+  it('should resolve history for tracked single-instance edge', () => {
     const edgeMap = new Map([
       ['sig-edge', { slotId: 10 as ValueSlot, type: canonicalType(FLOAT) }],
     ]);

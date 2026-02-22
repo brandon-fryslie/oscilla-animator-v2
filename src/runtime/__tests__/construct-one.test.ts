@@ -1,7 +1,7 @@
 /**
- * Tests for construct() expression evaluation in signal context
+ * Tests for construct() expression evaluation in single-instance context
  *
- * Validates WI-0: Runtime stride support for signal slots
+ * Validates WI-0: Runtime stride support for single-instance slots
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
@@ -12,7 +12,7 @@ import { createRuntimeState } from '../RuntimeState';
 import type { ValueExprId } from '../../compiler/ir/Indices';
 import { floatConst, canonicalScalar } from '../../core/canonical-types';
 
-describe('construct signal evaluation', () => {
+describe('construct one-cardinality evaluation', () => {
   let state: RuntimeState;
 
   beforeEach(() => {
@@ -138,7 +138,7 @@ describe('construct signal evaluation', () => {
     expect(value).toBe(42);
   });
 
-  it('ensures scalar signals still work (no regression)', () => {
+  it('ensures single-instance scalars still work (no regression)', () => {
     const valueExprs: ValueExpr[] = [
       { kind: 'const', value: floatConst(3.14), type: canonicalScalar({ kind: 'float' }, { kind: 'none' }) },
     ];
@@ -149,7 +149,7 @@ describe('construct signal evaluation', () => {
   });
 });
 
-describe('extract signal evaluation', () => {
+describe('extract one-cardinality evaluation', () => {
   let state: RuntimeState;
 
   beforeEach(() => {

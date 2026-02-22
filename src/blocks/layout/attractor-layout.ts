@@ -6,8 +6,8 @@
  *
  * Inputs:
  *   positions — Field<vec3> from upstream layout (required, no defaulting)
- *   target    — Signal<vec3> attraction point (default [0.5, 0.5, 0])
- *   strength  — Signal<float> 0..1 slider (default 0.5)
+ *   target    — One<vec3> attraction point (default [0.5, 0.5, 0])
+ *   strength  — One<float> 0..1 slider (default 0.5)
  *
  * Output:
  *   position  — Field<vec3> deformed positions
@@ -73,7 +73,7 @@ registerBlock({
     const inY = ctx.b.extract(positionsInput.id, 1, floatFieldType);
     const inZ = ctx.b.extract(positionsInput.id, 2, floatFieldType);
 
-    // Extract components from target signal (vec3 → x, y, z)
+    // Extract components from target value (vec3 → x, y, z)
     const targetFloatType = canonicalType(FLOAT);
     const tX = ctx.b.extract(targetInput.id, 0, targetFloatType);
     const tY = ctx.b.extract(targetInput.id, 1, targetFloatType);
@@ -82,7 +82,7 @@ registerBlock({
     const lerp = ctx.b.opcode(OpCode.Lerp);
 
     // Component-wise lerp: lerp(inComponent, targetComponent, strength)
-    // zipAuto handles mixed cardinality (field inX + signal tX/strength → zipPromote internally)
+    // zipAuto handles mixed cardinality (field inX + single-instance tX/strength → zipPromote internally)
     const outX = ctx.b.zipAuto([inX, tX, strengthInput.id], lerp, floatFieldType);
     const outY = ctx.b.zipAuto([inY, tY, strengthInput.id], lerp, floatFieldType);
     const outZ = ctx.b.zipAuto([inZ, tZ, strengthInput.id], lerp, floatFieldType);

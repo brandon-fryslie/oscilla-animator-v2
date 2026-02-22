@@ -8,7 +8,7 @@
  * PHASE 1: Expand Explicit Lenses (expandExplicitLenses)
  *   - For each lens in InputPort.lenses, create a lens block
  *   - Insert deterministically between source and target
- *   - Lenses are user-controlled signal transformations (scaling, etc.)
+ *   - Lenses are user-controlled value transformations (scaling, etc.)
  *   - Lenses are NOT adapters — they don't bridge type mismatches
  *
  * PHASE 2: Auto-Insert Adapters (autoInsertAdapters)
@@ -35,7 +35,7 @@
  *   - Both phases preserve existing block behavior
  *   - Deterministic: same input → same output
  *   - Adapter insertion is automatic (compiler handles type bridging)
- *   - Lens expansion is explicit (user controls signal transformations)
+ *   - Lens expansion is explicit (user controls value transformations)
  */
 
 import type { BlockId, BlockRole } from '../../types';

@@ -17,7 +17,7 @@ import { BLOCK_DEFS_BY_TYPE } from '../../../blocks/registry';
 // Helpers
 // =============================================================================
 
-const SIGNAL_FLOAT = canonicalScalar(FLOAT);
+const ONE_FLOAT = canonicalScalar(FLOAT);
 const FIELD_FLOAT = canonicalMany(FLOAT, undefined, instanceRef('circle', 'inst0'));
 
 function makeBlock(id: string, type: string): DraftBlock {
@@ -98,7 +98,7 @@ describe('AdapterPolicy (adapters.v1)', () => {
     });
 
     const facts = makeFacts([
-      [draftPortKey('c1', 'out', 'out'), okHint(SIGNAL_FLOAT)],
+      [draftPortKey('c1', 'out', 'out'), okHint(ONE_FLOAT)],
       [draftPortKey('ri', 'pos', 'in'), okHint(FIELD_FLOAT)],
     ]);
 
@@ -127,7 +127,7 @@ describe('AdapterPolicy (adapters.v1)', () => {
     });
 
     const facts = makeFacts([
-      [draftPortKey('c1', 'out', 'out'), okHint(SIGNAL_FLOAT)],
+      [draftPortKey('c1', 'out', 'out'), okHint(ONE_FLOAT)],
       [draftPortKey('ri', 'pos', 'in'), okHint(FIELD_FLOAT)],
     ]);
 
@@ -152,7 +152,7 @@ describe('AdapterPolicy (adapters.v1)', () => {
     });
 
     const facts = makeFacts([
-      [draftPortKey('c1', 'out', 'out'), okHint(SIGNAL_FLOAT)],
+      [draftPortKey('c1', 'out', 'out'), okHint(ONE_FLOAT)],
       [draftPortKey('ri', 'pos', 'in'), okHint(FIELD_FLOAT)],
     ]);
 
@@ -180,7 +180,7 @@ describe('AdapterPolicy (adapters.v1)', () => {
   it('returns blocked when no adapter exists for the conversion', () => {
     // float→bool with no adapter
     const boolType: CanonicalType = {
-      ...SIGNAL_FLOAT,
+      ...ONE_FLOAT,
       payload: { kind: 'bool' },
       unit: { kind: 'none' },
     };
@@ -191,7 +191,7 @@ describe('AdapterPolicy (adapters.v1)', () => {
     });
 
     const facts = makeFacts([
-      [draftPortKey('b1', 'out', 'out'), okHint(SIGNAL_FLOAT)],
+      [draftPortKey('b1', 'out', 'out'), okHint(ONE_FLOAT)],
       [draftPortKey('b2', 'in', 'in'), okHint(boolType)],
     ]);
 
@@ -226,7 +226,7 @@ describe('AdapterPolicy (adapters.v1)', () => {
     });
 
     const facts = makeFacts([
-      [draftPortKey('c1', 'out', 'out'), okHint(SIGNAL_FLOAT)],
+      [draftPortKey('c1', 'out', 'out'), okHint(ONE_FLOAT)],
       [draftPortKey('ri', 'pos', 'in'), okHint(FIELD_FLOAT)],
     ]);
 
@@ -248,7 +248,7 @@ describe('AdapterPolicy (adapters.v1)', () => {
     });
 
     const facts = makeFacts([
-      [draftPortKey('c1', 'out', 'out'), okHint(SIGNAL_FLOAT)],
+      [draftPortKey('c1', 'out', 'out'), okHint(ONE_FLOAT)],
       [draftPortKey('ri', 'pos', 'in'), okHint(FIELD_FLOAT)],
     ]);
 

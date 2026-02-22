@@ -297,7 +297,7 @@ class CompilationInspectorService {
   /**
    * Get resolved port types from the latest TypedPatch.
    * Returns a Map where keys are "blockIndex:portName:in" or "blockIndex:portName:out"
-   * and values are resolved SignalTypes.
+   * and values are resolved canonical types.
    *
    * @returns Port types map or undefined if not available
    */

@@ -159,7 +159,7 @@ registerBlock({
     const outType = ctx.outTypes[0];
     const stride = payloadStride(outType.payload);
 
-    // For multi-component signals (stride > 1), ensure we have a construct expression
+    // For multi-component values (stride > 1), ensure we have a construct expression
     if (stride > 1) {
       // Check if the result is already a construct node
       const expr = ctx.b.getValueExpr(outExprId);

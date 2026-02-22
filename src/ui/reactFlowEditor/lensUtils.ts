@@ -82,7 +82,7 @@ export function getLensLabel(lensType: string): string {
 
 /**
  * Get default params for a lens block by reading its non-primary input defaults.
- * Primary signal input is conventionally "in" and is excluded.
+ * Primary value input is conventionally "in" and is excluded.
  */
 export function getLensDefaultParams(lensType: string): Record<string, unknown> | undefined {
   const lensDef = requireAnyBlockDef(lensType);
@@ -157,7 +157,7 @@ export function canApplyLens(
 }
 
 /**
- * Check if two signal types match.
+ * Check if two value types match.
  * Handles payload and unit comparison with full structural equality.
  */
 interface MatchEnv {

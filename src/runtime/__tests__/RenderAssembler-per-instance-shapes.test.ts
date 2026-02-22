@@ -690,10 +690,6 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
       state.values.objects.set(10 as ValueSlot, circlePoints);
       state.values.objects.set(11 as ValueSlot, squarePoints);
 
-      const signals: ValueExpr[] = [
-        { kind: 'const', value: { kind: 'float', value: 1.0 }, type: SCALAR_TYPE },
-      ];
-
       // Build scalarExprToArenaOffset mapping for scale one-cardinality value
       const scalarExprToArenaOffset = new Map<number, number>([
         [0, 10], // scale one-cardinality value at slot 10

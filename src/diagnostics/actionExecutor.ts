@@ -218,7 +218,7 @@ function handleAddAdapter(
   try {
     // Create adapter block
     const adapterId = patchStore.addBlock(
-      action.adapterType, // e.g., 'SignalToValue'
+      action.adapterType, // e.g., 'OneToMany'
       {},
       { label: 'Adapter' }
     );

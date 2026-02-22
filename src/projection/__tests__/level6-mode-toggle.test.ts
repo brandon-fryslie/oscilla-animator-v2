@@ -324,7 +324,7 @@ describe('Level 6 Integration Tests: World-Space Continuity Across Toggle', () =
       maxError = Math.max(maxError, error);
     }
 
-    // Should be exact (we're directly setting z, not computing from signals)
+    // Should be exact (we're directly setting z, not computing from derived values)
     expect(maxError).toBeLessThan(1e-6);
 
     // PROOF: World-space trajectory is smooth and camera-independent.

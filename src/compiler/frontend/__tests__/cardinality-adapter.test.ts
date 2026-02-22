@@ -258,7 +258,7 @@ describe('cardinality adapter fixpoint integration', () => {
       const add = b.addBlock('Add');
       const arr = b.addBlock('Array');
 
-      // Signal chain: InfiniteTimeRoot → Phasor (time input)
+      // One-cardinality chain: InfiniteTimeRoot → Phasor (time input)
       b.wire(timeRoot, 'time', phasor, 'time');
       // Phasor output → Add input a
       b.wire(phasor, 'phase', add, 'a');

@@ -62,7 +62,7 @@ describe('Level 5 Unit Tests: Assembler API', () => {
 // =============================================================================
 
 describe('Level 5 Integration Tests: Full Pipeline', () => {
-  it('_placeholder_Pipeline_runs_signals', () => {
+  it('_placeholder_Pipeline_runs_values', () => {
     // Test removed during type system refactor
     expect(true).toBe(true);
   });
