@@ -189,6 +189,15 @@ class CompilationInspectorService {
     }
   }
 
+  // [LAW:one-source-of-truth] Snapshot insertion + retention is centralized so
+  // all lifecycle paths apply identical retention behavior.
+  private appendSnapshot(snapshot: CompilationSnapshot): void {
+    this.snapshots.push(snapshot);
+    if (this.snapshots.length > 2) {
+      this.snapshots.shift();
+    }
+  }
+
   /**
    * Begin a new compilation capture.
    * Called at the start of compile().
@@ -198,6 +207,20 @@ class CompilationInspectorService {
   // [LAW:single-enforcer] Inspector methods are internally resilient — callers never need try/catch.
   beginCompile(compileId: string): void {
     try {
+      if (this.currentSnapshot) {
+        // [LAW:no-silent-fallbacks] Starting a new compile while one is active
+        // is a lifecycle violation; capture it explicitly instead of silently replacing.
+        this.recordInternalError({
+          phase: 'beginCompile',
+          timestamp: Date.now(),
+          error: new Error(
+            `beginCompile(${compileId}) called before endCompile() for ${this.currentSnapshot.compileId}`
+          ),
+        });
+        this.currentSnapshot.status = 'failure';
+        this.currentSnapshot.totalDurationMs = Date.now() - this.currentSnapshot.timestamp;
+        this.appendSnapshot(this.currentSnapshot);
+      }
       this.currentSnapshot = {
         compileId,
         timestamp: Date.now(),
@@ -205,6 +228,7 @@ class CompilationInspectorService {
         passes: [],
         status: 'success',
       };
+      this.passStartTime = 0;
     } catch (e) {
       this.recordInternalError({
         phase: 'beginCompile',
@@ -224,7 +248,14 @@ class CompilationInspectorService {
    */
   capturePass(passName: string, input: unknown, output: unknown): void {
     if (!this.currentSnapshot) {
-      return; // Expected when compile() early-exits before inspector starts
+      // [LAW:no-silent-fallbacks] Lifecycle misuse must be observable.
+      this.recordInternalError({
+        phase: 'capturePass',
+        passName,
+        timestamp: Date.now(),
+        error: new Error(`capturePass(${passName}) called before beginCompile()`),
+      });
+      return;
     }
 
     const now = performance.now();
@@ -275,20 +306,20 @@ class CompilationInspectorService {
    */
   endCompile(status: 'success' | 'failure'): void {
     if (!this.currentSnapshot) {
-      return; // Idempotent — safe to call multiple times or without beginCompile
+      // [LAW:no-silent-fallbacks] Lifecycle misuse must be observable.
+      this.recordInternalError({
+        phase: 'endCompile',
+        timestamp: Date.now(),
+        error: new Error('endCompile() called before beginCompile()'),
+      });
+      return;
     }
 
     try {
       this.currentSnapshot.status = status;
       this.currentSnapshot.totalDurationMs = Date.now() - this.currentSnapshot.timestamp;
 
-      // Add to snapshots array
-      this.snapshots.push(this.currentSnapshot);
-
-      // Keep only last 2 snapshots
-      if (this.snapshots.length > 2) {
-        this.snapshots.shift();
-      }
+      this.appendSnapshot(this.currentSnapshot);
     } catch (e) {
       this.recordInternalError({
         phase: 'endCompile',
