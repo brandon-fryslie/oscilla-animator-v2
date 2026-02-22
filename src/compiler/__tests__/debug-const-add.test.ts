@@ -14,6 +14,17 @@ import { compileFrontend } from '../frontend/index';
 import { extractConstraints } from '../frontend/extract-constraints';
 import { solvePayloadUnit, buildPortVarMapping } from '../frontend/payload-unit/solve';
 
+const TRACE = process.env.OSCILLA_DEBUG_TEST_TRACE === '1';
+
+function trace(...args: unknown[]): void {
+  // [LAW:verifiable-goals] Debug logging remains available behind an explicit
+  // switch; default test runs stay deterministic and low-noise.
+  if (TRACE) {
+    // eslint-disable-next-line no-console
+    console.log(...args);
+  }
+}
+
 /**
  * Dump full constraint/solver state for a DraftGraph.
  * Returns the solver result for assertion use.
@@ -21,66 +32,66 @@ import { solvePayloadUnit, buildPortVarMapping } from '../frontend/payload-unit/
 function traceConstraintsAndSolver(label: string, graph: Parameters<typeof extractConstraints>[0]) {
   const extracted = extractConstraints(graph, BLOCK_DEFS_BY_TYPE);
 
-  console.log(`\n=== ${label}: Port Base Types ===`);
+  trace(`\n=== ${label}: Port Base Types ===`);
   for (const [key, type] of extracted.portBaseTypes) {
     const pKind = type.payload.kind;
     const pId = pKind === 'var' ? `:${(type.payload as any).id}` : '';
     const uKind = type.unit.kind;
     const uId = uKind === 'var' ? `:${(type.unit as any).id}` : '';
-    console.log(`  ${key}: payload=${pKind}${pId} unit=${uKind}${uId}`);
+    trace(`  ${key}: payload=${pKind}${pId} unit=${uKind}${uId}`);
   }
 
-  console.log(`\n=== ${label}: Payload/Unit Constraints ===`);
+  trace(`\n=== ${label}: Payload/Unit Constraints ===`);
   for (const c of extracted.payloadUnit) {
     switch (c.kind) {
       case 'payloadEq':
-        console.log(`  payloadEq: ${c.a} <=> ${c.b} (${c.origin.kind})`);
+        trace(`  payloadEq: ${c.a} <=> ${c.b} (${c.origin.kind})`);
         break;
       case 'unitEq':
-        console.log(`  unitEq: ${c.a} <=> ${c.b} (${c.origin.kind})`);
+        trace(`  unitEq: ${c.a} <=> ${c.b} (${c.origin.kind})`);
         break;
       case 'concretePayload':
-        console.log(`  concretePayload: ${c.port} = ${c.value.kind} (${c.origin.kind})`);
+        trace(`  concretePayload: ${c.port} = ${c.value.kind} (${c.origin.kind})`);
         break;
       case 'concreteUnit':
-        console.log(`  concreteUnit: ${c.port} = ${c.value.kind} (${c.origin.kind})`);
+        trace(`  concreteUnit: ${c.port} = ${c.value.kind} (${c.origin.kind})`);
         break;
       case 'requirePayloadIn':
-        console.log(`  requirePayloadIn: ${c.port} in [${c.allowed.map(a => a.kind).join(',')}] (${c.origin.kind})`);
+        trace(`  requirePayloadIn: ${c.port} in [${c.allowed.map(a => a.kind).join(',')}] (${c.origin.kind})`);
         break;
       case 'requireUnitless':
-        console.log(`  requireUnitless: ${c.port} (${c.origin.kind})`);
+        trace(`  requireUnitless: ${c.port} (${c.origin.kind})`);
         break;
     }
   }
 
   const portVarMapping = buildPortVarMapping(extracted.portBaseTypes);
-  console.log(`\n=== ${label}: Port Var Mapping (vars only) ===`);
+  trace(`\n=== ${label}: Port Var Mapping (vars only) ===`);
   for (const [key, varInfo] of portVarMapping) {
     if (varInfo.payloadVarId || varInfo.unitVarId) {
-      console.log(`  ${key}: pVar=${varInfo.payloadVarId ?? '-'} uVar=${varInfo.unitVarId ?? '-'}`);
+      trace(`  ${key}: pVar=${varInfo.payloadVarId ?? '-'} uVar=${varInfo.unitVarId ?? '-'}`);
     }
   }
 
   const result = solvePayloadUnit(extracted.payloadUnit, portVarMapping);
 
-  console.log(`\n=== ${label}: Solver Errors ===`);
+  trace(`\n=== ${label}: Solver Errors ===`);
   for (const e of result.errors) {
-    console.log(`  ${e.kind}: ${e.message} (port=${e.port})`);
+    trace(`  ${e.kind}: ${e.message} (port=${e.port})`);
   }
 
-  console.log(`\n=== ${label}: Var Resolutions ===`);
+  trace(`\n=== ${label}: Var Resolutions ===`);
   for (const [varId, payload] of result.payloads) {
-    console.log(`  payload ${varId} → ${payload.kind}`);
+    trace(`  payload ${varId} → ${payload.kind}`);
   }
   for (const [varId, unit] of result.units) {
-    console.log(`  unit ${varId} → ${unit.kind}`);
+    trace(`  unit ${varId} → ${unit.kind}`);
   }
 
-  console.log(`\n=== ${label}: Port Payloads (selected) ===`);
+  trace(`\n=== ${label}: Port Payloads (selected) ===`);
   for (const [key, payload] of result.portPayloads) {
     if (key.includes('_ds_') || key.includes('periodAMs') || key.includes('periodBMs') || key.includes('mode:')) {
-      console.log(`  ${key}: ${payload.kind}`);
+      trace(`  ${key}: ${payload.kind}`);
     }
   }
 
@@ -104,9 +115,9 @@ describe('Debug fixpoint harness', () => {
     // Run fixpoint to get the expanded graph
     const fixpoint = finalizeNormalizationFixpoint(draftGraph, BLOCK_DEFS_BY_TYPE, { maxIterations: 20 });
 
-    console.log('=== Final Graph ===');
-    console.log('Blocks:', fixpoint.graph.blocks.map(b => `${b.id}:${b.type}`));
-    console.log('Edges:', fixpoint.graph.edges.map(e => `${e.from.blockId}:${e.from.port} -> ${e.to.blockId}:${e.to.port} (${e.role})`));
+    trace('=== Final Graph ===');
+    trace('Blocks:', fixpoint.graph.blocks.map(b => `${b.id}:${b.type}`));
+    trace('Edges:', fixpoint.graph.edges.map(e => `${e.from.blockId}:${e.from.port} -> ${e.to.blockId}:${e.to.port} (${e.role})`));
 
     // Trace full constraint state on the expanded graph
     const solverResult = traceConstraintsAndSolver('Expanded graph', fixpoint.graph);
@@ -127,9 +138,9 @@ describe('Debug fixpoint harness', () => {
 
     // Full frontend should succeed
     const result = compileFrontend(patch);
-    console.log('\nFrontend backendReady:', result.backendReady);
+    trace('\nFrontend backendReady:', result.backendReady);
     if (!result.backendReady) {
-      console.log('errors:', JSON.stringify(result.errors, null, 2));
+      trace('errors:', JSON.stringify(result.errors, null, 2));
     }
     expect(result.backendReady).toBe(true);
   });

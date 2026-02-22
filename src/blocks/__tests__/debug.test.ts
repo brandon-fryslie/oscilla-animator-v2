@@ -3,7 +3,7 @@ import { compile } from '../../compiler/compile';
 import { buildPatch } from '../../graph';
 
 describe('Debug', () => {
-  it('shows compile errors', () => {
+  it('compiles a simple const->unitDelay graph', () => {
     const patch = buildPatch((b) => {
       b.addBlock('InfiniteTimeRoot');
       const constBlock = b.addBlock('Const');
@@ -13,6 +13,6 @@ describe('Debug', () => {
     });
 
     const result = compile(patch);
-    console.log('Result:', JSON.stringify(result, null, 2));
+    expect(result.kind).toBe('ok');
   });
 });

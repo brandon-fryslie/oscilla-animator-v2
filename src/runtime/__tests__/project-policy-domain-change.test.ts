@@ -25,6 +25,8 @@ import type { RuntimeState } from '../RuntimeState';
 import { ExternalChannelSystem } from '../ExternalChannel';
 import type { ValueSlot } from '../../types';
 
+const TRACE = process.env.OSCILLA_DEBUG_TEST_TRACE === '1';
+
 // Helper to create a valid palette Float32Array
 function createPalette(r = 0.5, g = 0, b = 0, a = 1): Float32Array {
   return new Float32Array([r, g, b, a]);
@@ -563,13 +565,21 @@ describe('Project Policy Domain Change', () => {
       result = runFrame(t, spiralFor7, false, null);
     }
 
-    // Log intermediate state
-    const targetState = state.continuity.targets.get(targetId);
-    console.log('After 500ms at count=7:');
-    console.log('  slew[0,1]:', targetState?.slewBuffer[0], targetState?.slewBuffer[1]);
-    console.log('  gauge[0,1]:', targetState?.gaugeBuffer[0], targetState?.gaugeBuffer[1]);
-    console.log('  base[0,1]:', spiralFor7[0], spiralFor7[1]);
-    console.log('  result[0,1]:', result[0], result[1]);
+    if (TRACE) {
+      // [LAW:verifiable-goals] Keep deep continuity traces opt-in so
+      // default test runs stay concise.
+      const targetState = state.continuity.targets.get(targetId);
+      // eslint-disable-next-line no-console
+      console.log('After 500ms at count=7:');
+      // eslint-disable-next-line no-console
+      console.log('  slew[0,1]:', targetState?.slewBuffer[0], targetState?.slewBuffer[1]);
+      // eslint-disable-next-line no-console
+      console.log('  gauge[0,1]:', targetState?.gaugeBuffer[0], targetState?.gaugeBuffer[1]);
+      // eslint-disable-next-line no-console
+      console.log('  base[0,1]:', spiralFor7[0], spiralFor7[1]);
+      // eslint-disable-next-line no-console
+      console.log('  result[0,1]:', result[0], result[1]);
+    }
 
     // After 500ms, slew should have converged toward spiralFor7
     // But with project policy + gauge, gauge preserves offset, so where does it slew to?
@@ -590,10 +600,16 @@ describe('Project Policy Domain Change', () => {
     // - Gauge accumulation
     // - Incorrect mapping application
     // - Slew state corruption
-    console.log('Final result after round-trip:');
-    console.log('Element 0:', result[0], result[1], 'expected:', spiralFor5[0], spiralFor5[1]);
-    console.log('Element 1:', result[2], result[3], 'expected:', spiralFor5[2], spiralFor5[3]);
-    console.log('Element 2:', result[4], result[5], 'expected:', spiralFor5[4], spiralFor5[5]);
+    if (TRACE) {
+      // eslint-disable-next-line no-console
+      console.log('Final result after round-trip:');
+      // eslint-disable-next-line no-console
+      console.log('Element 0:', result[0], result[1], 'expected:', spiralFor5[0], spiralFor5[1]);
+      // eslint-disable-next-line no-console
+      console.log('Element 1:', result[2], result[3], 'expected:', spiralFor5[2], spiralFor5[3]);
+      // eslint-disable-next-line no-console
+      console.log('Element 2:', result[4], result[5], 'expected:', spiralFor5[4], spiralFor5[5]);
+    }
 
     // Verify positions are close to original (allowing for some slew transition)
     for (let i = 0; i < 5; i++) {
