@@ -183,6 +183,73 @@ describe('RenderAssembler', () => {
       expect(result).toEqual([]);
     });
 
+    it('returns empty array when projection culls all instances', () => {
+      const state = createMockState();
+      // Two instances placed beyond default far plane (far=100)
+      const positionBuffer = new Float32Array([
+        0.1, 0.2, 250.0,
+        0.3, 0.4, 300.0,
+      ]);
+      const colorBuffer = new Uint8ClampedArray([
+        255, 0, 0, 255,
+        0, 255, 0, 255,
+      ]);
+      const controlPointsBuffer = new Float32Array([
+        0, 1,
+        0.95, 0.31,
+        0.59, -0.81,
+        -0.59, -0.81,
+        -0.95, 0.31,
+      ]);
+
+      state.values.objects.set(1 as ValueSlot, positionBuffer);
+      state.values.objects.set(2 as ValueSlot, colorBuffer);
+      state.values.objects.set(3 as ValueSlot, controlPointsBuffer);
+
+      const scalarExprToArenaOffset = new Map<number, number>([
+        [0, 10],
+        [1, 11],
+        [2, 12],
+        [3, 13],
+      ]);
+      state.arena[10] = 1.0;
+      state.arena[11] = 0.02;
+      state.arena[12] = 0.02;
+      state.arena[13] = 1;
+
+      const slotToArena = mirrorNumericObjectSlotsToArena(state, [
+        { slot: 1 as ValueSlot, stride: 3 },
+        { slot: 2 as ValueSlot, stride: 4 },
+        { slot: 3 as ValueSlot, stride: 2 },
+      ]);
+
+      const step: StepRender = {
+        kind: 'render',
+        instanceId: instanceId('culled-instance'),
+        positionSlot: 1 as ValueSlot,
+        colorSlot: 2 as ValueSlot,
+        scale: { k: 'one', id: 0 as ValueExprId },
+        shape: {
+          k: 'one',
+          topologyId: TEST_PENTAGON_ID,
+          paramExprs: [1 as ValueExprId, 2 as ValueExprId, 3 as ValueExprId],
+        },
+        controlPoints: { k: 'slot', slot: 3 as ValueSlot },
+      };
+
+      const context: AssemblerContext = {
+        scalarExprToArenaOffset,
+        instances: new Map([['culled-instance', createMockInstance(2)]]),
+        state,
+        resolvedCamera: DEFAULT_CAMERA,
+        arena: getTestArena(),
+        slotToArena,
+      };
+
+      const result = assembleDrawPathInstancesOp(step, context);
+      expect(result).toEqual([]);
+    });
+
     it('rejects non-path topologies', () => {
       const state = createMockState();
       // Position buffer must be stride-3 (vec3 world-space positions)

@@ -647,6 +647,66 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
     });
   });
 
+  describe('Projection Culling', () => {
+    it('returns no ops when all per-instance groups are fully culled', () => {
+      const state = createMockState();
+
+      const instanceCount = 3;
+      const positionBuffer = new Float32Array([
+        0.1, 0.2, 250.0,
+        0.3, 0.4, 300.0,
+        0.5, 0.6, 400.0,
+      ]);
+      const colorBuffer = new Uint8ClampedArray(instanceCount * 4);
+      const shapeBuffer = new Uint32Array(instanceCount * SHAPE2D_WORDS);
+      const controlPointsBuffer = new Float32Array([0, 1, 1, 0, 0, -1, -1, 0]);
+
+      for (let i = 0; i < instanceCount; i++) {
+        writeShape2D(shapeBuffer, i, {
+          topologyId: CIRCLE_ID,
+          pointsFieldSlot: 4,
+          pointsCount: 4,
+          styleRef: 0,
+          flags: 1,
+        });
+      }
+
+      state.values.objects.set(1 as ValueSlot, positionBuffer);
+      state.values.objects.set(2 as ValueSlot, colorBuffer);
+      state.values.objects.set(3 as ValueSlot, shapeBuffer);
+      state.values.objects.set(4 as ValueSlot, controlPointsBuffer);
+
+      const scalarExprToArenaOffset = new Map<number, number>([[0, 10]]);
+      state.arena[10] = 1.0;
+      const slotToArena = mirrorNumericObjectSlotsToArena(state, [
+        { slot: 1 as ValueSlot, stride: 3 },
+        { slot: 2 as ValueSlot, stride: 4 },
+        { slot: 4 as ValueSlot, stride: 2 },
+      ]);
+
+      const step: StepRender = {
+        kind: 'render',
+        instanceId: instanceId('culled-groups'),
+        positionSlot: 1 as ValueSlot,
+        colorSlot: 2 as ValueSlot,
+        scale: { k: 'one', id: 0 as ValueExprId },
+        shape: { k: 'slot', slot: 3 as ValueSlot },
+      };
+
+      const context: AssemblerContext = {
+        scalarExprToArenaOffset,
+        instances: new Map([['culled-groups', createMockInstance(instanceCount)]]),
+        state,
+        resolvedCamera: DEFAULT_CAMERA,
+        arena: getTestArena(),
+        slotToArena,
+      };
+
+      const result = assembleDrawPathInstancesOp(step, context);
+      expect(result).toEqual([]);
+    });
+  });
+
   describe('Integration with assembleRenderFrame', () => {
     it('flattens multiple ops from per-instance shapes', () => {
       const state = createMockState();

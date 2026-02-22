@@ -1058,6 +1058,12 @@ function assemblePerInstanceShapes(
       groupIsotropicScale,
     );
 
+    // [LAW:dataflow-not-control-flow] Culling variability is expressed as data (`count`).
+    // The assembler emits no draw op when a group has zero visible instances.
+    if (compactedCopy.count === 0) {
+      continue;
+    }
+
     // TODO: replace per-frame allocation with zero-alloc render assembly
     // eslint-disable-next-line oscilla/no-hot-path-alloc
     const instanceTransforms: InstanceTransforms = {
@@ -1410,6 +1416,12 @@ export function assembleDrawPathInstancesOp(
       scale2,
       isotropicScale,
     );
+
+    // [LAW:dataflow-not-control-flow] Visibility compaction owns the draw cardinality.
+    // Zero visible instances means no op is emitted.
+    if (compactedCopy.count === 0) {
+      return [];
+    }
 
     // Build instance transforms with copied data
     const instanceTransforms = buildInstanceTransforms(
