@@ -91,6 +91,8 @@ export interface CardinalitySolveResult {
   readonly errors: readonly CardinalitySolveError[];
   /** Escape hatch diagnostics (emitted unconditionally — severity applied downstream) */
   readonly diagnostics: readonly FixpointDiagnostic[];
+  /** Optional phase trace messages when `input.trace` is true. */
+  readonly traceLog?: readonly string[];
 }
 
 // =============================================================================
@@ -377,6 +379,11 @@ export function solveCardinality(input: CardinalitySolveInput): CardinalitySolve
   const errors: CardinalitySolveError[] = [];
   // [LAW:dataflow-not-control-flow] Escape hatch diagnostics emitted unconditionally.
   const escapeDiagnostics: FixpointDiagnostic[] = [];
+  const traceLog: string[] = [];
+  const tracePhase = (label: string): void => {
+    if (!trace) return;
+    traceLog.push(label);
+  };
   const uf = new CardinalityUF();
   const instanceUF = new InstanceUF();
 
@@ -386,7 +393,7 @@ export function solveCardinality(input: CardinalitySolveInput): CardinalitySolve
   }
 
   // ---- Phase 1: Equality UF ----
-  if (trace) console.log('[CardSolver] Phase 1: Equality UF');
+  tracePhase('[CardSolver] Phase 1: Equality UF');
 
   for (const c of constraints) {
     if (c.kind === 'equal') {
@@ -395,7 +402,7 @@ export function solveCardinality(input: CardinalitySolveInput): CardinalitySolve
   }
 
   // ---- Phase 2: Collect group facts ----
-  if (trace) console.log('[CardSolver] Phase 2: Collect group facts');
+  tracePhase('[CardSolver] Phase 2: Collect group facts');
 
   // From constraints
   for (const c of constraints) {
@@ -424,7 +431,7 @@ export function solveCardinality(input: CardinalitySolveInput): CardinalitySolve
   }
 
   // ---- Phase 3: Local group resolution ----
-  if (trace) console.log('[CardSolver] Phase 3: Local group resolution');
+  tracePhase('[CardSolver] Phase 3: Local group resolution');
 
   for (const root of uf.roots()) {
     const facts = uf.getOrCreateFacts(root);
@@ -511,7 +518,7 @@ export function solveCardinality(input: CardinalitySolveInput): CardinalitySolve
   }
 
   // ---- Phase 4: PromoteToMany fixpoint ----
-  if (trace) console.log('[CardSolver] Phase 4: PromoteToMany fixpoint');
+  tracePhase('[CardSolver] Phase 4: PromoteToMany fixpoint');
 
   // Collect zip sets from constraints (with origins for provenance)
   const zipSets: Array<{ ports: DraftPortKey[]; origin: ConstraintOrigin }> = [];
@@ -594,7 +601,7 @@ export function solveCardinality(input: CardinalitySolveInput): CardinalitySolve
   }
 
   // ---- Phase 5: Finalize ----
-  if (trace) console.log('[CardSolver] Phase 5: Finalize');
+  tracePhase('[CardSolver] Phase 5: Finalize');
 
   const cardinalities = new Map<CardinalityVarId, CardinalityValue>();
   const resolvedInstanceVars = instanceUF.resolvedVars();
@@ -657,5 +664,6 @@ export function solveCardinality(input: CardinalitySolveInput): CardinalitySolve
     instances: resolvedInstanceVars,
     errors,
     diagnostics: escapeDiagnostics,
+    traceLog: trace ? traceLog : undefined,
   };
 }
