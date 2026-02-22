@@ -48,7 +48,7 @@ describe('exprToBlock mapping', () => {
 
       b.wire(ellipse, 'shape', array, 'element');
       b.wire(array, 'elements', layout, 'elements');
-      b.wire(colorSig, 'out', colorField, 'signal');
+      b.wire(colorSig, 'out', colorField, 'one');
       b.wire(layout, 'position', render, 'pos');
       b.wire(colorField, 'field', render, 'color');
     });
@@ -84,7 +84,7 @@ describe('exprToBlock mapping', () => {
 
       b.wire(ellipse, 'shape', array, 'element');
       b.wire(array, 'elements', layout, 'elements');
-      b.wire(colorSig, 'out', colorField, 'signal');
+      b.wire(colorSig, 'out', colorField, 'one');
       b.wire(layout, 'position', render, 'pos');
       b.wire(colorField, 'field', render, 'color');
     });
@@ -126,7 +126,7 @@ describe('exprToBlock mapping', () => {
 
       b.wire(ellipse, 'shape', array, 'element');
       b.wire(array, 'elements', layout, 'elements');
-      b.wire(colorSig, 'out', colorField, 'signal');
+      b.wire(colorSig, 'out', colorField, 'one');
       b.wire(layout, 'position', render, 'pos');
       b.wire(colorField, 'field', render, 'color');
     });
@@ -198,7 +198,7 @@ describe('exprProvenance mapping', () => {
 
       b.wire(ellipse, 'shape', array, 'element');
       b.wire(array, 'elements', layout, 'elements');
-      b.wire(colorSig, 'out', colorField, 'signal');
+      b.wire(colorSig, 'out', colorField, 'one');
       b.wire(layout, 'position', render, 'pos');
       b.wire(colorField, 'field', render, 'color');
     });
@@ -234,7 +234,7 @@ describe('exprProvenance mapping', () => {
 
       b.wire(ellipse, 'shape', array, 'element');
       b.wire(array, 'elements', layout, 'elements');
-      b.wire(colorSig, 'out', colorField, 'signal');
+      b.wire(colorSig, 'out', colorField, 'one');
       b.wire(layout, 'position', render, 'pos');
       b.wire(colorField, 'field', render, 'color');
     });
@@ -289,7 +289,7 @@ describe('exprProvenance mapping', () => {
 
       b.wire(ellipse, 'shape', array, 'element');
       b.wire(array, 'elements', layout, 'elements');
-      b.wire(colorSig, 'out', colorField, 'signal');
+      b.wire(colorSig, 'out', colorField, 'one');
       b.wire(layout, 'position', render, 'pos');
       b.wire(colorField, 'field', render, 'color');
     });

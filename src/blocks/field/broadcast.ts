@@ -19,7 +19,7 @@ const BROADCAST_FIELD_CARD = cardinalityVar(cardinalityVarId('broadcast_field'),
 /**
  * Payload-Generic, Unit-Generic field broadcast block.
  *
- * Broadcasts a signal value to all elements of a field.
+ * Broadcasts a one-cardinality value to all elements of a field.
  * The payload type and unit are resolved by pass1 constraint solver
  * through constraint propagation from connected ports.
  *
@@ -30,30 +30,30 @@ const BROADCAST_FIELD_CARD = cardinalityVar(cardinalityVarId('broadcast_field'),
  * - Deterministic resolution via payloadType param
  *
  * Unit-Generic Contract:
- * - Output unit matches input signal unit (via unitVar constraint)
+ * - Output unit matches input one-cardinality unit (via unitVar constraint)
  * - No unit conversion or adaptation applied
  */
 registerBlock({
   type: 'Broadcast',
   label: 'Broadcast',
   category: 'field',
-  description: 'Broadcasts a signal value to all elements of a field (type inferred)',
+  description: 'Broadcasts a one-cardinality value to all elements of a field (type inferred)',
   form: 'primitive',
   capability: 'pure',
   loweringPurity: 'pure',
   adapterSpec: {
     from: { payload: 'any', unit: 'any', extent: 'any' },
     to: { payload: 'same', unit: 'same', extent: 'any' },
-    inputPortId: 'signal',
+    inputPortId: 'one',
     outputPortId: 'field',
-    description: 'Broadcast signal to field',
+    description: 'Broadcast one to field',
     purity: 'pure',
     stability: 'stable',
     priority: 100,
   },
   payload: {
     allowedPayloads: {
-      signal: ALL_CONCRETE_PAYLOADS,
+      one: ALL_CONCRETE_PAYLOADS,
       field: ALL_CONCRETE_PAYLOADS,
     },
     combinations: ALL_CONCRETE_PAYLOADS.map(p => ({
@@ -63,7 +63,7 @@ registerBlock({
     semantics: 'typeSpecific',
   },
   inputs: {
-    signal: { label: 'Signal', type: inferType(payloadVar('broadcast_payload'), unitVar('broadcast_in')) },
+    one: { label: 'One', type: inferType(payloadVar('broadcast_payload'), unitVar('broadcast_in')) },
   },
   outputs: {
     field: { label: 'Field', type: inferType(payloadVar('broadcast_payload'), unitVar('broadcast_in'), { cardinality: BROADCAST_FIELD_CARD }) },
@@ -78,18 +78,18 @@ registerBlock({
     if (ctx.inferredInstance) {
       outType = rewriteFieldType(outType, ctx.inferredInstance, ctx.instances);
     }
-    const signalValue = inputsById.signal;
-    if (!signalValue) throw new Error('Broadcast input required');
+    const oneValue = inputsById.one;
+    if (!oneValue) throw new Error('Broadcast input required');
 
     const stride = payloadStride(outType.payload);
 
-    // For multi-component signals (vec2, vec3, color), pass component IDs
+    // For multi-component one-cardinality values (vec2, vec3, color), pass component IDs
     // so the materializer can evaluate each component separately
     const fieldId = ctx.b.broadcast(
-      signalValue.id,
+      oneValue.id,
       outType,
-      signalValue.components && signalValue.components.length > 1
-        ? signalValue.components
+      oneValue.components && oneValue.components.length > 1
+        ? oneValue.components
         : undefined
     );
 

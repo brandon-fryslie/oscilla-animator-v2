@@ -72,7 +72,7 @@ function makeRenderPatch() {
     const colorSig = b.addBlock('Const');
     b.setConfig(colorSig, 'value', { r: 1, g: 0.5, b: 0.2, a: 1 });
     const colorField = b.addBlock('Broadcast');
-    b.wire(colorSig, 'out', colorField, 'signal');
+    b.wire(colorSig, 'out', colorField, 'one');
     const render = b.addBlock('RenderInstances2D');
     b.wire(ellipse, 'shape', array, 'element');
     b.wire(array, 'elements', layout, 'elements');

@@ -122,7 +122,7 @@ function buildDefaultSourceFieldReplacementPlan(
 
 /**
  * Insert a Broadcast block on the boundary edge (one→many).
- *   source → Broadcast:'signal', Broadcast:'field' → target
+ *   source → Broadcast:'one', Broadcast:'field' → target
  */
 function buildBroadcastPlan(
   obligation: Obligation,
@@ -157,7 +157,7 @@ function buildBroadcastPlan(
     {
       id: `_e_${obligation.id}_0`,
       from: edge.from,
-      to: { blockId, port: 'signal', dir: 'in' as const },
+      to: { blockId, port: 'one', dir: 'in' as const },
       role: 'implicitCoerce',
       origin: { kind: 'elaboration', obligationId: obligation.id, role },
     },
