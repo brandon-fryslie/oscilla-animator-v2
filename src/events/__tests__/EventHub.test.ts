@@ -284,6 +284,32 @@ describe('EventHub', () => {
       expect(global2).toHaveBeenCalledTimes(1);
       expect(global3).toHaveBeenCalledTimes(1);
     });
+
+    it('should route listener errors through configured error reporter', () => {
+      const report = vi.fn();
+      hub.setErrorReporter(report);
+
+      hub.on('CompileEnd', () => {
+        throw new Error('typed fail');
+      });
+      hub.subscribe(() => {
+        throw new Error('global fail');
+      });
+
+      hub.emit(createCompileEndEvent());
+
+      expect(report).toHaveBeenCalledTimes(2);
+      expect(report).toHaveBeenNthCalledWith(1, {
+        scope: 'typed',
+        eventType: 'CompileEnd',
+        error: expect.any(Error),
+      });
+      expect(report).toHaveBeenNthCalledWith(2, {
+        scope: 'global',
+        eventType: 'CompileEnd',
+        error: expect.any(Error),
+      });
+    });
   });
 
   describe('Listener management', () => {

@@ -80,6 +80,15 @@ export class RootStore {
       () => this.patch.patch
     );
     this.diagnostics = new DiagnosticsStore(this.diagnosticHub);
+    this.events.setErrorReporter(({ scope, eventType, error }) => {
+      const message = error instanceof Error ? error.message : String(error);
+      // [LAW:single-enforcer] RootStore routes EventHub listener failures into
+      // the diagnostics boundary, avoiding duplicate console + diagnostics paths.
+      this.diagnostics.log({
+        level: 'error',
+        message: `EventHub listener failure (${scope}:${eventType}): ${message}`,
+      });
+    });
 
     // Create ContinuityStore
     this.continuity = new ContinuityStore();
