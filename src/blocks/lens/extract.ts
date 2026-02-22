@@ -7,7 +7,7 @@
  * Example: extract(vec3(1,2,3), component=1) → 2.0
  */
 
-import { registerBlock } from '../registry';
+import { registerBlock, requireConfigInt } from '../registry';
 import { canonicalType, payloadStride } from '../../core/canonical-types';
 import { FLOAT, VEC3 } from '../../core/canonical-types';
 import { cardinalityVar } from '../../core/inference-types';
@@ -46,10 +46,7 @@ registerBlock({
 
     // Component index is compile-time only (IR extract takes a literal integer).
     // Read from config — defaultValue in block def ensures it's always present.
-    const componentIndex = config?.component;
-    if (typeof componentIndex !== 'number' || componentIndex < 0 || componentIndex > 2 || !Number.isInteger(componentIndex)) {
-      throw new Error(`Extract component must be 0, 1, or 2 (got ${componentIndex})`);
-    }
+    const componentIndex = requireConfigInt(config ?? {}, 'component', 0, 2);
 
     const outType = ctx.outTypes[0];
 

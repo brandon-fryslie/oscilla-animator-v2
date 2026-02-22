@@ -69,9 +69,11 @@ registerBlock({
       throw new Error(`Const block missing resolved output type from pass1`);
     }
     const payloadType = outType.payload as PayloadType;
-    const rawValue = config?.value;
+    const cfg = (config ?? {}) as Readonly<Record<string, unknown>>;
+    const hasValue = Object.prototype.hasOwnProperty.call(cfg, 'value');
+    const rawValue = cfg.value;
 
-    if (rawValue === undefined) {
+    if (!hasValue || rawValue === undefined) {
       throw new Error(
         `Const block missing value. Value must be provided.`
       );
