@@ -93,8 +93,15 @@ export class RootStore {
     // Create ContinuityStore
     this.continuity = new ContinuityStore();
 
-    // Create SettingsStore (before DebugStore, which depends on it)
-    this.settings = new SettingsStore();
+    // [LAW:single-enforcer] Route settings persistence/load failures through
+    // diagnostics to keep runtime issue reporting at one boundary.
+    this.settings = new SettingsStore((issue) => {
+      const ns = issue.namespace ? ` (${issue.namespace})` : '';
+      this.diagnostics.log({
+        level: issue.level,
+        message: `SettingsStore${ns}: ${issue.message}`,
+      });
+    });
 
     // Create DebugStore (inject SettingsStore for sync)
     this.debug = new DebugStore(this.settings);
@@ -105,8 +112,14 @@ export class RootStore {
     // Create CameraStore (3D preview state - viewer only)
     this.camera = new CameraStore();
 
-    // Create CompositeEditorStore (composite block editor state)
-    this.compositeEditor = new CompositeEditorStore();
+    // [LAW:single-enforcer] Route composite editor operational issues through
+    // RootStore diagnostics instead of store-local console side effects.
+    this.compositeEditor = new CompositeEditorStore((issue) => {
+      this.diagnostics.log({
+        level: issue.level,
+        message: `CompositeEditor: ${issue.message}`,
+      });
+    });
 
     // Create FrontendResultStore (frontend compilation results for UI)
     this.frontend = new FrontendResultStore();

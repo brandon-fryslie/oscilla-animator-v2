@@ -57,6 +57,14 @@ export interface ValidationError {
   readonly location?: { internalBlockId?: string; portId?: string };
 }
 
+export type CompositeEditorIssueLevel = 'warn' | 'error';
+
+export interface CompositeEditorIssue {
+  readonly level: CompositeEditorIssueLevel;
+  readonly message: string;
+  readonly detail?: unknown;
+}
+
 // =============================================================================
 // Store
 // =============================================================================
@@ -101,11 +109,18 @@ export class CompositeEditorStore {
   /** Counter for auto-generating unique composite names */
   private static _nameCounter: number = 1;
 
+  /** Last operational issue emitted by the editor (for UI/diagnostics integration). */
+  lastIssue: CompositeEditorIssue | null = null;
+
+  /** Optional injected reporter for integration-level diagnostics routing. */
+  private readonly issueReporter?: (issue: CompositeEditorIssue) => void;
+
   // -------------------------------------------------------------------------
   // Constructor
   // -------------------------------------------------------------------------
 
-  constructor() {
+  constructor(issueReporter?: (issue: CompositeEditorIssue) => void) {
+    this.issueReporter = issueReporter;
     makeObservable<CompositeEditorStore, 'explodeCompositeBlock'>(this, {
       // Observable state
       compositeId: observable,
@@ -117,6 +132,7 @@ export class CompositeEditorStore {
       isOpen: observable,
       isDirty: observable,
       isFork: observable,
+      lastIssue: observable,
 
       // Computed
       validationErrors: computed,
@@ -345,7 +361,7 @@ export class CompositeEditorStore {
   openExisting(compositeType: string): void {
     const def = getCompositeDefinition(compositeType);
     if (!def) {
-      console.warn(`Composite "${compositeType}" not found in registry`);
+      this.reportIssue('warn', `Composite "${compositeType}" not found in registry`);
       return;
     }
 
@@ -397,10 +413,6 @@ export class CompositeEditorStore {
    * Close the editor without saving.
    */
   close(): void {
-    if (this.isDirty) {
-      // In a real app, would show confirmation dialog
-      console.warn('Closing editor with unsaved changes');
-    }
     this.isOpen = false;
   }
 
@@ -723,13 +735,13 @@ export class CompositeEditorStore {
    */
   save(): CompositeBlockDef | null {
     if (!this.canSave) {
-      console.warn('Cannot save composite with validation errors:', this.validationErrors);
+      this.reportIssue('warn', 'Cannot save composite with validation errors', this.validationErrors);
       return null;
     }
 
     const def = this.buildCompositeDef();
     if (!def) {
-      console.error('Failed to build composite definition');
+      this.reportIssue('error', 'Failed to build composite definition');
       return null;
     }
 
@@ -750,15 +762,16 @@ export class CompositeEditorStore {
       // Persist to localStorage
       const json = compositeDefToJSON(def);
       if (!compositeStorage.add(json)) {
-        console.warn('Failed to persist composite to localStorage (quota exceeded?)');
+        this.reportIssue('warn', 'Failed to persist composite to localStorage (quota exceeded?)');
         // Continue anyway - composite is registered in memory
       }
 
       this.isDirty = false;
       this.compositeId = def.type;
+      this.lastIssue = null;
       return def;
     } catch (err) {
-      console.error('Failed to register composite:', err);
+      this.reportIssue('error', 'Failed to register composite', err);
       return null;
     }
   }
@@ -937,5 +950,11 @@ export class CompositeEditorStore {
       inputs,
       outputs,
     };
+  }
+
+  private reportIssue(level: CompositeEditorIssueLevel, message: string, detail?: unknown): void {
+    const issue: CompositeEditorIssue = { level, message, detail };
+    this.lastIssue = issue;
+    this.issueReporter?.(issue);
   }
 }

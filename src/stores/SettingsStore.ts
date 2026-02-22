@@ -24,6 +24,15 @@ import {
 const STORAGE_PREFIX = 'oscilla-v2-settings:';
 const PERSIST_DEBOUNCE_MS = 500;
 
+export type SettingsStoreIssueLevel = 'warn' | 'error';
+
+export interface SettingsStoreIssue {
+  readonly level: SettingsStoreIssueLevel;
+  readonly message: string;
+  readonly namespace?: string;
+  readonly detail?: unknown;
+}
+
 export class SettingsStore {
   /**
    * Registry of all settings tokens by namespace.
@@ -42,8 +51,11 @@ export class SettingsStore {
    */
   private persistDisposers = new Map<string, () => void>();
   private readonly storage: LocalStorageCapability | null;
+  lastIssue: SettingsStoreIssue | null = null;
+  private readonly issueReporter?: (issue: SettingsStoreIssue) => void;
 
-  constructor() {
+  constructor(issueReporter?: (issue: SettingsStoreIssue) => void) {
+    this.issueReporter = issueReporter;
     this.storage = resolveLocalStorageCapability();
     makeAutoObservable<SettingsStore, 'persistDisposers' | 'storage'>(this, {
       // tokens must be observable so getRegisteredTokens() triggers re-renders
@@ -171,8 +183,10 @@ export class SettingsStore {
       return { ...token.defaults, ...stored };
     } catch (err) {
       // Corrupt data - use defaults
-      console.warn(
-        `Failed to load settings for '${token.namespace}', using defaults:`,
+      this.reportIssue(
+        'warn',
+        `Failed to load settings, using defaults`,
+        token.namespace,
         err
       );
       return { ...token.defaults };
@@ -216,8 +230,7 @@ export class SettingsStore {
           const key = `${STORAGE_PREFIX}${namespace}`;
           this.storage.setItem(key, serialized);
         } catch (err) {
-          // Quota exceeded or other error - silently fail
-          console.warn(`Failed to persist settings for '${namespace}':`, err);
+          this.reportIssue('warn', 'Failed to persist settings', namespace, err);
         }
       },
       { delay: PERSIST_DEBOUNCE_MS }
@@ -233,5 +246,16 @@ export class SettingsStore {
   dispose(): void {
     this.persistDisposers.forEach((disposer) => disposer());
     this.persistDisposers.clear();
+  }
+
+  private reportIssue(
+    level: SettingsStoreIssueLevel,
+    message: string,
+    namespace?: string,
+    detail?: unknown
+  ): void {
+    const issue: SettingsStoreIssue = { level, message, namespace, detail };
+    this.lastIssue = issue;
+    this.issueReporter?.(issue);
   }
 }

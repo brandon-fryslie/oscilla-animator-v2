@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { SettingsStore } from '../SettingsStore';
+import { SettingsStore, type SettingsStoreIssue } from '../SettingsStore';
 import type { SettingsToken } from '../../settings/types';
 
 type TestSettings = {
@@ -113,25 +113,25 @@ describe('SettingsStore', () => {
   });
 
   it('uses defaults without warnings when localStorage is unavailable', () => {
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const issues: SettingsStoreIssue[] = [];
     removeLocalStorageCapability();
 
-    const store = new SettingsStore();
+    const store = new SettingsStore((issue) => issues.push(issue));
     store.register(TEST_TOKEN);
     expect(store.get(TEST_TOKEN)).toEqual(TEST_TOKEN.defaults);
-    expect(warnSpy).not.toHaveBeenCalled();
+    expect(issues).toHaveLength(0);
   });
 
   it('treats malformed localStorage object as unavailable', () => {
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const issues: SettingsStoreIssue[] = [];
     installLocalStorageMock({ getItem: 'nope', setItem: 123 });
 
-    const store = new SettingsStore();
+    const store = new SettingsStore((issue) => issues.push(issue));
     store.register(TEST_TOKEN);
     store.update(TEST_TOKEN, { threshold: 0.9 });
 
     expect(store.get(TEST_TOKEN).threshold).toBe(0.9);
-    expect(warnSpy).not.toHaveBeenCalled();
+    expect(issues).toHaveLength(0);
   });
 
   it('loads persisted values and persists updates via storage API', () => {
@@ -157,16 +157,21 @@ describe('SettingsStore', () => {
   });
 
   it('falls back to defaults when persisted JSON is invalid', () => {
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const issues: SettingsStoreIssue[] = [];
     installLocalStorageMock({
       getItem: vi.fn(() => '{invalid-json'),
       setItem: vi.fn(),
     });
 
-    const store = new SettingsStore();
+    const store = new SettingsStore((issue) => issues.push(issue));
     store.register(TEST_TOKEN);
 
     expect(store.get(TEST_TOKEN)).toEqual(TEST_TOKEN.defaults);
-    expect(warnSpy).toHaveBeenCalledTimes(1);
+    expect(issues).toHaveLength(1);
+    expect(issues[0]).toMatchObject({
+      level: 'warn',
+      message: 'Failed to load settings, using defaults',
+      namespace: TEST_TOKEN.namespace,
+    });
   });
 });
