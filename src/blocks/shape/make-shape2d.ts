@@ -11,7 +11,7 @@
 
 import { registerBlock, requireConfig } from '../registry';
 import { canonicalType, canonicalManyDef, payloadStride, requireInst } from '../../core/canonical-types';
-import { FLOAT, VEC2 } from '../../core/canonical-types';
+import { BOOL, FLOAT, VEC2 } from '../../core/canonical-types';
 import { DOMAIN_CONTROL } from '../../core/domain-registry';
 import { registerDynamicTopology } from '../../shapes/registry';
 import { createLinePathTopology } from './_topology-helpers';
@@ -51,8 +51,8 @@ registerBlock({
     },
     closed: {
       label: 'Closed',
-      type: canonicalType(FLOAT), // config-only bool stored as 0/1
-      defaultValue: 1,
+      type: canonicalType(BOOL),
+      defaultValue: true,
       exposedAsPort: false,
       uiHint: { kind: 'boolean' },
     },
@@ -91,9 +91,15 @@ registerBlock({
       throw new Error(`MakeShape2D: dynamic instance count not supported — topology requires compile-time count`);
     }
 
-    // Read closed config (default: true) — stored as 0/1 number
-    const closedVal = requireConfig<number>(config, 'closed', 'number');
-    const closed = closedVal !== 0;
+    // [LAW:single-enforcer] normalize legacy numeric 0/1 and canonical boolean here.
+    const closedRaw = config['closed'];
+    const closed = typeof closedRaw === 'boolean'
+      ? requireConfig<boolean>(config, 'closed', 'boolean')
+      : typeof closedRaw === 'number'
+        ? closedRaw !== 0
+        : (() => {
+            throw new Error(`Config 'closed' expected boolean (or legacy 0/1), got ${typeof closedRaw}`);
+          })();
 
     // Create and register topology
     const topology = createLinePathTopology(pointCount, closed);

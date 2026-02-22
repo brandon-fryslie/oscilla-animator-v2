@@ -28,7 +28,7 @@ import { applyContinuity, finalizeContinuityFrame } from './ContinuityApply';
 import { createStableDomainInstance, createUnstableDomainInstance } from './DomainIdentity';
 import { assembleRenderFrame, type AssemblerContext } from './RenderAssembler';
 import { resolveCameraFromGlobals } from './CameraResolver';
-import { requireManyInstance } from '../core/canonical-types';
+import { payloadStride } from '../core/canonical-types';
 import type { ValueSlot, StateSlotId } from '../compiler/ir/Indices';
 import { SCALAR_INSTANCE_ID, SYSTEM_PALETTE_SLOT } from '../compiler/ir/Indices';
 import { evaluateValueExprEvent } from './ValueExprEventEvaluator';
@@ -421,6 +421,7 @@ export function* executeFrameStepped(
           } else {
             state.continuity.mappings.delete(instanceId);
           }
+          state.continuity.changedInstancesThisFrame.add(instanceId);
           state.continuity.domainChangeThisFrame = true;
         }
         state.continuity.prevDomains.set(instanceId, newDomain);
@@ -476,6 +477,8 @@ export function* executeFrameStepped(
     const step = steps[stepIdx];
 
     if (step.kind === 'stateWrite') {
+      const mapping = stateSlotToMapping.get(step.stateSlot as number);
+      const stride = mapping?.stride ?? 1;
       const oneValue = materializeValueExpr(
         step.value as any,
         program.valueExprs,
@@ -486,14 +489,16 @@ export function* executeFrameStepped(
         undefined,
         STEPPED_MATERIALIZE_SCRATCH,
       );
-      const value = oneValue[0] ?? 0;
-      state.state[step.stateSlot as number] = value;
+      const baseSlot = step.stateSlot as number;
+      for (let c = 0; c < stride; c++) {
+        const fallback = mapping?.initial[c] ?? 0;
+        state.state[baseSlot + c] = oneValue[c] ?? fallback;
+      }
 
       const writtenStateSlots = new Map<StateSlotId, StateSlotValue>();
-      const mapping = stateSlotToMapping.get(step.stateSlot as number);
       writtenStateSlots.set(step.stateSlot, {
         kind: 'scalar',
-        value,
+        value: state.state[step.stateSlot as number] ?? 0,
         stateId: (() => {
           if (!mapping?.stateId) throw new Error(`State slot ${step.stateSlot} has no mapping — incomplete compiler metadata`);
           return mapping.stateId;
@@ -504,28 +509,42 @@ export function* executeFrameStepped(
     }
 
     if (step.kind === 'fieldStateWrite') {
+      const mapping = stateSlotToMapping.get(step.stateSlot as number);
+      if (!mapping || mapping.instanceId === undefined) {
+        throw new Error(`fieldStateWrite: missing field state mapping for slot ${step.stateSlot}`);
+      }
+
       const veId = step.value as any;
       const exprNode = valueExprs[veId as number];
-      const instanceRef = requireManyInstance(exprNode.type);
-      const instanceDecl = instances.get(instanceRef.instanceId);
-      const count = instanceDecl && typeof instanceDecl.count === 'number' ? instanceDecl.count : 0;
+      const count = mapping.laneCount;
 
       const writtenStateSlots = new Map<StateSlotId, StateSlotValue>();
 
       if (count > 0) {
-        const instanceIdStr = String(instanceRef.instanceId);
+        const instanceIdStr = String(mapping.instanceId);
         const tempBuffer = materializeValueExpr(
           veId, program.valueExprs, makeInstanceId(instanceIdStr), count, state, program, undefined, STEPPED_MATERIALIZE_SCRATCH,
         );
         const baseSlot = step.stateSlot as number;
+        const srcStride = payloadStride(exprNode.type.payload);
+        const copyStride = Math.min(srcStride, mapping.stride);
         const src = tempBuffer as Float32Array;
         const writtenValues: number[] = [];
-        for (let i = 0; i < count && i < src.length; i++) {
-          state.state[baseSlot + i] = src[i];
-          writtenValues.push(src[i]);
+        for (let lane = 0; lane < count; lane++) {
+          const dstLaneBase = baseSlot + lane * mapping.stride;
+          const srcLaneBase = lane * srcStride;
+          for (let c = 0; c < copyStride; c++) {
+            const value = src[srcLaneBase + c] ?? 0;
+            state.state[dstLaneBase + c] = value;
+            writtenValues.push(value);
+          }
+          for (let c = copyStride; c < mapping.stride; c++) {
+            const value = mapping.initial[c] ?? 0;
+            state.state[dstLaneBase + c] = value;
+            writtenValues.push(value);
+          }
         }
 
-        const mapping = stateSlotToMapping.get(baseSlot);
         writtenStateSlots.set(step.stateSlot, {
           kind: 'field',
           values: writtenValues,

@@ -14,7 +14,7 @@
 
 import type { TypedPatch, BlockIndex, NormalizedEdge } from '../ir/patches';
 import type { Block } from '../../graph/Patch';
-import { getBlockDefinition } from '../../blocks/registry';
+import { getBlockDefinition, hasLowerOutputsOnly } from '../../blocks/registry';
 
 // =============================================================================
 // CycleSummary Types (exposed to UI)
@@ -205,7 +205,8 @@ function hasStateBoundary(sccNodes: DepNode[], blocks: readonly Block[]): boolea
       const block = blocks[node.blockIndex];
       const blockDef = getBlockDefinition(block.type);
       if (!blockDef) return false;
-      return blockDef.isStateful === true;
+      // [LAW:single-enforcer] lowerOutputsOnly is the canonical same-frame cycle boundary.
+      return hasLowerOutputsOnly(blockDef);
     }
     return false;
   });

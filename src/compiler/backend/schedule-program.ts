@@ -151,7 +151,8 @@ export function getScalarSlots(schedule: ScheduleIR): ScalarSlotDecl[] {
  */
 export function getFieldSlots(schedule: ScheduleIR): FieldSlotDecl[] {
   return schedule.stateMappings.filter(
-    (m): m is FieldSlotDecl => m.instanceId !== undefined && m.laneCount > 1,
+    // [LAW:one-source-of-truth] instanceId carries field-vs-scalar semantics; laneCount may be 1.
+    (m): m is FieldSlotDecl => m.instanceId !== undefined,
   );
 }
 

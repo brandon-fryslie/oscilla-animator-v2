@@ -26,7 +26,7 @@ import { applyContinuity, finalizeContinuityFrame } from './ContinuityApply';
 import { createStableDomainInstance, createUnstableDomainInstance } from './DomainIdentity';
 import { assembleRenderFrame, type AssemblerContext } from './RenderAssembler';
 import { resolveCameraFromGlobals } from './CameraResolver';
-import { requireManyInstance } from '../core/canonical-types';
+import { payloadStride } from '../core/canonical-types';
 import type { ValueSlot } from '../compiler/ir/Indices';
 import { SCALAR_INSTANCE_ID, SYSTEM_PALETTE_SLOT } from '../compiler/ir/Indices';
 import { evaluateValueExprEvent } from './ValueExprEventEvaluator';
@@ -175,6 +175,10 @@ export function executeFrame(
   const timeModel = schedule.timeModel;
   const instances = schedule.instances;
   const steps = schedule.steps;
+  const stateSlotToMapping = new Map<number, (typeof schedule.stateMappings)[number]>();
+  for (const mapping of schedule.stateMappings) {
+    stateSlotToMapping.set(mapping.slotStart, mapping);
+  }
 
   // [LAW:one-source-of-truth] Single address table for all slot/expr/field queries.
   // slotToArena replaces all direct program.arenaLayout[slot] accesses in this file.
@@ -409,6 +413,7 @@ export function executeFrame(
             // No mapping possible - crossfade will handle it
             state.continuity.mappings.delete(instanceId);
           }
+          state.continuity.changedInstancesThisFrame.add(instanceId);
           state.continuity.domainChangeThisFrame = true;
         }
 
@@ -507,7 +512,10 @@ export function executeFrame(
   // This ensures state reads in Phase 1 saw previous frame's values
   for (const step of steps) {
     if (step.kind === 'stateWrite') {
-      // Write to persistent state array using unified one-lane materialization.
+      const mapping = stateSlotToMapping.get(step.stateSlot as number);
+      const stride = mapping?.stride ?? 1;
+
+      // [LAW:one-source-of-truth] State mapping stride is the canonical write width.
       const oneValue = materializeValueExpr(
         step.value as any,
         program.valueExprs,
@@ -518,27 +526,28 @@ export function executeFrame(
         undefined,
         MATERIALIZE_SCRATCH,
       );
-      const value = oneValue[0] ?? 0;
-      state.state[step.stateSlot as number] = value;
+      const baseSlot = step.stateSlot as number;
+      for (let c = 0; c < stride; c++) {
+        const fallback = mapping?.initial[c] ?? 0;
+        state.state[baseSlot + c] = oneValue[c] ?? fallback;
+      }
     }
     if (step.kind === 'fieldStateWrite') {
-      // Per-lane state write: evaluate field and write each lane
+      // Per-lane state write: evaluate field and write each lane+component.
+      const mapping = stateSlotToMapping.get(step.stateSlot as number);
+      if (!mapping || mapping.instanceId === undefined) {
+        throw new Error(`fieldStateWrite: missing field state mapping for slot ${step.stateSlot}`);
+      }
+
       const veId = step.value as any;
       const exprNode = valueExprs[veId as number];
-
-      // Determine count from the ValueExpr's instance (via type)
-      const instanceRef = requireManyInstance(exprNode.type);
-      const instanceDecl = instances.get(instanceRef.instanceId);
-      const count = instanceDecl && typeof instanceDecl.count === 'number' ? instanceDecl.count : 0;
+      const count = mapping.laneCount;
       if (count === 0) continue;
-
-      // Materialize the field to get values using ValueExpr materializer
-      const instanceIdStr = String(instanceRef.instanceId);
 
       const tempBuffer = materializeValueExpr(
         veId,
         program.valueExprs,
-        makeInstanceId(instanceIdStr),
+        makeInstanceId(String(mapping.instanceId)),
         count,
         state,
         program,
@@ -546,11 +555,19 @@ export function executeFrame(
         MATERIALIZE_SCRATCH,
       );
 
-      // Write each lane to state
+      const srcStride = payloadStride(exprNode.type.payload);
+      const copyStride = Math.min(srcStride, mapping.stride);
       const baseSlot = step.stateSlot as number;
       const src = tempBuffer as Float32Array;
-      for (let i = 0; i < count && i < src.length; i++) {
-        state.state[baseSlot + i] = src[i];
+      for (let lane = 0; lane < count; lane++) {
+        const dstLaneBase = baseSlot + lane * mapping.stride;
+        const srcLaneBase = lane * srcStride;
+        for (let c = 0; c < copyStride; c++) {
+          state.state[dstLaneBase + c] = src[srcLaneBase + c] ?? 0;
+        }
+        for (let c = copyStride; c < mapping.stride; c++) {
+          state.state[dstLaneBase + c] = mapping.initial[c] ?? 0;
+        }
       }
     }
   }

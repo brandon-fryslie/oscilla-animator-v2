@@ -13,6 +13,7 @@ import type { UIControlHint, DefaultSource } from '../types';
 import type { BlockIRBuilder } from '../compiler/ir/BlockIRBuilder';
 import type { BlockIndex } from '../graph/normalize';
 import type { InstanceId, StateSlotId } from '../compiler/ir/Indices';
+import type { StableStateId } from '../compiler/ir/types';
 
 import type { AdapterBlockSpec } from './adapter-spec';
 
@@ -101,6 +102,12 @@ export interface LowerResult {
    * Passed to phase 2 to ensure consistent state slot allocation.
    */
   readonly stateSlot?: StateSlotId;
+
+  /**
+   * Symbolic state key emitted in phase 1 (lowerOutputsOnly).
+   * // [LAW:one-source-of-truth] StableStateId is the canonical cross-phase state identity.
+   */
+  readonly stateKey?: StableStateId;
 
   /**
    * Declarative effects (optional).

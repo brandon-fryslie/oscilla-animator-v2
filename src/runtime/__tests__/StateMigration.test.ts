@@ -116,4 +116,36 @@ describe('StateMigration', () => {
     expect(result.initialized).toBe(1);
     expect(Array.from(newState)).toEqual([5, 5]);
   });
+
+  it('treats instance-scoped laneCount=1 state as field', () => {
+    const oldMappings: StateMapping[] = [
+      {
+        stateId: stableStateId('b3', 'state'),
+        slotStart: 0,
+        laneCount: 1,
+        stride: 1,
+        initial: [0],
+        instanceId: instanceId('inst_2'),
+      },
+    ];
+    const newMappings: StateMapping[] = [
+      {
+        stateId: stableStateId('b3', 'state'),
+        slotStart: 0,
+        laneCount: 1,
+        stride: 1,
+        initial: [0],
+        instanceId: instanceId('inst_2'),
+      },
+    ];
+    const remap: MappingState = { newToOld: new Int32Array([0]) };
+
+    const oldState = new Float64Array([77]);
+    const newState = new Float64Array(1);
+    const result = migrateState(oldState, newState, oldMappings, newMappings, () => remap);
+
+    expect(result.fieldsMigrated).toBe(1);
+    expect(result.scalarsMigrated).toBe(0);
+    expect(newState[0]).toBe(77);
+  });
 });

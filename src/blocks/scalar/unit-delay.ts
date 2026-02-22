@@ -60,7 +60,7 @@ registerBlock({
           { portId: 'out', type: outType },
         ],
       },
-      stateSlot: stateKey as any, // Pass symbolic key to phase 2 (temporary compatibility)
+      stateKey,
     };
   },
   // Phase 2: Generate state write step using resolved input
@@ -71,8 +71,8 @@ registerBlock({
     }
 
     // If called from two-phase lowering, reuse existing outputs and add state write effect
-    if (existingOutputs?.outputsById && existingOutputs?.stateSlot !== undefined) {
-      const stateKey = existingOutputs.stateSlot as any; // Symbolic key passed from phase 1
+    if (existingOutputs?.outputsById && existingOutputs?.stateKey !== undefined) {
+      const stateKey = existingOutputs.stateKey;
       // Return existing outputs with additional step request for state write
       return {
         outputsById: existingOutputs.outputsById,

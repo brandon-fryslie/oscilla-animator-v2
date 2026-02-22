@@ -22,7 +22,7 @@ import type {
   BlockIndex,
 } from "../ir/patches";
 import type { Block } from "../../graph/Patch";
-import { getBlockDefinition } from "../../blocks/registry";
+import { getBlockDefinition, hasLowerOutputsOnly } from "../../blocks/registry";
 
 /**
  * Tarjan's SCC algorithm state.
@@ -104,14 +104,14 @@ function strongConnect(
       sccNodes.push(w);
     } while (w !== v);
 
-    // Check if any block in this SCC has a state boundary
+    // Check if any block in this SCC has a same-frame boundary.
+    // [LAW:single-enforcer] lowerOutputsOnly is the single predicate for breaking same-frame cycles.
     const hasStateBoundary = sccNodes.some((node) => {
       if (node.kind === "BlockEval") {
         const block = blocks[node.blockIndex];
         const blockDef = getBlockDefinition(block.type);
         if (!blockDef) return false;
-        // Check if block breaks combinatorial cycles (has state)
-        return blockDef.isStateful === true;
+        return hasLowerOutputsOnly(blockDef);
       }
       return false;
     });
@@ -138,7 +138,7 @@ function hasSelfLoop(graph: DepGraph, node: DepNode): boolean {
  *
  * Legal cycles:
  * - Trivial cycles (single node with no self-loop)
- * - Cycles containing at least one block with isStateful=true
+ * - Cycles containing at least one block with lowerOutputsOnly=true
  *
  * Illegal cycles:
  * - Multi-node cycles with no state boundary

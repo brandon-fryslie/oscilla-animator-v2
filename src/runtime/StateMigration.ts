@@ -44,11 +44,12 @@ function isScalarStateMapping(mapping: StateMapping): mapping is ScalarSlotDecl 
 }
 
 function isFieldStateMapping(mapping: StateMapping): mapping is FieldSlotDecl {
-  return mapping.instanceId !== undefined && mapping.laneCount > 1;
+  // [LAW:one-source-of-truth] instanceId determines field semantics even when laneCount is 1.
+  return mapping.instanceId !== undefined;
 }
 
 function mappingKind(mapping: StateMapping): 'scalar' | 'field' {
-  return isScalarStateMapping(mapping) ? 'scalar' : 'field';
+  return mapping.instanceId !== undefined ? 'field' : 'scalar';
 }
 
 /**
