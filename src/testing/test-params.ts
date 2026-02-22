@@ -12,6 +12,7 @@
  */
 
 import { createParser, useQueryState } from 'nuqs';
+import { resolveLocalStorageCapability } from '../services/local-storage-capability';
 
 // ─── loadDemoPatch (EXCEPTION: pre-React, raw URLSearchParams) ───────────────
 // Must run before React mounts to trigger browser reload for clean state.
@@ -38,8 +39,8 @@ export function interceptLoadDemoPatch(): boolean {
   // Stash the filename for post-reload consumption
   sessionStorage.setItem(SESSION_KEY, filename);
 
-  // Clear localStorage so no stale patch is restored
-  localStorage.clear();
+  // [LAW:single-enforcer] localStorage capability detection is centralized.
+  resolveLocalStorageCapability()?.clear?.();
 
   // Strip loadDemoPatch from URL, preserve all other params
   params.delete('loadDemoPatch');
