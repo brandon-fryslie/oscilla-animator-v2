@@ -418,6 +418,26 @@ describe('actionExecutor', () => {
       expect(result.error).toContain('ambiguous');
       expect(mockDeps.patchStore.addBlock).not.toHaveBeenCalled();
     });
+
+    it('fails when adapterType is not a registered adapter block', () => {
+      const action: AddAdapterAction = {
+        kind: 'addAdapter',
+        label: 'Insert Adapter',
+        fromPort: {
+          blockId: 'block-a',
+          portId: 'out',
+          portKind: 'output',
+        },
+        adapterType: 'Add',
+      };
+
+      const result = executeAction(action, mockDeps);
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('not an adapter block');
+      expect(mockDeps.patchStore.removeEdge).not.toHaveBeenCalled();
+      expect(mockDeps.patchStore.addEdge).not.toHaveBeenCalled();
+    });
   });
 
   describe('muteDiagnostic', () => {

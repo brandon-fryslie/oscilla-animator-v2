@@ -254,12 +254,20 @@ function handleAddAdapter(
     }
 
     const adapterDef = requireAnyBlockDef(action.adapterType);
-    const adapterInputPort = Object.keys(adapterDef.inputs)[0];
-    const adapterOutputPort = Object.keys(adapterDef.outputs)[0];
-    if (!adapterInputPort || !adapterOutputPort) {
+    const adapterSpec = 'adapterSpec' in adapterDef ? adapterDef.adapterSpec : undefined;
+    if (!adapterSpec) {
       return {
         success: false,
-        error: `Adapter ${action.adapterType} must define at least one input and one output port`,
+        error: `Block ${action.adapterType} is not an adapter block`,
+      };
+    }
+    // [LAW:one-source-of-truth] Adapter wiring ports come from adapterSpec.
+    const adapterInputPort = adapterSpec.inputPortId;
+    const adapterOutputPort = adapterSpec.outputPortId;
+    if (!adapterDef.inputs[adapterInputPort] || !adapterDef.outputs[adapterOutputPort]) {
+      return {
+        success: false,
+        error: `Adapter ${action.adapterType} has invalid adapterSpec port wiring`,
       };
     }
 
