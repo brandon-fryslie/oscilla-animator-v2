@@ -906,4 +906,38 @@ describe('Forbidden Patterns (Type System Invariants)', () => {
     });
 
   });
+
+  describe('Storage Capability Boundary', () => {
+
+    it('no direct localStorage access outside storage capability boundary', () => {
+      const rawMatches = [
+        ...grepSrc('localStorage\\.', 'src/'),
+        ...grepSrc('window\\.localStorage', 'src/'),
+        ...grepSrc('globalThis\\.localStorage', 'src/'),
+      ];
+
+      const allowlist = [
+        /forbidden-patterns\.test\.ts/,
+        /\.test\./,
+        /__tests__/,
+        /local-storage-capability\.ts/,
+      ];
+
+      const filtered = filterAllowlist(rawMatches, allowlist).filter((m) => {
+        const secondColon = m.indexOf(':', m.indexOf(':') + 1);
+        const content = secondColon >= 0 ? m.slice(secondColon + 1).trim() : '';
+        if (!content) return false;
+        // Ignore comments/docstrings; enforce on executable code only.
+        return !content.startsWith('//') && !content.startsWith('*');
+      });
+
+      expect(
+        filtered,
+        'Direct localStorage access is forbidden outside local-storage-capability.ts.\n' +
+        'Use resolveLocalStorageCapability() at call sites.\n' +
+        'Found violations:\n' + filtered.join('\n')
+      ).toEqual([]);
+    });
+
+  });
 });
