@@ -28,7 +28,13 @@ import { NuqsAdapter } from 'nuqs/adapters/react';
 import { App } from './ui/components';
 import { StoreProvider, type RootStore } from './stores';
 import { RuntimeService } from './services/RuntimeService';
-import { initializeComposites } from './blocks/composites';
+import {
+  initializeComposites,
+  compositeStorage,
+  getCompositeInitIssues,
+  clearCompositeInitIssues,
+  setCompositeInitIssueReporter,
+} from './blocks/composites';
 
 let runtimeService: RuntimeService | null = null;
 let pendingCanvas: HTMLCanvasElement | null = null;
@@ -60,6 +66,35 @@ async function main() {
               }
             },
             onStoreReady: (rootStore: RootStore) => {
+              // [LAW:single-enforcer] Main boot routes composite persistence/init
+              // issues into diagnostics as the canonical user-visible sink.
+              compositeStorage.setIssueReporter((issue) => {
+                rootStore.diagnostics.log({
+                  level: issue.level,
+                  message: `CompositeStorage: ${issue.message}`,
+                });
+              });
+              setCompositeInitIssueReporter((issue) => {
+                rootStore.diagnostics.log({
+                  level: issue.level,
+                  message: `CompositeInit: ${issue.message}`,
+                });
+              });
+              for (const issue of compositeStorage.getIssues()) {
+                rootStore.diagnostics.log({
+                  level: issue.level,
+                  message: `CompositeStorage: ${issue.message}`,
+                });
+              }
+              compositeStorage.clearIssues();
+              for (const issue of getCompositeInitIssues()) {
+                rootStore.diagnostics.log({
+                  level: issue.level,
+                  message: `CompositeInit: ${issue.message}`,
+                });
+              }
+              clearCompositeInitIssues();
+
               runtimeService = new RuntimeService(rootStore);
               if (pendingCanvas) {
                 runtimeService.setCanvas(pendingCanvas);

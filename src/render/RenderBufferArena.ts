@@ -340,7 +340,9 @@ export class RenderBufferArena {
    */
   beginFrame(): void {
     if (this.strictMode && this.frameInProgress) {
-      console.warn('RenderBufferArena: beginFrame called while frame already in progress');
+      // [LAW:no-silent-fallbacks] Strict mode treats frame lifecycle misuse as
+      // a hard contract violation instead of warning-and-continuing.
+      throw new Error('RenderBufferArena: beginFrame called while frame already in progress');
     }
     this.frameInProgress = true;
     this.reset();
@@ -351,7 +353,9 @@ export class RenderBufferArena {
    */
   endFrame(): void {
     if (this.strictMode && !this.frameInProgress) {
-      console.warn('RenderBufferArena: endFrame called but no frame in progress');
+      // [LAW:no-silent-fallbacks] Strict mode treats frame lifecycle misuse as
+      // a hard contract violation instead of warning-and-continuing.
+      throw new Error('RenderBufferArena: endFrame called but no frame in progress');
     }
     this.frameInProgress = false;
   }
@@ -391,7 +395,6 @@ let globalArena: RenderBufferArena | null = null;
  */
 export function initGlobalRenderArena(maxElements: number = DEFAULT_MAX_ELEMENTS): RenderBufferArena {
   if (globalArena !== null) {
-    console.warn('RenderBufferArena: global arena already initialized, returning existing');
     return globalArena;
   }
   globalArena = createArenaInstance(RenderBufferArena, maxElements);

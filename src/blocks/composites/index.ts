@@ -29,6 +29,31 @@ export { LIBRARY_COMPOSITES } from './library';
 // =============================================================================
 
 let _initialized = false;
+const _initIssues: Array<{ level: 'warn' | 'error'; message: string; detail?: unknown }> = [];
+let _initIssueReporter: ((issue: { level: 'warn' | 'error'; message: string; detail?: unknown }) => void) | null = null;
+
+function reportInitIssue(level: 'warn' | 'error', message: string, detail?: unknown): void {
+  const issue = { level, message, detail };
+  _initIssues.push(issue);
+  if (_initIssues.length > 100) {
+    _initIssues.shift();
+  }
+  _initIssueReporter?.(issue);
+}
+
+export function getCompositeInitIssues(): ReadonlyArray<{ level: 'warn' | 'error'; message: string; detail?: unknown }> {
+  return _initIssues;
+}
+
+export function clearCompositeInitIssues(): void {
+  _initIssues.length = 0;
+}
+
+export function setCompositeInitIssueReporter(
+  reporter: ((issue: { level: 'warn' | 'error'; message: string; detail?: unknown }) => void) | null
+): void {
+  _initIssueReporter = reporter;
+}
 
 /**
  * Initialize the composite block system.
@@ -56,7 +81,7 @@ export function initializeComposites(): void {
       const def = jsonToCompositeBlockDef(stored.json);
       registerComposite(def);
     } catch (e) {
-      console.warn(`Failed to load user composite ${stored.json.type}:`, e);
+      reportInitIssue('warn', `Failed to load user composite ${stored.json.type}`, e);
     }
   }
 }

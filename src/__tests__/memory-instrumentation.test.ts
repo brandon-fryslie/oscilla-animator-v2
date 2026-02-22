@@ -195,4 +195,21 @@ describe('RenderBufferArena Memory Instrumentation', () => {
     arena.endFrame();
     expect(arena.isFrameInProgress()).toBe(false);
   });
+
+  test('P10: Strict mode rejects beginFrame re-entry', () => {
+    const arena = new RenderBufferArena(1000);
+    arena.init();
+    arena.enableStrictMode();
+
+    arena.beginFrame();
+    expect(() => arena.beginFrame()).toThrow(/beginFrame called while frame already in progress/i);
+  });
+
+  test('P11: Strict mode rejects endFrame without beginFrame', () => {
+    const arena = new RenderBufferArena(1000);
+    arena.init();
+    arena.enableStrictMode();
+
+    expect(() => arena.endFrame()).toThrow(/endFrame called but no frame in progress/i);
+  });
 });

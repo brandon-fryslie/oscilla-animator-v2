@@ -32,6 +32,14 @@ export interface StoredComposite {
   updatedAt: string; // ISO timestamp
 }
 
+export type CompositeStorageIssueLevel = 'warn' | 'error';
+
+export interface CompositeStorageIssue {
+  readonly level: CompositeStorageIssueLevel;
+  readonly message: string;
+  readonly detail?: unknown;
+}
+
 // =============================================================================
 // CompositeStorage Class
 // =============================================================================
@@ -43,9 +51,34 @@ export interface StoredComposite {
  * synchronous and handle errors gracefully (no exceptions thrown).
  */
 export class CompositeStorage {
+  private static readonly MAX_ISSUES = 100;
+  private readonly issues: CompositeStorageIssue[] = [];
+  private issueReporter: ((issue: CompositeStorageIssue) => void) | null = null;
+
   // [LAW:single-enforcer] Storage capability checks are centralized here.
   private getStorage(): Pick<Storage, 'getItem' | 'setItem'> | null {
     return resolveLocalStorageCapability();
+  }
+
+  setIssueReporter(reporter: ((issue: CompositeStorageIssue) => void) | null): void {
+    this.issueReporter = reporter;
+  }
+
+  getIssues(): readonly CompositeStorageIssue[] {
+    return this.issues;
+  }
+
+  clearIssues(): void {
+    this.issues.length = 0;
+  }
+
+  private reportIssue(level: CompositeStorageIssueLevel, message: string, detail?: unknown): void {
+    const issue: CompositeStorageIssue = { level, message, detail };
+    this.issues.push(issue);
+    if (this.issues.length > CompositeStorage.MAX_ISSUES) {
+      this.issues.shift();
+    }
+    this.issueReporter?.(issue);
   }
 
   /**
@@ -68,13 +101,13 @@ export class CompositeStorage {
 
       // Check version compatibility
       if (data.version !== 1) {
-        console.warn(`Unknown storage version ${data.version}, starting fresh`);
+        this.reportIssue('warn', `Unknown storage version ${data.version}, starting fresh`);
         return new Map();
       }
 
       return new Map(Object.entries(data.composites));
     } catch (e) {
-      console.warn('Failed to load user composites from localStorage:', e);
+      this.reportIssue('warn', 'Failed to load user composites from localStorage', e);
       return new Map();
     }
   }
@@ -102,10 +135,10 @@ export class CompositeStorage {
     } catch (e) {
       // Most likely quota exceeded
       if (e instanceof DOMException && e.name === 'QuotaExceededError') {
-        console.error('localStorage quota exceeded. Cannot save composites.');
-        console.error('Consider exporting composites to a file as backup.');
+        this.reportIssue('error', 'localStorage quota exceeded. Cannot save composites.');
+        this.reportIssue('error', 'Consider exporting composites to a file as backup.');
       } else {
-        console.error('Failed to save composites to localStorage:', e);
+        this.reportIssue('error', 'Failed to save composites to localStorage', e);
       }
       return false;
     }

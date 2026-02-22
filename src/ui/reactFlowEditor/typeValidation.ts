@@ -19,6 +19,51 @@ import { getAnyBlockDefinition, isPayloadAllowed } from '../../blocks/registry';
 import { findAdapter, type AdapterSpec } from '../../blocks/adapter-spec';
 
 const missingPortWarnings = new Set<string>();
+const typeValidationIssues: Array<{
+  readonly level: 'warn';
+  readonly message: string;
+  readonly blockType: string;
+  readonly portId: string;
+  readonly direction: 'input' | 'output';
+}> = [];
+let typeValidationIssueReporter:
+  | ((issue: {
+      readonly level: 'warn';
+      readonly message: string;
+      readonly blockType: string;
+      readonly portId: string;
+      readonly direction: 'input' | 'output';
+    }) => void)
+  | null = null;
+
+export function setTypeValidationIssueReporter(
+  reporter:
+    | ((issue: {
+        readonly level: 'warn';
+        readonly message: string;
+        readonly blockType: string;
+        readonly portId: string;
+        readonly direction: 'input' | 'output';
+      }) => void)
+    | null
+): void {
+  typeValidationIssueReporter = reporter;
+}
+
+export function getTypeValidationIssues(): ReadonlyArray<{
+  readonly level: 'warn';
+  readonly message: string;
+  readonly blockType: string;
+  readonly portId: string;
+  readonly direction: 'input' | 'output';
+}> {
+  return typeValidationIssues;
+}
+
+export function clearTypeValidationIssues(): void {
+  typeValidationIssues.length = 0;
+  missingPortWarnings.clear();
+}
 
 function warnMissingPort(blockType: string, portId: string, direction: 'input' | 'output'): void {
   const key = `${blockType}:${direction}:${portId}`;
@@ -27,7 +72,18 @@ function warnMissingPort(blockType: string, portId: string, direction: 'input' |
   }
   missingPortWarnings.add(key);
   // [LAW:single-enforcer] Missing-port warnings are emitted once at this projection boundary.
-  console.warn(`[typeValidation] Missing ${direction} port '${portId}' on block '${blockType}'`);
+  const issue = {
+    level: 'warn' as const,
+    message: `[typeValidation] Missing ${direction} port '${portId}' on block '${blockType}'`,
+    blockType,
+    portId,
+    direction,
+  };
+  typeValidationIssues.push(issue);
+  if (typeValidationIssues.length > 100) {
+    typeValidationIssues.shift();
+  }
+  typeValidationIssueReporter?.(issue);
 }
 
 // =============================================================================

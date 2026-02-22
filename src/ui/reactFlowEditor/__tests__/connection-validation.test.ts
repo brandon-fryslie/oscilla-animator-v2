@@ -9,7 +9,13 @@
 
 import { describe, it, expect } from 'vitest';
 import { buildPatch } from '../../../graph/Patch';
-import { validateConnection, formatTypeForDisplay, formatUnitForDisplay } from '../typeValidation';
+import {
+  validateConnection,
+  formatTypeForDisplay,
+  formatUnitForDisplay,
+  clearTypeValidationIssues,
+  getTypeValidationIssues,
+} from '../typeValidation';
 import {
   canonicalType,
   unitTurns,
@@ -480,5 +486,21 @@ describe('Type Compatibility Edge Cases', () => {
     const result = validateConnection('b0', 'out', 'b1', 'in', patch);
     expect(result.valid).toBe(true);
     expect(result.adapter).toBeDefined();
+  });
+
+  it('records missing-port warnings once without console side effects', () => {
+    clearTypeValidationIssues();
+    const patch = buildPatch((b) => {
+      b.addBlock('Add');
+      b.addBlock('Add');
+    });
+
+    const first = validateConnection('b0', 'does_not_exist', 'b1', 'a', patch);
+    const second = validateConnection('b0', 'does_not_exist', 'b1', 'a', patch);
+
+    expect(first.valid).toBe(false);
+    expect(second.valid).toBe(false);
+    expect(getTypeValidationIssues()).toHaveLength(1);
+    expect(getTypeValidationIssues()[0].message).toContain("Missing output port 'does_not_exist'");
   });
 });

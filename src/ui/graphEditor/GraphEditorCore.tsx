@@ -41,7 +41,7 @@ import { UnifiedNode as UnifiedNodeComponent } from './UnifiedNode';
 import { OscillaEdge } from '../reactFlowEditor/OscillaEdge';
 import type { OscillaEdgeData } from '../reactFlowEditor/nodes';
 import { getLayoutedElements } from '../reactFlowEditor/layout';
-import { validateConnection } from '../reactFlowEditor/typeValidation';
+import { setTypeValidationIssueReporter, validateConnection } from '../reactFlowEditor/typeValidation';
 // import { ErrorBadgeOverlay } from './ErrorBadgeOverlay'; // DISABLED: Errors now shown in port popovers
 import type { SelectionStore } from '../../stores/SelectionStore';
 import type { PortHighlightStore } from '../../stores/PortHighlightStore';
@@ -313,6 +313,23 @@ export const GraphEditorCoreInner = observer(
         }),
         [adapter, mergedFeatures, selection, portHighlight, diagnostics, debug]
       );
+
+      useEffect(() => {
+        if (!diagnostics) {
+          return;
+        }
+        // [LAW:single-enforcer] GraphEditorCore is the UI boundary that forwards
+        // type-validation projection warnings into diagnostics.
+        setTypeValidationIssueReporter((issue) => {
+          diagnostics.log({
+            level: issue.level,
+            message: issue.message,
+          });
+        });
+        return () => {
+          setTypeValidationIssueReporter(null);
+        };
+      }, [diagnostics]);
 
       // -------------------------------------------------------------------------
       // Event Handlers - Adapter Integration
