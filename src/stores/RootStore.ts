@@ -36,6 +36,7 @@ import {
   getPatchPersistenceIssues,
   clearPatchPersistenceIssues,
 } from '../services/PatchPersistence';
+import { debugService } from '../services/DebugService';
 
 export class RootStore {
   readonly patch: PatchStore;
@@ -171,6 +172,21 @@ export class RootStore {
       });
     }
     clearPatchPersistenceIssues();
+    // [LAW:single-enforcer] RootStore is the diagnostics boundary for service-level
+    // debug query failures emitted by DebugService.
+    debugService.setIssueReporter((issue) => {
+      this.diagnostics.log({
+        level: issue.level,
+        message: `DebugService(${issue.source}): ${issue.message}`,
+      });
+    });
+    for (const issue of debugService.getIssues()) {
+      this.diagnostics.log({
+        level: issue.level,
+        message: `DebugService(${issue.source}): ${issue.message}`,
+      });
+    }
+    debugService.clearIssues();
 
     // Wire up EventHub to SelectionStore for selection/hover events and automatic cleanup
     this.selection.setEventHub(this.events, 'patch-0', () => this.patchRevision);
@@ -269,5 +285,6 @@ export class RootStore {
 
     // [LAW:single-enforcer] Release persistence reporter when RootStore is disposed.
     setPatchPersistenceIssueReporter(null);
+    debugService.setIssueReporter(null);
   }
 }

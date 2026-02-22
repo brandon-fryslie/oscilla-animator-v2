@@ -8,9 +8,11 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { autorun } from 'mobx';
 import { RootStore } from '../RootStore';
 import type { Endpoint } from '../../graph/Patch';
-import { blockId } from '../../types';
+import { blockId, type ValueSlot } from '../../types';
 import * as PatchPersistence from '../../services/PatchPersistence';
 import { PatchDslError } from '../../patch-dsl';
+import { debugService } from '../../services/DebugService';
+import { canonicalType, FLOAT } from '../../core/canonical-types';
 
 // Import blocks to trigger registration
 import '../../blocks/all';
@@ -33,6 +35,7 @@ describe('Store Integration', () => {
   });
 
   afterEach(() => {
+    root.dispose();
     if (originalLocalStorage) {
       Object.defineProperty(globalThis, 'localStorage', originalLocalStorage);
     } else {
@@ -41,6 +44,8 @@ describe('Store Integration', () => {
     }
     PatchPersistence.clearPatchPersistenceIssues();
     PatchPersistence.setPatchPersistenceIssueReporter(null);
+    debugService.setIssueReporter(null);
+    debugService.clear();
   });
 
   describe('RootStore composition', () => {
@@ -96,6 +101,20 @@ describe('Store Integration', () => {
       expect(readComputed(() =>
         root.diagnostics.logs.some((entry) =>
           entry.message === 'PatchPersistence(save): Failed to persist patch to local storage'
+        )
+      )).toBe(true);
+    });
+
+    it('routes DebugService suppressed query failures through diagnostics', () => {
+      debugService.setEdgeToSlotMap(new Map([
+        ['edge1', { slotId: 10 as ValueSlot, type: canonicalType(FLOAT) }],
+      ]));
+      debugService.updateSlotValue(99 as ValueSlot, 0);
+      expect(debugService.tryGetEdgeValue('edge1')).toBeUndefined();
+
+      expect(readComputed(() =>
+        root.diagnostics.logs.some((entry) =>
+          entry.message === "DebugService(tryGetEdgeValue): Suppressed debug query failure for edge 'edge1'"
         )
       )).toBe(true);
     });

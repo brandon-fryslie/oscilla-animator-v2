@@ -10,7 +10,7 @@
  * - Tracked fields with data → return { kind: 'field', ... } with stats
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { debugService } from './DebugService';
 import type { ValueSlot } from '../types';
 import { canonicalType, canonicalManyDef } from '../core/canonical-types';
@@ -682,6 +682,37 @@ describe('DebugService', () => {
 
             debugService.untrackHistoryKey(key);
             expect(debugService.historyService.isTracked(key)).toBe(false);
+        });
+
+        it('records suppressed tryGetEdgeValue failures with throttling', () => {
+            const edgeMap = new Map([
+                ['edge1', { slotId: 10 as ValueSlot, type: canonicalType(FLOAT) }],
+            ]);
+            debugService.setEdgeToSlotMap(edgeMap);
+            // Mark runtime started without writing slot 10.
+            debugService.updateSlotValue(99 as ValueSlot, 0);
+
+            const reporter = vi.fn();
+            debugService.setIssueReporter(reporter);
+
+            expect(debugService.tryGetEdgeValue('edge1')).toBeUndefined();
+            expect(debugService.getIssues()).toHaveLength(1);
+            expect(debugService.getIssues()[0]).toMatchObject({
+                source: 'tryGetEdgeValue',
+                key: 'edge:edge1',
+            });
+
+            // Same failure immediately should be throttled.
+            expect(debugService.tryGetEdgeValue('edge1')).toBeUndefined();
+            expect(debugService.getIssues()).toHaveLength(1);
+            expect(reporter).toHaveBeenCalledTimes(1);
+
+            debugService.setIssueReporter(null);
+        });
+
+        it('does not record issues for unmapped tryGetEdgeValue queries', () => {
+            expect(debugService.tryGetEdgeValue('missing-edge')).toBeUndefined();
+            expect(debugService.getIssues()).toHaveLength(0);
         });
     });
 

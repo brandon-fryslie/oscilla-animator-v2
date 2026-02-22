@@ -87,6 +87,19 @@ export interface DebugServiceStatus {
   isHealthy: boolean;
 }
 
+export type DebugServiceIssueLevel = 'warn' | 'error';
+
+export interface DebugServiceIssue {
+  readonly level: DebugServiceIssueLevel;
+  readonly source: 'tryGetEdgeValue' | 'tryGetPortValue' | 'reporter';
+  readonly message: string;
+  readonly key?: string;
+  readonly detail?: unknown;
+}
+
+const MAX_DEBUG_ISSUES = 128;
+const ISSUE_THROTTLE_MS = 2000;
+
 /**
  * DebugService - Observation service with demand-driven or global debug tracking
  *
@@ -153,6 +166,10 @@ class DebugService {
 
   /** Constant values for optimized-away edges */
   private constantValues = new Map<string, ConstantValueResult>();
+
+  private issues: DebugServiceIssue[] = [];
+  private issueReporter: ((issue: DebugServiceIssue) => void) | null = null;
+  private issueThrottle = new Map<string, number>();
 
   /** Temporal history tracking service */
   readonly historyService: HistoryService;
@@ -251,6 +268,19 @@ class DebugService {
       unmappedEdges: this.unmappedEdges,
       isHealthy: this.unmappedEdges.length === 0,
     };
+  }
+
+  setIssueReporter(reporter: ((issue: DebugServiceIssue) => void) | null): void {
+    this.issueReporter = reporter;
+  }
+
+  getIssues(): readonly DebugServiceIssue[] {
+    return this.issues;
+  }
+
+  clearIssues(): void {
+    this.issues = [];
+    this.issueThrottle.clear();
   }
 
   // ===========================================================================
@@ -424,7 +454,16 @@ class DebugService {
         return this.queryFieldValue(meta);
       }
       return this.queryScalarValue(meta);
-    } catch {
+    } catch (error) {
+      // [LAW:no-silent-fallbacks] Polling paths remain non-throwing for UI stability,
+      // but suppressed query failures must still be observable.
+      this.recordIssue({
+        level: 'error',
+        source: 'tryGetEdgeValue',
+        key: `edge:${edgeId}`,
+        message: `Suppressed debug query failure for edge '${edgeId}'`,
+        detail: error,
+      });
       return undefined;
     }
   }
@@ -460,7 +499,16 @@ class DebugService {
         return this.queryFieldValue(meta);
       }
       return this.queryScalarValue(meta);
-    } catch {
+    } catch (error) {
+      // [LAW:no-silent-fallbacks] Polling paths remain non-throwing for UI stability,
+      // but suppressed query failures must still be observable.
+      this.recordIssue({
+        level: 'error',
+        source: 'tryGetPortValue',
+        key: `port:${blockId}:${portName}`,
+        message: `Suppressed debug query failure for port '${blockId}.${portName}'`,
+        detail: error,
+      });
       return undefined;
     }
   }
@@ -526,6 +574,7 @@ class DebugService {
     this.runtimeStarted = false;
     this.arenaRef = null;
     this.historyService.clear();
+    this.clearIssues();
   }
 
   /**
@@ -589,6 +638,35 @@ class DebugService {
       blockId: portKey.slice(0, idx),
       portName: portKey.slice(idx + 1),
     };
+  }
+
+  private recordIssue(issue: DebugServiceIssue): void {
+    const throttleKey = `${issue.source}:${issue.key ?? issue.message}`;
+    const now = Date.now();
+    const last = this.issueThrottle.get(throttleKey) ?? 0;
+    if (now - last < ISSUE_THROTTLE_MS) {
+      return;
+    }
+    this.issueThrottle.set(throttleKey, now);
+
+    this.issues.push(issue);
+    if (this.issues.length > MAX_DEBUG_ISSUES) {
+      this.issues.splice(0, this.issues.length - MAX_DEBUG_ISSUES);
+    }
+
+    try {
+      this.issueReporter?.(issue);
+    } catch (reporterError) {
+      this.issues.push({
+        level: 'error',
+        source: 'reporter',
+        message: 'DebugService issue reporter failed',
+        detail: reporterError,
+      });
+      if (this.issues.length > MAX_DEBUG_ISSUES) {
+        this.issues.splice(0, this.issues.length - MAX_DEBUG_ISSUES);
+      }
+    }
   }
 
   // ===========================================================================
