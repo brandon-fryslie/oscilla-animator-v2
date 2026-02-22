@@ -89,9 +89,7 @@ describe('Field-Path Math Integration', () => {
       expect(result.kind).toBe('ok');
     });
 
-    it.skip('compiles LineLayoutUV successfully', () => {
-      // FIXME: Failing after shape-in-instance changes. Needs investigation.
-      // May be related to LineLayoutUV specifically.
+    it('compiles LineLayoutUV successfully', () => {
       const patch = buildPatch((b) => {
         const time = b.addBlock('InfiniteTimeRoot');
 
@@ -240,9 +238,7 @@ describe('Field-Path Math Integration', () => {
       expect(program.slotMeta.length).toBeGreaterThan(0);
     });
 
-    it.skip('lowers lineLayoutUV kernel without errors', () => {
-      // FIXME: Failing after shape-in-instance changes. Needs investigation.
-      // May be related to LineLayoutUV specifically.
+    it('lowers lineLayoutUV kernel without errors', () => {
       const patch = buildPatch((b) => {
         const time = b.addBlock('InfiniteTimeRoot');
 
