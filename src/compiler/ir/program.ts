@@ -441,7 +441,7 @@ export interface CombineDebugIR {
  *
  * @example
  * const sizes = computeStorageSizes(program.slotMeta);
- * const state = createRuntimeState(sizes.f64);
+ * const state = createRuntimeState(sizes.f32);
  */
 export function computeStorageSizes(slotMeta: readonly SlotMetaEntry[]): {
   f64: number;
