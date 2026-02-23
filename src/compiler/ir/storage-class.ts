@@ -21,8 +21,7 @@ export interface StorageLayout {
 /**
  * Derive physical storage class and stride from a fully-instantiated CanonicalType.
  *
- * many cardinality → object storage, stride 1
- * one/zero cardinality → canonical numeric slot class (currently encoded as `f64`), stride from payloadStride()
+ * Canonical runtime storage is numeric `f32` with payload-derived stride.
  *
  * @param type - Fully instantiated CanonicalType (no vars — throws if var)
  * @param overrideStride - Optional stride override (e.g. from IRBuilder registration)
@@ -31,13 +30,12 @@ export function deriveStorageLayout(
   type: CanonicalType,
   overrideStride?: number,
 ): StorageLayout {
-  const card = requireInst(type.extent.cardinality, 'cardinality');
-  const storage: SlotMetaEntry['storage'] = isMany(card) ? 'object' : 'f64';
-  // [LAW:one-source-of-truth] Object slots store a single buffer reference (stride 1).
-  // Scalar slots derive stride from payload unless explicitly overridden.
-  const stride = storage === 'object'
-    ? 1
-    : (overrideStride ?? payloadStride(type.payload));
+  // Enforce fully instantiated canonical types at the storage boundary.
+  requireInst(type.extent.cardinality, 'cardinality');
+  // [LAW:one-source-of-truth] Slot metadata reflects canonical arena numeric ABI.
+  // Cardinality affects lane count (deriveArenaDescriptor), never storage class.
+  const storage: SlotMetaEntry['storage'] = 'f32';
+  const stride = overrideStride ?? payloadStride(type.payload);
   return { storage, stride };
 }
 

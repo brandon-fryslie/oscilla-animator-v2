@@ -315,9 +315,7 @@ function convertLinkedIRToProgram(
 
   // Build slot metadata from slot types
   // [LAW:one-source-of-truth] Storage class is derived from the slot's CanonicalType cardinality axis.
-  // many cardinality → object storage (Float32Array buffers)
-  // one/zero cardinality → f64 storage (scalar values)
-  // No parallel tracking sets needed.
+  // Slot metadata now reflects canonical f32 numeric storage with payload-derived stride.
   const slotTypes = builder.getSlotMetaInputs();
   const slotMeta: SlotMetaEntry[] = [];
   const instances = builder.getInstances();
