@@ -98,6 +98,9 @@ export interface ValueStore {
   /** Object values (non-numeric payloads, e.g. render frame references) */
   objects: Map<ValueSlot, unknown>;
 
+  /** Per-slot packed shape field buffers for render hot path (Field<shape2d>). */
+  shapeFields: Map<ValueSlot, Uint32Array>;
+
   /**
    * Packed shape2d values (8 x u32 words per shape)
    *
@@ -117,6 +120,7 @@ export function createValueStore(slotCount: number, shape2dSlotCount: number = 0
   void slotCount;
   return {
     objects: new Map(),
+    shapeFields: new Map(),
     shape2d: new Uint32Array(shape2dSlotCount * SHAPE2D_WORDS),
   };
 }

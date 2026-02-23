@@ -49,6 +49,7 @@ function createTestRuntimeState(): RuntimeState {
     },
     values: {
       objects: new Map(),
+      shapeFields: new Map(),
       shape2d: new Uint32Array(0),
     },
     lastRenderFrame: null,

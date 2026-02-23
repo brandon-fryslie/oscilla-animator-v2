@@ -1030,6 +1030,29 @@ describe('Forbidden Patterns (Type System Invariants)', () => {
 
   });
 
+  describe('WebGPU Prereq Guards (W3/W8)', () => {
+
+    it('render assembler must not read per-instance shapes from values.objects', () => {
+      // [LAW:one-source-of-truth] Per-instance shape payloads flow through
+      // the dedicated shapeFields bank, not generic object storage.
+      const rawMatches = grepSrc('values\\.objects\\.', 'src/runtime/RenderAssembler.ts');
+      const nonCommentMatches = rawMatches.filter((m) => {
+        const secondColon = m.indexOf(':', m.indexOf(':') + 1);
+        const content = secondColon >= 0 ? m.slice(secondColon + 1).trim() : '';
+        if (!content) return false;
+        return !content.startsWith('//') && !content.startsWith('*');
+      });
+      const filtered = filterAllowlist(nonCommentMatches, [/\.test\./, /__tests__/]);
+      expect(
+        filtered,
+        'RenderAssembler must not read/write per-instance shape payloads via values.objects.\n' +
+        'Use RuntimeState.values.shapeFields for shape slot payloads.\n' +
+        'Found violations:\n' + filtered.join('\n')
+      ).toEqual([]);
+    });
+
+  });
+
   describe('WebGPU Prereq Guards (W6)', () => {
 
     it('runtime evaluator modules must not carry shadow-mode markers', () => {
