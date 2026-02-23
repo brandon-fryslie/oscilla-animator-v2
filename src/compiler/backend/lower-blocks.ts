@@ -680,7 +680,7 @@ function lowerBlockInstance(
           };
         }
 
-        const rewrittenSlotRequests = result.effects?.slotRequests?.map((req) => {
+        const rewrittenSlotRequests = result.effects.slotRequests?.map((req) => {
           const reqCard = requireInst(req.type.extent.cardinality, 'cardinality');
           if (reqCard.kind !== 'many') return req;
           return { ...req, type: withInstance(req.type, instance) };
@@ -689,9 +689,9 @@ function lowerBlockInstance(
         result = {
           ...result,
           outputsById: rewrittenOutputsById,
-          ...(rewrittenSlotRequests
-            ? { effects: { ...result.effects, slotRequests: rewrittenSlotRequests } }
-            : {}),
+          effects: rewrittenSlotRequests
+            ? { ...result.effects, slotRequests: rewrittenSlotRequests }
+            : result.effects,
         };
       }
     }
@@ -709,43 +709,39 @@ function lowerBlockInstance(
     }
 
     // Process effects using binding pass (WI-4)
-    if (result.effects) {
-      const bindingInputs = {
-        effects: result.effects,
-        existingState: undefined, // Non-SCC path has no prior state
-        origin: { blockId: block.id },
-      };
-      const binding = bindEffects(bindingInputs, builder);
+    const bindingInputs = {
+      effects: result.effects,
+      existingState: undefined, // Non-SCC path has no prior state
+      origin: { blockId: block.id },
+    };
+    const binding = bindEffects(bindingInputs, builder);
 
-      // Check for binding diagnostics
-      if (binding.diagnostics.length > 0) {
-        for (const diag of binding.diagnostics) {
-          errors.push({
-            code: diag.level === 'error' ? 'IRValidationFailed' : 'NotImplemented',
-            message: diag.message,
-            where: { blockId: block.id },
-          });
-        }
+    // Check for binding diagnostics
+    if (binding.diagnostics.length > 0) {
+      for (const diag of binding.diagnostics) {
+        errors.push({
+          code: diag.level === 'error' ? 'IRValidationFailed' : 'NotImplemented',
+          message: diag.message,
+          where: { blockId: block.id },
+        });
       }
-
-      // Apply binding (mechanical execution)
-      applyBinding(builder, binding, result.effects);
-
-      // Bind outputs using the new helper
-      const boundOutputsMap = bindOutputs(
-        result.outputsById,
-        binding.slotMap,
-        block.id,
-        blockDef.loweringPurity,
-        builder
-      );
-
-      // Use bound outputs instead of raw outputs
-      result = {
-        ...result,
-        outputsById: Object.fromEntries(boundOutputsMap.entries()),
-      };
     }
+
+    // Apply binding (mechanical execution)
+    applyBinding(builder, binding, result.effects);
+
+    // Bind outputs using the new helper
+    const boundOutputsMap = bindOutputs(
+      result.outputsById,
+      binding.slotMap,
+      block.id,
+    );
+
+    // Use bound outputs instead of raw outputs
+    result = {
+      ...result,
+      outputsById: Object.fromEntries(boundOutputsMap.entries()),
+    };
 
     // Map outputs to port IDs using outputsById
     const portOrder = Object.keys(blockDef.outputs);
@@ -761,25 +757,15 @@ function lowerBlockInstance(
       }
 
 
-      // Handle pure blocks: allocate slots on their behalf if not already allocated
+      // Handle missing slot metadata uniformly for all blocks.
       let finalRef = ref;
       if (isExprRef(ref) && ref.slot === undefined) {
-        // Pure block output — allocate slot now
-        if (blockDef.loweringPurity === 'pure') {
-          const allocatedSlot = builder.allocTypedSlot(ref.type, `${block.id}.${portId}`);
-          finalRef = {
-            ...ref,
-            slot: allocatedSlot,
-          };
-        } else {
-          // Impure block with missing slot — this is a bug in the block's lower() function
-          errors.push({
-            code: "IRValidationFailed",
-            message: `Block ${ctx.blockType}#${ctx.instanceId} output '${portId}' missing slot (impure blocks must allocate slots)`,
-            where: { blockId: block.id },
-          });
-          continue;
-        }
+        errors.push({
+          code: "IRValidationFailed",
+          message: `Block ${ctx.blockType}#${ctx.instanceId} output '${portId}' missing slot (must provide effect slotRequest or explicit slot)`,
+          where: { blockId: block.id },
+        });
+        continue;
       }
 
       // Register slot for one/many/event outputs
@@ -935,71 +921,68 @@ function lowerSCCTwoPass(
         phase1Results.set(blockIndex, partialResult);
 
         // BINDING PASS for phase 1: process effects using new binding pass (WI-4)
-        if (partialResult.effects) {
-          const bindingInputs = {
-            effects: partialResult.effects,
-            existingState: undefined, // Phase 1 has no prior state
-            origin: { blockId: block.id, phase: 'phase1' as const },
-          };
-          const binding = bindEffects(bindingInputs, builder);
+        const phase1Effects = partialResult.effects ?? {};
+        const bindingInputs = {
+          effects: phase1Effects,
+          existingState: undefined, // Phase 1 has no prior state
+          origin: { blockId: block.id, phase: 'phase1' as const },
+        };
+        const binding = bindEffects(bindingInputs, builder);
 
-          // Check for binding diagnostics
-          if (binding.diagnostics.length > 0) {
-            for (const diag of binding.diagnostics) {
-              errors.push({
-                code: diag.level === 'error' ? 'IRValidationFailed' : 'NotImplemented',
-                message: diag.message,
-                where: { blockId: block.id },
-              });
-            }
+        // Check for binding diagnostics
+        if (binding.diagnostics.length > 0) {
+          for (const diag of binding.diagnostics) {
+            errors.push({
+              code: diag.level === 'error' ? 'IRValidationFailed' : 'NotImplemented',
+              message: diag.message,
+              where: { blockId: block.id },
+            });
           }
+        }
 
-          // Apply binding (mechanical execution)
-          applyBinding(builder, binding, partialResult.effects);
+        // Apply binding (mechanical execution)
+        applyBinding(builder, binding, phase1Effects);
 
-          // Bind outputs using the new helper
-          const boundOutputsMap = bindOutputs(
-            partialResult.outputsById,
-            binding.slotMap,
-            block.id,
-            blockDef.loweringPurity,
-            builder
-          );
+        // Bind outputs using the new helper
+        const boundOutputsMap = bindOutputs(
+          partialResult.outputsById,
+          binding.slotMap,
+          block.id,
+        );
 
-          // Register slot types - same logic as in lowerBlockInstance
-          for (const [, finalRef] of boundOutputsMap.entries()) {
-            if (isExprRef(finalRef)) {
-              const temp = requireInst(finalRef.type.extent.temporality, 'temporality');
-              const isEvent = temp.kind === 'discrete';
+        // Register slot types - same logic as in lowerBlockInstance
+        for (const [, finalRef] of boundOutputsMap.entries()) {
+          if (isExprRef(finalRef)) {
+            const temp = requireInst(finalRef.type.extent.temporality, 'temporality');
+            const isEvent = temp.kind === 'discrete';
 
-              if (!isEvent) {
-                const card = requireInst(finalRef.type.extent.cardinality, 'cardinality');
-                const isField = card.kind === 'many';
+            if (!isEvent) {
+              const card = requireInst(finalRef.type.extent.cardinality, 'cardinality');
+              const isField = card.kind === 'many';
 
-                if (isField) {
-                  // Field — register field slot and slot type
-                  builder.registerFieldSlot(finalRef.id, finalRef.slot!);
-                  builder.registerSlotType(finalRef.slot!, finalRef.type);
-                } else {
-                  // [LAW:one-source-of-truth] All cardinality-one outputs must be scalar-slot addressable.
-                  builder.registerScalarSlot(finalRef.id, finalRef.slot!);
-                  builder.registerSlotType(finalRef.slot!, finalRef.type);
-                }
+              if (isField) {
+                // Field — register field slot and slot type
+                builder.registerFieldSlot(finalRef.id, finalRef.slot!);
+                builder.registerSlotType(finalRef.slot!, finalRef.type);
               } else {
-                // Event — register slot type only
+                // [LAW:one-source-of-truth] All cardinality-one outputs must be scalar-slot addressable.
+                builder.registerScalarSlot(finalRef.id, finalRef.slot!);
                 builder.registerSlotType(finalRef.slot!, finalRef.type);
               }
+            } else {
+              // Event — register slot type only
+              builder.registerSlotType(finalRef.slot!, finalRef.type);
             }
           }
-
-          // Update blockOutputs and phase1Results with bound outputs
-          blockOutputs.set(blockIndex, boundOutputsMap);
-          const boundResult: Partial<LowerResult> = {
-            ...partialResult,
-            outputsById: Object.fromEntries(boundOutputsMap.entries())
-          };
-          phase1Results.set(blockIndex, boundResult);
         }
+
+        // Update blockOutputs and phase1Results with bound outputs
+        blockOutputs.set(blockIndex, boundOutputsMap);
+        const boundResult: Partial<LowerResult> = {
+          ...partialResult,
+          outputsById: Object.fromEntries(boundOutputsMap.entries())
+        };
+        phase1Results.set(blockIndex, boundResult);
       } catch (error) {
         errors.push({
           code: "NotImplemented",

@@ -194,6 +194,9 @@ export function register(): void {
         outputsById: {
           out: { id, type: outType, stride: payloadStride(outType.payload) },
         },
+        effects: {
+          slotRequests: [{ portId: 'out', type: outType }],
+        },
         instanceContext: ctx.inferredInstance,
       };
     },

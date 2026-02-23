@@ -39,7 +39,7 @@ registerBlock({
   outputs: {
     out: { label: 'Out', type: canonicalType(FLOAT, unitTurns(), undefined, contractWrap01()) },
   },
-  lower: () => ({ outputsById: {} }),
+  lower: () => ({ outputsById: {}, effects: {} }),
 });
 
 // Sink block that expects radians
@@ -54,7 +54,7 @@ registerBlock({
     in: { label: 'In', type: canonicalType(FLOAT, unitRadians()) },
   },
   outputs: {},
-  lower: () => ({ outputsById: {} }),
+  lower: () => ({ outputsById: {}, effects: {} }),
 });
 
 // Sink block that expects phase01
@@ -69,7 +69,7 @@ registerBlock({
     in: { label: 'In', type: canonicalType(FLOAT, unitTurns(), undefined, contractWrap01()) },
   },
   outputs: {},
-  lower: () => ({ outputsById: {} }),
+  lower: () => ({ outputsById: {}, effects: {} }),
 });
 
 // Source block that outputs scalar
@@ -84,7 +84,7 @@ registerBlock({
   outputs: {
     out: { label: 'Out', type: canonicalType(FLOAT, unitNone()) },
   },
-  lower: () => ({ outputsById: {} }),
+  lower: () => ({ outputsById: {}, effects: {} }),
 });
 
 // Sink block that expects scalar
@@ -99,7 +99,7 @@ registerBlock({
     in: { label: 'In', type: canonicalType(FLOAT, unitNone()) },
   },
   outputs: {},
-  lower: () => ({ outputsById: {} }),
+  lower: () => ({ outputsById: {}, effects: {} }),
 });
 
 registerBlock({
@@ -115,7 +115,7 @@ registerBlock({
   outputs: {
     out: { label: 'Out', type: canonicalType(FLOAT, unitNone()) },
   },
-  lower: () => ({ outputsById: {} }),
+  lower: () => ({ outputsById: {}, effects: {} }),
 });
 
 registerBlock({
@@ -131,7 +131,7 @@ registerBlock({
   outputs: {
     out: { label: 'Out', type: canonicalType(FLOAT, unitNone()) },
   },
-  lower: () => ({ outputsById: {} }),
+  lower: () => ({ outputsById: {}, effects: {} }),
 });
 
 // =============================================================================

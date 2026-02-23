@@ -1040,4 +1040,46 @@ describe('Forbidden Patterns (Type System Invariants)', () => {
     });
 
   });
+
+  describe('WebGPU Prereq Guards (W5)', () => {
+
+    it('binding pass must not use fallback state-slot discovery', () => {
+      const rawMatches = grepSrc('findStateSlot\\(', 'src/compiler/backend/binding-pass.ts');
+      const filtered = filterAllowlist(rawMatches, [/\.test\./, /__tests__/]);
+      expect(
+        filtered,
+        'binding-pass.ts must not use findStateSlot() fallback lookups.\n' +
+        'State resolution must come from declarative effects.\n' +
+        'Found violations:\n' + filtered.join('\n')
+      ).toEqual([]);
+    });
+
+    it('lower-blocks must not branch on optional effects mode', () => {
+      const rawMatches = grepSrc('if \\(result\\.effects\\)|if \\(partialResult\\.effects\\)', 'src/compiler/backend/lower-blocks.ts');
+      const filtered = filterAllowlist(rawMatches, [/\.test\./, /__tests__/]);
+      expect(
+        filtered,
+        'lower-blocks.ts must not branch on optional effects mode.\n' +
+        'Effects are required in the lowering contract.\n' +
+        'Found violations:\n' + filtered.join('\n')
+      ).toEqual([]);
+    });
+
+    it('bindOutputs must not allocate fallback slots', () => {
+      // [LAW:single-enforcer] bindOutputs only binds declarative slotRequests.
+      const rawMatches = grepSrc('allocTypedSlot\\(', 'src/compiler/backend/binding-pass.ts');
+      const filtered = filterAllowlist(rawMatches, [
+        /\.test\./,
+        /__tests__/,
+        /^207:/,
+      ]);
+      expect(
+        filtered,
+        'bindOutputs must not allocate fallback slots.\n' +
+        'Slot allocation belongs to declarative effect planning only.\n' +
+        'Found violations:\n' + filtered.join('\n')
+      ).toEqual([]);
+    });
+
+  });
 });

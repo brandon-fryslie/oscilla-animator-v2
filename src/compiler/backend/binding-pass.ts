@@ -109,6 +109,13 @@ class BinderState {
 export function bindEffects(inputs: BindInputs, builder: OrchestratorIRBuilder): BindingResult {
   const state = new BinderState();
 
+  // Seed state map with known allocations from prior deterministic bind phases.
+  if (inputs.existingState) {
+    for (const [key, slot] of inputs.existingState) {
+      state.stateMap.set(key, slot);
+    }
+  }
+
   // Step 1: Allocate state from stateDecls (lexically sorted)
   allocateStateDeterministic(inputs, state, builder);
 
@@ -206,14 +213,13 @@ function allocateSlotsDeterministic(
  * Validate step requests - all stateKey references must resolve.
  * Emits diagnostics for unresolved references instead of throwing.
  *
- * NOTE: For SCC phase-2, state may have been allocated in phase-1,
- * so we check builder.findStateSlot() as a fallback.
  */
 function validateStepRequests(
   inputs: BindInputs,
   state: BinderState,
   builder: OrchestratorIRBuilder
 ): void {
+  void builder;
   const { effects, origin } = inputs;
 
   if (!effects.stepRequests || effects.stepRequests.length === 0) {
@@ -225,19 +231,14 @@ function validateStepRequests(
     if ('stateKey' in req) {
       const { stateKey } = req;
 
-      // Validate that stateKey was declared and allocated
-      // Check local stateMap first, then builder's global state mappings
+      // [LAW:single-enforcer] State step references must resolve via this
+      // binding result only; no cross-boundary fallback lookup.
       if (!state.stateMap.has(stateKey)) {
-        // For SCC phase-2, state may have been allocated in phase-1
-        // Check builder's global state mappings as fallback
-        const globalSlot = builder.findStateSlot(stateKey);
-        if (globalSlot === undefined) {
-          state.diagnostics.push({
-            level: 'error',
-            message: `State key "${stateKey}" referenced in step request but not declared in stateDecls`,
-            context: `${origin.blockId}${origin.phase ? ` (${origin.phase})` : ''}`,
-          });
-        }
+        state.diagnostics.push({
+          level: 'error',
+          message: `State key "${stateKey}" referenced in step request but not declared in stateDecls`,
+          context: `${origin.blockId}${origin.phase ? ` (${origin.phase})` : ''}`,
+        });
       }
     }
 
@@ -284,9 +285,6 @@ export function applyBinding(
 
 /**
  * Apply a single step request (mechanical - no decisions).
- *
- * For SCC phase-2, state may have been allocated in phase-1, so we check
- * builder.findStateSlot() as a fallback.
  */
 function applyStepRequest(
   req: StepRequest,
@@ -296,16 +294,9 @@ function applyStepRequest(
   switch (req.kind) {
     case 'stateWrite': {
       // Look up physical slot from binding result
-      let slot = result.stateMap.get(req.stateKey);
-
-      // For SCC phase-2, state may have been allocated in phase-1
-      // Check builder's global state mappings as fallback
+      const slot = result.stateMap.get(req.stateKey);
       if (slot === undefined) {
-        slot = builder.findStateSlot(req.stateKey);
-      }
-
-      if (slot === undefined) {
-        throw new Error(`State key ${req.stateKey} not found in binding result or builder (validation failed)`);
+        throw new Error(`State key ${req.stateKey} not found in binding result (validation failed)`);
       }
 
       builder.stepStateWrite(slot, req.value);
@@ -313,15 +304,9 @@ function applyStepRequest(
     }
 
     case 'fieldStateWrite': {
-      let slot = result.stateMap.get(req.stateKey);
-
-      // For SCC phase-2, state may have been allocated in phase-1
+      const slot = result.stateMap.get(req.stateKey);
       if (slot === undefined) {
-        slot = builder.findStateSlot(req.stateKey);
-      }
-
-      if (slot === undefined) {
-        throw new Error(`State key ${req.stateKey} not found in binding result or builder (validation failed)`);
+        throw new Error(`State key ${req.stateKey} not found in binding result (validation failed)`);
       }
 
       builder.stepFieldStateWrite(slot, req.value);
@@ -362,16 +347,12 @@ function applyStepRequest(
  * @param outputsById - Outputs from block lowering (with slot: undefined)
  * @param slotMap - Allocated slots from binding result
  * @param blockId - Block ID for error context
- * @param loweringPurity - Block purity ('pure' or 'impure')
- * @param builder - IRBuilder (for fallback allocation if needed)
  * @returns Bound outputs with slots resolved
  */
 export function bindOutputs(
   outputsById: Record<string, ValueRefExpr> | undefined,
   slotMap: ReadonlyMap<string, ValueSlot>,
   blockId: string,
-  loweringPurity: 'pure' | 'stateful' | 'impure' | undefined,
-  builder: OrchestratorIRBuilder
 ): Map<string, ValueRefExpr> {
   const bound = new Map<string, ValueRefExpr>();
 
@@ -390,14 +371,11 @@ export function bindOutputs(
       if (effectSlot !== undefined) {
         // Effects-as-data block - bind slot from slotRequests
         finalRef = { ...ref, slot: effectSlot };
-      } else if (loweringPurity === 'pure') {
-        // Pure block fallback - allocate slot now
-        const allocatedSlot = builder.allocTypedSlot(ref.type, `${blockId}.${portId}`);
-        finalRef = { ...ref, slot: allocatedSlot };
       } else {
-        // Impure block with missing slot and no slotRequest - this is a bug
+        // [LAW:single-enforcer] Slot ownership is enforced only by effect slotRequests
+        // or explicit slot-bearing refs from lowering. No fallback allocator here.
         throw new Error(
-          `Block ${blockId} output '${portId}' missing slot (impure block must allocate slots or provide slotRequest)`
+          `Block ${blockId} output '${portId}' missing slot (block must provide effect slotRequest or explicit slot)`
         );
       }
     }

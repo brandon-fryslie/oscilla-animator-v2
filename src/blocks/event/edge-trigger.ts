@@ -73,6 +73,13 @@ export function register(): void {
           falling: { id: falling, slot: undefined, type: fallingType, stride: payloadStride(fallingType.payload), eventSlot: undefined },
           both: { id: both, slot: undefined, type: bothType, stride: payloadStride(bothType.payload), eventSlot: undefined },
         },
+        effects: {
+          slotRequests: [
+            { portId: 'rising', type: risingType },
+            { portId: 'falling', type: fallingType },
+            { portId: 'both', type: bothType },
+          ],
+        },
       };
     },
   });

@@ -78,6 +78,7 @@ export function register(): void {
   
       return {
         outputsById: {},
+        effects: {},
       };
     },
   });

@@ -57,7 +57,7 @@ registerBlock({
   outputs: {
     out: { label: 'Out', type: inferType(payloadVar('test_constrained'), unitVar('test_unit')) },
   },
-  lower: () => ({ outputsById: {} }),
+  lower: () => ({ outputsById: {}, effects: {} }),
 });
 
 // A sink that only accepts color
@@ -72,7 +72,7 @@ registerBlock({
     in: { label: 'In', type: canonicalType(COLOR) },
   },
   outputs: {},
-  lower: () => ({ outputsById: {} }),
+  lower: () => ({ outputsById: {}, effects: {} }),
 });
 
 // A sink with payloadVar and constrained allowedPayloads (only vec2, color)
@@ -93,7 +93,7 @@ registerBlock({
     in: { label: 'In', type: inferType(payloadVar('test_v2c'), unitVar('test_v2c_unit')) },
   },
   outputs: {},
-  lower: () => ({ outputsById: {} }),
+  lower: () => ({ outputsById: {}, effects: {} }),
 });
 
 // A sink with payloadVar constrained to numeric payloads (float, int)
@@ -114,7 +114,7 @@ registerBlock({
     in: { label: 'In', type: inferType(payloadVar('test_numeric_sink'), unitVar('test_numeric_sink_unit')) },
   },
   outputs: {},
-  lower: () => ({ outputsById: {} }),
+  lower: () => ({ outputsById: {}, effects: {} }),
 });
 
 // A concrete float source (no payload metadata, no payloadVar)
@@ -129,7 +129,7 @@ registerBlock({
   outputs: {
     out: { label: 'Out', type: canonicalType(FLOAT) },
   },
-  lower: () => ({ outputsById: {} }),
+  lower: () => ({ outputsById: {}, effects: {} }),
 });
 
 // A concrete int sink (no payload metadata)
@@ -144,7 +144,7 @@ registerBlock({
     in: { label: 'In', type: canonicalType(INT) },
   },
   outputs: {},
-  lower: () => ({ outputsById: {} }),
+  lower: () => ({ outputsById: {}, effects: {} }),
 });
 
 // Register test blocks for adapter tests
@@ -159,7 +159,7 @@ registerBlock({
   outputs: {
     out: { label: 'Out', type: canonicalType(FLOAT, unitTurns(), undefined, contractWrap01()) },
   },
-  lower: () => ({ outputsById: {} }),
+  lower: () => ({ outputsById: {}, effects: {} }),
 });
 
 registerBlock({
@@ -173,7 +173,7 @@ registerBlock({
     in: { label: 'In', type: canonicalType(FLOAT, unitRadians()) },
   },
   outputs: {},
-  lower: () => ({ outputsById: {} }),
+  lower: () => ({ outputsById: {}, effects: {} }),
 });
 
 registerBlock({
@@ -187,7 +187,7 @@ registerBlock({
   outputs: {
     out: { label: 'Out', type: canonicalType(FLOAT, unitNone()) },
   },
-  lower: () => ({ outputsById: {} }),
+  lower: () => ({ outputsById: {}, effects: {} }),
 });
 
 registerBlock({
@@ -201,7 +201,7 @@ registerBlock({
     in: { label: 'In', type: canonicalType(FLOAT, unitNone(), undefined, contractClamp01()) },
   },
   outputs: {},
-  lower: () => ({ outputsById: {} }),
+  lower: () => ({ outputsById: {}, effects: {} }),
 });
 
 // =============================================================================
@@ -375,7 +375,7 @@ describe('Adapter-aware Connection Validation', () => {
         outputs: {
           out: { label: 'Out', type: canonicalType(FLOAT, unitTurns(), undefined, contractWrap01()) },
         },
-        lower: () => ({ outputsById: {} }),
+        lower: () => ({ outputsById: {}, effects: {} }),
       });
       registerBlock({
         type: 'TestUINorm01Sink2',
@@ -387,7 +387,7 @@ describe('Adapter-aware Connection Validation', () => {
           in: { label: 'In', type: canonicalType(FLOAT, unitNone(), undefined, contractClamp01()) },
         },
         outputs: {},
-        lower: () => ({ outputsById: {} }),
+        lower: () => ({ outputsById: {}, effects: {} }),
       });
 
       const patch = buildPatch((b) => {
@@ -500,7 +500,7 @@ describe('Type Compatibility Edge Cases', () => {
       outputs: {
         out: { label: 'Out', type: canonicalType(FLOAT, unitDegrees()) },
       },
-      lower: () => ({ outputsById: {} }),
+      lower: () => ({ outputsById: {}, effects: {} }),
     });
 
     registerBlock({
@@ -513,7 +513,7 @@ describe('Type Compatibility Edge Cases', () => {
         in: { label: 'In', type: canonicalType(FLOAT, unitTurns(), undefined, contractWrap01()) },
       },
       outputs: {},
-      lower: () => ({ outputsById: {} }),
+      lower: () => ({ outputsById: {}, effects: {} }),
     });
 
     const patch = buildPatch((b) => {

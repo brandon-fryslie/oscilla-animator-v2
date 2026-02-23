@@ -130,6 +130,9 @@ export function register(): void {
           outputsById: {
             out: { id: neverId, slot: undefined, type: outType, stride: 0 },
           },
+          effects: {
+            slotRequests: [{ portId: 'out', type: outType }],
+          },
         };
       }
   
@@ -153,6 +156,9 @@ export function register(): void {
               stride: payloadStride(outType.payload),
             },
           },
+          effects: {
+            slotRequests: [{ portId: 'out', type: outType }],
+          },
         };
       }
   
@@ -165,6 +171,9 @@ export function register(): void {
             type: outType,
             stride: payloadStride(outType.payload),
           },
+        },
+        effects: {
+          slotRequests: [{ portId: 'out', type: outType }],
         },
       };
     },

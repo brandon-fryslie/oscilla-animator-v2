@@ -126,7 +126,7 @@ export function register(): void {
       };
   
       ctx.b.addRenderGlobal(cameraDecl);
-      return { outputsById: {} };
+      return { outputsById: {}, effects: {} };
     },
   });
 }

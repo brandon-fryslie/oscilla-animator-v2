@@ -53,7 +53,7 @@ function blockDef(
     capability: 'pure',
     inputs,
     outputs,
-    lower: () => ({ outputsById: {} }),
+    lower: () => ({ outputsById: {}, effects: {} }),
   } as unknown as BlockDef;
 }
 

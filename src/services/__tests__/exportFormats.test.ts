@@ -116,7 +116,7 @@ describe('exportFormats', () => {
         outputs: {
           instances: { type: canonicalType(FLOAT) },
         },
-        lower: () => ({ outputsById: {} }),
+        lower: () => ({ outputsById: {}, effects: {} }),
       };
 
       expect(formatBlockShorthand(block, definition)).toBe('b1:Array');
@@ -141,7 +141,7 @@ describe('exportFormats', () => {
         outputs: {
           instances: { type: canonicalType(FLOAT) },
         },
-        lower: () => ({ outputsById: {} }),
+        lower: () => ({ outputsById: {}, effects: {} }),
       };
 
       expect(formatBlockShorthand(block, definition)).toBe('b1:Array(count=5000)');
@@ -167,7 +167,7 @@ describe('exportFormats', () => {
         outputs: {
           shape: { type: canonicalType(FLOAT) },
         },
-        lower: () => ({ outputsById: {} }),
+        lower: () => ({ outputsById: {}, effects: {} }),
       };
 
       expect(formatBlockShorthand(block, definition)).toBe(
@@ -194,7 +194,7 @@ describe('exportFormats', () => {
         outputs: {
           out: { type: canonicalType(FLOAT) },
         },
-        lower: () => ({ outputsById: {} }),
+        lower: () => ({ outputsById: {}, effects: {} }),
       };
 
       expect(formatBlockShorthand(block, definition)).toBe('b4:Const(value=index*0.1)');

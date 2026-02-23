@@ -38,6 +38,9 @@ export function register(): void {
         outputsById: {
           out: { id: neverId, slot: undefined, type: outType, stride: 0 },
         },
+        effects: {
+          slotRequests: [{ portId: 'out', type: outType }],
+        },
       };
     },
   });

@@ -17,7 +17,7 @@ beforeAll(() => {
     category: 'test',
     inputs: {},
     outputs: {},
-    lower: () => ({ outputsById: {} }),
+    lower: () => ({ outputsById: {}, effects: {} }),
   });
 
   registerBlock({
@@ -28,7 +28,7 @@ beforeAll(() => {
     category: 'test',
     inputs: {},
     outputs: {},
-    lower: () => ({ outputsById: {} }),
+    lower: () => ({ outputsById: {}, effects: {} }),
   });
 });
 
