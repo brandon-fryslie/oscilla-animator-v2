@@ -484,7 +484,7 @@ export interface ProgramState {
   time: EffectiveTime | null;
 
   /** Stateful primitive state (migrated via StableStateIds on hot-swap) */
-  state: Float64Array;
+  state: Float32Array;
 
   /** Event scalar storage (0=not fired, 1=fired this tick). Cleared each frame. */
   eventScalars: Uint8Array;
@@ -531,7 +531,7 @@ export interface RuntimeState {
   time: EffectiveTime | null;
 
   /** Stateful primitive state (migrated via StableStateIds on hot-swap) */
-  state: Float64Array;
+  state: Float32Array;
 
   /** Event scalar storage (0=not fired, 1=fired this tick). Cleared each frame. */
   eventScalars: Uint8Array;
@@ -610,7 +610,7 @@ export function createProgramState(
     arena: createArena(arenaTotalFloats),
     cache: createFrameCache(1000, valueExprCount),
     time: null,
-    state: new Float64Array(stateSlotCount),
+    state: new Float32Array(stateSlotCount),
     eventScalars: new Uint8Array(eventSlotCount),
     eventPrevPredicateValue: new Uint8Array(valueExprCount),
     events: new Map(),

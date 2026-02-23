@@ -1082,4 +1082,22 @@ describe('Forbidden Patterns (Type System Invariants)', () => {
     });
 
   });
+
+  describe('WebGPU Prereq Guards (W4)', () => {
+
+    it('runtime state storage must not use Float64Array for persistent state slots', () => {
+      const rawMatches = [
+        ...grepSrc('state:\\s*Float64Array', 'src/runtime/RuntimeState.ts'),
+        ...grepSrc('new Float64Array\\(stateSlotCount\\)', 'src/runtime/RuntimeState.ts'),
+        ...grepSrc('oldState:\\s*Float64Array|newState:\\s*Float64Array', 'src/runtime/StateMigration.ts'),
+      ];
+      const filtered = filterAllowlist(rawMatches, [/\.test\./, /__tests__/]);
+      expect(
+        filtered,
+        'Persistent runtime state slots must use Float32Array.\n' +
+        'Found violations:\n' + filtered.join('\n')
+      ).toEqual([]);
+    });
+
+  });
 });

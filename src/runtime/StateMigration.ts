@@ -66,8 +66,8 @@ function mappingKind(mapping: StateMapping): 'scalar' | 'field' {
  * @returns Migration result with diagnostics
  */
 export function migrateState(
-  oldState: Float64Array,
-  newState: Float64Array,
+  oldState: Float32Array,
+  newState: Float32Array,
   oldMappings: readonly StateMapping[],
   newMappings: readonly StateMapping[],
   getLaneMapping: (instanceId: string) => MappingState | null
@@ -169,7 +169,7 @@ export function migrateState(
  * Initialize state with default values.
  */
 function initializeState(
-  state: Float64Array,
+  state: Float32Array,
   mapping: StateMapping
 ): void {
   for (let lane = 0; lane < mapping.laneCount; lane++) {
@@ -183,8 +183,8 @@ function initializeState(
  * Migrate scalar state (direct copy).
  */
 function migrateScalarState(
-  oldState: Float64Array,
-  newState: Float64Array,
+  oldState: Float32Array,
+  newState: Float32Array,
   oldMapping: ScalarSlotDecl,
   newMapping: ScalarSlotDecl
 ): void {
@@ -203,8 +203,8 @@ function migrateScalarState(
  * Migrate field state using lane mapping.
  */
 function migrateFieldState(
-  oldState: Float64Array,
-  newState: Float64Array,
+  oldState: Float32Array,
+  newState: Float32Array,
   oldMapping: FieldSlotDecl,
   newMapping: FieldSlotDecl,
   laneMapping: MappingState | null
@@ -277,8 +277,8 @@ function migrateFieldState(
 export function createInitialState(
   stateSlotCount: number,
   mappings: readonly StateMapping[]
-): Float64Array {
-  const state = new Float64Array(stateSlotCount);
+): Float32Array {
+  const state = new Float32Array(stateSlotCount);
   for (const mapping of mappings) {
     initializeState(state, mapping);
   }
