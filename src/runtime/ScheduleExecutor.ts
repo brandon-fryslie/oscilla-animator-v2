@@ -35,7 +35,8 @@ import { arenaSlice, type ArenaSlotDescriptor } from './ArenaValueStore';
 import {
   type SlotLookup,
   getExprAddressTable,
-  assertF64Stride,
+  assertNumericStride,
+  isNumericStorage,
 } from './ExprAddressTable';
 
 // [LAW:one-source-of-truth] Arena is the canonical numeric store.
@@ -116,8 +117,10 @@ function writeArenaStrided(
   src: ArrayLike<number>,
   stride: number,
 ): void {
-  if (lookup.storage !== 'f64') {
-    throw new Error('writeArenaStrided: expected f64-class storage for slot ' + lookup.slot + ', got ' + lookup.storage);
+  if (!isNumericStorage(lookup.storage)) {
+    throw new Error(
+      'writeArenaStrided: expected numeric storage for slot ' + lookup.slot + ', got ' + lookup.storage,
+    );
   }
   if (lookup.stride !== stride) {
     throw new Error('writeArenaStrided: expected stride=' + stride + ' for slot ' + lookup.slot + ', got ' + lookup.stride);
@@ -211,7 +214,7 @@ export function executeFrame(
   if (!(time.palette instanceof Float32Array) || time.palette.length !== 4) {
     throw new Error('time.palette must be Float32Array(4) in RGBA [0..1]');
   }
-  const palette = assertF64Stride(slotLookupMap, TIME_PALETTE_SLOT, 4, 'time.palette slot');
+  const palette = assertNumericStride(slotLookupMap, TIME_PALETTE_SLOT, 4, 'time.palette slot');
   writeArenaStrided(slotToArena, state, palette, time.palette, 4);
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -273,7 +276,7 @@ export function executeFrame(
             _shapeRecord.flags = 0;
             writeShape2D(state.values.shape2d, offset, _shapeRecord);
           }
-        } else if (storage === 'f64') {
+        } else if (isNumericStorage(storage)) {
           const arenaDesc = resolveArenaDescriptor(slotToArena, lookup);
           const arenaTarget = arenaSlice(state.arena, arenaDesc);
 

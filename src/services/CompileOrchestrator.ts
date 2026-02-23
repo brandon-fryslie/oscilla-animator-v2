@@ -38,6 +38,7 @@ import { debugService } from './DebugService';
 import { mapDebugMappings } from './mapDebugEdges';
 import { extractConstantValues } from './ConstantValueTracker';
 import { pruneStaleContinuity } from '../runtime/ContinuityState';
+import { getExprAddressTable } from '../runtime/ExprAddressTable';
 
 
 /**
@@ -78,9 +79,10 @@ function setupDebugProbe(
   debugService.setPortToSlotMap(portMap);
   debugService.setUnmappedEdges(unmappedEdges);
 
-  // [LAW:one-source-of-truth] Wire arena reference — arena is the canonical value
-  // store post-zdru.1/zdru.2. Called after setEdgeToSlotMap (which clears stale ref).
-  debugService.setArenaRef(state.arena, program.arenaLayout);
+  // [LAW:one-source-of-truth] Wire arena reference through the canonical slotToArena
+  // address map so consumers do not directly index program.arenaLayout.
+  const slotToArena = getExprAddressTable(program).slotToArena;
+  debugService.setArenaRef(state.arena, slotToArena);
 }
 
 function frontendErrorDetails(errors: readonly FrontendError[], patch: Patch): LogDetail[] {

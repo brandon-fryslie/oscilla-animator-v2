@@ -37,7 +37,8 @@ import { arenaSlice, type ArenaSlotDescriptor } from './ArenaValueStore';
 import {
   type SlotLookup,
   getExprAddressTable,
-  assertF64Stride,
+  assertNumericStride,
+  isNumericStorage,
 } from './ExprAddressTable';
 import type { StepSnapshot, SlotValue, StateSlotValue, ExecutionPhase } from './StepDebugTypes';
 import { readSlotValue, readEventSlotValue, detectAnomalies } from './ValueInspector';
@@ -69,8 +70,8 @@ function writeArenaStrided(
   src: ArrayLike<number>,
   stride: number,
 ): void {
-  if (lookup.storage !== 'f64') {
-    throw new Error(`writeArenaStrided: expected f64-class storage for slot ${lookup.slot}, got ${lookup.storage}`);
+  if (!isNumericStorage(lookup.storage)) {
+    throw new Error(`writeArenaStrided: expected numeric storage for slot ${lookup.slot}, got ${lookup.storage}`);
   }
   if (lookup.stride !== stride) {
     throw new Error(`writeArenaStrided: expected stride=${stride} for slot ${lookup.slot}, got ${lookup.stride}`);
@@ -265,7 +266,7 @@ export function* executeFrameStepped(
   if (!(time.palette instanceof Float32Array) || time.palette.length !== 4) {
     throw new Error('time.palette must be Float32Array(4) in RGBA [0..1]');
   }
-  const palette = assertF64Stride(slotLookupMap, TIME_PALETTE_SLOT, 4, 'time.palette slot');
+  const palette = assertNumericStride(slotLookupMap, TIME_PALETTE_SLOT, 4, 'time.palette slot');
   writeArenaStrided(slotToArena, state, palette, time.palette, 4);
 
   // Yield pre-frame snapshot
@@ -313,7 +314,7 @@ export function* executeFrameStepped(
           if (meta) {
             writtenSlots.set(targetSlot, readSlotValue(state, lookup, meta, slotToArena));
           }
-        } else if (storage === 'f64') {
+        } else if (isNumericStorage(storage)) {
           const arenaDesc = resolveArenaDescriptor(slotToArena, lookup);
           const arenaTarget = arenaSlice(state.arena, arenaDesc);
 

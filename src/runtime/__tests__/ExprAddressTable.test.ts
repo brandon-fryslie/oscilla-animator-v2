@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   getExprAddressTable,
   assertSlotExists,
-  assertF64Stride,
+  assertNumericStride,
 } from '../ExprAddressTable';
 import type { CompiledProgramIR, SlotMetaEntry } from '../../compiler/ir/program';
 import type { ScheduleIR } from '../../compiler/backend/schedule-program';
@@ -176,23 +176,32 @@ describe('assertSlotExists', () => {
   });
 });
 
-describe('assertF64Stride', () => {
-  it('returns lookup for matching f64 slot', () => {
+describe('assertNumericStride', () => {
+  it('returns lookup for matching numeric slot', () => {
     const table = getExprAddressTable(mockProgram({
       slotMeta: [{ slot: valueSlot(0), storage: 'f64', offset: 0, stride: 4, type: SIG_FLOAT }],
       steps: [],
     }));
-    const result = assertF64Stride(table.slotLookup, valueSlot(0), 4, 'test');
+    const result = assertNumericStride(table.slotLookup, valueSlot(0), 4, 'test');
     expect(result.stride).toBe(4);
   });
 
-  it('throws for non-f64 storage', () => {
+  it('accepts f32 numeric storage classes', () => {
+    const table = getExprAddressTable(mockProgram({
+      slotMeta: [{ slot: valueSlot(0), storage: 'f32', offset: 0, stride: 2, type: SIG_FLOAT }],
+      steps: [],
+    }));
+    const result = assertNumericStride(table.slotLookup, valueSlot(0), 2, 'test');
+    expect(result.storage).toBe('f32');
+  });
+
+  it('throws for non-numeric storage', () => {
     const table = getExprAddressTable(mockProgram({
       slotMeta: [{ slot: valueSlot(0), storage: 'object', offset: 0, stride: 1, type: FIELD_FLOAT }],
       steps: [],
     }));
-    expect(() => assertF64Stride(table.slotLookup, valueSlot(0), 1, 'test'))
-      .toThrow(/must be f64 storage/);
+    expect(() => assertNumericStride(table.slotLookup, valueSlot(0), 1, 'test'))
+      .toThrow(/must be numeric storage/);
   });
 
   it('throws for stride mismatch', () => {
@@ -200,7 +209,7 @@ describe('assertF64Stride', () => {
       slotMeta: [{ slot: valueSlot(0), storage: 'f64', offset: 0, stride: 1, type: SIG_FLOAT }],
       steps: [],
     }));
-    expect(() => assertF64Stride(table.slotLookup, valueSlot(0), 4, 'test'))
+    expect(() => assertNumericStride(table.slotLookup, valueSlot(0), 4, 'test'))
       .toThrow(/must have stride=4, got 1/);
   });
 });

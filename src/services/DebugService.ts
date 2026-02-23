@@ -159,7 +159,7 @@ class DebugService {
    * [LAW:one-source-of-truth] Arena is the canonical value store once set.
    * Cleared on setEdgeToSlotMap (recompile invalidates old ProgramState arena).
    */
-  private arenaRef: { arena: Float32Array; arenaLayout: readonly ArenaSlotDescriptor[] } | null = null;
+  private arenaRef: { arena: Float32Array; slotToArena: ReadonlyMap<ValueSlot, ArenaSlotDescriptor> } | null = null;
 
   /** Edges that couldn't be mapped (for error reporting) */
   private unmappedEdges: UnmappedEdgeInfo[] = [];
@@ -247,6 +247,24 @@ class DebugService {
     this.unmappedEdges = edges;
   }
 
+  private normalizeArenaBindings(
+    slotToArenaOrLayout: ReadonlyMap<ValueSlot, ArenaSlotDescriptor> | readonly ArenaSlotDescriptor[],
+  ): ReadonlyMap<ValueSlot, ArenaSlotDescriptor> {
+    if (Array.isArray(slotToArenaOrLayout)) {
+      // [LAW:one-source-of-truth] Consumers query one canonical slot->descriptor map.
+      // Compatibility array inputs are normalized at this boundary.
+      const slotToArena = new Map<ValueSlot, ArenaSlotDescriptor>();
+      for (let slot = 0; slot < slotToArenaOrLayout.length; slot++) {
+        const desc = slotToArenaOrLayout[slot];
+        if (desc && desc.offset >= 0) {
+          slotToArena.set(slot as ValueSlot, desc);
+        }
+      }
+      return slotToArena;
+    }
+    return slotToArenaOrLayout as ReadonlyMap<ValueSlot, ArenaSlotDescriptor>;
+  }
+
   /**
    * Wire the arena for direct value reads.
    * Called by CompileOrchestrator after every compile/recompile, after setEdgeToSlotMap.
@@ -254,8 +272,14 @@ class DebugService {
    * [LAW:one-source-of-truth] Arena is the canonical value store post-zdru.1/zdru.2.
    * Must be called AFTER setEdgeToSlotMap (which clears any stale arena ref).
    */
-  setArenaRef(arena: Float32Array, arenaLayout: readonly ArenaSlotDescriptor[]): void {
-    this.arenaRef = { arena, arenaLayout };
+  setArenaRef(
+    arena: Float32Array,
+    slotToArenaOrLayout: ReadonlyMap<ValueSlot, ArenaSlotDescriptor> | readonly ArenaSlotDescriptor[],
+  ): void {
+    this.arenaRef = {
+      arena,
+      slotToArena: this.normalizeArenaBindings(slotToArenaOrLayout),
+    };
   }
 
   /**
@@ -677,7 +701,7 @@ class DebugService {
     // [LAW:one-source-of-truth] Arena is the canonical value source post-zdru.1.
     // Read directly from arena when available and the slot has a valid descriptor.
     if (this.arenaRef) {
-      const desc = this.arenaRef.arenaLayout[meta.slotId as number];
+      const desc = this.arenaRef.slotToArena.get(meta.slotId);
       if (desc && desc.offset >= 0) {
         if (!this.runtimeStarted) return undefined;
         const value = arenaRead(this.arenaRef.arena, desc, 0, 0);
@@ -712,7 +736,7 @@ class DebugService {
     // [LAW:one-source-of-truth] Arena is the canonical value source post-zdru.2.
     // Zero-copy view into the arena — always current without a per-query copy.
     if (this.arenaRef) {
-      const desc = this.arenaRef.arenaLayout[meta.slotId as number];
+      const desc = this.arenaRef.slotToArena.get(meta.slotId);
       if (desc && desc.offset >= 0) {
         if (!this.runtimeStarted) return undefined;
         const buffer = arenaSlice(this.arenaRef.arena, desc);

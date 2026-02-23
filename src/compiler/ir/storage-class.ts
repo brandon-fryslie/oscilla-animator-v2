@@ -2,7 +2,7 @@
  * Storage Class Derivation
  *
  * [LAW:one-source-of-truth] Single decision point for storage class + stride.
- * All consumers that need to know whether a slot is f64 or object
+ * All consumers that need to know whether a slot is canonical numeric or object
  * call deriveStorageLayout() — no parallel derivation allowed.
  */
 
@@ -22,7 +22,7 @@ export interface StorageLayout {
  * Derive physical storage class and stride from a fully-instantiated CanonicalType.
  *
  * many cardinality → object storage, stride 1
- * one/zero cardinality → f64 storage, stride from payloadStride()
+ * one/zero cardinality → canonical numeric slot class (currently encoded as `f64`), stride from payloadStride()
  *
  * @param type - Fully instantiated CanonicalType (no vars — throws if var)
  * @param overrideStride - Optional stride override (e.g. from IRBuilder registration)

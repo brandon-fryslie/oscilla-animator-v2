@@ -114,15 +114,20 @@ export function assertSlotExists(slotLookupMap: ReadonlyMap<ValueSlot, SlotLooku
   return lookup;
 }
 
-export function assertF64Stride(
+export function isNumericStorage(storage: SlotLookup['storage']): storage is 'f64' | 'f32' | 'i32' | 'u32' {
+  return storage === 'f64' || storage === 'f32' || storage === 'i32' || storage === 'u32';
+}
+
+export function assertNumericStride(
   slotLookupMap: ReadonlyMap<ValueSlot, SlotLookup>,
   slot: ValueSlot,
   expectedStride: number,
   what: string,
 ): SlotLookup {
   const lookup = assertSlotExists(slotLookupMap, slot, what);
-  if (lookup.storage !== 'f64') {
-    throw new Error(what + ' must be f64 storage, got ' + lookup.storage);
+  // [LAW:one-source-of-truth] Canonical numeric ABI check is centralized here.
+  if (!isNumericStorage(lookup.storage)) {
+    throw new Error(what + ' must be numeric storage, got ' + lookup.storage);
   }
   if (lookup.stride !== expectedStride) {
     throw new Error(what + ' must have stride=' + expectedStride + ', got ' + lookup.stride);
