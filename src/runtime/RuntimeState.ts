@@ -491,15 +491,9 @@ export interface ProgramState {
 
   /**
    * Previous predicate values for wrap edge detection (indexed by ValueExprId).
-   * Used by legacy EventEvaluator during migration.
+   * Used by ValueExpr EventEvaluator wrap-edge detection.
    */
-  eventPrevPredicate: Uint8Array;
-
-  /**
-   * Previous predicate values for wrap edge detection (indexed by ValueExprId).
-   * Used by ValueExpr EventEvaluator during migration and post-cutover.
-   */
-  eventPrevPredicateValue: Uint8Array;
+  eventWrapPredicate: Uint8Array;
 
   /**
    * Event payload storage (spec-compliant data-carrying events)
@@ -544,15 +538,9 @@ export interface RuntimeState {
 
   /**
    * Previous predicate values for wrap edge detection (indexed by ValueExprId).
-   * Used by legacy EventEvaluator during migration.
+   * Used by ValueExpr EventEvaluator wrap-edge detection.
    */
-  eventPrevPredicate: Uint8Array;
-
-  /**
-   * Previous predicate values for wrap edge detection (indexed by ValueExprId).
-   * Used by ValueExpr EventEvaluator during migration and post-cutover.
-   */
-  eventPrevPredicateValue: Uint8Array;
+  eventWrapPredicate: Uint8Array;
 
   /**
    * Cycle detection bitset for event combine recursion.
@@ -609,7 +597,7 @@ export function createProgramState(
   slotCount: number,
   stateSlotCount: number = 0,
   eventSlotCount: number = 0,
-  eventExprCount: number = 0,
+  _legacyEventExprCount: number = 0,
   valueExprCount: number = 0,
   arenaTotalFloats: number = 0
 ): ProgramState {
@@ -620,8 +608,7 @@ export function createProgramState(
     time: null,
     state: new Float64Array(stateSlotCount),
     eventScalars: new Uint8Array(eventSlotCount),
-    eventPrevPredicate: new Uint8Array(eventExprCount),
-    eventPrevPredicateValue: new Uint8Array(valueExprCount),
+    eventWrapPredicate: new Uint8Array(valueExprCount),
     events: new Map(),
   };
 }
@@ -636,12 +623,20 @@ export function createRuntimeState(
   slotCount: number,
   stateSlotCount: number = 0,
   eventSlotCount: number = 0,
-  eventExprCount: number = 0,
+  _legacyEventExprCount: number = 0,
   valueExprCount: number = 0,
   arenaTotalFloats: number = 0
 ): RuntimeState {
   const session = createSessionState();
-  return createRuntimeStateFromSession(session, slotCount, stateSlotCount, eventSlotCount, eventExprCount, valueExprCount, arenaTotalFloats);
+  return createRuntimeStateFromSession(
+    session,
+    slotCount,
+    stateSlotCount,
+    eventSlotCount,
+    _legacyEventExprCount,
+    valueExprCount,
+    arenaTotalFloats
+  );
 }
 
 /**
@@ -654,11 +649,18 @@ export function createRuntimeStateFromSession(
   slotCount: number,
   stateSlotCount: number = 0,
   eventSlotCount: number = 0,
-  eventExprCount: number = 0,
+  _legacyEventExprCount: number = 0,
   valueExprCount: number = 0,
   arenaTotalFloats: number = 0
 ): RuntimeState {
-  const program = createProgramState(slotCount, stateSlotCount, eventSlotCount, eventExprCount, valueExprCount, arenaTotalFloats);
+  const program = createProgramState(
+    slotCount,
+    stateSlotCount,
+    eventSlotCount,
+    _legacyEventExprCount,
+    valueExprCount,
+    arenaTotalFloats
+  );
   return {
     // ProgramState (fresh)
     values: program.values,
@@ -667,8 +669,7 @@ export function createRuntimeStateFromSession(
     time: program.time,
     state: program.state,
     eventScalars: program.eventScalars,
-    eventPrevPredicate: program.eventPrevPredicate,
-    eventPrevPredicateValue: program.eventPrevPredicateValue,
+    eventWrapPredicate: program.eventWrapPredicate,
     events: program.events,
     // SessionState (preserved)
     timeState: session.timeState,

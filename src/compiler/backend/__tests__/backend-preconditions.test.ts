@@ -43,6 +43,7 @@ function testProgramConverter(
     schedule: scheduleIR,
     outputs: [],
     slotMeta: [],
+    runtimeSlots: [],
     debugIndex: {
       blockMap: new Map(),
       slotToPort: new Map(),

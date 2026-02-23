@@ -37,7 +37,7 @@ import { arenaSlice, type ArenaSlotDescriptor } from './ArenaValueStore';
 import {
   type SlotLookup,
   getExprAddressTable,
-  assertF64Stride,
+  assertNumericStride,
 } from './ExprAddressTable';
 import type { StepSnapshot, SlotValue, StateSlotValue, ExecutionPhase } from './StepDebugTypes';
 import { readSlotValue, readEventSlotValue, detectAnomalies } from './ValueInspector';
@@ -232,19 +232,13 @@ export function* executeFrameStepped(
   // [LAW:one-source-of-truth] Single address table for all slot/expr/field queries.
   // slotToArena replaces all direct program.arenaLayout[slot] accesses in this file.
   const addressTable = getExprAddressTable(program);
-  const { slotLookup: slotLookupMap, fieldExprToSlot, slotToArena } = addressTable;
+  const { slotLookup: slotLookupMap, slotTypeBySlot, fieldExprToSlot, slotToArena } = addressTable;
 
   const resolveSlotOffset = (slot: ValueSlot): SlotLookup => {
     const lookup = slotLookupMap.get(slot);
     if (!lookup) throw new Error(`Slot ${slot} not found in slotMeta`);
     return lookup;
   };
-
-  // Build slot-to-meta index for value reading
-  const slotToMeta = new Map<ValueSlot, (typeof program.slotMeta)[number]>();
-  for (const meta of program.slotMeta) {
-    slotToMeta.set(meta.slot, meta);
-  }
 
   // Build reverse lookup from state slot index to StateMapping for debug labeling
   const stateSlotToMapping = new Map<number, StateMapping>();
@@ -265,7 +259,7 @@ export function* executeFrameStepped(
   if (!(time.palette instanceof Float32Array) || time.palette.length !== 4) {
     throw new Error('time.palette must be Float32Array(4) in RGBA [0..1]');
   }
-  const palette = assertF64Stride(slotLookupMap, TIME_PALETTE_SLOT, 4, 'time.palette slot');
+  const palette = assertNumericStride(slotLookupMap, TIME_PALETTE_SLOT, 4, 'time.palette slot');
   writeArenaStrided(slotToArena, state, palette, time.palette, 4);
 
   // Yield pre-frame snapshot
@@ -309,9 +303,9 @@ export function* executeFrameStepped(
             });
           }
           // Capture written shape
-          const meta = slotToMeta.get(targetSlot);
-          if (meta) {
-            writtenSlots.set(targetSlot, readSlotValue(state, lookup, meta, slotToArena));
+          const slotType = slotTypeBySlot.get(targetSlot);
+          if (slotType) {
+            writtenSlots.set(targetSlot, readSlotValue(state, lookup, slotType, slotToArena));
           }
         } else if (storage === 'f64') {
           const arenaDesc = resolveArenaDescriptor(slotToArena, lookup);
@@ -339,9 +333,9 @@ export function* executeFrameStepped(
           state.cache.scalarStamps[step.expr as number] = state.cache.frameId;
 
           // Capture written slot
-          const meta = slotToMeta.get(targetSlot);
-          if (meta) {
-            writtenSlots.set(targetSlot, readSlotValue(state, lookup, meta, slotToArena));
+          const slotType = slotTypeBySlot.get(targetSlot);
+          if (slotType) {
+            writtenSlots.set(targetSlot, readSlotValue(state, lookup, slotType, slotToArena));
           }
         } else {
           throw new Error(`evalOne: unsupported storage type '${storage}' for slot ${slot} expr ${step.expr}`);

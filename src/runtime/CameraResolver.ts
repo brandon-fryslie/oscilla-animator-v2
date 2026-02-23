@@ -10,6 +10,7 @@
 import type { CompiledProgramIR, CameraDeclIR } from '../compiler/ir/program';
 import type { ValueSlot } from '../compiler/ir/Indices';
 import type { RuntimeState } from './RuntimeState';
+import { getExprAddressTable } from './ExprAddressTable';
 
 // =============================================================================
 // ResolvedCameraParams — The output contract
@@ -108,10 +109,12 @@ export function resolveCameraDecl(
   program: CompiledProgramIR,
   state: RuntimeState,
 ): ResolvedCameraParams {
+  const { slotToArena } = getExprAddressTable(program);
+
   // [LAW:one-source-of-truth] Read camera slots from arena descriptors.
   // Camera params are numeric value slots and should always be arena-backed.
   const readSlot = (slot: ValueSlot): number => {
-    const desc = program.arenaLayout[slot as number];
+    const desc = slotToArena.get(slot);
     if (desc && desc.offset >= 0) {
       return state.arena[desc.offset];
     }

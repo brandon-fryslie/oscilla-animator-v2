@@ -6,9 +6,7 @@
  * Event evaluation for the unified ValueExpr table.
  * This evaluator handles event-extent ValueExpr nodes (temporality discrete).
  *
- * Migration Status: Shadow mode implementation for incremental ValueExpr adoption.
- * This evaluator runs in parallel with legacy EventEvaluator during migration,
- * validating equivalence before cutover.
+ * Event evaluator for canonical ValueExpr execution.
  *
  * ──────────────────────────────────────────────────────────────────────
  * IMPORTANT: EVENT-EXTENT ONLY
@@ -150,12 +148,12 @@ function evaluateEventKind(
       // NaN and Inf treated as false (spec §8.6.3)
       const predicate = (Number.isFinite(oneValue) && oneValue >= 0.5) ? 1 : 0;
 
-      // Read previous predicate (separate array for ValueExpr)
-      const prev = state.eventPrevPredicateValue[veId as number];
+      // Read previous wrap predicate state for this event expression.
+      const prev = state.eventWrapPredicate[veId as number];
       const prevPredicate = prev !== undefined ? prev : 0;
 
       // Write current predicate
-      state.eventPrevPredicateValue[veId as number] = predicate;
+      state.eventWrapPredicate[veId as number] = predicate;
 
       // Rising edge: was 0, now 1
       return predicate === 1 && prevPredicate === 0;

@@ -113,14 +113,14 @@ export function getAllLensIds(): string[] {
 // Transform IR Context (for IR lowering)
 // =============================================================================
 
-import type { IRBuilder } from '../compiler/ir/IRBuilder';
+import type { BlockIRBuilder } from '../compiler/ir/BlockIRBuilder';
 import type { ValueRefPacked } from '../compiler/ir/lowerTypes';
 
 /**
  * Context for transform IR lowering.
  */
 export interface TransformIRCtx {
-  readonly builder: IRBuilder;
+  readonly builder: BlockIRBuilder;
   readonly inputRef: ValueRefPacked;
   readonly params: Record<string, ValueRefPacked>;
 }

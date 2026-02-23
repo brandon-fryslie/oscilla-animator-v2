@@ -162,7 +162,7 @@ describe('bindOutputs', () => {
     expect(bound.get('out')?.slot).toBe(42);
   });
 
-  it('allocates slots for pure blocks', () => {
+  it('requires slot requests for pure blocks', () => {
     const type = canonicalScalar(FLOAT);
     const builder = new IRBuilderImpl();
 
@@ -177,10 +177,9 @@ describe('bindOutputs', () => {
 
     const slotMap = new Map(); // No pre-allocated slot
 
-    const bound = bindOutputs(outputsById, slotMap, 'test-block', 'pure', builder);
-
-    expect(bound.size).toBe(1);
-    expect(bound.get('out')?.slot).toBeDefined();
+    expect(() => {
+      bindOutputs(outputsById, slotMap, 'test-block', 'pure', builder);
+    }).toThrow('slotRequests are required');
   });
 
   it('throws for impure blocks with missing slots', () => {

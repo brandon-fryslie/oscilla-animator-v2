@@ -16,7 +16,15 @@
 
 import type { Patch } from '../graph';
 import type { NormalizedPatch } from '../graph/normalize';
-import type { CompiledProgramIR, SlotMetaEntry, FieldSlotEntry, OutputSpecIR, ExprProvenanceIR, ExprUserTarget } from './ir/program';
+import type {
+  CompiledProgramIR,
+  SlotMetaEntry,
+  RuntimeSlotEntry,
+  FieldSlotEntry,
+  OutputSpecIR,
+  ExprProvenanceIR,
+  ExprUserTarget,
+} from './ir/program';
 import type { ValueSlot } from './ir/Indices';
 import type { BlockId } from '../types';
 import type { UnlinkedIRFragments } from './backend/lower-blocks';
@@ -321,6 +329,7 @@ function convertLinkedIRToProgram(
   // No parallel tracking sets needed.
   const slotTypes = builder.getSlotMetaInputs();
   const slotMeta: SlotMetaEntry[] = [];
+  const runtimeSlots: RuntimeSlotEntry[] = [];
   const instances = builder.getInstances();
   const arenaLayout: ArenaSlotDescriptor[] = [];
   let arenaOffset = 0;
@@ -352,12 +361,20 @@ function convertLinkedIRToProgram(
     // Arena descriptor: flat Float32Array layout for all numeric slots.
     const desc = deriveArenaDescriptor(type, arenaOffset, instances, slotInfo.stride);
     arenaLayout.push(desc);
+    runtimeSlots.push({
+      slot,
+      storage,
+      offset,
+      stride,
+      type,
+      arena: desc,
+    });
     arenaOffset += desc.length;
   }
 
   // Build output specs
   // TECH DEBT: renderFrameSlot is not a real value slot — it stores a RenderFrameIR object reference.
-  // It should be modeled as part of OutputSpecIR, not jammed into slotMeta with a fake type.
+  // It should be modeled as part of OutputSpecIR rather than a synthetic slot metadata record.
   // For now, allocate through builder to avoid shadow allocation, but add slotMeta manually
   // since the loop above has already completed.
   const renderFrameSlot = builder.allocTypedSlot(canonicalType(FLOAT), 'renderFrame');
@@ -369,7 +386,16 @@ function convertLinkedIRToProgram(
     type: canonicalType(FLOAT),
   });
   // renderFrameSlot stores an object reference, not numeric data — excluded from arena.
-  arenaLayout.push({ offset: -1, stride: 0, laneCount: 0, length: 0 });
+  const renderFrameArenaDesc = { offset: -1, stride: 0, laneCount: 0, length: 0 } as const;
+  arenaLayout.push(renderFrameArenaDesc);
+  runtimeSlots.push({
+    slot: renderFrameSlot,
+    storage: 'object',
+    offset: storageOffsets.object - 1,
+    stride: 1,
+    type: canonicalType(FLOAT),
+    arena: renderFrameArenaDesc,
+  });
 
   const outputs: OutputSpecIR[] = [{
     kind: 'renderFrame',
@@ -568,6 +594,7 @@ function convertLinkedIRToProgram(
     schedule: scheduleIR,
     outputs,
     slotMeta,
+    runtimeSlots,
     debugIndex,
     fieldSlotRegistry,
     renderGlobals, // NEW - Camera system: populated from builder
