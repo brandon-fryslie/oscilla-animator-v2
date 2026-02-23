@@ -14,6 +14,7 @@ import type { ValueSlot } from '../compiler/ir/Indices';
 import { SCALAR_INSTANCE_ID } from '../compiler/ir/Indices';
 import type { ScheduleIR } from '../compiler/backend/schedule-program';
 import type { ArenaSlotDescriptor } from './ArenaValueStore';
+import type { CanonicalType } from '../core/canonical-types';
 
 /**
  * Slot lookup entry — maps a ValueSlot to its physical storage location.
@@ -23,6 +24,8 @@ export interface SlotLookup {
   offset: number;
   stride: number;
   slot: ValueSlot;
+  /** Canonical value type for debugger/runtime inspection (mirrors slot metadata authority). */
+  type: CanonicalType;
 }
 
 /**
@@ -66,6 +69,7 @@ export function getExprAddressTable(program: CompiledProgramIR): ExprAddressTabl
       offset: meta.offset,
       stride: meta.stride,
       slot: meta.slot,
+      type: meta.type,
     });
     const arenaDesc = program.arenaLayout[meta.slot as number];
     if (arenaDesc && arenaDesc.offset >= 0) {

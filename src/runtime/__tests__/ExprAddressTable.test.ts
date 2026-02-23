@@ -82,15 +82,15 @@ describe('getExprAddressTable', () => {
 
     const table = getExprAddressTable(program);
     expect(table.slotLookup.size).toBe(3);
-    expect(table.slotLookup.get(valueSlot(0))).toEqual({
-      storage: 'f64', offset: 0, stride: 1, slot: valueSlot(0),
-    });
-    expect(table.slotLookup.get(valueSlot(1))).toEqual({
-      storage: 'object', offset: 0, stride: 1, slot: valueSlot(1),
-    });
-    expect(table.slotLookup.get(valueSlot(2))).toEqual({
-      storage: 'f64', offset: 1, stride: 3, slot: valueSlot(2),
-    });
+    expect(table.slotLookup.get(valueSlot(0))).toEqual(expect.objectContaining({
+      storage: 'f64', offset: 0, stride: 1, slot: valueSlot(0), type: SIG_FLOAT,
+    }));
+    expect(table.slotLookup.get(valueSlot(1))).toEqual(expect.objectContaining({
+      storage: 'object', offset: 0, stride: 1, slot: valueSlot(1), type: FIELD_FLOAT,
+    }));
+    expect(table.slotLookup.get(valueSlot(2))).toEqual(expect.objectContaining({
+      storage: 'f64', offset: 1, stride: 3, slot: valueSlot(2), type: SIG_FLOAT,
+    }));
   });
 
   it('builds fieldExprToSlot from materialize steps', () => {

@@ -237,15 +237,9 @@ export function* executeFrameStepped(
 
   const resolveSlotOffset = (slot: ValueSlot): SlotLookup => {
     const lookup = slotLookupMap.get(slot);
-    if (!lookup) throw new Error(`Slot ${slot} not found in slotMeta`);
+    if (!lookup) throw new Error(`Slot ${slot} not found in canonical slot lookup`);
     return lookup;
   };
-
-  // Build slot-to-meta index for value reading
-  const slotToMeta = new Map<ValueSlot, (typeof program.slotMeta)[number]>();
-  for (const meta of program.slotMeta) {
-    slotToMeta.set(meta.slot, meta);
-  }
 
   // Build reverse lookup from state slot index to StateMapping for debug labeling
   const stateSlotToMapping = new Map<number, StateMapping>();
@@ -310,10 +304,7 @@ export function* executeFrameStepped(
             });
           }
           // Capture written shape
-          const meta = slotToMeta.get(targetSlot);
-          if (meta) {
-            writtenSlots.set(targetSlot, readSlotValue(state, lookup, meta, slotToArena));
-          }
+          writtenSlots.set(targetSlot, readSlotValue(state, lookup, slotToArena));
         } else if (isNumericStorage(storage)) {
           const arenaDesc = resolveArenaDescriptor(slotToArena, lookup);
           const arenaTarget = arenaSlice(state.arena, arenaDesc);
@@ -340,10 +331,7 @@ export function* executeFrameStepped(
           state.cache.scalarStamps[step.expr as number] = state.cache.frameId;
 
           // Capture written slot
-          const meta = slotToMeta.get(targetSlot);
-          if (meta) {
-            writtenSlots.set(targetSlot, readSlotValue(state, lookup, meta, slotToArena));
-          }
+          writtenSlots.set(targetSlot, readSlotValue(state, lookup, slotToArena));
         } else {
           throw new Error(`evalOne: unsupported storage type '${storage}' for slot ${slot} expr ${step.expr}`);
         }

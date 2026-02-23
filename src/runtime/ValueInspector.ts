@@ -7,7 +7,7 @@
 
 import type { RuntimeState } from './RuntimeState';
 import { readShape2D } from './RuntimeState';
-import type { CompiledProgramIR, SlotMetaEntry } from '../compiler/ir/program';
+import type { CompiledProgramIR } from '../compiler/ir/program';
 import type { ValueSlot } from '../compiler/ir/Indices';
 import type { BlockId, PortId } from '../types';
 import type { SlotLookup } from './ExprAddressTable';
@@ -22,17 +22,18 @@ import type { ArenaSlotDescriptor } from './ArenaValueStore';
  *
  * @param state - Runtime state to read from
  * @param lookup - Pre-computed slot lookup (from ExprAddressTable)
- * @param meta - Slot metadata (for type information)
  * @returns Typed slot value snapshot
  */
 export function readSlotValue(
   state: RuntimeState,
   lookup: SlotLookup,
-  meta: SlotMetaEntry,
   slotToArena?: ReadonlyMap<ValueSlot, ArenaSlotDescriptor>,
 ): SlotValue {
   switch (lookup.storage) {
-    case 'f64': {
+    case 'f64':
+    case 'f32':
+    case 'i32':
+    case 'u32': {
       const arenaDesc = slotToArena?.get(lookup.slot);
       if (!arenaDesc) {
         throw new Error(`readSlotValue: missing arena descriptor for numeric slot ${lookup.slot}`);
@@ -41,7 +42,7 @@ export function readSlotValue(
         return {
           kind: 'scalar',
           value: state.arena[arenaDesc.offset],
-          type: meta.type,
+          type: lookup.type,
         };
       }
       // Multi-component: copy the values into a snapshot buffer
@@ -53,7 +54,7 @@ export function readSlotValue(
         kind: 'buffer',
         buffer,
         count: lookup.stride,
-        type: meta.type,
+        type: lookup.type,
       };
     }
 
@@ -66,7 +67,7 @@ export function readSlotValue(
           kind: 'buffer',
           buffer: ref,
           count: ref.length,
-          type: meta.type,
+          type: lookup.type,
         };
       }
       return { kind: 'object', ref };
@@ -76,12 +77,6 @@ export function readSlotValue(
       const record = readShape2D(state.values.shape2d, lookup.offset);
       return { kind: 'object', ref: record };
     }
-
-    case 'f32':
-    case 'i32':
-    case 'u32':
-      // Future storage types — return as object for now
-      return { kind: 'object', ref: undefined };
 
     default: {
       const _: never = lookup.storage;
@@ -174,21 +169,14 @@ export function inspectBlockSlots(
   const lookupMap = slotLookupMap ?? addressTable.slotLookup;
   const result = new Map<ValueSlot, SlotValue>();
 
-  // Build a slot-to-meta index for quick lookup
-  const slotToMeta = new Map<ValueSlot, SlotMetaEntry>();
-  for (const meta of program.slotMeta) {
-    slotToMeta.set(meta.slot, meta);
-  }
-
   // Find all slots belonging to this block
   for (const [slot, ownerBlockId] of program.debugIndex.slotToBlock) {
     if (ownerBlockId !== blockId) continue;
 
     const lookup = lookupMap.get(slot);
-    const meta = slotToMeta.get(slot);
-    if (!lookup || !meta) continue;
+    if (!lookup) continue;
 
-    result.set(slot, readSlotValue(state, lookup, meta, addressTable.slotToArena));
+    result.set(slot, readSlotValue(state, lookup, addressTable.slotToArena));
   }
 
   return result;

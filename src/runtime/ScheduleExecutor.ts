@@ -146,7 +146,7 @@ function readCanonicalNumeric(
 function resolveSlotOffsetFromMap(slotLookupMap: ReadonlyMap<ValueSlot, SlotLookup>, slot: ValueSlot): SlotLookup {
   const lookup = slotLookupMap.get(slot);
   if (!lookup) {
-    throw new Error('Slot ' + slot + ' not found in slotMeta');
+    throw new Error('Slot ' + slot + ' not found in canonical slot lookup');
   }
   return lookup;
 }

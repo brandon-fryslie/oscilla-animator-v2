@@ -988,4 +988,25 @@ describe('Forbidden Patterns (Type System Invariants)', () => {
     });
 
   });
+
+  describe('WebGPU Prereq Guards (W2)', () => {
+
+    it('execution modules must not read program.slotMeta directly', () => {
+      // [LAW:single-enforcer] Runtime execution must resolve slot addresses through
+      // ExprAddressTable; execution modules must not bypass to program.slotMeta.
+      const rawMatches = [
+        ...grepSrc('program\\.slotMeta', 'src/runtime/ScheduleExecutor.ts'),
+        ...grepSrc('program\\.slotMeta', 'src/runtime/executeFrameStepped.ts'),
+        ...grepSrc('program\\.slotMeta', 'src/runtime/ValueExprMaterializer.ts'),
+      ];
+      const filtered = filterAllowlist(rawMatches, [/\.test\./, /__tests__/]);
+      expect(
+        filtered,
+        'Execution modules must not access program.slotMeta directly.\n' +
+        'Use getExprAddressTable(program) as the canonical runtime addressing boundary.\n' +
+        'Found violations:\n' + filtered.join('\n')
+      ).toEqual([]);
+    });
+
+  });
 });

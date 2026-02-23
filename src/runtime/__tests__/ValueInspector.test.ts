@@ -5,7 +5,6 @@ import {
   detectAnomalies,
 } from '../ValueInspector';
 import type { SlotLookup } from '../ExprAddressTable';
-import type { SlotMetaEntry } from '../../compiler/ir/program';
 import type { ValueSlot } from '../../compiler/ir/Indices';
 import { createRuntimeState } from '../RuntimeState';
 import { canonicalScalar } from '../../core/canonical-types';
@@ -17,11 +16,7 @@ import type { SlotValue } from '../StepDebugTypes';
 const SIG_FLOAT = canonicalScalar(FLOAT, unitNone());
 
 function makeLookup(slot: number, storage: SlotLookup['storage'], offset: number, stride: number): SlotLookup {
-  return { storage, offset, stride, slot: valueSlot(slot) };
-}
-
-function makeMeta(slot: number, storage: SlotMetaEntry['storage'], offset: number, stride: number): SlotMetaEntry {
-  return { slot: valueSlot(slot), storage, offset, stride, type: SIG_FLOAT };
+  return { storage, offset, stride, slot: valueSlot(slot), type: SIG_FLOAT };
 }
 
 describe('readSlotValue', () => {
@@ -30,11 +25,9 @@ describe('readSlotValue', () => {
     state.arena[3] = 42.5;
 
     const lookup = makeLookup(3, 'f64', 3, 1);
-    const meta = makeMeta(3, 'f64', 3, 1);
     const value = readSlotValue(
       state,
       lookup,
-      meta,
       new Map([[valueSlot(3), { offset: 3, stride: 1, laneCount: 1, length: 1 }]])
     );
 
@@ -52,11 +45,9 @@ describe('readSlotValue', () => {
     state.arena[7] = 3.0;
 
     const lookup = makeLookup(5, 'f64', 5, 3);
-    const meta = makeMeta(5, 'f64', 5, 3);
     const value = readSlotValue(
       state,
       lookup,
-      meta,
       new Map([[valueSlot(5), { offset: 5, stride: 3, laneCount: 1, length: 3 }]])
     );
 
@@ -73,8 +64,7 @@ describe('readSlotValue', () => {
     state.values.objects.set(valueSlot(2), buffer);
 
     const lookup = makeLookup(2, 'object', 0, 0);
-    const meta = makeMeta(2, 'object', 0, 0);
-    const value = readSlotValue(state, lookup, meta);
+    const value = readSlotValue(state, lookup);
 
     expect(value.kind).toBe('buffer');
     if (value.kind === 'buffer') {
@@ -89,8 +79,7 @@ describe('readSlotValue', () => {
     state.values.objects.set(valueSlot(4), obj);
 
     const lookup = makeLookup(4, 'object', 0, 0);
-    const meta = makeMeta(4, 'object', 0, 0);
-    const value = readSlotValue(state, lookup, meta);
+    const value = readSlotValue(state, lookup);
 
     expect(value.kind).toBe('object');
     if (value.kind === 'object') {
