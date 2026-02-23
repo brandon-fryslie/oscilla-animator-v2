@@ -940,4 +940,52 @@ describe('Forbidden Patterns (Type System Invariants)', () => {
     });
 
   });
+
+  describe('WebGPU Prereq Guards (W7/W12)', () => {
+
+    it('runtime/services hot path must not use legacy assertF64Stride helper', () => {
+      // [LAW:one-source-of-truth] Runtime ABI assertions must flow through the
+      // canonical numeric assertion boundary only.
+      const rawMatches = [
+        ...grepSrc('assertF64Stride', 'src/runtime/'),
+        ...grepSrc('assertF64Stride', 'src/services/'),
+      ];
+      const filtered = filterAllowlist(rawMatches, [/\.test\./, /__tests__/]);
+      expect(
+        filtered,
+        'Legacy assertF64Stride helper is forbidden in runtime/services hot paths.\n' +
+        'Use assertNumericStride() from ExprAddressTable instead.\n' +
+        'Found violations:\n' + filtered.join('\n')
+      ).toEqual([]);
+    });
+
+    it('runtime/services hot path must not directly index program.arenaLayout', () => {
+      // [LAW:single-enforcer] Arena address resolution belongs to ExprAddressTable.
+      const rawMatches = [
+        ...grepSrc('program\\.arenaLayout\\[', 'src/runtime/'),
+        ...grepSrc('program\\.arenaLayout\\[', 'src/services/'),
+      ];
+
+      const nonCommentMatches = rawMatches.filter((m) => {
+        const secondColon = m.indexOf(':', m.indexOf(':') + 1);
+        const content = secondColon >= 0 ? m.slice(secondColon + 1).trim() : '';
+        if (!content) return false;
+        return !content.startsWith('//') && !content.startsWith('*');
+      });
+
+      const filtered = filterAllowlist(nonCommentMatches, [
+        /\.test\./,
+        /__tests__/,
+        /src\/runtime\/ExprAddressTable\.ts:/,
+      ]);
+
+      expect(
+        filtered,
+        'Direct program.arenaLayout indexing is forbidden in runtime/services hot paths.\n' +
+        'Route through ExprAddressTable.slotToArena instead.\n' +
+        'Found violations:\n' + filtered.join('\n')
+      ).toEqual([]);
+    });
+
+  });
 });

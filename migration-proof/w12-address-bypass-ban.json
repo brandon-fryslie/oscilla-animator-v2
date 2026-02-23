@@ -26,6 +26,11 @@
     {
       "command": "pnpm -s vitest run src/services/DebugService.test.ts src/runtime/__tests__/render-scale-offset.test.ts",
       "exit_code": 0
+    },
+    {
+      "command": "pnpm -s vitest run src/__tests__/forbidden-patterns.test.ts",
+      "exit_code": 0,
+      "tests_passed": 52
     }
   ],
   "static_scan": {

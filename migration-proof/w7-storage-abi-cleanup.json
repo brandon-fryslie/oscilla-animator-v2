@@ -31,6 +31,11 @@
       "tests_passed": 73
     },
     {
+      "command": "pnpm -s vitest run src/__tests__/forbidden-patterns.test.ts",
+      "exit_code": 0,
+      "tests_passed": 52
+    },
+    {
       "command": "./scripts/get-screenshot-of-demo-patch.sh simple.hcl",
       "exit_code": 0,
       "artifact": "/tmp/oscilla-test-screenshots/simple_burst_3x3_100ms_20260223-152136.png"
