@@ -1051,6 +1051,20 @@ describe('Forbidden Patterns (Type System Invariants)', () => {
       ).toEqual([]);
     });
 
+    it('runtime execution modules must not use values.objects in hot path', () => {
+      const rawMatches = [
+        ...grepSrc('values\\.objects\\.', 'src/runtime/ScheduleExecutor.ts'),
+        ...grepSrc('values\\.objects\\.', 'src/runtime/executeFrameStepped.ts'),
+      ];
+      const filtered = filterAllowlist(rawMatches, [/\.test\./, /__tests__/]);
+      expect(
+        filtered,
+        'ScheduleExecutor/executeFrameStepped must not read or write values.objects.\n' +
+        'Runtime hot path must use canonical arena/shape banks only.\n' +
+        'Found violations:\n' + filtered.join('\n')
+      ).toEqual([]);
+    });
+
   });
 
   describe('WebGPU Prereq Guards (W6)', () => {

@@ -483,14 +483,9 @@ export function executeFrame(
           state.tap.recordFieldValue?.(slot, arenaSlice(state.arena, arenaDesc));
           continue;
         }
-
-        const existing = state.values.objects.get(slot);
-        if (existing !== undefined) {
-          state.tap.recordFieldValue?.(slot, existing as any);
-          continue;
-        }
-
-        throw new Error('debug tracked slot has neither arena descriptor nor object payload for slot ' + slot);
+        // [LAW:one-source-of-truth] Debug-tracked field reads must resolve through
+        // the canonical arena descriptor map only.
+        throw new Error('debug tracked slot missing arena descriptor for slot ' + slot);
       }
     }
   }
