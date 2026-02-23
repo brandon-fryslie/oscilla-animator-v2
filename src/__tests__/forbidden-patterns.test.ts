@@ -1028,6 +1028,23 @@ describe('Forbidden Patterns (Type System Invariants)', () => {
       ).toEqual([]);
     });
 
+    it('source modules must not import removed legacy IRBuilder interface file', () => {
+      const rawMatches = grepSrc("ir/IRBuilder['\\\"]", 'src/');
+      const filtered = filterAllowlist(rawMatches, [
+        /\.test\./,
+        /__tests__/,
+        /forbidden-patterns\.test\.ts/,
+        /FUNCTIONS\.md/,
+        /README\.md/,
+      ]);
+      expect(
+        filtered,
+        'Legacy IRBuilder interface file imports are forbidden.\n' +
+        'Use BlockIRBuilder or OrchestratorIRBuilder contracts instead.\n' +
+        'Found violations:\n' + filtered.join('\n')
+      ).toEqual([]);
+    });
+
   });
 
   describe('WebGPU Prereq Guards (W3/W8)', () => {
