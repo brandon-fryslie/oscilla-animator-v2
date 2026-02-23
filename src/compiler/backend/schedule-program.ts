@@ -100,7 +100,7 @@ export interface ScheduleIR {
   /** Number of event slots (for sizing eventScalars Uint8Array) */
   readonly eventSlotCount: number;
 
-  /** Number of event expressions (for sizing eventPrevPredicate Uint8Array) */
+  /** Number of event expressions in the ValueExpr table (runtime metadata). */
   readonly eventCount: number;
 }
 

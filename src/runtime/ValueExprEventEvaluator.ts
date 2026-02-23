@@ -6,10 +6,6 @@
  * Event evaluation for the unified ValueExpr table.
  * This evaluator handles event-extent ValueExpr nodes (temporality discrete).
  *
- * Migration Status: Shadow mode implementation for incremental ValueExpr adoption.
- * This evaluator runs in parallel with legacy EventEvaluator during migration,
- * validating equivalence before cutover.
- *
  * ──────────────────────────────────────────────────────────────────────
  * IMPORTANT: EVENT-EXTENT ONLY
  * ──────────────────────────────────────────────────────────────────────
@@ -98,8 +94,6 @@ export function evaluateValueExprEvent(
 
 /**
  * Evaluate event kind dispatch
- *
- * Matches legacy EventEvaluator.ts behavior exactly.
  */
 function evaluateEventKind(
   expr: ValueExprEvent,
@@ -116,7 +110,7 @@ function evaluateEventKind(
       return false;
 
     case 'pulse':
-      // Fires every tick (same as legacy EventEvaluator.ts:43-45)
+      // Fires every tick.
       return true;
 
     case 'combine': {
@@ -131,7 +125,6 @@ function evaluateEventKind(
 
     case 'wrap': {
       // Edge detection: rising edge of (oneValue >= 0.5)
-      // Same logic as EventEvaluator.ts:57-64
       // [LAW:one-source-of-truth] Event wrap reads cardinality-one values through
       // the canonical materialization path (count=1), not a parallel evaluator path.
       EVENT_MATERIALIZE_SCRATCH.reset();

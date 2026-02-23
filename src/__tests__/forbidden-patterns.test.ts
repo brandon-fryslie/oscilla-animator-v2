@@ -1009,4 +1009,35 @@ describe('Forbidden Patterns (Type System Invariants)', () => {
     });
 
   });
+
+  describe('WebGPU Prereq Guards (W6)', () => {
+
+    it('runtime evaluator modules must not carry shadow-mode markers', () => {
+      // [LAW:one-source-of-truth] Production runtime has one evaluator family;
+      // shadow-mode migration markers are forbidden in canonical evaluator modules.
+      const rawMatches = [
+        ...grepSrc('shadow mode|Shadow mode', 'src/runtime/ValueExprScalarEvaluator.ts'),
+        ...grepSrc('shadow mode|Shadow mode', 'src/runtime/ValueExprEventEvaluator.ts'),
+        ...grepSrc('legacy EventEvaluator|legacy scalar evaluators|legacy event evaluator', 'src/runtime/ValueExprScalarEvaluator.ts'),
+        ...grepSrc('legacy EventEvaluator|legacy scalar evaluators|legacy event evaluator', 'src/runtime/ValueExprEventEvaluator.ts'),
+      ];
+      const filtered = filterAllowlist(rawMatches, [/\.test\./, /__tests__/]);
+      expect(
+        filtered,
+        'Evaluator modules must not include shadow-mode or legacy-parity markers.\n' +
+        'Found violations:\n' + filtered.join('\n')
+      ).toEqual([]);
+    });
+
+    it('runtime state must not expose duplicate legacy event predicate buffers', () => {
+      const rawMatches = grepSrc('eventPrevPredicate\\b', 'src/runtime/RuntimeState.ts');
+      const filtered = filterAllowlist(rawMatches, [/\.test\./, /__tests__/]);
+      expect(
+        filtered,
+        'RuntimeState must not expose legacy duplicate event predicate buffers.\n' +
+        'Found violations:\n' + filtered.join('\n')
+      ).toEqual([]);
+    });
+
+  });
 });

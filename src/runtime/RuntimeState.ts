@@ -491,13 +491,7 @@ export interface ProgramState {
 
   /**
    * Previous predicate values for wrap edge detection (indexed by ValueExprId).
-   * Used by legacy EventEvaluator during migration.
-   */
-  eventPrevPredicate: Uint8Array;
-
-  /**
-   * Previous predicate values for wrap edge detection (indexed by ValueExprId).
-   * Used by ValueExpr EventEvaluator during migration and post-cutover.
+   * Used by the canonical ValueExpr event evaluator.
    */
   eventPrevPredicateValue: Uint8Array;
 
@@ -544,13 +538,7 @@ export interface RuntimeState {
 
   /**
    * Previous predicate values for wrap edge detection (indexed by ValueExprId).
-   * Used by legacy EventEvaluator during migration.
-   */
-  eventPrevPredicate: Uint8Array;
-
-  /**
-   * Previous predicate values for wrap edge detection (indexed by ValueExprId).
-   * Used by ValueExpr EventEvaluator during migration and post-cutover.
+   * Used by the canonical ValueExpr event evaluator.
    */
   eventPrevPredicateValue: Uint8Array;
 
@@ -613,6 +601,10 @@ export function createProgramState(
   valueExprCount: number = 0,
   arenaTotalFloats: number = 0
 ): ProgramState {
+  // [LAW:one-source-of-truth] event wrap-edge state lives in eventPrevPredicateValue;
+  // eventExprCount is accepted for callsite compatibility while compile/runtime
+  // signatures converge on ValueExpr-driven sizing.
+  void eventExprCount;
   return {
     values: createValueStore(slotCount),
     arena: createArena(arenaTotalFloats),
@@ -620,7 +612,6 @@ export function createProgramState(
     time: null,
     state: new Float64Array(stateSlotCount),
     eventScalars: new Uint8Array(eventSlotCount),
-    eventPrevPredicate: new Uint8Array(eventExprCount),
     eventPrevPredicateValue: new Uint8Array(valueExprCount),
     events: new Map(),
   };
@@ -667,7 +658,6 @@ export function createRuntimeStateFromSession(
     time: program.time,
     state: program.state,
     eventScalars: program.eventScalars,
-    eventPrevPredicate: program.eventPrevPredicate,
     eventPrevPredicateValue: program.eventPrevPredicateValue,
     events: program.events,
     // SessionState (preserved)

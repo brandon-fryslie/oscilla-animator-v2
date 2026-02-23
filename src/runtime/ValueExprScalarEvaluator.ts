@@ -7,10 +7,6 @@
  * This evaluator handles scalar-extent ValueExpr nodes (cardinality one,
  * temporality continuous).
  *
- * Migration Status: Shadow mode implementation for incremental ValueExpr adoption.
- * This evaluator runs in parallel with legacy scalar evaluators during migration,
- * validating equivalence before cutover.
- *
  * ──────────────────────────────────────────────────────────────────────
  * IMPORTANT: SCALAR-EXTENT ONLY
  * ──────────────────────────────────────────────────────────────────────
@@ -20,7 +16,7 @@
  * - Temporality: continuous (not discrete)
  *
  * Field-extent (cardinality many) → Materializer
- * Event-extent (temporality discrete) → EventEvaluator
+ * Event-extent (temporality discrete) → ValueExprEventEvaluator
  *
  * Runtime assertions enforce this constraint.
  *
@@ -200,7 +196,7 @@ function evaluateScalarExtent(
     }
 
     case 'event': {
-      throw new Error('Event expressions must be evaluated by EventEvaluator');
+      throw new Error('Event expressions must be evaluated by ValueExprEventEvaluator');
     }
 
     case 'extract': {
