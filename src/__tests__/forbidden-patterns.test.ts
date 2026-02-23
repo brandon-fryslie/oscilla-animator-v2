@@ -1010,6 +1010,26 @@ describe('Forbidden Patterns (Type System Invariants)', () => {
 
   });
 
+  describe('WebGPU Prereq Guards (W11)', () => {
+
+    it('compiler public entrypoints must not export deprecated IRBuilder type', () => {
+      // [LAW:single-enforcer] Public builder contracts are exported once through
+      // BlockIRBuilder/OrchestratorIRBuilder; deprecated IRBuilder export is forbidden.
+      const rawMatches = [
+        ...grepSrc('export type \\{[^}]*\\bIRBuilder\\b', 'src/compiler/index.ts'),
+        ...grepSrc('export type \\{[^}]*\\bIRBuilder\\b', 'src/compiler/ir/index.ts'),
+      ];
+      const filtered = filterAllowlist(rawMatches, [/\.test\./, /__tests__/]);
+      expect(
+        filtered,
+        'Deprecated IRBuilder type must not be exported from compiler public entrypoints.\n' +
+        'Use BlockIRBuilder and OrchestratorIRBuilder as canonical surfaces.\n' +
+        'Found violations:\n' + filtered.join('\n')
+      ).toEqual([]);
+    });
+
+  });
+
   describe('WebGPU Prereq Guards (W6)', () => {
 
     it('runtime evaluator modules must not carry shadow-mode markers', () => {
