@@ -23,12 +23,11 @@ import type { UnlinkedIRFragments } from './backend/lower-blocks';
 import type { ScheduleIR } from './backend/schedule-program';
 import type { AcyclicOrLegalGraph } from './ir/patches';
 import type { EventHub } from '../events/EventHub';
-import { canonicalType, requireInst, requireManyInstance } from '../core/canonical-types';
+import { requireInst, requireManyInstance } from '../core/canonical-types';
 import { deriveStorageLayout, deriveArenaDescriptor } from './ir/storage-class';
 import type { ArenaSlotDescriptor } from '../runtime/ArenaValueStore';
 import type { ValueExpr, ValueExprId } from './ir/value-expr';
 import type { Step } from './ir/types';
-import { FLOAT } from '../core/canonical-types';
 import { compilationInspector } from '../services/CompilationInspectorService';
 import { computeRenderReachableBlocks } from './reachability';
 import { resolveKernels } from './resolve-kernels';
@@ -355,26 +354,8 @@ function convertLinkedIRToProgram(
     arenaOffset += desc.length;
   }
 
-  // Build output specs
-  // TECH DEBT: renderFrameSlot is not a real value slot — it stores a RenderFrameIR object reference.
-  // It should be modeled as part of OutputSpecIR, not jammed into slotMeta with a fake type.
-  // For now, allocate through builder to avoid shadow allocation, but add slotMeta manually
-  // since the loop above has already completed.
-  const renderFrameSlot = builder.allocTypedSlot(canonicalType(FLOAT), 'renderFrame');
-  slotMeta.push({
-    slot: renderFrameSlot,
-    storage: 'object',
-    offset: storageOffsets.object++,
-    stride: 1,
-    type: canonicalType(FLOAT),
-  });
-  // renderFrameSlot stores an object reference, not numeric data — excluded from arena.
-  arenaLayout.push({ offset: -1, stride: 0, laneCount: 0, length: 0 });
-
-  const outputs: OutputSpecIR[] = [{
-    kind: 'renderFrame',
-    slot: renderFrameSlot,
-  }];
+  // Build output specs from canonical output contract only.
+  const outputs: OutputSpecIR[] = [{ kind: 'renderFrame' }];
 
   // Build debug index
   const stepToBlock = new Map();

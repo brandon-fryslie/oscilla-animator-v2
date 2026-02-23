@@ -582,26 +582,15 @@ export function executeFrame(
   // Updates time tracking and clears frame-local flags
   finalizeContinuityFrame(state);
 
-  // 5. Store frame in output slot (DoD: outputs contract)
+  // [LAW:one-source-of-truth] RenderFrame output flows through one canonical
+  // runtime field, not a synthetic object slot indirection.
+  state.lastRenderFrame = frame;
   if (program.outputs.length > 0) {
     const outputSpec = program.outputs[0];
-    const { storage, slot } = resolveSlotOffsetFromMap(slotLookupMap,outputSpec.slot);
-
-    if (storage === 'object') {
-      // For object storage, use slot as Map key
-      state.values.objects.set(slot, frame);
-    } else {
-      throw new Error(
-        'Output slot expects object storage, got ' + storage
-      );
+    if (outputSpec.kind !== 'renderFrame') {
+      throw new Error('Unsupported output kind: ' + (outputSpec as { kind?: string }).kind);
     }
-
-    // 6. Read from outputs[0].slot (DoD: runtime reads from outputs[0].slot)
-    const outputFrame = state.values.objects.get(slot);
-    if (!outputFrame) {
-      throw new Error('Output frame not found in slot');
-    }
-    return outputFrame as RenderFrameIR;
+    return frame;
   }
 
   // Fallback: no outputs defined (shouldn't happen with proper compilation)

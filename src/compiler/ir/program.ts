@@ -156,8 +156,7 @@ export interface CompiledProgramIR {
 
   /**
    * Arena layout — flat Float32Array descriptor for every slot.
-   * Indexed by slot ID (same ordering as slotMeta). Slots excluded from the
-   * arena (e.g. renderFrameSlot) get a sentinel: { offset: -1, stride: 0, laneCount: 0, length: 0 }.
+   * Indexed by slot ID (same ordering as slotMeta).
    *
    * [LAW:one-source-of-truth] Arena layout is computed once during compilation
    * from CanonicalType + InstanceDecl — no parallel derivation.
@@ -247,13 +246,11 @@ export interface ValueExprTable {
  * Output Specification
  *
  * Defines how runtime extracts the final frame output.
- * Runtime MUST read from program.outputs[0].slot.
+ * Runtime uses output kind as the extraction contract.
  */
 export interface OutputSpecIR {
   /** Only allowed kind for now */
   readonly kind: 'renderFrame';
-  /** Slot containing RenderFrameIR object */
-  readonly slot: ValueSlot;
 }
 
 // =============================================================================

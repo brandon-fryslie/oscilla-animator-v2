@@ -51,6 +51,7 @@ function createTestRuntimeState(): RuntimeState {
       objects: new Map(),
       shape2d: new Uint32Array(0),
     },
+    lastRenderFrame: null,
     arena: new Float32Array(0),
     state: new Float32Array(0),
     eventScalars: new Uint8Array(0),

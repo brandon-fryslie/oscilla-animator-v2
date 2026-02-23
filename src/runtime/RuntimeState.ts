@@ -11,6 +11,7 @@ import { createTimeState } from './timeResolution';
 import type { ContinuityState } from './ContinuityState';
 import { createContinuityState } from './ContinuityState';
 import type { DebugTap } from './DebugTap';
+import type { RenderFrameIR } from '../render/types';
 import { ExternalChannelSystem } from './ExternalChannel';
 import { createArena } from './ArenaValueStore';
 
@@ -474,6 +475,9 @@ export interface ProgramState {
   /** Per-frame value storage (slot-based) */
   values: ValueStore;
 
+  /** Last assembled frame for the current program execution. */
+  lastRenderFrame: RenderFrameIR | null;
+
   /** Float32 arena for unified value store (cardinality unification migration) */
   arena: Float32Array;
 
@@ -520,6 +524,9 @@ export interface RuntimeState {
 
   /** Per-frame value storage (slot-based) */
   values: ValueStore;
+
+  /** Last assembled frame for the current program execution. */
+  lastRenderFrame: RenderFrameIR | null;
 
   /** Float32 arena for unified value store (cardinality unification migration) */
   arena: Float32Array;
@@ -607,6 +614,7 @@ export function createProgramState(
   void eventExprCount;
   return {
     values: createValueStore(slotCount),
+    lastRenderFrame: null,
     arena: createArena(arenaTotalFloats),
     cache: createFrameCache(1000, valueExprCount),
     time: null,
@@ -653,6 +661,7 @@ export function createRuntimeStateFromSession(
   return {
     // ProgramState (fresh)
     values: program.values,
+    lastRenderFrame: program.lastRenderFrame,
     arena: program.arena,
     cache: program.cache,
     time: program.time,

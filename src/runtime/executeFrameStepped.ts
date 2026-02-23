@@ -552,16 +552,8 @@ export function* executeFrameStepped(
   // --- POST-FRAME: Finalize continuity ---
   finalizeContinuityFrame(state);
 
-  // Store frame in output slot
-  if (program.outputs.length > 0) {
-    const outputSpec = program.outputs[0];
-    const { storage, slot } = resolveSlotOffset(outputSpec.slot);
-    if (storage === 'object') {
-      state.values.objects.set(slot, frame);
-    } else {
-      throw new Error(`Output slot expects object storage, got ${storage}`);
-    }
-  }
+  // [LAW:one-source-of-truth] RenderFrame output uses canonical runtime field.
+  state.lastRenderFrame = frame;
 
   yield buildSnapshot(-1, null, 'post-frame', totalSteps, program, state, tAbsMs, new Map(), prevValues);
 
@@ -570,10 +562,10 @@ export function* executeFrameStepped(
   // Return the frame result
   if (program.outputs.length > 0) {
     const outputSpec = program.outputs[0];
-    const { slot } = resolveSlotOffset(outputSpec.slot);
-    const outputFrame = state.values.objects.get(slot);
-    if (!outputFrame) throw new Error('Output frame not found in slot');
-    return outputFrame as RenderFrameIR;
+    if (outputSpec.kind !== 'renderFrame') {
+      throw new Error(`Unsupported output kind: ${(outputSpec as { kind?: string }).kind}`);
+    }
+    return frame;
   }
   return frame;
 }
