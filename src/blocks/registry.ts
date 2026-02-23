@@ -110,9 +110,9 @@ export interface LowerResult {
   readonly stateKey?: StableStateId;
 
   /**
-   * Declarative effects (optional).
+   * Declarative effects.
    * Blocks return effects (state declarations, step requests, slot requests) instead
-   * of calling imperative methods on IRBuilder. Optional during migration.
+   * of calling imperative methods on IRBuilder.
    */
   readonly effects?: import('../compiler/ir/lowerTypes').LowerEffects;
 }

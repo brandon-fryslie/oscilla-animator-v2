@@ -14,6 +14,7 @@ import type { ValueSlot } from '../compiler/ir/Indices';
 import { SCALAR_INSTANCE_ID } from '../compiler/ir/Indices';
 import type { ScheduleIR } from '../compiler/backend/schedule-program';
 import type { ArenaSlotDescriptor } from './ArenaValueStore';
+import type { CanonicalType } from '../core/canonical-types';
 
 /**
  * Slot lookup entry — maps a ValueSlot to its physical storage location.
@@ -31,6 +32,8 @@ export interface SlotLookup {
 export interface ExprAddressTable {
   /** ValueSlot → physical storage location */
   readonly slotLookup: ReadonlyMap<ValueSlot, SlotLookup>;
+  /** ValueSlot → CanonicalType metadata */
+  readonly slotTypeBySlot: ReadonlyMap<ValueSlot, CanonicalType>;
   /** ValueExprId (materialized field expression) → target ValueSlot */
   readonly fieldExprToSlot: ReadonlyMap<number, ValueSlot>;
   /** Scalar ValueExprId → arena scalar offset */
@@ -52,24 +55,21 @@ export function getExprAddressTable(program: CompiledProgramIR): ExprAddressTabl
   const cached = TABLE_CACHE.get(program);
   if (cached) return cached;
 
-  // 1. Build slotLookup from slotMeta, and slotToArena from arenaLayout (excludes sentinels).
-  // [LAW:one-source-of-truth] All per-slot arena lookups go through slotToArena — no direct
-  // program.arenaLayout[slot] accesses in consumers.
+  // 1. Build slot lookup/type/arena maps from compiler-provided runtimeSlots.
+  // [LAW:one-source-of-truth] Runtime address resolution reads one canonical table.
   const slotLookup = new Map<ValueSlot, SlotLookup>();
+  const slotTypeBySlot = new Map<ValueSlot, CanonicalType>();
   const slotToArena = new Map<ValueSlot, ArenaSlotDescriptor>();
-  for (const meta of program.slotMeta) {
-    if (meta.stride == null) {
-      throw new Error('slotMeta missing required stride for slot ' + meta.slot);
-    }
-    slotLookup.set(meta.slot, {
-      storage: meta.storage,
-      offset: meta.offset,
-      stride: meta.stride,
-      slot: meta.slot,
+  for (const slotEntry of program.runtimeSlots) {
+    slotLookup.set(slotEntry.slot, {
+      storage: slotEntry.storage,
+      offset: slotEntry.offset,
+      stride: slotEntry.stride,
+      slot: slotEntry.slot,
     });
-    const arenaDesc = program.arenaLayout[meta.slot as number];
-    if (arenaDesc && arenaDesc.offset >= 0) {
-      slotToArena.set(meta.slot, arenaDesc);
+    slotTypeBySlot.set(slotEntry.slot, slotEntry.type);
+    if (slotEntry.arena.offset >= 0) {
+      slotToArena.set(slotEntry.slot, slotEntry.arena);
     }
   }
 
@@ -100,6 +100,7 @@ export function getExprAddressTable(program: CompiledProgramIR): ExprAddressTabl
 
   const table: ExprAddressTable = {
     slotLookup,
+    slotTypeBySlot,
     fieldExprToSlot,
     scalarExprToArenaOffset,
     slotToArena,
@@ -114,7 +115,7 @@ export function assertSlotExists(slotLookupMap: ReadonlyMap<ValueSlot, SlotLooku
   return lookup;
 }
 
-export function assertF64Stride(
+export function assertNumericStride(
   slotLookupMap: ReadonlyMap<ValueSlot, SlotLookup>,
   slot: ValueSlot,
   expectedStride: number,

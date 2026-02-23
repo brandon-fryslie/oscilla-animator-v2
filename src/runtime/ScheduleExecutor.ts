@@ -35,7 +35,7 @@ import { arenaSlice, type ArenaSlotDescriptor } from './ArenaValueStore';
 import {
   type SlotLookup,
   getExprAddressTable,
-  assertF64Stride,
+  assertNumericStride,
 } from './ExprAddressTable';
 
 // [LAW:one-source-of-truth] Arena is the canonical numeric store.
@@ -211,7 +211,7 @@ export function executeFrame(
   if (!(time.palette instanceof Float32Array) || time.palette.length !== 4) {
     throw new Error('time.palette must be Float32Array(4) in RGBA [0..1]');
   }
-  const palette = assertF64Stride(slotLookupMap, TIME_PALETTE_SLOT, 4, 'time.palette slot');
+  const palette = assertNumericStride(slotLookupMap, TIME_PALETTE_SLOT, 4, 'time.palette slot');
   writeArenaStrided(slotToArena, state, palette, time.palette, 4);
 
   // ═══════════════════════════════════════════════════════════════════════════

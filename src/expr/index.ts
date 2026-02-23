@@ -22,7 +22,7 @@
  */
 
 import type { CanonicalType, PayloadType } from '../core/canonical-types';
-import type { IRBuilder } from '../compiler/ir/IRBuilder';
+import type { BlockIRBuilder } from '../compiler/ir/BlockIRBuilder';
 import type { ValueExprId } from '../compiler/ir/Indices';
 import type { AddressRegistry } from '../graph/address-registry';
 import { tokenize } from './lexer';
@@ -67,7 +67,7 @@ export type CompileResult =
  *
  * @param exprText Expression string (e.g., "sin(phase * 2) + 0.5")
  * @param inputs Input type environment (maps input names to value types)
- * @param builder IRBuilder instance
+ * @param builder BlockIRBuilder instance
  * @param inputExprs Compiled input IDs (maps input names to ValueExprIds)
  * @param blockRefs Optional block reference context for member access (e.g., circle_1.radius)
  * @returns Compiled ValueExprId or error
@@ -93,7 +93,7 @@ export type CompileResult =
 export function compileExpression(
   exprText: string,
   inputs: ReadonlyMap<string, CanonicalType>,
-  builder: import('../compiler/ir/BlockIRBuilder').BlockIRBuilder,
+  builder: BlockIRBuilder,
   inputExprs: ReadonlyMap<string, ValueExprId>,
   blockRefs?: BlockRefsContext
 ): CompileResult {

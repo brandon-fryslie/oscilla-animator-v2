@@ -100,6 +100,13 @@ export interface CompiledProgramIR {
   // Slot layout with required offsets
   readonly slotMeta: readonly SlotMetaEntry[];
 
+  /**
+   * Canonical runtime slot addressing records.
+   * [LAW:one-source-of-truth] Runtime address resolution reads this table
+   * instead of deriving from slotMeta/arenaLayout at execution time.
+   */
+  readonly runtimeSlots: readonly RuntimeSlotEntry[];
+
   // Debug provenance
   readonly debugIndex: DebugIndexIR;
 
@@ -294,6 +301,20 @@ export interface SlotMetaEntry {
 
   /** Optional debug label */
   readonly debugName?: string;
+}
+
+/**
+ * Runtime slot addressing entry.
+ *
+ * Carries all data runtime execution needs for slot resolution in one record.
+ */
+export interface RuntimeSlotEntry {
+  readonly slot: ValueSlot;
+  readonly storage: 'f64' | 'f32' | 'i32' | 'u32' | 'object' | 'shape2d';
+  readonly offset: number;
+  readonly stride: number;
+  readonly type: CanonicalType;
+  readonly arena: ArenaSlotDescriptor;
 }
 
 // =============================================================================

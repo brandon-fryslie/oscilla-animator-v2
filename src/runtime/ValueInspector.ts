@@ -7,7 +7,7 @@
 
 import type { RuntimeState } from './RuntimeState';
 import { readShape2D } from './RuntimeState';
-import type { CompiledProgramIR, SlotMetaEntry } from '../compiler/ir/program';
+import type { CompiledProgramIR } from '../compiler/ir/program';
 import type { ValueSlot } from '../compiler/ir/Indices';
 import type { BlockId, PortId } from '../types';
 import type { SlotLookup } from './ExprAddressTable';
@@ -16,19 +16,20 @@ import type { SlotValue, ValueAnomaly, LaneIdentity } from './StepDebugTypes';
 import type { InstanceId } from '../core/ids';
 import type { ContinuityState } from './ContinuityState';
 import type { ArenaSlotDescriptor } from './ArenaValueStore';
+import type { CanonicalType } from '../core/canonical-types';
 
 /**
  * Read the current value of a slot from runtime state.
  *
  * @param state - Runtime state to read from
  * @param lookup - Pre-computed slot lookup (from ExprAddressTable)
- * @param meta - Slot metadata (for type information)
+ * @param slotType - Slot type metadata
  * @returns Typed slot value snapshot
  */
 export function readSlotValue(
   state: RuntimeState,
   lookup: SlotLookup,
-  meta: SlotMetaEntry,
+  slotType: CanonicalType,
   slotToArena?: ReadonlyMap<ValueSlot, ArenaSlotDescriptor>,
 ): SlotValue {
   switch (lookup.storage) {
@@ -41,7 +42,7 @@ export function readSlotValue(
         return {
           kind: 'scalar',
           value: state.arena[arenaDesc.offset],
-          type: meta.type,
+          type: slotType,
         };
       }
       // Multi-component: copy the values into a snapshot buffer
@@ -53,7 +54,7 @@ export function readSlotValue(
         kind: 'buffer',
         buffer,
         count: lookup.stride,
-        type: meta.type,
+        type: slotType,
       };
     }
 
@@ -66,7 +67,7 @@ export function readSlotValue(
           kind: 'buffer',
           buffer: ref,
           count: ref.length,
-          type: meta.type,
+          type: slotType,
         };
       }
       return { kind: 'object', ref };
@@ -174,21 +175,15 @@ export function inspectBlockSlots(
   const lookupMap = slotLookupMap ?? addressTable.slotLookup;
   const result = new Map<ValueSlot, SlotValue>();
 
-  // Build a slot-to-meta index for quick lookup
-  const slotToMeta = new Map<ValueSlot, SlotMetaEntry>();
-  for (const meta of program.slotMeta) {
-    slotToMeta.set(meta.slot, meta);
-  }
-
   // Find all slots belonging to this block
   for (const [slot, ownerBlockId] of program.debugIndex.slotToBlock) {
     if (ownerBlockId !== blockId) continue;
 
     const lookup = lookupMap.get(slot);
-    const meta = slotToMeta.get(slot);
-    if (!lookup || !meta) continue;
+    const slotType = addressTable.slotTypeBySlot.get(slot);
+    if (!lookup || !slotType) continue;
 
-    result.set(slot, readSlotValue(state, lookup, meta, addressTable.slotToArena));
+    result.set(slot, readSlotValue(state, lookup, slotType, addressTable.slotToArena));
   }
 
   return result;

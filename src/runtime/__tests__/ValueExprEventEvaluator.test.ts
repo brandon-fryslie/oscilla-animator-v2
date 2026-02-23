@@ -329,7 +329,7 @@ describe('ValueExprEventEvaluator', () => {
       };
 
       // Set prevPredicate to 1 (already high)
-      state.eventPrevPredicateValue[1] = 1;
+      state.eventWrapPredicate[1] = 1;
 
       // Should not fire (no rising edge)
       const result = evaluateValueExprEvent(valueExprId(1), { nodes }, state, program);

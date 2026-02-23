@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   getExprAddressTable,
   assertSlotExists,
-  assertF64Stride,
+  assertNumericStride,
 } from '../ExprAddressTable';
 import type { CompiledProgramIR, SlotMetaEntry } from '../../compiler/ir/program';
 import type { ScheduleIR } from '../../compiler/backend/schedule-program';
@@ -37,8 +37,17 @@ function mockProgram(opts: {
       length: meta.stride,
     };
   }
+  const runtimeSlots = opts.slotMeta.map((meta) => ({
+    slot: meta.slot,
+    storage: meta.storage,
+    offset: meta.offset,
+    stride: meta.stride,
+    type: meta.type,
+    arena: arenaLayout[Number(meta.slot)]!,
+  }));
   return {
     slotMeta: opts.slotMeta,
+    runtimeSlots,
     schedule: {
       steps: opts.steps,
       timeModel: {} as any,
@@ -176,13 +185,13 @@ describe('assertSlotExists', () => {
   });
 });
 
-describe('assertF64Stride', () => {
+describe('assertNumericStride', () => {
   it('returns lookup for matching f64 slot', () => {
     const table = getExprAddressTable(mockProgram({
       slotMeta: [{ slot: valueSlot(0), storage: 'f64', offset: 0, stride: 4, type: SIG_FLOAT }],
       steps: [],
     }));
-    const result = assertF64Stride(table.slotLookup, valueSlot(0), 4, 'test');
+    const result = assertNumericStride(table.slotLookup, valueSlot(0), 4, 'test');
     expect(result.stride).toBe(4);
   });
 
@@ -191,7 +200,7 @@ describe('assertF64Stride', () => {
       slotMeta: [{ slot: valueSlot(0), storage: 'object', offset: 0, stride: 1, type: FIELD_FLOAT }],
       steps: [],
     }));
-    expect(() => assertF64Stride(table.slotLookup, valueSlot(0), 1, 'test'))
+    expect(() => assertNumericStride(table.slotLookup, valueSlot(0), 1, 'test'))
       .toThrow(/must be f64 storage/);
   });
 
@@ -200,7 +209,7 @@ describe('assertF64Stride', () => {
       slotMeta: [{ slot: valueSlot(0), storage: 'f64', offset: 0, stride: 1, type: SIG_FLOAT }],
       steps: [],
     }));
-    expect(() => assertF64Stride(table.slotLookup, valueSlot(0), 4, 'test'))
+    expect(() => assertNumericStride(table.slotLookup, valueSlot(0), 4, 'test'))
       .toThrow(/must have stride=4, got 1/);
   });
 });

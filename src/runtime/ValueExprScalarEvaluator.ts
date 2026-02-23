@@ -7,9 +7,7 @@
  * This evaluator handles scalar-extent ValueExpr nodes (cardinality one,
  * temporality continuous).
  *
- * Migration Status: Shadow mode implementation for incremental ValueExpr adoption.
- * This evaluator runs in parallel with legacy scalar evaluators during migration,
- * validating equivalence before cutover.
+ * Scalar evaluator for canonical ValueExpr execution.
  *
  * ──────────────────────────────────────────────────────────────────────
  * IMPORTANT: SCALAR-EXTENT ONLY

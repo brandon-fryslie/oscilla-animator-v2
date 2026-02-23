@@ -65,6 +65,7 @@ function makeMinimalProgram(opts: {
     constants: { json: [] },
     outputs: [],
     slotMeta: [],
+    runtimeSlots: [],
     renderGlobals: [],
     kernelRegistry: {} as any,
     arenaLayout: [],
