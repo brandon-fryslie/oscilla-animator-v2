@@ -141,3 +141,4 @@ Adopt the gate model as the canonical readiness concept. Keep workstreams as exe
 - Canonical verdict artifact emitted by checker: `artifacts/webgpu-migration-readiness.json`.
 - CI lane added: `.github/workflows/webgpu-migration-readiness.yml` runs the canonical readiness checker on pull requests and `master`.
 - Local acceptance path updated: `just check` now includes the readiness gate (`just readiness`).
+- Label enforcement added: `.github/workflows/design-kickoff-gate.yml` removes `design kickoff` when readiness is not green on the PR head SHA.
