@@ -123,7 +123,6 @@ describe('RenderAssembler', () => {
       };
 
       const context: AssemblerContext = {
-        scalarExprToArenaOffset: new Map(),
         scalarExprToArenaAddress: new Map(),
         instances: new Map(),
         state,
@@ -147,7 +146,6 @@ describe('RenderAssembler', () => {
       };
 
       const context: AssemblerContext = {
-        scalarExprToArenaOffset: new Map(),
         scalarExprToArenaAddress: new Map(),
         instances: new Map([['empty-instance', createMockInstance(0)]]),
         state,
@@ -214,7 +212,6 @@ describe('RenderAssembler', () => {
       };
 
       const context: AssemblerContext = {
-        scalarExprToArenaOffset,
         scalarExprToArenaAddress: buildScalarExprToArenaAddressFromOffsets(scalarExprToArenaOffset),
         instances: new Map([['culled-instance', createMockInstance(2)]]),
         state,
@@ -261,7 +258,6 @@ describe('RenderAssembler', () => {
       };
 
       const context: AssemblerContext = {
-        scalarExprToArenaOffset,
         scalarExprToArenaAddress: buildScalarExprToArenaAddressFromOffsets(scalarExprToArenaOffset),
         instances: new Map([['test-instance', createMockInstance(10)]]),
         state,
@@ -326,7 +322,6 @@ describe('RenderAssembler', () => {
       };
 
       const context: AssemblerContext = {
-        scalarExprToArenaOffset,
         scalarExprToArenaAddress: buildScalarExprToArenaAddressFromOffsets(scalarExprToArenaOffset),
         instances: new Map([['test-instance', createMockInstance(2)]]),
         state,
@@ -414,7 +409,6 @@ describe('RenderAssembler', () => {
       };
 
       const context: AssemblerContext = {
-        scalarExprToArenaOffset,
         scalarExprToArenaAddress: buildScalarExprToArenaAddressFromOffsets(scalarExprToArenaOffset),
         instances: new Map([['test-instance', createMockInstance(10)]]),
         state,
@@ -490,7 +484,6 @@ describe('RenderAssembler', () => {
       ];
 
       const context: AssemblerContext = {
-        scalarExprToArenaOffset,
         scalarExprToArenaAddress: buildScalarExprToArenaAddressFromOffsets(scalarExprToArenaOffset),
         instances: new Map([
           ['instance-a', createMockInstance(1)],
@@ -533,7 +526,6 @@ describe('RenderAssembler', () => {
       ];
 
       const context: AssemblerContext = {
-        scalarExprToArenaOffset,
         scalarExprToArenaAddress: buildScalarExprToArenaAddressFromOffsets(scalarExprToArenaOffset),
         instances: new Map([
           ['empty-instance', createMockInstance(0)], // count = 0
@@ -607,7 +599,6 @@ describe('RenderAssembler', () => {
 
       const arena = getTestArena();
       const context: AssemblerContext = {
-        scalarExprToArenaOffset,
         scalarExprToArenaAddress: buildScalarExprToArenaAddressFromOffsets(scalarExprToArenaOffset),
         instances: new Map([['budget-instance', createMockInstance(instanceCount)]]),
         state,

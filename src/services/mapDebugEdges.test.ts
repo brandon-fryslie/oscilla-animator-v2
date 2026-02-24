@@ -22,7 +22,6 @@ function createRuntimeAddressTable(slotEntries: ReadonlyArray<{ slot: ValueSlot;
     return {
         slotLookup,
         fieldExprToSlot: new Map(),
-        scalarExprToArenaOffset: new Map(),
         slotToArena: new Map(),
     };
 }

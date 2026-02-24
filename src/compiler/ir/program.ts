@@ -401,8 +401,6 @@ export interface RuntimeAddressTableIR {
   readonly slotLookup: ReadonlyMap<ValueSlot, RuntimeSlotLookupEntry>;
   /** ValueExprId (materialized field expression) → target ValueSlot */
   readonly fieldExprToSlot: ReadonlyMap<number, ValueSlot>;
-  /** Scalar ValueExprId → arena scalar offset */
-  readonly scalarExprToArenaOffset: ReadonlyMap<number, number>;
   /** Scalar ValueExprId → canonical arena address metadata */
   readonly scalarExprToArenaAddress: ReadonlyMap<number, RuntimeScalarArenaAddress>;
   /** ValueSlot → arena descriptor */
