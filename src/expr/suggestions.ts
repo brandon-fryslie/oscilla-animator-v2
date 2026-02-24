@@ -20,6 +20,7 @@ import { addressToString } from '../types/canonical-address';
 import { getOutputAddress } from '../graph/addressing';
 import { normalizeCanonicalName } from '../core/canonical-name';
 import type { PortId } from '../types';
+import { getExpressionConstants } from './constants';
 
 // =============================================================================
 // Suggestion Data Types
@@ -28,7 +29,7 @@ import type { PortId } from '../types';
 /**
  * Discriminated union for suggestion types.
  */
-export type SuggestionType = 'function' | 'block' | 'port' | 'output';
+export type SuggestionType = 'function' | 'constant' | 'block' | 'port' | 'output';
 
 /**
  * Base suggestion interface.
@@ -55,6 +56,17 @@ export interface FunctionSuggestion extends Suggestion {
   readonly type: 'function';
   readonly arity: number;
   readonly returnType: PayloadType;
+}
+
+/**
+ * Named constant suggestion.
+ *
+ * Example: { label: "pi", type: "constant", chipLabel: "π", value: 3.14159, ... }
+ */
+export interface ConstantSuggestion extends Suggestion {
+  readonly type: 'constant';
+  readonly chipLabel: string;
+  readonly value: number;
 }
 
 /**
@@ -211,6 +223,17 @@ export class SuggestionProvider {
       returnType: sig.returnType,
       description: sig.description,
       sortOrder: 100 + index, // Functions start at 100, preserve order
+    }));
+  }
+
+  suggestConstants(): readonly ConstantSuggestion[] {
+    return getExpressionConstants().map((constant, index) => ({
+      label: constant.name,
+      type: 'constant' as const,
+      chipLabel: constant.chipLabel,
+      value: constant.value,
+      description: `${constant.description} (${constant.chipLabel})`,
+      sortOrder: 220 + index,
     }));
   }
 
@@ -399,6 +422,8 @@ export class SuggestionProvider {
 
     if (type === 'function') {
       allSuggestions = [...this.suggestFunctions()];
+    } else if (type === 'constant') {
+      allSuggestions = [...this.suggestConstants()];
     } else if (type === 'block') {
       allSuggestions = [...this.suggestBlocks()];
     } else if (type === 'port') {
@@ -410,6 +435,7 @@ export class SuggestionProvider {
       // No type filter - show functions and compatible outputs (not bare blocks)
       allSuggestions = [
         ...this.suggestFunctions(),
+        ...this.suggestConstants(),
         ...this.suggestAllOutputs(excludeBlockId),
       ];
     }
