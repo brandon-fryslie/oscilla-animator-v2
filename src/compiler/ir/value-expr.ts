@@ -315,8 +315,9 @@ export type ValueExprEvent =
 
 // REMOVED 2026-02-06: ValueExprSlotRead
 // Reason: Dead code - slotRead() was never called in production, only in tests.
-// The slot→offset indirection required program.slotMeta lookup, which evaluators
-// don't have access to. This was a correctness hazard (treating slot as offset).
+// The slot→offset indirection relied on metadata-derived addressing instead of
+// the compiler-emitted runtimeAddressTable contract. This was a correctness
+// hazard (treating slot as offset).
 // Extract optimization (reading from strided slots) is handled via direct evaluation.
 
 /**
