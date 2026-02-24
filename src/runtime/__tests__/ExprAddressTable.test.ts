@@ -27,7 +27,7 @@ function mockProgram(opts: {
     length: 0,
   }));
   for (const meta of opts.slotMeta) {
-    if (meta.storage === 'object' || meta.storage === 'shape2d') {
+    if (meta.storage === 'shape2d') {
       continue;
     }
     arenaLayout[Number(meta.slot)] = {
@@ -82,9 +82,9 @@ describe('getExprAddressTable', () => {
   it('builds slotLookup from runtime slots', () => {
     const program = mockProgram({
       slotMeta: [
-        { slot: valueSlot(0), storage: 'f64', offset: 0, stride: 1, type: SIG_FLOAT },
-        { slot: valueSlot(1), storage: 'object', offset: 0, stride: 1, type: FIELD_FLOAT },
-        { slot: valueSlot(2), storage: 'f64', offset: 1, stride: 3, type: SIG_FLOAT },
+        { slot: valueSlot(0), storage: 'f32', offset: 0, stride: 1, type: SIG_FLOAT },
+        { slot: valueSlot(1), storage: 'shape2d', offset: 0, stride: 1, type: FIELD_FLOAT },
+        { slot: valueSlot(2), storage: 'u32', offset: 1, stride: 3, type: SIG_FLOAT },
       ],
       steps: [],
     });
@@ -92,20 +92,20 @@ describe('getExprAddressTable', () => {
     const table = getExprAddressTable(program);
     expect(table.slotLookup.size).toBe(3);
     expect(table.slotLookup.get(valueSlot(0))).toEqual(expect.objectContaining({
-      storage: 'f64', offset: 0, stride: 1, slot: valueSlot(0), type: SIG_FLOAT,
+      storage: 'f32', offset: 0, stride: 1, slot: valueSlot(0), type: SIG_FLOAT,
     }));
     expect(table.slotLookup.get(valueSlot(1))).toEqual(expect.objectContaining({
-      storage: 'object', offset: 0, stride: 1, slot: valueSlot(1), type: FIELD_FLOAT,
+      storage: 'shape2d', offset: 0, stride: 1, slot: valueSlot(1), type: FIELD_FLOAT,
     }));
     expect(table.slotLookup.get(valueSlot(2))).toEqual(expect.objectContaining({
-      storage: 'f64', offset: 1, stride: 3, slot: valueSlot(2), type: SIG_FLOAT,
+      storage: 'u32', offset: 1, stride: 3, slot: valueSlot(2), type: SIG_FLOAT,
     }));
   });
 
   it('builds fieldExprToSlot from materialize steps', () => {
     const program = mockProgram({
       slotMeta: [
-        { slot: valueSlot(5), storage: 'object', offset: 0, stride: 1, type: FIELD_FLOAT },
+        { slot: valueSlot(5), storage: 'f32', offset: 0, stride: 1, type: FIELD_FLOAT },
       ],
       steps: [
         { kind: 'materialize', field: 10 as any, target: valueSlot(5), instanceId: 'inst' as any },
@@ -119,7 +119,7 @@ describe('getExprAddressTable', () => {
   it('builds scalarExprToArenaOffset from evalOne steps', () => {
     const program = mockProgram({
       slotMeta: [
-        { slot: valueSlot(3), storage: 'f64', offset: 7, stride: 1, type: SIG_FLOAT },
+        { slot: valueSlot(3), storage: 'f32', offset: 7, stride: 1, type: SIG_FLOAT },
       ],
       steps: [
         {
@@ -137,7 +137,7 @@ describe('getExprAddressTable', () => {
   it('caches table per program identity', () => {
     const program = mockProgram({
       slotMeta: [
-        { slot: valueSlot(0), storage: 'f64', offset: 0, stride: 1, type: SIG_FLOAT },
+        { slot: valueSlot(0), storage: 'f32', offset: 0, stride: 1, type: SIG_FLOAT },
       ],
       steps: [],
     });
@@ -149,11 +149,11 @@ describe('getExprAddressTable', () => {
 
   it('different programs get different tables', () => {
     const p1 = mockProgram({
-      slotMeta: [{ slot: valueSlot(0), storage: 'f64', offset: 0, stride: 1, type: SIG_FLOAT }],
+      slotMeta: [{ slot: valueSlot(0), storage: 'f32', offset: 0, stride: 1, type: SIG_FLOAT }],
       steps: [],
     });
     const p2 = mockProgram({
-      slotMeta: [{ slot: valueSlot(0), storage: 'f64', offset: 5, stride: 1, type: SIG_FLOAT }],
+      slotMeta: [{ slot: valueSlot(0), storage: 'f32', offset: 5, stride: 1, type: SIG_FLOAT }],
       steps: [],
     });
 
@@ -168,7 +168,7 @@ describe('getExprAddressTable', () => {
 describe('assertSlotExists', () => {
   it('returns lookup for existing slot', () => {
     const table = getExprAddressTable(mockProgram({
-      slotMeta: [{ slot: valueSlot(1), storage: 'f64', offset: 0, stride: 1, type: SIG_FLOAT }],
+      slotMeta: [{ slot: valueSlot(1), storage: 'f32', offset: 0, stride: 1, type: SIG_FLOAT }],
       steps: [],
     }));
     const result = assertSlotExists(table.slotLookup, valueSlot(1), 'test');
@@ -188,7 +188,7 @@ describe('assertSlotExists', () => {
 describe('assertNumericStride', () => {
   it('returns lookup for matching numeric slot', () => {
     const table = getExprAddressTable(mockProgram({
-      slotMeta: [{ slot: valueSlot(0), storage: 'f64', offset: 0, stride: 4, type: SIG_FLOAT }],
+      slotMeta: [{ slot: valueSlot(0), storage: 'f32', offset: 0, stride: 4, type: SIG_FLOAT }],
       steps: [],
     }));
     const result = assertNumericStride(table.slotLookup, valueSlot(0), 4, 'test');
@@ -206,19 +206,28 @@ describe('assertNumericStride', () => {
 
   it('throws for non-numeric storage', () => {
     const table = getExprAddressTable(mockProgram({
-      slotMeta: [{ slot: valueSlot(0), storage: 'object', offset: 0, stride: 1, type: FIELD_FLOAT }],
+      slotMeta: [{ slot: valueSlot(0), storage: 'shape2d', offset: 0, stride: 1, type: FIELD_FLOAT }],
       steps: [],
     }));
     expect(() => assertNumericStride(table.slotLookup, valueSlot(0), 1, 'test'))
-      .toThrow(/must be numeric storage/);
+      .toThrow(/must use canonical numeric storage/);
   });
 
   it('throws for stride mismatch', () => {
     const table = getExprAddressTable(mockProgram({
-      slotMeta: [{ slot: valueSlot(0), storage: 'f64', offset: 0, stride: 1, type: SIG_FLOAT }],
+      slotMeta: [{ slot: valueSlot(0), storage: 'f32', offset: 0, stride: 1, type: SIG_FLOAT }],
       steps: [],
     }));
     expect(() => assertNumericStride(table.slotLookup, valueSlot(0), 4, 'test'))
       .toThrow(/must have stride=4, got 1/);
+  });
+
+  it('rejects legacy f64 storage labels in canonical numeric checks', () => {
+    const table = getExprAddressTable(mockProgram({
+      slotMeta: [{ slot: valueSlot(0), storage: 'f64', offset: 0, stride: 1, type: SIG_FLOAT }],
+      steps: [],
+    }));
+    expect(() => assertNumericStride(table.slotLookup, valueSlot(0), 1, 'test'))
+      .toThrow(/must use canonical numeric storage/);
   });
 });

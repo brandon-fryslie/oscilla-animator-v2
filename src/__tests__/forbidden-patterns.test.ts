@@ -987,6 +987,28 @@ describe('Forbidden Patterns (Type System Invariants)', () => {
       ).toEqual([]);
     });
 
+    it('runtime hot paths must not branch on legacy f64/object storage labels', () => {
+      // [LAW:dataflow-not-control-flow] Runtime storage variability must be
+      // encoded in canonical storage data, not legacy-name branches.
+      const rawMatches = [
+        ...grepSrc("storage\\s*===\\s*'f64'", 'src/runtime/ScheduleExecutor.ts'),
+        ...grepSrc("storage\\s*===\\s*'object'", 'src/runtime/ScheduleExecutor.ts'),
+        ...grepSrc("storage\\s*===\\s*'f64'", 'src/runtime/executeFrameStepped.ts'),
+        ...grepSrc("storage\\s*===\\s*'object'", 'src/runtime/executeFrameStepped.ts'),
+        ...grepSrc("case\\s*'f64'", 'src/runtime/ScheduleExecutor.ts'),
+        ...grepSrc("case\\s*'object'", 'src/runtime/ScheduleExecutor.ts'),
+        ...grepSrc("case\\s*'f64'", 'src/runtime/executeFrameStepped.ts'),
+        ...grepSrc("case\\s*'object'", 'src/runtime/executeFrameStepped.ts'),
+      ];
+      const filtered = filterAllowlist(rawMatches, [/\.test\./, /__tests__/]);
+      expect(
+        filtered,
+        'Legacy f64/object storage branching is forbidden in runtime hot paths.\n' +
+        'Use canonical numeric storage semantics and ExprAddressTable abstractions.\n' +
+        'Found violations:\n' + filtered.join('\n')
+      ).toEqual([]);
+    });
+
   });
 
   describe('WebGPU Prereq Guards (W2)', () => {

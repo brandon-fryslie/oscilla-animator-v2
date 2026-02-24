@@ -20,6 +20,8 @@ import type { CanonicalType } from '../core/canonical-types';
  * Slot lookup entry — maps a ValueSlot to its physical storage location.
  */
 export interface SlotLookup {
+  // [LAW:single-enforcer] RuntimeSlotEntry is canonical at compile boundary.
+  // Legacy labels are tolerated in this type only for non-hot-path debug consumers.
   storage: 'f64' | 'f32' | 'i32' | 'u32' | 'object' | 'shape2d';
   offset: number;
   stride: number;
@@ -113,8 +115,8 @@ export function assertSlotExists(slotLookupMap: ReadonlyMap<ValueSlot, SlotLooku
   return lookup;
 }
 
-export function isNumericStorage(storage: SlotLookup['storage']): storage is 'f64' | 'f32' | 'i32' | 'u32' {
-  return storage === 'f64' || storage === 'f32' || storage === 'i32' || storage === 'u32';
+export function isNumericStorage(storage: SlotLookup['storage']): storage is 'f32' | 'i32' | 'u32' {
+  return storage === 'f32' || storage === 'i32' || storage === 'u32';
 }
 
 export function assertNumericStride(
@@ -125,7 +127,7 @@ export function assertNumericStride(
 ): SlotLookup {
   const lookup = assertSlotExists(slotLookupMap, slot, what);
   if (!isNumericStorage(lookup.storage)) {
-    throw new Error(what + ' must be numeric storage, got ' + lookup.storage);
+    throw new Error(what + ' must use canonical numeric storage, got ' + lookup.storage);
   }
   if (lookup.stride !== expectedStride) {
     throw new Error(what + ' must have stride=' + expectedStride + ', got ' + lookup.stride);

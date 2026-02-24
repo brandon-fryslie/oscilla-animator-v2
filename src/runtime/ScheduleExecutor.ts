@@ -429,7 +429,7 @@ export function executeFrame(
         // Continuity System: Apply continuity policy to field target (spec §5.1)
         const { policy, baseSlot, outputSlot } = step;
 
-        // Resolve base/output through arena first (canonical numeric storage), with object fallback.
+        // Resolve base/output through canonical numeric arena descriptors only.
         const baseBuffer = resolveNumericBuffer(slotToArena, state, baseSlot);
 
         const outputBuffer = baseSlot === outputSlot

@@ -273,7 +273,11 @@ export interface OutputSpecIR {
 export interface SlotMetaEntry {
   readonly slot: ValueSlot;
 
-  /** Physical storage class (backing store selection) */
+  /**
+   * Physical storage class (metadata/backward-compat visibility).
+   * [LAW:single-enforcer] Runtime execution does not consume legacy classes;
+   * operational addressing flows through RuntimeSlotEntry.storage.
+   */
   readonly storage: 'f64' | 'f32' | 'i32' | 'u32' | 'object' | 'shape2d';
 
   /**
@@ -307,7 +311,12 @@ export interface SlotMetaEntry {
  */
 export interface RuntimeSlotEntry {
   readonly slot: ValueSlot;
-  readonly storage: 'f64' | 'f32' | 'i32' | 'u32' | 'object' | 'shape2d';
+  /**
+   * Canonical runtime ABI storage vocabulary.
+   * [LAW:one-source-of-truth] Runtime hot path resolves addresses from this
+   * canonical set only (no legacy f64/object labels).
+   */
+  readonly storage: 'f32' | 'i32' | 'u32' | 'shape2d';
   readonly offset: number;
   readonly stride: number;
   readonly type: CanonicalType;

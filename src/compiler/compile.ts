@@ -288,6 +288,23 @@ function isAlwaysFatalInvariantError(error: CompileError): boolean {
   return error.details?.compilerInvariant === 'unresolvedPlaceholderInstance';
 }
 
+function toCanonicalRuntimeStorage(storage: SlotMetaEntry['storage']): RuntimeSlotEntry['storage'] {
+  switch (storage) {
+    case 'f64':
+    case 'object':
+      return 'f32';
+    case 'f32':
+    case 'i32':
+    case 'u32':
+    case 'shape2d':
+      return storage;
+    default: {
+      const _never: never = storage;
+      throw new Error('Unknown storage class: ' + _never);
+    }
+  }
+}
+
 /**
  * Convert LinkedIR and ScheduleIR to CompiledProgramIR.
  *
@@ -321,11 +338,9 @@ function convertLinkedIRToProgram(
     }
   }
 
-  // Build slot metadata from slot types
-  // [LAW:one-source-of-truth] Storage class is derived from the slot's CanonicalType cardinality axis.
-  // many cardinality → object storage (Float32Array buffers)
-  // one/zero cardinality → f64 storage (scalar values)
-  // No parallel tracking sets needed.
+  // Build slot metadata from slot types.
+  // [LAW:one-source-of-truth] Runtime ABI storage is canonicalized once here.
+  // Legacy labels (f64/object) are normalized to f32 before runtime contract emission.
   const slotTypes = builder.getSlotMetaInputs();
   const slotMeta: SlotMetaEntry[] = [];
   const runtimeSlots: RuntimeSlotEntry[] = [];
@@ -333,12 +348,10 @@ function convertLinkedIRToProgram(
   const arenaLayout: ArenaSlotDescriptor[] = [];
   let arenaOffset = 0;
 
-  const storageOffsets = {
-    f64: 0,
+  const storageOffsets: Record<RuntimeSlotEntry['storage'], number> = {
     f32: 0,
     i32: 0,
     u32: 0,
-    object: 0,
     shape2d: 0,
   };
 
@@ -350,7 +363,8 @@ function convertLinkedIRToProgram(
     const type = slotInfo.type;
 
     // [LAW:one-source-of-truth] Single derivation point for storage class + stride.
-    const { storage, stride } = deriveStorageLayout(type, slotInfo.stride);
+    const { storage: derivedStorage, stride } = deriveStorageLayout(type, slotInfo.stride);
+    const storage = toCanonicalRuntimeStorage(derivedStorage);
 
     const offset = storageOffsets[storage];
     storageOffsets[storage] += stride;
