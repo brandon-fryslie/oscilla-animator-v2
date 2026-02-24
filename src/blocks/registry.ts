@@ -583,7 +583,22 @@ export function requireConfigInt(
   min?: number,
   max?: number,
 ): number {
-  const val = requireConfig<number>(config, key, 'number');
+  const raw = config[key];
+  if (raw === undefined) {
+    throw new Error(`Missing config key '${key}' — must be set in block.params`);
+  }
+
+  // [LAW:single-enforcer] Coerce integer-compatible UI select strings at the
+  // single config-read boundary instead of per-block ad hoc parsing.
+  const val = typeof raw === 'number'
+    ? raw
+    : typeof raw === 'string' && /^[+-]?\d+$/.test(raw.trim())
+      ? Number(raw)
+      : Number.NaN;
+
+  if (!Number.isFinite(val)) {
+    throw new Error(`Config '${key}' expected number or integer string, got ${typeof raw}`);
+  }
   if (!Number.isInteger(val)) {
     throw new Error(`Config '${key}' must be an integer, got ${val}`);
   }
