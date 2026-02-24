@@ -1,8 +1,9 @@
 {
   "workstream": "W12",
   "title": "Direct-Index Bypass Removal",
-  "status": "slice_completed",
-  "timestamp_utc": "2026-02-23T22:22:17Z",
+  "status": "completed",
+  "timestamp_utc": "2026-02-24T12:00:41Z",
+  "commit": "ce4e29669",
   "laws": [
     "one-source-of-truth",
     "single-enforcer",
@@ -13,10 +14,13 @@
     "Route debug service arena lookups through canonical slot-to-arena map",
     "Route compile orchestrator debug wiring through ExprAddressTable instead of direct arenaLayout array"
   ],
-  "changed_files": [
-    "/Users/bmf/.codex/worktrees/804c/oscilla-animator-v2/src/runtime/CameraResolver.ts",
-    "/Users/bmf/.codex/worktrees/804c/oscilla-animator-v2/src/services/DebugService.ts",
-    "/Users/bmf/.codex/worktrees/804c/oscilla-animator-v2/src/services/CompileOrchestrator.ts"
+  "closure_surfaces": [
+    "src/runtime/CameraResolver.ts",
+    "src/services/DebugService.ts",
+    "src/services/CompileOrchestrator.ts",
+    "src/runtime/__tests__/CameraResolver.test.ts",
+    "src/services/DebugService.test.ts",
+    "src/__tests__/forbidden-patterns.test.ts"
   ],
   "verification": [
     {
@@ -24,8 +28,9 @@
       "exit_code": 0
     },
     {
-      "command": "pnpm -s vitest run src/services/DebugService.test.ts src/runtime/__tests__/render-scale-offset.test.ts",
-      "exit_code": 0
+      "command": "pnpm -s vitest run src/services/DebugService.test.ts src/runtime/__tests__/CameraResolver.test.ts src/runtime/__tests__/render-scale-offset.test.ts src/runtime/__tests__/RenderAssembler.test.ts",
+      "exit_code": 0,
+      "tests_passed": 67
     },
     {
       "command": "pnpm -s vitest run src/__tests__/forbidden-patterns.test.ts",
@@ -33,13 +38,19 @@
       "tests_passed": 52
     }
   ],
-  "static_scan": {
-    "command": "rg -n \"program\\.arenaLayout\\[\" src/runtime src/services src/render src/compiler",
-    "allowed_matches": [
-      "ExprAddressTable canonical table construction",
-      "comments describing removed bypass pattern",
-      "runtime tests"
-    ],
-    "forbidden_in_hot_path": true
-  }
+  "static_scans": [
+    {
+      "command": "rg -n \"program\\.arenaLayout\\[\" src/runtime src/services src/render src/compiler",
+      "allowed_matches": [
+        "ExprAddressTable canonical table construction",
+        "comments describing removed bypass pattern",
+        "runtime tests"
+      ],
+      "forbidden_in_hot_path": true
+    }
+  ],
+  "notes": [
+    "Compatibility facade from DebugService.setArenaRef(Array) was removed and canonical map-only wiring is enforced.",
+    "Camera resolver now fails fast when slot descriptors are missing instead of silently falling back."
+  ]
 }

@@ -1,0 +1,192 @@
+{
+  "readiness_version": "2026-02-24.v1",
+  "generated_at_utc": "2026-02-24T12:04:22.581Z",
+  "source": {
+    "proof_dir": "migration-proof",
+    "artifact_count": 15
+  },
+  "gates": {
+    "G1": {
+      "name": "Canonical Runtime Data Model",
+      "passed": true,
+      "failures": [],
+      "evidence": [
+        {
+          "workstream": "W2",
+          "file": "w2-slotmeta-runtime-removal.json",
+          "status": "completed"
+        },
+        {
+          "workstream": "W3",
+          "file": "w3-handle-hotpath.json",
+          "status": "completed"
+        },
+        {
+          "workstream": "W4",
+          "file": "w4-state-f32-phase.json",
+          "status": "completed"
+        },
+        {
+          "workstream": "W7",
+          "file": "w7-storage-abi-cleanup.json",
+          "status": "completed"
+        },
+        {
+          "workstream": "W8",
+          "file": "w8-shape-bank.json",
+          "status": "completed"
+        },
+        {
+          "workstream": "W12",
+          "file": "w12-address-bypass-ban.json",
+          "status": "completed"
+        },
+        {
+          "workstream": "W14",
+          "file": "w14-cpu-soa-parity.json",
+          "status": "completed"
+        }
+      ]
+    },
+    "G2": {
+      "name": "Deterministic Execution Semantics",
+      "passed": true,
+      "failures": [],
+      "evidence": [
+        {
+          "workstream": "W4",
+          "file": "w4-state-f32-phase.json",
+          "status": "completed"
+        },
+        {
+          "workstream": "W5",
+          "file": "w5-effects-as-data.json",
+          "status": "completed"
+        },
+        {
+          "workstream": "W6",
+          "file": "w6-evaluator-unification.json",
+          "status": "completed"
+        },
+        {
+          "workstream": "W13",
+          "file": "w13-continuity-segments.json",
+          "status": "completed"
+        }
+      ]
+    },
+    "G3": {
+      "name": "Renderer Contract Hardness",
+      "passed": true,
+      "failures": [],
+      "evidence": [
+        {
+          "workstream": "W9",
+          "file": "w9-renderer-sink.json",
+          "status": "completed"
+        },
+        {
+          "workstream": "W10",
+          "file": "w10-webgpu-contract.json",
+          "status": "completed"
+        }
+      ]
+    },
+    "G4": {
+      "name": "Browser Qualification And Performance",
+      "passed": true,
+      "failures": [],
+      "evidence": [
+        {
+          "workstream": "W15",
+          "file": "w15-browser-matrix-perf.json",
+          "status": "completed"
+        }
+      ]
+    },
+    "G5": {
+      "name": "Evidence Integrity",
+      "passed": true,
+      "failures": [],
+      "evidence": [
+        {
+          "workstream": "W1",
+          "file": "w1-memory-model.json",
+          "status": "completed"
+        },
+        {
+          "workstream": "W2",
+          "file": "w2-slotmeta-runtime-removal.json",
+          "status": "completed"
+        },
+        {
+          "workstream": "W3",
+          "file": "w3-handle-hotpath.json",
+          "status": "completed"
+        },
+        {
+          "workstream": "W4",
+          "file": "w4-state-f32-phase.json",
+          "status": "completed"
+        },
+        {
+          "workstream": "W5",
+          "file": "w5-effects-as-data.json",
+          "status": "completed"
+        },
+        {
+          "workstream": "W6",
+          "file": "w6-evaluator-unification.json",
+          "status": "completed"
+        },
+        {
+          "workstream": "W7",
+          "file": "w7-storage-abi-cleanup.json",
+          "status": "completed"
+        },
+        {
+          "workstream": "W8",
+          "file": "w8-shape-bank.json",
+          "status": "completed"
+        },
+        {
+          "workstream": "W9",
+          "file": "w9-renderer-sink.json",
+          "status": "completed"
+        },
+        {
+          "workstream": "W10",
+          "file": "w10-webgpu-contract.json",
+          "status": "completed"
+        },
+        {
+          "workstream": "W11",
+          "file": "w11-api-surface.json",
+          "status": "completed"
+        },
+        {
+          "workstream": "W12",
+          "file": "w12-address-bypass-ban.json",
+          "status": "completed"
+        },
+        {
+          "workstream": "W13",
+          "file": "w13-continuity-segments.json",
+          "status": "completed"
+        },
+        {
+          "workstream": "W14",
+          "file": "w14-cpu-soa-parity.json",
+          "status": "completed"
+        },
+        {
+          "workstream": "W15",
+          "file": "w15-browser-matrix-perf.json",
+          "status": "completed"
+        }
+      ]
+    }
+  },
+  "blockers": [],
+  "overall": "ready"
+}

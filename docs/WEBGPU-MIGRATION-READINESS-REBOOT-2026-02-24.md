@@ -1,6 +1,6 @@
 # WebGPU Migration Readiness Reboot (From Scratch)
 
-Status: Proposal  
+Status: Implemented Baseline  
 Date: February 24, 2026  
 Audience: Architecture, Compiler, Runtime, Renderer maintainers
 
@@ -132,3 +132,11 @@ Computed result today:
 ## 8. Decision
 
 Adopt the gate model as the canonical readiness concept. Keep workstreams as execution planning only.
+
+## 9. Implementation Baseline (February 24, 2026)
+
+- Migration-proof artifacts are normalized to terminal statuses (`completed` / `blocked`) and canonical required fields.
+- `slice_completed` status usage has been removed from active readiness artifacts.
+- Canonical checker script added: `scripts/webgpu-migration-readiness.mjs`.
+- Canonical verdict artifact emitted by checker: `artifacts/webgpu-migration-readiness.json`.
+- CI lane added: `.github/workflows/webgpu-migration-readiness.yml` runs the canonical readiness checker on pull requests and `master`.

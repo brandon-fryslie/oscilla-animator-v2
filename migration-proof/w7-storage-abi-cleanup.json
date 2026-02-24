@@ -1,8 +1,9 @@
 {
   "workstream": "W7",
   "title": "Storage-Class Vocabulary And ABI Cleanup",
-  "status": "slice_completed",
-  "timestamp_utc": "2026-02-23T22:22:17Z",
+  "status": "completed",
+  "timestamp_utc": "2026-02-24T12:00:41Z",
+  "commit": "d47016d3d",
   "laws": [
     "one-source-of-truth",
     "verifiable-goals"
@@ -12,13 +13,14 @@
     "Retire f64-specific runtime error text in frame executors",
     "Align storage-class wording to canonical numeric semantics while preserving current slot encoding"
   ],
-  "changed_files": [
-    "/Users/bmf/.codex/worktrees/804c/oscilla-animator-v2/src/runtime/ExprAddressTable.ts",
-    "/Users/bmf/.codex/worktrees/804c/oscilla-animator-v2/src/runtime/ScheduleExecutor.ts",
-    "/Users/bmf/.codex/worktrees/804c/oscilla-animator-v2/src/runtime/executeFrameStepped.ts",
-    "/Users/bmf/.codex/worktrees/804c/oscilla-animator-v2/src/runtime/__tests__/ExprAddressTable.test.ts",
-    "/Users/bmf/.codex/worktrees/804c/oscilla-animator-v2/src/compiler/ir/storage-class.ts",
-    "/Users/bmf/.codex/worktrees/804c/oscilla-animator-v2/src/compiler/ir/__tests__/storage-class.test.ts"
+  "closure_surfaces": [
+    "src/runtime/ExprAddressTable.ts",
+    "src/runtime/ScheduleExecutor.ts",
+    "src/runtime/executeFrameStepped.ts",
+    "src/runtime/__tests__/ExprAddressTable.test.ts",
+    "src/compiler/ir/storage-class.ts",
+    "src/compiler/ir/__tests__/storage-class.test.ts",
+    "src/__tests__/forbidden-patterns.test.ts"
   ],
   "verification": [
     {
@@ -46,5 +48,9 @@
       "command": "rg -n \"assertF64Stride|expected f64-class|must be f64 storage\" src/runtime src/services src/compiler/ir",
       "result": "no_matches"
     }
+  ],
+  "notes": [
+    "Numeric ABI wording and assertions are now canonical in compiler and runtime boundaries.",
+    "This workstream is terminally closed and no longer tracked as a partial slice."
   ]
 }
