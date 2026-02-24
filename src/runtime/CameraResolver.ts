@@ -116,10 +116,12 @@ export function resolveCameraDecl(
   // Camera params are numeric value slots and should always be arena-backed.
   const readSlot = (slot: ValueSlot): number => {
     const desc = slotToArena.get(slot);
-    if (desc && desc.offset >= 0) {
-      return state.arena[desc.offset];
+    if (!desc || desc.offset < 0) {
+      // [LAW:no-silent-fallbacks] Missing camera slot bindings must fail fast
+      // instead of silently producing fallback camera values.
+      throw new Error(`CameraResolver: missing arena descriptor for camera slot ${slot}`);
     }
-    return 0;
+    return state.arena[desc.offset];
   };
 
   // Read raw values with NaN/Inf fallbacks to spec defaults

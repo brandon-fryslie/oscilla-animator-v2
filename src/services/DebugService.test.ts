@@ -855,14 +855,12 @@ describe('DebugService', () => {
 
     describe('arena reads (zdru.4)', () => {
         /**
-         * Build a minimal arena layout: one entry at slot `slotId` with the
-         * given descriptor, all others left as sentinel (offset:-1).
+         * Build a minimal slotToArena map with one descriptor entry.
          */
-        function makeArenaLayout(slotId: number, desc: ArenaSlotDescriptor): ArenaSlotDescriptor[] {
-            const sentinel: ArenaSlotDescriptor = { offset: -1, stride: 0, laneCount: 0, length: 0 };
-            const layout: ArenaSlotDescriptor[] = Array.from({ length: slotId + 1 }, () => sentinel);
-            layout[slotId] = desc;
-            return layout;
+        function makeSlotToArena(slotId: number, desc: ArenaSlotDescriptor): ReadonlyMap<ValueSlot, ArenaSlotDescriptor> {
+            const slotToArena = new Map<ValueSlot, ArenaSlotDescriptor>();
+            slotToArena.set(slotId as ValueSlot, desc);
+            return slotToArena;
         }
 
         it('reads one-cardinality value from arena when arenaRef is set', () => {
@@ -873,8 +871,8 @@ describe('DebugService', () => {
 
             // Build arena: slot 10 → offset 0, stride 1, laneCount 1
             const arena = new Float32Array(1);
-            const layout = makeArenaLayout(10, { offset: 0, stride: 1, laneCount: 1, length: 1 });
-            debugService.setArenaRef(arena, layout);
+            const slotToArena = makeSlotToArena(10, { offset: 0, stride: 1, laneCount: 1, length: 1 });
+            debugService.setArenaRef(arena, slotToArena);
 
             // Write a distinct value directly to the arena (not via updateSlotValue)
             arena[0] = 0.42;
@@ -897,8 +895,8 @@ describe('DebugService', () => {
             debugService.setEdgeToSlotMap(edgeMap);
 
             const arena = new Float32Array(1);
-            const layout = makeArenaLayout(10, { offset: 0, stride: 1, laneCount: 1, length: 1 });
-            debugService.setArenaRef(arena, layout);
+            const slotToArena = makeSlotToArena(10, { offset: 0, stride: 1, laneCount: 1, length: 1 });
+            debugService.setArenaRef(arena, slotToArena);
             arena[0] = 0.33;
 
             // Start runtime without writing slot 10 via tap path.
@@ -921,8 +919,8 @@ describe('DebugService', () => {
             debugService.setEdgeToSlotMap(edgeMap);
 
             const arena = new Float32Array(1);
-            const layout = makeArenaLayout(10, { offset: 0, stride: 1, laneCount: 1, length: 1 });
-            debugService.setArenaRef(arena, layout);
+            const slotToArena = makeSlotToArena(10, { offset: 0, stride: 1, laneCount: 1, length: 1 });
+            debugService.setArenaRef(arena, slotToArena);
 
             // Do NOT call updateSlotValue — runtime has not started
             const result = debugService.getEdgeValue('edge1');
@@ -938,8 +936,8 @@ describe('DebugService', () => {
 
             // Arena: slot 30 → offset 0, stride 1, laneCount 4 (4 float lanes)
             const arena = new Float32Array(4);
-            const layout = makeArenaLayout(30, { offset: 0, stride: 1, laneCount: 4, length: 4 });
-            debugService.setArenaRef(arena, layout);
+            const slotToArena = makeSlotToArena(30, { offset: 0, stride: 1, laneCount: 4, length: 4 });
+            debugService.setArenaRef(arena, slotToArena);
 
             debugService.trackField(30 as ValueSlot, floatType);
 
@@ -974,8 +972,8 @@ describe('DebugService', () => {
             debugService.setEdgeToSlotMap(edgeMap);
 
             const arena = new Float32Array([0.1, 0.2, 0.3, 0.4]);
-            const layout = makeArenaLayout(30, { offset: 0, stride: 1, laneCount: 4, length: 4 });
-            debugService.setArenaRef(arena, layout);
+            const slotToArena = makeSlotToArena(30, { offset: 0, stride: 1, laneCount: 4, length: 4 });
+            debugService.setArenaRef(arena, slotToArena);
 
             debugService.trackField(30 as ValueSlot, floatType);
             debugService.updateSlotValue(99 as ValueSlot, 0); // mark runtime started
@@ -1002,8 +1000,8 @@ describe('DebugService', () => {
             debugService.setEdgeToSlotMap(edgeMap);
 
             const arena = new Float32Array(4);
-            const layout = makeArenaLayout(30, { offset: 0, stride: 1, laneCount: 4, length: 4 });
-            debugService.setArenaRef(arena, layout);
+            const slotToArena = makeSlotToArena(30, { offset: 0, stride: 1, laneCount: 4, length: 4 });
+            debugService.setArenaRef(arena, slotToArena);
 
             // Do NOT track the field
             const result = debugService.getEdgeValue('field-edge');
@@ -1016,11 +1014,10 @@ describe('DebugService', () => {
             ]);
             debugService.setEdgeToSlotMap(edgeMap);
 
-            // Arena with sentinel for slot 10 (offset -1 = excluded from arena)
+            // Arena with no slot binding for slot 10 (excluded from arena path)
             const arena = new Float32Array(0);
-            const sentinel: ArenaSlotDescriptor = { offset: -1, stride: 0, laneCount: 0, length: 0 };
-            const layout: ArenaSlotDescriptor[] = new Array(11).fill(sentinel);
-            debugService.setArenaRef(arena, layout);
+            const slotToArena = new Map<ValueSlot, ArenaSlotDescriptor>();
+            debugService.setArenaRef(arena, slotToArena);
 
             // Write via Map path
             debugService.updateSlotValue(10 as ValueSlot, 0.77);
@@ -1039,8 +1036,8 @@ describe('DebugService', () => {
             debugService.setEdgeToSlotMap(edgeMap);
 
             const arena = new Float32Array(1);
-            const layout = makeArenaLayout(10, { offset: 0, stride: 1, laneCount: 1, length: 1 });
-            debugService.setArenaRef(arena, layout);
+            const slotToArena = makeSlotToArena(10, { offset: 0, stride: 1, laneCount: 1, length: 1 });
+            debugService.setArenaRef(arena, slotToArena);
             arena[0] = 0.5;
             debugService.updateSlotValue(10 as ValueSlot, 0.5); // sets runtimeStarted
 
@@ -1059,8 +1056,8 @@ describe('DebugService', () => {
             debugService.setEdgeToSlotMap(edgeMap);
 
             const arena = new Float32Array(1);
-            const layout = makeArenaLayout(10, { offset: 0, stride: 1, laneCount: 1, length: 1 });
-            debugService.setArenaRef(arena, layout);
+            const slotToArena = makeSlotToArena(10, { offset: 0, stride: 1, laneCount: 1, length: 1 });
+            debugService.setArenaRef(arena, slotToArena);
 
             debugService.clear();
 
