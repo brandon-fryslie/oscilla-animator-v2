@@ -1249,6 +1249,41 @@ describe('Forbidden Patterns (Type System Invariants)', () => {
       ).toEqual([]);
     });
 
+    it('phasor lowering must wrap state updates to [0,1) using Wrap01', () => {
+      const wrapMatches = filterAllowlist(
+        grepSrc('OpCode\\.Wrap01', 'src/blocks/scalar/phasor.ts'),
+        [/\.test\./, /__tests__/],
+      );
+      expect(
+        wrapMatches.length,
+        'Phasor must use Wrap01 for bounded phase integration.'
+      ).toBeGreaterThan(0);
+
+      const rawWriteMatches = filterAllowlist(
+        grepSrc('value:\\s*rawPhase', 'src/blocks/scalar/phasor.ts'),
+        [/\.test\./, /__tests__/],
+      );
+      expect(
+        rawWriteMatches,
+        'Phasor state writes must not persist unbounded raw phase values.\n' +
+        'Found violations:\n' + rawWriteMatches.join('\n')
+      ).toEqual([]);
+    });
+
+    it('resolveTime must wrap both phase channels before publishing time state', () => {
+      // [LAW:one-source-of-truth] timeResolution is the canonical owner of
+      // phase-domain bounds; both phase channels must be wrapped at this boundary.
+      const rawMatches = [
+        ...grepSrc('const\\s+phaseA\\s*=\\s*wrapPhase\\(', 'src/runtime/timeResolution.ts'),
+        ...grepSrc('const\\s+phaseB\\s*=\\s*wrapPhase\\(', 'src/runtime/timeResolution.ts'),
+      ];
+      const filtered = filterAllowlist(rawMatches, [/\.test\./, /__tests__/]);
+      expect(
+        filtered.length,
+        'resolveTime must wrap both phaseA and phaseB via wrapPhase().'
+      ).toBe(2);
+    });
+
   });
 
   describe('WebGPU Prereq Guards (W13)', () => {
