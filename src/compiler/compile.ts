@@ -324,7 +324,6 @@ function buildRuntimeAddressTable(
   }
 
   const fieldExprToSlot = new Map<number, ValueSlot>();
-  const scalarExprToArenaOffset = new Map<number, number>();
   const scalarExprToArenaAddress = new Map<number, { slot: ValueSlot; arena: ArenaSlotDescriptor; component: number }>();
   const steps = scheduleIR.steps as readonly Step[];
   for (const step of steps) {
@@ -333,7 +332,6 @@ function buildRuntimeAddressTable(
       if (step.instanceId === SCALAR_INSTANCE_ID) {
         const arenaDesc = slotToArena.get(step.target);
         if (arenaDesc) {
-          scalarExprToArenaOffset.set(step.field as number, arenaDesc.offset);
           scalarExprToArenaAddress.set(step.field as number, {
             slot: step.target,
             arena: arenaDesc,
@@ -345,7 +343,6 @@ function buildRuntimeAddressTable(
     if (step.kind === 'evalOne') {
       const arenaDesc = slotToArena.get(step.target);
       if (arenaDesc) {
-        scalarExprToArenaOffset.set(step.expr as number, arenaDesc.offset);
         scalarExprToArenaAddress.set(step.expr as number, {
           slot: step.target,
           arena: arenaDesc,
@@ -358,7 +355,6 @@ function buildRuntimeAddressTable(
   return {
     slotLookup,
     fieldExprToSlot,
-    scalarExprToArenaOffset,
     scalarExprToArenaAddress,
     slotToArena,
   };

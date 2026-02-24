@@ -69,7 +69,6 @@ function mockProgram(opts: {
     }
   }
   const fieldExprToSlot = new Map<number, ValueSlot>();
-  const scalarExprToArenaOffset = new Map<number, number>();
   const scalarExprToArenaAddress = new Map<number, { slot: ValueSlot; arena: (typeof arenaLayout)[number]; component: number }>();
   for (const step of opts.steps) {
     if (step.kind === 'materialize') {
@@ -77,7 +76,6 @@ function mockProgram(opts: {
       if (step.instanceId === SCALAR_INSTANCE_ID) {
         const arenaDesc = slotToArena.get(step.target);
         if (arenaDesc) {
-          scalarExprToArenaOffset.set(step.field as any as number, arenaDesc.offset);
           scalarExprToArenaAddress.set(step.field as any as number, {
             slot: step.target,
             arena: arenaDesc,
@@ -89,7 +87,6 @@ function mockProgram(opts: {
     if (step.kind === 'evalOne') {
       const arenaDesc = slotToArena.get(step.target);
       if (arenaDesc) {
-        scalarExprToArenaOffset.set(step.expr as any as number, arenaDesc.offset);
         scalarExprToArenaAddress.set(step.expr as any as number, {
           slot: step.target,
           arena: arenaDesc,
@@ -101,7 +98,6 @@ function mockProgram(opts: {
   const runtimeAddressTable = {
     slotLookup,
     fieldExprToSlot,
-    scalarExprToArenaOffset,
     scalarExprToArenaAddress,
     slotToArena,
   };
@@ -177,7 +173,7 @@ describe('getExprAddressTable', () => {
     expect(table.fieldExprToSlot.get(10)).toBe(valueSlot(5));
   });
 
-  it('reads scalarExprToArenaOffset from precomputed runtime address table', () => {
+  it('reads scalarExprToArenaAddress from precomputed runtime address table', () => {
     const program = mockProgram({
       slotMeta: [
         { slot: valueSlot(3), storage: 'f32', offset: 7, stride: 1, type: SIG_FLOAT },
@@ -192,7 +188,11 @@ describe('getExprAddressTable', () => {
     });
 
     const table = getExprAddressTable(program);
-    expect(table.scalarExprToArenaOffset.get(42)).toBe(7);
+    expect(table.scalarExprToArenaAddress.get(42)).toEqual(expect.objectContaining({
+      slot: valueSlot(3),
+      component: 0,
+      arena: expect.objectContaining({ offset: 7, stride: 1 }),
+    }));
   });
 
   it('returns the same precomputed table reference per program identity', () => {
