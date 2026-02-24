@@ -24,6 +24,7 @@ import {
 } from '../core/canonical-types';
 import { FLOAT, INT, BOOL } from '../core/canonical-types';
 import { isVectorType, swizzleResultType, componentIndex } from './swizzle';
+import { resolveExpressionConstant } from './constants';
 
 /**
  * Compilation context.
@@ -103,10 +104,17 @@ function compileLiteral(node: ExprNode & { kind: 'literal' }, ctx: CompileContex
  * Compile identifier node to input expression reference.
  */
 function compileIdentifier(node: ExprNode & { kind: 'identifier' }, ctx: CompileContext): ValueExprId {
-  if (!ctx.inputs.has(node.name)) {
-    throw new Error(`Undefined input '${node.name}' during compilation (should have been caught by type checker)`);
+  const inputExpr = ctx.inputs.get(node.name);
+  if (inputExpr !== undefined) {
+    return inputExpr;
   }
-  return ctx.inputs.get(node.name)!;
+
+  const constant = resolveExpressionConstant(node.name);
+  if (constant) {
+    return ctx.builder.constant(floatConst(constant.value), canonicalConst(FLOAT));
+  }
+
+  throw new Error(`Undefined identifier '${node.name}' during compilation (should have been caught by type checker)`);
 }
 
 /**

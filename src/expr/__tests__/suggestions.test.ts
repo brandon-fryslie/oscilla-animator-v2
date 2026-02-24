@@ -7,6 +7,7 @@ import {
   SuggestionProvider,
   getFunctionSignatures,
   type FunctionSuggestion,
+  type ConstantSuggestion,
   type BlockSuggestion,
   type PortSuggestion,
 } from '../suggestions';
@@ -191,6 +192,36 @@ describe('SuggestionProvider.suggestFunctions', () => {
 });
 
 // =============================================================================
+// SuggestionProvider - Constant Suggestions
+// =============================================================================
+
+describe('SuggestionProvider.suggestConstants', () => {
+  it('returns named constants including pi and tau', () => {
+    const patch = createTestPatch([]);
+    const registry = AddressRegistry.buildFromPatch(patch);
+    const provider = new SuggestionProvider(patch, registry);
+
+    const suggestions = provider.suggestConstants();
+    const labels = suggestions.map((s) => s.label);
+
+    expect(labels).toContain('pi');
+    expect(labels).toContain('tau');
+    expect(labels).toContain('deg2rad');
+    expect(labels).toContain('rad2deg');
+  });
+
+  it('pi constant includes greek chip label', () => {
+    const patch = createTestPatch([]);
+    const registry = AddressRegistry.buildFromPatch(patch);
+    const provider = new SuggestionProvider(patch, registry);
+
+    const piSuggestion = provider.suggestConstants().find((s) => s.label === 'pi') as ConstantSuggestion;
+    expect(piSuggestion).toBeDefined();
+    expect(piSuggestion.chipLabel).toBe('π');
+  });
+});
+
+// =============================================================================
 // SuggestionProvider - Block Suggestions
 // =============================================================================
 
@@ -331,6 +362,17 @@ describe('SuggestionProvider.filterSuggestions', () => {
     expect(labels.length).toBeGreaterThan(0);
   });
 
+  it('filters constants by prefix', () => {
+    const patch = createTestPatch([]);
+    const registry = AddressRegistry.buildFromPatch(patch);
+    const provider = new SuggestionProvider(patch, registry);
+
+    const suggestions = provider.filterSuggestions('pi');
+    const labels = suggestions.map((s) => s.label);
+
+    expect(labels).toContain('pi');
+  });
+
   it('case-insensitive matching', () => {
     const patch = createTestPatch([]);
     const registry = AddressRegistry.buildFromPatch(patch);
@@ -402,6 +444,18 @@ describe('SuggestionProvider.filterSuggestions', () => {
 
     expect(types.size).toBe(1);
     expect(types.has('block')).toBe(true);
+  });
+
+  it('type filter: constant', () => {
+    const patch = createTestPatch([]);
+    const registry = AddressRegistry.buildFromPatch(patch);
+    const provider = new SuggestionProvider(patch, registry);
+
+    const suggestions = provider.filterSuggestions('ra', 'constant');
+    const types = new Set(suggestions.map((s) => s.type));
+
+    expect(types.size).toBe(1);
+    expect(types.has('constant')).toBe(true);
   });
 
   it('type filter: port returns empty (needs block context)', () => {

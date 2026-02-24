@@ -5,12 +5,14 @@
  * Used by TokenExpressionEditor to render references as atomic chips.
  *
  * Algorithm:
- * 1. Scan expression text for IDENT.IDENT patterns
- * 2. For each pattern, check if it resolves to a valid block.port via AddressRegistry
- * 3. Return array of segments (text spans + metadata)
+ * 1. Scan expression text for IDENT.IDENT patterns and bare IDENTs
+ * 2. Resolve IDENT.IDENT to block.port references via AddressRegistry
+ * 3. Resolve bare IDENTs to named expression constants
+ * 4. Return array of segments (text spans + metadata)
  */
 
 import type { AddressRegistry } from '../../graph/address-registry';
+import { resolveExpressionConstant } from '../../expr/constants';
 
 // =============================================================================
 // Types
@@ -41,6 +43,15 @@ export interface TokenizedSegment {
 
   /** Only for references: whether this reference has a collect edge */
   readonly isConnected?: boolean;
+
+  /** Whether this segment is a named constant chip */
+  readonly isConstant?: boolean;
+
+  /** Only for constants: canonical constant identifier (e.g., "pi") */
+  readonly constantName?: string;
+
+  /** Only for constants: rendered chip label (e.g., "π") */
+  readonly constantDisplay?: string;
 }
 
 // =============================================================================
@@ -48,12 +59,14 @@ export interface TokenizedSegment {
 // =============================================================================
 
 /**
- * Regular expression to match potential block.port references.
+ * Regular expression to match either:
+ * - IDENT.IDENT block references
+ * - IDENT bare identifiers (constants, functions, variables)
  *
- * Matches: IDENT.IDENT where IDENT is [a-zA-Z_][a-zA-Z0-9_]*
- * Example: circle_1.radius, block_A.out0
+ * Note: block-reference alternative appears first to prevent splitting
+ * "block.port" into two separate identifier matches.
  */
-const REFERENCE_PATTERN = /\b([a-zA-Z_][a-zA-Z0-9_]*)\.([a-zA-Z_][a-zA-Z0-9_]*)\b/g;
+const TOKEN_PATTERN = /\b([a-zA-Z_][a-zA-Z0-9_]*)\.([a-zA-Z_][a-zA-Z0-9_]*)\b|\b([a-zA-Z_][a-zA-Z0-9_]*)\b/g;
 
 /**
  * Tokenize expression text into segments.
@@ -91,13 +104,13 @@ export function tokenizeExpression(
   const segments: TokenizedSegment[] = [];
   let lastIndex = 0;
 
-  // Find all potential block.port patterns
-  const matches = Array.from(text.matchAll(REFERENCE_PATTERN));
+  const matches = Array.from(text.matchAll(TOKEN_PATTERN));
 
   for (const match of matches) {
-    const fullMatch = match[0]; // Full "block.port" string
-    const blockName = match[1]; // Block part
-    const portName = match[2]; // Port part
+    const fullMatch = match[0];
+    const blockName = match[1];
+    const portName = match[2];
+    const ident = match[3];
     const matchIndex = match.index!;
 
     // Add plain text before this match
@@ -108,28 +121,51 @@ export function tokenizeExpression(
       });
     }
 
-    // Try to resolve this as a shorthand
-    const shorthand = `${blockName}.${portName}`;
-    const canonicalAddress = addressRegistry.resolveShorthand(shorthand);
+    if (blockName && portName) {
+      const shorthand = `${blockName}.${portName}`;
+      const canonicalAddress = addressRegistry.resolveShorthand(shorthand);
 
-    if (canonicalAddress) {
-      // Valid reference - add as reference segment
-      const isConnected = connectedShorthands.has(shorthand);
-      segments.push({
-        text: fullMatch,
-        isReference: true,
-        canonicalName: blockName,
-        portId: portName,
-        sourceAddress: canonicalAddress.kind === 'output'
-          ? `v1:blocks.${canonicalAddress.blockId}.outputs.${canonicalAddress.portId}`
-          : undefined,
-        isConnected,
-      });
+      if (canonicalAddress) {
+        const isConnected = connectedShorthands.has(shorthand);
+        segments.push({
+          text: fullMatch,
+          isReference: true,
+          canonicalName: blockName,
+          portId: portName,
+          sourceAddress: canonicalAddress.kind === 'output'
+            ? `v1:blocks.${canonicalAddress.blockId}.outputs.${canonicalAddress.portId}`
+            : undefined,
+          isConnected,
+        });
+      } else {
+        segments.push({
+          text: fullMatch,
+          isReference: false,
+          isConstant: false,
+        });
+      }
+    } else if (ident) {
+      const constant = resolveExpressionConstant(ident);
+      if (constant) {
+        segments.push({
+          text: ident,
+          isReference: false,
+          isConstant: true,
+          constantName: constant.name,
+          constantDisplay: constant.chipLabel,
+        });
+      } else {
+        segments.push({
+          text: ident,
+          isReference: false,
+          isConstant: false,
+        });
+      }
     } else {
-      // Not a valid reference - treat as plain text
       segments.push({
         text: fullMatch,
         isReference: false,
+        isConstant: false,
       });
     }
 
