@@ -1189,6 +1189,21 @@ describe('Forbidden Patterns (Type System Invariants)', () => {
       ).toEqual([]);
     });
 
+    it('runtime must not maintain duplicate scalar shadow caches', () => {
+      const rawMatches = [
+        ...grepSrc('scalarValues\\b|scalarStamps\\b', 'src/runtime/RuntimeState.ts'),
+        ...grepSrc('scalarValues\\b|scalarStamps\\b', 'src/runtime/ScheduleExecutor.ts'),
+        ...grepSrc('scalarValues\\b|scalarStamps\\b', 'src/runtime/executeFrameStepped.ts'),
+        ...grepSrc('scalarValues\\b|scalarStamps\\b', 'src/runtime/StepDebugSession.ts'),
+      ];
+      const filtered = filterAllowlist(rawMatches, [/\.test\./, /__tests__/]);
+      expect(
+        filtered,
+        'Runtime must use a single scalar evaluator cache surface.\n' +
+        'Found violations:\n' + filtered.join('\n')
+      ).toEqual([]);
+    });
+
   });
 
   describe('WebGPU Prereq Guards (W5)', () => {

@@ -114,7 +114,7 @@ export const RUNTIME_FRAME_SEGMENT_OWNERSHIP: Readonly<
   },
   'phase1-value-pre-event': {
     reads: ['arena', 'state', 'eventScalars', 'externalChannels.snapshot'],
-    writes: ['arena', 'cache.scalarValues', 'cache.scalarStamps'],
+    writes: ['arena', 'cache.scalarValueExprValues', 'cache.scalarValueExprStamps'],
   },
   'phase1-continuity-map': {
     reads: ['continuity.prevDomains'],
@@ -122,7 +122,7 @@ export const RUNTIME_FRAME_SEGMENT_OWNERSHIP: Readonly<
   },
   'phase1-value-after-map': {
     reads: ['arena', 'state', 'eventScalars', 'externalChannels.snapshot'],
-    writes: ['arena', 'cache.scalarValues', 'cache.scalarStamps'],
+    writes: ['arena', 'cache.scalarValueExprValues', 'cache.scalarValueExprStamps'],
   },
   'phase1-continuity-apply': {
     reads: ['continuity.changedInstancesThisFrame', 'continuity.mappings', 'arena'],
@@ -134,7 +134,7 @@ export const RUNTIME_FRAME_SEGMENT_OWNERSHIP: Readonly<
   },
   'phase1-value-post-event': {
     reads: ['arena', 'state', 'eventScalars', 'externalChannels.snapshot'],
-    writes: ['arena', 'cache.scalarValues', 'cache.scalarStamps'],
+    writes: ['arena', 'cache.scalarValueExprValues', 'cache.scalarValueExprStamps'],
   },
   'phase1-render-collect': {
     reads: ['arena'],
@@ -362,12 +362,6 @@ export interface FrameCache {
   /** Current frame ID (monotonic, starts at 0) */
   frameId: number;
 
-  /** Cached scalar values (indexed by step expr ID) */
-  scalarValues: Float32Array;
-
-  /** Frame stamps for scalar cache validation */
-  scalarStamps: Uint32Array;
-
   /** Cached scalar ValueExpr values (indexed by ValueExprId) */
   scalarValueExprValues: Float32Array;
 
@@ -393,13 +387,10 @@ export interface FrameCache {
  * Create a FrameCache
  */
 export function createFrameCache(
-  maxScalarExprs: number = 1000,
   maxValueExprs: number = 0
 ): FrameCache {
   return {
     frameId: 1, // Start at 1 so initial stamps[n]=0 don't match
-    scalarValues: new Float32Array(maxScalarExprs),
-    scalarStamps: new Uint32Array(maxScalarExprs),
     scalarValueExprValues: new Float32Array(maxValueExprs),
     scalarValueExprStamps: new Uint32Array(maxValueExprs),
     valueExprFieldBuffers: new Array(maxValueExprs).fill(null),
@@ -795,7 +786,7 @@ export function createProgramState(
     values: createValueStore(),
     lastRenderFrame: null,
     arena: createArena(arenaTotalFloats),
-    cache: createFrameCache(1000, valueExprCount),
+    cache: createFrameCache(valueExprCount),
     frameSemantics: {
       frameId: 0,
       segments: [],

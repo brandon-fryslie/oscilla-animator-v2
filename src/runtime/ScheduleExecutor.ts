@@ -324,8 +324,6 @@ export function executeFrame(
           for (let i = 0; i < stride; i++) {
             state.tap?.recordSlotValue?.((slot + i) as ValueSlot, readCanonicalNumeric(slotToArena, state, lookup, i));
           }
-          state.cache.scalarValues[step.expr as number] = readCanonicalNumeric(slotToArena, state, lookup, 0);
-          state.cache.scalarStamps[step.expr as number] = state.cache.frameId;
         } else {
           throw new Error('evalOne: unsupported storage type \'' + storage + '\' for slot ' + slot + ' expr ' + step.expr);
         }
