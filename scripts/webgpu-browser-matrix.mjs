@@ -10,6 +10,9 @@ const DEFAULT_REPORT = process.env.WEBGPU_MATRIX_REPORT ?? 'artifacts/webgpu-bro
 const SAMPLE_FRAMES = Number.parseInt(process.env.WEBGPU_MATRIX_FRAMES ?? '180', 10);
 const START_SERVER = (process.env.WEBGPU_MATRIX_START_SERVER ?? '1') !== '0';
 const SERVER_TIMEOUT_MS = Number.parseInt(process.env.WEBGPU_MATRIX_SERVER_TIMEOUT_MS ?? '45000', 10);
+const MAX_AVG_FRAME_DELTA_MS = parseOptionalNumber(process.env.WEBGPU_MATRIX_MAX_AVG_FRAME_DELTA_MS);
+const MAX_P95_FRAME_DELTA_MS = parseOptionalNumber(process.env.WEBGPU_MATRIX_MAX_P95_FRAME_DELTA_MS);
+const MIN_AVG_FPS = parseOptionalNumber(process.env.WEBGPU_MATRIX_MIN_AVG_FPS);
 
 function withPreviewParam(url) {
   const parsed = new URL(url);
@@ -20,6 +23,14 @@ function withPreviewParam(url) {
 }
 
 const TARGET_URL = withPreviewParam(BASE_URL);
+
+function parseOptionalNumber(value) {
+  if (value === undefined || value === null || value === '') {
+    return null;
+  }
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
 
 async function waitForHttpReady(url, timeoutMs) {
   const deadline = Date.now() + timeoutMs;
@@ -131,6 +142,12 @@ async function runBrowserCheck({ browserName, launcher, launchOptions, url }) {
   await browser.close();
 
   const timing = computeStats(probe.frameDeltasMs);
+  const performanceChecks = {
+    avgFrameDeltaMs: MAX_AVG_FRAME_DELTA_MS === null || timing.avgFrameDeltaMs <= MAX_AVG_FRAME_DELTA_MS,
+    p95FrameDeltaMs: MAX_P95_FRAME_DELTA_MS === null || timing.p95FrameDeltaMs <= MAX_P95_FRAME_DELTA_MS,
+    avgFps: MIN_AVG_FPS === null || timing.avgFps >= MIN_AVG_FPS,
+  };
+  const performancePassed = Object.values(performanceChecks).every(Boolean);
   const readiness = {
     hasNavigatorGpu: probe.hasNavigatorGpu,
     hasAdapter: probe.hasAdapter,
@@ -148,7 +165,8 @@ async function runBrowserCheck({ browserName, launcher, launchOptions, url }) {
     readiness.hasCanvas &&
     readiness.hasWebGPUContext &&
     readiness.consoleErrorCount === 0 &&
-    readiness.pageErrorCount === 0;
+    readiness.pageErrorCount === 0 &&
+    performancePassed;
 
   return {
     browser: browserName,
@@ -157,6 +175,14 @@ async function runBrowserCheck({ browserName, launcher, launchOptions, url }) {
     durationMs: Date.now() - startedAt,
     readiness,
     timing,
+    performance: {
+      thresholds: {
+        maxAvgFrameDeltaMs: MAX_AVG_FRAME_DELTA_MS,
+        maxP95FrameDeltaMs: MAX_P95_FRAME_DELTA_MS,
+        minAvgFps: MIN_AVG_FPS,
+      },
+      checks: performanceChecks,
+    },
     errors: {
       console: consoleErrors,
       page: pageErrors,
@@ -214,6 +240,18 @@ async function main() {
             p95FrameDeltaMs: 0,
             avgFps: 0,
           },
+          performance: {
+            thresholds: {
+              maxAvgFrameDeltaMs: MAX_AVG_FRAME_DELTA_MS,
+              maxP95FrameDeltaMs: MAX_P95_FRAME_DELTA_MS,
+              minAvgFps: MIN_AVG_FPS,
+            },
+            checks: {
+              avgFrameDeltaMs: false,
+              p95FrameDeltaMs: false,
+              avgFps: false,
+            },
+          },
           errors: {
             console: [],
             page: [],
@@ -228,6 +266,11 @@ async function main() {
       generatedAt: new Date().toISOString(),
       sampleFrames: SAMPLE_FRAMES,
       url: TARGET_URL,
+      thresholds: {
+        maxAvgFrameDeltaMs: MAX_AVG_FRAME_DELTA_MS,
+        maxP95FrameDeltaMs: MAX_P95_FRAME_DELTA_MS,
+        minAvgFps: MIN_AVG_FPS,
+      },
       results,
       passed: results.every((result) => result.passed),
     };
@@ -242,7 +285,8 @@ async function main() {
         `[matrix] ${result.browser}: ${result.passed ? 'PASS' : 'FAIL'} ` +
           `(gpu=${result.readiness.hasNavigatorGpu}, adapter=${result.readiness.hasAdapter}, ` +
           `context=${result.readiness.hasWebGPUContext}, ` +
-          `avg=${result.timing.avgFrameDeltaMs}ms, p95=${result.timing.p95FrameDeltaMs}ms)\n`
+          `avg=${result.timing.avgFrameDeltaMs}ms, p95=${result.timing.p95FrameDeltaMs}ms, ` +
+          `fps=${result.timing.avgFps})\n`
       );
     }
 
