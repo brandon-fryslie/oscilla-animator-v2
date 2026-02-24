@@ -791,6 +791,64 @@ describe('Project Policy Domain Change', () => {
     expect(finalGauge).toBeGreaterThan(initialGaugeMagnitude * 0.02); // > 2% (still decaying)
   });
 
+  it('ignores stale continuity mappings when instance is not marked changed this frame', () => {
+    const state = createTestRuntimeState();
+    state.continuity.lastTModelMs = 0;
+    state.time = {
+      tAbsMs: 16,
+      tMs: 16,
+      phaseA: 0,
+      phaseB: 0,
+      dt: 16,
+      pulse: 0,
+      palette: createPalette(),
+      energy: 0.5,
+    };
+
+    const baseSlot = 100 as ValueSlot;
+    const outputSlot = 101 as ValueSlot;
+    const targetId = 'stale_mapping_guard' as StableTargetId;
+    const instId = 'stale_instance';
+
+    const targetState = getOrCreateTargetState(state.continuity, targetId, 4);
+    targetState.slewBuffer.set([10, 20, 30, 40]);
+    targetState.gaugeBuffer.fill(0);
+
+    const base = new Float32Array([1, 2, 3, 4]);
+    const output = new Float32Array(base.length);
+    state.values.objects.set(baseSlot, base);
+    state.values.objects.set(outputSlot, output);
+
+    state.continuity.mappings.set(instId, { newToOld: new Int32Array([3, 2, 1, 0]) });
+    state.continuity.changedInstancesThisFrame.clear();
+    state.continuity.domainChangeThisFrame = false;
+
+    const step: StepContinuityApply = {
+      kind: 'continuityApply',
+      targetKey: targetId,
+      instanceId: instanceId(instId),
+      policy: { kind: 'project', projector: 'byId', post: 'slew', tauMs: 120 },
+      baseSlot,
+      outputSlot,
+      semantic: 'position',
+      stride: 1,
+    };
+
+    applyContinuity(step, state, (slot) => state.values.objects.get(slot) as Float32Array);
+
+    const alpha = 1 - Math.exp(-16 / 120);
+    const expected = [
+      10 + alpha * (1 - 10),
+      20 + alpha * (2 - 20),
+      30 + alpha * (3 - 30),
+      40 + alpha * (4 - 40),
+    ];
+
+    for (let i = 0; i < output.length; i++) {
+      expect(output[i]).toBeCloseTo(expected[i], 5);
+    }
+  });
+
   it('replays continuity transitions deterministically across repeated runs', () => {
     const runScenario = () => {
       const state = createTestRuntimeState();

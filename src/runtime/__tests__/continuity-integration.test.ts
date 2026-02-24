@@ -40,7 +40,11 @@ import {
   smoothstep,
   lerp,
 } from '../ContinuityApply';
-import { createRuntimeState } from '../RuntimeState';
+import {
+  createRuntimeState,
+  RUNTIME_FRAME_SEGMENT_ORDER,
+  RUNTIME_FRAME_SEGMENT_OWNERSHIP,
+} from '../RuntimeState';
 import type { ScheduleIR } from '../../compiler/backend/schedule-program';
 import { computeStorageSizes } from '../../compiler/ir/program';
 import { executeFrame } from '../ScheduleExecutor';
@@ -294,10 +298,27 @@ describe('Continuity Integration', () => {
       expect(frame1Segments.length).toBeGreaterThan(0);
       expect(frame1Segments).toContain('preframe-external-input');
       expect(frame1Segments).toContain('phase1-continuity-apply');
+      expect(frame1Segments).toContain('phase2-state-write');
+      expect(frame1Segments).toContain('continuity-finalize');
       expect(frame1Segments.indexOf('preframe-external-input')).toBeLessThan(
         frame1Segments.indexOf('phase1-continuity-apply'),
       );
+      expect(frame1Segments.indexOf('phase1-continuity-apply')).toBeLessThan(
+        frame1Segments.indexOf('phase2-state-write'),
+      );
+      expect(frame1Segments.indexOf('phase2-state-write')).toBeLessThan(
+        frame1Segments.indexOf('continuity-finalize'),
+      );
       expect(frame1Segments[frame1Segments.length - 1]).toBe('frame-output');
+      // [LAW:verifiable-goals] Every observed segment is checked against canonical
+      // frame ownership metadata and monotonic canonical order.
+      for (const segment of frame1Segments) {
+        expect(RUNTIME_FRAME_SEGMENT_OWNERSHIP[segment]).toBeDefined();
+      }
+      const indices = frame1Segments.map((segment) => RUNTIME_FRAME_SEGMENT_ORDER.indexOf(segment));
+      for (let i = 1; i < indices.length; i++) {
+        expect(indices[i]).toBeGreaterThan(indices[i - 1]);
+      }
 
       state.externalChannels.writeBus.set('ui.knob', 0.5);
       executeFrame(program, state, getTestArena(), 116);
@@ -306,6 +327,30 @@ describe('Continuity Integration', () => {
       expect(state.externalChannels.snapshot.getFloat('ui.knob')).toBeCloseTo(0.5, 6);
       // [LAW:verifiable-goals] Segment sequence is replay-locked frame-to-frame.
       expect(frame2Segments).toEqual(frame1Segments);
+    });
+
+    it('clears frame-local continuity mappings at finalize boundary', () => {
+      const state = createRuntimeState(8);
+      state.time = {
+        tAbsMs: 64,
+        tMs: 64,
+        dt: 16,
+        phaseA: 0,
+        phaseB: 0,
+        pulse: 0,
+        palette: new Float32Array([0.2, 0.3, 0.4, 1]),
+        energy: 0.5,
+      };
+      state.continuity.mappings.set('stale-instance', { newToOld: new Int32Array([0, -1]) });
+      state.continuity.changedInstancesThisFrame.add('stale-instance');
+      state.continuity.domainChangeThisFrame = true;
+
+      finalizeContinuityFrame(state);
+
+      expect(state.continuity.lastTModelMs).toBe(64);
+      expect(state.continuity.mappings.size).toBe(0);
+      expect(state.continuity.changedInstancesThisFrame.size).toBe(0);
+      expect(state.continuity.domainChangeThisFrame).toBe(false);
     });
   });
 

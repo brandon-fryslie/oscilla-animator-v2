@@ -19,7 +19,7 @@
  */
 
 import type { DomainInstance } from '../compiler/ir/types';
-import type { MappingState } from './ContinuityState';
+import type { ContinuityState, MappingState } from './ContinuityState';
 
 /**
  * Build element mapping using stable IDs (spec §3.4).
@@ -184,6 +184,48 @@ export function detectDomainChange(
 
   // No mapping possible - crossfade fallback
   return { changed: true, mapping: null };
+}
+
+/**
+ * Record per-instance domain transition ownership for the current frame.
+ *
+ * [LAW:one-source-of-truth] changedInstancesThisFrame is the canonical frame
+ * change signal; domainChangeThisFrame is derived from that set only.
+ */
+export function recordDomainTransition(
+  continuity: ContinuityState,
+  instanceId: string,
+  change: { changed: boolean; mapping: MappingState | null },
+): void {
+  if (change.changed) {
+    continuity.changedInstancesThisFrame.add(instanceId);
+    if (change.mapping) {
+      continuity.mappings.set(instanceId, change.mapping);
+    } else {
+      continuity.mappings.delete(instanceId);
+    }
+  } else {
+    continuity.changedInstancesThisFrame.delete(instanceId);
+    continuity.mappings.delete(instanceId);
+  }
+  continuity.domainChangeThisFrame = continuity.changedInstancesThisFrame.size > 0;
+}
+
+/**
+ * Resolve continuity mapping for an apply step in the current frame.
+ *
+ * [LAW:one-source-of-truth] continuityApply reads mapping only through
+ * changedInstancesThisFrame ownership; stale map entries are ignored.
+ */
+export function resolveMappingForApply(
+  continuity: ContinuityState,
+  instanceId: string,
+): MappingState | null {
+  if (!continuity.changedInstancesThisFrame.has(instanceId)) {
+    return null;
+  }
+  const mapping = continuity.mappings.get(instanceId);
+  return mapping !== undefined ? mapping : null;
 }
 
 /**

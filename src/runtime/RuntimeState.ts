@@ -84,6 +84,89 @@ export const RUNTIME_FRAME_SEGMENT_ORDER = [
 
 export type RuntimeFrameSegment = (typeof RUNTIME_FRAME_SEGMENT_ORDER)[number];
 
+export interface RuntimeFrameSegmentOwnership {
+  /** Canonical read surfaces touched by this segment */
+  reads: readonly string[];
+  /** Canonical write surfaces touched by this segment */
+  writes: readonly string[];
+}
+
+/**
+ * Canonical ownership contract per frame segment.
+ *
+ * [LAW:one-source-of-truth] Segment read/write ownership is defined once here
+ * so execution/tests share one deterministic frame-graph contract.
+ */
+export const RUNTIME_FRAME_SEGMENT_OWNERSHIP: Readonly<
+  Record<RuntimeFrameSegment, RuntimeFrameSegmentOwnership>
+> = {
+  'preframe-external-input': {
+    reads: ['externalChannels.writeBus'],
+    writes: ['externalChannels.snapshot'],
+  },
+  'preframe-time-resolve': {
+    reads: ['timeState'],
+    writes: ['time'],
+  },
+  'preframe-event-reset': {
+    reads: ['events', 'eventScalars'],
+    writes: ['events', 'eventScalars'],
+  },
+  'phase1-value-pre-event': {
+    reads: ['arena', 'state', 'eventScalars', 'externalChannels.snapshot'],
+    writes: ['arena', 'cache.scalarValues', 'cache.scalarStamps'],
+  },
+  'phase1-continuity-map': {
+    reads: ['continuity.prevDomains'],
+    writes: ['continuity.prevDomains', 'continuity.mappings', 'continuity.changedInstancesThisFrame'],
+  },
+  'phase1-value-after-map': {
+    reads: ['arena', 'state', 'eventScalars', 'externalChannels.snapshot'],
+    writes: ['arena', 'cache.scalarValues', 'cache.scalarStamps'],
+  },
+  'phase1-continuity-apply': {
+    reads: ['continuity.changedInstancesThisFrame', 'continuity.mappings', 'arena'],
+    writes: ['continuity.targets', 'arena'],
+  },
+  'phase1-event-dispatch': {
+    reads: ['arena', 'eventWrapPredicate'],
+    writes: ['eventScalars', 'events', 'eventWrapPredicate'],
+  },
+  'phase1-value-post-event': {
+    reads: ['arena', 'state', 'eventScalars', 'externalChannels.snapshot'],
+    writes: ['arena', 'cache.scalarValues', 'cache.scalarStamps'],
+  },
+  'phase1-render-collect': {
+    reads: ['arena'],
+    writes: ['render step buffer'],
+  },
+  'phase1-debug-materialize': {
+    reads: ['arena'],
+    writes: ['debug tap'],
+  },
+  'render-assembly': {
+    reads: ['render step buffer', 'arena'],
+    writes: ['lastRenderFrame'],
+  },
+  'phase2-state-write': {
+    reads: ['arena', 'state mappings'],
+    writes: ['state'],
+  },
+  'continuity-finalize': {
+    reads: ['time'],
+    writes: [
+      'continuity.lastTModelMs',
+      'continuity.domainChangeThisFrame',
+      'continuity.changedInstancesThisFrame',
+      'continuity.mappings',
+    ],
+  },
+  'frame-output': {
+    reads: ['lastRenderFrame'],
+    writes: ['lastRenderFrame'],
+  },
+} as const;
+
 export interface RuntimeFrameSemantics {
   /** Frame id this trace belongs to (RuntimeState.cache.frameId) */
   frameId: number;

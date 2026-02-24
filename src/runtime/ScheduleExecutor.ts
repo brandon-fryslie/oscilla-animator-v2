@@ -26,7 +26,7 @@ import {
   shapeRecord as _shapeRecord,
   assemblerCtx as _assemblerCtx,
 } from './executor-init';
-import { detectDomainChange } from './ContinuityMapping';
+import { detectDomainChange, recordDomainTransition } from './ContinuityMapping';
 import { applyContinuity, finalizeContinuityFrame } from './ContinuityApply';
 import { createStableDomainInstance, createUnstableDomainInstance } from './DomainIdentity';
 import { assembleRenderFrame, type AssemblerContext } from './RenderAssembler';
@@ -425,23 +425,14 @@ export function executeFrame(
         }
 
         // Detect domain change and compute mapping
-        const { changed, mapping } = detectDomainChange(
+        const change = detectDomainChange(
           instanceId,
           newDomain,
           state.continuity.prevDomains
         );
-
-        if (changed) {
-          // Store mapping (may be null for crossfade fallback)
-          if (mapping) {
-            state.continuity.mappings.set(instanceId, mapping);
-          } else {
-            // No mapping possible - crossfade will handle it
-            state.continuity.mappings.delete(instanceId);
-          }
-          state.continuity.changedInstancesThisFrame.add(instanceId);
-          state.continuity.domainChangeThisFrame = true;
-        }
+        // [LAW:one-source-of-truth] Domain transition ownership is updated through
+        // a single continuity mapping boundary.
+        recordDomainTransition(state.continuity, instanceId, change);
 
         // Update prevDomains for next frame comparison
         state.continuity.prevDomains.set(instanceId, newDomain);

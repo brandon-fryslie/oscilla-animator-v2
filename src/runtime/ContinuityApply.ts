@@ -21,6 +21,7 @@ import type { ValueSlot } from '../compiler/ir/Indices';
 import type { RuntimeState } from './RuntimeState';
 import type { ContinuityState, MappingState, StableTargetId } from './ContinuityState';
 import { getOrCreateTargetState } from './ContinuityState';
+import { resolveMappingForApply } from './ContinuityMapping';
 
 let continuityScratch = new Float32Array(0);
 
@@ -432,8 +433,7 @@ export function applyContinuity(
   }
 
   // Get mapping if domain changed
-  const mappingResult = state.continuity.mappings.get(instanceId);
-  const mapping = mappingResult !== undefined ? mappingResult : null;
+  const mapping = resolveMappingForApply(state.continuity, instanceId);
 
   // For crossfade, capture old effective values for blending
   // Use the pre-captured snapshot (before getOrCreateTargetState zeroed it)
@@ -645,8 +645,11 @@ export function applyContinuity(
 export function finalizeContinuityFrame(state: RuntimeState): void {
   // time is always set before continuity runs
   state.continuity.lastTModelMs = state.time !== null ? state.time.tMs : 0;
-  state.continuity.domainChangeThisFrame = false;
+  // [LAW:one-source-of-truth] Mapping ownership is frame-local; clear it at
+  // the canonical finalize boundary instead of relying on stale carry-over.
+  state.continuity.mappings.clear();
   state.continuity.changedInstancesThisFrame.clear();
+  state.continuity.domainChangeThisFrame = state.continuity.changedInstancesThisFrame.size > 0;
 
   // Clear test pulse request after it's been applied
   // (Note: appliedFrameId check prevents double-apply within same frame)
