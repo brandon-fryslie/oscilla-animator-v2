@@ -3574,6 +3574,3 @@ interface DrawPathInstancesOp {
 ```
 
 Each op is inherently a batch (shared geometry+style = one draw call).
-
-=======
-END OF SPEC

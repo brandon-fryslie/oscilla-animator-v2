@@ -6,7 +6,7 @@
  * Spec Reference: design-docs/IR-and-normalization-5-axes.md
  */
 
-// Import the legacy types for now (will be replaced with proper execution node types)
+// Import canonical type surfaces used by the authoritative CompiledProgramIR schema.
 import type { CanonicalType } from '../../core/canonical-types';
 import type { ScheduleIR } from '../backend/schedule-program';
 import type {

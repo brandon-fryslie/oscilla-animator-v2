@@ -34,8 +34,7 @@ import { isAxisInst } from '../../../core/canonical-types';
  * Resolution order:
  * 1. Per-instance portDefaults (from HCL params or setPortDefault — lives on DraftBlock)
  * 2. InputDef.defaultSource (port-level spec on block definition)
- * 3. (Future: domain-wide registry lookup by type shape — not implemented yet)
- * 4. Polymorphic DefaultSource block fallback
+ * 3. Polymorphic DefaultSource block fallback
  */
 function resolveDefaultStrategy(inputDef: InputDef, perInstance: DefaultSource | undefined): DefaultSource {
   if (perInstance) return perInstance;

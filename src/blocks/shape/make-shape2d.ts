@@ -92,15 +92,8 @@ export function register(): void {
         throw new Error(`MakeShape2D: dynamic instance count not supported — topology requires compile-time count`);
       }
   
-      // [LAW:single-enforcer] normalize legacy numeric 0/1 and canonical boolean here.
-      const closedRaw = config['closed'];
-      const closed = typeof closedRaw === 'boolean'
-        ? requireConfig<boolean>(config, 'closed', 'boolean')
-        : typeof closedRaw === 'number'
-          ? closedRaw !== 0
-          : (() => {
-              throw new Error(`Config 'closed' expected boolean (or legacy 0/1), got ${typeof closedRaw}`);
-            })();
+      // [LAW:one-source-of-truth] Shape closure is represented canonically as boolean.
+      const closed = requireConfig<boolean>(config, 'closed', 'boolean');
   
       // Create and register topology
       const topology = createLinePathTopology(pointCount, closed);

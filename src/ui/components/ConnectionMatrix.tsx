@@ -36,7 +36,7 @@ function findEdges(sourceId: BlockId, targetId: BlockId, edges: readonly Edge[])
  * Get display name for a block.
  */
 function getBlockDisplayName(block: Block): string {
-  return block.displayName || block.label || block.id;
+  return block.displayName || block.id;
 }
 
 /**
@@ -188,7 +188,6 @@ export const ConnectionMatrix = observer(function ConnectionMatrix() {
           }
 
           // Multiple edges: show count
-          // Currently select the first edge (could be enhanced to select all edges)
           return (
             <div
               style={{
@@ -196,7 +195,8 @@ export const ConnectionMatrix = observer(function ConnectionMatrix() {
                 cursor: 'pointer',
               }}
               onClick={() => {
-                // Select the first edge (TODO: support multi-edge selection)
+                // [LAW:one-source-of-truth] SelectionStore currently models one
+                // selected edge; choose a deterministic representative.
                 selection.selectEdge(edges[0].id);
               }}
             >

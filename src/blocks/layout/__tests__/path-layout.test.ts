@@ -28,7 +28,7 @@ patch "Test Path Layout" {
   }
 
   block "MakeShape2D" "assemble" {
-    closed = 1
+    closed = true
   }
 
   block "Ellipse" "dot" {
@@ -69,7 +69,7 @@ patch "Test PathLayout Full Pipeline" {
   }
 
   block "MakeShape2D" "assemble" {
-    closed = 1
+    closed = true
     outputs {
       shape = instances.element
     }

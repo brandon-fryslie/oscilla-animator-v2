@@ -29,7 +29,7 @@ patch "Tile Grid UV" {
   }
 
   block "MakeShape2D" "tile-shape" {
-    closed = 1
+    closed = true
     outputs {
       shape = instances.element
     }

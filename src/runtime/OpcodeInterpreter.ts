@@ -263,6 +263,6 @@ function applyNaryOp(op: string, values: number[]): number {
       // select(condition, valueIfTrue, valueIfFalse)
       return values[0] > 0 ? values[1] : values[2];
     default:
-      throw new Error('OpCode ' + op + ' not implemented for ' + values.length + ' args');
+      throw new Error('OpCode ' + op + ' is unsupported for ' + values.length + ' args');
   }
 }

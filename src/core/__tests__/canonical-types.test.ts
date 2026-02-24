@@ -31,7 +31,7 @@ import {
 import { isConcretePayload } from '../inference-types';
 import {
   FLOAT, INT, BOOL, VEC2, VEC3, COLOR, CAMERA_PROJECTION, payloadStride,
-  unitNone, unitDegrees, unitTurns, isValidPayloadUnit, defaultUnitForPayload,
+  unitNone, unitCount, unitDegrees, unitTurns, isValidPayloadUnit, defaultUnitForPayload,
 } from '../canonical-types';
 
 // =============================================================================
@@ -187,6 +187,10 @@ describe('Unit System (scalar removal)', () => {
   it('canonicalType(FLOAT) defaults to unitNone()', () => {
     const type = canonicalType(FLOAT);
     expect(type.unit.kind).toBe('none');
+  });
+
+  it('defaultUnitForPayload(INT) remains count', () => {
+    expect(defaultUnitForPayload(INT)).toEqual(unitCount());
   });
 });
 

@@ -14,14 +14,17 @@ interface ContourBuildResult {
 
 const VERB_MOVE = 0;
 const VERB_LINE = 1;
+const VERB_CUBIC = 2;
+const VERB_QUAD = 3;
 const VERB_CLOSE = 4;
 
 const EPSILON = 1e-7;
+const CURVE_SUBDIVISIONS = 12;
 
 /**
  * CPU path tessellation for WebGPU fill rendering.
  *
- * Supports a single contour composed of MOVE/LINE/CLOSE verbs.
+ * Supports one or more contours composed of MOVE/LINE/CUBIC/QUAD/CLOSE verbs.
  * Unsupported verb/topology patterns fail fast by throwing.
  */
 export class PathTessellator {
@@ -36,8 +39,8 @@ export class PathTessellator {
       return cached;
     }
 
-    const contour = this.extractContour(geometry);
-    const mesh = this.tessellateContour(cacheKey, contour);
+    const contours = this.extractContours(geometry);
+    const mesh = this.tessellateContours(cacheKey, contours);
     this.meshCache.set(cacheKey, mesh);
     return mesh;
   }
@@ -62,21 +65,31 @@ export class PathTessellator {
     return id;
   }
 
-  private extractContour(geometry: PathGeometry): ContourBuildResult {
+  private extractContours(geometry: PathGeometry): ContourBuildResult[] {
     const points = geometry.points;
     const maxPointIndex = geometry.pointsCount;
-    const contours: Float32Array[] = [];
+    const contours: ContourBuildResult[] = [];
     let current: number[] = [];
     let pointIndex = 0;
-    let closed = false;
+    let currentClosed = false;
+
+    const pushCurrent = (): void => {
+      if (current.length >= 4) {
+        const deduped = this.removeDuplicatePoints(new Float32Array(current));
+        const normalized = this.removeCollinearPoints(deduped);
+        contours.push({
+          points: normalized,
+          closed: currentClosed,
+        });
+      }
+      current = [];
+      currentClosed = false;
+    };
 
     for (let i = 0; i < geometry.verbs.length; i++) {
       const verb = geometry.verbs[i];
       if (verb === VERB_MOVE) {
-        if (current.length >= 4) {
-          contours.push(new Float32Array(current));
-        }
-        current = [];
+        pushCurrent();
         this.assertPointAvailable(pointIndex, maxPointIndex, verb);
         current.push(points[pointIndex * 2], points[pointIndex * 2 + 1]);
         pointIndex++;
@@ -84,37 +97,81 @@ export class PathTessellator {
       }
 
       if (verb === VERB_LINE) {
+        if (current.length < 2) {
+          throw new Error('PathTessellator: LINE verb requires an active contour (MOVE first)');
+        }
         this.assertPointAvailable(pointIndex, maxPointIndex, verb);
-        current.push(points[pointIndex * 2], points[pointIndex * 2 + 1]);
+        const x = points[pointIndex * 2];
+        const y = points[pointIndex * 2 + 1];
+        current.push(x, y);
         pointIndex++;
         continue;
       }
 
+      if (verb === VERB_CUBIC) {
+        if (current.length < 2) {
+          throw new Error('PathTessellator: CUBIC verb requires an active contour (MOVE first)');
+        }
+        this.assertPointAvailable(pointIndex, maxPointIndex, verb);
+        const cp1x = points[pointIndex * 2];
+        const cp1y = points[pointIndex * 2 + 1];
+        pointIndex++;
+
+        this.assertPointAvailable(pointIndex, maxPointIndex, verb);
+        const cp2x = points[pointIndex * 2];
+        const cp2y = points[pointIndex * 2 + 1];
+        pointIndex++;
+
+        this.assertPointAvailable(pointIndex, maxPointIndex, verb);
+        const endx = points[pointIndex * 2];
+        const endy = points[pointIndex * 2 + 1];
+        pointIndex++;
+
+        const startx = current[current.length - 2];
+        const starty = current[current.length - 1];
+        this.appendCubic(current, startx, starty, cp1x, cp1y, cp2x, cp2y, endx, endy);
+        continue;
+      }
+
+      if (verb === VERB_QUAD) {
+        if (current.length < 2) {
+          throw new Error('PathTessellator: QUAD verb requires an active contour (MOVE first)');
+        }
+        this.assertPointAvailable(pointIndex, maxPointIndex, verb);
+        const cpx = points[pointIndex * 2];
+        const cpy = points[pointIndex * 2 + 1];
+        pointIndex++;
+
+        this.assertPointAvailable(pointIndex, maxPointIndex, verb);
+        const endx = points[pointIndex * 2];
+        const endy = points[pointIndex * 2 + 1];
+        pointIndex++;
+
+        const startx = current[current.length - 2];
+        const starty = current[current.length - 1];
+        this.appendQuadratic(current, startx, starty, cpx, cpy, endx, endy);
+        continue;
+      }
+
       if (verb === VERB_CLOSE) {
-        closed = true;
+        currentClosed = true;
         continue;
       }
 
       throw new Error(
-        `PathTessellator: unsupported path verb ${verb}. Only MOVE/LINE/CLOSE are supported by WebGPU renderer`
+        `PathTessellator: unsupported path verb ${verb}. Valid verbs are MOVE/LINE/CUBIC/QUAD/CLOSE (0..4)`
       );
     }
 
-    if (current.length >= 4) {
-      contours.push(new Float32Array(current));
-    }
+    pushCurrent();
 
-    if (contours.length !== 1) {
+    if (contours.length === 0) {
       throw new Error(
-        `PathTessellator: expected exactly one contour, received ${contours.length}`
+        'PathTessellator: expected at least one contour with two or more points'
       );
     }
 
-    const normalized = this.removeDuplicatePoints(contours[0]);
-    return {
-      points: normalized,
-      closed,
-    };
+    return contours;
   }
 
   private assertPointAvailable(pointIndex: number, pointsCount: number, verb: number): void {
@@ -147,14 +204,135 @@ export class PathTessellator {
     return new Float32Array(deduped);
   }
 
-  private tessellateContour(cacheKey: string, contour: ContourBuildResult): TessellatedPathMesh {
+  /**
+   * Remove vertices that are collinear with their neighbors.
+   * Such vertices add no geometric information but block ear detection
+   * because cross(prev, curr, next) ≈ 0.
+   * Loops until stable since removal can create new collinear triplets.
+   */
+  private removeCollinearPoints(points: Float32Array): Float32Array {
+    if (points.length < 6) return points; // < 3 vertices — nothing to remove
+
+    let current = points;
+    for (;;) {
+      const n = current.length / 2;
+      if (n < 3) break;
+
+      const keep: boolean[] = new Array(n).fill(true);
+      let removed = 0;
+
+      for (let i = 0; i < n; i++) {
+        const pi = ((i - 1) + n) % n;
+        const ni = (i + 1) % n;
+        const ax = current[pi * 2],     ay = current[pi * 2 + 1];
+        const bx = current[i * 2],      by = current[i * 2 + 1];
+        const cx = current[ni * 2],     cy = current[ni * 2 + 1];
+        const cross = (bx - ax) * (cy - ay) - (by - ay) * (cx - ax);
+        if (Math.abs(cross) < EPSILON) {
+          keep[i] = false;
+          removed++;
+        }
+      }
+
+      if (removed === 0) break;
+
+      // Preserve at least 3 vertices — stop removing if we'd go below
+      if (n - removed < 3) break;
+
+      const out: number[] = [];
+      for (let i = 0; i < n; i++) {
+        if (keep[i]) {
+          out.push(current[i * 2], current[i * 2 + 1]);
+        }
+      }
+      current = new Float32Array(out);
+    }
+
+    return current;
+  }
+
+  private appendQuadratic(
+    out: number[],
+    x0: number,
+    y0: number,
+    cx: number,
+    cy: number,
+    x1: number,
+    y1: number,
+  ): void {
+    for (let i = 1; i <= CURVE_SUBDIVISIONS; i++) {
+      const t = i / CURVE_SUBDIVISIONS;
+      const mt = 1 - t;
+      const x = mt * mt * x0 + 2 * mt * t * cx + t * t * x1;
+      const y = mt * mt * y0 + 2 * mt * t * cy + t * t * y1;
+      out.push(x, y);
+    }
+  }
+
+  private appendCubic(
+    out: number[],
+    x0: number,
+    y0: number,
+    cx1: number,
+    cy1: number,
+    cx2: number,
+    cy2: number,
+    x1: number,
+    y1: number,
+  ): void {
+    for (let i = 1; i <= CURVE_SUBDIVISIONS; i++) {
+      const t = i / CURVE_SUBDIVISIONS;
+      const mt = 1 - t;
+      const x =
+        mt * mt * mt * x0 +
+        3 * mt * mt * t * cx1 +
+        3 * mt * t * t * cx2 +
+        t * t * t * x1;
+      const y =
+        mt * mt * mt * y0 +
+        3 * mt * mt * t * cy1 +
+        3 * mt * t * t * cy2 +
+        t * t * t * y1;
+      out.push(x, y);
+    }
+  }
+
+  private tessellateContours(cacheKey: string, contours: readonly ContourBuildResult[]): TessellatedPathMesh {
+    const contourMeshes = contours.map((contour) => this.tessellateSingleContour(contour));
+    const totalVertexFloats = contourMeshes.reduce((sum, contour) => sum + contour.vertexData.length, 0);
+
+    const mergedVertexData = new Float32Array(totalVertexFloats);
+    const mergedIndices: number[] = [];
+
+    let vertexFloatOffset = 0;
+    let vertexIndexOffset = 0;
+    for (const contourMesh of contourMeshes) {
+      mergedVertexData.set(contourMesh.vertexData, vertexFloatOffset);
+      vertexFloatOffset += contourMesh.vertexData.length;
+      for (let i = 0; i < contourMesh.indexData.length; i++) {
+        mergedIndices.push(contourMesh.indexData[i] + vertexIndexOffset);
+      }
+      vertexIndexOffset += contourMesh.vertexData.length / 2;
+    }
+
+    const indexData = this.createIndexData(mergedIndices);
+    return {
+      cacheKey,
+      vertexData: mergedVertexData,
+      indexData,
+      indexFormat: indexData instanceof Uint16Array ? 'uint16' : 'uint32',
+    };
+  }
+
+  private tessellateSingleContour(contour: ContourBuildResult): {
+    readonly vertexData: Float32Array;
+    readonly indexData: number[];
+  } {
     const vertexCount = contour.points.length / 2;
     if (vertexCount < 3) {
       return {
-        cacheKey,
         vertexData: contour.points,
-        indexData: new Uint16Array(0),
-        indexFormat: 'uint16',
+        indexData: [],
       };
     }
 
@@ -183,7 +361,14 @@ export class PathTessellator {
       }
 
       if (!earFound) {
-        throw new Error('PathTessellator: polygon triangulation failed (non-simple or degenerate contour)');
+        // Non-simple or remaining-degenerate contour — skip rather than halt runtime
+        // [LAW:no-silent-fallbacks] Degenerate tessellation is surfaced explicitly
+        // via warning instead of silently producing undefined geometry.
+        console.warn('PathTessellator: polygon triangulation failed (non-simple or degenerate contour), skipping mesh');
+        return {
+          vertexData: contour.points,
+          indexData: [],
+        };
       }
 
       guard++;
@@ -192,12 +377,9 @@ export class PathTessellator {
       }
     }
 
-    const indexData = this.createIndexData(indices);
     return {
-      cacheKey,
       vertexData: contour.points,
-      indexData,
-      indexFormat: indexData instanceof Uint16Array ? 'uint16' : 'uint32',
+      indexData: indices,
     };
   }
 

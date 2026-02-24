@@ -32,7 +32,7 @@ patch "Golden Spiral" {
   }
 
   block "MakeShape2D" "dot-shape" {
-    closed = 1
+    closed = true
     outputs {
       shape = instances.element
     }

@@ -606,7 +606,6 @@ function lowerBlockInstance(
       blockIdx: blockIndex,
       blockType: block.type,
       instanceId: block.id,
-      label: block.label,
       // Use resolved types from pass1 (portTypes) - THE source of truth
       inTypes: Object.keys(blockDef.inputs)
         .filter(portName => blockDef.inputs[portName].exposedAsPort !== false)
@@ -920,7 +919,6 @@ function lowerSCCTwoPass(
           blockIdx: blockIndex,
           blockType: block.type,
           instanceId: block.id,
-          label: block.label,
           inTypes: Object.keys(blockDef.inputs)
             .filter(portName => blockDef.inputs[portName].exposedAsPort !== false)
             .map(portName => portTypes.get(portKey(blockIndex, portName, 'in')))

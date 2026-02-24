@@ -131,7 +131,7 @@ Component access is implemented using generic structural IR operations:
 These operations are structural (not compute kernels) and work at all extent levels (one/many/event).
 
 **Block lowering** for multi-component outputs:
-- Allocate strided slot: `allocSlot(stride)`
+- Allocate base slot: `allocSlot()` (or `allocTypedSlot(type)` when type metadata is available)
 - Decompose construct into components via extract
 - Emit strided slot write: `stepSlotWriteStrided(slot, components)`
 

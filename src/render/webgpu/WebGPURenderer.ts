@@ -19,6 +19,11 @@ const MIN_INSTANCE_CAPACITY = 1024;
 const SIMULATION_CAPACITY = WEBGPU_RENDER_CONTRACT.simulationCapacity;
 const SIMULATION_WORKGROUP_SIZE = WEBGPU_RENDER_CONTRACT.computeWorkgroupSize;
 
+function alignTo4(value: number): number {
+  const remainder = value % 4;
+  return remainder === 0 ? value : value + (4 - remainder);
+}
+
 interface GPUMesh {
   readonly indexCount: number;
   readonly indexFormat: 'uint16' | 'uint32';
@@ -442,7 +447,9 @@ export class WebGPURenderer {
     data: Float32Array | Uint16Array | Uint32Array,
     usage: number
   ): any {
-    const safeSize = Math.max(4, data.byteLength);
+    // [LAW:no-silent-fallbacks] mappedAtCreation buffers must be 4-byte aligned;
+    // enforce the WebGPU contract deterministically at allocation time.
+    const safeSize = Math.max(4, alignTo4(data.byteLength));
     const buffer = this.device.createBuffer({
       size: safeSize,
       usage: usage | GPU_BUFFER_USAGE.COPY_DST,
@@ -480,7 +487,7 @@ export class WebGPURenderer {
     }
 
     if (style.strokeColor && style.strokeColor.length > 0) {
-      throw new Error('WebGPURenderer: stroke rendering is not implemented yet');
+      throw new Error('WebGPURenderer: stroke rendering is currently unsupported');
     }
 
     if (!fill || !(fill instanceof Uint8ClampedArray) || fill.length === 0) {

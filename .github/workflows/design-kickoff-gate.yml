@@ -1,0 +1,69 @@
+name: Design Kickoff Label Gate
+
+on:
+  pull_request_target:
+    types:
+      - labeled
+      - synchronize
+      - reopened
+
+permissions:
+  contents: read
+  checks: read
+  pull-requests: write
+
+jobs:
+  gate:
+    if: contains(github.event.pull_request.labels.*.name, 'design kickoff')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Enforce readiness check before design kickoff label
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const label = 'design kickoff';
+            const requiredCheckName = 'readiness';
+            const pr = context.payload.pull_request;
+            const headSha = pr.head.sha;
+
+            const checkRuns = await github.paginate(
+              github.rest.checks.listForRef,
+              {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                ref: headSha,
+                per_page: 100,
+              },
+              (response) => response.data.check_runs,
+            );
+
+            const readinessRun = checkRuns.find((run) => run.name === requiredCheckName);
+            const readinessPassed = readinessRun?.conclusion === 'success';
+
+            if (readinessPassed) {
+              core.info(`Readiness check is green for ${headSha}; label remains.`);
+              return;
+            }
+
+            await github.rest.issues.removeLabel({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: pr.number,
+              name: label,
+            });
+
+            const reason = readinessRun
+              ? `current conclusion is \`${readinessRun.conclusion ?? 'pending'}\``
+              : 'no readiness check run found';
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: pr.number,
+              body:
+                `Removed \`${label}\` label because readiness gate is not satisfied (` +
+                `${reason}).\n\n` +
+                `Run the \`WebGPU Migration Readiness\` workflow to green on this PR head SHA, then re-apply the label.`,
+            });
+
+            core.setFailed('Readiness gate must pass before design kickoff label can be applied.');

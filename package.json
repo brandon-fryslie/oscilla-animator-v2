@@ -12,13 +12,9 @@
     "test:coverage": "vitest run --coverage",
     "test:memory": "VITEST_EXPOSE_GC=1 vitest run src/__tests__/memory-profile.test.ts",
     "test:webgpu-matrix": "node scripts/webgpu-browser-matrix.mjs",
-    "sync:webgpu-proof": "node scripts/sync-webgpu-proof-from-matrix.mjs",
-    "refresh:webgpu-readiness": "pnpm run -s test:webgpu-matrix && pnpm run -s sync:webgpu-proof && pnpm run -s check:webgpu-readiness",
-    "test:webgpu-readiness": "vitest run src/__tests__/webgpu-readiness-check.test.ts",
-    "check:webgpu-readiness": "node scripts/webgpu-readiness-check.mjs",
-    "ci:webgpu-readiness": "pnpm run -s test:webgpu-readiness && pnpm run -s check:webgpu-readiness",
+    "test:migration-readiness": "node scripts/webgpu-migration-readiness.mjs",
     "bench": "vitest bench",
-    "lint": "eslint src/blocks/ src/runtime/ValueExprMaterializer.ts src/runtime/ValueExprSignalEvaluator.ts src/runtime/ValueExprEventEvaluator.ts src/runtime/ContinuityApply.ts src/compiler/compile.ts src/runtime/ScheduleExecutor.ts src/runtime/RenderAssembler.ts src/runtime/SignalKernelLibrary.ts src/runtime/OpcodeInterpreter.ts src/render/RenderBufferArena.ts"
+    "lint": "eslint src/blocks/ src/runtime/ValueExprMaterializer.ts src/runtime/ValueExprEventEvaluator.ts src/runtime/ContinuityApply.ts src/compiler/compile.ts src/runtime/ScheduleExecutor.ts src/runtime/RenderAssembler.ts src/runtime/OpcodeInterpreter.ts src/render/RenderBufferArena.ts"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",

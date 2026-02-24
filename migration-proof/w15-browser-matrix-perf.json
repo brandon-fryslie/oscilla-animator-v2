@@ -2,7 +2,7 @@
   "workstream": "W15",
   "title": "Browser Matrix, Performance, And Proof Artifact Pipeline",
   "status": "completed",
-  "timestamp_utc": "2026-02-24T17:39:04Z",
+  "timestamp_utc": "2026-02-24T12:00:41Z",
   "commit": "4656e2ac5",
   "laws": [
     "verifiable-goals",
@@ -11,11 +11,17 @@
   ],
   "scope": [
     "Run repeatable Chromium WebGPU gating check on canonical preview runtime",
-    "Capture machine-readable readiness and frame-time baseline"
+    "Capture machine-readable readiness and frame-time baseline",
+    "Treat optional non-blocking browser telemetry lanes as informational only"
+  ],
+  "closure_surfaces": [
+    "scripts/webgpu-browser-matrix.mjs",
+    "artifacts/webgpu-browser-matrix.json",
+    "migration-proof/w15-browser-matrix-perf.json"
   ],
   "artifact": {
     "matrix_report": "artifacts/webgpu-browser-matrix.json",
-    "report_generated_at": "2026-02-24T17:39:03.960Z",
+    "report_generated_at": "2026-02-24T09:38:47.713Z",
     "sample_frames": 180,
     "url": "http://127.0.0.1:5174/?showPreview=true",
     "gating_browsers": [
@@ -40,11 +46,32 @@
       },
       "timing": {
         "sampleCount": 180,
-        "avgFrameDeltaMs": 8.333,
-        "p95FrameDeltaMs": 9.3,
-        "avgFps": 120.01
+        "avgFrameDeltaMs": 14.528,
+        "p95FrameDeltaMs": 33.7,
+        "avgFps": 68.83
       }
     }
   },
-  "extra_verification": []
+  "verification": [
+    {
+      "command": "pnpm run test:webgpu-matrix",
+      "exit_code": 0,
+      "artifact": "artifacts/webgpu-browser-matrix.json"
+    },
+    {
+      "command": "osascript Safari probe for Boolean(navigator.gpu) + webgpu context",
+      "exit_code": 0,
+      "notes": "Real Safari (Version 26.3) reports navigator.gpu=true and canvas.getContext('webgpu')=true in this environment. This is telemetry only and non-blocking."
+    }
+  ],
+  "static_scans": [
+    {
+      "command": "rg -n \"INCLUDE_WEBKIT|blocking: true|blocking: false\" scripts/webgpu-browser-matrix.mjs",
+      "result": "chromium_is_only_blocking_lane"
+    }
+  ],
+  "notes": [
+    "Readiness gate enforcement is Chromium-only by policy; optional WebKit telemetry remains non-blocking.",
+    "Headless WebKit GPU availability is environment-dependent and does not delay readiness."
+  ]
 }

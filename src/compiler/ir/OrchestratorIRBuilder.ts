@@ -56,8 +56,8 @@ export interface OrchestratorIRBuilder extends BlockIRBuilder {
   /** Register a field expression -> slot binding. */
   registerFieldSlot(fieldId: ValueExprId, slot: ValueSlot): void;
 
-  /** Allocate a raw slot (stride optional). */
-  allocSlot(stride?: number): ValueSlot;
+  /** Allocate a raw slot. */
+  allocSlot(): ValueSlot;
 
   // =========================================================================
   // Execution Steps (orchestrator-only)

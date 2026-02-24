@@ -101,7 +101,6 @@ export const TYPE_COLORS: Record<ConcretePayloadType["kind"], string> = {
   vec4: '#059669',    // Teal (4D vector)
   color: '#ec4899',   // Magenta/Pink
   bool: '#f97316',    // Orange
-  // TODO: Q6 shape: '#facc15',   // Yellow
   cameraProjection: '#8b5cf6', // Purple (enum-like projection mode)
 };
 
@@ -305,24 +304,21 @@ export function getPortTypeFromBlockType(
 }
 
 // =============================================================================
-// Domain Transformation (Stub)
+// Domain Transformation
 // =============================================================================
 
 /**
  * Check if a domain transformation exists between two domains.
  *
- * TODO: Implement domain transformation system when available.
- * For now, this is a stub that always returns false.
- *
- * Related epic: oscilla-animator-v2-s02 (Domain Transformation System/Adapters)
+ * Domain transforms are currently unsupported in ReactFlow validation.
+ * Connection validity requires exact domain identity until transform adapters
+ * are introduced at the compiler boundary.
  *
  * @param fromDomain - Source domain
  * @param toDomain - Target domain
  * @returns true if a transformation exists, false otherwise
  */
 function canTransformDomain(_fromDomain: string, _toDomain: string): boolean {
-  // Stub: No transformation system implemented yet
-  // When domain transformation system is ready, check it here
   return false;
 }
 
@@ -482,7 +478,7 @@ function arePortsCompatible(from: PortContext, to: PortContext): boolean {
       return true;
     }
 
-    // Check if domain transformation exists (stub for now)
+    // Domain transforms are currently unsupported at this boundary.
     return canTransformDomain(fromInstance.domainTypeId, toInstance.domainTypeId);
   }
 

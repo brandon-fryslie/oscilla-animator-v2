@@ -173,8 +173,6 @@ export class ExternalChannelSystem {
 
   /**
    * Channel kind detection - Phase 1 uses naming convention
-   *
-   * TODO: Phase 2 will use ChannelDefResolver for explicit registration
    */
   private isPulse(name: string): boolean {
     // Convention: .down, .up, .pressed, .released

@@ -486,12 +486,8 @@ export class IRBuilderImpl implements OrchestratorIRBuilder {
     this.fieldSlots.set(fieldId, slot);
   }
 
-  allocSlot(stride?: number): ValueSlot {
-    const slot = this.slotCounter++ as ValueSlot;
-    if (stride !== undefined) {
-      // TODO: store stride metadata
-    }
-    return slot;
+  allocSlot(): ValueSlot {
+    return this.slotCounter++ as ValueSlot;
   }
 
   allocEventSlot(eventId: ValueExprId): EventSlotId {

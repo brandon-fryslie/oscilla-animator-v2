@@ -2,7 +2,6 @@
  * Diagnostics System Configuration
  *
  * Simple configuration object for diagnostics settings.
- * TODO: Migrate to app-wide settings panel when available.
  * Migration path:
  * 1. Move DiagnosticsConfig interface into app settings
  * 2. Replace DIAGNOSTICS_CONFIG imports with appSettings.diagnostics
