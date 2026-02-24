@@ -1,0 +1,53 @@
+{
+  "workstream": "W10",
+  "title": "WebGPU Execution Contract Pre-Design Baseline",
+  "status": "completed",
+  "timestamp_utc": "2026-02-24T05:17:25Z",
+  "commit": "ec9e9d4ce",
+  "laws": [
+    "one-source-of-truth",
+    "single-enforcer",
+    "no-silent-fallbacks",
+    "verifiable-goals"
+  ],
+  "scope": [
+    "Enforce fail-fast WebGPU runtime capability path with no backup renderer",
+    "Lock canonical WebGPU buffer and bind-group contract constants",
+    "Enforce runtime-to-render contract checks at renderer and animation-loop boundaries"
+  ],
+  "closure_surfaces": [
+    "src/render/webgpu/WebGPURenderer.ts",
+    "src/render/webgpu/shaders.ts",
+    "src/render/index.ts",
+    "src/services/RuntimeService.ts",
+    "src/services/AnimationLoop.ts",
+    "src/render/webgpu/__tests__/WebGPURenderer.test.ts",
+    "src/services/__tests__/AnimationLoop.test.ts"
+  ],
+  "verification": [
+    {
+      "command": "pnpm -s typecheck",
+      "exit_code": 0
+    },
+    {
+      "command": "pnpm -s vitest run src/render/webgpu/__tests__/WebGPURenderer.test.ts src/services/__tests__/AnimationLoop.test.ts",
+      "exit_code": 0,
+      "tests_passed": 7
+    },
+    {
+      "command": "pnpm run test:webgpu-matrix",
+      "exit_code": 1,
+      "notes": "Expected overall non-zero exit when any browser fails matrix gate. Chromium lane passed; WebKit lane failed due unavailable WebGPU API in environment."
+    }
+  ],
+  "static_scans": [
+    {
+      "command": "rg -n \"Canvas2DRenderer|SVGRenderer|getContext\\('2d'\\)|getContext\\(\\\"2d\\\"\\)|renderFrame\\(\" src/services/RuntimeService.ts src/services/AnimationLoop.ts src/render/index.ts src/render/webgpu/WebGPURenderer.ts",
+      "result": "no_matches"
+    }
+  ],
+  "notes": [
+    "Runtime render boundary now exports only WebGPU runtime renderer APIs from src/render/index.ts.",
+    "WebGPU contract constants are centralized in src/render/webgpu/shaders.ts as WEBGPU_RENDER_CONTRACT."
+  ]
+}

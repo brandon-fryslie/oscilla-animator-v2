@@ -77,6 +77,7 @@ function computeStats(frameDeltasMs) {
 
 async function runBrowserCheck({ browserName, launcher, launchOptions, url }) {
   const browser = await launcher.launch({ headless: true, ...launchOptions });
+  const browserVersion = browser.version();
   const page = await browser.newPage();
   const consoleErrors = [];
   const pageErrors = [];
@@ -95,6 +96,7 @@ async function runBrowserCheck({ browserName, launcher, launchOptions, url }) {
   await page.waitForSelector('canvas', { timeout: 30_000 });
 
   const probe = await page.evaluate(async (sampleFrames) => {
+    const userAgent = navigator.userAgent;
     const hasNavigatorGpu = Boolean(navigator.gpu);
     const adapter = hasNavigatorGpu ? await navigator.gpu.requestAdapter() : null;
     const hasAdapter = Boolean(adapter);
@@ -120,6 +122,7 @@ async function runBrowserCheck({ browserName, launcher, launchOptions, url }) {
     });
 
     return {
+      userAgent,
       hasNavigatorGpu,
       hasAdapter,
       hasCanvas,
@@ -132,6 +135,7 @@ async function runBrowserCheck({ browserName, launcher, launchOptions, url }) {
 
   const timing = computeStats(probe.frameDeltasMs);
   const readiness = {
+    userAgent: probe.userAgent,
     hasNavigatorGpu: probe.hasNavigatorGpu,
     hasAdapter: probe.hasAdapter,
     hasCanvas: probe.hasCanvas,
@@ -150,8 +154,24 @@ async function runBrowserCheck({ browserName, launcher, launchOptions, url }) {
     readiness.consoleErrorCount === 0 &&
     readiness.pageErrorCount === 0;
 
+  const failureReason =
+    passed
+      ? null
+      : !readiness.hasNavigatorGpu
+        ? 'webgpu_api_unavailable'
+        : !readiness.hasAdapter
+          ? 'webgpu_adapter_unavailable'
+          : !readiness.hasWebGPUContext
+            ? 'webgpu_context_unavailable'
+            : readiness.consoleErrorCount > 0
+              ? 'runtime_console_errors'
+              : readiness.pageErrorCount > 0
+                ? 'runtime_page_errors'
+                : 'unknown';
+
   return {
     browser: browserName,
+    browserVersion,
     url,
     startedAt: new Date(startedAt).toISOString(),
     durationMs: Date.now() - startedAt,
@@ -161,6 +181,7 @@ async function runBrowserCheck({ browserName, launcher, launchOptions, url }) {
       console: consoleErrors,
       page: pageErrors,
     },
+    failureReason,
     passed,
   };
 }
@@ -197,6 +218,7 @@ async function main() {
         const message = error instanceof Error ? error.message : String(error);
         results.push({
           browser: check.browserName,
+          browserVersion: null,
           url: TARGET_URL,
           startedAt: new Date().toISOString(),
           durationMs: 0,
@@ -207,6 +229,7 @@ async function main() {
             hasWebGPUContext: false,
             consoleErrorCount: 0,
             pageErrorCount: 0,
+            userAgent: null,
           },
           timing: {
             sampleCount: 0,
@@ -219,6 +242,7 @@ async function main() {
             page: [],
             setup: [message],
           },
+          failureReason: 'browser_launch_failed',
           passed: false,
         });
       }

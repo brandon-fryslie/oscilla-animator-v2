@@ -1,0 +1,79 @@
+{
+  "workstream": "W15",
+  "title": "Browser Matrix, Performance, And Proof Artifact Pipeline",
+  "status": "blocked_environment",
+  "timestamp_utc": "2026-02-24T05:17:25Z",
+  "commit": "ec9e9d4ce",
+  "laws": [
+    "verifiable-goals",
+    "no-silent-fallbacks"
+  ],
+  "scope": [
+    "Run repeatable Chrome+WebKit matrix check on canonical preview runtime",
+    "Capture machine-readable readiness and frame-time baseline",
+    "Classify browser failure reasons for deterministic gating"
+  ],
+  "artifact": {
+    "matrix_report": "artifacts/webgpu-browser-matrix.json",
+    "report_generated_at": "2026-02-24T05:17:02.357Z",
+    "sample_frames": 180,
+    "url": "http://127.0.0.1:5174/?showPreview=true",
+    "overall_passed": false
+  },
+  "results": {
+    "chromium": {
+      "browser_version": "143.0.7499.4",
+      "passed": true,
+      "failure_reason": null,
+      "readiness": {
+        "hasNavigatorGpu": true,
+        "hasAdapter": true,
+        "hasCanvas": true,
+        "hasWebGPUContext": true,
+        "consoleErrorCount": 0,
+        "pageErrorCount": 0
+      },
+      "timing": {
+        "sampleCount": 180,
+        "avgFrameDeltaMs": 8.321,
+        "p95FrameDeltaMs": 8.6,
+        "avgFps": 120.18
+      }
+    },
+    "webkit": {
+      "browser_version": "26.0",
+      "passed": false,
+      "failure_reason": "webgpu_api_unavailable",
+      "readiness": {
+        "hasNavigatorGpu": false,
+        "hasAdapter": false,
+        "hasCanvas": true,
+        "hasWebGPUContext": false,
+        "consoleErrorCount": 1,
+        "pageErrorCount": 0
+      },
+      "timing": {
+        "sampleCount": 180,
+        "avgFrameDeltaMs": 13.794,
+        "p95FrameDeltaMs": 15,
+        "avgFps": 72.49
+      }
+    }
+  },
+  "extra_verification": [
+    {
+      "command": "pnpm exec playwright install webkit",
+      "exit_code": 0
+    },
+    {
+      "command": "osascript Safari probe for Boolean(navigator.gpu)",
+      "result": false,
+      "notes": "System Safari also reports navigator.gpu unavailable in this environment."
+    }
+  ],
+  "blocker": {
+    "type": "platform_capability",
+    "summary": "Safari/WebKit lane cannot satisfy WebGPU readiness on this machine: navigator.gpu is unavailable.",
+    "next_action": "Re-run matrix on a Safari environment with WebGPU support enabled and available (or upgraded browser/OS) and republish this artifact with status=completed."
+  }
+}
