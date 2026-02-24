@@ -1,0 +1,52 @@
+{
+  "workstream": "W13",
+  "title": "External Input, State/Gauge, And Continuity Segment Semantics",
+  "status": "completed",
+  "timestamp_utc": "2026-02-24T06:53:35Z",
+  "commit": "2b2a05f03",
+  "laws": [
+    "one-source-of-truth",
+    "single-enforcer",
+    "verifiable-goals"
+  ],
+  "scope": [
+    "Enforce one continuity transition ownership boundary across frame executors",
+    "Keep stepped and non-stepped execution aligned on deterministic domain-change semantics",
+    "Preserve canonical frame segment ordering for external input, continuity apply, and finalize"
+  ],
+  "closure_surfaces": [
+    "src/runtime/ScheduleExecutor.ts",
+    "src/runtime/executeFrameStepped.ts",
+    "src/runtime/ContinuityMapping.ts",
+    "src/runtime/ContinuityApply.ts",
+    "src/runtime/__tests__/continuity-integration.test.ts",
+    "src/runtime/__tests__/project-policy-domain-change.test.ts",
+    "src/runtime/__tests__/executeFrameStepped.test.ts",
+    "src/__tests__/forbidden-patterns.test.ts"
+  ],
+  "verification": [
+    {
+      "command": "pnpm -s typecheck",
+      "exit_code": 0
+    },
+    {
+      "command": "pnpm -s vitest run src/runtime/__tests__/continuity-integration.test.ts src/runtime/__tests__/project-policy-domain-change.test.ts src/runtime/__tests__/executeFrameStepped.test.ts src/__tests__/forbidden-patterns.test.ts",
+      "exit_code": 0,
+      "tests_passed": 105
+    }
+  ],
+  "static_scans": [
+    {
+      "command": "non-comment scan for direct continuity transition writes in executeFrameStepped",
+      "result": "no_matches"
+    },
+    {
+      "command": "scan for recordDomainTransition usage in both ScheduleExecutor and executeFrameStepped",
+      "result": "present_in_both"
+    }
+  ],
+  "notes": [
+    "executeFrameStepped now routes domain transitions through recordDomainTransition(), matching ScheduleExecutor.",
+    "W13 guard tests prevent direct mutation of continuity transition ownership fields in stepped execution."
+  ]
+}

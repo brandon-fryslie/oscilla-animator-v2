@@ -1251,6 +1251,43 @@ describe('Forbidden Patterns (Type System Invariants)', () => {
 
   });
 
+  describe('WebGPU Prereq Guards (W13)', () => {
+
+    it('frame executors must use recordDomainTransition as the single continuity transition enforcer', () => {
+      const scheduleMatches = filterAllowlist(
+        grepSrc('recordDomainTransition\\s*\\(', 'src/runtime/ScheduleExecutor.ts'),
+        [/\.test\./, /__tests__/],
+      );
+      const steppedMatches = filterAllowlist(
+        grepSrc('recordDomainTransition\\s*\\(', 'src/runtime/executeFrameStepped.ts'),
+        [/\.test\./, /__tests__/],
+      );
+      expect(
+        scheduleMatches.length,
+        'ScheduleExecutor must route domain transition ownership through recordDomainTransition().'
+      ).toBeGreaterThan(0);
+      expect(
+        steppedMatches.length,
+        'executeFrameStepped must route domain transition ownership through recordDomainTransition().'
+      ).toBeGreaterThan(0);
+    });
+
+    it('executeFrameStepped must not mutate continuity transition ownership fields directly', () => {
+      const rawMatches = [
+        ...grepSrc('state\\.continuity\\.mappings\\.(set|delete)\\s*\\(', 'src/runtime/executeFrameStepped.ts'),
+        ...grepSrc('state\\.continuity\\.changedInstancesThisFrame\\.add\\s*\\(', 'src/runtime/executeFrameStepped.ts'),
+        ...grepSrc('state\\.continuity\\.domainChangeThisFrame\\s*=', 'src/runtime/executeFrameStepped.ts'),
+      ];
+      const filtered = filterAllowlist(rawMatches, [/\.test\./, /__tests__/]);
+      expect(
+        filtered,
+        'executeFrameStepped must use recordDomainTransition() instead of direct continuity transition writes.\n' +
+        'Found violations:\n' + filtered.join('\n')
+      ).toEqual([]);
+    });
+
+  });
+
   describe('WebGPU Prereq Guards (W9)', () => {
 
     it('render arena must not expose compatibility alias getTotalAllocatedBytes()', () => {
