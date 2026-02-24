@@ -213,41 +213,43 @@ describe('ContinuityApply', () => {
     });
 
     it('handles stride=2 (vec2) with identity mapping', () => {
-      // 2 vec2 elements: old = [(1,2), (3,4)], new base = [(0,0), (0,0)]
-      const oldEffective = new Float32Array([1, 2, 3, 4]);
+      // Canonical SoA for 2 vec2 elements: c0=[1,3], c1=[2,4]
+      const oldEffective = new Float32Array([1, 3, 2, 4]);
       const newBase = new Float32Array([0, 0, 0, 0]);
       const gaugeBuffer = new Float32Array(4);
       const mapping: MappingState = { newToOld: new Int32Array([0, 1]) };
 
       initializeGaugeOnDomainChange(oldEffective, newBase, gaugeBuffer, mapping, 2, 2);
 
-      // Should preserve both components of each element
-      expect(gaugeBuffer[0]).toBeCloseTo(1); // element 0, component 0
-      expect(gaugeBuffer[1]).toBeCloseTo(2); // element 0, component 1
-      expect(gaugeBuffer[2]).toBeCloseTo(3); // element 1, component 0
-      expect(gaugeBuffer[3]).toBeCloseTo(4); // element 1, component 1
+      // SoA layout: [c0 lane0, c0 lane1, c1 lane0, c1 lane1]
+      expect(gaugeBuffer[0]).toBeCloseTo(1);
+      expect(gaugeBuffer[1]).toBeCloseTo(3);
+      expect(gaugeBuffer[2]).toBeCloseTo(2);
+      expect(gaugeBuffer[3]).toBeCloseTo(4);
     });
 
     it('handles stride=3 (vec3) with partial mapping', () => {
-      // Old: 2 vec3 elements [(1,2,3), (4,5,6)]
-      // New: 3 elements, first 2 mapped, last unmapped
-      const oldEffective = new Float32Array([1, 2, 3, 4, 5, 6]);
-      const newBase = new Float32Array([0, 0, 0, 0, 0, 0, 10, 20, 30]);
+      // Canonical SoA for old vec3 lanes [(1,2,3), (4,5,6)]:
+      // c0=[1,4], c1=[2,5], c2=[3,6]
+      const oldEffective = new Float32Array([1, 4, 2, 5, 3, 6]);
+      // New base SoA for lanes [(0,0,0), (0,0,0), (10,20,30)]
+      // c0=[0,0,10], c1=[0,0,20], c2=[0,0,30]
+      const newBase = new Float32Array([0, 0, 10, 0, 0, 20, 0, 0, 30]);
       const gaugeBuffer = new Float32Array(9);
       const mapping: MappingState = { newToOld: new Int32Array([0, 1, -1]) };
 
       initializeGaugeOnDomainChange(oldEffective, newBase, gaugeBuffer, mapping, 3, 3);
 
-      // Mapped elements
+      // SoA output:
+      // c0=[1,4,0], c1=[2,5,0], c2=[3,6,0]
       expect(gaugeBuffer[0]).toBeCloseTo(1);
-      expect(gaugeBuffer[1]).toBeCloseTo(2);
-      expect(gaugeBuffer[2]).toBeCloseTo(3);
-      expect(gaugeBuffer[3]).toBeCloseTo(4);
+      expect(gaugeBuffer[1]).toBeCloseTo(4);
+      expect(gaugeBuffer[2]).toBe(0);
+      expect(gaugeBuffer[3]).toBeCloseTo(2);
       expect(gaugeBuffer[4]).toBeCloseTo(5);
-      expect(gaugeBuffer[5]).toBeCloseTo(6);
-      // Unmapped element (starts at base, gauge = 0)
-      expect(gaugeBuffer[6]).toBe(0);
-      expect(gaugeBuffer[7]).toBe(0);
+      expect(gaugeBuffer[5]).toBe(0);
+      expect(gaugeBuffer[6]).toBeCloseTo(3);
+      expect(gaugeBuffer[7]).toBeCloseTo(6);
       expect(gaugeBuffer[8]).toBe(0);
     });
   });
@@ -416,38 +418,40 @@ describe('ContinuityApply', () => {
     });
 
     it('handles stride=2 (vec2) with mapping', () => {
-      // Old: 2 vec2 elements [(10,20), (30,40)]
-      // New: 3 elements, first 2 mapped, last unmapped
-      const oldSlew = new Float32Array([10, 20, 30, 40]);
-      const newBase = new Float32Array([1, 2, 3, 4, 5, 6]);
+      // Canonical SoA old vec2 lanes [(10,20), (30,40)]:
+      // c0=[10,30], c1=[20,40]
+      const oldSlew = new Float32Array([10, 30, 20, 40]);
+      // New base SoA lanes [(1,2), (3,4), (5,6)]:
+      // c0=[1,3,5], c1=[2,4,6]
+      const newBase = new Float32Array([1, 3, 5, 2, 4, 6]);
       const slewBuffer = new Float32Array(6);
       const mapping: MappingState = { newToOld: new Int32Array([1, 0, -1]) };
 
       initializeSlewWithMapping(oldSlew, newBase, slewBuffer, mapping, 3, 2);
 
-      // new[0] maps to old[1]: (30,40)
+      // SoA output: c0=[30,10,5], c1=[40,20,6]
       expect(slewBuffer[0]).toBe(30);
-      expect(slewBuffer[1]).toBe(40);
-      // new[1] maps to old[0]: (10,20)
-      expect(slewBuffer[2]).toBe(10);
-      expect(slewBuffer[3]).toBe(20);
-      // new[2] unmapped: falls back to newBase (5,6)
-      expect(slewBuffer[4]).toBe(5);
+      expect(slewBuffer[1]).toBe(10);
+      expect(slewBuffer[2]).toBe(5);
+      expect(slewBuffer[3]).toBe(40);
+      expect(slewBuffer[4]).toBe(20);
       expect(slewBuffer[5]).toBe(6);
     });
 
     it('handles stride=3 (vec3) with empty mapping', () => {
       // No old data - all elements should start at base
-      const newBase = new Float32Array([1, 2, 3, 4, 5, 6]);
+      // Canonical SoA for lanes [(1,2,3), (4,5,6)]:
+      // c0=[1,4], c1=[2,5], c2=[3,6]
+      const newBase = new Float32Array([1, 4, 2, 5, 3, 6]);
       const slewBuffer = new Float32Array(6);
 
       initializeSlewWithMapping(null, newBase, slewBuffer, null, 2, 3);
 
       expect(slewBuffer[0]).toBe(1);
-      expect(slewBuffer[1]).toBe(2);
-      expect(slewBuffer[2]).toBe(3);
-      expect(slewBuffer[3]).toBe(4);
-      expect(slewBuffer[4]).toBe(5);
+      expect(slewBuffer[1]).toBe(4);
+      expect(slewBuffer[2]).toBe(2);
+      expect(slewBuffer[3]).toBe(5);
+      expect(slewBuffer[4]).toBe(3);
       expect(slewBuffer[5]).toBe(6);
     });
   });

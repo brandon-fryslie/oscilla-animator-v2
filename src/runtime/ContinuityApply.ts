@@ -159,14 +159,16 @@ function applyWithMapping(
     if (oldIdx >= 0 && oldIdx < oldElementCount) {
       // Mapped element: apply transformation
       for (let s = 0; s < stride; s++) {
-        const newBufIdx = i * stride + s;
-        const oldBufIdx = oldIdx * stride + s;
+        // [LAW:one-source-of-truth] Canonical field storage is SoA:
+        // component-major then lane.
+        const newBufIdx = s * elementCount + i;
+        const oldBufIdx = s * oldElementCount + oldIdx;
         onMapped(newBufIdx, oldBufIdx);
       }
     } else {
       // New element: fill with default
       for (let s = 0; s < stride; s++) {
-        const newBufIdx = i * stride + s;
+        const newBufIdx = s * elementCount + i;
         onUnmapped(newBufIdx);
       }
     }

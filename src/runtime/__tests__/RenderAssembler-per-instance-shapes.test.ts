@@ -19,6 +19,7 @@ import type { RuntimeState } from '../RuntimeState';
 import { createRuntimeState, SHAPE2D_WORDS, writeShape2D } from '../RuntimeState';
 import type { ValueSlot, ValueExprId } from '../../types';
 import type { ArenaSlotDescriptor } from '../ArenaValueStore';
+import { copyAosToSoa } from '../ArenaValueStore';
 import { registerDynamicTopology } from '../../shapes/registry';
 import type { RenderSpace2D } from '../../shapes/types';
 import { PathVerb } from '../../shapes/types';
@@ -65,11 +66,18 @@ function mirrorNumericObjectSlotsToArena(
       source instanceof Float32Array
         ? source
         : Float32Array.from(source, (v) => v / 255);
-    state.arena.set(data, offset);
+    const laneCount = spec.stride > 0 ? Math.floor(data.length / spec.stride) : 0;
+    if (spec.stride > 1 && laneCount > 1) {
+      const soa = new Float32Array(data.length);
+      copyAosToSoa(data, soa, laneCount, spec.stride);
+      state.arena.set(soa, offset);
+    } else {
+      state.arena.set(data, offset);
+    }
     slotToArena.set(spec.slot, {
       offset,
       stride: spec.stride,
-      laneCount: spec.stride > 0 ? Math.floor(data.length / spec.stride) : 0,
+      laneCount,
       length: data.length,
     });
     offset += data.length;
