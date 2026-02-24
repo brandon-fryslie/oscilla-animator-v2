@@ -3,7 +3,10 @@ version = 1
 name = "oscilla-animator-v2"
 
 [setup]
-script = ""
+script = '''
+pnpm install
+pnpm install -g vitest
+'''
 
 [[actions]]
 name = "Run"
