@@ -771,7 +771,6 @@ export function createSessionState(): SessionState {
  * Create a ProgramState (called on each compile)
  */
 export function createProgramState(
-  slotCount: number,
   stateSlotCount: number = 0,
   eventSlotCount: number = 0,
   eventExprCount: number = 0,
@@ -817,9 +816,12 @@ export function createRuntimeState(
   shape2dSlotCount: number = 0,
 ): RuntimeState {
   const session = createSessionState();
+  // [LAW:no-mode-explosion] `slotCount` remains as a compatibility-only
+  // positional arg for legacy tests; program/runtime construction no longer
+  // depends on it.
+  void slotCount;
   return createRuntimeStateFromSession(
     session,
-    slotCount,
     stateSlotCount,
     eventSlotCount,
     eventExprCount,
@@ -836,7 +838,6 @@ export function createRuntimeState(
  */
 export function createRuntimeStateFromSession(
   session: SessionState,
-  slotCount: number,
   stateSlotCount: number = 0,
   eventSlotCount: number = 0,
   eventExprCount: number = 0,
@@ -845,7 +846,6 @@ export function createRuntimeStateFromSession(
   shape2dSlotCount: number = 0,
 ): RuntimeState {
   const program = createProgramState(
-    slotCount,
     stateSlotCount,
     eventSlotCount,
     eventExprCount,

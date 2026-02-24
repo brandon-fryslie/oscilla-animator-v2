@@ -320,7 +320,6 @@ export async function compileAndSwap(
     stateMappings?: readonly any[];
     instances?: ReadonlyMap<string, any>;
   };
-  const newSlotCount = runtimeAddressTable.slotLookup.size;
   const newStateSlotCount = newSchedule?.stateSlotCount ?? 0;
   const newStateMappings = newSchedule?.stateMappings ?? [];
   const newEventSlotCount = (newSchedule as { eventSlotCount?: number })?.eventSlotCount ?? 0;
@@ -355,7 +354,6 @@ export async function compileAndSwap(
   // Create new RuntimeState from preserved SessionState + fresh ProgramState
   state.currentState = createRuntimeStateFromSession(
     state.sessionState!,
-    newSlotCount,
     newStateSlotCount,
     newEventSlotCount,
     newEventCount,
