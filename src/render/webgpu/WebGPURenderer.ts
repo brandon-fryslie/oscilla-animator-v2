@@ -492,6 +492,9 @@ export class WebGPURenderer {
     pass.setPipeline(this.pathPipeline);
     pass.setBindGroup(WEBGPU_RENDER_CONTRACT.sceneBindGroup, this.sceneBindGroup);
     pass.setBindGroup(WEBGPU_RENDER_CONTRACT.topologyBankBindGroup, this.topologyBankBindGroup);
+    // [LAW:single-enforcer] Instance storage binding is stable for the entire
+    // render pass, so the pass setup is the single bind authority.
+    pass.setBindGroup(WEBGPU_RENDER_CONTRACT.instanceBindGroup, this.instanceBindGroup);
 
     for (const prepared of drawPlan) {
       this.drawPreparedPathOp(pass, prepared);
@@ -665,7 +668,6 @@ export class WebGPURenderer {
   }
 
   private drawPreparedPathOp(pass: any, prepared: PreparedDrawPathOp): void {
-    pass.setBindGroup(WEBGPU_RENDER_CONTRACT.instanceBindGroup, this.instanceBindGroup);
     pass.setVertexBuffer(0, prepared.mesh.vertexBuffer);
     pass.setIndexBuffer(prepared.mesh.indexBuffer, prepared.mesh.indexFormat);
     pass.drawIndexedIndirect(

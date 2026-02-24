@@ -670,6 +670,11 @@ describe('WebGPURenderer', () => {
     expect(instanceUploads).toHaveLength(1);
     expect(instanceUploads[0]?.[4]).toBe(2 * WEBGPU_RENDER_CONTRACT.instanceBytes);
 
+    const instanceBindCalls = env.renderPass.setBindGroup.mock.calls.filter(
+      (args: unknown[]) => args[0] === WEBGPU_RENDER_CONTRACT.instanceBindGroup
+    );
+    expect(instanceBindCalls).toHaveLength(1);
+
     const drawPrepBindGroups = collectDrawPrepBindGroupCalls(env.device.createBindGroup);
     expect(drawPrepBindGroups).toHaveLength(1);
   });
