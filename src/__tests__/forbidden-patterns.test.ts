@@ -1391,6 +1391,34 @@ describe('Forbidden Patterns (Type System Invariants)', () => {
 
   });
 
+  describe('WebGPU Prereq Guards (W10/W15)', () => {
+
+    it('runtime render boundary must not import or export legacy Canvas2D/SVG renderers', () => {
+      // [LAW:one-type-per-behavior] Runtime render boundary exposes one renderer
+      // behavior type (WebGPU), not parallel Canvas/SVG implementations.
+      const rawMatches = [
+        ...grepSrc('\\bCanvas2DRenderer\\b', 'src/services/'),
+        ...grepSrc('\\bSVGRenderer\\b', 'src/services/'),
+        ...grepSrc('\\bCanvas2DRenderer\\b', 'src/runtime/'),
+        ...grepSrc('\\bSVGRenderer\\b', 'src/runtime/'),
+        ...grepSrc('\\bCanvas2DRenderer\\b', 'src/main.ts'),
+        ...grepSrc('\\bSVGRenderer\\b', 'src/main.ts'),
+        ...grepSrc('\\bCanvas2DRenderer\\b', 'src/render/index.ts'),
+        ...grepSrc('\\bSVGRenderer\\b', 'src/render/index.ts'),
+        ...grepSrc("from ['\\\"]\\.\\/svg", 'src/render/index.ts'),
+        ...grepSrc("from ['\\\"].*render\\/svg", 'src/services/'),
+        ...grepSrc("from ['\\\"].*render\\/svg", 'src/runtime/'),
+      ];
+      const filtered = filterAllowlist(rawMatches, [/\.test\./, /__tests__/]);
+      expect(
+        filtered,
+        'Runtime boundary must stay WebGPU-only; do not reintroduce Canvas2D/SVG renderer imports or exports.\n' +
+        'Found violations:\n' + filtered.join('\n')
+      ).toEqual([]);
+    });
+
+  });
+
   describe('WebGPU Prereq Guards (W1/W14)', () => {
 
     it('arena accessors must not hard-code AoS lane*stride+component formulas', () => {
