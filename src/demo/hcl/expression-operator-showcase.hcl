@@ -40,14 +40,67 @@ patch "Expression Operator Showcase" {
   }
 
   block "Expression" "pos" {
-    expression = "vec3(layout.position.x + (points.t > 0.5 ? 0.15 : -0.15) * sin(points.t * 18.8496 + mapField(clock.phaseA * 6.2832, points.t)), layout.position.y + (points.t > 0.5 ? -0.15 : 0.15) * cos(points.t * 18.8496 + mapField(clock.phaseA * 6.2832, points.t)), 0.0)"
+    expression = <<-EXPR
+      // Convert normalized phase to radians.
+      // Visual: provides continuous time movement for all instances.
+      global_phase = clock.phaseA * 6.2832
+
+      // Broadcast phase to each element lane.
+      // Visual: shared time signal combines with lane-local offsets.
+      global_phase_field = mapField(global_phase, points.t)
+
+      // Lane angle around the orbit ring.
+      // Visual: evenly distributes points and keeps them in motion.
+      angle = points.t * 18.8496 + global_phase_field
+
+      // Select opposite x offsets for the two halves of the field.
+      // Visual: creates mirrored left/right swirl behavior.
+      side_x = points.t > 0.5 ? 0.15 : -0.15
+
+      // Select opposite y offsets for the two halves of the field.
+      // Visual: complements x mirroring to form a braided pattern.
+      side_y = points.t > 0.5 ? -0.15 : 0.15
+
+      // Apply local orbit displacement around layout anchors.
+      // Visual: each point circles around its grid cell center.
+      x = layout.position.x + side_x * sin(angle)
+      y = layout.position.y + side_y * cos(angle)
+
+      // Output final position.
+      // Visual: keeps all motion on the 2D plane.
+      vec3(x, y, 0.0)
+    EXPR
     outputs {
       out = render.pos
     }
   }
 
   block "Expression" "scale" {
-    expression = "0.75 + 0.2 * sin(points.t * 12.5664 + mapField(clock.phaseA * 6.2832, points.t))"
+    expression = <<-EXPR
+      // Per-instance minimum scale.
+      // Visual: preserves legibility even when oscillation is low.
+      base_scale = 0.75
+
+      // Oscillation amplitude.
+      // Visual: controls the strength of the breathing effect.
+      pulse_amount = 0.2
+
+      // Shared time phase in radians.
+      // Visual: ties scale animation to the main clock.
+      global_phase = clock.phaseA * 6.2832
+
+      // Map one phase value across lanes.
+      // Visual: all points pulse on the same tempo with lane offsets.
+      global_phase_field = mapField(global_phase, points.t)
+
+      // Lane-specific pulse phase.
+      // Visual: creates traveling phase differences through the grid.
+      pulse_angle = points.t * 12.5664 + global_phase_field
+
+      // Final scale signal.
+      // Visual: results in rolling size waves across instances.
+      base_scale + pulse_amount * sin(pulse_angle)
+    EXPR
     outputs {
       out = render.scale
     }

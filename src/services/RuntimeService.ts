@@ -36,6 +36,8 @@ import { compilationInspector } from './CompilationInspectorService';
 import {
   startAnimationLoop,
   createAnimationLoopState,
+  type AnimationLoopDeps,
+  type AnimationLoopController,
   type AnimationLoopState,
 } from './AnimationLoop';
 import { debugSettings } from '../settings/tokens/debug-settings';
@@ -56,7 +58,7 @@ export class RuntimeService {
   private renderer: WebGPURenderer | null = null;
   private arena: RenderBufferArena | null = null;
 
-  private cancelAnimationLoop: (() => void) | null = null;
+  private animationLoop: AnimationLoopController | null = null;
   private unsubCompileEnd: (() => void) | null = null;
   private compileWorkerClient: CompileWorkerClient | null = null;
   private pendingSwap: PrecomputedCompileArtifacts | null = null;
@@ -90,6 +92,52 @@ export class RuntimeService {
         this.domainChangeDetector.detectAndLogDomainChanges(this.store, oldProg, newProg),
     };
   }
+
+  private animationLoopDeps(): AnimationLoopDeps {
+    return {
+      getCurrentProgram: () => this.compileState.currentProgram,
+      getCurrentState: () => this.compileState.currentState,
+      getCanvas: () => this.canvas,
+      getRenderer: () => this.renderer,
+      getArena: () => this.arena,
+      store: this.store,
+      onStatsUpdate: (statsText) => {
+        if (window.__setStats) {
+          window.__setStats(statsText);
+        }
+      },
+    };
+  }
+
+  private handleAnimationLoopError = (err: unknown): void => {
+    const { store } = this;
+    const message = err instanceof Error ? err.message : String(err);
+    const errorType: 'nan' | 'infinity' | 'overflow' | 'other' =
+      message.toLowerCase().includes('nan')
+        ? 'nan'
+        : message.toLowerCase().includes('infinity') || message.toLowerCase().includes('inf')
+          ? 'infinity'
+          : message.toLowerCase().includes('overflow')
+            ? 'overflow'
+            : 'other';
+
+    // [LAW:single-enforcer] RuntimeService is the single owner that transitions playback to paused on runtime failure.
+    if (store.playback.isPlaying) {
+      store.playback.pause();
+    }
+
+    store.events.emit({
+      type: 'RuntimeError',
+      patchId: 'patch-0',
+      patchRevision: store.getPatchRevision(),
+      errorType,
+      message,
+    });
+    store.diagnostics.log({
+      level: 'error',
+      message: `Runtime error (execution halted): ${message}`,
+    });
+  };
 
   private requestSwapFlush(): void {
     if (this.swapRafId !== null) return;
@@ -282,52 +330,23 @@ export class RuntimeService {
     this.unsubCompileEnd = store.events.on('CompileEnd', (event) => {
       if (event.status === 'success') {
         store.diagnostics.recordCompilation(event.durationMs);
+        // [LAW:single-enforcer] CompileEnd success is the sole signal that a fresh
+        // program is active; the loop consumes that signal to reset stale render state.
+        if (this.animationLoop?.onCompileSuccess()) {
+          store.diagnostics.log({
+            level: 'info',
+            message: 'Runtime loop resumed after successful recompile',
+          });
+        }
       }
     });
 
     // Start animation loop
-    this.cancelAnimationLoop = startAnimationLoop(
-      {
-        getCurrentProgram: () => this.compileState.currentProgram,
-        getCurrentState: () => this.compileState.currentState,
-        getCanvas: () => this.canvas,
-        getRenderer: () => this.renderer,
-        getArena: () => this.arena,
-        store,
-        onStatsUpdate: (statsText) => {
-          if (window.__setStats) {
-            window.__setStats(statsText);
-          }
-        },
-      },
+    this.animationState = createAnimationLoopState();
+    this.animationLoop = startAnimationLoop(
+      this.animationLoopDeps(),
       this.animationState,
-      (err) => {
-        const message = err instanceof Error ? err.message : String(err);
-        const errorType: 'nan' | 'infinity' | 'overflow' | 'other' =
-          message.toLowerCase().includes('nan')
-            ? 'nan'
-            : message.toLowerCase().includes('infinity') || message.toLowerCase().includes('inf')
-              ? 'infinity'
-              : message.toLowerCase().includes('overflow')
-                ? 'overflow'
-                : 'other';
-
-        // [LAW:single-enforcer] RuntimeService is the single owner that transitions playback to paused on runtime failure.
-        if (store.playback.isPlaying) {
-          store.playback.pause();
-        }
-        store.events.emit({
-          type: 'RuntimeError',
-          patchId: 'patch-0',
-          patchRevision: store.getPatchRevision(),
-          errorType,
-          message,
-        });
-        store.diagnostics.log({
-          level: 'error',
-          message: `Runtime error (execution halted): ${message}`,
-        });
-      }
+      this.handleAnimationLoopError,
     );
 
     // Persist current patch immediately after initial compile
@@ -341,8 +360,8 @@ export class RuntimeService {
   dispose(): void {
     compilationInspector.setErrorReporter(null);
     setRenderIssueReporter(null);
-    this.cancelAnimationLoop?.();
-    this.cancelAnimationLoop = null;
+    this.animationLoop?.stop();
+    this.animationLoop = null;
     if (this.swapRafId !== null) {
       cancelAnimationFrame(this.swapRafId);
       this.swapRafId = null;

@@ -70,6 +70,17 @@ export interface TokenExpressionEditorHandle {
 // Helper: Serialize contentEditable to plain text
 // =============================================================================
 
+function isChipElement(elem: HTMLElement): boolean {
+  return elem.classList.contains('expr-ref-chip') || elem.classList.contains('expr-const-chip');
+}
+
+function getChipSourceText(elem: HTMLElement): string {
+  return elem.getAttribute('data-token')
+    ?? elem.getAttribute('data-ref')
+    ?? elem.getAttribute('data-const')
+    ?? '';
+}
+
 function serializeToPlainText(element: HTMLDivElement): string {
   const parts: string[] = [];
 
@@ -78,9 +89,9 @@ function serializeToPlainText(element: HTMLDivElement): string {
       parts.push(node.textContent || '');
     } else if (node.nodeType === Node.ELEMENT_NODE) {
       const elem = node as HTMLElement;
-      if (elem.classList.contains('expr-ref-chip')) {
-        const refText = elem.getAttribute('data-ref');
-        if (refText) parts.push(refText);
+      if (isChipElement(elem)) {
+        const sourceText = getChipSourceText(elem);
+        if (sourceText) parts.push(sourceText);
       } else if (elem.tagName === 'BR') {
         parts.push('\n');
       } else {
@@ -112,9 +123,8 @@ function getCursorOffsetInPlainText(element: HTMLDivElement): number {
       length += node.textContent?.length || 0;
     } else if (node.nodeType === Node.ELEMENT_NODE) {
       const elem = node as HTMLElement;
-      if (elem.classList?.contains('expr-ref-chip')) {
-        const refText = elem.getAttribute('data-ref');
-        length += refText?.length || 0;
+      if (isChipElement(elem)) {
+        length += getChipSourceText(elem).length;
       } else if (elem.tagName === 'BR') {
         length += 1;
       } else {
@@ -151,10 +161,9 @@ function setCursorByPlainTextOffset(element: HTMLDivElement, targetOffset: numbe
       currentOffset += textLength;
     } else if (node.nodeType === Node.ELEMENT_NODE) {
       const elem = node as HTMLElement;
-      if (elem.classList.contains('expr-ref-chip')) {
-        const refText = elem.getAttribute('data-ref');
-        const refLength = refText?.length || 0;
-        if (currentOffset + refLength >= targetOffset) {
+      if (isChipElement(elem)) {
+        const sourceLength = getChipSourceText(elem).length;
+        if (currentOffset + sourceLength >= targetOffset) {
           const parent = elem.parentNode;
           if (parent) {
             const childIndex = Array.from(parent.childNodes).indexOf(elem as ChildNode);
@@ -163,7 +172,7 @@ function setCursorByPlainTextOffset(element: HTMLDivElement, targetOffset: numbe
             return true;
           }
         }
-        currentOffset += refLength;
+        currentOffset += sourceLength;
       } else if (elem.tagName === 'BR') {
         if (currentOffset + 1 >= targetOffset) {
           const parent = elem.parentNode;
@@ -227,7 +236,16 @@ function buildInnerHTML(
           .replace(/&/g, '&amp;')
           .replace(/</g, '&lt;')
           .replace(/>/g, '&gt;');
-        return `<span class="${chipClass}" contenteditable="false" data-ref="${escapedRef}">${escapedText}</span>`;
+        return `<span class="${chipClass}" contenteditable="false" data-ref="${escapedRef}" data-token="${escapedRef}">${escapedText}</span>`;
+      } else if (segment.isConstant) {
+        const sourceName = (segment.constantName ?? segment.text)
+          .replace(/&/g, '&amp;')
+          .replace(/"/g, '&quot;');
+        const displayText = (segment.constantDisplay ?? segment.text)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;');
+        return `<span class="expr-const-chip" contenteditable="false" data-const="${sourceName}" data-token="${sourceName}">${displayText}</span>`;
       } else {
         const escaped = segment.text
           .replace(/&/g, '&amp;')

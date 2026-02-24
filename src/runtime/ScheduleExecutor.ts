@@ -36,6 +36,7 @@ import type { ValueSlot } from '../compiler/ir/Indices';
 import { SCALAR_INSTANCE_ID, SYSTEM_PALETTE_SLOT } from '../compiler/ir/Indices';
 import { evaluateValueExprEvent } from './ValueExprEventEvaluator';
 import { materializeValueExpr } from './ValueExprMaterializer';
+import { applyStateWritePolicy } from './StateWritePolicy';
 import {
   arenaDecodeToAoS,
   arenaEncodeFromAoS,
@@ -558,7 +559,7 @@ export function executeFrame(
       const baseSlot = step.stateSlot as number;
       for (let c = 0; c < stride; c++) {
         const fallback = mapping?.initial[c] ?? 0;
-        state.state[baseSlot + c] = oneValue[c] ?? fallback;
+        state.state[baseSlot + c] = applyStateWritePolicy(mapping, oneValue[c] ?? fallback);
       }
     }
     if (step.kind === 'fieldStateWrite') {
@@ -592,10 +593,10 @@ export function executeFrame(
         const dstLaneBase = baseSlot + lane * mapping.stride;
         const srcLaneBase = lane * srcStride;
         for (let c = 0; c < copyStride; c++) {
-          state.state[dstLaneBase + c] = src[srcLaneBase + c] ?? 0;
+          state.state[dstLaneBase + c] = applyStateWritePolicy(mapping, src[srcLaneBase + c] ?? 0);
         }
         for (let c = copyStride; c < mapping.stride; c++) {
-          state.state[dstLaneBase + c] = mapping.initial[c] ?? 0;
+          state.state[dstLaneBase + c] = applyStateWritePolicy(mapping, mapping.initial[c] ?? 0);
         }
       }
     }

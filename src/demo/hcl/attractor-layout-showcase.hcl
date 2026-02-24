@@ -28,7 +28,29 @@ patch "Attractor Layout Showcase" {
 
   # Animated target: orbit around viewport center.
   block "Expression" "target-orbit" {
-    expression = "vec2(0.5 + 0.22 * cos(clock.phaseA * 6.2832), 0.5 + 0.22 * sin(clock.phaseA * 6.2832))"
+    expression = <<-EXPR
+      // Orbit center in normalized viewport coordinates.
+      // Visual: keeps attractor movement centered in the patch.
+      center_x = 0.5
+      center_y = 0.5
+
+      // Radius of the target orbit.
+      // Visual: controls how far the deformation focus travels.
+      radius = 0.22
+
+      // Clock phase in radians.
+      // Visual: drives smooth circular target motion over time.
+      angle = clock.phaseA * 6.2832
+
+      // Circular offset from center.
+      // Visual: traces the moving deformation hotspot.
+      target_x = center_x + radius * cos(angle)
+      target_y = center_y + radius * sin(angle)
+
+      // Emit animated attractor target.
+      // Visual: both soft/hard attractors chase this moving point.
+      vec2(target_x, target_y)
+    EXPR
     outputs {
       out = [soft-attract.target, hard-attract.target]
     }
