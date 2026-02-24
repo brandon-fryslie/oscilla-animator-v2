@@ -293,7 +293,7 @@ describe('Temporal Comparison (Cross-Frame Diff)', () => {
       const fakeType = { payload: { kind: 'float' }, unit: { kind: 'none' }, extent: {} } as any;
       currentSlots.set(slot1, { kind: 'scalar', value: 1.0, type: fakeType });
       currentSlots.set(slot2, { kind: 'scalar', value: 5.0, type: fakeType });
-      currentSlots.set(slot3, { kind: 'buffer', buffer: new Float64Array([1, 2]), count: 2, type: fakeType });
+      currentSlots.set(slot3, { kind: 'buffer', buffer: new Float32Array([1, 2]), count: 2, type: fakeType });
 
       const previousValues = new Map<ValueSlot, number>();
       previousValues.set(slot1, 0.5);

@@ -842,7 +842,7 @@ const BufferExpansion: React.FC<{
       </thead>
       <tbody>
         {Array.from({ length: count }, (_, i) => {
-          const v = buf instanceof Float64Array || buf instanceof Float32Array
+          const v = buf instanceof Float32Array
             || buf instanceof Uint8Array || buf instanceof Uint8ClampedArray
             || buf instanceof Int32Array || buf instanceof Uint32Array
             ? buf[i] : 0;

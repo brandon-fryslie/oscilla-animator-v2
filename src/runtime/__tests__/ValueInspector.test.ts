@@ -54,7 +54,7 @@ describe('readSlotValue', () => {
     expect(value.kind).toBe('buffer');
     if (value.kind === 'buffer') {
       expect(value.count).toBe(3);
-      expect(Array.from(value.buffer as Float64Array)).toEqual([1.0, 2.0, 3.0]);
+      expect(Array.from(value.buffer as Float32Array)).toEqual([1.0, 2.0, 3.0]);
     }
   });
 

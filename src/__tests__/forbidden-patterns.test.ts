@@ -1242,12 +1242,16 @@ describe('Forbidden Patterns (Type System Invariants)', () => {
       const rawMatches = [
         ...grepSrc('state:\\s*Float64Array', 'src/runtime/RuntimeState.ts'),
         ...grepSrc('new Float64Array\\(stateSlotCount\\)', 'src/runtime/RuntimeState.ts'),
+        ...grepSrc('scalarValues:\\s*Float64Array|scalarValueExprValues:\\s*Float64Array', 'src/runtime/RuntimeState.ts'),
+        ...grepSrc('new Float64Array\\(maxScalarExprs\\)|new Float64Array\\(maxValueExprs\\)', 'src/runtime/RuntimeState.ts'),
+        ...grepSrc('Float32Array \\| Float64Array|Float64Array\\)', 'src/runtime/ValueExprScalarEvaluator.ts'),
+        ...grepSrc('new Float64Array\\(', 'src/runtime/ValueInspector.ts'),
         ...grepSrc('oldState:\\s*Float64Array|newState:\\s*Float64Array', 'src/runtime/StateMigration.ts'),
       ];
       const filtered = filterAllowlist(rawMatches, [/\.test\./, /__tests__/]);
       expect(
         filtered,
-        'Persistent runtime state slots must use Float32Array.\n' +
+        'Runtime state/cache/evaluator numeric storage must use Float32Array.\n' +
         'Found violations:\n' + filtered.join('\n')
       ).toEqual([]);
     });

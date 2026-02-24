@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { reconcilePhaseOffsets, createTimeState, wrapPhase } from '../timeResolution';
+import { reconcilePhaseOffsets, createTimeState, resolveTime, wrapPhase } from '../timeResolution';
 import type { TimeModel } from '../../compiler/ir/types';
 
 describe('reconcilePhaseOffsets', () => {
@@ -207,5 +207,25 @@ describe('reconcilePhaseOffsets', () => {
     // After multiple changes, phase should still be continuous
     // (may not match original due to floating point, but should be close)
     expect(phase2).toBeCloseTo(phase1, 10);
+  });
+
+  it('remains phase-stable at large monotonic times', () => {
+    const timeState = createTimeState();
+    const timeModel: TimeModel = { kind: 'infinite', periodAMs: 4000, periodBMs: 8000 };
+    const dt = 16;
+    const baseTMs = 1000 * 60 * 60 * 72; // 72h uptime-equivalent timestamp
+
+    let prevPhaseA: number | null = null;
+    for (let i = 0; i < 5000; i++) {
+      const tAbsMs = baseTMs + i * dt;
+      const time = resolveTime(tAbsMs, timeModel, timeState);
+      if (prevPhaseA !== null) {
+        const expected = wrapPhase(prevPhaseA + dt / timeModel.periodAMs);
+        const absDelta = Math.abs(time.phaseA - expected);
+        const circularDelta = Math.min(absDelta, 1 - absDelta);
+        expect(circularDelta).toBeLessThan(1e-5);
+      }
+      prevPhaseA = time.phaseA;
+    }
   });
 });

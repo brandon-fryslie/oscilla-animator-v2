@@ -60,7 +60,7 @@ function mirrorNumericObjectSlotsToArena(
   let offset = startOffset;
   for (const spec of specs) {
     const source = state.values.objects.get(spec.slot);
-    if (!(source instanceof Float32Array || source instanceof Uint8ClampedArray || source instanceof Float64Array)) {
+    if (!(source instanceof Float32Array || source instanceof Uint8ClampedArray)) {
       continue;
     }
     const data =
