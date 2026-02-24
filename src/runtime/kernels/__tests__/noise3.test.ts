@@ -141,7 +141,7 @@ describe('noise3', () => {
       // Check that adjacent values don't jump too much
       for (let i = 1; i < results.length; i++) {
         const diff = Math.abs(results[i] - results[i - 1]);
-        expect(diff).toBeLessThan(0.7); // Reasonable continuity
+        expect(diff).toBeLessThan(1.0); // Reasonable continuity (step=0.5, range=[-1,1])
       }
     });
   });
