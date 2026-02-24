@@ -545,13 +545,3 @@ function accumulateStorageSizes(entries: readonly StorageExtentEntry[]): Runtime
 export function computeRuntimeStorageSizes(runtimeSlots: readonly RuntimeSlotEntry[]): RuntimeStorageSizes {
   return accumulateStorageSizes(runtimeSlots);
 }
-
-/**
- * Backward-compatible helper for older callsites.
- *
- * [LAW:one-source-of-truth] Runtime sizing is canonically derived from
- * runtimeSlots; this adapter exists only for metadata-oriented tests.
- */
-export function computeStorageSizes(slotMeta: readonly SlotMetaEntry[]): RuntimeStorageSizes {
-  return accumulateStorageSizes(slotMeta);
-}
