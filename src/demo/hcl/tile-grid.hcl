@@ -52,7 +52,6 @@ patch "Tile Grid" {
     outputs {
       position = render.pos
       rotation = rotation-add.a
-      scale = [aniso-apply-x.b, aniso-apply-y.b]
     }
   }
 
@@ -130,65 +129,6 @@ patch "Tile Grid" {
     }
   }
 
-  # Per-instance anisotropic deformation channels.
-  block "Const" "aniso-amt-x" {
-    value = 0.08
-    outputs {
-      out = aniso-x.amount
-    }
-  }
-
-  block "Const" "aniso-amt-y" {
-    value = 0.12
-    outputs {
-      out = aniso-y.amount
-    }
-  }
-
-  block "Const" "aniso-seed-x" {
-    value = 101
-    outputs {
-      out = aniso-x.seed
-    }
-  }
-
-  block "Const" "aniso-seed-y" {
-    value = 202
-    outputs {
-      out = aniso-y.seed
-    }
-  }
-
-  block "NoisyBroadcast" "aniso-x" {
-    outputs {
-      out = aniso-apply-x.a
-    }
-  }
-
-  block "NoisyBroadcast" "aniso-y" {
-    outputs {
-      out = aniso-apply-y.a
-    }
-  }
-
-  block "Multiply" "aniso-apply-x" {
-    outputs {
-      out = scale2-pack.x
-    }
-  }
-
-  block "Multiply" "aniso-apply-y" {
-    outputs {
-      out = scale2-pack.y
-    }
-  }
-
-  block "ConstructVec2" "scale2-pack" {
-    outputs {
-      out = render.scale2
-    }
-  }
-
   # Per-element control-point deformation channels.
   block "Add" "cp-phase-add" {
     outputs {
@@ -247,14 +187,6 @@ patch "Tile Grid" {
   block "MakeColorHSL" "color" {
     outputs {
       color = render.color
-    }
-  }
-
-  # Base value for anisotropic deformation channels.
-  block "Const" "aniso-base" {
-    value = 1.0
-    outputs {
-      out = [aniso-x.value, aniso-y.value]
     }
   }
 

@@ -188,7 +188,7 @@ describe('compile', () => {
       }
     });
 
-    it('threads render deformation channels (rotation + scale2 + control-point deform) through render slots', () => {
+    it('threads render deformation channels (rotation + control-point deform) through render slots', () => {
       const patch = buildPatch((b) => {
         b.addBlock('InfiniteTimeRoot');
 
@@ -201,7 +201,6 @@ describe('compile', () => {
         const render = b.addBlock('RenderInstances2D');
 
         const color = b.addBlock('MakeColorHSL');
-        const scale2 = b.addBlock('ConstructVec2');
 
         b.wire(ellipse, 'shape', array, 'element');
         b.wire(array, 'elements', grid, 'elements');
@@ -210,9 +209,6 @@ describe('compile', () => {
         b.wire(grid, 'position', render, 'pos');
         b.wire(color, 'color', render, 'color');
         b.wire(grid, 'rotation', render, 'rotation');
-        b.wire(grid, 'scale', scale2, 'x');
-        b.wire(grid, 'scale', scale2, 'y');
-        b.wire(scale2, 'out', render, 'scale2');
         b.wire(array, 't', render, 'deformAmount');
         b.wire(array, 't', render, 'deformPhase');
         b.wire(array, 't', render, 'deformFrequency');
@@ -230,7 +226,6 @@ describe('compile', () => {
       const renderSteps = schedule.steps.filter((step): step is StepRender => step.kind === 'render');
       expect(renderSteps.length).toBe(1);
       expect(renderSteps[0]?.rotationSlot).toBeDefined();
-      expect(renderSteps[0]?.scale2Slot).toBeDefined();
       expect(renderSteps[0]?.deformAmountSlot).toBeDefined();
       expect(renderSteps[0]?.deformPhaseSlot).toBeDefined();
       expect(renderSteps[0]?.deformFrequencySlot).toBeDefined();
