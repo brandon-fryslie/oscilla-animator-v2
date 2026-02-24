@@ -414,7 +414,7 @@ export interface BlockDef {
    * Blocks like Lag and Phasor where output depends on input within-frame
    * do NOT benefit from this and should omit it.
    */
-  readonly lowerOutputsOnly?: (args: { ctx: LowerCtx; config: Record<string, unknown> }) => Partial<LowerResult>;
+  readonly lowerOutputsOnly?: (args: { ctx: LowerCtx; config: Record<string, unknown> }) => LowerResult;
 
   // Optional tags
   readonly tags?: {

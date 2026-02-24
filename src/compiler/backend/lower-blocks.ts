@@ -879,7 +879,7 @@ function lowerSCCTwoPass(
 ): void {
   // Storage for phase 1 results
   // Phase 1 returns symbolic outputs + effects; binding happens before registration
-  const phase1Results = new Map<BlockIndex, Partial<LowerResult>>();
+  const phase1Results = new Map<BlockIndex, LowerResult>();
 
   // Pass 1: Generate outputs for stateful blocks with lowerOutputsOnly
   for (const node of scc.nodes) {
@@ -931,7 +931,7 @@ function lowerSCCTwoPass(
         phase1Results.set(blockIndex, partialResult);
 
         // BINDING PASS for phase 1: process effects using new binding pass (WI-4)
-        const phase1Effects = partialResult.effects ?? {};
+        const phase1Effects = partialResult.effects;
         const bindingInputs = {
           effects: phase1Effects,
           existingState: getExistingStateMap(builder),
@@ -988,7 +988,7 @@ function lowerSCCTwoPass(
 
         // Update blockOutputs and phase1Results with bound outputs
         blockOutputs.set(blockIndex, boundOutputsMap);
-        const boundResult: Partial<LowerResult> = {
+        const boundResult: LowerResult = {
           ...partialResult,
           outputsById: Object.fromEntries(boundOutputsMap.entries())
         };

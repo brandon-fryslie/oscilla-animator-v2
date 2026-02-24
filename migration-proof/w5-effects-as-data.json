@@ -1,0 +1,46 @@
+{
+  "workstream": "W5",
+  "title": "Effects-As-Data Enforcement",
+  "status": "slice_completed",
+  "timestamp_utc": "2026-02-24T06:45:15Z",
+  "laws": [
+    "one-source-of-truth",
+    "single-enforcer",
+    "verifiable-goals"
+  ],
+  "scope": [
+    "Require phase-1 lowerOutputsOnly contract to return full LowerResult including effects",
+    "Remove optional effects nullish fallback in two-pass lowering",
+    "Add static guard banning effects ?? {} fallback in lower-blocks"
+  ],
+  "changed_files": [
+    "/Users/bmf/.codex/worktrees/49f4/oscilla-animator-v2/src/blocks/registry.ts",
+    "/Users/bmf/.codex/worktrees/49f4/oscilla-animator-v2/src/compiler/backend/lower-blocks.ts",
+    "/Users/bmf/.codex/worktrees/49f4/oscilla-animator-v2/src/__tests__/forbidden-patterns.test.ts"
+  ],
+  "verification": [
+    {
+      "command": "pnpm -s typecheck",
+      "exit_code": 0
+    },
+    {
+      "command": "pnpm -s vitest run src/__tests__/forbidden-patterns.test.ts",
+      "exit_code": 0,
+      "tests_passed": 68
+    },
+    {
+      "command": "if command -v just >/dev/null 2>&1 && [ -f Justfile ]; then just check; else pnpm run typecheck && pnpm test; fi",
+      "exit_code": 0
+    }
+  ],
+  "static_scans": [
+    {
+      "command": "rg -n \"findStateSlot\\(\" src/compiler/backend/binding-pass.ts",
+      "result": "no_matches"
+    },
+    {
+      "command": "rg -n \"effects\\s*\\?\\?\\s*\\{\\s*\\}\" src/compiler/backend/lower-blocks.ts",
+      "result": "no_matches"
+    }
+  ]
+}

@@ -1178,6 +1178,17 @@ describe('Forbidden Patterns (Type System Invariants)', () => {
       ).toEqual([]);
     });
 
+    it('lower-blocks must not nullish-fallback effects to empty object', () => {
+      const rawMatches = grepSrc('effects\\s*\\?\\?\\s*\\{\\s*\\}', 'src/compiler/backend/lower-blocks.ts');
+      const filtered = filterAllowlist(rawMatches, [/\.test\./, /__tests__/]);
+      expect(
+        filtered,
+        'lower-blocks.ts must treat effects as required contract data.\n' +
+        'Do not use effects ?? {} fallback.\n' +
+        'Found violations:\n' + filtered.join('\n')
+      ).toEqual([]);
+    });
+
     it('bindOutputs must not allocate fallback slots', () => {
       // [LAW:single-enforcer] bindOutputs only binds declarative slotRequests.
       const rawMatches = grepSrc('allocTypedSlot\\(', 'src/compiler/backend/binding-pass.ts');
