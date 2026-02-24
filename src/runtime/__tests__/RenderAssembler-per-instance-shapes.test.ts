@@ -12,7 +12,7 @@ import {
 } from '../RenderAssembler';
 import type { StepRender, InstanceDecl } from '../../compiler/ir/types';
 import type { ValueExpr } from '../../compiler/ir/value-expr';
-import { instanceId, domainTypeId } from '../../compiler/ir/Indices';
+import { instanceId, domainTypeId } from '../../core/ids';
 import type { CanonicalType } from '../../core/canonical-types';
 import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR,  CAMERA_PROJECTION, canonicalType } from '../../core/canonical-types';
 import type { RuntimeState } from '../RuntimeState';

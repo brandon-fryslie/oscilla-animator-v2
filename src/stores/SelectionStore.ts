@@ -15,8 +15,8 @@
  */
 
 import { makeObservable, observable, computed, action } from 'mobx';
-import type { Block, Edge, PortRef } from '../graph/Patch';
-import type { BlockId, PortId } from '../types';
+import type { Block, Edge } from '../graph/Patch';
+import type { BlockId, PortId, PortEndpointRef } from '../types';
 import type { PatchStore } from './PatchStore';
 import type { EventHub } from '../events/EventHub';
 import type { SelectionTarget, HoverTarget } from '../events/types';
@@ -25,9 +25,9 @@ export class SelectionStore {
   // Observable state - IDs only
   selectedBlockId: BlockId | null = null;
   selectedEdgeId: string | null = null;
-  selectedPort: PortRef | null = null;
+  selectedPort: PortEndpointRef | null = null;
   hoveredBlockId: BlockId | null = null;
-  hoveredPortRef: PortRef | null = null;
+  hoveredPortRef: PortEndpointRef | null = null;
 
   // Block type preview mode (for library preview)
   previewType: string | null = null;
@@ -395,7 +395,7 @@ export class SelectionStore {
   /**
    * Sets the hovered port.
    */
-  hoverPort(ref: PortRef | null): void {
+  hoverPort(ref: PortEndpointRef | null): void {
     this.hoveredPortRef = ref;
 
     // Emit HoverChanged event

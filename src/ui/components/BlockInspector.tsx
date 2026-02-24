@@ -12,8 +12,8 @@ import { useStores } from '../../stores';
 import { colors } from '../theme';
 import { getAnyBlockDefinition, type AnyBlockDef, type InputDef, type OutputDef, BLOCK_DEFS_BY_TYPE } from '../../blocks/registry';
 import './BlockInspector.css';
-import type { Block, Patch, Edge, PortRef } from '../../graph/Patch';
-import type { BlockId, PortId, DefaultSource, UIControlHint } from '../../types';
+import type { Block, Patch, Edge } from '../../graph/Patch';
+import type { BlockId, PortId, DefaultSource, UIControlHint, PortEndpointRef } from '../../types';
 import type { CombineMode } from '../../types';
 import type { InferenceCanonicalType } from '../../core/inference-types';
 import {
@@ -292,7 +292,7 @@ function formatCombineMode(mode: CombineMode): string {
 // =============================================================================
 
 interface PortInspectorStandaloneProps {
-  portRef: PortRef;
+  portRef: PortEndpointRef;
   block: Block;
   blockDef: AnyBlockDef;
   patch: Patch;
@@ -669,7 +669,7 @@ interface BlockDetailsProps {
 
 const BlockDetails = function BlockDetails({ block, patch }: BlockDetailsProps) {
   const typeInfo = getAnyBlockDefinition(block.type);
-  const [selectedPort, setSelectedPort] = useState<PortRef | null>(null);
+  const [selectedPort, setSelectedPort] = useState<PortEndpointRef | null>(null);
 
   if (!typeInfo) {
     return (
@@ -1060,7 +1060,7 @@ function OutputPortItem({ port, edges, patch, onClick }: OutputPortItemProps) {
 // =============================================================================
 
 interface PortInspectorProps {
-  portRef: PortRef;
+  portRef: PortEndpointRef;
   block: Block;
   typeInfo: AnyBlockDef;
   patch: Patch;

@@ -22,7 +22,7 @@ import type { CardinalityAcceptance } from "../../core/canonical-types/cardinali
 import type { TimeModelIR } from "./schedule";
 
 export type { BlockIndex, NormalizedPatch, NormalizedEdge } from "../frontend/normalize-indexing";
-export type { Block, Edge, Patch, PortRef } from "../../graph/Patch";
+export type { Block, Edge, Patch } from "../../graph/Patch";
 import type { BlockIndex, NormalizedPatch, NormalizedEdge } from "../frontend/normalize-indexing";
 import type { Block } from "../../graph/Patch";
 

@@ -3,7 +3,7 @@ import { IRBuilderImpl } from '../IRBuilderImpl';
 import { canonicalType, canonicalMany, floatConst, vec2Const, intConst, instanceRef } from '../../../core/canonical-types';
 import { FLOAT, INT, VEC2 } from '../../../core/canonical-types';
 import { OpCode } from '../types';
-import { instanceId } from '../Indices';
+import { instanceId } from '../../../core/ids';
 
 describe('Hash-consing (I13)', () => {
   describe('SigExpr deduplication', () => {

@@ -4,14 +4,13 @@
  * Branded types for dense numeric indices used in runtime lookups.
  * String IDs are for persistence and debugging; indices are for fast runtime access.
  *
- * NOTE: InstanceId and DomainTypeId are now defined in src/core/ids.ts.
- * This module re-exports them for backward compatibility during migration.
+ * NOTE: InstanceId and DomainTypeId are defined in src/core/ids.ts.
+ * This module re-exports the types only.
  */
 
 // Re-export InstanceId and DomainTypeId from core (single source of truth)
 import type { InstanceId, DomainTypeId } from '../../core/ids';
 export type { InstanceId, DomainTypeId };
-export { instanceId, domainTypeId } from '../../core/ids';
 
 // =============================================================================
 // Branded Index Types (Numeric)

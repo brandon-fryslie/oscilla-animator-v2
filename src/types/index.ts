@@ -6,7 +6,7 @@
  */
 
 // Re-export graph types
-export type { Block, Edge, Endpoint, Patch, PortRef, BlockType, InputPort, OutputPort } from '../graph/Patch';
+export type { Block, Edge, Endpoint, Patch, BlockType, InputPort, OutputPort } from '../graph/Patch';
 
 // =============================================================================
 // Core Type System (from core/canonical-types.ts)
@@ -75,7 +75,7 @@ export {
 } from '../core/canonical-types';
 
 // =============================================================================
-// Branded IDs (from compiler/ir/Indices.ts)
+// Branded IDs (from compiler/ir/Indices.ts and core/ids.ts)
 // =============================================================================
 
 export type {
@@ -104,9 +104,12 @@ export {
   exprId,
   stateId,
   slotId,
+} from '../compiler/ir/Indices';
+
+export {
   instanceId as irInstanceId,
   domainTypeId as irDomainTypeId,
-} from '../compiler/ir/Indices';
+} from '../core/ids';
 
 // =============================================================================
 // Block/Port IDs (string-based)
@@ -124,6 +127,13 @@ export function blockId(s: string): BlockId {
 
 export function portId(s: string): PortId {
   return s as PortId;
+}
+
+// [LAW:one-type-per-behavior] Canonical block-port reference shared across UI,
+// diagnostics, and derived role metadata.
+export interface PortEndpointRef {
+  readonly blockId: BlockId;
+  readonly portId: PortId;
 }
 
 // =============================================================================
@@ -280,9 +290,6 @@ export type UIControlHint =
 // Block Roles (from spec 02-block-system.md)
 // =============================================================================
 
-// Import types used in role definitions
-import type { PortRef } from '../graph/Patch';
-
 /**
  * Wire identifier (for wireState targeting).
  */
@@ -326,7 +333,7 @@ export interface RendererMeta {}
  * Note: bus/rail variants removed - buses are now regular blocks.
  */
 export type DerivedBlockMeta =
-  | { readonly kind: "defaultSource"; readonly target: { readonly kind: "port"; readonly port: PortRef } }
+  | { readonly kind: "defaultSource"; readonly target: { readonly kind: "port"; readonly port: PortEndpointRef } }
   | { readonly kind: "wireState";     readonly target: { readonly kind: "wire"; readonly wire: WireId } }
   | { readonly kind: "lens";          readonly target: { readonly kind: "node"; readonly node: NodeRef } }
   | { readonly kind: "adapter";       readonly edgeId: string; readonly adapterType: string }

@@ -90,24 +90,12 @@ export interface AdapterBlockSpec {
   readonly priority?: number;
 }
 
-/**
- * Adapter spec with blockType (return type for findAdapter).
- * Includes blockType field for backwards compatibility.
- */
-export interface AdapterSpec {
+// [LAW:one-type-per-behavior] Adapter lookup returns the same adapter shape as
+// BlockDef.adapterSpec with one additional discriminator (blockType).
+export type AdapterSpec = AdapterBlockSpec & {
   /** Block type to insert (must be registered in block registry) */
   readonly blockType: string;
-  /** Input port ID on the adapter block */
-  readonly inputPortId: string;
-  /** Output port ID on the adapter block */
-  readonly outputPortId: string;
-  /** Description for debugging/UI */
-  readonly description: string;
-  /** Purity: adapters must be pure (no time/state dependence) */
-  readonly purity: 'pure';
-  /** Stability: same input always produces same output */
-  readonly stability: 'stable';
-}
+};
 
 /**
  * Adapter rule: pattern-based matching for type conversion (internal).
@@ -282,14 +270,7 @@ function buildAdapterRules(): AdapterRule[] {
     if (!blockDef.adapterSpec) continue;
 
     const spec = blockDef.adapterSpec;
-    const adapterSpec: AdapterSpec = {
-      blockType,
-      inputPortId: spec.inputPortId,
-      outputPortId: spec.outputPortId,
-      description: spec.description,
-      purity: spec.purity,
-      stability: spec.stability,
-    };
+    const adapterSpec: AdapterSpec = { blockType, ...spec };
 
     rules.push({
       blockType,

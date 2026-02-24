@@ -1,0 +1,61 @@
+{
+  "generatedAt": "2026-02-24T04:00:05.132Z",
+  "sampleFrames": 180,
+  "url": "http://127.0.0.1:5174/?showPreview=true",
+  "results": [
+    {
+      "browser": "chromium",
+      "url": "http://127.0.0.1:5174/?showPreview=true",
+      "startedAt": "2026-02-24T04:00:02.175Z",
+      "durationMs": 2955,
+      "readiness": {
+        "hasNavigatorGpu": true,
+        "hasAdapter": true,
+        "hasCanvas": true,
+        "hasWebGPUContext": true,
+        "consoleErrorCount": 0,
+        "pageErrorCount": 0
+      },
+      "timing": {
+        "sampleCount": 180,
+        "avgFrameDeltaMs": 8.325,
+        "p95FrameDeltaMs": 8.9,
+        "avgFps": 120.12
+      },
+      "errors": {
+        "console": [],
+        "page": []
+      },
+      "passed": true
+    },
+    {
+      "browser": "webkit",
+      "url": "http://127.0.0.1:5174/?showPreview=true",
+      "startedAt": "2026-02-24T04:00:05.131Z",
+      "durationMs": 0,
+      "readiness": {
+        "hasNavigatorGpu": false,
+        "hasAdapter": false,
+        "hasCanvas": false,
+        "hasWebGPUContext": false,
+        "consoleErrorCount": 0,
+        "pageErrorCount": 0
+      },
+      "timing": {
+        "sampleCount": 0,
+        "avgFrameDeltaMs": 0,
+        "p95FrameDeltaMs": 0,
+        "avgFps": 0
+      },
+      "errors": {
+        "console": [],
+        "page": [],
+        "setup": [
+          "browserType.launch: Executable doesn't exist at /Users/bmf/Library/Caches/ms-playwright/webkit-2227/pw_run.sh\n╔═════════════════════════════════════════════════════════════════════════╗\n║ Looks like Playwright Test or Playwright was just installed or updated. ║\n║ Please run the following command to download new browsers:              ║\n║                                                                         ║\n║     pnpm exec playwright install                                        ║\n║                                                                         ║\n║ <3 Playwright Team                                                      ║\n╚═════════════════════════════════════════════════════════════════════════╝"
+        ]
+      },
+      "passed": false
+    }
+  ],
+  "passed": false
+}

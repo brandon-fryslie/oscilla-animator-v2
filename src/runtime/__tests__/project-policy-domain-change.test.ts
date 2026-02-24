@@ -20,7 +20,7 @@ import {
   type StableTargetId,
 } from '../ContinuityState';
 import type { StepContinuityApply } from '../../compiler/ir/types';
-import { instanceId } from '../../compiler/ir/Indices';
+import { instanceId } from '../../core/ids';
 import type { RuntimeState } from '../RuntimeState';
 import { ExternalChannelSystem } from '../ExternalChannel';
 import type { ValueSlot } from '../../types';

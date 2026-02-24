@@ -8,7 +8,7 @@
  */
 
 import type { MappingState, StableTargetId } from '../runtime/ContinuityState';
-import { instanceId as makeInstanceId } from '../compiler/ir/Indices';
+import { instanceId as makeInstanceId } from '../core/ids';
 import type { InstanceId } from '../compiler/ir/Indices';
 import type { RuntimeState } from '../runtime/RuntimeState';
 import { createRuntimeState } from '../runtime';

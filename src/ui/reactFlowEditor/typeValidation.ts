@@ -514,14 +514,7 @@ function adapterSpecFromChainStep(
   if (!spec) {
     return undefined;
   }
-  return {
-    blockType: step.blockType,
-    inputPortId: step.inputPortId,
-    outputPortId: step.outputPortId,
-    description: spec.description,
-    purity: spec.purity,
-    stability: spec.stability,
-  };
+  return { blockType: step.blockType, ...spec };
 }
 
 export type PortTypeLookupFn = (

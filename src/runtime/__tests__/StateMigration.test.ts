@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createInitialState, migrateState } from '../StateMigration';
 import type { StateMapping } from '../../compiler/ir/types';
 import { stableStateId } from '../../compiler/ir/types';
-import { instanceId } from '../../compiler/ir/Indices';
+import { instanceId } from '../../core/ids';
 import type { MappingState } from '../ContinuityState';
 
 describe('StateMigration', () => {

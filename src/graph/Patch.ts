@@ -250,15 +250,6 @@ export interface Edge {
   readonly alias?: string;
 }
 
-/**
- * Legacy PortRef - for backwards compatibility.
- * New code should use Endpoint.
- */
-export interface PortRef {
-  readonly blockId: BlockId;
-  readonly portId: PortId;
-}
-
 // =============================================================================
 // Patch
 // =============================================================================

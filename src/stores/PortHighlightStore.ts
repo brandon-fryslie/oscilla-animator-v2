@@ -11,8 +11,7 @@
  */
 
 import { makeObservable, observable, computed, action } from 'mobx';
-import type { PortRef } from '../graph/Patch';
-import type { BlockId, PortId } from '../types';
+import type { BlockId, PortId, PortEndpointRef } from '../types';
 import { validateConnection } from '../ui/reactFlowEditor/typeValidation';
 import { requireAnyBlockDef } from '../blocks/registry';
 import type { PatchStore } from './PatchStore';
@@ -20,7 +19,7 @@ import type { FrontendResultStore } from './FrontendResultStore';
 
 export class PortHighlightStore {
   // Observable state - hover tracking only
-  hoveredPort: PortRef & { direction: 'input' | 'output' } | null = null;
+  hoveredPort: PortEndpointRef & { direction: 'input' | 'output' } | null = null;
 
   constructor(
     private patchStore: PatchStore,
