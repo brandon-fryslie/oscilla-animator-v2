@@ -2,6 +2,7 @@ import type { ValueSlot } from '../../types';
 import type { RuntimeState } from '../RuntimeState';
 import type { ArenaSlotDescriptor } from '../ArenaValueStore';
 import { arenaEncodeFromAoS } from '../ArenaValueStore';
+import type { RuntimeScalarArenaAddress } from '../../compiler/ir/program';
 
 export type TestSlotBuffer = Float32Array | Uint8ClampedArray;
 
@@ -62,4 +63,26 @@ export function buildSlotToArenaFromTestBuffers(
     offset += data.length;
   }
   return slotToArena;
+}
+
+export function buildScalarExprToArenaAddressFromOffsets(
+  scalarExprToArenaOffset: ReadonlyMap<number, number>,
+): ReadonlyMap<number, RuntimeScalarArenaAddress> {
+  const scalarExprToArenaAddress = new Map<number, RuntimeScalarArenaAddress>();
+  for (const [exprId, offset] of scalarExprToArenaOffset) {
+    scalarExprToArenaAddress.set(exprId, {
+      slot: offset as ValueSlot,
+      arena: {
+        offset,
+        stride: 1,
+        laneCount: 1,
+        length: 1,
+        packing: 'soa',
+        laneStride: 1,
+        componentStride: 1,
+      },
+      component: 0,
+    });
+  }
+  return scalarExprToArenaAddress;
 }

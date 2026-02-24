@@ -23,7 +23,11 @@ import type { RenderSpace2D } from '../../shapes/types';
 import { PathVerb } from '../../shapes/types';
 import { DEFAULT_CAMERA } from '../CameraResolver';
 import { getTestArena } from './test-arena-helper';
-import { buildSlotToArenaFromTestBuffers, setTestSlotBuffer } from './slot-buffer-helper';
+import {
+  buildScalarExprToArenaAddressFromOffsets,
+  buildSlotToArenaFromTestBuffers,
+  setTestSlotBuffer,
+} from './slot-buffer-helper';
 
 // Helper to create a valid palette Float32Array
 function createPalette(r = 1, g = 1, b = 1, a = 1): Float32Array {
@@ -120,6 +124,7 @@ describe('RenderAssembler', () => {
 
       const context: AssemblerContext = {
         scalarExprToArenaOffset: new Map(),
+        scalarExprToArenaAddress: new Map(),
         instances: new Map(),
         state,
         resolvedCamera: DEFAULT_CAMERA,
@@ -143,6 +148,7 @@ describe('RenderAssembler', () => {
 
       const context: AssemblerContext = {
         scalarExprToArenaOffset: new Map(),
+        scalarExprToArenaAddress: new Map(),
         instances: new Map([['empty-instance', createMockInstance(0)]]),
         state,
         resolvedCamera: DEFAULT_CAMERA,
@@ -209,6 +215,7 @@ describe('RenderAssembler', () => {
 
       const context: AssemblerContext = {
         scalarExprToArenaOffset,
+        scalarExprToArenaAddress: buildScalarExprToArenaAddressFromOffsets(scalarExprToArenaOffset),
         instances: new Map([['culled-instance', createMockInstance(2)]]),
         state,
         resolvedCamera: DEFAULT_CAMERA,
@@ -255,6 +262,7 @@ describe('RenderAssembler', () => {
 
       const context: AssemblerContext = {
         scalarExprToArenaOffset,
+        scalarExprToArenaAddress: buildScalarExprToArenaAddressFromOffsets(scalarExprToArenaOffset),
         instances: new Map([['test-instance', createMockInstance(10)]]),
         state,
         resolvedCamera: DEFAULT_CAMERA,
@@ -319,6 +327,7 @@ describe('RenderAssembler', () => {
 
       const context: AssemblerContext = {
         scalarExprToArenaOffset,
+        scalarExprToArenaAddress: buildScalarExprToArenaAddressFromOffsets(scalarExprToArenaOffset),
         instances: new Map([['test-instance', createMockInstance(2)]]),
         state,
         resolvedCamera: DEFAULT_CAMERA,
@@ -406,6 +415,7 @@ describe('RenderAssembler', () => {
 
       const context: AssemblerContext = {
         scalarExprToArenaOffset,
+        scalarExprToArenaAddress: buildScalarExprToArenaAddressFromOffsets(scalarExprToArenaOffset),
         instances: new Map([['test-instance', createMockInstance(10)]]),
         state,
         resolvedCamera: DEFAULT_CAMERA,
@@ -481,6 +491,7 @@ describe('RenderAssembler', () => {
 
       const context: AssemblerContext = {
         scalarExprToArenaOffset,
+        scalarExprToArenaAddress: buildScalarExprToArenaAddressFromOffsets(scalarExprToArenaOffset),
         instances: new Map([
           ['instance-a', createMockInstance(1)],
           ['instance-b', createMockInstance(1)],
@@ -523,6 +534,7 @@ describe('RenderAssembler', () => {
 
       const context: AssemblerContext = {
         scalarExprToArenaOffset,
+        scalarExprToArenaAddress: buildScalarExprToArenaAddressFromOffsets(scalarExprToArenaOffset),
         instances: new Map([
           ['empty-instance', createMockInstance(0)], // count = 0
         ]),
@@ -596,6 +608,7 @@ describe('RenderAssembler', () => {
       const arena = getTestArena();
       const context: AssemblerContext = {
         scalarExprToArenaOffset,
+        scalarExprToArenaAddress: buildScalarExprToArenaAddressFromOffsets(scalarExprToArenaOffset),
         instances: new Map([['budget-instance', createMockInstance(instanceCount)]]),
         state,
         resolvedCamera: DEFAULT_CAMERA,
