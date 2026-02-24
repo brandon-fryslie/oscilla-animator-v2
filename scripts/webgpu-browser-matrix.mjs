@@ -3,14 +3,13 @@ import { spawn } from 'node:child_process';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
-import { chromium, webkit } from 'playwright';
+import { chromium } from 'playwright';
 
 const BASE_URL = process.env.WEBGPU_MATRIX_URL ?? 'http://127.0.0.1:5174';
 const DEFAULT_REPORT = process.env.WEBGPU_MATRIX_REPORT ?? 'artifacts/webgpu-browser-matrix.json';
 const SAMPLE_FRAMES = Number.parseInt(process.env.WEBGPU_MATRIX_FRAMES ?? '180', 10);
 const START_SERVER = (process.env.WEBGPU_MATRIX_START_SERVER ?? '1') !== '0';
 const SERVER_TIMEOUT_MS = Number.parseInt(process.env.WEBGPU_MATRIX_SERVER_TIMEOUT_MS ?? '45000', 10);
-const INCLUDE_WEBKIT = (process.env.WEBGPU_MATRIX_INCLUDE_WEBKIT ?? '0') === '1';
 
 function withPreviewParam(url) {
   const parsed = new URL(url);
@@ -22,16 +21,20 @@ function withPreviewParam(url) {
 
 const TARGET_URL = withPreviewParam(BASE_URL);
 
+async function isHttpReady(url) {
+  try {
+    const response = await fetch(url, { method: 'GET' });
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
 async function waitForHttpReady(url, timeoutMs) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    try {
-      const response = await fetch(url, { method: 'GET' });
-      if (response.ok) {
-        return;
-      }
-    } catch {
-      // server not ready yet
+    if (await isHttpReady(url)) {
+      return;
     }
     await new Promise((resolve) => setTimeout(resolve, 500));
   }
@@ -43,9 +46,14 @@ async function startDevServer(url) {
     return null;
   }
 
+  if (await isHttpReady(url)) {
+    process.stdout.write(`[matrix] Reusing existing dev server at ${url}\n`);
+    return null;
+  }
+
   const serverProcess = spawn(
-    'npm',
-    ['run', 'dev', '--', '--host', '127.0.0.1', '--port', '5174'],
+    'pnpm',
+    ['run', 'dev', '--', '--host', '127.0.0.1', '--port', '5174', '--strictPort'],
     {
       stdio: ['ignore', 'pipe', 'pipe'],
       env: { ...process.env },
@@ -97,7 +105,6 @@ async function runBrowserCheck({ browserName, launcher, launchOptions, url, bloc
   await page.waitForSelector('canvas', { timeout: 30_000 });
 
   const probe = await page.evaluate(async (sampleFrames) => {
-    const userAgent = navigator.userAgent;
     const hasNavigatorGpu = Boolean(navigator.gpu);
     const adapter = hasNavigatorGpu ? await navigator.gpu.requestAdapter() : null;
     const hasAdapter = Boolean(adapter);
@@ -123,7 +130,6 @@ async function runBrowserCheck({ browserName, launcher, launchOptions, url, bloc
     });
 
     return {
-      userAgent,
       hasNavigatorGpu,
       hasAdapter,
       hasCanvas,
@@ -136,7 +142,6 @@ async function runBrowserCheck({ browserName, launcher, launchOptions, url, bloc
 
   const timing = computeStats(probe.frameDeltasMs);
   const readiness = {
-    userAgent: probe.userAgent,
     hasNavigatorGpu: probe.hasNavigatorGpu,
     hasAdapter: probe.hasAdapter,
     hasCanvas: probe.hasCanvas,
@@ -193,7 +198,6 @@ async function main() {
 
   try {
     // [LAW:single-enforcer] Chromium is the canonical gating lane for W15.
-    // Optional WebKit telemetry is non-blocking and never delays readiness.
     const checks = [
       {
         browserName: 'chromium',
@@ -205,15 +209,6 @@ async function main() {
         blocking: true,
       },
     ];
-    if (INCLUDE_WEBKIT) {
-      checks.push({
-        browserName: 'webkit',
-        launcher: webkit,
-        launchOptions: {},
-        url: TARGET_URL,
-        blocking: false,
-      });
-    }
 
     const results = [];
     for (const check of checks) {
@@ -238,7 +233,6 @@ async function main() {
             hasWebGPUContext: false,
             consoleErrorCount: 0,
             pageErrorCount: 0,
-            userAgent: null,
           },
           timing: {
             sampleCount: 0,

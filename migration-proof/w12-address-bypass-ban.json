@@ -1,8 +1,9 @@
 {
   "workstream": "W12",
   "title": "Direct-Index Bypass Removal",
-  "status": "slice_completed",
-  "timestamp_utc": "2026-02-23T22:22:17Z",
+  "status": "completed",
+  "timestamp_utc": "2026-02-24T10:44:13Z",
+  "commit": "4656e2ac5",
   "laws": [
     "one-source-of-truth",
     "single-enforcer",

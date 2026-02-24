@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-02-24T09:38:47.713Z",
+  "generatedAt": "2026-02-24T17:39:03.960Z",
   "sampleFrames": 180,
   "url": "http://127.0.0.1:5174/?showPreview=true",
   "results": [
@@ -8,10 +8,9 @@
       "blocking": true,
       "browserVersion": "143.0.7499.4",
       "url": "http://127.0.0.1:5174/?showPreview=true",
-      "startedAt": "2026-02-24T09:38:42.795Z",
-      "durationMs": 4918,
+      "startedAt": "2026-02-24T17:39:00.285Z",
+      "durationMs": 3675,
       "readiness": {
-        "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/143.0.7499.4 Safari/537.36",
         "hasNavigatorGpu": true,
         "hasAdapter": true,
         "hasCanvas": true,
@@ -21,9 +20,9 @@
       },
       "timing": {
         "sampleCount": 180,
-        "avgFrameDeltaMs": 14.528,
-        "p95FrameDeltaMs": 33.7,
-        "avgFps": 68.83
+        "avgFrameDeltaMs": 8.333,
+        "p95FrameDeltaMs": 9.3,
+        "avgFps": 120.01
       },
       "errors": {
         "console": [],
@@ -37,5 +36,6 @@
     "chromium"
   ],
   "nonBlockingBrowsers": [],
-  "passed": true
+  "passed": true,
+  "hardPassed": true
 }

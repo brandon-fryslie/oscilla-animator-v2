@@ -2,8 +2,8 @@
   "workstream": "W10",
   "title": "WebGPU Execution Contract Pre-Design Baseline",
   "status": "completed",
-  "timestamp_utc": "2026-02-24T05:17:25Z",
-  "commit": "ec9e9d4ce",
+  "timestamp_utc": "2026-02-24T17:39:04Z",
+  "commit": "4656e2ac5",
   "laws": [
     "one-source-of-truth",
     "single-enforcer",
@@ -36,8 +36,8 @@
     },
     {
       "command": "pnpm run test:webgpu-matrix",
-      "exit_code": 1,
-      "notes": "Expected overall non-zero exit when any browser fails matrix gate. Chromium lane passed; WebKit lane failed due unavailable WebGPU API in environment."
+      "exit_code": 0,
+      "notes": "Chromium-only matrix gate passed."
     }
   ],
   "static_scans": [

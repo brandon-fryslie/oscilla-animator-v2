@@ -1,0 +1,86 @@
+{
+  "readiness_version": "1.0.0",
+  "generated_at_utc": "2026-02-24T17:40:47Z",
+  "overall": "ready",
+  "gates": {
+    "G1": {
+      "passed": true,
+      "blockers": [],
+      "evidence": {
+        "workstreams": [
+          "W2",
+          "W3",
+          "W4",
+          "W7",
+          "W8",
+          "W12",
+          "W14"
+        ]
+      }
+    },
+    "G2": {
+      "passed": true,
+      "blockers": [],
+      "evidence": {
+        "workstreams": [
+          "W4",
+          "W5",
+          "W6",
+          "W13"
+        ]
+      }
+    },
+    "G3": {
+      "passed": true,
+      "blockers": [],
+      "evidence": {
+        "workstreams": [
+          "W9",
+          "W10"
+        ]
+      }
+    },
+    "G4": {
+      "passed": true,
+      "blockers": [],
+      "evidence": {
+        "workstreams": [
+          "W15"
+        ],
+        "matrix_report": "/Users/bmf/.codex/worktrees/2acb/oscilla-animator-v2/artifacts/webgpu-browser-matrix.json"
+      }
+    },
+    "G5": {
+      "passed": true,
+      "blockers": [],
+      "evidence": {
+        "workstreams": [
+          "W1",
+          "W2",
+          "W3",
+          "W4",
+          "W5",
+          "W6",
+          "W7",
+          "W8",
+          "W9",
+          "W10",
+          "W11",
+          "W12",
+          "W13",
+          "W14",
+          "W15"
+        ],
+        "browser_policy_files": [
+          "docs/WEBGPU-DESIGN-PREREQUISITES-2026-02-22.md",
+          "docs/WEBGPU-MIGRATION-READINESS-REBOOT-2026-02-24.md",
+          "design-docs/_new/renderer/12-webgpu-v3-migration.md",
+          "scripts/webgpu-browser-matrix.mjs",
+          "migration-proof/w10-webgpu-contract.json",
+          "migration-proof/w15-browser-matrix-perf.json"
+        ]
+      }
+    }
+  },
+  "blockers": []
+}

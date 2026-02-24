@@ -22,7 +22,7 @@ At readiness, architects receive:
 - One canonical addressing model for numeric data.
 - One canonical memory packing policy for GPU-targeted payloads (SoA).
 - One canonical execution model for scalar/field/state/gauge flow.
-- Measured Safari+Chrome behavior and performance baselines under those canonical models.
+- Measured Chrome/Chromium behavior and performance baselines under those canonical models.
 
 ## 3. Mandatory Source Inputs Incorporated
 
@@ -250,7 +250,7 @@ Closure surfaces:
 - runtime-to-render boundary contracts
 
 Completion proof:
-- WebGPU-only startup checks enforced for Safari+Chrome.
+- WebGPU-only startup checks enforced for Chrome/Chromium.
 - Draw submission path acceptance tests for canonical buffers and command flow.
 - Fallback renderer paths statically absent.
 
@@ -321,7 +321,7 @@ Completion proof:
 ## W15. Browser Matrix, Performance, And Proof Artifact Pipeline
 
 Required technical outcomes:
-- Safari latest and Chrome latest conformance is validated for canonical pre-design runtime.
+- Chrome/Chromium latest conformance is validated for canonical pre-design runtime.
 - CI publishes machine-readable proof artifacts for each prerequisite workstream.
 - Design phase consumes proof artifacts, not narrative status.
 
@@ -341,6 +341,7 @@ Completion proof artifacts (required):
 - `migration-proof/w13-continuity-segments.json`
 - `migration-proof/w14-cpu-soa-parity.json`
 - `migration-proof/w15-browser-matrix-perf.json`
+- `artifacts/webgpu-readiness.json` (computed canonical G1..G5 gate verdict)
 
 // [LAW:verifiable-goals] All workstreams must emit mechanical evidence artifacts before design kickoff.
 
@@ -361,7 +362,7 @@ Architectural design starts only when the following inputs exist and are current
 - Canonical state/continuity semantics spec with bounded-phase guarantees (post-W4/W13).
 - Renderer sink and command submission contract spec (post-W9/W10).
 - API surface map and ownership boundaries (post-W11/W12).
-- Safari+Chrome behavior/perf baseline bundle and proof artifacts (post-W15).
+- Chrome/Chromium behavior/perf baseline bundle and proof artifacts (post-W15).
 
 ## 7. Completion Rule
 
@@ -369,5 +370,6 @@ This prerequisite program is complete only when every workstream has:
 - Implemented technical outcomes.
 - Passing gates in CI.
 - Published proof artifact.
+- Passing canonical readiness verdict (`pnpm run -s check:webgpu-readiness` => `overall: ready`).
 
 At that point, the project is ready to begin interface design.

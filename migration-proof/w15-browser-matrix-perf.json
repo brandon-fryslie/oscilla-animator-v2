@@ -2,8 +2,8 @@
   "workstream": "W15",
   "title": "Browser Matrix, Performance, And Proof Artifact Pipeline",
   "status": "completed",
-  "timestamp_utc": "2026-02-24T09:38:57Z",
-  "commit": "2e45701b1",
+  "timestamp_utc": "2026-02-24T17:39:04Z",
+  "commit": "4656e2ac5",
   "laws": [
     "verifiable-goals",
     "single-enforcer",
@@ -11,12 +11,11 @@
   ],
   "scope": [
     "Run repeatable Chromium WebGPU gating check on canonical preview runtime",
-    "Capture machine-readable readiness and frame-time baseline",
-    "Treat optional non-blocking browser telemetry lanes as informational only"
+    "Capture machine-readable readiness and frame-time baseline"
   ],
   "artifact": {
     "matrix_report": "artifacts/webgpu-browser-matrix.json",
-    "report_generated_at": "2026-02-24T09:38:47.713Z",
+    "report_generated_at": "2026-02-24T17:39:03.960Z",
     "sample_frames": 180,
     "url": "http://127.0.0.1:5174/?showPreview=true",
     "gating_browsers": [
@@ -41,17 +40,11 @@
       },
       "timing": {
         "sampleCount": 180,
-        "avgFrameDeltaMs": 14.528,
-        "p95FrameDeltaMs": 33.7,
-        "avgFps": 68.83
+        "avgFrameDeltaMs": 8.333,
+        "p95FrameDeltaMs": 9.3,
+        "avgFps": 120.01
       }
     }
   },
-  "extra_verification": [
-    {
-      "command": "osascript Safari probe for Boolean(navigator.gpu) + webgpu context",
-      "result": true,
-      "notes": "Real Safari (Version 26.3) reports navigator.gpu=true and canvas.getContext('webgpu')=true in this environment."
-    }
-  ]
+  "extra_verification": []
 }

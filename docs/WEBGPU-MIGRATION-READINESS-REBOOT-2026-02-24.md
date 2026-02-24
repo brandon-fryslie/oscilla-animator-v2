@@ -84,6 +84,7 @@ Pass criteria:
 - Every referenced artifact uses normalized schema (`status`, `commit`, `verification[]`, `static_scans[]`).
 - Every artifact status is terminal and normalized (`completed` or `blocked`).
 - `blocked` artifacts include blocker metadata with owner and next action.
+- Canonical WebGPU policy files contain no non-Chromium browser-gating vocabulary regressions.
 
 Evidence sources:
 - All migration-proof JSON files.
@@ -110,24 +111,28 @@ This removes subjective "close enough" interpretation.
 ## 6. Current State Under The Reboot Model (As Of February 24, 2026)
 
 Observed from current artifacts:
-- G1: likely pass on technical substance, but blocked by non-normalized statuses in W2/W7/W12 (`slice_completed`).
+- G1: pass with W2/W3/W4/W7/W8/W12/W14 evidence and normalized terminal statuses.
 - G2: pass on technical substance with W4/W5/W6/W13 evidence.
 - G3: pass on W9/W10 evidence.
-- G4: pass when Chromium gating lane passes (WebKit/Safari telemetry is non-blocking).
-- G5: fail (status vocabulary and schema normalization incomplete across artifacts).
+- G4: pass when Chromium gating lane passes.
+- G5: pass (artifact statuses normalized to terminal values).
 
 Computed result today:
-- `overall = not_ready`
+- `overall = ready`
 - Primary blockers:
-- Artifact normalization blocker (`slice_completed` and mixed status semantics).
+- none
 
 ## 7. Immediate Transition Plan
 
-1. Normalize artifact schema and statuses.
-2. Convert `slice_completed` -> `completed` or `blocked` with explicit blockers.
-3. Add one readiness checker script that computes G1..G5 and emits one canonical verdict JSON.
-4. Require checker success in CI before any "design kickoff" label can be applied.
-5. Keep W-workstream docs for history, but treat gate verdict as the only readiness authority.
+1. Keep artifact schema/status validation in CI so normalized status cannot regress.
+2. Use `scripts/webgpu-readiness-check.mjs` as the readiness checker that computes G1..G5 and emits `artifacts/webgpu-readiness.json`.
+   - Test: `pnpm run -s test:webgpu-readiness`
+   - Command: `pnpm run -s check:webgpu-readiness`
+   - CI command: `pnpm run -s ci:webgpu-readiness`
+   - Matrix proof sync: `pnpm run -s sync:webgpu-proof`
+   - One-shot refresh: `pnpm run -s refresh:webgpu-readiness`
+3. Require checker success in CI before any "design kickoff" label can be applied (`webgpu-readiness` + `design-kickoff-gate` workflows).
+4. Keep W-workstream docs for history, but treat gate verdict as the only readiness authority.
 
 ## 8. Decision
 

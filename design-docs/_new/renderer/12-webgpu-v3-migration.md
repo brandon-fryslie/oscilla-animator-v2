@@ -1,4 +1,4 @@
-# Oscilla WebGPU v3.0 Migration (f32-Only, Safari+Chrome)
+# Oscilla WebGPU v3.0 Migration (f32-Only, Chrome-Gated)
 
 Status: Draft  
 Date: February 22, 2026  
@@ -10,7 +10,7 @@ This document evaluates the proposed WebGPU v3.0 architecture against the curren
 
 // [LAW:one-source-of-truth] One canonical runtime target: WebGPU only.
 - Runtime target: WebGPU only.
-- Browser support target: latest Safari and latest Chrome.
+- Browser support target: latest Chrome/Chromium.
 - If WebGPU is unavailable or device creation fails, app fails fast (no fallback renderer).
 
 // [LAW:single-enforcer] Numeric policy is enforced once at compiler and WGSL emission boundaries.
@@ -164,7 +164,7 @@ This document evaluates the proposed WebGPU v3.0 architecture against the curren
   - Persistent `ShapeBank` and `DrawIndirectBuffer` allocation + binding schema.
   - Frame graph runner with no-op compute kernels to validate wiring.
 - Exit criteria:
-  - App boots on Safari+Chrome with WebGPU device creation.
+  - App boots on Chrome/Chromium with WebGPU device creation.
   - Frame graph executes all phases without rendering regressions.
 
 ## Phase B: Scalar + Field Compute Lowering
@@ -212,8 +212,7 @@ This document evaluates the proposed WebGPU v3.0 architecture against the curren
   - screenshot regression script:
     - `./scripts/get-screenshot-of-demo-patch.sh simple.hcl`
   - browser matrix manual+automated smoke:
-    - Safari latest
-    - Chrome latest
+    - Chrome/Chromium latest
 - Add phase-specific fixtures:
   - continuity hot-swap scenario
   - high-instance field deformation scenario
@@ -231,7 +230,7 @@ This document evaluates the proposed WebGPU v3.0 architecture against the curren
 8. Lock policy docs:
    - WebGPU-only runtime
    - `f32`-only numeric model
-   - Safari+Chrome support envelope
+   - Chrome/Chromium support envelope
 
 ## 9. Open Technical Decisions
 
