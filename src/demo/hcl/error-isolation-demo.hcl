@@ -84,15 +84,27 @@ patch "Error Isolation Demo" {
   # ========================================================================
 
   block "Expression" "broken-expr-1" {
-    expression = "this is not valid +++"
+    expression = <<-EXPR
+      // [LAW:behavior-not-structure] Keep this expression invalid to assert isolation semantics, not implementation details.
+      // Visual: no effect, because this disconnected block is intentionally excluded from render output.
+      this is not valid +++
+    EXPR
   }
 
   block "Expression" "broken-expr-2" {
-    expression = "in0 +"
+    expression = <<-EXPR
+      // [LAW:behavior-not-structure] This malformed expression remains intentional for unreachable-error demo coverage.
+      // Visual: no effect, since this block is also disconnected.
+      in0 +
+    EXPR
   }
 
   block "Expression" "broken-expr" {
-    expression = "*** invalid ***"
+    expression = <<-EXPR
+      // [LAW:behavior-not-structure] Preserve an explicit syntax failure while still documenting purpose.
+      // Visual: no visible impact; output only feeds an unused disconnected add node.
+      *** invalid ***
+    EXPR
     outputs {
       out = unused-add.a
     }
