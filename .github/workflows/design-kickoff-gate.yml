@@ -6,64 +6,122 @@ on:
       - labeled
       - synchronize
       - reopened
+  workflow_run:
+    workflows:
+      - WebGPU Readiness
+    types:
+      - completed
 
 permissions:
   contents: read
-  checks: read
+  actions: read
   pull-requests: write
 
 jobs:
   gate:
-    if: contains(github.event.pull_request.labels.*.name, 'design kickoff')
     runs-on: ubuntu-latest
     steps:
-      - name: Enforce readiness check before design kickoff label
+      - name: Enforce readiness check before design-kickoff label
         uses: actions/github-script@v7
         with:
           script: |
-            const label = 'design kickoff';
-            const requiredCheckName = 'readiness';
-            const pr = context.payload.pull_request;
-            const headSha = pr.head.sha;
+            const LABEL = 'design-kickoff';
+            const READINESS_WORKFLOW_FILE = 'webgpu-readiness.yaml';
+            const READINESS_WORKFLOW_NAME = 'WebGPU Readiness';
 
-            const checkRuns = await github.paginate(
-              github.rest.checks.listForRef,
-              {
+            // [LAW:single-enforcer] Design kickoff eligibility is enforced in one
+            // canonical workflow. Other workflows should not duplicate this policy.
+            async function enforceForPullRequest(prNumber, headSha, triggerName, readinessFromEvent = null) {
+              const { data: pr } = await github.rest.pulls.get({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                ref: headSha,
-                per_page: 100,
-              },
-              (response) => response.data.check_runs,
-            );
+                pull_number: prNumber,
+              });
+              const hasKickoffLabel = (pr.labels ?? []).some((label) => label.name === LABEL);
+              if (!hasKickoffLabel) {
+                core.info(`PR #${prNumber} has no \`${LABEL}\` label; skipping gate enforcement.`);
+                return;
+              }
 
-            const readinessRun = checkRuns.find((run) => run.name === requiredCheckName);
-            const readinessPassed = readinessRun?.conclusion === 'success';
+              // [LAW:one-source-of-truth] Design kickoff gate reads readiness from
+              // one canonical workflow identity: WebGPU Readiness.
+              let readinessRun = readinessFromEvent;
+              if (!readinessRun) {
+                const runs = await github.paginate(
+                  github.rest.actions.listWorkflowRuns,
+                  {
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    workflow_id: READINESS_WORKFLOW_FILE,
+                    event: 'pull_request',
+                    head_sha: headSha,
+                    per_page: 100,
+                  },
+                  (response) => response.data.workflow_runs,
+                );
+                readinessRun = runs[0] ?? null;
+              }
 
-            if (readinessPassed) {
-              core.info(`Readiness check is green for ${headSha}; label remains.`);
+              if (!readinessRun) {
+                core.notice(
+                  `No ${READINESS_WORKFLOW_NAME} run found yet for PR #${prNumber} @ ${headSha}. ` +
+                  `Leaving \`${LABEL}\` in place until readiness run exists.`
+                );
+                return;
+              }
+
+              if (readinessRun.status !== 'completed') {
+                // [LAW:dataflow-not-control-flow] Pending readiness is handled as
+                // an explicit state, not an implicit failure/removal branch.
+                core.notice(
+                  `${READINESS_WORKFLOW_NAME} is still ${readinessRun.status} for PR #${prNumber}. ` +
+                  `Leaving \`${LABEL}\` in place until completion.`
+                );
+                return;
+              }
+
+              if (readinessRun.conclusion === 'success') {
+                core.info(
+                  `${READINESS_WORKFLOW_NAME} is green for PR #${prNumber} ` +
+                  `(${triggerName}); kickoff label remains.`
+                );
+                return;
+              }
+
+              await github.rest.issues.removeLabel({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: prNumber,
+                name: LABEL,
+              });
+
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: prNumber,
+                body:
+                  `Removed \`${LABEL}\` label because \`${READINESS_WORKFLOW_NAME}\` is ` +
+                  `\`${readinessRun.conclusion ?? 'unknown'}\` for \`${headSha}\`.\n\n` +
+                  `Re-run \`${READINESS_WORKFLOW_NAME}\` to green on the current PR head SHA, ` +
+                  `then re-apply \`${LABEL}\`.`,
+              });
+
+              core.setFailed(
+                `${READINESS_WORKFLOW_NAME} must be successful before \`${LABEL}\` can remain on PR #${prNumber}.`
+              );
+            }
+
+            if (context.eventName === 'pull_request_target') {
+              const pr = context.payload.pull_request;
+              await enforceForPullRequest(pr.number, pr.head.sha, 'pull_request_target');
               return;
             }
 
-            await github.rest.issues.removeLabel({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: pr.number,
-              name: label,
-            });
-
-            const reason = readinessRun
-              ? `current conclusion is \`${readinessRun.conclusion ?? 'pending'}\``
-              : 'no readiness check run found';
-
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: pr.number,
-              body:
-                `Removed \`${label}\` label because readiness gate is not satisfied (` +
-                `${reason}).\n\n` +
-                `Run the \`WebGPU Migration Readiness\` workflow to green on this PR head SHA, then re-apply the label.`,
-            });
-
-            core.setFailed('Readiness gate must pass before design kickoff label can be applied.');
+            if (context.eventName === 'workflow_run') {
+              const run = context.payload.workflow_run;
+              const prs = run.pull_requests ?? [];
+              for (const pr of prs) {
+                await enforceForPullRequest(pr.number, run.head_sha, 'workflow_run', run);
+              }
+              return;
+            }
