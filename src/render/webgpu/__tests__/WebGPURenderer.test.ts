@@ -603,6 +603,7 @@ describe('WebGPURenderer', () => {
     const env = createFakeWebGPUEnvironment();
     setNavigatorGpu(env.gpu);
     const renderer = await createWebGPURenderer(env.canvas);
+    env.device.queue.writeBuffer.mockClear();
     const topologyId = registerDynamicTopology({
       params: [],
       verbs: [PathVerb.MOVE, PathVerb.LINE, PathVerb.LINE, PathVerb.LINE, PathVerb.CLOSE],
@@ -647,6 +648,13 @@ describe('WebGPURenderer', () => {
     });
 
     expect(env.renderPass.drawIndexedIndirect).toHaveBeenCalledTimes(2);
+    const indirectOffsets = env.renderPass.drawIndexedIndirect.mock.calls.map((args: unknown[]) => args[1]);
+    expect(indirectOffsets).toEqual([0, WEBGPU_RENDER_CONTRACT.indirectArgsBytes]);
+    const instanceUploads = env.device.queue.writeBuffer.mock.calls.filter((args: unknown[]) =>
+      args[2] instanceof ArrayBuffer
+    );
+    expect(instanceUploads).toHaveLength(1);
+    expect(instanceUploads[0]?.[4]).toBe(2 * WEBGPU_RENDER_CONTRACT.instanceBytes);
   });
 
   it('supports per-instance stroke widths for stroke rendering', async () => {
