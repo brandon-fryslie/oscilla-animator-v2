@@ -59,6 +59,7 @@ describe('Stroke Rendering', () => {
           size: 0.1,
           rotation: new Float32Array([0]),
           scale2: new Float32Array([1, 1]),
+              deform: new Float32Array([0, 0, 0, 0]),
         },
         style: {
           fillColor: new Uint8ClampedArray([255, 0, 0, 255]),
@@ -176,6 +177,7 @@ describe('Stroke Rendering', () => {
           size: 0.1,
           rotation: new Float32Array([0, 0]),
           scale2: new Float32Array([1, 1, 1, 1]),
+              deform: new Float32Array([0, 0, 0, 0, 0, 0, 0, 0]),
         },
         style: {
           fillColor: new Uint8ClampedArray([
@@ -202,6 +204,7 @@ describe('Stroke Rendering', () => {
           size: 0.1,
           rotation: new Float32Array([0, 0]),
           scale2: new Float32Array([1, 1, 1, 1]),
+              deform: new Float32Array([0, 0, 0, 0, 0, 0, 0, 0]),
         },
       };
 

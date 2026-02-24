@@ -16,8 +16,9 @@ import { register as register_7_mask } from './mask';
 import { register as register_8_deadzone } from './deadzone';
 import { register as register_9_extract } from './extract';
 import { register as register_10_construct } from './construct';
-import { register as register_11_normalize_range } from './normalize-range';
-import { register as register_12_denormalize_range } from './denormalize-range';
+import { register as register_11_construct_vec2 } from './construct-vec2';
+import { register as register_12_normalize_range } from './normalize-range';
+import { register as register_13_denormalize_range } from './denormalize-range';
 
 export function registerLensBlocks(): void {
   register_0_scale_bias();
@@ -31,6 +32,7 @@ export function registerLensBlocks(): void {
   register_8_deadzone();
   register_9_extract();
   register_10_construct();
-  register_11_normalize_range();
-  register_12_denormalize_range();
+  register_11_construct_vec2();
+  register_12_normalize_range();
+  register_13_denormalize_range();
 }

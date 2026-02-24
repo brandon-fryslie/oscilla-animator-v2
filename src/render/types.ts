@@ -110,6 +110,7 @@ export interface PathGeometry {
  *   - WHEN PROJECTED: per-instance Float32Array of screenRadius
  * - rotation: radians (optional)
  * - scale2: anisotropic vec2 scale (optional, combines with size as S_effective)
+ * - deform: per-instance control-point deformation channels [amount, phase, frequency, seed]
  * - depth: per-instance depth values (optional, for test verification of depth-sorting)
  *
  * Effective scale: S_effective = size * (scale2 ?? vec2(1, 1))
@@ -126,8 +127,8 @@ export interface InstanceTransforms {
    * WHEN PROJECTED: per-instance Float32Array of screenRadius */
   readonly size: number | Float32Array;
 
-  // [LAW:dataflow-not-control-flow] rotation and scale2 are always present.
-  // Identity values (rotation=0, scale2=[1,1]) are filled by RenderAssembler
+  // [LAW:dataflow-not-control-flow] rotation/scale2/deform are always present.
+  // Identity values (rotation=0, scale2=[1,1], deform=[0,0,0,0]) are filled by RenderAssembler
   // so renderers execute unconditional transforms — variability lives in the values.
 
   /** Per-instance rotations in radians (identity: 0.0) */
@@ -135,6 +136,9 @@ export interface InstanceTransforms {
 
   /** Per-instance anisotropic scale, x,y interleaved (identity: [1.0, 1.0]) */
   readonly scale2: Float32Array;
+
+  /** Per-instance deformation channels (amount, phase, frequency, seed), stride 4. */
+  readonly deform: Float32Array;
 
   /** Optional per-instance depth (for test verification of depth-sorting)
    * Present when camera projection was applied */

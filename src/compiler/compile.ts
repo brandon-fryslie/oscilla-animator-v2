@@ -448,6 +448,10 @@ function convertLinkedIRToProgram(
       renderSoaSlots.add(step.colorSlot);
       if (step.rotationSlot !== undefined) renderSoaSlots.add(step.rotationSlot);
       if (step.scale2Slot !== undefined) renderSoaSlots.add(step.scale2Slot);
+      if (step.deformAmountSlot !== undefined) renderSoaSlots.add(step.deformAmountSlot);
+      if (step.deformPhaseSlot !== undefined) renderSoaSlots.add(step.deformPhaseSlot);
+      if (step.deformFrequencySlot !== undefined) renderSoaSlots.add(step.deformFrequencySlot);
+      if (step.deformSeedSlot !== undefined) renderSoaSlots.add(step.deformSeedSlot);
       if (step.controlPoints?.k === 'slot') renderSoaSlots.add(step.controlPoints.slot);
       if (step.scale?.k === 'slot') renderSoaSlots.add(step.scale.slot);
     } else if (step.kind === 'continuityApply') {
@@ -827,6 +831,10 @@ function collectComputeSlots(scheduleIR: ScheduleIR): ValueSlot[] {
         slots.add(step.colorSlot);
         if (step.rotationSlot !== undefined) slots.add(step.rotationSlot);
         if (step.scale2Slot !== undefined) slots.add(step.scale2Slot);
+        if (step.deformAmountSlot !== undefined) slots.add(step.deformAmountSlot);
+        if (step.deformPhaseSlot !== undefined) slots.add(step.deformPhaseSlot);
+        if (step.deformFrequencySlot !== undefined) slots.add(step.deformFrequencySlot);
+        if (step.deformSeedSlot !== undefined) slots.add(step.deformSeedSlot);
         if (step.controlPoints?.k === 'slot') slots.add(step.controlPoints.slot);
         if (step.scale?.k === 'slot') slots.add(step.scale.slot);
         break;

@@ -55,6 +55,20 @@ export function register(): void {
         defaultSource: defaultSourceConst(3),
         uiHint: { kind: 'slider', min: 0, max: 24, step: 0.25 },
       },
+      elementVariation: {
+        label: 'Element Variation',
+        type: canonicalType(FLOAT),
+        defaultValue: 0,
+        defaultSource: defaultSourceConst(0),
+        uiHint: { kind: 'slider', min: 0, max: 2, step: 0.01 },
+      },
+      seed: {
+        label: 'Seed',
+        type: canonicalType(FLOAT),
+        defaultValue: 0,
+        defaultSource: defaultSourceConst(0),
+        uiHint: { kind: 'slider', min: 0, max: 1000, step: 1 },
+      },
     },
     outputs: {
       points: { label: 'Control Points', type: canonicalManyDef(VEC2, { kind: 'none' }) },
@@ -74,6 +88,10 @@ export function register(): void {
       if (!amountInput) throw new Error('ShapeWobble2D: amount input not wired — normalization bug');
       const frequencyInput = inputsById.frequency;
       if (!frequencyInput) throw new Error('ShapeWobble2D: frequency input not wired — normalization bug');
+      const variationInput = inputsById.elementVariation;
+      if (!variationInput) throw new Error('ShapeWobble2D: elementVariation input not wired — normalization bug');
+      const seedInput = inputsById.seed;
+      if (!seedInput) throw new Error('ShapeWobble2D: seed input not wired — normalization bug');
   
       const instanceId = ctx.inferredInstance !== undefined ? ctx.inferredInstance : ctx.instance;
       if (!instanceId) {
@@ -94,12 +112,22 @@ export function register(): void {
       const mul = ctx.b.opcode(OpCode.Mul);
       const sin = ctx.b.opcode(OpCode.Sin);
       const cos = ctx.b.opcode(OpCode.Cos);
-  
+      const hash = ctx.b.opcode(OpCode.Hash);
+
       const normIndex = ctx.b.intrinsic('normalizedIndex', floatFieldType);
+      const randomId = ctx.b.intrinsic('randomId', floatFieldType);
       const twoPi = ctx.b.constant(floatConst(Math.PI * 2), canonicalType(FLOAT));
-  
+      const variationSeed = ctx.b.broadcast(seedInput.id, floatFieldType);
+      const variationAmount = ctx.b.broadcast(variationInput.id, floatFieldType);
+
+      // [LAW:dataflow-not-control-flow] Per-element variation is always evaluated;
+      // zero elementVariation naturally yields no offset without branching.
+      const hashedElement = ctx.b.zipAuto([randomId, variationSeed], hash, floatFieldType);
+      const elementOffset = ctx.b.zipAuto([hashedElement, variationAmount], mul, floatFieldType);
+
       const wobbleTurns = ctx.b.zipAuto([normIndex, frequencyInput.id], mul, floatFieldType);
-      const wobblePhase = ctx.b.zipAuto([wobbleTurns, phaseInput.id], add, floatFieldType);
+      const basePhase = ctx.b.zipAuto([wobbleTurns, phaseInput.id], add, floatFieldType);
+      const wobblePhase = ctx.b.zipAuto([basePhase, elementOffset], add, floatFieldType);
       const wobbleAngle = ctx.b.zipAuto([wobblePhase, twoPi], mul, floatFieldType);
   
       const wobbleX = ctx.b.mapAuto(wobbleAngle, sin, floatFieldType);

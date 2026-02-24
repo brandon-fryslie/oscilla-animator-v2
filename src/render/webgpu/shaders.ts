@@ -8,8 +8,8 @@
 export const WEBGPU_RENDER_CONTRACT = Object.freeze({
   sceneUniformFloats: 8,
   sceneUniformBytes: 8 * Float32Array.BYTES_PER_ELEMENT,
-  instanceFloats: 12,
-  instanceBytes: 12 * Float32Array.BYTES_PER_ELEMENT,
+  instanceFloats: 16,
+  instanceBytes: 16 * Float32Array.BYTES_PER_ELEMENT,
   sceneBindGroup: 0,
   sceneBinding: 0,
   instanceBindGroup: 1,
@@ -48,6 +48,8 @@ struct InstanceData {
   transform0: vec4<f32>,
   // transform1 = [scale2X, scale2Y, topologyRecordIndex, _]
   transform1: vec4<f32>,
+  // deform = [amount, phase, frequency, seed]
+  deform: vec4<f32>,
   // color = [r, g, b, a] in 0..1
   color: vec4<f32>,
 };
@@ -78,13 +80,19 @@ fn vs_main(input: VertexInput, @builtin(instance_index) instanceIndex: u32) -> V
   let panPx = scene.v0.zw;
   let zoom = scene.v1.x;
   let viewportMinPx = scene.v1.y;
+  let twoPi = 6.28318530718;
+  let polar = atan2(input.localPos.y, input.localPos.x);
+  let normalizedPolar = polar / twoPi;
+  let jitter = fract(sin((normalizedPolar + inst.deform.w) * 12.9898 + 78.233) * 43758.5453);
+  let deformAngle = (inst.deform.y + normalizedPolar * inst.deform.z + jitter) * twoPi;
+  let deformedLocalPos = input.localPos + vec2<f32>(sin(deformAngle), cos(deformAngle)) * inst.deform.x;
 
   let centerPx = inst.transform0.xy * viewportPx;
   let centeredPx = (centerPx - (viewportPx * 0.5)) * zoom + (viewportPx * 0.5) + (panPx * zoom);
 
   let localScaled = vec2<f32>(
-    input.localPos.x * inst.transform0.z * inst.transform1.x,
-    input.localPos.y * inst.transform0.z * inst.transform1.y
+    deformedLocalPos.x * inst.transform0.z * inst.transform1.x,
+    deformedLocalPos.y * inst.transform0.z * inst.transform1.y
   ) * viewportMinPx * zoom;
 
   let c = cos(inst.transform0.w);

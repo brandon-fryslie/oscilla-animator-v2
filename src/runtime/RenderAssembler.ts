@@ -166,6 +166,13 @@ export interface ProjectionOutput {
   visible: Uint8Array;
 }
 
+interface ResolvedDeformChannels {
+  amount?: Float32Array;
+  phase?: Float32Array;
+  frequency?: Float32Array;
+  seed?: Float32Array;
+}
+
 /**
  * Depth-sort and compact projection output.
  *
@@ -197,6 +204,10 @@ function depthSortAndCompactBuffers(
   rotation?: Float32Array,
   scale2?: Float32Array,
   isotropicScale?: Float32Array,
+  deformAmount?: Float32Array,
+  deformPhase?: Float32Array,
+  deformFrequency?: Float32Array,
+  deformSeed?: Float32Array,
 ): {
   count: number;
   screenPosition: Float32Array;
@@ -205,6 +216,7 @@ function depthSortAndCompactBuffers(
   color: Uint8ClampedArray;
   rotation: Float32Array;
   scale2: Float32Array;
+  deform: Float32Array;
 } {
   // Allocate index buffer from arena
   const indices = arena.allocU32(count);
@@ -277,8 +289,9 @@ function depthSortAndCompactBuffers(
     outColor[o + 3] = color[s + 3];
   }
 
-  // [LAW:dataflow-not-control-flow] Always produce rotation and scale2 buffers.
-  // When source buffers are absent, fill with identity values (rotation=0, scale2=[1,1]).
+  // [LAW:dataflow-not-control-flow] Always produce rotation/scale2/deform buffers.
+  // When source buffers are absent, fill with identity values
+  // (rotation=0, scale2=[1,1], deform=[0,0,0,0]).
   // Arena buffers contain stale data from previous frames, so identity fill is required.
   const compactedRotation = arena.allocF32(visibleCount);
   if (rotation) {
@@ -304,6 +317,16 @@ function depthSortAndCompactBuffers(
     }
   }
 
+  const compactedDeform = arena.allocF32(visibleCount * 4);
+  for (let out = 0; out < visibleCount; out++) {
+    const src = indices[out];
+    const base = out * 4;
+    compactedDeform[base] = deformAmount ? deformAmount[src] : 0;
+    compactedDeform[base + 1] = deformPhase ? deformPhase[src] : 0;
+    compactedDeform[base + 2] = deformFrequency ? deformFrequency[src] : 0;
+    compactedDeform[base + 3] = deformSeed ? deformSeed[src] : 0;
+  }
+
   return {
     count: visibleCount,
     screenPosition: outScreenPos,
@@ -312,6 +335,7 @@ function depthSortAndCompactBuffers(
     color: outColor,
     rotation: compactedRotation,
     scale2: compactedScale2,
+    deform: compactedDeform,
   };
 }
 
@@ -323,6 +347,10 @@ export function depthSortAndCompact(
   rotation?: Float32Array,
   scale2?: Float32Array,
   isotropicScale?: Float32Array,
+  deformAmount?: Float32Array,
+  deformPhase?: Float32Array,
+  deformFrequency?: Float32Array,
+  deformSeed?: Float32Array,
 ): {
   count: number;
   screenPosition: Float32Array;
@@ -331,6 +359,7 @@ export function depthSortAndCompact(
   color: Uint8ClampedArray;
   rotation: Float32Array;
   scale2: Float32Array;
+  deform: Float32Array;
 } {
   return depthSortAndCompactBuffers(
     projection.screenPosition,
@@ -343,6 +372,10 @@ export function depthSortAndCompact(
     rotation,
     scale2,
     isotropicScale,
+    deformAmount,
+    deformPhase,
+    deformFrequency,
+    deformSeed,
   );
 }
 
@@ -443,6 +476,10 @@ export function projectAndCompact(
   rotation?: Float32Array,
   scale2?: Float32Array,
   isotropicScale?: Float32Array,
+  deformAmount?: Float32Array,
+  deformPhase?: Float32Array,
+  deformFrequency?: Float32Array,
+  deformSeed?: Float32Array,
 ): {
   count: number;
   screenPosition: Float32Array;
@@ -451,12 +488,25 @@ export function projectAndCompact(
   color: Uint8ClampedArray;
   rotation: Float32Array;
   scale2: Float32Array;
+  deform: Float32Array;
 } {
   // Step 1: Project
   const projection = projectInstances(worldPositions, worldRadius, count, camera, arena, _projectionOutputScratch);
 
   // Step 2: Compact & sort (returns arena views directly)
-  return depthSortAndCompact(projection, count, color, arena, rotation, scale2, isotropicScale);
+  return depthSortAndCompact(
+    projection,
+    count,
+    color,
+    arena,
+    rotation,
+    scale2,
+    isotropicScale,
+    deformAmount,
+    deformPhase,
+    deformFrequency,
+    deformSeed,
+  );
 }
 
 /**
@@ -486,6 +536,10 @@ export function compactAndCopy(
   rotation?: Float32Array,
   scale2?: Float32Array,
   isotropicScale?: Float32Array,
+  deformAmount?: Float32Array,
+  deformPhase?: Float32Array,
+  deformFrequency?: Float32Array,
+  deformSeed?: Float32Array,
 ): {
   count: number;
   screenPosition: Float32Array;
@@ -494,9 +548,22 @@ export function compactAndCopy(
   color: Uint8ClampedArray;
   rotation: Float32Array;
   scale2: Float32Array;
+  deform: Float32Array;
 } {
   // Compact & sort (returns arena views directly)
-  return depthSortAndCompact(projection, count, color, arena, rotation, scale2, isotropicScale);
+  return depthSortAndCompact(
+    projection,
+    count,
+    color,
+    arena,
+    rotation,
+    scale2,
+    isotropicScale,
+    deformAmount,
+    deformPhase,
+    deformFrequency,
+    deformSeed,
+  );
 }
 
 /**
@@ -632,6 +699,29 @@ function resolveControlPoints(
     return undefined;
   }
   return resolveNumericSlotBuffer(cpSpec.slot, state, slotToArena, arena);
+}
+
+function resolveDeformChannels(
+  step: StepRender,
+  state: RuntimeState,
+  slotToArena: ReadonlyMap<ValueSlot, ArenaSlotDescriptor> | undefined,
+  arena: RenderBufferArena,
+  count: number,
+): ResolvedDeformChannels {
+  return {
+    amount: step.deformAmountSlot
+      ? (resolveNumericSlotBuffer(step.deformAmountSlot, state, slotToArena, arena, count) as Float32Array)
+      : undefined,
+    phase: step.deformPhaseSlot
+      ? (resolveNumericSlotBuffer(step.deformPhaseSlot, state, slotToArena, arena, count) as Float32Array)
+      : undefined,
+    frequency: step.deformFrequencySlot
+      ? (resolveNumericSlotBuffer(step.deformFrequencySlot, state, slotToArena, arena, count) as Float32Array)
+      : undefined,
+    seed: step.deformSeedSlot
+      ? (resolveNumericSlotBuffer(step.deformSeedSlot, state, slotToArena, arena, count) as Float32Array)
+      : undefined,
+  };
 }
 
 function allocatePackedAosBuffer(arena: RenderBufferArena, laneCount: number, stride: number): Float32Array {
@@ -1064,6 +1154,7 @@ function assemblePerInstanceShapes(
   const fullScale2 = step.scale2Slot
     ? (resolveNumericSlotBuffer(step.scale2Slot, state, slotToArena, arena, count) as Float32Array)
     : undefined;
+  const fullDeform = resolveDeformChannels(step, state, slotToArena, arena, count);
 
   // Run projection using resolved camera params
   const resolved = context.resolvedCamera;
@@ -1101,6 +1192,18 @@ function assemblePerInstanceShapes(
     const groupIsotropicScale = isotropicScale
       ? sliceScalarBuffer(isotropicScale, group.instanceIndices, arena)
       : undefined;
+    const groupDeformAmount = fullDeform.amount
+      ? sliceScalarBuffer(fullDeform.amount, group.instanceIndices, arena)
+      : undefined;
+    const groupDeformPhase = fullDeform.phase
+      ? sliceScalarBuffer(fullDeform.phase, group.instanceIndices, arena)
+      : undefined;
+    const groupDeformFrequency = fullDeform.frequency
+      ? sliceScalarBuffer(fullDeform.frequency, group.instanceIndices, arena)
+      : undefined;
+    const groupDeformSeed = fullDeform.seed
+      ? sliceScalarBuffer(fullDeform.seed, group.instanceIndices, arena)
+      : undefined;
 
     // Slice projection outputs for this group (use arena)
     const groupN = group.instanceIndices.length;
@@ -1129,6 +1232,10 @@ function assemblePerInstanceShapes(
       rotation,
       scale2,
       groupIsotropicScale,
+      groupDeformAmount,
+      groupDeformPhase,
+      groupDeformFrequency,
+      groupDeformSeed,
     );
 
     // [LAW:dataflow-not-control-flow] Culling variability is expressed as data (`count`).
@@ -1137,24 +1244,12 @@ function assemblePerInstanceShapes(
       continue;
     }
 
-    const instanceTransforms: InstanceTransforms = {
-      count: compactedCopy.count,
-      position: compactedCopy.screenPosition,
-      size: compactedCopy.screenRadius,
-      rotation: compactedCopy.rotation,
-      scale2: compactedCopy.scale2,
-      depth: compactedCopy.depth,
-    };
-    const compactedColor = compactedCopy.color as Uint8ClampedArray;
-
-    // Build style (shared by both path and primitive)
-    const style = buildPathStyle(compactedColor, 'nonzero');
-
     if (!isPathTopology(topology)) {
       throw new Error(
         `RenderAssembler: topology ${group.topologyId} is not path-renderable`
       );
     }
+    const cachedVerbs = getCachedVerbs(topology);
 
     let arenaControlPointsBuffer: Float32Array;
     try {
@@ -1178,9 +1273,22 @@ function assemblePerInstanceShapes(
       );
     }
 
+    const instanceTransforms: InstanceTransforms = {
+      count: compactedCopy.count,
+      position: compactedCopy.screenPosition,
+      size: compactedCopy.screenRadius,
+      rotation: compactedCopy.rotation,
+      scale2: compactedCopy.scale2,
+      deform: compactedCopy.deform,
+      depth: compactedCopy.depth,
+    };
+    const compactedColor = compactedCopy.color as Uint8ClampedArray;
+
+    // Build style (shared by both path and primitive)
+    const style = buildPathStyle(compactedColor, 'nonzero');
     const geometry: PathGeometry = {
       topologyId: group.topologyId,
-      verbs: getCachedVerbs(topology),
+      verbs: cachedVerbs,
       points: arenaControlPointsBuffer,
       pointsCount: group.pointsCount,
       flags: group.flags,
@@ -1322,6 +1430,7 @@ function buildPathGeometry(
  * @param size - Uniform size or per-instance sizes (isotropic scale)
  * @param rotation - Optional per-instance rotations (radians)
  * @param scale2 - Optional per-instance anisotropic scale (x,y interleaved)
+ * @param deform - Per-instance deformation channels (amount, phase, frequency, seed)
  * @param depth - Optional per-instance depth (when projected)
  * @returns InstanceTransforms structure for v2 rendering
  */
@@ -1331,6 +1440,7 @@ function buildInstanceTransforms(
   size: number | Float32Array,
   rotation: Float32Array,
   scale2: Float32Array,
+  deform: Float32Array,
   depth?: Float32Array
 ): InstanceTransforms {
   return {
@@ -1339,6 +1449,7 @@ function buildInstanceTransforms(
     size,
     rotation,
     scale2,
+    deform,
     depth,
   };
 }
@@ -1468,6 +1579,7 @@ function appendDrawPathInstancesOp(
   const scale2 = step.scale2Slot
     ? (resolveNumericSlotBuffer(step.scale2Slot, state, slotToArena, arena, count) as Float32Array)
     : undefined;
+  const fullDeform = resolveDeformChannels(step, state, slotToArena, arena, count);
 
   // Run projection using resolved camera params
   {
@@ -1491,12 +1603,22 @@ function appendDrawPathInstancesOp(
       rotation,
       scale2,
       isotropicScale,
+      fullDeform.amount,
+      fullDeform.phase,
+      fullDeform.frequency,
+      fullDeform.seed,
     );
 
     // [LAW:dataflow-not-control-flow] Visibility compaction owns the draw cardinality.
     // Zero visible instances means no op is emitted.
     if (compactedCopy.count === 0) {
       return;
+    }
+
+    if (!packedControlPointsBuffer || !(packedControlPointsBuffer instanceof Float32Array)) {
+      throw new Error(
+        'RenderAssembler: Path topology requires control points buffer (Float32Array)'
+      );
     }
 
     // Build instance transforms with copied data
@@ -1506,18 +1628,12 @@ function appendDrawPathInstancesOp(
       compactedCopy.screenRadius,
       compactedCopy.rotation,
       compactedCopy.scale2,
+      compactedCopy.deform,
       compactedCopy.depth
     );
 
     // Build style
     const style = buildPathStyle(compactedCopy.color, 'nonzero');
-
-    if (!packedControlPointsBuffer || !(packedControlPointsBuffer instanceof Float32Array)) {
-      throw new Error(
-        'RenderAssembler: Path topology requires control points buffer (Float32Array)'
-      );
-    }
-
     const geometry = buildPathGeometry(resolvedShape, packedControlPointsBuffer);
 
     outOps.push({

@@ -323,6 +323,14 @@ export interface StepRender {
   readonly rotationSlot?: ValueSlot;
   /** C-13: Per-instance anisotropic scale (x,y pairs) - slot containing Float32Array */
   readonly scale2Slot?: ValueSlot;
+  /**
+   * Per-instance control-point deformation channels.
+   * These are applied in RenderAssembler to deform local geometry per element.
+   */
+  readonly deformAmountSlot?: ValueSlot;
+  readonly deformPhaseSlot?: ValueSlot;
+  readonly deformFrequencySlot?: ValueSlot;
+  readonly deformSeedSlot?: ValueSlot;
 }
 
 export interface StepStateWrite {

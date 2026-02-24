@@ -18,7 +18,7 @@
  */
 
 import { registerBlock } from '../registry';
-import { unitWorld3, unitHsl, unitNone, requireInst, VEC3, COLOR, FLOAT } from '../../core/canonical-types';
+import { unitWorld3, unitHsl, unitNone, unitRadians, requireInst, VEC3, VEC2, COLOR, FLOAT } from '../../core/canonical-types';
 import { inferType, cardinalityVar, unitVar } from '../../core/inference-types';
 import { cardinalityVarId } from '../../core/ids';
 import { defaultSourceConst, canonicalType } from '../../types';
@@ -34,6 +34,30 @@ const RENDER_COLOR_CARD = cardinalityVar(cardinalityVarId('render_color'), {
 });
 const RENDER_SCALE_CARD = cardinalityVar(cardinalityVarId('render_scale'), {
   acceptance: 'oneOrMany',
+  instanceBinding: 'inherit',
+});
+const RENDER_ROTATION_CARD = cardinalityVar(cardinalityVarId('render_rotation'), {
+  acceptance: 'manyOnly',
+  instanceBinding: 'inherit',
+});
+const RENDER_SCALE2_CARD = cardinalityVar(cardinalityVarId('render_scale2'), {
+  acceptance: 'manyOnly',
+  instanceBinding: 'inherit',
+});
+const RENDER_DEFORM_AMOUNT_CARD = cardinalityVar(cardinalityVarId('render_deform_amount'), {
+  acceptance: 'manyOnly',
+  instanceBinding: 'inherit',
+});
+const RENDER_DEFORM_PHASE_CARD = cardinalityVar(cardinalityVarId('render_deform_phase'), {
+  acceptance: 'manyOnly',
+  instanceBinding: 'inherit',
+});
+const RENDER_DEFORM_FREQUENCY_CARD = cardinalityVar(cardinalityVarId('render_deform_frequency'), {
+  acceptance: 'manyOnly',
+  instanceBinding: 'inherit',
+});
+const RENDER_DEFORM_SEED_CARD = cardinalityVar(cardinalityVarId('render_deform_seed'), {
+  acceptance: 'manyOnly',
   instanceBinding: 'inherit',
 });
 
@@ -56,6 +80,30 @@ export function register(): void {
         defaultValue: 1.0,
         defaultSource: defaultSourceConst(1.0),
         uiHint: { kind: 'slider', min: 0.1, max: 1, step: 0.1 },
+      },
+      rotation: {
+        label: 'Rotation',
+        type: inferType(FLOAT, unitRadians(), { cardinality: RENDER_ROTATION_CARD }),
+      },
+      scale2: {
+        label: 'Scale 2D',
+        type: inferType(VEC2, unitVar('render_scale2_U'), { cardinality: RENDER_SCALE2_CARD }),
+      },
+      deformAmount: {
+        label: 'Deform Amount',
+        type: inferType(FLOAT, unitNone(), { cardinality: RENDER_DEFORM_AMOUNT_CARD }),
+      },
+      deformPhase: {
+        label: 'Deform Phase',
+        type: inferType(FLOAT, unitNone(), { cardinality: RENDER_DEFORM_PHASE_CARD }),
+      },
+      deformFrequency: {
+        label: 'Deform Frequency',
+        type: inferType(FLOAT, unitNone(), { cardinality: RENDER_DEFORM_FREQUENCY_CARD }),
+      },
+      deformSeed: {
+        label: 'Deform Seed',
+        type: inferType(FLOAT, unitNone(), { cardinality: RENDER_DEFORM_SEED_CARD }),
       },
     },
     outputs: {},

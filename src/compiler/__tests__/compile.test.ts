@@ -9,7 +9,7 @@ import { buildPatch } from '../../graph';
 import { compile } from '../compile';
 import type { ScheduleIR } from '../backend/schedule-program';
 import { SCALAR_INSTANCE_ID } from '../ir/Indices';
-import type { StepEvalOne, StepMaterialize } from '../ir/types';
+import type { StepEvalOne, StepMaterialize, StepRender } from '../ir/types';
 
 describe('compile', () => {
   describe('TimeRoot validation', () => {
@@ -107,6 +107,20 @@ describe('compile', () => {
       //   //   expect(result.program.valueExprs.nodes.length).toBeGreaterThan(0);
       // }
     });
+
+    it('accepts oscillator mode as numeric string from select-backed patch configs', () => {
+      const patch = buildPatch((b) => {
+        const time = b.addBlock('InfiniteTimeRoot');
+        b.setPortDefault(time, 'periodAMs', 1000);
+        b.setPortDefault(time, 'periodBMs', 2000);
+        const osc = b.addBlock('Oscillator');
+        b.setConfig(osc, 'mode', '2');
+        b.wire(time, 'phaseA', osc, 'phase');
+      });
+
+      const result = compile(patch);
+      expect(result.kind).toBe('ok');
+    });
   });
 
   describe('instance compilation', () => {
@@ -172,6 +186,55 @@ describe('compile', () => {
         const instance = userInstances[0];
         expect(instance.count).toBe(100);
       }
+    });
+
+    it('threads render deformation channels (rotation + scale2 + control-point deform) through render slots', () => {
+      const patch = buildPatch((b) => {
+        b.addBlock('InfiniteTimeRoot');
+
+        const ellipse = b.addBlock('Ellipse');
+        const array = b.addBlock('Array');
+        b.setPortDefault(array, 'count', 32);
+        const grid = b.addBlock('GridLayoutUV');
+        b.setPortDefault(grid, 'rows', 8);
+        b.setPortDefault(grid, 'cols', 4);
+        const render = b.addBlock('RenderInstances2D');
+
+        const color = b.addBlock('MakeColorHSL');
+        const scale2 = b.addBlock('ConstructVec2');
+
+        b.wire(ellipse, 'shape', array, 'element');
+        b.wire(array, 'elements', grid, 'elements');
+        b.wire(array, 't', color, 'h');
+
+        b.wire(grid, 'position', render, 'pos');
+        b.wire(color, 'color', render, 'color');
+        b.wire(grid, 'rotation', render, 'rotation');
+        b.wire(grid, 'scale', scale2, 'x');
+        b.wire(grid, 'scale', scale2, 'y');
+        b.wire(scale2, 'out', render, 'scale2');
+        b.wire(array, 't', render, 'deformAmount');
+        b.wire(array, 't', render, 'deformPhase');
+        b.wire(array, 't', render, 'deformFrequency');
+        b.wire(array, 't', render, 'deformSeed');
+      });
+
+      const result = compile(patch);
+      if (result.kind === 'error') {
+        console.error('COMPILE ERROR (Render deformation channels):', JSON.stringify(result.errors, null, 2));
+      }
+      expect(result.kind).toBe('ok');
+      if (result.kind !== 'ok') return;
+
+      const schedule = result.program.schedule as ScheduleIR;
+      const renderSteps = schedule.steps.filter((step): step is StepRender => step.kind === 'render');
+      expect(renderSteps.length).toBe(1);
+      expect(renderSteps[0]?.rotationSlot).toBeDefined();
+      expect(renderSteps[0]?.scale2Slot).toBeDefined();
+      expect(renderSteps[0]?.deformAmountSlot).toBeDefined();
+      expect(renderSteps[0]?.deformPhaseSlot).toBeDefined();
+      expect(renderSteps[0]?.deformFrequencySlot).toBeDefined();
+      expect(renderSteps[0]?.deformSeedSlot).toBeDefined();
     });
   });
 

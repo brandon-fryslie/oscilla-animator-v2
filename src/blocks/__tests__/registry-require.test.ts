@@ -15,6 +15,7 @@ import {
   getPayloadCombinations,
   findPayloadCombination,
   isPayloadGeneric,
+  requireConfigInt,
 } from '../registry';
 
 // Import all blocks to ensure they're registered
@@ -114,5 +115,18 @@ describe('Metadata functions throw on unknown block type', () => {
     it('returns true for payload-generic blocks', () => {
       expect(isPayloadGeneric('Add')).toBe(true);
     });
+  });
+});
+
+describe('requireConfigInt', () => {
+  it('accepts integer strings from select-backed config payloads', () => {
+    const value = requireConfigInt({ mode: '2' }, 'mode', 0, 3);
+    expect(value).toBe(2);
+  });
+
+  it('rejects non-integer strings', () => {
+    expect(() => requireConfigInt({ mode: '2.5' }, 'mode', 0, 3)).toThrow(
+      "Config 'mode' expected number or integer string, got string"
+    );
   });
 });

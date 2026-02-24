@@ -66,6 +66,12 @@ interface RenderTargetInfo {
   scale?:
     | { k: 'one'; id: ValueExprId }
     | { k: 'field'; id: ValueExprId; stride: number };
+  rotation?: { id: ValueExprId; stride: number };
+  scale2?: { id: ValueExprId; stride: number };
+  deformAmount?: { id: ValueExprId; stride: number };
+  deformPhase?: { id: ValueExprId; stride: number };
+  deformFrequency?: { id: ValueExprId; stride: number };
+  deformSeed?: { id: ValueExprId; stride: number };
   shape?:
     | { k: 'one'; id: ValueExprId }
     | { k: 'field'; id: ValueExprId; stride: number };
@@ -230,10 +236,22 @@ function collectRenderTargets(
     const posRef = getInputRef(index, 'pos', edges, blockOutputs);
     const colorRef = getInputRef(index, 'color', edges, blockOutputs);
     const scaleRef = getInputRef(index, 'scale', edges, blockOutputs);
+    const rotationRef = getInputRef(index, 'rotation', edges, blockOutputs);
+    const scale2Ref = getInputRef(index, 'scale2', edges, blockOutputs);
+    const deformAmountRef = getInputRef(index, 'deformAmount', edges, blockOutputs);
+    const deformPhaseRef = getInputRef(index, 'deformPhase', edges, blockOutputs);
+    const deformFrequencyRef = getInputRef(index, 'deformFrequency', edges, blockOutputs);
+    const deformSeedRef = getInputRef(index, 'deformSeed', edges, blockOutputs);
 
     const pos = asExprValueRef(posRef);
     const color = asExprValueRef(colorRef);
     const scaleExpr = asExprValueRef(scaleRef);
+    const rotationExpr = asExprValueRef(rotationRef);
+    const scale2Expr = asExprValueRef(scale2Ref);
+    const deformAmountExpr = asExprValueRef(deformAmountRef);
+    const deformPhaseExpr = asExprValueRef(deformPhaseRef);
+    const deformFrequencyExpr = asExprValueRef(deformFrequencyRef);
+    const deformSeedExpr = asExprValueRef(deformSeedRef);
 
     if (!pos || !color) {
       continue;
@@ -270,6 +288,69 @@ function collectRenderTargets(
           : undefined
       : undefined;
 
+    const rotation = rotationExpr
+      ? isFieldExtent(rotationExpr.id, valueExprs)
+        ? { id: rotationExpr.id, stride: rotationExpr.stride }
+        : undefined
+      : undefined;
+
+    const scale2 = scale2Expr
+      ? isFieldExtent(scale2Expr.id, valueExprs)
+        ? { id: scale2Expr.id, stride: scale2Expr.stride }
+        : undefined
+      : undefined;
+    const deformAmount = deformAmountExpr
+      ? isFieldExtent(deformAmountExpr.id, valueExprs)
+        ? { id: deformAmountExpr.id, stride: deformAmountExpr.stride }
+        : undefined
+      : undefined;
+    const deformPhase = deformPhaseExpr
+      ? isFieldExtent(deformPhaseExpr.id, valueExprs)
+        ? { id: deformPhaseExpr.id, stride: deformPhaseExpr.stride }
+        : undefined
+      : undefined;
+    const deformFrequency = deformFrequencyExpr
+      ? isFieldExtent(deformFrequencyExpr.id, valueExprs)
+        ? { id: deformFrequencyExpr.id, stride: deformFrequencyExpr.stride }
+        : undefined
+      : undefined;
+    const deformSeed = deformSeedExpr
+      ? isFieldExtent(deformSeedExpr.id, valueExprs)
+        ? { id: deformSeedExpr.id, stride: deformSeedExpr.stride }
+        : undefined
+      : undefined;
+
+    if (rotationExpr && !rotation) {
+      throw new Error(
+        `RenderInstances2D.rotation must be field-extent (cardinality many) for instance ${instanceId}.`
+      );
+    }
+    if (scale2Expr && !scale2) {
+      throw new Error(
+        `RenderInstances2D.scale2 must be field-extent (cardinality many) for instance ${instanceId}.`
+      );
+    }
+    if (deformAmountExpr && !deformAmount) {
+      throw new Error(
+        `RenderInstances2D.deformAmount must be field-extent (cardinality many) for instance ${instanceId}.`
+      );
+    }
+    if (deformPhaseExpr && !deformPhase) {
+      throw new Error(
+        `RenderInstances2D.deformPhase must be field-extent (cardinality many) for instance ${instanceId}.`
+      );
+    }
+    if (deformFrequencyExpr && !deformFrequency) {
+      throw new Error(
+        `RenderInstances2D.deformFrequency must be field-extent (cardinality many) for instance ${instanceId}.`
+      );
+    }
+    if (deformSeedExpr && !deformSeed) {
+      throw new Error(
+        `RenderInstances2D.deformSeed must be field-extent (cardinality many) for instance ${instanceId}.`
+      );
+    }
+
     const shapeFieldId = instanceDecl.shapeField;
     const shapeExpr = valueExprs[shapeFieldId as number];
     if (!shapeExpr) {
@@ -290,6 +371,12 @@ function collectRenderTargets(
       position: { id: pos.id, stride: pos.stride },
       color: { id: color.id, stride: color.stride },
       scale,
+      rotation,
+      scale2,
+      deformAmount,
+      deformPhase,
+      deformFrequency,
+      deformSeed,
       shape,
     });
   }
@@ -375,7 +462,20 @@ export function allocateContinuityPipeline(
   };
 
   for (const target of renderTargets) {
-    const { renderBlockId, instanceId, position, color, scale, shape } = target;
+    const {
+      renderBlockId,
+      instanceId,
+      position,
+      color,
+      scale,
+      rotation,
+      scale2,
+      deformAmount,
+      deformPhase,
+      deformFrequency,
+      deformSeed,
+      shape,
+    } = target;
 
     // Helper to get or create slots for a field
     const getFieldSlots = (
@@ -453,6 +553,30 @@ export function allocateContinuityPipeline(
       }
     }
 
+    // [LAW:dataflow-not-control-flow] Rotation is always handled via the same
+    // materialize+continuity pipeline; undefined simply yields no slot wiring.
+    const rotationSlot = rotation
+      ? getFieldSlots(rotation.id, 'custom', rotation.stride, `${renderBlockId}:rotation`).outputSlot
+      : undefined;
+
+    // [LAW:dataflow-not-control-flow] Anisotropic scale is processed through the
+    // same slot allocation path as every other optional field input.
+    const scale2Slot = scale2
+      ? getFieldSlots(scale2.id, 'custom', scale2.stride, `${renderBlockId}:scale2`).outputSlot
+      : undefined;
+    const deformAmountSlot = deformAmount
+      ? getFieldSlots(deformAmount.id, 'custom', deformAmount.stride, `${renderBlockId}:deformAmount`).outputSlot
+      : undefined;
+    const deformPhaseSlot = deformPhase
+      ? getFieldSlots(deformPhase.id, 'custom', deformPhase.stride, `${renderBlockId}:deformPhase`).outputSlot
+      : undefined;
+    const deformFrequencySlot = deformFrequency
+      ? getFieldSlots(deformFrequency.id, 'custom', deformFrequency.stride, `${renderBlockId}:deformFrequency`).outputSlot
+      : undefined;
+    const deformSeedSlot = deformSeed
+      ? getFieldSlots(deformSeed.id, 'custom', deformSeed.stride, `${renderBlockId}:deformSeed`).outputSlot
+      : undefined;
+
     // Process shape
     let shapeOutput: StepRender['shape'] | undefined = undefined;
     let controlPointsOutput: StepRender['controlPoints'] = undefined;
@@ -501,6 +625,12 @@ export function allocateContinuityPipeline(
       ...(scaleOutput && { scale: scaleOutput }),
       shape: shapeOutput,
       ...(controlPointsOutput && { controlPoints: controlPointsOutput }),
+      ...(rotationSlot !== undefined && { rotationSlot }),
+      ...(scale2Slot !== undefined && { scale2Slot }),
+      ...(deformAmountSlot !== undefined && { deformAmountSlot }),
+      ...(deformPhaseSlot !== undefined && { deformPhaseSlot }),
+      ...(deformFrequencySlot !== undefined && { deformFrequencySlot }),
+      ...(deformSeedSlot !== undefined && { deformSeedSlot }),
     };
 
     renderSteps.push(renderStep);

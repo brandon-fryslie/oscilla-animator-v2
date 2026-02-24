@@ -617,7 +617,8 @@ describe('RenderAssembler', () => {
       };
 
       let baselineAllocCount = -1;
-      const frameBudget = 16;
+      // One extra allocation for packed per-instance deform channels (stride-4 identity/data).
+      const frameBudget = 17;
 
       for (let frame = 0; frame < 20; frame++) {
         arena.reset();

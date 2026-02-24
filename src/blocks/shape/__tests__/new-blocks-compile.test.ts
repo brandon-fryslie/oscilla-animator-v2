@@ -116,6 +116,8 @@ patch "Test Shape Wobble" {
   block "ShapeWobble2D" "wobble" {
     amount = 0.01
     frequency = 5
+    elementVariation = 0.8
+    seed = 13
     outputs {
       points = assemble.controlPoints
     }

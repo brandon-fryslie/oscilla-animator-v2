@@ -695,7 +695,7 @@ export class WebGPURenderer {
       return 0;
     }
 
-    const { position, size, rotation, scale2 } = op.instances;
+    const { position, size, rotation, scale2, deform } = op.instances;
     const { style } = op;
     const hasFill = Boolean(style.fillColor && style.fillColor.length > 0);
     const hasStroke = Boolean(style.strokeColor && style.strokeColor.length > 0);
@@ -711,6 +711,9 @@ export class WebGPURenderer {
 
     if (!(scale2 instanceof Float32Array) || scale2.length !== count * 2) {
       throw new Error(`WebGPURenderer: scale2 must be Float32Array(count*2), got ${scale2.length}`);
+    }
+    if (!(deform instanceof Float32Array) || deform.length !== count * 4) {
+      throw new Error(`WebGPURenderer: deform must be Float32Array(count*4), got ${deform.length}`);
     }
 
     if (!activeColor || !(activeColor instanceof Uint8ClampedArray) || activeColor.length === 0) {
@@ -766,12 +769,16 @@ export class WebGPURenderer {
       this.instanceStaging[base + 5] = scale2[i * 2 + 1];
       this.instanceStaging[base + 6] = topologyBankRecordIndex;
       this.instanceStaging[base + 7] = 0;
+      this.instanceStaging[base + 8] = deform[i * 4];
+      this.instanceStaging[base + 9] = deform[i * 4 + 1];
+      this.instanceStaging[base + 10] = deform[i * 4 + 2];
+      this.instanceStaging[base + 11] = deform[i * 4 + 3];
 
       const colorOffset = isUniformColor ? 0 : i * 4;
-      this.instanceStaging[base + 8] = activeColor[colorOffset] / 255;
-      this.instanceStaging[base + 9] = activeColor[colorOffset + 1] / 255;
-      this.instanceStaging[base + 10] = activeColor[colorOffset + 2] / 255;
-      this.instanceStaging[base + 11] = activeColor[colorOffset + 3] / 255;
+      this.instanceStaging[base + 12] = activeColor[colorOffset] / 255;
+      this.instanceStaging[base + 13] = activeColor[colorOffset + 1] / 255;
+      this.instanceStaging[base + 14] = activeColor[colorOffset + 2] / 255;
+      this.instanceStaging[base + 15] = activeColor[colorOffset + 3] / 255;
     }
 
     return count;

@@ -231,6 +231,7 @@ describe('WebGPURenderer', () => {
               size: 1,
               rotation: new Float32Array([0]),
               scale2: new Float32Array([1, 1]),
+              deform: new Float32Array([0, 0, 0, 0]),
             },
             style: {
               fillColor: new Uint8ClampedArray([255, 255, 255, 255]),
@@ -347,6 +348,7 @@ describe('WebGPURenderer', () => {
             size: 0.25,
             rotation: new Float32Array([0]),
             scale2: new Float32Array([1, 1]),
+              deform: new Float32Array([0, 0, 0, 0]),
           },
           style: {
             fillColor: new Uint8ClampedArray([255, 0, 0, 255]),
@@ -407,6 +409,7 @@ describe('WebGPURenderer', () => {
             size: 0.2,
             rotation: new Float32Array([0]),
             scale2: new Float32Array([1, 1]),
+              deform: new Float32Array([0, 0, 0, 0]),
           },
           style: {
             fillColor: new Uint8ClampedArray([0, 255, 0, 255]),
@@ -459,6 +462,7 @@ describe('WebGPURenderer', () => {
             size: 0.2,
             rotation: new Float32Array([0]),
             scale2: new Float32Array([1, 1]),
+              deform: new Float32Array([0, 0, 0, 0]),
           },
           style: {
             fillColor: new Uint8ClampedArray([255, 0, 255, 255]),
@@ -532,6 +536,7 @@ describe('WebGPURenderer', () => {
             size: 0.2,
             rotation: new Float32Array([0]),
             scale2: new Float32Array([1, 1]),
+              deform: new Float32Array([0, 0, 0, 0]),
           },
           style: {
             fillColor: new Uint8ClampedArray([0, 0, 255, 255]),
@@ -580,6 +585,7 @@ describe('WebGPURenderer', () => {
             size: 0.25,
             rotation: new Float32Array([0]),
             scale2: new Float32Array([1, 1]),
+              deform: new Float32Array([0, 0, 0, 0]),
           },
           style: {
             strokeColor: new Uint8ClampedArray([255, 255, 0, 255]),
@@ -629,6 +635,7 @@ describe('WebGPURenderer', () => {
             size: 0.25,
             rotation: new Float32Array([0]),
             scale2: new Float32Array([1, 1]),
+              deform: new Float32Array([0, 0, 0, 0]),
           },
           style: {
             fillColor: new Uint8ClampedArray([255, 0, 0, 255]),
@@ -679,6 +686,7 @@ describe('WebGPURenderer', () => {
             size: new Float32Array([0.2, 0.2]),
             rotation: new Float32Array([0, 0]),
             scale2: new Float32Array([1, 1, 1, 1]),
+              deform: new Float32Array([0, 0, 0, 0, 0, 0, 0, 0]),
           },
           style: {
             strokeColor: new Uint8ClampedArray([255, 255, 255, 255]),
@@ -762,6 +770,7 @@ describe('WebGPURenderer', () => {
             size: 0.25,
             rotation: new Float32Array([0]),
             scale2: new Float32Array([1, 1]),
+              deform: new Float32Array([0, 0, 0, 0]),
           },
           style: {
             fillColor: new Uint8ClampedArray([255, 0, 0, 255]),
