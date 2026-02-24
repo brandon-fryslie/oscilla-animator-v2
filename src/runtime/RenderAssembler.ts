@@ -775,8 +775,18 @@ interface TopologyGroup {
   pointsCount: number;
   /** Flags bitfield (closed, fill, etc.) */
   flags: number;
-  /** Indices of instances in this group */
-  instanceIndices: number[];
+  /** Indices of instances in this group (typed span view into packed buffer) */
+  instanceIndices: Uint32Array;
+}
+
+interface TopologyGroupBuildMeta {
+  topologyId: number;
+  controlPointsSlot: number;
+  pointsCount: number;
+  flags: number;
+  count: number;
+  start: number;
+  write: number;
 }
 
 /**
@@ -853,7 +863,7 @@ export function computeTopologyGroups(
     );
   }
 
-  const groups = new Map<string, TopologyGroup>();
+  const groupMeta = new Map<string, TopologyGroupBuildMeta>();
 
   for (let i = 0; i < instanceCount; i++) {
     const shapeRef = readShape2D(shapeBuffer, i);
@@ -862,18 +872,51 @@ export function computeTopologyGroups(
     // Instances with same topology AND same control points buffer can batch
     const key = shapeRef.topologyId + ':' + shapeRef.pointsFieldSlot;
 
-    if (!groups.has(key)) {
-      groups.set(key, {
+    const existing = groupMeta.get(key);
+    if (existing) {
+      existing.count++;
+    } else {
+      groupMeta.set(key, {
         topologyId: shapeRef.topologyId,
         controlPointsSlot: shapeRef.pointsFieldSlot,
         pointsCount: shapeRef.pointsCount,
         flags: shapeRef.flags,
-        // eslint-disable-next-line oscilla/no-hot-path-alloc
-        instanceIndices: [],
+        count: 1,
+        start: 0,
+        write: 0,
       });
     }
+  }
 
-    groups.get(key)!.instanceIndices.push(i);
+  // [LAW:dataflow-not-control-flow] Build deterministic packed index spans for
+  // every group, then fill them in one unconditional pass.
+  const packedInstanceIndices = new Uint32Array(instanceCount);
+  let cursor = 0;
+  for (const meta of groupMeta.values()) {
+    meta.start = cursor;
+    meta.write = cursor;
+    cursor += meta.count;
+  }
+
+  for (let i = 0; i < instanceCount; i++) {
+    const shapeRef = readShape2D(shapeBuffer, i);
+    const key = shapeRef.topologyId + ':' + shapeRef.pointsFieldSlot;
+    const meta = groupMeta.get(key);
+    if (!meta) {
+      throw new Error('RenderAssembler: topology grouping metadata missing for key ' + key);
+    }
+    packedInstanceIndices[meta.write++] = i;
+  }
+
+  const groups = new Map<string, TopologyGroup>();
+  for (const [key, meta] of groupMeta.entries()) {
+    groups.set(key, {
+      topologyId: meta.topologyId,
+      controlPointsSlot: meta.controlPointsSlot,
+      pointsCount: meta.pointsCount,
+      flags: meta.flags,
+      instanceIndices: packedInstanceIndices.subarray(meta.start, meta.start + meta.count),
+    });
   }
 
   return groups;
@@ -889,7 +932,7 @@ export function computeTopologyGroups(
  * @param indices - Sorted array of instance indices
  * @returns True if indices are contiguous [start, start+1, ..., start+N-1]
  */
-export function isContiguous(indices: number[]): boolean {
+export function isContiguous(indices: ArrayLike<number>): boolean {
   if (indices.length <= 1) return true;
   return indices[indices.length - 1] - indices[0] === indices.length - 1;
 }
@@ -901,7 +944,7 @@ export function isContiguous(indices: number[]): boolean {
  */
 export function sliceColorBuffer(
   fullColor: Uint8ClampedArray,
-  instanceIndices: number[],
+  instanceIndices: ArrayLike<number>,
   arena: RenderBufferArena
 ): Uint8ClampedArray {
   const N = instanceIndices.length;
@@ -1183,7 +1226,7 @@ function assemblePerInstanceShapes(
  */
 function sliceRotationBuffer(
   fullRotation: Float32Array,
-  instanceIndices: number[],
+  instanceIndices: ArrayLike<number>,
   arena: RenderBufferArena
 ): Float32Array {
   const N = instanceIndices.length;
@@ -1204,7 +1247,7 @@ function sliceRotationBuffer(
 
 function sliceScalarBuffer(
   fullValues: Float32Array,
-  instanceIndices: number[],
+  instanceIndices: ArrayLike<number>,
   arena: RenderBufferArena,
 ): Float32Array {
   const N = instanceIndices.length;
@@ -1232,7 +1275,7 @@ function sliceScalarBuffer(
  */
 function sliceScale2Buffer(
   fullScale2: Float32Array,
-  instanceIndices: number[],
+  instanceIndices: ArrayLike<number>,
   arena: RenderBufferArena
 ): Float32Array {
   const N = instanceIndices.length;
@@ -1333,7 +1376,7 @@ function buildPathStyle(
  * Assemble DrawOp operations from a render step
  *
  * This is the v2 assembly path that produces explicit geometry/instances/style
- * structures. Unlike v1, this separates concerns and uses local-space geometry.
+ * structures with local-space geometry and explicit world-space transforms.
  *
  * NOW SUPPORTS PER-INSTANCE SHAPES: When shape is a buffer (`{ k: 'slot' }`),
  * instances are grouped by topology and multiple ops are emitted.
@@ -1508,8 +1551,8 @@ export function assembleDrawPathInstancesOp(
 /**
  * Assemble all render steps into a v2 RenderFrameIR
  *
- * This produces the target v2 frame structure with explicit draw operations.
- * Unlike v1, this uses local-space geometry with world-space instance transforms.
+ * This produces the frame structure with explicit draw operations,
+ * local-space geometry, and world-space instance transforms.
  *
  * NOW SUPPORTS PER-INSTANCE SHAPES: Multiple ops can be emitted per render step.
  * Path-only: emits DrawPathInstancesOp operations.

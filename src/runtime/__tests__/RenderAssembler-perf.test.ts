@@ -112,8 +112,10 @@ describe('Topology Group Caching', () => {
     const groups = computeTopologyGroups(buffer, 5);
 
     expect(groups.size).toBe(2);
-    expect(groups.get('1:10')!.instanceIndices).toEqual([0, 2, 4]);
-    expect(groups.get('2:20')!.instanceIndices).toEqual([1, 3]);
+    expect(groups.get('1:10')!.instanceIndices).toBeInstanceOf(Uint32Array);
+    expect(groups.get('2:20')!.instanceIndices).toBeInstanceOf(Uint32Array);
+    expect(Array.from(groups.get('1:10')!.instanceIndices)).toEqual([0, 2, 4]);
+    expect(Array.from(groups.get('2:20')!.instanceIndices)).toEqual([1, 3]);
   });
 });
 

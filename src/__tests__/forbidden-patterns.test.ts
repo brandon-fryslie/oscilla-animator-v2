@@ -1177,6 +1177,33 @@ describe('Forbidden Patterns (Type System Invariants)', () => {
 
   });
 
+  describe('WebGPU Prereq Guards (W9)', () => {
+
+    it('render assembler must not retain legacy v1 compatibility markers', () => {
+      const rawMatches = grepSrc('Unlike v1|v1 compatibility', 'src/runtime/RenderAssembler.ts');
+      const filtered = filterAllowlist(rawMatches, [/\.test\./, /__tests__/]);
+      expect(
+        filtered,
+        'RenderAssembler must not retain v1 compatibility scaffolding markers.\n' +
+        'Found violations:\n' + filtered.join('\n')
+      ).toEqual([]);
+    });
+
+    it('topology grouping must not allocate per-group mutable index arrays', () => {
+      // [LAW:one-source-of-truth] Group indices are owned by packed typed spans,
+      // not ad-hoc per-group JS arrays.
+      const rawMatches = grepSrc('instanceIndices\\s*:\\s*\\[\\s*\\]', 'src/runtime/RenderAssembler.ts');
+      const filtered = filterAllowlist(rawMatches, [/\.test\./, /__tests__/]);
+      expect(
+        filtered,
+        'RenderAssembler topology grouping must not allocate per-group instanceIndices arrays.\n' +
+        'Use typed packed index spans.\n' +
+        'Found violations:\n' + filtered.join('\n')
+      ).toEqual([]);
+    });
+
+  });
+
   describe('WebGPU Prereq Guards (W6)', () => {
 
     it('runtime evaluator modules must not carry shadow-mode markers', () => {
