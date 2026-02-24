@@ -261,11 +261,11 @@ export interface EventBuffer {
  */
 export interface ValueStore {
   /**
-   * Legacy object payload store.
+   * Auxiliary object payload store for non-numeric/debug surfaces.
    * [LAW:one-source-of-truth] Runtime compute/render/debug hot paths must read
    * canonical numeric/typed banks (arena, shapeFields, shape2d), not this map.
-   * [LAW:no-mode-explosion] Kept as a transitional compatibility surface only;
-   * do not add new production runtime dependencies on this store.
+   * [LAW:no-mode-explosion] Do not add new production runtime dependencies on
+   * this store; runtime hot paths stay on canonical typed banks.
    */
   objects: Map<ValueSlot, unknown>;
 
@@ -802,8 +802,9 @@ export function createProgramState(
 /**
  * Create a RuntimeState by composing SessionState and ProgramState
  *
- * DEPRECATED as of v2.6, remove by v3.0.
- * Internal test helper only. Use createSessionState() + createRuntimeStateFromSession() for new code.
+ * Convenience constructor for tests and utilities.
+ * New production callsites should compose session/program state explicitly via
+ * createSessionState() + createRuntimeStateFromSession().
  * @internal Not part of public API
  */
 export function createRuntimeState(

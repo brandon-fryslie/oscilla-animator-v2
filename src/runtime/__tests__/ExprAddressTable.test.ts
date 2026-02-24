@@ -211,7 +211,7 @@ describe('getExprAddressTable', () => {
     });
     const brokenProgram = { ...program, runtimeAddressTable: undefined } as CompiledProgramIR;
     expect(() => getExprAddressTable(brokenProgram))
-      .toThrow(/runtime address derivation from slotMeta is forbidden/);
+      .toThrow(/legacy metadata-based runtime address derivation is forbidden/);
   });
 });
 

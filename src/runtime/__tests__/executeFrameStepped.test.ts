@@ -78,7 +78,7 @@ describe('executeFrameStepped', () => {
     const arena = getTestArena();
 
     const gen = executeFrameStepped(brokenProgram, state, arena, 100);
-    expect(() => gen.next()).toThrow(/runtime address derivation from slotMeta is forbidden/);
+    expect(() => gen.next()).toThrow(/legacy metadata-based runtime address derivation is forbidden/);
   });
 
   it('consumes compiler-precomputed runtime address table contract', () => {
