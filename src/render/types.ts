@@ -196,3 +196,16 @@ export interface RenderFrameIR {
  */
 export type DrawOp = DrawPathInstancesOp;
 // Future: | DrawImageInstancesOp | DrawTextOp | ...
+
+/**
+ * Canonical shared empty frame.
+ *
+ * [LAW:one-source-of-truth] One shared empty RenderFrameIR avoids duplicate
+ * ad-hoc `{ version: 2, ops: [] }` construction across runtime/services.
+ */
+export const EMPTY_DRAW_OPS: readonly DrawOp[] = Object.freeze([] as DrawOp[]);
+
+export const EMPTY_RENDER_FRAME: RenderFrameIR = Object.freeze({
+  version: 2 as const,
+  ops: EMPTY_DRAW_OPS,
+});

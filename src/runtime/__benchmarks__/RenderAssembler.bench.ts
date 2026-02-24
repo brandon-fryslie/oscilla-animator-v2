@@ -10,6 +10,7 @@ import {
   groupInstancesByTopology,
   // sliceInstanceBuffers - removed (function no longer exported)
   resetTopologyCacheCounters,
+  topologyGroupCacheMisses,
 } from '../RenderAssembler';
 import { SHAPE2D_WORDS, writeShape2D } from '../RuntimeState';
 
@@ -74,13 +75,6 @@ describe('computeTopologyGroups', () => {
 });
 
 // ============================================================================
-// sliceInstanceBuffers Benchmarks (DISABLED - function removed)
-// ============================================================================
-
-// TODO: Re-enable if sliceInstanceBuffers is restored
-// describe('sliceInstanceBuffers', () => { ... });
-
-// ============================================================================
 // Cache Hit vs Miss Benchmarks
 // ============================================================================
 
@@ -97,5 +91,19 @@ describe('topology cache: hit vs miss', () => {
     const freshBuf = createShapeBuffer(500, 10);
     resetTopologyCacheCounters();
     groupInstancesByTopology(freshBuf, 500);
+  });
+});
+
+describe('topology cache stability guard', () => {
+  const buf = createShapeBuffer(5000, 32);
+  // Warm cache once.
+  groupInstancesByTopology(buf, 5000);
+
+  bench('stress cache hit does not recompute groups', () => {
+    const missesBefore = topologyGroupCacheMisses;
+    groupInstancesByTopology(buf, 5000);
+    if (topologyGroupCacheMisses !== missesBefore) {
+      throw new Error('RenderAssembler cache regression: cache hit path recomputed topology groups');
+    }
   });
 });

@@ -566,5 +566,89 @@ describe('RenderAssembler', () => {
       expect(result.version).toBe(2);
       expect(result.ops).toHaveLength(0);
     });
+
+    it('stays within a stable arena allocation budget for repeated frames', () => {
+      const state = createMockState();
+      const instanceCount = 16;
+
+      const positionBuffer = new Float32Array(instanceCount * 3);
+      const colorBuffer = new Uint8ClampedArray(instanceCount * 4);
+      const controlPointsBuffer = new Float32Array([
+        0, 1,
+        0.95, 0.31,
+        0.59, -0.81,
+        -0.59, -0.81,
+        -0.95, 0.31,
+      ]);
+
+      for (let i = 0; i < instanceCount; i++) {
+        positionBuffer[i * 3] = (i % 4) / 3;
+        positionBuffer[i * 3 + 1] = Math.floor(i / 4) / 3;
+        positionBuffer[i * 3 + 2] = 0;
+        colorBuffer[i * 4] = 255;
+        colorBuffer[i * 4 + 1] = 128;
+        colorBuffer[i * 4 + 2] = 32;
+        colorBuffer[i * 4 + 3] = 255;
+      }
+
+      state.values.objects.set(1 as ValueSlot, positionBuffer);
+      state.values.objects.set(2 as ValueSlot, colorBuffer);
+      state.values.objects.set(3 as ValueSlot, controlPointsBuffer);
+
+      const scalarExprToArenaOffset = new Map<number, number>([
+        [0, 10], [1, 11], [2, 12], [3, 13],
+      ]);
+      state.arena[10] = 1.0;
+      state.arena[11] = 0.02;
+      state.arena[12] = 0.02;
+      state.arena[13] = 1;
+
+      const slotToArena = mirrorNumericObjectSlotsToArena(state, [
+        { slot: 1 as ValueSlot, stride: 3 },
+        { slot: 2 as ValueSlot, stride: 4 },
+        { slot: 3 as ValueSlot, stride: 2 },
+      ]);
+
+      const step: StepRender = {
+        kind: 'render',
+        instanceId: instanceId('budget-instance'),
+        positionSlot: 1 as ValueSlot,
+        colorSlot: 2 as ValueSlot,
+        scale: { k: 'one', id: 0 as ValueExprId },
+        shape: {
+          k: 'one',
+          topologyId: TEST_PENTAGON_ID,
+          paramExprs: [1 as ValueExprId, 2 as ValueExprId, 3 as ValueExprId],
+        },
+        controlPoints: { k: 'slot', slot: 3 as ValueSlot },
+      };
+
+      const arena = getTestArena();
+      const context: AssemblerContext = {
+        scalarExprToArenaOffset,
+        instances: new Map([['budget-instance', createMockInstance(instanceCount)]]),
+        state,
+        resolvedCamera: DEFAULT_CAMERA,
+        arena,
+        slotToArena,
+      };
+
+      let baselineAllocCount = -1;
+      const frameBudget = 16;
+
+      for (let frame = 0; frame < 20; frame++) {
+        arena.reset();
+        const result = assembleRenderFrame([step], context);
+        expect(result.ops).toHaveLength(1);
+
+        const allocCount = arena.getFrameStats().allocCount;
+        expect(allocCount).toBeLessThanOrEqual(frameBudget);
+        if (baselineAllocCount === -1) {
+          baselineAllocCount = allocCount;
+        } else {
+          expect(allocCount).toBe(baselineAllocCount);
+        }
+      }
+    });
   });
 });

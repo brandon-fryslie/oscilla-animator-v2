@@ -21,14 +21,13 @@ import type { RuntimeState } from './RuntimeState';
 import { getTopology } from '../shapes/registry';
 import type { PathTopologyDef, TopologyDef, TopologyId } from '../shapes/types';
 import type {
-  DrawPathInstancesOp,
   DrawOp,
   PathGeometry,
   InstanceTransforms,
   PathStyle,
   RenderFrameIR,
 } from '../render/types';
-import { SHAPE2D_WORDS, Shape2DWord, type Shape2DRecord, readShape2D } from './RuntimeState';
+import { SHAPE2D_WORDS, readShape2D } from './RuntimeState';
 import type { ValueSlot } from '../types';
 import {
   projectFieldOrtho,
@@ -40,9 +39,11 @@ import {
   projectFieldPerspective,
   projectFieldRadiusPerspective,
   deriveCamPos,
+  type PerspectiveCameraParams,
 } from '../projection/perspective-kernel';
 import type { ResolvedCameraParams } from './CameraResolver';
 import { arenaSlice, type ArenaSlotDescriptor } from './ArenaValueStore';
+import { EMPTY_RENDER_FRAME } from '../render/types';
 
 // =============================================================================
 // RenderBufferArena Integration
@@ -61,8 +62,6 @@ import type { RenderBufferArena } from '../render/RenderBufferArena';
  * Cache topology.verbs (readonly PathVerb[]) → Uint8Array conversions.
  * Topology verbs are static — no need to copy every frame.
  */
-// TODO: replace per-frame allocation with zero-alloc render assembly
-// eslint-disable-next-line oscilla/no-hot-path-alloc
 const _topologyVerbsCache = new Map<TopologyId, Uint8Array>();
 
 function getCachedVerbs(topology: PathTopologyDef): Uint8Array {
@@ -76,7 +75,7 @@ function getCachedVerbs(topology: PathTopologyDef): Uint8Array {
 }
 
 // =============================================================================
-// Internal Types (v1 compatibility)
+// Internal Types
 // =============================================================================
 
 /**
@@ -100,6 +99,47 @@ interface ResolvedShape {
   verbs: Uint8Array;
   controlPoints: ArrayBufferView;
 }
+
+interface MutablePerspectiveCameraParams {
+  camPosX: number;
+  camPosY: number;
+  camPosZ: number;
+  camTargetX: number;
+  camTargetY: number;
+  camTargetZ: number;
+  camUpX: number;
+  camUpY: number;
+  camUpZ: number;
+  fovY: number;
+  near: number;
+  far: number;
+}
+
+// [LAW:no-shared-mutable-globals] Single-owner module scratch reused only by
+// RenderAssembler for per-frame temporary camera params.
+const _perspectiveParamsScratch: MutablePerspectiveCameraParams = {
+  camPosX: 0,
+  camPosY: 0,
+  camPosZ: 0,
+  camTargetX: 0,
+  camTargetY: 0,
+  camTargetZ: 0,
+  camUpX: 0,
+  camUpY: 1,
+  camUpZ: 0,
+  fovY: 0,
+  near: 0,
+  far: 1,
+};
+
+// [LAW:no-shared-mutable-globals] Single-owner module scratch reused only by
+// RenderAssembler; buffers are replaced each call before use.
+const _projectionOutputScratch: ProjectionOutput = {
+  screenPosition: new Float32Array(0),
+  screenRadius: new Float32Array(0),
+  depth: new Float32Array(0),
+  visible: new Uint8Array(0),
+};
 
 // =============================================================================
 // Projection Types
@@ -145,8 +185,11 @@ export interface ProjectionOutput {
  * @param scale2 - Optional per-instance anisotropic scale
  * @returns Compacted output with only visible instances, depth-sorted
  */
-export function depthSortAndCompact(
-  projection: ProjectionOutput,
+function depthSortAndCompactBuffers(
+  screenPosition: Float32Array,
+  screenRadius: Float32Array,
+  depth: Float32Array,
+  visible: Uint8Array,
   count: number,
   color: Uint8ClampedArray,
   arena: RenderBufferArena,
@@ -162,8 +205,6 @@ export function depthSortAndCompact(
   rotation: Float32Array;
   scale2: Float32Array;
 } {
-  const { screenPosition, screenRadius, depth, visible } = projection;
-
   // Allocate index buffer from arena
   const indices = arena.allocU32(count);
 
@@ -262,8 +303,6 @@ export function depthSortAndCompact(
     }
   }
 
-  // TODO: replace per-frame allocation with zero-alloc render assembly
-  // eslint-disable-next-line oscilla/no-hot-path-alloc
   return {
     count: visibleCount,
     screenPosition: outScreenPos,
@@ -273,6 +312,37 @@ export function depthSortAndCompact(
     rotation: compactedRotation,
     scale2: compactedScale2,
   };
+}
+
+export function depthSortAndCompact(
+  projection: ProjectionOutput,
+  count: number,
+  color: Uint8ClampedArray,
+  arena: RenderBufferArena,
+  rotation?: Float32Array,
+  scale2?: Float32Array,
+  isotropicScale?: Float32Array,
+): {
+  count: number;
+  screenPosition: Float32Array;
+  screenRadius: Float32Array;
+  depth: Float32Array;
+  color: Uint8ClampedArray;
+  rotation: Float32Array;
+  scale2: Float32Array;
+} {
+  return depthSortAndCompactBuffers(
+    projection.screenPosition,
+    projection.screenRadius,
+    projection.depth,
+    projection.visible,
+    count,
+    color,
+    arena,
+    rotation,
+    scale2,
+    isotropicScale,
+  );
 }
 
 /**
@@ -298,45 +368,45 @@ export function projectInstances(
   count: number,
   resolved: ResolvedCameraParams,
   arena: RenderBufferArena,
+  out: ProjectionOutput = _projectionOutputScratch,
 ): ProjectionOutput {
   // Allocate output buffers from arena (zero allocations after init)
-  const screenPosition = arena.allocVec2(count);
-  const screenRadius = arena.allocF32(count);
-  const depth = arena.allocF32(count);
-  const visible = arena.allocU8(count);
+  out.screenPosition = arena.allocVec2(count);
+  out.screenRadius = arena.allocF32(count);
+  out.depth = arena.allocF32(count);
+  out.visible = arena.allocU8(count);
 
   // Uniform radii input for field radius projection
   const worldRadii = arena.allocF32(count);
   worldRadii.fill(worldRadius);
 
   if (resolved.projection === 'ortho') {
-    projectFieldOrtho(worldPositions, count, ORTHO_CAMERA_DEFAULTS, screenPosition, depth, visible);
-    projectFieldRadiusOrtho(worldRadii, worldPositions, count, ORTHO_CAMERA_DEFAULTS, screenRadius);
+    projectFieldOrtho(worldPositions, count, ORTHO_CAMERA_DEFAULTS, out.screenPosition, out.depth, out.visible);
+    projectFieldRadiusOrtho(worldRadii, worldPositions, count, ORTHO_CAMERA_DEFAULTS, out.screenRadius);
   } else {
     // Derive kernel params from ResolvedCameraParams
     const [camPosX, camPosY, camPosZ] = deriveCamPos(
       resolved.centerX, resolved.centerY, 0, // camera target = (centerX, centerY, 0) in world
       resolved.tiltRad, resolved.yawRad, resolved.distance
     );
-    // TODO: replace per-frame allocation with zero-alloc render assembly
-    // eslint-disable-next-line oscilla/no-hot-path-alloc
-    const perspParams = {
-      camPosX, camPosY, camPosZ,
-      camTargetX: resolved.centerX,
-      camTargetY: resolved.centerY,
-      camTargetZ: 0,
-      camUpX: 0, camUpY: 1, camUpZ: 0,
-      fovY: resolved.fovYRad,
-      near: resolved.near,
-      far: resolved.far,
-    };
-    projectFieldPerspective(worldPositions, count, perspParams, screenPosition, depth, visible);
-    projectFieldRadiusPerspective(worldRadii, worldPositions, count, perspParams, screenRadius);
+    _perspectiveParamsScratch.camPosX = camPosX;
+    _perspectiveParamsScratch.camPosY = camPosY;
+    _perspectiveParamsScratch.camPosZ = camPosZ;
+    _perspectiveParamsScratch.camTargetX = resolved.centerX;
+    _perspectiveParamsScratch.camTargetY = resolved.centerY;
+    _perspectiveParamsScratch.camTargetZ = 0;
+    _perspectiveParamsScratch.camUpX = 0;
+    _perspectiveParamsScratch.camUpY = 1;
+    _perspectiveParamsScratch.camUpZ = 0;
+    _perspectiveParamsScratch.fovY = resolved.fovYRad;
+    _perspectiveParamsScratch.near = resolved.near;
+    _perspectiveParamsScratch.far = resolved.far;
+    const perspParams: PerspectiveCameraParams = _perspectiveParamsScratch;
+    projectFieldPerspective(worldPositions, count, perspParams, out.screenPosition, out.depth, out.visible);
+    projectFieldRadiusPerspective(worldRadii, worldPositions, count, perspParams, out.screenRadius);
   }
 
-  // TODO: replace per-frame allocation with zero-alloc render assembly
-  // eslint-disable-next-line oscilla/no-hot-path-alloc
-  return { screenPosition, screenRadius, depth, visible };
+  return out;
 }
 
 /**
@@ -382,7 +452,7 @@ export function projectAndCompact(
   scale2: Float32Array;
 } {
   // Step 1: Project
-  const projection = projectInstances(worldPositions, worldRadius, count, camera, arena);
+  const projection = projectInstances(worldPositions, worldRadius, count, camera, arena, _projectionOutputScratch);
 
   // Step 2: Compact & sort (returns arena views directly)
   return depthSortAndCompact(projection, count, color, arena, rotation, scale2, isotropicScale);
@@ -524,8 +594,6 @@ function resolveShape(
   } else {
     // One-cardinality shape descriptor ('sig') with topology: resolve scalar params from arena
     const { topologyId, paramExprs } = shapeSpec;
-    // TODO: replace per-frame allocation with zero-alloc render assembly
-    // eslint-disable-next-line oscilla/no-hot-path-alloc
     const params: Record<string, number> = {};
 
     for (let i = 0; i < paramExprs.length; i++) {
@@ -540,8 +608,6 @@ function resolveShape(
       params['param' + i] = state.arena[arenaOffset];
     }
 
-    // TODO: replace per-frame allocation with zero-alloc render assembly
-    // eslint-disable-next-line oscilla/no-hot-path-alloc
     return {
       topologyId,
       params,
@@ -648,8 +714,6 @@ function resolveShapeFully(
   const topology = getTopology(shape.topologyId);
 
   // Map param indices to param names from topology definition
-  // TODO: replace per-frame allocation with zero-alloc render assembly
-  // eslint-disable-next-line oscilla/no-hot-path-alloc
   const params: Record<string, number> = {};
   for (let i = 0; i < topology.params.length; i++) {
     const paramDef = topology.params[i];
@@ -675,8 +739,6 @@ function resolveShapeFully(
     );
   }
 
-  // TODO: replace per-frame allocation with zero-alloc render assembly
-  // eslint-disable-next-line oscilla/no-hot-path-alloc
   return {
     resolved: true,
     topologyId: shape.topologyId,
@@ -726,8 +788,6 @@ interface TopologyGroup {
  * - Buffer GC'd → cache entry automatically cleaned
  * - No manual invalidation logic needed
  */
-// TODO: replace per-frame allocation with zero-alloc render assembly
-// eslint-disable-next-line oscilla/no-hot-path-alloc
 const topologyGroupCache = new WeakMap<
   Uint32Array,
   { count: number; groups: Map<string, TopologyGroup> }
@@ -765,8 +825,6 @@ export function groupInstancesByTopology(
 
   topologyGroupCacheMisses++;
   const groups = computeTopologyGroups(shapeBuffer, instanceCount);
-  // TODO: replace per-frame allocation with zero-alloc render assembly
-  // eslint-disable-next-line oscilla/no-hot-path-alloc
   topologyGroupCache.set(shapeBuffer, { count: instanceCount, groups });
   return groups;
 }
@@ -795,8 +853,6 @@ export function computeTopologyGroups(
     );
   }
 
-  // TODO: replace per-frame allocation with zero-alloc render assembly
-  // eslint-disable-next-line oscilla/no-hot-path-alloc
   const groups = new Map<string, TopologyGroup>();
 
   for (let i = 0; i < instanceCount; i++) {
@@ -807,8 +863,6 @@ export function computeTopologyGroups(
     const key = shapeRef.topologyId + ':' + shapeRef.pointsFieldSlot;
 
     if (!groups.has(key)) {
-      // TODO: replace per-frame allocation with zero-alloc render assembly
-      // eslint-disable-next-line oscilla/no-hot-path-alloc
       groups.set(key, {
         topologyId: shapeRef.topologyId,
         controlPointsSlot: shapeRef.pointsFieldSlot,
@@ -948,7 +1002,7 @@ function recordAssemblerTiming(
  * @param isotropicScale - Optional per-instance isotropic scale (stride 1)
  * @param count - Instance count
  * @param context - Assembly context (includes camera, arena)
- * @returns Array of DrawPathInstancesOp operations
+ * Appends DrawPathInstancesOp operations to `outOps`.
  */
 function assemblePerInstanceShapes(
   step: StepRender,
@@ -958,8 +1012,9 @@ function assemblePerInstanceShapes(
   projectionScale: number,
   isotropicScale: Float32Array | undefined,
   count: number,
-  context: AssemblerContext
-): DrawOp[] {
+  context: AssemblerContext,
+  outOps: DrawOp[],
+): void {
   const { state, arena, slotToArena } = context;
   const t0 = performance.now();
 
@@ -967,10 +1022,6 @@ function assemblePerInstanceShapes(
   const groups = groupInstancesByTopology(shapeBuffer, count);
 
   const tGrouped = performance.now();
-
-  // TODO: replace per-frame allocation with zero-alloc render assembly
-  // eslint-disable-next-line oscilla/no-hot-path-alloc
-  const ops: DrawOp[] = [];
 
   // C-13: Read rotation and scale2 from slots if present
   const fullRotation = step.rotationSlot
@@ -991,9 +1042,9 @@ function assemblePerInstanceShapes(
     );
   }
 
-  const projection = projectInstances(fullPosition, projectionScale, count, resolved, arena);
+  const projection = projectInstances(fullPosition, projectionScale, count, resolved, arena, _projectionOutputScratch);
 
-  for (const [key, group] of groups) {
+  for (const group of groups.values()) {
     // Skip empty groups
     if (group.instanceIndices.length === 0) {
       continue;
@@ -1015,13 +1066,7 @@ function assemblePerInstanceShapes(
       : undefined;
 
     const groupIsotropicScale = isotropicScale
-      ? (() => {
-          const out = arena.allocF32(group.instanceIndices.length);
-          for (let i = 0; i < group.instanceIndices.length; i++) {
-            out[i] = isotropicScale[group.instanceIndices[i]];
-          }
-          return out;
-        })()
+      ? sliceScalarBuffer(isotropicScale, group.instanceIndices, arena)
       : undefined;
 
     // Slice projection outputs for this group (use arena)
@@ -1040,18 +1085,11 @@ function assemblePerInstanceShapes(
       groupVisible[i] = projection.visible[srcIdx];
     }
 
-    // TODO: replace per-frame allocation with zero-alloc render assembly
-    // eslint-disable-next-line oscilla/no-hot-path-alloc
-    const groupProjection: ProjectionOutput = {
-      screenPosition: groupScreenPos,
-      screenRadius: groupScreenRadius,
-      depth: groupDepth,
-      visible: groupVisible,
-    };
-
-    // Compact and copy in one step (projection already done)
-    const compactedCopy = compactAndCopy(
-      groupProjection,
+    const compactedCopy = depthSortAndCompactBuffers(
+      groupScreenPos,
+      groupScreenRadius,
+      groupDepth,
+      groupVisible,
       groupN,
       color,
       arena,
@@ -1066,8 +1104,6 @@ function assemblePerInstanceShapes(
       continue;
     }
 
-    // TODO: replace per-frame allocation with zero-alloc render assembly
-    // eslint-disable-next-line oscilla/no-hot-path-alloc
     const instanceTransforms: InstanceTransforms = {
       count: compactedCopy.count,
       position: compactedCopy.screenPosition,
@@ -1108,8 +1144,6 @@ function assemblePerInstanceShapes(
       );
     }
 
-    // TODO: replace per-frame allocation with zero-alloc render assembly
-    // eslint-disable-next-line oscilla/no-hot-path-alloc
     const geometry: PathGeometry = {
       topologyId: group.topologyId,
       verbs: getCachedVerbs(topology),
@@ -1118,9 +1152,7 @@ function assemblePerInstanceShapes(
       flags: group.flags,
     };
 
-    // TODO: replace per-frame allocation with zero-alloc render assembly
-    // eslint-disable-next-line oscilla/no-hot-path-alloc
-    ops.push({
+    outOps.push({
       kind: 'drawPathInstances',
       geometry,
       instances: instanceTransforms,
@@ -1131,15 +1163,11 @@ function assemblePerInstanceShapes(
   const tSliced = performance.now();
 
   // Record timing to health metrics
-  // TODO: replace per-frame allocation with zero-alloc render assembly
-  // eslint-disable-next-line oscilla/no-hot-path-alloc
   recordAssemblerTiming(state, {
     groupingMs: tGrouped - t0,
     slicingMs: tSliced - tGrouped,
     totalMs: tSliced - t0,
   });
-
-  return ops;
 }
 
 /**
@@ -1172,6 +1200,23 @@ function sliceRotationBuffer(
     rotation[i] = fullRotation[instanceIndices[i]];
   }
   return rotation;
+}
+
+function sliceScalarBuffer(
+  fullValues: Float32Array,
+  instanceIndices: number[],
+  arena: RenderBufferArena,
+): Float32Array {
+  const N = instanceIndices.length;
+  if (isContiguous(instanceIndices)) {
+    const start = instanceIndices[0];
+    return fullValues.subarray(start, start + N);
+  }
+  const values = arena.allocF32(N);
+  for (let i = 0; i < N; i++) {
+    values[i] = fullValues[instanceIndices[i]];
+  }
+  return values;
 }
 
 /**
@@ -1222,8 +1267,6 @@ function buildPathGeometry(
   resolvedShape: ResolvedShape,
   controlPoints: Float32Array
 ): PathGeometry {
-  // TODO: replace per-frame allocation with zero-alloc render assembly
-  // eslint-disable-next-line oscilla/no-hot-path-alloc
   return {
     topologyId: resolvedShape.topologyId,
     verbs: resolvedShape.verbs,
@@ -1256,8 +1299,6 @@ function buildInstanceTransforms(
   scale2: Float32Array,
   depth?: Float32Array
 ): InstanceTransforms {
-  // TODO: replace per-frame allocation with zero-alloc render assembly
-  // eslint-disable-next-line oscilla/no-hot-path-alloc
   return {
     count,
     position,
@@ -1282,8 +1323,6 @@ function buildPathStyle(
   color: Uint8ClampedArray,
   fillRule?: 'nonzero' | 'evenodd'
 ): PathStyle {
-  // TODO: replace per-frame allocation with zero-alloc render assembly
-  // eslint-disable-next-line oscilla/no-hot-path-alloc
   return {
     fillColor: color,
     fillRule,
@@ -1303,12 +1342,13 @@ function buildPathStyle(
  *
  * @param step - The render step to assemble
  * @param context - Assembly context with one-cardinality values, instances, state, and arena
- * @returns Array of DrawPathInstancesOp operations
+ * Appends DrawPathInstancesOp operations to `outOps`.
  */
-export function assembleDrawPathInstancesOp(
+function appendDrawPathInstancesOp(
   step: StepRender,
-  context: AssemblerContext
-): DrawOp[] {
+  context: AssemblerContext,
+  outOps: DrawOp[],
+): void {
   const { scalarExprToArenaOffset, slotToArena, instances, state, arena } = context;
 
   // Get instance declaration
@@ -1323,9 +1363,7 @@ export function assembleDrawPathInstancesOp(
   // Resolve count from instance
   const count = typeof instance.count === 'number' ? instance.count : 0;
   if (count === 0) {
-    // TODO: replace per-frame allocation with zero-alloc render assembly
-    // eslint-disable-next-line oscilla/no-hot-path-alloc
-    return []; // Empty instance, skip
+    return;
   }
 
   // Read position buffer from slot
@@ -1370,7 +1408,7 @@ export function assembleDrawPathInstancesOp(
   // Check if per-instance shapes (shape buffer)
   if (shape instanceof Uint32Array) {
     // Per-instance shapes: group by topology and emit multiple ops
-    return assemblePerInstanceShapes(
+    assemblePerInstanceShapes(
       step,
       shape,
       positionBuffer,
@@ -1378,8 +1416,10 @@ export function assembleDrawPathInstancesOp(
       projectionScale,
       isotropicScale,
       count,
-      context  // Pass full context (includes camera and arena)
+      context,  // Pass full context (includes camera and arena)
+      outOps,
     );
+    return;
   }
 
   // Uniform shape: resolve fully and emit single op
@@ -1422,7 +1462,7 @@ export function assembleDrawPathInstancesOp(
     // [LAW:dataflow-not-control-flow] Visibility compaction owns the draw cardinality.
     // Zero visible instances means no op is emitted.
     if (compactedCopy.count === 0) {
-      return [];
+      return;
     }
 
     // Build instance transforms with copied data
@@ -1446,15 +1486,23 @@ export function assembleDrawPathInstancesOp(
 
     const geometry = buildPathGeometry(resolvedShape, controlPointsBuffer);
 
-    // TODO: replace per-frame allocation with zero-alloc render assembly
-    // eslint-disable-next-line oscilla/no-hot-path-alloc
-    return [{
+    outOps.push({
       kind: 'drawPathInstances',
       geometry,
       instances: instanceTransforms,
       style,
-    }];
+    });
+    return;
   }
+}
+
+export function assembleDrawPathInstancesOp(
+  step: StepRender,
+  context: AssemblerContext,
+): DrawOp[] {
+  const ops: DrawOp[] = [];
+  appendDrawPathInstancesOp(step, context, ops);
+  return ops;
 }
 
 /**
@@ -1476,20 +1524,20 @@ export function assembleRenderFrame(
   renderSteps: readonly StepRender[],
   context: AssemblerContext
 ): RenderFrameIR {
-  // TODO: replace per-frame allocation with zero-alloc render assembly
-  // eslint-disable-next-line oscilla/no-hot-path-alloc
+  if (renderSteps.length === 0) {
+    return EMPTY_RENDER_FRAME;
+  }
+
   const ops: DrawOp[] = [];
 
   for (const step of renderSteps) {
-    const stepOps = assembleDrawPathInstancesOp(step, context);
-    // Avoid spread allocation — push individually
-    for (let i = 0; i < stepOps.length; i++) {
-      ops.push(stepOps[i]);
-    }
+    appendDrawPathInstancesOp(step, context, ops);
   }
 
-  // TODO: replace per-frame allocation with zero-alloc render assembly
-  // eslint-disable-next-line oscilla/no-hot-path-alloc
+  if (ops.length === 0) {
+    return EMPTY_RENDER_FRAME;
+  }
+
   return {
     version: 2,
     ops,

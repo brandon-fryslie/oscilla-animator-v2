@@ -816,5 +816,86 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
       expect(circleOps[1].instances.count).toBe(2); // Step 2
       expect(squareOps[0].instances.count).toBe(2); // Step 2
     });
+
+    it('keeps per-instance stress scenes within a stable allocation budget', () => {
+      const state = createMockState();
+      const instanceCount = 16;
+
+      const positionBuffer = new Float32Array(instanceCount * 3);
+      const colorBuffer = new Uint8ClampedArray(instanceCount * 4);
+      const shapeBuffer = new Uint32Array(instanceCount * SHAPE2D_WORDS);
+      const circlePoints = new Float32Array([0, 1, 1, 0, 0, -1, -1, 0]);
+      const squarePoints = new Float32Array([-1, -1, 1, -1, 1, 1, -1, 1]);
+
+      for (let i = 0; i < instanceCount; i++) {
+        positionBuffer[i * 3] = (i % 4) / 3;
+        positionBuffer[i * 3 + 1] = Math.floor(i / 4) / 3;
+        positionBuffer[i * 3 + 2] = 0;
+        colorBuffer[i * 4] = i % 2 === 0 ? 255 : 32;
+        colorBuffer[i * 4 + 1] = i % 2 === 0 ? 32 : 255;
+        colorBuffer[i * 4 + 2] = 64;
+        colorBuffer[i * 4 + 3] = 255;
+
+        const isCircle = (i % 2) === 0;
+        writeShape2D(shapeBuffer, i, {
+          topologyId: isCircle ? CIRCLE_ID : SQUARE_ID,
+          pointsFieldSlot: isCircle ? 10 : 11,
+          pointsCount: 4,
+          styleRef: 0,
+          flags: 1,
+        });
+      }
+
+      state.values.objects.set(1 as ValueSlot, positionBuffer);
+      state.values.objects.set(2 as ValueSlot, colorBuffer);
+      state.values.shapeFields.set(3 as ValueSlot, shapeBuffer);
+      state.values.objects.set(10 as ValueSlot, circlePoints);
+      state.values.objects.set(11 as ValueSlot, squarePoints);
+
+      const scalarExprToArenaOffset = new Map<number, number>([[0, 10]]);
+      state.arena[10] = 1.0;
+      const slotToArena = mirrorNumericObjectSlotsToArena(state, [
+        { slot: 1 as ValueSlot, stride: 3 },
+        { slot: 2 as ValueSlot, stride: 4 },
+        { slot: 10 as ValueSlot, stride: 2 },
+        { slot: 11 as ValueSlot, stride: 2 },
+      ]);
+
+      const step: StepRender = {
+        kind: 'render',
+        instanceId: instanceId('stress-instance'),
+        positionSlot: 1 as ValueSlot,
+        colorSlot: 2 as ValueSlot,
+        scale: { k: 'one', id: 0 as ValueExprId },
+        shape: { k: 'slot', slot: 3 as ValueSlot },
+      };
+
+      const arena = getTestArena();
+      const context: AssemblerContext = {
+        scalarExprToArenaOffset,
+        instances: new Map([['stress-instance', createMockInstance(instanceCount)]]),
+        state,
+        resolvedCamera: DEFAULT_CAMERA,
+        arena,
+        slotToArena,
+      };
+
+      let baselineAllocCount = -1;
+      const frameBudget = 36;
+
+      for (let frame = 0; frame < 12; frame++) {
+        arena.reset();
+        const result = assembleRenderFrame([step], context);
+        expect(result.ops).toHaveLength(2);
+
+        const allocCount = arena.getFrameStats().allocCount;
+        expect(allocCount).toBeLessThanOrEqual(frameBudget);
+        if (baselineAllocCount === -1) {
+          baselineAllocCount = allocCount;
+        } else {
+          expect(allocCount).toBe(baselineAllocCount);
+        }
+      }
+    });
   });
 });
