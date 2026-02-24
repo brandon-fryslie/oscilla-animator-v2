@@ -223,7 +223,7 @@ export function executeFrame(
 
   // === System-reserved time outputs ===
   // These are part of the runtime contract: they are written deterministically from resolved time each frame.
-  // Slot allocation/stride is enforced via slotMeta; no runtime-only side channels.
+  // Slot allocation/stride is enforced by compiler-emitted slot descriptors.
   const TIME_PALETTE_SLOT = SYSTEM_PALETTE_SLOT;
   if (!(time.palette instanceof Float32Array) || time.palette.length !== 4) {
     throw new Error('time.palette must be Float32Array(4) in RGBA [0..1]');

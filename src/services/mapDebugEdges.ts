@@ -105,7 +105,7 @@ export function mapDebugMappings(patch: Patch, program: CompiledProgramIR): Debu
     if (!runtimeAddressTable?.slotLookup) {
         // [LAW:single-enforcer] Slot type/address metadata is owned by
         // compiler-emitted runtimeAddressTable; debug mapping must not derive
-        // types from legacy slotMeta mirrors.
+        // types from legacy metadata mirrors.
         throw new Error('[mapDebugEdges] runtimeAddressTable.slotLookup is missing - compiler runtime address contract is incomplete');
     }
 
