@@ -76,6 +76,21 @@ describe('compileExpression Integration', () => {
     }
   });
 
+  it('compiles named constants without explicit inputs', () => {
+    const result = compileExpression(
+      'sin(pi * 0.5) + tau * deg2rad',
+      new Map(),
+      builder,
+      new Map()
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const expr = builder.getValueExpr(result.value);
+      expect(expr).toBeDefined();
+    }
+  });
+
   describe('Component Access (Swizzle)', () => {
 
     it('single-component swizzle compiles successfully (v.x)', () => {

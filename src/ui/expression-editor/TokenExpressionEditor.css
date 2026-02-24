@@ -47,7 +47,8 @@
 }
 
 /* Reference chips */
-.expr-ref-chip {
+.expr-ref-chip,
+.expr-const-chip {
   display: inline;
   padding: 0 4px;
   margin: 0 1px;
@@ -74,8 +75,16 @@
 }
 
 /* Hover effect */
-.expr-ref-chip:hover {
+.expr-ref-chip:hover,
+.expr-const-chip:hover {
   filter: brightness(1.2);
+}
+
+/* Named constants */
+.expr-const-chip {
+  background: rgba(121, 134, 203, 0.24);
+  border: 1px solid #7986cb;
+  color: #c5cae9;
 }
 
 /* ============================================================================
