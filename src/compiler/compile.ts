@@ -20,12 +20,15 @@ import type {
   CompiledProgramIR,
   SlotMetaEntry,
   RuntimeSlotEntry,
+  RuntimeAddressTableIR,
+  RuntimeSlotLookupEntry,
   FieldSlotEntry,
   OutputSpecIR,
   ExprProvenanceIR,
   ExprUserTarget,
 } from './ir/program';
 import type { ValueSlot } from './ir/Indices';
+import { SCALAR_INSTANCE_ID } from './ir/Indices';
 import type { BlockId } from '../types';
 import type { UnlinkedIRFragments } from './backend/lower-blocks';
 import type { ScheduleIR } from './backend/schedule-program';
@@ -305,6 +308,54 @@ function toCanonicalRuntimeStorage(storage: SlotMetaEntry['storage']): RuntimeSl
   }
 }
 
+function buildRuntimeAddressTable(
+  runtimeSlots: readonly RuntimeSlotEntry[],
+  scheduleIR: ScheduleIR,
+): RuntimeAddressTableIR {
+  const slotLookup = new Map<ValueSlot, RuntimeSlotLookupEntry>();
+  const slotToArena = new Map<ValueSlot, ArenaSlotDescriptor>();
+  for (const slotEntry of runtimeSlots) {
+    slotLookup.set(slotEntry.slot, {
+      storage: slotEntry.storage,
+      offset: slotEntry.offset,
+      stride: slotEntry.stride,
+      slot: slotEntry.slot,
+      type: slotEntry.type,
+    });
+    if (slotEntry.arena.offset >= 0) {
+      slotToArena.set(slotEntry.slot, slotEntry.arena);
+    }
+  }
+
+  const fieldExprToSlot = new Map<number, ValueSlot>();
+  const scalarExprToArenaOffset = new Map<number, number>();
+  const steps = scheduleIR.steps as readonly Step[];
+  for (const step of steps) {
+    if (step.kind === 'materialize') {
+      fieldExprToSlot.set(step.field as number, step.target);
+      if (step.instanceId === SCALAR_INSTANCE_ID) {
+        const arenaDesc = slotToArena.get(step.target);
+        if (arenaDesc) {
+          scalarExprToArenaOffset.set(step.field as number, arenaDesc.offset);
+        }
+      }
+    }
+    if (step.kind === 'evalOne') {
+      const arenaDesc = slotToArena.get(step.target);
+      if (arenaDesc) {
+        scalarExprToArenaOffset.set(step.expr as number, arenaDesc.offset);
+      }
+    }
+  }
+
+  return {
+    slotLookup,
+    fieldExprToSlot,
+    scalarExprToArenaOffset,
+    slotToArena,
+  };
+}
+
 /**
  * Convert LinkedIR and ScheduleIR to CompiledProgramIR.
  *
@@ -387,6 +438,7 @@ function convertLinkedIRToProgram(
 
   // Build output specs from canonical output contract only.
   const outputs: OutputSpecIR[] = [{ kind: 'renderFrame' }];
+  const runtimeAddressTable = buildRuntimeAddressTable(runtimeSlots, scheduleIR);
 
   // Build debug index
   const stepToBlock = new Map();
@@ -581,6 +633,7 @@ function convertLinkedIRToProgram(
     outputs,
     slotMeta,
     runtimeSlots,
+    runtimeAddressTable,
     debugIndex,
     fieldSlotRegistry,
     renderGlobals, // NEW - Camera system: populated from builder

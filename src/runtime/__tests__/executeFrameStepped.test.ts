@@ -10,6 +10,7 @@ import { compile } from '../../compiler/compile';
 import { buildPatch } from '../../graph/Patch';
 import { executeFrame } from '../ScheduleExecutor';
 import { executeFrameStepped } from '../executeFrameStepped';
+import { getExprAddressTable } from '../ExprAddressTable';
 import { createRuntimeState } from '../RuntimeState';
 import { computeStorageSizes } from '../../compiler/ir/program';
 import type { CompiledProgramIR } from '../../compiler/ir/program';
@@ -70,6 +71,14 @@ function createStateForProgram(program: CompiledProgramIR) {
 }
 
 describe('executeFrameStepped', () => {
+  it('consumes compiler-precomputed runtime address table contract', () => {
+    const program = compileSimplePatch();
+    const table = getExprAddressTable(program);
+    expect(table).toBe(program.runtimeAddressTable);
+    expect(table.slotLookup.size).toBeGreaterThan(0);
+    expect(table.slotToArena.size).toBeGreaterThan(0);
+  });
+
   it('produces correct phase sequence: pre-frame -> phase1... -> phase-boundary -> phase2... -> post-frame', () => {
     const program = compileSimplePatch();
     const state = createStateForProgram(program);

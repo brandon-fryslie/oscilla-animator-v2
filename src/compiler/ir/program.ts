@@ -107,6 +107,13 @@ export interface CompiledProgramIR {
    */
   readonly runtimeSlots: readonly RuntimeSlotEntry[];
 
+  /**
+   * Precomputed runtime address table consumed directly by runtime execution.
+   * [LAW:single-enforcer] Runtime address resolution has one owning boundary:
+   * compiler-emitted runtimeAddressTable (no runtime derivation pass).
+   */
+  readonly runtimeAddressTable?: RuntimeAddressTableIR;
+
   // Debug provenance
   readonly debugIndex: DebugIndexIR;
 
@@ -321,6 +328,31 @@ export interface RuntimeSlotEntry {
   readonly stride: number;
   readonly type: CanonicalType;
   readonly arena: ArenaSlotDescriptor;
+}
+
+/**
+ * Runtime slot lookup entry consumed by execution/debug readers.
+ */
+export interface RuntimeSlotLookupEntry {
+  readonly storage: 'f64' | 'f32' | 'i32' | 'u32' | 'object' | 'shape2d';
+  readonly offset: number;
+  readonly stride: number;
+  readonly slot: ValueSlot;
+  readonly type: CanonicalType;
+}
+
+/**
+ * Compiler-emitted runtime address table contract.
+ */
+export interface RuntimeAddressTableIR {
+  /** ValueSlot → physical storage lookup */
+  readonly slotLookup: ReadonlyMap<ValueSlot, RuntimeSlotLookupEntry>;
+  /** ValueExprId (materialized field expression) → target ValueSlot */
+  readonly fieldExprToSlot: ReadonlyMap<number, ValueSlot>;
+  /** Scalar ValueExprId → arena scalar offset */
+  readonly scalarExprToArenaOffset: ReadonlyMap<number, number>;
+  /** ValueSlot → arena descriptor */
+  readonly slotToArena: ReadonlyMap<ValueSlot, ArenaSlotDescriptor>;
 }
 
 // =============================================================================

@@ -6,7 +6,7 @@ import {
 } from '../ExprAddressTable';
 import type { CompiledProgramIR, SlotMetaEntry } from '../../compiler/ir/program';
 import type { ScheduleIR } from '../../compiler/backend/schedule-program';
-import { valueSlot, type ValueSlot } from '../../compiler/ir/Indices';
+import { SCALAR_INSTANCE_ID, valueSlot, type ValueSlot } from '../../compiler/ir/Indices';
 import { canonicalScalar, canonicalMany, FLOAT, unitNone, instanceRef } from '../../core/canonical-types';
 
 const SIG_FLOAT = canonicalScalar(FLOAT, unitNone());
@@ -45,9 +45,49 @@ function mockProgram(opts: {
     type: meta.type,
     arena: arenaLayout[Number(meta.slot)]!,
   }));
+  const slotLookup = new Map<ValueSlot, any>();
+  const slotToArena = new Map<ValueSlot, any>();
+  for (const slot of runtimeSlots) {
+    slotLookup.set(slot.slot, {
+      storage: slot.storage,
+      offset: slot.offset,
+      stride: slot.stride,
+      slot: slot.slot,
+      type: slot.type,
+    });
+    if (slot.arena.offset >= 0) {
+      slotToArena.set(slot.slot, slot.arena);
+    }
+  }
+  const fieldExprToSlot = new Map<number, ValueSlot>();
+  const scalarExprToArenaOffset = new Map<number, number>();
+  for (const step of opts.steps) {
+    if (step.kind === 'materialize') {
+      fieldExprToSlot.set(step.field as any as number, step.target);
+      if (step.instanceId === SCALAR_INSTANCE_ID) {
+        const arenaDesc = slotToArena.get(step.target);
+        if (arenaDesc) {
+          scalarExprToArenaOffset.set(step.field as any as number, arenaDesc.offset);
+        }
+      }
+    }
+    if (step.kind === 'evalOne') {
+      const arenaDesc = slotToArena.get(step.target);
+      if (arenaDesc) {
+        scalarExprToArenaOffset.set(step.expr as any as number, arenaDesc.offset);
+      }
+    }
+  }
+  const runtimeAddressTable = {
+    slotLookup,
+    fieldExprToSlot,
+    scalarExprToArenaOffset,
+    slotToArena,
+  };
   return {
     slotMeta: opts.slotMeta,
     runtimeSlots,
+    runtimeAddressTable,
     schedule: {
       steps: opts.steps,
       timeModel: {} as any,
@@ -79,7 +119,7 @@ function mockProgram(opts: {
 }
 
 describe('getExprAddressTable', () => {
-  it('builds slotLookup from runtime slots', () => {
+  it('reads slotLookup from precomputed runtime address table', () => {
     const program = mockProgram({
       slotMeta: [
         { slot: valueSlot(0), storage: 'f32', offset: 0, stride: 1, type: SIG_FLOAT },
@@ -102,7 +142,7 @@ describe('getExprAddressTable', () => {
     }));
   });
 
-  it('builds fieldExprToSlot from materialize steps', () => {
+  it('reads fieldExprToSlot from precomputed runtime address table', () => {
     const program = mockProgram({
       slotMeta: [
         { slot: valueSlot(5), storage: 'f32', offset: 0, stride: 1, type: FIELD_FLOAT },
@@ -116,7 +156,7 @@ describe('getExprAddressTable', () => {
     expect(table.fieldExprToSlot.get(10)).toBe(valueSlot(5));
   });
 
-  it('builds scalarExprToArenaOffset from evalOne steps', () => {
+  it('reads scalarExprToArenaOffset from precomputed runtime address table', () => {
     const program = mockProgram({
       slotMeta: [
         { slot: valueSlot(3), storage: 'f32', offset: 7, stride: 1, type: SIG_FLOAT },
@@ -134,7 +174,7 @@ describe('getExprAddressTable', () => {
     expect(table.scalarExprToArenaOffset.get(42)).toBe(7);
   });
 
-  it('caches table per program identity', () => {
+  it('returns the same precomputed table reference per program identity', () => {
     const program = mockProgram({
       slotMeta: [
         { slot: valueSlot(0), storage: 'f32', offset: 0, stride: 1, type: SIG_FLOAT },
