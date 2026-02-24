@@ -3,12 +3,13 @@
  */
 import { describe, it, expect } from 'vitest';
 import { finalizeNormalizationFixpoint } from '../final-normalization';
-import { buildDraftGraph } from '../draft-graph';
+import { buildDraftGraph, type DraftGraph } from '../draft-graph';
 import { buildPatch } from '../../../graph/Patch';
 import { BLOCK_DEFS_BY_TYPE } from '../../../blocks/registry';
 import { draftPortKey } from '../type-facts';
 import { isAxisInst, isMany, isOne } from '../../../core/canonical-types';
 import { DOMAIN_CIRCLE } from '../../../core/domain-registry';
+import type { ObligationId } from '../obligations';
 // Ensure all adapter blocks are registered
 import { registerAllBlocks } from '../../../blocks/all';
 registerAllBlocks();
@@ -67,6 +68,57 @@ describe('finalizeNormalizationFixpoint (skeleton)', () => {
     });
 
     expect(result.iterations).toBeLessThanOrEqual(1);
+  });
+
+  it('formats open obligation IDs with canonical block type names', () => {
+    const g: DraftGraph = {
+      blocks: [
+        {
+          id: 'id_1771973255108_25',
+          type: 'ConstructVec2',
+          params: {},
+          portDefaults: {},
+          origin: 'user',
+          displayName: 'Construct Vec2',
+          domainId: null,
+          role: { kind: 'user', meta: {} },
+        },
+        {
+          id: 'id_1771973255108_28',
+          type: 'RenderInstances2D',
+          params: {},
+          portDefaults: {},
+          origin: 'user',
+          displayName: 'Render',
+          domainId: null,
+          role: { kind: 'user', meta: {} },
+        },
+      ],
+      edges: [],
+      obligations: [
+        {
+          id: 'needsAdapter:id_1771973255108_25:out->id_1771973255108_28:scale2' as ObligationId,
+          kind: 'needsAdapter',
+          anchor: { blockId: 'id_1771973255108_25' },
+          status: { kind: 'open' },
+          // Use non-existent ports so deps stay unresolved and this obligation remains open.
+          deps: [
+            { kind: 'portCanonicalizable', port: { blockId: 'id_1771973255108_25', port: '__missing_out', dir: 'out' } },
+            { kind: 'portCanonicalizable', port: { blockId: 'id_1771973255108_28', port: '__missing_in', dir: 'in' } },
+          ],
+          policy: { name: 'adapters.v1', version: 1 },
+          debug: { createdBy: 'test' },
+        },
+      ],
+      meta: { revision: 0, provenance: 'test' },
+    };
+
+    const result = finalizeNormalizationFixpoint(g, BLOCK_DEFS_BY_TYPE, { maxIterations: 5 });
+    const open = result.diagnostics.find((d) => d.diagnosticFlagCode === 'OpenObligation');
+    expect(open).toBeDefined();
+    expect(open!.message).toContain('needsAdapter:ConstructVec2:out->RenderInstances2D:scale2');
+    expect(open!.message).not.toContain('id_1771973255108_25');
+    expect(open!.message).not.toContain('id_1771973255108_28');
   });
 
   it('empty graph produces empty result', () => {
