@@ -1,0 +1,53 @@
+{
+  "workstream": "W5",
+  "title": "Effects-As-Data Enforcement (No Fallback Binder Paths)",
+  "status": "completed",
+  "timestamp_utc": "2026-02-24T06:40:14Z",
+  "commit": "a53b8af13",
+  "laws": [
+    "dataflow-not-control-flow",
+    "single-enforcer",
+    "verifiable-goals"
+  ],
+  "scope": [
+    "Enforce declarative effects contracts in binding/lowering",
+    "Remove binder fallback allocation and state-slot discovery paths",
+    "Keep static guard rails preventing fallback reintroduction"
+  ],
+  "closure_surfaces": [
+    "src/blocks/registry.ts",
+    "src/compiler/backend/binding-pass.ts",
+    "src/compiler/ir/IRBuilderImpl.ts",
+    "src/__tests__/compiledir-foundation-gates.test.ts",
+    "src/__tests__/forbidden-patterns.test.ts"
+  ],
+  "verification": [
+    {
+      "command": "pnpm -s typecheck",
+      "exit_code": 0
+    },
+    {
+      "command": "pnpm -s vitest run src/compiler/backend/__tests__/binding-pass.test.ts src/__tests__/compiledir-foundation-gates.test.ts src/__tests__/forbidden-patterns.test.ts",
+      "exit_code": 0,
+      "tests_passed": 91
+    }
+  ],
+  "static_scans": [
+    {
+      "command": "rg -n \"Optional during migration\" src/blocks/registry.ts",
+      "result": "no_matches"
+    },
+    {
+      "command": "rg -n \"Pure block fallback - allocate slot now\" src/compiler/backend/binding-pass.ts",
+      "result": "no_matches"
+    },
+    {
+      "command": "rg -n \"= builder\\.findStateSlot\\(\" src/compiler/backend/binding-pass.ts",
+      "result": "no_matches"
+    }
+  ],
+  "notes": [
+    "CompiledIR foundation gate K-W5-* remains locked at zero.",
+    "Fallback binder semantics are blocked by mechanical scans and CI tests."
+  ]
+}
