@@ -280,13 +280,11 @@ export interface ValueStore {
 }
 
 /**
- * Create a ValueStore with the given slot count
+ * Create a ValueStore
  *
- * @param slotCount - Legacy parameter retained for callsite compatibility
  * @param shape2dSlotCount - Number of shape2d slots (defaults to 0)
  */
-export function createValueStore(slotCount: number, shape2dSlotCount: number = 0): ValueStore {
-  void slotCount;
+export function createValueStore(shape2dSlotCount: number = 0): ValueStore {
   return {
     objects: new Map(),
     shapeFields: new Map(),
@@ -792,7 +790,7 @@ export function createProgramState(
   // signatures converge on ValueExpr-driven sizing.
   void eventExprCount;
   return {
-    values: createValueStore(slotCount),
+    values: createValueStore(),
     lastRenderFrame: null,
     arena: createArena(arenaTotalFloats),
     cache: createFrameCache(1000, valueExprCount),

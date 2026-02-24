@@ -41,7 +41,7 @@ describe('IR bridges shape kind', () => {
 
 describe('Shape2D packed bank operations', () => {
   it('writes and reads a shape2d record at offset 0', () => {
-    const store = createValueStore(0, 4); // 4 shape slots
+    const store = createValueStore(4); // 4 shape slots
 
     writeShape2D(store.shape2d, 0, {
       topologyId: 42,
@@ -60,7 +60,7 @@ describe('Shape2D packed bank operations', () => {
   });
 
   it('writes and reads at non-zero offset without corruption', () => {
-    const store = createValueStore(0, 4);
+    const store = createValueStore(4);
 
     // Write to offset 0 and offset 2
     writeShape2D(store.shape2d, 0, {
@@ -93,7 +93,7 @@ describe('Shape2D packed bank operations', () => {
 
   it('shape2d bank size matches slot count × SHAPE2D_WORDS', () => {
     const slotCount = 3;
-    const store = createValueStore(0, slotCount);
+    const store = createValueStore(slotCount);
 
     expect(store.shape2d.length).toBe(slotCount * SHAPE2D_WORDS);
   });

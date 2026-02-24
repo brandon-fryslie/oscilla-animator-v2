@@ -20,7 +20,7 @@
  */
 
 import type { Patch } from '../../graph';
-import type { NormalizedPatch } from '../../graph/normalize';
+import type { NormalizedPatch } from './normalize-indexing';
 import type { TypedPatch, TypeResolvedPatch } from '../ir/patches';
 import type { CanonicalType } from '../../core/canonical-types';
 import type { DiagnosticSeverityOverride } from '../diagnostic-flags';

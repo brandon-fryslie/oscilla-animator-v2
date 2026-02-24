@@ -67,9 +67,6 @@ export function bindingUnbound(): BindingValue {
   return { kind: 'unbound' };
 }
 
-// Backward compat alias
-export const bindingDefault = bindingUnbound;
-
 /**
  * Test helper: create InstanceRef from string literals (uses branded ID casts).
  */
@@ -260,4 +257,3 @@ export function testEventType(
 export { unitCount, unitTurns, contractWrap01, contractClamp01, unitRadians, unitDegrees, unitNdc2, unitNdc3, unitWorld2, unitWorld3, unitRgba01, unitNone };
 
 // Re-export cardinality constructors
-

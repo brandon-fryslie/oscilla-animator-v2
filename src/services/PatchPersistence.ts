@@ -52,19 +52,19 @@ export interface SerializedPatch {
     type: string;
     params: Record<string, unknown>;
     label?: string;
-    displayName: string | null;
+    displayName: string;
     domainId: string | null;
     role: { kind: string; meta: Record<string, unknown> };
-    inputPorts: Array<{ id: string; defaultSource?: unknown; combineMode?: string }>;
+    inputPorts: Array<{ id: string; defaultSource?: unknown; combineMode: string }>;
     outputPorts: Array<{ id: string }>;
   }>;
   edges: Array<{
     id: string;
     from: { kind: 'port'; blockId: string; slotId: string };
     to: { kind: 'port'; blockId: string; slotId: string };
-    enabled?: boolean;
-    sortKey?: number;
-    role?: { kind: string; meta: Record<string, unknown> };
+    enabled: boolean;
+    sortKey: number;
+    role: { kind: string; meta: Record<string, unknown> };
   }>;
   presetIndex: number;
 }
@@ -100,26 +100,42 @@ export function deserializePatch(json: string): { patch: Patch; presetIndex: num
     const data: SerializedPatch = JSON.parse(json);
     const blocks = new Map<BlockId, any>();
     for (const b of data.blocks) {
-      // Ensure inputPorts have required combineMode field
-      const normalizedInputPorts = b.inputPorts.map(p => ({
-        ...p,
-        combineMode: p.combineMode ?? 'last',
-      }));
+      // [LAW:no-silent-fallbacks] Persisted payloads must contain canonical
+      // fields; legacy shape inference is rejected at decode time.
+      if (typeof b.displayName !== 'string') {
+        throw new Error(`Invalid serialized patch: block '${b.id}' is missing string displayName`);
+      }
+      const normalizedInputPorts = b.inputPorts.map(p => {
+        if (typeof p.combineMode !== 'string') {
+          throw new Error(`Invalid serialized patch: block '${b.id}' input '${p.id}' missing combineMode`);
+        }
+        return p;
+      });
       blocks.set(b.id as BlockId, {
         ...b,
         inputPorts: new Map(normalizedInputPorts.map(p => [p.id, p])),
         outputPorts: new Map(b.outputPorts.map(p => [p.id, p])),
       });
     }
-    // Ensure edges have required fields (for backwards compatibility with old patches)
-    const normalizedEdges = data.edges.map((e, i) => ({
-      id: e.id,
-      from: e.from,
-      to: e.to,
-      enabled: e.enabled ?? true,
-      sortKey: e.sortKey ?? i,
-      role: (e.role ?? { kind: 'user' as const, meta: {} as Record<string, never> }) as EdgeRole,
-    }));
+    const normalizedEdges = data.edges.map((e) => {
+      if (typeof e.enabled !== 'boolean') {
+        throw new Error(`Invalid serialized patch: edge '${e.id}' missing boolean enabled`);
+      }
+      if (typeof e.sortKey !== 'number') {
+        throw new Error(`Invalid serialized patch: edge '${e.id}' missing numeric sortKey`);
+      }
+      if (!e.role || typeof e.role.kind !== 'string' || typeof e.role.meta !== 'object' || e.role.meta === null) {
+        throw new Error(`Invalid serialized patch: edge '${e.id}' missing role`);
+      }
+      return {
+        id: e.id,
+        from: e.from,
+        to: e.to,
+        enabled: e.enabled,
+        sortKey: e.sortKey,
+        role: e.role as EdgeRole,
+      };
+    });
     const patch: Patch = { blocks, edges: normalizedEdges };
 
     return {

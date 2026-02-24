@@ -11,7 +11,7 @@ import type { InferenceCanonicalType, InferencePayloadType } from '../core/infer
 import { isPayloadVar } from '../core/inference-types';
 import type { UIControlHint, DefaultSource } from '../types';
 import type { BlockIRBuilder } from '../compiler/ir/BlockIRBuilder';
-import type { BlockIndex } from '../graph/normalize';
+import type { BlockIndex } from '../compiler/frontend/normalize-indexing';
 import type { InstanceId, StateSlotId } from '../compiler/ir/Indices';
 import type { StableStateId } from '../compiler/ir/types';
 

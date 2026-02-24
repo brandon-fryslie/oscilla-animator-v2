@@ -529,7 +529,6 @@ export class PatchStore {
   /**
    * Updates an input port's properties.
    * This is the API for editing port.defaultSource and other per-instance port properties.
-   * Emits GraphCommitted event to trigger recompilation.
    */
   updateInputPort(blockId: BlockId, portId: string, updates: Partial<InputPort>): void {
     const block = this._data.blocks.get(blockId);
@@ -600,6 +599,8 @@ export class PatchStore {
 
     // Emit BlockUpdated event for connection/defaultSource change
     if (this.eventHub && this.getPatchRevision) {
+      // [LAW:single-enforcer] RootStore emits GraphCommitted from patch snapshot
+      // identity; PatchStore emits only fine-grained mutation events.
       this.eventHub.emit({
         type: 'BlockUpdated',
         patchId: this.patchId,
@@ -607,19 +608,6 @@ export class PatchStore {
         blockId,
         changeType: 'defaultSource',
         property: portId,
-      });
-
-      // Also emit GraphCommitted for backward compatibility (triggers recompilation)
-      this.eventHub.emit({
-        type: 'GraphCommitted',
-        patchId: this.patchId,
-        patchRevision: this.getPatchRevision() + 1,
-        reason: 'userEdit',
-        diffSummary: {
-          blocksAdded: 0,
-          blocksRemoved: 0,
-          edgesChanged: 0,
-        },
       });
     }
   }
@@ -844,7 +832,6 @@ export class PatchStore {
    * Add a lens to an input port.
    *
    * Creates a LensAttachment and appends it to the port's lenses array.
-   * Triggers recompilation via GraphCommitted event.
    *
    * @param blockId - Block containing the input port
    * @param portId - Input port ID
@@ -923,18 +910,6 @@ export class PatchStore {
         changeType: 'other',
         property: portId,
       });
-
-      this.eventHub.emit({
-        type: 'GraphCommitted',
-        patchId: this.patchId,
-        patchRevision: this.getPatchRevision() + 1,
-        reason: 'userEdit',
-        diffSummary: {
-          blocksAdded: 0,
-          blocksRemoved: 0,
-          edgesChanged: 0,
-        },
-      });
     }
 
     return lensId;
@@ -988,18 +963,6 @@ export class PatchStore {
         blockId,
         changeType: 'other',
         property: portId,
-      });
-
-      this.eventHub.emit({
-        type: 'GraphCommitted',
-        patchId: this.patchId,
-        patchRevision: this.getPatchRevision() + 1,
-        reason: 'userEdit',
-        diffSummary: {
-          blocksAdded: 0,
-          blocksRemoved: 0,
-          edgesChanged: 0,
-        },
       });
     }
   }
@@ -1084,15 +1047,12 @@ export class PatchStore {
     // Emit events
     if (this.eventHub && this.getPatchRevision) {
       this.eventHub.emit({
-        type: 'GraphCommitted',
+        type: 'BlockUpdated',
         patchId: this.patchId,
-        patchRevision: this.getPatchRevision() + 1,
-        reason: 'userEdit',
-        diffSummary: {
-          blocksAdded: 0,
-          blocksRemoved: 0,
-          edgesChanged: 0,
-        },
+        patchRevision: this.getPatchRevision(),
+        blockId,
+        changeType: 'other',
+        property: portId,
       });
     }
   }
@@ -1241,7 +1201,7 @@ export class PatchStore {
   /**
    * Clears all blocks and edges, then auto-inserts InfiniteTimeRoot.
    * Every patch must have exactly one TimeRoot (system-managed).
-   * Emits PatchReset and GraphCommitted events.
+   * Emits PatchReset event.
    */
   clear(): void {
     this._hasStructuralChange = true;
@@ -1262,18 +1222,6 @@ export class PatchStore {
         patchRevision: rev,
       });
 
-      // Emit GraphCommitted to trigger recompilation and authoring validation
-      this.eventHub.emit({
-        type: 'GraphCommitted',
-        patchId: this.patchId,
-        patchRevision: rev + 1,
-        reason: 'import', // Closest semantic match for patch clear/reset
-        diffSummary: {
-          blocksAdded: 1, // TimeRoot
-          blocksRemoved: 0,
-          edgesChanged: 0,
-        },
-      });
     }
   }
 

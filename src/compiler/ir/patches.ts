@@ -5,7 +5,7 @@
  * Each pass transforms the patch, adding information and validating constraints.
  *
  * Pass Flow:
- * Patch -> NormalizedPatch (from graph/normalize.ts)
+ * Patch -> NormalizedPatch (from compiler/frontend/normalize-indexing.ts)
  *       -> TypedPatch (Pass 2)
  *       -> TimeResolvedPatch (Pass 3)
  *       -> DepGraph (Pass 4)
@@ -21,10 +21,9 @@ import type { CanonicalType, InstanceRef } from "../../core/canonical-types";
 import type { CardinalityAcceptance } from "../../core/canonical-types/cardinality";
 import type { TimeModelIR } from "./schedule";
 
-// Re-export from graph/normalize for convenience - these are the authoritative types
-export type { BlockIndex, NormalizedPatch, NormalizedEdge } from "../../graph/normalize";
+export type { BlockIndex, NormalizedPatch, NormalizedEdge } from "../frontend/normalize-indexing";
 export type { Block, Edge, Patch, PortRef } from "../../graph/Patch";
-import type { BlockIndex, NormalizedPatch, NormalizedEdge } from "../../graph/normalize";
+import type { BlockIndex, NormalizedPatch, NormalizedEdge } from "../frontend/normalize-indexing";
 import type { Block } from "../../graph/Patch";
 
 // =============================================================================

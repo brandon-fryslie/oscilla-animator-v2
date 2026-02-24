@@ -1,5 +1,4 @@
 export * from './Patch';
-export * from './normalize';
 
 // Canonical Addressing System
 export {

@@ -15,7 +15,7 @@
  */
 
 import type { Patch } from '../graph';
-import type { NormalizedPatch } from '../graph/normalize';
+import type { NormalizedPatch } from './frontend/normalize-indexing';
 import type {
   CompiledProgramIR,
   SlotMetaEntry,

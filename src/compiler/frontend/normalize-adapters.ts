@@ -1,7 +1,7 @@
 /**
  * Pass 2: Lens Expansion & Adapter Auto-Insertion
  *
- * Part of graph normalization (called from src/graph/passes/index.ts).
+ * Part of frontend normalization (called from finalizeNormalizationFixpoint()).
  *
  * This pass has TWO PHASES that run in order:
  *

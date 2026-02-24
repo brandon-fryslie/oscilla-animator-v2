@@ -239,7 +239,7 @@ export function executeAnimationFrame(
     store.diagnostics.updateMemoryStats({
       poolAllocs: 0,
       poolReleases: 0,
-      pooledBytes: arena.getTotalAllocatedBytes(),
+      pooledBytes: arena.getTotalBytes(),
       poolKeyCount: 6, // f32, vec2f32, vec3f32, rgba8, u32, u8
     });
 
