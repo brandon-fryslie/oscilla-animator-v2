@@ -140,3 +140,4 @@ Adopt the gate model as the canonical readiness concept. Keep workstreams as exe
 - Canonical checker script added: `scripts/webgpu-migration-readiness.mjs`.
 - Canonical verdict artifact emitted by checker: `artifacts/webgpu-migration-readiness.json`.
 - CI lane added: `.github/workflows/webgpu-migration-readiness.yml` runs the canonical readiness checker on pull requests and `master`.
+- Local acceptance path updated: `just check` now includes the readiness gate (`just readiness`).

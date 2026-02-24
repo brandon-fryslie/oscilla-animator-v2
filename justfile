@@ -25,8 +25,12 @@ build:
 typecheck:
   pnpm run typecheck
 
+# Compute canonical WebGPU migration readiness verdict
+readiness:
+  pnpm run test:migration-readiness
+
 # Run all checks (typecheck + test + build)
-check: typecheck test build
+check: typecheck test readiness build
   echo "All checks passed!"
 
 # Clean build artifacts
