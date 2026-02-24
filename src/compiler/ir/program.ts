@@ -498,37 +498,60 @@ export interface CombineDebugIR {
 // =============================================================================
 
 /**
- * Compute required storage sizes from slot metadata.
- *
- * Returns the number of cells needed for each storage class.
- * Use these values to create properly-sized runtime state buffers.
- *
- * @param slotMeta - Slot metadata from compiled program
- * @returns Object with storage size for each class
- *
- * @example
- * const sizes = computeStorageSizes(program.slotMeta);
- * const state = createRuntimeState(sizes.f32);
+ * Canonical runtime storage size map.
  */
-export function computeStorageSizes(slotMeta: readonly SlotMetaEntry[]): {
+export interface RuntimeStorageSizes {
   f32: number;
   i32: number;
   u32: number;
   shape2d: number;
-} {
-  const sizes = {
+}
+
+type StorageExtentEntry = {
+  readonly storage: RuntimeSlotEntry['storage'];
+  readonly offset: number;
+  readonly stride: number;
+};
+
+function accumulateStorageSizes(entries: readonly StorageExtentEntry[]): RuntimeStorageSizes {
+  const sizes: RuntimeStorageSizes = {
     f32: 0,
     i32: 0,
     u32: 0,
     shape2d: 0,
   };
-
-  for (const meta of slotMeta) {
-    const requiredSize = meta.offset + meta.stride;
-    if (requiredSize > sizes[meta.storage]) {
-      sizes[meta.storage] = requiredSize;
+  for (const entry of entries) {
+    const requiredSize = entry.offset + entry.stride;
+    if (requiredSize > sizes[entry.storage]) {
+      sizes[entry.storage] = requiredSize;
     }
   }
-
   return sizes;
+}
+
+/**
+ * Compute required storage sizes from runtime slot metadata.
+ *
+ * Returns the number of cells needed for each storage class.
+ * Use these values to create properly-sized runtime state buffers.
+ *
+ * @param runtimeSlots - Canonical runtime slots from compiled program
+ * @returns Object with storage size for each class
+ *
+ * @example
+ * const sizes = computeRuntimeStorageSizes(program.runtimeSlots);
+ * const state = createRuntimeState(sizes.f32);
+ */
+export function computeRuntimeStorageSizes(runtimeSlots: readonly RuntimeSlotEntry[]): RuntimeStorageSizes {
+  return accumulateStorageSizes(runtimeSlots);
+}
+
+/**
+ * Backward-compatible helper for older callsites.
+ *
+ * [LAW:one-source-of-truth] Runtime sizing is canonically derived from
+ * runtimeSlots; this adapter exists only for metadata-oriented tests.
+ */
+export function computeStorageSizes(slotMeta: readonly SlotMetaEntry[]): RuntimeStorageSizes {
+  return accumulateStorageSizes(slotMeta);
 }

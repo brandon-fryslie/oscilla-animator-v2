@@ -46,7 +46,7 @@ import {
   RUNTIME_FRAME_SEGMENT_OWNERSHIP,
 } from '../RuntimeState';
 import type { ScheduleIR } from '../../compiler/backend/schedule-program';
-import { computeStorageSizes } from '../../compiler/ir/program';
+import { computeRuntimeStorageSizes } from '../../compiler/ir/program';
 import { executeFrame } from '../ScheduleExecutor';
 import { compile } from '../../compiler/compile';
 import { buildPatch } from '../../graph/Patch';
@@ -88,7 +88,7 @@ function compileContinuityRenderProgram() {
 
 function createStateForProgram(program: ReturnType<typeof compileContinuityRenderProgram>) {
   const schedule = program.schedule as ScheduleIR;
-  const sizes = computeStorageSizes(program.slotMeta);
+  const sizes = computeRuntimeStorageSizes(program.runtimeSlots);
   return createRuntimeState(
     sizes.f32,
     schedule.stateSlotCount ?? 0,

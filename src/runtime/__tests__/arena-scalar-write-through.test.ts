@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { compile } from '../../compiler/compile';
 import type { ScheduleIR } from '../../compiler/backend/schedule-program';
 import type { CompiledProgramIR } from '../../compiler/ir/program';
-import { computeStorageSizes } from '../../compiler/ir/program';
+import { computeRuntimeStorageSizes } from '../../compiler/ir/program';
 import { SCALAR_INSTANCE_ID, SYSTEM_PALETTE_SLOT } from '../../compiler/ir/Indices';
 import { buildPatch } from '../../graph/Patch';
 import { executeFrame } from '../ScheduleExecutor';
@@ -48,7 +48,7 @@ function compileScalarValuePatch(): CompiledProgramIR {
 
 function createStateForProgram(program: CompiledProgramIR): RuntimeState {
   const schedule = program.schedule as ScheduleIR;
-  const sizes = computeStorageSizes(program.slotMeta);
+  const sizes = computeRuntimeStorageSizes(program.runtimeSlots);
   return createRuntimeState(
     sizes.f32,
     schedule.stateSlotCount ?? 0,

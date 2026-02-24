@@ -10,7 +10,7 @@ import { compile } from '../../compiler/compile';
 import { buildPatch } from '../../graph/Patch';
 import { executeFrameStepped } from '../executeFrameStepped';
 import { createRuntimeState } from '../RuntimeState';
-import { computeStorageSizes } from '../../compiler/ir/program';
+import { computeRuntimeStorageSizes } from '../../compiler/ir/program';
 import type { CompiledProgramIR } from '../../compiler/ir/program';
 import type { ValueSlot } from '../../compiler/ir/Indices';
 import type { ScheduleIR } from '../../compiler/backend/schedule-program';
@@ -60,7 +60,7 @@ function compileSimplePatch(): CompiledProgramIR {
 
 function createStateForProgram(program: CompiledProgramIR) {
   const schedule = program.schedule as ScheduleIR;
-  const sizes = computeStorageSizes(program.slotMeta);
+  const sizes = computeRuntimeStorageSizes(program.runtimeSlots);
   return createRuntimeState(
     sizes.f32,
     schedule.stateSlotCount ?? 0,
