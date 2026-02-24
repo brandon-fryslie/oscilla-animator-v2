@@ -43,7 +43,13 @@ import {
   type PerspectiveCameraParams,
 } from '../projection/perspective-kernel';
 import type { ResolvedCameraParams } from './CameraResolver';
-import { arenaDecodeToAoS, arenaIndex, type ArenaSlotDescriptor } from './ArenaValueStore';
+import {
+  arenaDecodeToAoS,
+  arenaIndex,
+  arenaSlice,
+  copySoaToAos,
+  type ArenaSlotDescriptor,
+} from './ArenaValueStore';
 import { EMPTY_RENDER_FRAME } from '../render/types';
 
 // =============================================================================
@@ -141,6 +147,45 @@ const _projectionOutputScratch: ProjectionOutput = {
   depth: new Float32Array(0),
   visible: new Uint8Array(0),
 };
+
+let _vec3AosScratch = new Float32Array(0);
+
+function ensureVec3AosScratch(length: number): Float32Array {
+  if (_vec3AosScratch.length < length) {
+    _vec3AosScratch = new Float32Array(length);
+  }
+  return _vec3AosScratch.subarray(0, length);
+}
+
+function soaVec3ToAosScratch(input: Float32Array, count: number): Float32Array {
+  if (count <= 1) {
+    return input;
+  }
+  const out = ensureVec3AosScratch(count * 3);
+  copySoaToAos(input, out, count, 3);
+  return out;
+}
+
+function soaToAosStable(
+  input: Float32Array,
+  laneCount: number,
+  stride: number,
+  arena: RenderBufferArena,
+): Float32Array {
+  if (laneCount <= 1 || stride <= 1) {
+    return input;
+  }
+  let out: Float32Array;
+  if (stride === 2) {
+    out = arena.allocVec2(laneCount);
+  } else if (stride === 3) {
+    out = arena.allocVec3(laneCount);
+  } else {
+    out = arena.allocF32(laneCount * stride);
+  }
+  copySoaToAos(input, out, laneCount, stride);
+  return out;
+}
 
 // =============================================================================
 // Projection Types
@@ -961,10 +1006,10 @@ function convertColorBufferToRgba(
   const output = arena.allocRGBA(count);
 
   for (let i = 0; i < count; i++) {
-    const h = input[i * 4];
-    const s = input[i * 4 + 1];
-    const l = input[i * 4 + 2];
-    const a = input[i * 4 + 3];
+    const h = input[i];
+    const s = input[count + i];
+    const l = input[count * 2 + i];
+    const a = input[count * 3 + i];
 
     // HSL→RGB conversion (single enforcer for color space conversion)
     const [r, g, b] = hslToRgbScalar(h, s, l);
@@ -1042,21 +1087,26 @@ function assemblePerInstanceShapes(
     ? (resolveNumericSlotBuffer(step.rotationSlot, state, slotToArena) as Float32Array)
     : undefined;
 
-  const fullScale2 = step.scale2Slot
+  const fullScale2Raw = step.scale2Slot
     ? (resolveNumericSlotBuffer(step.scale2Slot, state, slotToArena) as Float32Array)
     : undefined;
+  const fullScale2 = fullScale2Raw
+    ? soaToAosStable(fullScale2Raw, count, 2, arena)
+    : undefined;
+  const positionAos = soaVec3ToAosScratch(fullPosition, count);
+  const controlPointsAosCache = new Map<number, Float32Array>();
 
   // Run projection using resolved camera params
   const resolved = context.resolvedCamera;
-  if (fullPosition.length !== count * 3) {
+  if (positionAos.length !== count * 3) {
     throw new Error(
       'RenderAssembler: Position buffer must be world-space vec3 (stride 3). ' +
-      'Expected length ' + (count * 3) + ', got ' + fullPosition.length + '. ' +
+      'Expected length ' + (count * 3) + ', got ' + positionAos.length + '. ' +
       'Fix upstream: insert/compile an explicit pos2→pos3 adapter; RenderAssembler will not promote stride-2.'
     );
   }
 
-  const projection = projectInstances(fullPosition, projectionScale, count, resolved, arena, _projectionOutputScratch);
+  const projection = projectInstances(positionAos, projectionScale, count, resolved, arena, _projectionOutputScratch);
 
   for (const group of groups.values()) {
     // Skip empty groups
@@ -1139,11 +1189,18 @@ function assemblePerInstanceShapes(
 
     let arenaControlPointsBuffer: Float32Array;
     try {
-      arenaControlPointsBuffer = resolveNumericSlotBuffer(
+      const rawControlPoints = resolveNumericSlotBuffer(
         group.controlPointsSlot as ValueSlot,
         state,
         slotToArena,
       ) as Float32Array;
+      const cached = controlPointsAosCache.get(group.controlPointsSlot);
+      if (cached) {
+        arenaControlPointsBuffer = cached;
+      } else {
+        arenaControlPointsBuffer = soaToAosStable(rawControlPoints, group.pointsCount, 2, arena);
+        controlPointsAosCache.set(group.controlPointsSlot, arenaControlPointsBuffer);
+      }
     } catch {
       throw new Error(
         'RenderAssembler: Control points buffer not found for topology ' + group.topologyId + ' ' +
@@ -1392,6 +1449,7 @@ function appendDrawPathInstancesOp(
       'RenderAssembler: Position buffer must be Float32Array, got ' + positionBuffer.constructor.name
     );
   }
+  const positionBufferAos = soaVec3ToAosScratch(positionBuffer, count);
 
   // Read color buffer from slot
   const rawColorBuffer = resolveNumericSlotBuffer(step.colorSlot, state, slotToArena);
@@ -1437,7 +1495,16 @@ function appendDrawPathInstancesOp(
   }
 
   // Uniform shape: resolve fully and emit single op
-  const controlPointsBuffer = resolveControlPoints(step.controlPoints, state, slotToArena);
+  const controlPointsBufferRaw = resolveControlPoints(step.controlPoints, state, slotToArena);
+  const controlPointsBuffer =
+    controlPointsBufferRaw instanceof Float32Array && step.controlPoints
+      ? soaToAosStable(
+          controlPointsBufferRaw,
+          (slotToArena?.get(step.controlPoints.slot)?.laneCount ?? Math.floor(controlPointsBufferRaw.length / 2)),
+          2,
+          arena,
+        )
+      : controlPointsBufferRaw;
   const resolvedShape = resolveShapeFully(shape, controlPointsBuffer);
 
   // C-13: Read rotation and scale2 from slots if present
@@ -1445,24 +1512,25 @@ function appendDrawPathInstancesOp(
     ? (resolveNumericSlotBuffer(step.rotationSlot, state, slotToArena) as Float32Array)
     : undefined;
 
-  const scale2 = step.scale2Slot
+  const scale2Raw = step.scale2Slot
     ? (resolveNumericSlotBuffer(step.scale2Slot, state, slotToArena) as Float32Array)
     : undefined;
+  const scale2 = scale2Raw ? soaToAosStable(scale2Raw, count, 2, arena) : undefined;
 
   // Run projection using resolved camera params
   {
     // Run projection using resolved camera params
-    if (positionBuffer.length !== count * 3) {
+    if (positionBufferAos.length !== count * 3) {
       throw new Error(
         'RenderAssembler: Position buffer must be world-space vec3 (stride 3). ' +
-        'Expected length ' + (count * 3) + ', got ' + positionBuffer.length + '. ' +
+        'Expected length ' + (count * 3) + ', got ' + positionBufferAos.length + '. ' +
         'Fix upstream: insert/compile an explicit pos2→pos3 adapter; RenderAssembler will not promote stride-2.'
       );
     }
 
     // Project, compact, and copy in one step (uses arena from context)
     const compactedCopy = projectAndCompact(
-      positionBuffer,
+      positionBufferAos,
       projectionScale,
       count,
       colorBuffer,

@@ -32,10 +32,6 @@ function ensureContinuityScratch(length: number): Float32Array {
   return continuityScratch.subarray(0, length);
 }
 
-function continuityIndex(lane: number, component: number, stride: number): number {
-  return lane * stride + component;
-}
-
 // =============================================================================
 // Buffer Snapshot Capture
 // =============================================================================
@@ -162,16 +158,16 @@ function applyWithMapping(
     if (oldIdx >= 0 && oldIdx < oldElementCount) {
       // Mapped element: apply transformation
       for (let s = 0; s < stride; s++) {
-        // [LAW:one-source-of-truth] Continuity transfer index math is centralized
-        // through one resolver so layout migration has a single edit boundary.
-        const newBufIdx = continuityIndex(i, s, stride);
-        const oldBufIdx = continuityIndex(oldIdx, s, stride);
+        // [LAW:one-source-of-truth] Canonical field storage is SoA:
+        // component-major then lane.
+        const newBufIdx = s * elementCount + i;
+        const oldBufIdx = s * oldElementCount + oldIdx;
         onMapped(newBufIdx, oldBufIdx);
       }
     } else {
       // New element: fill with default
       for (let s = 0; s < stride; s++) {
-        const newBufIdx = continuityIndex(i, s, stride);
+        const newBufIdx = s * elementCount + i;
         onUnmapped(newBufIdx);
       }
     }
