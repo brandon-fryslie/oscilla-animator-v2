@@ -59,7 +59,7 @@ describe('deriveArenaDescriptor', () => {
       stride: 1,
       laneCount: 1,
       length: 1,
-      packing: 'aos',
+      packing: 'soa',
       laneStride: 1,
       componentStride: 1,
     }));
@@ -73,8 +73,8 @@ describe('deriveArenaDescriptor', () => {
       stride: 3,
       laneCount: 1,
       length: 3,
-      packing: 'aos',
-      laneStride: 3,
+      packing: 'soa',
+      laneStride: 1,
       componentStride: 1,
     }));
   });
@@ -89,9 +89,9 @@ describe('deriveArenaDescriptor', () => {
       stride: 1,
       laneCount: 10,
       length: 10,
-      packing: 'aos',
+      packing: 'soa',
       laneStride: 1,
-      componentStride: 1,
+      componentStride: 10,
     }));
   });
 
@@ -105,9 +105,9 @@ describe('deriveArenaDescriptor', () => {
       stride: 4,
       laneCount: 5,
       length: 20,
-      packing: 'aos',
-      laneStride: 4,
-      componentStride: 1,
+      packing: 'soa',
+      laneStride: 1,
+      componentStride: 5,
     }));
   });
 

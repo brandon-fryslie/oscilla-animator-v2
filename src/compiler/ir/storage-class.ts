@@ -83,11 +83,10 @@ export function deriveArenaDescriptor(
     ? resolveInstanceCount(card.instance.instanceId, instances)
     : 1;
   const length = stride * laneCount;
-  const packing = packingPreference ?? 'aos';
+  const packing = packingPreference ?? 'soa';
   const laneStride = packing === 'soa' ? 1 : stride;
   const componentStride = packing === 'soa' ? laneCount : 1;
-  // [LAW:one-source-of-truth] Canonical descriptor carries explicit packing
-  // metadata even while execution is still AoS-backed during W1/W14 migration.
+  // [LAW:one-source-of-truth] Canonical runtime arena descriptor is SoA.
   return {
     offset: arenaOffset,
     stride,

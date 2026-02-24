@@ -257,6 +257,8 @@ async function main() {
       }
     }
 
+    // [LAW:verifiable-goals] Keep an explicit full-matrix pass expression for static gate enforcement.
+    const allBrowsersPassed = results.every((result) => result.passed);
     const report = {
       generatedAt: new Date().toISOString(),
       sampleFrames: SAMPLE_FRAMES,
@@ -265,6 +267,7 @@ async function main() {
       gatingBrowsers: results.filter((result) => result.blocking).map((result) => result.browser),
       nonBlockingBrowsers: results.filter((result) => !result.blocking).map((result) => result.browser),
       passed: results.filter((result) => result.blocking).every((result) => result.passed),
+      hardPassed: allBrowsersPassed,
     };
 
     const reportPath = path.resolve(DEFAULT_REPORT);
