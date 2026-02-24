@@ -437,6 +437,22 @@ function convertLinkedIRToProgram(
   };
 
   const slotCount = builder.getSlotCount();
+  const renderSoaSlots = new Set<ValueSlot>();
+  const continuitySlots = new Set<ValueSlot>();
+  for (const step of scheduleIR.steps) {
+    if (step.kind === 'render') {
+      renderSoaSlots.add(step.positionSlot);
+      renderSoaSlots.add(step.colorSlot);
+      if (step.rotationSlot !== undefined) renderSoaSlots.add(step.rotationSlot);
+      if (step.scale2Slot !== undefined) renderSoaSlots.add(step.scale2Slot);
+      if (step.controlPoints?.k === 'slot') renderSoaSlots.add(step.controlPoints.slot);
+      if (step.scale?.k === 'slot') renderSoaSlots.add(step.scale.slot);
+    } else if (step.kind === 'continuityApply') {
+      continuitySlots.add(step.baseSlot);
+      continuitySlots.add(step.outputSlot);
+    }
+  }
+
   for (let slotId = 0; slotId < slotCount; slotId++) {
     const slot = slotId as ValueSlot;
     const slotInfo = slotTypes.get(slot);
@@ -453,7 +469,19 @@ function convertLinkedIRToProgram(
     slotMeta.push({ slot, storage, offset, stride, type });
 
     // Arena descriptor: flat Float32Array layout for all numeric slots.
-    const desc = deriveArenaDescriptor(type, arenaOffset, instances, slotInfo.stride);
+    const card = requireInst(type.extent.cardinality, 'cardinality');
+    const useRenderSoaPacking =
+      card.kind === 'many' &&
+      stride > 1 &&
+      renderSoaSlots.has(slot) &&
+      !continuitySlots.has(slot);
+    const desc = deriveArenaDescriptor(
+      type,
+      arenaOffset,
+      instances,
+      slotInfo.stride,
+      useRenderSoaPacking ? 'soa' : 'aos',
+    );
     arenaLayout.push(desc);
     runtimeSlots.push({
       slot,

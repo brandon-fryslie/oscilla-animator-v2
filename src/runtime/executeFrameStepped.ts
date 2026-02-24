@@ -33,7 +33,7 @@ import type { ValueSlot, StateSlotId } from '../compiler/ir/Indices';
 import { SCALAR_INSTANCE_ID, SYSTEM_PALETTE_SLOT } from '../compiler/ir/Indices';
 import { evaluateValueExprEvent } from './ValueExprEventEvaluator';
 import { materializeValueExpr } from './ValueExprMaterializer';
-import { arenaSlice, type ArenaSlotDescriptor } from './ArenaValueStore';
+import { arenaIndex, arenaSlice, type ArenaSlotDescriptor } from './ArenaValueStore';
 import {
   type SlotLookup,
   getExprAddressTable,
@@ -77,9 +77,8 @@ function writeArenaStrided(
     throw new Error(`writeArenaStrided: expected stride=${stride} for slot ${lookup.slot}, got ${lookup.stride}`);
   }
   const arenaDesc = resolveArenaDescriptor(slotToArena, lookup);
-  const o = arenaDesc.offset;
   for (let i = 0; i < stride; i++) {
-    state.arena[o + i] = src[i] as number;
+    state.arena[arenaIndex(arenaDesc, 0, i)] = src[i] as number;
   }
 }
 
@@ -90,7 +89,7 @@ function readCanonicalNumeric(
   component: number = 0,
 ): number {
   const arenaDesc = resolveArenaDescriptor(slotToArena, lookup);
-  return state.arena[arenaDesc.offset + component];
+  return state.arena[arenaIndex(arenaDesc, 0, component)];
 }
 
 function resolveNumericBuffer(
@@ -367,10 +366,25 @@ export function* executeFrameStepped(
             `materialize: arena too small for slot ${step.target} (need ${arenaDesc.offset + arenaDesc.length}, have ${state.arena.length})`,
           );
         }
-        const arenaTarget = arenaSlice(state.arena, arenaDesc);
+        const useSoaScatter = (arenaDesc.packing ?? 'aos') === 'soa' && arenaDesc.stride > 1 && count > 1;
         const buffer = materializeValueExpr(
-          veId, program.valueExprs, step.instanceId, count, state, program, arenaTarget, STEPPED_MATERIALIZE_SCRATCH,
+          veId,
+          program.valueExprs,
+          step.instanceId,
+          count,
+          state,
+          program,
+          useSoaScatter ? undefined : arenaSlice(state.arena, arenaDesc),
+          STEPPED_MATERIALIZE_SCRATCH,
         );
+        if (useSoaScatter) {
+          for (let lane = 0; lane < count; lane++) {
+            for (let component = 0; component < arenaDesc.stride; component++) {
+              const srcIndex = lane * arenaDesc.stride + component;
+              state.arena[arenaIndex(arenaDesc, lane, component)] = buffer[srcIndex] ?? 0;
+            }
+          }
+        }
 
         state.tap?.recordFieldValue?.(step.target, buffer);
 

@@ -21,6 +21,7 @@ import type { InstanceDecl } from '../ir/types';
 import { buildPatch } from '../../graph';
 import { compile } from '../compile';
 import { createRuntimeState } from '../../runtime';
+import type { ScheduleIR } from '../backend/schedule-program';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -154,6 +155,53 @@ describe('deriveArenaDescriptor', () => {
 // ---------------------------------------------------------------------------
 
 describe('arenaLayout integration', () => {
+  it('keeps continuity-owned multi-component render slots in AOS descriptors', () => {
+    const patch = buildPatch((b) => {
+      b.addBlock('InfiniteTimeRoot');
+
+      const ellipse = b.addBlock('Ellipse');
+      const array = b.addBlock('Array');
+      b.setPortDefault(array, 'count', 4);
+      b.wire(ellipse, 'shape', array, 'element');
+
+      const grid = b.addBlock('GridLayoutUV');
+      b.setPortDefault(grid, 'rows', 2);
+      b.setPortDefault(grid, 'cols', 2);
+      b.wire(array, 'elements', grid, 'elements');
+
+      const colorSignal = b.addBlock('Const');
+      b.setConfig(colorSignal, 'value', { r: 1, g: 0.25, b: 0.1, a: 1 });
+      const colorField = b.addBlock('Broadcast');
+      b.wire(colorSignal, 'out', colorField, 'one');
+
+      const render = b.addBlock('RenderInstances2D');
+      b.wire(grid, 'position', render, 'pos');
+      b.wire(colorField, 'field', render, 'color');
+    });
+
+    const result = compile(patch);
+    if (result.kind === 'error') {
+      throw new Error(`Compile failed: ${result.errors.map((e) => e.message).join(', ')}`);
+    }
+    const schedule = result.program.schedule as ScheduleIR;
+    const renderStep = schedule.steps.find((s) => s.kind === 'render');
+    expect(renderStep).toBeDefined();
+    if (!renderStep || renderStep.kind !== 'render') return;
+
+    const continuityOutputSlots = new Set(
+      schedule.steps
+        .filter((s): s is Extract<ScheduleIR['steps'][number], { kind: 'continuityApply' }> => s.kind === 'continuityApply')
+        .map((s) => s.outputSlot),
+    );
+    expect(continuityOutputSlots.has(renderStep.positionSlot)).toBe(true);
+    expect(continuityOutputSlots.has(renderStep.colorSlot)).toBe(true);
+
+    const positionDesc = result.program.runtimeAddressTable?.slotToArena.get(renderStep.positionSlot);
+    const colorDesc = result.program.runtimeAddressTable?.slotToArena.get(renderStep.colorSlot);
+    expect(positionDesc?.packing).toBe('aos');
+    expect(colorDesc?.packing).toBe('aos');
+  });
+
   it('compiled program has consistent arenaLayout', () => {
     const patch = buildPatch((b) => {
       const time = b.addBlock('InfiniteTimeRoot');

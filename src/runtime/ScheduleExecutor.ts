@@ -36,7 +36,7 @@ import type { ValueSlot } from '../compiler/ir/Indices';
 import { SCALAR_INSTANCE_ID, SYSTEM_PALETTE_SLOT } from '../compiler/ir/Indices';
 import { evaluateValueExprEvent } from './ValueExprEventEvaluator';
 import { materializeValueExpr } from './ValueExprMaterializer';
-import { arenaSlice, type ArenaSlotDescriptor } from './ArenaValueStore';
+import { arenaIndex, arenaSlice, type ArenaSlotDescriptor } from './ArenaValueStore';
 import {
   type SlotLookup,
   getExprAddressTable,
@@ -131,9 +131,8 @@ function writeArenaStrided(
     throw new Error('writeArenaStrided: expected stride=' + stride + ' for slot ' + lookup.slot + ', got ' + lookup.stride);
   }
   const arenaDesc = resolveArenaDescriptor(slotToArena, lookup);
-  const o = arenaDesc.offset;
   for (let i = 0; i < stride; i++) {
-    state.arena[o + i] = src[i] as number;
+    state.arena[arenaIndex(arenaDesc, 0, i)] = src[i] as number;
   }
 }
 
@@ -144,7 +143,7 @@ function readCanonicalNumeric(
   component: number = 0,
 ): number {
   const arenaDesc = resolveArenaDescriptor(slotToArena, lookup);
-  return state.arena[arenaDesc.offset + component];
+  return state.arena[arenaIndex(arenaDesc, 0, component)];
 }
 
 // Module-level helper: resolve slot to storage offset (hoisted to avoid per-frame closure)
@@ -366,8 +365,7 @@ export function executeFrame(
               ')',
           );
         }
-        const arenaTarget = arenaSlice(state.arena, arenaDesc);
-
+        const useSoaScatter = (arenaDesc.packing ?? 'aos') === 'soa' && arenaDesc.stride > 1 && count > 1;
         const buffer = materializeValueExpr(
           veId,
           program.valueExprs,
@@ -375,9 +373,17 @@ export function executeFrame(
           count,
           state,
           program,
-          arenaTarget,
+          useSoaScatter ? undefined : arenaSlice(state.arena, arenaDesc),
           MATERIALIZE_SCRATCH,
         );
+        if (useSoaScatter) {
+          for (let lane = 0; lane < count; lane++) {
+            for (let component = 0; component < arenaDesc.stride; component++) {
+              const srcIndex = lane * arenaDesc.stride + component;
+              state.arena[arenaIndex(arenaDesc, lane, component)] = buffer[srcIndex] ?? 0;
+            }
+          }
+        }
 
         // Debug tap: Record field value
         state.tap?.recordFieldValue?.(step.target, buffer);

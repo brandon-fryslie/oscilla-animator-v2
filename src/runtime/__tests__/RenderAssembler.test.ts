@@ -19,6 +19,7 @@ import type { RuntimeState } from '../RuntimeState';
 import { createRuntimeState } from '../RuntimeState';
 import type { ValueSlot, ValueExprId } from '../../types';
 import type { ArenaSlotDescriptor } from '../ArenaValueStore';
+import type { RuntimeScalarArenaAddress } from '../../compiler/ir/program';
 import { registerDynamicTopology } from '../../shapes/registry';
 import type { RenderSpace2D } from '../../shapes/types';
 import { PathVerb } from '../../shapes/types';
@@ -78,6 +79,64 @@ function mirrorNumericObjectSlotsToArena(
     offset += data.length;
   }
   return slotToArena;
+}
+
+function writeSoaSlotsToArena(
+  state: RuntimeState,
+  specs: ReadonlyArray<{ slot: ValueSlot; stride: number; laneCount: number; aosValues: readonly number[] }>,
+  startOffset: number = 96,
+): ReadonlyMap<ValueSlot, ArenaSlotDescriptor> {
+  const slotToArena = new Map<ValueSlot, ArenaSlotDescriptor>();
+  let offset = startOffset;
+  for (const spec of specs) {
+    const length = spec.stride * spec.laneCount;
+    if (spec.aosValues.length !== length) {
+      throw new Error(
+        `writeSoaSlotsToArena: slot ${spec.slot} expected ${length} AoS values, got ${spec.aosValues.length}`,
+      );
+    }
+    const desc: ArenaSlotDescriptor = {
+      offset,
+      stride: spec.stride,
+      laneCount: spec.laneCount,
+      length,
+      packing: 'soa',
+      laneStride: 1,
+      componentStride: spec.laneCount,
+    };
+    for (let lane = 0; lane < spec.laneCount; lane++) {
+      for (let component = 0; component < spec.stride; component++) {
+        const src = lane * spec.stride + component;
+        const dst = offset + component * spec.laneCount + lane;
+        state.arena[dst] = spec.aosValues[src] as number;
+      }
+    }
+    slotToArena.set(spec.slot, desc);
+    offset += length;
+  }
+  return slotToArena;
+}
+
+function scalarExprAddressesFromOffsets(
+  scalarExprToArenaOffset: ReadonlyMap<number, number>,
+): ReadonlyMap<number, RuntimeScalarArenaAddress> {
+  const out = new Map<number, RuntimeScalarArenaAddress>();
+  for (const [exprId, offset] of scalarExprToArenaOffset) {
+    out.set(exprId, {
+      slot: 0 as ValueSlot,
+      component: 0,
+      arena: {
+        offset,
+        stride: 1,
+        laneCount: 1,
+        length: 1,
+        packing: 'aos',
+        laneStride: 1,
+        componentStride: 1,
+      },
+    });
+  }
+  return out;
 }
 
 // Create a minimal instance declaration
@@ -150,6 +209,7 @@ describe('RenderAssembler', () => {
 
       const context: AssemblerContext = {
         scalarExprToArenaOffset: new Map(),
+        scalarExprToArenaAddress: new Map(),
         instances: new Map(),
         state,
         resolvedCamera: DEFAULT_CAMERA,
@@ -173,6 +233,7 @@ describe('RenderAssembler', () => {
 
       const context: AssemblerContext = {
         scalarExprToArenaOffset: new Map(),
+        scalarExprToArenaAddress: new Map(),
         instances: new Map([['empty-instance', createMockInstance(0)]]),
         state,
         resolvedCamera: DEFAULT_CAMERA,
@@ -239,6 +300,7 @@ describe('RenderAssembler', () => {
 
       const context: AssemblerContext = {
         scalarExprToArenaOffset,
+        scalarExprToArenaAddress: scalarExprAddressesFromOffsets(scalarExprToArenaOffset),
         instances: new Map([['culled-instance', createMockInstance(2)]]),
         state,
         resolvedCamera: DEFAULT_CAMERA,
@@ -285,6 +347,7 @@ describe('RenderAssembler', () => {
 
       const context: AssemblerContext = {
         scalarExprToArenaOffset,
+        scalarExprToArenaAddress: scalarExprAddressesFromOffsets(scalarExprToArenaOffset),
         instances: new Map([['test-instance', createMockInstance(10)]]),
         state,
         resolvedCamera: DEFAULT_CAMERA,
@@ -349,6 +412,7 @@ describe('RenderAssembler', () => {
 
       const context: AssemblerContext = {
         scalarExprToArenaOffset,
+        scalarExprToArenaAddress: scalarExprAddressesFromOffsets(scalarExprToArenaOffset),
         instances: new Map([['test-instance', createMockInstance(2)]]),
         state,
         resolvedCamera: DEFAULT_CAMERA,
@@ -395,6 +459,81 @@ describe('RenderAssembler', () => {
       expect(op.style.fillRule).toBe('nonzero');
     });
 
+    it('adapts SoA slot packing into renderer-facing packed buffers', () => {
+      const state = createMockState();
+      const positionAos = [
+        0.1, 0.2, 0.0,
+        0.3, 0.4, 0.0,
+      ];
+      const colorAos = [
+        0.0, 1.0, 0.5, 1.0,
+        1.0 / 3.0, 1.0, 0.5, 1.0,
+      ];
+      const controlPointsAos = [
+        0, 1,
+        0.95, 0.31,
+        0.59, -0.81,
+        -0.59, -0.81,
+        -0.95, 0.31,
+      ];
+      const slotToArena = writeSoaSlotsToArena(state, [
+        { slot: 1 as ValueSlot, stride: 3, laneCount: 2, aosValues: positionAos },
+        { slot: 2 as ValueSlot, stride: 4, laneCount: 2, aosValues: colorAos },
+        { slot: 3 as ValueSlot, stride: 2, laneCount: 5, aosValues: controlPointsAos },
+      ]);
+
+      const scalarExprToArenaOffset = new Map<number, number>([
+        [0, 10],
+        [1, 11],
+        [2, 12],
+        [3, 13],
+      ]);
+      state.arena[10] = 1.0;
+      state.arena[11] = 0.02;
+      state.arena[12] = 0.02;
+      state.arena[13] = 1.0;
+
+      const step: StepRender = {
+        kind: 'render',
+        instanceId: instanceId('soa-instance'),
+        positionSlot: 1 as ValueSlot,
+        colorSlot: 2 as ValueSlot,
+        scale: { k: 'one', id: 0 as ValueExprId },
+        shape: {
+          k: 'one',
+          topologyId: TEST_PENTAGON_ID,
+          paramExprs: [1 as ValueExprId, 2 as ValueExprId, 3 as ValueExprId],
+        },
+        controlPoints: { k: 'slot', slot: 3 as ValueSlot },
+      };
+
+      const context: AssemblerContext = {
+        scalarExprToArenaOffset,
+        scalarExprToArenaAddress: scalarExprAddressesFromOffsets(scalarExprToArenaOffset),
+        instances: new Map([['soa-instance', createMockInstance(2)]]),
+        state,
+        resolvedCamera: DEFAULT_CAMERA,
+        arena: getTestArena(),
+        slotToArena,
+      };
+
+      const result = assembleDrawPathInstancesOp(step, context);
+      expect(result).toHaveLength(1);
+      const op = result[0];
+      expect(op.kind).toBe('drawPathInstances');
+
+      if (op.kind === 'drawPathInstances') {
+        expect(op.instances.count).toBe(2);
+        expect(op.instances.position[0]).toBeCloseTo(0.1, 6);
+        expect(op.instances.position[1]).toBeCloseTo(0.2, 6);
+        expect(op.instances.position[2]).toBeCloseTo(0.3, 6);
+        expect(op.instances.position[3]).toBeCloseTo(0.4, 6);
+        expect(op.geometry.points).toEqual(new Float32Array(controlPointsAos));
+        expect(op.style.fillColor).toBeDefined();
+        expect(op.style.fillColor!.length).toBe(8);
+      }
+    });
+
     it('throws when control points missing for path topology', () => {
       const state = createMockState();
       // Position buffer must be stride-3 (vec3 world-space positions)
@@ -436,6 +575,7 @@ describe('RenderAssembler', () => {
 
       const context: AssemblerContext = {
         scalarExprToArenaOffset,
+        scalarExprToArenaAddress: scalarExprAddressesFromOffsets(scalarExprToArenaOffset),
         instances: new Map([['test-instance', createMockInstance(10)]]),
         state,
         resolvedCamera: DEFAULT_CAMERA,
@@ -511,6 +651,7 @@ describe('RenderAssembler', () => {
 
       const context: AssemblerContext = {
         scalarExprToArenaOffset,
+        scalarExprToArenaAddress: scalarExprAddressesFromOffsets(scalarExprToArenaOffset),
         instances: new Map([
           ['instance-a', createMockInstance(1)],
           ['instance-b', createMockInstance(1)],
@@ -553,6 +694,7 @@ describe('RenderAssembler', () => {
 
       const context: AssemblerContext = {
         scalarExprToArenaOffset,
+        scalarExprToArenaAddress: scalarExprAddressesFromOffsets(scalarExprToArenaOffset),
         instances: new Map([
           ['empty-instance', createMockInstance(0)], // count = 0
         ]),
@@ -626,6 +768,7 @@ describe('RenderAssembler', () => {
       const arena = getTestArena();
       const context: AssemblerContext = {
         scalarExprToArenaOffset,
+        scalarExprToArenaAddress: scalarExprAddressesFromOffsets(scalarExprToArenaOffset),
         instances: new Map([['budget-instance', createMockInstance(instanceCount)]]),
         state,
         resolvedCamera: DEFAULT_CAMERA,

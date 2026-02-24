@@ -19,6 +19,7 @@ import type { RuntimeState } from '../RuntimeState';
 import { createRuntimeState, SHAPE2D_WORDS, writeShape2D } from '../RuntimeState';
 import type { ValueSlot, ValueExprId } from '../../types';
 import type { ArenaSlotDescriptor } from '../ArenaValueStore';
+import type { RuntimeScalarArenaAddress } from '../../compiler/ir/program';
 import { registerDynamicTopology } from '../../shapes/registry';
 import type { RenderSpace2D } from '../../shapes/types';
 import { PathVerb } from '../../shapes/types';
@@ -75,6 +76,28 @@ function mirrorNumericObjectSlotsToArena(
     offset += data.length;
   }
   return slotToArena;
+}
+
+function scalarExprAddressesFromOffsets(
+  scalarExprToArenaOffset: ReadonlyMap<number, number>,
+): ReadonlyMap<number, RuntimeScalarArenaAddress> {
+  const out = new Map<number, RuntimeScalarArenaAddress>();
+  for (const [exprId, offset] of scalarExprToArenaOffset) {
+    out.set(exprId, {
+      slot: 0 as ValueSlot,
+      component: 0,
+      arena: {
+        offset,
+        stride: 1,
+        laneCount: 1,
+        length: 1,
+        packing: 'aos',
+        laneStride: 1,
+        componentStride: 1,
+      },
+    });
+  }
+  return out;
 }
 
 // Create a minimal instance declaration
@@ -174,6 +197,7 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
 
       const context: AssemblerContext = {
         scalarExprToArenaOffset,
+        scalarExprToArenaAddress: scalarExprAddressesFromOffsets(scalarExprToArenaOffset),
         instances: new Map([['test-instance', createMockInstance(10)]]),
         state,
         resolvedCamera: DEFAULT_CAMERA,
@@ -246,6 +270,7 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
 
       const context: AssemblerContext = {
         scalarExprToArenaOffset,
+        scalarExprToArenaAddress: scalarExprAddressesFromOffsets(scalarExprToArenaOffset),
         instances: new Map([['test-instance', createMockInstance(instanceCount)]]),
         state,
         resolvedCamera: DEFAULT_CAMERA,
@@ -332,6 +357,7 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
 
       const context: AssemblerContext = {
         scalarExprToArenaOffset,
+        scalarExprToArenaAddress: scalarExprAddressesFromOffsets(scalarExprToArenaOffset),
         instances: new Map([['test-instance', createMockInstance(instanceCount)]]),
         state,
         resolvedCamera: DEFAULT_CAMERA,
@@ -420,6 +446,7 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
 
       const context: AssemblerContext = {
         scalarExprToArenaOffset,
+        scalarExprToArenaAddress: scalarExprAddressesFromOffsets(scalarExprToArenaOffset),
         instances: new Map([['test-instance', createMockInstance(instanceCount)]]),
         state,
         resolvedCamera: DEFAULT_CAMERA,
@@ -496,6 +523,7 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
 
       const context: AssemblerContext = {
         scalarExprToArenaOffset,
+        scalarExprToArenaAddress: scalarExprAddressesFromOffsets(scalarExprToArenaOffset),
         instances: new Map([['test-instance', createMockInstance(instanceCount)]]),
         state,
         resolvedCamera: DEFAULT_CAMERA,
@@ -579,6 +607,7 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
 
       const context: AssemblerContext = {
         scalarExprToArenaOffset,
+        scalarExprToArenaAddress: scalarExprAddressesFromOffsets(scalarExprToArenaOffset),
         instances: new Map([['test-instance', createMockInstance(instanceCount)]]),
         state,
         resolvedCamera: DEFAULT_CAMERA,
@@ -634,6 +663,7 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
 
       const context: AssemblerContext = {
         scalarExprToArenaOffset,
+        scalarExprToArenaAddress: scalarExprAddressesFromOffsets(scalarExprToArenaOffset),
         instances: new Map([['test-instance', createMockInstance(instanceCount)]]),
         state,
         resolvedCamera: DEFAULT_CAMERA,
@@ -695,6 +725,7 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
 
       const context: AssemblerContext = {
         scalarExprToArenaOffset,
+        scalarExprToArenaAddress: scalarExprAddressesFromOffsets(scalarExprToArenaOffset),
         instances: new Map([['culled-groups', createMockInstance(instanceCount)]]),
         state,
         resolvedCamera: DEFAULT_CAMERA,
@@ -787,6 +818,7 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
 
       const context: AssemblerContext = {
         scalarExprToArenaOffset,
+        scalarExprToArenaAddress: scalarExprAddressesFromOffsets(scalarExprToArenaOffset),
         instances: new Map([
           ['instance-a', createMockInstance(3)],
           ['instance-b', createMockInstance(4)],
@@ -873,6 +905,7 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
       const arena = getTestArena();
       const context: AssemblerContext = {
         scalarExprToArenaOffset,
+        scalarExprToArenaAddress: scalarExprAddressesFromOffsets(scalarExprToArenaOffset),
         instances: new Map([['stress-instance', createMockInstance(instanceCount)]]),
         state,
         resolvedCamera: DEFAULT_CAMERA,

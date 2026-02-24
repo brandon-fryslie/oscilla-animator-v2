@@ -15,7 +15,7 @@ import { getExprAddressTable } from './ExprAddressTable';
 import type { SlotValue, ValueAnomaly, LaneIdentity } from './StepDebugTypes';
 import type { InstanceId } from '../core/ids';
 import type { ContinuityState } from './ContinuityState';
-import type { ArenaSlotDescriptor } from './ArenaValueStore';
+import { arenaIndex, type ArenaSlotDescriptor } from './ArenaValueStore';
 
 /**
  * Read the current value of a slot from runtime state.
@@ -40,14 +40,14 @@ export function readSlotValue(
       if (lookup.stride === 1) {
         return {
           kind: 'scalar',
-          value: state.arena[arenaDesc.offset],
+          value: state.arena[arenaIndex(arenaDesc, 0, 0)],
           type: lookup.type,
         };
       }
       // Multi-component: copy the values into a snapshot buffer
       const buffer = new Float64Array(lookup.stride);
       for (let i = 0; i < lookup.stride; i++) {
-        buffer[i] = state.arena[arenaDesc.offset + i];
+        buffer[i] = state.arena[arenaIndex(arenaDesc, 0, i)];
       }
       return {
         kind: 'buffer',
