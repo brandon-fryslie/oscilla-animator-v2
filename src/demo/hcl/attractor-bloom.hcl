@@ -82,14 +82,48 @@ patch "Attractor Bloom" {
   # - soft target follows smoothed mouse directly
   # - hard target orbits around mouse for richer motion
   block "Expression" "soft_target" {
-    expression = "vec2(mouse_x_smooth.out, mouse_y_smooth.out)"
+    expression = <<-EXPR
+      // Smoothed horizontal control from user input.
+      // Visual: prevents jitter and makes center motion feel fluid.
+      target_x = mouse_x_smooth.out
+
+      // Smoothed vertical control from user input.
+      // Visual: keeps target travel stable and easy to steer.
+      target_y = mouse_y_smooth.out
+
+      // Emit direct mouse-follow target.
+      // Visual: soft attractor remains anchored to the cursor path.
+      vec2(target_x, target_y)
+    EXPR
     outputs {
       out = soft_attract.target
     }
   }
 
   block "Expression" "hard_target" {
-    expression = "vec2(mouse_x_smooth.out + 0.08 * cos(clock.phaseA * 6.2832), mouse_y_smooth.out + 0.08 * sin(clock.phaseA * 6.2832))"
+    expression = <<-EXPR
+      // Smoothed mouse position is the base center.
+      // Visual: hard attractor stays tied to user motion.
+      base_x = mouse_x_smooth.out
+      base_y = mouse_y_smooth.out
+
+      // Orbit radius around the mouse center.
+      // Visual: adds secondary motion and richer bloom dynamics.
+      orbit_radius = 0.08
+
+      // Time phase in radians.
+      // Visual: sets speed and continuity of circular orbit.
+      orbit_angle = clock.phaseA * 6.2832
+
+      // Circular offset around base center.
+      // Visual: hard attractor continuously circles the soft target.
+      target_x = base_x + orbit_radius * cos(orbit_angle)
+      target_y = base_y + orbit_radius * sin(orbit_angle)
+
+      // Emit moving hard-attractor target.
+      // Visual: introduces evolving asymmetry between soft and hard layers.
+      vec2(target_x, target_y)
+    EXPR
     outputs {
       out = hard_attract.target
     }

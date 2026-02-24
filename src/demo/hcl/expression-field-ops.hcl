@@ -40,7 +40,27 @@ patch "Expression Field Ops" {
 
   # Explicit field operator: map one-cardinality oscillator value over points.t lanes
   block "Expression" "scale_expr" {
-    expression = "mapField(0.85 + 0.2 * sin(clock.phaseA * 6.2832), points.t)"
+    expression = <<-EXPR
+      // Baseline scale level shared by every instance.
+      // Visual: keeps the grid readable at all times.
+      base_scale = 0.85
+
+      // How far scale can deviate from baseline.
+      // Visual: determines the perceived energy of the pulse.
+      pulse_amount = 0.2
+
+      // Convert phase to radians for sine oscillator.
+      // Visual: drives rhythmic global expansion/contraction.
+      pulse_phase = clock.phaseA * 6.2832
+
+      // One-cardinality pulse value before field mapping.
+      // Visual: all points start from the same temporal pulse.
+      pulse_value = base_scale + pulse_amount * sin(pulse_phase)
+
+      // Broadcast pulse to every points.t lane.
+      // Visual: applies identical scale animation to the whole grid.
+      mapField(pulse_value, points.t)
+    EXPR
     outputs {
       out = render.scale
     }
