@@ -37,9 +37,41 @@ describe('PathTessellator', () => {
     expect(mesh.indexData.length).toBe((geometry.pointsCount - 2) * 3);
   });
 
-  it('throws on unsupported curve verbs', () => {
+  it('supports QUAD and CUBIC verbs by flattening curves', () => {
     const tessellator = new PathTessellator();
-    const geometry = createGeometry([0, 0, 1, 0, 1, 1], [0, 3, 4]);
+    const quadratic = createGeometry(
+      [
+        -1, 0,   // MOVE
+        0, 1,    // QUAD control
+        1, 0,    // QUAD end
+        1, -1,   // LINE
+        -1, -1,  // LINE
+      ],
+      [0, 3, 1, 1, 4]
+    );
+
+    const cubic = createGeometry(
+      [
+        -1, 0,   // MOVE
+        -0.5, 1, // CUBIC control 1
+        0.5, 1,  // CUBIC control 2
+        1, 0,    // CUBIC end
+        1, -1,   // LINE
+        -1, -1,  // LINE
+      ],
+      [0, 2, 1, 1, 4]
+    );
+
+    const quadMesh = tessellator.getOrCreateMesh(quadratic);
+    const cubicMesh = tessellator.getOrCreateMesh(cubic);
+
+    expect(quadMesh.indexData.length).toBeGreaterThan(0);
+    expect(cubicMesh.indexData.length).toBeGreaterThan(0);
+  });
+
+  it('throws on unknown path verbs', () => {
+    const tessellator = new PathTessellator();
+    const geometry = createGeometry([0, 0, 1, 0, 1, 1], [0, 99, 4]);
     expect(() => tessellator.getOrCreateMesh(geometry)).toThrow(/unsupported path verb/i);
   });
 

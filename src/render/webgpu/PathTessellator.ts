@@ -14,14 +14,17 @@ interface ContourBuildResult {
 
 const VERB_MOVE = 0;
 const VERB_LINE = 1;
+const VERB_CUBIC = 2;
+const VERB_QUAD = 3;
 const VERB_CLOSE = 4;
 
 const EPSILON = 1e-7;
+const CURVE_SUBDIVISIONS = 12;
 
 /**
  * CPU path tessellation for WebGPU fill rendering.
  *
- * Supports a single contour composed of MOVE/LINE/CLOSE verbs.
+ * Supports a single contour composed of MOVE/LINE/CUBIC/QUAD/CLOSE verbs.
  * Unsupported verb/topology patterns fail fast by throwing.
  */
 export class PathTessellator {
@@ -84,9 +87,59 @@ export class PathTessellator {
       }
 
       if (verb === VERB_LINE) {
+        if (current.length < 2) {
+          throw new Error('PathTessellator: LINE verb requires an active contour (MOVE first)');
+        }
         this.assertPointAvailable(pointIndex, maxPointIndex, verb);
-        current.push(points[pointIndex * 2], points[pointIndex * 2 + 1]);
+        const x = points[pointIndex * 2];
+        const y = points[pointIndex * 2 + 1];
+        current.push(x, y);
         pointIndex++;
+        continue;
+      }
+
+      if (verb === VERB_CUBIC) {
+        if (current.length < 2) {
+          throw new Error('PathTessellator: CUBIC verb requires an active contour (MOVE first)');
+        }
+        this.assertPointAvailable(pointIndex, maxPointIndex, verb);
+        const cp1x = points[pointIndex * 2];
+        const cp1y = points[pointIndex * 2 + 1];
+        pointIndex++;
+
+        this.assertPointAvailable(pointIndex, maxPointIndex, verb);
+        const cp2x = points[pointIndex * 2];
+        const cp2y = points[pointIndex * 2 + 1];
+        pointIndex++;
+
+        this.assertPointAvailable(pointIndex, maxPointIndex, verb);
+        const endx = points[pointIndex * 2];
+        const endy = points[pointIndex * 2 + 1];
+        pointIndex++;
+
+        const startx = current[current.length - 2];
+        const starty = current[current.length - 1];
+        this.appendCubic(current, startx, starty, cp1x, cp1y, cp2x, cp2y, endx, endy);
+        continue;
+      }
+
+      if (verb === VERB_QUAD) {
+        if (current.length < 2) {
+          throw new Error('PathTessellator: QUAD verb requires an active contour (MOVE first)');
+        }
+        this.assertPointAvailable(pointIndex, maxPointIndex, verb);
+        const cpx = points[pointIndex * 2];
+        const cpy = points[pointIndex * 2 + 1];
+        pointIndex++;
+
+        this.assertPointAvailable(pointIndex, maxPointIndex, verb);
+        const endx = points[pointIndex * 2];
+        const endy = points[pointIndex * 2 + 1];
+        pointIndex++;
+
+        const startx = current[current.length - 2];
+        const starty = current[current.length - 1];
+        this.appendQuadratic(current, startx, starty, cpx, cpy, endx, endy);
         continue;
       }
 
@@ -96,7 +149,7 @@ export class PathTessellator {
       }
 
       throw new Error(
-        `PathTessellator: unsupported path verb ${verb}. Only MOVE/LINE/CLOSE are supported by WebGPU renderer`
+        `PathTessellator: unsupported path verb ${verb}. Valid verbs are MOVE/LINE/CUBIC/QUAD/CLOSE (0..4)`
       );
     }
 
@@ -193,6 +246,52 @@ export class PathTessellator {
     }
 
     return current;
+  }
+
+  private appendQuadratic(
+    out: number[],
+    x0: number,
+    y0: number,
+    cx: number,
+    cy: number,
+    x1: number,
+    y1: number,
+  ): void {
+    for (let i = 1; i <= CURVE_SUBDIVISIONS; i++) {
+      const t = i / CURVE_SUBDIVISIONS;
+      const mt = 1 - t;
+      const x = mt * mt * x0 + 2 * mt * t * cx + t * t * x1;
+      const y = mt * mt * y0 + 2 * mt * t * cy + t * t * y1;
+      out.push(x, y);
+    }
+  }
+
+  private appendCubic(
+    out: number[],
+    x0: number,
+    y0: number,
+    cx1: number,
+    cy1: number,
+    cx2: number,
+    cy2: number,
+    x1: number,
+    y1: number,
+  ): void {
+    for (let i = 1; i <= CURVE_SUBDIVISIONS; i++) {
+      const t = i / CURVE_SUBDIVISIONS;
+      const mt = 1 - t;
+      const x =
+        mt * mt * mt * x0 +
+        3 * mt * mt * t * cx1 +
+        3 * mt * t * t * cx2 +
+        t * t * t * x1;
+      const y =
+        mt * mt * mt * y0 +
+        3 * mt * mt * t * cy1 +
+        3 * mt * t * t * cy2 +
+        t * t * t * y1;
+      out.push(x, y);
+    }
   }
 
   private tessellateContour(cacheKey: string, contour: ContourBuildResult): TessellatedPathMesh {
