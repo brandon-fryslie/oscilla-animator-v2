@@ -29,7 +29,6 @@ function mockProgram(
     runtimeAddressTable: {
       slotLookup: new Map(),
       fieldExprToSlot: new Map(),
-      scalarExprToArenaOffset: new Map(),
       scalarExprToArenaAddress: new Map(),
       slotToArena,
     },

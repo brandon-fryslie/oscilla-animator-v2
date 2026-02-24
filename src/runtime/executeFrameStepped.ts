@@ -272,9 +272,8 @@ export function* executeFrameStepped(
   // Yield pre-frame snapshot
   yield buildSnapshot(-1, null, 'pre-frame', totalSteps, program, state, tAbsMs, new Map(), prevValues);
 
-  // [LAW:one-source-of-truth] Populate scalarExprToArenaOffset before Phase 1 so extract
-  // reads multi-component values from arena using canonical ExprAddressTable offsets.
-  state.cache.scalarExprToArenaOffset = addressTable.scalarExprToArenaOffset;
+  // [LAW:one-source-of-truth] Populate canonical scalar arena addresses before Phase 1
+  // so extract reads resolve from compiler-emitted ExprAddressTable metadata only.
   state.cache.scalarExprToArenaAddress = addressTable.scalarExprToArenaAddress;
 
   // --- PHASE 1: Execute all non-stateWrite steps ---
@@ -457,7 +456,6 @@ export function* executeFrameStepped(
     state,
     resolvedCamera,
     arena,
-    scalarExprToArenaOffset: state.cache.scalarExprToArenaOffset!,
     scalarExprToArenaAddress: state.cache.scalarExprToArenaAddress ?? undefined,
     slotToArena: addressTable.slotToArena,
   };
