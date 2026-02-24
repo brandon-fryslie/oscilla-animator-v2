@@ -1050,6 +1050,38 @@ describe('Forbidden Patterns (Type System Invariants)', () => {
       ).toEqual([]);
     });
 
+    it('compiler public entrypoints must not export concrete builder implementation factories', () => {
+      // [LAW:one-source-of-truth] Public compiler surface exports canonical contracts,
+      // not IRBuilderImpl/createIRBuilder concrete implementation entrypoints.
+      const rawMatches = [
+        ...grepSrc('export \\{[^}]*\\bIRBuilderImpl\\b', 'src/compiler/index.ts'),
+        ...grepSrc('export \\{[^}]*\\bcreateIRBuilder\\b', 'src/compiler/index.ts'),
+        ...grepSrc('export \\{[^}]*\\bIRBuilderImpl\\b', 'src/compiler/ir/index.ts'),
+        ...grepSrc('export \\{[^}]*\\bcreateIRBuilder\\b', 'src/compiler/ir/index.ts'),
+      ];
+      const filtered = filterAllowlist(rawMatches, [/\.test\./, /__tests__/]);
+      expect(
+        filtered,
+        'Compiler entrypoints must not export IRBuilderImpl/createIRBuilder.\n' +
+        'Use BlockIRBuilder and OrchestratorIRBuilder contract surfaces.\n' +
+        'Found violations:\n' + filtered.join('\n')
+      ).toEqual([]);
+    });
+
+    it('typed patch contract must not carry legacy blockOutputTypes compatibility map', () => {
+      const rawMatches = [
+        ...grepSrc('blockOutputTypes', 'src/compiler/ir/patches.ts'),
+        ...grepSrc('blockOutputTypes', 'src/compiler/frontend/analyze-type-graph.ts'),
+      ];
+      const filtered = filterAllowlist(rawMatches, [/\.test\./, /__tests__/]);
+      expect(
+        filtered,
+        'TypedPatch must not carry legacy blockOutputTypes compatibility seams.\n' +
+        'TypeResolvedPatch.portTypes is the canonical type authority.\n' +
+        'Found violations:\n' + filtered.join('\n')
+      ).toEqual([]);
+    });
+
     it('source modules must not import removed legacy IRBuilder interface file', () => {
       const rawMatches = grepSrc("ir/IRBuilder['\\\"]", 'src/');
       const filtered = filterAllowlist(rawMatches, [

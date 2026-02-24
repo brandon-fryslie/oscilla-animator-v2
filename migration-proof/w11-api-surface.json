@@ -1,0 +1,49 @@
+{
+  "workstream": "W11",
+  "title": "Compiler API Surface Cleanup",
+  "status": "slice_completed",
+  "timestamp_utc": "2026-02-24T06:50:42Z",
+  "laws": [
+    "one-source-of-truth",
+    "single-enforcer",
+    "verifiable-goals"
+  ],
+  "scope": [
+    "Remove IRBuilderImpl/createIRBuilder exports from compiler public entrypoints",
+    "Remove TypedPatch blockOutputTypes legacy compatibility seam",
+    "Add static guards preventing concrete builder export and blockOutputTypes reintroduction"
+  ],
+  "changed_files": [
+    "/Users/bmf/.codex/worktrees/49f4/oscilla-animator-v2/src/compiler/index.ts",
+    "/Users/bmf/.codex/worktrees/49f4/oscilla-animator-v2/src/compiler/ir/index.ts",
+    "/Users/bmf/.codex/worktrees/49f4/oscilla-animator-v2/src/compiler/frontend/analyze-type-graph.ts",
+    "/Users/bmf/.codex/worktrees/49f4/oscilla-animator-v2/src/compiler/ir/patches.ts",
+    "/Users/bmf/.codex/worktrees/49f4/oscilla-animator-v2/src/compiler/ir/bridges.ts",
+    "/Users/bmf/.codex/worktrees/49f4/oscilla-animator-v2/src/__tests__/forbidden-patterns.test.ts"
+  ],
+  "verification": [
+    {
+      "command": "pnpm -s typecheck",
+      "exit_code": 0
+    },
+    {
+      "command": "pnpm -s vitest run src/__tests__/forbidden-patterns.test.ts src/__tests__/compiledir-foundation-gates.test.ts",
+      "exit_code": 0,
+      "tests_passed": 85
+    },
+    {
+      "command": "if command -v just >/dev/null 2>&1 && [ -f Justfile ]; then just check; else pnpm run typecheck && pnpm test; fi",
+      "exit_code": 0
+    }
+  ],
+  "static_scans": [
+    {
+      "command": "rg -n \"export \\{[^}]*\\b(IRBuilderImpl|createIRBuilder)\\b\" src/compiler/index.ts src/compiler/ir/index.ts",
+      "result": "no_matches"
+    },
+    {
+      "command": "rg -n \"blockOutputTypes\" src/compiler/frontend/analyze-type-graph.ts src/compiler/ir/patches.ts",
+      "result": "no_matches"
+    }
+  ]
+}

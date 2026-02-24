@@ -3,7 +3,6 @@ export { compile } from './compile';
 export type { CompileResult, CompileFailure } from './compile';
 
 // Export IR types (selective to avoid conflicts)
-export { createIRBuilder, IRBuilderImpl } from './ir';
 // [LAW:one-source-of-truth] Canonical builder contracts are BlockIRBuilder/OrchestratorIRBuilder.
 export type { BlockIRBuilder, OrchestratorIRBuilder, Step, TimeModel, ValueExpr } from './ir';
 export type { ValueExprId, SlotId, ValueSlot, InstanceId, EventSlotId } from './ir';
