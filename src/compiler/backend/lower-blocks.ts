@@ -12,7 +12,13 @@ import type { ConstantProvenanceEntry, InstanceCountProvenanceEntry } from "../i
 import { isExprRef, type ValueRefExpr, type CollectInputEntry } from "../ir/lowerTypes";
 import type { InstanceId, StateSlotId } from "../ir/Indices";
 import type { StableStateId } from "../ir/types";
-import { getBlockDefinition, type LowerCtx, type LowerResult, hasLowerOutputsOnly } from "../../blocks/registry";
+import {
+  getBlockDefinition,
+  type LowerCtx,
+  type LowerOutputsOnlyResult,
+  type LowerResult,
+  hasLowerOutputsOnly,
+} from "../../blocks/registry";
 import type { EventHub } from "../../events/EventHub";
 import { payloadStride, type CanonicalType, requireInst, withInstance } from "../../core/canonical-types";
 import { normalizeCanonicalName } from "../../core/canonical-name";
@@ -43,6 +49,17 @@ function getExistingStateMap(builder: OrchestratorIRBuilder): ReadonlyMap<Stable
     stateMap.set(mapping.stateId, mapping.slotStart as StateSlotId);
   }
   return stateMap;
+}
+
+function requireBlockEffects(
+  effects: LowerResult['effects'] | undefined,
+  block: Block,
+  phase: 'phase1' | 'phase2',
+): LowerResult['effects'] {
+  if (effects) return effects;
+  throw new Error(
+    `Block ${block.type}#${block.id} ${phase} lowering must return effects (empty arrays allowed, undefined is invalid).`,
+  );
 }
 
 
@@ -719,8 +736,9 @@ function lowerBlockInstance(
     }
 
     // Process effects using binding pass (WI-4)
+    const blockEffects = requireBlockEffects(result.effects, block, 'phase2');
     const bindingInputs = {
-      effects: result.effects,
+      effects: blockEffects,
       existingState: getExistingStateMap(builder),
       origin: { blockId: block.id },
     };
@@ -738,7 +756,7 @@ function lowerBlockInstance(
     }
 
     // Apply binding (mechanical execution)
-    applyBinding(builder, binding, result.effects);
+    applyBinding(builder, binding, blockEffects);
 
     // Bind outputs using the new helper
     const boundOutputsMap = bindOutputs(
@@ -926,12 +944,12 @@ function lowerSCCTwoPass(
         const config = block.params;
 
         // Call lowerOutputsOnly
-        const partialResult = blockDef.lowerOutputsOnly!({ ctx, config });
+        const partialResult: LowerOutputsOnlyResult = blockDef.lowerOutputsOnly!({ ctx, config });
         // Store partial result for phase 2
         phase1Results.set(blockIndex, partialResult);
 
         // BINDING PASS for phase 1: process effects using new binding pass (WI-4)
-        const phase1Effects = partialResult.effects ?? {};
+        const phase1Effects = requireBlockEffects(partialResult.effects, block, 'phase1');
         const bindingInputs = {
           effects: phase1Effects,
           existingState: getExistingStateMap(builder),

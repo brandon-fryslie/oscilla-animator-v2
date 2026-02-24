@@ -1205,7 +1205,10 @@ describe('Forbidden Patterns (Type System Invariants)', () => {
     });
 
     it('lower-blocks must not branch on optional effects mode', () => {
-      const rawMatches = grepSrc('if \\(result\\.effects\\)|if \\(partialResult\\.effects\\)', 'src/compiler/backend/lower-blocks.ts');
+      const rawMatches = grepSrc(
+        'if \\(result\\.effects\\)|if \\(partialResult\\.effects\\)|effects\\s*\\?\\?\\s*\\{\\}',
+        'src/compiler/backend/lower-blocks.ts',
+      );
       const filtered = filterAllowlist(rawMatches, [/\.test\./, /__tests__/]);
       expect(
         filtered,
@@ -1221,7 +1224,7 @@ describe('Forbidden Patterns (Type System Invariants)', () => {
       const filtered = filterAllowlist(rawMatches, [
         /\.test\./,
         /__tests__/,
-        /^207:/,
+        /origin\.blockId/,
       ]);
       expect(
         filtered,
