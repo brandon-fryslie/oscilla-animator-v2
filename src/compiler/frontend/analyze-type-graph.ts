@@ -2,7 +2,7 @@
  * Pass 2: Type Graph Construction
  *
  * Input: TypeResolvedPatch (from pass1 - has all port types resolved)
- * Output: TypedPatch (extends TypeResolvedPatch with blockOutputTypes for legacy compatibility)
+ * Output: TypedPatch (validated TypeResolvedPatch)
  *
  * This pass validates type compatibility for all edges using the resolved types
  * from pass1. It does NOT look up types from BlockDef - all types come from
@@ -71,7 +71,7 @@ export interface Pass2TypeGraphResult {
 // =============================================================================
 
 /**
- * Core type-graph evaluator — builds blockOutputTypes and validates edge
+ * Core type-graph evaluator — validates edge
  * compatibility in a single pass.  Returns typed errors as data.
  *
  * // [LAW:one-source-of-truth] This is the ONE place that evaluates pass2.
@@ -79,26 +79,6 @@ export interface Pass2TypeGraphResult {
  */
 function evaluateTypeGraph(typeResolved: TypeResolvedPatch): Pass2TypeGraphResult {
   const errors: Pass2Error[] = [];
-
-  // Build block output types map (for legacy compatibility)
-  const blockOutputTypes = new Map<string, ReadonlyMap<string, CanonicalType>>();
-
-  for (let i = 0; i < typeResolved.blocks.length; i++) {
-    const block = typeResolved.blocks[i];
-    const blockIndex = i as BlockIndex;
-    const blockDef = getBlockDefinition(block.type);
-    if (!blockDef) continue;
-
-    const outputTypes = new Map<string, CanonicalType>();
-    for (const portId of Object.keys(blockDef.outputs)) {
-      const type = getPortType(typeResolved, blockIndex, portId, 'out');
-      if (type) {
-        outputTypes.set(portId, type);
-      }
-    }
-
-    blockOutputTypes.set(block.id, outputTypes);
-  }
 
   // Validate type compatibility for edges
   for (const edge of typeResolved.edges) {
@@ -170,10 +150,7 @@ function evaluateTypeGraph(typeResolved: TypeResolvedPatch): Pass2TypeGraphResul
     }
   }
 
-  const typedPatch: TypedPatch = {
-    ...typeResolved,
-    blockOutputTypes,
-  };
+  const typedPatch: TypedPatch = typeResolved;
 
   return { typedPatch, errors };
 }

@@ -17,7 +17,7 @@
  */
 
 import type { ValueExprId } from "./Indices";
-import type { CanonicalType, InstanceRef } from "../../core/canonical-types";
+import type { CanonicalType } from "../../core/canonical-types";
 import type { CardinalityAcceptance } from "../../core/canonical-types/cardinality";
 import type { TimeModelIR } from "./schedule";
 
@@ -96,15 +96,12 @@ export interface TypeResolvedPatch extends NormalizedPatch {
 // =============================================================================
 
 /**
- * Typed patch - extends TypeResolvedPatch with blockOutputTypes for legacy compatibility.
+ * Typed patch - pass2 validated view over TypeResolvedPatch.
  *
- * Pass 2 validates type compatibility using resolved types from pass1.
- * All port types come from TypeResolvedPatch.portTypes.
+ * Pass 2 validates edge compatibility using resolved types from pass1.
+ * The validated patch shape is identical to TypeResolvedPatch.
  */
-export interface TypedPatch extends TypeResolvedPatch {
-  /** Type descriptors for each block output: Map<BlockId, Map<PortId, CanonicalType | InstanceRef>> */
-  readonly blockOutputTypes: ReadonlyMap<string, ReadonlyMap<string, CanonicalType | InstanceRef>>;
-}
+export type TypedPatch = TypeResolvedPatch;
 
 // =============================================================================
 // Time-Resolved Patch - Pass 3

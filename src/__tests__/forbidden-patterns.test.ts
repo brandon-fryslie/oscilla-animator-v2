@@ -1086,6 +1086,20 @@ describe('Forbidden Patterns (Type System Invariants)', () => {
       ).toEqual([]);
     });
 
+    it('compiler pass types must not carry legacy blockOutputTypes compatibility maps', () => {
+      const rawMatches = [
+        ...grepSrc('\\bblockOutputTypes\\b', 'src/compiler/ir/patches.ts'),
+        ...grepSrc('\\bblockOutputTypes\\b', 'src/compiler/frontend/analyze-type-graph.ts'),
+      ];
+      const filtered = filterAllowlist(rawMatches, [/\.test\./, /__tests__/]);
+      expect(
+        filtered,
+        'TypedPatch must not carry legacy blockOutputTypes compatibility seams.\n' +
+        'Pass2 output should be the validated TypeResolvedPatch shape only.\n' +
+        'Found violations:\n' + filtered.join('\n')
+      ).toEqual([]);
+    });
+
   });
 
   describe('WebGPU Prereq Guards (W3/W8)', () => {
