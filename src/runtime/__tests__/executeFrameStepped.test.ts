@@ -71,6 +71,16 @@ function createStateForProgram(program: CompiledProgramIR) {
 }
 
 describe('executeFrameStepped', () => {
+  it('fails fast when runtimeAddressTable is missing instead of deriving from slotMeta', () => {
+    const program = compileSimplePatch();
+    const brokenProgram = { ...program, runtimeAddressTable: undefined } as CompiledProgramIR;
+    const state = createStateForProgram(program);
+    const arena = getTestArena();
+
+    const gen = executeFrameStepped(brokenProgram, state, arena, 100);
+    expect(() => gen.next()).toThrow(/runtime address derivation from slotMeta is forbidden/);
+  });
+
   it('consumes compiler-precomputed runtime address table contract', () => {
     const program = compileSimplePatch();
     const table = getExprAddressTable(program);

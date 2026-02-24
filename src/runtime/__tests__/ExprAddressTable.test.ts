@@ -203,6 +203,16 @@ describe('getExprAddressTable', () => {
     expect(t1.slotLookup.get(valueSlot(0))!.offset).toBe(0);
     expect(t2.slotLookup.get(valueSlot(0))!.offset).toBe(5);
   });
+
+  it('fails fast when precomputed runtimeAddressTable is missing', () => {
+    const program = mockProgram({
+      slotMeta: [{ slot: valueSlot(0), storage: 'f32', offset: 0, stride: 1, type: SIG_FLOAT }],
+      steps: [],
+    });
+    const brokenProgram = { ...program, runtimeAddressTable: undefined } as CompiledProgramIR;
+    expect(() => getExprAddressTable(brokenProgram))
+      .toThrow(/runtime address derivation from slotMeta is forbidden/);
+  });
 });
 
 describe('assertSlotExists', () => {

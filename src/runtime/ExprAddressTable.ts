@@ -20,7 +20,9 @@ export type ExprAddressTable = RuntimeAddressTableIR;
  */
 export function getExprAddressTable(program: CompiledProgramIR): ExprAddressTable {
   if (!program.runtimeAddressTable) {
-    throw new Error('Missing precomputed runtimeAddressTable on CompiledProgramIR');
+    throw new Error(
+      'Missing precomputed runtimeAddressTable on CompiledProgramIR; runtime address derivation from slotMeta is forbidden',
+    );
   }
   return program.runtimeAddressTable;
 }

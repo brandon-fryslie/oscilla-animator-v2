@@ -348,6 +348,31 @@ function buildRuntimeAddressTable(
   };
 }
 
+function assertRuntimeAddressTableCoverage(
+  runtimeSlots: readonly RuntimeSlotEntry[],
+  runtimeAddressTable: RuntimeAddressTableIR,
+): void {
+  // [LAW:one-source-of-truth] Runtime address table coverage is validated once
+  // at compile-time so runtime execution never derives/repairs addressing.
+  if (runtimeAddressTable.slotLookup.size !== runtimeSlots.length) {
+    throw new Error(
+      'runtimeAddressTable.slotLookup coverage mismatch: expected ' +
+        runtimeSlots.length +
+        ', got ' +
+        runtimeAddressTable.slotLookup.size,
+    );
+  }
+  for (const slotEntry of runtimeSlots) {
+    const lookup = runtimeAddressTable.slotLookup.get(slotEntry.slot);
+    if (!lookup) {
+      throw new Error('runtimeAddressTable missing slot lookup for slot ' + slotEntry.slot);
+    }
+    if (lookup.storage !== slotEntry.storage || lookup.offset !== slotEntry.offset || lookup.stride !== slotEntry.stride) {
+      throw new Error('runtimeAddressTable slot mismatch for slot ' + slotEntry.slot);
+    }
+  }
+}
+
 /**
  * Convert LinkedIR and ScheduleIR to CompiledProgramIR.
  *
@@ -431,6 +456,7 @@ function convertLinkedIRToProgram(
   // Build output specs from canonical output contract only.
   const outputs: OutputSpecIR[] = [{ kind: 'renderFrame' }];
   const runtimeAddressTable = buildRuntimeAddressTable(runtimeSlots, scheduleIR);
+  assertRuntimeAddressTableCoverage(runtimeSlots, runtimeAddressTable);
 
   // Build debug index
   const stepToBlock = new Map();
