@@ -20,6 +20,7 @@ import { isConcretePayload } from '../core/inference-types';
 import type { AddressRegistry } from '../graph/address-registry';
 import { addressToString } from '../types/canonical-address';
 import { isVectorType, validateSwizzle, swizzleResultType } from './swizzle';
+import { getExpressionConstants, resolveExpressionConstant } from './constants';
 
 
 /**
@@ -169,16 +170,25 @@ function typecheckLiteral(node: ExprNode & { kind: 'literal' }): ExprNode {
  * Type check identifier node.
  */
 function typecheckIdentifier(node: ExprNode & { kind: 'identifier' }, ctx: TypeCheckContext): ExprNode {
-  const type = ctx.inputs.get(node.name);
-  if (!type) {
-    const available = Array.from(ctx.inputs.keys()).join(', ');
-    const suggestion = findClosestMatch(node.name, Array.from(ctx.inputs.keys()));
-    throw new TypeError(
-      `Undefined input '${node.name}'. Available inputs: ${available}${suggestion ? `. Did you mean '${suggestion}'?` : ''}`,
-      node.pos
-    );
+  const inputType = ctx.inputs.get(node.name);
+  if (inputType) {
+    return withType(node, inputType);
   }
-  return withType(node, type);
+
+  const constant = resolveExpressionConstant(node.name);
+  if (constant) {
+    return withType(node, constant.type);
+  }
+
+  const availableInputs = Array.from(ctx.inputs.keys());
+  const availableConstants = getExpressionConstants().map((entry) => entry.name);
+  const availableIdentifiers = [...availableInputs, ...availableConstants];
+  const available = availableIdentifiers.length > 0 ? availableIdentifiers.join(', ') : '(none)';
+  const suggestion = findClosestMatch(node.name, availableIdentifiers);
+  throw new TypeError(
+    `Undefined identifier '${node.name}'. Available identifiers: ${available}${suggestion ? `. Did you mean '${suggestion}'?` : ''}`,
+    node.pos
+  );
 }
 
 /**

@@ -20,7 +20,7 @@
 
 import type { CompiledProgramIR } from '../compiler/ir/program';
 import type { ConstValue } from '../core/canonical-types';
-import { floatConst, intConst, boolConst } from '../core/canonical-types';
+import { floatConst, intConst, boolConst, isMany } from '../core/canonical-types';
 import type { ValueExpr } from '../compiler/ir/value-expr';
 import type { InstanceId } from '../compiler/ir/Indices';
 import type { ScheduleIR } from '../compiler/backend/schedule-program';
@@ -141,6 +141,11 @@ function patchInstanceCounts(
     // Bounds: 0 <= newCount <= maxCount
     if (newCount < 0 || newCount > instanceDecl.maxCount) return null;
 
+    // [LAW:one-source-of-truth] Fast-path count patches must stay within the
+    // compiled arena descriptor capacity (single canonical slot layout source).
+    const laneCapacity = resolveInstanceLaneCapacity(program, entry.instanceId);
+    if (laneCapacity !== null && newCount > laneCapacity) return null;
+
     instancePatches.set(entry.instanceId, newCount);
   }
 
@@ -178,6 +183,37 @@ function patchInstanceCounts(
     ...program,
     schedule: newSchedule,
   };
+}
+
+/**
+ * Resolve the compiled lane capacity for all many-cardinality slots owned by an instance.
+ *
+ * Returns:
+ * - number: minimum lane capacity across all slots for this instance
+ * - null: instance has no many-cardinality slots (or unresolved descriptor)
+ */
+function resolveInstanceLaneCapacity(
+  program: CompiledProgramIR,
+  instanceId: InstanceId,
+): number | null {
+  const { slotMeta, arenaLayout } = program;
+  let capacity: number | null = null;
+
+  for (const meta of slotMeta) {
+    const cardAxis = meta.type.extent.cardinality;
+    if (cardAxis.kind !== 'inst') continue;
+    if (!isMany(cardAxis.value)) continue;
+    if (cardAxis.value.instance.instanceId !== instanceId) continue;
+
+    const arenaDesc = arenaLayout[meta.slot as number];
+    if (!arenaDesc) return null;
+
+    capacity = capacity === null
+      ? arenaDesc.laneCount
+      : Math.min(capacity, arenaDesc.laneCount);
+  }
+
+  return capacity;
 }
 
 /**

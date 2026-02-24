@@ -1,6 +1,8 @@
 import type { DrawPathInstancesOp, PathGeometry, RenderFrameIR } from '../types';
 import { PathTessellator } from './PathTessellator';
+import { exportTopologyBankU32, getTopologyRegistryRevision } from '../../shapes/registry';
 import {
+  DRAW_PREP_COMPUTE_WGSL,
   PATH_RENDER_WGSL,
   SIMULATION_COMPUTE_WGSL,
   WEBGPU_RENDER_CONTRACT,
@@ -12,12 +14,14 @@ const GPU_BUFFER_USAGE = {
   VERTEX: 0x0020,
   UNIFORM: 0x0040,
   STORAGE: 0x0080,
+  INDIRECT: 0x0100,
 } as const;
 
 const INSTANCE_FLOATS = WEBGPU_RENDER_CONTRACT.instanceFloats;
 const MIN_INSTANCE_CAPACITY = 1024;
 const SIMULATION_CAPACITY = WEBGPU_RENDER_CONTRACT.simulationCapacity;
 const SIMULATION_WORKGROUP_SIZE = WEBGPU_RENDER_CONTRACT.computeWorkgroupSize;
+const DRAW_PREP_WORKGROUP_SIZE = WEBGPU_RENDER_CONTRACT.drawPrepWorkgroupSize;
 
 function alignTo4(value: number): number {
   const remainder = value % 4;
@@ -39,6 +43,17 @@ interface RenderInput {
   readonly panX: number;
   readonly panY: number;
   readonly timeMs: number;
+  readonly drawPrepShaderWgsl?: string;
+}
+
+interface PreparedDrawPathOp {
+  readonly op: DrawPathInstancesOp;
+  readonly mesh: GPUMesh;
+  readonly topologyBankRecordIndex: number;
+  readonly indirectRecordIndex: number;
+  readonly firstInstance: number;
+  readonly instanceCount: number;
+  readonly pass: 'fill' | 'stroke';
 }
 
 interface WebGPUStartupResources {
@@ -164,6 +179,12 @@ class WebGPUComputeRuntime {
         ],
       }),
     ] as const;
+
+    // [LAW:single-enforcer] Compute runtime owns the src/dst safety contract.
+    // src and dst buffers must never alias.
+    if (this.stateBuffers[0] === this.stateBuffers[1]) {
+      throw new Error('WebGPUComputeRuntime: src/dst state buffers must be distinct');
+    }
   }
 
   step(commandEncoder: any, activeCount: number, dtSeconds: number): void {
@@ -184,13 +205,113 @@ class WebGPUComputeRuntime {
     const workgroups = Math.max(1, Math.ceil(clampedCount / SIMULATION_WORKGROUP_SIZE));
     pass.dispatchWorkgroups(workgroups);
     pass.end();
-    this.activeStateIndex = this.activeStateIndex === 0 ? 1 : 0;
+    this.activeStateIndex = this.activeStateIndex ^ 1;
   }
 
   dispose(): void {
     this.paramsBuffer.destroy();
     this.stateBuffers[0].destroy();
     this.stateBuffers[1].destroy();
+  }
+}
+
+class WebGPUDrawPrepRuntime {
+  private pipeline: any;
+  private activeShaderCode: string;
+  private readonly paramsBuffer: any;
+  private readonly paramsStaging = new Uint32Array(WEBGPU_RENDER_CONTRACT.drawPrepParamsU32);
+  private activeBindGroup: any | null = null;
+  private activeIndirectBuffer: any | null = null;
+
+  constructor(private readonly device: any, initialShaderCode: string = DRAW_PREP_COMPUTE_WGSL) {
+    this.activeShaderCode = initialShaderCode;
+    this.pipeline = this.createPipeline(initialShaderCode);
+    this.paramsBuffer = device.createBuffer({
+      size: WEBGPU_RENDER_CONTRACT.drawPrepParamsU32 * Uint32Array.BYTES_PER_ELEMENT,
+      usage: GPU_BUFFER_USAGE.UNIFORM | GPU_BUFFER_USAGE.COPY_DST,
+    });
+  }
+
+  private createPipeline(shaderCode: string): any {
+    const shaderModule = this.device.createShaderModule({ code: shaderCode });
+    return this.device.createComputePipeline({
+      layout: 'auto',
+      compute: {
+        module: shaderModule,
+        entryPoint: 'cs_main',
+      },
+    });
+  }
+
+  useShader(shaderCode: string | undefined): void {
+    const nextShaderCode =
+      typeof shaderCode === 'string' && shaderCode.trim().length > 0
+        ? shaderCode
+        : DRAW_PREP_COMPUTE_WGSL;
+    if (nextShaderCode === this.activeShaderCode) {
+      return;
+    }
+    // [LAW:one-source-of-truth] Draw-prep shader ownership is configured from
+    // one active WGSL source at runtime (compiler-provided or canonical default).
+    this.pipeline = this.createPipeline(nextShaderCode);
+    this.activeShaderCode = nextShaderCode;
+    this.activeBindGroup = null;
+    this.activeIndirectBuffer = null;
+  }
+
+  private getOrCreateBindGroup(indirectBuffer: any): any {
+    if (this.activeBindGroup && this.activeIndirectBuffer === indirectBuffer) {
+      return this.activeBindGroup;
+    }
+
+    const bindGroup = this.device.createBindGroup({
+      layout: this.pipeline.getBindGroupLayout(WEBGPU_RENDER_CONTRACT.drawPrepBindGroup),
+      entries: [
+        {
+          binding: WEBGPU_RENDER_CONTRACT.drawPrepIndirectBinding,
+          resource: { buffer: indirectBuffer },
+        },
+        {
+          binding: WEBGPU_RENDER_CONTRACT.drawPrepParamsBinding,
+          resource: { buffer: this.paramsBuffer },
+        },
+      ],
+    });
+    this.activeBindGroup = bindGroup;
+    this.activeIndirectBuffer = indirectBuffer;
+    return bindGroup;
+  }
+
+  step(
+    commandEncoder: any,
+    indirectBuffer: any,
+    recordIndex: number,
+    maxRecords: number,
+    indexCount: number,
+    instanceCount: number,
+    firstInstance: number,
+  ): void {
+    this.paramsStaging[0] = indexCount >>> 0;
+    this.paramsStaging[1] = instanceCount >>> 0;
+    this.paramsStaging[2] = 0; // firstIndex
+    this.paramsStaging[3] = 0; // baseVertex
+    this.paramsStaging[4] = firstInstance >>> 0;
+    this.paramsStaging[5] = recordIndex >>> 0;
+    this.paramsStaging[6] = maxRecords >>> 0;
+    this.paramsStaging[7] = 0;
+    this.device.queue.writeBuffer(this.paramsBuffer, 0, this.paramsStaging);
+
+    const bindGroup = this.getOrCreateBindGroup(indirectBuffer);
+
+    const pass = commandEncoder.beginComputePass();
+    pass.setPipeline(this.pipeline);
+    pass.setBindGroup(WEBGPU_RENDER_CONTRACT.drawPrepBindGroup, bindGroup);
+    pass.dispatchWorkgroups(DRAW_PREP_WORKGROUP_SIZE);
+    pass.end();
+  }
+
+  dispose(): void {
+    this.paramsBuffer.destroy();
   }
 }
 
@@ -202,11 +323,19 @@ export class WebGPURenderer {
   private readonly meshCache = new Map<string, GPUMesh>();
   private readonly sceneUniforms = new Float32Array(WEBGPU_RENDER_CONTRACT.sceneUniformFloats);
   private readonly computeRuntime: WebGPUComputeRuntime;
+  private readonly drawPrepRuntime: WebGPUDrawPrepRuntime;
   private readonly adapterFeatures: ReadonlySet<string>;
 
   private readonly pathPipeline: any;
   private readonly sceneUniformBuffer: any;
   private readonly sceneBindGroup: any;
+  private topologyBankBindGroup: any;
+  private indirectArgsBuffer: any;
+  private indirectArgsCapacityRecords = 1;
+  private topologyBankBuffer: any;
+  private topologyBankCapacityWords = 1;
+  private topologyBankRevision = -1;
+  private topologyBankIndexById = new Map<number, number>();
 
   private instanceBuffer: any;
   private instanceBindGroup: any;
@@ -241,6 +370,24 @@ export class WebGPURenderer {
         },
       ],
     });
+    this.indirectArgsBuffer = device.createBuffer({
+      size: WEBGPU_RENDER_CONTRACT.indirectArgsBytes,
+      usage: GPU_BUFFER_USAGE.STORAGE | GPU_BUFFER_USAGE.INDIRECT | GPU_BUFFER_USAGE.COPY_DST,
+    });
+    this.topologyBankBuffer = device.createBuffer({
+      size: Uint32Array.BYTES_PER_ELEMENT,
+      usage: GPU_BUFFER_USAGE.STORAGE | GPU_BUFFER_USAGE.COPY_DST,
+    });
+    this.topologyBankBindGroup = device.createBindGroup({
+      layout: this.pathPipeline.getBindGroupLayout(WEBGPU_RENDER_CONTRACT.topologyBankBindGroup),
+      entries: [
+        {
+          binding: WEBGPU_RENDER_CONTRACT.topologyBankBinding,
+          resource: { buffer: this.topologyBankBuffer },
+        },
+      ],
+    });
+    this.syncTopologyBank();
 
     this.instanceBuffer = device.createBuffer({
       size: MIN_INSTANCE_CAPACITY * INSTANCE_FLOATS * 4,
@@ -259,6 +406,7 @@ export class WebGPURenderer {
     });
 
     this.computeRuntime = new WebGPUComputeRuntime(this.device);
+    this.drawPrepRuntime = new WebGPUDrawPrepRuntime(this.device);
 
     void this.device.lost.then((lostInfo: { reason: string; message: string }) => {
       this.fatalError = new Error(
@@ -292,6 +440,7 @@ export class WebGPURenderer {
 
     this.assertRenderInputContract(input);
     this.ensureCanvasConfiguration(input.width, input.height);
+    this.syncTopologyBank();
     this.writeSceneUniforms(input);
 
     const dtSeconds =
@@ -302,6 +451,32 @@ export class WebGPURenderer {
 
     const commandEncoder = this.device.createCommandEncoder();
     this.computeRuntime.step(commandEncoder, 0, dtSeconds);
+    this.drawPrepRuntime.useShader(input.drawPrepShaderWgsl);
+    const drawPlan = this.buildDrawPlan(input.frame);
+    const totalInstances = this.countPlannedInstances(drawPlan);
+    this.ensureInstanceCapacity(totalInstances);
+    const packedInstances = this.packDrawPlanInstances(drawPlan);
+    if (packedInstances > 0) {
+      this.device.queue.writeBuffer(
+        this.instanceBuffer,
+        0,
+        this.instanceStaging.buffer,
+        0,
+        packedInstances * WEBGPU_RENDER_CONTRACT.instanceBytes
+      );
+    }
+    this.ensureIndirectArgsCapacity(drawPlan.length);
+    for (const prepared of drawPlan) {
+      this.drawPrepRuntime.step(
+        commandEncoder,
+        this.indirectArgsBuffer,
+        prepared.indirectRecordIndex,
+        this.indirectArgsCapacityRecords,
+        prepared.mesh.indexCount,
+        prepared.instanceCount,
+        prepared.firstInstance,
+      );
+    }
 
     const pass = commandEncoder.beginRenderPass({
       colorAttachments: [
@@ -316,12 +491,10 @@ export class WebGPURenderer {
 
     pass.setPipeline(this.pathPipeline);
     pass.setBindGroup(WEBGPU_RENDER_CONTRACT.sceneBindGroup, this.sceneBindGroup);
+    pass.setBindGroup(WEBGPU_RENDER_CONTRACT.topologyBankBindGroup, this.topologyBankBindGroup);
 
-    for (const op of input.frame.ops) {
-      if (op.kind !== 'drawPathInstances') {
-        throw new Error(`WebGPURenderer: unsupported draw op kind "${(op as { kind: string }).kind}"`);
-      }
-      this.drawPathOp(pass, op);
+    for (const prepared of drawPlan) {
+      this.drawPreparedPathOp(pass, prepared);
     }
 
     pass.end();
@@ -330,7 +503,10 @@ export class WebGPURenderer {
 
   dispose(): void {
     this.computeRuntime.dispose();
+    this.drawPrepRuntime.dispose();
     this.sceneUniformBuffer.destroy();
+    this.indirectArgsBuffer.destroy();
+    this.topologyBankBuffer.destroy();
     this.instanceBuffer.destroy();
     for (const mesh of this.meshCache.values()) {
       mesh.vertexBuffer.destroy();
@@ -391,6 +567,39 @@ export class WebGPURenderer {
     this.lastConfiguredSize.height = height;
   }
 
+  private syncTopologyBank(): void {
+    const revision = getTopologyRegistryRevision();
+    if (revision === this.topologyBankRevision) {
+      return;
+    }
+
+    const exported = exportTopologyBankU32();
+    this.topologyBankIndexById = new Map(exported.indexById);
+    const requiredWords = Math.max(1, exported.data.length);
+    if (requiredWords > this.topologyBankCapacityWords) {
+      const nextBuffer = this.device.createBuffer({
+        size: requiredWords * Uint32Array.BYTES_PER_ELEMENT,
+        usage: GPU_BUFFER_USAGE.STORAGE | GPU_BUFFER_USAGE.COPY_DST,
+      });
+      this.topologyBankBuffer.destroy();
+      this.topologyBankBuffer = nextBuffer;
+      this.topologyBankBindGroup = this.device.createBindGroup({
+        layout: this.pathPipeline.getBindGroupLayout(WEBGPU_RENDER_CONTRACT.topologyBankBindGroup),
+        entries: [
+          {
+            binding: WEBGPU_RENDER_CONTRACT.topologyBankBinding,
+            resource: { buffer: this.topologyBankBuffer },
+          },
+        ],
+      });
+      this.topologyBankCapacityWords = requiredWords;
+    }
+    if (exported.data.length > 0) {
+      this.device.queue.writeBuffer(this.topologyBankBuffer, 0, exported.data);
+    }
+    this.topologyBankRevision = revision;
+  }
+
   private writeSceneUniforms(input: RenderInput): void {
     this.sceneUniforms[0] = input.width;
     this.sceneUniforms[1] = input.height;
@@ -403,24 +612,95 @@ export class WebGPURenderer {
     this.device.queue.writeBuffer(this.sceneUniformBuffer, 0, this.sceneUniforms);
   }
 
-  private drawPathOp(pass: any, op: DrawPathInstancesOp): void {
-    const mesh = this.getOrCreateMesh(op.geometry);
-    if (mesh.indexCount === 0) {
-      return;
+  private buildDrawPlan(frame: RenderFrameIR): PreparedDrawPathOp[] {
+    const prepared: PreparedDrawPathOp[] = [];
+    let nextFirstInstance = 0;
+    for (const op of frame.ops) {
+      if (op.kind !== 'drawPathInstances') {
+        throw new Error(`WebGPURenderer: unsupported draw op kind "${(op as { kind: string }).kind}"`);
+      }
+      const mesh = this.getOrCreateMesh(op.geometry);
+      if (mesh.indexCount === 0 || op.instances.count <= 0) {
+        continue;
+      }
+      const topologyBankRecordIndex = this.topologyBankIndexById.get(op.geometry.topologyId);
+      // [LAW:one-source-of-truth] Topology metadata is read from the canonical
+      // GPU topology bank index; render ops must resolve through that mapping.
+      if (topologyBankRecordIndex === undefined) {
+        throw new Error(`WebGPURenderer: topology ${op.geometry.topologyId} missing from topology bank`);
+      }
+      const hasFill = Boolean(op.style.fillColor && op.style.fillColor.length > 0);
+      const hasStroke = Boolean(op.style.strokeColor && op.style.strokeColor.length > 0);
+      if (!hasFill && !hasStroke) {
+        throw new Error('WebGPURenderer: drawPathInstances op must provide fillColor and/or strokeColor');
+      }
+      // [LAW:dataflow-not-control-flow] Draw planning uses one canonical pass
+      // order; fill/stroke variability is encoded in pass data, not alternate pipelines.
+      if (hasFill) {
+        prepared.push({
+          op,
+          mesh,
+          topologyBankRecordIndex,
+          indirectRecordIndex: prepared.length,
+          firstInstance: nextFirstInstance,
+          instanceCount: op.instances.count,
+          pass: 'fill',
+        });
+        nextFirstInstance += op.instances.count;
+      }
+      if (hasStroke) {
+        prepared.push({
+          op,
+          mesh,
+          topologyBankRecordIndex,
+          indirectRecordIndex: prepared.length,
+          firstInstance: nextFirstInstance,
+          instanceCount: op.instances.count,
+          pass: 'stroke',
+        });
+        nextFirstInstance += op.instances.count;
+      }
     }
+    return prepared;
+  }
 
-    const instanceCount = this.packInstances(op);
-    if (instanceCount === 0) {
-      return;
-    }
-
-    const writeBytes = instanceCount * WEBGPU_RENDER_CONTRACT.instanceBytes;
-    this.device.queue.writeBuffer(this.instanceBuffer, 0, this.instanceStaging.buffer, 0, writeBytes);
-
+  private drawPreparedPathOp(pass: any, prepared: PreparedDrawPathOp): void {
     pass.setBindGroup(WEBGPU_RENDER_CONTRACT.instanceBindGroup, this.instanceBindGroup);
-    pass.setVertexBuffer(0, mesh.vertexBuffer);
-    pass.setIndexBuffer(mesh.indexBuffer, mesh.indexFormat);
-    pass.drawIndexed(mesh.indexCount, instanceCount, 0, 0, 0);
+    pass.setVertexBuffer(0, prepared.mesh.vertexBuffer);
+    pass.setIndexBuffer(prepared.mesh.indexBuffer, prepared.mesh.indexFormat);
+    pass.drawIndexedIndirect(
+      this.indirectArgsBuffer,
+      prepared.indirectRecordIndex * WEBGPU_RENDER_CONTRACT.indirectArgsBytes,
+    );
+  }
+
+  private countPlannedInstances(drawPlan: readonly PreparedDrawPathOp[]): number {
+    let total = 0;
+    for (const prepared of drawPlan) {
+      total += prepared.instanceCount;
+    }
+    return total;
+  }
+
+  private packDrawPlanInstances(drawPlan: readonly PreparedDrawPathOp[]): number {
+    let packedInstances = 0;
+    // [LAW:dataflow-not-control-flow] Every prepared draw pass runs through one
+    // deterministic packing stage; pass variance is represented as input data.
+    for (const prepared of drawPlan) {
+      const written = this.packInstances(
+        prepared.op,
+        prepared.topologyBankRecordIndex,
+        prepared.pass,
+        prepared.firstInstance
+      );
+      if (written !== prepared.instanceCount) {
+        throw new Error(
+          `WebGPURenderer: packed ${written} instances but plan expected ${prepared.instanceCount}`
+        );
+      }
+      packedInstances = Math.max(packedInstances, prepared.firstInstance + written);
+    }
+    return packedInstances;
   }
 
   private getOrCreateMesh(geometry: PathGeometry): GPUMesh {
@@ -464,7 +744,12 @@ export class WebGPURenderer {
     return buffer;
   }
 
-  private packInstances(op: DrawPathInstancesOp): number {
+  private packInstances(
+    op: DrawPathInstancesOp,
+    topologyBankRecordIndex: number,
+    renderPassKind: 'fill' | 'stroke',
+    firstInstance: number,
+  ): number {
     const count = op.instances.count;
     if (count <= 0) {
       return 0;
@@ -472,7 +757,9 @@ export class WebGPURenderer {
 
     const { position, size, rotation, scale2 } = op.instances;
     const { style } = op;
-    const fill = style.fillColor;
+    const hasFill = Boolean(style.fillColor && style.fillColor.length > 0);
+    const hasStroke = Boolean(style.strokeColor && style.strokeColor.length > 0);
+    const activeColor = renderPassKind === 'stroke' ? style.strokeColor : style.fillColor;
 
     if (!(position instanceof Float32Array) || position.length !== count * 2) {
       throw new Error(`WebGPURenderer: position must be Float32Array(count*2), got ${position.length}`);
@@ -486,16 +773,12 @@ export class WebGPURenderer {
       throw new Error(`WebGPURenderer: scale2 must be Float32Array(count*2), got ${scale2.length}`);
     }
 
-    if (style.strokeColor && style.strokeColor.length > 0) {
-      throw new Error('WebGPURenderer: stroke rendering is currently unsupported');
-    }
-
-    if (!fill || !(fill instanceof Uint8ClampedArray) || fill.length === 0) {
-      throw new Error('WebGPURenderer: fillColor must be provided as Uint8ClampedArray');
+    if (!activeColor || !(activeColor instanceof Uint8ClampedArray) || activeColor.length === 0) {
+      throw new Error(`WebGPURenderer: ${renderPassKind}Color must be provided as Uint8ClampedArray`);
     }
 
     const fillRule = style.fillRule ?? 'nonzero';
-    if (fillRule !== 'nonzero') {
+    if (hasFill && fillRule !== 'nonzero') {
       throw new Error(`WebGPURenderer: fillRule "${fillRule}" is not supported`);
     }
 
@@ -504,27 +787,51 @@ export class WebGPURenderer {
       throw new Error('WebGPURenderer: size must be number or Float32Array(count)');
     }
 
-    const isUniformColor = fill.length === 4;
-    if (!isUniformColor && fill.length !== count * 4) {
-      throw new Error('WebGPURenderer: fillColor must be length 4 or count*4');
+    const isUniformColor = activeColor.length === 4;
+    if (!isUniformColor && activeColor.length !== count * 4) {
+      throw new Error(`WebGPURenderer: ${renderPassKind}Color must be length 4 or count*4`);
     }
 
-    this.ensureInstanceCapacity(count);
+    let strokeWidthSource: number | Float32Array | null = null;
+    if (hasStroke) {
+      strokeWidthSource = style.strokeWidth ?? 0.01;
+      if (typeof strokeWidthSource !== 'number' &&
+          (!(strokeWidthSource instanceof Float32Array) || strokeWidthSource.length !== count)) {
+        throw new Error('WebGPURenderer: strokeWidth must be number or Float32Array(count)');
+      }
+    }
+
+    this.ensureInstanceCapacity(firstInstance + count);
 
     for (let i = 0; i < count; i++) {
-      const base = i * INSTANCE_FLOATS;
+      const base = (firstInstance + i) * INSTANCE_FLOATS;
+      const sizeBase = isUniformSize ? (size as number) : (size as Float32Array)[i];
+      const strokeWidth = hasStroke
+        ? (typeof strokeWidthSource === 'number'
+          ? strokeWidthSource
+          : (strokeWidthSource as Float32Array)[i] ?? 0)
+        : 0;
+      const strokeHalf = Math.max(0, strokeWidth) * 0.5;
+      const sizeValue = renderPassKind === 'stroke'
+        ? sizeBase + strokeHalf
+        : hasStroke
+          ? Math.max(0, sizeBase - strokeHalf)
+          : sizeBase;
+
       this.instanceStaging[base] = position[i * 2];
       this.instanceStaging[base + 1] = position[i * 2 + 1];
-      this.instanceStaging[base + 2] = isUniformSize ? (size as number) : (size as Float32Array)[i];
+      this.instanceStaging[base + 2] = sizeValue;
       this.instanceStaging[base + 3] = rotation[i];
       this.instanceStaging[base + 4] = scale2[i * 2];
       this.instanceStaging[base + 5] = scale2[i * 2 + 1];
+      this.instanceStaging[base + 6] = topologyBankRecordIndex;
+      this.instanceStaging[base + 7] = 0;
 
       const colorOffset = isUniformColor ? 0 : i * 4;
-      this.instanceStaging[base + 8] = fill[colorOffset] / 255;
-      this.instanceStaging[base + 9] = fill[colorOffset + 1] / 255;
-      this.instanceStaging[base + 10] = fill[colorOffset + 2] / 255;
-      this.instanceStaging[base + 11] = fill[colorOffset + 3] / 255;
+      this.instanceStaging[base + 8] = activeColor[colorOffset] / 255;
+      this.instanceStaging[base + 9] = activeColor[colorOffset + 1] / 255;
+      this.instanceStaging[base + 10] = activeColor[colorOffset + 2] / 255;
+      this.instanceStaging[base + 11] = activeColor[colorOffset + 3] / 255;
     }
 
     return count;
@@ -558,6 +865,25 @@ export class WebGPURenderer {
         },
       ],
     });
+  }
+
+  private ensureIndirectArgsCapacity(requiredRecords: number): void {
+    if (requiredRecords <= this.indirectArgsCapacityRecords) {
+      return;
+    }
+
+    let nextCapacity = this.indirectArgsCapacityRecords;
+    while (nextCapacity < requiredRecords) {
+      nextCapacity *= 2;
+    }
+
+    const nextBuffer = this.device.createBuffer({
+      size: nextCapacity * WEBGPU_RENDER_CONTRACT.indirectArgsBytes,
+      usage: GPU_BUFFER_USAGE.STORAGE | GPU_BUFFER_USAGE.INDIRECT | GPU_BUFFER_USAGE.COPY_DST,
+    });
+    this.indirectArgsBuffer.destroy();
+    this.indirectArgsBuffer = nextBuffer;
+    this.indirectArgsCapacityRecords = nextCapacity;
   }
 
   private createPathPipeline(): any {

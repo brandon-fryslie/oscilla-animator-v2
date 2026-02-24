@@ -32,6 +32,36 @@ Documentation is organized by subsystem:
 Deep technical documentation of the runtime execution model:
 - `execution-model.md` - Frame execution lifecycle and two-phase pattern
 
+### `design-docs/` (v3 reference)
+Canonical v3 architecture roadmap and implementation target:
+- `../design-docs/OSCILLA-WEBGPU-V3-REFERENCE-ARCHITECTURE.md`
+
+### Guardrail Test Gate
+
+The v3 hard-rule enforcement gate lives in:
+- `src/__tests__/forbidden-patterns.test.ts`
+
+Current enforced v3 constraints include:
+- WebGPU renderer draw contract uses indirect draws (`drawIndexedIndirect`)
+- No direct indexed draw hot path in `src/render/webgpu/WebGPURenderer.ts`
+
+### WebGPU Matrix Harness
+
+WebGPU browser conformance/perf harness:
+- `scripts/webgpu-browser-matrix.mjs`
+
+Common runs:
+- Chromium gating only (default): `pnpm run test:webgpu-matrix`
+- Chromium + Playwright WebKit telemetry:
+  - `WEBGPU_MATRIX_INCLUDE_WEBKIT=1 pnpm run test:webgpu-matrix`
+- Chromium + real Safari telemetry (macOS):
+  - `WEBGPU_MATRIX_INCLUDE_SAFARI=1 pnpm run test:webgpu-matrix`
+- Full matrix (Chromium + WebKit + Safari):
+  - `WEBGPU_MATRIX_INCLUDE_WEBKIT=1 WEBGPU_MATRIX_INCLUDE_SAFARI=1 pnpm run test:webgpu-matrix`
+
+Report output:
+- `artifacts/webgpu-browser-matrix.json`
+
 ### Naming Conventions
 
 - Use **kebab-case** for filenames (e.g., `execution-model.md`, not `ExecutionModel.md`)
