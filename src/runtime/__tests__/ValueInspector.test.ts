@@ -16,7 +16,7 @@ import type { SlotValue } from '../StepDebugTypes';
 const SIG_FLOAT = canonicalScalar(FLOAT, unitNone());
 
 function makeLookup(slot: number, storage: SlotLookup['storage'], offset: number, stride: number): SlotLookup {
-  return { storage, offset, stride, slot: valueSlot(slot) };
+  return { storage, offset, stride, slot: valueSlot(slot), type: SIG_FLOAT };
 }
 
 describe('readSlotValue', () => {
@@ -28,7 +28,6 @@ describe('readSlotValue', () => {
     const value = readSlotValue(
       state,
       lookup,
-      SIG_FLOAT,
       new Map([[valueSlot(3), { offset: 3, stride: 1, laneCount: 1, length: 1 }]])
     );
 
@@ -49,7 +48,6 @@ describe('readSlotValue', () => {
     const value = readSlotValue(
       state,
       lookup,
-      SIG_FLOAT,
       new Map([[valueSlot(5), { offset: 5, stride: 3, laneCount: 1, length: 3 }]])
     );
 
@@ -66,7 +64,7 @@ describe('readSlotValue', () => {
     state.values.objects.set(valueSlot(2), buffer);
 
     const lookup = makeLookup(2, 'object', 0, 0);
-    const value = readSlotValue(state, lookup, SIG_FLOAT);
+    const value = readSlotValue(state, lookup);
 
     expect(value.kind).toBe('buffer');
     if (value.kind === 'buffer') {
@@ -81,7 +79,7 @@ describe('readSlotValue', () => {
     state.values.objects.set(valueSlot(4), obj);
 
     const lookup = makeLookup(4, 'object', 0, 0);
-    const value = readSlotValue(state, lookup, SIG_FLOAT);
+    const value = readSlotValue(state, lookup);
 
     expect(value.kind).toBe('object');
     if (value.kind === 'object') {

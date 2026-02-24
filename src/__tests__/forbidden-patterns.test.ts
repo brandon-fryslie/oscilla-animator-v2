@@ -940,4 +940,238 @@ describe('Forbidden Patterns (Type System Invariants)', () => {
     });
 
   });
+
+  describe('WebGPU Prereq Guards (W7/W12)', () => {
+
+    it('runtime/services hot path must not use legacy assertF64Stride helper', () => {
+      // [LAW:one-source-of-truth] Runtime ABI assertions must flow through the
+      // canonical numeric assertion boundary only.
+      const rawMatches = [
+        ...grepSrc('assertF64Stride', 'src/runtime/'),
+        ...grepSrc('assertF64Stride', 'src/services/'),
+      ];
+      const filtered = filterAllowlist(rawMatches, [/\.test\./, /__tests__/]);
+      expect(
+        filtered,
+        'Legacy assertF64Stride helper is forbidden in runtime/services hot paths.\n' +
+        'Use assertNumericStride() from ExprAddressTable instead.\n' +
+        'Found violations:\n' + filtered.join('\n')
+      ).toEqual([]);
+    });
+
+    it('runtime/services hot path must not directly index program.arenaLayout', () => {
+      // [LAW:single-enforcer] Arena address resolution belongs to ExprAddressTable.
+      const rawMatches = [
+        ...grepSrc('program\\.arenaLayout\\[', 'src/runtime/'),
+        ...grepSrc('program\\.arenaLayout\\[', 'src/services/'),
+      ];
+
+      const nonCommentMatches = rawMatches.filter((m) => {
+        const secondColon = m.indexOf(':', m.indexOf(':') + 1);
+        const content = secondColon >= 0 ? m.slice(secondColon + 1).trim() : '';
+        if (!content) return false;
+        return !content.startsWith('//') && !content.startsWith('*');
+      });
+
+      const filtered = filterAllowlist(nonCommentMatches, [
+        /\.test\./,
+        /__tests__/,
+        /src\/runtime\/ExprAddressTable\.ts:/,
+      ]);
+
+      expect(
+        filtered,
+        'Direct program.arenaLayout indexing is forbidden in runtime/services hot paths.\n' +
+        'Route through ExprAddressTable.slotToArena instead.\n' +
+        'Found violations:\n' + filtered.join('\n')
+      ).toEqual([]);
+    });
+
+  });
+
+  describe('WebGPU Prereq Guards (W2)', () => {
+
+    it('execution modules must not read program.slotMeta directly', () => {
+      // [LAW:single-enforcer] Runtime execution must resolve slot addresses through
+      // ExprAddressTable; execution modules must not bypass to program.slotMeta.
+      const rawMatches = [
+        ...grepSrc('program\\.slotMeta', 'src/runtime/ScheduleExecutor.ts'),
+        ...grepSrc('program\\.slotMeta', 'src/runtime/executeFrameStepped.ts'),
+        ...grepSrc('program\\.slotMeta', 'src/runtime/ValueExprMaterializer.ts'),
+      ];
+      const filtered = filterAllowlist(rawMatches, [/\.test\./, /__tests__/]);
+      expect(
+        filtered,
+        'Execution modules must not access program.slotMeta directly.\n' +
+        'Use getExprAddressTable(program) as the canonical runtime addressing boundary.\n' +
+        'Found violations:\n' + filtered.join('\n')
+      ).toEqual([]);
+    });
+
+  });
+
+  describe('WebGPU Prereq Guards (W11)', () => {
+
+    it('compiler public entrypoints must not export deprecated IRBuilder type', () => {
+      // [LAW:single-enforcer] Public builder contracts are exported once through
+      // BlockIRBuilder/OrchestratorIRBuilder; deprecated IRBuilder export is forbidden.
+      const rawMatches = [
+        ...grepSrc('export type \\{[^}]*\\bIRBuilder\\b', 'src/compiler/index.ts'),
+        ...grepSrc('export type \\{[^}]*\\bIRBuilder\\b', 'src/compiler/ir/index.ts'),
+      ];
+      const filtered = filterAllowlist(rawMatches, [/\.test\./, /__tests__/]);
+      expect(
+        filtered,
+        'Deprecated IRBuilder type must not be exported from compiler public entrypoints.\n' +
+        'Use BlockIRBuilder and OrchestratorIRBuilder as canonical surfaces.\n' +
+        'Found violations:\n' + filtered.join('\n')
+      ).toEqual([]);
+    });
+
+    it('source modules must not import removed legacy IRBuilder interface file', () => {
+      const rawMatches = grepSrc("ir/IRBuilder['\\\"]", 'src/');
+      const filtered = filterAllowlist(rawMatches, [
+        /\.test\./,
+        /__tests__/,
+        /forbidden-patterns\.test\.ts/,
+        /FUNCTIONS\.md/,
+        /README\.md/,
+      ]);
+      expect(
+        filtered,
+        'Legacy IRBuilder interface file imports are forbidden.\n' +
+        'Use BlockIRBuilder or OrchestratorIRBuilder contracts instead.\n' +
+        'Found violations:\n' + filtered.join('\n')
+      ).toEqual([]);
+    });
+
+  });
+
+  describe('WebGPU Prereq Guards (W3/W8)', () => {
+
+    it('render assembler must not read per-instance shapes from values.objects', () => {
+      // [LAW:one-source-of-truth] Per-instance shape payloads flow through
+      // the dedicated shapeFields bank, not generic object storage.
+      const rawMatches = grepSrc('values\\.objects\\.', 'src/runtime/RenderAssembler.ts');
+      const nonCommentMatches = rawMatches.filter((m) => {
+        const secondColon = m.indexOf(':', m.indexOf(':') + 1);
+        const content = secondColon >= 0 ? m.slice(secondColon + 1).trim() : '';
+        if (!content) return false;
+        return !content.startsWith('//') && !content.startsWith('*');
+      });
+      const filtered = filterAllowlist(nonCommentMatches, [/\.test\./, /__tests__/]);
+      expect(
+        filtered,
+        'RenderAssembler must not read/write per-instance shape payloads via values.objects.\n' +
+        'Use RuntimeState.values.shapeFields for shape slot payloads.\n' +
+        'Found violations:\n' + filtered.join('\n')
+      ).toEqual([]);
+    });
+
+    it('runtime execution modules must not use values.objects in hot path', () => {
+      const rawMatches = [
+        ...grepSrc('values\\.objects\\.', 'src/runtime/ScheduleExecutor.ts'),
+        ...grepSrc('values\\.objects\\.', 'src/runtime/executeFrameStepped.ts'),
+      ];
+      const filtered = filterAllowlist(rawMatches, [/\.test\./, /__tests__/]);
+      expect(
+        filtered,
+        'ScheduleExecutor/executeFrameStepped must not read or write values.objects.\n' +
+        'Runtime hot path must use canonical arena/shape banks only.\n' +
+        'Found violations:\n' + filtered.join('\n')
+      ).toEqual([]);
+    });
+
+  });
+
+  describe('WebGPU Prereq Guards (W6)', () => {
+
+    it('runtime evaluator modules must not carry shadow-mode markers', () => {
+      // [LAW:one-source-of-truth] Production runtime has one evaluator family;
+      // shadow-mode migration markers are forbidden in canonical evaluator modules.
+      const rawMatches = [
+        ...grepSrc('shadow mode|Shadow mode', 'src/runtime/ValueExprScalarEvaluator.ts'),
+        ...grepSrc('shadow mode|Shadow mode', 'src/runtime/ValueExprEventEvaluator.ts'),
+        ...grepSrc('legacy EventEvaluator|legacy scalar evaluators|legacy event evaluator', 'src/runtime/ValueExprScalarEvaluator.ts'),
+        ...grepSrc('legacy EventEvaluator|legacy scalar evaluators|legacy event evaluator', 'src/runtime/ValueExprEventEvaluator.ts'),
+      ];
+      const filtered = filterAllowlist(rawMatches, [/\.test\./, /__tests__/]);
+      expect(
+        filtered,
+        'Evaluator modules must not include shadow-mode or legacy-parity markers.\n' +
+        'Found violations:\n' + filtered.join('\n')
+      ).toEqual([]);
+    });
+
+    it('runtime state must not expose duplicate legacy event predicate buffers', () => {
+      const rawMatches = grepSrc('eventPrevPredicate\\b', 'src/runtime/RuntimeState.ts');
+      const filtered = filterAllowlist(rawMatches, [/\.test\./, /__tests__/]);
+      expect(
+        filtered,
+        'RuntimeState must not expose legacy duplicate event predicate buffers.\n' +
+        'Found violations:\n' + filtered.join('\n')
+      ).toEqual([]);
+    });
+
+  });
+
+  describe('WebGPU Prereq Guards (W5)', () => {
+
+    it('binding pass must not use fallback state-slot discovery', () => {
+      const rawMatches = grepSrc('findStateSlot\\(', 'src/compiler/backend/binding-pass.ts');
+      const filtered = filterAllowlist(rawMatches, [/\.test\./, /__tests__/]);
+      expect(
+        filtered,
+        'binding-pass.ts must not use findStateSlot() fallback lookups.\n' +
+        'State resolution must come from declarative effects.\n' +
+        'Found violations:\n' + filtered.join('\n')
+      ).toEqual([]);
+    });
+
+    it('lower-blocks must not branch on optional effects mode', () => {
+      const rawMatches = grepSrc('if \\(result\\.effects\\)|if \\(partialResult\\.effects\\)', 'src/compiler/backend/lower-blocks.ts');
+      const filtered = filterAllowlist(rawMatches, [/\.test\./, /__tests__/]);
+      expect(
+        filtered,
+        'lower-blocks.ts must not branch on optional effects mode.\n' +
+        'Effects are required in the lowering contract.\n' +
+        'Found violations:\n' + filtered.join('\n')
+      ).toEqual([]);
+    });
+
+    it('bindOutputs must not allocate fallback slots', () => {
+      // [LAW:single-enforcer] bindOutputs only binds declarative slotRequests.
+      const rawMatches = grepSrc('allocTypedSlot\\(', 'src/compiler/backend/binding-pass.ts');
+      const filtered = filterAllowlist(rawMatches, [
+        /\.test\./,
+        /__tests__/,
+        /^207:/,
+      ]);
+      expect(
+        filtered,
+        'bindOutputs must not allocate fallback slots.\n' +
+        'Slot allocation belongs to declarative effect planning only.\n' +
+        'Found violations:\n' + filtered.join('\n')
+      ).toEqual([]);
+    });
+
+  });
+
+  describe('WebGPU Prereq Guards (W4)', () => {
+
+    it('runtime state storage must not use Float64Array for persistent state slots', () => {
+      const rawMatches = [
+        ...grepSrc('state:\\s*Float64Array', 'src/runtime/RuntimeState.ts'),
+        ...grepSrc('new Float64Array\\(stateSlotCount\\)', 'src/runtime/RuntimeState.ts'),
+        ...grepSrc('oldState:\\s*Float64Array|newState:\\s*Float64Array', 'src/runtime/StateMigration.ts'),
+      ];
+      const filtered = filterAllowlist(rawMatches, [/\.test\./, /__tests__/]);
+      expect(
+        filtered,
+        'Persistent runtime state slots must use Float32Array.\n' +
+        'Found violations:\n' + filtered.join('\n')
+      ).toEqual([]);
+    });
+
+  });
 });

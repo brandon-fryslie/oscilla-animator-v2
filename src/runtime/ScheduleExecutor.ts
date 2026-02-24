@@ -36,6 +36,7 @@ import {
   type SlotLookup,
   getExprAddressTable,
   assertNumericStride,
+  isNumericStorage,
 } from './ExprAddressTable';
 
 // [LAW:one-source-of-truth] Arena is the canonical numeric store.
@@ -116,8 +117,10 @@ function writeArenaStrided(
   src: ArrayLike<number>,
   stride: number,
 ): void {
-  if (lookup.storage !== 'f64') {
-    throw new Error('writeArenaStrided: expected f64-class storage for slot ' + lookup.slot + ', got ' + lookup.storage);
+  if (!isNumericStorage(lookup.storage)) {
+    throw new Error(
+      'writeArenaStrided: expected numeric storage for slot ' + lookup.slot + ', got ' + lookup.storage,
+    );
   }
   if (lookup.stride !== stride) {
     throw new Error('writeArenaStrided: expected stride=' + stride + ' for slot ' + lookup.slot + ', got ' + lookup.stride);
@@ -143,7 +146,7 @@ function readCanonicalNumeric(
 function resolveSlotOffsetFromMap(slotLookupMap: ReadonlyMap<ValueSlot, SlotLookup>, slot: ValueSlot): SlotLookup {
   const lookup = slotLookupMap.get(slot);
   if (!lookup) {
-    throw new Error('Slot ' + slot + ' not found in slotMeta');
+    throw new Error('Slot ' + slot + ' not found in canonical slot lookup');
   }
   return lookup;
 }
@@ -273,7 +276,7 @@ export function executeFrame(
             _shapeRecord.flags = 0;
             writeShape2D(state.values.shape2d, offset, _shapeRecord);
           }
-        } else if (storage === 'f64') {
+        } else if (isNumericStorage(storage)) {
           const arenaDesc = resolveArenaDescriptor(slotToArena, lookup);
           const arenaTarget = arenaSlice(state.arena, arenaDesc);
 
@@ -480,14 +483,9 @@ export function executeFrame(
           state.tap.recordFieldValue?.(slot, arenaSlice(state.arena, arenaDesc));
           continue;
         }
-
-        const existing = state.values.objects.get(slot);
-        if (existing !== undefined) {
-          state.tap.recordFieldValue?.(slot, existing as any);
-          continue;
-        }
-
-        throw new Error('debug tracked slot has neither arena descriptor nor object payload for slot ' + slot);
+        // [LAW:one-source-of-truth] Debug-tracked field reads must resolve through
+        // the canonical arena descriptor map only.
+        throw new Error('debug tracked slot missing arena descriptor for slot ' + slot);
       }
     }
   }
@@ -579,26 +577,15 @@ export function executeFrame(
   // Updates time tracking and clears frame-local flags
   finalizeContinuityFrame(state);
 
-  // 5. Store frame in output slot (DoD: outputs contract)
+  // [LAW:one-source-of-truth] RenderFrame output flows through one canonical
+  // runtime field, not a synthetic object slot indirection.
+  state.lastRenderFrame = frame;
   if (program.outputs.length > 0) {
     const outputSpec = program.outputs[0];
-    const { storage, slot } = resolveSlotOffsetFromMap(slotLookupMap,outputSpec.slot);
-
-    if (storage === 'object') {
-      // For object storage, use slot as Map key
-      state.values.objects.set(slot, frame);
-    } else {
-      throw new Error(
-        'Output slot expects object storage, got ' + storage
-      );
+    if (outputSpec.kind !== 'renderFrame') {
+      throw new Error('Unsupported output kind: ' + (outputSpec as { kind?: string }).kind);
     }
-
-    // 6. Read from outputs[0].slot (DoD: runtime reads from outputs[0].slot)
-    const outputFrame = state.values.objects.get(slot);
-    if (!outputFrame) {
-      throw new Error('Output frame not found in slot');
-    }
-    return outputFrame as RenderFrameIR;
+    return frame;
   }
 
   // Fallback: no outputs defined (shouldn't happen with proper compilation)

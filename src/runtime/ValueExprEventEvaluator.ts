@@ -6,8 +6,6 @@
  * Event evaluation for the unified ValueExpr table.
  * This evaluator handles event-extent ValueExpr nodes (temporality discrete).
  *
- * Event evaluator for canonical ValueExpr execution.
- *
  * ──────────────────────────────────────────────────────────────────────
  * IMPORTANT: EVENT-EXTENT ONLY
  * ──────────────────────────────────────────────────────────────────────
@@ -96,8 +94,6 @@ export function evaluateValueExprEvent(
 
 /**
  * Evaluate event kind dispatch
- *
- * Matches legacy EventEvaluator.ts behavior exactly.
  */
 function evaluateEventKind(
   expr: ValueExprEvent,
@@ -114,7 +110,7 @@ function evaluateEventKind(
       return false;
 
     case 'pulse':
-      // Fires every tick (same as legacy EventEvaluator.ts:43-45)
+      // Fires every tick.
       return true;
 
     case 'combine': {
@@ -129,7 +125,6 @@ function evaluateEventKind(
 
     case 'wrap': {
       // Edge detection: rising edge of (oneValue >= 0.5)
-      // Same logic as EventEvaluator.ts:57-64
       // [LAW:one-source-of-truth] Event wrap reads cardinality-one values through
       // the canonical materialization path (count=1), not a parallel evaluator path.
       EVENT_MATERIALIZE_SCRATCH.reset();
@@ -148,7 +143,7 @@ function evaluateEventKind(
       // NaN and Inf treated as false (spec §8.6.3)
       const predicate = (Number.isFinite(oneValue) && oneValue >= 0.5) ? 1 : 0;
 
-      // Read previous wrap predicate state for this event expression.
+      // Read previous predicate (separate array for ValueExpr)
       const prev = state.eventWrapPredicate[veId as number];
       const prevPredicate = prev !== undefined ? prev : 0;
 

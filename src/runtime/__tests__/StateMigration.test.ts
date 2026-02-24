@@ -49,8 +49,8 @@ describe('StateMigration', () => {
       },
     ];
 
-    const oldState = new Float64Array([42]);
-    const newState = new Float64Array(6);
+    const oldState = new Float32Array([42]);
+    const newState = new Float32Array(6);
     const result = migrateState(oldState, newState, oldMappings, newMappings, () => null);
 
     expect(result.scalarsMigrated).toBe(1);
@@ -80,8 +80,8 @@ describe('StateMigration', () => {
     ];
     const remap: MappingState = { newToOld: new Int32Array([2, 0, 1]) };
 
-    const oldState = new Float64Array([10, 20, 30]);
-    const newState = new Float64Array(3);
+    const oldState = new Float32Array([10, 20, 30]);
+    const newState = new Float32Array(3);
     const result = migrateState(oldState, newState, oldMappings, newMappings, () => remap);
 
     expect(result.fieldsMigrated).toBe(1);
@@ -109,8 +109,8 @@ describe('StateMigration', () => {
       },
     ];
 
-    const oldState = new Float64Array([99]);
-    const newState = new Float64Array(2);
+    const oldState = new Float32Array([99]);
+    const newState = new Float32Array(2);
     const result = migrateState(oldState, newState, oldMappings, newMappings, () => null);
 
     expect(result.initialized).toBe(1);
@@ -140,8 +140,8 @@ describe('StateMigration', () => {
     ];
     const remap: MappingState = { newToOld: new Int32Array([0]) };
 
-    const oldState = new Float64Array([77]);
-    const newState = new Float64Array(1);
+    const oldState = new Float32Array([77]);
+    const newState = new Float32Array(1);
     const result = migrateState(oldState, newState, oldMappings, newMappings, () => remap);
 
     expect(result.fieldsMigrated).toBe(1);

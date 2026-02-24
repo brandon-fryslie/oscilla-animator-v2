@@ -41,7 +41,7 @@ describe('adapter cache invalidation', () => {
           purity: 'pure',
           stability: 'stable',
         },
-        lower: () => ({ outputsById: {} }),
+        lower: () => ({ outputsById: {}, effects: {} }),
       });
     }
 

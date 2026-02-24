@@ -109,11 +109,9 @@ class BinderState {
 export function bindEffects(inputs: BindInputs, builder: OrchestratorIRBuilder): BindingResult {
   const state = new BinderState();
 
-  // Seed with already-allocated symbolic state so step validation/execution
-  // does not rely on runtime builder lookups.
-  // // [LAW:one-source-of-truth] Existing symbolic state is carried in input data, not discovered via fallback.
+  // Seed state map with known allocations from prior deterministic bind phases.
   if (inputs.existingState) {
-    for (const [key, slot] of inputs.existingState.entries()) {
+    for (const [key, slot] of inputs.existingState) {
       state.stateMap.set(key, slot);
     }
   }
@@ -135,7 +133,7 @@ export function bindEffects(inputs: BindInputs, builder: OrchestratorIRBuilder):
   // The caller will provide outputs separately - we just prepare slotMap here
 
   // Step 5: Validate step requests (all stateKey references must resolve)
-  validateStepRequests(inputs, state);
+  validateStepRequests(inputs, state, builder);
 
   return {
     stateMap: new Map(state.stateMap),
@@ -155,7 +153,7 @@ function allocateStateDeterministic(
   state: BinderState,
   builder: OrchestratorIRBuilder
 ): void {
-  const { effects } = inputs;
+  const { effects, existingState } = inputs;
 
   if (!effects.stateDecls || effects.stateDecls.length === 0) {
     return; // No state to allocate
@@ -165,8 +163,12 @@ function allocateStateDeterministic(
   const sorted = [...effects.stateDecls].sort((a, b) => a.key.localeCompare(b.key));
 
   for (const decl of sorted) {
-    // Existing state was seeded into state.stateMap before allocation.
-    if (state.stateMap.has(decl.key)) {
+    // Check for existing allocation (idempotency)
+    if (existingState?.has(decl.key)) {
+      const existing = existingState.get(decl.key)!;
+      state.stateMap.set(decl.key, existing);
+      // Note: We trust that the existing slot has compatible layout
+      // A production system might validate layout compatibility here
       continue;
     }
 
@@ -214,8 +216,10 @@ function allocateSlotsDeterministic(
  */
 function validateStepRequests(
   inputs: BindInputs,
-  state: BinderState
+  state: BinderState,
+  builder: OrchestratorIRBuilder
 ): void {
+  void builder;
   const { effects, origin } = inputs;
 
   if (!effects.stepRequests || effects.stepRequests.length === 0) {
@@ -227,7 +231,8 @@ function validateStepRequests(
     if ('stateKey' in req) {
       const { stateKey } = req;
 
-      // Validate that stateKey was declared and allocated.
+      // [LAW:single-enforcer] State step references must resolve via this
+      // binding result only; no cross-boundary fallback lookup.
       if (!state.stateMap.has(stateKey)) {
         state.diagnostics.push({
           level: 'error',
@@ -288,8 +293,8 @@ function applyStepRequest(
 ): void {
   switch (req.kind) {
     case 'stateWrite': {
+      // Look up physical slot from binding result
       const slot = result.stateMap.get(req.stateKey);
-
       if (slot === undefined) {
         throw new Error(`State key ${req.stateKey} not found in binding result (validation failed)`);
       }
@@ -300,7 +305,6 @@ function applyStepRequest(
 
     case 'fieldStateWrite': {
       const slot = result.stateMap.get(req.stateKey);
-
       if (slot === undefined) {
         throw new Error(`State key ${req.stateKey} not found in binding result (validation failed)`);
       }
@@ -343,16 +347,12 @@ function applyStepRequest(
  * @param outputsById - Outputs from block lowering (with slot: undefined)
  * @param slotMap - Allocated slots from binding result
  * @param blockId - Block ID for error context
- * @param loweringPurity - Block purity ('pure' or 'impure')
- * @param builder - IRBuilder (for fallback allocation if needed)
  * @returns Bound outputs with slots resolved
  */
 export function bindOutputs(
   outputsById: Record<string, ValueRefExpr> | undefined,
   slotMap: ReadonlyMap<string, ValueSlot>,
   blockId: string,
-  _loweringPurity: 'pure' | 'stateful' | 'impure' | undefined,
-  _builder: OrchestratorIRBuilder
 ): Map<string, ValueRefExpr> {
   const bound = new Map<string, ValueRefExpr>();
 
@@ -372,9 +372,10 @@ export function bindOutputs(
         // Effects-as-data block - bind slot from slotRequests
         finalRef = { ...ref, slot: effectSlot };
       } else {
-        // Missing slot request means lowering did not provide declarative effects.
+        // [LAW:single-enforcer] Slot ownership is enforced only by effect slotRequests
+        // or explicit slot-bearing refs from lowering. No fallback allocator here.
         throw new Error(
-          `Block ${blockId} output '${portId}' missing slot (slotRequests are required for binder slot binding)`
+          `Block ${blockId} output '${portId}' missing slot (block must provide effect slotRequest or explicit slot)`
         );
       }
     }

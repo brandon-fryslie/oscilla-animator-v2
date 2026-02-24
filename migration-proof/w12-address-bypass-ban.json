@@ -1,0 +1,45 @@
+{
+  "workstream": "W12",
+  "title": "Direct-Index Bypass Removal",
+  "status": "slice_completed",
+  "timestamp_utc": "2026-02-23T22:22:17Z",
+  "laws": [
+    "one-source-of-truth",
+    "single-enforcer",
+    "verifiable-goals"
+  ],
+  "scope": [
+    "Route camera resolution through ExprAddressTable.slotToArena",
+    "Route debug service arena lookups through canonical slot-to-arena map",
+    "Route compile orchestrator debug wiring through ExprAddressTable instead of direct arenaLayout array"
+  ],
+  "changed_files": [
+    "/Users/bmf/.codex/worktrees/804c/oscilla-animator-v2/src/runtime/CameraResolver.ts",
+    "/Users/bmf/.codex/worktrees/804c/oscilla-animator-v2/src/services/DebugService.ts",
+    "/Users/bmf/.codex/worktrees/804c/oscilla-animator-v2/src/services/CompileOrchestrator.ts"
+  ],
+  "verification": [
+    {
+      "command": "pnpm -s typecheck",
+      "exit_code": 0
+    },
+    {
+      "command": "pnpm -s vitest run src/services/DebugService.test.ts src/runtime/__tests__/render-scale-offset.test.ts",
+      "exit_code": 0
+    },
+    {
+      "command": "pnpm -s vitest run src/__tests__/forbidden-patterns.test.ts",
+      "exit_code": 0,
+      "tests_passed": 52
+    }
+  ],
+  "static_scan": {
+    "command": "rg -n \"program\\.arenaLayout\\[\" src/runtime src/services src/render src/compiler",
+    "allowed_matches": [
+      "ExprAddressTable canonical table construction",
+      "comments describing removed bypass pattern",
+      "runtime tests"
+    ],
+    "forbidden_in_hot_path": true
+  }
+}

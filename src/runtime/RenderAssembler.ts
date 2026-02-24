@@ -514,9 +514,11 @@ function resolveShape(
   }
 
   if (shapeSpec.k === 'slot') {
-    const shapeBuffer = state.values.objects.get(shapeSpec.slot) as ArrayBufferView;
+    // [LAW:one-source-of-truth] Per-instance shape payloads use the dedicated
+    // shape field bank, never generic values.objects.
+    const shapeBuffer = state.values.shapeFields.get(shapeSpec.slot);
     if (!shapeBuffer) {
-      throw new Error('RenderAssembler: Shape buffer not found in slot ' + shapeSpec.slot);
+      throw new Error('RenderAssembler: Shape field buffer not found in slot ' + shapeSpec.slot);
     }
     return shapeBuffer;
   } else {

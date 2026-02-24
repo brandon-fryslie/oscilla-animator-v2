@@ -6,7 +6,7 @@
  *
  * Replaces the former three separate caches (SLOT_LOOKUP_CACHE,
  * FIELD_EXPR_SLOT_CACHE, SIG_TO_SLOT_CACHE) with one unified table
- * built in a single pass over slotMeta + schedule steps.
+ * built in a single pass over runtimeSlots + schedule steps.
  */
 
 import type { CompiledProgramIR } from '../compiler/ir/program';
@@ -24,6 +24,8 @@ export interface SlotLookup {
   offset: number;
   stride: number;
   slot: ValueSlot;
+  /** Canonical value type for runtime/debug inspection. */
+  type: CanonicalType;
 }
 
 /**
@@ -32,8 +34,6 @@ export interface SlotLookup {
 export interface ExprAddressTable {
   /** ValueSlot → physical storage location */
   readonly slotLookup: ReadonlyMap<ValueSlot, SlotLookup>;
-  /** ValueSlot → CanonicalType metadata */
-  readonly slotTypeBySlot: ReadonlyMap<ValueSlot, CanonicalType>;
   /** ValueExprId (materialized field expression) → target ValueSlot */
   readonly fieldExprToSlot: ReadonlyMap<number, ValueSlot>;
   /** Scalar ValueExprId → arena scalar offset */
@@ -58,7 +58,6 @@ export function getExprAddressTable(program: CompiledProgramIR): ExprAddressTabl
   // 1. Build slot lookup/type/arena maps from compiler-provided runtimeSlots.
   // [LAW:one-source-of-truth] Runtime address resolution reads one canonical table.
   const slotLookup = new Map<ValueSlot, SlotLookup>();
-  const slotTypeBySlot = new Map<ValueSlot, CanonicalType>();
   const slotToArena = new Map<ValueSlot, ArenaSlotDescriptor>();
   for (const slotEntry of program.runtimeSlots) {
     slotLookup.set(slotEntry.slot, {
@@ -66,8 +65,8 @@ export function getExprAddressTable(program: CompiledProgramIR): ExprAddressTabl
       offset: slotEntry.offset,
       stride: slotEntry.stride,
       slot: slotEntry.slot,
+      type: slotEntry.type,
     });
-    slotTypeBySlot.set(slotEntry.slot, slotEntry.type);
     if (slotEntry.arena.offset >= 0) {
       slotToArena.set(slotEntry.slot, slotEntry.arena);
     }
@@ -100,7 +99,6 @@ export function getExprAddressTable(program: CompiledProgramIR): ExprAddressTabl
 
   const table: ExprAddressTable = {
     slotLookup,
-    slotTypeBySlot,
     fieldExprToSlot,
     scalarExprToArenaOffset,
     slotToArena,
@@ -111,8 +109,12 @@ export function getExprAddressTable(program: CompiledProgramIR): ExprAddressTabl
 
 export function assertSlotExists(slotLookupMap: ReadonlyMap<ValueSlot, SlotLookup>, slot: ValueSlot, what: string): SlotLookup {
   const lookup = slotLookupMap.get(slot);
-  if (!lookup) throw new Error('Missing slotMeta entry for ' + what + ' (slot ' + slot + ')');
+  if (!lookup) throw new Error('Missing slot lookup entry for ' + what + ' (slot ' + slot + ')');
   return lookup;
+}
+
+export function isNumericStorage(storage: SlotLookup['storage']): storage is 'f64' | 'f32' | 'i32' | 'u32' {
+  return storage === 'f64' || storage === 'f32' || storage === 'i32' || storage === 'u32';
 }
 
 export function assertNumericStride(
@@ -122,8 +124,8 @@ export function assertNumericStride(
   what: string,
 ): SlotLookup {
   const lookup = assertSlotExists(slotLookupMap, slot, what);
-  if (lookup.storage !== 'f64') {
-    throw new Error(what + ' must be f64 storage, got ' + lookup.storage);
+  if (!isNumericStorage(lookup.storage)) {
+    throw new Error(what + ' must be numeric storage, got ' + lookup.storage);
   }
   if (lookup.stride !== expectedStride) {
     throw new Error(what + ' must have stride=' + expectedStride + ', got ' + lookup.stride);

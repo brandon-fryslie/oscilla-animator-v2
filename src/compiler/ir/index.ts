@@ -27,6 +27,7 @@ export type { LowerResult, LowerCtx, LowerArgs } from '../../blocks/registry';
 // IR builder interfaces
 // BlockIRBuilder: pure surface for blocks
 // OrchestratorIRBuilder: full surface for orchestrator
+// [LAW:one-source-of-truth] Public surface exports only canonical builder interfaces.
 export type { BlockIRBuilder } from './BlockIRBuilder';
 export type { OrchestratorIRBuilder } from './OrchestratorIRBuilder';
 export { IRBuilderImpl, createIRBuilder } from './IRBuilderImpl';

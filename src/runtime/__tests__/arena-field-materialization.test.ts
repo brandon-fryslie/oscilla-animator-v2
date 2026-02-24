@@ -37,7 +37,7 @@ function stateFor(program: ReturnType<typeof compileOk>) {
   const schedule = program.schedule as ScheduleIR;
   const sizes = computeStorageSizes(program.slotMeta);
   return createRuntimeState(
-    sizes.f64,
+    sizes.f32,
     schedule.stateSlotCount,
     schedule.eventSlotCount ?? 0,
     schedule.eventCount ?? 0,

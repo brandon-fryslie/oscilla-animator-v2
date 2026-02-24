@@ -153,7 +153,7 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
 
       state.values.objects.set(1 as ValueSlot, positionBuffer);
       state.values.objects.set(2 as ValueSlot, colorBuffer);
-      state.values.objects.set(3 as ValueSlot, shapeBuffer);
+      state.values.shapeFields.set(3 as ValueSlot, shapeBuffer);
 
       // Build scalarExprToArenaOffset mapping
       const scalarExprToArenaOffset = new Map<number, number>([[0, 10]]);
@@ -223,7 +223,7 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
 
       state.values.objects.set(1 as ValueSlot, positionBuffer);
       state.values.objects.set(2 as ValueSlot, colorBuffer);
-      state.values.objects.set(3 as ValueSlot, shapeBuffer);
+      state.values.shapeFields.set(3 as ValueSlot, shapeBuffer);
       state.values.objects.set(4 as ValueSlot, controlPointsBuffer);
 
       // Build scalarExprToArenaOffset mapping
@@ -278,7 +278,7 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
 
       state.values.objects.set(1 as ValueSlot, positionBuffer);
       state.values.objects.set(2 as ValueSlot, colorBuffer);
-      state.values.objects.set(3 as ValueSlot, shapeBuffer);
+      state.values.shapeFields.set(3 as ValueSlot, shapeBuffer);
       state.values.objects.set(4 as ValueSlot, circlePoints);
       state.values.objects.set(5 as ValueSlot, squarePoints);
       state.values.objects.set(6 as ValueSlot, trianglePoints);
@@ -373,7 +373,7 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
 
       state.values.objects.set(1 as ValueSlot, positionBuffer);
       state.values.objects.set(2 as ValueSlot, colorBuffer);
-      state.values.objects.set(3 as ValueSlot, shapeBuffer);
+      state.values.shapeFields.set(3 as ValueSlot, shapeBuffer);
       state.values.objects.set(4 as ValueSlot, circlePoints);
       state.values.objects.set(5 as ValueSlot, squarePoints);
 
@@ -465,7 +465,7 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
 
       state.values.objects.set(1 as ValueSlot, positionBuffer);
       state.values.objects.set(2 as ValueSlot, colorBuffer);
-      state.values.objects.set(3 as ValueSlot, shapeBuffer);
+      state.values.shapeFields.set(3 as ValueSlot, shapeBuffer);
       state.values.objects.set(4 as ValueSlot, circlePoints);
       state.values.objects.set(5 as ValueSlot, squarePoints);
 
@@ -545,7 +545,7 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
 
       state.values.objects.set(1 as ValueSlot, positionBuffer);
       state.values.objects.set(2 as ValueSlot, colorBuffer);
-      state.values.objects.set(3 as ValueSlot, shapeBuffer);
+      state.values.shapeFields.set(3 as ValueSlot, shapeBuffer);
       state.values.objects.set(4 as ValueSlot, controlPointsBuffer);
 
       // Use non-existent topology ID
@@ -602,7 +602,7 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
 
       state.values.objects.set(1 as ValueSlot, positionBuffer);
       state.values.objects.set(2 as ValueSlot, colorBuffer);
-      state.values.objects.set(3 as ValueSlot, shapeBuffer);
+      state.values.shapeFields.set(3 as ValueSlot, shapeBuffer);
       // No control points buffer at slot 4!
 
       for (let i = 0; i < instanceCount; i++) {
@@ -673,7 +673,7 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
 
       state.values.objects.set(1 as ValueSlot, positionBuffer);
       state.values.objects.set(2 as ValueSlot, colorBuffer);
-      state.values.objects.set(3 as ValueSlot, shapeBuffer);
+      state.values.shapeFields.set(3 as ValueSlot, shapeBuffer);
       state.values.objects.set(4 as ValueSlot, controlPointsBuffer);
 
       const scalarExprToArenaOffset = new Map<number, number>([[0, 10]]);
@@ -743,10 +743,10 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
 
       state.values.objects.set(1 as ValueSlot, pos1);
       state.values.objects.set(2 as ValueSlot, color1);
-      state.values.objects.set(3 as ValueSlot, shape1);
+      state.values.shapeFields.set(3 as ValueSlot, shape1);
       state.values.objects.set(4 as ValueSlot, pos2);
       state.values.objects.set(5 as ValueSlot, color2);
-      state.values.objects.set(6 as ValueSlot, shape2);
+      state.values.shapeFields.set(6 as ValueSlot, shape2);
       state.values.objects.set(10 as ValueSlot, circlePoints);
       state.values.objects.set(11 as ValueSlot, squarePoints);
 

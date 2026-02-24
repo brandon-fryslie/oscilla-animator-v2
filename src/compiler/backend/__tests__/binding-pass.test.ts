@@ -143,7 +143,6 @@ describe('bindEffects', () => {
 describe('bindOutputs', () => {
   it('binds slots from slotMap', () => {
     const type = canonicalScalar(FLOAT);
-    const builder = new IRBuilderImpl();
 
     const outputsById: Record<string, ValueRefExpr> = {
       out: {
@@ -156,35 +155,34 @@ describe('bindOutputs', () => {
 
     const slotMap = new Map([['out', 42 as any]]);
 
-    const bound = bindOutputs(outputsById, slotMap, 'test-block', 'impure', builder);
+    const bound = bindOutputs(outputsById, slotMap, 'test-block');
 
     expect(bound.size).toBe(1);
     expect(bound.get('out')?.slot).toBe(42);
   });
 
-  it('requires slot requests for pure blocks', () => {
+  it('preserves explicit slot-bearing refs without slotMap entries', () => {
     const type = canonicalScalar(FLOAT);
-    const builder = new IRBuilderImpl();
 
     const outputsById: Record<string, ValueRefExpr> = {
       out: {
         id: 123 as any,
         type,
         stride: 1,
-        // slot is undefined
+        slot: 17 as any,
       },
     };
 
     const slotMap = new Map(); // No pre-allocated slot
 
-    expect(() => {
-      bindOutputs(outputsById, slotMap, 'test-block', 'pure', builder);
-    }).toThrow('slotRequests are required');
+    const bound = bindOutputs(outputsById, slotMap, 'test-block');
+
+    expect(bound.size).toBe(1);
+    expect(bound.get('out')?.slot).toBe(17);
   });
 
-  it('throws for impure blocks with missing slots', () => {
+  it('throws for missing slots without effect slotRequest', () => {
     const type = canonicalScalar(FLOAT);
-    const builder = new IRBuilderImpl();
 
     const outputsById: Record<string, ValueRefExpr> = {
       out: {
@@ -198,7 +196,7 @@ describe('bindOutputs', () => {
     const slotMap = new Map(); // No pre-allocated slot
 
     expect(() => {
-      bindOutputs(outputsById, slotMap, 'test-block', 'impure', builder);
+      bindOutputs(outputsById, slotMap, 'test-block');
     }).toThrow('missing slot');
   });
 });

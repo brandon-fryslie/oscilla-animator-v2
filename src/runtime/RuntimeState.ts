@@ -11,6 +11,7 @@ import { createTimeState } from './timeResolution';
 import type { ContinuityState } from './ContinuityState';
 import { createContinuityState } from './ContinuityState';
 import type { DebugTap } from './DebugTap';
+import type { RenderFrameIR } from '../render/types';
 import { ExternalChannelSystem } from './ExternalChannel';
 import { createArena } from './ArenaValueStore';
 
@@ -97,6 +98,9 @@ export interface ValueStore {
   /** Object values (non-numeric payloads, e.g. render frame references) */
   objects: Map<ValueSlot, unknown>;
 
+  /** Per-slot packed shape field buffers for render hot path (Field<shape2d>). */
+  shapeFields: Map<ValueSlot, Uint32Array>;
+
   /**
    * Packed shape2d values (8 x u32 words per shape)
    *
@@ -116,6 +120,7 @@ export function createValueStore(slotCount: number, shape2dSlotCount: number = 0
   void slotCount;
   return {
     objects: new Map(),
+    shapeFields: new Map(),
     shape2d: new Uint32Array(shape2dSlotCount * SHAPE2D_WORDS),
   };
 }
@@ -474,6 +479,9 @@ export interface ProgramState {
   /** Per-frame value storage (slot-based) */
   values: ValueStore;
 
+  /** Last assembled frame for the current program execution. */
+  lastRenderFrame: RenderFrameIR | null;
+
   /** Float32 arena for unified value store (cardinality unification migration) */
   arena: Float32Array;
 
@@ -484,14 +492,14 @@ export interface ProgramState {
   time: EffectiveTime | null;
 
   /** Stateful primitive state (migrated via StableStateIds on hot-swap) */
-  state: Float64Array;
+  state: Float32Array;
 
   /** Event scalar storage (0=not fired, 1=fired this tick). Cleared each frame. */
   eventScalars: Uint8Array;
 
   /**
    * Previous predicate values for wrap edge detection (indexed by ValueExprId).
-   * Used by ValueExpr EventEvaluator wrap-edge detection.
+   * Used by the canonical ValueExpr event evaluator.
    */
   eventWrapPredicate: Uint8Array;
 
@@ -521,6 +529,9 @@ export interface RuntimeState {
   /** Per-frame value storage (slot-based) */
   values: ValueStore;
 
+  /** Last assembled frame for the current program execution. */
+  lastRenderFrame: RenderFrameIR | null;
+
   /** Float32 arena for unified value store (cardinality unification migration) */
   arena: Float32Array;
 
@@ -531,14 +542,14 @@ export interface RuntimeState {
   time: EffectiveTime | null;
 
   /** Stateful primitive state (migrated via StableStateIds on hot-swap) */
-  state: Float64Array;
+  state: Float32Array;
 
   /** Event scalar storage (0=not fired, 1=fired this tick). Cleared each frame. */
   eventScalars: Uint8Array;
 
   /**
    * Previous predicate values for wrap edge detection (indexed by ValueExprId).
-   * Used by ValueExpr EventEvaluator wrap-edge detection.
+   * Used by the canonical ValueExpr event evaluator.
    */
   eventWrapPredicate: Uint8Array;
 
@@ -597,16 +608,21 @@ export function createProgramState(
   slotCount: number,
   stateSlotCount: number = 0,
   eventSlotCount: number = 0,
-  _legacyEventExprCount: number = 0,
+  eventExprCount: number = 0,
   valueExprCount: number = 0,
   arenaTotalFloats: number = 0
 ): ProgramState {
+  // [LAW:one-source-of-truth] event wrap-edge state lives in eventWrapPredicate;
+  // eventExprCount is accepted for callsite compatibility while compile/runtime
+  // signatures converge on ValueExpr-driven sizing.
+  void eventExprCount;
   return {
     values: createValueStore(slotCount),
+    lastRenderFrame: null,
     arena: createArena(arenaTotalFloats),
     cache: createFrameCache(1000, valueExprCount),
     time: null,
-    state: new Float64Array(stateSlotCount),
+    state: new Float32Array(stateSlotCount),
     eventScalars: new Uint8Array(eventSlotCount),
     eventWrapPredicate: new Uint8Array(valueExprCount),
     events: new Map(),
@@ -623,20 +639,12 @@ export function createRuntimeState(
   slotCount: number,
   stateSlotCount: number = 0,
   eventSlotCount: number = 0,
-  _legacyEventExprCount: number = 0,
+  eventExprCount: number = 0,
   valueExprCount: number = 0,
   arenaTotalFloats: number = 0
 ): RuntimeState {
   const session = createSessionState();
-  return createRuntimeStateFromSession(
-    session,
-    slotCount,
-    stateSlotCount,
-    eventSlotCount,
-    _legacyEventExprCount,
-    valueExprCount,
-    arenaTotalFloats
-  );
+  return createRuntimeStateFromSession(session, slotCount, stateSlotCount, eventSlotCount, eventExprCount, valueExprCount, arenaTotalFloats);
 }
 
 /**
@@ -649,21 +657,15 @@ export function createRuntimeStateFromSession(
   slotCount: number,
   stateSlotCount: number = 0,
   eventSlotCount: number = 0,
-  _legacyEventExprCount: number = 0,
+  eventExprCount: number = 0,
   valueExprCount: number = 0,
   arenaTotalFloats: number = 0
 ): RuntimeState {
-  const program = createProgramState(
-    slotCount,
-    stateSlotCount,
-    eventSlotCount,
-    _legacyEventExprCount,
-    valueExprCount,
-    arenaTotalFloats
-  );
+  const program = createProgramState(slotCount, stateSlotCount, eventSlotCount, eventExprCount, valueExprCount, arenaTotalFloats);
   return {
     // ProgramState (fresh)
     values: program.values,
+    lastRenderFrame: program.lastRenderFrame,
     arena: program.arena,
     cache: program.cache,
     time: program.time,

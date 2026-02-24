@@ -79,7 +79,7 @@ function mockProgram(opts: {
 }
 
 describe('getExprAddressTable', () => {
-  it('builds slotLookup from slotMeta', () => {
+  it('builds slotLookup from runtime slots', () => {
     const program = mockProgram({
       slotMeta: [
         { slot: valueSlot(0), storage: 'f64', offset: 0, stride: 1, type: SIG_FLOAT },
@@ -91,15 +91,15 @@ describe('getExprAddressTable', () => {
 
     const table = getExprAddressTable(program);
     expect(table.slotLookup.size).toBe(3);
-    expect(table.slotLookup.get(valueSlot(0))).toEqual({
-      storage: 'f64', offset: 0, stride: 1, slot: valueSlot(0),
-    });
-    expect(table.slotLookup.get(valueSlot(1))).toEqual({
-      storage: 'object', offset: 0, stride: 1, slot: valueSlot(1),
-    });
-    expect(table.slotLookup.get(valueSlot(2))).toEqual({
-      storage: 'f64', offset: 1, stride: 3, slot: valueSlot(2),
-    });
+    expect(table.slotLookup.get(valueSlot(0))).toEqual(expect.objectContaining({
+      storage: 'f64', offset: 0, stride: 1, slot: valueSlot(0), type: SIG_FLOAT,
+    }));
+    expect(table.slotLookup.get(valueSlot(1))).toEqual(expect.objectContaining({
+      storage: 'object', offset: 0, stride: 1, slot: valueSlot(1), type: FIELD_FLOAT,
+    }));
+    expect(table.slotLookup.get(valueSlot(2))).toEqual(expect.objectContaining({
+      storage: 'f64', offset: 1, stride: 3, slot: valueSlot(2), type: SIG_FLOAT,
+    }));
   });
 
   it('builds fieldExprToSlot from materialize steps', () => {
@@ -181,12 +181,12 @@ describe('assertSlotExists', () => {
       steps: [],
     }));
     expect(() => assertSlotExists(table.slotLookup, valueSlot(99), 'test'))
-      .toThrow(/Missing slotMeta entry for test/);
+      .toThrow(/Missing slot lookup entry for test/);
   });
 });
 
 describe('assertNumericStride', () => {
-  it('returns lookup for matching f64 slot', () => {
+  it('returns lookup for matching numeric slot', () => {
     const table = getExprAddressTable(mockProgram({
       slotMeta: [{ slot: valueSlot(0), storage: 'f64', offset: 0, stride: 4, type: SIG_FLOAT }],
       steps: [],
@@ -195,13 +195,22 @@ describe('assertNumericStride', () => {
     expect(result.stride).toBe(4);
   });
 
-  it('throws for non-f64 storage', () => {
+  it('accepts f32 numeric storage classes', () => {
+    const table = getExprAddressTable(mockProgram({
+      slotMeta: [{ slot: valueSlot(0), storage: 'f32', offset: 0, stride: 2, type: SIG_FLOAT }],
+      steps: [],
+    }));
+    const result = assertNumericStride(table.slotLookup, valueSlot(0), 2, 'test');
+    expect(result.storage).toBe('f32');
+  });
+
+  it('throws for non-numeric storage', () => {
     const table = getExprAddressTable(mockProgram({
       slotMeta: [{ slot: valueSlot(0), storage: 'object', offset: 0, stride: 1, type: FIELD_FLOAT }],
       steps: [],
     }));
     expect(() => assertNumericStride(table.slotLookup, valueSlot(0), 1, 'test'))
-      .toThrow(/must be f64 storage/);
+      .toThrow(/must be numeric storage/);
   });
 
   it('throws for stride mismatch', () => {

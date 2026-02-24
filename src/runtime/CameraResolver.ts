@@ -109,9 +109,10 @@ export function resolveCameraDecl(
   program: CompiledProgramIR,
   state: RuntimeState,
 ): ResolvedCameraParams {
-  const { slotToArena } = getExprAddressTable(program);
+  // [LAW:one-source-of-truth] Read camera slots through the canonical slotToArena table
+  // rather than directly indexing program.arenaLayout in consumers.
+  const slotToArena = getExprAddressTable(program).slotToArena;
 
-  // [LAW:one-source-of-truth] Read camera slots from arena descriptors.
   // Camera params are numeric value slots and should always be arena-backed.
   const readSlot = (slot: ValueSlot): number => {
     const desc = slotToArena.get(slot);

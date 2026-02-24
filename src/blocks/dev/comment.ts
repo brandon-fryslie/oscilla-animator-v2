@@ -31,7 +31,7 @@ export function register(): void {
     lower: () => {
       // [LAW:dataflow-not-control-flow] Lowering always executes and deterministically
       // yields an empty output set for this non-executing annotation block.
-      return { outputsById: {} };
+      return { outputsById: {}, effects: {} };
     },
   });
 }

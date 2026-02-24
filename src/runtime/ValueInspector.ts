@@ -16,24 +16,24 @@ import type { SlotValue, ValueAnomaly, LaneIdentity } from './StepDebugTypes';
 import type { InstanceId } from '../core/ids';
 import type { ContinuityState } from './ContinuityState';
 import type { ArenaSlotDescriptor } from './ArenaValueStore';
-import type { CanonicalType } from '../core/canonical-types';
 
 /**
  * Read the current value of a slot from runtime state.
  *
  * @param state - Runtime state to read from
  * @param lookup - Pre-computed slot lookup (from ExprAddressTable)
- * @param slotType - Slot type metadata
  * @returns Typed slot value snapshot
  */
 export function readSlotValue(
   state: RuntimeState,
   lookup: SlotLookup,
-  slotType: CanonicalType,
   slotToArena?: ReadonlyMap<ValueSlot, ArenaSlotDescriptor>,
 ): SlotValue {
   switch (lookup.storage) {
-    case 'f64': {
+    case 'f64':
+    case 'f32':
+    case 'i32':
+    case 'u32': {
       const arenaDesc = slotToArena?.get(lookup.slot);
       if (!arenaDesc) {
         throw new Error(`readSlotValue: missing arena descriptor for numeric slot ${lookup.slot}`);
@@ -42,7 +42,7 @@ export function readSlotValue(
         return {
           kind: 'scalar',
           value: state.arena[arenaDesc.offset],
-          type: slotType,
+          type: lookup.type,
         };
       }
       // Multi-component: copy the values into a snapshot buffer
@@ -54,7 +54,7 @@ export function readSlotValue(
         kind: 'buffer',
         buffer,
         count: lookup.stride,
-        type: slotType,
+        type: lookup.type,
       };
     }
 
@@ -67,7 +67,7 @@ export function readSlotValue(
           kind: 'buffer',
           buffer: ref,
           count: ref.length,
-          type: slotType,
+          type: lookup.type,
         };
       }
       return { kind: 'object', ref };
@@ -77,12 +77,6 @@ export function readSlotValue(
       const record = readShape2D(state.values.shape2d, lookup.offset);
       return { kind: 'object', ref: record };
     }
-
-    case 'f32':
-    case 'i32':
-    case 'u32':
-      // Future storage types — return as object for now
-      return { kind: 'object', ref: undefined };
 
     default: {
       const _: never = lookup.storage;
@@ -180,10 +174,9 @@ export function inspectBlockSlots(
     if (ownerBlockId !== blockId) continue;
 
     const lookup = lookupMap.get(slot);
-    const slotType = addressTable.slotTypeBySlot.get(slot);
-    if (!lookup || !slotType) continue;
+    if (!lookup) continue;
 
-    result.set(slot, readSlotValue(state, lookup, slotType, addressTable.slotToArena));
+    result.set(slot, readSlotValue(state, lookup, addressTable.slotToArena));
   }
 
   return result;

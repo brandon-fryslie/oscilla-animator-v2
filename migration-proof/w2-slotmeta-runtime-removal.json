@@ -1,0 +1,53 @@
+{
+  "workstream": "W2",
+  "title": "Remove Runtime-Operational slotMeta Dependency",
+  "status": "slice_completed",
+  "timestamp_utc": "2026-02-23T22:27:58Z",
+  "laws": [
+    "one-source-of-truth",
+    "single-enforcer",
+    "verifiable-goals"
+  ],
+  "scope": [
+    "Propagate canonical type metadata into ExprAddressTable.SlotLookup",
+    "Remove executeFrameStepped slotMeta indexing and route slot snapshots through canonical slot lookup",
+    "Remove ValueInspector slotMeta map construction in inspectBlockSlots",
+    "Add CI guard banning program.slotMeta access in execution modules"
+  ],
+  "changed_files": [
+    "/Users/bmf/.codex/worktrees/804c/oscilla-animator-v2/src/runtime/ExprAddressTable.ts",
+    "/Users/bmf/.codex/worktrees/804c/oscilla-animator-v2/src/runtime/executeFrameStepped.ts",
+    "/Users/bmf/.codex/worktrees/804c/oscilla-animator-v2/src/runtime/ValueInspector.ts",
+    "/Users/bmf/.codex/worktrees/804c/oscilla-animator-v2/src/runtime/ScheduleExecutor.ts",
+    "/Users/bmf/.codex/worktrees/804c/oscilla-animator-v2/src/runtime/__tests__/ExprAddressTable.test.ts",
+    "/Users/bmf/.codex/worktrees/804c/oscilla-animator-v2/src/runtime/__tests__/ValueInspector.test.ts",
+    "/Users/bmf/.codex/worktrees/804c/oscilla-animator-v2/src/__tests__/forbidden-patterns.test.ts"
+  ],
+  "verification": [
+    {
+      "command": "pnpm -s typecheck",
+      "exit_code": 0
+    },
+    {
+      "command": "pnpm -s vitest run src/runtime/__tests__/ExprAddressTable.test.ts src/runtime/__tests__/ValueInspector.test.ts src/runtime/__tests__/executeFrameStepped.test.ts src/runtime/__tests__/StepDebugSession.test.ts src/__tests__/forbidden-patterns.test.ts",
+      "exit_code": 0,
+      "tests_passed": 100
+    },
+    {
+      "command": "pnpm -s vitest run src/runtime/__tests__/ValueInspector.test.ts src/runtime/__tests__/executeFrameStepped.test.ts src/__tests__/forbidden-patterns.test.ts",
+      "exit_code": 0,
+      "tests_passed": 70
+    },
+    {
+      "command": "./scripts/get-screenshot-of-demo-patch.sh simple.hcl",
+      "exit_code": 0,
+      "artifact": "/tmp/oscilla-test-screenshots/simple_burst_3x3_100ms_20260223-152803.png"
+    }
+  ],
+  "static_scans": [
+    {
+      "command": "rg -n \"program\\.slotMeta\" src/runtime/ScheduleExecutor.ts src/runtime/executeFrameStepped.ts src/runtime/ValueExprMaterializer.ts",
+      "result": "no_matches"
+    }
+  ]
+}

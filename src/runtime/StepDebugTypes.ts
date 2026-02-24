@@ -42,7 +42,7 @@ export type SlotValue =
 /**
  * Snapshot of a state slot value after a Phase 2 stateWrite/fieldStateWrite.
  *
- * State slots live in `state.state[]` (Float64Array), indexed by StateSlotId.
+ * State slots live in `state.state[]` (Float32Array), indexed by StateSlotId.
  * They persist across frames (unlike ValueSlot values which are per-frame).
  * The `stateId` provides human-readable identification (e.g., "osc1:phase").
  */

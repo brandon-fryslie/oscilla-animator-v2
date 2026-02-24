@@ -38,6 +38,7 @@ import {
   type SlotLookup,
   getExprAddressTable,
   assertNumericStride,
+  isNumericStorage,
 } from './ExprAddressTable';
 import type { StepSnapshot, SlotValue, StateSlotValue, ExecutionPhase } from './StepDebugTypes';
 import { readSlotValue, readEventSlotValue, detectAnomalies } from './ValueInspector';
@@ -69,8 +70,8 @@ function writeArenaStrided(
   src: ArrayLike<number>,
   stride: number,
 ): void {
-  if (lookup.storage !== 'f64') {
-    throw new Error(`writeArenaStrided: expected f64-class storage for slot ${lookup.slot}, got ${lookup.storage}`);
+  if (!isNumericStorage(lookup.storage)) {
+    throw new Error(`writeArenaStrided: expected numeric storage for slot ${lookup.slot}, got ${lookup.storage}`);
   }
   if (lookup.stride !== stride) {
     throw new Error(`writeArenaStrided: expected stride=${stride} for slot ${lookup.slot}, got ${lookup.stride}`);
@@ -232,11 +233,11 @@ export function* executeFrameStepped(
   // [LAW:one-source-of-truth] Single address table for all slot/expr/field queries.
   // slotToArena replaces all direct program.arenaLayout[slot] accesses in this file.
   const addressTable = getExprAddressTable(program);
-  const { slotLookup: slotLookupMap, slotTypeBySlot, fieldExprToSlot, slotToArena } = addressTable;
+  const { slotLookup: slotLookupMap, fieldExprToSlot, slotToArena } = addressTable;
 
   const resolveSlotOffset = (slot: ValueSlot): SlotLookup => {
     const lookup = slotLookupMap.get(slot);
-    if (!lookup) throw new Error(`Slot ${slot} not found in slotMeta`);
+    if (!lookup) throw new Error(`Slot ${slot} not found in canonical slot lookup`);
     return lookup;
   };
 
@@ -303,11 +304,8 @@ export function* executeFrameStepped(
             });
           }
           // Capture written shape
-          const slotType = slotTypeBySlot.get(targetSlot);
-          if (slotType) {
-            writtenSlots.set(targetSlot, readSlotValue(state, lookup, slotType, slotToArena));
-          }
-        } else if (storage === 'f64') {
+          writtenSlots.set(targetSlot, readSlotValue(state, lookup, slotToArena));
+        } else if (isNumericStorage(storage)) {
           const arenaDesc = resolveArenaDescriptor(slotToArena, lookup);
           const arenaTarget = arenaSlice(state.arena, arenaDesc);
 
@@ -333,10 +331,7 @@ export function* executeFrameStepped(
           state.cache.scalarStamps[step.expr as number] = state.cache.frameId;
 
           // Capture written slot
-          const slotType = slotTypeBySlot.get(targetSlot);
-          if (slotType) {
-            writtenSlots.set(targetSlot, readSlotValue(state, lookup, slotType, slotToArena));
-          }
+          writtenSlots.set(targetSlot, readSlotValue(state, lookup, slotToArena));
         } else {
           throw new Error(`evalOne: unsupported storage type '${storage}' for slot ${slot} expr ${step.expr}`);
         }
@@ -557,16 +552,8 @@ export function* executeFrameStepped(
   // --- POST-FRAME: Finalize continuity ---
   finalizeContinuityFrame(state);
 
-  // Store frame in output slot
-  if (program.outputs.length > 0) {
-    const outputSpec = program.outputs[0];
-    const { storage, slot } = resolveSlotOffset(outputSpec.slot);
-    if (storage === 'object') {
-      state.values.objects.set(slot, frame);
-    } else {
-      throw new Error(`Output slot expects object storage, got ${storage}`);
-    }
-  }
+  // [LAW:one-source-of-truth] RenderFrame output uses canonical runtime field.
+  state.lastRenderFrame = frame;
 
   yield buildSnapshot(-1, null, 'post-frame', totalSteps, program, state, tAbsMs, new Map(), prevValues);
 
@@ -575,10 +562,10 @@ export function* executeFrameStepped(
   // Return the frame result
   if (program.outputs.length > 0) {
     const outputSpec = program.outputs[0];
-    const { slot } = resolveSlotOffset(outputSpec.slot);
-    const outputFrame = state.values.objects.get(slot);
-    if (!outputFrame) throw new Error('Output frame not found in slot');
-    return outputFrame as RenderFrameIR;
+    if (outputSpec.kind !== 'renderFrame') {
+      throw new Error(`Unsupported output kind: ${(outputSpec as { kind?: string }).kind}`);
+    }
+    return frame;
   }
   return frame;
 }
