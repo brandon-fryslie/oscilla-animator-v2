@@ -19,10 +19,18 @@ registerAllBlocks();
 const HCL_DIR = join(__dirname, '..');
 const hclFiles = readdirSync(HCL_DIR).filter(f => f.endsWith('.hcl'));
 
+function expectedCompileErrorSubstring(hcl: string): string | null {
+  const match = hcl.match(/@expect-compile-error(?:\s+([^\n\r]+))?/);
+  if (!match) return null;
+  const raw = (match[1] ?? '').trim();
+  return raw.length > 0 ? raw : '';
+}
+
 describe('HCL demo patches', () => {
   for (const file of hclFiles) {
     describe(file, () => {
       const hcl = readFileSync(join(HCL_DIR, file), 'utf-8');
+      const expectedCompileError = expectedCompileErrorSubstring(hcl);
 
       it('deserializes without errors', () => {
         const result = deserializePatchFromHCL(hcl);
@@ -46,8 +54,18 @@ describe('HCL demo patches', () => {
         expect(errors).toEqual([]);
 
         const result = compile(patch);
+        const msgs = result.kind === 'error' ? result.errors.map(e => e.message) : [];
+
+        // [LAW:dataflow-not-control-flow] Every demo is compiled; expected failures are asserted as data.
+        if (expectedCompileError !== null) {
+          expect(result.kind).toBe('error');
+          if (expectedCompileError.length > 0) {
+            expect(msgs.join('\n')).toContain(expectedCompileError);
+          }
+          return;
+        }
+
         if (result.kind === 'error') {
-          const msgs = result.errors.map(e => e.message);
           throw new Error(`Compilation failed:\n${msgs.join('\n')}`);
         }
         expect(result.kind).toBe('ok');

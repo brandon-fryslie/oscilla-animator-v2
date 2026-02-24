@@ -60,6 +60,26 @@ function filterAllowlist(results: string[], allowlist: RegExp[]): string[] {
 
 describe('Forbidden Patterns (Type System Invariants)', () => {
 
+  describe('WebGPU Draw Contract (V3)', () => {
+    it('WebGPURenderer must use indirect draws (no direct drawIndexed hot path)', () => {
+      const directDrawCalls = grepSrc('drawIndexed\\(', 'src/render/webgpu/WebGPURenderer.ts');
+      expect(directDrawCalls, 'WebGPURenderer must not use drawIndexed(); use drawIndexedIndirect()').toEqual([]);
+
+      const indirectDrawCalls = grepSrc('drawIndexedIndirect\\(', 'src/render/webgpu/WebGPURenderer.ts');
+      expect(indirectDrawCalls.length).toBeGreaterThan(0);
+    });
+  });
+
+  describe('Runtime Loop Contract (V3)', () => {
+    it('AnimationLoop must not perform CPU coordinate scans for content bounds in the hot path', () => {
+      const cpuBoundsHelpers = grepSrc('calculateContentBounds\\(', 'src/services/AnimationLoop.ts');
+      expect(cpuBoundsHelpers, 'AnimationLoop hot path must not scan per-instance coordinates on CPU').toEqual([]);
+
+      const canonicalNoopBoundsUpdate = grepSrc('setContentBounds\\(null\\)', 'src/services/AnimationLoop.ts');
+      expect(canonicalNoopBoundsUpdate.length).toBeGreaterThan(0);
+    });
+  });
+
   it('no AxisTag type alias anywhere in src/', () => {
     // Search for "type AxisTag" or "AxisTag<" as a type usage (not in comments)
     const matches = grepSrc('type AxisTag');

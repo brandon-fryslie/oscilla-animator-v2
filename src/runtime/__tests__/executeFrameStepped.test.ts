@@ -57,6 +57,39 @@ function compileSimplePatch() {
   return result.program;
 }
 
+function compilePhasorPatch() {
+  const patch = buildPatch((b) => {
+    b.addBlock('InfiniteTimeRoot');
+
+    const frequency = b.addBlock('Const');
+    b.setConfig(frequency, 'value', 12_345);
+
+    const phasor = b.addBlock('Phasor');
+    b.wire(frequency, 'out', phasor, 'frequency');
+
+    const ellipse = b.addBlock('Ellipse');
+    b.setPortDefault(ellipse, 'rx', 0.03);
+    b.setPortDefault(ellipse, 'ry', 0.03);
+
+    const array = b.addBlock('Array');
+    b.setPortDefault(array, 'count', 4);
+
+    const layout = b.addBlock('CircleLayoutUV');
+    b.wire(ellipse, 'shape', array, 'element');
+    b.wire(array, 'elements', layout, 'elements');
+    b.wire(phasor, 'out', layout, 'phase');
+
+    const render = b.addBlock('RenderInstances2D');
+    b.wire(layout, 'position', render, 'pos');
+  });
+
+  const result = compile(patch);
+  if (result.kind === 'error') {
+    throw new Error(`Compile failed: ${result.errors.map(e => e.message).join(', ')}`);
+  }
+  return result.program;
+}
+
 function createStateForProgram(program: CompiledProgramIR) {
   const schedule = program.schedule as ScheduleIR;
   const sizes = computeRuntimeStorageSizes(program.runtimeSlots);
@@ -213,5 +246,44 @@ describe('executeFrameStepped', () => {
     }
 
     expect(foundWrittenSlots).toBe(true);
+  });
+
+  it('keeps phasor state bounded during long-horizon stepped execution', () => {
+    const program = compilePhasorPatch();
+    const schedule = program.schedule as ScheduleIR;
+    const phasorMapping = schedule.stateMappings.find((mapping) => mapping.stateId.endsWith(':phasor'));
+    expect(phasorMapping).toBeDefined();
+    if (!phasorMapping) return;
+
+    const steppedState = createStateForProgram(program);
+    const steppedArena = getTestArena();
+
+    let timeMs = 0;
+    for (let frame = 0; frame < 1024; frame++) {
+      timeMs += 16.67;
+      let stepped = executeFrameStepped(program, steppedState, steppedArena, timeMs);
+      let steppedResult = stepped.next();
+      while (!steppedResult.done) {
+        steppedResult = stepped.next();
+      }
+
+      const value = steppedState.state[phasorMapping.slotStart] ?? NaN;
+      expect(Number.isFinite(value)).toBe(true);
+      expect(value).toBeGreaterThanOrEqual(0);
+      expect(value).toBeLessThan(1);
+    }
+
+    const directState = createStateForProgram(program);
+    const directArena = getTestArena();
+    timeMs = 0;
+    for (let frame = 0; frame < 1024; frame++) {
+      timeMs += 16.67;
+      directArena.reset();
+      executeFrame(program, directState, directArena, timeMs);
+      const value = directState.state[phasorMapping.slotStart] ?? NaN;
+      expect(Number.isFinite(value)).toBe(true);
+      expect(value).toBeGreaterThanOrEqual(0);
+      expect(value).toBeLessThan(1);
+    }
   });
 });

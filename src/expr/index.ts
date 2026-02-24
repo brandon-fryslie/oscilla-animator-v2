@@ -197,11 +197,13 @@ export type {
   Suggestion,
   SuggestionType,
   FunctionSuggestion,
+  ConstantSuggestion,
   BlockSuggestion,
   PortSuggestion,
   FunctionSignature,
 } from './suggestions';
 export { SuggestionProvider, getFunctionSignatures } from './suggestions';
+export { getExpressionConstants, resolveExpressionConstant } from './constants';
 
 // Swizzle utilities (for advanced use cases)
 export {

@@ -2,8 +2,8 @@
   "workstream": "W15",
   "title": "Browser Matrix, Performance, And Proof Artifact Pipeline",
   "status": "completed",
-  "timestamp_utc": "2026-02-24T12:00:41Z",
-  "commit": "4656e2ac5",
+  "timestamp_utc": "2026-02-24T18:06:28Z",
+  "commit": "working-tree",
   "laws": [
     "verifiable-goals",
     "single-enforcer",
@@ -21,13 +21,16 @@
   ],
   "artifact": {
     "matrix_report": "artifacts/webgpu-browser-matrix.json",
-    "report_generated_at": "2026-02-24T09:38:47.713Z",
+    "report_generated_at": "2026-02-24T18:06:28.853Z",
     "sample_frames": 180,
     "url": "http://127.0.0.1:5174/?showPreview=true",
     "gating_browsers": [
       "chromium"
     ],
-    "non_blocking_browsers": [],
+    "non_blocking_browsers": [
+      "webkit",
+      "safari"
+    ],
     "overall_passed": true
   },
   "results": {
@@ -46,9 +49,49 @@
       },
       "timing": {
         "sampleCount": 180,
-        "avgFrameDeltaMs": 14.528,
-        "p95FrameDeltaMs": 33.7,
-        "avgFps": 68.83
+        "avgFrameDeltaMs": 8.298,
+        "p95FrameDeltaMs": 8.7,
+        "avgFps": 120.51
+      }
+    },
+    "webkit": {
+      "browser_version": "26.0",
+      "blocking": false,
+      "passed": false,
+      "failure_reason": "webgpu_api_unavailable",
+      "readiness": {
+        "hasNavigatorGpu": false,
+        "hasAdapter": false,
+        "hasCanvas": true,
+        "hasWebGPUContext": false,
+        "consoleErrorCount": 1,
+        "pageErrorCount": 0
+      },
+      "timing": {
+        "sampleCount": 180,
+        "avgFrameDeltaMs": 16.561,
+        "p95FrameDeltaMs": 18,
+        "avgFps": 60.38
+      }
+    },
+    "safari": {
+      "browser_version": "26.3",
+      "blocking": false,
+      "passed": true,
+      "failure_reason": null,
+      "readiness": {
+        "hasNavigatorGpu": true,
+        "hasAdapter": true,
+        "hasCanvas": true,
+        "hasWebGPUContext": true,
+        "consoleErrorCount": 0,
+        "pageErrorCount": 0
+      },
+      "timing": {
+        "sampleCount": 0,
+        "avgFrameDeltaMs": 0,
+        "p95FrameDeltaMs": 0,
+        "avgFps": 0
       }
     }
   },
@@ -57,6 +100,11 @@
       "command": "pnpm run test:webgpu-matrix",
       "exit_code": 0,
       "artifact": "artifacts/webgpu-browser-matrix.json"
+    },
+    {
+      "command": "WEBGPU_MATRIX_INCLUDE_SAFARI=1 node scripts/webgpu-browser-matrix.mjs",
+      "exit_code": 0,
+      "notes": "Script now includes a first-class Safari probe lane (osascript) and writes Safari readiness into the same matrix report."
     },
     {
       "command": "osascript Safari probe for Boolean(navigator.gpu) + webgpu context",

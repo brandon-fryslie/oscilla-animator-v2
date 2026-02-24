@@ -19,7 +19,6 @@ import { JANK_THRESHOLD_MS } from '../stores/DiagnosticsStore';
 import type { RuntimeState } from '../runtime/RuntimeState';
 import type { RootStore } from '../stores';
 import type { RenderFrameIR } from '../render/types';
-import type { ContentBounds } from '../stores/ViewportStore';
 
 export interface AnimationLoopState {
   frameCount: number;
@@ -43,6 +42,11 @@ export interface AnimationLoopDeps {
   onStatsUpdate?: (statsText: string) => void;
 }
 
+export interface AnimationLoopController {
+  stop: () => void;
+  onCompileSuccess: () => boolean;
+}
+
 function assertWebGPULoopContract(deps: AnimationLoopDeps): void {
   const canvas = deps.getCanvas();
   const renderer = deps.getRenderer();
@@ -59,56 +63,6 @@ const CONTINUITY_STORE_UPDATE_INTERVAL = 200; // 5Hz
 const EMPTY_RENDER_FRAME: RenderFrameIR = { version: 2, ops: [] };
 
 /**
- * Calculate content bounds from a render frame.
- * Returns bounds in world space (normalized [0,1] coordinates).
- */
-function calculateContentBounds(frame: RenderFrameIR): ContentBounds | null {
-  if (frame.ops.length === 0) {
-    return null;
-  }
-
-  let minX = Infinity;
-  let maxX = -Infinity;
-  let minY = Infinity;
-  let maxY = -Infinity;
-
-  for (const op of frame.ops) {
-    const { instances } = op;
-    const { position, count } = instances;
-
-    // Process each instance - just track positions without size padding for now
-    for (let i = 0; i < count; i++) {
-      // Position in normalized [0,1] space
-      const normX = position[i * 2];
-      const normY = position[i * 2 + 1];
-
-      minX = Math.min(minX, normX);
-      maxX = Math.max(maxX, normX);
-      minY = Math.min(minY, normY);
-      maxY = Math.max(maxY, normY);
-    }
-  }
-
-  // Add a small padding (5% of content size) to account for instance sizes
-  const contentWidth = maxX - minX;
-  const contentHeight = maxY - minY;
-  const paddingX = contentWidth * 0.05;
-  const paddingY = contentHeight * 0.05;
-
-  minX -= paddingX;
-  maxX += paddingX;
-  minY -= paddingY;
-  maxY += paddingY;
-
-  // Return null if no valid bounds found
-  if (!isFinite(minX) || !isFinite(maxX) || !isFinite(minY) || !isFinite(maxY)) {
-    return null;
-  }
-
-  return { minX, maxX, minY, maxY };
-}
-
-/**
  * Create initial animation loop state
  */
 export function createAnimationLoopState(): AnimationLoopState {
@@ -123,6 +77,19 @@ export function createAnimationLoopState(): AnimationLoopState {
     frameTimeSum: 0,
     lastContinuityStoreUpdate: 0,
   };
+}
+
+function resetAnimationLoopState(state: AnimationLoopState): void {
+  const next = createAnimationLoopState();
+  state.frameCount = next.frameCount;
+  state.lastFpsUpdate = next.lastFpsUpdate;
+  state.fps = next.fps;
+  state.execTime = next.execTime;
+  state.renderTime = next.renderTime;
+  state.minFrameTime = next.minFrameTime;
+  state.maxFrameTime = next.maxFrameTime;
+  state.frameTimeSum = next.frameTimeSum;
+  state.lastContinuityStoreUpdate = next.lastContinuityStoreUpdate;
 }
 
 /**
@@ -220,6 +187,9 @@ export function executeAnimationFrame(
   const renderStart = performance.now();
   const { zoom, pan } = store.viewport;
   const frameToRender = frame ?? EMPTY_RENDER_FRAME;
+  // [LAW:one-source-of-truth] The active draw-prep shader comes from the
+  // compiled program contract; renderer selection has one canonical source.
+  const drawPrepShaderWgsl = currentProgram?.drawPrepProgram?.wgsl;
   renderer.render({
     frame: frameToRender,
     width: canvas.width,
@@ -228,12 +198,13 @@ export function executeAnimationFrame(
     panX: pan.x,
     panY: pan.y,
     timeMs: tMs,
+    drawPrepShaderWgsl,
   });
   state.renderTime = performance.now() - renderStart;
 
-  // Update content bounds in viewport store (for zoom-to-fit feature)
-  const bounds = calculateContentBounds(frameToRender);
-  store.viewport.setContentBounds(bounds);
+  // [LAW:dataflow-not-control-flow] Canonical render loop avoids CPU-side
+  // coordinate scans in the hot path; content-bounds updates are data-empty.
+  store.viewport.setContentBounds(null);
 
   // NOTE: No buffer release needed - arena is reset at frame start (O(1))
 
@@ -308,37 +279,61 @@ export function executeAnimationFrame(
 /**
  * Start the animation loop.
  *
- * @returns Cancel function — call it to stop the loop (e.g., on HMR dispose).
+ * @returns Controller for lifecycle operations (stop + compile-success signal).
  */
 export function startAnimationLoop(
   deps: AnimationLoopDeps,
   state: AnimationLoopState,
   onError: (err: unknown) => void
-): () => void {
+): AnimationLoopController {
   assertWebGPULoopContract(deps);
 
   let cancelled = false;
-  let rafId = 0;
+  let haltedByError = false;
+  let rafId: number | null = null;
+
+  const scheduleNextFrame = (): void => {
+    if (cancelled || haltedByError || rafId !== null) {
+      return;
+    }
+    rafId = requestAnimationFrame(animate);
+  };
 
   function animate(tMs: number) {
-    if (cancelled) return;
+    rafId = null;
+    if (cancelled || haltedByError) return;
     try {
       executeAnimationFrame(tMs, deps, state);
     } catch (err) {
       // [LAW:single-enforcer] AnimationLoop is the single runtime boundary that fail-stops frame execution on exceptions.
-      cancelled = true;
+      haltedByError = true;
       onError(err);
       return;
     }
-    if (!cancelled) {
-      rafId = requestAnimationFrame(animate);
-    }
+    scheduleNextFrame();
   }
 
-  rafId = requestAnimationFrame(animate);
+  scheduleNextFrame();
 
-  return () => {
-    cancelled = true;
-    cancelAnimationFrame(rafId);
+  return {
+    stop: () => {
+      cancelled = true;
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId);
+        rafId = null;
+      }
+    },
+    onCompileSuccess: () => {
+      if (cancelled) {
+        return false;
+      }
+      const resumedFromError = haltedByError;
+      // [LAW:dataflow-not-control-flow] Recovery keeps the same frame pipeline and
+      // resets only loop-owned runtime data when compilation publishes a new program.
+      haltedByError = false;
+      resetAnimationLoopState(state);
+      scheduleNextFrame();
+      return resumedFromError;
+    },
   };
 }

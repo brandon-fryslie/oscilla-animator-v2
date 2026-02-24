@@ -9,9 +9,142 @@
  */
 
 import { describe, it, expect } from 'vitest';
+import { compile } from '../compile';
+import { buildPatch } from '../../graph/Patch';
+import { executeFrame } from '../../runtime/ScheduleExecutor';
+import { createRuntimeState } from '../../runtime/RuntimeState';
+import { computeRuntimeStorageSizes } from '../ir/program';
+import type { ScheduleIR } from '../backend/schedule-program';
+import type { StepRender } from '../ir/types';
+import { getTestArena } from '../../runtime/__tests__/test-arena-helper';
+
 describe('Steel Thread - Dual Topology with Scale', () => {
-  // Test removed during type system refactor
-  it.skip('placeholder', () => {
-    expect(true).toBe(true);
+  it('compiles and executes two topology sinks with animated scale across frames', () => {
+    const patch = buildPatch((b) => {
+      const time = b.addBlock('InfiniteTimeRoot');
+
+      const ellipse = b.addBlock('Ellipse');
+      b.setPortDefault(ellipse, 'rx', 0.08);
+      b.setPortDefault(ellipse, 'ry', 0.05);
+      const arrayA = b.addBlock('Array');
+      b.setPortDefault(arrayA, 'count', 2);
+      const grid = b.addBlock('GridLayoutUV');
+      b.setPortDefault(grid, 'rows', 1);
+      b.setPortDefault(grid, 'cols', 2);
+      const renderA = b.addBlock('RenderInstances2D');
+      const colorA = b.addBlock('Const');
+      const colorFieldA = b.addBlock('Broadcast');
+      b.setConfig(colorA, 'value', { r: 1, g: 0.2, b: 0.2, a: 1 });
+
+      const rect = b.addBlock('Rect');
+      b.setPortDefault(rect, 'width', 0.1);
+      b.setPortDefault(rect, 'height', 0.08);
+      b.setPortDefault(rect, 'resolution', 24);
+      const arrayB = b.addBlock('Array');
+      b.setPortDefault(arrayB, 'count', 3);
+      const circle = b.addBlock('CircleLayoutUV');
+      b.setPortDefault(circle, 'radius', 0.2);
+      const renderB = b.addBlock('RenderInstances2D');
+      const colorB = b.addBlock('Const');
+      const colorFieldB = b.addBlock('Broadcast');
+      b.setConfig(colorB, 'value', { r: 0.2, g: 0.5, b: 1, a: 1 });
+
+      const osc = b.addBlock('Oscillator');
+      const scaleBias = b.addBlock('Const');
+      b.setConfig(scaleBias, 'value', 0.75);
+      const scaleMul = b.addBlock('Const');
+      b.setConfig(scaleMul, 'value', 0.25);
+      const scaledOsc = b.addBlock('Multiply');
+      const scaleSignal = b.addBlock('Add');
+
+      b.wire(ellipse, 'shape', arrayA, 'element');
+      b.wire(arrayA, 'elements', grid, 'elements');
+      b.wire(grid, 'position', renderA, 'pos');
+      b.wire(colorA, 'out', colorFieldA, 'one');
+      b.wire(colorFieldA, 'field', renderA, 'color');
+
+      b.wire(rect, 'shape', arrayB, 'element');
+      b.wire(arrayB, 'elements', circle, 'elements');
+      b.wire(circle, 'position', renderB, 'pos');
+      b.wire(colorB, 'out', colorFieldB, 'one');
+      b.wire(colorFieldB, 'field', renderB, 'color');
+
+      b.wire(time, 'phaseA', osc, 'phase');
+      b.wire(osc, 'out', scaledOsc, 'a');
+      b.wire(scaleMul, 'out', scaledOsc, 'b');
+      b.wire(scaleBias, 'out', scaleSignal, 'a');
+      b.wire(scaledOsc, 'out', scaleSignal, 'b');
+      b.wire(scaleSignal, 'out', renderA, 'scale');
+      b.wire(scaleSignal, 'out', renderB, 'scale');
+    });
+
+    const result = compile(patch);
+    expect(result.kind).toBe('ok');
+    if (result.kind !== 'ok') return;
+
+    const schedule = result.program.schedule as ScheduleIR;
+    expect(result.program.generatedComputeProgram?.wgsl).toContain('OFFSET_SLOT_');
+    const renderSteps = schedule.steps.filter((step): step is StepRender => step.kind === 'render');
+    expect(renderSteps.length).toBe(2);
+    expect(result.program.drawPrepProgram?.sinks.length).toBe(2);
+    expect(result.program.drawPrepProgram?.sinks.map((sink) => sink.sinkIndex)).toEqual([0, 1]);
+    expect(result.program.drawPrepProgram?.sinks.map((sink) => sink.indirectRecordIndex)).toEqual([0, 1]);
+    expect(result.program.drawPrepProgram?.wgsl).toContain('DRAW_SINK_0_RECORD');
+    expect(result.program.drawPrepProgram?.wgsl).toContain('DRAW_SINK_1_RECORD');
+    expect(result.program.drawPrepProgram?.wgsl).toContain('INSTANCE_COUNT: u32 = 2u');
+    expect(result.program.drawPrepProgram?.wgsl).toContain('INSTANCE_COUNT: u32 = 3u');
+    expect(result.program.drawPrepProgram?.wgsl).toContain('fn resolveInstanceCount');
+
+    const topologyIds = renderSteps.flatMap((step) =>
+      step.shape.k === 'one' ? [step.shape.topologyId] : []
+    );
+    expect(new Set(topologyIds).size).toBe(2);
+
+    const scaleExprIds = renderSteps.flatMap((step) =>
+      step.scale?.k === 'one' ? [step.scale.id as number] : []
+    );
+    expect(scaleExprIds.length).toBe(2);
+    expect(new Set(scaleExprIds).size).toBe(1);
+    const animatedScaleExprId = scaleExprIds[0]!;
+
+    const sizes = computeRuntimeStorageSizes(result.program.runtimeSlots);
+    const state = createRuntimeState(
+      sizes.f32,
+      schedule.stateSlotCount ?? 0,
+      schedule.eventSlotCount ?? 0,
+      schedule.eventCount ?? 0,
+      result.program.valueExprs.nodes.length,
+      result.program.arenaTotalFloats,
+    );
+    const arena = getTestArena();
+
+    arena.reset();
+    const frameA = executeFrame(result.program, state, arena, 0);
+    const scaleAddressA = state.cache.scalarExprToArenaAddress?.get(animatedScaleExprId);
+    expect(scaleAddressA).toBeDefined();
+    if (!scaleAddressA) return;
+    const scaleValueA = state.arena[scaleAddressA.arena.offset + scaleAddressA.component] ?? NaN;
+
+    arena.reset();
+    const frameB = executeFrame(result.program, state, arena, 137);
+    const scaleAddressB = state.cache.scalarExprToArenaAddress?.get(animatedScaleExprId);
+    expect(scaleAddressB).toBeDefined();
+    if (!scaleAddressB) return;
+    const scaleValueB = state.arena[scaleAddressB.arena.offset + scaleAddressB.component] ?? NaN;
+
+    expect(frameA.version).toBe(2);
+    expect(frameB.version).toBe(2);
+    expect(frameA.ops.length).toBe(2);
+    expect(frameB.ops.length).toBe(2);
+    expect(Number.isFinite(scaleValueA)).toBe(true);
+    expect(Number.isFinite(scaleValueB)).toBe(true);
+    const frameScaleA = frameA.ops.map((op) =>
+      typeof op.instances.size === 'number' ? op.instances.size : op.instances.size[0] ?? NaN
+    );
+    const frameScaleB = frameB.ops.map((op) =>
+      typeof op.instances.size === 'number' ? op.instances.size : op.instances.size[0] ?? NaN
+    );
+    expect(frameScaleA.every((value) => Number.isFinite(value))).toBe(true);
+    expect(frameScaleB.every((value) => Number.isFinite(value))).toBe(true);
   });
 });

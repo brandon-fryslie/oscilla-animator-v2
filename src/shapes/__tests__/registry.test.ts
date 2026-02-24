@@ -2,6 +2,10 @@ import { describe, it, expect } from 'vitest';
 import {
   registerDynamicTopology,
   exportSerializableTopologies,
+  exportTopologyBankU32,
+  TopologyBankFlag,
+  TOPOLOGY_BANK_WORDS,
+  getTopologyRegistryRevision,
   installSerializableTopologies,
 } from '../registry';
 import { PathVerb } from '../types';
@@ -55,5 +59,22 @@ describe('shapes/registry topology install/export sync', () => {
     expect(() => installSerializableTopologies(incompatible)).toThrow(
       `Topology ID collision with incompatible definitions: ${id}`,
     );
+  });
+});
+
+describe('shapes/registry topology bank export', () => {
+  it('exports packed u32 records from the canonical topology registry', () => {
+    const id = registerDynamicTopology(makePathTopology(9, true), 'shape-topology-bank');
+    const bank = exportTopologyBankU32([id]);
+
+    expect(bank.wordsPerRecord).toBe(TOPOLOGY_BANK_WORDS);
+    expect(bank.ids).toEqual([id]);
+    expect(bank.data.length).toBe(TOPOLOGY_BANK_WORDS);
+    expect(bank.data[0]).toBe(id);
+    expect(bank.data[1]).toBe(3); // MOVE, LINE, CLOSE
+    expect(bank.data[2]).toBe(9);
+    expect(bank.data[3]).toBe(TopologyBankFlag.IsPath | TopologyBankFlag.Closed);
+    expect(bank.indexById.get(id)).toBe(0);
+    expect(bank.revision).toBe(getTopologyRegistryRevision());
   });
 });

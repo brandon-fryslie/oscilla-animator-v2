@@ -1,5 +1,13 @@
 import { defineConfig } from 'vite';
 import path from 'path';
+import fs from 'node:fs';
+
+const workspaceRoot = path.resolve(__dirname);
+const resolvedWorkspaceRoot =
+  typeof (fs.realpathSync as { native?: (p: string) => string }).native === 'function'
+    ? (fs.realpathSync as { native: (p: string) => string }).native(workspaceRoot)
+    : fs.realpathSync(workspaceRoot);
+const allowedFsRoots = Array.from(new Set([workspaceRoot, resolvedWorkspaceRoot]));
 
 export default defineConfig({
   base: process.env.BASE_URL || '/',
@@ -9,6 +17,11 @@ export default defineConfig({
     port: 5174,
     host: '0.0.0.0',
     allowedHosts: true,
+    // [LAW:one-source-of-truth] Dev-server filesystem access is centralized
+    // here so every harness/browser lane resolves the same source roots.
+    fs: {
+      allow: allowedFsRoots,
+    },
   },
   build: {
     outDir: '../dist',

@@ -19,6 +19,22 @@
 export type TopologyId = number;
 
 /**
+ * TopologyBankRecord - packed structural metadata row for GPU upload.
+ *
+ * Fields mirror the canonical `u32` topology bank contract:
+ * - id: topology ID
+ * - verbCount: path verb count (0 for non-path topologies)
+ * - totalControlPoints: required control points (0 for non-path topologies)
+ * - flags: bitfield (path/closed, etc.)
+ */
+export interface TopologyBankRecord {
+  readonly id: number;
+  readonly verbCount: number;
+  readonly totalControlPoints: number;
+  readonly flags: number;
+}
+
+/**
  * ParamDef - Parameter definition for a topology
  *
  * Defines name, type, and default value for a topology parameter.

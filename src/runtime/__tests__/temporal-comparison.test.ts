@@ -8,6 +8,7 @@
 import { describe, it, expect } from 'vitest';
 import { compile } from '../../compiler/compile';
 import { buildPatch } from '../../graph/Patch';
+import { executeFrame } from '../ScheduleExecutor';
 import { executeFrameStepped } from '../executeFrameStepped';
 import { createRuntimeState } from '../RuntimeState';
 import { computeRuntimeStorageSizes } from '../../compiler/ir/program';
@@ -49,6 +50,39 @@ function compileSimplePatch(): CompiledProgramIR {
     b.wire(array, 'elements', layout, 'elements');
     b.wire(layout, 'position', render, 'pos');
     b.wire(colorField, 'field', render, 'color');
+  });
+
+  const result = compile(patch);
+  if (result.kind === 'error') {
+    throw new Error(`Compile failed: ${result.errors.map(e => e.message).join(', ')}`);
+  }
+  return result.program;
+}
+
+function compilePhasorPatch(): CompiledProgramIR {
+  const patch = buildPatch((b) => {
+    b.addBlock('InfiniteTimeRoot');
+
+    const frequency = b.addBlock('Const');
+    b.setConfig(frequency, 'value', 7_500);
+
+    const phasor = b.addBlock('Phasor');
+    b.wire(frequency, 'out', phasor, 'frequency');
+
+    const ellipse = b.addBlock('Ellipse');
+    b.setPortDefault(ellipse, 'rx', 0.03);
+    b.setPortDefault(ellipse, 'ry', 0.03);
+
+    const array = b.addBlock('Array');
+    b.setPortDefault(array, 'count', 4);
+
+    const layout = b.addBlock('CircleLayoutUV');
+    b.wire(ellipse, 'shape', array, 'element');
+    b.wire(array, 'elements', layout, 'elements');
+    b.wire(phasor, 'out', layout, 'phase');
+
+    const render = b.addBlock('RenderInstances2D');
+    b.wire(layout, 'position', render, 'pos');
   });
 
   const result = compile(patch);
@@ -384,6 +418,30 @@ describe('Temporal Comparison (Cross-Frame Diff)', () => {
       }
       // At least one snapshot should produce a delta (static values -> delta = 0)
       expect(foundDelta).toBe(true);
+    });
+  });
+
+  describe('Long-horizon state stability', () => {
+    it('keeps phasor accumulator bounded under executeFrame over long runs', () => {
+      const program = compilePhasorPatch();
+      const schedule = program.schedule as ScheduleIR;
+      const phasorMapping = schedule.stateMappings.find((mapping) => mapping.stateId.endsWith(':phasor'));
+      expect(phasorMapping).toBeDefined();
+      if (!phasorMapping) return;
+
+      const state = createStateForProgram(program);
+      const arena = getTestArena();
+
+      let timeMs = 0;
+      for (let frame = 0; frame < 2048; frame++) {
+        timeMs += 8.33;
+        arena.reset();
+        executeFrame(program, state, arena, timeMs);
+        const value = state.state[phasorMapping.slotStart] ?? NaN;
+        expect(Number.isFinite(value)).toBe(true);
+        expect(value).toBeGreaterThanOrEqual(0);
+        expect(value).toBeLessThan(1);
+      }
     });
   });
 });

@@ -80,6 +80,10 @@ describe('Steel Thread - Animated Particles', () => {
     // Basic structural checks
     expect(program.valueExprs.nodes.length).toBeGreaterThan(0);
     expect(program.slotMeta.length).toBeGreaterThan(0);
+    expect(program.generatedComputeProgram?.wgsl).toContain('@compute @workgroup_size(64)');
+    expect(program.generatedComputeProgram?.wgsl).toContain('OFFSET_SLOT_');
+    expect(program.drawPrepProgram?.wgsl).toContain('@group(0) @binding(0) var<storage, read_write> indirectArgs: array<u32>;');
+    expect(program.drawPrepProgram?.wgsl).toContain('fn cs_main');
     const schedule = program.schedule as ScheduleIR;
     expect(schedule.steps.length).toBeGreaterThan(0);
 
@@ -130,6 +134,7 @@ describe('Steel Thread - Animated Particles', () => {
 
     // 1. Compile
     const program = compileOk(patch);
+    expect(program.generatedComputeProgram?.offsetConstants.size ?? 0).toBeGreaterThan(0);
 
     // 2. Execute two frames at different times
     const state = stateFor(program);

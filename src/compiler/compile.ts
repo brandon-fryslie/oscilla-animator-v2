@@ -24,6 +24,9 @@ import type {
   RuntimeSlotLookupEntry,
   FieldSlotEntry,
   OutputSpecIR,
+  DrawPrepProgramIR,
+  DrawPrepSinkIR,
+  GeneratedComputeProgramIR,
   ExprProvenanceIR,
   ExprUserTarget,
 } from './ir/program';
@@ -496,8 +499,10 @@ function convertLinkedIRToProgram(
 
   // Build output specs from canonical output contract only.
   const outputs: OutputSpecIR[] = [{ kind: 'renderFrame' }];
+  const drawPrepProgram = buildDrawPrepProgram(scheduleIR);
   const runtimeAddressTable = buildRuntimeAddressTable(runtimeSlots, scheduleIR);
   assertRuntimeAddressTableCoverage(runtimeSlots, runtimeAddressTable);
+  const generatedComputeProgram = buildGeneratedComputeProgram(scheduleIR, runtimeAddressTable);
 
   // Build debug index
   const stepToBlock = new Map();
@@ -705,9 +710,184 @@ function convertLinkedIRToProgram(
       : undefined,
     arenaLayout,
     arenaTotalFloats: arenaOffset,
+    drawPrepProgram,
+    generatedComputeProgram,
   };
 
   return program;
+}
+
+function buildDrawPrepProgram(scheduleIR: ScheduleIR): DrawPrepProgramIR {
+  const sinks: DrawPrepSinkIR[] = [];
+  const steps = scheduleIR.steps as readonly Step[];
+  for (let stepIndex = 0; stepIndex < steps.length; stepIndex++) {
+    const step = steps[stepIndex];
+    if (step.kind !== 'render') continue;
+
+    const instance = scheduleIR.instances.get(step.instanceId);
+    if (!instance) {
+      throw new Error(`DrawPrepProgram: render step references missing instance ${String(step.instanceId)}`);
+    }
+    const staticInstanceCount = typeof instance.count === 'number' ? instance.count : undefined;
+
+    sinks.push({
+      sinkIndex: sinks.length,
+      renderStepIndex: stepIndex,
+      instanceId: step.instanceId,
+      indirectRecordIndex: sinks.length,
+      instanceCountMode: staticInstanceCount === undefined ? 'dynamic' : 'static',
+      staticInstanceCount,
+    });
+  }
+  const wgslLines: string[] = [
+    '// Auto-generated draw-prep WGSL (v3 stage-3).',
+    'struct DrawPrepParams {',
+    '  // v0 = [indexCount, instanceCount, firstIndex, baseVertexBits]',
+    '  v0: vec4<u32>,',
+    '  // v1 = [firstInstance, recordIndex, maxRecords, _]',
+    '  v1: vec4<u32>,',
+    '};',
+    '',
+    '@group(0) @binding(0) var<storage, read_write> indirectArgs: array<u32>;',
+    '@group(0) @binding(1) var<uniform> drawPrepParams: DrawPrepParams;',
+    '',
+    'const INDIRECT_ARGS_WORDS: u32 = 5u;',
+    '',
+  ];
+  // [LAW:one-source-of-truth] Draw-prep sink constants are emitted from one
+  // canonical compiler sink table used by runtime and shader generation.
+  for (const sink of sinks) {
+    const instanceCountLiteral =
+      sink.instanceCountMode === 'static'
+        ? `${sink.staticInstanceCount ?? 0}u`
+        : '/* dynamic instance count */ 0u';
+    const isStaticLiteral = sink.instanceCountMode === 'static' ? '1u' : '0u';
+    wgslLines.push(`const DRAW_SINK_${sink.sinkIndex}_RECORD: u32 = ${sink.indirectRecordIndex}u;`);
+    wgslLines.push(`const DRAW_SINK_${sink.sinkIndex}_IS_STATIC: u32 = ${isStaticLiteral};`);
+    wgslLines.push(`const DRAW_SINK_${sink.sinkIndex}_INSTANCE_COUNT: u32 = ${instanceCountLiteral};`);
+  }
+  wgslLines.push(
+    '',
+    'fn resolveInstanceCount(recordIndex: u32, fallbackCount: u32) -> u32 {',
+    '  var count = fallbackCount;',
+    '  switch (recordIndex) {',
+  );
+  for (const sink of sinks) {
+    wgslLines.push(
+      `    case DRAW_SINK_${sink.sinkIndex}_RECORD: {`,
+      `      count = select(count, DRAW_SINK_${sink.sinkIndex}_INSTANCE_COUNT, DRAW_SINK_${sink.sinkIndex}_IS_STATIC == 1u);`,
+      '    }',
+    );
+  }
+  wgslLines.push(
+    '    default: {}',
+    '  }',
+    '  return count;',
+    '}',
+    '',
+    '@compute @workgroup_size(1)',
+    'fn cs_main(@builtin(global_invocation_id) gid: vec3<u32>) {',
+    '  if (gid.x > 0u) {',
+    '    return;',
+    '  }',
+    '',
+    '  let recordIndex = drawPrepParams.v1.y;',
+    '  let maxRecords = drawPrepParams.v1.z;',
+    '  if (recordIndex >= maxRecords) {',
+    '    return;',
+    '  }',
+    '',
+    '  let base = recordIndex * INDIRECT_ARGS_WORDS;',
+    '  indirectArgs[base + 0u] = drawPrepParams.v0.x; // indexCount',
+    '  indirectArgs[base + 1u] = resolveInstanceCount(recordIndex, drawPrepParams.v0.y); // instanceCount',
+    '  indirectArgs[base + 2u] = drawPrepParams.v0.z; // firstIndex',
+    '  indirectArgs[base + 3u] = drawPrepParams.v0.w; // baseVertex bits',
+    '  indirectArgs[base + 4u] = drawPrepParams.v1.x; // firstInstance',
+    '}',
+  );
+  return { sinks, wgsl: wgslLines.join('\n') };
+}
+
+function collectComputeSlots(scheduleIR: ScheduleIR): ValueSlot[] {
+  const slots = new Set<ValueSlot>();
+  for (const step of scheduleIR.steps) {
+    switch (step.kind) {
+      case 'evalOne':
+        slots.add(step.target);
+        break;
+      case 'materialize':
+        slots.add(step.target);
+        break;
+      case 'continuityApply':
+        slots.add(step.baseSlot);
+        slots.add(step.outputSlot);
+        break;
+      case 'render':
+        slots.add(step.positionSlot);
+        slots.add(step.colorSlot);
+        if (step.rotationSlot !== undefined) slots.add(step.rotationSlot);
+        if (step.scale2Slot !== undefined) slots.add(step.scale2Slot);
+        if (step.controlPoints?.k === 'slot') slots.add(step.controlPoints.slot);
+        if (step.scale?.k === 'slot') slots.add(step.scale.slot);
+        break;
+      case 'eventDispatch':
+      case 'stateWrite':
+      case 'fieldStateWrite':
+      case 'continuityMapBuild':
+        break;
+      default: {
+        const _exhaustive: never = step;
+        void _exhaustive;
+      }
+    }
+  }
+  return Array.from(slots.values()).sort((a, b) => a - b);
+}
+
+function buildGeneratedComputeProgram(
+  scheduleIR: ScheduleIR,
+  runtimeAddressTable: RuntimeAddressTableIR,
+): GeneratedComputeProgramIR {
+  const slots = collectComputeSlots(scheduleIR);
+  const offsetConstants = new Map<ValueSlot, string>();
+  const lines: string[] = [
+    '// Auto-generated compute WGSL (v3 stage-2 scaffold).',
+    '@group(0) @binding(0) var<storage, read> arena_in: array<f32>;',
+    '@group(0) @binding(1) var<storage, read_write> arena_out: array<f32>;',
+    '',
+  ];
+
+  for (const slot of slots) {
+    const arena = runtimeAddressTable.slotToArena.get(slot);
+    if (!arena) continue;
+    const constantName = `OFFSET_SLOT_${slot}`;
+    offsetConstants.set(slot, constantName);
+    lines.push(`const ${constantName}: u32 = ${arena.offset}u;`);
+  }
+
+  lines.push(
+    '',
+    '@compute @workgroup_size(64)',
+    'fn cs_main(@builtin(global_invocation_id) gid: vec3<u32>) {',
+    '  let lane = gid.x;',
+  );
+
+  for (const slot of slots) {
+    const arena = runtimeAddressTable.slotToArena.get(slot);
+    const constantName = offsetConstants.get(slot);
+    if (!arena || !constantName) continue;
+    // [LAW:dataflow-not-control-flow] Generated kernels use one fixed copy pass
+    // shape; slot variation is encoded in injected offsets.
+    lines.push(
+      `  arena_out[${constantName} + lane] = arena_in[${constantName} + lane];`,
+    );
+  }
+
+  lines.push('}');
+  return {
+    wgsl: lines.join('\n'),
+    offsetConstants,
+  };
 }
 
 

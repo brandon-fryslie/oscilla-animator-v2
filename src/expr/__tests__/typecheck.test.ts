@@ -36,7 +36,21 @@ describe('Type Checker', () => {
     it('throws error for undefined identifier', () => {
       const ast = parse(tokenize('unknown'));
       const env = new Map([['phase', FLOAT]]);
-      expect(() => typecheck(ast, { inputs: env })).toThrow(/Undefined input 'unknown'/);
+      expect(() => typecheck(ast, { inputs: env })).toThrow(/Undefined identifier 'unknown'/);
+    });
+
+    it('accepts named constant pi as float', () => {
+      const ast = parse(tokenize('pi'));
+      const env = new Map();
+      const typed = typecheck(ast, { inputs: env });
+      expect(typed.type).toBe(FLOAT);
+    });
+
+    it('accepts additional named constants as float', () => {
+      const ast = parse(tokenize('tau + e + phi + deg2rad + rad2deg'));
+      const env = new Map();
+      const typed = typecheck(ast, { inputs: env });
+      expect(typed.type).toBe(FLOAT);
     });
   });
 
