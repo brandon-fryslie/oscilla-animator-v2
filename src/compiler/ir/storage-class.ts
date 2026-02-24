@@ -86,7 +86,9 @@ export function deriveArenaDescriptor(
   const packing = packingPreference ?? 'soa';
   const laneStride = packing === 'soa' ? 1 : stride;
   const componentStride = packing === 'soa' ? laneCount : 1;
-  // [LAW:one-source-of-truth] Canonical runtime arena descriptor is SoA.
+<<<<<<< HEAD
+  // [LAW:one-source-of-truth] Canonical descriptor carries explicit packing
+  // metadata, defaulting to SoA unless a caller requests AoS.
   return {
     offset: arenaOffset,
     stride,
