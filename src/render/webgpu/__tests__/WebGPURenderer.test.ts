@@ -674,6 +674,58 @@ describe('WebGPURenderer', () => {
     expect(drawPrepBindGroups).toHaveLength(1);
   });
 
+  it('dispatches simulation workgroups from unique op instance count (not fill/stroke pass count)', async () => {
+    const env = createFakeWebGPUEnvironment();
+    setNavigatorGpu(env.gpu);
+    const renderer = await createWebGPURenderer(env.canvas);
+    const instanceCount = 128;
+    const topologyId = registerDynamicTopology({
+      params: [],
+      verbs: [PathVerb.MOVE, PathVerb.LINE, PathVerb.LINE, PathVerb.LINE, PathVerb.CLOSE],
+      pointsPerVerb: [1, 1, 1, 1, 0],
+      totalControlPoints: 4,
+      closed: true,
+    }, 'webgpu-simulation-count-topology');
+
+    renderer.render({
+      frame: {
+        version: 2,
+        ops: [{
+          kind: 'drawPathInstances',
+          geometry: {
+            topologyId,
+            points: new Float32Array([-1, -1, 1, -1, 1, 1, -1, 1]),
+            pointsCount: 4,
+            verbs: new Uint8Array([0, 1, 1, 1, 4]),
+            flags: 1,
+          },
+          instances: {
+            count: instanceCount,
+            position: new Float32Array(instanceCount * 2),
+            size: 0.25,
+            rotation: new Float32Array(instanceCount),
+            scale2: new Float32Array(instanceCount * 2).fill(1),
+          },
+          style: {
+            fillColor: new Uint8ClampedArray([255, 0, 0, 255]),
+            strokeColor: new Uint8ClampedArray([0, 255, 255, 255]),
+            strokeWidth: 0.02,
+            fillRule: 'nonzero',
+          },
+        }],
+      },
+      width: 128,
+      height: 96,
+      zoom: 1,
+      panX: 0,
+      panY: 0,
+      timeMs: 0,
+    });
+
+    // First compute dispatch is simulation pass (draw-prep dispatches are fixed-size 1).
+    expect(env.computePass.dispatchWorkgroups.mock.calls[0]?.[0]).toBe(2);
+  });
+
   it('reuses draw-prep bind group across frames when shader and indirect buffer are unchanged', async () => {
     const env = createFakeWebGPUEnvironment();
     setNavigatorGpu(env.gpu);
