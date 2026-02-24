@@ -55,7 +55,7 @@ export function createArena(totalFloats: number): Float32Array {
  * // regardless of the underlying packing mode.
  */
 export function resolveArenaAddress(desc: ArenaSlotDescriptor): ArenaAddress {
-  const packing = desc.packing ?? 'aos';
+  const packing = desc.packing ?? 'soa';
   const laneStride = desc.laneStride ?? (packing === 'soa' ? 1 : desc.stride);
   const componentStride = desc.componentStride ?? (packing === 'soa' ? desc.laneCount : 1);
   return {

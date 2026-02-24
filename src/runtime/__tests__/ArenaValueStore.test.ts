@@ -143,10 +143,24 @@ describe('descriptor invariant', () => {
     expect(d.length).toBe(d.stride * d.laneCount);
   });
 
-  it('resolves canonical AoS address defaults', () => {
+  it('resolves canonical SoA address defaults', () => {
     const d = desc(3, 4, 5);
     const addr = resolveArenaAddress(d);
     expect(addr.baseOffset).toBe(3);
+    expect(addr.laneStride).toBe(1);
+    expect(addr.componentStride).toBe(5);
+    expect(arenaIndex(d, 2, 3)).toBe(3 + 3 * 5 + 2);
+  });
+
+  it('supports explicit AoS addressing metadata for compatibility descriptors', () => {
+    const d: ArenaSlotDescriptor = {
+      offset: 3,
+      stride: 4,
+      laneCount: 5,
+      length: 20,
+      packing: 'aos',
+    };
+    const addr = resolveArenaAddress(d);
     expect(addr.laneStride).toBe(4);
     expect(addr.componentStride).toBe(1);
     expect(arenaIndex(d, 2, 3)).toBe(3 + 2 * 4 + 3);
