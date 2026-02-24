@@ -1,0 +1,44 @@
+name: Design Kickoff Gate
+
+on:
+  pull_request:
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - labeled
+      - unlabeled
+
+permissions:
+  contents: read
+
+jobs:
+  readiness-for-design-kickoff:
+    if: contains(github.event.pull_request.labels.*.name, 'design-kickoff')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Verify readiness gate for design kickoff
+        run: pnpm run -s ci:webgpu-readiness
+
+      - name: Upload readiness report
+        uses: actions/upload-artifact@v4
+        with:
+          name: design-kickoff-readiness-report
+          path: artifacts/webgpu-readiness.json
