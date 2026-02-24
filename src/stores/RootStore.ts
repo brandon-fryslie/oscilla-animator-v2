@@ -11,6 +11,7 @@
 import { reaction } from 'mobx';
 import { configureMobX } from './configure';
 import { PatchStore } from './PatchStore';
+import type { ImmutablePatch } from './PatchStore';
 import { SelectionStore } from './SelectionStore';
 import { ViewportStore } from './ViewportStore';
 import { PlaybackStore } from './PlaybackStore';
@@ -37,6 +38,97 @@ import {
   clearPatchPersistenceIssues,
 } from '../services/PatchPersistence';
 import { debugService } from '../services/DebugService';
+import type { Edge } from '../graph/Patch';
+
+type PatchSnapshot = ImmutablePatch;
+
+function edgeEndpointSignature(edge: Edge): string {
+  return `${edge.from.blockId}:${edge.from.slotId}->${edge.to.blockId}:${edge.to.slotId}`;
+}
+
+function summarizeGraphDiff(
+  previousPatch: PatchSnapshot | undefined,
+  currentPatch: PatchSnapshot
+): {
+  diffSummary: { blocksAdded: number; blocksRemoved: number; edgesChanged: number };
+  affectedBlockIds: readonly string[];
+} {
+  const prevBlocks: PatchSnapshot['blocks'] = previousPatch
+    ? previousPatch.blocks
+    : (new Map() as PatchSnapshot['blocks']);
+  const currBlocks = currentPatch.blocks;
+
+  let blocksAdded = 0;
+  let blocksRemoved = 0;
+
+  const affectedBlockIds = new Set<string>();
+
+  for (const blockId of currBlocks.keys()) {
+    if (!prevBlocks.has(blockId as any)) {
+      blocksAdded++;
+      affectedBlockIds.add(String(blockId));
+    }
+  }
+
+  for (const blockId of prevBlocks.keys()) {
+    if (!currBlocks.has(blockId as any)) {
+      blocksRemoved++;
+      affectedBlockIds.add(String(blockId));
+    }
+  }
+
+  for (const [blockId, block] of currBlocks.entries()) {
+    const previousBlock = prevBlocks.get(blockId as any);
+    if (!previousBlock) continue;
+    if (previousBlock !== block) {
+      affectedBlockIds.add(String(blockId));
+    }
+  }
+
+  const previousEdges: PatchSnapshot['edges'] = previousPatch ? previousPatch.edges : [];
+  const prevEdgesById = new Map<string, Edge>(previousEdges.map((edge) => [edge.id, edge]));
+  const currEdgesById = new Map(currentPatch.edges.map((edge) => [edge.id, edge]));
+
+  let edgesAdded = 0;
+  let edgesRemoved = 0;
+  let edgesRewired = 0;
+
+  for (const [edgeId, edge] of currEdgesById) {
+    const previous = prevEdgesById.get(edgeId);
+    if (!previous) {
+      edgesAdded++;
+      affectedBlockIds.add(edge.from.blockId);
+      affectedBlockIds.add(edge.to.blockId);
+      continue;
+    }
+    if (edgeEndpointSignature(previous) !== edgeEndpointSignature(edge)) {
+      edgesRewired++;
+      affectedBlockIds.add(previous.from.blockId);
+      affectedBlockIds.add(previous.to.blockId);
+      affectedBlockIds.add(edge.from.blockId);
+      affectedBlockIds.add(edge.to.blockId);
+    }
+  }
+
+  for (const [edgeId, edge] of prevEdgesById) {
+    if (!currEdgesById.has(edgeId)) {
+      edgesRemoved++;
+      affectedBlockIds.add(edge.from.blockId);
+      affectedBlockIds.add(edge.to.blockId);
+    }
+  }
+
+  return {
+    // [LAW:one-source-of-truth] Event diff metadata is derived from patch
+    // snapshots only; no duplicate mutation counters are maintained.
+    diffSummary: {
+      blocksAdded,
+      blocksRemoved,
+      edgesChanged: edgesAdded + edgesRemoved + edgesRewired,
+    },
+    affectedBlockIds: Array.from(affectedBlockIds),
+  };
+}
 
 export class RootStore {
   readonly patch: PatchStore;
@@ -198,15 +290,9 @@ export class RootStore {
    * Sets up MobX reaction to emit GraphCommitted events on patch changes.
    *
    * Strategy:
-   * - Track block count and edge count as a proxy for mutations
-   * - When either changes, emit GraphCommitted event
+   * - Observe immutable patch snapshot identity
+   * - Derive diff summary from previous/current snapshots
    * - Increment patchRevision counter
-   *
-   * Note: This is a simplified implementation for Sprint 1.
-   * Future improvements:
-   * - Track actual mutation types (add/remove/modify)
-   * - Provide accurate diffSummary
-   * - Identify affectedBlockIds
    */
   private setupGraphCommittedEmission(): void {
     this.graphCommittedDisposer = reaction(
@@ -215,18 +301,16 @@ export class RootStore {
         // signal for any graph mutation (structure + params + port settings).
         return this.patch.patch;
       },
-      () => {
+      (currentPatch, previousPatch) => {
+        const { diffSummary, affectedBlockIds } = summarizeGraphDiff(previousPatch, currentPatch);
         this.patchRevision++;
         this.events.emit({
           type: 'GraphCommitted',
           patchId: 'patch-0',
           patchRevision: this.patchRevision,
           reason: 'userEdit',
-          diffSummary: {
-            blocksAdded: 0, // TODO: Track actual changes in Sprint 2
-            blocksRemoved: 0,
-            edgesChanged: 0,
-          },
+          diffSummary,
+          affectedBlockIds,
         });
       }
     );
@@ -251,7 +335,7 @@ export class RootStore {
     return executeAction(action, {
       patchStore: this.patch,
       selectionStore: this.selection,
-      eventHub: this.events,
+      diagnosticsStore: this.diagnostics,
     });
   }
 

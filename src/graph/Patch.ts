@@ -193,8 +193,6 @@ export interface Block {
   readonly id: BlockId;
   readonly type: BlockType;
   readonly params: Readonly<Record<string, unknown>>;
-  /** Optional label for display (legacy - prefer displayName) */
-  readonly label?: string;
   /** User-editable display name (REQUIRED - always has a value) */
   readonly displayName: string;
   /** Reference to domain block ID (REQUIRED - can be null) */
@@ -323,7 +321,6 @@ export class PatchBuilder {
   addBlock(
     type: BlockType,
     options?: {
-      label?: string;
       displayName?: string;
       domainId?: string | null;
       role?: BlockRole;
@@ -371,7 +368,6 @@ export class PatchBuilder {
       id,
       type,
       params: configDefaults,
-      label: options?.label,
       displayName,
       domainId: options?.domainId ?? null,
       role: options?.role ?? { kind: 'user', meta: {} },

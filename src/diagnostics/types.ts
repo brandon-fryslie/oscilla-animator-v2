@@ -237,15 +237,11 @@ export interface GoToTargetAction {
  *
  * @example
  * { kind: 'insertBlock', label: 'Add InfiniteTimeRoot', blockType: 'InfiniteTimeRoot' }
- * @example
- * { kind: 'insertBlock', label: 'Insert After', blockType: 'Gain', position: 'after', nearBlockId: 'abc123' }
  */
 export interface InsertBlockAction {
   readonly kind: 'insertBlock';
   readonly label: string;
   readonly blockType: string;
-  readonly position?: 'before' | 'after';
-  readonly nearBlockId?: string;
 }
 
 /**

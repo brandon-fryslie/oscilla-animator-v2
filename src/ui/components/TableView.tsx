@@ -89,7 +89,7 @@ export const TableView = observer(function TableView() {
         inputCount: incomingEdges.length,
         outputCount: outgoingEdges.length,
         connections,
-        domainId: undefined, // TODO: Extract from params if needed
+        domainId: block.domainId ?? undefined,
       });
     }
 
@@ -262,7 +262,7 @@ const BlockRow: React.FC<BlockRowProps> = ({
             fontFamily: "'Courier New', monospace",
             color: colors.primary,
           }}>
-            {data.block.label || data.block.id}
+            {data.block.displayName || data.block.id}
           </span>
         </div>
       </td>

@@ -298,8 +298,9 @@ function processBlock(
         warnings.push(new PatchDslWarning(`Port override for unknown port "${portId}"`, child.pos));
       }
     } else if (child.type === 'vararg' && child.labels.length === 1) {
-      // Legacy vararg block — ignored (collect edges replace varargs)
-      warnings.push(new PatchDslWarning(`Vararg block ignored (deprecated): "${child.labels[0]}"`, child.pos));
+      // [LAW:no-silent-fallbacks] Legacy vararg blocks are no longer accepted.
+      // Callers must migrate to explicit outputs/inputs edge declarations.
+      errors.push(new PatchDslError(`Unsupported legacy vararg block "${child.labels[0]}"`, child.pos));
     } else if (child.type === 'lens' && child.labels.length === 1) {
       // Lens attachment block
       const lensType = child.labels[0];

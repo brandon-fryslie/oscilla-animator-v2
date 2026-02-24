@@ -529,7 +529,7 @@ patch "Library Kitchen Sink" {
   }
 
   block "MakeShape2D" "poly-shape" {
-    closed = 1
+    closed = true
     outputs {
       shape = line-array.element
     }

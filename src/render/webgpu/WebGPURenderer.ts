@@ -480,7 +480,7 @@ export class WebGPURenderer {
     }
 
     if (style.strokeColor && style.strokeColor.length > 0) {
-      throw new Error('WebGPURenderer: stroke rendering is not implemented yet');
+      throw new Error('WebGPURenderer: stroke rendering is currently unsupported');
     }
 
     if (!fill || !(fill instanceof Uint8ClampedArray) || fill.length === 0) {

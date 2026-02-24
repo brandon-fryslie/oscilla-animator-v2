@@ -294,6 +294,7 @@ export class DiagnosticsStore {
   // Observable revision counter for MobX reactivity
   // This is incremented via a callback from DiagnosticHub
   private _revision: number = 0;
+  private _mutedDiagnosticIds: Set<string> = new Set();
 
   // Log entries (capped at MAX_LOGS to prevent unbounded memory growth)
   private static readonly MAX_LOGS = 1000;
@@ -348,18 +349,23 @@ export class DiagnosticsStore {
 
     makeObservable<
       DiagnosticsStore,
-      '_revision' | '_logs' | '_compilationStats' | '_frameTiming' | '_frameTimingHistory' | '_lifetimeStats' | '_jankLog' | '_memoryStats' | 'incrementRevision'
+      '_revision' | '_mutedDiagnosticIds' | '_logs' | '_compilationStats' | '_frameTiming' | '_frameTimingHistory' | '_lifetimeStats' | '_jankLog' | '_memoryStats' | 'incrementRevision'
     >(this, {
       // Observable revision counter
       _revision: observable,
+      _mutedDiagnosticIds: observable.shallow,
       incrementRevision: action,
 
       // DiagnosticHub API
       revision: computed,
       activeDiagnostics: computed,
+      mutedDiagnosticIds: computed,
       errorCount: computed,
       warningCount: computed,
       hasErrors: computed,
+      muteDiagnostic: action,
+      unmuteDiagnostic: action,
+      clearMutedDiagnostics: action,
 
       // Log API
       _logs: observable,
@@ -425,7 +431,7 @@ export class DiagnosticsStore {
     if (!this.hub) return [];
     // Force dependency on revision to trigger updates
     this.revision;
-    return this.hub.getActive();
+    return this.filterMuted(this.hub.getActive());
   }
 
   /**
@@ -433,7 +439,7 @@ export class DiagnosticsStore {
    */
   getByRevision(patchRevision: number): Diagnostic[] {
     if (!this.hub) return [];
-    return this.hub.getByRevision(patchRevision);
+    return this.filterMuted(this.hub.getByRevision(patchRevision));
   }
 
   /**
@@ -441,7 +447,7 @@ export class DiagnosticsStore {
    */
   getCompileSnapshot(patchRevision: number): Diagnostic[] {
     if (!this.hub) return [];
-    return this.hub.getCompileSnapshot(patchRevision);
+    return this.filterMuted(this.hub.getCompileSnapshot(patchRevision));
   }
 
   /**
@@ -452,7 +458,7 @@ export class DiagnosticsStore {
     if (!this.hub) return [];
     // Force dependency on revision for reactivity
     this.revision;
-    return this.hub.getDiagnosticsForBlock(blockId);
+    return this.filterMuted(this.hub.getDiagnosticsForBlock(blockId));
   }
 
   /**
@@ -463,7 +469,7 @@ export class DiagnosticsStore {
     if (!this.hub) return [];
     // Force dependency on revision for reactivity
     this.revision;
-    return this.hub.getDiagnosticsForEdge(edge);
+    return this.filterMuted(this.hub.getDiagnosticsForEdge(edge));
   }
 
   /**
@@ -473,7 +479,7 @@ export class DiagnosticsStore {
     if (!this.hub) return [];
     // Force dependency on revision for reactivity
     this.revision;
-    return this.hub.getDiagnosticsForPort(blockId, portId);
+    return this.filterMuted(this.hub.getDiagnosticsForPort(blockId, portId));
   }
 
   /**
@@ -481,7 +487,7 @@ export class DiagnosticsStore {
    */
   getAuthoringSnapshot(): Diagnostic[] {
     if (!this.hub) return [];
-    return this.hub.getAuthoringSnapshot();
+    return this.filterMuted(this.hub.getAuthoringSnapshot());
   }
 
   /**
@@ -489,7 +495,7 @@ export class DiagnosticsStore {
    */
   getRuntimeDiagnostics(): Diagnostic[] {
     if (!this.hub) return [];
-    return this.hub.getRuntimeDiagnostics();
+    return this.filterMuted(this.hub.getRuntimeDiagnostics());
   }
 
   /**
@@ -497,10 +503,52 @@ export class DiagnosticsStore {
    */
   filter(filter: DiagnosticFilter): Diagnostic[] {
     if (!this.hub) return [];
-    // Force dependency on revision to trigger updates
-    this.revision;
-    const active = this.hub.getActive();
+    const active = this.activeDiagnostics;
     return this.hub.filter(active, filter);
+  }
+
+  /**
+   * IDs currently muted by user action.
+   */
+  get mutedDiagnosticIds(): readonly string[] {
+    // Force dependency on revision so UI updates when muting changes.
+    this.revision;
+    return Array.from(this._mutedDiagnosticIds);
+  }
+
+  /**
+   * Mute a diagnostic by ID.
+   *
+   * @returns true when diagnostic exists and is now muted, false when ID is unknown
+   */
+  muteDiagnostic(diagnosticId: string): boolean {
+    if (!this.hub) return false;
+    if (this._mutedDiagnosticIds.has(diagnosticId)) return true;
+    const exists = this.hub.getActive().some((d) => d.id === diagnosticId);
+    if (!exists) return false;
+    // [LAW:single-enforcer] DiagnosticsStore is the sole muting boundary; all
+    // diagnostic projections derive from this muted-id set.
+    this._mutedDiagnosticIds.add(diagnosticId);
+    this.incrementRevision();
+    return true;
+  }
+
+  /**
+   * Unmute a diagnostic by ID.
+   */
+  unmuteDiagnostic(diagnosticId: string): void {
+    if (this._mutedDiagnosticIds.delete(diagnosticId)) {
+      this.incrementRevision();
+    }
+  }
+
+  /**
+   * Clear all muted diagnostics.
+   */
+  clearMutedDiagnostics(): void {
+    if (this._mutedDiagnosticIds.size === 0) return;
+    this._mutedDiagnosticIds.clear();
+    this.incrementRevision();
   }
 
   /**
@@ -536,6 +584,13 @@ export class DiagnosticsStore {
    */
   get hasErrors(): boolean {
     return this.errorCount > 0;
+  }
+
+  private filterMuted(diagnostics: readonly Diagnostic[]): Diagnostic[] {
+    if (this._mutedDiagnosticIds.size === 0) {
+      return [...diagnostics];
+    }
+    return diagnostics.filter((diagnostic) => !this._mutedDiagnosticIds.has(diagnostic.id));
   }
 
   // =============================================================================

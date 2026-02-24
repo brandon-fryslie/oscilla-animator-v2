@@ -84,7 +84,7 @@ export function valueSlot(n: number): ValueSlot {
  * Used for reading/writing individual components of multi-component values (vec2, vec3, color).
  *
  * Example:
- *   const baseSlot = allocSlot(3); // vec3
+ *   const baseSlot = allocSlot();
  *   const xSlot = slotOffset(baseSlot, 0);
  *   const ySlot = slotOffset(baseSlot, 1);
  *   const zSlot = slotOffset(baseSlot, 2);

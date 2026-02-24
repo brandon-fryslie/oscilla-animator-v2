@@ -30,7 +30,6 @@ export interface LowerCtx {
   readonly blockIdx: BlockIndex;
   readonly blockType: string;
   readonly instanceId: string;
-  readonly label?: string;
   readonly inTypes: readonly CanonicalType[];
   readonly outTypes: readonly CanonicalType[];
   readonly b: BlockIRBuilder;

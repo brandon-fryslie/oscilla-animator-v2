@@ -6,6 +6,7 @@ import {
   getPatchPersistenceIssues,
   loadPatchFromStorage,
   savePatchToStorage,
+  serializePatch,
   setPatchPersistenceIssueReporter,
 } from '../PatchPersistence';
 
@@ -95,5 +96,57 @@ describe('PatchPersistence issue reporting', () => {
       op: 'load',
       message: 'Failed to load patch from local storage',
     });
+  });
+
+  it('serializes canonical displayName without legacy label field', () => {
+    const patch = {
+      blocks: new Map([
+        ['b0', {
+          id: 'b0',
+          type: 'Add',
+          params: {},
+          label: 'Legacy Label',
+          displayName: 'Add 1',
+          domainId: null,
+          role: { kind: 'user', meta: {} },
+          inputPorts: new Map(),
+          outputPorts: new Map(),
+        }],
+      ]),
+      edges: [],
+    } as unknown as Patch;
+
+    const serialized = serializePatch(patch, 0);
+    const parsed = JSON.parse(serialized) as { blocks: Array<Record<string, unknown>> };
+
+    expect(parsed.blocks[0].displayName).toBe('Add 1');
+    expect(parsed.blocks[0]).not.toHaveProperty('label');
+  });
+
+  it('drops legacy label field when deserializing persisted patches', () => {
+    const legacyJson = JSON.stringify({
+      blocks: [
+        {
+          id: 'b0',
+          type: 'Add',
+          params: {},
+          label: 'Old Label',
+          displayName: 'Add 1',
+          domainId: null,
+          role: { kind: 'user', meta: {} },
+          inputPorts: [],
+          outputPorts: [],
+        },
+      ],
+      edges: [],
+      presetIndex: 0,
+    });
+
+    const result = deserializePatch(legacyJson);
+
+    expect(result).not.toBeNull();
+    const block = result!.patch.blocks.get('b0' as any);
+    expect(block?.displayName).toBe('Add 1');
+    expect('label' in (block as unknown as Record<string, unknown>)).toBe(false);
   });
 });

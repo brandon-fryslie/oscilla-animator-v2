@@ -19,7 +19,7 @@ import type {
 } from './types';
 import type { PatchStore } from '../stores/PatchStore';
 import type { SelectionStore } from '../stores/SelectionStore';
-import type { EventHub } from '../events/EventHub';
+import type { DiagnosticsStore } from '../stores/DiagnosticsStore';
 import { requireAnyBlockDef } from '../blocks/registry';
 import type { Endpoint } from '../graph/Patch';
 
@@ -30,7 +30,7 @@ import type { Endpoint } from '../graph/Patch';
 export interface ActionExecutorDeps {
   patchStore: PatchStore;
   selectionStore: SelectionStore;
-  eventHub: EventHub;
+  diagnosticsStore: DiagnosticsStore;
 }
 
 /**
@@ -53,7 +53,7 @@ export function executeAction(
   deps: ActionExecutorDeps
 ): ActionResult {
   // Validate deps
-  if (!deps.patchStore || !deps.selectionStore) {
+  if (!deps.patchStore || !deps.selectionStore || !deps.diagnosticsStore) {
     throw new Error('ActionExecutor: Missing required dependencies');
   }
 
@@ -136,7 +136,6 @@ function handleGoToTarget(
 
 /**
  * Insert a new block into the patch.
- * Note: position and nearBlockId are not yet supported (no layout system).
  */
 function handleInsertBlock(
   action: InsertBlockAction,
@@ -145,17 +144,8 @@ function handleInsertBlock(
   const { patchStore, selectionStore } = deps;
 
   try {
-    // Create block (position/nearBlockId not yet supported)
-    const blockId = patchStore.addBlock(
-      action.blockType,
-      {}, // No default parameters
-      {
-        label: action.blockType, // Use type as label
-      }
-    );
-
-    // TODO: Handle action.position ('before' | 'after') and action.nearBlockId
-    // when layout system is available
+    // Create block
+    const blockId = patchStore.addBlock(action.blockType, {});
 
     // Select newly created block
     selectionStore.selectBlock(blockId);
@@ -272,8 +262,7 @@ function handleAddAdapter(
     // Create adapter block
     const adapterId = patchStore.addBlock(
       action.adapterType, // e.g., 'Broadcast'
-      {},
-      { label: 'Adapter' }
+      {}
     );
 
     const sourceEndpoint: Endpoint = {
@@ -337,7 +326,6 @@ function handleCreateTimeRoot(
       'InfiniteTimeRoot',
       {}, // No parameters needed for InfiniteTimeRoot
       {
-        label: 'Time Root',
         role: { kind: 'timeRoot', meta: {} },
       }
     );
@@ -363,16 +351,16 @@ function handleMuteDiagnostic(
   deps: ActionExecutorDeps
 ): ActionResult {
   try {
-    // TODO: Add muted diagnostics tracking to DiagnosticsStore
-    // For now, return unimplemented
+    const muted = deps.diagnosticsStore.muteDiagnostic(action.diagnosticId);
+    if (!muted) {
+      return {
+        success: false,
+        error: `Diagnostic ${action.diagnosticId} not found`,
+      };
+    }
     return {
-      success: false,
-      error: 'Diagnostic muting not yet implemented',
+      success: true,
     };
-
-    // Future implementation:
-    // diagnosticsStore.muteDiagnostic(action.diagnosticId);
-    // return { success: true };
   } catch (err) {
     return {
       success: false,

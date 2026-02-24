@@ -40,7 +40,9 @@ describe('actionExecutor', () => {
         selectEdge: vi.fn(),
         selectPort: vi.fn(),
       },
-      eventHub: {},
+      diagnosticsStore: {
+        muteDiagnostic: vi.fn(() => true),
+      },
     } as any;
   });
 
@@ -67,6 +69,19 @@ describe('actionExecutor', () => {
             target: { kind: 'block', blockId: 'block-123' },
           },
           { ...mockDeps, selectionStore: null as any }
+        )
+      ).toThrow('Missing required dependencies');
+    });
+
+    it('throws error if diagnosticsStore missing', () => {
+      expect(() =>
+        executeAction(
+          {
+            kind: 'goToTarget',
+            label: 'Go to Block',
+            target: { kind: 'block', blockId: 'block-123' },
+          },
+          { ...mockDeps, diagnosticsStore: null as any }
         )
       ).toThrow('Missing required dependencies');
     });
@@ -178,7 +193,6 @@ describe('actionExecutor', () => {
         'InfiniteTimeRoot',
         {},
         {
-          label: 'Time Root',
           role: { kind: 'timeRoot', meta: {} },
         }
       );
@@ -287,28 +301,8 @@ describe('actionExecutor', () => {
       const result = executeAction(action, mockDeps);
 
       expect(result.success).toBe(true);
-      expect(mockDeps.patchStore.addBlock).toHaveBeenCalledWith(
-        'Gain',
-        {},
-        { label: 'Gain' }
-      );
+      expect(mockDeps.patchStore.addBlock).toHaveBeenCalledWith('Gain', {});
       expect(mockDeps.selectionStore.selectBlock).toHaveBeenCalledWith('block-123');
-    });
-
-    it('ignores position and nearBlockId (not yet supported)', () => {
-      const action: InsertBlockAction = {
-        kind: 'insertBlock',
-        label: 'Insert After',
-        blockType: 'Gain',
-        position: 'after',
-        nearBlockId: 'block-456',
-      };
-
-      const result = executeAction(action, mockDeps);
-
-      // Should succeed but position/nearBlockId are not used
-      expect(result.success).toBe(true);
-      expect(mockDeps.patchStore.addBlock).toHaveBeenCalled();
     });
 
     it('handles addBlock errors', () => {
@@ -346,11 +340,7 @@ describe('actionExecutor', () => {
       const result = executeAction(action, mockDeps);
 
       expect(result.success).toBe(true);
-      expect(mockDeps.patchStore.addBlock).toHaveBeenCalledWith(
-        'Broadcast',
-        {},
-        { label: 'Adapter' }
-      );
+      expect(mockDeps.patchStore.addBlock).toHaveBeenCalledWith('Broadcast', {});
       expect(mockDeps.patchStore.removeEdge).toHaveBeenCalledWith('edge-1');
       expect(mockDeps.patchStore.addEdge).toHaveBeenCalledTimes(2);
       expect(mockDeps.patchStore.addEdge).toHaveBeenNthCalledWith(
@@ -442,7 +432,7 @@ describe('actionExecutor', () => {
   });
 
   describe('muteDiagnostic', () => {
-    it('returns not implemented', () => {
+    it('mutes active diagnostic successfully', () => {
       const action: MuteDiagnosticAction = {
         kind: 'muteDiagnostic',
         label: 'Mute Warning',
@@ -451,8 +441,22 @@ describe('actionExecutor', () => {
 
       const result = executeAction(action, mockDeps);
 
+      expect(result.success).toBe(true);
+      expect(mockDeps.diagnosticsStore.muteDiagnostic).toHaveBeenCalledWith('diag-xyz');
+    });
+
+    it('returns error when diagnostic is unknown', () => {
+      mockDeps.diagnosticsStore.muteDiagnostic = vi.fn(() => false);
+      const action: MuteDiagnosticAction = {
+        kind: 'muteDiagnostic',
+        label: 'Mute Warning',
+        diagnosticId: 'diag-missing',
+      };
+
+      const result = executeAction(action, mockDeps);
+
       expect(result.success).toBe(false);
-      expect(result.error).toContain('not yet implemented');
+      expect(result.error).toContain('not found');
     });
   });
 

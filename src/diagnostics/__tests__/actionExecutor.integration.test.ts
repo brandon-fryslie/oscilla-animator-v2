@@ -195,4 +195,46 @@ describe('actionExecutor integration', () => {
       expect(rootStore.selection.selectedBlockId).toBe(adapterBlock?.id);
     });
   });
+
+  describe('muteDiagnostic action', () => {
+    it('mutes an active diagnostic in the diagnostics store', () => {
+      const now = Date.now();
+      const diagnostic: Diagnostic = {
+        id: 'diag-runtime-1',
+        code: 'E_RUNTIME_ERROR',
+        severity: 'warn',
+        domain: 'runtime',
+        primaryTarget: { kind: 'block', blockId: 'b0' },
+        title: 'Runtime warning',
+        message: 'Test warning',
+        scope: { patchRevision: rootStore.getPatchRevision() },
+        metadata: {
+          firstSeenAt: now,
+          lastSeenAt: now,
+          occurrenceCount: 1,
+        },
+      };
+
+      rootStore.events.emit({
+        type: 'RuntimeHealthSnapshot',
+        patchId: 'patch-0',
+        activePatchRevision: rootStore.getPatchRevision(),
+        tMs: 0,
+        frameBudget: { fpsEstimate: 60, avgFrameMs: 16.67 },
+        evalStats: { fieldMaterializations: 0, nanCount: 0, infCount: 0 },
+        diagnosticsDelta: { raised: [diagnostic], resolved: [] },
+      });
+
+      expect(readComputed(() => rootStore.diagnostics.activeDiagnostics).some((d) => d.id === diagnostic.id)).toBe(true);
+
+      const result = rootStore.executeAction({
+        kind: 'muteDiagnostic',
+        label: 'Mute Warning',
+        diagnosticId: diagnostic.id,
+      });
+
+      expect(result.success).toBe(true);
+      expect(readComputed(() => rootStore.diagnostics.activeDiagnostics).some((d) => d.id === diagnostic.id)).toBe(false);
+    });
+  });
 });

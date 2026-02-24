@@ -407,7 +407,7 @@ patch "Test" {
     expect(phasePort!.defaultSource).toBe(0.5);
   });
 
-  it('emits deprecation warning for legacy vararg blocks', () => {
+  it('reports explicit error for unsupported legacy vararg blocks', () => {
     const hcl = `
 patch "Test" {
   block "Const" "foo" {}
@@ -423,9 +423,8 @@ patch "Test" {
 }
 `;
     const result = deserializePatchFromHCL(hcl);
-    // Legacy vararg blocks produce a deprecation warning
-    expect(result.warnings.length).toBeGreaterThan(0);
-    expect(result.warnings.some(w => w.message.includes('deprecated'))).toBe(true);
+    expect(result.errors.length).toBeGreaterThan(0);
+    expect(result.errors.some(e => e.message.includes('Unsupported legacy vararg block'))).toBe(true);
   });
 
   it('deserializes lens attachments with data preserved', () => {

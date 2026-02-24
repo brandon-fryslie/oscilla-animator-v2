@@ -30,7 +30,6 @@ declare const ImmutablePatchBrand: unique symbol;
 export type ImmutablePatch = Patch & { readonly [ImmutablePatchBrand]: never };
 
 export interface BlockOptions {
-  label?: string;
   displayName?: string;
   domainId?: string | null;
   role?: BlockRole;
@@ -333,7 +332,6 @@ export class PatchStore {
       id,
       type,
       params: mergedParams,
-      label: options?.label,
       displayName,
       domainId: options?.domainId ?? null,
       role: options?.role ?? { kind: 'user', meta: {} },

@@ -58,7 +58,7 @@ patch "Test AttractorLayout Full" {
   }
 
   block "MakeShape2D" "assemble" {
-    closed = 1
+    closed = true
     outputs {
       shape = instances.element
     }

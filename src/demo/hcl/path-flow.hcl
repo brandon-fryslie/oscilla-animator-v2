@@ -86,7 +86,7 @@ patch "Path Flow" {
   }
 
   block "MakeShape2D" "assembler" {
-    closed = 1
+    closed = true
     outputs {
       shape = pathLayout.shape
     }

@@ -31,7 +31,7 @@ patch "Neon Grid" {
   }
 
   block "MakeShape2D" "tile-shape" {
-    closed = 1
+    closed = true
     outputs {
       shape = grid-elements.element
     }

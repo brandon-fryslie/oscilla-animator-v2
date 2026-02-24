@@ -25,7 +25,7 @@ patch "Path Flow" {
   }
 
   block "MakeShape2D" "assembler" {
-    closed = 1
+    closed = true
   }
 
   block "Ellipse" "dot" {

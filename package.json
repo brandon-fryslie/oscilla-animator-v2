@@ -14,7 +14,7 @@
     "test:webgpu-matrix": "node scripts/webgpu-browser-matrix.mjs",
     "test:migration-readiness": "node scripts/webgpu-migration-readiness.mjs",
     "bench": "vitest bench",
-    "lint": "eslint src/blocks/ src/runtime/ValueExprMaterializer.ts src/runtime/ValueExprSignalEvaluator.ts src/runtime/ValueExprEventEvaluator.ts src/runtime/ContinuityApply.ts src/compiler/compile.ts src/runtime/ScheduleExecutor.ts src/runtime/RenderAssembler.ts src/runtime/SignalKernelLibrary.ts src/runtime/OpcodeInterpreter.ts src/render/RenderBufferArena.ts"
+    "lint": "eslint src/blocks/ src/runtime/ValueExprMaterializer.ts src/runtime/ValueExprEventEvaluator.ts src/runtime/ContinuityApply.ts src/compiler/compile.ts src/runtime/ScheduleExecutor.ts src/runtime/RenderAssembler.ts src/runtime/OpcodeInterpreter.ts src/render/RenderBufferArena.ts"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",

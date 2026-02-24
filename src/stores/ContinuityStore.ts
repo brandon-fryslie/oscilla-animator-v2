@@ -257,7 +257,7 @@ export class ContinuityStore {
         semantic: parts[0] || 'unknown',
         instanceId: parts[1] || 'unknown',
         count: state.count,
-        slewProgress: 1.0, // TODO: Compute actual slew progress from buffer analysis
+        slewProgress: estimateSlewProgress(state, tMs, this.baseTauMs, this.tauMultiplier),
       });
     }
 
@@ -343,4 +343,33 @@ function countMappedElements(mapping: MappingState): { mapped: number; unmapped:
     }
   }
   return { mapped, unmapped };
+}
+
+function estimateSlewProgress(
+  target: { gaugeBuffer: Float32Array; slewBuffer: Float32Array; crossfadeStartMs?: number },
+  tMs: number,
+  baseTauMs: number,
+  tauMultiplier: number
+): number {
+  if (target.crossfadeStartMs !== undefined) {
+    const effectiveWindowMs = Math.max(50, baseTauMs * tauMultiplier * 2);
+    const elapsed = Math.max(0, tMs - target.crossfadeStartMs);
+    return Math.min(1, elapsed / effectiveWindowMs);
+  }
+
+  const laneCount = Math.min(target.gaugeBuffer.length, target.slewBuffer.length);
+  if (laneCount === 0) return 1;
+
+  let gaugeMagnitude = 0;
+  let slewMagnitude = 0;
+  for (let i = 0; i < laneCount; i++) {
+    gaugeMagnitude += Math.abs(target.gaugeBuffer[i]);
+    slewMagnitude += Math.abs(target.slewBuffer[i]);
+  }
+  const meanGauge = gaugeMagnitude / laneCount;
+  if (meanGauge < 1e-4) return 1;
+  const meanSlew = slewMagnitude / laneCount;
+  const denominator = meanGauge + meanSlew + 1e-6;
+  const progress = 1 - Math.min(1, meanGauge / denominator);
+  return Math.max(0, Math.min(1, progress));
 }

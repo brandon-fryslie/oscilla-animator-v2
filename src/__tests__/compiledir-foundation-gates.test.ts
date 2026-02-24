@@ -140,41 +140,7 @@ describe('CompiledIR Foundation Migration Gates (W11/W5/W6/W2/W7/W12)', () => {
     });
   }
 
-  it('A-W11-1 temporary allowlist is constrained to approved files only', () => {
-    const lines = rgLines("from '../compiler/ir/IRBuilder'", ['src']);
-    const approved = new Set([
-      'src/expr/index.ts',
-      'src/transforms/index.ts',
-    ]);
-
-    const disallowed = lines.filter((line) => {
-      const path = line.split(':', 1)[0] ?? '';
-      return !approved.has(path);
-    });
-
-    expect(lines.length).toBeLessThanOrEqual(0);
-    expect(disallowed).toEqual([]);
-  });
-
-  it('A-W2-1 temporary allowlist is constrained to approved runtime files only', () => {
-    const lines = rgLines('program\\.slotMeta', [
-      'src/runtime/ExprAddressTable.ts',
-      'src/runtime/ScheduleExecutor.ts',
-      'src/runtime/executeFrameStepped.ts',
-    ]);
-
-    const approved = new Set([
-      'src/runtime/ExprAddressTable.ts',
-      'src/runtime/executeFrameStepped.ts',
-      'src/runtime/ScheduleExecutor.ts',
-    ]);
-
-    const disallowed = lines.filter((line) => {
-      const path = line.split(':', 1)[0] ?? '';
-      return !approved.has(path);
-    });
-
-    expect(lines.length).toBeLessThanOrEqual(0);
-    expect(disallowed).toEqual([]);
-  });
+  // [LAW:one-source-of-truth] K-* gates with maxCount=0 are the canonical
+  // enforcement boundary; temporary allowlist assertions are redundant once
+  // thresholds are hard-zero.
 });

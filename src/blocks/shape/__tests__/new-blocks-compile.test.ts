@@ -28,7 +28,7 @@ patch "Test Assemble" {
   }
 
   block "MakeShape2D" "assemble" {
-    closed = 1
+    closed = true
   }
 }`;
     const { patch, errors } = deserializePatchFromHCL(hcl);
@@ -57,7 +57,7 @@ patch "Test Pipeline" {
   }
 
   block "MakeShape2D" "assemble" {
-    closed = 1
+    closed = true
     outputs {
       shape = arr.element
     }
@@ -122,7 +122,7 @@ patch "Test Shape Wobble" {
   }
 
   block "MakeShape2D" "assemble" {
-    closed = 1
+    closed = true
     outputs {
       shape = arr.element
     }

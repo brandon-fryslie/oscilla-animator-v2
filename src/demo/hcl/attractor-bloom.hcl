@@ -180,7 +180,7 @@ patch "Attractor Bloom" {
   }
 
   block "MakeShape2D" "shard_shape" {
-    closed = 1
+    closed = true
     outputs {
       shape = ring_instances.element
     }

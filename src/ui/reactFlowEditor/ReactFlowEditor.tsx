@@ -166,7 +166,6 @@ const ReactFlowEditorInner: React.FC<ReactFlowEditorProps> = observer(({
   const navigateToBlock = useCallback(
     (blockId: BlockId) => {
       selection.selectBlock(blockId);
-      // TODO: Add setCenter functionality to GraphEditorCore if needed
     },
     [selection]
   );

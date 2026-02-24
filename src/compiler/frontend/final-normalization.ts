@@ -411,7 +411,7 @@ function planDischarge(
     // Check deps
     if (!areDependenciesSatisfied(obligation.deps, facts)) continue;
 
-    // Call policy (stub — no policies registered yet)
+    // Call policy by canonical policy name.
     const result = callPolicy(obligation, ctx);
     if (!result) continue;
 
@@ -504,7 +504,7 @@ function tryFinalizeStrict(
   const hasOpenObligations = g.obligations.some((o) => isOpen(o));
   if (hasOpenObligations) return null;
 
-  // Check all ports resolved — for the stub, if facts is empty, that's OK
+  // Check all ports resolved; empty facts is valid for an empty graph.
   // (empty graph = trivially strict)
   const portTypes = new Map<DraftPortKey, import('../../core/canonical-types').CanonicalType>();
   for (const [key, hint] of facts.ports) {

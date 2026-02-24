@@ -51,7 +51,6 @@ export interface SerializedPatch {
     id: string;
     type: string;
     params: Record<string, unknown>;
-    label?: string;
     displayName: string;
     domainId: string | null;
     role: { kind: string; meta: Record<string, unknown> };
@@ -78,7 +77,7 @@ export function serializePatch(patch: Patch, presetIndex: number): string {
       id: block.id,
       type: block.type,
       params: { ...block.params },
-      ...(block.label && { label: block.label }),
+      // [LAW:one-source-of-truth] displayName is the canonical persisted block name.
       displayName: block.displayName,
       domainId: block.domainId,
       role: block.role as { kind: string; meta: Record<string, unknown> },
@@ -111,8 +110,11 @@ export function deserializePatch(json: string): { patch: Patch; presetIndex: num
         }
         return p;
       });
+      // [LAW:one-source-of-truth] Legacy serialized label is dropped at decode;
+      // displayName remains the only canonical block-name field in memory.
+      const { label: _legacyLabel, ...canonicalBlock } = b as typeof b & { label?: unknown };
       blocks.set(b.id as BlockId, {
-        ...b,
+        ...canonicalBlock,
         inputPorts: new Map(normalizedInputPorts.map(p => [p.id, p])),
         outputPorts: new Map(b.outputPorts.map(p => [p.id, p])),
       });

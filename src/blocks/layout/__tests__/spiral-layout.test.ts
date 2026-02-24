@@ -57,7 +57,7 @@ patch "Test MakeShape2D + SpiralLayout" {
   }
 
   block "MakeShape2D" "assemble" {
-    closed = 1
+    closed = true
     outputs {
       shape = instances.element
     }
