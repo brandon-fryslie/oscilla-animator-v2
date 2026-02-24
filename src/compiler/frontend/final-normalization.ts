@@ -563,15 +563,20 @@ function collectStrictFailureDiagnostics(
 ): FixpointDiagnostic[] {
   const diagnostics: FixpointDiagnostic[] = [];
   const openObligations = g.obligations.filter((o) => isOpen(o));
+  // [LAW:one-source-of-truth] User-facing obligation messages resolve block names
+  // from DraftGraph's canonical block type map.
+  const blockTypeById = buildBlockTypeById(g);
 
   for (const obligation of openObligations) {
     const depsReady = areDependenciesSatisfied(obligation.deps, facts);
     const reason = depsReady
       ? 'depsReadyNoPlan'
       : 'depsNotReady';
+    // [LAW:single-enforcer] Obligation ID display formatting is centralized here.
+    const displayObligationId = formatObligationIdForDisplay(obligation.id, blockTypeById);
     diagnostics.push({
       diagnosticFlagCode: 'OpenObligation',
-      message: `Open obligation '${obligation.id}' (${obligation.kind}, policy=${obligation.policy.name}, ${reason})`,
+      message: `Open obligation '${displayObligationId}' (${obligation.kind}, policy=${obligation.policy.name}, ${reason})`,
       stableKey: `OpenObligation:${obligation.id}:${reason}`,
     });
   }
@@ -588,6 +593,82 @@ function collectStrictFailureDiagnostics(
   }
 
   return diagnostics;
+}
+
+function buildBlockTypeById(g: DraftGraph): ReadonlyMap<string, string> {
+  return new Map(g.blocks.map((b) => [b.id, b.type] as const));
+}
+
+function formatObligationIdForDisplay(
+  obligationId: ObligationId,
+  blockTypeById: ReadonlyMap<string, string>,
+): string {
+  const raw = obligationId as string;
+  const firstColon = raw.indexOf(':');
+  if (firstColon < 0) return raw;
+  const kind = raw.slice(0, firstColon);
+  const payload = raw.slice(firstColon + 1);
+
+  if (payload.includes('->')) {
+    const arrowIndex = payload.indexOf('->');
+    if (arrowIndex <= 0 || arrowIndex >= payload.length - 2) return raw;
+    const left = parseObligationEndpoint(payload.slice(0, arrowIndex));
+    const right = parseObligationEndpoint(payload.slice(arrowIndex + 2));
+    if (!left || !right) return raw;
+    return `${kind}:${formatEndpointForDisplay(left, blockTypeById)}->${formatEndpointForDisplay(right, blockTypeById)}`;
+  }
+
+  const endpoint = parseObligationEndpoint(payload);
+  if (!endpoint) return raw;
+  return `${kind}:${formatEndpointForDisplay(endpoint, blockTypeById)}`;
+}
+
+interface ParsedObligationEndpoint {
+  readonly blockId: string;
+  readonly port: string;
+  readonly dir?: 'in' | 'out';
+}
+
+function parseObligationEndpoint(segment: string): ParsedObligationEndpoint | null {
+  const tail = splitLast(segment, ':');
+  if (!tail) return null;
+  const possibleDir = tail.tail;
+  // Endpoint forms:
+  // - blockId:port
+  // - blockId:port:in|out
+  if ((possibleDir === 'in' || possibleDir === 'out') && tail.head.includes(':')) {
+    const withPort = splitLast(tail.head, ':');
+    if (!withPort) return null;
+    return {
+      blockId: withPort.head,
+      port: withPort.tail,
+      dir: possibleDir,
+    };
+  }
+  return {
+    blockId: tail.head,
+    port: tail.tail,
+  };
+}
+
+function formatEndpointForDisplay(
+  endpoint: ParsedObligationEndpoint,
+  blockTypeById: ReadonlyMap<string, string>,
+): string {
+  const blockName = blockTypeById.get(endpoint.blockId) ?? endpoint.blockId;
+  if (endpoint.dir) {
+    return `${blockName}:${endpoint.port}:${endpoint.dir}`;
+  }
+  return `${blockName}:${endpoint.port}`;
+}
+
+function splitLast(value: string, sep: string): { head: string; tail: string } | null {
+  const idx = value.lastIndexOf(sep);
+  if (idx <= 0 || idx >= value.length - sep.length) return null;
+  return {
+    head: value.slice(0, idx),
+    tail: value.slice(idx + sep.length),
+  };
 }
 
 // =============================================================================
