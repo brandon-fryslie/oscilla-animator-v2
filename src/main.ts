@@ -39,6 +39,26 @@ import {
 
 let runtimeService: RuntimeService | null = null;
 let pendingCanvas: HTMLCanvasElement | null = null;
+let pendingStore: RootStore | null = null;
+let runtimeInitStarted = false;
+
+function tryInitRuntime(): void {
+  if (runtimeInitStarted || !runtimeService || !pendingStore || !pendingCanvas) return;
+  runtimeInitStarted = true;
+  runtimeService.setCanvas(pendingCanvas);
+  pendingCanvas = null;
+  runtimeService.init().catch((err) => {
+    const message = err instanceof Error ? err.message : String(err);
+    // [LAW:single-enforcer] Main boot is the one boundary that reports
+    // fatal runtime init failures to both diagnostics and browser console.
+    console.error('Failed to initialize runtime:', err);
+    // [LAW:single-enforcer] Main boot reports runtime init failures via diagnostics.
+    pendingStore?.diagnostics.log({
+      level: 'error',
+      message: `Failed to initialize runtime: ${message}`,
+    });
+  });
+}
 
 async function main() {
   registerAllBlocks();
@@ -59,15 +79,16 @@ async function main() {
           null,
           React.createElement(App, {
             onCanvasReady: (canvasEl: HTMLCanvasElement) => {
+              pendingCanvas = canvasEl;
               if (runtimeService) {
                 runtimeService.setCanvas(canvasEl);
-              } else {
-                // TestPreviewPanel fires onCanvasReady before onStoreReady
-                // (child effects run before parent effects). Buffer the element.
-                pendingCanvas = canvasEl;
               }
+              // [LAW:dataflow-not-control-flow] Runtime init waits on data readiness
+              // (store+canvas availability), not callback ordering.
+              tryInitRuntime();
             },
             onStoreReady: (rootStore: RootStore) => {
+              pendingStore = rootStore;
               // [LAW:single-enforcer] Main boot routes composite persistence/init
               // issues into diagnostics as the canonical user-visible sink.
               compositeStorage.setIssueReporter((issue) => {
@@ -98,21 +119,7 @@ async function main() {
               clearCompositeInitIssues();
 
               runtimeService = new RuntimeService(rootStore);
-              if (pendingCanvas) {
-                runtimeService.setCanvas(pendingCanvas);
-                pendingCanvas = null;
-              }
-              runtimeService.init().catch((err) => {
-                const message = err instanceof Error ? err.message : String(err);
-                // [LAW:single-enforcer] Main boot is the one boundary that reports
-                // fatal runtime init failures to both diagnostics and browser console.
-                console.error('Failed to initialize runtime:', err);
-                // [LAW:single-enforcer] Main boot reports runtime init failures via diagnostics.
-                rootStore.diagnostics.log({
-                  level: 'error',
-                  message: `Failed to initialize runtime: ${message}`,
-                });
-              });
+              tryInitRuntime();
             },
             externalWriteBus: runtimeService?.compileState.currentState?.externalChannels.writeBus,
           })

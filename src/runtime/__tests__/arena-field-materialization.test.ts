@@ -1,8 +1,7 @@
 /**
  * Arena Field Materialization Tests
  *
- * Verifies that field materialization writes to arena for many-cardinality slots
- * without relying on legacy numeric buffer mirrors in values.objects.
+ * Verifies that field materialization writes to arena for many-cardinality slots.
  *
  * [LAW:one-source-of-truth] Arena is the canonical flat buffer for all numeric
  * values. These tests prove materialized field data appears in the arena at the
@@ -13,7 +12,7 @@ import { describe, it, expect } from 'vitest';
 import { buildPatch } from '../../graph';
 import { compile } from '../../compiler/compile';
 import type { ScheduleIR } from '../../compiler/backend/schedule-program';
-import { computeStorageSizes } from '../../compiler/ir/program';
+import { computeRuntimeStorageSizes } from '../../compiler/ir/program';
 import { createRuntimeState, executeFrame } from '../../runtime';
 import { arenaSlice } from '../ArenaValueStore';
 import { getTestArena } from './test-arena-helper';
@@ -35,7 +34,7 @@ function compileOk(patch: ReturnType<typeof buildPatch>) {
 
 function stateFor(program: ReturnType<typeof compileOk>) {
   const schedule = program.schedule as ScheduleIR;
-  const sizes = computeStorageSizes(program.slotMeta);
+  const sizes = computeRuntimeStorageSizes(program.runtimeSlots);
   return createRuntimeState(
     sizes.f32,
     schedule.stateSlotCount,
@@ -63,7 +62,7 @@ function materializeTargets(program: ReturnType<typeof compileOk>): Set<number> 
 // ---------------------------------------------------------------------------
 
 describe('arena field materialization', () => {
-  it('arena contains materialized field values for materialize targets without objects mirror', () => {
+  it('arena contains materialized field values for materialize targets', () => {
     const patch = buildPatch((b) => {
       const time = b.addBlock('InfiniteTimeRoot');
       b.setPortDefault(time, 'periodAMs', 1000);
@@ -109,8 +108,6 @@ describe('arena field materialization', () => {
         expect(Number.isFinite(arenaRegion[i])).toBe(true);
         if (arenaRegion[i] !== 0) sawNonZero = true;
       }
-      const objectsValue = state.values.objects.get(slotId as any);
-      expect(objectsValue instanceof Float32Array).toBe(false);
       checked++;
     }
 

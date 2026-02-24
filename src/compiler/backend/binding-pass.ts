@@ -9,7 +9,13 @@
  */
 
 import type { OrchestratorIRBuilder } from "../ir/OrchestratorIRBuilder";
-import type { LowerEffects, StepRequest } from "../ir/lowerTypes";
+import type {
+  EventSlotRequest,
+  LowerEffects,
+  SlotRequest,
+  StateDecl,
+  StepRequest,
+} from "../ir/lowerTypes";
 import type { StableStateId } from "../ir/types";
 import type { StateSlotId, ValueSlot } from "../ir/Indices";
 import type { ValueRefExpr } from "../ir/lowerTypes";
@@ -75,6 +81,30 @@ export interface BindingResult {
   readonly diagnostics: readonly BindDiagnostic[];
 }
 
+type NormalizedLowerEffects = {
+  readonly stateDecls: readonly StateDecl[];
+  readonly stepRequests: readonly StepRequest[];
+  readonly slotRequests: readonly SlotRequest[];
+  readonly eventSlotRequests: readonly EventSlotRequest[];
+  readonly evalRequests: NonNullable<LowerEffects['evalRequests']>;
+};
+
+const EMPTY_STATE_DECLS: readonly StateDecl[] = [];
+const EMPTY_STEP_REQUESTS: readonly StepRequest[] = [];
+const EMPTY_SLOT_REQUESTS: readonly SlotRequest[] = [];
+const EMPTY_EVENT_SLOT_REQUESTS: readonly EventSlotRequest[] = [];
+const EMPTY_EVAL_REQUESTS: NonNullable<LowerEffects['evalRequests']> = [];
+
+function normalizeEffects(effects: LowerEffects): NormalizedLowerEffects {
+  return {
+    stateDecls: effects.stateDecls ?? EMPTY_STATE_DECLS,
+    stepRequests: effects.stepRequests ?? EMPTY_STEP_REQUESTS,
+    slotRequests: effects.slotRequests ?? EMPTY_SLOT_REQUESTS,
+    eventSlotRequests: effects.eventSlotRequests ?? EMPTY_EVENT_SLOT_REQUESTS,
+    evalRequests: effects.evalRequests ?? EMPTY_EVAL_REQUESTS,
+  };
+}
+
 /**
  * Internal mutable state for accumulating binding decisions.
  * Used only within bindEffects() - not exposed.
@@ -108,6 +138,7 @@ class BinderState {
  */
 export function bindEffects(inputs: BindInputs, builder: OrchestratorIRBuilder): BindingResult {
   const state = new BinderState();
+  const effects = normalizeEffects(inputs.effects);
 
   // Seed state map with known allocations from prior deterministic bind phases.
   if (inputs.existingState) {
@@ -117,7 +148,7 @@ export function bindEffects(inputs: BindInputs, builder: OrchestratorIRBuilder):
   }
 
   // Step 1: Allocate state from stateDecls (lexically sorted)
-  allocateStateDeterministic(inputs, state, builder);
+  allocateStateDeterministic(effects, inputs.existingState, state, builder);
 
   // Step 2: Create expr patches (all stateKey → resolvedSlot mappings)
   // These are identical to stateMap entries - just for explicitness
@@ -126,14 +157,14 @@ export function bindEffects(inputs: BindInputs, builder: OrchestratorIRBuilder):
   }
 
   // Step 3: Allocate slots from slotRequests (lexically sorted)
-  allocateSlotsDeterministic(inputs, state, builder);
+  allocateSlotsDeterministic(effects, inputs.origin, state, builder);
 
   // Step 4: Bind outputs (fill in ref.slot from slotMap)
   // Note: outputs come from the block's LowerResult, not from effects
   // The caller will provide outputs separately - we just prepare slotMap here
 
   // Step 5: Validate step requests (all stateKey references must resolve)
-  validateStepRequests(inputs, state, builder);
+  validateStepRequests(effects, inputs.origin, state, builder);
 
   return {
     stateMap: new Map(state.stateMap),
@@ -149,16 +180,11 @@ export function bindEffects(inputs: BindInputs, builder: OrchestratorIRBuilder):
  * Reuses existing state when provided (idempotency).
  */
 function allocateStateDeterministic(
-  inputs: BindInputs,
+  effects: NormalizedLowerEffects,
+  existingState: ReadonlyMap<StableStateId, StateSlotId> | undefined,
   state: BinderState,
   builder: OrchestratorIRBuilder
 ): void {
-  const { effects, existingState } = inputs;
-
-  if (!effects.stateDecls || effects.stateDecls.length === 0) {
-    return; // No state to allocate
-  }
-
   // Sort by StableStateId (lexical order)
   const sorted = [...effects.stateDecls].sort((a, b) => a.key.localeCompare(b.key));
 
@@ -190,21 +216,16 @@ function allocateStateDeterministic(
  * Allocate output slots deterministically (lexical order by portId).
  */
 function allocateSlotsDeterministic(
-  inputs: BindInputs,
+  effects: NormalizedLowerEffects,
+  origin: BindInputs['origin'],
   state: BinderState,
   builder: OrchestratorIRBuilder
 ): void {
-  const { effects } = inputs;
-
-  if (!effects.slotRequests || effects.slotRequests.length === 0) {
-    return; // No slots to allocate
-  }
-
   // Sort by portId (lexical order)
   const sorted = [...effects.slotRequests].sort((a, b) => a.portId.localeCompare(b.portId));
 
   for (const req of sorted) {
-    const slot = builder.allocTypedSlot(req.type, `${inputs.origin.blockId}.${req.portId}`);
+    const slot = builder.allocTypedSlot(req.type, `${origin.blockId}.${req.portId}`);
     state.slotMap.set(req.portId, slot);
   }
 }
@@ -215,16 +236,12 @@ function allocateSlotsDeterministic(
  *
  */
 function validateStepRequests(
-  inputs: BindInputs,
+  effects: NormalizedLowerEffects,
+  origin: BindInputs['origin'],
   state: BinderState,
   builder: OrchestratorIRBuilder
 ): void {
   void builder;
-  const { effects, origin } = inputs;
-
-  if (!effects.stepRequests || effects.stepRequests.length === 0) {
-    return; // No steps to validate
-  }
 
   for (const req of effects.stepRequests) {
     // Check if step requests reference a stateKey
@@ -265,18 +282,17 @@ function validateStepRequests(
 export function applyBinding(
   builder: OrchestratorIRBuilder,
   result: BindingResult,
-  effects: LowerEffects
+  rawEffects: LowerEffects
 ): void {
+  const effects = normalizeEffects(rawEffects);
   // Step 1: Apply expr patches (resolve state expressions)
   if (result.exprPatches.size > 0) {
     builder.resolveStateExprs(result.exprPatches);
   }
 
   // Step 2: Process step requests (mechanical execution)
-  if (effects.stepRequests) {
-    for (const req of effects.stepRequests) {
-      applyStepRequest(req, result, builder);
-    }
+  for (const req of effects.stepRequests) {
+    applyStepRequest(req, result, builder);
   }
 
   // Note: Slot registration and output binding happens at the call site,

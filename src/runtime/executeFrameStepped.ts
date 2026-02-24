@@ -33,7 +33,13 @@ import type { ValueSlot, StateSlotId } from '../compiler/ir/Indices';
 import { SCALAR_INSTANCE_ID, SYSTEM_PALETTE_SLOT } from '../compiler/ir/Indices';
 import { evaluateValueExprEvent } from './ValueExprEventEvaluator';
 import { materializeValueExpr } from './ValueExprMaterializer';
-import { arenaSlice, type ArenaSlotDescriptor } from './ArenaValueStore';
+import {
+  arenaDecodeToAoS,
+  arenaEncodeFromAoS,
+  arenaRead,
+  arenaWrite,
+  type ArenaSlotDescriptor,
+} from './ArenaValueStore';
 import {
   type SlotLookup,
   getExprAddressTable,
@@ -77,9 +83,8 @@ function writeArenaStrided(
     throw new Error(`writeArenaStrided: expected stride=${stride} for slot ${lookup.slot}, got ${lookup.stride}`);
   }
   const arenaDesc = resolveArenaDescriptor(slotToArena, lookup);
-  const o = arenaDesc.offset;
   for (let i = 0; i < stride; i++) {
-    state.arena[o + i] = src[i] as number;
+    arenaWrite(state.arena, arenaDesc, 0, i, src[i] as number);
   }
 }
 
@@ -90,7 +95,7 @@ function readCanonicalNumeric(
   component: number = 0,
 ): number {
   const arenaDesc = resolveArenaDescriptor(slotToArena, lookup);
-  return state.arena[arenaDesc.offset + component];
+  return arenaRead(state.arena, arenaDesc, 0, component);
 }
 
 function resolveNumericBuffer(
@@ -107,7 +112,7 @@ function resolveNumericBuffer(
       `resolveNumericBuffer: arena too small for slot ${slot} (need ${arenaDesc.offset + arenaDesc.length}, have ${state.arena.length})`,
     );
   }
-  return arenaSlice(state.arena, arenaDesc);
+  return arenaDecodeToAoS(state.arena, arenaDesc);
 }
 
 function ensureOutputBuffer(
@@ -130,7 +135,7 @@ function ensureOutputBuffer(
       `ensureOutputBuffer: arena too small for slot ${slot} (need ${arenaDesc.offset + arenaDesc.length}, have ${state.arena.length})`,
     );
   }
-  return arenaSlice(state.arena, arenaDesc);
+  return new Float32Array(length);
 }
 
 // =============================================================================
@@ -308,7 +313,6 @@ export function* executeFrameStepped(
           writtenSlots.set(targetSlot, readSlotValue(state, lookup, slotToArena));
         } else if (isNumericStorage(storage)) {
           const arenaDesc = resolveArenaDescriptor(slotToArena, lookup);
-          const arenaTarget = arenaSlice(state.arena, arenaDesc);
 
           const buffer = materializeValueExpr(
             step.expr,
@@ -317,9 +321,10 @@ export function* executeFrameStepped(
             1,
             state,
             program,
-            arenaTarget,
+            undefined,
             STEPPED_MATERIALIZE_SCRATCH,
           );
+          arenaEncodeFromAoS(state.arena, arenaDesc, buffer);
           if (buffer.length < stride) {
             throw new Error(
               `evalOne: materialized buffer too small for slot ${slot} (need ${stride}, got ${buffer.length})`
@@ -328,9 +333,6 @@ export function* executeFrameStepped(
           for (let i = 0; i < stride; i++) {
             state.tap?.recordSlotValue?.((slot + i) as ValueSlot, readCanonicalNumeric(slotToArena, state, lookup, i));
           }
-          state.cache.scalarValues[step.expr as number] = readCanonicalNumeric(slotToArena, state, lookup, 0);
-          state.cache.scalarStamps[step.expr as number] = state.cache.frameId;
-
           // Capture written slot
           writtenSlots.set(targetSlot, readSlotValue(state, lookup, slotToArena));
         } else {
@@ -367,10 +369,10 @@ export function* executeFrameStepped(
             `materialize: arena too small for slot ${step.target} (need ${arenaDesc.offset + arenaDesc.length}, have ${state.arena.length})`,
           );
         }
-        const arenaTarget = arenaSlice(state.arena, arenaDesc);
         const buffer = materializeValueExpr(
-          veId, program.valueExprs, step.instanceId, count, state, program, arenaTarget, STEPPED_MATERIALIZE_SCRATCH,
+          veId, program.valueExprs, step.instanceId, count, state, program, undefined, STEPPED_MATERIALIZE_SCRATCH,
         );
+        arenaEncodeFromAoS(state.arena, arenaDesc, buffer);
 
         state.tap?.recordFieldValue?.(step.target, buffer);
 
@@ -413,6 +415,11 @@ export function* executeFrameStepped(
 
       case 'continuityApply': {
         const { policy, baseSlot, outputSlot } = step;
+        void policy;
+        const outputDesc = slotToArena.get(outputSlot);
+        if (!outputDesc || outputDesc.offset < 0 || outputDesc.length <= 0) {
+          throw new Error(`Continuity: missing arena descriptor for output slot ${outputSlot}`);
+        }
         const baseBuffer = resolveNumericBuffer(slotToArena, state, baseSlot);
         const outputBuffer = baseSlot === outputSlot
           ? baseBuffer
@@ -424,6 +431,7 @@ export function* executeFrameStepped(
           if (!buffer) throw new Error(`Continuity: Buffer not found for slot ${slot}`);
           return buffer;
         });
+        arenaEncodeFromAoS(state.arena, outputDesc, outputBuffer);
         break;
       }
 

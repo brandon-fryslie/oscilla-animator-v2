@@ -29,11 +29,6 @@ import type {
 import { isAxisInst, FLOAT, INT, VEC2, VEC3, COLOR, BOOL,  CAMERA_PROJECTION } from '../../core/canonical-types';
 import type { ShapeDescIR } from './program';
 
-// Type aliases for backward compat
-type Cardinality = CardinalityValue;
-type Temporality = TemporalityValue;
-type Binding = BindingValue;
-
 // =============================================================================
 // Main Bridge Function: Extent → ResolvedExtent
 // =============================================================================
@@ -92,7 +87,7 @@ export function bridgeExtentToAxesDescIR(extent: Extent): {
  * - many(instance) → "many"
  */
 export function bridgeCardinalityToIR(
-  cardinality: Cardinality
+  cardinality: CardinalityValue
 ): 'zero' | 'one' | 'many' {
   switch (cardinality.kind) {
     case 'zero':
@@ -126,7 +121,7 @@ export function bridgeCardinalityToIR(
  * - discrete → "discrete"
  */
 export function bridgeTemporalityToIR(
-  temporality: Temporality
+  temporality: TemporalityValue
 ): 'continuous' | 'discrete' {
   switch (temporality.kind) {
     case 'continuous':
@@ -176,7 +171,7 @@ export function bridgeBranchToIR(_branch: string): 'single' | 'branched' {
  * - strong/weak binding → 'custom' (for v0)
  */
 export function bridgeBindingToIdentityIR(
-  binding: Binding
+  binding: BindingValue
 ):
   | { readonly kind: 'none' }
   | {

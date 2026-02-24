@@ -8,7 +8,7 @@ import { describe, it, expect } from 'vitest';
 import { compile } from '../../compiler/compile';
 import { buildPatch } from '../../graph/Patch';
 import { createRuntimeState } from '../RuntimeState';
-import { computeStorageSizes } from '../../compiler/ir/program';
+import { computeRuntimeStorageSizes } from '../../compiler/ir/program';
 import type { CompiledProgramIR } from '../../compiler/ir/program';
 import type { ScheduleIR } from '../../compiler/backend/schedule-program';
 import { getTestArena } from './test-arena-helper';
@@ -56,7 +56,7 @@ function compileSimplePatch(): CompiledProgramIR {
 
 function createStateForProgram(program: CompiledProgramIR) {
   const schedule = program.schedule as ScheduleIR;
-  const sizes = computeStorageSizes(program.slotMeta);
+  const sizes = computeRuntimeStorageSizes(program.runtimeSlots);
   return createRuntimeState(
     sizes.f32,
     schedule.stateSlotCount ?? 0,
@@ -194,23 +194,11 @@ describe('StepDebugSession', () => {
       expect(frame1).toBe(frame2);
     });
 
-    it('does not read legacy values.objects during stepped execution', () => {
+    it('completes stepped execution without legacy object storage dependencies', () => {
       const program = compileSimplePatch();
       const state = createStateForProgram(program);
       const arena = getTestArena();
       const session = new StepDebugSession(program, state, arena);
-
-      const throwingObjects = new Proxy(new Map(), {
-        get(_target, prop) {
-          if (prop === 'get' || prop === 'set' || prop === 'has' || prop === 'delete' || prop === 'clear') {
-            return () => {
-              throw new Error('legacy values.objects access');
-            };
-          }
-          return undefined;
-        },
-      });
-      state.values.objects = throwingObjects as unknown as Map<any, unknown>;
 
       session.startFrame(100);
       expect(() => session.finishFrame()).not.toThrow();

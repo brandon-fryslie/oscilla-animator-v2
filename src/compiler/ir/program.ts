@@ -281,11 +281,11 @@ export interface SlotMetaEntry {
   readonly slot: ValueSlot;
 
   /**
-   * Physical storage class (metadata/backward-compat visibility).
-   * [LAW:single-enforcer] Runtime execution does not consume legacy classes;
-   * operational addressing flows through RuntimeSlotEntry.storage.
+   * Physical storage class for metadata/debug consumers.
+   * [LAW:one-source-of-truth] Slot metadata mirrors canonical runtime ABI
+   * vocabulary only; legacy f64/object labels are not part of this contract.
    */
-  readonly storage: 'f64' | 'f32' | 'i32' | 'u32' | 'object' | 'shape2d';
+  readonly storage: 'f32' | 'i32' | 'u32' | 'shape2d';
 
   /**
    * REQUIRED: absolute offset into the backing store for this storage class.
@@ -509,41 +509,50 @@ export interface CombineDebugIR {
 // =============================================================================
 
 /**
- * Compute required storage sizes from slot metadata.
+ * Canonical runtime storage size map.
+ */
+export interface RuntimeStorageSizes {
+  f32: number;
+  i32: number;
+  u32: number;
+  shape2d: number;
+}
+
+type StorageExtentEntry = {
+  readonly storage: RuntimeSlotEntry['storage'];
+  readonly offset: number;
+  readonly stride: number;
+};
+
+function accumulateStorageSizes(entries: readonly StorageExtentEntry[]): RuntimeStorageSizes {
+  const sizes: RuntimeStorageSizes = {
+    f32: 0,
+    i32: 0,
+    u32: 0,
+    shape2d: 0,
+  };
+  for (const entry of entries) {
+    const requiredSize = entry.offset + entry.stride;
+    if (requiredSize > sizes[entry.storage]) {
+      sizes[entry.storage] = requiredSize;
+    }
+  }
+  return sizes;
+}
+
+/**
+ * Compute required storage sizes from runtime slot metadata.
  *
  * Returns the number of cells needed for each storage class.
  * Use these values to create properly-sized runtime state buffers.
  *
- * @param slotMeta - Slot metadata from compiled program
+ * @param runtimeSlots - Canonical runtime slots from compiled program
  * @returns Object with storage size for each class
  *
  * @example
- * const sizes = computeStorageSizes(program.slotMeta);
+ * const sizes = computeRuntimeStorageSizes(program.runtimeSlots);
  * const state = createRuntimeState(sizes.f32);
  */
-export function computeStorageSizes(slotMeta: readonly SlotMetaEntry[]): {
-  f64: number;
-  f32: number;
-  i32: number;
-  u32: number;
-  object: number;
-  shape2d: number;
-} {
-  const sizes = {
-    f64: 0,
-    f32: 0,
-    i32: 0,
-    u32: 0,
-    object: 0,
-    shape2d: 0,
-  };
-
-  for (const meta of slotMeta) {
-    const requiredSize = meta.offset + meta.stride;
-    if (requiredSize > sizes[meta.storage]) {
-      sizes[meta.storage] = requiredSize;
-    }
-  }
-
-  return sizes;
+export function computeRuntimeStorageSizes(runtimeSlots: readonly RuntimeSlotEntry[]): RuntimeStorageSizes {
+  return accumulateStorageSizes(runtimeSlots);
 }

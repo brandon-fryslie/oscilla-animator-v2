@@ -24,6 +24,7 @@ import { instanceId } from '../../core/ids';
 import type { RuntimeState } from '../RuntimeState';
 import { ExternalChannelSystem } from '../ExternalChannel';
 import type { ValueSlot } from '../../types';
+import { getTestSlotBuffer, setTestSlotBuffer } from './slot-buffer-helper';
 
 const TRACE = process.env.OSCILLA_DEBUG_TEST_TRACE === '1';
 
@@ -48,7 +49,6 @@ function createTestRuntimeState(): RuntimeState {
       energy: 0.5,
     },
     values: {
-      objects: new Map(),
       shapeFields: new Map(),
       shape2d: new Uint32Array(0),
     },
@@ -61,9 +61,7 @@ function createTestRuntimeState(): RuntimeState {
     events: new Map(),
     cache: {
       frameId: 0,
-      scalarValues: new Float64Array(100),
-      scalarStamps: new Uint32Array(100),
-      scalarValueExprValues: new Float64Array(0),
+      scalarValueExprValues: new Float32Array(0),
       scalarValueExprStamps: new Uint32Array(0),
 
       valueExprFieldBuffers: [],
@@ -290,8 +288,8 @@ describe('Project Policy Domain Change', () => {
     const outputBuffer = new Float32Array(8);
 
     // Store buffers in state
-    state.values.objects.set(baseSlot, newBasePositions);
-    state.values.objects.set(outputSlot, outputBuffer);
+    setTestSlotBuffer(state, baseSlot, newBasePositions);
+    setTestSlotBuffer(state, outputSlot, outputBuffer);
 
     // Set up mapping
     const mapping: MappingState = {
@@ -315,11 +313,11 @@ describe('Project Policy Domain Change', () => {
 
     // Apply continuity
     applyContinuity(step, state, (slot) => {
-      return state.values.objects.get(slot) as Float32Array;
+      return getTestSlotBuffer(state, slot) as Float32Array;
     });
 
     // Get the output
-    const result = state.values.objects.get(outputSlot) as Float32Array;
+    const result = getTestSlotBuffer(state, outputSlot) as Float32Array;
 
     // For mapped elements (0, 1, 2), output should be CLOSE to old positions
     // (not exactly equal because slew has 16ms of movement, but very close)
@@ -497,8 +495,8 @@ describe('Project Policy Domain Change', () => {
       }
 
       // Store buffers
-      state.values.objects.set(baseSlot, basePositions);
-      state.values.objects.set(outputSlot, outputBuffer);
+      setTestSlotBuffer(state, baseSlot, basePositions);
+      setTestSlotBuffer(state, outputSlot, outputBuffer);
 
       // Set up mapping if domain changed
       if (isDomainChange && newToOldMapping) {
@@ -528,13 +526,13 @@ describe('Project Policy Domain Change', () => {
 
       // Apply continuity
       applyContinuity(step, state, (slot) => {
-        return state.values.objects.get(slot) as Float32Array;
+        return getTestSlotBuffer(state, slot) as Float32Array;
       });
 
       // Update time tracking (like finalizeContinuityFrame does)
       state.continuity.lastTModelMs = tMs;
 
-      return state.values.objects.get(outputSlot) as Float32Array;
+      return getTestSlotBuffer(state, outputSlot) as Float32Array;
     };
 
     // PHASE 1: Initialize with 5 elements, run several frames to reach steady state
@@ -657,8 +655,8 @@ describe('Project Policy Domain Change', () => {
 
     // Run a few frames to establish steady state
     let outputBuffer = new Float32Array(6);
-    state.values.objects.set(baseSlot, initialPositions);
-    state.values.objects.set(outputSlot, outputBuffer);
+    setTestSlotBuffer(state, baseSlot, initialPositions);
+    setTestSlotBuffer(state, outputSlot, outputBuffer);
 
     const step: StepContinuityApply = {
       kind: 'continuityApply',
@@ -685,7 +683,7 @@ describe('Project Policy Domain Change', () => {
       };
       state.continuity.domainChangeThisFrame = false;
       state.continuity.changedInstancesThisFrame.clear();
-      applyContinuity(step, state, (slot) => state.values.objects.get(slot) as Float32Array);
+      applyContinuity(step, state, (slot) => getTestSlotBuffer(state, slot) as Float32Array);
       state.continuity.lastTModelMs = t;
     }
 
@@ -700,8 +698,8 @@ describe('Project Policy Domain Change', () => {
     ]);
 
     outputBuffer = new Float32Array(10);
-    state.values.objects.set(baseSlot, newBasePositions);
-    state.values.objects.set(outputSlot, outputBuffer);
+    setTestSlotBuffer(state, baseSlot, newBasePositions);
+    setTestSlotBuffer(state, outputSlot, outputBuffer);
 
     const mapping: MappingState = {
       newToOld: new Int32Array([0, 1, 2, -1, -1]),
@@ -721,7 +719,7 @@ describe('Project Policy Domain Change', () => {
     };
 
     // Apply domain change frame
-    applyContinuity(step, state, (slot) => state.values.objects.get(slot) as Float32Array);
+    applyContinuity(step, state, (slot) => getTestSlotBuffer(state, slot) as Float32Array);
     state.continuity.lastTModelMs = 116;
 
     // Capture gauge values right after domain change
@@ -758,7 +756,7 @@ describe('Project Policy Domain Change', () => {
       // IMPORTANT: Base positions continue to change (simulating rotating spiral)
       // This is what causes drift if gauge doesn't decay
       // For simplicity, we'll keep base constant in this test (gauge decay should work either way)
-      applyContinuity(step, state, (slot) => state.values.objects.get(slot) as Float32Array);
+      applyContinuity(step, state, (slot) => getTestSlotBuffer(state, slot) as Float32Array);
       state.continuity.lastTModelMs = t;
 
       // Sample gauge magnitude (Euclidean norm of first element's x,y gauge)
@@ -818,8 +816,8 @@ describe('Project Policy Domain Change', () => {
 
     const base = new Float32Array([1, 2, 3, 4]);
     const output = new Float32Array(base.length);
-    state.values.objects.set(baseSlot, base);
-    state.values.objects.set(outputSlot, output);
+    setTestSlotBuffer(state, baseSlot, base);
+    setTestSlotBuffer(state, outputSlot, output);
 
     state.continuity.mappings.set(instId, { newToOld: new Int32Array([3, 2, 1, 0]) });
     state.continuity.changedInstancesThisFrame.clear();
@@ -836,7 +834,7 @@ describe('Project Policy Domain Change', () => {
       stride: 1,
     };
 
-    applyContinuity(step, state, (slot) => state.values.objects.get(slot) as Float32Array);
+    applyContinuity(step, state, (slot) => getTestSlotBuffer(state, slot) as Float32Array);
 
     const alpha = 1 - Math.exp(-16 / 120);
     const expected = [
@@ -891,8 +889,8 @@ describe('Project Policy Domain Change', () => {
         if (output.length !== base.length) {
           output = new Float32Array(base.length);
         }
-        state.values.objects.set(baseSlot, base);
-        state.values.objects.set(outputSlot, output);
+        setTestSlotBuffer(state, baseSlot, base);
+        setTestSlotBuffer(state, outputSlot, output);
         state.time = {
           tAbsMs: tMs,
           tMs,
@@ -914,7 +912,7 @@ describe('Project Policy Domain Change', () => {
           state.continuity.changedInstancesThisFrame.clear();
         }
 
-        applyContinuity(step, state, (slot) => state.values.objects.get(slot) as Float32Array);
+        applyContinuity(step, state, (slot) => getTestSlotBuffer(state, slot) as Float32Array);
         state.continuity.lastTModelMs = tMs;
 
         const target = state.continuity.targets.get(targetId)!;

@@ -11,7 +11,7 @@ import { describe, it, expect } from 'vitest';
 import { buildPatch } from '../../graph';
 import { compile } from '../../compiler/compile';
 import type { ScheduleIR } from '../../compiler/backend/schedule-program';
-import { computeStorageSizes } from '../../compiler/ir/program';
+import { computeRuntimeStorageSizes } from '../../compiler/ir/program';
 import { createRuntimeState } from '../RuntimeState';
 import { executeFrame } from '../ScheduleExecutor';
 import { arenaSlice } from '../ArenaValueStore';
@@ -30,7 +30,7 @@ function compileOk(patch: ReturnType<typeof buildPatch>) {
 
 function stateFor(program: ReturnType<typeof compileOk>) {
   const schedule = program.schedule as ScheduleIR;
-  const sizes = computeStorageSizes(program.slotMeta);
+  const sizes = computeRuntimeStorageSizes(program.runtimeSlots);
   return createRuntimeState(
     sizes.f32,
     schedule.stateSlotCount,
@@ -85,8 +85,7 @@ function makeRenderPatch() {
 // ── assertion helper ──────────────────────────────────────────────────────────
 
 /**
- * For each continuityApply outputSlot, assert arena contains finite data and
- * that no Float32 objects mirror is retained for that slot.
+ * For each continuityApply outputSlot, assert arena contains finite data.
  * Returns number of slots actually verified (must be > 0).
  */
 function assertContinuityOutputsInArena(
@@ -103,8 +102,6 @@ function assertContinuityOutputsInArena(
     for (let i = 0; i < arenaRegion.length; i++) {
       expect(Number.isFinite(arenaRegion[i]), `policy=${policyKind} outputSlot=${outputSlot} i=${i}`).toBe(true);
     }
-    const objectsValue = state.values.objects.get(outputSlot as any);
-    expect(objectsValue instanceof Float32Array).toBe(false);
     checked++;
   }
   return checked;

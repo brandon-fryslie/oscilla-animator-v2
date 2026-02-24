@@ -12,7 +12,13 @@ import type { ConstantProvenanceEntry, InstanceCountProvenanceEntry } from "../i
 import { isExprRef, type ValueRefExpr, type CollectInputEntry } from "../ir/lowerTypes";
 import type { InstanceId, StateSlotId } from "../ir/Indices";
 import type { StableStateId } from "../ir/types";
-import { getBlockDefinition, type LowerCtx, type LowerResult, hasLowerOutputsOnly } from "../../blocks/registry";
+import {
+  getBlockDefinition,
+  type LowerCtx,
+  type LowerOutputsOnlyResult,
+  type LowerResult,
+  hasLowerOutputsOnly,
+} from "../../blocks/registry";
 import type { EventHub } from "../../events/EventHub";
 import { payloadStride, type CanonicalType, requireInst, withInstance } from "../../core/canonical-types";
 import { normalizeCanonicalName } from "../../core/canonical-name";
@@ -43,6 +49,17 @@ function getExistingStateMap(builder: OrchestratorIRBuilder): ReadonlyMap<Stable
     stateMap.set(mapping.stateId, mapping.slotStart as StateSlotId);
   }
   return stateMap;
+}
+
+function requireBlockEffects(
+  effects: LowerResult['effects'] | undefined,
+  block: Block,
+  phase: 'phase1' | 'phase2',
+): LowerResult['effects'] {
+  if (effects) return effects;
+  throw new Error(
+    `Block ${block.type}#${block.id} ${phase} lowering must return effects (empty arrays allowed, undefined is invalid).`,
+  );
 }
 
 
@@ -719,8 +736,9 @@ function lowerBlockInstance(
     }
 
     // Process effects using binding pass (WI-4)
+    const blockEffects = requireBlockEffects(result.effects, block, 'phase2');
     const bindingInputs = {
-      effects: result.effects,
+      effects: blockEffects,
       existingState: getExistingStateMap(builder),
       origin: { blockId: block.id },
     };
@@ -738,7 +756,7 @@ function lowerBlockInstance(
     }
 
     // Apply binding (mechanical execution)
-    applyBinding(builder, binding, result.effects);
+    applyBinding(builder, binding, blockEffects);
 
     // Bind outputs using the new helper
     const boundOutputsMap = bindOutputs(
@@ -926,12 +944,12 @@ function lowerSCCTwoPass(
         const config = block.params;
 
         // Call lowerOutputsOnly
-        const partialResult = blockDef.lowerOutputsOnly!({ ctx, config });
+        const partialResult: LowerOutputsOnlyResult = blockDef.lowerOutputsOnly!({ ctx, config });
         // Store partial result for phase 2
         phase1Results.set(blockIndex, partialResult);
 
         // BINDING PASS for phase 1: process effects using new binding pass (WI-4)
-        const phase1Effects = partialResult.effects ?? {};
+        const phase1Effects = requireBlockEffects(partialResult.effects, block, 'phase1');
         const bindingInputs = {
           effects: phase1Effects,
           existingState: getExistingStateMap(builder),
@@ -1255,7 +1273,7 @@ function repairUnresolvedOutputInstances(
   instanceContextByBlock: Map<BlockIndex, InstanceId>,
 ): void {
   const instances = builder.getInstances();
-  const slotMeta = builder.getSlotMetaInputs() as unknown as Map<number, { readonly type: CanonicalType; readonly stride: number }>;
+  const slotLayoutInputs = builder.getSlotLayoutInputs() as unknown as Map<number, { readonly type: CanonicalType; readonly stride: number }>;
 
   // [LAW:dataflow-not-control-flow] Repair executes to fixpoint; convergence is data.
   let changed = true;
@@ -1298,9 +1316,9 @@ function repairUnresolvedOutputInstances(
         }
 
         if (ref.slot !== undefined) {
-          const slotInfo = slotMeta.get(ref.slot as number);
+          const slotInfo = slotLayoutInputs.get(ref.slot as number);
           if (slotInfo) {
-            slotMeta.set(ref.slot as number, {
+            slotLayoutInputs.set(ref.slot as number, {
               ...slotInfo,
               type: rewrittenType,
               stride: payloadStride(rewrittenType.payload),
@@ -1358,8 +1376,8 @@ function reportUnresolvedSlotInstances(
   errors: CompileError[],
 ): void {
   const instances = builder.getInstances();
-  const slotMeta = builder.getSlotMetaInputs();
-  for (const [slot, meta] of slotMeta) {
+  const slotLayoutInputs = builder.getSlotLayoutInputs();
+  for (const [slot, meta] of slotLayoutInputs) {
     const card = requireInst(meta.type.extent.cardinality, 'cardinality');
     if (card.kind !== 'many') continue;
     const inst = card.instance.instanceId;

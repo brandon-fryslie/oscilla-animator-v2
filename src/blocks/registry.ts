@@ -117,6 +117,25 @@ export interface LowerResult {
   readonly effects: import('../compiler/ir/lowerTypes').LowerEffects;
 }
 
+/**
+ * Phase-1 lower result for `lowerOutputsOnly`.
+ *
+ * // [LAW:single-enforcer] Effects declaration is mandatory at the lowering
+ * // boundary; orchestrator code must not invent fallback effects.
+ */
+export interface LowerOutputsOnlyResult {
+  /** Map of port ID to ValueRef (required) */
+  readonly outputsById: Record<string, import('../compiler/ir/lowerTypes').ValueRefExpr>;
+  /** Declarative effects (required). */
+  readonly effects: import('../compiler/ir/lowerTypes').LowerEffects;
+  /** Optional instance context propagated to downstream blocks. */
+  readonly instanceContext?: InstanceId;
+  /** Optional state slot identifier emitted by phase-1 lowering. */
+  readonly stateSlot?: StateSlotId;
+  /** Optional stable key for cross-phase state identity. */
+  readonly stateKey?: StableStateId;
+}
+
 // =============================================================================
 // Block Definition Types
 // =============================================================================
@@ -414,7 +433,7 @@ export interface BlockDef {
    * Blocks like Lag and Phasor where output depends on input within-frame
    * do NOT benefit from this and should omit it.
    */
-  readonly lowerOutputsOnly?: (args: { ctx: LowerCtx; config: Record<string, unknown> }) => Partial<LowerResult>;
+  readonly lowerOutputsOnly?: (args: { ctx: LowerCtx; config: Record<string, unknown> }) => LowerOutputsOnlyResult;
 
   // Optional tags
   readonly tags?: {

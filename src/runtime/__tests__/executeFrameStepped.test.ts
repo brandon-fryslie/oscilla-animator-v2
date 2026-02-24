@@ -12,7 +12,7 @@ import { executeFrame } from '../ScheduleExecutor';
 import { executeFrameStepped } from '../executeFrameStepped';
 import { getExprAddressTable } from '../ExprAddressTable';
 import { createRuntimeState } from '../RuntimeState';
-import { computeStorageSizes } from '../../compiler/ir/program';
+import { computeRuntimeStorageSizes } from '../../compiler/ir/program';
 import type { CompiledProgramIR } from '../../compiler/ir/program';
 import type { ScheduleIR } from '../../compiler/backend/schedule-program';
 import { getTestArena } from './test-arena-helper';
@@ -59,7 +59,7 @@ function compileSimplePatch() {
 
 function createStateForProgram(program: CompiledProgramIR) {
   const schedule = program.schedule as ScheduleIR;
-  const sizes = computeStorageSizes(program.slotMeta);
+  const sizes = computeRuntimeStorageSizes(program.runtimeSlots);
   return createRuntimeState(
     sizes.f32,
     schedule.stateSlotCount ?? 0,
@@ -78,7 +78,7 @@ describe('executeFrameStepped', () => {
     const arena = getTestArena();
 
     const gen = executeFrameStepped(brokenProgram, state, arena, 100);
-    expect(() => gen.next()).toThrow(/runtime address derivation from slotMeta is forbidden/);
+    expect(() => gen.next()).toThrow(/legacy metadata-based runtime address derivation is forbidden/);
   });
 
   it('consumes compiler-precomputed runtime address table contract', () => {

@@ -1039,11 +1039,13 @@ describe('Forbidden Patterns (Type System Invariants)', () => {
         ...grepSrc('program\\.slotMeta', 'src/runtime/ScheduleExecutor.ts'),
         ...grepSrc('program\\.slotMeta', 'src/runtime/executeFrameStepped.ts'),
         ...grepSrc('program\\.slotMeta', 'src/runtime/ValueExprMaterializer.ts'),
+        ...grepSrc('program\\.slotMeta', 'src/services/CompileOrchestrator.ts'),
+        ...grepSrc('program\\.slotMeta', 'src/services/mapDebugEdges.ts'),
       ];
       const filtered = filterAllowlist(rawMatches, [/\.test\./, /__tests__/]);
       expect(
         filtered,
-        'Execution modules must not access program.slotMeta directly.\n' +
+        'Execution/service modules must not access program.slotMeta directly.\n' +
         'Use getExprAddressTable(program) as the canonical runtime addressing boundary.\n' +
         'Found violations:\n' + filtered.join('\n')
       ).toEqual([]);
@@ -1082,6 +1084,20 @@ describe('Forbidden Patterns (Type System Invariants)', () => {
         filtered,
         'Legacy IRBuilder interface file imports are forbidden.\n' +
         'Use BlockIRBuilder or OrchestratorIRBuilder contracts instead.\n' +
+        'Found violations:\n' + filtered.join('\n')
+      ).toEqual([]);
+    });
+
+    it('compiler pass types must not carry legacy blockOutputTypes compatibility maps', () => {
+      const rawMatches = [
+        ...grepSrc('\\bblockOutputTypes\\b', 'src/compiler/ir/patches.ts'),
+        ...grepSrc('\\bblockOutputTypes\\b', 'src/compiler/frontend/analyze-type-graph.ts'),
+      ];
+      const filtered = filterAllowlist(rawMatches, [/\.test\./, /__tests__/]);
+      expect(
+        filtered,
+        'TypedPatch must not carry legacy blockOutputTypes compatibility seams.\n' +
+        'Pass2 output should be the validated TypeResolvedPatch shape only.\n' +
         'Found violations:\n' + filtered.join('\n')
       ).toEqual([]);
     });
@@ -1189,6 +1205,21 @@ describe('Forbidden Patterns (Type System Invariants)', () => {
       ).toEqual([]);
     });
 
+    it('runtime must not maintain duplicate scalar shadow caches', () => {
+      const rawMatches = [
+        ...grepSrc('scalarValues\\b|scalarStamps\\b', 'src/runtime/RuntimeState.ts'),
+        ...grepSrc('scalarValues\\b|scalarStamps\\b', 'src/runtime/ScheduleExecutor.ts'),
+        ...grepSrc('scalarValues\\b|scalarStamps\\b', 'src/runtime/executeFrameStepped.ts'),
+        ...grepSrc('scalarValues\\b|scalarStamps\\b', 'src/runtime/StepDebugSession.ts'),
+      ];
+      const filtered = filterAllowlist(rawMatches, [/\.test\./, /__tests__/]);
+      expect(
+        filtered,
+        'Runtime must use a single scalar evaluator cache surface.\n' +
+        'Found violations:\n' + filtered.join('\n')
+      ).toEqual([]);
+    });
+
   });
 
   describe('WebGPU Prereq Guards (W5)', () => {
@@ -1205,7 +1236,10 @@ describe('Forbidden Patterns (Type System Invariants)', () => {
     });
 
     it('lower-blocks must not branch on optional effects mode', () => {
-      const rawMatches = grepSrc('if \\(result\\.effects\\)|if \\(partialResult\\.effects\\)', 'src/compiler/backend/lower-blocks.ts');
+      const rawMatches = grepSrc(
+        'if \\(result\\.effects\\)|if \\(partialResult\\.effects\\)|effects\\s*\\?\\?\\s*\\{\\}',
+        'src/compiler/backend/lower-blocks.ts',
+      );
       const filtered = filterAllowlist(rawMatches, [/\.test\./, /__tests__/]);
       expect(
         filtered,
@@ -1221,7 +1255,7 @@ describe('Forbidden Patterns (Type System Invariants)', () => {
       const filtered = filterAllowlist(rawMatches, [
         /\.test\./,
         /__tests__/,
-        /^207:/,
+        /origin\.blockId/,
       ]);
       expect(
         filtered,
@@ -1239,12 +1273,16 @@ describe('Forbidden Patterns (Type System Invariants)', () => {
       const rawMatches = [
         ...grepSrc('state:\\s*Float64Array', 'src/runtime/RuntimeState.ts'),
         ...grepSrc('new Float64Array\\(stateSlotCount\\)', 'src/runtime/RuntimeState.ts'),
+        ...grepSrc('scalarValues:\\s*Float64Array|scalarValueExprValues:\\s*Float64Array', 'src/runtime/RuntimeState.ts'),
+        ...grepSrc('new Float64Array\\(maxScalarExprs\\)|new Float64Array\\(maxValueExprs\\)', 'src/runtime/RuntimeState.ts'),
+        ...grepSrc('Float32Array \\| Float64Array|Float64Array\\)', 'src/runtime/ValueExprScalarEvaluator.ts'),
+        ...grepSrc('new Float64Array\\(', 'src/runtime/ValueInspector.ts'),
         ...grepSrc('oldState:\\s*Float64Array|newState:\\s*Float64Array', 'src/runtime/StateMigration.ts'),
       ];
       const filtered = filterAllowlist(rawMatches, [/\.test\./, /__tests__/]);
       expect(
         filtered,
-        'Persistent runtime state slots must use Float32Array.\n' +
+        'Runtime state/cache/evaluator numeric storage must use Float32Array.\n' +
         'Found violations:\n' + filtered.join('\n')
       ).toEqual([]);
     });

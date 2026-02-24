@@ -271,8 +271,8 @@ export class StepDebugSession {
   getCachedValue(exprId: ValueExprId): number | null {
     const numId = exprId as number;
     const cache = this._state.cache;
-    if (cache.scalarStamps[numId] === cache.frameId) {
-      return cache.scalarValues[numId];
+    if (cache.scalarValueExprStamps[numId] === cache.frameId) {
+      return cache.scalarValueExprValues[numId];
     }
     return null;
   }

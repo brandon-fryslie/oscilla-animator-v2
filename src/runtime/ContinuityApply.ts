@@ -399,6 +399,8 @@ export function applyContinuity(
   state: RuntimeState,
   getBuffer: (slot: ValueSlot) => Float32Array
 ): void {
+  // [LAW:one-source-of-truth] Continuity kernels operate on AoS/interleaved
+  // working buffers; runtime frame execution owns SoA<->AoS arena transcoding.
   const { targetKey, instanceId, policy, baseSlot, outputSlot, semantic, stride } = step;
   const targetId = targetKey as StableTargetId;
   const instanceChangedThisFrame = state.continuity.changedInstancesThisFrame.has(instanceId);

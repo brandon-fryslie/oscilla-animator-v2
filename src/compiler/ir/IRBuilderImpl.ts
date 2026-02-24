@@ -57,7 +57,7 @@ export class IRBuilderImpl implements OrchestratorIRBuilder {
   private scalarSlots = new Map<number, ValueSlot>();
   private fieldSlots = new Map<number, ValueSlot>();
   private eventSlots = new Map<ValueExprId, EventSlotId>();
-  private slotMeta = new Map<ValueSlot, { type: CanonicalType; stride: number }>();
+  private slotLayoutInputs = new Map<ValueSlot, { type: CanonicalType; stride: number }>();
   private schedule: TimeModelIR = { kind: 'infinite', periodAMs: 10000, periodBMs: 10000 };
   private renderGlobals: CameraDeclIR[] = [];
   private _currentBlockId: BlockId | null = null;
@@ -469,13 +469,13 @@ export class IRBuilderImpl implements OrchestratorIRBuilder {
   allocTypedSlot(type: CanonicalType, label?: string): ValueSlot {
     const slot = this.slotCounter++ as ValueSlot;
     const stride = payloadStride(type.payload);
-    this.slotMeta.set(slot, { type, stride });
+    this.slotLayoutInputs.set(slot, { type, stride });
     return slot;
   }
 
   registerSlotType(slot: ValueSlot, type: CanonicalType): void {
     const stride = payloadStride(type.payload);
-    this.slotMeta.set(slot, { type, stride });
+    this.slotLayoutInputs.set(slot, { type, stride });
   }
 
   registerScalarSlot(exprId: ValueExprId, slot: ValueSlot): void {
@@ -675,8 +675,8 @@ export class IRBuilderImpl implements OrchestratorIRBuilder {
     return this.slotCounter;
   }
 
-  getSlotMetaInputs(): ReadonlyMap<ValueSlot, { readonly type: CanonicalType; readonly stride: number }> {
-    return this.slotMeta;
+  getSlotLayoutInputs(): ReadonlyMap<ValueSlot, { readonly type: CanonicalType; readonly stride: number }> {
+    return this.slotLayoutInputs;
   }
 
   getValueExpr(id: ValueExprId): ValueExpr | undefined {

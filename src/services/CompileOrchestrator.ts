@@ -307,6 +307,12 @@ export async function compileAndSwap(
   }
 
   const program = result.program;
+  const runtimeAddressTable = program.runtimeAddressTable;
+  if (!runtimeAddressTable?.slotLookup) {
+    // [LAW:single-enforcer] Runtime slot cardinality comes from the compiler
+    // runtime-address contract; orchestrator must not derive from legacy metadata.
+    throw new Error('[compile] runtimeAddressTable.slotLookup is missing - compiler/runtime contract violation');
+  }
 
   // Get schedule info
   const newSchedule = program.schedule as {
@@ -314,12 +320,21 @@ export async function compileAndSwap(
     stateMappings?: readonly any[];
     instances?: ReadonlyMap<string, any>;
   };
-  const newSlotCount = program.slotMeta.length;
   const newStateSlotCount = newSchedule?.stateSlotCount ?? 0;
   const newStateMappings = newSchedule?.stateMappings ?? [];
   const newEventSlotCount = (newSchedule as { eventSlotCount?: number })?.eventSlotCount ?? 0;
   const newEventCount = (newSchedule as { eventCount?: number })?.eventCount ?? 0;
   const newValueExprCount = program.valueExprs?.nodes.length ?? 0;
+  // [LAW:one-source-of-truth] Shape2D bank sizing derives from the canonical
+  // runtime address table rather than ad-hoc slot metadata scans.
+  let newShape2DSlotCount = 0;
+  for (const lookup of runtimeAddressTable.slotLookup.values()) {
+    if (lookup.storage !== 'shape2d') continue;
+    const end = lookup.offset + lookup.stride;
+    if (end > newShape2DSlotCount) {
+      newShape2DSlotCount = end;
+    }
+  }
 
   // For recompile: detect domain changes
   if (!isInitial && state.currentProgram && onDomainChange) {
@@ -339,12 +354,12 @@ export async function compileAndSwap(
   // Create new RuntimeState from preserved SessionState + fresh ProgramState
   state.currentState = createRuntimeStateFromSession(
     state.sessionState!,
-    newSlotCount,
     newStateSlotCount,
     newEventSlotCount,
     newEventCount,
     newValueExprCount,
-    program.arenaTotalFloats
+    program.arenaTotalFloats,
+    newShape2DSlotCount,
   );
 
   // Handle primitive state migration

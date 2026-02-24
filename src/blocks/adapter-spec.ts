@@ -228,7 +228,13 @@ function patternsAreCompatible(from: TypePattern, to: TypePattern): boolean {
   const fromUnit = from.unit;
   const toUnit = to.unit;
   if (fromUnit !== 'any' && toUnit !== 'any' && fromUnit !== 'same' && toUnit !== 'same') {
-    if (!unitsEqual(fromUnit as UnitType, toUnit as UnitType)) return false;
+    // [LAW:dataflow-not-control-flow] Unit-variable compatibility is encoded as
+    // data (`kind:'var'`) while the same comparison path always executes.
+    const hasUnitVar =
+      typeof fromUnit === 'object'
+      && typeof toUnit === 'object'
+      && (fromUnit.kind === 'var' || toUnit.kind === 'var');
+    if (!hasUnitVar && !unitsEqual(fromUnit as UnitType, toUnit as UnitType)) return false;
   }
 
   // Extent must match exactly

@@ -1,10 +1,31 @@
-
 import { describe, it, expect } from 'vitest';
 import { mapDebugEdges, mapDebugMappings } from './mapDebugEdges';
 import type { Patch, Edge } from '../graph/Patch';
 import type { CompiledProgramIR, DebugIndexIR, PortBindingIR } from '../compiler/ir/program';
 import type { ValueSlot } from '../compiler/ir/Indices';
 import type { BlockId, PortId } from '../types';
+
+function createRuntimeAddressTable(slotEntries: ReadonlyArray<{ slot: ValueSlot; type: { kind: string } }>) {
+    const slotLookup = new Map(
+        slotEntries.map(({ slot, type }, index) => [
+            slot,
+            {
+                slot,
+                type,
+                storage: 'f32' as const,
+                offset: index,
+                stride: 1,
+            },
+        ]),
+    );
+
+    return {
+        slotLookup,
+        fieldExprToSlot: new Map(),
+        scalarExprToArenaOffset: new Map(),
+        slotToArena: new Map(),
+    };
+}
 
 describe('mapDebugEdges', () => {
     it('should map edges to source slots correctly', () => {
@@ -54,10 +75,9 @@ describe('mapDebugEdges', () => {
                 slotToBlock: new Map(),
                 exprToBlock: new Map(),
             } as DebugIndexIR,
-            slotMeta: [
-                // Meta for slot 10
-                { slot: 10 as ValueSlot, type: { kind: 'float' }, storage: 'f64', offset: 0 }
-            ]
+            runtimeAddressTable: createRuntimeAddressTable([
+                { slot: 10 as ValueSlot, type: { kind: 'float' } },
+            ]),
         } as unknown as CompiledProgramIR;
 
         // Execute
@@ -95,10 +115,10 @@ describe('mapDebugEdges', () => {
 
         const mockProgram = {
             debugIndex: { blockMap, slotToPort, ports, stepToBlock: new Map(), slotToBlock: new Map(), exprToBlock: new Map() } as DebugIndexIR,
-            slotMeta: [
-                { slot: 10 as ValueSlot, type: { kind: 'float' }, storage: 'f64', offset: 0 },
-                { slot: 11 as ValueSlot, type: { kind: 'float' }, storage: 'f64', offset: 1 },
-            ]
+            runtimeAddressTable: createRuntimeAddressTable([
+                { slot: 10 as ValueSlot, type: { kind: 'float' } },
+                { slot: 11 as ValueSlot, type: { kind: 'float' } },
+            ]),
         } as unknown as CompiledProgramIR;
 
         const result = mapDebugEdges(mockPatch, mockProgram);
@@ -147,9 +167,9 @@ describe('mapDebugEdges', () => {
                 slotToBlock: new Map(),
                 exprToBlock: new Map(),
             } as DebugIndexIR,
-            slotMeta: [
-                { slot: 21 as ValueSlot, type: { kind: 'float' }, storage: 'f64', offset: 0 }
-            ]
+            runtimeAddressTable: createRuntimeAddressTable([
+                { slot: 21 as ValueSlot, type: { kind: 'float' } },
+            ]),
         } as unknown as CompiledProgramIR;
 
         const mappings = mapDebugMappings(mockPatch, mockProgram);
@@ -169,7 +189,7 @@ describe('mapDebugEdges', () => {
                 slotToBlock: new Map(),
                 exprToBlock: new Map(),
             } as DebugIndexIR,
-            slotMeta: []
+            runtimeAddressTable: createRuntimeAddressTable([]),
         } as unknown as CompiledProgramIR;
 
         const result = mapDebugEdges(mockPatch, mockProgram);
@@ -193,7 +213,7 @@ describe('mapDebugEdges', () => {
                 slotToBlock: new Map(),
                 exprToBlock: new Map(),
             } as DebugIndexIR,
-            slotMeta: []
+            runtimeAddressTable: createRuntimeAddressTable([]),
         } as unknown as CompiledProgramIR;
 
         const result = mapDebugEdges(mockPatch, mockProgram);
@@ -253,6 +273,23 @@ describe('mapDebugEdges', () => {
             } as unknown as CompiledProgramIR;
 
             expect(() => mapDebugEdges(mockPatch, mockProgram)).toThrow('[mapDebugEdges] debugIndex.slotToPort is missing');
+        });
+
+        it('should throw if runtimeAddressTable.slotLookup is missing', () => {
+            const mockPatch = { edges: [] } as unknown as Patch;
+            const mockProgram = {
+                debugIndex: {
+                    blockMap: new Map(),
+                    slotToPort: new Map(),
+                    ports: [],
+                    stepToBlock: new Map(),
+                    slotToBlock: new Map(),
+                    exprToBlock: new Map(),
+                } as DebugIndexIR,
+                runtimeAddressTable: undefined,
+            } as unknown as CompiledProgramIR;
+
+            expect(() => mapDebugEdges(mockPatch, mockProgram)).toThrow('[mapDebugEdges] runtimeAddressTable.slotLookup is missing');
         });
     });
 });

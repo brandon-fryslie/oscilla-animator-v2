@@ -115,7 +115,7 @@ export const RUNTIME_FRAME_SEGMENT_OWNERSHIP: Readonly<
   },
   'phase1-value-pre-event': {
     reads: ['arena', 'state', 'eventScalars', 'externalChannels.snapshot'],
-    writes: ['arena', 'cache.scalarValues', 'cache.scalarStamps'],
+    writes: ['arena', 'cache.scalarValueExprValues', 'cache.scalarValueExprStamps'],
   },
   'phase1-continuity-map': {
     reads: ['continuity.prevDomains'],
@@ -123,7 +123,7 @@ export const RUNTIME_FRAME_SEGMENT_OWNERSHIP: Readonly<
   },
   'phase1-value-after-map': {
     reads: ['arena', 'state', 'eventScalars', 'externalChannels.snapshot'],
-    writes: ['arena', 'cache.scalarValues', 'cache.scalarStamps'],
+    writes: ['arena', 'cache.scalarValueExprValues', 'cache.scalarValueExprStamps'],
   },
   'phase1-continuity-apply': {
     reads: ['continuity.changedInstancesThisFrame', 'continuity.mappings', 'arena'],
@@ -135,7 +135,7 @@ export const RUNTIME_FRAME_SEGMENT_OWNERSHIP: Readonly<
   },
   'phase1-value-post-event': {
     reads: ['arena', 'state', 'eventScalars', 'externalChannels.snapshot'],
-    writes: ['arena', 'cache.scalarValues', 'cache.scalarStamps'],
+    writes: ['arena', 'cache.scalarValueExprValues', 'cache.scalarValueExprStamps'],
   },
   'phase1-render-collect': {
     reads: ['arena'],
@@ -257,19 +257,10 @@ export interface EventBuffer {
 /**
  * ValueStore - Slot-based value storage
  *
- * Stores non-numeric slot payloads by slot ID.
- * // [LAW:one-source-of-truth] Numeric slot values live only in RuntimeState.arena.
+ * Stores non-arena typed banks by slot ID.
+ * [LAW:one-source-of-truth] Numeric slot values live only in RuntimeState.arena.
  */
 export interface ValueStore {
-  /**
-   * Legacy object payload store.
-   * [LAW:one-source-of-truth] Runtime compute/render/debug hot paths must read
-   * canonical numeric/typed banks (arena, shapeFields, shape2d), not this map.
-   * [LAW:no-mode-explosion] Kept as a transitional compatibility surface only;
-   * do not add new production runtime dependencies on this store.
-   */
-  objects: Map<ValueSlot, unknown>;
-
   /** Per-slot packed shape field buffers for render hot path (Field<shape2d>). */
   shapeFields: Map<ValueSlot, Uint32Array>;
 
@@ -289,7 +280,6 @@ export interface ValueStore {
  */
 export function createValueStore(shape2dSlotCount: number = 0): ValueStore {
   return {
-    objects: new Map(),
     shapeFields: new Map(),
     shape2d: new Uint32Array(shape2dSlotCount * SHAPE2D_WORDS),
   };
@@ -363,14 +353,8 @@ export interface FrameCache {
   /** Current frame ID (monotonic, starts at 0) */
   frameId: number;
 
-  /** Cached scalar values (indexed by step expr ID) */
-  scalarValues: Float64Array;
-
-  /** Frame stamps for scalar cache validation */
-  scalarStamps: Uint32Array;
-
   /** Cached scalar ValueExpr values (indexed by ValueExprId) */
-  scalarValueExprValues: Float64Array;
+  scalarValueExprValues: Float32Array;
 
   /** Frame stamps for scalar ValueExpr cache validation */
   scalarValueExprStamps: Uint32Array;
@@ -397,14 +381,11 @@ export interface FrameCache {
  * Create a FrameCache
  */
 export function createFrameCache(
-  maxScalarExprs: number = 1000,
   maxValueExprs: number = 0
 ): FrameCache {
   return {
     frameId: 1, // Start at 1 so initial stamps[n]=0 don't match
-    scalarValues: new Float64Array(maxScalarExprs),
-    scalarStamps: new Uint32Array(maxScalarExprs),
-    scalarValueExprValues: new Float64Array(maxValueExprs),
+    scalarValueExprValues: new Float32Array(maxValueExprs),
     scalarValueExprStamps: new Uint32Array(maxValueExprs),
     valueExprFieldBuffers: new Array(maxValueExprs).fill(null),
     valueExprFieldStamps: new Array(maxValueExprs).fill(-1),
@@ -797,12 +778,12 @@ export function createSessionState(): SessionState {
  * Create a ProgramState (called on each compile)
  */
 export function createProgramState(
-  slotCount: number,
   stateSlotCount: number = 0,
   eventSlotCount: number = 0,
   eventExprCount: number = 0,
   valueExprCount: number = 0,
-  arenaTotalFloats: number = 0
+  arenaTotalFloats: number = 0,
+  shape2dSlotCount: number = 0,
 ): ProgramState {
   // [LAW:one-source-of-truth] event wrap-edge state lives in eventWrapPredicate;
   // eventExprCount is accepted for callsite compatibility while compile/runtime
@@ -812,7 +793,7 @@ export function createProgramState(
   const arena = createArena(arenaTotalFloats + stateSlotCount);
   const stateView = arena.subarray(stateArenaOffset, stateArenaOffset + stateSlotCount);
   return {
-    values: createValueStore(),
+    values: createValueStore(shape2dSlotCount),
     lastRenderFrame: null,
     arena,
     // [LAW:one-source-of-truth] Persistent state ownership is anchored to one
@@ -821,7 +802,7 @@ export function createProgramState(
       offset: stateArenaOffset,
       length: stateSlotCount,
     },
-    cache: createFrameCache(1000, valueExprCount),
+    cache: createFrameCache(valueExprCount),
     frameSemantics: {
       frameId: 0,
       segments: [],
@@ -837,8 +818,9 @@ export function createProgramState(
 /**
  * Create a RuntimeState by composing SessionState and ProgramState
  *
- * DEPRECATED as of v2.6, remove by v3.0.
- * Internal test helper only. Use createSessionState() + createRuntimeStateFromSession() for new code.
+ * Convenience constructor for tests and utilities.
+ * New production callsites should compose session/program state explicitly via
+ * createSessionState() + createRuntimeStateFromSession().
  * @internal Not part of public API
  */
 export function createRuntimeState(
@@ -847,10 +829,23 @@ export function createRuntimeState(
   eventSlotCount: number = 0,
   eventExprCount: number = 0,
   valueExprCount: number = 0,
-  arenaTotalFloats: number = 0
+  arenaTotalFloats: number = 0,
+  shape2dSlotCount: number = 0,
 ): RuntimeState {
   const session = createSessionState();
-  return createRuntimeStateFromSession(session, slotCount, stateSlotCount, eventSlotCount, eventExprCount, valueExprCount, arenaTotalFloats);
+  // [LAW:no-mode-explosion] `slotCount` remains as a compatibility-only
+  // positional arg for legacy tests; program/runtime construction no longer
+  // depends on it.
+  void slotCount;
+  return createRuntimeStateFromSession(
+    session,
+    stateSlotCount,
+    eventSlotCount,
+    eventExprCount,
+    valueExprCount,
+    arenaTotalFloats,
+    shape2dSlotCount,
+  );
 }
 
 /**
@@ -860,14 +855,21 @@ export function createRuntimeState(
  */
 export function createRuntimeStateFromSession(
   session: SessionState,
-  slotCount: number,
   stateSlotCount: number = 0,
   eventSlotCount: number = 0,
   eventExprCount: number = 0,
   valueExprCount: number = 0,
-  arenaTotalFloats: number = 0
+  arenaTotalFloats: number = 0,
+  shape2dSlotCount: number = 0,
 ): RuntimeState {
-  const program = createProgramState(slotCount, stateSlotCount, eventSlotCount, eventExprCount, valueExprCount, arenaTotalFloats);
+  const program = createProgramState(
+    stateSlotCount,
+    eventSlotCount,
+    eventExprCount,
+    valueExprCount,
+    arenaTotalFloats,
+    shape2dSlotCount,
+  );
   return {
     // ProgramState (fresh)
     values: program.values,

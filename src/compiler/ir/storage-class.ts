@@ -2,8 +2,8 @@
  * Storage Class Derivation
  *
  * [LAW:one-source-of-truth] Single decision point for storage class + stride.
- * All consumers that need to know whether a slot is canonical numeric or object
- * call deriveStorageLayout() — no parallel derivation allowed.
+ * All consumers that need canonical storage class/stride metadata call
+ * deriveStorageLayout() — no parallel derivation allowed.
  */
 
 import type { CanonicalType } from '../../core/canonical-types';
@@ -59,8 +59,7 @@ function resolveInstanceCount(
 /**
  * Derive an ArenaSlotDescriptor for a slot.
  *
- * Unlike deriveStorageLayout (which models the old dual-store — object for many,
- * f64 for scalars), the arena stores actual floats for ALL numeric slots.
+ * The arena stores floats for all numeric slots.
  * many-cardinality slots get laneCount from InstanceDecl rather than stride=1.
  *
  * [LAW:one-source-of-truth] Arena stride is always payloadStride(payload),

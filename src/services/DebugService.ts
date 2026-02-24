@@ -21,7 +21,7 @@ import { getSampleEncoding, serializeKey, type DebugTargetKey, type HistoryView,
 import type { FieldHistoryView, AggregateFieldStats } from '../ui/debug-viz/FieldStatsAccumulator';
 import { FieldStatsAccumulator } from '../ui/debug-viz/FieldStatsAccumulator';
 import type { ArenaSlotDescriptor } from '../runtime/ArenaValueStore';
-import { arenaRead, arenaSlice } from '../runtime/ArenaValueStore';
+import { arenaDecodeToAoS, arenaRead } from '../runtime/ArenaValueStore';
 
 /**
  * Scalar value result - scalar value from evalValue step.
@@ -431,7 +431,7 @@ class DebugService {
    */
   getEdgeValue(edgeId: string): EdgeValueResult | undefined {
     // [LAW:one-source-of-truth] Debug queries are sourced from canonical debug
-    // stores (arena-backed reads/tap caches), never the legacy object map.
+    // stores (arena-backed reads/tap caches), not the generic object map.
     const meta = this.edgeToSlotMap.get(edgeId);
     if (!meta) {
       // Edge not in mapping - this indicates the compiler failed to register
@@ -723,7 +723,7 @@ class DebugService {
       const desc = this.arenaRef.slotToArena.get(meta.slotId);
       if (desc && desc.offset >= 0) {
         if (!this.runtimeStarted) return undefined;
-        const buffer = arenaSlice(this.arenaRef.arena, desc);
+        const buffer = arenaDecodeToAoS(this.arenaRef.arena, desc);
         // Backfill accumulator histories from queried arena values when runtime tap
         // doesn't write this field slot (common for derived/arena-only paths).
         if (!this.fieldTapSlots.has(meta.slotId)) {

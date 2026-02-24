@@ -19,10 +19,8 @@ function mockProgram(opts: {
   slotMeta: SlotMetaEntry[];
   steps: ScheduleIR['steps'];
 }): CompiledProgramIR {
-  const toRuntimeStorage = (storage: SlotMetaEntry['storage']): 'f32' | 'i32' | 'u32' | 'shape2d' => {
-    if (storage === 'f64' || storage === 'object') return 'f32';
-    return storage;
-  };
+  const toRuntimeStorage = (storage: SlotMetaEntry['storage']): 'f32' | 'i32' | 'u32' | 'shape2d' =>
+    storage;
   const maxSlot = opts.slotMeta.reduce((max, meta) => Math.max(max, Number(meta.slot)), -1);
   const arenaLayout = Array.from({ length: maxSlot + 1 }, () => ({
     offset: -1,
@@ -234,7 +232,7 @@ describe('getExprAddressTable', () => {
     });
     const brokenProgram = { ...program, runtimeAddressTable: undefined } as CompiledProgramIR;
     expect(() => getExprAddressTable(brokenProgram))
-      .toThrow(/runtime address derivation from slotMeta is forbidden/);
+      .toThrow(/legacy metadata-based runtime address derivation is forbidden/);
   });
 });
 
@@ -295,9 +293,9 @@ describe('assertNumericStride', () => {
       .toThrow(/must have stride=4, got 1/);
   });
 
-  it('canonicalizes legacy f64 slot metadata to numeric runtime storage', () => {
+  it('uses canonical numeric slot metadata', () => {
     const table = getExprAddressTable(mockProgram({
-      slotMeta: [{ slot: valueSlot(0), storage: 'f64', offset: 0, stride: 1, type: SIG_FLOAT }],
+      slotMeta: [{ slot: valueSlot(0), storage: 'f32', offset: 0, stride: 1, type: SIG_FLOAT }],
       steps: [],
     }));
     const result = assertNumericStride(table.slotLookup, valueSlot(0), 1, 'test');
