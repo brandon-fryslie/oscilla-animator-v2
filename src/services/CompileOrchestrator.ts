@@ -307,6 +307,12 @@ export async function compileAndSwap(
   }
 
   const program = result.program;
+  const runtimeAddressTable = program.runtimeAddressTable;
+  if (!runtimeAddressTable?.slotLookup) {
+    // [LAW:single-enforcer] Runtime slot cardinality comes from the compiler
+    // runtime-address contract; orchestrator must not derive from slotMeta.
+    throw new Error('[compile] runtimeAddressTable.slotLookup is missing - compiler/runtime contract violation');
+  }
 
   // Get schedule info
   const newSchedule = program.schedule as {
@@ -314,7 +320,7 @@ export async function compileAndSwap(
     stateMappings?: readonly any[];
     instances?: ReadonlyMap<string, any>;
   };
-  const newSlotCount = program.slotMeta.length;
+  const newSlotCount = runtimeAddressTable.slotLookup.size;
   const newStateSlotCount = newSchedule?.stateSlotCount ?? 0;
   const newStateMappings = newSchedule?.stateMappings ?? [];
   const newEventSlotCount = (newSchedule as { eventSlotCount?: number })?.eventSlotCount ?? 0;

@@ -1039,11 +1039,13 @@ describe('Forbidden Patterns (Type System Invariants)', () => {
         ...grepSrc('program\\.slotMeta', 'src/runtime/ScheduleExecutor.ts'),
         ...grepSrc('program\\.slotMeta', 'src/runtime/executeFrameStepped.ts'),
         ...grepSrc('program\\.slotMeta', 'src/runtime/ValueExprMaterializer.ts'),
+        ...grepSrc('program\\.slotMeta', 'src/services/CompileOrchestrator.ts'),
+        ...grepSrc('program\\.slotMeta', 'src/services/mapDebugEdges.ts'),
       ];
       const filtered = filterAllowlist(rawMatches, [/\.test\./, /__tests__/]);
       expect(
         filtered,
-        'Execution modules must not access program.slotMeta directly.\n' +
+        'Execution/service modules must not access program.slotMeta directly.\n' +
         'Use getExprAddressTable(program) as the canonical runtime addressing boundary.\n' +
         'Found violations:\n' + filtered.join('\n')
       ).toEqual([]);

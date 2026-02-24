@@ -87,6 +87,7 @@ export function mapDebugEdges(patch: Patch, program: CompiledProgramIR): Map<str
 export function mapDebugMappings(patch: Patch, program: CompiledProgramIR): DebugMappings {
     const edgeMetaMap = new Map<string, EdgeMetadata>();
     const debugIndex = program.debugIndex;
+    const runtimeAddressTable = program.runtimeAddressTable;
 
     // Guard: If debug index is missing required data, throw - silent failures hide bugs
     if (!debugIndex) {
@@ -101,9 +102,15 @@ export function mapDebugMappings(patch: Patch, program: CompiledProgramIR): Debu
     if (!debugIndex.slotToPort) {
         throw new Error('[mapDebugEdges] debugIndex.slotToPort is missing - compiler debug index is incomplete');
     }
+    if (!runtimeAddressTable?.slotLookup) {
+        // [LAW:single-enforcer] Slot type/address metadata is owned by
+        // compiler-emitted runtimeAddressTable; debug mapping must not derive
+        // types from legacy slotMeta mirrors.
+        throw new Error('[mapDebugEdges] runtimeAddressTable.slotLookup is missing - compiler runtime address contract is incomplete');
+    }
 
     const slotTypeById = new Map<ValueSlot, CanonicalType>(
-      (program.slotMeta ?? []).map((meta) => [meta.slot, meta.type]),
+      Array.from(runtimeAddressTable.slotLookup).map(([slot, lookup]) => [slot, lookup.type]),
     );
 
     // Build lookup map: "blockId:portName" -> Slot
