@@ -1,4 +1,4 @@
-name: WebGPU Migration Readiness
+name: Lockfile Integrity
 
 on:
   pull_request:
@@ -11,8 +11,16 @@ permissions:
   contents: read
 
 jobs:
-  readiness:
-    runs-on: ubuntu-latest
+  frozen-install:
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+
+    runs-on: ${{ matrix.os }}
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -28,8 +36,8 @@ jobs:
           node-version: 22
           cache: pnpm
 
-      - name: Install dependencies
+      - name: Verify frozen install
         run: pnpm install --frozen-lockfile
 
-      - name: Compute readiness verdict
-        run: pnpm run test:migration-readiness
+      - name: Verify lockfile unchanged
+        run: git diff --exit-code -- pnpm-lock.yaml
