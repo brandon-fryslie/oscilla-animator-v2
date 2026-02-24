@@ -194,23 +194,11 @@ describe('StepDebugSession', () => {
       expect(frame1).toBe(frame2);
     });
 
-    it('does not read legacy values.objects during stepped execution', () => {
+    it('completes stepped execution without legacy object storage dependencies', () => {
       const program = compileSimplePatch();
       const state = createStateForProgram(program);
       const arena = getTestArena();
       const session = new StepDebugSession(program, state, arena);
-
-      const throwingObjects = new Proxy(new Map(), {
-        get(_target, prop) {
-          if (prop === 'get' || prop === 'set' || prop === 'has' || prop === 'delete' || prop === 'clear') {
-            return () => {
-              throw new Error('legacy values.objects access');
-            };
-          }
-          return undefined;
-        },
-      });
-      state.values.objects = throwingObjects as unknown as Map<any, unknown>;
 
       session.startFrame(100);
       expect(() => session.finishFrame()).not.toThrow();

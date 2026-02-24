@@ -18,13 +18,12 @@ import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR,  CAMERA_PROJECTION, canonicalType 
 import type { RuntimeState } from '../RuntimeState';
 import { createRuntimeState } from '../RuntimeState';
 import type { ValueSlot, ValueExprId } from '../../types';
-import type { ArenaSlotDescriptor } from '../ArenaValueStore';
-import { arenaEncodeFromAoS } from '../ArenaValueStore';
 import { registerDynamicTopology } from '../../shapes/registry';
 import type { RenderSpace2D } from '../../shapes/types';
 import { PathVerb } from '../../shapes/types';
 import { DEFAULT_CAMERA } from '../CameraResolver';
 import { getTestArena } from './test-arena-helper';
+import { buildSlotToArenaFromTestBuffers, setTestSlotBuffer } from './slot-buffer-helper';
 
 // Helper to create a valid palette Float32Array
 function createPalette(r = 1, g = 1, b = 1, a = 1): Float32Array {
@@ -49,43 +48,6 @@ function createMockState(): RuntimeState {
     energy: 0.5,
   };
   return state;
-}
-
-function mirrorNumericObjectSlotsToArena(
-  state: RuntimeState,
-  specs: ReadonlyArray<{ slot: ValueSlot; stride: number }>,
-  startOffset: number = 32,
-): ReadonlyMap<ValueSlot, ArenaSlotDescriptor> {
-  const slotToArena = new Map<ValueSlot, ArenaSlotDescriptor>();
-  let offset = startOffset;
-  for (const spec of specs) {
-    const source = state.values.objects.get(spec.slot);
-    if (!(source instanceof Float32Array || source instanceof Uint8ClampedArray)) {
-      continue;
-    }
-    const data =
-      source instanceof Float32Array
-        ? source
-        : source instanceof Uint8ClampedArray
-          ? Float32Array.from(source, (v) => v / 255)
-          : Float32Array.from(source as ArrayLike<number>);
-    const laneCount = spec.stride > 0 ? Math.floor(data.length / spec.stride) : 0;
-    const componentOffsets = new Array<number>(spec.stride);
-    for (let c = 0; c < spec.stride; c++) componentOffsets[c] = c * laneCount;
-    const desc: ArenaSlotDescriptor = {
-      offset,
-      stride: spec.stride,
-      laneCount,
-      length: data.length,
-      componentOffsets,
-    };
-    arenaEncodeFromAoS(state.arena, desc, data);
-    slotToArena.set(spec.slot, {
-      ...desc,
-    });
-    offset += data.length;
-  }
-  return slotToArena;
 }
 
 // Create a minimal instance declaration
@@ -210,9 +172,9 @@ describe('RenderAssembler', () => {
         -0.95, 0.31,
       ]);
 
-      state.values.objects.set(1 as ValueSlot, positionBuffer);
-      state.values.objects.set(2 as ValueSlot, colorBuffer);
-      state.values.objects.set(3 as ValueSlot, controlPointsBuffer);
+      setTestSlotBuffer(state, 1 as ValueSlot, positionBuffer);
+      setTestSlotBuffer(state, 2 as ValueSlot, colorBuffer);
+      setTestSlotBuffer(state, 3 as ValueSlot, controlPointsBuffer);
 
       const scalarExprToArenaOffset = new Map<number, number>([
         [0, 10],
@@ -225,7 +187,7 @@ describe('RenderAssembler', () => {
       state.arena[12] = 0.02;
       state.arena[13] = 1;
 
-      const slotToArena = mirrorNumericObjectSlotsToArena(state, [
+      const slotToArena = buildSlotToArenaFromTestBuffers(state, [
         { slot: 1 as ValueSlot, stride: 3 },
         { slot: 2 as ValueSlot, stride: 4 },
         { slot: 3 as ValueSlot, stride: 2 },
@@ -263,8 +225,8 @@ describe('RenderAssembler', () => {
       // Position buffer must be stride-3 (vec3 world-space positions)
       const positionBuffer = new Float32Array(30); // 10 instances * 3 components
       const colorBuffer = new Uint8ClampedArray(40);
-      state.values.objects.set(1 as ValueSlot, positionBuffer);
-      state.values.objects.set(2 as ValueSlot, colorBuffer);
+      setTestSlotBuffer(state, 1 as ValueSlot, positionBuffer);
+      setTestSlotBuffer(state, 2 as ValueSlot, colorBuffer);
 
       // Build scalarExprToArenaOffset mapping for scale and shape params
       const scalarExprToArenaOffset = new Map<number, number>([
@@ -277,7 +239,7 @@ describe('RenderAssembler', () => {
       state.arena[10] = 1.0;  // scale
       state.arena[11] = 0.02; // rx param
       state.arena[12] = 0.02; // ry param
-      const slotToArena = mirrorNumericObjectSlotsToArena(state, [
+      const slotToArena = buildSlotToArenaFromTestBuffers(state, [
         { slot: 1 as ValueSlot, stride: 3 },
         { slot: 2 as ValueSlot, stride: 4 },
       ]);
@@ -318,9 +280,9 @@ describe('RenderAssembler', () => {
         -0.95, 0.31,  // point 4
       ]); // 5 points for pentagon
 
-      state.values.objects.set(1 as ValueSlot, positionBuffer);
-      state.values.objects.set(2 as ValueSlot, colorBuffer);
-      state.values.objects.set(3 as ValueSlot, controlPointsBuffer);
+      setTestSlotBuffer(state, 1 as ValueSlot, positionBuffer);
+      setTestSlotBuffer(state, 2 as ValueSlot, colorBuffer);
+      setTestSlotBuffer(state, 3 as ValueSlot, controlPointsBuffer);
 
       // Build scalarExprToArenaOffset mapping for scale and shape params
       const scalarExprToArenaOffset = new Map<number, number>([
@@ -335,7 +297,7 @@ describe('RenderAssembler', () => {
       state.arena[11] = 0.02; // radiusX param
       state.arena[12] = 0.02; // radiusY param
       state.arena[13] = 1;    // closed param
-      const slotToArena = mirrorNumericObjectSlotsToArena(state, [
+      const slotToArena = buildSlotToArenaFromTestBuffers(state, [
         { slot: 1 as ValueSlot, stride: 3 },
         { slot: 2 as ValueSlot, stride: 4 },
         { slot: 3 as ValueSlot, stride: 2 },
@@ -410,8 +372,8 @@ describe('RenderAssembler', () => {
       const colorBuffer = new Uint8ClampedArray(40);
       // No control points buffer!
 
-      state.values.objects.set(1 as ValueSlot, positionBuffer);
-      state.values.objects.set(2 as ValueSlot, colorBuffer);
+      setTestSlotBuffer(state, 1 as ValueSlot, positionBuffer);
+      setTestSlotBuffer(state, 2 as ValueSlot, colorBuffer);
 
       // Build scalarExprToArenaOffset mapping
       const scalarExprToArenaOffset = new Map<number, number>([
@@ -423,7 +385,7 @@ describe('RenderAssembler', () => {
       state.arena[11] = 0.02;
       state.arena[12] = 0.02;
       state.arena[13] = 1;
-      const slotToArena = mirrorNumericObjectSlotsToArena(state, [
+      const slotToArena = buildSlotToArenaFromTestBuffers(state, [
         { slot: 1 as ValueSlot, stride: 3 },
         { slot: 2 as ValueSlot, stride: 4 },
       ]);
@@ -462,12 +424,12 @@ describe('RenderAssembler', () => {
       const state = createMockState();
 
       // Set up buffers for two path instances (stride-3 positions for vec3 world-space)
-      state.values.objects.set(1 as ValueSlot, new Float32Array([0.1, 0.2, 0.0])); // 1 instance * 3 components
-      state.values.objects.set(2 as ValueSlot, new Uint8ClampedArray([255, 0, 0, 255]));
-      state.values.objects.set(3 as ValueSlot, new Float32Array([0, 1, 0.95, 0.31, 0.59, -0.81, -0.59, -0.81, -0.95, 0.31]));
-      state.values.objects.set(4 as ValueSlot, new Float32Array([0.5, 0.6, 0.0])); // 1 instance * 3 components
-      state.values.objects.set(5 as ValueSlot, new Uint8ClampedArray([0, 255, 0, 255]));
-      state.values.objects.set(6 as ValueSlot, new Float32Array([0, 1, 0.95, 0.31, 0.59, -0.81, -0.59, -0.81, -0.95, 0.31]));
+      setTestSlotBuffer(state, 1 as ValueSlot, new Float32Array([0.1, 0.2, 0.0])); // 1 instance * 3 components
+      setTestSlotBuffer(state, 2 as ValueSlot, new Uint8ClampedArray([255, 0, 0, 255]));
+      setTestSlotBuffer(state, 3 as ValueSlot, new Float32Array([0, 1, 0.95, 0.31, 0.59, -0.81, -0.59, -0.81, -0.95, 0.31]));
+      setTestSlotBuffer(state, 4 as ValueSlot, new Float32Array([0.5, 0.6, 0.0])); // 1 instance * 3 components
+      setTestSlotBuffer(state, 5 as ValueSlot, new Uint8ClampedArray([0, 255, 0, 255]));
+      setTestSlotBuffer(state, 6 as ValueSlot, new Float32Array([0, 1, 0.95, 0.31, 0.59, -0.81, -0.59, -0.81, -0.95, 0.31]));
 
       // Build scalarExprToArenaOffset mapping
       const scalarExprToArenaOffset = new Map<number, number>([
@@ -479,7 +441,7 @@ describe('RenderAssembler', () => {
       state.arena[11] = 0.02;
       state.arena[12] = 0.02;
       state.arena[13] = 1;
-      const slotToArena = mirrorNumericObjectSlotsToArena(state, [
+      const slotToArena = buildSlotToArenaFromTestBuffers(state, [
         { slot: 1 as ValueSlot, stride: 3 },
         { slot: 2 as ValueSlot, stride: 4 },
         { slot: 3 as ValueSlot, stride: 2 },
@@ -599,9 +561,9 @@ describe('RenderAssembler', () => {
         colorBuffer[i * 4 + 3] = 255;
       }
 
-      state.values.objects.set(1 as ValueSlot, positionBuffer);
-      state.values.objects.set(2 as ValueSlot, colorBuffer);
-      state.values.objects.set(3 as ValueSlot, controlPointsBuffer);
+      setTestSlotBuffer(state, 1 as ValueSlot, positionBuffer);
+      setTestSlotBuffer(state, 2 as ValueSlot, colorBuffer);
+      setTestSlotBuffer(state, 3 as ValueSlot, controlPointsBuffer);
 
       const scalarExprToArenaOffset = new Map<number, number>([
         [0, 10], [1, 11], [2, 12], [3, 13],
@@ -611,7 +573,7 @@ describe('RenderAssembler', () => {
       state.arena[12] = 0.02;
       state.arena[13] = 1;
 
-      const slotToArena = mirrorNumericObjectSlotsToArena(state, [
+      const slotToArena = buildSlotToArenaFromTestBuffers(state, [
         { slot: 1 as ValueSlot, stride: 3 },
         { slot: 2 as ValueSlot, stride: 4 },
         { slot: 3 as ValueSlot, stride: 2 },

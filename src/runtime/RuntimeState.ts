@@ -256,19 +256,10 @@ export interface EventBuffer {
 /**
  * ValueStore - Slot-based value storage
  *
- * Stores non-numeric slot payloads by slot ID.
- * // [LAW:one-source-of-truth] Numeric slot values live only in RuntimeState.arena.
+ * Stores non-arena typed banks by slot ID.
+ * [LAW:one-source-of-truth] Numeric slot values live only in RuntimeState.arena.
  */
 export interface ValueStore {
-  /**
-   * Auxiliary object payload store for non-numeric/debug surfaces.
-   * [LAW:one-source-of-truth] Runtime compute/render/debug hot paths must read
-   * canonical numeric/typed banks (arena, shapeFields, shape2d), not this map.
-   * [LAW:no-mode-explosion] Do not add new production runtime dependencies on
-   * this store; runtime hot paths stay on canonical typed banks.
-   */
-  objects: Map<ValueSlot, unknown>;
-
   /** Per-slot packed shape field buffers for render hot path (Field<shape2d>). */
   shapeFields: Map<ValueSlot, Uint32Array>;
 
@@ -288,7 +279,6 @@ export interface ValueStore {
  */
 export function createValueStore(shape2dSlotCount: number = 0): ValueStore {
   return {
-    objects: new Map(),
     shapeFields: new Map(),
     shape2d: new Uint32Array(shape2dSlotCount * SHAPE2D_WORDS),
   };

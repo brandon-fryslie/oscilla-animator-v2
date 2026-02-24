@@ -1,8 +1,7 @@
 /**
  * Arena Field Materialization Tests
  *
- * Verifies that field materialization writes to arena for many-cardinality slots
- * without relying on legacy numeric buffer mirrors in values.objects.
+ * Verifies that field materialization writes to arena for many-cardinality slots.
  *
  * [LAW:one-source-of-truth] Arena is the canonical flat buffer for all numeric
  * values. These tests prove materialized field data appears in the arena at the
@@ -63,7 +62,7 @@ function materializeTargets(program: ReturnType<typeof compileOk>): Set<number> 
 // ---------------------------------------------------------------------------
 
 describe('arena field materialization', () => {
-  it('arena contains materialized field values for materialize targets without objects mirror', () => {
+  it('arena contains materialized field values for materialize targets', () => {
     const patch = buildPatch((b) => {
       const time = b.addBlock('InfiniteTimeRoot');
       b.setPortDefault(time, 'periodAMs', 1000);
@@ -109,8 +108,6 @@ describe('arena field materialization', () => {
         expect(Number.isFinite(arenaRegion[i])).toBe(true);
         if (arenaRegion[i] !== 0) sawNonZero = true;
       }
-      const objectsValue = state.values.objects.get(slotId as any);
-      expect(objectsValue instanceof Float32Array).toBe(false);
       checked++;
     }
 

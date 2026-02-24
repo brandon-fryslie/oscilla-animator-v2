@@ -51,6 +51,7 @@ import { executeFrame } from '../ScheduleExecutor';
 import { compile } from '../../compiler/compile';
 import { buildPatch } from '../../graph/Patch';
 import { getTestArena } from './test-arena-helper';
+import { getTestSlotBuffer, setTestSlotBuffer } from './slot-buffer-helper';
 import { registerAllBlocks } from '../../blocks/all';
 import type { DomainInstance, StepContinuityApply } from '../../compiler/ir/types';
 import type { MappingState } from '../ContinuityState';
@@ -557,8 +558,8 @@ describe('Continuity Integration', () => {
       const outputBuffer = new Float32Array(3);
 
       // Store in mock slot
-      state.values.objects.set(valueSlot(0), baseBuffer);
-      state.values.objects.set(valueSlot(1), outputBuffer);
+      setTestSlotBuffer(state, valueSlot(0), baseBuffer);
+      setTestSlotBuffer(state, valueSlot(1), outputBuffer);
 
       // Trigger domain change
       continuity.domainChangeThisFrame = true;
@@ -577,7 +578,7 @@ describe('Continuity Integration', () => {
       };
 
       // First frame: domain change triggers crossfade start
-      applyContinuity(step, state, (slot) => state.values.objects.get(slot) as Float32Array);
+      applyContinuity(step, state, (slot) => getTestSlotBuffer(state, slot) as Float32Array);
 
       // At t=0, w=0, output should be old values
       expect(outputBuffer[0]).toBeCloseTo(10, 2);
@@ -590,7 +591,7 @@ describe('Continuity Integration', () => {
 
       // Advance time to 50ms (halfway through 100ms window)
       state.time = makeTime(50);
-      applyContinuity(step, state, (slot) => state.values.objects.get(slot) as Float32Array);
+      applyContinuity(step, state, (slot) => getTestSlotBuffer(state, slot) as Float32Array);
 
       // At t=50ms, w=0.5 (linear), output should be midpoint
       expect(outputBuffer[0]).toBeCloseTo(55, 2); // lerp(10, 100, 0.5)
@@ -599,7 +600,7 @@ describe('Continuity Integration', () => {
 
       // Advance time to 100ms (end of window)
       state.time = makeTime(100);
-      applyContinuity(step, state, (slot) => state.values.objects.get(slot) as Float32Array);
+      applyContinuity(step, state, (slot) => getTestSlotBuffer(state, slot) as Float32Array);
 
       // At t=100ms, w=1.0, output should be new base values
       expect(outputBuffer[0]).toBeCloseTo(100, 2);
@@ -618,8 +619,8 @@ describe('Continuity Integration', () => {
 
       const baseBuffer = new Float32Array([100]);
       const outputBuffer = new Float32Array(1);
-      state.values.objects.set(valueSlot(0), baseBuffer);
-      state.values.objects.set(valueSlot(1), outputBuffer);
+      setTestSlotBuffer(state, valueSlot(0), baseBuffer);
+      setTestSlotBuffer(state, valueSlot(1), outputBuffer);
 
       continuity.domainChangeThisFrame = true;
       continuity.changedInstancesThisFrame.add('inst');
@@ -636,7 +637,7 @@ describe('Continuity Integration', () => {
       };
 
       // First frame at t=0 - triggers crossfade start
-      applyContinuity(step, state, (slot) => state.values.objects.get(slot) as Float32Array);
+      applyContinuity(step, state, (slot) => getTestSlotBuffer(state, slot) as Float32Array);
       // At t=0, w=0, output = old value = 0
       expect(outputBuffer[0]).toBeCloseTo(0, 2);
 
@@ -645,20 +646,20 @@ describe('Continuity Integration', () => {
 
       // At t=50ms, smoothstep(0.5) = 0.5
       state.time = makeTime(50);
-      applyContinuity(step, state, (slot) => state.values.objects.get(slot) as Float32Array);
+      applyContinuity(step, state, (slot) => getTestSlotBuffer(state, slot) as Float32Array);
 
       // smoothstep(0.5) = 0.5, so output = lerp(0, 100, 0.5) = 50
       expect(outputBuffer[0]).toBeCloseTo(50, 2);
 
       // At t=25ms from start, smoothstep(0.25) = 0.15625
       state.time = makeTime(25);
-      applyContinuity(step, state, (slot) => state.values.objects.get(slot) as Float32Array);
+      applyContinuity(step, state, (slot) => getTestSlotBuffer(state, slot) as Float32Array);
       // lerp(0, 100, 0.15625) = 15.625
       expect(outputBuffer[0]).toBeCloseTo(15.625, 2);
 
       // At t=75ms from start, smoothstep(0.75) = 0.84375
       state.time = makeTime(75);
-      applyContinuity(step, state, (slot) => state.values.objects.get(slot) as Float32Array);
+      applyContinuity(step, state, (slot) => getTestSlotBuffer(state, slot) as Float32Array);
       // lerp(0, 100, 0.84375) = 84.375
       expect(outputBuffer[0]).toBeCloseTo(84.375, 2);
     });
@@ -670,8 +671,8 @@ describe('Continuity Integration', () => {
       // No previous target state - first time seeing this target
       const baseBuffer = new Float32Array([100, 200, 300]);
       const outputBuffer = new Float32Array(3);
-      state.values.objects.set(valueSlot(0), baseBuffer);
-      state.values.objects.set(valueSlot(1), outputBuffer);
+      setTestSlotBuffer(state, valueSlot(0), baseBuffer);
+      setTestSlotBuffer(state, valueSlot(1), outputBuffer);
 
       continuity.domainChangeThisFrame = true;
       continuity.changedInstancesThisFrame.add('new');
@@ -689,7 +690,7 @@ describe('Continuity Integration', () => {
       };
 
       // First frame - no old buffer means instant transition to base
-      applyContinuity(step, state, (slot) => state.values.objects.get(slot) as Float32Array);
+      applyContinuity(step, state, (slot) => getTestSlotBuffer(state, slot) as Float32Array);
 
       // With no previous state, crossfade old buffer is initialized from base
       // So at t=0, w=0, output = lerp(base, base, 0) = base
