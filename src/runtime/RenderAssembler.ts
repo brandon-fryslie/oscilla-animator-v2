@@ -511,8 +511,6 @@ export interface AssemblerContext {
   resolvedCamera: ResolvedCameraParams;
   /** Pre-allocated buffer arena for zero-allocation rendering */
   arena: RenderBufferArena;
-  /** One-cardinality ValueExprId -> arena scalar offset map. */
-  scalarExprToArenaOffset: ReadonlyMap<number, number>;
   /** One-cardinality ValueExprId -> canonical arena address metadata. */
   scalarExprToArenaAddress?: ReadonlyMap<number, RuntimeScalarArenaAddress>;
   /** Slot -> arena descriptor map (for numeric field reads). */

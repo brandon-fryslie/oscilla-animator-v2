@@ -1501,6 +1501,25 @@ describe('Forbidden Patterns (Type System Invariants)', () => {
       ).toEqual([]);
     });
 
+    it('production runtime/compiler contracts must not expose offset-only scalar arena maps', () => {
+      // [LAW:one-source-of-truth] Canonical scalar arena addressing is enforced by
+      // one metadata contract (`scalarExprToArenaAddress`) across compile/runtime.
+      const rawMatches = [
+        ...grepSrc('scalarExprToArenaOffset', 'src/compiler/ir/program.ts'),
+        ...grepSrc('scalarExprToArenaOffset', 'src/compiler/compile.ts'),
+        ...grepSrc('scalarExprToArenaOffset', 'src/runtime/RuntimeState.ts'),
+        ...grepSrc('scalarExprToArenaOffset', 'src/runtime/ScheduleExecutor.ts'),
+        ...grepSrc('scalarExprToArenaOffset', 'src/runtime/executeFrameStepped.ts'),
+        ...grepSrc('scalarExprToArenaOffset', 'src/runtime/RenderAssembler.ts'),
+      ];
+      const filtered = filterAllowlist(rawMatches, [/\.test\./, /__tests__/]);
+      expect(
+        filtered,
+        'Production compile/runtime modules must not carry scalarExprToArenaOffset compatibility paths.\n' +
+        'Found violations:\n' + filtered.join('\n')
+      ).toEqual([]);
+    });
+
     it('materializer and continuity mapping must route stride indexing through shared helpers', () => {
       const rawMatches = [
         ...grepSrc('\\bi\\s*\\*\\s*stride\\s*\\+\\s*[a-zA-Z_]', 'src/runtime/ValueExprMaterializer.ts'),
