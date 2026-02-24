@@ -57,6 +57,25 @@ function normalizeWorkstream(value) {
   return typeof value === 'string' ? value.trim().toUpperCase() : '';
 }
 
+function isIsoUtcTimestamp(value) {
+  return typeof value === 'string' && !Number.isNaN(Date.parse(value));
+}
+
+function computeDeterministicGeneratedAt(artifactsByWorkstream) {
+  const timestamps = [];
+  for (const entry of artifactsByWorkstream.values()) {
+    const timestamp = entry?.artifact?.timestamp_utc;
+    if (isIsoUtcTimestamp(timestamp)) {
+      timestamps.push(timestamp);
+    }
+  }
+  if (timestamps.length === 0) {
+    return new Date().toISOString();
+  }
+  timestamps.sort();
+  return timestamps[timestamps.length - 1];
+}
+
 function createBlocker(gateId, reason, owner, nextAction) {
   return {
     gate: gateId,
@@ -288,7 +307,9 @@ async function main() {
 
   const report = {
     readiness_version: '2026-02-24.v1',
-    generated_at_utc: new Date().toISOString(),
+    // [LAW:verifiable-goals] Keep report generation deterministic to avoid
+    // timestamp-only churn; evidence changes drive file changes.
+    generated_at_utc: computeDeterministicGeneratedAt(loaded.artifacts),
     source: {
       proof_dir: path.relative(process.cwd(), proofDir) || '.',
       artifact_count: loaded.files.length,

@@ -79,4 +79,23 @@ describe('webgpu migration readiness checker', () => {
       await rm(tempDir, { recursive: true, force: true });
     }
   });
+
+  it('is stable across repeated runs with unchanged evidence', async () => {
+    const tempDir = await mkdtemp(path.join(tmpdir(), 'readiness-stable-'));
+    const reportPath = path.join(tempDir, 'readiness.json');
+
+    try {
+      const first = runReadinessCheck({ WEBGPU_READINESS_REPORT: reportPath });
+      expect(first.status).toBe(0);
+      const firstText = await readFile(reportPath, 'utf8');
+
+      const second = runReadinessCheck({ WEBGPU_READINESS_REPORT: reportPath });
+      expect(second.status).toBe(0);
+      const secondText = await readFile(reportPath, 'utf8');
+
+      expect(secondText).toBe(firstText);
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
 });
