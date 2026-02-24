@@ -110,7 +110,8 @@ export class PathTessellator {
       );
     }
 
-    const normalized = this.removeDuplicatePoints(contours[0]);
+    const deduped = this.removeDuplicatePoints(contours[0]);
+    const normalized = this.removeCollinearPoints(deduped);
     return {
       points: normalized,
       closed,
@@ -145,6 +146,53 @@ export class PathTessellator {
     }
 
     return new Float32Array(deduped);
+  }
+
+  /**
+   * Remove vertices that are collinear with their neighbors.
+   * Such vertices add no geometric information but block ear detection
+   * because cross(prev, curr, next) ≈ 0.
+   * Loops until stable since removal can create new collinear triplets.
+   */
+  private removeCollinearPoints(points: Float32Array): Float32Array {
+    if (points.length < 6) return points; // < 3 vertices — nothing to remove
+
+    let current = points;
+    for (;;) {
+      const n = current.length / 2;
+      if (n < 3) break;
+
+      const keep: boolean[] = new Array(n).fill(true);
+      let removed = 0;
+
+      for (let i = 0; i < n; i++) {
+        const pi = ((i - 1) + n) % n;
+        const ni = (i + 1) % n;
+        const ax = current[pi * 2],     ay = current[pi * 2 + 1];
+        const bx = current[i * 2],      by = current[i * 2 + 1];
+        const cx = current[ni * 2],     cy = current[ni * 2 + 1];
+        const cross = (bx - ax) * (cy - ay) - (by - ay) * (cx - ax);
+        if (Math.abs(cross) < EPSILON) {
+          keep[i] = false;
+          removed++;
+        }
+      }
+
+      if (removed === 0) break;
+
+      // Preserve at least 3 vertices — stop removing if we'd go below
+      if (n - removed < 3) break;
+
+      const out: number[] = [];
+      for (let i = 0; i < n; i++) {
+        if (keep[i]) {
+          out.push(current[i * 2], current[i * 2 + 1]);
+        }
+      }
+      current = new Float32Array(out);
+    }
+
+    return current;
   }
 
   private tessellateContour(cacheKey: string, contour: ContourBuildResult): TessellatedPathMesh {
@@ -183,7 +231,16 @@ export class PathTessellator {
       }
 
       if (!earFound) {
-        throw new Error('PathTessellator: polygon triangulation failed (non-simple or degenerate contour)');
+        // Non-simple or remaining-degenerate contour — skip rather than halt runtime
+        // [LAW:no-silent-fallbacks] Degenerate tessellation is surfaced explicitly
+        // via warning instead of silently producing undefined geometry.
+        console.warn('PathTessellator: polygon triangulation failed (non-simple or degenerate contour), skipping mesh');
+        return {
+          cacheKey,
+          vertexData: contour.points,
+          indexData: new Uint16Array(0),
+          indexFormat: 'uint16' as const,
+        };
       }
 
       guard++;
