@@ -6,7 +6,7 @@ import {
 } from '../ValueInspector';
 import type { SlotLookup } from '../ExprAddressTable';
 import type { ValueSlot } from '../../compiler/ir/Indices';
-import { createRuntimeState } from '../RuntimeState';
+import { createRuntimeState, writeShape2D } from '../RuntimeState';
 import { canonicalScalar } from '../../core/canonical-types';
 import { FLOAT } from '../../core/canonical-types/payloads';
 import { unitNone } from '../../core/canonical-types/units';
@@ -58,32 +58,35 @@ describe('readSlotValue', () => {
     }
   });
 
-  it('reads object (Float32Array field buffer)', () => {
+  it('rejects legacy object storage reads', () => {
     const state = createRuntimeState(10);
-    const buffer = new Float32Array([0.1, 0.2, 0.3, 0.4]);
-    state.values.objects.set(valueSlot(2), buffer);
-
     const lookup = makeLookup(2, 'object', 0, 0);
-    const value = readSlotValue(state, lookup);
-
-    expect(value.kind).toBe('buffer');
-    if (value.kind === 'buffer') {
-      expect(value.count).toBe(4);
-      expect(value.buffer).toBe(buffer);
-    }
+    expect(() => readSlotValue(state, lookup)).toThrow(/object storage.*unsupported/);
   });
 
-  it('reads non-typed-array object', () => {
+  it('reads shape2d records from the canonical shape2d bank', () => {
     const state = createRuntimeState(10);
-    const obj = { custom: true };
-    state.values.objects.set(valueSlot(4), obj);
+    state.values.shape2d = new Uint32Array(8);
+    writeShape2D(state.values.shape2d, 0, {
+      topologyId: 7,
+      pointsFieldSlot: 13,
+      pointsCount: 24,
+      styleRef: 2,
+      flags: 5,
+    });
 
-    const lookup = makeLookup(4, 'object', 0, 0);
+    const lookup = makeLookup(4, 'shape2d', 0, 1);
     const value = readSlotValue(state, lookup);
 
     expect(value.kind).toBe('object');
     if (value.kind === 'object') {
-      expect(value.ref).toBe(obj);
+      expect(value.ref).toEqual({
+        topologyId: 7,
+        pointsFieldSlot: 13,
+        pointsCount: 24,
+        styleRef: 2,
+        flags: 5,
+      });
     }
   });
 });

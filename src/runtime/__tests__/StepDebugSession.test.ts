@@ -334,6 +334,30 @@ describe('StepDebugSession', () => {
       session.stepNext();
       expect(session.stepHistory.length).toBe(3);
     });
+
+    it('captures canonical numeric/event slot snapshots for stepped execution', () => {
+      const program = compileSimplePatch();
+      const state = createStateForProgram(program);
+      const arena = getTestArena();
+      const session = new StepDebugSession(program, state, arena);
+
+      session.startFrame(100);
+      while (session.stepNext() !== null) {
+        // Keep advancing to collect complete history.
+      }
+
+      // [LAW:one-source-of-truth] This patch's stepped snapshots must come from
+      // canonical numeric/event banks, not generic object payload reads.
+      const observedKinds = new Set<string>();
+      for (const snapshot of session.stepHistory) {
+        for (const slotValue of snapshot.writtenSlots.values()) {
+          observedKinds.add(slotValue.kind);
+        }
+      }
+
+      expect(observedKinds.has('scalar') || observedKinds.has('buffer') || observedKinds.has('event')).toBe(true);
+      expect(observedKinds.has('object')).toBe(false);
+    });
   });
 
   describe('dispose', () => {

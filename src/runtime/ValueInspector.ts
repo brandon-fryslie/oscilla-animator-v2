@@ -59,18 +59,11 @@ export function readSlotValue(
     }
 
     case 'object': {
-      const ref = state.values.objects.get(lookup.slot);
-      if (ref instanceof Float32Array || ref instanceof Float64Array ||
-          ref instanceof Uint8Array || ref instanceof Uint8ClampedArray ||
-          ref instanceof Int32Array || ref instanceof Uint32Array) {
-        return {
-          kind: 'buffer',
-          buffer: ref,
-          count: ref.length,
-          type: lookup.type,
-        };
-      }
-      return { kind: 'object', ref };
+      // [LAW:one-source-of-truth] Runtime slot inspection is sourced from canonical
+      // numeric/typed banks only; legacy values.objects lookup is forbidden.
+      throw new Error(
+        `readSlotValue: object storage for slot ${lookup.slot} is unsupported in canonical runtime inspection`
+      );
     }
 
     case 'shape2d': {

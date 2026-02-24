@@ -95,7 +95,11 @@ export interface EventBuffer {
  * // [LAW:one-source-of-truth] Numeric slot values live only in RuntimeState.arena.
  */
 export interface ValueStore {
-  /** Object values (non-numeric payloads, e.g. render frame references) */
+  /**
+   * Legacy object payload store.
+   * [LAW:one-source-of-truth] Runtime compute/render/debug hot paths must read
+   * canonical numeric/typed banks (arena, shapeFields, shape2d), not this map.
+   */
   objects: Map<ValueSlot, unknown>;
 
   /** Per-slot packed shape field buffers for render hot path (Field<shape2d>). */

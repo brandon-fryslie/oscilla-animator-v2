@@ -448,6 +448,8 @@ class DebugService {
    * @throws If scalar/tracked-field slot has no value after runtime started (scheduling bug)
    */
   getEdgeValue(edgeId: string): EdgeValueResult | undefined {
+    // [LAW:one-source-of-truth] Debug queries are sourced from canonical debug
+    // stores (arena-backed reads/tap caches), never the legacy object map.
     const meta = this.edgeToSlotMap.get(edgeId);
     if (!meta) {
       // Edge not in mapping - this indicates the compiler failed to register

@@ -1104,6 +1104,23 @@ describe('Forbidden Patterns (Type System Invariants)', () => {
       ).toEqual([]);
     });
 
+    it('debug inspection modules must not read values.objects', () => {
+      // [LAW:one-source-of-truth] Runtime inspection/debug flows must read canonical
+      // arena/typed banks and stepped snapshots, never values.objects.
+      const rawMatches = [
+        ...grepSrc('values\\.objects\\.', 'src/runtime/ValueInspector.ts'),
+        ...grepSrc('values\\.objects\\.', 'src/runtime/StepDebugSession.ts'),
+        ...grepSrc('values\\.objects\\.', 'src/services/DebugService.ts'),
+      ];
+      const filtered = filterAllowlist(rawMatches, [/\.test\./, /__tests__/]);
+      expect(
+        filtered,
+        'ValueInspector/StepDebugSession/DebugService must not read values.objects.\n' +
+        'Debug inspection must use canonical arena and typed runtime banks only.\n' +
+        'Found violations:\n' + filtered.join('\n')
+      ).toEqual([]);
+    });
+
   });
 
   describe('WebGPU Prereq Guards (W6)', () => {
