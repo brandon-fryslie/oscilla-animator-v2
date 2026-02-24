@@ -66,6 +66,12 @@ function makeMinimalProgram(opts: {
     outputs: [],
     slotMeta: [],
     runtimeSlots: [],
+    runtimeAddressTable: {
+      slotLookup: new Map(),
+      fieldExprToSlot: new Map(),
+      scalarExprToArenaOffset: new Map(),
+      slotToArena: new Map(),
+    },
     renderGlobals: [],
     kernelRegistry: {} as any,
     arenaLayout: [],

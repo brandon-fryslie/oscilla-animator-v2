@@ -1030,6 +1030,28 @@ describe('Forbidden Patterns (Type System Invariants)', () => {
       ).toEqual([]);
     });
 
+    it('CompiledProgramIR must require precomputed runtimeAddressTable', () => {
+      const rawMatches = grepSrc('runtimeAddressTable\\?:', 'src/compiler/ir/program.ts');
+      const filtered = filterAllowlist(rawMatches, [/\.test\./, /__tests__/]);
+      expect(
+        filtered,
+        'CompiledProgramIR.runtimeAddressTable must be required (not optional).\n' +
+        'Runtime must consume compiler-emitted address tables only.\n' +
+        'Found violations:\n' + filtered.join('\n')
+      ).toEqual([]);
+    });
+
+    it('ExprAddressTable must not derive addresses from slotMeta', () => {
+      const rawMatches = grepSrc('slotMeta', 'src/runtime/ExprAddressTable.ts');
+      const filtered = filterAllowlist(rawMatches, [/\.test\./, /__tests__/]);
+      expect(
+        filtered,
+        'ExprAddressTable must consume precomputed runtimeAddressTable only.\n' +
+        'slotMeta-based derivation is forbidden in runtime address resolution.\n' +
+        'Found violations:\n' + filtered.join('\n')
+      ).toEqual([]);
+    });
+
   });
 
   describe('WebGPU Prereq Guards (W11)', () => {

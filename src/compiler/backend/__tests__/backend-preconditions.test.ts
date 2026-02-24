@@ -44,6 +44,12 @@ function testProgramConverter(
     outputs: [],
     slotMeta: [],
     runtimeSlots: [],
+    runtimeAddressTable: {
+      slotLookup: new Map(),
+      fieldExprToSlot: new Map(),
+      scalarExprToArenaOffset: new Map(),
+      slotToArena: new Map(),
+    },
     debugIndex: {
       blockMap: new Map(),
       slotToPort: new Map(),

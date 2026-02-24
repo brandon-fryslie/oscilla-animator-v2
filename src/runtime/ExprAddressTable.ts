@@ -19,9 +19,6 @@ export type ExprAddressTable = RuntimeAddressTableIR;
  * [LAW:single-enforcer] Runtime does not derive address tables operationally.
  */
 export function getExprAddressTable(program: CompiledProgramIR): ExprAddressTable {
-  if (!program.runtimeAddressTable) {
-    throw new Error('Missing precomputed runtimeAddressTable on CompiledProgramIR');
-  }
   return program.runtimeAddressTable;
 }
 

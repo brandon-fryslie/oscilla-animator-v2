@@ -112,7 +112,7 @@ export interface CompiledProgramIR {
    * [LAW:single-enforcer] Runtime address resolution has one owning boundary:
    * compiler-emitted runtimeAddressTable (no runtime derivation pass).
    */
-  readonly runtimeAddressTable?: RuntimeAddressTableIR;
+  readonly runtimeAddressTable: RuntimeAddressTableIR;
 
   // Debug provenance
   readonly debugIndex: DebugIndexIR;
