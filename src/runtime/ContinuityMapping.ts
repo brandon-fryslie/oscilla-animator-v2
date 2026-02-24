@@ -116,7 +116,9 @@ export function buildMappingByPosition(
       const dy = newY - oldY;
       const distSq = dx * dx + dy * dy;
 
-      if (distSq < bestDistSq) {
+      // [LAW:one-source-of-truth] Tie-break on source index so nearest-neighbor
+      // fallback mapping is deterministic for equal-distance candidates.
+      if (distSq < bestDistSq || (distSq === bestDistSq && bestOldIdx >= 0 && j < bestOldIdx)) {
         bestDistSq = distSq;
         bestOldIdx = j;
       }

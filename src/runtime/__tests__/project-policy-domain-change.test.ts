@@ -790,4 +790,92 @@ describe('Project Policy Domain Change', () => {
     expect(finalGauge).toBeLessThan(initialGaugeMagnitude * 0.06); // < 6% after 600ms
     expect(finalGauge).toBeGreaterThan(initialGaugeMagnitude * 0.02); // > 2% (still decaying)
   });
+
+  it('replays continuity transitions deterministically across repeated runs', () => {
+    const runScenario = () => {
+      const state = createTestRuntimeState();
+      state.continuity.lastTModelMs = 0;
+
+      const baseSlot = 100 as ValueSlot;
+      const outputSlot = 101 as ValueSlot;
+      const targetId = 'test_instance_position_0' as StableTargetId;
+      const instId = 'test_instance';
+
+      const step: StepContinuityApply = {
+        kind: 'continuityApply',
+        targetKey: targetId,
+        instanceId: instanceId(instId),
+        policy: { kind: 'project', projector: 'byId', post: 'slew', tauMs: 120 },
+        baseSlot,
+        outputSlot,
+        semantic: 'position',
+        stride: 2,
+      };
+
+      const baseA = new Float32Array([
+        0.50, 0.50,
+        0.30, 0.30,
+        0.70, 0.70,
+      ]);
+      const baseB = new Float32Array([
+        0.42, 0.44,
+        0.24, 0.26,
+        0.64, 0.66,
+        0.80, 0.82,
+      ]);
+
+      let output = new Float32Array(baseA.length);
+      const trace: number[][] = [];
+
+      const runFrame = (tMs: number, base: Float32Array, mapping: Int32Array | null) => {
+        if (output.length !== base.length) {
+          output = new Float32Array(base.length);
+        }
+        state.values.objects.set(baseSlot, base);
+        state.values.objects.set(outputSlot, output);
+        state.time = {
+          tAbsMs: tMs,
+          tMs,
+          phaseA: 0,
+          phaseB: 0,
+          dt: 16,
+          pulse: 0,
+          palette: createPalette(),
+          energy: 0.5,
+        };
+
+        if (mapping) {
+          state.continuity.mappings.set(instId, { newToOld: mapping });
+          state.continuity.domainChangeThisFrame = true;
+          state.continuity.changedInstancesThisFrame.add(instId);
+        } else {
+          state.continuity.mappings.delete(instId);
+          state.continuity.domainChangeThisFrame = false;
+          state.continuity.changedInstancesThisFrame.clear();
+        }
+
+        applyContinuity(step, state, (slot) => state.values.objects.get(slot) as Float32Array);
+        state.continuity.lastTModelMs = tMs;
+
+        const target = state.continuity.targets.get(targetId)!;
+        trace.push([
+          ...Array.from(output),
+          ...Array.from(target.gaugeBuffer),
+          ...Array.from(target.slewBuffer),
+        ]);
+      };
+
+      runFrame(0, baseA, null);
+      runFrame(16, baseA, null);
+      runFrame(32, baseB, new Int32Array([0, 1, 2, -1]));
+      runFrame(48, baseB, null);
+      runFrame(64, baseA, new Int32Array([0, 1, 2]));
+      runFrame(80, baseA, null);
+
+      return trace;
+    };
+
+    // [LAW:verifiable-goals] Deterministic replay is test-locked by exact trace equality.
+    expect(runScenario()).toEqual(runScenario());
+  });
 });

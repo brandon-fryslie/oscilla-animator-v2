@@ -28,7 +28,6 @@ import {
 } from '../ContinuityState';
 import {
   createMockRuntimeState,
-  testInstanceId,
   testStableTargetId,
 } from '../../__tests__/runtime-test-helpers';
 import {
@@ -42,9 +41,59 @@ import {
   lerp,
 } from '../ContinuityApply';
 import { createRuntimeState } from '../RuntimeState';
+import type { ScheduleIR } from '../../compiler/backend/schedule-program';
+import { computeStorageSizes } from '../../compiler/ir/program';
+import { executeFrame } from '../ScheduleExecutor';
+import { compile } from '../../compiler/compile';
+import { buildPatch } from '../../graph/Patch';
+import { getTestArena } from './test-arena-helper';
+import { registerAllBlocks } from '../../blocks/all';
 import type { DomainInstance, StepContinuityApply } from '../../compiler/ir/types';
-import type { ContinuityState, MappingState } from '../ContinuityState';
+import type { MappingState } from '../ContinuityState';
 import { valueSlot } from '../../types';
+
+registerAllBlocks();
+
+function compileContinuityRenderProgram() {
+  const patch = buildPatch((b) => {
+    b.addBlock('InfiniteTimeRoot');
+    const ellipse = b.addBlock('Ellipse');
+    b.setPortDefault(ellipse, 'rx', 0.03);
+    b.setPortDefault(ellipse, 'ry', 0.03);
+    const array = b.addBlock('Array');
+    b.setPortDefault(array, 'count', 4);
+    const layout = b.addBlock('GridLayoutUV');
+    b.setPortDefault(layout, 'rows', 2);
+    b.setPortDefault(layout, 'cols', 2);
+    const render = b.addBlock('RenderInstances2D');
+    const colorSig = b.addBlock('Const');
+    b.setConfig(colorSig, 'value', { r: 1, g: 0.5, b: 0.2, a: 1 });
+    const colorField = b.addBlock('Broadcast');
+    b.wire(colorSig, 'out', colorField, 'one');
+    b.wire(ellipse, 'shape', array, 'element');
+    b.wire(array, 'elements', layout, 'elements');
+    b.wire(layout, 'position', render, 'pos');
+    b.wire(colorField, 'field', render, 'color');
+  });
+  const result = compile(patch);
+  if (result.kind === 'error') {
+    throw new Error(result.errors.map((e) => e.message).join('\n'));
+  }
+  return result.program;
+}
+
+function createStateForProgram(program: ReturnType<typeof compileContinuityRenderProgram>) {
+  const schedule = program.schedule as ScheduleIR;
+  const sizes = computeStorageSizes(program.slotMeta);
+  return createRuntimeState(
+    sizes.f32,
+    schedule.stateSlotCount ?? 0,
+    schedule.eventSlotCount ?? 0,
+    schedule.eventCount ?? 0,
+    program.valueExprs.nodes.length,
+    program.arenaTotalFloats,
+  );
+}
 
 describe('Continuity Integration', () => {
   describe('Scenario: Count change 10→11 with stable identity', () => {
@@ -232,6 +281,32 @@ describe('Continuity Integration', () => {
       expect(state.continuity.domainChangeThisFrame).toBe(false);
       expect(state.continuity.changedInstancesThisFrame.size).toBe(0);
     });
+
+    it('executes deterministic frame segments and commits external input before continuity', () => {
+      const program = compileContinuityRenderProgram();
+      const state = createStateForProgram(program);
+
+      state.externalChannels.writeBus.set('ui.knob', 0.25);
+      executeFrame(program, state, getTestArena(), 100);
+      const frame1Segments = state.frameSemantics?.segments.slice() ?? [];
+
+      expect(state.externalChannels.snapshot.getFloat('ui.knob')).toBeCloseTo(0.25, 6);
+      expect(frame1Segments.length).toBeGreaterThan(0);
+      expect(frame1Segments).toContain('preframe-external-input');
+      expect(frame1Segments).toContain('phase1-continuity-apply');
+      expect(frame1Segments.indexOf('preframe-external-input')).toBeLessThan(
+        frame1Segments.indexOf('phase1-continuity-apply'),
+      );
+      expect(frame1Segments[frame1Segments.length - 1]).toBe('frame-output');
+
+      state.externalChannels.writeBus.set('ui.knob', 0.5);
+      executeFrame(program, state, getTestArena(), 116);
+      const frame2Segments = state.frameSemantics?.segments.slice() ?? [];
+
+      expect(state.externalChannels.snapshot.getFloat('ui.knob')).toBeCloseTo(0.5, 6);
+      // [LAW:verifiable-goals] Segment sequence is replay-locked frame-to-frame.
+      expect(frame2Segments).toEqual(frame1Segments);
+    });
   });
 
   describe('Scenario: Domain change detection', () => {
@@ -307,6 +382,26 @@ describe('Continuity Integration', () => {
 
       expect(mapping.newToOld[0]).toBe(0); // (0.05,0.05) → (0,0)
       expect(mapping.newToOld[1]).toBe(1); // (0.95,0.95) → (1,1)
+    });
+
+    it('breaks equal-distance ties deterministically by source index', () => {
+      const oldDomain: DomainInstance = {
+        count: 2,
+        elementId: new Uint32Array(0),
+        identityMode: 'none',
+        posHintXY: new Float32Array([0, 0, 2, 0]),
+      };
+      const newDomain: DomainInstance = {
+        count: 1,
+        elementId: new Uint32Array(0),
+        identityMode: 'none',
+        posHintXY: new Float32Array([1, 0]),
+      };
+
+      const first = buildMappingByPosition(oldDomain, newDomain, 2);
+      const second = buildMappingByPosition(oldDomain, newDomain, 2);
+      expect(first.newToOld[0]).toBe(0);
+      expect(second.newToOld[0]).toBe(0);
     });
   });
 

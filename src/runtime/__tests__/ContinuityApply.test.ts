@@ -25,7 +25,7 @@ describe('ContinuityApply', () => {
       const targetId = 'position:instance1:out' as StableTargetId;
       const newBufferLength = 10;
 
-      const ctx = capturePreAllocationState(continuity, targetId, newBufferLength);
+      const ctx = capturePreAllocationState(continuity, targetId, newBufferLength, false);
 
       expect(ctx.oldSlewSnapshot).toBeNull();
       expect(ctx.hadPreviousState).toBe(false);
@@ -47,7 +47,7 @@ describe('ContinuityApply', () => {
 
       // Capture before changing size to 10
       const newBufferLength = 10;
-      const ctx = capturePreAllocationState(continuity, targetId, newBufferLength);
+      const ctx = capturePreAllocationState(continuity, targetId, newBufferLength, true);
 
       expect(ctx.hadPreviousState).toBe(true);
       expect(ctx.sizeChanged).toBe(true);
@@ -74,7 +74,7 @@ describe('ContinuityApply', () => {
       }
 
       // Capture with same size
-      const ctx = capturePreAllocationState(continuity, targetId, bufferLength);
+      const ctx = capturePreAllocationState(continuity, targetId, bufferLength, false);
 
       expect(ctx.hadPreviousState).toBe(true);
       expect(ctx.sizeChanged).toBe(false);

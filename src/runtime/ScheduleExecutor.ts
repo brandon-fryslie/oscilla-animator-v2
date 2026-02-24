@@ -14,7 +14,12 @@ import type { RuntimeState } from './RuntimeState';
 import type { RenderFrameIR } from '../render/types';
 import type { RenderBufferArena } from '../render/RenderBufferArena';
 import { resolveTime } from './timeResolution';
-import { writeShape2D } from './RuntimeState';
+import {
+  writeShape2D,
+  beginRuntimeFrameSemantics,
+  enterRuntimeFrameSegment,
+  type RuntimeFrameSegment,
+} from './RuntimeState';
 import {
   MATERIALIZE_SCRATCH,
   renderStepsBuffer as _renderSteps,
@@ -192,15 +197,19 @@ export function executeFrame(
 
   // 1. Advance frame (cache owns frameId)
   state.cache.frameId++;
+  beginRuntimeFrameSemantics(state);
 
   // 1.5. Commit external channel writes (spec: External Input System Section 3.1)
+  enterRuntimeFrameSegment(state, 'preframe-external-input');
   state.externalChannels.commit();
 
   // 2. Resolve effective time
+  enterRuntimeFrameSegment(state, 'preframe-time-resolve');
   const time = resolveTime(tAbsMs, timeModel, state.timeState);
   state.time = time;
 
   // 2.5. Clear event scalars and payloads (events fire for exactly one tick, spec §6.1)
+  enterRuntimeFrameSegment(state, 'preframe-event-reset');
   state.eventScalars.fill(0);
 
   // Clear event payload arrays (spec-compliant event storage)
@@ -249,9 +258,17 @@ export function executeFrame(
   state.cache.scalarExprToArenaOffset = addressTable.scalarExprToArenaOffset;
 
   // PHASE 1: Execute all non-stateWrite steps
+  let eventDispatchSeen = false;
+  let continuityMapSeen = false;
+  const resolvePhase1ValueSegment = (): RuntimeFrameSegment => {
+    if (eventDispatchSeen) return 'phase1-value-post-event';
+    if (continuityMapSeen) return 'phase1-value-after-map';
+    return 'phase1-value-pre-event';
+  };
   for (const step of steps) {
     switch (step.kind) {
       case 'evalOne': {
+        enterRuntimeFrameSegment(state, resolvePhase1ValueSegment());
         const targetSlot = step.target;
         const lookup = resolveSlotOffsetFromMap(slotLookupMap, targetSlot);
         const { storage, offset, slot, stride } = lookup;
@@ -311,6 +328,8 @@ export function executeFrame(
       }
 
       case 'eventDispatch': {
+        enterRuntimeFrameSegment(state, 'phase1-event-dispatch');
+        eventDispatchSeen = true;
         // ValueExpr-only event evaluation (cutover complete)
         const fired = evaluateValueExprEvent(step.expr as any, program.valueExprs, state, program);
 
@@ -322,6 +341,7 @@ export function executeFrame(
       }
 
       case 'materialize': {
+        enterRuntimeFrameSegment(state, resolvePhase1ValueSegment());
         // ValueExpr-only materialization (cutover complete)
         const veId = step.field;
 
@@ -364,6 +384,7 @@ export function executeFrame(
       }
 
       case 'render': {
+        enterRuntimeFrameSegment(state, 'phase1-render-collect');
         // Collect render steps for v2 batch assembly (after Phase 1)
         _renderSteps.push(step);
         break;
@@ -375,6 +396,8 @@ export function executeFrame(
       }
 
       case 'continuityMapBuild': {
+        enterRuntimeFrameSegment(state, 'phase1-continuity-map');
+        continuityMapSeen = true;
         // Continuity System: Build element mapping when domain changes (spec §5.1)
         const { instanceId } = step;
 
@@ -426,8 +449,9 @@ export function executeFrame(
       }
 
       case 'continuityApply': {
+        enterRuntimeFrameSegment(state, 'phase1-continuity-apply');
         // Continuity System: Apply continuity policy to field target (spec §5.1)
-        const { policy, baseSlot, outputSlot } = step;
+        const { baseSlot, outputSlot } = step;
 
         // Resolve base/output through canonical numeric arena descriptors only.
         const baseBuffer = resolveNumericBuffer(slotToArena, state, baseSlot);
@@ -466,6 +490,7 @@ export function executeFrame(
   if (state.tap) {
     const trackedSlots = state.tap.getTrackedFieldSlots?.();
     if (trackedSlots && trackedSlots.size > 0) {
+      enterRuntimeFrameSegment(state, 'phase1-debug-materialize');
       for (const slot of trackedSlots) {
         const arenaDesc = slotToArena.get(slot);
         if (arenaDesc && arenaDesc.offset >= 0 && arenaDesc.length > 0) {
@@ -504,10 +529,12 @@ export function executeFrame(
   assemblerContext = _assemblerCtx as AssemblerContext;
 
   // Build v2 frame from collected render steps (zero allocations - uses arena)
+  enterRuntimeFrameSegment(state, 'render-assembly');
   const frame = assembleRenderFrame(_renderSteps, assemblerContext);
 
   // PHASE 2: Execute all stateWrite steps
   // This ensures state reads in Phase 1 saw previous frame's values
+  enterRuntimeFrameSegment(state, 'phase2-state-write');
   for (const step of steps) {
     if (step.kind === 'stateWrite') {
       const mapping = stateSlotToMapping.get(step.stateSlot as number);
@@ -575,10 +602,12 @@ export function executeFrame(
 
   // 3.5 Finalize continuity frame (spec §5.1)
   // Updates time tracking and clears frame-local flags
+  enterRuntimeFrameSegment(state, 'continuity-finalize');
   finalizeContinuityFrame(state);
 
   // [LAW:one-source-of-truth] RenderFrame output flows through one canonical
   // runtime field, not a synthetic object slot indirection.
+  enterRuntimeFrameSegment(state, 'frame-output');
   state.lastRenderFrame = frame;
   if (program.outputs.length > 0) {
     const outputSpec = program.outputs[0];

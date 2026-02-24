@@ -55,6 +55,88 @@ export const Shape2DFlags = {
 } as const;
 
 // =============================================================================
+// Deterministic Frame Segment Semantics (W13)
+// =============================================================================
+
+/**
+ * Canonical runtime frame segments in strict execution order.
+ *
+ * [LAW:one-source-of-truth] Segment ownership/order is defined once here and
+ * shared by all runtime frame executors/inspectors.
+ */
+export const RUNTIME_FRAME_SEGMENT_ORDER = [
+  'preframe-external-input',
+  'preframe-time-resolve',
+  'preframe-event-reset',
+  'phase1-value-pre-event',
+  'phase1-continuity-map',
+  'phase1-value-after-map',
+  'phase1-continuity-apply',
+  'phase1-event-dispatch',
+  'phase1-value-post-event',
+  'phase1-render-collect',
+  'phase1-debug-materialize',
+  'render-assembly',
+  'phase2-state-write',
+  'continuity-finalize',
+  'frame-output',
+] as const;
+
+export type RuntimeFrameSegment = (typeof RUNTIME_FRAME_SEGMENT_ORDER)[number];
+
+export interface RuntimeFrameSemantics {
+  /** Frame id this trace belongs to (RuntimeState.cache.frameId) */
+  frameId: number;
+  /** Ordered unique segment transitions observed in the frame */
+  segments: RuntimeFrameSegment[];
+}
+
+const RUNTIME_FRAME_SEGMENT_INDEX = new Map<RuntimeFrameSegment, number>(
+  RUNTIME_FRAME_SEGMENT_ORDER.map((segment, index) => [segment, index]),
+);
+
+/**
+ * Reset frame segment tracing for the current frame.
+ */
+export function beginRuntimeFrameSemantics(state: RuntimeState): void {
+  if (!state.frameSemantics) {
+    state.frameSemantics = {
+      frameId: state.cache.frameId,
+      segments: [],
+    };
+  }
+  state.frameSemantics.frameId = state.cache.frameId;
+  state.frameSemantics.segments.length = 0;
+}
+
+/**
+ * Record a frame segment transition and enforce canonical monotonic ordering.
+ *
+ * [LAW:dataflow-not-control-flow] Runtime frame ownership varies by segment data,
+ * not by ad-hoc execution branches; monotonic segment transitions are explicit.
+ */
+export function enterRuntimeFrameSegment(
+  state: RuntimeState,
+  segment: RuntimeFrameSegment,
+): void {
+  if (!state.frameSemantics || state.frameSemantics.frameId !== state.cache.frameId) {
+    beginRuntimeFrameSemantics(state);
+  }
+  const semantics = state.frameSemantics!;
+  const previous = semantics.segments[semantics.segments.length - 1];
+  if (previous === segment) return;
+
+  const previousIndex = previous ? (RUNTIME_FRAME_SEGMENT_INDEX.get(previous) ?? -1) : -1;
+  const nextIndex = RUNTIME_FRAME_SEGMENT_INDEX.get(segment) ?? -1;
+  if (nextIndex < previousIndex) {
+    throw new Error(
+      `Runtime frame segment order violation: '${segment}' cannot follow '${previous}'`,
+    );
+  }
+  semantics.segments.push(segment);
+}
+
+// =============================================================================
 // Event Payload Types (Spec §5: Runtime)
 // =============================================================================
 
@@ -492,6 +574,9 @@ export interface ProgramState {
   /** Frame cache (per-frame memoization) - cache owns frameId */
   cache: FrameCache;
 
+  /** Deterministic frame segment trace for the current frame (W13). */
+  frameSemantics: RuntimeFrameSemantics;
+
   /** Current effective time (set each frame) */
   time: EffectiveTime | null;
 
@@ -541,6 +626,9 @@ export interface RuntimeState {
 
   /** Frame cache (per-frame memoization) - cache owns frameId */
   cache: FrameCache;
+
+  /** Deterministic frame segment trace for the current frame (W13). */
+  frameSemantics?: RuntimeFrameSemantics;
 
   /** Current effective time (set each frame) */
   time: EffectiveTime | null;
@@ -625,6 +713,10 @@ export function createProgramState(
     lastRenderFrame: null,
     arena: createArena(arenaTotalFloats),
     cache: createFrameCache(1000, valueExprCount),
+    frameSemantics: {
+      frameId: 0,
+      segments: [],
+    },
     time: null,
     state: new Float32Array(stateSlotCount),
     eventScalars: new Uint8Array(eventSlotCount),
@@ -672,6 +764,7 @@ export function createRuntimeStateFromSession(
     lastRenderFrame: program.lastRenderFrame,
     arena: program.arena,
     cache: program.cache,
+    frameSemantics: program.frameSemantics,
     time: program.time,
     state: program.state,
     eventScalars: program.eventScalars,

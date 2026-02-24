@@ -22,6 +22,15 @@ import type { RuntimeState } from './RuntimeState';
 import type { ContinuityState, MappingState, StableTargetId } from './ContinuityState';
 import { getOrCreateTargetState } from './ContinuityState';
 
+let continuityScratch = new Float32Array(0);
+
+function ensureContinuityScratch(length: number): Float32Array {
+  if (continuityScratch.length < length) {
+    continuityScratch = new Float32Array(length);
+  }
+  return continuityScratch.subarray(0, length);
+}
+
 // =============================================================================
 // Buffer Snapshot Capture
 // =============================================================================
@@ -53,19 +62,24 @@ export interface CaptureContext {
  * @param continuity - Continuity state container
  * @param targetId - Stable target identifier
  * @param newBufferLength - New buffer length (in floats, not elements)
+ * @param captureSnapshot - Whether to snapshot previous slew values now
  * @returns Capture context with old buffer snapshot (if needed)
  */
 export function capturePreAllocationState(
   continuity: ContinuityState,
   targetId: StableTargetId,
-  newBufferLength: number
+  newBufferLength: number,
+  captureSnapshot: boolean,
 ): CaptureContext {
   const existingState = continuity.targets.get(targetId);
   const hadPreviousState = existingState !== undefined;
   const sizeChanged = hadPreviousState && existingState!.count !== newBufferLength;
 
   return {
-    oldSlewSnapshot: sizeChanged ? new Float32Array(existingState!.slewBuffer) : null,
+    // [LAW:one-source-of-truth] Domain-change initialization must read one
+    // authoritative pre-allocation slew snapshot regardless of size change.
+    oldSlewSnapshot:
+      captureSnapshot && hadPreviousState ? new Float32Array(existingState!.slewBuffer) : null,
     hadPreviousState,
     sizeChanged,
   };
@@ -393,7 +407,12 @@ export function applyContinuity(
   // CRITICAL: Capture old buffer values BEFORE getOrCreateTargetState replaces them
   // When count changes, getOrCreateTargetState creates new zero-filled buffers,
   // discarding the old values we need for continuity
-  const ctx = capturePreAllocationState(state.continuity, targetId, bufferLength);
+  const ctx = capturePreAllocationState(
+    state.continuity,
+    targetId,
+    bufferLength,
+    instanceChangedThisFrame,
+  );
 
   // Get or create continuity state for this target
   // NOTE: This may replace the state with new zero-filled buffers if count changed
@@ -420,44 +439,16 @@ export function applyContinuity(
   // Use the pre-captured snapshot (before getOrCreateTargetState zeroed it)
   let oldEffectiveSnapshot: Float32Array | null = null;
   if (instanceChangedThisFrame && ctx.hadPreviousState) {
-    // Buffer size changed - use pre-captured snapshot (safer, buffers may have been reallocated)
-    if (ctx.sizeChanged) {
-      oldEffectiveSnapshot = ctx.oldSlewSnapshot;
-    }
-    // Buffer size unchanged - safe to copy from current state (no reallocation happened)
-    else if (targetState.slewBuffer.length > 0) {
-      oldEffectiveSnapshot = new Float32Array(targetState.slewBuffer);
-    }
-    // Edge case: buffer exists but is empty (shouldn't happen, but handle gracefully)
-    else {
-      oldEffectiveSnapshot = null;
-    }
+    oldEffectiveSnapshot = ctx.oldSlewSnapshot;
   }
 
   // Handle domain change - reinitialize buffers (for non-crossfade policies)
   // Crossfade handles its own initialization differently
   if (instanceChangedThisFrame && policy.kind !== 'crossfade') {
-    // Determine old effective values (for gauge initialization)
-    let oldEffective: Float32Array | null = null;
-    if (ctx.sizeChanged) {
-      // Buffer size changed - use pre-captured snapshot (buffers were reallocated)
-      oldEffective = ctx.oldSlewSnapshot;
-    } else if (targetState.slewBuffer.length > 0 && targetState.slewBuffer.length <= bufferLength) {
-      // Buffer size unchanged - safe to copy from current state (no reallocation happened)
-      oldEffective = new Float32Array(targetState.slewBuffer);
-    }
-    // Otherwise oldEffective remains null (no previous data to preserve)
-
-    // Determine old slew values (for slew initialization)
-    let oldSlew: Float32Array | null = null;
-    if (ctx.sizeChanged) {
-      // Buffer size changed - use pre-captured snapshot
-      oldSlew = ctx.oldSlewSnapshot;
-    } else if (targetState.slewBuffer.length > 0) {
-      // Buffer size unchanged - safe to copy from current state
-      oldSlew = new Float32Array(targetState.slewBuffer);
-    }
-    // Otherwise oldSlew remains null
+    // [LAW:one-source-of-truth] Domain-change continuity initialization reads
+    // one pre-allocation snapshot for both effective and slew transfer paths.
+    const oldEffective = ctx.oldSlewSnapshot;
+    const oldSlew = ctx.oldSlewSnapshot;
 
     // For ALL policies that use gauge (preserve, slew, project):
     // Initialize gauge to preserve effective values at boundary (spec §2.5)
@@ -527,7 +518,15 @@ export function applyContinuity(
 
     case 'preserve':
       // Apply gauge only (hard continuity)
-      applyAdditiveGauge(baseBuffer, targetState.gaugeBuffer, outputBuffer, bufferLength);
+      // [LAW:dataflow-not-control-flow] Preserve path always computes into a
+      // dedicated target buffer first, then writes output.
+      {
+        const preserveTarget = ensureContinuityScratch(bufferLength);
+        applyAdditiveGauge(baseBuffer, targetState.gaugeBuffer, preserveTarget, bufferLength);
+        if (outputBuffer !== preserveTarget) {
+          outputBuffer.set(preserveTarget);
+        }
+      }
       break;
 
     case 'slew': {
@@ -556,12 +555,14 @@ export function applyContinuity(
       // Decay gauge toward zero over time (using config exponent)
       decayGauge(targetState.gaugeBuffer, effectiveTau, dtMs, bufferLength, decayExponent);
 
-      // Apply gauge: x_gauged = x_base + Δ
-      applyAdditiveGauge(baseBuffer, targetState.gaugeBuffer, outputBuffer, bufferLength);
+      // [LAW:one-source-of-truth] Keep continuity read/write ownership explicit:
+      // read base into a staged gauged buffer, then write output via slew.
+      const gaugedTarget = ensureContinuityScratch(bufferLength);
+      applyAdditiveGauge(baseBuffer, targetState.gaugeBuffer, gaugedTarget, bufferLength);
 
       // Slew toward gauged values
       applySlewFilter(
-        outputBuffer,       // Target: gauged values (base + gauge)
+        gaugedTarget,       // Target: gauged values (base + gauge)
         targetState.slewBuffer,
         outputBuffer,
         effectiveTau,
