@@ -53,6 +53,24 @@ function grepSrc(pattern: string, pathFilter?: string): string[] {
   }
 }
 
+function grepFile(pattern: string, filePath: string): string[] {
+  try {
+    const result = execFileSync(
+      'rg',
+      ['-n', '--no-heading', '--color', 'never', pattern, filePath],
+      { encoding: 'utf-8', cwd: process.cwd() }
+    ).trim();
+    const lines = result ? result.split('\n').filter(Boolean) : [];
+    return lines.filter(l => !l.includes('forbidden-patterns.test.ts'));
+  } catch (err) {
+    const failure = err as { status?: number };
+    if (failure.status === 1) {
+      return [];
+    }
+    return [];
+  }
+}
+
 /** Filter out allowed locations from grep results */
 function filterAllowlist(results: string[], allowlist: RegExp[]): string[] {
   return results.filter(line => !allowlist.some(re => re.test(line)));
@@ -1455,6 +1473,60 @@ describe('Forbidden Patterns (Type System Invariants)', () => {
         'W1/W14 indexing must flow through lane/component helper boundaries in materializer and continuity paths.\n' +
         'Found violations:\n' + filtered.join('\n')
       ).toEqual([]);
+    });
+
+  });
+
+  describe('WebGPU Prereq Guards (W10/W15)', () => {
+
+    it('runtime render boundary must not export legacy renderers', () => {
+      // [LAW:one-type-per-behavior] Runtime render boundary exposes one renderer type only.
+      const rawMatches = [
+        ...grepSrc('Canvas2DRenderer|SVGRenderer|WebGLRenderer', 'src/render/index.ts'),
+      ];
+      const filtered = filterAllowlist(rawMatches, [/\.test\./, /__tests__/]);
+      expect(
+        filtered,
+        'src/render/index.ts must remain WebGPU-only.\n' +
+        'Do not export Canvas2D/SVG/WebGL renderers from runtime boundary.\n' +
+        'Found violations:\n' + filtered.join('\n')
+      ).toEqual([]);
+    });
+
+    it('runtime services must enforce WebGPU fail-fast startup/loop contracts', () => {
+      const startupContractChecks = [
+        ...grepSrc('assertWebGPUStartupContract\\(', 'src/services/RuntimeService.ts'),
+        ...grepSrc('createWebGPURenderer\\(', 'src/services/RuntimeService.ts'),
+      ];
+      expect(
+        startupContractChecks.length,
+        'RuntimeService must assert WebGPU startup contract and create WebGPU renderer only.'
+      ).toBeGreaterThanOrEqual(2);
+
+      const loopContractChecks = grepSrc('assertWebGPULoopContract\\(', 'src/services/AnimationLoop.ts');
+      expect(
+        loopContractChecks.length,
+        'AnimationLoop must enforce WebGPU loop contract at loop entry and frame execution.'
+      ).toBeGreaterThanOrEqual(2);
+    });
+
+    it('browser matrix harness must cover chromium+webkit and hard-pass gate', () => {
+      const script = 'scripts/webgpu-browser-matrix.mjs';
+      const requiredPatterns = [
+        "browserName:\\s*'chromium'",
+        "browserName:\\s*'webkit'",
+        'results\\.every\\(\\(result\\) => result\\.passed\\)',
+        'WEBGPU_MATRIX_MAX_AVG_FRAME_DELTA_MS',
+        'WEBGPU_MATRIX_MAX_P95_FRAME_DELTA_MS',
+        'WEBGPU_MATRIX_MIN_AVG_FPS',
+      ];
+      for (const pattern of requiredPatterns) {
+        const matches = grepFile(pattern, script);
+        expect(
+          matches.length,
+          `webgpu-browser-matrix must include required pattern: ${pattern}`
+        ).toBeGreaterThan(0);
+      }
     });
 
   });
