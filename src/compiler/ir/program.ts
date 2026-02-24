@@ -179,6 +179,19 @@ export interface CompiledProgramIR {
 
   /** Total number of floats in the arena (sum of all descriptor lengths). */
   readonly arenaTotalFloats: number;
+
+  /**
+   * Draw-prep metadata for indirect rendering sinks.
+   *
+   * [LAW:one-source-of-truth] Compiler owns the canonical sink ordering and
+   * instance-count mode contract consumed by draw-prep execution.
+   */
+  readonly drawPrepProgram?: DrawPrepProgramIR;
+
+  /**
+   * Compiler-generated compute WGSL with concrete arena offsets injected.
+   */
+  readonly generatedComputeProgram?: GeneratedComputeProgramIR;
 }
 
 // =============================================================================
@@ -265,6 +278,31 @@ export interface ValueExprTable {
 export interface OutputSpecIR {
   /** Only allowed kind for now */
   readonly kind: 'renderFrame';
+}
+
+export interface DrawPrepSinkIR {
+  /** Sequential sink index in render schedule order */
+  readonly sinkIndex: number;
+  /** Source render step index from schedule.steps */
+  readonly renderStepIndex: number;
+  /** Runtime instance identity for this sink */
+  readonly instanceId: InstanceId;
+  /** Indirect args record index written for this sink */
+  readonly indirectRecordIndex: number;
+  /** Whether instance count is static or dynamic for this sink */
+  readonly instanceCountMode: 'static' | 'dynamic';
+  /** Present only when instanceCountMode==='static' */
+  readonly staticInstanceCount?: number;
+}
+
+export interface DrawPrepProgramIR {
+  readonly sinks: readonly DrawPrepSinkIR[];
+  readonly wgsl: string;
+}
+
+export interface GeneratedComputeProgramIR {
+  readonly wgsl: string;
+  readonly offsetConstants: ReadonlyMap<ValueSlot, string>;
 }
 
 // =============================================================================

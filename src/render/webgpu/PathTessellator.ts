@@ -19,7 +19,8 @@ const VERB_QUAD = 3;
 const VERB_CLOSE = 4;
 
 const EPSILON = 1e-7;
-const CURVE_SUBDIVISIONS = 12;
+const MIN_CURVE_SUBDIVISIONS = 4;
+const MAX_CURVE_SUBDIVISIONS = 64;
 
 /**
  * CPU path tessellation for WebGPU fill rendering.
@@ -97,9 +98,7 @@ export class PathTessellator {
       }
 
       if (verb === VERB_LINE) {
-        if (current.length < 2) {
-          throw new Error('PathTessellator: LINE verb requires an active contour (MOVE first)');
-        }
+        this.assertContourStarted(current, verb);
         this.assertPointAvailable(pointIndex, maxPointIndex, verb);
         const x = points[pointIndex * 2];
         const y = points[pointIndex * 2 + 1];
@@ -109,46 +108,31 @@ export class PathTessellator {
       }
 
       if (verb === VERB_CUBIC) {
-        if (current.length < 2) {
-          throw new Error('PathTessellator: CUBIC verb requires an active contour (MOVE first)');
-        }
-        this.assertPointAvailable(pointIndex, maxPointIndex, verb);
-        const cp1x = points[pointIndex * 2];
-        const cp1y = points[pointIndex * 2 + 1];
-        pointIndex++;
-
-        this.assertPointAvailable(pointIndex, maxPointIndex, verb);
-        const cp2x = points[pointIndex * 2];
-        const cp2y = points[pointIndex * 2 + 1];
-        pointIndex++;
-
-        this.assertPointAvailable(pointIndex, maxPointIndex, verb);
-        const endx = points[pointIndex * 2];
-        const endy = points[pointIndex * 2 + 1];
-        pointIndex++;
-
+        this.assertContourStarted(current, verb);
+        this.assertPointAvailable(pointIndex + 2, maxPointIndex, verb);
         const startx = current[current.length - 2];
         const starty = current[current.length - 1];
+        const cp1x = points[pointIndex * 2];
+        const cp1y = points[pointIndex * 2 + 1];
+        const cp2x = points[(pointIndex + 1) * 2];
+        const cp2y = points[(pointIndex + 1) * 2 + 1];
+        const endx = points[(pointIndex + 2) * 2];
+        const endy = points[(pointIndex + 2) * 2 + 1];
+        pointIndex += 3;
         this.appendCubic(current, startx, starty, cp1x, cp1y, cp2x, cp2y, endx, endy);
         continue;
       }
 
       if (verb === VERB_QUAD) {
-        if (current.length < 2) {
-          throw new Error('PathTessellator: QUAD verb requires an active contour (MOVE first)');
-        }
-        this.assertPointAvailable(pointIndex, maxPointIndex, verb);
-        const cpx = points[pointIndex * 2];
-        const cpy = points[pointIndex * 2 + 1];
-        pointIndex++;
-
-        this.assertPointAvailable(pointIndex, maxPointIndex, verb);
-        const endx = points[pointIndex * 2];
-        const endy = points[pointIndex * 2 + 1];
-        pointIndex++;
-
+        this.assertContourStarted(current, verb);
+        this.assertPointAvailable(pointIndex + 1, maxPointIndex, verb);
         const startx = current[current.length - 2];
         const starty = current[current.length - 1];
+        const cpx = points[pointIndex * 2];
+        const cpy = points[pointIndex * 2 + 1];
+        const endx = points[(pointIndex + 1) * 2];
+        const endy = points[(pointIndex + 1) * 2 + 1];
+        pointIndex += 2;
         this.appendQuadratic(current, startx, starty, cpx, cpy, endx, endy);
         continue;
       }
@@ -172,6 +156,12 @@ export class PathTessellator {
     }
 
     return contours;
+  }
+
+  private assertContourStarted(current: readonly number[], verb: number): void {
+    if (current.length === 0) {
+      throw new Error(`PathTessellator: verb ${verb} encountered before MOVE`);
+    }
   }
 
   private assertPointAvailable(pointIndex: number, pointsCount: number, verb: number): void {
@@ -260,8 +250,10 @@ export class PathTessellator {
     x1: number,
     y1: number,
   ): void {
-    for (let i = 1; i <= CURVE_SUBDIVISIONS; i++) {
-      const t = i / CURVE_SUBDIVISIONS;
+    const polyLength = this.distance(x0, y0, cx, cy) + this.distance(cx, cy, x1, y1);
+    const segments = this.estimateCurveSubdivisions(polyLength);
+    for (let i = 1; i <= segments; i++) {
+      const t = i / segments;
       const mt = 1 - t;
       const x = mt * mt * x0 + 2 * mt * t * cx + t * t * x1;
       const y = mt * mt * y0 + 2 * mt * t * cy + t * t * y1;
@@ -280,8 +272,13 @@ export class PathTessellator {
     x1: number,
     y1: number,
   ): void {
-    for (let i = 1; i <= CURVE_SUBDIVISIONS; i++) {
-      const t = i / CURVE_SUBDIVISIONS;
+    const polyLength =
+      this.distance(x0, y0, cx1, cy1) +
+      this.distance(cx1, cy1, cx2, cy2) +
+      this.distance(cx2, cy2, x1, y1);
+    const segments = this.estimateCurveSubdivisions(polyLength);
+    for (let i = 1; i <= segments; i++) {
+      const t = i / segments;
       const mt = 1 - t;
       const x =
         mt * mt * mt * x0 +
@@ -295,6 +292,17 @@ export class PathTessellator {
         t * t * t * y1;
       out.push(x, y);
     }
+  }
+
+  private distance(x0: number, y0: number, x1: number, y1: number): number {
+    const dx = x1 - x0;
+    const dy = y1 - y0;
+    return Math.hypot(dx, dy);
+  }
+
+  private estimateCurveSubdivisions(approxLength: number): number {
+    const subdivisions = Math.ceil(approxLength * 8);
+    return Math.max(MIN_CURVE_SUBDIVISIONS, Math.min(MAX_CURVE_SUBDIVISIONS, subdivisions));
   }
 
   private tessellateContours(cacheKey: string, contours: readonly ContourBuildResult[]): TessellatedPathMesh {
@@ -471,7 +479,12 @@ export class PathTessellator {
     if (indices.length === 0) {
       return new Uint16Array(0);
     }
-    const maxIndex = Math.max(...indices);
+    let maxIndex = 0;
+    for (let i = 0; i < indices.length; i++) {
+      if (indices[i] > maxIndex) {
+        maxIndex = indices[i];
+      }
+    }
     return maxIndex <= 0xffff ? new Uint16Array(indices) : new Uint32Array(indices);
   }
 }

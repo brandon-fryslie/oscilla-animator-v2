@@ -14,6 +14,11 @@ export const WEBGPU_RENDER_CONTRACT = Object.freeze({
   sceneBinding: 0,
   instanceBindGroup: 1,
   instanceBinding: 0,
+  topologyBankBindGroup: 2,
+  topologyBankBinding: 0,
+  topologyBankWordsPerRecord: 4,
+  topologyBankFlagsWord: 3,
+  topologyBankFlagClosed: 1 << 1,
   computeBindGroup: 0,
   computeSrcStateBinding: 0,
   computeDstStateBinding: 1,
@@ -21,6 +26,13 @@ export const WEBGPU_RENDER_CONTRACT = Object.freeze({
   computeParamsFloats: 4,
   computeWorkgroupSize: 64,
   simulationCapacity: 65_536,
+  indirectArgsWords: 5,
+  indirectArgsBytes: 5 * Uint32Array.BYTES_PER_ELEMENT,
+  drawPrepBindGroup: 0,
+  drawPrepIndirectBinding: 0,
+  drawPrepParamsBinding: 1,
+  drawPrepParamsU32: 8,
+  drawPrepWorkgroupSize: 1,
 } as const);
 
 export const PATH_RENDER_WGSL = /* wgsl */ `
@@ -34,7 +46,7 @@ struct SceneUniforms {
 struct InstanceData {
   // transform0 = [posXNorm, posYNorm, sizeNorm, rotationRad]
   transform0: vec4<f32>,
-  // transform1 = [scale2X, scale2Y, _, _]
+  // transform1 = [scale2X, scale2Y, topologyRecordIndex, _]
   transform1: vec4<f32>,
   // color = [r, g, b, a] in 0..1
   color: vec4<f32>,
@@ -42,6 +54,7 @@ struct InstanceData {
 
 @group(0) @binding(0) var<uniform> scene: SceneUniforms;
 @group(1) @binding(0) var<storage, read> instances: array<InstanceData>;
+@group(2) @binding(0) var<storage, read> topologyBank: array<u32>;
 
 struct VertexInput {
   @location(0) localPos: vec2<f32>,
@@ -55,6 +68,12 @@ struct VertexOutput {
 @vertex
 fn vs_main(input: VertexInput, @builtin(instance_index) instanceIndex: u32) -> VertexOutput {
   let inst = instances[instanceIndex];
+  let topologyRecordIndex = u32(max(inst.transform1.z, 0.0));
+  let topologyFlags = topologyBank[
+    topologyRecordIndex * ${WEBGPU_RENDER_CONTRACT.topologyBankWordsPerRecord}u +
+    ${WEBGPU_RENDER_CONTRACT.topologyBankFlagsWord}u
+  ];
+  let closedMask = select(0.0, 1.0, (topologyFlags & ${WEBGPU_RENDER_CONTRACT.topologyBankFlagClosed}u) != 0u);
   let viewportPx = scene.v0.xy;
   let panPx = scene.v0.zw;
   let zoom = scene.v1.x;
@@ -83,7 +102,7 @@ fn vs_main(input: VertexInput, @builtin(instance_index) instanceIndex: u32) -> V
 
   var output: VertexOutput;
   output.position = vec4<f32>(ndc, 0.0, 1.0);
-  output.color = inst.color;
+  output.color = inst.color * (1.0 + closedMask * 0.0);
   return output;
 }
 
@@ -122,5 +141,37 @@ fn cs_main(@builtin(global_invocation_id) gid: vec3<u32>) {
   state.position = state.position + state.velocity * dt;
   state.velocity = state.velocity * damping;
   dstState[gid.x] = state;
+}
+`;
+
+export const DRAW_PREP_COMPUTE_WGSL = /* wgsl */ `
+struct DrawPrepParams {
+  // v0 = [indexCount, instanceCount, firstIndex, baseVertexBits]
+  v0: vec4<u32>,
+  // v1 = [firstInstance, recordIndex, maxRecords, _]
+  v1: vec4<u32>,
+};
+
+@group(0) @binding(0) var<storage, read_write> indirectArgs: array<u32>;
+@group(0) @binding(1) var<uniform> drawPrepParams: DrawPrepParams;
+
+@compute @workgroup_size(${WEBGPU_RENDER_CONTRACT.drawPrepWorkgroupSize})
+fn cs_main(@builtin(global_invocation_id) gid: vec3<u32>) {
+  if (gid.x > 0u) {
+    return;
+  }
+
+  let recordIndex = drawPrepParams.v1.y;
+  let maxRecords = drawPrepParams.v1.z;
+  if (recordIndex >= maxRecords) {
+    return;
+  }
+
+  let base = recordIndex * ${WEBGPU_RENDER_CONTRACT.indirectArgsWords}u;
+  indirectArgs[base + 0u] = drawPrepParams.v0.x; // indexCount
+  indirectArgs[base + 1u] = drawPrepParams.v0.y; // instanceCount
+  indirectArgs[base + 2u] = drawPrepParams.v0.z; // firstIndex
+  indirectArgs[base + 3u] = drawPrepParams.v0.w; // baseVertex bits
+  indirectArgs[base + 4u] = drawPrepParams.v1.x; // firstInstance
 }
 `;

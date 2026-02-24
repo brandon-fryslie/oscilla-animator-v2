@@ -11,6 +11,11 @@ const SAMPLE_FRAMES = Number.parseInt(process.env.WEBGPU_MATRIX_FRAMES ?? '180',
 const START_SERVER = (process.env.WEBGPU_MATRIX_START_SERVER ?? '1') !== '0';
 const SERVER_TIMEOUT_MS = Number.parseInt(process.env.WEBGPU_MATRIX_SERVER_TIMEOUT_MS ?? '45000', 10);
 const INCLUDE_WEBKIT = (process.env.WEBGPU_MATRIX_INCLUDE_WEBKIT ?? '0') === '1';
+const INCLUDE_SAFARI = (process.env.WEBGPU_MATRIX_INCLUDE_SAFARI ?? '0') === '1';
+const SAFARI_BLOCKING = (process.env.WEBGPU_MATRIX_SAFARI_BLOCKING ?? '0') === '1';
+const SAFARI_SETTLE_MS = Number.parseInt(process.env.WEBGPU_MATRIX_SAFARI_SETTLE_MS ?? '2500', 10);
+const SAFARI_PROBE_RETRIES = Number.parseInt(process.env.WEBGPU_MATRIX_SAFARI_PROBE_RETRIES ?? '20', 10);
+const SAFARI_PROBE_INTERVAL_MS = Number.parseInt(process.env.WEBGPU_MATRIX_SAFARI_PROBE_INTERVAL_MS ?? '500', 10);
 
 function withPreviewParam(url) {
   const parsed = new URL(url);
@@ -74,6 +79,179 @@ function computeStats(frameDeltasMs) {
     p95FrameDeltaMs: Number(p95.toFixed(3)),
     avgFps: Number((1000 / Math.max(0.0001, avg)).toFixed(2)),
   };
+}
+
+function runOsascript(script) {
+  return new Promise((resolve, reject) => {
+    const osa = spawn('osascript', [], {
+      stdio: ['pipe', 'pipe', 'pipe'],
+      env: { ...process.env },
+    });
+    let stdout = '';
+    let stderr = '';
+
+    osa.stdout?.on('data', (chunk) => {
+      stdout += String(chunk);
+    });
+    osa.stderr?.on('data', (chunk) => {
+      stderr += String(chunk);
+    });
+    osa.on('error', (error) => reject(error));
+    osa.on('close', (code) => {
+      if (code === 0) {
+        resolve(stdout.trim());
+        return;
+      }
+      reject(new Error(stderr.trim() || `osascript exited with code ${code}`));
+    });
+    osa.stdin?.end(script);
+  });
+}
+
+function escapeAppleScriptString(value) {
+  return value
+    .replaceAll('\\', '\\\\')
+    .replaceAll('"', '\\"');
+}
+
+function safariVersionFromUserAgent(userAgent) {
+  const match = /Version\/([^\s]+)/.exec(userAgent);
+  return match ? match[1] : null;
+}
+
+async function runSafariCheck({ url, blocking }) {
+  const startedAtMs = Date.now();
+  const baseFailureResult = {
+    browser: 'safari',
+    blocking,
+    browserVersion: null,
+    url,
+    startedAt: new Date(startedAtMs).toISOString(),
+    durationMs: 0,
+    readiness: {
+      userAgent: null,
+      hasNavigatorGpu: false,
+      hasAdapter: false,
+      hasCanvas: false,
+      hasWebGPUContext: false,
+      consoleErrorCount: 0,
+      pageErrorCount: 0,
+    },
+    timing: {
+      sampleCount: 0,
+      avgFrameDeltaMs: 0,
+      p95FrameDeltaMs: 0,
+      avgFps: 0,
+    },
+    errors: {
+      console: [],
+      page: [],
+      setup: [],
+    },
+    failureReason: 'safari_probe_failed',
+    passed: false,
+  };
+
+  if (process.platform !== 'darwin') {
+    return {
+      ...baseFailureResult,
+      durationMs: Date.now() - startedAtMs,
+      errors: {
+        ...baseFailureResult.errors,
+        setup: ['Safari probe is only supported on macOS'],
+      },
+      failureReason: 'safari_unsupported_platform',
+    };
+  }
+
+  const settleSeconds = Math.max(0, SAFARI_SETTLE_MS) / 1000;
+  const probeIntervalSeconds = Math.max(0, SAFARI_PROBE_INTERVAL_MS) / 1000;
+  const probeRetries = Math.max(1, SAFARI_PROBE_RETRIES);
+  const escapedUrl = escapeAppleScriptString(url);
+  const probeJs = [
+    'JSON.stringify((() => {',
+    '  const canvas = document.querySelector("canvas");',
+    '  const hasNavigatorGpu = !!navigator.gpu;',
+    '  return {',
+    '    userAgent: navigator.userAgent,',
+    '    hasNavigatorGpu,',
+    '    hasAdapter: hasNavigatorGpu,',
+    '    hasCanvas: !!canvas,',
+    '    hasWebGPUContext: !!(canvas && canvas.getContext("webgpu"))',
+    '  };',
+    '})())',
+  ].join('');
+  const escapedProbeJs = escapeAppleScriptString(probeJs);
+  const script = `
+tell application "Safari"
+  activate
+  if (count of documents) = 0 then
+    make new document
+  end if
+  set URL of front document to "${escapedUrl}"
+end tell
+delay ${settleSeconds}
+set probeJson to ""
+repeat with probeAttempt from 1 to ${probeRetries}
+  tell application "Safari"
+    set probeJson to do JavaScript "${escapedProbeJs}" in front document
+  end tell
+  if probeJson contains "\\"hasCanvas\\":true" then
+    exit repeat
+  end if
+  delay ${probeIntervalSeconds}
+end repeat
+return probeJson
+`;
+
+  try {
+    const rawProbeJson = await runOsascript(script);
+    const probe = JSON.parse(rawProbeJson);
+    const readiness = {
+      userAgent: typeof probe.userAgent === 'string' ? probe.userAgent : null,
+      hasNavigatorGpu: Boolean(probe.hasNavigatorGpu),
+      hasAdapter: Boolean(probe.hasAdapter),
+      hasCanvas: Boolean(probe.hasCanvas),
+      hasWebGPUContext: Boolean(probe.hasWebGPUContext),
+      consoleErrorCount: 0,
+      pageErrorCount: 0,
+    };
+    const passed =
+      readiness.hasNavigatorGpu &&
+      readiness.hasAdapter &&
+      readiness.hasCanvas &&
+      readiness.hasWebGPUContext;
+    const failureReason =
+      passed
+        ? null
+        : !readiness.hasNavigatorGpu
+          ? 'webgpu_api_unavailable'
+          : !readiness.hasAdapter
+            ? 'webgpu_adapter_unavailable'
+            : !readiness.hasWebGPUContext
+              ? 'webgpu_context_unavailable'
+              : 'unknown';
+
+    return {
+      ...baseFailureResult,
+      browserVersion: readiness.userAgent ? safariVersionFromUserAgent(readiness.userAgent) : null,
+      durationMs: Date.now() - startedAtMs,
+      readiness,
+      failureReason,
+      passed,
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return {
+      ...baseFailureResult,
+      durationMs: Date.now() - startedAtMs,
+      errors: {
+        ...baseFailureResult.errors,
+        setup: [message],
+      },
+      failureReason: 'safari_probe_failed',
+    };
+  }
 }
 
 async function runBrowserCheck({ browserName, launcher, launchOptions, url, blocking }) {
@@ -255,6 +433,12 @@ async function main() {
           passed: false,
         });
       }
+    }
+    if (INCLUDE_SAFARI) {
+      process.stdout.write('[matrix] Running safari WebGPU check...\n');
+      // [LAW:single-enforcer] Safari hardware readiness is measured through one
+      // explicit osascript probe lane, not inferred from Playwright WebKit.
+      results.push(await runSafariCheck({ url: TARGET_URL, blocking: SAFARI_BLOCKING }));
     }
 
     // [LAW:verifiable-goals] Keep an explicit full-matrix pass expression for static gate enforcement.

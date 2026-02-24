@@ -155,6 +155,54 @@ describe('deriveArenaDescriptor', () => {
 // ---------------------------------------------------------------------------
 
 describe('arenaLayout integration', () => {
+  it('emits deterministic arena offsets across repeated compilation of identical input', () => {
+    const patch = buildPatch((b) => {
+      b.addBlock('InfiniteTimeRoot');
+
+      const ellipse = b.addBlock('Ellipse');
+      const array = b.addBlock('Array');
+      b.setPortDefault(array, 'count', 6);
+      b.wire(ellipse, 'shape', array, 'element');
+
+      const grid = b.addBlock('GridLayoutUV');
+      b.setPortDefault(grid, 'rows', 2);
+      b.setPortDefault(grid, 'cols', 3);
+      b.wire(array, 'elements', grid, 'elements');
+
+      const colorSignal = b.addBlock('Const');
+      b.setConfig(colorSignal, 'value', { r: 0.1, g: 0.4, b: 0.8, a: 1 });
+      const colorField = b.addBlock('Broadcast');
+      b.wire(colorSignal, 'out', colorField, 'one');
+
+      const render = b.addBlock('RenderInstances2D');
+      b.wire(grid, 'position', render, 'pos');
+      b.wire(colorField, 'field', render, 'color');
+    });
+
+    const first = compile(patch);
+    const second = compile(patch);
+    if (first.kind === 'error') {
+      throw new Error(`First compile failed: ${first.errors.map((e) => e.message).join(', ')}`);
+    }
+    if (second.kind === 'error') {
+      throw new Error(`Second compile failed: ${second.errors.map((e) => e.message).join(', ')}`);
+    }
+
+    const normalizeDescriptors = (layout: readonly { offset: number; stride: number; laneCount: number; length: number; packing?: string; laneStride?: number; componentStride?: number }[]) =>
+      layout.map((d) => ({
+        offset: d.offset,
+        stride: d.stride,
+        laneCount: d.laneCount,
+        length: d.length,
+        packing: d.packing ?? 'soa',
+        laneStride: d.laneStride ?? 1,
+        componentStride: d.componentStride ?? d.laneCount,
+      }));
+
+    expect(normalizeDescriptors(first.program.arenaLayout)).toEqual(normalizeDescriptors(second.program.arenaLayout));
+    expect(first.program.arenaTotalFloats).toBe(second.program.arenaTotalFloats);
+  });
+
   it('keeps continuity-owned multi-component render slots in AOS descriptors', () => {
     const patch = buildPatch((b) => {
       b.addBlock('InfiniteTimeRoot');

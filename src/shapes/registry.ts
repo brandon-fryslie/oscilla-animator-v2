@@ -46,6 +46,33 @@ const TOPOLOGY_BY_SHAPE_SIGNATURE: Map<string, TopologyId> = new Map();
  */
 const NEXT_DYNAMIC_ID_START = 100;
 let nextDynamicId = NEXT_DYNAMIC_ID_START;
+let topologyRegistryRevision = 0;
+
+/**
+ * Topology bank packed record layout (u32 words per topology).
+ *
+ * [LAW:one-source-of-truth] This layout is the canonical structural export for
+ * GPU-facing topology metadata.
+ */
+export const TOPOLOGY_BANK_WORDS = 4;
+export const TopologyBankWord = {
+  Id: 0,
+  VerbCount: 1,
+  TotalControlPoints: 2,
+  Flags: 3,
+} as const;
+export const TopologyBankFlag = {
+  IsPath: 1 << 0,
+  Closed: 1 << 1,
+} as const;
+
+export interface TopologyBankExport {
+  readonly wordsPerRecord: number;
+  readonly ids: readonly TopologyId[];
+  readonly indexById: ReadonlyMap<TopologyId, number>;
+  readonly data: Uint32Array;
+  readonly revision: number;
+}
 
 /**
  * Get a topology definition by numeric ID (O(1) array access)
@@ -84,6 +111,59 @@ export function getAllTopologyIds(): readonly TopologyId[] {
   return TOPOLOGY_REGISTRY
     .map((_, idx) => idx)
     .filter(idx => TOPOLOGY_REGISTRY[idx] !== undefined);
+}
+
+/**
+ * Get the current topology registry revision.
+ *
+ * Increments on any registry mutation (new topology registration/install).
+ */
+export function getTopologyRegistryRevision(): number {
+  return topologyRegistryRevision;
+}
+
+function isPathTopology(topology: TopologyDef): topology is PathTopologyDef {
+  return Array.isArray((topology as Partial<PathTopologyDef>).verbs);
+}
+
+/**
+ * Export topology metadata as a packed u32 bank for GPU upload.
+ *
+ * Record layout (4 words):
+ * - 0: topology id
+ * - 1: verb count (0 for non-path topologies)
+ * - 2: total control points (0 for non-path topologies)
+ * - 3: flags bitfield (isPath, closed)
+ */
+export function exportTopologyBankU32(ids?: readonly TopologyId[]): TopologyBankExport {
+  const topologyIds = ids ?? getAllTopologyIds();
+  const wordsPerRecord = TOPOLOGY_BANK_WORDS;
+  const data = new Uint32Array(topologyIds.length * wordsPerRecord);
+  const indexById = new Map<TopologyId, number>();
+
+  for (let i = 0; i < topologyIds.length; i++) {
+    const id = topologyIds[i]!;
+    const topology = getTopology(id);
+    const base = i * wordsPerRecord;
+    const path = isPathTopology(topology);
+    const flags =
+      (path ? TopologyBankFlag.IsPath : 0) |
+      (path && topology.closed ? TopologyBankFlag.Closed : 0);
+
+    data[base + TopologyBankWord.Id] = id >>> 0;
+    data[base + TopologyBankWord.VerbCount] = path ? topology.verbs.length >>> 0 : 0;
+    data[base + TopologyBankWord.TotalControlPoints] = path ? topology.totalControlPoints >>> 0 : 0;
+    data[base + TopologyBankWord.Flags] = flags >>> 0;
+    indexById.set(id, i);
+  }
+
+  return {
+    wordsPerRecord,
+    ids: topologyIds,
+    indexById,
+    data,
+    revision: topologyRegistryRevision,
+  };
 }
 
 /**
@@ -179,6 +259,7 @@ export function registerDynamicTopology(
   const fullTopology = { ...shapeTopology, id } as TopologyDef;
   TOPOLOGY_REGISTRY[id] = fullTopology;
   TOPOLOGY_BY_SHAPE_SIGNATURE.set(shapeSig, id);
+  topologyRegistryRevision++;
   if (debugName) {
     TOPOLOGY_BY_NAME.set(debugName, id);
   }
@@ -243,6 +324,7 @@ export function exportSerializableTopologies(ids?: readonly TopologyId[]): reado
  * Existing IDs must match exactly; mismatched redefinitions throw.
  */
 export function installSerializableTopologies(topologies: readonly SerializableTopologyDef[]): void {
+  let changed = false;
   for (const topology of topologies) {
     const existing = TOPOLOGY_REGISTRY[topology.id];
     const shapeSig = topologyShapeSignature(topology);
@@ -254,6 +336,7 @@ export function installSerializableTopologies(topologies: readonly SerializableT
       }
       if (!TOPOLOGY_BY_SHAPE_SIGNATURE.has(shapeSig)) {
         TOPOLOGY_BY_SHAPE_SIGNATURE.set(shapeSig, topology.id);
+        changed = true;
       }
       continue;
     }
@@ -261,11 +344,15 @@ export function installSerializableTopologies(topologies: readonly SerializableT
     // [LAW:one-source-of-truth] Main-thread topology registry is synchronized from
     // compile artifacts instead of re-deriving runtime-only IDs.
     TOPOLOGY_REGISTRY[topology.id] = { ...topology } as TopologyDef;
+    changed = true;
     if (!TOPOLOGY_BY_SHAPE_SIGNATURE.has(shapeSig)) {
       TOPOLOGY_BY_SHAPE_SIGNATURE.set(shapeSig, topology.id);
     }
     if (topology.id >= nextDynamicId) {
       nextDynamicId = topology.id + 1;
     }
+  }
+  if (changed) {
+    topologyRegistryRevision++;
   }
 }
