@@ -90,17 +90,17 @@ describe('PathTessellator', () => {
     expect(() => tessellator.getOrCreateMesh(geometry)).toThrow(/unsupported path verb/i);
   });
 
-  it('removes collinear midpoints and triangulates successfully', () => {
+  it('triangulates polygon with collinear midpoints', () => {
     const tessellator = new PathTessellator();
-    // Square with collinear midpoints on each edge
+    // Square with collinear midpoints on each edge (8 vertices)
     const geometry = createGeometry(
       [-1, -1, 0, -1, 1, -1, 1, 0, 1, 1, 0, 1, -1, 1, -1, 0],
       [0, 1, 1, 1, 1, 1, 1, 1, 4]
     );
 
     const mesh = tessellator.getOrCreateMesh(geometry);
-    // Collinear midpoints removed → 4-vertex square → 2 triangles = 6 indices
-    expect(mesh.indexData.length).toBe(6);
+    // earcut handles collinear midpoints directly: 8 vertices → 6 triangles = 18 indices
+    expect(mesh.indexData.length).toBe(18);
   });
 
   it('returns empty mesh for fully collinear points', () => {
@@ -123,33 +123,27 @@ describe('PathTessellator', () => {
 
   it('handles near-collinear vertices from floating-point accumulation', () => {
     const tessellator = new PathTessellator();
-    // Triangle with a near-collinear point injected on one edge
+    // Triangle with a near-collinear point injected on one edge (4 vertices)
     const geometry = createGeometry(
       [0, 0, 0.5, 1e-10, 1, 0, 0.5, 1],
       [0, 1, 1, 1, 4]
     );
 
     const mesh = tessellator.getOrCreateMesh(geometry);
-    // Near-collinear midpoint removed → 3 vertices → 1 triangle = 3 indices
-    expect(mesh.indexData.length).toBe(3);
+    // earcut handles near-collinear points directly: 4 vertices → 2 triangles = 6 indices
+    expect(mesh.indexData.length).toBe(6);
   });
 
-  it('gracefully returns empty mesh for self-intersecting contour', () => {
+  it('produces best-effort triangulation for self-intersecting contour', () => {
     const tessellator = new PathTessellator();
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     // Bowtie (self-intersecting): edges cross at the center
     const geometry = createGeometry(
       [0, 0, 1, 1, 1, 0, 0, 1],
       [0, 1, 1, 1, 4]
     );
 
-    try {
-      const mesh = tessellator.getOrCreateMesh(geometry);
-      // Ear-cutting can't handle self-intersection — should degrade gracefully
-      expect(mesh.indexData.length).toBe(0);
-      expect(warn).toHaveBeenCalled();
-    } finally {
-      warn.mockRestore();
-    }
+    const mesh = tessellator.getOrCreateMesh(geometry);
+    // earcut produces best-effort triangulation for non-simple polygons
+    expect(mesh.indexData.length).toBeGreaterThan(0);
   });
 });

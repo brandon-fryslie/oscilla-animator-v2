@@ -5,7 +5,7 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import { AutocompleteDropdown } from '../AutocompleteDropdown';
-import type { Suggestion, FunctionSuggestion, BlockSuggestion, PortSuggestion } from '../../../expr/suggestions';
+import type { Suggestion, FunctionSuggestion, ConstantSuggestion, BlockSuggestion, PortSuggestion } from '../../../expr/suggestions';
 import { FLOAT } from '../../../core/canonical-types';
 
 // =============================================================================
@@ -64,6 +64,17 @@ const mockBlockSuggestions: BlockSuggestion[] = [
     sortOrder: 300,
     portCount: 3,
     displayName: 'Circle',
+  },
+];
+
+const mockConstantSuggestions: ConstantSuggestion[] = [
+  {
+    label: 'pi',
+    type: 'constant',
+    description: 'Circle ratio π (π)',
+    sortOrder: 220,
+    chipLabel: 'π',
+    value: Math.PI,
   },
 ];
 
@@ -233,6 +244,20 @@ describe('AutocompleteDropdown - Type Icons', () => {
     );
 
     expect(screen.getByText('◆')).toBeInTheDocument();
+  });
+
+  it('renders constant icon for constant suggestions', () => {
+    render(
+      <AutocompleteDropdown
+        suggestions={mockConstantSuggestions}
+        selectedIndex={0}
+        onSelect={vi.fn()}
+        isVisible={true}
+        position={{ top: 100, left: 100 }}
+      />
+    );
+
+    expect(screen.getByText('π')).toBeInTheDocument();
   });
 
   it('renders port icon for port suggestions', () => {
