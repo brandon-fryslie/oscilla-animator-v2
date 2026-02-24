@@ -455,10 +455,13 @@ function convertLinkedIRToProgram(
     // Arena descriptor: flat Float32Array layout for all numeric slots.
     const desc = deriveArenaDescriptor(type, arenaOffset, instances, slotInfo.stride);
     arenaLayout.push(desc);
+    // [LAW:one-source-of-truth] Runtime numeric addressing is anchored to the
+    // canonical arena descriptor offset (SoA-owned), not legacy storage-bank offsets.
+    const runtimeOffset = storage === 'shape2d' ? offset : desc.offset;
     runtimeSlots.push({
       slot,
       storage,
-      offset,
+      offset: runtimeOffset,
       stride,
       type,
       arena: desc,

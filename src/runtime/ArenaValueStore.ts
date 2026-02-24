@@ -17,29 +17,13 @@ export interface ArenaAddress {
 
 // [LAW:one-source-of-truth] Descriptor is the single authority for slot layout.
 export interface ArenaSlotDescriptor {
-  readonly offset: number;     // Start index in Float32Array
-  readonly stride: number;     // Components per element (1=float, 2=vec2, 3=vec3, 4=color)
-  readonly laneCount: number;  // 1=one-cardinality, N=many-cardinality
-  readonly length: number;     // = stride * laneCount (stored for fast bounds/subarray)
-  /**
-   * Back-compat component-channel offsets relative to `offset`.
-   * Used by legacy SoA-style test descriptors.
-   */
+  readonly offset: number;
+  readonly stride: number;
+  readonly laneCount: number;
+  readonly length: number;
   readonly componentOffsets?: readonly number[];
-  /**
-   * Canonical packing metadata for W1/W14.
-   * `aos` keeps historical interleaved layout, `soa` is component-major.
-   */
   readonly packing?: ArenaPacking;
-  /**
-   * Lane step in floats for one component plane.
-   * Defaults: `aos -> stride`, `soa -> 1`.
-   */
   readonly laneStride?: number;
-  /**
-   * Component step in floats between adjacent component planes.
-   * Defaults: `aos -> 1`, `soa -> laneCount`.
-   */
   readonly componentStride?: number;
 }
 
@@ -50,9 +34,6 @@ export function createArena(totalFloats: number): Float32Array {
 
 /**
  * Canonical per-slot arena address normalization.
- *
- * // [LAW:one-source-of-truth] Runtime addressing derives from one descriptor contract
- * // regardless of the underlying packing mode.
  */
 export function resolveArenaAddress(desc: ArenaSlotDescriptor): ArenaAddress {
   const packing = desc.packing ?? 'aos';
@@ -113,7 +94,6 @@ export function arenaSlice(
 
 /**
  * Decode a descriptor region into AoS/interleaved ordering.
- *
  * Output layout: [lane0.c0, lane0.c1, ..., lane1.c0, lane1.c1, ...]
  */
 export function arenaDecodeToAoS(
@@ -143,6 +123,40 @@ export function arenaEncodeFromAoS(
     const base = lane * desc.stride;
     for (let component = 0; component < desc.stride; component++) {
       arenaWrite(arena, desc, lane, component, src[base + component] as number);
+    }
+  }
+}
+
+/**
+ * Copy an interleaved AoS buffer into canonical SoA layout.
+ */
+export function copyAosToSoa(
+  source: Float32Array,
+  target: Float32Array,
+  laneCount: number,
+  stride: number,
+): void {
+  for (let lane = 0; lane < laneCount; lane++) {
+    const aosBase = lane * stride;
+    for (let component = 0; component < stride; component++) {
+      target[component * laneCount + lane] = source[aosBase + component];
+    }
+  }
+}
+
+/**
+ * Copy canonical SoA layout into interleaved AoS layout.
+ */
+export function copySoaToAos(
+  source: Float32Array,
+  target: Float32Array,
+  laneCount: number,
+  stride: number,
+): void {
+  for (let lane = 0; lane < laneCount; lane++) {
+    const aosBase = lane * stride;
+    for (let component = 0; component < stride; component++) {
+      target[aosBase + component] = source[component * laneCount + lane];
     }
   }
 }

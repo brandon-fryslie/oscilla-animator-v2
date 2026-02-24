@@ -11,6 +11,7 @@ import type {
   RuntimeSlotLookupEntry,
 } from '../compiler/ir/program';
 import type { ValueSlot } from '../compiler/ir/Indices';
+import type { ArenaSlotDescriptor } from './ArenaValueStore';
 export type SlotLookup = RuntimeSlotLookupEntry;
 export type ExprAddressTable = RuntimeAddressTableIR;
 
@@ -51,4 +52,20 @@ export function assertNumericStride(
     throw new Error(what + ' must have stride=' + expectedStride + ', got ' + lookup.stride);
   }
   return lookup;
+}
+
+/**
+ * Resolve canonical SoA arena index for a slot lane/component.
+ */
+export function resolveSoaArenaIndex(
+  slotToArena: ReadonlyMap<ValueSlot, ArenaSlotDescriptor>,
+  slot: ValueSlot,
+  lane: number,
+  component: number,
+): number {
+  const arenaDesc = slotToArena.get(slot);
+  if (!arenaDesc) {
+    throw new Error('Missing arena descriptor for slot ' + slot);
+  }
+  return arenaDesc.offset + component * arenaDesc.laneCount + lane;
 }

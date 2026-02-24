@@ -22,6 +22,7 @@ import { evaluateValueExprScalar, type ScalarEvalContext } from './ValueExprScal
 import { requireInst } from '../core/canonical-types';
 import { payloadStride } from '../core/canonical-types';
 import { constValueAsNumber, type ConstValue } from '../core/canonical-types';
+import { copyAosToSoa } from './ArenaValueStore';
 import { getTopology } from '../shapes/registry';
 import type { PathTopologyDef } from '../shapes/types';
 import { applyOpcode } from './OpcodeInterpreter';
@@ -162,18 +163,24 @@ export function materializeValueExpr(
 
   const stride = payloadStride(expr.type.payload);
   const requiredLength = count * stride;
-  const buf = resolveMaterializeBuffer(target, requiredLength, scratch);
-  if (buf.length < requiredLength) {
+  const outputBuffer = resolveMaterializeBuffer(target, requiredLength, scratch);
+  if (outputBuffer.length < requiredLength) {
     throw new Error(
-      `materializeValueExpr target too small: need ${requiredLength}, got ${buf.length} for expr ${exprId}`,
+      `materializeValueExpr target too small: need ${requiredLength}, got ${outputBuffer.length} for expr ${exprId}`,
     );
   }
+  // [LAW:one-source-of-truth] Canonical arena layout is SoA. Kernel/materializer
+  // compute stays in interleaved form and transposes once at arena-write boundary.
+  const writeSoATarget = target !== undefined && count > 1 && stride > 1;
+  const workBuffer = writeSoATarget
+    ? resolveMaterializeBuffer(undefined, requiredLength, scratch)
+    : outputBuffer;
 
   // Dispatch based on expr.kind
   switch (expr.kind) {
     case 'const': {
       // WI-4: Const - fill buffer with constant value
-      fillBufferWithConst(buf, expr.value, count, stride);
+      fillBufferWithConst(workBuffer, expr.value, count, stride);
       break;
     }
 
@@ -181,17 +188,17 @@ export function materializeValueExpr(
       // WI-4: Intrinsic - materialize instance-bound data
       if (expr.intrinsicKind === 'property') {
         const intrinsic = expr.intrinsic;
-        materializeIntrinsic(buf, intrinsic, instanceId, count, state, program);
+        materializeIntrinsic(workBuffer, intrinsic, instanceId, count, state, program);
       } else {
         // Placement intrinsic: uv, rank, seed with basis kind
-        materializePlacement(buf, expr.field, expr.basisKind, count, stride);
+        materializePlacement(workBuffer, expr.field, expr.basisKind, count, stride);
       }
       break;
     }
 
     case 'kernel': {
       // WI-4: Kernel - dispatch to kernel-specific materialization
-      materializeKernel(expr, buf, table, instanceId, count, state, program, scratch, stride);
+      materializeKernel(expr, workBuffer, table, instanceId, count, state, program, scratch, stride);
       break;
     }
 
@@ -205,7 +212,7 @@ export function materializeValueExpr(
       // Interleave components into output buffer
       for (let i = 0; i < count; i++) {
         for (let c = 0; c < componentCount; c++) {
-          buf[laneComponentIndex(i, c, stride)] = componentBufs[c][i];
+          workBuffer[i * stride + c] = componentBufs[c][i];
         }
       }
       break;
@@ -217,7 +224,7 @@ export function materializeValueExpr(
       const inputExpr = table.nodes[expr.input];
       const inputStride = payloadStride(inputExpr.type.payload);
       for (let i = 0; i < count; i++) {
-        buf[i] = inputBuf[laneComponentIndex(i, expr.componentIndex, inputStride)];
+        workBuffer[i] = inputBuf[i * inputStride + expr.componentIndex];
       }
       break;
     }
@@ -225,7 +232,7 @@ export function materializeValueExpr(
     case 'hslToRgb': {
       // WI-4: HSL→RGB color space conversion
       const inputBuf = materializeValueExpr(expr.input, table, instanceId, count, state, program, undefined, scratch);
-      hslToRgbConversion(buf, inputBuf, count);
+      hslToRgbConversion(workBuffer, inputBuf, count);
       break;
     }
 
@@ -239,7 +246,7 @@ export function materializeValueExpr(
       }
       const stateSlot = expr.resolvedSlot as number;
       // Copy directly via subarray view (no intermediate allocation)
-      buf.set(state.state.subarray(stateSlot, stateSlot + count * stride));
+      workBuffer.set(state.state.subarray(stateSlot, stateSlot + count * stride));
       break;
     }
 
@@ -249,7 +256,7 @@ export function materializeValueExpr(
       // [LAW:dataflow-not-control-flow] Scalar reads materialize by writing
       // their evaluated value through the same buffer path as all other materialize ops.
       const oneValue = evaluateScalarForMaterialize(exprId, table, state, program, scratch);
-      fillBufferWithOne(buf, oneValue, count, stride);
+      fillBufferWithOne(workBuffer, oneValue, count, stride);
       break;
     }
 
@@ -259,7 +266,7 @@ export function materializeValueExpr(
     case 'shapeRef': {
       // [LAW:dataflow-not-control-flow] Keep evalOne/materialize on the unified
       // numeric write path; shapeRef contributes no numeric payload, so write zeros.
-      fillBufferWithOne(buf, 0, count, stride);
+      fillBufferWithOne(workBuffer, 0, count, stride);
       break;
     }
 
@@ -269,7 +276,10 @@ export function materializeValueExpr(
     }
   }
 
-  return buf;
+  if (writeSoATarget) {
+    copyAosToSoa(workBuffer, outputBuffer, count, stride);
+  }
+  return outputBuffer;
 }
 
 /**

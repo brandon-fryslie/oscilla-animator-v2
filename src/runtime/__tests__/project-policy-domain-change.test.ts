@@ -33,6 +33,20 @@ function createPalette(r = 0.5, g = 0, b = 0, a = 1): Float32Array {
   return new Float32Array([r, g, b, a]);
 }
 
+function vec2Soa(valuesAos: ReadonlyArray<number>): Float32Array {
+  const laneCount = Math.floor(valuesAos.length / 2);
+  const out = new Float32Array(valuesAos.length);
+  for (let lane = 0; lane < laneCount; lane++) {
+    out[lane] = valuesAos[lane * 2];
+    out[laneCount + lane] = valuesAos[lane * 2 + 1];
+  }
+  return out;
+}
+
+function vec2Idx(lane: number, component: 0 | 1, laneCount: number): number {
+  return component * laneCount + lane;
+}
+
 /**
  * Create a minimal RuntimeState for testing
  */
@@ -146,7 +160,7 @@ describe('Project Policy Domain Change', () => {
 
     // Simulate: We have 5 elements with positions around (0.5, 0.5)
     // Position is vec2, so buffer has 10 floats (5 elements * 2 components)
-    const oldPositions = new Float32Array([
+    const oldPositions = vec2Soa([
       0.4, 0.4,  // element 0
       0.5, 0.5,  // element 1
       0.6, 0.6,  // element 2
@@ -170,7 +184,7 @@ describe('Project Policy Domain Change', () => {
     // New base positions (computed by materializer)
     // Note: With more elements, each element's base position changes!
     // This is the key insight - the COMPUTED position changes when count changes
-    const newBasePositions = new Float32Array([
+    const newBasePositions = vec2Soa([
       0.35, 0.35,  // element 0 - DIFFERENT from old!
       0.45, 0.45,  // element 1 - DIFFERENT from old!
       0.55, 0.55,  // element 2 - DIFFERENT from old!
@@ -222,8 +236,8 @@ describe('Project Policy Domain Change', () => {
       expect(oldIdx).toBeGreaterThanOrEqual(0); // Should be mapped
 
       for (let s = 0; s < 2; s++) {
-        const newBufIdx = i * 2 + s;
-        const oldBufIdx = oldIdx * 2 + s;
+        const newBufIdx = vec2Idx(i, s as 0 | 1, newCount);
+        const oldBufIdx = vec2Idx(oldIdx, s as 0 | 1, 5);
 
         const effectivePosition = newBasePositions[newBufIdx] + newTargetState.gaugeBuffer[newBufIdx];
         const oldPosition = oldSlewSnapshot[oldBufIdx];
@@ -237,7 +251,7 @@ describe('Project Policy Domain Change', () => {
     // For new elements, gauge should be 0 (start at base)
     for (let i = 5; i < 7; i++) {
       for (let s = 0; s < 2; s++) {
-        expect(newTargetState.gaugeBuffer[i * 2 + s]).toBe(0);
+        expect(newTargetState.gaugeBuffer[vec2Idx(i, s as 0 | 1, newCount)]).toBe(0);
       }
     }
   });
@@ -264,7 +278,7 @@ describe('Project Policy Domain Change', () => {
     const outputSlot = 101 as ValueSlot;
 
     // Initial state: 3 elements with known positions
-    const oldPositions = new Float32Array([
+    const oldPositions = vec2Soa([
       0.5, 0.5,  // center
       0.3, 0.3,  // offset
       0.7, 0.7,  // offset other way
@@ -278,7 +292,7 @@ describe('Project Policy Domain Change', () => {
 
     // Domain change: now 4 elements
     // New base positions are DIFFERENT (because count changed)
-    const newBasePositions = new Float32Array([
+    const newBasePositions = vec2Soa([
       0.4, 0.4,  // element 0 - computed differently now
       0.2, 0.2,  // element 1 - computed differently now
       0.6, 0.6,  // element 2 - computed differently now
@@ -329,20 +343,20 @@ describe('Project Policy Domain Change', () => {
 
     // Element 0: old was (0.5, 0.5), new base is (0.4, 0.4)
     // If continuity is working, output should be closer to 0.5 than to 0.4
-    expect(result[0]).toBeGreaterThan(0.4); // Should be > new base
-    expect(result[1]).toBeGreaterThan(0.4);
+    expect(result[vec2Idx(0, 0, 4)]).toBeGreaterThan(0.4); // Should be > new base
+    expect(result[vec2Idx(0, 1, 4)]).toBeGreaterThan(0.4);
 
     // Element 1: old was (0.3, 0.3), new base is (0.2, 0.2)
-    expect(result[2]).toBeGreaterThan(0.2);
-    expect(result[3]).toBeGreaterThan(0.2);
+    expect(result[vec2Idx(1, 0, 4)]).toBeGreaterThan(0.2);
+    expect(result[vec2Idx(1, 1, 4)]).toBeGreaterThan(0.2);
 
     // Element 2: old was (0.7, 0.7), new base is (0.6, 0.6)
-    expect(result[4]).toBeGreaterThan(0.6);
-    expect(result[5]).toBeGreaterThan(0.6);
+    expect(result[vec2Idx(2, 0, 4)]).toBeGreaterThan(0.6);
+    expect(result[vec2Idx(2, 1, 4)]).toBeGreaterThan(0.6);
 
     // Element 3 (new): should be at or near base (0.8, 0.8)
-    expect(result[6]).toBeCloseTo(0.8, 1);
-    expect(result[7]).toBeCloseTo(0.8, 1);
+    expect(result[vec2Idx(3, 0, 4)]).toBeCloseTo(0.8, 1);
+    expect(result[vec2Idx(3, 1, 4)]).toBeCloseTo(0.8, 1);
   });
 
   /**
@@ -362,7 +376,7 @@ describe('Project Policy Domain Change', () => {
     };
 
     // Start with 5 elements
-    const oldPositions = new Float32Array([
+    const oldPositions = vec2Soa([
       0.1, 0.1,
       0.2, 0.2,
       0.3, 0.3,
@@ -377,7 +391,7 @@ describe('Project Policy Domain Change', () => {
 
     // Decrease to 3 elements
     // Elements 0-2 are kept, 3-4 are removed
-    const newBasePositions = new Float32Array([
+    const newBasePositions = vec2Soa([
       0.15, 0.15,  // element 0 - different base now
       0.25, 0.25,  // element 1 - different base now
       0.35, 0.35,  // element 2 - different base now
@@ -406,9 +420,9 @@ describe('Project Policy Domain Change', () => {
     // Verify: effective position = base + gauge = old position
     for (let i = 0; i < 3; i++) {
       for (let s = 0; s < 2; s++) {
-        const idx = i * 2 + s;
+        const idx = vec2Idx(i, s as 0 | 1, 3);
         const effective = newBasePositions[idx] + newTargetState.gaugeBuffer[idx];
-        expect(effective).toBeCloseTo(oldPositions[idx], 5);
+        expect(effective).toBeCloseTo(oldPositions[vec2Idx(i, s as 0 | 1, 5)], 5);
       }
     }
   });
@@ -436,7 +450,7 @@ describe('Project Policy Domain Change', () => {
     // These represent the COMPUTED positions based on count=5
     // IMPORTANT: Each element has DIFFERENT positions in each configuration
     // to test that gauge offsets accumulate correctly across domain changes
-    const spiralFor5 = new Float32Array([
+    const spiralFor5 = vec2Soa([
       0.50, 0.50,  // element 0
       0.55, 0.60,  // element 1
       0.45, 0.40,  // element 2
@@ -447,7 +461,7 @@ describe('Project Policy Domain Change', () => {
     // When count increases to 7, ALL COMPUTED positions change
     // (because the spiral formula distributes elements differently)
     // Notice: Even element 0 is at a DIFFERENT position now!
-    const spiralFor7 = new Float32Array([
+    const spiralFor7 = vec2Soa([
       0.48, 0.52,  // element 0 - MOVED from (0.50, 0.50)!
       0.52, 0.55,  // element 1 - DIFFERENT spacing
       0.46, 0.47,  // element 2 - DIFFERENT spacing
@@ -459,7 +473,7 @@ describe('Project Policy Domain Change', () => {
 
     // When count goes back to 5, positions return to spiralFor5 formula
     // (This is the COMPUTED base - same as original)
-    const spiralBackTo5 = new Float32Array([
+    const spiralBackTo5 = vec2Soa([
       0.50, 0.50,  // element 0 - back to original
       0.55, 0.60,  // element 1 - back to original
       0.45, 0.40,  // element 2 - back to original
@@ -557,8 +571,8 @@ describe('Project Policy Domain Change', () => {
     // - New elements (5-6) should be at their base positions
     for (let i = 0; i < 5; i++) {
       // Mapped elements should preserve old position (within slew tolerance)
-      expect(result[i * 2]).toBeCloseTo(spiralFor5[i * 2], 1);
-      expect(result[i * 2 + 1]).toBeCloseTo(spiralFor5[i * 2 + 1], 1);
+      expect(result[vec2Idx(i, 0, 7)]).toBeCloseTo(spiralFor5[vec2Idx(i, 0, 5)], 1);
+      expect(result[vec2Idx(i, 1, 7)]).toBeCloseTo(spiralFor5[vec2Idx(i, 1, 5)], 1);
     }
 
     // Run several more frames with 7 elements
@@ -614,10 +628,10 @@ describe('Project Policy Domain Change', () => {
 
     // Verify positions are close to original (allowing for some slew transition)
     for (let i = 0; i < 5; i++) {
-      const x = result[i * 2];
-      const y = result[i * 2 + 1];
-      const expectedX = spiralFor5[i * 2];
-      const expectedY = spiralFor5[i * 2 + 1];
+      const x = result[vec2Idx(i, 0, 5)];
+      const y = result[vec2Idx(i, 1, 5)];
+      const expectedX = spiralFor5[vec2Idx(i, 0, 5)];
+      const expectedY = spiralFor5[vec2Idx(i, 1, 5)];
 
       // After domain change, should be at or near old effective position
       // The old effective position after the previous frames was spiralFor7[i]
@@ -647,7 +661,7 @@ describe('Project Policy Domain Change', () => {
     const instId = 'test_instance';
 
     // Start with 3 elements at known positions
-    const initialPositions = new Float32Array([
+    const initialPositions = vec2Soa([
       0.5, 0.5,  // element 0
       0.3, 0.3,  // element 1
       0.7, 0.7,  // element 2
@@ -689,7 +703,7 @@ describe('Project Policy Domain Change', () => {
 
     // Domain change at t=116: increase to 5 elements
     // New base positions are different (simulating rotating spiral)
-    const newBasePositions = new Float32Array([
+    const newBasePositions = vec2Soa([
       0.4, 0.4,  // element 0 - moved from (0.5, 0.5)
       0.2, 0.2,  // element 1 - moved from (0.3, 0.3)
       0.6, 0.6,  // element 2 - moved from (0.7, 0.7)
@@ -727,8 +741,8 @@ describe('Project Policy Domain Change', () => {
     const gaugeAfterDomainChange = new Float32Array(targetState.gaugeBuffer);
 
     // Gauge should be non-zero for mapped elements (preserving continuity)
-    expect(Math.abs(gaugeAfterDomainChange[0])).toBeGreaterThan(0.01); // element 0, x
-    expect(Math.abs(gaugeAfterDomainChange[1])).toBeGreaterThan(0.01); // element 0, y
+    expect(Math.abs(gaugeAfterDomainChange[vec2Idx(0, 0, 5)])).toBeGreaterThan(0.01); // element 0, x
+    expect(Math.abs(gaugeAfterDomainChange[vec2Idx(0, 1, 5)])).toBeGreaterThan(0.01); // element 0, y
 
     // Run frames with the NEW base positions (simulating continued animation)
     // As time passes, gauge should decay toward zero
@@ -761,7 +775,8 @@ describe('Project Policy Domain Change', () => {
 
       // Sample gauge magnitude (Euclidean norm of first element's x,y gauge)
       const gaugeMagnitude = Math.sqrt(
-        targetState.gaugeBuffer[0] ** 2 + targetState.gaugeBuffer[1] ** 2
+        targetState.gaugeBuffer[vec2Idx(0, 0, 5)] ** 2 +
+          targetState.gaugeBuffer[vec2Idx(0, 1, 5)] ** 2
       );
       gaugeSamples.push(gaugeMagnitude);
       timeSamples.push(t - 116); // elapsed since domain change
@@ -772,7 +787,8 @@ describe('Project Policy Domain Change', () => {
     // After 5 tau (600ms): gauge should be ~0.7% of original (e^-5 ≈ 0.0067)
 
     const initialGaugeMagnitude = Math.sqrt(
-      gaugeAfterDomainChange[0] ** 2 + gaugeAfterDomainChange[1] ** 2
+      gaugeAfterDomainChange[vec2Idx(0, 0, 5)] ** 2 +
+        gaugeAfterDomainChange[vec2Idx(0, 1, 5)] ** 2
     );
 
     // Verify overall trend: gauge is monotonically decreasing
@@ -870,12 +886,12 @@ describe('Project Policy Domain Change', () => {
         stride: 2,
       };
 
-      const baseA = new Float32Array([
+      const baseA = vec2Soa([
         0.50, 0.50,
         0.30, 0.30,
         0.70, 0.70,
       ]);
-      const baseB = new Float32Array([
+      const baseB = vec2Soa([
         0.42, 0.44,
         0.24, 0.26,
         0.64, 0.66,

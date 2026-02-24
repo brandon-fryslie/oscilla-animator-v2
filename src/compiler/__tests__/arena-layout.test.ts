@@ -21,6 +21,7 @@ import type { InstanceDecl } from '../ir/types';
 import { buildPatch } from '../../graph';
 import { compile } from '../compile';
 import { createRuntimeState } from '../../runtime';
+import { arenaRead, arenaWrite } from '../../runtime/ArenaValueStore';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -108,6 +109,26 @@ describe('deriveArenaDescriptor', () => {
       laneStride: 4,
       componentStride: 1,
     }));
+  });
+
+  it('descriptor accessors use canonical SoA component-major indexing', () => {
+    const ref = instanceRef('grid', 'inst_soa');
+    const instances = makeInstances([{ id: 'inst_soa', count: 3, maxCount: 3 }]);
+    const type = canonicalMany(COLOR, undefined, ref);
+    const desc = deriveArenaDescriptor(type, 0, instances);
+    const arena = new Float32Array(desc.length);
+
+    arenaWrite(arena, desc, 0, 0, 10);
+    arenaWrite(arena, desc, 1, 0, 20);
+    arenaWrite(arena, desc, 2, 0, 30);
+    arenaWrite(arena, desc, 0, 1, 40);
+    arenaWrite(arena, desc, 1, 1, 50);
+    arenaWrite(arena, desc, 2, 1, 60);
+
+    // SoA layout => first laneCount entries are component 0 for all lanes,
+    // then component 1, etc.
+    expect(Array.from(arena.subarray(0, 6))).toEqual([10, 20, 30, 40, 50, 60]);
+    expect(arenaRead(arena, desc, 2, 1)).toBe(60);
   });
 
   it('dynamic count uses maxCount', () => {
