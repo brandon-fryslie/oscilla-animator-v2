@@ -45,14 +45,8 @@ describe('AnimationLoop', () => {
         },
       }),
       getCanvas: () => ({ width: 100, height: 100 }),
-      getContext: () => ({
-        setTransform: vi.fn(),
-        fillStyle: '#000',
-        fillRect: vi.fn(),
-        save: vi.fn(),
-        translate: vi.fn(),
-        scale: vi.fn(),
-        restore: vi.fn(),
+      getRenderer: () => ({
+        render: vi.fn(),
       }),
       getArena: () => ({ reset: vi.fn(), getTotalAllocatedBytes: () => 0 }),
       store: {

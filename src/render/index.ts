@@ -7,6 +7,9 @@ export { renderFrame, renderDrawPathInstancesOp } from './canvas/Canvas2DRendere
 
 // SVG renderer
 export { SVGRenderer } from './svg/SVGRenderer';
+
+// WebGPU renderer (runtime default)
+export { WebGPURenderer, createWebGPURenderer } from './webgpu';
 export {
   setRenderIssueReporter,
   getRenderIssues,

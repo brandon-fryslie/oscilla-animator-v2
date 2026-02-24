@@ -11,6 +11,8 @@
 
 import {
   initGlobalRenderArena,
+  createWebGPURenderer,
+  type WebGPURenderer,
   type RenderBufferArena,
   setRenderIssueReporter,
   getRenderIssues,
@@ -50,7 +52,7 @@ export class RuntimeService {
 
   private animationState: AnimationLoopState = createAnimationLoopState();
   private canvas: HTMLCanvasElement | null = null;
-  private ctx: CanvasRenderingContext2D | null = null;
+  private renderer: WebGPURenderer | null = null;
   private arena: RenderBufferArena | null = null;
 
   private cancelAnimationLoop: (() => void) | null = null;
@@ -125,7 +127,6 @@ export class RuntimeService {
    */
   setCanvas(canvasEl: HTMLCanvasElement): void {
     this.canvas = canvasEl;
-    this.ctx = canvasEl.getContext('2d');
   }
 
   /**
@@ -171,6 +172,14 @@ export class RuntimeService {
     // Register settings tokens (before any compile call)
     store.settings.register(appSettings);
     store.settings.register(compilerFlagsSettings);
+
+    // [LAW:single-enforcer] RuntimeService is the only startup boundary that
+    // validates rendering capability and instantiates the renderer.
+    if (!this.canvas) {
+      throw new Error('RuntimeService: preview canvas is required before initialization');
+    }
+
+    this.renderer = await createWebGPURenderer(this.canvas);
 
     // Check for test automation demo marker (set by ?loadDemoPatch= before reload)
     const testDemo = consumeTestDemoFilename();
@@ -273,7 +282,7 @@ export class RuntimeService {
         getCurrentProgram: () => this.compileState.currentProgram,
         getCurrentState: () => this.compileState.currentState,
         getCanvas: () => this.canvas,
-        getContext: () => this.ctx,
+        getRenderer: () => this.renderer,
         getArena: () => this.arena,
         store,
         onStatsUpdate: (statsText) => {
@@ -340,5 +349,7 @@ export class RuntimeService {
     this.domainChangeDetector.cleanup();
     this.liveRecompile.cleanup();
     debugService.clear();
+    this.renderer?.dispose();
+    this.renderer = null;
   }
 }

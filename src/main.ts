@@ -104,6 +104,9 @@ async function main() {
               }
               runtimeService.init().catch((err) => {
                 const message = err instanceof Error ? err.message : String(err);
+                // [LAW:single-enforcer] Main boot is the one boundary that reports
+                // fatal runtime init failures to both diagnostics and browser console.
+                console.error('Failed to initialize runtime:', err);
                 // [LAW:single-enforcer] Main boot reports runtime init failures via diagnostics.
                 rootStore.diagnostics.log({
                   level: 'error',

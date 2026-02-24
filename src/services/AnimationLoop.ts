@@ -6,7 +6,7 @@
  */
 
 import { executeFrame } from '../runtime';
-import { renderFrame, RenderBufferArena } from '../render';
+import { RenderBufferArena, type WebGPURenderer } from '../render';
 import {
   recordFrameTime,
   recordFrameDelta,
@@ -37,13 +37,14 @@ export interface AnimationLoopDeps {
   getCurrentProgram: () => any | null;
   getCurrentState: () => RuntimeState | null;
   getCanvas: () => HTMLCanvasElement | null;
-  getContext: () => CanvasRenderingContext2D | null;
+  getRenderer: () => WebGPURenderer | null;
   getArena: () => RenderBufferArena | null;
   store: RootStore;
   onStatsUpdate?: (statsText: string) => void;
 }
 
 const CONTINUITY_STORE_UPDATE_INTERVAL = 200; // 5Hz
+const EMPTY_RENDER_FRAME: RenderFrameIR = { version: 2, ops: [] };
 
 /**
  * Calculate content bounds from a render frame.
@@ -152,7 +153,7 @@ function acquireFrame(
 /**
  * Execute a single animation frame.
  *
- * [LAW:dataflow-not-control-flow] The pipeline (clear, transform, render, metrics, continuity, FPS)
+ * [LAW:dataflow-not-control-flow] The pipeline (acquire frame, render pass, metrics, continuity, FPS)
  * always runs in the same order. Only the frame source varies (via acquireFrame).
  * Null frame = empty collection (no ops to draw), not control-flow branching.
  */
@@ -161,15 +162,15 @@ export function executeAnimationFrame(
   deps: AnimationLoopDeps,
   state: AnimationLoopState
 ): void {
-  const { getCurrentProgram, getCurrentState, getCanvas, getContext, getArena, store, onStatsUpdate } = deps;
+  const { getCurrentProgram, getCurrentState, getCanvas, getRenderer, getArena, store, onStatsUpdate } = deps;
 
   const currentProgram = getCurrentProgram();
   const currentState = getCurrentState();
-  const ctx = getContext();
   const canvas = getCanvas();
+  const renderer = getRenderer();
   const arena = getArena();
 
-  if (!currentProgram || !currentState || !ctx || !canvas || !arena) {
+  if (!currentProgram || !currentState || !canvas || !renderer || !arena) {
     return;
   }
 
@@ -199,28 +200,23 @@ export function executeAnimationFrame(
   const { frame, execTimeMs } = acquireFrame(tMs, deps, currentProgram, currentState, arena);
   state.execTime = execTimeMs;
 
-  // Render to canvas with zoom/pan transform from store
+  // Render with zoom/pan transform from store
   const renderStart = performance.now();
   const { zoom, pan } = store.viewport;
-
-  // Clear in device space (identity transform) to avoid ghosting/trails
-  ctx.setTransform(1, 0, 0, 1, 0, 0);
-  ctx.fillStyle = '#000000';
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-  // Render frame if available (null = no ops to draw, not control-flow branching)
-  if (frame) {
-    ctx.save();
-    ctx.translate(canvas.width / 2 + pan.x * zoom, canvas.height / 2 + pan.y * zoom);
-    ctx.scale(zoom, zoom);
-    ctx.translate(-canvas.width / 2, -canvas.height / 2);
-    renderFrame(ctx, frame, canvas.width, canvas.height);
-    ctx.restore();
-  }
+  const frameToRender = frame ?? EMPTY_RENDER_FRAME;
+  renderer.render({
+    frame: frameToRender,
+    width: canvas.width,
+    height: canvas.height,
+    zoom,
+    panX: pan.x,
+    panY: pan.y,
+    timeMs: tMs,
+  });
   state.renderTime = performance.now() - renderStart;
 
   // Update content bounds in viewport store (for zoom-to-fit feature)
-  const bounds = frame ? calculateContentBounds(frame) : null;
+  const bounds = calculateContentBounds(frameToRender);
   store.viewport.setContentBounds(bounds);
 
   // NOTE: No buffer release needed - arena is reset at frame start (O(1))
@@ -277,9 +273,7 @@ export function executeAnimationFrame(
     state.fps = Math.round((state.frameCount * 1000) / (now - state.lastFpsUpdate));
 
     // Calculate total elements being rendered
-    const totalElements = frame
-      ? frame.ops.reduce((sum: number, op) => sum + op.instances.count, 0)
-      : 0;
+    const totalElements = frameToRender.ops.reduce((sum: number, op) => sum + op.instances.count, 0);
     const statsText = `FPS: ${state.fps} | Elements: ${totalElements} | ${state.execTime.toFixed(1)}/${state.renderTime.toFixed(1)}ms`;
 
     // Update stats via callback
