@@ -42,6 +42,11 @@ export interface AnimationLoopDeps {
   onStatsUpdate?: (statsText: string) => void;
 }
 
+export interface AnimationLoopController {
+  stop: () => void;
+  onCompileSuccess: () => boolean;
+}
+
 function assertWebGPULoopContract(deps: AnimationLoopDeps): void {
   const canvas = deps.getCanvas();
   const renderer = deps.getRenderer();
@@ -72,6 +77,19 @@ export function createAnimationLoopState(): AnimationLoopState {
     frameTimeSum: 0,
     lastContinuityStoreUpdate: 0,
   };
+}
+
+function resetAnimationLoopState(state: AnimationLoopState): void {
+  const next = createAnimationLoopState();
+  state.frameCount = next.frameCount;
+  state.lastFpsUpdate = next.lastFpsUpdate;
+  state.fps = next.fps;
+  state.execTime = next.execTime;
+  state.renderTime = next.renderTime;
+  state.minFrameTime = next.minFrameTime;
+  state.maxFrameTime = next.maxFrameTime;
+  state.frameTimeSum = next.frameTimeSum;
+  state.lastContinuityStoreUpdate = next.lastContinuityStoreUpdate;
 }
 
 /**
@@ -261,37 +279,61 @@ export function executeAnimationFrame(
 /**
  * Start the animation loop.
  *
- * @returns Cancel function — call it to stop the loop (e.g., on HMR dispose).
+ * @returns Controller for lifecycle operations (stop + compile-success signal).
  */
 export function startAnimationLoop(
   deps: AnimationLoopDeps,
   state: AnimationLoopState,
   onError: (err: unknown) => void
-): () => void {
+): AnimationLoopController {
   assertWebGPULoopContract(deps);
 
   let cancelled = false;
-  let rafId = 0;
+  let haltedByError = false;
+  let rafId: number | null = null;
+
+  const scheduleNextFrame = (): void => {
+    if (cancelled || haltedByError || rafId !== null) {
+      return;
+    }
+    rafId = requestAnimationFrame(animate);
+  };
 
   function animate(tMs: number) {
-    if (cancelled) return;
+    rafId = null;
+    if (cancelled || haltedByError) return;
     try {
       executeAnimationFrame(tMs, deps, state);
     } catch (err) {
       // [LAW:single-enforcer] AnimationLoop is the single runtime boundary that fail-stops frame execution on exceptions.
-      cancelled = true;
+      haltedByError = true;
       onError(err);
       return;
     }
-    if (!cancelled) {
-      rafId = requestAnimationFrame(animate);
-    }
+    scheduleNextFrame();
   }
 
-  rafId = requestAnimationFrame(animate);
+  scheduleNextFrame();
 
-  return () => {
-    cancelled = true;
-    cancelAnimationFrame(rafId);
+  return {
+    stop: () => {
+      cancelled = true;
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId);
+        rafId = null;
+      }
+    },
+    onCompileSuccess: () => {
+      if (cancelled) {
+        return false;
+      }
+      const resumedFromError = haltedByError;
+      // [LAW:dataflow-not-control-flow] Recovery keeps the same frame pipeline and
+      // resets only loop-owned runtime data when compilation publishes a new program.
+      haltedByError = false;
+      resetAnimationLoopState(state);
+      scheduleNextFrame();
+      return resumedFromError;
+    },
   };
 }
