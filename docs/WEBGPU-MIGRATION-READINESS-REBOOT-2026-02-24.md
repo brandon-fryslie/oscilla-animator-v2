@@ -109,17 +109,17 @@ This removes subjective "close enough" interpretation.
 
 ## 6. Current State Under The Reboot Model (As Of February 24, 2026)
 
-Observed from current artifacts:
-- G1: likely pass on technical substance, but blocked by non-normalized statuses in W2/W7/W12 (`slice_completed`).
-- G2: pass on technical substance with W4/W5/W6/W13 evidence.
-- G3: pass on W9/W10 evidence.
-- G4: pass when Chromium gating lane passes (WebKit/Safari telemetry is non-blocking).
-- G5: fail (status vocabulary and schema normalization incomplete across artifacts).
+Observed from current artifacts and canonical checker output:
+- G1: pass.
+- G2: pass.
+- G3: pass.
+- G4: pass (Chromium gating lane passed; optional telemetry lanes remain non-blocking).
+- G5: pass (terminal statuses and normalized required schema fields).
 
 Computed result today:
-- `overall = not_ready`
+- `overall = ready`
 - Primary blockers:
-- Artifact normalization blocker (`slice_completed` and mixed status semantics).
+- none.
 
 ## 7. Immediate Transition Plan
 
