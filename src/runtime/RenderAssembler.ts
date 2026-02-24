@@ -647,23 +647,6 @@ function allocatePackedAosBuffer(arena: RenderBufferArena, laneCount: number, st
   }
 }
 
-function packSoaSlotToAos(
-  state: RuntimeState,
-  arenaDesc: ArenaSlotDescriptor,
-  arena: RenderBufferArena,
-  laneCount: number,
-): Float32Array {
-  const packed = allocatePackedAosBuffer(arena, laneCount, arenaDesc.stride);
-  for (let lane = 0; lane < laneCount; lane++) {
-    for (let component = 0; component < arenaDesc.stride; component++) {
-      // [LAW:one-source-of-truth] Render boundary performs SoA->packed adaptation
-      // through canonical arenaIndex(), not duplicated lane*stride formulas.
-      packed[lane * arenaDesc.stride + component] = state.arena[arenaIndex(arenaDesc, lane, component)];
-    }
-  }
-  return packed;
-}
-
 function resolveNumericSlotBuffer(
   slot: ValueSlot,
   state: RuntimeState,
@@ -696,16 +679,25 @@ function resolveNumericSlotBuffer(
       );
     }
 
-    if ((arenaDesc.packing ?? 'aos') === 'soa' && arenaDesc.stride > 1 && laneCount > 1) {
-      if (!arena) {
-        throw new Error('RenderAssembler: SoA slot adaptation requires render arena for slot ' + slot);
-      }
-      return packSoaSlotToAos(state, arenaDesc, arena, laneCount);
+    const canUseDirectSlice =
+      laneCount === arenaDesc.laneCount &&
+      !arenaDesc.componentOffsets &&
+      (arenaDesc.packing ?? 'aos') === 'aos' &&
+      (arenaDesc.laneStride === undefined || arenaDesc.laneStride === arenaDesc.stride) &&
+      (arenaDesc.componentStride === undefined || arenaDesc.componentStride === 1);
+    if (canUseDirectSlice) {
+      return state.arena.subarray(arenaDesc.offset, arenaDesc.offset + arenaDesc.length);
     }
 
-    const raw = arenaSlice(state.arena, arenaDesc);
     const requiredLength = laneCount * arenaDesc.stride;
-    return requiredLength === arenaDesc.length ? raw : raw.subarray(0, requiredLength);
+    const decodeDesc: ArenaSlotDescriptor =
+      requiredLength === arenaDesc.length
+        ? arenaDesc
+        : { ...arenaDesc, laneCount, length: requiredLength };
+    const outBuffer = arena
+      ? allocatePackedAosBuffer(arena, laneCount, arenaDesc.stride)
+      : undefined;
+    return arenaDecodeToAoS(state.arena, decodeDesc, outBuffer);
   }
 
   throw new Error('RenderAssembler: missing arena descriptor for numeric slot ' + slot);
