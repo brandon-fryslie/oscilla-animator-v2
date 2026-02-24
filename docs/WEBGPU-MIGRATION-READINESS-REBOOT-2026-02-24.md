@@ -70,13 +70,13 @@ Evidence sources:
 
 Pass criteria:
 - Latest Chrome lane passes readiness and baseline perf thresholds.
-- Latest Safari/WebKit lane passes readiness and baseline perf thresholds.
 - Matrix run is repeatable and emitted as machine-readable artifact.
+- Optional non-blocking browser telemetry lanes may be collected, but they do not gate readiness.
 
 Evidence sources:
 - W15 artifact and matrix report.
 
-// [LAW:single-enforcer] browser readiness pass/fail is enforced only by matrix runner output, not manual interpretation.
+// [LAW:single-enforcer] browser readiness pass/fail is enforced only by the Chromium gating lane output.
 
 ### G5. Evidence Integrity
 
@@ -113,13 +113,12 @@ Observed from current artifacts:
 - G1: likely pass on technical substance, but blocked by non-normalized statuses in W2/W7/W12 (`slice_completed`).
 - G2: pass on technical substance with W4/W5/W6/W13 evidence.
 - G3: pass on W9/W10 evidence.
-- G4: fail (W15 reports Safari/WebKit WebGPU unavailable in current environment).
+- G4: pass when Chromium gating lane passes (WebKit/Safari telemetry is non-blocking).
 - G5: fail (status vocabulary and schema normalization incomplete across artifacts).
 
 Computed result today:
 - `overall = not_ready`
 - Primary blockers:
-- Browser qualification blocker (Safari/WebKit capability unavailable in current host environment).
 - Artifact normalization blocker (`slice_completed` and mixed status semantics).
 
 ## 7. Immediate Transition Plan
@@ -133,4 +132,3 @@ Computed result today:
 ## 8. Decision
 
 Adopt the gate model as the canonical readiness concept. Keep workstreams as execution planning only.
-

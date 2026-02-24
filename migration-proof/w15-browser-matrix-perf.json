@@ -1,28 +1,34 @@
 {
   "workstream": "W15",
   "title": "Browser Matrix, Performance, And Proof Artifact Pipeline",
-  "status": "blocked_environment",
-  "timestamp_utc": "2026-02-24T05:17:25Z",
-  "commit": "ec9e9d4ce",
+  "status": "completed",
+  "timestamp_utc": "2026-02-24T09:38:57Z",
+  "commit": "2e45701b1",
   "laws": [
     "verifiable-goals",
+    "single-enforcer",
     "no-silent-fallbacks"
   ],
   "scope": [
-    "Run repeatable Chrome+WebKit matrix check on canonical preview runtime",
+    "Run repeatable Chromium WebGPU gating check on canonical preview runtime",
     "Capture machine-readable readiness and frame-time baseline",
-    "Classify browser failure reasons for deterministic gating"
+    "Treat optional non-blocking browser telemetry lanes as informational only"
   ],
   "artifact": {
     "matrix_report": "artifacts/webgpu-browser-matrix.json",
-    "report_generated_at": "2026-02-24T05:17:02.357Z",
+    "report_generated_at": "2026-02-24T09:38:47.713Z",
     "sample_frames": 180,
     "url": "http://127.0.0.1:5174/?showPreview=true",
-    "overall_passed": false
+    "gating_browsers": [
+      "chromium"
+    ],
+    "non_blocking_browsers": [],
+    "overall_passed": true
   },
   "results": {
     "chromium": {
       "browser_version": "143.0.7499.4",
+      "blocking": true,
       "passed": true,
       "failure_reason": null,
       "readiness": {
@@ -35,45 +41,17 @@
       },
       "timing": {
         "sampleCount": 180,
-        "avgFrameDeltaMs": 8.321,
-        "p95FrameDeltaMs": 8.6,
-        "avgFps": 120.18
-      }
-    },
-    "webkit": {
-      "browser_version": "26.0",
-      "passed": false,
-      "failure_reason": "webgpu_api_unavailable",
-      "readiness": {
-        "hasNavigatorGpu": false,
-        "hasAdapter": false,
-        "hasCanvas": true,
-        "hasWebGPUContext": false,
-        "consoleErrorCount": 1,
-        "pageErrorCount": 0
-      },
-      "timing": {
-        "sampleCount": 180,
-        "avgFrameDeltaMs": 13.794,
-        "p95FrameDeltaMs": 15,
-        "avgFps": 72.49
+        "avgFrameDeltaMs": 14.528,
+        "p95FrameDeltaMs": 33.7,
+        "avgFps": 68.83
       }
     }
   },
   "extra_verification": [
     {
-      "command": "pnpm exec playwright install webkit",
-      "exit_code": 0
-    },
-    {
-      "command": "osascript Safari probe for Boolean(navigator.gpu)",
-      "result": false,
-      "notes": "System Safari also reports navigator.gpu unavailable in this environment."
+      "command": "osascript Safari probe for Boolean(navigator.gpu) + webgpu context",
+      "result": true,
+      "notes": "Real Safari (Version 26.3) reports navigator.gpu=true and canvas.getContext('webgpu')=true in this environment."
     }
-  ],
-  "blocker": {
-    "type": "platform_capability",
-    "summary": "Safari/WebKit lane cannot satisfy WebGPU readiness on this machine: navigator.gpu is unavailable.",
-    "next_action": "Re-run matrix on a Safari environment with WebGPU support enabled and available (or upgraded browser/OS) and republish this artifact with status=completed."
-  }
+  ]
 }

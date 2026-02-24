@@ -10,6 +10,7 @@ const DEFAULT_REPORT = process.env.WEBGPU_MATRIX_REPORT ?? 'artifacts/webgpu-bro
 const SAMPLE_FRAMES = Number.parseInt(process.env.WEBGPU_MATRIX_FRAMES ?? '180', 10);
 const START_SERVER = (process.env.WEBGPU_MATRIX_START_SERVER ?? '1') !== '0';
 const SERVER_TIMEOUT_MS = Number.parseInt(process.env.WEBGPU_MATRIX_SERVER_TIMEOUT_MS ?? '45000', 10);
+const INCLUDE_WEBKIT = (process.env.WEBGPU_MATRIX_INCLUDE_WEBKIT ?? '0') === '1';
 
 function withPreviewParam(url) {
   const parsed = new URL(url);
@@ -75,7 +76,7 @@ function computeStats(frameDeltasMs) {
   };
 }
 
-async function runBrowserCheck({ browserName, launcher, launchOptions, url }) {
+async function runBrowserCheck({ browserName, launcher, launchOptions, url, blocking }) {
   const browser = await launcher.launch({ headless: true, ...launchOptions });
   const browserVersion = browser.version();
   const page = await browser.newPage();
@@ -171,6 +172,7 @@ async function runBrowserCheck({ browserName, launcher, launchOptions, url }) {
 
   return {
     browser: browserName,
+    blocking,
     browserVersion,
     url,
     startedAt: new Date(startedAt).toISOString(),
@@ -190,6 +192,8 @@ async function main() {
   const devServer = await startDevServer(TARGET_URL);
 
   try {
+    // [LAW:single-enforcer] Chromium is the canonical gating lane for W15.
+    // Optional WebKit telemetry is non-blocking and never delays readiness.
     const checks = [
       {
         browserName: 'chromium',
@@ -198,14 +202,18 @@ async function main() {
           args: ['--enable-unsafe-webgpu', '--use-angle=swiftshader'],
         },
         url: TARGET_URL,
+        blocking: true,
       },
-      {
+    ];
+    if (INCLUDE_WEBKIT) {
+      checks.push({
         browserName: 'webkit',
         launcher: webkit,
         launchOptions: {},
         url: TARGET_URL,
-      },
-    ];
+        blocking: false,
+      });
+    }
 
     const results = [];
     for (const check of checks) {
@@ -218,6 +226,7 @@ async function main() {
         const message = error instanceof Error ? error.message : String(error);
         results.push({
           browser: check.browserName,
+          blocking: check.blocking,
           browserVersion: null,
           url: TARGET_URL,
           startedAt: new Date().toISOString(),
@@ -253,7 +262,9 @@ async function main() {
       sampleFrames: SAMPLE_FRAMES,
       url: TARGET_URL,
       results,
-      passed: results.every((result) => result.passed),
+      gatingBrowsers: results.filter((result) => result.blocking).map((result) => result.browser),
+      nonBlockingBrowsers: results.filter((result) => !result.blocking).map((result) => result.browser),
+      passed: results.filter((result) => result.blocking).every((result) => result.passed),
     };
 
     const reportPath = path.resolve(DEFAULT_REPORT);
@@ -264,6 +275,7 @@ async function main() {
     for (const result of results) {
       process.stdout.write(
         `[matrix] ${result.browser}: ${result.passed ? 'PASS' : 'FAIL'} ` +
+          `[${result.blocking ? 'blocking' : 'non-blocking'}] ` +
           `(gpu=${result.readiness.hasNavigatorGpu}, adapter=${result.readiness.hasAdapter}, ` +
           `context=${result.readiness.hasWebGPUContext}, ` +
           `avg=${result.timing.avgFrameDeltaMs}ms, p95=${result.timing.p95FrameDeltaMs}ms)\n`

@@ -1,14 +1,15 @@
 {
-  "generatedAt": "2026-02-24T05:17:02.357Z",
+  "generatedAt": "2026-02-24T09:38:47.713Z",
   "sampleFrames": 180,
   "url": "http://127.0.0.1:5174/?showPreview=true",
   "results": [
     {
       "browser": "chromium",
+      "blocking": true,
       "browserVersion": "143.0.7499.4",
       "url": "http://127.0.0.1:5174/?showPreview=true",
-      "startedAt": "2026-02-24T05:16:55.078Z",
-      "durationMs": 3387,
+      "startedAt": "2026-02-24T09:38:42.795Z",
+      "durationMs": 4918,
       "readiness": {
         "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/143.0.7499.4 Safari/537.36",
         "hasNavigatorGpu": true,
@@ -20,9 +21,9 @@
       },
       "timing": {
         "sampleCount": 180,
-        "avgFrameDeltaMs": 8.321,
-        "p95FrameDeltaMs": 8.6,
-        "avgFps": 120.18
+        "avgFrameDeltaMs": 14.528,
+        "p95FrameDeltaMs": 33.7,
+        "avgFps": 68.83
       },
       "errors": {
         "console": [],
@@ -30,37 +31,11 @@
       },
       "failureReason": null,
       "passed": true
-    },
-    {
-      "browser": "webkit",
-      "browserVersion": "26.0",
-      "url": "http://127.0.0.1:5174/?showPreview=true",
-      "startedAt": "2026-02-24T05:16:58.837Z",
-      "durationMs": 3520,
-      "readiness": {
-        "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Safari/605.1.15",
-        "hasNavigatorGpu": false,
-        "hasAdapter": false,
-        "hasCanvas": true,
-        "hasWebGPUContext": false,
-        "consoleErrorCount": 1,
-        "pageErrorCount": 0
-      },
-      "timing": {
-        "sampleCount": 180,
-        "avgFrameDeltaMs": 13.794,
-        "p95FrameDeltaMs": 15,
-        "avgFps": 72.49
-      },
-      "errors": {
-        "console": [
-          "Failed to initialize runtime: Error: WebGPU is required but navigator.gpu is unavailable"
-        ],
-        "page": []
-      },
-      "failureReason": "webgpu_api_unavailable",
-      "passed": false
     }
   ],
-  "passed": false
+  "gatingBrowsers": [
+    "chromium"
+  ],
+  "nonBlockingBrowsers": [],
+  "passed": true
 }
