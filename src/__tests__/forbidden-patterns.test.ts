@@ -1443,6 +1443,16 @@ describe('Forbidden Patterns (Type System Invariants)', () => {
       ).toEqual([]);
     });
 
+    it('render assembler must not read one-cardinality values from offset-only arena maps', () => {
+      const rawMatches = grepSrc('scalarExprToArenaOffset\\.get\\(', 'src/runtime/RenderAssembler.ts');
+      const filtered = filterAllowlist(rawMatches, [/\.test\./, /__tests__/]);
+      expect(
+        filtered,
+        'RenderAssembler one-cardinality reads must use scalarExprToArenaAddress metadata only.\n' +
+        'Found violations:\n' + filtered.join('\n')
+      ).toEqual([]);
+    });
+
     it('materializer and continuity mapping must route stride indexing through shared helpers', () => {
       const rawMatches = [
         ...grepSrc('\\bi\\s*\\*\\s*stride\\s*\\+\\s*[a-zA-Z_]', 'src/runtime/ValueExprMaterializer.ts'),

@@ -531,7 +531,6 @@ type ResolvedScale =
 
 function resolveScale(
   scaleSpec: StepRender['scale'],
-  scalarExprToArenaOffset: ReadonlyMap<number, number>,
   scalarExprToArenaAddress: ReadonlyMap<number, RuntimeScalarArenaAddress> | undefined,
   state: RuntimeState,
   slotToArena: ReadonlyMap<ValueSlot, ArenaSlotDescriptor> | undefined,
@@ -549,14 +548,10 @@ function resolveScale(
     if (canonicalAddress) {
       return { kind: 'uniform', value: state.arena[arenaIndex(canonicalAddress.arena, 0, canonicalAddress.component)] };
     }
-    const arenaOffset = scalarExprToArenaOffset.get(scaleSpec.id as number);
-    if (arenaOffset !== undefined) {
-      return { kind: 'uniform', value: state.arena[arenaOffset] };
-    }
 
     throw new Error(
-      'RenderAssembler: No slot mapping for one-cardinality expression ' + scaleSpec.id + '. ' +
-      'One-cardinality values must be evaluated in schedule before rendering.'
+      'RenderAssembler: No canonical arena address for one-cardinality expression ' + scaleSpec.id + '. ' +
+      'One-cardinality values must be evaluated in schedule and resolved in scalarExprToArenaAddress before rendering.'
     );
   }
 
@@ -581,7 +576,6 @@ function resolveScale(
  */
 function resolveShape(
   shapeSpec: StepRender['shape'],
-  scalarExprToArenaOffset: ReadonlyMap<number, number>,
   scalarExprToArenaAddress: ReadonlyMap<number, RuntimeScalarArenaAddress> | undefined,
   state: RuntimeState
 ): ShapeDescriptor | ArrayBufferView {
@@ -612,14 +606,10 @@ function resolveShape(
         params['param' + i] = state.arena[arenaIndex(canonicalAddress.arena, 0, canonicalAddress.component)];
         continue;
       }
-      const arenaOffset = scalarExprToArenaOffset.get(paramExprs[i] as number);
-      if (arenaOffset === undefined) {
-        throw new Error(
-          'RenderAssembler: No slot mapping for one-cardinality shape param ' + paramExprs[i] + '. ' +
-          'One-cardinality values must be evaluated in schedule before rendering.'
-        );
-      }
-      params['param' + i] = state.arena[arenaOffset];
+      throw new Error(
+        'RenderAssembler: No canonical arena address for one-cardinality shape param ' + paramExprs[i] + '. ' +
+        'One-cardinality values must be evaluated in schedule and resolved in scalarExprToArenaAddress before rendering.'
+      );
     }
 
     return {
@@ -1401,7 +1391,7 @@ function appendDrawPathInstancesOp(
   context: AssemblerContext,
   outOps: DrawOp[],
 ): void {
-  const { scalarExprToArenaOffset, scalarExprToArenaAddress, slotToArena, instances, state, arena } = context;
+  const { scalarExprToArenaAddress, slotToArena, instances, state, arena } = context;
 
   // Get instance declaration
   const instance = instances.get(step.instanceId);
@@ -1450,12 +1440,12 @@ function appendDrawPathInstancesOp(
     );
   }
 
-  const resolvedScale = resolveScale(step.scale, scalarExprToArenaOffset, scalarExprToArenaAddress, state, slotToArena);
+  const resolvedScale = resolveScale(step.scale, scalarExprToArenaAddress, state, slotToArena);
   const projectionScale = resolvedScale.kind === 'uniform' ? resolvedScale.value : 1;
   const isotropicScale = resolvedScale.kind === 'perInstance' ? resolvedScale.values : undefined;
 
   // Resolve shape
-  const shape = resolveShape(step.shape, scalarExprToArenaOffset, scalarExprToArenaAddress, state);
+  const shape = resolveShape(step.shape, scalarExprToArenaAddress, state);
 
   // Check if per-instance shapes (shape buffer)
   if (shape instanceof Uint32Array) {

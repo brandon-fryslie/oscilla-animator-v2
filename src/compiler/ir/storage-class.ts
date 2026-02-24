@@ -8,7 +8,7 @@
 
 import type { CanonicalType } from '../../core/canonical-types';
 import type { SlotMetaEntry } from './program';
-import type { ArenaSlotDescriptor } from '../../runtime/ArenaValueStore';
+import type { ArenaPacking, ArenaSlotDescriptor } from '../../runtime/ArenaValueStore';
 import type { InstanceId } from './Indices';
 import type { InstanceDecl } from './types';
 import { requireInst, isMany, payloadStride } from '../../core/canonical-types';
@@ -75,6 +75,7 @@ export function deriveArenaDescriptor(
   arenaOffset: number,
   instances: ReadonlyMap<InstanceId, InstanceDecl>,
   overrideStride?: number,
+  packingPreference?: ArenaPacking,
 ): ArenaSlotDescriptor {
   const card = requireInst(type.extent.cardinality, 'cardinality');
   const stride = overrideStride ?? payloadStride(type.payload);
@@ -82,6 +83,9 @@ export function deriveArenaDescriptor(
     ? resolveInstanceCount(card.instance.instanceId, instances)
     : 1;
   const length = stride * laneCount;
+  const packing = packingPreference ?? 'aos';
+  const laneStride = packing === 'soa' ? 1 : stride;
+  const componentStride = packing === 'soa' ? laneCount : 1;
   // [LAW:one-source-of-truth] Canonical descriptor carries explicit packing
   // metadata even while execution is still AoS-backed during W1/W14 migration.
   return {
@@ -89,8 +93,8 @@ export function deriveArenaDescriptor(
     stride,
     laneCount,
     length,
-    packing: 'aos',
-    laneStride: stride,
-    componentStride: 1,
+    packing,
+    laneStride,
+    componentStride,
   };
 }
