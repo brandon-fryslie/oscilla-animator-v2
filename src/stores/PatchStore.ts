@@ -12,7 +12,7 @@
 
 import { makeObservable, observable, computed, action, reaction } from 'mobx';
 import type { Block, Edge, Endpoint, Patch, BlockType, InputPort, OutputPort, LensAttachment } from '../graph/Patch';
-import type { BlockId, BlockRole, CombineMode, EdgeRole, PortId } from '../types';
+import type { BlockId, BlockRole, CombineMode, DefaultSource, EdgeRole, PortId } from '../types';
 import { emptyPatchData, type PatchData } from './internal';
 import type { EventHub } from '../events/EventHub';
 import { requireAnyBlockDef } from '../blocks/registry';
@@ -89,6 +89,21 @@ function generateDefaultDisplayName(
   return candidate;
 }
 
+// [LAW:one-source-of-truth] Default-source derived block identity is canonical.
+function derivedDefaultSourceBlockId(targetBlockId: BlockId, targetPortId: string): BlockId {
+  return `_ds_${targetBlockId}_${targetPortId}` as BlockId;
+}
+
+function sourceAddress(blockId: BlockId, outputPortId: string): string {
+  return `v1:blocks.${blockId}.outputs.${outputPortId}`;
+}
+
+// [LAW:one-type-per-behavior] Time-source identity is one predicate shared by
+// materialize and dematerialize paths.
+function isTimeSourceBlockType(blockType: string): boolean {
+  return blockType === 'TimeRoot' || blockType === 'InfiniteTimeRoot';
+}
+
 export class PatchStore {
   // Private mutable state - THE source of truth
   private _data: PatchData;
@@ -132,6 +147,8 @@ export class PatchStore {
       updateBlockDisplayName: action,
       updateInputPort: action,
       updateInputPortCombineMode: action,
+      materializeInputDefaultSource: action,
+      dematerializeInputDefaultSource: action,
 
       addLens: action,
       removeLens: action,
@@ -613,6 +630,211 @@ export class PatchStore {
    */
   updateInputPortCombineMode(blockId: BlockId, portId: PortId, combineMode: CombineMode): void {
     this.updateInputPort(blockId, portId, { combineMode });
+  }
+
+  /**
+   * Materialize an input port default source into an explicit graph edge.
+   *
+   * Creates a concrete source block (or reuses TimeRoot), wires it to the input,
+   * and rewrites any lens sourceAddress that previously targeted the derived
+   * default-source address for this input.
+   */
+  materializeInputDefaultSource(
+    targetBlockId: BlockId,
+    targetPortId: PortId,
+  ): { materializedBlockId?: BlockId; createdNewBlock: boolean; error?: string } {
+    const targetBlock = this._data.blocks.get(targetBlockId);
+    if (!targetBlock) {
+      throw new Error(`Block not found: ${targetBlockId}`);
+    }
+
+    const targetDef = requireAnyBlockDef(targetBlock.type);
+    const inputDef = targetDef.inputs[targetPortId];
+    if (!inputDef || inputDef.exposedAsPort === false) {
+      const message = `Input port ${targetBlockId}.${targetPortId} not found or not exposable`;
+      this.reportIssue('warn', message);
+      return { createdNewBlock: false, error: message };
+    }
+
+    const connected = this._data.edges.some(
+      (edge) => edge.to.blockId === targetBlockId && edge.to.slotId === targetPortId,
+    );
+    if (connected) {
+      const message = `Cannot materialize ${targetBlockId}.${targetPortId}: port is already connected`;
+      this.reportIssue('warn', message);
+      return { createdNewBlock: false, error: message };
+    }
+
+    const instancePort = targetBlock.inputPorts.get(targetPortId);
+    const effectiveDefault = instancePort?.defaultSource ?? inputDef.defaultSource;
+    if (!effectiveDefault) {
+      const message = `Cannot materialize ${targetBlockId}.${targetPortId}: no default source is configured`;
+      this.reportIssue('warn', message);
+      return { createdNewBlock: false, error: message };
+    }
+
+    const materializeAddressFrom = sourceAddress(
+      derivedDefaultSourceBlockId(targetBlockId, targetPortId),
+      effectiveDefault.output,
+    );
+
+    if (isTimeSourceBlockType(effectiveDefault.blockType)) {
+      // [LAW:one-source-of-truth] Time defaults always point at the canonical
+      // time source block rather than creating duplicate time roots.
+      const timeSource = Array.from(this._data.blocks.values()).find((block) =>
+        isTimeSourceBlockType(block.type),
+      );
+      if (!timeSource) {
+        const message = `Cannot materialize ${targetBlockId}.${targetPortId}: no TimeRoot block exists`;
+        this.reportIssue('warn', message);
+        return { createdNewBlock: false, error: message };
+      }
+
+      this.addEdge(
+        { kind: 'port', blockId: timeSource.id, slotId: effectiveDefault.output },
+        { kind: 'port', blockId: targetBlockId, slotId: targetPortId },
+      );
+
+      const portAfterConnect = this._data.blocks.get(targetBlockId)?.inputPorts.get(targetPortId);
+      const existingLenses = portAfterConnect?.lenses ?? [];
+      const materializedAddressTo = sourceAddress(timeSource.id, effectiveDefault.output);
+      const rewrittenLenses = existingLenses.map((lens) =>
+        lens.sourceAddress === materializeAddressFrom
+          ? { ...lens, sourceAddress: materializedAddressTo }
+          : lens,
+      );
+      const changed = rewrittenLenses.some((lens, idx) => lens.sourceAddress !== existingLenses[idx].sourceAddress);
+      if (changed) {
+        this.updateInputPort(targetBlockId, targetPortId, { lenses: rewrittenLenses });
+      }
+
+      return {
+        materializedBlockId: timeSource.id,
+        createdNewBlock: false,
+      };
+    }
+
+    requireAnyBlockDef(effectiveDefault.blockType);
+
+    // [LAW:single-enforcer] PatchStore is the only boundary that mutates graph
+    // state for default-source materialization.
+    const materializedBlockId = this.addBlock(effectiveDefault.blockType, { ...(effectiveDefault.params ?? {}) }, {
+      domainId: targetBlock.domainId,
+      role: { kind: 'user', meta: {} },
+    });
+    this.addEdge(
+      { kind: 'port', blockId: materializedBlockId, slotId: effectiveDefault.output },
+      { kind: 'port', blockId: targetBlockId, slotId: targetPortId },
+    );
+
+    const portAfterConnect = this._data.blocks.get(targetBlockId)?.inputPorts.get(targetPortId);
+    const existingLenses = portAfterConnect?.lenses ?? [];
+    const materializedAddressTo = sourceAddress(materializedBlockId, effectiveDefault.output);
+    const rewrittenLenses = existingLenses.map((lens) =>
+      lens.sourceAddress === materializeAddressFrom
+        ? { ...lens, sourceAddress: materializedAddressTo }
+        : lens,
+    );
+    const changed = rewrittenLenses.some((lens, idx) => lens.sourceAddress !== existingLenses[idx].sourceAddress);
+    if (changed) {
+      this.updateInputPort(targetBlockId, targetPortId, { lenses: rewrittenLenses });
+    }
+
+    return {
+      materializedBlockId,
+      createdNewBlock: true,
+    };
+  }
+
+  /**
+   * Dematerialize a connected source block back into an input default source.
+   *
+   * Captures source block type/output/params into InputPort.defaultSource,
+   * rewrites target-port lens sourceAddress back to the derived default-source
+   * address, then removes the explicit edge and the materialized source block
+   * (except TimeRoot sources, which are reused and retained).
+   */
+  dematerializeInputDefaultSource(
+    targetBlockId: BlockId,
+    targetPortId: PortId,
+  ): { removedBlockId?: BlockId; error?: string } {
+    const targetBlock = this._data.blocks.get(targetBlockId);
+    if (!targetBlock) {
+      throw new Error(`Block not found: ${targetBlockId}`);
+    }
+
+    const targetDef = requireAnyBlockDef(targetBlock.type);
+    const inputDef = targetDef.inputs[targetPortId];
+    if (!inputDef || inputDef.exposedAsPort === false) {
+      const message = `Input port ${targetBlockId}.${targetPortId} not found or not exposable`;
+      this.reportIssue('warn', message);
+      return { error: message };
+    }
+
+    const incomingEdges = this._data.edges.filter(
+      (edge) => edge.to.blockId === targetBlockId && edge.to.slotId === targetPortId,
+    );
+    if (incomingEdges.length !== 1) {
+      const message = `Cannot dematerialize ${targetBlockId}.${targetPortId}: requires exactly one incoming edge`;
+      this.reportIssue('warn', message);
+      return { error: message };
+    }
+    const incomingEdge = incomingEdges[0];
+    const sourceBlock = this._data.blocks.get(incomingEdge.from.blockId as BlockId);
+    if (!sourceBlock) {
+      const message = `Cannot dematerialize ${targetBlockId}.${targetPortId}: source block missing`;
+      this.reportIssue('warn', message);
+      return { error: message };
+    }
+
+    const sourceOutgoingEdges = this._data.edges.filter((edge) => edge.from.blockId === sourceBlock.id);
+    const sourceIncomingEdges = this._data.edges.filter((edge) => edge.to.blockId === sourceBlock.id);
+    const removeSourceBlock = !isTimeSourceBlockType(sourceBlock.type);
+    if (removeSourceBlock) {
+      const onlyFeedsTarget =
+        sourceOutgoingEdges.length === 1
+        && sourceOutgoingEdges[0].id === incomingEdge.id
+        && sourceIncomingEdges.length === 0;
+      if (!onlyFeedsTarget) {
+        const message = `Cannot dematerialize ${targetBlockId}.${targetPortId}: source block ${sourceBlock.id} is shared or has upstream inputs`;
+        this.reportIssue('warn', message);
+        return { error: message };
+      }
+    }
+
+    const newDefaultSource: DefaultSource = {
+      blockType: sourceBlock.type,
+      output: incomingEdge.from.slotId,
+      ...(Object.keys(sourceBlock.params).length > 0 ? { params: { ...sourceBlock.params } } : {}),
+    };
+
+    const materializedAddressFrom = sourceAddress(sourceBlock.id, incomingEdge.from.slotId);
+    const dematerializedAddressTo = sourceAddress(
+      derivedDefaultSourceBlockId(targetBlockId, targetPortId),
+      incomingEdge.from.slotId,
+    );
+    const existingLenses = targetBlock.inputPorts.get(targetPortId)?.lenses ?? [];
+    const rewrittenLenses = existingLenses.map((lens) =>
+      lens.sourceAddress === materializedAddressFrom
+        ? { ...lens, sourceAddress: dematerializedAddressTo }
+        : lens,
+    );
+    const changed = rewrittenLenses.some((lens, idx) => lens.sourceAddress !== existingLenses[idx].sourceAddress);
+
+    // [LAW:single-enforcer] Dematerialization writes both defaultSource and
+    // lens-source rewrite through the InputPort mutation boundary.
+    this.updateInputPort(targetBlockId, targetPortId, {
+      defaultSource: newDefaultSource,
+      ...(changed ? { lenses: rewrittenLenses } : {}),
+    });
+
+    this.removeEdge(incomingEdge.id);
+    if (removeSourceBlock) {
+      this.removeBlock(sourceBlock.id);
+      return { removedBlockId: sourceBlock.id };
+    }
+
+    return {};
   }
   // =============================================================================
   // Lens Management

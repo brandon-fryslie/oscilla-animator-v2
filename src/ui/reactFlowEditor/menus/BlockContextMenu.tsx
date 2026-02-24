@@ -11,6 +11,7 @@
 import React, { useMemo } from 'react';
 import {
   ContentCopy as DuplicateIcon,
+  SwapHoriz as ReplaceIcon,
   Delete as DeleteIcon,
   LinkOff as DisconnectIcon,
   CenterFocusStrong as CenterIcon,
@@ -18,6 +19,7 @@ import {
 import type { BlockId } from '../../../types';
 import { useStores } from '../../../stores';
 import { ContextMenu, type ContextMenuItem } from '../ContextMenu';
+import { findCompatibleReplacementPlans } from './blockReplacement';
 
 export interface BlockContextMenuProps {
   blockId: BlockId;
@@ -32,7 +34,7 @@ export const BlockContextMenu: React.FC<BlockContextMenuProps> = ({
   onClose,
   onCenter,
 }) => {
-  const { patch, layout } = useStores();
+  const { patch, layout, selection } = useStores();
 
   const items = useMemo<ContextMenuItem[]>(() => {
     const block = patch.blocks.get(blockId);
@@ -43,6 +45,7 @@ export const BlockContextMenu: React.FC<BlockContextMenuProps> = ({
       (edge) => edge.from.blockId === blockId || edge.to.blockId === blockId
     );
     const hasConnections = connectedEdges.length > 0;
+    const replacementPlans = findCompatibleReplacementPlans(patch.patch, blockId);
 
     return [
       {
@@ -66,6 +69,57 @@ export const BlockContextMenu: React.FC<BlockContextMenuProps> = ({
             });
           }
         },
+        dividerAfter: true,
+      },
+      {
+        label: 'Replace Block...',
+        icon: <ReplaceIcon fontSize="small" />,
+        action: () => {},
+        children: replacementPlans.map((candidate) => ({
+          label: candidate.blockLabel,
+          icon: <ReplaceIcon fontSize="small" />,
+          action: () => {
+            const sourceBlock = patch.blocks.get(blockId);
+            if (!sourceBlock) return;
+
+            const sourcePos = layout.getPosition(blockId);
+            const replacementId = patch.addBlock(candidate.blockType, {}, {
+              domainId: sourceBlock.domainId,
+              role: sourceBlock.role,
+            });
+
+            if (sourcePos) {
+              // [LAW:single-enforcer] LayoutStore remains the sole authority for
+              // node positions, including replacement swaps.
+              layout.setPosition(replacementId, sourcePos);
+            }
+
+            for (const edge of candidate.rewiredEdges) {
+              patch.addEdge(
+                {
+                  kind: 'port',
+                  blockId: edge.from.blockId === blockId ? replacementId : edge.from.blockId,
+                  slotId: edge.from.slotId,
+                },
+                {
+                  kind: 'port',
+                  blockId: edge.to.blockId === blockId ? replacementId : edge.to.blockId,
+                  slotId: edge.to.slotId,
+                },
+                {
+                  enabled: edge.enabled,
+                  sortKey: edge.sortKey,
+                  role: edge.role,
+                  ...(edge.alias !== undefined ? { alias: edge.alias } : {}),
+                },
+              );
+            }
+
+            patch.removeBlock(blockId);
+            selection.selectBlock(replacementId);
+          },
+        })),
+        disabled: replacementPlans.length === 0,
         dividerAfter: true,
       },
       {
@@ -96,7 +150,7 @@ export const BlockContextMenu: React.FC<BlockContextMenuProps> = ({
         danger: true,
       },
     ];
-  }, [blockId, onCenter, patch, layout]);
+  }, [blockId, onCenter, patch, layout, selection]);
 
   return <ContextMenu items={items} anchorPosition={anchorPosition} onClose={onClose} />;
 };

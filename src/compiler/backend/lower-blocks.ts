@@ -10,7 +10,8 @@ import { IRBuilderImpl } from "../ir/IRBuilderImpl";
 import type { CompileError } from "../types";
 import type { ConstantProvenanceEntry, InstanceCountProvenanceEntry } from "../ir/program";
 import { isExprRef, type ValueRefExpr, type CollectInputEntry } from "../ir/lowerTypes";
-import type { InstanceId } from "../ir/Indices";
+import type { InstanceId, StateSlotId } from "../ir/Indices";
+import type { StableStateId } from "../ir/types";
 import { getBlockDefinition, type LowerCtx, type LowerResult, hasLowerOutputsOnly } from "../../blocks/registry";
 import type { EventHub } from "../../events/EventHub";
 import { payloadStride, type CanonicalType, requireInst, withInstance } from "../../core/canonical-types";
@@ -33,6 +34,15 @@ import { bindEffects, applyBinding, bindOutputs } from "./binding-pass";
 // Helper to create port key
 function portKey(blockIndex: BlockIndex, portName: string, direction: 'in' | 'out'): PortKey {
   return `${blockIndex}:${portName}:${direction}` as PortKey;
+}
+
+function getExistingStateMap(builder: OrchestratorIRBuilder): ReadonlyMap<StableStateId, StateSlotId> {
+  // [LAW:one-source-of-truth] Existing state authority is builder stateMappings.
+  const stateMap = new Map<StableStateId, StateSlotId>();
+  for (const mapping of builder.getStateMappings()) {
+    stateMap.set(mapping.stateId, mapping.slotStart as StateSlotId);
+  }
+  return stateMap;
 }
 
 
@@ -711,7 +721,7 @@ function lowerBlockInstance(
     // Process effects using binding pass (WI-4)
     const bindingInputs = {
       effects: result.effects,
-      existingState: undefined, // Non-SCC path has no prior state
+      existingState: getExistingStateMap(builder),
       origin: { blockId: block.id },
     };
     const binding = bindEffects(bindingInputs, builder);
@@ -924,7 +934,7 @@ function lowerSCCTwoPass(
         const phase1Effects = partialResult.effects ?? {};
         const bindingInputs = {
           effects: phase1Effects,
-          existingState: undefined, // Phase 1 has no prior state
+          existingState: getExistingStateMap(builder),
           origin: { blockId: block.id, phase: 'phase1' as const },
         };
         const binding = bindEffects(bindingInputs, builder);
