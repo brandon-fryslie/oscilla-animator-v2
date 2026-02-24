@@ -370,9 +370,6 @@ export interface FrameCache {
    */
   valueExprFieldStamps: number[];
 
-  /** Scalar ValueExprId -> arena offset mapping for multi-component extract */
-  scalarExprToArenaOffset: ReadonlyMap<number, number> | null;
-
   /** Scalar ValueExprId -> canonical arena address metadata. */
   scalarExprToArenaAddress: ReadonlyMap<number, RuntimeScalarArenaAddress> | null;
 }
@@ -389,7 +386,6 @@ export function createFrameCache(
     scalarValueExprStamps: new Uint32Array(maxValueExprs),
     valueExprFieldBuffers: new Array(maxValueExprs).fill(null),
     valueExprFieldStamps: new Array(maxValueExprs).fill(-1),
-    scalarExprToArenaOffset: null,
     scalarExprToArenaAddress: null,
   };
 }

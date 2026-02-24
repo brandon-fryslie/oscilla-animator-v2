@@ -30,13 +30,13 @@
   Why seam: Canonical descriptor contract is now explicit (`packing`, `laneStride`, `componentStride`) but producers/consumers still run AoS packing.
   Proposed change: flip runtime/compiler descriptor emission + read/write helpers to SoA packing and migrate remaining AoS consumers.
 
-- [S7] Code location: src/compiler/ir/program.ts:347
-  Why seam: RuntimeAddressTable now carries canonical scalar address metadata, but downstream modules still depend on offset-only maps.
-  Proposed change: migrate remaining runtime readers to `scalarExprToArenaAddress`/descriptor-driven reads and remove offset-only compatibility path.
-
 - [S8] Code location: src/runtime/RuntimeState.ts:665
   Why seam: Persistent state is now arena-backed (`stateArena` + view), but frame semantics still model single-bank writes only.
   Proposed change: introduce explicit read/write bank semantics on state arena segment for full ping-pong ownership.
+
+## Resolved (Delta)
+- [S7] Code location: src/compiler/ir/program.ts:347
+  Resolution: Removed `scalarExprToArenaOffset` from production compiler/runtime contracts and execution context wiring; canonical `scalarExprToArenaAddress` is now the only scalar arena metadata path in production modules.
 
 ## Class 2
 - none
