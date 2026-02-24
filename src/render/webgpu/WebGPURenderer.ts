@@ -51,6 +51,8 @@ interface PreparedDrawPathOp {
   readonly mesh: GPUMesh;
   readonly topologyBankRecordIndex: number;
   readonly indirectRecordIndex: number;
+  readonly firstInstance: number;
+  readonly instanceCount: number;
   readonly pass: 'fill' | 'stroke';
 }
 
@@ -260,12 +262,13 @@ class WebGPUDrawPrepRuntime {
     maxRecords: number,
     indexCount: number,
     instanceCount: number,
+    firstInstance: number,
   ): void {
     this.paramsStaging[0] = indexCount >>> 0;
     this.paramsStaging[1] = instanceCount >>> 0;
     this.paramsStaging[2] = 0; // firstIndex
     this.paramsStaging[3] = 0; // baseVertex
-    this.paramsStaging[4] = 0; // firstInstance
+    this.paramsStaging[4] = firstInstance >>> 0;
     this.paramsStaging[5] = recordIndex >>> 0;
     this.paramsStaging[6] = maxRecords >>> 0;
     this.paramsStaging[7] = 0;
@@ -435,6 +438,18 @@ export class WebGPURenderer {
     this.computeRuntime.step(commandEncoder, 0, dtSeconds);
     this.drawPrepRuntime.useShader(input.drawPrepShaderWgsl);
     const drawPlan = this.buildDrawPlan(input.frame);
+    const totalInstances = this.countPlannedInstances(drawPlan);
+    this.ensureInstanceCapacity(totalInstances);
+    const packedInstances = this.packDrawPlanInstances(drawPlan);
+    if (packedInstances > 0) {
+      this.device.queue.writeBuffer(
+        this.instanceBuffer,
+        0,
+        this.instanceStaging.buffer,
+        0,
+        packedInstances * WEBGPU_RENDER_CONTRACT.instanceBytes
+      );
+    }
     this.ensureIndirectArgsCapacity(drawPlan.length);
     for (const prepared of drawPlan) {
       this.drawPrepRuntime.step(
@@ -443,7 +458,8 @@ export class WebGPURenderer {
         prepared.indirectRecordIndex,
         this.indirectArgsCapacityRecords,
         prepared.mesh.indexCount,
-        prepared.op.instances.count,
+        prepared.instanceCount,
+        prepared.firstInstance,
       );
     }
 
@@ -583,6 +599,7 @@ export class WebGPURenderer {
 
   private buildDrawPlan(frame: RenderFrameIR): PreparedDrawPathOp[] {
     const prepared: PreparedDrawPathOp[] = [];
+    let nextFirstInstance = 0;
     for (const op of frame.ops) {
       if (op.kind !== 'drawPathInstances') {
         throw new Error(`WebGPURenderer: unsupported draw op kind "${(op as { kind: string }).kind}"`);
@@ -610,8 +627,11 @@ export class WebGPURenderer {
           mesh,
           topologyBankRecordIndex,
           indirectRecordIndex: prepared.length,
+          firstInstance: nextFirstInstance,
+          instanceCount: op.instances.count,
           pass: 'fill',
         });
+        nextFirstInstance += op.instances.count;
       }
       if (hasStroke) {
         prepared.push({
@@ -619,22 +639,17 @@ export class WebGPURenderer {
           mesh,
           topologyBankRecordIndex,
           indirectRecordIndex: prepared.length,
+          firstInstance: nextFirstInstance,
+          instanceCount: op.instances.count,
           pass: 'stroke',
         });
+        nextFirstInstance += op.instances.count;
       }
     }
     return prepared;
   }
 
   private drawPreparedPathOp(pass: any, prepared: PreparedDrawPathOp): void {
-    const instanceCount = this.packInstances(prepared.op, prepared.topologyBankRecordIndex, prepared.pass);
-    if (instanceCount === 0) {
-      return;
-    }
-
-    const writeBytes = instanceCount * WEBGPU_RENDER_CONTRACT.instanceBytes;
-    this.device.queue.writeBuffer(this.instanceBuffer, 0, this.instanceStaging.buffer, 0, writeBytes);
-
     pass.setBindGroup(WEBGPU_RENDER_CONTRACT.instanceBindGroup, this.instanceBindGroup);
     pass.setVertexBuffer(0, prepared.mesh.vertexBuffer);
     pass.setIndexBuffer(prepared.mesh.indexBuffer, prepared.mesh.indexFormat);
@@ -642,6 +657,35 @@ export class WebGPURenderer {
       this.indirectArgsBuffer,
       prepared.indirectRecordIndex * WEBGPU_RENDER_CONTRACT.indirectArgsBytes,
     );
+  }
+
+  private countPlannedInstances(drawPlan: readonly PreparedDrawPathOp[]): number {
+    let total = 0;
+    for (const prepared of drawPlan) {
+      total += prepared.instanceCount;
+    }
+    return total;
+  }
+
+  private packDrawPlanInstances(drawPlan: readonly PreparedDrawPathOp[]): number {
+    let packedInstances = 0;
+    // [LAW:dataflow-not-control-flow] Every prepared draw pass runs through one
+    // deterministic packing stage; pass variance is represented as input data.
+    for (const prepared of drawPlan) {
+      const written = this.packInstances(
+        prepared.op,
+        prepared.topologyBankRecordIndex,
+        prepared.pass,
+        prepared.firstInstance
+      );
+      if (written !== prepared.instanceCount) {
+        throw new Error(
+          `WebGPURenderer: packed ${written} instances but plan expected ${prepared.instanceCount}`
+        );
+      }
+      packedInstances = Math.max(packedInstances, prepared.firstInstance + written);
+    }
+    return packedInstances;
   }
 
   private getOrCreateMesh(geometry: PathGeometry): GPUMesh {
@@ -689,6 +733,7 @@ export class WebGPURenderer {
     op: DrawPathInstancesOp,
     topologyBankRecordIndex: number,
     renderPassKind: 'fill' | 'stroke',
+    firstInstance: number,
   ): number {
     const count = op.instances.count;
     if (count <= 0) {
@@ -741,10 +786,10 @@ export class WebGPURenderer {
       }
     }
 
-    this.ensureInstanceCapacity(count);
+    this.ensureInstanceCapacity(firstInstance + count);
 
     for (let i = 0; i < count; i++) {
-      const base = i * INSTANCE_FLOATS;
+      const base = (firstInstance + i) * INSTANCE_FLOATS;
       const sizeBase = isUniformSize ? (size as number) : (size as Float32Array)[i];
       const strokeWidth = hasStroke
         ? (typeof strokeWidthSource === 'number'
