@@ -334,7 +334,12 @@ export interface RuntimeSlotEntry {
  * Runtime slot lookup entry consumed by execution/debug readers.
  */
 export interface RuntimeSlotLookupEntry {
-  readonly storage: 'f64' | 'f32' | 'i32' | 'u32' | 'object' | 'shape2d';
+  /**
+   * Canonical runtime ABI storage vocabulary.
+   * [LAW:one-source-of-truth] Runtime lookup contracts must not expose legacy
+   * f64/object storage labels.
+   */
+  readonly storage: 'f32' | 'i32' | 'u32' | 'shape2d';
   readonly offset: number;
   readonly stride: number;
   readonly slot: ValueSlot;

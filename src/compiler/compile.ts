@@ -291,21 +291,13 @@ function isAlwaysFatalInvariantError(error: CompileError): boolean {
   return error.details?.compilerInvariant === 'unresolvedPlaceholderInstance';
 }
 
-function toCanonicalRuntimeStorage(storage: SlotMetaEntry['storage']): RuntimeSlotEntry['storage'] {
-  switch (storage) {
-    case 'f64':
-    case 'object':
-      return 'f32';
-    case 'f32':
-    case 'i32':
-    case 'u32':
-    case 'shape2d':
-      return storage;
-    default: {
-      const _never: never = storage;
-      throw new Error('Unknown storage class: ' + _never);
-    }
+function assertCanonicalRuntimeStorage(storage: SlotMetaEntry['storage']): RuntimeSlotEntry['storage'] {
+  if (storage === 'f32' || storage === 'i32' || storage === 'u32' || storage === 'shape2d') {
+    return storage;
   }
+  // [LAW:single-enforcer] Compiler slot derivation is the single boundary that
+  // enforces canonical runtime ABI storage vocabulary.
+  throw new Error('Non-canonical runtime storage emitted by deriveStorageLayout: ' + storage);
 }
 
 function buildRuntimeAddressTable(
@@ -390,8 +382,8 @@ function convertLinkedIRToProgram(
   }
 
   // Build slot metadata from slot types.
-  // [LAW:one-source-of-truth] Runtime ABI storage is canonicalized once here.
-  // Legacy labels (f64/object) are normalized to f32 before runtime contract emission.
+  // [LAW:one-source-of-truth] Runtime ABI storage is emitted as canonical vocabulary.
+  // No legacy label normalization is allowed in runtime contract emission.
   const slotTypes = builder.getSlotMetaInputs();
   const slotMeta: SlotMetaEntry[] = [];
   const runtimeSlots: RuntimeSlotEntry[] = [];
@@ -415,7 +407,7 @@ function convertLinkedIRToProgram(
 
     // [LAW:one-source-of-truth] Single derivation point for storage class + stride.
     const { storage: derivedStorage, stride } = deriveStorageLayout(type, slotInfo.stride);
-    const storage = toCanonicalRuntimeStorage(derivedStorage);
+    const storage = assertCanonicalRuntimeStorage(derivedStorage);
 
     const offset = storageOffsets[storage];
     storageOffsets[storage] += stride;

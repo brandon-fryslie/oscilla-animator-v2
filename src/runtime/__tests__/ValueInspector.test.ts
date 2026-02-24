@@ -20,11 +20,11 @@ function makeLookup(slot: number, storage: SlotLookup['storage'], offset: number
 }
 
 describe('readSlotValue', () => {
-  it('reads scalar f64 value', () => {
+  it('reads scalar f32 value', () => {
     const state = createRuntimeState(10, 0, 0, 0, 0, 20);
     state.arena[3] = 42.5;
 
-    const lookup = makeLookup(3, 'f64', 3, 1);
+    const lookup = makeLookup(3, 'f32', 3, 1);
     const value = readSlotValue(
       state,
       lookup,
@@ -38,13 +38,13 @@ describe('readSlotValue', () => {
     }
   });
 
-  it('reads strided f64 value (vec3)', () => {
+  it('reads strided f32 value (vec3)', () => {
     const state = createRuntimeState(20, 0, 0, 0, 0, 40);
     state.arena[5] = 1.0;
     state.arena[6] = 2.0;
     state.arena[7] = 3.0;
 
-    const lookup = makeLookup(5, 'f64', 5, 3);
+    const lookup = makeLookup(5, 'f32', 5, 3);
     const value = readSlotValue(
       state,
       lookup,
@@ -56,12 +56,6 @@ describe('readSlotValue', () => {
       expect(value.count).toBe(3);
       expect(Array.from(value.buffer as Float64Array)).toEqual([1.0, 2.0, 3.0]);
     }
-  });
-
-  it('rejects legacy object storage reads', () => {
-    const state = createRuntimeState(10);
-    const lookup = makeLookup(2, 'object', 0, 0);
-    expect(() => readSlotValue(state, lookup)).toThrow(/object storage.*unsupported/);
   });
 
   it('reads shape2d records from the canonical shape2d bank', () => {

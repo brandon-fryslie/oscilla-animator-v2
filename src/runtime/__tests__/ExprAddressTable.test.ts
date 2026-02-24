@@ -262,12 +262,4 @@ describe('assertNumericStride', () => {
       .toThrow(/must have stride=4, got 1/);
   });
 
-  it('rejects legacy f64 storage labels in canonical numeric checks', () => {
-    const table = getExprAddressTable(mockProgram({
-      slotMeta: [{ slot: valueSlot(0), storage: 'f64', offset: 0, stride: 1, type: SIG_FLOAT }],
-      steps: [],
-    }));
-    expect(() => assertNumericStride(table.slotLookup, valueSlot(0), 1, 'test'))
-      .toThrow(/must use canonical numeric storage/);
-  });
 });

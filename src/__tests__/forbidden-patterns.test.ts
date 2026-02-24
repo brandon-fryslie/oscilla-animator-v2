@@ -1009,6 +1009,25 @@ describe('Forbidden Patterns (Type System Invariants)', () => {
       ).toEqual([]);
     });
 
+    it('compiler runtime-address ABI emission must not normalize legacy f64/object storage labels', () => {
+      // [LAW:single-enforcer] Canonical runtime ABI storage is enforced at the
+      // compiler storage-derivation boundary; runtime-address emission must not
+      // contain legacy remap branches.
+      const rawMatches = [
+        ...grepSrc("case\\s*'f64'", 'src/compiler/compile.ts'),
+        ...grepSrc("case\\s*'object'", 'src/compiler/compile.ts'),
+        ...grepSrc("storage\\s*===\\s*'f64'", 'src/compiler/compile.ts'),
+        ...grepSrc("storage\\s*===\\s*'object'", 'src/compiler/compile.ts'),
+      ];
+      const filtered = filterAllowlist(rawMatches, [/\.test\./, /__tests__/]);
+      expect(
+        filtered,
+        'Legacy f64/object normalization branches are forbidden in runtime-address emission.\n' +
+        'Emit canonical runtime storage vocabulary directly.\n' +
+        'Found violations:\n' + filtered.join('\n')
+      ).toEqual([]);
+    });
+
   });
 
   describe('WebGPU Prereq Guards (W2)', () => {

@@ -30,7 +30,6 @@ export function readSlotValue(
   slotToArena?: ReadonlyMap<ValueSlot, ArenaSlotDescriptor>,
 ): SlotValue {
   switch (lookup.storage) {
-    case 'f64':
     case 'f32':
     case 'i32':
     case 'u32': {
@@ -56,14 +55,6 @@ export function readSlotValue(
         count: lookup.stride,
         type: lookup.type,
       };
-    }
-
-    case 'object': {
-      // [LAW:one-source-of-truth] Runtime slot inspection is sourced from canonical
-      // numeric/typed banks only; legacy values.objects lookup is forbidden.
-      throw new Error(
-        `readSlotValue: object storage for slot ${lookup.slot} is unsupported in canonical runtime inspection`
-      );
     }
 
     case 'shape2d': {
