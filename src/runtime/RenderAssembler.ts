@@ -636,34 +636,50 @@ function resolveControlPoints(
   cpSpec: StepRender['controlPoints'],
   state: RuntimeState,
   slotToArena: ReadonlyMap<ValueSlot, ArenaSlotDescriptor> | undefined,
+  arena: RenderBufferArena,
 ): ArrayBufferView | undefined {
   if (!cpSpec) {
     return undefined;
   }
+  return resolveNumericSlotBuffer(cpSpec.slot, state, slotToArena, arena);
+}
 
-  const arenaDesc = slotToArena?.get(cpSpec.slot);
-  if (arenaDesc) {
-    if (state.arena.length < arenaDesc.offset + arenaDesc.length) {
-      throw new Error(
-        'RenderAssembler: arena too small for control points slot ' +
-          cpSpec.slot +
-          ' (need ' +
-          (arenaDesc.offset + arenaDesc.length) +
-          ', have ' +
-          state.arena.length +
-          ')',
-      );
-    }
-    return arenaSlice(state.arena, arenaDesc);
+function allocatePackedAosBuffer(arena: RenderBufferArena, laneCount: number, stride: number): Float32Array {
+  switch (stride) {
+    case 1:
+      return arena.allocF32(laneCount);
+    case 2:
+      return arena.allocVec2(laneCount);
+    case 3:
+      return arena.allocVec3(laneCount);
+    default:
+      return arena.allocF32(laneCount * stride);
   }
+}
 
-  throw new Error('RenderAssembler: missing arena descriptor for control points slot ' + cpSpec.slot);
+function packSoaSlotToAos(
+  state: RuntimeState,
+  arenaDesc: ArenaSlotDescriptor,
+  arena: RenderBufferArena,
+  laneCount: number,
+): Float32Array {
+  const packed = allocatePackedAosBuffer(arena, laneCount, arenaDesc.stride);
+  for (let lane = 0; lane < laneCount; lane++) {
+    for (let component = 0; component < arenaDesc.stride; component++) {
+      // [LAW:one-source-of-truth] Render boundary performs SoA->packed adaptation
+      // through canonical arenaIndex(), not duplicated lane*stride formulas.
+      packed[lane * arenaDesc.stride + component] = state.arena[arenaIndex(arenaDesc, lane, component)];
+    }
+  }
+  return packed;
 }
 
 function resolveNumericSlotBuffer(
   slot: ValueSlot,
   state: RuntimeState,
   slotToArena: ReadonlyMap<ValueSlot, ArenaSlotDescriptor> | undefined,
+  arena?: RenderBufferArena,
+  expectedLaneCount?: number,
 ): ArrayBufferView {
   const arenaDesc = slotToArena?.get(slot);
   if (arenaDesc) {
@@ -678,7 +694,28 @@ function resolveNumericSlotBuffer(
           ')',
       );
     }
-    return arenaSlice(state.arena, arenaDesc);
+    const laneCount = expectedLaneCount ?? arenaDesc.laneCount;
+    if (laneCount > arenaDesc.laneCount) {
+      throw new Error(
+        'RenderAssembler: requested laneCount ' +
+          laneCount +
+          ' exceeds descriptor laneCount ' +
+          arenaDesc.laneCount +
+          ' for slot ' +
+          slot,
+      );
+    }
+
+    if ((arenaDesc.packing ?? 'aos') === 'soa' && arenaDesc.stride > 1 && laneCount > 1) {
+      if (!arena) {
+        throw new Error('RenderAssembler: SoA slot adaptation requires render arena for slot ' + slot);
+      }
+      return packSoaSlotToAos(state, arenaDesc, arena, laneCount);
+    }
+
+    const raw = arenaSlice(state.arena, arenaDesc);
+    const requiredLength = laneCount * arenaDesc.stride;
+    return requiredLength === arenaDesc.length ? raw : raw.subarray(0, requiredLength);
   }
 
   throw new Error('RenderAssembler: missing arena descriptor for numeric slot ' + slot);
@@ -1039,11 +1076,11 @@ function assemblePerInstanceShapes(
 
   // C-13: Read rotation and scale2 from slots if present
   const fullRotation = step.rotationSlot
-    ? (resolveNumericSlotBuffer(step.rotationSlot, state, slotToArena) as Float32Array)
+    ? (resolveNumericSlotBuffer(step.rotationSlot, state, slotToArena, arena, count) as Float32Array)
     : undefined;
 
   const fullScale2 = step.scale2Slot
-    ? (resolveNumericSlotBuffer(step.scale2Slot, state, slotToArena) as Float32Array)
+    ? (resolveNumericSlotBuffer(step.scale2Slot, state, slotToArena, arena, count) as Float32Array)
     : undefined;
 
   // Run projection using resolved camera params
@@ -1143,6 +1180,7 @@ function assemblePerInstanceShapes(
         group.controlPointsSlot as ValueSlot,
         state,
         slotToArena,
+        arena,
       ) as Float32Array;
     } catch {
       throw new Error(
@@ -1381,20 +1419,20 @@ function appendDrawPathInstancesOp(
   }
 
   // Read position buffer from slot
-  const positionBuffer = resolveNumericSlotBuffer(step.positionSlot, state, slotToArena);
-  if (!positionBuffer) {
+  const packedPositionBuffer = resolveNumericSlotBuffer(step.positionSlot, state, slotToArena, arena, count);
+  if (!packedPositionBuffer) {
     throw new Error('RenderAssembler: Position buffer not found in slot ' + step.positionSlot);
   }
 
   // Position must be Float32Array for v2
-  if (!(positionBuffer instanceof Float32Array)) {
+  if (!(packedPositionBuffer instanceof Float32Array)) {
     throw new Error(
-      'RenderAssembler: Position buffer must be Float32Array, got ' + positionBuffer.constructor.name
+      'RenderAssembler: Position buffer must be Float32Array, got ' + packedPositionBuffer.constructor.name
     );
   }
 
   // Read color buffer from slot
-  const rawColorBuffer = resolveNumericSlotBuffer(step.colorSlot, state, slotToArena);
+  const rawColorBuffer = resolveNumericSlotBuffer(step.colorSlot, state, slotToArena, arena, count);
   if (!rawColorBuffer) {
     throw new Error('RenderAssembler: Color buffer not found in slot ' + step.colorSlot);
   }
@@ -1425,7 +1463,7 @@ function appendDrawPathInstancesOp(
     assemblePerInstanceShapes(
       step,
       shape,
-      positionBuffer,
+      packedPositionBuffer,
       colorBuffer,
       projectionScale,
       isotropicScale,
@@ -1437,32 +1475,32 @@ function appendDrawPathInstancesOp(
   }
 
   // Uniform shape: resolve fully and emit single op
-  const controlPointsBuffer = resolveControlPoints(step.controlPoints, state, slotToArena);
-  const resolvedShape = resolveShapeFully(shape, controlPointsBuffer);
+  const packedControlPointsBuffer = resolveControlPoints(step.controlPoints, state, slotToArena, arena);
+  const resolvedShape = resolveShapeFully(shape, packedControlPointsBuffer);
 
   // C-13: Read rotation and scale2 from slots if present
   const rotation = step.rotationSlot
-    ? (resolveNumericSlotBuffer(step.rotationSlot, state, slotToArena) as Float32Array)
+    ? (resolveNumericSlotBuffer(step.rotationSlot, state, slotToArena, arena, count) as Float32Array)
     : undefined;
 
   const scale2 = step.scale2Slot
-    ? (resolveNumericSlotBuffer(step.scale2Slot, state, slotToArena) as Float32Array)
+    ? (resolveNumericSlotBuffer(step.scale2Slot, state, slotToArena, arena, count) as Float32Array)
     : undefined;
 
   // Run projection using resolved camera params
   {
     // Run projection using resolved camera params
-    if (positionBuffer.length !== count * 3) {
+    if (packedPositionBuffer.length !== count * 3) {
       throw new Error(
         'RenderAssembler: Position buffer must be world-space vec3 (stride 3). ' +
-        'Expected length ' + (count * 3) + ', got ' + positionBuffer.length + '. ' +
+        'Expected length ' + (count * 3) + ', got ' + packedPositionBuffer.length + '. ' +
         'Fix upstream: insert/compile an explicit pos2→pos3 adapter; RenderAssembler will not promote stride-2.'
       );
     }
 
     // Project, compact, and copy in one step (uses arena from context)
     const compactedCopy = projectAndCompact(
-      positionBuffer,
+      packedPositionBuffer,
       projectionScale,
       count,
       colorBuffer,
@@ -1492,13 +1530,13 @@ function appendDrawPathInstancesOp(
     // Build style
     const style = buildPathStyle(compactedCopy.color, 'nonzero');
 
-    if (!controlPointsBuffer || !(controlPointsBuffer instanceof Float32Array)) {
+    if (!packedControlPointsBuffer || !(packedControlPointsBuffer instanceof Float32Array)) {
       throw new Error(
         'RenderAssembler: Path topology requires control points buffer (Float32Array)'
       );
     }
 
-    const geometry = buildPathGeometry(resolvedShape, controlPointsBuffer);
+    const geometry = buildPathGeometry(resolvedShape, packedControlPointsBuffer);
 
     outOps.push({
       kind: 'drawPathInstances',
