@@ -326,6 +326,16 @@ export async function compileAndSwap(
   const newEventSlotCount = (newSchedule as { eventSlotCount?: number })?.eventSlotCount ?? 0;
   const newEventCount = (newSchedule as { eventCount?: number })?.eventCount ?? 0;
   const newValueExprCount = program.valueExprs?.nodes.length ?? 0;
+  // [LAW:one-source-of-truth] Shape2D bank sizing derives from the canonical
+  // runtime address table rather than ad-hoc slot metadata scans.
+  let newShape2DSlotCount = 0;
+  for (const lookup of runtimeAddressTable.slotLookup.values()) {
+    if (lookup.storage !== 'shape2d') continue;
+    const end = lookup.offset + lookup.stride;
+    if (end > newShape2DSlotCount) {
+      newShape2DSlotCount = end;
+    }
+  }
 
   // For recompile: detect domain changes
   if (!isInitial && state.currentProgram && onDomainChange) {
@@ -350,7 +360,8 @@ export async function compileAndSwap(
     newEventSlotCount,
     newEventCount,
     newValueExprCount,
-    program.arenaTotalFloats
+    program.arenaTotalFloats,
+    newShape2DSlotCount,
   );
 
   // Handle primitive state migration

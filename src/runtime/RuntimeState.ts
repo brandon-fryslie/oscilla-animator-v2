@@ -776,14 +776,15 @@ export function createProgramState(
   eventSlotCount: number = 0,
   eventExprCount: number = 0,
   valueExprCount: number = 0,
-  arenaTotalFloats: number = 0
+  arenaTotalFloats: number = 0,
+  shape2dSlotCount: number = 0,
 ): ProgramState {
   // [LAW:one-source-of-truth] event wrap-edge state lives in eventWrapPredicate;
   // eventExprCount is accepted for callsite compatibility while compile/runtime
   // signatures converge on ValueExpr-driven sizing.
   void eventExprCount;
   return {
-    values: createValueStore(),
+    values: createValueStore(shape2dSlotCount),
     lastRenderFrame: null,
     arena: createArena(arenaTotalFloats),
     cache: createFrameCache(valueExprCount),
@@ -812,10 +813,20 @@ export function createRuntimeState(
   eventSlotCount: number = 0,
   eventExprCount: number = 0,
   valueExprCount: number = 0,
-  arenaTotalFloats: number = 0
+  arenaTotalFloats: number = 0,
+  shape2dSlotCount: number = 0,
 ): RuntimeState {
   const session = createSessionState();
-  return createRuntimeStateFromSession(session, slotCount, stateSlotCount, eventSlotCount, eventExprCount, valueExprCount, arenaTotalFloats);
+  return createRuntimeStateFromSession(
+    session,
+    slotCount,
+    stateSlotCount,
+    eventSlotCount,
+    eventExprCount,
+    valueExprCount,
+    arenaTotalFloats,
+    shape2dSlotCount,
+  );
 }
 
 /**
@@ -830,9 +841,18 @@ export function createRuntimeStateFromSession(
   eventSlotCount: number = 0,
   eventExprCount: number = 0,
   valueExprCount: number = 0,
-  arenaTotalFloats: number = 0
+  arenaTotalFloats: number = 0,
+  shape2dSlotCount: number = 0,
 ): RuntimeState {
-  const program = createProgramState(slotCount, stateSlotCount, eventSlotCount, eventExprCount, valueExprCount, arenaTotalFloats);
+  const program = createProgramState(
+    slotCount,
+    stateSlotCount,
+    eventSlotCount,
+    eventExprCount,
+    valueExprCount,
+    arenaTotalFloats,
+    shape2dSlotCount,
+  );
   return {
     // ProgramState (fresh)
     values: program.values,

@@ -10,6 +10,7 @@ import { describe, it, expect } from 'vitest';
 import { payloadTypeToShapeDescIR } from '../../compiler/ir/bridges';
 import {
   SHAPE2D_WORDS,
+  createRuntimeState,
   createValueStore,
   readShape2D,
   writeShape2D,
@@ -96,5 +97,11 @@ describe('Shape2D packed bank operations', () => {
     const store = createValueStore(slotCount);
 
     expect(store.shape2d.length).toBe(slotCount * SHAPE2D_WORDS);
+  });
+
+  it('createRuntimeState allocates shape2d bank from compile-provided slot count', () => {
+    const shape2dSlotCount = 5;
+    const state = createRuntimeState(0, 0, 0, 0, 0, 0, shape2dSlotCount);
+    expect(state.values.shape2d.length).toBe(shape2dSlotCount * SHAPE2D_WORDS);
   });
 });
