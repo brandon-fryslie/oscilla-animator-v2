@@ -24,7 +24,7 @@ const CURVE_SUBDIVISIONS = 12;
 /**
  * CPU path tessellation for WebGPU fill rendering.
  *
- * Supports a single contour composed of MOVE/LINE/CUBIC/QUAD/CLOSE verbs.
+ * Supports one or more contours composed of MOVE/LINE/CUBIC/QUAD/CLOSE verbs.
  * Unsupported verb/topology patterns fail fast by throwing.
  */
 export class PathTessellator {
@@ -39,8 +39,8 @@ export class PathTessellator {
       return cached;
     }
 
-    const contour = this.extractContour(geometry);
-    const mesh = this.tessellateContour(cacheKey, contour);
+    const contours = this.extractContours(geometry);
+    const mesh = this.tessellateContours(cacheKey, contours);
     this.meshCache.set(cacheKey, mesh);
     return mesh;
   }
@@ -65,21 +65,31 @@ export class PathTessellator {
     return id;
   }
 
-  private extractContour(geometry: PathGeometry): ContourBuildResult {
+  private extractContours(geometry: PathGeometry): ContourBuildResult[] {
     const points = geometry.points;
     const maxPointIndex = geometry.pointsCount;
-    const contours: Float32Array[] = [];
+    const contours: ContourBuildResult[] = [];
     let current: number[] = [];
     let pointIndex = 0;
-    let closed = false;
+    let currentClosed = false;
+
+    const pushCurrent = (): void => {
+      if (current.length >= 4) {
+        const deduped = this.removeDuplicatePoints(new Float32Array(current));
+        const normalized = this.removeCollinearPoints(deduped);
+        contours.push({
+          points: normalized,
+          closed: currentClosed,
+        });
+      }
+      current = [];
+      currentClosed = false;
+    };
 
     for (let i = 0; i < geometry.verbs.length; i++) {
       const verb = geometry.verbs[i];
       if (verb === VERB_MOVE) {
-        if (current.length >= 4) {
-          contours.push(new Float32Array(current));
-        }
-        current = [];
+        pushCurrent();
         this.assertPointAvailable(pointIndex, maxPointIndex, verb);
         current.push(points[pointIndex * 2], points[pointIndex * 2 + 1]);
         pointIndex++;
@@ -144,7 +154,7 @@ export class PathTessellator {
       }
 
       if (verb === VERB_CLOSE) {
-        closed = true;
+        currentClosed = true;
         continue;
       }
 
@@ -153,22 +163,15 @@ export class PathTessellator {
       );
     }
 
-    if (current.length >= 4) {
-      contours.push(new Float32Array(current));
-    }
+    pushCurrent();
 
-    if (contours.length !== 1) {
+    if (contours.length === 0) {
       throw new Error(
-        `PathTessellator: expected exactly one contour, received ${contours.length}`
+        'PathTessellator: expected at least one contour with two or more points'
       );
     }
 
-    const deduped = this.removeDuplicatePoints(contours[0]);
-    const normalized = this.removeCollinearPoints(deduped);
-    return {
-      points: normalized,
-      closed,
-    };
+    return contours;
   }
 
   private assertPointAvailable(pointIndex: number, pointsCount: number, verb: number): void {
@@ -294,14 +297,42 @@ export class PathTessellator {
     }
   }
 
-  private tessellateContour(cacheKey: string, contour: ContourBuildResult): TessellatedPathMesh {
+  private tessellateContours(cacheKey: string, contours: readonly ContourBuildResult[]): TessellatedPathMesh {
+    const contourMeshes = contours.map((contour) => this.tessellateSingleContour(contour));
+    const totalVertexFloats = contourMeshes.reduce((sum, contour) => sum + contour.vertexData.length, 0);
+
+    const mergedVertexData = new Float32Array(totalVertexFloats);
+    const mergedIndices: number[] = [];
+
+    let vertexFloatOffset = 0;
+    let vertexIndexOffset = 0;
+    for (const contourMesh of contourMeshes) {
+      mergedVertexData.set(contourMesh.vertexData, vertexFloatOffset);
+      vertexFloatOffset += contourMesh.vertexData.length;
+      for (let i = 0; i < contourMesh.indexData.length; i++) {
+        mergedIndices.push(contourMesh.indexData[i] + vertexIndexOffset);
+      }
+      vertexIndexOffset += contourMesh.vertexData.length / 2;
+    }
+
+    const indexData = this.createIndexData(mergedIndices);
+    return {
+      cacheKey,
+      vertexData: mergedVertexData,
+      indexData,
+      indexFormat: indexData instanceof Uint16Array ? 'uint16' : 'uint32',
+    };
+  }
+
+  private tessellateSingleContour(contour: ContourBuildResult): {
+    readonly vertexData: Float32Array;
+    readonly indexData: number[];
+  } {
     const vertexCount = contour.points.length / 2;
     if (vertexCount < 3) {
       return {
-        cacheKey,
         vertexData: contour.points,
-        indexData: new Uint16Array(0),
-        indexFormat: 'uint16',
+        indexData: [],
       };
     }
 
@@ -335,10 +366,8 @@ export class PathTessellator {
         // via warning instead of silently producing undefined geometry.
         console.warn('PathTessellator: polygon triangulation failed (non-simple or degenerate contour), skipping mesh');
         return {
-          cacheKey,
           vertexData: contour.points,
-          indexData: new Uint16Array(0),
-          indexFormat: 'uint16' as const,
+          indexData: [],
         };
       }
 
@@ -348,12 +377,9 @@ export class PathTessellator {
       }
     }
 
-    const indexData = this.createIndexData(indices);
     return {
-      cacheKey,
       vertexData: contour.points,
-      indexData,
-      indexFormat: indexData instanceof Uint16Array ? 'uint16' : 'uint32',
+      indexData: indices,
     };
   }
 

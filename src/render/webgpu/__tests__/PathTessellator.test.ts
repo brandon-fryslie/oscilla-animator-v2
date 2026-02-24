@@ -37,6 +37,21 @@ describe('PathTessellator', () => {
     expect(mesh.indexData.length).toBe((geometry.pointsCount - 2) * 3);
   });
 
+  it('triangulates multiple contours into one merged mesh', () => {
+    const tessellator = new PathTessellator();
+    const geometry = createGeometry(
+      [
+        -2, -1, -1, 1, -3, 1, // contour 1 triangle
+        1, -1, 2, 1, 0, 1,    // contour 2 triangle
+      ],
+      [0, 1, 1, 4, 0, 1, 1, 4]
+    );
+
+    const mesh = tessellator.getOrCreateMesh(geometry);
+    expect(mesh.vertexData.length).toBe(12);
+    expect(mesh.indexData.length).toBe(6);
+  });
+
   it('supports QUAD and CUBIC verbs by flattening curves', () => {
     const tessellator = new PathTessellator();
     const quadratic = createGeometry(
