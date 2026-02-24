@@ -176,12 +176,107 @@ describe('AnimationLoop', () => {
       },
     } as any;
 
-    startAnimationLoop(deps, createAnimationLoopState(), onError);
+    const loop = startAnimationLoop(deps, createAnimationLoopState(), onError);
     const firstFrame = (globalThis as any).__testFrameCallback() as FrameRequestCallback;
     firstFrame(0);
 
     expect(onError).toHaveBeenCalledTimes(1);
     // [LAW:dataflow-not-control-flow] Fail-stop means no subsequent frame scheduling after error.
+    expect(globalThis.requestAnimationFrame).toHaveBeenCalledTimes(1);
+    expect(loop.onCompileSuccess()).toBe(true);
+    expect(globalThis.requestAnimationFrame).toHaveBeenCalledTimes(2);
+  });
+
+  it('resumes after WebGPU renderer failure when compile success is signaled', () => {
+    executeFrameMock.mockReturnValue({ version: 2, ops: [] } as any);
+    const onError = vi.fn();
+    const renderer = {
+      render: vi.fn(() => {
+        throw new Error('WebGPU pipeline failure');
+      }),
+    };
+    const deps = {
+      getCurrentProgram: () => ({}),
+      getCurrentState: () => ({
+        health: createHealthMetrics(),
+      }),
+      getCanvas: () => ({ width: 100, height: 100 }),
+      getRenderer: () => renderer,
+      getArena: () => ({ reset: vi.fn(), getTotalBytes: () => 0 }),
+      store: {
+        stepDebug: null,
+        diagnostics: {
+          recordJank: vi.fn(),
+          updateFrameTiming: vi.fn(),
+          updateMemoryStats: vi.fn(),
+        },
+        continuity: { updateFromRuntime: vi.fn() },
+        viewport: { zoom: 1, pan: { x: 0, y: 0 }, setContentBounds: vi.fn() },
+        events: { emit: vi.fn() },
+        getPatchRevision: () => 1,
+      },
+    } as any;
+
+    const loop = startAnimationLoop(deps, createAnimationLoopState(), onError);
+    const firstFrame = (globalThis as any).__testFrameCallback() as FrameRequestCallback;
+    firstFrame(0);
+
+    expect(onError).toHaveBeenCalledTimes(1);
+    expect(globalThis.requestAnimationFrame).toHaveBeenCalledTimes(1);
+    expect(loop.onCompileSuccess()).toBe(true);
+    expect(globalThis.requestAnimationFrame).toHaveBeenCalledTimes(2);
+  });
+
+  it('compile success resets loop-owned state even without prior runtime error', () => {
+    executeFrameMock.mockReturnValue({ version: 2, ops: [] } as any);
+    const onError = vi.fn();
+    const deps = {
+      getCurrentProgram: () => ({}),
+      getCurrentState: () => ({
+        health: createHealthMetrics(),
+      }),
+      getCanvas: () => ({ width: 100, height: 100 }),
+      getRenderer: () => ({
+        render: vi.fn(),
+      }),
+      getArena: () => ({ reset: vi.fn(), getTotalBytes: () => 0 }),
+      store: {
+        stepDebug: null,
+        diagnostics: {
+          recordJank: vi.fn(),
+          updateFrameTiming: vi.fn(),
+          updateMemoryStats: vi.fn(),
+        },
+        continuity: { updateFromRuntime: vi.fn() },
+        viewport: { zoom: 1, pan: { x: 0, y: 0 }, setContentBounds: vi.fn() },
+        events: { emit: vi.fn() },
+        getPatchRevision: () => 1,
+      },
+    } as any;
+
+    const state = createAnimationLoopState();
+    state.frameCount = 99;
+    state.fps = 42;
+    state.execTime = 3.2;
+    state.renderTime = 5.7;
+    state.minFrameTime = 1.2;
+    state.maxFrameTime = 9.8;
+    state.frameTimeSum = 123;
+    state.lastContinuityStoreUpdate = 777;
+
+    const loop = startAnimationLoop(deps, state, onError);
+    const resumed = loop.onCompileSuccess();
+
+    expect(resumed).toBe(false);
+    expect(state.frameCount).toBe(0);
+    expect(state.fps).toBe(0);
+    expect(state.execTime).toBe(0);
+    expect(state.renderTime).toBe(0);
+    expect(state.minFrameTime).toBe(Infinity);
+    expect(state.maxFrameTime).toBe(0);
+    expect(state.frameTimeSum).toBe(0);
+    expect(state.lastContinuityStoreUpdate).toBe(0);
+    // Compile success should not duplicate frame scheduling when one frame is already queued.
     expect(globalThis.requestAnimationFrame).toHaveBeenCalledTimes(1);
   });
 
