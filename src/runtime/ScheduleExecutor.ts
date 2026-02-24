@@ -36,7 +36,13 @@ import type { ValueSlot } from '../compiler/ir/Indices';
 import { SCALAR_INSTANCE_ID, SYSTEM_PALETTE_SLOT } from '../compiler/ir/Indices';
 import { evaluateValueExprEvent } from './ValueExprEventEvaluator';
 import { materializeValueExpr } from './ValueExprMaterializer';
-import { arenaSlice, type ArenaSlotDescriptor } from './ArenaValueStore';
+import {
+  arenaDecodeToAoS,
+  arenaEncodeFromAoS,
+  arenaRead,
+  arenaWrite,
+  type ArenaSlotDescriptor,
+} from './ArenaValueStore';
 import {
   type SlotLookup,
   getExprAddressTable,
@@ -77,7 +83,7 @@ function resolveNumericBuffer(
         ')',
     );
   }
-  return arenaSlice(state.arena, arenaDesc);
+  return arenaDecodeToAoS(state.arena, arenaDesc);
 }
 
 function ensureOutputBuffer(
@@ -112,7 +118,7 @@ function ensureOutputBuffer(
         ')',
     );
   }
-  return arenaSlice(state.arena, arenaDesc);
+  return new Float32Array(length);
 }
 
 function writeArenaStrided(
@@ -131,9 +137,8 @@ function writeArenaStrided(
     throw new Error('writeArenaStrided: expected stride=' + stride + ' for slot ' + lookup.slot + ', got ' + lookup.stride);
   }
   const arenaDesc = resolveArenaDescriptor(slotToArena, lookup);
-  const o = arenaDesc.offset;
   for (let i = 0; i < stride; i++) {
-    state.arena[o + i] = src[i] as number;
+    arenaWrite(state.arena, arenaDesc, 0, i, src[i] as number);
   }
 }
 
@@ -144,7 +149,7 @@ function readCanonicalNumeric(
   component: number = 0,
 ): number {
   const arenaDesc = resolveArenaDescriptor(slotToArena, lookup);
-  return state.arena[arenaDesc.offset + component];
+  return arenaRead(state.arena, arenaDesc, 0, component);
 }
 
 // Module-level helper: resolve slot to storage offset (hoisted to avoid per-frame closure)
@@ -295,7 +300,6 @@ export function executeFrame(
           }
         } else if (isNumericStorage(storage)) {
           const arenaDesc = resolveArenaDescriptor(slotToArena, lookup);
-          const arenaTarget = arenaSlice(state.arena, arenaDesc);
 
           // [LAW:one-source-of-truth] Evaluate one-lane values through the same
           // materialization path as many-lane values (count=1).
@@ -306,9 +310,10 @@ export function executeFrame(
             1,
             state,
             program,
-            arenaTarget,
+            undefined,
             MATERIALIZE_SCRATCH,
           );
+          arenaEncodeFromAoS(state.arena, arenaDesc, buffer);
           if (buffer.length < stride) {
             throw new Error(
               'evalOne: materialized buffer too small for slot ' + slot + ' (need ' + stride + ', got ' + buffer.length + ')',
@@ -365,8 +370,6 @@ export function executeFrame(
               ')',
           );
         }
-        const arenaTarget = arenaSlice(state.arena, arenaDesc);
-
         const buffer = materializeValueExpr(
           veId,
           program.valueExprs,
@@ -374,9 +377,10 @@ export function executeFrame(
           count,
           state,
           program,
-          arenaTarget,
+          undefined,
           MATERIALIZE_SCRATCH,
         );
+        arenaEncodeFromAoS(state.arena, arenaDesc, buffer);
 
         // Debug tap: Record field value
         state.tap?.recordFieldValue?.(step.target, buffer);
@@ -445,6 +449,14 @@ export function executeFrame(
         const { baseSlot, outputSlot } = step;
 
         // Resolve base/output through canonical numeric arena descriptors only.
+        const baseDesc = slotToArena.get(baseSlot);
+        if (!baseDesc || baseDesc.offset < 0 || baseDesc.length <= 0) {
+          throw new Error('Continuity: missing arena descriptor for base slot ' + baseSlot);
+        }
+        const outputDesc = slotToArena.get(outputSlot);
+        if (!outputDesc || outputDesc.offset < 0 || outputDesc.length <= 0) {
+          throw new Error('Continuity: missing arena descriptor for output slot ' + outputSlot);
+        }
         const baseBuffer = resolveNumericBuffer(slotToArena, state, baseSlot);
 
         const outputBuffer = baseSlot === outputSlot
@@ -458,6 +470,7 @@ export function executeFrame(
           if (!buffer) throw new Error('Continuity: Buffer not found for slot ' + slot);
           return buffer;
         });
+        arenaEncodeFromAoS(state.arena, outputDesc, outputBuffer);
         state.tap?.recordFieldValue?.(outputSlot, outputBuffer);
         break;
       }
@@ -496,7 +509,7 @@ export function executeFrame(
                 ')',
             );
           }
-          state.tap.recordFieldValue?.(slot, arenaSlice(state.arena, arenaDesc));
+          state.tap.recordFieldValue?.(slot, arenaDecodeToAoS(state.arena, arenaDesc));
           continue;
         }
         // [LAW:one-source-of-truth] Debug-tracked field reads must resolve through

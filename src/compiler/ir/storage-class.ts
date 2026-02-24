@@ -83,5 +83,9 @@ export function deriveArenaDescriptor(
     ? resolveInstanceCount(card.instance.instanceId, instances)
     : 1;
   const length = stride * laneCount;
-  return { offset: arenaOffset, stride, laneCount, length };
+  const componentOffsets = new Array<number>(stride);
+  for (let c = 0; c < stride; c++) {
+    componentOffsets[c] = c * laneCount;
+  }
+  return { offset: arenaOffset, stride, laneCount, length, componentOffsets };
 }

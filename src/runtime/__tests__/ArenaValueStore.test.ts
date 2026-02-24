@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest';
 import {
   type ArenaSlotDescriptor,
   createArena,
+  arenaDecodeToAoS,
+  arenaEncodeFromAoS,
   arenaRead,
   arenaWrite,
   arenaSlice,
@@ -104,6 +106,32 @@ describe('arenaSlice', () => {
     // Write through parent, visible in slice
     arena[5] = 88.0;
     expect(slice[1]).toBeCloseTo(88.0);
+  });
+});
+
+describe('SoA encode/decode', () => {
+  it('encodes AoS into SoA storage and decodes back losslessly', () => {
+    const arena = createArena(12);
+    const d = desc(0, 3, 4); // vec3 x 4 lanes
+    const aos = new Float32Array([
+      1, 2, 3,
+      4, 5, 6,
+      7, 8, 9,
+      10, 11, 12,
+    ]);
+
+    arenaEncodeFromAoS(arena, d, aos);
+
+    // SoA channels are contiguous by component: xxxx yyyy zzzz
+    const raw = arenaSlice(arena, d);
+    expect(Array.from(raw)).toEqual([
+      1, 4, 7, 10,
+      2, 5, 8, 11,
+      3, 6, 9, 12,
+    ]);
+
+    const roundTrip = arenaDecodeToAoS(arena, d);
+    expect(Array.from(roundTrip)).toEqual(Array.from(aos));
   });
 });
 

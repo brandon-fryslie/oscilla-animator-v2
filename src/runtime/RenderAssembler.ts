@@ -42,7 +42,7 @@ import {
   type PerspectiveCameraParams,
 } from '../projection/perspective-kernel';
 import type { ResolvedCameraParams } from './CameraResolver';
-import { arenaSlice, type ArenaSlotDescriptor } from './ArenaValueStore';
+import { arenaDecodeToAoS, type ArenaSlotDescriptor } from './ArenaValueStore';
 import { EMPTY_RENDER_FRAME } from '../render/types';
 
 // =============================================================================
@@ -640,7 +640,7 @@ function resolveControlPoints(
           ')',
       );
     }
-    return arenaSlice(state.arena, arenaDesc);
+    return arenaDecodeToAoS(state.arena, arenaDesc);
   }
 
   throw new Error('RenderAssembler: missing arena descriptor for control points slot ' + cpSpec.slot);
@@ -664,7 +664,7 @@ function resolveNumericSlotBuffer(
           ')',
       );
     }
-    return arenaSlice(state.arena, arenaDesc);
+    return arenaDecodeToAoS(state.arena, arenaDesc);
   }
 
   throw new Error('RenderAssembler: missing arena descriptor for numeric slot ' + slot);
