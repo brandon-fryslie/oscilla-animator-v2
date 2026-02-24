@@ -182,6 +182,26 @@ describe('executeFrameStepped', () => {
     }
   });
 
+  it('records the same canonical frame segments as executeFrame', () => {
+    const program = compileSimplePatch();
+    const arena = getTestArena();
+
+    const stateExecute = createStateForProgram(program);
+    executeFrame(program, stateExecute, arena, 100);
+    const executeSegments = stateExecute.frameSemantics?.segments.slice() ?? [];
+
+    const stateStepped = createStateForProgram(program);
+    const gen = executeFrameStepped(program, stateStepped, arena, 100);
+    let steppedResult = gen.next();
+    while (!steppedResult.done) {
+      steppedResult = gen.next();
+    }
+    const steppedSegments = stateStepped.frameSemantics?.segments.slice() ?? [];
+
+    expect(executeSegments.length).toBeGreaterThan(0);
+    expect(steppedSegments).toEqual(executeSegments);
+  });
+
   it('phase1 value steps capture written slots', () => {
     const program = compileSimplePatch();
     const state = createStateForProgram(program);

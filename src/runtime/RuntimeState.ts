@@ -361,13 +361,13 @@ export interface FrameCache {
   frameId: number;
 
   /** Cached scalar values (indexed by step expr ID) */
-  scalarValues: Float64Array;
+  scalarValues: Float32Array;
 
   /** Frame stamps for scalar cache validation */
   scalarStamps: Uint32Array;
 
   /** Cached scalar ValueExpr values (indexed by ValueExprId) */
-  scalarValueExprValues: Float64Array;
+  scalarValueExprValues: Float32Array;
 
   /** Frame stamps for scalar ValueExpr cache validation */
   scalarValueExprStamps: Uint32Array;
@@ -396,9 +396,9 @@ export function createFrameCache(
 ): FrameCache {
   return {
     frameId: 1, // Start at 1 so initial stamps[n]=0 don't match
-    scalarValues: new Float64Array(maxScalarExprs),
+    scalarValues: new Float32Array(maxScalarExprs),
     scalarStamps: new Uint32Array(maxScalarExprs),
-    scalarValueExprValues: new Float64Array(maxValueExprs),
+    scalarValueExprValues: new Float32Array(maxValueExprs),
     scalarValueExprStamps: new Uint32Array(maxValueExprs),
     valueExprFieldBuffers: new Array(maxValueExprs).fill(null),
     valueExprFieldStamps: new Array(maxValueExprs).fill(-1),

@@ -1198,16 +1198,63 @@ describe('Forbidden Patterns (Type System Invariants)', () => {
 
   describe('WebGPU Prereq Guards (W4)', () => {
 
-    it('runtime state storage must not use Float64Array for persistent state slots', () => {
+    it('runtime state/cache storage must not use Float64Array in hot paths', () => {
       const rawMatches = [
         ...grepSrc('state:\\s*Float64Array', 'src/runtime/RuntimeState.ts'),
         ...grepSrc('new Float64Array\\(stateSlotCount\\)', 'src/runtime/RuntimeState.ts'),
+        ...grepSrc('scalarValues:\\s*Float64Array', 'src/runtime/RuntimeState.ts'),
+        ...grepSrc('scalarValueExprValues:\\s*Float64Array', 'src/runtime/RuntimeState.ts'),
+        ...grepSrc('new Float64Array\\(maxScalarExprs\\)', 'src/runtime/RuntimeState.ts'),
+        ...grepSrc('new Float64Array\\(maxValueExprs\\)', 'src/runtime/RuntimeState.ts'),
+        ...grepSrc('Float32Array \\| Float64Array', 'src/runtime/ValueExprScalarEvaluator.ts'),
         ...grepSrc('oldState:\\s*Float64Array|newState:\\s*Float64Array', 'src/runtime/StateMigration.ts'),
       ];
       const filtered = filterAllowlist(rawMatches, [/\.test\./, /__tests__/]);
       expect(
         filtered,
-        'Persistent runtime state slots must use Float32Array.\n' +
+        'Runtime state/cache hot paths must use canonical Float32Array storage.\n' +
+        'Found violations:\n' + filtered.join('\n')
+      ).toEqual([]);
+    });
+
+  });
+
+  describe('WebGPU Prereq Guards (W13)', () => {
+
+    it('runtime executors must record canonical frame segment transitions', () => {
+      // [LAW:one-source-of-truth] Frame segment semantics must be emitted by all
+      // runtime executors through one canonical segment boundary API.
+      const scheduleExecutorMatches = grepSrc('enterRuntimeFrameSegment\\(', 'src/runtime/ScheduleExecutor.ts');
+      const steppedExecutorMatches = grepSrc('enterRuntimeFrameSegment\\(', 'src/runtime/executeFrameStepped.ts');
+      expect(
+        scheduleExecutorMatches.length,
+        'ScheduleExecutor must emit runtime frame segment transitions via enterRuntimeFrameSegment().'
+      ).toBeGreaterThan(0);
+      expect(
+        steppedExecutorMatches.length,
+        'executeFrameStepped must emit runtime frame segment transitions via enterRuntimeFrameSegment().'
+      ).toBeGreaterThan(0);
+    });
+
+    it('schedule pass ordering must not branch on topology terms', () => {
+      // [LAW:dataflow-not-control-flow] Step ordering is fixed by phase contract;
+      // topology variability must stay in values, not schedule control flow.
+      const rawMatches = [
+        ...grepSrc('if\\s*\\([^\\)]*topology', 'src/compiler/backend/schedule-program.ts'),
+        ...grepSrc('switch\\s*\\([^\\)]*topology', 'src/compiler/backend/schedule-program.ts'),
+        ...grepSrc('\\?[^\\n]*topology', 'src/compiler/backend/schedule-program.ts'),
+        ...grepSrc('\\.sort\\([^\\)]*topology', 'src/compiler/backend/schedule-program.ts'),
+      ];
+      const nonCommentMatches = rawMatches.filter((m) => {
+        const secondColon = m.indexOf(':', m.indexOf(':') + 1);
+        const content = secondColon >= 0 ? m.slice(secondColon + 1).trim() : '';
+        if (!content) return false;
+        return !content.startsWith('//') && !content.startsWith('*');
+      });
+      const filtered = filterAllowlist(nonCommentMatches, [/\.test\./, /__tests__/]);
+      expect(
+        filtered,
+        'Schedule pass ordering must not branch on topology-specific conditions.\n' +
         'Found violations:\n' + filtered.join('\n')
       ).toEqual([]);
     });

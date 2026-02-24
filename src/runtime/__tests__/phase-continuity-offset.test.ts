@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { reconcilePhaseOffsets, createTimeState, wrapPhase } from '../timeResolution';
+import { reconcilePhaseOffsets, createTimeState, resolveTime, wrapPhase } from '../timeResolution';
 import type { TimeModel } from '../../compiler/ir/types';
 
 describe('reconcilePhaseOffsets', () => {
@@ -207,5 +207,38 @@ describe('reconcilePhaseOffsets', () => {
     // After multiple changes, phase should still be continuous
     // (may not match original due to floating point, but should be close)
     expect(phase2).toBeCloseTo(phase1, 10);
+  });
+
+  it('keeps bounded phase semantics stable across multi-hour simulation', () => {
+    const timeState = createTimeState();
+    const timeModel: TimeModel = { kind: 'infinite', periodAMs: 4000, periodBMs: 6500 };
+
+    const totalSeconds = 6 * 60 * 60; // 6 hours equivalent runtime
+    let previousPhaseA = 0;
+    let previousPhaseB = 0;
+    let wrapsA = 0;
+    let wrapsB = 0;
+
+    for (let second = 0; second <= totalSeconds; second++) {
+      const tAbsMs = second * 1000;
+      const resolved = resolveTime(tAbsMs, timeModel, timeState);
+
+      expect(resolved.phaseA).toBeGreaterThanOrEqual(0);
+      expect(resolved.phaseA).toBeLessThan(1);
+      expect(resolved.phaseB).toBeGreaterThanOrEqual(0);
+      expect(resolved.phaseB).toBeLessThan(1);
+
+      if (second > 0 && resolved.phaseA < previousPhaseA) wrapsA++;
+      if (second > 0 && resolved.phaseB < previousPhaseB) wrapsB++;
+
+      previousPhaseA = resolved.phaseA;
+      previousPhaseB = resolved.phaseB;
+    }
+
+    const totalMs = totalSeconds * 1000;
+    expect(previousPhaseA).toBeCloseTo(wrapPhase(totalMs / timeModel.periodAMs), 10);
+    expect(previousPhaseB).toBeCloseTo(wrapPhase(totalMs / timeModel.periodBMs), 10);
+    expect(wrapsA).toBe(Math.floor(totalMs / timeModel.periodAMs));
+    expect(wrapsB).toBe(Math.floor(totalMs / timeModel.periodBMs));
   });
 });

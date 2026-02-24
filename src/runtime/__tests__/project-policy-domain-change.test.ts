@@ -60,9 +60,9 @@ function createTestRuntimeState(): RuntimeState {
     events: new Map(),
     cache: {
       frameId: 0,
-      scalarValues: new Float64Array(100),
+      scalarValues: new Float32Array(100),
       scalarStamps: new Uint32Array(100),
-      scalarValueExprValues: new Float64Array(0),
+      scalarValueExprValues: new Float32Array(0),
       scalarValueExprStamps: new Uint32Array(0),
 
       valueExprFieldBuffers: [],

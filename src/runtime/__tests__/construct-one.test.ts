@@ -57,7 +57,7 @@ describe('construct one-cardinality evaluation', () => {
     ];
 
     const constructExpr = valueExprs[2] as Extract<ValueExpr, { kind: 'construct' }>;
-    const targetBuffer = new Float64Array(10);
+    const targetBuffer = new Float32Array(10);
     const targetOffset = 3;
 
     const written = evaluateConstructScalar(constructExpr, valueExprs, state, targetBuffer, targetOffset);
@@ -82,15 +82,15 @@ describe('construct one-cardinality evaluation', () => {
     ];
 
     const constructExpr = valueExprs[4] as Extract<ValueExpr, { kind: 'construct' }>;
-    const targetBuffer = new Float64Array(10);
+    const targetBuffer = new Float32Array(10);
     const targetOffset = 0;
 
     const written = evaluateConstructScalar(constructExpr, valueExprs, state, targetBuffer, targetOffset);
 
     expect(written).toBe(4);
-    expect(targetBuffer[0]).toBe(0.1);
-    expect(targetBuffer[1]).toBe(0.2);
-    expect(targetBuffer[2]).toBe(0.3);
+    expect(targetBuffer[0]).toBeCloseTo(0.1, 6);
+    expect(targetBuffer[1]).toBeCloseTo(0.2, 6);
+    expect(targetBuffer[2]).toBeCloseTo(0.3, 6);
     expect(targetBuffer[3]).toBe(1.0);
   });
 
@@ -108,7 +108,7 @@ describe('construct one-cardinality evaluation', () => {
     ];
 
     const constructExpr = valueExprs[3] as Extract<ValueExpr, { kind: 'construct' }>;
-    const targetBuffer = new Float64Array(10);
+    const targetBuffer = new Float32Array(10);
     const targetOffset = 5;
 
     const written = evaluateConstructScalar(constructExpr, valueExprs, state, targetBuffer, targetOffset);

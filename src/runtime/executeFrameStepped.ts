@@ -22,7 +22,12 @@ import type { RenderFrameIR } from '../render/types';
 import type { RenderBufferArena } from '../render/RenderBufferArena';
 import { createMaterializeScratch } from './MaterializeScratch';
 import { resolveTime } from './timeResolution';
-import { writeShape2D } from './RuntimeState';
+import {
+  writeShape2D,
+  beginRuntimeFrameSemantics,
+  enterRuntimeFrameSegment,
+  type RuntimeFrameSegment,
+} from './RuntimeState';
 import { detectDomainChange } from './ContinuityMapping';
 import { applyContinuity, finalizeContinuityFrame } from './ContinuityApply';
 import { createStableDomainInstance, createUnstableDomainInstance } from './DomainIdentity';
@@ -249,9 +254,16 @@ export function* executeFrameStepped(
 
   // --- PRE-FRAME SETUP ---
   state.cache.frameId++;
+  beginRuntimeFrameSemantics(state);
+
+  enterRuntimeFrameSegment(state, 'preframe-external-input');
   state.externalChannels.commit();
+
+  enterRuntimeFrameSegment(state, 'preframe-time-resolve');
   const time = resolveTime(tAbsMs, timeModel, state.timeState);
   state.time = time;
+
+  enterRuntimeFrameSegment(state, 'preframe-event-reset');
   state.eventScalars.fill(0);
   state.events.forEach((payloads) => { payloads.length = 0; });
 
@@ -273,6 +285,13 @@ export function* executeFrameStepped(
   // --- PHASE 1: Execute all non-stateWrite steps ---
   const valueExprs = program.valueExprs.nodes;
   const renderSteps: StepRender[] = [];
+  let eventDispatchSeen = false;
+  let continuityMapSeen = false;
+  const resolvePhase1ValueSegment = (): RuntimeFrameSegment => {
+    if (eventDispatchSeen) return 'phase1-value-post-event';
+    if (continuityMapSeen) return 'phase1-value-after-map';
+    return 'phase1-value-pre-event';
+  };
 
   for (let stepIdx = 0; stepIdx < steps.length; stepIdx++) {
     const step = steps[stepIdx];
@@ -280,6 +299,7 @@ export function* executeFrameStepped(
 
     switch (step.kind) {
       case 'evalOne': {
+        enterRuntimeFrameSegment(state, resolvePhase1ValueSegment());
         const targetSlot = step.target;
         const lookup = resolveSlotOffset(targetSlot);
         const { storage, offset, slot, stride } = lookup;
@@ -339,6 +359,8 @@ export function* executeFrameStepped(
       }
 
       case 'eventDispatch': {
+        enterRuntimeFrameSegment(state, 'phase1-event-dispatch');
+        eventDispatchSeen = true;
         const fired = evaluateValueExprEvent(step.expr as any, program.valueExprs, state, program);
         if (fired) {
           state.eventScalars[step.target as number] = 1;
@@ -353,6 +375,7 @@ export function* executeFrameStepped(
       }
 
       case 'materialize': {
+        enterRuntimeFrameSegment(state, resolvePhase1ValueSegment());
         const veId = step.field;
         const instanceDecl = instances.get(step.instanceId);
         const count = instanceDecl && typeof instanceDecl.count === 'number' ? instanceDecl.count : 0;
@@ -381,6 +404,7 @@ export function* executeFrameStepped(
       }
 
       case 'render': {
+        enterRuntimeFrameSegment(state, 'phase1-render-collect');
         renderSteps.push(step);
         break;
       }
@@ -392,6 +416,8 @@ export function* executeFrameStepped(
       }
 
       case 'continuityMapBuild': {
+        enterRuntimeFrameSegment(state, 'phase1-continuity-map');
+        continuityMapSeen = true;
         const { instanceId } = step;
         const instance = instances.get(instanceId as InstanceId);
         if (!instance) break;
@@ -418,6 +444,7 @@ export function* executeFrameStepped(
       }
 
       case 'continuityApply': {
+        enterRuntimeFrameSegment(state, 'phase1-continuity-apply');
         const { policy, baseSlot, outputSlot } = step;
         const baseBuffer = resolveNumericBuffer(slotToArena, state, baseSlot);
         const outputBuffer = baseSlot === outputSlot
@@ -457,11 +484,13 @@ export function* executeFrameStepped(
     scalarExprToArenaOffset: state.cache.scalarExprToArenaOffset!,
     slotToArena: addressTable.slotToArena,
   };
+  enterRuntimeFrameSegment(state, 'render-assembly');
   const frame = assembleRenderFrame(renderSteps, assemblerContext);
 
   yield buildSnapshot(-1, null, 'phase-boundary', totalSteps, program, state, tAbsMs, new Map(), prevValues);
 
   // --- PHASE 2: State writes ---
+  enterRuntimeFrameSegment(state, 'phase2-state-write');
   for (let stepIdx = 0; stepIdx < steps.length; stepIdx++) {
     const step = steps[stepIdx];
 
@@ -550,9 +579,11 @@ export function* executeFrameStepped(
   }
 
   // --- POST-FRAME: Finalize continuity ---
+  enterRuntimeFrameSegment(state, 'continuity-finalize');
   finalizeContinuityFrame(state);
 
   // [LAW:one-source-of-truth] RenderFrame output uses canonical runtime field.
+  enterRuntimeFrameSegment(state, 'frame-output');
   state.lastRenderFrame = frame;
 
   yield buildSnapshot(-1, null, 'post-frame', totalSteps, program, state, tAbsMs, new Map(), prevValues);
