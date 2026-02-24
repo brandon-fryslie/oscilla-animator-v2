@@ -656,10 +656,9 @@ function formatEndpointForDisplay(
   blockTypeById: ReadonlyMap<string, string>,
 ): string {
   const blockName = blockTypeById.get(endpoint.blockId) ?? endpoint.blockId;
-  if (endpoint.dir) {
-    return `${blockName}:${endpoint.port}:${endpoint.dir}`;
-  }
-  return `${blockName}:${endpoint.port}`;
+  // [LAW:single-enforcer] Port display formatting is normalized here for all
+  // obligation endpoint variants (with/without explicit direction suffix).
+  return `${blockName}.${endpoint.port}`;
 }
 
 function splitLast(value: string, sep: string): { head: string; tail: string } | null {

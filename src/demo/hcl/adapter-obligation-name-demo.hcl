@@ -4,7 +4,7 @@
 # This should produce an open needsAdapter obligation and demonstrate
 # canonical block-type names in the diagnostic message.
 #
-# @expect-compile-error needsAdapter:ExternalVec2:position->RenderInstances2D:scale
+# @expect-compile-error needsAdapter:ExternalVec2.position->RenderInstances2D.scale
 
 patch "Adapter Obligation Name Demo" {
   block "Ellipse" "dot" {
