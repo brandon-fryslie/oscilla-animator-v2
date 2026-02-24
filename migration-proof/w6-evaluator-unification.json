@@ -1,0 +1,50 @@
+{
+  "workstream": "W6",
+  "title": "Evaluator Runtime Unification",
+  "status": "slice_completed",
+  "timestamp_utc": "2026-02-24T06:54:05Z",
+  "laws": [
+    "one-source-of-truth",
+    "single-enforcer",
+    "verifiable-goals"
+  ],
+  "scope": [
+    "Lock scheduler execution paths to canonical ValueExpr evaluator/materializer imports only",
+    "Remove remaining legacy/migration wording from runtime evaluator-state contract comments",
+    "Keep single event predicate buffer contract (`eventWrapPredicate`) with no legacy duplicate surfaces"
+  ],
+  "changed_files": [
+    "/Users/bmf/.codex/worktrees/49f4/oscilla-animator-v2/src/runtime/ScheduleExecutor.ts",
+    "/Users/bmf/.codex/worktrees/49f4/oscilla-animator-v2/src/runtime/RuntimeState.ts",
+    "/Users/bmf/.codex/worktrees/49f4/oscilla-animator-v2/src/__tests__/forbidden-patterns.test.ts"
+  ],
+  "verification": [
+    {
+      "command": "pnpm -s typecheck",
+      "exit_code": 0
+    },
+    {
+      "command": "pnpm -s vitest run src/__tests__/forbidden-patterns.test.ts src/runtime/__tests__/ValueExprEventEvaluator.test.ts src/runtime/__tests__/executeFrameStepped.test.ts",
+      "exit_code": 0,
+      "tests_passed": 95
+    },
+    {
+      "command": "if command -v just >/dev/null 2>&1 && [ -f Justfile ]; then just check; else pnpm run typecheck && pnpm test; fi",
+      "exit_code": 0
+    }
+  ],
+  "static_scans": [
+    {
+      "command": "rg -n \"shadow mode|Shadow mode|legacy EventEvaluator|legacy scalar evaluators|legacy event evaluator\" src/runtime/ValueExprScalarEvaluator.ts src/runtime/ValueExprEventEvaluator.ts",
+      "result": "no_matches"
+    },
+    {
+      "command": "rg -n \"eventPrevPredicate\\b\" src/runtime/RuntimeState.ts",
+      "result": "no_matches"
+    },
+    {
+      "command": "rg -n \"from '\\./EventEvaluator'|from '\\./SignalEvaluator'|from '\\./ValueSignalEvaluator'|from '\\./Materializer'\" src/runtime/ScheduleExecutor.ts src/runtime/executeFrameStepped.ts",
+      "result": "no_matches"
+    }
+  ]
+}

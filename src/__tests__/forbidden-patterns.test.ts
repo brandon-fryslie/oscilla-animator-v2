@@ -1184,6 +1184,20 @@ describe('Forbidden Patterns (Type System Invariants)', () => {
       ).toEqual([]);
     });
 
+    it('runtime schedulers must not import legacy evaluator modules', () => {
+      const rawMatches = [
+        ...grepSrc("from '\\./EventEvaluator'|from '\\./SignalEvaluator'|from '\\./ValueSignalEvaluator'|from '\\./Materializer'", 'src/runtime/ScheduleExecutor.ts'),
+        ...grepSrc("from '\\./EventEvaluator'|from '\\./SignalEvaluator'|from '\\./ValueSignalEvaluator'|from '\\./Materializer'", 'src/runtime/executeFrameStepped.ts'),
+      ];
+      const filtered = filterAllowlist(rawMatches, [/\.test\./, /__tests__/]);
+      expect(
+        filtered,
+        'Runtime execution must use canonical ValueExpr evaluator/materializer modules only.\n' +
+        'Legacy evaluator module imports are forbidden in scheduler execution paths.\n' +
+        'Found violations:\n' + filtered.join('\n')
+      ).toEqual([]);
+    });
+
   });
 
   describe('WebGPU Prereq Guards (W5)', () => {

@@ -2,7 +2,7 @@
  * Schedule Executor - Core Frame Execution Loop
  *
  * Executes the IR program schedule step-by-step to produce a frame.
- * Simplified for v2 - pure IR path, no legacy complexity.
+ * Pure IR path for the canonical ValueExpr runtime.
  */
 
 import type { CompiledProgramIR } from '../compiler/ir/program';

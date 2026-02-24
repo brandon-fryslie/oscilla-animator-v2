@@ -649,7 +649,7 @@ export interface ProgramState {
   /** Last assembled frame for the current program execution. */
   lastRenderFrame: RenderFrameIR | null;
 
-  /** Float32 arena for unified value store (cardinality unification migration) */
+  /** Float32 arena for canonical unified value storage. */
   arena: Float32Array;
 
   /** Frame cache (per-frame memoization) - cache owns frameId */
@@ -702,7 +702,7 @@ export interface RuntimeState {
   /** Last assembled frame for the current program execution. */
   lastRenderFrame: RenderFrameIR | null;
 
-  /** Float32 arena for unified value store (cardinality unification migration) */
+  /** Float32 arena for canonical unified value storage. */
   arena: Float32Array;
 
   /** Frame cache (per-frame memoization) - cache owns frameId */
