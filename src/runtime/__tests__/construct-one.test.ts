@@ -10,7 +10,26 @@ import type { ValueExpr } from '../../compiler/ir/value-expr';
 import type { RuntimeState } from '../RuntimeState';
 import { createRuntimeState } from '../RuntimeState';
 import type { ValueExprId } from '../../compiler/ir/Indices';
+import type { RuntimeScalarArenaAddress } from '../../compiler/ir/program';
+import type { ValueSlot } from '../../types';
 import { floatConst, canonicalScalar } from '../../core/canonical-types';
+
+function scalarArenaAddress(offset: number): RuntimeScalarArenaAddress {
+  return {
+    slot: 0 as ValueSlot,
+    component: 0,
+    arena: {
+      offset,
+      stride: 4,
+      laneCount: 1,
+      length: 4,
+    },
+  };
+}
+
+function scalarAddressMap(entries: ReadonlyArray<[number, number]>): ReadonlyMap<number, RuntimeScalarArenaAddress> {
+  return new Map(entries.map(([exprId, offset]) => [exprId, scalarArenaAddress(offset)]));
+}
 
 describe('construct one-cardinality evaluation', () => {
   let state: RuntimeState;
@@ -183,16 +202,16 @@ describe('extract one-cardinality evaluation', () => {
     };
   });
 
-  it('reads component from arena slot via scalarExprToArenaOffset mapping', () => {
+  it('reads component from arena slot via canonical scalarExprToArenaAddress mapping', () => {
     // Write vec3 values (10, 20, 30) to arena at a known offset
     const offset = 5;
     state.arena[offset + 0] = 10;
     state.arena[offset + 1] = 20;
     state.arena[offset + 2] = 30;
 
-    // Set up scalarExprToArenaOffset: input expression 3 maps to offset 5
+    // Set up scalarExprToArenaAddress: input expression 3 maps to offset 5
     const inputId = 3;
-    state.cache.scalarExprToArenaOffset = new Map([[inputId, offset]]);
+    state.cache.scalarExprToArenaAddress = scalarAddressMap([[inputId, offset]]);
 
     // Build extract expressions referencing input 3
     const valueExprs: ValueExpr[] = [
@@ -267,16 +286,16 @@ describe('extract one-cardinality evaluation', () => {
     const constructExpr = valueExprs[2] as Extract<ValueExpr, { kind: 'construct' }>;
     evaluateConstructScalar(constructExpr, valueExprs, state, state.arena, offset);
 
-    // Set up scalarExprToArenaOffset mapping
-    state.cache.scalarExprToArenaOffset = new Map([[2, offset]]);
+    // Set up scalarExprToArenaAddress mapping
+    state.cache.scalarExprToArenaAddress = scalarAddressMap([[2, offset]]);
 
     expect(evaluateValueExprScalar(3 as ValueExprId, valueExprs, state)).toBe(100);
     expect(evaluateValueExprScalar(4 as ValueExprId, valueExprs, state)).toBe(200);
   });
 
-  it('throws when input has no slot mapping', () => {
-    // scalarExprToArenaOffset is null (not populated)
-    state.cache.scalarExprToArenaOffset = null;
+  it('throws when input is missing canonical arena address', () => {
+    // scalarExprToArenaAddress is null (not populated)
+    state.cache.scalarExprToArenaAddress = null;
 
     const valueExprs: ValueExpr[] = [
       {
@@ -293,7 +312,7 @@ describe('extract one-cardinality evaluation', () => {
   });
 
   it('throws when slot mapping is unavailable for non-construct input', () => {
-    state.cache.scalarExprToArenaOffset = null;
+    state.cache.scalarExprToArenaAddress = null;
 
     const valueExprs: ValueExpr[] = [
       { kind: 'const', value: floatConst(0), type: canonicalScalar({ kind: 'float' }, { kind: 'none' }) },
@@ -306,7 +325,7 @@ describe('extract one-cardinality evaluation', () => {
     ];
 
     expect(() => evaluateValueExprScalar(1 as ValueExprId, valueExprs, state)).toThrow(
-      'has no slot mapping',
+      'has no canonical arena address',
     );
   });
 
@@ -318,7 +337,7 @@ describe('extract one-cardinality evaluation', () => {
     state.arena[offset + 3] = 1.0;
 
     const inputId = 4;
-    state.cache.scalarExprToArenaOffset = new Map([[inputId, offset]]);
+    state.cache.scalarExprToArenaAddress = scalarAddressMap([[inputId, offset]]);
 
     const valueExprs: ValueExpr[] = [
       { kind: 'const', value: floatConst(0), type: canonicalScalar({ kind: 'float' }, { kind: 'none' }) },

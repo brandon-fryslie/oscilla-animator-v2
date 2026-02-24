@@ -34,5 +34,6 @@ export const assemblerCtx = {
   resolvedCamera: null as any,
   arena: null as any,
   scalarExprToArenaOffset: null as any,
+  scalarExprToArenaAddress: null as any,
   slotToArena: null as any,
 };

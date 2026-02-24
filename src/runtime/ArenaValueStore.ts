@@ -5,6 +5,16 @@
  * Descriptors are computed at compile time; read/write/slice are unchecked hot-path ops.
  */
 
+export type ArenaPacking = 'aos' | 'soa';
+
+export interface ArenaAddress {
+  readonly baseOffset: number;
+  readonly laneStride: number;
+  readonly componentStride: number;
+  readonly stride: number;
+  readonly laneCount: number;
+}
+
 // [LAW:one-source-of-truth] Descriptor is the single authority for slot layout.
 export interface ArenaSlotDescriptor {
   readonly offset: number;     // Start index in Float32Array
@@ -12,18 +22,25 @@ export interface ArenaSlotDescriptor {
   readonly laneCount: number;  // 1=one-cardinality, N=many-cardinality
   readonly length: number;     // = stride * laneCount (stored for fast bounds/subarray)
   /**
-   * Component-channel offsets relative to `offset`.
-   *
-   * Canonical SoA layout uses `componentOffsets[c] = c * laneCount`.
-   * Legacy descriptors may omit this field; accessors fall back to that formula.
+   * Back-compat component-channel offsets relative to `offset`.
+   * Used by legacy SoA-style test descriptors.
    */
   readonly componentOffsets?: readonly number[];
-}
-
-function componentBase(desc: ArenaSlotDescriptor, component: number): number {
-  const offsets = desc.componentOffsets;
-  if (offsets && component < offsets.length) return offsets[component]!;
-  return component * desc.laneCount;
+  /**
+   * Canonical packing metadata for W1/W14.
+   * `aos` keeps historical interleaved layout, `soa` is component-major.
+   */
+  readonly packing?: ArenaPacking;
+  /**
+   * Lane step in floats for one component plane.
+   * Defaults: `aos -> stride`, `soa -> 1`.
+   */
+  readonly laneStride?: number;
+  /**
+   * Component step in floats between adjacent component planes.
+   * Defaults: `aos -> 1`, `soa -> laneCount`.
+   */
+  readonly componentStride?: number;
 }
 
 /** Allocate a zeroed Float32Array of `totalFloats` elements. */
@@ -31,17 +48,51 @@ export function createArena(totalFloats: number): Float32Array {
   return new Float32Array(totalFloats);
 }
 
-/** Read a single component from canonical SoA slot layout. */
+/**
+ * Canonical per-slot arena address normalization.
+ *
+ * // [LAW:one-source-of-truth] Runtime addressing derives from one descriptor contract
+ * // regardless of the underlying packing mode.
+ */
+export function resolveArenaAddress(desc: ArenaSlotDescriptor): ArenaAddress {
+  const packing = desc.packing ?? 'aos';
+  const laneStride = desc.laneStride ?? (packing === 'soa' ? 1 : desc.stride);
+  const componentStride = desc.componentStride ?? (packing === 'soa' ? desc.laneCount : 1);
+  return {
+    baseOffset: desc.offset,
+    laneStride,
+    componentStride,
+    stride: desc.stride,
+    laneCount: desc.laneCount,
+  };
+}
+
+/** Compute canonical arena index for (lane, component). */
+export function arenaIndex(
+  desc: ArenaSlotDescriptor,
+  lane: number,
+  component: number,
+): number {
+  const componentOffsets = desc.componentOffsets;
+  if (componentOffsets && component < componentOffsets.length) {
+    const laneStride = desc.laneStride ?? 1;
+    return desc.offset + componentOffsets[component]! + lane * laneStride;
+  }
+  const addr = resolveArenaAddress(desc);
+  return addr.baseOffset + component * addr.componentStride + lane * addr.laneStride;
+}
+
+/** Read a single component via canonical arena addressing. */
 export function arenaRead(
   arena: Float32Array,
   desc: ArenaSlotDescriptor,
   lane: number,
   component: number,
 ): number {
-  return arena[desc.offset + componentBase(desc, component) + lane];
+  return arena[arenaIndex(desc, lane, component)];
 }
 
-/** Write a single component into canonical SoA slot layout. */
+/** Write a single component via canonical arena addressing. */
 export function arenaWrite(
   arena: Float32Array,
   desc: ArenaSlotDescriptor,
@@ -49,10 +100,10 @@ export function arenaWrite(
   component: number,
   value: number,
 ): void {
-  arena[desc.offset + componentBase(desc, component) + lane] = value;
+  arena[arenaIndex(desc, lane, component)] = value;
 }
 
-/** Zero-copy raw storage view over the descriptor region (canonical SoA ordering). */
+/** Zero-copy subarray view over the descriptor's region. */
 export function arenaSlice(
   arena: Float32Array,
   desc: ArenaSlotDescriptor,
@@ -81,7 +132,7 @@ export function arenaDecodeToAoS(
 }
 
 /**
- * Encode AoS/interleaved input into canonical SoA descriptor storage.
+ * Encode AoS/interleaved input into descriptor storage.
  */
 export function arenaEncodeFromAoS(
   arena: Float32Array,

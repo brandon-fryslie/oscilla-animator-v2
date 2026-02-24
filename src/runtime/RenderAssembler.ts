@@ -18,6 +18,7 @@
 
 import type { StepRender, InstanceDecl } from '../compiler/ir/types';
 import type { RuntimeState } from './RuntimeState';
+import type { RuntimeScalarArenaAddress } from '../compiler/ir/program';
 import { getTopology } from '../shapes/registry';
 import type { PathTopologyDef, TopologyDef, TopologyId } from '../shapes/types';
 import type {
@@ -42,7 +43,7 @@ import {
   type PerspectiveCameraParams,
 } from '../projection/perspective-kernel';
 import type { ResolvedCameraParams } from './CameraResolver';
-import { arenaDecodeToAoS, type ArenaSlotDescriptor } from './ArenaValueStore';
+import { arenaDecodeToAoS, arenaIndex, type ArenaSlotDescriptor } from './ArenaValueStore';
 import { EMPTY_RENDER_FRAME } from '../render/types';
 
 // =============================================================================
@@ -512,6 +513,8 @@ export interface AssemblerContext {
   arena: RenderBufferArena;
   /** One-cardinality ValueExprId -> arena scalar offset map. */
   scalarExprToArenaOffset: ReadonlyMap<number, number>;
+  /** One-cardinality ValueExprId -> canonical arena address metadata. */
+  scalarExprToArenaAddress?: ReadonlyMap<number, RuntimeScalarArenaAddress>;
   /** Slot -> arena descriptor map (for numeric field reads). */
   slotToArena?: ReadonlyMap<ValueSlot, ArenaSlotDescriptor>;
 }
@@ -529,6 +532,7 @@ type ResolvedScale =
 function resolveScale(
   scaleSpec: StepRender['scale'],
   scalarExprToArenaOffset: ReadonlyMap<number, number>,
+  scalarExprToArenaAddress: ReadonlyMap<number, RuntimeScalarArenaAddress> | undefined,
   state: RuntimeState,
   slotToArena: ReadonlyMap<ValueSlot, ArenaSlotDescriptor> | undefined,
 ): ResolvedScale {
@@ -541,6 +545,10 @@ function resolveScale(
 
   if (scaleSpec.k === 'one') {
     // [LAW:one-source-of-truth] Render reads numeric one-cardinality values from arena only.
+    const canonicalAddress = scalarExprToArenaAddress?.get(scaleSpec.id as number);
+    if (canonicalAddress) {
+      return { kind: 'uniform', value: state.arena[arenaIndex(canonicalAddress.arena, 0, canonicalAddress.component)] };
+    }
     const arenaOffset = scalarExprToArenaOffset.get(scaleSpec.id as number);
     if (arenaOffset !== undefined) {
       return { kind: 'uniform', value: state.arena[arenaOffset] };
@@ -574,6 +582,7 @@ function resolveScale(
 function resolveShape(
   shapeSpec: StepRender['shape'],
   scalarExprToArenaOffset: ReadonlyMap<number, number>,
+  scalarExprToArenaAddress: ReadonlyMap<number, RuntimeScalarArenaAddress> | undefined,
   state: RuntimeState
 ): ShapeDescriptor | ArrayBufferView {
   if (shapeSpec === undefined) {
@@ -598,6 +607,11 @@ function resolveShape(
 
     for (let i = 0; i < paramExprs.length; i++) {
       // [LAW:one-source-of-truth] Render reads numeric one-cardinality values from arena only.
+      const canonicalAddress = scalarExprToArenaAddress?.get(paramExprs[i] as number);
+      if (canonicalAddress) {
+        params['param' + i] = state.arena[arenaIndex(canonicalAddress.arena, 0, canonicalAddress.component)];
+        continue;
+      }
       const arenaOffset = scalarExprToArenaOffset.get(paramExprs[i] as number);
       if (arenaOffset === undefined) {
         throw new Error(
@@ -1349,7 +1363,7 @@ function appendDrawPathInstancesOp(
   context: AssemblerContext,
   outOps: DrawOp[],
 ): void {
-  const { scalarExprToArenaOffset, slotToArena, instances, state, arena } = context;
+  const { scalarExprToArenaOffset, scalarExprToArenaAddress, slotToArena, instances, state, arena } = context;
 
   // Get instance declaration
   const instance = instances.get(step.instanceId);
@@ -1398,12 +1412,12 @@ function appendDrawPathInstancesOp(
     );
   }
 
-  const resolvedScale = resolveScale(step.scale, scalarExprToArenaOffset, state, slotToArena);
+  const resolvedScale = resolveScale(step.scale, scalarExprToArenaOffset, scalarExprToArenaAddress, state, slotToArena);
   const projectionScale = resolvedScale.kind === 'uniform' ? resolvedScale.value : 1;
   const isotropicScale = resolvedScale.kind === 'perInstance' ? resolvedScale.values : undefined;
 
   // Resolve shape
-  const shape = resolveShape(step.shape, scalarExprToArenaOffset, state);
+  const shape = resolveShape(step.shape, scalarExprToArenaOffset, scalarExprToArenaAddress, state);
 
   // Check if per-instance shapes (shape buffer)
   if (shape instanceof Uint32Array) {

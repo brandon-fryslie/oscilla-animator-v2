@@ -115,6 +115,10 @@ export interface ValueExprTable {
   readonly nodes: readonly ValueExpr[];
 }
 
+function laneComponentIndex(lane: number, component: number, stride: number): number {
+  return lane * stride + component;
+}
+
 function resolveMaterializeBuffer(
   target: Float32Array | undefined,
   length: number,
@@ -201,7 +205,7 @@ export function materializeValueExpr(
       // Interleave components into output buffer
       for (let i = 0; i < count; i++) {
         for (let c = 0; c < componentCount; c++) {
-          buf[i * stride + c] = componentBufs[c][i];
+          buf[laneComponentIndex(i, c, stride)] = componentBufs[c][i];
         }
       }
       break;
@@ -213,7 +217,7 @@ export function materializeValueExpr(
       const inputExpr = table.nodes[expr.input];
       const inputStride = payloadStride(inputExpr.type.payload);
       for (let i = 0; i < count; i++) {
-        buf[i] = inputBuf[i * inputStride + expr.componentIndex];
+        buf[i] = inputBuf[laneComponentIndex(i, expr.componentIndex, inputStride)];
       }
       break;
     }
@@ -319,7 +323,7 @@ function materializeKernel(
         }
         for (let i = 0; i < count; i++) {
           for (let c = 0; c < componentValues.length; c++) {
-            buf[i * stride + c] = componentValues[c];
+            buf[laneComponentIndex(i, c, stride)] = componentValues[c];
           }
         }
       } else {
@@ -433,28 +437,28 @@ function fillBufferWithConst(
     }
   } else if (value.kind === 'vec2') {
     for (let i = 0; i < count; i++) {
-      buf[i * 2] = value.value[0];
-      buf[i * 2 + 1] = value.value[1];
+      buf[laneComponentIndex(i, 0, 2)] = value.value[0];
+      buf[laneComponentIndex(i, 1, 2)] = value.value[1];
     }
   } else if (value.kind === 'vec3') {
     for (let i = 0; i < count; i++) {
-      buf[i * 3] = value.value[0];
-      buf[i * 3 + 1] = value.value[1];
-      buf[i * 3 + 2] = value.value[2];
+      buf[laneComponentIndex(i, 0, 3)] = value.value[0];
+      buf[laneComponentIndex(i, 1, 3)] = value.value[1];
+      buf[laneComponentIndex(i, 2, 3)] = value.value[2];
     }
   } else if (value.kind === 'vec4') {
     for (let i = 0; i < count; i++) {
-      buf[i * 4] = value.value[0];
-      buf[i * 4 + 1] = value.value[1];
-      buf[i * 4 + 2] = value.value[2];
-      buf[i * 4 + 3] = value.value[3];
+      buf[laneComponentIndex(i, 0, 4)] = value.value[0];
+      buf[laneComponentIndex(i, 1, 4)] = value.value[1];
+      buf[laneComponentIndex(i, 2, 4)] = value.value[2];
+      buf[laneComponentIndex(i, 3, 4)] = value.value[3];
     }
   } else if (value.kind === 'color') {
     for (let i = 0; i < count; i++) {
-      buf[i * 4] = value.value[0];
-      buf[i * 4 + 1] = value.value[1];
-      buf[i * 4 + 2] = value.value[2];
-      buf[i * 4 + 3] = value.value[3];
+      buf[laneComponentIndex(i, 0, 4)] = value.value[0];
+      buf[laneComponentIndex(i, 1, 4)] = value.value[1];
+      buf[laneComponentIndex(i, 2, 4)] = value.value[2];
+      buf[laneComponentIndex(i, 3, 4)] = value.value[3];
     }
   } else if (value.kind === 'int' || value.kind === 'bool' || value.kind === 'cameraProjection') {
     // Scalar-like types are encoded as float in the field buffer.
@@ -680,16 +684,16 @@ function materializePlacement(
           for (let i = 0; i < count; i++) {
             const col = i % cols;
             const row = Math.floor(i / cols);
-            buf[i * stride] = cols > 1 ? col / (cols - 1) : 0.5;
-            buf[i * stride + 1] = rows > 1 ? row / (rows - 1) : 0.5;
+            buf[laneComponentIndex(i, 0, stride)] = cols > 1 ? col / (cols - 1) : 0.5;
+            buf[laneComponentIndex(i, 1, stride)] = rows > 1 ? row / (rows - 1) : 0.5;
           }
           break;
         }
         case 'halton2D': {
           // Halton sequence bases 2 and 3
           for (let i = 0; i < count; i++) {
-            buf[i * stride] = halton(i + 1, 2);
-            buf[i * stride + 1] = halton(i + 1, 3);
+            buf[laneComponentIndex(i, 0, stride)] = halton(i + 1, 2);
+            buf[laneComponentIndex(i, 1, stride)] = halton(i + 1, 3);
           }
           break;
         }
@@ -699,16 +703,16 @@ function materializePlacement(
           for (let i = 0; i < count; i++) {
             const r = Math.sqrt(i / count);
             const theta = i * goldenAngle;
-            buf[i * stride] = 0.5 + 0.5 * r * Math.cos(theta);
-            buf[i * stride + 1] = 0.5 + 0.5 * r * Math.sin(theta);
+            buf[laneComponentIndex(i, 0, stride)] = 0.5 + 0.5 * r * Math.cos(theta);
+            buf[laneComponentIndex(i, 1, stride)] = 0.5 + 0.5 * r * Math.sin(theta);
           }
           break;
         }
         case 'random': {
           // Pseudo-random (deterministic from index)
           for (let i = 0; i < count; i++) {
-            buf[i * stride] = pseudoRandom(i * 2);
-            buf[i * stride + 1] = pseudoRandom(i * 2 + 1);
+            buf[laneComponentIndex(i, 0, stride)] = pseudoRandom(i * 2);
+            buf[laneComponentIndex(i, 1, stride)] = pseudoRandom(i * 2 + 1);
           }
           break;
         }
@@ -718,14 +722,14 @@ function materializePlacement(
     case 'rank': {
       // 1D ordering value in [0, 1)
       for (let i = 0; i < count; i++) {
-        buf[i * stride] = count > 1 ? i / (count - 1) : 0;
+        buf[laneComponentIndex(i, 0, stride)] = count > 1 ? i / (count - 1) : 0;
       }
       break;
     }
     case 'seed': {
       // Pseudo-random stable seed per element
       for (let i = 0; i < count; i++) {
-        buf[i * stride] = pseudoRandom(i);
+        buf[laneComponentIndex(i, 0, stride)] = pseudoRandom(i);
       }
       break;
     }

@@ -1,0 +1,55 @@
+{
+  "workstream": "W6",
+  "title": "Evaluator Unification (End Shadow-Mode Scalar/Event Paths)",
+  "status": "completed",
+  "timestamp_utc": "2026-02-24T06:40:14Z",
+  "commit": "a53b8af13",
+  "laws": [
+    "one-type-per-behavior",
+    "dataflow-not-control-flow",
+    "verifiable-goals"
+  ],
+  "scope": [
+    "Maintain one canonical scalar/event evaluator family in production execution",
+    "Remove shadow-mode migration markers and duplicate parity state surfaces",
+    "Lock evaluator-path invariants with static bans and runtime tests"
+  ],
+  "closure_surfaces": [
+    "src/runtime/ValueExprScalarEvaluator.ts",
+    "src/runtime/ValueExprEventEvaluator.ts",
+    "src/runtime/RuntimeState.ts",
+    "src/runtime/ScheduleExecutor.ts",
+    "src/runtime/executeFrameStepped.ts",
+    "src/__tests__/compiledir-foundation-gates.test.ts",
+    "src/__tests__/forbidden-patterns.test.ts"
+  ],
+  "verification": [
+    {
+      "command": "pnpm -s typecheck",
+      "exit_code": 0
+    },
+    {
+      "command": "pnpm -s vitest run src/runtime/__tests__/ValueExprEventEvaluator.test.ts src/runtime/__tests__/executeFrameStepped.test.ts src/runtime/__tests__/StepDebugSession.test.ts src/runtime/__tests__/arena-scalar-write-through.test.ts src/__tests__/compiledir-foundation-gates.test.ts src/__tests__/forbidden-patterns.test.ts",
+      "exit_code": 0,
+      "tests_passed": 137
+    }
+  ],
+  "static_scans": [
+    {
+      "command": "rg -n \"runs in parallel with legacy scalar evaluators during migration\" src/runtime/ValueExprScalarEvaluator.ts",
+      "result": "no_matches"
+    },
+    {
+      "command": "rg -n \"runs in parallel with legacy EventEvaluator during migration\" src/runtime/ValueExprEventEvaluator.ts",
+      "result": "no_matches"
+    },
+    {
+      "command": "rg -n \"eventPrevPredicate\" src/runtime/RuntimeState.ts",
+      "result": "no_matches"
+    }
+  ],
+  "notes": [
+    "CompiledIR foundation gate K-W6-* remains locked at zero.",
+    "Evaluator invariants are validated through both direct runtime tests and forbidden-pattern guards."
+  ]
+}

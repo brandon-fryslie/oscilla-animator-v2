@@ -1,0 +1,47 @@
+{
+  "workstream": "W3",
+  "title": "Remove Hot-Path Object References (values.objects) And Move To Numeric Handles",
+  "status": "completed",
+  "timestamp_utc": "2026-02-24T06:59:20Z",
+  "commit": "c56e03fe3",
+  "laws": [
+    "one-source-of-truth",
+    "single-enforcer",
+    "verifiable-goals"
+  ],
+  "scope": [
+    "Keep render/execute hot paths on canonical arena + typed handle banks",
+    "Prevent reintroduction of values.objects reads in runtime/render hot-path modules",
+    "Keep debug/inspection flows on canonical banks and stepped snapshots"
+  ],
+  "closure_surfaces": [
+    "src/runtime/RenderAssembler.ts",
+    "src/runtime/ScheduleExecutor.ts",
+    "src/runtime/executeFrameStepped.ts",
+    "src/runtime/ValueInspector.ts",
+    "src/runtime/StepDebugSession.ts",
+    "src/services/DebugService.ts",
+    "src/__tests__/forbidden-patterns.test.ts"
+  ],
+  "verification": [
+    {
+      "command": "pnpm -s typecheck",
+      "exit_code": 0
+    },
+    {
+      "command": "pnpm -s vitest run src/__tests__/forbidden-patterns.test.ts src/runtime/__tests__/RenderAssembler.test.ts src/runtime/__tests__/RenderAssembler-per-instance-shapes.test.ts src/runtime/__tests__/shape-payload.test.ts src/runtime/__tests__/ValueInspector.test.ts src/runtime/__tests__/StepDebugSession.test.ts src/runtime/__tests__/arena-field-materialization.test.ts",
+      "exit_code": 0,
+      "tests_passed": 134
+    }
+  ],
+  "static_scans": [
+    {
+      "command": "non-comment scan for values.objects reads in RenderAssembler/ScheduleExecutor/executeFrameStepped/ValueInspector/StepDebugSession/DebugService",
+      "result": "no_matches"
+    }
+  ],
+  "notes": [
+    "W3/W8 forbidden-pattern guards remain green and block hot-path values.objects reintroduction.",
+    "Render assembly and stepped/debug inspection paths remain on canonical numeric/typed banks."
+  ]
+}

@@ -247,24 +247,6 @@ class DebugService {
     this.unmappedEdges = edges;
   }
 
-  private normalizeArenaBindings(
-    slotToArenaOrLayout: ReadonlyMap<ValueSlot, ArenaSlotDescriptor> | readonly ArenaSlotDescriptor[],
-  ): ReadonlyMap<ValueSlot, ArenaSlotDescriptor> {
-    if (Array.isArray(slotToArenaOrLayout)) {
-      // [LAW:one-source-of-truth] Consumers query one canonical slot->descriptor map.
-      // Compatibility array inputs are normalized at this boundary.
-      const slotToArena = new Map<ValueSlot, ArenaSlotDescriptor>();
-      for (let slot = 0; slot < slotToArenaOrLayout.length; slot++) {
-        const desc = slotToArenaOrLayout[slot];
-        if (desc && desc.offset >= 0) {
-          slotToArena.set(slot as ValueSlot, desc);
-        }
-      }
-      return slotToArena;
-    }
-    return slotToArenaOrLayout as ReadonlyMap<ValueSlot, ArenaSlotDescriptor>;
-  }
-
   /**
    * Wire the arena for direct value reads.
    * Called by CompileOrchestrator after every compile/recompile, after setEdgeToSlotMap.
@@ -274,11 +256,11 @@ class DebugService {
    */
   setArenaRef(
     arena: Float32Array,
-    slotToArenaOrLayout: ReadonlyMap<ValueSlot, ArenaSlotDescriptor> | readonly ArenaSlotDescriptor[],
+    slotToArena: ReadonlyMap<ValueSlot, ArenaSlotDescriptor>,
   ): void {
     this.arenaRef = {
       arena,
-      slotToArena: this.normalizeArenaBindings(slotToArenaOrLayout),
+      slotToArena,
     };
   }
 

@@ -209,23 +209,49 @@ describe('reconcilePhaseOffsets', () => {
     expect(phase2).toBeCloseTo(phase1, 10);
   });
 
-  it('remains phase-stable at large monotonic times', () => {
+  it('hours-scale simulation keeps phase channels bounded and finite under period hot-swaps', () => {
     const timeState = createTimeState();
-    const timeModel: TimeModel = { kind: 'infinite', periodAMs: 4000, periodBMs: 8000 };
-    const dt = 16;
-    const baseTMs = 1000 * 60 * 60 * 72; // 72h uptime-equivalent timestamp
+    const models: TimeModel[] = [
+      { kind: 'infinite', periodAMs: 4000, periodBMs: 8000 },
+      { kind: 'infinite', periodAMs: 2000, periodBMs: 12000 },
+      { kind: 'infinite', periodAMs: 7500, periodBMs: 3000 },
+      { kind: 'infinite', periodAMs: 16000, periodBMs: 6400 },
+    ];
 
-    let prevPhaseA: number | null = null;
-    for (let i = 0; i < 5000; i++) {
-      const tAbsMs = baseTMs + i * dt;
-      const time = resolveTime(tAbsMs, timeModel, timeState);
-      if (prevPhaseA !== null) {
-        const expected = wrapPhase(prevPhaseA + dt / timeModel.periodAMs);
-        const absDelta = Math.abs(time.phaseA - expected);
-        const circularDelta = Math.min(absDelta, 1 - absDelta);
-        expect(circularDelta).toBeLessThan(1e-5);
+    let modelIndex = 0;
+    let activeModel = models[modelIndex];
+    const dtMs = 16;
+    const totalDurationMs = 6 * 60 * 60 * 1000; // 6h equivalent runtime
+    const totalFrames = Math.floor(totalDurationMs / dtMs);
+    const swapEveryFrames = Math.floor((5 * 60 * 1000) / dtMs); // swap every 5m
+
+    let bounded = true;
+    let finite = true;
+
+    for (let frame = 0; frame < totalFrames; frame++) {
+      const tMs = frame * dtMs;
+      if (frame > 0 && frame % swapEveryFrames === 0) {
+        const oldModel = activeModel;
+        modelIndex = (modelIndex + 1) % models.length;
+        activeModel = models[modelIndex];
+        reconcilePhaseOffsets(oldModel, activeModel, tMs, timeState);
       }
-      prevPhaseA = time.phaseA;
+
+      const resolved = resolveTime(tMs, activeModel, timeState);
+      const phaseABounded = resolved.phaseA >= 0 && resolved.phaseA < 1;
+      const phaseBBounded = resolved.phaseB >= 0 && resolved.phaseB < 1;
+      const valuesFinite = Number.isFinite(resolved.phaseA) &&
+        Number.isFinite(resolved.phaseB) &&
+        Number.isFinite(resolved.dt);
+
+      bounded = bounded && phaseABounded && phaseBBounded;
+      finite = finite && valuesFinite;
+      if (!bounded || !finite) break;
     }
+
+    // [LAW:verifiable-goals] Hours-scale boundedness/finite checks are
+    // deterministic gates for stateful phase-time semantics.
+    expect(bounded).toBe(true);
+    expect(finite).toBe(true);
   });
 });

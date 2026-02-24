@@ -19,12 +19,17 @@ function mockProgram(opts: {
   slotMeta: SlotMetaEntry[];
   steps: ScheduleIR['steps'];
 }): CompiledProgramIR {
+  const toRuntimeStorage = (storage: SlotMetaEntry['storage']): 'f32' | 'i32' | 'u32' | 'shape2d' =>
+    storage;
   const maxSlot = opts.slotMeta.reduce((max, meta) => Math.max(max, Number(meta.slot)), -1);
   const arenaLayout = Array.from({ length: maxSlot + 1 }, () => ({
     offset: -1,
     stride: 0,
     laneCount: 0,
     length: 0,
+    packing: 'aos' as const,
+    laneStride: 0,
+    componentStride: 1,
   }));
   for (const meta of opts.slotMeta) {
     if (meta.storage === 'shape2d') {
@@ -35,11 +40,14 @@ function mockProgram(opts: {
       stride: meta.stride,
       laneCount: 1,
       length: meta.stride,
+      packing: 'aos',
+      laneStride: meta.stride,
+      componentStride: 1,
     };
   }
   const runtimeSlots = opts.slotMeta.map((meta) => ({
     slot: meta.slot,
-    storage: meta.storage,
+    storage: toRuntimeStorage(meta.storage),
     offset: meta.offset,
     stride: meta.stride,
     type: meta.type,
@@ -54,6 +62,7 @@ function mockProgram(opts: {
       stride: slot.stride,
       slot: slot.slot,
       type: slot.type,
+      arena: slot.arena,
     });
     if (slot.arena.offset >= 0) {
       slotToArena.set(slot.slot, slot.arena);
@@ -61,6 +70,7 @@ function mockProgram(opts: {
   }
   const fieldExprToSlot = new Map<number, ValueSlot>();
   const scalarExprToArenaOffset = new Map<number, number>();
+  const scalarExprToArenaAddress = new Map<number, { slot: ValueSlot; arena: (typeof arenaLayout)[number]; component: number }>();
   for (const step of opts.steps) {
     if (step.kind === 'materialize') {
       fieldExprToSlot.set(step.field as any as number, step.target);
@@ -68,6 +78,11 @@ function mockProgram(opts: {
         const arenaDesc = slotToArena.get(step.target);
         if (arenaDesc) {
           scalarExprToArenaOffset.set(step.field as any as number, arenaDesc.offset);
+          scalarExprToArenaAddress.set(step.field as any as number, {
+            slot: step.target,
+            arena: arenaDesc,
+            component: 0,
+          });
         }
       }
     }
@@ -75,6 +90,11 @@ function mockProgram(opts: {
       const arenaDesc = slotToArena.get(step.target);
       if (arenaDesc) {
         scalarExprToArenaOffset.set(step.expr as any as number, arenaDesc.offset);
+        scalarExprToArenaAddress.set(step.expr as any as number, {
+          slot: step.target,
+          arena: arenaDesc,
+          component: 0,
+        });
       }
     }
   }
@@ -82,6 +102,7 @@ function mockProgram(opts: {
     slotLookup,
     fieldExprToSlot,
     scalarExprToArenaOffset,
+    scalarExprToArenaAddress,
     slotToArena,
   };
   return {
@@ -272,4 +293,12 @@ describe('assertNumericStride', () => {
       .toThrow(/must have stride=4, got 1/);
   });
 
+  it('uses canonical numeric slot metadata', () => {
+    const table = getExprAddressTable(mockProgram({
+      slotMeta: [{ slot: valueSlot(0), storage: 'f32', offset: 0, stride: 1, type: SIG_FLOAT }],
+      steps: [],
+    }));
+    const result = assertNumericStride(table.slotLookup, valueSlot(0), 1, 'test');
+    expect(result.storage).toBe('f32');
+  });
 });

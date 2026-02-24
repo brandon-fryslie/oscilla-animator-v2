@@ -313,6 +313,7 @@ function buildRuntimeAddressTable(
       stride: slotEntry.stride,
       slot: slotEntry.slot,
       type: slotEntry.type,
+      arena: slotEntry.arena,
     });
     if (slotEntry.arena.offset >= 0) {
       slotToArena.set(slotEntry.slot, slotEntry.arena);
@@ -321,6 +322,7 @@ function buildRuntimeAddressTable(
 
   const fieldExprToSlot = new Map<number, ValueSlot>();
   const scalarExprToArenaOffset = new Map<number, number>();
+  const scalarExprToArenaAddress = new Map<number, { slot: ValueSlot; arena: ArenaSlotDescriptor; component: number }>();
   const steps = scheduleIR.steps as readonly Step[];
   for (const step of steps) {
     if (step.kind === 'materialize') {
@@ -329,6 +331,11 @@ function buildRuntimeAddressTable(
         const arenaDesc = slotToArena.get(step.target);
         if (arenaDesc) {
           scalarExprToArenaOffset.set(step.field as number, arenaDesc.offset);
+          scalarExprToArenaAddress.set(step.field as number, {
+            slot: step.target,
+            arena: arenaDesc,
+            component: 0,
+          });
         }
       }
     }
@@ -336,6 +343,11 @@ function buildRuntimeAddressTable(
       const arenaDesc = slotToArena.get(step.target);
       if (arenaDesc) {
         scalarExprToArenaOffset.set(step.expr as number, arenaDesc.offset);
+        scalarExprToArenaAddress.set(step.expr as number, {
+          slot: step.target,
+          arena: arenaDesc,
+          component: 0,
+        });
       }
     }
   }
@@ -344,6 +356,7 @@ function buildRuntimeAddressTable(
     slotLookup,
     fieldExprToSlot,
     scalarExprToArenaOffset,
+    scalarExprToArenaAddress,
     slotToArena,
   };
 }

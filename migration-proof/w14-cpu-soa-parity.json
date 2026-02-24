@@ -1,0 +1,54 @@
+{
+  "workstream": "W14",
+  "title": "CPU-First SoA Migration Completion Before GPU Interface Design",
+  "status": "completed",
+  "timestamp_utc": "2026-02-24T07:02:56Z",
+  "commit": "1a354ae94",
+  "laws": [
+    "one-source-of-truth",
+    "dataflow-not-control-flow",
+    "verifiable-goals"
+  ],
+  "scope": [
+    "Validate CPU-path SoA parity for vector/color field math and dynamic instance counts",
+    "Keep scalar extract addressing on canonical scalarExprToArenaAddress",
+    "Keep runtime state/inspection seams aligned with canonical arena-driven runtime contracts"
+  ],
+  "closure_surfaces": [
+    "src/runtime/ValueExprScalarEvaluator.ts",
+    "src/runtime/ArenaValueStore.ts",
+    "src/runtime/ValueExprMaterializer.ts",
+    "src/runtime/ContinuityApply.ts",
+    "src/compiler/__tests__/arena-layout.test.ts",
+    "src/blocks/__tests__/math-field-paths.test.ts",
+    "src/runtime/__tests__/color-math.test.ts",
+    "src/projection/__tests__/level10-golden-tests.test.ts",
+    "src/__tests__/forbidden-patterns.test.ts"
+  ],
+  "verification": [
+    {
+      "command": "pnpm -s typecheck",
+      "exit_code": 0
+    },
+    {
+      "command": "pnpm -s vitest run src/__tests__/forbidden-patterns.test.ts src/compiler/__tests__/arena-layout.test.ts src/runtime/__tests__/ArenaValueStore.test.ts src/runtime/__tests__/ExprAddressTable.test.ts src/runtime/__tests__/construct-one.test.ts src/runtime/__tests__/project-policy-domain-change.test.ts src/runtime/__tests__/color-math.test.ts src/blocks/__tests__/math-field-paths.test.ts src/projection/__tests__/level10-golden-tests.test.ts src/runtime/__tests__/cast-consistency.test.ts",
+      "exit_code": 0,
+      "tests_passed": 182,
+      "tests_skipped": 5
+    }
+  ],
+  "static_scans": [
+    {
+      "command": "scan for legacy scalarExprToArenaOffset usage in ValueExprScalarEvaluator",
+      "result": "no_matches"
+    },
+    {
+      "command": "scan for scalarExprToArenaAddress usage in ValueExprScalarEvaluator extract path",
+      "result": "present"
+    }
+  ],
+  "notes": [
+    "Field-path and color/vector suites remained green under SoA-oriented CPU runtime paths.",
+    "Golden projection suite remained green for CPU-executed parity gates (with existing documented skips)."
+  ]
+}

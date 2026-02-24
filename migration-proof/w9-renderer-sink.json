@@ -1,0 +1,47 @@
+{
+  "workstream": "W9",
+  "title": "Renderer Sink Finalization (No v1 Compatibility + Zero-Alloc Hot Path)",
+  "status": "completed",
+  "timestamp_utc": "2026-02-24T06:47:08Z",
+  "commit": "c4c992004",
+  "laws": [
+    "one-type-per-behavior",
+    "no-silent-fallbacks",
+    "verifiable-goals"
+  ],
+  "scope": [
+    "Remove residual render compatibility aliasing from RenderBufferArena",
+    "Guard render sink modules against legacy v1/compatibility marker reintroduction",
+    "Verify RenderAssembler regression/perf suites remain green"
+  ],
+  "closure_surfaces": [
+    "src/render/RenderBufferArena.ts",
+    "src/runtime/RenderAssembler.ts",
+    "src/render/types.ts",
+    "src/__tests__/forbidden-patterns.test.ts",
+    "src/runtime/__tests__/RenderAssembler.test.ts",
+    "src/runtime/__tests__/RenderAssembler-per-instance-shapes.test.ts",
+    "src/runtime/__tests__/RenderAssembler-perf.test.ts"
+  ],
+  "verification": [
+    {
+      "command": "pnpm -s typecheck",
+      "exit_code": 0
+    },
+    {
+      "command": "pnpm -s vitest run src/runtime/__tests__/RenderAssembler.test.ts src/runtime/__tests__/RenderAssembler-per-instance-shapes.test.ts src/runtime/__tests__/RenderAssembler-perf.test.ts src/__tests__/forbidden-patterns.test.ts",
+      "exit_code": 0,
+      "tests_passed": 102
+    }
+  ],
+  "static_scans": [
+    {
+      "command": "non-comment scan for getTotalAllocatedBytes()/v1 compatibility/compatibility scaffolding/TODO per-frame allocation in render sink modules",
+      "result": "no_matches"
+    }
+  ],
+  "notes": [
+    "RenderBufferArena compatibility alias getTotalAllocatedBytes() was removed; canonical API is getTotalBytes().",
+    "New W9 forbidden-pattern guards enforce no reintroduction of compatibility alias/markers."
+  ]
+}

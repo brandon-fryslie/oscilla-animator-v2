@@ -7,6 +7,8 @@ import {
   arenaRead,
   arenaWrite,
   arenaSlice,
+  resolveArenaAddress,
+  arenaIndex,
 } from '../ArenaValueStore';
 
 function desc(offset: number, stride: number, laneCount: number): ArenaSlotDescriptor {
@@ -139,6 +141,29 @@ describe('descriptor invariant', () => {
   it('length === stride * laneCount', () => {
     const d = desc(10, 3, 5);
     expect(d.length).toBe(d.stride * d.laneCount);
+  });
+
+  it('resolves canonical AoS address defaults', () => {
+    const d = desc(3, 4, 5);
+    const addr = resolveArenaAddress(d);
+    expect(addr.baseOffset).toBe(3);
+    expect(addr.laneStride).toBe(4);
+    expect(addr.componentStride).toBe(1);
+    expect(arenaIndex(d, 2, 3)).toBe(3 + 2 * 4 + 3);
+  });
+
+  it('supports canonical SoA addressing metadata', () => {
+    const d: ArenaSlotDescriptor = {
+      offset: 10,
+      stride: 3,
+      laneCount: 4,
+      length: 12,
+      packing: 'soa',
+    };
+    const addr = resolveArenaAddress(d);
+    expect(addr.laneStride).toBe(1);
+    expect(addr.componentStride).toBe(4);
+    expect(arenaIndex(d, 2, 1)).toBe(10 + 1 * 4 + 2);
   });
 });
 

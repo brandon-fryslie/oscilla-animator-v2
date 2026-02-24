@@ -53,13 +53,29 @@ describe('deriveArenaDescriptor', () => {
   it('one (float): stride=1, laneCount=1, length=1', () => {
     const type = canonicalScalar(FLOAT);
     const desc = deriveArenaDescriptor(type, 0, emptyInstances);
-    expect(desc).toEqual({ offset: 0, stride: 1, laneCount: 1, length: 1, componentOffsets: [0] });
+    expect(desc).toEqual(expect.objectContaining({
+      offset: 0,
+      stride: 1,
+      laneCount: 1,
+      length: 1,
+      packing: 'aos',
+      laneStride: 1,
+      componentStride: 1,
+    }));
   });
 
   it('one (vec3): stride=3, laneCount=1, length=3', () => {
     const type = canonicalScalar(VEC3);
     const desc = deriveArenaDescriptor(type, 0, emptyInstances);
-    expect(desc).toEqual({ offset: 0, stride: 3, laneCount: 1, length: 3, componentOffsets: [0, 1, 2] });
+    expect(desc).toEqual(expect.objectContaining({
+      offset: 0,
+      stride: 3,
+      laneCount: 1,
+      length: 3,
+      packing: 'aos',
+      laneStride: 3,
+      componentStride: 1,
+    }));
   });
 
   it('field (many, float, count=10): stride=1, laneCount=10, length=10', () => {
@@ -67,7 +83,15 @@ describe('deriveArenaDescriptor', () => {
     const instances = makeInstances([{ id: 'inst_a', count: 10, maxCount: 10 }]);
     const type = canonicalMany(FLOAT, undefined, ref);
     const desc = deriveArenaDescriptor(type, 0, instances);
-    expect(desc).toEqual({ offset: 0, stride: 1, laneCount: 10, length: 10, componentOffsets: [0] });
+    expect(desc).toEqual(expect.objectContaining({
+      offset: 0,
+      stride: 1,
+      laneCount: 10,
+      length: 10,
+      packing: 'aos',
+      laneStride: 1,
+      componentStride: 1,
+    }));
   });
 
   it('field (many, color, count=5): stride=4, laneCount=5, length=20', () => {
@@ -75,7 +99,15 @@ describe('deriveArenaDescriptor', () => {
     const instances = makeInstances([{ id: 'inst_b', count: 5, maxCount: 5 }]);
     const type = canonicalMany(COLOR, undefined, ref);
     const desc = deriveArenaDescriptor(type, 0, instances);
-    expect(desc).toEqual({ offset: 0, stride: 4, laneCount: 5, length: 20, componentOffsets: [0, 5, 10, 15] });
+    expect(desc).toEqual(expect.objectContaining({
+      offset: 0,
+      stride: 4,
+      laneCount: 5,
+      length: 20,
+      packing: 'aos',
+      laneStride: 4,
+      componentStride: 1,
+    }));
   });
 
   it('dynamic count uses maxCount', () => {
@@ -99,7 +131,6 @@ describe('deriveArenaDescriptor', () => {
     const desc = deriveArenaDescriptor(type, 0, emptyInstances, 4);
     expect(desc.stride).toBe(4);
     expect(desc.length).toBe(4);
-    expect(desc.componentOffsets).toEqual([0, 1, 2, 3]);
   });
 
   it('two sequential descriptors do not overlap', () => {

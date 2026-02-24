@@ -23,7 +23,7 @@ import type { RenderBufferArena } from '../render/RenderBufferArena';
 import { createMaterializeScratch } from './MaterializeScratch';
 import { resolveTime } from './timeResolution';
 import { writeShape2D } from './RuntimeState';
-import { detectDomainChange } from './ContinuityMapping';
+import { detectDomainChange, recordDomainTransition } from './ContinuityMapping';
 import { applyContinuity, finalizeContinuityFrame } from './ContinuityApply';
 import { createStableDomainInstance, createUnstableDomainInstance } from './DomainIdentity';
 import { assembleRenderFrame, type AssemblerContext } from './RenderAssembler';
@@ -274,6 +274,7 @@ export function* executeFrameStepped(
   // [LAW:one-source-of-truth] Populate scalarExprToArenaOffset before Phase 1 so extract
   // reads multi-component values from arena using canonical ExprAddressTable offsets.
   state.cache.scalarExprToArenaOffset = addressTable.scalarExprToArenaOffset;
+  state.cache.scalarExprToArenaAddress = addressTable.scalarExprToArenaAddress;
 
   // --- PHASE 1: Execute all non-stateWrite steps ---
   const valueExprs = program.valueExprs.nodes;
@@ -405,16 +406,9 @@ export function* executeFrameStepped(
         } else {
           newDomain = createUnstableDomainInstance(count);
         }
-        const { changed, mapping } = detectDomainChange(instanceId, newDomain, state.continuity.prevDomains);
-        if (changed) {
-          if (mapping) {
-            state.continuity.mappings.set(instanceId, mapping);
-          } else {
-            state.continuity.mappings.delete(instanceId);
-          }
-          state.continuity.changedInstancesThisFrame.add(instanceId);
-          state.continuity.domainChangeThisFrame = true;
-        }
+        const change = detectDomainChange(instanceId, newDomain, state.continuity.prevDomains);
+        // [LAW:single-enforcer] Continuity transition ownership is enforced at one boundary.
+        recordDomainTransition(state.continuity, instanceId, change);
         state.continuity.prevDomains.set(instanceId, newDomain);
         break;
       }
@@ -463,6 +457,7 @@ export function* executeFrameStepped(
     resolvedCamera,
     arena,
     scalarExprToArenaOffset: state.cache.scalarExprToArenaOffset!,
+    scalarExprToArenaAddress: state.cache.scalarExprToArenaAddress ?? undefined,
     slotToArena: addressTable.slotToArena,
   };
   const frame = assembleRenderFrame(renderSteps, assemblerContext);

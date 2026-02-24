@@ -344,6 +344,15 @@ export interface RuntimeSlotLookupEntry {
   readonly stride: number;
   readonly slot: ValueSlot;
   readonly type: CanonicalType;
+  /** Canonical runtime arena descriptor for this slot. */
+  readonly arena: ArenaSlotDescriptor;
+}
+
+export interface RuntimeScalarArenaAddress {
+  readonly slot: ValueSlot;
+  readonly arena: ArenaSlotDescriptor;
+  /** Reserved for future multi-component one-value addressing. */
+  readonly component: number;
 }
 
 /**
@@ -356,6 +365,8 @@ export interface RuntimeAddressTableIR {
   readonly fieldExprToSlot: ReadonlyMap<number, ValueSlot>;
   /** Scalar ValueExprId → arena scalar offset */
   readonly scalarExprToArenaOffset: ReadonlyMap<number, number>;
+  /** Scalar ValueExprId → canonical arena address metadata */
+  readonly scalarExprToArenaAddress: ReadonlyMap<number, RuntimeScalarArenaAddress>;
   /** ValueSlot → arena descriptor */
   readonly slotToArena: ReadonlyMap<ValueSlot, ArenaSlotDescriptor>;
 }

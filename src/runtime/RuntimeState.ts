@@ -12,6 +12,7 @@ import type { ContinuityState } from './ContinuityState';
 import { createContinuityState } from './ContinuityState';
 import type { DebugTap } from './DebugTap';
 import type { RenderFrameIR } from '../render/types';
+import type { RuntimeScalarArenaAddress } from '../compiler/ir/program';
 import { ExternalChannelSystem } from './ExternalChannel';
 import { createArena } from './ArenaValueStore';
 
@@ -371,6 +372,9 @@ export interface FrameCache {
 
   /** Scalar ValueExprId -> arena offset mapping for multi-component extract */
   scalarExprToArenaOffset: ReadonlyMap<number, number> | null;
+
+  /** Scalar ValueExprId -> canonical arena address metadata. */
+  scalarExprToArenaAddress: ReadonlyMap<number, RuntimeScalarArenaAddress> | null;
 }
 
 /**
@@ -386,6 +390,7 @@ export function createFrameCache(
     valueExprFieldBuffers: new Array(maxValueExprs).fill(null),
     valueExprFieldStamps: new Array(maxValueExprs).fill(-1),
     scalarExprToArenaOffset: null,
+    scalarExprToArenaAddress: null,
   };
 }
 
@@ -635,6 +640,12 @@ export interface ProgramState {
   /** Float32 arena for unified value store (cardinality unification migration) */
   arena: Float32Array;
 
+  /** Persistent state segment within arena (W1/W14 canonical ownership). */
+  stateArena: {
+    readonly offset: number;
+    readonly length: number;
+  };
+
   /** Frame cache (per-frame memoization) - cache owns frameId */
   cache: FrameCache;
 
@@ -687,6 +698,12 @@ export interface RuntimeState {
 
   /** Float32 arena for unified value store (cardinality unification migration) */
   arena: Float32Array;
+
+  /** Persistent state segment within arena (W1/W14 canonical ownership). */
+  stateArena: {
+    readonly offset: number;
+    readonly length: number;
+  };
 
   /** Frame cache (per-frame memoization) - cache owns frameId */
   cache: FrameCache;
@@ -772,17 +789,26 @@ export function createProgramState(
   // eventExprCount is accepted for callsite compatibility while compile/runtime
   // signatures converge on ValueExpr-driven sizing.
   void eventExprCount;
+  const stateArenaOffset = arenaTotalFloats;
+  const arena = createArena(arenaTotalFloats + stateSlotCount);
+  const stateView = arena.subarray(stateArenaOffset, stateArenaOffset + stateSlotCount);
   return {
     values: createValueStore(shape2dSlotCount),
     lastRenderFrame: null,
-    arena: createArena(arenaTotalFloats),
+    arena,
+    // [LAW:one-source-of-truth] Persistent state ownership is anchored to one
+    // arena segment contract; `state` is a view over that canonical segment.
+    stateArena: {
+      offset: stateArenaOffset,
+      length: stateSlotCount,
+    },
     cache: createFrameCache(valueExprCount),
     frameSemantics: {
       frameId: 0,
       segments: [],
     },
     time: null,
-    state: new Float32Array(stateSlotCount),
+    state: stateView,
     eventScalars: new Uint8Array(eventSlotCount),
     eventWrapPredicate: new Uint8Array(valueExprCount),
     events: new Map(),
@@ -849,6 +875,7 @@ export function createRuntimeStateFromSession(
     values: program.values,
     lastRenderFrame: program.lastRenderFrame,
     arena: program.arena,
+    stateArena: program.stateArena,
     cache: program.cache,
     frameSemantics: program.frameSemantics,
     time: program.time,

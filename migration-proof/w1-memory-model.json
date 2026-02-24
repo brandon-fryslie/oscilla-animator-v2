@@ -1,0 +1,53 @@
+{
+  "workstream": "W1",
+  "title": "Canonical Numeric Memory Model (f32 Ping-Pong Arena + SoA)",
+  "status": "completed",
+  "timestamp_utc": "2026-02-24T07:02:56Z",
+  "commit": "1a354ae94",
+  "laws": [
+    "one-source-of-truth",
+    "single-enforcer",
+    "verifiable-goals"
+  ],
+  "scope": [
+    "Keep runtime numeric access on canonical arena addressing boundaries",
+    "Eliminate inline AoS lane*stride+component formulas from canonical runtime accessors",
+    "Keep materializer/continuity indexing routed through shared lane/component helpers"
+  ],
+  "closure_surfaces": [
+    "src/runtime/ArenaValueStore.ts",
+    "src/runtime/ValueExprMaterializer.ts",
+    "src/runtime/ContinuityApply.ts",
+    "src/runtime/ScheduleExecutor.ts",
+    "src/runtime/executeFrameStepped.ts",
+    "src/compiler/compile.ts",
+    "src/compiler/ir/storage-class.ts",
+    "src/__tests__/forbidden-patterns.test.ts"
+  ],
+  "verification": [
+    {
+      "command": "pnpm -s typecheck",
+      "exit_code": 0
+    },
+    {
+      "command": "pnpm -s vitest run src/__tests__/forbidden-patterns.test.ts src/compiler/__tests__/arena-layout.test.ts src/runtime/__tests__/ArenaValueStore.test.ts src/runtime/__tests__/ExprAddressTable.test.ts src/runtime/__tests__/construct-one.test.ts src/runtime/__tests__/project-policy-domain-change.test.ts src/runtime/__tests__/color-math.test.ts src/blocks/__tests__/math-field-paths.test.ts src/projection/__tests__/level10-golden-tests.test.ts src/runtime/__tests__/cast-consistency.test.ts",
+      "exit_code": 0,
+      "tests_passed": 182,
+      "tests_skipped": 5
+    }
+  ],
+  "static_scans": [
+    {
+      "command": "non-comment scan for desc.offset + lane*desc.stride + component in ArenaValueStore",
+      "result": "no_matches"
+    },
+    {
+      "command": "non-comment scan for inline i*stride+component and oldIdx*stride+component formulas in ValueExprMaterializer + ContinuityApply",
+      "result": "no_matches"
+    }
+  ],
+  "notes": [
+    "W1/W14 forbidden-pattern guards are active and green in the main test lane.",
+    "Runtime numeric addressing now remains inside canonical helper boundaries in arena/materializer/continuity paths."
+  ]
+}

@@ -1287,5 +1287,175 @@ describe('Forbidden Patterns (Type System Invariants)', () => {
       ).toEqual([]);
     });
 
+    it('phasor lowering must wrap state updates to [0,1) using Wrap01', () => {
+      const wrapMatches = filterAllowlist(
+        grepSrc('OpCode\\.Wrap01', 'src/blocks/scalar/phasor.ts'),
+        [/\.test\./, /__tests__/],
+      );
+      expect(
+        wrapMatches.length,
+        'Phasor must use Wrap01 for bounded phase integration.'
+      ).toBeGreaterThan(0);
+
+      const rawWriteMatches = filterAllowlist(
+        grepSrc('value:\\s*rawPhase', 'src/blocks/scalar/phasor.ts'),
+        [/\.test\./, /__tests__/],
+      );
+      expect(
+        rawWriteMatches,
+        'Phasor state writes must not persist unbounded raw phase values.\n' +
+        'Found violations:\n' + rawWriteMatches.join('\n')
+      ).toEqual([]);
+    });
+
+    it('resolveTime must wrap both phase channels before publishing time state', () => {
+      // [LAW:one-source-of-truth] timeResolution is the canonical owner of
+      // phase-domain bounds; both phase channels must be wrapped at this boundary.
+      const rawMatches = [
+        ...grepSrc('const\\s+phaseA\\s*=\\s*wrapPhase\\(', 'src/runtime/timeResolution.ts'),
+        ...grepSrc('const\\s+phaseB\\s*=\\s*wrapPhase\\(', 'src/runtime/timeResolution.ts'),
+      ];
+      const filtered = filterAllowlist(rawMatches, [/\.test\./, /__tests__/]);
+      expect(
+        filtered.length,
+        'resolveTime must wrap both phaseA and phaseB via wrapPhase().'
+      ).toBe(2);
+    });
+
+  });
+
+  describe('WebGPU Prereq Guards (W13)', () => {
+
+    it('frame executors must use recordDomainTransition as the single continuity transition enforcer', () => {
+      const scheduleMatches = filterAllowlist(
+        grepSrc('recordDomainTransition\\s*\\(', 'src/runtime/ScheduleExecutor.ts'),
+        [/\.test\./, /__tests__/],
+      );
+      const steppedMatches = filterAllowlist(
+        grepSrc('recordDomainTransition\\s*\\(', 'src/runtime/executeFrameStepped.ts'),
+        [/\.test\./, /__tests__/],
+      );
+      expect(
+        scheduleMatches.length,
+        'ScheduleExecutor must route domain transition ownership through recordDomainTransition().'
+      ).toBeGreaterThan(0);
+      expect(
+        steppedMatches.length,
+        'executeFrameStepped must route domain transition ownership through recordDomainTransition().'
+      ).toBeGreaterThan(0);
+    });
+
+    it('executeFrameStepped must not mutate continuity transition ownership fields directly', () => {
+      const rawMatches = [
+        ...grepSrc('state\\.continuity\\.mappings\\.(set|delete)\\s*\\(', 'src/runtime/executeFrameStepped.ts'),
+        ...grepSrc('state\\.continuity\\.changedInstancesThisFrame\\.add\\s*\\(', 'src/runtime/executeFrameStepped.ts'),
+        ...grepSrc('state\\.continuity\\.domainChangeThisFrame\\s*=', 'src/runtime/executeFrameStepped.ts'),
+      ];
+      const filtered = filterAllowlist(rawMatches, [/\.test\./, /__tests__/]);
+      expect(
+        filtered,
+        'executeFrameStepped must use recordDomainTransition() instead of direct continuity transition writes.\n' +
+        'Found violations:\n' + filtered.join('\n')
+      ).toEqual([]);
+    });
+
+  });
+
+  describe('WebGPU Prereq Guards (W9)', () => {
+
+    it('render arena must not expose compatibility alias getTotalAllocatedBytes()', () => {
+      const rawMatches = grepSrc('getTotalAllocatedBytes\\s*\\(', 'src/render/RenderBufferArena.ts');
+      const filtered = filterAllowlist(rawMatches, [/\.test\./, /__tests__/]);
+      expect(
+        filtered,
+        'RenderBufferArena must expose canonical getTotalBytes() only.\n' +
+        'Compatibility alias getTotalAllocatedBytes() must not reappear.\n' +
+        'Found violations:\n' + filtered.join('\n')
+      ).toEqual([]);
+    });
+
+    it('render sink modules must not carry legacy v1/compatibility TODO markers', () => {
+      const rawMatches = [
+        ...grepSrc('TODO:\\s*replace per-frame allocation', 'src/runtime/RenderAssembler.ts'),
+        ...grepSrc('v1 compatibility', 'src/runtime/RenderAssembler.ts'),
+        ...grepSrc('v1 compatibility', 'src/render/types.ts'),
+        ...grepSrc('compatibility scaffolding', 'src/runtime/RenderAssembler.ts'),
+      ];
+      const filtered = filterAllowlist(rawMatches, [/\.test\./, /__tests__/]);
+      expect(
+        filtered,
+        'Render sink closure (W9) must not carry legacy compatibility/TODO markers.\n' +
+        'Found violations:\n' + filtered.join('\n')
+      ).toEqual([]);
+    });
+
+  });
+
+  describe('WebGPU Prereq Guards (W1/W14)', () => {
+
+    it('arena accessors must not hard-code AoS lane*stride+component formulas', () => {
+      // [LAW:one-source-of-truth] Arena addressing must flow through one canonical
+      // index resolver, not duplicated inline AoS formulas.
+      const rawMatches = grepSrc('desc\\.offset\\s*\\+\\s*lane\\s*\\*\\s*desc\\.stride\\s*\\+\\s*component', 'src/runtime/ArenaValueStore.ts');
+      const nonCommentMatches = rawMatches.filter((m) => {
+        const secondColon = m.indexOf(':', m.indexOf(':') + 1);
+        const content = secondColon >= 0 ? m.slice(secondColon + 1).trim() : '';
+        if (!content) return false;
+        return !content.startsWith('//') && !content.startsWith('*') && !content.startsWith('/**');
+      });
+      expect(
+        nonCommentMatches,
+        'ArenaValueStore must use canonical arenaIndex()/resolveArenaAddress(), not inline AoS formulas.\n' +
+        'Found violations:\n' + nonCommentMatches.join('\n')
+      ).toEqual([]);
+    });
+
+    it('runtime inspector must not branch on legacy f64/object storage labels', () => {
+      const rawMatches = [
+        ...grepSrc("case\\s*'f64'", 'src/runtime/ValueInspector.ts'),
+        ...grepSrc("case\\s*'object'", 'src/runtime/ValueInspector.ts'),
+      ];
+      const filtered = filterAllowlist(rawMatches, [/\.test\./, /__tests__/]);
+      expect(
+        filtered,
+        'ValueInspector must read canonical runtime storage labels only.\n' +
+        'Found violations:\n' + filtered.join('\n')
+      ).toEqual([]);
+    });
+
+    it('runtime state must not allocate persistent state outside arena ownership', () => {
+      const rawMatches = grepSrc('new Float32Array\\(stateSlotCount\\)', 'src/runtime/RuntimeState.ts');
+      const filtered = filterAllowlist(rawMatches, [/\.test\./, /__tests__/]);
+      expect(
+        filtered,
+        'RuntimeState persistent state must be an arena-backed segment view, not a standalone allocation.\n' +
+        'Found violations:\n' + filtered.join('\n')
+      ).toEqual([]);
+    });
+
+    it('scalar extract evaluator must not fall back to offset-only arena maps', () => {
+      const rawMatches = grepSrc('scalarExprToArenaOffset', 'src/runtime/ValueExprScalarEvaluator.ts');
+      const filtered = filterAllowlist(rawMatches, [/\.test\./, /__tests__/]);
+      expect(
+        filtered,
+        'ValueExprScalarEvaluator extract path must use canonical scalarExprToArenaAddress only.\n' +
+        'Found violations:\n' + filtered.join('\n')
+      ).toEqual([]);
+    });
+
+    it('materializer and continuity mapping must route stride indexing through shared helpers', () => {
+      const rawMatches = [
+        ...grepSrc('\\bi\\s*\\*\\s*stride\\s*\\+\\s*[a-zA-Z_]', 'src/runtime/ValueExprMaterializer.ts'),
+        ...grepSrc('\\bi\\s*\\*\\s*stride\\s*\\+\\s*[a-zA-Z_]', 'src/runtime/ContinuityApply.ts'),
+        ...grepSrc('\\boldIdx\\s*\\*\\s*stride\\s*\\+\\s*[a-zA-Z_]', 'src/runtime/ContinuityApply.ts'),
+      ];
+      const filtered = filterAllowlist(rawMatches, [/\.test\./, /__tests__/]);
+      expect(
+        filtered,
+        'W1/W14 indexing must flow through lane/component helper boundaries in materializer and continuity paths.\n' +
+        'Found violations:\n' + filtered.join('\n')
+      ).toEqual([]);
+    });
+
   });
 });
