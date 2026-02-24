@@ -70,9 +70,31 @@ function rgbaToCSS(color: Uint8ClampedArray, offset: number): string {
   return `rgba(${color[offset]},${color[offset + 1]},${color[offset + 2]},${color[offset + 3] / 255})`;
 }
 
+function resolveStyleColor(
+  color: Uint8ClampedArray,
+  instanceIndex: number,
+  isUniform: boolean,
+): string {
+  return rgbaToCSS(color, isUniform ? 0 : instanceIndex * 4);
+}
 
+function applyFillStyle(
+  ctx: CanvasRenderingContext2D,
+  style: PathStyle,
+  instanceIndex: number,
+  uniformFillColor: boolean,
+): void {
+  ctx.fillStyle = resolveStyleColor(style.fillColor!, instanceIndex, uniformFillColor);
+}
 
-
+function applyStrokeStyle(
+  ctx: CanvasRenderingContext2D,
+  style: PathStyle,
+  instanceIndex: number,
+  uniformStrokeColor: boolean,
+): void {
+  ctx.strokeStyle = resolveStyleColor(style.strokeColor!, instanceIndex, uniformStrokeColor);
+}
 
 // [LAW:dataflow-not-control-flow] renderFrame is a pure sink — clearing is the caller's responsibility.
 export function renderFrame(
@@ -173,21 +195,13 @@ export function renderDrawPathInstancesOp(
 
     // Render fill first (if present)
     if (hasFill) {
-      if (uniformFillColor) {
-        ctx.fillStyle = rgbaToCSS(style.fillColor!, 0);
-      } else {
-        ctx.fillStyle = rgbaToCSS(style.fillColor!, i * 4);
-      }
+      applyFillStyle(ctx, style, i, uniformFillColor);
       ctx.fill(style.fillRule);
     }
 
     // Render stroke second (on top of fill)
     if (hasStroke) {
-      if (uniformStrokeColor) {
-        ctx.strokeStyle = rgbaToCSS(style.strokeColor!, 0);
-      } else {
-        ctx.strokeStyle = rgbaToCSS(style.strokeColor!, i * 4);
-      }
+      applyStrokeStyle(ctx, style, i, uniformStrokeColor);
 
       // Set stroke width (accounting for instance scale already applied)
       // Since we've already scaled by sizePx, we need to use unscaled stroke width

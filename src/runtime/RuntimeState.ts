@@ -811,7 +811,8 @@ export function createProgramState(
 /**
  * Create a RuntimeState by composing SessionState and ProgramState
  *
- * DEPRECATED - Internal test helper only. Use createSessionState() + createRuntimeStateFromSession() for new code.
+ * DEPRECATED as of v2.6, remove by v3.0.
+ * Internal test helper only. Use createSessionState() + createRuntimeStateFromSession() for new code.
  * @internal Not part of public API
  */
 export function createRuntimeState(
