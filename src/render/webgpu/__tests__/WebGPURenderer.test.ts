@@ -92,6 +92,19 @@ function createFakeWebGPUEnvironment() {
   };
 }
 
+function collectDrawPrepBindGroupCalls(createBindGroupMock: { mock: { calls: unknown[][] } }): unknown[][] {
+  return createBindGroupMock.mock.calls.filter((call: unknown[]) => {
+    const descriptor = call[0] as { entries?: Array<{ binding: number }> };
+    if (!descriptor.entries || descriptor.entries.length !== 2) {
+      return false;
+    }
+    return (
+      descriptor.entries[0]?.binding === WEBGPU_RENDER_CONTRACT.drawPrepIndirectBinding &&
+      descriptor.entries[1]?.binding === WEBGPU_RENDER_CONTRACT.drawPrepParamsBinding
+    );
+  });
+}
+
 describe('WebGPURenderer', () => {
   const originalGpu = (navigator as Navigator & { gpu?: unknown }).gpu;
 
@@ -603,6 +616,8 @@ describe('WebGPURenderer', () => {
     const env = createFakeWebGPUEnvironment();
     setNavigatorGpu(env.gpu);
     const renderer = await createWebGPURenderer(env.canvas);
+    env.device.queue.writeBuffer.mockClear();
+    env.device.createBindGroup.mockClear();
     const topologyId = registerDynamicTopology({
       params: [],
       verbs: [PathVerb.MOVE, PathVerb.LINE, PathVerb.LINE, PathVerb.LINE, PathVerb.CLOSE],
@@ -647,6 +662,71 @@ describe('WebGPURenderer', () => {
     });
 
     expect(env.renderPass.drawIndexedIndirect).toHaveBeenCalledTimes(2);
+    const indirectOffsets = env.renderPass.drawIndexedIndirect.mock.calls.map((args: unknown[]) => args[1]);
+    expect(indirectOffsets).toEqual([0, WEBGPU_RENDER_CONTRACT.indirectArgsBytes]);
+    const instanceUploads = env.device.queue.writeBuffer.mock.calls.filter((args: unknown[]) =>
+      args[2] instanceof ArrayBuffer
+    );
+    expect(instanceUploads).toHaveLength(1);
+    expect(instanceUploads[0]?.[4]).toBe(2 * WEBGPU_RENDER_CONTRACT.instanceBytes);
+
+    const drawPrepBindGroups = collectDrawPrepBindGroupCalls(env.device.createBindGroup);
+    expect(drawPrepBindGroups).toHaveLength(1);
+  });
+
+  it('reuses draw-prep bind group across frames when shader and indirect buffer are unchanged', async () => {
+    const env = createFakeWebGPUEnvironment();
+    setNavigatorGpu(env.gpu);
+    const renderer = await createWebGPURenderer(env.canvas);
+    const topologyId = registerDynamicTopology({
+      params: [],
+      verbs: [PathVerb.MOVE, PathVerb.LINE, PathVerb.LINE, PathVerb.LINE, PathVerb.CLOSE],
+      pointsPerVerb: [1, 1, 1, 1, 0],
+      totalControlPoints: 4,
+      closed: true,
+    }, 'webgpu-draw-prep-bindgroup-reuse-topology');
+
+    const renderInput = {
+      frame: {
+        version: 2 as const,
+        ops: [{
+          kind: 'drawPathInstances' as const,
+          geometry: {
+            topologyId,
+            points: new Float32Array([-1, -1, 1, -1, 1, 1, -1, 1]),
+            pointsCount: 4,
+            verbs: new Uint8Array([0, 1, 1, 1, 4]),
+            flags: 1,
+          },
+          instances: {
+            count: 1,
+            position: new Float32Array([0.5, 0.5]),
+            size: 0.25,
+            rotation: new Float32Array([0]),
+            scale2: new Float32Array([1, 1]),
+          },
+          style: {
+            fillColor: new Uint8ClampedArray([255, 0, 0, 255]),
+            fillRule: 'nonzero' as const,
+          },
+        }],
+      },
+      width: 128,
+      height: 96,
+      zoom: 1,
+      panX: 0,
+      panY: 0,
+    };
+
+    env.device.createBindGroup.mockClear();
+    renderer.render({ ...renderInput, timeMs: 0 });
+    const firstFrameDrawPrepBindGroups = collectDrawPrepBindGroupCalls(env.device.createBindGroup);
+    expect(firstFrameDrawPrepBindGroups).toHaveLength(1);
+
+    env.device.createBindGroup.mockClear();
+    renderer.render({ ...renderInput, timeMs: 16 });
+    const secondFrameDrawPrepBindGroups = collectDrawPrepBindGroupCalls(env.device.createBindGroup);
+    expect(secondFrameDrawPrepBindGroups).toHaveLength(0);
   });
 
   it('supports per-instance stroke widths for stroke rendering', async () => {
