@@ -11,6 +11,7 @@
 
 import {
   initGlobalRenderArena,
+  assertWebGPUStartupContract,
   createWebGPURenderer,
   type WebGPURenderer,
   type RenderBufferArena,
@@ -138,6 +139,13 @@ export class RuntimeService {
    */
   async init(): Promise<void> {
     const { store } = this;
+    if (!this.canvas) {
+      throw new Error('RuntimeService: preview canvas is required before initialization');
+    }
+    // [LAW:single-enforcer] RuntimeService owns startup capability validation.
+    // [LAW:no-silent-fallbacks] WebGPU-only runtime hard-fails when prerequisites are missing.
+    assertWebGPUStartupContract(this.canvas);
+
     this.compileWorkerClient = new CompileWorkerClient();
     // [LAW:single-enforcer] RuntimeService owns debug lifecycle boundaries.
     debugService.clear();
@@ -174,12 +182,13 @@ export class RuntimeService {
     store.settings.register(compilerFlagsSettings);
 
     // [LAW:single-enforcer] RuntimeService is the only startup boundary that
-    // validates rendering capability and instantiates the renderer.
-    if (!this.canvas) {
-      throw new Error('RuntimeService: preview canvas is required before initialization');
+    // instantiates the renderer after prerequisites are validated.
+    try {
+      this.renderer = await createWebGPURenderer(this.canvas);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`RuntimeService: WebGPU renderer initialization failed: ${message}`);
     }
-
-    this.renderer = await createWebGPURenderer(this.canvas);
 
     // Check for test automation demo marker (set by ?loadDemoPatch= before reload)
     const testDemo = consumeTestDemoFilename();

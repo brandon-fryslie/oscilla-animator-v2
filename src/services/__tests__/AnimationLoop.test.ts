@@ -48,7 +48,7 @@ describe('AnimationLoop', () => {
       getRenderer: () => ({
         render: vi.fn(),
       }),
-      getArena: () => ({ reset: vi.fn(), getTotalAllocatedBytes: () => 0 }),
+      getArena: () => ({ reset: vi.fn(), getTotalBytes: () => 0 }),
       store: {
         stepDebug: null,
         diagnostics: {
@@ -70,5 +70,42 @@ describe('AnimationLoop', () => {
     expect(onError).toHaveBeenCalledTimes(1);
     // [LAW:dataflow-not-control-flow] Fail-stop means no subsequent frame scheduling after error.
     expect(globalThis.requestAnimationFrame).toHaveBeenCalledTimes(1);
+  });
+
+  it('fails fast when required WebGPU loop dependencies are missing', () => {
+    const onError = vi.fn();
+    const deps = {
+      getCurrentProgram: () => ({}),
+      getCurrentState: () => ({
+        health: {
+          prevRafTimestamp: null,
+          frameDeltas: new Float64Array(60),
+          frameDeltasIndex: 0,
+          frameCountInWindow: 0,
+          frameDeltaSum: 0,
+          frameDeltaSumSq: 0,
+          minFrameDelta: Infinity,
+          maxFrameDelta: 0,
+        },
+      }),
+      getCanvas: () => ({ width: 100, height: 100 }),
+      getRenderer: () => null,
+      getArena: () => ({ reset: vi.fn(), getTotalBytes: () => 0 }),
+      store: {
+        stepDebug: null,
+        diagnostics: {
+          recordJank: vi.fn(),
+          updateFrameTiming: vi.fn(),
+          updateMemoryStats: vi.fn(),
+        },
+        continuity: { updateFromRuntime: vi.fn() },
+        viewport: { zoom: 1, pan: { x: 0, y: 0 }, setContentBounds: vi.fn() },
+        events: { emit: vi.fn() },
+        getPatchRevision: () => 1,
+      },
+    } as any;
+
+    expect(() => startAnimationLoop(deps, createAnimationLoopState(), onError))
+      .toThrow('WebGPU runtime contract');
   });
 });

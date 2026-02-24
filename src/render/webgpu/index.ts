@@ -1,1 +1,5 @@
-export { WebGPURenderer, createWebGPURenderer } from './WebGPURenderer';
+export {
+  WebGPURenderer,
+  createWebGPURenderer,
+  assertWebGPUStartupContract,
+} from './WebGPURenderer';

@@ -43,6 +43,18 @@ export interface AnimationLoopDeps {
   onStatsUpdate?: (statsText: string) => void;
 }
 
+function assertWebGPULoopContract(deps: AnimationLoopDeps): void {
+  const canvas = deps.getCanvas();
+  const renderer = deps.getRenderer();
+  const arena = deps.getArena();
+
+  if (!canvas || !renderer || !arena) {
+    // [LAW:no-silent-fallbacks] Runtime loop must hard-fail when required
+    // WebGPU rendering dependencies are missing.
+    throw new Error('AnimationLoop: WebGPU runtime contract requires canvas, renderer, and arena');
+  }
+}
+
 const CONTINUITY_STORE_UPDATE_INTERVAL = 200; // 5Hz
 const EMPTY_RENDER_FRAME: RenderFrameIR = { version: 2, ops: [] };
 
@@ -170,7 +182,11 @@ export function executeAnimationFrame(
   const renderer = getRenderer();
   const arena = getArena();
 
-  if (!currentProgram || !currentState || !canvas || !renderer || !arena) {
+  if (!canvas || !renderer || !arena) {
+    throw new Error('AnimationLoop: WebGPU runtime contract requires canvas, renderer, and arena');
+  }
+
+  if (!currentProgram || !currentState) {
     return;
   }
 
@@ -299,6 +315,8 @@ export function startAnimationLoop(
   state: AnimationLoopState,
   onError: (err: unknown) => void
 ): () => void {
+  assertWebGPULoopContract(deps);
+
   let cancelled = false;
   let rafId = 0;
 

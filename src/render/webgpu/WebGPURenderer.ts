@@ -1,6 +1,10 @@
 import type { DrawPathInstancesOp, PathGeometry, RenderFrameIR } from '../types';
 import { PathTessellator } from './PathTessellator';
-import { PATH_RENDER_WGSL, SIMULATION_COMPUTE_WGSL } from './shaders';
+import {
+  PATH_RENDER_WGSL,
+  SIMULATION_COMPUTE_WGSL,
+  WEBGPU_RENDER_CONTRACT,
+} from './shaders';
 
 const GPU_BUFFER_USAGE = {
   COPY_DST: 0x0008,
@@ -10,10 +14,10 @@ const GPU_BUFFER_USAGE = {
   STORAGE: 0x0080,
 } as const;
 
-const INSTANCE_FLOATS = 12;
+const INSTANCE_FLOATS = WEBGPU_RENDER_CONTRACT.instanceFloats;
 const MIN_INSTANCE_CAPACITY = 1024;
-const SIMULATION_CAPACITY = 65_536;
-const SIMULATION_WORKGROUP_SIZE = 64;
+const SIMULATION_CAPACITY = WEBGPU_RENDER_CONTRACT.simulationCapacity;
+const SIMULATION_WORKGROUP_SIZE = WEBGPU_RENDER_CONTRACT.computeWorkgroupSize;
 
 interface GPUMesh {
   readonly indexCount: number;
@@ -32,12 +36,64 @@ interface RenderInput {
   readonly timeMs: number;
 }
 
+interface WebGPUStartupResources {
+  readonly device: any;
+  readonly context: any;
+  readonly canvasFormat: string;
+  readonly adapterFeatures: ReadonlySet<string>;
+}
+
+export function assertWebGPUStartupContract(canvas: HTMLCanvasElement): void {
+  const gpu = (navigator as Navigator & { gpu?: any }).gpu;
+  if (!gpu) {
+    throw new Error('WebGPU is required but navigator.gpu is unavailable');
+  }
+
+  const context = canvas.getContext('webgpu') as any;
+  if (!context) {
+    // [LAW:no-silent-fallbacks] WebGPU-only runtime must fail fast when the
+    // browser cannot create a WebGPU presentation context.
+    throw new Error('WebGPU is required but canvas.getContext("webgpu") failed');
+  }
+}
+
+async function createStartupResources(canvas: HTMLCanvasElement): Promise<WebGPUStartupResources> {
+  assertWebGPUStartupContract(canvas);
+  const gpu = (navigator as Navigator & { gpu?: any }).gpu!;
+
+  const adapter = await gpu.requestAdapter();
+  if (!adapter) {
+    throw new Error('WebGPU is required but no adapter was found');
+  }
+
+  // [LAW:dataflow-not-control-flow] Device allocation uses one request path
+  // for all browsers; capability differences flow through adapter features.
+  const device = await adapter.requestDevice();
+  const context = canvas.getContext('webgpu') as any;
+  if (!context) {
+    throw new Error('WebGPU is required but canvas.getContext("webgpu") failed');
+  }
+  const canvasFormat = gpu.getPreferredCanvasFormat();
+  context.configure({
+    device,
+    format: canvasFormat,
+    alphaMode: 'premultiplied',
+  });
+
+  return {
+    device,
+    context,
+    canvasFormat,
+    adapterFeatures: new Set(Array.from(adapter.features.values())),
+  };
+}
+
 class WebGPUComputeRuntime {
   private readonly pipeline: any;
   private readonly paramsBuffer: any;
   private readonly stateBuffers: readonly [any, any];
   private readonly bindGroups: readonly [any, any];
-  private readonly paramsStaging = new Float32Array(4);
+  private readonly paramsStaging = new Float32Array(WEBGPU_RENDER_CONTRACT.computeParamsFloats);
   private activeStateIndex = 0;
 
   constructor(private readonly device: any) {
@@ -62,26 +118,44 @@ class WebGPUComputeRuntime {
     ] as const;
 
     this.paramsBuffer = device.createBuffer({
-      size: 16,
+      size: WEBGPU_RENDER_CONTRACT.computeParamsFloats * Float32Array.BYTES_PER_ELEMENT,
       usage: GPU_BUFFER_USAGE.UNIFORM | GPU_BUFFER_USAGE.COPY_DST,
     });
 
-    const bindLayout = this.pipeline.getBindGroupLayout(0);
+    const bindLayout = this.pipeline.getBindGroupLayout(WEBGPU_RENDER_CONTRACT.computeBindGroup);
     this.bindGroups = [
       device.createBindGroup({
         layout: bindLayout,
         entries: [
-          { binding: 0, resource: { buffer: this.stateBuffers[0] } },
-          { binding: 1, resource: { buffer: this.stateBuffers[1] } },
-          { binding: 2, resource: { buffer: this.paramsBuffer } },
+          {
+            binding: WEBGPU_RENDER_CONTRACT.computeSrcStateBinding,
+            resource: { buffer: this.stateBuffers[0] },
+          },
+          {
+            binding: WEBGPU_RENDER_CONTRACT.computeDstStateBinding,
+            resource: { buffer: this.stateBuffers[1] },
+          },
+          {
+            binding: WEBGPU_RENDER_CONTRACT.computeParamsBinding,
+            resource: { buffer: this.paramsBuffer },
+          },
         ],
       }),
       device.createBindGroup({
         layout: bindLayout,
         entries: [
-          { binding: 0, resource: { buffer: this.stateBuffers[1] } },
-          { binding: 1, resource: { buffer: this.stateBuffers[0] } },
-          { binding: 2, resource: { buffer: this.paramsBuffer } },
+          {
+            binding: WEBGPU_RENDER_CONTRACT.computeSrcStateBinding,
+            resource: { buffer: this.stateBuffers[1] },
+          },
+          {
+            binding: WEBGPU_RENDER_CONTRACT.computeDstStateBinding,
+            resource: { buffer: this.stateBuffers[0] },
+          },
+          {
+            binding: WEBGPU_RENDER_CONTRACT.computeParamsBinding,
+            resource: { buffer: this.paramsBuffer },
+          },
         ],
       }),
     ] as const;
@@ -101,7 +175,7 @@ class WebGPUComputeRuntime {
     // Variability is encoded in activeCount/dt values, not whether the pass runs.
     const pass = commandEncoder.beginComputePass();
     pass.setPipeline(this.pipeline);
-    pass.setBindGroup(0, this.bindGroups[this.activeStateIndex]);
+    pass.setBindGroup(WEBGPU_RENDER_CONTRACT.computeBindGroup, this.bindGroups[this.activeStateIndex]);
     const workgroups = Math.max(1, Math.ceil(clampedCount / SIMULATION_WORKGROUP_SIZE));
     pass.dispatchWorkgroups(workgroups);
     pass.end();
@@ -121,7 +195,7 @@ class WebGPUComputeRuntime {
 export class WebGPURenderer {
   private readonly tessellator = new PathTessellator();
   private readonly meshCache = new Map<string, GPUMesh>();
-  private readonly sceneUniforms = new Float32Array(8);
+  private readonly sceneUniforms = new Float32Array(WEBGPU_RENDER_CONTRACT.sceneUniformFloats);
   private readonly computeRuntime: WebGPUComputeRuntime;
   private readonly adapterFeatures: ReadonlySet<string>;
 
@@ -149,13 +223,18 @@ export class WebGPURenderer {
     this.pathPipeline = this.createPathPipeline();
 
     this.sceneUniformBuffer = device.createBuffer({
-      size: 32,
+      size: WEBGPU_RENDER_CONTRACT.sceneUniformBytes,
       usage: GPU_BUFFER_USAGE.UNIFORM | GPU_BUFFER_USAGE.COPY_DST,
     });
 
     this.sceneBindGroup = device.createBindGroup({
-      layout: this.pathPipeline.getBindGroupLayout(0),
-      entries: [{ binding: 0, resource: { buffer: this.sceneUniformBuffer } }],
+      layout: this.pathPipeline.getBindGroupLayout(WEBGPU_RENDER_CONTRACT.sceneBindGroup),
+      entries: [
+        {
+          binding: WEBGPU_RENDER_CONTRACT.sceneBinding,
+          resource: { buffer: this.sceneUniformBuffer },
+        },
+      ],
     });
 
     this.instanceBuffer = device.createBuffer({
@@ -165,8 +244,13 @@ export class WebGPURenderer {
     this.instanceCapacity = MIN_INSTANCE_CAPACITY;
     this.instanceStaging = new Float32Array(this.instanceCapacity * INSTANCE_FLOATS);
     this.instanceBindGroup = device.createBindGroup({
-      layout: this.pathPipeline.getBindGroupLayout(1),
-      entries: [{ binding: 0, resource: { buffer: this.instanceBuffer } }],
+      layout: this.pathPipeline.getBindGroupLayout(WEBGPU_RENDER_CONTRACT.instanceBindGroup),
+      entries: [
+        {
+          binding: WEBGPU_RENDER_CONTRACT.instanceBinding,
+          resource: { buffer: this.instanceBuffer },
+        },
+      ],
     });
 
     this.computeRuntime = new WebGPUComputeRuntime(this.device);
@@ -186,33 +270,14 @@ export class WebGPURenderer {
   }
 
   static async create(canvas: HTMLCanvasElement): Promise<WebGPURenderer> {
-    const gpu = (navigator as Navigator & { gpu?: any }).gpu;
-    if (!gpu) {
-      throw new Error('WebGPU is required but navigator.gpu is unavailable');
-    }
-
-    const adapter = await gpu.requestAdapter();
-    if (!adapter) {
-      throw new Error('WebGPU is required but no adapter was found');
-    }
-
-    // [LAW:dataflow-not-control-flow] Runtime uses one device request path across browsers.
-    // Optional capabilities are detected from adapterFeatures and consumed as data flags.
-    const device = await adapter.requestDevice();
-
-    const context = canvas.getContext('webgpu') as any;
-    if (!context) {
-      throw new Error('WebGPU is required but canvas.getContext("webgpu") failed');
-    }
-
-    const format = gpu.getPreferredCanvasFormat();
-    context.configure({
-      device,
-      format,
-      alphaMode: 'premultiplied',
-    });
-
-    return new WebGPURenderer(canvas, device, context, format, new Set(Array.from(adapter.features.values())));
+    const startup = await createStartupResources(canvas);
+    return new WebGPURenderer(
+      canvas,
+      startup.device,
+      startup.context,
+      startup.canvasFormat,
+      startup.adapterFeatures
+    );
   }
 
   render(input: RenderInput): void {
@@ -220,7 +285,7 @@ export class WebGPURenderer {
       throw this.fatalError;
     }
 
-    this.assertFrameShape(input.frame);
+    this.assertRenderInputContract(input);
     this.ensureCanvasConfiguration(input.width, input.height);
     this.writeSceneUniforms(input);
 
@@ -245,7 +310,7 @@ export class WebGPURenderer {
     });
 
     pass.setPipeline(this.pathPipeline);
-    pass.setBindGroup(0, this.sceneBindGroup);
+    pass.setBindGroup(WEBGPU_RENDER_CONTRACT.sceneBindGroup, this.sceneBindGroup);
 
     for (const op of input.frame.ops) {
       if (op.kind !== 'drawPathInstances') {
@@ -270,9 +335,25 @@ export class WebGPURenderer {
     this.tessellator.clear();
   }
 
-  private assertFrameShape(frame: RenderFrameIR): void {
+  private assertRenderInputContract(input: RenderInput): void {
+    const { frame, width, height, zoom, panX, panY, timeMs } = input;
     if (frame.version !== 2) {
       throw new Error(`WebGPURenderer: unsupported frame version ${frame.version}`);
+    }
+    if (!Number.isFinite(width) || width < 0) {
+      throw new Error(`WebGPURenderer: width must be a finite non-negative number, got ${width}`);
+    }
+    if (!Number.isFinite(height) || height < 0) {
+      throw new Error(`WebGPURenderer: height must be a finite non-negative number, got ${height}`);
+    }
+    if (!Number.isFinite(zoom) || zoom <= 0) {
+      throw new Error(`WebGPURenderer: zoom must be a finite positive number, got ${zoom}`);
+    }
+    if (!Number.isFinite(panX) || !Number.isFinite(panY)) {
+      throw new Error(`WebGPURenderer: pan must be finite numbers, got (${panX}, ${panY})`);
+    }
+    if (!Number.isFinite(timeMs)) {
+      throw new Error(`WebGPURenderer: timeMs must be finite, got ${timeMs}`);
     }
   }
 
@@ -328,10 +409,10 @@ export class WebGPURenderer {
       return;
     }
 
-    const writeBytes = instanceCount * INSTANCE_FLOATS * 4;
+    const writeBytes = instanceCount * WEBGPU_RENDER_CONTRACT.instanceBytes;
     this.device.queue.writeBuffer(this.instanceBuffer, 0, this.instanceStaging.buffer, 0, writeBytes);
 
-    pass.setBindGroup(1, this.instanceBindGroup);
+    pass.setBindGroup(WEBGPU_RENDER_CONTRACT.instanceBindGroup, this.instanceBindGroup);
     pass.setVertexBuffer(0, mesh.vertexBuffer);
     pass.setIndexBuffer(mesh.indexBuffer, mesh.indexFormat);
     pass.drawIndexed(mesh.indexCount, instanceCount, 0, 0, 0);
@@ -462,8 +543,13 @@ export class WebGPURenderer {
     this.instanceCapacity = nextCapacity;
     this.instanceStaging = new Float32Array(this.instanceCapacity * INSTANCE_FLOATS);
     this.instanceBindGroup = this.device.createBindGroup({
-      layout: this.pathPipeline.getBindGroupLayout(1),
-      entries: [{ binding: 0, resource: { buffer: this.instanceBuffer } }],
+      layout: this.pathPipeline.getBindGroupLayout(WEBGPU_RENDER_CONTRACT.instanceBindGroup),
+      entries: [
+        {
+          binding: WEBGPU_RENDER_CONTRACT.instanceBinding,
+          resource: { buffer: this.instanceBuffer },
+        },
+      ],
     });
   }
 

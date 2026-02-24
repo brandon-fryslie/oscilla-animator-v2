@@ -2,14 +2,15 @@
  * Render - Convert RenderFrameIR to pixels
  */
 
-// Canvas 2D renderer
-export { renderFrame, renderDrawPathInstancesOp } from './canvas/Canvas2DRenderer';
-
-// SVG renderer
-export { SVGRenderer } from './svg/SVGRenderer';
-
-// WebGPU renderer (runtime default)
-export { WebGPURenderer, createWebGPURenderer } from './webgpu';
+// [LAW:one-type-per-behavior] Runtime rendering uses a single renderer type:
+// WebGPU. Alternative renderers are kept in module-local paths, not exported
+// from the runtime render boundary.
+export {
+  WebGPURenderer,
+  createWebGPURenderer,
+  assertWebGPUStartupContract,
+} from './webgpu';
+export { WEBGPU_RENDER_CONTRACT } from './webgpu/shaders';
 export {
   setRenderIssueReporter,
   getRenderIssues,

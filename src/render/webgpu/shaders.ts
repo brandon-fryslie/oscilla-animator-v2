@@ -5,6 +5,24 @@
  * pipeline construction and tests share one canonical shader definition.
  */
 
+export const WEBGPU_RENDER_CONTRACT = Object.freeze({
+  sceneUniformFloats: 8,
+  sceneUniformBytes: 8 * Float32Array.BYTES_PER_ELEMENT,
+  instanceFloats: 12,
+  instanceBytes: 12 * Float32Array.BYTES_PER_ELEMENT,
+  sceneBindGroup: 0,
+  sceneBinding: 0,
+  instanceBindGroup: 1,
+  instanceBinding: 0,
+  computeBindGroup: 0,
+  computeSrcStateBinding: 0,
+  computeDstStateBinding: 1,
+  computeParamsBinding: 2,
+  computeParamsFloats: 4,
+  computeWorkgroupSize: 64,
+  simulationCapacity: 65_536,
+} as const);
+
 export const PATH_RENDER_WGSL = /* wgsl */ `
 struct SceneUniforms {
   // v0 = [viewportWidthPx, viewportHeightPx, panXPx, panYPx]
@@ -90,7 +108,7 @@ struct SimParams {
 @group(0) @binding(1) var<storage, read_write> dstState: array<SimState>;
 @group(0) @binding(2) var<uniform> simParams: SimParams;
 
-@compute @workgroup_size(64)
+@compute @workgroup_size(${WEBGPU_RENDER_CONTRACT.computeWorkgroupSize})
 fn cs_main(@builtin(global_invocation_id) gid: vec3<u32>) {
   let activeCount = u32(simParams.v0.x);
   if (gid.x >= activeCount) {
