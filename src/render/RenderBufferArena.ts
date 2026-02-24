@@ -313,13 +313,6 @@ export class RenderBufferArena {
   }
 
   /**
-   * Alias for getTotalBytes() used by renderer/service memory telemetry.
-   */
-  getTotalAllocatedBytes(): number {
-    return this.getTotalBytes();
-  }
-
-  /**
    * Check if arena is initialized.
    */
   isInitialized(): boolean {

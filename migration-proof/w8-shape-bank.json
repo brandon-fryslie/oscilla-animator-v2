@@ -1,0 +1,51 @@
+{
+  "workstream": "W8",
+  "title": "Shape Bank And Topology Bank Canonicalization (u32)",
+  "status": "completed",
+  "timestamp_utc": "2026-02-24T06:47:08Z",
+  "commit": "c4c992004",
+  "laws": [
+    "one-source-of-truth",
+    "single-enforcer",
+    "verifiable-goals"
+  ],
+  "scope": [
+    "Enforce canonical shape bank usage over legacy object-map seams in runtime/render hot paths",
+    "Keep render assembly shape reads on typed shapeFields bank",
+    "Lock debug/inspection flows to canonical banks and snapshots"
+  ],
+  "closure_surfaces": [
+    "src/runtime/RuntimeState.ts",
+    "src/runtime/RenderAssembler.ts",
+    "src/runtime/ValueInspector.ts",
+    "src/runtime/StepDebugSession.ts",
+    "src/services/DebugService.ts",
+    "src/__tests__/forbidden-patterns.test.ts"
+  ],
+  "verification": [
+    {
+      "command": "pnpm -s typecheck",
+      "exit_code": 0
+    },
+    {
+      "command": "pnpm -s vitest run src/runtime/__tests__/ValueInspector.test.ts src/runtime/__tests__/StepDebugSession.test.ts src/runtime/__tests__/shape-payload.test.ts src/runtime/__tests__/RenderAssembler-per-instance-shapes.test.ts src/runtime/__tests__/RenderAssembler.test.ts",
+      "exit_code": 0,
+      "tests_passed": 58
+    },
+    {
+      "command": "pnpm -s vitest run src/__tests__/forbidden-patterns.test.ts",
+      "exit_code": 0,
+      "tests_passed": 69
+    }
+  ],
+  "static_scans": [
+    {
+      "command": "non-comment scan for values.objects usage across RenderAssembler/ScheduleExecutor/executeFrameStepped/ValueInspector/StepDebugSession/DebugService",
+      "result": "no_matches"
+    }
+  ],
+  "notes": [
+    "Comment-only references to values.objects are allowed for migration context; non-comment operational usage is zero.",
+    "W3/W8 forbidden-pattern guards remain green and block seam reintroduction."
+  ]
+}

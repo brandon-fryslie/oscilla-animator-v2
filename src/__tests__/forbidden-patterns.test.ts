@@ -1250,4 +1250,34 @@ describe('Forbidden Patterns (Type System Invariants)', () => {
     });
 
   });
+
+  describe('WebGPU Prereq Guards (W9)', () => {
+
+    it('render arena must not expose compatibility alias getTotalAllocatedBytes()', () => {
+      const rawMatches = grepSrc('getTotalAllocatedBytes\\s*\\(', 'src/render/RenderBufferArena.ts');
+      const filtered = filterAllowlist(rawMatches, [/\.test\./, /__tests__/]);
+      expect(
+        filtered,
+        'RenderBufferArena must expose canonical getTotalBytes() only.\n' +
+        'Compatibility alias getTotalAllocatedBytes() must not reappear.\n' +
+        'Found violations:\n' + filtered.join('\n')
+      ).toEqual([]);
+    });
+
+    it('render sink modules must not carry legacy v1/compatibility TODO markers', () => {
+      const rawMatches = [
+        ...grepSrc('TODO:\\s*replace per-frame allocation', 'src/runtime/RenderAssembler.ts'),
+        ...grepSrc('v1 compatibility', 'src/runtime/RenderAssembler.ts'),
+        ...grepSrc('v1 compatibility', 'src/render/types.ts'),
+        ...grepSrc('compatibility scaffolding', 'src/runtime/RenderAssembler.ts'),
+      ];
+      const filtered = filterAllowlist(rawMatches, [/\.test\./, /__tests__/]);
+      expect(
+        filtered,
+        'Render sink closure (W9) must not carry legacy compatibility/TODO markers.\n' +
+        'Found violations:\n' + filtered.join('\n')
+      ).toEqual([]);
+    });
+
+  });
 });
