@@ -84,6 +84,40 @@ export function wrapPhase(value: number): number {
 }
 
 /**
+ * Normalize phase offset to a bounded representative in [-0.5, 0.5).
+ *
+ * Adding any integer to offset preserves wrapped phase semantics, so runtime
+ * keeps a bounded representative to prevent unbounded offset drift.
+ */
+function normalizePhaseOffset(offset: number): number {
+  if (!Number.isFinite(offset)) {
+    return 0;
+  }
+  return wrapPhase(offset + 0.5) - 0.5;
+}
+
+/**
+ * Validate effective time channel invariants.
+ */
+export function assertBoundedEffectiveTime(effective: EffectiveTime): void {
+  if (!Number.isFinite(effective.tAbsMs) || !Number.isFinite(effective.tMs) || !Number.isFinite(effective.dt)) {
+    throw new Error('resolveTime: tAbsMs/tMs/dt must be finite numbers');
+  }
+  if (!Number.isFinite(effective.phaseA) || !Number.isFinite(effective.phaseB)) {
+    throw new Error('resolveTime: phase channels must be finite numbers');
+  }
+  if (effective.phaseA < 0 || effective.phaseA >= 1 || effective.phaseB < 0 || effective.phaseB >= 1) {
+    throw new Error('resolveTime: phase channels must be bounded to [0, 1)');
+  }
+  if (!(effective.palette instanceof Float32Array) || effective.palette.length !== 4) {
+    throw new Error('resolveTime: palette must be Float32Array(4)');
+  }
+  if (!Number.isFinite(effective.energy)) {
+    throw new Error('resolveTime: energy must be a finite number');
+  }
+}
+
+/**
  * Reconcile phase offsets when time model periods change.
  * Adjusts offsetA/offsetB so effective phases remain continuous.
  * Called during hot-swap when the compiled schedule changes.
@@ -109,6 +143,11 @@ export function reconcilePhaseOffsets(
   monotonicTMs: number,
   timeState: TimeState
 ): void {
+  // [LAW:dataflow-not-control-flow] Offset bounds are represented in data, not
+  // optional caller-side branches; normalize at the single time boundary.
+  timeState.offsetA = normalizePhaseOffset(timeState.offsetA);
+  timeState.offsetB = normalizePhaseOffset(timeState.offsetB);
+
   // Extract periods (default fallbacks for finite models which don't have these fields)
   const oldPeriodA = oldTimeModel.kind === 'infinite' ? oldTimeModel.periodAMs : 4000;
   const newPeriodA = newTimeModel.kind === 'infinite' ? newTimeModel.periodAMs : 4000;
@@ -148,7 +187,7 @@ export function reconcilePhaseOffsets(
       }
     }
 
-    timeState.offsetA = bestOffset;
+    timeState.offsetA = normalizePhaseOffset(bestOffset);
   }
 
   // Reconcile B if period changed
@@ -176,7 +215,7 @@ export function reconcilePhaseOffsets(
       }
     }
 
-    timeState.offsetB = bestOffset;
+    timeState.offsetB = normalizePhaseOffset(bestOffset);
   }
 }
 
@@ -214,6 +253,9 @@ export function resolveTime(
   timeModel: TimeModel,
   timeState: TimeState
 ): EffectiveTime {
+  timeState.offsetA = normalizePhaseOffset(timeState.offsetA);
+  timeState.offsetB = normalizePhaseOffset(timeState.offsetB);
+
   // Calculate delta time
   const dt = timeState.prevTAbsMs !== null ? tAbsMs - timeState.prevTAbsMs : 0;
   timeState.prevTAbsMs = tAbsMs;
@@ -251,5 +293,7 @@ export function resolveTime(
   const energy = 0.5 + 0.5 * Math.sin(phaseA * 2 * Math.PI);
 
   // Infinite model
-  return { tAbsMs, tMs: monotonicTMs, dt, phaseA, phaseB, pulse, palette, energy };
+  const effective = { tAbsMs, tMs: monotonicTMs, dt, phaseA, phaseB, pulse, palette, energy };
+  assertBoundedEffectiveTime(effective);
+  return effective;
 }

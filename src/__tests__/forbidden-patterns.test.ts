@@ -1314,6 +1314,9 @@ describe('Forbidden Patterns (Type System Invariants)', () => {
         ...grepSrc('new Float64Array\\(maxValueExprs\\)', 'src/runtime/RuntimeState.ts'),
         ...grepSrc('Float32Array \\| Float64Array', 'src/runtime/ValueExprScalarEvaluator.ts'),
         ...grepSrc('oldState:\\s*Float64Array|newState:\\s*Float64Array', 'src/runtime/StateMigration.ts'),
+        ...grepSrc('Float64Array', 'src/runtime/timeResolution.ts'),
+        ...grepSrc('Float64Array', 'src/runtime/ScheduleExecutor.ts'),
+        ...grepSrc('Float64Array', 'src/runtime/executeFrameStepped.ts'),
       ];
       const filtered = filterAllowlist(rawMatches, [/\.test\./, /__tests__/]);
       expect(
@@ -1321,6 +1324,18 @@ describe('Forbidden Patterns (Type System Invariants)', () => {
         'Runtime state/cache hot paths must use canonical Float32Array storage.\n' +
         'Found violations:\n' + filtered.join('\n')
       ).toEqual([]);
+    });
+
+    it('runtime executors must assert canonical runtime storage at frame boundary', () => {
+      const rawMatches = [
+        ...grepSrc('assertCanonicalRuntimeStorage\\(', 'src/runtime/ScheduleExecutor.ts'),
+        ...grepSrc('assertCanonicalRuntimeStorage\\(', 'src/runtime/executeFrameStepped.ts'),
+      ];
+      const filtered = filterAllowlist(rawMatches, [/\.test\./, /__tests__/]);
+      expect(
+        filtered.length,
+        'ScheduleExecutor and executeFrameStepped must assert canonical runtime storage before frame execution.'
+      ).toBeGreaterThanOrEqual(2);
     });
 
   });

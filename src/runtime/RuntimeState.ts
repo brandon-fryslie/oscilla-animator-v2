@@ -798,6 +798,25 @@ export interface RuntimeState {
 }
 
 /**
+ * Enforce canonical runtime storage contracts used by execution hot paths.
+ */
+export function assertCanonicalRuntimeStorage(state: RuntimeState): void {
+  // [LAW:one-source-of-truth] Runtime numeric/state banks are canonical Float32.
+  if (!(state.arena instanceof Float32Array)) {
+    throw new Error('RuntimeState.arena must be Float32Array (canonical numeric storage)');
+  }
+  if (!(state.state instanceof Float32Array)) {
+    throw new Error('RuntimeState.state must be Float32Array (canonical state storage)');
+  }
+  if (!(state.eventScalars instanceof Uint8Array)) {
+    throw new Error('RuntimeState.eventScalars must be Uint8Array');
+  }
+  if (!(state.eventWrapPredicate instanceof Uint8Array)) {
+    throw new Error('RuntimeState.eventWrapPredicate must be Uint8Array');
+  }
+}
+
+/**
  * Create a SessionState (called once at startup)
  */
 export function createSessionState(): SessionState {

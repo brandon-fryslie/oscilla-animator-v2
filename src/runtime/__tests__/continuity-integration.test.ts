@@ -329,6 +329,24 @@ describe('Continuity Integration', () => {
       expect(frame2Segments).toEqual(frame1Segments);
     });
 
+    it('keeps canonical f32 storage and bounded phases across repeated frames', () => {
+      const program = compileContinuityRenderProgram();
+      const state = createStateForProgram(program);
+      const arena = getTestArena();
+
+      for (let frame = 0; frame < 240; frame++) {
+        executeFrame(program, state, arena, frame * 16);
+      }
+
+      expect(state.arena).toBeInstanceOf(Float32Array);
+      expect(state.state).toBeInstanceOf(Float32Array);
+      expect(state.time).not.toBeNull();
+      expect(state.time!.phaseA).toBeGreaterThanOrEqual(0);
+      expect(state.time!.phaseA).toBeLessThan(1);
+      expect(state.time!.phaseB).toBeGreaterThanOrEqual(0);
+      expect(state.time!.phaseB).toBeLessThan(1);
+    });
+
     it('clears frame-local continuity mappings at finalize boundary', () => {
       const state = createRuntimeState(8);
       state.time = {

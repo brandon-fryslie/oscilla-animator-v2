@@ -1,0 +1,51 @@
+{
+  "workstream": "W4",
+  "title": "Canonical Float32 Runtime State and Bounded Phase Semantics",
+  "status": "slice_completed",
+  "timestamp_utc": "2026-02-24T07:13:55Z",
+  "laws": [
+    "one-source-of-truth",
+    "dataflow-not-control-flow",
+    "verifiable-goals"
+  ],
+  "scope": [
+    "Add canonical runtime storage assertions at frame boundaries for both production and stepped executors",
+    "Normalize phase offsets to bounded representatives and enforce bounded/finite EffectiveTime contracts in time resolution",
+    "Expand bounded-phase hot-swap/long-run tests and extend W4 static guards against Float64Array regressions"
+  ],
+  "changed_files": [
+    "/Users/bmf/.codex/worktrees/49f4/oscilla-animator-v2/src/runtime/RuntimeState.ts",
+    "/Users/bmf/.codex/worktrees/49f4/oscilla-animator-v2/src/runtime/ScheduleExecutor.ts",
+    "/Users/bmf/.codex/worktrees/49f4/oscilla-animator-v2/src/runtime/executeFrameStepped.ts",
+    "/Users/bmf/.codex/worktrees/49f4/oscilla-animator-v2/src/runtime/timeResolution.ts",
+    "/Users/bmf/.codex/worktrees/49f4/oscilla-animator-v2/src/runtime/StateMigration.ts",
+    "/Users/bmf/.codex/worktrees/49f4/oscilla-animator-v2/src/runtime/__tests__/phase-continuity-offset.test.ts",
+    "/Users/bmf/.codex/worktrees/49f4/oscilla-animator-v2/src/runtime/__tests__/continuity-integration.test.ts",
+    "/Users/bmf/.codex/worktrees/49f4/oscilla-animator-v2/src/__tests__/forbidden-patterns.test.ts"
+  ],
+  "verification": [
+    {
+      "command": "pnpm -s typecheck",
+      "exit_code": 0
+    },
+    {
+      "command": "pnpm -s vitest run src/runtime/__tests__/phase-continuity-offset.test.ts src/runtime/__tests__/continuity-integration.test.ts src/runtime/__tests__/StateMigration.test.ts src/runtime/__tests__/executeFrameStepped.test.ts src/__tests__/forbidden-patterns.test.ts",
+      "exit_code": 0,
+      "tests_passed": 121
+    },
+    {
+      "command": "if command -v just >/dev/null 2>&1 && [ -f Justfile ]; then just check; else pnpm run typecheck && pnpm test; fi",
+      "exit_code": 0
+    }
+  ],
+  "static_scans": [
+    {
+      "command": "rg -n \"Float64Array\" src/runtime/RuntimeState.ts src/runtime/StateMigration.ts src/runtime/timeResolution.ts src/runtime/ScheduleExecutor.ts src/runtime/executeFrameStepped.ts",
+      "result": "no_matches"
+    },
+    {
+      "command": "rg -n \"assertCanonicalRuntimeStorage\\(\" src/runtime/ScheduleExecutor.ts src/runtime/executeFrameStepped.ts",
+      "result": "matches_present"
+    }
+  ]
+}

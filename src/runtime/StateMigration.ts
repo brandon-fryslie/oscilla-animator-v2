@@ -39,6 +39,13 @@ export interface StateMigrationDetail {
   lanesInitialized?: number;
 }
 
+function assertCanonicalStateStorage(oldState: Float32Array, newState: Float32Array): void {
+  // [LAW:one-source-of-truth] Stateful runtime storage is canonical Float32 only.
+  if (!(oldState instanceof Float32Array) || !(newState instanceof Float32Array)) {
+    throw new Error('migrateState requires Float32Array storage for oldState and newState');
+  }
+}
+
 function isScalarStateMapping(mapping: StateMapping): mapping is ScalarSlotDecl {
   return mapping.laneCount === 1 && mapping.instanceId === undefined;
 }
@@ -72,6 +79,8 @@ export function migrateState(
   newMappings: readonly StateMapping[],
   getLaneMapping: (instanceId: string) => MappingState | null
 ): StateMigrationResult {
+  assertCanonicalStateStorage(oldState, newState);
+
   const result: StateMigrationResult = {
     migrated: false,
     scalarsMigrated: 0,

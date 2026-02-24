@@ -26,6 +26,7 @@ import {
   writeShape2D,
   beginRuntimeFrameSemantics,
   enterRuntimeFrameSegment,
+  assertCanonicalRuntimeStorage,
   type RuntimeFrameSegment,
 } from './RuntimeState';
 import { detectDomainChange } from './ContinuityMapping';
@@ -255,6 +256,7 @@ export function* executeFrameStepped(
   // --- PRE-FRAME SETUP ---
   state.cache.frameId++;
   beginRuntimeFrameSemantics(state);
+  assertCanonicalRuntimeStorage(state);
 
   enterRuntimeFrameSegment(state, 'preframe-external-input');
   state.externalChannels.commit();

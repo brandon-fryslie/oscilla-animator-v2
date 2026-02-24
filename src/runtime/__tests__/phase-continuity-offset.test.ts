@@ -22,8 +22,8 @@ describe('reconcilePhaseOffsets', () => {
     reconcilePhaseOffsets(oldTimeModel, newTimeModel, monotonicTMs, timeState);
 
     // Offsets should remain unchanged when periods don't change
-    expect(timeState.offsetA).toBe(0.25);
-    expect(timeState.offsetB).toBe(0.5);
+    expect(timeState.offsetA).toBeCloseTo(0.25, 10);
+    expect(wrapPhase(timeState.offsetB)).toBeCloseTo(wrapPhase(0.5), 10);
   });
 
   it('phase preserved when period doubles', () => {
@@ -109,8 +109,8 @@ describe('reconcilePhaseOffsets', () => {
       reconcilePhaseOffsets(oldTimeModel, newTimeModel, monotonicTMs, timeState);
     }).not.toThrow();
 
-    // Offset should remain unchanged (no reconciliation happens)
-    expect(timeState.offsetA).toBe(0.1);
+    // Offset should remain phase-equivalent when no reconciliation happens.
+    expect(wrapPhase(timeState.offsetA)).toBeCloseTo(wrapPhase(0.1), 10);
   });
 
   it('zero period handled gracefully (new)', () => {
@@ -127,8 +127,8 @@ describe('reconcilePhaseOffsets', () => {
       reconcilePhaseOffsets(oldTimeModel, newTimeModel, monotonicTMs, timeState);
     }).not.toThrow();
 
-    // Offset should remain unchanged (no reconciliation happens)
-    expect(timeState.offsetA).toBe(0.1);
+    // Offset should remain phase-equivalent when no reconciliation happens.
+    expect(wrapPhase(timeState.offsetA)).toBeCloseTo(wrapPhase(0.1), 10);
   });
 
   it('both phases reconciled independently', () => {
@@ -207,6 +207,49 @@ describe('reconcilePhaseOffsets', () => {
     // After multiple changes, phase should still be continuous
     // (may not match original due to floating point, but should be close)
     expect(phase2).toBeCloseTo(phase1, 10);
+  });
+
+  it('normalizes offsets into bounded representative range', () => {
+    const timeState = createTimeState();
+    timeState.offsetA = 1024.25;
+    timeState.offsetB = -2048.75;
+
+    const monotonicTMs = 5000;
+    const oldTimeModel: TimeModel = { kind: 'infinite', periodAMs: 4000, periodBMs: 8000 };
+    const newTimeModel: TimeModel = { kind: 'infinite', periodAMs: 2000, periodBMs: 6000 };
+
+    reconcilePhaseOffsets(oldTimeModel, newTimeModel, monotonicTMs, timeState);
+
+    expect(timeState.offsetA).toBeGreaterThanOrEqual(-0.5);
+    expect(timeState.offsetA).toBeLessThan(0.5);
+    expect(timeState.offsetB).toBeGreaterThanOrEqual(-0.5);
+    expect(timeState.offsetB).toBeLessThan(0.5);
+  });
+
+  it('keeps phases bounded and finite across repeated period hot-swaps', () => {
+    const timeState = createTimeState();
+    const models: TimeModel[] = [
+      { kind: 'infinite', periodAMs: 2400, periodBMs: 5100 },
+      { kind: 'infinite', periodAMs: 3600, periodBMs: 7700 },
+      { kind: 'infinite', periodAMs: 4100, periodBMs: 6100 },
+      { kind: 'infinite', periodAMs: 2900, periodBMs: 8300 },
+    ];
+
+    let current = models[0];
+    for (let frame = 1; frame <= 2000; frame++) {
+      if (frame % 125 === 0) {
+        const next = models[(frame / 125) % models.length];
+        reconcilePhaseOffsets(current, next, frame * 16, timeState);
+        current = next;
+      }
+      const resolved = resolveTime(frame * 16, current, timeState);
+      expect(Number.isFinite(resolved.phaseA)).toBe(true);
+      expect(Number.isFinite(resolved.phaseB)).toBe(true);
+      expect(resolved.phaseA).toBeGreaterThanOrEqual(0);
+      expect(resolved.phaseA).toBeLessThan(1);
+      expect(resolved.phaseB).toBeGreaterThanOrEqual(0);
+      expect(resolved.phaseB).toBeLessThan(1);
+    }
   });
 
   it('keeps bounded phase semantics stable across multi-hour simulation', () => {
