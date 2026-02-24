@@ -220,6 +220,8 @@ class WebGPUDrawPrepRuntime {
   private activeShaderCode: string;
   private readonly paramsBuffer: any;
   private readonly paramsStaging = new Uint32Array(WEBGPU_RENDER_CONTRACT.drawPrepParamsU32);
+  private activeBindGroup: any | null = null;
+  private activeIndirectBuffer: any | null = null;
 
   constructor(private readonly device: any, initialShaderCode: string = DRAW_PREP_COMPUTE_WGSL) {
     this.activeShaderCode = initialShaderCode;
@@ -253,6 +255,31 @@ class WebGPUDrawPrepRuntime {
     // one active WGSL source at runtime (compiler-provided or canonical default).
     this.pipeline = this.createPipeline(nextShaderCode);
     this.activeShaderCode = nextShaderCode;
+    this.activeBindGroup = null;
+    this.activeIndirectBuffer = null;
+  }
+
+  private getOrCreateBindGroup(indirectBuffer: any): any {
+    if (this.activeBindGroup && this.activeIndirectBuffer === indirectBuffer) {
+      return this.activeBindGroup;
+    }
+
+    const bindGroup = this.device.createBindGroup({
+      layout: this.pipeline.getBindGroupLayout(WEBGPU_RENDER_CONTRACT.drawPrepBindGroup),
+      entries: [
+        {
+          binding: WEBGPU_RENDER_CONTRACT.drawPrepIndirectBinding,
+          resource: { buffer: indirectBuffer },
+        },
+        {
+          binding: WEBGPU_RENDER_CONTRACT.drawPrepParamsBinding,
+          resource: { buffer: this.paramsBuffer },
+        },
+      ],
+    });
+    this.activeBindGroup = bindGroup;
+    this.activeIndirectBuffer = indirectBuffer;
+    return bindGroup;
   }
 
   step(
@@ -274,19 +301,7 @@ class WebGPUDrawPrepRuntime {
     this.paramsStaging[7] = 0;
     this.device.queue.writeBuffer(this.paramsBuffer, 0, this.paramsStaging);
 
-    const bindGroup = this.device.createBindGroup({
-      layout: this.pipeline.getBindGroupLayout(WEBGPU_RENDER_CONTRACT.drawPrepBindGroup),
-      entries: [
-        {
-          binding: WEBGPU_RENDER_CONTRACT.drawPrepIndirectBinding,
-          resource: { buffer: indirectBuffer },
-        },
-        {
-          binding: WEBGPU_RENDER_CONTRACT.drawPrepParamsBinding,
-          resource: { buffer: this.paramsBuffer },
-        },
-      ],
-    });
+    const bindGroup = this.getOrCreateBindGroup(indirectBuffer);
 
     const pass = commandEncoder.beginComputePass();
     pass.setPipeline(this.pipeline);
