@@ -1317,4 +1317,72 @@ describe('Forbidden Patterns (Type System Invariants)', () => {
     });
 
   });
+
+  describe('WebGPU Prereq Guards (W1/W14)', () => {
+
+    it('arena accessors must not hard-code AoS lane*stride+component formulas', () => {
+      // [LAW:one-source-of-truth] Arena addressing must flow through one canonical
+      // index resolver, not duplicated inline AoS formulas.
+      const rawMatches = grepSrc('desc\\.offset\\s*\\+\\s*lane\\s*\\*\\s*desc\\.stride\\s*\\+\\s*component', 'src/runtime/ArenaValueStore.ts');
+      const nonCommentMatches = rawMatches.filter((m) => {
+        const secondColon = m.indexOf(':', m.indexOf(':') + 1);
+        const content = secondColon >= 0 ? m.slice(secondColon + 1).trim() : '';
+        if (!content) return false;
+        return !content.startsWith('//') && !content.startsWith('*') && !content.startsWith('/**');
+      });
+      expect(
+        nonCommentMatches,
+        'ArenaValueStore must use canonical arenaIndex()/resolveArenaAddress(), not inline AoS formulas.\n' +
+        'Found violations:\n' + nonCommentMatches.join('\n')
+      ).toEqual([]);
+    });
+
+    it('runtime inspector must not branch on legacy f64/object storage labels', () => {
+      const rawMatches = [
+        ...grepSrc("case\\s*'f64'", 'src/runtime/ValueInspector.ts'),
+        ...grepSrc("case\\s*'object'", 'src/runtime/ValueInspector.ts'),
+      ];
+      const filtered = filterAllowlist(rawMatches, [/\.test\./, /__tests__/]);
+      expect(
+        filtered,
+        'ValueInspector must read canonical runtime storage labels only.\n' +
+        'Found violations:\n' + filtered.join('\n')
+      ).toEqual([]);
+    });
+
+    it('runtime state must not allocate persistent state outside arena ownership', () => {
+      const rawMatches = grepSrc('new Float32Array\\(stateSlotCount\\)', 'src/runtime/RuntimeState.ts');
+      const filtered = filterAllowlist(rawMatches, [/\.test\./, /__tests__/]);
+      expect(
+        filtered,
+        'RuntimeState persistent state must be an arena-backed segment view, not a standalone allocation.\n' +
+        'Found violations:\n' + filtered.join('\n')
+      ).toEqual([]);
+    });
+
+    it('scalar extract evaluator must not fall back to offset-only arena maps', () => {
+      const rawMatches = grepSrc('scalarExprToArenaOffset', 'src/runtime/ValueExprScalarEvaluator.ts');
+      const filtered = filterAllowlist(rawMatches, [/\.test\./, /__tests__/]);
+      expect(
+        filtered,
+        'ValueExprScalarEvaluator extract path must use canonical scalarExprToArenaAddress only.\n' +
+        'Found violations:\n' + filtered.join('\n')
+      ).toEqual([]);
+    });
+
+    it('materializer and continuity mapping must route stride indexing through shared helpers', () => {
+      const rawMatches = [
+        ...grepSrc('\\bi\\s*\\*\\s*stride\\s*\\+\\s*[a-zA-Z_]', 'src/runtime/ValueExprMaterializer.ts'),
+        ...grepSrc('\\bi\\s*\\*\\s*stride\\s*\\+\\s*[a-zA-Z_]', 'src/runtime/ContinuityApply.ts'),
+        ...grepSrc('\\boldIdx\\s*\\*\\s*stride\\s*\\+\\s*[a-zA-Z_]', 'src/runtime/ContinuityApply.ts'),
+      ];
+      const filtered = filterAllowlist(rawMatches, [/\.test\./, /__tests__/]);
+      expect(
+        filtered,
+        'W1/W14 indexing must flow through lane/component helper boundaries in materializer and continuity paths.\n' +
+        'Found violations:\n' + filtered.join('\n')
+      ).toEqual([]);
+    });
+
+  });
 });

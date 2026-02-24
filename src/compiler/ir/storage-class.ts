@@ -83,5 +83,15 @@ export function deriveArenaDescriptor(
     ? resolveInstanceCount(card.instance.instanceId, instances)
     : 1;
   const length = stride * laneCount;
-  return { offset: arenaOffset, stride, laneCount, length };
+  // [LAW:one-source-of-truth] Canonical descriptor carries explicit packing
+  // metadata even while execution is still AoS-backed during W1/W14 migration.
+  return {
+    offset: arenaOffset,
+    stride,
+    laneCount,
+    length,
+    packing: 'aos',
+    laneStride: stride,
+    componentStride: 1,
+  };
 }

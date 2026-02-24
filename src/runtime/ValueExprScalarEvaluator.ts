@@ -29,6 +29,7 @@ import type { RuntimeState } from './RuntimeState';
 import { recordNaN, recordInfinity } from './HealthMonitor';
 import { constValueAsNumber } from '../core/canonical-types';
 import { applyPureFn } from './ScalarKernelLibrary';
+import { arenaIndex } from './ArenaValueStore';
 
 export interface ScalarEvalContext {
   evaluateReduceKernel?: (
@@ -200,36 +201,35 @@ function evaluateScalarExtent(
     }
 
     case 'extract': {
-      // [LAW:one-source-of-truth] Multi-component scalar expressions live in arena slots.
-      // Read directly from the materialized slot — schedule ordering guarantees
-      // the input was written before this extract evaluates.
-      const scalarExprToArenaOffset = state.cache.scalarExprToArenaOffset;
-      const offset = scalarExprToArenaOffset?.get(expr.input as number);
-      if (offset === undefined) {
-        const inputExpr = valueExprs[expr.input as number];
-        if (!inputExpr) {
-          throw new Error(
-            `extract(${expr.componentIndex}): input ${expr.input} not found in ValueExpr table`
-          );
-        }
-
-        // [LAW:single-enforcer] Structural extract-from-construct is handled directly
-        // here; all other extract addressability is enforced at schedule construction.
-        if (inputExpr.kind === 'construct') {
-          const componentExpr = inputExpr.components[expr.componentIndex];
-          if (componentExpr === undefined) {
-            throw new Error(
-              `extract(${expr.componentIndex}): input ${expr.input} has only ${inputExpr.components.length} components`
-            );
-          }
-          return evaluateValueExprScalar(componentExpr, valueExprs, state, context);
-        }
-
+      // [LAW:one-source-of-truth] Multi-component scalar expressions are resolved
+      // through canonical arena address metadata when available.
+      const scalarExprToArenaAddress = state.cache.scalarExprToArenaAddress;
+      const address = scalarExprToArenaAddress?.get(expr.input as number);
+      if (address) {
+        return state.arena[arenaIndex(address.arena, 0, address.component + expr.componentIndex)];
+      }
+      const inputExpr = valueExprs[expr.input as number];
+      if (!inputExpr) {
         throw new Error(
-          `extract(${expr.componentIndex}): input ${expr.input} has no slot mapping`
+          `extract(${expr.componentIndex}): input ${expr.input} not found in ValueExpr table`
         );
       }
-      return state.arena[offset + expr.componentIndex];
+
+      // [LAW:single-enforcer] Structural extract-from-construct is handled directly
+      // here; all other extract addressability is enforced at schedule construction.
+      if (inputExpr.kind === 'construct') {
+        const componentExpr = inputExpr.components[expr.componentIndex];
+        if (componentExpr === undefined) {
+          throw new Error(
+            `extract(${expr.componentIndex}): input ${expr.input} has only ${inputExpr.components.length} components`
+          );
+        }
+        return evaluateValueExprScalar(componentExpr, valueExprs, state, context);
+      }
+
+      throw new Error(
+        `extract(${expr.componentIndex}): input ${expr.input} has no canonical arena address`
+      );
     }
 
     case 'construct': {

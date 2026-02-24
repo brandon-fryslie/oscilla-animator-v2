@@ -54,6 +54,7 @@ function createTestRuntimeState(): RuntimeState {
     },
     lastRenderFrame: null,
     arena: new Float32Array(0),
+    stateArena: { offset: 0, length: 0 },
     state: new Float32Array(0),
     eventScalars: new Uint8Array(0),
     eventWrapPredicate: new Uint8Array(0),
@@ -68,6 +69,7 @@ function createTestRuntimeState(): RuntimeState {
       valueExprFieldBuffers: [],
       valueExprFieldStamps: [],
       scalarExprToArenaOffset: null,
+      scalarExprToArenaAddress: null,
     },
     timeState: {
       prevTAbsMs: null,

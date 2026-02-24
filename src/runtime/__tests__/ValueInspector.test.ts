@@ -16,7 +16,22 @@ import type { SlotValue } from '../StepDebugTypes';
 const SIG_FLOAT = canonicalScalar(FLOAT, unitNone());
 
 function makeLookup(slot: number, storage: SlotLookup['storage'], offset: number, stride: number): SlotLookup {
-  return { storage, offset, stride, slot: valueSlot(slot), type: SIG_FLOAT };
+  return {
+    storage,
+    offset,
+    stride,
+    slot: valueSlot(slot),
+    type: SIG_FLOAT,
+    arena: {
+      offset,
+      stride,
+      laneCount: 1,
+      length: Math.max(1, stride),
+      packing: 'aos',
+      laneStride: Math.max(1, stride),
+      componentStride: 1,
+    },
+  };
 }
 
 describe('readSlotValue', () => {

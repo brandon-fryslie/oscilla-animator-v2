@@ -269,6 +269,7 @@ export function* executeFrameStepped(
   // [LAW:one-source-of-truth] Populate scalarExprToArenaOffset before Phase 1 so extract
   // reads multi-component values from arena using canonical ExprAddressTable offsets.
   state.cache.scalarExprToArenaOffset = addressTable.scalarExprToArenaOffset;
+  state.cache.scalarExprToArenaAddress = addressTable.scalarExprToArenaAddress;
 
   // --- PHASE 1: Execute all non-stateWrite steps ---
   const valueExprs = program.valueExprs.nodes;
@@ -448,6 +449,7 @@ export function* executeFrameStepped(
     resolvedCamera,
     arena,
     scalarExprToArenaOffset: state.cache.scalarExprToArenaOffset!,
+    scalarExprToArenaAddress: state.cache.scalarExprToArenaAddress ?? undefined,
     slotToArena: addressTable.slotToArena,
   };
   const frame = assembleRenderFrame(renderSteps, assemblerContext);
