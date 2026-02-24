@@ -183,9 +183,9 @@ patch "Tile Grid" {
     }
   }
 
-  block "ConstructVec2" "scale2-pack" {
+  block "Construct" "scale2-pack" {
     outputs {
-      out = render.scale2
+      vec2 = render.scale2
     }
   }
 

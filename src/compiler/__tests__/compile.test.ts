@@ -201,7 +201,7 @@ describe('compile', () => {
         const render = b.addBlock('RenderInstances2D');
 
         const color = b.addBlock('MakeColorHSL');
-        const scale2 = b.addBlock('ConstructVec2');
+        const scale2 = b.addBlock('Construct');
 
         b.wire(ellipse, 'shape', array, 'element');
         b.wire(array, 'elements', grid, 'elements');
@@ -212,7 +212,7 @@ describe('compile', () => {
         b.wire(grid, 'rotation', render, 'rotation');
         b.wire(grid, 'scale', scale2, 'x');
         b.wire(grid, 'scale', scale2, 'y');
-        b.wire(scale2, 'out', render, 'scale2');
+        b.wire(scale2, 'vec2', render, 'scale2');
         b.wire(array, 't', render, 'deformAmount');
         b.wire(array, 't', render, 'deformPhase');
         b.wire(array, 't', render, 'deformFrequency');
