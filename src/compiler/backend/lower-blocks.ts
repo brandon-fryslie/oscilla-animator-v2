@@ -1273,7 +1273,7 @@ function repairUnresolvedOutputInstances(
   instanceContextByBlock: Map<BlockIndex, InstanceId>,
 ): void {
   const instances = builder.getInstances();
-  const slotMeta = builder.getSlotMetaInputs() as unknown as Map<number, { readonly type: CanonicalType; readonly stride: number }>;
+  const slotLayoutInputs = builder.getSlotLayoutInputs() as unknown as Map<number, { readonly type: CanonicalType; readonly stride: number }>;
 
   // [LAW:dataflow-not-control-flow] Repair executes to fixpoint; convergence is data.
   let changed = true;
@@ -1316,9 +1316,9 @@ function repairUnresolvedOutputInstances(
         }
 
         if (ref.slot !== undefined) {
-          const slotInfo = slotMeta.get(ref.slot as number);
+          const slotInfo = slotLayoutInputs.get(ref.slot as number);
           if (slotInfo) {
-            slotMeta.set(ref.slot as number, {
+            slotLayoutInputs.set(ref.slot as number, {
               ...slotInfo,
               type: rewrittenType,
               stride: payloadStride(rewrittenType.payload),
@@ -1376,8 +1376,8 @@ function reportUnresolvedSlotInstances(
   errors: CompileError[],
 ): void {
   const instances = builder.getInstances();
-  const slotMeta = builder.getSlotMetaInputs();
-  for (const [slot, meta] of slotMeta) {
+  const slotLayoutInputs = builder.getSlotLayoutInputs();
+  for (const [slot, meta] of slotLayoutInputs) {
     const card = requireInst(meta.type.extent.cardinality, 'cardinality');
     if (card.kind !== 'many') continue;
     const inst = card.instance.instanceId;

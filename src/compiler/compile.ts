@@ -409,7 +409,7 @@ function convertLinkedIRToProgram(
   // Build slot metadata from slot types.
   // [LAW:one-source-of-truth] Runtime ABI storage is emitted as canonical vocabulary.
   // No legacy label normalization is allowed in runtime contract emission.
-  const slotTypes = builder.getSlotMetaInputs();
+  const slotTypes = builder.getSlotLayoutInputs();
   const slotMeta: SlotMetaEntry[] = [];
   const runtimeSlots: RuntimeSlotEntry[] = [];
   const instances = builder.getInstances();
