@@ -715,7 +715,7 @@ class DebugService {
         return { kind: 'scalar', value, slotId: meta.slotId, type: meta.type };
       }
     }
-    // Fallback: read from scalarValues Map (pre-arena path or slot excluded from arena)
+    // Fallback: read from scalar write snapshots (stepped/debug snapshots).
     const value = this.scalarValues.get(meta.slotId);
     if (value === undefined) {
       if (!this.runtimeStarted) {
@@ -760,7 +760,7 @@ class DebugService {
       }
     }
 
-    // Fallback: read from fieldBuffers Map (pre-arena path or slot excluded from arena)
+    // Fallback: read from field write snapshots (stepped/debug snapshots).
     const buffer = this.fieldBuffers.get(meta.slotId);
     if (!buffer) {
       if (!this.runtimeStarted) {

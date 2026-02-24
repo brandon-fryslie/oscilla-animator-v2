@@ -30,7 +30,7 @@ export class StepDebugSession {
   private _currentSnapshot: StepSnapshot | null = null;
   private _frameResult: RenderFrameIR | null = null;
   // [LAW:one-source-of-truth] Snapshots come from executeFrameStepped/ValueInspector,
-  // which reads canonical runtime banks for slot inspection.
+  // which reads canonical runtime banks for slot inspection (never values.objects).
   private _history: StepSnapshot[] = [];
   private _breakpoints: Breakpoint[] = [];
   private _previousSlotValues = new Map<string, number>();

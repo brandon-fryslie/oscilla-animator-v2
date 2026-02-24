@@ -1140,6 +1140,24 @@ describe('Forbidden Patterns (Type System Invariants)', () => {
       ).toEqual([]);
     });
 
+    it('debug inspection modules must not branch on legacy object storage labels', () => {
+      const rawMatches = [
+        ...grepSrc("case\\s*'object'", 'src/runtime/ValueInspector.ts'),
+        ...grepSrc("storage\\s*===\\s*'object'", 'src/runtime/ValueInspector.ts'),
+        ...grepSrc("case\\s*'object'", 'src/runtime/StepDebugSession.ts'),
+        ...grepSrc("storage\\s*===\\s*'object'", 'src/runtime/StepDebugSession.ts'),
+        ...grepSrc("case\\s*'object'", 'src/services/DebugService.ts'),
+        ...grepSrc("storage\\s*===\\s*'object'", 'src/services/DebugService.ts'),
+      ];
+      const filtered = filterAllowlist(rawMatches, [/\.test\./, /__tests__/]);
+      expect(
+        filtered,
+        'Debug inspection modules must not branch on legacy object storage labels.\n' +
+        'Inspectors must use canonical arena/typed banks and runtime snapshots.\n' +
+        'Found violations:\n' + filtered.join('\n')
+      ).toEqual([]);
+    });
+
   });
 
   describe('WebGPU Prereq Guards (W6)', () => {

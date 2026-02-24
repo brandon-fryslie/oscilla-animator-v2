@@ -264,6 +264,8 @@ export interface ValueStore {
    * Legacy object payload store.
    * [LAW:one-source-of-truth] Runtime compute/render/debug hot paths must read
    * canonical numeric/typed banks (arena, shapeFields, shape2d), not this map.
+   * [LAW:no-mode-explosion] Kept as a transitional compatibility surface only;
+   * do not add new production runtime dependencies on this store.
    */
   objects: Map<ValueSlot, unknown>;
 
