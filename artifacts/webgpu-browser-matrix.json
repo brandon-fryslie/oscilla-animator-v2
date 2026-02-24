@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-02-24T18:06:28.853Z",
+  "generatedAt": "2026-02-24T17:39:03.960Z",
   "sampleFrames": 180,
   "url": "http://127.0.0.1:5174/?showPreview=true",
   "results": [
@@ -8,10 +8,9 @@
       "blocking": true,
       "browserVersion": "143.0.7499.4",
       "url": "http://127.0.0.1:5174/?showPreview=true",
-      "startedAt": "2026-02-24T18:06:15.205Z",
-      "durationMs": 3638,
+      "startedAt": "2026-02-24T17:39:00.285Z",
+      "durationMs": 3675,
       "readiness": {
-        "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/143.0.7499.4 Safari/537.36",
         "hasNavigatorGpu": true,
         "hasAdapter": true,
         "hasCanvas": true,
@@ -21,74 +20,13 @@
       },
       "timing": {
         "sampleCount": 180,
-        "avgFrameDeltaMs": 8.298,
-        "p95FrameDeltaMs": 8.7,
-        "avgFps": 120.51
+        "avgFrameDeltaMs": 8.333,
+        "p95FrameDeltaMs": 9.3,
+        "avgFps": 120.01
       },
       "errors": {
         "console": [],
         "page": []
-      },
-      "failureReason": null,
-      "passed": true
-    },
-    {
-      "browser": "webkit",
-      "blocking": false,
-      "browserVersion": "26.0",
-      "url": "http://127.0.0.1:5174/?showPreview=true",
-      "startedAt": "2026-02-24T18:06:19.648Z",
-      "durationMs": 4050,
-      "readiness": {
-        "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Safari/605.1.15",
-        "hasNavigatorGpu": false,
-        "hasAdapter": false,
-        "hasCanvas": true,
-        "hasWebGPUContext": false,
-        "consoleErrorCount": 1,
-        "pageErrorCount": 0
-      },
-      "timing": {
-        "sampleCount": 180,
-        "avgFrameDeltaMs": 16.561,
-        "p95FrameDeltaMs": 18,
-        "avgFps": 60.38
-      },
-      "errors": {
-        "console": [
-          "Failed to initialize runtime: Error: WebGPU is required but navigator.gpu is unavailable"
-        ],
-        "page": []
-      },
-      "failureReason": "webgpu_api_unavailable",
-      "passed": false
-    },
-    {
-      "browser": "safari",
-      "blocking": false,
-      "browserVersion": "26.3",
-      "url": "http://127.0.0.1:5174/?showPreview=true",
-      "startedAt": "2026-02-24T18:06:23.698Z",
-      "durationMs": 5155,
-      "readiness": {
-        "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.3 Safari/605.1.15",
-        "hasNavigatorGpu": true,
-        "hasAdapter": true,
-        "hasCanvas": true,
-        "hasWebGPUContext": true,
-        "consoleErrorCount": 0,
-        "pageErrorCount": 0
-      },
-      "timing": {
-        "sampleCount": 0,
-        "avgFrameDeltaMs": 0,
-        "p95FrameDeltaMs": 0,
-        "avgFps": 0
-      },
-      "errors": {
-        "console": [],
-        "page": [],
-        "setup": []
       },
       "failureReason": null,
       "passed": true
@@ -97,10 +35,7 @@
   "gatingBrowsers": [
     "chromium"
   ],
-  "nonBlockingBrowsers": [
-    "webkit",
-    "safari"
-  ],
+  "nonBlockingBrowsers": [],
   "passed": true,
-  "hardPassed": false
+  "hardPassed": true
 }
