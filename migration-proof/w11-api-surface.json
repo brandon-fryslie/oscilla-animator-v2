@@ -1,0 +1,52 @@
+{
+  "workstream": "W11",
+  "title": "Public API Surface Cleanup (Deprecated Builder/Bridge Exports)",
+  "status": "completed",
+  "timestamp_utc": "2026-02-24T04:14:40Z",
+  "commit": "114d1a719",
+  "laws": [
+    "one-source-of-truth",
+    "single-enforcer",
+    "verifiable-goals"
+  ],
+  "scope": [
+    "Confirm compiler public entrypoints expose canonical builder contracts only",
+    "Confirm deprecated IRBuilder export patterns are absent from production surfaces",
+    "Confirm production imports do not reference deprecated IRBuilder interface paths"
+  ],
+  "closure_surfaces": [
+    "src/compiler/ir/index.ts",
+    "src/compiler/index.ts",
+    "src/compiler/ir/bridges.ts",
+    "src/__tests__/compiledir-foundation-gates.test.ts"
+  ],
+  "verification": [
+    {
+      "command": "pnpm -s typecheck",
+      "exit_code": 0
+    },
+    {
+      "command": "pnpm -s vitest run src/__tests__/compiledir-foundation-gates.test.ts",
+      "exit_code": 0,
+      "tests_passed": 15
+    }
+  ],
+  "static_scans": [
+    {
+      "command": "rg -n \"export type \\{ IRBuilder \\} from './IRBuilder'\" src/compiler/ir/index.ts",
+      "result": "no_matches"
+    },
+    {
+      "command": "rg -n \"export type \\{ IRBuilder, Step, TimeModel, ValueExpr \\} from './ir'\" src/compiler/index.ts",
+      "result": "no_matches"
+    },
+    {
+      "command": "rg -n \"from '../compiler/ir/IRBuilder'\" src --glob '!**/*.test.*' --glob '!**/__tests__/**'",
+      "result": "no_matches"
+    }
+  ],
+  "notes": [
+    "Canonical public compiler builder contracts are BlockIRBuilder and OrchestratorIRBuilder.",
+    "This artifact satisfies the W11 proof-artifact requirement in docs/WEBGPU-DESIGN-PREREQUISITES-2026-02-22.md."
+  ]
+}
