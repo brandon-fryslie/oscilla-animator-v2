@@ -1,0 +1,45 @@
+{
+  "workstream": "W13",
+  "title": "Deterministic Runtime Segment Semantics",
+  "status": "slice_completed",
+  "timestamp_utc": "2026-02-24T07:02:02Z",
+  "laws": [
+    "one-source-of-truth",
+    "dataflow-not-control-flow",
+    "verifiable-goals"
+  ],
+  "scope": [
+    "Add runtime assertion for canonical frame-segment monotonic order and required segment boundaries",
+    "Enforce scheduler boundary validation before frame output return",
+    "Keep continuity/input/phase segment transitions test-locked through existing W13 suites"
+  ],
+  "changed_files": [
+    "/Users/bmf/.codex/worktrees/49f4/oscilla-animator-v2/src/runtime/RuntimeState.ts",
+    "/Users/bmf/.codex/worktrees/49f4/oscilla-animator-v2/src/runtime/ScheduleExecutor.ts"
+  ],
+  "verification": [
+    {
+      "command": "pnpm -s typecheck",
+      "exit_code": 0
+    },
+    {
+      "command": "pnpm -s vitest run src/runtime/__tests__/continuity-integration.test.ts src/runtime/__tests__/project-policy-domain-change.test.ts src/runtime/__tests__/executeFrameStepped.test.ts src/__tests__/forbidden-patterns.test.ts",
+      "exit_code": 0,
+      "tests_passed": 107
+    },
+    {
+      "command": "if command -v just >/dev/null 2>&1 && [ -f Justfile ]; then just check; else pnpm run typecheck && pnpm test; fi",
+      "exit_code": 0
+    }
+  ],
+  "static_scans": [
+    {
+      "command": "rg -n \"assertRuntimeFrameSemantics\\(\" src/runtime/ScheduleExecutor.ts src/runtime/RuntimeState.ts",
+      "result": "matches_present"
+    },
+    {
+      "command": "rg -n \"enterRuntimeFrameSegment\\(\" src/runtime/ScheduleExecutor.ts src/runtime/executeFrameStepped.ts",
+      "result": "matches_present"
+    }
+  ]
+}

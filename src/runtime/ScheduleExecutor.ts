@@ -18,6 +18,7 @@ import {
   writeShape2D,
   beginRuntimeFrameSemantics,
   enterRuntimeFrameSegment,
+  assertRuntimeFrameSemantics,
   type RuntimeFrameSegment,
 } from './RuntimeState';
 import {
@@ -600,6 +601,7 @@ export function executeFrame(
   // runtime field, not a synthetic object slot indirection.
   enterRuntimeFrameSegment(state, 'frame-output');
   state.lastRenderFrame = frame;
+  assertRuntimeFrameSemantics(state.frameSemantics);
   if (program.outputs.length > 0) {
     const outputSpec = program.outputs[0];
     if (outputSpec.kind !== 'renderFrame') {

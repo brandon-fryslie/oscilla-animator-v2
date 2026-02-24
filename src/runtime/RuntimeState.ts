@@ -174,6 +174,15 @@ export interface RuntimeFrameSemantics {
   segments: RuntimeFrameSegment[];
 }
 
+const REQUIRED_RUNTIME_FRAME_SEGMENTS: readonly RuntimeFrameSegment[] = [
+  'preframe-external-input',
+  'preframe-time-resolve',
+  'preframe-event-reset',
+  'phase2-state-write',
+  'continuity-finalize',
+  'frame-output',
+];
+
 const RUNTIME_FRAME_SEGMENT_INDEX = new Map<RuntimeFrameSegment, number>(
   RUNTIME_FRAME_SEGMENT_ORDER.map((segment, index) => [segment, index]),
 );
@@ -217,6 +226,33 @@ export function enterRuntimeFrameSegment(
     );
   }
   semantics.segments.push(segment);
+}
+
+/**
+ * Validate frame segment semantics against canonical order and required boundaries.
+ */
+export function assertRuntimeFrameSemantics(semantics: RuntimeFrameSemantics | undefined): void {
+  if (!semantics || semantics.segments.length === 0) {
+    throw new Error('Runtime frame semantics missing segment trace');
+  }
+
+  let previousIndex = -1;
+  for (const segment of semantics.segments) {
+    const segmentIndex = RUNTIME_FRAME_SEGMENT_INDEX.get(segment);
+    if (segmentIndex === undefined) {
+      throw new Error(`Unknown runtime frame segment '${segment}'`);
+    }
+    if (segmentIndex <= previousIndex) {
+      throw new Error(`Runtime frame segment order violation at '${segment}'`);
+    }
+    previousIndex = segmentIndex;
+  }
+
+  for (const requiredSegment of REQUIRED_RUNTIME_FRAME_SEGMENTS) {
+    if (!semantics.segments.includes(requiredSegment)) {
+      throw new Error(`Runtime frame semantics missing required segment '${requiredSegment}'`);
+    }
+  }
 }
 
 // =============================================================================
