@@ -155,6 +155,54 @@ describe('WebGPURenderer', () => {
     ]);
   });
 
+  it('aligns mapped upload buffers to 4-byte boundaries', async () => {
+    const env = createFakeWebGPUEnvironment();
+    setNavigatorGpu(env.gpu);
+    const renderer = await createWebGPURenderer(env.canvas);
+
+    renderer.render({
+      frame: {
+        version: 2,
+        ops: [
+          {
+            kind: 'drawPathInstances',
+            geometry: {
+              topologyId: 1,
+              verbs: new Uint8Array([0, 1, 1, 4]),
+              points: new Float32Array([0, 0, 1, 0, 0, 1]),
+              pointsCount: 3,
+            },
+            instances: {
+              count: 1,
+              position: new Float32Array([0.5, 0.5]),
+              size: 1,
+              rotation: new Float32Array([0]),
+              scale2: new Float32Array([1, 1]),
+            },
+            style: {
+              fillColor: new Uint8ClampedArray([255, 255, 255, 255]),
+            },
+          },
+        ],
+      },
+      width: 128,
+      height: 128,
+      zoom: 1,
+      panX: 0,
+      panY: 0,
+      timeMs: 0,
+    });
+
+    const mappedBufferSizes = env.device.createBuffer.mock.calls
+      .map(([descriptor]: [{ size: number; mappedAtCreation?: boolean }]) => descriptor)
+      .filter((descriptor) => descriptor.mappedAtCreation)
+      .map((descriptor) => descriptor.size);
+
+    expect(mappedBufferSizes.length).toBeGreaterThan(0);
+    expect(mappedBufferSizes.every((size) => size % 4 === 0)).toBe(true);
+    expect(mappedBufferSizes).toContain(8);
+  });
+
   it('rejects render input that violates runtime contract bounds', async () => {
     const env = createFakeWebGPUEnvironment();
     setNavigatorGpu(env.gpu);
