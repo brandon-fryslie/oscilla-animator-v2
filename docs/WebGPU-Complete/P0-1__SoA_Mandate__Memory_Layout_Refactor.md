@@ -1,219 +1,107 @@
-This is the comprehensive technical specification for **Phase 0: The SoA Mandate**.
+This is the comprehensive technical specification for **Phase 0: The SoA Mandate (Completed Baseline)**.
 
-This document defines the strict memory layout protocols that must be implemented in the current CPU engine *before* any WebGPU migration begins. It ensures that the runtime data structures are no longer optimized for JavaScript objects, but for linear memory access and GPU storage buffer compatibility.
+# Phase 0: The Structure-of-Arrays Mandate
 
-# Phase 0: The Structure of Arrays (SoA) Mandate
+**Objective:** Keep runtime memory layout canonical for WebGPU execution: channel-oriented, deterministic, and compiler-owned.
 
-**Objective:** Eradicate all "Array of Structures" (AoS) patterns from the hot path.
+**Current State:** This is no longer a pre-migration plan. It is the enforced baseline contract for `master`.
 
-**Invariant:** Memory is allocated as contiguous, channel-separated blocks.
+// [LAW:one-source-of-truth] Arena layout and runtime addressing are emitted by the compiler as authoritative artifacts.
+// [LAW:single-enforcer] Runtime reads/writes must resolve through canonical arena descriptors and runtime address tables, not ad-hoc slot derivation.
 
-**Success Criteria:** The application renders identical pixels, but RuntimeState.arena is organized exactly as it will be in VRAM.
+## 1. Canonical Memory Contract
 
-## 1. The Memory Model Definition
+### 1.1 Arena as Canonical Numeric Store
 
-We are moving from a "Logical Object Model" (where a Particle is an entity with properties) to a "Columnar Data Model" (where properties are arrays that happen to share an index).
+1. Runtime numeric values live in a contiguous `Float32Array` arena.
+2. The compiler emits `arenaLayout` and `runtimeAddressTable` that describe exactly where each slot lives.
+3. Runtime execution consumes those artifacts directly.
 
-### 1.1 The Global Arena
+### 1.2 SoA-First Descriptor Semantics
 
-Instead of fragmented arrays, the entire application state lives in one massive Float32Array (the **Host Arena**). This array is virtually partitioned into three zones.
+1. Canonical packing is SoA (`packing: 'soa'`) for slot descriptors.
+2. Descriptor fields (`stride`, `laneCount`, `laneStride`, `componentStride`) define lane/component addressing.
+3. Descriptor-driven access (`arenaRead`, `arenaWrite`, `arenaIndex`) is the only valid hot-path addressing model.
 
-| **Zone** | **Byte Alignment** | **Usage** |
-|----|----|----|
-| **Zone A: Uniforms** | 256 Bytes | Global parameters (Time, Mouse, Resolution). Fixed size. |
-| **Zone B: Scalars** | 16 Bytes | Output of all cardinality: one blocks (LFOs, Math). |
-| **Zone C: Fields** | 16 Bytes | Output of all cardinality: many blocks. Variable size. |
+// [LAW:dataflow-not-control-flow] The same descriptor-based addressing operations run every frame; only input values vary.
 
-### 1.2 The Field Layout (Pure SoA)
+### 1.3 Shape/Data Separation
 
-This is the most critical change. A Field\<vec3\> with 1000 instances is no longer stored as \[x,y,z, x,y,z...\]. It is decomposed into three distinct, disjoint allocations within the Host Arena.
+1. Arena stores numeric payloads only (`f32` contract for runtime slot storage).
+2. Shape/topology metadata is stored in dedicated non-arena banks (packed `u32` structures), referenced by numeric handles.
+3. Arena does not carry object-shaped runtime payloads.
 
-- **Channel X:** \[x0, x1, ... x999\] (Allocated at OFFSET_X)
+// [LAW:one-way-deps] Render/runtime consume compiler-emitted numeric contracts; they do not re-derive schema from high-level graph objects.
 
-- **Channel Y:** \[y0, y1, ... y999\] (Allocated at OFFSET_Y)
+## 2. Compiler Requirements (Now Enforced)
 
-- **Channel Z:** \[z0, z1, ... z999\] (Allocated at OFFSET_Z)
+### 2.1 Required Artifacts
 
-**Crucial Padding Rule:**
+The compiler must emit and keep consistent:
 
-Every channel allocation must be padded to a **16-byte (4-float) boundary**.
+1. `slotMeta`
+2. `runtimeSlots`
+3. `runtimeAddressTable`
+4. `arenaLayout`
+5. `arenaTotalFloats`
 
-- *Example:* If a field has 5 instances (20 bytes), the next channel cannot start at byte 20. It must start at byte 32 (next 16-byte multiple).
+### 2.2 Descriptor Derivation Rules
 
-- *Why:* WebGPU Storage Buffers often require aligned reads. If we don't pad on the CPU, a GPU thread reading Channel Y might crash or read garbage due to misalignment.
+1. Descriptor `stride` is payload-derived.
+2. Descriptor `laneCount` is cardinality-derived (including dynamic-instance max count where applicable).
+3. Descriptor `length` is `stride * laneCount`.
+4. Default packing preference is SoA.
 
-## 2. The Compiler Refactor (ArenaLayout)
+### 2.3 Determinism
 
-The Compiler's Layout phase currently calculates a single offset and a stride for each block. This must be replaced by a **Multi-Channel Offset Resolver**.
+1. Repeated compilation of identical input must produce deterministic arena offsets/descriptors.
+2. Descriptor ranges must be non-overlapping for active slots.
+3. `arenaTotalFloats` must equal the sum of descriptor lengths.
 
-### 2.1 The New SlotMeta Contract
+// [LAW:verifiable-goals] These rules are mechanically enforced by compiler/runtime layout tests.
 
-The compiler must track allocations per *channel*, not per slot.
+## 3. Runtime Requirements (Now Enforced)
 
-- **Old Way:** Slot 5 (vec3) -\> { offset: 1024, stride: 3 }
+### 3.1 Addressing and Execution
 
-- **New Way:** Slot 5 (vec3) -\> { offsets: \[1024, 2048, 3072\], stride: 1 }
+1. Runtime execution must use compiler-emitted address metadata (no legacy metadata derivation).
+2. Arena allocation must exactly match `arenaTotalFloats`.
+3. Slot reads/writes in hot paths must route through canonical descriptor-aware indexing.
 
-### 2.2 The Allocation Algorithm
+### 3.2 No Legacy Numeric Paths
 
-The compiler iterates through the sorted execution schedule (or topological list) and issues allocations from a "Heap Pointer."
+1. Legacy `f64`/object runtime storage labels are not part of the canonical slot ABI.
+2. Runtime hot paths must not branch on legacy storage labels.
+3. Fallback storage models are prohibited for canonical execution.
 
-1.  **Initialize:** heap_ptr = UNIFORM_ZONE_SIZE (e.g., 256).
+// [LAW:no-silent-fallbacks] Invalid/legacy addressing assumptions fail fast instead of silently selecting alternate paths.
 
-2.  **For Each Scalar Block:**
+## 4. Verification Gates
 
-    - Assign offset = heap_ptr.
+Run these to verify this phase remains complete:
 
-    - Increment heap_ptr += 4 (1 float).
+1. `pnpm vitest run src/compiler/__tests__/arena-layout.test.ts`
+2. `pnpm vitest run src/runtime/__tests__/ArenaValueStore.test.ts src/runtime/__tests__/RuntimeState-banks.test.ts`
+3. `pnpm vitest run src/runtime/__tests__/ExprAddressTable.test.ts`
+4. `pnpm vitest run src/__tests__/forbidden-patterns.test.ts src/compiler/__tests__/no-legacy-types.test.ts`
 
-    - *Padding:* If heap_ptr % 16 != 0, advance to next multiple.
+## 5. Remaining Cleanup Scope (Non-Blocking)
 
-3.  **For Each Field Block:**
+This phase is complete, but cleanup work can still reduce migration residue:
 
-    - Determine instance_count (N).
+1. Remove migration-era language and compatibility comments that no longer describe canonical behavior.
+2. Keep shrinking any non-canonical packing compatibility seams where not required by continuity/render contracts.
+3. Maintain test gates as the sole enforcement boundary for SoA/ABI invariants.
 
-    - Determine component_count (e.g., 3 for vec3).
+// [LAW:behavior-not-structure] Keep tests focused on memory and addressing behavior contracts, not historical implementation shape.
 
-    - **Loop (k = 0 to component_count):**
+## 6. Definition of Done (Phase 0)
 
-      - Assign offsets\[k\] = heap_ptr.
+Phase 0 is considered complete when all of the following remain true on `master`:
 
-      - Increment heap_ptr += N \* 4.
+1. Compiler emits deterministic canonical arena/address artifacts.
+2. Runtime executes exclusively from those artifacts.
+3. Numeric slot ABI stays SoA-first and WebGPU-compatible.
+4. Guardrail tests prevent regression to legacy memory/addressing behavior.
 
-      - *Padding:* Align heap_ptr to 16 bytes.
-
-### 2.3 Handling "Views" (Aliasing)
-
-Sometimes a block reads a vec3 but only uses the y component.
-
-- **The Optimization:** The compiler does not need to allocate new memory for a "Split" block. It simply passes the offsets\[1\] (the Y channel) of the source block to the consumer.
-
-- **The Invariant:** Data is never copied unless modified.
-
-## 3. The Runtime Refactor (ScheduleExecutor)
-
-The JavaScript hot loop must be rewritten to respect SoA. This effectively turns the JS engine into a SIMD emulator.
-
-### 3.1 The Loop Inversion
-
-- **Old (AoS):** "For each instance i, execute all blocks."
-
-  - *Why this dies:* Thrashing the instruction cache. Jumping between code for Add, Mul, Sin 10,000 times.
-
-- **New (SoA):** "For each Block, execute for all instances i."
-
-  - *Why this flies:* The JIT compiles the block logic *once*. The CPU pre-fetches the linear arrays (Channel X, Channel Y) into L1/L2 cache.
-
-### 3.2 The Vector Math Logic
-
-Since JS doesn't have operator overloading for float\[\], the runtime logic for a vec3 addition must be explicitly unrolled by the ScheduleWalker.
-
-**The "Unrolled" Execution Plan:**
-
-When the runtime encounters an Add(vec3, vec3) instruction:
-
-1.  **Load Pointers:** Get ptrA_x, ptrA_y, ptrA_z, ptrB_x, etc. from the AddressTable.
-
-2.  **Loop (Channel 0):** out_x\[i\] = A_x\[i\] + B_x\[i\] (for all i).
-
-3.  **Loop (Channel 1):** out_y\[i\] = A_y\[i\] + B_y\[i\] (for all i).
-
-4.  **Loop (Channel 2):** out_z\[i\] = A_z\[i\] + B_z\[i\] (for all i).
-
-*Note:* While this looks verbose in JS, it is mathematically identical to what the GPU threads will do.
-
-## 4. The Data Migration Strategy
-
-How do we move existing data types into this strict f32 world?
-
-### 4.1 Booleans and Flags
-
-- **Storage:** Stored as f32 (0.0 or 1.0).
-
-- **Why:** GPU bit-packing is expensive/complex in standard WGSL without bitwise extensions. f32 is "native" speed.
-
-- **Logic:** Select(a, b, cond) becomes mix(a, b, cond).
-
-### 4.2 Matrices (mat2, mat3, mat4)
-
-- **Decomposition:** Matrices are treated as N column vectors.
-
-  - mat2 -\> 2 columns -\> 4 components -\> 4 SoA Channels.
-
-  - mat4 -\> 4 columns -\> 16 components -\> 16 SoA Channels.
-
-- **Memory:** No special 4x4 blocks. Just 16 parallel float arrays.
-
-### 4.3 Color
-
-- **Storage:** 4 Channels (r, g, b, a).
-
-- **Space:** Always linear f32 (0.0 - 1.0). No uint8 packing in the Arena. Packing only happens at the very last step (the Sink) if required by the texture format.
-
-## 5. The "Shape Bank" Separation
-
-The SoA Mandate strictly forbids "Pointer" or "Object" types in the Arena. This creates a problem for Geometry signals (e.g., Shape).
-
-### 5.1 The Problem
-
-A Shape is not a number. It's a topology (a list of connections).
-
-### 5.2 The Solution: The Handle Pattern
-
-The compiler must create a secondary memory bank: ShapeBank (Uint32Array).
-
-1.  **CPU Logic:** When a Polygon block runs, it writes its vertex count and index offsets into the ShapeBank.
-
-2.  **Arena Logic:** The Polygon block outputs a single f32 value into the Arena: the **Shape ID**.
-
-3.  **Downstream:** A Deform block reads the **Shape ID** from the Arena, casts it to int, looks up the topology in the ShapeBank, and then processes the vertex positions from the Arena.
-
-## 6. Verification & Debugging
-
-How do we know "Phase 0" is working without a GPU?
-
-### 6.1 The "Memory Dump" Test
-
-- **Tool:** Create a visualizer that renders the Float32Array as a pixel grid (gray-scale).
-
-- **Expectation:** You should see distinct "stripes" of data.
-
-  - A sine wave LFO will look like a smooth gradient in the Scalar Zone.
-
-  - A geometry field will look like repeating gradients in the Field Zone.
-
-- **Failure State:** If you see "static" or "noise," your offsets are wrong, or you are reading uninitialized padding bytes.
-
-### 6.2 The Regression Suite
-
-Run the existing Golden Image tests.
-
-- If the SoA refactor is correct, the output pixels of the Canvas2D renderer should be **identical** to the AoS version (within floating-point epsilon).
-
-- *Note:* Any deviation implies a logic error in the "Unrolled" math loops.
-
-## 7. Summary of Required Changes
-
-1.  **Refactor ir/layout.ts:**
-
-    - Remove stride property.
-
-    - Add channelOffsets: number\[\].
-
-    - Implement 16-byte alignment logic.
-
-2.  **Refactor runtime/Arena.ts:**
-
-    - Ensure it can resize dynamically while preserving alignment gaps.
-
-3.  **Refactor runtime/ScheduleExecutor.ts:**
-
-    - Delete the "Instance Inner Loop."
-
-    - Implement "Block Inner Loop" (iterating over arrays).
-
-4.  **Refactor blocks/\*.ts:**
-
-    - Update every evaluate function to accept Float32Array pointers for inputs/outputs instead of objects.
-
-This phase is the "Great Filter." If the application survives this refactor, the migration to WebGPU is effectively just "Changing the backend driver." The data is already ready.
+This condition is currently met; future work should treat this document as a maintained contract, not a migration checklist.
