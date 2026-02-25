@@ -50,8 +50,7 @@ export function emitValue(value: unknown): string {
     return value.toString();
   }
   if (typeof value === 'string') {
-    // Escape double quotes
-    return `"${value.replace(/"/g, '\\"')}"`;
+    return emitStringValue(value);
   }
   if (typeof value === 'boolean') {
     return value.toString();
@@ -71,4 +70,14 @@ export function emitValue(value: unknown): string {
   }
   // Fallback for unknown types
   return 'null';
+}
+
+function emitStringValue(value: string): string {
+  const escaped = value
+    .replace(/\\/g, '\\\\')
+    .replace(/\n/g, '\\n')
+    .replace(/\r/g, '\\r')
+    .replace(/\t/g, '\\t')
+    .replace(/"/g, '\\"');
+  return `"${escaped}"`;
 }

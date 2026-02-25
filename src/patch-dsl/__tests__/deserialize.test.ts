@@ -181,4 +181,66 @@ describe('deserialize', () => {
     const block = Array.from(result.patch.blocks.values())[0];
     expect(block.domainId).toBe('circle1');
   });
+
+  it('expands top-level locals in block params', () => {
+    const hcl = `
+      locals {
+        rx = 0.02
+        color = { r = 1.0, g = 0.5, b = 0.0, a = 1.0 }
+      }
+
+      patch "Test" {
+        block "Ellipse" "dot" {
+          rx = local.rx
+          color = local.color
+        }
+      }
+    `;
+    const result = deserializePatchFromHCL(hcl);
+
+    expect(result.errors).toHaveLength(0);
+    const block = Array.from(result.patch.blocks.values())[0];
+    expect(block.params.rx).toBe(0.02);
+    expect(block.params.color).toEqual({ r: 1.0, g: 0.5, b: 0.0, a: 1.0 });
+  });
+
+  it('errors on unknown local references', () => {
+    const hcl = `
+      locals {
+        known = 1
+      }
+
+      patch "Test" {
+        block "Const" "c1" {
+          value = local.unknown
+        }
+      }
+    `;
+    const result = deserializePatchFromHCL(hcl);
+    expect(result.errors.some((e) => e.message.includes('Unknown local "unknown"'))).toBe(true);
+  });
+
+  it('errors when locals are not at top of file', () => {
+    const hcl = `
+      patch "Test" {}
+      locals {
+        value = 1
+      }
+    `;
+    const result = deserializePatchFromHCL(hcl);
+    expect(result.errors.some((e) => e.message.includes('locals blocks must appear at the top'))).toBe(true);
+  });
+
+  it('errors when local definitions contain references', () => {
+    const hcl = `
+      locals {
+        derived = local.base
+        base = 1
+      }
+
+      patch "Test" {}
+    `;
+    const result = deserializePatchFromHCL(hcl);
+    expect(result.errors.some((e) => e.message.includes('must be a literal/object/list without references'))).toBe(true);
+  });
 });

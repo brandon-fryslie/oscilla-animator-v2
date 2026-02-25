@@ -27,6 +27,7 @@ import type { HclDocument, HclBlock, HclValue } from './ast';
 import { PatchDslError, PatchDslWarning } from './errors';
 import { tokenize } from './lexer';
 import { parse } from './parser';
+import { expandTopLevelLocals } from './locals';
 import { getBlockDefinition } from '../blocks/registry';
 import type { Capability } from '../blocks/registry';
 import { toIdentifier } from './serialize';
@@ -71,16 +72,19 @@ export function deserializeCompositeFromHCL(hcl: string): CompositeDeserializeRe
     const tokens = tokenize(hcl);
     const parseResult = parse(tokens);
     errors.push(...parseResult.errors);
+    const localsResult = expandTopLevelLocals(parseResult.document);
+    errors.push(...localsResult.errors);
+    warnings.push(...localsResult.warnings);
 
     // Phase 2: Extract composite header
-    const compositeHeader = parseResult.document.blocks.find(b => b.type === 'composite');
+    const compositeHeader = localsResult.document.blocks.find(b => b.type === 'composite');
     if (!compositeHeader) {
       errors.push(new PatchDslError('No composite header found', { start: 0, end: 0 }));
       return { def: null, errors, warnings };
     }
 
     // Reject patch headers (wrong document type)
-    const patchHeader = parseResult.document.blocks.find(b => b.type === 'patch');
+    const patchHeader = localsResult.document.blocks.find(b => b.type === 'patch');
     if (patchHeader) {
       errors.push(new PatchDslError(
         'Cannot deserialize patch as composite (use deserializePatchFromHCL instead)',
