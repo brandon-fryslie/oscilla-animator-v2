@@ -985,7 +985,7 @@ function resolveExprSlot(
 
 function emitTransfer(
   lines: string[],
-  sourceBuffer: 'arena_in' | 'state_in',
+  sourceBuffer: 'arena_in' | 'arena_out' | 'state_in',
   targetBuffer: 'arena_out' | 'state_out',
   source: AddressingConstants,
   target: AddressingConstants,
