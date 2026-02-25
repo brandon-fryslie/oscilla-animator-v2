@@ -22,7 +22,7 @@ import type { RenderFrameIR } from '../render/types';
 import type { RenderBufferArena } from '../render/RenderBufferArena';
 import { createMaterializeScratch } from './MaterializeScratch';
 import { resolveTime } from './timeResolution';
-import { writeShape2D } from './RuntimeState';
+import { writeShape2D, prepareStateWriteBank, commitStateWriteBank } from './RuntimeState';
 import { detectDomainChange, recordDomainTransition } from './ContinuityMapping';
 import { applyContinuity, finalizeContinuityFrame } from './ContinuityApply';
 import { createStableDomainInstance, createUnstableDomainInstance } from './DomainIdentity';
@@ -464,6 +464,7 @@ export function* executeFrameStepped(
   yield buildSnapshot(-1, null, 'phase-boundary', totalSteps, program, state, tAbsMs, new Map(), prevValues);
 
   // --- PHASE 2: State writes ---
+  prepareStateWriteBank(state);
   for (let stepIdx = 0; stepIdx < steps.length; stepIdx++) {
     const step = steps[stepIdx];
 
@@ -483,13 +484,13 @@ export function* executeFrameStepped(
       const baseSlot = step.stateSlot as number;
       for (let c = 0; c < stride; c++) {
         const fallback = mapping?.initial[c] ?? 0;
-        state.state[baseSlot + c] = applyStateWritePolicy(mapping, oneValue[c] ?? fallback);
+        state.stateWrite![baseSlot + c] = applyStateWritePolicy(mapping, oneValue[c] ?? fallback);
       }
 
       const writtenStateSlots = new Map<StateSlotId, StateSlotValue>();
       writtenStateSlots.set(step.stateSlot, {
         kind: 'scalar',
-        value: state.state[step.stateSlot as number] ?? 0,
+        value: state.stateWrite![step.stateSlot as number] ?? 0,
         stateId: (() => {
           if (!mapping?.stateId) throw new Error(`State slot ${step.stateSlot} has no mapping — incomplete compiler metadata`);
           return mapping.stateId;
@@ -527,13 +528,13 @@ export function* executeFrameStepped(
           for (let c = 0; c < copyStride; c++) {
             const value = src[srcLaneBase + c] ?? 0;
             const normalized = applyStateWritePolicy(mapping, value);
-            state.state[dstLaneBase + c] = normalized;
+            state.stateWrite![dstLaneBase + c] = normalized;
             writtenValues.push(normalized);
           }
           for (let c = copyStride; c < mapping.stride; c++) {
             const value = mapping.initial[c] ?? 0;
             const normalized = applyStateWritePolicy(mapping, value);
-            state.state[dstLaneBase + c] = normalized;
+            state.stateWrite![dstLaneBase + c] = normalized;
             writtenValues.push(normalized);
           }
         }
@@ -552,6 +553,7 @@ export function* executeFrameStepped(
       yield buildSnapshot(stepIdx, step, 'phase2', totalSteps, program, state, tAbsMs, new Map(), prevValues, writtenStateSlots);
     }
   }
+  commitStateWriteBank(state);
 
   // --- POST-FRAME: Finalize continuity ---
   finalizeContinuityFrame(state);
