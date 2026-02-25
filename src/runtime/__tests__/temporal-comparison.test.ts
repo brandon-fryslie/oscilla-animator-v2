@@ -443,5 +443,39 @@ describe('Temporal Comparison (Cross-Frame Diff)', () => {
         expect(value).toBeLessThan(1);
       }
     });
+
+    it('keeps phasor state phase-locked after a 4-hour absolute-time fast-forward', () => {
+      const program = compilePhasorPatch();
+      const schedule = program.schedule as ScheduleIR;
+      const phasorMapping = schedule.stateMappings.find((mapping) => mapping.stateId.endsWith(':phasor'));
+      expect(phasorMapping).toBeDefined();
+      if (!phasorMapping) return;
+
+      const baselineState = createStateForProgram(program);
+      const offsetState = createStateForProgram(program);
+      const baselineArena = getTestArena();
+      const offsetArena = getTestArena();
+
+      // [LAW:verifiable-goals] Same dt sequence at T=0 and T=4h must produce
+      // equivalent wrapped phasor state, proving no absolute-time dependency.
+      const dtMs = 16;
+      const offsetMs = 14_400_000; // 4 hours
+      for (let frame = 0; frame < 100; frame++) {
+        const frameTime = (frame + 1) * dtMs;
+        baselineArena.reset();
+        offsetArena.reset();
+
+        executeFrame(program, baselineState, baselineArena, frameTime);
+        executeFrame(program, offsetState, offsetArena, offsetMs + frameTime);
+
+        const baseline = baselineState.state[phasorMapping.slotStart] ?? NaN;
+        const offset = offsetState.state[phasorMapping.slotStart] ?? NaN;
+        expect(Number.isFinite(baseline)).toBe(true);
+        expect(Number.isFinite(offset)).toBe(true);
+        expect(offset).toBeCloseTo(baseline, 7);
+        expect(offset).toBeGreaterThanOrEqual(0);
+        expect(offset).toBeLessThan(1);
+      }
+    });
   });
 });
