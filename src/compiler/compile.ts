@@ -41,7 +41,7 @@ import { requireInst, requireManyInstance } from '../core/canonical-types';
 import { deriveStorageLayout, deriveArenaDescriptor } from './ir/storage-class';
 import type { ArenaSlotDescriptor } from '../runtime/ArenaValueStore';
 import type { ValueExpr, ValueExprId } from './ir/value-expr';
-import type { Step } from './ir/types';
+import type { Step, PureFn } from './ir/types';
 import { compilationInspector } from '../services/CompilationInspectorService';
 import { computeRenderReachableBlocks } from './reachability';
 import { resolveKernels } from './resolve-kernels';
@@ -498,7 +498,11 @@ function convertLinkedIRToProgram(
   const drawPrepProgram = buildDrawPrepProgram(scheduleIR);
   const runtimeAddressTable = buildRuntimeAddressTable(runtimeSlots, scheduleIR);
   assertRuntimeAddressTableCoverage(runtimeSlots, runtimeAddressTable);
-  const generatedComputeProgram = buildGeneratedComputeProgram(scheduleIR, runtimeAddressTable);
+  const generatedComputeProgram = buildGeneratedComputeProgram(
+    scheduleIR,
+    runtimeAddressTable,
+    valueExprNodes,
+  );
 
   // Build debug index
   const stepToBlock = new Map();
@@ -840,43 +844,376 @@ function collectComputeSlots(scheduleIR: ScheduleIR): ValueSlot[] {
   return Array.from(slots.values()).sort((a, b) => a - b);
 }
 
+interface AddressingConstants {
+  readonly offsetName: string;
+  readonly strideName: string;
+  readonly laneCountName: string;
+  readonly laneStrideName: string;
+  readonly componentStrideName: string;
+  readonly strideValue: number;
+  readonly laneCountValue: number;
+}
+
+function sanitizeTemplateToken(token: string): string {
+  return token.replace(/[^A-Za-z0-9_]+/g, '_');
+}
+
+function describePureFn(fn: PureFn): string {
+  switch (fn.kind) {
+    case 'opcode':
+      return `opcode.${sanitizeTemplateToken(fn.opcode)}`;
+    case 'kernel':
+      return `kernel.${sanitizeTemplateToken(fn.name)}`;
+    case 'kernelResolved':
+      return `kernelResolved.${fn.handle}`;
+    case 'expr':
+      return `expr.${sanitizeTemplateToken(fn.expr)}`;
+    case 'composed':
+      return `composed.${fn.ops.map((op) => sanitizeTemplateToken(op)).join('_')}`;
+    default: {
+      const _exhaustive: never = fn;
+      void _exhaustive;
+      return 'unknown';
+    }
+  }
+}
+
+function describeExprTemplate(expr: ValueExpr | undefined): string {
+  if (!expr) return 'missingExpr';
+  switch (expr.kind) {
+    case 'kernel': {
+      switch (expr.kernelKind) {
+        case 'map':
+          return `kernel.map.${describePureFn(expr.fn)}`;
+        case 'zip':
+          return `kernel.zip.${describePureFn(expr.fn)}`;
+        case 'zipPromote':
+          return `kernel.zipPromote.${describePureFn(expr.fn)}`;
+        case 'broadcast':
+          return 'kernel.broadcast';
+        case 'reduce':
+          return `kernel.reduce.${expr.op}`;
+        case 'pathDerivative':
+          return `kernel.pathDerivative.${expr.op}`;
+        case 'pathSample':
+          return `kernel.pathSample.${expr.op}`;
+        default: {
+          const _exhaustive: never = expr;
+          void _exhaustive;
+          return 'kernel.unknown';
+        }
+      }
+    }
+    case 'state':
+      return 'state.read';
+    case 'construct':
+      return 'construct';
+    case 'extract':
+      return 'extract';
+    case 'hslToRgb':
+      return 'hslToRgb';
+    case 'event':
+      return `event.${expr.eventKind}`;
+    default:
+      return expr.kind;
+  }
+}
+
+function collectExprInputIds(expr: ValueExpr | undefined): number[] {
+  if (!expr) return [];
+  switch (expr.kind) {
+    case 'kernel':
+      switch (expr.kernelKind) {
+        case 'map':
+          return [expr.input as number];
+        case 'zip':
+          return expr.inputs.map((id) => id as number);
+        case 'zipPromote':
+          return [expr.field as number, ...expr.ones.map((id) => id as number)];
+        case 'broadcast':
+          return [
+            expr.one as number,
+            ...(expr.oneComponents ?? []).map((id) => id as number),
+          ];
+        case 'reduce':
+          return [expr.field as number];
+        case 'pathDerivative':
+          return [expr.field as number];
+        case 'pathSample':
+          return [expr.controlPoints as number, expr.tField as number];
+        default: {
+          const _exhaustive: never = expr;
+          void _exhaustive;
+          return [];
+        }
+      }
+    case 'extract':
+      return [expr.input as number];
+    case 'construct':
+      return expr.components.map((id) => id as number);
+    case 'hslToRgb':
+      return [expr.input as number];
+    case 'event':
+      switch (expr.eventKind) {
+        case 'wrap':
+          return [expr.input as number];
+        case 'combine':
+          return expr.inputs.map((id) => id as number);
+        case 'pulse':
+        case 'never':
+        case 'const':
+          return [];
+        default: {
+          const _exhaustive: never = expr;
+          void _exhaustive;
+          return [];
+        }
+      }
+    default:
+      return [];
+  }
+}
+
+function resolveExprSlot(
+  exprId: number,
+  runtimeAddressTable: RuntimeAddressTableIR,
+): ValueSlot | undefined {
+  const fieldSlot = runtimeAddressTable.fieldExprToSlot.get(exprId);
+  if (fieldSlot !== undefined) return fieldSlot;
+  return runtimeAddressTable.scalarExprToArenaAddress.get(exprId)?.slot;
+}
+
+function emitTransfer(
+  lines: string[],
+  sourceBuffer: 'arena_in' | 'state_in',
+  targetBuffer: 'arena_out' | 'state_out',
+  source: AddressingConstants,
+  target: AddressingConstants,
+  guard: string,
+  comment: string,
+): void {
+  const componentCount = Math.min(source.strideValue, target.strideValue);
+  lines.push(`  // ${comment}`);
+  lines.push(`  if (${guard}) {`);
+  for (let component = 0; component < componentCount; component++) {
+    const sourceIndex =
+      `slot_index(${source.offsetName}, lane, ${component}u, ${source.laneStrideName}, ${source.componentStrideName})`;
+    const targetIndex =
+      `slot_index(${target.offsetName}, lane, ${component}u, ${target.laneStrideName}, ${target.componentStrideName})`;
+    lines.push(`    ${targetBuffer}[${targetIndex}] = ${sourceBuffer}[${sourceIndex}];`);
+  }
+  lines.push('  }');
+}
+
 function buildGeneratedComputeProgram(
   scheduleIR: ScheduleIR,
   runtimeAddressTable: RuntimeAddressTableIR,
+  valueExprs: readonly ValueExpr[],
 ): GeneratedComputeProgramIR {
   const slots = collectComputeSlots(scheduleIR);
   const offsetConstants = new Map<ValueSlot, string>();
+  const slotConstants = new Map<ValueSlot, AddressingConstants>();
+  const stateConstantsBySlot = new Map<number, AddressingConstants>();
+  const stateConstantsByStateId = new Map<string, AddressingConstants>();
   const lines: string[] = [
-    '// Auto-generated compute WGSL (v3 stage-2 scaffold).',
+    '// Auto-generated compute WGSL (v3 stage-2).',
     '@group(0) @binding(0) var<storage, read> arena_in: array<f32>;',
     '@group(0) @binding(1) var<storage, read_write> arena_out: array<f32>;',
+    '@group(0) @binding(2) var<storage, read> state_in: array<f32>;',
+    '@group(0) @binding(3) var<storage, read_write> state_out: array<f32>;',
     '',
   ];
 
+  // [LAW:one-source-of-truth] Generated addressing constants come from one
+  // compiler-emitted runtimeAddressTable, not duplicated slot/layout derivation.
   for (const slot of slots) {
     const arena = runtimeAddressTable.slotToArena.get(slot);
     if (!arena) continue;
-    const constantName = `OFFSET_SLOT_${slot}`;
-    offsetConstants.set(slot, constantName);
-    lines.push(`const ${constantName}: u32 = ${arena.offset}u;`);
+    const packing = arena.packing ?? 'soa';
+    const laneStride = arena.laneStride ?? (packing === 'soa' ? 1 : arena.stride);
+    const componentStride = arena.componentStride ?? (packing === 'soa' ? arena.laneCount : 1);
+    const constants: AddressingConstants = {
+      offsetName: `OFFSET_SLOT_${slot}`,
+      strideName: `STRIDE_SLOT_${slot}`,
+      laneCountName: `LANE_COUNT_SLOT_${slot}`,
+      laneStrideName: `LANE_STRIDE_SLOT_${slot}`,
+      componentStrideName: `COMPONENT_STRIDE_SLOT_${slot}`,
+      strideValue: arena.stride,
+      laneCountValue: arena.laneCount,
+    };
+    offsetConstants.set(slot, constants.offsetName);
+    slotConstants.set(slot, constants);
+    lines.push(`const ${constants.offsetName}: u32 = ${arena.offset}u;`);
+    lines.push(`const ${constants.strideName}: u32 = ${arena.stride}u;`);
+    lines.push(`const ${constants.laneCountName}: u32 = ${arena.laneCount}u;`);
+    lines.push(`const ${constants.laneStrideName}: u32 = ${laneStride}u;`);
+    lines.push(`const ${constants.componentStrideName}: u32 = ${componentStride}u;`);
   }
+
+  for (const mapping of scheduleIR.stateMappings) {
+    const slot = mapping.slotStart;
+    const constants: AddressingConstants = {
+      offsetName: `STATE_SLOT_${slot}`,
+      strideName: `STATE_STRIDE_${slot}`,
+      laneCountName: `STATE_LANE_COUNT_${slot}`,
+      laneStrideName: `STATE_LANE_STRIDE_${slot}`,
+      componentStrideName: `STATE_COMPONENT_STRIDE_${slot}`,
+      strideValue: mapping.stride,
+      laneCountValue: mapping.laneCount,
+    };
+    stateConstantsBySlot.set(slot, constants);
+    stateConstantsByStateId.set(mapping.stateId, constants);
+    lines.push(`const ${constants.offsetName}: u32 = ${slot}u;`);
+    lines.push(`const ${constants.strideName}: u32 = ${mapping.stride}u;`);
+    lines.push(`const ${constants.laneCountName}: u32 = ${mapping.laneCount}u;`);
+    lines.push(`const ${constants.laneStrideName}: u32 = ${mapping.stride}u;`);
+    lines.push(`const ${constants.componentStrideName}: u32 = 1u;`);
+  }
+
+  const maxLaneCount = Math.max(
+    1,
+    ...Array.from(slotConstants.values()).map((entry) => entry.laneCountValue),
+    ...Array.from(stateConstantsBySlot.values()).map((entry) => entry.laneCountValue),
+  );
+  lines.push(
+    '',
+    `const MAX_ACTIVE_LANES: u32 = ${maxLaneCount}u;`,
+    '',
+    'fn slot_index(base: u32, lane: u32, component: u32, laneStride: u32, componentStride: u32) -> u32 {',
+    '  return base + lane * laneStride + component * componentStride;',
+    '}',
+    '',
+  );
 
   lines.push(
     '',
     '@compute @workgroup_size(64)',
     'fn cs_main(@builtin(global_invocation_id) gid: vec3<u32>) {',
     '  let lane = gid.x;',
+    '  if (lane >= MAX_ACTIVE_LANES) {',
+    '    return;',
+    '  }',
   );
 
-  for (const slot of slots) {
-    const arena = runtimeAddressTable.slotToArena.get(slot);
-    const constantName = offsetConstants.get(slot);
-    if (!arena || !constantName) continue;
-    // [LAW:dataflow-not-control-flow] Generated kernels use one fixed copy pass
-    // shape; slot variation is encoded in injected offsets.
-    lines.push(
-      `  arena_out[${constantName} + lane] = arena_in[${constantName} + lane];`,
-    );
+  // [LAW:dataflow-not-control-flow] Generated WGSL emits every scheduled step in
+  // deterministic order; data-dependent masks gate lane participation only.
+  const steps = scheduleIR.steps as readonly Step[];
+  for (let stepIndex = 0; stepIndex < steps.length; stepIndex++) {
+    const step = steps[stepIndex];
+    switch (step.kind) {
+      case 'evalOne':
+      case 'materialize': {
+        const exprId = step.kind === 'evalOne' ? (step.expr as number) : (step.field as number);
+        const expr = valueExprs[exprId];
+        const template = describeExprTemplate(expr);
+        const targetSlot = step.target;
+        const targetConstants = slotConstants.get(targetSlot);
+        if (!targetConstants) {
+          lines.push(`  // step ${stepIndex} kind=${step.kind} skipped: missing target slot metadata`);
+          break;
+        }
+
+        if (expr?.kind === 'state') {
+          const stateConstants = stateConstantsByStateId.get(expr.stateKey);
+          if (!stateConstants) {
+            lines.push(
+              `  // step ${stepIndex} kind=${step.kind} template=${template} skipped: missing state mapping for ${expr.stateKey}`,
+            );
+            break;
+          }
+          emitTransfer(
+            lines,
+            'state_in',
+            'arena_out',
+            stateConstants,
+            targetConstants,
+            `lane < ${stateConstants.laneCountName} && lane < ${targetConstants.laneCountName}`,
+            `step ${stepIndex} kind=${step.kind} template=${template} state-read stateKey=${expr.stateKey} targetSlot=${targetSlot}`,
+          );
+          break;
+        }
+
+        const inputExprIds = collectExprInputIds(expr);
+        const sourceSlots = inputExprIds
+          .map((id) => resolveExprSlot(id, runtimeAddressTable))
+          .filter((slot): slot is ValueSlot => slot !== undefined);
+        const sourceSlot = sourceSlots[0] ?? targetSlot;
+        const sourceConstants = slotConstants.get(sourceSlot);
+        if (!sourceConstants) {
+          lines.push(
+            `  // step ${stepIndex} kind=${step.kind} template=${template} skipped: missing source slot metadata`,
+          );
+          break;
+        }
+        emitTransfer(
+          lines,
+          'arena_in',
+          'arena_out',
+          sourceConstants,
+          targetConstants,
+          `lane < ${sourceConstants.laneCountName} && lane < ${targetConstants.laneCountName}`,
+          `step ${stepIndex} kind=${step.kind} template=${template} sourceSlot=${sourceSlot} targetSlot=${targetSlot}`,
+        );
+        break;
+      }
+
+      case 'continuityApply': {
+        const sourceConstants = slotConstants.get(step.baseSlot);
+        const targetConstants = slotConstants.get(step.outputSlot);
+        if (!sourceConstants || !targetConstants) {
+          lines.push(
+            `  // step ${stepIndex} kind=continuityApply skipped: missing slot metadata`,
+          );
+          break;
+        }
+        emitTransfer(
+          lines,
+          'arena_in',
+          'arena_out',
+          sourceConstants,
+          targetConstants,
+          `lane < ${sourceConstants.laneCountName} && lane < ${targetConstants.laneCountName}`,
+          `step ${stepIndex} kind=continuityApply template=continuity.apply semantic=${step.semantic} targetKey=${step.targetKey}`,
+        );
+        break;
+      }
+
+      case 'stateWrite':
+      case 'fieldStateWrite': {
+        const sourceExprId = step.value as number;
+        const sourceSlot = resolveExprSlot(sourceExprId, runtimeAddressTable);
+        const sourceConstants = sourceSlot !== undefined ? slotConstants.get(sourceSlot) : undefined;
+        const stateConstants = stateConstantsBySlot.get(step.stateSlot as number);
+        if (!sourceConstants || !stateConstants) {
+          lines.push(
+            `  // step ${stepIndex} kind=${step.kind} skipped: missing state/source metadata`,
+          );
+          break;
+        }
+        emitTransfer(
+          lines,
+          'arena_out',
+          'state_out',
+          sourceConstants,
+          stateConstants,
+          `lane < ${sourceConstants.laneCountName} && lane < ${stateConstants.laneCountName}`,
+          `step ${stepIndex} kind=${step.kind} template=state.write stateSlot=${step.stateSlot} sourceSlot=${sourceSlot} sourceExpr=${sourceExprId}`,
+        );
+        break;
+      }
+
+      case 'eventDispatch':
+      case 'render':
+      case 'continuityMapBuild':
+        lines.push(`  // step ${stepIndex} kind=${step.kind} emitted outside stage-2 compute`);
+        break;
+
+      default: {
+        const _exhaustive: never = step;
+        void _exhaustive;
+        break;
+      }
+    }
   }
 
   lines.push('}');
