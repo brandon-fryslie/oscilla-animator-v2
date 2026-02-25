@@ -815,6 +815,9 @@ export class WebGPURenderer {
     if (!isUniformSize && (!(size instanceof Float32Array) || size.length !== count)) {
       throw new Error('WebGPURenderer: size must be number or Float32Array(count)');
     }
+    if (isUniformSize && !Number.isFinite(size as number)) {
+      throw new Error('WebGPURenderer: size must be finite when provided as a number');
+    }
 
     const isUniformColor = activeColor.length === 4;
     if (!isUniformColor && activeColor.length !== count * 4) {
@@ -828,31 +831,55 @@ export class WebGPURenderer {
           (!(strokeWidthSource instanceof Float32Array) || strokeWidthSource.length !== count)) {
         throw new Error('WebGPURenderer: strokeWidth must be number or Float32Array(count)');
       }
+      if (typeof strokeWidthSource === 'number' && !Number.isFinite(strokeWidthSource)) {
+        throw new Error('WebGPURenderer: strokeWidth must be finite when provided as a number');
+      }
     }
 
     this.ensureInstanceCapacity(firstInstance + count);
 
     for (let i = 0; i < count; i++) {
       const base = (firstInstance + i) * INSTANCE_FLOATS;
+      const posX = position[i * 2];
+      const posY = position[i * 2 + 1];
+      const rotationValue = rotation[i];
+      const scaleX = scale2[i * 2];
+      const scaleY = scale2[i * 2 + 1];
+      // [LAW:single-enforcer] Per-instance numeric validity is enforced once at
+      // GPU payload packing so downstream shader stages never receive NaN/Inf.
+      if (!Number.isFinite(posX) || !Number.isFinite(posY) ||
+          !Number.isFinite(rotationValue) || !Number.isFinite(scaleX) || !Number.isFinite(scaleY)) {
+        throw new Error(`WebGPURenderer: instance ${firstInstance + i} contains non-finite transform values`);
+      }
+
       const sizeBase = isUniformSize ? (size as number) : (size as Float32Array)[i];
+      if (!Number.isFinite(sizeBase)) {
+        throw new Error(`WebGPURenderer: instance ${firstInstance + i} size must be finite`);
+      }
       const strokeWidth = hasStroke
         ? (typeof strokeWidthSource === 'number'
           ? strokeWidthSource
           : (strokeWidthSource as Float32Array)[i] ?? 0)
         : 0;
+      if (!Number.isFinite(strokeWidth)) {
+        throw new Error(`WebGPURenderer: instance ${firstInstance + i} strokeWidth must be finite`);
+      }
       const strokeHalf = Math.max(0, strokeWidth) * 0.5;
       const sizeValue = renderPassKind === 'stroke'
         ? sizeBase + strokeHalf
         : hasStroke
           ? Math.max(0, sizeBase - strokeHalf)
           : sizeBase;
+      if (!Number.isFinite(sizeValue)) {
+        throw new Error(`WebGPURenderer: instance ${firstInstance + i} resolved size must be finite`);
+      }
 
-      this.instanceStaging[base] = position[i * 2];
-      this.instanceStaging[base + 1] = position[i * 2 + 1];
+      this.instanceStaging[base] = posX;
+      this.instanceStaging[base + 1] = posY;
       this.instanceStaging[base + 2] = sizeValue;
-      this.instanceStaging[base + 3] = rotation[i];
-      this.instanceStaging[base + 4] = scale2[i * 2];
-      this.instanceStaging[base + 5] = scale2[i * 2 + 1];
+      this.instanceStaging[base + 3] = rotationValue;
+      this.instanceStaging[base + 4] = scaleX;
+      this.instanceStaging[base + 5] = scaleY;
       this.instanceStaging[base + 6] = topologyBankRecordIndex;
       this.instanceStaging[base + 7] = 0;
 
