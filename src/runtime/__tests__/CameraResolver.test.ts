@@ -16,7 +16,7 @@ function mockProgram(
     constants: { json: [] },
     schedule: {
       steps: [],
-      timeModel: { kind: 'infinite', periodAMs: 4000, periodBMs: 8000 },
+      timeModel: { periodAMs: 4000, periodBMs: 8000 },
       instances: new Map(),
       stateMappings: [],
       stateSlotCount: 0,

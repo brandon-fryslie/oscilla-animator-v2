@@ -8,24 +8,13 @@
 // Time Model IR
 // =============================================================================
 
-/** Finite time model with fixed duration */
-export interface TimeModelFinite {
-  kind: "finite";
-  /** Duration in milliseconds */
-  durationMs: number;
-}
-
-/** Infinite time model (unbounded) */
-export interface TimeModelInfinite {
-  kind: "infinite";
+/** Canonical runtime time model (single model only). */
+export interface TimeModelIR {
   /** Period for phase A in milliseconds */
   periodAMs: number;
   /** Period for phase B in milliseconds */
   periodBMs: number;
 }
-
-/** Time model - finite or infinite only */
-export type TimeModelIR = TimeModelFinite | TimeModelInfinite;
 
 // =============================================================================
 // Schedule Types (re-exported from types.ts)

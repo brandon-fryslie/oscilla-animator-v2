@@ -206,7 +206,7 @@ describe('compile', () => {
 });
 
 describe('TimeModel', () => {
-  it('InfiniteTimeRoot sets infinite time model', () => {
+  it('InfiniteTimeRoot sets canonical time model periods', () => {
     const patch = buildPatch((b) => {
       b.addBlock('InfiniteTimeRoot');
     });
@@ -217,7 +217,8 @@ describe('TimeModel', () => {
     if (result.kind === 'ok') {
       // TimeModel is in schedule wrapper for now
       const schedule = result.program.schedule as ScheduleIR;
-      expect(schedule.timeModel.kind).toBe('infinite');
+      expect(schedule.timeModel.periodAMs).toBeGreaterThan(0);
+      expect(schedule.timeModel.periodBMs).toBeGreaterThan(0);
     }
   });
 });
