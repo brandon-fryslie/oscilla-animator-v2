@@ -42,6 +42,14 @@ describe('lexer', () => {
     expect(tokens[1].value).toBe('0.5');
   });
 
+  it('tokenizes numbers (exponent)', () => {
+    const tokens = tokenize('1e3 -2.5E-4');
+    expect(tokens[0].kind).toBe(TokenKind.NUMBER);
+    expect(tokens[0].value).toBe('1e3');
+    expect(tokens[1].kind).toBe(TokenKind.NUMBER);
+    expect(tokens[1].value).toBe('-2.5E-4');
+  });
+
   it('tokenizes booleans', () => {
     const tokens = tokenize('true false');
     expect(tokens[0].kind).toBe(TokenKind.BOOL);
@@ -81,6 +89,23 @@ describe('lexer', () => {
     expect(tokens[2].kind).toBe(TokenKind.EOF);
   });
 
+  it('skips // comments', () => {
+    const tokens = tokenize('// comment\nblock');
+    expect(tokens[0].kind).toBe(TokenKind.NEWLINE);
+    expect(tokens[1].kind).toBe(TokenKind.IDENT);
+    expect(tokens[1].value).toBe('block');
+    expect(tokens[2].kind).toBe(TokenKind.EOF);
+  });
+
+  it('skips /* */ inline comments', () => {
+    const tokens = tokenize('foo /* comment */ bar');
+    expect(tokens[0].kind).toBe(TokenKind.IDENT);
+    expect(tokens[0].value).toBe('foo');
+    expect(tokens[1].kind).toBe(TokenKind.IDENT);
+    expect(tokens[1].value).toBe('bar');
+    expect(tokens[2].kind).toBe(TokenKind.EOF);
+  });
+
   it('emits newlines', () => {
     const tokens = tokenize('a\nb\n');
     expect(tokens[0].kind).toBe(TokenKind.IDENT);
@@ -112,6 +137,32 @@ describe('lexer', () => {
     expect(tokens[0].value).toBe('\n\t\\"');
   });
 
+  it('handles \\r and unicode string escapes', () => {
+    const tokens = tokenize('"line\\r\\u03C0\\U0001F680"');
+    expect(tokens[0].kind).toBe(TokenKind.STRING);
+    expect(tokens[0].value).toBe('line\rπ🚀');
+  });
+
+  it('tokenizes heredoc strings', () => {
+    const tokens = tokenize('value = <<EOF\nhello\nworld\nEOF');
+    expect(tokens[0].kind).toBe(TokenKind.IDENT);
+    expect(tokens[1].kind).toBe(TokenKind.EQUALS);
+    expect(tokens[2].kind).toBe(TokenKind.STRING);
+    expect(tokens[2].value).toBe('hello\nworld\n');
+  });
+
+  it('tokenizes indented heredoc strings (<<-) with space-trim', () => {
+    const input = [
+      'value = <<-EOF',
+      '    alpha',
+      '      beta',
+      '    EOF',
+    ].join('\n');
+    const tokens = tokenize(input);
+    expect(tokens[2].kind).toBe(TokenKind.STRING);
+    expect(tokens[2].value).toBe('alpha\n  beta\n');
+  });
+
   it('handles empty string', () => {
     const tokens = tokenize('""');
     expect(tokens[0].kind).toBe(TokenKind.STRING);
@@ -122,8 +173,43 @@ describe('lexer', () => {
     expect(() => tokenize('"hello')).toThrow('Unterminated string');
   });
 
+  it('throws on literal newlines in quoted strings', () => {
+    expect(() => tokenize('"hello\nworld"')).toThrow('Quoted strings cannot contain literal newlines');
+  });
+
+  it('throws on template interpolation syntax in quoted strings', () => {
+    expect(() => tokenize('"hello ${name}"')).toThrow('Template interpolation/directives are not supported');
+    expect(() => tokenize('"%{ if true }x%{ endif }"')).toThrow('Template interpolation/directives are not supported');
+  });
+
   it('throws on invalid character', () => {
     expect(() => tokenize('@')).toThrow("Unexpected character '@'");
+  });
+
+  it('throws on tab characters outside strings/comments', () => {
+    expect(() => tokenize('foo\tbar')).toThrow("Unexpected character '\t'");
+  });
+
+  it('does not lex .5/-.5 as numeric literals', () => {
+    const tokens = tokenize('.5');
+    expect(tokens[0].kind).toBe(TokenKind.DOT);
+    expect(tokens[1].kind).toBe(TokenKind.NUMBER);
+    expect(tokens[1].value).toBe('5');
+    expect(() => tokenize('-.5')).toThrow("Unexpected character '-'");
+  });
+
+  it('throws on unterminated inline comment', () => {
+    expect(() => tokenize('/* unterminated')).toThrow('Unterminated inline comment');
+  });
+
+  it('throws on template interpolation syntax in heredoc strings', () => {
+    const input = ['value = <<EOF', 'hello ${name}', 'EOF'].join('\n');
+    expect(() => tokenize(input)).toThrow('Template interpolation/directives are not supported');
+  });
+
+  it('throws on heredoc delimiter containing a dash', () => {
+    const input = ['value = <<MY-EOF', 'hello', 'MY-EOF'].join('\n');
+    expect(() => tokenize(input)).toThrow('Expected newline after heredoc delimiter');
   });
 
   it('handles complex HCL', () => {

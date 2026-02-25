@@ -45,11 +45,8 @@ describe('tripwire: negative numbers', () => {
     expect(tokens[0].value).toBe('-0.5');
   });
 
-  it('lexes -.5 as single NUMBER token', () => {
-    const tokens = tokenize('-.5');
-    expect(tokens).toHaveLength(2);
-    expect(tokens[0].kind).toBe(TokenKind.NUMBER);
-    expect(tokens[0].value).toBe('-.5');
+  it('rejects -.5 (leading decimal point is invalid in HCL2 numeric literal)', () => {
+    expect(() => tokenize('-.5')).toThrow("Unexpected character '-'");
   });
 
   it('lexes a=-1 correctly (IDENT EQUALS NUMBER)', () => {
@@ -67,7 +64,7 @@ describe('tripwire: negative numbers', () => {
 patch "Test" {
   block "Const" "neg" {
     value = -1.5
-    other = -.25
+    other = -0.25
   }
 }
 `;

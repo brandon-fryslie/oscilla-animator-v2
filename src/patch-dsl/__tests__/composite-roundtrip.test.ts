@@ -200,6 +200,34 @@ describe('Composite Deserializer', () => {
     expect(block?.params?.value).toBe(42);
   });
 
+  it('expands top-level locals in internal block params', () => {
+    const hcl = `
+      locals {
+        smoothing = 0.9
+      }
+
+      composite "TestComp" {
+        label = "Test"
+        category = "test"
+        capability = "pure"
+
+        block "Lag" "lag" {
+          smoothing = local.smoothing
+        }
+
+        expose_output "out" {
+          block = "lag"
+          port = "out"
+        }
+      }
+    `;
+
+    const result = deserializeCompositeFromHCL(hcl);
+    expect(result.errors).toHaveLength(0);
+    const block = result.def?.internalBlocks.get(internalBlockId('lag'));
+    expect(block?.params?.smoothing).toBe(0.9);
+  });
+
   it('parses internal edges from outputs', () => {
     const hcl = `
       composite "TestComp" {
@@ -520,4 +548,3 @@ describe('Round-Trip: Edge Cases', () => {
     expect(compositeDefsEqual(def, result.def!)).toBe(true);
   });
 });
-

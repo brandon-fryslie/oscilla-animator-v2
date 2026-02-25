@@ -32,6 +32,9 @@ Documentation is organized by subsystem:
 Deep technical documentation of the runtime execution model:
 - `execution-model.md` - Frame execution lifecycle and two-phase pattern
 
+### Patch DSL
+- `patch-dsl-hcl2-support.md` - Supported HCL2 subset, unsupported features, and string interpolation policy
+
 ### `design-docs/` (v3 reference)
 Canonical v3 architecture roadmap and implementation target:
 - `../design-docs/OSCILLA-WEBGPU-V3-REFERENCE-ARCHITECTURE.md`
