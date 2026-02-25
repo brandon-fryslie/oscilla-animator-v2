@@ -231,6 +231,24 @@ describe('deserialize', () => {
     expect(result.errors.some((e) => e.message.includes('locals blocks must appear at the top'))).toBe(true);
   });
 
+  it('does not substitute locals defined after a non-locals block', () => {
+    const hcl = `
+      patch "Test" {
+        block "Const" "c1" {
+          value = local.rx
+        }
+      }
+      locals {
+        rx = 99
+      }
+    `;
+    const result = deserializePatchFromHCL(hcl);
+    // Should have the ordering error
+    expect(result.errors.some((e) => e.message.includes('locals blocks must appear at the top'))).toBe(true);
+    // The misplaced local must NOT have been substituted (local.rx reference should remain unknown)
+    expect(result.errors.some((e) => e.message.includes('Unknown local "rx"'))).toBe(true);
+  });
+
   it('errors when local definitions contain references', () => {
     const hcl = `
       locals {

@@ -4,6 +4,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { serializePatchToHCL } from '../serialize';
+import { emitValue } from '../hcl-emit-utils';
 import { PatchBuilder } from '../../graph/Patch';
 
 // Import blocks to trigger registration
@@ -227,5 +228,19 @@ describe('serialize', () => {
 
     expect(hcl).toContain('lens "Adapter_DegreesToRadians"');
     expect(hcl).toContain('sourceAddress = "v1:blocks.a.outputs.out"');
+  });
+});
+
+describe('emitValue (string escaping)', () => {
+  it('escapes C0 control characters other than \\n, \\r, \\t', () => {
+    // U+0001 (SOH) and U+000B (VT) have no named escape — must use \uXXXX
+    expect(emitValue('\x01')).toBe('"\\u0001"');
+    expect(emitValue('\x0B')).toBe('"\\u000b"');
+  });
+
+  it('still emits \\n, \\r, \\t as named escapes (not \\uXXXX)', () => {
+    expect(emitValue('\n')).toBe('"\\n"');
+    expect(emitValue('\r')).toBe('"\\r"');
+    expect(emitValue('\t')).toBe('"\\t"');
   });
 });

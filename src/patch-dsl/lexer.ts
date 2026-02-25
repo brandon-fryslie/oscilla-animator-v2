@@ -266,12 +266,12 @@ class Lexer {
       this.pos++;
     }
 
-    // Delimiter identifier
+    // Delimiter identifier: [A-Za-z_][A-Za-z0-9_]* (dashes are not allowed per HCL2 spec)
     const delimiterStart = this.pos;
     if (!(this.isAlpha(this.peek()) || this.peek() === '_')) {
       throw this.error('Expected heredoc delimiter after <<', start);
     }
-    while (this.isAlphaNumeric(this.peek())) {
+    while (this.isAlpha(this.peek()) || this.isDigit(this.peek()) || this.peek() === '_') {
       this.pos++;
     }
     const delimiter = this.input.slice(delimiterStart, this.pos);
