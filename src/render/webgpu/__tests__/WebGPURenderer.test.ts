@@ -3,6 +3,7 @@ import { createWebGPURenderer } from '../WebGPURenderer';
 import { WEBGPU_RENDER_CONTRACT } from '../shaders';
 import { registerDynamicTopology } from '../../../shapes/registry';
 import { PathVerb } from '../../../shapes/types';
+import type { DrawPathInstancesOp } from '../../types';
 
 function setNavigatorGpu(value: unknown): void {
   Object.defineProperty(navigator, 'gpu', {
@@ -105,6 +106,79 @@ function collectDrawPrepBindGroupCalls(createBindGroupMock: { mock: { calls: unk
   });
 }
 
+// ─── Test helpers ────────────────────────────────────────────────────────────
+
+/** Register a simple closed 4-point rectangle topology and return its ID. */
+function makeSimpleTopology(name: string): number {
+  return registerDynamicTopology(
+    {
+      params: [],
+      verbs: [PathVerb.MOVE, PathVerb.LINE, PathVerb.LINE, PathVerb.LINE, PathVerb.CLOSE],
+      pointsPerVerb: [1, 1, 1, 1, 0],
+      totalControlPoints: 4,
+      closed: true,
+    },
+    name,
+  );
+}
+
+/** Build a minimal drawPathInstances op. Defaults to one instance with a fill. */
+function makeDrawOp(
+  topologyId: number,
+  opts: {
+    count?: number;
+    size?: number | Float32Array;
+    position?: Float32Array;
+    rotation?: Float32Array;
+    scale2?: Float32Array;
+    style?: DrawPathInstancesOp['style'];
+    geometry?: Omit<DrawPathInstancesOp['geometry'], 'topologyId'>;
+  } = {},
+): DrawPathInstancesOp {
+  const count = opts.count ?? 1;
+  return {
+    kind: 'drawPathInstances',
+    geometry:
+      opts.geometry != null
+        ? { topologyId, ...opts.geometry }
+        : {
+            topologyId,
+            points: new Float32Array([-1, -1, 1, -1, 1, 1, -1, 1]),
+            pointsCount: 4,
+            verbs: new Uint8Array([PathVerb.MOVE, PathVerb.LINE, PathVerb.LINE, PathVerb.LINE, PathVerb.CLOSE]),
+            flags: 1,
+          },
+    instances: {
+      count,
+      position: opts.position ?? new Float32Array(count * 2).fill(0.5),
+      size: opts.size ?? 0.25,
+      rotation: opts.rotation ?? new Float32Array(count),
+      scale2: opts.scale2 ?? new Float32Array(count * 2).fill(1),
+    },
+    style: opts.style ?? {
+      fillColor: new Uint8ClampedArray([255, 0, 0, 255]),
+      fillRule: 'nonzero',
+    },
+  };
+}
+
+/** Build a minimal render input. Defaults to a 128×96 viewport at time 0. */
+function makeRenderInput(
+  ops: DrawPathInstancesOp[],
+  overrides: Record<string, unknown> = {},
+) {
+  return {
+    frame: { version: 2 as const, ops },
+    width: 128,
+    height: 96,
+    zoom: 1,
+    panX: 0,
+    panY: 0,
+    timeMs: 0,
+    ...overrides,
+  };
+}
+
 describe('WebGPURenderer', () => {
   const originalGpu = (navigator as Navigator & { gpu?: unknown }).gpu;
 
@@ -176,14 +250,7 @@ describe('WebGPURenderer', () => {
     const env = createFakeWebGPUEnvironment();
     setNavigatorGpu(env.gpu);
 
-    registerDynamicTopology({
-      params: [],
-      verbs: [PathVerb.MOVE, PathVerb.LINE, PathVerb.CLOSE],
-      pointsPerVerb: [1, 1, 0],
-      totalControlPoints: 2,
-      closed: true,
-    }, 'webgpu-topology-bank-test');
-
+    makeSimpleTopology('webgpu-topology-bank-test');
     await createWebGPURenderer(env.canvas);
 
     const hasU32TopologyWrite = env.device.queue.writeBuffer.mock.calls.some((args: unknown[]) => {
@@ -198,15 +265,7 @@ describe('WebGPURenderer', () => {
     setNavigatorGpu(env.gpu);
     const renderer = await createWebGPURenderer(env.canvas);
 
-    renderer.render({
-      frame: { version: 2, ops: [] },
-      width: 128,
-      height: 96,
-      zoom: 1,
-      panX: 0,
-      panY: 0,
-      timeMs: 0,
-    });
+    renderer.render(makeRenderInput([]));
 
     expect(env.renderPass.setBindGroup).toHaveBeenCalledWith(
       WEBGPU_RENDER_CONTRACT.topologyBankBindGroup,
@@ -226,38 +285,16 @@ describe('WebGPURenderer', () => {
       closed: true,
     }, 'webgpu-upload-alignment-test');
 
-    renderer.render({
-      frame: {
-        version: 2,
-        ops: [
-          {
-            kind: 'drawPathInstances',
-            geometry: {
-              topologyId,
-              verbs: new Uint8Array([0, 1, 1, 4]),
-              points: new Float32Array([0, 0, 1, 0, 0, 1]),
-              pointsCount: 3,
-            },
-            instances: {
-              count: 1,
-              position: new Float32Array([0.5, 0.5]),
-              size: 1,
-              rotation: new Float32Array([0]),
-              scale2: new Float32Array([1, 1]),
-            },
-            style: {
-              fillColor: new Uint8ClampedArray([255, 255, 255, 255]),
-            },
-          },
-        ],
-      },
-      width: 128,
-      height: 128,
-      zoom: 1,
-      panX: 0,
-      panY: 0,
-      timeMs: 0,
-    });
+    renderer.render(makeRenderInput([
+      makeDrawOp(topologyId, {
+        size: 1,
+        geometry: {
+          points: new Float32Array([0, 0, 1, 0, 0, 1]),
+          pointsCount: 3,
+          verbs: new Uint8Array([PathVerb.MOVE, PathVerb.LINE, PathVerb.LINE, PathVerb.CLOSE]),
+        },
+      }),
+    ]));
 
     const mappedBufferSizes = env.device.createBuffer.mock.calls
       .map(([descriptor]: [{ size: number; mappedAtCreation?: boolean }]) => descriptor)
@@ -275,15 +312,7 @@ describe('WebGPURenderer', () => {
     const renderer = await createWebGPURenderer(env.canvas);
 
     expect(() =>
-      renderer.render({
-        frame: { version: 2, ops: [] },
-        width: Number.NaN,
-        height: 128,
-        zoom: 1,
-        panX: 0,
-        panY: 0,
-        timeMs: 0,
-      })
+      renderer.render(makeRenderInput([], { width: Number.NaN }))
     ).toThrow('width must be a finite non-negative number');
   });
 
@@ -292,16 +321,8 @@ describe('WebGPURenderer', () => {
     setNavigatorGpu(env.gpu);
     const renderer = await createWebGPURenderer(env.canvas);
 
-    const baseInput = {
-      frame: { version: 2 as const, ops: [] },
-      width: 128,
-      height: 96,
-      zoom: 1,
-      panX: 0,
-      panY: 0,
-    };
-    renderer.render({ ...baseInput, timeMs: 0 });
-    renderer.render({ ...baseInput, timeMs: 16 });
+    renderer.render(makeRenderInput([], { timeMs: 0 }));
+    renderer.render(makeRenderInput([], { timeMs: 16 }));
 
     const computeBindGroupDescriptors = env.device.createBindGroup.mock.calls
       .map(([descriptor]: [unknown]) => descriptor as { entries: Array<{ binding: number }> })
@@ -334,46 +355,9 @@ describe('WebGPURenderer', () => {
     const env = createFakeWebGPUEnvironment();
     setNavigatorGpu(env.gpu);
     const renderer = await createWebGPURenderer(env.canvas);
-    const topologyId = registerDynamicTopology({
-      params: [],
-      verbs: [PathVerb.MOVE, PathVerb.LINE, PathVerb.CLOSE],
-      pointsPerVerb: [1, 1, 0],
-      totalControlPoints: 2,
-      closed: true,
-    }, 'webgpu-indirect-draw-topology');
+    const topologyId = makeSimpleTopology('webgpu-indirect-draw-topology');
 
-    renderer.render({
-      frame: {
-        version: 2,
-        ops: [{
-          kind: 'drawPathInstances',
-          geometry: {
-            topologyId,
-            points: new Float32Array([-1, -1, 1, -1, 1, 1, -1, 1]),
-            pointsCount: 4,
-            verbs: new Uint8Array([0, 1, 1, 1, 4]),
-            flags: 1,
-          },
-          instances: {
-            count: 1,
-            position: new Float32Array([0.5, 0.5]),
-            size: 0.25,
-            rotation: new Float32Array([0]),
-            scale2: new Float32Array([1, 1]),
-          },
-          style: {
-            fillColor: new Uint8ClampedArray([255, 0, 0, 255]),
-            fillRule: 'nonzero',
-          },
-        }],
-      },
-      width: 128,
-      height: 96,
-      zoom: 1,
-      panX: 0,
-      panY: 0,
-      timeMs: 0,
-    });
+    renderer.render(makeRenderInput([makeDrawOp(topologyId)]));
 
     expect(env.renderPass.drawIndexedIndirect).toHaveBeenCalledTimes(1);
     const cpuIndirectArgsWrite = env.device.queue.writeBuffer.mock.calls.find((args: unknown[]) => {
@@ -397,43 +381,17 @@ describe('WebGPURenderer', () => {
       closed: true,
     }, 'webgpu-cubic-topology');
 
-    renderer.render({
-      frame: {
-        version: 2,
-        ops: [{
-          kind: 'drawPathInstances',
-          geometry: {
-            topologyId,
-            points: new Float32Array([
-              0, 0,
-              0.2, 1,
-              0.8, 1,
-              1, 0,
-            ]),
-            pointsCount: 4,
-            verbs: new Uint8Array([PathVerb.MOVE, PathVerb.CUBIC, PathVerb.CLOSE]),
-            flags: 1,
-          },
-          instances: {
-            count: 1,
-            position: new Float32Array([0.5, 0.5]),
-            size: 0.2,
-            rotation: new Float32Array([0]),
-            scale2: new Float32Array([1, 1]),
-          },
-          style: {
-            fillColor: new Uint8ClampedArray([0, 255, 0, 255]),
-            fillRule: 'nonzero',
-          },
-        }],
-      },
-      width: 128,
-      height: 96,
-      zoom: 1,
-      panX: 0,
-      panY: 0,
-      timeMs: 0,
-    });
+    renderer.render(makeRenderInput([
+      makeDrawOp(topologyId, {
+        size: 0.2,
+        geometry: {
+          points: new Float32Array([0, 0, 0.2, 1, 0.8, 1, 1, 0]),
+          pointsCount: 4,
+          verbs: new Uint8Array([PathVerb.MOVE, PathVerb.CUBIC, PathVerb.CLOSE]),
+          flags: 1,
+        },
+      }),
+    ]));
 
     expect(env.renderPass.drawIndexedIndirect).toHaveBeenCalledTimes(1);
   });
@@ -450,42 +408,17 @@ describe('WebGPURenderer', () => {
       closed: true,
     }, 'webgpu-quad-topology');
 
-    renderer.render({
-      frame: {
-        version: 2,
-        ops: [{
-          kind: 'drawPathInstances',
-          geometry: {
-            topologyId,
-            points: new Float32Array([
-              0, 0,
-              0.5, 1,
-              1, 0,
-            ]),
-            pointsCount: 3,
-            verbs: new Uint8Array([PathVerb.MOVE, PathVerb.QUAD, PathVerb.CLOSE]),
-            flags: 1,
-          },
-          instances: {
-            count: 1,
-            position: new Float32Array([0.5, 0.5]),
-            size: 0.2,
-            rotation: new Float32Array([0]),
-            scale2: new Float32Array([1, 1]),
-          },
-          style: {
-            fillColor: new Uint8ClampedArray([255, 0, 255, 255]),
-            fillRule: 'nonzero',
-          },
-        }],
-      },
-      width: 128,
-      height: 96,
-      zoom: 1,
-      panX: 0,
-      panY: 0,
-      timeMs: 0,
-    });
+    renderer.render(makeRenderInput([
+      makeDrawOp(topologyId, {
+        size: 0.2,
+        geometry: {
+          points: new Float32Array([0, 0, 0.5, 1, 1, 0]),
+          pointsCount: 3,
+          verbs: new Uint8Array([PathVerb.MOVE, PathVerb.QUAD, PathVerb.CLOSE]),
+          flags: 1,
+        },
+      }),
+    ]));
 
     expect(env.renderPass.drawIndexedIndirect).toHaveBeenCalledTimes(1);
   });
@@ -497,68 +430,28 @@ describe('WebGPURenderer', () => {
     const topologyId = registerDynamicTopology({
       params: [],
       verbs: [
-        PathVerb.MOVE,
-        PathVerb.LINE,
-        PathVerb.LINE,
-        PathVerb.CLOSE,
-        PathVerb.MOVE,
-        PathVerb.LINE,
-        PathVerb.LINE,
-        PathVerb.CLOSE,
+        PathVerb.MOVE, PathVerb.LINE, PathVerb.LINE, PathVerb.CLOSE,
+        PathVerb.MOVE, PathVerb.LINE, PathVerb.LINE, PathVerb.CLOSE,
       ],
       pointsPerVerb: [1, 1, 1, 0, 1, 1, 1, 0],
       totalControlPoints: 6,
       closed: true,
     }, 'webgpu-multicontour-topology');
 
-    renderer.render({
-      frame: {
-        version: 2,
-        ops: [{
-          kind: 'drawPathInstances',
-          geometry: {
-            topologyId,
-            points: new Float32Array([
-              -1, -1,
-              -0.2, -1,
-              -0.6, -0.2,
-              0.2, 0.2,
-              1, 0.2,
-              0.6, 1,
-            ]),
-            pointsCount: 6,
-            verbs: new Uint8Array([
-              PathVerb.MOVE,
-              PathVerb.LINE,
-              PathVerb.LINE,
-              PathVerb.CLOSE,
-              PathVerb.MOVE,
-              PathVerb.LINE,
-              PathVerb.LINE,
-              PathVerb.CLOSE,
-            ]),
-            flags: 1,
-          },
-          instances: {
-            count: 1,
-            position: new Float32Array([0.5, 0.5]),
-            size: 0.2,
-            rotation: new Float32Array([0]),
-            scale2: new Float32Array([1, 1]),
-          },
-          style: {
-            fillColor: new Uint8ClampedArray([0, 0, 255, 255]),
-            fillRule: 'nonzero',
-          },
-        }],
-      },
-      width: 128,
-      height: 96,
-      zoom: 1,
-      panX: 0,
-      panY: 0,
-      timeMs: 0,
-    });
+    renderer.render(makeRenderInput([
+      makeDrawOp(topologyId, {
+        size: 0.2,
+        geometry: {
+          points: new Float32Array([-1, -1, -0.2, -1, -0.6, -0.2, 0.2, 0.2, 1, 0.2, 0.6, 1]),
+          pointsCount: 6,
+          verbs: new Uint8Array([
+            PathVerb.MOVE, PathVerb.LINE, PathVerb.LINE, PathVerb.CLOSE,
+            PathVerb.MOVE, PathVerb.LINE, PathVerb.LINE, PathVerb.CLOSE,
+          ]),
+          flags: 1,
+        },
+      }),
+    ]));
 
     expect(env.renderPass.drawIndexedIndirect).toHaveBeenCalledTimes(1);
   });
@@ -567,47 +460,17 @@ describe('WebGPURenderer', () => {
     const env = createFakeWebGPUEnvironment();
     setNavigatorGpu(env.gpu);
     const renderer = await createWebGPURenderer(env.canvas);
-    const topologyId = registerDynamicTopology({
-      params: [],
-      verbs: [PathVerb.MOVE, PathVerb.LINE, PathVerb.LINE, PathVerb.LINE, PathVerb.CLOSE],
-      pointsPerVerb: [1, 1, 1, 1, 0],
-      totalControlPoints: 4,
-      closed: true,
-    }, 'webgpu-stroke-only-topology');
+    const topologyId = makeSimpleTopology('webgpu-stroke-only-topology');
 
-    expect(() => renderer.render({
-      frame: {
-        version: 2,
-        ops: [{
-          kind: 'drawPathInstances',
-          geometry: {
-            topologyId,
-            points: new Float32Array([-1, -1, 1, -1, 1, 1, -1, 1]),
-            pointsCount: 4,
-            verbs: new Uint8Array([0, 1, 1, 1, 4]),
-            flags: 1,
-          },
-          instances: {
-            count: 1,
-            position: new Float32Array([0.5, 0.5]),
-            size: 0.25,
-            rotation: new Float32Array([0]),
-            scale2: new Float32Array([1, 1]),
-          },
-          style: {
-            strokeColor: new Uint8ClampedArray([255, 255, 0, 255]),
-            strokeWidth: 0.02,
-            fillRule: 'nonzero',
-          },
-        }],
-      },
-      width: 128,
-      height: 96,
-      zoom: 1,
-      panX: 0,
-      panY: 0,
-      timeMs: 0,
-    })).not.toThrow();
+    expect(() => renderer.render(makeRenderInput([
+      makeDrawOp(topologyId, {
+        style: {
+          strokeColor: new Uint8ClampedArray([255, 255, 0, 255]),
+          strokeWidth: 0.02,
+          fillRule: 'nonzero',
+        },
+      }),
+    ]))).not.toThrow();
 
     expect(env.renderPass.drawIndexedIndirect).toHaveBeenCalledTimes(1);
   });
@@ -618,48 +481,18 @@ describe('WebGPURenderer', () => {
     const renderer = await createWebGPURenderer(env.canvas);
     env.device.queue.writeBuffer.mockClear();
     env.device.createBindGroup.mockClear();
-    const topologyId = registerDynamicTopology({
-      params: [],
-      verbs: [PathVerb.MOVE, PathVerb.LINE, PathVerb.LINE, PathVerb.LINE, PathVerb.CLOSE],
-      pointsPerVerb: [1, 1, 1, 1, 0],
-      totalControlPoints: 4,
-      closed: true,
-    }, 'webgpu-fill-stroke-topology');
+    const topologyId = makeSimpleTopology('webgpu-fill-stroke-topology');
 
-    renderer.render({
-      frame: {
-        version: 2,
-        ops: [{
-          kind: 'drawPathInstances',
-          geometry: {
-            topologyId,
-            points: new Float32Array([-1, -1, 1, -1, 1, 1, -1, 1]),
-            pointsCount: 4,
-            verbs: new Uint8Array([0, 1, 1, 1, 4]),
-            flags: 1,
-          },
-          instances: {
-            count: 1,
-            position: new Float32Array([0.5, 0.5]),
-            size: 0.25,
-            rotation: new Float32Array([0]),
-            scale2: new Float32Array([1, 1]),
-          },
-          style: {
-            fillColor: new Uint8ClampedArray([255, 0, 0, 255]),
-            strokeColor: new Uint8ClampedArray([0, 255, 255, 255]),
-            strokeWidth: 0.02,
-            fillRule: 'nonzero',
-          },
-        }],
-      },
-      width: 128,
-      height: 96,
-      zoom: 1,
-      panX: 0,
-      panY: 0,
-      timeMs: 0,
-    });
+    renderer.render(makeRenderInput([
+      makeDrawOp(topologyId, {
+        style: {
+          fillColor: new Uint8ClampedArray([255, 0, 0, 255]),
+          strokeColor: new Uint8ClampedArray([0, 255, 255, 255]),
+          strokeWidth: 0.02,
+          fillRule: 'nonzero',
+        },
+      }),
+    ]));
 
     expect(env.renderPass.drawIndexedIndirect).toHaveBeenCalledTimes(2);
     const indirectOffsets = env.renderPass.drawIndexedIndirect.mock.calls.map((args: unknown[]) => args[1]);
@@ -684,48 +517,19 @@ describe('WebGPURenderer', () => {
     setNavigatorGpu(env.gpu);
     const renderer = await createWebGPURenderer(env.canvas);
     const instanceCount = 128;
-    const topologyId = registerDynamicTopology({
-      params: [],
-      verbs: [PathVerb.MOVE, PathVerb.LINE, PathVerb.LINE, PathVerb.LINE, PathVerb.CLOSE],
-      pointsPerVerb: [1, 1, 1, 1, 0],
-      totalControlPoints: 4,
-      closed: true,
-    }, 'webgpu-simulation-count-topology');
+    const topologyId = makeSimpleTopology('webgpu-simulation-count-topology');
 
-    renderer.render({
-      frame: {
-        version: 2,
-        ops: [{
-          kind: 'drawPathInstances',
-          geometry: {
-            topologyId,
-            points: new Float32Array([-1, -1, 1, -1, 1, 1, -1, 1]),
-            pointsCount: 4,
-            verbs: new Uint8Array([0, 1, 1, 1, 4]),
-            flags: 1,
-          },
-          instances: {
-            count: instanceCount,
-            position: new Float32Array(instanceCount * 2),
-            size: 0.25,
-            rotation: new Float32Array(instanceCount),
-            scale2: new Float32Array(instanceCount * 2).fill(1),
-          },
-          style: {
-            fillColor: new Uint8ClampedArray([255, 0, 0, 255]),
-            strokeColor: new Uint8ClampedArray([0, 255, 255, 255]),
-            strokeWidth: 0.02,
-            fillRule: 'nonzero',
-          },
-        }],
-      },
-      width: 128,
-      height: 96,
-      zoom: 1,
-      panX: 0,
-      panY: 0,
-      timeMs: 0,
-    });
+    renderer.render(makeRenderInput([
+      makeDrawOp(topologyId, {
+        count: instanceCount,
+        style: {
+          fillColor: new Uint8ClampedArray([255, 0, 0, 255]),
+          strokeColor: new Uint8ClampedArray([0, 255, 255, 255]),
+          strokeWidth: 0.02,
+          fillRule: 'nonzero',
+        },
+      }),
+    ]));
 
     // First compute dispatch is simulation pass (draw-prep dispatches are fixed-size 1).
     expect(env.computePass.dispatchWorkgroups.mock.calls[0]?.[0]).toBe(2);
@@ -735,53 +539,16 @@ describe('WebGPURenderer', () => {
     const env = createFakeWebGPUEnvironment();
     setNavigatorGpu(env.gpu);
     const renderer = await createWebGPURenderer(env.canvas);
-    const topologyId = registerDynamicTopology({
-      params: [],
-      verbs: [PathVerb.MOVE, PathVerb.LINE, PathVerb.LINE, PathVerb.LINE, PathVerb.CLOSE],
-      pointsPerVerb: [1, 1, 1, 1, 0],
-      totalControlPoints: 4,
-      closed: true,
-    }, 'webgpu-draw-prep-bindgroup-reuse-topology');
-
-    const renderInput = {
-      frame: {
-        version: 2 as const,
-        ops: [{
-          kind: 'drawPathInstances' as const,
-          geometry: {
-            topologyId,
-            points: new Float32Array([-1, -1, 1, -1, 1, 1, -1, 1]),
-            pointsCount: 4,
-            verbs: new Uint8Array([0, 1, 1, 1, 4]),
-            flags: 1,
-          },
-          instances: {
-            count: 1,
-            position: new Float32Array([0.5, 0.5]),
-            size: 0.25,
-            rotation: new Float32Array([0]),
-            scale2: new Float32Array([1, 1]),
-          },
-          style: {
-            fillColor: new Uint8ClampedArray([255, 0, 0, 255]),
-            fillRule: 'nonzero' as const,
-          },
-        }],
-      },
-      width: 128,
-      height: 96,
-      zoom: 1,
-      panX: 0,
-      panY: 0,
-    };
+    const topologyId = makeSimpleTopology('webgpu-draw-prep-bindgroup-reuse-topology');
+    const op = makeDrawOp(topologyId);
 
     env.device.createBindGroup.mockClear();
-    renderer.render({ ...renderInput, timeMs: 0 });
+    renderer.render(makeRenderInput([op], { timeMs: 0 }));
     const firstFrameDrawPrepBindGroups = collectDrawPrepBindGroupCalls(env.device.createBindGroup);
     expect(firstFrameDrawPrepBindGroups).toHaveLength(1);
 
     env.device.createBindGroup.mockClear();
-    renderer.render({ ...renderInput, timeMs: 16 });
+    renderer.render(makeRenderInput([op], { timeMs: 16 }));
     const secondFrameDrawPrepBindGroups = collectDrawPrepBindGroupCalls(env.device.createBindGroup);
     expect(secondFrameDrawPrepBindGroups).toHaveLength(0);
   });
@@ -790,47 +557,20 @@ describe('WebGPURenderer', () => {
     const env = createFakeWebGPUEnvironment();
     setNavigatorGpu(env.gpu);
     const renderer = await createWebGPURenderer(env.canvas);
-    const topologyId = registerDynamicTopology({
-      params: [],
-      verbs: [PathVerb.MOVE, PathVerb.LINE, PathVerb.LINE, PathVerb.LINE, PathVerb.CLOSE],
-      pointsPerVerb: [1, 1, 1, 1, 0],
-      totalControlPoints: 4,
-      closed: true,
-    }, 'webgpu-stroke-width-array-topology');
+    const topologyId = makeSimpleTopology('webgpu-stroke-width-array-topology');
 
-    renderer.render({
-      frame: {
-        version: 2,
-        ops: [{
-          kind: 'drawPathInstances',
-          geometry: {
-            topologyId,
-            points: new Float32Array([-1, -1, 1, -1, 1, 1, -1, 1]),
-            pointsCount: 4,
-            verbs: new Uint8Array([0, 1, 1, 1, 4]),
-            flags: 1,
-          },
-          instances: {
-            count: 2,
-            position: new Float32Array([0.4, 0.5, 0.6, 0.5]),
-            size: new Float32Array([0.2, 0.2]),
-            rotation: new Float32Array([0, 0]),
-            scale2: new Float32Array([1, 1, 1, 1]),
-          },
-          style: {
-            strokeColor: new Uint8ClampedArray([255, 255, 255, 255]),
-            strokeWidth: new Float32Array([0.01, 0.02]),
-            fillRule: 'nonzero',
-          },
-        }],
-      },
-      width: 128,
-      height: 96,
-      zoom: 1,
-      panX: 0,
-      panY: 0,
-      timeMs: 0,
-    });
+    renderer.render(makeRenderInput([
+      makeDrawOp(topologyId, {
+        count: 2,
+        position: new Float32Array([0.4, 0.5, 0.6, 0.5]),
+        size: new Float32Array([0.2, 0.2]),
+        style: {
+          strokeColor: new Uint8ClampedArray([255, 255, 255, 255]),
+          strokeWidth: new Float32Array([0.01, 0.02]),
+          fillRule: 'nonzero',
+        },
+      }),
+    ]));
 
     expect(env.renderPass.drawIndexedIndirect).toHaveBeenCalledTimes(1);
   });
@@ -839,46 +579,13 @@ describe('WebGPURenderer', () => {
     const env = createFakeWebGPUEnvironment();
     setNavigatorGpu(env.gpu);
     const renderer = await createWebGPURenderer(env.canvas);
-    const topologyId = registerDynamicTopology({
-      params: [],
-      verbs: [PathVerb.MOVE, PathVerb.LINE, PathVerb.LINE, PathVerb.LINE, PathVerb.CLOSE],
-      pointsPerVerb: [1, 1, 1, 1, 0],
-      totalControlPoints: 4,
-      closed: true,
-    }, 'webgpu-non-finite-transform-topology');
+    const topologyId = makeSimpleTopology('webgpu-non-finite-transform-topology');
 
-    expect(() => renderer.render({
-      frame: {
-        version: 2,
-        ops: [{
-          kind: 'drawPathInstances',
-          geometry: {
-            topologyId,
-            points: new Float32Array([-1, -1, 1, -1, 1, 1, -1, 1]),
-            pointsCount: 4,
-            verbs: new Uint8Array([0, 1, 1, 1, 4]),
-            flags: 1,
-          },
-          instances: {
-            count: 1,
-            position: new Float32Array([Number.NaN, 0.5]),
-            size: 0.25,
-            rotation: new Float32Array([0]),
-            scale2: new Float32Array([1, 1]),
-          },
-          style: {
-            fillColor: new Uint8ClampedArray([255, 0, 0, 255]),
-            fillRule: 'nonzero',
-          },
-        }],
-      },
-      width: 128,
-      height: 96,
-      zoom: 1,
-      panX: 0,
-      panY: 0,
-      timeMs: 0,
-    })).toThrow('contains non-finite transform values');
+    expect(() =>
+      renderer.render(makeRenderInput([
+        makeDrawOp(topologyId, { position: new Float32Array([Number.NaN, 0.5]) }),
+      ]))
+    ).toThrow('contains non-finite transform values');
 
     expect(env.renderPass.drawIndexedIndirect).not.toHaveBeenCalled();
   });
@@ -887,46 +594,13 @@ describe('WebGPURenderer', () => {
     const env = createFakeWebGPUEnvironment();
     setNavigatorGpu(env.gpu);
     const renderer = await createWebGPURenderer(env.canvas);
-    const topologyId = registerDynamicTopology({
-      params: [],
-      verbs: [PathVerb.MOVE, PathVerb.LINE, PathVerb.LINE, PathVerb.LINE, PathVerb.CLOSE],
-      pointsPerVerb: [1, 1, 1, 1, 0],
-      totalControlPoints: 4,
-      closed: true,
-    }, 'webgpu-non-finite-size-topology');
+    const topologyId = makeSimpleTopology('webgpu-non-finite-size-topology');
 
-    expect(() => renderer.render({
-      frame: {
-        version: 2,
-        ops: [{
-          kind: 'drawPathInstances',
-          geometry: {
-            topologyId,
-            points: new Float32Array([-1, -1, 1, -1, 1, 1, -1, 1]),
-            pointsCount: 4,
-            verbs: new Uint8Array([0, 1, 1, 1, 4]),
-            flags: 1,
-          },
-          instances: {
-            count: 1,
-            position: new Float32Array([0.5, 0.5]),
-            size: Number.POSITIVE_INFINITY,
-            rotation: new Float32Array([0]),
-            scale2: new Float32Array([1, 1]),
-          },
-          style: {
-            fillColor: new Uint8ClampedArray([255, 0, 0, 255]),
-            fillRule: 'nonzero',
-          },
-        }],
-      },
-      width: 128,
-      height: 96,
-      zoom: 1,
-      panX: 0,
-      panY: 0,
-      timeMs: 0,
-    })).toThrow('size must be finite when provided as a number');
+    expect(() =>
+      renderer.render(makeRenderInput([
+        makeDrawOp(topologyId, { size: Number.POSITIVE_INFINITY }),
+      ]))
+    ).toThrow('size must be finite when provided as a number');
 
     expect(env.renderPass.drawIndexedIndirect).not.toHaveBeenCalled();
   });
@@ -954,16 +628,7 @@ describe('WebGPURenderer', () => {
       '}',
     ].join('\n');
 
-    renderer.render({
-      frame: { version: 2, ops: [] },
-      width: 128,
-      height: 96,
-      zoom: 1,
-      panX: 0,
-      panY: 0,
-      timeMs: 0,
-      drawPrepShaderWgsl: customDrawPrepWgsl,
-    });
+    renderer.render(makeRenderInput([], { drawPrepShaderWgsl: customDrawPrepWgsl }));
 
     const usedCustomShader = env.device.createShaderModule.mock.calls.some((call: unknown[]) => {
       const descriptor = call[0] as { code?: string };
@@ -977,37 +642,8 @@ describe('WebGPURenderer', () => {
     setNavigatorGpu(env.gpu);
     const renderer = await createWebGPURenderer(env.canvas);
 
-    expect(() => renderer.render({
-      frame: {
-        version: 2,
-        ops: [{
-          kind: 'drawPathInstances',
-          geometry: {
-            topologyId: 999_999,
-            points: new Float32Array([-1, -1, 1, -1, 1, 1, -1, 1]),
-            pointsCount: 4,
-            verbs: new Uint8Array([0, 1, 1, 1, 4]),
-            flags: 1,
-          },
-          instances: {
-            count: 1,
-            position: new Float32Array([0.5, 0.5]),
-            size: 0.25,
-            rotation: new Float32Array([0]),
-            scale2: new Float32Array([1, 1]),
-          },
-          style: {
-            fillColor: new Uint8ClampedArray([255, 0, 0, 255]),
-            fillRule: 'nonzero',
-          },
-        }],
-      },
-      width: 128,
-      height: 96,
-      zoom: 1,
-      panX: 0,
-      panY: 0,
-      timeMs: 0,
-    })).toThrow('missing from topology bank');
+    expect(() =>
+      renderer.render(makeRenderInput([makeDrawOp(999_999)]))
+    ).toThrow('missing from topology bank');
   });
 });
