@@ -835,6 +835,102 @@ describe('WebGPURenderer', () => {
     expect(env.renderPass.drawIndexedIndirect).toHaveBeenCalledTimes(1);
   });
 
+  it('rejects non-finite per-instance transform payloads', async () => {
+    const env = createFakeWebGPUEnvironment();
+    setNavigatorGpu(env.gpu);
+    const renderer = await createWebGPURenderer(env.canvas);
+    const topologyId = registerDynamicTopology({
+      params: [],
+      verbs: [PathVerb.MOVE, PathVerb.LINE, PathVerb.LINE, PathVerb.LINE, PathVerb.CLOSE],
+      pointsPerVerb: [1, 1, 1, 1, 0],
+      totalControlPoints: 4,
+      closed: true,
+    }, 'webgpu-non-finite-transform-topology');
+
+    expect(() => renderer.render({
+      frame: {
+        version: 2,
+        ops: [{
+          kind: 'drawPathInstances',
+          geometry: {
+            topologyId,
+            points: new Float32Array([-1, -1, 1, -1, 1, 1, -1, 1]),
+            pointsCount: 4,
+            verbs: new Uint8Array([0, 1, 1, 1, 4]),
+            flags: 1,
+          },
+          instances: {
+            count: 1,
+            position: new Float32Array([Number.NaN, 0.5]),
+            size: 0.25,
+            rotation: new Float32Array([0]),
+            scale2: new Float32Array([1, 1]),
+          },
+          style: {
+            fillColor: new Uint8ClampedArray([255, 0, 0, 255]),
+            fillRule: 'nonzero',
+          },
+        }],
+      },
+      width: 128,
+      height: 96,
+      zoom: 1,
+      panX: 0,
+      panY: 0,
+      timeMs: 0,
+    })).toThrow('contains non-finite transform values');
+
+    expect(env.renderPass.drawIndexedIndirect).not.toHaveBeenCalled();
+  });
+
+  it('rejects non-finite numeric size payloads', async () => {
+    const env = createFakeWebGPUEnvironment();
+    setNavigatorGpu(env.gpu);
+    const renderer = await createWebGPURenderer(env.canvas);
+    const topologyId = registerDynamicTopology({
+      params: [],
+      verbs: [PathVerb.MOVE, PathVerb.LINE, PathVerb.LINE, PathVerb.LINE, PathVerb.CLOSE],
+      pointsPerVerb: [1, 1, 1, 1, 0],
+      totalControlPoints: 4,
+      closed: true,
+    }, 'webgpu-non-finite-size-topology');
+
+    expect(() => renderer.render({
+      frame: {
+        version: 2,
+        ops: [{
+          kind: 'drawPathInstances',
+          geometry: {
+            topologyId,
+            points: new Float32Array([-1, -1, 1, -1, 1, 1, -1, 1]),
+            pointsCount: 4,
+            verbs: new Uint8Array([0, 1, 1, 1, 4]),
+            flags: 1,
+          },
+          instances: {
+            count: 1,
+            position: new Float32Array([0.5, 0.5]),
+            size: Number.POSITIVE_INFINITY,
+            rotation: new Float32Array([0]),
+            scale2: new Float32Array([1, 1]),
+          },
+          style: {
+            fillColor: new Uint8ClampedArray([255, 0, 0, 255]),
+            fillRule: 'nonzero',
+          },
+        }],
+      },
+      width: 128,
+      height: 96,
+      zoom: 1,
+      panX: 0,
+      panY: 0,
+      timeMs: 0,
+    })).toThrow('size must be finite when provided as a number');
+
+    expect(env.renderPass.drawIndexedIndirect).not.toHaveBeenCalled();
+  });
+
   it('rebuilds draw-prep pipeline from compiler-provided WGSL when supplied', async () => {
     const env = createFakeWebGPUEnvironment();
     setNavigatorGpu(env.gpu);
