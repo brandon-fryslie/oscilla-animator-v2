@@ -215,7 +215,11 @@ export function resolveTime(
   timeState: TimeState
 ): EffectiveTime {
   // Calculate delta time
-  const dt = timeState.prevTAbsMs !== null ? tAbsMs - timeState.prevTAbsMs : 0;
+  const rawDt = timeState.prevTAbsMs !== null ? tAbsMs - timeState.prevTAbsMs : 0;
+  // [LAW:dataflow-not-control-flow] Resolve time channels every frame; when
+  // absolute timestamps move backward, clamp dt to 0 as data instead of branching
+  // the execution pipeline.
+  const dt = Math.max(0, rawDt);
   timeState.prevTAbsMs = tAbsMs;
 
   // Enforce monotonicity (I1): tMs never decreases

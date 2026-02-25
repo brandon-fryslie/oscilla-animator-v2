@@ -209,6 +209,20 @@ describe('reconcilePhaseOffsets', () => {
     expect(phase2).toBeCloseTo(phase1, 10);
   });
 
+  it('clamps dt to zero when absolute time goes backward', () => {
+    const timeState = createTimeState();
+    const model: TimeModel = { kind: 'infinite', periodAMs: 4000, periodBMs: 8000 };
+
+    const first = resolveTime(1000, model, timeState);
+    const rewound = resolveTime(900, model, timeState);
+
+    expect(first.dt).toBe(0);
+    expect(rewound.dt).toBe(0);
+    expect(rewound.tMs).toBe(1000);
+    expect(rewound.phaseA).toBeCloseTo(first.phaseA, 10);
+    expect(rewound.phaseB).toBeCloseTo(first.phaseB, 10);
+  });
+
   it('hours-scale simulation keeps phase channels bounded and finite under period hot-swaps', () => {
     const timeState = createTimeState();
     const models: TimeModel[] = [
