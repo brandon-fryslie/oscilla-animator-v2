@@ -1,206 +1,171 @@
-This is the comprehensive technical specification for **The Developer Experience & Migration Strategy: The Phased Rollout**.
+This is the comprehensive technical specification for **The Developer Experience & Migration Strategy: Post-Cutover Fix-Forward Execution**.
 
-This document defines the tactical execution plan for replacing a running engine while it is still flying. It rejects the "Big Bang Rewrite" (which usually kills startups) in favor of the **"Ship of Theseus"** approach—replacing the system plank by plank until the old ship is gone, without the user ever noticing a broken build.
+# The Developer Experience: Post-Cutover Rollout
 
-# The Developer Experience: The Phased Rollout
+**Objective:** Execute WebGPU migration completion work on top of a WebGPU-only engine.
 
-**Objective:** Migrate from v2 (Legacy JS/Canvas) to v3 (WebGPU/WASM) with zero downtime.
+**Current State:** WebGPU is already the active runtime path on `master`.
 
-**Invariant:** The main branch must always be deployable. At no point is the application left in a broken "Work in Progress" state.
+**Release Context:** Product is unreleased; no production customers depend on legacy behavior.
 
-**Mechanism:** A robust **Feature Flag System** and a **Parallel Execution Runtime** (The "Ghost Engine").
+**Core Policy:** No backward compatibility layers, no dual-runtime operation, no runtime fallback toggles.
 
-## Phase 1: The "Ghost" Engine (Parallel Validation)
+// [LAW:one-source-of-truth] WebGPU runtime and compiler outputs are the only authoritative execution path.
+// [LAW:single-enforcer] Runtime capability and execution invariants are enforced at one boundary, not duplicated across fallback paths.
+// [LAW:dataflow-not-control-flow] Frame loop and compiler stages run in fixed order; variability is expressed in data, not mode switches.
 
-Before we trust the GPU to drive the visuals, we make it run in the background, invisible to the user but visible to the developer.
+## 1. Strategic Shift from Legacy Migration to Fix-Forward
 
-### 1.1 The Architecture
+The prior staged migration model (legacy v2 + ghost v3 + feature flags + rollback toggles) is obsolete for this repository state.
 
-The application initializes **two** runtimes simultaneously.
+### 1.1 What is removed
 
-1.  **The Incumbent (v2):** Controls the DOM, handles Inputs, renders to the visible Canvas.
+1. Parallel v2/v3 runtime execution.
+2. CPU-render fallback modes (Canvas2D/SVG) for migration safety.
+3. Runtime feature flags that switch engine ownership.
+4. Graph-wide fallback for unported blocks.
+5. Canary-style rollback guidance based on deployed customer impact.
 
-2.  **The Ghost (v3):** Initializes WebGPU, loads Naga, allocates the Arena.
+### 1.2 What replaces it
 
-### 1.2 The "Shadow Graph"
+1. Single WebGPU runtime contract.
+2. Fix-forward bug handling: patch master, add invariant tests, continue forward.
+3. Strict compile-time/runtime validation over runtime mode switching.
+4. Aggressive deletion of dead migration seams.
 
-When the user edits the graph:
+// [LAW:no-mode-explosion] Migration flags are removed because they create non-canonical execution permutations.
+// [LAW:verifiable-goals] Every rollout step below includes deterministic acceptance criteria.
 
-- The UI emits a NormalizedGraph JSON.
+## 2. Non-Negotiable Migration Invariants
 
-- **v2 Compiler:** Compiles it to JavaScript closures (Legacy).
+1. **One engine path:** Runtime executes only WebGPU orchestration.
+2. **No compatibility shims:** New work must not preserve legacy executor semantics unless required by current canonical spec.
+3. **No hidden fallback:** Errors fail fast with explicit diagnostics.
+4. **Fix-forward only:** Defects are corrected in place with test coverage; no feature-toggle retreat strategy.
+5. **Canonical docs:** Architecture and rollout docs must match current code reality.
 
-- **v3 Compiler:** Compiles it to Naga IR \$\to\$ WGSL (New).
+// [LAW:no-silent-fallbacks] Fail explicitly; do not silently route to older render/runtime paths.
+// [LAW:one-way-deps] Compiler/runtime boundaries remain directional; renderer does not own compiler truth.
 
-- **Execution:** Both engines run the frame loop.
+## 3. Phased Execution Plan (WebGPU-Only)
 
-  - v2: Draws to screen.
+Phases remain useful for sequencing work, but they are no longer migration-between-engines phases. They are completion phases on one engine.
 
-  - v3: Computes state, writes to offscreen buffers.
+### Phase A: Canonicalization & Dead-Seam Removal
 
-### 1.3 The Comparator (The Test)
+**Goal:** Eliminate remaining references to migration-era assumptions.
 
-We use the **Async Readback** system here for validation, not visualization.
+1. Remove legacy terminology and stale docs that imply dual runtime ownership.
+2. Keep or add forbidden-pattern tests preventing reintroduction of Canvas2D/SVG runtime dependencies.
+3. Ensure startup contract is explicit: WebGPU required, fail fast when unavailable.
 
-- **Target:** Select a simple LFO node (Sine Wave).
+**Acceptance:**
+1. `pnpm vitest run src/__tests__/forbidden-patterns.test.ts`
+2. `pnpm run typecheck`
 
-- **Action:** Every 60 frames, read the value from v2 (CPU) and v3 (GPU).
+### Phase B: Compiler/Runtime Contract Completion
 
-- **Assert:** abs(v2_val - v3_val) \< EPSILON.
+**Goal:** Complete v3 pipeline ownership by compiler-generated artifacts.
 
-- **Failure:** If they drift, the v3 compiler logic is wrong (or the f32 phase logic is different). We fix v3. The user sees nothing but a perfect v2 render.
+1. Finish compiler-generated draw-prep integration as the authoritative indirect-args writer.
+2. Ensure runtime loop remains canonical and deterministic.
+3. Keep state update policies centralized and test-enforced.
 
-## Phase 2: The "Brain Transplant" (Scalar Takeover)
+**Acceptance:**
+1. `pnpm vitest run src/compiler/__tests__/steel-thread-dual-topology.test.ts`
+2. `pnpm vitest run src/render/webgpu/__tests__/WebGPURenderer.test.ts`
+3. `pnpm vitest run src/services/__tests__/AnimationLoop.test.ts src/runtime/__tests__/executeFrameStepped.test.ts`
 
-Once the Ghost Engine is mathematically proven to match the Incumbent, we start moving the "Brain" (Scalar Logic) to the GPU.
+### Phase C: Continuity & Observability Hardening
 
-### 2.1 The Hybrid Dependency
+**Goal:** Preserve edit/hot-swap continuity and non-blocking debug visibility without altering canonical render ownership.
 
-We introduce a **Data Bridge** (Readback \$\to\$ CPU).
+1. Implement continuity gauge-offset subsystem in canonical arena/state boundaries.
+2. Implement spy compute async readback as observability seam (not render dependency).
+3. Expand invariant tests to prevent hidden CPU hot-path regressions.
 
-- **The Change:** We update the v2 LFO block to stop calculating Math.sin(). Instead, it returns Runtime.latestReadback\[NodeID\].
+**Acceptance:**
+1. `pnpm vitest run src/runtime/__tests__/continuity-integration.test.ts src/runtime/__tests__/phase-continuity-offset.test.ts`
+2. `pnpm vitest run src/runtime/__tests__/StepDebugSession.test.ts src/ui/debug-viz/ValueRenderer.test.ts`
+3. `pnpm vitest run src/__tests__/forbidden-patterns.test.ts`
 
-- **The Flow:**
+### Phase D: Performance & Allocation Discipline
 
-  1.  **GPU (v3):** Calculates sin(t). Writes to Arena.
+**Goal:** Stabilize hot-path behavior under high instance counts on the canonical WebGPU path.
 
-  2.  **Readback:** Copies to CPU (3-frame latency).
+1. Finalize canonical packed instance layout ownership.
+2. Ensure no per-frame allocation except explicit growth events.
+3. Validate upload and command generation consistency under stress.
 
-  3.  **CPU (v2):** Reads the value, drives the legacy visualizer (e.g., moves a div).
+**Acceptance:**
+1. WebGPU renderer test suite passes.
+2. Bench/perf scripts (where present) show stable frame-time variance at high counts.
 
-### 2.2 The Latency Acceptance
+### Phase E: Integration Demo & Documentation Lock
 
-- **The Risk:** Controls will feel "mushy" (50ms lag).
+**Goal:** Ship an end-to-end steel-thread proof and align docs with shipped behavior.
 
-- **The Mitigation:** We accept this temporarily. It proves that the **Data Architecture** (SoA \$\to\$ Readback) works in production.
+1. Add/update a v3 demo patch that exercises compile -> compute -> draw-prep -> indirect render.
+2. Ensure docs describe only current canonical behavior.
+3. Close remaining migration-prep beads with linked acceptance evidence.
 
-- **Feature Flag:** ENABLE_GPU_SCALARS = true. If users complain about lag, we toggle it off instantly.
+**Acceptance:**
+1. `pnpm test -- integration`
+2. Targeted v3 suites pass as defined in open beads child tasks.
 
-## Phase 3: The "Muscle" Migration (Field Compute)
+## 4. Defect Handling Policy (Fix-Forward)
 
-This is the most painful phase. Performance will get *worse* before it gets better. We move the heavy geometry processing to the GPU, but we still render on the CPU.
+When a defect is discovered:
 
-### 3.1 The "Bottleneck" Architecture
+1. Reproduce with a deterministic test.
+2. Patch the canonical WebGPU path.
+3. Add/strengthen guardrails so regression is mechanically blocked.
+4. Land forward on master.
 
-1.  **GPU (v3):** Computes 10,000 particle positions (PhysicsKernel).
+Prohibited responses:
 
-2.  **Readback:** Copies **ALL** 10,000 positions to a CPU Float32Array.
+1. Reintroducing runtime fallback engines.
+2. Adding temporary dual-execution reconciliation layers.
+3. Shipping feature flags that split canonical engine ownership.
 
-    - *Warning:* This is heavy (\$120KB/frame\$). It might drop FPS to 30.
+// [LAW:single-enforcer] Bug fixes must reinforce one owning boundary per invariant.
+// [LAW:behavior-not-structure] Tests assert behavioral contracts, not preservation of migration-era structure.
 
-3.  **CPU (v2):** The Legacy Renderer (Canvas2D) iterates this array and draws circles.
+## 5. Block Porting Policy
 
-### 3.2 Why do this?
+The old "fallback entire graph to legacy" rule is retired.
 
-It validates the **Physics Engine**.
+New rule:
 
-- Does the Lag block work on 10k particles?
+1. All blocks must compile/execute on the canonical v3 path.
+2. Missing functionality is a compile-time diagnostic and a prioritized fix-forward task.
+3. No runtime graph-routing to deprecated engines.
 
-- Does the Noise field look correct?
+// [LAW:one-source-of-truth] There is one executable graph target: WebGPU pipeline artifacts.
 
-- Does the collision logic explode?\
-  We can debug these mathematical errors using the familiar Canvas2D visualizer before we introduce the complexity of the WebGPU Render Pipeline.
+## 6. Configuration Policy
 
-## Phase 4: The "Monitor Swap" (The Rubicon)
+Configuration may tune behavior (limits, debug cadence, buffer sizing), but may not introduce alternate engine modes.
 
-This is the moment of truth. We sever the Readback bridge and enable the WebGPU Renderer.
+Allowed:
 
-### 4.1 The Switch
+1. Debug observability cadence.
+2. Capacity and buffer growth thresholds.
+3. Test-only knobs guarded from production runtime paths.
 
-- **Action:** Enable ENABLE_WEBGPU_RENDERER = true.
+Disallowed:
 
-- **Visuals:**
+1. `USE_LEGACY_RENDERER`
+2. `USE_GPU_SCALARS`-style migration ownership toggles
+3. Any flag that changes which engine owns frame execution
 
-  - Hide the \<canvas id="legacy-2d"\>.
+// [LAW:no-mode-explosion] Configuration is constrained to parameter tuning, not architecture branching.
 
-  - Show the \<canvas id="webgpu"\>.
+## 7. Updated Summary
 
-- **Logic:**
+1. Migration is no longer "legacy to WebGPU"; it is now **WebGPU completion and hardening**.
+2. Execution is **single-path and fix-forward**.
+3. Backward compatibility is intentionally out of scope for unreleased software.
+4. Success is measured by deterministic tests, invariant gates, and elimination of legacy seams.
 
-  - Disable the massive Readback from Phase 3.
-
-  - Enable the **Indirect Command Buffer** and **Render Pass**.
-
-### 4.2 The Result
-
-- **Performance:** FPS jumps from ~30 (Phase 3) to ~144 (Native).
-
-- **User Perception:** "The app just got impossibly fast."
-
-- **Fallback:** If the WebGPU context crashes or looks wrong, we toggle the flag back to Phase 3 (or Phase 2). The Legacy Engine is still running in the background (or idling), ready to take over.
-
-## Phase 5: The "Extermination" (Cleanup)
-
-Once Phase 4 has been stable in production for 2 weeks (no major bug reports), we kill the Incumbent.
-
-### 5.1 The Code Purge
-
-1.  **Delete:** src/runtime/legacy/\* (The old JS executor).
-
-2.  **Delete:** src/blocks/legacy/\* (The JS implementations of blocks).
-
-3.  **Refactor:** The CompilerService no longer generates the "Shadow Graph." It only generates Naga IR.
-
-4.  **Simplify:** Remove the AsyncReadback bridge used for driving the CPU. Readback is now *only* used for UI visualization (Sparklines).
-
-### 5.2 The Artifact
-
-The bundle size drops significantly as we remove the duplicate engine logic. The app is now pure v3.
-
-## 6. The Feature Flag System
-
-To manage this, we need a strict config object available globally.
-
-TypeScript
-
-// config/FeatureFlags.ts\
-\
-export const Flags = {\
-// Phase 1: Boot the WASM engine but don't use it\
-BOOT_WASM_ENGINE: true,\
-\
-// Phase 2: Use GPU for Scalar math (LFOs)\
-USE_GPU_SCALARS: false,\
-\
-// Phase 3: Use GPU for Geometry, but draw with CPU (Slow!)\
-USE_GPU_PHYSICS_CPU_RENDER: false,\
-\
-// Phase 4: Full WebGPU (The End Goal)\
-USE_WEBGPU_RENDER: false,\
-};\
-\
-// The Migration Timeline:\
-// Week 1: BOOT_WASM_ENGINE = true\
-// Week 2: USE_GPU_SCALARS = true (Opt-in Beta)\
-// Week 4: USE_GPU_PHYSICS_CPU_RENDER = true (Internal Dev Only)\
-// Week 6: USE_WEBGPU_RENDER = true (Public Beta)
-
-## 7. Handling "Missing" Blocks
-
-During migration, not every block will be ported to Naga immediately.
-
-### 7.1 The "Hybrid Graph" Problem
-
-What if the user uses Sine (Ported) and SuperRareFilter (Not Ported)?
-
-### 7.2 The "CpuFallback" Node
-
-- **Strategy:** We cannot run a hybrid graph easily (GPU \$\to\$ CPU \$\to\$ GPU is too slow).
-
-- **Rule:** If a graph contains **ANY** un-ported blocks, the **Entire Graph** falls back to the Legacy Engine.
-
-- **UI:** Display a warning on the un-ported node: *"This block forces Legacy Mode (Low Performance). Porting coming soon."*
-
-- **Incentive:** This pushes users to bug you about porting specific blocks, prioritizing your roadmap based on actual demand.
-
-## 8. Summary of Strategy
-
-1.  **Do not rewrite from scratch.** Build the new engine as a "Ghost" inside the old one.
-
-2.  **Validate Data, then Visuals.** Prove the math is right (Readback) before you worry about pixels.
-
-3.  **Accept temporary regression.** Phase 3 will be slow. That is okay; it is a necessary bridge.
-
-4.  **Toggle, don't revert.** Use feature flags to switch engines instantly if a bug is found, rather than rolling back deployments.
-
-This strategy converts a terrifying architectural overhaul into a series of boring, verifiable checklists. It is the only professional way to upgrade a live instrument.
+This strategy optimizes for delivery velocity, architectural integrity, and long-term maintainability on the engine that will actually ship.
