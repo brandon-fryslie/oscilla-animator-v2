@@ -26,6 +26,7 @@
  */
 
 import type { LaneKernel } from '../KernelRegistry';
+import { hsvToRgba01 } from '../../utilities/color';
 
 /**
  * HSV to RGBA conversion kernel (lane kernel with stride 4)
@@ -36,39 +37,10 @@ export const hsvToRgb: LaneKernel = (
   args: number[]
 ): void => {
   const [h, s, v] = args;
-
-  // Wrap hue to [0, 1]
-  const hNorm = ((h % 1) + 1) % 1;
-
-  // Clamp saturation and value to [0, 1]
-  const sClamp = Math.max(0, Math.min(1, s));
-  const vClamp = Math.max(0, Math.min(1, v));
-
-  // HSV to RGB conversion
-  const c = vClamp * sClamp; // Chroma
-  const x = c * (1 - Math.abs(((hNorm * 6) % 2) - 1));
-  const m = vClamp - c;
-
-  let r1, g1, b1;
-  const h6 = hNorm * 6;
-
-  if (h6 < 1) {
-    [r1, g1, b1] = [c, x, 0];
-  } else if (h6 < 2) {
-    [r1, g1, b1] = [x, c, 0];
-  } else if (h6 < 3) {
-    [r1, g1, b1] = [0, c, x];
-  } else if (h6 < 4) {
-    [r1, g1, b1] = [0, x, c];
-  } else if (h6 < 5) {
-    [r1, g1, b1] = [x, 0, c];
-  } else {
-    [r1, g1, b1] = [c, 0, x];
-  }
-
-  // Write to output buffer (normalized to [0, 1])
-  out[outBase + 0] = r1 + m; // Red
-  out[outBase + 1] = g1 + m; // Green
-  out[outBase + 2] = b1 + m; // Blue
-  out[outBase + 3] = 1.0;     // Alpha (full opacity)
+  // [LAW:one-source-of-truth] HSV conversion math lives in utilities/color.
+  const [r, g, b, a] = hsvToRgba01(h, s, v);
+  out[outBase + 0] = r;
+  out[outBase + 1] = g;
+  out[outBase + 2] = b;
+  out[outBase + 3] = a;
 };

@@ -1,7 +1,7 @@
 /**
  * Pass 3: Time Model Pass
  *
- * Determines the time model (infinite) and generates time-derived channels.
+ * Determines the canonical time model and generates time-derived channels.
  */
 
 import type { Block } from '../../graph/Patch';
@@ -70,8 +70,7 @@ export function pass3Time(typedPatch: TypedPatch): TimeResolvedPatch {
  * Extract time model from TimeRoot block.
  *
  * Note: This reads from block params which are set by the block definition.
- * The time model kind is determined by the block type (InfiniteTimeRoot)
- * but parameters like duration come from block params.
+ * There is one canonical runtime time model; periods come from TimeRoot params.
  */
 function extractTimeModel(
   timeRoot: Block
@@ -80,11 +79,7 @@ function extractTimeModel(
   const periodAMs = typeof timeRoot.params.periodAMs === 'number' ? timeRoot.params.periodAMs : 1000;
   const periodBMs = typeof timeRoot.params.periodBMs === 'number' ? timeRoot.params.periodBMs : 2000;
 
-  return {
-    kind: 'infinite',
-    periodAMs,
-    periodBMs,
-  };
+  return { periodAMs, periodBMs };
 }
 
 /**
@@ -96,7 +91,6 @@ function generateTimeChannels(timeModel: TimeModelIR): TimeChannels {
   // All models have tModelMs - float scalar
   const tModelMs = builder.time('tMs', canonicalType(FLOAT));
 
-  // Infinite time model
   const phaseA = builder.time('phaseA', canonicalType(FLOAT, unitTurns(), undefined, contractWrap01()));
   const phaseB = builder.time('phaseB', canonicalType(FLOAT, unitTurns(), undefined, contractWrap01()));
   const dt = builder.time('dt', canonicalType(FLOAT));

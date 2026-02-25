@@ -58,7 +58,7 @@ export class IRBuilderImpl implements OrchestratorIRBuilder {
   private fieldSlots = new Map<number, ValueSlot>();
   private eventSlots = new Map<ValueExprId, EventSlotId>();
   private slotLayoutInputs = new Map<ValueSlot, { type: CanonicalType; stride: number }>();
-  private schedule: TimeModelIR = { kind: 'infinite', periodAMs: 10000, periodBMs: 10000 };
+  private schedule: TimeModelIR = { periodAMs: 10000, periodBMs: 10000 };
   private renderGlobals: CameraDeclIR[] = [];
   private _currentBlockId: BlockId | null = null;
   private _exprToBlock = new Map<ValueExprId, BlockId>();
