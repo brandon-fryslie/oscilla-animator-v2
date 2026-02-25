@@ -1,6 +1,6 @@
 This is the **Oscilla v3.0 Master Architecture Document**.
 
-It is the single source of truth for the migration to a WebGPU-native, WASM-validated, SoA-optimized visual instrument. It assumes no prior knowledge of the "old ways" other than what must be destroyed to build the new.
+It is the single source of truth for the WebGPU-native, WASM-validated, SoA-optimized visual instrument architecture and its fix-forward completion policy.
 
 # Oscilla v3.0: The "Moonshot" Specification
 
@@ -12,9 +12,9 @@ It is the single source of truth for the migration to a WebGPU-native, WASM-vali
 
 **Memory Model:** Structure of Arrays (SoA), Ping-Pong Storage, Indirect Draw.
 
-## Part I: The Pre-Flight Refactor (Phase 0)
+## Part I: The Canonical Baseline (Former Phase 0 Prerequisites)
 
-*Before writing a single line of shader code, the CPU runtime must be mathematically aligned with the GPU target. These are strict prerequisites.*
+*These invariants were the strict prerequisites for cutover and are now required baseline properties of `master`.*
 
 ### 1. The SoA Mandate (Structure of Arrays)
 
@@ -26,7 +26,7 @@ The current CPU memory layout (Array of Structures, e.g., x,y,z) must be eradica
 
 - **Alignment Rule:** Every channel block must be padded to 4-byte alignment (WebGPU f32 requirement).
 
-- **Verification:** The CPU runtime must successfully render the current application using this split-channel memory model before migration proceeds.
+- **Verification:** The runtime must continue rendering correctly with this split-channel memory model; regressions are prohibited.
 
 ### 2. The f32 Phase-Lock
 
@@ -204,13 +204,16 @@ The generated module is passed to the Naga WASM binary.
 
 - **Retrieval:** buffer.mapAsync() is called. When the promise resolves, the CPU reads the Float32 data and updates the React state for Sparklines and Inspection panels.
 
-## Part VI: The Developer Experience & Migration Strategy
+## Part VI: The Developer Experience & Post-Cutover Execution
 
-### 1. The "WASM Boot"
+### 1. WASM Boot and Startup Contract
 
 - **Loading:** The App Entry Point must immediately fetch naga.wasm.
 
 - **Blocking:** The Graph Editor does not initialize until the WASM is instantiated. A "System Booting..." splash screen is required.
+
+- **Runtime Contract:** WebGPU is required at runtime; startup must fail fast with explicit diagnostics rather than fallback engine routing.
+// [LAW:no-silent-fallbacks] Startup errors must be explicit and actionable.
 
 ### 2. Error Propagation
 
@@ -218,20 +221,24 @@ The generated module is passed to the Naga WASM binary.
 
 - **UI Feedback:** The previous valid pipeline remains active (no visual crash). The UI highlights the offending node with the specific error message from Naga.
 
-### 3. The Phased Rollout
+- **Defect Policy:** Fix forward on the canonical path: reproduce with deterministic tests, patch `master`, and strengthen invariant gates.
+// [LAW:single-enforcer] Defects are fixed in the one canonical runtime/compiler path, not by introducing alternate ownership paths.
 
-1.  **Refactor Phase:** Implement SoA and Numeric Handles on the CPU engine. Verify parity.
+### 3. Execution Sequencing (WebGPU-Only)
 
-2.  **Infrastructure Phase:** Set up the Naga WASM build pipeline and the Async Compiler Service shell.
+// [LAW:one-source-of-truth] Detailed rollout sequencing lives in `P5-3__Phased_Rollout__Engine_Migration_Strategy.md`; this section summarizes policy only.
+// [LAW:no-mode-explosion] Migration-era runtime mode toggles are out of scope for unreleased software.
 
-3.  **Scalar Phase:** Port all "Scalar" blocks (Math, LFOs) to WGSL generation. Run hybrid engine (GPU scalars, CPU fields).
+1. **Canonicalization:** Remove migration-era seams and stale assumptions.
+2. **Compiler/Runtime Completion:** Finish compiler-authored draw-prep ownership and deterministic frame-loop contracts.
+3. **Continuity/Observability Hardening:** Implement gauge-offset continuity and async spy readback without hot-path fallback coupling.
+4. **Performance Discipline:** Enforce no per-frame allocation except explicit growth events.
+5. **Integration Lock:** Keep docs, demos, and invariant tests aligned with shipped WebGPU behavior.
 
-4.  **Field Phase:** Port "Generator" and "Deformer" blocks. Switch to full GPU compute.
-
-5.  **Render Phase:** Implement the Indirect Draw buffer and kill the Canvas2D sink.
+**Prohibited:** Dual-runtime execution, graph-level legacy fallback, and engine-ownership feature flags.
 
 ## Final Architect's Note
 
 This architecture creates a **Hard Real-Time System** running inside a browser tab. By enforcing strict memory layouts (SoA) and validating logic via Rust (Naga), you eliminate the entire class of "JavaScript Jitter" bugs. The GPU becomes the metronome, and the CPU is merely the conductor.
 
-**Proceed with the CPU Refactor (Phase 0). That is your Rubicon.**
+**Proceed with fix-forward completion on the canonical WebGPU path.**
