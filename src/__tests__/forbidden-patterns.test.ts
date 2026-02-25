@@ -1481,6 +1481,29 @@ describe('Forbidden Patterns (Type System Invariants)', () => {
       ).toEqual([]);
     });
 
+    it('runtime state constructor must allocate explicit dual state banks in arena', () => {
+      const rawMatches = grepSrc('createArena\\(arenaTotalFloats \\+ stateSlotCount\\)', 'src/runtime/RuntimeState.ts');
+      const filtered = filterAllowlist(rawMatches, [/\.test\./, /__tests__/]);
+      expect(
+        filtered,
+        'RuntimeState must allocate explicit read/write state banks in arena (not single-bank stateSlotCount sizing).\n' +
+        'Found violations:\n' + filtered.join('\n')
+      ).toEqual([]);
+    });
+
+    it('frame executors must not write primitive state through read-bank alias', () => {
+      const rawMatches = [
+        ...grepSrc('state\\.state\\[[^\\]]+\\]\\s*=', 'src/runtime/ScheduleExecutor.ts'),
+        ...grepSrc('state\\.state\\[[^\\]]+\\]\\s*=', 'src/runtime/executeFrameStepped.ts'),
+      ];
+      const filtered = filterAllowlist(rawMatches, [/\.test\./, /__tests__/]);
+      expect(
+        filtered,
+        'Phase-2 primitive writes must target state.write bank and commit via bank swap, not mutate read-bank alias.\n' +
+        'Found violations:\n' + filtered.join('\n')
+      ).toEqual([]);
+    });
+
     it('scalar extract evaluator must not fall back to offset-only arena maps', () => {
       const rawMatches = grepSrc('scalarExprToArenaOffset', 'src/runtime/ValueExprScalarEvaluator.ts');
       const filtered = filterAllowlist(rawMatches, [/\.test\./, /__tests__/]);
