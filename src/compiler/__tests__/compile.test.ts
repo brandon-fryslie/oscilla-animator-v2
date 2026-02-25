@@ -365,6 +365,75 @@ describe('TimeModel', () => {
     }
   });
 
+  it('emits stage-2 template annotations and concrete arena addressing constants', () => {
+    const patch = buildPatch((b) => {
+      b.addBlock('InfiniteTimeRoot');
+
+      const ellipse = b.addBlock('Ellipse');
+      const array = b.addBlock('Array');
+      b.setPortDefault(array, 'count', 6);
+      b.wire(ellipse, 'shape', array, 'element');
+
+      const grid = b.addBlock('GridLayoutUV');
+      b.setPortDefault(grid, 'rows', 2);
+      b.setPortDefault(grid, 'cols', 3);
+      b.wire(array, 'elements', grid, 'elements');
+
+      const color = b.addBlock('Const');
+      b.setConfig(color, 'value', { r: 0.2, g: 0.7, b: 1, a: 1 });
+      const render = b.addBlock('RenderInstances2D');
+      b.wire(grid, 'position', render, 'pos');
+      b.wire(color, 'out', render, 'color');
+    });
+
+    const result = compile(patch);
+    expect(result.kind).toBe('ok');
+    if (result.kind !== 'ok') return;
+
+    const wgsl = result.program.generatedComputeProgram?.wgsl ?? '';
+    expect(wgsl).toContain('template=');
+    expect(wgsl).toContain('OFFSET_SLOT_');
+    expect(wgsl).toContain('LANE_STRIDE_SLOT_');
+    expect(wgsl).toContain('COMPONENT_STRIDE_SLOT_');
+    expect(wgsl).toContain('fn slot_index(');
+  });
+
+  it('emits state bridge reads and writes for stateful blocks in generated compute WGSL', () => {
+    const patch = buildPatch((b) => {
+      const time = b.addBlock('InfiniteTimeRoot');
+      const delay = b.addBlock('UnitDelay');
+      b.wire(time, 'phaseA', delay, 'in');
+
+      const ellipse = b.addBlock('Ellipse');
+      const array = b.addBlock('Array');
+      b.setPortDefault(array, 'count', 4);
+      b.wire(ellipse, 'shape', array, 'element');
+
+      const grid = b.addBlock('GridLayoutUV');
+      b.setPortDefault(grid, 'rows', 2);
+      b.setPortDefault(grid, 'cols', 2);
+      b.wire(array, 'elements', grid, 'elements');
+
+      const color = b.addBlock('Const');
+      b.setConfig(color, 'value', { r: 1, g: 0.4, b: 0.2, a: 1 });
+      const render = b.addBlock('RenderInstances2D');
+      b.wire(grid, 'position', render, 'pos');
+      b.wire(color, 'out', render, 'color');
+      b.wire(delay, 'out', render, 'scale');
+    });
+
+    const result = compile(patch);
+    expect(result.kind).toBe('ok');
+    if (result.kind !== 'ok') return;
+
+    const wgsl = result.program.generatedComputeProgram?.wgsl ?? '';
+    expect(wgsl).toContain('var<storage, read> state_in: array<f32>;');
+    expect(wgsl).toContain('var<storage, read_write> state_out: array<f32>;');
+    expect(wgsl).toContain('state-read stateKey=');
+    expect(wgsl).toContain('template=state.write');
+    expect(wgsl).toContain('STATE_SLOT_');
+  });
+
   it('scalar write steps execute before render steps', () => {
     const patch = buildPatch((b) => {
       b.addBlock('InfiniteTimeRoot');
