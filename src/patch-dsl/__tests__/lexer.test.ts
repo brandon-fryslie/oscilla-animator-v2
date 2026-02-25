@@ -207,6 +207,11 @@ describe('lexer', () => {
     expect(() => tokenize(input)).toThrow('Template interpolation/directives are not supported');
   });
 
+  it('throws on heredoc delimiter containing a dash', () => {
+    const input = ['value = <<MY-EOF', 'hello', 'MY-EOF'].join('\n');
+    expect(() => tokenize(input)).toThrow('Expected newline after heredoc delimiter');
+  });
+
   it('handles complex HCL', () => {
     const input = `
 patch "Test" {

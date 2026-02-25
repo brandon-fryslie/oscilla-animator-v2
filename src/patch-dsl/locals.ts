@@ -29,6 +29,7 @@ export function expandTopLevelLocals(document: HclDocument): ExpandLocalsResult 
     if (block.type === 'locals') {
       if (reachedNonLocalsBlock) {
         errors.push(new PatchDslError('locals blocks must appear at the top of the file', block.pos));
+        continue; // hard reject: do not collect or substitute a misplaced locals block
       }
       collectLocals(block, locals, errors);
       continue;

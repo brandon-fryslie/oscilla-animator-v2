@@ -78,6 +78,8 @@ function emitStringValue(value: string): string {
     .replace(/\n/g, '\\n')
     .replace(/\r/g, '\\r')
     .replace(/\t/g, '\\t')
-    .replace(/"/g, '\\"');
+    .replace(/"/g, '\\"')
+    // Escape remaining C0 control characters (U+0000–U+001F)
+    .replace(/[\x00-\x1F]/g, (ch) => `\\u${ch.charCodeAt(0).toString(16).padStart(4, '0')}`);
   return `"${escaped}"`;
 }
