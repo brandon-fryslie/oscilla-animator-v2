@@ -28,6 +28,7 @@ import {
   createRuntimeStateFromSession,
   migrateState,
   createInitialState,
+  prepareStateWriteBank,
   reconcilePhaseOffsets,
   type SessionState,
 } from '../runtime';
@@ -381,6 +382,9 @@ export async function compileAndSwap(
     const initialState = createInitialState(newStateSlotCount, newStateMappings);
     state.currentState.state.set(initialState);
   }
+  // [LAW:one-source-of-truth] Keep read/write state banks synchronized at
+  // compile boundary so first post-swap frame has deterministic bank ownership.
+  prepareStateWriteBank(state.currentState);
 
   // Reconcile phase offsets when time model periods change (hot-swap continuity)
   if (!isInitial && state.currentProgram?.schedule) {
