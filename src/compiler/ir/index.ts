@@ -11,8 +11,6 @@ export * from './patches';
 // Schedule types - re-export selectively to avoid conflicts with types.ts
 export type {
   TimeModelIR,
-  TimeModelFinite,
-  TimeModelInfinite,
 } from './schedule';
 
 // Lowering types - value references and types for compiler passes

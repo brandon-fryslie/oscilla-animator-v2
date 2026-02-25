@@ -10,9 +10,12 @@
  * Algorithm: Standard HSL→RGB per CSS Color Level 3 spec.
  */
 
+import { wrapToPhase01 } from '../utilities/phase';
+
 function hue2rgb(p: number, q: number, t: number): number {
-  // Wrap t to [0,1)
-  t = ((t % 1) + 1) % 1;
+  // [LAW:one-source-of-truth] Phase wrapping for hue interpolation is shared
+  // through utilities/phase, not reimplemented here.
+  t = wrapToPhase01(t);
   if (t < 1 / 6) return p + (q - p) * 6 * t;
   if (t < 1 / 2) return q;
   if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;

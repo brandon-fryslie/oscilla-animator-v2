@@ -1,5 +1,5 @@
 import type { StateMapping } from '../compiler/ir/types';
-import { wrapPhase } from './timeResolution';
+import { wrapToPhase01 } from '../utilities/phase';
 
 function resolveStateKind(mapping: StateMapping | undefined): string {
   if (!mapping?.stateId) {
@@ -20,5 +20,5 @@ export function shouldWrapPhaseState(mapping: StateMapping | undefined): boolean
 export function applyStateWritePolicy(mapping: StateMapping | undefined, value: number): number {
   // [LAW:single-enforcer] Runtime state writes are normalized through one policy
   // boundary so phase-wrap invariants do not depend on individual block lowerings.
-  return shouldWrapPhaseState(mapping) ? wrapPhase(value) : value;
+  return shouldWrapPhaseState(mapping) ? wrapToPhase01(value) : value;
 }

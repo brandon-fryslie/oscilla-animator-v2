@@ -23,7 +23,6 @@ import { SCALAR_INSTANCE_ID, type InstanceId } from '../ir/Indices';
 import type { ValueExpr, ValueExprId } from '../ir/value-expr';
 import type { UnlinkedIRFragments } from './lower-blocks';
 import type { AcyclicOrLegalGraph } from '../ir/patches';
-import type { TimeModelIR } from '../ir/schedule';
 import type { ContinuityPipelineIR } from './continuity-pipeline';
 import { requireInst } from '../../core/canonical-types';
 import type { InstanceDecl } from '../ir/types';
@@ -438,8 +437,7 @@ export function pass7Schedule(
   validated: AcyclicOrLegalGraph,
   continuityPipeline: ContinuityPipelineIR
 ): ScheduleIR {
-  // Convert TimeModelIR to TimeModel
-  const timeModel: TimeModel = convertTimeModel(validated.timeModel);
+  const timeModel: TimeModel = validated.timeModel;
 
   // Get instances from IRBuilder
   const instances = unlinkedIR.builder.getInstances();
@@ -628,18 +626,4 @@ function valueExprDependsOnEvent(valueExprId: number, valueExprs: readonly Value
   }
 
   return check(valueExprId);
-}
-
-/**
- * Convert TimeModelIR to TimeModel for schedule.
- */
-function convertTimeModel(timeModelIR: TimeModelIR): TimeModel {
-  if (timeModelIR.kind === 'finite') {
-    return { kind: 'finite', durationMs: timeModelIR.durationMs };
-  }
-  return {
-    kind: 'infinite',
-    periodAMs: timeModelIR.periodAMs,
-    periodBMs: timeModelIR.periodBMs,
-  };
 }

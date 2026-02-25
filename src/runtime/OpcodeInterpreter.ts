@@ -80,6 +80,8 @@
  * ══════════════════════════════════════════════════════════════════════
  */
 
+import { wrapToPhase01 } from '../utilities/phase';
+
 // Module-level reducer functions (hoisted to avoid per-call closure allocation)
 function _reduceAdd(a: number, b: number): number { return a + b; }
 function _reduceMul(a: number, b: number): number { return a * b; }
@@ -159,7 +161,7 @@ function applyUnaryOp(op: string, x: number, got: number): number {
       // Used for field-level math where angles are already in radians
       return Math.tan(x);
     case 'wrap01':
-      return ((x % 1) + 1) % 1;
+      return wrapToPhase01(x);
     case 'floor':
       return Math.floor(x);
     case 'ceil':
