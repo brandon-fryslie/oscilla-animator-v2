@@ -114,7 +114,7 @@ export const RUNTIME_FRAME_SEGMENT_OWNERSHIP: Readonly<
     writes: ['events', 'eventScalars'],
   },
   'phase1-value-pre-event': {
-    reads: ['arena', 'state', 'eventScalars', 'externalChannels.snapshot'],
+    reads: ['arena', 'state.readBank', 'eventScalars', 'externalChannels.snapshot'],
     writes: ['arena', 'cache.scalarValueExprValues', 'cache.scalarValueExprStamps'],
   },
   'phase1-continuity-map': {
@@ -122,7 +122,7 @@ export const RUNTIME_FRAME_SEGMENT_OWNERSHIP: Readonly<
     writes: ['continuity.prevDomains', 'continuity.mappings', 'continuity.changedInstancesThisFrame'],
   },
   'phase1-value-after-map': {
-    reads: ['arena', 'state', 'eventScalars', 'externalChannels.snapshot'],
+    reads: ['arena', 'state.readBank', 'eventScalars', 'externalChannels.snapshot'],
     writes: ['arena', 'cache.scalarValueExprValues', 'cache.scalarValueExprStamps'],
   },
   'phase1-continuity-apply': {
@@ -134,7 +134,7 @@ export const RUNTIME_FRAME_SEGMENT_OWNERSHIP: Readonly<
     writes: ['eventScalars', 'events', 'eventWrapPredicate'],
   },
   'phase1-value-post-event': {
-    reads: ['arena', 'state', 'eventScalars', 'externalChannels.snapshot'],
+    reads: ['arena', 'state.readBank', 'eventScalars', 'externalChannels.snapshot'],
     writes: ['arena', 'cache.scalarValueExprValues', 'cache.scalarValueExprStamps'],
   },
   'phase1-render-collect': {
@@ -150,8 +150,8 @@ export const RUNTIME_FRAME_SEGMENT_OWNERSHIP: Readonly<
     writes: ['lastRenderFrame'],
   },
   'phase2-state-write': {
-    reads: ['arena', 'state mappings'],
-    writes: ['state'],
+    reads: ['arena', 'state.readBank', 'state mappings'],
+    writes: ['state.writeBank'],
   },
   'continuity-finalize': {
     reads: ['time'],
@@ -640,6 +640,12 @@ export interface ProgramState {
   stateArena: {
     readonly offset: number;
     readonly length: number;
+    /** Length of each state bank (read/write) in floats. */
+    readonly bankLength?: number;
+    /** Active read-bank offset in `arena` (for diagnostics/debug only). */
+    readOffset?: number;
+    /** Active write-bank offset in `arena` (for diagnostics/debug only). */
+    writeOffset?: number;
   };
 
   /** Frame cache (per-frame memoization) - cache owns frameId */
@@ -653,6 +659,9 @@ export interface ProgramState {
 
   /** Stateful primitive state (migrated via StableStateIds on hot-swap) */
   state: Float32Array;
+
+  /** Phase-2 state write target bank (committed via end-of-frame swap). */
+  stateWrite: Float32Array;
 
   /** Event scalar storage (0=not fired, 1=fired this tick). Cleared each frame. */
   eventScalars: Uint8Array;
@@ -699,6 +708,12 @@ export interface RuntimeState {
   stateArena: {
     readonly offset: number;
     readonly length: number;
+    /** Length of each state bank (read/write) in floats. */
+    readonly bankLength?: number;
+    /** Active read-bank offset in `arena` (for diagnostics/debug only). */
+    readOffset?: number;
+    /** Active write-bank offset in `arena` (for diagnostics/debug only). */
+    writeOffset?: number;
   };
 
   /** Frame cache (per-frame memoization) - cache owns frameId */
@@ -712,6 +727,9 @@ export interface RuntimeState {
 
   /** Stateful primitive state (migrated via StableStateIds on hot-swap) */
   state: Float32Array;
+
+  /** Phase-2 state write target bank (committed via end-of-frame swap). */
+  stateWrite?: Float32Array;
 
   /** Event scalar storage (0=not fired, 1=fired this tick). Cleared each frame. */
   eventScalars: Uint8Array;
@@ -786,17 +804,26 @@ export function createProgramState(
   // signatures converge on ValueExpr-driven sizing.
   void eventExprCount;
   const stateArenaOffset = arenaTotalFloats;
-  const arena = createArena(arenaTotalFloats + stateSlotCount);
-  const stateView = arena.subarray(stateArenaOffset, stateArenaOffset + stateSlotCount);
+  // [LAW:one-source-of-truth] Persistent primitive state ownership is explicit:
+  // one read bank + one write bank in a single arena segment.
+  const stateBankLength = stateSlotCount;
+  const readOffset = stateArenaOffset;
+  const writeOffset = stateArenaOffset + stateBankLength;
+  const arena = createArena(arenaTotalFloats + stateBankLength * 2);
+  const stateReadView = arena.subarray(readOffset, readOffset + stateBankLength);
+  const stateWriteView = arena.subarray(writeOffset, writeOffset + stateBankLength);
   return {
     values: createValueStore(shape2dSlotCount),
     lastRenderFrame: null,
     arena,
     // [LAW:one-source-of-truth] Persistent state ownership is anchored to one
-    // arena segment contract; `state` is a view over that canonical segment.
+    // arena segment contract with explicit read/write bank metadata.
     stateArena: {
       offset: stateArenaOffset,
-      length: stateSlotCount,
+      length: stateBankLength * 2,
+      bankLength: stateBankLength,
+      readOffset,
+      writeOffset,
     },
     cache: createFrameCache(valueExprCount),
     frameSemantics: {
@@ -804,7 +831,8 @@ export function createProgramState(
       segments: [],
     },
     time: null,
-    state: stateView,
+    state: stateReadView,
+    stateWrite: stateWriteView,
     eventScalars: new Uint8Array(eventSlotCount),
     eventWrapPredicate: new Uint8Array(valueExprCount),
     events: new Map(),
@@ -876,6 +904,7 @@ export function createRuntimeStateFromSession(
     frameSemantics: program.frameSemantics,
     time: program.time,
     state: program.state,
+    stateWrite: program.stateWrite,
     eventScalars: program.eventScalars,
     eventWrapPredicate: program.eventWrapPredicate,
     events: program.events,
@@ -887,6 +916,48 @@ export function createRuntimeStateFromSession(
     continuityConfig: session.continuityConfig,
     tap: session.tap,
   };
+}
+
+/**
+ * Prepare the state write bank for Phase 2.
+ *
+ * Copies the active read bank into the write bank so unchanged state slots
+ * preserve previous-frame values when not explicitly rewritten this frame.
+ */
+export function prepareStateWriteBank(state: RuntimeState): void {
+  const write = state.stateWrite ?? state.state;
+  if (write.length !== state.state.length) {
+    throw new Error(
+      'prepareStateWriteBank: read/write bank length mismatch (read=' +
+        state.state.length +
+        ', write=' +
+        write.length +
+        ')',
+    );
+  }
+  write.set(state.state);
+  if (!state.stateWrite) {
+    state.stateWrite = write;
+  }
+}
+
+/**
+ * Commit Phase-2 state writes by swapping read/write bank ownership.
+ */
+export function commitStateWriteBank(state: RuntimeState): void {
+  const write = state.stateWrite;
+  if (!write || write === state.state) {
+    return;
+  }
+  const previousRead = state.state;
+  state.state = write;
+  state.stateWrite = previousRead;
+  const readOffset = state.stateArena.readOffset;
+  const writeOffset = state.stateArena.writeOffset;
+  if (readOffset !== undefined && writeOffset !== undefined) {
+    state.stateArena.readOffset = writeOffset;
+    state.stateArena.writeOffset = readOffset;
+  }
 }
 
 /**

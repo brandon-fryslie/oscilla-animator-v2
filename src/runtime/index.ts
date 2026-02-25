@@ -26,6 +26,8 @@ export {
   createRuntimeStateFromSession,
   extractSessionState,
   createContinuityConfig,
+  prepareStateWriteBank,
+  commitStateWriteBank,
   advanceFrame,
 } from './RuntimeState';
 export {
