@@ -18,6 +18,8 @@ import {
   writeShape2D,
   beginRuntimeFrameSemantics,
   enterRuntimeFrameSegment,
+  prepareStateWriteBank,
+  commitStateWriteBank,
   type RuntimeFrameSegment,
 } from './RuntimeState';
 import {
@@ -538,6 +540,9 @@ export function executeFrame(
   // PHASE 2: Execute all stateWrite steps
   // This ensures state reads in Phase 1 saw previous frame's values
   enterRuntimeFrameSegment(state, 'phase2-state-write');
+  // [LAW:dataflow-not-control-flow] Phase 2 always prepares the write bank first;
+  // per-step variability is encoded in written values, not whether prep runs.
+  prepareStateWriteBank(state);
   for (const step of steps) {
     if (step.kind === 'stateWrite') {
       const mapping = stateSlotToMapping.get(step.stateSlot as number);
@@ -557,7 +562,7 @@ export function executeFrame(
       const baseSlot = step.stateSlot as number;
       for (let c = 0; c < stride; c++) {
         const fallback = mapping?.initial[c] ?? 0;
-        state.state[baseSlot + c] = applyStateWritePolicy(mapping, oneValue[c] ?? fallback);
+        state.stateWrite![baseSlot + c] = applyStateWritePolicy(mapping, oneValue[c] ?? fallback);
       }
     }
     if (step.kind === 'fieldStateWrite') {
@@ -591,14 +596,15 @@ export function executeFrame(
         const dstLaneBase = baseSlot + lane * mapping.stride;
         const srcLaneBase = lane * srcStride;
         for (let c = 0; c < copyStride; c++) {
-          state.state[dstLaneBase + c] = applyStateWritePolicy(mapping, src[srcLaneBase + c] ?? 0);
+          state.stateWrite![dstLaneBase + c] = applyStateWritePolicy(mapping, src[srcLaneBase + c] ?? 0);
         }
         for (let c = copyStride; c < mapping.stride; c++) {
-          state.state[dstLaneBase + c] = applyStateWritePolicy(mapping, mapping.initial[c] ?? 0);
+          state.stateWrite![dstLaneBase + c] = applyStateWritePolicy(mapping, mapping.initial[c] ?? 0);
         }
       }
     }
   }
+  commitStateWriteBank(state);
 
   // Reset scratch allocator after all materialized buffers have been consumed.
   MATERIALIZE_SCRATCH.reset();
