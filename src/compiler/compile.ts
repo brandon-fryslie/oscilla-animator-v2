@@ -1192,7 +1192,7 @@ function buildGeneratedComputeProgram(
         }
         emitTransfer(
           lines,
-          'arena_in',
+          'arena_out',
           'state_out',
           sourceConstants,
           stateConstants,
