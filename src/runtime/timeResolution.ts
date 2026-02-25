@@ -5,6 +5,8 @@
  */
 
 import type { TimeModel } from '../compiler/ir/types';
+import { wrapToPhase01 } from '../utilities/phase';
+import { hsvToRgba01 } from '../utilities/color';
 
 /**
  * EffectiveTime - Resolved time channels for a frame
@@ -28,7 +30,7 @@ export interface EffectiveTime {
   /** Pulse channel: 1.0 every frame (frame-tick trigger) */
   pulse: number;
 
-  /** Progress within finite time (0-1), only set for finite time roots */
+  /** Optional normalized progress channel (reserved for future runtime use) */
   progress?: number;
 
   /** Palette: phase-derived RGBA color as Float32Array(4) [r, g, b, a] */
@@ -76,14 +78,6 @@ export function createTimeState(): TimeState {
 }
 
 /**
- * Wrap phase to [0, 1)
- */
-export function wrapPhase(value: number): number {
-  const wrapped = value % 1.0;
-  return wrapped < 0 ? wrapped + 1.0 : wrapped;
-}
-
-/**
  * Reconcile phase offsets when time model periods change.
  * Adjusts offsetA/offsetB so effective phases remain continuous.
  * Called during hot-swap when the compiled schedule changes.
@@ -109,16 +103,15 @@ export function reconcilePhaseOffsets(
   monotonicTMs: number,
   timeState: TimeState
 ): void {
-  // Extract periods (default fallbacks for finite models which don't have these fields)
-  const oldPeriodA = oldTimeModel.kind === 'infinite' ? oldTimeModel.periodAMs : 4000;
-  const newPeriodA = newTimeModel.kind === 'infinite' ? newTimeModel.periodAMs : 4000;
-  const oldPeriodB = oldTimeModel.kind === 'infinite' ? oldTimeModel.periodBMs : 8000;
-  const newPeriodB = newTimeModel.kind === 'infinite' ? newTimeModel.periodBMs : 8000;
+  const oldPeriodA = oldTimeModel.periodAMs;
+  const newPeriodA = newTimeModel.periodAMs;
+  const oldPeriodB = oldTimeModel.periodBMs;
+  const newPeriodB = newTimeModel.periodBMs;
 
   // Reconcile A if period changed
   if (oldPeriodA !== newPeriodA && oldPeriodA > 0 && newPeriodA > 0) {
     const oldRaw = (monotonicTMs / oldPeriodA) % 1.0;
-    const oldEffective = wrapPhase(oldRaw + timeState.offsetA);
+    const oldEffective = wrapToPhase01(oldRaw + timeState.offsetA);
     const newRaw = (monotonicTMs / newPeriodA) % 1.0;
 
     // We need: wrap(newRaw + newOffset) = oldEffective
@@ -154,7 +147,7 @@ export function reconcilePhaseOffsets(
   // Reconcile B if period changed
   if (oldPeriodB !== newPeriodB && oldPeriodB > 0 && newPeriodB > 0) {
     const oldRaw = (monotonicTMs / oldPeriodB) % 1.0;
-    const oldEffective = wrapPhase(oldRaw + timeState.offsetB);
+    const oldEffective = wrapToPhase01(oldRaw + timeState.offsetB);
     const newRaw = (monotonicTMs / newPeriodB) % 1.0;
 
     let candidateOffset = oldEffective - newRaw;
@@ -181,32 +174,6 @@ export function reconcilePhaseOffsets(
 }
 
 /**
- * Convert HSV color to RGB.
- * All values are in [0, 1] range.
- * Returns Float32Array(4) in RGBA order [r, g, b, a].
- */
-function hsvToRgb(h: number, s: number, v: number): Float32Array {
-  const i = Math.floor(h * 6);
-  const f = h * 6 - i;
-  const p = v * (1 - s);
-  const q = v * (1 - f * s);
-  const t = v * (1 - (1 - f) * s);
-
-  let r: number, g: number, b: number;
-  switch (i % 6) {
-    case 0: r = v; g = t; b = p; break;
-    case 1: r = q; g = v; b = p; break;
-    case 2: r = p; g = v; b = t; break;
-    case 3: r = p; g = q; b = v; break;
-    case 4: r = t; g = p; b = v; break;
-    case 5: r = v; g = p; b = q; break;
-    default: r = 0; g = 0; b = 0;
-  }
-
-  return new Float32Array([r, g, b, 1.0]);
-}
-
-/**
  * Resolve effective time from absolute time and time model.
  */
 export function resolveTime(
@@ -215,23 +182,26 @@ export function resolveTime(
   timeState: TimeState
 ): EffectiveTime {
   // Calculate delta time
-  const dt = timeState.prevTAbsMs !== null ? tAbsMs - timeState.prevTAbsMs : 0;
+  const rawDt = timeState.prevTAbsMs !== null ? tAbsMs - timeState.prevTAbsMs : 0;
+  // [LAW:dataflow-not-control-flow] Resolve time channels every frame; when
+  // absolute timestamps move backward, clamp dt to 0 as data instead of branching
+  // the execution pipeline.
+  const dt = Math.max(0, rawDt);
   timeState.prevTAbsMs = tAbsMs;
 
   // Enforce monotonicity (I1): tMs never decreases
   const monotonicTMs = Math.max(tAbsMs, timeState.prevTMs ?? 0);
   timeState.prevTMs = monotonicTMs;
 
-  // Extract periods (default fallbacks for finite models which don't have these fields)
-  const periodAMs = timeModel.kind === 'infinite' ? timeModel.periodAMs : 4000;
-  const periodBMs = timeModel.kind === 'infinite' ? timeModel.periodBMs : 8000;
+  const periodAMs = timeModel.periodAMs;
+  const periodBMs = timeModel.periodBMs;
 
   // Compute phases
   const rawPhaseA = periodAMs > 0 ? (monotonicTMs / periodAMs) % 1.0 : 0;
-  const phaseA = wrapPhase(rawPhaseA + timeState.offsetA);
+  const phaseA = wrapToPhase01(rawPhaseA + timeState.offsetA);
 
   const rawPhaseB = periodBMs > 0 ? (monotonicTMs / periodBMs) % 1.0 : 0;
-  const phaseB = wrapPhase(rawPhaseB + timeState.offsetB);
+  const phaseB = wrapToPhase01(rawPhaseB + timeState.offsetB);
 
   // Wrap detection (kept for future use, but pulse now fires every frame)
   const wrapA = timeState.prevPhaseA !== null && phaseA < timeState.prevPhaseA - 0.5;
@@ -245,7 +215,7 @@ export function resolveTime(
   timeState.prevPhaseB = phaseB;
 
   // Compute palette: HSV(phaseA, 1.0, 0.5) -> RGB
-  const palette = hsvToRgb(phaseA, 1.0, 0.5);
+  const palette = Float32Array.from(hsvToRgba01(phaseA, 1.0, 0.5));
 
   // Compute energy: 0.5 + 0.5 * sin(phaseA * 2π)
   const energy = 0.5 + 0.5 * Math.sin(phaseA * 2 * Math.PI);

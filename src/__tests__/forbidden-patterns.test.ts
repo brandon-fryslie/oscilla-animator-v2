@@ -1332,13 +1332,13 @@ describe('Forbidden Patterns (Type System Invariants)', () => {
       // [LAW:one-source-of-truth] timeResolution is the canonical owner of
       // phase-domain bounds; both phase channels must be wrapped at this boundary.
       const rawMatches = [
-        ...grepSrc('const\\s+phaseA\\s*=\\s*wrapPhase\\(', 'src/runtime/timeResolution.ts'),
-        ...grepSrc('const\\s+phaseB\\s*=\\s*wrapPhase\\(', 'src/runtime/timeResolution.ts'),
+        ...grepSrc('const\\s+phaseA\\s*=\\s*wrapToPhase01\\(', 'src/runtime/timeResolution.ts'),
+        ...grepSrc('const\\s+phaseB\\s*=\\s*wrapToPhase01\\(', 'src/runtime/timeResolution.ts'),
       ];
       const filtered = filterAllowlist(rawMatches, [/\.test\./, /__tests__/]);
       expect(
         filtered.length,
-        'resolveTime must wrap both phaseA and phaseB via wrapPhase().'
+        'resolveTime must wrap both phaseA and phaseB via wrapToPhase01().'
       ).toBe(2);
     });
 
