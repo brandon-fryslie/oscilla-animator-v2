@@ -442,6 +442,8 @@ export class WebGPURenderer {
     this.ensureCanvasConfiguration(input.width, input.height);
     this.syncTopologyBank();
     this.writeSceneUniforms(input);
+    this.drawPrepRuntime.useShader(input.drawPrepShaderWgsl);
+    const drawPlan = this.buildDrawPlan(input.frame);
 
     const dtSeconds =
       this.lastFrameTimeMs === null
@@ -450,9 +452,7 @@ export class WebGPURenderer {
     this.lastFrameTimeMs = input.timeMs;
 
     const commandEncoder = this.device.createCommandEncoder();
-    this.computeRuntime.step(commandEncoder, 0, dtSeconds);
-    this.drawPrepRuntime.useShader(input.drawPrepShaderWgsl);
-    const drawPlan = this.buildDrawPlan(input.frame);
+    this.computeRuntime.step(commandEncoder, this.countSimulationInstances(drawPlan), dtSeconds);
     const totalInstances = this.countPlannedInstances(drawPlan);
     this.ensureInstanceCapacity(totalInstances);
     const packedInstances = this.packDrawPlanInstances(drawPlan);
@@ -677,6 +677,21 @@ export class WebGPURenderer {
   private countPlannedInstances(drawPlan: readonly PreparedDrawPathOp[]): number {
     let total = 0;
     for (const prepared of drawPlan) {
+      total += prepared.instanceCount;
+    }
+    return total;
+  }
+
+  private countSimulationInstances(drawPlan: readonly PreparedDrawPathOp[]): number {
+    let total = 0;
+    const seenOps = new Set<DrawPathInstancesOp>();
+    // [LAW:one-source-of-truth] Simulation cardinality is derived from unique
+    // draw ops, so fill/stroke pass expansion does not double-count instances.
+    for (const prepared of drawPlan) {
+      if (seenOps.has(prepared.op)) {
+        continue;
+      }
+      seenOps.add(prepared.op);
       total += prepared.instanceCount;
     }
     return total;
