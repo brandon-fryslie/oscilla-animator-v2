@@ -9,6 +9,7 @@ import type { Patch } from '../graph/Patch';
 import { tokenize } from './lexer';
 import { parse } from './parser';
 import { patchFromAst } from './patch-from-ast';
+import { expandTopLevelLocals } from './locals';
 import { PatchDslError, type PatchDslWarning } from './errors';
 
 /**
@@ -40,9 +41,12 @@ export function deserializePatchFromHCL(hcl: string): DeserializeResult {
     const tokens = tokenize(hcl);
     const parseResult = parse(tokens);
     errors.push(...parseResult.errors);
+    const localsResult = expandTopLevelLocals(parseResult.document);
+    errors.push(...localsResult.errors);
+    warnings.push(...localsResult.warnings);
 
     // Phase 2: AST → Patch
-    const result = patchFromAst(parseResult.document);
+    const result = patchFromAst(localsResult.document);
     errors.push(...result.errors);
     warnings.push(...result.warnings);
 

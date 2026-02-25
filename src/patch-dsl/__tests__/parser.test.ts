@@ -55,11 +55,52 @@ describe('parser', () => {
     expect(result.document.blocks[0].attributes.foo).toEqual({ kind: 'number', value: 42 });
   });
 
+  it('parses attributes (number with exponent)', () => {
+    const input = 'block "Test" { foo = 1.25e-3 }';
+    const result = parseHcl(input);
+    expect(result.errors).toHaveLength(0);
+    expect(result.document.blocks[0].attributes.foo).toEqual({ kind: 'number', value: 0.00125 });
+  });
+
   it('parses attributes (string)', () => {
     const input = 'block "Test" { name = "hello" }';
     const result = parseHcl(input);
     expect(result.errors).toHaveLength(0);
     expect(result.document.blocks[0].attributes.name).toEqual({ kind: 'string', value: 'hello' });
+  });
+
+  it('parses attributes (heredoc string)', () => {
+    const input = [
+      'block "Test" {',
+      '  name = <<EOF',
+      'hello',
+      'world',
+      'EOF',
+      '}',
+    ].join('\n');
+    const result = parseHcl(input);
+    expect(result.errors).toHaveLength(0);
+    expect(result.document.blocks[0].attributes.name).toEqual({
+      kind: 'string',
+      value: 'hello\nworld\n',
+    });
+  });
+
+  it('parses attributes (indented heredoc string)', () => {
+    const input = [
+      'block "Test" {',
+      '  name = <<-EOF',
+      '    alpha',
+      '      beta',
+      '  EOF',
+      '}',
+    ].join('\n');
+    const result = parseHcl(input);
+    expect(result.errors).toHaveLength(0);
+    expect(result.document.blocks[0].attributes.name).toEqual({
+      kind: 'string',
+      value: 'alpha\n  beta\n',
+    });
   });
 
   it('parses attributes (boolean)', () => {

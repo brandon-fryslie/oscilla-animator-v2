@@ -177,7 +177,12 @@ async function main() {
         ),
       );
     }
-    if (w12 && w12.static_scan?.forbidden_in_hot_path !== true) {
+    // [LAW:single-enforcer] Readiness gate is the single boundary that normalizes
+    // legacy `static_scan` and canonical `static_scans[]` evidence shapes.
+    const w12HotPathGuard =
+      w12?.static_scan?.forbidden_in_hot_path === true ||
+      asArray(w12?.static_scans).some((scan) => scan?.forbidden_in_hot_path === true);
+    if (w12 && !w12HotPathGuard) {
       gateBlockers.push(
         createBlocker(
           'G1',
