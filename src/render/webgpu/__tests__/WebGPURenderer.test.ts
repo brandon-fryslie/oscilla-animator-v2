@@ -535,6 +535,55 @@ describe('WebGPURenderer', () => {
     expect(env.computePass.dispatchWorkgroups.mock.calls[0]?.[0]).toBe(2);
   });
 
+  it('fails fast when simulation instance count exceeds contract capacity', async () => {
+    const env = createFakeWebGPUEnvironment();
+    setNavigatorGpu(env.gpu);
+    const renderer = await createWebGPURenderer(env.canvas);
+    const overflowCount = WEBGPU_RENDER_CONTRACT.simulationCapacity + 1;
+    const topologyId = registerDynamicTopology({
+      params: [],
+      verbs: [PathVerb.MOVE, PathVerb.LINE, PathVerb.LINE, PathVerb.LINE, PathVerb.CLOSE],
+      pointsPerVerb: [1, 1, 1, 1, 0],
+      totalControlPoints: 4,
+      closed: true,
+    }, 'webgpu-simulation-capacity-overflow-topology');
+
+    expect(() => renderer.render({
+      frame: {
+        version: 2,
+        ops: [{
+          kind: 'drawPathInstances',
+          geometry: {
+            topologyId,
+            points: new Float32Array([-1, -1, 1, -1, 1, 1, -1, 1]),
+            pointsCount: 4,
+            verbs: new Uint8Array([0, 1, 1, 1, 4]),
+            flags: 1,
+          },
+          instances: {
+            count: overflowCount,
+            position: new Float32Array(overflowCount * 2),
+            size: 0.25,
+            rotation: new Float32Array(overflowCount),
+            scale2: new Float32Array(overflowCount * 2).fill(1),
+          },
+          style: {
+            fillColor: new Uint8ClampedArray([255, 0, 0, 255]),
+            fillRule: 'nonzero',
+          },
+        }],
+      },
+      width: 128,
+      height: 96,
+      zoom: 1,
+      panX: 0,
+      panY: 0,
+      timeMs: 0,
+    })).toThrow(/simulation instance count .* exceeds capacity/i);
+
+    expect(env.computePass.dispatchWorkgroups).not.toHaveBeenCalled();
+  });
+
   it('reuses draw-prep bind group across frames when shader and indirect buffer are unchanged', async () => {
     const env = createFakeWebGPUEnvironment();
     setNavigatorGpu(env.gpu);

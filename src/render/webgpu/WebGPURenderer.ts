@@ -452,7 +452,9 @@ export class WebGPURenderer {
     this.lastFrameTimeMs = input.timeMs;
 
     const commandEncoder = this.device.createCommandEncoder();
-    this.computeRuntime.step(commandEncoder, this.countSimulationInstances(drawPlan), dtSeconds);
+    const simulationInstanceCount = this.countSimulationInstances(drawPlan);
+    this.assertSimulationCapacity(simulationInstanceCount);
+    this.computeRuntime.step(commandEncoder, simulationInstanceCount, dtSeconds);
     const totalInstances = this.countPlannedInstances(drawPlan);
     this.ensureInstanceCapacity(totalInstances);
     const packedInstances = this.packDrawPlanInstances(drawPlan);
@@ -697,6 +699,16 @@ export class WebGPURenderer {
       total += prepared.instanceCount;
     }
     return total;
+  }
+
+  private assertSimulationCapacity(activeCount: number): void {
+    // [LAW:no-silent-fallbacks] Simulation capacity overruns are explicit
+    // contract violations; fail fast instead of silently clipping active lanes.
+    if (activeCount > SIMULATION_CAPACITY) {
+      throw new Error(
+        `WebGPURenderer: simulation instance count ${activeCount} exceeds capacity ${SIMULATION_CAPACITY}`
+      );
+    }
   }
 
   private packDrawPlanInstances(drawPlan: readonly PreparedDrawPathOp[]): number {
