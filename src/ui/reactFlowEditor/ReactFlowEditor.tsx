@@ -247,11 +247,18 @@ const ReactFlowEditorInner: React.FC<ReactFlowEditorProps> = observer(({
       const blockType = event.dataTransfer.getData('application/oscilla-block-type');
       if (!blockType) return;
 
-      // Get drop position relative to the canvas
+      const flowPos = coreRef.current?.screenToFlowPosition({
+        x: event.clientX,
+        y: event.clientY,
+      });
       const bounds = event.currentTarget.getBoundingClientRect();
+      const fallbackPos = {
+        x: event.clientX - bounds.left,
+        y: event.clientY - bounds.top,
+      };
       const position = {
-        x: event.clientX - bounds.left - 75,
-        y: event.clientY - bounds.top - 30,
+        x: (flowPos?.x ?? fallbackPos.x) - 75,
+        y: (flowPos?.y ?? fallbackPos.y) - 30,
       };
 
       const blockId = adapter.addBlock(blockType, position);
