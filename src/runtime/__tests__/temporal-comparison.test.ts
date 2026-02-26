@@ -5,7 +5,7 @@
  * StepDebugSession, and that computeSlotDeltas produces correct deltas.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll } from 'vitest';
 import { compile } from '../../compiler/compile';
 import { buildPatch } from '../../graph/Patch';
 import { executeFrame } from '../ScheduleExecutor';
@@ -48,7 +48,7 @@ function compileSimplePatch(): CompiledProgramIR {
 
     b.wire(ellipse, 'shape', array, 'element');
     b.wire(array, 'elements', layout, 'elements');
-    b.wire(layout, 'position', render, 'pos');
+    b.wire(layout, 'controlPoints', render, 'controlPoints');
     b.wire(colorField, 'field', render, 'color');
   });
 
@@ -82,7 +82,7 @@ function compilePhasorPatch(): CompiledProgramIR {
     b.wire(phasor, 'out', layout, 'phase');
 
     const render = b.addBlock('RenderInstances2D');
-    b.wire(layout, 'position', render, 'pos');
+    b.wire(layout, 'controlPoints', render, 'controlPoints');
   });
 
   const result = compile(patch);
@@ -130,9 +130,18 @@ function extractScalarValues(snapshots: StepSnapshot[]): Map<ValueSlot, number> 
 }
 
 describe('Temporal Comparison (Cross-Frame Diff)', () => {
+  let simpleProgram: CompiledProgramIR;
+  let phasorProgram: CompiledProgramIR;
+
+  beforeAll(() => {
+    // [LAW:one-source-of-truth] Reuse canonical compiled fixtures; per-test runtime state remains isolated.
+    simpleProgram = compileSimplePatch();
+    phasorProgram = compilePhasorPatch();
+  });
+
   describe('executeFrameStepped previousFrameValues parameter', () => {
     it('snapshots have null previousFrameValues when no previous frame data is passed', () => {
-      const program = compileSimplePatch();
+      const program = simpleProgram;
       const state = createStateForProgram(program);
       const arena = getTestArena();
 
@@ -147,7 +156,7 @@ describe('Temporal Comparison (Cross-Frame Diff)', () => {
     });
 
     it('snapshots carry previousFrameValues when previous frame data is passed', () => {
-      const program = compileSimplePatch();
+      const program = simpleProgram;
       const state = createStateForProgram(program);
       const arena = getTestArena();
 
@@ -173,7 +182,7 @@ describe('Temporal Comparison (Cross-Frame Diff)', () => {
 
   describe('StepDebugSession cross-frame state', () => {
     it('lastFrameValues is null before any frame completes', () => {
-      const program = compileSimplePatch();
+      const program = simpleProgram;
       const state = createStateForProgram(program);
       const arena = getTestArena();
       const session = new StepDebugSession(program, state, arena);
@@ -182,7 +191,7 @@ describe('Temporal Comparison (Cross-Frame Diff)', () => {
     });
 
     it('lastFrameValues is populated after first frame completes via finishFrame', () => {
-      const program = compileSimplePatch();
+      const program = simpleProgram;
       const state = createStateForProgram(program);
       const arena = getTestArena();
       const session = new StepDebugSession(program, state, arena);
@@ -195,7 +204,7 @@ describe('Temporal Comparison (Cross-Frame Diff)', () => {
     });
 
     it('lastFrameValues is populated after frame completes via stepNext exhaustion', () => {
-      const program = compileSimplePatch();
+      const program = simpleProgram;
       const state = createStateForProgram(program);
       const arena = getTestArena();
       const session = new StepDebugSession(program, state, arena);
@@ -208,7 +217,7 @@ describe('Temporal Comparison (Cross-Frame Diff)', () => {
     });
 
     it('second frame snapshots carry previousFrameValues from first frame', () => {
-      const program = compileSimplePatch();
+      const program = simpleProgram;
       const state = createStateForProgram(program);
       const arena = getTestArena();
       const session = new StepDebugSession(program, state, arena);
@@ -233,7 +242,7 @@ describe('Temporal Comparison (Cross-Frame Diff)', () => {
     });
 
     it('lastFrameValues is populated after frame completes via runToBreakpoint', () => {
-      const program = compileSimplePatch();
+      const program = simpleProgram;
       const state = createStateForProgram(program);
       const arena = getTestArena();
       const session = new StepDebugSession(program, state, arena);
@@ -247,7 +256,7 @@ describe('Temporal Comparison (Cross-Frame Diff)', () => {
     });
 
     it('lastFrameValues persists across frame restarts', () => {
-      const program = compileSimplePatch();
+      const program = simpleProgram;
       const state = createStateForProgram(program);
       const arena = getTestArena();
       const session = new StepDebugSession(program, state, arena);
@@ -382,7 +391,7 @@ describe('Temporal Comparison (Cross-Frame Diff)', () => {
 
   describe('Integration: two frames with executeFrameStepped', () => {
     it('second frame gets previousFrameValues matching first frame slot values', () => {
-      const program = compileSimplePatch();
+      const program = simpleProgram;
       const state = createStateForProgram(program);
 
       // Frame 1 — no previous values
@@ -423,7 +432,7 @@ describe('Temporal Comparison (Cross-Frame Diff)', () => {
 
   describe('Long-horizon state stability', () => {
     it('keeps phasor accumulator bounded under executeFrame over long runs', () => {
-      const program = compilePhasorPatch();
+      const program = phasorProgram;
       const schedule = program.schedule as ScheduleIR;
       const phasorMapping = schedule.stateMappings.find((mapping) => mapping.stateId.endsWith(':phasor'));
       expect(phasorMapping).toBeDefined();
@@ -441,6 +450,40 @@ describe('Temporal Comparison (Cross-Frame Diff)', () => {
         expect(Number.isFinite(value)).toBe(true);
         expect(value).toBeGreaterThanOrEqual(0);
         expect(value).toBeLessThan(1);
+      }
+    });
+
+    it('keeps phasor state phase-locked after a 4-hour absolute-time fast-forward', () => {
+      const program = compilePhasorPatch();
+      const schedule = program.schedule as ScheduleIR;
+      const phasorMapping = schedule.stateMappings.find((mapping) => mapping.stateId.endsWith(':phasor'));
+      expect(phasorMapping).toBeDefined();
+      if (!phasorMapping) return;
+
+      const baselineState = createStateForProgram(program);
+      const offsetState = createStateForProgram(program);
+      const baselineArena = getTestArena();
+      const offsetArena = getTestArena();
+
+      // [LAW:verifiable-goals] Same dt sequence at T=0 and T=4h must produce
+      // equivalent wrapped phasor state, proving no absolute-time dependency.
+      const dtMs = 16;
+      const offsetMs = 14_400_000; // 4 hours
+      for (let frame = 0; frame < 100; frame++) {
+        const frameTime = (frame + 1) * dtMs;
+        baselineArena.reset();
+        offsetArena.reset();
+
+        executeFrame(program, baselineState, baselineArena, frameTime);
+        executeFrame(program, offsetState, offsetArena, offsetMs + frameTime);
+
+        const baseline = baselineState.state[phasorMapping.slotStart] ?? NaN;
+        const offset = offsetState.state[phasorMapping.slotStart] ?? NaN;
+        expect(Number.isFinite(baseline)).toBe(true);
+        expect(Number.isFinite(offset)).toBe(true);
+        expect(offset).toBeCloseTo(baseline, 7);
+        expect(offset).toBeGreaterThanOrEqual(0);
+        expect(offset).toBeLessThan(1);
       }
     });
   });

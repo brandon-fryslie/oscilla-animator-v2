@@ -49,7 +49,7 @@ patch "Neon Grid" {
     rows = 25
     cols = 25
     outputs {
-      position = render.pos
+      controlPoints = render.controlPoints
     }
   }
 

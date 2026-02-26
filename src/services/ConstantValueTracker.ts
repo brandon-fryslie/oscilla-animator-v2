@@ -84,21 +84,12 @@ function resolveDefaultValue(
   const inputDef = blockDef.inputs[inputPortId];
   if (!inputDef) return undefined;
 
-  const portDefault = block.inputPorts.get(inputPortId)?.defaultSource?.params?.value;
-  if (portDefault !== undefined) {
+  const paramDefault = (block.params as Record<string, unknown>)[inputPortId];
+  if (paramDefault !== undefined) {
     return {
-      value: portDefault,
+      value: paramDefault,
       reason: 'default-value',
-      description: `Default value from ${block.type}.${inputPortId}`,
-    };
-  }
-
-  const inputDefault = inputDef.defaultSource?.params?.value;
-  if (inputDefault !== undefined) {
-    return {
-      value: inputDefault,
-      reason: 'default-value',
-      description: `Registry default source value for ${block.type}.${inputPortId}`,
+      description: `Param value from ${block.type}.${inputPortId}`,
     };
   }
 

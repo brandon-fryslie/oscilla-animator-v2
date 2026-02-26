@@ -61,7 +61,7 @@ export interface ContinuityPipelineIR {
 interface RenderTargetInfo {
   renderBlockId: string;
   instanceId: InstanceId;
-  position: { id: ValueExprId; stride: number };
+  controlPoints: { id: ValueExprId; stride: number };
   color: { id: ValueExprId; stride: number };
   scale?:
     | { k: 'one'; id: ValueExprId }
@@ -214,7 +214,7 @@ function resolveShapeInfo(
  *
  * SHAPE LOOKUP (2026-02-04):
  * Shape is no longer extracted from a shape input port. Instead, it's looked up
- * from InstanceDecl.shapeField using the instanceId inferred from the position field.
+ * from InstanceDecl.shapeField using the instanceId inferred from the controlPoints field.
  */
 function collectRenderTargets(
   blocks: readonly Block[],
@@ -227,22 +227,22 @@ function collectRenderTargets(
   const renderBlocks = findRenderBlocks(blocks);
 
   for (const { block, index } of renderBlocks) {
-    const posRef = getInputRef(index, 'pos', edges, blockOutputs);
+    const controlPointsRef = getInputRef(index, 'controlPoints', edges, blockOutputs);
     const colorRef = getInputRef(index, 'color', edges, blockOutputs);
     const scaleRef = getInputRef(index, 'scale', edges, blockOutputs);
 
-    const pos = asExprValueRef(posRef);
+    const controlPoints = asExprValueRef(controlPointsRef);
     const color = asExprValueRef(colorRef);
     const scaleExpr = asExprValueRef(scaleRef);
 
-    if (!pos || !color) {
+    if (!controlPoints || !color) {
       continue;
     }
 
-    if (!isFieldExtent(pos.id, valueExprs)) continue;
+    if (!isFieldExtent(controlPoints.id, valueExprs)) continue;
     if (!isFieldExtent(color.id, valueExprs)) continue;
 
-    const instanceId = inferFieldInstanceFromExprs(pos.id, valueExprs);
+    const instanceId = inferFieldInstanceFromExprs(controlPoints.id, valueExprs);
     if (!instanceId) {
       continue;
     }
@@ -251,7 +251,7 @@ function collectRenderTargets(
     if (!instanceDecl) {
       throw new Error(
         `RenderInstances2D: Instance ${instanceId} not found in instances registry. ` +
-        `This indicates a compiler bug - instanceId was inferred from position field but instance doesn't exist.`
+        `This indicates a compiler bug - instanceId was inferred from controlPoints field but instance doesn't exist.`
       );
     }
 
@@ -287,7 +287,7 @@ function collectRenderTargets(
     targets.push({
       renderBlockId: block.id,
       instanceId,
-      position: { id: pos.id, stride: pos.stride },
+      controlPoints: { id: controlPoints.id, stride: controlPoints.stride },
       color: { id: color.id, stride: color.stride },
       scale,
       shape,
@@ -375,7 +375,7 @@ export function allocateContinuityPipeline(
   };
 
   for (const target of renderTargets) {
-    const { renderBlockId, instanceId, position, color, scale, shape } = target;
+    const { renderBlockId, instanceId, controlPoints, color, scale, shape } = target;
 
     // Helper to get or create slots for a field
     const getFieldSlots = (
@@ -435,8 +435,9 @@ export function allocateContinuityPipeline(
       return slots;
     };
 
-    // Process position (semantic: position)
-    const posSlots = getFieldSlots(position.id, 'position', position.stride, `${renderBlockId}:pos`);
+    // [LAW:one-source-of-truth] Render position continuity is keyed from RenderInstances2D.controlPoints.
+    // We preserve semantic='position' for continuity policy ownership.
+    const posSlots = getFieldSlots(controlPoints.id, 'position', controlPoints.stride, `${renderBlockId}:controlPoints`);
 
     // Process color (semantic: color)
     const colorSlots = getFieldSlots(color.id, 'color', color.stride, `${renderBlockId}:color`);
@@ -496,7 +497,7 @@ export function allocateContinuityPipeline(
     const renderStep: StepRender = {
       kind: 'render',
       instanceId,
-      positionSlot: posSlots.outputSlot,
+      controlPointsSlot: posSlots.outputSlot,
       colorSlot: colorSlots.outputSlot,
       ...(scaleOutput && { scale: scaleOutput }),
       shape: shapeOutput,

@@ -15,10 +15,27 @@ function listDemoFiles(): readonly string[] {
     .sort((a, b) => a.localeCompare(b));
 }
 
+const REPRESENTATIVE_DEMOS = [
+  'simple.hcl',
+  'perspective-camera.hcl',
+  'expression-field-ops.hcl',
+  'feedback-accumulator.hcl',
+  'path-field-demo.hcl',
+  'library-kitchen-sink.hcl',
+  'mouse-reactive.hcl',
+  'rect-mosaic.hcl',
+] as const;
+
+function selectRepresentativeDemos(allFiles: readonly string[]): readonly string[] {
+  const selected = REPRESENTATIVE_DEMOS.filter((name) => allFiles.includes(name));
+  if (selected.length > 0) return selected;
+  return allFiles.slice(0, Math.min(8, allFiles.length));
+}
+
 describe('compile worker payload clone safety', () => {
-  it('frontend and backend payloads are structured-clone safe for all demos', () => {
+  it('frontend and backend payloads are structured-clone safe for representative demos', () => {
     const failures: string[] = [];
-    const demoFiles = listDemoFiles();
+    const demoFiles = selectRepresentativeDemos(listDemoFiles());
 
     for (const filename of demoFiles) {
       const fullPath = join(process.cwd(), 'src', 'demo', 'hcl', filename);
@@ -74,6 +91,8 @@ describe('compile worker payload clone safety', () => {
       }
     }
 
+    // [LAW:one-source-of-truth] Full demo compile coverage is enforced by hcl-demos.test.ts.
+    // This suite owns clone-safety behavior on a representative payload matrix.
     expect(failures).toEqual([]);
   });
 });

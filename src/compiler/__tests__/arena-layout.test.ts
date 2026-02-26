@@ -175,7 +175,7 @@ describe('arenaLayout integration', () => {
       b.wire(colorSignal, 'out', colorField, 'one');
 
       const render = b.addBlock('RenderInstances2D');
-      b.wire(grid, 'position', render, 'pos');
+      b.wire(grid, 'controlPoints', render, 'controlPoints');
       b.wire(colorField, 'field', render, 'color');
     });
 
@@ -223,7 +223,7 @@ describe('arenaLayout integration', () => {
       b.wire(colorSignal, 'out', colorField, 'one');
 
       const render = b.addBlock('RenderInstances2D');
-      b.wire(grid, 'position', render, 'pos');
+      b.wire(grid, 'controlPoints', render, 'controlPoints');
       b.wire(colorField, 'field', render, 'color');
     });
 
@@ -241,10 +241,10 @@ describe('arenaLayout integration', () => {
         .filter((s): s is Extract<ScheduleIR['steps'][number], { kind: 'continuityApply' }> => s.kind === 'continuityApply')
         .map((s) => s.outputSlot),
     );
-    expect(continuityOutputSlots.has(renderStep.positionSlot)).toBe(true);
+    expect(continuityOutputSlots.has(renderStep.controlPointsSlot)).toBe(true);
     expect(continuityOutputSlots.has(renderStep.colorSlot)).toBe(true);
 
-    const positionDesc = result.program.runtimeAddressTable?.slotToArena.get(renderStep.positionSlot);
+    const positionDesc = result.program.runtimeAddressTable?.slotToArena.get(renderStep.controlPointsSlot);
     const colorDesc = result.program.runtimeAddressTable?.slotToArena.get(renderStep.colorSlot);
     expect(positionDesc?.packing).toBe('aos');
     expect(colorDesc?.packing).toBe('aos');

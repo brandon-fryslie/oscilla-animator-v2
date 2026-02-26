@@ -28,11 +28,9 @@ import type {
   DrawPrepSinkIR,
   GeneratedComputeProgramIR,
   ExprProvenanceIR,
-  ExprUserTarget,
 } from './ir/program';
 import type { ValueSlot } from './ir/Indices';
 import { SCALAR_INSTANCE_ID } from './ir/Indices';
-import type { BlockId } from '../types';
 import type { UnlinkedIRFragments } from './backend/lower-blocks';
 import type { ScheduleIR } from './backend/schedule-program';
 import type { AcyclicOrLegalGraph } from './ir/patches';
@@ -440,7 +438,7 @@ function convertLinkedIRToProgram(
   const continuitySlots = new Set<ValueSlot>();
   for (const step of scheduleIR.steps) {
     if (step.kind === 'render') {
-      renderSoaSlots.add(step.positionSlot);
+      renderSoaSlots.add(step.controlPointsSlot);
       renderSoaSlots.add(step.colorSlot);
       if (step.rotationSlot !== undefined) renderSoaSlots.add(step.rotationSlot);
       if (step.scale2Slot !== undefined) renderSoaSlots.add(step.scale2Slot);
@@ -580,23 +578,10 @@ function convertLinkedIRToProgram(
   }
 
   // Build expression provenance map
-  // Maps each ValueExprId to its source block + resolved user-facing target for derived blocks
+  // Maps each ValueExprId to its source block + output port.
   const exprProvenance = new Map<ValueExprId, ExprProvenanceIR>();
 
   if (exprToBlock.size > 0) {
-    // Reverse lookup: string block ID → block object (for role access)
-    const patchBlocks = acyclicPatch.blocks || [];
-    const stringIdToBlock = new Map<string, typeof patchBlocks[number]>();
-    for (const block of patchBlocks) {
-      stringIdToBlock.set(block.id, block);
-    }
-
-    // Reverse lookup: string block ID → numeric index (for blockMap-compatible IDs)
-    const stringIdToIndex = new Map<string, number>();
-    for (const [idx, strId] of blockMap.entries()) {
-      stringIdToIndex.set(strId, idx as number);
-    }
-
     // Map ValueExprId → portName via blockOutputs
     const exprIdToPortName = new Map<number, string>();
     if (unlinkedIR.blockOutputs) {
@@ -608,62 +593,12 @@ function convertLinkedIRToProgram(
     }
 
     for (const [exprId, blockStringId] of exprToBlock) {
-      const blockStr = blockStringId as unknown as string;
-      const block = stringIdToBlock.get(blockStr);
-      if (!block) continue;
-
       const portNameResult = exprIdToPortName.get(exprId as unknown as number);
       const portName = portNameResult !== undefined ? portNameResult : null;
-      let userTarget: ExprUserTarget | null = null;
-
-      if (block.role.kind === 'derived') {
-        const meta = block.role.meta;
-        switch (meta.kind) {
-          case 'defaultSource': {
-            const targetStr = meta.target.port.blockId as string;
-            const targetIdx = stringIdToIndex.get(targetStr);
-            if (targetIdx !== undefined) {
-              userTarget = {
-                kind: 'defaultSource',
-                targetBlockId: targetStr as BlockId,
-                targetPortName: meta.target.port.portId as string,
-              };
-            }
-            break;
-          }
-          case 'adapter':
-            userTarget = {
-              kind: 'adapter',
-              edgeId: meta.edgeId,
-              adapterType: meta.adapterType,
-            };
-            break;
-          case 'wireState':
-            userTarget = {
-              kind: 'wireState',
-              wireId: meta.target.wire as string,
-            };
-            break;
-          case 'lens':
-            userTarget = {
-              kind: 'lens',
-              nodeRef: JSON.stringify(meta.target.node),
-            };
-            break;
-          case 'compositeExpansion':
-            userTarget = {
-              kind: 'compositeExpansion',
-              compositeId: meta.compositeDefId,
-              internalBlockId: meta.internalBlockId,
-            };
-            break;
-        }
-      }
 
       exprProvenance.set(exprId, {
         blockId: blockStringId,
         portName,
-        userTarget,
       });
     }
   }
@@ -823,7 +758,7 @@ function collectComputeSlots(scheduleIR: ScheduleIR): ValueSlot[] {
         slots.add(step.outputSlot);
         break;
       case 'render':
-        slots.add(step.positionSlot);
+        slots.add(step.controlPointsSlot);
         slots.add(step.colorSlot);
         if (step.rotationSlot !== undefined) slots.add(step.rotationSlot);
         if (step.scale2Slot !== undefined) slots.add(step.scale2Slot);
@@ -985,7 +920,7 @@ function resolveExprSlot(
 
 function emitTransfer(
   lines: string[],
-  sourceBuffer: 'arena_in' | 'state_in',
+  sourceBuffer: 'arena_in' | 'arena_out' | 'state_in',
   targetBuffer: 'arena_out' | 'state_out',
   source: AddressingConstants,
   target: AddressingConstants,

@@ -47,7 +47,7 @@ function compileConnectedPatch(): { program: CompiledProgramIR; snapshot: Compil
 
     b.wire(ellipse, 'shape', array, 'element');
     b.wire(array, 'elements', layout, 'elements');
-    b.wire(layout, 'position', render, 'pos');
+    b.wire(layout, 'controlPoints', render, 'controlPoints');
     b.wire(colorField, 'field', render, 'color');
   });
 
@@ -95,7 +95,7 @@ function compileWithDisconnectedBlock(): {
 
     b.wire(ellipse, 'shape', array, 'element');
     b.wire(array, 'elements', layout, 'elements');
-    b.wire(layout, 'position', render, 'pos');
+    b.wire(layout, 'controlPoints', render, 'controlPoints');
     b.wire(colorField, 'field', render, 'color');
 
     // Add a disconnected Const block (not wired to anything)

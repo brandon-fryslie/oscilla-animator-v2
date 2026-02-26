@@ -31,7 +31,7 @@ describe('stateful storage planning', () => {
       b.wire(delay, 'out', makeShape, 'controlPoints');
       b.wire(makeShape, 'shape', array, 'element');
       b.wire(array, 'elements', layout, 'elements');
-      b.wire(layout, 'position', render, 'pos');
+      b.wire(layout, 'controlPoints', render, 'controlPoints');
     });
 
     const schedule = requireOk(compile(patch));

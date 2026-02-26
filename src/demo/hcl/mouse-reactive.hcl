@@ -102,7 +102,7 @@ patch "Mouse Reactive" {
   block "CircleLayoutUV" "ring" {
     radius = 0.25
     outputs {
-      position = render.pos
+      controlPoints = render.controlPoints
     }
   }
 

@@ -60,7 +60,7 @@ function buildToggleTestPatch() {
 
     b.wire(ellipse, 'shape', array, 'element');
     b.wire(array, 'elements', layout, 'elements');
-    b.wire(layout, 'position', render, 'pos');
+    b.wire(layout, 'controlPoints', render, 'controlPoints');
     b.wire(color, 'out', render, 'color');
     b.wire(ellipse, 'shape', render, 'shape');
   });
@@ -148,18 +148,6 @@ describe('Level 6 Unit Tests: ProjectionMode Type', () => {
     expect(result1.screenPosition.length).toBe(N * 2);
     expect(result2.screenPosition.length).toBe(N * 2);
     expect(result3.screenPosition.length).toBe(N * 2);
-  });
-});
-
-// =============================================================================
-// Integration Tests: State Preservation
-// =============================================================================
-
-describe('Level 6 Integration Tests: State Preservation Across Mode Toggle', () => {
-  // Tests removed during type system refactor
-  it('_placeholder_Toggle_back_to_ortho', () => {
-    // Test removed during type system refactor
-    expect(true).toBe(true);
   });
 });
 

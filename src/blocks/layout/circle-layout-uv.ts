@@ -5,8 +5,8 @@
    */
 
   import { registerBlock, ALL_CONCRETE_PAYLOADS } from '../registry';
-  import { canonicalType, unitWorld3, unitTurns, contractWrap01, payloadStride, floatConst, requireInst } from '../../core/canonical-types';
-  import { FLOAT, VEC2, VEC3 } from '../../core/canonical-types';
+  import { canonicalType, unitTurns, contractWrap01, payloadStride, floatConst, requireInst } from '../../core/canonical-types';
+  import { FLOAT, VEC2 } from '../../core/canonical-types';
   import { inferType, payloadVar, cardinalityVar } from '../../core/inference-types';
   import { cardinalityVarId } from '../../core/ids';
   import { defaultSourceConst } from '../../types';
@@ -24,7 +24,7 @@
    * CircleLayoutUV - Gauge-invariant circle layout using placement basis
    *
    * Stage 3: Field operation block.
-   * Takes Field<T> input and outputs Field<vec3> positions on a circle.
+   * Takes Field<T> input and outputs Field<vec2> control points on a circle.
    * Uses UV placement basis instead of normalizedIndex for gauge invariance.
    */
   export function register(): void {
@@ -48,7 +48,6 @@
           phase: { label: 'Phase', type: canonicalType(FLOAT, unitTurns(), undefined, contractWrap01()), defaultValue: 0, defaultSource: defaultSourceConst(0), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
         },
         outputs: {
-          position: { label: 'Position', type: inferType(VEC3, unitWorld3(), { cardinality: CIRCLE_FIELD_CARD }) },
           rotation: { label: 'Rotation', type: inferType(FLOAT, { kind: 'none' }, { cardinality: CIRCLE_FIELD_CARD }) },
           scale: { label: 'Scale', type: inferType(FLOAT, { kind: 'none' }, { cardinality: CIRCLE_FIELD_CARD }) },
           controlPoints: { label: 'Control Points', type: inferType(VEC2, { kind: 'none' }, { cardinality: CIRCLE_FIELD_CARD }) },
@@ -65,11 +64,12 @@
             throw new Error('CircleLayoutUV requires instance context from upstream Array block');
           }
     
-          // Rewrite output type with actual instance (ctx.outTypes has placeholder 'default')
-          const posType = rewriteFieldType(ctx.outTypes[0], instanceId, ctx.instances);
-          const floatFieldType = { ...posType, payload: FLOAT, unit: { kind: 'none' as const } };
-          const vec2FieldType = { ...posType, payload: { kind: 'vec2' as const }, unit: { kind: 'none' as const } };
-          const controlPointsType = rewriteFieldType(ctx.outTypes[3], instanceId, ctx.instances);
+          // [LAW:one-source-of-truth] Layout emits only controlPoints; rotation/scale derive from the same instance.
+          const rotationType = rewriteFieldType(ctx.outTypes[0], instanceId, ctx.instances);
+          const scaleType = rewriteFieldType(ctx.outTypes[1], instanceId, ctx.instances);
+          const controlPointsType = rewriteFieldType(ctx.outTypes[2], instanceId, ctx.instances);
+          const floatFieldType = rotationType;
+          const vec2FieldType = controlPointsType;
     
           // Post-normalization: all inputs guaranteed wired — no fallback needed
           // [LAW:one-source-of-truth] inputs are the single source; config was a dead fallback
@@ -125,8 +125,6 @@
           const x = ctx.b.zipAuto([x_scaled, const0_5], add, floatFieldType);
           const y = ctx.b.zipAuto([y_scaled, const0_5], add, floatFieldType);
     
-          // pos = constructAuto([x, y, 0]) → vec3 (auto-broadcasts const0 one value)
-          const positionField = ctx.b.constructAuto([x, y, const0], posType);
           const controlPointsField = ctx.b.constructAuto([x, y], controlPointsType);
     
           // rotation = angle (the circle angle per element, already computed)
@@ -135,16 +133,14 @@
     
           return {
             outputsById: {
-              position: { id: positionField, slot: undefined, type: posType, stride: payloadStride(posType.payload) },
-              rotation: { id: angle, slot: undefined, type: floatFieldType, stride: 1 },
-              scale: { id: scaleField, slot: undefined, type: floatFieldType, stride: 1 },
+              rotation: { id: angle, slot: undefined, type: rotationType, stride: 1 },
+              scale: { id: scaleField, slot: undefined, type: scaleType, stride: 1 },
               controlPoints: { id: controlPointsField, slot: undefined, type: controlPointsType, stride: payloadStride(controlPointsType.payload) },
             },
             effects: {
               slotRequests: [
-                { portId: 'position', type: posType },
-                { portId: 'rotation', type: floatFieldType },
-                { portId: 'scale', type: floatFieldType },
+                { portId: 'rotation', type: rotationType },
+                { portId: 'scale', type: scaleType },
                 { portId: 'controlPoints', type: controlPointsType },
               ],
             },

@@ -56,7 +56,7 @@ patch "Mouse Spiral" {
   block "CircleLayoutUV" "layout" {
     radius = 0.3
     outputs {
-      position = render.pos
+      controlPoints = render.controlPoints
     }
   }
 

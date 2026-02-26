@@ -206,7 +206,7 @@ describe('compile', () => {
 });
 
 describe('TimeModel', () => {
-  it('InfiniteTimeRoot sets infinite time model', () => {
+  it('InfiniteTimeRoot sets canonical time model periods', () => {
     const patch = buildPatch((b) => {
       b.addBlock('InfiniteTimeRoot');
     });
@@ -217,7 +217,8 @@ describe('TimeModel', () => {
     if (result.kind === 'ok') {
       // TimeModel is in schedule wrapper for now
       const schedule = result.program.schedule as ScheduleIR;
-      expect(schedule.timeModel.kind).toBe('infinite');
+      expect(schedule.timeModel.periodAMs).toBeGreaterThan(0);
+      expect(schedule.timeModel.periodBMs).toBeGreaterThan(0);
     }
   });
 });
@@ -282,7 +283,7 @@ describe('TimeModel', () => {
       b.setConfig(scale, 'value', 0.8);
 
       const render = b.addBlock('RenderInstances2D');
-      b.wire(grid, 'position', render, 'pos');
+      b.wire(grid, 'controlPoints', render, 'controlPoints');
       b.wire(color, 'out', render, 'color');
       b.wire(scale, 'out', render, 'scale');
     });
@@ -335,7 +336,7 @@ describe('TimeModel', () => {
       const color = b.addBlock('Const');
       b.setConfig(color, 'value', { r: 1, g: 0.5, b: 0.2, a: 1 });
       const render = b.addBlock('RenderInstances2D');
-      b.wire(grid, 'position', render, 'pos');
+      b.wire(grid, 'controlPoints', render, 'controlPoints');
       b.wire(color, 'out', render, 'color');
       b.wire(osc, 'out', render, 'scale');
     });
@@ -382,7 +383,7 @@ describe('TimeModel', () => {
       const color = b.addBlock('Const');
       b.setConfig(color, 'value', { r: 0.2, g: 0.7, b: 1, a: 1 });
       const render = b.addBlock('RenderInstances2D');
-      b.wire(grid, 'position', render, 'pos');
+      b.wire(grid, 'controlPoints', render, 'controlPoints');
       b.wire(color, 'out', render, 'color');
     });
 
@@ -417,7 +418,7 @@ describe('TimeModel', () => {
       const color = b.addBlock('Const');
       b.setConfig(color, 'value', { r: 1, g: 0.4, b: 0.2, a: 1 });
       const render = b.addBlock('RenderInstances2D');
-      b.wire(grid, 'position', render, 'pos');
+      b.wire(grid, 'controlPoints', render, 'controlPoints');
       b.wire(color, 'out', render, 'color');
       b.wire(delay, 'out', render, 'scale');
     });
@@ -448,7 +449,7 @@ describe('TimeModel', () => {
       const color = b.addBlock('Const');
       b.setConfig(color, 'value', { r: 1, g: 0.5, b: 0.2, a: 1 });
       const render = b.addBlock('RenderInstances2D');
-      b.wire(grid, 'position', render, 'pos');
+      b.wire(grid, 'controlPoints', render, 'controlPoints');
       b.wire(color, 'out', render, 'color');
     });
 
@@ -491,7 +492,7 @@ describe('error isolation for unreachable blocks', () => {
       const color = b.addBlock('Const');
       b.setConfig(color, 'value', { r: 1, g: 0, b: 0, a: 1 });
       const render = b.addBlock('RenderInstances2D');
-      b.wire(grid, 'position', render, 'pos');
+      b.wire(grid, 'controlPoints', render, 'controlPoints');
       // Shape port removed - automatically looked up from instance
       b.wire(color, 'out', render, 'color');
 
@@ -525,7 +526,7 @@ describe('error isolation for unreachable blocks', () => {
       const color = b.addBlock('Const');
       b.setConfig(color, 'value', { r: 1, g: 0, b: 0, a: 1 });
       const render = b.addBlock('RenderInstances2D');
-      b.wire(grid, 'position', render, 'pos');
+      b.wire(grid, 'controlPoints', render, 'controlPoints');
       // Shape port removed - automatically looked up from instance
       b.wire(color, 'out', render, 'color');
 
@@ -564,7 +565,7 @@ describe('error isolation for unreachable blocks', () => {
       const color = b.addBlock('Const');
       b.setConfig(color, 'value', { r: 1, g: 0, b: 0, a: 1 });
       const render = b.addBlock('RenderInstances2D');
-      b.wire(grid, 'position', render, 'pos');
+      b.wire(grid, 'controlPoints', render, 'controlPoints');
       b.wire(color, 'out', render, 'color');
 
       // Expression block with a syntax error — wired to time but NOT to render
@@ -608,7 +609,7 @@ describe('error isolation for unreachable blocks', () => {
       b.wireCollect(time, 'tMs', expr, 'refs', 't');
 
       const render = b.addBlock('RenderInstances2D');
-      b.wire(gridLayout, 'position', render, 'pos');
+      b.wire(gridLayout, 'controlPoints', render, 'controlPoints');
       b.wire(ellipse, 'shape', render, 'shape');
       b.wire(expr, 'out', render, 'color');  // Connected to render — error must NOT be isolated
     });
@@ -645,7 +646,7 @@ describe('mixed cardinality (one→many broadcast)', () => {
       b.setConfig(color, 'value', { r: 0.9, g: 0.7, b: 0.5, a: 1.0 });
 
       const render = b.addBlock('RenderInstances2D');
-      b.wire(circleLayout, 'position', render, 'pos');
+      b.wire(circleLayout, 'controlPoints', render, 'controlPoints');
       b.wire(color, 'out', render, 'color');
       // Shape port removed - automatically looked up from instance
     });

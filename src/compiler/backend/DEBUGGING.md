@@ -97,16 +97,7 @@ Interactive collapsible tree view showing the full DAG of how each value was com
 
 ### E3.1: Expression Provenance
 
-`DebugIndexIR.exprProvenance` maps each `ValueExprId` to an `ExprProvenanceIR` record containing the emitting block, output port name, and — for derived blocks — the user-visible target it serves. Built during debug index construction from `Block.role.meta` (already available during compilation).
-
-Expression tree nodes now show user-facing context instead of raw IR labels:
-- **Default sources**: `Array 1 . Count` with amber "default" badge (instead of `const(4)`)
-- **User blocks**: `Oscillator 1 . Output` (instead of bare block name)
-- **Adapters**: `ScalarToPhase` with purple "adapter" badge
-- **Wire state**: `Lag 1` with blue "state" badge
-- **Infrastructure**: `time:phaseA` (no block context, unchanged)
-
-Provenance covers all 5 `DerivedBlockMeta` kinds: `defaultSource`, `adapter`, `wireState`, `lens`, `compositeExpansion`.
+`DebugIndexIR.exprProvenance` maps each `ValueExprId` to an `ExprProvenanceIR` record containing only emitted block identity and output port name. The debugger resolves these emitted identities through `blockMap` + `blockDisplayNames` to render user-facing labels.
 
 ### E4: Breakpoint UX Improvements
 

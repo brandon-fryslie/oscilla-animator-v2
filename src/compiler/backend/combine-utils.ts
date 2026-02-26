@@ -221,7 +221,7 @@ function normalizeCombineMode(mode: CombineMode | 'error' | 'layer'): CombineMod
  * - For commutative modes (sum, average, max, min), order doesn't affect result
  *
  * Special cases:
- * - N=0: Returns null (caller should use defaultSource)
+ * - N=0: Returns null (caller should use the frontend-materialized fallback writer)
  * - N=1: Caller should optimize by using direct passthrough
  *
  * @param mode - Combine mode (sum, average, max, min, last, first, layer)

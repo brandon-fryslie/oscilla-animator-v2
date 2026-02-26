@@ -4,7 +4,7 @@
  * Tests for slot-condition and value-delta breakpoint kinds.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll } from 'vitest';
 import { compile } from '../../compiler/compile';
 import { buildPatch } from '../../graph/Patch';
 import { createRuntimeState } from '../RuntimeState';
@@ -44,7 +44,7 @@ function compileSimplePatch(): CompiledProgramIR {
 
     b.wire(ellipse, 'shape', array, 'element');
     b.wire(array, 'elements', layout, 'elements');
-    b.wire(layout, 'position', render, 'pos');
+    b.wire(layout, 'controlPoints', render, 'controlPoints');
     b.wire(colorField, 'field', render, 'color');
   });
 
@@ -103,9 +103,16 @@ function findFirstScalarSlot(snapshots: StepSnapshot[]): { slot: ValueSlot; valu
 }
 
 describe('Conditional Breakpoints', () => {
+  let compiledProgram: CompiledProgramIR;
+
+  beforeAll(() => {
+    // [LAW:one-source-of-truth] Reuse one immutable compiled IR and keep runtime/session state per-test.
+    compiledProgram = compileSimplePatch();
+  });
+
   describe('slot-condition', () => {
     it('triggers when predicate returns true for a scalar slot value', () => {
-      const program = compileSimplePatch();
+      const program = compiledProgram;
 
       // First pass: discover a scalar slot and its value
       const snapshots = collectAllSnapshots(program);
@@ -143,7 +150,7 @@ describe('Conditional Breakpoints', () => {
     });
 
     it('does NOT trigger when predicate returns false', () => {
-      const program = compileSimplePatch();
+      const program = compiledProgram;
       const state = createStateForProgram(program);
       const arena = getTestArena();
       const session = new StepDebugSession(program, state, arena);
@@ -165,7 +172,7 @@ describe('Conditional Breakpoints', () => {
     });
 
     it('only triggers for scalar slot values (ignores buffers)', () => {
-      const program = compileSimplePatch();
+      const program = compiledProgram;
 
       // Find a buffer slot if one exists
       const snapshots = collectAllSnapshots(program);
@@ -207,7 +214,7 @@ describe('Conditional Breakpoints', () => {
 
   describe('value-delta', () => {
     it('does NOT trigger on the first write (no previous value)', () => {
-      const program = compileSimplePatch();
+      const program = compiledProgram;
 
       // Find any scalar slot
       const snapshots = collectAllSnapshots(program);
@@ -251,7 +258,7 @@ describe('Conditional Breakpoints', () => {
     });
 
     it('triggers when delta exceeds threshold', () => {
-      const program = compileSimplePatch();
+      const program = compiledProgram;
 
       // Collect snapshots to find a slot that is written at least twice with different values
       const snapshots = collectAllSnapshots(program);
@@ -310,7 +317,7 @@ describe('Conditional Breakpoints', () => {
     });
 
     it('does NOT trigger when delta is below threshold', () => {
-      const program = compileSimplePatch();
+      const program = compiledProgram;
       const state = createStateForProgram(program);
       const arena = getTestArena();
       const session = new StepDebugSession(program, state, arena);
@@ -332,7 +339,7 @@ describe('Conditional Breakpoints', () => {
 
   describe('breakpointsEqual', () => {
     it('slot-condition: equal by slot and predicate reference', () => {
-      const program = compileSimplePatch();
+      const program = compiledProgram;
       const state = createStateForProgram(program);
       const arena = getTestArena();
       const session = new StepDebugSession(program, state, arena);
@@ -359,7 +366,7 @@ describe('Conditional Breakpoints', () => {
     });
 
     it('slot-condition: different predicate references are not equal', () => {
-      const program = compileSimplePatch();
+      const program = compiledProgram;
       const state = createStateForProgram(program);
       const arena = getTestArena();
       const session = new StepDebugSession(program, state, arena);
@@ -385,7 +392,7 @@ describe('Conditional Breakpoints', () => {
     });
 
     it('value-delta: equal by slot and threshold', () => {
-      const program = compileSimplePatch();
+      const program = compiledProgram;
       const state = createStateForProgram(program);
       const arena = getTestArena();
       const session = new StepDebugSession(program, state, arena);
@@ -409,7 +416,7 @@ describe('Conditional Breakpoints', () => {
     });
 
     it('value-delta: different threshold means not equal', () => {
-      const program = compileSimplePatch();
+      const program = compiledProgram;
       const state = createStateForProgram(program);
       const arena = getTestArena();
       const session = new StepDebugSession(program, state, arena);
@@ -432,7 +439,7 @@ describe('Conditional Breakpoints', () => {
     });
 
     it('different breakpoint kinds are not equal', () => {
-      const program = compileSimplePatch();
+      const program = compiledProgram;
       const state = createStateForProgram(program);
       const arena = getTestArena();
       const session = new StepDebugSession(program, state, arena);
@@ -456,7 +463,7 @@ describe('Conditional Breakpoints', () => {
 
   describe('removal', () => {
     it('removing a conditional breakpoint stops it from triggering', () => {
-      const program = compileSimplePatch();
+      const program = compiledProgram;
 
       // Find a scalar slot
       const snapshots = collectAllSnapshots(program);

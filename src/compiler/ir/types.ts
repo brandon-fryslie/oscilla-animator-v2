@@ -167,13 +167,13 @@ import type { DomainTypeId, InstanceId } from './Indices';
  *
  * Design rationale:
  * - ONE SOURCE OF TRUTH: Shape data lives in the field, InstanceDecl just points to it
- * - SIMPLIFIED WIRING: RenderInstances2D only needs position input (shape looked up via instance)
+ * - SIMPLIFIED WIRING: RenderInstances2D only needs controlPoints input (shape looked up via instance)
  * - PRESERVES CAPABILITY: Supports both uniform (one<shape>) and per-element (many<shape>) shapes
  *
  * Example:
  *   Ellipse.shape → Array.element (creates instance with shapeField = elements field)
- *   Array.elements → GridLayout.elements → GridLayout.position → RenderInstances2D.pos
- *   RenderInstances2D extracts instanceId from position field → looks up shapeField from instance
+ *   Array.elements → GridLayout.elements → GridLayout.controlPoints → RenderInstances2D.controlPoints
+ *   RenderInstances2D extracts instanceId from controlPoints field → looks up shapeField from instance
  */
 export interface InstanceDecl {
   readonly id: InstanceId;
@@ -304,7 +304,7 @@ export interface StepRender {
   readonly kind: 'render';
   readonly instanceId: InstanceId;
   /** Slot containing position buffer (after continuity applied) */
-  readonly positionSlot: ValueSlot;
+  readonly controlPointsSlot: ValueSlot;
   /** Slot containing color buffer (after continuity applied) */
   readonly colorSlot: ValueSlot;
   /**

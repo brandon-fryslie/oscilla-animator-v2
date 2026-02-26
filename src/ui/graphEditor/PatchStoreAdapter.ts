@@ -11,7 +11,7 @@
  * It delegates all operations to the underlying stores.
  */
 
-import { makeObservable, computed } from 'mobx';
+import { makeObservable, computed, runInAction } from 'mobx';
 import type { BlockId, CombineMode, DefaultSource } from '../../types';
 import { portId } from '../../types';
 import type { PatchStore } from '../../stores/PatchStore';
@@ -107,12 +107,13 @@ export class PatchStoreAdapter implements GraphDataAdapter<BlockId> {
    * Delegates to PatchStore for block creation, LayoutStore for position.
    */
   addBlock(type: string, position: { x: number; y: number }): BlockId {
-    // PatchStore handles block creation and event emission
-    const blockId = this.patchStore.addBlock(type, {});
-
-    // LayoutStore handles position persistence
-    this.layoutStore.setPosition(blockId, position);
-
+    let blockId!: BlockId;
+    runInAction(() => {
+      // [LAW:one-source-of-truth] Add + position are committed atomically so graph projection
+      // sees one coherent source of truth for new node placement.
+      blockId = this.patchStore.addBlock(type, {});
+      this.layoutStore.setPosition(blockId, position);
+    });
     return blockId;
   }
 

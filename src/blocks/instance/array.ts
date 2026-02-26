@@ -94,8 +94,8 @@ export function register(): void {
        *
        * Flow:
        *   Ellipse.shape (one<shape>) → Array.element → stored as instance.shapeField
-       *   Array.elements (Field<shape>) → Layout → position → RenderInstances2D
-       *   RenderInstances2D extracts instanceId from position → looks up shapeField
+       *   Array.elements (Field<shape>) → Layout.controlPoints → RenderInstances2D.controlPoints
+       *   RenderInstances2D extracts instanceId from controlPoints → looks up shapeField
        */
       const instanceId = ctx.b.createInstance(DOMAIN_CIRCLE, count, elementInput.id);
   

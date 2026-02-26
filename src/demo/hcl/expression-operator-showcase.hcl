@@ -35,7 +35,7 @@ patch "Expression Operator Showcase" {
     rows = 16
     cols = 10
     outputs {
-      position = pos.refs
+      controlPoints = pos.refs
     }
   }
 
@@ -63,15 +63,15 @@ patch "Expression Operator Showcase" {
 
       // Apply local orbit displacement around layout anchors.
       // Visual: each point circles around its grid cell center.
-      x = layout.position.x + side_x * sin(angle)
-      y = layout.position.y + side_y * cos(angle)
+      x = layout.controlPoints.x + side_x * sin(angle)
+      y = layout.controlPoints.y + side_y * cos(angle)
 
       // Output final position.
       // Visual: keeps all motion on the 2D plane.
-      vec3(x, y, 0.0)
+      vec2(x, y)
     EXPR
     outputs {
-      out = render.pos
+      out = render.controlPoints
     }
   }
 

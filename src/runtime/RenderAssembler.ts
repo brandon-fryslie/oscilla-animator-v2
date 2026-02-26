@@ -347,6 +347,36 @@ export function depthSortAndCompact(
 }
 
 /**
+ * Normalize RenderInstances2D control points into world-space vec3 positions.
+ * Accepts either vec2 (x,y) or vec3 (x,y,z) interleaved buffers.
+ */
+function ensureWorldPositionVec3(
+  positions: Float32Array,
+  count: number,
+  arena: RenderBufferArena,
+): Float32Array {
+  const vec3Len = count * 3;
+  if (positions.length === vec3Len) return positions;
+
+  const vec2Len = count * 2;
+  if (positions.length !== vec2Len) {
+    throw new Error(
+      'RenderAssembler: Position/controlPoints buffer must be vec2 or vec3 interleaved. ' +
+      'Expected length ' + vec2Len + ' or ' + vec3Len + ', got ' + positions.length + '.'
+    );
+  }
+
+  // [LAW:one-source-of-truth] RenderInstances2D reads canonical controlPoints and derives z=0 world positions.
+  const promoted = arena.allocVec3(count);
+  for (let i = 0; i < count; i++) {
+    promoted[i * 3 + 0] = positions[i * 2 + 0];
+    promoted[i * 3 + 1] = positions[i * 2 + 1];
+    promoted[i * 3 + 2] = 0;
+  }
+  return promoted;
+}
+
+/**
  * Project world-space instances to screen-space.
  *
  * This is the projection stage called by the RenderAssembler.
@@ -1399,9 +1429,9 @@ function appendDrawPathInstancesOp(
   }
 
   // Read position buffer from slot
-  const packedPositionBuffer = resolveNumericSlotBuffer(step.positionSlot, state, slotToArena, arena, count);
+  const packedPositionBuffer = resolveNumericSlotBuffer(step.controlPointsSlot, state, slotToArena, arena, count);
   if (!packedPositionBuffer) {
-    throw new Error('RenderAssembler: Position buffer not found in slot ' + step.positionSlot);
+    throw new Error('RenderAssembler: Position buffer not found in slot ' + step.controlPointsSlot);
   }
 
   // Position must be Float32Array for v2
@@ -1410,6 +1440,7 @@ function appendDrawPathInstancesOp(
       'RenderAssembler: Position buffer must be Float32Array, got ' + packedPositionBuffer.constructor.name
     );
   }
+  const worldPositionBuffer = ensureWorldPositionVec3(packedPositionBuffer, count, arena);
 
   // Read color buffer from slot
   const rawColorBuffer = resolveNumericSlotBuffer(step.colorSlot, state, slotToArena, arena, count);
@@ -1443,7 +1474,7 @@ function appendDrawPathInstancesOp(
     assemblePerInstanceShapes(
       step,
       shape,
-      packedPositionBuffer,
+      worldPositionBuffer,
       colorBuffer,
       projectionScale,
       isotropicScale,
@@ -1470,17 +1501,9 @@ function appendDrawPathInstancesOp(
   // Run projection using resolved camera params
   {
     // Run projection using resolved camera params
-    if (packedPositionBuffer.length !== count * 3) {
-      throw new Error(
-        'RenderAssembler: Position buffer must be world-space vec3 (stride 3). ' +
-        'Expected length ' + (count * 3) + ', got ' + packedPositionBuffer.length + '. ' +
-        'Fix upstream: insert/compile an explicit pos2→pos3 adapter; RenderAssembler will not promote stride-2.'
-      );
-    }
-
     // Project, compact, and copy in one step (uses arena from context)
     const compactedCopy = projectAndCompact(
-      packedPositionBuffer,
+      worldPositionBuffer,
       projectionScale,
       count,
       colorBuffer,

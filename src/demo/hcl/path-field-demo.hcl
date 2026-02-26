@@ -122,7 +122,7 @@ patch "Path Field Demo" {
   block "PathLayout" "path-layout" {
     spacing = 1.0
     outputs {
-      position = render.pos
+      controlPoints = render.controlPoints
     }
   }
 

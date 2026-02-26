@@ -86,7 +86,7 @@ function buildMemoryTestPatch(instanceCount: number) {
     b.wire(array, 'elements', layout, 'elements');
 
     // Wire to render
-    b.wire(layout, 'position', render, 'pos');
+    b.wire(layout, 'controlPoints', render, 'controlPoints');
     b.wire(color, 'out', render, 'color');
     b.wire(ellipse, 'shape', render, 'shape');
   });

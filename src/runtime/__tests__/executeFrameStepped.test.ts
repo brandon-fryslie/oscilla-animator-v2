@@ -5,7 +5,7 @@
  * as executeFrame() and yields snapshots with correct phase ordering.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll } from 'vitest';
 import { compile } from '../../compiler/compile';
 import { buildPatch } from '../../graph/Patch';
 import { executeFrame } from '../ScheduleExecutor';
@@ -46,7 +46,7 @@ function compileSimplePatch() {
 
     b.wire(ellipse, 'shape', array, 'element');
     b.wire(array, 'elements', layout, 'elements');
-    b.wire(layout, 'position', render, 'pos');
+    b.wire(layout, 'controlPoints', render, 'controlPoints');
     b.wire(colorField, 'field', render, 'color');
   });
 
@@ -80,7 +80,7 @@ function compilePhasorPatch() {
     b.wire(phasor, 'out', layout, 'phase');
 
     const render = b.addBlock('RenderInstances2D');
-    b.wire(layout, 'position', render, 'pos');
+    b.wire(layout, 'controlPoints', render, 'controlPoints');
   });
 
   const result = compile(patch);
@@ -104,8 +104,17 @@ function createStateForProgram(program: CompiledProgramIR) {
 }
 
 describe('executeFrameStepped', () => {
+  let simpleProgram: CompiledProgramIR;
+  let phasorProgram: CompiledProgramIR;
+
+  beforeAll(() => {
+    // [LAW:one-source-of-truth] Compile once and derive fresh runtime state per test to avoid mutable coupling.
+    simpleProgram = compileSimplePatch();
+    phasorProgram = compilePhasorPatch();
+  });
+
   it('fails fast when runtimeAddressTable is missing instead of deriving from slotMeta', () => {
-    const program = compileSimplePatch();
+    const program = simpleProgram;
     const brokenProgram = { ...program, runtimeAddressTable: undefined } as CompiledProgramIR;
     const state = createStateForProgram(program);
     const arena = getTestArena();
@@ -115,7 +124,7 @@ describe('executeFrameStepped', () => {
   });
 
   it('consumes compiler-precomputed runtime address table contract', () => {
-    const program = compileSimplePatch();
+    const program = simpleProgram;
     const table = getExprAddressTable(program);
     expect(table).toBe(program.runtimeAddressTable);
     expect(table.slotLookup.size).toBeGreaterThan(0);
@@ -123,7 +132,7 @@ describe('executeFrameStepped', () => {
   });
 
   it('produces correct phase sequence: pre-frame -> phase1... -> phase-boundary -> phase2... -> post-frame', () => {
-    const program = compileSimplePatch();
+    const program = simpleProgram;
     const state = createStateForProgram(program);
     const arena = getTestArena();
 
@@ -164,7 +173,7 @@ describe('executeFrameStepped', () => {
   });
 
   it('returns a valid RenderFrameIR', () => {
-    const program = compileSimplePatch();
+    const program = simpleProgram;
     const state = createStateForProgram(program);
     const arena = getTestArena();
 
@@ -181,7 +190,7 @@ describe('executeFrameStepped', () => {
   });
 
   it('phase1 snapshots have valid step indices and step references', () => {
-    const program = compileSimplePatch();
+    const program = simpleProgram;
     const state = createStateForProgram(program);
     const arena = getTestArena();
 
@@ -209,7 +218,7 @@ describe('executeFrameStepped', () => {
   });
 
   it('phase markers have stepIndex -1 and null step', () => {
-    const program = compileSimplePatch();
+    const program = simpleProgram;
     const state = createStateForProgram(program);
     const arena = getTestArena();
 
@@ -226,7 +235,7 @@ describe('executeFrameStepped', () => {
   });
 
   it('phase1 value steps capture written slots', () => {
-    const program = compileSimplePatch();
+    const program = simpleProgram;
     const state = createStateForProgram(program);
     const arena = getTestArena();
 
@@ -249,7 +258,7 @@ describe('executeFrameStepped', () => {
   });
 
   it('keeps phasor state bounded during long-horizon stepped execution', () => {
-    const program = compilePhasorPatch();
+    const program = phasorProgram;
     const schedule = program.schedule as ScheduleIR;
     const phasorMapping = schedule.stateMappings.find((mapping) => mapping.stateId.endsWith(':phasor'));
     expect(phasorMapping).toBeDefined();
