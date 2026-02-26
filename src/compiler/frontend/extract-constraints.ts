@@ -30,7 +30,7 @@ import type { PayloadType, UnitType, CardinalityValue, Axis } from '../../core/c
 import { axisInst, isAxisInst, isAxisVar, resolveCardinalityPolicy, instanceRef, unitNone, unitsEqual } from '../../core/canonical-types';
 import { cardinalityVarId, instanceVarId, type CardinalityVarId } from '../../core/ids';
 import type { CardinalityConstraint, InstanceTerm } from './cardinality/solve';
-import type { PayloadUnitConstraint, ConstraintOrigin } from './payload-unit/solve';
+import type { PayloadUnitConstraint, ConstraintOrigin, PayloadUnitEdgeVerification } from './payload-unit/solve';
 import type { FixpointDiagnostic } from './fixpoint-diagnostic';
 
 // =============================================================================
@@ -60,6 +60,11 @@ export interface ExtractedConstraints {
    * // [LAW:single-enforcer] Policy conflicts detected at extraction boundary, not scattered.
    */
   readonly policyDiagnostics: readonly FixpointDiagnostic[];
+  /**
+   * Edge-level payload/unit compatibility checks executed after union-find solve.
+   * These act as a safety net for dropped constraints.
+   */
+  readonly payloadUnitEdgeVerifications: readonly PayloadUnitEdgeVerification[];
 }
 
 // =============================================================================
@@ -82,6 +87,7 @@ export function extractConstraints(
   const collectPorts = new Set<DraftPortKey>();
   const collectAcceptsByPort = new Map<DraftPortKey, AcceptsSpec>();
   const policyDiagnostics: FixpointDiagnostic[] = [];
+  const payloadUnitEdgeVerifications: PayloadUnitEdgeVerification[] = [];
   const blockTypeById = new Map(g.blocks.map((b) => [b.id, b.type]));
 
   // Phase A: Collect port types and intra-block constraints
@@ -271,6 +277,14 @@ export function extractConstraints(
             },
           });
         }
+        payloadUnitEdgeVerifications.push({
+          kind: 'collect',
+          edgeId: edge.id,
+          fromPort: fromKey,
+          toPort: toKey,
+          allowedPayloads: accepts.payloads,
+          allowedUnits: accepts.units,
+        });
       }
       continue;
     }
@@ -280,12 +294,26 @@ export function extractConstraints(
       const edgeOrigin: ConstraintOrigin = { kind: 'edge', edgeId: edge.id };
       payloadUnit.push({ kind: 'payloadEq', a: fromKey, b: toKey, origin: edgeOrigin });
       payloadUnit.push({ kind: 'unitEq', a: fromKey, b: toKey, origin: edgeOrigin });
+      payloadUnitEdgeVerifications.push({
+        kind: 'equal',
+        edgeId: edge.id,
+        fromPort: fromKey,
+        toPort: toKey,
+      });
       // Edge cardinality equality — solver unifies cardinality across edges
       cardinality.push({ kind: 'equal', a: fromKey, b: toKey, origin: edgeOrigin });
     }
   }
 
-  return { portBaseTypes, payloadUnit, cardinality, baseCardinalityAxis, collectPorts, policyDiagnostics };
+  return {
+    portBaseTypes,
+    payloadUnit,
+    cardinality,
+    baseCardinalityAxis,
+    collectPorts,
+    policyDiagnostics,
+    payloadUnitEdgeVerifications,
+  };
 }
 
 // =============================================================================
