@@ -115,7 +115,6 @@ export function pass3Indexing(patch: Patch): Pass3Result | Pass3Error {
       id: source.id,
       type: source.type,
       params: source.params,
-      displayName: source.displayName,
     });
   }
 
