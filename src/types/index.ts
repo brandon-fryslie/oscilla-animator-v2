@@ -133,6 +133,57 @@ export {
 // Combine Mode
 // =============================================================================
 
+/**
+ * Combine mode for input ports with multiple edges.
+ *
+ * Modes are categorized by the types they work with:
+ * - any: Works with any type
+ * - numeric: Works with numeric types (float, int, vec2, vec3, color)
+ * - boolean: Works with boolean type
+ */
+export type CombineMode =
+  | 'last'      // any: Last value wins
+  | 'first'     // any: First value wins
+  | 'sum'       // numeric: Additive
+  | 'average'   // numeric: Arithmetic mean
+  | 'max'       // numeric: Maximum
+  | 'min'       // numeric: Minimum
+  | 'mul'       // numeric: Multiplicative
+  | 'layer'     // any: Layer composition
+  | 'or'        // boolean: Logical OR
+  | 'and'       // boolean: Logical AND
+  | 'collect'   // any: Preserve individual edge types (no unification)
+  | 'array';    // any: User-facing alias for collect semantics
+
+/**
+ * Category for combine modes based on type compatibility.
+ */
+export type CombineModeCategory = 'numeric' | 'any' | 'boolean';
+
+/**
+ * Mapping of combine modes to their category.
+ * Used for validating that a combine mode is compatible with a port's type.
+ */
+export const COMBINE_MODE_CATEGORY: Record<CombineMode, CombineModeCategory> = {
+  last: 'any',
+  first: 'any',
+  sum: 'numeric',
+  average: 'numeric',
+  max: 'numeric',
+  min: 'numeric',
+  mul: 'numeric',
+  layer: 'any',
+  or: 'boolean',
+  and: 'boolean',
+  collect: 'any',
+  array: 'any',
+};
+
+// [LAW:single-enforcer] Canonicalize legacy/user-facing combine aliases at one boundary.
+export function canonicalizeCombineMode(mode: CombineMode): CombineMode {
+  return mode === 'array' ? 'collect' : mode;
+}
+
 // Import CanonicalType for local use in interface definitions
 import type { CanonicalType } from '../core/canonical-types';
 import type { BlockId, PortEndpointRef } from './compiler';
