@@ -5,7 +5,7 @@
  * and performance metrics tracking.
  */
 
-import { executeFrame } from '../runtime';
+import { assertSchedulePhaseBoundaryStateReads, executeFrame } from '../runtime';
 import { RenderBufferArena, type WebGPURenderer } from '../render';
 import {
   recordFrameTime,
@@ -61,6 +61,16 @@ function assertWebGPULoopContract(deps: AnimationLoopDeps): void {
 
 const CONTINUITY_STORE_UPDATE_INTERVAL = 200; // 5Hz
 const EMPTY_RENDER_FRAME: RenderFrameIR = { version: 2, ops: [] };
+
+function assertProgramPhaseBoundary(deps: AnimationLoopDeps): void {
+  const program = deps.getCurrentProgram();
+  if (!program) return;
+  // [LAW:dataflow-not-control-flow] Invariant validation runs at compile/start
+  // boundaries so frame execution order stays fixed with zero assertion work.
+  // [LAW:no-silent-fallbacks] Phase-boundary violations are fail-fast invariants,
+  // not optional runtime behavior.
+  assertSchedulePhaseBoundaryStateReads(program);
+}
 
 /**
  * Create initial animation loop state
@@ -287,6 +297,9 @@ export function startAnimationLoop(
   onError: (err: unknown) => void
 ): AnimationLoopController {
   assertWebGPULoopContract(deps);
+  // [LAW:single-enforcer] AnimationLoop owns runtime startup/compile boundaries,
+  // so boundary checks are enforced here exactly once per published program.
+  assertProgramPhaseBoundary(deps);
 
   let cancelled = false;
   let haltedByError = false;
@@ -327,6 +340,7 @@ export function startAnimationLoop(
       if (cancelled) {
         return false;
       }
+      assertProgramPhaseBoundary(deps);
       const resumedFromError = haltedByError;
       // [LAW:dataflow-not-control-flow] Recovery keeps the same frame pipeline and
       // resets only loop-owned runtime data when compilation publishes a new program.
