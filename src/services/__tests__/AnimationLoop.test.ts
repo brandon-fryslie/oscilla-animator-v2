@@ -103,6 +103,42 @@ describe('AnimationLoop', () => {
     expect(renderArg.frame).toEqual({ version: 2, ops: [] });
   });
 
+  it('enables cardinality slot write assertions when cardinality debug tracing is on', () => {
+    const arena = { reset: vi.fn(), getTotalBytes: () => 0 };
+    const renderer = { render: vi.fn() };
+    executeFrameMock.mockReturnValue({ version: 2, ops: [] } as any);
+
+    const deps = {
+      getCurrentProgram: () => ({}),
+      getCurrentState: () => ({
+        health: createHealthMetrics(),
+      }),
+      getCanvas: () => ({ width: 100, height: 80 }),
+      getRenderer: () => renderer,
+      getArena: () => arena,
+      store: {
+        debug: { enabled: true, traceCardinalitySolver: true },
+        stepDebug: null,
+        diagnostics: {
+          recordJank: vi.fn(),
+          updateFrameTiming: vi.fn(),
+          updateMemoryStats: vi.fn(),
+        },
+        continuity: { updateFromRuntime: vi.fn() },
+        viewport: { zoom: 1, pan: { x: 0, y: 0 }, setContentBounds: vi.fn() },
+        events: { emit: vi.fn() },
+        getPatchRevision: () => 1,
+      },
+    } as any;
+
+    const state = createAnimationLoopState();
+    executeAnimationFrame(16, deps, state);
+
+    expect(executeFrameMock.mock.calls.length).toBeGreaterThan(0);
+    const lastCall = executeFrameMock.mock.calls[executeFrameMock.mock.calls.length - 1];
+    expect(lastCall?.[4]).toEqual({ assertCardinalitySlotWrites: true });
+  });
+
   it('forwards compiler draw-prep shader WGSL to renderer input', () => {
     const arena = { reset: vi.fn(), getTotalBytes: () => 0 };
     const renderer = { render: vi.fn() };
