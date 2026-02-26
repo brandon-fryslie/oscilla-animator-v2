@@ -79,7 +79,7 @@ describe('getBlockAddress', () => {
     expect(addr.canonicalName).toBe('my_block_v20'); // Special chars stripped
   });
 
-  it('handles displayName with hyphens and underscores', () => {
+  it('normalizes hyphens to underscores in canonical names', () => {
     const patch = buildPatch(b => {
       const c = b.addBlock('Const', { displayName: 'my-fancy_block' });
       b.setConfig(c, 'value', 1);
@@ -88,7 +88,19 @@ describe('getBlockAddress', () => {
     const block = Array.from(patch.blocks.values())[0];
     const addr = getBlockAddress(block);
 
-    expect(addr.canonicalName).toBe('my-fancy_block'); // Preserved
+    expect(addr.canonicalName).toBe('my_fancy_block');
+  });
+
+  it('prefixes canonical names that start with digits', () => {
+    const patch = buildPatch(b => {
+      const c = b.addBlock('Const', { displayName: '123 Pulse' });
+      b.setConfig(c, 'value', 1);
+    });
+
+    const block = Array.from(patch.blocks.values())[0];
+    const addr = getBlockAddress(block);
+
+    expect(addr.canonicalName).toBe('_123_pulse');
   });
 });
 
