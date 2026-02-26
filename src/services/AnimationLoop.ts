@@ -19,7 +19,6 @@ import { JANK_THRESHOLD_MS } from '../stores/DiagnosticsStore';
 import type { RuntimeState } from '../runtime/RuntimeState';
 import type { RootStore } from '../stores';
 import type { RenderFrameIR } from '../render/types';
-import { debugSettings } from '../settings/tokens/debug-settings';
 
 export interface AnimationLoopState {
   frameCount: number;
@@ -63,17 +62,13 @@ function assertWebGPULoopContract(deps: AnimationLoopDeps): void {
 const CONTINUITY_STORE_UPDATE_INTERVAL = 200; // 5Hz
 const EMPTY_RENDER_FRAME: RenderFrameIR = { version: 2, ops: [] };
 
-function isPhaseBoundaryAssertionEnabled(deps: AnimationLoopDeps): boolean {
-  const debugValues = deps.store.settings?.get?.(debugSettings);
-  return Boolean(debugValues?.enabled && debugValues?.assertPhaseBoundaryStateReads);
-}
-
-function assertProgramPhaseBoundaryIfEnabled(deps: AnimationLoopDeps): void {
-  if (!isPhaseBoundaryAssertionEnabled(deps)) return;
+function assertProgramPhaseBoundary(deps: AnimationLoopDeps): void {
   const program = deps.getCurrentProgram();
   if (!program) return;
   // [LAW:dataflow-not-control-flow] Invariant validation runs at compile/start
   // boundaries so frame execution order stays fixed with zero assertion work.
+  // [LAW:no-silent-fallbacks] Phase-boundary violations are fail-fast invariants,
+  // not optional runtime behavior.
   assertSchedulePhaseBoundaryStateReads(program);
 }
 
@@ -304,7 +299,7 @@ export function startAnimationLoop(
   assertWebGPULoopContract(deps);
   // [LAW:single-enforcer] AnimationLoop owns runtime startup/compile boundaries,
   // so boundary checks are enforced here exactly once per published program.
-  assertProgramPhaseBoundaryIfEnabled(deps);
+  assertProgramPhaseBoundary(deps);
 
   let cancelled = false;
   let haltedByError = false;
@@ -345,7 +340,7 @@ export function startAnimationLoop(
       if (cancelled) {
         return false;
       }
-      assertProgramPhaseBoundaryIfEnabled(deps);
+      assertProgramPhaseBoundary(deps);
       const resumedFromError = haltedByError;
       // [LAW:dataflow-not-control-flow] Recovery keeps the same frame pipeline and
       // resets only loop-owned runtime data when compilation publishes a new program.
