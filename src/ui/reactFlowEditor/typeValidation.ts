@@ -19,44 +19,18 @@ import { ALL_CONCRETE_PAYLOADS, getAnyBlockDefinition, isPayloadAllowed } from '
 import { findAdapterChain, type AdapterSpec } from '../../blocks/adapter-spec';
 
 const missingPortWarnings = new Set<string>();
-const typeValidationIssues: Array<{
+export interface TypeValidationIssue {
   readonly level: 'warn';
   readonly message: string;
   readonly blockType: string;
   readonly portId: string;
   readonly direction: 'input' | 'output';
-}> = [];
-let typeValidationIssueReporter:
-  | ((issue: {
-      readonly level: 'warn';
-      readonly message: string;
-      readonly blockType: string;
-      readonly portId: string;
-      readonly direction: 'input' | 'output';
-    }) => void)
-  | null = null;
-
-export function setTypeValidationIssueReporter(
-  reporter:
-    | ((issue: {
-        readonly level: 'warn';
-        readonly message: string;
-        readonly blockType: string;
-        readonly portId: string;
-        readonly direction: 'input' | 'output';
-      }) => void)
-    | null
-): void {
-  typeValidationIssueReporter = reporter;
 }
 
-export function getTypeValidationIssues(): ReadonlyArray<{
-  readonly level: 'warn';
-  readonly message: string;
-  readonly blockType: string;
-  readonly portId: string;
-  readonly direction: 'input' | 'output';
-}> {
+const typeValidationIssues: TypeValidationIssue[] = [];
+type TypeValidationIssueReporter = (issue: TypeValidationIssue) => void;
+
+export function getTypeValidationIssues(): ReadonlyArray<TypeValidationIssue> {
   return typeValidationIssues;
 }
 
@@ -65,15 +39,20 @@ export function clearTypeValidationIssues(): void {
   missingPortWarnings.clear();
 }
 
-function warnMissingPort(blockType: string, portId: string, direction: 'input' | 'output'): void {
+function warnMissingPort(
+  blockType: string,
+  portId: string,
+  direction: 'input' | 'output',
+  issueReporter?: TypeValidationIssueReporter,
+): void {
   const key = `${blockType}:${direction}:${portId}`;
   if (missingPortWarnings.has(key)) {
     return;
   }
   missingPortWarnings.add(key);
   // [LAW:single-enforcer] Missing-port warnings are emitted once at this projection boundary.
-  const issue = {
-    level: 'warn' as const,
+  const issue: TypeValidationIssue = {
+    level: 'warn',
     message: `[typeValidation] Missing ${direction} port '${portId}' on block '${blockType}'`,
     blockType,
     portId,
@@ -83,7 +62,7 @@ function warnMissingPort(blockType: string, portId: string, direction: 'input' |
   if (typeValidationIssues.length > 100) {
     typeValidationIssues.shift();
   }
-  typeValidationIssueReporter?.(issue);
+  issueReporter?.(issue);
 }
 
 // =============================================================================
@@ -265,7 +244,8 @@ export function getPortType(
   patch: Patch,
   blockId: string,
   portId: string,
-  direction: 'input' | 'output'
+  direction: 'input' | 'output',
+  issueReporter?: TypeValidationIssueReporter,
 ): InferenceCanonicalType | null {
   const block = patch.blocks.get(blockId as BlockId);
   if (!block) return null;
@@ -276,7 +256,7 @@ export function getPortType(
   const slots = direction === 'input' ? blockDef.inputs : blockDef.outputs;
   const slot = slots[portId];
   if (!slot) {
-    warnMissingPort(block.type, portId, direction);
+    warnMissingPort(block.type, portId, direction, issueReporter);
     return null;
   }
   return slot.type ?? null;
@@ -289,7 +269,8 @@ export function getPortType(
 export function getPortTypeFromBlockType(
   blockType: string,
   portId: string,
-  direction: 'input' | 'output'
+  direction: 'input' | 'output',
+  issueReporter?: TypeValidationIssueReporter,
 ): InferenceCanonicalType | null {
   const blockDef = getAnyBlockDefinition(blockType);
   if (!blockDef) return null;
@@ -297,7 +278,7 @@ export function getPortTypeFromBlockType(
   const slots = direction === 'input' ? blockDef.inputs : blockDef.outputs;
   const slot = slots[portId];
   if (!slot) {
-    warnMissingPort(blockType, portId, direction);
+    warnMissingPort(blockType, portId, direction, issueReporter);
     return null;
   }
   return slot.type ?? null;
@@ -525,6 +506,7 @@ function resolvePortType(
   portId: string,
   direction: 'input' | 'output',
   resolvedPortTypeLookup?: PortTypeLookupFn,
+  issueReporter?: TypeValidationIssueReporter,
 ): InferenceCanonicalType | null {
   // [LAW:one-source-of-truth] Prefer compiler-resolved port types when available;
   // static block-definition types remain a fallback for pre-frontend states.
@@ -532,7 +514,7 @@ function resolvePortType(
   if (resolved) {
     return resolved;
   }
-  return getPortType(patch, blockId, portId, direction);
+  return getPortType(patch, blockId, portId, direction, issueReporter);
 }
 
 /**
@@ -545,6 +527,7 @@ export function validateConnection(
   targetPortId: string,
   patch: Patch,
   resolvedPortTypeLookup?: PortTypeLookupFn,
+  issueReporter?: TypeValidationIssueReporter,
 ): ConnectionValidationResult {
   // Prevent self-connections on same port
   if (sourceBlockId === targetBlockId && sourcePortId === targetPortId) {
@@ -558,6 +541,7 @@ export function validateConnection(
     sourcePortId,
     'output',
     resolvedPortTypeLookup,
+    issueReporter,
   );
   if (!sourceType) {
     return { valid: false, reason: 'Unknown source port' };
@@ -570,6 +554,7 @@ export function validateConnection(
     targetPortId,
     'input',
     resolvedPortTypeLookup,
+    issueReporter,
   );
   if (!targetType) {
     return { valid: false, reason: 'Unknown target port' };
