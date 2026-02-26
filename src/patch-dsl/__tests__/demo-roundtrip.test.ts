@@ -33,6 +33,8 @@ function blockSnapshot(block: Block): Record<string, unknown> {
     domainId: block.domainId,
     role: normalizeValue(block.role),
     params: normalizeValue(block.params),
+    inputPorts: normalizeValue(block.inputPorts),
+    outputPorts: normalizeValue(block.outputPorts),
   };
 }
 
