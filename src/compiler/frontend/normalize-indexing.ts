@@ -61,34 +61,9 @@ import type { CompilerGraphBlock, CompilerGraphEdge, CompilerGraphEdgeRole } fro
 // Type Exports
 // =============================================================================
 
-/** Dense block index for array-based access */
-export type BlockIndex = number & { readonly __brand: 'BlockIndex' };
-
-export function blockIndex(n: number): BlockIndex {
-  return n as BlockIndex;
-}
-
-export interface NormalizedPatch {
-  /** Original patch (for reference) */
-  readonly patch: Patch;
-
-  /** Map from BlockId to dense BlockIndex */
-  readonly blockIndex: ReadonlyMap<BlockId, BlockIndex>;
-
-  /** Blocks in index order (includes adapter blocks) */
-  readonly blocks: readonly Block[];
-
-  /** Edges with block indices instead of IDs */
-  readonly edges: readonly NormalizedEdge[];
-}
-
-export interface NormalizedEdge {
-  readonly fromBlock: BlockIndex;
-  readonly fromPort: PortId;
-  readonly toBlock: BlockIndex;
-  readonly toPort: PortId;
-  readonly alias: string;
-}
+export type { BlockIndex } from '../ir/BlockIndex';
+export { blockIndex } from '../ir/BlockIndex';
+export type { NormalizedPatch, NormalizedEdge } from '../ir/NormalizedPatch';
 
 // =============================================================================
 // Error Types
@@ -148,6 +123,7 @@ export function pass3Indexing(patch: Patch): Pass3Result | Pass3Error {
   // Normalize edges + compiler graph edges
   const normalizedEdges: NormalizedEdge[] = [];
   const seenEdgeKeys = new Set<string>();
+  const graphEdges: CompilerGraphEdge[] = [];
 
   for (const edge of patch.edges) {
     // Skip disabled edges
@@ -183,6 +159,15 @@ export function pass3Indexing(patch: Patch): Pass3Result | Pass3Error {
       toPort: edge.to.slotId as PortId,
       // [LAW:one-source-of-truth] Alias must already be authored at graph boundary.
       alias: edge.alias,
+    });
+
+    graphEdges.push({
+      id: edge.id,
+      fromBlockId: edge.from.blockId,
+      fromPort: edge.from.slotId as PortId,
+      toBlockId: edge.to.blockId,
+      toPort: edge.to.slotId as PortId,
+      role: toCompilerGraphEdgeRole(edge.role.kind),
     });
   }
 
