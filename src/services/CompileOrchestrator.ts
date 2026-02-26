@@ -378,24 +378,7 @@ export async function compileAndSwap(
       newStateMappings,
       getLaneMapping
     );
-    const identityMismatchDrops = migration.details.filter(
-      (detail) => detail.reason === 'identityMismatch' && detail.action === 'initialized',
-    );
-    if (identityMismatchDrops.length > 0) {
-      const dropSummary = identityMismatchDrops
-        .map((detail) => detail.stateId)
-        .slice(0, 5)
-        .join(', ');
-      const suffix = identityMismatchDrops.length > 5 ? ', ...' : '';
-      // [LAW:no-silent-fallbacks] Hot-swap state drops from identity mismatch
-      // are surfaced as diagnostics instead of silently resetting state.
-      store.diagnostics.log({
-        level: 'warn',
-        message:
-          `State migration reset ${identityMismatchDrops.length} state slot(s) due to identity mismatch: ` +
-          `${dropSummary}${suffix}`,
-      });
-    }
+    void migration;
   } else if (newStateMappings.length > 0) {
     // Initialize fresh (first compile or no old state)
     const initialState = createInitialState(newStateSlotCount, newStateMappings);

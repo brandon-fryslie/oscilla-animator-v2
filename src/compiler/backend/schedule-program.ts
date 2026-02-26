@@ -19,7 +19,6 @@
  */
 
 import type { Step, StepEvalOne, StepEvalEvent, StepMaterialize, TimeModel, StateMapping, ScalarSlotDecl, FieldSlotDecl } from '../ir/types';
-import { stateIdentityFromStateId } from '../ir/types';
 import { SCALAR_INSTANCE_ID, type InstanceId } from '../ir/Indices';
 import type { ValueExpr, ValueExprId } from '../ir/value-expr';
 import type { UnlinkedIRFragments } from './lower-blocks';
@@ -551,12 +550,7 @@ export function pass7Schedule(
   ];
 
   const stateSlotCount = unlinkedIR.builder.getStateSlotCount();
-  const stateMappings = unlinkedIR.builder.getStateMappings().map((mapping) => ({
-    ...mapping,
-    // [LAW:one-source-of-truth] Schedule state mappings carry explicit migration
-    // identity tags so runtime migration never falls back to positional matching.
-    stateIdentity: mapping.stateIdentity ?? stateIdentityFromStateId(mapping.stateId),
-  }));
+  const stateMappings = unlinkedIR.builder.getStateMappings();
 
   // Get event counts for runtime allocation
   const eventSlotCount = unlinkedIR.builder.getEventSlotCount();

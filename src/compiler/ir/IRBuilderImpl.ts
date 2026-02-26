@@ -28,7 +28,7 @@ import type {
   StableStateId,
   StateMapping,
 } from './types';
-import { OpCode, stateIdentityFromStateId } from './types';
+import { OpCode } from './types';
 import type { CameraDeclIR } from './program';
 import type { ValueExpr } from './value-expr';
 import type { OrchestratorIRBuilder } from './OrchestratorIRBuilder';
@@ -558,14 +558,12 @@ export class IRBuilderImpl implements OrchestratorIRBuilder {
     const stride = options?.stride ?? 1;
     const initialValue = options?.initialValue ?? 0;
     const initial = Array.from({ length: stride }, () => initialValue);
-    const stateIdentity = stateIdentityFromStateId(stableId);
 
     if (options?.instanceId !== undefined && options?.laneCount !== undefined) {
       // // [LAW:one-source-of-truth] State mappings use one unified shape; laneCount/instanceId
       // encode cardinality semantics instead of a parallel scalar/field union.
       this.stateMappings.push({
         stateId: stableId,
-        stateIdentity,
         slotStart: slot,
         laneCount: options.laneCount,
         stride,
@@ -575,7 +573,6 @@ export class IRBuilderImpl implements OrchestratorIRBuilder {
     } else {
       this.stateMappings.push({
         stateId: stableId,
-        stateIdentity,
         slotStart: slot,
         laneCount: 1,
         stride,
