@@ -116,15 +116,8 @@ class WebGPUComputeRuntime {
   private readonly paramsStaging = new Float32Array(WEBGPU_RENDER_CONTRACT.computeParamsFloats);
   private activeStateIndex = 0;
 
-  constructor(private readonly device: any) {
-    const shaderModule = device.createShaderModule({ code: SIMULATION_COMPUTE_WGSL });
-    this.pipeline = device.createComputePipeline({
-      layout: 'auto',
-      compute: {
-        module: shaderModule,
-        entryPoint: 'cs_main',
-      },
-    });
+  private constructor(private readonly device: any, pipeline: any) {
+    this.pipeline = pipeline;
 
     this.stateBuffers = [
       device.createBuffer({
@@ -187,6 +180,20 @@ class WebGPUComputeRuntime {
     }
   }
 
+  // [LAW:single-enforcer] createComputePipelineAsync is the only permitted pipeline
+  // creation path (P2-1: Async Compiler Service Architecture).
+  static async create(device: any): Promise<WebGPUComputeRuntime> {
+    const shaderModule = device.createShaderModule({ code: SIMULATION_COMPUTE_WGSL });
+    const pipeline = await device.createComputePipelineAsync({
+      layout: 'auto',
+      compute: {
+        module: shaderModule,
+        entryPoint: 'cs_main',
+      },
+    });
+    return new WebGPUComputeRuntime(device, pipeline);
+  }
+
   step(commandEncoder: any, activeCount: number, dtSeconds: number): void {
     const clampedCount = Math.max(0, Math.min(SIMULATION_CAPACITY, activeCount));
     const clampedDt = Math.max(0, Math.min(0.1, dtSeconds));
@@ -222,25 +229,46 @@ class WebGPUDrawPrepRuntime {
   private readonly paramsStaging = new Uint32Array(WEBGPU_RENDER_CONTRACT.drawPrepParamsU32);
   private activeBindGroup: any | null = null;
   private activeIndirectBuffer: any | null = null;
+  // [LAW:single-enforcer] Hot-swap pending pipeline follows P2-1 async protocol.
+  private pendingPipeline: any | null = null;
+  private shaderGeneration = 0;
 
-  constructor(private readonly device: any, initialShaderCode: string = DRAW_PREP_COMPUTE_WGSL) {
+  private constructor(private readonly device: any, initialPipeline: any, initialShaderCode: string) {
+    this.pipeline = initialPipeline;
     this.activeShaderCode = initialShaderCode;
-    this.pipeline = this.createPipeline(initialShaderCode);
     this.paramsBuffer = device.createBuffer({
       size: WEBGPU_RENDER_CONTRACT.drawPrepParamsU32 * Uint32Array.BYTES_PER_ELEMENT,
       usage: GPU_BUFFER_USAGE.UNIFORM | GPU_BUFFER_USAGE.COPY_DST,
     });
   }
 
-  private createPipeline(shaderCode: string): any {
-    const shaderModule = this.device.createShaderModule({ code: shaderCode });
-    return this.device.createComputePipeline({
+  // [LAW:single-enforcer] createComputePipelineAsync is the only permitted pipeline
+  // creation path (P2-1: Async Compiler Service Architecture).
+  static async create(device: any, initialShaderCode: string = DRAW_PREP_COMPUTE_WGSL): Promise<WebGPUDrawPrepRuntime> {
+    const shaderModule = device.createShaderModule({ code: initialShaderCode });
+    const pipeline = await device.createComputePipelineAsync({
       layout: 'auto',
       compute: {
         module: shaderModule,
         entryPoint: 'cs_main',
       },
     });
+    return new WebGPUDrawPrepRuntime(device, pipeline, initialShaderCode);
+  }
+
+  // Commit any async-ready pipeline swap at the start of a render frame.
+  // Implements the hot-swap protocol from P2-1: Runtime Loop checks for a pending
+  // pipeline before dispatch and swaps atomically at frame boundary.
+  commitPendingPipeline(): void {
+    if (this.pendingPipeline !== null) {
+      // [LAW:one-source-of-truth] Draw-prep shader ownership is configured from
+      // one active WGSL source at runtime (compiler-provided or canonical default).
+      this.pipeline = this.pendingPipeline;
+      this.pendingPipeline = null;
+      // Invalidate cached bind group since pipeline layout may have changed.
+      this.activeBindGroup = null;
+      this.activeIndirectBuffer = null;
+    }
   }
 
   useShader(shaderCode: string | undefined): void {
@@ -251,12 +279,26 @@ class WebGPUDrawPrepRuntime {
     if (nextShaderCode === this.activeShaderCode) {
       return;
     }
-    // [LAW:one-source-of-truth] Draw-prep shader ownership is configured from
-    // one active WGSL source at runtime (compiler-provided or canonical default).
-    this.pipeline = this.createPipeline(nextShaderCode);
     this.activeShaderCode = nextShaderCode;
-    this.activeBindGroup = null;
-    this.activeIndirectBuffer = null;
+    // Shader module is created synchronously; GPU pipeline link is async (hot-swap protocol).
+    const generation = ++this.shaderGeneration;
+    const shaderModule = this.device.createShaderModule({ code: nextShaderCode });
+    void this.device.createComputePipelineAsync({
+      layout: 'auto',
+      compute: {
+        module: shaderModule,
+        entryPoint: 'cs_main',
+      },
+    }).then((pipeline: any) => {
+      // Only commit if no newer shader update has superseded this one.
+      if (generation === this.shaderGeneration) {
+        this.pendingPipeline = pipeline;
+      }
+    }).catch((err: unknown) => {
+      // [LAW:no-silent-fallbacks] Pipeline creation errors are surfaced explicitly.
+      // The active pipeline remains in use; the next render will use the last valid pipeline.
+      console.error('WebGPUDrawPrepRuntime: async pipeline creation failed:', err);
+    });
   }
 
   private getOrCreateBindGroup(indirectBuffer: any): any {
@@ -351,10 +393,15 @@ export class WebGPURenderer {
     private readonly device: any,
     private readonly context: any,
     private readonly canvasFormat: string,
-    adapterFeatures: ReadonlySet<string>
+    adapterFeatures: ReadonlySet<string>,
+    computeRuntime: WebGPUComputeRuntime,
+    drawPrepRuntime: WebGPUDrawPrepRuntime,
+    pathPipeline: any,
   ) {
     this.adapterFeatures = adapterFeatures;
-    this.pathPipeline = this.createPathPipeline();
+    this.computeRuntime = computeRuntime;
+    this.drawPrepRuntime = drawPrepRuntime;
+    this.pathPipeline = pathPipeline;
 
     this.sceneUniformBuffer = device.createBuffer({
       size: WEBGPU_RENDER_CONTRACT.sceneUniformBytes,
@@ -405,9 +452,6 @@ export class WebGPURenderer {
       ],
     });
 
-    this.computeRuntime = new WebGPUComputeRuntime(this.device);
-    this.drawPrepRuntime = new WebGPUDrawPrepRuntime(this.device);
-
     void this.device.lost.then((lostInfo: { reason: string; message: string }) => {
       this.fatalError = new Error(
         `WebGPU device lost (${lostInfo.reason}): ${lostInfo.message}`
@@ -424,12 +468,22 @@ export class WebGPURenderer {
 
   static async create(canvas: HTMLCanvasElement): Promise<WebGPURenderer> {
     const startup = await createStartupResources(canvas);
+    const { device, context, canvasFormat, adapterFeatures } = startup;
+    // [LAW:single-enforcer] All pipeline creation uses the async path (P2-1).
+    const [computeRuntime, drawPrepRuntime, pathPipeline] = await Promise.all([
+      WebGPUComputeRuntime.create(device),
+      WebGPUDrawPrepRuntime.create(device),
+      WebGPURenderer.createPathPipelineAsync(device, canvasFormat),
+    ]);
     return new WebGPURenderer(
       canvas,
-      startup.device,
-      startup.context,
-      startup.canvasFormat,
-      startup.adapterFeatures
+      device,
+      context,
+      canvasFormat,
+      adapterFeatures,
+      computeRuntime,
+      drawPrepRuntime,
+      pathPipeline,
     );
   }
 
@@ -442,6 +496,9 @@ export class WebGPURenderer {
     this.ensureCanvasConfiguration(input.width, input.height);
     this.syncTopologyBank();
     this.writeSceneUniforms(input);
+    // [LAW:single-enforcer] Hot-swap protocol: commit any ready async pipeline at
+    // frame boundary before use (P2-1: Async Compiler Service Architecture).
+    this.drawPrepRuntime.commitPendingPipeline();
     this.drawPrepRuntime.useShader(input.drawPrepShaderWgsl);
     const drawPlan = this.buildDrawPlan(input.frame);
 
@@ -942,9 +999,11 @@ export class WebGPURenderer {
     this.indirectArgsCapacityRecords = nextCapacity;
   }
 
-  private createPathPipeline(): any {
-    const shaderModule = this.device.createShaderModule({ code: PATH_RENDER_WGSL });
-    return this.device.createRenderPipeline({
+  // [LAW:single-enforcer] createRenderPipelineAsync is the only permitted render pipeline
+  // creation path (P2-1: Async Compiler Service Architecture).
+  private static async createPathPipelineAsync(device: any, canvasFormat: string): Promise<any> {
+    const shaderModule = device.createShaderModule({ code: PATH_RENDER_WGSL });
+    return device.createRenderPipelineAsync({
       layout: 'auto',
       vertex: {
         module: shaderModule,
@@ -962,7 +1021,7 @@ export class WebGPURenderer {
         entryPoint: 'fs_main',
         targets: [
           {
-            format: this.canvasFormat,
+            format: canvasFormat,
             blend: {
               color: {
                 srcFactor: 'src-alpha',
