@@ -28,3 +28,13 @@ scripts/enforce-webgpu-bead-readiness.sh
 ```
 
 The local pre-commit hook should call this script so commits are rejected when `BEAD_ID` is missing or blocked by open `blocks` dependencies.
+
+## Codex Memory
+
+- Treat `.beads/issues.jsonl` as the beads database and expected workspace state.
+- Include `.beads/issues.jsonl` changes in commits when present.
+- Do not call out `.beads/issues.jsonl` as unrelated noise.
+- Do not state or imply that `.beads/issues.jsonl` was not modified.
+- Markdown code fences in PR descriptions are allowed.
+- Never emit escaped newline literals (e.g. `\n`) in PR descriptions; use real multiline Markdown text.
+- There are no "unrelated" test failures. If a test fails, fix it before merging.
