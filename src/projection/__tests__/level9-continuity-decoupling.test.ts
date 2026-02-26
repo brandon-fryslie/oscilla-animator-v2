@@ -40,27 +40,39 @@ const __dirname = dirname(__filename);
 // =============================================================================
 
 describe('Level 9 Unit Tests: Continuity Uses World-Space Data', () => {
-  // Tests removed during type system refactor
-  it('_placeholder_Test_3', () => {
-    // Test removed during type system refactor
-    expect(true).toBe(true);
+  it('projection path does not mutate world-space position buffers', () => {
+    const N = 6;
+    const positions = createWorldPositions(N, 1);
+    const baseline = new Float32Array(positions);
+    const orthoCam: ResolvedCameraParams = DEFAULT_CAMERA;
+    const perspCam: ResolvedCameraParams = {
+      projection: 'persp',
+      centerX: 0.5,
+      centerY: 0.5,
+      distance: 2.0,
+      tiltRad: (35 * Math.PI) / 180,
+      yawRad: 0,
+      fovYRad: (45 * Math.PI) / 180,
+      near: 0.01,
+      far: 100,
+    };
+
+    projectInstances(positions, 0.03, N, orthoCam, getTestArena());
+    projectInstances(positions, 0.03, N, perspCam, getTestArena());
+
+    // [LAW:behavior-not-structure] Continuity contracts are asserted via world-state immutability.
+    expect(positions).toEqual(baseline);
   });
 });
 
 // =============================================================================
-// Integration Tests: Continuity Unaffected by Camera Toggle
+// Shared Helpers
 // =============================================================================
 
-describe('Level 9 Integration: Continuity Unaffected by Toggle', () => {
-  // Tests removed during type system refactor
-  it.skip('placeholder', () => {
-    expect(true).toBe(true);
-  });
-
-  /**
-   * Helper: Create a minimal CompiledProgramIR with continuity steps
-   */
-  function createMinimalProgramWithContinuity(count: number): CompiledProgramIR {
+/**
+ * Helper: Create a minimal CompiledProgramIR with continuity steps
+ */
+function createMinimalProgramWithContinuity(count: number): CompiledProgramIR {
     const instanceId = 'test-instance';
 
     return {
@@ -108,25 +120,25 @@ describe('Level 9 Integration: Continuity Unaffected by Toggle', () => {
         ],
       },
     } as unknown as CompiledProgramIR;
-  }
+}
 
-  /**
-   * Helper: Create world-space position buffer (stride 2 for vec2 in 2D)
-   * Note: Current system uses vec2 for positions, not vec3
-   */
-  function createWorldPositions(count: number, seed: number = 0): Float32Array {
-    const buf = new Float32Array(count * 2);
-    for (let i = 0; i < count; i++) {
-      buf[i * 2 + 0] = 0.1 + i * 0.1 + seed * 0.01; // x
-      buf[i * 2 + 1] = 0.2 + i * 0.15 + seed * 0.02; // y
-    }
-    return buf;
+/**
+ * Helper: Create world-space position buffer (stride 3 for vec3).
+ */
+function createWorldPositions(count: number, seed: number = 0): Float32Array {
+  const buf = new Float32Array(count * 3);
+  for (let i = 0; i < count; i++) {
+    buf[i * 3 + 0] = 0.1 + i * 0.1 + seed * 0.01; // x
+    buf[i * 3 + 1] = 0.2 + i * 0.15 + seed * 0.02; // y
+    buf[i * 3 + 2] = 0.0; // z
   }
+  return buf;
+}
 
-  /**
-   * Helper: Serialize ContinuityState for comparison
-   */
-  function serializeContinuityState(state: ContinuityState): string {
+/**
+ * Helper: Serialize ContinuityState for comparison
+ */
+function serializeContinuityState(state: ContinuityState): string {
     const targets: Record<string, any> = {};
     for (const [key, value] of state.targets.entries()) {
       targets[key] = {
@@ -142,9 +154,7 @@ describe('Level 9 Integration: Continuity Unaffected by Toggle', () => {
     }
 
     return JSON.stringify({ targets, mappings }, null, 2);
-  }
-
-});
+}
 
 // =============================================================================
 // Integration Tests: Projection Never Writes World State
