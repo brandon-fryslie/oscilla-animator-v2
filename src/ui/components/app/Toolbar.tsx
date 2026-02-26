@@ -1,11 +1,13 @@
 import React, { useMemo, useState } from 'react';
 import {
+  ActionIcon,
   Badge,
   Box,
   Button,
   Group,
   Menu,
   Text,
+  Tooltip,
   rem,
 } from '@mantine/core';
 import { observer } from 'mobx-react-lite';
@@ -87,6 +89,17 @@ export const Toolbar: React.FC<ToolbarProps> = observer(({ stats = 'FPS: --', do
       >
         <Group h="100%" px="md" justify="space-between">
           <Group gap="sm">
+            <Tooltip label="Toggle left sidebar" withArrow>
+              <ActionIcon
+                variant="subtle"
+                color="gray"
+                size="sm"
+                aria-label="Toggle left sidebar"
+                onClick={() => dockviewApi && toggleSidebar(dockviewApi, 'left')}
+              >
+                <span style={{ fontSize: rem(13), fontWeight: 700 }}>☰</span>
+              </ActionIcon>
+            </Tooltip>
             <Box
               style={{
                 width: rem(32),
@@ -223,6 +236,18 @@ export const Toolbar: React.FC<ToolbarProps> = observer(({ stats = 'FPS: --', do
             >
               3D
             </Button>
+
+            <Tooltip label="Toggle right sidebar" withArrow>
+              <ActionIcon
+                variant="subtle"
+                color="gray"
+                size="sm"
+                aria-label="Toggle right sidebar"
+                onClick={() => dockviewApi && toggleSidebar(dockviewApi, 'right')}
+              >
+                <span style={{ fontSize: rem(13), fontWeight: 700 }}>☰</span>
+              </ActionIcon>
+            </Tooltip>
           </Group>
         </Group>
       </Box>
@@ -236,4 +261,3 @@ export const Toolbar: React.FC<ToolbarProps> = observer(({ stats = 'FPS: --', do
     </>
   );
 });
-

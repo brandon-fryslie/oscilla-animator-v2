@@ -17,7 +17,7 @@ import 'dockview/dist/styles/dockview.css';
 import { PANEL_COMPONENTS } from './panelRegistry';
 import { createDefaultLayout } from './defaultLayout';
 import type { EditorHandle } from '../editorCommon';
-import { DockviewLeftHeaderActions, DockviewRightHeaderActions } from './DockviewHeaderActions';
+import { DockviewRightHeaderActions } from './DockviewHeaderActions';
 import { clearStoredDockviewLayout, loadDockviewLayout, saveDockviewLayout } from './layoutPersistence';
 import { DockviewRuntimeCallbacksContext } from './runtimeCallbacks';
 import { applySidebarConstraints, captureSidebarWidths, getSidebarForPanel } from './layoutActions';
@@ -184,7 +184,6 @@ export const DockviewProvider: React.FC<DockviewProviderProps> = ({
         <DockviewReact
           className="oscilla-dockview"
           components={PANEL_COMPONENTS}
-          leftHeaderActionsComponent={DockviewLeftHeaderActions}
           rightHeaderActionsComponent={DockviewRightHeaderActions}
           onReady={handleReady}
           onWillDrop={handleWillDrop}
