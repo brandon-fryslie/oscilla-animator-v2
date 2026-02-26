@@ -208,7 +208,7 @@ function buildTimeSourcePlan(
     id: edgeId,
     from: { blockId: timeSource.id, port: ds.output, dir: 'out' },
     to: { blockId: targetBlockId, port: targetPortId, dir: 'in' },
-    alias: `${timeRoot.id}.${ds.output}`,
+    alias: `${timeSource.id}.${ds.output}`,
     role: 'defaultWire',
     origin: { kind: 'elaboration', obligationId, role },
   };
