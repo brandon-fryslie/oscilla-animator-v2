@@ -117,7 +117,7 @@ describe('RenderAssembler', () => {
       const step: StepRender = {
         kind: 'render',
         instanceId: instanceId('missing-instance'),
-        positionSlot: 1 as ValueSlot,
+        controlPointsSlot: 1 as ValueSlot,
         colorSlot: 2 as ValueSlot,
         shape: { k: 'one', topologyId: 1, paramExprs: [] },
       };
@@ -140,7 +140,7 @@ describe('RenderAssembler', () => {
       const step: StepRender = {
         kind: 'render',
         instanceId: instanceId('empty-instance'),
-        positionSlot: 1 as ValueSlot,
+        controlPointsSlot: 1 as ValueSlot,
         colorSlot: 2 as ValueSlot,
         shape: { k: 'one', topologyId: 1, paramExprs: [] },
       };
@@ -200,7 +200,7 @@ describe('RenderAssembler', () => {
       const step: StepRender = {
         kind: 'render',
         instanceId: instanceId('culled-instance'),
-        positionSlot: 1 as ValueSlot,
+        controlPointsSlot: 1 as ValueSlot,
         colorSlot: 2 as ValueSlot,
         scale: { k: 'one', id: 0 as ValueExprId },
         shape: {
@@ -251,7 +251,7 @@ describe('RenderAssembler', () => {
       const step: StepRender = {
         kind: 'render',
         instanceId: instanceId('test-instance'),
-        positionSlot: 1 as ValueSlot,
+        controlPointsSlot: 1 as ValueSlot,
         colorSlot: 2 as ValueSlot,
         scale: { k: 'one', id: 0 as ValueExprId },
         shape: { k: 'one', topologyId: TEST_NON_PATH_TOPOLOGY_ID, paramExprs: [1 as ValueExprId, 2 as ValueExprId] },
@@ -310,7 +310,7 @@ describe('RenderAssembler', () => {
       const step: StepRender = {
         kind: 'render',
         instanceId: instanceId('test-instance'),
-        positionSlot: 1 as ValueSlot,
+        controlPointsSlot: 1 as ValueSlot,
         colorSlot: 2 as ValueSlot,
         scale: { k: 'one', id: 0 as ValueExprId },
         shape: {
@@ -397,7 +397,7 @@ describe('RenderAssembler', () => {
       const step: StepRender = {
         kind: 'render',
         instanceId: instanceId('test-instance'),
-        positionSlot: 1 as ValueSlot,
+        controlPointsSlot: 1 as ValueSlot,
         colorSlot: 2 as ValueSlot,
         scale: { k: 'one', id: 0 as ValueExprId },
         shape: {
@@ -458,7 +458,7 @@ describe('RenderAssembler', () => {
         {
           kind: 'render',
           instanceId: instanceId('instance-a'),
-          positionSlot: 1 as ValueSlot,
+          controlPointsSlot: 1 as ValueSlot,
           colorSlot: 2 as ValueSlot,
           scale: { k: 'one', id: 0 as ValueExprId },
           shape: {
@@ -471,7 +471,7 @@ describe('RenderAssembler', () => {
         {
           kind: 'render',
           instanceId: instanceId('instance-b'),
-          positionSlot: 4 as ValueSlot,
+          controlPointsSlot: 4 as ValueSlot,
           colorSlot: 5 as ValueSlot,
           scale: { k: 'one', id: 0 as ValueExprId },
           shape: {
@@ -518,7 +518,7 @@ describe('RenderAssembler', () => {
         {
           kind: 'render',
           instanceId: instanceId('empty-instance'),
-          positionSlot: 1 as ValueSlot,
+          controlPointsSlot: 1 as ValueSlot,
           colorSlot: 2 as ValueSlot,
           scale: { k: 'one', id: 0 as ValueExprId },
           shape: { k: 'one', topologyId: TEST_PENTAGON_ID, paramExprs: [] },
@@ -586,7 +586,7 @@ describe('RenderAssembler', () => {
       const step: StepRender = {
         kind: 'render',
         instanceId: instanceId('budget-instance'),
-        positionSlot: 1 as ValueSlot,
+        controlPointsSlot: 1 as ValueSlot,
         colorSlot: 2 as ValueSlot,
         scale: { k: 'one', id: 0 as ValueExprId },
         shape: {

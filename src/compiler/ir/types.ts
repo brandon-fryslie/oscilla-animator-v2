@@ -304,7 +304,7 @@ export interface StepRender {
   readonly kind: 'render';
   readonly instanceId: InstanceId;
   /** Slot containing position buffer (after continuity applied) */
-  readonly positionSlot: ValueSlot;
+  readonly controlPointsSlot: ValueSlot;
   /** Slot containing color buffer (after continuity applied) */
   readonly colorSlot: ValueSlot;
   /**

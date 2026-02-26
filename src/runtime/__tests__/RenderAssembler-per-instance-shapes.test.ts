@@ -142,7 +142,7 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
       const step: StepRender = {
         kind: 'render',
         instanceId: instanceId('test-instance'),
-        positionSlot: 1 as ValueSlot,
+        controlPointsSlot: 1 as ValueSlot,
         colorSlot: 2 as ValueSlot,
         scale: { k: 'one', id: 0 as ValueExprId },
         shape: { k: 'slot', slot: 3 as ValueSlot }, // Per-instance shapes
@@ -214,7 +214,7 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
       const step: StepRender = {
         kind: 'render',
         instanceId: instanceId('test-instance'),
-        positionSlot: 1 as ValueSlot,
+        controlPointsSlot: 1 as ValueSlot,
         colorSlot: 2 as ValueSlot,
         scale: { k: 'one', id: 0 as ValueExprId },
         shape: { k: 'slot', slot: 3 as ValueSlot },
@@ -300,7 +300,7 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
       const step: StepRender = {
         kind: 'render',
         instanceId: instanceId('test-instance'),
-        positionSlot: 1 as ValueSlot,
+        controlPointsSlot: 1 as ValueSlot,
         colorSlot: 2 as ValueSlot,
         scale: { k: 'one', id: 0 as ValueExprId },
         shape: { k: 'slot', slot: 3 as ValueSlot },
@@ -388,7 +388,7 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
       const step: StepRender = {
         kind: 'render',
         instanceId: instanceId('test-instance'),
-        positionSlot: 1 as ValueSlot,
+        controlPointsSlot: 1 as ValueSlot,
         colorSlot: 2 as ValueSlot,
         scale: { k: 'one', id: 0 as ValueExprId },
         shape: { k: 'slot', slot: 3 as ValueSlot },
@@ -464,7 +464,7 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
       const step: StepRender = {
         kind: 'render',
         instanceId: instanceId('test-instance'),
-        positionSlot: 1 as ValueSlot,
+        controlPointsSlot: 1 as ValueSlot,
         colorSlot: 2 as ValueSlot,
         scale: { k: 'one', id: 0 as ValueExprId },
         shape: { k: 'slot', slot: 3 as ValueSlot },
@@ -547,7 +547,7 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
       const step: StepRender = {
         kind: 'render',
         instanceId: instanceId('test-instance'),
-        positionSlot: 1 as ValueSlot,
+        controlPointsSlot: 1 as ValueSlot,
         colorSlot: 2 as ValueSlot,
         scale: { k: 'one', id: 0 as ValueExprId },
         shape: { k: 'slot', slot: 3 as ValueSlot },
@@ -602,7 +602,7 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
       const step: StepRender = {
         kind: 'render',
         instanceId: instanceId('test-instance'),
-        positionSlot: 1 as ValueSlot,
+        controlPointsSlot: 1 as ValueSlot,
         colorSlot: 2 as ValueSlot,
         scale: { k: 'one', id: 0 as ValueExprId },
         shape: { k: 'slot', slot: 3 as ValueSlot },
@@ -663,7 +663,7 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
       const step: StepRender = {
         kind: 'render',
         instanceId: instanceId('culled-groups'),
-        positionSlot: 1 as ValueSlot,
+        controlPointsSlot: 1 as ValueSlot,
         colorSlot: 2 as ValueSlot,
         scale: { k: 'one', id: 0 as ValueExprId },
         shape: { k: 'slot', slot: 3 as ValueSlot },
@@ -746,7 +746,7 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
         {
           kind: 'render',
           instanceId: instanceId('instance-a'),
-          positionSlot: 1 as ValueSlot,
+          controlPointsSlot: 1 as ValueSlot,
           colorSlot: 2 as ValueSlot,
           scale: { k: 'one', id: 0 as ValueExprId },
           shape: { k: 'slot', slot: 3 as ValueSlot },
@@ -754,7 +754,7 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
         {
           kind: 'render',
           instanceId: instanceId('instance-b'),
-          positionSlot: 4 as ValueSlot,
+          controlPointsSlot: 4 as ValueSlot,
           colorSlot: 5 as ValueSlot,
           scale: { k: 'one', id: 0 as ValueExprId },
           shape: { k: 'slot', slot: 6 as ValueSlot },
@@ -840,7 +840,7 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
       const step: StepRender = {
         kind: 'render',
         instanceId: instanceId('stress-instance'),
-        positionSlot: 1 as ValueSlot,
+        controlPointsSlot: 1 as ValueSlot,
         colorSlot: 2 as ValueSlot,
         scale: { k: 'one', id: 0 as ValueExprId },
         shape: { k: 'slot', slot: 3 as ValueSlot },
