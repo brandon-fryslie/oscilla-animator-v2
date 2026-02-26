@@ -17,7 +17,7 @@
  */
 
 import type { BlockId, BlockRole } from '../../types';
-import { derivedRole } from '../../types';
+import { blockId, derivedRole } from '../../types';
 import type { Block, Edge, InputPort, OutputPort, Patch } from '../../graph/Patch';
 import { deriveEdgeAlias } from '../../graph/edge-alias';
 import {
@@ -596,8 +596,8 @@ export function expandComposites(
       }
       seenEdgeIds.add(edge.id);
 
-      const missingFrom = !workBlocks.has(edge.from.blockId);
-      const missingTo = !workBlocks.has(edge.to.blockId);
+      const missingFrom = !workBlocks.has(blockId(edge.from.blockId));
+      const missingTo = !workBlocks.has(blockId(edge.to.blockId));
       if (!missingFrom && !missingTo) {
         continue;
       }
