@@ -25,7 +25,6 @@ import type { AcyclicOrLegalGraph, NormalizedEdge, BlockIndex } from '../ir/patc
 import type { CompilerGraphBlock } from '../ir/CompilerGraph';
 import type { ValueRefPacked } from '../ir/lowerTypes';
 import { isExprRef } from '../ir/lowerTypes';
-import type { TopologyId } from '../../shapes/types';
 import { getBlockDefinition } from '../../blocks/registry';
 import { getPolicyForSemantic } from '../../runtime/ContinuityDefaults';
 import { requireManyInstance, payloadStride } from '../../core/canonical-types';
@@ -168,16 +167,13 @@ function inferFieldInstanceFromExprs(
 }
 
 /**
- * Resolve shape info from a cardinality-one expression.
- * Returns topologyId, paramExprs, and optional controlPointField with stride.
+ * Resolve shape-local control-point field info from a cardinality-one expression.
  */
 function resolveShapeInfo(
   shapeExprId: ValueExprId,
   valueExprs: readonly ValueExpr[]
 ):
   | {
-      topologyId: TopologyId;
-      paramExprs: readonly ValueExprId[];
       controlPointField?: { id: ValueExprId; stride: number };
     }
   | undefined {
@@ -186,11 +182,6 @@ function resolveShapeInfo(
   if (isEventExtent(shapeExprId, valueExprs)) return undefined;
 
   if (expr.kind === 'shapeRef') {
-    const topologyId = (expr as any).topologyId as TopologyId;
-
-    const paramExprs = (expr as any).paramArgs as readonly ValueExprId[];
-    if (!paramExprs) throw new Error('shapeRef missing paramArgs field — malformed ValueExprShapeRef');
-
     const cpId = (expr as any).controlPointField as ValueExprId | undefined;
     const controlPointField = cpId !== undefined
       ? (() => {
@@ -201,8 +192,6 @@ function resolveShapeInfo(
       : undefined;
 
     return {
-      topologyId,
-      paramExprs,
       controlPointField,
     };
   }
@@ -384,15 +373,18 @@ export function allocateContinuityPipeline(
       semantic: 'position' | 'radius' | 'opacity' | 'color' | 'custom',
       stride: number,
       roleKey: string,
+      mode: 'continuity' | 'passthrough' = 'continuity',
     ): { baseSlot: ValueSlot; outputSlot: ValueSlot } => {
       // [LAW:one-source-of-truth] Materialization count/continuity mapping are derived from the field's own instance.
       const fieldInstanceId = inferFieldInstanceFromExprs(fieldId, valueExprs) ?? instanceId;
       // [LAW:one-source-of-truth] Continuity keys must be stable across recompiles.
       // Compile-ephemeral ValueExprIds are excluded from runtime continuity identity.
-      const key = `${fieldInstanceId}:${semantic}:${roleKey}`;
+      const key = `${fieldInstanceId}:${semantic}:${roleKey}:${mode}`;
       let slots = fieldSlots.get(key);
       if (!slots) {
-        ensureMapBuildStep(fieldInstanceId);
+        if (mode === 'continuity') {
+          ensureMapBuildStep(fieldInstanceId);
+        }
 
         // [LAW:one-source-of-truth] Reuse the binding-pass-allocated ref.slot as baseSlot
         // so materialize writes to the same slot the debug index references.
@@ -402,11 +394,16 @@ export function allocateContinuityPipeline(
           `continuity_base_${instanceId}_${semantic}`
         );
 
-        // [LAW:single-enforcer] outputSlot always allocated through builder
-        const outputSlot = builder.allocTypedSlot(
-          valueExprs[fieldId as number].type,
-          `continuity_output_${instanceId}_${semantic}`
-        );
+        // [LAW:dataflow-not-control-flow] Shape-handle passthrough still materializes
+        // the field every frame; variability lives in whether continuity mutates outputs.
+        // [LAW:one-source-of-truth] Topology handle identity is canonical data and must
+        // not be transformed by continuity policies.
+        const outputSlot = mode === 'continuity'
+          ? builder.allocTypedSlot(
+              valueExprs[fieldId as number].type,
+              `continuity_output_${instanceId}_${semantic}`,
+            )
+          : baseSlot;
 
         slots = { baseSlot, outputSlot };
         fieldSlots.set(key, slots);
@@ -420,18 +417,20 @@ export function allocateContinuityPipeline(
         });
 
         // 3. Emit ContinuityApply step
-        const policy = getPolicyForSemantic(semantic);
-        const targetKey = `${semantic}:${fieldInstanceId}:${roleKey}`;
-        continuityApplySteps.push({
-          kind: 'continuityApply',
-          targetKey,
-          instanceId: fieldInstanceId,
-          policy,
-          baseSlot,
-          outputSlot,
-          semantic,
-          stride,
-        });
+        if (mode === 'continuity') {
+          const policy = getPolicyForSemantic(semantic);
+          const targetKey = `${semantic}:${fieldInstanceId}:${roleKey}`;
+          continuityApplySteps.push({
+            kind: 'continuityApply',
+            targetKey,
+            instanceId: fieldInstanceId,
+            policy,
+            baseSlot,
+            outputSlot,
+            semantic,
+            stride,
+          });
+        }
       }
       return slots;
     };
@@ -461,28 +460,33 @@ export function allocateContinuityPipeline(
 
     if (shape) {
       if (shape.k === 'field') {
-        const shapeSlots = getFieldSlots(shape.id, 'custom', shape.stride, `${renderBlockId}:shape`);
+        const shapeSlots = getFieldSlots(
+          shape.id,
+          'custom',
+          shape.stride,
+          `${renderBlockId}:shape`,
+          'passthrough',
+        );
         shapeOutput = { k: 'slot', slot: shapeSlots.outputSlot };
       } else {
-        // One-cardinality shape - resolve topology + param expressions + control points
+        // [LAW:one-source-of-truth] One-cardinality shape is rendered via canonical
+        // handle flow (arena scalar -> ShapeBank), not embedded topology literals.
+        shapeOutput = { k: 'oneHandle', id: shape.id };
+        // [LAW:single-enforcer] Continuity pipeline is the single compile-time
+        // boundary that guarantees shape-handle render geometry has control points.
         const shapeInfo = resolveShapeInfo(shape.id, valueExprs);
-        if (shapeInfo) {
-          shapeOutput = {
-            k: 'one',
-            topologyId: shapeInfo.topologyId,
-            paramExprs: shapeInfo.paramExprs,
-          };
-
-          if (shapeInfo.controlPointField !== undefined) {
-            const cpSlots = getFieldSlots(
-              shapeInfo.controlPointField.id,
-              'custom',
-              shapeInfo.controlPointField.stride,
-              `${renderBlockId}:controlPoints`,
-            );
-            controlPointsOutput = { k: 'slot', slot: cpSlots.outputSlot };
-          }
+        if (!shapeInfo || shapeInfo.controlPointField === undefined) {
+          throw new Error(
+            `RenderInstances2D (${renderBlockId}) shape handle must resolve to a shapeRef with controlPointField`,
+          );
         }
+        const cpSlots = getFieldSlots(
+          shapeInfo.controlPointField.id,
+          'custom',
+          shapeInfo.controlPointField.stride,
+          `${renderBlockId}:controlPoints`,
+        );
+        controlPointsOutput = { k: 'slot', slot: cpSlots.outputSlot };
       }
     }
 

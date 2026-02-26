@@ -38,6 +38,11 @@ export interface ScalarEvalContext {
     valueExprs: readonly ValueExpr[],
     state: RuntimeState
   ) => number;
+  evaluateShapeRef?: (
+    expr: Extract<ValueExpr, { kind: 'shapeRef' }>,
+    valueExprs: readonly ValueExpr[],
+    state: RuntimeState
+  ) => number;
 }
 
 /**
@@ -180,9 +185,12 @@ function evaluateScalarExtent(
     }
 
     case 'shapeRef': {
-      // [LAW:no-silent-fallbacks] Shape references are non-numeric resources.
-      // Evaluating them as scalar numbers would mask schedule bugs.
-      throw new Error('ShapeRef expressions are not scalar-evaluable; evaluate via shape2d write path');
+      if (context?.evaluateShapeRef) {
+        return context.evaluateShapeRef(expr, valueExprs, state);
+      }
+      // [LAW:no-silent-fallbacks] Shape references require an explicit evaluator
+      // at the execution boundary; silent coercion to numeric is forbidden.
+      throw new Error('ShapeRef expressions require evaluateShapeRef context');
     }
 
     case 'eventRead': {

@@ -74,6 +74,22 @@ export interface ShapeBankHeaderRecord {
   flags: number;
 }
 
+/** Sentinel for shape handles that do not reference a control-point field slot. */
+export const SHAPE_BANK_NO_CONTROL_POINT_SLOT = -1;
+
+export interface ShapeBankHandleMetadata {
+  topologyId: number;
+  controlPointSlot: number;
+}
+
+/**
+ * Default per-program ShapeBank capacity (u32 words).
+ *
+ * [LAW:single-enforcer] RuntimeState owns default ShapeBank sizing for
+ * handle-based shape execution when compile metadata does not override it.
+ */
+export const DEFAULT_SHAPE_BANK_WORD_CAPACITY = 4096;
+
 /**
  * ShapeBankState - Uint32 topology bank + frame-volatile bump allocator.
  *
@@ -86,6 +102,18 @@ export interface ShapeBankState {
   volatilePtr: number;
   /** Start of volatile region (lower range reserved for static assets). */
   staticBoundary: number;
+  /**
+   * Handle (word offset) -> topology ID sidecar.
+   *
+   * [LAW:one-source-of-truth] Shape handles resolve topology ownership from
+   * this canonical ShapeBank sidecar, not ad-hoc runtime maps.
+   */
+  topologyIdByHandle: Uint32Array;
+  /**
+   * Handle (word offset) -> control-point field slot sidecar.
+   * `-1` means "no control-point field slot".
+   */
+  controlPointSlotByHandle: Int32Array;
 }
 
 /**
@@ -110,6 +138,8 @@ export function createShapeBank(
     data: new Uint32Array(wordCapacity),
     volatilePtr: staticBoundary,
     staticBoundary,
+    topologyIdByHandle: new Uint32Array(wordCapacity),
+    controlPointSlotByHandle: new Int32Array(wordCapacity).fill(SHAPE_BANK_NO_CONTROL_POINT_SLOT),
   };
 }
 
@@ -169,6 +199,31 @@ export function writeShapeBankHeader(
   bank[handle + ShapeBankHeaderWord.IndexOffset] = header.indexOffset;
   bank[handle + ShapeBankHeaderWord.VertexCount] = header.vertexCount;
   bank[handle + ShapeBankHeaderWord.Flags] = header.flags;
+}
+
+/**
+ * Write runtime handle metadata sidecar for a ShapeBank record.
+ */
+export function writeShapeBankHandleMetadata(
+  shapeBank: ShapeBankState,
+  handle: number,
+  metadata: ShapeBankHandleMetadata,
+): void {
+  shapeBank.topologyIdByHandle[handle] = metadata.topologyId >>> 0;
+  shapeBank.controlPointSlotByHandle[handle] = metadata.controlPointSlot;
+}
+
+/**
+ * Read runtime handle metadata sidecar for a ShapeBank record.
+ */
+export function readShapeBankHandleMetadata(
+  shapeBank: ShapeBankState,
+  handle: number,
+): ShapeBankHandleMetadata {
+  return {
+    topologyId: shapeBank.topologyIdByHandle[handle] >>> 0,
+    controlPointSlot: shapeBank.controlPointSlotByHandle[handle] ?? SHAPE_BANK_NO_CONTROL_POINT_SLOT,
+  };
 }
 
 // =============================================================================
@@ -920,7 +975,7 @@ export function createProgramState(
   valueExprCount: number = 0,
   arenaTotalFloats: number = 0,
   shape2dSlotCount: number = 0,
-  shapeBankWordCapacity: number = 0,
+  shapeBankWordCapacity: number = DEFAULT_SHAPE_BANK_WORD_CAPACITY,
   shapeBankStaticBoundary: number = 0,
 ): ProgramState {
   // [LAW:one-source-of-truth] event wrap-edge state lives in eventWrapPredicate;
@@ -982,7 +1037,7 @@ export function createRuntimeState(
   valueExprCount: number = 0,
   arenaTotalFloats: number = 0,
   shape2dSlotCount: number = 0,
-  shapeBankWordCapacity: number = 0,
+  shapeBankWordCapacity: number = DEFAULT_SHAPE_BANK_WORD_CAPACITY,
   shapeBankStaticBoundary: number = 0,
 ): RuntimeState {
   const session = createSessionState();
@@ -1016,7 +1071,7 @@ export function createRuntimeStateFromSession(
   valueExprCount: number = 0,
   arenaTotalFloats: number = 0,
   shape2dSlotCount: number = 0,
-  shapeBankWordCapacity: number = 0,
+  shapeBankWordCapacity: number = DEFAULT_SHAPE_BANK_WORD_CAPACITY,
   shapeBankStaticBoundary: number = 0,
 ): RuntimeState {
   const program = createProgramState(

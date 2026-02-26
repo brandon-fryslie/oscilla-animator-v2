@@ -15,7 +15,6 @@ import type { RenderFrameIR } from '../render/types';
 import type { RenderBufferArena } from '../render/RenderBufferArena';
 import { resolveTime } from './timeResolution';
 import {
-  writeShape2D,
   beginRuntimeFrameSemantics,
   enterRuntimeFrameSegment,
   resetFrameVolatileShapeBank,
@@ -26,7 +25,6 @@ import {
 import {
   MATERIALIZE_SCRATCH,
   renderStepsBuffer as _renderSteps,
-  shapeRecord as _shapeRecord,
   assemblerCtx as _assemblerCtx,
 } from './executor-init';
 import { detectDomainChange, recordDomainTransition } from './ContinuityMapping';
@@ -252,7 +250,7 @@ export function executeFrame(
   // [LAW:one-source-of-truth] Single address table for all slot/expr/field queries.
   // slotToArena replaces all direct program.arenaLayout[slot] accesses in this file.
   const addressTable = getExprAddressTable(program);
-  const { slotLookup: slotLookupMap, fieldExprToSlot, slotToArena } = addressTable;
+  const { slotLookup: slotLookupMap, slotToArena } = addressTable;
   const pureFnContext: PureFnExecutionContext = { kernelRegistry: program.kernelRegistry };
   // [LAW:dataflow-not-control-flow] Assertion mode is chosen once per frame.
   // Step execution order is unchanged; only validation dataflow varies.
@@ -327,29 +325,9 @@ export function executeFrame(
         enterRuntimeFrameSegment(state, resolvePhase1ValueSegment());
         const targetSlot = step.target;
         const lookup = resolveSlotOffsetFromMap(slotLookupMap, targetSlot);
-        const { storage, offset, slot, stride } = lookup;
+        const { storage, slot, stride } = lookup;
 
-        if (storage === 'shape2d') {
-          // Shape value: write Shape2D record to shape2d bank
-          const veId = step.expr;
-          const exprNode = valueExprs[veId as number];
-          if (exprNode.kind === 'shapeRef') {
-            // Resolve control point field slot (avoid IIFE closure)
-            let cpFieldSlot = 0;
-            if (exprNode.controlPointField != null) {
-              const cpSlot = fieldExprToSlot.get(exprNode.controlPointField as number);
-              if (cpSlot === undefined) throw new Error('Control point field ' + exprNode.controlPointField + ' not in fieldExprToSlot — compiler bug');
-              cpFieldSlot = cpSlot;
-            }
-            // Write shape record — populate reusable record fields
-            _shapeRecord.topologyId = exprNode.topologyId;
-            _shapeRecord.pointsFieldSlot = cpFieldSlot;
-            _shapeRecord.pointsCount = 0;
-            _shapeRecord.styleRef = 0;
-            _shapeRecord.flags = 0;
-            writeShape2D(state.values.shape2d, offset, _shapeRecord);
-          }
-        } else if (isNumericStorage(storage)) {
+        if (isNumericStorage(storage)) {
           const arenaDesc = resolveArenaDescriptor(slotToArena, lookup);
 
           // [LAW:one-source-of-truth] Evaluate one-lane values through the same

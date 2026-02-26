@@ -62,20 +62,21 @@ describe('validateCombineMode', () => {
       expect(validateCombineMode('first', 'one', 'shape').valid).toBe(true);
     });
 
-    it('allows layer for shape', () => {
-      expect(validateCombineMode('layer', 'one', 'shape').valid).toBe(true);
+    it('rejects layer for legacy shape payload alias', () => {
+      const result = validateCombineMode('layer', 'one', 'shape');
+      expect(result.valid).toBe(false);
     });
 
     it('rejects sum for shape', () => {
       const result = validateCombineMode('sum', 'one', 'shape');
       expect(result.valid).toBe(false);
-      expect(result.reason).toContain('Shape domain');
+      expect(result.reason).toContain('only supports combineMode "last" or "first"');
     });
 
     it('rejects average for shape', () => {
       const result = validateCombineMode('average', 'one', 'shape');
       expect(result.valid).toBe(false);
-      expect(result.reason).toContain('Shape domain');
+      expect(result.reason).toContain('only supports combineMode "last" or "first"');
     });
 
     it('rejects mul for shape', () => {

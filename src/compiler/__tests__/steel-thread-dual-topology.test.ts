@@ -95,9 +95,18 @@ describe('Steel Thread - Dual Topology with Scale', () => {
     expect(result.program.drawPrepProgram?.wgsl).toContain('INSTANCE_COUNT: u32 = 3u');
     expect(result.program.drawPrepProgram?.wgsl).toContain('fn resolveInstanceCount');
 
-    const topologyIds = renderSteps.flatMap((step) =>
-      step.shape.k === 'one' ? [step.shape.topologyId] : []
-    );
+    const topologyIds = renderSteps.flatMap((step) => {
+      if (step.shape.k === 'oneHandle') {
+        const expr = result.program.valueExprs.nodes[step.shape.id as number];
+        if (expr?.kind === 'shapeRef') {
+          return [expr.topologyId as number];
+        }
+      }
+      if (step.shape.k === 'one') {
+        return [step.shape.topologyId as number];
+      }
+      return [];
+    });
     expect(new Set(topologyIds).size).toBe(2);
 
     const scaleExprIds = renderSteps.flatMap((step) =>
