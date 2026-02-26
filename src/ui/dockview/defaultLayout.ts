@@ -2,114 +2,60 @@
  * Default Layout Builder
  *
  * Creates the initial Dockview layout structure:
- * - Left sidebar: Library (top), Inspector (bottom) - stacked
- * - Center: Flow, Table, Matrix - tabbed editors
- * - Right sidebar: Settings (collapsible)
- * - Bottom: Diagnostics (left), empty placeholder (right) - split
- * - Floating: Preview panel (draggable, resizable, dockable)
- *
- * EXPLICIT GROUP CREATION APPROACH:
- * This implementation creates the group structure FIRST using api.addGroup(),
- * then adds panels to those groups. This makes layout deterministic and
- * independent of panel creation order.
+ * - Left sidebar: PaneView-backed sidebar panel
+ * - Center: Patch, Table, Matrix, Composite
+ * - Right sidebar: PaneView-backed sidebar panel
+ * - Bottom: diagnostics + debug split
+ * - Floating: preview
  */
 
 import type { DockviewApi, DockviewGroupPanel } from 'dockview';
 import { PANEL_DEFINITIONS } from './panelRegistry';
+import {
+  SIDEBAR_DEFAULT_WIDTH,
+  SIDEBAR_MAX_WIDTH,
+  SIDEBAR_MIN_WIDTH,
+} from './sidebarConfig';
 
-/**
- * Builds the default layout with floating preview and split bottom.
- *
- * PHASE 1: Create group structure explicitly
- * PHASE 2: Add panels to those groups (order-independent)
- *
- * Target Structure:
- * +------------------+------------------------+----------------+
- * | left-top         |  center                | right-top      |
- * | (Library)        |  (Flow|Table|Matrix)   | (Settings)     |
- * +------------------+                        |                |
- * | left-bottom      |                        |                |
- * | (Inspector)      |                        |                |
- * +------------------+------------------------+----------------+
- * | bottom-left      | bottom-right           |
- * | (Diagnostics)    | (empty)                |
- * +-------------------------------------------+
- * + Floating: preview (300x300)
- */
 export function createDefaultLayout(api: DockviewApi): void {
-  // Get panel definitions by group
   const visible = PANEL_DEFINITIONS.filter((p) => !p.initiallyHidden);
   const leftTopPanels = visible.filter((p) => p.group === 'left-top');
-  const leftBottomPanels = visible.filter((p) => p.group === 'left-bottom');
   const centerPanels = visible.filter((p) => p.group === 'center');
   const rightTopPanels = visible.filter((p) => p.group === 'right-top');
   const bottomLeftPanels = visible.filter((p) => p.group === 'bottom-left');
   const bottomRightPanels = visible.filter((p) => p.group === 'bottom-right');
   const floatingPanels = visible.filter((p) => p.floating);
 
-  // Validate we have required panels
   if (leftTopPanels.length === 0) {
     throw new Error('Layout requires at least one left-top panel as anchor');
   }
 
-  // ============================================================================
-  // PHASE 1: Create group structure explicitly
-  // ============================================================================
-
-  // 1. Create left-top group (anchor - first group in the layout)
   const leftTopGroup = api.addGroup();
-
-  // 2. Create center group to the RIGHT of left-top
-  //    This establishes the left sidebar | center split
   const centerGroup = api.addGroup({
     referenceGroup: leftTopGroup,
     direction: 'right',
   });
-
-  // 3. Create right-top group to the RIGHT of center (right sidebar)
-  //    This creates the collapsible right sidebar for settings
   const rightTopGroup = api.addGroup({
     referenceGroup: centerGroup,
     direction: 'right',
   });
-
-  // 4. Create left-bottom group BELOW left-top (within left column)
-  //    This splits the left sidebar vertically
-  const leftBottomGroup = api.addGroup({
-    referenceGroup: leftTopGroup,
-    direction: 'below',
-  });
-
-  // 5. Create bottom-left group BELOW center (spans to bottom)
-  //    This creates the bottom bar
   const bottomLeftGroup = api.addGroup({
     referenceGroup: centerGroup,
     direction: 'below',
   });
-
-  // 6. Create bottom-right group to the RIGHT of bottom-left
-  //    This splits the bottom bar horizontally
-  //    Note: Empty groups may collapse, but the structure exists for docking
   const bottomRightGroup = api.addGroup({
     referenceGroup: bottomLeftGroup,
     direction: 'right',
   });
 
-  // Store group references for panel addition
   const groups: Record<string, DockviewGroupPanel> = {
     'left-top': leftTopGroup,
-    'left-bottom': leftBottomGroup,
     center: centerGroup,
     'right-top': rightTopGroup,
     'bottom-left': bottomLeftGroup,
     'bottom-right': bottomRightGroup,
   };
 
-  // ============================================================================
-  // PHASE 2: Add panels to groups (order-independent)
-  // ============================================================================
-
-  // Add left-top panels (Library, etc.)
   leftTopPanels.forEach((panel, index) => {
     api.addPanel({
       id: panel.id,
@@ -117,57 +63,32 @@ export function createDefaultLayout(api: DockviewApi): void {
       title: panel.title,
       position: {
         referenceGroup: groups['left-top'].id,
-        direction: 'within', // Add as tab in same group
+        direction: 'within',
       },
+      minimumWidth: SIDEBAR_MIN_WIDTH.left,
+      maximumWidth: SIDEBAR_MAX_WIDTH.left,
     });
 
-    // Activate the first panel in the group
     if (index === 0) {
-      const addedPanel = api.getPanel(panel.id);
-      addedPanel?.api.setActive();
+      api.getPanel(panel.id)?.api.setActive();
     }
   });
 
-  // Add center panels (Flow, Table, Matrix)
-  centerPanels.forEach((panel, index) => {
+  centerPanels.forEach((panel) => {
     api.addPanel({
       id: panel.id,
       component: panel.component,
       title: panel.title,
       position: {
         referenceGroup: groups.center.id,
-        direction: 'within', // Add as tab in same group
-      },
-      minimumHeight: 200, // Ensure panels have minimum height for React Flow
-      minimumWidth: 200,  // Ensure panels have minimum width for React Flow
-    });
-  });
-
-  // Activate the flow editor tab (now the primary editor)
-  const flowPanel = api.getPanel('flow-editor');
-  if (flowPanel) {
-    flowPanel.api.setActive();
-  }
-
-  // Add left-bottom panels (Inspector, etc.)
-  leftBottomPanels.forEach((panel, index) => {
-    api.addPanel({
-      id: panel.id,
-      component: panel.component,
-      title: panel.title,
-      position: {
-        referenceGroup: groups['left-bottom'].id,
         direction: 'within',
       },
+      minimumHeight: 200,
+      minimumWidth: 200,
     });
-
-    if (index === 0) {
-      const addedPanel = api.getPanel(panel.id);
-      addedPanel?.api.setActive();
-    }
   });
+  api.getPanel('flow-editor')?.api.setActive();
 
-  // Add bottom-left panels (Diagnostics, etc.)
   bottomLeftPanels.forEach((panel, index) => {
     api.addPanel({
       id: panel.id,
@@ -178,14 +99,11 @@ export function createDefaultLayout(api: DockviewApi): void {
         direction: 'within',
       },
     });
-
     if (index === 0) {
-      const addedPanel = api.getPanel(panel.id);
-      addedPanel?.api.setActive();
+      api.getPanel(panel.id)?.api.setActive();
     }
   });
 
-  // Add bottom-right panels (Debug miniview, etc.)
   bottomRightPanels.forEach((panel) => {
     api.addPanel({
       id: panel.id,
@@ -198,7 +116,6 @@ export function createDefaultLayout(api: DockviewApi): void {
     });
   });
 
-  // Add right-top panels (Settings, etc.)
   rightTopPanels.forEach((panel, index) => {
     api.addPanel({
       id: panel.id,
@@ -208,44 +125,38 @@ export function createDefaultLayout(api: DockviewApi): void {
         referenceGroup: groups['right-top'].id,
         direction: 'within',
       },
+      minimumWidth: SIDEBAR_MIN_WIDTH.right,
+      maximumWidth: SIDEBAR_MAX_WIDTH.right,
     });
-
     if (index === 0) {
-      const addedPanel = api.getPanel(panel.id);
-      addedPanel?.api.setActive();
+      api.getPanel(panel.id)?.api.setActive();
     }
   });
 
-  // ============================================================================
-  // PHASE 3: Set initial group sizes
-  // ============================================================================
+  // [LAW:single-enforcer] Sidebar width constraints are owned at layout creation.
+  leftTopGroup.api.setConstraints({
+    minimumWidth: SIDEBAR_MIN_WIDTH.left,
+    maximumWidth: SIDEBAR_MAX_WIDTH.left,
+  });
+  leftTopGroup.api.setSize({ width: SIDEBAR_DEFAULT_WIDTH.left });
 
-  // Set left sidebar width
-  leftTopGroup.api.setSize({ width: 280 });
+  rightTopGroup.api.setConstraints({
+    minimumWidth: SIDEBAR_MIN_WIDTH.right,
+    maximumWidth: SIDEBAR_MAX_WIDTH.right,
+  });
+  rightTopGroup.api.setSize({ width: SIDEBAR_DEFAULT_WIDTH.right });
 
-  // Set right sidebar width (settings)
-  rightTopGroup.api.setSize({ width: 260 });
-
-  // Set bottom bar height
   bottomLeftGroup.api.setSize({ height: 240 });
-
-  // ============================================================================
-  // PHASE 4: Add floating preview panel (LAST)
-  // ============================================================================
 
   const previewPanel = floatingPanels.find((p) => p.id === 'preview');
   if (previewPanel) {
-    // Calculate position: ~60% from left, near top
-    const x = Math.floor(window.innerWidth * 0.6);
-    const y = 50;
-
     api.addPanel({
       id: previewPanel.id,
       component: previewPanel.component,
       title: previewPanel.title,
       floating: {
-        x,
-        y,
+        x: Math.floor(window.innerWidth * 0.6),
+        y: 50,
         width: 300,
         height: 300,
       },
@@ -254,3 +165,4 @@ export function createDefaultLayout(api: DockviewApi): void {
     });
   }
 }
+

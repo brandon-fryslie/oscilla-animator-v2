@@ -1,34 +1,25 @@
-/**
- * Toolbar Component
- *
- * Top toolbar with app title, performance stats, and export functionality.
- * Uses Mantine for a gorgeous, modern look.
- */
-
-import React, { useState, useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
-  Group,
-  Button,
-  Text,
+  ActionIcon,
   Badge,
   Box,
-  Tooltip,
-  Select,
-  ActionIcon,
+  Button,
+  Group,
   Menu,
+  Text,
+  Tooltip,
   rem,
 } from '@mantine/core';
 import { observer } from 'mobx-react-lite';
-import { useStore } from '../../../stores';
-import { useExportPatch } from '../../hooks/useExportPatch';
-import { clearStorageAndReload } from '../../../services/PatchPersistence';
 import type { DockviewApi } from 'dockview';
+import { useStore } from '../../../stores';
+import { clearStorageAndReload } from '../../../services/PatchPersistence';
+import { useExportPatch } from '../../hooks/useExportPatch';
 import { Toast } from '../common/Toast';
 import {
   openOrFocusPanel,
   resetDockviewLayout,
   toggleSidebar,
-  toggleSidebars,
 } from '../../dockview/layoutActions';
 import { PANEL_DEFINITIONS } from '../../dockview/panelRegistry';
 
@@ -42,30 +33,24 @@ export const Toolbar: React.FC<ToolbarProps> = observer(({ stats = 'FPS: --', do
   const patch = useStore('patch');
   const demo = useStore('demo');
   const diagnostics = useStore('diagnostics');
+
   const exportPatch = useExportPatch();
+
   const [toastOpen, setToastOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
   const [toastSeverity, setToastSeverity] = useState<'success' | 'error'>('success');
 
-  // Derive Select data from DemoStore (stable unless demos change — they don't)
-  const demoSelectData = useMemo(
-    () => demo.demos.map(d => ({ label: d.name, value: d.filename })),
-    [demo.demos],
+  const visiblePanels = useMemo(
+    () => PANEL_DEFINITIONS.filter((panel) => !panel.initiallyHidden),
+    []
   );
-
-  const handleDemoChange = (value: string | null) => {
-    if (value === null) return;
-    demo.selectDemo(value);
-  };
 
   const handleExport = async () => {
     const result = await exportPatch();
     setToastMessage(result.message);
     setToastSeverity(result.success ? 'success' : 'error');
     setToastOpen(true);
-
     if (!result.success && result.error) {
-      // [LAW:single-enforcer] Toolbar routes export failures through diagnostics.
       diagnostics.log({
         level: 'error',
         message: `Export error: ${result.error}`,
@@ -73,46 +58,21 @@ export const Toolbar: React.FC<ToolbarProps> = observer(({ stats = 'FPS: --', do
     }
   };
 
-  const handleToastClose = () => {
-    setToastOpen(false);
-  };
-
-  const handleResetLocalStorage = () => {
-    clearStorageAndReload();
-  };
-
-  const handleToggleLeftSidebar = () => {
-    if (!dockviewApi) return;
-    toggleSidebar(dockviewApi, 'left');
-  };
-
-  const handleToggleRightSidebar = () => {
-    if (!dockviewApi) return;
-    toggleSidebar(dockviewApi, 'right');
-  };
-
-  const handleToggleBothSidebars = () => {
-    if (!dockviewApi) return;
-    toggleSidebars(dockviewApi);
-  };
-
-  const handleResetLayout = () => {
-    if (!dockviewApi) return;
-    resetDockviewLayout(dockviewApi);
-  };
-
-  const handleOpenPanel = (panelId: string) => {
-    if (!dockviewApi) return;
-    openOrFocusPanel(dockviewApi, panelId);
-  };
-
   const handleNewPatch = () => {
-    if (confirm('Create a new patch? This will clear the current patch.')) {
-      patch.clear();
-      setToastMessage('New patch created');
-      setToastSeverity('success');
-      setToastOpen(true);
+    if (!confirm('Create a new patch? This clears the current patch.')) {
+      return;
     }
+    patch.clear();
+    setToastMessage('New patch created');
+    setToastSeverity('success');
+    setToastOpen(true);
+  };
+
+  const handleDemoSelect = (filename: string) => {
+    demo.selectDemo(filename);
+    setToastMessage(`Loaded demo: ${filename}`);
+    setToastSeverity('success');
+    setToastOpen(true);
   };
 
   return (
@@ -128,8 +88,18 @@ export const Toolbar: React.FC<ToolbarProps> = observer(({ stats = 'FPS: --', do
         }}
       >
         <Group h="100%" px="md" justify="space-between">
-          {/* Logo and Title */}
           <Group gap="sm">
+            <Tooltip label="Toggle left sidebar" withArrow>
+              <ActionIcon
+                variant="subtle"
+                color="gray"
+                size="sm"
+                aria-label="Toggle left sidebar"
+                onClick={() => dockviewApi && toggleSidebar(dockviewApi, 'left')}
+              >
+                <span style={{ fontSize: rem(13), fontWeight: 700 }}>☰</span>
+              </ActionIcon>
+            </Tooltip>
             <Box
               style={{
                 width: rem(32),
@@ -162,38 +132,7 @@ export const Toolbar: React.FC<ToolbarProps> = observer(({ stats = 'FPS: --', do
             </Badge>
           </Group>
 
-          {/* Preset Selector + Stats and Actions */}
-          <Group gap="md">
-            {/* Demo Dropdown */}
-            {demoSelectData.length > 0 && (
-              <Select
-                data={demoSelectData}
-                value={demo.currentFilename}
-                onChange={handleDemoChange}
-                searchable
-                placeholder="Select demo..."
-                size="xs"
-                w={200}
-                allowDeselect={false}
-                styles={{
-                  input: {
-                    backgroundColor: 'rgba(0, 0, 0, 0.3)',
-                    borderColor: 'rgba(139, 92, 246, 0.3)',
-                    color: '#ccc',
-                    fontSize: rem(12),
-                  },
-                  dropdown: {
-                    backgroundColor: '#1e1e2e',
-                    borderColor: 'rgba(139, 92, 246, 0.3)',
-                  },
-                  option: {
-                    fontSize: rem(12),
-                  },
-                }}
-              />
-            )}
-
-            {/* Performance Stats */}
+          <Group gap="xs">
             <Badge
               variant="outline"
               color="dark"
@@ -213,171 +152,102 @@ export const Toolbar: React.FC<ToolbarProps> = observer(({ stats = 'FPS: --', do
               {stats}
             </Badge>
 
-            {/* Action Buttons */}
-            <Group gap="xs">
-              <Tooltip label="Create new patch" position="bottom" withArrow>
-                <Button
-                  variant="subtle"
-                  color="gray"
-                  size="xs"
-                  onClick={handleNewPatch}
-                  styles={{
-                    root: {
-                      border: '1px solid rgba(139, 92, 246, 0.2)',
-                    },
-                  }}
-                >
-                  New
-                </Button>
-              </Tooltip>
+            <Menu shadow="md" width={220} withinPortal>
+              <Menu.Target>
+                <Button variant="subtle" color="gray" size="xs">Patch</Button>
+              </Menu.Target>
+              <Menu.Dropdown>
+                <Menu.Item onClick={handleNewPatch}>New</Menu.Item>
+                <Menu.Item disabled>Save</Menu.Item>
+                <Menu.Item disabled>Load</Menu.Item>
+                <Menu.Item onClick={handleExport}>Export</Menu.Item>
+                <Menu.Divider />
+                <Menu.Item onClick={clearStorageAndReload}>Reset Storage</Menu.Item>
+              </Menu.Dropdown>
+            </Menu>
 
-              <Tooltip label="Open existing patch" position="bottom" withArrow>
-                <Button
-                  variant="subtle"
-                  color="gray"
-                  size="xs"
-                  styles={{
-                    root: {
-                      border: '1px solid rgba(139, 92, 246, 0.2)',
-                    },
-                  }}
-                >
-                  Open
-                </Button>
-              </Tooltip>
-
-              <Tooltip label="Save current patch" position="bottom" withArrow>
-                <Button
-                  variant="subtle"
-                  color="gray"
-                  size="xs"
-                  styles={{
-                    root: {
-                      border: '1px solid rgba(139, 92, 246, 0.2)',
-                    },
-                  }}
-                >
-                  Save
-                </Button>
-              </Tooltip>
-
-              <Tooltip label="3D Preview (hold Shift)" position="bottom" withArrow>
-                <Button
-                  variant={camera.isActive ? 'gradient' : 'subtle'}
-                  gradient={{ from: 'violet', to: 'grape', deg: 90 }}
-                  color="gray"
-                  size="xs"
-                  onClick={() => camera.toggle()}
-                  styles={{
-                    root: {
-                      border: camera.isActive
-                        ? 'none'
-                        : '1px solid rgba(139, 92, 246, 0.2)',
-                      boxShadow: camera.isActive
-                        ? '0 2px 8px rgba(139, 92, 246, 0.25)'
-                        : 'none',
-                    },
-                  }}
-                >
-                  3D
-                </Button>
-              </Tooltip>
-
-              <Tooltip label="Reset localStorage" position="bottom" withArrow>
-                <Button
-                  variant="subtle"
-                  color="gray"
-                  size="xs"
-                  onClick={handleResetLocalStorage}
-                  styles={{
-                    root: {
-                      border: '1px solid rgba(139, 92, 246, 0.2)',
-                    },
-                  }}
-                >
-                  Reset
-                </Button>
-              </Tooltip>
-
-              <Menu shadow="md" width={220} position="bottom-end" withinPortal>
-                <Menu.Target>
-                  <Tooltip label="Layout controls" position="bottom" withArrow>
-                    <ActionIcon
-                      variant="subtle"
-                      color="gray"
-                      size="lg"
-                      style={{
-                        border: '1px solid rgba(139, 92, 246, 0.2)',
-                      }}
-                    >
-                      <span style={{ fontSize: rem(14), fontWeight: 700 }}>☰</span>
-                    </ActionIcon>
-                  </Tooltip>
-                </Menu.Target>
-                <Menu.Dropdown>
-                  <Menu.Label>Layout</Menu.Label>
-                  <Menu.Item onClick={handleToggleBothSidebars} disabled={!dockviewApi}>
-                    Toggle Sidebars
+            <Menu shadow="md" width={260} withinPortal>
+              <Menu.Target>
+                <Button variant="subtle" color="gray" size="xs">Demos</Button>
+              </Menu.Target>
+              <Menu.Dropdown>
+                {demo.demos.map((item) => (
+                  <Menu.Item
+                    key={item.filename}
+                    onClick={() => handleDemoSelect(item.filename)}
+                    disabled={demo.currentFilename === item.filename}
+                  >
+                    {item.name}
                   </Menu.Item>
-                  <Menu.Item onClick={handleToggleLeftSidebar} disabled={!dockviewApi}>
-                    Toggle Left Sidebar
-                  </Menu.Item>
-                  <Menu.Item onClick={handleToggleRightSidebar} disabled={!dockviewApi}>
-                    Toggle Right Sidebar
-                  </Menu.Item>
-                  <Menu.Item onClick={handleResetLayout} disabled={!dockviewApi}>
-                    Reset Layout
-                  </Menu.Item>
-                </Menu.Dropdown>
-              </Menu>
+                ))}
+              </Menu.Dropdown>
+            </Menu>
 
-              <Menu shadow="md" width={230} position="bottom-end" withinPortal>
-                <Menu.Target>
-                  <Tooltip label="Open/focus panels" position="bottom" withArrow>
-                    <Button
-                      variant="subtle"
-                      color="gray"
-                      size="xs"
-                      styles={{
-                        root: {
-                          border: '1px solid rgba(139, 92, 246, 0.2)',
-                        },
-                      }}
-                    >
-                      Panels
-                    </Button>
-                  </Tooltip>
-                </Menu.Target>
-                <Menu.Dropdown>
-                  <Menu.Label>Panels</Menu.Label>
-                  {PANEL_DEFINITIONS.map((panel) => (
-                    <Menu.Item
-                      key={panel.id}
-                      onClick={() => handleOpenPanel(panel.id)}
-                      disabled={!dockviewApi}
-                    >
-                      {panel.title}
-                    </Menu.Item>
-                  ))}
-                </Menu.Dropdown>
-              </Menu>
-
-              <Tooltip label="Export to clipboard (Cmd+E)" position="bottom" withArrow>
-                <Button
-                  variant="gradient"
-                  gradient={{ from: 'violet', to: 'grape', deg: 90 }}
-                  size="xs"
-                  onClick={handleExport}
-                  styles={{
-                    root: {
-                      boxShadow: '0 2px 8px rgba(139, 92, 246, 0.25)',
-                    },
-                  }}
+            <Menu shadow="md" width={220} withinPortal>
+              <Menu.Target>
+                <Button variant="subtle" color="gray" size="xs">Layout</Button>
+              </Menu.Target>
+              <Menu.Dropdown>
+                <Menu.Item
+                  onClick={() => dockviewApi && toggleSidebar(dockviewApi, 'left')}
+                  disabled={!dockviewApi}
                 >
-                  Export
-                </Button>
-              </Tooltip>
-            </Group>
+                  Toggle Left Sidebar
+                </Menu.Item>
+                <Menu.Item
+                  onClick={() => dockviewApi && toggleSidebar(dockviewApi, 'right')}
+                  disabled={!dockviewApi}
+                >
+                  Toggle Right Sidebar
+                </Menu.Item>
+                <Menu.Divider />
+                <Menu.Item
+                  onClick={() => dockviewApi && resetDockviewLayout(dockviewApi)}
+                  disabled={!dockviewApi}
+                >
+                  Reset Layout
+                </Menu.Item>
+              </Menu.Dropdown>
+            </Menu>
+
+            <Menu shadow="md" width={240} withinPortal>
+              <Menu.Target>
+                <Button variant="subtle" color="gray" size="xs">Panels</Button>
+              </Menu.Target>
+              <Menu.Dropdown>
+                {visiblePanels.map((panel) => (
+                  <Menu.Item
+                    key={panel.id}
+                    onClick={() => dockviewApi && openOrFocusPanel(dockviewApi, panel.id)}
+                    disabled={!dockviewApi}
+                  >
+                    {panel.title}
+                  </Menu.Item>
+                ))}
+              </Menu.Dropdown>
+            </Menu>
+
+            <Button
+              variant={camera.isActive ? 'gradient' : 'subtle'}
+              gradient={{ from: 'violet', to: 'grape', deg: 90 }}
+              color="gray"
+              size="xs"
+              onClick={() => camera.toggle()}
+            >
+              3D
+            </Button>
+
+            <Tooltip label="Toggle right sidebar" withArrow>
+              <ActionIcon
+                variant="subtle"
+                color="gray"
+                size="sm"
+                aria-label="Toggle right sidebar"
+                onClick={() => dockviewApi && toggleSidebar(dockviewApi, 'right')}
+              >
+                <span style={{ fontSize: rem(13), fontWeight: 700 }}>☰</span>
+              </ActionIcon>
+            </Tooltip>
           </Group>
         </Group>
       </Box>
@@ -386,7 +256,7 @@ export const Toolbar: React.FC<ToolbarProps> = observer(({ stats = 'FPS: --', do
         open={toastOpen}
         message={toastMessage}
         severity={toastSeverity}
-        onClose={handleToastClose}
+        onClose={() => setToastOpen(false)}
       />
     </>
   );

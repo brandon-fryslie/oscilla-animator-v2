@@ -10,6 +10,8 @@ import {
   DockviewReact,
   type DockviewReadyEvent,
   type DockviewApi,
+  type DockviewWillDropEvent,
+  type DockviewWillShowOverlayLocationEvent,
 } from 'dockview';
 import 'dockview/dist/styles/dockview.css';
 import { PANEL_COMPONENTS } from './panelRegistry';
@@ -18,6 +20,7 @@ import type { EditorHandle } from '../editorCommon';
 import { DockviewRightHeaderActions } from './DockviewHeaderActions';
 import { clearStoredDockviewLayout, loadDockviewLayout, saveDockviewLayout } from './layoutPersistence';
 import { DockviewRuntimeCallbacksContext } from './runtimeCallbacks';
+import { applySidebarConstraints, captureSidebarWidths, getSidebarForPanel } from './layoutActions';
 import './theme.css';
 
 // Note: Popout functionality would go here when ready
@@ -75,12 +78,47 @@ export const DockviewProvider: React.FC<DockviewProviderProps> = ({
       } else {
         createDefaultLayout(event.api);
       }
+      applySidebarConstraints(event.api);
 
       // Notify parent that API is ready
       onApiReady?.(event.api);
     },
     [onApiReady]
   );
+
+  const shouldBlockEdgeDrop = useCallback((event: DockviewWillDropEvent | DockviewWillShowOverlayLocationEvent): boolean => {
+    if (event.kind !== 'edge') {
+      return false;
+    }
+
+    // [LAW:no-mode-explosion] root-edge dock targets are constrained to the
+    // canonical center+sidebar layout contract.
+    if (!event.group) {
+      return event.position === 'left' || event.position === 'right' || event.position === 'bottom';
+    }
+
+    const groupSidebar = event.group.panels
+      .map((panel) => getSidebarForPanel(panel.id))
+      .find((side): side is 'left' | 'right' => side !== null);
+    if (groupSidebar) {
+      // [LAW:single-enforcer] Sidebar vertical split restrictions are enforced
+      // only at Dockview's drop-boundary.
+      return event.position === 'top' || event.position === 'bottom';
+    }
+
+    const isPatchGroup = event.group.panels.some((panel) => panel.id === 'flow-editor');
+    if (isPatchGroup && event.position === 'top') {
+      return true;
+    }
+
+    return false;
+  }, []);
+
+  const handleWillDrop = useCallback((event: DockviewWillDropEvent) => {
+    if (shouldBlockEdgeDrop(event)) {
+      event.preventDefault();
+    }
+  }, [shouldBlockEdgeDrop]);
 
   // Subscribe to active panel changes
   useEffect(() => {
@@ -99,6 +137,20 @@ export const DockviewProvider: React.FC<DockviewProviderProps> = ({
     if (!api) {
       return;
     }
+    const disposable = api.onWillShowOverlay((event) => {
+      if (shouldBlockEdgeDrop(event)) {
+        event.preventDefault();
+      }
+    });
+    return () => {
+      disposable.dispose();
+    };
+  }, [api, shouldBlockEdgeDrop]);
+
+  useEffect(() => {
+    if (!api) {
+      return;
+    }
 
     const saveLayout = () => {
       if (saveTimeoutRef.current !== null) {
@@ -111,6 +163,9 @@ export const DockviewProvider: React.FC<DockviewProviderProps> = ({
     };
 
     const disposable = api.onDidLayoutChange(() => {
+      // [LAW:dataflow-not-control-flow] Layout-change handling records sidebar
+      // state and persists layout; it must not mutate layout structure itself.
+      captureSidebarWidths(api);
       saveLayout();
     });
 
@@ -131,6 +186,7 @@ export const DockviewProvider: React.FC<DockviewProviderProps> = ({
           components={PANEL_COMPONENTS}
           rightHeaderActionsComponent={DockviewRightHeaderActions}
           onReady={handleReady}
+          onWillDrop={handleWillDrop}
           floatingGroupBounds="boundedWithinViewport"
         />
       </DockviewRuntimeCallbacksContext.Provider>
