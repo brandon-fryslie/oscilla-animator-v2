@@ -5,8 +5,6 @@
  * Maps panel IDs to their React components.
  */
 
-import { BlockLibraryPanel } from './panels/BlockLibraryPanel';
-import { BlockInspectorPanel } from './panels/BlockInspectorPanel';
 import { TableViewPanel } from './panels/TableViewPanel';
 import { ConnectionMatrixPanel } from './panels/ConnectionMatrixPanel';
 import { ReactFlowEditorPanel } from './panels/ReactFlowEditorPanel';
@@ -16,11 +14,12 @@ import { LogPanel } from './panels/LogPanel';
 import { ContinuityPanel } from './panels/ContinuityPanel';
 import { CompilationInspectorPanel } from './panels/CompilationInspectorPanel';
 import { DebugMiniViewPanel } from './panels/DebugMiniViewPanel';
-import { SettingsPanelWrapper } from './panels/SettingsPanelWrapper';
 import { CompositeEditorPanel } from './panels/CompositeEditorPanel';
 import { StepDebugPanel } from './panels/StepDebugPanel';
 import { HelpPanelWrapper } from './panels/HelpPanelWrapper';
 import { ExpressionEditorPanel } from './panels/ExpressionEditorPanel';
+import { LeftSidebarPanel } from './panels/LeftSidebarPanel';
+import { RightSidebarPanel } from './panels/RightSidebarPanel';
 
 /**
  * Panel group assignments for layout.
@@ -54,18 +53,17 @@ export interface PanelDefinition {
  */
 export const PANEL_DEFINITIONS: PanelDefinition[] = [
   // Left sidebar
-  { id: 'block-library', component: 'block-library', title: 'Library', group: 'left-top' },
-  { id: 'block-inspector', component: 'block-inspector', title: 'Inspector', group: 'left-bottom' },
+  { id: 'left-sidebar', component: 'left-sidebar', title: 'Library', group: 'left-top' },
 
   // Center (tabbed editors)
-  { id: 'flow-editor', component: 'flow-editor', title: 'Flow', group: 'center' },
+  { id: 'flow-editor', component: 'flow-editor', title: 'Patch', group: 'center' },
   { id: 'table-view', component: 'table-view', title: 'Table', group: 'center' },
   { id: 'connection-matrix', component: 'connection-matrix', title: 'Matrix', group: 'center' },
   { id: 'composite-editor', component: 'composite-editor', title: 'Composite', group: 'center' },
   { id: 'expression-editor', component: 'expression-editor', title: 'Expression Editor', group: 'center', initiallyHidden: true },
 
-  // Right sidebar (settings not in default layout - can be opened manually)
-  { id: 'settings', component: 'settings', title: 'Settings', group: 'right-top' },
+  // Right sidebar
+  { id: 'right-sidebar', component: 'right-sidebar', title: 'Settings', group: 'right-top' },
 
   // Bottom (split)
   { id: 'diagnostic-console', component: 'diagnostic-console', title: 'Console', group: 'bottom-left' },
@@ -87,8 +85,8 @@ export const PANEL_DEFINITIONS: PanelDefinition[] = [
  * Keys must match the 'component' field in PANEL_DEFINITIONS.
  */
 export const PANEL_COMPONENTS = {
-  'block-library': BlockLibraryPanel,
-  'block-inspector': BlockInspectorPanel,
+  'left-sidebar': LeftSidebarPanel,
+  'right-sidebar': RightSidebarPanel,
   'table-view': TableViewPanel,
   'connection-matrix': ConnectionMatrixPanel,
   'flow-editor': ReactFlowEditorPanel,
@@ -99,7 +97,6 @@ export const PANEL_COMPONENTS = {
   'continuity-panel': ContinuityPanel,
   'compilation-inspector': CompilationInspectorPanel,
   'debug-miniview': DebugMiniViewPanel,
-  'settings': SettingsPanelWrapper,
   'step-debugger': StepDebugPanel,
   'help': HelpPanelWrapper,
   'expression-editor': ExpressionEditorPanel,

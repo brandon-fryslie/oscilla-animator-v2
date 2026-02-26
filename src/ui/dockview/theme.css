@@ -129,3 +129,16 @@
 .oscilla-dockview .dv-resize-container .dv-resize-handle-bottomright:hover {
   background-color: rgba(34, 139, 230, 0.5);
 }
+
+.oscilla-sidebar-paneview {
+  height: 100%;
+  width: 100%;
+}
+
+.oscilla-sidebar-paneview .dv-pane-container {
+  height: 100%;
+}
+
+.oscilla-sidebar-paneview .dv-pane .dv-pane-body {
+  overflow: auto;
+}

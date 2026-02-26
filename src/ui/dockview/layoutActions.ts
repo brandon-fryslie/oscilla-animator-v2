@@ -2,17 +2,20 @@ import type { DockviewApi, DockviewGroupPanel } from 'dockview';
 import { PANEL_DEFINITIONS } from './panelRegistry';
 import { createDefaultLayout } from './defaultLayout';
 import { clearStoredDockviewLayout } from './layoutPersistence';
+import {
+  SIDEBAR_DEFAULT_WIDTH,
+  SIDEBAR_MAX_WIDTH,
+  SIDEBAR_MIN_WIDTH,
+  SIDEBAR_PANEL_IDS,
+  type SidebarSide,
+} from './sidebarConfig';
 
-type SidebarSide = 'left' | 'right';
+const SIDEBAR_SIDES: readonly SidebarSide[] = ['left', 'right'];
 
-const SIDEBAR_PANEL_IDS: Record<SidebarSide, string[]> = {
-  left: ['block-library', 'block-inspector'],
-  right: ['settings'],
-};
-
-export const SIDEBAR_DEFAULT_WIDTH: Record<SidebarSide, number> = {
-  left: 280,
-  right: 260,
+const LEGACY_PANEL_TO_SIDEBAR: Partial<Record<string, SidebarSide>> = {
+  'block-library': 'left',
+  'block-inspector': 'left',
+  settings: 'right',
 };
 
 const sidebarExpandedWidth: Record<SidebarSide, number> = {
@@ -20,21 +23,52 @@ const sidebarExpandedWidth: Record<SidebarSide, number> = {
   right: SIDEBAR_DEFAULT_WIDTH.right,
 };
 
+function clampSidebarWidth(side: SidebarSide, width: number): number {
+  return Math.max(SIDEBAR_MIN_WIDTH[side], Math.min(SIDEBAR_MAX_WIDTH[side], width));
+}
+
 function getSidebarGroup(api: DockviewApi, side: SidebarSide): DockviewGroupPanel | null {
-  const panel = SIDEBAR_PANEL_IDS[side]
-    .map((id) => api.getPanel(id))
-    .find((candidate) => Boolean(candidate));
+  const panel = api.getPanel(SIDEBAR_PANEL_IDS[side]);
   return panel?.group ?? null;
 }
 
-function getSidebarForPanel(panelId: string): SidebarSide | null {
-  if (SIDEBAR_PANEL_IDS.left.includes(panelId)) {
+export function getSidebarForPanel(panelId: string): SidebarSide | null {
+  if (panelId === SIDEBAR_PANEL_IDS.left) {
     return 'left';
   }
-  if (SIDEBAR_PANEL_IDS.right.includes(panelId)) {
+  if (panelId === SIDEBAR_PANEL_IDS.right) {
     return 'right';
   }
-  return null;
+  return LEGACY_PANEL_TO_SIDEBAR[panelId] ?? null;
+}
+
+function rememberExpandedSidebarWidth(group: DockviewGroupPanel, side: SidebarSide): void {
+  if (!group.api.isVisible) {
+    return;
+  }
+  if (group.api.width <= 1) {
+    return;
+  }
+  sidebarExpandedWidth[side] = clampSidebarWidth(side, group.api.width);
+}
+
+export function applySidebarConstraints(api: DockviewApi): void {
+  for (const side of SIDEBAR_SIDES) {
+    const group = getSidebarGroup(api, side);
+    if (!group) {
+      continue;
+    }
+
+    group.api.setConstraints({
+      minimumWidth: SIDEBAR_MIN_WIDTH[side],
+      maximumWidth: SIDEBAR_MAX_WIDTH[side],
+    });
+
+    rememberExpandedSidebarWidth(group, side);
+    if (group.api.isVisible) {
+      group.api.setSize({ width: sidebarExpandedWidth[side] });
+    }
+  }
 }
 
 export function isSidebarCollapsed(api: DockviewApi, side: SidebarSide): boolean {
@@ -42,7 +76,7 @@ export function isSidebarCollapsed(api: DockviewApi, side: SidebarSide): boolean
   if (!group) {
     return false;
   }
-  return group.api.width <= 1;
+  return !group.api.isVisible;
 }
 
 export function setSidebarCollapsed(api: DockviewApi, side: SidebarSide, collapsed: boolean): boolean {
@@ -51,14 +85,19 @@ export function setSidebarCollapsed(api: DockviewApi, side: SidebarSide, collaps
     return false;
   }
 
+  // [LAW:no-silent-fallbacks] Sidebar visibility is explicitly controlled via
+  // Dockview visibility state, not implicit zero-width conventions.
   if (collapsed) {
-    if (group.api.width > 1) {
-      sidebarExpandedWidth[side] = group.api.width;
-    }
-    group.api.setSize({ width: 0 });
+    rememberExpandedSidebarWidth(group, side);
+    group.api.setVisible(false);
     return true;
   }
 
+  group.api.setVisible(true);
+  group.api.setConstraints({
+    minimumWidth: SIDEBAR_MIN_WIDTH[side],
+    maximumWidth: SIDEBAR_MAX_WIDTH[side],
+  });
   group.api.setSize({ width: sidebarExpandedWidth[side] });
   group.api.setActive();
   return true;
@@ -115,13 +154,25 @@ function getReferenceGroup(api: DockviewApi, groupName: string): DockviewGroupPa
   return peerPanel?.group ?? api.activeGroup ?? api.groups[0];
 }
 
+function getSidebarPanelIdForRequest(panelId: string): string | null {
+  const sidebar = getSidebarForPanel(panelId);
+  if (!sidebar) {
+    return null;
+  }
+  return SIDEBAR_PANEL_IDS[sidebar];
+}
+
 export function openOrFocusPanel(api: DockviewApi, panelId: string): boolean {
+  const sidebarPanelId = getSidebarPanelIdForRequest(panelId);
+  if (sidebarPanelId) {
+    const sidebar = getSidebarForPanel(sidebarPanelId)!;
+    setSidebarCollapsed(api, sidebar, false);
+    api.getPanel(sidebarPanelId)?.api.setActive();
+    return true;
+  }
+
   const existing = api.getPanel(panelId);
   if (existing) {
-    const sidebar = getSidebarForPanel(panelId);
-    if (sidebar) {
-      setSidebarCollapsed(api, sidebar, false);
-    }
     existing.api.setActive();
     return true;
   }
@@ -160,10 +211,6 @@ export function openOrFocusPanel(api: DockviewApi, panelId: string): boolean {
         }
       : undefined,
   });
-  const sidebar = getSidebarForPanel(panelId);
-  if (sidebar) {
-    setSidebarCollapsed(api, sidebar, false);
-  }
   api.getPanel(definition.id)?.api.setActive();
   return true;
 }
@@ -173,4 +220,6 @@ export function resetDockviewLayout(api: DockviewApi): void {
   clearStoredDockviewLayout();
   api.clear();
   createDefaultLayout(api);
+  applySidebarConstraints(api);
 }
+
