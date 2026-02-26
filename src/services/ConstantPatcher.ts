@@ -127,6 +127,12 @@ function collectRuntimeLiveExprIds(program: CompiledProgramIR): Set<number> {
   const scheduleSteps = Array.isArray(program.schedule?.steps)
     ? (program.schedule.steps as readonly Step[])
     : ([] as readonly Step[]);
+  const fieldExprBySlot = new Map<number, number>();
+  if (program.fieldSlotRegistry) {
+    for (const [slot, entry] of program.fieldSlotRegistry.entries()) {
+      fieldExprBySlot.set(slot as number, entry.fieldId as number);
+    }
+  }
 
   const pushExpr = (exprId: number | undefined | null): void => {
     if (exprId === undefined || exprId === null) return;
@@ -136,40 +142,57 @@ function collectRuntimeLiveExprIds(program: CompiledProgramIR): Set<number> {
     }
   };
 
+  const pushFieldExprForSlot = (slot: number | undefined): void => {
+    if (slot === undefined || slot === null) return;
+    const fieldExprId = fieldExprBySlot.get(slot);
+    if (fieldExprId === undefined) return;
+    pushExpr(fieldExprId);
+  };
+
+  // [LAW:dataflow-not-control-flow] Runtime liveness seeds only from runtime
+  // sink expressions/slots (render, event dispatch, state writes). Materialize
+  // and evalOne are execution plumbing and are not liveness roots.
   for (const step of scheduleSteps) {
     switch (step.kind) {
-      case 'evalOne':
       case 'eventDispatch':
         pushExpr(step.expr as number);
-        break;
-      case 'materialize':
-        pushExpr(step.field as number);
         break;
       case 'stateWrite':
       case 'fieldStateWrite':
         pushExpr(step.value as number);
         break;
       case 'render':
+        // One-cardinality render params are direct expression sinks.
         if (step.scale?.k === 'one') pushExpr(step.scale.id as number);
         if (step.shape.k === 'one') {
           for (const exprId of step.shape.paramExprs) {
             pushExpr(exprId as number);
           }
         }
+        // Field-backed render inputs are rooted via field-slot provenance.
+        pushFieldExprForSlot(step.controlPointsSlot as number);
+        pushFieldExprForSlot(step.colorSlot as number);
+        if (step.scale?.k === 'slot') {
+          pushFieldExprForSlot(step.scale.slot as number);
+        }
+        if (step.shape.k === 'slot') {
+          pushFieldExprForSlot(step.shape.slot as number);
+        }
+        if (step.controlPoints?.k === 'slot') {
+          pushFieldExprForSlot(step.controlPoints.slot as number);
+        }
+        pushFieldExprForSlot(step.rotationSlot as number | undefined);
+        pushFieldExprForSlot(step.scale2Slot as number | undefined);
         break;
       case 'continuityMapBuild':
       case 'continuityApply':
+      case 'evalOne':
+      case 'materialize':
         break;
       default: {
         const _exhaustive: never = step;
         throw new Error(`Unhandled schedule step kind: ${(_exhaustive as Step).kind}`);
       }
-    }
-  }
-
-  if (program.fieldSlotRegistry) {
-    for (const entry of program.fieldSlotRegistry.values()) {
-      pushExpr(entry.fieldId as number);
     }
   }
 

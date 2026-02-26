@@ -236,8 +236,8 @@ export interface Slot {
  * Default source for an input port.
  * Every input has a default source - there is no 'none' option.
  *
- * If blockType is 'TimeRoot', wires to the existing TimeRoot.
- * Otherwise, creates a derived block instance for this port.
+ * If blockType names a time-capability source block (e.g. InfiniteTimeRoot),
+ * normalization wires to the existing singleton instead of creating a derived block.
  */
 export type DefaultSource = {
   readonly blockType: string;
@@ -261,15 +261,6 @@ export function defaultSource(
  */
 export function defaultSourceConst(value: unknown): DefaultSource {
   return { blockType: 'Const', output: 'out', params: { value } };
-}
-
-/**
- * TimeRoot output default - wires to existing TimeRoot
- */
-export function defaultSourceTimeRoot(
-  output: 'tMs' | 'dt' | 'phaseA' | 'phaseB' | 'pulse' | 'palette' | 'energy'
-): DefaultSource {
-  return { blockType: 'TimeRoot', output };
 }
 
 // =============================================================================

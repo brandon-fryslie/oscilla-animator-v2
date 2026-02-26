@@ -10,7 +10,7 @@ import { validateCombineMode } from '../combine-utils';
 describe('validateCombineMode', () => {
   describe('numeric payloads (float, int, vec2)', () => {
     const numericPayloads = ['float', 'int', 'vec2'] as const;
-    const allModes = ['sum', 'average', 'max', 'min', 'last', 'first'] as const;
+    const allModes = ['sum', 'average', 'max', 'min', 'mul', 'last', 'first'] as const;
 
     for (const payload of numericPayloads) {
       for (const mode of allModes) {
@@ -20,6 +20,12 @@ describe('validateCombineMode', () => {
         });
       }
     }
+
+    it('rejects non-numeric combine modes for numeric payloads', () => {
+      const result = validateCombineMode('layer', 'one', 'float');
+      expect(result.valid).toBe(false);
+      expect(result.reason).toContain('Numeric payload');
+    });
   });
 
   describe('color payload', () => {

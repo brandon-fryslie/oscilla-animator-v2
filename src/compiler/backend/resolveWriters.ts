@@ -24,8 +24,7 @@ import type {
 import type { InferenceCanonicalType } from '../../core/inference-types';
 import { getBlockDefinition, type InputDef } from '../../blocks/registry';
 import type { CombinePolicy } from './combine-utils';
-import type { NormalizedEdge, BlockIndex } from '../ir/patches';
-import type { InputPort } from '../../graph/Patch';
+import type { NormalizedEdge, BlockIndex, PortKey, InputPortPolicy } from '../ir/patches';
 
 // =============================================================================
 // Types
@@ -63,7 +62,7 @@ export interface ResolvedInputSpec {
   /** All writers to this input (length >= 1 after defaults injected) */
   readonly writers: readonly Writer[];
 
-  /** Combine policy (from Slot.combine or default) */
+  /** Combine policy (from frontend-compiled input policy map) */
   readonly combine: CombinePolicy;
 
 }
@@ -81,6 +80,10 @@ export type InputPortTypeResolver = (args: {
   readonly slotId: string;
   readonly inputDef: InputDef;
 }) => InferenceCanonicalType;
+
+function portKey(blockIndex: BlockIndex, portName: string, direction: 'in' | 'out'): PortKey {
+  return `${blockIndex}:${portName}:${direction}` as PortKey;
+}
 
 // =============================================================================
 // Writer Sort Key (Deterministic Ordering)
@@ -201,29 +204,16 @@ export function enumerateWriters(
 // =============================================================================
 
 /**
- * Get default combine policy.
- *
- * Default: { when: 'multi', mode: 'last' }
- *
- * This keeps "plumbing" painless and preserves deterministic behavior.
- *
- * @see design-docs/now/01-MultiBlock-Input.md §1.2
- */
-export function getDefaultCombinePolicy(): CombinePolicy {
-  return { when: 'multi', mode: 'last' };
-}
-
-/**
  * Resolve combine policy for an input slot.
  *
- * Reads combineMode from the block's InputPort if set, otherwise uses default 'last'.
+ * Reads combineMode from compiled frontend policy.
  *
  * @param _inputDef - The input slot definition (unused, kept for signature compatibility)
- * @param inputPort - The block's InputPort instance (may have user-set combineMode)
+ * @param inputPolicy - Compiler frontend policy for this input port
  * @returns Combine policy with the effective combine mode
  */
-export function resolveCombinePolicy(_inputDef: InputDef, inputPort?: InputPort): CombinePolicy {
-  const mode: CombineMode = inputPort?.combineMode ?? 'last';
+export function resolveCombinePolicy(_inputDef: InputDef, inputPolicy: InputPortPolicy): CombinePolicy {
+  const mode: CombineMode = inputPolicy.combineMode;
   return { when: 'multi', mode };
 }
 
@@ -246,13 +236,16 @@ export function resolveCombinePolicy(_inputDef: InputDef, inputPort?: InputPort)
  * @param edges - All edges in the patch (NormalizedEdge format)
  * @param blocks - All blocks in the patch (for index lookup)
  * @param resolveInputPortType - Optional resolver for specialized input port types
+ * @param inputPortPolicies - Required frontend-compiled input policies
  * @returns Map of slotId → ResolvedInputSpec
  */
 export function resolveBlockInputs(
   block: Block,
+  blockIndex: BlockIndex,
   edges: readonly NormalizedEdge[],
   blocks: readonly Block[],
-  resolveInputPortType?: InputPortTypeResolver
+  inputPortPolicies: ReadonlyMap<PortKey, InputPortPolicy>,
+  resolveInputPortType?: InputPortTypeResolver,
 ): Map<string, ResolvedInputSpec> {
   const resolved = new Map<string, ResolvedInputSpec>();
 
@@ -279,9 +272,13 @@ export function resolveBlockInputs(
     // Sort deterministically
     const sortedWriters = sortWriters(writers);
 
-    // Resolve combine policy - read combineMode from block's InputPort if set
-    const inputPort = block.inputPorts.get(slotId);
-    const combine = resolveCombinePolicy(inputSlot, inputPort);
+    // Resolve combine policy from frontend-compiled input policy map.
+    const key = portKey(blockIndex, slotId, 'in');
+    const inputPolicy = inputPortPolicies.get(key);
+    if (!inputPolicy) {
+      throw new Error(`Missing input policy for ${key} (block=${block.id}, port=${slotId})`);
+    }
+    const combine = resolveCombinePolicy(inputSlot, inputPolicy);
 
     // Get the *effective* input port type.
     // If a resolver is provided, it must reflect any specialization
@@ -311,7 +308,7 @@ export function resolveBlockInputs(
  * @param edges - All edges in the patch (NormalizedEdge format)
  * @param blocks - All blocks in the patch (for index lookup)
  * @param inputSlot - The input slot definition
- * @param inputPort - Optional InputPort with user-set combineMode
+ * @param combineMode - Explicit combineMode for this endpoint
  * @returns Resolved input spec
  */
 export function resolveInput(
@@ -319,7 +316,7 @@ export function resolveInput(
   edges: readonly NormalizedEdge[],
   blocks: readonly Block[],
   inputSlot: Slot,
-  inputPort?: InputPort
+  combineMode: CombineMode
 ): ResolvedInputSpec {
   // Enumerate writers (DSConst edges are included via GraphNormalizer)
   const writers = enumerateWriters(endpoint, edges, blocks);
@@ -327,8 +324,8 @@ export function resolveInput(
   // Sort deterministically
   const sortedWriters = sortWriters(writers);
 
-  // Resolve combine policy - read combineMode from InputPort if set
-  const combine = resolveCombinePolicy(inputSlot, inputPort);
+  // Resolve combine policy from explicit input policy data.
+  const combine = resolveCombinePolicy(inputSlot, { combineMode });
 
   // Get port type - inputSlot.type is CanonicalType
   const portType = inputSlot.type;

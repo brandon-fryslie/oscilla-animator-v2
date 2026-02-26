@@ -16,6 +16,7 @@ import type { BlockId, BlockRole, CombineMode, DefaultSource, EdgeRole, PortId }
 import { emptyPatchData, type PatchData } from './internal';
 import type { EventHub } from '../events/EventHub';
 import { requireAnyBlockDef } from '../blocks/registry';
+import { getBlockDefinition } from '../blocks/registry';
 import { normalizeCanonicalName, detectCanonicalNameCollisions } from '../core/canonical-name';
 import { exportPatchAsHCL, importPatchFromHCL, savePatchToStorage } from '../services/PatchPersistence';
 import { derivedLensParamKey } from '../graph/lens-block-id';
@@ -100,7 +101,8 @@ function sourceAddress(blockId: BlockId, outputPortId: string): string {
 // [LAW:one-type-per-behavior] Time-source identity is one predicate shared by
 // materialize and dematerialize paths.
 function isTimeSourceBlockType(blockType: string): boolean {
-  return blockType === 'TimeRoot' || blockType === 'InfiniteTimeRoot';
+  // [LAW:one-source-of-truth] Time-source identity is declared by BlockDef capability.
+  return getBlockDefinition(blockType)?.capability === 'time';
 }
 
 export class PatchStore {

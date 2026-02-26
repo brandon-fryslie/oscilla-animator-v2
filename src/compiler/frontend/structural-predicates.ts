@@ -14,7 +14,7 @@ import { getBlockDefinition } from '../../blocks/registry';
 import { isAxisVar, resolveCardinalityPolicy } from '../../core/canonical-types';
 
 /**
- * Is this block type a time source (e.g. TimeRoot, InfiniteTimeRoot)?
+ * Is this block type a time source (e.g. InfiniteTimeRoot)?
  *
  * Structural: capability === 'time'.
  * Time sources are unique singleton blocks that provide time values.

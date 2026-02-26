@@ -28,6 +28,7 @@ import type { CompiledProgramIR } from '../compiler/ir/program';
 import { SCALAR_INSTANCE_ID } from '../compiler/ir/Indices';
 import { createMaterializeScratch } from './MaterializeScratch';
 import { materializeValueExpr } from './ValueExprMaterializer';
+import type { PureFnExecutionContext } from './ScalarKernelLibrary';
 
 const EVENT_MATERIALIZE_SCRATCH = createMaterializeScratch();
 
@@ -58,7 +59,8 @@ export function evaluateValueExprEvent(
   veId: ValueExprId,
   table: { readonly nodes: readonly ValueExpr[] },
   state: RuntimeState,
-  program: CompiledProgramIR
+  program: CompiledProgramIR,
+  pureFnContext?: PureFnExecutionContext,
 ): boolean {
   const expr = table.nodes[veId as number];
   if (!expr) {
@@ -84,7 +86,7 @@ export function evaluateValueExprEvent(
 
   try {
     // Evaluate event kind
-    const result = evaluateEventKind(expr, veId, table, state, program);
+    const result = evaluateEventKind(expr, veId, table, state, program, pureFnContext);
     return result;
   } finally {
     // Clear visiting flag before returning (even on error)
@@ -100,7 +102,8 @@ function evaluateEventKind(
   veId: ValueExprId,
   table: { readonly nodes: readonly ValueExpr[] },
   state: RuntimeState,
-  program: CompiledProgramIR
+  program: CompiledProgramIR,
+  pureFnContext?: PureFnExecutionContext,
 ): boolean {
   switch (expr.eventKind) {
     case 'const':
@@ -116,10 +119,10 @@ function evaluateEventKind(
     case 'combine': {
       if (expr.mode === 'any') {
         // OR semantics: any input fires → output fires
-        return expr.inputs.some(id => evaluateValueExprEvent(id, table, state, program));
+        return expr.inputs.some(id => evaluateValueExprEvent(id, table, state, program, pureFnContext));
       } else {
         // AND semantics: all inputs fire → output fires
-        return expr.inputs.every(id => evaluateValueExprEvent(id, table, state, program));
+        return expr.inputs.every(id => evaluateValueExprEvent(id, table, state, program, pureFnContext));
       }
     }
 
@@ -137,6 +140,7 @@ function evaluateEventKind(
         program,
         undefined,
         EVENT_MATERIALIZE_SCRATCH,
+        pureFnContext,
       );
       const oneValue = oneValueBuf[0] ?? 0;
 

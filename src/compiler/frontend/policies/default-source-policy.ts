@@ -5,7 +5,7 @@
  * 1. InputDef.defaultSource (port-level override on block definition)
  * 2. Polymorphic DefaultSource block (fallback — defers to type-resolved lowering)
  *
- * TimeRoot special case: wire to existing TimeRoot block (edge only, no new block).
+ * Time-source policy path: wire to existing time source block (edge only, no new block).
  *
  * Guards:
  * - UnexpectedConnectedInput: if the target port already has an incoming edge,
@@ -131,8 +131,8 @@ function buildDefaultSourcePlan(
 
   // [LAW:one-source-of-truth] Block identity from capability, not name string.
   if (isTimeSourceBlock(ds.blockType)) {
-    // Time source special case: wire to existing time source block (edge only, no new block)
-    return buildTimeRootPlan(obligationId, ds, targetBlockId, targetPortId, graph, role);
+    // Time-source path: wire to existing time source block (edge only, no new block)
+    return buildTimeSourcePlan(obligationId, ds, targetBlockId, targetPortId, graph, role);
   }
 
   // Standard case: create a new derived block + edge
@@ -179,7 +179,7 @@ function buildDefaultSourcePlan(
   return { kind: 'plan', plan };
 }
 
-function buildTimeRootPlan(
+function buildTimeSourcePlan(
   obligationId: ObligationId,
   ds: DefaultSource,
   targetBlockId: string,
@@ -189,23 +189,23 @@ function buildTimeRootPlan(
 ): PolicyResult {
   // Find existing time source block
   // [LAW:one-source-of-truth] Block identity from capability, not name string.
-  const timeRoot = graph.blocks.find(
+  const timeSource = graph.blocks.find(
     (b) => isTimeSourceBlock(b.type),
   );
 
-  if (!timeRoot) {
+  if (!timeSource) {
     return {
       kind: 'blocked',
-      reason: 'DefaultSource references TimeRoot but no TimeRoot exists in graph',
+      reason: 'DefaultSource references a time source but no time source block exists in graph',
       diagIds: [],
     };
   }
 
-  const edgeId = `${timeRoot.id}_${ds.output}_to_${targetBlockId}_${targetPortId}`;
+  const edgeId = `${timeSource.id}_${ds.output}_to_${targetBlockId}_${targetPortId}`;
 
   const newEdge: DraftEdge = {
     id: edgeId,
-    from: { blockId: timeRoot.id, port: ds.output, dir: 'out' },
+    from: { blockId: timeSource.id, port: ds.output, dir: 'out' },
     to: { blockId: targetBlockId, port: targetPortId, dir: 'in' },
     role: 'defaultWire',
     origin: { kind: 'elaboration', obligationId, role },

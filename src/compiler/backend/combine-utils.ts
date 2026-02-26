@@ -62,7 +62,7 @@ export interface CombineModeValidation {
  * - One/Many worlds: All modes valid
  * - Config world: Only 'last'/'first' valid (stepwise changes)
  * - Scalar world: Multi-input not allowed (should emit error if N > 1)
- * - Numeric domains (float, int, vec2, vec3): All modes valid
+ * - Numeric domains (float, int, vec2, vec3): sum/average/max/min/mul + first/last
  * - Color domain: Only 'last', 'first', and 'layer' valid
  * - String/boolean domains: Only 'last'/'first' valid
  *
@@ -107,8 +107,13 @@ export function validateCombineMode(
   const payloadKind = typeof payload === 'string' ? payload : payload;
   const numericPayloads = ['float', 'int', 'vec2', 'vec3'];
   if (numericPayloads.includes(payloadKind)) {
-    // Numeric domains support all combine modes
-    return { valid: true };
+    if (mode === 'sum' || mode === 'average' || mode === 'max' || mode === 'min' || mode === 'mul') {
+      return { valid: true };
+    }
+    return {
+      valid: false,
+      reason: `Numeric payload "${payload}" only supports combineMode "sum", "average", "max", "min", "mul", "last", or "first"`,
+    };
   }
 
   if (payloadKind === 'color') {
@@ -180,6 +185,27 @@ export function shouldCombine(policy: CombinePolicy, writerCount: number): boole
   }
   // when: 'multi'
   return writerCount >= 2;
+}
+
+type BuilderCombineMode = 'sum' | 'average' | 'max' | 'min' | 'last' | 'product';
+
+function mapCombineMode(mode: CombineMode): BuilderCombineMode {
+  switch (mode) {
+    case 'sum':
+      return 'sum';
+    case 'average':
+      return 'average';
+    case 'max':
+      return 'max';
+    case 'min':
+      return 'min';
+    case 'last':
+      return 'last';
+    case 'mul':
+      return 'product';
+    default:
+      throw new Error(`Unsupported combine mode for numeric lowering: ${mode}`);
+  }
 }
 
 // =============================================================================
@@ -266,23 +292,14 @@ export function createCombineNode(
   if (!isEvent) {
     const card = requireInst(type.extent.cardinality, 'cardinality');
     const isField = card.kind === 'many';
+    const combineMode = mapCombineMode(normalizedMode);
 
     if (isField) {
-      // Field combine
-      const validModes = ["sum", "average", "max", "min", "last", "product"];
-      const safeMode = validModes.includes(normalizedMode) ? normalizedMode : "product";
-      const combineMode = safeMode as "sum" | "average" | "max" | "min" | "last" | "product";
-
       const fieldId = builder.combine(exprIds, combineMode, type);
       const slot = builder.allocTypedSlot(type, `combine_field_${combineMode}`);
       builder.registerFieldSlot(fieldId, slot);
       return { id: fieldId, slot, type, stride: payloadStride(type.payload) };
     } else {
-      // One-cardinality combine
-      const validModes = ["sum", "average", "max", "min", "last"];
-      const safeMode = validModes.includes(normalizedMode) ? normalizedMode : "last";
-      const combineMode = safeMode as "sum" | "average" | "max" | "min" | "last";
-
       const sigId = builder.combine(exprIds, combineMode, type);
       const slot = builder.allocTypedSlot(type, `combine_sig_${combineMode}`);
       builder.registerScalarSlot(sigId, slot);

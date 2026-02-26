@@ -4,18 +4,16 @@
  * Main compilation pipeline:
  * 1. Normalization - Convert Patch to NormalizedPatch
  * 2. Pass 2: Type Graph - Resolve types for all connections
- * 3. Pass 3: Time Topology - Determine time model
- * 4. Pass 4: Dependency Graph - Build execution dependencies
- * 5. Pass 5: Cycle Validation (SCC) - Check for illegal cycles
- * 6. Pass 6: Block Lowering - Lower blocks to IR expressions
- * 7. Pass 7: Schedule Construction - Build execution schedule
- * 8. Kernel Resolution - Resolve kernel names to handles (Phase B)
+ * 3. Pass 3: Dependency Graph - Build execution dependencies
+ * 4. Pass 4: Cycle Validation (SCC) - Check for illegal cycles
+ * 5. Pass 5: Block Lowering - Lower blocks to IR expressions
+ * 6. Pass 6: Schedule Construction - Build execution schedule
+ * 7. Kernel Resolution - Resolve kernel names to handles (Phase B)
  *
  * Integrated with event emission for diagnostics.
  */
 
 import type { Patch } from '../graph';
-import type { NormalizedPatch } from './frontend/normalize-indexing';
 import type {
   CompiledProgramIR,
   SlotMetaEntry,
@@ -50,7 +48,6 @@ import type { CompileError } from './types';
 import { registerAllBlocks } from '../blocks/all';
 
 // Import passes
-import { pass3Time } from './backend/derive-time-model';
 import { pass4DepGraph } from './backend/derive-dep-graph';
 import { pass5CycleValidation } from './backend/schedule-scc';
 import { pass6BlockLowering } from './backend/lower-blocks';
@@ -140,22 +137,17 @@ export function compile(patch: Patch, options?: CompileOptions): CompileResult {
     // Backend: Always runs (requires frontend output)
     // =========================================================================
 
-    // Pass 3: Time Topology
-    const timeResolvedPatch = pass3Time(typedPatch);
+    // Pass 3: Dependency Graph
+    const depGraphPatch = pass4DepGraph(typedPatch);
 
-    compilationInspector.capturePass('time', typedPatch, timeResolvedPatch);
+    compilationInspector.capturePass('depgraph', typedPatch, depGraphPatch);
 
-    // Pass 4: Dependency Graph
-    const depGraphPatch = pass4DepGraph(timeResolvedPatch);
-
-    compilationInspector.capturePass('depgraph', timeResolvedPatch, depGraphPatch);
-
-    // Pass 5: Cycle Validation (SCC)
+    // Pass 4: Cycle Validation (SCC)
     const acyclicPatch = pass5CycleValidation(depGraphPatch);
 
     compilationInspector.capturePass('scc', depGraphPatch, acyclicPatch);
 
-    // Pass 6: Block Lowering
+    // Pass 5: Block Lowering
     const addressRegistry = AddressRegistry.buildFromPatch(normalized.patch);
     const unlinkedIR = pass6BlockLowering(acyclicPatch, {
       events: options?.events,

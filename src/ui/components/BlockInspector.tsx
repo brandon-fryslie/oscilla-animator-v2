@@ -1354,9 +1354,9 @@ const PortDefaultSourceEditor = observer(function PortDefaultSourceEditor({
 
   const constValue = isConstBlock ? parseConstValue(currentParams.value) : 0;
 
-  // Special handling for TimeRoot block - show output dropdown
-  const isTimeRootBlock = currentBlockType === 'TimeRoot';
-  const timeRootOutputs = ['tMs', 'phaseA', 'phaseB', 'pulse', 'palette', 'energy'];
+  // [LAW:one-source-of-truth] Time-source handling is keyed by block capability, not type string aliasing.
+  const isTimeRootBlock = currentBlockDef?.capability === 'time';
+  const timeRootOutputs = currentBlockDef ? Object.keys(currentBlockDef.outputs) : [];
 
   return (
     <div style={{ marginBottom: '16px', opacity: isConnected ? 0.6 : 1 }}>
@@ -1474,7 +1474,7 @@ const PortDefaultSourceEditor = observer(function PortDefaultSourceEditor({
         </div>
       )}
 
-      {/* TimeRoot Block - Output Selector */}
+      {/* Time source block - Output Selector */}
       {isTimeRootBlock && (
         <div style={{ marginBottom: '12px' }}>
           <label style={{ fontSize: '12px', color: colors.textSecondary, display: 'block', marginBottom: '4px' }}>

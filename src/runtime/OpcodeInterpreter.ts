@@ -51,6 +51,8 @@
  *   mul      - Product: a * b * c * ...
  *   min      - Minimum: min(a, b, c, ...)
  *   max      - Maximum: max(a, b, c, ...)
+ *   avg      - Arithmetic mean: (a + b + c + ...) / n
+ *   last     - Last value wins: returns final argument
  *
  * ──────────────────────────────────────────────────────────────────────
  * VECTOR SEMANTICS (component-wise)
@@ -224,6 +226,12 @@ function applyNaryOp(op: string, values: number[]): number {
     case 'max':
       expectMinArity('max', values.length, 1);
       return Math.max(...values);
+    case 'avg':
+      expectMinArity('avg', values.length, 1);
+      return values.reduce(_reduceAdd, 0) / values.length;
+    case 'last':
+      expectMinArity('last', values.length, 1);
+      return values[values.length - 1];
     case 'clamp':
       expectArity('clamp', values.length, 3);
       return Math.max(values[1], Math.min(values[2], values[0]));

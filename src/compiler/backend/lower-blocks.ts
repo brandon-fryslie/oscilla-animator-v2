@@ -22,7 +22,7 @@ import {
 import type { EventHub } from "../../events/EventHub";
 import { payloadStride, type CanonicalType, requireInst, withInstance } from "../../core/canonical-types";
 import { normalizeCanonicalName } from "../../core/canonical-name";
-import type { PortKey, CollectEdgeKey } from "../ir/patches";
+import type { PortKey, CollectEdgeKey, InputPortPolicy } from "../ir/patches";
 // Multi-Input Blocks Integration
 import {
   type Writer,
@@ -104,6 +104,35 @@ export interface Pass6Options {
   /** Address registry for blocks that need address resolution (e.g., Expression block) */
   addressRegistry?: import('../../graph/address-registry').AddressRegistry;
 }
+
+interface TimeModelState {
+  sourceBlockId?: string;
+}
+
+function validateSingleTimeSource(
+  blocks: readonly Block[],
+  errors: CompileError[],
+): void {
+  const timeBlocks = blocks.filter((block) => {
+    const def = getBlockDefinition(block.type);
+    return def?.capability === 'time';
+  });
+
+  if (timeBlocks.length === 0) {
+    errors.push({
+      code: 'NoTimeRoot',
+      message: 'Patch must have exactly one time source block',
+    });
+    return;
+  }
+
+  if (timeBlocks.length > 1) {
+    errors.push({
+      code: 'MultipleTimeRoots',
+      message: 'Patch cannot have multiple time source blocks',
+    });
+  }
+}
 // =============================================================================
 // Helper Functions
 // =============================================================================
@@ -163,15 +192,17 @@ function isNonTrivialSCC(scc: SCC, graph: DepGraph): boolean {
  */
 function resolveInputsWithMultiInput(
   block: Block,
+  blockIndex: BlockIndex,
   edges: readonly NormalizedEdge[],
   blocks: readonly Block[],
   builder: OrchestratorIRBuilder,
   errors: CompileError[],
+  inputPortPolicies: ReadonlyMap<PortKey, InputPortPolicy>,
   blockOutputs?: Map<BlockIndex, Map<string, ValueRefExpr>>,
   blockIdToIndex?: Map<string, BlockIndex>,
   failedBlocks?: ReadonlySet<BlockIndex>
 ): MultiInputResolution {
-  const resolved = resolveBlockInputs(block, edges, blocks);
+  const resolved = resolveBlockInputs(block, blockIndex, edges, blocks, inputPortPolicies);
   const inputRefs = new Map<string, ValueRefExpr>();
   const upstreamFailedPorts = new Set<string>();
 
@@ -433,12 +464,14 @@ function lowerBlockInstance(
   blockIndex: BlockIndex,
   builder: OrchestratorIRBuilder,
   errors: CompileError[],
-  edges?: readonly NormalizedEdge[],
-  blocks?: readonly Block[],
-  blockOutputs?: Map<BlockIndex, Map<string, ValueRefExpr>>,
-  blockIdToIndex?: Map<string, BlockIndex>,
-  instanceContextByBlock?: Map<BlockIndex, InstanceId>,
-  portTypes?: ReadonlyMap<PortKey, CanonicalType>,
+  edges: readonly NormalizedEdge[],
+  blocks: readonly Block[],
+  blockOutputs: Map<BlockIndex, Map<string, ValueRefExpr>>,
+  blockIdToIndex: Map<string, BlockIndex>,
+  instanceContextByBlock: Map<BlockIndex, InstanceId>,
+  portTypes: ReadonlyMap<PortKey, CanonicalType>,
+  inputPortPolicies: ReadonlyMap<PortKey, InputPortPolicy>,
+  timeModelState: TimeModelState,
   existingOutputs?: Partial<LowerResult>,
   addressRegistry?: import('../../graph/address-registry').AddressRegistry,
   collectEdgeTypes?: ReadonlyMap<CollectEdgeKey, CanonicalType>,
@@ -463,13 +496,20 @@ function lowerBlockInstance(
   try {
     // Collect input ValueRefs
     // Use resolveInputsWithMultiInput if edges and blocks available
-    const multiInputResult: MultiInputResolution | undefined = (edges !== undefined && blocks !== undefined)
-      ? resolveInputsWithMultiInput(block, edges, blocks, builder, errors, blockOutputs, blockIdToIndex, failedBlocks)
-      : undefined;
-    const inputsById: Record<string, ValueRefExpr> = multiInputResult
-      ? Object.fromEntries(multiInputResult.inputRefs.entries())
-      : {};
-    const upstreamFailedPorts = multiInputResult?.upstreamFailedPorts ?? new Set<string>();
+    const multiInputResult = resolveInputsWithMultiInput(
+      block,
+      blockIndex,
+      edges,
+      blocks,
+      builder,
+      errors,
+      inputPortPolicies,
+      blockOutputs,
+      blockIdToIndex,
+      failedBlocks
+    );
+    const inputsById: Record<string, ValueRefExpr> = Object.fromEntries(multiInputResult.inputRefs.entries());
+    const upstreamFailedPorts = multiInputResult.upstreamFailedPorts;
 
     const inputs: ValueRefExpr[] = [];
     let hasUnresolvedInputs = false;
@@ -725,6 +765,18 @@ function lowerBlockInstance(
 
     // Process effects using binding pass (WI-4)
     const blockEffects = requireBlockEffects(result.effects, block, 'phase2');
+    if (blockEffects.timeModel) {
+      if (timeModelState?.sourceBlockId === undefined || timeModelState.sourceBlockId === block.id) {
+        builder.setTimeModel(blockEffects.timeModel);
+        if (timeModelState) timeModelState.sourceBlockId = block.id;
+      } else {
+        errors.push({
+          code: 'MultipleTimeRoots',
+          message: `Patch cannot have multiple time source blocks (found ${timeModelState.sourceBlockId} and ${block.id})`,
+          where: { blockId: block.id },
+        });
+      }
+    }
     const bindingInputs = {
       effects: blockEffects,
       existingState: getExistingStateMap(builder),
@@ -879,6 +931,8 @@ function lowerSCCTwoPass(
   blockIdToIndex: Map<string, BlockIndex>,
   instanceContextByBlock: Map<BlockIndex, InstanceId>,
   portTypes: ReadonlyMap<PortKey, CanonicalType>,
+  inputPortPolicies: ReadonlyMap<PortKey, InputPortPolicy>,
+  timeModelState: TimeModelState,
   options?: Pass6Options,
   collectEdgeTypes?: ReadonlyMap<CollectEdgeKey, CanonicalType>,
   failedBlocks?: Set<BlockIndex>
@@ -1034,6 +1088,8 @@ function lowerSCCTwoPass(
       blockIdToIndex,
       instanceContextByBlock,
       portTypes,
+      inputPortPolicies,
+      timeModelState,
       existingOutputs,
       options?.addressRegistry,
       collectEdgeTypes,
@@ -1426,6 +1482,7 @@ export function pass6BlockLowering(
   const edges = validated.edges;
   const blockOutputs = new Map<BlockIndex, Map<string, ValueRefExpr>>();
   const errors: CompileError[] = [];
+  const timeModelState: TimeModelState = {};
 
   // Track blocks that failed to lower — downstream blocks skip cascade errors
   const failedBlocks = new Set<BlockIndex>();
@@ -1439,8 +1496,16 @@ export function pass6BlockLowering(
     blockIdToIndex.set(blocks[i].id, i as BlockIndex);
   }
 
-  // Set time model from Pass 3 (threaded through Pass 4 and 5)
-  builder.setTimeModel(validated.timeModel);
+  validateSingleTimeSource(blocks, errors);
+  if (errors.length > 0) {
+    return {
+      builder,
+      blockOutputs,
+      errors,
+      constantProvenance: new Map<string, ConstantProvenanceEntry>(),
+      instanceCountProvenance: new Map<string, InstanceCountProvenanceEntry>(),
+    };
+  }
 
   // Process blocks in dependency order
   // Tarjan's SCC algorithm returns SCCs in REVERSE topological order,
@@ -1462,6 +1527,8 @@ export function pass6BlockLowering(
         blockIdToIndex,
         instanceContextByBlock,
         validated.portTypes,
+        validated.inputPortPolicies,
+        timeModelState,
         options,
         validated.collectEdgeTypes,
         failedBlocks
@@ -1500,6 +1567,8 @@ export function pass6BlockLowering(
           blockIdToIndex,
           instanceContextByBlock,
           validated.portTypes,
+          validated.inputPortPolicies,
+          timeModelState,
           undefined, // existingOutputs
           options?.addressRegistry,
           validated.collectEdgeTypes,
@@ -1552,6 +1621,12 @@ export function pass6BlockLowering(
   // [LAW:single-enforcer] Pass 6 emits unresolved instance diagnostics before backend slot derivation.
   reportUnresolvedOutputInstances(blocks, builder, blockOutputs, errors);
   reportUnresolvedSlotInstances(builder, errors);
+  if (!timeModelState.sourceBlockId) {
+    errors.push({
+      code: 'NoTimeRoot',
+      message: 'Patch must have exactly one time source block',
+    });
+  }
 
   // Build provenance maps post-lowering (source-agnostic, scans edges)
   const { constantProvenance, instanceCountProvenance } = buildProvenanceMaps(

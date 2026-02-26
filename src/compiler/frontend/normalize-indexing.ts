@@ -31,7 +31,7 @@
  *     (Unknown ports are handled elsewhere; this pass treats ports as opaque IDs.)
  *   - NO special-casing of particular block types or particular ports.
  *     (The only allowed special-casing in the entire normalization pipeline is
- *      TimeRoot wiring in pass1-default-sources; this pass stays generic.)
+ *      time-source wiring in pass1-default-sources; this pass stays generic.)
  *
  * Allowed future changes (safe evolutions):
  *   - Change ordering strategy *only* if determinism is preserved and documented
