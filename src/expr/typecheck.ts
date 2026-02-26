@@ -17,7 +17,7 @@ import { withType } from './ast';
 import type { PayloadType } from '../core/canonical-types';
 import { FLOAT, INT, BOOL, VEC2, VEC3, VEC4 } from '../core/canonical-types';
 import { isConcretePayload } from '../core/inference-types';
-import type { AddressRegistry } from '../graph/address-registry';
+import type { AddressResolver } from '../graph/address-registry';
 import { addressToString } from '../types/canonical-address';
 import { isVectorType, validateSwizzle, swizzleResultType } from './swizzle';
 import { getExpressionConstants, resolveExpressionConstant } from './constants';
@@ -52,7 +52,7 @@ export type TypeEnv = ReadonlyMap<string, PayloadType>;
  */
 export interface BlockReferenceContext {
   /** Address registry for resolving block references */
-  readonly addressRegistry: AddressRegistry;
+  readonly addressRegistry: AddressResolver;
   /** Allowed payload types (from collect AcceptsSpec) */
   readonly allowedPayloads: readonly PayloadType[];
 }

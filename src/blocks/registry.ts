@@ -51,7 +51,7 @@ export interface LowerCtx {
    * Address registry for resolving canonical addresses.
    * Available for blocks that need address resolution (e.g., Expression block).
    */
-  readonly addressRegistry?: import('../graph/address-registry').AddressRegistry;
+  readonly addressRegistry?: import('../graph/address-registry').AddressResolver;
 
   /**
    * Read-only instance registry.

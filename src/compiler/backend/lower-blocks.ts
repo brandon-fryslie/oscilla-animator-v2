@@ -3,7 +3,8 @@
  */
 
 import type { AcyclicOrLegalGraph, BlockIndex, DepGraph, SCC } from "../ir/patches";
-import type { Block, BlockId } from "../../types";
+import type { BlockId } from "../../types";
+import type { CompilerGraphBlock as Block } from "../ir/CompilerGraph";
 
 import type { OrchestratorIRBuilder } from "../ir/OrchestratorIRBuilder";
 import { IRBuilderImpl } from "../ir/IRBuilderImpl";
@@ -102,7 +103,7 @@ export interface Pass6Options {
   /** Patch revision for event context */
   patchRevision?: number;
   /** Address registry for blocks that need address resolution (e.g., Expression block) */
-  addressRegistry?: import('../../graph/address-registry').AddressRegistry;
+  addressRegistry?: import('../../graph/address-registry').AddressResolver;
 }
 
 interface TimeModelState {
@@ -473,7 +474,7 @@ function lowerBlockInstance(
   inputPortPolicies: ReadonlyMap<PortKey, InputPortPolicy>,
   timeModelState: TimeModelState,
   existingOutputs?: Partial<LowerResult>,
-  addressRegistry?: import('../../graph/address-registry').AddressRegistry,
+  addressRegistry?: import('../../graph/address-registry').AddressResolver,
   collectEdgeTypes?: ReadonlyMap<CollectEdgeKey, CanonicalType>,
   failedBlocks?: ReadonlySet<BlockIndex>
 ): Map<string, ValueRefExpr> {
@@ -587,7 +588,7 @@ function lowerBlockInstance(
           const sourceBlockId = sourceBlock?.id ?? '';
 
           const alias = sourceBlock
-            ? `${normalizeCanonicalName(sourceBlock.displayName ?? sourceBlock.id)}.${edge.fromPort}`
+            ? `${normalizeCanonicalName(sourceBlock.id)}.${edge.fromPort}`
             : undefined;
 
           entries.push({

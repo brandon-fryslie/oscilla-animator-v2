@@ -51,10 +51,11 @@
  */
 
 import type { BlockId, PortId } from '../../types';
-import type { Block, Edge, Patch } from '../../graph/Patch';
+import type { Edge, Patch } from '../../graph/Patch';
 import type { BlockIndex } from '../ir/BlockIndex';
 import { blockIndex } from '../ir/BlockIndex';
 import type { NormalizedPatch, NormalizedEdge } from '../ir/NormalizedPatch';
+import type { CompilerGraphBlock, CompilerGraphEdge, CompilerGraphEdgeRole } from '../ir/CompilerGraph';
 
 // =============================================================================
 // Type Exports
@@ -97,7 +98,7 @@ export function pass3Indexing(patch: Patch): Pass3Result | Pass3Error {
 
   // Build block index map
   const blockIndex = new Map<BlockId, BlockIndex>();
-  const blocks: Block[] = [];
+  const blocks: CompilerGraphBlock[] = [];
 
   // Sort blocks by ID for deterministic ordering
   const sortedBlockIds = [...patch.blocks.keys()].sort();
@@ -109,11 +110,17 @@ export function pass3Indexing(patch: Patch): Pass3Result | Pass3Error {
     }
     const index = blocks.length as BlockIndex;
     blockIndex.set(id, index);
-    blocks.push(patch.blocks.get(id)!);
+    const source = patch.blocks.get(id)!;
+    blocks.push({
+      id: source.id,
+      type: source.type,
+      params: source.params,
+    });
   }
 
-  // Normalize edges
+  // Normalize edges + compiler graph edges
   const normalizedEdges: NormalizedEdge[] = [];
+  const graphEdges: CompilerGraphEdge[] = [];
 
   for (const edge of patch.edges) {
     // Skip disabled edges
@@ -137,6 +144,15 @@ export function pass3Indexing(patch: Patch): Pass3Result | Pass3Error {
       toBlock: toIdx,
       toPort: edge.to.slotId as PortId,
     });
+
+    graphEdges.push({
+      id: edge.id,
+      fromBlockId: edge.from.blockId,
+      fromPort: edge.from.slotId as PortId,
+      toBlockId: edge.to.blockId,
+      toPort: edge.to.slotId as PortId,
+      role: toCompilerGraphEdgeRole(edge.role.kind),
+    });
   }
 
   // Sort edges for deterministic ordering (by target, then source)
@@ -154,12 +170,31 @@ export function pass3Indexing(patch: Patch): Pass3Result | Pass3Error {
   return {
     kind: 'ok',
     patch: {
-      patch, // Original patch (before adapters)
+      graph: {
+        blocks,
+        edges: graphEdges,
+      },
       blockIndex,
       blocks,
       edges: normalizedEdges,
     },
   };
+}
+
+function toCompilerGraphEdgeRole(kind: Edge['role']['kind']): CompilerGraphEdgeRole {
+  switch (kind) {
+    case 'default':
+      return 'defaultWire';
+    case 'adapter':
+      return 'implicitCoerce';
+    case 'user':
+    case 'auto':
+    case 'composite':
+    case 'collect':
+      return 'userWire';
+    default:
+      return 'internalHelper';
+  }
 }
 
 // =============================================================================
