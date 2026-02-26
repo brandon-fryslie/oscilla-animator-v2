@@ -39,8 +39,9 @@ function valueExprChildren(expr: ValueExpr): readonly ValueExprId[] {
           return [expr.field];
         case 'pathSample':
           return [expr.controlPoints, expr.tField];
+        default:
+          return [];
       }
-      break;
     case 'event':
       switch (expr.eventKind) {
         case 'wrap':
@@ -51,14 +52,17 @@ function valueExprChildren(expr: ValueExpr): readonly ValueExprId[] {
         case 'never':
         case 'const':
           return [];
+        default:
+          return [];
       }
-      break;
     case 'extract':
       return [expr.input];
     case 'construct':
       return expr.components;
     case 'hslToRgb':
       return [expr.input];
+    default:
+      return [];
   }
 }
 

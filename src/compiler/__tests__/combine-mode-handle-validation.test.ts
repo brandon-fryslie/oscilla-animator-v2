@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { buildPatch, type Patch } from '../../graph';
 import type { BlockId, CombineMode } from '../../types';
-import { canonicalType, HANDLE } from '../../core/canonical-types';
+import { canonicalType, HANDLE, INT } from '../../core/canonical-types';
 import { compile } from '../compile';
 import { validateCombineMode } from '../backend/combine-utils';
 
@@ -65,6 +65,11 @@ function buildHandleArrayMultiWriterPatch(): { patch: Patch; array: BlockId } {
 }
 
 describe('handle combine-mode validation', () => {
+  it('keeps canonical INT payloads on numeric combine rules', () => {
+    expect(validateCombineMode('sum', 'one', canonicalType(INT)).valid).toBe(true);
+    expect(validateCombineMode('average', 'many', canonicalType(INT)).valid).toBe(true);
+  });
+
   it('rejects arithmetic modes for canonical HANDLE types', () => {
     const result = validateCombineMode('sum', 'one', canonicalType(HANDLE));
     expect(result.valid).toBe(false);

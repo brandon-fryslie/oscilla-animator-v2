@@ -17,7 +17,7 @@ import type { CombineMode } from "../../types/compiler";
 import type { OrchestratorIRBuilder } from "../ir/OrchestratorIRBuilder";
 import { isExprRef, type ValueRefExpr } from "../ir/lowerTypes";
 import type { ValueExprId } from "../ir/Indices";
-import { payloadStride, requireInst, type CanonicalType } from "../../core/canonical-types";
+import { HANDLE, payloadsEqual, payloadStride, requireInst, type CanonicalType } from "../../core/canonical-types";
 
 // =============================================================================
 // Types
@@ -66,7 +66,7 @@ export interface CombineModeValidation {
  * - Config world: Only 'last'/'first' valid (stepwise changes)
  * - Scalar world: Multi-input not allowed (should emit error if N > 1)
  * - Numeric domains (float, int, vec2, vec3): sum/average/max/min/mul + first/last
- * - Handle semantics (canonical HANDLE carried as int payload): first/last/layer/collect/array only
+ * - Handle semantics (canonical HANDLE carried as shape payload): first/last/layer/collect/array only
  * - Color domain: Only 'last', 'first', and 'layer' valid
  * - String/boolean domains: Only 'last'/'first' valid
  *
@@ -162,7 +162,9 @@ function payloadKindOf(payloadOrType: CorePayload | string | CanonicalType): str
 
 function isCanonicalHandleType(payloadOrType: CorePayload | string | CanonicalType): boolean {
   if (typeof payloadOrType === 'string') return false;
-  return payloadOrType.payload.kind === 'int';
+  // [LAW:one-source-of-truth] HANDLE semantics are identified from the canonical
+  // payload singleton, never inferred from generic numeric payload kind.
+  return payloadsEqual(payloadOrType.payload, HANDLE);
 }
 
 /**

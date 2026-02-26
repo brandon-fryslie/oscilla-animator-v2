@@ -99,4 +99,18 @@ describe('resolveShapeRef', () => {
       /could not resolve shape reference/
     );
   });
+
+  it('handles malformed expression nodes without crashing child traversal', () => {
+    const exprs: ValueExpr[] = [
+      ({
+        kind: 'kernel',
+        kernelKind: 'unknownFutureKernelKind',
+        type: canonicalType(HANDLE),
+      } as unknown) as ValueExpr,
+    ];
+
+    expect(() => resolveShapeRef(mockBuilder(exprs), 0 as ValueExprId)).toThrow(
+      /could not resolve shape reference/
+    );
+  });
 });
