@@ -5,9 +5,9 @@
  * Stage 2: Cardinality transform block.
  */
 
-import { registerBlock, ALL_CONCRETE_PAYLOADS } from '../registry';
+import { registerBlock } from '../registry';
 import { canonicalType, payloadStride, type PayloadType, boolConst, withInstance, instanceRef, requireInst, unitNone, contractClamp01 } from '../../core/canonical-types';
-import { FLOAT, INT, BOOL } from '../../core/canonical-types';
+import { FLOAT, SHAPE, INT, BOOL } from '../../core/canonical-types';
 import { cardinalityVar } from '../../core/inference-types';
 import { cardinalityVarId } from '../../core/ids';
 import { DOMAIN_CIRCLE } from '../../core/domain-registry';
@@ -32,10 +32,10 @@ export function register(): void {
     loweringPurity: 'pure',
     payload: {
       allowedPayloads: {
-        element: ALL_CONCRETE_PAYLOADS,
-        elements: ALL_CONCRETE_PAYLOADS,
+        element: [SHAPE],
+        elements: [SHAPE],
       },
-      combinations: ALL_CONCRETE_PAYLOADS.map(p => ({
+      combinations: [SHAPE].map(p => ({
         inputs: [p] as PayloadType[],
         output: p,
       })),
@@ -44,7 +44,7 @@ export function register(): void {
     inputs: {
       element: {
         label: 'Element',
-        type: canonicalType(FLOAT),
+        type: canonicalType(SHAPE),
         defaultSource: defaultSource('Ellipse', 'shape'),
       },
       count: {
@@ -59,7 +59,7 @@ export function register(): void {
     outputs: {
       elements: {
         label: 'Elements',
-        type: canonicalType(FLOAT, { kind: 'none' }, { cardinality: ARRAY_OUTPUT_CARD }, contractClamp01()),
+        type: canonicalType(SHAPE, { kind: 'none' }, { cardinality: ARRAY_OUTPUT_CARD }, contractClamp01()),
       },
       index: {
         label: 'Index',
