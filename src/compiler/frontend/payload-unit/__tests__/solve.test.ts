@@ -3,7 +3,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { solvePayloadUnit, buildPortVarMapping } from '../solve';
-import type { PayloadUnitConstraint, ConstraintOrigin } from '../solve';
+import type { PayloadUnitConstraint, ConstraintOrigin, PayloadUnitEdgeVerification } from '../solve';
 import type { DraftPortKey } from '../../type-facts';
 import { draftPortKey } from '../../type-facts';
 import { FLOAT, INT, VEC2, COLOR, unitNone, unitRadians } from '../../../../core/canonical-types';
@@ -267,6 +267,69 @@ describe('solvePayloadUnit', () => {
     expect(result.portPayloads.get(portB)?.kind).toBe('float');
     expect(result.portPayloads.get(portOut)?.kind).toBe('float');
     expect(result.payloads.get('T')?.kind).toBe('float');
+  });
+
+  // ==========================================================================
+  // Post-solve edge verification safety net
+  // ==========================================================================
+
+  it('emits diagnostic when edge endpoints resolve to incompatible payloads', () => {
+    const mapping = makeVarMapping([
+      [portA, null, null],
+      [portC, null, null],
+    ]);
+    const constraints: PayloadUnitConstraint[] = [
+      { kind: 'concretePayload', port: portA, value: FLOAT, origin: portDefOrigin },
+      { kind: 'concretePayload', port: portC, value: INT, origin: portDefOrigin },
+      { kind: 'concreteUnit', port: portA, value: unitNone(), origin: portDefOrigin },
+      { kind: 'concreteUnit', port: portC, value: unitNone(), origin: portDefOrigin },
+    ];
+    const edgeVerifications: PayloadUnitEdgeVerification[] = [
+      { kind: 'equal', edgeId: 'e-mismatch', fromPort: portA, toPort: portC },
+    ];
+
+    const result = solvePayloadUnit(constraints, mapping, edgeVerifications);
+    expect(result.diagnostics.some((d) => d.diagnosticFlagCode === 'PostSolveEdgeTypeMismatch')).toBe(true);
+  });
+
+  it('uses solver unit-compatibility semantics for post-solve edge verification', () => {
+    const mapping = makeVarMapping([
+      [portA, null, null],
+      [portC, null, null],
+    ]);
+    const constraints: PayloadUnitConstraint[] = [
+      { kind: 'concretePayload', port: portA, value: FLOAT, origin: portDefOrigin },
+      { kind: 'concretePayload', port: portC, value: FLOAT, origin: portDefOrigin },
+      { kind: 'concreteUnit', port: portA, value: unitNone(), origin: portDefOrigin },
+      { kind: 'concreteUnit', port: portC, value: unitRadians(), origin: portDefOrigin },
+    ];
+    const edgeVerifications: PayloadUnitEdgeVerification[] = [
+      { kind: 'equal', edgeId: 'e-unit-compatible', fromPort: portA, toPort: portC },
+    ];
+
+    const result = solvePayloadUnit(constraints, mapping, edgeVerifications);
+    expect(result.diagnostics.some((d) => d.diagnosticFlagCode === 'PostSolveEdgeTypeMismatch')).toBe(false);
+  });
+
+  it('emits diagnostic when collect-edge source type violates collect accepts', () => {
+    const mapping = makeVarMapping([[portC, null, null]]);
+    const constraints: PayloadUnitConstraint[] = [
+      { kind: 'concretePayload', port: portC, value: VEC2, origin: portDefOrigin },
+      { kind: 'concreteUnit', port: portC, value: unitRadians(), origin: portDefOrigin },
+    ];
+    const edgeVerifications: PayloadUnitEdgeVerification[] = [
+      {
+        kind: 'collect',
+        edgeId: 'e-collect-mismatch',
+        fromPort: portC,
+        toPort: portA,
+        allowedPayloads: [FLOAT, INT],
+        allowedUnits: { kind: 'set', values: [unitNone()] },
+      },
+    ];
+
+    const result = solvePayloadUnit(constraints, mapping, edgeVerifications);
+    expect(result.diagnostics.some((d) => d.diagnosticFlagCode === 'PostSolveEdgeTypeMismatch')).toBe(true);
   });
 
   // ==========================================================================

@@ -232,7 +232,11 @@ function solveAndComputeFacts(
   const portVarMapping = buildPortVarMapping(extracted.portBaseTypes);
 
   // 3) Run payload/unit solver
-  const puResult = solvePayloadUnit(extracted.payloadUnit, portVarMapping);
+  const puResult = solvePayloadUnit(
+    extracted.payloadUnit,
+    portVarMapping,
+    extracted.payloadUnitEdgeVerifications,
+  );
 
   // Collect payload/unit errors as FixpointDiagnostic
   for (const error of puResult.errors) {
