@@ -154,11 +154,14 @@ function applyWithMapping(
     return;
   }
 
-  const oldElementCount = oldData.length / stride;
+  // [LAW:no-silent-fallbacks] Clamp to complete lanes only; partial trailing
+  // data from prior layouts is treated as unmapped instead of read-through.
+  const oldElementCount = Math.floor(oldData.length / stride);
+  const newToOld = mapping.newToOld;
   // Single code path: always use newToOld lookup
   // For identity mappings, newToOld[i] === i (allocated once at domain creation)
   for (let i = 0; i < elementCount; i++) {
-    const oldIdx = mapping.newToOld[i];
+    const oldIdx = i < newToOld.length ? newToOld[i] : -1;
     if (oldIdx >= 0 && oldIdx < oldElementCount) {
       // Mapped element: apply transformation
       for (let s = 0; s < stride; s++) {
@@ -424,7 +427,12 @@ export function applyContinuity(
 
   // Get or create continuity state for this target
   // NOTE: This may replace the state with new zero-filled buffers if count changed
-  const targetState = getOrCreateTargetState(state.continuity, targetId, bufferLength);
+  const targetState = getOrCreateTargetState(
+    state.continuity,
+    targetId,
+    bufferLength,
+    instanceId
+  );
 
   // Compute dt for slew (I30: use t_model_ms only)
   const tModelMs = state.time !== null ? state.time.tMs : 0;

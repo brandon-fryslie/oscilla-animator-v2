@@ -26,6 +26,12 @@ import type { PlacementBasisBuffers } from './PlacementBasis';
 export type StableTargetId = string & { readonly __brand: 'StableTargetId' };
 
 /**
+ * Number of consecutive hot-swap prune passes an instance can stay missing
+ * before its continuity state is physically removed.
+ */
+export const CONTINUITY_DORMANT_PRUNE_HOTSWAPS = 2;
+
+/**
  * Compute stable target ID from semantic information (spec §6.1).
  *
  * Stable derivation from:
@@ -111,6 +117,13 @@ export interface ContinuityState {
   /** Per-target continuity buffers, keyed by StableTargetId */
   targets: Map<StableTargetId, TargetContinuityState>;
 
+  /**
+   * Canonical target ownership map: StableTargetId -> instanceId.
+   * // [LAW:one-source-of-truth] Target->instance ownership is tracked once
+   * and reused by prune/migration logic instead of reparsing string keys.
+   */
+  targetOwners: Map<StableTargetId, string>;
+
   /** Current mapping state per instance */
   mappings: Map<string, MappingState>;
 
@@ -132,6 +145,12 @@ export interface ContinuityState {
    * change signal; global booleans are derived compatibility surfaces.
    */
   changedInstancesThisFrame: Set<string>;
+
+  /**
+   * Tracks how many consecutive prune passes each missing instance has spent
+   * in dormant state before hard deletion.
+   */
+  dormantInstanceMisses: Map<string, number>;
 }
 
 /**
@@ -142,12 +161,14 @@ export interface ContinuityState {
 export function createContinuityState(): ContinuityState {
   return {
     targets: new Map(),
+    targetOwners: new Map(),
     mappings: new Map(),
     prevDomains: new Map(),
     placementBasis: new Map(),
     lastTModelMs: 0,
     domainChangeThisFrame: false,
     changedInstancesThisFrame: new Set(),
+    dormantInstanceMisses: new Map(),
   };
 }
 
@@ -184,8 +205,19 @@ export function resizePreservePrefix(old: Float32Array, newLen: number): Float32
 export function getOrCreateTargetState(
   continuity: ContinuityState,
   targetId: StableTargetId,
-  count: number
+  count: number,
+  instanceId?: string
 ): TargetContinuityState {
+  if (instanceId !== undefined) {
+    continuity.targetOwners.set(targetId, instanceId);
+    continuity.dormantInstanceMisses.delete(instanceId);
+  } else if (!continuity.targetOwners.has(targetId)) {
+    const inferredOwner = inferTargetOwnerInstanceId(targetId);
+    if (inferredOwner !== null) {
+      continuity.targetOwners.set(targetId, inferredOwner);
+    }
+  }
+
   let state = continuity.targets.get(targetId);
 
   if (!state || state.count !== count) {
@@ -223,12 +255,69 @@ export function getOrCreateTargetState(
  */
 export function clearContinuityState(continuity: ContinuityState): void {
   continuity.targets.clear();
+  continuity.targetOwners.clear();
   continuity.mappings.clear();
   continuity.prevDomains.clear();
   continuity.placementBasis.clear();
   continuity.lastTModelMs = 0;
   continuity.domainChangeThisFrame = false;
   continuity.changedInstancesThisFrame.clear();
+  continuity.dormantInstanceMisses.clear();
+}
+
+function inferTargetOwnerInstanceId(targetId: StableTargetId): string | null {
+  const rawTargetId = targetId as string;
+  const firstColon = rawTargetId.indexOf(':');
+  const secondColon = rawTargetId.indexOf(':', firstColon + 1);
+  if (firstColon < 0 || secondColon < 0 || secondColon <= firstColon + 1) {
+    return null;
+  }
+  return rawTargetId.slice(firstColon + 1, secondColon);
+}
+
+function backfillLegacyTargetOwners(continuity: ContinuityState): void {
+  for (const targetId of continuity.targets.keys()) {
+    if (continuity.targetOwners.has(targetId)) {
+      continue;
+    }
+    const inferredOwner = inferTargetOwnerInstanceId(targetId);
+    if (inferredOwner !== null) {
+      // [LAW:no-silent-fallbacks] exception: Legacy sessions may not have
+      // ownership metadata; infer once so future pruning uses canonical map.
+      continuity.targetOwners.set(targetId, inferredOwner);
+    }
+  }
+}
+
+function collectTrackedInstanceIds(continuity: ContinuityState): Set<string> {
+  const trackedInstanceIds = new Set<string>();
+  for (const instanceId of continuity.prevDomains.keys()) {
+    trackedInstanceIds.add(instanceId);
+  }
+  for (const instanceId of continuity.mappings.keys()) {
+    trackedInstanceIds.add(instanceId);
+  }
+  for (const instanceId of continuity.placementBasis.keys()) {
+    trackedInstanceIds.add(instanceId);
+  }
+  for (const instanceId of continuity.targetOwners.values()) {
+    trackedInstanceIds.add(instanceId);
+  }
+  return trackedInstanceIds;
+}
+
+function pruneInstanceState(continuity: ContinuityState, instanceId: string): void {
+  continuity.prevDomains.delete(instanceId);
+  continuity.mappings.delete(instanceId);
+  continuity.placementBasis.delete(instanceId);
+  continuity.dormantInstanceMisses.delete(instanceId);
+
+  for (const [targetId, ownerId] of continuity.targetOwners.entries()) {
+    if (ownerId === instanceId) {
+      continuity.targetOwners.delete(targetId);
+      continuity.targets.delete(targetId);
+    }
+  }
 }
 
 /**
@@ -242,27 +331,21 @@ export function pruneStaleContinuity(
   continuity: ContinuityState,
   activeInstanceIds: ReadonlySet<string>
 ): void {
-  for (const id of continuity.prevDomains.keys()) {
-    if (!activeInstanceIds.has(id)) {
-      continuity.prevDomains.delete(id);
-    }
+  backfillLegacyTargetOwners(continuity);
+
+  for (const instanceId of activeInstanceIds) {
+    continuity.dormantInstanceMisses.delete(instanceId);
   }
-  for (const id of continuity.mappings.keys()) {
-    if (!activeInstanceIds.has(id)) {
-      continuity.mappings.delete(id);
-    }
-  }
-  for (const id of continuity.placementBasis.keys()) {
-    if (!activeInstanceIds.has(id)) {
-      continuity.placementBasis.delete(id);
-    }
-  }
-  // Prune targets: StableTargetId format is "semantic:instanceId:portName"
-  for (const targetId of continuity.targets.keys()) {
-    const parts = targetId.split(':');
-    const instanceId = parts[1];
-    if (instanceId && !activeInstanceIds.has(instanceId)) {
-      continuity.targets.delete(targetId);
+
+  const trackedInstanceIds = collectTrackedInstanceIds(continuity);
+  for (const instanceId of trackedInstanceIds) {
+    if (!activeInstanceIds.has(instanceId)) {
+      const nextMisses = (continuity.dormantInstanceMisses.get(instanceId) ?? 0) + 1;
+      if (nextMisses >= CONTINUITY_DORMANT_PRUNE_HOTSWAPS) {
+        pruneInstanceState(continuity, instanceId);
+      } else {
+        continuity.dormantInstanceMisses.set(instanceId, nextMisses);
+      }
     }
   }
 }
