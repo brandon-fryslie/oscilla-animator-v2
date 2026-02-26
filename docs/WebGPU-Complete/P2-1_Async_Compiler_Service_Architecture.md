@@ -188,3 +188,36 @@ Re-compiling the *entire* graph when moving a single "Math Add" node is wasteful
 5.  **Cancellation:** Implement a token/version check to discard stale compilation results.
 
 This architecture ensures that no matter how complex the shader becomes, the UI remains responsive, capable of 60fps animations even while the compiler is churning in the background.
+
+## 9. Completion Note
+
+**Status:** Spec complete for the GPU pipeline async requirement (Requirement 4).
+
+**Evidence:**
+
+1. `createComputePipelineAsync` is now the exclusive path for all compute pipeline creation in `WebGPURenderer`:
+   - `WebGPUComputeRuntime.create()` (static async factory) — simulation pipeline
+   - `WebGPUDrawPrepRuntime.create()` (static async factory) — draw-prep pipeline
+   - `WebGPUDrawPrepRuntime.useShader()` — live shader hot-swap fires async creation
+
+2. `createRenderPipelineAsync` is now the exclusive path for the render (path) pipeline:
+   - `WebGPURenderer.createPathPipelineAsync()` (static async factory)
+
+3. `WebGPURenderer.create()` awaits all three async factories in parallel via `Promise.all` before constructing the renderer.
+
+4. Hot-swap protocol implemented: `WebGPUDrawPrepRuntime.commitPendingPipeline()` is called at the top of each render frame to atomically swap in any resolved async pipeline.
+
+5. Generation counter prevents stale pipeline commits when multiple shader updates fire in rapid succession.
+
+**Existing service-layer requirements (1, 2, 3, 5):** The existing async compile worker architecture (`CompileWorkerClient`, `LiveRecompile`, `CompileOrchestrator`) satisfies the debounce, async service class, and cancellation requirements. Naga WASM loader integration is the subject of P2-2/P2-3.
+
+**Verification commands:**
+
+```bash
+pnpm -s typecheck
+pnpm -s vitest run src/render/webgpu/__tests__/WebGPURenderer.test.ts
+```
+
+**Changed files:**
+- `src/render/webgpu/WebGPURenderer.ts`
+- `src/render/webgpu/__tests__/WebGPURenderer.test.ts`
