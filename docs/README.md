@@ -35,18 +35,16 @@ Deep technical documentation of the runtime execution model:
 ### Patch DSL
 - `patch-dsl-hcl2-support.md` - Supported HCL2 subset, unsupported features, and string interpolation policy
 
-### `design-docs/` (v3 reference)
-Canonical v3 architecture roadmap and implementation target:
-- `../design-docs/OSCILLA-WEBGPU-V3-REFERENCE-ARCHITECTURE.md`
+### `WebGPU-Complete/` (canonical WebGPU design source)
+Canonical WebGPU architecture and migration design lives in:
+- `./WebGPU-Complete/`
+
+Outside `docs/WebGPU-Complete/`, WebGPU documents are historical pointers only and must not define competing architecture or readiness criteria.
 
 ### Guardrail Test Gate
 
-The v3 hard-rule enforcement gate lives in:
-- `src/__tests__/forbidden-patterns.test.ts`
-
-Current enforced v3 constraints include:
-- WebGPU renderer draw contract uses indirect draws (`drawIndexedIndirect`)
-- No direct indexed draw hot path in `src/render/webgpu/WebGPURenderer.ts`
+Canonical architecture guardrails live in:
+- `src/__tests__/architecture-guardrails.test.ts`
 
 ### WebGPU Matrix Harness
 
