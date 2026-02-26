@@ -7,7 +7,8 @@
  * affect rendering and their errors can be suppressed.
  */
 
-import type { Block, BlockIndex, NormalizedEdge } from './ir/patches';
+import type { BlockIndex, NormalizedEdge } from './ir/patches';
+import type { CompilerGraphBlock } from './ir/CompilerGraph';
 import { getBlockDefinition } from '../blocks/registry';
 
 /**
@@ -15,9 +16,9 @@ import { getBlockDefinition } from '../blocks/registry';
  * Render blocks have `capability === 'render'` in their block definition.
  */
 function findRenderBlocks(
-  blocks: readonly Block[]
-): Array<{ block: Block; index: BlockIndex }> {
-  const result: Array<{ block: Block; index: BlockIndex }> = [];
+  blocks: readonly CompilerGraphBlock[]
+): Array<{ block: CompilerGraphBlock; index: BlockIndex }> {
+  const result: Array<{ block: CompilerGraphBlock; index: BlockIndex }> = [];
 
   for (let i = 0; i < blocks.length; i++) {
     const block = blocks[i];
@@ -44,7 +45,7 @@ function findRenderBlocks(
  * @returns Set of BlockIndex values for all blocks that feed into render output
  */
 export function computeRenderReachableBlocks(
-  blocks: readonly Block[],
+  blocks: readonly CompilerGraphBlock[],
   edges: readonly NormalizedEdge[]
 ): Set<BlockIndex> {
   const renderBlocks = findRenderBlocks(blocks);

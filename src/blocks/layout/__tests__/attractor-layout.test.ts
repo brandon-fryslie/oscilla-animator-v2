@@ -35,9 +35,11 @@ patch "Test Attractor Layout" {
     const { patch, errors } = deserializePatchFromHCL(hcl);
     expect(errors).toEqual([]);
     const result = compileFrontend(patch);
-    const attractorBlock = result.typedPatch.blocks.find(b => b.type === 'AttractorLayout');
-    expect(attractorBlock).toBeDefined();
-    expect(attractorBlock!.outputPorts.size).toBeGreaterThan(0);
+    const attractorIndex = result.typedPatch.blocks.findIndex(b => b.type === 'AttractorLayout');
+    expect(attractorIndex).toBeGreaterThanOrEqual(0);
+    const outputCount = Array.from(result.typedPatch.portTypes.keys())
+      .filter(key => key.startsWith(`${attractorIndex}:`) && key.endsWith(':out')).length;
+    expect(outputCount).toBeGreaterThan(0);
   });
 
   it('compiles full pipeline', () => {

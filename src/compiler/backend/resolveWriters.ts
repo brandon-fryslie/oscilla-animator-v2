@@ -18,9 +18,9 @@
 
 import type {
   Slot,
-  Block,
   CombineMode,
 } from '../../types';
+import type { CompilerGraphBlock as Block } from '../ir/CompilerGraph';
 import type { InferenceCanonicalType } from '../../core/inference-types';
 import { getBlockDefinition, type InputDef } from '../../blocks/registry';
 import type { CombinePolicy } from './combine-utils';

@@ -12,15 +12,16 @@
  * // [LAW:dataflow-not-control-flow] All blocks/edges always processed; empty is data.
  */
 
-import type { BlockId, PortId, BlockRole, EdgeRole, DefaultSource } from '../../types';
-import type { Block, Edge, Patch, InputPort, OutputPort } from '../../graph/Patch';
+import type { BlockId, PortId } from '../../types';
+import type { Patch } from '../../graph/Patch';
 import type { NormalizedPatch, NormalizedEdge, BlockIndex } from './normalize-indexing';
 import { blockIndex } from './normalize-indexing';
 import type { TypeResolvedPatch, PortKey, CollectEdgeKey, InputPortPolicy } from '../ir/patches';
+import type { CompilerGraphBlock, CompilerGraphEdge, CompilerGraphEdgeRole } from '../ir/CompilerGraph';
 import type { CanonicalType } from '../../core/canonical-types';
 import type { CardinalityAcceptance } from '../../core/canonical-types/cardinality';
 import type { StrictTypedGraph, DraftPortKey, TypeFacts } from './type-facts';
-import type { DraftBlock, DraftEdge, DraftEdgeRole, DraftGraph } from './draft-graph';
+import type { DraftBlock, DraftEdge, DraftGraph } from './draft-graph';
 import type { BlockDef } from '../../blocks/registry';
 
 // =============================================================================
@@ -55,10 +56,8 @@ export function bridgeToNormalizedPatch(
     blockIndexMap.set(sortedBlocks[i].id as BlockId, blockIndex(i));
   }
 
-  // Step 2: Reconstruct Block objects from DraftBlocks
-  const blocks: Block[] = sortedBlocks.map((db) =>
-    reconstructBlock(db, expandedPatch, registry),
-  );
+  // Step 2: Build compiler-owned block nodes (frontend patch fields stripped)
+  const blocks: CompilerGraphBlock[] = buildCompilerBlocks(sortedBlocks);
 
   // Step 3: Convert DraftEdge → NormalizedEdge
   // Build a string→BlockIndex lookup for edge conversion (DraftEdge uses string blockId)
@@ -67,18 +66,21 @@ export function bridgeToNormalizedPatch(
 
   const normalizedEdges = buildNormalizedEdges(g.edges, stringIndexMap);
 
-  // Step 4: Build synthetic Patch for NormalizedPatch.patch
-  const syntheticPatch = buildSyntheticPatch(blocks, g.edges, stringIndexMap);
+  // Step 4: Build compiler-owned graph edges for provenance/diagnostics.
+  const graphEdges = buildCompilerGraphEdges(g.edges);
 
   // Step 5: Translate DraftPortKey → PortKey for type map
   const portTypes = translatePortTypes(strict.portTypes, stringIndexMap);
-  const inputPortPolicies = buildInputPortPolicies(blocks, stringIndexMap, registry);
+  const inputPortPolicies = buildInputPortPolicies(sortedBlocks, expandedPatch, stringIndexMap, registry);
 
   // Step 6: Translate collectEdgeTypes (DraftPortKey-flavored keys → CollectEdgeKey)
   const collectEdgeTypes = translateCollectEdgeTypes(strict.collectEdgeTypes, stringIndexMap);
 
   const normalizedPatch: NormalizedPatch = {
-    patch: syntheticPatch,
+    graph: {
+      blocks,
+      edges: graphEdges,
+    },
     blockIndex: blockIndexMap,
     blocks,
     edges: normalizedEdges,
@@ -125,10 +127,8 @@ export function bridgePartialToNormalizedPatch(
     blockIndexMap.set(sortedBlocks[i].id as BlockId, blockIndex(i));
   }
 
-  // Step 2: Reconstruct Block objects from DraftBlocks
-  const blocks: Block[] = sortedBlocks.map((db) =>
-    reconstructBlock(db, expandedPatch, registry),
-  );
+  // Step 2: Build compiler-owned block nodes (frontend patch fields stripped)
+  const blocks: CompilerGraphBlock[] = buildCompilerBlocks(sortedBlocks);
 
   // Step 3: Convert DraftEdge → NormalizedEdge
   const stringIndexMap = new Map<string, BlockIndex>();
@@ -136,8 +136,8 @@ export function bridgePartialToNormalizedPatch(
 
   const normalizedEdges = buildNormalizedEdges(graph.edges, stringIndexMap);
 
-  // Step 4: Build synthetic Patch
-  const syntheticPatch = buildSyntheticPatch(blocks, graph.edges, stringIndexMap);
+  // Step 4: Build compiler-owned graph edges for provenance/diagnostics.
+  const graphEdges = buildCompilerGraphEdges(graph.edges);
 
   // Step 5: Build partial portTypes from TypeFacts (only status === 'ok' ports)
   const portTypes = new Map<PortKey, CanonicalType>();
@@ -149,10 +149,13 @@ export function bridgePartialToNormalizedPatch(
     }
   }
 
-  const inputPortPolicies = buildInputPortPolicies(blocks, stringIndexMap, registry);
+  const inputPortPolicies = buildInputPortPolicies(sortedBlocks, expandedPatch, stringIndexMap, registry);
 
   const normalizedPatch: NormalizedPatch = {
-    patch: syntheticPatch,
+    graph: {
+      blocks,
+      edges: graphEdges,
+    },
     blockIndex: blockIndexMap,
     blocks,
     edges: normalizedEdges,
@@ -172,68 +175,19 @@ export function bridgePartialToNormalizedPatch(
 }
 
 // =============================================================================
-// Block Reconstruction
+// Compiler Graph Conversion
 // =============================================================================
 
 /**
- * Reconstruct a Block from a DraftBlock.
- *
- * For blocks that exist in the expandedPatch (user/composite blocks), we pull
- * inputPorts/outputPorts from there to preserve per-instance overrides (combineMode,
- * defaultSource, lenses).
- *
- * For elaborated blocks (inserted by the fixpoint engine, not in expandedPatch),
- * we build ports from the BlockDef with defaults.
+ * Convert DraftBlocks to compiler-owned block nodes.
+ * // [LAW:one-way-deps] Compiler graph strips editor-only Patch fields.
  */
-function reconstructBlock(
-  draft: DraftBlock,
-  expandedPatch: Patch,
-  registry: ReadonlyMap<string, BlockDef>,
-): Block {
-  const existingBlock = expandedPatch.blocks.get(draft.id as BlockId);
-
-  if (existingBlock) {
-    // User/composite block: preserve port overrides from original Patch
-    return {
-      id: draft.id as BlockId,
-      type: draft.type,
-      params: draft.params as Record<string, unknown>,
-      displayName: draft.displayName,
-      domainId: draft.domainId,
-      role: draft.role,
-      inputPorts: existingBlock.inputPorts,
-      outputPorts: existingBlock.outputPorts,
-    };
-  }
-
-  // Elaborated block: build ports from BlockDef
-  const blockDef = registry.get(draft.type);
-  const inputPorts = new Map<string, InputPort>();
-  const outputPorts = new Map<string, OutputPort>();
-
-  if (blockDef) {
-    for (const [portId, inputDef] of Object.entries(blockDef.inputs)) {
-      if (inputDef.exposedAsPort === false) continue;
-      inputPorts.set(portId, {
-        id: portId,
-        combineMode: 'last',
-      });
-    }
-    for (const portId of Object.keys(blockDef.outputs)) {
-      outputPorts.set(portId, { id: portId });
-    }
-  }
-
-  return {
-    id: draft.id as BlockId,
+function buildCompilerBlocks(drafts: readonly DraftBlock[]): CompilerGraphBlock[] {
+  return drafts.map((draft) => ({
+    id: draft.id,
     type: draft.type,
-    params: draft.params as Record<string, unknown>,
-    displayName: draft.displayName,
-    domainId: draft.domainId,
-    role: draft.role,
-    inputPorts,
-    outputPorts,
-  };
+    params: draft.params,
+  }));
 }
 
 // =============================================================================
@@ -285,51 +239,29 @@ function buildNormalizedEdges(
 }
 
 // =============================================================================
-// Synthetic Patch
+// Graph Metadata Conversion
 // =============================================================================
 
 /**
- * Build a synthetic Patch for NormalizedPatch.patch.
- *
- * The NormalizedPatch interface requires a `patch: Patch` field.
- * We construct one from the reconstructed blocks and draft edges.
+ * Convert DraftEdges to compiler-owned ID-addressed edge metadata.
  */
-function buildSyntheticPatch(
-  blocks: readonly Block[],
-  draftEdges: readonly DraftEdge[],
-  blockIndexMap: ReadonlyMap<string, BlockIndex>,
-): Patch {
-  const blockMap = new Map<BlockId, Block>();
-  for (const block of blocks) {
-    blockMap.set(block.id, block);
-  }
-
-  const edges: Edge[] = draftEdges.map((de, i) => ({
-    id: de.id,
-    from: { kind: 'port' as const, blockId: de.from.blockId, slotId: de.from.port },
-    to: { kind: 'port' as const, blockId: de.to.blockId, slotId: de.to.port },
-    enabled: true,
-    sortKey: i,
-    alias: de.alias,
-    role: draftEdgeRoleToEdgeRole(de.role),
+function buildCompilerGraphEdges(draftEdges: readonly DraftEdge[]): CompilerGraphEdge[] {
+  return draftEdges.map((edge) => ({
+    id: edge.id,
+    fromBlockId: edge.from.blockId,
+    fromPort: edge.from.port as PortId,
+    toBlockId: edge.to.blockId,
+    toPort: edge.to.port as PortId,
+    role: draftRoleToGraphRole(edge.role),
   }));
-
-  return { blocks: blockMap, edges };
 }
 
-/**
- * Map DraftEdgeRole → EdgeRole.
- */
-function draftEdgeRoleToEdgeRole(role: DraftEdgeRole): EdgeRole {
+function draftRoleToGraphRole(role: DraftEdge['role']): CompilerGraphEdgeRole {
   switch (role) {
-    case 'userWire':
-      return { kind: 'user', meta: {} as Record<string, never> };
-    case 'defaultWire':
-      return { kind: 'default', meta: { defaultSourceBlockId: '' as BlockId } };
-    case 'implicitCoerce':
-      return { kind: 'adapter', meta: { adapterId: '' as BlockId, originalEdgeId: '' } };
-    case 'internalHelper':
-      return { kind: 'user', meta: {} as Record<string, never> };
+    case 'userWire': return 'userWire';
+    case 'defaultWire': return 'defaultWire';
+    case 'implicitCoerce': return 'implicitCoerce';
+    case 'internalHelper': return 'internalHelper';
   }
 }
 
@@ -366,21 +298,23 @@ function translatePortTypes(
  * editor input-port metadata into compiler backend policy data.
  */
 function buildInputPortPolicies(
-  blocks: readonly Block[],
+  draftBlocks: readonly DraftBlock[],
+  expandedPatch: Patch,
   blockIndexMap: ReadonlyMap<string, BlockIndex>,
   registry: ReadonlyMap<string, BlockDef>,
 ): ReadonlyMap<PortKey, InputPortPolicy> {
   const policies = new Map<PortKey, InputPortPolicy>();
 
-  for (const block of blocks) {
+  for (const block of draftBlocks) {
     const blockIdx = blockIndexMap.get(block.id);
     if (blockIdx === undefined) continue;
     const blockDef = registry.get(block.type);
     if (!blockDef) continue;
+    const sourcePatchBlock = expandedPatch.blocks.get(block.id as BlockId);
 
     for (const [portId, inputDef] of Object.entries(blockDef.inputs)) {
       if (inputDef.exposedAsPort === false) continue;
-      const combineMode = block.inputPorts.get(portId)?.combineMode ?? 'last';
+      const combineMode = sourcePatchBlock?.inputPorts.get(portId)?.combineMode ?? 'last';
       const key = `${blockIdx}:${portId}:in` as PortKey;
       policies.set(key, { combineMode });
     }

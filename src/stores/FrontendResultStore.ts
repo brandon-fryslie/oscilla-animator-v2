@@ -18,9 +18,9 @@ import type { CanonicalType } from '../core/canonical-types';
 import type { FrontendResult, CycleSummary, FrontendError } from '../compiler/frontend';
 import type { NormalizedPatch } from '../compiler/frontend/normalize-indexing';
 import type { TypedPatch } from '../compiler/ir/patches';
-import type { DefaultSource, PortId, TransformStep } from '../types';
-import { getBlockAddress, getInputAddress, getOutputAddress } from '../graph/addressing';
+import type { BlockId, DefaultSource, PortId, TransformStep } from '../types';
 import { addressToString } from '../types/canonical-address';
+import { normalizeCanonicalName } from '../core/canonical-name';
 
 // =============================================================================
 // FrontendSnapshot - Stable UI Contract
@@ -97,6 +97,28 @@ const EMPTY_SNAPSHOT: FrontendSnapshot = {
   backendReady: false,
   cycleSummary: null,
 };
+
+function blockCanonicalName(blockId: string): string {
+  return normalizeCanonicalName(blockId);
+}
+
+function inputAddressKey(blockId: string, portId: string): string {
+  return addressToString({
+    kind: 'input',
+    blockId: blockId as BlockId,
+    canonicalName: blockCanonicalName(blockId),
+    portId: portId as PortId,
+  });
+}
+
+function outputAddressKey(blockId: string, portId: string): string {
+  return addressToString({
+    kind: 'output',
+    blockId: blockId as BlockId,
+    canonicalName: blockCanonicalName(blockId),
+    portId: portId as PortId,
+  });
+}
 
 // =============================================================================
 // FrontendResultStore - MobX Store
@@ -268,8 +290,7 @@ export class FrontendResultStore {
   private rebuildBlockIdMap(normalizedPatch: NormalizedPatch): void {
     this.blockIdToCanonicalName.clear();
     for (const block of normalizedPatch.blocks) {
-      const addr = getBlockAddress(block);
-      this.blockIdToCanonicalName.set(block.id as string, addr.canonicalName);
+      this.blockIdToCanonicalName.set(block.id as string, blockCanonicalName(block.id as string));
     }
   }
 
@@ -298,10 +319,10 @@ export class FrontendResultStore {
 
       // Build canonical address
       const addr = dir === 'in'
-        ? getInputAddress(block, portName as PortId)
-        : getOutputAddress(block, portName as PortId);
+        ? inputAddressKey(block.id as string, portName as string)
+        : outputAddressKey(block.id as string, portName as string);
 
-      map.set(addressToString(addr), type);
+      map.set(addr, type);
     }
 
     return map;
@@ -349,7 +370,7 @@ export class FrontendResultStore {
       //
       // Strategy: follow the path from source output through any intermediate blocks.
       // Build an adjacency map from the normalized patch's original edges (which include lens/adapter edges).
-      const normalizedEdges = normalizedPatch.patch.edges;
+      const normalizedEdges = normalizedPatch.graph.edges;
 
       // Find the chain by tracing from sourceBlockId.sourcePortId to targetBlockId.targetPortId
       // through intermediate adapter/lens blocks.
@@ -361,18 +382,16 @@ export class FrontendResultStore {
       for (let depth = 0; depth < MAX_CHAIN_DEPTH; depth++) {
         // Find edge from current block/port
         const nextEdge = normalizedEdges.find(e =>
-          e.from.kind === 'port' &&
-          e.from.blockId === currentBlockId &&
-          e.from.slotId === currentPortId &&
-          e.to.kind === 'port' &&
+          e.fromBlockId === currentBlockId &&
+          e.fromPort === currentPortId &&
           !visited.has(e.id)
         );
 
-        if (!nextEdge || nextEdge.to.kind !== 'port') break;
+        if (!nextEdge) break;
         visited.add(nextEdge.id);
 
-        const nextBlockId = nextEdge.to.blockId;
-        const nextPortId = nextEdge.to.slotId;
+        const nextBlockId = nextEdge.toBlockId;
+        const nextPortId = nextEdge.toPort;
 
         // If we've reached the target, we're done
         if (nextBlockId === targetBlockId && nextPortId === targetPortId) break;
@@ -385,12 +404,11 @@ export class FrontendResultStore {
 
         // Find the output port of the intermediate block
         const outEdge = normalizedEdges.find(e =>
-          e.from.kind === 'port' &&
-          e.from.blockId === nextBlockId &&
+          e.fromBlockId === nextBlockId &&
           !visited.has(e.id)
         );
 
-        const outPortId = outEdge?.from.slotId ?? 'out';
+        const outPortId = outEdge?.fromPort ?? 'out';
         const outType = resolvePortType(nextBlockId, outPortId, 'out');
 
         // Determine if this is a lens or adapter based on block ID pattern
@@ -421,40 +439,32 @@ export class FrontendResultStore {
       return chain;
     };
 
-    // Iterate original patch edges (which have role information)
-    for (const edge of normalizedPatch.patch.edges) {
-      if (edge.to.kind !== 'port') continue;
-
-      const targetBlock = blocksById.get(edge.to.blockId);
-      if (!targetBlock) continue;
-
-      const targetAddr = getInputAddress(targetBlock, edge.to.slotId as PortId);
-      const targetAddrStr = addressToString(targetAddr);
-
-      const role = edge.role;
+    // Iterate compiler graph edges (role metadata preserved by frontend bridge)
+    for (const edge of normalizedPatch.graph.edges) {
+      const targetAddrStr = inputAddressKey(edge.toBlockId, edge.toPort);
 
       // Resolve source and target types
-      const sourceType = resolvePortType(edge.from.blockId, edge.from.slotId, 'out');
-      const targetType = resolvePortType(edge.to.blockId, edge.to.slotId, 'in');
+      const sourceType = resolvePortType(edge.fromBlockId, edge.fromPort, 'out');
+      const targetType = resolvePortType(edge.toBlockId, edge.toPort, 'in');
 
       // Build transform chain
-      const chain = buildChain(edge.from.blockId, edge.from.slotId, edge.to.blockId, edge.to.slotId);
+      const chain = buildChain(edge.fromBlockId, edge.fromPort, edge.toBlockId, edge.toPort);
 
-      if (role.kind === 'default') {
-        const sourceBlock = blocksById.get(edge.from.blockId);
+      if (edge.role === 'defaultWire') {
+        const sourceBlock = blocksById.get(edge.fromBlockId);
         map.set(targetAddrStr, {
           kind: 'defaultSource',
           source: {
             blockType: sourceBlock?.type ?? 'DefaultSource',
-            output: edge.from.slotId,
+            output: edge.fromPort,
             params: sourceBlock?.params,
           },
           sourceType,
           targetType,
           chain,
         });
-      } else if (role.kind === 'adapter') {
-        const sourceBlock = blocksById.get(edge.from.blockId);
+      } else if (edge.role === 'implicitCoerce') {
+        const sourceBlock = blocksById.get(edge.fromBlockId);
         map.set(targetAddrStr, {
           kind: 'adapter',
           adapterType: sourceBlock?.type ?? 'Adapter',
@@ -462,7 +472,7 @@ export class FrontendResultStore {
           targetType,
           chain,
         });
-      } else if (role.kind === 'user') {
+      } else if (edge.role === 'userWire') {
         map.set(targetAddrStr, {
           kind: 'userEdge',
           sourceType,
