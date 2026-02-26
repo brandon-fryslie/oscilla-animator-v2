@@ -134,7 +134,11 @@ function acquireFrame(
   // Normal mode: execute the full schedule
   arena.reset();
   const execStart = performance.now();
-  const frame = executeFrame(currentProgram, currentState, arena, tMs);
+  const cardinalityAssertionsEnabled =
+    store.debug?.enabled === true && store.debug?.traceCardinalitySolver === true;
+  const frame = cardinalityAssertionsEnabled
+    ? executeFrame(currentProgram, currentState, arena, tMs, { assertCardinalitySlotWrites: true })
+    : executeFrame(currentProgram, currentState, arena, tMs);
   const execTimeMs = performance.now() - execStart;
   return { frame, execTimeMs };
 }
