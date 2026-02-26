@@ -33,7 +33,7 @@ import { resolveExpressionConstant } from './constants';
 export interface CompileContext {
   readonly builder: BlockIRBuilder;
   readonly inputs: ReadonlyMap<string, ValueExprId>;
-  /** Block reference values by canonical address (optional - for member access support) */
+  /** Block reference values by shorthand name (optional - for member access support) */
   readonly blockRefs?: ReadonlyMap<string, ValueExprId>;
 }
 

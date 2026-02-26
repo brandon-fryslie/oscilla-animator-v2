@@ -205,6 +205,7 @@ describe('DefaultSourcePolicy', () => {
       id: 'e0',
       from: { blockId: 'src', port: 'out', dir: 'out' },
       to: { blockId: 'b0', port: 'a', dir: 'in' },
+      alias: 'src.out',
       role: 'userWire',
       origin: 'user',
     };

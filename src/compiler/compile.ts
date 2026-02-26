@@ -53,7 +53,6 @@ import { pass5CycleValidation } from './backend/schedule-scc';
 import { pass6BlockLowering } from './backend/lower-blocks';
 import { pass7Schedule } from './backend/schedule-program';
 import { allocateContinuityPipeline } from './backend/continuity-pipeline';
-import { AddressRegistry } from '../graph/address-registry';
 
 registerAllBlocks();
 
@@ -147,13 +146,11 @@ export function compile(patch: Patch, options?: CompileOptions): CompileResult {
 
     compilationInspector.capturePass('scc', depGraphPatch, acyclicPatch);
 
-    // Pass 5: Block Lowering
-    const addressRegistry = AddressRegistry.buildFromPatch(normalized.patch);
+    // Pass 6: Block Lowering
     const unlinkedIR = pass6BlockLowering(acyclicPatch, {
       events: options?.events,
       compileId,
       patchRevision: options?.patchRevision,
-      addressRegistry,
     });
 
     compilationInspector.capturePass('block-lowering', acyclicPatch, unlinkedIR);

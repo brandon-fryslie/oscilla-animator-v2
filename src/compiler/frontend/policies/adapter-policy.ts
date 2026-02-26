@@ -125,6 +125,7 @@ export const adapterPolicyV1: AdapterPolicyInterface = {
         id: edgeId,
         from,
         to,
+        alias: `${from.blockId}.${from.port}`,
         role: 'implicitCoerce',
         origin: { kind: 'elaboration', obligationId: obligation.id, role },
       });

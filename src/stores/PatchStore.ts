@@ -13,6 +13,7 @@
 import { makeObservable, observable, computed, action, reaction } from 'mobx';
 import type { Block, Edge, Endpoint, Patch, BlockType, InputPort, OutputPort, LensAttachment } from '../graph/Patch';
 import type { BlockId, BlockRole, CombineMode, DefaultSource, EdgeRole, PortId } from '../types';
+import { canonicalizeCombineMode } from '../types';
 import { emptyPatchData, type PatchData } from './internal';
 import type { EventHub } from '../events/EventHub';
 import { requireAnyBlockDef } from '../blocks/registry';
@@ -20,6 +21,7 @@ import { getBlockDefinition } from '../blocks/registry';
 import { normalizeCanonicalName, detectCanonicalNameCollisions } from '../core/canonical-name';
 import { exportPatchAsHCL, importPatchFromHCL, savePatchToStorage } from '../services/PatchPersistence';
 import { derivedLensParamKey } from '../graph/lens-block-id';
+import { deriveEdgeAlias } from '../graph/edge-alias';
 import { nextLensAttachmentId } from '../graph/lens-id';
 import type { PatchDslError } from '../patch-dsl';
 
@@ -96,6 +98,13 @@ function derivedDefaultSourceBlockId(targetBlockId: BlockId, targetPortId: strin
 
 function sourceAddress(blockId: BlockId, outputPortId: string): string {
   return `v1:blocks.${blockId}.outputs.${outputPortId}`;
+}
+
+function samePortEndpoints(a: Endpoint, b: Endpoint): boolean {
+  return a.kind === 'port' &&
+    b.kind === 'port' &&
+    a.blockId === b.blockId &&
+    a.slotId === b.slotId;
 }
 
 // [LAW:one-type-per-behavior] Time-source identity is one predicate shared by
@@ -620,8 +629,12 @@ export class PatchStore {
       this._hasStructuralChange = true;
     }
 
+    const normalizedUpdates: Partial<InputPort> = Object.prototype.hasOwnProperty.call(updates, 'combineMode')
+      ? { ...updates, combineMode: canonicalizeCombineMode(updates.combineMode as CombineMode) }
+      : updates;
+
     // Update port
-    const updatedPort: InputPort = { ...port, ...updates };
+    const updatedPort: InputPort = { ...port, ...normalizedUpdates };
     const updatedInputPorts = new Map(block.inputPorts);
     updatedInputPorts.set(portId, updatedPort);
 
@@ -667,7 +680,7 @@ export class PatchStore {
    * Convenience method that wraps updateInputPort.
    */
   updateInputPortCombineMode(blockId: BlockId, portId: PortId, combineMode: CombineMode): void {
-    this.updateInputPort(blockId, portId, { combineMode });
+    this.updateInputPort(blockId, portId, { combineMode: canonicalizeCombineMode(combineMode) });
   }
 
   /**
@@ -1113,6 +1126,10 @@ export class PatchStore {
    * Emits EdgeAdded event.
    */
   addEdge(from: Endpoint, to: Endpoint, options?: EdgeOptions): string {
+    if (this._data.edges.some((edge) => samePortEndpoints(edge.from, from) && samePortEndpoints(edge.to, to))) {
+      throw new Error(`Duplicate edge rejected: ${from.blockId}.${from.slotId} -> ${to.blockId}.${to.slotId}`);
+    }
+    const alias = deriveEdgeAlias(from, this._data.blocks, options?.alias);
     this._hasStructuralChange = true;
     const id = `e${this._nextEdgeId++}`;
     const edge: Edge = {
@@ -1122,7 +1139,7 @@ export class PatchStore {
       enabled: options?.enabled ?? true,
       sortKey: options?.sortKey ?? this._data.edges.length,
       role: options?.role ?? { kind: 'user', meta: {} as Record<string, never> },
-      ...(options?.alias !== undefined ? { alias: options.alias } : {}),
+      alias,
     };
     this._data.edges.push(edge);
     this.invalidateSnapshot();
@@ -1148,9 +1165,10 @@ export class PatchStore {
    * [LAW:one-type-per-behavior] Collect edges are standard edges.
    */
   addCollectEdge(from: Endpoint, to: Endpoint, alias?: string): string {
+    const collectAlias = deriveEdgeAlias(from, this._data.blocks, alias);
     return this.addEdge(from, to, {
-      role: { kind: 'collect', meta: { alias } },
-      alias,
+      role: { kind: 'collect', meta: { alias: collectAlias } },
+      alias: collectAlias,
     });
   }
 
@@ -1183,10 +1201,21 @@ export class PatchStore {
     if (index === -1) {
       throw new Error(`Edge not found: ${id}`);
     }
+    const current = this._data.edges[index];
+    const nextFrom = updates.from ?? current.from;
+    const nextTo = updates.to ?? current.to;
+
+    if (this._data.edges.some((edge) => edge.id !== id && samePortEndpoints(edge.from, nextFrom) && samePortEndpoints(edge.to, nextTo))) {
+      throw new Error(`Duplicate edge rejected: ${nextFrom.blockId}.${nextFrom.slotId} -> ${nextTo.blockId}.${nextTo.slotId}`);
+    }
+    const nextAlias = deriveEdgeAlias(nextFrom, this._data.blocks, updates.alias ?? current.alias);
 
     this._data.edges[index] = {
-      ...this._data.edges[index],
+      ...current,
       ...updates,
+      from: nextFrom,
+      to: nextTo,
+      alias: nextAlias,
     };
 
     this.invalidateSnapshot();

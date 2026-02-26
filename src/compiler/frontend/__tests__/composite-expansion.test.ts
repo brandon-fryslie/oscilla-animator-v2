@@ -117,6 +117,7 @@ function createEdge(
     enabled: true,
     sortKey: 0,
     role: { kind: 'user', meta: {} },
+    alias: `${fromBlock}.${fromPort}`,
   };
 }
 
@@ -316,6 +317,7 @@ describe('expandComposites', () => {
         enabled: true,
         sortKey: 0,
         role: { kind: 'user', meta: {} },
+        alias: 'src.out',
       }];
       const result = expandComposites(createPatch(blocks, edges));
 
