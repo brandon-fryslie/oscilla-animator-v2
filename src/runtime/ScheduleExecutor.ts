@@ -196,8 +196,8 @@ function assertRuntimeSlotWrite(
   const expectedKind = deriveRuntimeValueKind(lookup.type);
   if (expectedKind === 'event') {
     throw new Error(
-      `Cardinality write assertion failed at ${stepKind} slot ${slot}: ` +
-      `expected event, actual ${observedKind}`,
+      `Internal error: non-event step ${stepKind} attempted to write to event-typed slot ${slot} ` +
+      `(discrete temporality slots must only be written by eventDispatch; observed write kind: ${observedKind})`,
     );
   }
   if (expectedKind !== observedKind) {
