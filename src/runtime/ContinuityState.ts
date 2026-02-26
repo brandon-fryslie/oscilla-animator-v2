@@ -153,6 +153,11 @@ export interface ContinuityState {
   dormantInstanceMisses: Map<string, number>;
 }
 
+export interface ContinuityTargetOwnerBinding {
+  readonly targetId: StableTargetId;
+  readonly instanceId: string;
+}
+
 /**
  * Create initial continuity state.
  *
@@ -211,11 +216,6 @@ export function getOrCreateTargetState(
   if (instanceId !== undefined) {
     continuity.targetOwners.set(targetId, instanceId);
     continuity.dormantInstanceMisses.delete(instanceId);
-  } else if (!continuity.targetOwners.has(targetId)) {
-    const inferredOwner = inferTargetOwnerInstanceId(targetId);
-    if (inferredOwner !== null) {
-      continuity.targetOwners.set(targetId, inferredOwner);
-    }
   }
 
   let state = continuity.targets.get(targetId);
@@ -265,27 +265,17 @@ export function clearContinuityState(continuity: ContinuityState): void {
   continuity.dormantInstanceMisses.clear();
 }
 
-function inferTargetOwnerInstanceId(targetId: StableTargetId): string | null {
-  const rawTargetId = targetId as string;
-  const firstColon = rawTargetId.indexOf(':');
-  const secondColon = rawTargetId.indexOf(':', firstColon + 1);
-  if (firstColon < 0 || secondColon < 0 || secondColon <= firstColon + 1) {
-    return null;
-  }
-  return rawTargetId.slice(firstColon + 1, secondColon);
-}
-
-function backfillLegacyTargetOwners(continuity: ContinuityState): void {
-  for (const targetId of continuity.targets.keys()) {
-    if (continuity.targetOwners.has(targetId)) {
+export function registerContinuityTargetOwners(
+  continuity: ContinuityState,
+  bindings: Iterable<ContinuityTargetOwnerBinding>,
+): void {
+  for (const binding of bindings) {
+    if (!continuity.targets.has(binding.targetId)) {
       continue;
     }
-    const inferredOwner = inferTargetOwnerInstanceId(targetId);
-    if (inferredOwner !== null) {
-      // [LAW:no-silent-fallbacks] exception: Legacy sessions may not have
-      // ownership metadata; infer once so future pruning uses canonical map.
-      continuity.targetOwners.set(targetId, inferredOwner);
-    }
+    // [LAW:one-source-of-truth] Continuity owner bindings are only accepted
+    // through structured upstream metadata, never parsed from target strings.
+    continuity.targetOwners.set(binding.targetId, binding.instanceId);
   }
 }
 
@@ -329,9 +319,12 @@ function pruneInstanceState(continuity: ContinuityState, instanceId: string): vo
  */
 export function pruneStaleContinuity(
   continuity: ContinuityState,
-  activeInstanceIds: ReadonlySet<string>
+  activeInstanceIds: ReadonlySet<string>,
+  ownerBindings?: Iterable<ContinuityTargetOwnerBinding>,
 ): void {
-  backfillLegacyTargetOwners(continuity);
+  if (ownerBindings !== undefined) {
+    registerContinuityTargetOwners(continuity, ownerBindings);
+  }
 
   for (const instanceId of activeInstanceIds) {
     continuity.dormantInstanceMisses.delete(instanceId);

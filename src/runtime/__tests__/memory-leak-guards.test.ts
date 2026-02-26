@@ -8,6 +8,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   CONTINUITY_DORMANT_PRUNE_HOTSWAPS,
+  type ContinuityTargetOwnerBinding,
   createContinuityState,
   getOrCreateTargetState,
   pruneStaleContinuity,
@@ -121,6 +122,32 @@ describe('pruneStaleContinuity', () => {
     pruneStaleContinuity(cs, new Set());
     expect(cs.targets.has(targetId)).toBe(true);
     pruneStaleContinuity(cs, new Set());
+    expect(cs.targets.has(targetId)).toBe(false);
+  });
+
+  it('does not infer target ownership from targetId strings', () => {
+    const cs = createContinuityState();
+    const targetId = 'position:circle:main:render:block:controlPoints' as StableTargetId;
+    getOrCreateTargetState(cs, targetId, 4);
+
+    pruneUntilHardDelete(cs, new Set());
+
+    // No canonical owner binding was provided, so target remains untouched.
+    expect(cs.targetOwners.has(targetId)).toBe(false);
+    expect(cs.targets.has(targetId)).toBe(true);
+  });
+
+  it('prunes legacy targets when canonical owner bindings are provided', () => {
+    const cs = createContinuityState();
+    const targetId = 'position:circle:main:render:block:controlPoints' as StableTargetId;
+    getOrCreateTargetState(cs, targetId, 4);
+    const ownerBindings: ContinuityTargetOwnerBinding[] = [
+      { targetId, instanceId: 'circle:main' },
+    ];
+
+    pruneStaleContinuity(cs, new Set(), ownerBindings);
+    expect(cs.targets.has(targetId)).toBe(true);
+    pruneStaleContinuity(cs, new Set(), ownerBindings);
     expect(cs.targets.has(targetId)).toBe(false);
   });
 
