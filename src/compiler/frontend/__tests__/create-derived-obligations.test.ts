@@ -75,6 +75,7 @@ function makeEdge(id: string, fromBlockId: string, fromPort: string, toBlockId: 
     id,
     from: { blockId: fromBlockId, port: fromPort, dir: 'out' },
     to: { blockId: toBlockId, port: toPort, dir: 'in' },
+    alias: `${fromBlockId}.${fromPort}`,
     role: 'userWire',
     origin: 'user',
   };
@@ -161,6 +162,7 @@ describe('createDerivedObligations', () => {
       id: 'e1',
       from: { blockId: 'c1', port: 'out', dir: 'out' },
       to: { blockId: 'ri', port: 'controlPoints', dir: 'in' },
+      alias: 'c1.out',
       role: 'userWire',
       origin: { kind: 'elaboration', obligationId: oblId, role: 'adapter' },
     };
@@ -183,6 +185,7 @@ describe('createDerivedObligations', () => {
       id: 'e1',
       from: { blockId: 'c1', port: 'out', dir: 'out' },
       to: { blockId: 'ri', port: 'controlPoints', dir: 'in' },
+      alias: 'c1.out',
       role: 'implicitCoerce',
       origin: 'user',
     };

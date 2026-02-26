@@ -48,12 +48,6 @@ export interface LowerCtx {
   readonly inferredInstance?: InstanceId;
 
   /**
-   * Address registry for resolving canonical addresses.
-   * Available for blocks that need address resolution (e.g., Expression block).
-   */
-  readonly addressRegistry?: import('../graph/address-registry').AddressRegistry;
-
-  /**
    * Read-only instance registry.
    * Allows blocks to query instance declarations without accessing the builder.
    * This keeps BlockIRBuilder focused on expression construction only.
@@ -70,7 +64,7 @@ export interface LowerArgs {
   readonly inputsById: Record<string, import('../compiler/ir/lowerTypes').ValueRefExpr>;
   /**
    * Collect inputs - per-edge entries for collect ports.
-   * Each entry has its own type, value, alias, and source info.
+   * Each entry has its own type, value, alias, and sort key.
    * Key is port ID, value is array of CollectInputEntry in sortKey order.
    */
   readonly collectInputsById?: Record<string, readonly import('../compiler/ir/lowerTypes').CollectInputEntry[]>;

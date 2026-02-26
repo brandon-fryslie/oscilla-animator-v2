@@ -121,11 +121,7 @@ export interface CollectInputEntry {
   /** Per-edge resolved type (from collectEdgeTypes) */
   readonly type: CanonicalType;
   /** Edge alias (from Edge.alias, used for Expression DSL member access) */
-  readonly alias?: string;
-  /** Source block ID (for building canonical addresses) */
-  readonly sourceBlockId: string;
-  /** Source port name */
-  readonly sourcePort: string;
+  readonly alias: string;
   /** Edge sort key for deterministic ordering */
   readonly sortKey: number;
 }

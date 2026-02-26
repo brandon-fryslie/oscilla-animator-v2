@@ -5,11 +5,11 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { validateCombineMode } from '../combine-utils';
+import { validateCombineMode, NUMERIC_PAYLOADS } from '../combine-utils';
 
 describe('validateCombineMode', () => {
-  describe('numeric payloads (float, int, vec2)', () => {
-    const numericPayloads = ['float', 'int', 'vec2'] as const;
+  describe('numeric payloads (float, int, vec2, vec3, vec4)', () => {
+    const numericPayloads = NUMERIC_PAYLOADS;
     const allModes = ['sum', 'average', 'max', 'min', 'mul', 'last', 'first'] as const;
 
     for (const payload of numericPayloads) {
@@ -106,6 +106,16 @@ describe('validateCombineMode', () => {
     it('rejects sum for bool', () => {
       const result = validateCombineMode('sum', 'one', 'bool');
       expect(result.valid).toBe(false);
+    });
+  });
+
+  describe('collect/array modes', () => {
+    it('allows collect for any payload', () => {
+      expect(validateCombineMode('collect', 'one', 'float').valid).toBe(true);
+    });
+
+    it('allows array for any payload', () => {
+      expect(validateCombineMode('array', 'one', 'float').valid).toBe(true);
     });
   });
 

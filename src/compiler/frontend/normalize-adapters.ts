@@ -40,6 +40,7 @@
 
 import type { BlockId, BlockRole } from '../../types';
 import type { InferenceCanonicalType } from '../../core/inference-types';
+import { deriveEdgeAlias } from '../../graph/edge-alias';
 import type { Block, Edge, Patch, LensAttachment } from '../../graph/Patch';
 import { derivedLensBlockId } from '../../graph/lens-block-id';
 import { getBlockDefinition, requireBlockDef } from '../../blocks/registry';
@@ -237,6 +238,7 @@ function planLensExpansion(
             enabled: true,
             sortKey: edge.sortKey,
             role: { kind: 'adapter', meta: { adapterId: lensBlockId, originalEdgeId: edge.id } },
+            alias: deriveEdgeAlias(currentFrom, new Map([...patch.blocks, ...lensBlocks])),
           };
           replacementEdges.push(edgeToLens);
 
@@ -256,6 +258,7 @@ function planLensExpansion(
           enabled: true,
           sortKey: edge.sortKey,
           role: { kind: 'adapter', meta: { adapterId: currentAdapterId ?? firstLensBlockId, originalEdgeId: edge.id } },
+          alias: deriveEdgeAlias(currentFrom, new Map([...patch.blocks, ...lensBlocks])),
         });
 
         replacementEdgesByOriginal.set(edge.id, replacementEdges);
@@ -451,6 +454,8 @@ function autoInsertAdapters(patch: Patch): Pass2Result | Pass2Error {
         enabled: true,
         sortKey: edge.sortKey,
         role: { kind: 'adapter', meta: { adapterId, originalEdgeId: edge.id } },
+        // [LAW:one-source-of-truth] Source endpoint unchanged from original edge.
+        alias: edge.alias,
       };
 
       const edgeFromAdapter: Edge = {
@@ -464,6 +469,10 @@ function autoInsertAdapters(patch: Patch): Pass2Result | Pass2Error {
         enabled: true,
         sortKey: edge.sortKey,
         role: { kind: 'adapter', meta: { adapterId, originalEdgeId: edge.id } },
+        alias: deriveEdgeAlias(
+          { kind: 'port', blockId: adapterId, slotId: adapterSpec.outputPortId },
+          new Map([...patch.blocks, [adapterId, adapterBlock]]),
+        ),
       };
 
       insertions.push({

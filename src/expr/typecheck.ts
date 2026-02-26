@@ -16,9 +16,6 @@ import type { ExprNode, Position } from './ast';
 import { withType } from './ast';
 import type { PayloadType } from '../core/canonical-types';
 import { FLOAT, INT, BOOL, VEC2, VEC3, VEC4 } from '../core/canonical-types';
-import { isConcretePayload } from '../core/inference-types';
-import type { AddressRegistry } from '../graph/address-registry';
-import { addressToString } from '../types/canonical-address';
 import { isVectorType, validateSwizzle, swizzleResultType } from './swizzle';
 import { getExpressionConstants, resolveExpressionConstant } from './constants';
 
@@ -51,10 +48,8 @@ export type TypeEnv = ReadonlyMap<string, PayloadType>;
  * When absent, member access expressions produce type errors.
  */
 export interface BlockReferenceContext {
-  /** Address registry for resolving block references */
-  readonly addressRegistry: AddressRegistry;
-  /** Allowed payload types (from collect AcceptsSpec) */
-  readonly allowedPayloads: readonly PayloadType[];
+  /** Resolved payload type by shorthand (e.g. "osc.out"). */
+  readonly typesByName: ReadonlyMap<string, PayloadType>;
 }
 
 /**
@@ -688,68 +683,21 @@ function canCoerceTo(from: PayloadType, to: PayloadType): boolean {
 function resolveBlockOutputReference(node: ExprNode & { kind: 'member' }, ctx: TypeCheckContext): ExprNode {
   if (!ctx.blockRefs || node.object.kind !== 'identifier') {
     throw new TypeError(
-      'Block reference must be in the form BlockName.port (e.g., Circle1.radius)',
-      node.object.pos,
-      undefined,
-      undefined,
-      'Only simple block references are supported'
+      'Block reference must be in the form BlockName.port',
+      node.object.pos
     );
   }
 
-  const blockName = node.object.name;
-  const portName = node.member;
-  const shorthand = `${blockName}.${portName}`;
-
-  // Resolve shorthand to canonical address
-  const canonicalAddr = ctx.blockRefs.addressRegistry.resolveShorthand(shorthand);
-  if (!canonicalAddr) {
+  const shorthand = `${node.object.name}.${node.member}`;
+  // [LAW:single-enforcer] Expression block collect inputs are the only source for ref name typing.
+  const payload = ctx.blockRefs.typesByName.get(shorthand);
+  if (payload === undefined) {
     throw new TypeError(
-      `Unknown block or port: ${shorthand}`,
+      `Unknown reference: ${shorthand}`,
       node.pos,
       undefined,
       undefined,
-      `Check that block "${blockName}" exists and has an output named "${portName}"`
-    );
-  }
-
-  // Resolve to get full type information
-  const resolved = ctx.blockRefs.addressRegistry.resolve(addressToString(canonicalAddr));
-  if (!resolved) {
-    throw new TypeError(
-      `Failed to resolve ${shorthand} (internal error)`,
-      node.pos
-    );
-  }
-
-  // Verify it's an output port
-  if (resolved.kind !== 'output') {
-    throw new TypeError(
-      `${shorthand} is not an output port`,
-      node.pos,
-      undefined,
-      undefined,
-      resolved.kind === 'input' ? `Did you mean to reference an output instead of an input?` : undefined
-    );
-  }
-
-  // Extract payload type from CanonicalType (may be inference var from BlockDef)
-  const rawPayload = resolved.type.payload;
-
-  // Payload vars are polymorphic — skip validation, default to float for AST annotation
-  if (!isConcretePayload(rawPayload)) {
-    return withType(node, FLOAT);
-  }
-
-  const payload: PayloadType = rawPayload;
-
-  // Validate payload type is allowed
-  if (!ctx.blockRefs.allowedPayloads.includes(payload)) {
-    throw new TypeError(
-      `${shorthand} has type ${payload.kind}, but only ${ctx.blockRefs.allowedPayloads.map(p => p.kind).join(', ')} are allowed`,
-      node.pos,
-      ctx.blockRefs.allowedPayloads as PayloadType[],
-      payload,
-      `This expression context only accepts ${ctx.blockRefs.allowedPayloads.map(p => p.kind).join(' or ')} types`
+      `Check that "${node.object.name}" is connected to this block's refs port with output "${node.member}"`
     );
   }
 

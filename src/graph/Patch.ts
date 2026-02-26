@@ -49,6 +49,7 @@
 import type { BlockId, PortId, BlockRole, DefaultSource, EdgeRole, CombineMode } from '../types';
 import { requireBlockDef } from '../blocks/registry';
 import { detectCanonicalNameCollisions, normalizeCanonicalName } from '../core/canonical-name';
+import { deriveEdgeAlias } from './edge-alias';
 import { nextLensAttachmentId } from './lens-id';
 
 // =============================================================================
@@ -241,11 +242,10 @@ export interface Edge {
   readonly role: EdgeRole;
 
   /**
-   * Alias for collect edges.
-   * Used by collect ports to identify input references (e.g., for Expression DSL member access).
-   * Only meaningful when role.kind === 'collect'.
+   * Canonical source alias (`<normalizedDisplayName>.<port>`).
+   * Required on all edges and used as the single shorthand identity source.
    */
-  readonly alias?: string;
+  readonly alias: string;
 }
 
 // =============================================================================
@@ -424,7 +424,24 @@ export class PatchBuilder {
     return this;
   }
 
+  private hasDuplicateEdge(from: Endpoint, to: Endpoint): boolean {
+    if (from.kind !== 'port' || to.kind !== 'port') return false;
+    return this.edges.some(
+      (edge) =>
+        edge.from.kind === 'port' &&
+        edge.to.kind === 'port' &&
+        edge.from.blockId === from.blockId &&
+        edge.from.slotId === from.slotId &&
+        edge.to.blockId === to.blockId &&
+        edge.to.slotId === to.slotId,
+    );
+  }
+
   addEdge(from: Endpoint, to: Endpoint, options?: { enabled?: boolean; sortKey?: number; role?: EdgeRole; alias?: string }): this {
+    if (this.hasDuplicateEdge(from, to)) {
+      throw new Error(`Duplicate edge rejected: ${from.blockId}.${from.slotId} -> ${to.blockId}.${to.slotId}`);
+    }
+    const alias = deriveEdgeAlias(from, this.blocks, options?.alias);
     const id = `e${this.nextEdgeId++}`;
     this.edges.push({
       id,
@@ -433,7 +450,7 @@ export class PatchBuilder {
       enabled: options?.enabled ?? true,
       sortKey: options?.sortKey ?? this.edges.length,
       role: options?.role ?? { kind: 'user', meta: {} as Record<string, never> },
-      alias: options?.alias,
+      alias,
     });
     this.invalidateSnapshot();
     return this;
@@ -455,10 +472,8 @@ export class PatchBuilder {
 
   /**
    * Create a collect edge — a normal edge with role 'collect'.
-   * Collect edges target ports with combineMode: 'collect' and preserve
+   * Collect edges are intended for ports configured with combineMode: 'collect' and preserve
    * individual edge types instead of unifying via union-find.
-   *
-   * Also sets the target port's combineMode to 'collect' if not already set.
    */
   wireCollect(
     fromBlock: BlockId,
@@ -467,29 +482,16 @@ export class PatchBuilder {
     toPort: string,
     alias?: string
   ): this {
-    const id = `e${this.nextEdgeId++}`;
-    this.edges.push({
-      id,
-      from: { kind: 'port', blockId: fromBlock, slotId: fromPort as PortId },
-      to: { kind: 'port', blockId: toBlock, slotId: toPort as PortId },
+    const from = { kind: 'port', blockId: fromBlock, slotId: fromPort as PortId } as const;
+    const to = { kind: 'port', blockId: toBlock, slotId: toPort as PortId } as const;
+    const collectAlias = deriveEdgeAlias(from, this.blocks, alias);
+    this.addEdge(from, to, {
       enabled: true,
       sortKey: this.edges.length,
-      role: { kind: 'collect', meta: { alias } },
-      alias,
+      role: { kind: 'collect', meta: { alias: collectAlias } },
+      alias: collectAlias,
     });
 
-    // Ensure the target port has combineMode: 'collect'
-    const block = this.blocks.get(toBlock);
-    if (block) {
-      const port = block.inputPorts.get(toPort);
-      if (port && port.combineMode !== 'collect') {
-        const updatedPorts = new Map(block.inputPorts);
-        updatedPorts.set(toPort, { ...port, combineMode: 'collect' as import('../types').CombineMode });
-        this.blocks.set(toBlock, { ...block, inputPorts: updatedPorts });
-      }
-    }
-
-    this.invalidateSnapshot();
     return this;
   }
 

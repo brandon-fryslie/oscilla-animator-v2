@@ -69,6 +69,7 @@ describe('computeRenderReachableBlocks', () => {
         fromPort: 'out' as any,
         toBlock: 1 as BlockIndex,
         toPort: 'in' as any,
+        alias: 'source.out',
       },
     ];
 
@@ -92,18 +93,21 @@ describe('computeRenderReachableBlocks', () => {
         fromPort: 'out' as any,
         toBlock: 1 as BlockIndex,
         toPort: 'in' as any,
+        alias: 'b1.out',
       },
       {
         fromBlock: 1 as BlockIndex,
         fromPort: 'out' as any,
         toBlock: 2 as BlockIndex,
         toPort: 'in' as any,
+        alias: 'b2.out',
       },
       {
         fromBlock: 2 as BlockIndex,
         fromPort: 'out' as any,
         toBlock: 3 as BlockIndex,
         toPort: 'in' as any,
+        alias: 'b3.out',
       },
     ];
 
@@ -129,24 +133,28 @@ describe('computeRenderReachableBlocks', () => {
         fromPort: 'out' as any,
         toBlock: 1 as BlockIndex,
         toPort: 'in' as any,
+        alias: 'source.out',
       },
       {
         fromBlock: 0 as BlockIndex,
         fromPort: 'out' as any,
         toBlock: 2 as BlockIndex,
         toPort: 'in' as any,
+        alias: 'source.out',
       },
       {
         fromBlock: 1 as BlockIndex,
         fromPort: 'out' as any,
         toBlock: 3 as BlockIndex,
         toPort: 'in1' as any,
+        alias: 'left.out',
       },
       {
         fromBlock: 2 as BlockIndex,
         fromPort: 'out' as any,
         toBlock: 3 as BlockIndex,
         toPort: 'in2' as any,
+        alias: 'right.out',
       },
     ];
 
@@ -172,6 +180,7 @@ describe('computeRenderReachableBlocks', () => {
         fromPort: 'out' as any,
         toBlock: 1 as BlockIndex,
         toPort: 'in' as any,
+        alias: 'connected.out',
       },
       // disconnected subgraph
       {
@@ -179,6 +188,7 @@ describe('computeRenderReachableBlocks', () => {
         fromPort: 'out' as any,
         toBlock: 3 as BlockIndex,
         toPort: 'in' as any,
+        alias: 'disconnected1.out',
       },
     ];
 
@@ -205,12 +215,14 @@ describe('computeRenderReachableBlocks', () => {
         fromPort: 'out' as any,
         toBlock: 1 as BlockIndex,
         toPort: 'in' as any,
+        alias: 'source1.out',
       },
       {
         fromBlock: 2 as BlockIndex,
         fromPort: 'out' as any,
         toBlock: 3 as BlockIndex,
         toPort: 'in' as any,
+        alias: 'source2.out',
       },
     ];
 

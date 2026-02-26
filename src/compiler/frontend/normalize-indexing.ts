@@ -83,6 +83,7 @@ export interface NormalizedEdge {
   readonly fromPort: PortId;
   readonly toBlock: BlockIndex;
   readonly toPort: PortId;
+  readonly alias: string;
 }
 
 // =============================================================================
@@ -91,7 +92,9 @@ export interface NormalizedEdge {
 
 export type IndexingError =
   | { kind: 'DanglingEdge'; edge: Edge; missing: 'from' | 'to' }
-  | { kind: 'DuplicateBlockId'; id: BlockId };
+  | { kind: 'DuplicateBlockId'; id: BlockId }
+  | { kind: 'MissingEdgeAlias'; edge: Edge }
+  | { kind: 'DuplicateEdge'; edge: Edge };
 
 export interface Pass3Result {
   readonly kind: 'ok';
@@ -135,6 +138,7 @@ export function pass3Indexing(patch: Patch): Pass3Result | Pass3Error {
 
   // Normalize edges
   const normalizedEdges: NormalizedEdge[] = [];
+  const seenEdgeKeys = new Set<string>();
 
   for (const edge of patch.edges) {
     // Skip disabled edges
@@ -151,12 +155,25 @@ export function pass3Indexing(patch: Patch): Pass3Result | Pass3Error {
       errors.push({ kind: 'DanglingEdge', edge, missing: 'to' });
       continue;
     }
+    if (edge.alias === undefined) {
+      errors.push({ kind: 'MissingEdgeAlias', edge });
+      continue;
+    }
+
+    const edgeKey = `${fromIdx}:${edge.from.slotId}->${toIdx}:${edge.to.slotId}`;
+    if (seenEdgeKeys.has(edgeKey)) {
+      errors.push({ kind: 'DuplicateEdge', edge });
+      continue;
+    }
+    seenEdgeKeys.add(edgeKey);
 
     normalizedEdges.push({
       fromBlock: fromIdx,
       fromPort: edge.from.slotId as PortId,
       toBlock: toIdx,
       toPort: edge.to.slotId as PortId,
+      // [LAW:one-source-of-truth] Alias must already be authored at graph boundary.
+      alias: edge.alias,
     });
   }
 

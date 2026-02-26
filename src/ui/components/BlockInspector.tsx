@@ -282,6 +282,7 @@ function formatCombineMode(mode: CombineMode): string {
     or: 'OR (boolean)',
     and: 'AND (boolean)',
     collect: 'Collect',
+    array: 'Array',
   };
   return labels[mode] ?? mode;
 }

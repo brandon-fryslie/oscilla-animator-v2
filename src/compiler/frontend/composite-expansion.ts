@@ -19,6 +19,7 @@
 import type { BlockId, BlockRole } from '../../types';
 import { derivedRole } from '../../types';
 import type { Block, Edge, InputPort, OutputPort, Patch } from '../../graph/Patch';
+import { deriveEdgeAlias } from '../../graph/edge-alias';
 import {
   getCompositeDefinition,
   isCompositeType,
@@ -374,6 +375,7 @@ export function expandComposites(
         enabled: true,
         sortKey: edgeSortKey++,
         role: { kind: 'composite', meta: { compositeInstanceId: instanceBlock.id } },
+        alias: deriveEdgeAlias({ kind: 'port', blockId: fromId, slotId: internalEdge.fromPort }, workBlocks),
       };
 
       workEdges.push(expandedEdge);
@@ -408,6 +410,8 @@ export function expandComposites(
             enabled: true,
             sortKey: edgeSortKey++,
             role: edge.role, // preserve original role
+            // [LAW:one-source-of-truth] Source endpoint is unchanged; preserve alias.
+            alias: edge.alias,
           };
 
           workEdges.push(rewiredEdge);
@@ -465,6 +469,10 @@ export function expandComposites(
             enabled: true,
             sortKey: edgeSortKey++,
             role: edge.role, // preserve original role
+            alias: deriveEdgeAlias(
+              { kind: 'port', blockId: internalExpandedId, slotId: exposedOutput.internalPortId },
+              workBlocks,
+            ),
           };
 
           workEdges.push(rewiredEdge);

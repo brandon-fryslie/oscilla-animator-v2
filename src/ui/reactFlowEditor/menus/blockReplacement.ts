@@ -9,7 +9,7 @@ export interface ReplacementEdgePlan {
   enabled: boolean;
   sortKey: number;
   role: import('../../../types').EdgeRole;
-  alias?: string;
+  alias: string;
 }
 
 export interface CompatibleReplacementPlan {
@@ -126,7 +126,7 @@ function buildReplacementPlanForType(
       enabled: edge.enabled,
       sortKey: edge.sortKey,
       role: edge.role,
-      ...(edge.alias !== undefined ? { alias: edge.alias } : {}),
+      alias: edge.alias,
     });
   }
 

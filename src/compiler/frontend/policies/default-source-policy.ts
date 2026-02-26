@@ -165,6 +165,7 @@ function buildDefaultSourcePlan(
     id: edgeId,
     from: { blockId: derivedBlockId, port: ds.output, dir: 'out' },
     to: { blockId: targetBlockId, port: targetPortId, dir: 'in' },
+    alias: `${derivedBlockId}.${ds.output}`,
     role: 'defaultWire',
     origin: { kind: 'elaboration', obligationId, role },
   };
@@ -207,6 +208,7 @@ function buildTimeSourcePlan(
     id: edgeId,
     from: { blockId: timeSource.id, port: ds.output, dir: 'out' },
     to: { blockId: targetBlockId, port: targetPortId, dir: 'in' },
+    alias: `${timeSource.id}.${ds.output}`,
     role: 'defaultWire',
     origin: { kind: 'elaboration', obligationId, role },
   };

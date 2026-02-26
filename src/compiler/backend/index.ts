@@ -21,7 +21,6 @@ import type { TypedPatch, AcyclicOrLegalGraph } from '../ir/patches';
 import type { CompiledProgramIR } from '../ir/program';
 import type { EventHub } from '../../events/EventHub';
 import { compilationInspector } from '../../services/CompilationInspectorService';
-import { AddressRegistry } from '../../graph/address-registry';
 
 // Backend passes
 import { pass4DepGraph } from './derive-dep-graph';
@@ -118,13 +117,11 @@ export function compileBackend(
     }
 
     // =========================================================================
-    const addressRegistry = AddressRegistry.buildFromPatch(typedPatch.patch);
-    // Step 3: Block Lowering
+    // Step 4: Block Lowering
     // =========================================================================
     const pass6Options: Pass6Options = {
       events: options?.events,
       compileId: options?.compileId,
-      addressRegistry,
       patchRevision: options?.patchRevision,
     };
     const unlinkedIR = pass6BlockLowering(acyclicPatch, pass6Options);

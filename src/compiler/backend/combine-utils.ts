@@ -26,6 +26,9 @@ import { payloadStride, requireInst } from "../../core/canonical-types";
 /**
  * Core payload domains for combine operations.
  */
+// Numeric payload kinds that support arithmetic combine modes (sum/avg/min/max/mul).
+// Note: 'color' is excluded despite matching vec4 stride because it uses layer semantics.
+export const NUMERIC_PAYLOADS = ['float', 'int', 'vec2', 'vec3', 'vec4'] as const;
 export type CorePayload = 'float' | 'int' | 'vec2' | 'color' | 'bool';
 
 /**
@@ -81,6 +84,11 @@ export function validateCombineMode(
     return { valid: true }; // Validated separately in caller
   }
 
+  // collect/array bypass combine semantics (per-edge types are preserved)
+  if (mode === 'collect' || mode === 'array') {
+    return { valid: true };
+  }
+
   // 'last' and 'first' are always valid for all worlds and domains
   if (mode === 'last' || mode === 'first') {
     return { valid: true };
@@ -105,8 +113,7 @@ export function validateCombineMode(
   // Domain-specific validation for one/many worlds
   // Normalize payload to kind string (handles both string and object forms)
   const payloadKind = typeof payload === 'string' ? payload : payload;
-  const numericPayloads = ['float', 'int', 'vec2', 'vec3'];
-  if (numericPayloads.includes(payloadKind)) {
+  if (NUMERIC_PAYLOADS.includes(payloadKind as typeof NUMERIC_PAYLOADS[number])) {
     if (mode === 'sum' || mode === 'average' || mode === 'max' || mode === 'min' || mode === 'mul') {
       return { valid: true };
     }
@@ -138,7 +145,7 @@ export function validateCombineMode(
     };
   }
 
-  // Boolean and other domains only support 'last' and 'first'
+  // Other domains only support 'last' and 'first'
   return {
     valid: false,
     reason: `Payload "${payload}" only supports combineMode "last" or "first"`,

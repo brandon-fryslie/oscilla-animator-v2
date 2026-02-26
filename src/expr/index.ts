@@ -24,7 +24,6 @@
 import type { CanonicalType, PayloadType } from '../core/canonical-types';
 import type { BlockIRBuilder } from '../compiler/ir/BlockIRBuilder';
 import type { ValueExprId } from '../compiler/ir/Indices';
-import type { AddressRegistry } from '../graph/address-registry';
 import { tokenize } from './lexer';
 import { parse, ParseError } from './parser';
 import { typecheck, TypeError } from './typecheck';
@@ -40,9 +39,8 @@ import {
  * When provided, enables block.port syntax in expressions.
  */
 export interface BlockRefsContext {
-  readonly addressRegistry: AddressRegistry;
-  readonly allowedPayloads: readonly PayloadType[];
-  readonly valuesByShorthand: ReadonlyMap<string, ValueExprId>;
+  readonly typesByName: ReadonlyMap<string, PayloadType>;
+  readonly valuesByName: ReadonlyMap<string, ValueExprId>;
 }
 
 /**
@@ -110,17 +108,14 @@ export function compileExpression(
     const inputTypes = extractPayloadTypes(inputs);
     const typedAst = typecheck(ast, {
       inputs: inputTypes,
-      blockRefs: blockRefs ? {
-        addressRegistry: blockRefs.addressRegistry,
-        allowedPayloads: blockRefs.allowedPayloads,
-      } : undefined,
+      blockRefs: blockRefs ? { typesByName: blockRefs.typesByName } : undefined,
     });
 
     // Step 4: Compile to IR
     const ctx: CompileContext = {
       builder,
       inputs: inputExprs,
-      blockRefs: blockRefs?.valuesByShorthand,
+      blockRefs: blockRefs?.valuesByName,
     };
     const exprId = compile(typedAst, ctx);
 
