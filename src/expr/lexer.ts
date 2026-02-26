@@ -207,10 +207,10 @@ class Lexer {
 
   /**
    * Read identifier.
-   * Grammar: [a-zA-Z_][a-zA-Z0-9_]*
+   * Grammar: [a-zA-Z_][a-zA-Z0-9_-]* (dash cannot be trailing)
    */
   private identifier(start: number): Token {
-    while (this.isAlphaNumeric(this.peek())) {
+    while (this.isIdentifierContinue(this.peek(), this.peekNext())) {
       this.pos++;
     }
     const value = this.input.slice(start, this.pos);
@@ -237,6 +237,13 @@ class Lexer {
 
   private isAlphaNumeric(ch: string): boolean {
     return this.isAlpha(ch) || this.isDigit(ch) || ch === '_';
+  }
+
+  private isIdentifierContinue(ch: string, next: string): boolean {
+    if (this.isAlphaNumeric(ch)) return true;
+    if (ch !== '-') return false;
+    // Permit kebab-case identifiers (e.g., make-x), but reject trailing '-'.
+    return this.isAlpha(next) || next === '_';
   }
 
   private isWhitespace(ch: string): boolean {

@@ -52,6 +52,16 @@ describe('Type Checker', () => {
       const typed = typecheck(ast, { inputs: env });
       expect(typed.type).toBe(FLOAT);
     });
+
+    it('resolves kebab-case identifiers from env', () => {
+      const ast = parse(tokenize('make-x + make-y'));
+      const env = new Map([
+        ['make-x', FLOAT],
+        ['make-y', FLOAT],
+      ]);
+      const typed = typecheck(ast, { inputs: env });
+      expect(typed.type).toBe(FLOAT);
+    });
   });
 
   describe('Arithmetic Type Rules', () => {

@@ -37,7 +37,7 @@ export class ExpressionProgramError extends Error {
   }
 }
 
-const ASSIGNMENT_RE = /^([A-Za-z_][A-Za-z0-9_]*)\s*=(?![=])\s*(.+)$/;
+const ASSIGNMENT_RE = /^([A-Za-z_](?:[A-Za-z0-9_]|-(?=[A-Za-z_]))*)\s*=(?![=])\s*(.+)$/;
 
 function stripSingleLineComment(input: string): string {
   const idx = input.indexOf('//');

@@ -41,7 +41,7 @@ arguments       := expression ("," expression)*
 NUMBER          := INTEGER | FLOAT
 INTEGER         := [0-9]+
 FLOAT           := [0-9]+ "." [0-9]+
-IDENTIFIER      := [a-zA-Z_][a-zA-Z0-9_]*
+IDENTIFIER      := [a-zA-Z_][a-zA-Z0-9_]*( "-" [a-zA-Z_][a-zA-Z0-9_]* )*
 WHITESPACE      := [ \t\n\r]+ (ignored)
 ```
 
@@ -78,6 +78,7 @@ phase       // Input reference
 radius      // Input reference
 my_value    // Input reference
 _internal   // Input reference (underscore prefix allowed)
+make-x      // Input reference (kebab-case allowed)
 ```
 
 ### Arithmetic
