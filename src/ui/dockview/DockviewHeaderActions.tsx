@@ -24,14 +24,15 @@ export const DockviewRightHeaderActions: React.FC<IDockviewHeaderActionsProps> =
 }) => {
   const canActOnPanel = Boolean(activePanel);
   const protectedPanel = activePanel?.id === 'flow-editor';
+  const nonFloatablePanelIds = new Set(['left-sidebar', 'right-sidebar']);
+  const panelLocationType = activePanel?.group.api.location.type ?? activePanel?.api.location.type;
+  const panelAlreadyFloating = panelLocationType === 'floating' || panelLocationType === 'popout';
   // [LAW:one-type-per-behavior] panel-specific actions are derived from panel
   // identity/capabilities, while common actions remain shared.
   const canFloat = Boolean(
     activePanel &&
-    activePanel.api.location.type !== 'floating' &&
-    activePanel.id !== 'flow-editor' &&
-    activePanel.id !== 'left-sidebar' &&
-    activePanel.id !== 'right-sidebar'
+    !panelAlreadyFloating &&
+    !nonFloatablePanelIds.has(activePanel.id)
   );
 
   const [isMaximized, setIsMaximized] = useState(activePanel?.api.isMaximized() ?? false);
