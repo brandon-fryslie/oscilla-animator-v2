@@ -40,7 +40,6 @@ import { evaluateValueExprEvent } from './ValueExprEventEvaluator';
 import { materializeValueExpr } from './ValueExprMaterializer';
 import { applyStateWritePolicy } from './StateWritePolicy';
 import type { PureFnExecutionContext } from './ScalarKernelLibrary';
-import { walkValueExprTree } from './ValueExprTreeWalker';
 import {
   arenaDecodeToAoS,
   arenaEncodeFromAoS,
@@ -64,29 +63,6 @@ function resolveArenaDescriptor(
     throw new Error(`resolveArenaDescriptor: missing arena descriptor for numeric slot ${lookup.slot}`);
   }
   return arenaDesc;
-}
-
-function collectStateReadSlotsForExpr(
-  rootExprId: number,
-  valueExprs: CompiledProgramIR['valueExprs']['nodes'],
-  out: Set<number>,
-): void {
-  walkValueExprTree(rootExprId as any, valueExprs, (_id, expr) => {
-    if (expr.kind !== 'state') return;
-    if (expr.resolvedSlot === undefined) {
-      throw new Error(
-        'Phase-boundary assertion requires resolved state slot for stateKey "' +
-          expr.stateKey +
-          '"',
-      );
-    }
-    out.add(expr.resolvedSlot as number);
-  });
-}
-
-export interface ExecuteFrameOptions {
-  /** Debug assertion for enforcing phase boundary ordering around state writes. */
-  assertPhaseBoundaryStateReads?: boolean;
 }
 
 function resolveNumericBuffer(
@@ -185,7 +161,6 @@ export function executeFrame(
   state: RuntimeState,
   arena: RenderBufferArena,
   tAbsMs: number,
-  options?: ExecuteFrameOptions,
 ): RenderFrameIR {
   MATERIALIZE_SCRATCH.reset();
 
@@ -255,35 +230,6 @@ export function executeFrame(
   // Collect render steps for v2 batch assembly (reuse module-level array)
   _renderSteps.length = 0;
 
-  const assertPhaseBoundaryStateReads = options?.assertPhaseBoundaryStateReads === true;
-  const phase1StateWriteSlots = assertPhaseBoundaryStateReads ? new Set<number>() : null;
-  const phase2StateReadSlots = assertPhaseBoundaryStateReads ? new Set<number>() : null;
-  const stateWriteGeneration = assertPhaseBoundaryStateReads ? new Uint8Array(state.state.length) : null;
-  const PHASE1_GENERATION = 1;
-  const PHASE2_GENERATION = 2;
-  let currentGeneration = PHASE1_GENERATION;
-  const markStateWriteGeneration = (slot: number, generation: number): void => {
-    if (!stateWriteGeneration) return;
-    if (slot < 0 || slot >= stateWriteGeneration.length) return;
-    stateWriteGeneration[slot] = generation;
-  };
-  const assertPhase2StateReadsUsePreviousFrameBank = (exprId: number, stepKind: Step['kind']): void => {
-    if (!phase2StateReadSlots || !phase1StateWriteSlots || !stateWriteGeneration) return;
-    phase2StateReadSlots.clear();
-    collectStateReadSlotsForExpr(exprId, valueExprs, phase2StateReadSlots);
-    for (const slot of phase2StateReadSlots) {
-      if (phase1StateWriteSlots.has(slot) || stateWriteGeneration[slot] === PHASE1_GENERATION) {
-        throw new Error(
-          'Phase-boundary assertion failed: ' +
-            stepKind +
-            ' reads state slot ' +
-            slot +
-            ' after a Phase-1 write. Stateful reads must observe previous-frame state only.',
-        );
-      }
-    }
-  };
-
   // [LAW:one-source-of-truth] Populate canonical scalar arena addresses before Phase 1
   // so extract reads resolve from compiler-emitted ExprAddressTable metadata only.
   state.cache.scalarExprToArenaAddress = addressTable.scalarExprToArenaAddress;
@@ -296,24 +242,7 @@ export function executeFrame(
     if (continuityMapSeen) return 'phase1-value-after-map';
     return 'phase1-value-pre-event';
   };
-  for (let stepIndex = 0; stepIndex < steps.length; stepIndex++) {
-    const step = steps[stepIndex];
-    if (assertPhaseBoundaryStateReads) {
-      const stepGeneration =
-        step.kind === 'stateWrite' || step.kind === 'fieldStateWrite'
-          ? PHASE2_GENERATION
-          : PHASE1_GENERATION;
-      // [LAW:single-enforcer] ScheduleExecutor is the single runtime boundary
-      // enforcing that schedule steps never move backward across phase boundary.
-      if (stepGeneration < currentGeneration) {
-        throw new Error(
-          'Phase-boundary assertion failed: non-state step at index ' +
-            stepIndex +
-            ' appears after state-write step. Schedule must keep all phase-1 steps before phase-2 writes.',
-        );
-      }
-      currentGeneration = stepGeneration;
-    }
+  for (const step of steps) {
     switch (step.kind) {
       case 'evalOne': {
         enterRuntimeFrameSegment(state, resolvePhase1ValueSegment());
@@ -587,7 +516,6 @@ export function executeFrame(
   prepareStateWriteBank(state);
   for (const step of steps) {
     if (step.kind === 'stateWrite') {
-      assertPhase2StateReadsUsePreviousFrameBank(step.value as unknown as number, step.kind);
       const mapping = stateSlotToMapping.get(step.stateSlot as number);
       const stride = mapping?.stride ?? 1;
 
@@ -607,11 +535,9 @@ export function executeFrame(
       for (let c = 0; c < stride; c++) {
         const fallback = mapping?.initial[c] ?? 0;
         state.stateWrite![baseSlot + c] = applyStateWritePolicy(mapping, oneValue[c] ?? fallback);
-        markStateWriteGeneration(baseSlot + c, PHASE2_GENERATION);
       }
     }
     if (step.kind === 'fieldStateWrite') {
-      assertPhase2StateReadsUsePreviousFrameBank(step.value as unknown as number, step.kind);
       // Per-lane state write: evaluate field and write each lane+component.
       const mapping = stateSlotToMapping.get(step.stateSlot as number);
       if (!mapping || mapping.instanceId === undefined) {
@@ -644,11 +570,9 @@ export function executeFrame(
         const srcLaneBase = lane * srcStride;
         for (let c = 0; c < copyStride; c++) {
           state.stateWrite![dstLaneBase + c] = applyStateWritePolicy(mapping, src[srcLaneBase + c] ?? 0);
-          markStateWriteGeneration(dstLaneBase + c, PHASE2_GENERATION);
         }
         for (let c = copyStride; c < mapping.stride; c++) {
           state.stateWrite![dstLaneBase + c] = applyStateWritePolicy(mapping, mapping.initial[c] ?? 0);
-          markStateWriteGeneration(dstLaneBase + c, PHASE2_GENERATION);
         }
       }
     }

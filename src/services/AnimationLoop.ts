@@ -5,7 +5,7 @@
  * and performance metrics tracking.
  */
 
-import { executeFrame } from '../runtime';
+import { assertSchedulePhaseBoundaryStateReads, executeFrame } from '../runtime';
 import { RenderBufferArena, type WebGPURenderer } from '../render';
 import {
   recordFrameTime,
@@ -62,6 +62,20 @@ function assertWebGPULoopContract(deps: AnimationLoopDeps): void {
 
 const CONTINUITY_STORE_UPDATE_INTERVAL = 200; // 5Hz
 const EMPTY_RENDER_FRAME: RenderFrameIR = { version: 2, ops: [] };
+
+function isPhaseBoundaryAssertionEnabled(deps: AnimationLoopDeps): boolean {
+  const debugValues = deps.store.settings?.get?.(debugSettings);
+  return Boolean(debugValues?.enabled && debugValues?.assertPhaseBoundaryStateReads);
+}
+
+function assertProgramPhaseBoundaryIfEnabled(deps: AnimationLoopDeps): void {
+  if (!isPhaseBoundaryAssertionEnabled(deps)) return;
+  const program = deps.getCurrentProgram();
+  if (!program) return;
+  // [LAW:dataflow-not-control-flow] Invariant validation runs at compile/start
+  // boundaries so frame execution order stays fixed with zero assertion work.
+  assertSchedulePhaseBoundaryStateReads(program);
+}
 
 /**
  * Create initial animation loop state
@@ -125,14 +139,7 @@ function acquireFrame(
   // Normal mode: execute the full schedule
   arena.reset();
   const execStart = performance.now();
-  const debugValues = store.settings.get(debugSettings);
-  const frame = executeFrame(currentProgram, currentState, arena, tMs, {
-    // [LAW:dataflow-not-control-flow] The runtime frame pipeline is fixed; only
-    // assertion data toggles vary at this boundary.
-    assertPhaseBoundaryStateReads: Boolean(
-      debugValues?.enabled && debugValues?.assertPhaseBoundaryStateReads,
-    ),
-  });
+  const frame = executeFrame(currentProgram, currentState, arena, tMs);
   const execTimeMs = performance.now() - execStart;
   return { frame, execTimeMs };
 }
@@ -295,6 +302,9 @@ export function startAnimationLoop(
   onError: (err: unknown) => void
 ): AnimationLoopController {
   assertWebGPULoopContract(deps);
+  // [LAW:single-enforcer] AnimationLoop owns runtime startup/compile boundaries,
+  // so boundary checks are enforced here exactly once per published program.
+  assertProgramPhaseBoundaryIfEnabled(deps);
 
   let cancelled = false;
   let haltedByError = false;
@@ -335,6 +345,7 @@ export function startAnimationLoop(
       if (cancelled) {
         return false;
       }
+      assertProgramPhaseBoundaryIfEnabled(deps);
       const resumedFromError = haltedByError;
       // [LAW:dataflow-not-control-flow] Recovery keeps the same frame pipeline and
       // resets only loop-owned runtime data when compilation publishes a new program.

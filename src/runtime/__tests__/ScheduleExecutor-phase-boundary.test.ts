@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { CompiledProgramIR } from '../../compiler/ir/program';
-import { SYSTEM_PALETTE_SLOT, valueExprId, valueSlot } from '../../compiler/ir/Indices';
+import { SYSTEM_PALETTE_SLOT, valueExprId } from '../../compiler/ir/Indices';
 import { canonicalScalar, FLOAT, unitNone } from '../../core/canonical-types';
+import { assertSchedulePhaseBoundaryStateReads } from '../PhaseBoundaryValidator';
 import { createRuntimeState } from '../RuntimeState';
 import { executeFrame } from '../ScheduleExecutor';
 import { getTestArena } from './test-arena-helper';
@@ -74,25 +75,14 @@ function makeProgramWithPhaseBoundaryViolation(): CompiledProgramIR {
   } as CompiledProgramIR;
 }
 
-describe('ScheduleExecutor phase-boundary assertion', () => {
-  it('throws when schedule regresses across phase boundary and assertion is enabled', () => {
+describe('phase-boundary assertion', () => {
+  it('throws when schedule regresses across phase boundary at compile boundary', () => {
     const program = makeProgramWithPhaseBoundaryViolation();
-    const state = createRuntimeState(
-      4,
-      1,
-      0,
-      0,
-      1,
-      program.arenaTotalFloats,
-    );
-    expect(() =>
-      executeFrame(program, state, getTestArena(), 100, {
-        assertPhaseBoundaryStateReads: true,
-      }),
-    ).toThrow(/Phase-boundary assertion failed: non-state step/);
+    expect(() => assertSchedulePhaseBoundaryStateReads(program))
+      .toThrow(/Phase-boundary assertion failed: non-state step/);
   });
 
-  it('does not run the assertion when toggle is disabled', () => {
+  it('keeps executeFrame hot path free of phase-boundary assertion work', () => {
     const program = makeProgramWithPhaseBoundaryViolation();
     const state = createRuntimeState(
       4,
@@ -102,10 +92,6 @@ describe('ScheduleExecutor phase-boundary assertion', () => {
       1,
       program.arenaTotalFloats,
     );
-    expect(() =>
-      executeFrame(program, state, getTestArena(), 100, {
-        assertPhaseBoundaryStateReads: false,
-      }),
-    ).not.toThrow();
+    expect(() => executeFrame(program, state, getTestArena(), 100)).not.toThrow();
   });
 });
