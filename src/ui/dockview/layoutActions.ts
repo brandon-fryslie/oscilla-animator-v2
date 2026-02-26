@@ -66,8 +66,21 @@ export function applySidebarConstraints(api: DockviewApi): void {
 
     rememberExpandedSidebarWidth(group, side);
     if (group.api.isVisible) {
-      group.api.setSize({ width: sidebarExpandedWidth[side] });
+      const clamped = clampSidebarWidth(side, group.api.width);
+      if (Math.abs(group.api.width - clamped) > 0.5) {
+        group.api.setSize({ width: clamped });
+      }
     }
+  }
+}
+
+export function captureSidebarWidths(api: DockviewApi): void {
+  for (const side of SIDEBAR_SIDES) {
+    const group = getSidebarGroup(api, side);
+    if (!group) {
+      continue;
+    }
+    rememberExpandedSidebarWidth(group, side);
   }
 }
 
@@ -222,4 +235,3 @@ export function resetDockviewLayout(api: DockviewApi): void {
   createDefaultLayout(api);
   applySidebarConstraints(api);
 }
-
