@@ -2,12 +2,27 @@ import { defineConfig } from 'vite';
 import path from 'path';
 import fs from 'node:fs';
 
+function readRealpath(candidate: string): string {
+  try {
+    if (typeof (fs.realpathSync as { native?: (p: string) => string }).native === 'function') {
+      return (fs.realpathSync as { native: (p: string) => string }).native(candidate);
+    }
+    return fs.realpathSync(candidate);
+  } catch {
+    return candidate;
+  }
+}
+
 const workspaceRoot = path.resolve(__dirname);
-const resolvedWorkspaceRoot =
-  typeof (fs.realpathSync as { native?: (p: string) => string }).native === 'function'
-    ? (fs.realpathSync as { native: (p: string) => string }).native(workspaceRoot)
-    : fs.realpathSync(workspaceRoot);
-const allowedFsRoots = Array.from(new Set([workspaceRoot, resolvedWorkspaceRoot]));
+const cwdRoot = path.resolve(process.cwd());
+const pwdRoot = process.env.PWD ? path.resolve(process.env.PWD) : null;
+const allowedFsRoots = Array.from(
+  new Set(
+    [workspaceRoot, cwdRoot, pwdRoot]
+      .filter((value): value is string => Boolean(value))
+      .flatMap((candidate) => [candidate, readRealpath(candidate)])
+  )
+);
 
 export default defineConfig({
   base: process.env.BASE_URL || '/',
