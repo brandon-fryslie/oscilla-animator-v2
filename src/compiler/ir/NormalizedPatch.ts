@@ -1,4 +1,4 @@
-import type { BlockId, PortId } from '../../types';
+import type { BlockId, PortId } from '../../types/compiler';
 import type { BlockIndex } from './BlockIndex';
 import type { CompilerGraph, CompilerGraphBlock } from './CompilerGraph';
 

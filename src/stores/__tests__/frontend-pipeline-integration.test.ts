@@ -85,10 +85,10 @@ describe('Frontend Pipeline Integration', () => {
     expect(rxType).toBeDefined();
     expect(rxType?.payload.kind).toBe('float');
 
-    // Verify output type (Ellipse outputs float for shape)
+    // Verify output type (Ellipse outputs HANDLE semantics via int payload)
     const shapeType = store.getResolvedPortTypeByIds(ellipseId!, 'shape', 'out');
     expect(shapeType).toBeDefined();
-    expect(shapeType?.payload.kind).toBe('float');
+    expect(shapeType?.payload.kind).toBe('int');
   });
 
   it('handles cycles gracefully — always produces FrontendResult', () => {

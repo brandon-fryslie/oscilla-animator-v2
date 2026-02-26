@@ -17,7 +17,7 @@
 
 import type { CanonicalType } from "../../core/canonical-types";
 import type { CardinalityAcceptance } from "../../core/canonical-types/cardinality";
-import type { CombineMode } from "../../types";
+import type { CombineMode } from "../../types/compiler";
 
 export type { BlockIndex } from "./BlockIndex";
 export type { NormalizedPatch, NormalizedEdge } from "./NormalizedPatch";

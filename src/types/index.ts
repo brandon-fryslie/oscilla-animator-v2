@@ -115,84 +115,27 @@ export {
 // Block/Port IDs (string-based)
 // =============================================================================
 
-declare const BlockIdBrand: unique symbol;
-declare const PortIdBrand: unique symbol;
-
-export type BlockId = string & { readonly [BlockIdBrand]: never };
-export type PortId = string & { readonly [PortIdBrand]: never };
-
-export function blockId(s: string): BlockId {
-  return s as BlockId;
-}
-
-export function portId(s: string): PortId {
-  return s as PortId;
-}
-
-// [LAW:one-type-per-behavior] Canonical block-port reference shared across UI,
-// diagnostics, and derived role metadata.
-export interface PortEndpointRef {
-  readonly blockId: BlockId;
-  readonly portId: PortId;
-}
+export type {
+  BlockId,
+  PortId,
+  PortEndpointRef,
+  CombineMode,
+  CombineModeCategory,
+} from './compiler';
+export {
+  blockId,
+  portId,
+  COMBINE_MODE_CATEGORY,
+  canonicalizeCombineMode,
+} from './compiler';
 
 // =============================================================================
 // Combine Mode
 // =============================================================================
 
-/**
- * Combine mode for input ports with multiple edges.
- *
- * Modes are categorized by the types they work with:
- * - any: Works with any type
- * - numeric: Works with numeric types (float, int, vec2, vec3, color)
- * - boolean: Works with boolean type
- */
-export type CombineMode =
-  | 'last'      // any: Last value wins
-  | 'first'     // any: First value wins
-  | 'sum'       // numeric: Additive
-  | 'average'   // numeric: Arithmetic mean
-  | 'max'       // numeric: Maximum
-  | 'min'       // numeric: Minimum
-  | 'mul'       // numeric: Multiplicative
-  | 'layer'     // any: Layer composition
-  | 'or'        // boolean: Logical OR
-  | 'and'       // boolean: Logical AND
-  | 'collect'   // any: Preserve individual edge types (no unification)
-  | 'array';    // any: User-facing alias for collect semantics
-
-/**
- * Category for combine modes based on type compatibility.
- */
-export type CombineModeCategory = 'numeric' | 'any' | 'boolean';
-
-/**
- * Mapping of combine modes to their category.
- * Used for validating that a combine mode is compatible with a port's type.
- */
-export const COMBINE_MODE_CATEGORY: Record<CombineMode, CombineModeCategory> = {
-  last: 'any',
-  first: 'any',
-  sum: 'numeric',
-  average: 'numeric',
-  max: 'numeric',
-  min: 'numeric',
-  mul: 'numeric',
-  layer: 'any',
-  or: 'boolean',
-  and: 'boolean',
-  collect: 'any',
-  array: 'any',
-};
-
-// [LAW:single-enforcer] Canonicalize legacy/user-facing combine aliases at one boundary.
-export function canonicalizeCombineMode(mode: CombineMode): CombineMode {
-  return mode === 'array' ? 'collect' : mode;
-}
-
 // Import CanonicalType for local use in interface definitions
 import type { CanonicalType } from '../core/canonical-types';
+import type { BlockId, PortEndpointRef } from './compiler';
 
 // =============================================================================
 // Transform System Types

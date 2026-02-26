@@ -30,7 +30,7 @@ import {
 } from '../canonical-types';
 import { isConcretePayload } from '../inference-types';
 import {
-  FLOAT, INT, BOOL, VEC2, VEC3, COLOR, CAMERA_PROJECTION, payloadStride,
+  FLOAT, HANDLE, INT, BOOL, VEC2, VEC3, COLOR, CAMERA_PROJECTION, payloadStride,
   unitNone, unitCount, unitDegrees, unitTurns, isValidPayloadUnit, defaultUnitForPayload,
 } from '../canonical-types';
 
@@ -40,13 +40,13 @@ import {
 
 describe('PayloadType', () => {
   it('includes all core payload types', () => {
-    const payloads: PayloadType[] = [FLOAT, INT, VEC2, COLOR, BOOL];
-    expect(payloads.length).toBe(5);
+    const payloads: PayloadType[] = [FLOAT, HANDLE, INT, VEC2, COLOR, BOOL];
+    expect(payloads.length).toBe(6);
   });
 
   it('does NOT include event or domain (these are axis concepts)', () => {
     // TypeScript will catch this at compile time, but documenting intent
-    const validPayloads: PayloadType[] = [FLOAT, INT, VEC2, COLOR, BOOL];
+    const validPayloads: PayloadType[] = [FLOAT, HANDLE, INT, VEC2, COLOR, BOOL];
     expect(validPayloads).not.toContain('event');
     expect(validPayloads).not.toContain('domain');
   });
@@ -192,6 +192,10 @@ describe('Unit System (scalar removal)', () => {
   it('defaultUnitForPayload(INT) remains count', () => {
     expect(defaultUnitForPayload(INT)).toEqual(unitCount());
   });
+
+  it('defaultUnitForPayload(HANDLE) remains count', () => {
+    expect(defaultUnitForPayload(HANDLE)).toEqual(unitCount());
+  });
 });
 
 // =============================================================================
@@ -201,6 +205,7 @@ describe('Unit System (scalar removal)', () => {
 describe('payloadStride', () => {
   it('computes stride for all payload types', () => {
     expect(payloadStride(FLOAT)).toBe(1);
+    expect(payloadStride(HANDLE)).toBe(1);
     expect(payloadStride(INT)).toBe(1);
     expect(payloadStride(BOOL)).toBe(1);
     expect(payloadStride(VEC2)).toBe(2);

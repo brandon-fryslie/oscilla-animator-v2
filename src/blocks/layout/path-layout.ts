@@ -17,7 +17,7 @@
 
 import { registerBlock, ALL_CONCRETE_PAYLOADS } from '../registry';
 import { canonicalType, unitTurns, contractWrap01, payloadStride, requireInst } from '../../core/canonical-types';
-import { FLOAT, VEC2 } from '../../core/canonical-types';
+import { FLOAT, HANDLE, VEC2 } from '../../core/canonical-types';
 import { inferType, payloadVar, cardinalityVar } from '../../core/inference-types';
 import { cardinalityVarId } from '../../core/ids';
 import { defaultSourceConst } from '../../types';
@@ -48,7 +48,7 @@ export function register(): void {
     },
     inputs: {
       elements: { label: 'Elements', type: inferType(payloadVar('path_elements_payload'), { kind: 'none' }, { cardinality: PATH_FIELD_CARD }) },
-      shape: { label: 'Shape', type: canonicalType(FLOAT), defaulting: 'forbidden' },
+      shape: { label: 'Shape', type: canonicalType(HANDLE), defaulting: 'forbidden' },
       spacing: { label: 'Spacing', type: canonicalType(FLOAT), defaultValue: 1.0, defaultSource: defaultSourceConst(1.0), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 5, step: 0.01 } },
       offset: { label: 'Offset', type: canonicalType(FLOAT, unitTurns(), undefined, contractWrap01()), defaultValue: 0, defaultSource: defaultSourceConst(0), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
     },
