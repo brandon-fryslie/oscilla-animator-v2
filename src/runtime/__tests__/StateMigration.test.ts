@@ -149,11 +149,10 @@ describe('StateMigration', () => {
     expect(newState[0]).toBe(77);
   });
 
-  it('migrates by state identity even when stable state id changes', () => {
+  it('drops state when stateId is not present in new mappings', () => {
     const oldMappings: StateMapping[] = [
       {
-        stateId: stableStateId('b9', 'legacy'),
-        stateIdentity: { blockId: 'b9', portName: 'out' },
+        stateId: stableStateId('b10', 'delay'),
         slotStart: 0,
         laneCount: 1,
         stride: 1,
@@ -162,38 +161,7 @@ describe('StateMigration', () => {
     ];
     const newMappings: StateMapping[] = [
       {
-        stateId: stableStateId('b9', 'renamed'),
-        stateIdentity: { blockId: 'b9', portName: 'out' },
-        slotStart: 2,
-        laneCount: 1,
-        stride: 1,
-        initial: [0],
-      },
-    ];
-
-    const oldState = new Float32Array([123]);
-    const newState = new Float32Array(4);
-    const result = migrateState(oldState, newState, oldMappings, newMappings, () => null);
-
-    expect(result.scalarsMigrated).toBe(1);
-    expect(newState[2]).toBe(123);
-  });
-
-  it('drops state on identity mismatch and reports identity-mismatch details', () => {
-    const oldMappings: StateMapping[] = [
-      {
-        stateId: stableStateId('b10', 'delay'),
-        stateIdentity: { blockId: 'b10', portName: 'outA' },
-        slotStart: 0,
-        laneCount: 1,
-        stride: 1,
-        initial: [0],
-      },
-    ];
-    const newMappings: StateMapping[] = [
-      {
-        stateId: stableStateId('b10', 'delay'),
-        stateIdentity: { blockId: 'b10', portName: 'outB' },
+        stateId: stableStateId('b10', 'renamed'),
         slotStart: 0,
         laneCount: 1,
         stride: 1,
@@ -209,7 +177,7 @@ describe('StateMigration', () => {
     expect(result.initialized).toBe(1);
     expect(result.discarded).toBe(1);
     expect(newState[0]).toBe(9);
-    expect(result.details.some((d) => d.reason === 'identityMismatch')).toBe(true);
+    expect(result.details.some((d) => d.reason === 'missingOldState')).toBe(true);
   });
 
   it('initializes field lanes when lane mapping is unavailable and layout changes', () => {

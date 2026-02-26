@@ -15,9 +15,7 @@ import type {
   ScalarSlotDecl,
   StateMapping,
   StableStateId,
-  StateSlotIdentity,
 } from '../compiler/ir/types';
-import { stateIdentityFromStateId } from '../compiler/ir/types';
 import type { MappingState } from './ContinuityState';
 
 /**
@@ -42,8 +40,7 @@ export interface StateMigrationDetail {
   stateId: StableStateId;
   action: 'migrated' | 'initialized' | 'discarded';
   kind: 'scalar' | 'field';
-  reason?: 'identityMismatch' | 'missingOldState' | 'kindChanged' | 'removed';
-  stateIdentity?: StateSlotIdentity;
+  reason?: 'missingOldState' | 'kindChanged' | 'removed';
   lanesMigrated?: number;
   lanesInitialized?: number;
 }
@@ -59,14 +56,6 @@ function isFieldStateMapping(mapping: StateMapping): mapping is FieldSlotDecl {
 
 function mappingKind(mapping: StateMapping): 'scalar' | 'field' {
   return mapping.instanceId !== undefined ? 'field' : 'scalar';
-}
-
-function getStateIdentity(mapping: StateMapping): StateSlotIdentity {
-  return mapping.stateIdentity ?? stateIdentityFromStateId(mapping.stateId);
-}
-
-function stateIdentityKey(identity: StateSlotIdentity): string {
-  return `${identity.blockId}\u0000${identity.portName}`;
 }
 
 /**
@@ -98,47 +87,34 @@ export function migrateState(
     details: [],
   };
 
-  // Build lookups from old mappings.
-  // [LAW:one-source-of-truth] Migration keys on explicit state identity
-  // (blockId + portName), not positional slot indices.
-  const oldByIdentity = new Map<string, StateMapping>();
+  // Build lookup from old mappings by stateId.
   const oldByStateId = new Map<StableStateId, StateMapping>();
   for (const mapping of oldMappings) {
-    oldByIdentity.set(stateIdentityKey(getStateIdentity(mapping)), mapping);
     oldByStateId.set(mapping.stateId, mapping);
   }
 
-  const newByStateId = new Map<StableStateId, StateMapping>();
-  for (const mapping of newMappings) {
-    newByStateId.set(mapping.stateId, mapping);
-  }
-
-  // Track which old identities were migrated (for discard count)
-  const migratedOldIdentityKeys = new Set<string>();
+  // Track which old stateIds were migrated (for discard count)
+  const migratedOldStateIds = new Set<StableStateId>();
 
   // Process each new state mapping
   for (const newMapping of newMappings) {
-    const newIdentity = getStateIdentity(newMapping);
-    const identityKey = stateIdentityKey(newIdentity);
-    const oldMapping = oldByIdentity.get(identityKey);
+    const oldMapping = oldByStateId.get(newMapping.stateId);
 
     if (!oldMapping) {
       // New state - initialize with defaults
       initializeState(newState, newMapping);
       result.initialized++;
-      const hasOldStateId = oldByStateId.has(newMapping.stateId);
       result.details.push({
         stateId: newMapping.stateId,
         action: 'initialized',
         kind: mappingKind(newMapping),
-        reason: hasOldStateId ? 'identityMismatch' : 'missingOldState',
-        stateIdentity: newIdentity,
+        reason: 'missingOldState',
       });
       continue;
     }
 
     // State exists in both - migrate
-    migratedOldIdentityKeys.add(identityKey);
+    migratedOldStateIds.add(newMapping.stateId);
 
     if (isScalarStateMapping(newMapping) && isScalarStateMapping(oldMapping)) {
       // Scalar to scalar: direct copy
@@ -148,7 +124,6 @@ export function migrateState(
         stateId: newMapping.stateId,
         action: 'migrated',
         kind: 'scalar',
-        stateIdentity: newIdentity,
       });
     } else if (isFieldStateMapping(newMapping) && isFieldStateMapping(oldMapping)) {
       // Field to field: use lane mapping
@@ -165,7 +140,6 @@ export function migrateState(
         stateId: newMapping.stateId,
         action: 'migrated',
         kind: 'field',
-        stateIdentity: newIdentity,
         lanesMigrated: migrationInfo.lanesMigrated,
         lanesInitialized: migrationInfo.lanesInitialized,
       });
@@ -179,24 +153,19 @@ export function migrateState(
         action: 'initialized',
         kind: mappingKind(newMapping),
         reason: 'kindChanged',
-        stateIdentity: newIdentity,
       });
     }
   }
 
-  // Count discarded states (in old but not migrated to new identity)
+  // Count discarded states (in old but not migrated to new)
   for (const oldMapping of oldMappings) {
-    const oldIdentity = getStateIdentity(oldMapping);
-    const oldIdentityKey = stateIdentityKey(oldIdentity);
-    if (!migratedOldIdentityKeys.has(oldIdentityKey)) {
-      const hasNewStateId = newByStateId.has(oldMapping.stateId);
+    if (!migratedOldStateIds.has(oldMapping.stateId)) {
       result.discarded++;
       result.details.push({
         stateId: oldMapping.stateId,
         action: 'discarded',
         kind: mappingKind(oldMapping),
-        reason: hasNewStateId ? 'identityMismatch' : 'removed',
-        stateIdentity: oldIdentity,
+        reason: 'removed',
       });
     }
   }
