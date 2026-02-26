@@ -91,42 +91,6 @@ describe('compileExpression Integration', () => {
     }
   });
 
-  it('accepts kebab-case identifiers from expression inputs', () => {
-    const lhs = builder.constant(floatConst(2), canonicalType(FLOAT));
-    const rhs = builder.constant(floatConst(3), canonicalType(FLOAT));
-    const result = compileExpression(
-      'make-x + make-y',
-      new Map([
-        ['make-x', canonicalType(FLOAT)],
-        ['make-y', canonicalType(FLOAT)],
-      ]),
-      builder,
-      new Map([
-        ['make-x', lhs],
-        ['make-y', rhs],
-      ]),
-    );
-
-    expect(result.ok).toBe(true);
-    if (result.ok) {
-      const expr = builder.getValueExpr(result.value);
-      expect(expr).toBeDefined();
-      expect(expr?.kind).toBe('kernel');
-    }
-  });
-
-  it('preserves subtraction tokenization for compact numeric expressions', () => {
-    const x = builder.constant(floatConst(2), canonicalType(FLOAT));
-    const result = compileExpression(
-      'x-1',
-      new Map([['x', canonicalType(FLOAT)]]),
-      builder,
-      new Map([['x', x]]),
-    );
-
-    expect(result.ok).toBe(true);
-  });
-
   describe('Component Access (Swizzle)', () => {
 
     it('single-component swizzle compiles successfully (v.x)', () => {

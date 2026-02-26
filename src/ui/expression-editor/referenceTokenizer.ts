@@ -66,11 +66,7 @@ export interface TokenizedSegment {
  * Note: block-reference alternative appears first to prevent splitting
  * "block.port" into two separate identifier matches.
  */
-const IDENT_PATTERN = String.raw`[a-zA-Z_](?:[a-zA-Z0-9_]|-(?=[a-zA-Z_]))*`;
-const TOKEN_PATTERN = new RegExp(
-  String.raw`(?<![a-zA-Z0-9_-])(${IDENT_PATTERN})\.(${IDENT_PATTERN})(?![a-zA-Z0-9_-])|(?<![a-zA-Z0-9_-])(${IDENT_PATTERN})(?![a-zA-Z0-9_-])`,
-  'g',
-);
+const TOKEN_PATTERN = /\b([a-zA-Z_][a-zA-Z0-9_]*)\.([a-zA-Z_][a-zA-Z0-9_]*)\b|\b([a-zA-Z_][a-zA-Z0-9_]*)\b/g;
 
 /**
  * Tokenize expression text into segments.
