@@ -34,7 +34,8 @@ import { applyContinuity, finalizeContinuityFrame } from './ContinuityApply';
 import { createStableDomainInstance, createUnstableDomainInstance } from './DomainIdentity';
 import { assembleRenderFrame, type AssemblerContext } from './RenderAssembler';
 import { resolveCameraFromGlobals } from './CameraResolver';
-import { payloadStride } from '../core/canonical-types';
+import type { CanonicalType } from '../core/canonical-types';
+import { payloadStride, requireInst } from '../core/canonical-types';
 import type { ValueSlot } from '../compiler/ir/Indices';
 import { SCALAR_INSTANCE_ID } from '../compiler/ir/Indices';
 import { evaluateValueExprEvent } from './ValueExprEventEvaluator';
@@ -148,6 +149,78 @@ function _clearEventPayloads(payloads: unknown[]): void {
   payloads.length = 0;
 }
 
+export interface ExecuteFrameOptions {
+  /**
+   * Enable cardinality/runtime write assertions.
+   * Intended for debug-mode execution only due per-step overhead.
+   */
+  readonly assertCardinalitySlotWrites?: boolean;
+}
+
+type RuntimeValueKind = 'signal' | 'field' | 'event';
+type RuntimeWriteKind = 'signal' | 'field';
+
+function deriveRuntimeValueKind(type: CanonicalType): RuntimeValueKind {
+  const temporality = requireInst(type.extent.temporality, 'temporality');
+  if (temporality.kind === 'discrete') {
+    return 'event';
+  }
+  const cardinality = requireInst(type.extent.cardinality, 'cardinality');
+  return cardinality.kind === 'many' ? 'field' : 'signal';
+}
+
+function deriveExpectedLaneCount(
+  lookup: SlotLookup,
+  instances: ReadonlyMap<InstanceId, InstanceDecl>,
+): number | null {
+  const cardinality = requireInst(lookup.type.extent.cardinality, 'cardinality');
+  if (cardinality.kind !== 'many') {
+    return 1;
+  }
+  const instance = instances.get(cardinality.instance.instanceId as InstanceId);
+  if (!instance || typeof instance.count !== 'number') {
+    return null;
+  }
+  return instance.count;
+}
+
+function assertRuntimeSlotWrite(
+  slotLookupMap: ReadonlyMap<ValueSlot, SlotLookup>,
+  instances: ReadonlyMap<InstanceId, InstanceDecl>,
+  stepKind: Step['kind'],
+  slot: ValueSlot,
+  observedKind: RuntimeWriteKind,
+  observedLaneCount: number,
+): void {
+  const lookup = resolveSlotOffsetFromMap(slotLookupMap, slot);
+  const expectedKind = deriveRuntimeValueKind(lookup.type);
+  if (expectedKind === 'event') {
+    throw new Error(
+      `Internal error: non-event step ${stepKind} attempted to write to event-typed slot ${slot} ` +
+      `(discrete temporality slots must only be written by eventDispatch; observed write kind: ${observedKind})`,
+    );
+  }
+  if (expectedKind !== observedKind) {
+    throw new Error(
+      `Cardinality write assertion failed at ${stepKind} slot ${slot}: ` +
+      `expected ${expectedKind}, actual ${observedKind}`,
+    );
+  }
+  if (lookup.arena.laneCount !== observedLaneCount) {
+    throw new Error(
+      `Cardinality write assertion failed at ${stepKind} slot ${slot}: ` +
+      `expected laneCount ${lookup.arena.laneCount}, actual ${observedLaneCount}`,
+    );
+  }
+  const expectedLaneCount = deriveExpectedLaneCount(lookup, instances);
+  if (expectedLaneCount !== null && expectedLaneCount !== observedLaneCount) {
+    throw new Error(
+      `Cardinality write assertion failed at ${stepKind} slot ${slot}: ` +
+      `expected cardinality lanes ${expectedLaneCount}, actual ${observedLaneCount}`,
+    );
+  }
+}
+
 /**
  * Execute one frame of the program
  *
@@ -162,6 +235,7 @@ export function executeFrame(
   state: RuntimeState,
   arena: RenderBufferArena,
   tAbsMs: number,
+  options?: ExecuteFrameOptions,
 ): RenderFrameIR {
   MATERIALIZE_SCRATCH.reset();
 
@@ -180,6 +254,9 @@ export function executeFrame(
   const addressTable = getExprAddressTable(program);
   const { slotLookup: slotLookupMap, fieldExprToSlot, slotToArena } = addressTable;
   const pureFnContext: PureFnExecutionContext = { kernelRegistry: program.kernelRegistry };
+  // [LAW:dataflow-not-control-flow] Assertion mode is chosen once per frame.
+  // Step execution order is unchanged; only validation dataflow varies.
+  const assertCardinalitySlotWrites = options?.assertCardinalitySlotWrites === true;
 
   // Helper uses module-level resolveSlotOffsetFromMap() — no closure needed
 
@@ -302,6 +379,9 @@ export function executeFrame(
         } else {
           throw new Error('evalOne: unsupported storage type \'' + storage + '\' for slot ' + slot + ' expr ' + step.expr);
         }
+        if (assertCardinalitySlotWrites) {
+          assertRuntimeSlotWrite(slotLookupMap, instances, step.kind, targetSlot, 'signal', 1);
+        }
         break;
       }
 
@@ -358,6 +438,9 @@ export function executeFrame(
 
         // Debug tap: Record field value
         state.tap?.recordFieldValue?.(step.target, buffer);
+        if (assertCardinalitySlotWrites) {
+          assertRuntimeSlotWrite(slotLookupMap, instances, step.kind, step.target, 'field', count);
+        }
         break;
       }
 
@@ -446,6 +529,17 @@ export function executeFrame(
         });
         arenaEncodeFromAoS(state.arena, outputDesc, outputBuffer);
         state.tap?.recordFieldValue?.(outputSlot, outputBuffer);
+        if (assertCardinalitySlotWrites) {
+          const observedLaneCount = step.stride > 0 ? Math.floor(baseBuffer.length / step.stride) : 0;
+          assertRuntimeSlotWrite(
+            slotLookupMap,
+            instances,
+            step.kind,
+            outputSlot,
+            'field',
+            observedLaneCount,
+          );
+        }
         break;
       }
 

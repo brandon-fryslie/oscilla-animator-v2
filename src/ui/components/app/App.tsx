@@ -106,10 +106,11 @@ const mantineTheme = createMantineTheme({
 interface AppProps {
   onCanvasReady?: (canvas: HTMLCanvasElement) => void;
   onStoreReady?: (store: RootStore) => void;
+  onStatsSinkReady?: (sink: ((statsText: string) => void) | null) => void;
   externalWriteBus?: ExternalWriteBus;
 }
 
-export const App: React.FC<AppProps> = ({ onCanvasReady, onStoreReady, externalWriteBus }) => {
+export const App: React.FC<AppProps> = ({ onCanvasReady, onStoreReady, onStatsSinkReady, externalWriteBus }) => {
   const showPreview = useShowPreview();
   const [stats, setStats] = useState('FPS: --');
 
@@ -156,13 +157,14 @@ export const App: React.FC<AppProps> = ({ onCanvasReady, onStoreReady, externalW
     canvasCallbackRef.current?.(canvas);
   }, []);
 
-  // Make setStats available globally for main.ts
+  // [LAW:no-shared-mutable-globals] Stats updates flow through explicit
+  // callback plumbing rather than a window-level mutable callback.
   useEffect(() => {
-    window.__setStats = setStats;
+    onStatsSinkReady?.(setStats);
     return () => {
-      delete window.__setStats;
+      onStatsSinkReady?.(null);
     };
-  }, []);
+  }, [onStatsSinkReady]);
 
   // Handle editor ready callback
   const handleReactFlowEditorReady = useCallback((adapter: EditorHandle) => {

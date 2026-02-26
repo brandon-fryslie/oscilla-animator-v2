@@ -1,7 +1,7 @@
 /**
  * Payload Types — What the value is made of
  *
- * Closed union of concrete payload kinds (float, int, bool, vec2, vec3, color, shape, cameraProjection).
+ * Closed union of concrete payload kinds (float, int, bool, vec2, vec3, vec4, color, shape, cameraProjection).
  * Stride is NOT stored — use payloadStride() to derive it from kind.
  */
 

@@ -128,7 +128,7 @@ function computePortPopoverPlacement(anchorEl: HTMLElement, isInput: boolean): P
  * UnifiedNode - Adapter-powered node component.
  */
 export const UnifiedNode: React.FC<NodeProps<UnifiedNodeData>> = observer(({ data }) => {
-  const { adapter, enableParamEditing, selection, portHighlight } = useGraphEditor();
+  const { adapter, enableParamEditing, onPortContextMenu, selection, portHighlight } = useGraphEditor();
   const { diagnostics } = useStores();
 
   const portPopover = usePinPopoverState<PortPopoverData>({
@@ -160,14 +160,20 @@ export const UnifiedNode: React.FC<NodeProps<UnifiedNodeData>> = observer(({ dat
   // Port context menu handler
   const handlePortContextMenu = useCallback(
     (portId: PortId, isInput: boolean, e: React.MouseEvent) => {
+      e.preventDefault();
       e.stopPropagation();
-      // Call global handler exposed by parent editor
-      const handler = window.__reactFlowPortContextMenu;
-      if (handler) {
-        handler(data.blockId as BlockId, portId, isInput, e);
+      if (onPortContextMenu) {
+        // [LAW:no-shared-mutable-globals] Menu routing stays within graph
+        // editor context and does not depend on ambient window state.
+        onPortContextMenu({
+          blockId: data.blockId as BlockId,
+          portId,
+          isInput,
+          position: { top: e.clientY, left: e.clientX },
+        });
       }
     },
-    [data.blockId]
+    [data.blockId, onPortContextMenu]
   );
 
   // Port hover handlers

@@ -41,7 +41,8 @@ import {
 describe('PayloadType', () => {
   it('includes all core payload types', () => {
     const payloads: PayloadType[] = [FLOAT, HANDLE, SHAPE, INT, VEC2, COLOR, BOOL];
-    expect(payloads.length).toBe(7);
+    const kinds = new Set(payloads.map((p) => p.kind));
+    expect(kinds).toEqual(new Set(['float', 'shape', 'int', 'vec2', 'color', 'bool']));
   });
 
   it('does NOT include event or domain (these are axis concepts)', () => {

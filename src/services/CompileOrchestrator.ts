@@ -38,7 +38,10 @@ import { type ValueSlot } from '../types';
 import { debugService } from './DebugService';
 import { mapDebugMappings } from './mapDebugEdges';
 import { extractConstantValues } from './ConstantValueTracker';
-import { pruneStaleContinuity } from '../runtime/ContinuityState';
+import {
+  pruneStaleContinuity,
+  type ContinuityTargetOwnerBinding,
+} from '../runtime/ContinuityState';
 import { getExprAddressTable } from '../runtime/ExprAddressTable';
 
 
@@ -309,6 +312,28 @@ export async function compileAndSwap(
   }
 
   const program = result.program;
+  const collectContinuityTargetOwnerBindings = (
+    schedule: { steps?: readonly any[] } | undefined,
+  ): ContinuityTargetOwnerBinding[] => {
+    if (!schedule?.steps) {
+      return [];
+    }
+    const bindings: ContinuityTargetOwnerBinding[] = [];
+    for (const step of schedule.steps) {
+      if (step?.kind !== 'continuityApply') {
+        continue;
+      }
+      if (typeof step.targetKey !== 'string' || typeof step.instanceId !== 'string') {
+        continue;
+      }
+      bindings.push({
+        targetId: step.targetKey as ContinuityTargetOwnerBinding['targetId'],
+        instanceId: step.instanceId,
+      });
+    }
+    return bindings;
+  };
+
   const runtimeAddressTable = program.runtimeAddressTable;
   if (!runtimeAddressTable?.slotLookup) {
     // [LAW:single-enforcer] Runtime slot cardinality comes from the compiler
@@ -321,6 +346,7 @@ export async function compileAndSwap(
     stateSlotCount?: number;
     stateMappings?: readonly any[];
     instances?: ReadonlyMap<string, any>;
+    steps?: readonly any[];
   };
   const newStateSlotCount = newSchedule?.stateSlotCount ?? 0;
   const newStateMappings = newSchedule?.stateMappings ?? [];
@@ -344,9 +370,17 @@ export async function compileAndSwap(
   }
 
   // Get old state info for migration
-  const oldSchedule = state.currentProgram?.schedule as { stateSlotCount?: number; stateMappings?: readonly any[] } | undefined;
+  const oldSchedule = state.currentProgram?.schedule as {
+    stateSlotCount?: number;
+    stateMappings?: readonly any[];
+    steps?: readonly any[];
+  } | undefined;
   const oldStateMappings = oldSchedule?.stateMappings ?? [];
   const oldPrimitiveState = state.currentState?.state;
+  const knownTargetOwnerBindings = [
+    ...collectContinuityTargetOwnerBindings(oldSchedule),
+    ...collectContinuityTargetOwnerBindings(newSchedule),
+  ];
 
   // Initialize session state on first compile
   if (isInitial) {
@@ -424,7 +458,11 @@ export async function compileAndSwap(
 
   // Prune stale continuity entries for instances removed from the graph
   if (!isInitial && state.sessionState) {
-    pruneStaleContinuity(state.sessionState.continuity, new Set(instanceCounts.keys()));
+    pruneStaleContinuity(
+      state.sessionState.continuity,
+      new Set(instanceCounts.keys()),
+      knownTargetOwnerBindings,
+    );
   }
 
   // Compilation succeeded - emit CompileEnd with success
