@@ -26,6 +26,8 @@ import { payloadStride, requireInst } from "../../core/canonical-types";
 /**
  * Core payload domains for combine operations.
  */
+// Numeric payload kinds that support arithmetic combine modes (sum/avg/min/max/mul).
+// Note: 'color' is excluded despite matching vec4 stride because it uses layer semantics.
 export const NUMERIC_PAYLOADS = ['float', 'int', 'vec2', 'vec3', 'vec4'] as const;
 export type CorePayload = 'float' | 'int' | 'vec2' | 'color' | 'bool';
 
