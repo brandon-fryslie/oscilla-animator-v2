@@ -21,7 +21,8 @@ import type { StepRender, StepMaterialize, StepContinuityMapBuild, StepContinuit
 import type { InstanceId, ValueSlot } from '../ir/Indices';
 import type { ValueExpr, ValueExprId } from '../ir/value-expr';
 import type { UnlinkedIRFragments } from './lower-blocks';
-import type { AcyclicOrLegalGraph, NormalizedEdge, Block, BlockIndex } from '../ir/patches';
+import type { AcyclicOrLegalGraph, NormalizedEdge, BlockIndex } from '../ir/patches';
+import type { CompilerGraphBlock } from '../ir/CompilerGraph';
 import type { ValueRefPacked } from '../ir/lowerTypes';
 import { isExprRef } from '../ir/lowerTypes';
 import type { TopologyId } from '../../shapes/types';
@@ -75,9 +76,9 @@ interface RenderTargetInfo {
  * Find all render blocks in the validated graph.
  */
 function findRenderBlocks(
-  blocks: readonly Block[]
-): Array<{ block: Block; index: BlockIndex }> {
-  const result: Array<{ block: Block; index: BlockIndex }> = [];
+  blocks: readonly CompilerGraphBlock[]
+): Array<{ block: CompilerGraphBlock; index: BlockIndex }> {
+  const result: Array<{ block: CompilerGraphBlock; index: BlockIndex }> = [];
 
   for (let i = 0; i < blocks.length; i++) {
     const block = blocks[i];
@@ -217,7 +218,7 @@ function resolveShapeInfo(
  * from InstanceDecl.shapeField using the instanceId inferred from the controlPoints field.
  */
 function collectRenderTargets(
-  blocks: readonly Block[],
+  blocks: readonly CompilerGraphBlock[],
   edges: readonly NormalizedEdge[],
   blockOutputs: Map<BlockIndex, Map<string, ValueRefPacked>>,
   instances: ReadonlyMap<InstanceId, InstanceDecl>,

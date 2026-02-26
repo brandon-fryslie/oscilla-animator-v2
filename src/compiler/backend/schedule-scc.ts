@@ -20,8 +20,8 @@ import type {
   AcyclicOrLegalGraph,
   IllegalCycleError,
   BlockIndex,
-  Block,
 } from "../ir/patches";
+import type { CompilerGraphBlock } from "../ir/CompilerGraph";
 import { getBlockDefinition, hasLowerOutputsOnly } from "../../blocks/registry";
 
 /**
@@ -43,7 +43,7 @@ interface TarjanState {
  * @param blocks - The blocks (for state boundary checking)
  * @returns Array of SCCs with state boundary information
  */
-function tarjanSCC(graph: DepGraph, blocks: readonly Block[]): SCC[] {
+function tarjanSCC(graph: DepGraph, blocks: readonly CompilerGraphBlock[]): SCC[] {
   const state: TarjanState = {
     index: 0,
     stack: [],
@@ -69,7 +69,7 @@ function tarjanSCC(graph: DepGraph, blocks: readonly Block[]): SCC[] {
 function strongConnect(
   v: DepNode,
   graph: DepGraph,
-  blocks: readonly Block[],
+  blocks: readonly CompilerGraphBlock[],
   state: TarjanState
 ): void {
   // Set the depth index for v to the smallest unused index

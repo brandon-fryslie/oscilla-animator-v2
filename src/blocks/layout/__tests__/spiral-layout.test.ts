@@ -34,9 +34,11 @@ patch "Test Spiral Layout" {
     const { patch, errors } = deserializePatchFromHCL(hcl);
     expect(errors).toEqual([]);
     const result = compileFrontend(patch);
-    const spiralBlock = result.typedPatch.blocks.find(b => b.type === 'SpiralLayout');
-    expect(spiralBlock).toBeDefined();
-    expect(spiralBlock!.outputPorts.size).toBeGreaterThan(0);
+    const spiralIndex = result.typedPatch.blocks.findIndex(b => b.type === 'SpiralLayout');
+    expect(spiralIndex).toBeGreaterThanOrEqual(0);
+    const outputCount = Array.from(result.typedPatch.portTypes.keys())
+      .filter(key => key.startsWith(`${spiralIndex}:`) && key.endsWith(':out')).length;
+    expect(outputCount).toBeGreaterThan(0);
   });
 
   it('compiles full pipeline with MakeShape2D stamp', () => {

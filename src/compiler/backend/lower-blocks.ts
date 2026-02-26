@@ -3,7 +3,8 @@
  */
 
 import type { AcyclicOrLegalGraph, BlockIndex, DepGraph, SCC } from "../ir/patches";
-import type { Block, BlockId } from "../../types";
+import type { BlockId } from "../../types";
+import type { CompilerGraphBlock as Block } from "../ir/CompilerGraph";
 
 import type { OrchestratorIRBuilder } from "../ir/OrchestratorIRBuilder";
 import { IRBuilderImpl } from "../ir/IRBuilderImpl";
@@ -22,7 +23,6 @@ import {
 import type { EventHub } from "../../events/EventHub";
 import { payloadStride, type CanonicalType, requireInst, withInstance, isAxisInst } from "../../core/canonical-types";
 import { isConcretePayload } from "../../core/inference-types";
-import { normalizeCanonicalName } from "../../core/canonical-name";
 import type { PortKey, CollectEdgeKey, InputPortPolicy } from "../ir/patches";
 // Multi-Input Blocks Integration
 import {
@@ -612,7 +612,6 @@ function lowerBlockInstance(
           // Look up per-edge type from collectEdgeTypes
           const edgeKey = `${blockIndex}:${portId}:${edgeIdx}` as CollectEdgeKey;
           const edgeType = collectEdgeTypes?.get(edgeKey) ?? sourceRef.type;
-
           entries.push({
             value: sourceRef,
             type: edgeType,

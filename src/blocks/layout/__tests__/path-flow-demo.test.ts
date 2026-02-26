@@ -88,9 +88,11 @@ patch "Path Flow" {
     expect(errors).toEqual([]);
     const result = compileFrontend(patch);
 
-    const pathLayout = result.typedPatch.blocks.find(b => b.type === 'PathLayout');
-    expect(pathLayout).toBeDefined();
-    expect(pathLayout!.outputPorts.size).toBeGreaterThanOrEqual(2);
+    const pathLayoutIndex = result.typedPatch.blocks.findIndex(b => b.type === 'PathLayout');
+    expect(pathLayoutIndex).toBeGreaterThanOrEqual(0);
+    const pathLayoutOutputs = Array.from(result.typedPatch.portTypes.keys())
+      .filter(key => key.startsWith(`${pathLayoutIndex}:`) && key.endsWith(':out')).length;
+    expect(pathLayoutOutputs).toBeGreaterThanOrEqual(2);
   });
 
   it('AttractorLayout has controlPoints output', () => {
@@ -98,8 +100,10 @@ patch "Path Flow" {
     expect(errors).toEqual([]);
     const result = compileFrontend(patch);
 
-    const attractor = result.typedPatch.blocks.find(b => b.type === 'AttractorLayout');
-    expect(attractor).toBeDefined();
-    expect(attractor!.outputPorts.size).toBeGreaterThanOrEqual(1);
+    const attractorIndex = result.typedPatch.blocks.findIndex(b => b.type === 'AttractorLayout');
+    expect(attractorIndex).toBeGreaterThanOrEqual(0);
+    const attractorOutputs = Array.from(result.typedPatch.portTypes.keys())
+      .filter(key => key.startsWith(`${attractorIndex}:`) && key.endsWith(':out')).length;
+    expect(attractorOutputs).toBeGreaterThanOrEqual(1);
   });
 });

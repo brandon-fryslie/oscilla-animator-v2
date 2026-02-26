@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { compile } from '../../compiler/compile';
+import { compileFromFrontend } from '../../compiler/compile';
 import { compileFrontend } from '../../compiler/frontend';
 import { EventHub } from '../../events/EventHub';
 import { deserializePatchFromHCL } from '../../patch-dsl';
@@ -56,9 +56,8 @@ describe('compile worker payload clone safety', () => {
       }
 
       const backendResult = frontendResult.backendReady
-        ? compile(parsed.patch, {
+        ? compileFromFrontend(frontendResult, {
             events: new EventHub(),
-            precomputedFrontend: frontendResult,
           })
         : null;
 

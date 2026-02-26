@@ -45,9 +45,11 @@ patch "Test Path Layout" {
     const { patch, errors } = deserializePatchFromHCL(hcl);
     expect(errors).toEqual([]);
     const result = compileFrontend(patch);
-    const pathLayoutBlock = result.typedPatch.blocks.find(b => b.type === 'PathLayout');
-    expect(pathLayoutBlock).toBeDefined();
-    expect(pathLayoutBlock!.outputPorts.size).toBeGreaterThan(0);
+    const pathLayoutIndex = result.typedPatch.blocks.findIndex(b => b.type === 'PathLayout');
+    expect(pathLayoutIndex).toBeGreaterThanOrEqual(0);
+    const outputCount = Array.from(result.typedPatch.portTypes.keys())
+      .filter(key => key.startsWith(`${pathLayoutIndex}:`) && key.endsWith(':out')).length;
+    expect(outputCount).toBeGreaterThan(0);
   });
 
   it('compiles full pipeline with render', () => {

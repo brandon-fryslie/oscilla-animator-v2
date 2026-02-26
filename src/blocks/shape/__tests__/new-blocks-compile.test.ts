@@ -34,9 +34,11 @@ patch "Test Assemble" {
     const { patch, errors } = deserializePatchFromHCL(hcl);
     expect(errors).toEqual([]);
     const result = compileFrontend(patch);
-    const assembleBlock = result.typedPatch.blocks.find(b => b.type === 'MakeShape2D');
-    expect(assembleBlock).toBeDefined();
-    expect(assembleBlock!.outputPorts.size).toBeGreaterThan(0);
+    const assembleIndex = result.typedPatch.blocks.findIndex(b => b.type === 'MakeShape2D');
+    expect(assembleIndex).toBeGreaterThanOrEqual(0);
+    const outputCount = Array.from(result.typedPatch.portTypes.keys())
+      .filter(key => key.startsWith(`${assembleIndex}:`) && key.endsWith(':out')).length;
+    expect(outputCount).toBeGreaterThan(0);
   });
 
   it('MakeShape2D shape → Array → Layout pipeline compiles', () => {

@@ -77,7 +77,7 @@ describe('Frontend edge cases', () => {
     expect(result.normalizedPatch.blocks).toBeDefined();
     expect(result.normalizedPatch.edges).toBeDefined();
     expect(result.normalizedPatch.blockIndex).toBeDefined();
-    expect(result.normalizedPatch.patch).toBeDefined();
+    expect(result.normalizedPatch.graph).toBeDefined();
   });
 
   it('does not crash on graphs with type mismatches', () => {
