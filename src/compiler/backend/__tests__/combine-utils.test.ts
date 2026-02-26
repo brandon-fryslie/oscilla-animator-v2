@@ -5,11 +5,11 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { validateCombineMode } from '../combine-utils';
+import { validateCombineMode, NUMERIC_PAYLOADS } from '../combine-utils';
 
 describe('validateCombineMode', () => {
   describe('numeric payloads (float, int, vec2, vec3, vec4)', () => {
-    const numericPayloads = ['float', 'int', 'vec2', 'vec3', 'vec4'] as const;
+    const numericPayloads = NUMERIC_PAYLOADS;
     const allModes = ['sum', 'average', 'max', 'min', 'mul', 'last', 'first'] as const;
 
     for (const payload of numericPayloads) {

@@ -26,7 +26,8 @@ import { payloadStride, requireInst } from "../../core/canonical-types";
 /**
  * Core payload domains for combine operations.
  */
-export type CorePayload = 'float' | 'int' | 'vec2' | 'color' | 'bool';
+export const NUMERIC_PAYLOADS = ['float', 'int', 'vec2', 'vec3', 'vec4'] as const;
+export type CorePayload = typeof NUMERIC_PAYLOADS[number] | 'color' | 'bool';
 
 /**
  * Combine policy - controls when and how multiple writers are combined.
@@ -110,8 +111,7 @@ export function validateCombineMode(
   // Domain-specific validation for one/many worlds
   // Normalize payload to kind string (handles both string and object forms)
   const payloadKind = typeof payload === 'string' ? payload : payload;
-  const numericPayloads = ['float', 'int', 'vec2', 'vec3', 'vec4'];
-  if (numericPayloads.includes(payloadKind)) {
+  if (NUMERIC_PAYLOADS.includes(payloadKind as typeof NUMERIC_PAYLOADS[number])) {
     if (mode === 'sum' || mode === 'average' || mode === 'max' || mode === 'min' || mode === 'mul') {
       return { valid: true };
     }

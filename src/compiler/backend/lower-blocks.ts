@@ -68,7 +68,7 @@ function classifyLoweringErrorCode(error: unknown): CompileError['code'] {
   if (!error || typeof error !== 'object') return 'NotImplemented';
   if ('code' in error) {
     const code = (error as { code?: unknown }).code;
-    if (code === 'ExprSyntaxError' || code === 'ExprTypeError' || code === 'ExprCompileError') {
+    if (typeof code === 'string' && (code === 'ExprSyntaxError' || code === 'ExprTypeError' || code === 'ExprCompileError')) {
       return code;
     }
   }
