@@ -18,4 +18,7 @@ export {
   type PUSolveError,
   type PUSolveErrorClass,
   type PayloadUnitSolveResult,
+  type PayloadUnitEdgeVerification,
+  type EqualEdgeVerification,
+  type CollectEdgeVerification,
 } from './solve';

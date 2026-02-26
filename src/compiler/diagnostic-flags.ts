@@ -80,6 +80,13 @@ export const DIAGNOSTIC_FLAGS: readonly DiagnosticFlagDef[] = Object.freeze([
     defaultSeverity: 'error',
     category: 'payload-unit',
   },
+  {
+    code: 'PostSolveEdgeTypeMismatch',
+    label: 'Post-solve Edge Type Mismatch',
+    description: 'Resolved edge endpoint types are incompatible after payload/unit solve',
+    defaultSeverity: 'error',
+    category: 'payload-unit',
+  },
 
   // --- Cardinality Solver Errors ---
   {

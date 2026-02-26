@@ -233,6 +233,28 @@ export interface PayloadUnitSolveResult {
 }
 
 // =============================================================================
+// Post-solve edge verification inputs
+// =============================================================================
+
+export interface EqualEdgeVerification {
+  readonly kind: 'equal';
+  readonly edgeId: string;
+  readonly fromPort: DraftPortKey;
+  readonly toPort: DraftPortKey;
+}
+
+export interface CollectEdgeVerification {
+  readonly kind: 'collect';
+  readonly edgeId: string;
+  readonly fromPort: DraftPortKey;
+  readonly toPort: DraftPortKey;
+  readonly allowedPayloads: readonly PayloadType[];
+  readonly allowedUnits: { readonly kind: 'any' } | { readonly kind: 'set'; readonly values: readonly UnitType[] };
+}
+
+export type PayloadUnitEdgeVerification = EqualEdgeVerification | CollectEdgeVerification;
+
+// =============================================================================
 // Node ID constructors
 // =============================================================================
 
@@ -347,6 +369,7 @@ function unitsMerge(a: UnitType, b: UnitType): UnitType | null {
 export function solvePayloadUnit(
   constraints: readonly PayloadUnitConstraint[],
   portVarMapping: ReadonlyMap<DraftPortKey, { payloadVarId: string | null; unitVarId: string | null }>,
+  edgeVerifications: readonly PayloadUnitEdgeVerification[] = [],
 ): PayloadUnitSolveResult {
   const payloadUF = new UnionFind<PayloadType>();
   const unitUF = new UnionFind<UnitType>();
@@ -678,6 +701,57 @@ export function solvePayloadUnit(
         units.set(varInfo.unitVarId, resolvedUnit);
       }
     }
+  }
+
+  // [LAW:single-enforcer] Post-solve edge compatibility is validated once here
+  // so dropped/unapplied constraints cannot silently pass through to runtime.
+  // [LAW:dataflow-not-control-flow] Verification always runs; incompatible edges
+  // become diagnostics data rather than control-flow skips.
+  for (const verification of edgeVerifications) {
+    const fromPayload = portPayloads.get(verification.fromPort);
+    const fromUnit = portUnits.get(verification.fromPort);
+    if (!fromPayload || !fromUnit) continue;
+
+    if (verification.kind === 'collect') {
+      const payloadCompatible = verification.allowedPayloads.some((allowed) => payloadsEqual(allowed, fromPayload));
+      const unitCompatible =
+        verification.allowedUnits.kind === 'any'
+          ? true
+          : verification.allowedUnits.values.some((allowed) => unitsEqual(allowed, fromUnit));
+      if (payloadCompatible && unitCompatible) continue;
+
+      diagnostics.push({
+        diagnosticFlagCode: 'PostSolveEdgeTypeMismatch',
+        message:
+          `Post-solve edge verification failed for ${verification.fromPort} -> ${verification.toPort}: ` +
+          `collect input rejected resolved type payload=${fromPayload.kind}, unit=${fromUnit.kind}.`,
+        stableKey: `PostSolveEdgeTypeMismatch:${verification.edgeId}:collect`,
+        ports: [verification.fromPort, verification.toPort],
+        origins: [{ kind: 'edge', edgeId: verification.edgeId }],
+      });
+      continue;
+    }
+
+    const toPayload = portPayloads.get(verification.toPort);
+    const toUnit = portUnits.get(verification.toPort);
+    if (!toPayload || !toUnit) continue;
+
+    const payloadCompatible = payloadsEqual(fromPayload, toPayload);
+    // [LAW:one-source-of-truth] Reuse canonical solver merge semantics for
+    // unit compatibility instead of redefining edge-local rules.
+    const unitCompatible = unitsMerge(fromUnit, toUnit) !== null;
+    if (payloadCompatible && unitCompatible) continue;
+
+    diagnostics.push({
+      diagnosticFlagCode: 'PostSolveEdgeTypeMismatch',
+      message:
+        `Post-solve edge verification failed for ${verification.fromPort} -> ${verification.toPort}: ` +
+        `resolved types are incompatible (payload ${fromPayload.kind} vs ${toPayload.kind}, ` +
+        `unit ${fromUnit.kind} vs ${toUnit.kind}).`,
+      stableKey: `PostSolveEdgeTypeMismatch:${verification.edgeId}:equal`,
+      ports: [verification.fromPort, verification.toPort],
+      origins: [{ kind: 'edge', edgeId: verification.edgeId }],
+    });
   }
 
   return { payloads, units, portPayloads, portUnits, errors, diagnostics };
