@@ -63,6 +63,7 @@ const FRONTEND_ERROR_KIND_TO_DIAGNOSTIC_CODE: Record<string, DiagnosticCode> = {
   EmptyAllowedSet: 'E_PAYLOAD_NOT_ALLOWED',
   UnresolvedPayload: 'E_TYPE_MISMATCH',
   UnresolvedUnit: 'E_TYPE_MISMATCH',
+  PostSolveEdgeTypeMismatch: 'E_TYPE_MISMATCH',
   // Cardinality solver
   ClampManyConflict: 'E_CARDINALITY_MISMATCH',
   InstanceConflict: 'E_INSTANCE_MISMATCH',

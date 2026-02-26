@@ -55,6 +55,9 @@ describe('extractConstraints', () => {
     // Edge → equal cardinality constraints should exist
     const cardEqualConstraints = constraints.cardinality.filter((c) => c.kind === 'equal');
     expect(cardEqualConstraints.length).toBeGreaterThanOrEqual(1);
+    expect(
+      constraints.payloadUnitEdgeVerifications.some((v) => v.kind === 'equal'),
+    ).toBe(true);
   });
 
   it('emits concrete constraints for non-polymorphic ports', () => {
@@ -211,5 +214,10 @@ describe('extractConstraints', () => {
       expect(allowedKinds).toContain('vec4');
       expect(allowedKinds).not.toContain('bool');
     }
+
+    const collectVerification = constraints.payloadUnitEdgeVerifications.find(
+      (v) => v.kind === 'collect' && v.fromPort === fromKey && v.toPort === toKey,
+    );
+    expect(collectVerification).toBeDefined();
   });
 });
