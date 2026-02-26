@@ -8,7 +8,7 @@
  * 4. Round-trips: serialize → deserialize → serialize produces identical output
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll } from 'vitest';
 import { readFileSync, readdirSync } from 'fs';
 import { join } from 'path';
 import { deserializePatchFromHCL, serializePatchToHCL } from '../../../patch-dsl/index';
@@ -31,30 +31,39 @@ describe('HCL demo patches', () => {
     describe(file, () => {
       const hcl = readFileSync(join(HCL_DIR, file), 'utf-8');
       const expectedCompileError = expectedCompileErrorSubstring(hcl);
+      const nameMatch = hcl.match(/patch\s+"([^"]+)"/);
+      const name = nameMatch ? nameMatch[1] : file.replace('.hcl', '');
+
+      let parsed!: ReturnType<typeof deserializePatchFromHCL>;
+      let compileResult: ReturnType<typeof compile> | null = null;
+
+      beforeAll(() => {
+        parsed = deserializePatchFromHCL(hcl);
+        if (parsed.errors.length === 0) {
+          compileResult = compile(parsed.patch);
+        }
+      });
 
       it('deserializes without errors', () => {
-        const result = deserializePatchFromHCL(hcl);
-        if (result.errors.length > 0) {
+        if (parsed.errors.length > 0) {
           // Print errors for debugging
-          for (const err of result.errors) {
+          for (const err of parsed.errors) {
             console.error(`  ${err}`);
           }
         }
-        expect(result.errors).toEqual([]);
+        expect(parsed.errors).toEqual([]);
       });
 
       it('produces blocks and edges', () => {
-        const result = deserializePatchFromHCL(hcl);
-        expect(result.patch.blocks.size).toBeGreaterThan(0);
-        expect(result.patch.edges.length).toBeGreaterThan(0);
+        expect(parsed.patch.blocks.size).toBeGreaterThan(0);
+        expect(parsed.patch.edges.length).toBeGreaterThan(0);
       });
 
       it('compiles without errors', () => {
-        const { patch, errors } = deserializePatchFromHCL(hcl);
-        expect(errors).toEqual([]);
-
-        const result = compile(patch);
-        const msgs = result.kind === 'error' ? result.errors.map(e => e.message) : [];
+        expect(parsed.errors).toEqual([]);
+        expect(compileResult).not.toBeNull();
+        const result = compileResult!;
+        const msgs = result.kind === 'error' ? result.errors.map((e) => e.message) : [];
 
         // [LAW:dataflow-not-control-flow] Every demo is compiled; expected failures are asserted as data.
         if (expectedCompileError !== null) {
@@ -72,14 +81,9 @@ describe('HCL demo patches', () => {
       });
 
       it('round-trips through serialize → deserialize', () => {
-        const result1 = deserializePatchFromHCL(hcl);
-        expect(result1.errors).toEqual([]);
+        expect(parsed.errors).toEqual([]);
 
-        // Extract patch name from HCL for serialization
-        const nameMatch = hcl.match(/patch\s+"([^"]+)"/);
-        const name = nameMatch ? nameMatch[1] : file.replace('.hcl', '');
-
-        const serialized = serializePatchToHCL(result1.patch, { name });
+        const serialized = serializePatchToHCL(parsed.patch, { name });
         const result2 = deserializePatchFromHCL(serialized);
         expect(result2.errors).toEqual([]);
 
