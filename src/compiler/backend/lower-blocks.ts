@@ -64,20 +64,16 @@ function requireBlockEffects(
   );
 }
 
-const EXPRESSION_ERROR_CODES = new Set<CompileError['code']>([
-  'ExprSyntaxError',
-  'ExprTypeError',
-  'ExprCompileError',
-]);
+interface LoweringError extends Error {
+  code?: CompileError['code'];
+}
+
+function isLoweringError(error: unknown): error is LoweringError {
+  return error instanceof Error && 'code' in error;
+}
 
 function classifyLoweringErrorCode(error: unknown): CompileError['code'] {
-  if (typeof error !== 'object' || error === null) return 'NotImplemented';
-  if ('code' in error) {
-    const code = (error as { code?: unknown }).code;
-    if (typeof code === 'string' && EXPRESSION_ERROR_CODES.has(code as CompileError['code'])) {
-      return code as CompileError['code'];
-    }
-  }
+  if (isLoweringError(error) && error.code !== undefined) return error.code;
   return 'NotImplemented';
 }
 
@@ -612,6 +608,7 @@ function lowerBlockInstance(
           // Look up per-edge type from collectEdgeTypes
           const edgeKey = `${blockIndex}:${portId}:${edgeIdx}` as CollectEdgeKey;
           const edgeType = collectEdgeTypes?.get(edgeKey) ?? sourceRef.type;
+
           entries.push({
             value: sourceRef,
             type: edgeType,
