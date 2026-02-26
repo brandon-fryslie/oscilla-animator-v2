@@ -108,12 +108,12 @@ describe('createDerivedObligations', () => {
   it('creates adapter obligation when types differ (one→many)', () => {
     const g = emptyGraph({
       blocks: [makeBlock('c1', 'Const'), makeBlock('ri', 'RenderInstances2D')],
-      edges: [makeEdge('e1', 'c1', 'out', 'ri', 'pos')],
+      edges: [makeEdge('e1', 'c1', 'out', 'ri', 'controlPoints')],
     });
 
     const facts = makeFacts([
       [draftPortKey('c1', 'out', 'out'), okHint(ONE_FLOAT)],
-      [draftPortKey('ri', 'pos', 'in'), okHint(FIELD_FLOAT)],
+      [draftPortKey('ri', 'controlPoints', 'in'), okHint(FIELD_FLOAT)],
     ]);
 
     const obs = createDerivedObligations(g, facts);
@@ -126,18 +126,18 @@ describe('createDerivedObligations', () => {
   it('generates deterministic obligation IDs', () => {
     const g = emptyGraph({
       blocks: [makeBlock('c1', 'Const'), makeBlock('ri', 'RenderInstances2D')],
-      edges: [makeEdge('e1', 'c1', 'out', 'ri', 'pos')],
+      edges: [makeEdge('e1', 'c1', 'out', 'ri', 'controlPoints')],
     });
 
     const facts = makeFacts([
       [draftPortKey('c1', 'out', 'out'), okHint(ONE_FLOAT)],
-      [draftPortKey('ri', 'pos', 'in'), okHint(FIELD_FLOAT)],
+      [draftPortKey('ri', 'controlPoints', 'in'), okHint(FIELD_FLOAT)],
     ]);
 
     const obs1 = createDerivedObligations(g, facts);
     const obs2 = createDerivedObligations(g, facts);
     expect(obs1[0].id).toBe(obs2[0].id);
-    expect(obs1[0].id).toBe('needsAdapter:c1:out->ri:pos');
+    expect(obs1[0].id).toBe('needsAdapter:c1:out->ri:controlPoints');
   });
 
   it('skips edges where either endpoint is not resolved', () => {
@@ -160,7 +160,7 @@ describe('createDerivedObligations', () => {
     const elaboratedEdge: DraftEdge = {
       id: 'e1',
       from: { blockId: 'c1', port: 'out', dir: 'out' },
-      to: { blockId: 'ri', port: 'pos', dir: 'in' },
+      to: { blockId: 'ri', port: 'controlPoints', dir: 'in' },
       role: 'userWire',
       origin: { kind: 'elaboration', obligationId: oblId, role: 'adapter' },
     };
@@ -172,7 +172,7 @@ describe('createDerivedObligations', () => {
 
     const facts = makeFacts([
       [draftPortKey('c1', 'out', 'out'), okHint(ONE_FLOAT)],
-      [draftPortKey('ri', 'pos', 'in'), okHint(FIELD_FLOAT)],
+      [draftPortKey('ri', 'controlPoints', 'in'), okHint(FIELD_FLOAT)],
     ]);
 
     expect(createDerivedObligations(g, facts)).toEqual([]);
@@ -182,7 +182,7 @@ describe('createDerivedObligations', () => {
     const coerceEdge: DraftEdge = {
       id: 'e1',
       from: { blockId: 'c1', port: 'out', dir: 'out' },
-      to: { blockId: 'ri', port: 'pos', dir: 'in' },
+      to: { blockId: 'ri', port: 'controlPoints', dir: 'in' },
       role: 'implicitCoerce',
       origin: 'user',
     };
@@ -194,7 +194,7 @@ describe('createDerivedObligations', () => {
 
     const facts = makeFacts([
       [draftPortKey('c1', 'out', 'out'), okHint(ONE_FLOAT)],
-      [draftPortKey('ri', 'pos', 'in'), okHint(FIELD_FLOAT)],
+      [draftPortKey('ri', 'controlPoints', 'in'), okHint(FIELD_FLOAT)],
     ]);
 
     expect(createDerivedObligations(g, facts)).toEqual([]);
@@ -221,18 +221,18 @@ describe('createDerivedObligations', () => {
   it('deps reference both edge endpoints', () => {
     const g = emptyGraph({
       blocks: [makeBlock('c1', 'Const'), makeBlock('ri', 'RenderInstances2D')],
-      edges: [makeEdge('e1', 'c1', 'out', 'ri', 'pos')],
+      edges: [makeEdge('e1', 'c1', 'out', 'ri', 'controlPoints')],
     });
 
     const facts = makeFacts([
       [draftPortKey('c1', 'out', 'out'), okHint(ONE_FLOAT)],
-      [draftPortKey('ri', 'pos', 'in'), okHint(FIELD_FLOAT)],
+      [draftPortKey('ri', 'controlPoints', 'in'), okHint(FIELD_FLOAT)],
     ]);
 
     const obs = createDerivedObligations(g, facts);
     expect(obs[0].deps.length).toBe(2);
     expect(obs[0].deps[0]).toEqual({ kind: 'portCanonicalizable', port: { blockId: 'c1', port: 'out', dir: 'out' } });
-    expect(obs[0].deps[1]).toEqual({ kind: 'portCanonicalizable', port: { blockId: 'ri', port: 'pos', dir: 'in' } });
+    expect(obs[0].deps[1]).toEqual({ kind: 'portCanonicalizable', port: { blockId: 'ri', port: 'controlPoints', dir: 'in' } });
   });
 });
 

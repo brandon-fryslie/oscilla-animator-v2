@@ -52,7 +52,7 @@ describe('ValueExpr cardinality invariants', () => {
       b.wire(colorSig, 'out', colorField, 'one');
 
       const render = b.addBlock('RenderInstances2D');
-      b.wire(construct, 'out', render, 'pos');
+      b.wire(construct, 'out', render, 'controlPoints');
       b.wire(colorField, 'field', render, 'color');
     });
 

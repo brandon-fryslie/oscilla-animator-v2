@@ -23,7 +23,7 @@ import { useGraphEditor } from './GraphEditorContext';
 import { useStores } from '../../stores';
 import type { UnifiedNodeData, PortData } from './nodeDataTransform';
 import type { DefaultSource, PortId, BlockId } from '../../types';
-import { ParameterControl, DefaultSourceControl } from '../reactFlowEditor/ParameterControls';
+import { ParameterControl } from '../reactFlowEditor/ParameterControls';
 import { PortInfoPopover } from '../reactFlowEditor/PortInfoPopover';
 import { usePinPopoverState, type PopoverAnchorPosition } from '../reactFlowEditor/BasePopover';
 import { DisplayNameEditor } from '../components/DisplayNameEditor';
@@ -35,10 +35,7 @@ import {
 } from './portTooltipFormatters';
 import { resolvePortStyle } from './port-style';
 import { graphColors } from './graph-tokens';
-import {
-  isConstLiteralDefaultSource,
-  isTimeDefaultSource,
-} from '../defaultSourcePresentation';
+import { isTimeDefaultSource } from '../defaultSourcePresentation';
 
 /**
  * Get indicator color based on default source type.
@@ -141,7 +138,6 @@ export const UnifiedNode: React.FC<NodeProps<UnifiedNodeData>> = observer(({ dat
   // Check adapter capabilities
   const canEditParams = enableParamEditing && typeof adapter.updateBlockParams === 'function';
   const canEditDisplayName = typeof adapter.updateBlockDisplayName === 'function';
-  const canEditDefaultSource = typeof adapter.updateInputPort === 'function';
 
   // Port click handler
   const handlePortClick = useCallback(
@@ -479,35 +475,6 @@ export const UnifiedNode: React.FC<NodeProps<UnifiedNodeData>> = observer(({ dat
           ))}
         </div>
       )}
-
-      {/* Default Source Controls (conditional on feature flag) */}
-      {canEditDefaultSource &&
-        (() => {
-          const editableDefaults = data.inputs.filter(
-            (input) => !input.isConnected && isConstLiteralDefaultSource(input.defaultSource)
-          );
-          if (editableDefaults.length === 0) return null;
-          return (
-            <div
-              style={{
-                marginTop: data.params.length > 0 ? '8px' : '10px',
-                paddingTop: data.params.length > 0 ? '8px' : '10px',
-                borderTop: data.params.length > 0 ? 'none' : '1px solid rgba(100, 116, 139, 0.2)',
-              }}
-            >
-              {editableDefaults.map((input) => (
-                <DefaultSourceControl
-                  key={`default-${input.id}`}
-                  blockId={data.blockId as BlockId}
-                  portId={input.id}
-                  portLabel={input.label}
-                  defaultSource={input.defaultSource!}
-                  hint={input.uiHint}
-                />
-              ))}
-            </div>
-          );
-        })()}
 
       {/* Output Handles (Right Side) */}
       {data.outputs.map((output, index) => {

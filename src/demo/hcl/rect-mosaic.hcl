@@ -48,7 +48,7 @@ patch "Rect Mosaic" {
   block "CircleLayoutUV" "layout" {
     radius = 0.45
     outputs {
-      position = render.pos
+      controlPoints = render.controlPoints
     }
   }
 

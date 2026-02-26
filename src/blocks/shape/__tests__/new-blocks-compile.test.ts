@@ -73,7 +73,7 @@ patch "Test Pipeline" {
   block "CircleLayoutUV" "layout" {
     radius = 0.3
     outputs {
-      position = render.pos
+      controlPoints = render.controlPoints
     }
   }
 
@@ -138,7 +138,7 @@ patch "Test Shape Wobble" {
   block "CircleLayoutUV" "layout" {
     radius = 0.3
     outputs {
-      position = render.pos
+      controlPoints = render.controlPoints
     }
   }
 

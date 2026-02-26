@@ -77,7 +77,7 @@ patch "Test AttractorLayout Full" {
   }
 
   block "AttractorLayout" "attractor" {
-    outputs { position = render.pos }
+    outputs { controlPoints = render.controlPoints }
   }
 
   block "MakeColorHSL" "color" {

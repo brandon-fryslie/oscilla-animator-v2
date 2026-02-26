@@ -112,7 +112,7 @@ patch "Feedback Simple" {
   block "CircleLayoutUV" "outer-layout" {
     radius = 0.35
     outputs {
-      position = render-outer.pos
+      controlPoints = render-outer.controlPoints
     }
   }
 
@@ -145,7 +145,7 @@ patch "Feedback Simple" {
   block "CircleLayoutUV" "inner-layout" {
     radius = 0.18
     outputs {
-      position = render-inner.pos
+      controlPoints = render-inner.controlPoints
     }
   }
 

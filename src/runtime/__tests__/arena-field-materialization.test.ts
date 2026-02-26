@@ -83,7 +83,7 @@ describe('arena field materialization', () => {
 
       b.wire(ellipse, 'shape', array, 'element');
       b.wire(array, 'elements', layout, 'elements');
-      b.wire(layout, 'position', render, 'pos');
+      b.wire(layout, 'controlPoints', render, 'controlPoints');
       b.wire(colorField, 'field', render, 'color');
     });
 
@@ -135,7 +135,7 @@ describe('arena field materialization', () => {
 
       b.wire(ellipse, 'shape', array, 'element');
       b.wire(array, 'elements', layout, 'elements');
-      b.wire(layout, 'position', render, 'pos');
+      b.wire(layout, 'controlPoints', render, 'controlPoints');
       b.wire(colorField, 'field', render, 'color');
     });
 
@@ -184,7 +184,7 @@ describe('arena field materialization', () => {
 
       b.wire(ellipse, 'shape', array, 'element');
       b.wire(array, 'elements', layout, 'elements');
-      b.wire(layout, 'position', render, 'pos');
+      b.wire(layout, 'controlPoints', render, 'controlPoints');
       b.wire(colorField, 'field', render, 'color');
     });
 

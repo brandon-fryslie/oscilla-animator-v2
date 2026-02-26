@@ -85,7 +85,7 @@ patch "Test PathLayout Full Pipeline" {
 
   block "PathLayout" "pathLayout" {
     outputs {
-      position = render.pos
+      controlPoints = render.controlPoints
     }
   }
 
@@ -104,10 +104,10 @@ patch "Test PathLayout Full Pipeline" {
     expect(renderBlock).toBeDefined();
   });
 
-  it('has position and rotation outputs', () => {
+  it('has controlPoints and rotation outputs', () => {
     const def = getBlockDefinition('PathLayout');
     expect(def).toBeDefined();
-    expect(def!.outputs.position).toBeDefined();
+    expect(def!.outputs.controlPoints).toBeDefined();
     expect(def!.outputs.rotation).toBeDefined();
   });
 });

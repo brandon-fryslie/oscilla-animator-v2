@@ -155,8 +155,8 @@ export interface CompiledProgramIR {
   /**
    * Constant provenance map for fast-path value patching.
    * Maps user-facing port key ("blockId:portId") to patchable constant expr IDs.
-   * Only present when the program contains patchable default-source constants.
-   * Built during lowering (pass 6) for derived default-source Const blocks.
+   * Only present when the program contains patchable constant-backed ports.
+   * Built during lowering (pass 6) from lowered graph topology.
    */
   readonly constantProvenance?: ConstantProvenanceMap;
 
@@ -210,7 +210,7 @@ export interface ConstantProvenanceEntry {
 
 /**
  * Maps user-facing port key ("blockId:portId") to patchable constant expr IDs.
- * Built during lowering for derived default-source Const blocks.
+ * Built during lowering from lowered graph topology.
  */
 export type ConstantProvenanceMap = ReadonlyMap<string, ConstantProvenanceEntry>;
 
@@ -475,7 +475,7 @@ export interface DebugIndexIR {
   /** Optional: general labels for debugging */
   readonly labels?: ReadonlyMap<string, string>;
 
-  /** Optional: expression provenance — maps each expr to its source block and resolved user-facing target */
+  /** Optional: expression provenance — maps each expr to its source block and output port */
   readonly exprProvenance?: ReadonlyMap<ValueExprId, ExprProvenanceIR>;
 }
 
@@ -484,25 +484,13 @@ export interface DebugIndexIR {
 // =============================================================================
 
 /**
- * Provenance for a single value expression — which block emitted it,
- * which output port it represents, and (for derived blocks) which
- * user-visible block/port it ultimately serves.
+ * Provenance for a single value expression — which block emitted it and
+ * which output port it represents.
  */
 export interface ExprProvenanceIR {
   readonly blockId: BlockId;
   readonly portName: string | null;
-  readonly userTarget: ExprUserTarget | null;
 }
-
-/**
- * For derived blocks, identifies the user-visible concept this expression serves.
- */
-export type ExprUserTarget =
-  | { readonly kind: 'defaultSource'; readonly targetBlockId: BlockId; readonly targetPortName: string }
-  | { readonly kind: 'adapter'; readonly edgeId: string; readonly adapterType: string }
-  | { readonly kind: 'wireState'; readonly wireId: string }
-  | { readonly kind: 'lens'; readonly nodeRef: string }
-  | { readonly kind: 'compositeExpansion'; readonly compositeId: string; readonly internalBlockId: string };
 
 /**
  * Port Binding - Slot/Step to Port Mapping
@@ -522,10 +510,7 @@ export interface PortBindingIR {
   readonly temporality: 'continuous' | 'discrete';
 
   /** Why does this value exist? */
-  readonly role: 'userWire' | 'defaultSource' | 'implicitCoerce' | 'internalHelper';
-
-  /** Optional: if this came from a default-source block, identify it */
-  readonly defaultOfPort?: PortId;
+  readonly role: 'userWire' | 'implicitCoerce' | 'internalHelper';
 }
 
 /**

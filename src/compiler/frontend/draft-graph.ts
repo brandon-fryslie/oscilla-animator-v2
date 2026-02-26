@@ -158,7 +158,8 @@ export function buildDraftGraph(patch: Patch): BuildDraftGraphResult {
     const portDefaults: Record<string, DefaultSource> = {};
 
     if (blockDef) {
-      // Partition user-provided params into config vs portDefaults
+      // Partition user-provided params into fallback writers while preserving
+      // canonical params on the block.
       for (const [key, val] of Object.entries(block.params)) {
         const inputDef = blockDef.inputs[key];
         if (!inputDef) {
@@ -166,11 +167,11 @@ export function buildDraftGraph(patch: Patch): BuildDraftGraphResult {
           diagnostics.push({ kind: 'UnknownParam', blockId: block.id, portName: key });
           continue;
         }
-        if (inputDef.exposedAsPort === false) {
-          // Config param — keep in params
-          filteredParams[key] = val;
-        } else {
-          // Exposed port — extract to portDefaults as a Const default source
+        // [LAW:one-source-of-truth] Keep all user params in DraftBlock.params;
+        // fallback writer synthesis for exposed ports is derived from this map.
+        filteredParams[key] = val;
+        if (inputDef.exposedAsPort !== false) {
+          // Exposed port — derive a Const fallback source from canonical params
           portDefaults[key] = defaultSourceConst(val);
         }
       }
@@ -192,6 +193,9 @@ export function buildDraftGraph(patch: Patch): BuildDraftGraphResult {
       for (const [portId, inputPort] of block.inputPorts) {
         if (inputPort.defaultSource) {
           portDefaults[portId] = inputPort.defaultSource;
+          if (inputPort.defaultSource.blockType === 'Const' && inputPort.defaultSource.output === 'out' && inputPort.defaultSource.params?.value !== undefined) {
+            filteredParams[portId] = inputPort.defaultSource.params.value;
+          }
         }
       }
     } else {

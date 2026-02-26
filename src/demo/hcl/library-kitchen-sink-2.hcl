@@ -38,7 +38,14 @@ patch "Library Kitchen Sink 2" {
     spin = 1.05
     expansion = 0.68
     outputs {
-      position = xform.position
+      controlPoints = spiral-pos3.refs
+    }
+  }
+
+  block "Expression" "spiral-pos3" {
+    expression = "vec3(spiral.controlPoints.x, spiral.controlPoints.y, 0.0)"
+    outputs {
+      out = xform.position
     }
   }
 
@@ -52,7 +59,14 @@ patch "Library Kitchen Sink 2" {
 
   block "Rotate2D" "rot2d" {
     outputs {
-      out = render.pos
+      out = rot2d-cp.refs
+    }
+  }
+
+  block "Expression" "rot2d-cp" {
+    expression = "vec2(rot2d.out.x, rot2d.out.y)"
+    outputs {
+      out = render.controlPoints
     }
   }
 

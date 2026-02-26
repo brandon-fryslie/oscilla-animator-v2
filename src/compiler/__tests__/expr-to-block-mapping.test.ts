@@ -49,7 +49,7 @@ describe('exprToBlock mapping', () => {
       b.wire(ellipse, 'shape', array, 'element');
       b.wire(array, 'elements', layout, 'elements');
       b.wire(colorSig, 'out', colorField, 'one');
-      b.wire(layout, 'position', render, 'pos');
+      b.wire(layout, 'controlPoints', render, 'controlPoints');
       b.wire(colorField, 'field', render, 'color');
     });
 
@@ -85,7 +85,7 @@ describe('exprToBlock mapping', () => {
       b.wire(ellipse, 'shape', array, 'element');
       b.wire(array, 'elements', layout, 'elements');
       b.wire(colorSig, 'out', colorField, 'one');
-      b.wire(layout, 'position', render, 'pos');
+      b.wire(layout, 'controlPoints', render, 'controlPoints');
       b.wire(colorField, 'field', render, 'color');
     });
 
@@ -127,7 +127,7 @@ describe('exprToBlock mapping', () => {
       b.wire(ellipse, 'shape', array, 'element');
       b.wire(array, 'elements', layout, 'elements');
       b.wire(colorSig, 'out', colorField, 'one');
-      b.wire(layout, 'position', render, 'pos');
+      b.wire(layout, 'controlPoints', render, 'controlPoints');
       b.wire(colorField, 'field', render, 'color');
     });
 
@@ -199,7 +199,7 @@ describe('exprProvenance mapping', () => {
       b.wire(ellipse, 'shape', array, 'element');
       b.wire(array, 'elements', layout, 'elements');
       b.wire(colorSig, 'out', colorField, 'one');
-      b.wire(layout, 'position', render, 'pos');
+      b.wire(layout, 'controlPoints', render, 'controlPoints');
       b.wire(colorField, 'field', render, 'color');
     });
 
@@ -210,7 +210,7 @@ describe('exprProvenance mapping', () => {
     expect(program.debugIndex.exprProvenance!.size).toBeGreaterThan(0);
   });
 
-  it('resolves default source derived blocks to user-visible targets', () => {
+  it('captures emitted block/port identities', () => {
     const patch = buildPatch((b) => {
       const time = b.addBlock('InfiniteTimeRoot');
       b.setPortDefault(time, 'periodAMs', 1000);
@@ -235,32 +235,24 @@ describe('exprProvenance mapping', () => {
       b.wire(ellipse, 'shape', array, 'element');
       b.wire(array, 'elements', layout, 'elements');
       b.wire(colorSig, 'out', colorField, 'one');
-      b.wire(layout, 'position', render, 'pos');
+      b.wire(layout, 'controlPoints', render, 'controlPoints');
       b.wire(colorField, 'field', render, 'color');
     });
 
     const program = compileOk(patch);
     const provenance = program.debugIndex.exprProvenance!;
 
-    // Find entries with defaultSource userTarget
-    const defaultSourceEntries = [...provenance.values()].filter(
-      (p) => p.userTarget?.kind === 'defaultSource'
-    );
-
-    // At least one default source should exist (Array's count, etc.)
-    expect(defaultSourceEntries.length).toBeGreaterThan(0);
-
-    // Every defaultSource entry should have a valid targetPortName
-    for (const entry of defaultSourceEntries) {
-      expect(entry.userTarget!.kind).toBe('defaultSource');
-      if (entry.userTarget!.kind === 'defaultSource') {
-        expect(typeof entry.userTarget!.targetPortName).toBe('string');
-        expect(entry.userTarget!.targetPortName.length).toBeGreaterThan(0);
-      }
+    const entriesWithPort = [...provenance.values()].filter((p) => p.portName !== null);
+    expect(entriesWithPort.length).toBeGreaterThan(0);
+    for (const entry of entriesWithPort) {
+      expect(typeof entry.blockId).toBe('string');
+      expect((entry.blockId as string).length).toBeGreaterThan(0);
+      expect(typeof entry.portName).toBe('string');
+      expect((entry.portName as string).length).toBeGreaterThan(0);
     }
   });
 
-  it('defaultSource targetBlockId resolves via blockMap to a display name', () => {
+  it('provenance blockId resolves via blockMap to a display name', () => {
     // This test verifies the full data pipeline: provenance stores string block IDs,
     // blockMap maps numeric→string, blockDisplayNames maps numeric→name.
     // The store must resolve string IDs to display names — if the key types mismatch
@@ -290,7 +282,8 @@ describe('exprProvenance mapping', () => {
       b.wire(ellipse, 'shape', array, 'element');
       b.wire(array, 'elements', layout, 'elements');
       b.wire(colorSig, 'out', colorField, 'one');
-      b.wire(layout, 'position', render, 'pos');
+      b.setConfig(colorSig, 'value', { r: 1, g: 0.5, b: 0.2, a: 1 });
+      b.wire(layout, 'controlPoints', render, 'controlPoints');
       b.wire(colorField, 'field', render, 'color');
     });
 
@@ -305,29 +298,23 @@ describe('exprProvenance mapping', () => {
       stringIdToDisplayName.set(strId, displayName);
     }
 
-    // Find all defaultSource entries
-    const defaultSourceEntries = [...provenance.values()].filter(
-      (p) => p.userTarget?.kind === 'defaultSource'
-    );
-    expect(defaultSourceEntries.length).toBeGreaterThan(0);
-
-    for (const entry of defaultSourceEntries) {
-      if (entry.userTarget?.kind !== 'defaultSource') continue;
-      const tgtId = entry.userTarget.targetBlockId as string;
-
-      // The target block string ID must exist in blockMap values
+    const entries = [...provenance.values()];
+    expect(entries.length).toBeGreaterThan(0);
+    for (const entry of entries) {
+      const blockId = entry.blockId as string;
+      // The provenance block string ID must exist in blockMap values
       const allStringIds = new Set(blockMap.values());
-      expect(allStringIds.has(tgtId)).toBe(true);
+      expect(allStringIds.has(blockId)).toBe(true);
 
       // The reverse map must resolve to a non-empty display name
-      const displayName = stringIdToDisplayName.get(tgtId);
+      const displayName = stringIdToDisplayName.get(blockId);
       expect(displayName).toBeDefined();
       expect(typeof displayName).toBe('string');
       expect(displayName!.length).toBeGreaterThan(0);
     }
   });
 
-  it('marks user blocks with null userTarget', () => {
+  it('records provenance as emitted block/port identity only', () => {
     const patch = buildPatch((b) => {
       const time = b.addBlock('InfiniteTimeRoot');
       b.setPortDefault(time, 'periodAMs', 1000);
@@ -345,10 +332,13 @@ describe('exprProvenance mapping', () => {
     const program = compileOk(patch);
     const provenance = program.debugIndex.exprProvenance!;
 
-    // User blocks should have null userTarget
-    const userEntries = [...provenance.values()].filter(
-      (p) => p.userTarget === null
-    );
-    expect(userEntries.length).toBeGreaterThan(0);
+    // Provenance now carries only emitted block/port identity.
+    for (const entry of provenance.values()) {
+      const keys = Object.keys({
+        blockId: entry.blockId,
+        portName: entry.portName,
+      }).sort();
+      expect(keys).toEqual(['blockId', 'portName']);
+    }
   });
 });
