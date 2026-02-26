@@ -22,7 +22,12 @@ import type { RenderFrameIR } from '../render/types';
 import type { RenderBufferArena } from '../render/RenderBufferArena';
 import { createMaterializeScratch } from './MaterializeScratch';
 import { resolveTime } from './timeResolution';
-import { writeShape2D, prepareStateWriteBank, commitStateWriteBank } from './RuntimeState';
+import {
+  writeShape2D,
+  resetFrameVolatileShapeBank,
+  prepareStateWriteBank,
+  commitStateWriteBank,
+} from './RuntimeState';
 import { detectDomainChange, recordDomainTransition } from './ContinuityMapping';
 import { applyContinuity, finalizeContinuityFrame } from './ContinuityApply';
 import { createStableDomainInstance, createUnstableDomainInstance } from './DomainIdentity';
@@ -236,6 +241,7 @@ export function* executeFrameStepped(
 
   // --- PRE-FRAME SETUP ---
   state.cache.frameId++;
+  resetFrameVolatileShapeBank(state);
   state.externalChannels.commit();
   const time = resolveTime(tAbsMs, timeModel, state.timeState);
   state.time = time;

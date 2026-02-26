@@ -34,6 +34,7 @@ import {
 } from '../../../__tests__/type-test-helpers';
 import {
   FLOAT,
+  HANDLE,
   INT,
   VEC2,
   COLOR,
@@ -169,8 +170,7 @@ describe('payloadTypeToShapeDescIR', () => {
   });
 
   it('maps shape to shape kind', () => {
-    // Per Q6: SHAPE was aliased to FLOAT
-    expect(payloadTypeToShapeDescIR(FLOAT)).toEqual({ kind: 'number' });
+    expect(payloadTypeToShapeDescIR(HANDLE)).toEqual({ kind: 'number' });
   });
 
   it('maps bool to bool shape', () => {

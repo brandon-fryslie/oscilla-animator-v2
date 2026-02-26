@@ -18,6 +18,7 @@ import {
   writeShape2D,
   beginRuntimeFrameSemantics,
   enterRuntimeFrameSegment,
+  resetFrameVolatileShapeBank,
   prepareStateWriteBank,
   commitStateWriteBank,
   type RuntimeFrameSegment,
@@ -185,6 +186,7 @@ export function executeFrame(
   // 1. Advance frame (cache owns frameId)
   state.cache.frameId++;
   beginRuntimeFrameSemantics(state);
+  resetFrameVolatileShapeBank(state);
 
   // 1.5. Commit external channel writes (spec: External Input System Section 3.1)
   enterRuntimeFrameSegment(state, 'preframe-external-input');
