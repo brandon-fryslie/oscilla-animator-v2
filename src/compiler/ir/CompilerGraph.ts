@@ -8,6 +8,8 @@ export interface CompilerGraphBlock {
   readonly id: string;
   readonly type: string;
   readonly params: Readonly<Record<string, unknown>>;
+  /** Optional human-readable display name (for debugger/diagnostics only). */
+  readonly displayName?: string;
 }
 
 export type CompilerGraphEdgeRole = 'userWire' | 'defaultWire' | 'implicitCoerce' | 'internalHelper';

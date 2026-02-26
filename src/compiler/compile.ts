@@ -519,7 +519,7 @@ function convertLinkedIRToProgram(
     const blocks = acyclicPatch.blocks || []; // AcyclicOrLegalGraph has blocks array
     for (let i = 0; i < blocks.length; i++) {
       blockMap.set(i, blocks[i].id);
-      blockDisplayNames.set(i, blocks[i].id || blocks[i].type);
+      blockDisplayNames.set(i, blocks[i].displayName || blocks[i].id || blocks[i].type);
     }
 
     for (const [blockIndex, outputs] of unlinkedIR.blockOutputs.entries()) {

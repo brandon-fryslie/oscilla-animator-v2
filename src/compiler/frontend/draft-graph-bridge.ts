@@ -187,6 +187,7 @@ function buildCompilerBlocks(drafts: readonly DraftBlock[]): CompilerGraphBlock[
     id: draft.id,
     type: draft.type,
     params: draft.params,
+    displayName: draft.displayName,
   }));
 }
 
