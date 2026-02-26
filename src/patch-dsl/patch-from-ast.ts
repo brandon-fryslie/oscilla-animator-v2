@@ -19,6 +19,7 @@ import type { Patch, Block, Edge, Endpoint, InputPort, OutputPort, LensAttachmen
 import type { HclDocument, HclBlock, HclValue, Position } from './ast';
 import { PatchDslError, PatchDslWarning } from './errors';
 import { normalizeCanonicalName } from '../core/canonical-name';
+import { deriveEdgeAlias } from '../graph/edge-alias';
 import { getBlockDefinition } from '../blocks/registry';
 import { toIdentifier } from './serialize';
 import type { BlockId, CombineMode } from '../types';
@@ -165,10 +166,12 @@ function processPatchContents(
     }
     seenEdgeKeys.add(edgeKey);
 
-    const alias = deriveEdgeAlias(from, patchBlocks);
-    if (!alias) {
+    let alias: string;
+    try {
+      alias = deriveEdgeAlias(from, patchBlocks);
+    } catch (err) {
       errors.push(new PatchDslError(
-        `Cannot derive edge alias for ${from.blockId}.${from.slotId}`,
+        err instanceof Error ? err.message : `Cannot derive edge alias for ${from.blockId}.${from.slotId}`,
         deferred.pos
       ));
       continue;
@@ -190,13 +193,6 @@ function processPatchContents(
 
   const patch: Patch = { blocks: patchBlocks, edges };
   return { patch, errors, warnings };
-}
-
-function deriveEdgeAlias(from: Endpoint, patchBlocks: ReadonlyMap<BlockId, Block>): string | undefined {
-  const source = patchBlocks.get(from.blockId as BlockId);
-  if (!source) return undefined;
-  const canonical = source.displayName ? normalizeCanonicalName(source.displayName) : source.id;
-  return `${canonical}.${from.slotId}`;
 }
 
 /**

@@ -140,9 +140,11 @@ export function register(): void {
           ? `\nSuggestion: ${err.suggestion}`
           : '';
   
-        throw new Error(
+        const error = new Error(
           `Expression ${err.code}: ${err.message}${positionInfo}${suggestionInfo}`
-        );
+        ) as Error & { code?: string };
+        error.code = err.code;
+        throw error;
       }
   
       // Compilation succeeded - return output expression

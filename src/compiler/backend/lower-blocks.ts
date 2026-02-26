@@ -20,7 +20,8 @@ import {
   hasLowerOutputsOnly,
 } from "../../blocks/registry";
 import type { EventHub } from "../../events/EventHub";
-import { payloadStride, type CanonicalType, requireInst, withInstance } from "../../core/canonical-types";
+import { payloadStride, type CanonicalType, requireInst, withInstance, isAxisInst } from "../../core/canonical-types";
+import { isConcretePayload } from "../../core/inference-types";
 import { normalizeCanonicalName } from "../../core/canonical-name";
 import type { PortKey, CollectEdgeKey, InputPortPolicy } from "../ir/patches";
 // Multi-Input Blocks Integration
@@ -30,6 +31,7 @@ import {
 } from "./resolveWriters";
 import {
   createCombineNode,
+  validateCombineMode,
   validateCombinePolicy,
   shouldCombine,
 } from "./combine-utils";
@@ -62,11 +64,20 @@ function requireBlockEffects(
   );
 }
 
+const EXPRESSION_ERROR_CODES = new Set<CompileError['code']>([
+  'ExprSyntaxError',
+  'ExprTypeError',
+  'ExprCompileError',
+]);
+
 function classifyLoweringErrorCode(error: unknown): CompileError['code'] {
-  if (!(error instanceof Error)) return 'NotImplemented';
-  if (error.message.includes('ExprSyntaxError')) return 'ExprSyntaxError';
-  if (error.message.includes('ExprTypeError')) return 'ExprTypeError';
-  if (error.message.includes('ExprCompileError')) return 'ExprCompileError';
+  if (typeof error !== 'object' || error === null) return 'NotImplemented';
+  if ('code' in error) {
+    const code = (error as { code?: unknown }).code;
+    if (typeof code === 'string' && EXPRESSION_ERROR_CODES.has(code as CompileError['code'])) {
+      return code as CompileError['code'];
+    }
+  }
   return 'NotImplemented';
 }
 
@@ -224,6 +235,21 @@ function resolveInputsWithMultiInput(
         where: { blockId: endpoint.blockId, port: endpoint.slotId },
       });
       continue;
+    }
+
+    const payload = portType.payload;
+    if (isConcretePayload(payload) && isAxisInst(portType.extent.cardinality)) {
+      const card = portType.extent.cardinality.value;
+      const world = card.kind === 'many' ? 'many' : card.kind === 'one' ? 'one' : 'scalar';
+      const modeValidation = validateCombineMode(combine.mode, world, payload.kind);
+      if (!modeValidation.valid) {
+        errors.push({
+          code: 'PortTypeMismatch',
+          message: modeValidation.reason ?? 'Invalid combine mode for payload',
+          where: { blockId: endpoint.blockId, port: endpoint.slotId },
+        });
+        continue;
+      }
     }
 
     // Convert writers to ValueRefs, skipping writers from failed upstream blocks
