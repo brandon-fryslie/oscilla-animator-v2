@@ -11,48 +11,48 @@
 
 .oscilla-dockview {
   /* Panel backgrounds */
-  --dv-group-view-background-color: #0f0f23;
-  --dv-tabs-and-actions-container-background-color: #16213e;
+  --dv-group-view-background-color: var(--mantine-color-dark-8);
+  --dv-tabs-and-actions-container-background-color: var(--mantine-color-dark-7);
 
   /* Tab backgrounds - active group */
-  --dv-activegroup-visiblepanel-tab-background-color: #1a1a2e;
-  --dv-activegroup-hiddenpanel-tab-background-color: #16213e;
+  --dv-activegroup-visiblepanel-tab-background-color: var(--mantine-color-dark-6);
+  --dv-activegroup-hiddenpanel-tab-background-color: var(--mantine-color-dark-7);
 
   /* Tab backgrounds - inactive group */
-  --dv-inactivegroup-visiblepanel-tab-background-color: #0f0f23;
-  --dv-inactivegroup-hiddenpanel-tab-background-color: #0f0f23;
+  --dv-inactivegroup-visiblepanel-tab-background-color: var(--mantine-color-dark-9);
+  --dv-inactivegroup-hiddenpanel-tab-background-color: var(--mantine-color-dark-9);
 
   /* Tab text colors */
-  --dv-activegroup-visiblepanel-tab-color: #eee;
-  --dv-activegroup-hiddenpanel-tab-color: #888;
-  --dv-inactivegroup-visiblepanel-tab-color: #aaa;
-  --dv-inactivegroup-hiddenpanel-tab-color: #666;
+  --dv-activegroup-visiblepanel-tab-color: var(--mantine-color-gray-2);
+  --dv-activegroup-hiddenpanel-tab-color: var(--mantine-color-gray-5);
+  --dv-inactivegroup-visiblepanel-tab-color: var(--mantine-color-gray-4);
+  --dv-inactivegroup-hiddenpanel-tab-color: var(--mantine-color-gray-6);
 
   /* Borders and dividers */
-  --dv-tab-divider-color: #0f3460;
-  --dv-separator-border: 1px solid #0f3460;
-  --dv-paneview-header-border-color: #0f3460;
+  --dv-tab-divider-color: var(--mantine-color-dark-4);
+  --dv-separator-border: 1px solid var(--mantine-color-dark-4);
+  --dv-paneview-header-border-color: var(--mantine-color-dark-4);
 
   /* Hover states */
-  --dv-activegroup-visiblepanel-tab-hover-background-color: #222244;
-  --dv-activegroup-hiddenpanel-tab-hover-background-color: #1a1a2e;
+  --dv-activegroup-visiblepanel-tab-hover-background-color: var(--mantine-color-dark-5);
+  --dv-activegroup-hiddenpanel-tab-hover-background-color: var(--mantine-color-dark-6);
 
   /* Focus/active indicators */
-  --dv-activegroup-visiblepanel-tab-bottom-border-color: #4ecdc4;
+  --dv-activegroup-visiblepanel-tab-bottom-border-color: var(--mantine-color-blue-5);
 
   /* Drag and drop overlay */
-  --dv-drag-over-background-color: rgba(78, 205, 196, 0.1);
+  --dv-drag-over-background-color: rgba(34, 139, 230, 0.14);
 
   /* Scrollbar (for overflow) */
-  --dv-scrollbar-color: #0f3460;
-  --dv-scrollbar-hover-color: #4ecdc4;
+  --dv-scrollbar-color: var(--mantine-color-dark-4);
+  --dv-scrollbar-hover-color: var(--mantine-color-blue-5);
 
   /* Floating group shadow */
   --dv-floating-group-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
 
   /* Base font */
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  color: #eee;
+  font-family: var(--mantine-font-family);
+  color: var(--mantine-color-gray-2);
 
   /* Fill container */
   height: 100%;
@@ -81,11 +81,11 @@
 
 /* Ensure separators are visible and easier to grab */
 .oscilla-dockview .split-view-view > .split-view-container > .separator {
-  background-color: #0f3460;
+  background-color: var(--mantine-color-dark-4);
 }
 
 .oscilla-dockview .split-view-view > .split-view-container > .separator:hover {
-  background-color: #4ecdc4;
+  background-color: var(--mantine-color-blue-5);
 }
 
 /* Make resize handles larger and easier to grab */
@@ -115,18 +115,17 @@
 /* Highlight resize handles on hover */
 .oscilla-dockview .dv-resize-container .dv-resize-handle-top:hover,
 .oscilla-dockview .dv-resize-container .dv-resize-handle-bottom:hover {
-  background-color: rgba(78, 205, 196, 0.3);
+  background-color: rgba(34, 139, 230, 0.3);
 }
 
 .oscilla-dockview .dv-resize-container .dv-resize-handle-left:hover,
 .oscilla-dockview .dv-resize-container .dv-resize-handle-right:hover {
-  background-color: rgba(78, 205, 196, 0.3);
+  background-color: rgba(34, 139, 230, 0.3);
 }
 
 .oscilla-dockview .dv-resize-container .dv-resize-handle-topleft:hover,
 .oscilla-dockview .dv-resize-container .dv-resize-handle-topright:hover,
 .oscilla-dockview .dv-resize-container .dv-resize-handle-bottomleft:hover,
 .oscilla-dockview .dv-resize-container .dv-resize-handle-bottomright:hover {
-  background-color: rgba(78, 205, 196, 0.5);
+  background-color: rgba(34, 139, 230, 0.5);
 }
-
