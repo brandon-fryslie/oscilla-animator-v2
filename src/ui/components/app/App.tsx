@@ -132,6 +132,10 @@ export const App: React.FC<AppProps> = ({ onCanvasReady, onStoreReady, externalW
   const editorContextRef = useRef<{ setEditorHandle: (handle: EditorHandle | null) => void } | null>(null);
   const [activeEditorTab, setActiveEditorTab] = useState<'flow-editor' | 'composite-editor' | null>('flow-editor');
   const [editorReady, setEditorReady] = useState(false);
+  const [editorContextReady, setEditorContextReady] = useState(false);
+  const handleEditorContextReady = useCallback((ready: boolean) => {
+    setEditorContextReady(ready);
+  }, []);
 
   // Dockview API for toolbar panel focus
   const [dockviewApi, setDockviewApi] = useState<DockviewApi | null>(null);
@@ -166,7 +170,10 @@ export const App: React.FC<AppProps> = ({ onCanvasReady, onStoreReady, externalW
   const handleReactFlowEditorReady = useCallback((adapter: EditorHandle) => {
     reactFlowHandleRef.current = adapter;
     setEditorReady(true);
-  }, []);
+    if (activeEditorTab === 'flow-editor') {
+      editorContextRef.current?.setEditorHandle(adapter);
+    }
+  }, [activeEditorTab]);
 
   // Handle Dockview panel activation to update active editor
   const handleActivePanelChange = useCallback((panelId: string | undefined) => {
@@ -175,24 +182,19 @@ export const App: React.FC<AppProps> = ({ onCanvasReady, onStoreReady, externalW
     } else if (panelId === 'composite-editor') {
       // CompositeEditor manages its own EditorHandle via useEditor()
       setActiveEditorTab('composite-editor');
-    } else {
-      // Non-editor panel activated, clear active editor
-      setActiveEditorTab(null);
     }
   }, []);
 
   // Update EditorContext when active editor changes or editor becomes ready
   useEffect(() => {
-    if (!editorContextRef.current) return;
+    if (!editorContextReady || !editorContextRef.current) return;
 
     if (activeEditorTab === 'flow-editor' && editorReady) {
       editorContextRef.current.setEditorHandle(reactFlowHandleRef.current);
     } else if (activeEditorTab === 'composite-editor') {
       // CompositeEditor sets its own handle - don't interfere
-    } else if (activeEditorTab === null) {
-      editorContextRef.current.setEditorHandle(null);
     }
-  }, [activeEditorTab, editorReady]);
+  }, [activeEditorTab, editorReady, editorContextReady]);
 
   // Global hotkey feedback handler
   const handleHotkeyFeedback = useCallback((feedback: HotkeyFeedback) => {
@@ -215,7 +217,10 @@ export const App: React.FC<AppProps> = ({ onCanvasReady, onStoreReady, externalW
           ) : (
             <EditorProvider>
             {/* Capture EditorContext methods */}
-            <EditorContextCapture contextRef={editorContextRef} />
+            <EditorContextCapture
+              contextRef={editorContextRef}
+              onReady={handleEditorContextReady}
+            />
             <GlobalHotkeys onFeedback={handleHotkeyFeedback} />
 
             <div
@@ -270,12 +275,19 @@ const GlobalHotkeys: React.FC<{ onFeedback: (feedback: HotkeyFeedback) => void }
  */
 const EditorContextCapture: React.FC<{
   contextRef: React.MutableRefObject<{ setEditorHandle: (handle: EditorHandle | null) => void } | null>;
-}> = ({ contextRef }) => {
+  onReady?: (ready: boolean) => void;
+}> = ({ contextRef, onReady }) => {
   const { setEditorHandle } = useEditor();
 
   useEffect(() => {
+    // [LAW:single-enforcer] App-level editor handle wiring is enforced at this context bridge.
     contextRef.current = { setEditorHandle };
-  }, [contextRef, setEditorHandle]);
+    onReady?.(true);
+    return () => {
+      contextRef.current = null;
+      onReady?.(false);
+    };
+  }, [contextRef, onReady, setEditorHandle]);
 
   return null;
 };

@@ -126,11 +126,18 @@ export const CompositeEditor = observer(function CompositeEditor() {
         event.dataTransfer.getData('application/oscilla-composite-type');
       if (!blockType) return;
 
-      // Get drop position relative to the canvas
+      const flowPos = graphEditorRef.current?.screenToFlowPosition({
+        x: event.clientX,
+        y: event.clientY,
+      });
       const reactFlowBounds = event.currentTarget.getBoundingClientRect();
+      const fallbackPos = {
+        x: event.clientX - reactFlowBounds.left,
+        y: event.clientY - reactFlowBounds.top,
+      };
       const position = {
-        x: event.clientX - reactFlowBounds.left - 75, // Center the node
-        y: event.clientY - reactFlowBounds.top - 30,
+        x: (flowPos?.x ?? fallbackPos.x) - 75, // Center the node
+        y: (flowPos?.y ?? fallbackPos.y) - 30,
       };
 
       compositeEditor.addBlock(blockType, position);

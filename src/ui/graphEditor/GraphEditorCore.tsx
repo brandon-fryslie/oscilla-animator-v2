@@ -128,6 +128,7 @@ export interface GraphEditorCoreProps {
 export interface GraphEditorCoreHandle {
   autoArrange(): Promise<void>;
   zoomToFit(): Promise<void>;
+  screenToFlowPosition(position: { x: number; y: number }): { x: number; y: number };
 }
 
 function stableParamsSignature(params: Readonly<Record<string, unknown>>): string {
@@ -198,7 +199,8 @@ export const GraphEditorCoreInner = observer(
       const [edges, setEdges, onEdgesChange] = useEdgesState<OscillaEdgeData>([]);
       const [isLayouting, setIsLayouting] = useState(false);
       const [isInitialized, setIsInitialized] = useState(false);
-      const { fitView } = useReactFlow();
+      const reactFlowApi = useReactFlow();
+      const { fitView } = reactFlowApi;
 
       // Refs for stable access to latest state
       const nodesRef = useRef(nodes);
@@ -518,6 +520,20 @@ export const GraphEditorCoreInner = observer(
         autoArrange: handleAutoArrange,
         zoomToFit: async () => {
           fitView({ padding: 0.1 });
+        },
+        screenToFlowPosition: (position) => {
+          // [LAW:single-enforcer] Coordinate-space conversion belongs at the graph boundary.
+          const api = reactFlowApi as unknown as {
+            screenToFlowPosition?: (p: { x: number; y: number }) => { x: number; y: number };
+            project?: (p: { x: number; y: number }) => { x: number; y: number };
+          };
+          if (typeof api.screenToFlowPosition === 'function') {
+            return api.screenToFlowPosition(position);
+          }
+          if (typeof api.project === 'function') {
+            return api.project(position);
+          }
+          return position;
         },
       }));
 
