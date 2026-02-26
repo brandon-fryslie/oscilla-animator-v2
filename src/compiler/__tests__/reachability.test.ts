@@ -4,7 +4,8 @@
 
 import { describe, it, expect, beforeAll } from 'vitest';
 import { computeRenderReachableBlocks } from '../reachability';
-import type { Block, BlockIndex, NormalizedEdge } from '../ir/patches';
+import type { BlockIndex, NormalizedEdge } from '../ir/patches';
+import type { CompilerGraphBlock } from '../ir/CompilerGraph';
 import { registerBlock } from '../../blocks/registry';
 
 // Register test block types before running tests
@@ -34,7 +35,7 @@ beforeAll(() => {
 
 describe('computeRenderReachableBlocks', () => {
   it('returns empty set for no render blocks', () => {
-    const blocks: Block[] = [
+    const blocks: CompilerGraphBlock[] = [
       { id: 'b1' as any, type: 'TestPureBlock' } as any,
       { id: 'b2' as any, type: 'TestPureBlock' } as any,
     ];
@@ -46,7 +47,7 @@ describe('computeRenderReachableBlocks', () => {
   });
 
   it('returns render block only if no inputs', () => {
-    const blocks: Block[] = [
+    const blocks: CompilerGraphBlock[] = [
       { id: 'render' as any, type: 'TestRenderBlock' } as any,
       { id: 'disconnected' as any, type: 'TestPureBlock' } as any,
     ];
@@ -59,7 +60,7 @@ describe('computeRenderReachableBlocks', () => {
   });
 
   it('traces through single edge', () => {
-    const blocks: Block[] = [
+    const blocks: CompilerGraphBlock[] = [
       { id: 'source' as any, type: 'TestPureBlock' } as any,
       { id: 'render' as any, type: 'TestRenderBlock' } as any,
     ];
@@ -69,6 +70,7 @@ describe('computeRenderReachableBlocks', () => {
         fromPort: 'out' as any,
         toBlock: 1 as BlockIndex,
         toPort: 'in' as any,
+        alias: 'source.out',
       },
     ];
 
@@ -80,7 +82,7 @@ describe('computeRenderReachableBlocks', () => {
   });
 
   it('traces through chain', () => {
-    const blocks: Block[] = [
+    const blocks: CompilerGraphBlock[] = [
       { id: 'b1' as any, type: 'TestPureBlock' } as any,
       { id: 'b2' as any, type: 'TestPureBlock' } as any,
       { id: 'b3' as any, type: 'TestPureBlock' } as any,
@@ -92,18 +94,21 @@ describe('computeRenderReachableBlocks', () => {
         fromPort: 'out' as any,
         toBlock: 1 as BlockIndex,
         toPort: 'in' as any,
+        alias: 'b1.out',
       },
       {
         fromBlock: 1 as BlockIndex,
         fromPort: 'out' as any,
         toBlock: 2 as BlockIndex,
         toPort: 'in' as any,
+        alias: 'b2.out',
       },
       {
         fromBlock: 2 as BlockIndex,
         fromPort: 'out' as any,
         toBlock: 3 as BlockIndex,
         toPort: 'in' as any,
+        alias: 'b3.out',
       },
     ];
 
@@ -117,7 +122,7 @@ describe('computeRenderReachableBlocks', () => {
   });
 
   it('traces through diamond', () => {
-    const blocks: Block[] = [
+    const blocks: CompilerGraphBlock[] = [
       { id: 'source' as any, type: 'TestPureBlock' } as any,
       { id: 'left' as any, type: 'TestPureBlock' } as any,
       { id: 'right' as any, type: 'TestPureBlock' } as any,
@@ -129,24 +134,28 @@ describe('computeRenderReachableBlocks', () => {
         fromPort: 'out' as any,
         toBlock: 1 as BlockIndex,
         toPort: 'in' as any,
+        alias: 'source.out',
       },
       {
         fromBlock: 0 as BlockIndex,
         fromPort: 'out' as any,
         toBlock: 2 as BlockIndex,
         toPort: 'in' as any,
+        alias: 'source.out',
       },
       {
         fromBlock: 1 as BlockIndex,
         fromPort: 'out' as any,
         toBlock: 3 as BlockIndex,
         toPort: 'in1' as any,
+        alias: 'left.out',
       },
       {
         fromBlock: 2 as BlockIndex,
         fromPort: 'out' as any,
         toBlock: 3 as BlockIndex,
         toPort: 'in2' as any,
+        alias: 'right.out',
       },
     ];
 
@@ -160,7 +169,7 @@ describe('computeRenderReachableBlocks', () => {
   });
 
   it('excludes disconnected subgraph', () => {
-    const blocks: Block[] = [
+    const blocks: CompilerGraphBlock[] = [
       { id: 'connected' as any, type: 'TestPureBlock' } as any,
       { id: 'render' as any, type: 'TestRenderBlock' } as any,
       { id: 'disconnected1' as any, type: 'TestPureBlock' } as any,
@@ -172,6 +181,7 @@ describe('computeRenderReachableBlocks', () => {
         fromPort: 'out' as any,
         toBlock: 1 as BlockIndex,
         toPort: 'in' as any,
+        alias: 'connected.out',
       },
       // disconnected subgraph
       {
@@ -179,6 +189,7 @@ describe('computeRenderReachableBlocks', () => {
         fromPort: 'out' as any,
         toBlock: 3 as BlockIndex,
         toPort: 'in' as any,
+        alias: 'disconnected1.out',
       },
     ];
 
@@ -192,7 +203,7 @@ describe('computeRenderReachableBlocks', () => {
   });
 
   it('handles multiple render blocks', () => {
-    const blocks: Block[] = [
+    const blocks: CompilerGraphBlock[] = [
       { id: 'source1' as any, type: 'TestPureBlock' } as any,
       { id: 'render1' as any, type: 'TestRenderBlock' } as any,
       { id: 'source2' as any, type: 'TestPureBlock' } as any,
@@ -205,12 +216,14 @@ describe('computeRenderReachableBlocks', () => {
         fromPort: 'out' as any,
         toBlock: 1 as BlockIndex,
         toPort: 'in' as any,
+        alias: 'source1.out',
       },
       {
         fromBlock: 2 as BlockIndex,
         fromPort: 'out' as any,
         toBlock: 3 as BlockIndex,
         toPort: 'in' as any,
+        alias: 'source2.out',
       },
     ];
 

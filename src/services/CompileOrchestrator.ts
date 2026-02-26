@@ -7,7 +7,7 @@
  * This is the SINGLE compile path - used for both initial and recompile.
  */
 
-import { compile } from '../compiler';
+import { compileFromFrontend } from '../compiler';
 import { compileFrontend } from '../compiler/frontend';
 import type { FrontendError } from '../compiler/frontend';
 import type { FrontendResult } from '../compiler/frontend';
@@ -276,11 +276,10 @@ export async function compileAndSwap(
 
   let result: CompileResult | null = precomputed?.backendResult ?? null;
   if (!result) {
-    result = compile(patch, {
+    result = compileFromFrontend(frontendResult, {
       events: store.events,
       patchRevision,
       patchId: 'patch-0',
-      precomputedFrontend: frontendResult,
     });
     compileDurationMs = Date.now() - compileStartMs;
   }

@@ -140,7 +140,8 @@ describe('ReduceOp', () => {
       state,
       zeroLaneProgram,
     );
-    expect(reduced[0]).toBe(0);
+    const reducedValue = typeof reduced === 'number' ? reduced : reduced[0];
+    expect(reducedValue).toBe(0);
   });
 
   it('propagates NaN when source field contains NaN values', () => {

@@ -17,10 +17,9 @@
  */
 
 import type {
-  Slot,
-  Block,
   CombineMode,
-} from '../../types';
+} from '../../types/compiler';
+import type { CompilerGraphBlock as Block } from '../ir/CompilerGraph';
 import type { InferenceCanonicalType } from '../../core/inference-types';
 import { getBlockDefinition, type InputDef } from '../../blocks/registry';
 import type { CombinePolicy } from './combine-utils';
@@ -315,7 +314,7 @@ export function resolveInput(
   endpoint: InputEndpoint,
   edges: readonly NormalizedEdge[],
   blocks: readonly Block[],
-  inputSlot: Slot,
+  inputSlot: InputDef,
   combineMode: CombineMode
 ): ResolvedInputSpec {
   // Enumerate writers (DSConst edges are included via GraphNormalizer)
@@ -327,8 +326,12 @@ export function resolveInput(
   // Resolve combine policy from explicit input policy data.
   const combine = resolveCombinePolicy(inputSlot, { combineMode });
 
-  // Get port type - inputSlot.type is CanonicalType
+  // [LAW:single-enforcer] Port type presence is enforced at the backend
+  // boundary for explicit resolveInput callers.
   const portType = inputSlot.type;
+  if (!portType) {
+    throw new Error(`resolveInput requires a typed input definition for ${endpoint.blockId}.${endpoint.slotId}`);
+  }
 
   return {
     endpoint,

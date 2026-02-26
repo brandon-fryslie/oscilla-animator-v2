@@ -13,7 +13,7 @@
  */
 
 import type { TypedPatch, BlockIndex, NormalizedEdge } from '../ir/patches';
-import type { Block } from '../../graph/Patch';
+import type { CompilerGraphBlock as Block } from '../ir/CompilerGraph';
 import { getBlockDefinition, hasLowerOutputsOnly } from '../../blocks/registry';
 
 // =============================================================================

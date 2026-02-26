@@ -13,7 +13,7 @@
 
 import type { BlockIRBuilder } from './BlockIRBuilder';
 import type { CanonicalType } from '../../core/canonical-types';
-import type { BlockId } from '../../types';
+import type { BlockId } from '../../types/compiler';
 import type {
   ValueExprId,
   ValueSlot,

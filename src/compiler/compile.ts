@@ -53,7 +53,6 @@ import { pass5CycleValidation } from './backend/schedule-scc';
 import { pass6BlockLowering } from './backend/lower-blocks';
 import { pass7Schedule } from './backend/schedule-program';
 import { allocateContinuityPipeline } from './backend/continuity-pipeline';
-import { AddressRegistry } from '../graph/address-registry';
 
 registerAllBlocks();
 
@@ -83,10 +82,10 @@ export type CompileResult = CompileSuccess | CompileFailure;
 export interface CompileOptions {
   readonly patchId?: string;
   readonly patchRevision?: number;
-  readonly events: EventHub;
-  /** Precomputed frontend result. When provided, compile() reuses it. Otherwise runs compileFrontend() internally. */
-  readonly precomputedFrontend?: FrontendResult;
+  readonly events?: EventHub;
 }
+
+export type CompileFromFrontendOptions = CompileOptions;
 
 // =============================================================================
 // Main Compile Function
@@ -100,6 +99,21 @@ export interface CompileOptions {
  * @returns CompileResult with either the compiled program or errors
  */
 export function compile(patch: Patch, options?: CompileOptions): CompileResult {
+  // [LAW:single-enforcer] Raw Patch enters backend pipeline only through this boundary.
+  const frontend = compileFrontend(patch);
+  return compileFromFrontend(frontend, options);
+}
+
+/**
+ * Compile using precomputed frontend output.
+ *
+ * Used by worker/orchestrator paths to avoid rerunning frontend while keeping
+ * the backend contract independent from raw Patch plumbing.
+ */
+export function compileFromFrontend(
+  frontend: FrontendResult,
+  options?: CompileFromFrontendOptions,
+): CompileResult {
   const compileId = options?.patchId ? `${options.patchId}:${options.patchRevision || 0}` : 'unknown';
 
   // [LAW:one-source-of-truth] compile() owns the inspector snapshot lifecycle unconditionally.
@@ -107,23 +121,16 @@ export function compile(patch: Patch, options?: CompileOptions): CompileResult {
   compilationInspector.beginCompile(compileId);
 
   try {
-    // =========================================================================
-    // Frontend: Use precomputed result or run compileFrontend()
-    // [LAW:dataflow-not-control-flow] compileFrontend always returns FrontendResult.
-    // =========================================================================
-    const frontend: FrontendResult = options?.precomputedFrontend
-      ? options.precomputedFrontend
-      : compileFrontend(patch);
-
     if (!frontend.backendReady) {
       return makeFailure(frontend.errors.map(frontendErrorToCompileError));
     }
 
     const normalized = frontend.normalizedPatch;
     const typedPatch = frontend.typedPatch;
+    const graph = normalized.graph;
 
     // Capture frontend passes (for inspection)
-    compilationInspector.capturePass('normalization', patch, normalized);
+    compilationInspector.capturePass('normalization', graph, normalized);
     compilationInspector.capturePass('type-constraints', normalized, typedPatch);
     compilationInspector.capturePass('type-graph', normalized, typedPatch);
     compilationInspector.capturePass('axis-validation', typedPatch, {
@@ -147,13 +154,11 @@ export function compile(patch: Patch, options?: CompileOptions): CompileResult {
 
     compilationInspector.capturePass('scc', depGraphPatch, acyclicPatch);
 
-    // Pass 5: Block Lowering
-    const addressRegistry = AddressRegistry.buildFromPatch(normalized.patch);
+    // Pass 6: Block Lowering
     const unlinkedIR = pass6BlockLowering(acyclicPatch, {
       events: options?.events,
       compileId,
       patchRevision: options?.patchRevision,
-      addressRegistry,
     });
 
     compilationInspector.capturePass('block-lowering', acyclicPatch, unlinkedIR);
@@ -511,7 +516,7 @@ function convertLinkedIRToProgram(
     const blocks = acyclicPatch.blocks || []; // AcyclicOrLegalGraph has blocks array
     for (let i = 0; i < blocks.length; i++) {
       blockMap.set(i, blocks[i].id);
-      blockDisplayNames.set(i, blocks[i].displayName || blocks[i].type);
+      blockDisplayNames.set(i, blocks[i].id || blocks[i].type);
     }
 
     for (const [blockIndex, outputs] of unlinkedIR.blockOutputs.entries()) {

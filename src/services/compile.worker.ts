@@ -1,6 +1,6 @@
 /// <reference lib="webworker" />
 
-import { compile } from '../compiler';
+import { compileFromFrontend } from '../compiler';
 import { compileFrontend } from '../compiler/frontend';
 import { EventHub } from '../events/EventHub';
 import { deserializePatch } from './PatchPersistence';
@@ -13,7 +13,7 @@ import type {
 import { collectProgramTopologyIds, stripKernelRegistry } from './compile-worker-serialization';
 
 function toBackendResult(
-  result: ReturnType<typeof compile>,
+  result: ReturnType<typeof compileFromFrontend>,
 ): CompileWorkerBackendResult {
   if (result.kind === 'ok') {
     const program = stripKernelRegistry(result.program);
@@ -58,11 +58,10 @@ self.onmessage = (event: MessageEvent<CompileWorkerRequest>) => {
     const frontendResult = compileFrontend(patch, frontendOptions);
     const backendResult = frontendResult.backendReady
       ? toBackendResult(
-          compile(patch, {
+          compileFromFrontend(frontendResult, {
             // [LAW:single-enforcer] Compiler event emission remains owned by CompileOrchestrator.
-            // Worker compile uses an isolated no-listener hub to satisfy compile()'s contract.
+            // Worker compile uses an isolated no-listener hub for backend compile context.
             events: new EventHub(),
-            precomputedFrontend: frontendResult,
           }),
         )
       : null;

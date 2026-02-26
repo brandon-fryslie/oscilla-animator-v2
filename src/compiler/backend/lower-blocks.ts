@@ -3,7 +3,8 @@
  */
 
 import type { AcyclicOrLegalGraph, BlockIndex, DepGraph, SCC } from "../ir/patches";
-import type { Block, BlockId } from "../../types";
+import type { BlockId } from "../../types/compiler";
+import type { CompilerGraphBlock as Block } from "../ir/CompilerGraph";
 
 import type { OrchestratorIRBuilder } from "../ir/OrchestratorIRBuilder";
 import { IRBuilderImpl } from "../ir/IRBuilderImpl";
@@ -20,8 +21,8 @@ import {
   hasLowerOutputsOnly,
 } from "../../blocks/registry";
 import type { EventHub } from "../../events/EventHub";
-import { payloadStride, type CanonicalType, requireInst, withInstance } from "../../core/canonical-types";
-import { normalizeCanonicalName } from "../../core/canonical-name";
+import { payloadStride, type CanonicalType, requireInst, withInstance, isAxisInst } from "../../core/canonical-types";
+import { isConcretePayload } from "../../core/inference-types";
 import type { PortKey, CollectEdgeKey, InputPortPolicy } from "../ir/patches";
 // Multi-Input Blocks Integration
 import {
@@ -30,6 +31,7 @@ import {
 } from "./resolveWriters";
 import {
   createCombineNode,
+  validateCombineMode,
   validateCombinePolicy,
   shouldCombine,
 } from "./combine-utils";
@@ -60,6 +62,23 @@ function requireBlockEffects(
   throw new Error(
     `Block ${block.type}#${block.id} ${phase} lowering must return effects (empty arrays allowed, undefined is invalid).`,
   );
+}
+
+const EXPRESSION_ERROR_CODES = new Set<CompileError['code']>([
+  'ExprSyntaxError',
+  'ExprTypeError',
+  'ExprCompileError',
+]);
+
+function classifyLoweringErrorCode(error: unknown): CompileError['code'] {
+  if (typeof error !== 'object' || error === null) return 'NotImplemented';
+  if ('code' in error) {
+    const code = (error as { code?: unknown }).code;
+    if (typeof code === 'string' && EXPRESSION_ERROR_CODES.has(code as CompileError['code'])) {
+      return code as CompileError['code'];
+    }
+  }
+  return 'NotImplemented';
 }
 
 
@@ -101,8 +120,6 @@ export interface Pass6Options {
   compileId?: string;
   /** Patch revision for event context */
   patchRevision?: number;
-  /** Address registry for blocks that need address resolution (e.g., Expression block) */
-  addressRegistry?: import('../../graph/address-registry').AddressRegistry;
 }
 
 interface TimeModelState {
@@ -218,6 +235,21 @@ function resolveInputsWithMultiInput(
         where: { blockId: endpoint.blockId, port: endpoint.slotId },
       });
       continue;
+    }
+
+    const payload = portType.payload;
+    if (isConcretePayload(payload) && isAxisInst(portType.extent.cardinality)) {
+      const card = portType.extent.cardinality.value;
+      const world = card.kind === 'many' ? 'many' : card.kind === 'one' ? 'one' : 'scalar';
+      const modeValidation = validateCombineMode(combine.mode, world, payload.kind);
+      if (!modeValidation.valid) {
+        errors.push({
+          code: 'PortTypeMismatch',
+          message: modeValidation.reason ?? 'Invalid combine mode for payload',
+          where: { blockId: endpoint.blockId, port: endpoint.slotId },
+        });
+        continue;
+      }
     }
 
     // Convert writers to ValueRefs, skipping writers from failed upstream blocks
@@ -473,7 +505,6 @@ function lowerBlockInstance(
   inputPortPolicies: ReadonlyMap<PortKey, InputPortPolicy>,
   timeModelState: TimeModelState,
   existingOutputs?: Partial<LowerResult>,
-  addressRegistry?: import('../../graph/address-registry').AddressRegistry,
   collectEdgeTypes?: ReadonlyMap<CollectEdgeKey, CanonicalType>,
   failedBlocks?: ReadonlySet<BlockIndex>
 ): Map<string, ValueRefExpr> {
@@ -581,21 +612,11 @@ function lowerBlockInstance(
           // Look up per-edge type from collectEdgeTypes
           const edgeKey = `${blockIndex}:${portId}:${edgeIdx}` as CollectEdgeKey;
           const edgeType = collectEdgeTypes?.get(edgeKey) ?? sourceRef.type;
-
-          // Get source block ID for address building
-          const sourceBlock = blocks[edge.fromBlock];
-          const sourceBlockId = sourceBlock?.id ?? '';
-
-          const alias = sourceBlock
-            ? `${normalizeCanonicalName(sourceBlock.displayName ?? sourceBlock.id)}.${edge.fromPort}`
-            : undefined;
-
           entries.push({
             value: sourceRef,
             type: edgeType,
-            alias,
-            sourceBlockId,
-            sourcePort: edge.fromPort,
+            // [LAW:one-source-of-truth] Collect aliases come directly from normalized edge alias.
+            alias: edge.alias,
             sortKey: edgeIdx,
           });
         }
@@ -655,7 +676,6 @@ function lowerBlockInstance(
       b: builder,
       seedConstId: 0, // Seed value not used by current intrinsics (randomId uses element index only)
       inferredInstance,
-      addressRegistry,
       instances: builder.getInstances(),
     };
 
@@ -872,20 +892,9 @@ function lowerBlockInstance(
     // Lowering failed - record error (will be thrown at end of pass with all other errors)
     const errorMsg = `Block lowering failed for "${block.type}": ${error instanceof Error ? error.message : String(error)}`;
 
-    // Detect expression errors by checking error message for ExprXxxError codes
-    let errorKind = "NotImplemented";
-    if (error instanceof Error && block.type === 'Expression') {
-      if (error.message.includes('ExprSyntaxError')) {
-        errorKind = 'ExprSyntaxError';
-      } else if (error.message.includes('ExprTypeError')) {
-        errorKind = 'ExprTypeError';
-      } else if (error.message.includes('ExprCompileError')) {
-        errorKind = 'ExprCompileError';
-      }
-    }
-
     errors.push({
-      code: errorKind,
+      // [LAW:one-type-per-behavior] Lowering error classification is block-agnostic.
+      code: classifyLoweringErrorCode(error),
       message: errorMsg,
       where: { blockId: block.id },
     });
@@ -1091,7 +1100,6 @@ function lowerSCCTwoPass(
       inputPortPolicies,
       timeModelState,
       existingOutputs,
-      options?.addressRegistry,
       collectEdgeTypes,
       failedBlocks
     );
@@ -1570,7 +1578,6 @@ export function pass6BlockLowering(
           validated.inputPortPolicies,
           timeModelState,
           undefined, // existingOutputs
-          options?.addressRegistry,
           validated.collectEdgeTypes,
           failedBlocks
         );

@@ -46,6 +46,7 @@ function makeEdge(id: string, from: string, fromPort: string, to: string, toPort
     id,
     from: { blockId: from, port: fromPort, dir: 'out' },
     to: { blockId: to, port: toPort, dir: 'in' },
+    alias: `${from}.${fromPort}`,
     role: 'userWire',
     origin,
   };

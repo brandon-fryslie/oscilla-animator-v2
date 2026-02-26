@@ -5,11 +5,12 @@
  */
 
 import type { Patch } from '../graph';
-import type { BlockId, EdgeRole } from '../types';
+import type { BlockId, EdgeRole, CombineMode } from '../types';
+import { canonicalizeCombineMode } from '../types';
 import { serializePatchToHCL, deserializePatchFromHCL, type PatchDslError } from '../patch-dsl';
 import { resolveLocalStorageCapability } from './local-storage-capability';
 
-export const STORAGE_KEY = 'oscilla-v2-patch-v10'; // Bumped to invalidate stale patches after block genericization (FieldSin->Sin, etc.)
+export const STORAGE_KEY = 'oscilla-v2-patch-v11'; // Bumped for required edge alias persistence.
 const MAX_PERSISTENCE_ISSUES = 128;
 
 export type PatchPersistenceIssueLevel = 'warn' | 'error';
@@ -63,6 +64,7 @@ export interface SerializedPatch {
     to: { kind: 'port'; blockId: string; slotId: string };
     enabled: boolean;
     sortKey: number;
+    alias: string;
     role: { kind: string; meta: Record<string, unknown> };
   }>;
   presetIndex: number;
@@ -108,7 +110,10 @@ export function deserializePatch(json: string): { patch: Patch; presetIndex: num
         if (typeof p.combineMode !== 'string') {
           throw new Error(`Invalid serialized patch: block '${b.id}' input '${p.id}' missing combineMode`);
         }
-        return p;
+        return {
+          ...p,
+          combineMode: canonicalizeCombineMode(p.combineMode as CombineMode),
+        };
       });
       // [LAW:one-source-of-truth] Legacy serialized label is dropped at decode;
       // displayName remains the only canonical block-name field in memory.
@@ -126,6 +131,9 @@ export function deserializePatch(json: string): { patch: Patch; presetIndex: num
       if (typeof e.sortKey !== 'number') {
         throw new Error(`Invalid serialized patch: edge '${e.id}' missing numeric sortKey`);
       }
+      if (typeof e.alias !== 'string' || e.alias.trim().length === 0) {
+        throw new Error(`Invalid serialized patch: edge '${e.id}' missing string alias`);
+      }
       if (!e.role || typeof e.role.kind !== 'string' || typeof e.role.meta !== 'object' || e.role.meta === null) {
         throw new Error(`Invalid serialized patch: edge '${e.id}' missing role`);
       }
@@ -135,6 +143,7 @@ export function deserializePatch(json: string): { patch: Patch; presetIndex: num
         to: e.to,
         enabled: e.enabled,
         sortKey: e.sortKey,
+        alias: e.alias,
         role: e.role as EdgeRole,
       };
     });
