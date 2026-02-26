@@ -9,6 +9,7 @@
     "build": "tsc -b && vite build",
     "typecheck": "tsc -b",
     "test": "vitest run",
+    "test:audit": "node scripts/test-audit.mjs",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:memory": "VITEST_EXPOSE_GC=1 vitest run src/__tests__/memory-profile.test.ts",
