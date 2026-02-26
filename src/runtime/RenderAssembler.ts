@@ -1429,9 +1429,9 @@ function appendDrawPathInstancesOp(
   }
 
   // Read position buffer from slot
-  const packedPositionBuffer = resolveNumericSlotBuffer(step.positionSlot, state, slotToArena, arena, count);
+  const packedPositionBuffer = resolveNumericSlotBuffer(step.controlPointsSlot, state, slotToArena, arena, count);
   if (!packedPositionBuffer) {
-    throw new Error('RenderAssembler: Position buffer not found in slot ' + step.positionSlot);
+    throw new Error('RenderAssembler: Position buffer not found in slot ' + step.controlPointsSlot);
   }
 
   // Position must be Float32Array for v2
