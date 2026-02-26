@@ -275,15 +275,41 @@ describe('Field-Path Math Integration', () => {
   });
 
   describe('Verification: old dead kernel names removed', () => {
-    it('confirms old kernel names (fieldAdd, fieldMultiply, etc.) are gone', () => {
-      // This test documents that we successfully removed the old dead kernel names.
-      // The fact that all the above tests compile proves that opcode dispatch
-      // now handles what those old kernels used to do.
-      //
-      // If the old code was still present, we'd see "Unknown field kernel: fieldAdd"
-      // errors at runtime. The absence of those errors proves the migration worked.
+    it('uses opcode-backed kernels in compiled field math graph', () => {
+      const patch = buildPatch((b) => {
+        b.addBlock('InfiniteTimeRoot');
+        const ellipse = b.addBlock('Ellipse');
+        const array = b.addBlock('Array');
+        b.setPortDefault(array, 'count', 6);
+        const layout = b.addBlock('GridLayoutUV');
+        b.setPortDefault(layout, 'rows', 2);
+        b.setPortDefault(layout, 'cols', 3);
 
-      expect(true).toBe(true); // Test that passes to document this fact
+        const render = b.addBlock('RenderInstances2D');
+        const colorConst = b.addBlock('Const');
+        b.setConfig(colorConst, 'value', { r: 0.9, g: 0.9, b: 0.9, a: 1 });
+        const colorField = b.addBlock('Broadcast');
+
+        b.wire(ellipse, 'shape', array, 'element');
+        b.wire(array, 'elements', layout, 'elements');
+        b.wire(layout, 'position', render, 'pos');
+        b.wire(colorConst, 'out', colorField, 'one');
+        b.wire(colorField, 'field', render, 'color');
+      });
+
+      const result = compile(patch);
+      expect(result.kind).toBe('ok');
+      if (result.kind !== 'ok') return;
+
+      const kernelNodes = result.program.valueExprs.nodes.filter((node) => node.kind === 'kernel');
+      const namedKernelFns = kernelNodes.filter((node) => {
+        if (node.kernelKind === 'map') return node.fn.kind === 'kernel';
+        if (node.kernelKind === 'zip') return node.fn.kind === 'kernel';
+        if (node.kernelKind === 'zipPromote') return node.fn.kind === 'kernel';
+        return false;
+      });
+
+      expect(namedKernelFns).toEqual([]);
     });
   });
 });
