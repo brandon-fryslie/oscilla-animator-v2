@@ -3,7 +3,7 @@
  */
 
 import type { AcyclicOrLegalGraph, BlockIndex, DepGraph, SCC } from "../ir/patches";
-import type { BlockId } from "../../types";
+import type { BlockId } from "../../types/compiler";
 import type { CompilerGraphBlock as Block } from "../ir/CompilerGraph";
 
 import type { OrchestratorIRBuilder } from "../ir/OrchestratorIRBuilder";
