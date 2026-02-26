@@ -150,14 +150,14 @@ patch "Attractor Bloom" {
     rows = 16
     cols = 16
     outputs {
-      position = base_render.pos
+      controlPoints = base_render.controlPoints
       controlPoints = soft_attract.points
     }
   }
 
   block "AttractorLayout" "soft_attract" {
     outputs {
-      position = soft_render.pos
+      controlPoints = soft_render.controlPoints
     }
   }
 
@@ -237,7 +237,7 @@ patch "Attractor Bloom" {
 
   block "AttractorLayout" "hard_attract" {
     outputs {
-      position = hard_render.pos
+      controlPoints = hard_render.controlPoints
     }
   }
 

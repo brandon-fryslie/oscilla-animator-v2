@@ -77,7 +77,7 @@ function compileContinuityRenderProgram() {
     b.wire(colorSig, 'out', colorField, 'one');
     b.wire(ellipse, 'shape', array, 'element');
     b.wire(array, 'elements', layout, 'elements');
-    b.wire(layout, 'position', render, 'pos');
+    b.wire(layout, 'controlPoints', render, 'controlPoints');
     b.wire(colorField, 'field', render, 'color');
   });
   const result = compile(patch);

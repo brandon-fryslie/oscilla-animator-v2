@@ -47,7 +47,7 @@ patch "Tile Grid UV" {
     rows = 20
     cols = 20
     outputs {
-      position = render.pos
+      controlPoints = render.controlPoints
     }
   }
 

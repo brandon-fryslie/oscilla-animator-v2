@@ -50,7 +50,7 @@ patch "Golden Spiral" {
     turns = 8
     expansion = 0.4
     outputs {
-      position = render.pos
+      controlPoints = render.controlPoints
     }
   }
 

@@ -24,6 +24,8 @@ import { floatConst, intConst, boolConst, isMany } from '../core/canonical-types
 import type { ValueExpr } from '../compiler/ir/value-expr';
 import type { InstanceId } from '../compiler/ir/Indices';
 import type { ScheduleIR } from '../compiler/backend/schedule-program';
+import type { Step } from '../compiler/ir/types';
+import { getValueExprChildren } from '../runtime/ValueExprTreeWalker';
 
 /**
  * Patch constant values in a compiled program without full recompilation.
@@ -78,6 +80,7 @@ function patchConstants(
   changes: ReadonlyMap<string, unknown>,
 ): CompiledProgramIR | null {
   if (!program.constantProvenance) return null;
+  const runtimeLiveExprIds = collectRuntimeLiveExprIds(program);
 
   const patches: Array<{ exprIndex: number; value: ConstValue }> = [];
 
@@ -91,8 +94,12 @@ function patchConstants(
     if (entry.componentExprIds.length !== constValues.length) return null; // Shape mismatch → fallback
 
     for (let i = 0; i < entry.componentExprIds.length; i++) {
+      const exprIndex = entry.componentExprIds[i] as number;
+      // [LAW:dataflow-not-control-flow] Fast path only patches constants that
+      // are active in runtime dataflow; compile-time-only constants fall back.
+      if (!runtimeLiveExprIds.has(exprIndex)) return null;
       patches.push({
-        exprIndex: entry.componentExprIds[i] as number,
+        exprIndex,
         value: constValues[i],
       });
     }
@@ -107,6 +114,77 @@ function patchConstants(
   }
 
   return { ...program, valueExprs: { nodes: newNodes } };
+}
+
+function collectRuntimeLiveExprIds(program: CompiledProgramIR): Set<number> {
+  // TODO(webgpu-migration): Move runtime-live patchability ownership to the compiler.
+  // [LAW:single-enforcer] Compiler should emit canonical patchability metadata so
+  // the patcher consumes data instead of inferring liveness from schedule shape.
+  // [LAW:one-source-of-truth] Runtime-liveness/patchability must have one authority.
+  const live = new Set<number>();
+  const stack: number[] = [];
+  const nodes = program.valueExprs.nodes;
+  const scheduleSteps = Array.isArray(program.schedule?.steps)
+    ? (program.schedule.steps as readonly Step[])
+    : ([] as readonly Step[]);
+
+  const pushExpr = (exprId: number | undefined | null): void => {
+    if (exprId === undefined || exprId === null) return;
+    if (!Number.isInteger(exprId) || exprId < 0) return;
+    if (!live.has(exprId)) {
+      stack.push(exprId);
+    }
+  };
+
+  for (const step of scheduleSteps) {
+    switch (step.kind) {
+      case 'evalOne':
+      case 'eventDispatch':
+        pushExpr(step.expr as number);
+        break;
+      case 'materialize':
+        pushExpr(step.field as number);
+        break;
+      case 'stateWrite':
+      case 'fieldStateWrite':
+        pushExpr(step.value as number);
+        break;
+      case 'render':
+        if (step.scale?.k === 'one') pushExpr(step.scale.id as number);
+        if (step.shape.k === 'one') {
+          for (const exprId of step.shape.paramExprs) {
+            pushExpr(exprId as number);
+          }
+        }
+        break;
+      case 'continuityMapBuild':
+      case 'continuityApply':
+        break;
+      default: {
+        const _exhaustive: never = step;
+        throw new Error(`Unhandled schedule step kind: ${(_exhaustive as Step).kind}`);
+      }
+    }
+  }
+
+  if (program.fieldSlotRegistry) {
+    for (const entry of program.fieldSlotRegistry.values()) {
+      pushExpr(entry.fieldId as number);
+    }
+  }
+
+  while (stack.length > 0) {
+    const exprId = stack.pop()!;
+    if (live.has(exprId)) continue;
+    live.add(exprId);
+    const expr = nodes[exprId];
+    if (!expr) continue;
+    for (const child of getValueExprChildren(expr)) {
+      pushExpr(child as number);
+    }
+  }
+
+  return live;
 }
 
 /**

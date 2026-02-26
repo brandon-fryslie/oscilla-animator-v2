@@ -78,7 +78,7 @@ patch "Attractor Layout Showcase" {
     rows = 14
     cols = 14
     outputs {
-      position = base-render.pos
+      controlPoints = base-render.controlPoints
       controlPoints = [soft-attract.points, hard-attract.points]
     }
   }
@@ -87,7 +87,7 @@ patch "Attractor Layout Showcase" {
   block "AttractorLayout" "soft-attract" {
     strength = 0.25
     outputs {
-      position = soft-render.pos
+      controlPoints = soft-render.controlPoints
     }
   }
 
@@ -95,7 +95,7 @@ patch "Attractor Layout Showcase" {
   block "AttractorLayout" "hard-attract" {
     strength = 0.85
     outputs {
-      position = hard-render.pos
+      controlPoints = hard-render.controlPoints
     }
   }
 

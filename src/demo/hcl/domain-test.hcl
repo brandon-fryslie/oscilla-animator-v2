@@ -34,7 +34,7 @@ patch "Domain Test" {
   block "CircleLayoutUV" "layout" {
     radius = 0.35
     outputs {
-      position = render.pos
+      controlPoints = render.controlPoints
     }
   }
 

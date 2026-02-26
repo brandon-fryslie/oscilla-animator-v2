@@ -47,7 +47,7 @@ patch "Simple" {
   block "CircleLayoutUV" "layout" {
     radius = 0.2
     outputs {
-      position = render.pos
+      controlPoints = render.controlPoints
     }
   }
 

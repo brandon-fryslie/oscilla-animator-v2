@@ -175,7 +175,7 @@ describe('arenaLayout integration', () => {
       b.wire(colorSignal, 'out', colorField, 'one');
 
       const render = b.addBlock('RenderInstances2D');
-      b.wire(grid, 'position', render, 'pos');
+      b.wire(grid, 'controlPoints', render, 'controlPoints');
       b.wire(colorField, 'field', render, 'color');
     });
 
@@ -223,7 +223,7 @@ describe('arenaLayout integration', () => {
       b.wire(colorSignal, 'out', colorField, 'one');
 
       const render = b.addBlock('RenderInstances2D');
-      b.wire(grid, 'position', render, 'pos');
+      b.wire(grid, 'controlPoints', render, 'controlPoints');
       b.wire(colorField, 'field', render, 'color');
     });
 

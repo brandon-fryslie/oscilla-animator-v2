@@ -33,6 +33,50 @@ import type { ValueExpr } from '../compiler/ir/value-expr';
 
 const MAX_HISTORY = 2000;
 
+interface UserFacingIdentity {
+  readonly blockName: string;
+  readonly portName: string | null;
+}
+
+function emittedIdentityKey(blockId: string, portId: string | null): string {
+  return `${blockId}:${portId ?? ''}`;
+}
+
+function buildUserFacingIdentityMap(debugIndex: DebugIndexIR): Map<string, UserFacingIdentity> {
+  const byIdentity = new Map<string, UserFacingIdentity>();
+  const blockDisplayByStringId = new Map<string, string>();
+
+  // [LAW:one-source-of-truth] Build all user-facing block labels from debugIndex
+  // mappings so debugger naming has a single canonical source.
+  for (const [numericBlockId, stringBlockId] of debugIndex.blockMap.entries()) {
+    const displayName = debugIndex.blockDisplayNames?.get(numericBlockId) ?? stringBlockId;
+    blockDisplayByStringId.set(stringBlockId, displayName);
+    byIdentity.set(
+      emittedIdentityKey(stringBlockId, null),
+      {
+        blockName: displayName,
+        portName: null,
+      },
+    );
+  }
+
+  if (debugIndex.exprProvenance) {
+    for (const provenance of debugIndex.exprProvenance.values()) {
+      const stringBlockId = provenance.blockId as string;
+      const blockName = blockDisplayByStringId.get(stringBlockId) ?? stringBlockId;
+      byIdentity.set(
+        emittedIdentityKey(stringBlockId, provenance.portName),
+        {
+          blockName,
+          portName: provenance.portName,
+        },
+      );
+    }
+  }
+
+  return byIdentity;
+}
+
 export class StepDebugStore {
   /** Whether the step debugger is active (controls animation loop branching) */
   active: boolean = false;
@@ -64,11 +108,15 @@ export class StepDebugStore {
   /** Last compiled program (for WhyNotEvaluated analysis) */
   private _lastProgram: CompiledProgramIR | null = null;
 
+  /** Emitted block/port identity -> user-facing name mapping */
+  private _userFacingIdentityByEmitted = new Map<string, UserFacingIdentity>();
+
   constructor() {
-    makeAutoObservable<StepDebugStore, '_session' | '_disposeSession' | '_lastProgram'>(this, {
+    makeAutoObservable<StepDebugStore, '_session' | '_disposeSession' | '_lastProgram' | '_userFacingIdentityByEmitted'>(this, {
       _session: false,
       _disposeSession: false,
       _lastProgram: false,
+      _userFacingIdentityByEmitted: false,
     });
   }
 
@@ -92,6 +140,7 @@ export class StepDebugStore {
       this.history = [];
       this.lastFrameResult = null;
     });
+    this._userFacingIdentityByEmitted = new Map();
   }
 
   // =========================================================================
@@ -109,6 +158,7 @@ export class StepDebugStore {
 
     const session = new StepDebugSession(program, state, arena);
     this._lastProgram = program;
+    this._userFacingIdentityByEmitted = buildUserFacingIdentityMap(program.debugIndex);
 
     // Apply breakpoints from store
     for (const bp of this.breakpoints) {
@@ -444,6 +494,21 @@ export class StepDebugStore {
   // =========================================================================
 
   /**
+   * Resolve emitted compiler identity to user-facing block/port naming.
+   * Returns null when no mapping is available for the emitted identity.
+   */
+  resolveUserFacingIdentity(blockId: string | null, portId: string | null): UserFacingIdentity | null {
+    if (!blockId) return null;
+    const exact = this._userFacingIdentityByEmitted.get(emittedIdentityKey(blockId, portId));
+    if (exact) return exact;
+    return this._userFacingIdentityByEmitted.get(emittedIdentityKey(blockId, null)) ?? null;
+  }
+
+  get emittedIdentityMap(): ReadonlyMap<string, UserFacingIdentity> {
+    return this._userFacingIdentityByEmitted;
+  }
+
+  /**
    * Determine the root ValueExprId for the current step's expression tree.
    * Returns null for steps that don't have a single root expression
    * (render, continuityMapBuild, continuityApply).
@@ -477,20 +542,7 @@ export class StepDebugStore {
 
     const nodes = program.valueExprs.nodes;
     const exprToBlock = program.debugIndex.exprToBlock;
-    const blockMap = program.debugIndex.blockMap;
-    const blockDisplayNames = program.debugIndex.blockDisplayNames;
     const visited = new Set<number>();
-
-    // blockMap and blockDisplayNames are keyed by numeric indices (BlockId),
-    // but exprProvenance stores string block IDs (e.g. "b0", "_ds_b0_count").
-    // Build a reverse map: string block ID → display name for provenance lookups.
-    // [LAW:one-source-of-truth] blockMap is the canonical numeric→string mapping;
-    // we derive this reverse map from it rather than storing a second source.
-    const stringIdToDisplayName = new Map<string, string>();
-    for (const [numIdx, strId] of blockMap.entries()) {
-      const displayName = blockDisplayNames?.get(numIdx) ?? strId;
-      stringIdToDisplayName.set(strId, displayName);
-    }
 
     const build = (exprId: ValueExprId, depth: number): ExprTreeNode | null => {
       const numId = exprId as number;
@@ -507,9 +559,8 @@ export class StepDebugStore {
 
       visited.add(numId);
 
-      // Resolve provenance-aware block name, port name, and role.
-      // Uses stringIdToDisplayName (built above) since provenance stores string
-      // block IDs but blockMap/blockDisplayNames are keyed by numeric indices.
+      // Resolve block/port identity to user-facing labels via the emitted
+      // identity map derived from program.debugIndex at frame start.
       const prov = program.debugIndex.exprProvenance?.get(exprId);
       let blockName: string | null = null;
       let portName: string | null = null;
@@ -518,56 +569,17 @@ export class StepDebugStore {
       let targetPortId: string | null = null;
 
       if (prov) {
-        if (prov.userTarget) {
-          switch (prov.userTarget.kind) {
-            case 'defaultSource': {
-              const tgtId = prov.userTarget.targetBlockId as string;
-              blockName = stringIdToDisplayName.get(tgtId) ?? null;
-              portName = prov.userTarget.targetPortName;
-              role = 'default';
-              targetBlockId = tgtId;
-              targetPortId = prov.userTarget.targetPortName;
-              break;
-            }
-            case 'adapter': {
-              blockName = prov.userTarget.adapterType;
-              role = 'adapter';
-              targetBlockId = prov.blockId as string;
-              break;
-            }
-            case 'wireState': {
-              blockName = stringIdToDisplayName.get(prov.blockId as string) ?? null;
-              role = 'wireState';
-              targetBlockId = prov.blockId as string;
-              break;
-            }
-            case 'lens': {
-              blockName = stringIdToDisplayName.get(prov.blockId as string) ?? null;
-              role = 'lens';
-              targetBlockId = prov.blockId as string;
-              break;
-            }
-            case 'compositeExpansion': {
-              blockName = stringIdToDisplayName.get(prov.blockId as string) ?? null;
-              role = 'composite';
-              targetBlockId = prov.blockId as string;
-              break;
-            }
-          }
-        } else {
-          // User block — resolve directly
-          blockName = stringIdToDisplayName.get(prov.blockId as string) ?? null;
-          portName = prov.portName;
-          role = 'user';
-          targetBlockId = prov.blockId as string;
-          targetPortId = prov.portName;
-        }
+        const resolved = this.resolveUserFacingIdentity(prov.blockId as string, prov.portName);
+        blockName = resolved?.blockName ?? null;
+        portName = resolved?.portName ?? prov.portName;
+        role = 'user';
+        targetBlockId = prov.blockId as string;
+        targetPortId = prov.portName;
       } else {
         // Fallback: no provenance available (infrastructure exprs like time)
         const blockId = exprToBlock.get(exprId);
-        blockName = blockId != null
-          ? (stringIdToDisplayName.get(blockId as unknown as string) ?? null)
-          : null;
+        const resolved = this.resolveUserFacingIdentity(blockId as string | null, null);
+        blockName = resolved?.blockName ?? null;
       }
 
       // Read cached scalar value
@@ -613,6 +625,7 @@ export class StepDebugStore {
       this.breakpoints = [];
       this.lastFrameResult = null;
     });
+    this._userFacingIdentityByEmitted = new Map();
   }
 
   private _disposeSession(): void {

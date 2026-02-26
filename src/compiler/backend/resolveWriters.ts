@@ -187,9 +187,10 @@ export function enumerateWriters(
     });
   }
 
-  // NOTE: No legacy defaultSource injection here.
+  // NOTE: No legacy fallback injection here.
   // DSConst blocks are materialized by GraphNormalizer.normalize() before compilation.
-  // If writers.length === 0, it means the input has no connection AND no defaultSource,
+  // If writers.length === 0, it means the input has no connection AND no
+  // frontend-materialized fallback writer,
   // which should be caught as an error by the caller.
 
   return writers;

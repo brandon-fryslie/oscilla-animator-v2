@@ -94,15 +94,15 @@ describe('AdapterPolicy (adapters.v1)', () => {
   it('produces a plan with Broadcast adapter for one→many mismatch', () => {
     const g = emptyGraph({
       blocks: [makeBlock('c1', 'Const'), makeBlock('ri', 'RenderInstances2D')],
-      edges: [makeEdge('e1', 'c1', 'out', 'ri', 'pos')],
+      edges: [makeEdge('e1', 'c1', 'out', 'ri', 'controlPoints')],
     });
 
     const facts = makeFacts([
       [draftPortKey('c1', 'out', 'out'), okHint(ONE_FLOAT)],
-      [draftPortKey('ri', 'pos', 'in'), okHint(FIELD_FLOAT)],
+      [draftPortKey('ri', 'controlPoints', 'in'), okHint(FIELD_FLOAT)],
     ]);
 
-    const obl = makeObligation('needsAdapter:c1:out->ri:pos', 'e1', 'c1');
+    const obl = makeObligation('needsAdapter:c1:out->ri:controlPoints', 'e1', 'c1');
     const result = adapterPolicyV1.plan(obl, makeCtx(g, facts));
 
     expect(result.kind).toBe('plan');
@@ -123,15 +123,15 @@ describe('AdapterPolicy (adapters.v1)', () => {
   it('adapter block has elaboration origin', () => {
     const g = emptyGraph({
       blocks: [makeBlock('c1', 'Const'), makeBlock('ri', 'RenderInstances2D')],
-      edges: [makeEdge('e1', 'c1', 'out', 'ri', 'pos')],
+      edges: [makeEdge('e1', 'c1', 'out', 'ri', 'controlPoints')],
     });
 
     const facts = makeFacts([
       [draftPortKey('c1', 'out', 'out'), okHint(ONE_FLOAT)],
-      [draftPortKey('ri', 'pos', 'in'), okHint(FIELD_FLOAT)],
+      [draftPortKey('ri', 'controlPoints', 'in'), okHint(FIELD_FLOAT)],
     ]);
 
-    const obl = makeObligation('needsAdapter:c1:out->ri:pos', 'e1', 'c1');
+    const obl = makeObligation('needsAdapter:c1:out->ri:controlPoints', 'e1', 'c1');
     const result = adapterPolicyV1.plan(obl, makeCtx(g, facts));
 
     expect(result.kind).toBe('plan');
@@ -148,15 +148,15 @@ describe('AdapterPolicy (adapters.v1)', () => {
   it('replacement edges have implicitCoerce role', () => {
     const g = emptyGraph({
       blocks: [makeBlock('c1', 'Const'), makeBlock('ri', 'RenderInstances2D')],
-      edges: [makeEdge('e1', 'c1', 'out', 'ri', 'pos')],
+      edges: [makeEdge('e1', 'c1', 'out', 'ri', 'controlPoints')],
     });
 
     const facts = makeFacts([
       [draftPortKey('c1', 'out', 'out'), okHint(ONE_FLOAT)],
-      [draftPortKey('ri', 'pos', 'in'), okHint(FIELD_FLOAT)],
+      [draftPortKey('ri', 'controlPoints', 'in'), okHint(FIELD_FLOAT)],
     ]);
 
-    const obl = makeObligation('needsAdapter:c1:out->ri:pos', 'e1', 'c1');
+    const obl = makeObligation('needsAdapter:c1:out->ri:controlPoints', 'e1', 'c1');
     const result = adapterPolicyV1.plan(obl, makeCtx(g, facts));
 
     expect(result.kind).toBe('plan');
@@ -171,7 +171,7 @@ describe('AdapterPolicy (adapters.v1)', () => {
     const g = emptyGraph();
     const facts = makeFacts([]);
 
-    const obl = makeObligation('needsAdapter:c1:out->ri:pos', 'nonexistent', 'c1');
+    const obl = makeObligation('needsAdapter:c1:out->ri:controlPoints', 'nonexistent', 'c1');
     const result = adapterPolicyV1.plan(obl, makeCtx(g, facts));
 
     expect(result.kind).toBe('blocked');
@@ -222,15 +222,15 @@ describe('AdapterPolicy (adapters.v1)', () => {
   it('adapter block ID is deterministic and keyed by obligation ID', () => {
     const g = emptyGraph({
       blocks: [makeBlock('c1', 'Const'), makeBlock('ri', 'RenderInstances2D')],
-      edges: [makeEdge('e1', 'c1', 'out', 'ri', 'pos')],
+      edges: [makeEdge('e1', 'c1', 'out', 'ri', 'controlPoints')],
     });
 
     const facts = makeFacts([
       [draftPortKey('c1', 'out', 'out'), okHint(ONE_FLOAT)],
-      [draftPortKey('ri', 'pos', 'in'), okHint(FIELD_FLOAT)],
+      [draftPortKey('ri', 'controlPoints', 'in'), okHint(FIELD_FLOAT)],
     ]);
 
-    const oblId = 'needsAdapter:c1:out->ri:pos';
+    const oblId = 'needsAdapter:c1:out->ri:controlPoints';
     const obl = makeObligation(oblId, 'e1', 'c1');
     const result = adapterPolicyV1.plan(obl, makeCtx(g, facts));
 
@@ -244,15 +244,15 @@ describe('AdapterPolicy (adapters.v1)', () => {
   it('edge IDs use numeric indexing for single-step chains', () => {
     const g = emptyGraph({
       blocks: [makeBlock('c1', 'Const'), makeBlock('ri', 'RenderInstances2D')],
-      edges: [makeEdge('e1', 'c1', 'out', 'ri', 'pos')],
+      edges: [makeEdge('e1', 'c1', 'out', 'ri', 'controlPoints')],
     });
 
     const facts = makeFacts([
       [draftPortKey('c1', 'out', 'out'), okHint(ONE_FLOAT)],
-      [draftPortKey('ri', 'pos', 'in'), okHint(FIELD_FLOAT)],
+      [draftPortKey('ri', 'controlPoints', 'in'), okHint(FIELD_FLOAT)],
     ]);
 
-    const oblId = 'needsAdapter:c1:out->ri:pos';
+    const oblId = 'needsAdapter:c1:out->ri:controlPoints';
     const obl = makeObligation(oblId, 'e1', 'c1');
     const result = adapterPolicyV1.plan(obl, makeCtx(g, facts));
 

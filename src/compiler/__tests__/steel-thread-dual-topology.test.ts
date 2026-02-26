@@ -59,13 +59,13 @@ describe('Steel Thread - Dual Topology with Scale', () => {
 
       b.wire(ellipse, 'shape', arrayA, 'element');
       b.wire(arrayA, 'elements', grid, 'elements');
-      b.wire(grid, 'position', renderA, 'pos');
+      b.wire(grid, 'controlPoints', renderA, 'controlPoints');
       b.wire(colorA, 'out', colorFieldA, 'one');
       b.wire(colorFieldA, 'field', renderA, 'color');
 
       b.wire(rect, 'shape', arrayB, 'element');
       b.wire(arrayB, 'elements', circle, 'elements');
-      b.wire(circle, 'position', renderB, 'pos');
+      b.wire(circle, 'controlPoints', renderB, 'controlPoints');
       b.wire(colorB, 'out', colorFieldB, 'one');
       b.wire(colorFieldB, 'field', renderB, 'color');
 

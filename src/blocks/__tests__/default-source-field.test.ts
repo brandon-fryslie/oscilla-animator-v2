@@ -22,7 +22,7 @@ describe('DefaultSource field cardinality (via adapter system)', () => {
       const grid = b.addBlock('GridLayoutUV');
       b.wire(arr, 'elements', grid, 'elements');
       const render = b.addBlock('RenderInstances2D');
-      b.wire(grid, 'position', render, 'pos');
+      b.wire(grid, 'controlPoints', render, 'controlPoints');
       // color is unconnected — DefaultSource (oneOnly) + Broadcast adapter
     });
 
@@ -43,7 +43,7 @@ describe('DefaultSource field cardinality (via adapter system)', () => {
       const grid = b.addBlock('GridLayoutUV');
       b.wire(arr, 'elements', grid, 'elements');
       const render = b.addBlock('RenderInstances2D');
-      b.wire(grid, 'position', render, 'pos');
+      b.wire(grid, 'controlPoints', render, 'controlPoints');
       // color unconnected — should get a oneOnly DefaultSource + Broadcast adapter
     });
 

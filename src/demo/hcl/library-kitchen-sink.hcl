@@ -391,7 +391,7 @@ patch "Library Kitchen Sink" {
     cols = 12
     rows = 8
     outputs {
-      position = grid-render.pos
+      controlPoints = grid-render.controlPoints
       scale = grid-scale-sub.a
     }
   }
@@ -461,7 +461,7 @@ patch "Library Kitchen Sink" {
   block "CircleLayoutUV" "circle" {
     radius = 0.3
     outputs {
-      position = circle-render.pos
+      controlPoints = circle-render.controlPoints
     }
   }
 
@@ -549,7 +549,7 @@ patch "Library Kitchen Sink" {
     x1 = 0.9
     y1 = 0.2
     outputs {
-      position = line-render.pos
+      controlPoints = line-render.controlPoints
       scale = line-render.scale
     }
   }
@@ -593,7 +593,7 @@ patch "Library Kitchen Sink" {
     spin = 0.9
     expansion = 0.7
     outputs {
-      position = spiral-render.pos
+      controlPoints = spiral-render.controlPoints
     }
   }
 
@@ -632,7 +632,7 @@ patch "Library Kitchen Sink" {
   block "AttractorLayout" "attract-layout" {
     strength = 0.35
     outputs {
-      position = path-render.pos
+      controlPoints = path-render.controlPoints
     }
   }
 

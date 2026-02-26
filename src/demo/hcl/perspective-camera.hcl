@@ -49,7 +49,7 @@ patch "Perspective Camera" {
     rows = 10
     cols = 10
     outputs {
-      position = render.pos
+      controlPoints = render.controlPoints
     }
   }
 

@@ -424,35 +424,72 @@ export class PatchStore {
     id: BlockId,
     params: Partial<Record<string, unknown>>
   ): void {
-    this._hasStructuralChange = true;
     const block = this._data.blocks.get(id);
     if (!block) {
       throw new Error(`Block not found: ${id}`);
     }
 
+    const changedEntries = Object.entries(params).filter(([key, newValue]) => block.params[key] !== newValue);
+    if (changedEntries.length === 0) {
+      return;
+    }
+
+    // [LAW:one-source-of-truth] Track fast-path candidates from canonical block.params
+    // keys regardless of whether the key originated from config or exposed-port UI.
+    for (const [key, newValue] of changedEntries) {
+      this._pendingValueChanges.set(`${id}:${key}`, newValue);
+    }
+
+    const mergedParams = { ...block.params };
+    for (const [key, newValue] of changedEntries) {
+      if (newValue === undefined) {
+        delete mergedParams[key];
+      } else {
+        mergedParams[key] = newValue;
+      }
+    }
+    const blockDef = requireAnyBlockDef(block.type);
+    let updatedInputPorts: Map<string, InputPort> = new Map(block.inputPorts);
+    let portsChanged = false;
+
+    // [LAW:single-enforcer] Keep per-port defaultSource metadata synchronized from
+    // canonical params at the PatchStore mutation boundary.
+    for (const [key, newValue] of changedEntries) {
+      const inputDef = blockDef.inputs[key];
+      if (!inputDef || inputDef.exposedAsPort === false) continue;
+      const existingPort = updatedInputPorts.get(key) ?? { id: key, combineMode: 'last' as const };
+      const syncedDefaultSource = newValue === undefined
+        ? undefined
+        : { blockType: 'Const', output: 'out', params: { value: newValue } };
+      if (existingPort.defaultSource === syncedDefaultSource) continue;
+      portsChanged = true;
+      updatedInputPorts.set(key, {
+        ...existingPort,
+        defaultSource: syncedDefaultSource,
+      });
+    }
+
     // Emit ParamChanged events before updating (capture old values)
     if (this.eventHub && this.getPatchRevision) {
-      for (const [key, newValue] of Object.entries(params)) {
+      for (const [key, newValue] of changedEntries) {
         const oldValue = block.params[key];
-        // Only emit if value actually changed
-        if (oldValue !== newValue) {
-          this.eventHub.emit({
-            type: 'ParamChanged',
-            patchId: this.patchId,
-            patchRevision: this.getPatchRevision(),
-            blockId: id,
-            blockType: block.type,
-            paramKey: key,
-            oldValue,
-            newValue,
-          });
-        }
+        this.eventHub.emit({
+          type: 'ParamChanged',
+          patchId: this.patchId,
+          patchRevision: this.getPatchRevision(),
+          blockId: id,
+          blockType: block.type,
+          paramKey: key,
+          oldValue,
+          newValue,
+        });
       }
     }
 
     this._data.blocks.set(id, {
       ...block,
-      params: { ...block.params, ...params },
+      params: mergedParams,
+      inputPorts: portsChanged ? updatedInputPorts : block.inputPorts,
     });
 
     this.invalidateSnapshot();
@@ -552,9 +589,8 @@ export class PatchStore {
     }
 
     // Classify: value-only if only defaultSource.params changed.
-    // First-time defaultSource setting is also value-only because normalization
-    // already created a derived Const block from the registry default —
-    // the provenance map covers it.
+    // First-time defaultSource setting is also value-only because provenance
+    // keys are target-port based ("blockId:portId"), independent of source topology.
     const isValueOnly = (() => {
       if (!updates.defaultSource) return false;
       const updateKeys = Object.keys(updates);
@@ -587,9 +623,23 @@ export class PatchStore {
     const updatedInputPorts = new Map(block.inputPorts);
     updatedInputPorts.set(portId, updatedPort);
 
+    const blockDef = requireAnyBlockDef(block.type);
+    const inputDef = blockDef.inputs[portId];
+    const nextParams = { ...block.params };
+    if (Object.prototype.hasOwnProperty.call(updates, 'defaultSource') && inputDef?.exposedAsPort !== false) {
+      const nextDefault = updates.defaultSource;
+      if (nextDefault && nextDefault.blockType === 'Const' && nextDefault.output === 'out' && nextDefault.params?.value !== undefined) {
+        // [LAW:one-source-of-truth] Canonical source for user-editable values is block.params.
+        nextParams[portId] = nextDefault.params.value;
+      } else {
+        delete nextParams[portId];
+      }
+    }
+
     // Update block with new ports map
     this._data.blocks.set(blockId, {
       ...block,
+      params: nextParams,
       inputPorts: updatedInputPorts,
     });
 
@@ -1299,7 +1349,7 @@ export class PatchStore {
   /**
    * Consume pending change classification for the fast-path recompile decision.
    *
-   * Returns `{ kind: 'valueOnly', changes }` if only default-source param values
+   * Returns `{ kind: 'valueOnly', changes }` if only canonical value entries
    * changed since the last consumption. Returns `{ kind: 'structural' }` if any
    * structural mutation occurred (or no changes at all).
    *

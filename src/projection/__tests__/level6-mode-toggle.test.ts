@@ -60,7 +60,7 @@ function buildToggleTestPatch() {
 
     b.wire(ellipse, 'shape', array, 'element');
     b.wire(array, 'elements', layout, 'elements');
-    b.wire(layout, 'position', render, 'pos');
+    b.wire(layout, 'controlPoints', render, 'controlPoints');
     b.wire(color, 'out', render, 'color');
     b.wire(ellipse, 'shape', render, 'shape');
   });

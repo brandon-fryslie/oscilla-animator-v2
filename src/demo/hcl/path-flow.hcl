@@ -128,7 +128,7 @@ patch "Path Flow" {
   block "AttractorLayout" "attractor" {
     strength = 0.6
     outputs {
-      position = render.pos
+      controlPoints = render.controlPoints
     }
   }
 

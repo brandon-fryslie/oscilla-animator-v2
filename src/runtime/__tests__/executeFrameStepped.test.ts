@@ -46,7 +46,7 @@ function compileSimplePatch() {
 
     b.wire(ellipse, 'shape', array, 'element');
     b.wire(array, 'elements', layout, 'elements');
-    b.wire(layout, 'position', render, 'pos');
+    b.wire(layout, 'controlPoints', render, 'controlPoints');
     b.wire(colorField, 'field', render, 'color');
   });
 
@@ -80,7 +80,7 @@ function compilePhasorPatch() {
     b.wire(phasor, 'out', layout, 'phase');
 
     const render = b.addBlock('RenderInstances2D');
-    b.wire(layout, 'position', render, 'pos');
+    b.wire(layout, 'controlPoints', render, 'controlPoints');
   });
 
   const result = compile(patch);

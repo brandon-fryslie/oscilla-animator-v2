@@ -34,7 +34,7 @@ patch "Expression Field Ops" {
     rows = 12
     cols = 10
     outputs {
-      position = render.pos
+      controlPoints = render.controlPoints
     }
   }
 

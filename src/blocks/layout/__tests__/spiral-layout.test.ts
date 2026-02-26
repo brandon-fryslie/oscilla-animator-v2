@@ -75,7 +75,7 @@ patch "Test MakeShape2D + SpiralLayout" {
     turns = 3
     expansion = 0.3
     outputs {
-      position = render.pos
+      controlPoints = render.controlPoints
     }
   }
 

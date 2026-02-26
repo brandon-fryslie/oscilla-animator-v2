@@ -27,7 +27,7 @@ patch "Adapter Obligation Name Demo" {
     rows = 4
     cols = 6
     outputs {
-      position = render.pos
+      controlPoints = render.controlPoints
     }
   }
 

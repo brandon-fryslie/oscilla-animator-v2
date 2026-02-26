@@ -78,7 +78,7 @@ patch "Judder Hot-Swap Test" {
 
   block "SpiralLayout" "spiral" {
     outputs {
-      position = render.pos
+      controlPoints = render.controlPoints
     }
   }
 

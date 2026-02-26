@@ -58,6 +58,12 @@ export interface ParamData {
   hint?: UIControlHint;
 }
 
+function tryReadConstDefaultValue(defaultSource: DefaultSource | undefined): unknown {
+  if (!defaultSource) return undefined;
+  if (defaultSource.blockType !== 'Const' || defaultSource.output !== 'out') return undefined;
+  return defaultSource.params?.value;
+}
+
 /**
  * Custom data stored in each ReactFlow node.
  * Adapter-agnostic version of OscillaNodeData.
@@ -207,31 +213,46 @@ export function createNodeFromBlockLike(
     );
   }
 
-  // Build params (blocks don't expose params in BlockDef directly - they're in the block instance)
-  const params: ParamData[] = [];
+  // Build controllable params from one canonical source (block.params), with
+  // deterministic defaults derived at projection time for missing entries.
+  // [LAW:one-source-of-truth] Node controls read/edit canonical params only.
+  const paramsById = new Map<string, ParamData>();
   for (const [inputId, inputDef] of Object.entries(blockDef.inputs)) {
-    if (inputDef.exposedAsPort === false) {
-      const value = block.params[inputId] ?? inputDef.defaultValue;
-      if (value !== undefined) {
-        params.push({
-          id: inputId,
-          label: inputDef.label || inputId,
-          value,
-          hint: inputDef.uiHint,
-        });
-      }
-    }
+    const isExposedPort = inputDef.exposedAsPort !== false;
+    const isConnected = inputConnections.has(inputId);
+    if (isExposedPort && isConnected) continue;
+
+    const portState = block.inputPorts.get(inputId);
+    const effectiveDefaultSource = portState?.defaultSource
+      ?? (inputDef as InputDef & { defaultSource?: DefaultSource }).defaultSource;
+
+    const fromParam = block.params[inputId];
+    const fromConstDefault = tryReadConstDefaultValue(effectiveDefaultSource);
+    const fromDefinitionDefault = inputDef.defaultValue;
+    const value = fromParam ?? fromConstDefault ?? fromDefinitionDefault;
+
+    if (value === undefined) continue;
+
+    paramsById.set(inputId, {
+      id: inputId,
+      label: inputDef.label || inputId,
+      value,
+      hint: inputDef.uiHint,
+    });
   }
 
-  // Add any extra persisted params not represented by config inputs
+  // Add extra persisted params not represented by declared block inputs.
   for (const [paramId, value] of Object.entries(block.params)) {
-    if (params.some((param) => param.id === paramId)) continue;
-    params.push({
+    if (paramsById.has(paramId)) continue;
+    if (paramId === 'payloadType') continue;
+    if (paramId in blockDef.inputs) continue;
+    paramsById.set(paramId, {
       id: paramId,
       label: paramId,
       value,
     });
   }
+  const params = Array.from(paramsById.values());
 
   const commentText = block.type === 'Comment'
     ? (typeof block.params.text === 'string'

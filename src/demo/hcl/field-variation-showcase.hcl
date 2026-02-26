@@ -41,7 +41,7 @@ patch "Field Variation Showcase" {
     expansion = 0.65
     spin = 1
     outputs {
-      position = render.pos
+      controlPoints = render.controlPoints
     }
   }
 

@@ -116,11 +116,18 @@ patch "Orbit" {
     }
   }
 
-  # --- Construct vec3 position ---
+  # --- Construct vec3 position and project to vec2 control points ---
 
   block "Construct" "pos" {
     outputs {
-      out = render.pos
+      out = pos2.refs
+    }
+  }
+
+  block "Expression" "pos2" {
+    expression = "vec2(pos.out.x, pos.out.y)"
+    outputs {
+      out = render.controlPoints
     }
   }
 

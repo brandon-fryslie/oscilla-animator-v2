@@ -19,7 +19,7 @@ describe('DefaultSource event lowering', () => {
       const grid = b.addBlock('GridLayoutUV');
       b.wire(arr, 'elements', grid, 'elements');
       const render = b.addBlock('RenderInstances2D');
-      b.wire(grid, 'position', render, 'pos');
+      b.wire(grid, 'controlPoints', render, 'controlPoints');
 
       const sampleHold = b.addBlock('SampleHold');
       b.wire(time, 'tMs', sampleHold, 'value');

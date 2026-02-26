@@ -92,7 +92,7 @@ patch "Smooth Chase" {
   block "CircleLayoutUV" "outer-ring" {
     radius = 0.35
     outputs {
-      position = render-raw.pos
+      controlPoints = render-raw.controlPoints
     }
   }
 
@@ -132,7 +132,7 @@ patch "Smooth Chase" {
   block "CircleLayoutUV" "inner-ring" {
     radius = 0.18
     outputs {
-      position = render-smooth.pos
+      controlPoints = render-smooth.controlPoints
     }
   }
 

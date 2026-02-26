@@ -74,7 +74,7 @@ patch "Debug Lens Coverage" {
   block "SpiralLayout" "spiral" {
     expansion = 0.72
     outputs {
-      position = render.pos
+      controlPoints = render.controlPoints
       rotation = alpha-shape.in
     }
 
