@@ -15,7 +15,7 @@ import type {
   StepId,
   ValueExprId,
 } from './Indices';
-import type { BlockId, PortId } from '../../types';
+import type { BlockId, PortId } from '../../types/compiler';
 import type { ValueExpr } from './value-expr';
 import type { KernelRegistry } from '../../runtime/KernelRegistry';
 import type { ArenaSlotDescriptor } from '../../runtime/ArenaValueStore';

@@ -14,7 +14,7 @@ import type {
   InstanceId,
   DomainTypeId,
 } from './Indices';
-import type { BlockId } from '../../types';
+import type { BlockId } from '../../types/compiler';
 import type { TopologyId } from '../../shapes/types';
 import type { TimeModelIR } from './schedule';
 import type {

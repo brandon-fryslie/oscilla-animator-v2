@@ -13,11 +13,11 @@
  * Updated: Multi-Input Blocks Integration (2026-01-01)
  */
 
-import type { CombineMode, Edge, CanonicalType } from "../../types";
+import type { CombineMode } from "../../types/compiler";
 import type { OrchestratorIRBuilder } from "../ir/OrchestratorIRBuilder";
 import { isExprRef, type ValueRefExpr } from "../ir/lowerTypes";
 import type { ValueExprId } from "../ir/Indices";
-import { payloadStride, requireInst } from "../../core/canonical-types";
+import { payloadStride, requireInst, type CanonicalType } from "../../core/canonical-types";
 
 // =============================================================================
 // Types
@@ -331,7 +331,14 @@ export function createCombineNode(
  * @param edges - Edges to sort
  * @returns Sorted edges (ascending sortKey, ties broken by ID)
  */
-export function sortEdgesBySortKey(edges: readonly Edge[]): Edge[] {
+// [LAW:locality-or-seam] Backend sorting consumes a minimal edge seam and does
+// not depend on graph-era Edge contracts.
+export interface SortableEdgeRef {
+  readonly id: string;
+  readonly sortKey?: number;
+}
+
+export function sortEdgesBySortKey(edges: readonly SortableEdgeRef[]): SortableEdgeRef[] {
   return [...edges].sort((a, b) => {
     // Sort by sortKey (ascending)
     const sortKeyA = a.sortKey ?? 0;
