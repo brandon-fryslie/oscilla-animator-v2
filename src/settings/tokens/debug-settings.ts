@@ -9,14 +9,12 @@ import { defineSettings } from '../defineSettings';
 export interface DebugSettings extends Record<string, unknown> {
   enabled: boolean;
   traceCardinalitySolver: boolean;
-  assertPhaseBoundaryStateReads: boolean;
 }
 
 export const debugSettings = defineSettings<DebugSettings>('debug', {
   defaults: {
     enabled: true,
     traceCardinalitySolver: false,
-    assertPhaseBoundaryStateReads: false,
   },
   ui: {
     label: 'Debug',
@@ -31,11 +29,6 @@ export const debugSettings = defineSettings<DebugSettings>('debug', {
       traceCardinalitySolver: {
         label: 'Trace Cardinality Solver',
         description: 'Log cardinality solver phases to browser console',
-        control: 'toggle',
-      },
-      assertPhaseBoundaryStateReads: {
-        label: 'Assert Phase Boundary (State)',
-        description: 'Debug assertion: fail when schedule mixes phase-2 state writes before phase-1 reads',
         control: 'toggle',
       },
     },

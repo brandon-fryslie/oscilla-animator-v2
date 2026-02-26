@@ -284,7 +284,7 @@ describe('AnimationLoop', () => {
     expect(globalThis.requestAnimationFrame).toHaveBeenCalledTimes(1);
   });
 
-  it('runs phase-boundary assertion on startup and compile boundaries when enabled', () => {
+  it('runs phase-boundary assertion on startup and compile boundaries', () => {
     executeFrameMock.mockReturnValue({ version: 2, ops: [] } as any);
     const onError = vi.fn();
     const currentProgram = {};
@@ -295,9 +295,6 @@ describe('AnimationLoop', () => {
       getRenderer: () => ({ render: vi.fn() }),
       getArena: () => ({ reset: vi.fn(), getTotalBytes: () => 0 }),
       store: {
-        settings: {
-          get: vi.fn(() => ({ enabled: true, assertPhaseBoundaryStateReads: true })),
-        },
         stepDebug: null,
         diagnostics: {
           recordJank: vi.fn(),
@@ -317,37 +314,6 @@ describe('AnimationLoop', () => {
 
     loop.onCompileSuccess();
     expect(assertSchedulePhaseBoundaryStateReadsMock).toHaveBeenCalledTimes(2);
-  });
-
-  it('does not run phase-boundary assertion when setting is disabled', () => {
-    executeFrameMock.mockReturnValue({ version: 2, ops: [] } as any);
-    const onError = vi.fn();
-    const deps = {
-      getCurrentProgram: () => ({}),
-      getCurrentState: () => ({ health: createHealthMetrics() }),
-      getCanvas: () => ({ width: 100, height: 100 }),
-      getRenderer: () => ({ render: vi.fn() }),
-      getArena: () => ({ reset: vi.fn(), getTotalBytes: () => 0 }),
-      store: {
-        settings: {
-          get: vi.fn(() => ({ enabled: true, assertPhaseBoundaryStateReads: false })),
-        },
-        stepDebug: null,
-        diagnostics: {
-          recordJank: vi.fn(),
-          updateFrameTiming: vi.fn(),
-          updateMemoryStats: vi.fn(),
-        },
-        continuity: { updateFromRuntime: vi.fn() },
-        viewport: { zoom: 1, pan: { x: 0, y: 0 }, setContentBounds: vi.fn() },
-        events: { emit: vi.fn() },
-        getPatchRevision: () => 1,
-      },
-    } as any;
-
-    const loop = startAnimationLoop(deps, createAnimationLoopState(), onError);
-    loop.onCompileSuccess();
-    expect(assertSchedulePhaseBoundaryStateReadsMock).not.toHaveBeenCalled();
   });
 
   it('fails fast when required WebGPU loop dependencies are missing', () => {
