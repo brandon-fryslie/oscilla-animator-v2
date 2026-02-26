@@ -171,6 +171,20 @@ describe('expandComposites', () => {
       expect(result.provenance.edgeMap.get('e1')).toEqual({ kind: 'user' });
       expect(result.provenance.boundaryMap.size).toBe(0);
     });
+
+    it('emits error for dangling user edge endpoints', () => {
+      const blocks = [createBlock('b1', 'Add')];
+      const edges = [createEdge('dangling1', 'b1', 'out', 'missing_block', 'a')];
+      const patch = createPatch(blocks, edges);
+
+      const result = expandComposites(patch);
+      const validationErrors = result.diagnostics.filter(
+        (d) => d.code === 'CompositePostValidationFailed',
+      );
+      expect(validationErrors.length).toBeGreaterThan(0);
+      expect(validationErrors[0]?.message).toContain('dangling1');
+      expect(validationErrors[0]?.message).toContain('missing_block');
+    });
   });
 
   // -------------------------------------------------------------------------
@@ -586,6 +600,45 @@ describe('expandComposites', () => {
       };
 
       expect(() => registerTestComposite(badDef)).toThrow(/INVALID_PORT_MAPPING/);
+    });
+
+    it('fails expansion when internal edge references missing internal block', () => {
+      const badInternalEdgeDef: CompositeBlockDef = {
+        type: 'TestMissingInternalEdgeEndpoint',
+        form: 'composite',
+        label: 'Missing Internal Edge Endpoint',
+        category: 'test',
+        capability: 'pure',
+        internalBlocks: new Map([
+          [internalBlockId('add'), { type: 'Add' }],
+        ]),
+        internalEdges: [
+          {
+            fromBlock: internalBlockId('ghost'),
+            fromPort: 'out',
+            toBlock: internalBlockId('add'),
+            toPort: 'a',
+          },
+        ],
+        exposedInputs: [
+          { externalId: 'a', internalBlockId: internalBlockId('add'), internalPortId: 'a' },
+          { externalId: 'b', internalBlockId: internalBlockId('add'), internalPortId: 'b' },
+        ],
+        exposedOutputs: [
+          { externalId: 'out', internalBlockId: internalBlockId('add'), internalPortId: 'out' },
+        ],
+        inputs: {},
+        outputs: {},
+      };
+      registerTestComposite(badInternalEdgeDef);
+
+      const result = expandComposites(createPatch([createBlock('comp1', 'TestMissingInternalEdgeEndpoint')], []));
+      const validationErrors = result.diagnostics.filter(
+        (d) => d.code === 'CompositePostValidationFailed',
+      );
+      expect(validationErrors.length).toBeGreaterThan(0);
+      expect(validationErrors[0]?.message).toContain('internal edge index 0');
+      expect(validationErrors[0]?.message).toContain('ghost');
     });
   });
 

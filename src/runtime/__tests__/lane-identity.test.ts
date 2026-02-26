@@ -76,12 +76,14 @@ function makeMinimalProgram(opts: {
 function makeEmptyContinuity(): ContinuityState {
   return {
     targets: new Map(),
+    targetOwners: new Map(),
     mappings: new Map(),
     prevDomains: new Map(),
     placementBasis: new Map(),
     lastTModelMs: 0,
     domainChangeThisFrame: false,
     changedInstancesThisFrame: new Set(),
+    dormantInstanceMisses: new Map(),
   };
 }
 

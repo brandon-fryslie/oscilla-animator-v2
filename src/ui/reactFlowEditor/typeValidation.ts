@@ -79,6 +79,7 @@ export const TYPE_COLORS: Record<ConcretePayloadType["kind"], string> = {
   vec3: '#10b981',    // Emerald (darker green for 3D)
   vec4: '#059669',    // Teal (4D vector)
   color: '#ec4899',   // Magenta/Pink
+  shape: '#f59e0b',   // Amber (opaque shape handle)
   bool: '#f97316',    // Orange
   cameraProjection: '#8b5cf6', // Purple (enum-like projection mode)
 };

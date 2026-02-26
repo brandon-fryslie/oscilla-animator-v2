@@ -1,7 +1,7 @@
 /**
  * Payload Types — What the value is made of
  *
- * Closed union of concrete payload kinds (float, int, bool, vec2, vec3, color, cameraProjection).
+ * Closed union of concrete payload kinds (float, int, bool, vec2, vec3, vec4, color, shape, cameraProjection).
  * Stride is NOT stored — use payloadStride() to derive it from kind.
  */
 
@@ -29,7 +29,7 @@ export type CameraProjection = 'orthographic' | 'perspective';
  *
  * Note: 'phase' is NOT a payload - it's float with unit:turns.
  * Note: 'event' and 'domain' are NOT PayloadTypes - they are axis/resource concepts.
- * Note: 'shape' removed per Q6 - shapes are resources, not payloads.
+ * Note: shape is an opaque handle payload (stride 1, unit none).
  */
 export type ConcretePayloadType =
   | { readonly kind: 'float' }
@@ -39,6 +39,7 @@ export type ConcretePayloadType =
   | { readonly kind: 'vec3' }
   | { readonly kind: 'vec4' }
   | { readonly kind: 'color' }
+  | { readonly kind: 'shape' }
   | { readonly kind: 'cameraProjection' };
 
 /**
@@ -63,12 +64,15 @@ export type PayloadKind = ConcretePayloadType['kind'];
 export const FLOAT: ConcretePayloadType = { kind: 'float' } as const;
 /** Int payload type (stride: 1) */
 export const INT: ConcretePayloadType = { kind: 'int' } as const;
+/** Shape handle payload type (stride: 1, opaque reference semantics) */
+export const SHAPE: ConcretePayloadType = { kind: 'shape' } as const;
 /**
  * Handle payload type (u32 semantics, numeric lane transport).
  *
- * [LAW:one-source-of-truth] HANDLE has exactly one canonical representation.
+ * [LAW:one-source-of-truth] HANDLE has exactly one canonical representation:
+ * shape payload kind (opaque reference transported in one lane).
  */
-export const HANDLE: ConcretePayloadType = INT;
+export const HANDLE: ConcretePayloadType = SHAPE;
 /** Bool payload type (stride: 1) */
 export const BOOL: ConcretePayloadType = { kind: 'bool' } as const;
 /** Vec2 payload type (stride: 2) */
@@ -94,6 +98,7 @@ const PAYLOAD_BY_KIND: Record<PayloadKind, ConcretePayloadType> = {
   vec3: VEC3,
   vec4: VEC4,
   color: COLOR,
+  shape: SHAPE,
   cameraProjection: CAMERA_PROJECTION,
 };
 
@@ -113,6 +118,7 @@ const ALLOWED_UNITS: Record<PayloadKind, readonly UnitType['kind'][]> = {
   vec3: ['space'],
   vec4: ['none'],
   color: ['color'],
+  shape: ['none'],
   bool: ['none'],
   cameraProjection: ['none'],
 };
@@ -147,6 +153,7 @@ export function defaultUnitForPayload(payload: PayloadType): UnitType {
     case 'vec3': return unitWorld3();
     case 'vec4': return unitNone();
     case 'color': return unitRgba01();
+    case 'shape': return unitNone();
     case 'bool': return unitNone();
     case 'cameraProjection': return unitNone();
     default: {

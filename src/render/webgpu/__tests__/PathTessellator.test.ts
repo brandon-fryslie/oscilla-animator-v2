@@ -146,4 +146,24 @@ describe('PathTessellator', () => {
     // earcut produces best-effort triangulation for non-simple polygons
     expect(mesh.indexData.length).toBeGreaterThan(0);
   });
+
+  it('invalidates cached mesh when control points mutate in place', () => {
+    const tessellator = new PathTessellator();
+    const geometry = createGeometry(
+      [-1, -1, 1, -1, 1, 1, -1, 1],
+      [0, 1, 1, 1, 4]
+    );
+
+    const meshA = tessellator.getOrCreateMesh(geometry);
+
+    // Mutate the same Float32Array instance in place.
+    geometry.points[0] = -2;
+    geometry.points[1] = -2;
+
+    const meshB = tessellator.getOrCreateMesh(geometry);
+    expect(meshB).not.toBe(meshA);
+    expect(meshB.cacheKey).not.toBe(meshA.cacheKey);
+    expect(meshB.vertexData[0]).toBe(-2);
+    expect(meshB.vertexData[1]).toBe(-2);
+  });
 });
