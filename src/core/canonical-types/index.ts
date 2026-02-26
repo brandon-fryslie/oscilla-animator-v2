@@ -36,6 +36,7 @@ export {
   type PayloadKind,
   FLOAT,
   INT,
+  SHAPE,
   HANDLE,
   BOOL,
   VEC2,
