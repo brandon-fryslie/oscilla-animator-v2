@@ -22,6 +22,7 @@ import { useStores } from '../../stores';
 import type { InternalBlockId } from '../../blocks/composite-types';
 import { getCompositeDefinition } from '../../blocks/registry';
 import { GraphEditorCore, type GraphEditorCoreHandle } from '../graphEditor/GraphEditorCore';
+import type { PortContextMenuRequest } from '../graphEditor/GraphEditorContext';
 import { CompositeStoreAdapter } from '../graphEditor/CompositeStoreAdapter';
 import { ContextMenu, type ContextMenuItem } from '../reactFlowEditor/ContextMenu';
 import { CompositeEditorDslSidebar } from './CompositeEditorDslSidebar';
@@ -179,30 +180,19 @@ export const CompositeEditor = observer(function CompositeEditor() {
     setContextMenu(null);
   }, []);
 
-  // Port context menu handler - called from UnifiedNode via window global
+  // Port context menu handler - called from UnifiedNode via GraphEditorContext
   const handlePortContextMenu = useCallback(
-    (blockId: unknown, portId: unknown, isInput: boolean, event: React.MouseEvent) => {
-      event.preventDefault();
-      event.stopPropagation();
+    ({ blockId, portId, isInput, position }: PortContextMenuRequest) => {
       setContextMenu({
         type: 'port',
         blockId: blockId as InternalBlockId,
         portId: portId as string,
         isInput,
-        position: { top: event.clientY, left: event.clientX },
+        position,
       });
     },
     []
   );
-
-  // Register port context menu handler on window for UnifiedNode access
-  useEffect(() => {
-    if (!compositeEditor.isOpen) return;
-    window.__reactFlowPortContextMenu = handlePortContextMenu;
-    return () => {
-      delete window.__reactFlowPortContextMenu;
-    };
-  }, [compositeEditor.isOpen, handlePortContextMenu]);
 
   // Build context menu items based on what was right-clicked
   const contextMenuItems = useMemo<ContextMenuItem[]>(() => {
@@ -538,6 +528,7 @@ export const CompositeEditor = observer(function CompositeEditor() {
             patch={null}
             onNodeContextMenu={handleNodeContextMenu}
             onEdgeContextMenu={handleEdgeContextMenu}
+            onPortContextMenu={handlePortContextMenu}
             onPaneClick={handlePaneClick}
           />
         </div>
