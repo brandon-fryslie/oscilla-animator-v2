@@ -9,9 +9,7 @@ function cardKind(expr: ValueExpr): 'zero' | 'one' | 'many' {
 }
 
 describe('ValueExpr cardinality invariants', () => {
-  // [LAW:behavior-not-structure] Legacy invariant assumes pre-CT/ICT cardinality fallback behavior.
-  // The migration rewires this path; replace with steel-thread coverage after adapter fixpoint updates.
-  it.skip('kernel/map/zip cardinality matches field inputs', () => {
+  it('kernel/map/zip cardinality matches field inputs', () => {
     const patch = buildPatch((b) => {
       const time = b.addBlock('InfiniteTimeRoot');
 
