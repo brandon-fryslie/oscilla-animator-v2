@@ -40,8 +40,8 @@
 
 import type { BlockId, BlockRole } from '../../types';
 import type { InferenceCanonicalType } from '../../core/inference-types';
-import { deriveEdgeAlias } from '../../graph/edge-alias';
 import type { Block, Edge, Patch, LensAttachment } from '../../graph/Patch';
+import { deriveEdgeAlias } from '../../graph/edge-alias';
 import { derivedLensBlockId } from '../../graph/lens-block-id';
 import { getBlockDefinition, requireBlockDef } from '../../blocks/registry';
 import { findAdapter } from '../../blocks/adapter-spec';
