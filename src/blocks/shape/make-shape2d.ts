@@ -11,7 +11,7 @@
 
 import { registerBlock, requireConfig } from '../registry';
 import { canonicalType, canonicalManyDef, payloadStride, requireInst } from '../../core/canonical-types';
-import { BOOL, FLOAT, VEC2 } from '../../core/canonical-types';
+import { BOOL, FLOAT, HANDLE, VEC2 } from '../../core/canonical-types';
 import { DOMAIN_CONTROL } from '../../core/domain-registry';
 import { registerDynamicTopology } from '../../shapes/registry';
 import { createLinePathTopology } from './_topology-helpers';
@@ -59,7 +59,7 @@ export function register(): void {
       },
     },
     outputs: {
-      shape: { label: 'Shape', type: canonicalType(FLOAT) },
+      shape: { label: 'Shape', type: canonicalType(HANDLE) },
     },
     lower: ({ ctx, inputsById, config }) => {
       // Validate input is field-extent (cardinality many) — I33 enforcement
@@ -103,7 +103,7 @@ export function register(): void {
       const shapeRefSig = ctx.b.shapeRef(
         topologyId,
         [],
-        canonicalType(FLOAT),
+        canonicalType(HANDLE),
         controlPointsInput.id
       );
   

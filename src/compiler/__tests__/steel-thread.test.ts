@@ -84,6 +84,12 @@ describe('Steel Thread - Animated Particles', () => {
     expect(program.generatedComputeProgram?.wgsl).toContain('OFFSET_SLOT_');
     expect(program.drawPrepProgram?.wgsl).toContain('@group(0) @binding(0) var<storage, read_write> indirectArgs: array<u32>;');
     expect(program.drawPrepProgram?.wgsl).toContain('fn cs_main');
+    const shapeRefs = program.valueExprs.nodes.filter((expr) => expr.kind === 'shapeRef');
+    expect(shapeRefs.length).toBeGreaterThan(0);
+    for (const shapeRef of shapeRefs) {
+      // [LAW:one-source-of-truth] Shape wires carry canonical HANDLE semantics.
+      expect(shapeRef.type.payload.kind).toBe('int');
+    }
     const schedule = program.schedule as ScheduleIR;
     expect(schedule.steps.length).toBeGreaterThan(0);
 
@@ -94,6 +100,8 @@ describe('Steel Thread - Animated Particles', () => {
 
     // 3. Verify render output
     expect(frame.ops.length).toBeGreaterThan(0);
+    const renderInstanceDecls = Array.from(schedule.instances.values()).filter((instance) => instance.shapeField != null);
+    expect(renderInstanceDecls.length).toBeGreaterThan(0);
 
     // Should have a draw op with 4 instances
     const drawOp = frame.ops[0];

@@ -55,6 +55,122 @@ export const Shape2DFlags = {
   EVENODD_FILL: 1 << 3,
 } as const;
 
+/**
+ * ShapeBank header word layout (4 x u32 words per shape topology record).
+ */
+export const SHAPE_BANK_HEADER_WORDS = 4;
+
+export enum ShapeBankHeaderWord {
+  IndexCount = 0,
+  IndexOffset = 1,
+  VertexCount = 2,
+  Flags = 3,
+}
+
+export interface ShapeBankHeaderRecord {
+  indexCount: number;
+  indexOffset: number;
+  vertexCount: number;
+  flags: number;
+}
+
+/**
+ * ShapeBankState - Uint32 topology bank + frame-volatile bump allocator.
+ *
+ * [LAW:single-enforcer] RuntimeState owns ShapeBank allocation invariants.
+ */
+export interface ShapeBankState {
+  /** Packed u32 topology bank. */
+  data: Uint32Array;
+  /** Frame-volatile allocator pointer (u32 word offset). */
+  volatilePtr: number;
+  /** Start of volatile region (lower range reserved for static assets). */
+  staticBoundary: number;
+}
+
+/**
+ * Create ShapeBank with optional reserved static region.
+ */
+export function createShapeBank(
+  wordCapacity: number = 0,
+  staticBoundary: number = 0,
+): ShapeBankState {
+  if (!Number.isInteger(wordCapacity) || wordCapacity < 0) {
+    throw new Error('createShapeBank: wordCapacity must be a non-negative integer');
+  }
+  if (!Number.isInteger(staticBoundary) || staticBoundary < 0) {
+    throw new Error('createShapeBank: staticBoundary must be a non-negative integer');
+  }
+  if (staticBoundary > wordCapacity) {
+    throw new Error(
+      `createShapeBank: staticBoundary ${staticBoundary} exceeds capacity ${wordCapacity}`,
+    );
+  }
+  return {
+    data: new Uint32Array(wordCapacity),
+    volatilePtr: staticBoundary,
+    staticBoundary,
+  };
+}
+
+/**
+ * Reset frame-volatile ShapeBank allocator pointer.
+ *
+ * [LAW:dataflow-not-control-flow] Reset is unconditional at frame start.
+ */
+export function resetShapeBankFrameAllocator(shapeBank: ShapeBankState): void {
+  shapeBank.volatilePtr = shapeBank.staticBoundary;
+}
+
+/**
+ * Allocate `words` in frame-volatile ShapeBank region.
+ *
+ * @returns Handle (u32 word offset into ShapeBank)
+ */
+export function allocShapeBankWords(shapeBank: ShapeBankState, words: number): number {
+  if (!Number.isInteger(words) || words <= 0) {
+    throw new Error('allocShapeBankWords: words must be a positive integer');
+  }
+  const start = shapeBank.volatilePtr;
+  const end = start + words;
+  if (end > shapeBank.data.length) {
+    throw new Error(
+      `allocShapeBankWords: out of capacity (need ${end}, capacity ${shapeBank.data.length})`,
+    );
+  }
+  shapeBank.volatilePtr = end;
+  return start;
+}
+
+/**
+ * Read ShapeBank topology header at handle offset.
+ */
+export function readShapeBankHeader(
+  bank: Uint32Array,
+  handle: number,
+): ShapeBankHeaderRecord {
+  return {
+    indexCount: bank[handle + ShapeBankHeaderWord.IndexCount],
+    indexOffset: bank[handle + ShapeBankHeaderWord.IndexOffset],
+    vertexCount: bank[handle + ShapeBankHeaderWord.VertexCount],
+    flags: bank[handle + ShapeBankHeaderWord.Flags],
+  };
+}
+
+/**
+ * Write ShapeBank topology header at handle offset.
+ */
+export function writeShapeBankHeader(
+  bank: Uint32Array,
+  handle: number,
+  header: ShapeBankHeaderRecord,
+): void {
+  bank[handle + ShapeBankHeaderWord.IndexCount] = header.indexCount;
+  bank[handle + ShapeBankHeaderWord.IndexOffset] = header.indexOffset;
+  bank[handle + ShapeBankHeaderWord.VertexCount] = header.vertexCount;
+  bank[handle + ShapeBankHeaderWord.Flags] = header.flags;
+}
+
 // =============================================================================
 // Deterministic Frame Segment Semantics (W13)
 // =============================================================================
@@ -684,6 +800,9 @@ export interface ProgramState {
    * - Cleared at frame start (monotone OR: only append, never remove mid-frame)
    */
   events: Map<number, EventPayload[]>;
+
+  /** Shape topology bank + frame-volatile allocator. */
+  shapeBank: ShapeBankState;
 }
 
 /**
@@ -754,6 +873,9 @@ export interface RuntimeState {
    */
   events: Map<number, EventPayload[]>;
 
+  /** Shape topology bank + frame-volatile allocator. */
+  shapeBank?: ShapeBankState;
+
   // === SessionState fields (survive hot-swap) ===
 
   /** Time state for wrap detection (persistent across frames) */
@@ -798,6 +920,8 @@ export function createProgramState(
   valueExprCount: number = 0,
   arenaTotalFloats: number = 0,
   shape2dSlotCount: number = 0,
+  shapeBankWordCapacity: number = 0,
+  shapeBankStaticBoundary: number = 0,
 ): ProgramState {
   // [LAW:one-source-of-truth] event wrap-edge state lives in eventWrapPredicate;
   // eventExprCount is accepted for callsite compatibility while compile/runtime
@@ -836,6 +960,9 @@ export function createProgramState(
     eventScalars: new Uint8Array(eventSlotCount),
     eventWrapPredicate: new Uint8Array(valueExprCount),
     events: new Map(),
+    // [LAW:single-enforcer] ShapeBank allocator invariants are owned by
+    // createShapeBank(), not duplicated across runtime construction callsites.
+    shapeBank: createShapeBank(shapeBankWordCapacity, shapeBankStaticBoundary),
   };
 }
 
@@ -855,6 +982,8 @@ export function createRuntimeState(
   valueExprCount: number = 0,
   arenaTotalFloats: number = 0,
   shape2dSlotCount: number = 0,
+  shapeBankWordCapacity: number = 0,
+  shapeBankStaticBoundary: number = 0,
 ): RuntimeState {
   const session = createSessionState();
   // [LAW:no-mode-explosion] `slotCount` remains as a compatibility-only
@@ -869,6 +998,8 @@ export function createRuntimeState(
     valueExprCount,
     arenaTotalFloats,
     shape2dSlotCount,
+    shapeBankWordCapacity,
+    shapeBankStaticBoundary,
   );
 }
 
@@ -885,6 +1016,8 @@ export function createRuntimeStateFromSession(
   valueExprCount: number = 0,
   arenaTotalFloats: number = 0,
   shape2dSlotCount: number = 0,
+  shapeBankWordCapacity: number = 0,
+  shapeBankStaticBoundary: number = 0,
 ): RuntimeState {
   const program = createProgramState(
     stateSlotCount,
@@ -893,6 +1026,8 @@ export function createRuntimeStateFromSession(
     valueExprCount,
     arenaTotalFloats,
     shape2dSlotCount,
+    shapeBankWordCapacity,
+    shapeBankStaticBoundary,
   );
   return {
     // ProgramState (fresh)
@@ -908,6 +1043,7 @@ export function createRuntimeStateFromSession(
     eventScalars: program.eventScalars,
     eventWrapPredicate: program.eventWrapPredicate,
     events: program.events,
+    shapeBank: program.shapeBank,
     // SessionState (preserved)
     timeState: session.timeState,
     externalChannels: session.external,
@@ -916,6 +1052,15 @@ export function createRuntimeStateFromSession(
     continuityConfig: session.continuityConfig,
     tap: session.tap,
   };
+}
+
+/**
+ * Reset frame-volatile ShapeBank allocator for a new frame.
+ */
+export function resetFrameVolatileShapeBank(state: RuntimeState): void {
+  if (!state.shapeBank) return;
+  // [LAW:single-enforcer] Frame reset delegates to one allocator boundary.
+  resetShapeBankFrameAllocator(state.shapeBank);
 }
 
 /**
