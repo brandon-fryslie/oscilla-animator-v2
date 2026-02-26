@@ -88,7 +88,7 @@ describe('Steel Thread - Animated Particles', () => {
     expect(shapeRefs.length).toBeGreaterThan(0);
     for (const shapeRef of shapeRefs) {
       // [LAW:one-source-of-truth] Shape wires carry canonical HANDLE semantics.
-      expect(shapeRef.type.payload.kind).toBe('int');
+      expect(shapeRef.type.payload.kind).toBe('shape');
     }
     const schedule = program.schedule as ScheduleIR;
     expect(schedule.steps.length).toBeGreaterThan(0);
