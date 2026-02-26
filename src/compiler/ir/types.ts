@@ -398,7 +398,7 @@ export function stableStateId(blockId: string, stateKind: string): StableStateId
  * // one-vs-many semantics without parallel scalar/field types.
  */
 export interface StateMapping {
-  /** Stable semantic identity */
+  /** Stable semantic identity used for hot-swap migration matching */
   readonly stateId: StableStateId;
   /** Start offset in state array (positional, changes each compile) */
   readonly slotStart: number;

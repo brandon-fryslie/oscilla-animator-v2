@@ -10,7 +10,12 @@
  * @module runtime/StateMigration
  */
 
-import type { FieldSlotDecl, ScalarSlotDecl, StateMapping, StableStateId } from '../compiler/ir/types';
+import type {
+  FieldSlotDecl,
+  ScalarSlotDecl,
+  StateMapping,
+  StableStateId,
+} from '../compiler/ir/types';
 import type { MappingState } from './ContinuityState';
 
 /**
@@ -35,6 +40,7 @@ export interface StateMigrationDetail {
   stateId: StableStateId;
   action: 'migrated' | 'initialized' | 'discarded';
   kind: 'scalar' | 'field';
+  reason?: 'missingOldState' | 'kindChanged' | 'removed';
   lanesMigrated?: number;
   lanesInitialized?: number;
 }
@@ -55,7 +61,7 @@ function mappingKind(mapping: StateMapping): 'scalar' | 'field' {
 /**
  * Migrate state from old program to new program.
  *
- * For scalar state: direct copy if StateId matches.
+ * For scalar state: direct copy if state identity matches.
  * For field state: use lane mapping from continuity service if available.
  *
  * @param oldState - Old state array
@@ -81,14 +87,14 @@ export function migrateState(
     details: [],
   };
 
-  // Build lookup from old mappings
+  // Build lookup from old mappings by stateId.
   const oldByStateId = new Map<StableStateId, StateMapping>();
   for (const mapping of oldMappings) {
     oldByStateId.set(mapping.stateId, mapping);
   }
 
-  // Track which old states were migrated (for discard count)
-  const migratedOldIds = new Set<StableStateId>();
+  // Track which old stateIds were migrated (for discard count)
+  const migratedOldStateIds = new Set<StableStateId>();
 
   // Process each new state mapping
   for (const newMapping of newMappings) {
@@ -102,12 +108,13 @@ export function migrateState(
         stateId: newMapping.stateId,
         action: 'initialized',
         kind: mappingKind(newMapping),
+        reason: 'missingOldState',
       });
       continue;
     }
 
     // State exists in both - migrate
-    migratedOldIds.add(newMapping.stateId);
+    migratedOldStateIds.add(newMapping.stateId);
 
     if (isScalarStateMapping(newMapping) && isScalarStateMapping(oldMapping)) {
       // Scalar to scalar: direct copy
@@ -145,18 +152,20 @@ export function migrateState(
         stateId: newMapping.stateId,
         action: 'initialized',
         kind: mappingKind(newMapping),
+        reason: 'kindChanged',
       });
     }
   }
 
-  // Count discarded states (in old but not in new)
+  // Count discarded states (in old but not migrated to new)
   for (const oldMapping of oldMappings) {
-    if (!migratedOldIds.has(oldMapping.stateId)) {
+    if (!migratedOldStateIds.has(oldMapping.stateId)) {
       result.discarded++;
       result.details.push({
         stateId: oldMapping.stateId,
         action: 'discarded',
         kind: mappingKind(oldMapping),
+        reason: 'removed',
       });
     }
   }
@@ -215,11 +224,23 @@ function migrateFieldState(
   const stride = newMapping.stride;
 
   if (!laneMapping) {
-    // No mapping: copy by index
-    const copyCount = Math.min(oldMapping.laneCount, newMapping.laneCount);
-    const copyStride = Math.min(oldMapping.stride, newMapping.stride);
+    // [LAW:no-silent-fallbacks] Without an explicit lane mapping we only perform
+    // index-based copy when layout is unchanged; otherwise initialize clean state.
+    const canCopyByIndex =
+      oldMapping.instanceId === newMapping.instanceId &&
+      oldMapping.laneCount === newMapping.laneCount;
+    if (!canCopyByIndex) {
+      for (let lane = 0; lane < newMapping.laneCount; lane++) {
+        for (let i = 0; i < stride; i++) {
+          newState[newMapping.slotStart + lane * stride + i] = newMapping.initial[i];
+        }
+        lanesInitialized++;
+      }
+      return { lanesMigrated, lanesInitialized };
+    }
 
-    for (let lane = 0; lane < copyCount; lane++) {
+    const copyStride = Math.min(oldMapping.stride, newMapping.stride);
+    for (let lane = 0; lane < newMapping.laneCount; lane++) {
       for (let i = 0; i < copyStride; i++) {
         newState[newMapping.slotStart + lane * stride + i] =
           oldState[oldMapping.slotStart + lane * oldMapping.stride + i];
@@ -229,14 +250,6 @@ function migrateFieldState(
         newState[newMapping.slotStart + lane * stride + i] = newMapping.initial[i];
       }
       lanesMigrated++;
-    }
-
-    // Initialize new lanes
-    for (let lane = copyCount; lane < newMapping.laneCount; lane++) {
-      for (let i = 0; i < stride; i++) {
-        newState[newMapping.slotStart + lane * stride + i] = newMapping.initial[i];
-      }
-      lanesInitialized++;
     }
   } else {
     // Use lane mapping (byId or byPosition)
