@@ -17,7 +17,7 @@
  */
 
 import type { BlockId, BlockRole } from '../../types';
-import { derivedRole } from '../../types';
+import { blockId, derivedRole } from '../../types';
 import type { Block, Edge, InputPort, OutputPort, Patch } from '../../graph/Patch';
 import { deriveEdgeAlias } from '../../graph/edge-alias';
 import {
@@ -91,6 +91,7 @@ export type ExpansionDiagnosticCode =
   | 'CompositeExpansionDepthExceeded'
   | 'CompositeExpansionSizeExceeded'
   | 'CompositeIdCollision'
+  | 'CompositePostValidationFailed'
   | 'UnusedInterfacePort';
 
 export interface ExpansionDiagnostic {
@@ -189,6 +190,7 @@ export function expandComposites(
   // Find and expand composites
   // We iterate until no composites remain, respecting depth limits per instance
   expandAllComposites([], opts);
+  validateExpandedGraph();
 
   // Sort for determinism
   const sortedBlocks = new Map(
@@ -353,7 +355,21 @@ export function expandComposites(
       const internalEdge = def.internalEdges[edgeIdx];
       const fromId = internalToExpanded.get(internalEdge.fromBlock);
       const toId = internalToExpanded.get(internalEdge.toBlock);
-      if (!fromId || !toId) continue; // validated above
+      if (!fromId || !toId) {
+        const missingRef = !fromId
+          ? `fromBlock="${internalEdge.fromBlock}"`
+          : `toBlock="${internalEdge.toBlock}"`;
+        emitDiagnostic({
+          severity: 'error',
+          code: 'CompositePostValidationFailed',
+          message:
+            `Post-expansion validation failed for composite "${compositeId}" ` +
+            `(instance ${instanceBlock.id}): internal edge index ${edgeIdx} references ` +
+            `missing expanded endpoint (${missingRef})`,
+          at: { instanceBlockId: instanceBlock.id, compositeId, path, innerId: String(edgeIdx) },
+        });
+        return;
+      }
 
       const newEdgeId = expandedEdgeId(path, edgeIdx);
 
@@ -540,6 +556,77 @@ export function expandComposites(
         edgeOrigins.delete(workEdges[i].id);
         workEdges.splice(i, 1);
       }
+    }
+  }
+
+  function validateExpandedGraph(): void {
+    // [LAW:one-source-of-truth] Expanded patch identity is validated against a
+    // single canonical block/edge graph before returning results.
+    const seenBlockIds = new Set<string>();
+    for (const [key, block] of workBlocks.entries()) {
+      if (block.id !== key) {
+        emitDiagnostic({
+          severity: 'error',
+          code: 'CompositeIdCollision',
+          message:
+            `Post-expansion validation failed: block map key "${key}" does not match block.id "${block.id}"`,
+          at: { instanceBlockId: key, innerId: block.id },
+        });
+      }
+      if (seenBlockIds.has(block.id)) {
+        emitDiagnostic({
+          severity: 'error',
+          code: 'CompositeIdCollision',
+          message: `Post-expansion validation failed: duplicate block ID "${block.id}" detected`,
+          at: { instanceBlockId: block.id },
+        });
+      }
+      seenBlockIds.add(block.id);
+    }
+
+    const seenEdgeIds = new Set<string>();
+    for (const edge of workEdges) {
+      if (seenEdgeIds.has(edge.id)) {
+        emitDiagnostic({
+          severity: 'error',
+          code: 'CompositeIdCollision',
+          message: `Post-expansion validation failed: duplicate edge ID "${edge.id}" detected`,
+          at: { innerId: edge.id },
+        });
+      }
+      seenEdgeIds.add(edge.id);
+
+      const missingFrom = !workBlocks.has(blockId(edge.from.blockId));
+      const missingTo = !workBlocks.has(blockId(edge.to.blockId));
+      if (!missingFrom && !missingTo) {
+        continue;
+      }
+
+      const origin = edgeOrigins.get(edge.id);
+      const originPath =
+        origin && origin.kind !== 'user'
+          ? origin.path
+          : undefined;
+      const lastFrame = originPath && originPath.length > 0
+        ? originPath[originPath.length - 1]
+        : undefined;
+      const missingLabels = [
+        missingFrom ? `from="${edge.from.blockId}"` : null,
+        missingTo ? `to="${edge.to.blockId}"` : null,
+      ].filter((value): value is string => value !== null);
+      emitDiagnostic({
+        severity: 'error',
+        code: 'CompositePostValidationFailed',
+        message:
+          `Post-expansion validation failed: edge "${edge.id}" references missing block endpoint(s): ` +
+          missingLabels.join(', '),
+        at: {
+          instanceBlockId: lastFrame?.instanceBlockId,
+          compositeId: lastFrame?.compositeId,
+          path: originPath,
+          innerId: edge.id,
+        },
+      });
     }
   }
 
