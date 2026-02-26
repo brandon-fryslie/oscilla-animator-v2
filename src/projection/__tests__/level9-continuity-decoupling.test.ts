@@ -109,7 +109,7 @@ function createMinimalProgramWithContinuity(count: number): CompiledProgramIR {
           // Continuity apply step (position)
           {
             kind: 'continuityApply' as const,
-            targetKey: 'position:test-instance:pos',
+            targetKey: 'position:test-instance:controlPoints',
             instanceId,
             policy: { kind: 'project', projector: 'byId', post: 'slew', tauMs: 360 } as ContinuityPolicy,
             baseSlot: 10 as ValueSlot,

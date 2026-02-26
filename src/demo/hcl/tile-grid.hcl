@@ -48,7 +48,7 @@ patch "Tile Grid" {
     rows = 20
     cols = 20
     outputs {
-      position = render.pos
+      controlPoints = render.controlPoints
     }
   }
 

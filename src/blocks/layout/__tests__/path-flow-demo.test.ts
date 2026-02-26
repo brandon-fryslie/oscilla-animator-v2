@@ -53,7 +53,7 @@ patch "Path Flow" {
   block "AttractorLayout" "attractor" {
     strength = 0.6
     outputs {
-      position = render.pos
+      controlPoints = render.controlPoints
     }
   }
 
@@ -83,7 +83,7 @@ patch "Path Flow" {
     expect(blockTypes).toContain('RenderInstances2D');
   });
 
-  it('PathLayout has position and rotation outputs', () => {
+  it('PathLayout has controlPoints and rotation outputs', () => {
     const { patch, errors } = deserializePatchFromHCL(hcl);
     expect(errors).toEqual([]);
     const result = compileFrontend(patch);
@@ -93,7 +93,7 @@ patch "Path Flow" {
     expect(pathLayout!.outputPorts.size).toBeGreaterThanOrEqual(2);
   });
 
-  it('AttractorLayout has position output', () => {
+  it('AttractorLayout has controlPoints output', () => {
     const { patch, errors } = deserializePatchFromHCL(hcl);
     expect(errors).toEqual([]);
     const result = compileFrontend(patch);

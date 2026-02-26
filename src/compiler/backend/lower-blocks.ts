@@ -380,8 +380,8 @@ function inferInstanceContext(
   }
 
   // Fallback: look at siblings through shared downstream targets.
-  // This handles DefaultSourceField → RenderInstances2D ← Array,
-  // where DefaultSourceField gets Array's instance via RenderInstances2D's other inputs.
+  // This handles derived field fallback branches that inherit instance context
+  // from sibling inputs on a shared downstream render target.
   // [LAW:one-source-of-truth] Instance ownership still comes from upstream creators;
   // this only discovers that same instance via shared downstream topology.
   const outgoingEdges = edges.filter((e) => e.fromBlock === blockIndex);
@@ -622,29 +622,18 @@ function lowerBlockInstance(
     // Pass block params as config (needed for DSConst blocks to access their value)
     const config = block.params ?? {};
 
-    // [LAW:dataflow-not-control-flow] Always run the validation pass;
-    // do not branch around it per block type.
-    // [LAW:one-source-of-truth] Each key has exactly ONE source.
-    for (const [portId, inputDef] of Object.entries(blockDef.inputs)) {
-      if (inputDef.exposedAsPort !== false) {
-        // Wired source-of-truth: config must NOT contain this key
-        if (portId in config && config[portId] !== undefined) {
-          throw new Error(
-            `HARD ERROR: Block ${block.type}#${block.id} has key '${portId}' in both ` +
-            `config (params) and inputsById. exposedAsPort is not false — ` +
-            `value must come from wired input only.`
-          );
-        }
-      } else {
-        // Config source-of-truth: config MUST contain this key (unless it has a defaultValue)
-        if (inputDef.defaultValue === undefined && config[portId] === undefined) {
+      // [LAW:dataflow-not-control-flow] Always run the validation pass;
+      // do not branch around it per block type.
+      for (const [portId, inputDef] of Object.entries(blockDef.inputs)) {
+        // Config source-of-truth: config MUST contain config-only keys unless
+        // a default exists in the registry definition.
+        if (inputDef.exposedAsPort === false && inputDef.defaultValue === undefined && config[portId] === undefined) {
           throw new Error(
             `HARD ERROR: Block ${block.type}#${block.id} missing config key '${portId}'. ` +
             `exposedAsPort is false — value must be in block.params.`
           );
         }
       }
-    }
 
     // Call lowering function (with existingOutputs if this is phase 2)
     let result = blockDef.lower({ ctx, inputs, inputsById, collectInputsById: resolvedCollectInputsById, config, existingOutputs });
@@ -1171,7 +1160,7 @@ function lowerSCCTwoPass(
 /**
  * Build constant and instance-count provenance maps by scanning edges post-lowering.
  *
- * Source-agnostic: works with any edge topology, not just derived default-source blocks.
+ * Source-agnostic: works with any lowered edge topology.
  * Multi-edge guard: ports with >1 incoming edge are not patchable (combine semantics).
  *
  * For constant provenance:

@@ -18,7 +18,7 @@ function buildRenderPatch(
     b.wire(arr, 'elements', grid, 'elements');
 
     const render = b.addBlock('RenderInstances2D');
-    b.wire(grid, 'position', render, 'pos');
+    b.wire(grid, 'controlPoints', render, 'controlPoints');
 
     wireScale(b, render);
   });

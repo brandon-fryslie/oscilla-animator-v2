@@ -46,13 +46,13 @@ describe('ConstantValueTracker', () => {
     expect(constant?.reason).toBe('computed-constant');
   });
 
-  it('uses per-port default source values when evaluating computed constants', () => {
+  it('uses canonical param values when evaluating computed constants', () => {
     let addId!: BlockId;
     const patch = buildPatch((b) => {
       const c1 = b.addBlock('Const');
       b.setConfig(c1, 'value', 2);
       addId = b.addBlock('Add');
-      b.setPortDefault(addId, 'b', 4);
+      b.setConfig(addId, 'b', 4);
       b.wire(c1, 'out', addId, 'a');
     });
 
@@ -76,7 +76,7 @@ describe('ConstantValueTracker', () => {
       addId = b.addBlock('Add');
       b.wire(active, 'out', addId, 'a');
       b.wire(disabled, 'out', addId, 'b', { enabled: false });
-      b.setPortDefault(addId, 'b', 4);
+      b.setConfig(addId, 'b', 4);
     });
 
     const result = extractConstantValues(patch, [
@@ -99,7 +99,8 @@ describe('ConstantValueTracker', () => {
       lerpId = b.addBlock('Lerp');
       b.wire(start, 'out', lerpId, 'a');
       b.wire(end, 'out', lerpId, 'b');
-      // t intentionally unconnected -> uses defaultSourceConst(0.5)
+      // t intentionally unconnected -> uses canonical param default value
+      b.setConfig(lerpId, 't', 0.5);
     });
 
     const result = extractConstantValues(patch, [

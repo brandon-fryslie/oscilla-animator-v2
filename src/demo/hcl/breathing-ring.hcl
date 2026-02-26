@@ -48,7 +48,7 @@ patch "Breathing Ring" {
   block "CircleLayoutUV" "ring" {
     radius = 0.3
     outputs {
-      position = render.pos
+      controlPoints = render.controlPoints
     }
   }
 

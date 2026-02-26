@@ -56,7 +56,7 @@ patch "Expression Vec3 Orbit" {
       vec3(x, y, 0.0)
     EXPR
     outputs {
-      out = render.pos
+      out = render.controlPoints
     }
   }
 

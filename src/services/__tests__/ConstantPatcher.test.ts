@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { patchProgramConstants } from '../ConstantPatcher';
 import type { CompiledProgramIR } from '../../compiler/ir/program';
-import { canonicalMany, FLOAT, instanceRef, unitNone } from '../../core/canonical-types';
+import { canonicalMany, canonicalType, FLOAT, floatConst, instanceRef, unitNone } from '../../core/canonical-types';
 import { valueSlot } from '../../compiler/ir/Indices';
 import { domainTypeId, instanceId } from '../../core/ids';
 import type { ArenaSlotDescriptor } from '../../runtime/ArenaValueStore';
@@ -82,5 +82,71 @@ describe('ConstantPatcher instance count fast-path', () => {
     const patched = patchProgramConstants(program, new Map([['array-1:count', 7]]));
 
     expect(patched).toBeNull();
+  });
+});
+
+function buildProgramForConstPatch(params: {
+  readonly liveExprId: number;
+  readonly patchExprId: number;
+}): CompiledProgramIR {
+  return {
+    valueExprs: {
+      nodes: [
+        { kind: 'const', value: floatConst(3), type: canonicalType(FLOAT) },
+        { kind: 'const', value: floatConst(5), type: canonicalType(FLOAT) },
+      ],
+    },
+    constantProvenance: new Map([
+      ['shape-1:resolution', { componentExprIds: [params.patchExprId], payloadKind: 'float' }],
+    ]),
+    schedule: {
+      timeModel: { periodAMs: 1000, periodBMs: 2000 },
+      instances: new Map(),
+      steps: [
+        {
+          kind: 'evalOne',
+          expr: params.liveExprId,
+          target: valueSlot(0),
+        },
+      ],
+      stateSlotCount: 0,
+      stateMappings: [],
+      eventSlotCount: 0,
+      eventCount: 0,
+    },
+    slotMeta: [],
+    arenaLayout: [],
+    fieldSlotRegistry: new Map(),
+    debugIndex: {
+      stepToBlock: new Map(),
+      slotToBlock: new Map(),
+      exprToBlock: new Map(),
+      ports: [],
+      slotToPort: new Map(),
+      blockMap: new Map(),
+    },
+  } as unknown as CompiledProgramIR;
+}
+
+describe('ConstantPatcher runtime-liveness guard', () => {
+  it('falls back when provenance points at a compile-time-only const expr', () => {
+    const program = buildProgramForConstPatch({
+      liveExprId: 0,
+      patchExprId: 1,
+    });
+
+    const patched = patchProgramConstants(program, new Map([['shape-1:resolution', 12]]));
+    expect(patched).toBeNull();
+  });
+
+  it('patches constants when provenance points at a runtime-live expr', () => {
+    const program = buildProgramForConstPatch({
+      liveExprId: 1,
+      patchExprId: 1,
+    });
+
+    const patched = patchProgramConstants(program, new Map([['shape-1:resolution', 12]]));
+    expect(patched).not.toBeNull();
+    expect((patched!.valueExprs.nodes[1] as any).value.value).toBe(12);
   });
 });

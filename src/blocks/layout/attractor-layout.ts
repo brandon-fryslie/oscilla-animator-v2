@@ -11,12 +11,11 @@
  *
  * Output:
  *   controlPoints — Field<vec2> deformed control points
- *   position      — Field<vec3> lifted from control points (z=0)
  */
 
 import { registerBlock } from '../registry';
-import { canonicalType, unitWorld3, payloadStride, floatConst, requireInst } from '../../core/canonical-types';
-import { FLOAT, VEC2, VEC3 } from '../../core/canonical-types';
+import { canonicalType, payloadStride, requireInst } from '../../core/canonical-types';
+import { FLOAT, VEC2 } from '../../core/canonical-types';
 import { inferType, cardinalityVar } from '../../core/inference-types';
 import { cardinalityVarId } from '../../core/ids';
 import { defaultSourceConst } from '../../types';
@@ -45,7 +44,6 @@ export function register(): void {
       strength: { label: 'Strength', type: canonicalType(FLOAT), defaultValue: 0.5, defaultSource: defaultSourceConst(0.5), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
     },
     outputs: {
-      position: { label: 'Position', type: inferType(VEC3, unitWorld3(), { cardinality: ATTRACTOR_FIELD_CARD }) },
       controlPoints: { label: 'Control Points', type: inferType(VEC2, { kind: 'none' }, { cardinality: ATTRACTOR_FIELD_CARD }) },
     },
     lower: ({ ctx, inputsById }) => {
@@ -60,10 +58,9 @@ export function register(): void {
         throw new Error('AttractorLayout requires instance context from upstream Array block');
       }
   
-      // Rewrite output type with actual instance
-      const posType = rewriteFieldType(ctx.outTypes[0], instanceId, ctx.instances);
-      const controlPointsType = rewriteFieldType(ctx.outTypes[1], instanceId, ctx.instances);
-      const floatFieldType = { ...posType, payload: FLOAT, unit: { kind: 'none' as const } };
+      // [LAW:one-source-of-truth] Attractor emits only controlPoints as the canonical spatial output.
+      const controlPointsType = rewriteFieldType(ctx.outTypes[0], instanceId, ctx.instances);
+      const floatFieldType = { ...controlPointsType, payload: FLOAT, unit: { kind: 'none' as const } };
   
       // Post-normalization: all inputs guaranteed wired
       // [LAW:one-source-of-truth] inputs are the single source
@@ -88,19 +85,15 @@ export function register(): void {
       const outX = ctx.b.zipAuto([inX, tX, strengthInput.id], lerp, floatFieldType);
       const outY = ctx.b.zipAuto([inY, tY, strengthInput.id], lerp, floatFieldType);
   
-      // Construct outputs: vec2 control points and lifted vec3 positions.
+      // Construct output: vec2 control points.
       const controlPointsField = ctx.b.constructAuto([outX, outY], controlPointsType);
-      const const0 = ctx.b.constant(floatConst(0), canonicalType(FLOAT));
-      const positionField = ctx.b.constructAuto([outX, outY, const0], posType);
   
       return {
         outputsById: {
-          position: { id: positionField, slot: undefined, type: posType, stride: payloadStride(posType.payload) },
           controlPoints: { id: controlPointsField, slot: undefined, type: controlPointsType, stride: payloadStride(controlPointsType.payload) },
         },
         effects: {
           slotRequests: [
-            { portId: 'position', type: posType },
             { portId: 'controlPoints', type: controlPointsType },
           ],
         },

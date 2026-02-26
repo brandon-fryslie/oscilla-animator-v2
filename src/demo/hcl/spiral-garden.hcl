@@ -49,7 +49,7 @@ patch "Spiral Garden" {
     turns = 3
     expansion = 0.8
     outputs {
-      position = render.pos
+      controlPoints = render.controlPoints
     }
   }
 
