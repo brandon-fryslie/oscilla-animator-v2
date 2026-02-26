@@ -5,7 +5,7 @@
  * StepDebugSession, and that computeSlotDeltas produces correct deltas.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll } from 'vitest';
 import { compile } from '../../compiler/compile';
 import { buildPatch } from '../../graph/Patch';
 import { executeFrame } from '../ScheduleExecutor';
@@ -130,9 +130,18 @@ function extractScalarValues(snapshots: StepSnapshot[]): Map<ValueSlot, number> 
 }
 
 describe('Temporal Comparison (Cross-Frame Diff)', () => {
+  let simpleProgram: CompiledProgramIR;
+  let phasorProgram: CompiledProgramIR;
+
+  beforeAll(() => {
+    // [LAW:one-source-of-truth] Reuse canonical compiled fixtures; per-test runtime state remains isolated.
+    simpleProgram = compileSimplePatch();
+    phasorProgram = compilePhasorPatch();
+  });
+
   describe('executeFrameStepped previousFrameValues parameter', () => {
     it('snapshots have null previousFrameValues when no previous frame data is passed', () => {
-      const program = compileSimplePatch();
+      const program = simpleProgram;
       const state = createStateForProgram(program);
       const arena = getTestArena();
 
@@ -147,7 +156,7 @@ describe('Temporal Comparison (Cross-Frame Diff)', () => {
     });
 
     it('snapshots carry previousFrameValues when previous frame data is passed', () => {
-      const program = compileSimplePatch();
+      const program = simpleProgram;
       const state = createStateForProgram(program);
       const arena = getTestArena();
 
@@ -173,7 +182,7 @@ describe('Temporal Comparison (Cross-Frame Diff)', () => {
 
   describe('StepDebugSession cross-frame state', () => {
     it('lastFrameValues is null before any frame completes', () => {
-      const program = compileSimplePatch();
+      const program = simpleProgram;
       const state = createStateForProgram(program);
       const arena = getTestArena();
       const session = new StepDebugSession(program, state, arena);
@@ -182,7 +191,7 @@ describe('Temporal Comparison (Cross-Frame Diff)', () => {
     });
 
     it('lastFrameValues is populated after first frame completes via finishFrame', () => {
-      const program = compileSimplePatch();
+      const program = simpleProgram;
       const state = createStateForProgram(program);
       const arena = getTestArena();
       const session = new StepDebugSession(program, state, arena);
@@ -195,7 +204,7 @@ describe('Temporal Comparison (Cross-Frame Diff)', () => {
     });
 
     it('lastFrameValues is populated after frame completes via stepNext exhaustion', () => {
-      const program = compileSimplePatch();
+      const program = simpleProgram;
       const state = createStateForProgram(program);
       const arena = getTestArena();
       const session = new StepDebugSession(program, state, arena);
@@ -208,7 +217,7 @@ describe('Temporal Comparison (Cross-Frame Diff)', () => {
     });
 
     it('second frame snapshots carry previousFrameValues from first frame', () => {
-      const program = compileSimplePatch();
+      const program = simpleProgram;
       const state = createStateForProgram(program);
       const arena = getTestArena();
       const session = new StepDebugSession(program, state, arena);
@@ -233,7 +242,7 @@ describe('Temporal Comparison (Cross-Frame Diff)', () => {
     });
 
     it('lastFrameValues is populated after frame completes via runToBreakpoint', () => {
-      const program = compileSimplePatch();
+      const program = simpleProgram;
       const state = createStateForProgram(program);
       const arena = getTestArena();
       const session = new StepDebugSession(program, state, arena);
@@ -247,7 +256,7 @@ describe('Temporal Comparison (Cross-Frame Diff)', () => {
     });
 
     it('lastFrameValues persists across frame restarts', () => {
-      const program = compileSimplePatch();
+      const program = simpleProgram;
       const state = createStateForProgram(program);
       const arena = getTestArena();
       const session = new StepDebugSession(program, state, arena);
@@ -382,7 +391,7 @@ describe('Temporal Comparison (Cross-Frame Diff)', () => {
 
   describe('Integration: two frames with executeFrameStepped', () => {
     it('second frame gets previousFrameValues matching first frame slot values', () => {
-      const program = compileSimplePatch();
+      const program = simpleProgram;
       const state = createStateForProgram(program);
 
       // Frame 1 — no previous values
@@ -423,7 +432,7 @@ describe('Temporal Comparison (Cross-Frame Diff)', () => {
 
   describe('Long-horizon state stability', () => {
     it('keeps phasor accumulator bounded under executeFrame over long runs', () => {
-      const program = compilePhasorPatch();
+      const program = phasorProgram;
       const schedule = program.schedule as ScheduleIR;
       const phasorMapping = schedule.stateMappings.find((mapping) => mapping.stateId.endsWith(':phasor'));
       expect(phasorMapping).toBeDefined();
