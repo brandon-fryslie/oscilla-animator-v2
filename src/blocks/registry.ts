@@ -465,6 +465,19 @@ export function getBlockRegistryRevision(): number {
 }
 
 /**
+ * Clear primitive block declarations and live registry state.
+ *
+ * Used by hot-reload registration to rebuild the full primitive catalog from source.
+ */
+export function resetDeclaredBlocks(): void {
+  // [LAW:single-enforcer] Primitive block registry reset is centralized here.
+  declaredRegistry.clear();
+  registry.clear();
+  registryActivated = false;
+  registryRevision++;
+}
+
+/**
  * Activate all declared blocks into the live registry.
  *
  * This is the explicit registration boundary for the application.
