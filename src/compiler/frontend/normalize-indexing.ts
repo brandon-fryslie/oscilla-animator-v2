@@ -52,38 +52,17 @@
 
 import type { BlockId, PortId } from '../../types';
 import type { Block, Edge, Patch } from '../../graph/Patch';
+import type { BlockIndex } from '../ir/BlockIndex';
+import { blockIndex } from '../ir/BlockIndex';
+import type { NormalizedPatch, NormalizedEdge } from '../ir/NormalizedPatch';
 
 // =============================================================================
 // Type Exports
 // =============================================================================
 
-/** Dense block index for array-based access */
-export type BlockIndex = number & { readonly __brand: 'BlockIndex' };
-
-export function blockIndex(n: number): BlockIndex {
-  return n as BlockIndex;
-}
-
-export interface NormalizedPatch {
-  /** Original patch (for reference) */
-  readonly patch: Patch;
-
-  /** Map from BlockId to dense BlockIndex */
-  readonly blockIndex: ReadonlyMap<BlockId, BlockIndex>;
-
-  /** Blocks in index order (includes adapter blocks) */
-  readonly blocks: readonly Block[];
-
-  /** Edges with block indices instead of IDs */
-  readonly edges: readonly NormalizedEdge[];
-}
-
-export interface NormalizedEdge {
-  readonly fromBlock: BlockIndex;
-  readonly fromPort: PortId;
-  readonly toBlock: BlockIndex;
-  readonly toPort: PortId;
-}
+export type { BlockIndex } from '../ir/BlockIndex';
+export { blockIndex } from '../ir/BlockIndex';
+export type { NormalizedPatch, NormalizedEdge } from '../ir/NormalizedPatch';
 
 // =============================================================================
 // Error Types

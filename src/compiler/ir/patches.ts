@@ -19,9 +19,11 @@ import type { CanonicalType } from "../../core/canonical-types";
 import type { CardinalityAcceptance } from "../../core/canonical-types/cardinality";
 import type { CombineMode } from "../../types";
 
-export type { BlockIndex, NormalizedPatch, NormalizedEdge } from "../frontend/normalize-indexing";
+export type { BlockIndex } from "./BlockIndex";
+export type { NormalizedPatch, NormalizedEdge } from "./NormalizedPatch";
 export type { Block, Edge, Patch } from "../../graph/Patch";
-import type { BlockIndex, NormalizedPatch, NormalizedEdge } from "../frontend/normalize-indexing";
+import type { BlockIndex } from "./BlockIndex";
+import type { NormalizedPatch, NormalizedEdge } from "./NormalizedPatch";
 import type { Block } from "../../graph/Patch";
 
 // =============================================================================
