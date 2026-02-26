@@ -25,6 +25,7 @@ export type { CompilerGraph, CompilerGraphBlock, CompilerGraphEdge, CompilerGrap
 import type { BlockIndex } from "./BlockIndex";
 import type { NormalizedPatch, NormalizedEdge } from "./NormalizedPatch";
 import type { CompilerGraphBlock } from "./CompilerGraph";
+export type Block = CompilerGraphBlock;
 
 // =============================================================================
 // Transform Steps (for future edge transforms)
