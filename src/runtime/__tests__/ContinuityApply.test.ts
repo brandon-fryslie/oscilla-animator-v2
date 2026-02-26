@@ -436,6 +436,29 @@ describe('ContinuityApply', () => {
       expect(slewBuffer[5]).toBe(6);
     });
 
+    it('treats partial old lanes as unmapped for bounds safety', () => {
+      // Old buffer has 2 full vec2 lanes plus one dangling scalar.
+      const oldSlew = new Float32Array([10, 20, 30, 40, 50]);
+      const newBase = new Float32Array([1, 2, 3, 4, 5, 6]);
+      const slewBuffer = new Float32Array(6);
+      const mapping: MappingState = { newToOld: new Int32Array([0, 2, 1]) };
+
+      initializeSlewWithMapping(oldSlew, newBase, slewBuffer, mapping, 3, 2);
+
+      // Lane 0 maps to old lane 0.
+      expect(slewBuffer[0]).toBe(10);
+      expect(slewBuffer[1]).toBe(20);
+      // Lane 1 maps to partial old lane 2 -> treated as unmapped, starts at base.
+      expect(slewBuffer[2]).toBe(3);
+      expect(slewBuffer[3]).toBe(4);
+      // Lane 2 maps to old lane 1.
+      expect(slewBuffer[4]).toBe(30);
+      expect(slewBuffer[5]).toBe(40);
+      for (const value of slewBuffer) {
+        expect(Number.isFinite(value)).toBe(true);
+      }
+    });
+
     it('handles stride=3 (vec3) with empty mapping', () => {
       // No old data - all elements should start at base
       const newBase = new Float32Array([1, 2, 3, 4, 5, 6]);
