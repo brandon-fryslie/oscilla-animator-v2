@@ -237,6 +237,9 @@ export function payloadTypeToShapeDescIR(payload: PayloadType): ShapeDescIR {
     case 'cameraProjection':
       // cameraProjection is a scalar enum stored as number (0=ortho, 1=persp)
       return { kind: 'number' };
+    case 'shape':
+      // shape is an opaque handle transported in one numeric lane
+      return { kind: 'number' };
 
     default:
       exhaustiveCheck(payload);
