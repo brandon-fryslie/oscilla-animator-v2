@@ -5,28 +5,21 @@
  * Manages layout initialization and provides callbacks for special panels.
  */
 
-import React, { createContext, useState, useCallback, useEffect } from 'react';
+import React, { createContext, useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import {
   DockviewReact,
-  DockviewDefaultTab,
   type DockviewReadyEvent,
   type DockviewApi,
-  type IDockviewPanelHeaderProps,
 } from 'dockview';
 import 'dockview/dist/styles/dockview.css';
 import { PANEL_COMPONENTS } from './panelRegistry';
 import { createDefaultLayout } from './defaultLayout';
 import { setDockviewApiRef } from './apiRef';
 import type { EditorHandle } from '../editorCommon';
+import { DockviewRightHeaderActions } from './DockviewHeaderActions';
+import { clearStoredDockviewLayout, loadDockviewLayout, saveDockviewLayout } from './layoutPersistence';
+import { DockviewRuntimeCallbacksContext } from './runtimeCallbacks';
 import './theme.css';
-
-/**
- * Custom tab component that hides the close button.
- * We don't have a way to reopen closed panels yet.
- */
-const TabWithoutClose: React.FC<IDockviewPanelHeaderProps> = (props) => {
-  return <DockviewDefaultTab {...props} hideClose />;
-};
 
 // Note: Popout functionality would go here when ready
 // Dockview supports `panel.api.popout()` to open panels in new windows
@@ -57,22 +50,38 @@ export const DockviewProvider: React.FC<DockviewProviderProps> = ({
   onApiReady,
 }) => {
   const [api, setApi] = useState<DockviewApi | null>(null);
+  const saveTimeoutRef = useRef<number | null>(null);
+
+  const runtimeCallbacks = useMemo(
+    () => ({
+      onReactFlowEditorReady,
+      onCanvasReady,
+    }),
+    [onReactFlowEditorReady, onCanvasReady]
+  );
 
   const handleReady = useCallback(
     (event: DockviewReadyEvent) => {
       setApi(event.api);
       setDockviewApiRef(event.api);
 
-      // Build default layout
-      createDefaultLayout(event.api, {
-        onReactFlowEditorReady,
-        onCanvasReady,
-      });
+      const savedLayout = loadDockviewLayout();
+      if (savedLayout) {
+        try {
+          event.api.fromJSON(savedLayout);
+        } catch {
+          // [LAW:single-enforcer] persisted layout repair occurs at this initialization boundary.
+          clearStoredDockviewLayout();
+          createDefaultLayout(event.api);
+        }
+      } else {
+        createDefaultLayout(event.api);
+      }
 
       // Notify parent that API is ready
       onApiReady?.(event.api);
     },
-    [onReactFlowEditorReady, onCanvasReady, onApiReady]
+    [onApiReady]
   );
 
   // Subscribe to active panel changes
@@ -89,6 +98,34 @@ export const DockviewProvider: React.FC<DockviewProviderProps> = ({
   }, [api, onActivePanelChange]);
 
   useEffect(() => {
+    if (!api) {
+      return;
+    }
+
+    const saveLayout = () => {
+      if (saveTimeoutRef.current !== null) {
+        window.clearTimeout(saveTimeoutRef.current);
+      }
+      saveTimeoutRef.current = window.setTimeout(() => {
+        saveTimeoutRef.current = null;
+        saveDockviewLayout(api.toJSON());
+      }, 120);
+    };
+
+    const disposable = api.onDidLayoutChange(() => {
+      saveLayout();
+    });
+
+    return () => {
+      disposable.dispose();
+      if (saveTimeoutRef.current !== null) {
+        window.clearTimeout(saveTimeoutRef.current);
+        saveTimeoutRef.current = null;
+      }
+    };
+  }, [api]);
+
+  useEffect(() => {
     return () => {
       setDockviewApiRef(null);
     };
@@ -96,13 +133,15 @@ export const DockviewProvider: React.FC<DockviewProviderProps> = ({
 
   return (
     <DockviewContext.Provider value={{ api }}>
-      <DockviewReact
-        className="oscilla-dockview"
-        components={PANEL_COMPONENTS}
-        defaultTabComponent={TabWithoutClose}
-        onReady={handleReady}
-        floatingGroupBounds="boundedWithinViewport"
-      />
+      <DockviewRuntimeCallbacksContext.Provider value={runtimeCallbacks}>
+        <DockviewReact
+          className="oscilla-dockview"
+          components={PANEL_COMPONENTS}
+          rightHeaderActionsComponent={DockviewRightHeaderActions}
+          onReady={handleReady}
+          floatingGroupBounds="boundedWithinViewport"
+        />
+      </DockviewRuntimeCallbacksContext.Provider>
     </DockviewContext.Provider>
   );
 };

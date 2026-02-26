@@ -7,13 +7,14 @@
 import React from 'react';
 import type { IDockviewPanelProps } from 'dockview';
 import { CanvasTab } from '../../components/app/CanvasTab';
+import { useDockviewRuntimeCallbacks } from '../runtimeCallbacks';
 
-export const PreviewPanel: React.FC<IDockviewPanelProps<{
-  onCanvasReady?: (canvas: HTMLCanvasElement) => void;
-}>> = ({ params }) => {
+export const PreviewPanel: React.FC<IDockviewPanelProps> = () => {
+  const { onCanvasReady } = useDockviewRuntimeCallbacks();
+
   return (
     <CanvasTab
-      onCanvasReady={params?.onCanvasReady}
+      onCanvasReady={onCanvasReady}
     />
   );
 };
