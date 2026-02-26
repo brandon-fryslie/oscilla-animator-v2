@@ -64,11 +64,16 @@ function requireBlockEffects(
   );
 }
 
+interface LoweringError extends Error {
+  code?: CompileError['code'];
+}
+
+function isLoweringError(error: unknown): error is LoweringError {
+  return error instanceof Error && 'code' in error;
+}
+
 function classifyLoweringErrorCode(error: unknown): CompileError['code'] {
-  if (!(error instanceof Error)) return 'NotImplemented';
-  if (error.message.includes('ExprSyntaxError')) return 'ExprSyntaxError';
-  if (error.message.includes('ExprTypeError')) return 'ExprTypeError';
-  if (error.message.includes('ExprCompileError')) return 'ExprCompileError';
+  if (isLoweringError(error) && error.code !== undefined) return error.code;
   return 'NotImplemented';
 }
 
