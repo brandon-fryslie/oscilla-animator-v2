@@ -472,7 +472,7 @@ export class PatchBuilder {
 
   /**
    * Create a collect edge — a normal edge with role 'collect'.
-   * Collect edges target ports with combineMode: 'collect' and preserve
+   * Collect edges are intended for ports configured with combineMode: 'collect' and preserve
    * individual edge types instead of unifying via union-find.
    */
   wireCollect(

@@ -8,7 +8,7 @@ import { describe, it, expect } from 'vitest';
 import { validateCombineMode } from '../combine-utils';
 
 describe('validateCombineMode', () => {
-  describe('numeric payloads (float, int, vec2)', () => {
+  describe('numeric payloads (float, int, vec2, vec3, vec4)', () => {
     const numericPayloads = ['float', 'int', 'vec2', 'vec3', 'vec4'] as const;
     const allModes = ['sum', 'average', 'max', 'min', 'mul', 'last', 'first'] as const;
 
