@@ -19,6 +19,7 @@ import { JANK_THRESHOLD_MS } from '../stores/DiagnosticsStore';
 import type { RuntimeState } from '../runtime/RuntimeState';
 import type { RootStore } from '../stores';
 import type { RenderFrameIR } from '../render/types';
+import { debugSettings } from '../settings/tokens/debug-settings';
 
 export interface AnimationLoopState {
   frameCount: number;
@@ -124,7 +125,14 @@ function acquireFrame(
   // Normal mode: execute the full schedule
   arena.reset();
   const execStart = performance.now();
-  const frame = executeFrame(currentProgram, currentState, arena, tMs);
+  const debugValues = store.settings.get(debugSettings);
+  const frame = executeFrame(currentProgram, currentState, arena, tMs, {
+    // [LAW:dataflow-not-control-flow] The runtime frame pipeline is fixed; only
+    // assertion data toggles vary at this boundary.
+    assertPhaseBoundaryStateReads: Boolean(
+      debugValues?.enabled && debugValues?.assertPhaseBoundaryStateReads,
+    ),
+  });
   const execTimeMs = performance.now() - execStart;
   return { frame, execTimeMs };
 }
