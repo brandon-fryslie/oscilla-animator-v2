@@ -59,7 +59,7 @@ export function register(): void {
     outputs: {
       elements: {
         label: 'Elements',
-        type: canonicalType(SHAPE, { kind: 'none' }, { cardinality: ARRAY_OUTPUT_CARD }, contractClamp01()),
+        type: canonicalType(SHAPE, { kind: 'none' }, { cardinality: ARRAY_OUTPUT_CARD }),
       },
       index: {
         label: 'Index',
