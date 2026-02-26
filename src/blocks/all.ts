@@ -4,7 +4,7 @@
  * Registers all block declarations explicitly, then activates them in the live registry.
  */
 
-import { activateDeclaredBlocks } from './registry';
+import { activateDeclaredBlocks, resetDeclaredBlocks } from './registry';
 import { registerTimeBlocks } from './time';
 import { registerScalarBlocks } from './scalar';
 import { registerMathBlocks } from './math';
@@ -21,13 +21,13 @@ import { registerDomainBlocks } from './domain';
 import { registerInstanceBlocks } from './instance';
 import { registerDevBlocks } from './dev';
 
-let didRegisterAllBlocks = false;
-
 /**
  * Explicitly activate all declared blocks in the live registry.
  */
 export function registerAllBlocks(): void {
-  if (didRegisterAllBlocks) return;
+  // [LAW:one-source-of-truth] Primitive block catalog is rebuilt from source
+  // registrations every invocation (including HMR refresh paths).
+  resetDeclaredBlocks();
   registerTimeBlocks();
   registerScalarBlocks();
   registerMathBlocks();
@@ -44,5 +44,4 @@ export function registerAllBlocks(): void {
   registerInstanceBlocks();
   registerDevBlocks();
   activateDeclaredBlocks();
-  didRegisterAllBlocks = true;
 }
