@@ -15,23 +15,21 @@ import {
   readShape2D,
   writeShape2D,
 } from '../RuntimeState';
-import { FLOAT } from '../../core/canonical-types';
+import { HANDLE } from '../../core/canonical-types';
 
 // =============================================================================
 // IR Bridges: shape → ShapeDescIR
 // =============================================================================
 
 describe('IR bridges shape kind', () => {
-  it('maps FLOAT to {kind: "number"} descriptor', () => {
-    // Per Q6: SHAPE === FLOAT, so maps to number
-    expect(payloadTypeToShapeDescIR(FLOAT)).toEqual({ kind: 'number' });
+  it('maps HANDLE to {kind: "number"} descriptor', () => {
+    expect(payloadTypeToShapeDescIR(HANDLE)).toEqual({ kind: 'number' });
   });
 
-  it('FLOAT descriptor is {kind: "number"}', () => {
-    const shapeDesc = payloadTypeToShapeDescIR(FLOAT);
-    const numberDesc = payloadTypeToShapeDescIR(FLOAT);
+  it('HANDLE descriptor stays numeric for IR transport', () => {
+    const shapeDesc = payloadTypeToShapeDescIR(HANDLE);
+    const numberDesc = payloadTypeToShapeDescIR(HANDLE);
 
-    // Per Q6: SHAPE was aliased to FLOAT, both are {kind:'number'}
     expect(shapeDesc.kind).toBe(numberDesc.kind);
   });
 });

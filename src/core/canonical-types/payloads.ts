@@ -63,6 +63,12 @@ export type PayloadKind = ConcretePayloadType['kind'];
 export const FLOAT: ConcretePayloadType = { kind: 'float' } as const;
 /** Int payload type (stride: 1) */
 export const INT: ConcretePayloadType = { kind: 'int' } as const;
+/**
+ * Handle payload type (u32 semantics, numeric lane transport).
+ *
+ * [LAW:one-source-of-truth] HANDLE has exactly one canonical representation.
+ */
+export const HANDLE: ConcretePayloadType = INT;
 /** Bool payload type (stride: 1) */
 export const BOOL: ConcretePayloadType = { kind: 'bool' } as const;
 /** Vec2 payload type (stride: 2) */
