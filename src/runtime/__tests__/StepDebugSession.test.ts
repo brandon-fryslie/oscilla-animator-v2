@@ -4,7 +4,7 @@
  * Tests session lifecycle, breakpoint matching, and execution control.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll } from 'vitest';
 import { compile } from '../../compiler/compile';
 import { buildPatch } from '../../graph/Patch';
 import { createRuntimeState } from '../RuntimeState';
@@ -68,9 +68,15 @@ function createStateForProgram(program: CompiledProgramIR) {
 }
 
 describe('StepDebugSession', () => {
+  let program: CompiledProgramIR;
+
+  beforeAll(() => {
+    // [LAW:one-source-of-truth] Compile once; each test derives fresh runtime state from the same canonical IR.
+    program = compileSimplePatch();
+  });
+
   describe('lifecycle', () => {
     it('starts in idle mode', () => {
-      const program = compileSimplePatch();
       const state = createStateForProgram(program);
       const arena = getTestArena();
       const session = new StepDebugSession(program, state, arena);
@@ -81,7 +87,6 @@ describe('StepDebugSession', () => {
     });
 
     it('transitions to paused after startFrame', () => {
-      const program = compileSimplePatch();
       const state = createStateForProgram(program);
       const arena = getTestArena();
       const session = new StepDebugSession(program, state, arena);
@@ -93,7 +98,6 @@ describe('StepDebugSession', () => {
     });
 
     it('transitions to completed after exhausting steps', () => {
-      const program = compileSimplePatch();
       const state = createStateForProgram(program);
       const arena = getTestArena();
       const session = new StepDebugSession(program, state, arena);
@@ -110,7 +114,6 @@ describe('StepDebugSession', () => {
     });
 
     it('throws if startFrame called while frame in progress', () => {
-      const program = compileSimplePatch();
       const state = createStateForProgram(program);
       const arena = getTestArena();
       const session = new StepDebugSession(program, state, arena);
@@ -120,7 +123,6 @@ describe('StepDebugSession', () => {
     });
 
     it('allows starting a new frame after completion', () => {
-      const program = compileSimplePatch();
       const state = createStateForProgram(program);
       const arena = getTestArena();
       const session = new StepDebugSession(program, state, arena);
@@ -138,7 +140,6 @@ describe('StepDebugSession', () => {
 
   describe('stepNext', () => {
     it('advances through all steps and returns null at end', () => {
-      const program = compileSimplePatch();
       const state = createStateForProgram(program);
       const arena = getTestArena();
       const session = new StepDebugSession(program, state, arena);
@@ -157,7 +158,6 @@ describe('StepDebugSession', () => {
     });
 
     it('returns null when session is idle', () => {
-      const program = compileSimplePatch();
       const state = createStateForProgram(program);
       const arena = getTestArena();
       const session = new StepDebugSession(program, state, arena);
@@ -168,7 +168,6 @@ describe('StepDebugSession', () => {
 
   describe('finishFrame', () => {
     it('completes the frame and returns RenderFrameIR', () => {
-      const program = compileSimplePatch();
       const state = createStateForProgram(program);
       const arena = getTestArena();
       const session = new StepDebugSession(program, state, arena);
@@ -183,7 +182,6 @@ describe('StepDebugSession', () => {
     });
 
     it('returns cached result when called after completion', () => {
-      const program = compileSimplePatch();
       const state = createStateForProgram(program);
       const arena = getTestArena();
       const session = new StepDebugSession(program, state, arena);
@@ -195,7 +193,6 @@ describe('StepDebugSession', () => {
     });
 
     it('completes stepped execution without legacy object storage dependencies', () => {
-      const program = compileSimplePatch();
       const state = createStateForProgram(program);
       const arena = getTestArena();
       const session = new StepDebugSession(program, state, arena);
@@ -208,7 +205,6 @@ describe('StepDebugSession', () => {
 
   describe('runToPhaseEnd', () => {
     it('stops at phase-boundary when starting from phase1', () => {
-      const program = compileSimplePatch();
       const state = createStateForProgram(program);
       const arena = getTestArena();
       const session = new StepDebugSession(program, state, arena);
@@ -225,7 +221,6 @@ describe('StepDebugSession', () => {
     });
 
     it('stops at post-frame when starting from phase2', () => {
-      const program = compileSimplePatch();
       const state = createStateForProgram(program);
       const arena = getTestArena();
       const session = new StepDebugSession(program, state, arena);
@@ -253,7 +248,6 @@ describe('StepDebugSession', () => {
 
   describe('breakpoints', () => {
     it('step-index breakpoint stops at correct index', () => {
-      const program = compileSimplePatch();
       const state = createStateForProgram(program);
       const arena = getTestArena();
       const session = new StepDebugSession(program, state, arena);
@@ -272,7 +266,6 @@ describe('StepDebugSession', () => {
     });
 
     it('phase-boundary breakpoint stops at boundary', () => {
-      const program = compileSimplePatch();
       const state = createStateForProgram(program);
       const arena = getTestArena();
       const session = new StepDebugSession(program, state, arena);
@@ -286,7 +279,6 @@ describe('StepDebugSession', () => {
     });
 
     it('runToBreakpoint returns null when no breakpoint matches', () => {
-      const program = compileSimplePatch();
       const state = createStateForProgram(program);
       const arena = getTestArena();
       const session = new StepDebugSession(program, state, arena);
@@ -299,7 +291,6 @@ describe('StepDebugSession', () => {
     });
 
     it('clearBreakpoints removes all breakpoints', () => {
-      const program = compileSimplePatch();
       const state = createStateForProgram(program);
       const arena = getTestArena();
       const session = new StepDebugSession(program, state, arena);
@@ -313,7 +304,6 @@ describe('StepDebugSession', () => {
     });
 
     it('removeBreakpoint removes specific breakpoint', () => {
-      const program = compileSimplePatch();
       const state = createStateForProgram(program);
       const arena = getTestArena();
       const session = new StepDebugSession(program, state, arena);
@@ -331,7 +321,6 @@ describe('StepDebugSession', () => {
 
   describe('history', () => {
     it('accumulates snapshots as steps are executed', () => {
-      const program = compileSimplePatch();
       const state = createStateForProgram(program);
       const arena = getTestArena();
       const session = new StepDebugSession(program, state, arena);
@@ -347,7 +336,6 @@ describe('StepDebugSession', () => {
     });
 
     it('captures canonical numeric/event slot snapshots for stepped execution', () => {
-      const program = compileSimplePatch();
       const state = createStateForProgram(program);
       const arena = getTestArena();
       const session = new StepDebugSession(program, state, arena);
@@ -373,7 +361,6 @@ describe('StepDebugSession', () => {
 
   describe('dispose', () => {
     it('safely finishes frame on dispose', () => {
-      const program = compileSimplePatch();
       const state = createStateForProgram(program);
       const arena = getTestArena();
       const session = new StepDebugSession(program, state, arena);
@@ -390,7 +377,6 @@ describe('StepDebugSession', () => {
     });
 
     it('dispose on idle session is safe', () => {
-      const program = compileSimplePatch();
       const state = createStateForProgram(program);
       const arena = getTestArena();
       const session = new StepDebugSession(program, state, arena);
