@@ -1,20 +1,29 @@
 # AGENTS.md — WebGPU-Complete Migration Execution Rules
 
-This file defines mandatory execution policy for all work under `docs/WebGPU-Complete`.
+This file is mandatory preflight context for any WebGPU migration implementation under `docs/WebGPU-Complete`.
 
 ## Mission
+
 Deliver the WebGPU migration with strict phase discipline, zero partial roll-forward between specs, and no deferred cleanup debt.
 
 // [LAW:verifiable-goals] Completion is accepted only with deterministic evidence (tests/checks), not subjective judgment.
 // [LAW:one-source-of-truth] The spec sequence below is the canonical migration order.
 
+## Required Read Order
+
+Before changing code or tickets for WebGPU work:
+
+1. Read this file.
+2. Read the exact spec document(s) being implemented in this directory.
+3. Confirm the target ticket is ready via `bd ready`.
+
 ## Non-Negotiable Rules
 
-1. **All cleanup steps are blocking.**
-2. **No spec may start until the previous spec is fully complete.**
-3. **No partial completion credit.** A spec is either complete or incomplete.
-4. **No compatibility detours to “go faster.”** Fix forward on the canonical architecture.
-5. **No scope skipping.** If a spec includes refactor, cleanup, tests, docs, and gates, all are required.
+1. All cleanup steps are blocking.
+2. No spec may start until the previous spec is fully complete.
+3. No partial completion credit. A spec is either complete or incomplete.
+4. No compatibility detours to "go faster." Fix forward on the canonical architecture.
+5. No scope skipping. If a spec includes refactor, cleanup, tests, docs, and gates, all are required.
 
 // [LAW:single-enforcer] Completion gates are enforced once per spec by the checklist below; do not invent alternate pass criteria.
 // [LAW:no-mode-explosion] Do not introduce temporary execution modes/flags to bypass unresolved migration work.
@@ -44,7 +53,7 @@ Complete in this exact order:
 19. `P5-3__Phased_Rollout__Engine_Migration_Strategy.md`
 20. `P6-1__GPU_Physics_Engine_with_Compute_Shaders.md`
 
-## Definition of “Spec Complete” (All Required)
+## Definition of "Spec Complete" (All Required)
 
 A spec is complete only if every item below is true:
 
@@ -56,7 +65,7 @@ A spec is complete only if every item below is true:
 6. Documentation impacted by that spec is updated to match actual behavior.
 7. A completion note exists with concrete evidence (commands, outputs, changed files).
 
-If any one of the above fails, the spec is **not complete**.
+If any one of the above fails, the spec is not complete.
 
 ## Execution Protocol Per Spec
 
@@ -69,15 +78,34 @@ If any one of the above fails, the spec is **not complete**.
 
 ## Implementation-Only Discipline
 
-1. **One spec per PR.** Do not mix changes from multiple spec documents in one PR.
-2. **No speculative refactors.** Do not edit code outside current spec scope unless required to satisfy that spec.
-3. **Code is the source of truth.** Completion claims must be backed by passing repository tests/commands listed in the spec, or direct code inspection when no command exists.
-4. **Missing tests means incomplete.** If a spec requirement has no effective test coverage, add tests before declaring the spec complete.
-5. **Cleanup deletions are mandatory.** Leaving dead code/seams behind means the spec is incomplete.
-6. **No meta-process artifacts.** Do not add trackers, ledgers, checklists, or process documents unless a spec explicitly requires them.
+1. One spec per PR. Do not mix changes from multiple spec documents in one PR.
+2. No speculative refactors. Do not edit code outside current spec scope unless required to satisfy that spec.
+3. Code is the source of truth. Completion claims must be backed by passing repository tests/commands listed in the spec, or direct code inspection when no command exists.
+4. Missing tests means incomplete. If a spec requirement has no effective test coverage, add tests before declaring the spec complete.
+5. Cleanup deletions are mandatory. Leaving dead code/seams behind means the spec is incomplete.
+6. No meta-process artifacts. Do not add trackers, ledgers, checklists, or process documents unless a spec explicitly requires them.
 
 // [LAW:behavior-not-structure] Progress is measured by implemented behavior and enforced tests, not process artifacts.
 // [LAW:verifiable-goals] Spec completion requires deterministic, repository-verifiable proof.
+
+## Mechanical Gating Rule
+
+For WebGPU migration tasks, the ticket is executable only if it appears in `bd ready` for the active scope.
+
+Recommended checks:
+
+```bash
+bd dep cycles --json
+bd ready --json --parent <epic-id>
+```
+
+For commit-time enforcement, set `BEAD_ID=<issue-id>` and run:
+
+```bash
+scripts/enforce-webgpu-bead-readiness.sh
+```
+
+This script fails if the ticket has open `blocks` dependencies or is not in `bd ready`.
 
 ## Blocker Handling
 
@@ -90,11 +118,15 @@ If blocked:
 
 // [LAW:dataflow-not-control-flow] Keep execution order fixed by spec sequence; variability belongs in implementation details, not phase ordering.
 
+## Invariant
+
+Do not optimize for speed by skipping ordering. Correct dependency sequencing is part of correctness.
+
 ## Quality Bar
 
 This migration is high-risk and high-coupling. Incomplete cleanup or out-of-order progression causes compounding complexity and potential migration failure. Maintain strict sequential closure.
 
-**Short form policy:**
+Short form policy:
 
 - Cleanup is blocking.
 - Sequence is strict.
