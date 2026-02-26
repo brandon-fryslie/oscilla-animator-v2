@@ -15,15 +15,22 @@ import {
   Tooltip,
   Select,
   ActionIcon,
+  Menu,
   rem,
 } from '@mantine/core';
-import { Settings as SettingsIcon } from '@mui/icons-material';
 import { observer } from 'mobx-react-lite';
 import { useStore } from '../../../stores';
 import { useExportPatch } from '../../hooks/useExportPatch';
 import { clearStorageAndReload } from '../../../services/PatchPersistence';
 import type { DockviewApi } from 'dockview';
 import { Toast } from '../common/Toast';
+import {
+  openOrFocusPanel,
+  resetDockviewLayout,
+  toggleSidebar,
+  toggleSidebars,
+} from '../../dockview/layoutActions';
+import { PANEL_DEFINITIONS } from '../../dockview/panelRegistry';
 
 interface ToolbarProps {
   stats?: string;
@@ -72,6 +79,31 @@ export const Toolbar: React.FC<ToolbarProps> = observer(({ stats = 'FPS: --', do
 
   const handleResetLocalStorage = () => {
     clearStorageAndReload();
+  };
+
+  const handleToggleLeftSidebar = () => {
+    if (!dockviewApi) return;
+    toggleSidebar(dockviewApi, 'left');
+  };
+
+  const handleToggleRightSidebar = () => {
+    if (!dockviewApi) return;
+    toggleSidebar(dockviewApi, 'right');
+  };
+
+  const handleToggleBothSidebars = () => {
+    if (!dockviewApi) return;
+    toggleSidebars(dockviewApi);
+  };
+
+  const handleResetLayout = () => {
+    if (!dockviewApi) return;
+    resetDockviewLayout(dockviewApi);
+  };
+
+  const handleOpenPanel = (panelId: string) => {
+    if (!dockviewApi) return;
+    openOrFocusPanel(dockviewApi, panelId);
   };
 
   const handleNewPatch = () => {
@@ -267,34 +299,68 @@ export const Toolbar: React.FC<ToolbarProps> = observer(({ stats = 'FPS: --', do
                 </Button>
               </Tooltip>
 
-              <Tooltip label="Settings" position="bottom" withArrow>
-                <ActionIcon
-                  variant="subtle"
-                  color="gray"
-                  size="lg"
-                  onClick={() => {
-                    if (dockviewApi) {
-                      const panel = dockviewApi.getPanel('settings');
-                      if (panel) {
-                        const group = panel.group;
-                        if (panel.api.isActive && group) {
-                          // Toggle off: collapse the settings group
-                          group.api.setSize({ width: 0 });
-                        } else if (group) {
-                          // Toggle on: expand and activate
-                          group.api.setSize({ width: 280 });
-                          panel.api.setActive();
-                        }
-                      }
-                    }
-                  }}
-                  style={{
-                    border: '1px solid rgba(139, 92, 246, 0.2)',
-                  }}
-                >
-                  <SettingsIcon style={{ fontSize: rem(18) }} />
-                </ActionIcon>
-              </Tooltip>
+              <Menu shadow="md" width={220} position="bottom-end" withinPortal>
+                <Menu.Target>
+                  <Tooltip label="Layout controls" position="bottom" withArrow>
+                    <ActionIcon
+                      variant="subtle"
+                      color="gray"
+                      size="lg"
+                      style={{
+                        border: '1px solid rgba(139, 92, 246, 0.2)',
+                      }}
+                    >
+                      <span style={{ fontSize: rem(14), fontWeight: 700 }}>☰</span>
+                    </ActionIcon>
+                  </Tooltip>
+                </Menu.Target>
+                <Menu.Dropdown>
+                  <Menu.Label>Layout</Menu.Label>
+                  <Menu.Item onClick={handleToggleBothSidebars} disabled={!dockviewApi}>
+                    Toggle Sidebars
+                  </Menu.Item>
+                  <Menu.Item onClick={handleToggleLeftSidebar} disabled={!dockviewApi}>
+                    Toggle Left Sidebar
+                  </Menu.Item>
+                  <Menu.Item onClick={handleToggleRightSidebar} disabled={!dockviewApi}>
+                    Toggle Right Sidebar
+                  </Menu.Item>
+                  <Menu.Item onClick={handleResetLayout} disabled={!dockviewApi}>
+                    Reset Layout
+                  </Menu.Item>
+                </Menu.Dropdown>
+              </Menu>
+
+              <Menu shadow="md" width={230} position="bottom-end" withinPortal>
+                <Menu.Target>
+                  <Tooltip label="Open/focus panels" position="bottom" withArrow>
+                    <Button
+                      variant="subtle"
+                      color="gray"
+                      size="xs"
+                      styles={{
+                        root: {
+                          border: '1px solid rgba(139, 92, 246, 0.2)',
+                        },
+                      }}
+                    >
+                      Panels
+                    </Button>
+                  </Tooltip>
+                </Menu.Target>
+                <Menu.Dropdown>
+                  <Menu.Label>Panels</Menu.Label>
+                  {PANEL_DEFINITIONS.map((panel) => (
+                    <Menu.Item
+                      key={panel.id}
+                      onClick={() => handleOpenPanel(panel.id)}
+                      disabled={!dockviewApi}
+                    >
+                      {panel.title}
+                    </Menu.Item>
+                  ))}
+                </Menu.Dropdown>
+              </Menu>
 
               <Tooltip label="Export to clipboard (Cmd+E)" position="bottom" withArrow>
                 <Button

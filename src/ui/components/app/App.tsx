@@ -11,14 +11,12 @@
  */
 
 import React, { useCallback, useState, useEffect, useRef } from 'react';
-import { ThemeProvider } from '@mui/material/styles';
 import { MantineProvider, createTheme as createMantineTheme, virtualColor } from '@mantine/core';
 import '@mantine/core/styles.css';
 import { Toolbar } from './Toolbar';
 import { EditorProvider, type EditorHandle, useEditor } from '../../editorCommon';
 import { DockviewProvider } from '../../dockview';
 import type { DockviewApi } from 'dockview';
-import { darkTheme } from '../../theme';
 import { useGlobalHotkeys, type HotkeyFeedback } from '../../hotkeys';
 import { Toast } from '../common/Toast';
 import { useStores, type RootStore } from '../../../stores';
@@ -209,55 +207,53 @@ export const App: React.FC<AppProps> = ({ onCanvasReady, onStoreReady, externalW
 
   return (
     <MantineProvider theme={mantineTheme} defaultColorScheme="dark">
-      <ThemeProvider theme={darkTheme}>
-        <ExternalWriteBusContext.Provider value={externalWriteBus}>
-          {showPreview ? (
-            /* Test automation: full-viewport canvas or errors, zero chrome */
-            <TestPreviewPanel onCanvasReady={handleCanvasReady} />
-          ) : (
-            <EditorProvider>
-            {/* Capture EditorContext methods */}
-            <EditorContextCapture
-              contextRef={editorContextRef}
-              onReady={handleEditorContextReady}
-            />
-            <GlobalHotkeys onFeedback={handleHotkeyFeedback} />
+      <ExternalWriteBusContext.Provider value={externalWriteBus}>
+        {showPreview ? (
+          /* Test automation: full-viewport canvas or errors, zero chrome */
+          <TestPreviewPanel onCanvasReady={handleCanvasReady} />
+        ) : (
+          <EditorProvider>
+          {/* Capture EditorContext methods */}
+          <EditorContextCapture
+            contextRef={editorContextRef}
+            onReady={handleEditorContextReady}
+          />
+          <GlobalHotkeys onFeedback={handleHotkeyFeedback} />
 
-            <div
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                height: '100vh',
-                overflow: 'hidden',
-                background: '#1a1a2e',
-                color: '#eee',
-                fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
-              }}
-            >
-              <Toolbar stats={stats} dockviewApi={dockviewApi} />
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              height: '100vh',
+              overflow: 'hidden',
+              background: '#1a1a2e',
+              color: '#eee',
+              fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+            }}
+          >
+            <Toolbar stats={stats} dockviewApi={dockviewApi} />
 
-              {/* Dockview workspace - all panels managed by Dockview */}
-              <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
-                <DockviewProvider
-                  onReactFlowEditorReady={handleReactFlowEditorReady}
-                  onCanvasReady={handleCanvasReady}
-                  onActivePanelChange={handleActivePanelChange}
-                  onApiReady={setDockviewApi}
-                />
-              </div>
+            {/* Dockview workspace - all panels managed by Dockview */}
+            <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
+              <DockviewProvider
+                onReactFlowEditorReady={handleReactFlowEditorReady}
+                onCanvasReady={handleCanvasReady}
+                onActivePanelChange={handleActivePanelChange}
+                onApiReady={setDockviewApi}
+              />
             </div>
+          </div>
 
-            {/* Toast for keyboard shortcut feedback */}
-            <Toast
-              open={toastOpen}
-              message={toastMessage}
-              severity={toastSeverity}
-              onClose={handleToastClose}
-            />
-          </EditorProvider>
-          )}
-        </ExternalWriteBusContext.Provider>
-      </ThemeProvider>
+          {/* Toast for keyboard shortcut feedback */}
+          <Toast
+            open={toastOpen}
+            message={toastMessage}
+            severity={toastSeverity}
+            onClose={handleToastClose}
+          />
+        </EditorProvider>
+        )}
+      </ExternalWriteBusContext.Provider>
     </MantineProvider>
   );
 };
