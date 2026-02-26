@@ -82,10 +82,10 @@ export type CompileResult = CompileSuccess | CompileFailure;
 export interface CompileOptions {
   readonly patchId?: string;
   readonly patchRevision?: number;
-  readonly events: EventHub;
-  /** Precomputed frontend result. When provided, compile() reuses it. Otherwise runs compileFrontend() internally. */
-  readonly precomputedFrontend?: FrontendResult;
+  readonly events?: EventHub;
 }
+
+export type CompileFromFrontendOptions = CompileOptions;
 
 // =============================================================================
 // Main Compile Function
@@ -99,6 +99,21 @@ export interface CompileOptions {
  * @returns CompileResult with either the compiled program or errors
  */
 export function compile(patch: Patch, options?: CompileOptions): CompileResult {
+  // [LAW:single-enforcer] Raw Patch enters backend pipeline only through this boundary.
+  const frontend = compileFrontend(patch);
+  return compileFromFrontend(frontend, options);
+}
+
+/**
+ * Compile using precomputed frontend output.
+ *
+ * Used by worker/orchestrator paths to avoid rerunning frontend while keeping
+ * the backend contract independent from raw Patch plumbing.
+ */
+export function compileFromFrontend(
+  frontend: FrontendResult,
+  options?: CompileFromFrontendOptions,
+): CompileResult {
   const compileId = options?.patchId ? `${options.patchId}:${options.patchRevision || 0}` : 'unknown';
 
   // [LAW:one-source-of-truth] compile() owns the inspector snapshot lifecycle unconditionally.
@@ -106,20 +121,13 @@ export function compile(patch: Patch, options?: CompileOptions): CompileResult {
   compilationInspector.beginCompile(compileId);
 
   try {
-    // =========================================================================
-    // Frontend: Use precomputed result or run compileFrontend()
-    // [LAW:dataflow-not-control-flow] compileFrontend always returns FrontendResult.
-    // =========================================================================
-    const frontend: FrontendResult = options?.precomputedFrontend
-      ? options.precomputedFrontend
-      : compileFrontend(patch);
-
     if (!frontend.backendReady) {
       return makeFailure(frontend.errors.map(frontendErrorToCompileError));
     }
 
     const normalized = frontend.normalizedPatch;
     const typedPatch = frontend.typedPatch;
+    const patch = normalized.patch;
 
     // Capture frontend passes (for inspection)
     compilationInspector.capturePass('normalization', patch, normalized);

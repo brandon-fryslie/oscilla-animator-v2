@@ -17,7 +17,7 @@
  */
 
 import type { BlockIRBuilder } from './BlockIRBuilder';
-import type { BlockIndex } from '../frontend/normalize-indexing';
+import type { BlockIndex } from './BlockIndex';
 import type { CanonicalType } from '../../core/canonical-types';
 import { payloadStride } from '../../core/canonical-types';
 import type { ValueExprId } from './Indices';

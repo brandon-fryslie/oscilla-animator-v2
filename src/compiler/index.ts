@@ -1,6 +1,6 @@
 // Export compiler types (selective to avoid conflicts)
-export { compile } from './compile';
-export type { CompileResult, CompileFailure } from './compile';
+export { compile, compileFromFrontend } from './compile';
+export type { CompileResult, CompileFailure, CompileFromFrontendOptions } from './compile';
 
 // Export IR types (selective to avoid conflicts)
 export { createIRBuilder, IRBuilderImpl } from './ir';
