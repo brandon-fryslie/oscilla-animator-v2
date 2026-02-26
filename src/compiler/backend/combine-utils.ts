@@ -27,7 +27,7 @@ import { payloadStride, requireInst } from "../../core/canonical-types";
  * Core payload domains for combine operations.
  */
 export const NUMERIC_PAYLOADS = ['float', 'int', 'vec2', 'vec3', 'vec4'] as const;
-export type CorePayload = typeof NUMERIC_PAYLOADS[number] | 'color' | 'bool';
+export type CorePayload = 'float' | 'int' | 'vec2' | 'color' | 'bool';
 
 /**
  * Combine policy - controls when and how multiple writers are combined.

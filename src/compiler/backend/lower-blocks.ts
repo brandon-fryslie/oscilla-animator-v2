@@ -64,12 +64,18 @@ function requireBlockEffects(
   );
 }
 
+const EXPRESSION_ERROR_CODES = new Set<CompileError['code']>([
+  'ExprSyntaxError',
+  'ExprTypeError',
+  'ExprCompileError',
+]);
+
 function classifyLoweringErrorCode(error: unknown): CompileError['code'] {
-  if (!error || typeof error !== 'object') return 'NotImplemented';
+  if (typeof error !== 'object' || error === null) return 'NotImplemented';
   if ('code' in error) {
     const code = (error as { code?: unknown }).code;
-    if (typeof code === 'string' && (code === 'ExprSyntaxError' || code === 'ExprTypeError' || code === 'ExprCompileError')) {
-      return code;
+    if (typeof code === 'string' && EXPRESSION_ERROR_CODES.has(code as CompileError['code'])) {
+      return code as CompileError['code'];
     }
   }
   return 'NotImplemented';
