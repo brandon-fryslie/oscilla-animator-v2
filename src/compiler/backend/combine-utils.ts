@@ -81,6 +81,11 @@ export function validateCombineMode(
     return { valid: true }; // Validated separately in caller
   }
 
+  // collect/array bypass combine semantics (per-edge types are preserved)
+  if (mode === 'collect' || mode === 'array') {
+    return { valid: true };
+  }
+
   // 'last' and 'first' are always valid for all worlds and domains
   if (mode === 'last' || mode === 'first') {
     return { valid: true };
@@ -105,7 +110,7 @@ export function validateCombineMode(
   // Domain-specific validation for one/many worlds
   // Normalize payload to kind string (handles both string and object forms)
   const payloadKind = typeof payload === 'string' ? payload : payload;
-  const numericPayloads = ['float', 'int', 'vec2', 'vec3'];
+  const numericPayloads = ['float', 'int', 'vec2', 'vec3', 'vec4'];
   if (numericPayloads.includes(payloadKind)) {
     if (mode === 'sum' || mode === 'average' || mode === 'max' || mode === 'min' || mode === 'mul') {
       return { valid: true };
@@ -138,7 +143,7 @@ export function validateCombineMode(
     };
   }
 
-  // Boolean and other domains only support 'last' and 'first'
+  // Other domains only support 'last' and 'first'
   return {
     valid: false,
     reason: `Payload "${payload}" only supports combineMode "last" or "first"`,

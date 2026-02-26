@@ -40,7 +40,7 @@
 
 import type { BlockId, BlockRole } from '../../types';
 import type { InferenceCanonicalType } from '../../core/inference-types';
-import { normalizeCanonicalName } from '../../core/canonical-name';
+import { deriveEdgeAlias } from '../../graph/edge-alias';
 import type { Block, Edge, Patch, LensAttachment } from '../../graph/Patch';
 import { derivedLensBlockId } from '../../graph/lens-block-id';
 import { getBlockDefinition, requireBlockDef } from '../../blocks/registry';
@@ -99,22 +99,6 @@ function getPortType(
   const ports = direction === 'input' ? blockDef.inputs : blockDef.outputs;
   const port = ports[portId];
   return port?.type ?? null;
-}
-
-function deriveEdgeAlias(
-  from: Edge['from'],
-  blocks: ReadonlyMap<BlockId, Block>,
-): string {
-  // [LAW:single-enforcer] Adapter/lens expansion assigns canonical aliases at edge creation.
-  if (from.kind !== 'port') {
-    throw new Error(`Cannot derive edge alias from endpoint kind '${from.kind}'`);
-  }
-  const source = blocks.get(from.blockId as BlockId);
-  if (!source) {
-    throw new Error(`Cannot derive edge alias: source block '${from.blockId}' not found`);
-  }
-  const canonical = source.displayName ? normalizeCanonicalName(source.displayName) : source.id;
-  return `${canonical}.${from.slotId}`;
 }
 
 /**

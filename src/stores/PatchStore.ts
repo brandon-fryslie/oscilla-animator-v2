@@ -21,6 +21,7 @@ import { getBlockDefinition } from '../blocks/registry';
 import { normalizeCanonicalName, detectCanonicalNameCollisions } from '../core/canonical-name';
 import { exportPatchAsHCL, importPatchFromHCL, savePatchToStorage } from '../services/PatchPersistence';
 import { derivedLensParamKey } from '../graph/lens-block-id';
+import { deriveEdgeAlias } from '../graph/edge-alias';
 import { nextLensAttachmentId } from '../graph/lens-id';
 import type { PatchDslError } from '../patch-dsl';
 
@@ -104,25 +105,6 @@ function samePortEndpoints(a: Endpoint, b: Endpoint): boolean {
     b.kind === 'port' &&
     a.blockId === b.blockId &&
     a.slotId === b.slotId;
-}
-
-function deriveEdgeAlias(
-  from: Endpoint,
-  blocks: ReadonlyMap<BlockId, Block>,
-  explicitAlias?: string,
-): string {
-  if (explicitAlias !== undefined) return explicitAlias;
-  if (from.kind !== 'port') {
-    throw new Error(`Cannot derive edge alias from endpoint kind '${from.kind}'`);
-  }
-  const source = blocks.get(from.blockId as BlockId);
-  if (!source) {
-    throw new Error(`Cannot derive edge alias: source block '${from.blockId}' not found`);
-  }
-  // [LAW:dataflow-not-control-flow] Derive from endpoint identity regardless of
-  // hidden/composite output-port registration nuances.
-  const canonical = source.displayName ? normalizeCanonicalName(source.displayName) : source.id;
-  return `${canonical}.${from.slotId}`;
 }
 
 // [LAW:one-type-per-behavior] Time-source identity is one predicate shared by

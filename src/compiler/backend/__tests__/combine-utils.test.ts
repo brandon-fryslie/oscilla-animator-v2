@@ -109,6 +109,16 @@ describe('validateCombineMode', () => {
     });
   });
 
+  describe('collect/array modes', () => {
+    it('allows collect for any payload', () => {
+      expect(validateCombineMode('collect', 'one', 'float').valid).toBe(true);
+    });
+
+    it('allows array for any payload', () => {
+      expect(validateCombineMode('array', 'one', 'float').valid).toBe(true);
+    });
+  });
+
   describe('world restrictions', () => {
     it('rejects non-last/first for config world', () => {
       const result = validateCombineMode('sum', 'config', 'float');
