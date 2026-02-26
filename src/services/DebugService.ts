@@ -167,6 +167,13 @@ class DebugService {
   /** Constant values for optimized-away edges */
   private constantValues = new Map<string, ConstantValueResult>();
 
+  /**
+   * Frontend-sourced map from string block ID to user-facing display name.
+   * // [LAW:one-way-deps] Populated by CompileOrchestrator (which owns the Patch),
+   * // never by the compiler backend, runtime, or renderer.
+   */
+  private blockDisplayNames = new Map<string, string>();
+
   private issues: DebugServiceIssue[] = [];
   private issueReporter: ((issue: DebugServiceIssue) => void) | null = null;
   private issueThrottle = new Map<string, number>();
@@ -245,6 +252,23 @@ class DebugService {
    */
   setUnmappedEdges(edges: UnmappedEdgeInfo[]): void {
     this.unmappedEdges = edges;
+  }
+
+  /**
+   * Set the block display name map.
+   * Called by CompileOrchestrator (which owns the Patch) after each compilation.
+   * // [LAW:one-way-deps] Only the frontend-aware orchestration layer may call this.
+   */
+  setBlockDisplayNames(map: ReadonlyMap<string, string>): void {
+    this.blockDisplayNames = new Map(map);
+  }
+
+  /**
+   * Resolve a string block ID to its user-facing display name.
+   * Returns undefined if no display name is registered for the given block ID.
+   */
+  getBlockDisplayName(blockId: string): string | undefined {
+    return this.blockDisplayNames.get(blockId);
   }
 
   /**
@@ -579,6 +603,7 @@ class DebugService {
     this.globalHistoryKeys.clear();
     this.fieldAccumulators.clear();
     this.unmappedEdges = [];
+    this.blockDisplayNames.clear();
     this.runtimeStarted = false;
     this.arenaRef = null;
     this.historyService.clear();

@@ -252,12 +252,10 @@ describe('exprProvenance mapping', () => {
     }
   });
 
-  it('provenance blockId resolves via blockMap to a display name', () => {
-    // This test verifies the full data pipeline: provenance stores string block IDs,
-    // blockMap maps numeric→string, blockDisplayNames maps numeric→name.
-    // The store must resolve string IDs to display names — if the key types mismatch
-    // (numeric vs string), lookups silently return undefined and the UI falls back
-    // to showing the raw IR label instead of the provenance badge.
+  it('provenance blockId resolves via blockMap to a string block ID', () => {
+    // This test verifies the compiler data pipeline: provenance stores string block IDs
+    // and blockMap maps numeric→string. Display names are a UI/debug concern owned by
+    // DebugService (set by CompileOrchestrator from the Patch), not the compiler IR.
     const patch = buildPatch((b) => {
       const time = b.addBlock('InfiniteTimeRoot');
       b.setPortDefault(time, 'periodAMs', 1000);
@@ -289,14 +287,7 @@ describe('exprProvenance mapping', () => {
 
     const program = compileOk(patch);
     const provenance = program.debugIndex.exprProvenance!;
-    const { blockMap, blockDisplayNames } = program.debugIndex;
-
-    // Build the same reverse map the store uses
-    const stringIdToDisplayName = new Map<string, string>();
-    for (const [numIdx, strId] of blockMap.entries()) {
-      const displayName = blockDisplayNames?.get(numIdx) ?? strId;
-      stringIdToDisplayName.set(strId, displayName);
-    }
+    const { blockMap } = program.debugIndex;
 
     const entries = [...provenance.values()];
     expect(entries.length).toBeGreaterThan(0);
@@ -306,11 +297,11 @@ describe('exprProvenance mapping', () => {
       const allStringIds = new Set(blockMap.values());
       expect(allStringIds.has(blockId)).toBe(true);
 
-      // The reverse map must resolve to a non-empty display name
-      const displayName = stringIdToDisplayName.get(blockId);
-      expect(displayName).toBeDefined();
-      expect(typeof displayName).toBe('string');
-      expect(displayName!.length).toBeGreaterThan(0);
+      // The blockMap must resolve to a non-empty string ID
+      const stringId = [...blockMap.values()].find(id => id === blockId);
+      expect(stringId).toBeDefined();
+      expect(typeof stringId).toBe('string');
+      expect(stringId!.length).toBeGreaterThan(0);
     }
   });
 

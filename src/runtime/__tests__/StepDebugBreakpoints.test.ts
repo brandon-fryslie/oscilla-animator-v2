@@ -7,13 +7,14 @@
  * - block-id breakpoint matching resolves through blockMap
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import type { Step } from '../../compiler/ir/types';
 import type { ValueExprId } from '../../compiler/ir/Indices';
 import type { DebugIndexIR, PortBindingIR } from '../../compiler/ir/program';
 import type { ValueSlot } from '../../compiler/ir/Indices';
 import type { BlockId, PortId } from '../../types';
 import type { Breakpoint, StepSnapshot } from '../StepDebugTypes';
+import { debugService } from '../../services/DebugService';
 
 // =============================================================================
 // getStepExprId — unit tests
@@ -116,10 +117,6 @@ describe('block-id breakpoint matching', () => {
       [0, 'b0'] as any,
       [1, 'b1'] as any,
     ]),
-    blockDisplayNames: new Map([
-      [0, 'Oscillator 1'] as any,
-      [1, 'Lag 1'] as any,
-    ]),
   });
 
   /**
@@ -171,6 +168,10 @@ describe('block-id breakpoint matching', () => {
 // =============================================================================
 
 describe('resolveSlotName', () => {
+  beforeEach(() => {
+    debugService.clear();
+  });
+
   function resolveSlotName(
     slot: ValueSlot,
     debugIndex: DebugIndexIR | null,
@@ -184,9 +185,8 @@ describe('resolveSlotName', () => {
     const portBinding = debugIndex.ports.find(p => p.port === portId);
     if (!portBinding) return `slot ${slot}`;
 
-    const displayName = debugIndex.blockDisplayNames?.get(portBinding.block);
     const blockStringId = debugIndex.blockMap.get(portBinding.block);
-    const blockLabel = displayName
+    const blockLabel = (blockStringId ? debugService.getBlockDisplayName(blockStringId) : null)
       ?? (blockStringId ? blocks?.get(blockStringId)?.displayName : null)
       ?? blockStringId
       ?? `block ${portBinding.block}`;
@@ -194,7 +194,8 @@ describe('resolveSlotName', () => {
     return `${blockLabel}.${portBinding.portName}`;
   }
 
-  it('resolves full slot name with display name from debugIndex', () => {
+  it('resolves full slot name with display name from DebugService', () => {
+    debugService.setBlockDisplayNames(new Map([['b0', 'Oscillator 1']]));
     const debugIndex: DebugIndexIR = {
       stepToBlock: new Map(),
       slotToBlock: new Map(),
@@ -202,7 +203,6 @@ describe('resolveSlotName', () => {
       ports: [{ port: 0 as unknown as PortId, block: 0 as unknown as BlockId, portName: 'out', direction: 'out', cardinality: 'one', temporality: 'continuous', role: 'userWire' } as PortBindingIR],
       slotToPort: new Map([[5 as ValueSlot, 0 as unknown as PortId]]),
       blockMap: new Map([[0 as unknown as BlockId, 'b0']]),
-      blockDisplayNames: new Map([[0 as unknown as BlockId, 'Oscillator 1']]),
     };
     expect(resolveSlotName(5 as ValueSlot, debugIndex, null)).toBe('Oscillator 1.out');
   });
@@ -223,7 +223,7 @@ describe('resolveSlotName', () => {
     expect(resolveSlotName(5 as ValueSlot, debugIndex, null)).toBe('slot 5');
   });
 
-  it('falls back to blocks map when blockDisplayNames is absent', () => {
+  it('falls back to blocks map when DebugService has no display name', () => {
     const debugIndex: DebugIndexIR = {
       stepToBlock: new Map(),
       slotToBlock: new Map(),

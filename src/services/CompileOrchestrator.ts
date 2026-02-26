@@ -80,6 +80,15 @@ function setupDebugProbe(
   debugService.setPortToSlotMap(portMap);
   debugService.setUnmappedEdges(unmappedEdges);
 
+  // Build block display name map from the frontend Patch and register with DebugService.
+  // // [LAW:one-way-deps] Display names are frontend metadata; the debug service is the
+  // // single intermediary that exposes them to the UI without coupling the compiler pipeline.
+  const blockDisplayNames = new Map<string, string>();
+  for (const block of patch.blocks.values()) {
+    blockDisplayNames.set(block.id, block.displayName);
+  }
+  debugService.setBlockDisplayNames(blockDisplayNames);
+
   // [LAW:one-source-of-truth] Wire arena reference through the canonical slotToArena
   // address map so consumers do not directly index program.arenaLayout.
   const slotToArena = getExprAddressTable(program).slotToArena;

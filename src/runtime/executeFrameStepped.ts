@@ -153,9 +153,7 @@ function buildSnapshot(
       }
     }
     if (blockId !== null) {
-      blockName = debugIndex.blockDisplayNames?.get(blockId)
-        ?? debugIndex.blockMap.get(blockId)
-        ?? null;
+      blockName = debugIndex.blockMap.get(blockId) ?? null;
     }
     if (debugIndex.stepToPort) {
       for (const [sid, pid] of debugIndex.stepToPort) {

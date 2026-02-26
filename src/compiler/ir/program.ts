@@ -463,9 +463,6 @@ export interface DebugIndexIR {
    */
   readonly blockMap: ReadonlyMap<BlockId, string>;
 
-  /** Maps numeric BlockId to user-facing display name (e.g., "Golden Spiral") */
-  readonly blockDisplayNames?: ReadonlyMap<BlockId, string>;
-
   /** Optional: maps steps to ports */
   readonly stepToPort?: ReadonlyMap<StepId, PortId>;
 

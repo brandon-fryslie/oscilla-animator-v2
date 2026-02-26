@@ -27,6 +27,7 @@ import type { ValueSlot, StateSlotId, ValueExprId } from '../compiler/ir/Indices
 import type { BlockId, PortId } from '../types';
 import { analyzeWhyNotEvaluated, type WhyNotResult } from '../runtime/WhyNotEvaluated';
 import { compilationInspector } from '../services/CompilationInspectorService';
+import { debugService } from '../services/DebugService';
 import { computeSlotDeltas, type SlotDelta } from '../runtime/ValueInspector';
 import { getValueExprChildren } from '../runtime/ValueExprTreeWalker';
 import type { ValueExpr } from '../compiler/ir/value-expr';
@@ -46,10 +47,10 @@ function buildUserFacingIdentityMap(debugIndex: DebugIndexIR): Map<string, UserF
   const byIdentity = new Map<string, UserFacingIdentity>();
   const blockDisplayByStringId = new Map<string, string>();
 
-  // [LAW:one-source-of-truth] Build all user-facing block labels from debugIndex
-  // mappings so debugger naming has a single canonical source.
-  for (const [numericBlockId, stringBlockId] of debugIndex.blockMap.entries()) {
-    const displayName = debugIndex.blockDisplayNames?.get(numericBlockId) ?? stringBlockId;
+  // [LAW:one-source-of-truth] Build all user-facing block labels from DebugService
+  // so debugger naming has a single canonical source (set by CompileOrchestrator).
+  for (const [, stringBlockId] of debugIndex.blockMap.entries()) {
+    const displayName = debugService.getBlockDisplayName(stringBlockId) ?? stringBlockId;
     blockDisplayByStringId.set(stringBlockId, displayName);
     byIdentity.set(
       emittedIdentityKey(stringBlockId, null),
@@ -389,9 +390,10 @@ export class StepDebugStore {
       const key = snap.blockName ?? '(system)';
       let acc = blockAccum.get(key);
       if (!acc) {
+        const displayName = (snap.blockName ? debugService.getBlockDisplayName(snap.blockName) : null) ?? key;
         acc = {
           blockId: snap.blockId,
-          blockName: key,
+          blockName: displayName,
           stepCount: 0,
           anomalyCount: 0,
           portNames: new Set(),
@@ -454,9 +456,10 @@ export class StepDebugStore {
       const key = snap.blockName ?? '(system)';
       let group = groupMap.get(key);
       if (!group) {
+        const displayName = (snap.blockName ? debugService.getBlockDisplayName(snap.blockName) : null) ?? key;
         group = {
           blockId: snap.blockId,
-          blockName: key,
+          blockName: displayName,
           steps: [],
           anomalyCount: 0,
         };

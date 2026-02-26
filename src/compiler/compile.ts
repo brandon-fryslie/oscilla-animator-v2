@@ -86,15 +86,7 @@ export interface CompileOptions {
   readonly events?: EventHub;
 }
 
-export interface CompileFromFrontendOptions extends CompileOptions {
-  /**
-   * Optional debug-only map from block ID to user-facing display name.
-   * Populated by compile() from the frontend Patch; absent when calling
-   * compileFromFrontend() directly without Patch access.
-   * // [LAW:one-way-deps] Debug names are frontend metadata, not part of compiler IR.
-   */
-  readonly debugBlockNames?: ReadonlyMap<string, string>;
-}
+export type CompileFromFrontendOptions = CompileOptions;
 
 // =============================================================================
 // Main Compile Function
@@ -110,13 +102,7 @@ export interface CompileFromFrontendOptions extends CompileOptions {
 export function compile(patch: Patch, options?: CompileOptions): CompileResult {
   // [LAW:single-enforcer] Raw Patch enters backend pipeline only through this boundary.
   const frontend = compileFrontend(patch);
-  // Extract debug display names from the Patch at the boundary — these are
-  // frontend metadata only and must not enter the compiler IR.
-  const debugBlockNames = new Map<string, string>();
-  for (const block of patch.blocks.values()) {
-    debugBlockNames.set(block.id, block.displayName);
-  }
-  return compileFromFrontend(frontend, { ...options, debugBlockNames });
+  return compileFromFrontend(frontend, options);
 }
 
 /**
@@ -264,7 +250,7 @@ export function compileFromFrontend(
     }
 
     // Convert to CompiledProgramIR (now with registry)
-    const compiledIR = convertLinkedIRToProgram(unlinkedIR, scheduleIR, acyclicPatch, registry, options?.debugBlockNames);
+    const compiledIR = convertLinkedIRToProgram(unlinkedIR, scheduleIR, acyclicPatch, registry);
 
     compilationInspector.endCompile('success');
     return {
@@ -411,7 +397,6 @@ function convertLinkedIRToProgram(
   scheduleIR: ScheduleIR,
   acyclicPatch: AcyclicOrLegalGraph,
   registry: import('../runtime/KernelRegistry').KernelRegistry,
-  debugBlockNames?: ReadonlyMap<string, string>,
 ): CompiledProgramIR {
   // Extract data from the IR builder (ValueExpr-only)
   const builder = unlinkedIR.builder;
@@ -523,7 +508,6 @@ function convertLinkedIRToProgram(
   const ports: any[] = [];
   const slotToPort = new Map();
   const blockMap = new Map(); // Map numeric BlockId -> string ID
-  const blockDisplayNames = new Map(); // Map numeric BlockId -> user-facing name
 
   // Populate debug index from unlinkedIR.blockOutputs (provenance)
   if (unlinkedIR.blockOutputs) {
@@ -534,8 +518,6 @@ function convertLinkedIRToProgram(
     const blocks = acyclicPatch.blocks || []; // AcyclicOrLegalGraph has blocks array
     for (let i = 0; i < blocks.length; i++) {
       blockMap.set(i, blocks[i].id);
-      const blockId = blocks[i].id;
-      blockDisplayNames.set(i, debugBlockNames?.get(blockId) || blockId || blocks[i].type);
     }
 
     for (const [blockIndex, outputs] of unlinkedIR.blockOutputs.entries()) {
@@ -626,7 +608,6 @@ function convertLinkedIRToProgram(
     ports,
     slotToPort,
     blockMap,
-    blockDisplayNames,
     stepToPort: stepToPortMap,
     exprProvenance,
   };
