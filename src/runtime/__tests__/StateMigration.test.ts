@@ -148,4 +148,100 @@ describe('StateMigration', () => {
     expect(result.scalarsMigrated).toBe(0);
     expect(newState[0]).toBe(77);
   });
+
+  it('migrates by state identity even when stable state id changes', () => {
+    const oldMappings: StateMapping[] = [
+      {
+        stateId: stableStateId('b9', 'legacy'),
+        stateIdentity: { blockId: 'b9', portName: 'out' },
+        slotStart: 0,
+        laneCount: 1,
+        stride: 1,
+        initial: [0],
+      },
+    ];
+    const newMappings: StateMapping[] = [
+      {
+        stateId: stableStateId('b9', 'renamed'),
+        stateIdentity: { blockId: 'b9', portName: 'out' },
+        slotStart: 2,
+        laneCount: 1,
+        stride: 1,
+        initial: [0],
+      },
+    ];
+
+    const oldState = new Float32Array([123]);
+    const newState = new Float32Array(4);
+    const result = migrateState(oldState, newState, oldMappings, newMappings, () => null);
+
+    expect(result.scalarsMigrated).toBe(1);
+    expect(newState[2]).toBe(123);
+  });
+
+  it('drops state on identity mismatch and reports identity-mismatch details', () => {
+    const oldMappings: StateMapping[] = [
+      {
+        stateId: stableStateId('b10', 'delay'),
+        stateIdentity: { blockId: 'b10', portName: 'outA' },
+        slotStart: 0,
+        laneCount: 1,
+        stride: 1,
+        initial: [0],
+      },
+    ];
+    const newMappings: StateMapping[] = [
+      {
+        stateId: stableStateId('b10', 'delay'),
+        stateIdentity: { blockId: 'b10', portName: 'outB' },
+        slotStart: 0,
+        laneCount: 1,
+        stride: 1,
+        initial: [9],
+      },
+    ];
+
+    const oldState = new Float32Array([77]);
+    const newState = new Float32Array(1);
+    const result = migrateState(oldState, newState, oldMappings, newMappings, () => null);
+
+    expect(result.scalarsMigrated).toBe(0);
+    expect(result.initialized).toBe(1);
+    expect(result.discarded).toBe(1);
+    expect(newState[0]).toBe(9);
+    expect(result.details.some((d) => d.reason === 'identityMismatch')).toBe(true);
+  });
+
+  it('initializes field lanes when lane mapping is unavailable and layout changes', () => {
+    const oldMappings: StateMapping[] = [
+      {
+        stateId: stableStateId('b11', 'slew'),
+        slotStart: 0,
+        laneCount: 2,
+        stride: 1,
+        initial: [0],
+        instanceId: instanceId('inst_old'),
+      },
+    ];
+    const newMappings: StateMapping[] = [
+      {
+        stateId: stableStateId('b11', 'slew'),
+        slotStart: 0,
+        laneCount: 3,
+        stride: 1,
+        initial: [5],
+        instanceId: instanceId('inst_new'),
+      },
+    ];
+
+    const oldState = new Float32Array([1, 2]);
+    const newState = new Float32Array(3);
+    const result = migrateState(oldState, newState, oldMappings, newMappings, () => null);
+
+    expect(result.fieldsMigrated).toBe(1);
+    expect(Array.from(newState)).toEqual([5, 5, 5]);
+    const detail = result.details.find((d) => d.kind === 'field' && d.action === 'migrated');
+    expect(detail?.lanesMigrated).toBe(0);
+    expect(detail?.lanesInitialized).toBe(3);
+  });
 });

@@ -393,6 +393,33 @@ export function stableStateId(blockId: string, stateKind: string): StableStateId
 }
 
 /**
+ * Stable identity tag for state migration matching.
+ *
+ * `portName` is the semantic state channel name emitted by lowering.
+ */
+export interface StateSlotIdentity {
+  readonly blockId: string;
+  readonly portName: string;
+}
+
+/**
+ * Derive migration identity from a stable state ID.
+ *
+ * Uses the last ':' as separator so block IDs may contain ':'.
+ */
+export function stateIdentityFromStateId(stateId: StableStateId): StateSlotIdentity {
+  const raw = String(stateId);
+  const splitAt = raw.lastIndexOf(':');
+  if (splitAt < 0) {
+    return { blockId: raw, portName: 'state' };
+  }
+  return {
+    blockId: raw.slice(0, splitAt),
+    portName: raw.slice(splitAt + 1),
+  };
+}
+
+/**
  * State mapping with lane semantics.
  * // [LAW:one-source-of-truth] A single shape models state slots; laneCount encodes
  * // one-vs-many semantics without parallel scalar/field types.
@@ -400,6 +427,8 @@ export function stableStateId(blockId: string, stateKind: string): StableStateId
 export interface StateMapping {
   /** Stable semantic identity */
   readonly stateId: StableStateId;
+  /** Stable migration identity (block + state channel), emitted at compile time. */
+  readonly stateIdentity?: StateSlotIdentity;
   /** Start offset in state array (positional, changes each compile) */
   readonly slotStart: number;
   /** Number of lanes for this state entry (1 for one-cardinality state) */
