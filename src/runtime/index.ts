@@ -36,6 +36,7 @@ export {
   ExternalChannelSystem,
 } from './ExternalChannel';
 export { executeFrame } from './ScheduleExecutor';
+export { assertSchedulePhaseBoundaryStateReads } from './PhaseBoundaryValidator';
 export {
   migrateState,
   createInitialState,

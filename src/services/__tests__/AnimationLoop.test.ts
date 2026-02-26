@@ -1,9 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createAnimationLoopState, executeAnimationFrame, startAnimationLoop } from '../AnimationLoop';
-import { executeFrame } from '../../runtime';
+import { assertSchedulePhaseBoundaryStateReads, executeFrame } from '../../runtime';
 import { createHealthMetrics } from '../../runtime/RuntimeState';
 
 vi.mock('../../runtime', () => ({
+  assertSchedulePhaseBoundaryStateReads: vi.fn(),
   executeFrame: vi.fn(() => {
     throw new Error('boom');
   }),
@@ -11,10 +12,12 @@ vi.mock('../../runtime', () => ({
 
 describe('AnimationLoop', () => {
   const executeFrameMock = vi.mocked(executeFrame);
+  const assertSchedulePhaseBoundaryStateReadsMock = vi.mocked(assertSchedulePhaseBoundaryStateReads);
   const originalRaf = globalThis.requestAnimationFrame;
   const originalCancelRaf = globalThis.cancelAnimationFrame;
 
   beforeEach(() => {
+    assertSchedulePhaseBoundaryStateReadsMock.mockReset();
     executeFrameMock.mockImplementation(() => {
       throw new Error('boom');
     });
@@ -59,6 +62,7 @@ describe('AnimationLoop', () => {
 
     expect(arena.reset).toHaveBeenCalledTimes(1);
     expect(executeFrameMock).toHaveBeenCalledTimes(1);
+    expect(executeFrameMock.mock.calls[0]).toHaveLength(4);
     expect(renderer.render).toHaveBeenCalledTimes(1);
     expect(deps.store.viewport.setContentBounds).toHaveBeenCalledWith(null);
     expect(arena.reset.mock.invocationCallOrder[0]).toBeLessThan(executeFrameMock.mock.invocationCallOrder[0]);
@@ -278,6 +282,38 @@ describe('AnimationLoop', () => {
     expect(state.lastContinuityStoreUpdate).toBe(0);
     // Compile success should not duplicate frame scheduling when one frame is already queued.
     expect(globalThis.requestAnimationFrame).toHaveBeenCalledTimes(1);
+  });
+
+  it('runs phase-boundary assertion on startup and compile boundaries', () => {
+    executeFrameMock.mockReturnValue({ version: 2, ops: [] } as any);
+    const onError = vi.fn();
+    const currentProgram = {};
+    const deps = {
+      getCurrentProgram: () => currentProgram,
+      getCurrentState: () => ({ health: createHealthMetrics() }),
+      getCanvas: () => ({ width: 100, height: 100 }),
+      getRenderer: () => ({ render: vi.fn() }),
+      getArena: () => ({ reset: vi.fn(), getTotalBytes: () => 0 }),
+      store: {
+        stepDebug: null,
+        diagnostics: {
+          recordJank: vi.fn(),
+          updateFrameTiming: vi.fn(),
+          updateMemoryStats: vi.fn(),
+        },
+        continuity: { updateFromRuntime: vi.fn() },
+        viewport: { zoom: 1, pan: { x: 0, y: 0 }, setContentBounds: vi.fn() },
+        events: { emit: vi.fn() },
+        getPatchRevision: () => 1,
+      },
+    } as any;
+
+    const loop = startAnimationLoop(deps, createAnimationLoopState(), onError);
+    expect(assertSchedulePhaseBoundaryStateReadsMock).toHaveBeenCalledTimes(1);
+    expect(assertSchedulePhaseBoundaryStateReadsMock).toHaveBeenLastCalledWith(currentProgram);
+
+    loop.onCompileSuccess();
+    expect(assertSchedulePhaseBoundaryStateReadsMock).toHaveBeenCalledTimes(2);
   });
 
   it('fails fast when required WebGPU loop dependencies are missing', () => {
