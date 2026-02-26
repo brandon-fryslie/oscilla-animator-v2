@@ -79,7 +79,7 @@ function buildReduceProbePatch(opts: {
     b.wire(color, 'out', colorField, 'one');
 
     const render = b.addBlock('RenderInstances2D');
-    b.wire(layout, 'position', render, 'pos');
+    b.wire(layout, 'controlPoints', render, 'controlPoints');
     b.wire(colorField, 'field', render, 'color');
 
     // [LAW:behavior-not-structure] Reduce contract is asserted from rendered scale output.
