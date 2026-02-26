@@ -22,6 +22,7 @@ import { editorSettings } from '../../settings/tokens/editor-settings';
 import type { BlockId, PortId } from '../../types';
 import type { EditorHandle } from '../editorCommon';
 import { GraphEditorCore, type GraphEditorCoreHandle } from '../graphEditor/GraphEditorCore';
+import type { PortContextMenuRequest } from '../graphEditor/GraphEditorContext';
 import { PatchStoreAdapter } from '../graphEditor/PatchStoreAdapter';
 import { BlockContextMenu } from './menus/BlockContextMenu';
 import { EdgeContextMenu } from './menus/EdgeContextMenu';
@@ -138,29 +139,19 @@ const ReactFlowEditorInner: React.FC<ReactFlowEditorProps> = observer(({
     [patchStore, layoutStore, frontend]
   );
 
-  // Port context menu handler - called from UnifiedNode
+  // Port context menu handler - called from UnifiedNode via GraphEditorContext
   const handlePortContextMenu = useCallback(
-    (blockId: BlockId, portId: PortId, isInput: boolean, event: React.MouseEvent) => {
-      event.preventDefault();
-      event.stopPropagation();
+    ({ blockId, portId, isInput, position }: PortContextMenuRequest) => {
       setContextMenu({
         type: 'port',
-        blockId,
-        portId,
+        blockId: blockId as BlockId,
+        portId: portId as PortId,
         isInput,
-        position: { top: event.clientY, left: event.clientX },
+        position,
       });
     },
     []
   );
-
-  // Expose port context menu handler via global store for UnifiedNode access
-  useEffect(() => {
-    window.__reactFlowPortContextMenu = handlePortContextMenu;
-    return () => {
-      delete window.__reactFlowPortContextMenu;
-    };
-  }, [handlePortContextMenu]);
 
   // Navigate to block helper - centers and selects block
   const navigateToBlock = useCallback(
@@ -358,6 +349,7 @@ const ReactFlowEditorInner: React.FC<ReactFlowEditorProps> = observer(({
           patch={patchStore.patch}
           onNodeContextMenu={handleNodeContextMenu}
           onEdgeContextMenu={handleEdgeContextMenu}
+          onPortContextMenu={handlePortContextMenu}
           onEdgeClick={handleEdgeClick}
           onEdgeMouseEnter={handleEdgeMouseEnter}
           onEdgeMouseLeave={handleEdgeMouseLeave}
