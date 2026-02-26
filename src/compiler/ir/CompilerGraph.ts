@@ -1,4 +1,4 @@
-import type { PortId } from '../../types';
+import type { PortId } from '../../types/compiler';
 
 /**
  * Compiler-owned graph node representation.
@@ -31,4 +31,3 @@ export interface CompilerGraph {
   readonly blocks: readonly CompilerGraphBlock[];
   readonly edges: readonly CompilerGraphEdge[];
 }
-
