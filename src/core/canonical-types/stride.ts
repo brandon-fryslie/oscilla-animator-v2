@@ -25,6 +25,7 @@ export function payloadStride(p: PayloadType): 1 | 2 | 3 | 4 {
     case 'vec3': return 3;
     case 'vec4': return 4;
     case 'color': return 4;
+    case 'shape': return 1;
     case 'cameraProjection': return 1;
     default: {
       const _exhaustive: never = p as never;
