@@ -152,18 +152,6 @@ describe('Level 6 Unit Tests: ProjectionMode Type', () => {
 });
 
 // =============================================================================
-// Integration Tests: State Preservation
-// =============================================================================
-
-describe('Level 6 Integration Tests: State Preservation Across Mode Toggle', () => {
-  // Tests removed during type system refactor
-  it('_placeholder_Toggle_back_to_ortho', () => {
-    // Test removed during type system refactor
-    expect(true).toBe(true);
-  });
-});
-
-// =============================================================================
 // Integration Tests: Output Correctness
 // =============================================================================
 
