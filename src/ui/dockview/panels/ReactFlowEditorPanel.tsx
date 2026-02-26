@@ -7,13 +7,15 @@
 import React from 'react';
 import type { IDockviewPanelProps } from 'dockview';
 import { ReactFlowEditor } from '../../reactFlowEditor/ReactFlowEditor';
-import type { EditorHandle } from '../../editorCommon';
+import { useDockviewRuntimeCallbacks } from '../runtimeCallbacks';
 import './ReactFlowEditorPanel.css';
 
-export const ReactFlowEditorPanel: React.FC<IDockviewPanelProps<{ onEditorReady?: (handle: EditorHandle) => void }>> = ({ params }) => {
+export const ReactFlowEditorPanel: React.FC<IDockviewPanelProps> = () => {
+  const { onReactFlowEditorReady } = useDockviewRuntimeCallbacks();
+
   return (
     <div className="react-flow-editor-panel">
-      <ReactFlowEditor onEditorReady={params?.onEditorReady} />
+      <ReactFlowEditor onEditorReady={onReactFlowEditorReady} />
     </div>
   );
 };

@@ -16,12 +16,6 @@
 
 import type { DockviewApi, DockviewGroupPanel } from 'dockview';
 import { PANEL_DEFINITIONS } from './panelRegistry';
-import type { EditorHandle } from '../editorCommon';
-
-interface LayoutCallbacks {
-  onReactFlowEditorReady?: (handle: EditorHandle) => void;
-  onCanvasReady?: (canvas: HTMLCanvasElement) => void;
-}
 
 /**
  * Builds the default layout with floating preview and split bottom.
@@ -42,7 +36,7 @@ interface LayoutCallbacks {
  * +-------------------------------------------+
  * + Floating: preview (300x300)
  */
-export function createDefaultLayout(api: DockviewApi, callbacks: LayoutCallbacks = {}): void {
+export function createDefaultLayout(api: DockviewApi): void {
   // Get panel definitions by group
   const visible = PANEL_DEFINITIONS.filter((p) => !p.initiallyHidden);
   const leftTopPanels = visible.filter((p) => p.group === 'left-top');
@@ -136,13 +130,6 @@ export function createDefaultLayout(api: DockviewApi, callbacks: LayoutCallbacks
 
   // Add center panels (Flow, Table, Matrix)
   centerPanels.forEach((panel, index) => {
-    const params: Record<string, unknown> = {};
-
-    // Pass callbacks to panels that need them
-    if (panel.id === 'flow-editor' && callbacks.onReactFlowEditorReady) {
-      params.onEditorReady = callbacks.onReactFlowEditorReady;
-    }
-
     api.addPanel({
       id: panel.id,
       component: panel.component,
@@ -151,7 +138,6 @@ export function createDefaultLayout(api: DockviewApi, callbacks: LayoutCallbacks
         referenceGroup: groups.center.id,
         direction: 'within', // Add as tab in same group
       },
-      params: Object.keys(params).length > 0 ? params : undefined,
       minimumHeight: 200, // Ensure panels have minimum height for React Flow
       minimumWidth: 200,  // Ensure panels have minimum width for React Flow
     });
@@ -249,11 +235,6 @@ export function createDefaultLayout(api: DockviewApi, callbacks: LayoutCallbacks
 
   const previewPanel = floatingPanels.find((p) => p.id === 'preview');
   if (previewPanel) {
-    const params: Record<string, unknown> = {};
-    if (callbacks.onCanvasReady) {
-      params.onCanvasReady = callbacks.onCanvasReady;
-    }
-
     // Calculate position: ~60% from left, near top
     const x = Math.floor(window.innerWidth * 0.6);
     const y = 50;
@@ -262,7 +243,6 @@ export function createDefaultLayout(api: DockviewApi, callbacks: LayoutCallbacks
       id: previewPanel.id,
       component: previewPanel.component,
       title: previewPanel.title,
-      params: Object.keys(params).length > 0 ? params : undefined,
       floating: {
         x,
         y,
