@@ -371,13 +371,14 @@ export async function compileAndSwap(
       return state.sessionState!.continuity.mappings.get(instanceId) ?? null;
     };
 
-    migrateState(
+    const migration = migrateState(
       oldPrimitiveState,
       state.currentState.state,
       oldStateMappings,
       newStateMappings,
       getLaneMapping
     );
+    void migration;
   } else if (newStateMappings.length > 0) {
     // Initialize fresh (first compile or no old state)
     const initialState = createInitialState(newStateSlotCount, newStateMappings);
