@@ -398,14 +398,3 @@ describe('Level 7 Integration Tests: Culling', () => {
     expect(Number.isFinite(result2.depth[0])).toBe(true);
   });
 });
-
-// =============================================================================
-// End-to-End Integration Test (Real Pipeline)
-// =============================================================================
-
-describe('Level 7 End-to-End: Real Pipeline Depth Sort + Cull', () => {
-  it('_placeholder_Real_pipeline_executeFrame_produces_compacted', () => {
-    // Test removed during type system refactor
-    expect(true).toBe(true);
-  });
-});
