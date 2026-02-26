@@ -64,6 +64,9 @@ function valueExprChildren(expr: ValueExpr): readonly ValueExprId[] {
     default:
       return [];
   }
+
+  // [LAW:single-enforcer] Child traversal helper must never return undefined.
+  return [];
 }
 
 /**
