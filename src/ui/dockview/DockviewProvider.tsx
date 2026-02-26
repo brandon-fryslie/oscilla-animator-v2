@@ -20,7 +20,7 @@ import type { EditorHandle } from '../editorCommon';
 import { DockviewLeftHeaderActions, DockviewRightHeaderActions } from './DockviewHeaderActions';
 import { clearStoredDockviewLayout, loadDockviewLayout, saveDockviewLayout } from './layoutPersistence';
 import { DockviewRuntimeCallbacksContext } from './runtimeCallbacks';
-import { applySidebarConstraints, getSidebarForPanel } from './layoutActions';
+import { applySidebarConstraints, captureSidebarWidths, getSidebarForPanel } from './layoutActions';
 import './theme.css';
 
 // Note: Popout functionality would go here when ready
@@ -163,7 +163,9 @@ export const DockviewProvider: React.FC<DockviewProviderProps> = ({
     };
 
     const disposable = api.onDidLayoutChange(() => {
-      applySidebarConstraints(api);
+      // [LAW:dataflow-not-control-flow] Layout-change handling records sidebar
+      // state and persists layout; it must not mutate layout structure itself.
+      captureSidebarWidths(api);
       saveLayout();
     });
 
