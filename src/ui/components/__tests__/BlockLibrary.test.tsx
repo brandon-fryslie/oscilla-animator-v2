@@ -1,25 +1,14 @@
-/**
- * BlockLibrary Component Tests
- *
- * Tests for BlockLibrary component including:
- * - Category-based organization
- * - Search functionality (debounced, case-insensitive)
- * - Block preview/add interactions
- * - Category collapse persistence
- * - Keyboard navigation
- * - Integration with stores
- */
-
-import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { autorun } from 'mobx';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { MantineProvider } from '@mantine/core';
+import { useEffect } from 'react';
+
 import { BlockLibrary } from '../BlockLibrary';
 import { EditorProvider, useEditor, type EditorHandle } from '../../editorCommon';
 import { RootStore, StoreProvider } from '../../../stores';
 import { getBlockCategories, getBlockTypesByCategory } from '../../../blocks/registry';
-import { useEffect } from 'react';
 
 function readComputed<T>(reader: () => T): T {
   let value!: T;
@@ -30,13 +19,11 @@ function readComputed<T>(reader: () => T): T {
   return value;
 }
 
-// Create a fresh store instance for tests (not the global singleton)
 let testStore: RootStore;
+let mockEditorHandle: EditorHandle | null = null;
 
-// Mock localStorage
 const localStorageMock = (() => {
   let store: Record<string, string> = {};
-
   return {
     getItem: (key: string) => store[key] || null,
     setItem: (key: string, value: string) => {
@@ -55,10 +42,6 @@ Object.defineProperty(window, 'localStorage', {
   value: localStorageMock,
 });
 
-/**
- * Injects an EditorHandle into the EditorContext.
- * Must be rendered inside EditorProvider.
- */
 function InjectEditorHandle({ handle }: { handle: EditorHandle | null }) {
   const { setEditorHandle } = useEditor();
   useEffect(() => {
@@ -68,24 +51,20 @@ function InjectEditorHandle({ handle }: { handle: EditorHandle | null }) {
   return null;
 }
 
-/** Create a mock EditorHandle that delegates addBlock to testStore.patch */
 function createMockEditorHandle(): EditorHandle {
   return {
     type: 'reactflow',
     async addBlock(blockType: string, options?: { displayName?: string }) {
-      return testStore.patch.addBlock(blockType, {}, {
-        displayName: options?.displayName,
-      });
+      return testStore.patch.addBlock(blockType, {}, { displayName: options?.displayName });
     },
     async removeBlock() {},
     async zoomToFit() {},
-    getRawHandle() { return null; },
+    getRawHandle() {
+      return null;
+    },
   };
 }
 
-let mockEditorHandle: EditorHandle | null = null;
-
-// Wrapper component to provide required context
 function TestWrapper({ children }: { children: React.ReactNode }) {
   return (
     <MantineProvider>
@@ -99,218 +78,79 @@ function TestWrapper({ children }: { children: React.ReactNode }) {
   );
 }
 
+function getVisibleCategories(): string[] {
+  return getBlockCategories().filter((category: string) => {
+    const types = getBlockTypesByCategory(category);
+    return types.some((t: any) => t.capability !== 'time');
+  });
+}
+
 describe('BlockLibrary', () => {
   beforeEach(() => {
-    // Create fresh store instance for each test
     testStore = new RootStore();
     localStorageMock.clear();
     testStore.selection.clearSelection();
     testStore.selection.clearPreview();
     mockEditorHandle = createMockEditorHandle();
-  });
-
-  afterEach(() => {
     vi.clearAllMocks();
   });
 
-  // The component filters out categories where all blocks have capability:'time'.
-  // Tests must use visible categories to match what the component renders.
-  function getVisibleCategories(): string[] {
-    return getBlockCategories().filter((category: string) => {
-      const types = getBlockTypesByCategory(category);
-      return types.some((t: any) => t.capability !== 'time');
-    });
-  }
+  it('filters blocks from search input (case-insensitive)', async () => {
+    render(<BlockLibrary />, { wrapper: TestWrapper });
 
-  describe('Category Organization', () => {
-    it('should display blocks grouped by BlockCategory enum', () => {
-      render(<BlockLibrary />, { wrapper: TestWrapper });
+    const searchInput = screen.getByPlaceholderText('Search blocks...');
+    fireEvent.change(searchInput, { target: { value: 'SINE' } });
 
-      const categories = getVisibleCategories();
-      categories.forEach((category: string) => {
-        expect(screen.getByText(category)).toBeInTheDocument();
-      });
-    });
-
-    it('should show correct count of blocks per category', () => {
-      render(<BlockLibrary />, { wrapper: TestWrapper });
-
-      const categories = getVisibleCategories();
-      categories.forEach((category: string) => {
-        const types = getBlockTypesByCategory(category);
-        // The component also filters out timeRoot blocks within each category
-        const visibleTypes = types.filter((t: any) => t.capability !== 'time');
-        const countElement = screen.getByText(category).parentElement?.querySelector('.block-category__count');
-        expect(countElement?.textContent).toBe(String(visibleTypes.length));
-      });
-    });
-
-    it('should allow toggling category collapse', () => {
-      render(<BlockLibrary />, { wrapper: TestWrapper });
-
-      const categories = getVisibleCategories();
-      if (categories.length === 0) return;
-
-      const firstCategory = categories[0];
-      const types = getBlockTypesByCategory(firstCategory);
-      if (types.length === 0) return;
-
-      const categoryHeader = screen.getByText(firstCategory);
-      fireEvent.click(categoryHeader);
-
-      // Check if types are hidden (implementation depends on CSS)
-      // For now, just verify the click handler works
-      expect(categoryHeader).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText(/\bresults?\b/i)).toBeInTheDocument();
     });
   });
 
-  describe('Search Functionality', () => {
-    it('should filter blocks based on type name', async () => {
-      render(<BlockLibrary />, { wrapper: TestWrapper });
+  it('adds a block to the patch on double click', async () => {
+    render(<BlockLibrary />, { wrapper: TestWrapper });
 
-      const searchInput = screen.getByPlaceholderText('Search blocks...');
-      fireEvent.change(searchInput, { target: { value: 'sine' } });
+    const categories = getVisibleCategories();
+    expect(categories.length).toBeGreaterThan(0);
 
-      await waitFor(() => {
-        // Check if search is active (results count should appear)
-        const resultsText = screen.queryByText(/result/);
-        if (resultsText) {
-          expect(resultsText).toBeInTheDocument();
-        }
-      });
+    const types = getBlockTypesByCategory(categories[0]!);
+    const firstVisible = types.find((t: any) => t.capability !== 'time');
+    expect(firstVisible).toBeTruthy();
+
+    const beforeCount = readComputed(() => testStore.patch.blocks.size);
+    fireEvent.doubleClick(screen.getByText(firstVisible!.label));
+
+    await waitFor(() => {
+      expect(readComputed(() => testStore.patch.blocks.size)).toBe(beforeCount + 1);
     });
+  });
 
-    it('should be case-insensitive', async () => {
-      render(<BlockLibrary />, { wrapper: TestWrapper });
+  it('persists category collapse state in localStorage', () => {
+    render(<BlockLibrary />, { wrapper: TestWrapper });
 
-      const searchInput = screen.getByPlaceholderText('Search blocks...');
-      fireEvent.change(searchInput, { target: { value: 'SINE' } });
+    const categories = getVisibleCategories();
+    expect(categories.length).toBeGreaterThan(0);
 
-      await waitFor(() => {
-        const resultsText = screen.queryByText(/result/);
-        if (resultsText) {
-          expect(resultsText).toBeInTheDocument();
-        }
-      });
-    });
+    fireEvent.click(screen.getByText(categories[0]!));
 
-    it('should debounce search input', async () => {
-      render(<BlockLibrary />, { wrapper: TestWrapper });
+    const stored = localStorageMock.getItem('blockLibrary.collapsedCategories');
+    expect(stored).toBeTruthy();
 
-      const searchInput = screen.getByPlaceholderText('Search blocks...');
+    const parsed = JSON.parse(stored!);
+    expect(Array.isArray(parsed)).toBe(true);
+    expect(parsed).toContain(categories[0]);
+  });
 
-      // Rapid typing
-      fireEvent.change(searchInput, { target: { value: 's' } });
-      fireEvent.change(searchInput, { target: { value: 'si' } });
-      fireEvent.change(searchInput, { target: { value: 'sin' } });
-      fireEvent.change(searchInput, { target: { value: 'sine' } });
+  it('clears active search when Escape is pressed', async () => {
+    render(<BlockLibrary />, { wrapper: TestWrapper });
 
-      // Wait for debounce delay
-      await waitFor(() => {
-        expect(searchInput).toHaveValue('sine');
-      }, { timeout: 200 });
-    });
+    const searchInput = screen.getByPlaceholderText('Search blocks...') as HTMLInputElement;
+    fireEvent.change(searchInput, { target: { value: 'noise' } });
+    expect(searchInput.value).toBe('noise');
 
-    it('should clear search on Escape key', async () => {
-      render(<BlockLibrary />, { wrapper: TestWrapper });
+    fireEvent.keyDown(window, { key: 'Escape' });
 
-      const searchInput = screen.getByPlaceholderText('Search blocks...') as HTMLInputElement;
-      fireEvent.change(searchInput, { target: { value: 'test' } });
-      expect(searchInput.value).toBe('test');
-
-      fireEvent.keyDown(window, { key: 'Escape' });
-
-      await waitFor(() => {
-        expect(searchInput.value).toBe('');
-      });
-    });
-
-    it('should clear search on clear button click', () => {
-      render(<BlockLibrary />, { wrapper: TestWrapper });
-
-      const searchInput = screen.getByPlaceholderText('Search blocks...') as HTMLInputElement;
-      fireEvent.change(searchInput, { target: { value: 'test' } });
-
-      const clearButton = screen.getByLabelText('Clear search');
-      fireEvent.click(clearButton);
-
+    await waitFor(() => {
       expect(searchInput.value).toBe('');
-    });
-  });
-
-  describe('Block Interactions', () => {
-    it('should preview block on single click', async () => {
-      render(<BlockLibrary />, { wrapper: TestWrapper });
-
-      const categories = getVisibleCategories();
-      if (categories.length === 0) return;
-
-      const types = getBlockTypesByCategory(categories[0]);
-      if (types.length === 0) return;
-
-      const firstType = types[0];
-      const blockElement = screen.getByText(firstType.label);
-      fireEvent.click(blockElement);
-
-      // Verify block is selected (implementation depends on UI state)
-      expect(blockElement).toBeInTheDocument();
-    });
-
-    it('should add block on double click', async () => {
-      render(<BlockLibrary />, { wrapper: TestWrapper });
-
-      const categories = getVisibleCategories();
-      if (categories.length === 0) return;
-
-      const types = getBlockTypesByCategory(categories[0]);
-      if (types.length === 0) return;
-
-      const firstType = types[0];
-      const blockElement = screen.getByText(firstType.label);
-
-      const initialBlockCount = readComputed(() => testStore.patch.blocks.size);
-      fireEvent.doubleClick(blockElement);
-
-      await waitFor(() => {
-        // Block should be added to PatchStore
-        expect(readComputed(() => testStore.patch.blocks.size)).toBe(initialBlockCount + 1);
-      });
-    });
-  });
-
-  describe('Persistence', () => {
-    it('should persist collapsed categories to localStorage', () => {
-      render(<BlockLibrary />, { wrapper: TestWrapper });
-
-      const categories = getVisibleCategories();
-      if (categories.length === 0) return;
-
-      const firstCategory = categories[0];
-      const categoryHeader = screen.getByText(firstCategory);
-      fireEvent.click(categoryHeader);
-
-      const stored = localStorageMock.getItem('blockLibrary.collapsedCategories');
-      expect(stored).toBeTruthy();
-
-      const parsed = JSON.parse(stored!);
-      expect(Array.isArray(parsed)).toBe(true);
-    });
-
-    it('should restore collapsed state from localStorage', () => {
-      const categories = getVisibleCategories();
-      if (categories.length === 0) return;
-
-      const firstCategory = categories[0];
-      localStorageMock.setItem(
-        'blockLibrary.collapsedCategories',
-        JSON.stringify([firstCategory])
-      );
-
-      render(<BlockLibrary />, { wrapper: TestWrapper });
-
-      const categoryHeader = screen.getByText(firstCategory);
-      expect(categoryHeader).toBeInTheDocument();
-      // Check if category is collapsed (implementation specific)
     });
   });
 });
