@@ -46,7 +46,13 @@ function createFakeWebGPUEnvironment() {
     createComputePipeline: vi.fn(() => ({
       getBindGroupLayout: vi.fn(() => ({ label: 'compute-layout' })),
     })),
+    createComputePipelineAsync: vi.fn(async () => ({
+      getBindGroupLayout: vi.fn(() => ({ label: 'compute-layout' })),
+    })),
     createRenderPipeline: vi.fn(() => ({
+      getBindGroupLayout: vi.fn(() => ({ label: 'render-layout' })),
+    })),
+    createRenderPipelineAsync: vi.fn(async () => ({
       getBindGroupLayout: vi.fn(() => ({ label: 'render-layout' })),
     })),
     createBuffer: vi.fn((descriptor: { size: number }) => ({
@@ -690,5 +696,45 @@ describe('WebGPURenderer', () => {
     expect(() =>
       renderer.render(makeRenderInput([makeDrawOp(999_999)]))
     ).toThrow('missing from topology bank');
+  });
+
+  it('uses createComputePipelineAsync for all compute pipelines (P2-1 enforcement)', async () => {
+    const env = createFakeWebGPUEnvironment();
+    setNavigatorGpu(env.gpu);
+    await createWebGPURenderer(env.canvas);
+
+    expect(env.device.createComputePipelineAsync).toHaveBeenCalled();
+    expect(env.device.createComputePipeline).not.toHaveBeenCalled();
+  });
+
+  it('uses createRenderPipelineAsync for the path pipeline (P2-1 enforcement)', async () => {
+    const env = createFakeWebGPUEnvironment();
+    setNavigatorGpu(env.gpu);
+    await createWebGPURenderer(env.canvas);
+
+    expect(env.device.createRenderPipelineAsync).toHaveBeenCalled();
+    expect(env.device.createRenderPipeline).not.toHaveBeenCalled();
+  });
+
+  it('commits async draw-prep pipeline on next frame after shader update (hot-swap protocol)', async () => {
+    const env = createFakeWebGPUEnvironment();
+    setNavigatorGpu(env.gpu);
+    const renderer = await createWebGPURenderer(env.canvas);
+    const topologyId = makeSimpleTopology('webgpu-hotswap-protocol-topology');
+    const customWgsl = '@compute @workgroup_size(1) fn cs_main() {}';
+
+    // Frame 1: issue shader update; async pipeline creation starts but is not committed yet.
+    env.device.createComputePipelineAsync.mockClear();
+    renderer.render(makeRenderInput([makeDrawOp(topologyId)], { drawPrepShaderWgsl: customWgsl }));
+    expect(env.device.createComputePipelineAsync).toHaveBeenCalledTimes(1);
+
+    // Flush microtasks so the async pipeline creation resolves.
+    await Promise.resolve();
+
+    // Frame 2: commitPendingPipeline() is called at frame start; the resolved pipeline is swapped in.
+    env.device.createComputePipelineAsync.mockClear();
+    renderer.render(makeRenderInput([makeDrawOp(topologyId)], { drawPrepShaderWgsl: customWgsl }));
+    // Same shader code on frame 2 — no new async creation needed.
+    expect(env.device.createComputePipelineAsync).not.toHaveBeenCalled();
   });
 });
