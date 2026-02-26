@@ -10,7 +10,7 @@
  *
  * Simplified wiring:
  *   Before: Array.elements → RenderInstances2D.shape
- *           Array.elements → Layout → RenderInstances2D.position
+ *           Array.elements → Layout → RenderInstances2D.controlPoints
  *   After:  Array.elements → Layout → RenderInstances2D.controlPoints (that's it!)
  *
  * The backend (schedule-program.ts) extracts instanceId from the controlPoints field

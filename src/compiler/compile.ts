@@ -438,7 +438,7 @@ function convertLinkedIRToProgram(
   const continuitySlots = new Set<ValueSlot>();
   for (const step of scheduleIR.steps) {
     if (step.kind === 'render') {
-      renderSoaSlots.add(step.positionSlot);
+      renderSoaSlots.add(step.controlPointsSlot);
       renderSoaSlots.add(step.colorSlot);
       if (step.rotationSlot !== undefined) renderSoaSlots.add(step.rotationSlot);
       if (step.scale2Slot !== undefined) renderSoaSlots.add(step.scale2Slot);
@@ -758,7 +758,7 @@ function collectComputeSlots(scheduleIR: ScheduleIR): ValueSlot[] {
         slots.add(step.outputSlot);
         break;
       case 'render':
-        slots.add(step.positionSlot);
+        slots.add(step.controlPointsSlot);
         slots.add(step.colorSlot);
         if (step.rotationSlot !== undefined) slots.add(step.rotationSlot);
         if (step.scale2Slot !== undefined) slots.add(step.scale2Slot);

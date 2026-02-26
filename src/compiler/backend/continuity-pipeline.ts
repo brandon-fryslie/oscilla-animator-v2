@@ -497,7 +497,7 @@ export function allocateContinuityPipeline(
     const renderStep: StepRender = {
       kind: 'render',
       instanceId,
-      positionSlot: posSlots.outputSlot,
+      controlPointsSlot: posSlots.outputSlot,
       colorSlot: colorSlots.outputSlot,
       ...(scaleOutput && { scale: scaleOutput }),
       shape: shapeOutput,

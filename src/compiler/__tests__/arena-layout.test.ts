@@ -241,10 +241,10 @@ describe('arenaLayout integration', () => {
         .filter((s): s is Extract<ScheduleIR['steps'][number], { kind: 'continuityApply' }> => s.kind === 'continuityApply')
         .map((s) => s.outputSlot),
     );
-    expect(continuityOutputSlots.has(renderStep.positionSlot)).toBe(true);
+    expect(continuityOutputSlots.has(renderStep.controlPointsSlot)).toBe(true);
     expect(continuityOutputSlots.has(renderStep.colorSlot)).toBe(true);
 
-    const positionDesc = result.program.runtimeAddressTable?.slotToArena.get(renderStep.positionSlot);
+    const positionDesc = result.program.runtimeAddressTable?.slotToArena.get(renderStep.controlPointsSlot);
     const colorDesc = result.program.runtimeAddressTable?.slotToArena.get(renderStep.colorSlot);
     expect(positionDesc?.packing).toBe('aos');
     expect(colorDesc?.packing).toBe('aos');
