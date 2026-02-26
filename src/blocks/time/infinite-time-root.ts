@@ -33,10 +33,8 @@ export function register(): void {
       palette: { label: 'Palette', type: canonicalType(COLOR) },
       energy: { label: 'Energy', type: canonicalType(FLOAT) },
     },
-    lower: ({ ctx }): import('../registry').LowerResult => {
-      // TimeRoot blocks don't produce IR directly
-      // Their outputs are provided by the time system (pass 3)
-      // We create placeholder values that reference the time system
+    lower: ({ ctx, config }): import('../registry').LowerResult => {
+      // Time root lowers like any other block and emits time model as effect data.
       const tMs = ctx.b.time('tMs', canonicalType(FLOAT));
       const dt = ctx.b.time('dt', canonicalType(FLOAT));
       const phaseA = ctx.b.time('phaseA', canonicalType(FLOAT, unitTurns(), undefined, contractWrap01()));
@@ -44,9 +42,11 @@ export function register(): void {
       const pulse = ctx.b.eventPulse('InfiniteTimeRoot');
       const palette = ctx.b.time('palette', canonicalType(COLOR));
       const energy = ctx.b.time('energy', canonicalType(FLOAT));
+
+      const periodAMs = typeof config.periodAMs === 'number' ? config.periodAMs : 1000;
+      const periodBMs = typeof config.periodBMs === 'number' ? config.periodBMs : 2000;
   
-      // System palette slot - special case
-      // Note: Orchestrator handles slot type registration now
+      // Palette uses the canonical reserved slot declared by the IR index contract.
       const paletteSlot = SYSTEM_PALETTE_SLOT;
   
       // Get output types
@@ -70,6 +70,8 @@ export function register(): void {
           energy: { id: energy, slot: undefined, type: energyType, stride: payloadStride(energyType.payload) },
         },
         effects: {
+          // [LAW:one-source-of-truth] Time model is emitted by the time root block itself.
+          timeModel: { periodAMs, periodBMs },
           slotRequests: [
             { portId: 'tMs', type: tMsType },
             { portId: 'dt', type: dtType },

@@ -28,10 +28,11 @@ import type { ValueExprId } from '../compiler/ir/Indices';
 import type { RuntimeState } from './RuntimeState';
 import { recordNaN, recordInfinity } from './HealthMonitor';
 import { constValueAsNumber } from '../core/canonical-types';
-import { applyPureFn } from './ScalarKernelLibrary';
+import { applyPureFn, type PureFnExecutionContext } from './ScalarKernelLibrary';
 import { arenaIndex } from './ArenaValueStore';
 
 export interface ScalarEvalContext {
+  readonly pureFnContext?: PureFnExecutionContext;
   evaluateReduceKernel?: (
     expr: Extract<ValueExpr, { kind: 'kernel'; kernelKind: 'reduce' }>,
     valueExprs: readonly ValueExpr[],
@@ -152,8 +153,7 @@ function evaluateScalarExtent(
         case 'progress':
           return state.time.progress !== undefined ? state.time.progress : 0;
         case 'palette':
-          // Palette is stored in objects map at reserved slot 0
-          return 0; // Slot number for palette
+          throw new Error('time.palette is vector-valued and must be materialized or extracted');
         case 'energy':
           return state.time.energy;
         default: {
@@ -274,13 +274,13 @@ function evaluateKernelScalar(
     case 'map': {
       // Unary kernel: fn(input)
       const inputVal = evaluateValueExprScalar(expr.input, valueExprs, state, context);
-      return applyPureFn(expr.fn, [inputVal]);
+      return applyPureFn(expr.fn, [inputVal], context?.pureFnContext);
     }
 
     case 'zip': {
       // N-ary kernel: fn(inputs...)
       const inputVals = expr.inputs.map(id => evaluateValueExprScalar(id, valueExprs, state, context));
-      return applyPureFn(expr.fn, inputVals);
+      return applyPureFn(expr.fn, inputVals, context?.pureFnContext);
     }
 
     case 'zipPromote': {

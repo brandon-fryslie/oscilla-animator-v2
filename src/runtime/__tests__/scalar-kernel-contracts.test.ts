@@ -23,6 +23,7 @@ describe('Scalar Kernel Contract Tests', () => {
       'easeInCubic', 'easeOutCubic', 'easeInOutCubic',
       'easeInElastic', 'easeOutElastic', 'easeOutBounce',
       'noise',
+      'average', 'last', 'max', 'min',
       'combine_sum', 'combine_average', 'combine_max', 'combine_min', 'combine_last',
       'vec3ExtractX', 'vec3ExtractY', 'vec3ExtractZ',
       'colorExtractR', 'colorExtractG', 'colorExtractB', 'colorExtractA',

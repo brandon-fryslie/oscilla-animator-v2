@@ -20,8 +20,8 @@ import type {
   AcyclicOrLegalGraph,
   IllegalCycleError,
   BlockIndex,
+  Block,
 } from "../ir/patches";
-import type { Block } from "../../graph/Patch";
 import { getBlockDefinition, hasLowerOutputsOnly } from "../../blocks/registry";
 
 /**
@@ -197,11 +197,11 @@ export function pass5CycleValidation(
     );
   }
 
-  // Return validated graph with SCC information and portTypes/blocks/edges threaded through
+  // Return validated graph with SCC information and threaded metadata.
   return {
     graph: depGraphWithTime.graph,
-    timeModel: depGraphWithTime.timeModel,
     portTypes: depGraphWithTime.portTypes,
+    inputPortPolicies: depGraphWithTime.inputPortPolicies,
     collectEdgeTypes: depGraphWithTime.collectEdgeTypes,
     blocks: depGraphWithTime.blocks,
     edges: depGraphWithTime.edges,

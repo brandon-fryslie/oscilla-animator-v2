@@ -25,6 +25,10 @@ import { constValueAsNumber, type ConstValue } from '../core/canonical-types';
 import { getTopology } from '../shapes/registry';
 import type { PathTopologyDef } from '../shapes/types';
 import { applyOpcode } from './OpcodeInterpreter';
+import {
+  applyPureFn as applySharedPureFn,
+  type PureFnExecutionContext,
+} from './ScalarKernelLibrary';
 
 function reduceScalarBuffer(buffer: ArrayLike<number>, count: number, op: 'min' | 'max' | 'sum' | 'avg'): number {
   if (count <= 0) return 0;
@@ -55,6 +59,7 @@ function materializeReduceScalar(
   state: RuntimeState,
   program: CompiledProgramIR,
   scratch: MaterializeScratch | undefined,
+  pureFnContext: PureFnExecutionContext,
 ): number {
   const fieldExpr = table.nodes[expr.field];
   if (!fieldExpr) {
@@ -86,6 +91,7 @@ function materializeReduceScalar(
     program,
     undefined,
     scratch,
+    pureFnContext,
   );
   return reduceScalarBuffer(fieldValues, laneCount, expr.op);
 }
@@ -96,11 +102,14 @@ function evaluateScalarForMaterialize(
   state: RuntimeState,
   program: CompiledProgramIR,
   scratch: MaterializeScratch | undefined,
+  pureFnContext: PureFnExecutionContext,
 ): number {
   const context: ScalarEvalContext = {
+    pureFnContext,
     // [LAW:one-source-of-truth] Reduce has exactly one runtime implementation.
     // Scalar evaluation delegates reduce kernels back to the materializer path.
-    evaluateReduceKernel: (expr, _valueExprs, runtimeState) => materializeReduceScalar(expr, table, runtimeState, program, scratch),
+    evaluateReduceKernel: (expr, _valueExprs, runtimeState) =>
+      materializeReduceScalar(expr, table, runtimeState, program, scratch, pureFnContext),
   };
   return evaluateValueExprScalar(exprId, table.nodes, state, context);
 }
@@ -154,7 +163,9 @@ export function materializeValueExpr(
   program: CompiledProgramIR,
   target?: Float32Array,
   scratch?: MaterializeScratch,
+  pureFnContext?: PureFnExecutionContext,
 ): Float32Array {
+  const activePureFnContext = pureFnContext ?? { kernelRegistry: program.kernelRegistry };
   const expr = table.nodes[exprId];
   if (!expr) {
     throw new Error(`ValueExpr ${exprId} not found in table`);
@@ -191,7 +202,18 @@ export function materializeValueExpr(
 
     case 'kernel': {
       // WI-4: Kernel - dispatch to kernel-specific materialization
-      materializeKernel(expr, buf, table, instanceId, count, state, program, scratch, stride);
+      materializeKernel(
+        expr,
+        buf,
+        table,
+        instanceId,
+        count,
+        state,
+        program,
+        scratch,
+        stride,
+        activePureFnContext,
+      );
       break;
     }
 
@@ -200,7 +222,17 @@ export function materializeValueExpr(
       const componentCount = expr.components.length;
       const componentBufs = new Array<Float32Array>(componentCount);
       for (let c = 0; c < componentCount; c++) {
-        componentBufs[c] = materializeValueExpr(expr.components[c], table, instanceId, count, state, program, undefined, scratch);
+        componentBufs[c] = materializeValueExpr(
+          expr.components[c],
+          table,
+          instanceId,
+          count,
+          state,
+          program,
+          undefined,
+          scratch,
+          activePureFnContext,
+        );
       }
       // Interleave components into output buffer
       for (let i = 0; i < count; i++) {
@@ -213,7 +245,17 @@ export function materializeValueExpr(
 
     case 'extract': {
       // WI-4: Extract - extract single component from composite
-      const inputBuf = materializeValueExpr(expr.input, table, instanceId, count, state, program, undefined, scratch);
+      const inputBuf = materializeValueExpr(
+        expr.input,
+        table,
+        instanceId,
+        count,
+        state,
+        program,
+        undefined,
+        scratch,
+        activePureFnContext,
+      );
       const inputExpr = table.nodes[expr.input];
       const inputStride = payloadStride(inputExpr.type.payload);
       for (let i = 0; i < count; i++) {
@@ -224,7 +266,17 @@ export function materializeValueExpr(
 
     case 'hslToRgb': {
       // WI-4: HSL→RGB color space conversion
-      const inputBuf = materializeValueExpr(expr.input, table, instanceId, count, state, program, undefined, scratch);
+      const inputBuf = materializeValueExpr(
+        expr.input,
+        table,
+        instanceId,
+        count,
+        state,
+        program,
+        undefined,
+        scratch,
+        activePureFnContext,
+      );
       hslToRgbConversion(buf, inputBuf, count);
       break;
     }
@@ -244,11 +296,44 @@ export function materializeValueExpr(
     }
 
     case 'external':
-    case 'time':
     case 'eventRead': {
       // [LAW:dataflow-not-control-flow] Scalar reads materialize by writing
       // their evaluated value through the same buffer path as all other materialize ops.
-      const oneValue = evaluateScalarForMaterialize(exprId, table, state, program, scratch);
+      const oneValue = evaluateScalarForMaterialize(
+        exprId,
+        table,
+        state,
+        program,
+        scratch,
+        activePureFnContext,
+      );
+      fillBufferWithOne(buf, oneValue, count, stride);
+      break;
+    }
+
+    case 'time': {
+      if (expr.which === 'palette') {
+        const palette = state.time?.palette;
+        if (!(palette instanceof Float32Array) || palette.length !== 4) {
+          throw new Error('time.palette must be Float32Array(4) in RGBA [0..1]');
+        }
+        for (let lane = 0; lane < count; lane++) {
+          const base = lane * stride;
+          buf[base + 0] = palette[0];
+          buf[base + 1] = palette[1];
+          buf[base + 2] = palette[2];
+          buf[base + 3] = palette[3];
+        }
+        break;
+      }
+      const oneValue = evaluateScalarForMaterialize(
+        exprId,
+        table,
+        state,
+        program,
+        scratch,
+        activePureFnContext,
+      );
       fillBufferWithOne(buf, oneValue, count, stride);
       break;
     }
@@ -287,13 +372,24 @@ function materializeKernel(
   state: RuntimeState,
   program: CompiledProgramIR,
   scratch: MaterializeScratch | undefined,
-  stride: number
+  stride: number,
+  pureFnContext: PureFnExecutionContext,
 ): void {
   switch (expr.kernelKind) {
     case 'map': {
       // WI-4: Map - apply function to each lane
-      const input = materializeValueExpr(expr.input, table, instanceId, count, state, program, undefined, scratch);
-      applyMap(buf, input, expr.fn, count, stride);
+      const input = materializeValueExpr(
+        expr.input,
+        table,
+        instanceId,
+        count,
+        state,
+        program,
+        undefined,
+        scratch,
+        pureFnContext,
+      );
+      applyMap(buf, input, expr.fn, count, stride, pureFnContext);
       break;
     }
 
@@ -302,9 +398,19 @@ function materializeKernel(
       const inputCount = expr.inputs.length;
       const inputs = new Array<Float32Array>(inputCount);
       for (let j = 0; j < inputCount; j++) {
-        inputs[j] = materializeValueExpr(expr.inputs[j], table, instanceId, count, state, program, undefined, scratch);
+        inputs[j] = materializeValueExpr(
+          expr.inputs[j],
+          table,
+          instanceId,
+          count,
+          state,
+          program,
+          undefined,
+          scratch,
+          pureFnContext,
+        );
       }
-      applyZip(buf, inputs, expr.fn, count, stride);
+      applyZip(buf, inputs, expr.fn, count, stride, pureFnContext);
       break;
     }
 
@@ -319,7 +425,14 @@ function materializeKernel(
         const compCount = expr.oneComponents.length;
         const componentValues = new Array<number>(compCount);
         for (let j = 0; j < compCount; j++) {
-          componentValues[j] = evaluateScalarForMaterialize(expr.oneComponents[j], table, state, program, scratch);
+          componentValues[j] = evaluateScalarForMaterialize(
+            expr.oneComponents[j],
+            table,
+            state,
+            program,
+            scratch,
+            pureFnContext,
+          );
         }
         for (let i = 0; i < count; i++) {
           for (let c = 0; c < componentValues.length; c++) {
@@ -328,7 +441,14 @@ function materializeKernel(
         }
       } else {
         // Single-component broadcast: fill entire buffer with one-cardinality value
-        const oneValue = evaluateScalarForMaterialize(expr.one, table, state, program, scratch);
+        const oneValue = evaluateScalarForMaterialize(
+          expr.one,
+          table,
+          state,
+          program,
+          scratch,
+          pureFnContext,
+        );
         fillBufferWithOne(buf, oneValue, count, stride);
       }
       break;
@@ -336,19 +456,46 @@ function materializeKernel(
 
     case 'zipPromote': {
       // WI-4: ZipPromote - combine field with ones
-      const fieldInput = materializeValueExpr(expr.field, table, instanceId, count, state, program, undefined, scratch);
+      const fieldInput = materializeValueExpr(
+        expr.field,
+        table,
+        instanceId,
+        count,
+        state,
+        program,
+        undefined,
+        scratch,
+        pureFnContext,
+      );
       const oneCount = expr.ones.length;
       const oneValues = new Array<number>(oneCount);
       for (let j = 0; j < oneCount; j++) {
-        oneValues[j] = evaluateScalarForMaterialize(expr.ones[j], table, state, program, scratch);
+        oneValues[j] = evaluateScalarForMaterialize(
+          expr.ones[j],
+          table,
+          state,
+          program,
+          scratch,
+          pureFnContext,
+        );
       }
-      applyZipPromote(buf, fieldInput, oneValues, expr.fn, count, stride, instanceId, program);
+      applyZipPromote(buf, fieldInput, oneValues, expr.fn, count, stride, instanceId, program, pureFnContext);
       break;
     }
 
     case 'pathDerivative': {
       // WI-4: PathDerivative - materialize input, compute derivative
-      const input = materializeValueExpr(expr.field, table, instanceId, count, state, program, undefined, scratch) as Float32Array;
+      const input = materializeValueExpr(
+        expr.field,
+        table,
+        instanceId,
+        count,
+        state,
+        program,
+        undefined,
+        scratch,
+        pureFnContext,
+      ) as Float32Array;
       // Read topology ID from expression (Phase 1: available but not yet used for dispatch)
       const topologyId = expr.topologyId;
       // Future: Look up topology for bezier dispatch
@@ -383,9 +530,29 @@ function materializeKernel(
       const sourceCount = typeof rawCount === 'number' ? rawCount : 0;
 
       // Materialize controlPoints with source instance count
-      const cpBuf = materializeValueExpr(expr.controlPoints, table, sourceInstId, sourceCount, state, program, undefined, scratch);
+      const cpBuf = materializeValueExpr(
+        expr.controlPoints,
+        table,
+        sourceInstId,
+        sourceCount,
+        state,
+        program,
+        undefined,
+        scratch,
+        pureFnContext,
+      );
       // Materialize tField with target count (M, the normal count parameter)
-      const tBuf = materializeValueExpr(expr.tField, table, instanceId, count, state, program, undefined, scratch);
+      const tBuf = materializeValueExpr(
+        expr.tField,
+        table,
+        instanceId,
+        count,
+        state,
+        program,
+        undefined,
+        scratch,
+        pureFnContext,
+      );
 
       // Look up topology for closed flag
       const topology = getTopology(expr.topologyId) as PathTopologyDef | undefined;
@@ -405,7 +572,7 @@ function materializeKernel(
     case 'reduce': {
       // [LAW:one-source-of-truth] Reduce is materialized through the same kernel
       // implementation used by scalar fallback evaluation.
-      const reducedValue = materializeReduceScalar(expr, table, state, program, scratch);
+      const reducedValue = materializeReduceScalar(expr, table, state, program, scratch, pureFnContext);
       fillBufferWithOne(buf, reducedValue, count, stride);
       break;
     }
@@ -514,13 +681,14 @@ function applyMap(
   input: Float32Array,
   fn: PureFn,
   count: number,
-  stride: number
+  stride: number,
+  pureFnContext: PureFnExecutionContext,
 ): void {
   for (let i = 0; i < count; i++) {
     const base = i * stride;
     for (let c = 0; c < stride; c++) {
       _mapArgs[0] = input[base + c];
-      out[base + c] = evaluatePureFn(fn, _mapArgs);
+      out[base + c] = evaluatePureFn(fn, _mapArgs, pureFnContext);
     }
   }
 }
@@ -534,7 +702,8 @@ function applyZip(
   inputs: Float32Array[],
   fn: PureFn,
   count: number,
-  stride: number
+  stride: number,
+  pureFnContext: PureFnExecutionContext,
 ): void {
   const n = inputs.length;
   _zipArgs.length = n;
@@ -545,7 +714,7 @@ function applyZip(
       for (let j = 0; j < n; j++) {
         _zipArgs[j] = inputs[j][base + c];
       }
-      out[base + c] = evaluatePureFn(fn, _zipArgs);
+      out[base + c] = evaluatePureFn(fn, _zipArgs, pureFnContext);
     }
   }
 }
@@ -562,7 +731,8 @@ function applyZipPromote(
   count: number,
   stride: number,
   instanceId: InstanceId,
-  program: CompiledProgramIR
+  program: CompiledProgramIR,
+  pureFnContext: PureFnExecutionContext,
 ): void {
   const argCount = 1 + oneValues.length;
   _zipPromoteArgs.length = argCount;
@@ -575,7 +745,7 @@ function applyZipPromote(
     const base = i * stride;
     for (let c = 0; c < stride; c++) {
       _zipPromoteArgs[0] = fieldInput[base + c];
-      out[base + c] = evaluatePureFn(fn, _zipPromoteArgs);
+      out[base + c] = evaluatePureFn(fn, _zipPromoteArgs, pureFnContext);
     }
   }
 }
@@ -590,35 +760,10 @@ function applyZipPromote(
  * @param args - Input arguments
  * @returns Result value
  */
-function evaluatePureFn(fn: PureFn, args: number[]): number {
-  switch (fn.kind) {
-    case 'opcode':
-      // Delegate to single enforcer for all opcodes
-      return applyOpcode(fn.opcode, args);
-
-    case 'kernel':
-      throw new Error(`Kernel functions not yet implemented: ${fn.name}`);
-
-    case 'kernelResolved':
-      throw new Error(`kernelResolved not yet implemented: ${fn.handle}`);
-
-    case 'expr':
-      throw new Error(`Expression evaluation not yet implemented: ${fn.expr}`);
-
-    case 'composed': {
-      // Apply each opcode in sequence (same pattern as ScalarKernelLibrary)
-      let result = args[0];
-      for (const op of fn.ops) {
-        result = applyOpcode(op, [result]);
-      }
-      return result;
-    }
-
-    default: {
-      const _exhaustive: never = fn;
-      throw new Error(`Unknown function kind: ${(_exhaustive as PureFn).kind}`);
-    }
-  }
+function evaluatePureFn(fn: PureFn, args: number[], pureFnContext: PureFnExecutionContext): number {
+  // [LAW:single-enforcer] All PureFn execution is delegated to the shared
+  // scalar kernel library so scalar + field paths cannot diverge.
+  return applySharedPureFn(fn, args, pureFnContext);
 }
 
 /**

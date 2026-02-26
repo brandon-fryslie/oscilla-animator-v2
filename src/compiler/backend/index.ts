@@ -5,11 +5,10 @@
  * Backend has NO knowledge of block origins (adapter, lens, user-created, etc.)
  *
  * Pipeline:
- * 1. Derive.TimeModel    - Generate time channels (tMs, phaseA/B, dt, pulse)
- * 2. Derive.DepGraph     - Build execution dependency graph
- * 3. Schedule.SCC        - SCC decomposition for execution ordering
- * 4. Lower.Blocks        - Convert blocks to IR fragments
- * 5. Schedule.Program    - Topological sort, produce execution order
+ * 1. Derive.DepGraph     - Build execution dependency graph
+ * 2. Schedule.SCC        - SCC decomposition for execution ordering
+ * 3. Lower.Blocks        - Convert blocks to IR fragments
+ * 4. Schedule.Program    - Topological sort, produce execution order
  *
  * Output: CompiledProgramIR ready for runtime execution
  *
@@ -25,7 +24,6 @@ import { compilationInspector } from '../../services/CompilationInspectorService
 import { AddressRegistry } from '../../graph/address-registry';
 
 // Backend passes
-import { pass3Time } from './derive-time-model';
 import { pass4DepGraph } from './derive-dep-graph';
 import { pass5CycleValidation } from './schedule-scc';
 import { pass6BlockLowering, type UnlinkedIRFragments, type Pass6Options } from './lower-blocks';
@@ -33,14 +31,13 @@ import { pass7Schedule, type ScheduleIR } from './schedule-program';
 import { allocateContinuityPipeline } from './continuity-pipeline';
 
 // Re-export for consumers
-export { pass3Time } from './derive-time-model';
 export { pass4DepGraph } from './derive-dep-graph';
 export { pass5CycleValidation } from './schedule-scc';
 export { pass6BlockLowering } from './lower-blocks';
 export { pass7Schedule } from './schedule-program';
 export type { UnlinkedIRFragments, Pass6Options } from './lower-blocks';
 export type { ScheduleIR } from './schedule-program';
-export type { TimeResolvedPatch, DepGraphWithTimeModel, AcyclicOrLegalGraph } from '../ir/patches';
+export type { DepGraphWithTimeModel, AcyclicOrLegalGraph } from '../ir/patches';
 
 // =============================================================================
 // Backend Options
@@ -99,29 +96,18 @@ export function compileBackend(
 ): BackendCompileResult {
   try {
     // =========================================================================
-    // Step 1: Time Model Derivation
+    // Step 1: Dependency Graph
     // =========================================================================
-    const timeResolvedPatch = pass3Time(typedPatch);
+    const depGraphPatch = pass4DepGraph(typedPatch);
 
     try {
-      compilationInspector.capturePass('backend:time', typedPatch, timeResolvedPatch);
+      compilationInspector.capturePass('backend:depgraph', typedPatch, depGraphPatch);
     } catch (e) {
       // Ignore inspector errors
     }
 
     // =========================================================================
-    // Step 2: Dependency Graph
-    // =========================================================================
-    const depGraphPatch = pass4DepGraph(timeResolvedPatch);
-
-    try {
-      compilationInspector.capturePass('backend:depgraph', timeResolvedPatch, depGraphPatch);
-    } catch (e) {
-      // Ignore inspector errors
-    }
-
-    // =========================================================================
-    // Step 3: SCC Scheduling (execution order validation)
+    // Step 2: SCC Scheduling (execution order validation)
     // =========================================================================
     const acyclicPatch = pass5CycleValidation(depGraphPatch);
 
@@ -133,7 +119,7 @@ export function compileBackend(
 
     // =========================================================================
     const addressRegistry = AddressRegistry.buildFromPatch(typedPatch.patch);
-    // Step 4: Block Lowering
+    // Step 3: Block Lowering
     // =========================================================================
     const pass6Options: Pass6Options = {
       events: options?.events,
@@ -163,12 +149,12 @@ export function compileBackend(
     }
 
     // =========================================================================
-    // Step 5a: Continuity Pipeline Allocation
+    // Step 4a: Continuity Pipeline Allocation
     // =========================================================================
     const continuityPipeline = allocateContinuityPipeline(unlinkedIR, acyclicPatch);
 
     // =========================================================================
-    // Step 5b: Schedule Construction (pure ordering, no allocation)
+    // Step 4b: Schedule Construction (pure ordering, no allocation)
     // =========================================================================
     const scheduleIR = pass7Schedule(unlinkedIR, acyclicPatch, continuityPipeline);
 
@@ -179,7 +165,7 @@ export function compileBackend(
     }
 
     // =========================================================================
-    // Step 6: Convert to CompiledProgramIR
+    // Step 5: Convert to CompiledProgramIR
     // =========================================================================
     const program = convertToProgram(unlinkedIR, scheduleIR, acyclicPatch);
 

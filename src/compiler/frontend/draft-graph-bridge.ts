@@ -16,7 +16,7 @@ import type { BlockId, PortId, BlockRole, EdgeRole, DefaultSource } from '../../
 import type { Block, Edge, Patch, InputPort, OutputPort } from '../../graph/Patch';
 import type { NormalizedPatch, NormalizedEdge, BlockIndex } from './normalize-indexing';
 import { blockIndex } from './normalize-indexing';
-import type { TypeResolvedPatch, PortKey, CollectEdgeKey } from '../ir/patches';
+import type { TypeResolvedPatch, PortKey, CollectEdgeKey, InputPortPolicy } from '../ir/patches';
 import type { CanonicalType } from '../../core/canonical-types';
 import type { CardinalityAcceptance } from '../../core/canonical-types/cardinality';
 import type { StrictTypedGraph, DraftPortKey, TypeFacts } from './type-facts';
@@ -72,6 +72,7 @@ export function bridgeToNormalizedPatch(
 
   // Step 5: Translate DraftPortKey → PortKey for type map
   const portTypes = translatePortTypes(strict.portTypes, stringIndexMap);
+  const inputPortPolicies = buildInputPortPolicies(blocks, stringIndexMap, registry);
 
   // Step 6: Translate collectEdgeTypes (DraftPortKey-flavored keys → CollectEdgeKey)
   const collectEdgeTypes = translateCollectEdgeTypes(strict.collectEdgeTypes, stringIndexMap);
@@ -91,6 +92,7 @@ export function bridgeToNormalizedPatch(
   const typeResolved: TypeResolvedPatch = {
     ...normalizedPatch,
     portTypes,
+    inputPortPolicies,
     collectEdgeTypes: collectEdgeTypes.size > 0 ? collectEdgeTypes : undefined,
     portAcceptance: portAcceptance && portAcceptance.size > 0 ? portAcceptance : undefined,
   };
@@ -147,6 +149,8 @@ export function bridgePartialToNormalizedPatch(
     }
   }
 
+  const inputPortPolicies = buildInputPortPolicies(blocks, stringIndexMap, registry);
+
   const normalizedPatch: NormalizedPatch = {
     patch: syntheticPatch,
     blockIndex: blockIndexMap,
@@ -160,6 +164,7 @@ export function bridgePartialToNormalizedPatch(
   const typeResolved: TypeResolvedPatch = {
     ...normalizedPatch,
     portTypes,
+    inputPortPolicies,
     portAcceptance: portAcceptance.size > 0 ? portAcceptance : undefined,
   };
 
@@ -341,6 +346,36 @@ function translatePortTypes(
   }
 
   return result;
+}
+
+/**
+ * Build backend input policies from per-instance input port metadata.
+ *
+ * // [LAW:single-enforcer] Frontend bridge is the only boundary that translates
+ * editor input-port metadata into compiler backend policy data.
+ */
+function buildInputPortPolicies(
+  blocks: readonly Block[],
+  blockIndexMap: ReadonlyMap<string, BlockIndex>,
+  registry: ReadonlyMap<string, BlockDef>,
+): ReadonlyMap<PortKey, InputPortPolicy> {
+  const policies = new Map<PortKey, InputPortPolicy>();
+
+  for (const block of blocks) {
+    const blockIdx = blockIndexMap.get(block.id);
+    if (blockIdx === undefined) continue;
+    const blockDef = registry.get(block.type);
+    if (!blockDef) continue;
+
+    for (const [portId, inputDef] of Object.entries(blockDef.inputs)) {
+      if (inputDef.exposedAsPort === false) continue;
+      const combineMode = block.inputPorts.get(portId)?.combineMode ?? 'last';
+      const key = `${blockIdx}:${portId}:in` as PortKey;
+      policies.set(key, { combineMode });
+    }
+  }
+
+  return policies;
 }
 
 /**

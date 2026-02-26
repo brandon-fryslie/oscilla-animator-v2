@@ -437,7 +437,9 @@ export function pass7Schedule(
   validated: AcyclicOrLegalGraph,
   continuityPipeline: ContinuityPipelineIR
 ): ScheduleIR {
-  const timeModel: TimeModel = validated.timeModel;
+  // [LAW:one-source-of-truth] Time model authority is the IR builder schedule
+  // emitted by block lowering effects (not pass-threaded metadata).
+  const timeModel: TimeModel = unlinkedIR.builder.getSchedule();
 
   // Get instances from IRBuilder
   const instances = unlinkedIR.builder.getInstances();
@@ -462,12 +464,6 @@ export function pass7Schedule(
     const exprId = scalarExprId as ValueExprId;
     const expr = valueExprs[exprId as number];
     if (!expr) continue;
-
-    if (expr.kind === 'time' && expr.which === 'palette') {
-      // [LAW:single-enforcer] Palette slot is authored once by executor pre-frame setup.
-      // Do not emit a competing eval/materialize step from ValueExpr scheduling.
-      continue;
-    }
 
     // [LAW:one-source-of-truth] Eligible arena-compatible scalar DAGs are migrated to the
     // materializer path via SCALAR_INSTANCE_ID instead of evalValue.

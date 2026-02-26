@@ -44,6 +44,15 @@ import { debugSettings } from '../settings/tokens/debug-settings';
 import { compilerFlagsSettings } from '../settings/tokens/compiler-flags-settings';
 import { appSettings } from '../settings/tokens/app-settings';
 
+function isCompileWorkerUnavailableError(err: unknown): boolean {
+  const message = err instanceof Error ? err.message : String(err);
+  const lowered = message.toLowerCase();
+  return lowered.includes('failed to construct') ||
+    lowered.includes('worker is not defined') ||
+    lowered.includes('module workers are not supported') ||
+    lowered.includes('securityerror');
+}
+
 export class RuntimeService {
   private readonly domainChangeDetector: DomainChangeDetector = createDomainChangeDetector();
 
@@ -62,15 +71,15 @@ export class RuntimeService {
   private unsubCompileEnd: (() => void) | null = null;
   private compileWorkerClient: CompileWorkerClient | null = null;
   private pendingSwap: PrecomputedCompileArtifacts | null = null;
-  private pendingMainThreadCompile = false;
   private swapInFlight = false;
   private swapRafId: number | null = null;
   private lastWorkerFallbackLog = { message: '', atMs: 0 };
+  private compileWorkerUnavailableLogged = false;
   private readonly liveRecompile: LiveRecompileController = createLiveRecompileController();
 
   constructor(private readonly store: RootStore) {}
 
-  private logWorkerFallback(err: unknown): void {
+  private logWorkerFailure(err: unknown): void {
     const message = err instanceof Error ? err.message : String(err);
     const now = performance.now();
     const unchanged = this.lastWorkerFallbackLog.message === message;
@@ -78,9 +87,21 @@ export class RuntimeService {
     if (unchanged && withinWindow) return;
 
     this.lastWorkerFallbackLog = { message, atMs: now };
+    // [LAW:no-silent-fallbacks] Worker recompile failures must surface as
+    // explicit diagnostics; this runtime does not support silent fallback.
+    if (isCompileWorkerUnavailableError(err)) {
+      if (this.compileWorkerUnavailableLogged) return;
+      this.compileWorkerUnavailableLogged = true;
+      this.store.diagnostics.log({
+        level: 'error',
+        message: `Live recompile unavailable: Web Workers are required but could not be started (${message}). This platform/runtime is unsupported for graph edits.`,
+      });
+      return;
+    }
+
     this.store.diagnostics.log({
-      level: 'warn',
-      message: `Compile worker failed, falling back to main-thread compile: ${message}`,
+      level: 'error',
+      message: `Live recompile failed in worker: ${message}`,
     });
   }
 
@@ -150,22 +171,16 @@ export class RuntimeService {
   private async flushPendingSwap(): Promise<void> {
     if (this.swapInFlight) return;
     const next = this.pendingSwap;
-    const shouldRunMainThreadCompile = next == null && this.pendingMainThreadCompile;
-    if (!next && !shouldRunMainThreadCompile) return;
+    if (!next) return;
 
     this.pendingSwap = null;
-    this.pendingMainThreadCompile = false;
     this.swapInFlight = true;
     try {
       // [LAW:single-enforcer] All compile/swap application goes through this queue.
-      if (next) {
-        await compileAndSwap(this.compileDeps(), false, next);
-      } else {
-        await compileAndSwap(this.compileDeps(), false);
-      }
+      await compileAndSwap(this.compileDeps(), false, next);
     } finally {
       this.swapInFlight = false;
-      if (this.pendingSwap || this.pendingMainThreadCompile) {
+      if (this.pendingSwap) {
         this.requestSwapFlush();
       }
     }
@@ -306,9 +321,7 @@ export class RuntimeService {
         if (err instanceof CompileSupersededError) {
           return;
         }
-        this.logWorkerFallback(err);
-        this.pendingMainThreadCompile = true;
-        this.requestSwapFlush();
+        this.logWorkerFailure(err);
       }
     }, (changes) => {
       const program = this.compileState.currentProgram;
@@ -367,7 +380,6 @@ export class RuntimeService {
       this.swapRafId = null;
     }
     this.pendingSwap = null;
-    this.pendingMainThreadCompile = false;
     this.swapInFlight = false;
     this.unsubCompileEnd?.();
     this.unsubCompileEnd = null;

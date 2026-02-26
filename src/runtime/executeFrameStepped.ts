@@ -30,21 +30,20 @@ import { assembleRenderFrame, type AssemblerContext } from './RenderAssembler';
 import { resolveCameraFromGlobals } from './CameraResolver';
 import { payloadStride } from '../core/canonical-types';
 import type { ValueSlot, StateSlotId } from '../compiler/ir/Indices';
-import { SCALAR_INSTANCE_ID, SYSTEM_PALETTE_SLOT } from '../compiler/ir/Indices';
+import { SCALAR_INSTANCE_ID } from '../compiler/ir/Indices';
 import { evaluateValueExprEvent } from './ValueExprEventEvaluator';
 import { materializeValueExpr } from './ValueExprMaterializer';
 import { applyStateWritePolicy } from './StateWritePolicy';
+import type { PureFnExecutionContext } from './ScalarKernelLibrary';
 import {
   arenaDecodeToAoS,
   arenaEncodeFromAoS,
   arenaRead,
-  arenaWrite,
   type ArenaSlotDescriptor,
 } from './ArenaValueStore';
 import {
   type SlotLookup,
   getExprAddressTable,
-  assertNumericStride,
   isNumericStorage,
 } from './ExprAddressTable';
 import type { StepSnapshot, SlotValue, StateSlotValue, ExecutionPhase } from './StepDebugTypes';
@@ -68,25 +67,6 @@ function resolveArenaDescriptor(
     throw new Error(`resolveArenaDescriptor: missing arena descriptor for numeric slot ${lookup.slot}`);
   }
   return arenaDesc;
-}
-
-function writeArenaStrided(
-  slotToArena: ReadonlyMap<ValueSlot, ArenaSlotDescriptor>,
-  state: RuntimeState,
-  lookup: SlotLookup,
-  src: ArrayLike<number>,
-  stride: number,
-): void {
-  if (!isNumericStorage(lookup.storage)) {
-    throw new Error(`writeArenaStrided: expected numeric storage for slot ${lookup.slot}, got ${lookup.storage}`);
-  }
-  if (lookup.stride !== stride) {
-    throw new Error(`writeArenaStrided: expected stride=${stride} for slot ${lookup.slot}, got ${lookup.stride}`);
-  }
-  const arenaDesc = resolveArenaDescriptor(slotToArena, lookup);
-  for (let i = 0; i < stride; i++) {
-    arenaWrite(state.arena, arenaDesc, 0, i, src[i] as number);
-  }
 }
 
 function readCanonicalNumeric(
@@ -240,6 +220,7 @@ export function* executeFrameStepped(
   // slotToArena replaces all direct program.arenaLayout[slot] accesses in this file.
   const addressTable = getExprAddressTable(program);
   const { slotLookup: slotLookupMap, fieldExprToSlot, slotToArena } = addressTable;
+  const pureFnContext: PureFnExecutionContext = { kernelRegistry: program.kernelRegistry };
 
   const resolveSlotOffset = (slot: ValueSlot): SlotLookup => {
     const lookup = slotLookupMap.get(slot);
@@ -260,14 +241,6 @@ export function* executeFrameStepped(
   state.time = time;
   state.eventScalars.fill(0);
   state.events.forEach((payloads) => { payloads.length = 0; });
-
-  // System-reserved time outputs
-  const TIME_PALETTE_SLOT = SYSTEM_PALETTE_SLOT;
-  if (!(time.palette instanceof Float32Array) || time.palette.length !== 4) {
-    throw new Error('time.palette must be Float32Array(4) in RGBA [0..1]');
-  }
-  const palette = assertNumericStride(slotLookupMap, TIME_PALETTE_SLOT, 4, 'time.palette slot');
-  writeArenaStrided(slotToArena, state, palette, time.palette, 4);
 
   // Yield pre-frame snapshot
   yield buildSnapshot(-1, null, 'pre-frame', totalSteps, program, state, tAbsMs, new Map(), prevValues);
@@ -323,6 +296,7 @@ export function* executeFrameStepped(
             program,
             undefined,
             STEPPED_MATERIALIZE_SCRATCH,
+            pureFnContext,
           );
           arenaEncodeFromAoS(state.arena, arenaDesc, buffer);
           if (buffer.length < stride) {
@@ -342,7 +316,7 @@ export function* executeFrameStepped(
       }
 
       case 'eventDispatch': {
-        const fired = evaluateValueExprEvent(step.expr as any, program.valueExprs, state, program);
+        const fired = evaluateValueExprEvent(step.expr as any, program.valueExprs, state, program, pureFnContext);
         if (fired) {
           state.eventScalars[step.target as number] = 1;
         }
@@ -370,7 +344,15 @@ export function* executeFrameStepped(
           );
         }
         const buffer = materializeValueExpr(
-          veId, program.valueExprs, step.instanceId, count, state, program, undefined, STEPPED_MATERIALIZE_SCRATCH,
+          veId,
+          program.valueExprs,
+          step.instanceId,
+          count,
+          state,
+          program,
+          undefined,
+          STEPPED_MATERIALIZE_SCRATCH,
+          pureFnContext,
         );
         arenaEncodeFromAoS(state.arena, arenaDesc, buffer);
 
@@ -480,6 +462,7 @@ export function* executeFrameStepped(
         program,
         undefined,
         STEPPED_MATERIALIZE_SCRATCH,
+        pureFnContext,
       );
       const baseSlot = step.stateSlot as number;
       for (let c = 0; c < stride; c++) {
@@ -515,7 +498,15 @@ export function* executeFrameStepped(
       if (count > 0) {
         const instanceIdStr = String(mapping.instanceId);
         const tempBuffer = materializeValueExpr(
-          veId, program.valueExprs, makeInstanceId(instanceIdStr), count, state, program, undefined, STEPPED_MATERIALIZE_SCRATCH,
+          veId,
+          program.valueExprs,
+          makeInstanceId(instanceIdStr),
+          count,
+          state,
+          program,
+          undefined,
+          STEPPED_MATERIALIZE_SCRATCH,
+          pureFnContext,
         );
         const baseSlot = step.stateSlot as number;
         const srcStride = payloadStride(exprNode.type.payload);

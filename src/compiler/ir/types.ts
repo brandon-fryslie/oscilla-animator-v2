@@ -108,6 +108,8 @@ export enum OpCode {
   // Range
   Min = 'min',
   Max = 'max',
+  Avg = 'avg',
+  Last = 'last',
   Clamp = 'clamp',
   Lerp = 'lerp',
 

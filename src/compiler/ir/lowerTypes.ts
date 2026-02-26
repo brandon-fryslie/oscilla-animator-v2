@@ -29,6 +29,7 @@ import type {
   StateSlotId,
 } from './Indices';
 import type { StableStateId, ContinuityPolicy } from './types';
+import type { TimeModelIR } from './schedule';
 
 // =============================================================================
 // Value Reference Types
@@ -208,4 +209,6 @@ export interface LowerEffects {
   readonly eventSlotRequests?: readonly EventSlotRequest[];
   /** Eval requests for sink blocks (for runtime probes/test sinks). */
   readonly evalRequests?: readonly { exprId: ValueExprId }[];
+  /** Optional time model contribution for runtime clock resolution. */
+  readonly timeModel?: TimeModelIR;
 }

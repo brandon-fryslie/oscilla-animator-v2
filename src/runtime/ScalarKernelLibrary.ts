@@ -16,6 +16,11 @@
 import type { PureFn } from '@/compiler/ir/types';
 import { applyOpcode } from './OpcodeInterpreter';
 import { singleArgBuf as _singleArgBuf } from './executor-init';
+import type { KernelRegistry } from './KernelRegistry';
+
+export interface PureFnExecutionContext {
+  readonly kernelRegistry: KernelRegistry;
+}
 
 // ═══════════════════════════════════════════════════════════════════════════
 // SCALAR KERNEL IMPLEMENTATION
@@ -35,13 +40,11 @@ export function applyScalarKernel(name: string, _values: number[]): number {
  * Apply a pure function to values
  *
  * Handles opcodes, kernels, and composed operations.
- *
- * Note: kernelResolved case will be implemented in Phase D (Migration).
- * For now, it throws to catch any premature usage.
  */
 export function applyPureFn(
   fn: PureFn,
-  values: number[]
+  values: number[],
+  context?: PureFnExecutionContext
 ): number {
   switch (fn.kind) {
     case 'opcode':
@@ -50,11 +53,21 @@ export function applyPureFn(
     case 'kernel':
       return applyScalarKernel(fn.name, values);
 
-    case 'kernelResolved':
-      // Phase D: This will call registry.callScalar(fn.handle, values)
-      throw new Error(
-        'kernelResolved not yet implemented (Phase D pending). Handle: ' + fn.handle + ', ABI: ' + fn.abi
-      );
+    case 'kernelResolved': {
+      // [LAW:no-shared-mutable-globals] Kernel handles are program-local.
+      // Runtime dispatch must use the active program's registry, never a global.
+      if (!context) {
+        throw new Error(
+          'kernelResolved evaluation requires PureFnExecutionContext'
+        );
+      }
+      if (fn.abi !== 'scalar') {
+        throw new Error(
+          'kernelResolved lane ABI is not scalar-evaluable (handle=' + fn.handle + ', abi=' + fn.abi + ')'
+        );
+      }
+      return context.kernelRegistry.callScalar(fn.handle, values);
+    }
 
     case 'expr':
       throw new Error('PureFn kind \'expr\' not yet implemented');

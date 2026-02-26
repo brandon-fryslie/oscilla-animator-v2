@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { compile } from '../../compiler/compile';
 import { buildPatch, type Patch } from '../../graph';
+import type { PatchBuilder } from '../../graph';
 import { executeFrame } from '../../runtime/ScheduleExecutor';
 import { createRuntimeState } from '../../runtime/RuntimeState';
 import type { ScheduleIR } from '../../compiler/backend/schedule-program';
@@ -29,7 +30,7 @@ function createState(program: CompiledProgramIR) {
 }
 
 function buildScalarProbePatch(
-  connectScale: (ctx: { b: Parameters<typeof buildPatch>[0]; time: any; render: any }) => void,
+  connectScale: (ctx: { b: PatchBuilder; time: any; render: any }) => void,
 ): Patch {
   return buildPatch((b) => {
     const time = b.addBlock('InfiniteTimeRoot');
@@ -68,7 +69,8 @@ function runScaleFrames(program: CompiledProgramIR, frameTimesMs: readonly numbe
   for (const t of frameTimesMs) {
     const frame = executeFrame(program, state, getTestArena(), t);
     expect(frame.ops.length).toBeGreaterThan(0);
-    out.push(frame.ops[0]!.instances.size[0]!);
+    const size = frame.ops[0]!.instances.size;
+    out.push(typeof size === 'number' ? size : (size[0] ?? 0));
   }
   return out;
 }

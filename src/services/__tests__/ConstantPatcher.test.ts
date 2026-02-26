@@ -5,6 +5,14 @@ import { canonicalMany, canonicalType, FLOAT, floatConst, instanceRef, unitNone 
 import { valueSlot } from '../../compiler/ir/Indices';
 import { domainTypeId, instanceId } from '../../core/ids';
 import type { ArenaSlotDescriptor } from '../../runtime/ArenaValueStore';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { deserializePatchFromHCL } from '../../patch-dsl/deserialize';
+import { compile } from '../../compiler';
+import { EventHub } from '../../events/EventHub';
+import { computeRuntimeStorageSizes } from '../../compiler/ir/program';
+import { createRuntimeState, executeFrame } from '../../runtime';
+import { getTestArena } from '../../runtime/__tests__/test-arena-helper';
 
 function buildProgramForCountPatch(params: {
   readonly instanceCount: number;
@@ -104,9 +112,9 @@ function buildProgramForConstPatch(params: {
       instances: new Map(),
       steps: [
         {
-          kind: 'evalOne',
+          kind: 'eventDispatch',
           expr: params.liveExprId,
-          target: valueSlot(0),
+          target: 0,
         },
       ],
       stateSlotCount: 0,
@@ -148,5 +156,88 @@ describe('ConstantPatcher runtime-liveness guard', () => {
     const patched = patchProgramConstants(program, new Map([['shape-1:resolution', 12]]));
     expect(patched).not.toBeNull();
     expect((patched!.valueExprs.nodes[1] as any).value.value).toBe(12);
+  });
+});
+
+function compileSimpleProgram(): {
+  program: CompiledProgramIR;
+  idByDisplayName: Map<string, string>;
+} {
+  const hcl = readFileSync(resolve(process.cwd(), 'src/demo/hcl/simple.hcl'), 'utf-8');
+  const parsed = deserializePatchFromHCL(hcl);
+  expect(parsed.errors).toEqual([]);
+
+  const idByDisplayName = new Map<string, string>();
+  for (const [id, block] of parsed.patch.blocks) {
+    idByDisplayName.set(block.displayName, id);
+  }
+
+  const compiled = compile(parsed.patch, { events: new EventHub() });
+  if (compiled.kind !== 'ok') {
+    throw new Error(compiled.errors.map((e) => `${e.code}: ${e.message}`).join('\n'));
+  }
+
+  return { program: compiled.program, idByDisplayName };
+}
+
+function frameSummary(program: CompiledProgramIR): {
+  pointsCount: number;
+  instanceCount: number;
+  firstScale: number;
+} {
+  const schedule = program.schedule as {
+    stateSlotCount?: number;
+    eventSlotCount?: number;
+    eventCount?: number;
+  };
+  const sizes = computeRuntimeStorageSizes(program.runtimeSlots);
+  const state = createRuntimeState(
+    sizes.f32,
+    schedule.stateSlotCount ?? 0,
+    schedule.eventSlotCount ?? 0,
+    schedule.eventCount ?? 0,
+    program.valueExprs.nodes.length,
+    program.arenaTotalFloats,
+  );
+  const frame = executeFrame(program, state, getTestArena(), 1370);
+  const op = frame.ops[0];
+  return {
+    pointsCount: op?.geometry.pointsCount ?? 0,
+    instanceCount: op?.instances.count ?? 0,
+    firstScale: op ? (typeof op.instances.size === 'number' ? op.instances.size : op.instances.size[0]) : 0,
+  };
+}
+
+describe('ConstantPatcher simple patch runtime sink gating', () => {
+  it('falls back for constants that are not read by runtime sinks', () => {
+    const { program, idByDisplayName } = compileSimpleProgram();
+    const dotId = idByDisplayName.get('dot')!;
+    const wobbleId = idByDisplayName.get('dot-wobble')!;
+    const clockId = idByDisplayName.get('clock')!;
+
+    const resolutionPatched = patchProgramConstants(program, new Map([[`${dotId}:resolution`, 100]]));
+    const amountPatched = patchProgramConstants(program, new Map([[`${wobbleId}:amount`, 0.01]]));
+    const frequencyPatched = patchProgramConstants(program, new Map([[`${wobbleId}:frequency`, 12]]));
+    const periodPatched = patchProgramConstants(program, new Map([[`${clockId}:periodAMs`, 2500]]));
+
+    expect(resolutionPatched).toBeNull();
+    expect(amountPatched).toBeNull();
+    expect(frequencyPatched).toBeNull();
+    expect(periodPatched).toBeNull();
+  });
+
+  it('patches render scale and immediately changes frame output', () => {
+    const { program, idByDisplayName } = compileSimpleProgram();
+    const renderId = idByDisplayName.get('render')!;
+
+    const before = frameSummary(program);
+    const patched = patchProgramConstants(program, new Map([[`${renderId}:scale`, 0.25]]));
+    expect(patched).not.toBeNull();
+
+    const after = frameSummary(patched!);
+    expect(after.instanceCount).toBe(before.instanceCount);
+    expect(after.pointsCount).toBe(before.pointsCount);
+    expect(after.firstScale).not.toBeCloseTo(before.firstScale);
+    expect(after.firstScale).toBeCloseTo(0.25, 5);
   });
 });

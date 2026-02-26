@@ -7,19 +7,17 @@
  * Pass Flow:
  * Patch -> NormalizedPatch (from compiler/frontend/normalize-indexing.ts)
  *       -> TypedPatch (Pass 2)
- *       -> TimeResolvedPatch (Pass 3)
- *       -> DepGraph (Pass 4)
- *       -> AcyclicOrLegalGraph (Pass 5)
- *       -> UnlinkedIRFragments (Pass 6)
+ *       -> DepGraph (Pass 3)
+ *       -> AcyclicOrLegalGraph (Pass 4)
+ *       -> UnlinkedIRFragments (Pass 5)
  *
  * IMPORTANT: The compiler receives NormalizedPatch from the Graph Normalizer.
  * It never sees raw Patch directly.
  */
 
-import type { ValueExprId } from "./Indices";
 import type { CanonicalType } from "../../core/canonical-types";
 import type { CardinalityAcceptance } from "../../core/canonical-types/cardinality";
-import type { TimeModelIR } from "./schedule";
+import type { CombineMode } from "../../types";
 
 export type { BlockIndex, NormalizedPatch, NormalizedEdge } from "../frontend/normalize-indexing";
 export type { Block, Edge, Patch } from "../../graph/Patch";
@@ -73,11 +71,20 @@ export type PortKey = `${number}:${string}:${'in' | 'out'}`;
 export type CollectEdgeKey = `${number}:${string}:${number}`;
 
 /**
+ * Backend input policy metadata keyed by compiler port key.
+ * This is compiled at the frontend boundary from editor/graph metadata.
+ */
+export interface InputPortPolicy {
+  readonly combineMode: CombineMode;
+}
+
+/**
  * Patch with all port types resolved.
  * The portTypes map is the single source of truth for all port types.
  */
 export interface TypeResolvedPatch extends NormalizedPatch {
   readonly portTypes: ReadonlyMap<PortKey, CanonicalType>;
+  readonly inputPortPolicies: ReadonlyMap<PortKey, InputPortPolicy>;
   /**
    * Per-edge types for collect ports.
    * Collect ports opt out of union-find unification — each incoming edge
@@ -104,50 +111,7 @@ export interface TypeResolvedPatch extends NormalizedPatch {
 export type TypedPatch = TypeResolvedPatch;
 
 // =============================================================================
-// Time-Resolved Patch - Pass 3
-// =============================================================================
-
-/**
- * Patch with time channels resolved and validated.
- *
- * Pass 3 determines the time model and generates derived time channels.
- */
-export interface TimeResolvedPatch extends TypedPatch {
-  /** Time model (authoritative for the patch) */
-  readonly timeModel: TimeModelIR;
-
-  /** Derived time channels available to all blocks */
-  readonly timeChannels: TimeChannels;
-}
-
-/**
- * Derived time channels generated from the time model.
- */
-export interface TimeChannels {
-  /** One-cardinality expression ID for tModelMs (model time) */
-  readonly tModelMs: ValueExprId;
-
-  /** One-cardinality expression ID for phaseA (primary phase) */
-  readonly phaseA?: ValueExprId;
-
-  /** One-cardinality expression ID for phaseB (secondary phase) */
-  readonly phaseB?: ValueExprId;
-
-  /** One-cardinality expression ID for dt (delta time) */
-  readonly dt?: ValueExprId;
-
-  /** Event expression ID for pulse (fires on phase wrap) */
-  readonly pulse: ValueExprId | null;
-
-  /** One-cardinality expression ID for palette (phase-derived color) */
-  readonly palette?: ValueExprId;
-
-  /** One-cardinality expression ID for energy (phase-derived energy) */
-  readonly energy?: ValueExprId;
-}
-
-// =============================================================================
-// Dependency Graph - Pass 4
+// Dependency Graph - Pass 3
 // =============================================================================
 
 /**
@@ -176,10 +140,10 @@ export interface DepGraph {
  */
 export interface DepGraphWithTimeModel {
   readonly graph: DepGraph;
-  readonly timeModel: TimeModelIR;
-
   /** Port types from pass1 - THE source of truth */
   readonly portTypes: TypeResolvedPatch['portTypes'];
+  /** Input policies from frontend normalization (e.g., combineMode). */
+  readonly inputPortPolicies: TypeResolvedPatch['inputPortPolicies'];
 
   /** Per-edge types for collect ports (threaded from TypeResolvedPatch) */
   readonly collectEdgeTypes?: TypeResolvedPatch['collectEdgeTypes'];
@@ -192,7 +156,7 @@ export interface DepGraphWithTimeModel {
 }
 
 // =============================================================================
-// Cycle Validation - Pass 5
+// Cycle Validation - Pass 4
 // =============================================================================
 
 /**
@@ -219,11 +183,10 @@ export interface AcyclicOrLegalGraph {
   readonly sccs: readonly SCC[];
   readonly errors: readonly IllegalCycleError[];
 
-  /** Time model from Pass 3, threaded through for Pass 6 */
-  readonly timeModel: TimeModelIR;
-
   /** Port types from pass1 - THE source of truth */
   readonly portTypes: TypeResolvedPatch['portTypes'];
+  /** Input policies from frontend normalization (e.g., combineMode). */
+  readonly inputPortPolicies: TypeResolvedPatch['inputPortPolicies'];
 
   /** Per-edge types for collect ports (threaded from TypeResolvedPatch) */
   readonly collectEdgeTypes?: TypeResolvedPatch['collectEdgeTypes'];

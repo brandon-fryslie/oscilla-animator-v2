@@ -8,11 +8,9 @@ import {
 } from '../defaultSourcePresentation';
 
 describe('defaultSourcePresentation', () => {
-  it('treats both TimeRoot and InfiniteTimeRoot as time defaults', () => {
-    const finite: DefaultSource = { blockType: 'TimeRoot', output: 'tMs' };
+  it('treats InfiniteTimeRoot as time default', () => {
     const infinite: DefaultSource = { blockType: 'InfiniteTimeRoot', output: 'phaseA' };
 
-    expect(isTimeDefaultSource(finite)).toBe(true);
     expect(isTimeDefaultSource(infinite)).toBe(true);
     expect(isTimeDefaultSource({ blockType: 'Const', output: 'out', params: { value: 1 } })).toBe(false);
   });
@@ -35,4 +33,3 @@ describe('defaultSourcePresentation', () => {
     expect(formatDefaultSourceLabel(constDefault, 'Default: ')).toBe('Default: [1, 2, 3]');
   });
 });
-

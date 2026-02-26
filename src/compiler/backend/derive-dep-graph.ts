@@ -1,7 +1,7 @@
 /**
- * Pass 4: Dependency Graph Construction
+ * Pass 3: Dependency Graph Construction
  *
- * Transforms a TimeResolvedPatch into a DepGraph by:
+ * Transforms a TypedPatch into a DepGraph by:
  * 1. Creating BlockEval nodes for all blocks
  * 2. Adding edges (block → block) from NormalizedEdge array
  *
@@ -13,13 +13,13 @@
  */
 
 import type {
-  TimeResolvedPatch,
+  TypedPatch,
   DepGraph,
   DepNode,
   DepEdge,
   DepGraphWithTimeModel,
+  BlockIndex,
 } from "../ir/patches";
-import type { BlockIndex } from "../frontend/normalize-indexing";
 
 /**
  * Error types emitted by Pass 4.
@@ -36,16 +36,16 @@ export type Pass4Error =
   | DanglingConnectionError;
 
 /**
- * Pass 4: Dependency Graph Construction
+ * Pass 3: Dependency Graph Construction
  *
  * Builds a unified dependency graph with BlockEval nodes
  * and edges from the NormalizedEdge array.
  *
- * @param timeResolved - The time-resolved patch from Pass 3
+ * @param typedPatch - The typed patch from frontend
  * @returns A dependency graph ready for cycle validation
  */
 export function pass4DepGraph(
-  timeResolved: TimeResolvedPatch
+  typedPatch: TypedPatch
 ): DepGraphWithTimeModel {
   const errors: Pass4Error[] = [];
   const nodes: DepNode[] = [];
@@ -53,7 +53,7 @@ export function pass4DepGraph(
 
   // Step 1: Create BlockEval nodes for all blocks
   // Blocks are already in index order, so we can just iterate
-  for (let i = 0; i < timeResolved.blocks.length; i++) {
+  for (let i = 0; i < typedPatch.blocks.length; i++) {
     // Import BlockIndex type to make this safe
     nodes.push({
       kind: "BlockEval",
@@ -63,24 +63,24 @@ export function pass4DepGraph(
 
   // Step 2: Add edges from NormalizedEdge array
   // NormalizedEdge already has block indices, no lookup needed
-  for (const edge of timeResolved.edges) {
+  for (const edge of typedPatch.edges) {
     // Validate that block indices are within bounds
-    if (edge.fromBlock < 0 || edge.fromBlock >= timeResolved.blocks.length) {
+    if (edge.fromBlock < 0 || edge.fromBlock >= typedPatch.blocks.length) {
       errors.push({
         kind: "DanglingConnection",
         connectionId: `${edge.fromBlock}:${edge.fromPort}->${edge.toBlock}:${edge.toPort}`,
         fromBlockIndex: edge.fromBlock,
-        message: `Edge references invalid fromBlock index ${edge.fromBlock} (valid range: 0-${timeResolved.blocks.length - 1})`,
+        message: `Edge references invalid fromBlock index ${edge.fromBlock} (valid range: 0-${typedPatch.blocks.length - 1})`,
       });
       continue;
     }
 
-    if (edge.toBlock < 0 || edge.toBlock >= timeResolved.blocks.length) {
+    if (edge.toBlock < 0 || edge.toBlock >= typedPatch.blocks.length) {
       errors.push({
         kind: "DanglingConnection",
         connectionId: `${edge.fromBlock}:${edge.fromPort}->${edge.toBlock}:${edge.toPort}`,
         toBlockIndex: edge.toBlock,
-        message: `Edge references invalid toBlock index ${edge.toBlock} (valid range: 0-${timeResolved.blocks.length - 1})`,
+        message: `Edge references invalid toBlock index ${edge.toBlock} (valid range: 0-${typedPatch.blocks.length - 1})`,
       });
       continue;
     }
@@ -103,16 +103,16 @@ export function pass4DepGraph(
     );
   }
 
-  // Return dependency graph with timeModel, portTypes and blocks/edges threaded through
+  // Return dependency graph with type/policy metadata threaded through.
   return {
     graph: {
       nodes,
       edges: depEdges,
     },
-    timeModel: timeResolved.timeModel,
-    portTypes: timeResolved.portTypes,
-    collectEdgeTypes: timeResolved.collectEdgeTypes,
-    blocks: timeResolved.blocks,
-    edges: timeResolved.edges,
+    portTypes: typedPatch.portTypes,
+    inputPortPolicies: typedPatch.inputPortPolicies,
+    collectEdgeTypes: typedPatch.collectEdgeTypes,
+    blocks: typedPatch.blocks,
+    edges: typedPatch.edges,
   };
 }

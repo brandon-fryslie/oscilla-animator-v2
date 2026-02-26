@@ -208,9 +208,11 @@ export async function compileAndSwap(
 
   const currentPatchRevision = store.getPatchRevision();
   if (precomputed && precomputed.sourcePatchRevision !== currentPatchRevision) {
+    // [LAW:no-silent-fallbacks] Dropped stale worker results must be visible;
+    // otherwise the runtime appears to ignore user edits with no explanation.
     store.diagnostics.log({
-      level: 'info',
-      message: `Compile dropped as stale (compiled r${precomputed.sourcePatchRevision}, current r${currentPatchRevision})`,
+      level: 'warn',
+      message: `Recompile result dropped as stale (compiled r${precomputed.sourcePatchRevision}, current r${currentPatchRevision}); waiting for latest edit compile.`,
     });
     return;
   }
