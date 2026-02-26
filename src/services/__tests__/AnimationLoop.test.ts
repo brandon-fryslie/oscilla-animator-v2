@@ -139,6 +139,58 @@ describe('AnimationLoop', () => {
     expect(lastCall?.[4]).toEqual({ assertCardinalitySlotWrites: true });
   });
 
+  it('does not read coordinate payloads on CPU in frame hot path', () => {
+    const arena = { reset: vi.fn(), getTotalBytes: () => 0 };
+    const renderer = { render: vi.fn() };
+    const cpuCoordinateTouch = vi.fn(() => {
+      throw new Error('CPU coordinate scan is forbidden in animation hot path');
+    });
+    executeFrameMock.mockReturnValue({
+      version: 2,
+      ops: [
+        {
+          instances: { count: 3 },
+          get points() {
+            return cpuCoordinateTouch();
+          },
+          get bounds() {
+            return cpuCoordinateTouch();
+          },
+        } as any,
+      ],
+    } as any);
+
+    const deps = {
+      getCurrentProgram: () => ({}),
+      getCurrentState: () => ({
+        health: createHealthMetrics(),
+      }),
+      getCanvas: () => ({ width: 100, height: 80 }),
+      getRenderer: () => renderer,
+      getArena: () => arena,
+      store: {
+        stepDebug: null,
+        diagnostics: {
+          recordJank: vi.fn(),
+          updateFrameTiming: vi.fn(),
+          updateMemoryStats: vi.fn(),
+        },
+        continuity: { updateFromRuntime: vi.fn() },
+        viewport: { zoom: 1, pan: { x: 0, y: 0 }, setContentBounds: vi.fn() },
+        events: { emit: vi.fn() },
+        getPatchRevision: () => 1,
+      },
+    } as any;
+
+    const state = createAnimationLoopState();
+    executeAnimationFrame(16, deps, state);
+
+    // [LAW:dataflow-not-control-flow] Frame loop must remain GPU-first and
+    // never branch into CPU coordinate extraction during orchestration.
+    expect(cpuCoordinateTouch).not.toHaveBeenCalled();
+    expect(deps.store.viewport.setContentBounds).toHaveBeenCalledWith(null);
+  });
+
   it('forwards compiler draw-prep shader WGSL to renderer input', () => {
     const arena = { reset: vi.fn(), getTotalBytes: () => 0 };
     const renderer = { render: vi.fn() };

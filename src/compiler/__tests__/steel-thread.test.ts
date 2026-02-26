@@ -13,7 +13,9 @@ import { compile } from '../compile';
 import type { ScheduleIR } from '../backend/schedule-program';
 import { computeRuntimeStorageSizes } from '../ir/program';
 import { createRuntimeState, executeFrame } from '../../runtime';
+import { readShapeBankHandleMetadata, readShapeBankHeader } from '../../runtime/RuntimeState';
 import { getTestArena } from '../../runtime/__tests__/test-arena-helper';
+import { getTopology } from '../../shapes/registry';
 
 /**
  * Helper: compile a patch and assert success.
@@ -110,6 +112,28 @@ describe('Steel Thread - Animated Particles', () => {
     // Position buffer should be finite (no NaN/Infinity)
     for (let i = 0; i < drawOp.instances.position.length; i++) {
       expect(Number.isFinite(drawOp.instances.position[i])).toBe(true);
+    }
+
+    // P0-3.2 contract: shape producers emit numeric handles with populated ShapeBank headers.
+    expect(state.shapeBank).toBeDefined();
+    const scalarAddressTable = program.runtimeAddressTable?.scalarExprToArenaAddress;
+    expect(scalarAddressTable).toBeDefined();
+    for (let exprId = 0; exprId < program.valueExprs.nodes.length; exprId++) {
+      const expr = program.valueExprs.nodes[exprId];
+      if (!expr || expr.kind !== 'shapeRef') continue;
+      const address = scalarAddressTable?.get(exprId);
+      expect(address).toBeDefined();
+      if (!address || !state.shapeBank) continue;
+      const handle = Math.trunc(state.arena[address.arena.offset + address.component] ?? NaN);
+      expect(Number.isFinite(handle)).toBe(true);
+      const header = readShapeBankHeader(state.shapeBank.data, handle);
+      const metadata = readShapeBankHandleMetadata(state.shapeBank, handle);
+      expect(metadata.topologyId).toBe(expr.topologyId);
+      const topology = getTopology(expr.topologyId);
+      if ('totalControlPoints' in topology) {
+        expect(header.vertexCount).toBe(topology.totalControlPoints);
+      }
+      expect(header.indexCount).toBe(header.vertexCount);
     }
   });
 

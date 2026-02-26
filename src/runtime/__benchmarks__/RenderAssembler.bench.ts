@@ -12,7 +12,9 @@ import {
   resetTopologyCacheCounters,
   topologyGroupCacheMisses,
 } from '../RenderAssembler';
-import { SHAPE2D_WORDS, writeShape2D } from '../RuntimeState';
+import { SHAPE2D_WORDS, createRuntimeState, writeShape2D } from '../RuntimeState';
+
+const BENCH_STATE = createRuntimeState(0);
 
 // ============================================================================
 // Helpers
@@ -62,15 +64,15 @@ describe('computeTopologyGroups', () => {
   const buf1000_50 = createShapeBuffer(1000, 50);
 
   bench('100 instances / 5 topologies', () => {
-    computeTopologyGroups(buf100_5, 100);
+    computeTopologyGroups(buf100_5, 100, BENCH_STATE);
   });
 
   bench('500 instances / 10 topologies', () => {
-    computeTopologyGroups(buf500_10, 500);
+    computeTopologyGroups(buf500_10, 500, BENCH_STATE);
   });
 
   bench('1000 instances / 50 topologies', () => {
-    computeTopologyGroups(buf1000_50, 1000);
+    computeTopologyGroups(buf1000_50, 1000, BENCH_STATE);
   });
 });
 
@@ -83,25 +85,25 @@ describe('topology cache: hit vs miss', () => {
 
   bench('cache hit (same buffer, same count)', () => {
     // After first call, all subsequent are cache hits
-    groupInstancesByTopology(buf, 500);
+    groupInstancesByTopology(buf, 500, BENCH_STATE);
   });
 
   bench('cache miss (new buffer each time)', () => {
     // Each iteration creates a new buffer → always miss
     const freshBuf = createShapeBuffer(500, 10);
     resetTopologyCacheCounters();
-    groupInstancesByTopology(freshBuf, 500);
+    groupInstancesByTopology(freshBuf, 500, BENCH_STATE);
   });
 });
 
 describe('topology cache stability guard', () => {
   const buf = createShapeBuffer(5000, 32);
   // Warm cache once.
-  groupInstancesByTopology(buf, 5000);
+  groupInstancesByTopology(buf, 5000, BENCH_STATE);
 
   bench('stress cache hit does not recompute groups', () => {
     const missesBefore = topologyGroupCacheMisses;
-    groupInstancesByTopology(buf, 5000);
+    groupInstancesByTopology(buf, 5000, BENCH_STATE);
     if (topologyGroupCacheMisses !== missesBefore) {
       throw new Error('RenderAssembler cache regression: cache hit path recomputed topology groups');
     }

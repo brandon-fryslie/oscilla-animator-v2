@@ -39,12 +39,10 @@ describe('ValueExpr cardinality invariants', () => {
       b.wire(maxSig, 'out', normalize, 'max');
 
       // Use the result in the render pipeline so it can't be pruned.
-      const construct = b.addBlock('Construct');
-      b.wire(normalize, 'out', construct, 'x');
-      b.wire(array, 't', construct, 'y');
-      const zSig = b.addBlock('Const');
-      b.setConfig(zSig, 'value', 0.0);
-      b.wire(zSig, 'out', construct, 'z');
+      const grid = b.addBlock('GridLayoutUV');
+      b.setPortDefault(grid, 'rows', 2);
+      b.setPortDefault(grid, 'cols', 2);
+      b.wire(array, 'elements', grid, 'elements');
 
       const colorSig = b.addBlock('Const');
       b.setConfig(colorSig, 'value', { r: 1, g: 0.5, b: 0.2, a: 1 });
@@ -52,8 +50,9 @@ describe('ValueExpr cardinality invariants', () => {
       b.wire(colorSig, 'out', colorField, 'one');
 
       const render = b.addBlock('RenderInstances2D');
-      b.wire(construct, 'out', render, 'controlPoints');
+      b.wire(grid, 'controlPoints', render, 'controlPoints');
       b.wire(colorField, 'field', render, 'color');
+      b.wire(normalize, 'out', render, 'scale');
     });
 
     const result = compile(patch);

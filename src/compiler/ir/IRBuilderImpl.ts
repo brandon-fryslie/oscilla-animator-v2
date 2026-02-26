@@ -710,6 +710,10 @@ export class IRBuilderImpl implements OrchestratorIRBuilder {
     return this.scalarSlots;
   }
 
+  getFieldSlots(): ReadonlyMap<number, ValueSlot> {
+    return this.fieldSlots;
+  }
+
   getEventSlots(): ReadonlyMap<ValueExprId, EventSlotId> {
     return this.eventSlots;
   }

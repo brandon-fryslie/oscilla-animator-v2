@@ -66,18 +66,19 @@ export interface CombineModeValidation {
  * - Config world: Only 'last'/'first' valid (stepwise changes)
  * - Scalar world: Multi-input not allowed (should emit error if N > 1)
  * - Numeric domains (float, int, vec2, vec3): sum/average/max/min/mul + first/last
+ * - Handle semantics (canonical HANDLE carried as int payload): first/last/layer/collect/array only
  * - Color domain: Only 'last', 'first', and 'layer' valid
  * - String/boolean domains: Only 'last'/'first' valid
  *
  * @param mode - The combine mode to validate
  * @param world - The slot's world (one, many, config, scalar)
- * @param payload - The slot's payload type (float, color, vec2, etc.)
+ * @param payloadOrType - The slot's payload kind or full canonical type
  * @returns Validation result with reason if invalid
  */
 export function validateCombineMode(
   mode: CombineMode | 'error' | 'layer',
   world: 'one' | 'many' | 'scalar' | 'config',
-  payload: CorePayload | string
+  payloadOrType: CorePayload | string | CanonicalType
 ): CombineModeValidation {
   // 'error' mode is special - it rejects multiple writers
   if (mode === 'error') {
@@ -111,15 +112,28 @@ export function validateCombineMode(
   }
 
   // Domain-specific validation for one/many worlds
-  // Normalize payload to kind string (handles both string and object forms)
-  const payloadKind = typeof payload === 'string' ? payload : payload;
+  const payloadKind = payloadKindOf(payloadOrType);
+  const payloadLabel = payloadKind;
+
+  // [LAW:one-source-of-truth] Handle semantics must be derived from canonical
+  // type structure, not legacy payload aliases.
+  if (isCanonicalHandleType(payloadOrType)) {
+    if (mode === 'layer') {
+      return { valid: true };
+    }
+    return {
+      valid: false,
+      reason: 'Handle payload only supports combineMode "last", "first", "layer", "collect", or "array"',
+    };
+  }
+
   if (NUMERIC_PAYLOADS.includes(payloadKind as typeof NUMERIC_PAYLOADS[number])) {
     if (mode === 'sum' || mode === 'average' || mode === 'max' || mode === 'min' || mode === 'mul') {
       return { valid: true };
     }
     return {
       valid: false,
-      reason: `Numeric payload "${payload}" only supports combineMode "sum", "average", "max", "min", "mul", "last", or "first"`,
+      reason: `Numeric payload "${payloadLabel}" only supports combineMode "sum", "average", "max", "min", "mul", "last", or "first"`,
     };
   }
 
@@ -134,22 +148,21 @@ export function validateCombineMode(
     };
   }
 
-  if (payloadKind === 'shape') {
-    // Shape domain only supports 'last', 'first', and 'layer' (not numeric combines)
-    if (mode === 'layer') {
-      return { valid: true };
-    }
-    return {
-      valid: false,
-      reason: 'Shape domain only supports combineMode "last", "first", and "layer"',
-    };
-  }
-
   // Other domains only support 'last' and 'first'
   return {
     valid: false,
-    reason: `Payload "${payload}" only supports combineMode "last" or "first"`,
+    reason: `Payload "${payloadLabel}" only supports combineMode "last" or "first"`,
   };
+}
+
+function payloadKindOf(payloadOrType: CorePayload | string | CanonicalType): string {
+  if (typeof payloadOrType === 'string') return payloadOrType;
+  return payloadOrType.payload.kind;
+}
+
+function isCanonicalHandleType(payloadOrType: CorePayload | string | CanonicalType): boolean {
+  if (typeof payloadOrType === 'string') return false;
+  return payloadOrType.payload.kind === 'int';
 }
 
 /**

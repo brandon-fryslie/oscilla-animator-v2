@@ -203,7 +203,7 @@ describe('arenaLayout integration', () => {
     expect(first.program.arenaTotalFloats).toBe(second.program.arenaTotalFloats);
   });
 
-  it('keeps continuity-owned multi-component render slots in AOS descriptors', () => {
+  it('keeps continuity-owned multi-component render slots in SoA descriptors', () => {
     const patch = buildPatch((b) => {
       b.addBlock('InfiniteTimeRoot');
 
@@ -246,8 +246,10 @@ describe('arenaLayout integration', () => {
 
     const positionDesc = result.program.runtimeAddressTable?.slotToArena.get(renderStep.controlPointsSlot);
     const colorDesc = result.program.runtimeAddressTable?.slotToArena.get(renderStep.colorSlot);
-    expect(positionDesc?.packing).toBe('aos');
-    expect(colorDesc?.packing).toBe('aos');
+    // [LAW:dataflow-not-control-flow] Continuity does not change packing mode;
+    // render multi-component lanes stay channel-separated in SoA layout.
+    expect(positionDesc?.packing).toBe('soa');
+    expect(colorDesc?.packing).toBe('soa');
   });
 
   it('compiled program has consistent arenaLayout', () => {
