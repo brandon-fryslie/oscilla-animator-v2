@@ -21,10 +21,11 @@ import type { CombineMode } from "../../types";
 
 export type { BlockIndex } from "./BlockIndex";
 export type { NormalizedPatch, NormalizedEdge } from "./NormalizedPatch";
-export type { Block, Edge, Patch } from "../../graph/Patch";
+export type { CompilerGraph, CompilerGraphBlock, CompilerGraphEdge, CompilerGraphEdgeRole } from "./CompilerGraph";
 import type { BlockIndex } from "./BlockIndex";
 import type { NormalizedPatch, NormalizedEdge } from "./NormalizedPatch";
-import type { Block } from "../../graph/Patch";
+import type { CompilerGraphBlock } from "./CompilerGraph";
+export type Block = CompilerGraphBlock;
 
 // =============================================================================
 // Transform Steps (for future edge transforms)
@@ -151,7 +152,7 @@ export interface DepGraphWithTimeModel {
   readonly collectEdgeTypes?: TypeResolvedPatch['collectEdgeTypes'];
 
   /** Blocks threaded through from NormalizedPatch */
-  readonly blocks: readonly Block[];
+  readonly blocks: readonly CompilerGraphBlock[];
 
   /** Edges threaded through from NormalizedPatch */
   readonly edges: readonly NormalizedEdge[];
@@ -194,7 +195,7 @@ export interface AcyclicOrLegalGraph {
   readonly collectEdgeTypes?: TypeResolvedPatch['collectEdgeTypes'];
 
   /** Blocks threaded through for downstream passes */
-  readonly blocks: readonly Block[];
+  readonly blocks: readonly CompilerGraphBlock[];
 
   /** Edges threaded through for downstream passes */
   readonly edges: readonly NormalizedEdge[];

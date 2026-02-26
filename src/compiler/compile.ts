@@ -127,10 +127,10 @@ export function compileFromFrontend(
 
     const normalized = frontend.normalizedPatch;
     const typedPatch = frontend.typedPatch;
-    const patch = normalized.patch;
+    const graph = normalized.graph;
 
     // Capture frontend passes (for inspection)
-    compilationInspector.capturePass('normalization', patch, normalized);
+    compilationInspector.capturePass('normalization', graph, normalized);
     compilationInspector.capturePass('type-constraints', normalized, typedPatch);
     compilationInspector.capturePass('type-graph', normalized, typedPatch);
     compilationInspector.capturePass('axis-validation', typedPatch, {
@@ -516,7 +516,7 @@ function convertLinkedIRToProgram(
     const blocks = acyclicPatch.blocks || []; // AcyclicOrLegalGraph has blocks array
     for (let i = 0; i < blocks.length; i++) {
       blockMap.set(i, blocks[i].id);
-      blockDisplayNames.set(i, blocks[i].displayName || blocks[i].type);
+      blockDisplayNames.set(i, blocks[i].id || blocks[i].type);
     }
 
     for (const [blockIndex, outputs] of unlinkedIR.blockOutputs.entries()) {
