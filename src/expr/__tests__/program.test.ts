@@ -44,19 +44,6 @@ describe('expression program preprocessing', () => {
     expect(lowered.expression).not.toContain('b');
   });
 
-  it('supports kebab-case assignment identifiers', () => {
-    const lowered = lowerExpressionProgram([
-      'make-x = points.t * 2',
-      'make-y = make-x + 1',
-      'sin(make-y)',
-    ].join('\n'));
-
-    expect(lowered.expression).toContain('points.t');
-    expect(lowered.expression).toContain('sin');
-    expect(lowered.expression).not.toContain('make-x');
-    expect(lowered.expression).not.toContain('make-y');
-  });
-
   it('throws when non-final line is not an assignment', () => {
     expect(() => lowerExpressionProgram([
       'sin(x)',

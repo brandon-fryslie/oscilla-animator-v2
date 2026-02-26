@@ -25,21 +25,17 @@ export interface SharedExpressionEditorProps {
   readonly onValueChange?: (value: string) => void;
 }
 
-function isIdentifierChar(ch: string | undefined): boolean {
-  return ch !== undefined && /[a-zA-Z0-9_-]/.test(ch);
-}
-
 function extractIdentifierPrefix(value: string, cursorPos: number): { prefix: string; startOffset: number } | null {
   if (cursorPos === 0) return null;
 
   let start = cursorPos - 1;
-  while (start >= 0 && isIdentifierChar(value[start])) {
+  while (start >= 0 && /[a-zA-Z0-9_]/.test(value[start])) {
     start--;
   }
 
   if (start >= 0 && value[start] === '.') {
     let blockStart = start - 1;
-    while (blockStart >= 0 && isIdentifierChar(value[blockStart])) {
+    while (blockStart >= 0 && /[a-zA-Z0-9_]/.test(value[blockStart])) {
       blockStart--;
     }
     const identifierStart = blockStart + 1;
@@ -61,7 +57,7 @@ function detectBlockContext(value: string, cursorPos: number): string | null {
 
   if (value[cursorPos - 1] === '.') {
     let start = cursorPos - 2;
-    while (start >= 0 && isIdentifierChar(value[start])) {
+    while (start >= 0 && /[a-zA-Z0-9_]/.test(value[start])) {
       start--;
     }
     const blockName = value.substring(start + 1, cursorPos - 1);
@@ -71,7 +67,7 @@ function detectBlockContext(value: string, cursorPos: number): string | null {
   const identifierPrefix = extractIdentifierPrefix(value, cursorPos);
   if (identifierPrefix && identifierPrefix.startOffset > 0 && value[identifierPrefix.startOffset - 1] === '.') {
     let start = identifierPrefix.startOffset - 2;
-    while (start >= 0 && isIdentifierChar(value[start])) {
+    while (start >= 0 && /[a-zA-Z0-9_]/.test(value[start])) {
       start--;
     }
     const blockName = value.substring(start + 1, identifierPrefix.startOffset - 1);

@@ -104,18 +104,14 @@ function buildBlockNameMap(patch: Patch): Map<BlockId, string> {
  * Convert a display name to a valid HCL identifier.
  *
  * Applies canonical normalization first, then strips any remaining non-ASCII
- * or non-identifier characters (only allows a-z, 0-9, _, -).
+ * or non-identifier characters (only allows a-z, 0-9, _).
  *
  * @param displayName - The display name
  * @returns Valid HCL identifier (ASCII only, no special chars)
  */
 export function toIdentifier(displayName: string): string {
-  // First apply canonical normalization (lowercase, strip special chars, replace spaces)
-  const canonical = normalizeCanonicalName(displayName);
-
-  // Then strip any remaining non-identifier characters (only allow a-z, 0-9, _, -)
-  // This handles Unicode characters and any other edge cases
-  return canonical.replace(/[^a-z0-9_-]/g, '');
+  // [LAW:one-source-of-truth] Canonical naming owns identifier safety rules.
+  return normalizeCanonicalName(displayName);
 }
 
 /**

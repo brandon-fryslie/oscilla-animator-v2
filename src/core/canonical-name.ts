@@ -15,8 +15,8 @@ import type { Patch } from '../graph/Patch';
  * Special characters allowed in displayName but stripped for canonical names.
  * These are removed entirely (not replaced).
  *
- * NOTE: Hyphens (-), underscores (_), and numbers are PRESERVED as they're useful
- * for readable names like "my-circle", "block_1", etc.
+ * NOTE: Canonical names must remain expression-identifier-safe. Hyphens are
+ * normalized to underscores and names that start with digits are prefixed with "_".
  *
  * Stripped chars: ! @ # $ & ( ) [ ] { } | ' " + = * ^ % < > ? .
  */
@@ -30,11 +30,12 @@ const CANONICAL_STRIP_CHARS = /[!@#$&()\[\]{}|'"+=*^%<>?.]/g;
  * 2. Replace whitespace sequences with single underscores
  * 3. Convert to lowercase
  *
- * PRESERVED: Hyphens, underscores, alphanumerics
+ * PRESERVED: Underscores and alphanumerics
  *
  * Examples:
  * - "My Circle!" → "my_circle"
- * - "My Block! (it's a great block-o)" → "my_block_its_a_great_block-o"
+ * - "My Block! (it's a great block-o)" → "my_block_its_a_great_block_o"
+ * - "123 Pulse" → "_123_pulse"
  * - "My Block" → "my_block"
  * - "my block" → "my_block" (collision!)
  *
@@ -42,13 +43,19 @@ const CANONICAL_STRIP_CHARS = /[!@#$&()\[\]{}|'"+=*^%<>?.]/g;
  * Never duplicate this logic elsewhere.
  *
  * @param displayName - The human-readable display name
- * @returns Normalized canonical name (may be empty string for invalid inputs)
+ * @returns Normalized canonical name (always non-empty and identifier-safe)
  */
 export function normalizeCanonicalName(displayName: string): string {
-  return displayName
+  const normalized = displayName
     .replace(CANONICAL_STRIP_CHARS, '') // Strip special chars
-    .replace(/\s+/g, '_') // Replace whitespace with underscores
+    .replace(/[\s-]+/g, '_') // Normalize separators
+    .replace(/[^A-Za-z0-9_]/g, '') // ASCII identifier-safe only
+    .replace(/_+/g, '_') // Collapse duplicate separators
+    .replace(/^_+|_+$/g, '') // Trim separators
     .toLowerCase(); // Lowercase
+
+  const nonEmpty = normalized.length > 0 ? normalized : 'block';
+  return /^[a-z_]/.test(nonEmpty) ? nonEmpty : `_${nonEmpty}`;
 }
 
 /**
