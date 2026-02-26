@@ -1,6 +1,7 @@
 import earcut from 'earcut';
 import { Bezier } from 'bezier-js';
 import type { PathGeometry } from '../types';
+import { HashUtils } from '../../utilities/hash';
 
 export interface TessellatedPathMesh {
   readonly cacheKey: string;
@@ -55,8 +56,8 @@ export class PathTessellator {
     const pointValueCount = Math.max(0, Math.min(geometry.points.length, geometry.pointsCount * 2));
     // [LAW:one-source-of-truth] Tessellation cache identity must derive from
     // geometry content, not mutable buffer object identity.
-    const verbsHash = hashU8(geometry.verbs, geometry.verbs.length);
-    const pointsHash = hashF32Bits(geometry.points, pointValueCount);
+    const verbsHash = HashUtils.hashU8(geometry.verbs, geometry.verbs.length);
+    const pointsHash = HashUtils.hashF32Bits(geometry.points, pointValueCount);
     return `${geometry.topologyId}:${geometry.flags ?? 0}:${geometry.pointsCount}:${verbsHash.toString(16)}:${pointsHash.toString(16)}`;
   }
 
@@ -286,33 +287,4 @@ export class PathTessellator {
     }
     return maxIndex <= 0xffff ? new Uint16Array(indices) : new Uint32Array(indices);
   }
-}
-
-const FNV1A_OFFSET_BASIS = 0x811c9dc5;
-const FNV1A_PRIME = 0x01000193;
-
-function hashU8(values: Uint8Array, count: number): number {
-  let hash = FNV1A_OFFSET_BASIS;
-  for (let i = 0; i < count; i++) {
-    hash ^= values[i]!;
-    hash = Math.imul(hash, FNV1A_PRIME);
-  }
-  return hash >>> 0;
-}
-
-function hashF32Bits(values: Float32Array, count: number): number {
-  let hash = FNV1A_OFFSET_BASIS;
-  const words = new Uint32Array(values.buffer, values.byteOffset, count);
-  for (let i = 0; i < count; i++) {
-    const word = words[i]!;
-    hash ^= word & 0xff;
-    hash = Math.imul(hash, FNV1A_PRIME);
-    hash ^= (word >>> 8) & 0xff;
-    hash = Math.imul(hash, FNV1A_PRIME);
-    hash ^= (word >>> 16) & 0xff;
-    hash = Math.imul(hash, FNV1A_PRIME);
-    hash ^= (word >>> 24) & 0xff;
-    hash = Math.imul(hash, FNV1A_PRIME);
-  }
-  return hash >>> 0;
 }

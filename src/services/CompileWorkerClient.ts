@@ -220,16 +220,12 @@ export class CompileWorkerClient {
         superseded: false,
       };
 
-      // [LAW:dataflow-not-control-flow] Keep exactly one active compile and one
-      // queued "latest edit" compile to avoid unbounded stale-worker backlogs.
-      if (this.inFlight) {
-        this.supersedeInFlight();
-        this.supersedeQueued();
-        this.queued = nextRequest;
-        return;
-      }
-
-      this.startRequest(nextRequest);
+      // [LAW:dataflow-not-control-flow] Every compile request executes the same
+      // queue pipeline; variability lives in queue/in-flight data, not branches.
+      this.supersedeInFlight();
+      this.supersedeQueued();
+      this.queued = nextRequest;
+      this.drainQueued();
     });
   }
 
