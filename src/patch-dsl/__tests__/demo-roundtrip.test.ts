@@ -53,6 +53,7 @@ function edgeSnapshot(
     enabled: edge.enabled,
     role: normalizeValue(edge.role),
     alias: edge.alias,
+    sortKey: edge.sortKey,
   };
 }
 
