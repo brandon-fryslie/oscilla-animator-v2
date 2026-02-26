@@ -10,18 +10,6 @@ import type { Patch } from './Patch';
 import { getBlockAddress, getOutputAddress, getInputAddress, getAllAddresses, getShorthandForOutput } from './addressing';
 import { resolveAddress, ResolvedAddress } from './address-resolution';
 import { normalizeCanonicalName } from '../core/canonical-name';
-import type { InferenceCanonicalType } from '../core/inference-types';
-
-export type AddressResolution =
-  | { kind: 'block'; block: { id: string; type: string } }
-  | { kind: 'output'; block: { id: string; type: string }; type: InferenceCanonicalType }
-  | { kind: 'input'; block: { id: string; type: string }; type: InferenceCanonicalType }
-  | { kind: 'param'; block: { id: string; type: string }; paramId: string; value: unknown };
-
-export interface AddressResolver {
-  resolve(address: string): AddressResolution | null;
-  resolveShorthand(shorthand: string): CanonicalAddress | null;
-}
 
 /**
  * Normalize the canonical name portion of an address string.
@@ -52,7 +40,7 @@ function normalizeAddressCanonicalName(address: string): string {
  * - Single lookup (use resolveAddress directly)
  * - Patch changes frequently (rebuild cost > lookup savings)
  */
-export class AddressRegistry implements AddressResolver {
+export class AddressRegistry {
   private readonly byCanonical: Map<string, ResolvedAddress>;
   private readonly byShorthand: Map<string, CanonicalAddress>;
 
