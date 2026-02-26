@@ -241,11 +241,10 @@ export interface Edge {
   readonly role: EdgeRole;
 
   /**
-   * Alias for collect edges.
-   * Used by collect ports to identify input references (e.g., for Expression DSL member access).
-   * Only meaningful when role.kind === 'collect'.
+   * Canonical source alias (`<normalizedDisplayName>.<port>`).
+   * Required on all edges and used as the single shorthand identity source.
    */
-  readonly alias?: string;
+  readonly alias: string;
 }
 
 // =============================================================================
@@ -424,7 +423,39 @@ export class PatchBuilder {
     return this;
   }
 
+  private deriveEdgeAlias(from: Endpoint, explicitAlias?: string): string {
+    if (explicitAlias !== undefined) return explicitAlias;
+    if (from.kind !== 'port') {
+      throw new Error(`Cannot derive edge alias from endpoint kind '${from.kind}'`);
+    }
+    const source = this.blocks.get(from.blockId as BlockId);
+    if (!source) {
+      throw new Error(`Cannot derive edge alias: source block '${from.blockId}' not found`);
+    }
+    // [LAW:dataflow-not-control-flow] Alias derivation is endpoint-based and
+    // does not branch on output-port registration details (hidden/composite ports).
+    const canonical = source.displayName ? normalizeCanonicalName(source.displayName) : source.id;
+    return `${canonical}.${from.slotId}`;
+  }
+
+  private hasDuplicateEdge(from: Endpoint, to: Endpoint): boolean {
+    if (from.kind !== 'port' || to.kind !== 'port') return false;
+    return this.edges.some(
+      (edge) =>
+        edge.from.kind === 'port' &&
+        edge.to.kind === 'port' &&
+        edge.from.blockId === from.blockId &&
+        edge.from.slotId === from.slotId &&
+        edge.to.blockId === to.blockId &&
+        edge.to.slotId === to.slotId,
+    );
+  }
+
   addEdge(from: Endpoint, to: Endpoint, options?: { enabled?: boolean; sortKey?: number; role?: EdgeRole; alias?: string }): this {
+    if (this.hasDuplicateEdge(from, to)) {
+      throw new Error(`Duplicate edge rejected: ${from.blockId}.${from.slotId} -> ${to.blockId}.${to.slotId}`);
+    }
+    const alias = this.deriveEdgeAlias(from, options?.alias);
     const id = `e${this.nextEdgeId++}`;
     this.edges.push({
       id,
@@ -433,7 +464,7 @@ export class PatchBuilder {
       enabled: options?.enabled ?? true,
       sortKey: options?.sortKey ?? this.edges.length,
       role: options?.role ?? { kind: 'user', meta: {} as Record<string, never> },
-      alias: options?.alias,
+      alias,
     });
     this.invalidateSnapshot();
     return this;
@@ -467,15 +498,14 @@ export class PatchBuilder {
     toPort: string,
     alias?: string
   ): this {
-    const id = `e${this.nextEdgeId++}`;
-    this.edges.push({
-      id,
-      from: { kind: 'port', blockId: fromBlock, slotId: fromPort as PortId },
-      to: { kind: 'port', blockId: toBlock, slotId: toPort as PortId },
+    const from = { kind: 'port', blockId: fromBlock, slotId: fromPort as PortId } as const;
+    const to = { kind: 'port', blockId: toBlock, slotId: toPort as PortId } as const;
+    const collectAlias = this.deriveEdgeAlias(from, alias);
+    this.addEdge(from, to, {
       enabled: true,
       sortKey: this.edges.length,
-      role: { kind: 'collect', meta: { alias } },
-      alias,
+      role: { kind: 'collect', meta: { alias: collectAlias } },
+      alias: collectAlias,
     });
 
     // Ensure the target port has combineMode: 'collect'
@@ -489,7 +519,6 @@ export class PatchBuilder {
       }
     }
 
-    this.invalidateSnapshot();
     return this;
   }
 

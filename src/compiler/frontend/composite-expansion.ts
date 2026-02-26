@@ -19,6 +19,7 @@
 import type { BlockId, BlockRole } from '../../types';
 import { derivedRole } from '../../types';
 import type { Block, Edge, InputPort, OutputPort, Patch } from '../../graph/Patch';
+import { normalizeCanonicalName } from '../../core/canonical-name';
 import {
   getCompositeDefinition,
   isCompositeType,
@@ -145,6 +146,23 @@ function boundaryInEdgeId(path: ExpansionPath, port: string, origEdgeId: string)
 
 function boundaryOutEdgeId(path: ExpansionPath, port: string, origEdgeId: string): string {
   return `cx:${pathKey(path)}:out:${port}:re:${origEdgeId}`;
+}
+
+function deriveEdgeAlias(
+  from: Edge['from'],
+  blocks: ReadonlyMap<BlockId, Block>,
+): string {
+  // [LAW:single-enforcer] Composite expansion derives aliases exactly once
+  // when creating rewritten/internal edges.
+  if (from.kind !== 'port') {
+    throw new Error(`Cannot derive edge alias from endpoint kind '${from.kind}'`);
+  }
+  const source = blocks.get(from.blockId as BlockId);
+  if (!source) {
+    throw new Error(`Cannot derive edge alias: source block '${from.blockId}' not found`);
+  }
+  const canonical = source.displayName ? normalizeCanonicalName(source.displayName) : source.id;
+  return `${canonical}.${from.slotId}`;
 }
 
 // =============================================================================
@@ -374,6 +392,7 @@ export function expandComposites(
         enabled: true,
         sortKey: edgeSortKey++,
         role: { kind: 'composite', meta: { compositeInstanceId: instanceBlock.id } },
+        alias: deriveEdgeAlias({ kind: 'port', blockId: fromId, slotId: internalEdge.fromPort }, workBlocks),
       };
 
       workEdges.push(expandedEdge);
@@ -408,6 +427,8 @@ export function expandComposites(
             enabled: true,
             sortKey: edgeSortKey++,
             role: edge.role, // preserve original role
+            // [LAW:one-source-of-truth] Source endpoint is unchanged; preserve alias.
+            alias: edge.alias,
           };
 
           workEdges.push(rewiredEdge);
@@ -465,6 +486,10 @@ export function expandComposites(
             enabled: true,
             sortKey: edgeSortKey++,
             role: edge.role, // preserve original role
+            alias: deriveEdgeAlias(
+              { kind: 'port', blockId: internalExpandedId, slotId: exposedOutput.internalPortId },
+              workBlocks,
+            ),
           };
 
           workEdges.push(rewiredEdge);

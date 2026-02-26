@@ -249,17 +249,27 @@ function buildNormalizedEdges(
   blockIndexMap: ReadonlyMap<string, BlockIndex>,
 ): NormalizedEdge[] {
   const result: NormalizedEdge[] = [];
+  const seenEdgeKeys = new Set<string>();
 
   for (const edge of edges) {
     const fromIdx = blockIndexMap.get(edge.from.blockId);
     const toIdx = blockIndexMap.get(edge.to.blockId);
     if (fromIdx === undefined || toIdx === undefined) continue;
 
+    const edgeKey = `${fromIdx}:${edge.from.port}->${toIdx}:${edge.to.port}`;
+    if (seenEdgeKeys.has(edgeKey)) {
+      throw new Error(
+        `Duplicate edge detected in DraftGraph bridge: ${edge.from.blockId}.${edge.from.port} -> ${edge.to.blockId}.${edge.to.port}`,
+      );
+    }
+    seenEdgeKeys.add(edgeKey);
+
     result.push({
       fromBlock: fromIdx,
       fromPort: edge.from.port as PortId,
       toBlock: toIdx,
       toPort: edge.to.port as PortId,
+      alias: edge.alias,
     });
   }
 
@@ -300,6 +310,7 @@ function buildSyntheticPatch(
     to: { kind: 'port' as const, blockId: de.to.blockId, slotId: de.to.port },
     enabled: true,
     sortKey: i,
+    alias: de.alias,
     role: draftEdgeRoleToEdgeRole(de.role),
   }));
 

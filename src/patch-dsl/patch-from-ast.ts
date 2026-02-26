@@ -21,7 +21,8 @@ import { PatchDslError, PatchDslWarning } from './errors';
 import { normalizeCanonicalName } from '../core/canonical-name';
 import { getBlockDefinition } from '../blocks/registry';
 import { toIdentifier } from './serialize';
-import type { BlockId } from '../types';
+import type { BlockId, CombineMode } from '../types';
+import { canonicalizeCombineMode } from '../types';
 
 /**
  * A deferred inline edge collected during Phase 1 block processing.
@@ -164,6 +165,15 @@ function processPatchContents(
     }
     seenEdgeKeys.add(edgeKey);
 
+    const alias = deriveEdgeAlias(from, patchBlocks);
+    if (!alias) {
+      errors.push(new PatchDslError(
+        `Cannot derive edge alias for ${from.blockId}.${from.slotId}`,
+        deferred.pos
+      ));
+      continue;
+    }
+
     edges.push({
       id: generateId(),
       from,
@@ -172,7 +182,7 @@ function processPatchContents(
       sortKey,
       // [LAW:one-source-of-truth] Derive edge alias from source block/port once at parse boundary.
       // Expression collect refs use this alias as a stable shorthand (e.g., "osc.out").
-      alias: deriveEdgeAlias(from, patchBlocks),
+      alias,
       role: { kind: 'user', meta: {} as Record<string, never> },
     });
     sortKey++;
@@ -185,7 +195,6 @@ function processPatchContents(
 function deriveEdgeAlias(from: Endpoint, patchBlocks: ReadonlyMap<BlockId, Block>): string | undefined {
   const source = patchBlocks.get(from.blockId as BlockId);
   if (!source) return undefined;
-  if (!source.outputPorts.has(from.slotId)) return undefined;
   const canonical = source.displayName ? normalizeCanonicalName(source.displayName) : source.id;
   return `${canonical}.${from.slotId}`;
 }
@@ -290,7 +299,12 @@ function processBlock(
 
         const newPort: InputPort = {
           ...port,
-          ...(combineModeAttr ? { combineMode: convertHclValue(combineModeAttr) as 'last' | 'sum' } : {}),
+          ...(combineModeAttr
+            ? {
+                // [LAW:single-enforcer] Patch DSL normalizes combine aliases at parse boundary.
+                combineMode: canonicalizeCombineMode(convertHclValue(combineModeAttr) as CombineMode),
+              }
+            : {}),
           ...(defaultSourceAttr ? { defaultSource: convertHclValue(defaultSourceAttr) as any } : {}),
         };
         inputPorts.set(portId, newPort);

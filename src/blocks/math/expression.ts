@@ -7,7 +7,7 @@
 import { registerBlock } from '../registry';
 import { canonicalType, payloadStride, floatConst } from '../../core/canonical-types';
 import { FLOAT, VEC2, VEC3, VEC4 } from '../../core/canonical-types';
-import type { CanonicalType } from '../../core/canonical-types';
+import type { CanonicalType, PayloadType } from '../../core/canonical-types';
 import { payloadVar, unitVar, inferType, cardinalityVar } from '../../core/inference-types';
 import { compileExpression, type BlockRefsContext } from '../../expr';
 import type { ValueExprId } from '../../compiler/ir/Indices';
@@ -110,36 +110,21 @@ export function register(): void {
   
       // Step 3: Build input map and blockRefs from collect refs
       // [LAW:one-type-per-behavior] Collect entries come from normal edges.
+      const refsEntries = collectInputsById ? collectInputsById.refs : [];
       const inputs = new Map<string, CanonicalType>();
       const inputExprs = new Map<string, ValueExprId>();
-      const valuesByShorthand = new Map<string, ValueExprId>();
-  
-      const refsEntries = collectInputsById ? collectInputsById.refs : [];
+      const typesByName = new Map<string, PayloadType>();
+      const valuesByName = new Map<string, ValueExprId>();
       for (const entry of refsEntries) {
         const inputType = getExprType(entry.value.id);
-  
-        // Build shorthand key from sourceBlockId.sourcePort (canonical address format)
-        const shorthand = `${entry.sourceBlockId}.${entry.sourcePort}`;
-        valuesByShorthand.set(shorthand, entry.value.id);
-        if (entry.alias) {
-          valuesByShorthand.set(entry.alias, entry.value.id);
-        }
-  
-        // Register as regular input using alias or shorthand
-        const alias = entry.alias !== undefined ? entry.alias : shorthand;
-        inputs.set(alias, inputType);
-        inputExprs.set(alias, entry.value.id);
+        inputs.set(entry.alias, inputType);
+        inputExprs.set(entry.alias, entry.value.id);
+        typesByName.set(entry.alias, inputType.payload);
+        valuesByName.set(entry.alias, entry.value.id);
       }
-  
+
       // Step 4: Build blockRefs context for member access resolution
-      let blockRefs: BlockRefsContext | undefined;
-      if (ctx.addressRegistry && valuesByShorthand.size > 0) {
-        blockRefs = {
-          addressRegistry: ctx.addressRegistry,
-          allowedPayloads: EXPRESSION_ALLOWED_PAYLOADS,
-          valuesByShorthand,
-        };
-      }
+      const blockRefs: BlockRefsContext = { typesByName, valuesByName };
   
       // Step 5: Compile expression using Expression DSL
       const result = compileExpression(exprText, inputs, ctx.b, inputExprs, blockRefs);

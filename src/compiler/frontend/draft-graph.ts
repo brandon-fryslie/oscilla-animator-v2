@@ -72,6 +72,7 @@ export interface DraftEdge {
   readonly id: string;
   readonly from: DraftPortRef;
   readonly to: DraftPortRef;
+  readonly alias: string;
   readonly role: DraftEdgeRole;
   readonly origin: EdgeOrigin;
 }
@@ -226,6 +227,7 @@ export function buildDraftGraph(patch: Patch): BuildDraftGraphResult {
       id: edge.id,
       from: { blockId: edge.from.blockId, port: edge.from.slotId, dir: 'out' },
       to: { blockId: edge.to.blockId, port: edge.to.slotId, dir: 'in' },
+      alias: edge.alias,
       role,
       origin,
     });

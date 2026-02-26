@@ -40,6 +40,7 @@
 
 import type { BlockId, BlockRole } from '../../types';
 import type { InferenceCanonicalType } from '../../core/inference-types';
+import { normalizeCanonicalName } from '../../core/canonical-name';
 import type { Block, Edge, Patch, LensAttachment } from '../../graph/Patch';
 import { derivedLensBlockId } from '../../graph/lens-block-id';
 import { getBlockDefinition, requireBlockDef } from '../../blocks/registry';
@@ -98,6 +99,22 @@ function getPortType(
   const ports = direction === 'input' ? blockDef.inputs : blockDef.outputs;
   const port = ports[portId];
   return port?.type ?? null;
+}
+
+function deriveEdgeAlias(
+  from: Edge['from'],
+  blocks: ReadonlyMap<BlockId, Block>,
+): string {
+  // [LAW:single-enforcer] Adapter/lens expansion assigns canonical aliases at edge creation.
+  if (from.kind !== 'port') {
+    throw new Error(`Cannot derive edge alias from endpoint kind '${from.kind}'`);
+  }
+  const source = blocks.get(from.blockId as BlockId);
+  if (!source) {
+    throw new Error(`Cannot derive edge alias: source block '${from.blockId}' not found`);
+  }
+  const canonical = source.displayName ? normalizeCanonicalName(source.displayName) : source.id;
+  return `${canonical}.${from.slotId}`;
 }
 
 /**
@@ -237,6 +254,7 @@ function planLensExpansion(
             enabled: true,
             sortKey: edge.sortKey,
             role: { kind: 'adapter', meta: { adapterId: lensBlockId, originalEdgeId: edge.id } },
+            alias: deriveEdgeAlias(currentFrom, new Map([...patch.blocks, ...lensBlocks])),
           };
           replacementEdges.push(edgeToLens);
 
@@ -256,6 +274,7 @@ function planLensExpansion(
           enabled: true,
           sortKey: edge.sortKey,
           role: { kind: 'adapter', meta: { adapterId: currentAdapterId ?? firstLensBlockId, originalEdgeId: edge.id } },
+          alias: deriveEdgeAlias(currentFrom, new Map([...patch.blocks, ...lensBlocks])),
         });
 
         replacementEdgesByOriginal.set(edge.id, replacementEdges);
@@ -451,6 +470,8 @@ function autoInsertAdapters(patch: Patch): Pass2Result | Pass2Error {
         enabled: true,
         sortKey: edge.sortKey,
         role: { kind: 'adapter', meta: { adapterId, originalEdgeId: edge.id } },
+        // [LAW:one-source-of-truth] Source endpoint unchanged from original edge.
+        alias: edge.alias,
       };
 
       const edgeFromAdapter: Edge = {
@@ -464,6 +485,10 @@ function autoInsertAdapters(patch: Patch): Pass2Result | Pass2Error {
         enabled: true,
         sortKey: edge.sortKey,
         role: { kind: 'adapter', meta: { adapterId, originalEdgeId: edge.id } },
+        alias: deriveEdgeAlias(
+          { kind: 'port', blockId: adapterId, slotId: adapterSpec.outputPortId },
+          new Map([...patch.blocks, [adapterId, adapterBlock]]),
+        ),
       };
 
       insertions.push({

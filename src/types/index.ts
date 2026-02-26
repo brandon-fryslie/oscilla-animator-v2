@@ -159,7 +159,8 @@ export type CombineMode =
   | 'layer'     // any: Layer composition
   | 'or'        // boolean: Logical OR
   | 'and'       // boolean: Logical AND
-  | 'collect';  // any: Preserve individual edge types (no unification)
+  | 'collect'   // any: Preserve individual edge types (no unification)
+  | 'array';    // any: User-facing alias for collect semantics
 
 /**
  * Category for combine modes based on type compatibility.
@@ -182,7 +183,13 @@ export const COMBINE_MODE_CATEGORY: Record<CombineMode, CombineModeCategory> = {
   or: 'boolean',
   and: 'boolean',
   collect: 'any',
+  array: 'any',
 };
+
+// [LAW:single-enforcer] Canonicalize legacy/user-facing combine aliases at one boundary.
+export function canonicalizeCombineMode(mode: CombineMode): CombineMode {
+  return mode === 'array' ? 'collect' : mode;
+}
 
 // Import CanonicalType for local use in interface definitions
 import type { CanonicalType } from '../core/canonical-types';
@@ -372,7 +379,7 @@ export type EdgeRole =
   | { readonly kind: "auto";    readonly meta: { readonly reason: "portMoved" | "rehydrate" | "migrate" } }
   | { readonly kind: "adapter"; readonly meta: { readonly adapterId: BlockId; readonly originalEdgeId: string } }
   | { readonly kind: "composite"; readonly meta: { readonly compositeInstanceId: string } }
-  | { readonly kind: "collect"; readonly meta: { readonly alias?: string } };
+  | { readonly kind: "collect"; readonly meta: { readonly alias: string } };
 
 // =============================================================================
 // Canonical Addressing System
