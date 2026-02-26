@@ -28,10 +28,4 @@ export type {
 } from './types';
 
 // RenderBufferArena for zero-allocation rendering
-export {
-  RenderBufferArena,
-  initGlobalRenderArena,
-  getGlobalRenderArena,
-  isGlobalArenaInitialized,
-  _resetGlobalArenaForTesting,
-} from './RenderBufferArena';
+export { RenderBufferArena } from './RenderBufferArena';

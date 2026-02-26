@@ -10,7 +10,6 @@ export { useDockview } from './hooks';
 export { PANEL_DEFINITIONS, PANEL_COMPONENTS } from './panelRegistry';
 export type { PanelDefinition } from './panelRegistry';
 export { createDefaultLayout } from './defaultLayout';
-export { getDockviewApiRef, setDockviewApiRef } from './apiRef';
 export {
   openExpressionEditorPanel,
   EXPRESSION_EDITOR_PANEL_ID,

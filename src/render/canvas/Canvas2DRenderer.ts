@@ -36,9 +36,6 @@ import { reportRenderIssue } from '../render-issues';
 /** Singleton empty dash array — avoids per-frame allocation from setLineDash([]) */
 const EMPTY_DASH: number[] = [];
 
-/** Reusable dash pattern buffer — avoids .map() allocation per frame */
-let _dashBuffer: number[] = [];
-
 /**
  * Calculate stroke width in pixels from world units.
  *
@@ -149,6 +146,7 @@ export function renderDrawPathInstancesOp(
   const uniformStrokeWidthPx = uniformStrokeWidth
     ? calculateStrokeWidthPx(style.strokeWidth as number, width, height)
     : undefined;
+  const dashBuffer: number[] = [];
 
   // Set up line join/cap/dash (these are typically uniform per pass)
   if (hasStroke) {
@@ -158,11 +156,11 @@ export function renderDrawPathInstancesOp(
     if (style.dashPattern && style.dashPattern.length > 0) {
       // Scale dash pattern from world units to pixels (reuse buffer)
       const patLen = style.dashPattern.length;
-      _dashBuffer.length = patLen;
+      dashBuffer.length = patLen;
       for (let d = 0; d < patLen; d++) {
-        _dashBuffer[d] = style.dashPattern[d] * D;
+        dashBuffer[d] = style.dashPattern[d] * D;
       }
-      ctx.setLineDash(_dashBuffer);
+      ctx.setLineDash(dashBuffer);
       ctx.lineDashOffset = (style.dashOffset ?? 0) * D;
     } else {
       ctx.setLineDash(EMPTY_DASH);

@@ -10,11 +10,10 @@
  */
 
 import {
-  initGlobalRenderArena,
   assertWebGPUStartupContract,
   createWebGPURenderer,
   type WebGPURenderer,
-  type RenderBufferArena,
+  RenderBufferArena,
   setRenderIssueReporter,
   getRenderIssues,
   clearRenderIssues,
@@ -76,8 +75,31 @@ export class RuntimeService {
   private lastWorkerFallbackLog = { message: '', atMs: 0 };
   private compileWorkerUnavailableLogged = false;
   private readonly liveRecompile: LiveRecompileController = createLiveRecompileController();
+  private statsSink: ((statsText: string) => void) | null;
+  private runtimeReadySink: (() => void) | null;
 
-  constructor(private readonly store: RootStore) {}
+  constructor(
+    private readonly store: RootStore,
+    options: {
+      onStatsUpdate?: (statsText: string) => void;
+      onRuntimeReady?: () => void;
+    } = {}
+  ) {
+    this.statsSink = options.onStatsUpdate ?? null;
+    this.runtimeReadySink = options.onRuntimeReady ?? null;
+  }
+
+  setStatsSink(onStatsUpdate: ((statsText: string) => void) | null): void {
+    // [LAW:no-shared-mutable-globals] RuntimeService owns the stats sink
+    // explicitly; no ambient window callback is used.
+    this.statsSink = onStatsUpdate;
+  }
+
+  setRuntimeReadySink(onRuntimeReady: (() => void) | null): void {
+    // [LAW:no-shared-mutable-globals] Runtime-ready notifications are pushed
+    // through explicit ownership callbacks, never window globals.
+    this.runtimeReadySink = onRuntimeReady;
+  }
 
   private logWorkerFailure(err: unknown): void {
     const message = err instanceof Error ? err.message : String(err);
@@ -122,11 +144,7 @@ export class RuntimeService {
       getRenderer: () => this.renderer,
       getArena: () => this.arena,
       store: this.store,
-      onStatsUpdate: (statsText) => {
-        if (window.__setStats) {
-          window.__setStats(statsText);
-        }
-      },
+      onStatsUpdate: (statsText) => this.statsSink?.(statsText),
     };
   }
 
@@ -223,8 +241,10 @@ export class RuntimeService {
       });
     });
 
-    // Initialize render buffer arena (50k elements, zero allocations after init)
-    this.arena = initGlobalRenderArena(50_000);
+    // [LAW:no-shared-mutable-globals] RuntimeService owns one arena instance
+    // per runtime lifecycle instead of relying on module-level singleton state.
+    this.arena = new RenderBufferArena(50_000);
+    this.arena.init();
     setRenderIssueReporter((issue) => {
       // [LAW:single-enforcer] RuntimeService owns render issue routing into diagnostics.
       store.diagnostics.log({
@@ -291,10 +311,8 @@ export class RuntimeService {
       });
     }
 
-    // Re-render App to update externalWriteBus prop now that runtime state exists
-    if ((window as any).__renderApp) {
-      (window as any).__renderApp();
-    }
+    // Re-render App to update externalWriteBus prop now that runtime state exists.
+    this.runtimeReadySink?.();
 
     // Start auto-persistence (PatchStore watches itself)
     store.patch.startPersistence();
@@ -391,5 +409,8 @@ export class RuntimeService {
     debugService.clear();
     this.renderer?.dispose();
     this.renderer = null;
+    this.arena = null;
+    this.statsSink = null;
+    this.runtimeReadySink = null;
   }
 }

@@ -16,6 +16,15 @@ import type { PortHighlightStore } from '../../stores/PortHighlightStore';
 import type { DiagnosticsStore } from '../../stores/DiagnosticsStore';
 import type { DebugStore } from '../../stores/DebugStore';
 
+export interface PortContextMenuRequest {
+  blockId: string;
+  portId: string;
+  isInput: boolean;
+  position: { top: number; left: number };
+}
+
+export type PortContextMenuHandler = (request: PortContextMenuRequest) => void;
+
 /**
  * Context value provided to all child components of GraphEditorCore.
  *
@@ -35,6 +44,8 @@ export interface GraphEditorContextValue {
   enableDebugMode: boolean;
   /** Enable context menus (block/edge/port) */
   enableContextMenus: boolean;
+  /** Optional port-context-menu dispatch owned by embedding editor */
+  onPortContextMenu?: PortContextMenuHandler | null;
 
   // Store references (not part of adapter abstraction)
   /** Selection state (optional - may be null for composite editor) */
