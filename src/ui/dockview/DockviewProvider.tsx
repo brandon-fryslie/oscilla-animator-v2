@@ -14,7 +14,6 @@ import {
 import 'dockview/dist/styles/dockview.css';
 import { PANEL_COMPONENTS } from './panelRegistry';
 import { createDefaultLayout } from './defaultLayout';
-import { setDockviewApiRef } from './apiRef';
 import type { EditorHandle } from '../editorCommon';
 import { DockviewRightHeaderActions } from './DockviewHeaderActions';
 import { clearStoredDockviewLayout, loadDockviewLayout, saveDockviewLayout } from './layoutPersistence';
@@ -63,7 +62,6 @@ export const DockviewProvider: React.FC<DockviewProviderProps> = ({
   const handleReady = useCallback(
     (event: DockviewReadyEvent) => {
       setApi(event.api);
-      setDockviewApiRef(event.api);
 
       const savedLayout = loadDockviewLayout();
       if (savedLayout) {
@@ -124,12 +122,6 @@ export const DockviewProvider: React.FC<DockviewProviderProps> = ({
       }
     };
   }, [api]);
-
-  useEffect(() => {
-    return () => {
-      setDockviewApiRef(null);
-    };
-  }, []);
 
   return (
     <DockviewContext.Provider value={{ api }}>

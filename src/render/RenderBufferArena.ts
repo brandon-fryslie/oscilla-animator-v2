@@ -35,7 +35,6 @@ import {
   buildOverflowMessage,
   populateFrameStats,
   populatePeakStats,
-  createArenaInstance,
 } from './arena-init';
 
 /** Maximum supported element count - set at construction */
@@ -374,51 +373,4 @@ export class RenderBufferArena {
       );
     }
   }
-}
-
-/**
- * Global singleton arena instance.
- * Initialized once at app startup, used throughout render pipeline.
- */
-let globalArena: RenderBufferArena | null = null;
-
-/**
- * Initialize the global render arena.
- * Call this once at application startup.
- */
-export function initGlobalRenderArena(maxElements: number = DEFAULT_MAX_ELEMENTS): RenderBufferArena {
-  if (globalArena !== null) {
-    return globalArena;
-  }
-  globalArena = createArenaInstance(RenderBufferArena, maxElements);
-  globalArena.init();
-  return globalArena;
-}
-
-/**
- * Get the global render arena.
- * Throws if not initialized.
- */
-export function getGlobalRenderArena(): RenderBufferArena {
-  if (globalArena === null) {
-    throw new Error(
-      'RenderBufferArena: global arena not initialized. Call initGlobalRenderArena() at startup.'
-    );
-  }
-  return globalArena;
-}
-
-/**
- * Check if global arena is initialized.
- */
-export function isGlobalArenaInitialized(): boolean {
-  return globalArena !== null && globalArena.isInitialized();
-}
-
-/**
- * Reset the global arena for testing.
- * DO NOT use in production code.
- */
-export function _resetGlobalArenaForTesting(): void {
-  globalArena = null;
 }

@@ -34,8 +34,10 @@ export interface CompileWorkerRunResult {
 
 interface InFlightRequest {
   requestId: number;
+  request: CompileWorkerRunRequest;
   reject: (reason?: unknown) => void;
   resolve: (value: CompileWorkerRunResult) => void;
+  superseded: boolean;
 }
 
 const ALLOWED_SEVERITY_OVERRIDES = new Set<WorkerDiagnosticSeverityOverride>([
@@ -101,7 +103,57 @@ export class CompileWorkerClient {
   private activeWorker: Worker | null = null;
   private nextRequestId = 0;
   private inFlight: InFlightRequest | null = null;
+  private queued: InFlightRequest | null = null;
   private destroyed = false;
+
+  private buildPayload(inFlight: InFlightRequest): CompileWorkerRequest {
+    return {
+      kind: 'compile',
+      requestId: inFlight.requestId,
+      patchRevision: inFlight.request.patchRevision,
+      serializedPatch: serializePatch(inFlight.request.patch, 0),
+      // [LAW:single-enforcer] Worker boundary sanitizes options to plain data.
+      frontendOptions: sanitizeFrontendOptions(inFlight.request.frontendOptions),
+    };
+  }
+
+  private startRequest(inFlight: InFlightRequest): void {
+    const worker = this.ensureWorker();
+    this.inFlight = inFlight;
+
+    try {
+      worker.postMessage(this.buildPayload(inFlight));
+    } catch (err) {
+      if (this.inFlight?.requestId === inFlight.requestId) {
+        this.inFlight = null;
+      }
+      inFlight.reject(
+        new Error(
+          `Compile worker request clone failed: ${err instanceof Error ? err.message : String(err)}`,
+        ),
+      );
+      this.drainQueued();
+    }
+  }
+
+  private supersedeInFlight(): void {
+    if (!this.inFlight || this.inFlight.superseded) return;
+    this.inFlight.superseded = true;
+    this.inFlight.reject(new CompileSupersededError());
+  }
+
+  private supersedeQueued(): void {
+    if (!this.queued) return;
+    this.queued.reject(new CompileSupersededError());
+    this.queued = null;
+  }
+
+  private drainQueued(): void {
+    if (this.destroyed || this.inFlight || !this.queued) return;
+    const next = this.queued;
+    this.queued = null;
+    this.startRequest(next);
+  }
 
   private ensureWorker(): Worker {
     if (this.activeWorker) return this.activeWorker;
@@ -122,27 +174,34 @@ export class CompileWorkerClient {
 
       this.inFlight = null;
       if (message.kind === 'workerError') {
-        inFlight.reject(new Error(`Compile worker failed: ${message.message}`));
+        if (!inFlight.superseded) {
+          inFlight.reject(new Error(`Compile worker failed: ${message.message}`));
+        }
+        this.drainQueued();
         return;
       }
 
-      inFlight.resolve({
-        sourcePatchRevision: message.patchRevision,
-        frontendResult: message.frontendResult,
-        backendResult: reviveBackendResult(message.backendResult),
-        compileDurationMs: message.durationMs,
-      });
+      if (!inFlight.superseded) {
+        inFlight.resolve({
+          sourcePatchRevision: message.patchRevision,
+          frontendResult: message.frontendResult,
+          backendResult: reviveBackendResult(message.backendResult),
+          compileDurationMs: message.durationMs,
+        });
+      }
+      this.drainQueued();
     };
 
     worker.onerror = (event) => {
       const inFlight = this.inFlight;
       this.inFlight = null;
-      if (inFlight) {
+      if (inFlight && !inFlight.superseded) {
         inFlight.reject(new Error(`Compile worker crashed: ${event.message}`));
       }
       if (!this.destroyed) {
         // [LAW:single-enforcer] Worker lifecycle recovery is owned by this client.
         this.activeWorker = null;
+        this.drainQueued();
       }
     };
 
@@ -150,46 +209,31 @@ export class CompileWorkerClient {
   }
 
   async compile(request: CompileWorkerRunRequest): Promise<CompileWorkerRunResult> {
-    if (this.inFlight) {
-      this.inFlight.reject(new CompileSupersededError());
-      this.inFlight = null;
-    }
-
     const requestId = ++this.nextRequestId;
-    const worker = this.ensureWorker();
 
     return await new Promise<CompileWorkerRunResult>((resolve, reject) => {
-      this.inFlight = { requestId, resolve, reject };
-
-      const payload: CompileWorkerRequest = {
-        kind: 'compile',
+      const nextRequest: InFlightRequest = {
         requestId,
-        patchRevision: request.patchRevision,
-        serializedPatch: serializePatch(request.patch, 0),
-        // [LAW:single-enforcer] Worker boundary sanitizes options to plain data.
-        frontendOptions: sanitizeFrontendOptions(request.frontendOptions),
+        request,
+        resolve,
+        reject,
+        superseded: false,
       };
-      try {
-        worker.postMessage(payload);
-      } catch (err) {
-        if (this.inFlight?.requestId === requestId) {
-          this.inFlight = null;
-        }
-        reject(
-          new Error(
-            `Compile worker request clone failed: ${err instanceof Error ? err.message : String(err)}`,
-          ),
-        );
-      }
+
+      // [LAW:dataflow-not-control-flow] Every compile request executes the same
+      // queue pipeline; variability lives in queue/in-flight data, not branches.
+      this.supersedeInFlight();
+      this.supersedeQueued();
+      this.queued = nextRequest;
+      this.drainQueued();
     });
   }
 
   dispose(): void {
     this.destroyed = true;
-    if (this.inFlight) {
-      this.inFlight.reject(new CompileSupersededError());
-      this.inFlight = null;
-    }
+    this.supersedeInFlight();
+    this.inFlight = null;
+    this.supersedeQueued();
     this.activeWorker?.terminate();
     this.activeWorker = null;
   }

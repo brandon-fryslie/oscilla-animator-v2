@@ -12,7 +12,7 @@ import { AutocompleteDropdown } from '../expression-editor/AutocompleteDropdown'
 import { adjustPositionForViewport } from '../expression-editor/cursorPosition';
 import { TokenExpressionEditor } from '../expression-editor/TokenExpressionEditor';
 import type { TokenExpressionEditorHandle } from '../expression-editor/TokenExpressionEditor';
-import { DockviewContext, getDockviewApiRef, openExpressionEditorPanel } from '../dockview';
+import { DockviewContext, openExpressionEditorPanel } from '../dockview';
 
 export interface SharedExpressionEditorProps {
   readonly blockId: BlockId;
@@ -116,7 +116,7 @@ export const SharedExpressionEditor = observer(function SharedExpressionEditor({
 }: SharedExpressionEditorProps) {
   const { patch: patchStore, diagnostics: diagnosticsStore, expressionEditor } = useStores();
   const dockview = React.useContext(DockviewContext);
-  const api = dockview?.api ?? getDockviewApiRef();
+  const api = dockview?.api ?? null;
   const [localValue, setLocalValue] = useState(value);
   const tokenEditorRef = useRef<TokenExpressionEditorHandle>(null);
 
@@ -301,8 +301,7 @@ export const SharedExpressionEditor = observer(function SharedExpressionEditor({
       patchStore.updateBlockParams(blockId, { expression: localValue });
     }
     expressionEditor.openForBlock(blockId);
-    const resolvedApi = api ?? getDockviewApiRef();
-    if (!resolvedApi) {
+    if (!api) {
       // [LAW:single-enforcer] UI action failures are logged through diagnostics.
       diagnosticsStore.log({
         level: 'error',
@@ -310,8 +309,8 @@ export const SharedExpressionEditor = observer(function SharedExpressionEditor({
       });
       return;
     }
-    openExpressionEditorPanel(resolvedApi, blockId);
-  }, [api, blockId, expressionEditor, localValue, patchStore, value]);
+    openExpressionEditorPanel(api, blockId);
+  }, [api, blockId, expressionEditor, localValue, patchStore, value, diagnosticsStore]);
 
   return (
     <div style={{ position: 'relative' }}>

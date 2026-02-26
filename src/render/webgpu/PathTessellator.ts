@@ -1,6 +1,7 @@
 import earcut from 'earcut';
 import { Bezier } from 'bezier-js';
 import type { PathGeometry } from '../types';
+import { HashUtils } from '../../utilities/hash';
 
 export interface TessellatedPathMesh {
   readonly cacheKey: string;
@@ -33,8 +34,6 @@ const MAX_CURVE_SUBDIVISIONS = 64;
  */
 export class PathTessellator {
   private readonly meshCache = new Map<string, TessellatedPathMesh>();
-  private readonly objectIds = new WeakMap<object, number>();
-  private nextObjectId = 1;
 
   getOrCreateMesh(geometry: PathGeometry): TessellatedPathMesh {
     const cacheKey = this.makeCacheKey(geometry);
@@ -54,19 +53,12 @@ export class PathTessellator {
   }
 
   private makeCacheKey(geometry: PathGeometry): string {
-    const verbsRef = this.getObjectId(geometry.verbs);
-    const pointsRef = this.getObjectId(geometry.points);
-    return `${geometry.topologyId}:${verbsRef}:${pointsRef}:${geometry.pointsCount}:${geometry.flags ?? 0}`;
-  }
-
-  private getObjectId(value: object): number {
-    const existing = this.objectIds.get(value);
-    if (existing !== undefined) {
-      return existing;
-    }
-    const id = this.nextObjectId++;
-    this.objectIds.set(value, id);
-    return id;
+    const pointValueCount = Math.max(0, Math.min(geometry.points.length, geometry.pointsCount * 2));
+    // [LAW:one-source-of-truth] Tessellation cache identity must derive from
+    // geometry content, not mutable buffer object identity.
+    const verbsHash = HashUtils.hashU8(geometry.verbs, geometry.verbs.length);
+    const pointsHash = HashUtils.hashF32Bits(geometry.points, pointValueCount);
+    return `${geometry.topologyId}:${geometry.flags ?? 0}:${geometry.pointsCount}:${verbsHash.toString(16)}:${pointsHash.toString(16)}`;
   }
 
   private extractContours(geometry: PathGeometry): ContourBuildResult[] {

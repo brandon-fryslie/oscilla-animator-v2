@@ -35,16 +35,20 @@ import ReactFlow, {
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import type { GraphDataAdapter, BlockLike, EdgeLike } from './types';
-import { GraphEditorProvider, type GraphEditorContextValue } from './GraphEditorContext';
+import {
+  GraphEditorProvider,
+  type GraphEditorContextValue,
+  type PortContextMenuHandler,
+} from './GraphEditorContext';
 import { reconcileNodesFromAdapter, type UnifiedNodeData } from './nodeDataTransform';
 import { UnifiedNode as UnifiedNodeComponent } from './UnifiedNode';
 import { OscillaEdge } from '../reactFlowEditor/OscillaEdge';
 import type { OscillaEdgeData } from '../reactFlowEditor/nodes';
 import { getLayoutedElements } from '../reactFlowEditor/layout';
 import {
-  setTypeValidationIssueReporter,
   validateConnection,
   type PortTypeLookupFn,
+  type TypeValidationIssue,
 } from '../reactFlowEditor/typeValidation';
 // import { ErrorBadgeOverlay } from './ErrorBadgeOverlay'; // DISABLED: Errors now shown in port popovers
 import type { SelectionStore } from '../../stores/SelectionStore';
@@ -109,6 +113,7 @@ export interface GraphEditorCoreProps {
   onNodeContextMenu?: NodeMouseHandler;
   onEdgeContextMenu?: EdgeMouseHandler;
   onEdgeClick?: EdgeMouseHandler;
+  onPortContextMenu?: PortContextMenuHandler;
 
   /** Edge hover event handlers (optional - for debug mode) */
   onEdgeMouseEnter?: EdgeMouseHandler;
@@ -184,6 +189,7 @@ export const GraphEditorCoreInner = observer(
         onNodeContextMenu,
         onEdgeContextMenu,
         onEdgeClick,
+        onPortContextMenu,
         onEdgeMouseEnter,
         onEdgeMouseLeave,
         onPaneClick,
@@ -326,29 +332,24 @@ export const GraphEditorCoreInner = observer(
           enableParamEditing: mergedFeatures.enableParamEditing,
           enableDebugMode: mergedFeatures.enableDebugMode,
           enableContextMenus: mergedFeatures.enableContextMenus,
+          // [LAW:no-shared-mutable-globals] Port context menu dispatch is
+          // owned by editor context instead of window-level mutable globals.
+          onPortContextMenu,
           selection,
           portHighlight,
           diagnostics,
           debug,
         }),
-        [adapter, mergedFeatures, selection, portHighlight, diagnostics, debug]
+        [adapter, mergedFeatures, onPortContextMenu, selection, portHighlight, diagnostics, debug]
       );
 
-      useEffect(() => {
-        if (!diagnostics) {
-          return;
-        }
+      const reportTypeValidationIssue = useCallback((issue: TypeValidationIssue): void => {
         // [LAW:single-enforcer] GraphEditorCore is the UI boundary that forwards
         // type-validation projection warnings into diagnostics.
-        setTypeValidationIssueReporter((issue) => {
-          diagnostics.log({
-            level: issue.level,
-            message: issue.message,
-          });
+        diagnostics?.log({
+          level: issue.level,
+          message: issue.message,
         });
-        return () => {
-          setTypeValidationIssueReporter(null);
-        };
       }, [diagnostics]);
 
       // -------------------------------------------------------------------------
@@ -433,10 +434,11 @@ export const GraphEditorCoreInner = observer(
             connection.targetHandle || '',
             patch,
             resolvedPortTypeLookup,
+            reportTypeValidationIssue,
           );
           return result.valid;
         },
-        [patch, resolvedPortTypeLookup]
+        [patch, resolvedPortTypeLookup, reportTypeValidationIssue]
       );
 
       // -------------------------------------------------------------------------
