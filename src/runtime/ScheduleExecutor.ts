@@ -35,21 +35,20 @@ import { assembleRenderFrame, type AssemblerContext } from './RenderAssembler';
 import { resolveCameraFromGlobals } from './CameraResolver';
 import { payloadStride } from '../core/canonical-types';
 import type { ValueSlot } from '../compiler/ir/Indices';
-import { SCALAR_INSTANCE_ID, SYSTEM_PALETTE_SLOT } from '../compiler/ir/Indices';
+import { SCALAR_INSTANCE_ID } from '../compiler/ir/Indices';
 import { evaluateValueExprEvent } from './ValueExprEventEvaluator';
 import { materializeValueExpr } from './ValueExprMaterializer';
 import { applyStateWritePolicy } from './StateWritePolicy';
+import type { PureFnExecutionContext } from './ScalarKernelLibrary';
 import {
   arenaDecodeToAoS,
   arenaEncodeFromAoS,
   arenaRead,
-  arenaWrite,
   type ArenaSlotDescriptor,
 } from './ArenaValueStore';
 import {
   type SlotLookup,
   getExprAddressTable,
-  assertNumericStride,
   isNumericStorage,
 } from './ExprAddressTable';
 
@@ -124,27 +123,6 @@ function ensureOutputBuffer(
   return new Float32Array(length);
 }
 
-function writeArenaStrided(
-  slotToArena: ReadonlyMap<ValueSlot, ArenaSlotDescriptor>,
-  state: RuntimeState,
-  lookup: SlotLookup,
-  src: ArrayLike<number>,
-  stride: number,
-): void {
-  if (!isNumericStorage(lookup.storage)) {
-    throw new Error(
-      'writeArenaStrided: expected numeric storage for slot ' + lookup.slot + ', got ' + lookup.storage,
-    );
-  }
-  if (lookup.stride !== stride) {
-    throw new Error('writeArenaStrided: expected stride=' + stride + ' for slot ' + lookup.slot + ', got ' + lookup.stride);
-  }
-  const arenaDesc = resolveArenaDescriptor(slotToArena, lookup);
-  for (let i = 0; i < stride; i++) {
-    arenaWrite(state.arena, arenaDesc, 0, i, src[i] as number);
-  }
-}
-
 function readCanonicalNumeric(
   slotToArena: ReadonlyMap<ValueSlot, ArenaSlotDescriptor>,
   state: RuntimeState,
@@ -200,6 +178,7 @@ export function executeFrame(
   // slotToArena replaces all direct program.arenaLayout[slot] accesses in this file.
   const addressTable = getExprAddressTable(program);
   const { slotLookup: slotLookupMap, fieldExprToSlot, slotToArena } = addressTable;
+  const pureFnContext: PureFnExecutionContext = { kernelRegistry: program.kernelRegistry };
 
   // Helper uses module-level resolveSlotOffsetFromMap() — no closure needed
 
@@ -223,16 +202,6 @@ export function executeFrame(
   // Clear event payload arrays (spec-compliant event storage)
   // Monotone OR semantics: clear at frame start, only append during frame
   state.events.forEach(_clearEventPayloads);
-
-  // === System-reserved time outputs ===
-  // These are part of the runtime contract: they are written deterministically from resolved time each frame.
-  // Slot allocation/stride is enforced by compiler-emitted slot descriptors.
-  const TIME_PALETTE_SLOT = SYSTEM_PALETTE_SLOT;
-  if (!(time.palette instanceof Float32Array) || time.palette.length !== 4) {
-    throw new Error('time.palette must be Float32Array(4) in RGBA [0..1]');
-  }
-  const palette = assertNumericStride(slotLookupMap, TIME_PALETTE_SLOT, 4, 'time.palette slot');
-  writeArenaStrided(slotToArena, state, palette, time.palette, 4);
 
   // ═══════════════════════════════════════════════════════════════════════════
   // TWO-PHASE EXECUTION MODEL
@@ -315,6 +284,7 @@ export function executeFrame(
             program,
             undefined,
             MATERIALIZE_SCRATCH,
+            pureFnContext,
           );
           arenaEncodeFromAoS(state.arena, arenaDesc, buffer);
           if (buffer.length < stride) {
@@ -337,7 +307,7 @@ export function executeFrame(
         enterRuntimeFrameSegment(state, 'phase1-event-dispatch');
         eventDispatchSeen = true;
         // ValueExpr-only event evaluation (cutover complete)
-        const fired = evaluateValueExprEvent(step.expr as any, program.valueExprs, state, program);
+        const fired = evaluateValueExprEvent(step.expr as any, program.valueExprs, state, program, pureFnContext);
 
         // Monotone OR: only write 1, never write 0 back — ensures any-fired-stays-fired
         if (fired) {
@@ -380,6 +350,7 @@ export function executeFrame(
           program,
           undefined,
           MATERIALIZE_SCRATCH,
+          pureFnContext,
         );
         arenaEncodeFromAoS(state.arena, arenaDesc, buffer);
 
@@ -558,6 +529,7 @@ export function executeFrame(
         program,
         undefined,
         MATERIALIZE_SCRATCH,
+        pureFnContext,
       );
       const baseSlot = step.stateSlot as number;
       for (let c = 0; c < stride; c++) {
@@ -586,6 +558,7 @@ export function executeFrame(
         program,
         undefined,
         MATERIALIZE_SCRATCH,
+        pureFnContext,
       );
 
       const srcStride = payloadStride(exprNode.type.payload);

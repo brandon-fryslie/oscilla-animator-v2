@@ -383,10 +383,10 @@ export class IRBuilderImpl implements OrchestratorIRBuilder {
     // Map combine modes to zip functions
     const fnMap: Record<typeof mode, PureFn> = {
       sum: { kind: 'opcode', opcode: OpCode.Add },
-      average: { kind: 'kernel', name: 'average' },
-      max: { kind: 'kernel', name: 'max' },
-      min: { kind: 'kernel', name: 'min' },
-      last: { kind: 'kernel', name: 'last' },
+      average: { kind: 'opcode', opcode: OpCode.Avg },
+      max: { kind: 'opcode', opcode: OpCode.Max },
+      min: { kind: 'opcode', opcode: OpCode.Min },
+      last: { kind: 'opcode', opcode: OpCode.Last },
       product: { kind: 'opcode', opcode: OpCode.Mul },
     };
     // Delegate to zipAuto so mixed cardinality is handled

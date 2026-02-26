@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { compile } from '../../compiler/compile';
 import { buildPatch, type Patch } from '../../graph';
+import type { PatchBuilder } from '../../graph';
 import { executeFrame } from '../../runtime/ScheduleExecutor';
 import { createRuntimeState } from '../../runtime/RuntimeState';
 import type { ScheduleIR } from '../../compiler/backend/schedule-program';
@@ -36,7 +37,7 @@ function createState(program: CompiledProgramIR) {
 function buildReduceProbePatch(opts: {
   op: ReduceOpName;
   sourceCount: number;
-  makeField?: (ctx: { b: Parameters<typeof buildPatch>[0]; fieldBlock: any; fieldPort: string }) => {
+  makeField?: (ctx: { b: PatchBuilder; fieldBlock: any; fieldPort: string }) => {
     block: any;
     port: string;
   };
@@ -91,7 +92,8 @@ function runReduceScale(program: CompiledProgramIR): number {
   const state = createState(program);
   const frame = executeFrame(program, state, getTestArena(), 0);
   expect(frame.ops.length).toBeGreaterThan(0);
-  return frame.ops[0]!.instances.size[0]!;
+  const size = frame.ops[0]!.instances.size;
+  return typeof size === 'number' ? size : (size[0] ?? 0);
 }
 
 describe('ReduceOp', () => {

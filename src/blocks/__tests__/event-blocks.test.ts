@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { compile } from '../../compiler/compile';
 import { buildPatch, type Patch } from '../../graph';
+import type { PatchBuilder } from '../../graph';
 import type { CompiledProgramIR } from '../../compiler/ir/program';
 import { computeRuntimeStorageSizes } from '../../compiler/ir/program';
 import type { ScheduleIR } from '../../compiler/backend/schedule-program';
@@ -30,7 +31,7 @@ function createState(program: CompiledProgramIR) {
 }
 
 function buildScalarProbePatch(
-  wireScale: (ctx: { b: Parameters<typeof buildPatch>[0]; time: any; render: any }) => void,
+  wireScale: (ctx: { b: PatchBuilder; time: any; render: any }) => void,
 ): Patch {
   return buildPatch((b) => {
     const time = b.addBlock('InfiniteTimeRoot');
@@ -68,7 +69,8 @@ function runScaleFrames(program: CompiledProgramIR, timesMs: readonly number[]):
   for (const t of timesMs) {
     const frame = executeFrame(program, state, getTestArena(), t);
     expect(frame.ops.length).toBeGreaterThan(0);
-    values.push(frame.ops[0]!.instances.size[0]!);
+    const size = frame.ops[0]!.instances.size;
+    values.push(typeof size === 'number' ? size : (size[0] ?? 0));
   }
   return values;
 }
