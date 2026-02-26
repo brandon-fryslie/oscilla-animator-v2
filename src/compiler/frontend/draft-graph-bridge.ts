@@ -245,14 +245,24 @@ function buildNormalizedEdges(
 /**
  * Convert DraftEdges to compiler-owned ID-addressed edge metadata.
  */
-function buildCompilerGraphEdges(draftEdges: readonly DraftEdge[]): CompilerGraphEdge[] {
-  return draftEdges.map((edge) => ({
-    id: edge.id,
-    fromBlockId: edge.from.blockId,
-    fromPort: edge.from.port as PortId,
-    toBlockId: edge.to.blockId,
-    toPort: edge.to.port as PortId,
-    role: draftRoleToGraphRole(edge.role),
+function buildSyntheticPatch(
+  blocks: readonly Block[],
+  draftEdges: readonly DraftEdge[],
+  blockIndexMap: ReadonlyMap<string, BlockIndex>,
+): Patch {
+  const blockMap = new Map<BlockId, Block>();
+  for (const block of blocks) {
+    blockMap.set(block.id, block);
+  }
+
+  const edges: Edge[] = draftEdges.map((de, i) => ({
+    id: de.id,
+    from: { kind: 'port' as const, blockId: de.from.blockId, slotId: de.from.port },
+    to: { kind: 'port' as const, blockId: de.to.blockId, slotId: de.to.port },
+    enabled: true,
+    sortKey: i,
+    alias: de.alias,
+    role: draftEdgeRoleToEdgeRole(de.role),
   }));
 }
 

@@ -19,7 +19,7 @@
 import type { BlockId, BlockRole } from '../../types';
 import { derivedRole } from '../../types';
 import type { Block, Edge, InputPort, OutputPort, Patch } from '../../graph/Patch';
-import { deriveEdgeAlias } from '../../graph/edge-alias';
+import { normalizeCanonicalName } from '../../core/canonical-name';
 import {
   getCompositeDefinition,
   isCompositeType,
@@ -146,6 +146,23 @@ function boundaryInEdgeId(path: ExpansionPath, port: string, origEdgeId: string)
 
 function boundaryOutEdgeId(path: ExpansionPath, port: string, origEdgeId: string): string {
   return `cx:${pathKey(path)}:out:${port}:re:${origEdgeId}`;
+}
+
+function deriveEdgeAlias(
+  from: Edge['from'],
+  blocks: ReadonlyMap<BlockId, Block>,
+): string {
+  // [LAW:single-enforcer] Composite expansion derives aliases exactly once
+  // when creating rewritten/internal edges.
+  if (from.kind !== 'port') {
+    throw new Error(`Cannot derive edge alias from endpoint kind '${from.kind}'`);
+  }
+  const source = blocks.get(from.blockId as BlockId);
+  if (!source) {
+    throw new Error(`Cannot derive edge alias: source block '${from.blockId}' not found`);
+  }
+  const canonical = source.displayName ? normalizeCanonicalName(source.displayName) : source.id;
+  return `${canonical}.${from.slotId}`;
 }
 
 // =============================================================================

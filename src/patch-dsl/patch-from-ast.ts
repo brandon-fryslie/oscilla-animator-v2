@@ -166,12 +166,10 @@ function processPatchContents(
     }
     seenEdgeKeys.add(edgeKey);
 
-    let alias: string;
-    try {
-      alias = deriveEdgeAlias(from, patchBlocks);
-    } catch (err) {
+    const alias = deriveEdgeAlias(from, patchBlocks);
+    if (!alias) {
       errors.push(new PatchDslError(
-        err instanceof Error ? err.message : `Cannot derive edge alias for ${from.blockId}.${from.slotId}`,
+        `Cannot derive edge alias for ${from.blockId}.${from.slotId}`,
         deferred.pos
       ));
       continue;
@@ -193,6 +191,13 @@ function processPatchContents(
 
   const patch: Patch = { blocks: patchBlocks, edges };
   return { patch, errors, warnings };
+}
+
+function deriveEdgeAlias(from: Endpoint, patchBlocks: ReadonlyMap<BlockId, Block>): string | undefined {
+  const source = patchBlocks.get(from.blockId as BlockId);
+  if (!source) return undefined;
+  const canonical = source.displayName ? normalizeCanonicalName(source.displayName) : source.id;
+  return `${canonical}.${from.slotId}`;
 }
 
 /**
