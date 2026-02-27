@@ -11,6 +11,15 @@ import { canonicalScalar, canonicalMany, FLOAT, unitNone, instanceRef } from '..
 
 const SIG_FLOAT = canonicalScalar(FLOAT, unitNone());
 const FIELD_FLOAT = canonicalMany(FLOAT, unitNone(), instanceRef('d', 'i'));
+const EMPTY_SHAPE_TABLE: CompiledProgramIR['shapeTable'] = {
+  revision: 0,
+  wordsPerRecord: 8,
+  payloadWordStart: 0,
+  topologyIds: [],
+  indexByTopologyId: new Map(),
+  data: new Uint32Array(0),
+  entries: [],
+};
 
 /**
  * Build a minimal mock CompiledProgramIR sufficient for ExprAddressTable tests.
@@ -132,6 +141,7 @@ function mockProgram(opts: {
     kernelRegistry: { resolve: () => undefined, entries: () => [] } as any,
     arenaLayout,
     arenaTotalFloats: 0,
+    shapeTable: EMPTY_SHAPE_TABLE,
   } as CompiledProgramIR;
 }
 

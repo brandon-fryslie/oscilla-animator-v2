@@ -18,6 +18,16 @@ import { valueSlot, valueExprId } from '../../compiler/ir/Indices';
 import { instanceId } from '../../core/ids';
 import type { InstanceId } from '../../core/ids';
 
+const EMPTY_SHAPE_TABLE: CompiledProgramIR['shapeTable'] = {
+  revision: 0,
+  wordsPerRecord: 8,
+  payloadWordStart: 0,
+  topologyIds: [],
+  indexByTopologyId: new Map(),
+  data: new Uint32Array(0),
+  entries: [],
+};
+
 // =============================================================================
 // Helpers
 // =============================================================================
@@ -70,6 +80,7 @@ function makeMinimalProgram(opts: {
     kernelRegistry: {} as any,
     arenaLayout: [],
     arenaTotalFloats: 0,
+    shapeTable: EMPTY_SHAPE_TABLE,
   } as CompiledProgramIR;
 }
 

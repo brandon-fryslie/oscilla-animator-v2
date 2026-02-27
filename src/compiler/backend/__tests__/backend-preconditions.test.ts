@@ -23,6 +23,15 @@ import { createDefaultRegistry } from '../../../runtime/kernels/default-registry
 import { registerAllBlocks } from '../../../blocks/all';
 registerAllBlocks();
 
+const EMPTY_SHAPE_TABLE: CompiledProgramIR['shapeTable'] = {
+  revision: 0,
+  wordsPerRecord: 8,
+  payloadWordStart: 0,
+  topologyIds: [],
+  indexByTopologyId: new Map(),
+  data: new Uint32Array(0),
+  entries: [],
+};
 
 /**
  * Minimal program converter for testing.
@@ -57,6 +66,7 @@ function testProgramConverter(
     kernelRegistry: createDefaultRegistry(),
     arenaLayout: [],
     arenaTotalFloats: 0,
+    shapeTable: EMPTY_SHAPE_TABLE,
   };
 }
 

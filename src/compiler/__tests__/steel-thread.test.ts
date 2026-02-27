@@ -86,8 +86,20 @@ describe('Steel Thread - Animated Particles', () => {
     expect(program.generatedComputeProgram?.wgsl).toContain('OFFSET_SLOT_');
     expect(program.drawPrepProgram?.wgsl).toContain('@group(0) @binding(0) var<storage, read_write> indirectArgs: array<u32>;');
     expect(program.drawPrepProgram?.wgsl).toContain('fn cs_main');
+    expect(program.shapeTable.entries.length).toBeGreaterThan(0);
     const shapeRefs = program.valueExprs.nodes.filter((expr) => expr.kind === 'shapeRef');
     expect(shapeRefs.length).toBeGreaterThan(0);
+    const shapeTopologyIds = [...new Set(shapeRefs.map((expr) => expr.topologyId as number))].sort((a, b) => a - b);
+    expect(program.shapeTable.topologyIds).toEqual(shapeTopologyIds);
+    for (const entry of program.shapeTable.entries) {
+      const topology = getTopology(entry.topologyId);
+      if ('totalControlPoints' in topology) {
+        expect(entry.header.vertexCount).toBe(topology.totalControlPoints);
+        expect(entry.header.indexCount).toBe(topology.totalControlPoints);
+      }
+      expect(entry.shapeId).toBe(entry.topologyId);
+      expect(entry.recordIndex).toBe(program.shapeTable.indexByTopologyId.get(entry.topologyId));
+    }
     for (const shapeRef of shapeRefs) {
       // [LAW:one-source-of-truth] Shape wires carry canonical HANDLE semantics.
       expect(shapeRef.type.payload.kind).toBe('shape');

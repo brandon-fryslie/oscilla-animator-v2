@@ -6,6 +6,16 @@ import { resolveCameraDecl, resolveCameraFromGlobals, DEFAULT_CAMERA } from '../
 import type { RuntimeState } from '../RuntimeState';
 import type { ArenaSlotDescriptor } from '../ArenaValueStore';
 
+const EMPTY_SHAPE_TABLE: CompiledProgramIR['shapeTable'] = {
+  revision: 0,
+  wordsPerRecord: 8,
+  payloadWordStart: 0,
+  topologyIds: [],
+  indexByTopologyId: new Map(),
+  data: new Uint32Array(0),
+  entries: [],
+};
+
 function mockProgram(
   slotToArena: ReadonlyMap<ValueSlot, ArenaSlotDescriptor>,
   renderGlobals: readonly CameraDeclIR[] = [],
@@ -45,6 +55,7 @@ function mockProgram(
     kernelRegistry: { resolve: () => undefined, entries: () => [] } as any,
     arenaLayout: [],
     arenaTotalFloats: 0,
+    shapeTable: EMPTY_SHAPE_TABLE,
   };
 }
 

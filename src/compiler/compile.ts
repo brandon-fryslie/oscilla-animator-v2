@@ -24,6 +24,7 @@ import type {
   OutputSpecIR,
   DrawPrepProgramIR,
   DrawPrepSinkIR,
+  ShapeTableIR,
   GeneratedComputeProgramIR,
   ExprProvenanceIR,
 } from './ir/program';
@@ -48,6 +49,8 @@ import { resolveKernels } from './resolve-kernels';
 import { createDefaultRegistry } from '../runtime/kernels/default-registry';
 import { compileFrontend, type FrontendResult, type FrontendError } from './frontend';
 import type { CompileError } from './types';
+import { exportTopologyBankU32, TopologyBankWord } from '../shapes/registry';
+import type { TopologyId } from '../shapes/types';
 
 import { registerAllBlocks } from '../blocks/all';
 
@@ -495,6 +498,7 @@ function convertLinkedIRToProgram(
   // Build output specs from canonical output contract only.
   const outputs: OutputSpecIR[] = [{ kind: 'renderFrame' }];
   const drawPrepProgram = buildDrawPrepProgram(scheduleIR);
+  const shapeTable = buildShapeTable(valueExprNodes);
   const runtimeAddressTable = buildRuntimeAddressTable(
     runtimeSlots,
     scheduleIR,
@@ -652,10 +656,63 @@ function convertLinkedIRToProgram(
     arenaZones: arenaZonePlan.toIR(),
     arenaTotalFloats: arenaZonePlan.totalFloats,
     drawPrepProgram,
+    shapeTable,
     generatedComputeProgram,
   };
 
   return program;
+}
+
+function collectShapeTableTopologyIds(valueExprNodes: readonly ValueExpr[]): readonly TopologyId[] {
+  const ids = new Set<TopologyId>();
+  for (const expr of valueExprNodes) {
+    if (expr.kind === 'shapeRef') {
+      ids.add(expr.topologyId as TopologyId);
+      continue;
+    }
+    if (
+      expr.kind === 'kernel' &&
+      (expr.kernelKind === 'pathDerivative' || expr.kernelKind === 'pathSample')
+    ) {
+      ids.add(expr.topologyId as TopologyId);
+    }
+  }
+  return [...ids].sort((a, b) => a - b);
+}
+
+function buildShapeTable(valueExprNodes: readonly ValueExpr[]): ShapeTableIR {
+  const topologyIds = collectShapeTableTopologyIds(valueExprNodes);
+  const exported = exportTopologyBankU32(topologyIds);
+  const entries = topologyIds.map((topologyId, recordIndex) => {
+    const headerWordStart = recordIndex * exported.wordsPerRecord;
+    const header = {
+      vertexCount: exported.headers[headerWordStart + TopologyBankWord.VertexCount] ?? 0,
+      indexCount: exported.headers[headerWordStart + TopologyBankWord.IndexCount] ?? 0,
+      indexStart: exported.headers[headerWordStart + TopologyBankWord.IndexStart] ?? 0,
+      baseVertex: exported.headers[headerWordStart + TopologyBankWord.BaseVertex] ?? 0,
+      flags: exported.headers[headerWordStart + TopologyBankWord.Flags] ?? 0,
+      boundsMin: exported.headers[headerWordStart + TopologyBankWord.BoundsMin] ?? 0,
+      boundsMax: exported.headers[headerWordStart + TopologyBankWord.BoundsMax] ?? 0,
+      reserved: exported.headers[headerWordStart + TopologyBankWord.Reserved] ?? 0,
+    };
+    return {
+      shapeId: topologyId,
+      topologyId,
+      recordIndex,
+      headerWordStart,
+      payloadWordStart: header.indexStart,
+      header,
+    };
+  });
+  return {
+    revision: exported.revision,
+    wordsPerRecord: exported.wordsPerRecord,
+    payloadWordStart: exported.payloadWordStart,
+    topologyIds,
+    indexByTopologyId: exported.indexById,
+    data: exported.data,
+    entries,
+  };
 }
 
 function buildDrawPrepProgram(scheduleIR: ScheduleIR): DrawPrepProgramIR {

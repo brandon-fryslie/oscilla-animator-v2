@@ -12,28 +12,7 @@ export function stripKernelRegistry(program: CompiledProgramIR): SerializableCom
 export function collectProgramTopologyIds(
   program: SerializableCompiledProgramIR
 ): readonly TopologyId[] {
-  const ids = new Set<TopologyId>();
-  for (const expr of program.valueExprs.nodes as readonly unknown[]) {
-    if (!expr || typeof expr !== 'object') continue;
-
-    const candidate = expr as {
-      kind?: string;
-      topologyId?: unknown;
-      kernelKind?: string;
-    };
-
-    if (candidate.kind === 'shapeRef' && typeof candidate.topologyId === 'number') {
-      ids.add(candidate.topologyId as TopologyId);
-      continue;
-    }
-
-    if (
-      candidate.kind === 'kernel' &&
-      (candidate.kernelKind === 'pathDerivative' || candidate.kernelKind === 'pathSample') &&
-      typeof candidate.topologyId === 'number'
-    ) {
-      ids.add(candidate.topologyId as TopologyId);
-    }
-  }
-  return [...ids];
+  // [LAW:one-source-of-truth] Compiler-emitted shapeTable is the authoritative
+  // topology contract for worker payload export.
+  return program.shapeTable.topologyIds;
 }

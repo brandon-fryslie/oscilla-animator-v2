@@ -8,6 +8,16 @@ import { executeFrame } from '../ScheduleExecutor';
 import { getTestArena } from './test-arena-helper';
 import { domainTypeId, instanceId } from '../../core/ids';
 
+const EMPTY_SHAPE_TABLE: CompiledProgramIR['shapeTable'] = {
+  revision: 0,
+  wordsPerRecord: 8,
+  payloadWordStart: 0,
+  topologyIds: [],
+  indexByTopologyId: new Map(),
+  data: new Uint32Array(0),
+  entries: [],
+};
+
 function makeProgramWithPhaseBoundaryViolation(): CompiledProgramIR {
   const scalar = canonicalScalar(FLOAT, unitNone());
   const paletteSlot = SYSTEM_PALETTE_SLOT;
@@ -73,6 +83,7 @@ function makeProgramWithPhaseBoundaryViolation(): CompiledProgramIR {
     kernelRegistry: { resolve: () => undefined, entries: () => [] } as any,
     arenaLayout: [{ offset: 0, stride: 4, laneCount: 1, length: 4 }],
     arenaTotalFloats: 4,
+    shapeTable: EMPTY_SHAPE_TABLE,
   } as CompiledProgramIR;
 }
 
@@ -143,6 +154,7 @@ function makeProgramWithCardinalityWriteMismatch(): CompiledProgramIR {
     kernelRegistry: { resolve: () => undefined, entries: () => [] } as any,
     arenaLayout: [{ offset: 0, stride: 1, laneCount: 2, length: 2 }],
     arenaTotalFloats: 2,
+    shapeTable: EMPTY_SHAPE_TABLE,
   } as CompiledProgramIR;
 }
 

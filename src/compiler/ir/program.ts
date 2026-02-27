@@ -19,6 +19,7 @@ import type { BlockId, PortId } from '../../types/compiler';
 import type { ValueExpr } from './value-expr';
 import type { KernelRegistry } from '../../runtime/KernelRegistry';
 import type { ArenaSlotDescriptor } from '../../runtime/ArenaValueStore';
+import type { TopologyId } from '../../shapes/types';
 
 // =============================================================================
 // Version and Core Types
@@ -202,6 +203,14 @@ export interface CompiledProgramIR {
   readonly drawPrepProgram?: DrawPrepProgramIR;
 
   /**
+   * Compiler-owned static shape-table artifact.
+   *
+   * [LAW:one-source-of-truth] Stable shape IDs and shape-bank metadata are
+   * emitted once by compilation and consumed as immutable runtime/render data.
+   */
+  readonly shapeTable: ShapeTableIR;
+
+  /**
    * Compiler-generated compute WGSL with concrete arena offsets injected.
    */
   readonly generatedComputeProgram?: GeneratedComputeProgramIR;
@@ -311,6 +320,45 @@ export interface DrawPrepSinkIR {
 export interface DrawPrepProgramIR {
   readonly sinks: readonly DrawPrepSinkIR[];
   readonly wgsl: string;
+}
+
+export interface ShapeTableEntryIR {
+  /** Stable shape ID for this compiled program (canonicalized to topology ID). */
+  readonly shapeId: TopologyId;
+  /** Canonical topology ID for this static shape asset. */
+  readonly topologyId: TopologyId;
+  /** Row index within shape-table entries (stable sort by topology ID). */
+  readonly recordIndex: number;
+  /** Absolute word offset for this shape header within packed bank data. */
+  readonly headerWordStart: number;
+  /** Absolute word offset for this shape payload within packed bank data. */
+  readonly payloadWordStart: number;
+  readonly header: {
+    readonly vertexCount: number;
+    readonly indexCount: number;
+    readonly indexStart: number;
+    readonly baseVertex: number;
+    readonly flags: number;
+    readonly boundsMin: number;
+    readonly boundsMax: number;
+    readonly reserved: number;
+  };
+}
+
+export interface ShapeTableIR {
+  /** Topology registry revision when this table was emitted. */
+  readonly revision: number;
+  /** Fixed shape-bank header width, in u32 words. */
+  readonly wordsPerRecord: number;
+  /** Absolute word offset where payload region starts in packed `data`. */
+  readonly payloadWordStart: number;
+  /** Stable topology IDs in record order. */
+  readonly topologyIds: readonly TopologyId[];
+  /** topologyId -> shape-table record index. */
+  readonly indexByTopologyId: ReadonlyMap<TopologyId, number>;
+  /** Packed static shape-bank data for the shape table (headers + payload). */
+  readonly data: Uint32Array;
+  readonly entries: readonly ShapeTableEntryIR[];
 }
 
 export interface GeneratedComputeProgramIR {
