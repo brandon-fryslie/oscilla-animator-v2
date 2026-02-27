@@ -14,6 +14,10 @@ import type { RenderFrameIR } from '../render/types';
 import type { ArenaZonesIR, RuntimeScalarArenaAddress } from '../compiler/ir/program';
 import { ExternalChannelSystem } from './ExternalChannel';
 import { createArena, growArenaCapacity, migrateArenaBank } from './ArenaValueStore';
+import {
+  SHAPE_BANK_HEADER_WORDS as CANONICAL_SHAPE_BANK_HEADER_WORDS,
+  ShapeBankHeaderWord as CanonicalShapeBankHeaderWord,
+} from '../shapes/types';
 
 /**
  * Shape2D packed record word layout (8 x u32 words per shape)
@@ -55,22 +59,35 @@ export const Shape2DFlags = {
 } as const;
 
 /**
- * ShapeBank header word layout (4 x u32 words per shape topology record).
+ * ShapeBank header word layout (canonical 8 x u32 words per record).
  */
-export const SHAPE_BANK_HEADER_WORDS = 4;
+export const SHAPE_BANK_HEADER_WORDS = CANONICAL_SHAPE_BANK_HEADER_WORDS;
 
 export enum ShapeBankHeaderWord {
-  IndexCount = 0,
-  IndexOffset = 1,
-  VertexCount = 2,
-  Flags = 3,
+  VertexCount = CanonicalShapeBankHeaderWord.VertexCount,
+  IndexCount = CanonicalShapeBankHeaderWord.IndexCount,
+  IndexOffset = CanonicalShapeBankHeaderWord.IndexStart,
+  IndexStart = CanonicalShapeBankHeaderWord.IndexStart,
+  BaseVertex = CanonicalShapeBankHeaderWord.BaseVertex,
+  Flags = CanonicalShapeBankHeaderWord.Flags,
+  BoundsMin = CanonicalShapeBankHeaderWord.BoundsMin,
+  BoundsMax = CanonicalShapeBankHeaderWord.BoundsMax,
+  Reserved = CanonicalShapeBankHeaderWord.Reserved,
 }
 
 export interface ShapeBankHeaderRecord {
-  indexCount: number;
-  indexOffset: number;
-  vertexCount: number;
-  flags: number;
+  readonly vertexCount: number;
+  readonly indexCount: number;
+  /**
+   * Legacy alias preserved for tests/mocks; maps to indexStart.
+   */
+  readonly indexOffset?: number;
+  readonly indexStart?: number;
+  readonly baseVertex?: number;
+  readonly flags: number;
+  readonly boundsMin?: number;
+  readonly boundsMax?: number;
+  readonly reserved?: number;
 }
 
 /** Sentinel for shape handles that do not reference a control-point field slot. */
@@ -202,11 +219,17 @@ export function readShapeBankHeader(
   bank: Uint32Array,
   handle: number,
 ): ShapeBankHeaderRecord {
+  const indexStart = bank[handle + ShapeBankHeaderWord.IndexStart];
   return {
-    indexCount: bank[handle + ShapeBankHeaderWord.IndexCount],
-    indexOffset: bank[handle + ShapeBankHeaderWord.IndexOffset],
     vertexCount: bank[handle + ShapeBankHeaderWord.VertexCount],
+    indexCount: bank[handle + ShapeBankHeaderWord.IndexCount],
+    indexOffset: indexStart,
+    indexStart,
+    baseVertex: bank[handle + ShapeBankHeaderWord.BaseVertex],
     flags: bank[handle + ShapeBankHeaderWord.Flags],
+    boundsMin: bank[handle + ShapeBankHeaderWord.BoundsMin],
+    boundsMax: bank[handle + ShapeBankHeaderWord.BoundsMax],
+    reserved: bank[handle + ShapeBankHeaderWord.Reserved],
   };
 }
 
@@ -218,10 +241,15 @@ export function writeShapeBankHeader(
   handle: number,
   header: ShapeBankHeaderRecord,
 ): void {
-  bank[handle + ShapeBankHeaderWord.IndexCount] = header.indexCount;
-  bank[handle + ShapeBankHeaderWord.IndexOffset] = header.indexOffset;
   bank[handle + ShapeBankHeaderWord.VertexCount] = header.vertexCount;
+  bank[handle + ShapeBankHeaderWord.IndexCount] = header.indexCount;
+  const indexStart = header.indexStart ?? header.indexOffset ?? 0;
+  bank[handle + ShapeBankHeaderWord.IndexStart] = indexStart;
+  bank[handle + ShapeBankHeaderWord.BaseVertex] = header.baseVertex ?? 0;
   bank[handle + ShapeBankHeaderWord.Flags] = header.flags;
+  bank[handle + ShapeBankHeaderWord.BoundsMin] = header.boundsMin ?? 0;
+  bank[handle + ShapeBankHeaderWord.BoundsMax] = header.boundsMax ?? 0;
+  bank[handle + ShapeBankHeaderWord.Reserved] = header.reserved ?? 0;
 }
 
 /**

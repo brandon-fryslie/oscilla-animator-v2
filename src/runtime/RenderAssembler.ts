@@ -85,15 +85,6 @@ function getCachedVerbs(topology: PathTopologyDef): Uint8Array {
 // =============================================================================
 
 /**
- * Shape descriptor with topology ID and parameter values
- * @internal Used by shape resolution helpers
- */
-interface ShapeDescriptor {
-  topologyId: TopologyId;
-  params: Record<string, number>;
-}
-
-/**
  * Fully resolved shape data for rendering
  * @internal Used by shape resolution helpers
  */
@@ -101,7 +92,7 @@ interface ResolvedShape {
   resolved: true;
   topologyId: TopologyId;
   mode: 'path';
-  params: Record<string, number>;
+  closed: boolean;
   verbs: Uint8Array;
   controlPoints: ArrayBufferView;
 }
@@ -601,8 +592,8 @@ function resolveScale(
 /**
  * Resolve shape from step specification
  *
- * Returns ShapeDescriptor for topology-based shapes.
- * Returns handle field buffers for per-instance shape topology routing.
+ * Returns topology IDs for uniform shapes and handle field buffers for
+ * per-instance shape topology routing.
  *
  * MUST be provided - no fallback values in render pipeline.
  * NO LEGACY NUMERIC ENCODING - all shapes use proper topology IDs.
@@ -612,7 +603,7 @@ function resolveShape(
   scalarExprToArenaAddress: ReadonlyMap<number, RuntimeScalarArenaAddress> | undefined,
   state: RuntimeState,
   slotToArena: ReadonlyMap<ValueSlot, ArenaSlotDescriptor> | undefined,
-): ShapeDescriptor | Float32Array | TopologyId {
+): Float32Array | TopologyId {
   if (shapeSpec === undefined) {
     throw new Error(
       'RenderAssembler: shape is required. ' +
@@ -672,29 +663,9 @@ function resolveShape(
     return metadata.topologyId as TopologyId;
   }
 
-  {
-    // One-cardinality shape descriptor ('sig') with topology: resolve scalar params from arena
-    const { topologyId, paramExprs } = shapeSpec;
-    const params: Record<string, number> = {};
-
-    for (let i = 0; i < paramExprs.length; i++) {
-      // [LAW:one-source-of-truth] Render reads numeric one-cardinality values from arena only.
-      const canonicalAddress = scalarExprToArenaAddress?.get(paramExprs[i] as number);
-      if (canonicalAddress) {
-        params['param' + i] = state.arena[arenaIndex(canonicalAddress.arena, 0, canonicalAddress.component)];
-        continue;
-      }
-      throw new Error(
-        'RenderAssembler: No canonical arena address for one-cardinality shape param ' + paramExprs[i] + '. ' +
-        'One-cardinality values must be evaluated in schedule and resolved in scalarExprToArenaAddress before rendering.'
-      );
-    }
-
-    return {
-      topologyId,
-      params,
-    };
-  }
+  // [LAW:one-source-of-truth] Legacy one-cardinality shape descriptors are
+  // normalized to topology identity at the render boundary.
+  return shapeSpec.topologyId;
 }
 
 /**
@@ -789,95 +760,38 @@ export function isPathTopology(topology: TopologyDef): topology is PathTopologyD
 }
 
 /**
- * Type guard for ShapeDescriptor
- */
-function isShapeDescriptor(
-  shape: ShapeDescriptor | ArrayBufferView | number
-): shape is ShapeDescriptor {
-  return typeof shape === 'object' && 'topologyId' in shape && 'params' in shape;
-}
-
-/**
  * Fully resolve shape for renderer
  *
- * This performs the topology lookup and param mapping that was previously
- * done in the renderer. Now the renderer receives pre-resolved data.
+ * This performs topology lookup from canonical topology IDs.
  *
- * NO LEGACY NUMERIC ENCODING - all shapes must be proper ShapeDescriptor.
- *
- * @param shape - Shape descriptor or per-particle buffer
+ * @param shape - Topology identifier
  * @param controlPoints - Optional control points for path shapes
  * @returns ResolvedShape for renderer
  */
 function resolveShapeFully(
-  shape: ShapeDescriptor | ArrayBufferView | TopologyId,
+  shape: TopologyId,
   controlPoints?: ArrayBufferView
 ): ResolvedShape {
-  if (typeof shape === 'number') {
-    const topology = getTopology(shape);
-    if (!isPathTopology(topology)) {
-      throw new Error(
-        `RenderAssembler: topology ${shape} is not a path topology. ` +
-        'Shapes must provide Field<vec2> control points and path topology.'
-      );
-    }
-    if (!controlPoints) {
-      throw new Error(
-        `RenderAssembler: path topology ${shape} requires control points buffer`
-      );
-    }
-    return {
-      resolved: true,
-      topologyId: shape,
-      mode: 'path',
-      params: {},
-      verbs: getCachedVerbs(topology),
-      controlPoints,
-    };
-  }
-
-  // Per-particle shape buffer (Field<shape>) - not yet implemented
-  if (!isShapeDescriptor(shape)) {
-    throw new Error(
-      'Per-particle shapes (Field<shape>) are not yet implemented. ' +
-      'Use a uniform one-cardinality shape value instead.'
-    );
-  }
-
-  // ShapeDescriptor - look up topology and resolve params
-  const topology = getTopology(shape.topologyId);
-
-  // Map param indices to param names from topology definition
-  const params: Record<string, number> = {};
-  for (let i = 0; i < topology.params.length; i++) {
-    const paramDef = topology.params[i];
-    const value = shape.params['param' + i];
-    if (value !== undefined) {
-      params[paramDef.name] = value;
-    } else {
-      // Use default if param not provided
-      params[paramDef.name] = paramDef.default;
-    }
-  }
+  const topology = getTopology(shape);
 
   if (!isPathTopology(topology)) {
     throw new Error(
-      `RenderAssembler: topology ${shape.topologyId} is not a path topology. ` +
+      `RenderAssembler: topology ${shape} is not a path topology. ` +
       'Shapes must provide Field<vec2> control points and path topology.'
     );
   }
 
   if (!controlPoints) {
     throw new Error(
-      `RenderAssembler: path topology ${shape.topologyId} requires control points buffer`
+      `RenderAssembler: path topology ${shape} requires control points buffer`
     );
   }
 
   return {
     resolved: true,
-    topologyId: shape.topologyId,
+    topologyId: shape,
     mode: 'path',
-    params,
+    closed: topology.closed,
     verbs: getCachedVerbs(topology),
     controlPoints,
   };
@@ -1440,7 +1354,7 @@ function buildPathGeometry(
     verbs: resolvedShape.verbs,
     points: controlPoints,
     pointsCount: controlPoints.length / 2,
-    flags: resolvedShape.params.closed ? 1 : 0,
+    flags: resolvedShape.closed ? 1 : 0,
   };
 }
 
