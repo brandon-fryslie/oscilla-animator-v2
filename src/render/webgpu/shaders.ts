@@ -47,6 +47,7 @@ export const WEBGPU_RENDER_CONTRACT = Object.freeze({
   drawPrepParamsBinding: 1,
   drawPrepParamsU32: 8,
   drawPrepWorkgroupSize: 1,
+  renderMsaaSampleCount: 4,
 } as const);
 
 export const PATH_RENDER_WGSL = /* wgsl */ `
@@ -122,7 +123,9 @@ fn vs_main(input: VertexInput, @builtin(instance_index) instanceIndex: u32) -> V
 
 @fragment
 fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
-  return input.color;
+  // [LAW:single-enforcer] Fragment stage outputs premultiplied alpha so browser
+  // compositing and pipeline blending share one canonical alpha contract.
+  return vec4<f32>(input.color.rgb * input.color.a, input.color.a);
 }
 `;
 
