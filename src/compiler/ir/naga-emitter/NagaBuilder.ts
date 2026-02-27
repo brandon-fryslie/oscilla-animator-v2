@@ -26,6 +26,13 @@ interface StateVariableBinding {
   readonly typeHandle: NagaHandle;
 }
 
+const ZERO_MATRIX4: readonly number[] = Object.freeze([
+  0, 0, 0, 0,
+  0, 0, 0, 0,
+  0, 0, 0, 0,
+  0, 0, 0, 0,
+]);
+
 function scalarTypeKey(kind: NagaScalarKind): string {
   return 'Scalar:' + kind + ':4';
 }
@@ -36,6 +43,42 @@ function vectorTypeKey(size: 2 | 3 | 4, kind: NagaScalarKind): string {
 
 function matrixTypeKey(columns: 2 | 3 | 4, rows: 2 | 3 | 4): string {
   return 'Matrix:' + String(columns) + 'x' + String(rows) + ':4';
+}
+
+function isNumericScalar(type: NagaType): boolean {
+  return type.kind === 'Scalar' && (
+    type.scalar === NagaScalarKind.Float ||
+    type.scalar === NagaScalarKind.Sint ||
+    type.scalar === NagaScalarKind.Uint
+  );
+}
+
+function isNumericVector(type: NagaType): boolean {
+  return type.kind === 'Vector' && (
+    type.scalar === NagaScalarKind.Float ||
+    type.scalar === NagaScalarKind.Sint ||
+    type.scalar === NagaScalarKind.Uint
+  );
+}
+
+function isBoolScalar(type: NagaType): boolean {
+  return type.kind === 'Scalar' && type.scalar === NagaScalarKind.Bool;
+}
+
+function isBoolVector(type: NagaType): boolean {
+  return type.kind === 'Vector' && type.scalar === NagaScalarKind.Bool;
+}
+
+function isFloatScalar(type: NagaType): boolean {
+  return type.kind === 'Scalar' && type.scalar === NagaScalarKind.Float;
+}
+
+function isFloatVector(type: NagaType): boolean {
+  return type.kind === 'Vector' && type.scalar === NagaScalarKind.Float;
+}
+
+function isMixValueType(type: NagaType): boolean {
+  return isFloatScalar(type) || isFloatVector(type);
 }
 
 export class NagaBuilder {
@@ -69,7 +112,7 @@ export class NagaBuilder {
 
   public literalMatrix4(meta: BlockContext): ExprHandle {
     const matrixType = this.getOrCreateMatrixType(4, 4);
-    return this.registerConstantExpression(matrixType, 0, meta);
+    return this.registerConstantExpression(matrixType, ZERO_MATRIX4, meta);
   }
 
   public add(left: ExprHandle, right: ExprHandle, meta: BlockContext): ExprHandle {
@@ -82,8 +125,21 @@ export class NagaBuilder {
 
   public lerp(a: ExprHandle, b: ExprHandle, t: ExprHandle, meta: BlockContext): ExprHandle {
     const aType = this.requireExpressionType(a);
-    this.requireExpressionType(b);
-    this.requireExpressionType(t);
+    const bType = this.requireExpressionType(b);
+    const tType = this.requireExpressionType(t);
+    const aNagaType = this.types.get(aType);
+    const tNagaType = this.types.get(tType);
+    // [LAW:single-enforcer] Mix operand compatibility is enforced at the builder boundary.
+    if (aType !== bType) {
+      throw new Error('NagaBuilder.lerp: type mismatch between a and b.');
+    }
+    if (!isMixValueType(aNagaType)) {
+      throw new Error('NagaBuilder.lerp: a/b must be float scalar or float vector.');
+    }
+    const hasCompatibleFactorType = tType === aType || isFloatScalar(tNagaType);
+    if (!hasCompatibleFactorType) {
+      throw new Error('NagaBuilder.lerp: t must be float scalar or match a/b type.');
+    }
     const expr: NagaExpression = {
       type: 'Math',
       fun: NagaMathFunction.Mix,
@@ -100,16 +156,40 @@ export class NagaBuilder {
     falseVal: ExprHandle,
     meta: BlockContext,
   ): ExprHandle {
-    const resultType = this.requireExpressionType(trueVal);
-    this.requireExpressionType(falseVal);
-    this.requireExpressionType(cond);
+    const trueType = this.requireExpressionType(trueVal);
+    const falseType = this.requireExpressionType(falseVal);
+    const condType = this.requireExpressionType(cond);
+    const trueNagaType = this.types.get(trueType);
+    const condNagaType = this.types.get(condType);
+    // [LAW:single-enforcer] Select shape constraints are enforced before IR append.
+    if (trueType !== falseType) {
+      throw new Error('NagaBuilder.select: type mismatch between trueVal and falseVal.');
+    }
+    if (!isBoolScalar(condNagaType) && !isBoolVector(condNagaType)) {
+      throw new Error('NagaBuilder.select: cond must be bool scalar or bool vector.');
+    }
+    if (
+      trueNagaType.kind === 'Vector' &&
+      condNagaType.kind === 'Vector' &&
+      condNagaType.scalar === NagaScalarKind.Bool &&
+      condNagaType.size !== trueNagaType.size
+    ) {
+      throw new Error('NagaBuilder.select: bool vector condition size must match value vector size.');
+    }
+    if (
+      trueNagaType.kind !== 'Vector' &&
+      condNagaType.kind === 'Vector' &&
+      condNagaType.scalar === NagaScalarKind.Bool
+    ) {
+      throw new Error('NagaBuilder.select: bool vector condition requires vector values.');
+    }
     const expr: NagaExpression = {
       type: 'Select',
       condition: cond.nagaHandle,
       accept: trueVal.nagaHandle,
       reject: falseVal.nagaHandle,
     };
-    return this.registerExpression(expr, resultType, meta);
+    return this.registerExpression(expr, trueType, meta);
   }
 
   public readState(stateKey: string, type: CanonicalType, meta: BlockContext): ExprHandle {
@@ -172,7 +252,15 @@ export class NagaBuilder {
     meta: BlockContext,
   ): ExprHandle {
     const leftType = this.requireExpressionType(left);
-    this.requireExpressionType(right);
+    const rightType = this.requireExpressionType(right);
+    const leftNagaType = this.types.get(leftType);
+    // [LAW:single-enforcer] Binary operand compatibility is validated here for all builder callsites.
+    if (leftType !== rightType) {
+      throw new Error('NagaBuilder.binary: operand type mismatch for operation ' + String(op) + '.');
+    }
+    if (!isNumericScalar(leftNagaType) && !isNumericVector(leftNagaType)) {
+      throw new Error('NagaBuilder.binary: invalid operand type ' + leftNagaType.kind + ' for operation ' + String(op) + '.');
+    }
     const expr: NagaExpression = {
       type: 'Binary',
       op,
@@ -182,7 +270,11 @@ export class NagaBuilder {
     return this.registerExpression(expr, leftType, meta);
   }
 
-  private registerConstantExpression(typeHandle: NagaHandle, value: number | boolean, meta: BlockContext): ExprHandle {
+  private registerConstantExpression(
+    typeHandle: NagaHandle,
+    value: number | boolean | readonly number[],
+    meta: BlockContext,
+  ): ExprHandle {
     const constantHandle = this.constants.append({
       type: typeHandle,
       value,
@@ -210,14 +302,17 @@ export class NagaBuilder {
   }
 
   private getOrCreateStateVariable(stateKey: string, type: CanonicalType): StateVariableBinding {
+    const requestedTypeHandle = this.resolveNagaType(type);
     const existing = this.stateVariables.get(stateKey);
     if (existing) {
+      if (existing.typeHandle !== requestedTypeHandle) {
+        throw new Error('NagaBuilder.readState: type mismatch for state key ' + stateKey);
+      }
       return existing;
     }
-    const typeHandle = this.resolveNagaType(type);
     const binding: StateVariableBinding = {
       variableHandle: this.stateVariables.size,
-      typeHandle,
+      typeHandle: requestedTypeHandle,
     };
     this.stateVariables.set(stateKey, binding);
     return binding;
