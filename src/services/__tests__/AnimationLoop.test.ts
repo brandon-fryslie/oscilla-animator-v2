@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createAnimationLoopState, executeAnimationFrame, startAnimationLoop } from '../AnimationLoop';
 import { assertSchedulePhaseBoundaryStateReads, executeFrame } from '../../runtime';
 import { createHealthMetrics } from '../../runtime/RuntimeState';
+import { ARENA_HEADER_WORD } from '../../runtime/RuntimeState';
 
 vi.mock('../../runtime', () => ({
   assertSchedulePhaseBoundaryStateReads: vi.fn(),
@@ -67,6 +68,85 @@ describe('AnimationLoop', () => {
     expect(deps.store.viewport.setContentBounds).toHaveBeenCalledWith(null);
     expect(arena.reset.mock.invocationCallOrder[0]).toBeLessThan(executeFrameMock.mock.invocationCallOrder[0]);
     expect(executeFrameMock.mock.invocationCallOrder[0]).toBeLessThan(renderer.render.mock.invocationCallOrder[0]);
+  });
+
+  it('writes canonical arena header inputs before executeFrame', () => {
+    const arena = { reset: vi.fn(), getTotalBytes: () => 0 };
+    const renderer = { render: vi.fn() };
+    const arenaRead = new Float32Array(96);
+    const arenaWrite = new Float32Array(96);
+    const headerStart = 8;
+    const stateRef: any = {
+      health: createHealthMetrics(),
+      arena: arenaRead,
+      arenaRead,
+      arenaWrite,
+      externalChannels: {
+        snapshot: {
+          getFloat: (name: string) =>
+            name === 'mouse.x'
+              ? 0.25
+              : name === 'mouse.y'
+                ? 0.75
+                : name === 'mouse.buttons'
+                  ? 1
+                  : name === 'keyboard.modifiers'
+                    ? 4
+                    : 0,
+        },
+      },
+    };
+    const program = {
+      arenaZones: {
+        alignment: { headerFloats: 64, scalarToFieldAlignFloats: 64 },
+        zones: [
+          { kind: 'header', start: headerStart, end: headerStart + 64, length: 64, slotCount: 0, alignmentFloats: 64 },
+          { kind: 'scalar', start: headerStart + 64, end: headerStart + 64, length: 0, slotCount: 0, alignmentFloats: 64 },
+          { kind: 'field', start: headerStart + 64, end: headerStart + 64, length: 0, slotCount: 0, alignmentFloats: 64 },
+          { kind: 'state', start: headerStart + 64, end: headerStart + 64, length: 0, slotCount: 0, alignmentFloats: 1 },
+          { kind: 'gauge', start: headerStart + 64, end: headerStart + 64, length: 0, slotCount: 0, alignmentFloats: 1 },
+        ],
+        totalFloats: 96,
+      },
+    };
+    executeFrameMock.mockClear();
+    executeFrameMock.mockImplementation((_program, currentState: any) => {
+      expect(currentState.arenaRead[headerStart + ARENA_HEADER_WORD.TimeMs]).toBe(16);
+      expect(currentState.arenaRead[headerStart + ARENA_HEADER_WORD.DtMs]).toBe(0);
+      expect(currentState.arenaRead[headerStart + ARENA_HEADER_WORD.ViewportWidthPx]).toBe(100);
+      expect(currentState.arenaRead[headerStart + ARENA_HEADER_WORD.ViewportHeightPx]).toBe(80);
+      expect(currentState.arenaRead[headerStart + ARENA_HEADER_WORD.MouseX]).toBe(0.25);
+      expect(currentState.arenaRead[headerStart + ARENA_HEADER_WORD.MouseY]).toBe(0.75);
+      expect(currentState.arenaRead[headerStart + ARENA_HEADER_WORD.MouseButtons]).toBe(1);
+      expect(currentState.arenaRead[headerStart + ARENA_HEADER_WORD.Modifiers]).toBe(4);
+      return { version: 2, ops: [] } as any;
+    });
+
+    const deps = {
+      getCurrentProgram: () => program,
+      getCurrentState: () => stateRef,
+      getCanvas: () => ({ width: 100, height: 80 }),
+      getRenderer: () => renderer,
+      getArena: () => arena,
+      store: {
+        stepDebug: null,
+        diagnostics: {
+          recordJank: vi.fn(),
+          updateFrameTiming: vi.fn(),
+          updateMemoryStats: vi.fn(),
+        },
+        continuity: { updateFromRuntime: vi.fn() },
+        viewport: { zoom: 1, pan: { x: 0, y: 0 }, setContentBounds: vi.fn() },
+        events: { emit: vi.fn() },
+        getPatchRevision: () => 1,
+      },
+    } as any;
+
+    const loopState = createAnimationLoopState();
+    executeAnimationFrame(16, deps, loopState);
+
+    expect(executeFrameMock).toHaveBeenCalledTimes(1);
+    expect(renderer.render).toHaveBeenCalledTimes(1);
   });
 
   it('renders canonical empty frame when frame acquisition returns null', () => {

@@ -11,9 +11,9 @@ import type { ContinuityState } from './ContinuityState';
 import { createContinuityState } from './ContinuityState';
 import type { DebugTap } from './DebugTap';
 import type { RenderFrameIR } from '../render/types';
-import type { RuntimeScalarArenaAddress } from '../compiler/ir/program';
+import type { ArenaZonesIR, RuntimeScalarArenaAddress } from '../compiler/ir/program';
 import { ExternalChannelSystem } from './ExternalChannel';
-import { createArena } from './ArenaValueStore';
+import { createArena, growArenaCapacity, migrateArenaBank } from './ArenaValueStore';
 
 /**
  * Shape2D packed record word layout (8 x u32 words per shape)
@@ -79,6 +79,30 @@ export const SHAPE_BANK_NO_CONTROL_POINT_SLOT = -1;
 export interface ShapeBankHandleMetadata {
   topologyId: number;
   controlPointSlot: number;
+}
+
+export const ARENA_HEADER_WORD = {
+  TimeMs: 0,
+  DtMs: 1,
+  ViewportWidthPx: 2,
+  ViewportHeightPx: 3,
+  MouseX: 4,
+  MouseY: 5,
+  MouseButtons: 6,
+  Modifiers: 7,
+} as const;
+
+export const ARENA_HEADER_FLOATS = 8;
+
+export interface ArenaHeaderFrameInputs {
+  readonly timeMs: number;
+  readonly dtMs: number;
+  readonly viewportWidthPx: number;
+  readonly viewportHeightPx: number;
+  readonly mouseX: number;
+  readonly mouseY: number;
+  readonly mouseButtons: number;
+  readonly modifiers: number;
 }
 
 /**
@@ -223,6 +247,40 @@ export function readShapeBankHandleMetadata(
     topologyId: shapeBank.topologyIdByHandle[handle] >>> 0,
     controlPointSlot: shapeBank.controlPointSlotByHandle[handle] ?? SHAPE_BANK_NO_CONTROL_POINT_SLOT,
   };
+}
+
+/**
+ * Write frame-global inputs into the canonical arena header zone.
+ *
+ * Returns `true` when a header zone exists and receives data.
+ */
+export function writeArenaHeader(
+  arena: Float32Array,
+  arenaZones: ArenaZonesIR | undefined,
+  inputs: ArenaHeaderFrameInputs,
+): boolean {
+  const headerZone = arenaZones?.zones.find((zone) => zone.kind === 'header');
+  if (!headerZone) {
+    return false;
+  }
+  const base = headerZone.start;
+  const maxWord = Math.min(headerZone.length, ARENA_HEADER_FLOATS);
+  const writeWord = (word: number, value: number): void => {
+    if (word >= maxWord) return;
+    const index = base + word;
+    if (index < 0 || index >= arena.length) return;
+    arena[index] = value;
+  };
+
+  writeWord(ARENA_HEADER_WORD.TimeMs, inputs.timeMs);
+  writeWord(ARENA_HEADER_WORD.DtMs, inputs.dtMs);
+  writeWord(ARENA_HEADER_WORD.ViewportWidthPx, inputs.viewportWidthPx);
+  writeWord(ARENA_HEADER_WORD.ViewportHeightPx, inputs.viewportHeightPx);
+  writeWord(ARENA_HEADER_WORD.MouseX, inputs.mouseX);
+  writeWord(ARENA_HEADER_WORD.MouseY, inputs.mouseY);
+  writeWord(ARENA_HEADER_WORD.MouseButtons, inputs.mouseButtons);
+  writeWord(ARENA_HEADER_WORD.Modifiers, inputs.modifiers);
+  return true;
 }
 
 // =============================================================================
@@ -805,6 +863,8 @@ export interface ProgramState {
   arenaRead: Float32Array;
   /** Frame-write arena bank (execution target for current frame). */
   arenaWrite: Float32Array;
+  /** Current arena bank capacity in floats. */
+  arenaCapacity: number;
   /** Active read-bank parity bit (0/1), toggled at end-of-frame swap. */
   arenaParity: 0 | 1;
 
@@ -882,6 +942,8 @@ export interface RuntimeState {
   arenaRead?: Float32Array;
   /** Frame-write arena bank (execution target for current frame). */
   arenaWrite?: Float32Array;
+  /** Current arena bank capacity in floats. */
+  arenaCapacity?: number;
   /** Active read-bank parity bit (0/1), toggled at end-of-frame swap. */
   arenaParity?: 0 | 1;
 
@@ -1006,6 +1068,7 @@ export function createProgramState(
     arena: arenaRead,
     arenaRead,
     arenaWrite,
+    arenaCapacity: arenaRead.length,
     arenaParity: 0,
     // [LAW:one-source-of-truth] Persistent state ownership is anchored to one
     // arena segment contract with explicit read/write bank metadata.
@@ -1103,6 +1166,7 @@ export function createRuntimeStateFromSession(
     arena: program.arena,
     arenaRead: program.arenaRead,
     arenaWrite: program.arenaWrite,
+    arenaCapacity: program.arenaCapacity,
     arenaParity: program.arenaParity,
     stateArena: program.stateArena,
     cache: program.cache,
@@ -1157,6 +1221,32 @@ export function prepareArenaWriteBank(state: RuntimeState): void {
   // [LAW:dataflow-not-control-flow] Runtime execution reads/writes one prepared
   // execution bank per frame; parity selection is data-owned by RuntimeState.
   state.arena = write;
+}
+
+/**
+ * Ensure arena banks can hold at least `requiredFloats`.
+ *
+ * Returns true when growth/migration occurred.
+ */
+export function ensureArenaCapacity(state: RuntimeState, requiredFloats: number): boolean {
+  const read = state.arenaRead ?? state.arena;
+  const write = state.arenaWrite ?? state.arena;
+  const required = Math.max(0, Math.ceil(requiredFloats));
+  if (required <= read.length && required <= write.length) {
+    state.arenaCapacity = Math.min(read.length, write.length);
+    return false;
+  }
+  const nextCapacity = growArenaCapacity(required, Math.min(read.length, write.length));
+  const nextRead = createArena(nextCapacity);
+  const nextWrite = createArena(nextCapacity);
+  migrateArenaBank(read, nextRead);
+  migrateArenaBank(write, nextWrite);
+  const activeWasWrite = state.arena === write;
+  state.arenaRead = nextRead;
+  state.arenaWrite = nextWrite;
+  state.arena = activeWasWrite ? nextWrite : nextRead;
+  state.arenaCapacity = nextCapacity;
+  return true;
 }
 
 /**

@@ -49,6 +49,26 @@ export function createArena(totalFloats: number): Float32Array {
 }
 
 /**
+ * Grow arena capacity geometrically until it can satisfy `requiredFloats`.
+ */
+export function growArenaCapacity(requiredFloats: number, currentCapacity: number): number {
+  const required = Math.max(0, Math.ceil(requiredFloats));
+  let capacity = Math.max(1, Math.ceil(currentCapacity));
+  while (capacity < required) {
+    capacity *= 2;
+  }
+  return capacity;
+}
+
+/**
+ * Migrate arena contents into a new bank (prefix copy, zero-fill remainder).
+ */
+export function migrateArenaBank(source: Float32Array, target: Float32Array): void {
+  target.fill(0);
+  target.set(source.subarray(0, Math.min(source.length, target.length)));
+}
+
+/**
  * Canonical per-slot arena address normalization.
  *
  * // [LAW:one-source-of-truth] Runtime addressing derives from one descriptor contract

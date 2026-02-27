@@ -155,6 +155,32 @@ describe('executeFrameStepped', () => {
     expect(state.arena).toBe(state.arenaRead);
   });
 
+  it('grows undersized arena banks geometrically before stepped frame execution', () => {
+    const program = simpleProgram;
+    const state = createStateForProgram(program);
+    const arena = getTestArena();
+    state.arenaRead = new Float32Array(8);
+    state.arenaWrite = new Float32Array(8);
+    state.arena = state.arenaRead;
+    state.arenaCapacity = 8;
+
+    const expectedCapacity = (() => {
+      let cap = 8;
+      while (cap < program.arenaTotalFloats) cap *= 2;
+      return cap;
+    })();
+
+    const gen = executeFrameStepped(program, state, arena, 100);
+    let result = gen.next();
+    while (!result.done) {
+      result = gen.next();
+    }
+
+    expect(state.arenaCapacity).toBe(expectedCapacity);
+    expect(state.arenaRead?.length).toBe(expectedCapacity);
+    expect(state.arenaWrite?.length).toBe(expectedCapacity);
+  });
+
   it('produces correct phase sequence: pre-frame -> phase1... -> phase-boundary -> phase2... -> post-frame', () => {
     const program = simpleProgram;
     const state = createStateForProgram(program);

@@ -18,6 +18,7 @@ import {
   beginRuntimeFrameSemantics,
   enterRuntimeFrameSegment,
   resetFrameVolatileShapeBank,
+  ensureArenaCapacity,
   prepareArenaWriteBank,
   commitArenaWriteBank,
   prepareStateWriteBank,
@@ -264,6 +265,7 @@ export function executeFrame(
   state.cache.frameId++;
   beginRuntimeFrameSemantics(state);
   resetFrameVolatileShapeBank(state);
+  ensureArenaCapacity(state, program.arenaTotalFloats);
   prepareArenaWriteBank(state);
 
   // 1.5. Commit external channel writes (spec: External Input System Section 3.1)

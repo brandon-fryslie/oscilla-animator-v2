@@ -24,6 +24,7 @@ import { createMaterializeScratch } from './MaterializeScratch';
 import { resolveTime } from './timeResolution';
 import {
   resetFrameVolatileShapeBank,
+  ensureArenaCapacity,
   prepareArenaWriteBank,
   commitArenaWriteBank,
   prepareStateWriteBank,
@@ -243,6 +244,7 @@ export function* executeFrameStepped(
   // --- PRE-FRAME SETUP ---
   state.cache.frameId++;
   resetFrameVolatileShapeBank(state);
+  ensureArenaCapacity(state, program.arenaTotalFloats);
   prepareArenaWriteBank(state);
   state.externalChannels.commit();
   const time = resolveTime(tAbsMs, timeModel, state.timeState);

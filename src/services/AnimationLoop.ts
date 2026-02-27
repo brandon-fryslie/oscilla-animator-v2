@@ -17,6 +17,7 @@ import {
 } from '../runtime/HealthMonitor';
 import { JANK_THRESHOLD_MS } from '../stores/DiagnosticsStore';
 import type { RuntimeState } from '../runtime/RuntimeState';
+import { writeArenaHeader } from '../runtime/RuntimeState';
 import type { RootStore } from '../stores';
 import type { RenderFrameIR } from '../render/types';
 
@@ -143,6 +144,32 @@ function acquireFrame(
   return { frame, execTimeMs };
 }
 
+function writeFrameHeaderInputs(
+  currentProgram: any,
+  currentState: RuntimeState,
+  canvas: HTMLCanvasElement,
+  tMs: number,
+  dtMs: number,
+): void {
+  const arenaRead = currentState.arenaRead ?? currentState.arena;
+  if (!arenaRead) return;
+  const snapshot = currentState.externalChannels?.snapshot;
+  const mouseX = snapshot?.getFloat('mouse.x') ?? 0;
+  const mouseY = snapshot?.getFloat('mouse.y') ?? 0;
+  const mouseButtons = snapshot?.getFloat('mouse.buttons') ?? 0;
+  const modifiers = snapshot?.getFloat('keyboard.modifiers') ?? 0;
+  writeArenaHeader(arenaRead, currentProgram?.arenaZones, {
+    timeMs: tMs,
+    dtMs,
+    viewportWidthPx: canvas.width,
+    viewportHeightPx: canvas.height,
+    mouseX,
+    mouseY,
+    mouseButtons,
+    modifiers,
+  });
+}
+
 /**
  * Execute a single animation frame.
  *
@@ -177,6 +204,7 @@ export function executeAnimationFrame(
 
   // Record frame delta FIRST (using rAF timestamp for precision)
   recordFrameDelta(currentState, tMs);
+  writeFrameHeaderInputs(currentProgram, currentState, canvas, tMs, rafDelta);
 
   // Jank detection — state.execTime/renderTime still hold PREVIOUS frame's values
   if (rafDelta > JANK_THRESHOLD_MS) {
