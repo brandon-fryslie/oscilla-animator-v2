@@ -133,7 +133,7 @@ struct SimState {
 };
 
 struct SimParams {
-  // v0 = [activeCount, dtSeconds, damping, _]
+  // v0 = [activeCount, dtSeconds, damping, capacity]
   v0: vec4<f32>,
 };
 
@@ -143,6 +143,11 @@ struct SimParams {
 
 @compute @workgroup_size(${WEBGPU_RENDER_CONTRACT.computeWorkgroupSize})
 fn cs_main(@builtin(global_invocation_id) gid: vec3<u32>) {
+  let capacity = u32(simParams.v0.w);
+  if (gid.x >= capacity) {
+    return;
+  }
+
   let activeCount = u32(simParams.v0.x);
   if (gid.x >= activeCount) {
     return;
