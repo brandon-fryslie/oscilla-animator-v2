@@ -260,8 +260,16 @@ function emitOutputs(edges: Edge[], nameMap: Map<BlockId, string>, indent: numbe
 
   let output = `${ind}outputs {\n`;
 
-  // Sort ports alphabetically for determinism
-  const sortedPorts = Array.from(byPort.entries()).sort(([a], [b]) => a.localeCompare(b));
+  // [LAW:one-source-of-truth] Edge.sortKey is the canonical ordering source for
+  // round-trips; emit ports by first edge sortKey, with name as deterministic tiebreak.
+  const sortedPorts = Array.from(byPort.entries()).sort(([leftPort, leftEdges], [rightPort, rightEdges]) => {
+    const leftFirstSortKey = leftEdges[0]?.sortKey ?? Number.MAX_SAFE_INTEGER;
+    const rightFirstSortKey = rightEdges[0]?.sortKey ?? Number.MAX_SAFE_INTEGER;
+    if (leftFirstSortKey !== rightFirstSortKey) {
+      return leftFirstSortKey - rightFirstSortKey;
+    }
+    return leftPort.localeCompare(rightPort);
+  });
   for (const [port, portEdges] of sortedPorts) {
     if (portEdges.length === 1) {
       const edge = portEdges[0];

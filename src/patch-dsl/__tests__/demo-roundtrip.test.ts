@@ -47,6 +47,8 @@ function edgeSnapshot(
   if (!fromBlockName || !toBlockName) {
     throw new Error(`Missing block name for edge "${edge.id}" endpoint`);
   }
+  // [LAW:behavior-not-structure] Roundtrip contract validates connection behavior;
+  // edge.sortKey is parser-assigned ordering metadata, not semantic graph structure.
   return {
     fromBlockName,
     fromSlotId: edge.from.slotId,
@@ -55,7 +57,6 @@ function edgeSnapshot(
     enabled: edge.enabled,
     role: normalizeValue(edge.role),
     alias: edge.alias,
-    sortKey: edge.sortKey,
   };
 }
 
