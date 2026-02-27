@@ -16,7 +16,15 @@ import { instanceId, domainTypeId } from '../../core/ids';
 import type { CanonicalType } from '../../core/canonical-types';
 import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR,  CAMERA_PROJECTION, canonicalType } from '../../core/canonical-types';
 import type { RuntimeState } from '../RuntimeState';
-import { createRuntimeState, SHAPE2D_WORDS, writeShape2D } from '../RuntimeState';
+import {
+  allocShapeBankWords,
+  createRuntimeState,
+  SHAPE2D_WORDS,
+  SHAPE_BANK_HEADER_WORDS,
+  writeShape2D,
+  writeShapeBankHandleMetadata,
+  writeShapeBankHeader,
+} from '../RuntimeState';
 import type { ValueSlot, ValueExprId } from '../../types';
 import { registerDynamicTopology } from '../../shapes/registry';
 import type { RenderSpace2D } from '../../shapes/types';
@@ -26,8 +34,10 @@ import { getTestArena } from './test-arena-helper';
 import {
   buildScalarExprToArenaAddressFromOffsets,
   buildSlotToArenaFromTestBuffers,
+  getTestSlotBuffer,
   setTestSlotBuffer,
 } from './slot-buffer-helper';
+import type { ArenaSlotDescriptor } from '../ArenaValueStore';
 
 // Helper to create a valid palette Float32Array
 function createPalette(r = 1, g = 1, b = 1, a = 1): Float32Array {
@@ -59,6 +69,55 @@ function createMockInstance(count: number): InstanceDecl {
     count,
     identityMode: 'none',
   } as InstanceDecl;
+}
+
+function installShapeHandlesFromPacked(
+  state: RuntimeState,
+  slot: ValueSlot,
+  packed: Uint32Array,
+): void {
+  const shapeBank = state.shapeBank;
+  if (!shapeBank) {
+    throw new Error('Test RuntimeState missing shapeBank');
+  }
+  const count = Math.floor(packed.length / SHAPE2D_WORDS);
+  const handles = new Float32Array(count);
+  for (let i = 0; i < count; i++) {
+    const base = i * SHAPE2D_WORDS;
+    const topologyId = packed[base + 0];
+    const pointsFieldSlot = packed[base + 1];
+    const pointsCount = packed[base + 2];
+    const flags = packed[base + 4];
+    const handle = allocShapeBankWords(shapeBank, SHAPE_BANK_HEADER_WORDS);
+    writeShapeBankHeader(shapeBank.data, handle, {
+      indexCount: pointsCount,
+      indexOffset: 0,
+      vertexCount: pointsCount,
+      flags,
+    });
+    writeShapeBankHandleMetadata(shapeBank, handle, {
+      topologyId,
+      controlPointSlot: pointsFieldSlot,
+    });
+    handles[i] = handle;
+  }
+  setTestSlotBuffer(state, slot, handles);
+}
+
+function buildSlotToArenaWithShapeSlots(
+  state: RuntimeState,
+  specs: ReadonlyArray<{ slot: ValueSlot; stride: number }>,
+): ReadonlyMap<ValueSlot, ArenaSlotDescriptor> {
+  const merged = [...specs];
+  const maybeAddShapeSlot = (slot: ValueSlot): void => {
+    const shapeBuf = getTestSlotBuffer(state, slot);
+    if (!(shapeBuf instanceof Float32Array)) return;
+    if (merged.some((entry) => entry.slot === slot)) return;
+    merged.push({ slot, stride: 1 });
+  };
+  maybeAddShapeSlot(3 as ValueSlot);
+  maybeAddShapeSlot(6 as ValueSlot);
+  return buildSlotToArenaFromTestBuffers(state, merged);
 }
 
 // Register test path topologies (without id — assigned by registry)
@@ -129,12 +188,12 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
 
       setTestSlotBuffer(state, 1 as ValueSlot, positionBuffer);
       setTestSlotBuffer(state, 2 as ValueSlot, colorBuffer);
-      state.values.shapeFields.set(3 as ValueSlot, shapeBuffer);
+      installShapeHandlesFromPacked(state, 3 as ValueSlot, shapeBuffer);
 
       // Build scalarExprToArenaOffset mapping
       const scalarExprToArenaOffset = new Map<number, number>([[0, 10]]);
       state.arena[10] = 1.0;
-      const slotToArena = buildSlotToArenaFromTestBuffers(state, [
+      const slotToArena = buildSlotToArenaWithShapeSlots(state, [
         { slot: 1 as ValueSlot, stride: 3 },
         { slot: 2 as ValueSlot, stride: 4 },
       ]);
@@ -158,7 +217,7 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
       };
 
       expect(() => assembleDrawPathInstancesOp(step, context)).toThrow(
-        /Shape buffer length mismatch/
+        /Shape handle buffer length mismatch/
       );
     });
   });
@@ -199,13 +258,13 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
 
       setTestSlotBuffer(state, 1 as ValueSlot, positionBuffer);
       setTestSlotBuffer(state, 2 as ValueSlot, colorBuffer);
-      state.values.shapeFields.set(3 as ValueSlot, shapeBuffer);
+      installShapeHandlesFromPacked(state, 3 as ValueSlot, shapeBuffer);
       setTestSlotBuffer(state, 4 as ValueSlot, controlPointsBuffer);
 
       // Build scalarExprToArenaOffset mapping
       const scalarExprToArenaOffset = new Map<number, number>([[0, 10]]);
       state.arena[10] = 1.0;
-      const slotToArena = buildSlotToArenaFromTestBuffers(state, [
+      const slotToArena = buildSlotToArenaWithShapeSlots(state, [
         { slot: 1 as ValueSlot, stride: 3 },
         { slot: 2 as ValueSlot, stride: 4 },
         { slot: 4 as ValueSlot, stride: 2 },
@@ -254,7 +313,6 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
 
       setTestSlotBuffer(state, 1 as ValueSlot, positionBuffer);
       setTestSlotBuffer(state, 2 as ValueSlot, colorBuffer);
-      state.values.shapeFields.set(3 as ValueSlot, shapeBuffer);
       setTestSlotBuffer(state, 4 as ValueSlot, circlePoints);
       setTestSlotBuffer(state, 5 as ValueSlot, squarePoints);
       setTestSlotBuffer(state, 6 as ValueSlot, trianglePoints);
@@ -285,11 +343,12 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
           flags: 1,
         });
       }
+      installShapeHandlesFromPacked(state, 3 as ValueSlot, shapeBuffer);
 
       // Build scalarExprToArenaOffset mapping
       const scalarExprToArenaOffset = new Map<number, number>([[0, 10]]);
       state.arena[10] = 2.0;
-      const slotToArena = buildSlotToArenaFromTestBuffers(state, [
+      const slotToArena = buildSlotToArenaWithShapeSlots(state, [
         { slot: 1 as ValueSlot, stride: 3 },
         { slot: 2 as ValueSlot, stride: 4 },
         { slot: 4 as ValueSlot, stride: 2 },
@@ -349,7 +408,6 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
 
       setTestSlotBuffer(state, 1 as ValueSlot, positionBuffer);
       setTestSlotBuffer(state, 2 as ValueSlot, colorBuffer);
-      state.values.shapeFields.set(3 as ValueSlot, shapeBuffer);
       setTestSlotBuffer(state, 4 as ValueSlot, circlePoints);
       setTestSlotBuffer(state, 5 as ValueSlot, squarePoints);
 
@@ -374,11 +432,12 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
           flags: 1,
         });
       }
+      installShapeHandlesFromPacked(state, 3 as ValueSlot, shapeBuffer);
 
       // Build scalarExprToArenaOffset mapping
       const scalarExprToArenaOffset = new Map<number, number>([[0, 10]]);
       state.arena[10] = 1.0;
-      const slotToArena = buildSlotToArenaFromTestBuffers(state, [
+      const slotToArena = buildSlotToArenaWithShapeSlots(state, [
         { slot: 1 as ValueSlot, stride: 3 },
         { slot: 2 as ValueSlot, stride: 4 },
         { slot: 4 as ValueSlot, stride: 2 },
@@ -441,7 +500,6 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
 
       setTestSlotBuffer(state, 1 as ValueSlot, positionBuffer);
       setTestSlotBuffer(state, 2 as ValueSlot, colorBuffer);
-      state.values.shapeFields.set(3 as ValueSlot, shapeBuffer);
       setTestSlotBuffer(state, 4 as ValueSlot, circlePoints);
       setTestSlotBuffer(state, 5 as ValueSlot, squarePoints);
 
@@ -450,11 +508,12 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
       writeShape2D(shapeBuffer, 1, { topologyId: SQUARE_ID, pointsFieldSlot: 5, pointsCount: 4, styleRef: 0, flags: 1 });
       writeShape2D(shapeBuffer, 2, { topologyId: SQUARE_ID, pointsFieldSlot: 5, pointsCount: 4, styleRef: 0, flags: 1 });
       writeShape2D(shapeBuffer, 3, { topologyId: CIRCLE_ID, pointsFieldSlot: 4, pointsCount: 4, styleRef: 0, flags: 1 });
+      installShapeHandlesFromPacked(state, 3 as ValueSlot, shapeBuffer);
 
       // Build scalarExprToArenaOffset mapping
       const scalarExprToArenaOffset = new Map<number, number>([[0, 10]]);
       state.arena[10] = 1.0;
-      const slotToArena = buildSlotToArenaFromTestBuffers(state, [
+      const slotToArena = buildSlotToArenaWithShapeSlots(state, [
         { slot: 1 as ValueSlot, stride: 3 },
         { slot: 2 as ValueSlot, stride: 4 },
         { slot: 4 as ValueSlot, stride: 2 },
@@ -521,7 +580,6 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
 
       setTestSlotBuffer(state, 1 as ValueSlot, positionBuffer);
       setTestSlotBuffer(state, 2 as ValueSlot, colorBuffer);
-      state.values.shapeFields.set(3 as ValueSlot, shapeBuffer);
       setTestSlotBuffer(state, 4 as ValueSlot, controlPointsBuffer);
 
       // Use non-existent topology ID
@@ -534,11 +592,12 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
           flags: 1,
         });
       }
+      installShapeHandlesFromPacked(state, 3 as ValueSlot, shapeBuffer);
 
       // Build scalarExprToArenaOffset mapping
       const scalarExprToArenaOffset = new Map<number, number>([[0, 10]]);
       state.arena[10] = 1.0;
-      const slotToArena = buildSlotToArenaFromTestBuffers(state, [
+      const slotToArena = buildSlotToArenaWithShapeSlots(state, [
         { slot: 1 as ValueSlot, stride: 3 },
         { slot: 2 as ValueSlot, stride: 4 },
         { slot: 4 as ValueSlot, stride: 2 },
@@ -578,7 +637,6 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
 
       setTestSlotBuffer(state, 1 as ValueSlot, positionBuffer);
       setTestSlotBuffer(state, 2 as ValueSlot, colorBuffer);
-      state.values.shapeFields.set(3 as ValueSlot, shapeBuffer);
       // No control points buffer at slot 4!
 
       for (let i = 0; i < instanceCount; i++) {
@@ -590,11 +648,12 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
           flags: 1,
         });
       }
+      installShapeHandlesFromPacked(state, 3 as ValueSlot, shapeBuffer);
 
       // Build scalarExprToArenaOffset mapping
       const scalarExprToArenaOffset = new Map<number, number>([[0, 10]]);
       state.arena[10] = 1.0;
-      const slotToArena = buildSlotToArenaFromTestBuffers(state, [
+      const slotToArena = buildSlotToArenaWithShapeSlots(state, [
         { slot: 1 as ValueSlot, stride: 3 },
         { slot: 2 as ValueSlot, stride: 4 },
       ]);
@@ -649,12 +708,12 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
 
       setTestSlotBuffer(state, 1 as ValueSlot, positionBuffer);
       setTestSlotBuffer(state, 2 as ValueSlot, colorBuffer);
-      state.values.shapeFields.set(3 as ValueSlot, shapeBuffer);
+      installShapeHandlesFromPacked(state, 3 as ValueSlot, shapeBuffer);
       setTestSlotBuffer(state, 4 as ValueSlot, controlPointsBuffer);
 
       const scalarExprToArenaOffset = new Map<number, number>([[0, 10]]);
       state.arena[10] = 1.0;
-      const slotToArena = buildSlotToArenaFromTestBuffers(state, [
+      const slotToArena = buildSlotToArenaWithShapeSlots(state, [
         { slot: 1 as ValueSlot, stride: 3 },
         { slot: 2 as ValueSlot, stride: 4 },
         { slot: 4 as ValueSlot, stride: 2 },
@@ -719,10 +778,10 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
 
       setTestSlotBuffer(state, 1 as ValueSlot, pos1);
       setTestSlotBuffer(state, 2 as ValueSlot, color1);
-      state.values.shapeFields.set(3 as ValueSlot, shape1);
+      installShapeHandlesFromPacked(state, 3 as ValueSlot, shape1);
       setTestSlotBuffer(state, 4 as ValueSlot, pos2);
       setTestSlotBuffer(state, 5 as ValueSlot, color2);
-      state.values.shapeFields.set(6 as ValueSlot, shape2);
+      installShapeHandlesFromPacked(state, 6 as ValueSlot, shape2);
       setTestSlotBuffer(state, 10 as ValueSlot, circlePoints);
       setTestSlotBuffer(state, 11 as ValueSlot, squarePoints);
 
@@ -733,7 +792,7 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
 
       // Write one-cardinality value to state
       state.arena[10] = 1.0;
-      const slotToArena = buildSlotToArenaFromTestBuffers(state, [
+      const slotToArena = buildSlotToArenaWithShapeSlots(state, [
         { slot: 1 as ValueSlot, stride: 3 },
         { slot: 2 as ValueSlot, stride: 4 },
         { slot: 4 as ValueSlot, stride: 3 },
@@ -824,13 +883,13 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
 
       setTestSlotBuffer(state, 1 as ValueSlot, positionBuffer);
       setTestSlotBuffer(state, 2 as ValueSlot, colorBuffer);
-      state.values.shapeFields.set(3 as ValueSlot, shapeBuffer);
+      installShapeHandlesFromPacked(state, 3 as ValueSlot, shapeBuffer);
       setTestSlotBuffer(state, 10 as ValueSlot, circlePoints);
       setTestSlotBuffer(state, 11 as ValueSlot, squarePoints);
 
       const scalarExprToArenaOffset = new Map<number, number>([[0, 10]]);
       state.arena[10] = 1.0;
-      const slotToArena = buildSlotToArenaFromTestBuffers(state, [
+      const slotToArena = buildSlotToArenaWithShapeSlots(state, [
         { slot: 1 as ValueSlot, stride: 3 },
         { slot: 2 as ValueSlot, stride: 4 },
         { slot: 10 as ValueSlot, stride: 2 },

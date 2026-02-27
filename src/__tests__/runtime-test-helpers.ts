@@ -113,7 +113,7 @@ export function createTestRuntimeState(slotCount: number = 100): RuntimeState {
  * @example
  * const state = createMockRuntimeState({
  *   continuity: myContinuity,
- *   values: { shapeFields: new Map(), shape2d: new Uint32Array(0) }
+ *   values: { shape2d: new Uint32Array(0) }
  * });
  * // Now state is properly typed and ready to use
  */
