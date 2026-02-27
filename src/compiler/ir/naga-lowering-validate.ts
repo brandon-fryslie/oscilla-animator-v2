@@ -1,7 +1,6 @@
 import type {
   NagaFunctionIR,
   NagaLoweringProgramIR,
-  NagaStatementIR,
 } from './naga-lowering';
 
 export interface NagaLoweringValidationIssue {
@@ -31,7 +30,7 @@ function validateFunctionSourceMap(
   }
 
   for (let stmtIndex = 0; stmtIndex < fn.body.length; stmtIndex++) {
-    const statement = fn.body[stmtIndex] as NagaStatementIR;
+    const statement = fn.body[stmtIndex];
     if (statement.kind === 'comment') continue;
     const key = `Stmt_${stmtIndex}`;
     if (!(key in sourceMap)) {
@@ -50,13 +49,14 @@ export function validateNagaLoweringProgram(
 ): readonly NagaLoweringValidationIssue[] {
   const issues: NagaLoweringValidationIssue[] = [];
   const entryPoints = artifact.module.entry_points;
+  const functions = artifact.module.functions;
+  let computeFunction: NagaFunctionIR | null = null;
 
   if (entryPoints.length === 0) {
     issues.push({
       code: 'E_NAGA_ENTRYPOINT_MISSING',
-      message: 'Naga lowering artifact must include at least one compute entry point',
+      message: 'Naga lowering artifact must include at least one entry point',
     });
-    return issues;
   }
 
   const computeEntry = entryPoints.find((entry) => entry.stage === 'compute');
@@ -65,19 +65,21 @@ export function validateNagaLoweringProgram(
       code: 'E_NAGA_ENTRYPOINT_TARGET_MISSING',
       message: 'Naga lowering artifact has no compute-stage entry point',
     });
-    return issues;
+  } else {
+    const fn = functions.find((candidate) => candidate.name === computeEntry.function);
+    if (!fn) {
+      issues.push({
+        code: 'E_NAGA_FUNCTION_MISSING',
+        message: `Naga lowering artifact entry point targets missing function "${computeEntry.function}"`,
+      });
+    } else {
+      computeFunction = fn;
+    }
   }
 
-  const fn = artifact.module.functions.find((candidate) => candidate.name === computeEntry.function);
-  if (!fn) {
-    issues.push({
-      code: 'E_NAGA_FUNCTION_MISSING',
-      message: `Naga lowering artifact entry point targets missing function "${computeEntry.function}"`,
-    });
-    return issues;
+  const functionsToValidate = computeFunction ? [computeFunction] : functions;
+  for (const fn of functionsToValidate) {
+    issues.push(...validateFunctionSourceMap(fn, artifact.sourceMap));
   }
-
-  issues.push(...validateFunctionSourceMap(fn, artifact.sourceMap));
   return issues;
 }
-
