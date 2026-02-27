@@ -257,6 +257,37 @@ describe('executeFrameStepped', () => {
     expect(foundWrittenSlots).toBe(true);
   });
 
+  it('swaps state read/write banks per frame without reallocating arena storage', () => {
+    const program = phasorProgram;
+    const schedule = program.schedule as ScheduleIR;
+    expect((schedule.stateSlotCount ?? 0)).toBeGreaterThan(0);
+
+    const state = createStateForProgram(program);
+    const arena = getTestArena();
+    const initialArenaBuffer = state.arena.buffer;
+    const initialRead = state.state;
+    const initialWrite = state.stateWrite;
+    expect(initialWrite).toBeDefined();
+    expect(initialRead).not.toBe(initialWrite);
+
+    let frame = executeFrameStepped(program, state, arena, 16.67);
+    while (!frame.next().done) {
+      // Exhaust generator
+    }
+    expect(state.arena.buffer).toBe(initialArenaBuffer);
+    expect(state.state).toBe(initialWrite);
+    expect(state.stateWrite).toBe(initialRead);
+
+    arena.reset();
+    frame = executeFrameStepped(program, state, arena, 33.34);
+    while (!frame.next().done) {
+      // Exhaust generator
+    }
+    expect(state.arena.buffer).toBe(initialArenaBuffer);
+    expect(state.state).toBe(initialRead);
+    expect(state.stateWrite).toBe(initialWrite);
+  });
+
   it('keeps phasor state bounded during long-horizon stepped execution', () => {
     const program = phasorProgram;
     const schedule = program.schedule as ScheduleIR;

@@ -4,6 +4,7 @@ import {
   exportSerializableTopologies,
   exportTopologyBankU32,
   TopologyBankFlag,
+  TopologyBankWord,
   TOPOLOGY_BANK_WORDS,
   getTopologyRegistryRevision,
   installSerializableTopologies,
@@ -76,5 +77,31 @@ describe('shapes/registry topology bank export', () => {
     expect(bank.data[3]).toBe(TopologyBankFlag.IsPath | TopologyBankFlag.Closed);
     expect(bank.indexById.get(id)).toBe(0);
     expect(bank.revision).toBe(getTopologyRegistryRevision());
+  });
+
+  it('keeps revision stable across export-only reads', () => {
+    const id = registerDynamicTopology(makePathTopology(10, true), 'shape-topology-bank-revision-read');
+    const revisionBefore = getTopologyRegistryRevision();
+    const first = exportTopologyBankU32([id]);
+    const second = exportTopologyBankU32([id]);
+
+    expect(first.revision).toBe(revisionBefore);
+    expect(second.revision).toBe(revisionBefore);
+    expect(getTopologyRegistryRevision()).toBe(revisionBefore);
+    expect(Array.from(second.data)).toEqual(Array.from(first.data));
+  });
+
+  it('bumps revision exactly on new topology registration and reflects it in bank export', () => {
+    const revisionBefore = getTopologyRegistryRevision();
+    // Use a structurally unique topology so registration cannot intern to an existing ID.
+    const uniquePoints = revisionBefore + 1000;
+    const id = registerDynamicTopology(makePathTopology(uniquePoints, false), 'shape-topology-bank-revision-bump');
+    const revisionAfter = getTopologyRegistryRevision();
+    const bank = exportTopologyBankU32([id]);
+
+    expect(revisionAfter).toBe(revisionBefore + 1);
+    expect(bank.revision).toBe(revisionAfter);
+    expect(bank.data[TopologyBankWord.Id]).toBe(id);
+    expect(bank.data[TopologyBankWord.TotalControlPoints]).toBe(uniquePoints);
   });
 });

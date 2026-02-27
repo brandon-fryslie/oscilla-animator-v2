@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createWebGPURenderer } from '../WebGPURenderer';
 import { WEBGPU_RENDER_CONTRACT } from '../shaders';
-import { registerDynamicTopology } from '../../../shapes/registry';
+import { getTopologyRegistryRevision, registerDynamicTopology } from '../../../shapes/registry';
 import { PathVerb } from '../../../shapes/types';
 import type { DrawPathInstancesOp } from '../../types';
 
@@ -32,6 +32,7 @@ function createFakeWebGPUEnvironment() {
   const commandEncoder = {
     beginComputePass: vi.fn(() => computePass),
     beginRenderPass: vi.fn(() => renderPass),
+    copyBufferToBuffer: vi.fn(),
     finish: vi.fn(() => ({ label: 'cmd' })),
   };
 
@@ -375,6 +376,18 @@ describe('WebGPURenderer', () => {
     expect(env.device.createCommandEncoder.mock.results[0]?.value.beginComputePass).toHaveBeenCalledTimes(2);
   });
 
+  it('does not issue GPU copyBufferToBuffer calls during frame rendering', async () => {
+    const env = createFakeWebGPUEnvironment();
+    setNavigatorGpu(env.gpu);
+    const renderer = await createWebGPURenderer(env.canvas);
+    const topologyId = makeSimpleTopology('webgpu-no-buffer-copy-topology');
+
+    renderer.render(makeRenderInput([makeDrawOp(topologyId)]));
+
+    const encoder = env.device.createCommandEncoder.mock.results[0]?.value as { copyBufferToBuffer: ReturnType<typeof vi.fn> };
+    expect(encoder.copyBufferToBuffer).not.toHaveBeenCalled();
+  });
+
   it('renders cubic path geometry without rejecting supported curve verbs', async () => {
     const env = createFakeWebGPUEnvironment();
     setNavigatorGpu(env.gpu);
@@ -606,6 +619,34 @@ describe('WebGPURenderer', () => {
     renderer.render(makeRenderInput([op], { timeMs: 16 }));
     const secondFrameDrawPrepBindGroups = collectDrawPrepBindGroupCalls(env.device.createBindGroup);
     expect(secondFrameDrawPrepBindGroups).toHaveLength(0);
+  });
+
+  it('uploads topology bank only when topology registry revision changes', async () => {
+    const env = createFakeWebGPUEnvironment();
+    setNavigatorGpu(env.gpu);
+    makeSimpleTopology('webgpu-revision-gate-a');
+    const renderer = await createWebGPURenderer(env.canvas);
+
+    env.device.queue.writeBuffer.mockClear();
+    renderer.render(makeRenderInput([], { timeMs: 0 }));
+    const unchangedRevisionWrites = env.device.queue.writeBuffer.mock.calls.filter((args: unknown[]) => args[2] instanceof Uint32Array);
+    expect(unchangedRevisionWrites).toHaveLength(0);
+
+    const revisionBefore = getTopologyRegistryRevision();
+    registerDynamicTopology({
+      params: [],
+      verbs: [PathVerb.MOVE, PathVerb.LINE],
+      pointsPerVerb: [1, 136],
+      totalControlPoints: 137,
+      closed: false,
+    }, 'webgpu-revision-gate-b');
+    const revisionAfter = getTopologyRegistryRevision();
+    expect(revisionAfter).toBeGreaterThan(revisionBefore);
+
+    env.device.queue.writeBuffer.mockClear();
+    renderer.render(makeRenderInput([], { timeMs: 16 }));
+    const changedRevisionWrites = env.device.queue.writeBuffer.mock.calls.filter((args: unknown[]) => args[2] instanceof Uint32Array);
+    expect(changedRevisionWrites.length).toBeGreaterThan(0);
   });
 
   it('supports per-instance stroke widths for stroke rendering', async () => {
