@@ -10,6 +10,7 @@ import {
 } from './shaders';
 
 const GPU_BUFFER_USAGE = {
+  COPY_SRC: 0x0004,
   COPY_DST: 0x0008,
   INDEX: 0x0010,
   VERTEX: 0x0020,
@@ -28,6 +29,12 @@ const SIMULATION_STATE_BYTES = 16;
 function alignTo4(value: number): number {
   const remainder = value % 4;
   return remainder === 0 ? value : value + (4 - remainder);
+}
+
+function computeDispatchWorkgroups(capacity: number, workgroupSize: number): number {
+  // [LAW:single-enforcer] Dispatch geometry is computed once from canonical
+  // capacity/workgroup constants, not ad-hoc at each callsite.
+  return Math.max(1, Math.ceil(capacity / workgroupSize));
 }
 
 interface GPUMesh {
@@ -131,11 +138,11 @@ class WebGPUComputeRuntime {
     this.stateBuffers = [
       device.createBuffer({
         size: WEBGPU_RENDER_CONTRACT.inputHeaderBytes + SIMULATION_CAPACITY * SIMULATION_STATE_BYTES,
-        usage: GPU_BUFFER_USAGE.STORAGE | GPU_BUFFER_USAGE.COPY_DST,
+        usage: GPU_BUFFER_USAGE.STORAGE | GPU_BUFFER_USAGE.COPY_DST | GPU_BUFFER_USAGE.COPY_SRC,
       }),
       device.createBuffer({
         size: WEBGPU_RENDER_CONTRACT.inputHeaderBytes + SIMULATION_CAPACITY * SIMULATION_STATE_BYTES,
-        usage: GPU_BUFFER_USAGE.STORAGE | GPU_BUFFER_USAGE.COPY_DST,
+        usage: GPU_BUFFER_USAGE.STORAGE | GPU_BUFFER_USAGE.COPY_DST | GPU_BUFFER_USAGE.COPY_SRC,
       }),
     ] as const;
 
@@ -218,7 +225,7 @@ class WebGPUComputeRuntime {
     this.paramsStaging[0] = clampedCount;
     this.paramsStaging[1] = clampedDt;
     this.paramsStaging[2] = 0.999; // Mild damping keeps default simulation stable.
-    this.paramsStaging[3] = 0;
+    this.paramsStaging[3] = SIMULATION_CAPACITY;
     this.device.queue.writeBuffer(this.paramsBuffer, 0, this.paramsStaging);
 
     // [LAW:dataflow-not-control-flow] Compute pass always executes.
@@ -226,7 +233,7 @@ class WebGPUComputeRuntime {
     const pass = commandEncoder.beginComputePass();
     pass.setPipeline(this.pipeline);
     pass.setBindGroup(WEBGPU_RENDER_CONTRACT.computeBindGroup, this.bindGroups[this.activeStateIndex]);
-    const workgroups = Math.max(1, Math.ceil(clampedCount / SIMULATION_WORKGROUP_SIZE));
+    const workgroups = computeDispatchWorkgroups(SIMULATION_CAPACITY, SIMULATION_WORKGROUP_SIZE);
     pass.dispatchWorkgroups(workgroups);
     pass.end();
     this.activeStateIndex = this.activeStateIndex ^ 1;

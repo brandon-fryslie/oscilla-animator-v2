@@ -238,6 +238,17 @@ describe('WebGPURenderer', () => {
       WEBGPU_RENDER_CONTRACT.inputHeaderBytes + WEBGPU_RENDER_CONTRACT.simulationCapacity * 16
     );
     expect(bufferSizes).toContain(Uint32Array.BYTES_PER_ELEMENT);
+    const computeStateBuffers = env.device.createBuffer.mock.calls
+      .map(([descriptor]: [unknown]) => descriptor as { size: number; usage: number })
+      .filter((descriptor) =>
+        descriptor.size === WEBGPU_RENDER_CONTRACT.inputHeaderBytes + WEBGPU_RENDER_CONTRACT.simulationCapacity * 16
+      );
+    expect(computeStateBuffers).toHaveLength(2);
+    for (const descriptor of computeStateBuffers) {
+      expect((descriptor.usage & 0x0080) !== 0).toBe(true); // STORAGE
+      expect((descriptor.usage & 0x0008) !== 0).toBe(true); // COPY_DST
+      expect((descriptor.usage & 0x0004) !== 0).toBe(true); // COPY_SRC
+    }
 
     const bindGroupDescriptors = env.device.createBindGroup.mock.calls.map(
       ([descriptor]: [unknown]) => descriptor as { entries: Array<{ binding: number }> }
@@ -579,7 +590,7 @@ describe('WebGPURenderer', () => {
     expect(drawPrepBindGroups).toHaveLength(1);
   });
 
-  it('dispatches simulation workgroups from unique op instance count (not fill/stroke pass count)', async () => {
+  it('dispatches simulation workgroups from canonical capacity and passes activeCount in params', async () => {
     const env = createFakeWebGPUEnvironment();
     setNavigatorGpu(env.gpu);
     const renderer = await createWebGPURenderer(env.canvas);
@@ -599,7 +610,17 @@ describe('WebGPURenderer', () => {
     ]));
 
     // First compute dispatch is simulation pass (draw-prep dispatches are fixed-size 1).
-    expect(env.computePass.dispatchWorkgroups.mock.calls[0]?.[0]).toBe(2);
+    expect(env.computePass.dispatchWorkgroups.mock.calls[0]?.[0]).toBe(
+      WEBGPU_RENDER_CONTRACT.simulationCapacity / WEBGPU_RENDER_CONTRACT.computeWorkgroupSize
+    );
+    const computeParamsWrite = env.device.queue.writeBuffer.mock.calls.find((args: unknown[]) =>
+      args[2] instanceof Float32Array &&
+      (args[2] as Float32Array).length === WEBGPU_RENDER_CONTRACT.computeParamsFloats
+    );
+    expect(computeParamsWrite).toBeDefined();
+    const computeParams = computeParamsWrite?.[2] as Float32Array;
+    expect(computeParams[0]).toBe(instanceCount);
+    expect(computeParams[3]).toBe(WEBGPU_RENDER_CONTRACT.simulationCapacity);
   });
 
   it('fails fast when simulation instance count exceeds contract capacity', async () => {
