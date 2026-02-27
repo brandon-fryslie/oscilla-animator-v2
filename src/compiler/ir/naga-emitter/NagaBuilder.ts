@@ -1,6 +1,7 @@
 import type { CanonicalType } from '../../../core/canonical-types';
 import {
   NagaArena,
+  NagaArenaReader,
   NagaBinaryOp,
   NagaBlock,
   NagaConstant,
@@ -94,13 +95,13 @@ function isIntegerScalar(type: NagaType): boolean {
 }
 
 export class NagaBuilder {
-  public readonly expressions = new NagaArena<NagaExpression>();
-  public readonly types = new NagaArena<NagaType>();
-  public readonly constants = new NagaArena<NagaConstant>();
-  public readonly statements = new NagaArena<NagaStatement>();
+  private readonly expressionArena = new NagaArena<NagaExpression>();
+  private readonly typeArena = new NagaArena<NagaType>();
+  private readonly constantArena = new NagaArena<NagaConstant>();
+  private readonly statementArena = new NagaArena<NagaStatement>();
 
   // [LAW:one-source-of-truth] Expression handle metadata is authored only here.
-  public readonly sourceMap = new Map<NagaHandle, BlockContext>();
+  private readonly expressionSourceMap = new Map<NagaHandle, BlockContext>();
 
   private readonly expressionTypeByHandle = new Map<NagaHandle, NagaHandle>();
   private readonly statementSourceMap = new Map<NagaHandle, BlockContext>();
@@ -112,6 +113,22 @@ export class NagaBuilder {
   private activeBlock: NagaBlock | null = null;
   private rootBlock: NagaBlock | null = null;
   private nextGlobalVariableHandle = 0;
+
+  public get expressions(): NagaArenaReader<NagaExpression> {
+    return this.expressionArena;
+  }
+
+  public get types(): NagaArenaReader<NagaType> {
+    return this.typeArena;
+  }
+
+  public get constants(): NagaArenaReader<NagaConstant> {
+    return this.constantArena;
+  }
+
+  public get statements(): NagaArenaReader<NagaStatement> {
+    return this.statementArena;
+  }
 
   public buildBlock(callback: () => void): NagaBlock {
     const previousBlock = this.activeBlock;
@@ -137,7 +154,7 @@ export class NagaBuilder {
   }
 
   public ifStatement(condition: ExprHandle, accept: NagaBlock, reject: NagaBlock, meta: BlockContext): void {
-    const conditionType = this.types.get(this.requireExpressionType(condition));
+    const conditionType = this.typeArena.get(this.requireExpressionType(condition));
     if (!isBoolScalar(conditionType)) {
       throw new Error('NagaBuilder.ifStatement: condition strictly requires bool scalar.');
     }
@@ -201,8 +218,8 @@ export class NagaBuilder {
     const aType = this.requireExpressionType(a);
     const bType = this.requireExpressionType(b);
     const tType = this.requireExpressionType(t);
-    const aNagaType = this.types.get(aType);
-    const tNagaType = this.types.get(tType);
+    const aNagaType = this.typeArena.get(aType);
+    const tNagaType = this.typeArena.get(tType);
 
     // [LAW:single-enforcer] Mix operand compatibility is enforced at the builder boundary.
     if (aType !== bType) {
@@ -228,8 +245,8 @@ export class NagaBuilder {
     const trueType = this.requireExpressionType(trueVal);
     const falseType = this.requireExpressionType(falseVal);
     const condType = this.requireExpressionType(cond);
-    const trueNagaType = this.types.get(trueType);
-    const condNagaType = this.types.get(condType);
+    const trueNagaType = this.typeArena.get(trueType);
+    const condNagaType = this.typeArena.get(condType);
 
     // [LAW:single-enforcer] Select shape constraints are enforced before IR append.
     if (trueType !== falseType) {
@@ -264,14 +281,42 @@ export class NagaBuilder {
   }
 
   public cast(value: ExprHandle, targetType: CanonicalType, meta: BlockContext): ExprHandle {
-    this.requireExpressionType(value);
-    const typeHandle = this.resolveNagaType(targetType);
+    const sourceTypeHandle = this.requireExpressionType(value);
+    const sourceType = this.typeArena.get(sourceTypeHandle);
+    const targetTypeHandle = this.resolveNagaType(targetType);
+    const targetNagaType = this.typeArena.get(targetTypeHandle);
+
+    // [LAW:single-enforcer] Cast shape rules are enforced at the constrained builder boundary.
+    if (targetNagaType.kind === 'Scalar' && sourceType.kind !== 'Scalar') {
+      throw new Error('NagaBuilder.cast: scalar casts require scalar source values.');
+    }
+    if (targetNagaType.kind === 'Vector') {
+      const vectorIdentity =
+        sourceType.kind === 'Vector' &&
+        sourceType.size === targetNagaType.size &&
+        sourceType.scalar === targetNagaType.scalar;
+      const scalarSplat = sourceType.kind === 'Scalar' && sourceType.scalar === targetNagaType.scalar;
+      if (!vectorIdentity && !scalarSplat) {
+        throw new Error('NagaBuilder.cast: vector casts require scalar splat or same-shape vector source.');
+      }
+    }
+    if (targetNagaType.kind === 'Matrix') {
+      const matrixIdentity =
+        sourceType.kind === 'Matrix' &&
+        sourceType.columns === targetNagaType.columns &&
+        sourceType.rows === targetNagaType.rows;
+      const scalarSplat = sourceType.kind === 'Scalar' && sourceType.scalar === NagaScalarKind.Float;
+      if (!matrixIdentity && !scalarSplat) {
+        throw new Error('NagaBuilder.cast: matrix casts require float scalar splat or same-shape matrix source.');
+      }
+    }
+
     const expr: NagaExpression = {
       type: 'Compose',
-      ty: typeHandle,
+      ty: targetTypeHandle,
       components: [value.nagaHandle],
     };
-    return this.registerExpression(expr, typeHandle, meta);
+    return this.registerExpression(expr, targetTypeHandle, meta);
   }
 
   public readState(stateKey: string, type: CanonicalType, meta: BlockContext): ExprHandle {
@@ -316,7 +361,7 @@ export class NagaBuilder {
 
   public bufferRead(bufferKey: string, index: ExprHandle, targetType: CanonicalType, meta: BlockContext): ExprHandle {
     const bufferBinding = this.getOrCreateBufferVariable(bufferKey);
-    const indexType = this.types.get(this.requireExpressionType(index));
+    const indexType = this.typeArena.get(this.requireExpressionType(index));
     if (!isIntegerScalar(indexType)) {
       throw new Error('NagaBuilder.bufferRead: dynamic index must be integer scalar.');
     }
@@ -326,8 +371,8 @@ export class NagaBuilder {
       base: bufferBinding.variableHandle,
       index: index.nagaHandle,
     };
-    const accessHandle = this.expressions.append(accessExpr);
-    this.sourceMap.set(accessHandle, meta);
+    const accessHandle = this.expressionArena.append(accessExpr);
+    this.expressionSourceMap.set(accessHandle, meta);
 
     const loadExpr: NagaExpression = {
       type: 'Load',
@@ -339,7 +384,7 @@ export class NagaBuilder {
 
   public bufferWrite(bufferKey: string, index: ExprHandle, value: ExprHandle, meta: BlockContext): void {
     const bufferBinding = this.getOrCreateBufferVariable(bufferKey);
-    const indexType = this.types.get(this.requireExpressionType(index));
+    const indexType = this.typeArena.get(this.requireExpressionType(index));
     if (!isIntegerScalar(indexType)) {
       throw new Error('NagaBuilder.bufferWrite: dynamic index must be integer scalar.');
     }
@@ -350,8 +395,8 @@ export class NagaBuilder {
       base: bufferBinding.variableHandle,
       index: index.nagaHandle,
     };
-    const pointerHandle = this.expressions.append(accessExpr);
-    this.sourceMap.set(pointerHandle, meta);
+    const pointerHandle = this.expressionArena.append(accessExpr);
+    this.expressionSourceMap.set(pointerHandle, meta);
 
     this.emitStatement({
       type: 'Store',
@@ -362,9 +407,9 @@ export class NagaBuilder {
 
   public atomicAdd(bufferKey: string, index: ExprHandle, value: ExprHandle, meta: BlockContext): ExprHandle {
     const bufferBinding = this.getOrCreateBufferVariable(bufferKey);
-    const indexType = this.types.get(this.requireExpressionType(index));
+    const indexType = this.typeArena.get(this.requireExpressionType(index));
     const valueTypeHandle = this.requireExpressionType(value);
-    const valueType = this.types.get(valueTypeHandle);
+    const valueType = this.typeArena.get(valueTypeHandle);
 
     if (!isIntegerScalar(indexType)) {
       throw new Error('NagaBuilder.atomicAdd: index must be integer scalar.');
@@ -378,8 +423,8 @@ export class NagaBuilder {
       base: bufferBinding.variableHandle,
       index: index.nagaHandle,
     };
-    const pointerHandle = this.expressions.append(accessExpr);
-    this.sourceMap.set(pointerHandle, meta);
+    const pointerHandle = this.expressionArena.append(accessExpr);
+    this.expressionSourceMap.set(pointerHandle, meta);
 
     const atomicExpr: NagaExpression = {
       type: 'AtomicResult',
@@ -395,15 +440,40 @@ export class NagaBuilder {
   }
 
   public getExpressionContext(handle: NagaHandle): BlockContext | null {
-    return this.sourceMap.get(handle) ?? null;
+    return this.expressionSourceMap.get(handle) ?? null;
   }
 
   public getStatementContext(handle: NagaHandle): BlockContext | null {
     return this.statementSourceMap.get(handle) ?? null;
   }
 
+  // [LAW:single-enforcer] exception: explicit test-only seam for validator trap coverage.
+  public unsafeAppendExpressionForTesting(
+    expression: NagaExpression,
+    meta: BlockContext | null = null,
+    resultTypeHandle?: NagaHandle,
+  ): NagaHandle {
+    const handle = this.expressionArena.append(expression);
+    if (meta !== null) {
+      this.expressionSourceMap.set(handle, meta);
+    }
+    if (resultTypeHandle !== undefined) {
+      this.expressionTypeByHandle.set(handle, resultTypeHandle);
+    }
+    return handle;
+  }
+
+  // [LAW:single-enforcer] exception: explicit test-only seam for statement validation coverage.
+  public unsafeAppendStatementForTesting(statement: NagaStatement, meta: BlockContext | null = null): NagaHandle {
+    const handle = this.statementArena.append(statement);
+    if (meta !== null) {
+      this.statementSourceMap.set(handle, meta);
+    }
+    return handle;
+  }
+
   private emitStatement(statement: NagaStatement, meta: BlockContext): void {
-    const handle = this.statements.append(statement);
+    const handle = this.statementArena.append(statement);
     this.statementSourceMap.set(handle, meta);
     if (this.activeBlock !== null) {
       (this.activeBlock as NagaHandle[]).push(handle);
@@ -431,7 +501,7 @@ export class NagaBuilder {
   private binary(op: NagaBinaryOp, left: ExprHandle, right: ExprHandle, meta: BlockContext): ExprHandle {
     const leftType = this.requireExpressionType(left);
     const rightType = this.requireExpressionType(right);
-    const leftNagaType = this.types.get(leftType);
+    const leftNagaType = this.typeArena.get(leftType);
 
     // [LAW:single-enforcer] Binary operand compatibility is validated here for all builder callsites.
     if (leftType !== rightType) {
@@ -454,7 +524,7 @@ export class NagaBuilder {
     value: number | boolean | readonly number[],
     meta: BlockContext,
   ): ExprHandle {
-    const constantHandle = this.constants.append({
+    const constantHandle = this.constantArena.append({
       type: typeHandle,
       value,
     });
@@ -466,8 +536,8 @@ export class NagaBuilder {
   }
 
   private registerExpression(expr: NagaExpression, typeHandle: NagaHandle, meta: BlockContext): ExprHandle {
-    const handle = this.expressions.append(expr);
-    this.sourceMap.set(handle, meta);
+    const handle = this.expressionArena.append(expr);
+    this.expressionSourceMap.set(handle, meta);
     this.expressionTypeByHandle.set(handle, typeHandle);
     return new ExprHandle(handle);
   }
@@ -539,7 +609,7 @@ export class NagaBuilder {
     if (cached !== undefined) {
       return cached;
     }
-    const handle = this.types.append({
+    const handle = this.typeArena.append({
       kind: 'Scalar',
       scalar: kind,
       width: 4,
@@ -554,7 +624,7 @@ export class NagaBuilder {
     if (cached !== undefined) {
       return cached;
     }
-    const handle = this.types.append({
+    const handle = this.typeArena.append({
       kind: 'Vector',
       size,
       scalar: kind,
@@ -570,7 +640,7 @@ export class NagaBuilder {
     if (cached !== undefined) {
       return cached;
     }
-    const handle = this.types.append({
+    const handle = this.typeArena.append({
       kind: 'Matrix',
       columns,
       rows,
