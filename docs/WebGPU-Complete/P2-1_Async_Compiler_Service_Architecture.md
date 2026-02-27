@@ -1,3 +1,9 @@
+> Alignment Notice (2026-02-27)
+> [LAW:one-source-of-truth] The canonical lowering boundary is `src/compiler/ir/naga-emitter/*` and `docs/compiler/ONE-TRUE-EMITTER.md`.
+> [LAW:dataflow-not-control-flow] Control flow is represented as recursive Naga blocks with lexical scopes, not flat instruction lists.
+> [LAW:no-string-math] Direct WGSL string generation in lowering code is forbidden; dynamic WGSL emission is an engine serializer boundary concern.
+> Read this document with `docs/WebGPU-Complete/P2-4__Scoped_Naga_IR_Control_Flow_and_Memory_Model.md`.
+
 This is the comprehensive technical specification for **The Compiler Architecture: The Async Compiler Service**.
 
 This document defines the lifecycle of the compilation process. It addresses the challenge of integrating a synchronous human workflow (drag-and-drop) with an asynchronous build pipeline (WASM validation + Driver shader compilation), ensuring the UI remains responsive even when the GPU driver is crunching heavily optimized shader binaries.
@@ -32,8 +38,8 @@ The Service is not a function; it is a **State Machine**. The UI binds to this s
 |----|----|----|
 | **IDLE** | System is stable. The active pipeline matches the graph. | DIRTY |
 | **DIRTY** | User modified the graph. A **Debounce Timer** is running. | COMPILING, IDLE (if reverted) |
-| **COMPILING** | Debounce expired. The **Naga WASM** module is generating WGSL. | LINKING, ERROR |
-| **LINKING** | WGSL is valid. The **GPU Driver** is compiling the pipeline (createPipelineAsync). | READY, ERROR |
+| **COMPILING** | Debounce expired. TS lowering emits scoped Naga IR and runs validator checks. | LINKING, ERROR |
+| **LINKING** | IR is validated. Serializer + driver pipeline compilation runs (`create*PipelineAsync`). | READY, ERROR |
 | **READY** | New artifacts are prepared. Waiting for the **Hot-Swap** signal. | IDLE (after swap) |
 | **ERROR** | Compilation failed (Logic or Driver error). | DIRTY (on next edit) |
 
@@ -81,19 +87,19 @@ When scheduleCompile is called and the debounce timer (e.g., 50ms) expires, the 
 
 ### Stage 1: The IR Lowering (Synchronous - CPU)
 
-- **Action:** TypeScript converts NormalizedGraph \$\to\$ ScheduleIR \$\to\$ NagaModule (JSON).
+- **Action:** TypeScript converts NormalizedGraph into scoped `NagaEmitterInstruction` blocks, then emits Naga-like arenas via constrained builder APIs.
 
 - **Performance:** Extremely fast (\$\<2\$ms).
 
-- **Output:** A JSON object representing the shader logic in Naga's format.
+- **Output:** Typed IR artifact (expressions/statements/blocks/source map), no ad-hoc WGSL source generation.
 
 ### Stage 2: The WASM Validation (Synchronous - Worker?)
 
-- **Action:** The NagaModule is sent to the naga.wasm instance.
+- **Action:** The Naga artifact is validated (expression + statement invariants) and prepared for deterministic WGSL serialization.
 
 - **Validation:** Naga checks types (vec3 + float errors).
 
-- **Emission:** Naga returns the wgsl_source string.
+- **Emission:** Serializer boundary produces WGSL from validated IR when linking artifacts.
 
 - **Optimization:** We can run this in a WebWorker to keep the UI silky smooth, but main-thread execution is acceptable for v3.0 if the graph is small (\<500 nodes).
 
@@ -101,7 +107,7 @@ When scheduleCompile is called and the debounce timer (e.g., 50ms) expires, the 
 
 ### Stage 3: The Driver Linking (Asynchronous - GPU)
 
-- **Action:** We call device.createComputePipelineAsync({ code: wgsl_source }).
+- **Action:** We call async pipeline creation using serializer-produced WGSL.
 
 - **Wait:** We await this promise. The browser yields to the main thread.
 
@@ -143,7 +149,7 @@ We have a new pipeline ready. When do we switch?
 
 Since Naga is a "Black Box," error messages come back as strings.
 
-- **Naga Error:** "Type mismatch at statement 42: expected f32, found vec3"
+- **Naga Error:** "Type mismatch at Expression [42]" or "Invalid condition at Statement [7]"
 
 - **Source Map:** The Compiler must maintain a map of StatementIndex \$\to\$ BlockID.
 
