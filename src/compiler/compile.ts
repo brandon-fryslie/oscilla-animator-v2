@@ -43,6 +43,7 @@ import type { ArenaSlotDescriptor } from '../runtime/ArenaValueStore';
 import type { ValueExpr, ValueExprId } from './ir/value-expr';
 import type { Step, PureFn } from './ir/types';
 import { lowerScheduleToNagaModule } from './ir/naga-lowering';
+import { validateNagaLoweringProgram } from './ir/naga-lowering-validate';
 import { compilationInspector } from '../services/CompilationInspectorService';
 import { computeRenderReachableBlocks } from './reachability';
 import { resolveKernels } from './resolve-kernels';
@@ -513,6 +514,13 @@ function convertLinkedIRToProgram(
     valueExprs: valueExprNodes,
     exprToBlock: builder.getExprToBlock(),
   });
+  // [LAW:single-enforcer] Naga artifact structural invariants are enforced once
+  // at compile output construction before worker/runtime consumption.
+  const nagaIssues = validateNagaLoweringProgram(nagaLoweringProgram);
+  if (nagaIssues.length > 0) {
+    const messages = nagaIssues.map((issue) => `${issue.code}: ${issue.message}`).join('; ');
+    throw new Error(`Naga lowering validation failed: ${messages}`);
+  }
 
   // Build debug index
   const stepToBlock = new Map();
