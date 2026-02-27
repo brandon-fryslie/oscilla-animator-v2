@@ -243,9 +243,12 @@ class WebGPUDrawPrepRuntime {
   private pipeline: any;
   private activeShaderCode: string;
   private readonly paramsBuffer: any;
+  private recordsBuffer: any;
+  private recordsCapacityWords = WEBGPU_RENDER_CONTRACT.drawPrepRecordWords;
   private readonly paramsStaging = new Uint32Array(WEBGPU_RENDER_CONTRACT.drawPrepParamsU32);
   private activeBindGroup: any | null = null;
   private activeIndirectBuffer: any | null = null;
+  private activeRecordsBuffer: any | null = null;
   // [LAW:single-enforcer] Hot-swap pending pipeline follows P2-1 async protocol.
   private pendingPipeline: any | null = null;
   private shaderGeneration = 0;
@@ -256,6 +259,10 @@ class WebGPUDrawPrepRuntime {
     this.paramsBuffer = device.createBuffer({
       size: WEBGPU_RENDER_CONTRACT.drawPrepParamsU32 * Uint32Array.BYTES_PER_ELEMENT,
       usage: GPU_BUFFER_USAGE.UNIFORM | GPU_BUFFER_USAGE.COPY_DST,
+    });
+    this.recordsBuffer = device.createBuffer({
+      size: WEBGPU_RENDER_CONTRACT.drawPrepRecordWords * Uint32Array.BYTES_PER_ELEMENT,
+      usage: GPU_BUFFER_USAGE.STORAGE | GPU_BUFFER_USAGE.COPY_DST,
     });
   }
 
@@ -285,6 +292,7 @@ class WebGPUDrawPrepRuntime {
       // Invalidate cached bind group since pipeline layout may have changed.
       this.activeBindGroup = null;
       this.activeIndirectBuffer = null;
+      this.activeRecordsBuffer = null;
     }
   }
 
@@ -319,7 +327,11 @@ class WebGPUDrawPrepRuntime {
   }
 
   private getOrCreateBindGroup(indirectBuffer: any): any {
-    if (this.activeBindGroup && this.activeIndirectBuffer === indirectBuffer) {
+    if (
+      this.activeBindGroup &&
+      this.activeIndirectBuffer === indirectBuffer &&
+      this.activeRecordsBuffer === this.recordsBuffer
+    ) {
       return this.activeBindGroup;
     }
 
@@ -331,6 +343,10 @@ class WebGPUDrawPrepRuntime {
           resource: { buffer: indirectBuffer },
         },
         {
+          binding: WEBGPU_RENDER_CONTRACT.drawPrepRecordBinding,
+          resource: { buffer: this.recordsBuffer },
+        },
+        {
           binding: WEBGPU_RENDER_CONTRACT.drawPrepParamsBinding,
           resource: { buffer: this.paramsBuffer },
         },
@@ -338,26 +354,56 @@ class WebGPUDrawPrepRuntime {
     });
     this.activeBindGroup = bindGroup;
     this.activeIndirectBuffer = indirectBuffer;
+    this.activeRecordsBuffer = this.recordsBuffer;
     return bindGroup;
+  }
+
+  private ensureRecordsCapacity(requiredWords: number): void {
+    if (requiredWords <= this.recordsCapacityWords) {
+      return;
+    }
+
+    let nextCapacityWords = this.recordsCapacityWords;
+    while (nextCapacityWords < requiredWords) {
+      nextCapacityWords *= 2;
+    }
+
+    const nextBuffer = this.device.createBuffer({
+      size: nextCapacityWords * Uint32Array.BYTES_PER_ELEMENT,
+      usage: GPU_BUFFER_USAGE.STORAGE | GPU_BUFFER_USAGE.COPY_DST,
+    });
+    this.recordsBuffer.destroy();
+    this.recordsBuffer = nextBuffer;
+    this.recordsCapacityWords = nextCapacityWords;
+    this.activeBindGroup = null;
+    this.activeRecordsBuffer = null;
   }
 
   step(
     commandEncoder: any,
     indirectBuffer: any,
-    recordIndex: number,
-    maxRecords: number,
-    indexCount: number,
-    instanceCount: number,
-    firstInstance: number,
+    drawPrepRecords: Uint32Array,
+    recordCount: number,
   ): void {
-    this.paramsStaging[0] = indexCount >>> 0;
-    this.paramsStaging[1] = instanceCount >>> 0;
-    this.paramsStaging[2] = 0; // firstIndex
-    this.paramsStaging[3] = 0; // baseVertex
-    this.paramsStaging[4] = firstInstance >>> 0;
-    this.paramsStaging[5] = recordIndex >>> 0;
-    this.paramsStaging[6] = maxRecords >>> 0;
-    this.paramsStaging[7] = 0;
+    const clampedRecordCount = Math.max(0, recordCount >>> 0);
+    const requiredWords = Math.max(
+      WEBGPU_RENDER_CONTRACT.drawPrepRecordWords,
+      clampedRecordCount * WEBGPU_RENDER_CONTRACT.drawPrepRecordWords
+    );
+    this.ensureRecordsCapacity(requiredWords);
+
+    if (clampedRecordCount > 0) {
+      this.device.queue.writeBuffer(
+        this.recordsBuffer,
+        0,
+        drawPrepRecords.subarray(0, clampedRecordCount * WEBGPU_RENDER_CONTRACT.drawPrepRecordWords)
+      );
+    }
+
+    this.paramsStaging[0] = clampedRecordCount;
+    this.paramsStaging[1] = this.recordsCapacityWords / WEBGPU_RENDER_CONTRACT.drawPrepRecordWords;
+    this.paramsStaging[2] = 0;
+    this.paramsStaging[3] = 0;
     this.device.queue.writeBuffer(this.paramsBuffer, 0, this.paramsStaging);
 
     const bindGroup = this.getOrCreateBindGroup(indirectBuffer);
@@ -365,12 +411,14 @@ class WebGPUDrawPrepRuntime {
     const pass = commandEncoder.beginComputePass();
     pass.setPipeline(this.pipeline);
     pass.setBindGroup(WEBGPU_RENDER_CONTRACT.drawPrepBindGroup, bindGroup);
-    pass.dispatchWorkgroups(DRAW_PREP_WORKGROUP_SIZE);
+    const workgroups = Math.max(1, Math.ceil(clampedRecordCount / DRAW_PREP_WORKGROUP_SIZE));
+    pass.dispatchWorkgroups(workgroups);
     pass.end();
   }
 
   dispose(): void {
     this.paramsBuffer.destroy();
+    this.recordsBuffer.destroy();
   }
 }
 
@@ -392,6 +440,7 @@ export class WebGPURenderer {
   private topologyBankBindGroup: any;
   private indirectArgsBuffer: any;
   private indirectArgsCapacityRecords = 1;
+  private drawPrepRecordStaging = new Uint32Array(WEBGPU_RENDER_CONTRACT.drawPrepRecordWords);
   private topologyBankBuffer: any;
   private topologyBankCapacityWords = 1;
   private topologyBankRevision = -1;
@@ -559,17 +608,11 @@ export class WebGPURenderer {
       );
     }
     this.ensureIndirectArgsCapacity(drawPlan.length);
-    for (const prepared of drawPlan) {
-      this.drawPrepRuntime.step(
-        commandEncoder,
-        this.indirectArgsBuffer,
-        prepared.indirectRecordIndex,
-        this.indirectArgsCapacityRecords,
-        prepared.mesh.indexCount,
-        prepared.instanceCount,
-        prepared.firstInstance,
-      );
-    }
+    this.ensureDrawPrepRecordCapacity(drawPlan.length);
+    this.packDrawPrepRecords(drawPlan);
+    // [LAW:dataflow-not-control-flow] Draw-prep dispatch runs once per frame;
+    // per-record variability is encoded in the manifest buffer, not control flow.
+    this.drawPrepRuntime.step(commandEncoder, this.indirectArgsBuffer, this.drawPrepRecordStaging, drawPlan.length);
 
     const pass = commandEncoder.beginRenderPass({
       colorAttachments: [
@@ -782,6 +825,32 @@ export class WebGPURenderer {
       this.indirectArgsBuffer,
       prepared.indirectRecordIndex * WEBGPU_RENDER_CONTRACT.indirectArgsBytes,
     );
+  }
+
+  private ensureDrawPrepRecordCapacity(requiredRecords: number): void {
+    const recordWords = WEBGPU_RENDER_CONTRACT.drawPrepRecordWords;
+    const currentCapacityRecords = this.drawPrepRecordStaging.length / recordWords;
+    if (requiredRecords <= currentCapacityRecords) {
+      return;
+    }
+
+    let nextCapacityRecords = Math.max(1, currentCapacityRecords);
+    while (nextCapacityRecords < requiredRecords) {
+      nextCapacityRecords *= 2;
+    }
+    this.drawPrepRecordStaging = new Uint32Array(nextCapacityRecords * recordWords);
+  }
+
+  private packDrawPrepRecords(drawPlan: readonly PreparedDrawPathOp[]): void {
+    const recordWords = WEBGPU_RENDER_CONTRACT.drawPrepRecordWords;
+    for (const prepared of drawPlan) {
+      const base = prepared.indirectRecordIndex * recordWords;
+      this.drawPrepRecordStaging[base] = prepared.mesh.indexCount >>> 0;
+      this.drawPrepRecordStaging[base + 1] = prepared.instanceCount >>> 0;
+      this.drawPrepRecordStaging[base + 2] = 0; // firstIndex
+      this.drawPrepRecordStaging[base + 3] = 0; // baseVertex bits
+      this.drawPrepRecordStaging[base + 4] = prepared.firstInstance >>> 0;
+    }
   }
 
   private countPlannedInstances(drawPlan: readonly PreparedDrawPathOp[]): number {

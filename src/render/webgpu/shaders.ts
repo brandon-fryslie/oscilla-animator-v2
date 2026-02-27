@@ -44,9 +44,11 @@ export const WEBGPU_RENDER_CONTRACT = Object.freeze({
   indirectArgsBytes: 5 * Uint32Array.BYTES_PER_ELEMENT,
   drawPrepBindGroup: 0,
   drawPrepIndirectBinding: 0,
-  drawPrepParamsBinding: 1,
-  drawPrepParamsU32: 8,
-  drawPrepWorkgroupSize: 1,
+  drawPrepRecordBinding: 1,
+  drawPrepParamsBinding: 2,
+  drawPrepRecordWords: 5,
+  drawPrepParamsU32: 4,
+  drawPrepWorkgroupSize: 64,
 } as const);
 
 export const PATH_RENDER_WGSL = /* wgsl */ `
@@ -161,32 +163,28 @@ fn cs_main(@builtin(global_invocation_id) gid: vec3<u32>) {
 
 export const DRAW_PREP_COMPUTE_WGSL = /* wgsl */ `
 struct DrawPrepParams {
-  // v0 = [indexCount, instanceCount, firstIndex, baseVertexBits]
+  // v0 = [recordCount, maxRecords, _, _]
   v0: vec4<u32>,
-  // v1 = [firstInstance, recordIndex, maxRecords, _]
-  v1: vec4<u32>,
 };
 
 @group(0) @binding(0) var<storage, read_write> indirectArgs: array<u32>;
-@group(0) @binding(1) var<uniform> drawPrepParams: DrawPrepParams;
+@group(0) @binding(1) var<storage, read> drawPrepRecords: array<u32>;
+@group(0) @binding(2) var<uniform> drawPrepParams: DrawPrepParams;
 
 @compute @workgroup_size(${WEBGPU_RENDER_CONTRACT.drawPrepWorkgroupSize})
 fn cs_main(@builtin(global_invocation_id) gid: vec3<u32>) {
-  if (gid.x > 0u) {
+  let recordIndex = gid.x;
+  let recordCount = drawPrepParams.v0.x;
+  let maxRecords = drawPrepParams.v0.y;
+  if (recordIndex >= recordCount || recordIndex >= maxRecords) {
     return;
   }
 
-  let recordIndex = drawPrepParams.v1.y;
-  let maxRecords = drawPrepParams.v1.z;
-  if (recordIndex >= maxRecords) {
-    return;
-  }
-
-  let base = recordIndex * ${WEBGPU_RENDER_CONTRACT.indirectArgsWords}u;
-  indirectArgs[base + 0u] = drawPrepParams.v0.x; // indexCount
-  indirectArgs[base + 1u] = drawPrepParams.v0.y; // instanceCount
-  indirectArgs[base + 2u] = drawPrepParams.v0.z; // firstIndex
-  indirectArgs[base + 3u] = drawPrepParams.v0.w; // baseVertex bits
-  indirectArgs[base + 4u] = drawPrepParams.v1.x; // firstInstance
+  let base = recordIndex * ${WEBGPU_RENDER_CONTRACT.drawPrepRecordWords}u;
+  indirectArgs[base + 0u] = drawPrepRecords[base + 0u]; // indexCount
+  indirectArgs[base + 1u] = drawPrepRecords[base + 1u]; // instanceCount
+  indirectArgs[base + 2u] = drawPrepRecords[base + 2u]; // firstIndex
+  indirectArgs[base + 3u] = drawPrepRecords[base + 3u]; // baseVertex bits
+  indirectArgs[base + 4u] = drawPrepRecords[base + 4u]; // firstInstance
 }
 `;
