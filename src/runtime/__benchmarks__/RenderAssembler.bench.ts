@@ -12,24 +12,39 @@ import {
   resetTopologyCacheCounters,
   topologyGroupCacheMisses,
 } from '../RenderAssembler';
-import { SHAPE2D_WORDS, createRuntimeState, writeShape2D } from '../RuntimeState';
+import {
+  SHAPE_BANK_HEADER_WORDS,
+  allocShapeBankWords,
+  createRuntimeState,
+  resetFrameVolatileShapeBank,
+  writeShapeBankHandleMetadata,
+  writeShapeBankHeader,
+} from '../RuntimeState';
 
-const BENCH_STATE = createRuntimeState(0);
+const BENCH_STATE = createRuntimeState(0, 0, 0, 0, 0, 0, 0, 1_000_000);
 
 // ============================================================================
 // Helpers
 // ============================================================================
 
-function createShapeBuffer(count: number, numTopologies: number): Uint32Array {
-  const buffer = new Uint32Array(count * SHAPE2D_WORDS);
+function createShapeBuffer(count: number, numTopologies: number, state: typeof BENCH_STATE = BENCH_STATE): Float32Array {
+  if (!state.shapeBank) throw new Error('Benchmark state missing shapeBank');
+  const buffer = new Float32Array(count);
   for (let i = 0; i < count; i++) {
-    writeShape2D(buffer, i, {
-      topologyId: (i % numTopologies) + 1,
-      pointsFieldSlot: ((i % numTopologies) + 1) * 10,
-      pointsCount: 4,
-      styleRef: 0,
+    const topologyId = (i % numTopologies) + 1;
+    const controlPointSlot = topologyId * 10;
+    const handle = allocShapeBankWords(state.shapeBank, SHAPE_BANK_HEADER_WORDS);
+    writeShapeBankHeader(state.shapeBank.data, handle, {
+      indexCount: 4,
+      indexOffset: 0,
+      vertexCount: 4,
       flags: 0,
     });
+    writeShapeBankHandleMetadata(state.shapeBank, handle, {
+      topologyId,
+      controlPointSlot,
+    });
+    buffer[i] = handle;
   }
   return buffer;
 }
@@ -53,6 +68,9 @@ function createColorBuffer(count: number): Uint8ClampedArray {
   }
   return buf;
 }
+
+// Reset volatile allocator before creating one-shot benchmark buffers.
+resetFrameVolatileShapeBank(BENCH_STATE);
 
 // ============================================================================
 // computeTopologyGroups Benchmarks
@@ -82,6 +100,7 @@ describe('computeTopologyGroups', () => {
 
 describe('topology cache: hit vs miss', () => {
   const buf = createShapeBuffer(500, 10);
+  const missState = createRuntimeState(0, 0, 0, 0, 0, 0, 0, 8_192);
 
   bench('cache hit (same buffer, same count)', () => {
     // After first call, all subsequent are cache hits
@@ -89,10 +108,11 @@ describe('topology cache: hit vs miss', () => {
   });
 
   bench('cache miss (new buffer each time)', () => {
-    // Each iteration creates a new buffer → always miss
-    const freshBuf = createShapeBuffer(500, 10);
+    // Each iteration builds a fresh handle buffer in an isolated state.
+    resetFrameVolatileShapeBank(missState);
+    const freshBuf = createShapeBuffer(500, 10, missState);
     resetTopologyCacheCounters();
-    groupInstancesByTopology(freshBuf, 500, BENCH_STATE);
+    groupInstancesByTopology(freshBuf, 500, missState);
   });
 });
 

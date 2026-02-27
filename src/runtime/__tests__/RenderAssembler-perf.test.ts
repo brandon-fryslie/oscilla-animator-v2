@@ -16,34 +16,41 @@ import {
   resetTopologyCacheCounters,
 } from '../RenderAssembler';
 import {
-  SHAPE2D_WORDS,
   SHAPE_BANK_HEADER_WORDS,
   allocShapeBankWords,
   createRuntimeState,
-  writeShape2D,
+  resetFrameVolatileShapeBank,
   writeShapeBankHandleMetadata,
   writeShapeBankHeader,
 } from '../RuntimeState';
 
 const TEST_STATE = createRuntimeState(0);
 
-// Helper: create a shape buffer with N instances of given topologies
-function createShapeBuffer(topologies: Array<{ topologyId: number; pointsFieldSlot: number; pointsCount: number; flags: number }>): Uint32Array {
-  const buffer = new Uint32Array(topologies.length * SHAPE2D_WORDS);
+// Helper: create a handle buffer with N instances of given topologies
+function createShapeBuffer(
+  topologies: Array<{ topologyId: number; pointsFieldSlot: number; pointsCount: number; flags: number }>,
+): Float32Array {
+  const buffer = new Float32Array(topologies.length);
+  if (!TEST_STATE.shapeBank) throw new Error('Test state missing shapeBank');
   for (let i = 0; i < topologies.length; i++) {
-    writeShape2D(buffer, i, {
-      topologyId: topologies[i].topologyId,
-      pointsFieldSlot: topologies[i].pointsFieldSlot,
-      pointsCount: topologies[i].pointsCount,
-      styleRef: 0,
+    const handle = allocShapeBankWords(TEST_STATE.shapeBank, SHAPE_BANK_HEADER_WORDS);
+    writeShapeBankHeader(TEST_STATE.shapeBank.data, handle, {
+      indexCount: topologies[i].pointsCount,
+      indexOffset: 0,
+      vertexCount: topologies[i].pointsCount,
       flags: topologies[i].flags,
     });
+    writeShapeBankHandleMetadata(TEST_STATE.shapeBank, handle, {
+      topologyId: topologies[i].topologyId,
+      controlPointSlot: topologies[i].pointsFieldSlot,
+    });
+    buffer[i] = handle;
   }
   return buffer;
 }
 
 // Helper: create a uniform shape buffer (all same topology)
-function createUniformShapeBuffer(count: number, topologyId: number = 1): Uint32Array {
+function createUniformShapeBuffer(count: number, topologyId: number = 1): Float32Array {
   const entries = Array.from({ length: count }, () => ({
     topologyId,
     pointsFieldSlot: 10,
@@ -56,6 +63,7 @@ function createUniformShapeBuffer(count: number, topologyId: number = 1): Uint32
 describe('Topology Group Caching', () => {
   beforeEach(() => {
     resetTopologyCacheCounters();
+    resetFrameVolatileShapeBank(TEST_STATE);
   });
 
   it('cache hit: same buffer ref + same count → reuse (computed once)', () => {
