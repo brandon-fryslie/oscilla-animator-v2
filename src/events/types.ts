@@ -29,6 +29,7 @@
  */
 
 import type { Diagnostic } from '../diagnostics/types';
+import type { AsyncCompilerState } from '../types/async-compiler-state';
 
 // =============================================================================
 // GraphCommitted Event
@@ -389,7 +390,7 @@ export interface CompilerStateChangedEvent {
   readonly type: 'CompilerStateChanged';
   readonly patchId: string;
   readonly patchRevision: number;
-  readonly state: 'idle' | 'dirty' | 'compiling' | 'linking' | 'ready' | 'error';
+  readonly state: AsyncCompilerState;
   readonly errorMessage?: string;
 }
 

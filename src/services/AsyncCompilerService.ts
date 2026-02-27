@@ -1,14 +1,9 @@
 import type { CompileWorkerRunRequest, CompileWorkerRunResult } from './CompileWorkerClient';
 import { CompileSupersededError } from './CompileWorkerClient';
 import type { PrecomputedCompileArtifacts } from './CompileOrchestrator';
+import type { AsyncCompilerState } from '../types/async-compiler-state';
 
-export type AsyncCompilerState =
-  | 'idle'
-  | 'dirty'
-  | 'compiling'
-  | 'linking'
-  | 'ready'
-  | 'error';
+export type { AsyncCompilerState } from '../types/async-compiler-state';
 
 export interface AsyncCompilerServiceDeps {
   readonly runCompile: (request: CompileWorkerRunRequest) => Promise<CompileWorkerRunResult>;
@@ -42,6 +37,7 @@ export class AsyncCompilerService {
   private lastErrorMessage: string | null = null;
   private scheduleToken = 0;
   private scheduled: ScheduledCompile | null = null;
+  private inFlightToken: number | null = null;
   private debounceTimer: ReturnType<typeof setTimeout> | null = null;
   private readyArtifacts: PrecomputedCompileArtifacts | null = null;
 
@@ -75,7 +71,11 @@ export class AsyncCompilerService {
     // Older ready artifacts are stale once a new compile is requested.
     this.readyArtifacts = null;
     this.lastErrorMessage = null;
-    this.setState('dirty');
+    // [LAW:dataflow-not-control-flow] Preserve linking state while a swap is in
+    // progress; queued compile intent is represented by scheduled/debounce data.
+    if (this.state !== 'linking') {
+      this.setState('dirty');
+    }
 
     if (this.debounceTimer) {
       clearTimeout(this.debounceTimer);
@@ -99,7 +99,15 @@ export class AsyncCompilerService {
   markSwapComplete(): void {
     if (this.disposed) return;
     if (this.state !== 'linking') return;
-    this.setState(this.scheduled ? 'dirty' : 'idle');
+    const hasCompileInFlight = this.inFlightToken !== null;
+    const hasPendingDebounce = this.scheduled !== null || this.debounceTimer !== null;
+    // [LAW:dataflow-not-control-flow] Swap completion transitions depend on queue
+    // and in-flight data, not ad-hoc callsite branching.
+    if (hasCompileInFlight) {
+      this.setState('compiling');
+      return;
+    }
+    this.setState(hasPendingDebounce ? 'dirty' : 'idle');
   }
 
   markSwapFailed(error: unknown): void {
@@ -117,6 +125,7 @@ export class AsyncCompilerService {
     }
     this.listeners.clear();
     this.scheduled = null;
+    this.inFlightToken = null;
     this.readyArtifacts = null;
   }
 
@@ -126,6 +135,7 @@ export class AsyncCompilerService {
 
     this.scheduled = null;
     const launchToken = next.token;
+    this.inFlightToken = launchToken;
     this.setState('compiling');
 
     void this.runCompile(next.request)
@@ -139,6 +149,9 @@ export class AsyncCompilerService {
 
   private handleCompileSuccess(token: number, result: CompileWorkerRunResult): void {
     if (this.disposed) return;
+    if (this.inFlightToken === token) {
+      this.inFlightToken = null;
+    }
     if (token !== this.scheduleToken) return;
 
     this.readyArtifacts = {
@@ -153,6 +166,9 @@ export class AsyncCompilerService {
 
   private handleCompileFailure(token: number, error: unknown): void {
     if (this.disposed) return;
+    if (this.inFlightToken === token) {
+      this.inFlightToken = null;
+    }
     if (error instanceof CompileSupersededError) return;
     if (token !== this.scheduleToken) return;
 
