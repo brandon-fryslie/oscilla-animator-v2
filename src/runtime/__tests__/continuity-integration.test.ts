@@ -606,6 +606,17 @@ describe('Continuity Integration', () => {
       expect(outputBuffer[0]).toBeCloseTo(100, 2);
       expect(outputBuffer[1]).toBeCloseTo(200, 2);
       expect(outputBuffer[2]).toBeCloseTo(300, 2);
+
+      // After completion (no domain change), output must track current base directly.
+      // Regression guard: completed crossfade must not pin output to stale oldBuffer values.
+      baseBuffer[0] = 150;
+      baseBuffer[1] = 250;
+      baseBuffer[2] = 350;
+      state.time = makeTime(116);
+      applyContinuity(step, state, (slot) => getTestSlotBuffer(state, slot) as Float32Array);
+      expect(outputBuffer[0]).toBeCloseTo(150, 2);
+      expect(outputBuffer[1]).toBeCloseTo(250, 2);
+      expect(outputBuffer[2]).toBeCloseTo(350, 2);
     });
 
     it('uses smoothstep curve when specified', () => {

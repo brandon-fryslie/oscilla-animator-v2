@@ -5,7 +5,6 @@
  * Simplified for v2 - no hot-swap complexity initially.
  */
 
-import type { ValueSlot } from '../types';
 import type { EffectiveTime, TimeState } from './timeResolution';
 import { createTimeState } from './timeResolution';
 import type { ContinuityState } from './ContinuityState';
@@ -377,9 +376,6 @@ export interface EventBuffer {
  * [LAW:one-source-of-truth] Numeric slot values live only in RuntimeState.arena.
  */
 export interface ValueStore {
-  /** Per-slot packed shape field buffers for render hot path (Field<shape2d>). */
-  shapeFields: Map<ValueSlot, Uint32Array>;
-
   /**
    * Packed shape2d values (8 x u32 words per shape)
    *
@@ -396,7 +392,6 @@ export interface ValueStore {
  */
 export function createValueStore(shape2dSlotCount: number = 0): ValueStore {
   return {
-    shapeFields: new Map(),
     shape2d: new Uint32Array(shape2dSlotCount * SHAPE2D_WORDS),
   };
 }

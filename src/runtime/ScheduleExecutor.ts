@@ -15,7 +15,6 @@ import type { RenderFrameIR } from '../render/types';
 import type { RenderBufferArena } from '../render/RenderBufferArena';
 import { resolveTime } from './timeResolution';
 import {
-  writeShape2D,
   beginRuntimeFrameSemantics,
   enterRuntimeFrameSegment,
   resetFrameVolatileShapeBank,
@@ -26,7 +25,6 @@ import {
 import {
   MATERIALIZE_SCRATCH,
   renderStepsBuffer as _renderSteps,
-  shapeRecord as _shapeRecord,
   assemblerCtx as _assemblerCtx,
 } from './executor-init';
 import { detectDomainChange, recordDomainTransition } from './ContinuityMapping';
@@ -41,6 +39,7 @@ import { SCALAR_INSTANCE_ID } from '../compiler/ir/Indices';
 import { evaluateValueExprEvent } from './ValueExprEventEvaluator';
 import { materializeValueExpr } from './ValueExprMaterializer';
 import { applyStateWritePolicy } from './StateWritePolicy';
+import { writeShapeRefExprToBank } from './ShapeRefWriter';
 import type { PureFnExecutionContext } from './ScalarKernelLibrary';
 import {
   arenaDecodeToAoS,
@@ -333,22 +332,7 @@ export function executeFrame(
           // Shape value: write Shape2D record to shape2d bank
           const veId = step.expr;
           const exprNode = valueExprs[veId as number];
-          if (exprNode.kind === 'shapeRef') {
-            // Resolve control point field slot (avoid IIFE closure)
-            let cpFieldSlot = 0;
-            if (exprNode.controlPointField != null) {
-              const cpSlot = fieldExprToSlot.get(exprNode.controlPointField as number);
-              if (cpSlot === undefined) throw new Error('Control point field ' + exprNode.controlPointField + ' not in fieldExprToSlot — compiler bug');
-              cpFieldSlot = cpSlot;
-            }
-            // Write shape record — populate reusable record fields
-            _shapeRecord.topologyId = exprNode.topologyId;
-            _shapeRecord.pointsFieldSlot = cpFieldSlot;
-            _shapeRecord.pointsCount = 0;
-            _shapeRecord.styleRef = 0;
-            _shapeRecord.flags = 0;
-            writeShape2D(state.values.shape2d, offset, _shapeRecord);
-          }
+          writeShapeRefExprToBank(exprNode, fieldExprToSlot, state.values.shape2d, offset);
         } else if (isNumericStorage(storage)) {
           const arenaDesc = resolveArenaDescriptor(slotToArena, lookup);
 
@@ -598,6 +582,7 @@ export function executeFrame(
   _assemblerCtx.arena = arena;
   _assemblerCtx.scalarExprToArenaAddress = state.cache.scalarExprToArenaAddress ?? undefined;
   _assemblerCtx.slotToArena = addressTable.slotToArena;
+  _assemblerCtx.slotLookup = addressTable.slotLookup;
   assemblerContext = _assemblerCtx as AssemblerContext;
 
   // Build v2 frame from collected render steps (zero allocations - uses arena)
