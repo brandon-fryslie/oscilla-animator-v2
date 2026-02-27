@@ -94,8 +94,14 @@ export class WgslNagaCompiler {
   // [LAW:one-source-of-truth] ID resolution lives in one lexical environment chain.
   private currentScope = new ScopeEnvironment();
   private loopDepth = 0;
+  private hasCompiled = false;
 
   public compileRootGraph(instructions: readonly NagaEmitterInstruction[]): NagaBuilder {
+    // [LAW:one-source-of-truth] Compiler instances are single-use to prevent cross-graph state aliasing.
+    if (this.hasCompiled) {
+      throw new Error('CRITICAL FAIL: WgslNagaCompiler instances are single-use; create a new compiler per graph.');
+    }
+    this.hasCompiled = true;
     this.compileBlock(instructions);
     return this.builder;
   }
@@ -194,9 +200,12 @@ export class WgslNagaCompiler {
         // [LAW:single-enforcer] Dynamic index clamping is enforced only at this memory-read entrypoint.
         const lengthHandle = this.builder.arrayLength(instruction.bufferKey, meta);
         const lengthAsIntHandle = this.builder.cast(lengthHandle, canonicalScalar(INT), meta);
+        const zeroHandle = this.builder.literalInt(0, meta);
         const oneHandle = this.builder.literalInt(1, meta);
         const maxIndexHandle = this.builder.sub(lengthAsIntHandle, oneHandle, meta);
-        const safeIndexHandle = this.builder.min(rawIndex, maxIndexHandle, meta);
+        const safeMaxIndexHandle = this.builder.max(maxIndexHandle, zeroHandle, meta);
+        const nonNegativeIndexHandle = this.builder.max(rawIndex, zeroHandle, meta);
+        const safeIndexHandle = this.builder.min(nonNegativeIndexHandle, safeMaxIndexHandle, meta);
 
         const outHandle = this.builder.bufferRead(
           instruction.bufferKey,

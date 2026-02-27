@@ -28,20 +28,18 @@ describe('Naga one-true-emitter', () => {
     const builder = new NagaBuilder();
     const mat4 = builder.literalMatrix4({ visualBlockId: 'matrix_node' });
     const scalar = builder.literalFloat(1, { visualBlockId: 'scalar_node' });
-    const invalidHandle = builder.expressions.append({
-      type: 'Binary',
-      op: NagaBinaryOp.Add,
-      left: mat4.nagaHandle,
-      right: scalar.nagaHandle,
-    });
-    builder.sourceMap.set(invalidHandle, { visualBlockId: 'node_accumulator_7' });
     const matrixType = builder.getExpressionType(mat4.nagaHandle);
     expect(matrixType).toBeDefined();
-    (
-      builder as unknown as {
-        expressionTypeByHandle: Map<number, number>;
-      }
-    ).expressionTypeByHandle.set(invalidHandle, matrixType as number);
+    const invalidHandle = builder.unsafeAppendExpressionForTesting(
+      {
+        type: 'Binary',
+        op: NagaBinaryOp.Add,
+        left: mat4.nagaHandle,
+        right: scalar.nagaHandle,
+      },
+      { visualBlockId: 'node_accumulator_7' },
+      matrixType as number,
+    );
 
     let thrown: unknown;
     try {
@@ -194,6 +192,11 @@ describe('Naga one-true-emitter', () => {
         (expr) => expr.type === 'Math' && expr.fun === NagaMathFunction.Min,
       ),
     ).toBe(true);
+    expect(
+      compiler.getBuilder().expressions.toArray().some(
+        (expr) => expr.type === 'Math' && expr.fun === NagaMathFunction.Max,
+      ),
+    ).toBe(true);
     expect(exprKinds.includes('Access')).toBe(true);
     expect(exprKinds.includes('Load')).toBe(true);
   });
@@ -274,7 +277,7 @@ describe('Naga one-true-emitter', () => {
     const cond = builder.literalFloat(1, { visualBlockId: 'cond_float' });
     const accept: readonly number[] = [];
     const reject: readonly number[] = [];
-    builder.statements.append({
+    builder.unsafeAppendStatementForTesting({
       type: 'If',
       condition: cond.nagaHandle,
       accept,
@@ -292,6 +295,28 @@ describe('Naga one-true-emitter', () => {
     const validationError = thrown as NagaValidationError;
     expect(validationError.message).toContain('Statement [');
     expect(validationError.message).toContain('boolean scalar');
+  });
+
+  it('rejects compiler reuse to prevent cross-run state leakage', () => {
+    const compiler = new WgslNagaCompiler();
+    compiler.compileRootGraph([
+      {
+        op: 'constFloat',
+        outputId: 'a',
+        visualBlockId: 'const_a',
+        value: 1,
+      },
+    ]);
+    expect(() =>
+      compiler.compileRootGraph([
+        {
+          op: 'constFloat',
+          outputId: 'b',
+          visualBlockId: 'const_b',
+          value: 2,
+        },
+      ]),
+    ).toThrow('single-use');
   });
 
   it('AC3: string exclusion zone forbids interpolation in emitter implementation', () => {

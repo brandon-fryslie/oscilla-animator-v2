@@ -77,6 +77,16 @@ function isMixValueType(type: NagaType): boolean {
   return isFloatScalar(type) || isFloatVector(type);
 }
 
+function expectedComposeComponentCount(type: NagaType): number {
+  if (type.kind === 'Scalar') {
+    return 1;
+  }
+  if (type.kind === 'Vector') {
+    return type.size;
+  }
+  return type.columns * type.rows;
+}
+
 function pushIssue(
   issues: NagaValidationIssue[],
   handle: NagaHandle,
@@ -165,6 +175,16 @@ export function collectNagaValidationIssues(builder: NagaBuilder): readonly Naga
         }
         if (aTypeHandle !== bTypeHandle) {
           pushIssue(issues, handle, visualBlockId, String(expression.fun) + ' requires matching operand types.');
+          continue;
+        }
+        const aType = builder.types.get(aTypeHandle);
+        if (!isValidBinaryOperand(aType)) {
+          pushIssue(
+            issues,
+            handle,
+            visualBlockId,
+            String(expression.fun) + ' does not accept operand type ' + aType.kind + '.',
+          );
         }
       }
       continue;
@@ -218,6 +238,36 @@ export function collectNagaValidationIssues(builder: NagaBuilder): readonly Naga
       if (expressionTypeHandle !== expression.ty) {
         pushIssue(issues, handle, visualBlockId, 'Compose result type must match target compose type.');
       }
+      let targetType: NagaType;
+      try {
+        targetType = builder.types.get(expression.ty);
+      } catch {
+        pushIssue(issues, handle, visualBlockId, 'Compose target type metadata is missing.');
+        continue;
+      }
+      const componentCount = expression.components.length;
+      const fullCount = expectedComposeComponentCount(targetType);
+      if (componentCount !== 1 && componentCount !== fullCount) {
+        if (targetType.kind === 'Scalar') {
+          pushIssue(issues, handle, visualBlockId, 'Compose into scalar type requires exactly one component.');
+          continue;
+        }
+        if (targetType.kind === 'Vector') {
+          pushIssue(
+            issues,
+            handle,
+            visualBlockId,
+            'Compose into vector type requires one scalar splat component or one component per lane.',
+          );
+          continue;
+        }
+        pushIssue(
+          issues,
+          handle,
+          visualBlockId,
+          'Compose into matrix type requires one float splat component or one component per element.',
+        );
+      }
       continue;
     }
 
@@ -236,8 +286,15 @@ export function collectNagaValidationIssues(builder: NagaBuilder): readonly Naga
       if (constant.type !== expressionTypeHandle) {
         pushIssue(issues, handle, visualBlockId, 'Constant result type must match constant type handle.');
       }
-      if (expressionType?.kind === 'Matrix' && !Array.isArray(constant.value)) {
-        pushIssue(issues, handle, visualBlockId, 'Matrix constants must store component arrays.');
+      if (expressionType?.kind === 'Matrix') {
+        if (!Array.isArray(constant.value)) {
+          pushIssue(issues, handle, visualBlockId, 'Matrix constants must store component arrays.');
+          continue;
+        }
+        const expectedComponents = expressionType.columns * expressionType.rows;
+        if (constant.value.length !== expectedComponents) {
+          pushIssue(issues, handle, visualBlockId, 'Matrix constant component count must match matrix dimensions.');
+        }
       }
       continue;
     }
@@ -299,6 +356,22 @@ export function collectNagaValidationIssues(builder: NagaBuilder): readonly Naga
       const condType = builder.types.get(condTypeHandle);
       if (!isBoolScalar(condType)) {
         pushIssue(issues, handle, visualBlockId, 'If statement condition strictly requires a boolean scalar.', true);
+      }
+      for (const acceptStatement of statement.accept) {
+        try {
+          builder.statements.get(acceptStatement);
+        } catch {
+          pushIssue(issues, handle, visualBlockId, 'If accept block contains an invalid nested statement handle.', true);
+          break;
+        }
+      }
+      for (const rejectStatement of statement.reject) {
+        try {
+          builder.statements.get(rejectStatement);
+        } catch {
+          pushIssue(issues, handle, visualBlockId, 'If reject block contains an invalid nested statement handle.', true);
+          break;
+        }
       }
       continue;
     }

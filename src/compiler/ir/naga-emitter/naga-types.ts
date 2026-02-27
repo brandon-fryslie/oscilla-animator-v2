@@ -129,3 +129,9 @@ export class NagaArena<T> {
     return this.items;
   }
 }
+
+export interface NagaArenaReader<T> {
+  get(handle: NagaHandle): T;
+  length(): number;
+  toArray(): readonly T[];
+}
