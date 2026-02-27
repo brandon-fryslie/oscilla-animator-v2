@@ -42,6 +42,7 @@ import {
 import type { ArenaSlotDescriptor } from '../runtime/ArenaValueStore';
 import type { ValueExpr, ValueExprId } from './ir/value-expr';
 import type { Step, PureFn } from './ir/types';
+import { lowerScheduleToNagaModule } from './ir/naga-lowering';
 import { compilationInspector } from '../services/CompilationInspectorService';
 import { computeRenderReachableBlocks } from './reachability';
 import { resolveKernels } from './resolve-kernels';
@@ -506,6 +507,12 @@ function convertLinkedIRToProgram(
     runtimeAddressTable,
     valueExprNodes,
   );
+  const nagaLoweringProgram = lowerScheduleToNagaModule({
+    schedule: scheduleIR,
+    runtimeAddressTable,
+    valueExprs: valueExprNodes,
+    exprToBlock: builder.getExprToBlock(),
+  });
 
   // Build debug index
   const stepToBlock = new Map();
@@ -653,6 +660,7 @@ function convertLinkedIRToProgram(
     arenaTotalFloats: arenaZonePlan.totalFloats,
     drawPrepProgram,
     generatedComputeProgram,
+    nagaLoweringProgram,
   };
 
   return program;
