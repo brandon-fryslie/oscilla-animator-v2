@@ -1,5 +1,7 @@
 export type NagaHandle = number;
 
+export type NagaBlock = readonly NagaHandle[];
+
 export enum NagaScalarKind {
   Sint = 'Sint',
   Uint = 'Uint',
@@ -36,8 +38,6 @@ export enum NagaBinaryOp {
   Subtract = 'Subtract',
   Multiply = 'Multiply',
   Divide = 'Divide',
-  Min = 'Min',
-  Max = 'Max',
 }
 
 export enum NagaMathFunction {
@@ -45,6 +45,8 @@ export enum NagaMathFunction {
   Sin = 'Sin',
   Cos = 'Cos',
   Normalize = 'Normalize',
+  Min = 'Min',
+  Max = 'Max',
 }
 
 export type NagaExpression =
@@ -70,9 +72,10 @@ export type NagaExpression =
     }
   | { readonly type: 'GlobalVariable'; readonly variable: NagaHandle }
   | { readonly type: 'Compose'; readonly ty: NagaHandle; readonly components: readonly NagaHandle[] }
-  | { readonly type: 'ArrayLength'; readonly bufferKey: string }
-  | { readonly type: 'BufferRead'; readonly bufferKey: string; readonly index: NagaHandle }
-  | { readonly type: 'AtomicAdd'; readonly bufferKey: string; readonly index: NagaHandle; readonly value: NagaHandle };
+  | { readonly type: 'ArrayLength'; readonly expr: NagaHandle }
+  | { readonly type: 'Access'; readonly base: NagaHandle; readonly index: NagaHandle }
+  | { readonly type: 'Load'; readonly pointer: NagaHandle }
+  | { readonly type: 'AtomicResult'; readonly kind: 'Add'; readonly pointer: NagaHandle; readonly value: NagaHandle };
 
 export type NagaStatement =
   | {
@@ -81,20 +84,19 @@ export type NagaStatement =
       readonly value: NagaHandle;
     }
   | {
-      readonly type: 'BufferWrite';
-      readonly bufferKey: string;
-      readonly index: NagaHandle;
+      readonly type: 'Store';
+      readonly pointer: NagaHandle;
       readonly value: NagaHandle;
     }
   | {
       readonly type: 'Loop';
-      readonly body: NagaHandle;
+      readonly body: NagaBlock;
     }
   | {
       readonly type: 'If';
       readonly condition: NagaHandle;
-      readonly accept: NagaHandle;
-      readonly reject: NagaHandle;
+      readonly accept: NagaBlock;
+      readonly reject: NagaBlock;
     }
   | {
       readonly type: 'Break';
@@ -102,10 +104,6 @@ export type NagaStatement =
   | {
       readonly type: 'Continue';
     };
-
-export interface NagaBlock {
-  readonly statements: NagaHandle[];
-}
 
 export class NagaArena<T> {
   private readonly items: T[] = [];
