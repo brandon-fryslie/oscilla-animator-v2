@@ -186,7 +186,11 @@ export interface CompiledProgramIR {
    */
   readonly arenaZones?: ArenaZonesIR;
 
-  /** Total number of floats in the arena (sum of all descriptor lengths). */
+  /**
+   * Total number of floats in the arena buffer, as computed by the arena zone
+   * plan (`totalFloats`). Includes header reservation and scalar->field
+   * alignment padding, not just slot descriptor lengths.
+   */
   readonly arenaTotalFloats: number;
 
   /**
