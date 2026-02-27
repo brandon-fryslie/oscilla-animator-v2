@@ -940,7 +940,7 @@ export function resetTopologyCacheCounters(): void {
  * Cache hit: same buffer reference AND same count → reuse (zero allocations).
  * Cache miss: different buffer or different count → recompute and store.
  *
- * @param shapeBuffer - Packed Shape2D buffer (Uint32Array)
+ * @param shapeBuffer - Handle buffer (Float32Array) containing numeric handle values
  * @param instanceCount - Number of instances
  * @returns Map of topology groups keyed by "topologyId:controlPointsSlot"
  */
@@ -967,7 +967,7 @@ export function groupInstancesByTopology(
  * Single-pass O(N) grouping algorithm. Instances with the same topology
  * and control points buffer are grouped together for batched rendering.
  *
- * @param shapeBuffer - Packed Shape2D buffer (Uint32Array)
+ * @param shapeBuffer - Handle buffer (Float32Array) containing numeric handle values
  * @param instanceCount - Number of instances
  * @returns Map of topology groups keyed by "topologyId:controlPointsSlot"
  */
