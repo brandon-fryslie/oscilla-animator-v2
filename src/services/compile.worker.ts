@@ -24,6 +24,9 @@ async function toBackendResult(
           {
             code: 'IRValidationFailed',
             message: 'Compiled program is missing generatedComputeProgram',
+            details: {
+              preNagaWarnings: result.warnings,
+            },
           },
         ],
       };
