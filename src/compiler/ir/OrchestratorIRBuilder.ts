@@ -142,6 +142,7 @@ export interface OrchestratorIRBuilder extends BlockIRBuilder {
   getValueExprs(): readonly ValueExpr[];
 
   getScalarSlots(): ReadonlyMap<number, ValueSlot>;
+  getFieldSlots(): ReadonlyMap<number, ValueSlot>;
   getEventSlots(): ReadonlyMap<ValueExprId, any>;
   getEventSlotCount(): number;
 

@@ -16,7 +16,7 @@ describe('Frontend Pipeline Integration', () => {
   it('unconnected port has defaultSource provenance in snapshot', () => {
     const store = new FrontendResultStore();
 
-    let ellipseId: BlockId;
+    let ellipseId!: BlockId;
     const patch = buildPatch((b) => {
       b.addBlock('InfiniteTimeRoot');
       ellipseId = b.addBlock('Ellipse');
@@ -28,7 +28,7 @@ describe('Frontend Pipeline Integration', () => {
     store.updateFromFrontendResult(result, 1);
 
     // Verify snapshot has correct provenance
-    const rxAddr = `v1:blocks.ellipse_1.inputs.rx`;
+    const rxAddr = `v1:blocks.${String(ellipseId)}.inputs.rx`;
     const provenance = store.getPortProvenance(rxAddr);
     expect(provenance).toBeDefined();
     expect(provenance?.kind).toBe('defaultSource');
@@ -41,7 +41,7 @@ describe('Frontend Pipeline Integration', () => {
   it('connected port has userEdge provenance in snapshot', () => {
     const store = new FrontendResultStore();
 
-    let ellipseId: BlockId;
+    let ellipseId!: BlockId;
     const patch = buildPatch((b) => {
       b.addBlock('InfiniteTimeRoot');
       ellipseId = b.addBlock('Ellipse');
@@ -56,7 +56,7 @@ describe('Frontend Pipeline Integration', () => {
     store.updateFromFrontendResult(result, 1);
 
     // Verify snapshot has userEdge provenance
-    const rxAddr = `v1:blocks.ellipse_1.inputs.rx`;
+    const rxAddr = `v1:blocks.${String(ellipseId)}.inputs.rx`;
     const provenance = store.getPortProvenance(rxAddr);
     expect(provenance).toBeDefined();
     expect(provenance?.kind).toBe('userEdge');
@@ -69,7 +69,7 @@ describe('Frontend Pipeline Integration', () => {
   it('resolves types from frontend for both inputs and outputs', () => {
     const store = new FrontendResultStore();
 
-    let ellipseId: BlockId;
+    let ellipseId!: BlockId;
     const patch = buildPatch((b) => {
       b.addBlock('InfiniteTimeRoot');
       ellipseId = b.addBlock('Ellipse');

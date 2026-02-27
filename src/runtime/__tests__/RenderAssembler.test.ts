@@ -16,7 +16,14 @@ import { instanceId } from '../../core/ids';
 import type { CanonicalType } from '../../core/canonical-types';
 import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR,  CAMERA_PROJECTION, canonicalType } from '../../core/canonical-types';
 import type { RuntimeState } from '../RuntimeState';
-import { createRuntimeState } from '../RuntimeState';
+import {
+  SHAPE_BANK_HEADER_WORDS,
+  SHAPE_BANK_NO_CONTROL_POINT_SLOT,
+  allocShapeBankWords,
+  createRuntimeState,
+  writeShapeBankHandleMetadata,
+  writeShapeBankHeader,
+} from '../RuntimeState';
 import type { ValueSlot, ValueExprId } from '../../types';
 import { registerDynamicTopology } from '../../shapes/registry';
 import type { RenderSpace2D } from '../../shapes/types';
@@ -367,6 +374,216 @@ describe('RenderAssembler', () => {
       expect(op.style.fillColor).toBeInstanceOf(Uint8ClampedArray);
       expect(op.style.fillColor!.length).toBe(colorBuffer.length);
       expect(op.style.fillRule).toBe('nonzero');
+    });
+
+    it('assembles DrawPathInstancesOp from oneHandle shape lookup', () => {
+      const state = createMockState();
+      const positionBuffer = new Float32Array([0.1, 0.2, 0.0, 0.3, 0.4, 0.0]);
+      const colorBuffer = new Uint8ClampedArray([255, 0, 0, 255, 0, 255, 0, 255]);
+      const controlPointsBuffer = new Float32Array([
+        0, 1,
+        0.95, 0.31,
+        0.59, -0.81,
+        -0.59, -0.81,
+        -0.95, 0.31,
+      ]);
+
+      setTestSlotBuffer(state, 1 as ValueSlot, positionBuffer);
+      setTestSlotBuffer(state, 2 as ValueSlot, colorBuffer);
+      setTestSlotBuffer(state, 3 as ValueSlot, controlPointsBuffer);
+
+      const scalarExprToArenaOffset = new Map<number, number>([
+        [0, 10],
+        [4, 14],
+      ]);
+      state.arena[10] = 2.5;
+      const handle = allocShapeBankWords(state.shapeBank!, SHAPE_BANK_HEADER_WORDS);
+      writeShapeBankHeader(state.shapeBank!.data, handle, {
+        indexCount: 5,
+        indexOffset: 0,
+        vertexCount: 5,
+        flags: 1,
+      });
+      writeShapeBankHandleMetadata(state.shapeBank!, handle, {
+        topologyId: TEST_PENTAGON_ID,
+        controlPointSlot: 3,
+      });
+      state.arena[14] = handle;
+
+      const slotToArena = buildSlotToArenaFromTestBuffers(state, [
+        { slot: 1 as ValueSlot, stride: 3 },
+        { slot: 2 as ValueSlot, stride: 4 },
+        { slot: 3 as ValueSlot, stride: 2 },
+      ]);
+
+      const step: StepRender = {
+        kind: 'render',
+        instanceId: instanceId('test-instance'),
+        controlPointsSlot: 1 as ValueSlot,
+        colorSlot: 2 as ValueSlot,
+        scale: { k: 'one', id: 0 as ValueExprId },
+        shape: { k: 'oneHandle', id: 4 as ValueExprId },
+        controlPoints: { k: 'slot', slot: 3 as ValueSlot },
+      };
+
+      const context: AssemblerContext = {
+        scalarExprToArenaAddress: buildScalarExprToArenaAddressFromOffsets(scalarExprToArenaOffset),
+        instances: new Map([['test-instance', createMockInstance(2)]]),
+        state,
+        resolvedCamera: DEFAULT_CAMERA,
+        arena: getTestArena(),
+        slotToArena,
+      };
+
+      const result = assembleDrawPathInstancesOp(step, context);
+      expect(result).toHaveLength(1);
+      const op = result[0];
+      if (op.kind === 'drawPathInstances') {
+        expect(op.geometry.topologyId).toBe(TEST_PENTAGON_ID);
+        expect(op.geometry.points).toEqual(controlPointsBuffer);
+      }
+    });
+
+    it('fails fast on out-of-range oneHandle lookup', () => {
+      const state = createMockState();
+      const positionBuffer = new Float32Array([0.1, 0.2, 0.0, 0.3, 0.4, 0.0]);
+      const colorBuffer = new Uint8ClampedArray([255, 0, 0, 255, 0, 255, 0, 255]);
+      const controlPointsBuffer = new Float32Array([0, 1, 1, 0, 0, -1, -1, 0, 0, 1]);
+      setTestSlotBuffer(state, 1 as ValueSlot, positionBuffer);
+      setTestSlotBuffer(state, 2 as ValueSlot, colorBuffer);
+      setTestSlotBuffer(state, 3 as ValueSlot, controlPointsBuffer);
+
+      const scalarExprToArenaOffset = new Map<number, number>([
+        [0, 10],
+        [4, 14],
+      ]);
+      state.arena[10] = 1;
+      state.arena[14] = state.shapeBank!.data.length + 32;
+
+      const slotToArena = buildSlotToArenaFromTestBuffers(state, [
+        { slot: 1 as ValueSlot, stride: 3 },
+        { slot: 2 as ValueSlot, stride: 4 },
+        { slot: 3 as ValueSlot, stride: 2 },
+      ]);
+
+      const step: StepRender = {
+        kind: 'render',
+        instanceId: instanceId('test-instance'),
+        controlPointsSlot: 1 as ValueSlot,
+        colorSlot: 2 as ValueSlot,
+        scale: { k: 'one', id: 0 as ValueExprId },
+        shape: { k: 'oneHandle', id: 4 as ValueExprId },
+        controlPoints: { k: 'slot', slot: 3 as ValueSlot },
+      };
+
+      const context: AssemblerContext = {
+        scalarExprToArenaAddress: buildScalarExprToArenaAddressFromOffsets(scalarExprToArenaOffset),
+        instances: new Map([['test-instance', createMockInstance(2)]]),
+        state,
+        resolvedCamera: DEFAULT_CAMERA,
+        arena: getTestArena(),
+        slotToArena,
+      };
+
+      expect(() => assembleDrawPathInstancesOp(step, context)).toThrow(/shape handle out of range/i);
+    });
+
+    it('fails fast on non-integer oneHandle lookup', () => {
+      const state = createMockState();
+      const positionBuffer = new Float32Array([0.1, 0.2, 0.0, 0.3, 0.4, 0.0]);
+      const colorBuffer = new Uint8ClampedArray([255, 0, 0, 255, 0, 255, 0, 255]);
+      const controlPointsBuffer = new Float32Array([0, 1, 1, 0, 0, -1, -1, 0, 0, 1]);
+      setTestSlotBuffer(state, 1 as ValueSlot, positionBuffer);
+      setTestSlotBuffer(state, 2 as ValueSlot, colorBuffer);
+      setTestSlotBuffer(state, 3 as ValueSlot, controlPointsBuffer);
+
+      const scalarExprToArenaOffset = new Map<number, number>([
+        [0, 10],
+        [4, 14],
+      ]);
+      state.arena[10] = 1;
+      state.arena[14] = 12.5;
+
+      const slotToArena = buildSlotToArenaFromTestBuffers(state, [
+        { slot: 1 as ValueSlot, stride: 3 },
+        { slot: 2 as ValueSlot, stride: 4 },
+        { slot: 3 as ValueSlot, stride: 2 },
+      ]);
+
+      const step: StepRender = {
+        kind: 'render',
+        instanceId: instanceId('test-instance'),
+        controlPointsSlot: 1 as ValueSlot,
+        colorSlot: 2 as ValueSlot,
+        scale: { k: 'one', id: 0 as ValueExprId },
+        shape: { k: 'oneHandle', id: 4 as ValueExprId },
+        controlPoints: { k: 'slot', slot: 3 as ValueSlot },
+      };
+
+      const context: AssemblerContext = {
+        scalarExprToArenaAddress: buildScalarExprToArenaAddressFromOffsets(scalarExprToArenaOffset),
+        instances: new Map([['test-instance', createMockInstance(2)]]),
+        state,
+        resolvedCamera: DEFAULT_CAMERA,
+        arena: getTestArena(),
+        slotToArena,
+      };
+
+      expect(() => assembleDrawPathInstancesOp(step, context)).toThrow(/must be an integer/i);
+    });
+
+    it('fails fast when per-instance path handles omit control-point slot metadata', () => {
+      const state = createMockState();
+      const positionBuffer = new Float32Array([0.1, 0.2, 0.0, 0.3, 0.4, 0.0]);
+      const colorBuffer = new Uint8ClampedArray([255, 0, 0, 255, 0, 255, 0, 255]);
+      const shapeHandleBuffer = new Float32Array(2);
+
+      setTestSlotBuffer(state, 1 as ValueSlot, positionBuffer);
+      setTestSlotBuffer(state, 2 as ValueSlot, colorBuffer);
+      setTestSlotBuffer(state, 3 as ValueSlot, shapeHandleBuffer);
+
+      const handle = allocShapeBankWords(state.shapeBank!, SHAPE_BANK_HEADER_WORDS);
+      writeShapeBankHeader(state.shapeBank!.data, handle, {
+        indexCount: 5,
+        indexOffset: 0,
+        vertexCount: 5,
+        flags: 1,
+      });
+      writeShapeBankHandleMetadata(state.shapeBank!, handle, {
+        topologyId: TEST_PENTAGON_ID,
+        controlPointSlot: SHAPE_BANK_NO_CONTROL_POINT_SLOT,
+      });
+      shapeHandleBuffer[0] = handle;
+      shapeHandleBuffer[1] = handle;
+
+      const scalarExprToArenaOffset = new Map<number, number>([[0, 10]]);
+      state.arena[10] = 1.0;
+
+      const slotToArena = buildSlotToArenaFromTestBuffers(state, [
+        { slot: 1 as ValueSlot, stride: 3 },
+        { slot: 2 as ValueSlot, stride: 4 },
+        { slot: 3 as ValueSlot, stride: 1 },
+      ]);
+
+      const step: StepRender = {
+        kind: 'render',
+        instanceId: instanceId('test-instance'),
+        controlPointsSlot: 1 as ValueSlot,
+        colorSlot: 2 as ValueSlot,
+        scale: { k: 'one', id: 0 as ValueExprId },
+        shape: { k: 'slot', slot: 3 as ValueSlot },
+      };
+
+      const context: AssemblerContext = {
+        scalarExprToArenaAddress: buildScalarExprToArenaAddressFromOffsets(scalarExprToArenaOffset),
+        instances: new Map([['test-instance', createMockInstance(2)]]),
+        state,
+        resolvedCamera: DEFAULT_CAMERA,
+        arena: getTestArena(),
+        slotToArena,
+      };
+
+      expect(() => assembleDrawPathInstancesOp(step, context)).toThrow(/missing control-point slot metadata/i);
     });
 
     it('throws when control points missing for path topology', () => {

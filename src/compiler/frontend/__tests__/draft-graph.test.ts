@@ -130,4 +130,28 @@ describe('buildDraftGraph', () => {
       expect(obl.deps).toEqual([]);
     }
   });
+
+  it('diagnoses and drops duplicate endpoint edges', () => {
+    const base = buildPatch((b) => {
+      const c = b.addBlock('Const');
+      const add = b.addBlock('Add');
+      b.wire(c, 'out', add, 'a');
+    });
+    const [edge] = base.edges;
+    const patchWithDup = {
+      blocks: base.blocks,
+      edges: [
+        ...base.edges,
+        {
+          ...edge,
+          id: 'dup-edge-id',
+        },
+      ],
+    };
+
+    const { graph: g, diagnostics } = buildDraftGraph(patchWithDup);
+    const duplicate = diagnostics.find((d) => d.kind === 'DuplicateEdge');
+    expect(duplicate).toBeDefined();
+    expect(g.edges).toHaveLength(1);
+  });
 });

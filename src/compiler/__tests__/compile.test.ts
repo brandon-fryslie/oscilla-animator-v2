@@ -114,11 +114,17 @@ describe('compile', () => {
       const patch = buildPatch((b) => {
         b.addBlock('InfiniteTimeRoot');
         // Three-stage architecture: Array creates instances, GridLayout applies layout
+        const ellipse = b.addBlock('Ellipse');
+        b.setPortDefault(ellipse, 'rx', 0.03);
+        b.setPortDefault(ellipse, 'ry', 0.03);
         const array = b.addBlock('Array');
         b.setPortDefault(array, 'count', 16);
         const gridLayout = b.addBlock('GridLayoutUV');
         b.setPortDefault(gridLayout, 'rows', 4);
         b.setPortDefault(gridLayout, 'cols', 4);
+        // [LAW:one-source-of-truth] Array element payload must be explicit so
+        // type graph does not infer conflicting int/float anchors.
+        b.wire(ellipse, 'shape', array, 'element');
         // Wire Array.elements -> GridLayout.elements
         b.wire(array, 'elements', gridLayout, 'elements');
       });

@@ -164,6 +164,7 @@ function collectRuntimeLiveExprIds(program: CompiledProgramIR): Set<number> {
       case 'render':
         // One-cardinality render params are direct expression sinks.
         if (step.scale?.k === 'one') pushExpr(step.scale.id as number);
+        if (step.shape.k === 'oneHandle') pushExpr(step.shape.id as number);
         if (step.shape.k === 'one') {
           for (const exprId of step.shape.paramExprs) {
             pushExpr(exprId as number);
