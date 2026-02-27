@@ -128,6 +128,7 @@ class WebGPUComputeRuntime {
   private readonly stateBuffers: readonly [any, any];
   private readonly bindGroups: readonly [any, any];
   private readonly paramsStaging = new Float32Array(WEBGPU_RENDER_CONTRACT.computeParamsFloats);
+  private activeStateIndex = 0;
 
   private constructor(private readonly device: any, pipeline: any) {
     this.pipeline = pipeline;
@@ -207,19 +208,12 @@ class WebGPUComputeRuntime {
     return new WebGPUComputeRuntime(device, pipeline);
   }
 
-  step(
-    commandEncoder: any,
-    activeCount: number,
-    dtSeconds: number,
-    inputHeader: Uint8Array,
-    frameIndex: number,
-  ): void {
+  step(commandEncoder: any, activeCount: number, dtSeconds: number, inputHeader: Uint8Array): void {
     const clampedCount = Math.max(0, Math.min(SIMULATION_CAPACITY, activeCount));
     const clampedDt = Math.max(0, Math.min(0.1, dtSeconds));
-    const readStateIndex = frameIndex & 1;
 
     this.device.queue.writeBuffer(
-      this.stateBuffers[readStateIndex],
+      this.stateBuffers[this.activeStateIndex],
       0,
       inputHeader,
       0,
@@ -236,10 +230,11 @@ class WebGPUComputeRuntime {
     // Variability is encoded in activeCount/dt values, not whether the pass runs.
     const pass = commandEncoder.beginComputePass();
     pass.setPipeline(this.pipeline);
-    pass.setBindGroup(WEBGPU_RENDER_CONTRACT.computeBindGroup, this.bindGroups[readStateIndex]);
+    pass.setBindGroup(WEBGPU_RENDER_CONTRACT.computeBindGroup, this.bindGroups[this.activeStateIndex]);
     const workgroups = Math.max(1, Math.ceil(clampedCount / SIMULATION_WORKGROUP_SIZE));
     pass.dispatchWorkgroups(workgroups);
     pass.end();
+    this.activeStateIndex = this.activeStateIndex ^ 1;
   }
 
   dispose(): void {
@@ -414,9 +409,7 @@ export class WebGPURenderer {
   private msaaColorTexture: any | null = null;
 
   private lastFrameTimeMs: number | null = null;
-  // [LAW:one-source-of-truth] Renderer-owned frameIndex is the canonical swap
-  // parity source for compute read/write role selection.
-  private frameIndex = 0;
+  private frameCount = 0;
   private fatalError: Error | null = null;
   private lastConfiguredSize = { width: -1, height: -1 };
 
@@ -541,13 +534,12 @@ export class WebGPURenderer {
     this.lastFrameTimeMs = input.timeMs;
 
     const commandEncoder = this.device.createCommandEncoder();
-    const frameIndex = this.frameIndex;
     const simulationInstanceCount = this.countSimulationInstances(drawPlan);
     this.assertSimulationCapacity(simulationInstanceCount);
     const frameInputHeader = this.inputService.marshal({
       timeSeconds: input.timeMs / 1000,
       deltaTimeSeconds: dtSeconds,
-      frameCount: frameIndex,
+      frameCount: this.frameCount,
       width: input.width,
       height: input.height,
       mouseX: input.inputMouseX ?? 0,
@@ -558,7 +550,8 @@ export class WebGPURenderer {
       audioHigh: input.inputAudioHigh ?? 0,
       gaugeActive: input.inputGaugeActive ?? 0,
     });
-    this.computeRuntime.step(commandEncoder, simulationInstanceCount, dtSeconds, frameInputHeader, frameIndex);
+    this.computeRuntime.step(commandEncoder, simulationInstanceCount, dtSeconds, frameInputHeader);
+    this.frameCount += 1;
     const totalInstances = this.countPlannedInstances(drawPlan);
     this.ensureInstanceCapacity(totalInstances);
     const packedInstances = this.packDrawPlanInstances(drawPlan);
@@ -614,7 +607,6 @@ export class WebGPURenderer {
 
     pass.end();
     this.device.queue.submit([commandEncoder.finish()]);
-    this.frameIndex += 1;
   }
 
   dispose(): void {
