@@ -84,9 +84,15 @@ If any one of the above fails, the spec is not complete.
 4. Missing tests means incomplete. If a spec requirement has no effective test coverage, add tests before declaring the spec complete.
 5. Cleanup deletions are mandatory. Leaving dead code/seams behind means the spec is incomplete.
 6. No meta-process artifacts. Do not add trackers, ledgers, checklists, or process documents unless a spec explicitly requires them.
+7. Descriptions must be correct and reproducible (ticket + PR):
+   - Include ticket ID, scope, changed files, and validation results.
+   - Use literal markdown for identifiers/commands (wrap with backticks).
+   - Never paste accidental shell-expanded output into PR body.
+8. When creating/editing PR descriptions from CLI, use `--body-file` (or an equivalent quoted heredoc source), not inline shell strings with backticks.
 
 // [LAW:behavior-not-structure] Progress is measured by implemented behavior and enforced tests, not process artifacts.
 // [LAW:verifiable-goals] Spec completion requires deterministic, repository-verifiable proof.
+// [LAW:single-enforcer] Description formatting/safety is enforced once here for all WebGPU spec PRs.
 
 ## Mechanical Gating Rule
 
