@@ -627,8 +627,6 @@ export function applyContinuity(
         if (outputBuffer !== baseBuffer) {
           outputBuffer.set(baseBuffer);
         }
-        // Defensive cleanup in case stale buffers survived a prior completion.
-        targetState.crossfadeOldBuffer = undefined;
         break;
       }
 
@@ -647,11 +645,8 @@ export function applyContinuity(
         if (outputBuffer !== baseBuffer) {
           outputBuffer.set(baseBuffer);
         }
-        // Clear crossfade state when complete
-        if (w >= 1.0) {
-          targetState.crossfadeStartMs = undefined;
-          targetState.crossfadeOldBuffer = undefined;
-        }
+        // Clear active-state marker when complete; retain old buffer for reuse.
+        targetState.crossfadeStartMs = undefined;
       } else {
         // Blend old and new: X_out[i] = lerp(X_old_eff[i], X_new_base[i], w)
         const oldBuffer = targetState.crossfadeOldBuffer;
