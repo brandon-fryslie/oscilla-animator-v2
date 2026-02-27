@@ -801,6 +801,12 @@ export interface ProgramState {
 
   /** Float32 arena for unified value store (cardinality unification migration) */
   arena: Float32Array;
+  /** Frame-read arena bank (source for next prepare step). */
+  arenaRead: Float32Array;
+  /** Frame-write arena bank (execution target for current frame). */
+  arenaWrite: Float32Array;
+  /** Active read-bank parity bit (0/1), toggled at end-of-frame swap. */
+  arenaParity: 0 | 1;
 
   /** Persistent state segment within arena (W1/W14 canonical ownership). */
   stateArena: {
@@ -872,6 +878,12 @@ export interface RuntimeState {
 
   /** Float32 arena for unified value store (cardinality unification migration) */
   arena: Float32Array;
+  /** Frame-read arena bank (source for next prepare step). */
+  arenaRead?: Float32Array;
+  /** Frame-write arena bank (execution target for current frame). */
+  arenaWrite?: Float32Array;
+  /** Active read-bank parity bit (0/1), toggled at end-of-frame swap. */
+  arenaParity?: 0 | 1;
 
   /** Persistent state segment within arena (W1/W14 canonical ownership). */
   stateArena: {
@@ -983,13 +995,18 @@ export function createProgramState(
   const stateBankLength = stateSlotCount;
   const readOffset = stateArenaOffset;
   const writeOffset = stateArenaOffset + stateBankLength;
-  const arena = createArena(arenaTotalFloats + stateBankLength * 2);
-  const stateReadView = arena.subarray(readOffset, readOffset + stateBankLength);
-  const stateWriteView = arena.subarray(writeOffset, writeOffset + stateBankLength);
+  const arenaRead = createArena(arenaTotalFloats);
+  const arenaWrite = createArena(arenaTotalFloats);
+  const stateBanks = createArena(stateBankLength * 2);
+  const stateReadView = stateBanks.subarray(0, stateBankLength);
+  const stateWriteView = stateBanks.subarray(stateBankLength, stateBankLength * 2);
   return {
     values: createValueStore(shape2dSlotCount),
     lastRenderFrame: null,
-    arena,
+    arena: arenaRead,
+    arenaRead,
+    arenaWrite,
+    arenaParity: 0,
     // [LAW:one-source-of-truth] Persistent state ownership is anchored to one
     // arena segment contract with explicit read/write bank metadata.
     stateArena: {
@@ -1084,6 +1101,9 @@ export function createRuntimeStateFromSession(
     values: program.values,
     lastRenderFrame: program.lastRenderFrame,
     arena: program.arena,
+    arenaRead: program.arenaRead,
+    arenaWrite: program.arenaWrite,
+    arenaParity: program.arenaParity,
     stateArena: program.stateArena,
     cache: program.cache,
     frameSemantics: program.frameSemantics,
@@ -1111,6 +1131,60 @@ export function resetFrameVolatileShapeBank(state: RuntimeState): void {
   if (!state.shapeBank) return;
   // [LAW:single-enforcer] Frame reset delegates to one allocator boundary.
   resetShapeBankFrameAllocator(state.shapeBank);
+}
+
+/**
+ * Prepare arena write bank for frame execution.
+ *
+ * Copies current read bank into write bank so unchanged slots preserve prior
+ * frame values while step execution writes deterministic updates.
+ */
+export function prepareArenaWriteBank(state: RuntimeState): void {
+  const read = state.arenaRead ?? state.arena;
+  const write = state.arenaWrite ?? state.arena;
+  if (read.length !== write.length) {
+    throw new Error(
+      'prepareArenaWriteBank: read/write bank length mismatch (read=' +
+        read.length +
+        ', write=' +
+        write.length +
+        ')',
+    );
+  }
+  write.set(read);
+  state.arenaRead = read;
+  state.arenaWrite = write;
+  // [LAW:dataflow-not-control-flow] Runtime execution reads/writes one prepared
+  // execution bank per frame; parity selection is data-owned by RuntimeState.
+  state.arena = write;
+}
+
+/**
+ * Commit frame arena writes by swapping read/write bank ownership.
+ */
+export function commitArenaWriteBank(state: RuntimeState): void {
+  const read = state.arenaRead ?? state.arena;
+  const write = state.arenaWrite ?? state.arena;
+  if (read.length !== write.length) {
+    throw new Error(
+      'commitArenaWriteBank: read/write bank length mismatch (read=' +
+        read.length +
+        ', write=' +
+        write.length +
+        ')',
+    );
+  }
+  if (read === write) {
+    state.arena = read;
+    state.arenaRead = read;
+    state.arenaWrite = write;
+    state.arenaParity = 0;
+    return;
+  }
+  state.arenaRead = write;
+  state.arenaWrite = read;
+  state.arena = state.arenaRead;
+  state.arenaParity = state.arenaParity === 1 ? 0 : 1;
 }
 
 /**

@@ -41,6 +41,8 @@ export {
   writeShapeBankHandleMetadata,
   resetShapeBankFrameAllocator,
   resetFrameVolatileShapeBank,
+  prepareArenaWriteBank,
+  commitArenaWriteBank,
   prepareStateWriteBank,
   commitStateWriteBank,
   advanceFrame,

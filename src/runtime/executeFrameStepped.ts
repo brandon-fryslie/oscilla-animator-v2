@@ -24,6 +24,8 @@ import { createMaterializeScratch } from './MaterializeScratch';
 import { resolveTime } from './timeResolution';
 import {
   resetFrameVolatileShapeBank,
+  prepareArenaWriteBank,
+  commitArenaWriteBank,
   prepareStateWriteBank,
   commitStateWriteBank,
 } from './RuntimeState';
@@ -241,6 +243,7 @@ export function* executeFrameStepped(
   // --- PRE-FRAME SETUP ---
   state.cache.frameId++;
   resetFrameVolatileShapeBank(state);
+  prepareArenaWriteBank(state);
   state.externalChannels.commit();
   const time = resolveTime(tAbsMs, timeModel, state.timeState);
   state.time = time;
@@ -529,6 +532,7 @@ export function* executeFrameStepped(
     }
   }
   commitStateWriteBank(state);
+  commitArenaWriteBank(state);
 
   // --- POST-FRAME: Finalize continuity ---
   finalizeContinuityFrame(state);

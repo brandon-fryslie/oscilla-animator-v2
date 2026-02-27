@@ -18,6 +18,8 @@ import {
   beginRuntimeFrameSemantics,
   enterRuntimeFrameSegment,
   resetFrameVolatileShapeBank,
+  prepareArenaWriteBank,
+  commitArenaWriteBank,
   prepareStateWriteBank,
   commitStateWriteBank,
   type RuntimeFrameSegment,
@@ -262,6 +264,7 @@ export function executeFrame(
   state.cache.frameId++;
   beginRuntimeFrameSemantics(state);
   resetFrameVolatileShapeBank(state);
+  prepareArenaWriteBank(state);
 
   // 1.5. Commit external channel writes (spec: External Input System Section 3.1)
   enterRuntimeFrameSegment(state, 'preframe-external-input');
@@ -652,6 +655,7 @@ export function executeFrame(
     }
   }
   commitStateWriteBank(state);
+  commitArenaWriteBank(state);
 
   // Reset scratch allocator after all materialized buffers have been consumed.
   MATERIALIZE_SCRATCH.reset();

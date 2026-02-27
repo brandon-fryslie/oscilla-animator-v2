@@ -131,6 +131,30 @@ describe('executeFrameStepped', () => {
     expect(table.slotToArena.size).toBeGreaterThan(0);
   });
 
+  it('swaps full arena banks at frame boundary for stepped execution', () => {
+    const program = simpleProgram;
+    const state = createStateForProgram(program);
+    const arena = getTestArena();
+
+    const initialRead = state.arenaRead;
+    const initialWrite = state.arenaWrite;
+    expect(initialRead).toBeDefined();
+    expect(initialWrite).toBeDefined();
+    expect(initialRead).not.toBe(initialWrite);
+    expect(state.arenaParity).toBe(0);
+
+    const gen = executeFrameStepped(program, state, arena, 100);
+    let result = gen.next();
+    while (!result.done) {
+      result = gen.next();
+    }
+
+    expect(state.arenaParity).toBe(1);
+    expect(state.arenaRead).toBe(initialWrite);
+    expect(state.arenaWrite).toBe(initialRead);
+    expect(state.arena).toBe(state.arenaRead);
+  });
+
   it('produces correct phase sequence: pre-frame -> phase1... -> phase-boundary -> phase2... -> post-frame', () => {
     const program = simpleProgram;
     const state = createStateForProgram(program);
