@@ -245,6 +245,55 @@ describe('deriveArenaZonePlan', () => {
     expect(fieldZone?.alignmentFloats).toBe(1);
     expect(fieldZone?.start).toBeGreaterThanOrEqual(scalarZone?.end ?? 0);
   });
+
+  it('normalizes non-finite and non-integer alignment inputs', () => {
+    const ref = instanceRef('grid', 'inst_nonfinite');
+    const instances = makeInstances([{ id: 'inst_nonfinite', count: 4, maxCount: 4 }]);
+    const plan = deriveArenaZonePlan(
+      [
+        {
+          slot: 1 as ValueSlot,
+          type: canonicalScalar(FLOAT),
+          packingPreference: 'aos',
+        },
+        {
+          slot: 2 as ValueSlot,
+          type: canonicalMany(VEC3, undefined, ref),
+          packingPreference: 'soa',
+        },
+      ],
+      instances,
+      {
+        headerFloats: Number.NaN,
+        scalarToFieldAlignFloats: Number.POSITIVE_INFINITY,
+      },
+    );
+
+    const ir = plan.toIR();
+    expect(ir.alignment).toEqual({
+      headerFloats: DEFAULT_ARENA_ALIGNMENT_POLICY.headerFloats,
+      scalarToFieldAlignFloats: DEFAULT_ARENA_ALIGNMENT_POLICY.scalarToFieldAlignFloats,
+    });
+
+    const fractionalPlan = deriveArenaZonePlan(
+      [
+        {
+          slot: 3 as ValueSlot,
+          type: canonicalScalar(FLOAT),
+          packingPreference: 'aos',
+        },
+      ],
+      instances,
+      {
+        headerFloats: 7.9,
+        scalarToFieldAlignFloats: 3.2,
+      },
+    );
+    expect(fractionalPlan.toIR().alignment).toEqual({
+      headerFloats: 7,
+      scalarToFieldAlignFloats: 3,
+    });
+  });
 });
 
 // ---------------------------------------------------------------------------
