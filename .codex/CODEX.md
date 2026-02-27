@@ -38,3 +38,10 @@ If the requested ticket is blocked, update dependencies/plan first, then execute
 - After pushing fixes, continue polling every 1 minute until Copilot is clear and checks are green.
 - Merge the PR only when there are no outstanding actionable comments and required checks pass.
 - If any actionable comments required code changes, do not auto-merge after updates; stop and wait for explicit user approval to merge.
+
+## Default Delivery Flow
+
+// [LAW:single-enforcer] File-delivery ownership is enforced at one boundary: immediate VCS delivery.
+- If tracked repository files are edited, immediately execute delivery without waiting for user prompting.
+- Delivery means: commit on the active work branch, push, and create/update the PR.
+- Only skip commit/push/PR delivery when the user explicitly says not to commit yet.
