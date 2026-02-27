@@ -326,13 +326,14 @@ describe('WebGPURenderer', () => {
     ).toThrow('width must be a finite non-negative number');
   });
 
-  it('ping-pongs compute bind groups across frames', async () => {
+  it('selects compute bind groups from renderer frame parity', async () => {
     const env = createFakeWebGPUEnvironment();
     setNavigatorGpu(env.gpu);
     const renderer = await createWebGPURenderer(env.canvas);
 
     renderer.render(makeRenderInput([], { timeMs: 0 }));
     renderer.render(makeRenderInput([], { timeMs: 16 }));
+    renderer.render(makeRenderInput([], { timeMs: 32 }));
 
     const computeBindGroupDescriptors = env.device.createBindGroup.mock.calls
       .map(([descriptor]: [unknown]) => descriptor as { entries: Array<{ binding: number }> })
@@ -341,18 +342,39 @@ describe('WebGPURenderer', () => {
 
     const firstFrameBindGroup = env.computePass.setBindGroup.mock.calls[0]?.[1];
     const secondFrameBindGroup = env.computePass.setBindGroup.mock.calls[1]?.[1];
+    const thirdFrameBindGroup = env.computePass.setBindGroup.mock.calls[2]?.[1];
     expect(firstFrameBindGroup).toBe(computeBindGroupDescriptors[0]);
     expect(secondFrameBindGroup).toBe(computeBindGroupDescriptors[1]);
+    expect(thirdFrameBindGroup).toBe(computeBindGroupDescriptors[0]);
     expect(firstFrameBindGroup).not.toBe(secondFrameBindGroup);
   });
 
-  it('marshals frame input values into the compute read-buffer header before dispatch', async () => {
+  it('marshals frame input values and frameCount into the compute read-buffer header before dispatch', async () => {
     const env = createFakeWebGPUEnvironment();
     setNavigatorGpu(env.gpu);
     const renderer = await createWebGPURenderer(env.canvas);
+    const capturedInputHeaderWrites: Array<{ buffer: unknown; bytes: Uint8Array }> = [];
+    env.device.queue.writeBuffer.mockImplementation((buffer: unknown, _offset: number, data: unknown, _dataOffset: number, size?: number) => {
+      if (data instanceof Uint8Array && size === WEBGPU_RENDER_CONTRACT.inputHeaderBytes) {
+        capturedInputHeaderWrites.push({
+          buffer,
+          bytes: data.slice(),
+        });
+      }
+    });
 
     renderer.render(makeRenderInput([], {
       timeMs: 1000,
+      inputMouseX: 0.75,
+      inputMouseY: 0.25,
+      inputMouseButtons: 5,
+      inputAudioLow: 0.2,
+      inputAudioMid: 0.4,
+      inputAudioHigh: 0.8,
+      inputGaugeActive: 1,
+    }));
+    renderer.render(makeRenderInput([], {
+      timeMs: 1016,
       inputMouseX: 0.75,
       inputMouseY: 0.25,
       inputMouseButtons: 5,
@@ -366,29 +388,45 @@ describe('WebGPURenderer', () => {
       .map(([descriptor]: [unknown]) => descriptor as { entries: Array<{ resource: { buffer: unknown } }> })
       .filter((descriptor) => descriptor.entries.length === 3);
     const firstFrameReadBuffer = computeBindGroupDescriptors[0]?.entries[0]?.resource.buffer;
+    const secondFrameReadBuffer = computeBindGroupDescriptors[1]?.entries[0]?.resource.buffer;
     expect(firstFrameReadBuffer).toBeDefined();
+    expect(secondFrameReadBuffer).toBeDefined();
 
-    const inputHeaderWrite = env.device.queue.writeBuffer.mock.calls.find((args: unknown[]) =>
-      args[0] === firstFrameReadBuffer &&
-      args[2] instanceof Uint8Array &&
-      args[4] === WEBGPU_RENDER_CONTRACT.inputHeaderBytes
+    expect(capturedInputHeaderWrites).toHaveLength(2);
+
+    const firstInputHeaderWrite = capturedInputHeaderWrites.find((write) => write.buffer === firstFrameReadBuffer);
+    const secondInputHeaderWrite = capturedInputHeaderWrites.find((write) => write.buffer === secondFrameReadBuffer);
+    expect(firstInputHeaderWrite).toBeDefined();
+    expect(secondInputHeaderWrite).toBeDefined();
+
+    const firstFrameHeaderBytes = firstInputHeaderWrite!.bytes;
+    const firstFrameView = new DataView(
+      firstFrameHeaderBytes.buffer,
+      firstFrameHeaderBytes.byteOffset,
+      firstFrameHeaderBytes.byteLength,
     );
-    expect(inputHeaderWrite).toBeDefined();
+    expect(firstFrameView.getFloat32(WEBGPU_RENDER_CONTRACT.inputHeaderTimeOffsetBytes, true)).toBeCloseTo(1);
+    expect(firstFrameView.getFloat32(WEBGPU_RENDER_CONTRACT.inputHeaderDeltaTimeOffsetBytes, true)).toBeCloseTo(0);
+    expect(firstFrameView.getFloat32(WEBGPU_RENDER_CONTRACT.inputHeaderFrameCountOffsetBytes, true)).toBeCloseTo(0);
+    expect(firstFrameView.getFloat32(WEBGPU_RENDER_CONTRACT.inputHeaderResolutionXOffsetBytes, true)).toBeCloseTo(128);
+    expect(firstFrameView.getFloat32(WEBGPU_RENDER_CONTRACT.inputHeaderResolutionYOffsetBytes, true)).toBeCloseTo(96);
+    expect(firstFrameView.getFloat32(WEBGPU_RENDER_CONTRACT.inputHeaderMouseXOffsetBytes, true)).toBeCloseTo(2 / 3);
+    expect(firstFrameView.getFloat32(WEBGPU_RENDER_CONTRACT.inputHeaderMouseYOffsetBytes, true)).toBeCloseTo(0.5);
+    expect(firstFrameView.getUint32(WEBGPU_RENDER_CONTRACT.inputHeaderMouseButtonsOffsetBytes, true)).toBe(5);
+    expect(firstFrameView.getFloat32(WEBGPU_RENDER_CONTRACT.inputHeaderAudioLowOffsetBytes, true)).toBeCloseTo(0.2);
+    expect(firstFrameView.getFloat32(WEBGPU_RENDER_CONTRACT.inputHeaderAudioMidOffsetBytes, true)).toBeCloseTo(0.4);
+    expect(firstFrameView.getFloat32(WEBGPU_RENDER_CONTRACT.inputHeaderAudioHighOffsetBytes, true)).toBeCloseTo(0.8);
+    expect(firstFrameView.getFloat32(WEBGPU_RENDER_CONTRACT.inputHeaderGaugeActiveOffsetBytes, true)).toBeCloseTo(1);
 
-    const inputHeaderBytes = inputHeaderWrite?.[2] as Uint8Array;
-    const view = new DataView(inputHeaderBytes.buffer, inputHeaderBytes.byteOffset, inputHeaderBytes.byteLength);
-    expect(view.getFloat32(WEBGPU_RENDER_CONTRACT.inputHeaderTimeOffsetBytes, true)).toBeCloseTo(1);
-    expect(view.getFloat32(WEBGPU_RENDER_CONTRACT.inputHeaderDeltaTimeOffsetBytes, true)).toBeCloseTo(0);
-    expect(view.getFloat32(WEBGPU_RENDER_CONTRACT.inputHeaderFrameCountOffsetBytes, true)).toBeCloseTo(0);
-    expect(view.getFloat32(WEBGPU_RENDER_CONTRACT.inputHeaderResolutionXOffsetBytes, true)).toBeCloseTo(128);
-    expect(view.getFloat32(WEBGPU_RENDER_CONTRACT.inputHeaderResolutionYOffsetBytes, true)).toBeCloseTo(96);
-    expect(view.getFloat32(WEBGPU_RENDER_CONTRACT.inputHeaderMouseXOffsetBytes, true)).toBeCloseTo(2 / 3);
-    expect(view.getFloat32(WEBGPU_RENDER_CONTRACT.inputHeaderMouseYOffsetBytes, true)).toBeCloseTo(0.5);
-    expect(view.getUint32(WEBGPU_RENDER_CONTRACT.inputHeaderMouseButtonsOffsetBytes, true)).toBe(5);
-    expect(view.getFloat32(WEBGPU_RENDER_CONTRACT.inputHeaderAudioLowOffsetBytes, true)).toBeCloseTo(0.2);
-    expect(view.getFloat32(WEBGPU_RENDER_CONTRACT.inputHeaderAudioMidOffsetBytes, true)).toBeCloseTo(0.4);
-    expect(view.getFloat32(WEBGPU_RENDER_CONTRACT.inputHeaderAudioHighOffsetBytes, true)).toBeCloseTo(0.8);
-    expect(view.getFloat32(WEBGPU_RENDER_CONTRACT.inputHeaderGaugeActiveOffsetBytes, true)).toBeCloseTo(1);
+    const secondFrameHeaderBytes = secondInputHeaderWrite!.bytes;
+    const secondFrameView = new DataView(
+      secondFrameHeaderBytes.buffer,
+      secondFrameHeaderBytes.byteOffset,
+      secondFrameHeaderBytes.byteLength,
+    );
+    expect(secondFrameView.getFloat32(WEBGPU_RENDER_CONTRACT.inputHeaderTimeOffsetBytes, true)).toBeCloseTo(1.016);
+    expect(secondFrameView.getFloat32(WEBGPU_RENDER_CONTRACT.inputHeaderDeltaTimeOffsetBytes, true)).toBeCloseTo(0.016);
+    expect(secondFrameView.getFloat32(WEBGPU_RENDER_CONTRACT.inputHeaderFrameCountOffsetBytes, true)).toBeCloseTo(1);
   });
 
   it('allocates distinct compute src/dst buffers to prevent aliasing hazards', async () => {
