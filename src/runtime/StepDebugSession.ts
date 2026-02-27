@@ -491,7 +491,9 @@ export class StepDebugSession {
       }
       return out;
     }
-    const total = Math.min(maxComponents, buffer.byteLength / Float32Array.BYTES_PER_ELEMENT);
+    // [LAW:one-source-of-truth] byteLength is the authoritative byte budget for
+    // decoding sampled floats; truncate partial trailing bytes deterministically.
+    const total = Math.min(maxComponents, Math.floor(buffer.byteLength / Float32Array.BYTES_PER_ELEMENT));
     if (total <= 0) {
       return new Float32Array(0);
     }
