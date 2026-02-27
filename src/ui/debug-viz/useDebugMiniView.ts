@@ -13,6 +13,7 @@ import type { EdgeMetadata } from '../../services/mapDebugEdges';
 import { requireInst } from '../../core/canonical-types';
 import type { DebugTargetKey, HistoryView, BufferHistoryView, FieldHistoryView } from './types';
 import type { TrackedEntry } from './HistoryService';
+import type { SpyReadbackMeta } from './ValueRenderer';
 
 /** Poll interval for value updates (ms). */
 const POLL_INTERVAL_MS = 250;
@@ -37,6 +38,8 @@ export interface MiniViewData {
   fieldInstanceHistory: HistoryView | null;
   /** Buffer history for raster heatmap (null if not a field or not tracked) */
   fieldBufferHistory: BufferHistoryView | null;
+  /** Latest async readback freshness metadata for scalar slots */
+  spyReadbackMeta: SpyReadbackMeta | null;
 }
 
 type MiniViewTarget =
@@ -75,6 +78,7 @@ function useDebugTargetMiniView(
 ): MiniViewData | null {
   const [value, setValue] = useState<EdgeValueResult | null>(null);
   const [tick, setTick] = useState(0);
+  const [nowMs, setNowMs] = useState(() => performance.now());
 
   const edgeId = target?.kind === 'edge' ? target.edgeId : null;
   const blockId = target?.kind === 'port' ? target.blockId : null;
@@ -121,6 +125,7 @@ function useDebugTargetMiniView(
         ? debugService.tryGetEdgeValue(edgeId)
         : debugService.tryGetPortValue(blockId!, portName!);
       setValue(result ?? null);
+      setNowMs(performance.now());
       setTick(t => t + 1); // Force Sparkline re-render
     };
 
@@ -143,6 +148,12 @@ function useDebugTargetMiniView(
   const fieldBufferHistory = cardinality === 'many'
     ? debugService.getFieldBufferHistory(meta.slotId) ?? null
     : null;
+  const slotSpyReadback = cardinality === 'one'
+    ? debugService.getSlotSpyReadbackMeta(meta.slotId)
+    : undefined;
+  const spyReadbackMeta = slotSpyReadback
+    ? { capturedAtMs: slotSpyReadback.capturedAtMs, nowMs }
+    : null;
 
   return {
     key,
@@ -153,6 +164,7 @@ function useDebugTargetMiniView(
     fieldHistory,
     fieldInstanceHistory,
     fieldBufferHistory,
+    spyReadbackMeta,
   };
 }
 
