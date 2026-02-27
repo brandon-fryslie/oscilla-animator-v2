@@ -359,6 +359,57 @@ describe('StepDebugSession', () => {
     });
   });
 
+  describe('spy readback cadence', () => {
+    it('captures low-rate spy samples and drains them without mutating session mode', () => {
+      const state = createStateForProgram(program);
+      const arena = getTestArena();
+      const session = new StepDebugSession(program, state, arena, {
+        sampleHz: 15,
+        maxSlotsPerSample: 4,
+        maxBufferComponents: 8,
+      });
+
+      session.startFrame(100);
+      session.finishFrame();
+      expect(session.mode).toBe('completed');
+
+      const samples = session.drainSpySamples();
+      expect(samples.length).toBeGreaterThan(0);
+      expect(samples[0]?.slots.size).toBeGreaterThan(0);
+      expect(session.mode).toBe('completed');
+      expect(session.drainSpySamples()).toEqual([]);
+    });
+
+    it('honors tracked slot selection for spy sample payloads', () => {
+      const state = createStateForProgram(program);
+      const arena = getTestArena();
+      const probe = new StepDebugSession(program, state, arena, { sampleHz: 15 });
+      probe.startFrame(100);
+      probe.finishFrame();
+      const probeSamples = probe.drainSpySamples();
+      const selectedSlot = Array.from(probeSamples[0]?.slots.keys() ?? [])[0];
+      expect(selectedSlot).toBeDefined();
+
+      const filteredState = createStateForProgram(program);
+      const filteredArena = getTestArena();
+      const session = new StepDebugSession(program, filteredState, filteredArena, {
+        sampleHz: 15,
+        trackedSlots: new Set([selectedSlot!]),
+      });
+
+      session.startFrame(100);
+      session.finishFrame();
+      const samples = session.drainSpySamples();
+
+      expect(samples.length).toBeGreaterThan(0);
+      for (const sample of samples) {
+        for (const slot of sample.slots.keys()) {
+          expect(slot).toBe(selectedSlot!);
+        }
+      }
+    });
+  });
+
   describe('dispose', () => {
     it('safely finishes frame on dispose', () => {
       const state = createStateForProgram(program);
