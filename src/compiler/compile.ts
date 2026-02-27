@@ -34,7 +34,11 @@ import type { ScheduleIR } from './backend/schedule-program';
 import type { AcyclicOrLegalGraph } from './ir/patches';
 import type { EventHub } from '../events/EventHub';
 import { requireInst, requireManyInstance } from '../core/canonical-types';
-import { deriveStorageLayout, deriveArenaDescriptor } from './ir/storage-class';
+import {
+  deriveStorageLayout,
+  deriveArenaZonePlan,
+  DEFAULT_ARENA_ALIGNMENT_POLICY,
+} from './ir/storage-class';
 import type { ArenaSlotDescriptor } from '../runtime/ArenaValueStore';
 import type { ValueExpr, ValueExprId } from './ir/value-expr';
 import type { Step, PureFn } from './ir/types';
@@ -421,10 +425,14 @@ function convertLinkedIRToProgram(
   // No legacy label normalization is allowed in runtime contract emission.
   const slotTypes = builder.getSlotLayoutInputs();
   const slotMeta: SlotMetaEntry[] = [];
-  const runtimeSlots: RuntimeSlotEntry[] = [];
+  const runtimeSlotEntries: Array<Omit<RuntimeSlotEntry, 'arena'>> = [];
   const instances = builder.getInstances();
-  const arenaLayout: ArenaSlotDescriptor[] = [];
-  let arenaOffset = 0;
+  const arenaSlotPlanInputs: Array<{
+    readonly slot: ValueSlot;
+    readonly type: RuntimeSlotEntry['type'];
+    readonly overrideStride?: number;
+    readonly packingPreference: 'soa' | 'aos';
+  }> = [];
 
   const storageOffsets: Record<RuntimeSlotEntry['storage'], number> = {
     f32: 0,
@@ -450,27 +458,39 @@ function convertLinkedIRToProgram(
 
     slotMeta.push({ slot, storage, offset, stride, type });
 
-    // Arena descriptor: flat Float32Array layout for all numeric slots.
+    // Arena descriptor inputs: canonical zone plan decides final offset.
     const card = requireInst(type.extent.cardinality, 'cardinality');
     const useRenderSoaPacking = card.kind === 'many' && stride > 1;
-    const desc = deriveArenaDescriptor(
+    arenaSlotPlanInputs.push({
+      slot,
       type,
-      arenaOffset,
-      instances,
-      slotInfo.stride,
-      useRenderSoaPacking ? 'soa' : 'aos',
-    );
-    arenaLayout.push(desc);
-    runtimeSlots.push({
+      overrideStride: slotInfo.stride,
+      packingPreference: useRenderSoaPacking ? 'soa' : 'aos',
+    });
+    runtimeSlotEntries.push({
       slot,
       storage,
       offset,
       stride,
       type,
-      arena: desc,
     });
-    arenaOffset += desc.length;
   }
+
+  // [LAW:one-source-of-truth] Arena zones + aligned offsets are compiled once.
+  const arenaZonePlan = deriveArenaZonePlan(
+    arenaSlotPlanInputs,
+    instances,
+    DEFAULT_ARENA_ALIGNMENT_POLICY,
+  );
+  const arenaLayout: ArenaSlotDescriptor[] = new Array(slotCount);
+  const runtimeSlots: RuntimeSlotEntry[] = runtimeSlotEntries.map((entry) => {
+    const arena = arenaZonePlan.slotDescriptor(entry.slot);
+    arenaLayout[entry.slot as number] = arena;
+    return {
+      ...entry,
+      arena,
+    };
+  });
 
   // Build output specs from canonical output contract only.
   const outputs: OutputSpecIR[] = [{ kind: 'renderFrame' }];
@@ -629,7 +649,8 @@ function convertLinkedIRToProgram(
       ? unlinkedIR.instanceCountProvenance
       : undefined,
     arenaLayout,
-    arenaTotalFloats: arenaOffset,
+    arenaZones: arenaZonePlan.toIR(),
+    arenaTotalFloats: arenaZonePlan.totalFloats,
     drawPrepProgram,
     generatedComputeProgram,
   };

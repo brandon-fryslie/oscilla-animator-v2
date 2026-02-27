@@ -6,7 +6,11 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { deriveArenaDescriptor } from '../ir/storage-class';
+import {
+  deriveArenaDescriptor,
+  deriveArenaZonePlan,
+  DEFAULT_ARENA_ALIGNMENT_POLICY,
+} from '../ir/storage-class';
 import {
   canonicalScalar,
   canonicalMany,
@@ -22,6 +26,7 @@ import { buildPatch } from '../../graph';
 import { compile } from '../compile';
 import { createRuntimeState } from '../../runtime';
 import type { ScheduleIR } from '../backend/schedule-program';
+import type { ValueSlot } from '../../types';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -150,6 +155,57 @@ describe('deriveArenaDescriptor', () => {
   });
 });
 
+describe('deriveArenaZonePlan', () => {
+  it('emits header/scalar/field/state/gauge zones with deterministic ordering', () => {
+    const ref = instanceRef('grid', 'inst_zone');
+    const instances = makeInstances([{ id: 'inst_zone', count: 8, maxCount: 8 }]);
+    const plan = deriveArenaZonePlan(
+      [
+        {
+          slot: 1 as ValueSlot,
+          type: canonicalScalar(FLOAT),
+          packingPreference: 'aos',
+        },
+        {
+          slot: 2 as ValueSlot,
+          type: canonicalMany(VEC3, undefined, ref),
+          packingPreference: 'soa',
+        },
+      ],
+      instances,
+      DEFAULT_ARENA_ALIGNMENT_POLICY,
+    );
+    const zones = plan.toIR().zones;
+    expect(zones.map((z) => z.kind)).toEqual(['header', 'scalar', 'field', 'state', 'gauge']);
+    expect(zones[0].length).toBe(DEFAULT_ARENA_ALIGNMENT_POLICY.headerFloats);
+  });
+
+  it('aligns field zone start to scalar->field alignment boundary', () => {
+    const ref = instanceRef('grid', 'inst_align');
+    const instances = makeInstances([{ id: 'inst_align', count: 5, maxCount: 5 }]);
+    const plan = deriveArenaZonePlan(
+      [
+        {
+          slot: 1 as ValueSlot,
+          type: canonicalScalar(VEC3), // length 3 to force non-aligned scalar end
+          packingPreference: 'aos',
+        },
+        {
+          slot: 2 as ValueSlot,
+          type: canonicalMany(COLOR, undefined, ref),
+          packingPreference: 'soa',
+        },
+      ],
+      instances,
+      DEFAULT_ARENA_ALIGNMENT_POLICY,
+    );
+    const zones = plan.toIR().zones;
+    const fieldZone = zones.find((z) => z.kind === 'field');
+    expect(fieldZone).toBeDefined();
+    expect(fieldZone!.start % DEFAULT_ARENA_ALIGNMENT_POLICY.scalarToFieldAlignFloats).toBe(0);
+  });
+});
+
 // ---------------------------------------------------------------------------
 // Integration test — compile a patch and verify arena layout
 // ---------------------------------------------------------------------------
@@ -201,6 +257,7 @@ describe('arenaLayout integration', () => {
 
     expect(normalizeDescriptors(first.program.arenaLayout)).toEqual(normalizeDescriptors(second.program.arenaLayout));
     expect(first.program.arenaTotalFloats).toBe(second.program.arenaTotalFloats);
+    expect(first.program.arenaZones).toEqual(second.program.arenaZones);
   });
 
   it('keeps continuity-owned multi-component render slots in SoA descriptors', () => {
@@ -279,14 +336,34 @@ describe('arenaLayout integration', () => {
       expect(regions[i].start).toBeGreaterThanOrEqual(regions[i - 1].end);
     }
 
-    // arenaTotalFloats equals sum of all non-sentinel descriptor lengths
+    // arenaTotalFloats includes zone padding (header + alignment), so it must
+    // be >= payload descriptor sum and match emitted zone metadata total.
     const totalFromLayout = program.arenaLayout
       .filter((d) => d.offset >= 0)
       .reduce((sum, d) => sum + d.length, 0);
-    expect(program.arenaTotalFloats).toBe(totalFromLayout);
+    expect(program.arenaTotalFloats).toBeGreaterThanOrEqual(totalFromLayout);
+    const arenaZones = program.arenaZones;
+    expect(arenaZones).toBeDefined();
+    if (!arenaZones) {
+      throw new Error('Compiled program missing arenaZones metadata');
+    }
+    expect(program.arenaTotalFloats).toBe(arenaZones.totalFloats);
 
     // arenaTotalFloats > 0 (a compiled program with blocks must have slots)
     expect(program.arenaTotalFloats).toBeGreaterThan(0);
+
+    // Zone contract is explicit and ordered.
+    expect(arenaZones.zones.map((z) => z.kind)).toEqual([
+      'header',
+      'scalar',
+      'field',
+      'state',
+      'gauge',
+    ]);
+    const fieldZone = arenaZones.zones.find((z) => z.kind === 'field');
+    if (fieldZone && fieldZone.length > 0) {
+      expect(fieldZone.start % arenaZones.alignment.scalarToFieldAlignFloats).toBe(0);
+    }
   });
 
   it('runtime state arena length matches compiled arenaTotalFloats', () => {
