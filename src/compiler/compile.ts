@@ -691,67 +691,35 @@ function buildDrawPrepProgram(scheduleIR: ScheduleIR): DrawPrepProgramIR {
   const wgslLines: string[] = [
     '// Auto-generated draw-prep WGSL (v3 stage-3).',
     'struct DrawPrepParams {',
-    '  // v0 = [indexCount, instanceCount, firstIndex, baseVertexBits]',
+    '  // v0 = [recordCount, maxRecords, _, _]',
     '  v0: vec4<u32>,',
-    '  // v1 = [firstInstance, recordIndex, maxRecords, _]',
-    '  v1: vec4<u32>,',
     '};',
     '',
     '@group(0) @binding(0) var<storage, read_write> indirectArgs: array<u32>;',
-    '@group(0) @binding(1) var<uniform> drawPrepParams: DrawPrepParams;',
+    '@group(0) @binding(1) var<storage, read> drawPrepRecords: array<u32>;',
+    '@group(0) @binding(2) var<uniform> drawPrepParams: DrawPrepParams;',
     '',
-    'const INDIRECT_ARGS_WORDS: u32 = 5u;',
+    'const DRAW_PREP_RECORD_WORDS: u32 = 5u;',
     '',
   ];
-  // [LAW:one-source-of-truth] Draw-prep sink constants are emitted from one
-  // canonical compiler sink table used by runtime and shader generation.
-  for (const sink of sinks) {
-    const instanceCountLiteral =
-      sink.instanceCountMode === 'static'
-        ? `${sink.staticInstanceCount ?? 0}u`
-        : '/* dynamic instance count */ 0u';
-    const isStaticLiteral = sink.instanceCountMode === 'static' ? '1u' : '0u';
-    wgslLines.push(`const DRAW_SINK_${sink.sinkIndex}_RECORD: u32 = ${sink.indirectRecordIndex}u;`);
-    wgslLines.push(`const DRAW_SINK_${sink.sinkIndex}_IS_STATIC: u32 = ${isStaticLiteral};`);
-    wgslLines.push(`const DRAW_SINK_${sink.sinkIndex}_INSTANCE_COUNT: u32 = ${instanceCountLiteral};`);
-  }
+  // [LAW:one-source-of-truth] Draw-prep writes consume one canonical manifest
+  // record schema so compiler/runtime share a single indirect-args contract.
   wgslLines.push(
-    '',
-    'fn resolveInstanceCount(recordIndex: u32, fallbackCount: u32) -> u32 {',
-    '  var count = fallbackCount;',
-    '  switch (recordIndex) {',
-  );
-  for (const sink of sinks) {
-    wgslLines.push(
-      `    case DRAW_SINK_${sink.sinkIndex}_RECORD: {`,
-      `      count = select(count, DRAW_SINK_${sink.sinkIndex}_INSTANCE_COUNT, DRAW_SINK_${sink.sinkIndex}_IS_STATIC == 1u);`,
-      '    }',
-    );
-  }
-  wgslLines.push(
-    '    default: {}',
-    '  }',
-    '  return count;',
-    '}',
-    '',
-    '@compute @workgroup_size(1)',
+    '@compute @workgroup_size(64)',
     'fn cs_main(@builtin(global_invocation_id) gid: vec3<u32>) {',
-    '  if (gid.x > 0u) {',
+    '  let recordIndex = gid.x;',
+    '  let recordCount = drawPrepParams.v0.x;',
+    '  let maxRecords = drawPrepParams.v0.y;',
+    '  if (recordIndex >= recordCount || recordIndex >= maxRecords) {',
     '    return;',
     '  }',
     '',
-    '  let recordIndex = drawPrepParams.v1.y;',
-    '  let maxRecords = drawPrepParams.v1.z;',
-    '  if (recordIndex >= maxRecords) {',
-    '    return;',
-    '  }',
-    '',
-    '  let base = recordIndex * INDIRECT_ARGS_WORDS;',
-    '  indirectArgs[base + 0u] = drawPrepParams.v0.x; // indexCount',
-    '  indirectArgs[base + 1u] = resolveInstanceCount(recordIndex, drawPrepParams.v0.y); // instanceCount',
-    '  indirectArgs[base + 2u] = drawPrepParams.v0.z; // firstIndex',
-    '  indirectArgs[base + 3u] = drawPrepParams.v0.w; // baseVertex bits',
-    '  indirectArgs[base + 4u] = drawPrepParams.v1.x; // firstInstance',
+    '  let base = recordIndex * DRAW_PREP_RECORD_WORDS;',
+    '  indirectArgs[base + 0u] = drawPrepRecords[base + 0u]; // indexCount',
+    '  indirectArgs[base + 1u] = drawPrepRecords[base + 1u]; // instanceCount',
+    '  indirectArgs[base + 2u] = drawPrepRecords[base + 2u]; // firstIndex',
+    '  indirectArgs[base + 3u] = drawPrepRecords[base + 3u]; // baseVertex bits',
+    '  indirectArgs[base + 4u] = drawPrepRecords[base + 4u]; // firstInstance',
     '}',
   );
   return { sinks, wgsl: wgslLines.join('\n') };

@@ -103,12 +103,13 @@ function createFakeWebGPUEnvironment() {
 function collectDrawPrepBindGroupCalls(createBindGroupMock: { mock: { calls: unknown[][] } }): unknown[][] {
   return createBindGroupMock.mock.calls.filter((call: unknown[]) => {
     const descriptor = call[0] as { entries?: Array<{ binding: number }> };
-    if (!descriptor.entries || descriptor.entries.length !== 2) {
+    if (!descriptor.entries || descriptor.entries.length !== 3) {
       return false;
     }
     return (
       descriptor.entries[0]?.binding === WEBGPU_RENDER_CONTRACT.drawPrepIndirectBinding &&
-      descriptor.entries[1]?.binding === WEBGPU_RENDER_CONTRACT.drawPrepParamsBinding
+      descriptor.entries[1]?.binding === WEBGPU_RENDER_CONTRACT.drawPrepRecordBinding &&
+      descriptor.entries[2]?.binding === WEBGPU_RENDER_CONTRACT.drawPrepParamsBinding
     );
   });
 }
@@ -335,12 +336,21 @@ describe('WebGPURenderer', () => {
     renderer.render(makeRenderInput([], { timeMs: 16 }));
 
     const computeBindGroupDescriptors = env.device.createBindGroup.mock.calls
-      .map(([descriptor]: [unknown]) => descriptor as { entries: Array<{ binding: number }> })
-      .filter((descriptor) => descriptor.entries.length === 3);
+      .map(([descriptor]: [unknown]) => descriptor as {
+        entries: Array<{ binding: number; resource: { buffer: { descriptor?: { size?: number } } } }>;
+      })
+      .filter((descriptor) =>
+        descriptor.entries.length === 3 &&
+        descriptor.entries[0]?.resource?.buffer?.descriptor?.size ===
+          WEBGPU_RENDER_CONTRACT.inputHeaderBytes + WEBGPU_RENDER_CONTRACT.simulationCapacity * 16
+      );
     expect(computeBindGroupDescriptors.length).toBe(2);
 
-    const firstFrameBindGroup = env.computePass.setBindGroup.mock.calls[0]?.[1];
-    const secondFrameBindGroup = env.computePass.setBindGroup.mock.calls[1]?.[1];
+    const simulationBindGroups = env.computePass.setBindGroup.mock.calls
+      .map((args: unknown[]) => args[1])
+      .filter((bindGroup: unknown) => computeBindGroupDescriptors.includes(bindGroup as never));
+    const firstFrameBindGroup = simulationBindGroups[0];
+    const secondFrameBindGroup = simulationBindGroups[1];
     expect(firstFrameBindGroup).toBe(computeBindGroupDescriptors[0]);
     expect(secondFrameBindGroup).toBe(computeBindGroupDescriptors[1]);
     expect(firstFrameBindGroup).not.toBe(secondFrameBindGroup);
@@ -363,8 +373,14 @@ describe('WebGPURenderer', () => {
     }));
 
     const computeBindGroupDescriptors = env.device.createBindGroup.mock.calls
-      .map(([descriptor]: [unknown]) => descriptor as { entries: Array<{ resource: { buffer: unknown } }> })
-      .filter((descriptor) => descriptor.entries.length === 3);
+      .map(([descriptor]: [unknown]) => descriptor as {
+        entries: Array<{ resource: { buffer: { descriptor?: { size?: number } } } }>;
+      })
+      .filter((descriptor) =>
+        descriptor.entries.length === 3 &&
+        descriptor.entries[0]?.resource?.buffer?.descriptor?.size ===
+          WEBGPU_RENDER_CONTRACT.inputHeaderBytes + WEBGPU_RENDER_CONTRACT.simulationCapacity * 16
+      );
     const firstFrameReadBuffer = computeBindGroupDescriptors[0]?.entries[0]?.resource.buffer;
     expect(firstFrameReadBuffer).toBeDefined();
 
@@ -397,8 +413,14 @@ describe('WebGPURenderer', () => {
     await createWebGPURenderer(env.canvas);
 
     const computeBindGroupDescriptors = env.device.createBindGroup.mock.calls
-      .map(([descriptor]: [unknown]) => descriptor as { entries: Array<{ resource: { buffer: unknown } }> })
-      .filter((descriptor) => descriptor.entries.length === 3);
+      .map(([descriptor]: [unknown]) => descriptor as {
+        entries: Array<{ resource: { buffer: { descriptor?: { size?: number } } } }>;
+      })
+      .filter((descriptor) =>
+        descriptor.entries.length === 3 &&
+        descriptor.entries[0]?.resource?.buffer?.descriptor?.size ===
+          WEBGPU_RENDER_CONTRACT.inputHeaderBytes + WEBGPU_RENDER_CONTRACT.simulationCapacity * 16
+      );
     expect(computeBindGroupDescriptors.length).toBe(2);
 
     for (const descriptor of computeBindGroupDescriptors) {
@@ -416,8 +438,10 @@ describe('WebGPURenderer', () => {
 
     expect(env.renderPass.drawIndexedIndirect).toHaveBeenCalledTimes(1);
     const cpuIndirectArgsWrite = env.device.queue.writeBuffer.mock.calls.find((args: unknown[]) => {
+      const targetBuffer = args[0] as { descriptor?: { usage?: number } };
       const data = args[2];
-      return data instanceof Uint32Array && data.length === 5;
+      const writesIndirectBuffer = ((targetBuffer?.descriptor?.usage ?? 0) & 0x0100) !== 0;
+      return writesIndirectBuffer && data instanceof Uint32Array;
     });
     expect(cpuIndirectArgsWrite).toBeUndefined();
     expect(env.device.createCommandEncoder).toHaveBeenCalledTimes(1);
@@ -598,8 +622,22 @@ describe('WebGPURenderer', () => {
       }),
     ]));
 
-    // First compute dispatch is simulation pass (draw-prep dispatches are fixed-size 1).
+    // First compute dispatch is simulation pass (draw-prep dispatch follows as second dispatch).
     expect(env.computePass.dispatchWorkgroups.mock.calls[0]?.[0]).toBe(2);
+  });
+
+  it('dispatches draw-prep once per frame with ceil(renderRecordCount/64) workgroups', async () => {
+    const env = createFakeWebGPUEnvironment();
+    setNavigatorGpu(env.gpu);
+    const renderer = await createWebGPURenderer(env.canvas);
+    const topologyId = makeSimpleTopology('webgpu-draw-prep-workgroups-topology');
+    const opCount = 65;
+    const ops = Array.from({ length: opCount }, () => makeDrawOp(topologyId));
+
+    renderer.render(makeRenderInput(ops));
+
+    expect(env.computePass.dispatchWorkgroups).toHaveBeenCalledTimes(2);
+    expect(env.computePass.dispatchWorkgroups.mock.calls[1]?.[0]).toBe(2);
   });
 
   it('fails fast when simulation instance count exceeds contract capacity', async () => {
@@ -675,9 +713,17 @@ describe('WebGPURenderer', () => {
     makeSimpleTopology('webgpu-revision-gate-a');
     const renderer = await createWebGPURenderer(env.canvas);
 
+    const topologyBuffers = env.device.createBindGroup.mock.calls
+      .map(([descriptor]: [unknown]) => descriptor as { entries?: Array<{ binding: number; resource: { buffer: unknown } }> })
+      .filter((descriptor) => descriptor.entries?.length === 1)
+      .filter((descriptor) => descriptor.entries?.[0]?.binding === WEBGPU_RENDER_CONTRACT.topologyBankBinding)
+      .map((descriptor) => descriptor.entries?.[0]?.resource.buffer);
+
     env.device.queue.writeBuffer.mockClear();
     renderer.render(makeRenderInput([], { timeMs: 0 }));
-    const unchangedRevisionWrites = env.device.queue.writeBuffer.mock.calls.filter((args: unknown[]) => args[2] instanceof Uint32Array);
+    const unchangedRevisionWrites = env.device.queue.writeBuffer.mock.calls.filter((args: unknown[]) =>
+      topologyBuffers.includes(args[0]) && args[2] instanceof Uint32Array
+    );
     expect(unchangedRevisionWrites).toHaveLength(0);
 
     const revisionBefore = getTopologyRegistryRevision();
@@ -693,7 +739,14 @@ describe('WebGPURenderer', () => {
 
     env.device.queue.writeBuffer.mockClear();
     renderer.render(makeRenderInput([], { timeMs: 16 }));
-    const changedRevisionWrites = env.device.queue.writeBuffer.mock.calls.filter((args: unknown[]) => args[2] instanceof Uint32Array);
+    const topologyBuffersAfter = env.device.createBindGroup.mock.calls
+      .map(([descriptor]: [unknown]) => descriptor as { entries?: Array<{ binding: number; resource: { buffer: unknown } }> })
+      .filter((descriptor) => descriptor.entries?.length === 1)
+      .filter((descriptor) => descriptor.entries?.[0]?.binding === WEBGPU_RENDER_CONTRACT.topologyBankBinding)
+      .map((descriptor) => descriptor.entries?.[0]?.resource.buffer);
+    const changedRevisionWrites = env.device.queue.writeBuffer.mock.calls.filter((args: unknown[]) =>
+      topologyBuffersAfter.includes(args[0]) && args[2] instanceof Uint32Array
+    );
     expect(changedRevisionWrites.length).toBeGreaterThan(0);
   });
 
@@ -752,19 +805,20 @@ describe('WebGPURenderer', () => {
     const customDrawPrepWgsl = [
       'struct DrawPrepParams {',
       '  v0: vec4<u32>;',
-      '  v1: vec4<u32>;',
       '};',
       '@group(0) @binding(0) var<storage, read_write> indirectArgs: array<u32>;',
-      '@group(0) @binding(1) var<uniform> drawPrepParams: DrawPrepParams;',
-      '@compute @workgroup_size(1)',
+      '@group(0) @binding(1) var<storage, read> drawPrepRecords: array<u32>;',
+      '@group(0) @binding(2) var<uniform> drawPrepParams: DrawPrepParams;',
+      '@compute @workgroup_size(64)',
       'fn cs_main(@builtin(global_invocation_id) gid: vec3<u32>) {',
-      '  if (gid.x > 0u) { return; }',
-      '  let base = drawPrepParams.v1.y * 5u;',
-      '  indirectArgs[base + 0u] = drawPrepParams.v0.x;',
-      '  indirectArgs[base + 1u] = drawPrepParams.v0.y;',
-      '  indirectArgs[base + 2u] = drawPrepParams.v0.z;',
-      '  indirectArgs[base + 3u] = drawPrepParams.v0.w;',
-      '  indirectArgs[base + 4u] = drawPrepParams.v1.x;',
+      '  let recordIndex = gid.x;',
+      '  if (recordIndex >= drawPrepParams.v0.x) { return; }',
+      '  let base = recordIndex * 5u;',
+      '  indirectArgs[base + 0u] = drawPrepRecords[base + 0u];',
+      '  indirectArgs[base + 1u] = drawPrepRecords[base + 1u];',
+      '  indirectArgs[base + 2u] = drawPrepRecords[base + 2u];',
+      '  indirectArgs[base + 3u] = drawPrepRecords[base + 3u];',
+      '  indirectArgs[base + 4u] = drawPrepRecords[base + 4u];',
       '}',
     ].join('\n');
 
