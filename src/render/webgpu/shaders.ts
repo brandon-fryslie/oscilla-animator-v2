@@ -57,6 +57,20 @@ struct InstanceData {
 @group(1) @binding(0) var<storage, read> instances: array<InstanceData>;
 @group(2) @binding(0) var<storage, read> topologyBank: array<u32>;
 
+fn getTopologyHeaderWord(recordIndex: u32, word: u32) -> u32 {
+  return topologyBank[
+    recordIndex * ${WEBGPU_RENDER_CONTRACT.topologyBankWordsPerRecord}u + word
+  ];
+}
+
+fn getTopologyFlags(recordIndex: u32) -> u32 {
+  return getTopologyHeaderWord(recordIndex, ${WEBGPU_RENDER_CONTRACT.topologyBankFlagsWord}u);
+}
+
+fn getTopologyIndexStart(recordIndex: u32) -> u32 {
+  return getTopologyHeaderWord(recordIndex, 2u);
+}
+
 struct VertexInput {
   @location(0) localPos: vec2<f32>,
 };
@@ -70,10 +84,8 @@ struct VertexOutput {
 fn vs_main(input: VertexInput, @builtin(instance_index) instanceIndex: u32) -> VertexOutput {
   let inst = instances[instanceIndex];
   let topologyRecordIndex = u32(max(inst.transform1.z, 0.0));
-  let topologyFlags = topologyBank[
-    topologyRecordIndex * ${WEBGPU_RENDER_CONTRACT.topologyBankWordsPerRecord}u +
-    ${WEBGPU_RENDER_CONTRACT.topologyBankFlagsWord}u
-  ];
+  let topologyFlags = getTopologyFlags(topologyRecordIndex);
+  let topologyIndexStart = getTopologyIndexStart(topologyRecordIndex);
   let closedMask = select(0.0, 1.0, (topologyFlags & ${WEBGPU_RENDER_CONTRACT.topologyBankFlagClosed}u) != 0u);
   let viewportPx = scene.v0.xy;
   let panPx = scene.v0.zw;
@@ -103,7 +115,7 @@ fn vs_main(input: VertexInput, @builtin(instance_index) instanceIndex: u32) -> V
 
   var output: VertexOutput;
   output.position = vec4<f32>(ndc, 0.0, 1.0);
-  output.color = inst.color * (1.0 + closedMask * 0.0);
+  output.color = inst.color * (1.0 + closedMask * 0.0 + f32(topologyIndexStart & 0u));
   return output;
 }
 

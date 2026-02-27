@@ -267,6 +267,32 @@ describe('WebGPURenderer', () => {
     expect(hasU32TopologyWrite).toBe(true);
   });
 
+  it('uploads topology-bank revisions via dirty word ranges', async () => {
+    const env = createFakeWebGPUEnvironment();
+    setNavigatorGpu(env.gpu);
+    makeSimpleTopology('webgpu-topology-dirty-range-a');
+    const renderer = await createWebGPURenderer(env.canvas);
+    renderer.render(makeRenderInput([]));
+
+    env.device.queue.writeBuffer.mockClear();
+    registerDynamicTopology({
+      params: [],
+      verbs: [PathVerb.MOVE, PathVerb.LINE, PathVerb.LINE, PathVerb.LINE, PathVerb.LINE, PathVerb.CLOSE],
+      pointsPerVerb: [1, 1, 1, 1, 1, 0],
+      totalControlPoints: 5,
+      closed: true,
+    }, 'webgpu-topology-dirty-range-b');
+    renderer.render(makeRenderInput([]));
+
+    const dirtyWrites = env.device.queue.writeBuffer.mock.calls.filter((args: unknown[]) => (
+      args[2] instanceof Uint32Array &&
+      typeof args[3] === 'number' &&
+      typeof args[4] === 'number'
+    ));
+    expect(dirtyWrites.length).toBeGreaterThan(0);
+    expect(dirtyWrites.some((args: unknown[]) => (args[3] as number) > 0)).toBe(true);
+  });
+
   it('binds topology bank as an explicit render bind group', async () => {
     const env = createFakeWebGPUEnvironment();
     setNavigatorGpu(env.gpu);

@@ -392,6 +392,9 @@ export class WebGPURenderer {
   private topologyBankCapacityWords = 1;
   private topologyBankRevision = -1;
   private topologyBankIndexById = new Map<number, number>();
+  private topologyBankShadow = new Uint32Array(1);
+  private topologyBankWordCount = 0;
+  private zeroWordScratch = new Uint32Array(0);
 
   private instanceBuffer: any;
   private instanceBindGroup: any;
@@ -657,29 +660,99 @@ export class WebGPURenderer {
 
     const exported = exportTopologyBankU32();
     this.topologyBankIndexById = new Map(exported.indexById);
-    const requiredWords = Math.max(1, exported.data.length);
-    if (requiredWords > this.topologyBankCapacityWords) {
-      const nextBuffer = this.device.createBuffer({
-        size: requiredWords * Uint32Array.BYTES_PER_ELEMENT,
-        usage: GPU_BUFFER_USAGE.STORAGE | GPU_BUFFER_USAGE.COPY_DST,
-      });
-      this.topologyBankBuffer.destroy();
-      this.topologyBankBuffer = nextBuffer;
-      this.topologyBankBindGroup = this.device.createBindGroup({
-        layout: this.pathPipeline.getBindGroupLayout(WEBGPU_RENDER_CONTRACT.topologyBankBindGroup),
-        entries: [
-          {
-            binding: WEBGPU_RENDER_CONTRACT.topologyBankBinding,
-            resource: { buffer: this.topologyBankBuffer },
-          },
-        ],
-      });
-      this.topologyBankCapacityWords = requiredWords;
-    }
-    if (exported.data.length > 0) {
-      this.device.queue.writeBuffer(this.topologyBankBuffer, 0, exported.data);
-    }
+    this.ensureTopologyBankCapacity(Math.max(1, exported.data.length));
+    this.uploadTopologyBankDirtyRanges(exported.data);
     this.topologyBankRevision = revision;
+  }
+
+  private ensureTopologyBankCapacity(requiredWords: number): void {
+    if (requiredWords <= this.topologyBankCapacityWords) {
+      return;
+    }
+    let nextCapacity = this.topologyBankCapacityWords;
+    while (nextCapacity < requiredWords) {
+      nextCapacity *= 2;
+    }
+    const nextBuffer = this.device.createBuffer({
+      size: nextCapacity * Uint32Array.BYTES_PER_ELEMENT,
+      usage: GPU_BUFFER_USAGE.STORAGE | GPU_BUFFER_USAGE.COPY_DST,
+    });
+    this.topologyBankBuffer.destroy();
+    this.topologyBankBuffer = nextBuffer;
+    this.topologyBankBindGroup = this.device.createBindGroup({
+      layout: this.pathPipeline.getBindGroupLayout(WEBGPU_RENDER_CONTRACT.topologyBankBindGroup),
+      entries: [
+        {
+          binding: WEBGPU_RENDER_CONTRACT.topologyBankBinding,
+          resource: { buffer: this.topologyBankBuffer },
+        },
+      ],
+    });
+    this.topologyBankCapacityWords = nextCapacity;
+    this.topologyBankShadow = new Uint32Array(nextCapacity);
+    this.topologyBankWordCount = 0;
+  }
+
+  private ensureZeroWordScratch(length: number): Uint32Array {
+    if (length <= this.zeroWordScratch.length) {
+      return this.zeroWordScratch;
+    }
+    this.zeroWordScratch = new Uint32Array(length);
+    return this.zeroWordScratch;
+  }
+
+  private uploadTopologyBankDirtyRanges(nextData: Uint32Array): void {
+    const previousWords = this.topologyBankWordCount;
+    const nextWords = nextData.length;
+    const compareWords = Math.max(previousWords, nextWords);
+    const dirtyRanges: Array<{ startWord: number; lengthWords: number }> = [];
+    let rangeStart = -1;
+    for (let word = 0; word < compareWords; word++) {
+      const prevWord = word < previousWords ? this.topologyBankShadow[word]! : 0;
+      const nextWord = word < nextWords ? nextData[word]! : 0;
+      const changed = prevWord !== nextWord;
+      if (changed && rangeStart === -1) {
+        rangeStart = word;
+      } else if (!changed && rangeStart !== -1) {
+        dirtyRanges.push({ startWord: rangeStart, lengthWords: word - rangeStart });
+        rangeStart = -1;
+      }
+    }
+    if (rangeStart !== -1) {
+      dirtyRanges.push({ startWord: rangeStart, lengthWords: compareWords - rangeStart });
+    }
+
+    for (const range of dirtyRanges) {
+      const rangeEnd = range.startWord + range.lengthWords;
+      if (range.startWord < nextWords) {
+        const dataWords = Math.min(range.lengthWords, nextWords - range.startWord);
+        this.device.queue.writeBuffer(
+          this.topologyBankBuffer,
+          range.startWord * Uint32Array.BYTES_PER_ELEMENT,
+          nextData,
+          range.startWord,
+          dataWords,
+        );
+      }
+      if (rangeEnd > nextWords) {
+        const zeroStart = Math.max(range.startWord, nextWords);
+        const zeroWords = rangeEnd - zeroStart;
+        const zeroSource = this.ensureZeroWordScratch(zeroWords);
+        this.device.queue.writeBuffer(
+          this.topologyBankBuffer,
+          zeroStart * Uint32Array.BYTES_PER_ELEMENT,
+          zeroSource,
+          0,
+          zeroWords,
+        );
+      }
+    }
+
+    this.topologyBankShadow.fill(0);
+    if (nextWords > 0) {
+      this.topologyBankShadow.set(nextData, 0);
+    }
+    this.topologyBankWordCount = nextWords;
   }
 
   private writeSceneUniforms(input: RenderInput): void {
