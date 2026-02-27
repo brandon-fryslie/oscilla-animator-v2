@@ -4,17 +4,17 @@ import { writeShape2D } from './RuntimeState';
 
 /**
  * Encode a shapeRef expression into the canonical shape2d bank.
- *
- * Returns true when the expression is a shapeRef and was written, false otherwise.
  */
 export function writeShapeRefExprToBank(
   exprNode: ValueExpr,
   fieldExprToSlot: ReadonlyMap<number, ValueSlot>,
   shape2dBank: Uint32Array,
   offset: number,
-): boolean {
+): void {
   if (exprNode.kind !== 'shapeRef') {
-    return false;
+    throw new Error(
+      'shape2d evalOne target must lower a shapeRef expression; got ' + exprNode.kind,
+    );
   }
 
   // [LAW:single-enforcer] controlPointField -> slot resolution for shape records
@@ -39,5 +39,4 @@ export function writeShapeRefExprToBank(
     styleRef: 0,
     flags: 0,
   });
-  return true;
 }
