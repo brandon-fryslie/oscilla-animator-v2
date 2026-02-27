@@ -5,14 +5,17 @@ export interface NagaValidationIssue {
   readonly handle: NagaHandle;
   readonly message: string;
   readonly visualBlockId: string | null;
+  readonly isStatement: boolean;
 }
 
 export class NagaValidationError extends Error {
   public readonly handle: NagaHandle;
   public readonly visualBlockId: string | null;
 
-  public constructor(handle: NagaHandle, visualBlockId: string | null, message: string) {
-    const prefix = 'Naga Validation Error at Expression [' + String(handle) + ']: ';
+  public constructor(handle: NagaHandle, visualBlockId: string | null, message: string, isStatement: boolean) {
+    const prefix = isStatement
+      ? 'Naga Validation Error at Statement [' + String(handle) + ']: '
+      : 'Naga Validation Error at Expression [' + String(handle) + ']: ';
     const suffix = visualBlockId ? ' (visualBlockId=' + visualBlockId + ')' : '';
     super(prefix + message + suffix);
     this.name = 'NagaValidationError';
@@ -24,6 +27,13 @@ export class NagaValidationError extends Error {
 function isNumericScalar(type: NagaType): boolean {
   return type.kind === 'Scalar' && (
     type.scalar === NagaScalarKind.Float ||
+    type.scalar === NagaScalarKind.Sint ||
+    type.scalar === NagaScalarKind.Uint
+  );
+}
+
+function isIntegerScalar(type: NagaType): boolean {
+  return type.kind === 'Scalar' && (
     type.scalar === NagaScalarKind.Sint ||
     type.scalar === NagaScalarKind.Uint
   );
@@ -61,20 +71,18 @@ function isMixValueType(type: NagaType): boolean {
   return isFloatScalar(type) || isFloatVector(type);
 }
 
-function isIntScalar(type: NagaType): boolean {
-  return type.kind === 'Scalar' && type.scalar === NagaScalarKind.Sint;
-}
-
 function pushIssue(
   issues: NagaValidationIssue[],
   handle: NagaHandle,
   visualBlockId: string | null,
   message: string,
+  isStatement = false,
 ): void {
   issues.push({
     handle,
     visualBlockId,
     message,
+    isStatement,
   });
 }
 
@@ -82,15 +90,18 @@ export function collectNagaValidationIssues(builder: NagaBuilder): readonly Naga
   // [LAW:single-enforcer] Validation coverage is centralized in this single pass.
   const issues: NagaValidationIssue[] = [];
   const expressions = builder.expressions.toArray();
+  const statements = builder.statements.toArray();
 
   for (let handle = 0; handle < expressions.length; handle++) {
     const expression = expressions[handle];
     const visualBlockId = builder.getExpressionContext(handle)?.visualBlockId ?? null;
     const expressionTypeHandle = builder.getExpressionType(handle);
+
     if (expressionTypeHandle === undefined) {
       pushIssue(issues, handle, visualBlockId, 'Expression is missing result type metadata.');
       continue;
     }
+
     const expressionType = builder.types.get(expressionTypeHandle);
 
     if (expression.type === 'Binary') {
@@ -214,8 +225,8 @@ export function collectNagaValidationIssues(builder: NagaBuilder): readonly Naga
     }
 
     if (expression.type === 'ArrayLength') {
-      if (!isIntScalar(expressionType)) {
-        pushIssue(issues, handle, visualBlockId, 'ArrayLength result type must be int scalar.');
+      if (!isIntegerScalar(expressionType)) {
+        pushIssue(issues, handle, visualBlockId, 'ArrayLength result type must be integer scalar.');
       }
       continue;
     }
@@ -227,8 +238,8 @@ export function collectNagaValidationIssues(builder: NagaBuilder): readonly Naga
         continue;
       }
       const indexType = builder.types.get(indexTypeHandle);
-      if (!isIntScalar(indexType)) {
-        pushIssue(issues, handle, visualBlockId, 'BufferRead index must be int scalar.');
+      if (!isIntegerScalar(indexType)) {
+        pushIssue(issues, handle, visualBlockId, 'BufferRead index must be integer scalar.');
       }
       continue;
     }
@@ -242,17 +253,67 @@ export function collectNagaValidationIssues(builder: NagaBuilder): readonly Naga
       }
       const indexType = builder.types.get(indexTypeHandle);
       const valueType = builder.types.get(valueTypeHandle);
-      if (!isIntScalar(indexType)) {
-        pushIssue(issues, handle, visualBlockId, 'AtomicAdd index must be int scalar.');
+      if (!isIntegerScalar(indexType)) {
+        pushIssue(issues, handle, visualBlockId, 'AtomicAdd index must be integer scalar.');
         continue;
       }
-      if (!isIntScalar(valueType)) {
-        pushIssue(issues, handle, visualBlockId, 'AtomicAdd value must be int scalar.');
+      if (!isIntegerScalar(valueType)) {
+        pushIssue(issues, handle, visualBlockId, 'Atomic operations strictly require integer payloads (Sint/Uint).');
         continue;
       }
       if (expressionTypeHandle !== valueTypeHandle) {
-        pushIssue(issues, handle, visualBlockId, 'AtomicAdd result type must match value type.');
+        pushIssue(issues, handle, visualBlockId, 'AtomicAdd result type must perfectly match payload type.');
       }
+      continue;
+    }
+  }
+
+  for (let handle = 0; handle < statements.length; handle++) {
+    const statement = statements[handle];
+    const visualBlockId = builder.getStatementContext(handle)?.visualBlockId ?? null;
+
+    if (statement.type === 'If') {
+      const condTypeHandle = builder.getExpressionType(statement.condition);
+      if (condTypeHandle === undefined) {
+        pushIssue(issues, handle, visualBlockId, 'If statement condition is missing type metadata.', true);
+        continue;
+      }
+      const condType = builder.types.get(condTypeHandle);
+      if (!isBoolScalar(condType)) {
+        pushIssue(issues, handle, visualBlockId, 'If statement condition strictly requires a boolean scalar.', true);
+      }
+      continue;
+    }
+
+    if (statement.type === 'StoreState') {
+      const valueTypeHandle = builder.getExpressionType(statement.value);
+      if (valueTypeHandle === undefined) {
+        pushIssue(issues, handle, visualBlockId, 'StoreState value is missing type metadata.', true);
+      }
+      continue;
+    }
+
+    if (statement.type === 'BufferWrite') {
+      const indexTypeHandle = builder.getExpressionType(statement.index);
+      const valueTypeHandle = builder.getExpressionType(statement.value);
+      if (indexTypeHandle === undefined || valueTypeHandle === undefined) {
+        pushIssue(issues, handle, visualBlockId, 'BufferWrite statement has missing operand type metadata.', true);
+        continue;
+      }
+      const indexType = builder.types.get(indexTypeHandle);
+      if (!isIntegerScalar(indexType)) {
+        pushIssue(issues, handle, visualBlockId, 'BufferWrite index must be integer scalar.', true);
+      }
+      continue;
+    }
+
+    if (statement.type === 'Loop') {
+      try {
+        builder.blocks.get(statement.body);
+      } catch {
+        pushIssue(issues, handle, visualBlockId, 'Loop statement references an invalid body block handle.', true);
+      }
+      continue;
     }
   }
 
@@ -265,5 +326,5 @@ export function validateNagaBuilder(builder: NagaBuilder): void {
     return;
   }
   const first = issues[0];
-  throw new NagaValidationError(first.handle, first.visualBlockId, first.message);
+  throw new NagaValidationError(first.handle, first.visualBlockId, first.message, first.isStatement);
 }
