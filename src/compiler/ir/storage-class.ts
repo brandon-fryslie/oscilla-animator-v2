@@ -142,6 +142,13 @@ function alignUp(value: number, alignment: number): number {
   return value + (alignment - remainder);
 }
 
+function normalizeAlignmentCount(value: number, min: number, fallback: number): number {
+  if (!Number.isFinite(value)) {
+    return fallback;
+  }
+  return Math.floor(Math.max(min, value));
+}
+
 function classifySlotZone(type: CanonicalType): 'scalar' | 'field' {
   const card = requireInst(type.extent.cardinality, 'cardinality');
   return isMany(card) ? 'field' : 'scalar';
@@ -176,8 +183,16 @@ export function deriveArenaZonePlan(
   alignment: ArenaZoneAlignmentPolicyIR = DEFAULT_ARENA_ALIGNMENT_POLICY,
 ): ArenaZonePlan {
   const normalizedAlignment: ArenaZoneAlignmentPolicyIR = {
-    headerFloats: Math.max(0, alignment.headerFloats),
-    scalarToFieldAlignFloats: Math.max(1, alignment.scalarToFieldAlignFloats),
+    headerFloats: normalizeAlignmentCount(
+      alignment.headerFloats,
+      0,
+      DEFAULT_ARENA_ALIGNMENT_POLICY.headerFloats,
+    ),
+    scalarToFieldAlignFloats: normalizeAlignmentCount(
+      alignment.scalarToFieldAlignFloats,
+      1,
+      DEFAULT_ARENA_ALIGNMENT_POLICY.scalarToFieldAlignFloats,
+    ),
   };
 
   const scalarSlots: ArenaSlotPlanInput[] = [];
