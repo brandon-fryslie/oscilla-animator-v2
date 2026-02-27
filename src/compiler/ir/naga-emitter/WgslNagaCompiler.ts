@@ -1,6 +1,7 @@
 import type { CanonicalType } from '../../../core/canonical-types';
 import { OpCode } from '../types';
-import { ExprHandle, NagaBuilder } from './NagaBuilder';
+import { BlockHandle, ExprHandle, NagaBuilder } from './NagaBuilder';
+import { ScopeEnvironment } from './ScopeEnvironment';
 import { validateNagaBuilder } from './NagaValidator';
 
 export type NagaEmitterInstruction =
@@ -34,13 +35,7 @@ export type NagaEmitterInstruction =
       readonly inputs: readonly [string, string];
     }
   | {
-      readonly op: OpCode.Lerp;
-      readonly outputId: string;
-      readonly visualBlockId: string;
-      readonly inputs: readonly [string, string, string];
-    }
-  | {
-      readonly op: OpCode.Select;
+      readonly op: OpCode.Lerp | OpCode.Select;
       readonly outputId: string;
       readonly visualBlockId: string;
       readonly inputs: readonly [string, string, string];
@@ -51,18 +46,61 @@ export type NagaEmitterInstruction =
       readonly visualBlockId: string;
       readonly input: string;
       readonly targetType: CanonicalType;
+    }
+  | {
+      readonly op: 'bufferReadDynamic';
+      readonly outputId: string;
+      readonly visualBlockId: string;
+      readonly bufferKey: string;
+      readonly indexId: string;
+      readonly targetType: CanonicalType;
+    }
+  | {
+      readonly op: 'bufferWriteDynamic';
+      readonly visualBlockId: string;
+      readonly bufferKey: string;
+      readonly indexId: string;
+      readonly valueId: string;
+    }
+  | {
+      readonly op: 'atomicAdd';
+      readonly outputId: string;
+      readonly visualBlockId: string;
+      readonly bufferKey: string;
+      readonly indexId: string;
+      readonly valueId: string;
+    }
+  | {
+      readonly op: 'loop';
+      readonly visualBlockId: string;
+      readonly body: readonly NagaEmitterInstruction[];
+    }
+  | {
+      readonly op: 'if';
+      readonly visualBlockId: string;
+      readonly condition: string;
+      readonly acceptBody: readonly NagaEmitterInstruction[];
+      readonly rejectBody: readonly NagaEmitterInstruction[];
+    }
+  | {
+      readonly op: 'break' | 'continue';
+      readonly visualBlockId: string;
     };
 
 export class WgslNagaCompiler {
   private readonly builder = new NagaBuilder();
-  // [LAW:one-source-of-truth] IR output ids resolve through this single handle map.
-  private readonly irToNagaMap = new Map<string, ExprHandle>();
+
+  // [LAW:one-source-of-truth] ID resolution lives in one lexical environment chain.
+  private currentScope = new ScopeEnvironment();
+  private loopDepth = 0;
+
+  public compileRootGraph(instructions: readonly NagaEmitterInstruction[]): NagaBuilder {
+    this.compileBlock(instructions, { visualBlockId: '__root__' });
+    return this.builder;
+  }
 
   public compileTopologicalGraph(instructions: readonly NagaEmitterInstruction[]): NagaBuilder {
-    for (const instruction of instructions) {
-      this.emitInstruction(instruction);
-    }
-    return this.builder;
+    return this.compileRootGraph(instructions);
   }
 
   public validate(): void {
@@ -73,66 +111,137 @@ export class WgslNagaCompiler {
     return this.builder;
   }
 
+  private compileBlock(instructions: readonly NagaEmitterInstruction[], meta: { visualBlockId: string }): BlockHandle {
+    return this.builder.buildBlock(() => {
+      const parentScope = this.currentScope;
+      this.currentScope = new ScopeEnvironment(parentScope);
+      try {
+        for (const instruction of instructions) {
+          this.emitInstruction(instruction);
+        }
+      } finally {
+        this.currentScope = parentScope;
+      }
+    }, meta);
+  }
+
+  private compileLoopBody(instructions: readonly NagaEmitterInstruction[], meta: { visualBlockId: string }): BlockHandle {
+    this.loopDepth += 1;
+    try {
+      return this.compileBlock(instructions, meta);
+    } finally {
+      this.loopDepth -= 1;
+    }
+  }
+
   private emitInstruction(instruction: NagaEmitterInstruction): void {
     const blockId = instruction.visualBlockId;
     const meta = { visualBlockId: blockId };
 
-    // [LAW:dataflow-not-control-flow] Deterministic topological lowering; variability is in instruction data.
+    // [LAW:dataflow-not-control-flow] Deterministic instruction traversal; variability is encoded in data values.
     switch (instruction.op) {
       case 'constFloat': {
-        const outHandle = this.builder.literalFloat(instruction.value, meta);
-        this.irToNagaMap.set(instruction.outputId, outHandle);
+        this.currentScope.set(instruction.outputId, this.builder.literalFloat(instruction.value, meta));
         return;
       }
       case 'constInt': {
-        const outHandle = this.builder.literalInt(instruction.value, meta);
-        this.irToNagaMap.set(instruction.outputId, outHandle);
+        this.currentScope.set(instruction.outputId, this.builder.literalInt(instruction.value, meta));
         return;
       }
       case 'constBool': {
-        const outHandle = this.builder.literalBool(instruction.value, meta);
-        this.irToNagaMap.set(instruction.outputId, outHandle);
+        this.currentScope.set(instruction.outputId, this.builder.literalBool(instruction.value, meta));
         return;
       }
       case 'constMat4': {
-        const outHandle = this.builder.literalMatrix4(meta);
-        this.irToNagaMap.set(instruction.outputId, outHandle);
+        this.currentScope.set(instruction.outputId, this.builder.literalMatrix4(meta));
         return;
       }
       case OpCode.Add: {
         const left = this.getHandle(instruction.inputs[0], blockId);
         const right = this.getHandle(instruction.inputs[1], blockId);
-        const outHandle = this.builder.add(left, right, meta);
-        this.irToNagaMap.set(instruction.outputId, outHandle);
+        this.currentScope.set(instruction.outputId, this.builder.add(left, right, meta));
         return;
       }
       case OpCode.Mul: {
         const left = this.getHandle(instruction.inputs[0], blockId);
         const right = this.getHandle(instruction.inputs[1], blockId);
-        const outHandle = this.builder.mul(left, right, meta);
-        this.irToNagaMap.set(instruction.outputId, outHandle);
+        this.currentScope.set(instruction.outputId, this.builder.mul(left, right, meta));
         return;
       }
       case OpCode.Lerp: {
         const a = this.getHandle(instruction.inputs[0], blockId);
         const b = this.getHandle(instruction.inputs[1], blockId);
         const t = this.getHandle(instruction.inputs[2], blockId);
-        const outHandle = this.builder.lerp(a, b, t, meta);
-        this.irToNagaMap.set(instruction.outputId, outHandle);
+        this.currentScope.set(instruction.outputId, this.builder.lerp(a, b, t, meta));
         return;
       }
       case OpCode.Select: {
         const condition = this.getHandle(instruction.inputs[0], blockId);
         const accept = this.getHandle(instruction.inputs[1], blockId);
         const reject = this.getHandle(instruction.inputs[2], blockId);
-        const outHandle = this.builder.select(condition, accept, reject, meta);
-        this.irToNagaMap.set(instruction.outputId, outHandle);
+        this.currentScope.set(instruction.outputId, this.builder.select(condition, accept, reject, meta));
         return;
       }
       case 'cast': {
         const value = this.getHandle(instruction.input, blockId);
-        const outHandle = this.builder.cast(value, instruction.targetType, meta);
-        this.irToNagaMap.set(instruction.outputId, outHandle);
+        this.currentScope.set(instruction.outputId, this.builder.cast(value, instruction.targetType, meta));
+        return;
+      }
+      case 'bufferReadDynamic': {
+        const rawIndex = this.getHandle(instruction.indexId, blockId);
+
+        // [LAW:single-enforcer] Dynamic index clamping is enforced only at this memory-read entrypoint.
+        const lengthHandle = this.builder.arrayLength(instruction.bufferKey, meta);
+        const oneHandle = this.builder.literalInt(1, meta);
+        const maxIndexHandle = this.builder.sub(lengthHandle, oneHandle, meta);
+        const safeIndexHandle = this.builder.min(rawIndex, maxIndexHandle, meta);
+
+        const outHandle = this.builder.bufferRead(
+          instruction.bufferKey,
+          safeIndexHandle,
+          instruction.targetType,
+          meta,
+        );
+        this.currentScope.set(instruction.outputId, outHandle);
+        return;
+      }
+      case 'bufferWriteDynamic': {
+        const indexHandle = this.getHandle(instruction.indexId, blockId);
+        const valueHandle = this.getHandle(instruction.valueId, blockId);
+        this.builder.bufferWrite(instruction.bufferKey, indexHandle, valueHandle, meta);
+        return;
+      }
+      case 'atomicAdd': {
+        const indexHandle = this.getHandle(instruction.indexId, blockId);
+        const valueHandle = this.getHandle(instruction.valueId, blockId);
+        const outHandle = this.builder.atomicAdd(instruction.bufferKey, indexHandle, valueHandle, meta);
+        this.currentScope.set(instruction.outputId, outHandle);
+        return;
+      }
+      case 'loop': {
+        const loopBody = this.compileLoopBody(instruction.body, meta);
+        this.builder.loopStatement(loopBody, meta);
+        return;
+      }
+      case 'if': {
+        const condition = this.getHandle(instruction.condition, blockId);
+        const acceptBlock = this.compileBlock(instruction.acceptBody, meta);
+        const rejectBlock = this.compileBlock(instruction.rejectBody, meta);
+        this.builder.ifStatement(condition, acceptBlock, rejectBlock, meta);
+        return;
+      }
+      case 'break': {
+        if (this.loopDepth <= 0) {
+          throw new Error('CRITICAL FAIL: break used outside loop in block ' + blockId + '.');
+        }
+        this.builder.breakStatement(meta);
+        return;
+      }
+      case 'continue': {
+        if (this.loopDepth <= 0) {
+          throw new Error('CRITICAL FAIL: continue used outside loop in block ' + blockId + '.');
+        }
+        this.builder.continueStatement(meta);
         return;
       }
       default: {
@@ -149,14 +258,14 @@ export class WgslNagaCompiler {
   }
 
   private getHandle(irNodeId: string, visualBlockId: string): ExprHandle {
-    const handle = this.irToNagaMap.get(irNodeId);
-    if (!handle) {
+    const handle = this.currentScope.get(irNodeId);
+    if (handle === undefined) {
       throw new Error(
         'Topological Sort Failure: Attempted to read IR node ' +
           irNodeId +
           ' before it was evaluated (block ' +
           visualBlockId +
-          ').',
+          '). This may indicate a variable scope leak where a block tried to access an ID generated inside a sibling or child block.',
       );
     }
     return handle;

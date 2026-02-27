@@ -36,6 +36,8 @@ export enum NagaBinaryOp {
   Subtract = 'Subtract',
   Multiply = 'Multiply',
   Divide = 'Divide',
+  Min = 'Min',
+  Max = 'Max',
 }
 
 export enum NagaMathFunction {
@@ -67,14 +69,43 @@ export type NagaExpression =
       readonly reject: NagaHandle;
     }
   | { readonly type: 'GlobalVariable'; readonly variable: NagaHandle }
-  | { readonly type: 'Compose'; readonly ty: NagaHandle; readonly components: readonly NagaHandle[] };
+  | { readonly type: 'Compose'; readonly ty: NagaHandle; readonly components: readonly NagaHandle[] }
+  | { readonly type: 'ArrayLength'; readonly bufferKey: string }
+  | { readonly type: 'BufferRead'; readonly bufferKey: string; readonly index: NagaHandle }
+  | { readonly type: 'AtomicAdd'; readonly bufferKey: string; readonly index: NagaHandle; readonly value: NagaHandle };
 
 export type NagaStatement =
   | {
       readonly type: 'StoreState';
       readonly stateKey: string;
       readonly value: NagaHandle;
+    }
+  | {
+      readonly type: 'BufferWrite';
+      readonly bufferKey: string;
+      readonly index: NagaHandle;
+      readonly value: NagaHandle;
+    }
+  | {
+      readonly type: 'Loop';
+      readonly body: NagaHandle;
+    }
+  | {
+      readonly type: 'If';
+      readonly condition: NagaHandle;
+      readonly accept: NagaHandle;
+      readonly reject: NagaHandle;
+    }
+  | {
+      readonly type: 'Break';
+    }
+  | {
+      readonly type: 'Continue';
     };
+
+export interface NagaBlock {
+  readonly statements: NagaHandle[];
+}
 
 export class NagaArena<T> {
   private readonly items: T[] = [];
