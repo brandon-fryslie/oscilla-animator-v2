@@ -12,7 +12,7 @@
  * - EdgeAdded, EdgeRemoved, PatchReset
  *
  * **Runtime Events** (new - emitted by RuntimeService):
- * - PlaybackStateChanged, RuntimeError
+ * - PlaybackStateChanged, CompilerStateChanged, RuntimeError
  *
  * **Selection Events** (new - emitted by SelectionStore):
  * - SelectionChanged, HoverChanged
@@ -29,6 +29,7 @@
  */
 
 import type { Diagnostic } from '../diagnostics/types';
+import type { AsyncCompilerState } from '../types/async-compiler-state';
 
 // =============================================================================
 // GraphCommitted Event
@@ -378,6 +379,22 @@ export interface PlaybackStateChangedEvent {
 }
 
 /**
+ * Emitted when async compiler lifecycle state changes.
+ *
+ * Triggers:
+ * - Graph edit queued for debounce
+ * - Compile started/completed/failed
+ * - Program swap handoff complete
+ */
+export interface CompilerStateChangedEvent {
+  readonly type: 'CompilerStateChanged';
+  readonly patchId: string;
+  readonly patchRevision: number;
+  readonly state: AsyncCompilerState;
+  readonly errorMessage?: string;
+}
+
+/**
  * Emitted when a runtime error occurs.
  *
  * Triggers:
@@ -566,6 +583,7 @@ export type EditorEvent =
   | PatchResetEvent
   // Runtime events (new)
   | PlaybackStateChangedEvent
+  | CompilerStateChangedEvent
   | RuntimeErrorEvent
   // Selection events (new)
   | SelectionChangedEvent

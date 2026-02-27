@@ -19,6 +19,7 @@ import type { BlockId, PortId } from '../../types/compiler';
 import type { ValueExpr } from './value-expr';
 import type { KernelRegistry } from '../../runtime/KernelRegistry';
 import type { ArenaSlotDescriptor } from '../../runtime/ArenaValueStore';
+import type { NagaLoweringProgramIR } from './naga-lowering';
 
 // =============================================================================
 // Version and Core Types
@@ -205,6 +206,12 @@ export interface CompiledProgramIR {
    * Compiler-generated compute WGSL with concrete arena offsets injected.
    */
   readonly generatedComputeProgram?: GeneratedComputeProgramIR;
+
+  /**
+   * Compiler-generated typed Naga lowering artifact (P2-2).
+   * Contains the structured module and expr/statement source-map provenance.
+   */
+  readonly nagaLoweringProgram?: NagaLoweringProgramIR;
 }
 
 // =============================================================================
