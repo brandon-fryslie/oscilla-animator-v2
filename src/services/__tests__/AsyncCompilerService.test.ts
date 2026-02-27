@@ -125,6 +125,48 @@ describe('AsyncCompilerService', () => {
     service.dispose();
   });
 
+  it('preserves linking until swap completes when a new compile is scheduled mid-swap', async () => {
+    vi.useFakeTimers();
+    const pending = new Map<number, ReturnType<typeof deferred<CompileWorkerRunResult>>>();
+    const service = new AsyncCompilerService({
+      debounceMs: 10,
+      runCompile: (request) => {
+        const gate = deferred<CompileWorkerRunResult>();
+        pending.set(request.patchRevision, gate);
+        return gate.promise;
+      },
+    });
+
+    service.scheduleCompile(makeRequest(1));
+    vi.advanceTimersByTime(10);
+    await Promise.resolve();
+    expect(service.getState()).toBe('compiling');
+
+    pending.get(1)!.resolve(makeResult(1));
+    await Promise.resolve();
+    expect(service.getState()).toBe('ready');
+    service.takeReadyArtifactsForSwap();
+    expect(service.getState()).toBe('linking');
+
+    // Queue another compile while swap/linking is in progress.
+    service.scheduleCompile(makeRequest(2));
+    expect(service.getState()).toBe('linking');
+
+    // Complete swap before debounce fires: service should advance to dirty.
+    service.markSwapComplete();
+    expect(service.getState()).toBe('dirty');
+
+    vi.advanceTimersByTime(10);
+    await Promise.resolve();
+    expect(service.getState()).toBe('compiling');
+
+    pending.get(2)!.resolve(makeResult(2));
+    await Promise.resolve();
+    expect(service.getState()).toBe('ready');
+
+    service.dispose();
+  });
+
   it('records compile failures on latest token and invokes failure callback once', async () => {
     vi.useFakeTimers();
     const onCompileFailure = vi.fn<(error: unknown) => void>();

@@ -199,7 +199,11 @@ export class RuntimeService {
       this.asyncCompiler?.markSwapComplete();
     } catch (err) {
       this.asyncCompiler?.markSwapFailed(err);
-      throw err;
+      const message = err instanceof Error ? err.message : String(err);
+      this.store.diagnostics.log({
+        level: 'error',
+        message: `Recompile swap failed: ${message}`,
+      });
     } finally {
       this.swapInFlight = false;
       if (this.asyncCompiler?.getState() === 'ready') {
