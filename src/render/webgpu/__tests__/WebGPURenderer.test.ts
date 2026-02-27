@@ -62,6 +62,11 @@ function createFakeWebGPUEnvironment() {
       getMappedRange: vi.fn(() => new ArrayBuffer(descriptor.size)),
       unmap: vi.fn(),
     })),
+    createTexture: vi.fn((descriptor: unknown) => ({
+      descriptor,
+      destroy: vi.fn(),
+      createView: vi.fn(() => ({ label: 'msaa-view' })),
+    })),
     createBindGroup: vi.fn((descriptor: unknown) => descriptor),
     createCommandEncoder: vi.fn(() => commandEncoder),
   };
@@ -256,6 +261,22 @@ describe('WebGPURenderer', () => {
     ]);
   });
 
+  it('configures premultiplied-alpha blend and 4x MSAA on the path pipeline', async () => {
+    const env = createFakeWebGPUEnvironment();
+    setNavigatorGpu(env.gpu);
+
+    await createWebGPURenderer(env.canvas);
+
+    const pipelineCall = env.device.createRenderPipelineAsync.mock.calls[0];
+    expect(pipelineCall).toBeDefined();
+    const pipelineDescriptor = (((pipelineCall as unknown[] | undefined)?.[0]) ?? {}) as {
+      fragment?: { targets?: Array<{ blend?: { color?: { srcFactor?: string } } }> };
+      multisample?: { count?: number };
+    };
+    expect(pipelineDescriptor.multisample?.count).toBe(4);
+    expect(pipelineDescriptor.fragment?.targets?.[0]?.blend?.color?.srcFactor).toBe('one');
+  });
+
   it('uploads topology-bank u32 data from the canonical topology registry', async () => {
     const env = createFakeWebGPUEnvironment();
     setNavigatorGpu(env.gpu);
@@ -281,6 +302,31 @@ describe('WebGPURenderer', () => {
       WEBGPU_RENDER_CONTRACT.topologyBankBindGroup,
       expect.anything(),
     );
+  });
+
+  it('uses an MSAA color target with resolve in the render pass', async () => {
+    const env = createFakeWebGPUEnvironment();
+    setNavigatorGpu(env.gpu);
+    const renderer = await createWebGPURenderer(env.canvas);
+
+    renderer.render(makeRenderInput([]));
+
+    const renderPassDescriptor = env.device.createCommandEncoder.mock.results[0]?.value.beginRenderPass.mock.calls[0]?.[0] as {
+      colorAttachments?: Array<{ resolveTarget?: unknown; storeOp?: string }>;
+    };
+    expect(renderPassDescriptor.colorAttachments?.[0]?.resolveTarget).toBeDefined();
+    expect(renderPassDescriptor.colorAttachments?.[0]?.storeOp).toBe('discard');
+  });
+
+  it('recreates the MSAA color target when the canvas size changes', async () => {
+    const env = createFakeWebGPUEnvironment();
+    setNavigatorGpu(env.gpu);
+    const renderer = await createWebGPURenderer(env.canvas);
+
+    renderer.render(makeRenderInput([], { width: 128, height: 96 }));
+    renderer.render(makeRenderInput([], { width: 256, height: 192, timeMs: 16 }));
+
+    expect(env.device.createTexture).toHaveBeenCalledTimes(2);
   });
 
   it('aligns mapped upload buffers to 4-byte boundaries', async () => {

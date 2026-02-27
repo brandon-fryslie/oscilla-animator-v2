@@ -122,7 +122,8 @@ fn vs_main(input: VertexInput, @builtin(instance_index) instanceIndex: u32) -> V
 
 @fragment
 fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
-  return input.color;
+  // Premultiplied-alpha output for correct compositing in browser surfaces.
+  return vec4<f32>(input.color.rgb * input.color.a, input.color.a);
 }
 `;
 
