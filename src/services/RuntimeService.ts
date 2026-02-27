@@ -24,14 +24,14 @@ import { consumeTestDemoFilename } from '../testing/test-params';
 import {
   compileAndSwap,
   type CompileOrchestratorState,
-  type PrecomputedCompileArtifacts,
 } from './CompileOrchestrator';
-import { CompileWorkerClient, CompileSupersededError } from './CompileWorkerClient';
+import { CompileWorkerClient } from './CompileWorkerClient';
 import { createDomainChangeDetector, type DomainChangeDetector } from './DomainChangeDetector';
 import { createLiveRecompileController, type LiveRecompileController } from './LiveRecompile';
 import { patchProgramConstants } from './ConstantPatcher';
 import { debugService } from './DebugService';
 import { compilationInspector } from './CompilationInspectorService';
+import { AsyncCompilerService } from './AsyncCompilerService';
 import {
   startAnimationLoop,
   createAnimationLoopState,
@@ -69,7 +69,8 @@ export class RuntimeService {
   private animationLoop: AnimationLoopController | null = null;
   private unsubCompileEnd: (() => void) | null = null;
   private compileWorkerClient: CompileWorkerClient | null = null;
-  private pendingSwap: PrecomputedCompileArtifacts | null = null;
+  private asyncCompiler: AsyncCompilerService | null = null;
+  private unsubCompilerState: (() => void) | null = null;
   private swapInFlight = false;
   private swapRafId: number | null = null;
   private lastWorkerFallbackLog = { message: '', atMs: 0 };
@@ -188,17 +189,20 @@ export class RuntimeService {
 
   private async flushPendingSwap(): Promise<void> {
     if (this.swapInFlight) return;
-    const next = this.pendingSwap;
+    const next = this.asyncCompiler?.takeReadyArtifactsForSwap() ?? null;
     if (!next) return;
 
-    this.pendingSwap = null;
     this.swapInFlight = true;
     try {
       // [LAW:single-enforcer] All compile/swap application goes through this queue.
       await compileAndSwap(this.compileDeps(), false, next);
+      this.asyncCompiler?.markSwapComplete();
+    } catch (err) {
+      this.asyncCompiler?.markSwapFailed(err);
+      throw err;
     } finally {
       this.swapInFlight = false;
-      if (this.pendingSwap) {
+      if (this.asyncCompiler?.getState() === 'ready') {
         this.requestSwapFlush();
       }
     }
@@ -228,6 +232,32 @@ export class RuntimeService {
     assertWebGPUStartupContract(this.canvas);
 
     this.compileWorkerClient = new CompileWorkerClient();
+    this.asyncCompiler = new AsyncCompilerService({
+      runCompile: (request) => this.compileWorkerClient!.compile(request),
+      onCompileFailure: (error) => this.logWorkerFailure(error),
+      debounceMs: 50,
+    });
+    this.unsubCompilerState = this.asyncCompiler.subscribe((nextState) => {
+      // [LAW:single-enforcer] RuntimeService is the single boundary that exposes
+      // async compiler lifecycle state to app-level observers via EventHub.
+      store.events.emit({
+        type: 'CompilerStateChanged',
+        patchId: 'patch-0',
+        patchRevision: store.getPatchRevision(),
+        state: nextState,
+        errorMessage: this.asyncCompiler?.getLastErrorMessage() ?? undefined,
+      });
+      if (nextState === 'ready') {
+        this.requestSwapFlush();
+      }
+    });
+    store.events.emit({
+      type: 'CompilerStateChanged',
+      patchId: 'patch-0',
+      patchRevision: store.getPatchRevision(),
+      state: this.asyncCompiler.getState(),
+      errorMessage: this.asyncCompiler.getLastErrorMessage() ?? undefined,
+    });
     // [LAW:single-enforcer] RuntimeService owns debug lifecycle boundaries.
     debugService.clear();
     compilationInspector.setErrorReporter((payload) => {
@@ -319,28 +349,16 @@ export class RuntimeService {
 
     // Set up live recompile reaction with fast-path for constant value changes
     this.liveRecompile.setup(store, async () => {
-      try {
-        const debugValues = store.settings.get(debugSettings);
-        const flagOverrides = store.settings.get(compilerFlagsSettings);
-        const precomputed = await this.compileWorkerClient!.compile({
-          patch: store.patch.patch,
-          patchRevision: store.getPatchRevision(),
-          frontendOptions: {
-            traceCardinalitySolver: debugValues?.traceCardinalitySolver,
-            diagnosticOverrides: flagOverrides ?? undefined,
-          },
-        });
-
-        // [LAW:dataflow-not-control-flow] Swap application is always driven through
-        // the same queue; variability is the queued payload, not execution path.
-        this.pendingSwap = precomputed;
-        this.requestSwapFlush();
-      } catch (err) {
-        if (err instanceof CompileSupersededError) {
-          return;
-        }
-        this.logWorkerFailure(err);
-      }
+      const debugValues = store.settings.get(debugSettings);
+      const flagOverrides = store.settings.get(compilerFlagsSettings);
+      this.asyncCompiler!.scheduleCompile({
+        patch: store.patch.patch,
+        patchRevision: store.getPatchRevision(),
+        frontendOptions: {
+          traceCardinalitySolver: debugValues?.traceCardinalitySolver,
+          diagnosticOverrides: flagOverrides ?? undefined,
+        },
+      });
     }, (changes) => {
       const program = this.compileState.currentProgram;
       if (!program) return false;
@@ -397,8 +415,11 @@ export class RuntimeService {
       cancelAnimationFrame(this.swapRafId);
       this.swapRafId = null;
     }
-    this.pendingSwap = null;
     this.swapInFlight = false;
+    this.unsubCompilerState?.();
+    this.unsubCompilerState = null;
+    this.asyncCompiler?.dispose();
+    this.asyncCompiler = null;
     this.unsubCompileEnd?.();
     this.unsubCompileEnd = null;
     this.compileWorkerClient?.dispose();
