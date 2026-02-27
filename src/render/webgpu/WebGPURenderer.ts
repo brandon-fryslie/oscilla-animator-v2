@@ -18,12 +18,17 @@ const GPU_BUFFER_USAGE = {
   INDIRECT: 0x0100,
 } as const;
 
+const GPU_TEXTURE_USAGE = {
+  RENDER_ATTACHMENT: 0x0010,
+} as const;
+
 const INSTANCE_FLOATS = WEBGPU_RENDER_CONTRACT.instanceFloats;
 const MIN_INSTANCE_CAPACITY = 1024;
 const SIMULATION_CAPACITY = WEBGPU_RENDER_CONTRACT.simulationCapacity;
 const SIMULATION_WORKGROUP_SIZE = WEBGPU_RENDER_CONTRACT.computeWorkgroupSize;
 const DRAW_PREP_WORKGROUP_SIZE = WEBGPU_RENDER_CONTRACT.drawPrepWorkgroupSize;
 const SIMULATION_STATE_BYTES = 16;
+const RENDER_MSAA_SAMPLE_COUNT = 4;
 
 function alignTo4(value: number): number {
   const remainder = value % 4;
@@ -401,6 +406,7 @@ export class WebGPURenderer {
   private instanceBindGroup: any;
   private instanceCapacity = 0;
   private instanceStaging = new Float32Array(0);
+  private msaaColorTexture: any | null = null;
 
   private lastFrameTimeMs: number | null = null;
   private frameCount = 0;
@@ -571,12 +577,18 @@ export class WebGPURenderer {
       );
     }
 
+    const currentTexture = this.context.getCurrentTexture();
+    const currentTextureView = currentTexture.createView();
+    const msaaView = this.msaaColorTexture?.createView();
+    const colorView = msaaView ?? currentTextureView;
+
     const pass = commandEncoder.beginRenderPass({
       colorAttachments: [
         {
-          view: this.context.getCurrentTexture().createView(),
+          view: colorView,
           loadOp: 'clear',
-          storeOp: 'store',
+          storeOp: msaaView ? 'discard' : 'store',
+          resolveTarget: msaaView ? currentTextureView : undefined,
           clearValue: { r: 0, g: 0, b: 0, a: 1 },
         },
       ],
@@ -604,6 +616,8 @@ export class WebGPURenderer {
     this.indirectArgsBuffer.destroy();
     this.topologyBankBuffer.destroy();
     this.instanceBuffer.destroy();
+    this.msaaColorTexture?.destroy();
+    this.msaaColorTexture = null;
     for (const mesh of this.meshCache.values()) {
       mesh.vertexBuffer.destroy();
       mesh.indexBuffer.destroy();
@@ -674,8 +688,25 @@ export class WebGPURenderer {
       format: this.canvasFormat,
       alphaMode: 'premultiplied',
     });
+    this.refreshMsaaColorTarget(width, height);
     this.lastConfiguredSize.width = width;
     this.lastConfiguredSize.height = height;
+  }
+
+  private refreshMsaaColorTarget(width: number, height: number): void {
+    // [LAW:single-enforcer] MSAA color-target lifecycle is owned by one resize
+    // boundary so sample-count resources stay in lockstep with canvas size.
+    this.msaaColorTexture?.destroy();
+    this.msaaColorTexture = this.device.createTexture({
+      size: {
+        width,
+        height,
+        depthOrArrayLayers: 1,
+      },
+      sampleCount: RENDER_MSAA_SAMPLE_COUNT,
+      format: this.canvasFormat,
+      usage: GPU_TEXTURE_USAGE.RENDER_ATTACHMENT,
+    });
   }
 
   private syncTopologyBank(): void {
@@ -1073,7 +1104,7 @@ export class WebGPURenderer {
             format: canvasFormat,
             blend: {
               color: {
-                srcFactor: 'src-alpha',
+                srcFactor: 'one',
                 dstFactor: 'one-minus-src-alpha',
                 operation: 'add',
               },
@@ -1092,7 +1123,7 @@ export class WebGPURenderer {
         cullMode: 'none',
       },
       multisample: {
-        count: 1,
+        count: RENDER_MSAA_SAMPLE_COUNT,
       },
     });
   }
