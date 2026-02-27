@@ -61,6 +61,10 @@ function isMixValueType(type: NagaType): boolean {
   return isFloatScalar(type) || isFloatVector(type);
 }
 
+function isIntScalar(type: NagaType): boolean {
+  return type.kind === 'Scalar' && type.scalar === NagaScalarKind.Sint;
+}
+
 function pushIssue(
   issues: NagaValidationIssue[],
   handle: NagaHandle,
@@ -205,6 +209,49 @@ export function collectNagaValidationIssues(builder: NagaBuilder): readonly Naga
       }
       if (expressionType.kind === 'Matrix' && !Array.isArray(constant.value)) {
         pushIssue(issues, handle, visualBlockId, 'Matrix constants must store component arrays.');
+      }
+      continue;
+    }
+
+    if (expression.type === 'ArrayLength') {
+      if (!isIntScalar(expressionType)) {
+        pushIssue(issues, handle, visualBlockId, 'ArrayLength result type must be int scalar.');
+      }
+      continue;
+    }
+
+    if (expression.type === 'BufferRead') {
+      const indexTypeHandle = builder.getExpressionType(expression.index);
+      if (indexTypeHandle === undefined) {
+        pushIssue(issues, handle, visualBlockId, 'BufferRead has missing index type metadata.');
+        continue;
+      }
+      const indexType = builder.types.get(indexTypeHandle);
+      if (!isIntScalar(indexType)) {
+        pushIssue(issues, handle, visualBlockId, 'BufferRead index must be int scalar.');
+      }
+      continue;
+    }
+
+    if (expression.type === 'AtomicAdd') {
+      const indexTypeHandle = builder.getExpressionType(expression.index);
+      const valueTypeHandle = builder.getExpressionType(expression.value);
+      if (indexTypeHandle === undefined || valueTypeHandle === undefined) {
+        pushIssue(issues, handle, visualBlockId, 'AtomicAdd has missing operand type metadata.');
+        continue;
+      }
+      const indexType = builder.types.get(indexTypeHandle);
+      const valueType = builder.types.get(valueTypeHandle);
+      if (!isIntScalar(indexType)) {
+        pushIssue(issues, handle, visualBlockId, 'AtomicAdd index must be int scalar.');
+        continue;
+      }
+      if (!isIntScalar(valueType)) {
+        pushIssue(issues, handle, visualBlockId, 'AtomicAdd value must be int scalar.');
+        continue;
+      }
+      if (expressionTypeHandle !== valueTypeHandle) {
+        pushIssue(issues, handle, visualBlockId, 'AtomicAdd result type must match value type.');
       }
     }
   }
