@@ -456,6 +456,50 @@ describe('arenaLayout integration', () => {
     }
   });
 
+  it('emits contiguous zone boundaries with declared per-zone alignment', () => {
+    const patch = buildPatch((b) => {
+      b.addBlock('InfiniteTimeRoot');
+
+      const ellipse = b.addBlock('Ellipse');
+      const array = b.addBlock('Array');
+      b.setPortDefault(array, 'count', 7);
+      b.wire(ellipse, 'shape', array, 'element');
+
+      const layout = b.addBlock('GridLayoutUV');
+      b.setPortDefault(layout, 'rows', 1);
+      b.setPortDefault(layout, 'cols', 7);
+      b.wire(array, 'elements', layout, 'elements');
+
+      const colorSignal = b.addBlock('Const');
+      b.setConfig(colorSignal, 'value', { r: 0.8, g: 0.2, b: 0.1, a: 1 });
+      const colorField = b.addBlock('Broadcast');
+      b.wire(colorSignal, 'out', colorField, 'one');
+
+      const render = b.addBlock('RenderInstances2D');
+      b.wire(layout, 'controlPoints', render, 'controlPoints');
+      b.wire(colorField, 'field', render, 'color');
+    });
+
+    const result = compile(patch);
+    if (result.kind === 'error') {
+      throw new Error(`Compile failed: ${result.errors.map((e) => e.message).join(', ')}`);
+    }
+    const zones = result.program.arenaZones?.zones ?? [];
+    expect(zones.length).toBeGreaterThan(0);
+
+    let expectedStart = 0;
+    for (const zone of zones) {
+      expect(zone.start).toBe(expectedStart);
+      expect(zone.end).toBe(zone.start + zone.length);
+      if (zone.alignmentFloats > 0) {
+        expect(zone.start % zone.alignmentFloats).toBe(0);
+      }
+      expectedStart = zone.end;
+    }
+    expect(result.program.arenaZones?.totalFloats).toBe(expectedStart);
+    expect(result.program.arenaTotalFloats).toBe(expectedStart);
+  });
+
   it('runtime state arena length matches compiled arenaTotalFloats', () => {
     const patch = buildPatch((b) => {
       const time = b.addBlock('InfiniteTimeRoot');
