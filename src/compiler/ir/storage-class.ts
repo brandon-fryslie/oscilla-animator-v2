@@ -175,6 +175,11 @@ export function deriveArenaZonePlan(
   instances: ReadonlyMap<InstanceId, InstanceDecl>,
   alignment: ArenaZoneAlignmentPolicyIR = DEFAULT_ARENA_ALIGNMENT_POLICY,
 ): ArenaZonePlan {
+  const normalizedAlignment: ArenaZoneAlignmentPolicyIR = {
+    headerFloats: Math.max(0, alignment.headerFloats),
+    scalarToFieldAlignFloats: Math.max(1, alignment.scalarToFieldAlignFloats),
+  };
+
   const scalarSlots: ArenaSlotPlanInput[] = [];
   const fieldSlots: ArenaSlotPlanInput[] = [];
   for (const slot of slots) {
@@ -189,8 +194,8 @@ export function deriveArenaZonePlan(
   const zones: ArenaZoneRangeIR[] = [];
 
   const headerStart = 0;
-  const headerEnd = headerStart + Math.max(0, alignment.headerFloats);
-  zones.push(makeZone('header', headerStart, headerEnd, 0, alignment.headerFloats));
+  const headerEnd = headerStart + normalizedAlignment.headerFloats;
+  zones.push(makeZone('header', headerStart, headerEnd, 0, normalizedAlignment.headerFloats));
 
   let cursor = headerEnd;
   const scalarStart = cursor;
@@ -208,9 +213,17 @@ export function deriveArenaZonePlan(
   const scalarDataEnd = cursor;
   const fieldStart =
     fieldSlots.length > 0
-      ? alignUp(scalarDataEnd, Math.max(1, alignment.scalarToFieldAlignFloats))
+      ? alignUp(scalarDataEnd, normalizedAlignment.scalarToFieldAlignFloats)
       : scalarDataEnd;
-  zones.push(makeZone('scalar', scalarStart, fieldStart, scalarSlots.length, alignment.scalarToFieldAlignFloats));
+  zones.push(
+    makeZone(
+      'scalar',
+      scalarStart,
+      fieldStart,
+      scalarSlots.length,
+      normalizedAlignment.scalarToFieldAlignFloats,
+    ),
+  );
 
   cursor = fieldStart;
   const fieldZoneStart = cursor;
@@ -226,7 +239,15 @@ export function deriveArenaZonePlan(
     cursor += descriptor.length;
   }
   const fieldEnd = cursor;
-  zones.push(makeZone('field', fieldZoneStart, fieldEnd, fieldSlots.length, alignment.scalarToFieldAlignFloats));
+  zones.push(
+    makeZone(
+      'field',
+      fieldZoneStart,
+      fieldEnd,
+      fieldSlots.length,
+      normalizedAlignment.scalarToFieldAlignFloats,
+    ),
+  );
 
   // [LAW:one-way-deps] State/gauge zones are explicit IR contract ranges even
   // before dedicated allocators migrate ownership in later specs.
@@ -238,7 +259,7 @@ export function deriveArenaZonePlan(
   zones.push(makeZone('gauge', gaugeStart, gaugeEnd, 0, 1));
 
   const toIR = (): ArenaZonesIR => ({
-    alignment,
+    alignment: normalizedAlignment,
     zones,
     totalFloats: gaugeEnd,
   });
@@ -246,7 +267,7 @@ export function deriveArenaZonePlan(
   return {
     totalFloats: gaugeEnd,
     zones,
-    alignment,
+    alignment: normalizedAlignment,
     slotDescriptor(slot: ValueSlot): ArenaSlotDescriptor {
       const descriptor = descriptors.get(slot);
       if (!descriptor) {

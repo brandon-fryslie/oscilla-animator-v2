@@ -204,6 +204,47 @@ describe('deriveArenaZonePlan', () => {
     expect(fieldZone).toBeDefined();
     expect(fieldZone!.start % DEFAULT_ARENA_ALIGNMENT_POLICY.scalarToFieldAlignFloats).toBe(0);
   });
+
+  it('normalizes invalid alignment policy values consistently in layout and metadata', () => {
+    const ref = instanceRef('grid', 'inst_norm');
+    const instances = makeInstances([{ id: 'inst_norm', count: 4, maxCount: 4 }]);
+    const plan = deriveArenaZonePlan(
+      [
+        {
+          slot: 1 as ValueSlot,
+          type: canonicalScalar(FLOAT),
+          packingPreference: 'aos',
+        },
+        {
+          slot: 2 as ValueSlot,
+          type: canonicalMany(VEC3, undefined, ref),
+          packingPreference: 'soa',
+        },
+      ],
+      instances,
+      {
+        headerFloats: -8,
+        scalarToFieldAlignFloats: 0,
+      },
+    );
+
+    const ir = plan.toIR();
+    expect(ir.alignment).toEqual({
+      headerFloats: 0,
+      scalarToFieldAlignFloats: 1,
+    });
+
+    const headerZone = ir.zones.find((zone) => zone.kind === 'header');
+    const scalarZone = ir.zones.find((zone) => zone.kind === 'scalar');
+    const fieldZone = ir.zones.find((zone) => zone.kind === 'field');
+    expect(headerZone).toEqual(expect.objectContaining({
+      length: 0,
+      alignmentFloats: 0,
+    }));
+    expect(scalarZone?.alignmentFloats).toBe(1);
+    expect(fieldZone?.alignmentFloats).toBe(1);
+    expect(fieldZone?.start).toBeGreaterThanOrEqual(scalarZone?.end ?? 0);
+  });
 });
 
 // ---------------------------------------------------------------------------
