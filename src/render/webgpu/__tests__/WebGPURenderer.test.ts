@@ -234,6 +234,9 @@ describe('WebGPURenderer', () => {
     expect(bufferSizes).toContain(
       WEBGPU_RENDER_CONTRACT.computeParamsFloats * Float32Array.BYTES_PER_ELEMENT
     );
+    expect(bufferSizes).toContain(
+      WEBGPU_RENDER_CONTRACT.inputHeaderBytes + WEBGPU_RENDER_CONTRACT.simulationCapacity * 16
+    );
     expect(bufferSizes).toContain(Uint32Array.BYTES_PER_ELEMENT);
 
     const bindGroupDescriptors = env.device.createBindGroup.mock.calls.map(
@@ -341,6 +344,51 @@ describe('WebGPURenderer', () => {
     expect(firstFrameBindGroup).toBe(computeBindGroupDescriptors[0]);
     expect(secondFrameBindGroup).toBe(computeBindGroupDescriptors[1]);
     expect(firstFrameBindGroup).not.toBe(secondFrameBindGroup);
+  });
+
+  it('marshals frame input values into the compute read-buffer header before dispatch', async () => {
+    const env = createFakeWebGPUEnvironment();
+    setNavigatorGpu(env.gpu);
+    const renderer = await createWebGPURenderer(env.canvas);
+
+    renderer.render(makeRenderInput([], {
+      timeMs: 1000,
+      inputMouseX: 0.75,
+      inputMouseY: 0.25,
+      inputMouseButtons: 5,
+      inputAudioLow: 0.2,
+      inputAudioMid: 0.4,
+      inputAudioHigh: 0.8,
+      inputGaugeActive: 1,
+    }));
+
+    const computeBindGroupDescriptors = env.device.createBindGroup.mock.calls
+      .map(([descriptor]: [unknown]) => descriptor as { entries: Array<{ resource: { buffer: unknown } }> })
+      .filter((descriptor) => descriptor.entries.length === 3);
+    const firstFrameReadBuffer = computeBindGroupDescriptors[0]?.entries[0]?.resource.buffer;
+    expect(firstFrameReadBuffer).toBeDefined();
+
+    const inputHeaderWrite = env.device.queue.writeBuffer.mock.calls.find((args: unknown[]) =>
+      args[0] === firstFrameReadBuffer &&
+      args[2] instanceof Uint8Array &&
+      args[4] === WEBGPU_RENDER_CONTRACT.inputHeaderBytes
+    );
+    expect(inputHeaderWrite).toBeDefined();
+
+    const inputHeaderBytes = inputHeaderWrite?.[2] as Uint8Array;
+    const view = new DataView(inputHeaderBytes.buffer, inputHeaderBytes.byteOffset, inputHeaderBytes.byteLength);
+    expect(view.getFloat32(WEBGPU_RENDER_CONTRACT.inputHeaderTimeOffsetBytes, true)).toBeCloseTo(1);
+    expect(view.getFloat32(WEBGPU_RENDER_CONTRACT.inputHeaderDeltaTimeOffsetBytes, true)).toBeCloseTo(0);
+    expect(view.getFloat32(WEBGPU_RENDER_CONTRACT.inputHeaderFrameCountOffsetBytes, true)).toBeCloseTo(0);
+    expect(view.getFloat32(WEBGPU_RENDER_CONTRACT.inputHeaderResolutionXOffsetBytes, true)).toBeCloseTo(128);
+    expect(view.getFloat32(WEBGPU_RENDER_CONTRACT.inputHeaderResolutionYOffsetBytes, true)).toBeCloseTo(96);
+    expect(view.getFloat32(WEBGPU_RENDER_CONTRACT.inputHeaderMouseXOffsetBytes, true)).toBeCloseTo(2 / 3);
+    expect(view.getFloat32(WEBGPU_RENDER_CONTRACT.inputHeaderMouseYOffsetBytes, true)).toBeCloseTo(0.5);
+    expect(view.getUint32(WEBGPU_RENDER_CONTRACT.inputHeaderMouseButtonsOffsetBytes, true)).toBe(5);
+    expect(view.getFloat32(WEBGPU_RENDER_CONTRACT.inputHeaderAudioLowOffsetBytes, true)).toBeCloseTo(0.2);
+    expect(view.getFloat32(WEBGPU_RENDER_CONTRACT.inputHeaderAudioMidOffsetBytes, true)).toBeCloseTo(0.4);
+    expect(view.getFloat32(WEBGPU_RENDER_CONTRACT.inputHeaderAudioHighOffsetBytes, true)).toBeCloseTo(0.8);
+    expect(view.getFloat32(WEBGPU_RENDER_CONTRACT.inputHeaderGaugeActiveOffsetBytes, true)).toBeCloseTo(1);
   });
 
   it('allocates distinct compute src/dst buffers to prevent aliasing hazards', async () => {
