@@ -577,32 +577,40 @@ export class WebGPURenderer {
       );
     }
 
-    const currentTextureView = this.context.getCurrentTexture().createView();
-    const colorAttachmentView = this.msaaColorView ?? currentTextureView;
-    const pass = commandEncoder.beginRenderPass({
-      colorAttachments: [
-        {
-          view: colorAttachmentView,
-          resolveTarget: this.msaaColorView ? currentTextureView : undefined,
-          loadOp: 'clear',
-          storeOp: this.msaaColorView ? 'discard' : 'store',
-          clearValue: { r: 0, g: 0, b: 0, a: 0 },
-        },
-      ],
-    });
+    // [LAW:dataflow-not-control-flow] exception: WebGPU render targets cannot be
+    // zero-sized with a fixed MSAA sample-count pipeline; keep compute running and
+    // skip only the render pass when viewport dimensions are zero.
+    const shouldRenderPass = input.width > 0 && input.height > 0;
+    if (shouldRenderPass) {
+      if (this.msaaColorView === null) {
+        throw new Error('WebGPURenderer: MSAA render target unavailable for non-zero viewport');
+      }
+      const currentTextureView = this.context.getCurrentTexture().createView();
+      const pass = commandEncoder.beginRenderPass({
+        colorAttachments: [
+          {
+            view: this.msaaColorView,
+            resolveTarget: currentTextureView,
+            loadOp: 'clear',
+            storeOp: 'discard',
+            clearValue: { r: 0, g: 0, b: 0, a: 0 },
+          },
+        ],
+      });
 
-    pass.setPipeline(this.pathPipeline);
-    pass.setBindGroup(WEBGPU_RENDER_CONTRACT.sceneBindGroup, this.sceneBindGroup);
-    pass.setBindGroup(WEBGPU_RENDER_CONTRACT.topologyBankBindGroup, this.topologyBankBindGroup);
-    // [LAW:single-enforcer] Instance storage binding is stable for the entire
-    // render pass, so the pass setup is the single bind authority.
-    pass.setBindGroup(WEBGPU_RENDER_CONTRACT.instanceBindGroup, this.instanceBindGroup);
+      pass.setPipeline(this.pathPipeline);
+      pass.setBindGroup(WEBGPU_RENDER_CONTRACT.sceneBindGroup, this.sceneBindGroup);
+      pass.setBindGroup(WEBGPU_RENDER_CONTRACT.topologyBankBindGroup, this.topologyBankBindGroup);
+      // [LAW:single-enforcer] Instance storage binding is stable for the entire
+      // render pass, so the pass setup is the single bind authority.
+      pass.setBindGroup(WEBGPU_RENDER_CONTRACT.instanceBindGroup, this.instanceBindGroup);
 
-    for (const prepared of drawPlan) {
-      this.drawPreparedPathOp(pass, prepared);
+      for (const prepared of drawPlan) {
+        this.drawPreparedPathOp(pass, prepared);
+      }
+
+      pass.end();
     }
-
-    pass.end();
     this.device.queue.submit([commandEncoder.finish()]);
   }
 

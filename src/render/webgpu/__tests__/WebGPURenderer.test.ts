@@ -331,6 +331,22 @@ describe('WebGPURenderer', () => {
     ).toThrow('width must be a finite non-negative number');
   });
 
+  it('skips render pass for zero-sized viewports while still submitting compute work', async () => {
+    const env = createFakeWebGPUEnvironment();
+    setNavigatorGpu(env.gpu);
+    const renderer = await createWebGPURenderer(env.canvas);
+
+    renderer.render(makeRenderInput([], { width: 0, height: 96 }));
+
+    const encoder = env.device.createCommandEncoder.mock.results[0]?.value as {
+      beginComputePass: ReturnType<typeof vi.fn>;
+      beginRenderPass: ReturnType<typeof vi.fn>;
+    };
+    expect(encoder.beginComputePass).toHaveBeenCalledTimes(1);
+    expect(encoder.beginRenderPass).not.toHaveBeenCalled();
+    expect(env.device.queue.submit).toHaveBeenCalledTimes(1);
+  });
+
   it('ping-pongs compute bind groups across frames', async () => {
     const env = createFakeWebGPUEnvironment();
     setNavigatorGpu(env.gpu);
