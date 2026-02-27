@@ -2,9 +2,8 @@
  * DefaultSourcePolicy — discharges missingInputSource obligations.
  *
  * Strategy resolution order:
- * 1. DraftBlock.portDefaults (per-instance override from canonical params / setPortDefault)
- * 2. InputDef.defaultSource (port-level override on block definition)
- * 3. Polymorphic DefaultSource block (fallback — defers to type-resolved lowering)
+ * 1. InputDef.defaultSource (port-level override on block definition)
+ * 2. Polymorphic DefaultSource block (fallback — defers to type-resolved lowering)
  *
  * Time-source policy path: wire to existing time source block (edge only, no new block).
  *

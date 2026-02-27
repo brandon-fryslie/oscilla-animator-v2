@@ -210,12 +210,25 @@ function resolveInputsWithMultiInput(
   blocks: readonly Block[],
   builder: OrchestratorIRBuilder,
   errors: CompileError[],
+  portTypes: ReadonlyMap<PortKey, CanonicalType>,
   inputPortPolicies: ReadonlyMap<PortKey, InputPortPolicy>,
   blockOutputs?: Map<BlockIndex, Map<string, ValueRefExpr>>,
   blockIdToIndex?: Map<string, BlockIndex>,
   failedBlocks?: ReadonlySet<BlockIndex>
 ): MultiInputResolution {
-  const resolved = resolveBlockInputs(block, blockIndex, edges, blocks, inputPortPolicies);
+  const resolved = resolveBlockInputs(
+    block,
+    blockIndex,
+    edges,
+    blocks,
+    inputPortPolicies,
+    ({ slotId, inputDef }) => {
+      const key = portKey(blockIndex, slotId, 'in');
+      const resolvedType = portTypes.get(key);
+      // [LAW:one-source-of-truth] Solver-resolved portTypes are authoritative.
+      return resolvedType ?? inputDef.type!;
+    },
+  );
   const inputRefs = new Map<string, ValueRefExpr>();
   const upstreamFailedPorts = new Set<string>();
 
@@ -237,7 +250,9 @@ function resolveInputsWithMultiInput(
     if (isConcretePayload(payload) && isAxisInst(portType.extent.cardinality)) {
       const card = portType.extent.cardinality.value;
       const world = card.kind === 'many' ? 'many' : card.kind === 'one' ? 'one' : 'scalar';
-      const modeValidation = validateCombineMode(combine.mode, world, payload.kind);
+      // [LAW:one-source-of-truth] Combine validation must read canonical type
+      // structure so HANDLE semantics don't collapse into payload-kind-only checks.
+      const modeValidation = validateCombineMode(combine.mode, world, portType as CanonicalType);
       if (!modeValidation.valid) {
         errors.push({
           code: 'PortTypeMismatch',
@@ -530,6 +545,7 @@ function lowerBlockInstance(
       blocks,
       builder,
       errors,
+      portTypes,
       inputPortPolicies,
       blockOutputs,
       blockIdToIndex,

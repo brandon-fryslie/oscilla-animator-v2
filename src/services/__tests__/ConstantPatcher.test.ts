@@ -209,7 +209,7 @@ function frameSummary(program: CompiledProgramIR): {
 }
 
 describe('ConstantPatcher simple patch runtime sink gating', () => {
-  it('falls back for constants that are not read by runtime sinks', () => {
+  it('patches runtime-live sink constants and falls back for compile-time-only constants', () => {
     const { program, idByDisplayName } = compileSimpleProgram();
     const dotId = idByDisplayName.get('dot')!;
     const wobbleId = idByDisplayName.get('dot-wobble')!;
@@ -221,8 +221,8 @@ describe('ConstantPatcher simple patch runtime sink gating', () => {
     const periodPatched = patchProgramConstants(program, new Map([[`${clockId}:periodAMs`, 2500]]));
 
     expect(resolutionPatched).toBeNull();
-    expect(amountPatched).toBeNull();
-    expect(frequencyPatched).toBeNull();
+    expect(amountPatched).not.toBeNull();
+    expect(frequencyPatched).not.toBeNull();
     expect(periodPatched).toBeNull();
   });
 

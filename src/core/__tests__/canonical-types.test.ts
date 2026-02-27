@@ -51,6 +51,14 @@ describe('PayloadType', () => {
     expect(validPayloads).not.toContain('event');
     expect(validPayloads).not.toContain('domain');
   });
+
+  it('keeps HANDLE semantics distinct from INT semantics', () => {
+    // [LAW:one-source-of-truth] Handle semantics are represented by payload kind
+    // 'shape', not by overloading plain integer payloads.
+    expect(HANDLE.kind).toBe('shape');
+    expect(INT.kind).toBe('int');
+    expect(HANDLE.kind).not.toBe(INT.kind);
+  });
 });
 
 // =============================================================================

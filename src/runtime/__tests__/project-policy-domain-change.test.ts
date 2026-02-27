@@ -49,6 +49,7 @@ function createTestRuntimeState(): RuntimeState {
       energy: 0.5,
     },
     values: {
+      shapeFields: new Map(),
       shape2d: new Uint32Array(0),
     },
     lastRenderFrame: null,

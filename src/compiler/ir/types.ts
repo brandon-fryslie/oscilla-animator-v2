@@ -315,8 +315,14 @@ export interface StepRender {
    * - `slot`: per-instance isotropic scale (cardinality many; stride 1)
    */
   readonly scale?: { readonly k: 'one'; readonly id: ValueExprId } | { readonly k: 'slot'; readonly slot: ValueSlot };
-  /** Shape - topology + param expressions (REQUIRED at runtime, types now enforce this) */
+  /**
+   * Shape source for rendering.
+   *
+   * [LAW:one-source-of-truth] Canonical path is `oneHandle`/`slot` (numeric handle flow
+   * via arena + ShapeBank). Legacy `one` is kept for compatibility while migration lands.
+   */
   readonly shape:
+    | { readonly k: 'oneHandle'; readonly id: ValueExprId }
     | { readonly k: 'one'; readonly topologyId: TopologyId; readonly paramExprs: readonly ValueExprId[] }
     | { readonly k: 'slot'; readonly slot: ValueSlot };
   /** Optional control points for path rendering - P5c: Add control points field */

@@ -45,6 +45,13 @@ Outside `docs/WebGPU-Complete/`, WebGPU documents are historical pointers only a
 
 Canonical architecture guardrails live in:
 - `src/__tests__/architecture-guardrails.test.ts`
+- `src/__tests__/forbidden-patterns.test.ts` (v3 hard rules)
+- `src/compiler/__tests__/no-legacy-types.test.ts` (compiler/runtime legacy-type gate)
+- `src/services/__tests__/AnimationLoop.test.ts` (canonical frame-order/runtime hot-path invariants)
+
+Canonical v3 architecture source:
+- `design-docs/OSCILLA-WEBGPU-V3-REFERENCE-ARCHITECTURE.md`
+- `docs/WebGPU-Complete/P0-3__Refactoring_to_Handle-Based_Architecture.md`
 
 ### WebGPU Matrix Harness
 

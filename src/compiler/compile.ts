@@ -301,6 +301,7 @@ function assertCanonicalRuntimeStorage(storage: SlotMetaEntry['storage']): Runti
 function buildRuntimeAddressTable(
   runtimeSlots: readonly RuntimeSlotEntry[],
   scheduleIR: ScheduleIR,
+  precomputedFieldSlots?: ReadonlyMap<number, ValueSlot>,
 ): RuntimeAddressTableIR {
   const slotLookup = new Map<ValueSlot, RuntimeSlotLookupEntry>();
   const slotToArena = new Map<ValueSlot, ArenaSlotDescriptor>();
@@ -318,7 +319,9 @@ function buildRuntimeAddressTable(
     }
   }
 
-  const fieldExprToSlot = new Map<number, ValueSlot>();
+  // [LAW:one-source-of-truth] Field slot ownership comes from IR builder
+  // registration; schedule materialize steps augment this map for runtime reads.
+  const fieldExprToSlot = new Map<number, ValueSlot>(precomputedFieldSlots ?? []);
   const scalarExprToArenaAddress = new Map<number, { slot: ValueSlot; arena: ArenaSlotDescriptor; component: number }>();
   const steps = scheduleIR.steps as readonly Step[];
   for (const step of steps) {
@@ -431,21 +434,6 @@ function convertLinkedIRToProgram(
   };
 
   const slotCount = builder.getSlotCount();
-  const renderSoaSlots = new Set<ValueSlot>();
-  const continuitySlots = new Set<ValueSlot>();
-  for (const step of scheduleIR.steps) {
-    if (step.kind === 'render') {
-      renderSoaSlots.add(step.controlPointsSlot);
-      renderSoaSlots.add(step.colorSlot);
-      if (step.rotationSlot !== undefined) renderSoaSlots.add(step.rotationSlot);
-      if (step.scale2Slot !== undefined) renderSoaSlots.add(step.scale2Slot);
-      if (step.controlPoints?.k === 'slot') renderSoaSlots.add(step.controlPoints.slot);
-      if (step.scale?.k === 'slot') renderSoaSlots.add(step.scale.slot);
-    } else if (step.kind === 'continuityApply') {
-      continuitySlots.add(step.baseSlot);
-      continuitySlots.add(step.outputSlot);
-    }
-  }
 
   for (let slotId = 0; slotId < slotCount; slotId++) {
     const slot = slotId as ValueSlot;
@@ -464,11 +452,7 @@ function convertLinkedIRToProgram(
 
     // Arena descriptor: flat Float32Array layout for all numeric slots.
     const card = requireInst(type.extent.cardinality, 'cardinality');
-    const useRenderSoaPacking =
-      card.kind === 'many' &&
-      stride > 1 &&
-      renderSoaSlots.has(slot) &&
-      !continuitySlots.has(slot);
+    const useRenderSoaPacking = card.kind === 'many' && stride > 1;
     const desc = deriveArenaDescriptor(
       type,
       arenaOffset,
@@ -491,7 +475,11 @@ function convertLinkedIRToProgram(
   // Build output specs from canonical output contract only.
   const outputs: OutputSpecIR[] = [{ kind: 'renderFrame' }];
   const drawPrepProgram = buildDrawPrepProgram(scheduleIR);
-  const runtimeAddressTable = buildRuntimeAddressTable(runtimeSlots, scheduleIR);
+  const runtimeAddressTable = buildRuntimeAddressTable(
+    runtimeSlots,
+    scheduleIR,
+    builder.getFieldSlots(),
+  );
   assertRuntimeAddressTableCoverage(runtimeSlots, runtimeAddressTable);
   const generatedComputeProgram = buildGeneratedComputeProgram(
     scheduleIR,

@@ -178,7 +178,7 @@ describe('construct one-cardinality evaluation', () => {
     ];
 
     expect(() => evaluateValueExprScalar(0 as ValueExprId, valueExprs, state)).toThrow(
-      /not scalar-evaluable/
+      /not scalar-evaluable|evaluateShapeRef context/
     );
   });
 });

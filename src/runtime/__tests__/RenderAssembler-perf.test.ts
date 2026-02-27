@@ -15,7 +15,17 @@ import {
   topologyGroupCacheMisses,
   resetTopologyCacheCounters,
 } from '../RenderAssembler';
-import { SHAPE2D_WORDS, writeShape2D, createRuntimeState } from '../RuntimeState';
+import {
+  SHAPE2D_WORDS,
+  SHAPE_BANK_HEADER_WORDS,
+  allocShapeBankWords,
+  createRuntimeState,
+  writeShape2D,
+  writeShapeBankHandleMetadata,
+  writeShapeBankHeader,
+} from '../RuntimeState';
+
+const TEST_STATE = createRuntimeState(0);
 
 // Helper: create a shape buffer with N instances of given topologies
 function createShapeBuffer(topologies: Array<{ topologyId: number; pointsFieldSlot: number; pointsCount: number; flags: number }>): Uint32Array {
@@ -51,11 +61,11 @@ describe('Topology Group Caching', () => {
   it('cache hit: same buffer ref + same count → reuse (computed once)', () => {
     const buffer = createUniformShapeBuffer(5);
 
-    const result1 = groupInstancesByTopology(buffer, 5);
+    const result1 = groupInstancesByTopology(buffer, 5, TEST_STATE);
     expect(topologyGroupCacheMisses).toBe(1);
     expect(topologyGroupCacheHits).toBe(0);
 
-    const result2 = groupInstancesByTopology(buffer, 5);
+    const result2 = groupInstancesByTopology(buffer, 5, TEST_STATE);
     expect(topologyGroupCacheHits).toBe(1);
     expect(topologyGroupCacheMisses).toBe(1); // Still 1 from first call
 
@@ -67,10 +77,10 @@ describe('Topology Group Caching', () => {
     const buffer1 = createUniformShapeBuffer(5);
     const buffer2 = createUniformShapeBuffer(5); // Different object, same content
 
-    groupInstancesByTopology(buffer1, 5);
+    groupInstancesByTopology(buffer1, 5, TEST_STATE);
     expect(topologyGroupCacheMisses).toBe(1);
 
-    groupInstancesByTopology(buffer2, 5);
+    groupInstancesByTopology(buffer2, 5, TEST_STATE);
     expect(topologyGroupCacheMisses).toBe(2);
   });
 
@@ -78,10 +88,10 @@ describe('Topology Group Caching', () => {
     // Buffer is big enough for 10 instances
     const buffer = createUniformShapeBuffer(10);
 
-    const result1 = groupInstancesByTopology(buffer, 5);
+    const result1 = groupInstancesByTopology(buffer, 5, TEST_STATE);
     expect(topologyGroupCacheMisses).toBe(1);
 
-    const result2 = groupInstancesByTopology(buffer, 7);
+    const result2 = groupInstancesByTopology(buffer, 7, TEST_STATE);
     expect(topologyGroupCacheMisses).toBe(2);
 
     // Different results since count differs
@@ -91,11 +101,11 @@ describe('Topology Group Caching', () => {
   it('cache updates on miss (new count replaces old entry)', () => {
     const buffer = createUniformShapeBuffer(10);
 
-    groupInstancesByTopology(buffer, 5);
-    groupInstancesByTopology(buffer, 7); // Miss, replaces cache entry
+    groupInstancesByTopology(buffer, 5, TEST_STATE);
+    groupInstancesByTopology(buffer, 7, TEST_STATE); // Miss, replaces cache entry
 
     // Now calling with 7 should hit
-    const result = groupInstancesByTopology(buffer, 7);
+    const result = groupInstancesByTopology(buffer, 7, TEST_STATE);
     expect(topologyGroupCacheHits).toBe(1);
     expect(result.get('1:10')!.instanceIndices.length).toBe(7);
   });
@@ -109,11 +119,61 @@ describe('Topology Group Caching', () => {
       { topologyId: 1, pointsFieldSlot: 10, pointsCount: 4, flags: 0 },
     ]);
 
-    const groups = computeTopologyGroups(buffer, 5);
+    const groups = computeTopologyGroups(buffer, 5, TEST_STATE);
 
     expect(groups.size).toBe(2);
     expect(groups.get('1:10')!.instanceIndices).toEqual([0, 2, 4]);
     expect(groups.get('2:20')!.instanceIndices).toEqual([1, 3]);
+  });
+
+  it('computeTopologyGroups preserves integer handle identity for numeric shape buffers', () => {
+    const handleA = allocShapeBankWords(TEST_STATE.shapeBank!, SHAPE_BANK_HEADER_WORDS);
+    writeShapeBankHeader(TEST_STATE.shapeBank!.data, handleA, {
+      indexCount: 4,
+      indexOffset: 0,
+      vertexCount: 4,
+      flags: 1,
+    });
+    writeShapeBankHandleMetadata(TEST_STATE.shapeBank!, handleA, {
+      topologyId: 7,
+      controlPointSlot: 11,
+    });
+
+    const handleB = allocShapeBankWords(TEST_STATE.shapeBank!, SHAPE_BANK_HEADER_WORDS);
+    writeShapeBankHeader(TEST_STATE.shapeBank!.data, handleB, {
+      indexCount: 3,
+      indexOffset: 0,
+      vertexCount: 3,
+      flags: 0,
+    });
+    writeShapeBankHandleMetadata(TEST_STATE.shapeBank!, handleB, {
+      topologyId: 9,
+      controlPointSlot: 13,
+    });
+
+    const handleBuffer = new Float32Array([handleA, handleB, handleA, handleA]);
+    const groups = computeTopologyGroups(handleBuffer, handleBuffer.length, TEST_STATE);
+
+    expect(groups.size).toBe(2);
+    expect(groups.get('7:11')!.instanceIndices).toEqual([0, 2, 3]);
+    expect(groups.get('9:13')!.instanceIndices).toEqual([1]);
+  });
+
+  it('computeTopologyGroups rejects non-integer numeric handles', () => {
+    const handleA = allocShapeBankWords(TEST_STATE.shapeBank!, SHAPE_BANK_HEADER_WORDS);
+    writeShapeBankHeader(TEST_STATE.shapeBank!.data, handleA, {
+      indexCount: 4,
+      indexOffset: 0,
+      vertexCount: 4,
+      flags: 1,
+    });
+    writeShapeBankHandleMetadata(TEST_STATE.shapeBank!, handleA, {
+      topologyId: 7,
+      controlPointSlot: 11,
+    });
+
+    const corruptedHandles = new Float32Array([handleA, handleA + 0.5]);
+    expect(() => computeTopologyGroups(corruptedHandles, 2, TEST_STATE)).toThrow(/must be an integer/i);
   });
 });
 
