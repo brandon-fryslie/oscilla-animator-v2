@@ -42,6 +42,8 @@ import {
 import { debugSettings } from '../settings/tokens/debug-settings';
 import { compilerFlagsSettings } from '../settings/tokens/compiler-flags-settings';
 import { appSettings } from '../settings/tokens/app-settings';
+import { exportTopologyBankU32, getTopologyRegistryRevision } from '../shapes/registry';
+import { ShapeBankAllocator, type ShapeBankDirtyRange } from '../shapes/ShapeBankAllocator';
 
 function isCompileWorkerUnavailableError(err: unknown): boolean {
   const message = err instanceof Error ? err.message : String(err);
@@ -77,6 +79,9 @@ export class RuntimeService {
   private readonly liveRecompile: LiveRecompileController = createLiveRecompileController();
   private statsSink: ((statsText: string) => void) | null;
   private runtimeReadySink: (() => void) | null;
+  private shapeBankAllocator: ShapeBankAllocator | null = null;
+  private shapeBankRevision = -1;
+  private shapeBankDirtyRanges: readonly ShapeBankDirtyRange[] = [];
 
   constructor(
     private readonly store: RootStore,
@@ -186,6 +191,30 @@ export class RuntimeService {
     });
   }
 
+  private syncShapeBankAllocatorFromRegistry(): void {
+    const revision = getTopologyRegistryRevision();
+    if (revision === this.shapeBankRevision) {
+      return;
+    }
+    const exported = exportTopologyBankU32();
+    const requiredStaticWords = exported.data.length;
+    const requiredCapacityWords = Math.max(requiredStaticWords * 2, requiredStaticWords + 256, 1);
+    const allocator =
+      this.shapeBankAllocator &&
+      this.shapeBankAllocator.capacityWords >= requiredCapacityWords &&
+      this.shapeBankAllocator.staticBoundary >= requiredStaticWords
+        ? this.shapeBankAllocator
+        : new ShapeBankAllocator(requiredCapacityWords, { staticWords: requiredStaticWords });
+
+    allocator.resetStatic();
+    const alloc = allocator.allocStatic(requiredStaticWords);
+    allocator.writeWords(alloc.wordOffset, exported.data);
+
+    this.shapeBankAllocator = allocator;
+    this.shapeBankDirtyRanges = allocator.consumeDirtyRanges();
+    this.shapeBankRevision = revision;
+  }
+
   private async flushPendingSwap(): Promise<void> {
     if (this.swapInFlight) return;
     const next = this.pendingSwap;
@@ -196,6 +225,7 @@ export class RuntimeService {
     try {
       // [LAW:single-enforcer] All compile/swap application goes through this queue.
       await compileAndSwap(this.compileDeps(), false, next);
+      this.syncShapeBankAllocatorFromRegistry();
     } finally {
       this.swapInFlight = false;
       if (this.pendingSwap) {
@@ -302,6 +332,7 @@ export class RuntimeService {
         this.compileDeps(),
         true
       );
+      this.syncShapeBankAllocatorFromRegistry();
     } catch (err) {
       // [LAW:single-enforcer] RuntimeService logs unexpected startup failures once.
       const message = err instanceof Error ? err.message : String(err);
