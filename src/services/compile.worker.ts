@@ -62,8 +62,10 @@ async function toBackendResult(
   };
 }
 
-async function handleCompileMessage(message: CompileWorkerRequest): Promise<CompileWorkerResponse> {
-  const startMs = performance.now();
+async function handleCompileMessage(
+  message: CompileWorkerRequest,
+  startMs: number,
+): Promise<CompileWorkerResponse> {
   const { serializedPatch, frontendOptions, patchRevision, requestId } = message;
 
   const decoded = deserializePatch(serializedPatch);
@@ -104,8 +106,9 @@ self.onmessage = (event: MessageEvent<CompileWorkerRequest>) => {
   if (!message || message.kind !== 'compile') {
     return;
   }
+  const startMs = performance.now();
 
-  void handleCompileMessage(message)
+  void handleCompileMessage(message, startMs)
     .then((response) => {
       self.postMessage(response);
     })
@@ -114,7 +117,7 @@ self.onmessage = (event: MessageEvent<CompileWorkerRequest>) => {
         kind: 'workerError',
         requestId: message.requestId,
         patchRevision: message.patchRevision,
-        durationMs: 0,
+        durationMs: Math.max(0, performance.now() - startMs),
         message: err instanceof Error ? err.message : String(err),
       };
       self.postMessage(response);

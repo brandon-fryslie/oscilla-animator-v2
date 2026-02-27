@@ -28,6 +28,25 @@ describe('compileProgramWithNaga', () => {
     expect(compiled.wgsl).toContain('fn compute_main');
   });
 
+  it('emits lane bounds guard using canonical MAX_ACTIVE_LANES value', async () => {
+    const result = compile(buildSimplePatch());
+    expect(result.kind).toBe('ok');
+    if (result.kind !== 'ok') return;
+
+    const sourceWgsl = result.program.generatedComputeProgram?.wgsl ?? '';
+    const maxLaneMatch = /const\s+MAX_ACTIVE_LANES:\s*u32\s*=\s*(\d+)u\s*;/m.exec(sourceWgsl);
+    expect(maxLaneMatch).not.toBeNull();
+    if (!maxLaneMatch) return;
+    const expected = maxLaneMatch[1];
+
+    const compiled = await compileProgramWithNaga(result.program);
+    expect(compiled.kind).toBe('ok');
+    if (compiled.kind !== 'ok') return;
+
+    expect(compiled.wgsl).toContain(`const MAX_ACTIVE_LANES: u32 = ${expected}u;`);
+    expect(compiled.wgsl).toContain('if (lane >= MAX_ACTIVE_LANES) {');
+  });
+
   it('fails when compiled program has no lowering artifact', async () => {
     const result = compile(buildSimplePatch());
     expect(result.kind).toBe('ok');
@@ -99,5 +118,33 @@ describe('compileProgramWithNaga', () => {
     expect(
       compiled.errors.some((error) => error.where?.blockId === targetBlockId),
     ).toBe(true);
+  });
+
+  it('fails fast when lowering module references missing type indices', async () => {
+    const result = compile(buildSimplePatch());
+    expect(result.kind).toBe('ok');
+    if (result.kind !== 'ok') return;
+
+    const lowering = result.program.nagaLoweringProgram;
+    expect(lowering).toBeDefined();
+    if (!lowering) return;
+
+    const faultyProgram = {
+      ...result.program,
+      nagaLoweringProgram: {
+        ...lowering,
+        module: {
+          ...lowering.module,
+          global_variables: lowering.module.global_variables.map((global, index) =>
+            index === 0 ? { ...global, type: 999 } : global
+          ),
+        },
+      },
+    };
+
+    const compiled = await compileProgramWithNaga(faultyProgram as typeof result.program);
+    expect(compiled.kind).toBe('error');
+    if (compiled.kind !== 'error') return;
+    expect(compiled.errors.some((error) => error.message.includes('Emission Failure'))).toBe(true);
   });
 });

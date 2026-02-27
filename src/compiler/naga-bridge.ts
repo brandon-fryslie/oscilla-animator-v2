@@ -5,6 +5,10 @@ export interface NagaCompilationResult {
   readonly wgsl: string;
 }
 
+export interface NagaCompileOptions {
+  readonly maxActiveLanes?: number;
+}
+
 export class NagaValidationError extends Error {
   readonly errors: readonly ShimFormattedError[];
 
@@ -36,15 +40,14 @@ export class NagaService {
     await this.bootPromise;
   }
 
-  static compile(module: NagaModuleIR): NagaCompilationResult {
+  static compile(module: NagaModuleIR, options?: NagaCompileOptions): NagaCompilationResult {
     if (!this.ready) {
       throw new Error('NagaService.compile called before boot');
     }
-    const result = compile_ir(module);
+    const result = compile_ir(module, options?.maxActiveLanes);
     if (!result.is_valid) {
       throw new NagaValidationError(result.errors);
     }
     return { wgsl: result.wgsl };
   }
 }
-
