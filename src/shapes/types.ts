@@ -19,19 +19,50 @@
 export type TopologyId = number;
 
 /**
- * TopologyBankRecord - packed structural metadata row for GPU upload.
+ * Shape bank header words (u32).
  *
- * Fields mirror the canonical `u32` topology bank contract:
- * - id: topology ID
- * - verbCount: path verb count (0 for non-path topologies)
- * - totalControlPoints: required control points (0 for non-path topologies)
- * - flags: bitfield (path/closed, etc.)
+ * [LAW:one-source-of-truth] Header layout is defined once for all shape-bank
+ * producers/consumers.
  */
-export interface TopologyBankRecord {
-  readonly id: number;
-  readonly verbCount: number;
-  readonly totalControlPoints: number;
+export const SHAPE_BANK_HEADER_WORDS = 8;
+
+export enum ShapeBankHeaderWord {
+  VertexCount = 0,
+  IndexCount = 1,
+  IndexStart = 2,
+  BaseVertex = 3,
+  Flags = 4,
+  BoundsMin = 5,
+  BoundsMax = 6,
+  Reserved = 7,
+}
+
+export const ShapeBankFlag = {
+  IsPath: 1 << 0,
+  Closed: 1 << 1,
+} as const;
+
+/**
+ * ShapeBankHeaderRecord - packed structural metadata row for GPU upload.
+ *
+ * Fields mirror the canonical `u32` shape bank contract:
+ * - vertexCount: vertices in topology
+ * - indexCount: indices in payload heap
+ * - indexStart: absolute payload start offset in the unified bank
+ * - baseVertex: base-vertex offset
+ * - flags: bitfield (path/closed, etc.)
+ * - boundsMin/boundsMax: packed bounds words (reserved in current runtime)
+ * - reserved: forward-compat reserved word
+ */
+export interface ShapeBankHeaderRecord {
+  readonly vertexCount: number;
+  readonly indexCount: number;
+  readonly indexStart: number;
+  readonly baseVertex: number;
   readonly flags: number;
+  readonly boundsMin: number;
+  readonly boundsMax: number;
+  readonly reserved: number;
 }
 
 /**

@@ -9,7 +9,12 @@
  */
 
 import type { TopologyId, TopologyDef, PathTopologyDef, AbstractTopologyDef, PathSegmentKind } from './types';
-import { PathVerb } from './types';
+import {
+  PathVerb,
+  SHAPE_BANK_HEADER_WORDS,
+  ShapeBankHeaderWord,
+  ShapeBankFlag,
+} from './types';
 
 export type SerializableTopologyDef = Omit<TopologyDef, 'render'> & Partial<Pick<
   PathTopologyDef,
@@ -54,22 +59,18 @@ let topologyRegistryRevision = 0;
  * [LAW:one-source-of-truth] This layout is the canonical structural export for
  * GPU-facing topology metadata.
  */
-export const TOPOLOGY_BANK_WORDS = 4;
-export const TopologyBankWord = {
-  Id: 0,
-  VerbCount: 1,
-  TotalControlPoints: 2,
-  Flags: 3,
-} as const;
-export const TopologyBankFlag = {
-  IsPath: 1 << 0,
-  Closed: 1 << 1,
-} as const;
+export const TOPOLOGY_BANK_WORDS = SHAPE_BANK_HEADER_WORDS;
+export const TopologyBankWord = ShapeBankHeaderWord;
+export const TopologyBankFlag = ShapeBankFlag;
 
 export interface TopologyBankExport {
   readonly wordsPerRecord: number;
   readonly ids: readonly TopologyId[];
   readonly indexById: ReadonlyMap<TopologyId, number>;
+  readonly headers: Uint32Array;
+  readonly payload: Uint32Array;
+  /** Absolute u32 word offset where payload region begins in `data`. */
+  readonly payloadWordStart: number;
   readonly data: Uint32Array;
   readonly revision: number;
 }
@@ -127,33 +128,66 @@ function isPathTopology(topology: TopologyDef): topology is PathTopologyDef {
 }
 
 /**
- * Export topology metadata as a packed u32 bank for GPU upload.
+ * Export topology metadata as a packed u32 shape bank for GPU upload.
  *
- * Record layout (4 words):
- * - 0: topology id
- * - 1: verb count (0 for non-path topologies)
- * - 2: total control points (0 for non-path topologies)
- * - 3: flags bitfield (isPath, closed)
+ * Region A (headers): fixed-width 8-word rows.
+ * Region B (payload): contiguous u32 index heap.
  */
 export function exportTopologyBankU32(ids?: readonly TopologyId[]): TopologyBankExport {
   const topologyIds = ids ?? getAllTopologyIds();
   const wordsPerRecord = TOPOLOGY_BANK_WORDS;
-  const data = new Uint32Array(topologyIds.length * wordsPerRecord);
+  const headers = new Uint32Array(topologyIds.length * wordsPerRecord);
   const indexById = new Map<TopologyId, number>();
+  const payloadChunks: Uint32Array[] = [];
+  const payloadOffsets: number[] = [];
+  let payloadWords = 0;
+
+  for (let i = 0; i < topologyIds.length; i++) {
+    const topology = getTopology(topologyIds[i]!);
+    const path = isPathTopology(topology);
+    const indexCount = path ? topology.totalControlPoints : 0;
+    const indices = new Uint32Array(indexCount);
+    for (let j = 0; j < indexCount; j++) {
+      indices[j] = j >>> 0;
+    }
+    payloadChunks.push(indices);
+    payloadOffsets.push(payloadWords);
+    payloadWords += indices.length;
+  }
+
+  const payloadWordStart = headers.length;
+  const payload = new Uint32Array(payloadWords);
+  const data = new Uint32Array(payloadWordStart + payloadWords);
+  data.set(headers, 0);
+
+  let payloadCursor = 0;
+  for (const chunk of payloadChunks) {
+    payload.set(chunk, payloadCursor);
+    data.set(chunk, payloadWordStart + payloadCursor);
+    payloadCursor += chunk.length;
+  }
 
   for (let i = 0; i < topologyIds.length; i++) {
     const id = topologyIds[i]!;
     const topology = getTopology(id);
     const base = i * wordsPerRecord;
     const path = isPathTopology(topology);
+    const indices = payloadChunks[i]!;
+    const indexCount = indices.length;
+    const indexStart = indexCount > 0 ? payloadWordStart + payloadOffsets[i]! : 0;
     const flags =
       (path ? TopologyBankFlag.IsPath : 0) |
       (path && topology.closed ? TopologyBankFlag.Closed : 0);
 
-    data[base + TopologyBankWord.Id] = id >>> 0;
-    data[base + TopologyBankWord.VerbCount] = path ? topology.verbs.length >>> 0 : 0;
-    data[base + TopologyBankWord.TotalControlPoints] = path ? topology.totalControlPoints >>> 0 : 0;
-    data[base + TopologyBankWord.Flags] = flags >>> 0;
+    headers[base + TopologyBankWord.VertexCount] = path ? topology.totalControlPoints >>> 0 : 0;
+    headers[base + TopologyBankWord.IndexCount] = indexCount >>> 0;
+    headers[base + TopologyBankWord.IndexStart] = indexStart >>> 0;
+    headers[base + TopologyBankWord.BaseVertex] = 0;
+    headers[base + TopologyBankWord.Flags] = flags >>> 0;
+    headers[base + TopologyBankWord.BoundsMin] = 0;
+    headers[base + TopologyBankWord.BoundsMax] = 0;
+    headers[base + TopologyBankWord.Reserved] = 0;
+    data.set(headers.subarray(base, base + wordsPerRecord), base);
     indexById.set(id, i);
   }
 
@@ -161,6 +195,9 @@ export function exportTopologyBankU32(ids?: readonly TopologyId[]): TopologyBank
     wordsPerRecord,
     ids: topologyIds,
     indexById,
+    headers,
+    payload,
+    payloadWordStart,
     data,
     revision: topologyRegistryRevision,
   };

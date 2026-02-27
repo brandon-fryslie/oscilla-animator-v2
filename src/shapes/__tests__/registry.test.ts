@@ -63,17 +63,22 @@ describe('shapes/registry topology install/export sync', () => {
 });
 
 describe('shapes/registry topology bank export', () => {
-  it('exports packed u32 records from the canonical topology registry', () => {
+  it('exports packed 8-word headers + payload heap from the canonical topology registry', () => {
     const id = registerDynamicTopology(makePathTopology(9, true), 'shape-topology-bank');
     const bank = exportTopologyBankU32([id]);
 
     expect(bank.wordsPerRecord).toBe(TOPOLOGY_BANK_WORDS);
     expect(bank.ids).toEqual([id]);
-    expect(bank.data.length).toBe(TOPOLOGY_BANK_WORDS);
-    expect(bank.data[0]).toBe(id);
-    expect(bank.data[1]).toBe(3); // MOVE, LINE, CLOSE
-    expect(bank.data[2]).toBe(9);
-    expect(bank.data[3]).toBe(TopologyBankFlag.IsPath | TopologyBankFlag.Closed);
+    expect(bank.headers.length).toBe(TOPOLOGY_BANK_WORDS);
+    expect(bank.payload.length).toBe(9);
+    expect(bank.payloadWordStart).toBe(TOPOLOGY_BANK_WORDS);
+    expect(bank.data.length).toBe(TOPOLOGY_BANK_WORDS + 9);
+    expect(bank.headers[0]).toBe(9); // vertexCount
+    expect(bank.headers[1]).toBe(9); // indexCount
+    expect(bank.headers[2]).toBe(TOPOLOGY_BANK_WORDS); // absolute payload start
+    expect(bank.headers[3]).toBe(0); // baseVertex
+    expect(bank.headers[4]).toBe(TopologyBankFlag.IsPath | TopologyBankFlag.Closed);
+    expect(Array.from(bank.payload)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8]);
     expect(bank.indexById.get(id)).toBe(0);
     expect(bank.revision).toBe(getTopologyRegistryRevision());
   });
