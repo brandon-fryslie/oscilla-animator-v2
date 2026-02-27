@@ -267,6 +267,31 @@ describe('Naga one-true-emitter', () => {
     ).toThrow('NagaBuilder.atomicAdd: value must be int scalar.');
   });
 
+  it('reports statement-scoped validation errors for invalid if conditions', () => {
+    const builder = new NagaBuilder();
+    const cond = builder.literalFloat(1, { visualBlockId: 'cond_float' });
+    const accept = builder.blocks.append({ statements: [] });
+    const reject = builder.blocks.append({ statements: [] });
+    builder.statements.append({
+      type: 'If',
+      condition: cond.nagaHandle,
+      accept,
+      reject,
+    });
+
+    let thrown: unknown;
+    try {
+      validateNagaBuilder(builder);
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toBeInstanceOf(NagaValidationError);
+    const validationError = thrown as NagaValidationError;
+    expect(validationError.message).toContain('Statement [');
+    expect(validationError.message).toContain('boolean scalar');
+  });
+
   it('AC3: string exclusion zone forbids interpolation in emitter implementation', () => {
     const here = path.dirname(fileURLToPath(import.meta.url));
     const emitterDir = path.resolve(here, '../naga-emitter');
