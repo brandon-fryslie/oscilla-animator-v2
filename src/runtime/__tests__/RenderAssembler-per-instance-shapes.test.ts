@@ -334,8 +334,6 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
         shape: { k: 'slot', slot: 3 as ValueSlot },
       };
 
-      installShapeBuffer(state, 3 as ValueSlot, shapeBuffer);
-
       const context: AssemblerContext = {
         scalarExprToArenaAddress: buildScalarExprToArenaAddressFromOffsets(scalarExprToArenaOffset),
         instances: new Map([['test-instance', createMockInstance(instanceCount)]]),

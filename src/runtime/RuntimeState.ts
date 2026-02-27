@@ -452,6 +452,34 @@ export function writeShape2D(bank: Uint32Array, offset: number, record: Shape2DR
 }
 
 /**
+ * Write shape2d words directly without allocating an intermediate record object.
+ *
+ * @param bank - The shape2d Uint32Array bank
+ * @param offset - Slot offset (not byte offset)
+ * @param topologyId - Numeric topology ID
+ * @param pointsFieldSlot - FieldSlot ID containing control points
+ * @param pointsCount - Number of vec2 points expected
+ * @param styleRef - Style reference (0 = default)
+ * @param flags - Bitfield flags
+ */
+export function writeShape2DWords(
+  bank: Uint32Array,
+  offset: number,
+  topologyId: number,
+  pointsFieldSlot: number,
+  pointsCount: number,
+  styleRef: number,
+  flags: number,
+): void {
+  const baseIndex = offset * SHAPE2D_WORDS;
+  bank[baseIndex + Shape2DWord.TopologyId] = topologyId;
+  bank[baseIndex + Shape2DWord.PointsFieldSlot] = pointsFieldSlot;
+  bank[baseIndex + Shape2DWord.PointsCount] = pointsCount;
+  bank[baseIndex + Shape2DWord.StyleRef] = styleRef;
+  bank[baseIndex + Shape2DWord.Flags] = flags;
+}
+
+/**
  * FrameCache - Per-frame memoization
  *
  * Uses stamp-based invalidation (no array clearing between frames).
