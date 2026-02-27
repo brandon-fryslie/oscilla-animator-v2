@@ -12,7 +12,13 @@ import React, { useEffect } from 'react';
 import { observer } from 'mobx-react-lite';
 import { useStores } from '../../stores';
 import { useDebugMiniView, type MiniViewData } from './useDebugMiniView';
-import { getValueRenderer } from './ValueRenderer';
+import {
+  getValueRenderer,
+  getSpyReadbackAgeMs,
+  getSpyReadbackFreshness,
+  withSpyReadbackMeta,
+  type SpyReadbackMeta,
+} from './ValueRenderer';
 import { Sparkline } from './charts/Sparkline';
 import { DistributionBar } from './charts/DistributionBar';
 import { WarmupIndicator } from './charts/WarmupIndicator';
@@ -151,10 +157,11 @@ export function formatTypeLine(type: CanonicalType): string {
   return `${payloadUnit} · ${card} · cont`;
 }
 
-export function OneValueSection({ value, meta, history }: {
+export function OneValueSection({ value, meta, history, spyReadbackMeta }: {
   value: EdgeValueResult | null;
   meta: EdgeMetadata;
   history: { buffer: Float32Array; writeIndex: number; capacity: number; stride: 0 | 1 | 2 | 3 | 4; filled: boolean } | null;
+  spyReadbackMeta: SpyReadbackMeta | null;
 }): React.ReactElement {
   const children: React.ReactElement[] = [];
 
@@ -199,9 +206,31 @@ export function OneValueSection({ value, meta, history }: {
       stride: 1,
     };
     const renderer = getValueRenderer(meta.type);
-    children.push(
-      React.createElement('div', { key: 'value' }, renderer.renderFull(sample))
+    const renderedValue = withSpyReadbackMeta(
+      renderer.renderFull(sample),
+      spyReadbackMeta ?? undefined,
     );
+    children.push(
+      React.createElement('div', { key: 'value' }, renderedValue)
+    );
+    if (spyReadbackMeta) {
+      const freshness = getSpyReadbackFreshness(spyReadbackMeta);
+      const ageMs = Math.round(getSpyReadbackAgeMs(spyReadbackMeta));
+      children.push(
+        React.createElement(
+          'div',
+          {
+            key: 'spy-readback-meta',
+            style: {
+              marginTop: '2px',
+              fontSize: '10px',
+              color: freshness === 'fresh' ? '#4ecdc4' : '#ffb86c',
+            },
+          },
+          `readback: ${freshness} (${ageMs}ms)`,
+        )
+      );
+    }
   } else {
     children.push(
       React.createElement('div', { key: 'value', style: { color: '#555' } }, 'awaiting value...')
@@ -456,6 +485,7 @@ export function DebugEdgeValueDisplay({ data }: { data: MiniViewData }): React.R
           value: data.value,
           meta: data.meta,
           history: data.history,
+          spyReadbackMeta: data.spyReadbackMeta,
         })
       : React.createElement(FieldValueSection, {
           value: data.value,
