@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { RuntimeService } from '../RuntimeService';
 import { debugService } from '../DebugService';
 import type { EdgeMetadata } from '../mapDebugEdges';
@@ -93,5 +93,29 @@ describe('RuntimeService spy readback packet selection', () => {
 
     const packet = (runtime as any).buildSpyReadbackPacket(100);
     expect(packet).toBeNull();
+  });
+
+  it('starts and stops the readback timer based on tracked spy slots', () => {
+    vi.useFakeTimers();
+    const runtime = new RuntimeService({} as any);
+    const key = { kind: 'edge' as const, edgeId: 'edge-tracked' };
+    debugService.setEdgeToSlotMap(new Map([['edge-tracked', edgeMeta(9)]]));
+    debugService.setPortToSlotMap(new Map());
+
+    try {
+      (runtime as any).bindSpyReadbackTracking();
+      expect((runtime as any).spyReadbackTimer).toBeNull();
+
+      debugService.trackHistoryKey(key);
+      expect((runtime as any).spyReadbackTimer).not.toBeNull();
+
+      debugService.untrackHistoryKey(key);
+      expect((runtime as any).spyReadbackTimer).toBeNull();
+    } finally {
+      (runtime as any).stopSpyReadbackLoop();
+      (runtime as any).unsubSpyTracking?.();
+      (runtime as any).unsubSpyTracking = null;
+      vi.useRealTimers();
+    }
   });
 });

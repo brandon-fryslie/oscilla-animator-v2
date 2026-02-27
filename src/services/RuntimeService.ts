@@ -91,7 +91,7 @@ export class RuntimeService {
   private readonly liveRecompile: LiveRecompileController = createLiveRecompileController();
   private statsSink: ((statsText: string) => void) | null;
   private runtimeReadySink: (() => void) | null;
-  private spyReadbackSink: ((packet: RuntimeSpyReadbackPacket) => void) | null;
+  private unsubSpyTracking: (() => void) | null = null;
   private spyReadbackTimer: ReturnType<typeof setTimeout> | null = null;
   private spyReadbackInFlight = false;
   private spyReadbackHz = 15;
@@ -101,12 +101,10 @@ export class RuntimeService {
     options: {
       onStatsUpdate?: (statsText: string) => void;
       onRuntimeReady?: () => void;
-      onSpyReadback?: (packet: RuntimeSpyReadbackPacket) => void;
     } = {}
   ) {
     this.statsSink = options.onStatsUpdate ?? null;
     this.runtimeReadySink = options.onRuntimeReady ?? null;
-    this.spyReadbackSink = options.onSpyReadback ?? null;
   }
 
   setStatsSink(onStatsUpdate: ((statsText: string) => void) | null): void {
@@ -119,11 +117,6 @@ export class RuntimeService {
     // [LAW:no-shared-mutable-globals] Runtime-ready notifications are pushed
     // through explicit ownership callbacks, never window globals.
     this.runtimeReadySink = onRuntimeReady;
-  }
-
-  setSpyReadbackSink(onSpyReadback: ((packet: RuntimeSpyReadbackPacket) => void) | null): void {
-    // [LAW:no-shared-mutable-globals] Spy readback delivery is explicit callback ownership.
-    this.spyReadbackSink = onSpyReadback;
   }
 
   private logWorkerFailure(err: unknown): void {
@@ -425,7 +418,7 @@ export class RuntimeService {
       this.animationState,
       this.handleAnimationLoopError,
     );
-    this.startSpyReadbackLoop();
+    this.bindSpyReadbackTracking();
 
     // Persist current patch immediately after initial compile
     // (covers the case where we loaded a default demo)
@@ -441,6 +434,8 @@ export class RuntimeService {
     this.animationLoop?.stop();
     this.animationLoop = null;
     this.stopSpyReadbackLoop();
+    this.unsubSpyTracking?.();
+    this.unsubSpyTracking = null;
     if (this.swapRafId !== null) {
       cancelAnimationFrame(this.swapRafId);
       this.swapRafId = null;
@@ -463,15 +458,38 @@ export class RuntimeService {
     this.arena = null;
     this.statsSink = null;
     this.runtimeReadySink = null;
-    this.spyReadbackSink = null;
+  }
+
+  private bindSpyReadbackTracking(): void {
+    this.unsubSpyTracking?.();
+    this.unsubSpyTracking = debugService.onTrackedSpyScalarSlotsChange((trackedSlotCount) => {
+      this.syncSpyReadbackLoopForTrackedSlots(trackedSlotCount);
+    });
+    this.syncSpyReadbackLoopForTrackedSlots(debugService.getTrackedSpyScalarSlots(1).length);
+  }
+
+  private syncSpyReadbackLoopForTrackedSlots(trackedSlotCount: number): void {
+    if (trackedSlotCount > 0) {
+      this.startSpyReadbackLoop();
+      return;
+    }
+    this.stopSpyReadbackLoop();
   }
 
   private startSpyReadbackLoop(): void {
-    this.stopSpyReadbackLoop();
+    if (this.spyReadbackTimer !== null) {
+      return;
+    }
     const schedule = (): void => {
+      if (debugService.getTrackedSpyScalarSlots(1).length === 0) {
+        this.stopSpyReadbackLoop();
+        return;
+      }
       const intervalMs = 1000 / Math.max(1, this.spyReadbackHz);
       this.spyReadbackTimer = setTimeout(() => {
-        void this.runSpyReadbackCycle().finally(() => schedule());
+        this.spyReadbackTimer = null;
+        this.runSpyReadbackCycle();
+        schedule();
       }, intervalMs);
     };
     schedule();
@@ -485,7 +503,7 @@ export class RuntimeService {
     this.spyReadbackInFlight = false;
   }
 
-  private async runSpyReadbackCycle(): Promise<void> {
+  private runSpyReadbackCycle(): void {
     if (this.spyReadbackInFlight) {
       return;
     }
@@ -496,10 +514,6 @@ export class RuntimeService {
         return;
       }
       this.applySpyReadbackPacket(packet);
-      // [LAW:dataflow-not-control-flow] Readback delivery is async fire-and-forget
-      // and decoupled from the frame loop cadence.
-      await Promise.resolve();
-      this.spyReadbackSink?.(packet);
     } finally {
       this.spyReadbackInFlight = false;
     }
