@@ -1,5 +1,11 @@
 import { NagaBuilder } from './NagaBuilder';
-import { NagaBinaryOp, NagaHandle, NagaMathFunction, NagaScalarKind, NagaType } from './naga-types';
+import {
+  NagaBinaryOp,
+  NagaHandle,
+  NagaMathFunction,
+  NagaScalarKind,
+  NagaType,
+} from './naga-types';
 
 export interface NagaValidationIssue {
   readonly handle: NagaHandle;
@@ -97,12 +103,12 @@ export function collectNagaValidationIssues(builder: NagaBuilder): readonly Naga
     const visualBlockId = builder.getExpressionContext(handle)?.visualBlockId ?? null;
     const expressionTypeHandle = builder.getExpressionType(handle);
 
-    if (expressionTypeHandle === undefined) {
+    if (expressionTypeHandle === undefined && expression.type !== 'Access') {
       pushIssue(issues, handle, visualBlockId, 'Expression is missing result type metadata.');
       continue;
     }
 
-    const expressionType = builder.types.get(expressionTypeHandle);
+    const expressionType = expressionTypeHandle !== undefined ? builder.types.get(expressionTypeHandle) : null;
 
     if (expression.type === 'Binary') {
       const leftTypeHandle = builder.getExpressionType(expression.left);
@@ -123,31 +129,43 @@ export function collectNagaValidationIssues(builder: NagaBuilder): readonly Naga
       continue;
     }
 
-    if (expression.type === 'Math' && expression.fun === NagaMathFunction.Mix) {
-      if (expression.arg1 === undefined || expression.arg2 === undefined) {
-        pushIssue(issues, handle, visualBlockId, 'Mix requires arg, arg1, and arg2.');
-        continue;
-      }
-      const aTypeHandle = builder.getExpressionType(expression.arg);
-      const bTypeHandle = builder.getExpressionType(expression.arg1);
-      const tTypeHandle = builder.getExpressionType(expression.arg2);
-      if (aTypeHandle === undefined || bTypeHandle === undefined || tTypeHandle === undefined) {
-        pushIssue(issues, handle, visualBlockId, 'Mix expression has missing operand type metadata.');
-        continue;
-      }
-      if (aTypeHandle !== bTypeHandle) {
-        pushIssue(issues, handle, visualBlockId, 'Mix requires matching a/b operand types.');
-        continue;
-      }
-      const aType = builder.types.get(aTypeHandle);
-      const tType = builder.types.get(tTypeHandle);
-      if (!isMixValueType(aType)) {
-        pushIssue(issues, handle, visualBlockId, 'Mix requires float scalar or float vector a/b operands.');
-        continue;
-      }
-      const hasCompatibleFactorType = tTypeHandle === aTypeHandle || isFloatScalar(tType);
-      if (!hasCompatibleFactorType) {
-        pushIssue(issues, handle, visualBlockId, 'Mix factor must be float scalar or match a/b type.');
+    if (expression.type === 'Math') {
+      if (expression.fun === NagaMathFunction.Mix) {
+        if (expression.arg1 === undefined || expression.arg2 === undefined) {
+          pushIssue(issues, handle, visualBlockId, 'Mix requires arg, arg1, and arg2.');
+          continue;
+        }
+        const aTypeHandle = builder.getExpressionType(expression.arg);
+        const bTypeHandle = builder.getExpressionType(expression.arg1);
+        const tTypeHandle = builder.getExpressionType(expression.arg2);
+        if (aTypeHandle === undefined || bTypeHandle === undefined || tTypeHandle === undefined) {
+          pushIssue(issues, handle, visualBlockId, 'Mix expression has missing operand type metadata.');
+          continue;
+        }
+        if (aTypeHandle !== bTypeHandle) {
+          pushIssue(issues, handle, visualBlockId, 'Mix requires matching a/b operand types.');
+          continue;
+        }
+        const aType = builder.types.get(aTypeHandle);
+        const tType = builder.types.get(tTypeHandle);
+        if (!isMixValueType(aType)) {
+          pushIssue(issues, handle, visualBlockId, 'Mix requires float scalar or float vector a/b operands.');
+          continue;
+        }
+        const hasCompatibleFactorType = tTypeHandle === aTypeHandle || isFloatScalar(tType);
+        if (!hasCompatibleFactorType) {
+          pushIssue(issues, handle, visualBlockId, 'Mix factor must be float scalar or match a/b type.');
+        }
+      } else if (expression.fun === NagaMathFunction.Min || expression.fun === NagaMathFunction.Max) {
+        const aTypeHandle = builder.getExpressionType(expression.arg);
+        const bTypeHandle = expression.arg1 !== undefined ? builder.getExpressionType(expression.arg1) : undefined;
+        if (aTypeHandle === undefined || bTypeHandle === undefined) {
+          pushIssue(issues, handle, visualBlockId, String(expression.fun) + ' has missing operand type metadata.');
+          continue;
+        }
+        if (aTypeHandle !== bTypeHandle) {
+          pushIssue(issues, handle, visualBlockId, String(expression.fun) + ' requires matching operand types.');
+        }
       }
       continue;
     }
@@ -218,51 +236,51 @@ export function collectNagaValidationIssues(builder: NagaBuilder): readonly Naga
       if (constant.type !== expressionTypeHandle) {
         pushIssue(issues, handle, visualBlockId, 'Constant result type must match constant type handle.');
       }
-      if (expressionType.kind === 'Matrix' && !Array.isArray(constant.value)) {
+      if (expressionType?.kind === 'Matrix' && !Array.isArray(constant.value)) {
         pushIssue(issues, handle, visualBlockId, 'Matrix constants must store component arrays.');
       }
       continue;
     }
 
     if (expression.type === 'ArrayLength') {
-      if (!isIntegerScalar(expressionType)) {
+      if (!isIntegerScalar(expressionType as NagaType)) {
         pushIssue(issues, handle, visualBlockId, 'ArrayLength result type must be integer scalar.');
       }
       continue;
     }
 
-    if (expression.type === 'BufferRead') {
+    if (expression.type === 'Access') {
       const indexTypeHandle = builder.getExpressionType(expression.index);
       if (indexTypeHandle === undefined) {
-        pushIssue(issues, handle, visualBlockId, 'BufferRead has missing index type metadata.');
+        pushIssue(issues, handle, visualBlockId, 'Access index is missing type metadata.');
         continue;
       }
       const indexType = builder.types.get(indexTypeHandle);
       if (!isIntegerScalar(indexType)) {
-        pushIssue(issues, handle, visualBlockId, 'BufferRead index must be integer scalar.');
+        pushIssue(issues, handle, visualBlockId, 'Access (array indexing) requires integer scalar index.');
       }
       continue;
     }
 
-    if (expression.type === 'AtomicAdd') {
-      const indexTypeHandle = builder.getExpressionType(expression.index);
+    if (expression.type === 'Load') {
+      if (expression.pointer < 0) {
+        pushIssue(issues, handle, visualBlockId, 'Load pointer handle must be non-negative.');
+      }
+      continue;
+    }
+
+    if (expression.type === 'AtomicResult') {
       const valueTypeHandle = builder.getExpressionType(expression.value);
-      if (indexTypeHandle === undefined || valueTypeHandle === undefined) {
-        pushIssue(issues, handle, visualBlockId, 'AtomicAdd has missing operand type metadata.');
+      if (valueTypeHandle === undefined) {
+        pushIssue(issues, handle, visualBlockId, 'Atomic operation value is missing type metadata.');
         continue;
       }
-      const indexType = builder.types.get(indexTypeHandle);
       const valueType = builder.types.get(valueTypeHandle);
-      if (!isIntegerScalar(indexType)) {
-        pushIssue(issues, handle, visualBlockId, 'AtomicAdd index must be integer scalar.');
-        continue;
-      }
       if (!isIntegerScalar(valueType)) {
         pushIssue(issues, handle, visualBlockId, 'Atomic operations strictly require integer payloads (Sint/Uint).');
-        continue;
       }
       if (expressionTypeHandle !== valueTypeHandle) {
-        pushIssue(issues, handle, visualBlockId, 'AtomicAdd result type must perfectly match payload type.');
+        pushIssue(issues, handle, visualBlockId, 'AtomicResult type must match payload type.');
       }
       continue;
     }
@@ -285,33 +303,22 @@ export function collectNagaValidationIssues(builder: NagaBuilder): readonly Naga
       continue;
     }
 
-    if (statement.type === 'StoreState') {
+    if (statement.type === 'StoreState' || statement.type === 'Store') {
       const valueTypeHandle = builder.getExpressionType(statement.value);
       if (valueTypeHandle === undefined) {
-        pushIssue(issues, handle, visualBlockId, 'StoreState value is missing type metadata.', true);
-      }
-      continue;
-    }
-
-    if (statement.type === 'BufferWrite') {
-      const indexTypeHandle = builder.getExpressionType(statement.index);
-      const valueTypeHandle = builder.getExpressionType(statement.value);
-      if (indexTypeHandle === undefined || valueTypeHandle === undefined) {
-        pushIssue(issues, handle, visualBlockId, 'BufferWrite statement has missing operand type metadata.', true);
-        continue;
-      }
-      const indexType = builder.types.get(indexTypeHandle);
-      if (!isIntegerScalar(indexType)) {
-        pushIssue(issues, handle, visualBlockId, 'BufferWrite index must be integer scalar.', true);
+        pushIssue(issues, handle, visualBlockId, 'Store statement value is missing type metadata.', true);
       }
       continue;
     }
 
     if (statement.type === 'Loop') {
-      try {
-        builder.blocks.get(statement.body);
-      } catch {
-        pushIssue(issues, handle, visualBlockId, 'Loop statement references an invalid body block handle.', true);
+      for (const bodyStatement of statement.body) {
+        try {
+          builder.statements.get(bodyStatement);
+        } catch {
+          pushIssue(issues, handle, visualBlockId, 'Loop contains an invalid nested statement handle.', true);
+          break;
+        }
       }
       continue;
     }

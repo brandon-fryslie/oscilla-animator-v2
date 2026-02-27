@@ -7,6 +7,7 @@ import { OpCode } from '../types';
 import {
   NagaBinaryOp,
   NagaBuilder,
+  NagaMathFunction,
   NagaValidationError,
   WgslNagaCompiler,
   validateNagaBuilder,
@@ -190,10 +191,11 @@ describe('Naga one-true-emitter', () => {
     ).toBe(true);
     expect(
       compiler.getBuilder().expressions.toArray().some(
-        (expr) => expr.type === 'Binary' && expr.op === NagaBinaryOp.Min,
+        (expr) => expr.type === 'Math' && expr.fun === NagaMathFunction.Min,
       ),
     ).toBe(true);
-    expect(exprKinds.includes('BufferRead')).toBe(true);
+    expect(exprKinds.includes('Access')).toBe(true);
+    expect(exprKinds.includes('Load')).toBe(true);
   });
 
   it('emits recursive loop and if statements without strings', () => {
@@ -233,7 +235,7 @@ describe('Naga one-true-emitter', () => {
     const builder = compiler.getBuilder();
     const root = builder.getRootBlock();
     expect(root).not.toBeNull();
-    const rootStatements = builder.getBlockStatements(root!);
+    const rootStatements = root as readonly number[];
     expect(rootStatements.length).toBe(1);
     const loopStmt = builder.statements.get(rootStatements[0]);
     expect(loopStmt.type).toBe('Loop');
@@ -270,8 +272,8 @@ describe('Naga one-true-emitter', () => {
   it('reports statement-scoped validation errors for invalid if conditions', () => {
     const builder = new NagaBuilder();
     const cond = builder.literalFloat(1, { visualBlockId: 'cond_float' });
-    const accept = builder.blocks.append({ statements: [] });
-    const reject = builder.blocks.append({ statements: [] });
+    const accept: readonly number[] = [];
+    const reject: readonly number[] = [];
     builder.statements.append({
       type: 'If',
       condition: cond.nagaHandle,

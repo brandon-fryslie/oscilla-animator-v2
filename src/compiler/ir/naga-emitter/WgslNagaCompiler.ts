@@ -1,7 +1,8 @@
-import type { CanonicalType } from '../../../core/canonical-types';
+import { canonicalScalar, type CanonicalType, INT } from '../../../core/canonical-types';
 import { OpCode } from '../types';
-import { BlockHandle, ExprHandle, NagaBuilder } from './NagaBuilder';
+import { ExprHandle, NagaBuilder } from './NagaBuilder';
 import { ScopeEnvironment } from './ScopeEnvironment';
+import type { NagaBlock } from './naga-types';
 import { validateNagaBuilder } from './NagaValidator';
 
 export type NagaEmitterInstruction =
@@ -95,7 +96,7 @@ export class WgslNagaCompiler {
   private loopDepth = 0;
 
   public compileRootGraph(instructions: readonly NagaEmitterInstruction[]): NagaBuilder {
-    this.compileBlock(instructions, { visualBlockId: '__root__' });
+    this.compileBlock(instructions);
     return this.builder;
   }
 
@@ -111,7 +112,7 @@ export class WgslNagaCompiler {
     return this.builder;
   }
 
-  private compileBlock(instructions: readonly NagaEmitterInstruction[], meta: { visualBlockId: string }): BlockHandle {
+  private compileBlock(instructions: readonly NagaEmitterInstruction[]): NagaBlock {
     return this.builder.buildBlock(() => {
       const parentScope = this.currentScope;
       this.currentScope = new ScopeEnvironment(parentScope);
@@ -122,13 +123,13 @@ export class WgslNagaCompiler {
       } finally {
         this.currentScope = parentScope;
       }
-    }, meta);
+    });
   }
 
-  private compileLoopBody(instructions: readonly NagaEmitterInstruction[], meta: { visualBlockId: string }): BlockHandle {
+  private compileLoopBody(instructions: readonly NagaEmitterInstruction[]): NagaBlock {
     this.loopDepth += 1;
     try {
-      return this.compileBlock(instructions, meta);
+      return this.compileBlock(instructions);
     } finally {
       this.loopDepth -= 1;
     }
@@ -192,8 +193,9 @@ export class WgslNagaCompiler {
 
         // [LAW:single-enforcer] Dynamic index clamping is enforced only at this memory-read entrypoint.
         const lengthHandle = this.builder.arrayLength(instruction.bufferKey, meta);
+        const lengthAsIntHandle = this.builder.cast(lengthHandle, canonicalScalar(INT), meta);
         const oneHandle = this.builder.literalInt(1, meta);
-        const maxIndexHandle = this.builder.sub(lengthHandle, oneHandle, meta);
+        const maxIndexHandle = this.builder.sub(lengthAsIntHandle, oneHandle, meta);
         const safeIndexHandle = this.builder.min(rawIndex, maxIndexHandle, meta);
 
         const outHandle = this.builder.bufferRead(
@@ -219,14 +221,14 @@ export class WgslNagaCompiler {
         return;
       }
       case 'loop': {
-        const loopBody = this.compileLoopBody(instruction.body, meta);
+        const loopBody = this.compileLoopBody(instruction.body);
         this.builder.loopStatement(loopBody, meta);
         return;
       }
       case 'if': {
         const condition = this.getHandle(instruction.condition, blockId);
-        const acceptBlock = this.compileBlock(instruction.acceptBody, meta);
-        const rejectBlock = this.compileBlock(instruction.rejectBody, meta);
+        const acceptBlock = this.compileBlock(instruction.acceptBody);
+        const rejectBlock = this.compileBlock(instruction.rejectBody);
         this.builder.ifStatement(condition, acceptBlock, rejectBlock, meta);
         return;
       }
