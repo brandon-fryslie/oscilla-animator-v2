@@ -18,7 +18,7 @@
 
 import type { StepRender, InstanceDecl } from '../compiler/ir/types';
 import type { RuntimeState } from './RuntimeState';
-import type { RuntimeScalarArenaAddress } from '../compiler/ir/program';
+import type { RuntimeScalarArenaAddress, RuntimeSlotLookupEntry } from '../compiler/ir/program';
 import { getTopology } from '../shapes/registry';
 import type { PathTopologyDef, TopologyDef, TopologyId } from '../shapes/types';
 import type {
@@ -545,6 +545,8 @@ export interface AssemblerContext {
   scalarExprToArenaAddress?: ReadonlyMap<number, RuntimeScalarArenaAddress>;
   /** Slot -> arena descriptor map (for numeric field reads). */
   slotToArena?: ReadonlyMap<ValueSlot, ArenaSlotDescriptor>;
+  /** Canonical runtime slot lookup metadata (required for shape2d slot reads). */
+  slotLookup?: ReadonlyMap<ValueSlot, RuntimeSlotLookupEntry>;
 }
 
 /**
@@ -605,7 +607,9 @@ function resolveScale(
 function resolveShape(
   shapeSpec: StepRender['shape'],
   scalarExprToArenaAddress: ReadonlyMap<number, RuntimeScalarArenaAddress> | undefined,
-  state: RuntimeState
+  state: RuntimeState,
+  slotLookup: ReadonlyMap<ValueSlot, RuntimeSlotLookupEntry> | undefined,
+  expectedCount: number,
 ): ShapeDescriptor | ArrayBufferView {
   if (shapeSpec === undefined) {
     throw new Error(
@@ -615,13 +619,42 @@ function resolveShape(
   }
 
   if (shapeSpec.k === 'slot') {
-    // [LAW:one-source-of-truth] Per-instance shape payloads use the dedicated
-    // shape field bank, never the legacy generic object map.
-    const shapeBuffer = state.values.shapeFields.get(shapeSpec.slot);
-    if (!shapeBuffer) {
-      throw new Error('RenderAssembler: Shape field buffer not found in slot ' + shapeSpec.slot);
+    // [LAW:one-source-of-truth] Per-instance shape payloads are resolved
+    // exclusively from canonical compiler slot metadata + shape2d bank.
+    const shapeLookup = slotLookup?.get(shapeSpec.slot);
+    if (!shapeLookup) {
+      throw new Error('RenderAssembler: missing slot lookup for shape slot ' + shapeSpec.slot);
     }
-    return shapeBuffer;
+    if (shapeLookup.storage !== 'shape2d') {
+      throw new Error(
+        'RenderAssembler: shape slot ' + shapeSpec.slot + ' must use shape2d storage, got ' + shapeLookup.storage,
+      );
+    }
+    const availableCount = shapeLookup.arena.laneCount;
+    if (availableCount < expectedCount) {
+      throw new Error(
+        'RenderAssembler: shape slot ' +
+          shapeSpec.slot +
+          ' has insufficient laneCount ' +
+          availableCount +
+          ' for instance count ' +
+          expectedCount,
+      );
+    }
+    const startWord = shapeLookup.offset * SHAPE2D_WORDS;
+    const endWord = (shapeLookup.offset + expectedCount) * SHAPE2D_WORDS;
+    if (state.values.shape2d.length < endWord) {
+      throw new Error(
+        'RenderAssembler: shape2d bank too small for slot ' +
+          shapeSpec.slot +
+          ' (need ' +
+          endWord +
+          ', have ' +
+          state.values.shape2d.length +
+          ')',
+      );
+    }
+    return state.values.shape2d.subarray(startWord, endWord);
   } else {
     // One-cardinality shape descriptor ('sig') with topology: resolve scalar params from arena
     const { topologyId, paramExprs } = shapeSpec;
@@ -1411,7 +1444,7 @@ function appendDrawPathInstancesOp(
   context: AssemblerContext,
   outOps: DrawOp[],
 ): void {
-  const { scalarExprToArenaAddress, slotToArena, instances, state, arena } = context;
+  const { scalarExprToArenaAddress, slotToArena, slotLookup, instances, state, arena } = context;
 
   // Get instance declaration
   const instance = instances.get(step.instanceId);
@@ -1466,7 +1499,7 @@ function appendDrawPathInstancesOp(
   const isotropicScale = resolvedScale.kind === 'perInstance' ? resolvedScale.values : undefined;
 
   // Resolve shape
-  const shape = resolveShape(step.shape, scalarExprToArenaAddress, state);
+  const shape = resolveShape(step.shape, scalarExprToArenaAddress, state, slotLookup, count);
 
   // Check if per-instance shapes (shape buffer)
   if (shape instanceof Uint32Array) {

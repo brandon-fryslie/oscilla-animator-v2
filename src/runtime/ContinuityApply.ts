@@ -620,8 +620,20 @@ export function applyContinuity(
         targetState.crossfadeStartMs = tModelMs;
       }
 
+      // [LAW:one-source-of-truth] crossfadeStartMs is the single authority for
+      // whether a crossfade is currently active.
+      if (targetState.crossfadeStartMs === undefined || !targetState.crossfadeOldBuffer) {
+        // No active crossfade in this frame: pass through base values.
+        if (outputBuffer !== baseBuffer) {
+          outputBuffer.set(baseBuffer);
+        }
+        // Defensive cleanup in case stale buffers survived a prior completion.
+        targetState.crossfadeOldBuffer = undefined;
+        break;
+      }
+
       // Compute blend weight based on elapsed time
-      const startMs = targetState.crossfadeStartMs !== undefined ? targetState.crossfadeStartMs : tModelMs;
+      const startMs = targetState.crossfadeStartMs;
       const elapsed = Math.max(0, tModelMs - startMs);
       const t = Math.min(1.0, elapsed / windowMs);
 
@@ -630,7 +642,7 @@ export function applyContinuity(
         ? smoothstep(t)
         : t; // linear
 
-      if (w >= 1.0 || !targetState.crossfadeOldBuffer) {
+      if (w >= 1.0) {
         // Crossfade complete or not initialized - pass through base
         if (outputBuffer !== baseBuffer) {
           outputBuffer.set(baseBuffer);
@@ -638,6 +650,7 @@ export function applyContinuity(
         // Clear crossfade state when complete
         if (w >= 1.0) {
           targetState.crossfadeStartMs = undefined;
+          targetState.crossfadeOldBuffer = undefined;
         }
       } else {
         // Blend old and new: X_out[i] = lerp(X_old_eff[i], X_new_base[i], w)

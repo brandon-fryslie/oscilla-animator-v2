@@ -12,6 +12,7 @@ import {
 } from '../RenderAssembler';
 import type { StepRender, InstanceDecl } from '../../compiler/ir/types';
 import type { ValueExpr } from '../../compiler/ir/value-expr';
+import type { RuntimeSlotLookupEntry } from '../../compiler/ir/program';
 import { instanceId, domainTypeId } from '../../core/ids';
 import type { CanonicalType } from '../../core/canonical-types';
 import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR,  CAMERA_PROJECTION, canonicalType } from '../../core/canonical-types';
@@ -39,7 +40,7 @@ const SCALAR_TYPE: CanonicalType = canonicalType(FLOAT);
 
 // Create a minimal runtime state for testing
 function createMockState(): RuntimeState {
-  const state = createRuntimeState(100, 0, 0, 0, 0, 256);
+  const state = createRuntimeState(100, 0, 0, 0, 0, 256, 2048);
   state.time = {
     tAbsMs: 0,
     tMs: 0,
@@ -59,6 +60,46 @@ function createMockInstance(count: number): InstanceDecl {
     count,
     identityMode: 'none',
   } as InstanceDecl;
+}
+
+function installShapeBuffer(
+  state: RuntimeState,
+  slot: ValueSlot,
+  shapeBuffer: Uint32Array,
+): void {
+  const startWord = (slot as number) * SHAPE2D_WORDS;
+  const requiredWords = startWord + shapeBuffer.length;
+  if (state.values.shape2d.length < requiredWords) {
+    const grown = new Uint32Array(requiredWords);
+    grown.set(state.values.shape2d);
+    state.values.shape2d = grown;
+  }
+  state.values.shape2d.set(shapeBuffer, startWord);
+}
+
+function buildShapeSlotLookup(
+  entries: ReadonlyArray<{ slot: ValueSlot; laneCount: number }>,
+): ReadonlyMap<ValueSlot, RuntimeSlotLookupEntry> {
+  const lookup = new Map<ValueSlot, RuntimeSlotLookupEntry>();
+  for (const { slot, laneCount } of entries) {
+    lookup.set(slot, {
+      slot,
+      storage: 'shape2d',
+      offset: slot as number,
+      stride: 1,
+      type: SCALAR_TYPE,
+      arena: {
+        offset: 0,
+        stride: 1,
+        laneCount,
+        length: laneCount,
+        packing: 'soa',
+        laneStride: 1,
+        componentStride: 1,
+      },
+    });
+  }
+  return lookup;
 }
 
 // Register test path topologies (without id — assigned by registry)
@@ -129,7 +170,7 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
 
       setTestSlotBuffer(state, 1 as ValueSlot, positionBuffer);
       setTestSlotBuffer(state, 2 as ValueSlot, colorBuffer);
-      state.values.shapeFields.set(3 as ValueSlot, shapeBuffer);
+      installShapeBuffer(state, 3 as ValueSlot, shapeBuffer);
 
       // Build scalarExprToArenaOffset mapping
       const scalarExprToArenaOffset = new Map<number, number>([[0, 10]]);
@@ -155,10 +196,11 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
         resolvedCamera: DEFAULT_CAMERA,
         arena: getTestArena(),
         slotToArena,
+        slotLookup: buildShapeSlotLookup([{ slot: 3 as ValueSlot, laneCount: shapeBuffer.length / SHAPE2D_WORDS }]),
       };
 
       expect(() => assembleDrawPathInstancesOp(step, context)).toThrow(
-        /Shape buffer length mismatch/
+        /insufficient laneCount/
       );
     });
   });
@@ -199,7 +241,7 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
 
       setTestSlotBuffer(state, 1 as ValueSlot, positionBuffer);
       setTestSlotBuffer(state, 2 as ValueSlot, colorBuffer);
-      state.values.shapeFields.set(3 as ValueSlot, shapeBuffer);
+      installShapeBuffer(state, 3 as ValueSlot, shapeBuffer);
       setTestSlotBuffer(state, 4 as ValueSlot, controlPointsBuffer);
 
       // Build scalarExprToArenaOffset mapping
@@ -220,6 +262,8 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
         shape: { k: 'slot', slot: 3 as ValueSlot },
       };
 
+      installShapeBuffer(state, 3 as ValueSlot, shapeBuffer);
+
       const context: AssemblerContext = {
         scalarExprToArenaAddress: buildScalarExprToArenaAddressFromOffsets(scalarExprToArenaOffset),
         instances: new Map([['test-instance', createMockInstance(instanceCount)]]),
@@ -227,6 +271,7 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
         resolvedCamera: DEFAULT_CAMERA,
         arena: getTestArena(),
         slotToArena,
+        slotLookup: buildShapeSlotLookup([{ slot: 3 as ValueSlot, laneCount: shapeBuffer.length / SHAPE2D_WORDS }]),
       };
 
       const result = assembleDrawPathInstancesOp(step, context);
@@ -254,7 +299,7 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
 
       setTestSlotBuffer(state, 1 as ValueSlot, positionBuffer);
       setTestSlotBuffer(state, 2 as ValueSlot, colorBuffer);
-      state.values.shapeFields.set(3 as ValueSlot, shapeBuffer);
+      installShapeBuffer(state, 3 as ValueSlot, shapeBuffer);
       setTestSlotBuffer(state, 4 as ValueSlot, circlePoints);
       setTestSlotBuffer(state, 5 as ValueSlot, squarePoints);
       setTestSlotBuffer(state, 6 as ValueSlot, trianglePoints);
@@ -306,6 +351,8 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
         shape: { k: 'slot', slot: 3 as ValueSlot },
       };
 
+      installShapeBuffer(state, 3 as ValueSlot, shapeBuffer);
+
       const context: AssemblerContext = {
         scalarExprToArenaAddress: buildScalarExprToArenaAddressFromOffsets(scalarExprToArenaOffset),
         instances: new Map([['test-instance', createMockInstance(instanceCount)]]),
@@ -313,6 +360,7 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
         resolvedCamera: DEFAULT_CAMERA,
         arena: getTestArena(),
         slotToArena,
+        slotLookup: buildShapeSlotLookup([{ slot: 3 as ValueSlot, laneCount: shapeBuffer.length / SHAPE2D_WORDS }]),
       };
 
       const result = assembleDrawPathInstancesOp(step, context);
@@ -349,7 +397,7 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
 
       setTestSlotBuffer(state, 1 as ValueSlot, positionBuffer);
       setTestSlotBuffer(state, 2 as ValueSlot, colorBuffer);
-      state.values.shapeFields.set(3 as ValueSlot, shapeBuffer);
+      installShapeBuffer(state, 3 as ValueSlot, shapeBuffer);
       setTestSlotBuffer(state, 4 as ValueSlot, circlePoints);
       setTestSlotBuffer(state, 5 as ValueSlot, squarePoints);
 
@@ -394,6 +442,8 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
         shape: { k: 'slot', slot: 3 as ValueSlot },
       };
 
+      installShapeBuffer(state, 3 as ValueSlot, shapeBuffer);
+
       const context: AssemblerContext = {
         scalarExprToArenaAddress: buildScalarExprToArenaAddressFromOffsets(scalarExprToArenaOffset),
         instances: new Map([['test-instance', createMockInstance(instanceCount)]]),
@@ -401,6 +451,7 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
         resolvedCamera: DEFAULT_CAMERA,
         arena: getTestArena(),
         slotToArena,
+        slotLookup: buildShapeSlotLookup([{ slot: 3 as ValueSlot, laneCount: shapeBuffer.length / SHAPE2D_WORDS }]),
       };
 
       const result = assembleDrawPathInstancesOp(step, context);
@@ -441,7 +492,7 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
 
       setTestSlotBuffer(state, 1 as ValueSlot, positionBuffer);
       setTestSlotBuffer(state, 2 as ValueSlot, colorBuffer);
-      state.values.shapeFields.set(3 as ValueSlot, shapeBuffer);
+      installShapeBuffer(state, 3 as ValueSlot, shapeBuffer);
       setTestSlotBuffer(state, 4 as ValueSlot, circlePoints);
       setTestSlotBuffer(state, 5 as ValueSlot, squarePoints);
 
@@ -470,6 +521,8 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
         shape: { k: 'slot', slot: 3 as ValueSlot },
       };
 
+      installShapeBuffer(state, 3 as ValueSlot, shapeBuffer);
+
       const context: AssemblerContext = {
         scalarExprToArenaAddress: buildScalarExprToArenaAddressFromOffsets(scalarExprToArenaOffset),
         instances: new Map([['test-instance', createMockInstance(instanceCount)]]),
@@ -477,6 +530,7 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
         resolvedCamera: DEFAULT_CAMERA,
         arena: getTestArena(),
         slotToArena,
+        slotLookup: buildShapeSlotLookup([{ slot: 3 as ValueSlot, laneCount: shapeBuffer.length / SHAPE2D_WORDS }]),
       };
 
       const result = assembleDrawPathInstancesOp(step, context);
@@ -521,7 +575,7 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
 
       setTestSlotBuffer(state, 1 as ValueSlot, positionBuffer);
       setTestSlotBuffer(state, 2 as ValueSlot, colorBuffer);
-      state.values.shapeFields.set(3 as ValueSlot, shapeBuffer);
+      installShapeBuffer(state, 3 as ValueSlot, shapeBuffer);
       setTestSlotBuffer(state, 4 as ValueSlot, controlPointsBuffer);
 
       // Use non-existent topology ID
@@ -553,6 +607,8 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
         shape: { k: 'slot', slot: 3 as ValueSlot },
       };
 
+      installShapeBuffer(state, 3 as ValueSlot, shapeBuffer);
+
       const context: AssemblerContext = {
         scalarExprToArenaAddress: buildScalarExprToArenaAddressFromOffsets(scalarExprToArenaOffset),
         instances: new Map([['test-instance', createMockInstance(instanceCount)]]),
@@ -560,6 +616,7 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
         resolvedCamera: DEFAULT_CAMERA,
         arena: getTestArena(),
         slotToArena,
+        slotLookup: buildShapeSlotLookup([{ slot: 3 as ValueSlot, laneCount: shapeBuffer.length / SHAPE2D_WORDS }]),
       };
 
       expect(() => assembleDrawPathInstancesOp(step, context)).toThrow(
@@ -578,7 +635,7 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
 
       setTestSlotBuffer(state, 1 as ValueSlot, positionBuffer);
       setTestSlotBuffer(state, 2 as ValueSlot, colorBuffer);
-      state.values.shapeFields.set(3 as ValueSlot, shapeBuffer);
+      installShapeBuffer(state, 3 as ValueSlot, shapeBuffer);
       // No control points buffer at slot 4!
 
       for (let i = 0; i < instanceCount; i++) {
@@ -608,6 +665,8 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
         shape: { k: 'slot', slot: 3 as ValueSlot },
       };
 
+      installShapeBuffer(state, 3 as ValueSlot, shapeBuffer);
+
       const context: AssemblerContext = {
         scalarExprToArenaAddress: buildScalarExprToArenaAddressFromOffsets(scalarExprToArenaOffset),
         instances: new Map([['test-instance', createMockInstance(instanceCount)]]),
@@ -615,6 +674,7 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
         resolvedCamera: DEFAULT_CAMERA,
         arena: getTestArena(),
         slotToArena,
+        slotLookup: buildShapeSlotLookup([{ slot: 3 as ValueSlot, laneCount: shapeBuffer.length / SHAPE2D_WORDS }]),
       };
 
       expect(() => assembleDrawPathInstancesOp(step, context)).toThrow(
@@ -649,7 +709,7 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
 
       setTestSlotBuffer(state, 1 as ValueSlot, positionBuffer);
       setTestSlotBuffer(state, 2 as ValueSlot, colorBuffer);
-      state.values.shapeFields.set(3 as ValueSlot, shapeBuffer);
+      installShapeBuffer(state, 3 as ValueSlot, shapeBuffer);
       setTestSlotBuffer(state, 4 as ValueSlot, controlPointsBuffer);
 
       const scalarExprToArenaOffset = new Map<number, number>([[0, 10]]);
@@ -669,6 +729,8 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
         shape: { k: 'slot', slot: 3 as ValueSlot },
       };
 
+      installShapeBuffer(state, 3 as ValueSlot, shapeBuffer);
+
       const context: AssemblerContext = {
         scalarExprToArenaAddress: buildScalarExprToArenaAddressFromOffsets(scalarExprToArenaOffset),
         instances: new Map([['culled-groups', createMockInstance(instanceCount)]]),
@@ -676,6 +738,7 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
         resolvedCamera: DEFAULT_CAMERA,
         arena: getTestArena(),
         slotToArena,
+        slotLookup: buildShapeSlotLookup([{ slot: 3 as ValueSlot, laneCount: shapeBuffer.length / SHAPE2D_WORDS }]),
       };
 
       const result = assembleDrawPathInstancesOp(step, context);
@@ -719,10 +782,10 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
 
       setTestSlotBuffer(state, 1 as ValueSlot, pos1);
       setTestSlotBuffer(state, 2 as ValueSlot, color1);
-      state.values.shapeFields.set(3 as ValueSlot, shape1);
+      installShapeBuffer(state, 3 as ValueSlot, shape1);
       setTestSlotBuffer(state, 4 as ValueSlot, pos2);
       setTestSlotBuffer(state, 5 as ValueSlot, color2);
-      state.values.shapeFields.set(6 as ValueSlot, shape2);
+      installShapeBuffer(state, 6 as ValueSlot, shape2);
       setTestSlotBuffer(state, 10 as ValueSlot, circlePoints);
       setTestSlotBuffer(state, 11 as ValueSlot, squarePoints);
 
@@ -761,6 +824,9 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
         },
       ];
 
+      installShapeBuffer(state, 3 as ValueSlot, shape1);
+      installShapeBuffer(state, 6 as ValueSlot, shape2);
+
       const context: AssemblerContext = {
         scalarExprToArenaAddress: buildScalarExprToArenaAddressFromOffsets(scalarExprToArenaOffset),
         instances: new Map([
@@ -771,6 +837,10 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
         resolvedCamera: DEFAULT_CAMERA,
         arena: getTestArena(),
         slotToArena,
+        slotLookup: buildShapeSlotLookup([
+          { slot: 3 as ValueSlot, laneCount: shape1.length / SHAPE2D_WORDS },
+          { slot: 6 as ValueSlot, laneCount: shape2.length / SHAPE2D_WORDS },
+        ]),
       };
 
       const result = assembleRenderFrame(steps, context);
@@ -824,7 +894,7 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
 
       setTestSlotBuffer(state, 1 as ValueSlot, positionBuffer);
       setTestSlotBuffer(state, 2 as ValueSlot, colorBuffer);
-      state.values.shapeFields.set(3 as ValueSlot, shapeBuffer);
+      installShapeBuffer(state, 3 as ValueSlot, shapeBuffer);
       setTestSlotBuffer(state, 10 as ValueSlot, circlePoints);
       setTestSlotBuffer(state, 11 as ValueSlot, squarePoints);
 
@@ -847,6 +917,8 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
       };
 
       const arena = getTestArena();
+      installShapeBuffer(state, 3 as ValueSlot, shapeBuffer);
+
       const context: AssemblerContext = {
         scalarExprToArenaAddress: buildScalarExprToArenaAddressFromOffsets(scalarExprToArenaOffset),
         instances: new Map([['stress-instance', createMockInstance(instanceCount)]]),
@@ -854,6 +926,7 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
         resolvedCamera: DEFAULT_CAMERA,
         arena,
         slotToArena,
+        slotLookup: buildShapeSlotLookup([{ slot: 3 as ValueSlot, laneCount: shapeBuffer.length / SHAPE2D_WORDS }]),
       };
 
       let baselineAllocCount = -1;

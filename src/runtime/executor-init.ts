@@ -35,4 +35,5 @@ export const assemblerCtx = {
   arena: null as any,
   scalarExprToArenaAddress: null as any,
   slotToArena: null as any,
+  slotLookup: null as any,
 };

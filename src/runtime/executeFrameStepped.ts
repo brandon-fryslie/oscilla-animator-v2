@@ -23,7 +23,6 @@ import type { RenderBufferArena } from '../render/RenderBufferArena';
 import { createMaterializeScratch } from './MaterializeScratch';
 import { resolveTime } from './timeResolution';
 import {
-  writeShape2D,
   resetFrameVolatileShapeBank,
   prepareStateWriteBank,
   commitStateWriteBank,
@@ -39,6 +38,7 @@ import { SCALAR_INSTANCE_ID } from '../compiler/ir/Indices';
 import { evaluateValueExprEvent } from './ValueExprEventEvaluator';
 import { materializeValueExpr } from './ValueExprMaterializer';
 import { applyStateWritePolicy } from './StateWritePolicy';
+import { writeShapeRefExprToBank } from './ShapeRefWriter';
 import type { PureFnExecutionContext } from './ScalarKernelLibrary';
 import {
   arenaDecodeToAoS,
@@ -272,22 +272,7 @@ export function* executeFrameStepped(
         if (storage === 'shape2d') {
           const veId = step.expr;
           const exprNode = valueExprs[veId as number];
-          if (exprNode.kind === 'shapeRef') {
-            writeShape2D(state.values.shape2d, offset, {
-              topologyId: exprNode.topologyId,
-              pointsFieldSlot:
-                (exprNode.kind === 'shapeRef' && exprNode.controlPointField != null
-                  ? (() => {
-                      const cpSlot = fieldExprToSlot.get(exprNode.controlPointField as number);
-                      if (cpSlot === undefined) throw new Error(`Control point field ${exprNode.controlPointField} not in fieldExprToSlot — compiler bug`);
-                      return cpSlot;
-                    })()
-                  : 0),
-              pointsCount: 0,
-              styleRef: 0,
-              flags: 0,
-            });
-          }
+          writeShapeRefExprToBank(exprNode, fieldExprToSlot, state.values.shape2d, offset);
           // Capture written shape
           writtenSlots.set(targetSlot, readSlotValue(state, lookup, slotToArena));
         } else if (isNumericStorage(storage)) {
@@ -446,6 +431,7 @@ export function* executeFrameStepped(
     arena,
     scalarExprToArenaAddress: state.cache.scalarExprToArenaAddress ?? undefined,
     slotToArena: addressTable.slotToArena,
+    slotLookup: addressTable.slotLookup,
   };
   const frame = assembleRenderFrame(renderSteps, assemblerContext);
 
