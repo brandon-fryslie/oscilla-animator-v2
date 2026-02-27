@@ -35,7 +35,7 @@ import { validateTypes, validateNoVarAxes, type AxisViolation } from './axis-val
 import { expandComposites, type ExpansionDiagnostic, type ExpansionProvenance } from './composite-expansion';
 
 import { buildDraftGraph, computeReachableDraftBlockIds } from './draft-graph';
-import type { DraftGraph } from './draft-graph';
+import type { BuildDiagnostic, DraftGraph } from './draft-graph';
 import { finalizeNormalizationFixpoint } from './final-normalization';
 import { bridgeToNormalizedPatch, bridgePartialToNormalizedPatch } from './draft-graph-bridge';
 import { BLOCK_DEFS_BY_TYPE, requireBlockDef, getBlockDefinition } from '../../blocks/registry';
@@ -151,14 +151,8 @@ export function compileFrontend(patch: Patch, options?: FrontendOptions): Fronte
   // Only report build diagnostics for reachable blocks
   errors.push(
     ...buildDiagnostics
-      .filter((d) => reachableBlockIds.has(d.blockId))
-      .map((d) => ({
-        kind: `Build/${d.kind}` as const,
-        message: `Required input "${d.portName}" on block "${d.blockId}" is not connected`,
-        blockId: d.blockId,
-        portId: d.portName,
-        severity: 'error' as const,
-      })),
+      .filter((d) => isBuildDiagnosticRelevant(d, reachableBlockIds))
+      .map(convertBuildDiagnostic),
   );
 
   const filteredDraftGraph: DraftGraph = hasRenderBlocks
@@ -285,6 +279,59 @@ function convertExpansionDiagnostic(d: ExpansionDiagnostic): FrontendError {
     portId: d.at.port,
     severity: 'error',
   };
+}
+
+function isBuildDiagnosticRelevant(
+  diagnostic: BuildDiagnostic,
+  reachableBlockIds: ReadonlySet<string>,
+): boolean {
+  switch (diagnostic.kind) {
+    case 'MissingRequiredInput':
+    case 'UnknownParam':
+      return reachableBlockIds.has(diagnostic.blockId);
+    case 'DuplicateEdge':
+      return reachableBlockIds.has(diagnostic.fromBlockId) || reachableBlockIds.has(diagnostic.toBlockId);
+    default: {
+      const _exhaustive: never = diagnostic;
+      void _exhaustive;
+      return false;
+    }
+  }
+}
+
+function convertBuildDiagnostic(diagnostic: BuildDiagnostic): FrontendError {
+  switch (diagnostic.kind) {
+    case 'MissingRequiredInput':
+      return {
+        kind: 'Build/MissingRequiredInput',
+        message: `Required input "${diagnostic.portName}" on block "${diagnostic.blockId}" is not connected`,
+        blockId: diagnostic.blockId,
+        portId: diagnostic.portName,
+        severity: 'error',
+      };
+    case 'UnknownParam':
+      return {
+        kind: 'Build/UnknownParam',
+        message: `Unknown parameter "${diagnostic.portName}" on block "${diagnostic.blockId}"`,
+        blockId: diagnostic.blockId,
+        portId: diagnostic.portName,
+        severity: 'error',
+      };
+    case 'DuplicateEdge':
+      return {
+        kind: 'Build/DuplicateEdge',
+        message:
+          `Duplicate edge "${diagnostic.fromBlockId}.${diagnostic.fromPort} -> ${diagnostic.toBlockId}.${diagnostic.toPort}" ` +
+          `(${diagnostic.edgeId}) duplicates existing edge ${diagnostic.existingEdgeId}`,
+        blockId: diagnostic.toBlockId,
+        portId: diagnostic.toPort,
+        severity: 'error',
+      };
+    default: {
+      const _exhaustive: never = diagnostic;
+      return _exhaustive;
+    }
+  }
 }
 
 /**

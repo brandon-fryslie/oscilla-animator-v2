@@ -97,6 +97,29 @@ describe('Frontend edge cases', () => {
     expect(result.cycleSummary).toBeDefined();
   });
 
+  it('rejects duplicate edges on the same endpoint pair', () => {
+    const base = buildPatch((b) => {
+      const c = b.addBlock('Const');
+      const add = b.addBlock('Add');
+      b.wire(c, 'out', add, 'a');
+    });
+    const [edge] = base.edges;
+    const patchWithDup = {
+      blocks: base.blocks,
+      edges: [
+        ...base.edges,
+        {
+          ...edge,
+          id: 'dup-edge-id',
+        },
+      ],
+    };
+
+    const result = compileFrontend(patchWithDup);
+    expect(result.backendReady).toBe(false);
+    expect(result.errors.some((error) => error.kind === 'Build/DuplicateEdge')).toBe(true);
+  });
+
   it('FrontendOptions no longer has useFixpointFrontend', () => {
     const patch = buildPatch(() => {});
 

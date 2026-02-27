@@ -123,7 +123,16 @@ function missingInputObligationId(blockId: string, portName: string): Obligation
 
 export type BuildDiagnostic =
   | { readonly kind: 'MissingRequiredInput'; readonly blockId: string; readonly portName: string }
-  | { readonly kind: 'UnknownParam'; readonly blockId: string; readonly portName: string };
+  | { readonly kind: 'UnknownParam'; readonly blockId: string; readonly portName: string }
+  | {
+      readonly kind: 'DuplicateEdge';
+      readonly edgeId: string;
+      readonly fromBlockId: string;
+      readonly fromPort: string;
+      readonly toBlockId: string;
+      readonly toPort: string;
+      readonly existingEdgeId: string;
+    };
 
 export interface BuildDraftGraphResult {
   readonly graph: DraftGraph;
@@ -217,8 +226,26 @@ export function buildDraftGraph(patch: Patch): BuildDraftGraphResult {
   }
 
   // Convert edges
+  const seenEdgeKeys = new Map<string, string>();
   for (const edge of patch.edges) {
     if (edge.from.kind !== 'port' || edge.to.kind !== 'port') continue;
+    const edgeKey = `${edge.from.blockId}:${edge.from.slotId}->${edge.to.blockId}:${edge.to.slotId}`;
+    const existingEdgeId = seenEdgeKeys.get(edgeKey);
+    if (existingEdgeId) {
+      diagnostics.push({
+        kind: 'DuplicateEdge',
+        edgeId: edge.id,
+        fromBlockId: edge.from.blockId,
+        fromPort: edge.from.slotId,
+        toBlockId: edge.to.blockId,
+        toPort: edge.to.slotId,
+        existingEdgeId,
+      });
+      continue;
+    }
+    // [LAW:single-enforcer] DraftGraph construction is the single frontend
+    // boundary that enforces endpoint-level edge uniqueness.
+    seenEdgeKeys.set(edgeKey, edge.id);
 
     const role = classifyEdgeRole(edge);
     const origin: EdgeOrigin = classifyEdgeOrigin(edge);

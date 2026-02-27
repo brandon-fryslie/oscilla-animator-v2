@@ -18,7 +18,7 @@
 
 import type { StepRender, InstanceDecl } from '../compiler/ir/types';
 import type { RuntimeState } from './RuntimeState';
-import type { RuntimeScalarArenaAddress, RuntimeSlotLookupEntry } from '../compiler/ir/program';
+import type { RuntimeScalarArenaAddress } from '../compiler/ir/program';
 import { getTopology } from '../shapes/registry';
 import type { PathTopologyDef, TopologyDef, TopologyId } from '../shapes/types';
 import type {
@@ -28,7 +28,13 @@ import type {
   PathStyle,
   RenderFrameIR,
 } from '../render/types';
-import { SHAPE2D_WORDS, readShape2D } from './RuntimeState';
+import {
+  SHAPE2D_WORDS,
+  SHAPE_BANK_HEADER_WORDS,
+  SHAPE_BANK_NO_CONTROL_POINT_SLOT,
+  readShapeBankHandleMetadata,
+  readShapeBankHeader,
+} from './RuntimeState';
 import type { ValueSlot } from '../types';
 import {
   projectFieldOrtho,
@@ -545,8 +551,6 @@ export interface AssemblerContext {
   scalarExprToArenaAddress?: ReadonlyMap<number, RuntimeScalarArenaAddress>;
   /** Slot -> arena descriptor map (for numeric field reads). */
   slotToArena?: ReadonlyMap<ValueSlot, ArenaSlotDescriptor>;
-  /** Canonical runtime slot lookup metadata (required for shape2d slot reads). */
-  slotLookup?: ReadonlyMap<ValueSlot, RuntimeSlotLookupEntry>;
 }
 
 /**
@@ -558,18 +562,6 @@ export interface AssemblerContext {
 type ResolvedScale =
   | { kind: 'uniform'; value: number }
   | { kind: 'perInstance'; values: Float32Array };
-
-interface PerInstanceShapeSpan {
-  kind: 'perInstance';
-  bank: Uint32Array;
-  offset: number;
-}
-
-function isPerInstanceShapeSpan(
-  shape: ShapeDescriptor | PerInstanceShapeSpan,
-): shape is PerInstanceShapeSpan {
-  return (shape as PerInstanceShapeSpan).kind === 'perInstance';
-}
 
 function resolveScale(
   scaleSpec: StepRender['scale'],
@@ -611,7 +603,7 @@ function resolveScale(
  * Resolve shape from step specification
  *
  * Returns ShapeDescriptor for topology-based shapes.
- * Returns shape-bank span metadata for per-instance shapes.
+ * Returns ArrayBufferView for per-particle shapes (not yet fully supported).
  *
  * MUST be provided - no fallback values in render pipeline.
  * NO LEGACY NUMERIC ENCODING - all shapes use proper topology IDs.
@@ -620,9 +612,8 @@ function resolveShape(
   shapeSpec: StepRender['shape'],
   scalarExprToArenaAddress: ReadonlyMap<number, RuntimeScalarArenaAddress> | undefined,
   state: RuntimeState,
-  slotLookup: ReadonlyMap<ValueSlot, RuntimeSlotLookupEntry> | undefined,
-  expectedCount: number,
-): ShapeDescriptor | PerInstanceShapeSpan {
+  slotToArena: ReadonlyMap<ValueSlot, ArenaSlotDescriptor> | undefined,
+): ShapeDescriptor | ArrayBufferView | TopologyId {
   if (shapeSpec === undefined) {
     throw new Error(
       'RenderAssembler: shape is required. ' +
@@ -631,47 +622,59 @@ function resolveShape(
   }
 
   if (shapeSpec.k === 'slot') {
-    // [LAW:one-source-of-truth] Per-instance shape payloads are resolved
-    // exclusively from canonical compiler slot metadata + shape2d bank.
-    const shapeLookup = slotLookup?.get(shapeSpec.slot);
-    if (!shapeLookup) {
-      throw new Error('RenderAssembler: missing slot lookup for shape slot ' + shapeSpec.slot);
+    // [LAW:one-source-of-truth] Canonical per-instance shape handles are numeric
+    // arena fields. Legacy packed shape2d buffers are read only for compatibility.
+    // [LAW:locality-or-seam] Keep one compatibility seam at render boundary so
+    // legacy tests/paths remain valid while canonical handle path migrates.
+    const shapeBuffer = state.values.shapeFields.get(shapeSpec.slot);
+    if (shapeBuffer) {
+      return shapeBuffer;
     }
-    if (shapeLookup.storage !== 'shape2d') {
+    const numericShapeBuffer = resolveNumericSlotBuffer(shapeSpec.slot, state, slotToArena);
+    if (numericShapeBuffer instanceof Float32Array) {
+      return numericShapeBuffer;
+    }
+    throw new Error('RenderAssembler: Shape field buffer not found in slot ' + shapeSpec.slot);
+  }
+
+  if (shapeSpec.k === 'oneHandle') {
+    const canonicalAddress = scalarExprToArenaAddress?.get(shapeSpec.id as number);
+    if (!canonicalAddress) {
       throw new Error(
-        'RenderAssembler: shape slot ' + shapeSpec.slot + ' must use shape2d storage, got ' + shapeLookup.storage,
+        'RenderAssembler: No canonical arena address for one-cardinality shape handle expr ' +
+          shapeSpec.id +
+          '. One-cardinality values must be evaluated in schedule and resolved in scalarExprToArenaAddress before rendering.',
       );
     }
-    const availableCount = shapeLookup.arena.laneCount;
-    if (availableCount < expectedCount) {
-      throw new Error(
-        'RenderAssembler: shape slot ' +
-          shapeSpec.slot +
-          ' has insufficient laneCount ' +
-          availableCount +
-          ' for instance count ' +
-          expectedCount,
-      );
+    const rawHandle = state.arena[arenaIndex(canonicalAddress.arena, 0, canonicalAddress.component)];
+    if (!Number.isFinite(rawHandle)) {
+      throw new Error('RenderAssembler: shape handle is not finite for expr ' + shapeSpec.id);
     }
-    const startWord = shapeLookup.offset * SHAPE2D_WORDS;
-    const endWord = (shapeLookup.offset + expectedCount) * SHAPE2D_WORDS;
-    if (state.values.shape2d.length < endWord) {
+    if (!Number.isInteger(rawHandle)) {
       throw new Error(
-        'RenderAssembler: shape2d bank too small for slot ' +
-          shapeSpec.slot +
-          ' (need ' +
-          endWord +
-          ', have ' +
-          state.values.shape2d.length +
+        'RenderAssembler: shape handle must be an integer for expr ' +
+          shapeSpec.id +
+          ' (got ' +
+          rawHandle +
           ')',
       );
     }
-    return {
-      kind: 'perInstance',
-      bank: state.values.shape2d,
-      offset: shapeLookup.offset,
-    };
-  } else {
+    const handle = Math.trunc(rawHandle);
+    const shapeBank = state.shapeBank;
+    if (!shapeBank) {
+      throw new Error('RenderAssembler: shapeBank is required to resolve shape handles');
+    }
+    if (handle < 0 || handle + SHAPE_BANK_HEADER_WORDS > shapeBank.data.length) {
+      throw new Error('RenderAssembler: shape handle out of range: ' + handle);
+    }
+    const metadata = readShapeBankHandleMetadata(shapeBank, handle);
+    // Validate metadata + header presence at the single render boundary.
+    readShapeBankHeader(shapeBank.data, handle);
+    getTopology(metadata.topologyId);
+    return metadata.topologyId as TopologyId;
+  }
+
+  {
     // One-cardinality shape descriptor ('sig') with topology: resolve scalar params from arena
     const { topologyId, paramExprs } = shapeSpec;
     const params: Record<string, number> = {};
@@ -809,9 +812,32 @@ function isShapeDescriptor(
  * @returns ResolvedShape for renderer
  */
 function resolveShapeFully(
-  shape: ShapeDescriptor | ArrayBufferView,
+  shape: ShapeDescriptor | ArrayBufferView | TopologyId,
   controlPoints?: ArrayBufferView
 ): ResolvedShape {
+  if (typeof shape === 'number') {
+    const topology = getTopology(shape);
+    if (!isPathTopology(topology)) {
+      throw new Error(
+        `RenderAssembler: topology ${shape} is not a path topology. ` +
+        'Shapes must provide Field<vec2> control points and path topology.'
+      );
+    }
+    if (!controlPoints) {
+      throw new Error(
+        `RenderAssembler: path topology ${shape} requires control points buffer`
+      );
+    }
+    return {
+      resolved: true,
+      topologyId: shape,
+      mode: 'path',
+      params: {},
+      verbs: getCachedVerbs(topology),
+      controlPoints,
+    };
+  }
+
   // Per-particle shape buffer (Field<shape>) - not yet implemented
   if (!isShapeDescriptor(shape)) {
     throw new Error(
@@ -899,8 +925,8 @@ interface TopologyGroup {
  * - No manual invalidation logic needed
  */
 const topologyGroupCache = new WeakMap<
-  Uint32Array,
-  { count: number; offset: number; groups: Map<string, TopologyGroup> }
+  ArrayBufferView,
+  { count: number; groups: Map<string, TopologyGroup> }
 >();
 
 /** Cache hit/miss counters - read by instrumentation */
@@ -924,19 +950,19 @@ export function resetTopologyCacheCounters(): void {
  * @returns Map of topology groups keyed by "topologyId:controlPointsSlot"
  */
 export function groupInstancesByTopology(
-  shapeBuffer: Uint32Array,
+  shapeBuffer: Uint32Array | Float32Array,
   instanceCount: number,
-  shapeOffset: number = 0,
+  state: RuntimeState,
 ): Map<string, TopologyGroup> {
   const cached = topologyGroupCache.get(shapeBuffer);
-  if (cached && cached.count === instanceCount && cached.offset === shapeOffset) {
+  if (cached && cached.count === instanceCount) {
     topologyGroupCacheHits++;
     return cached.groups;
   }
 
   topologyGroupCacheMisses++;
-  const groups = computeTopologyGroups(shapeBuffer, instanceCount, shapeOffset);
-  topologyGroupCache.set(shapeBuffer, { count: instanceCount, offset: shapeOffset, groups });
+  const groups = computeTopologyGroups(shapeBuffer, instanceCount, state);
+  topologyGroupCache.set(shapeBuffer, { count: instanceCount, groups });
   return groups;
 }
 
@@ -951,24 +977,26 @@ export function groupInstancesByTopology(
  * @returns Map of topology groups keyed by "topologyId:controlPointsSlot"
  */
 export function computeTopologyGroups(
+  shapeBuffer: Uint32Array | Float32Array,
+  instanceCount: number,
+  state: RuntimeState,
+): Map<string, TopologyGroup> {
+  if (shapeBuffer instanceof Float32Array) {
+    return computeTopologyGroupsFromHandles(shapeBuffer, instanceCount, state);
+  }
+  return computeTopologyGroupsFromShape2D(shapeBuffer, instanceCount);
+}
+
+function computeTopologyGroupsFromShape2D(
   shapeBuffer: Uint32Array,
   instanceCount: number,
-  shapeOffset: number = 0,
 ): Map<string, TopologyGroup> {
   // Validate buffer length at pass level (not per-instance)
-  const expectedLength = (shapeOffset + instanceCount) * SHAPE2D_WORDS;
+  const expectedLength = instanceCount * SHAPE2D_WORDS;
   if (shapeBuffer.length < expectedLength) {
     throw new Error(
       'RenderAssembler: Shape buffer length mismatch. ' +
-      'Expected >=' +
-      expectedLength +
-      ' (offset ' +
-      shapeOffset +
-      ' + ' +
-      instanceCount +
-      ' instances × ' +
-      SHAPE2D_WORDS +
-      ' words), ' +
+      'Expected >=' + expectedLength + ' (' + instanceCount + ' instances × ' + SHAPE2D_WORDS + ' words), ' +
       'got ' + shapeBuffer.length
     );
   }
@@ -976,18 +1004,24 @@ export function computeTopologyGroups(
   const groups = new Map<string, TopologyGroup>();
 
   for (let i = 0; i < instanceCount; i++) {
-    const shapeRef = readShape2D(shapeBuffer, shapeOffset + i);
+    // [LAW:one-source-of-truth] Packed shape2d bank layout is the canonical
+    // compatibility format; read words directly to avoid per-instance record allocation.
+    const base = i * SHAPE2D_WORDS;
+    const topologyId = shapeBuffer[base + 0];
+    const pointsFieldSlot = shapeBuffer[base + 1];
+    const pointsCount = shapeBuffer[base + 2];
+    const flags = shapeBuffer[base + 4];
 
     // Group key: topologyId + controlPointsSlot
     // Instances with same topology AND same control points buffer can batch
-    const key = shapeRef.topologyId + ':' + shapeRef.pointsFieldSlot;
+    const key = topologyId + ':' + pointsFieldSlot;
 
     if (!groups.has(key)) {
       groups.set(key, {
-        topologyId: shapeRef.topologyId,
-        controlPointsSlot: shapeRef.pointsFieldSlot,
-        pointsCount: shapeRef.pointsCount,
-        flags: shapeRef.flags,
+        topologyId,
+        controlPointsSlot: pointsFieldSlot,
+        pointsCount,
+        flags,
         // eslint-disable-next-line oscilla/no-hot-path-alloc
         instanceIndices: [],
       });
@@ -996,6 +1030,73 @@ export function computeTopologyGroups(
     groups.get(key)!.instanceIndices.push(i);
   }
 
+  return groups;
+}
+
+function computeTopologyGroupsFromHandles(
+  shapeBuffer: Float32Array,
+  instanceCount: number,
+  state: RuntimeState,
+): Map<string, TopologyGroup> {
+  if (shapeBuffer.length < instanceCount) {
+    throw new Error(
+      'RenderAssembler: Shape handle buffer length mismatch. ' +
+      'Expected >=' +
+      instanceCount +
+      ', got ' +
+      shapeBuffer.length,
+    );
+  }
+  const shapeBank = state.shapeBank;
+  if (!shapeBank) {
+    throw new Error('RenderAssembler: shapeBank is required for per-instance shape handles');
+  }
+  const groups = new Map<string, TopologyGroup>();
+  for (let i = 0; i < instanceCount; i++) {
+    const rawHandle = shapeBuffer[i];
+    if (!Number.isFinite(rawHandle)) {
+      throw new Error('RenderAssembler: shape handle is not finite at instance ' + i);
+    }
+    if (!Number.isInteger(rawHandle)) {
+      throw new Error(
+        'RenderAssembler: shape handle must be an integer at instance ' +
+          i +
+          ' (got ' +
+          rawHandle +
+          ')',
+      );
+    }
+    const handle = Math.trunc(rawHandle);
+    if (handle < 0 || handle + SHAPE_BANK_HEADER_WORDS > shapeBank.data.length) {
+      throw new Error('RenderAssembler: shape handle out of range at instance ' + i + ': ' + handle);
+    }
+    const metadata = readShapeBankHandleMetadata(shapeBank, handle);
+    const header = readShapeBankHeader(shapeBank.data, handle);
+    if (metadata.controlPointSlot === SHAPE_BANK_NO_CONTROL_POINT_SLOT) {
+      // [LAW:single-enforcer] Render assembly is the single runtime boundary
+      // that validates per-instance shape-handle geometry metadata.
+      throw new Error(
+        'RenderAssembler: shape handle missing control-point slot metadata at instance ' +
+          i +
+          ' (handle ' +
+          handle +
+          ')',
+      );
+    }
+    const controlPointsSlot = metadata.controlPointSlot;
+    const key = metadata.topologyId + ':' + controlPointsSlot;
+    if (!groups.has(key)) {
+      groups.set(key, {
+        topologyId: metadata.topologyId,
+        controlPointsSlot,
+        pointsCount: header.vertexCount,
+        flags: header.flags,
+        // eslint-disable-next-line oscilla/no-hot-path-alloc
+        instanceIndices: [],
+      });
+    }
+    groups.get(key)!.instanceIndices.push(i);
+  }
   return groups;
 }
 
@@ -1126,8 +1227,7 @@ function recordAssemblerTiming(
  */
 function assemblePerInstanceShapes(
   step: StepRender,
-  shapeBank: Uint32Array,
-  shapeOffset: number,
+  shapeBuffer: Uint32Array | Float32Array,
   fullPosition: Float32Array,
   fullColor: Uint8ClampedArray,
   projectionScale: number,
@@ -1140,7 +1240,7 @@ function assemblePerInstanceShapes(
   const t0 = performance.now();
 
   // Group instances by topology
-  const groups = groupInstancesByTopology(shapeBank, count, shapeOffset);
+  const groups = groupInstancesByTopology(shapeBuffer, count, state);
 
   const tGrouped = performance.now();
 
@@ -1471,7 +1571,7 @@ function appendDrawPathInstancesOp(
   context: AssemblerContext,
   outOps: DrawOp[],
 ): void {
-  const { scalarExprToArenaAddress, slotToArena, slotLookup, instances, state, arena } = context;
+  const { scalarExprToArenaAddress, slotToArena, instances, state, arena } = context;
 
   // Get instance declaration
   const instance = instances.get(step.instanceId);
@@ -1526,15 +1626,14 @@ function appendDrawPathInstancesOp(
   const isotropicScale = resolvedScale.kind === 'perInstance' ? resolvedScale.values : undefined;
 
   // Resolve shape
-  const shape = resolveShape(step.shape, scalarExprToArenaAddress, state, slotLookup, count);
+  const shape = resolveShape(step.shape, scalarExprToArenaAddress, state, slotToArena);
 
   // Check if per-instance shapes (shape buffer)
-  if (isPerInstanceShapeSpan(shape)) {
+  if (shape instanceof Uint32Array || shape instanceof Float32Array) {
     // Per-instance shapes: group by topology and emit multiple ops
     assemblePerInstanceShapes(
       step,
-      shape.bank,
-      shape.offset,
+      shape,
       worldPositionBuffer,
       colorBuffer,
       projectionScale,

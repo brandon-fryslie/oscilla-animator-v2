@@ -39,7 +39,6 @@ import { SCALAR_INSTANCE_ID } from '../compiler/ir/Indices';
 import { evaluateValueExprEvent } from './ValueExprEventEvaluator';
 import { materializeValueExpr } from './ValueExprMaterializer';
 import { applyStateWritePolicy } from './StateWritePolicy';
-import { writeShapeRefExprToBank } from './ShapeRefWriter';
 import type { PureFnExecutionContext } from './ScalarKernelLibrary';
 import {
   arenaDecodeToAoS,
@@ -251,7 +250,7 @@ export function executeFrame(
   // [LAW:one-source-of-truth] Single address table for all slot/expr/field queries.
   // slotToArena replaces all direct program.arenaLayout[slot] accesses in this file.
   const addressTable = getExprAddressTable(program);
-  const { slotLookup: slotLookupMap, fieldExprToSlot, slotToArena } = addressTable;
+  const { slotLookup: slotLookupMap, slotToArena } = addressTable;
   const pureFnContext: PureFnExecutionContext = { kernelRegistry: program.kernelRegistry };
   // [LAW:dataflow-not-control-flow] Assertion mode is chosen once per frame.
   // Step execution order is unchanged; only validation dataflow varies.
@@ -326,14 +325,9 @@ export function executeFrame(
         enterRuntimeFrameSegment(state, resolvePhase1ValueSegment());
         const targetSlot = step.target;
         const lookup = resolveSlotOffsetFromMap(slotLookupMap, targetSlot);
-        const { storage, offset, slot, stride } = lookup;
+        const { storage, slot, stride } = lookup;
 
-        if (storage === 'shape2d') {
-          // Shape value: write Shape2D record to shape2d bank
-          const veId = step.expr;
-          const exprNode = valueExprs[veId as number];
-          writeShapeRefExprToBank(exprNode, fieldExprToSlot, state.values.shape2d, offset);
-        } else if (isNumericStorage(storage)) {
+        if (isNumericStorage(storage)) {
           const arenaDesc = resolveArenaDescriptor(slotToArena, lookup);
 
           // [LAW:one-source-of-truth] Evaluate one-lane values through the same
@@ -582,7 +576,6 @@ export function executeFrame(
   _assemblerCtx.arena = arena;
   _assemblerCtx.scalarExprToArenaAddress = state.cache.scalarExprToArenaAddress ?? undefined;
   _assemblerCtx.slotToArena = addressTable.slotToArena;
-  _assemblerCtx.slotLookup = addressTable.slotLookup;
   assemblerContext = _assemblerCtx as AssemblerContext;
 
   // Build v2 frame from collected render steps (zero allocations - uses arena)
