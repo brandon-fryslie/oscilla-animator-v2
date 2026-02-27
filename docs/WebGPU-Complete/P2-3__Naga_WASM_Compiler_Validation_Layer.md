@@ -1,10 +1,16 @@
+> Alignment Notice (2026-02-27)
+> [LAW:one-source-of-truth] The canonical lowering boundary is `src/compiler/ir/naga-emitter/*` and `docs/compiler/ONE-TRUE-EMITTER.md`.
+> [LAW:dataflow-not-control-flow] Control flow is represented as recursive Naga blocks with lexical scopes, not flat instruction lists.
+> [LAW:no-string-math] Direct WGSL string generation in lowering code is forbidden; dynamic WGSL emission is an engine serializer boundary concern.
+> Read this document with `docs/WebGPU-Complete/P2-4__Scoped_Naga_IR_Control_Flow_and_Memory_Model.md`.
+
 This is the comprehensive technical specification for **The Compiler Architecture: The Naga Validation Layer (WASM)**.
 
-This document defines the interface and implementation of the **Custom Rust Shim** that acts as the bridge between your TypeScript compiler and the Naga Rust crate. Because standard npm packages (like naga-wasm) operate on *strings* (WGSL \$\to\$ GLSL), they are insufficient for our architecture. We are injecting raw **IR**, which requires a bespoke binary.
+This document defines the interface and implementation of the **Validation + Emission boundary** between the TypeScript scoped IR compiler and the Naga Rust crate. The boundary consumes structured IR and enforces expression/statement invariants before deterministic shader emission.
 
 # The Naga Validation Layer (WASM)
 
-**Objective:** Validate the TypeScript-generated IR against the strict rules of the WebGPU standard and emit optimized WGSL.
+**Objective:** Validate scoped TypeScript-generated IR (expressions, statements, blocks, memory operations) against strict WebGPU/Naga rules and emit shader artifacts.
 
 **Invariant:** Any module that passes this layer is guaranteed to be safe for the browser's GPU driver.
 
@@ -144,17 +150,13 @@ return result;\
 
 Naga's validation errors are precise but dense (e.g., Type mismatch: \[1\] is not \[2\]). We need to map these back to the user's graph.
 
-### 3.1 The Rust Side (validation_error_to_js)
+### 3.1 The Validation Side (validation_error_to_js)
 
-The Validator returns a WithSpan\<ValidationError\>.
+The validator reports typed failures tied to expression or statement handles.
 
-- **Span:** A byte offset or ID.
-
-- **Inner:** The logic error (e.g., Expression::Binary operands mismatch).
-
-The Shim must traverse the error path to find the **Handle ID** (e.g., Expression Handle 45).
-
-- *Action:* formatting the error string to include the Handle ID: "Expression \[45\] (Op: Add) invalid: Left operand type \[1\] (f32) does not match Right operand type \[2\] (vec3)".
+- **Location Class:** expression vs statement.
+- **Handle:** concrete arena handle (e.g., `Expression[45]`, `Statement[7]`).
+- **Inner:** invariant violation (type mismatch, invalid branch condition, illegal atomic payload, invalid dynamic index type).
 
 ### 3.2 The TypeScript Side (Source Mapping)
 
@@ -173,6 +175,8 @@ When NagaService throws an error citing Expression \[45\]:
 2.  Lookup 45 in sourceMap.
 
 3.  Highlight Node_102 in the UI.
+
+If it cites `Statement[7]`, we resolve through statement source mapping for the same UI behavior.
 
 ## 4. Performance Considerations
 
@@ -201,7 +205,6 @@ The compiled WASM binary will be approximately **600KB - 1.2MB** (gzipped).
 4.  **Build:** Run wasm-pack build --target web --release.
 
 5.  **Integrate:** Copy the pkg/ folder to your frontend public/wasm/ or src/wasm/ folder.
-
-6.  **Update Compiler:** Change the AsyncCompilerService to call NagaService.compile(ir) instead of generating strings.
+6.  **Update Compiler:** Ensure AsyncCompilerService compiles scoped IR and delegates validation/emission to the boundary. Lowering code must not generate WGSL strings.
 
 This layer is your safety net. It guarantees that no matter what logic errors exist in your TypeScript compiler, you will never crash the user's GPU driver, because Naga catches the bad math first.
