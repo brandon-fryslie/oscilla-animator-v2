@@ -2,10 +2,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { canonicalScalar, FLOAT } from '../../../core/canonical-types';
+import { canonicalScalar, FLOAT, INT } from '../../../core/canonical-types';
 import { OpCode } from '../types';
 import {
   NagaBuilder,
+  NagaBinaryOp,
   NagaValidationError,
   WgslNagaCompiler,
   validateNagaBuilder,
@@ -26,7 +27,20 @@ describe('Naga one-true-emitter', () => {
     const builder = new NagaBuilder();
     const mat4 = builder.literalMatrix4({ visualBlockId: 'matrix_node' });
     const scalar = builder.literalFloat(1, { visualBlockId: 'scalar_node' });
-    const add = builder.add(mat4, scalar, { visualBlockId: 'node_accumulator_7' });
+    const invalidHandle = builder.expressions.append({
+      type: 'Binary',
+      op: NagaBinaryOp.Add,
+      left: mat4.nagaHandle,
+      right: scalar.nagaHandle,
+    });
+    builder.sourceMap.set(invalidHandle, { visualBlockId: 'node_accumulator_7' });
+    const matrixType = builder.getExpressionType(mat4.nagaHandle);
+    expect(matrixType).toBeDefined();
+    (
+      builder as unknown as {
+        expressionTypeByHandle: Map<number, number>;
+      }
+    ).expressionTypeByHandle.set(invalidHandle, matrixType as number);
 
     let thrown: unknown;
     try {
@@ -37,9 +51,46 @@ describe('Naga one-true-emitter', () => {
 
     expect(thrown).toBeInstanceOf(NagaValidationError);
     const validationError = thrown as NagaValidationError;
-    expect(validationError.handle).toBe(add.nagaHandle);
+    expect(validationError.handle).toBe(invalidHandle);
     expect(validationError.visualBlockId).toBe('node_accumulator_7');
-    expect(validationError.message).toContain('Expression [' + String(add.nagaHandle) + ']');
+    expect(validationError.message).toContain('Expression [' + String(invalidHandle) + ']');
+  });
+
+  it('enforces select and lerp operand compatibility in builder', () => {
+    const builder = new NagaBuilder();
+    const boolCond = builder.literalBool(true, { visualBlockId: 'cond_bool' });
+    const floatCond = builder.literalFloat(1, { visualBlockId: 'cond_float' });
+    const a = builder.literalFloat(1, { visualBlockId: 'a' });
+    const b = builder.literalFloat(2, { visualBlockId: 'b' });
+    const t = builder.literalFloat(0.5, { visualBlockId: 't' });
+    const i = builder.literalInt(7, { visualBlockId: 'i' });
+
+    expect(() =>
+      builder.select(boolCond, a, b, { visualBlockId: 'select_ok' }),
+    ).not.toThrow();
+    expect(() =>
+      builder.select(floatCond, a, b, { visualBlockId: 'select_bad_cond' }),
+    ).toThrow('NagaBuilder.select: cond must be bool scalar or bool vector.');
+    expect(() =>
+      builder.select(boolCond, a, i, { visualBlockId: 'select_bad_branches' }),
+    ).toThrow('NagaBuilder.select: type mismatch between trueVal and falseVal.');
+
+    expect(() => builder.lerp(a, b, t, { visualBlockId: 'lerp_ok' })).not.toThrow();
+    expect(() => builder.lerp(a, i, t, { visualBlockId: 'lerp_bad_ab' })).toThrow(
+      'NagaBuilder.lerp: type mismatch between a and b.',
+    );
+  });
+
+  it('enforces consistent state slot typing on read', () => {
+    const builder = new NagaBuilder();
+    const floatType = canonicalScalar(FLOAT);
+    const intType = canonicalScalar(INT);
+    expect(() =>
+      builder.readState('accum', floatType, { visualBlockId: 'read_float' }),
+    ).not.toThrow();
+    expect(() =>
+      builder.readState('accum', intType, { visualBlockId: 'read_int' }),
+    ).toThrow('NagaBuilder.readState: type mismatch for state key accum');
   });
 
   it('compiles opcode instructions through the constrained builder API', () => {

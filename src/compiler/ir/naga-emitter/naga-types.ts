@@ -28,7 +28,7 @@ export type NagaType =
 
 export interface NagaConstant {
   readonly type: NagaHandle;
-  readonly value: number | boolean;
+  readonly value: number | boolean | readonly number[];
 }
 
 export enum NagaBinaryOp {
