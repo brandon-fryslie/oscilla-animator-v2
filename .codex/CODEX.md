@@ -34,11 +34,11 @@ If the requested ticket is blocked, update dependencies/plan first, then execute
 // [LAW:single-enforcer] PR readiness is enforced at one boundary: PR review + checks before merge.
 - After opening a PR, poll review status every 1 minute until Copilot review appears and checks are complete.
 - START_REVIEW_LOOP
-- Treat Copilot's "Pull request overview" review object as a completed review signal when there are no actionable inline comments.
+- Treat Copilot's "Pull request overview" review object as a completed review signal when there are no actionable review threads.
   - Copilot will leave ONE "Pull request overview" PER REVIEW.  If you push additional changes, you MUST repeat the following process!
-- If Copilot leaves actionable review comments, address each one, push fixes, and re-run required checks.
-- Address each specific comment by responding directly to Copilot's comment, explaining the resolution (with specifics).
-- For each review comment Copilot leaves, you MUST acknowledge you have read it by leaving a response BEFORE making changes:
+- If Copilot leaves actionable review threads or comments, address each one, push fixes, and re-run required checks.
+- Address each specific review thread by responding directly to Copilot's comment, explaining the resolution (with specifics).
+- For each review thread Copilot leaves, you MUST acknowledge you have read it by leaving a response BEFORE making changes:
   - If the solution is trivial and you will make a fix, say e.g., '👍 will fix'
   - If the solution is non-trivial, leave a brief explanation
   - If you need to research, say 'will look into it' (and updated with more info later)
@@ -47,10 +47,10 @@ If the requested ticket is blocked, update dependencies/plan first, then execute
   - Add additional context to the conversation, if necessary (if not necessary, do not)
   - You MUST resolve each conversation you have addressed
   - You MUST continue polling every 1 minute until Copilot's new "Pull request overview" review object is available, indicating the review is complete
-  - If there are any actionable comments, you MUST START_REVIEW_LOOP again
-  - If there are comments but none are actionable (ie, one comment that is not accurate), resolve the conversation and exit the loop.
+  - If there are any actionable threads or comments, you MUST START_REVIEW_LOOP again
+  - If there are threads or comments but none are actionable (ie, one thread that is not accurate), resolve the conversation and exit the loop.
 - END_REVIEW_LOOP (exit condition: you have received a "Pull request overview" for your latest pushed commit and resolved all conversations)
-- Merge the PR only when there are no outstanding actionable comments and required checks pass.
+- Merge the PR only when there are no outstanding actionable threads and required checks pass.
 
 ## Default Delivery Flow
 
