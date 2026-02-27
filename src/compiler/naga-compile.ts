@@ -10,6 +10,15 @@ export type NagaCompilationOutcome =
   | { readonly kind: 'ok'; readonly wgsl: string }
   | { readonly kind: 'error'; readonly errors: readonly CompileError[] };
 
+function parseMaxActiveLanes(generatedWgsl: string | undefined): number | undefined {
+  if (!generatedWgsl) return undefined;
+  const match = /const\s+MAX_ACTIVE_LANES:\s*u32\s*=\s*(\d+)u\s*;/m.exec(generatedWgsl);
+  if (!match) return undefined;
+  const parsed = Number.parseInt(match[1], 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) return undefined;
+  return parsed;
+}
+
 function parseExpressionId(value: string): number | null {
   const match = /Expression\s*\[(\d+)\]/i.exec(value);
   if (!match) return null;
@@ -51,7 +60,8 @@ export async function compileProgramWithNaga(
 
   try {
     await NagaService.boot();
-    const compiled = NagaService.compile(lowering.module);
+    const maxActiveLanes = parseMaxActiveLanes(program.generatedComputeProgram?.wgsl);
+    const compiled = NagaService.compile(lowering.module, { maxActiveLanes });
     return {
       kind: 'ok',
       wgsl: compiled.wgsl,
@@ -74,4 +84,3 @@ export async function compileProgramWithNaga(
     };
   }
 }
-
