@@ -84,9 +84,37 @@ If any one of the above fails, the spec is not complete.
 4. Missing tests means incomplete. If a spec requirement has no effective test coverage, add tests before declaring the spec complete.
 5. Cleanup deletions are mandatory. Leaving dead code/seams behind means the spec is incomplete.
 6. No meta-process artifacts. Do not add trackers, ledgers, checklists, or process documents unless a spec explicitly requires them.
+7. Descriptions must be correct and reproducible (ticket + PR):
+   - Include ticket ID, scope, changed files, and validation results.
+   - Use literal markdown for identifiers/commands (wrap with backticks).
+   - Never paste accidental shell-expanded output into PR body.
+8. When creating/editing PR descriptions from CLI, use `--body-file` (or an equivalent quoted heredoc source), not inline shell strings with backticks.
 
 // [LAW:behavior-not-structure] Progress is measured by implemented behavior and enforced tests, not process artifacts.
 // [LAW:verifiable-goals] Spec completion requires deterministic, repository-verifiable proof.
+// [LAW:single-enforcer] Description formatting/safety is enforced once here for all WebGPU spec PRs.
+
+## Branch/Workspace Preflight & Delivery Protocol
+
+1. Before starting any work, ensure the working directory is clean and the branch is fully up to date with `master`.
+2. If there are outstanding local changes, review them for correctness, best practices, architectural law compliance, and merge readiness.
+3. If outstanding work needs more changes, complete the work to make it merge-ready before starting new scope.
+4. If outstanding work should be reverted, explain why and stop. Do not remove or revert it yourself unless explicitly instructed by the user.
+5. If outstanding work is merge-ready, commit the final state, push, and open PR(s) before starting new work.
+6. Start each new unit of work on a fresh branch named for the scope, using the `codex/` prefix, from up-to-date `master`.
+7. When a unit of work is complete, make a commit and ensure that commit is up to date with `master`.
+8. If work is complete and review-ready, open a PR.
+9. If work is not complete but an adjacent, directly related chunk can be safely completed with the current unmerged scope, include and complete that chunk before stopping.
+10. You must only stop when one of these is true:
+    - The user explicitly tells you to stop.
+    - Ambiguity or high-risk uncertainty prevents safe completion.
+    - A full batch is complete and a PR is open, ready for review and merge.
+    - There is a known, concrete teammate-conflict risk on the same files (for example, dependency-coupled tickets).
+    - No other reason is valid for stopping.
+
+// [LAW:one-source-of-truth] `master` is the canonical integration baseline for all new branches and completion sync.
+// [LAW:single-enforcer] Start-work and stop-work process checks are enforced once in this section.
+// [LAW:verifiable-goals] Clean tree, sync state, and merge readiness are validated with deterministic git/test evidence.
 
 ## Mechanical Gating Rule
 

@@ -177,7 +177,20 @@ export interface CompiledProgramIR {
    */
   readonly arenaLayout: readonly ArenaSlotDescriptor[];
 
-  /** Total number of floats in the arena (sum of all descriptor lengths). */
+  /**
+   * Compiler-owned arena zone contract for runtime/render consumption.
+   *
+   * [LAW:one-source-of-truth] Zone offsets/alignment are emitted once by the
+   * compiler; runtime/render must consume this metadata rather than deriving
+   * independent zone boundaries.
+   */
+  readonly arenaZones?: ArenaZonesIR;
+
+  /**
+   * Total number of floats in the arena buffer, as computed by the arena zone
+   * plan (`totalFloats`). Includes header reservation and scalar->field
+   * alignment padding, not just slot descriptor lengths.
+   */
   readonly arenaTotalFloats: number;
 
   /**
@@ -405,6 +418,43 @@ export interface RuntimeAddressTableIR {
   readonly scalarExprToArenaAddress: ReadonlyMap<number, RuntimeScalarArenaAddress>;
   /** ValueSlot → arena descriptor */
   readonly slotToArena: ReadonlyMap<ValueSlot, ArenaSlotDescriptor>;
+}
+
+// =============================================================================
+// Arena Zones (Compiler-Owned Memory Contract)
+// =============================================================================
+
+export type ArenaZoneKind = 'header' | 'scalar' | 'field' | 'state' | 'gauge';
+
+export interface ArenaZoneAlignmentPolicyIR {
+  /**
+   * Fixed header size in floats (64 floats = 256 bytes).
+   * This reserves CPU->GPU global input marshalling space.
+   */
+  readonly headerFloats: number;
+  /**
+   * Alignment boundary (in floats) for the scalar->field zone transition.
+   */
+  readonly scalarToFieldAlignFloats: number;
+}
+
+export interface ArenaZoneRangeIR {
+  readonly kind: ArenaZoneKind;
+  readonly start: number;
+  readonly end: number;
+  readonly length: number;
+  readonly slotCount: number;
+  /**
+   * Alignment boundary applied when placing this zone. Header alignment is
+   * represented by its fixed size.
+   */
+  readonly alignmentFloats: number;
+}
+
+export interface ArenaZonesIR {
+  readonly alignment: ArenaZoneAlignmentPolicyIR;
+  readonly zones: readonly ArenaZoneRangeIR[];
+  readonly totalFloats: number;
 }
 
 // =============================================================================

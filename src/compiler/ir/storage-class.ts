@@ -7,9 +7,14 @@
  */
 
 import type { CanonicalType } from '../../core/canonical-types';
-import type { SlotMetaEntry } from './program';
+import type {
+  SlotMetaEntry,
+  ArenaZoneAlignmentPolicyIR,
+  ArenaZoneRangeIR,
+  ArenaZonesIR,
+} from './program';
 import type { ArenaPacking, ArenaSlotDescriptor } from '../../runtime/ArenaValueStore';
-import type { InstanceId } from './Indices';
+import type { InstanceId, ValueSlot } from './Indices';
 import type { InstanceDecl } from './types';
 import { requireInst, isMany, payloadStride } from '../../core/canonical-types';
 
@@ -96,5 +101,198 @@ export function deriveArenaDescriptor(
     packing,
     laneStride,
     componentStride,
+  };
+}
+
+// =============================================================================
+// Arena Zone Plan Derivation
+// =============================================================================
+
+export interface ArenaSlotPlanInput {
+  readonly slot: ValueSlot;
+  readonly type: CanonicalType;
+  readonly overrideStride?: number;
+  readonly packingPreference?: ArenaPacking;
+}
+
+/**
+ * Canonical alignment policy for arena zone planning.
+ *
+ * - 64 floats = 256 bytes header reservation.
+ * - 64-float alignment at scalar->field transition.
+ */
+export const DEFAULT_ARENA_ALIGNMENT_POLICY: ArenaZoneAlignmentPolicyIR = {
+  headerFloats: 64,
+  scalarToFieldAlignFloats: 64,
+};
+
+export interface ArenaZonePlan {
+  readonly totalFloats: number;
+  readonly zones: readonly ArenaZoneRangeIR[];
+  readonly alignment: ArenaZoneAlignmentPolicyIR;
+  slotDescriptor(slot: ValueSlot): ArenaSlotDescriptor;
+  slotOffset(slot: ValueSlot): number;
+  toIR(): ArenaZonesIR;
+}
+
+function alignUp(value: number, alignment: number): number {
+  if (alignment <= 1) return value;
+  const remainder = value % alignment;
+  if (remainder === 0) return value;
+  return value + (alignment - remainder);
+}
+
+function normalizeAlignmentCount(value: number, min: number, fallback: number): number {
+  if (!Number.isFinite(value)) {
+    return fallback;
+  }
+  return Math.floor(Math.max(min, value));
+}
+
+function classifySlotZone(type: CanonicalType): 'scalar' | 'field' {
+  const card = requireInst(type.extent.cardinality, 'cardinality');
+  return isMany(card) ? 'field' : 'scalar';
+}
+
+function makeZone(
+  kind: ArenaZoneRangeIR['kind'],
+  start: number,
+  end: number,
+  slotCount: number,
+  alignmentFloats: number,
+): ArenaZoneRangeIR {
+  return {
+    kind,
+    start,
+    end,
+    length: Math.max(0, end - start),
+    slotCount,
+    alignmentFloats,
+  };
+}
+
+/**
+ * Derive compiler-owned arena zone boundaries + per-slot descriptors.
+ *
+ * [LAW:one-source-of-truth] Zone ownership and aligned offsets are computed once
+ * by the compiler and consumed downstream as emitted metadata.
+ */
+export function deriveArenaZonePlan(
+  slots: readonly ArenaSlotPlanInput[],
+  instances: ReadonlyMap<InstanceId, InstanceDecl>,
+  alignment: ArenaZoneAlignmentPolicyIR = DEFAULT_ARENA_ALIGNMENT_POLICY,
+): ArenaZonePlan {
+  const normalizedAlignment: ArenaZoneAlignmentPolicyIR = {
+    headerFloats: normalizeAlignmentCount(
+      alignment.headerFloats,
+      0,
+      DEFAULT_ARENA_ALIGNMENT_POLICY.headerFloats,
+    ),
+    scalarToFieldAlignFloats: normalizeAlignmentCount(
+      alignment.scalarToFieldAlignFloats,
+      1,
+      DEFAULT_ARENA_ALIGNMENT_POLICY.scalarToFieldAlignFloats,
+    ),
+  };
+
+  const scalarSlots: ArenaSlotPlanInput[] = [];
+  const fieldSlots: ArenaSlotPlanInput[] = [];
+  for (const slot of slots) {
+    if (classifySlotZone(slot.type) === 'field') {
+      fieldSlots.push(slot);
+    } else {
+      scalarSlots.push(slot);
+    }
+  }
+
+  const descriptors = new Map<ValueSlot, ArenaSlotDescriptor>();
+  const zones: ArenaZoneRangeIR[] = [];
+
+  const headerStart = 0;
+  const headerEnd = headerStart + normalizedAlignment.headerFloats;
+  zones.push(makeZone('header', headerStart, headerEnd, 0, normalizedAlignment.headerFloats));
+
+  let cursor = headerEnd;
+  const scalarStart = cursor;
+  for (const slot of scalarSlots) {
+    const descriptor = deriveArenaDescriptor(
+      slot.type,
+      cursor,
+      instances,
+      slot.overrideStride,
+      slot.packingPreference,
+    );
+    descriptors.set(slot.slot, descriptor);
+    cursor += descriptor.length;
+  }
+  const scalarDataEnd = cursor;
+  const fieldStart =
+    fieldSlots.length > 0
+      ? alignUp(scalarDataEnd, normalizedAlignment.scalarToFieldAlignFloats)
+      : scalarDataEnd;
+  zones.push(
+    makeZone(
+      'scalar',
+      scalarStart,
+      fieldStart,
+      scalarSlots.length,
+      normalizedAlignment.scalarToFieldAlignFloats,
+    ),
+  );
+
+  cursor = fieldStart;
+  const fieldZoneStart = cursor;
+  for (const slot of fieldSlots) {
+    const descriptor = deriveArenaDescriptor(
+      slot.type,
+      cursor,
+      instances,
+      slot.overrideStride,
+      slot.packingPreference,
+    );
+    descriptors.set(slot.slot, descriptor);
+    cursor += descriptor.length;
+  }
+  const fieldEnd = cursor;
+  zones.push(
+    makeZone(
+      'field',
+      fieldZoneStart,
+      fieldEnd,
+      fieldSlots.length,
+      normalizedAlignment.scalarToFieldAlignFloats,
+    ),
+  );
+
+  // [LAW:one-way-deps] State/gauge zones are explicit IR contract ranges even
+  // before dedicated allocators migrate ownership in later specs.
+  const stateStart = fieldEnd;
+  const stateEnd = stateStart;
+  const gaugeStart = stateEnd;
+  const gaugeEnd = gaugeStart;
+  zones.push(makeZone('state', stateStart, stateEnd, 0, 1));
+  zones.push(makeZone('gauge', gaugeStart, gaugeEnd, 0, 1));
+
+  const toIR = (): ArenaZonesIR => ({
+    alignment: normalizedAlignment,
+    zones,
+    totalFloats: gaugeEnd,
+  });
+
+  return {
+    totalFloats: gaugeEnd,
+    zones,
+    alignment: normalizedAlignment,
+    slotDescriptor(slot: ValueSlot): ArenaSlotDescriptor {
+      const descriptor = descriptors.get(slot);
+      if (!descriptor) {
+        throw new Error(`deriveArenaZonePlan: missing descriptor for slot ${slot}`);
+      }
+      return descriptor;
+    },
+    slotOffset(slot: ValueSlot): number {
+      return this.slotDescriptor(slot).offset;
+    },
+    toIR,
   };
 }
