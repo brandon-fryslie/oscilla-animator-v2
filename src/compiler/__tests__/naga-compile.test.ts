@@ -62,6 +62,21 @@ describe('compileProgramWithNaga', () => {
     expect(compiled.errors.some((error) => error.code === 'IRValidationFailed')).toBe(true);
   });
 
+  it('fails when compiled program has no generated compute WGSL', async () => {
+    const result = compile(buildSimplePatch());
+    expect(result.kind).toBe('ok');
+    if (result.kind !== 'ok') return;
+
+    const withoutGeneratedCompute = {
+      ...result.program,
+      generatedComputeProgram: undefined,
+    };
+    const compiled = await compileProgramWithNaga(withoutGeneratedCompute as typeof result.program);
+    expect(compiled.kind).toBe('error');
+    if (compiled.kind !== 'error') return;
+    expect(compiled.errors.some((error) => error.message.includes('Missing generatedComputeProgram WGSL'))).toBe(true);
+  });
+
   it('maps validation failures to source block IDs via sourceMap', async () => {
     const result = compile(buildSimplePatch());
     expect(result.kind).toBe('ok');
@@ -146,5 +161,28 @@ describe('compileProgramWithNaga', () => {
     expect(compiled.kind).toBe('error');
     if (compiled.kind !== 'error') return;
     expect(compiled.errors.some((error) => error.message.includes('Emission Failure'))).toBe(true);
+  });
+
+  it('fails when MAX_ACTIVE_LANES constant cannot be resolved from generated WGSL', async () => {
+    const result = compile(buildSimplePatch());
+    expect(result.kind).toBe('ok');
+    if (result.kind !== 'ok') return;
+
+    const faultyProgram = {
+      ...result.program,
+      generatedComputeProgram: {
+        ...result.program.generatedComputeProgram!,
+        wgsl: result.program.generatedComputeProgram!.wgsl.replace(/const\s+MAX_ACTIVE_LANES:[^\n]*\n/m, ''),
+      },
+    };
+
+    const compiled = await compileProgramWithNaga(faultyProgram as typeof result.program);
+    expect(compiled.kind).toBe('error');
+    if (compiled.kind !== 'error') return;
+    expect(
+      compiled.errors.some((error) =>
+        error.message.includes('MAX_ACTIVE_LANES constant missing or invalid')
+      ),
+    ).toBe(true);
   });
 });

@@ -58,9 +58,34 @@ export async function compileProgramWithNaga(
     };
   }
 
+  const generatedComputeWgsl = program.generatedComputeProgram?.wgsl;
+  if (!generatedComputeWgsl) {
+    return {
+      kind: 'error',
+      errors: [
+        {
+          code: 'IRValidationFailed',
+          message: 'Missing generatedComputeProgram WGSL on compiled IR',
+        },
+      ],
+    };
+  }
+
+  const maxActiveLanes = parseMaxActiveLanes(generatedComputeWgsl);
+  if (!maxActiveLanes) {
+    return {
+      kind: 'error',
+      errors: [
+        {
+          code: 'IRValidationFailed',
+          message: 'MAX_ACTIVE_LANES constant missing or invalid in generatedComputeProgram WGSL',
+        },
+      ],
+    };
+  }
+
   try {
     await NagaService.boot();
-    const maxActiveLanes = parseMaxActiveLanes(program.generatedComputeProgram?.wgsl);
     const compiled = NagaService.compile(lowering.module, { maxActiveLanes });
     return {
       kind: 'ok',

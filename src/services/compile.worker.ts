@@ -17,14 +17,6 @@ async function toBackendResult(
   result: ReturnType<typeof compileFromFrontend>,
 ): Promise<CompileWorkerBackendResult> {
   if (result.kind === 'ok') {
-    const nagaOutcome = await compileProgramWithNaga(result.program);
-    if (nagaOutcome.kind === 'error') {
-      return {
-        kind: 'error',
-        errors: nagaOutcome.errors,
-      };
-    }
-
     if (!result.program.generatedComputeProgram) {
       return {
         kind: 'error',
@@ -34,6 +26,24 @@ async function toBackendResult(
             message: 'Compiled program is missing generatedComputeProgram',
           },
         ],
+      };
+    }
+
+    const nagaOutcome = await compileProgramWithNaga(result.program);
+    if (nagaOutcome.kind === 'error') {
+      const errorsWithWarningContext = nagaOutcome.errors.map((error, index) => {
+        if (index !== 0) return error;
+        return {
+          ...error,
+          details: {
+            ...(error.details ?? {}),
+            preNagaWarnings: result.warnings,
+          },
+        };
+      });
+      return {
+        kind: 'error',
+        errors: errorsWithWarningContext,
       };
     }
 

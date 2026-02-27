@@ -36,9 +36,18 @@ function formatScalarLiteral(value: number, scalar: NagaScalarKindIR): string {
 }
 
 function emitTypeRef(typeIndex: number, types: readonly NagaTypeIR[]): string {
+  const totalTypes = types.length;
   const type = types[typeIndex];
   if (!type) {
-    throw new Error(`emitTypeRef: missing type for index ${typeIndex}`);
+    const indexInfo =
+      typeIndex < 0
+        ? 'index is negative'
+        : typeIndex >= totalTypes
+          ? 'index is beyond upper bound'
+          : 'index is within bounds but type entry is missing';
+    throw new Error(
+      `emitTypeRef: missing type for index ${typeIndex} (types length=${totalTypes}; ${indexInfo})`,
+    );
   }
   switch (type.kind) {
     case 'scalar':
@@ -249,7 +258,11 @@ export function compile_ir(module: NagaModuleIR, maxActiveLanes?: number): ShimC
 
     const gidArg = fn.arguments.find((arg) => arg.builtin === 'global_invocation_id');
     if (gidArg) {
-      const laneBound = Math.max(1, Math.trunc(maxActiveLanes ?? 1));
+      const resolvedMaxActiveLanes = maxActiveLanes;
+      if (typeof resolvedMaxActiveLanes !== 'number' || !Number.isFinite(resolvedMaxActiveLanes)) {
+        throw new Error('MAX_ACTIVE_LANES not found or invalid in source WGSL; cannot determine lane bound');
+      }
+      const laneBound = Math.max(1, Math.trunc(resolvedMaxActiveLanes));
       lines.push(`const MAX_ACTIVE_LANES: u32 = ${laneBound}u;`);
     }
 
