@@ -565,6 +565,12 @@ interface PerInstanceShapeSpan {
   offset: number;
 }
 
+function isPerInstanceShapeSpan(
+  shape: ShapeDescriptor | PerInstanceShapeSpan,
+): shape is PerInstanceShapeSpan {
+  return (shape as PerInstanceShapeSpan).kind === 'perInstance';
+}
+
 function resolveScale(
   scaleSpec: StepRender['scale'],
   scalarExprToArenaAddress: ReadonlyMap<number, RuntimeScalarArenaAddress> | undefined,
@@ -1523,7 +1529,7 @@ function appendDrawPathInstancesOp(
   const shape = resolveShape(step.shape, scalarExprToArenaAddress, state, slotLookup, count);
 
   // Check if per-instance shapes (shape buffer)
-  if ('kind' in shape && shape.kind === 'perInstance') {
+  if (isPerInstanceShapeSpan(shape)) {
     // Per-instance shapes: group by topology and emit multiple ops
     assemblePerInstanceShapes(
       step,
