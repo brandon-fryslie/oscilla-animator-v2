@@ -12,6 +12,14 @@
  */
 
 import type { RuntimeState } from './RuntimeState';
+import {
+  SHAPE_BANK_HEADER_WORDS,
+  SHAPE_BANK_NO_CONTROL_POINT_SLOT,
+  Shape2DFlags,
+  allocShapeBankWords,
+  writeShapeBankHandleMetadata,
+  writeShapeBankHeader,
+} from './RuntimeState';
 import type { ValueExpr, ValueExprKernel } from '../compiler/ir/value-expr';
 import type { ValueExprId } from '../compiler/ir/Indices';
 import type { PureFn } from '../compiler/ir/types';
@@ -23,12 +31,76 @@ import { requireInst } from '../core/canonical-types';
 import { payloadStride } from '../core/canonical-types';
 import { constValueAsNumber, type ConstValue } from '../core/canonical-types';
 import { getTopology } from '../shapes/registry';
-import type { PathTopologyDef } from '../shapes/types';
+import type { PathTopologyDef, TopologyDef } from '../shapes/types';
 import { applyOpcode } from './OpcodeInterpreter';
 import {
   applyPureFn as applySharedPureFn,
   type PureFnExecutionContext,
 } from './ScalarKernelLibrary';
+
+function isPathTopology(topology: TopologyDef): topology is PathTopologyDef {
+  return 'verbs' in topology;
+}
+
+function resolveShapeControlPointSlot(
+  expr: Extract<ValueExpr, { kind: 'shapeRef' }>,
+  program: CompiledProgramIR,
+  requireControlPointSlot: boolean,
+): number {
+  if (expr.controlPointField == null) {
+    if (requireControlPointSlot) {
+      // [LAW:single-enforcer] shapeRef->ShapeBank metadata validation is enforced
+      // at this runtime materialization boundary.
+      throw new Error(
+        'shapeRef path topology requires controlPointField; missing controlPointField on shapeRef expression',
+      );
+    }
+    return SHAPE_BANK_NO_CONTROL_POINT_SLOT;
+  }
+  const slot = program.runtimeAddressTable?.fieldExprToSlot.get(expr.controlPointField as number);
+  if (slot === undefined) {
+    if (requireControlPointSlot) {
+      // [LAW:one-source-of-truth] Runtime address table owns field->slot mapping;
+      // missing entries are compiler/runtime contract violations, not fallbacks.
+      throw new Error(
+        'shapeRef path topology missing runtimeAddressTable fieldExprToSlot entry for controlPointField ' +
+          expr.controlPointField,
+      );
+    }
+    return SHAPE_BANK_NO_CONTROL_POINT_SLOT;
+  }
+  return slot as number;
+}
+
+function evaluateShapeRefHandle(
+  expr: Extract<ValueExpr, { kind: 'shapeRef' }>,
+  state: RuntimeState,
+  program: CompiledProgramIR,
+): number {
+  const shapeBank = state.shapeBank;
+  if (!shapeBank) {
+    throw new Error('RuntimeState.shapeBank is required to evaluate shape handles');
+  }
+  const topology = getTopology(expr.topologyId);
+  const isPath = isPathTopology(topology);
+  const vertexCount = isPath ? topology.totalControlPoints : 0;
+  const flags = isPath && topology.closed ? Shape2DFlags.CLOSED : 0;
+  const controlPointSlot = resolveShapeControlPointSlot(expr, program, isPath);
+  const handle = allocShapeBankWords(shapeBank, SHAPE_BANK_HEADER_WORDS);
+  // [LAW:one-source-of-truth] Handle semantics are anchored in ShapeBank:
+  // header stores draw topology dimensions, sidecar stores topology/control-slot metadata.
+  writeShapeBankHeader(shapeBank.data, handle, {
+    indexCount: vertexCount,
+    indexOffset: 0,
+    vertexCount,
+    flags,
+  });
+  writeShapeBankHandleMetadata(shapeBank, handle, {
+    topologyId: expr.topologyId as number,
+    controlPointSlot,
+  });
+  return handle;
+}
 
 function reduceScalarBuffer(buffer: ArrayLike<number>, count: number, op: 'min' | 'max' | 'sum' | 'avg'): number {
   if (count <= 0) return 0;
@@ -110,6 +182,8 @@ function evaluateScalarForMaterialize(
     // Scalar evaluation delegates reduce kernels back to the materializer path.
     evaluateReduceKernel: (expr, _valueExprs, runtimeState) =>
       materializeReduceScalar(expr, table, runtimeState, program, scratch, pureFnContext),
+    evaluateShapeRef: (expr, _valueExprs, runtimeState) =>
+      evaluateShapeRefHandle(expr, runtimeState, program),
   };
   return evaluateValueExprScalar(exprId, table.nodes, state, context);
 }
@@ -342,9 +416,17 @@ export function materializeValueExpr(
       throw new Error(`Cannot materialize one/event expression as field: ${expr.kind}`);
 
     case 'shapeRef': {
-      // [LAW:dataflow-not-control-flow] Keep evalOne/materialize on the unified
-      // numeric write path; shapeRef contributes no numeric payload, so write zeros.
-      fillBufferWithOne(buf, 0, count, stride);
+      // [LAW:dataflow-not-control-flow] shapeRef flows through the same scalar
+      // materialization path as all one-values; variability lives in handle data.
+      const handle = evaluateScalarForMaterialize(
+        exprId,
+        table,
+        state,
+        program,
+        scratch,
+        activePureFnContext,
+      );
+      fillBufferWithOne(buf, handle, count, stride);
       break;
     }
 

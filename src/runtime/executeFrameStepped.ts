@@ -23,7 +23,6 @@ import type { RenderBufferArena } from '../render/RenderBufferArena';
 import { createMaterializeScratch } from './MaterializeScratch';
 import { resolveTime } from './timeResolution';
 import {
-  writeShape2D,
   resetFrameVolatileShapeBank,
   prepareStateWriteBank,
   commitStateWriteBank,
@@ -224,7 +223,7 @@ export function* executeFrameStepped(
   // [LAW:one-source-of-truth] Single address table for all slot/expr/field queries.
   // slotToArena replaces all direct program.arenaLayout[slot] accesses in this file.
   const addressTable = getExprAddressTable(program);
-  const { slotLookup: slotLookupMap, fieldExprToSlot, slotToArena } = addressTable;
+  const { slotLookup: slotLookupMap, slotToArena } = addressTable;
   const pureFnContext: PureFnExecutionContext = { kernelRegistry: program.kernelRegistry };
 
   const resolveSlotOffset = (slot: ValueSlot): SlotLookup => {
@@ -267,30 +266,9 @@ export function* executeFrameStepped(
       case 'evalOne': {
         const targetSlot = step.target;
         const lookup = resolveSlotOffset(targetSlot);
-        const { storage, offset, slot, stride } = lookup;
+        const { storage, slot, stride } = lookup;
 
-        if (storage === 'shape2d') {
-          const veId = step.expr;
-          const exprNode = valueExprs[veId as number];
-          if (exprNode.kind === 'shapeRef') {
-            writeShape2D(state.values.shape2d, offset, {
-              topologyId: exprNode.topologyId,
-              pointsFieldSlot:
-                (exprNode.kind === 'shapeRef' && exprNode.controlPointField != null
-                  ? (() => {
-                      const cpSlot = fieldExprToSlot.get(exprNode.controlPointField as number);
-                      if (cpSlot === undefined) throw new Error(`Control point field ${exprNode.controlPointField} not in fieldExprToSlot — compiler bug`);
-                      return cpSlot;
-                    })()
-                  : 0),
-              pointsCount: 0,
-              styleRef: 0,
-              flags: 0,
-            });
-          }
-          // Capture written shape
-          writtenSlots.set(targetSlot, readSlotValue(state, lookup, slotToArena));
-        } else if (isNumericStorage(storage)) {
+        if (isNumericStorage(storage)) {
           const arenaDesc = resolveArenaDescriptor(slotToArena, lookup);
 
           const buffer = materializeValueExpr(
