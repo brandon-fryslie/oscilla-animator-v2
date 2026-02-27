@@ -62,6 +62,37 @@ function assertWebGPULoopContract(deps: AnimationLoopDeps): void {
 const CONTINUITY_STORE_UPDATE_INTERVAL = 200; // 5Hz
 const EMPTY_RENDER_FRAME: RenderFrameIR = { version: 2, ops: [] };
 
+function readChannel(snapshot: { getFloat: (name: string) => number } | undefined, name: string): number {
+  return snapshot?.getFloat(name) ?? 0;
+}
+
+function resolveRendererInputChannels(currentState: RuntimeState): {
+  readonly inputMouseX: number;
+  readonly inputMouseY: number;
+  readonly inputMouseButtons: number;
+  readonly inputAudioLow: number;
+  readonly inputAudioMid: number;
+  readonly inputAudioHigh: number;
+  readonly inputGaugeActive: number;
+} {
+  const snapshot = currentState.externalChannels?.snapshot;
+  const leftButton = readChannel(snapshot, 'mouse.button.left.held') > 0 ? 1 : 0;
+  const rightButton = readChannel(snapshot, 'mouse.button.right.held') > 0 ? 1 : 0;
+  const middleButton = readChannel(snapshot, 'mouse.button.middle.held') > 0 ? 1 : 0;
+
+  // [LAW:one-source-of-truth] External channel snapshot is the canonical
+  // runtime input source; renderer payload values are derived from it only.
+  return {
+    inputMouseX: readChannel(snapshot, 'mouse.x'),
+    inputMouseY: readChannel(snapshot, 'mouse.y'),
+    inputMouseButtons: leftButton | (rightButton << 1) | (middleButton << 2),
+    inputAudioLow: readChannel(snapshot, 'audio.low'),
+    inputAudioMid: readChannel(snapshot, 'audio.mid'),
+    inputAudioHigh: readChannel(snapshot, 'audio.high'),
+    inputGaugeActive: readChannel(snapshot, 'gauge.active'),
+  };
+}
+
 function assertProgramPhaseBoundary(deps: AnimationLoopDeps): void {
   const program = deps.getCurrentProgram();
   if (!program) return;
@@ -204,6 +235,7 @@ export function executeAnimationFrame(
   // [LAW:one-source-of-truth] The active draw-prep shader comes from the
   // compiled program contract; renderer selection has one canonical source.
   const drawPrepShaderWgsl = currentProgram?.drawPrepProgram?.wgsl;
+  const inputChannels = resolveRendererInputChannels(currentState);
   renderer.render({
     frame: frameToRender,
     width: canvas.width,
@@ -212,6 +244,7 @@ export function executeAnimationFrame(
     panX: pan.x,
     panY: pan.y,
     timeMs: tMs,
+    ...inputChannels,
     drawPrepShaderWgsl,
   });
   state.renderTime = performance.now() - renderStart;
