@@ -64,4 +64,38 @@ describe('forbidden patterns (v3 hard rules)', () => {
     // runtime mode flags; variability is expressed in data, not mode branches.
     expect(matches).toEqual([]);
   });
+
+  it('forbids GPU full-buffer copy commands in the WebGPU hot path', () => {
+    const matches = rg('copyBufferToBuffer\\s*\\(', ['src/render/webgpu/WebGPURenderer.ts']);
+
+    // [LAW:dataflow-not-control-flow] Frame execution keeps one deterministic
+    // compute->draw flow without whole-buffer copy detours.
+    expect(matches).toEqual([]);
+  });
+
+  it('forbids runtime arena reassignment in frame executors', () => {
+    const matches = rg('state\\.arena\\s*=', [
+      'src/runtime/ScheduleExecutor.ts',
+      'src/runtime/executeFrameStepped.ts',
+    ]);
+
+    // [LAW:one-source-of-truth] Runtime arena storage is single-owned and must
+    // not be replaced inside frame execution loops.
+    expect(matches).toEqual([]);
+  });
+
+  it('forbids shape-bank mutation helpers in renderer/assembler hot paths', () => {
+    const matches = rg('writeShapeBank(Header|HandleMetadata)\\s*\\(', [
+      'src/runtime/RenderAssembler.ts',
+      'src/render/webgpu/WebGPURenderer.ts',
+    ]);
+    expect(matches).toEqual([]);
+  });
+
+  it('forbids CPU-side direct indirect-args writes in WebGPU renderer', () => {
+    const matches = rg('writeBuffer\\s*\\(\\s*this\\.indirectArgsBuffer', [
+      'src/render/webgpu/WebGPURenderer.ts',
+    ]);
+    expect(matches).toEqual([]);
+  });
 });

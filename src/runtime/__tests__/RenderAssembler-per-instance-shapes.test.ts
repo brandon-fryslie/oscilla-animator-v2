@@ -220,6 +220,118 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
         /Shape handle buffer length mismatch/
       );
     });
+
+    it('rejects shape handles that do not span a full shape-bank header', () => {
+      const state = createMockState();
+      const positionBuffer = new Float32Array([0.1, 0.2, 0.0]);
+      const colorBuffer = new Uint8ClampedArray([255, 0, 0, 255]);
+      const shapeHandles = new Float32Array([
+        state.shapeBank!.data.length - SHAPE_BANK_HEADER_WORDS + 1,
+      ]);
+
+      setTestSlotBuffer(state, 1 as ValueSlot, positionBuffer);
+      setTestSlotBuffer(state, 2 as ValueSlot, colorBuffer);
+      setTestSlotBuffer(state, 3 as ValueSlot, shapeHandles);
+
+      const scalarExprToArenaOffset = new Map<number, number>([[0, 10]]);
+      state.arena[10] = 1.0;
+      const slotToArena = buildSlotToArenaWithShapeSlots(state, [
+        { slot: 1 as ValueSlot, stride: 3 },
+        { slot: 2 as ValueSlot, stride: 4 },
+      ]);
+
+      const step: StepRender = {
+        kind: 'render',
+        instanceId: instanceId('invalid-shape-header-span'),
+        controlPointsSlot: 1 as ValueSlot,
+        colorSlot: 2 as ValueSlot,
+        scale: { k: 'one', id: 0 as ValueExprId },
+        shape: { k: 'slot', slot: 3 as ValueSlot },
+      };
+
+      const context: AssemblerContext = {
+        scalarExprToArenaAddress: buildScalarExprToArenaAddressFromOffsets(scalarExprToArenaOffset),
+        instances: new Map([['invalid-shape-header-span', createMockInstance(1)]]),
+        state,
+        resolvedCamera: DEFAULT_CAMERA,
+        arena: getTestArena(),
+        slotToArena,
+      };
+
+      expect(() => assembleDrawPathInstancesOp(step, context)).toThrow(/shape handle out of range/i);
+    });
+  });
+
+  describe('Shape Bank Read Contract', () => {
+    it('treats shape bank as read-only during per-instance assembly', () => {
+      const state = createMockState();
+      const instanceCount = 2;
+      const positionBuffer = new Float32Array(instanceCount * 3);
+      const colorBuffer = new Uint8ClampedArray(instanceCount * 4);
+      const shapeBuffer = new Uint32Array(instanceCount * SHAPE2D_WORDS);
+      const controlPointsBuffer = new Float32Array([
+        0, 1, 1, 0, 0, -1, -1, 0,
+      ]);
+
+      for (let i = 0; i < instanceCount; i++) {
+        writeShape2D(shapeBuffer, i, {
+          topologyId: CIRCLE_ID,
+          pointsFieldSlot: 4,
+          pointsCount: 4,
+          styleRef: 0,
+          flags: 1,
+        });
+        positionBuffer[i * 3] = i * 0.1;
+        positionBuffer[i * 3 + 1] = 0.5;
+        positionBuffer[i * 3 + 2] = 0.0;
+        colorBuffer[i * 4] = 255;
+        colorBuffer[i * 4 + 3] = 255;
+      }
+
+      setTestSlotBuffer(state, 1 as ValueSlot, positionBuffer);
+      setTestSlotBuffer(state, 2 as ValueSlot, colorBuffer);
+      installShapeHandlesFromPacked(state, 3 as ValueSlot, shapeBuffer);
+      setTestSlotBuffer(state, 4 as ValueSlot, controlPointsBuffer);
+
+      const scalarExprToArenaOffset = new Map<number, number>([[0, 10]]);
+      state.arena[10] = 1.0;
+      const slotToArena = buildSlotToArenaWithShapeSlots(state, [
+        { slot: 1 as ValueSlot, stride: 3 },
+        { slot: 2 as ValueSlot, stride: 4 },
+        { slot: 4 as ValueSlot, stride: 2 },
+      ]);
+
+      const step: StepRender = {
+        kind: 'render',
+        instanceId: instanceId('shape-bank-read-only'),
+        controlPointsSlot: 1 as ValueSlot,
+        colorSlot: 2 as ValueSlot,
+        scale: { k: 'one', id: 0 as ValueExprId },
+        shape: { k: 'slot', slot: 3 as ValueSlot },
+      };
+
+      const shapeBank = state.shapeBank!;
+      const volatileBefore = shapeBank.volatilePtr;
+      const dataSnapshot = shapeBank.data.slice();
+      const topologySnapshot = shapeBank.topologyIdByHandle.slice();
+      const controlPointSnapshot = shapeBank.controlPointSlotByHandle.slice();
+
+      const context: AssemblerContext = {
+        scalarExprToArenaAddress: buildScalarExprToArenaAddressFromOffsets(scalarExprToArenaOffset),
+        instances: new Map([['shape-bank-read-only', createMockInstance(instanceCount)]]),
+        state,
+        resolvedCamera: DEFAULT_CAMERA,
+        arena: getTestArena(),
+        slotToArena,
+      };
+
+      const result = assembleDrawPathInstancesOp(step, context);
+      expect(result.length).toBeGreaterThan(0);
+      expect(shapeBank.volatilePtr).toBe(volatileBefore);
+      expect(Array.from(shapeBank.data)).toEqual(Array.from(dataSnapshot));
+      expect(Array.from(shapeBank.topologyIdByHandle)).toEqual(Array.from(topologySnapshot));
+      expect(Array.from(shapeBank.controlPointSlotByHandle)).toEqual(Array.from(controlPointSnapshot));
+    });
   });
 
   describe('Topology Grouping', () => {
