@@ -229,6 +229,7 @@ class WebGPUDrawPrepRuntime {
   private readonly paramsStaging = new Uint32Array(WEBGPU_RENDER_CONTRACT.drawPrepParamsU32);
   private activeBindGroup: any | null = null;
   private activeIndirectBuffer: any | null = null;
+  private activeCountersBuffer: any | null = null;
   // [LAW:single-enforcer] Hot-swap pending pipeline follows P2-1 async protocol.
   private pendingPipeline: any | null = null;
   private shaderGeneration = 0;
@@ -268,6 +269,7 @@ class WebGPUDrawPrepRuntime {
       // Invalidate cached bind group since pipeline layout may have changed.
       this.activeBindGroup = null;
       this.activeIndirectBuffer = null;
+      this.activeCountersBuffer = null;
     }
   }
 
@@ -301,8 +303,12 @@ class WebGPUDrawPrepRuntime {
     });
   }
 
-  private getOrCreateBindGroup(indirectBuffer: any): any {
-    if (this.activeBindGroup && this.activeIndirectBuffer === indirectBuffer) {
+  private getOrCreateBindGroup(indirectBuffer: any, countersBuffer: any): any {
+    if (
+      this.activeBindGroup &&
+      this.activeIndirectBuffer === indirectBuffer &&
+      this.activeCountersBuffer === countersBuffer
+    ) {
       return this.activeBindGroup;
     }
 
@@ -317,24 +323,29 @@ class WebGPUDrawPrepRuntime {
           binding: WEBGPU_RENDER_CONTRACT.drawPrepParamsBinding,
           resource: { buffer: this.paramsBuffer },
         },
+        {
+          binding: WEBGPU_RENDER_CONTRACT.drawPrepCountersBinding,
+          resource: { buffer: countersBuffer },
+        },
       ],
     });
     this.activeBindGroup = bindGroup;
     this.activeIndirectBuffer = indirectBuffer;
+    this.activeCountersBuffer = countersBuffer;
     return bindGroup;
   }
 
   step(
     commandEncoder: any,
     indirectBuffer: any,
+    countersBuffer: any,
     recordIndex: number,
     maxRecords: number,
     indexCount: number,
-    instanceCount: number,
     firstInstance: number,
   ): void {
     this.paramsStaging[0] = indexCount >>> 0;
-    this.paramsStaging[1] = instanceCount >>> 0;
+    this.paramsStaging[1] = 0;
     this.paramsStaging[2] = 0; // firstIndex
     this.paramsStaging[3] = 0; // baseVertex
     this.paramsStaging[4] = firstInstance >>> 0;
@@ -343,7 +354,7 @@ class WebGPUDrawPrepRuntime {
     this.paramsStaging[7] = 0;
     this.device.queue.writeBuffer(this.paramsBuffer, 0, this.paramsStaging);
 
-    const bindGroup = this.getOrCreateBindGroup(indirectBuffer);
+    const bindGroup = this.getOrCreateBindGroup(indirectBuffer, countersBuffer);
 
     const pass = commandEncoder.beginComputePass();
     pass.setPipeline(this.pipeline);
@@ -374,6 +385,9 @@ export class WebGPURenderer {
   private topologyBankBindGroup: any;
   private indirectArgsBuffer: any;
   private indirectArgsCapacityRecords = 1;
+  private drawPrepCountersBuffer: any;
+  private drawPrepCountersCapacityRecords = 1;
+  private drawPrepCountersStaging = new Uint32Array(1);
   private topologyBankBuffer: any;
   private topologyBankCapacityWords = 1;
   private topologyBankRevision = -1;
@@ -420,6 +434,10 @@ export class WebGPURenderer {
     this.indirectArgsBuffer = device.createBuffer({
       size: WEBGPU_RENDER_CONTRACT.indirectArgsBytes,
       usage: GPU_BUFFER_USAGE.STORAGE | GPU_BUFFER_USAGE.INDIRECT | GPU_BUFFER_USAGE.COPY_DST,
+    });
+    this.drawPrepCountersBuffer = device.createBuffer({
+      size: Uint32Array.BYTES_PER_ELEMENT,
+      usage: GPU_BUFFER_USAGE.STORAGE | GPU_BUFFER_USAGE.COPY_DST,
     });
     this.topologyBankBuffer = device.createBuffer({
       size: Uint32Array.BYTES_PER_ELEMENT,
@@ -525,14 +543,15 @@ export class WebGPURenderer {
       );
     }
     this.ensureIndirectArgsCapacity(drawPlan.length);
+    this.uploadDrawPrepCounters(drawPlan);
     for (const prepared of drawPlan) {
       this.drawPrepRuntime.step(
         commandEncoder,
         this.indirectArgsBuffer,
+        this.drawPrepCountersBuffer,
         prepared.indirectRecordIndex,
-        this.indirectArgsCapacityRecords,
+        drawPlan.length,
         prepared.mesh.indexCount,
-        prepared.instanceCount,
         prepared.firstInstance,
       );
     }
@@ -568,6 +587,7 @@ export class WebGPURenderer {
     this.drawPrepRuntime.dispose();
     this.sceneUniformBuffer.destroy();
     this.indirectArgsBuffer.destroy();
+    this.drawPrepCountersBuffer.destroy();
     this.topologyBankBuffer.destroy();
     this.instanceBuffer.destroy();
     for (const mesh of this.meshCache.values()) {
@@ -997,6 +1017,43 @@ export class WebGPURenderer {
     this.indirectArgsBuffer.destroy();
     this.indirectArgsBuffer = nextBuffer;
     this.indirectArgsCapacityRecords = nextCapacity;
+  }
+
+  private ensureDrawPrepCountersCapacity(requiredRecords: number): void {
+    if (requiredRecords <= this.drawPrepCountersCapacityRecords) {
+      return;
+    }
+
+    let nextCapacity = this.drawPrepCountersCapacityRecords;
+    while (nextCapacity < requiredRecords) {
+      nextCapacity *= 2;
+    }
+
+    const nextBuffer = this.device.createBuffer({
+      size: nextCapacity * Uint32Array.BYTES_PER_ELEMENT,
+      usage: GPU_BUFFER_USAGE.STORAGE | GPU_BUFFER_USAGE.COPY_DST,
+    });
+    this.drawPrepCountersBuffer.destroy();
+    this.drawPrepCountersBuffer = nextBuffer;
+    this.drawPrepCountersCapacityRecords = nextCapacity;
+    this.drawPrepCountersStaging = new Uint32Array(nextCapacity);
+  }
+
+  private uploadDrawPrepCounters(drawPlan: readonly PreparedDrawPathOp[]): void {
+    this.ensureDrawPrepCountersCapacity(drawPlan.length);
+    for (let i = 0; i < drawPlan.length; i++) {
+      const prepared = drawPlan[i]!;
+      this.drawPrepCountersStaging[prepared.indirectRecordIndex] = prepared.instanceCount >>> 0;
+    }
+    if (drawPlan.length > 0) {
+      this.device.queue.writeBuffer(
+        this.drawPrepCountersBuffer,
+        0,
+        this.drawPrepCountersStaging,
+        0,
+        drawPlan.length,
+      );
+    }
   }
 
   // [LAW:single-enforcer] createRenderPipelineAsync is the only permitted render pipeline

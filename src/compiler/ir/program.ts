@@ -311,6 +311,8 @@ export interface DrawPrepSinkIR {
   readonly instanceId: InstanceId;
   /** Indirect args record index written for this sink */
   readonly indirectRecordIndex: number;
+  /** Arena counter slot read by draw-prep for dynamic instance counts. */
+  readonly counterSlot: number;
   /** Whether instance count is static or dynamic for this sink */
   readonly instanceCountMode: 'static' | 'dynamic';
   /** Present only when instanceCountMode==='static' */

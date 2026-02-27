@@ -31,6 +31,7 @@ export const WEBGPU_RENDER_CONTRACT = Object.freeze({
   drawPrepBindGroup: 0,
   drawPrepIndirectBinding: 0,
   drawPrepParamsBinding: 1,
+  drawPrepCountersBinding: 2,
   drawPrepParamsU32: 8,
   drawPrepWorkgroupSize: 1,
 } as const);
@@ -146,7 +147,7 @@ fn cs_main(@builtin(global_invocation_id) gid: vec3<u32>) {
 
 export const DRAW_PREP_COMPUTE_WGSL = /* wgsl */ `
 struct DrawPrepParams {
-  // v0 = [indexCount, instanceCount, firstIndex, baseVertexBits]
+  // v0 = [indexCount, _, firstIndex, baseVertexBits]
   v0: vec4<u32>,
   // v1 = [firstInstance, recordIndex, maxRecords, _]
   v1: vec4<u32>,
@@ -154,6 +155,7 @@ struct DrawPrepParams {
 
 @group(0) @binding(0) var<storage, read_write> indirectArgs: array<u32>;
 @group(0) @binding(1) var<uniform> drawPrepParams: DrawPrepParams;
+@group(0) @binding(2) var<storage, read> arenaCounters: array<u32>;
 
 @compute @workgroup_size(${WEBGPU_RENDER_CONTRACT.drawPrepWorkgroupSize})
 fn cs_main(@builtin(global_invocation_id) gid: vec3<u32>) {
@@ -168,8 +170,9 @@ fn cs_main(@builtin(global_invocation_id) gid: vec3<u32>) {
   }
 
   let base = recordIndex * ${WEBGPU_RENDER_CONTRACT.indirectArgsWords}u;
+  let dynamicCount = arenaCounters[recordIndex];
   indirectArgs[base + 0u] = drawPrepParams.v0.x; // indexCount
-  indirectArgs[base + 1u] = drawPrepParams.v0.y; // instanceCount
+  indirectArgs[base + 1u] = dynamicCount; // instanceCount
   indirectArgs[base + 2u] = drawPrepParams.v0.z; // firstIndex
   indirectArgs[base + 3u] = drawPrepParams.v0.w; // baseVertex bits
   indirectArgs[base + 4u] = drawPrepParams.v1.x; // firstInstance

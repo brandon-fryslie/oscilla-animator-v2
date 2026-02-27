@@ -102,12 +102,13 @@ function createFakeWebGPUEnvironment() {
 function collectDrawPrepBindGroupCalls(createBindGroupMock: { mock: { calls: unknown[][] } }): unknown[][] {
   return createBindGroupMock.mock.calls.filter((call: unknown[]) => {
     const descriptor = call[0] as { entries?: Array<{ binding: number }> };
-    if (!descriptor.entries || descriptor.entries.length !== 2) {
+    if (!descriptor.entries || descriptor.entries.length !== 3) {
       return false;
     }
     return (
       descriptor.entries[0]?.binding === WEBGPU_RENDER_CONTRACT.drawPrepIndirectBinding &&
-      descriptor.entries[1]?.binding === WEBGPU_RENDER_CONTRACT.drawPrepParamsBinding
+      descriptor.entries[1]?.binding === WEBGPU_RENDER_CONTRACT.drawPrepParamsBinding &&
+      descriptor.entries[2]?.binding === WEBGPU_RENDER_CONTRACT.drawPrepCountersBinding
     );
   });
 }
@@ -516,6 +517,13 @@ describe('WebGPURenderer', () => {
 
     const drawPrepBindGroups = collectDrawPrepBindGroupCalls(env.device.createBindGroup);
     expect(drawPrepBindGroups).toHaveLength(1);
+    const counterUploads = env.device.queue.writeBuffer.mock.calls.filter((args: unknown[]) => {
+      const data = args[2];
+      return data instanceof Uint32Array && args[4] === 2;
+    });
+    expect(counterUploads).toHaveLength(1);
+    expect((counterUploads[0]?.[2] as Uint32Array)[0]).toBe(1);
+    expect((counterUploads[0]?.[2] as Uint32Array)[1]).toBe(1);
   });
 
   it('dispatches simulation workgroups from unique op instance count (not fill/stroke pass count)', async () => {
@@ -667,12 +675,13 @@ describe('WebGPURenderer', () => {
       '};',
       '@group(0) @binding(0) var<storage, read_write> indirectArgs: array<u32>;',
       '@group(0) @binding(1) var<uniform> drawPrepParams: DrawPrepParams;',
+      '@group(0) @binding(2) var<storage, read> arenaCounters: array<u32>;',
       '@compute @workgroup_size(1)',
       'fn cs_main(@builtin(global_invocation_id) gid: vec3<u32>) {',
       '  if (gid.x > 0u) { return; }',
       '  let base = drawPrepParams.v1.y * 5u;',
       '  indirectArgs[base + 0u] = drawPrepParams.v0.x;',
-      '  indirectArgs[base + 1u] = drawPrepParams.v0.y;',
+      '  indirectArgs[base + 1u] = arenaCounters[drawPrepParams.v1.y];',
       '  indirectArgs[base + 2u] = drawPrepParams.v0.z;',
       '  indirectArgs[base + 3u] = drawPrepParams.v0.w;',
       '  indirectArgs[base + 4u] = drawPrepParams.v1.x;',
