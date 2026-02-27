@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createWebGPURenderer } from '../WebGPURenderer';
-import { WEBGPU_RENDER_CONTRACT } from '../shaders';
+import { PATH_RENDER_WGSL, WEBGPU_RENDER_CONTRACT } from '../shaders';
 import { getTopologyRegistryRevision, registerDynamicTopology } from '../../../shapes/registry';
 import { PathVerb } from '../../../shapes/types';
 import type { DrawPathInstancesOp } from '../../types';
@@ -61,6 +61,11 @@ function createFakeWebGPUEnvironment() {
       destroy: vi.fn(),
       getMappedRange: vi.fn(() => new ArrayBuffer(descriptor.size)),
       unmap: vi.fn(),
+    })),
+    createTexture: vi.fn((descriptor: unknown) => ({
+      descriptor,
+      createView: vi.fn(() => ({ label: 'msaa-view' })),
+      destroy: vi.fn(),
     })),
     createBindGroup: vi.fn((descriptor: unknown) => descriptor),
     createCommandEncoder: vi.fn(() => commandEncoder),
@@ -824,6 +829,63 @@ describe('WebGPURenderer', () => {
 
     expect(env.device.createRenderPipelineAsync).toHaveBeenCalled();
     expect(env.device.createRenderPipeline).not.toHaveBeenCalled();
+  });
+
+  it('configures premultiplied alpha blending and 4x MSAA on the render pipeline', async () => {
+    const env = createFakeWebGPUEnvironment();
+    setNavigatorGpu(env.gpu);
+    await createWebGPURenderer(env.canvas);
+
+    expect(env.device.createRenderPipelineAsync).toHaveBeenCalled();
+    const firstRenderPipelineCall = (env.device.createRenderPipelineAsync as any).mock.calls[0];
+    const descriptor = firstRenderPipelineCall[0] as {
+      fragment: {
+        targets: Array<{
+          blend: {
+            color: { srcFactor: string; dstFactor: string; operation: string };
+            alpha: { srcFactor: string; dstFactor: string; operation: string };
+          };
+        }>;
+      };
+      multisample: { count: number };
+    };
+    expect(descriptor.fragment.targets[0]?.blend).toEqual({
+      color: {
+        srcFactor: 'one',
+        dstFactor: 'one-minus-src-alpha',
+        operation: 'add',
+      },
+      alpha: {
+        srcFactor: 'one',
+        dstFactor: 'one-minus-src-alpha',
+        operation: 'add',
+      },
+    });
+    expect(descriptor.multisample.count).toBe(WEBGPU_RENDER_CONTRACT.renderMsaaSampleCount);
+  });
+
+  it('uses premultiplied alpha output in the fragment shader', () => {
+    expect(PATH_RENDER_WGSL).toContain('vec4<f32>(input.color.rgb * input.color.a, input.color.a)');
+  });
+
+  it('renders through MSAA resolve attachment with discard store semantics', async () => {
+    const env = createFakeWebGPUEnvironment();
+    setNavigatorGpu(env.gpu);
+    const renderer = await createWebGPURenderer(env.canvas);
+
+    renderer.render(makeRenderInput([]));
+
+    const passDescriptor = env.device.createCommandEncoder.mock.results[0]?.value.beginRenderPass.mock.calls[0]?.[0] as {
+      colorAttachments: Array<{
+        resolveTarget?: unknown;
+        storeOp?: string;
+        clearValue?: { a?: number };
+      }>;
+    };
+    const colorAttachment = passDescriptor.colorAttachments[0];
+    expect(colorAttachment.resolveTarget).toBeDefined();
+    expect(colorAttachment.storeOp).toBe('discard');
+    expect(colorAttachment.clearValue?.a).toBe(0);
   });
 
   it('commits async draw-prep pipeline on next frame after shader update (hot-swap protocol)', async () => {
