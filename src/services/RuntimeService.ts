@@ -43,6 +43,19 @@ import { debugSettings } from '../settings/tokens/debug-settings';
 import { compilerFlagsSettings } from '../settings/tokens/compiler-flags-settings';
 import { appSettings } from '../settings/tokens/app-settings';
 
+export interface RuntimeSpyReadbackEntry {
+  readonly exprId: number;
+  readonly slotId: number;
+  readonly component: number;
+  readonly value: number;
+}
+
+export interface RuntimeSpyReadbackPacket {
+  readonly capturedAtMs: number;
+  readonly frameId: number;
+  readonly entries: readonly RuntimeSpyReadbackEntry[];
+}
+
 function isCompileWorkerUnavailableError(err: unknown): boolean {
   const message = err instanceof Error ? err.message : String(err);
   const lowered = message.toLowerCase();
@@ -78,16 +91,23 @@ export class RuntimeService {
   private readonly liveRecompile: LiveRecompileController = createLiveRecompileController();
   private statsSink: ((statsText: string) => void) | null;
   private runtimeReadySink: (() => void) | null;
+  private spyReadbackSink: ((packet: RuntimeSpyReadbackPacket) => void) | null;
+  private spyReadbackTimer: ReturnType<typeof setTimeout> | null = null;
+  private spyReadbackInFlight = false;
+  private spyReadbackHz = 15;
+  private spyTrackedExprIds: number[] = [];
 
   constructor(
     private readonly store: RootStore,
     options: {
       onStatsUpdate?: (statsText: string) => void;
       onRuntimeReady?: () => void;
+      onSpyReadback?: (packet: RuntimeSpyReadbackPacket) => void;
     } = {}
   ) {
     this.statsSink = options.onStatsUpdate ?? null;
     this.runtimeReadySink = options.onRuntimeReady ?? null;
+    this.spyReadbackSink = options.onSpyReadback ?? null;
   }
 
   setStatsSink(onStatsUpdate: ((statsText: string) => void) | null): void {
@@ -100,6 +120,22 @@ export class RuntimeService {
     // [LAW:no-shared-mutable-globals] Runtime-ready notifications are pushed
     // through explicit ownership callbacks, never window globals.
     this.runtimeReadySink = onRuntimeReady;
+  }
+
+  setSpyReadbackSink(onSpyReadback: ((packet: RuntimeSpyReadbackPacket) => void) | null): void {
+    // [LAW:no-shared-mutable-globals] Spy readback delivery is explicit callback ownership.
+    this.spyReadbackSink = onSpyReadback;
+    if (this.spyReadbackSink) {
+      this.startSpyReadbackLoop();
+    } else {
+      this.stopSpyReadbackLoop();
+    }
+  }
+
+  setSpyTrackedExprIds(exprIds: readonly number[]): void {
+    // [LAW:dataflow-not-control-flow] Probe selection is data-driven and can be
+    // updated without branching runtime frame execution.
+    this.spyTrackedExprIds = Array.from(exprIds);
   }
 
   private logWorkerFailure(err: unknown): void {
@@ -401,6 +437,9 @@ export class RuntimeService {
       this.animationState,
       this.handleAnimationLoopError,
     );
+    if (this.spyReadbackSink) {
+      this.startSpyReadbackLoop();
+    }
 
     // Persist current patch immediately after initial compile
     // (covers the case where we loaded a default demo)
@@ -415,6 +454,7 @@ export class RuntimeService {
     setRenderIssueReporter(null);
     this.animationLoop?.stop();
     this.animationLoop = null;
+    this.stopSpyReadbackLoop();
     if (this.swapRafId !== null) {
       cancelAnimationFrame(this.swapRafId);
       this.swapRafId = null;
@@ -437,5 +477,87 @@ export class RuntimeService {
     this.arena = null;
     this.statsSink = null;
     this.runtimeReadySink = null;
+    this.spyReadbackSink = null;
+  }
+
+  private startSpyReadbackLoop(): void {
+    this.stopSpyReadbackLoop();
+    const schedule = (): void => {
+      const intervalMs = 1000 / Math.max(1, this.spyReadbackHz);
+      this.spyReadbackTimer = setTimeout(() => {
+        void this.runSpyReadbackCycle().finally(() => schedule());
+      }, intervalMs);
+    };
+    schedule();
+  }
+
+  private stopSpyReadbackLoop(): void {
+    if (this.spyReadbackTimer !== null) {
+      clearTimeout(this.spyReadbackTimer);
+      this.spyReadbackTimer = null;
+    }
+    this.spyReadbackInFlight = false;
+  }
+
+  private async runSpyReadbackCycle(): Promise<void> {
+    if (this.spyReadbackInFlight) {
+      return;
+    }
+    if (!this.spyReadbackSink) {
+      return;
+    }
+    this.spyReadbackInFlight = true;
+    try {
+      const packet = this.buildSpyReadbackPacket(performance.now());
+      if (!packet || packet.entries.length === 0) {
+        return;
+      }
+      // [LAW:dataflow-not-control-flow] Readback delivery is async fire-and-forget
+      // and decoupled from the frame loop cadence.
+      await Promise.resolve();
+      this.spyReadbackSink?.(packet);
+    } finally {
+      this.spyReadbackInFlight = false;
+    }
+  }
+
+  private buildSpyReadbackPacket(capturedAtMs: number): RuntimeSpyReadbackPacket | null {
+    const program = this.compileState.currentProgram;
+    const state = this.compileState.currentState;
+    const table = program?.runtimeAddressTable;
+    if (!program || !state || !table) {
+      return null;
+    }
+
+    const scalarAddresses = table.scalarExprToArenaAddress;
+    if (scalarAddresses.size === 0) {
+      return null;
+    }
+
+    const selectedExprs =
+      this.spyTrackedExprIds.length > 0
+        ? this.spyTrackedExprIds
+        : Array.from(scalarAddresses.keys()).slice(0, 16);
+
+    const entries: RuntimeSpyReadbackEntry[] = [];
+    for (const exprId of selectedExprs) {
+      const addr = scalarAddresses.get(exprId);
+      if (!addr) continue;
+      const arenaIndex = addr.arena.offset + addr.component;
+      const value = state.arena[arenaIndex];
+      if (!Number.isFinite(value)) continue;
+      entries.push({
+        exprId,
+        slotId: addr.slot,
+        component: addr.component,
+        value,
+      });
+    }
+
+    return {
+      capturedAtMs,
+      frameId: state.cache.frameId,
+      entries,
+    };
   }
 }
