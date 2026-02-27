@@ -118,4 +118,32 @@ describe('RuntimeService spy readback packet selection', () => {
       vi.useRealTimers();
     }
   });
+
+  it('does not reschedule readback after stop is called during a timer callback', () => {
+    vi.useFakeTimers();
+    const runtime = new RuntimeService({} as any);
+    const key = { kind: 'edge' as const, edgeId: 'edge-timer-stop' };
+    debugService.setEdgeToSlotMap(new Map([['edge-timer-stop', edgeMeta(10)]]));
+    debugService.setPortToSlotMap(new Map());
+    debugService.trackHistoryKey(key);
+
+    const runCycleSpy = vi.spyOn(runtime as any, 'runSpyReadbackCycle').mockImplementation(() => {
+      (runtime as any).stopSpyReadbackLoop();
+    });
+
+    try {
+      (runtime as any).bindSpyReadbackTracking();
+      expect((runtime as any).spyReadbackTimer).not.toBeNull();
+
+      vi.runOnlyPendingTimers();
+      expect((runtime as any).spyReadbackTimer).toBeNull();
+      expect(runCycleSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      (runtime as any).stopSpyReadbackLoop();
+      (runtime as any).unsubSpyTracking?.();
+      (runtime as any).unsubSpyTracking = null;
+      runCycleSpy.mockRestore();
+      vi.useRealTimers();
+    }
+  });
 });

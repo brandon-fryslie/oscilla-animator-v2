@@ -93,6 +93,7 @@ export class RuntimeService {
   private runtimeReadySink: (() => void) | null;
   private unsubSpyTracking: (() => void) | null = null;
   private spyReadbackTimer: ReturnType<typeof setTimeout> | null = null;
+  private spyReadbackLoopActive = false;
   private spyReadbackInFlight = false;
   private spyReadbackHz = 15;
 
@@ -477,18 +478,34 @@ export class RuntimeService {
   }
 
   private startSpyReadbackLoop(): void {
-    if (this.spyReadbackTimer !== null) {
+    if (this.spyReadbackLoopActive && this.spyReadbackTimer !== null) {
       return;
     }
+    this.spyReadbackLoopActive = true;
     const schedule = (): void => {
+      if (!this.spyReadbackLoopActive) {
+        return;
+      }
       if (debugService.getTrackedSpyScalarSlots(1).length === 0) {
         this.stopSpyReadbackLoop();
         return;
       }
       const intervalMs = 1000 / Math.max(1, this.spyReadbackHz);
       this.spyReadbackTimer = setTimeout(() => {
+        if (!this.spyReadbackLoopActive) {
+          this.spyReadbackTimer = null;
+          return;
+        }
         this.spyReadbackTimer = null;
-        this.runSpyReadbackCycle();
+        try {
+          this.runSpyReadbackCycle();
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          this.store.diagnostics.log({
+            level: 'error',
+            message: `Spy readback cycle failed: ${message}`,
+          });
+        }
         schedule();
       }, intervalMs);
     };
@@ -496,6 +513,7 @@ export class RuntimeService {
   }
 
   private stopSpyReadbackLoop(): void {
+    this.spyReadbackLoopActive = false;
     if (this.spyReadbackTimer !== null) {
       clearTimeout(this.spyReadbackTimer);
       this.spyReadbackTimer = null;
