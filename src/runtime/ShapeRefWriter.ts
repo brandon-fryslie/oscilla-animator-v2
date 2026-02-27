@@ -1,6 +1,6 @@
 import type { ValueExpr } from '../compiler/ir/value-expr';
 import type { ValueSlot } from '../compiler/ir/Indices';
-import { writeShape2D } from './RuntimeState';
+import { writeShape2DWords } from './RuntimeState';
 
 /**
  * Encode a shapeRef expression into the canonical shape2d bank.
@@ -32,11 +32,5 @@ export function writeShapeRefExprToBank(
     controlPointsSlot = cpSlot;
   }
 
-  writeShape2D(shape2dBank, offset, {
-    topologyId: exprNode.topologyId,
-    pointsFieldSlot: controlPointsSlot,
-    pointsCount: 0,
-    styleRef: 0,
-    flags: 0,
-  });
+  writeShape2DWords(shape2dBank, offset, exprNode.topologyId, controlPointsSlot, 0, 0, 0);
 }

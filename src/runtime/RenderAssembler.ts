@@ -559,6 +559,12 @@ type ResolvedScale =
   | { kind: 'uniform'; value: number }
   | { kind: 'perInstance'; values: Float32Array };
 
+interface PerInstanceShapeSpan {
+  kind: 'perInstance';
+  bank: Uint32Array;
+  offset: number;
+}
+
 function resolveScale(
   scaleSpec: StepRender['scale'],
   scalarExprToArenaAddress: ReadonlyMap<number, RuntimeScalarArenaAddress> | undefined,
@@ -599,7 +605,7 @@ function resolveScale(
  * Resolve shape from step specification
  *
  * Returns ShapeDescriptor for topology-based shapes.
- * Returns ArrayBufferView for per-particle shapes (not yet fully supported).
+ * Returns shape-bank span metadata for per-instance shapes.
  *
  * MUST be provided - no fallback values in render pipeline.
  * NO LEGACY NUMERIC ENCODING - all shapes use proper topology IDs.
@@ -610,7 +616,7 @@ function resolveShape(
   state: RuntimeState,
   slotLookup: ReadonlyMap<ValueSlot, RuntimeSlotLookupEntry> | undefined,
   expectedCount: number,
-): ShapeDescriptor | ArrayBufferView {
+): ShapeDescriptor | PerInstanceShapeSpan {
   if (shapeSpec === undefined) {
     throw new Error(
       'RenderAssembler: shape is required. ' +
@@ -654,7 +660,11 @@ function resolveShape(
           ')',
       );
     }
-    return state.values.shape2d.subarray(startWord, endWord);
+    return {
+      kind: 'perInstance',
+      bank: state.values.shape2d,
+      offset: shapeLookup.offset,
+    };
   } else {
     // One-cardinality shape descriptor ('sig') with topology: resolve scalar params from arena
     const { topologyId, paramExprs } = shapeSpec;
@@ -884,7 +894,7 @@ interface TopologyGroup {
  */
 const topologyGroupCache = new WeakMap<
   Uint32Array,
-  { count: number; groups: Map<string, TopologyGroup> }
+  { count: number; offset: number; groups: Map<string, TopologyGroup> }
 >();
 
 /** Cache hit/miss counters - read by instrumentation */
@@ -909,17 +919,18 @@ export function resetTopologyCacheCounters(): void {
  */
 export function groupInstancesByTopology(
   shapeBuffer: Uint32Array,
-  instanceCount: number
+  instanceCount: number,
+  shapeOffset: number = 0,
 ): Map<string, TopologyGroup> {
   const cached = topologyGroupCache.get(shapeBuffer);
-  if (cached && cached.count === instanceCount) {
+  if (cached && cached.count === instanceCount && cached.offset === shapeOffset) {
     topologyGroupCacheHits++;
     return cached.groups;
   }
 
   topologyGroupCacheMisses++;
-  const groups = computeTopologyGroups(shapeBuffer, instanceCount);
-  topologyGroupCache.set(shapeBuffer, { count: instanceCount, groups });
+  const groups = computeTopologyGroups(shapeBuffer, instanceCount, shapeOffset);
+  topologyGroupCache.set(shapeBuffer, { count: instanceCount, offset: shapeOffset, groups });
   return groups;
 }
 
@@ -935,14 +946,23 @@ export function groupInstancesByTopology(
  */
 export function computeTopologyGroups(
   shapeBuffer: Uint32Array,
-  instanceCount: number
+  instanceCount: number,
+  shapeOffset: number = 0,
 ): Map<string, TopologyGroup> {
   // Validate buffer length at pass level (not per-instance)
-  const expectedLength = instanceCount * SHAPE2D_WORDS;
+  const expectedLength = (shapeOffset + instanceCount) * SHAPE2D_WORDS;
   if (shapeBuffer.length < expectedLength) {
     throw new Error(
       'RenderAssembler: Shape buffer length mismatch. ' +
-      'Expected >=' + expectedLength + ' (' + instanceCount + ' instances × ' + SHAPE2D_WORDS + ' words), ' +
+      'Expected >=' +
+      expectedLength +
+      ' (offset ' +
+      shapeOffset +
+      ' + ' +
+      instanceCount +
+      ' instances × ' +
+      SHAPE2D_WORDS +
+      ' words), ' +
       'got ' + shapeBuffer.length
     );
   }
@@ -950,7 +970,7 @@ export function computeTopologyGroups(
   const groups = new Map<string, TopologyGroup>();
 
   for (let i = 0; i < instanceCount; i++) {
-    const shapeRef = readShape2D(shapeBuffer, i);
+    const shapeRef = readShape2D(shapeBuffer, shapeOffset + i);
 
     // Group key: topologyId + controlPointsSlot
     // Instances with same topology AND same control points buffer can batch
@@ -1100,7 +1120,8 @@ function recordAssemblerTiming(
  */
 function assemblePerInstanceShapes(
   step: StepRender,
-  shapeBuffer: Uint32Array,
+  shapeBank: Uint32Array,
+  shapeOffset: number,
   fullPosition: Float32Array,
   fullColor: Uint8ClampedArray,
   projectionScale: number,
@@ -1113,7 +1134,7 @@ function assemblePerInstanceShapes(
   const t0 = performance.now();
 
   // Group instances by topology
-  const groups = groupInstancesByTopology(shapeBuffer, count);
+  const groups = groupInstancesByTopology(shapeBank, count, shapeOffset);
 
   const tGrouped = performance.now();
 
@@ -1502,11 +1523,12 @@ function appendDrawPathInstancesOp(
   const shape = resolveShape(step.shape, scalarExprToArenaAddress, state, slotLookup, count);
 
   // Check if per-instance shapes (shape buffer)
-  if (shape instanceof Uint32Array) {
+  if ('kind' in shape && shape.kind === 'perInstance') {
     // Per-instance shapes: group by topology and emit multiple ops
     assemblePerInstanceShapes(
       step,
-      shape,
+      shape.bank,
+      shape.offset,
       worldPositionBuffer,
       colorBuffer,
       projectionScale,
