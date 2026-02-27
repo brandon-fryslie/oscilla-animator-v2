@@ -1,6 +1,7 @@
 import type { DrawPathInstancesOp, PathGeometry, RenderFrameIR } from '../types';
 import { PathTessellator } from './PathTessellator';
 import { exportTopologyBankU32, getTopologyRegistryRevision } from '../../shapes/registry';
+import { InputService } from './InputService';
 import {
   DRAW_PREP_COMPUTE_WGSL,
   PATH_RENDER_WGSL,
@@ -22,6 +23,7 @@ const MIN_INSTANCE_CAPACITY = 1024;
 const SIMULATION_CAPACITY = WEBGPU_RENDER_CONTRACT.simulationCapacity;
 const SIMULATION_WORKGROUP_SIZE = WEBGPU_RENDER_CONTRACT.computeWorkgroupSize;
 const DRAW_PREP_WORKGROUP_SIZE = WEBGPU_RENDER_CONTRACT.drawPrepWorkgroupSize;
+const SIMULATION_STATE_BYTES = 16;
 
 function alignTo4(value: number): number {
   const remainder = value % 4;
@@ -43,6 +45,13 @@ interface RenderInput {
   readonly panX: number;
   readonly panY: number;
   readonly timeMs: number;
+  readonly inputMouseX?: number;
+  readonly inputMouseY?: number;
+  readonly inputMouseButtons?: number;
+  readonly inputAudioLow?: number;
+  readonly inputAudioMid?: number;
+  readonly inputAudioHigh?: number;
+  readonly inputGaugeActive?: number;
   readonly drawPrepShaderWgsl?: string;
 }
 
@@ -121,11 +130,11 @@ class WebGPUComputeRuntime {
 
     this.stateBuffers = [
       device.createBuffer({
-        size: SIMULATION_CAPACITY * 16,
+        size: WEBGPU_RENDER_CONTRACT.inputHeaderBytes + SIMULATION_CAPACITY * SIMULATION_STATE_BYTES,
         usage: GPU_BUFFER_USAGE.STORAGE | GPU_BUFFER_USAGE.COPY_DST,
       }),
       device.createBuffer({
-        size: SIMULATION_CAPACITY * 16,
+        size: WEBGPU_RENDER_CONTRACT.inputHeaderBytes + SIMULATION_CAPACITY * SIMULATION_STATE_BYTES,
         usage: GPU_BUFFER_USAGE.STORAGE | GPU_BUFFER_USAGE.COPY_DST,
       }),
     ] as const;
@@ -194,9 +203,17 @@ class WebGPUComputeRuntime {
     return new WebGPUComputeRuntime(device, pipeline);
   }
 
-  step(commandEncoder: any, activeCount: number, dtSeconds: number): void {
+  step(commandEncoder: any, activeCount: number, dtSeconds: number, inputHeader: Uint8Array): void {
     const clampedCount = Math.max(0, Math.min(SIMULATION_CAPACITY, activeCount));
     const clampedDt = Math.max(0, Math.min(0.1, dtSeconds));
+
+    this.device.queue.writeBuffer(
+      this.stateBuffers[this.activeStateIndex],
+      0,
+      inputHeader,
+      0,
+      WEBGPU_RENDER_CONTRACT.inputHeaderBytes,
+    );
 
     this.paramsStaging[0] = clampedCount;
     this.paramsStaging[1] = clampedDt;
@@ -362,6 +379,7 @@ class WebGPUDrawPrepRuntime {
  */
 export class WebGPURenderer {
   private readonly tessellator = new PathTessellator();
+  private readonly inputService = new InputService();
   private readonly meshCache = new Map<string, GPUMesh>();
   private readonly sceneUniforms = new Float32Array(WEBGPU_RENDER_CONTRACT.sceneUniformFloats);
   private readonly computeRuntime: WebGPUComputeRuntime;
@@ -385,6 +403,7 @@ export class WebGPURenderer {
   private instanceStaging = new Float32Array(0);
 
   private lastFrameTimeMs: number | null = null;
+  private frameCount = 0;
   private fatalError: Error | null = null;
   private lastConfiguredSize = { width: -1, height: -1 };
 
@@ -511,7 +530,22 @@ export class WebGPURenderer {
     const commandEncoder = this.device.createCommandEncoder();
     const simulationInstanceCount = this.countSimulationInstances(drawPlan);
     this.assertSimulationCapacity(simulationInstanceCount);
-    this.computeRuntime.step(commandEncoder, simulationInstanceCount, dtSeconds);
+    const frameInputHeader = this.inputService.marshal({
+      timeSeconds: input.timeMs / 1000,
+      deltaTimeSeconds: dtSeconds,
+      frameCount: this.frameCount,
+      width: input.width,
+      height: input.height,
+      mouseX: input.inputMouseX ?? 0,
+      mouseY: input.inputMouseY ?? 0,
+      mouseButtons: input.inputMouseButtons ?? 0,
+      audioLow: input.inputAudioLow ?? 0,
+      audioMid: input.inputAudioMid ?? 0,
+      audioHigh: input.inputAudioHigh ?? 0,
+      gaugeActive: input.inputGaugeActive ?? 0,
+    });
+    this.computeRuntime.step(commandEncoder, simulationInstanceCount, dtSeconds, frameInputHeader);
+    this.frameCount += 1;
     const totalInstances = this.countPlannedInstances(drawPlan);
     this.ensureInstanceCapacity(totalInstances);
     const packedInstances = this.packDrawPlanInstances(drawPlan);
@@ -597,6 +631,21 @@ export class WebGPURenderer {
     }
     if (!Number.isFinite(timeMs)) {
       throw new Error(`WebGPURenderer: timeMs must be finite, got ${timeMs}`);
+    }
+
+    const optionalFields = [
+      ['inputMouseX', input.inputMouseX],
+      ['inputMouseY', input.inputMouseY],
+      ['inputMouseButtons', input.inputMouseButtons],
+      ['inputAudioLow', input.inputAudioLow],
+      ['inputAudioMid', input.inputAudioMid],
+      ['inputAudioHigh', input.inputAudioHigh],
+      ['inputGaugeActive', input.inputGaugeActive],
+    ] as const;
+    for (const [name, value] of optionalFields) {
+      if (value !== undefined && !Number.isFinite(value)) {
+        throw new Error(`WebGPURenderer: ${name} must be finite when provided, got ${value}`);
+      }
     }
   }
 

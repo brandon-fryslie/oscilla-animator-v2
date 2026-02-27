@@ -226,6 +226,62 @@ describe('AnimationLoop', () => {
     expect(renderArg.drawPrepShaderWgsl).toBe(drawPrepShaderWgsl);
   });
 
+  it('derives renderer input channels from the canonical external snapshot', () => {
+    const arena = { reset: vi.fn(), getTotalBytes: () => 0 };
+    const renderer = { render: vi.fn() };
+    executeFrameMock.mockReturnValue({ version: 2, ops: [] } as any);
+
+    const channels = new Map<string, number>([
+      ['mouse.x', 0.7],
+      ['mouse.y', 0.2],
+      ['mouse.button.left.held', 1],
+      ['mouse.button.right.held', 1],
+      ['audio.low', 0.1],
+      ['audio.mid', 0.2],
+      ['audio.high', 0.3],
+      ['gauge.active', 1],
+    ]);
+
+    const deps = {
+      getCurrentProgram: () => ({}),
+      getCurrentState: () => ({
+        health: createHealthMetrics(),
+        externalChannels: {
+          snapshot: {
+            getFloat: (name: string) => channels.get(name) ?? 0,
+          },
+        },
+      }),
+      getCanvas: () => ({ width: 100, height: 80 }),
+      getRenderer: () => renderer,
+      getArena: () => arena,
+      store: {
+        stepDebug: null,
+        diagnostics: {
+          recordJank: vi.fn(),
+          updateFrameTiming: vi.fn(),
+          updateMemoryStats: vi.fn(),
+        },
+        continuity: { updateFromRuntime: vi.fn() },
+        viewport: { zoom: 1, pan: { x: 0, y: 0 }, setContentBounds: vi.fn() },
+        events: { emit: vi.fn() },
+        getPatchRevision: () => 1,
+      },
+    } as any;
+
+    const state = createAnimationLoopState();
+    executeAnimationFrame(16, deps, state);
+
+    const renderArg = renderer.render.mock.calls[0]?.[0];
+    expect(renderArg.inputMouseX).toBe(0.7);
+    expect(renderArg.inputMouseY).toBe(0.2);
+    expect(renderArg.inputMouseButtons).toBe(3);
+    expect(renderArg.inputAudioLow).toBe(0.1);
+    expect(renderArg.inputAudioMid).toBe(0.2);
+    expect(renderArg.inputAudioHigh).toBe(0.3);
+    expect(renderArg.inputGaugeActive).toBe(1);
+  });
+
   afterEach(() => {
     vi.unstubAllGlobals();
     (globalThis as any).requestAnimationFrame = originalRaf;

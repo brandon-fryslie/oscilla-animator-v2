@@ -24,6 +24,20 @@ export const WEBGPU_RENDER_CONTRACT = Object.freeze({
   computeDstStateBinding: 1,
   computeParamsBinding: 2,
   computeParamsFloats: 4,
+  inputHeaderBytes: 256,
+  inputHeaderTimeOffsetBytes: 0x00,
+  inputHeaderDeltaTimeOffsetBytes: 0x04,
+  inputHeaderFrameCountOffsetBytes: 0x08,
+  inputHeaderResolutionXOffsetBytes: 0x0c,
+  inputHeaderResolutionYOffsetBytes: 0x10,
+  inputHeaderMouseXOffsetBytes: 0x14,
+  inputHeaderMouseYOffsetBytes: 0x18,
+  inputHeaderMouseButtonsOffsetBytes: 0x1c,
+  inputHeaderAudioLowOffsetBytes: 0x20,
+  inputHeaderAudioMidOffsetBytes: 0x24,
+  inputHeaderAudioHighOffsetBytes: 0x28,
+  inputHeaderGaugeActiveOffsetBytes: 0x2c,
+  inputHeaderSimStateOffset: 16,
   computeWorkgroupSize: 64,
   simulationCapacity: 65_536,
   indirectArgsWords: 5,
@@ -137,10 +151,11 @@ fn cs_main(@builtin(global_invocation_id) gid: vec3<u32>) {
   let dt = simParams.v0.y;
   let damping = simParams.v0.z;
 
-  var state = srcState[gid.x];
+  let stateIndex = gid.x + ${WEBGPU_RENDER_CONTRACT.inputHeaderSimStateOffset}u;
+  var state = srcState[stateIndex];
   state.position = state.position + state.velocity * dt;
   state.velocity = state.velocity * damping;
-  dstState[gid.x] = state;
+  dstState[stateIndex] = state;
 }
 `;
 
