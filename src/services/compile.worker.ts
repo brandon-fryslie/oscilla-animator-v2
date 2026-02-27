@@ -2,6 +2,7 @@
 
 import { compileFromFrontend } from '../compiler';
 import { compileFrontend } from '../compiler/frontend';
+import { compileProgramWithNaga } from '../compiler/naga-compile';
 import { EventHub } from '../events/EventHub';
 import { deserializePatch } from './PatchPersistence';
 import { exportSerializableTopologies } from '../shapes/registry';
@@ -12,11 +13,41 @@ import type {
 } from './compile-worker-protocol';
 import { collectProgramTopologyIds, stripKernelRegistry } from './compile-worker-serialization';
 
-function toBackendResult(
+async function toBackendResult(
   result: ReturnType<typeof compileFromFrontend>,
-): CompileWorkerBackendResult {
+): Promise<CompileWorkerBackendResult> {
   if (result.kind === 'ok') {
-    const program = stripKernelRegistry(result.program);
+    const nagaOutcome = await compileProgramWithNaga(result.program);
+    if (nagaOutcome.kind === 'error') {
+      return {
+        kind: 'error',
+        errors: nagaOutcome.errors,
+      };
+    }
+
+    if (!result.program.generatedComputeProgram) {
+      return {
+        kind: 'error',
+        errors: [
+          {
+            code: 'IRValidationFailed',
+            message: 'Compiled program is missing generatedComputeProgram',
+          },
+        ],
+      };
+    }
+
+    const programWithValidatedWgsl = {
+      ...result.program,
+      generatedComputeProgram: {
+        ...result.program.generatedComputeProgram,
+        // [LAW:one-source-of-truth] Worker WGSL payload comes from one validated
+        // Naga emission path, not parallel string emitters.
+        wgsl: nagaOutcome.wgsl,
+      },
+    };
+
+    const program = stripKernelRegistry(programWithValidatedWgsl);
     const topologyIds = collectProgramTopologyIds(program);
     return {
       kind: 'ok',
@@ -31,58 +62,61 @@ function toBackendResult(
   };
 }
 
+async function handleCompileMessage(message: CompileWorkerRequest): Promise<CompileWorkerResponse> {
+  const startMs = performance.now();
+  const { serializedPatch, frontendOptions, patchRevision, requestId } = message;
+
+  const decoded = deserializePatch(serializedPatch);
+  if (!decoded) {
+    return {
+      kind: 'workerError',
+      requestId,
+      patchRevision,
+      durationMs: Math.max(0, performance.now() - startMs),
+      message: 'Compile worker received invalid serialized patch payload',
+    };
+  }
+
+  const patch = decoded.patch;
+  const frontendResult = compileFrontend(patch, frontendOptions);
+  const backendResult = frontendResult.backendReady
+    ? await toBackendResult(
+        compileFromFrontend(frontendResult, {
+          // [LAW:single-enforcer] Compiler event emission remains owned by CompileOrchestrator.
+          // Worker compile uses an isolated no-listener hub for backend compile context.
+          events: new EventHub(),
+        }),
+      )
+    : null;
+
+  return {
+    kind: 'compiled',
+    requestId,
+    patchRevision,
+    durationMs: Math.max(0, performance.now() - startMs),
+    frontendResult,
+    backendResult,
+  };
+}
+
 self.onmessage = (event: MessageEvent<CompileWorkerRequest>) => {
   const message = event.data;
   if (!message || message.kind !== 'compile') {
     return;
   }
 
-  const startMs = performance.now();
-  const { serializedPatch, frontendOptions, patchRevision, requestId } = message;
-
-  try {
-    const decoded = deserializePatch(serializedPatch);
-    if (!decoded) {
+  void handleCompileMessage(message)
+    .then((response) => {
+      self.postMessage(response);
+    })
+    .catch((err) => {
       const response: CompileWorkerResponse = {
         kind: 'workerError',
-        requestId,
-        patchRevision,
-        durationMs: Math.max(0, performance.now() - startMs),
-        message: 'Compile worker received invalid serialized patch payload',
+        requestId: message.requestId,
+        patchRevision: message.patchRevision,
+        durationMs: 0,
+        message: err instanceof Error ? err.message : String(err),
       };
       self.postMessage(response);
-      return;
-    }
-
-    const patch = decoded.patch;
-    const frontendResult = compileFrontend(patch, frontendOptions);
-    const backendResult = frontendResult.backendReady
-      ? toBackendResult(
-          compileFromFrontend(frontendResult, {
-            // [LAW:single-enforcer] Compiler event emission remains owned by CompileOrchestrator.
-            // Worker compile uses an isolated no-listener hub for backend compile context.
-            events: new EventHub(),
-          }),
-        )
-      : null;
-
-    const response: CompileWorkerResponse = {
-      kind: 'compiled',
-      requestId,
-      patchRevision,
-      durationMs: Math.max(0, performance.now() - startMs),
-      frontendResult,
-      backendResult,
-    };
-    self.postMessage(response);
-  } catch (err) {
-    const response: CompileWorkerResponse = {
-      kind: 'workerError',
-      requestId,
-      patchRevision,
-      durationMs: Math.max(0, performance.now() - startMs),
-      message: err instanceof Error ? err.message : String(err),
-    };
-    self.postMessage(response);
-  }
+    });
 };
