@@ -1,3 +1,9 @@
+> Alignment Notice (2026-02-27)
+> [LAW:one-source-of-truth] The canonical lowering boundary is `src/compiler/ir/naga-emitter/*` and `docs/compiler/ONE-TRUE-EMITTER.md`.
+> [LAW:dataflow-not-control-flow] Control flow is represented as recursive Naga blocks with lexical scopes, not flat instruction lists.
+> [LAW:no-string-math] Direct WGSL string generation in lowering code is forbidden; dynamic WGSL emission is an engine serializer boundary concern.
+> Read this document with `docs/WebGPU-Complete/P2-4__Scoped_Naga_IR_Control_Flow_and_Memory_Model.md`.
+
 This is the comprehensive technical specification for **The Runtime Loop: The Swap**.
 
 This document defines the critical "End of Frame" logic. It details how the engine transitions from Frame \$N\$ to Frame \$N+1\$ without copying massive amounts of memory, ensuring that the "Past" becomes the "Present" for the next simulation step.
@@ -9,6 +15,12 @@ This document defines the critical "End of Frame" logic. It details how the engi
 **Invariant:** The Arena_Write of Frame \$N\$ becomes the Arena_Read of Frame \$N+1\$.
 
 **Mechanism:** A pointer swap of GPUBindGroup objects on the CPU.
+
+## Scoped IR and Synchronization Implications
+
+- [LAW:one-source-of-truth] Compute outputs consumed by draw-prep/render must flow through one canonical pass graph sequence.
+- [LAW:single-enforcer] Resource visibility and usage transitions are enforced by render-graph ordering (compute before draw-prep before render) rather than scattered callsite guards.
+- [LAW:dataflow-not-control-flow] Swap logic remains deterministic; only buffer role data (read/write identities) changes per frame.
 
 ## 1. The Physics of the Swap
 

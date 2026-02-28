@@ -1,3 +1,9 @@
+> Alignment Notice (2026-02-27)
+> [LAW:one-source-of-truth] The canonical lowering boundary is `src/compiler/ir/naga-emitter/*` and `docs/compiler/ONE-TRUE-EMITTER.md`.
+> [LAW:dataflow-not-control-flow] Control flow is represented as recursive Naga blocks with lexical scopes, not flat instruction lists.
+> [LAW:no-string-math] Direct WGSL string generation in lowering code is forbidden; dynamic WGSL emission is an engine serializer boundary concern.
+> Read this document with `docs/WebGPU-Complete/P2-4__Scoped_Naga_IR_Control_Flow_and_Memory_Model.md`.
+
 This is **Part VII: The Physics Engine (Oscilla v3.0)**.
 
 It details how to implement a massively parallel, deterministic physics simulation that lives entirely on the GPU. We will use **XPBD (Extended Position Based Dynamics)** as the mathematical foundation because it allows us to solve rigid bodies, cloth, particles, and constraints within a single unified solver framework that is exceptionally stable on f32.
@@ -11,6 +17,12 @@ It details how to implement a massively parallel, deterministic physics simulati
 **Collision:** Spatial Hashing (Unbounded Grid).
 
 **Constraint Solver:** Graph-Colored Parallel Jacobi.
+
+## Scoped IR Implications
+
+- [LAW:one-source-of-truth] Physics dispatch logic is lowered through scoped Naga IR blocks; no direct shader string mutation in block lowering.
+- [LAW:single-enforcer] Integer-only atomic constraints and dynamic-index safety are validated at compiler boundary before physics pipelines link.
+- [LAW:dataflow-not-control-flow] Sub-step scheduling is deterministic; runtime variability is carried via buffer values and constraint sets.
 
 ## 1. Memory Architecture: Physics Extensions
 

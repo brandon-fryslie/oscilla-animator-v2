@@ -1,3 +1,9 @@
+> Alignment Notice (2026-02-27)
+> [LAW:one-source-of-truth] The canonical lowering boundary is `src/compiler/ir/naga-emitter/*` and `docs/compiler/ONE-TRUE-EMITTER.md`.
+> [LAW:dataflow-not-control-flow] Control flow is represented as recursive Naga blocks with lexical scopes, not flat instruction lists.
+> [LAW:no-string-math] Direct WGSL string generation in lowering code is forbidden; dynamic WGSL emission is an engine serializer boundary concern.
+> Read this document with `docs/WebGPU-Complete/P2-4__Scoped_Naga_IR_Control_Flow_and_Memory_Model.md`.
+
 This is the comprehensive technical specification for **The Runtime Loop: The Render Pass (The "Sink")**.
 
 This document defines the final stage of the pipeline where the abstract simulation state is materialized into pixels. It details the "Vertex Pulling" architecture that replaces traditional Vertex Attributes, the "Uber-Shader" that handles all drawing, and the precise alpha blending mathematics required for professional-grade compositing.
@@ -9,6 +15,12 @@ This document defines the final stage of the pipeline where the abstract simulat
 **Invariant:** The Render Pass reads the *exact* state produced by the Compute Pass (no double-buffering lag).
 
 **Mechanism:** A RenderPipeline using **Programmable Vertex Pulling** and **Indirect Draw Commands**.
+
+## Scoped IR Implications
+
+- [LAW:one-source-of-truth] Dynamic graph shading logic enters the render stack through validated scoped IR output, not ad hoc WGSL concatenation.
+- [LAW:single-enforcer] The renderer composes static pass shaders and graph-generated functions at one deterministic assembly boundary before pipeline creation.
+- [LAW:dataflow-not-control-flow] Render pass behavior depends on data produced by prior passes; control-flow shape is fixed by compiled IR artifacts.
 
 ## 1. The "Vertex Pulling" Paradigm (No VBOs)
 

@@ -1,3 +1,9 @@
+> Alignment Notice (2026-02-27)
+> [LAW:one-source-of-truth] The canonical lowering boundary is `src/compiler/ir/naga-emitter/*` and `docs/compiler/ONE-TRUE-EMITTER.md`.
+> [LAW:dataflow-not-control-flow] Control flow is represented as recursive Naga blocks with lexical scopes, not flat instruction lists.
+> [LAW:no-string-math] Direct WGSL string generation in lowering code is forbidden; dynamic WGSL emission is an engine serializer boundary concern.
+> Read this document with `docs/WebGPU-Complete/P2-4__Scoped_Naga_IR_Control_Flow_and_Memory_Model.md`.
+
 This is the comprehensive technical specification for **The Runtime Loop: Input Marshalling (CPU \$\to\$ GPU)**.
 
 This document defines the high-frequency data transfer protocol that occurs at the start of every frame. It details how the CPU captures user intent (Mouse, MIDI, Time) and serializes it into the GPU memory space with minimal latency and zero garbage collection overhead.

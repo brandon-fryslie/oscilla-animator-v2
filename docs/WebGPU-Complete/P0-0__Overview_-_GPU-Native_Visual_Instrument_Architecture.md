@@ -1,3 +1,9 @@
+> Alignment Notice (2026-02-27)
+> [LAW:one-source-of-truth] The canonical lowering boundary is `src/compiler/ir/naga-emitter/*` and `docs/compiler/ONE-TRUE-EMITTER.md`.
+> [LAW:dataflow-not-control-flow] Control flow is represented as recursive Naga blocks with lexical scopes, not flat instruction lists.
+> [LAW:no-string-math] Direct WGSL string generation in lowering code is forbidden; dynamic WGSL emission is an engine serializer boundary concern.
+> Read this document with `docs/WebGPU-Complete/P2-4__Scoped_Naga_IR_Control_Flow_and_Memory_Model.md`.
+
 This is the **Oscilla v3.0 Master Architecture Document**.
 
 It is the single source of truth for the WebGPU-native, WASM-validated, SoA-optimized visual instrument architecture and its fix-forward completion policy.
@@ -114,27 +120,27 @@ Because Naga is WASM, compilation is asynchronous.
 
 We do not generate WGSL strings directly. We generate a **Structured Intermediate Representation** that Naga understands.
 
-- **Step 1: Schedule Walk:** The compiler traverses the execution schedule.
+- **Step 1: Recursive Scoped Walk:** The compiler traverses execution/data edges and emits nested block bodies (`loop`, `if`, `acceptBody`, `rejectBody`).
 
 - **Step 2: Address Resolution:** It queries the SoA Layout map to resolve abstract Slot IDs into concrete byte offsets (OFFSET_X, OFFSET_Y).
 
-- **Step 3: Kernel Injection:** It selects the appropriate WGSL logic for each block (e.g., snoise, mix).
+- **Step 3: Constrained Builder Emission:** It emits typed Naga expressions/statements through `NagaBuilder` (handles only, no source concatenation).
 
-- **Step 4: Module Assembly:** It constructs a Virtual Module (JSON or Struct) containing:
+- **Step 4: Module and Block Assembly:** It constructs a Naga-like module with expression/statement arenas plus scoped statement blocks:
 
   - **Entry Point:** main (Compute).
 
   - **Bindings:** The Arena (Group 0, Binding 0/1).
 
-  - **Code Body:** The sequence of function calls and assignments.
+  - **Code Body:** Deterministic statement blocks with lexical handle scope.
 
 ### 3. The Naga Validation Layer (WASM)
 
 The generated module is passed to the Naga WASM binary.
 
-- **Validation:** Naga checks types, bounds, and logic consistency.
+- **Validation:** Naga checks expression + statement correctness (types, control-flow structure, and memory/indexing invariants).
 
-- **Sanitization:** If valid, Naga emits the final, optimized WGSL string.
+- **Sanitization:** If valid, the engine can serialize validated Naga IR to WGSL at one deterministic serializer boundary.
 
 - **Error Handling:** If invalid, Naga returns a Rust-style error report which we map back to the specific Node ID in the UI (red border effect).
 
