@@ -1,14 +1,20 @@
+> Alignment Notice (2026-02-27)
+> [LAW:one-source-of-truth] The canonical lowering boundary is `src/compiler/ir/naga-emitter/*` and `docs/compiler/ONE-TRUE-EMITTER.md`.
+> [LAW:dataflow-not-control-flow] Control flow is represented as recursive Naga blocks with lexical scopes, not flat instruction lists.
+> [LAW:no-string-math] Direct WGSL string generation in lowering code is forbidden; dynamic WGSL emission is an engine serializer boundary concern.
+> Read this document with `docs/WebGPU-Complete/P2-4__Scoped_Naga_IR_Control_Flow_and_Memory_Model.md`.
+
 This is the comprehensive technical specification for **The Compiler Architecture: The Lowering Pipeline (TS \$\to\$ Naga)**.
 
-This document defines the core transformation logic of the compiler. It details how we convert the linear, high-level ScheduleIR into the structured, strictly-typed **Naga Intermediate Representation (IR)**. This IR is the lingua franca of our compilation pipeline—it is what we validate, optimize, and eventually emit as shader bytecode or WGSL.
+This document defines the core transformation logic of the compiler. It details how we convert high-level graph IR into a structured, strictly-typed **scoped Naga Intermediate Representation (IR)** with recursive control-flow blocks and explicit memory/pointer operations.
 
 # The Compiler Architecture: The Lowering Pipeline
 
-**Objective:** Transform abstract operations (Add, Mult, Lag) into a concrete, strictly-typed Control Flow Graph (CFG) that mirrors the Naga Rust structures.
+**Objective:** Transform graph operations into a concrete, strictly-typed scoped IR that mirrors Naga-style expression/statement arenas and block bodies.
 
 **Invariant:** The output must be a valid NagaModule JSON object (or structurally identical AST) that is guaranteed to pass Naga’s validation.
 
-**Mechanism:** A Single-Pass Visitor that maintains a "Context" of interned types, constants, and SSA (Static Single Assignment) variables.
+**Mechanism:** Recursive block lowering with lexical scope environments, interned types/constants, and SSA expression handles.
 
 ## 1. The Naga IR Schema (The Target)
 
@@ -34,11 +40,11 @@ A Naga function is not just a list of lines. It is split into **Expressions** (p
 
   - *Example:* \[0: Load(x), 1: Load(y), 2: Add(0, 1)\]
 
-- **body (Block):** A tree of statements referring to Expression IDs.
+- **body (Block):** Nested statement blocks (`Loop`, `If`) referring to expression handles.
 
   - *Example:* \[ Store { pointer: GlobalZ, value: Expr(2) } \]
 
-## 2. The Lowering Context (LoweringCtx)
+## 2. The Lowering Context (LoweringCtx + ScopeEnvironment)
 
 The lowering process is stateful. We need a class to manage the "Arenas" (Interning) and track variable scopes.
 
@@ -50,10 +56,9 @@ class LoweringCtx {\
 types: Interner\<NagaType\>;\
 constants: Interner\<NagaConstant\>;\
 \
-// 2. Scoping (SSA Mapping)\
-// Maps our SlotID (from ScheduleIR) to Naga ExpressionID.\
-// Example: Slot 5 -\> Expr 42\
-private slotToExpr = new Map\<number, number\>();\
+// 2. Lexical Scoping (SSA Mapping)\
+// Maps IR IDs to Naga expression handles with parent-scope lookup.\
+private currentScope: ScopeEnvironment;\
 \
 // 3. Helpers\
 addGlobal(binding: number, name: string, type: NagaType): number;\
@@ -101,9 +106,9 @@ We create the compute_main function and inject standard preambles.
 
     - Store this as lane_idx in the Context. Used by all subsequent Field operations.
 
-## 4. Phase 2: The Schedule Walk (The Loop)
+## 4. Phase 2: The Recursive Block Walk
 
-We iterate through ScheduleIR.steps. For each step, we execute a **Lowering Strategy**.
+We recursively iterate instruction blocks. For each instruction, we execute a **Lowering Strategy** in the active lexical scope.
 
 ### 4.1 Address Resolution (The Access Pattern)
 
@@ -121,11 +126,11 @@ Before generating math, we must fetch the data.
 
   - *Result:* An Expression ID representing the **Index** in the Arena array.
 
-### 4.2 The Load Operation
+### 4.2 The Dynamic Load Operation
 
 We generate the load instruction.
 
-- **Expression:** ImageLoad or Access.
+- **Expression:** `ArrayLength` + clamp math + `Access` + `Load`.
 
   - *SoA:* Since arena_in is a flat f32 array, this is essentially Access { base: arena_in, index: Expr(Index) }.
 
@@ -161,9 +166,9 @@ If the step writes to a field (most do):
 
 2.  **Generate Statement:** Store { pointer: Access(arena_out, OutIndex), value: ResultExpr }.
 
-## 5. Handling Control Flow & State
+## 5. Handling Control Flow, State, and Dynamic Memory
 
-Naga IR requires strict structure for logic that isn't just A+B.
+Naga IR requires strict structure for branching, loops, and pointer-based memory operations.
 
 ### 5.1 Select / Mix (Logic)
 
@@ -173,17 +178,23 @@ Naga IR requires strict structure for logic that isn't just A+B.
 
 - *Note:* This handles the "No branching" rule. It compiles to a hardware select instruction, not an if/else.
 
-### 5.2 Helper Functions (Snippets)
+### 5.2 Structured Control Flow
+
+- **Loop:** Lower to `Statement::Loop { body: NagaBlock }` with lexical scope push/pop.
+- **If:** Lower to `Statement::If { condition, accept: NagaBlock, reject: NagaBlock }`.
+- **Break/Continue:** Valid only inside loop scope.
+
+### 5.3 Helper Functions (Library IR)
 
 For complex blocks (like SimplexNoise), we don't inline the logic.
 
-1.  **Registry:** We check ctx.functions for "snoise".
+1.  **Registry:** We check ctx.functions for `"snoise"`.
 
-2.  **Injection:** If missing, we parse the snoise WGSL snippet (using wgsl_reflect or pre-parsed IR) and append a new NagaFunction to the module.
+2.  **Injection:** If missing, we append a pre-defined helper function in structured IR form (not WGSL source text concatenation).
 
-3.  **Call:** In compute_main, we generate Expr::Call { function: FuncID_Noise, arguments: \[...\] }.
+3.  **Call:** In compute_main, we generate function-call expressions with typed handle arguments.
 
-## 6. The Hard Part: Structs & Handles
+## 6. Dynamic Memory, Atomics, and Handles
 
 How do we lower the **Shape Handles** (u32) discussed in Phase 0?
 
@@ -227,7 +238,7 @@ sourceMap: {\
 
 1.  **Zero Syntax Errors:** It is impossible to generate "missing semicolon" or "unbalanced brace" errors because we aren't writing text. We are building a graph.
 
-2.  **Validation Ready:** This structure is exactly what the Naga WASM binary ingests.
+2.  **Validation Ready:** Expression + statement arenas are validated before serialization/linking.
 
 3.  **Optimization:** We can run a trivial "Dead Code" pass on the expressions array before emission (remove IDs that are never referenced by a Statement).
 
