@@ -1091,6 +1091,8 @@ function computeTopologyGroupsFromHandles(
     const controlPointsSlot = metadata.controlPointSlot;
     const key = metadata.topologyId + ':' + controlPointsSlot;
     if (!groups.has(key)) {
+      // [LAW:dataflow-not-control-flow] This call executes in the canonical loop,
+      // but allocates only when data introduces a new topology key (bounded by unique keys).
       groups.set(
         key,
         createTopologyGroup(metadata.topologyId, controlPointsSlot, header.vertexCount, header.flags),
@@ -1361,6 +1363,8 @@ function assemblePerInstanceShapes(
     }
 
     const geometry = createPathGeometry(group, topology, arenaControlPointsBuffer);
+    // [LAW:verifiable-goals] One draw op allocation per topology group (not per instance)
+    // keeps allocation cardinality machine-bounded by group count for each frame.
     outOps.push(createDrawPathInstancesOp(geometry, instanceTransforms, style));
   }
 
