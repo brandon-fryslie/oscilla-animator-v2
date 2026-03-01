@@ -1,9 +1,9 @@
 /**
  * ESLint rule: no-hot-path-alloc
  *
- * Bans heap allocations in hot-path files (render loop, schedule executor,
- * field kernels, render assembler). Every allocation in the per-frame loop
- * is GC pressure that causes jank.
+ * Bans heap allocations inside hot-loop bodies in hot-path files (render loop,
+ * schedule executor, field kernels, render assembler). Every per-iteration
+ * allocation is GC pressure that causes jank.
  *
  * Enforcement scope: syntactic loop bodies only. The rule reports allocation
  * nodes only when their AST ancestors include a loop node in the same file.
@@ -128,10 +128,8 @@ export default {
     schema: [],
   },
   create(context) {
-    // Track nesting depth inside functions that are clearly one-time setup
-    // (e.g., module-level const declarations, class constructors).
-    // For now, apply everywhere in the file — the file list is the scope control.
-
+    // [LAW:verifiable-goals] This rule enforces one deterministic contract:
+    // allocation nodes nested inside loop ASTs in hot-path files are violations.
     return {
       // --- Object literals ---
       ObjectExpression(node) {
