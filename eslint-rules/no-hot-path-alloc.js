@@ -5,6 +5,11 @@
  * field kernels, render assembler). Every allocation in the per-frame loop
  * is GC pressure that causes jank.
  *
+ * Enforcement scope: syntactic loop bodies only. The rule reports allocation
+ * nodes only when their AST ancestors include a loop node in the same file.
+ * Helper functions called from loops are out of scope for this rule and must
+ * be protected via targeted tests/review in hot-path modules.
+ *
  * Catches:
  *   - Object literals: { ... }
  *   - Array literals: [ ... ]
@@ -102,7 +107,7 @@ export default {
     type: 'problem',
     docs: {
       description:
-        'Disallow heap allocations in hot-path files. Allocations cause GC pauses and frame drops.',
+        'Disallow heap allocations inside syntactic loop bodies in hot-path files. Allocations cause GC pauses and frame drops.',
     },
     messages: {
       objectLiteral:
