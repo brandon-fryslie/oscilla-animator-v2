@@ -544,18 +544,21 @@ describe('arenaLayout integration', () => {
       expect(regions[i].start).toBeGreaterThanOrEqual(regions[i - 1].end);
     }
 
-    // arenaTotalFloats includes zone padding (header + alignment), so it must
-    // be >= payload descriptor sum and match emitted zone metadata total.
+    // [LAW:one-source-of-truth] Descriptor payload sum and total arena budget
+    // are emitted as separate compiler metrics with explicit invariants.
     const totalFromLayout = program.arenaLayout
       .filter((d) => d.offset >= 0)
       .reduce((sum, d) => sum + d.length, 0);
-    expect(program.arenaTotalFloats).toBeGreaterThanOrEqual(totalFromLayout);
+    expect(program.arenaPayloadFloats).toBe(totalFromLayout);
     const arenaZones = program.arenaZones;
     expect(arenaZones).toBeDefined();
     if (!arenaZones) {
       throw new Error('Compiled program missing arenaZones metadata');
     }
+    expect(arenaZones.payloadFloats).toBe(totalFromLayout);
+    expect(program.arenaPayloadFloats).toBe(arenaZones.payloadFloats);
     expect(program.arenaTotalFloats).toBe(arenaZones.totalFloats);
+    expect(program.arenaTotalFloats).toBeGreaterThanOrEqual(program.arenaPayloadFloats);
 
     // arenaTotalFloats > 0 (a compiled program with blocks must have slots)
     expect(program.arenaTotalFloats).toBeGreaterThan(0);

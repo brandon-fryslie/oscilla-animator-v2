@@ -72,6 +72,7 @@ function makeProgramWithPhaseBoundaryViolation(): CompiledProgramIR {
     renderGlobals: [],
     kernelRegistry: { resolve: () => undefined, entries: () => [] } as any,
     arenaLayout: [{ offset: 0, stride: 4, laneCount: 1, length: 4 }],
+    arenaPayloadFloats: 4,
     arenaTotalFloats: 4,
   } as CompiledProgramIR;
 }
@@ -142,6 +143,7 @@ function makeProgramWithCardinalityWriteMismatch(): CompiledProgramIR {
     renderGlobals: [],
     kernelRegistry: { resolve: () => undefined, entries: () => [] } as any,
     arenaLayout: [{ offset: 0, stride: 1, laneCount: 2, length: 2 }],
+    arenaPayloadFloats: 2,
     arenaTotalFloats: 2,
   } as CompiledProgramIR;
 }

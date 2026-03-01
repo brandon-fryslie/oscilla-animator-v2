@@ -49,7 +49,8 @@ The compiler must emit and keep consistent:
 2. `runtimeSlots`
 3. `runtimeAddressTable`
 4. `arenaLayout`
-5. `arenaTotalFloats`
+5. `arenaPayloadFloats`
+6. `arenaTotalFloats`
 
 ### 2.2 Descriptor Derivation Rules
 
@@ -62,7 +63,8 @@ The compiler must emit and keep consistent:
 
 1. Repeated compilation of identical input must produce deterministic arena offsets/descriptors.
 2. Descriptor ranges must be non-overlapping for active slots.
-3. `arenaTotalFloats` must equal the sum of descriptor lengths.
+3. `arenaPayloadFloats` must equal the sum of descriptor lengths.
+4. `arenaTotalFloats` must equal emitted arena-zone total (`arenaZones.totalFloats`) and must be `>= arenaPayloadFloats`.
 
 // [LAW:verifiable-goals] These rules are mechanically enforced by compiler/runtime layout tests.
 
@@ -71,7 +73,7 @@ The compiler must emit and keep consistent:
 ### 3.1 Addressing and Execution
 
 1. Runtime execution must use compiler-emitted address metadata (no legacy metadata derivation).
-2. Arena allocation must exactly match `arenaTotalFloats`.
+2. Arena allocation must exactly match `arenaTotalFloats` (zone total), while descriptor-sum validation uses `arenaPayloadFloats`.
 3. Slot reads/writes in hot paths must route through canonical descriptor-aware indexing.
 
 ### 3.2 No Legacy Numeric Paths

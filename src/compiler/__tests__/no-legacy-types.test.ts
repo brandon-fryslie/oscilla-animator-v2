@@ -2,7 +2,6 @@ import { execFileSync } from 'node:child_process';
 import { describe, expect, it } from 'vitest';
 import { buildPatch } from '../../graph';
 import { compile } from '../compile';
-import { requireInst } from '../../core/canonical-types';
 
 function rg(pattern: string, scope: readonly string[], globs: readonly string[] = ['*.ts', '*.tsx']): string[] {
   try {
@@ -94,14 +93,9 @@ describe('no-legacy-types gate', () => {
       expect(slot.type.payload.kind).not.toBe('object');
     }
 
-    // [LAW:dataflow-not-control-flow] Channel separation is canonical: either
-    // slots are scalarized (stride=1) or explicitly SoA-packed.
-    const nonSoaMultiComponentSlots = program.runtimeSlots.filter(
-      (slot) =>
-        requireInst(slot.type.extent.cardinality, 'cardinality').kind === 'many' &&
-        slot.arena.stride > 1 &&
-        slot.arena.packing !== 'soa',
-    );
-    expect(nonSoaMultiComponentSlots).toEqual([]);
+    // [LAW:one-source-of-truth] P0-1 canonical packing is SoA for runtime slot
+    // descriptors; compiler slot planning must not emit AoS descriptors.
+    const nonSoaSlots = program.runtimeSlots.filter((slot) => slot.arena.packing !== 'soa');
+    expect(nonSoaSlots).toEqual([]);
   });
 });
