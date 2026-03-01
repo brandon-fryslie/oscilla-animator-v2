@@ -24,6 +24,7 @@ export const WEBGPU_RENDER_CONTRACT = Object.freeze({
   computeDstStateBinding: 1,
   computeParamsBinding: 2,
   computeParamsFloats: 4,
+  computeMigrationParamsU32: 4,
   inputHeaderBytes: 256,
   inputHeaderTimeOffsetBytes: 0x00,
   inputHeaderDeltaTimeOffsetBytes: 0x04,
@@ -196,5 +197,25 @@ fn cs_main(@builtin(global_invocation_id) gid: vec3<u32>) {
   indirectArgs[base + 2u] = drawPrepParams.v0.z; // firstIndex
   indirectArgs[base + 3u] = drawPrepParams.v0.w; // baseVertex bits
   indirectArgs[base + 4u] = drawPrepParams.v1.x; // firstInstance
+}
+`;
+
+export const STATE_MIGRATION_COMPUTE_WGSL = /* wgsl */ `
+struct MigrationParams {
+  // v0 = [copyWordCount, _, _, _]
+  v0: vec4<u32>,
+};
+
+@group(0) @binding(0) var<storage, read> oldStateWords: array<u32>;
+@group(0) @binding(1) var<storage, read_write> newStateWords: array<u32>;
+@group(0) @binding(2) var<uniform> migrationParams: MigrationParams;
+
+@compute @workgroup_size(${WEBGPU_RENDER_CONTRACT.computeWorkgroupSize})
+fn cs_main(@builtin(global_invocation_id) gid: vec3<u32>) {
+  let copyWordCount = migrationParams.v0.x;
+  if (gid.x >= copyWordCount) {
+    return;
+  }
+  newStateWords[gid.x] = oldStateWords[gid.x];
 }
 `;

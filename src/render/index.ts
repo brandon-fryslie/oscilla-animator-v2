@@ -10,6 +10,7 @@ export {
   createWebGPURenderer,
   assertWebGPUStartupContract,
 } from './webgpu';
+export type { IndirectArgsDebugRecord } from './webgpu';
 export { WEBGPU_RENDER_CONTRACT } from './webgpu/shaders';
 export {
   setRenderIssueReporter,

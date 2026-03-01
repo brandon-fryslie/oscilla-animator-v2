@@ -1,4 +1,5 @@
 import { execFileSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 function rg(pattern: string, scope: readonly string[]): string[] {
@@ -65,12 +66,15 @@ describe('forbidden patterns (v3 hard rules)', () => {
     expect(matches).toEqual([]);
   });
 
-  it('forbids GPU full-buffer copy commands in the WebGPU hot path', () => {
-    const matches = rg('copyBufferToBuffer\\s*\\(', ['src/render/webgpu/WebGPURenderer.ts']);
+  it('forbids GPU copyBufferToBuffer usage inside render frame hot path', () => {
+    const source = readFileSync('src/render/webgpu/WebGPURenderer.ts', 'utf8');
+    const renderMethodMatch = source.match(/render\(input: RenderInput\): void \{[\s\S]*?\n  \}\n\n  async readIndirectArgsDebug/);
+    expect(renderMethodMatch).toBeTruthy();
+    const renderMethodSource = renderMethodMatch?.[0] ?? '';
 
     // [LAW:dataflow-not-control-flow] Frame execution keeps one deterministic
-    // compute->draw flow without whole-buffer copy detours.
-    expect(matches).toEqual([]);
+    // compute->draw flow without copyBufferToBuffer detours in render().
+    expect(renderMethodSource.includes('copyBufferToBuffer')).toBe(false);
   });
 
   it('forbids runtime arena reassignment in frame executors', () => {

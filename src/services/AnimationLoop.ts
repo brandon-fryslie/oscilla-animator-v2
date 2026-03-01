@@ -235,6 +235,7 @@ export function executeAnimationFrame(
   // [LAW:one-source-of-truth] The active draw-prep shader comes from the
   // compiled program contract; renderer selection has one canonical source.
   const drawPrepShaderWgsl = currentProgram?.drawPrepProgram?.wgsl;
+  const shapeBankTopology = currentState.shapeBank?.topology;
   const inputChannels = resolveRendererInputChannels(currentState);
   renderer.render({
     frame: frameToRender,
@@ -246,6 +247,7 @@ export function executeAnimationFrame(
     timeMs: tMs,
     ...inputChannels,
     drawPrepShaderWgsl,
+    shapeBankTopology,
   });
   state.renderTime = performance.now() - renderStart;
 

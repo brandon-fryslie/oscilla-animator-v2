@@ -226,6 +226,48 @@ describe('AnimationLoop', () => {
     expect(renderArg.drawPrepShaderWgsl).toBe(drawPrepShaderWgsl);
   });
 
+  it('forwards runtime shape-bank topology snapshot to renderer input', () => {
+    const arena = { reset: vi.fn(), getTotalBytes: () => 0 };
+    const renderer = { render: vi.fn() };
+    executeFrameMock.mockReturnValue({ version: 2, ops: [] } as any);
+    const shapeBankTopology = {
+      revision: 3,
+      data: new Uint32Array([1, 2, 3, 4]),
+      indexById: new Map<number, number>([[101, 0]]),
+    };
+
+    const deps = {
+      getCurrentProgram: () => ({}),
+      getCurrentState: () => ({
+        health: createHealthMetrics(),
+        shapeBank: {
+          topology: shapeBankTopology,
+        },
+      }),
+      getCanvas: () => ({ width: 100, height: 80 }),
+      getRenderer: () => renderer,
+      getArena: () => arena,
+      store: {
+        stepDebug: null,
+        diagnostics: {
+          recordJank: vi.fn(),
+          updateFrameTiming: vi.fn(),
+          updateMemoryStats: vi.fn(),
+        },
+        continuity: { updateFromRuntime: vi.fn() },
+        viewport: { zoom: 1, pan: { x: 0, y: 0 }, setContentBounds: vi.fn() },
+        events: { emit: vi.fn() },
+        getPatchRevision: () => 1,
+      },
+    } as any;
+
+    const state = createAnimationLoopState();
+    executeAnimationFrame(16, deps, state);
+
+    const renderArg = renderer.render.mock.calls[0]?.[0];
+    expect(renderArg.shapeBankTopology).toBe(shapeBankTopology);
+  });
+
   it('derives renderer input channels from the canonical external snapshot', () => {
     const arena = { reset: vi.fn(), getTotalBytes: () => 0 };
     const renderer = { render: vi.fn() };

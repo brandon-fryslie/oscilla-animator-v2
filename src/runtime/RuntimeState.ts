@@ -14,6 +14,7 @@ import type { RenderFrameIR } from '../render/types';
 import type { ArenaRuntimeLayoutIR, RuntimeScalarArenaAddress } from '../compiler/ir/program';
 import { ExternalChannelSystem } from './ExternalChannel';
 import { createArena } from './ArenaValueStore';
+import { exportTopologyBankU32 } from '../shapes/registry';
 
 /**
  * Shape2D packed record word layout (8 x u32 words per shape)
@@ -81,6 +82,12 @@ export interface ShapeBankHandleMetadata {
   controlPointSlot: number;
 }
 
+export interface ShapeBankTopologySnapshot {
+  readonly revision: number;
+  readonly data: Uint32Array;
+  readonly indexById: ReadonlyMap<number, number>;
+}
+
 /**
  * Default per-program ShapeBank capacity (u32 words).
  *
@@ -113,6 +120,13 @@ export interface ShapeBankState {
    * `-1` means "no control-point field slot".
    */
   controlPointSlotByHandle: Int32Array;
+  /**
+   * Canonical topology-bank export consumed by GPU renderer.
+   *
+   * [LAW:one-source-of-truth] Runtime shape handles and renderer topology
+   * lookup share one shape-bank-owned topology snapshot.
+   */
+  topology: ShapeBankTopologySnapshot;
 }
 
 /**
@@ -133,12 +147,35 @@ export function createShapeBank(
       `createShapeBank: staticBoundary ${staticBoundary} exceeds capacity ${wordCapacity}`,
     );
   }
+  const topology = exportTopologyBankU32();
   return {
     data: new Uint32Array(wordCapacity),
     volatilePtr: staticBoundary,
     staticBoundary,
     topologyIdByHandle: new Uint32Array(wordCapacity),
     controlPointSlotByHandle: new Int32Array(wordCapacity).fill(SHAPE_BANK_NO_CONTROL_POINT_SLOT),
+    topology: {
+      revision: topology.revision,
+      data: topology.data,
+      indexById: topology.indexById,
+    },
+  };
+}
+
+/**
+ * Synchronize shape-bank topology snapshot from canonical topology registry.
+ */
+export function syncShapeBankTopology(shapeBank: ShapeBankState): void {
+  const topology = exportTopologyBankU32();
+  if (topology.revision === shapeBank.topology.revision) {
+    return;
+  }
+  // [LAW:single-enforcer] Runtime shape bank is the sole synchronization
+  // boundary that republishes topology registry revisions for rendering.
+  shapeBank.topology = {
+    revision: topology.revision,
+    data: topology.data,
+    indexById: topology.indexById,
   };
 }
 
@@ -1147,6 +1184,7 @@ export function createRuntimeStateFromSession(
 export function resetFrameVolatileShapeBank(state: RuntimeState): void {
   if (!state.shapeBank) return;
   // [LAW:single-enforcer] Frame reset delegates to one allocator boundary.
+  syncShapeBankTopology(state.shapeBank);
   resetShapeBankFrameAllocator(state.shapeBank);
 }
 
