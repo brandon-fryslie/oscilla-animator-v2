@@ -197,7 +197,7 @@ This architecture ensures that no matter how complex the shader becomes, the UI 
 
 ## 9. Completion Note
 
-**Status:** Spec complete for the GPU pipeline async requirement (Requirement 4).
+**Status:** Complete for runtime integration requirements in this phase (1, 2, 4, 5), including startup.
 
 **Evidence:**
 
@@ -215,15 +215,22 @@ This architecture ensures that no matter how complex the shader becomes, the UI 
 
 5. Generation counter prevents stale pipeline commits when multiple shader updates fire in rapid succession.
 
-**Existing service-layer requirements (1, 2, 3, 5):** The existing async compile worker architecture (`CompileWorkerClient`, `LiveRecompile`, `CompileOrchestrator`) satisfies the debounce, async service class, and cancellation requirements. Naga WASM loader integration is the subject of P2-2/P2-3.
+6. Startup compile now flows through `AsyncCompilerService` + `CompileWorkerClient` and applies precomputed artifacts through `compileAndSwap(..., isInitial=true, precomputed)` in `RuntimeService`.
+   - The synchronous startup `compileAndSwap(..., isInitial=true)` compile path was removed from `RuntimeService.init()`.
+   - Startup and live recompiles share one canonical compile-request shape (`buildCompileRequest`) and one swap queue (`flushPendingSwap`).
+   - Worker compile failures do not fall back to synchronous compile.
+
+**Remaining boundary:** Requirement 3 (Naga WASM boot/loader ownership) remains tracked by P2-2/P2-3.
 
 **Verification commands:**
 
 ```bash
 pnpm -s typecheck
-pnpm -s vitest run src/render/webgpu/__tests__/WebGPURenderer.test.ts
+pnpm -s vitest run src/services/__tests__/RuntimeService.test.ts src/services/__tests__/AsyncCompilerService.test.ts src/render/webgpu/__tests__/WebGPURenderer.test.ts
 ```
 
 **Changed files:**
 - `src/render/webgpu/WebGPURenderer.ts`
 - `src/render/webgpu/__tests__/WebGPURenderer.test.ts`
+- `src/services/RuntimeService.ts`
+- `src/services/__tests__/RuntimeService.test.ts`

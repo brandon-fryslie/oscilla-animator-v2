@@ -399,6 +399,9 @@ export class IRBuilderImpl implements OrchestratorIRBuilder {
 
   extract(input: ValueExprId, componentIndex: number, type: CanonicalType): ValueExprId {
     const inputExpr = this.valueExprs[input as number];
+    if (!inputExpr) {
+      throw new Error(`IRBuilder.extract: invalid input id=${input}`);
+    }
     if (inputExpr?.kind === 'construct') {
       const componentExpr = inputExpr.components[componentIndex];
       if (componentExpr === undefined) {
@@ -410,6 +413,39 @@ export class IRBuilderImpl implements OrchestratorIRBuilder {
       // instead of manufacturing extra extract nodes that require slot mapping.
       return componentExpr;
     }
+
+    const stride = payloadStride(inputExpr.type.payload);
+    if (stride === 1) {
+      if (componentIndex !== 0) {
+        throw new Error(
+          `IRBuilder.extract: component ${componentIndex} out of range for scalar input ${input}`
+        );
+      }
+      // [LAW:one-source-of-truth] Scalar extract(0) is identity and must be
+      // canonicalized at IR construction, not deferred to runtime.
+      return input;
+    }
+
+    if (inputExpr.kind === 'const') {
+      const source = inputExpr.value;
+      if (
+        source.kind === 'vec2' ||
+        source.kind === 'vec3' ||
+        source.kind === 'vec4' ||
+        source.kind === 'color'
+      ) {
+        const componentValue = source.value[componentIndex];
+        if (componentValue === undefined) {
+          throw new Error(
+            `IRBuilder.extract: component ${componentIndex} out of range for const ${source.kind}`
+          );
+        }
+        // [LAW:one-source-of-truth] Component extraction from const composites is
+        // folded into a scalar const expression upstream.
+        return this.constant({ kind: 'float', value: componentValue }, type);
+      }
+    }
+
     return this.pushExpr({ kind: 'extract', type, input, componentIndex });
   }
 

@@ -17,7 +17,10 @@
     "ci:webgpu-readiness": "WEBGPU_READINESS_REPORT=artifacts/webgpu-readiness.json node scripts/webgpu-migration-readiness.mjs",
     "test:migration-readiness": "node scripts/webgpu-migration-readiness.mjs",
     "bench": "vitest bench",
-    "lint": "eslint src/blocks/ src/runtime/ValueExprMaterializer.ts src/runtime/ValueExprEventEvaluator.ts src/runtime/ContinuityApply.ts src/compiler/compile.ts src/runtime/ScheduleExecutor.ts src/runtime/RenderAssembler.ts src/runtime/OpcodeInterpreter.ts src/render/RenderBufferArena.ts"
+    "lint": "eslint src/blocks/ src/runtime/ValueExprMaterializer.ts src/runtime/ValueExprEventEvaluator.ts src/runtime/ContinuityApply.ts src/compiler/compile.ts src/runtime/ScheduleExecutor.ts src/runtime/RenderAssembler.ts src/runtime/OpcodeInterpreter.ts src/render/RenderBufferArena.ts",
+    "build:naga-shim": "scripts/build-naga-shim.sh",
+    "verify:naga-shim": "node scripts/verify-naga-shim.mjs",
+    "ci:release-readiness": "pnpm -s verify:naga-shim && pnpm -s typecheck && pnpm -s vitest run src/compiler/__tests__ src/services/__tests__/AsyncCompilerService.test.ts src/services/__tests__/CompileWorkerClient.test.ts src/services/__tests__/RuntimeService.test.ts src/runtime/__tests__/construct-one.test.ts"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",

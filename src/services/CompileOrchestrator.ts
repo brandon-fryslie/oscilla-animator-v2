@@ -7,8 +7,6 @@
  * This is the SINGLE compile path - used for both initial and recompile.
  */
 
-import { compileFromFrontend } from '../compiler';
-import { compileFrontend } from '../compiler/frontend';
 import type { FrontendError } from '../compiler/frontend';
 import type { FrontendResult } from '../compiler/frontend';
 import type { CompileResult } from '../compiler/compile';
@@ -18,8 +16,6 @@ import { convertFrontendErrorsToDiagnostics } from '../compiler/frontend/fronten
 import { convertCompileErrorsToDiagnostics } from '../compiler/diagnosticConversion';
 import type { CompileError } from '../compiler/types';
 import { untracked } from 'mobx';
-import { debugSettings } from '../settings/tokens/debug-settings';
-import { compilerFlagsSettings } from '../settings/tokens/compiler-flags-settings';
 import type { Patch } from '../graph';
 import { blockId as toBlockId } from '../types';
 import type { LogDetail } from '../stores/DiagnosticsStore';
@@ -201,7 +197,7 @@ export interface CompileOrchestratorDeps {
 export async function compileAndSwap(
   deps: CompileOrchestratorDeps,
   isInitial: boolean = false,
-  precomputed?: PrecomputedCompileArtifacts,
+  precomputed: PrecomputedCompileArtifacts,
 ): Promise<void> {
   const { store, state, onDomainChange } = deps;
   const patch = untracked(() => store.patch.patch);
@@ -210,19 +206,18 @@ export async function compileAndSwap(
   }
 
   const currentPatchRevision = store.getPatchRevision();
-  if (precomputed && precomputed.sourcePatchRevision !== currentPatchRevision) {
+  if (precomputed.sourcePatchRevision !== currentPatchRevision) {
     // [LAW:no-silent-fallbacks] Dropped stale worker results must be visible;
     // otherwise the runtime appears to ignore user edits with no explanation.
     store.diagnostics.log({
       level: 'warn',
-      message: `Recompile result dropped as stale (compiled r${precomputed.sourcePatchRevision}, current r${currentPatchRevision}); waiting for latest edit compile.`,
+      message: `Compile result dropped as stale (compiled r${precomputed.sourcePatchRevision}, current r${currentPatchRevision}); waiting for latest edit compile.`,
     });
     return;
   }
 
-  const patchRevision = precomputed?.sourcePatchRevision ?? currentPatchRevision;
+  const patchRevision = precomputed.sourcePatchRevision;
   const compileId = isInitial ? 'compile-0' : `compile-live-${Date.now()}`;
-  const compileStartMs = Date.now();
 
   // Emit CompileBegin event
   store.events.emit({
@@ -233,13 +228,8 @@ export async function compileAndSwap(
     trigger: isInitial ? 'startup' : 'graphCommitted',
   });
 
-  const debugValues = store.settings.get(debugSettings);
-  const flagOverrides = store.settings.get(compilerFlagsSettings);
-  const frontendResult = precomputed?.frontendResult ?? compileFrontend(patch, {
-    traceCardinalitySolver: debugValues?.traceCardinalitySolver,
-    diagnosticOverrides: flagOverrides ?? undefined,
-  });
-  let compileDurationMs = precomputed?.compileDurationMs ?? (Date.now() - compileStartMs);
+  const frontendResult = precomputed.frontendResult;
+  const compileDurationMs = precomputed.compileDurationMs;
 
   // Store frontend snapshot (always available now)
   // [LAW:dataflow-not-control-flow] Frontend always produces a FrontendResult.
@@ -277,14 +267,27 @@ export async function compileAndSwap(
     return;
   }
 
-  let result: CompileResult | null = precomputed?.backendResult ?? null;
+  const result: CompileResult | null = precomputed.backendResult;
   if (!result) {
-    result = compileFromFrontend(frontendResult, {
-      events: store.events,
+    // [LAW:no-silent-fallbacks] Worker-backed compile is the canonical source.
+    // Missing backend result must fail explicitly; no main-thread fallback compile.
+    emitCompileFailure({
+      store,
+      patch,
+      compileId,
       patchRevision,
-      patchId: 'patch-0',
+      durationMs: compileDurationMs,
+      phase: 'backend',
+      diagnostics: frontendDiagnostics,
+      details: [{
+        message: 'Compile worker returned no backend result for a backend-ready frontend result',
+      }],
+      errorCount: 1,
     });
-    compileDurationMs = Date.now() - compileStartMs;
+    if (isInitial) {
+      throw new Error('Initial compile failed (backend): missing backend worker result');
+    }
+    return;
   }
 
   if (result.kind !== 'ok') {
