@@ -26,6 +26,7 @@ describe('naga lowering artifact', () => {
     expect(artifact.module.types.length).toBeGreaterThan(0);
     expect(artifact.module.constants.length).toBeGreaterThan(0);
     expect(artifact.module.functions.length).toBe(1);
+    expect(artifact.compute.maxActiveLanes).toBeGreaterThan(0);
     expect(artifact.module.entry_points).toEqual([
       {
         stage: 'compute',

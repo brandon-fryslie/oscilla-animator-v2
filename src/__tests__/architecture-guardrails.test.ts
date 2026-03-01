@@ -199,6 +199,31 @@ describe('Architecture Guardrails', () => {
         scope: ['src/runtime', 'src/services'],
         maxCount: 0,
       },
+      // P0 no-string-math
+      {
+        id: 'K-P0-1',
+        pattern: 'buildGeneratedComputeProgram',
+        scope: ['src/compiler/compile.ts'],
+        maxCount: 0,
+      },
+      {
+        id: 'K-P0-2',
+        pattern: 'generatedComputeProgram',
+        scope: ['src/compiler/ir/program.ts'],
+        maxCount: 0,
+      },
+      {
+        id: 'K-P0-3',
+        pattern: 'MAX_ACTIVE_LANES',
+        scope: ['src/compiler/compile.ts'],
+        maxCount: 0,
+      },
+      {
+        id: 'K-P0-4',
+        pattern: 'state_in:\\s*array<f32>',
+        scope: ['src/compiler/compile.ts'],
+        maxCount: 0,
+      },
     ];
 
     for (const gate of gates) {

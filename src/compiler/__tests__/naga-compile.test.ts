@@ -33,11 +33,9 @@ describe('compileProgramWithNaga', () => {
     expect(result.kind).toBe('ok');
     if (result.kind !== 'ok') return;
 
-    const sourceWgsl = result.program.generatedComputeProgram?.wgsl ?? '';
-    const maxLaneMatch = /const\s+MAX_ACTIVE_LANES:\s*u32\s*=\s*(\d+)u\s*;/m.exec(sourceWgsl);
-    expect(maxLaneMatch).not.toBeNull();
-    if (!maxLaneMatch) return;
-    const expected = maxLaneMatch[1];
+    const expected = result.program.nagaLoweringProgram?.compute.maxActiveLanes;
+    expect(expected).toBeDefined();
+    if (!expected) return;
 
     const compiled = await compileProgramWithNaga(result.program);
     expect(compiled.kind).toBe('ok');
@@ -62,19 +60,26 @@ describe('compileProgramWithNaga', () => {
     expect(compiled.errors.some((error) => error.code === 'IRValidationFailed')).toBe(true);
   });
 
-  it('fails when compiled program has no generated compute WGSL', async () => {
+  it('fails when compiled program has no compute metadata', async () => {
     const result = compile(buildSimplePatch());
     expect(result.kind).toBe('ok');
     if (result.kind !== 'ok') return;
 
-    const withoutGeneratedCompute = {
+    const withoutComputeMetadata = {
       ...result.program,
-      generatedComputeProgram: undefined,
+      nagaLoweringProgram: {
+        ...result.program.nagaLoweringProgram!,
+        compute: undefined,
+      },
     };
-    const compiled = await compileProgramWithNaga(withoutGeneratedCompute as typeof result.program);
+    const compiled = await compileProgramWithNaga(withoutComputeMetadata as unknown as typeof result.program);
     expect(compiled.kind).toBe('error');
     if (compiled.kind !== 'error') return;
-    expect(compiled.errors.some((error) => error.message.includes('Missing generatedComputeProgram WGSL'))).toBe(true);
+    expect(
+      compiled.errors.some((error) =>
+        error.message.includes('Missing or invalid nagaLoweringProgram.compute.maxActiveLanes'),
+      ),
+    ).toBe(true);
   });
 
   it('maps validation failures to source block IDs via sourceMap', async () => {
@@ -124,10 +129,11 @@ describe('compileProgramWithNaga', () => {
       nagaLoweringProgram: {
         module: mutatedModule,
         sourceMap: lowering.sourceMap,
+        compute: lowering.compute,
       },
     };
 
-    const compiled = await compileProgramWithNaga(faultyProgram as typeof result.program);
+    const compiled = await compileProgramWithNaga(faultyProgram as unknown as typeof result.program);
     expect(compiled.kind).toBe('error');
     if (compiled.kind !== 'error') return;
     expect(
@@ -163,16 +169,18 @@ describe('compileProgramWithNaga', () => {
     expect(compiled.errors.some((error) => error.message.includes('Emission Failure'))).toBe(true);
   });
 
-  it('fails when MAX_ACTIVE_LANES constant cannot be resolved from generated WGSL', async () => {
+  it('fails when lowering compute metadata has invalid MAX_ACTIVE_LANES', async () => {
     const result = compile(buildSimplePatch());
     expect(result.kind).toBe('ok');
     if (result.kind !== 'ok') return;
 
     const faultyProgram = {
       ...result.program,
-      generatedComputeProgram: {
-        ...result.program.generatedComputeProgram!,
-        wgsl: result.program.generatedComputeProgram!.wgsl.replace(/const\s+MAX_ACTIVE_LANES:[^\n]*\n/m, ''),
+      nagaLoweringProgram: {
+        ...result.program.nagaLoweringProgram!,
+        compute: {
+          maxActiveLanes: 0,
+        },
       },
     };
 
@@ -181,7 +189,7 @@ describe('compileProgramWithNaga', () => {
     if (compiled.kind !== 'error') return;
     expect(
       compiled.errors.some((error) =>
-        error.message.includes('MAX_ACTIVE_LANES constant missing or invalid')
+        error.message.includes('Missing or invalid nagaLoweringProgram.compute.maxActiveLanes')
       ),
     ).toBe(true);
   });
