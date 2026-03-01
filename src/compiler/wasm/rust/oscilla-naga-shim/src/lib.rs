@@ -625,7 +625,7 @@ fn compile_internal(module_ir: NagaModuleIR, max_active_lanes: Option<u32>) -> R
 
     let module = naga::front::wgsl::parse_str(&emitted_wgsl).map_err(|error| {
         vec![make_error(
-            format!("Deserialization Failure: {error}"),
+            format!("WGSL Parse Failure: {error}"),
             "Module",
             "WGSL parse",
         )]
