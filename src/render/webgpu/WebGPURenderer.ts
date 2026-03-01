@@ -117,7 +117,14 @@ function buildDrawPrepStaticCountLookup(
       // [LAW:no-silent-fallbacks] Invalid compiler draw-prep metadata must fail
       // fast instead of silently emitting fallback instance counts.
       throw new Error(
-        `WebGPURenderer: static draw-prep sink ${sink.indirectRecordIndex} missing valid staticInstanceCount`,
+        `WebGPURenderer: static draw-prep sink at sinkIndex ${sink.sinkIndex} (indirectRecordIndex=${sink.indirectRecordIndex}) missing valid staticInstanceCount`,
+      );
+    }
+    if (staticCounts.has(sink.sinkIndex)) {
+      // [LAW:no-silent-fallbacks] Duplicate static sinkIndex must fail fast
+      // instead of silently overwriting an existing entry.
+      throw new Error(
+        `WebGPURenderer: duplicate static draw-prep sinkIndex ${sink.sinkIndex} (indirectRecordIndex=${sink.indirectRecordIndex})`,
       );
     }
     staticCounts.set(sink.sinkIndex, staticCount);
@@ -895,6 +902,7 @@ export class WebGPURenderer {
       if (op.kind !== 'drawPathInstances') {
         throw new Error(`WebGPURenderer: unsupported draw op kind "${(op as { kind: string }).kind}"`);
       }
+      const sourceSinkIndex = nextSourceSinkIndex++;
       const mesh = this.getOrCreateMesh(op.geometry);
       if (mesh.indexCount === 0 || op.instances.count <= 0) {
         continue;
@@ -917,7 +925,7 @@ export class WebGPURenderer {
           op,
           mesh,
           shapeBankWordOffset,
-          sourceSinkIndex: nextSourceSinkIndex,
+          sourceSinkIndex,
           indirectRecordIndex: prepared.length,
           firstInstance: nextFirstInstance,
           instanceCount: op.instances.count,
@@ -930,7 +938,7 @@ export class WebGPURenderer {
           op,
           mesh,
           shapeBankWordOffset,
-          sourceSinkIndex: nextSourceSinkIndex,
+          sourceSinkIndex,
           indirectRecordIndex: prepared.length,
           firstInstance: nextFirstInstance,
           instanceCount: op.instances.count,
@@ -938,7 +946,6 @@ export class WebGPURenderer {
         });
         nextFirstInstance += op.instances.count;
       }
-      nextSourceSinkIndex += 1;
     }
     return prepared;
   }
