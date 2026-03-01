@@ -326,7 +326,9 @@ function buildRuntimeAddressTable(
 
   // [LAW:one-source-of-truth] Field slot ownership comes from IR builder
   // registration; schedule materialize steps augment this map for runtime reads.
-  const fieldExprToSlot = new Map<number, ValueSlot>(precomputedFieldSlots ?? []);
+  const fieldExprToSlot = precomputedFieldSlots
+    ? new Map<number, ValueSlot>(precomputedFieldSlots)
+    : new Map<number, ValueSlot>();
   const scalarExprToArenaAddress = new Map<number, { slot: ValueSlot; arena: ArenaSlotDescriptor; component: number }>();
   const steps = scheduleIR.steps as readonly Step[];
   for (const step of steps) {
@@ -706,9 +708,17 @@ function buildDrawPrepProgram(scheduleIR: ScheduleIR): DrawPrepProgramIR {
   // [LAW:one-source-of-truth] Draw-prep sink constants are emitted from one
   // canonical compiler sink table used by runtime and shader generation.
   for (const sink of sinks) {
+    // [LAW:one-source-of-truth] Static sink metadata is authoritative for
+    // draw-prep constants; missing counts must fail at compile boundary.
+    if (sink.instanceCountMode === 'static' && sink.staticInstanceCount === undefined) {
+      throw new Error(
+        'DrawPrepProgram: static sink missing staticInstanceCount for sink ' +
+          sink.sinkIndex.toString(),
+      );
+    }
     const instanceCountLiteral =
       sink.instanceCountMode === 'static'
-        ? `${sink.staticInstanceCount ?? 0}u`
+        ? `${sink.staticInstanceCount}u`
         : '/* dynamic instance count */ 0u';
     const isStaticLiteral = sink.instanceCountMode === 'static' ? '1u' : '0u';
     wgslLines.push(`const DRAW_SINK_${sink.sinkIndex}_RECORD: u32 = ${sink.indirectRecordIndex}u;`);
@@ -880,10 +890,9 @@ function collectExprInputIds(expr: ValueExpr | undefined): number[] {
         case 'zipPromote':
           return [expr.field as number, ...expr.ones.map((id) => id as number)];
         case 'broadcast':
-          return [
-            expr.one as number,
-            ...(expr.oneComponents ?? []).map((id) => id as number),
-          ];
+          return expr.oneComponents !== undefined
+            ? [expr.one as number, ...expr.oneComponents.map((id) => id as number)]
+            : [expr.one as number];
         case 'reduce':
           return [expr.field as number];
         case 'pathDerivative':
@@ -978,9 +987,15 @@ function buildGeneratedComputeProgram(
   for (const slot of slots) {
     const arena = runtimeAddressTable.slotToArena.get(slot);
     if (!arena) continue;
-    const packing = arena.packing ?? 'soa';
-    const laneStride = arena.laneStride ?? (packing === 'soa' ? 1 : arena.stride);
-    const componentStride = arena.componentStride ?? (packing === 'soa' ? arena.laneCount : 1);
+    const packing = arena.packing !== undefined ? arena.packing : 'soa';
+    const laneStride =
+      arena.laneStride !== undefined
+        ? arena.laneStride
+        : (packing === 'soa' ? 1 : arena.stride);
+    const componentStride =
+      arena.componentStride !== undefined
+        ? arena.componentStride
+        : (packing === 'soa' ? arena.laneCount : 1);
     const constants: AddressingConstants = {
       offsetName: `OFFSET_SLOT_${slot}`,
       strideName: `STRIDE_SLOT_${slot}`,
@@ -1086,7 +1101,7 @@ function buildGeneratedComputeProgram(
         const sourceSlots = inputExprIds
           .map((id) => resolveExprSlot(id, runtimeAddressTable))
           .filter((slot): slot is ValueSlot => slot !== undefined);
-        const sourceSlot = sourceSlots[0] ?? targetSlot;
+        const sourceSlot = sourceSlots.length > 0 ? sourceSlots[0] : targetSlot;
         const sourceConstants = slotConstants.get(sourceSlot);
         if (!sourceConstants) {
           lines.push(

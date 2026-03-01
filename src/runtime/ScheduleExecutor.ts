@@ -147,6 +147,40 @@ function _clearEventPayloads(payloads: unknown[]): void {
   payloads.length = 0;
 }
 
+interface ContinuityBufferResolverContext {
+  baseSlot: ValueSlot;
+  outputSlot: ValueSlot;
+  baseBuffer: Float32Array;
+  outputBuffer: Float32Array;
+  slotToArena: ReadonlyMap<ValueSlot, ArenaSlotDescriptor>;
+  state: RuntimeState;
+}
+
+// [LAW:no-shared-mutable-globals] Resolver context is single-owner runtime scratch
+// scoped to executeFrame; values are overwritten before each continuity step.
+const _continuityResolverContext: ContinuityBufferResolverContext = {
+  baseSlot: 0 as ValueSlot,
+  outputSlot: 0 as ValueSlot,
+  baseBuffer: new Float32Array(0),
+  outputBuffer: new Float32Array(0),
+  slotToArena: new Map<ValueSlot, ArenaSlotDescriptor>(),
+  state: null as unknown as RuntimeState,
+};
+
+function resolveContinuityBuffer(slot: ValueSlot): Float32Array {
+  if (slot === _continuityResolverContext.baseSlot) return _continuityResolverContext.baseBuffer;
+  if (slot === _continuityResolverContext.outputSlot) return _continuityResolverContext.outputBuffer;
+  const buffer = resolveNumericBuffer(
+    _continuityResolverContext.slotToArena,
+    _continuityResolverContext.state,
+    slot,
+  );
+  if (!buffer) {
+    throw new Error('Continuity: Buffer not found for slot ' + slot);
+  }
+  return buffer;
+}
+
 export interface ExecuteFrameOptions {
   /**
    * Enable cardinality/runtime write assertions.
@@ -498,13 +532,13 @@ export function executeFrame(
           ? baseBuffer
           : ensureOutputBuffer(slotToArena, state, outputSlot, baseBuffer.length);
 
-        applyContinuity(step, state, (slot) => {
-          if (slot === baseSlot) return baseBuffer;
-          if (slot === outputSlot) return outputBuffer;
-          const buffer = resolveNumericBuffer(slotToArena, state, slot);
-          if (!buffer) throw new Error('Continuity: Buffer not found for slot ' + slot);
-          return buffer;
-        });
+        _continuityResolverContext.baseSlot = baseSlot;
+        _continuityResolverContext.outputSlot = outputSlot;
+        _continuityResolverContext.baseBuffer = baseBuffer;
+        _continuityResolverContext.outputBuffer = outputBuffer;
+        _continuityResolverContext.slotToArena = slotToArena;
+        _continuityResolverContext.state = state;
+        applyContinuity(step, state, resolveContinuityBuffer);
         arenaEncodeFromAoS(state.arena, outputDesc, outputBuffer);
         state.tap?.recordFieldValue?.(outputSlot, outputBuffer);
         if (assertCardinalitySlotWrites) {
@@ -615,7 +649,7 @@ export function executeFrame(
       // Per-lane state write: evaluate field and write each lane+component.
       const mapping = stateSlotToMapping.get(step.stateSlot as number);
       if (!mapping || mapping.instanceId === undefined) {
-        throw new Error(`fieldStateWrite: missing field state mapping for slot ${step.stateSlot}`);
+        throw new Error('fieldStateWrite: missing field state mapping for slot ' + step.stateSlot);
       }
 
       const veId = step.value as any;

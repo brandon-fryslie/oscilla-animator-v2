@@ -73,7 +73,6 @@ const _topologyVerbsCache = new Map<TopologyId, Uint8Array>();
 function getCachedVerbs(topology: PathTopologyDef): Uint8Array {
   let cached = _topologyVerbsCache.get(topology.id);
   if (!cached) {
-    // eslint-disable-next-line oscilla/no-hot-path-alloc
     cached = new Uint8Array(topology.verbs);
     _topologyVerbsCache.set(topology.id, cached);
   }
@@ -913,6 +912,66 @@ interface TopologyGroup {
   instanceIndices: number[];
 }
 
+function createTopologyGroup(
+  topologyId: number,
+  controlPointsSlot: number,
+  pointsCount: number,
+  flags: number,
+): TopologyGroup {
+  return {
+    topologyId,
+    controlPointsSlot,
+    pointsCount,
+    flags,
+    instanceIndices: [],
+  };
+}
+
+function createInstanceTransforms(compactedCopy: {
+  count: number;
+  screenPosition: Float32Array;
+  screenRadius: Float32Array;
+  rotation: Float32Array;
+  scale2: Float32Array;
+  depth: Float32Array;
+}): InstanceTransforms {
+  return {
+    count: compactedCopy.count,
+    position: compactedCopy.screenPosition,
+    size: compactedCopy.screenRadius,
+    rotation: compactedCopy.rotation,
+    scale2: compactedCopy.scale2,
+    depth: compactedCopy.depth,
+  };
+}
+
+function createPathGeometry(
+  group: TopologyGroup,
+  topology: PathTopologyDef,
+  arenaControlPointsBuffer: Float32Array,
+): PathGeometry {
+  return {
+    topologyId: group.topologyId,
+    verbs: getCachedVerbs(topology),
+    points: arenaControlPointsBuffer,
+    pointsCount: group.pointsCount,
+    flags: group.flags,
+  };
+}
+
+function createDrawPathInstancesOp(
+  geometry: PathGeometry,
+  instances: InstanceTransforms,
+  style: PathStyle,
+): DrawOp {
+  return {
+    kind: 'drawPathInstances',
+    geometry,
+    instances,
+    style,
+  };
+}
+
 /**
  * Topology group cache - WeakMap keyed on shape buffer identity
  *
@@ -1032,14 +1091,10 @@ function computeTopologyGroupsFromHandles(
     const controlPointsSlot = metadata.controlPointSlot;
     const key = metadata.topologyId + ':' + controlPointsSlot;
     if (!groups.has(key)) {
-      groups.set(key, {
-        topologyId: metadata.topologyId,
-        controlPointsSlot,
-        pointsCount: header.vertexCount,
-        flags: header.flags,
-        // eslint-disable-next-line oscilla/no-hot-path-alloc
-        instanceIndices: [],
-      });
+      groups.set(
+        key,
+        createTopologyGroup(metadata.topologyId, controlPointsSlot, header.vertexCount, header.flags),
+      );
     }
     groups.get(key)!.instanceIndices.push(i);
   }
@@ -1271,14 +1326,7 @@ function assemblePerInstanceShapes(
       continue;
     }
 
-    const instanceTransforms: InstanceTransforms = {
-      count: compactedCopy.count,
-      position: compactedCopy.screenPosition,
-      size: compactedCopy.screenRadius,
-      rotation: compactedCopy.rotation,
-      scale2: compactedCopy.scale2,
-      depth: compactedCopy.depth,
-    };
+    const instanceTransforms = createInstanceTransforms(compactedCopy);
     const compactedColor = compactedCopy.color as Uint8ClampedArray;
 
     // Build style (shared by both path and primitive)
@@ -1286,7 +1334,7 @@ function assemblePerInstanceShapes(
 
     if (!isPathTopology(topology)) {
       throw new Error(
-        `RenderAssembler: topology ${group.topologyId} is not path-renderable`
+        'RenderAssembler: topology ' + group.topologyId + ' is not path-renderable'
       );
     }
 
@@ -1312,20 +1360,8 @@ function assemblePerInstanceShapes(
       );
     }
 
-    const geometry: PathGeometry = {
-      topologyId: group.topologyId,
-      verbs: getCachedVerbs(topology),
-      points: arenaControlPointsBuffer,
-      pointsCount: group.pointsCount,
-      flags: group.flags,
-    };
-
-    outOps.push({
-      kind: 'drawPathInstances',
-      geometry,
-      instances: instanceTransforms,
-      style,
-    });
+    const geometry = createPathGeometry(group, topology, arenaControlPointsBuffer);
+    outOps.push(createDrawPathInstancesOp(geometry, instanceTransforms, style));
   }
 
   const tSliced = performance.now();
