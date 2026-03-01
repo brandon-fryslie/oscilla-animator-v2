@@ -2,8 +2,8 @@
  * ESLint rule: no-hot-path-alloc
  *
  * Bans heap allocations in hot-path files (render loop, schedule executor,
- * field kernels, render assembler). Every allocation in the per-frame loop
- * is GC pressure that causes jank.
+ * field kernels, render assembler) when they are syntactically inside loop
+ * bodies. Every allocation in the per-frame loop is GC pressure that causes jank.
  *
  * Catches:
  *   - Object literals: { ... }
@@ -102,7 +102,7 @@ export default {
     type: 'problem',
     docs: {
       description:
-        'Disallow heap allocations in hot-path files. Allocations cause GC pauses and frame drops.',
+        'Disallow heap allocations inside loop bodies in hot-path files. Allocations cause GC pauses and frame drops.',
     },
     messages: {
       objectLiteral:
