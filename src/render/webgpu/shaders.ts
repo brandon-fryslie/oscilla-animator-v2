@@ -16,14 +16,18 @@ export const WEBGPU_RENDER_CONTRACT = Object.freeze({
   instanceBinding: 0,
   topologyBankBindGroup: 2,
   topologyBankBinding: 0,
-  topologyBankWordsPerRecord: 4,
   topologyBankFlagsWord: 3,
-  topologyBankFlagClosed: 1 << 1,
+  topologyBankFlagClosed: 1 << 0,
   computeBindGroup: 0,
   computeSrcStateBinding: 0,
   computeDstStateBinding: 1,
   computeParamsBinding: 2,
+  computeMigrationBindGroup: 0,
+  computeMigrationSrcBinding: 0,
+  computeMigrationDstBinding: 1,
+  computeMigrationParamsBinding: 2,
   computeParamsFloats: 4,
+  computeMigrationParamsU32: 4,
   inputHeaderBytes: 256,
   inputHeaderTimeOffsetBytes: 0x00,
   inputHeaderDeltaTimeOffsetBytes: 0x04,
@@ -39,6 +43,7 @@ export const WEBGPU_RENDER_CONTRACT = Object.freeze({
   inputHeaderGaugeActiveOffsetBytes: 0x2c,
   inputHeaderSimStateOffset: 16,
   computeWorkgroupSize: 64,
+  computeMigrationWorkgroupSize: 64,
   simulationCapacity: 65_536,
   indirectArgsWords: 5,
   indirectArgsBytes: 5 * Uint32Array.BYTES_PER_ELEMENT,
@@ -61,7 +66,7 @@ struct SceneUniforms {
 struct InstanceData {
   // transform0 = [posXNorm, posYNorm, sizeNorm, rotationRad]
   transform0: vec4<f32>,
-  // transform1 = [scale2X, scale2Y, topologyRecordIndex, _]
+  // transform1 = [scale2X, scale2Y, topologyWordOffset, _]
   transform1: vec4<f32>,
   // color = [r, g, b, a] in 0..1
   color: vec4<f32>,
@@ -83,10 +88,9 @@ struct VertexOutput {
 @vertex
 fn vs_main(input: VertexInput, @builtin(instance_index) instanceIndex: u32) -> VertexOutput {
   let inst = instances[instanceIndex];
-  let topologyRecordIndex = u32(max(inst.transform1.z, 0.0));
+  let topologyWordOffset = u32(max(inst.transform1.z, 0.0));
   let topologyFlags = topologyBank[
-    topologyRecordIndex * ${WEBGPU_RENDER_CONTRACT.topologyBankWordsPerRecord}u +
-    ${WEBGPU_RENDER_CONTRACT.topologyBankFlagsWord}u
+    topologyWordOffset + ${WEBGPU_RENDER_CONTRACT.topologyBankFlagsWord}u
   ];
   let closedMask = select(0.0, 1.0, (topologyFlags & ${WEBGPU_RENDER_CONTRACT.topologyBankFlagClosed}u) != 0u);
   let viewportPx = scene.v0.xy;
@@ -126,6 +130,26 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
   // [LAW:single-enforcer] Fragment stage outputs premultiplied alpha so browser
   // compositing and pipeline blending share one canonical alpha contract.
   return vec4<f32>(input.color.rgb * input.color.a, input.color.a);
+}
+`;
+
+export const SIMULATION_MIGRATION_COMPUTE_WGSL = /* wgsl */ `
+struct MigrationParams {
+  // v0 = [wordCount, _, _, _]
+  v0: vec4<u32>,
+};
+
+@group(0) @binding(0) var<storage, read> srcWords: array<u32>;
+@group(0) @binding(1) var<storage, read_write> dstWords: array<u32>;
+@group(0) @binding(2) var<uniform> migrationParams: MigrationParams;
+
+@compute @workgroup_size(${WEBGPU_RENDER_CONTRACT.computeMigrationWorkgroupSize})
+fn cs_main(@builtin(global_invocation_id) gid: vec3<u32>) {
+  let wordCount = migrationParams.v0.x;
+  if (gid.x >= wordCount) {
+    return;
+  }
+  dstWords[gid.x] = srcWords[gid.x];
 }
 `;
 

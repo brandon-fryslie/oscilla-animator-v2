@@ -232,12 +232,17 @@ export function executeAnimationFrame(
   const renderStart = performance.now();
   const { zoom, pan } = store.viewport;
   const frameToRender = frame ?? EMPTY_RENDER_FRAME;
+  const shapeBank = currentState.shapeBank;
+  if (!shapeBank) {
+    throw new Error('AnimationLoop: RuntimeState.shapeBank is required for WebGPU rendering');
+  }
   // [LAW:one-source-of-truth] The active draw-prep shader comes from the
   // compiled program contract; renderer selection has one canonical source.
   const drawPrepShaderWgsl = currentProgram?.drawPrepProgram?.wgsl;
   const inputChannels = resolveRendererInputChannels(currentState);
   renderer.render({
     frame: frameToRender,
+    shapeBank,
     width: canvas.width,
     height: canvas.height,
     zoom,
