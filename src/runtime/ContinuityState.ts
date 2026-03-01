@@ -212,12 +212,12 @@ function resolveGaugeLayoutBacking(
   }
   const arena = continuity.gaugeArena;
   if (!arena) {
-    throw new Error(`getOrCreateTargetState: missing gauge arena for target ${targetId}`);
+    throw new Error(`resolveGaugeLayoutBacking: missing gauge arena for target ${targetId}`);
   }
   const { offset, length } = layout.descriptor;
   if (offset < 0 || length < 0 || offset + length > arena.length) {
     throw new Error(
-      `getOrCreateTargetState: gauge descriptor out of bounds for target ${targetId} (offset=${offset}, length=${length}, arena=${arena.length})`,
+      `resolveGaugeLayoutBacking: gauge descriptor out of bounds for target ${targetId} (offset=${offset}, length=${length}, arena=${arena.length})`,
     );
   }
   return arena.subarray(offset, offset + length);
