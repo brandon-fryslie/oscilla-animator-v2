@@ -11,6 +11,9 @@
 
 import type { DomainInstance } from '../compiler/ir/types';
 
+const EMPTY_ELEMENT_IDS = new Uint32Array(0);
+const stableElementIdCache = new Map<string, Uint32Array>();
+
 /**
  * Generate deterministic element IDs for a domain (spec §3.2).
  * IDs are monotonic integers starting from seed.
@@ -27,10 +30,18 @@ export function generateElementIds(
   count: number,
   seed: number = 0
 ): Uint32Array {
+  const cacheKey = String(seed) + ':' + String(count);
+  const cached = stableElementIdCache.get(cacheKey);
+  if (cached) {
+    return cached;
+  }
   const ids = new Uint32Array(count);
   for (let i = 0; i < count; i++) {
     ids[i] = seed + i;
   }
+  // [LAW:one-source-of-truth] Stable identity vectors are memoized in one
+  // module-owned cache so deterministic domains reuse the same backing IDs.
+  stableElementIdCache.set(cacheKey, ids);
   return ids;
 }
 
@@ -74,9 +85,33 @@ export function createUnstableDomainInstance(
 ): DomainInstance {
   return {
     count,
-    elementId: new Uint32Array(0), // Empty - no identity
+    elementId: EMPTY_ELEMENT_IDS, // Empty - no identity
     identityMode: 'none',
   };
+}
+
+export function shouldRebuildDomainInstance(
+  previousDomain: DomainInstance | undefined,
+  count: number,
+  identityMode: DomainInstance['identityMode'],
+  seed: number,
+): boolean {
+  if (!previousDomain) {
+    return true;
+  }
+  if (previousDomain.count !== count) {
+    return true;
+  }
+  if (previousDomain.identityMode !== identityMode) {
+    return true;
+  }
+  if (identityMode === 'stable') {
+    if (count === 0) {
+      return false;
+    }
+    return previousDomain.elementId[0] !== seed;
+  }
+  return false;
 }
 
 /**

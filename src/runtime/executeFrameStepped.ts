@@ -14,7 +14,7 @@
 
 import type { CompiledProgramIR } from '../compiler/ir/program';
 import type { ScheduleIR } from '../compiler/backend/schedule-program';
-import type { Step, InstanceDecl, DomainInstance, StepRender, StateMapping, StableStateId } from '../compiler/ir/types';
+import type { Step, InstanceDecl, StepRender, StateMapping, StableStateId } from '../compiler/ir/types';
 import type { IrInstanceId as InstanceId } from '../types';
 import { instanceId as makeInstanceId } from '../core/ids';
 import type { RuntimeState } from './RuntimeState';
@@ -29,7 +29,11 @@ import {
 } from './RuntimeState';
 import { detectDomainChange, recordDomainTransition } from './ContinuityMapping';
 import { applyContinuity, finalizeContinuityFrame } from './ContinuityApply';
-import { createStableDomainInstance, createUnstableDomainInstance } from './DomainIdentity';
+import {
+  createStableDomainInstance,
+  createUnstableDomainInstance,
+  shouldRebuildDomainInstance,
+} from './DomainIdentity';
 import { assembleRenderFrame, type AssemblerContext } from './RenderAssembler';
 import { resolveCameraFromGlobals } from './CameraResolver';
 import { payloadStride } from '../core/canonical-types';
@@ -55,6 +59,24 @@ import { readSlotValue, readEventSlotValue, detectAnomalies } from './ValueInspe
 
 // Separate scratch allocator for stepped execution (avoid interference with production scratch)
 const STEPPED_MATERIALIZE_SCRATCH = createMaterializeScratch();
+const steppedStateSlotMappingCache = new WeakMap<ScheduleIR, ReadonlyMap<number, StateMapping>>();
+const NO_DOMAIN_CHANGE = {
+  changed: false,
+  mapping: null,
+} as const;
+
+function getSteppedStateSlotToMapping(schedule: ScheduleIR): ReadonlyMap<number, StateMapping> {
+  const cached = steppedStateSlotMappingCache.get(schedule);
+  if (cached) {
+    return cached;
+  }
+  const byStateSlot = new Map<number, StateMapping>();
+  for (const mapping of schedule.stateMappings) {
+    byStateSlot.set(mapping.slotStart, mapping);
+  }
+  steppedStateSlotMappingCache.set(schedule, byStateSlot);
+  return byStateSlot;
+}
 
 // =============================================================================
 // Helpers (duplicated from ScheduleExecutor — these are private in the original)
@@ -233,10 +255,7 @@ export function* executeFrameStepped(
   };
 
   // Build reverse lookup from state slot index to StateMapping for debug labeling
-  const stateSlotToMapping = new Map<number, StateMapping>();
-  for (const mapping of schedule.stateMappings) {
-    stateSlotToMapping.set(mapping.slotStart, mapping);
-  }
+  const stateSlotToMapping = getSteppedStateSlotToMapping(schedule);
 
   // --- PRE-FRAME SETUP ---
   state.cache.frameId++;
@@ -366,12 +385,16 @@ export function* executeFrameStepped(
         if (!instance) break;
         const count = typeof instance.count === 'number' ? instance.count : 0;
         if (count === 0) break;
-        let newDomain: DomainInstance;
-        if (instance.identityMode === 'stable') {
-          newDomain = createStableDomainInstance(count, instance.elementIdSeed ?? 0);
-        } else {
-          newDomain = createUnstableDomainInstance(count);
+        const seed = instance.elementIdSeed ?? 0;
+        const previousDomain = state.continuity.prevDomains.get(instanceId);
+        const identityMode = instance.identityMode === 'stable' ? 'stable' : 'none';
+        if (!shouldRebuildDomainInstance(previousDomain, count, identityMode, seed)) {
+          recordDomainTransition(state.continuity, instanceId, NO_DOMAIN_CHANGE);
+          break;
         }
+        const newDomain = identityMode === 'stable'
+          ? createStableDomainInstance(count, seed)
+          : createUnstableDomainInstance(count);
         const change = detectDomainChange(instanceId, newDomain, state.continuity.prevDomains);
         // [LAW:single-enforcer] Continuity transition ownership is enforced at one boundary.
         recordDomainTransition(state.continuity, instanceId, change);

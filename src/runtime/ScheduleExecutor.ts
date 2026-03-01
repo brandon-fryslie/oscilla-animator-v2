@@ -7,7 +7,7 @@
 
 import type { CompiledProgramIR } from '../compiler/ir/program';
 import type { ScheduleIR } from '../compiler/backend/schedule-program';
-import type { Step, InstanceDecl, DomainInstance, StepRender } from '../compiler/ir/types';
+import type { Step, InstanceDecl, StepRender } from '../compiler/ir/types';
 import type { IrInstanceId as InstanceId } from '../types';
 import { instanceId as makeInstanceId } from '../core/ids';
 import type { RuntimeState } from './RuntimeState';
@@ -29,7 +29,11 @@ import {
 } from './executor-init';
 import { detectDomainChange, recordDomainTransition } from './ContinuityMapping';
 import { applyContinuity, finalizeContinuityFrame } from './ContinuityApply';
-import { createStableDomainInstance, createUnstableDomainInstance } from './DomainIdentity';
+import {
+  createStableDomainInstance,
+  createUnstableDomainInstance,
+  shouldRebuildDomainInstance,
+} from './DomainIdentity';
 import { assembleRenderFrame, type AssemblerContext } from './RenderAssembler';
 import { resolveCameraFromGlobals } from './CameraResolver';
 import type { CanonicalType } from '../core/canonical-types';
@@ -142,6 +146,30 @@ function resolveSlotOffsetFromMap(slotLookupMap: ReadonlyMap<ValueSlot, SlotLook
   return lookup;
 }
 
+const stateSlotMappingCache = new WeakMap<
+  ScheduleIR,
+  ReadonlyMap<number, ScheduleIR['stateMappings'][number]>
+>();
+const NO_DOMAIN_CHANGE = {
+  changed: false,
+  mapping: null,
+} as const;
+
+function getStateSlotToMapping(
+  schedule: ScheduleIR,
+): ReadonlyMap<number, ScheduleIR['stateMappings'][number]> {
+  const cached = stateSlotMappingCache.get(schedule);
+  if (cached) {
+    return cached;
+  }
+  const byStateSlot = new Map<number, ScheduleIR['stateMappings'][number]>();
+  for (const mapping of schedule.stateMappings) {
+    byStateSlot.set(mapping.slotStart, mapping);
+  }
+  stateSlotMappingCache.set(schedule, byStateSlot);
+  return byStateSlot;
+}
+
 // Module-level callback for events.forEach (hoisted to avoid per-frame closure)
 function _clearEventPayloads(payloads: unknown[]): void {
   payloads.length = 0;
@@ -242,10 +270,7 @@ export function executeFrame(
   const timeModel = schedule.timeModel;
   const instances = schedule.instances;
   const steps = schedule.steps;
-  const stateSlotToMapping = new Map<number, (typeof schedule.stateMappings)[number]>();
-  for (const mapping of schedule.stateMappings) {
-    stateSlotToMapping.set(mapping.slotStart, mapping);
-  }
+  const stateSlotToMapping = getStateSlotToMapping(schedule);
 
   // [LAW:one-source-of-truth] Single address table for all slot/expr/field queries.
   // slotToArena replaces all direct program.arenaLayout[slot] accesses in this file.
@@ -451,23 +476,24 @@ export function executeFrame(
         const count = typeof instance.count === 'number' ? instance.count : 0;
         if (count === 0) break;
 
-        // Create DomainInstance from InstanceDecl
-        // Use identity mode from instance declaration
-        let newDomain: DomainInstance;
-        if (instance.identityMode === 'stable') {
-          // Stable identity: generate deterministic element IDs
-          const seed = instance.elementIdSeed ?? 0;
-          newDomain = createStableDomainInstance(count, seed);
-        } else {
-          // No identity: crossfade fallback required
-          newDomain = createUnstableDomainInstance(count);
+        const seed = instance.elementIdSeed ?? 0;
+        const previousDomain = state.continuity.prevDomains.get(instanceId);
+        const identityMode = instance.identityMode === 'stable' ? 'stable' : 'none';
+        if (!shouldRebuildDomainInstance(previousDomain, count, identityMode, seed)) {
+          // [LAW:dataflow-not-control-flow] Continuity transition recording runs
+          // every frame; unchanged domains emit canonical "no change" data.
+          recordDomainTransition(state.continuity, instanceId, NO_DOMAIN_CHANGE);
+          break;
         }
+        const newDomain = identityMode === 'stable'
+          ? createStableDomainInstance(count, seed)
+          : createUnstableDomainInstance(count);
 
         // Detect domain change and compute mapping
         const change = detectDomainChange(
           instanceId,
           newDomain,
-          state.continuity.prevDomains
+          state.continuity.prevDomains,
         );
         // [LAW:one-source-of-truth] Domain transition ownership is updated through
         // a single continuity mapping boundary.

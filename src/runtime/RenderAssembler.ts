@@ -69,6 +69,7 @@ import type { RenderBufferArena } from '../render/RenderBufferArena';
  * Topology verbs are static — no need to copy every frame.
  */
 const _topologyVerbsCache = new Map<TopologyId, Uint8Array>();
+const _arenaSliceCache = new WeakMap<Float32Array, Map<number, Map<number, Float32Array>>>();
 
 function getCachedVerbs(topology: PathTopologyDef): Uint8Array {
   let cached = _topologyVerbsCache.get(topology.id);
@@ -78,6 +79,32 @@ function getCachedVerbs(topology: PathTopologyDef): Uint8Array {
     _topologyVerbsCache.set(topology.id, cached);
   }
   return cached;
+}
+
+function getCachedArenaSlice(
+  arena: Float32Array,
+  start: number,
+  end: number,
+): Float32Array {
+  let slicesByStart = _arenaSliceCache.get(arena);
+  if (!slicesByStart) {
+    slicesByStart = new Map<number, Map<number, Float32Array>>();
+    _arenaSliceCache.set(arena, slicesByStart);
+  }
+  let slicesByEnd = slicesByStart.get(start);
+  if (!slicesByEnd) {
+    slicesByEnd = new Map<number, Float32Array>();
+    slicesByStart.set(start, slicesByEnd);
+  }
+  const cached = slicesByEnd.get(end);
+  if (cached) {
+    return cached;
+  }
+  const created = arena.subarray(start, end);
+  // [LAW:verifiable-goals] Cache key path avoids per-call string construction so
+  // direct numeric slot reads can remain allocation-free on repeated frames.
+  slicesByEnd.set(end, created);
+  return created;
 }
 
 // =============================================================================
@@ -757,14 +784,26 @@ function resolveNumericSlotBuffer(
       );
     }
 
-    const canUseDirectSlice =
+    const packing = arenaDesc.packing ?? 'soa';
+    const laneStride = arenaDesc.laneStride ?? (packing === 'soa' ? 1 : arenaDesc.stride);
+    const componentStride = arenaDesc.componentStride ?? (packing === 'soa' ? arenaDesc.laneCount : 1);
+    const isDirectAosLayout =
       laneCount === arenaDesc.laneCount &&
       !arenaDesc.componentOffsets &&
-      (arenaDesc.packing ?? 'aos') === 'aos' &&
-      (arenaDesc.laneStride === undefined || arenaDesc.laneStride === arenaDesc.stride) &&
-      (arenaDesc.componentStride === undefined || arenaDesc.componentStride === 1);
-    if (canUseDirectSlice) {
-      return state.arena.subarray(arenaDesc.offset, arenaDesc.offset + arenaDesc.length);
+      packing === 'aos' &&
+      laneStride === arenaDesc.stride &&
+      componentStride === 1;
+    const isDirectScalarLayout =
+      laneCount === arenaDesc.laneCount &&
+      !arenaDesc.componentOffsets &&
+      arenaDesc.stride === 1 &&
+      laneStride === 1;
+    if (isDirectAosLayout || isDirectScalarLayout) {
+      return getCachedArenaSlice(
+        state.arena,
+        arenaDesc.offset,
+        arenaDesc.offset + arenaDesc.length,
+      );
     }
 
     const requiredLength = laneCount * arenaDesc.stride;
