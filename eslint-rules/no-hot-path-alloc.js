@@ -67,8 +67,12 @@ const LOOP_NODE_TYPES = new Set([
 ]);
 
 function isInsideLoop(context, node) {
-  // [LAW:verifiable-goals] The gate enforces a deterministic, machine-checkable
+  // [LAW:verifiable-goals] The gate enforces a syntactic, machine-checkable
   // budget: no allocations inside per-iteration hot loops.
+  // NOTE: This is a syntactic-only check. Allocations inside helper functions
+  // *called* from loops are not caught by this rule. Architectural discipline
+  // (code review, naming conventions) is required to prevent helper-based bypasses
+  // in hot-path code.
   const ancestors = context.getAncestors
     ? context.getAncestors()
     : context.sourceCode.getAncestors(node);
@@ -102,7 +106,7 @@ export default {
     type: 'problem',
     docs: {
       description:
-        'Disallow heap allocations in hot-path files. Allocations cause GC pauses and frame drops.',
+        'Disallow heap allocations syntactically inside loop constructs in hot-path files. Note: allocations in helper functions called from loops are not caught by this rule.',
     },
     messages: {
       objectLiteral:
