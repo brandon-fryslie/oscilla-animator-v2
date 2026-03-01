@@ -162,6 +162,10 @@ describe('phase-boundary assertion', () => {
       0,
       1,
       program.arenaTotalFloats,
+      0,
+      undefined,
+      undefined,
+      program.arenaRuntimeLayout,
     );
     expect(() => executeFrame(program, state, getTestArena(), 100)).not.toThrow();
   });
@@ -175,6 +179,10 @@ describe('phase-boundary assertion', () => {
       0,
       1,
       program.arenaTotalFloats,
+      0,
+      undefined,
+      undefined,
+      program.arenaRuntimeLayout,
     );
     expect(() =>
       executeFrame(program, state, getTestArena(), 100, { assertCardinalitySlotWrites: true })
@@ -190,6 +198,10 @@ describe('phase-boundary assertion', () => {
       0,
       1,
       program.arenaTotalFloats,
+      0,
+      undefined,
+      undefined,
+      program.arenaRuntimeLayout,
     );
     expect(() => executeFrame(program, state, getTestArena(), 100)).not.toThrow();
   });

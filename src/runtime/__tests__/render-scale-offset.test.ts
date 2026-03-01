@@ -82,6 +82,10 @@ describe('Render scale reads arena by slot descriptor offset', () => {
       0,
       program.valueExprs.nodes.length,
       program.arenaTotalFloats,
+      0,
+      undefined,
+      undefined,
+      program.arenaRuntimeLayout,
     );
     const arena = getTestArena();
 

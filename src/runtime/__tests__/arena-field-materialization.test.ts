@@ -42,6 +42,10 @@ function stateFor(program: ReturnType<typeof compileOk>) {
     schedule.eventCount ?? 0,
     program.valueExprs.nodes.length,
     program.arenaTotalFloats,
+    0,
+    undefined,
+    undefined,
+    program.arenaRuntimeLayout,
   );
 }
 

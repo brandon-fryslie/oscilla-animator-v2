@@ -76,6 +76,8 @@ function makeMinimalProgram(opts: {
 function makeEmptyContinuity(): ContinuityState {
   return {
     targets: new Map(),
+    gaugeArena: null,
+    gaugeLayouts: new Map(),
     targetOwners: new Map(),
     mappings: new Map(),
     prevDomains: new Map(),
