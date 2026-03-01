@@ -1,0 +1,88 @@
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { debugService } from '../DebugService';
+import type { EdgeMetadata } from '../mapDebugEdges';
+import { FLOAT, VEC2, canonicalScalar } from '../../core/canonical-types';
+import { valueSlot } from '../../types';
+
+function edgeMeta(slot: number, type: ReturnType<typeof canonicalScalar>): EdgeMetadata {
+  return {
+    slotId: valueSlot(slot),
+    type,
+  };
+}
+
+describe('DebugService spy readback integration', () => {
+  beforeEach(() => {
+    debugService.clear();
+  });
+
+  afterEach(() => {
+    debugService.clear();
+  });
+
+  it('tracks scalar slots from tracked history keys with ref-count semantics', () => {
+    const key = { kind: 'edge' as const, edgeId: 'edge-1' };
+    const map = new Map<string, EdgeMetadata>([
+      ['edge-1', edgeMeta(5, canonicalScalar(FLOAT))],
+    ]);
+
+    debugService.setEdgeToSlotMap(map);
+    debugService.setPortToSlotMap(new Map());
+
+    expect(debugService.getTrackedSpyScalarSlots()).toEqual([]);
+
+    debugService.trackHistoryKey(key);
+    expect(debugService.getTrackedSpyScalarSlots()).toEqual([valueSlot(5)]);
+
+    debugService.trackHistoryKey(key);
+    expect(debugService.getTrackedSpyScalarSlots()).toEqual([valueSlot(5)]);
+
+    debugService.untrackHistoryKey(key);
+    expect(debugService.getTrackedSpyScalarSlots()).toEqual([valueSlot(5)]);
+
+    debugService.untrackHistoryKey(key);
+    expect(debugService.getTrackedSpyScalarSlots()).toEqual([]);
+  });
+
+  it('rejects non-scalar (stride>1) payloads from spy-slot tracking', () => {
+    const key = { kind: 'edge' as const, edgeId: 'edge-vec2' };
+    const map = new Map<string, EdgeMetadata>([
+      ['edge-vec2', edgeMeta(11, canonicalScalar(VEC2))],
+    ]);
+
+    debugService.setEdgeToSlotMap(map);
+    debugService.setPortToSlotMap(new Map());
+
+    debugService.trackHistoryKey(key);
+    expect(debugService.getTrackedSpyScalarSlots()).toEqual([]);
+  });
+
+  it('applies async spy readback value + metadata and avoids duplicate history writes on query', () => {
+    const key = { kind: 'edge' as const, edgeId: 'edge-readback' };
+    const slot = valueSlot(17);
+    const map = new Map<string, EdgeMetadata>([
+      ['edge-readback', edgeMeta(17, canonicalScalar(FLOAT))],
+    ]);
+
+    debugService.setEdgeToSlotMap(map);
+    debugService.setPortToSlotMap(new Map());
+    debugService.setArenaRef(
+      new Float32Array([42]),
+      new Map([[slot, { offset: 0, stride: 1, laneCount: 1, length: 1 }]]),
+    );
+    debugService.trackHistoryKey(key);
+
+    debugService.applySpyReadback(slot, 42, 1200, 9);
+
+    const value = debugService.tryGetEdgeValue('edge-readback');
+    expect(value).toMatchObject({ kind: 'scalar', value: 42, slotId: slot });
+
+    const meta = debugService.getSlotSpyReadbackMeta(slot);
+    expect(meta).toEqual({ capturedAtMs: 1200, frameId: 9 });
+
+    const history = debugService.historyService.getHistory(key);
+    expect(history).toBeTruthy();
+    expect(history!.writeIndex).toBe(1);
+    expect(history!.buffer[0]).toBe(42);
+  });
+});

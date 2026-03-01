@@ -42,6 +42,19 @@ import {
 import { debugSettings } from '../settings/tokens/debug-settings';
 import { compilerFlagsSettings } from '../settings/tokens/compiler-flags-settings';
 import { appSettings } from '../settings/tokens/app-settings';
+import { arenaRead } from '../runtime/ArenaValueStore';
+import type { ValueSlot } from '../types';
+
+export interface RuntimeSpyReadbackEntry {
+  readonly slotId: ValueSlot;
+  readonly value: number;
+}
+
+export interface RuntimeSpyReadbackPacket {
+  readonly capturedAtMs: number;
+  readonly frameId: number;
+  readonly entries: readonly RuntimeSpyReadbackEntry[];
+}
 
 function isCompileWorkerUnavailableError(err: unknown): boolean {
   const message = err instanceof Error ? err.message : String(err);
@@ -78,6 +91,11 @@ export class RuntimeService {
   private readonly liveRecompile: LiveRecompileController = createLiveRecompileController();
   private statsSink: ((statsText: string) => void) | null;
   private runtimeReadySink: (() => void) | null;
+  private unsubSpyTracking: (() => void) | null = null;
+  private spyReadbackTimer: ReturnType<typeof setTimeout> | null = null;
+  private spyReadbackLoopActive = false;
+  private spyReadbackInFlight = false;
+  private spyReadbackHz = 15;
 
   constructor(
     private readonly store: RootStore,
@@ -401,6 +419,7 @@ export class RuntimeService {
       this.animationState,
       this.handleAnimationLoopError,
     );
+    this.bindSpyReadbackTracking();
 
     // Persist current patch immediately after initial compile
     // (covers the case where we loaded a default demo)
@@ -415,6 +434,9 @@ export class RuntimeService {
     setRenderIssueReporter(null);
     this.animationLoop?.stop();
     this.animationLoop = null;
+    this.stopSpyReadbackLoop();
+    this.unsubSpyTracking?.();
+    this.unsubSpyTracking = null;
     if (this.swapRafId !== null) {
       cancelAnimationFrame(this.swapRafId);
       this.swapRafId = null;
@@ -437,5 +459,132 @@ export class RuntimeService {
     this.arena = null;
     this.statsSink = null;
     this.runtimeReadySink = null;
+  }
+
+  private bindSpyReadbackTracking(): void {
+    this.unsubSpyTracking?.();
+    this.unsubSpyTracking = debugService.onTrackedSpyScalarSlotsChange((trackedSlotCount) => {
+      this.syncSpyReadbackLoopForTrackedSlots(trackedSlotCount);
+    });
+    this.syncSpyReadbackLoopForTrackedSlots(debugService.getTrackedSpyScalarSlots(1).length);
+  }
+
+  private syncSpyReadbackLoopForTrackedSlots(trackedSlotCount: number): void {
+    if (trackedSlotCount > 0) {
+      this.startSpyReadbackLoop();
+      return;
+    }
+    this.stopSpyReadbackLoop();
+  }
+
+  private startSpyReadbackLoop(): void {
+    if (this.spyReadbackLoopActive && this.spyReadbackTimer !== null) {
+      return;
+    }
+    this.spyReadbackLoopActive = true;
+    const schedule = (): void => {
+      if (!this.spyReadbackLoopActive) {
+        return;
+      }
+      if (debugService.getTrackedSpyScalarSlots(1).length === 0) {
+        this.stopSpyReadbackLoop();
+        return;
+      }
+      const intervalMs = 1000 / Math.max(1, this.spyReadbackHz);
+      this.spyReadbackTimer = setTimeout(() => {
+        if (!this.spyReadbackLoopActive) {
+          this.spyReadbackTimer = null;
+          return;
+        }
+        this.spyReadbackTimer = null;
+        try {
+          this.runSpyReadbackCycle();
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          this.store.diagnostics.log({
+            level: 'error',
+            message: `Spy readback cycle failed: ${message}`,
+          });
+        }
+        schedule();
+      }, intervalMs);
+    };
+    schedule();
+  }
+
+  private stopSpyReadbackLoop(): void {
+    this.spyReadbackLoopActive = false;
+    if (this.spyReadbackTimer !== null) {
+      clearTimeout(this.spyReadbackTimer);
+      this.spyReadbackTimer = null;
+    }
+    this.spyReadbackInFlight = false;
+  }
+
+  private runSpyReadbackCycle(): void {
+    if (this.spyReadbackInFlight) {
+      return;
+    }
+    this.spyReadbackInFlight = true;
+    try {
+      const packet = this.buildSpyReadbackPacket(performance.now());
+      if (!packet || packet.entries.length === 0) {
+        return;
+      }
+      this.applySpyReadbackPacket(packet);
+    } finally {
+      this.spyReadbackInFlight = false;
+    }
+  }
+
+  private buildSpyReadbackPacket(capturedAtMs: number): RuntimeSpyReadbackPacket | null {
+    const program = this.compileState.currentProgram;
+    const state = this.compileState.currentState;
+    const table = program?.runtimeAddressTable;
+    if (!program || !state || !table) {
+      return null;
+    }
+
+    const trackedSlots = debugService.getTrackedSpyScalarSlots(16);
+    if (trackedSlots.length === 0) {
+      return null;
+    }
+
+    const entries: RuntimeSpyReadbackEntry[] = [];
+    for (const slotId of trackedSlots) {
+      const lookup = table.slotLookup.get(slotId);
+      if (!lookup || lookup.arena.laneCount !== 1 || lookup.arena.stride < 1) {
+        continue;
+      }
+      const value = arenaRead(state.arena, lookup.arena, 0, 0);
+      if (!Number.isFinite(value)) continue;
+      entries.push({
+        slotId,
+        value,
+      });
+    }
+
+    if (entries.length === 0) {
+      return null;
+    }
+
+    return {
+      capturedAtMs,
+      frameId: state.cache.frameId,
+      entries,
+    };
+  }
+
+  private applySpyReadbackPacket(packet: RuntimeSpyReadbackPacket): void {
+    // [LAW:single-enforcer] DebugService remains the single write boundary
+    // for async readback values consumed by UI/debug queries.
+    for (const entry of packet.entries) {
+      debugService.applySpyReadback(
+        entry.slotId,
+        entry.value,
+        packet.capturedAtMs,
+        packet.frameId,
+      );
+    }
   }
 }

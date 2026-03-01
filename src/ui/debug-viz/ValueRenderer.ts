@@ -14,6 +14,14 @@ import type { CanonicalType } from '../../core/canonical-types';
 import { isPayloadVar } from '../../core/inference-types';
 import type { RendererSample } from './types';
 
+export interface SpyReadbackMeta {
+  readonly capturedAtMs: number;
+  readonly nowMs: number;
+  readonly staleAfterMs?: number;
+}
+
+export type SpyReadbackFreshness = 'fresh' | 'stale' | 'invalid';
+
 // =============================================================================
 // ValueRenderer Interface
 // =============================================================================
@@ -117,6 +125,43 @@ export function getValueRenderer(type: CanonicalType): ValueRenderer {
 
   // Last resort: placeholder
   return placeholderRenderer;
+}
+
+export function getSpyReadbackAgeMs(meta: SpyReadbackMeta): number {
+  const age = meta.nowMs - meta.capturedAtMs;
+  if (!Number.isFinite(age)) return Number.POSITIVE_INFINITY;
+  return Math.max(0, age);
+}
+
+export function getSpyReadbackFreshness(meta: SpyReadbackMeta): SpyReadbackFreshness {
+  if (!Number.isFinite(meta.capturedAtMs) || !Number.isFinite(meta.nowMs)) {
+    return 'invalid';
+  }
+  const threshold = meta.staleAfterMs ?? 250;
+  return getSpyReadbackAgeMs(meta) <= Math.max(0, threshold) ? 'fresh' : 'stale';
+}
+
+/**
+ * Wraps an existing rendered value element with deterministic spy-readback metadata.
+ *
+ * This keeps renderer implementations unchanged while exposing freshness signals
+ * to UI surfaces that consume async observability data.
+ */
+export function withSpyReadbackMeta(
+  rendered: React.ReactElement,
+  meta?: SpyReadbackMeta,
+): React.ReactElement {
+  if (!meta) return rendered;
+  const freshness = getSpyReadbackFreshness(meta);
+  const ageMs = getSpyReadbackAgeMs(meta);
+  return React.createElement(
+    'span',
+    {
+      'data-spy-freshness': freshness,
+      'data-spy-age-ms': Number.isFinite(ageMs) ? Math.round(ageMs) : 'inf',
+    },
+    rendered,
+  );
 }
 
 // =============================================================================
