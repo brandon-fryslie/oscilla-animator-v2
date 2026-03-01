@@ -1,5 +1,5 @@
 ---
-applyTo: "src/**/__tests__/**/*.ts,src/**/__tests__/**/*.tsx"
+applyTo: "src/**/__tests__/**/*.{ts,tsx}"
 ---
 
 # Test Review Instructions
