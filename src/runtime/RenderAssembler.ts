@@ -74,6 +74,7 @@ const _arenaSliceCache = new WeakMap<Float32Array, Map<number, Map<number, Float
 function getCachedVerbs(topology: PathTopologyDef): Uint8Array {
   let cached = _topologyVerbsCache.get(topology.id);
   if (!cached) {
+    // eslint-disable-next-line oscilla/no-hot-path-alloc -- [LAW:verifiable-goals] One-time cache fill per static topology id.
     cached = new Uint8Array(topology.verbs);
     _topologyVerbsCache.set(topology.id, cached);
   }
@@ -957,6 +958,7 @@ function createTopologyGroup(
   pointsCount: number,
   flags: number,
 ): TopologyGroup {
+  /* eslint-disable oscilla/no-hot-path-alloc -- [LAW:verifiable-goals] Group records are allocated on topology-group misses, not per-lane math. */
   return {
     topologyId,
     controlPointsSlot,
@@ -964,6 +966,7 @@ function createTopologyGroup(
     flags,
     instanceIndices: [],
   };
+  /* eslint-enable oscilla/no-hot-path-alloc */
 }
 
 function createInstanceTransforms(compactedCopy: {

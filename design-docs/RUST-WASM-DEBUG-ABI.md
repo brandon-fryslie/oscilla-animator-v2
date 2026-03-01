@@ -70,6 +70,7 @@ Packet header:
 - `captured_at_ms: f64`
 - `runtime_frame_id: u32`
 - `sample_count: u16`
+- `packet_flags: u16` (`packet_stale`, `budget_clamped`, `subscription_invalid`, `nan_detected_any`)
 
 Per-sample descriptor:
 
@@ -80,7 +81,16 @@ Per-sample descriptor:
 - `lane_count: u16`
 - `value_offset: u32`
 - `value_len_f32: u32`
-- `flags: u16` (`fresh`, `downsampled`, `partial_budget`, `nan_detected`)
+- `sample_flags: u16` (`sample_fresh`, `sample_downsampled`, `sample_partial_budget`, `sample_nan_detected`)
+
+Flag semantics:
+
+// [LAW:one-source-of-truth] Packet freshness authority is encoded once at the packet header boundary.
+- `packet_stale=1` means no new capture was produced for this sequence; payload may repeat prior values.
+- When `packet_stale=1`, every sample in the packet must set `sample_fresh=0`.
+- `sample_fresh=1` means this sample payload reflects a new capture for the current packet sequence.
+- `budget_clamped=1` means packet-level budget trimming occurred for one or more samples.
+- `sample_partial_budget=1` marks a specific sample payload that was window-reduced/downgraded by budget policy.
 
 Payload blob:
 
@@ -165,12 +175,19 @@ No per-slot callback chatter across the boundary.
 
 ## 11. Failure/Health Signals
 
-Packet-level flags:
+Packet-level flags (`packet_flags`):
 
-- `stale` (no fresh capture in expected cadence window),
+- `packet_stale` (no fresh capture in expected cadence window),
 - `budget_clamped`,
-- `subscription_invalid` (slot no longer mapped),
-- `nan_detected` (for UI crash guard behavior).
+- `subscription_invalid` (at least one requested subscription is no longer mapped),
+- `nan_detected_any` (at least one sample payload had NaN/Inf guard condition).
+
+Per-sample flags (`sample_flags`):
+
+- `sample_fresh`,
+- `sample_downsampled`,
+- `sample_partial_budget`,
+- `sample_nan_detected`.
 
 Health query fields:
 
