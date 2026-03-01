@@ -5,10 +5,10 @@
  * field kernels, render assembler). Every allocation in the per-frame loop
  * is GC pressure that causes jank.
  *
- * Enforcement scope: syntactic loop bodies only. The rule reports allocation
- * nodes only when their AST ancestors include a loop node in the same file.
- * Helper functions called from loops are out of scope for this rule and must
- * be protected via targeted tests/review in hot-path modules.
+ * Enforcement scope: function bodies in hot-path files. Module-level setup
+ * allocations are allowed; any allocation inside a function is rejected.
+ * This prevents helper-based bypasses where allocations are moved out of loop
+ * syntax but still execute in the render/frame hot path.
  *
  * Catches:
  *   - Object literals: { ... }
@@ -63,21 +63,19 @@ const ALLOCATING_STATIC_METHODS = new Set([
   'String.raw',
 ]);
 
-const LOOP_NODE_TYPES = new Set([
-  'ForStatement',
-  'ForInStatement',
-  'ForOfStatement',
-  'WhileStatement',
-  'DoWhileStatement',
+const FUNCTION_NODE_TYPES = new Set([
+  'FunctionDeclaration',
+  'FunctionExpression',
+  'ArrowFunctionExpression',
 ]);
 
-function isInsideLoop(context, node) {
+function isInsideFunction(context, node) {
   // [LAW:verifiable-goals] The gate enforces a deterministic, machine-checkable
-  // budget: no allocations inside per-iteration hot loops.
+  // budget: no allocations in executable hot-path function bodies.
   const ancestors = context.getAncestors
     ? context.getAncestors()
     : context.sourceCode.getAncestors(node);
-  return ancestors.some((ancestor) => LOOP_NODE_TYPES.has(ancestor.type));
+  return ancestors.some((ancestor) => FUNCTION_NODE_TYPES.has(ancestor.type));
 }
 
 function staticMethodName(node) {
@@ -107,7 +105,7 @@ export default {
     type: 'problem',
     docs: {
       description:
-        'Disallow heap allocations inside syntactic loop bodies in hot-path files. Allocations cause GC pauses and frame drops.',
+        'Disallow heap allocations inside function bodies in hot-path files. Allocations cause GC pauses and frame drops.',
     },
     messages: {
       objectLiteral:
@@ -128,26 +126,22 @@ export default {
     schema: [],
   },
   create(context) {
-    // Track nesting depth inside functions that are clearly one-time setup
-    // (e.g., module-level const declarations, class constructors).
-    // For now, apply everywhere in the file — the file list is the scope control.
-
     return {
       // --- Object literals ---
       ObjectExpression(node) {
-        if (!isInsideLoop(context, node)) return;
+        if (!isInsideFunction(context, node)) return;
         context.report({ node, messageId: 'objectLiteral' });
       },
 
       // --- Array literals ---
       ArrayExpression(node) {
-        if (!isInsideLoop(context, node)) return;
+        if (!isInsideFunction(context, node)) return;
         context.report({ node, messageId: 'arrayLiteral' });
       },
 
       // --- new X() (except Error subtypes) ---
       NewExpression(node) {
-        if (!isInsideLoop(context, node)) return;
+        if (!isInsideFunction(context, node)) return;
         const name =
           node.callee.type === 'Identifier'
             ? node.callee.name
@@ -167,7 +161,7 @@ export default {
 
       // --- Allocating method calls ---
       CallExpression(node) {
-        if (!isInsideLoop(context, node)) return;
+        if (!isInsideFunction(context, node)) return;
         // Static methods: Array.from(), Object.keys(), etc.
         const sName = staticMethodName(node);
         if (sName && ALLOCATING_STATIC_METHODS.has(sName)) {
@@ -192,7 +186,7 @@ export default {
 
       // --- Template literals (allocate strings) ---
       TemplateLiteral(node) {
-        if (!isInsideLoop(context, node)) return;
+        if (!isInsideFunction(context, node)) return;
         // Only flag interpolated templates (plain `foo` without ${} is just a string literal)
         if (node.expressions.length > 0) {
           context.report({ node, messageId: 'templateLiteral' });
@@ -201,7 +195,7 @@ export default {
 
       // --- Closures ---
       ArrowFunctionExpression(node) {
-        if (!isInsideLoop(context, node)) return;
+        if (!isInsideFunction(context, node)) return;
         // Don't flag top-level (module scope) arrow functions —
         // only flag closures created inside other functions.
         // Exclude the immediate parent: a class method's FunctionExpression
@@ -220,7 +214,7 @@ export default {
       },
 
       FunctionExpression(node) {
-        if (!isInsideLoop(context, node)) return;
+        if (!isInsideFunction(context, node)) return;
         // Exclude the immediate parent from ancestor check.
         // A class method body is a FunctionExpression with MethodDefinition parent —
         // it's on the prototype, not allocated per-call.
