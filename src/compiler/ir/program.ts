@@ -196,9 +196,17 @@ export interface CompiledProgramIR {
   readonly arenaRuntimeLayout?: ArenaRuntimeLayoutIR;
 
   /**
+   * Sum of canonical slot descriptor lengths across `arenaLayout`.
+   *
+   * [LAW:one-source-of-truth] Payload capacity is emitted once by compiler
+   * zone planning and used for descriptor-sum invariant checks.
+   */
+  readonly arenaPayloadFloats: number;
+
+  /**
    * Total number of floats in the arena buffer, as computed by the arena zone
    * plan (`totalFloats`). Includes header reservation and scalar->field
-   * alignment padding, not just slot descriptor lengths.
+   * alignment padding and state/gauge zones.
    */
   readonly arenaTotalFloats: number;
 
@@ -459,6 +467,11 @@ export interface ArenaZoneRangeIR {
 export interface ArenaZonesIR {
   readonly alignment: ArenaZoneAlignmentPolicyIR;
   readonly zones: readonly ArenaZoneRangeIR[];
+  /**
+   * Sum of canonical slot descriptor lengths (scalar + field payloads).
+   * Excludes header/alignment/state/gauge zone overhead.
+   */
+  readonly payloadFloats: number;
   readonly totalFloats: number;
 }
 

@@ -520,6 +520,18 @@ function convertLinkedIRToProgram(
       arena,
     };
   });
+  const descriptorPayloadFloats = arenaLayout.reduce((sum, descriptor) => sum + descriptor.length, 0);
+  if (descriptorPayloadFloats !== arenaZonePlan.payloadFloats) {
+    // [LAW:single-enforcer] Compiler layout planning is the single boundary
+    // that guarantees descriptor-sum payload invariants.
+    throw new Error(
+      'convertLinkedIRToProgram: payload sum mismatch (layout=' +
+        descriptorPayloadFloats +
+        ', plan=' +
+        arenaZonePlan.payloadFloats +
+        ')',
+    );
+  }
 
   // Build output specs from canonical output contract only.
   const outputs: OutputSpecIR[] = [{ kind: 'renderFrame' }];
@@ -683,6 +695,7 @@ function convertLinkedIRToProgram(
     arenaLayout,
     arenaZones: arenaZonePlan.toIR(),
     arenaRuntimeLayout: arenaZonePlan.runtimeLayout,
+    arenaPayloadFloats: arenaZonePlan.payloadFloats,
     arenaTotalFloats: arenaZonePlan.totalFloats,
     drawPrepProgram,
     nagaLoweringProgram,

@@ -56,6 +56,7 @@ function testProgramConverter(
     renderGlobals: [],
     kernelRegistry: createDefaultRegistry(),
     arenaLayout: [],
+    arenaPayloadFloats: 0,
     arenaTotalFloats: 0,
   };
 }
