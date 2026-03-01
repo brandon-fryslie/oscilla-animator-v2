@@ -211,11 +211,6 @@ export interface CompiledProgramIR {
   readonly drawPrepProgram?: DrawPrepProgramIR;
 
   /**
-   * Compiler-generated compute WGSL with concrete arena offsets injected.
-   */
-  readonly generatedComputeProgram?: GeneratedComputeProgramIR;
-
-  /**
    * Compiler-generated typed Naga lowering artifact (P2-2).
    * Contains the structured module and expr/statement source-map provenance.
    */
@@ -326,11 +321,6 @@ export interface DrawPrepSinkIR {
 export interface DrawPrepProgramIR {
   readonly sinks: readonly DrawPrepSinkIR[];
   readonly wgsl: string;
-}
-
-export interface GeneratedComputeProgramIR {
-  readonly wgsl: string;
-  readonly offsetConstants: ReadonlyMap<ValueSlot, string>;
 }
 
 // =============================================================================
