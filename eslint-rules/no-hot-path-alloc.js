@@ -58,6 +58,23 @@ const ALLOCATING_STATIC_METHODS = new Set([
   'String.raw',
 ]);
 
+const LOOP_NODE_TYPES = new Set([
+  'ForStatement',
+  'ForInStatement',
+  'ForOfStatement',
+  'WhileStatement',
+  'DoWhileStatement',
+]);
+
+function isInsideLoop(context, node) {
+  // [LAW:verifiable-goals] The gate enforces a deterministic, machine-checkable
+  // budget: no allocations inside per-iteration hot loops.
+  const ancestors = context.getAncestors
+    ? context.getAncestors()
+    : context.sourceCode.getAncestors(node);
+  return ancestors.some((ancestor) => LOOP_NODE_TYPES.has(ancestor.type));
+}
+
 function staticMethodName(node) {
   if (
     node.callee.type === 'MemberExpression' &&
@@ -113,18 +130,19 @@ export default {
     return {
       // --- Object literals ---
       ObjectExpression(node) {
-        // Allow empty object in variable declarations at module scope?
-        // No — even those are suspect in hot-path files.
+        if (!isInsideLoop(context, node)) return;
         context.report({ node, messageId: 'objectLiteral' });
       },
 
       // --- Array literals ---
       ArrayExpression(node) {
+        if (!isInsideLoop(context, node)) return;
         context.report({ node, messageId: 'arrayLiteral' });
       },
 
       // --- new X() (except Error subtypes) ---
       NewExpression(node) {
+        if (!isInsideLoop(context, node)) return;
         const name =
           node.callee.type === 'Identifier'
             ? node.callee.name
@@ -144,6 +162,7 @@ export default {
 
       // --- Allocating method calls ---
       CallExpression(node) {
+        if (!isInsideLoop(context, node)) return;
         // Static methods: Array.from(), Object.keys(), etc.
         const sName = staticMethodName(node);
         if (sName && ALLOCATING_STATIC_METHODS.has(sName)) {
@@ -168,6 +187,7 @@ export default {
 
       // --- Template literals (allocate strings) ---
       TemplateLiteral(node) {
+        if (!isInsideLoop(context, node)) return;
         // Only flag interpolated templates (plain `foo` without ${} is just a string literal)
         if (node.expressions.length > 0) {
           context.report({ node, messageId: 'templateLiteral' });
@@ -176,6 +196,7 @@ export default {
 
       // --- Closures ---
       ArrowFunctionExpression(node) {
+        if (!isInsideLoop(context, node)) return;
         // Don't flag top-level (module scope) arrow functions —
         // only flag closures created inside other functions.
         // Exclude the immediate parent: a class method's FunctionExpression
@@ -194,6 +215,7 @@ export default {
       },
 
       FunctionExpression(node) {
+        if (!isInsideLoop(context, node)) return;
         // Exclude the immediate parent from ancestor check.
         // A class method body is a FunctionExpression with MethodDefinition parent —
         // it's on the prototype, not allocated per-call.

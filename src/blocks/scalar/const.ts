@@ -70,7 +70,7 @@ export function register(): void {
         throw new Error(`Const block missing resolved output type from pass1`);
       }
       const payloadType = outType.payload as PayloadType;
-      const cfg = (config ?? {}) as Readonly<Record<string, unknown>>;
+      const cfg = config as Readonly<Record<string, unknown>>;
       const hasValue = Object.prototype.hasOwnProperty.call(cfg, 'value');
       const rawValue = cfg.value;
   

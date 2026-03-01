@@ -142,7 +142,12 @@ function evaluateEventKind(
         EVENT_MATERIALIZE_SCRATCH,
         pureFnContext,
       );
-      const oneValue = oneValueBuf[0] ?? 0;
+      const oneValue = oneValueBuf[0];
+      // [LAW:single-enforcer] Event wrap semantics consume exactly one scalar
+      // from canonical materialization; missing lane is an upstream bug.
+      if (oneValue === undefined) {
+        throw new Error('Event wrap materialization produced empty scalar buffer');
+      }
 
       // NaN and Inf treated as false (spec §8.6.3)
       const predicate = (Number.isFinite(oneValue) && oneValue >= 0.5) ? 1 : 0;

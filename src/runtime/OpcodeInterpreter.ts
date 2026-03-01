@@ -87,25 +87,30 @@ import { wrapToPhase01 } from '../utilities/phase';
 // Module-level reducer functions (hoisted to avoid per-call closure allocation)
 function _reduceAdd(a: number, b: number): number { return a + b; }
 function _reduceMul(a: number, b: number): number { return a * b; }
-const UNARY_OPS = new Set<string>([
-  'neg',
-  'abs',
-  'sin',
-  'cos',
-  'tan',
-  'wrap01',
-  'floor',
-  'ceil',
-  'round',
-  'fract',
-  'sqrt',
-  'exp',
-  'log',
-  'sign',
-  'f64_to_i32_trunc',
-  'i32_to_f64',
-  'identity',
-]);
+function isUnaryOpcode(opcode: string): boolean {
+  switch (opcode) {
+    case 'neg':
+    case 'abs':
+    case 'sin':
+    case 'cos':
+    case 'tan':
+    case 'wrap01':
+    case 'floor':
+    case 'ceil':
+    case 'round':
+    case 'fract':
+    case 'sqrt':
+    case 'exp':
+    case 'log':
+    case 'sign':
+    case 'f64_to_i32_trunc':
+    case 'i32_to_f64':
+    case 'identity':
+      return true;
+    default:
+      return false;
+  }
+}
 
 /**
  * Apply an opcode to a list of values
@@ -117,7 +122,7 @@ const UNARY_OPS = new Set<string>([
 export function applyOpcode(opcode: string, values: number[]): number {
   // [LAW:single-enforcer] Arity dispatch is centralized here so all scalar
   // opcode callsites share one behavior contract.
-  if (UNARY_OPS.has(opcode)) return applyUnaryOp(opcode, values[0], values.length);
+  if (isUnaryOpcode(opcode)) return applyUnaryOp(opcode, values[0], values.length);
   return applyNaryOp(opcode, values);
 }
 
