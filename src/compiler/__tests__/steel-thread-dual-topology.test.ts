@@ -89,11 +89,11 @@ describe('Steel Thread - Dual Topology with Scale', () => {
     expect(result.program.drawPrepProgram?.sinks.length).toBe(2);
     expect(result.program.drawPrepProgram?.sinks.map((sink) => sink.sinkIndex)).toEqual([0, 1]);
     expect(result.program.drawPrepProgram?.sinks.map((sink) => sink.indirectRecordIndex)).toEqual([0, 1]);
-    expect(result.program.drawPrepProgram?.wgsl).toContain('DRAW_SINK_0_RECORD');
-    expect(result.program.drawPrepProgram?.wgsl).toContain('DRAW_SINK_1_RECORD');
-    expect(result.program.drawPrepProgram?.wgsl).toContain('INSTANCE_COUNT: u32 = 2u');
-    expect(result.program.drawPrepProgram?.wgsl).toContain('INSTANCE_COUNT: u32 = 3u');
-    expect(result.program.drawPrepProgram?.wgsl).toContain('fn resolveInstanceCount');
+    expect(result.program.drawPrepProgram?.sinks.map((sink) => sink.instanceCountMode)).toEqual(['static', 'static']);
+    expect(
+      [...(result.program.drawPrepProgram?.sinks.map((sink) => sink.staticInstanceCount) ?? [])]
+        .sort((a, b) => (a ?? 0) - (b ?? 0))
+    ).toEqual([2, 3]);
 
     const topologyIds = renderSteps.flatMap((step) => {
       if (step.shape.k === 'oneHandle') {

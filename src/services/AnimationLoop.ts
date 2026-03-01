@@ -236,9 +236,8 @@ export function executeAnimationFrame(
   if (!shapeBank) {
     throw new Error('AnimationLoop: RuntimeState.shapeBank is required for WebGPU rendering');
   }
-  // [LAW:one-source-of-truth] The active draw-prep shader comes from the
-  // compiled program contract; renderer selection has one canonical source.
-  const drawPrepShaderWgsl = currentProgram?.drawPrepProgram?.wgsl;
+  // [LAW:one-source-of-truth] WebGPU sink input is sourced from runtime state
+  // shapeBank handles only; compile-time topology snapshots are never forwarded.
   const inputChannels = resolveRendererInputChannels(currentState);
   renderer.render({
     frame: frameToRender,
@@ -250,7 +249,6 @@ export function executeAnimationFrame(
     panY: pan.y,
     timeMs: tMs,
     ...inputChannels,
-    drawPrepShaderWgsl,
   });
   state.renderTime = performance.now() - renderStart;
 
