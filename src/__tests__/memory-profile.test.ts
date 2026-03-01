@@ -12,6 +12,8 @@ import { compile } from '../compiler/compile';
 import { executeFrame } from '../runtime/ScheduleExecutor';
 import { createRuntimeState } from '../runtime/RuntimeState';
 import { RenderBufferArena } from '../render/RenderBufferArena';
+import { computeRuntimeStorageSizes, type CompiledProgramIR } from '../compiler/ir/program';
+import type { ScheduleIR } from '../compiler/backend/schedule-program';
 
 // Check if GC is exposed
 const gcAvailable = typeof global.gc === 'function';
@@ -88,8 +90,24 @@ function buildMemoryTestPatch(instanceCount: number) {
     // Wire to render
     b.wire(layout, 'controlPoints', render, 'controlPoints');
     b.wire(color, 'out', render, 'color');
-    b.wire(ellipse, 'shape', render, 'shape');
   });
+}
+
+function createStateForProgram(program: CompiledProgramIR) {
+  const schedule = program.schedule as ScheduleIR;
+  const sizes = computeRuntimeStorageSizes(program.runtimeSlots);
+  return createRuntimeState(
+    sizes.f32,
+    schedule.stateSlotCount ?? 0,
+    schedule.eventSlotCount ?? 0,
+    schedule.eventCount ?? 0,
+    program.valueExprs.nodes.length,
+    program.arenaTotalFloats,
+    0,
+    undefined,
+    undefined,
+    program.arenaRuntimeLayout,
+  );
 }
 
 describe('Memory Profile: Zero-Allocation Rendering', () => {
@@ -98,15 +116,17 @@ describe('Memory Profile: Zero-Allocation Rendering', () => {
 
   describeWithGC('Heap Growth Tests (requires --expose-gc)', () => {
     it('100 frames with 1000 instances: heap growth < 500KB', () => {
-      // NOTE: Some small allocations remain (e.g., topology.verbs copying).
-      // This test ensures we don't regress significantly.
+      // This test guards zero-allocation hot-path behavior by detecting
+      // unexpected heap growth over a sustained frame window.
       // Target: < 500KB for 100 frames (5KB/frame budget)
       const patch = buildMemoryTestPatch(1000);
       const result = compile(patch);
       if (result.kind !== 'ok') throw new Error('Compile failed');
 
       const program = result.program;
-      const state = createRuntimeState(program.slotMeta.length);
+      // [LAW:one-source-of-truth] Runtime storage sizes derive from canonical
+      // program.runtimeSlots + schedule counts, not legacy slotMeta length.
+      const state = createStateForProgram(program);
       const arena = new RenderBufferArena(50_000);
       arena.init();
 
@@ -128,21 +148,20 @@ describe('Memory Profile: Zero-Allocation Rendering', () => {
       console.log(`100 frames × 1000 instances: heap delta = ${deltaKB.toFixed(1)} KB`);
 
       if (gcAvailable) {
-        // Allow some slack for V8 internals, JIT compilation artifacts,
-        // and remaining small allocations (topology.verbs, etc.)
+        // Allow some slack for V8 internals and JIT compilation artifacts.
         expect(deltaKB).toBeLessThan(500);
       }
     });
 
     it('100 frames with 5000 instances: heap growth < 500KB', () => {
-      // NOTE: Some small allocations remain (e.g., topology.verbs copying).
-      // This test ensures we don't regress significantly.
+      // This test guards zero-allocation hot-path behavior by detecting
+      // unexpected heap growth over a sustained frame window.
       const patch = buildMemoryTestPatch(5000);
       const result = compile(patch);
       if (result.kind !== 'ok') throw new Error('Compile failed');
 
       const program = result.program;
-      const state = createRuntimeState(program.slotMeta.length);
+      const state = createStateForProgram(program);
       const arena = new RenderBufferArena(50_000);
       arena.init();
 
@@ -176,7 +195,7 @@ describe('Memory Profile: Zero-Allocation Rendering', () => {
       if (result.kind !== 'ok') throw new Error('Compile failed');
 
       const program = result.program;
-      const state = createRuntimeState(program.slotMeta.length);
+      const state = createStateForProgram(program);
       const arena = new RenderBufferArena(50_000);
       arena.init();
 

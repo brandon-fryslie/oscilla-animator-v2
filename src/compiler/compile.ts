@@ -795,7 +795,6 @@ function requireStaticInstanceCount(sink: DrawPrepSinkIR): number {
   }
   return sink.staticInstanceCount;
 }
-
 /**
  * Extract the primary expression ID from a schedule step.
  * Returns null for infrastructure steps that don't reference a value expression.

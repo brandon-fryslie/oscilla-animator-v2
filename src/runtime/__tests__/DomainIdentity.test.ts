@@ -11,6 +11,7 @@ import {
   createStableDomainInstance,
   createUnstableDomainInstance,
   extendElementIds,
+  shouldRebuildDomainInstance,
 } from '../DomainIdentity';
 
 describe('DomainIdentity', () => {
@@ -41,6 +42,12 @@ describe('DomainIdentity', () => {
       const ids1 = generateElementIds(10, 42);
       const ids2 = generateElementIds(10, 42);
       expect(ids1).toEqual(ids2);
+    });
+
+    it('reuses cached ID vectors for identical inputs', () => {
+      const ids1 = generateElementIds(8, 7);
+      const ids2 = generateElementIds(8, 7);
+      expect(ids1).toBe(ids2);
     });
   });
 
@@ -180,6 +187,23 @@ describe('DomainIdentity', () => {
       for (const id of inst2.elementId) {
         expect(set1.has(id)).toBe(false);
       }
+    });
+  });
+
+  describe('shouldRebuildDomainInstance', () => {
+    it('returns false when stable identity config is unchanged', () => {
+      const previous = createStableDomainInstance(4, 10);
+      expect(shouldRebuildDomainInstance(previous, 4, 'stable', 10)).toBe(false);
+    });
+
+    it('returns true when stable seed changes', () => {
+      const previous = createStableDomainInstance(4, 10);
+      expect(shouldRebuildDomainInstance(previous, 4, 'stable', 11)).toBe(true);
+    });
+
+    it('returns false when unstable identity config is unchanged', () => {
+      const previous = createUnstableDomainInstance(5);
+      expect(shouldRebuildDomainInstance(previous, 5, 'none', 0)).toBe(false);
     });
   });
 });
