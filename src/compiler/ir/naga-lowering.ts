@@ -747,20 +747,6 @@ function lowerStateWrite(
   );
 }
 
-function computeMaxActiveLanes(
-  schedule: ScheduleIR,
-  runtimeAddressTable: RuntimeAddressTableIR,
-): number {
-  let maxActiveLanes = 1;
-  for (const arena of runtimeAddressTable.slotToArena.values()) {
-    maxActiveLanes = Math.max(maxActiveLanes, arena.laneCount);
-  }
-  for (const mapping of schedule.stateMappings) {
-    maxActiveLanes = Math.max(maxActiveLanes, mapping.laneCount);
-  }
-  return maxActiveLanes;
-}
-
 export function lowerScheduleToNagaModule(args: {
   readonly schedule: ScheduleIR;
   readonly runtimeAddressTable: RuntimeAddressTableIR;
@@ -807,7 +793,12 @@ export function lowerScheduleToNagaModule(args: {
   }).block;
 
   const guardSource: NagaSourceMapEntryIR = { blockId: null, stepIndex: -1 };
-  const maxActiveLanes = computeMaxActiveLanes(args.schedule, args.runtimeAddressTable);
+  // [LAW:one-source-of-truth] Guard generation and compute metadata share one
+  // canonical max-lane derivation to prevent drift across lowering surfaces.
+  const maxActiveLanes = deriveMaxActiveLanes({
+    schedule: args.schedule,
+    runtimeAddressTable: args.runtimeAddressTable,
+  });
   const maxLaneExpr = ctx.addExpression(
     {
       kind: 'constant',
@@ -838,12 +829,6 @@ export function lowerScheduleToNagaModule(args: {
   );
 
   const mainFunction = ctx.emitFunction('compute_main', functionArgs);
-  // [LAW:one-source-of-truth] MAX_ACTIVE_LANES is derived once from canonical
-  // runtimeAddressTable + stateMappings and consumed by the Naga serializer.
-  const maxActiveLanes = deriveMaxActiveLanes({
-    schedule: args.schedule,
-    runtimeAddressTable: args.runtimeAddressTable,
-  });
 
   return {
     module: {

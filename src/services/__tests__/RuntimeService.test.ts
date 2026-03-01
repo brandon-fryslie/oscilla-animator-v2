@@ -30,6 +30,8 @@ const mocks = vi.hoisted(() => {
   }));
   const patchProgramConstants = vi.fn(() => null);
   const debugServiceClear = vi.fn();
+  const debugServiceOnTrackedSpyScalarSlotsChange = vi.fn(() => () => {});
+  const debugServiceGetTrackedSpyScalarSlots = vi.fn(() => []);
   const setErrorReporter = vi.fn();
 
   return {
@@ -50,6 +52,8 @@ const mocks = vi.hoisted(() => {
     createLiveRecompileController,
     patchProgramConstants,
     debugServiceClear,
+    debugServiceOnTrackedSpyScalarSlotsChange,
+    debugServiceGetTrackedSpyScalarSlots,
     setErrorReporter,
   };
 });
@@ -103,6 +107,8 @@ vi.mock('../ConstantPatcher', () => ({
 vi.mock('../DebugService', () => ({
   debugService: {
     clear: mocks.debugServiceClear,
+    onTrackedSpyScalarSlotsChange: mocks.debugServiceOnTrackedSpyScalarSlotsChange,
+    getTrackedSpyScalarSlots: mocks.debugServiceGetTrackedSpyScalarSlots,
   },
 }));
 
