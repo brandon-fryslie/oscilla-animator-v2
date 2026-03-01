@@ -224,6 +224,12 @@ describe('Architecture Guardrails', () => {
         scope: ['src/compiler/compile.ts'],
         maxCount: 0,
       },
+      {
+        id: 'K-P0-5',
+        pattern: "packingPreference:\\s*'aos'",
+        scope: ['src/compiler/compile.ts'],
+        maxCount: 0,
+      },
     ];
 
     for (const gate of gates) {

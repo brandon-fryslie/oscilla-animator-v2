@@ -454,7 +454,7 @@ function convertLinkedIRToProgram(
     readonly slot: ValueSlot;
     readonly type: RuntimeSlotEntry['type'];
     readonly overrideStride?: number;
-    readonly packingPreference: 'soa' | 'aos';
+    readonly packingPreference: 'soa';
   }> = [];
 
   const storageOffsets: Record<RuntimeSlotEntry['storage'], number> = {
@@ -482,13 +482,13 @@ function convertLinkedIRToProgram(
     slotMeta.push({ slot, storage, offset, stride, type });
 
     // Arena descriptor inputs: canonical zone plan decides final offset.
-    const card = requireInst(type.extent.cardinality, 'cardinality');
-    const useRenderSoaPacking = card.kind === 'many' && stride > 1;
+    // [LAW:one-source-of-truth] P0-1 SoA mandate: compiler slot planning emits
+    // canonical SoA descriptors for all runtime slots.
     arenaSlotPlanInputs.push({
       slot,
       type,
       overrideStride: slotInfo.stride,
-      packingPreference: useRenderSoaPacking ? 'soa' : 'aos',
+      packingPreference: 'soa',
     });
     runtimeSlotEntries.push({
       slot,
