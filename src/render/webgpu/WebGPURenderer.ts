@@ -1,11 +1,11 @@
 import type { DrawPathInstancesOp, PathGeometry, RenderFrameIR } from '../types';
 import { PathTessellator } from './PathTessellator';
-import { exportTopologyBankU32, getTopologyRegistryRevision } from '../../shapes/registry';
 import { InputService } from './InputService';
 import {
   DRAW_PREP_COMPUTE_WGSL,
   PATH_RENDER_WGSL,
   SIMULATION_COMPUTE_WGSL,
+  STATE_MIGRATION_COMPUTE_WGSL,
   WEBGPU_RENDER_CONTRACT,
 } from './shaders';
 
@@ -17,6 +17,11 @@ const GPU_BUFFER_USAGE = {
   UNIFORM: 0x0040,
   STORAGE: 0x0080,
   INDIRECT: 0x0100,
+  MAP_READ: 0x0001,
+} as const;
+
+const GPU_MAP_MODE = {
+  READ: 0x0001,
 } as const;
 
 const GPU_TEXTURE_USAGE = {
@@ -25,7 +30,7 @@ const GPU_TEXTURE_USAGE = {
 
 const INSTANCE_FLOATS = WEBGPU_RENDER_CONTRACT.instanceFloats;
 const MIN_INSTANCE_CAPACITY = 1024;
-const SIMULATION_CAPACITY = WEBGPU_RENDER_CONTRACT.simulationCapacity;
+const SIMULATION_INITIAL_CAPACITY = WEBGPU_RENDER_CONTRACT.simulationCapacity;
 const SIMULATION_WORKGROUP_SIZE = WEBGPU_RENDER_CONTRACT.computeWorkgroupSize;
 const DRAW_PREP_WORKGROUP_SIZE = WEBGPU_RENDER_CONTRACT.drawPrepWorkgroupSize;
 const SIMULATION_STATE_BYTES = 16;
@@ -64,6 +69,21 @@ interface RenderInput {
   readonly inputAudioHigh?: number;
   readonly inputGaugeActive?: number;
   readonly drawPrepShaderWgsl?: string;
+  readonly shapeBankTopology?: ShapeBankTopologyInput;
+}
+
+interface ShapeBankTopologyInput {
+  readonly revision: number;
+  readonly data: Uint32Array;
+  readonly indexById: ReadonlyMap<number, number>;
+}
+
+export interface IndirectArgsDebugRecord {
+  readonly indexCount: number;
+  readonly instanceCount: number;
+  readonly firstIndex: number;
+  readonly baseVertex: number;
+  readonly firstInstance: number;
 }
 
 interface PreparedDrawPathOp {
@@ -129,103 +149,208 @@ async function createStartupResources(canvas: HTMLCanvasElement): Promise<WebGPU
 }
 
 class WebGPUComputeRuntime {
-  private readonly pipeline: any;
+  private readonly simulationPipeline: any;
+  private readonly migrationPipeline: any;
   private readonly paramsBuffer: any;
-  private readonly stateBuffers: readonly [any, any];
-  private readonly bindGroups: readonly [any, any];
+  private readonly migrationParamsBuffer: any;
+  private stateBuffers: [any, any];
+  private bindGroups: [any, any];
   private readonly paramsStaging = new Float32Array(WEBGPU_RENDER_CONTRACT.computeParamsFloats);
+  private readonly migrationParamsStaging = new Uint32Array(WEBGPU_RENDER_CONTRACT.computeMigrationParamsU32);
+  private stateCapacity: number;
+  private activeStateIndex = 0;
 
-  private constructor(private readonly device: any, pipeline: any) {
-    this.pipeline = pipeline;
-
-    this.stateBuffers = [
-      device.createBuffer({
-        size: WEBGPU_RENDER_CONTRACT.inputHeaderBytes + SIMULATION_CAPACITY * SIMULATION_STATE_BYTES,
-        usage: GPU_BUFFER_USAGE.STORAGE | GPU_BUFFER_USAGE.COPY_DST | GPU_BUFFER_USAGE.COPY_SRC,
-      }),
-      device.createBuffer({
-        size: WEBGPU_RENDER_CONTRACT.inputHeaderBytes + SIMULATION_CAPACITY * SIMULATION_STATE_BYTES,
-        usage: GPU_BUFFER_USAGE.STORAGE | GPU_BUFFER_USAGE.COPY_DST | GPU_BUFFER_USAGE.COPY_SRC,
-      }),
-    ] as const;
+  private constructor(
+    private readonly device: any,
+    simulationPipeline: any,
+    migrationPipeline: any,
+    initialCapacity: number,
+  ) {
+    this.simulationPipeline = simulationPipeline;
+    this.migrationPipeline = migrationPipeline;
+    this.stateCapacity = Math.max(1, initialCapacity | 0);
+    this.stateBuffers = this.createStateBuffers(this.stateCapacity);
 
     this.paramsBuffer = device.createBuffer({
       size: WEBGPU_RENDER_CONTRACT.computeParamsFloats * Float32Array.BYTES_PER_ELEMENT,
       usage: GPU_BUFFER_USAGE.UNIFORM | GPU_BUFFER_USAGE.COPY_DST,
     });
+    this.migrationParamsBuffer = device.createBuffer({
+      size: WEBGPU_RENDER_CONTRACT.computeMigrationParamsU32 * Uint32Array.BYTES_PER_ELEMENT,
+      usage: GPU_BUFFER_USAGE.UNIFORM | GPU_BUFFER_USAGE.COPY_DST,
+    });
+    this.bindGroups = this.createSimulationBindGroups(this.stateBuffers);
 
-    const bindLayout = this.pipeline.getBindGroupLayout(WEBGPU_RENDER_CONTRACT.computeBindGroup);
-    this.bindGroups = [
-      device.createBindGroup({
-        layout: bindLayout,
-        entries: [
-          {
-            binding: WEBGPU_RENDER_CONTRACT.computeSrcStateBinding,
-            resource: { buffer: this.stateBuffers[0] },
-          },
-          {
-            binding: WEBGPU_RENDER_CONTRACT.computeDstStateBinding,
-            resource: { buffer: this.stateBuffers[1] },
-          },
-          {
-            binding: WEBGPU_RENDER_CONTRACT.computeParamsBinding,
-            resource: { buffer: this.paramsBuffer },
-          },
-        ],
-      }),
-      device.createBindGroup({
-        layout: bindLayout,
-        entries: [
-          {
-            binding: WEBGPU_RENDER_CONTRACT.computeSrcStateBinding,
-            resource: { buffer: this.stateBuffers[1] },
-          },
-          {
-            binding: WEBGPU_RENDER_CONTRACT.computeDstStateBinding,
-            resource: { buffer: this.stateBuffers[0] },
-          },
-          {
-            binding: WEBGPU_RENDER_CONTRACT.computeParamsBinding,
-            resource: { buffer: this.paramsBuffer },
-          },
-        ],
-      }),
-    ] as const;
-
-    // [LAW:single-enforcer] Compute runtime owns the src/dst safety contract.
-    // src and dst buffers must never alias.
-    if (this.stateBuffers[0] === this.stateBuffers[1]) {
-      throw new Error('WebGPUComputeRuntime: src/dst state buffers must be distinct');
-    }
+    this.assertDistinctStateBuffers(this.stateBuffers);
   }
 
   // [LAW:single-enforcer] createComputePipelineAsync is the only permitted pipeline
   // creation path (P2-1: Async Compiler Service Architecture).
   static async create(device: any): Promise<WebGPUComputeRuntime> {
-    const shaderModule = device.createShaderModule({ code: SIMULATION_COMPUTE_WGSL });
-    const pipeline = await device.createComputePipelineAsync({
-      layout: 'auto',
-      compute: {
-        module: shaderModule,
-        entryPoint: 'cs_main',
-      },
-    });
-    return new WebGPUComputeRuntime(device, pipeline);
+    const simulationShaderModule = device.createShaderModule({ code: SIMULATION_COMPUTE_WGSL });
+    const migrationShaderModule = device.createShaderModule({ code: STATE_MIGRATION_COMPUTE_WGSL });
+    const [simulationPipeline, migrationPipeline] = await Promise.all([
+      device.createComputePipelineAsync({
+        layout: 'auto',
+        compute: {
+          module: simulationShaderModule,
+          entryPoint: 'cs_main',
+        },
+      }),
+      device.createComputePipelineAsync({
+        layout: 'auto',
+        compute: {
+          module: migrationShaderModule,
+          entryPoint: 'cs_main',
+        },
+      }),
+    ]);
+    return new WebGPUComputeRuntime(
+      device,
+      simulationPipeline,
+      migrationPipeline,
+      SIMULATION_INITIAL_CAPACITY,
+    );
   }
 
-  step(
+  private static computeStateBufferSizeBytes(capacity: number): number {
+    return WEBGPU_RENDER_CONTRACT.inputHeaderBytes + capacity * SIMULATION_STATE_BYTES;
+  }
+
+  private static computeStateCopyWords(capacity: number): number {
+    return WebGPUComputeRuntime.computeStateBufferSizeBytes(capacity) >>> 2;
+  }
+
+  private createStateBuffers(capacity: number): [any, any] {
+    const size = WebGPUComputeRuntime.computeStateBufferSizeBytes(capacity);
+    return [
+      this.device.createBuffer({
+        size,
+        usage: GPU_BUFFER_USAGE.STORAGE | GPU_BUFFER_USAGE.COPY_DST | GPU_BUFFER_USAGE.COPY_SRC,
+      }),
+      this.device.createBuffer({
+        size,
+        usage: GPU_BUFFER_USAGE.STORAGE | GPU_BUFFER_USAGE.COPY_DST | GPU_BUFFER_USAGE.COPY_SRC,
+      }),
+    ];
+  }
+
+  private createSimulationBindGroups(stateBuffers: readonly [any, any]): [any, any] {
+    const bindLayout = this.simulationPipeline.getBindGroupLayout(WEBGPU_RENDER_CONTRACT.computeBindGroup);
+    return [
+      this.device.createBindGroup({
+        layout: bindLayout,
+        entries: [
+          {
+            binding: WEBGPU_RENDER_CONTRACT.computeSrcStateBinding,
+            resource: { buffer: stateBuffers[0] },
+          },
+          {
+            binding: WEBGPU_RENDER_CONTRACT.computeDstStateBinding,
+            resource: { buffer: stateBuffers[1] },
+          },
+          {
+            binding: WEBGPU_RENDER_CONTRACT.computeParamsBinding,
+            resource: { buffer: this.paramsBuffer },
+          },
+        ],
+      }),
+      this.device.createBindGroup({
+        layout: bindLayout,
+        entries: [
+          {
+            binding: WEBGPU_RENDER_CONTRACT.computeSrcStateBinding,
+            resource: { buffer: stateBuffers[1] },
+          },
+          {
+            binding: WEBGPU_RENDER_CONTRACT.computeDstStateBinding,
+            resource: { buffer: stateBuffers[0] },
+          },
+          {
+            binding: WEBGPU_RENDER_CONTRACT.computeParamsBinding,
+            resource: { buffer: this.paramsBuffer },
+          },
+        ],
+      }),
+    ];
+  }
+
+  private assertDistinctStateBuffers(stateBuffers: readonly [any, any]): void {
+    // [LAW:single-enforcer] Compute runtime owns the src/dst safety contract.
+    // src and dst buffers must never alias.
+    if (stateBuffers[0] === stateBuffers[1]) {
+      throw new Error('WebGPUComputeRuntime: src/dst state buffers must be distinct');
+    }
+  }
+
+  private dispatchMigrationCopy(
     commandEncoder: any,
-    activeCount: number,
-    dtSeconds: number,
-    inputHeader: Uint8Array,
-    frameIndex: number,
+    srcBuffer: any,
+    dstBuffer: any,
+    copyWordCount: number,
   ): void {
-    const clampedCount = Math.max(0, Math.min(SIMULATION_CAPACITY, activeCount));
+    this.migrationParamsStaging[0] = copyWordCount >>> 0;
+    this.migrationParamsStaging[1] = 0;
+    this.migrationParamsStaging[2] = 0;
+    this.migrationParamsStaging[3] = 0;
+    this.device.queue.writeBuffer(this.migrationParamsBuffer, 0, this.migrationParamsStaging);
+    const bindGroup = this.device.createBindGroup({
+      layout: this.migrationPipeline.getBindGroupLayout(WEBGPU_RENDER_CONTRACT.computeBindGroup),
+      entries: [
+        {
+          binding: WEBGPU_RENDER_CONTRACT.computeSrcStateBinding,
+          resource: { buffer: srcBuffer },
+        },
+        {
+          binding: WEBGPU_RENDER_CONTRACT.computeDstStateBinding,
+          resource: { buffer: dstBuffer },
+        },
+        {
+          binding: WEBGPU_RENDER_CONTRACT.computeParamsBinding,
+          resource: { buffer: this.migrationParamsBuffer },
+        },
+      ],
+    });
+    const pass = commandEncoder.beginComputePass();
+    pass.setPipeline(this.migrationPipeline);
+    pass.setBindGroup(WEBGPU_RENDER_CONTRACT.computeBindGroup, bindGroup);
+    pass.dispatchWorkgroups(computeDispatchWorkgroups(copyWordCount, SIMULATION_WORKGROUP_SIZE));
+    pass.end();
+  }
+
+  private ensureStateCapacity(commandEncoder: any, requiredCount: number): void {
+    if (requiredCount <= this.stateCapacity) {
+      return;
+    }
+
+    let nextCapacity = this.stateCapacity;
+    while (nextCapacity < requiredCount) {
+      nextCapacity *= 2;
+    }
+
+    const previousBuffers = this.stateBuffers;
+    const copyWordCount = WebGPUComputeRuntime.computeStateCopyWords(this.stateCapacity);
+    const nextBuffers = this.createStateBuffers(nextCapacity);
+    // [LAW:dataflow-not-control-flow] State migration always uses the same GPU
+    // dispatch path; only source/destination buffers and copy size vary by data.
+    this.dispatchMigrationCopy(commandEncoder, previousBuffers[0], nextBuffers[0], copyWordCount);
+    this.dispatchMigrationCopy(commandEncoder, previousBuffers[1], nextBuffers[1], copyWordCount);
+    previousBuffers[0].destroy();
+    previousBuffers[1].destroy();
+    this.stateBuffers = nextBuffers;
+    this.stateCapacity = nextCapacity;
+    this.assertDistinctStateBuffers(this.stateBuffers);
+    this.bindGroups = this.createSimulationBindGroups(this.stateBuffers);
+  }
+
+  step(commandEncoder: any, activeCount: number, dtSeconds: number, inputHeader: Uint8Array): void {
+    const requestedCount = Math.max(0, Math.floor(activeCount));
+    this.ensureStateCapacity(commandEncoder, requestedCount);
+    const clampedCount = Math.max(0, Math.min(this.stateCapacity, requestedCount));
     const clampedDt = Math.max(0, Math.min(0.1, dtSeconds));
-    const readStateIndex = frameIndex & 1;
 
     this.device.queue.writeBuffer(
-      this.stateBuffers[readStateIndex],
+      this.stateBuffers[this.activeStateIndex],
       0,
       inputHeader,
       0,
@@ -235,21 +360,23 @@ class WebGPUComputeRuntime {
     this.paramsStaging[0] = clampedCount;
     this.paramsStaging[1] = clampedDt;
     this.paramsStaging[2] = 0.999; // Mild damping keeps default simulation stable.
-    this.paramsStaging[3] = SIMULATION_CAPACITY;
+    this.paramsStaging[3] = this.stateCapacity;
     this.device.queue.writeBuffer(this.paramsBuffer, 0, this.paramsStaging);
 
     // [LAW:dataflow-not-control-flow] Compute pass always executes.
     // Variability is encoded in activeCount/dt values, not whether the pass runs.
     const pass = commandEncoder.beginComputePass();
-    pass.setPipeline(this.pipeline);
-    pass.setBindGroup(WEBGPU_RENDER_CONTRACT.computeBindGroup, this.bindGroups[readStateIndex]);
-    const workgroups = computeDispatchWorkgroups(SIMULATION_CAPACITY, SIMULATION_WORKGROUP_SIZE);
+    pass.setPipeline(this.simulationPipeline);
+    pass.setBindGroup(WEBGPU_RENDER_CONTRACT.computeBindGroup, this.bindGroups[this.activeStateIndex]);
+    const workgroups = computeDispatchWorkgroups(this.stateCapacity, SIMULATION_WORKGROUP_SIZE);
     pass.dispatchWorkgroups(workgroups);
     pass.end();
+    this.activeStateIndex = this.activeStateIndex ^ 1;
   }
 
   dispose(): void {
     this.paramsBuffer.destroy();
+    this.migrationParamsBuffer.destroy();
     this.stateBuffers[0].destroy();
     this.stateBuffers[1].destroy();
   }
@@ -390,6 +517,81 @@ class WebGPUDrawPrepRuntime {
   }
 }
 
+class GPUShapeBankManager {
+  private buffer: any;
+  private bindGroup: any;
+  private capacityWords = 1;
+  private revision = -1;
+  private indexById = new Map<number, number>();
+
+  constructor(
+    private readonly device: any,
+    private readonly pathPipeline: any,
+  ) {
+    this.buffer = this.device.createBuffer({
+      size: Uint32Array.BYTES_PER_ELEMENT,
+      usage: GPU_BUFFER_USAGE.STORAGE | GPU_BUFFER_USAGE.COPY_DST,
+    });
+    this.bindGroup = this.device.createBindGroup({
+      layout: this.pathPipeline.getBindGroupLayout(WEBGPU_RENDER_CONTRACT.topologyBankBindGroup),
+      entries: [
+        {
+          binding: WEBGPU_RENDER_CONTRACT.topologyBankBinding,
+          resource: { buffer: this.buffer },
+        },
+      ],
+    });
+  }
+
+  sync(source: ShapeBankTopologyInput | undefined): void {
+    if (!source) {
+      this.indexById = new Map();
+      this.revision = -1;
+      return;
+    }
+    if (source.revision === this.revision) {
+      return;
+    }
+    this.indexById = new Map(source.indexById);
+    const requiredWords = Math.max(1, source.data.length);
+    if (requiredWords > this.capacityWords) {
+      const nextBuffer = this.device.createBuffer({
+        size: requiredWords * Uint32Array.BYTES_PER_ELEMENT,
+        usage: GPU_BUFFER_USAGE.STORAGE | GPU_BUFFER_USAGE.COPY_DST,
+      });
+      this.buffer.destroy();
+      this.buffer = nextBuffer;
+      this.bindGroup = this.device.createBindGroup({
+        layout: this.pathPipeline.getBindGroupLayout(WEBGPU_RENDER_CONTRACT.topologyBankBindGroup),
+        entries: [
+          {
+            binding: WEBGPU_RENDER_CONTRACT.topologyBankBinding,
+            resource: { buffer: this.buffer },
+          },
+        ],
+      });
+      this.capacityWords = requiredWords;
+    }
+    if (source.data.length > 0) {
+      this.device.queue.writeBuffer(this.buffer, 0, source.data);
+    }
+    this.revision = source.revision;
+  }
+
+  getBindGroup(): any {
+    return this.bindGroup;
+  }
+
+  getRecordIndex(topologyId: number): number | undefined {
+    return this.indexById.get(topologyId);
+  }
+
+  dispose(): void {
+    this.buffer.destroy();
+    this.indexById.clear();
+  }
+}
+
 /**
  * WebGPU renderer that consumes RenderFrameIR directly.
  */
@@ -405,23 +607,18 @@ export class WebGPURenderer {
   private readonly pathPipeline: any;
   private readonly sceneUniformBuffer: any;
   private readonly sceneBindGroup: any;
-  private topologyBankBindGroup: any;
+  private readonly shapeBankManager: GPUShapeBankManager;
   private indirectArgsBuffer: any;
   private indirectArgsCapacityRecords = 1;
-  private topologyBankBuffer: any;
-  private topologyBankCapacityWords = 1;
-  private topologyBankRevision = -1;
-  private topologyBankIndexById = new Map<number, number>();
 
   private instanceBuffer: any;
   private instanceBindGroup: any;
   private instanceCapacity = 0;
   private instanceStaging = new Float32Array(0);
+  private lastIndirectRecordCount = 0;
 
   private lastFrameTimeMs: number | null = null;
-  // [LAW:one-source-of-truth] Renderer-owned frameIndex is the canonical swap
-  // parity source for compute read/write role selection.
-  private frameIndex = 0;
+  private frameCount = 0;
   private fatalError: Error | null = null;
   private lastConfiguredSize = { width: -1, height: -1 };
   private msaaColorTexture: any | null = null;
@@ -460,20 +657,9 @@ export class WebGPURenderer {
       size: WEBGPU_RENDER_CONTRACT.indirectArgsBytes,
       usage: GPU_BUFFER_USAGE.STORAGE | GPU_BUFFER_USAGE.INDIRECT | GPU_BUFFER_USAGE.COPY_DST,
     });
-    this.topologyBankBuffer = device.createBuffer({
-      size: Uint32Array.BYTES_PER_ELEMENT,
-      usage: GPU_BUFFER_USAGE.STORAGE | GPU_BUFFER_USAGE.COPY_DST,
-    });
-    this.topologyBankBindGroup = device.createBindGroup({
-      layout: this.pathPipeline.getBindGroupLayout(WEBGPU_RENDER_CONTRACT.topologyBankBindGroup),
-      entries: [
-        {
-          binding: WEBGPU_RENDER_CONTRACT.topologyBankBinding,
-          resource: { buffer: this.topologyBankBuffer },
-        },
-      ],
-    });
-    this.syncTopologyBank();
+    // [LAW:single-enforcer] GPU topology-bank allocation/sync is centralized
+    // in one manager shared by all render frames.
+    this.shapeBankManager = new GPUShapeBankManager(this.device, this.pathPipeline);
 
     this.instanceBuffer = device.createBuffer({
       size: MIN_INSTANCE_CAPACITY * INSTANCE_FLOATS * 4,
@@ -533,7 +719,7 @@ export class WebGPURenderer {
 
     this.assertRenderInputContract(input);
     this.ensureCanvasConfiguration(input.width, input.height);
-    this.syncTopologyBank();
+    this.shapeBankManager.sync(input.shapeBankTopology);
     this.writeSceneUniforms(input);
     // [LAW:single-enforcer] Hot-swap protocol: commit any ready async pipeline at
     // frame boundary before use (P2-1: Async Compiler Service Architecture).
@@ -548,13 +734,11 @@ export class WebGPURenderer {
     this.lastFrameTimeMs = input.timeMs;
 
     const commandEncoder = this.device.createCommandEncoder();
-    const frameIndex = this.frameIndex;
     const simulationInstanceCount = this.countSimulationInstances(drawPlan);
-    this.assertSimulationCapacity(simulationInstanceCount);
     const frameInputHeader = this.inputService.marshal({
       timeSeconds: input.timeMs / 1000,
       deltaTimeSeconds: dtSeconds,
-      frameCount: frameIndex,
+      frameCount: this.frameCount,
       width: input.width,
       height: input.height,
       mouseX: input.inputMouseX ?? 0,
@@ -565,7 +749,8 @@ export class WebGPURenderer {
       audioHigh: input.inputAudioHigh ?? 0,
       gaugeActive: input.inputGaugeActive ?? 0,
     });
-    this.computeRuntime.step(commandEncoder, simulationInstanceCount, dtSeconds, frameInputHeader, frameIndex);
+    this.computeRuntime.step(commandEncoder, simulationInstanceCount, dtSeconds, frameInputHeader);
+    this.frameCount += 1;
     const totalInstances = this.countPlannedInstances(drawPlan);
     this.ensureInstanceCapacity(totalInstances);
     const packedInstances = this.packDrawPlanInstances(drawPlan);
@@ -579,6 +764,7 @@ export class WebGPURenderer {
       );
     }
     this.ensureIndirectArgsCapacity(drawPlan.length);
+    this.lastIndirectRecordCount = drawPlan.length;
     for (const prepared of drawPlan) {
       this.drawPrepRuntime.step(
         commandEncoder,
@@ -607,7 +793,7 @@ export class WebGPURenderer {
 
     pass.setPipeline(this.pathPipeline);
     pass.setBindGroup(WEBGPU_RENDER_CONTRACT.sceneBindGroup, this.sceneBindGroup);
-    pass.setBindGroup(WEBGPU_RENDER_CONTRACT.topologyBankBindGroup, this.topologyBankBindGroup);
+    pass.setBindGroup(WEBGPU_RENDER_CONTRACT.topologyBankBindGroup, this.shapeBankManager.getBindGroup());
     // [LAW:single-enforcer] Instance storage binding is stable for the entire
     // render pass, so the pass setup is the single bind authority.
     pass.setBindGroup(WEBGPU_RENDER_CONTRACT.instanceBindGroup, this.instanceBindGroup);
@@ -618,7 +804,58 @@ export class WebGPURenderer {
 
     pass.end();
     this.device.queue.submit([commandEncoder.finish()]);
-    this.frameIndex += 1;
+  }
+
+  async readIndirectArgsDebug(
+    recordCount: number = this.lastIndirectRecordCount,
+  ): Promise<readonly IndirectArgsDebugRecord[]> {
+    if (!Number.isInteger(recordCount) || recordCount < 0) {
+      throw new Error('WebGPURenderer.readIndirectArgsDebug: recordCount must be a non-negative integer');
+    }
+    if (recordCount > this.indirectArgsCapacityRecords) {
+      throw new Error(
+        'WebGPURenderer.readIndirectArgsDebug: requested records exceed capacity (' +
+          recordCount +
+          ' > ' +
+          this.indirectArgsCapacityRecords +
+          ')',
+      );
+    }
+    if (recordCount === 0) {
+      return [];
+    }
+
+    const byteLength = recordCount * WEBGPU_RENDER_CONTRACT.indirectArgsBytes;
+    const readbackBuffer = this.device.createBuffer({
+      size: byteLength,
+      usage: GPU_BUFFER_USAGE.COPY_DST | GPU_BUFFER_USAGE.MAP_READ,
+    });
+    try {
+      const commandEncoder = this.device.createCommandEncoder();
+      // [LAW:single-enforcer] Indirect-args CPU inspection uses one explicit
+      // readback path (copy + map), keeping debug ownership at renderer boundary.
+      commandEncoder.copyBufferToBuffer(this.indirectArgsBuffer, 0, readbackBuffer, 0, byteLength);
+      this.device.queue.submit([commandEncoder.finish()]);
+      await readbackBuffer.mapAsync(GPU_MAP_MODE.READ);
+      const mappedRange = readbackBuffer.getMappedRange();
+      const words = new Uint32Array((mappedRange as ArrayBuffer).slice(0));
+      const wordsI32 = new Int32Array(words.buffer, words.byteOffset, words.length);
+      const records: IndirectArgsDebugRecord[] = [];
+      for (let i = 0; i < recordCount; i++) {
+        const base = i * WEBGPU_RENDER_CONTRACT.indirectArgsWords;
+        records.push({
+          indexCount: words[base + 0] ?? 0,
+          instanceCount: words[base + 1] ?? 0,
+          firstIndex: words[base + 2] ?? 0,
+          baseVertex: wordsI32[base + 3] ?? 0,
+          firstInstance: words[base + 4] ?? 0,
+        });
+      }
+      readbackBuffer.unmap();
+      return records;
+    } finally {
+      readbackBuffer.destroy();
+    }
   }
 
   dispose(): void {
@@ -627,7 +864,7 @@ export class WebGPURenderer {
     this.destroyMsaaColorTarget();
     this.sceneUniformBuffer.destroy();
     this.indirectArgsBuffer.destroy();
-    this.topologyBankBuffer.destroy();
+    this.shapeBankManager.dispose();
     this.instanceBuffer.destroy();
     for (const mesh of this.meshCache.values()) {
       mesh.vertexBuffer.destroy();
@@ -670,6 +907,17 @@ export class WebGPURenderer {
     for (const [name, value] of optionalFields) {
       if (value !== undefined && !Number.isFinite(value)) {
         throw new Error(`WebGPURenderer: ${name} must be finite when provided, got ${value}`);
+      }
+    }
+    const topology = input.shapeBankTopology;
+    if (topology !== undefined) {
+      if (!Number.isInteger(topology.revision) || topology.revision < 0) {
+        throw new Error(
+          `WebGPURenderer: shapeBankTopology.revision must be a non-negative integer, got ${topology.revision}`,
+        );
+      }
+      if (!(topology.data instanceof Uint32Array)) {
+        throw new Error('WebGPURenderer: shapeBankTopology.data must be Uint32Array');
       }
     }
   }
@@ -724,39 +972,6 @@ export class WebGPURenderer {
     this.msaaColorView = null;
   }
 
-  private syncTopologyBank(): void {
-    const revision = getTopologyRegistryRevision();
-    if (revision === this.topologyBankRevision) {
-      return;
-    }
-
-    const exported = exportTopologyBankU32();
-    this.topologyBankIndexById = new Map(exported.indexById);
-    const requiredWords = Math.max(1, exported.data.length);
-    if (requiredWords > this.topologyBankCapacityWords) {
-      const nextBuffer = this.device.createBuffer({
-        size: requiredWords * Uint32Array.BYTES_PER_ELEMENT,
-        usage: GPU_BUFFER_USAGE.STORAGE | GPU_BUFFER_USAGE.COPY_DST,
-      });
-      this.topologyBankBuffer.destroy();
-      this.topologyBankBuffer = nextBuffer;
-      this.topologyBankBindGroup = this.device.createBindGroup({
-        layout: this.pathPipeline.getBindGroupLayout(WEBGPU_RENDER_CONTRACT.topologyBankBindGroup),
-        entries: [
-          {
-            binding: WEBGPU_RENDER_CONTRACT.topologyBankBinding,
-            resource: { buffer: this.topologyBankBuffer },
-          },
-        ],
-      });
-      this.topologyBankCapacityWords = requiredWords;
-    }
-    if (exported.data.length > 0) {
-      this.device.queue.writeBuffer(this.topologyBankBuffer, 0, exported.data);
-    }
-    this.topologyBankRevision = revision;
-  }
-
   private writeSceneUniforms(input: RenderInput): void {
     this.sceneUniforms[0] = input.width;
     this.sceneUniforms[1] = input.height;
@@ -780,7 +995,7 @@ export class WebGPURenderer {
       if (mesh.indexCount === 0 || op.instances.count <= 0) {
         continue;
       }
-      const topologyBankRecordIndex = this.topologyBankIndexById.get(op.geometry.topologyId);
+      const topologyBankRecordIndex = this.shapeBankManager.getRecordIndex(op.geometry.topologyId);
       // [LAW:one-source-of-truth] Topology metadata is read from the canonical
       // GPU topology bank index; render ops must resolve through that mapping.
       if (topologyBankRecordIndex === undefined) {
@@ -851,16 +1066,6 @@ export class WebGPURenderer {
       total += prepared.instanceCount;
     }
     return total;
-  }
-
-  private assertSimulationCapacity(activeCount: number): void {
-    // [LAW:no-silent-fallbacks] Simulation capacity overruns are explicit
-    // contract violations; fail fast instead of silently clipping active lanes.
-    if (activeCount > SIMULATION_CAPACITY) {
-      throw new Error(
-        `WebGPURenderer: simulation instance count ${activeCount} exceeds capacity ${SIMULATION_CAPACITY}`
-      );
-    }
   }
 
   private packDrawPlanInstances(drawPlan: readonly PreparedDrawPathOp[]): number {

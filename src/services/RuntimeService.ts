@@ -108,6 +108,15 @@ export class RuntimeService {
     this.runtimeReadySink = options.onRuntimeReady ?? null;
   }
 
+  async readIndirectArgsDebug(recordCount?: number): Promise<readonly import('../render').IndirectArgsDebugRecord[]> {
+    if (!this.renderer) {
+      return [];
+    }
+    // [LAW:single-enforcer] RuntimeService is the single app-runtime boundary
+    // that exposes renderer indirect-args debug inspection.
+    return this.renderer.readIndirectArgsDebug(recordCount);
+  }
+
   setStatsSink(onStatsUpdate: ((statsText: string) => void) | null): void {
     // [LAW:no-shared-mutable-globals] RuntimeService owns the stats sink
     // explicitly; no ambient window callback is used.

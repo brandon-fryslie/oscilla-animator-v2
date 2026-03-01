@@ -3,3 +3,4 @@ export {
   createWebGPURenderer,
   assertWebGPUStartupContract,
 } from './WebGPURenderer';
+export type { IndirectArgsDebugRecord } from './WebGPURenderer';
