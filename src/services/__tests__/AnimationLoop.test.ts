@@ -10,6 +10,15 @@ vi.mock('../../runtime', () => ({
   }),
 }));
 
+function makeEmptyShapeBank() {
+  return {
+    data: new Uint32Array(1),
+    volatilePtr: 0,
+    staticBoundary: 0,
+    topologyIdByHandle: new Uint32Array(1),
+  };
+}
+
 describe('AnimationLoop', () => {
   const executeFrameMock = vi.mocked(executeFrame);
   const assertSchedulePhaseBoundaryStateReadsMock = vi.mocked(assertSchedulePhaseBoundaryStateReads);
@@ -39,6 +48,7 @@ describe('AnimationLoop', () => {
       getCurrentProgram: () => ({}),
       getCurrentState: () => ({
         health: createHealthMetrics(),
+        shapeBank: makeEmptyShapeBank(),
       }),
       getCanvas: () => ({ width: 100, height: 80 }),
       getRenderer: () => renderer,
@@ -78,6 +88,7 @@ describe('AnimationLoop', () => {
       getCurrentProgram: () => ({}),
       getCurrentState: () => ({
         health: createHealthMetrics(),
+        shapeBank: makeEmptyShapeBank(),
       }),
       getCanvas: () => ({ width: 100, height: 80 }),
       getRenderer: () => renderer,
@@ -112,6 +123,7 @@ describe('AnimationLoop', () => {
       getCurrentProgram: () => ({}),
       getCurrentState: () => ({
         health: createHealthMetrics(),
+        shapeBank: makeEmptyShapeBank(),
       }),
       getCanvas: () => ({ width: 100, height: 80 }),
       getRenderer: () => renderer,
@@ -164,6 +176,7 @@ describe('AnimationLoop', () => {
       getCurrentProgram: () => ({}),
       getCurrentState: () => ({
         health: createHealthMetrics(),
+        shapeBank: makeEmptyShapeBank(),
       }),
       getCanvas: () => ({ width: 100, height: 80 }),
       getRenderer: () => renderer,
@@ -201,6 +214,7 @@ describe('AnimationLoop', () => {
       getCurrentProgram: () => ({ drawPrepProgram: { wgsl: drawPrepShaderWgsl } }),
       getCurrentState: () => ({
         health: createHealthMetrics(),
+        shapeBank: makeEmptyShapeBank(),
       }),
       getCanvas: () => ({ width: 100, height: 80 }),
       getRenderer: () => renderer,
@@ -246,6 +260,7 @@ describe('AnimationLoop', () => {
       getCurrentProgram: () => ({}),
       getCurrentState: () => ({
         health: createHealthMetrics(),
+        shapeBank: makeEmptyShapeBank(),
         externalChannels: {
           snapshot: {
             getFloat: (name: string) => channels.get(name) ?? 0,
@@ -304,6 +319,7 @@ describe('AnimationLoop', () => {
           minFrameDelta: Infinity,
           maxFrameDelta: 0,
         },
+        shapeBank: makeEmptyShapeBank(),
       }),
       getCanvas: () => ({ width: 100, height: 100 }),
       getRenderer: () => ({
@@ -347,6 +363,7 @@ describe('AnimationLoop', () => {
       getCurrentProgram: () => ({}),
       getCurrentState: () => ({
         health: createHealthMetrics(),
+        shapeBank: makeEmptyShapeBank(),
       }),
       getCanvas: () => ({ width: 100, height: 100 }),
       getRenderer: () => renderer,
@@ -382,6 +399,7 @@ describe('AnimationLoop', () => {
       getCurrentProgram: () => ({}),
       getCurrentState: () => ({
         health: createHealthMetrics(),
+        shapeBank: makeEmptyShapeBank(),
       }),
       getCanvas: () => ({ width: 100, height: 100 }),
       getRenderer: () => ({
@@ -434,7 +452,7 @@ describe('AnimationLoop', () => {
     const currentProgram = {};
     const deps = {
       getCurrentProgram: () => currentProgram,
-      getCurrentState: () => ({ health: createHealthMetrics() }),
+      getCurrentState: () => ({ health: createHealthMetrics(), shapeBank: makeEmptyShapeBank() }),
       getCanvas: () => ({ width: 100, height: 100 }),
       getRenderer: () => ({ render: vi.fn() }),
       getArena: () => ({ reset: vi.fn(), getTotalBytes: () => 0 }),
@@ -475,6 +493,7 @@ describe('AnimationLoop', () => {
           minFrameDelta: Infinity,
           maxFrameDelta: 0,
         },
+        shapeBank: makeEmptyShapeBank(),
       }),
       getCanvas: () => ({ width: 100, height: 100 }),
       getRenderer: () => null,
