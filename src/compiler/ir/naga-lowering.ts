@@ -532,11 +532,17 @@ function deriveMaxActiveLanes(args: {
   readonly schedule: ScheduleIR;
   readonly runtimeAddressTable: RuntimeAddressTableIR;
 }): number {
-  const slotLaneCounts = Array.from(args.runtimeAddressTable.slotToArena.values()).map(
-    (arena) => arena.laneCount,
-  );
-  const stateLaneCounts = args.schedule.stateMappings.map((mapping) => mapping.laneCount);
-  const maxLaneCount = Math.max(1, ...slotLaneCounts, ...stateLaneCounts);
+  let maxLaneCount = 1;
+  for (const arena of args.runtimeAddressTable.slotToArena.values()) {
+    if (arena.laneCount > maxLaneCount) {
+      maxLaneCount = arena.laneCount;
+    }
+  }
+  for (const mapping of args.schedule.stateMappings) {
+    if (mapping.laneCount > maxLaneCount) {
+      maxLaneCount = mapping.laneCount;
+    }
+  }
   return Number.isFinite(maxLaneCount) && maxLaneCount > 0 ? Math.trunc(maxLaneCount) : 1;
 }
 
