@@ -194,6 +194,21 @@ const _continuityResolverContext: ContinuityBufferResolverContext = {
   slotToArena: new Map<ValueSlot, ArenaSlotDescriptor>(),
   state: null as unknown as RuntimeState,
 };
+const _continuityEmptyBaseBuffer = _continuityResolverContext.baseBuffer;
+const _continuityEmptyOutputBuffer = _continuityResolverContext.outputBuffer;
+const _continuityEmptySlotMap = _continuityResolverContext.slotToArena;
+
+function clearContinuityResolverContext(): void {
+  // [LAW:no-shared-mutable-globals] Clear frame-owned references immediately
+  // after continuity resolution so this module scratch context cannot retain
+  // the previous RuntimeState/arena across halted runtimes.
+  _continuityResolverContext.baseSlot = 0 as ValueSlot;
+  _continuityResolverContext.outputSlot = 0 as ValueSlot;
+  _continuityResolverContext.baseBuffer = _continuityEmptyBaseBuffer;
+  _continuityResolverContext.outputBuffer = _continuityEmptyOutputBuffer;
+  _continuityResolverContext.slotToArena = _continuityEmptySlotMap;
+  _continuityResolverContext.state = null as unknown as RuntimeState;
+}
 
 function resolveContinuityBuffer(slot: ValueSlot): Float32Array {
   if (slot === _continuityResolverContext.baseSlot) return _continuityResolverContext.baseBuffer;
@@ -560,7 +575,11 @@ export function executeFrame(
         _continuityResolverContext.outputBuffer = outputBuffer;
         _continuityResolverContext.slotToArena = slotToArena;
         _continuityResolverContext.state = state;
-        applyContinuity(step, state, resolveContinuityBuffer);
+        try {
+          applyContinuity(step, state, resolveContinuityBuffer);
+        } finally {
+          clearContinuityResolverContext();
+        }
         arenaEncodeFromAoS(state.arena, outputDesc, outputBuffer);
         state.tap?.recordFieldValue?.(outputSlot, outputBuffer);
         if (assertCardinalitySlotWrites) {

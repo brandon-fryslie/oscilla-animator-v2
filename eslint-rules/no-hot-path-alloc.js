@@ -5,8 +5,8 @@
  * field kernels, render assembler). Every allocation in the per-frame loop
  * is GC pressure that causes jank.
  *
- * Enforcement scope: function bodies in hot-path files. Module-level setup
- * allocations are allowed; any allocation inside a function is rejected.
+ * Enforcement scope: function bodies and instance class-field initializers in
+ * hot-path files. Module-level setup allocations are allowed.
  * This prevents helper-based bypasses where allocations are moved out of loop
  * syntax but still execute in the render/frame hot path.
  *
@@ -69,13 +69,27 @@ const FUNCTION_NODE_TYPES = new Set([
   'ArrowFunctionExpression',
 ]);
 
-function isInsideFunction(context, node) {
+function isInsideInstanceFieldInitializer(ancestors) {
+  return ancestors.some((ancestor) => {
+    const type = ancestor.type;
+    if (type !== 'PropertyDefinition' && type !== 'ClassProperty') {
+      return false;
+    }
+    if (ancestor.static === true) {
+      return false;
+    }
+    return ancestor.value != null;
+  });
+}
+
+function isInsideHotExecutionScope(context, node) {
   // [LAW:verifiable-goals] The gate enforces a deterministic, machine-checkable
-  // budget: no allocations in executable hot-path function bodies.
+  // budget: no allocations in executable hot-path scopes.
   const ancestors = context.getAncestors
     ? context.getAncestors()
     : context.sourceCode.getAncestors(node);
-  return ancestors.some((ancestor) => FUNCTION_NODE_TYPES.has(ancestor.type));
+  return ancestors.some((ancestor) => FUNCTION_NODE_TYPES.has(ancestor.type))
+    || isInsideInstanceFieldInitializer(ancestors);
 }
 
 function staticMethodName(node) {
@@ -105,7 +119,7 @@ export default {
     type: 'problem',
     docs: {
       description:
-        'Disallow heap allocations inside function bodies in hot-path files. Allocations cause GC pauses and frame drops.',
+        'Disallow heap allocations inside hot-path function bodies and instance field initializers. Allows explicit Error construction and focuses on syntax-level allocation forms.',
     },
     messages: {
       objectLiteral:
@@ -129,19 +143,19 @@ export default {
     return {
       // --- Object literals ---
       ObjectExpression(node) {
-        if (!isInsideFunction(context, node)) return;
+        if (!isInsideHotExecutionScope(context, node)) return;
         context.report({ node, messageId: 'objectLiteral' });
       },
 
       // --- Array literals ---
       ArrayExpression(node) {
-        if (!isInsideFunction(context, node)) return;
+        if (!isInsideHotExecutionScope(context, node)) return;
         context.report({ node, messageId: 'arrayLiteral' });
       },
 
       // --- new X() (except Error subtypes) ---
       NewExpression(node) {
-        if (!isInsideFunction(context, node)) return;
+        if (!isInsideHotExecutionScope(context, node)) return;
         const name =
           node.callee.type === 'Identifier'
             ? node.callee.name
@@ -161,7 +175,7 @@ export default {
 
       // --- Allocating method calls ---
       CallExpression(node) {
-        if (!isInsideFunction(context, node)) return;
+        if (!isInsideHotExecutionScope(context, node)) return;
         // Static methods: Array.from(), Object.keys(), etc.
         const sName = staticMethodName(node);
         if (sName && ALLOCATING_STATIC_METHODS.has(sName)) {
@@ -186,7 +200,7 @@ export default {
 
       // --- Template literals (allocate strings) ---
       TemplateLiteral(node) {
-        if (!isInsideFunction(context, node)) return;
+        if (!isInsideHotExecutionScope(context, node)) return;
         // Only flag interpolated templates (plain `foo` without ${} is just a string literal)
         if (node.expressions.length > 0) {
           context.report({ node, messageId: 'templateLiteral' });
@@ -195,7 +209,7 @@ export default {
 
       // --- Closures ---
       ArrowFunctionExpression(node) {
-        if (!isInsideFunction(context, node)) return;
+        if (!isInsideHotExecutionScope(context, node)) return;
         // Don't flag top-level (module scope) arrow functions —
         // only flag closures created inside other functions.
         // Exclude the immediate parent: a class method's FunctionExpression
@@ -214,7 +228,7 @@ export default {
       },
 
       FunctionExpression(node) {
-        if (!isInsideFunction(context, node)) return;
+        if (!isInsideHotExecutionScope(context, node)) return;
         // Exclude the immediate parent from ancestor check.
         // A class method body is a FunctionExpression with MethodDefinition parent —
         // it's on the prototype, not allocated per-call.
