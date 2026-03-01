@@ -1,8 +1,8 @@
-import type { BlockId } from '../../types/compiler';
-import type { ScheduleIR } from '../backend/schedule-program';
-import type { RuntimeAddressTableIR } from './program';
-import type { ValueExpr } from './value-expr';
-import type { ValueExprId, ValueSlot } from './Indices';
+import type { BlockId } from '../../../types/compiler';
+import type { ScheduleIR } from '../../backend/schedule-program';
+import type { RuntimeAddressTableIR } from '../program';
+import type { ValueExpr } from '../value-expr';
+import type { ValueExprId, ValueSlot } from '../Indices';
 import type {
   Step,
   StepContinuityApply,
@@ -10,7 +10,7 @@ import type {
   StepFieldStateWrite,
   StepMaterialize,
   StepStateWrite,
-} from './types';
+} from '../types';
 
 export type NagaScalarKindIR = 'f32' | 'u32' | 'bool';
 

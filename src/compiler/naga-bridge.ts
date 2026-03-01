@@ -1,4 +1,4 @@
-import type { NagaModuleIR } from './ir/naga-lowering';
+import type { NagaModuleIR } from './ir/naga-emitter';
 import initShim, { compile_ir, type ShimFormattedError } from './wasm/oscilla_naga_shim';
 
 export interface NagaCompilationResult {
