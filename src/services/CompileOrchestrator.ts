@@ -205,14 +205,6 @@ export async function compileAndSwap(
     return;
   }
 
-  if (!precomputed) {
-    // [LAW:single-enforcer] P0-0 compile ownership requires worker-precomputed
-    // frontend/backend artifacts; orchestrator is swap-only.
-    throw new Error(
-      'compileAndSwap requires precomputed compile artifacts from CompileWorkerClient',
-    );
-  }
-
   const currentPatchRevision = store.getPatchRevision();
   if (precomputed.sourcePatchRevision !== currentPatchRevision) {
     // [LAW:no-silent-fallbacks] Dropped stale worker results must be visible;
