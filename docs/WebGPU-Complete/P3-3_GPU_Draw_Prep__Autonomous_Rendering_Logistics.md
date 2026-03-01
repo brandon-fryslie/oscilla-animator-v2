@@ -60,7 +60,7 @@ The Compiler counts the number of Render blocks in the graph. Let's say there ar
 
 ## 3. The Shader Logic (draw_prep.wgsl)
 
-The compiler generates this shader dynamically based on the graph topology. It contains a switch statement or a lookup table to handle the different logic for each draw call.
+The draw-prep shader is a canonical static kernel. The compiler emits only draw-prep sink metadata (`indirectRecordIndex`, `instanceCountMode`, `staticInstanceCount`) and the runtime resolves static-vs-dynamic instance counts before dispatch.
 
 Code snippet
 
@@ -241,11 +241,11 @@ We must ensure memory coherency.
 
 1.  **Update CompiledProgramIR:** Add a RenderBlockTable that maps BlockID \$\to\$ DrawIndex.
 
-2.  **Generate draw_prep.wgsl:**
+2.  **Use canonical draw_prep.wgsl:**
 
-    - Write the switch statement generation logic in the Compiler.
+    - Keep one static shader module for draw-prep dispatch.
 
-    - Ensure constants (Shape IDs) are baked in.
+    - Consume compiler-emitted sink metadata to resolve instance-count policy per record.
 
 3.  **Update RuntimeExecutor:**
 

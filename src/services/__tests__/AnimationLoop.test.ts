@@ -204,13 +204,21 @@ describe('AnimationLoop', () => {
     expect(deps.store.viewport.setContentBounds).toHaveBeenCalledWith(null);
   });
 
-  it('does not forward draw-prep WGSL strings through renderer input', () => {
+  it('forwards compiler draw-prep sink metadata to renderer input', () => {
     const arena = { reset: vi.fn(), getTotalBytes: () => 0 };
     const renderer = { render: vi.fn() };
+    const drawPrepSinks = [{
+      sinkIndex: 0,
+      renderStepIndex: 0,
+      instanceId: 'inst-0',
+      indirectRecordIndex: 0,
+      instanceCountMode: 'static',
+      staticInstanceCount: 4,
+    }] as const;
     executeFrameMock.mockReturnValue({ version: 2, ops: [] } as any);
 
     const deps = {
-      getCurrentProgram: () => ({ drawPrepProgram: { sinks: [] } }),
+      getCurrentProgram: () => ({ drawPrepProgram: { sinks: drawPrepSinks } }),
       getCurrentState: () => ({
         health: createHealthMetrics(),
         shapeBank: makeEmptyShapeBank(),
@@ -237,6 +245,7 @@ describe('AnimationLoop', () => {
 
     const renderArg = renderer.render.mock.calls[0]?.[0];
     expect(Object.prototype.hasOwnProperty.call(renderArg ?? {}, 'drawPrepShaderWgsl')).toBe(false);
+    expect(renderArg.drawPrepSinks).toEqual(drawPrepSinks);
   });
 
   it('derives renderer input channels from the canonical external snapshot', () => {

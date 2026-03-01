@@ -759,6 +759,37 @@ describe('WebGPURenderer', () => {
     expect(computeParams[3]).toBe(WEBGPU_RENDER_CONTRACT.simulationCapacity);
   });
 
+  it('uses static draw-prep sink metadata to override per-op instance count', async () => {
+    const env = createFakeWebGPUEnvironment();
+    setNavigatorGpu(env.gpu);
+    const renderer = await createWebGPURenderer(env.canvas);
+    const topologyId = makeSimpleTopology('webgpu-draw-prep-static-sink-count-topology');
+
+    renderer.render(makeRenderInput([
+      makeDrawOp(topologyId, { count: 9 }),
+    ], {
+      drawPrepSinks: [
+        {
+          sinkIndex: 0,
+          renderStepIndex: 0,
+          instanceId: 'inst-0',
+          indirectRecordIndex: 0,
+          instanceCountMode: 'static',
+          staticInstanceCount: 4,
+        },
+      ],
+    }));
+
+    const drawPrepParamsWrite = env.device.queue.writeBuffer.mock.calls.find((args: unknown[]) =>
+      args[2] instanceof Uint32Array
+      && (args[2] as Uint32Array).length === WEBGPU_RENDER_CONTRACT.drawPrepParamsU32
+      && ((args[2] as Uint32Array)[5] === 0)
+    );
+    expect(drawPrepParamsWrite).toBeDefined();
+    const drawPrepParams = drawPrepParamsWrite?.[2] as Uint32Array;
+    expect(drawPrepParams[1]).toBe(4);
+  });
+
   it('grows compute arena geometrically and dispatches migration when simulation count exceeds current capacity', async () => {
     const env = createFakeWebGPUEnvironment();
     setNavigatorGpu(env.gpu);

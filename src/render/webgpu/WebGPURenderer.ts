@@ -74,6 +74,14 @@ interface RenderInput {
   readonly inputAudioMid?: number;
   readonly inputAudioHigh?: number;
   readonly inputGaugeActive?: number;
+  readonly drawPrepSinks?: readonly DrawPrepSinkDescriptor[];
+  readonly drawPrepShaderWgsl?: string;
+}
+
+interface DrawPrepSinkDescriptor {
+  readonly indirectRecordIndex: number;
+  readonly instanceCountMode: 'static' | 'dynamic';
+  readonly staticInstanceCount?: number;
 }
 
 interface PreparedDrawPathOp {
@@ -84,6 +92,26 @@ interface PreparedDrawPathOp {
   readonly firstInstance: number;
   readonly instanceCount: number;
   readonly pass: 'fill' | 'stroke';
+}
+
+function buildDrawPrepStaticCountLookup(
+  sinks: readonly DrawPrepSinkDescriptor[] | undefined,
+): ReadonlyMap<number, number> {
+  const staticCounts = new Map<number, number>();
+  if (!sinks) return staticCounts;
+  for (const sink of sinks) {
+    if (sink.instanceCountMode !== 'static') continue;
+    const staticCount = sink.staticInstanceCount;
+    if (typeof staticCount !== 'number' || !Number.isFinite(staticCount) || staticCount < 0) {
+      // [LAW:no-silent-fallbacks] Invalid compiler draw-prep metadata must fail
+      // fast instead of silently emitting fallback instance counts.
+      throw new Error(
+        `WebGPURenderer: static draw-prep sink ${sink.indirectRecordIndex} missing valid staticInstanceCount`,
+      );
+    }
+    staticCounts.set(sink.indirectRecordIndex, staticCount >>> 0);
+  }
+  return staticCounts;
 }
 
 interface WebGPUStartupResources {
@@ -654,14 +682,18 @@ export class WebGPURenderer {
       );
     }
     this.ensureIndirectArgsCapacity(drawPlan.length);
+    const staticDrawPrepCounts = buildDrawPrepStaticCountLookup(input.drawPrepSinks);
     for (const prepared of drawPlan) {
+      const resolvedInstanceCount =
+        staticDrawPrepCounts.get(prepared.indirectRecordIndex)
+        ?? prepared.instanceCount;
       this.drawPrepRuntime.step(
         commandEncoder,
         this.indirectArgsBuffer,
         prepared.indirectRecordIndex,
         this.indirectArgsCapacityRecords,
         prepared.mesh.indexCount,
-        prepared.instanceCount,
+        resolvedInstanceCount,
         prepared.firstInstance,
       );
     }

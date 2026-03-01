@@ -85,6 +85,7 @@ The architecture is considered aligned only if all pass:
    - atomic non-integer payload rejection
    - string interpolation exclusion in emitter lowering files
 3. Validator reports expression vs statement failures with source mapping to `visualBlockId`.
+4. Draw-prep metadata stays structured in compiler IR (`drawPrepProgram.sinks`); `compile.ts` must not assemble draw-prep WGSL source text.
 
 ## 8. Reference Documents
 - `docs/compiler/ONE-TRUE-EMITTER.md`
