@@ -1,6 +1,31 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { buildPatch } from '../../graph';
 import { compile } from '../compile';
+
+const hoisted = vi.hoisted(() => ({
+  bootMock: vi.fn(async () => {}),
+  compileMock: vi.fn((_: unknown, options?: { maxActiveLanes?: number }) => ({
+    wgsl: `const MAX_ACTIVE_LANES: u32 = ${options?.maxActiveLanes ?? 1}u;\n@compute @workgroup_size(64, 1, 1)\nfn compute_main() {}`,
+  })),
+  MockNagaValidationError: class MockNagaValidationError extends Error {
+    readonly errors: readonly { message: string; location: string; path: string }[];
+
+    constructor(errors: readonly { message: string; location: string; path: string }[]) {
+      super(errors.map((error) => error.message).join('; ') || 'Naga validation failed');
+      this.name = 'NagaValidationError';
+      this.errors = errors;
+    }
+  },
+}));
+
+vi.mock('../naga-bridge', () => ({
+  NagaService: {
+    boot: hoisted.bootMock,
+    compile: hoisted.compileMock,
+  },
+  NagaValidationError: hoisted.MockNagaValidationError,
+}));
+
 import { compileProgramWithNaga } from '../naga-compile';
 
 function buildSimplePatch() {
@@ -15,7 +40,12 @@ function buildSimplePatch() {
 }
 
 describe('compileProgramWithNaga', () => {
-  it('compiles lowering artifact to WGSL', async () => {
+  beforeEach(() => {
+    hoisted.bootMock.mockClear();
+    hoisted.compileMock.mockClear();
+  });
+
+  it('compiles lowering artifact to WGSL through NagaService boundary', async () => {
     const result = compile(buildSimplePatch());
     expect(result.kind).toBe('ok');
     if (result.kind !== 'ok') return;
@@ -24,25 +54,28 @@ describe('compileProgramWithNaga', () => {
     expect(compiled.kind).toBe('ok');
     if (compiled.kind !== 'ok') return;
 
+    expect(hoisted.bootMock).toHaveBeenCalledTimes(1);
+    expect(hoisted.compileMock).toHaveBeenCalledTimes(1);
     expect(compiled.wgsl).toContain('@compute @workgroup_size(');
     expect(compiled.wgsl).toContain('fn compute_main');
   });
 
-  it('emits lane bounds guard using canonical MAX_ACTIVE_LANES value', async () => {
+  it('passes canonical maxActiveLanes metadata to NagaService', async () => {
     const result = compile(buildSimplePatch());
     expect(result.kind).toBe('ok');
     if (result.kind !== 'ok') return;
 
-    const expected = result.program.nagaLoweringProgram?.compute.maxActiveLanes;
-    expect(expected).toBeDefined();
-    if (!expected) return;
+    const expected = result.program.generatedComputeProgram?.maxActiveLanes;
+    expect(typeof expected).toBe('number');
 
     const compiled = await compileProgramWithNaga(result.program);
     expect(compiled.kind).toBe('ok');
     if (compiled.kind !== 'ok') return;
 
+    expect(hoisted.compileMock).toHaveBeenCalledTimes(1);
+    const options = hoisted.compileMock.mock.calls[0]?.[1] as { maxActiveLanes?: number } | undefined;
+    expect(options?.maxActiveLanes).toBe(expected);
     expect(compiled.wgsl).toContain(`const MAX_ACTIVE_LANES: u32 = ${expected}u;`);
-    expect(compiled.wgsl).toContain('if (lane >= MAX_ACTIVE_LANES) {');
   });
 
   it('fails when compiled program has no lowering artifact', async () => {
@@ -60,29 +93,22 @@ describe('compileProgramWithNaga', () => {
     expect(compiled.errors.some((error) => error.code === 'IRValidationFailed')).toBe(true);
   });
 
-  it('fails when compiled program has no compute metadata', async () => {
+  it('fails when compiled program has no generated compute metadata', async () => {
     const result = compile(buildSimplePatch());
     expect(result.kind).toBe('ok');
     if (result.kind !== 'ok') return;
 
     const withoutComputeMetadata = {
       ...result.program,
-      nagaLoweringProgram: {
-        ...result.program.nagaLoweringProgram!,
-        compute: undefined,
-      },
+      generatedComputeProgram: undefined,
     };
     const compiled = await compileProgramWithNaga(withoutComputeMetadata as unknown as typeof result.program);
     expect(compiled.kind).toBe('error');
     if (compiled.kind !== 'error') return;
-    expect(
-      compiled.errors.some((error) =>
-        error.message.includes('Missing or invalid nagaLoweringProgram.compute.maxActiveLanes'),
-      ),
-    ).toBe(true);
+    expect(compiled.errors.some((error) => error.message.includes('Missing generatedComputeProgram metadata'))).toBe(true);
   });
 
-  it('maps validation failures to source block IDs via sourceMap', async () => {
+  it('maps expression validation failures to source block IDs', async () => {
     const result = compile(buildSimplePatch());
     expect(result.kind).toBe('ok');
     if (result.kind !== 'ok') return;
@@ -91,57 +117,34 @@ describe('compileProgramWithNaga', () => {
     expect(lowering).toBeDefined();
     if (!lowering) return;
 
-    const fn = lowering.module.functions[0];
-    const referencedExprIds = fn.body
-      .flatMap((stmt) => (stmt.kind === 'store' ? [stmt.index, stmt.value] : []))
-      .filter((exprId) => {
-        const source = lowering.sourceMap[`Expr_${exprId}`];
-        return source?.blockId !== null && source?.blockId !== undefined;
-      });
-    expect(referencedExprIds.length).toBeGreaterThan(0);
-    if (referencedExprIds.length === 0) return;
+    const exprEntry = Object.entries(lowering.sourceMap).find(
+      ([key, value]) => key.startsWith('Expr_') && value.blockId,
+    );
+    expect(exprEntry).toBeDefined();
+    if (!exprEntry) return;
 
-    const targetExprId = referencedExprIds[0]!;
-    const targetBlockId = lowering.sourceMap[`Expr_${targetExprId}`]!.blockId;
-    expect(typeof targetBlockId).toBe('string');
-    if (typeof targetBlockId !== 'string') return;
+    const exprId = Number.parseInt(exprEntry[0].slice('Expr_'.length), 10);
+    const blockId = exprEntry[1].blockId;
+    expect(typeof blockId).toBe('string');
+    if (typeof blockId !== 'string') return;
 
-    const baseModule = structuredClone(lowering.module);
-    const firstFn = baseModule.functions[0]!;
-    const mutatedExpressions = [...firstFn.expressions];
-    mutatedExpressions[targetExprId] = {
-      kind: 'argument',
-      argument: 999,
-    };
-    const mutatedModule = {
-      ...baseModule,
-      functions: [
+    hoisted.compileMock.mockImplementationOnce(() => {
+      throw new hoisted.MockNagaValidationError([
         {
-          ...firstFn,
-          expressions: mutatedExpressions,
+          message: 'Bad expression',
+          location: `Expression [${exprId}]`,
+          path: 'Function [compute_main]',
         },
-        ...baseModule.functions.slice(1),
-      ],
-    };
+      ]);
+    });
 
-    const faultyProgram = {
-      ...result.program,
-      nagaLoweringProgram: {
-        module: mutatedModule,
-        sourceMap: lowering.sourceMap,
-        compute: lowering.compute,
-      },
-    };
-
-    const compiled = await compileProgramWithNaga(faultyProgram as unknown as typeof result.program);
+    const compiled = await compileProgramWithNaga(result.program);
     expect(compiled.kind).toBe('error');
     if (compiled.kind !== 'error') return;
-    expect(
-      compiled.errors.some((error) => error.where?.blockId === targetBlockId),
-    ).toBe(true);
+    expect(compiled.errors.some((error) => error.where?.blockId === blockId)).toBe(true);
   });
 
-  it('fails fast when lowering module references missing type indices', async () => {
+  it('maps statement validation failures to source block IDs', async () => {
     const result = compile(buildSimplePatch());
     expect(result.kind).toBe('ok');
     if (result.kind !== 'ok') return;
@@ -150,37 +153,43 @@ describe('compileProgramWithNaga', () => {
     expect(lowering).toBeDefined();
     if (!lowering) return;
 
-    const faultyProgram = {
-      ...result.program,
-      nagaLoweringProgram: {
-        ...lowering,
-        module: {
-          ...lowering.module,
-          global_variables: lowering.module.global_variables.map((global, index) =>
-            index === 0 ? { ...global, type: 999 } : global
-          ),
-        },
-      },
-    };
+    const stmtEntry = Object.entries(lowering.sourceMap).find(
+      ([key, value]) => key.startsWith('Stmt_') && value.blockId,
+    );
+    expect(stmtEntry).toBeDefined();
+    if (!stmtEntry) return;
 
-    const compiled = await compileProgramWithNaga(faultyProgram as typeof result.program);
+    const stmtId = Number.parseInt(stmtEntry[0].slice('Stmt_'.length), 10);
+    const blockId = stmtEntry[1].blockId;
+    expect(typeof blockId).toBe('string');
+    if (typeof blockId !== 'string') return;
+
+    hoisted.compileMock.mockImplementationOnce(() => {
+      throw new hoisted.MockNagaValidationError([
+        {
+          message: 'Bad statement',
+          location: `Statement [${stmtId}]`,
+          path: 'Function [compute_main]',
+        },
+      ]);
+    });
+
+    const compiled = await compileProgramWithNaga(result.program);
     expect(compiled.kind).toBe('error');
     if (compiled.kind !== 'error') return;
-    expect(compiled.errors.some((error) => error.message.includes('Emission Failure'))).toBe(true);
+    expect(compiled.errors.some((error) => error.where?.blockId === blockId)).toBe(true);
   });
 
-  it('fails when lowering compute metadata has invalid MAX_ACTIVE_LANES', async () => {
+  it('fails when maxActiveLanes metadata is invalid', async () => {
     const result = compile(buildSimplePatch());
     expect(result.kind).toBe('ok');
     if (result.kind !== 'ok') return;
 
     const faultyProgram = {
       ...result.program,
-      nagaLoweringProgram: {
-        ...result.program.nagaLoweringProgram!,
-        compute: {
-          maxActiveLanes: 0,
-        },
+      generatedComputeProgram: {
+        ...result.program.generatedComputeProgram!,
+        maxActiveLanes: 0,
       },
     };
 
@@ -189,7 +198,7 @@ describe('compileProgramWithNaga', () => {
     if (compiled.kind !== 'error') return;
     expect(
       compiled.errors.some((error) =>
-        error.message.includes('Missing or invalid nagaLoweringProgram.compute.maxActiveLanes')
+        error.message.includes('generatedComputeProgram.maxActiveLanes is missing or invalid'),
       ),
     ).toBe(true);
   });

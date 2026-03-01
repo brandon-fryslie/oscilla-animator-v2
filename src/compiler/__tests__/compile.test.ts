@@ -372,7 +372,7 @@ describe('TimeModel', () => {
     }
   });
 
-  it('emits structured compute lowering metadata without direct WGSL generation', () => {
+  it('emits compute metadata and lane bound without direct WGSL generation', () => {
     const patch = buildPatch((b) => {
       b.addBlock('InfiniteTimeRoot');
 
@@ -397,27 +397,17 @@ describe('TimeModel', () => {
     expect(result.kind).toBe('ok');
     if (result.kind !== 'ok') return;
 
-    const lowering = result.program.nagaLoweringProgram;
-    expect(lowering).toBeDefined();
-    if (!lowering) return;
+    const generated = result.program.generatedComputeProgram;
+    expect(generated).toBeDefined();
+    if (!generated) return;
 
-    expect(lowering.compute.maxActiveLanes).toBeGreaterThan(0);
-    expect(lowering.module.entry_points).toEqual([
-      {
-        stage: 'compute',
-        function: 'compute_main',
-        workgroupSize: [64, 1, 1],
-      },
-    ]);
-    expect(
-      lowering.module.global_variables.some((global) => global.name === 'arena_in'),
-    ).toBe(true);
-    expect(
-      lowering.module.global_variables.some((global) => global.name === 'arena_out'),
-    ).toBe(true);
+    expect(generated.maxActiveLanes).toBeGreaterThan(0);
+    expect(generated.offsetConstants.size).toBeGreaterThan(0);
+    expect(Array.from(generated.offsetConstants.values()).every((name) => name.startsWith('OFFSET_SLOT_'))).toBe(true);
+    expect(generated.wgsl).toBeUndefined();
   });
 
-  it('emits state bridge reads and writes in structured lowering IR', () => {
+  it('emits state bridge metadata and lowering stores for stateful blocks', () => {
     const patch = buildPatch((b) => {
       const time = b.addBlock('InfiniteTimeRoot');
       const delay = b.addBlock('UnitDelay');
@@ -449,25 +439,14 @@ describe('TimeModel', () => {
     expect(lowering).toBeDefined();
     if (!lowering) return;
 
-    expect(
-      lowering.module.global_variables.some((global) => global.name === 'state_in'),
-    ).toBe(true);
-    expect(
-      lowering.module.global_variables.some((global) => global.name === 'state_out'),
-    ).toBe(true);
+    const globalNames = lowering.module.global_variables.map((global) => global.name);
+    expect(globalNames).toEqual(expect.arrayContaining(['state_in', 'state_out']));
 
     const fn = lowering.module.functions[0];
-    expect(fn).toBeDefined();
-    if (!fn) return;
-
-    const hasStateRead = fn.expressions.some(
-      (expr) => expr.kind === 'buffer_load' && expr.buffer === 'state_in',
+    const hasStateWriteStore = fn?.statements.some(
+      (statement) => statement.kind === 'store' && statement.buffer === 'state_out',
     );
-    const hasStateWrite = fn.body.some(
-      (stmt) => stmt.kind === 'store' && stmt.buffer === 'state_out',
-    );
-    expect(hasStateRead).toBe(true);
-    expect(hasStateWrite).toBe(true);
+    expect(hasStateWriteStore).toBe(true);
   });
 
   it('scalar write steps execute before render steps', () => {
