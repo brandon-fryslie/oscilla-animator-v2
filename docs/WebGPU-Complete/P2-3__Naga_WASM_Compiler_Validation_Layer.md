@@ -22,7 +22,7 @@ We must build a minimal Rust crate whose only job is to receive a JSON blob and 
 
 ### 1.1 Dependencies (Cargo.toml)
 
-We enable the serialize feature in Naga to allow it to ingest our JSON.
+Use the exact dependency set from `src/compiler/wasm/rust/oscilla-naga-shim/Cargo.toml`.
 
 Ini, TOML
 
@@ -37,12 +37,12 @@ crate-type = \["cdylib"\]\
 \
 \[dependencies\]\
 \# The Star of the Show\
-naga = { version = "0.19", features = \["wgsl-out", "serialize", "validate"\] }\
+naga = { version = "0.19", features = \["wgsl-in", "wgsl-out"\] }\
 \
 \# The Bridge\
 wasm-bindgen = "0.2"\
 serde = { version = "1.0", features = \["derive"\] }\
-serde_json = "1.0"\
+serde-wasm-bindgen = "0.6"\
 console_error_panic_hook = "0.1"
 
 ### 1.2 The Interface (lib.rs)
@@ -184,7 +184,7 @@ If it cites `Statement[7]`, we resolve through statement source mapping for the 
 
 Copying a large JSON object (e.g., 5000 nodes) from JS to WASM can take 2-4ms.
 
-- **Optimization (Future):** If this becomes a bottleneck, we switch from serde_json to bincode. You would use a TS library to write binary structs into a Uint8Array and pass that zero-copy to WASM.
+- **Optimization (Future):** If this becomes a bottleneck, we switch from `serde-wasm-bindgen` marshalling to a binary format (e.g., bincode) and pass a typed `Uint8Array` to WASM.
 
 - **Phase 0/1 Decision:** Stick to JSON. It is debuggable and fast enough for \<1000 blocks.
 
