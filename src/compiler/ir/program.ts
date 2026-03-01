@@ -188,6 +188,14 @@ export interface CompiledProgramIR {
   readonly arenaZones?: ArenaZonesIR;
 
   /**
+   * Compiler-owned runtime bindings for arena state/gauge zones.
+   *
+   * [LAW:one-source-of-truth] Runtime state/gauge surfaces resolve through one
+   * compiler-emitted layout contract instead of ad-hoc runtime offsets.
+   */
+  readonly arenaRuntimeLayout?: ArenaRuntimeLayoutIR;
+
+  /**
    * Total number of floats in the arena buffer, as computed by the arena zone
    * plan (`totalFloats`). Includes header reservation and scalar->field
    * alignment padding, not just slot descriptor lengths.
@@ -462,6 +470,35 @@ export interface ArenaZonesIR {
   readonly alignment: ArenaZoneAlignmentPolicyIR;
   readonly zones: readonly ArenaZoneRangeIR[];
   readonly totalFloats: number;
+}
+
+export interface ArenaStateBankLayoutIR {
+  /** State zone start offset in arena floats. */
+  readonly offset: number;
+  /** Total state zone length in floats (read + write banks). */
+  readonly length: number;
+  /** Floats per state bank. */
+  readonly bankLength: number;
+  /** Active read-bank offset in arena floats. */
+  readonly readOffset: number;
+  /** Active write-bank offset in arena floats. */
+  readonly writeOffset: number;
+}
+
+export interface ArenaGaugeTargetLayoutIR {
+  /** Stable continuity target ID (`StepContinuityApply.targetKey`). */
+  readonly targetId: string;
+  /** Instance owner for continuity/prune bookkeeping. */
+  readonly instanceId: string;
+  /** Arena descriptor for this target's gauge zone slice. */
+  readonly descriptor: ArenaSlotDescriptor;
+}
+
+export interface ArenaRuntimeLayoutIR {
+  /** Persistent state bank views inside the arena state zone. */
+  readonly stateBank: ArenaStateBankLayoutIR;
+  /** Gauge-zone descriptors for continuity targets. */
+  readonly gaugeTargets: readonly ArenaGaugeTargetLayoutIR[];
 }
 
 // =============================================================================
