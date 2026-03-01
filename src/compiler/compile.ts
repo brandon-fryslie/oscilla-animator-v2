@@ -25,6 +25,7 @@ import type {
   DrawPrepProgramIR,
   DrawPrepSinkIR,
   ExprProvenanceIR,
+  GeneratedComputeProgramIR,
 } from './ir/program';
 import type { ValueSlot } from './ir/Indices';
 import { SCALAR_INSTANCE_ID } from './ir/Indices';
@@ -32,7 +33,7 @@ import type { UnlinkedIRFragments } from './backend/lower-blocks';
 import type { ScheduleIR } from './backend/schedule-program';
 import type { AcyclicOrLegalGraph } from './ir/patches';
 import type { EventHub } from '../events/EventHub';
-import { requireInst, requireManyInstance } from '../core/canonical-types';
+import { payloadStride, requireInst, requireManyInstance } from '../core/canonical-types';
 import {
   deriveStorageLayout,
   deriveArenaZonePlan,
@@ -410,6 +411,45 @@ function assertRuntimeAddressTableCoverage(
   }
 }
 
+function assertExtractAddressability(
+  valueExprs: readonly ValueExpr[],
+  runtimeAddressTable: RuntimeAddressTableIR,
+): void {
+  for (let exprId = 0; exprId < valueExprs.length; exprId++) {
+    const expr = valueExprs[exprId];
+    if (!expr || expr.kind !== 'extract') continue;
+    const extractCardinality = requireInst(expr.type.extent.cardinality, 'cardinality').kind;
+    if (extractCardinality !== 'one') continue;
+
+    const inputId = expr.input as number;
+    const inputExpr = valueExprs[inputId];
+    if (!inputExpr) {
+      throw new Error(`extract expr ${exprId} references missing input ${inputId}`);
+    }
+
+    if (runtimeAddressTable.scalarExprToArenaAddress.has(inputId)) continue;
+    if (inputExpr.kind === 'construct') continue;
+
+    const inputStride = payloadStride(inputExpr.type.payload);
+    if (inputStride === 1 && expr.componentIndex === 0) {
+      throw new Error(
+        `non-canonical extract expr ${exprId}: scalar extract(0) must be normalized upstream (input ${inputId})`,
+      );
+    }
+    if (inputExpr.kind === 'const') {
+      throw new Error(
+        `non-canonical extract expr ${exprId}: const extract must be folded upstream (input ${inputId})`,
+      );
+    }
+
+    // [LAW:single-enforcer] Compiler addressability checks are enforced once at
+    // compile boundary so runtime evaluator does not encode policy fallbacks.
+    throw new Error(
+      `extract expr ${exprId} input ${inputId} (${inputExpr.kind}) has no canonical arena address`,
+    );
+  }
+}
+
 /**
  * Convert LinkedIR and ScheduleIR to CompiledProgramIR.
  *
@@ -542,8 +582,11 @@ function convertLinkedIRToProgram(
     builder.getFieldSlots(),
   );
   assertRuntimeAddressTableCoverage(runtimeSlots, runtimeAddressTable);
-  // [LAW:no-string-math] P0 lowering emits only structured Naga IR metadata.
-  // WGSL text emission is reserved for the serializer boundary (Naga bridge).
+  assertExtractAddressability(valueExprNodes, runtimeAddressTable);
+  const generatedComputeProgram = buildGeneratedComputeProgram(
+    scheduleIR,
+    runtimeAddressTable,
+  );
   const nagaLoweringProgram = lowerScheduleToNagaModule({
     schedule: scheduleIR,
     runtimeAddressTable,
@@ -698,6 +741,7 @@ function convertLinkedIRToProgram(
     arenaPayloadFloats: arenaZonePlan.payloadFloats,
     arenaTotalFloats: arenaZonePlan.totalFloats,
     drawPrepProgram,
+    generatedComputeProgram,
     nagaLoweringProgram,
   };
 
@@ -807,6 +851,70 @@ function requireStaticInstanceCount(sink: DrawPrepSinkIR): number {
     );
   }
   return sink.staticInstanceCount;
+}
+
+function collectComputeSlots(scheduleIR: ScheduleIR): ValueSlot[] {
+  const slots = new Set<ValueSlot>();
+  for (const step of scheduleIR.steps) {
+    switch (step.kind) {
+      case 'evalOne':
+        slots.add(step.target);
+        break;
+      case 'materialize':
+        slots.add(step.target);
+        break;
+      case 'continuityApply':
+        slots.add(step.baseSlot);
+        slots.add(step.outputSlot);
+        break;
+      case 'render':
+        slots.add(step.controlPointsSlot);
+        slots.add(step.colorSlot);
+        if (step.rotationSlot !== undefined) slots.add(step.rotationSlot);
+        if (step.scale2Slot !== undefined) slots.add(step.scale2Slot);
+        if (step.controlPoints?.k === 'slot') slots.add(step.controlPoints.slot);
+        if (step.scale?.k === 'slot') slots.add(step.scale.slot);
+        break;
+      case 'eventDispatch':
+      case 'stateWrite':
+      case 'fieldStateWrite':
+      case 'continuityMapBuild':
+        break;
+      default: {
+        const _exhaustive: never = step;
+        void _exhaustive;
+      }
+    }
+  }
+  return Array.from(slots.values()).sort((a, b) => a - b);
+}
+
+function buildGeneratedComputeProgram(
+  scheduleIR: ScheduleIR,
+  runtimeAddressTable: RuntimeAddressTableIR,
+): GeneratedComputeProgramIR {
+  const slots = collectComputeSlots(scheduleIR);
+  const offsetConstants = new Map<ValueSlot, string>();
+  let maxActiveLanes = 1;
+
+  // [LAW:one-source-of-truth] Compute addressing metadata is derived once from
+  // compiler-owned runtimeAddressTable; lowering/validation consumes this
+  // metadata and owns WGSL emission.
+  for (const slot of slots) {
+    const arena = runtimeAddressTable.slotToArena.get(slot);
+    if (!arena) continue;
+    offsetConstants.set(slot, `OFFSET_SLOT_${slot}`);
+    maxActiveLanes = Math.max(maxActiveLanes, arena.laneCount);
+  }
+
+  for (const mapping of scheduleIR.stateMappings) {
+    maxActiveLanes = Math.max(maxActiveLanes, mapping.laneCount);
+  }
+
+  return {
+    maxActiveLanes,
+    offsetConstants,
+  };
 }
 /**
  * Extract the primary expression ID from a schedule step.

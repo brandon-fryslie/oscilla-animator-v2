@@ -1,0 +1,2 @@
+/target/
+EOF && git add src/compiler/wasm/rust/oscilla-naga-shim/.gitignore && git status --short

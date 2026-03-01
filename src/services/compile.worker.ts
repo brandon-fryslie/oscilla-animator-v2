@@ -17,6 +17,20 @@ async function toBackendResult(
   result: ReturnType<typeof compileFromFrontend>,
 ): Promise<CompileWorkerBackendResult> {
   if (result.kind === 'ok') {
+    if (!result.program.generatedComputeProgram) {
+      return {
+        kind: 'error',
+        errors: [
+          {
+            code: 'IRValidationFailed',
+            message: 'Compiled program is missing generatedComputeProgram metadata',
+            details: {
+              preNagaWarnings: result.warnings,
+            },
+          },
+        ],
+      };
+    }
     const nagaOutcome = await compileProgramWithNaga(result.program);
     if (nagaOutcome.kind === 'error') {
       const errorsWithWarningContext = nagaOutcome.errors.map((error, index) => {

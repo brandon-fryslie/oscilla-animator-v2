@@ -28,6 +28,11 @@ export default defineConfig({
   base: process.env.BASE_URL || '/',
   root: 'public',
   publicDir: false,
+  worker: {
+    // [LAW:single-enforcer] Worker bundling format is centralized here so
+    // compile-worker wasm code-splitting uses one valid Rollup output mode.
+    format: 'es',
+  },
   server: {
     port: 5174,
     host: '0.0.0.0',
