@@ -58,6 +58,13 @@ export class WebGPUShapeBankManager {
         `WebGPUShapeBankManager: invalid volatilePtr ${source.volatilePtr} for capacity ${source.data.length}`,
       );
     }
+    if (source.topologyIdByHandle.length < source.volatilePtr) {
+      // [LAW:one-source-of-truth] ShapeBank sidecar/index stream must cover the
+      // same handle address space as the canonical ShapeBank payload.
+      throw new Error(
+        `WebGPUShapeBankManager: topologyIdByHandle length ${source.topologyIdByHandle.length} is smaller than volatilePtr ${source.volatilePtr}`,
+      );
+    }
     if (!Number.isInteger(source.staticBoundary) || source.staticBoundary < 0 || source.staticBoundary > source.volatilePtr) {
       throw new Error(
         `WebGPUShapeBankManager: invalid staticBoundary ${source.staticBoundary} for volatilePtr ${source.volatilePtr}`,

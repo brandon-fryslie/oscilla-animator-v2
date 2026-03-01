@@ -595,7 +595,11 @@ export class WebGPURenderer {
     });
     this.indirectArgsBuffer = device.createBuffer({
       size: WEBGPU_RENDER_CONTRACT.indirectArgsBytes,
-      usage: GPU_BUFFER_USAGE.STORAGE | GPU_BUFFER_USAGE.INDIRECT | GPU_BUFFER_USAGE.COPY_DST,
+      usage:
+        GPU_BUFFER_USAGE.STORAGE |
+        GPU_BUFFER_USAGE.INDIRECT |
+        GPU_BUFFER_USAGE.COPY_DST |
+        GPU_BUFFER_USAGE.COPY_SRC,
     });
     this.shapeBankManager = new WebGPUShapeBankManager(this.device, this.pathPipeline);
     this.indirectArgsInspector = new WebGPUIndirectArgsInspector(this.device);
@@ -1192,7 +1196,11 @@ export class WebGPURenderer {
 
     const nextBuffer = this.device.createBuffer({
       size: nextCapacity * WEBGPU_RENDER_CONTRACT.indirectArgsBytes,
-      usage: GPU_BUFFER_USAGE.STORAGE | GPU_BUFFER_USAGE.INDIRECT | GPU_BUFFER_USAGE.COPY_DST,
+      usage:
+        GPU_BUFFER_USAGE.STORAGE |
+        GPU_BUFFER_USAGE.INDIRECT |
+        GPU_BUFFER_USAGE.COPY_DST |
+        GPU_BUFFER_USAGE.COPY_SRC,
     });
     this.indirectArgsBuffer.destroy();
     this.indirectArgsBuffer = nextBuffer;
