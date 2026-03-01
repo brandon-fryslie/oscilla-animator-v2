@@ -1,5 +1,5 @@
 ---
-applyTo: "src/compiler/**/*.ts,src/render/webgpu/**/*.ts,src/runtime/**/*.ts,src/services/**/*.ts,docs/WebGPU-Complete/**/*.md,docs/compiler/**/*.md"
+applyTo: "{src/{compiler,render/webgpu,runtime,services}/**/*.ts,docs/{WebGPU-Complete,compiler}/**/*.md}"
 ---
 
 # WebGPU / Compiler Spec-Conformance Instructions
