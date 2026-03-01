@@ -396,6 +396,9 @@ export async function compileAndSwap(
     newValueExprCount,
     program.arenaTotalFloats,
     newShape2DSlotCount,
+    undefined,
+    undefined,
+    program.arenaRuntimeLayout,
   );
 
   // Handle primitive state migration
