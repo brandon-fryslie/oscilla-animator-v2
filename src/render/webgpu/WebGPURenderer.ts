@@ -96,7 +96,6 @@ interface PreparedDrawPathOp {
 }
 
 const MAX_UINT32 = 0xFFFF_FFFF;
-
 function buildDrawPrepStaticCountLookup(
   sinks: readonly DrawPrepSinkDescriptor[] | undefined,
 ): ReadonlyMap<number, number> {

@@ -934,7 +934,6 @@ describe('WebGPURenderer', () => {
       ],
     }))).toThrow('duplicate static draw-prep sinkIndex');
   });
-
   it('grows compute arena geometrically and dispatches migration when simulation count exceeds current capacity', async () => {
     const env = createFakeWebGPUEnvironment();
     setNavigatorGpu(env.gpu);
