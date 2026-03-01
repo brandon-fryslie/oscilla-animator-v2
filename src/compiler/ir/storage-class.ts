@@ -129,6 +129,7 @@ export const DEFAULT_ARENA_ALIGNMENT_POLICY: ArenaZoneAlignmentPolicyIR = {
 };
 
 export interface ArenaZonePlan {
+  readonly payloadFloats: number;
   readonly totalFloats: number;
   readonly zones: readonly ArenaZoneRangeIR[];
   readonly alignment: ArenaZoneAlignmentPolicyIR;
@@ -227,6 +228,7 @@ export function deriveArenaZonePlan(
   const descriptors = new Map<ValueSlot, ArenaSlotDescriptor>();
   const zones: ArenaZoneRangeIR[] = [];
   const gaugeTargetLayouts: ArenaGaugeTargetLayoutIR[] = [];
+  let payloadFloats = 0;
 
   const normalizedStateBankLength = normalizeAlignmentCount(options.stateBankLength ?? 0, 0, 0);
   const normalizedStateEntryCount = normalizeAlignmentCount(options.stateEntryCount ?? 0, 0, 0);
@@ -247,6 +249,7 @@ export function deriveArenaZonePlan(
       slot.packingPreference,
     );
     descriptors.set(slot.slot, descriptor);
+    payloadFloats += descriptor.length;
     cursor += descriptor.length;
   }
   const scalarDataEnd = cursor;
@@ -275,6 +278,7 @@ export function deriveArenaZonePlan(
       slot.packingPreference,
     );
     descriptors.set(slot.slot, descriptor);
+    payloadFloats += descriptor.length;
     cursor += descriptor.length;
   }
   const fieldEnd = cursor;
@@ -331,10 +335,12 @@ export function deriveArenaZonePlan(
   const toIR = (): ArenaZonesIR => ({
     alignment: normalizedAlignment,
     zones,
+    payloadFloats,
     totalFloats: gaugeEnd,
   });
 
   return {
+    payloadFloats,
     totalFloats: gaugeEnd,
     zones,
     alignment: normalizedAlignment,

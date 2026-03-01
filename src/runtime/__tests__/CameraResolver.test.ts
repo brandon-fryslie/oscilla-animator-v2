@@ -44,6 +44,7 @@ function mockProgram(
     renderGlobals,
     kernelRegistry: { resolve: () => undefined, entries: () => [] } as any,
     arenaLayout: [],
+    arenaPayloadFloats: 0,
     arenaTotalFloats: 0,
   };
 }

@@ -131,6 +131,7 @@ function mockProgram(opts: {
     renderGlobals: [],
     kernelRegistry: { resolve: () => undefined, entries: () => [] } as any,
     arenaLayout,
+    arenaPayloadFloats: arenaLayout.reduce((sum, d) => sum + Math.max(0, d.length), 0),
     arenaTotalFloats: 0,
   } as CompiledProgramIR;
 }
