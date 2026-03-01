@@ -97,6 +97,11 @@ export interface DebugServiceIssue {
   readonly detail?: unknown;
 }
 
+export interface SpySlotReadbackMeta {
+  readonly capturedAtMs: number;
+  readonly frameId: number;
+}
+
 const MAX_DEBUG_ISSUES = 128;
 const ISSUE_THROTTLE_MS = 2000;
 
@@ -141,6 +146,16 @@ class DebugService {
 
   /** Reference counts for scalar history tracking keys (supports multiple observers). */
   private trackedHistoryRefs = new Map<string, number>();
+  /** Canonical key payload for trackedHistoryRefs entries (for remap-safe slot derivation). */
+  private trackedHistoryKeys = new Map<string, DebugTargetKey>();
+  /** Reference counts for tracked scalar slots used by spy readback selection. */
+  private trackedSpyScalarSlotRefs = new Map<ValueSlot, number>();
+  /** Active tracked scalar slots for spy probe reads. */
+  private trackedSpyScalarSlots = new Set<ValueSlot>();
+  /** Last async readback metadata by scalar slot. */
+  private spyReadbackMetaBySlot = new Map<ValueSlot, SpySlotReadbackMeta>();
+  /** Subscribers for tracked spy-slot count changes. */
+  private spyTrackedSlotSubscribers = new Set<(trackedSlotCount: number) => void>();
 
   /** Global scalar history mode: pre-track mapped scalar history keys. */
   private autoTrackAllDebugData = false;
@@ -210,12 +225,14 @@ class DebugService {
     this.trackedFieldSlots.clear();
     this.trackedFieldSlotRefs.clear();
     this.fieldAccumulators.clear();
+    this.spyReadbackMetaBySlot.clear();
     this.runtimeStarted = false;
     // [LAW:one-source-of-truth] Arena belongs to ProgramState; clear stale ref on recompile.
     // setArenaRef() will restore it after this call in setupDebugProbe.
     this.arenaRef = null;
     this.historyService.onMappingChanged();
     this.syncGlobalDebugTracking();
+    this.rebuildTrackedSpyScalarSlots();
   }
 
   /**
@@ -226,6 +243,7 @@ class DebugService {
     this.portToSlotMap = map;
     this.historyService.onMappingChanged();
     this.syncGlobalDebugTracking();
+    this.rebuildTrackedSpyScalarSlots();
   }
 
   /**
@@ -351,7 +369,9 @@ class DebugService {
     const serialized = serializeKey(key);
     const refs = this.trackedHistoryRefs.get(serialized) ?? 0;
     this.trackedHistoryRefs.set(serialized, refs + 1);
+    this.trackedHistoryKeys.set(serialized, key);
     if (refs > 0) return;
+    this.trackSpyScalarSlotForKey(key);
     if (!this.globalHistoryKeys.has(serialized)) {
       this.historyService.track(key);
     }
@@ -365,6 +385,8 @@ class DebugService {
     const refs = this.trackedHistoryRefs.get(serialized) ?? 0;
     if (refs <= 1) {
       this.trackedHistoryRefs.delete(serialized);
+      this.trackedHistoryKeys.delete(serialized);
+      this.untrackSpyScalarSlotForKey(key);
       if (!this.globalHistoryKeys.has(serialized)) {
         this.historyService.untrack(key);
       }
@@ -386,6 +408,25 @@ class DebugService {
     this.scalarValues.set(slotId, value);
     this.scalarTapSlots.add(slotId);
     this.historyService.onSlotWrite(slotId, value);
+  }
+
+  /**
+   * Apply an async spy-readback scalar sample.
+   *
+   * [LAW:single-enforcer] DebugService is the only bridge that records async
+   * readback slot values and freshness metadata for UI consumption.
+   */
+  applySpyReadback(
+    slotId: ValueSlot,
+    value: number,
+    capturedAtMs: number,
+    frameId: number,
+  ): void {
+    this.runtimeStarted = true;
+    this.scalarValues.set(slotId, value);
+    this.scalarTapSlots.add(slotId);
+    this.historyService.onSlotWrite(slotId, value);
+    this.spyReadbackMetaBySlot.set(slotId, { capturedAtMs, frameId });
   }
 
   /**
@@ -563,6 +604,33 @@ class DebugService {
   }
 
   /**
+   * Return currently tracked scalar slots for low-rate spy readback.
+   */
+  getTrackedSpyScalarSlots(maxSlots: number = 16): readonly ValueSlot[] {
+    const limit = Math.max(1, Math.floor(maxSlots));
+    return Array.from(this.trackedSpyScalarSlots.values()).slice(0, limit);
+  }
+
+  /**
+   * Subscribe to tracked spy scalar-slot count changes.
+   * RuntimeService uses this to start/stop the async spy readback loop.
+   */
+  onTrackedSpyScalarSlotsChange(subscriber: (trackedSlotCount: number) => void): () => void {
+    this.spyTrackedSlotSubscribers.add(subscriber);
+    subscriber(this.trackedSpyScalarSlots.size);
+    return () => {
+      this.spyTrackedSlotSubscribers.delete(subscriber);
+    };
+  }
+
+  /**
+   * Return latest async readback metadata for a scalar slot, if present.
+   */
+  getSlotSpyReadbackMeta(slotId: ValueSlot): SpySlotReadbackMeta | undefined {
+    return this.spyReadbackMetaBySlot.get(slotId);
+  }
+
+  /**
    * Clear all stored data.
    * Called when patch is unloaded or recompiled.
    */
@@ -576,13 +644,18 @@ class DebugService {
     this.trackedFieldSlots.clear();
     this.trackedFieldSlotRefs.clear();
     this.trackedHistoryRefs.clear();
+    this.trackedHistoryKeys.clear();
+    this.trackedSpyScalarSlotRefs.clear();
+    this.trackedSpyScalarSlots.clear();
     this.globalHistoryKeys.clear();
+    this.spyReadbackMetaBySlot.clear();
     this.fieldAccumulators.clear();
     this.unmappedEdges = [];
     this.runtimeStarted = false;
     this.arenaRef = null;
     this.historyService.clear();
     this.clearIssues();
+    this.notifyTrackedSpyScalarSlotSubscribers();
   }
 
   /**
@@ -625,6 +698,7 @@ class DebugService {
         this.historyService.untrack(key);
       }
     }
+    this.rebuildTrackedSpyScalarSlots();
   }
 
   /**
@@ -633,7 +707,8 @@ class DebugService {
   private isScalarHistoryEligible(type: CanonicalType): boolean {
     const cardinality = requireInst(type.extent.cardinality, 'cardinality').kind;
     if (cardinality !== 'one') return false;
-    return getSampleEncoding(type.payload).sampleable;
+    const encoding = getSampleEncoding(type.payload);
+    return encoding.sampleable && encoding.stride === 1;
   }
 
   /**
@@ -646,6 +721,70 @@ class DebugService {
       blockId: portKey.slice(0, idx),
       portName: portKey.slice(idx + 1),
     };
+  }
+
+  private resolveDebugTargetMeta(key: DebugTargetKey): EdgeMetadata | undefined {
+    if (key.kind === 'edge') {
+      return this.edgeToSlotMap.get(key.edgeId);
+    }
+    return this.portToSlotMap.get(`${key.blockId}:${key.portName}`);
+  }
+
+  private trackSpyScalarSlotForKey(key: DebugTargetKey): void {
+    const meta = this.resolveDebugTargetMeta(key);
+    if (!meta || !this.isScalarHistoryEligible(meta.type)) {
+      return;
+    }
+    const refs = this.trackedSpyScalarSlotRefs.get(meta.slotId) ?? 0;
+    this.trackedSpyScalarSlotRefs.set(meta.slotId, refs + 1);
+    const beforeSize = this.trackedSpyScalarSlots.size;
+    this.trackedSpyScalarSlots.add(meta.slotId);
+    if (this.trackedSpyScalarSlots.size !== beforeSize) {
+      this.notifyTrackedSpyScalarSlotSubscribers();
+    }
+  }
+
+  private untrackSpyScalarSlotForKey(key: DebugTargetKey): void {
+    const meta = this.resolveDebugTargetMeta(key);
+    if (!meta || !this.isScalarHistoryEligible(meta.type)) {
+      return;
+    }
+    const refs = this.trackedSpyScalarSlotRefs.get(meta.slotId) ?? 0;
+    if (refs <= 1) {
+      this.trackedSpyScalarSlotRefs.delete(meta.slotId);
+      const removed = this.trackedSpyScalarSlots.delete(meta.slotId);
+      if (removed) {
+        this.notifyTrackedSpyScalarSlotSubscribers();
+      }
+      return;
+    }
+    this.trackedSpyScalarSlotRefs.set(meta.slotId, refs - 1);
+  }
+
+  private rebuildTrackedSpyScalarSlots(): void {
+    const before = Array.from(this.trackedSpyScalarSlots.values()).join(',');
+    this.trackedSpyScalarSlotRefs.clear();
+    this.trackedSpyScalarSlots.clear();
+    for (const [serialized, key] of this.trackedHistoryKeys.entries()) {
+      const refs = this.trackedHistoryRefs.get(serialized) ?? 0;
+      if (refs <= 0) continue;
+      const meta = this.resolveDebugTargetMeta(key);
+      if (!meta || !this.isScalarHistoryEligible(meta.type)) continue;
+      const slotRefs = this.trackedSpyScalarSlotRefs.get(meta.slotId) ?? 0;
+      this.trackedSpyScalarSlotRefs.set(meta.slotId, slotRefs + refs);
+      this.trackedSpyScalarSlots.add(meta.slotId);
+    }
+    const after = Array.from(this.trackedSpyScalarSlots.values()).join(',');
+    if (before !== after) {
+      this.notifyTrackedSpyScalarSlotSubscribers();
+    }
+  }
+
+  private notifyTrackedSpyScalarSlotSubscribers(): void {
+    const trackedSlotCount = this.trackedSpyScalarSlots.size;
+    for (const subscriber of this.spyTrackedSlotSubscribers) {
+      subscriber(trackedSlotCount);
+    }
   }
 
   private recordIssue(issue: DebugServiceIssue): void {

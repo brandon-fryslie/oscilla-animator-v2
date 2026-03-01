@@ -20,6 +20,25 @@ import type { StepSnapshot, Breakpoint, SessionMode, LaneIdentity } from './Step
 import { executeFrameStepped } from './executeFrameStepped';
 import { buildLaneIdentityMap } from './ValueInspector';
 
+export interface StepDebugSpyOptions {
+  /** Low-rate spy cadence (defaults to 15Hz) */
+  readonly sampleHz?: number;
+  /** Max number of slots copied into one spy sample (defaults to 8) */
+  readonly maxSlotsPerSample?: number;
+  /** Max scalar components copied per buffer slot (defaults to 16) */
+  readonly maxBufferComponents?: number;
+  /** Optional slot filter; when set only these slots are sampled */
+  readonly trackedSlots?: ReadonlySet<ValueSlot>;
+}
+
+export interface StepDebugSpySample {
+  readonly frameId: number;
+  readonly capturedAtMs: number;
+  readonly phase: StepSnapshot['phase'];
+  readonly stepIndex: number;
+  readonly slots: ReadonlyMap<ValueSlot, Float32Array>;
+}
+
 export class StepDebugSession {
   private readonly _program: CompiledProgramIR;
   private readonly _state: RuntimeState;
@@ -36,15 +55,20 @@ export class StepDebugSession {
   private _previousSlotValues = new Map<string, number>();
   /** Scalar slot values captured at the end of the previous frame (for cross-frame diff) */
   private _lastFrameValues: ReadonlyMap<ValueSlot, number> | null = null;
+  private _spyOptions: StepDebugSpyOptions;
+  private _spySamples: StepDebugSpySample[] = [];
+  private _nextSpySampleAtMs = Number.NEGATIVE_INFINITY;
 
   constructor(
     program: CompiledProgramIR,
     state: RuntimeState,
     arena: RenderBufferArena,
+    spyOptions: StepDebugSpyOptions = {},
   ) {
     this._program = program;
     this._state = state;
     this._arena = arena;
+    this._spyOptions = spyOptions;
   }
 
   // =========================================================================
@@ -70,6 +94,23 @@ export class StepDebugSession {
   /** Previous frame's scalar slot values (null if no frame has completed yet) */
   get lastFrameValues(): ReadonlyMap<ValueSlot, number> | null {
     return this._lastFrameValues;
+  }
+
+  get spyOptions(): StepDebugSpyOptions {
+    return this._spyOptions;
+  }
+
+  setSpyOptions(options: StepDebugSpyOptions): void {
+    this._spyOptions = options;
+  }
+
+  drainSpySamples(): readonly StepDebugSpySample[] {
+    if (this._spySamples.length === 0) {
+      return [];
+    }
+    const drained = this._spySamples.slice();
+    this._spySamples.length = 0;
+    return drained;
   }
 
   // =========================================================================
@@ -113,6 +154,9 @@ export class StepDebugSession {
     this._frameResult = null;
     this._history = [];
     this._previousSlotValues.clear();
+    if (!Number.isFinite(this._nextSpySampleAtMs)) {
+      this._nextSpySampleAtMs = tAbsMs;
+    }
 
     // Get first snapshot (pre-frame)
     const result = this._generator.next();
@@ -123,6 +167,7 @@ export class StepDebugSession {
     this._currentSnapshot = result.value;
     this._history.push(result.value);
     this._recordSlotValues(result.value);
+    this._captureSpySample(result.value);
     return result.value;
   }
 
@@ -146,6 +191,7 @@ export class StepDebugSession {
     this._currentSnapshot = result.value;
     this._history.push(result.value);
     this._recordSlotValues(result.value);
+    this._captureSpySample(result.value);
     return result.value;
   }
 
@@ -172,6 +218,7 @@ export class StepDebugSession {
 
       const snapshot = result.value;
       this._history.push(snapshot);
+      this._captureSpySample(snapshot);
 
       if (this._matchesBreakpoint(snapshot)) {
         this._recordSlotValues(snapshot);
@@ -207,6 +254,8 @@ export class StepDebugSession {
 
       const snapshot = result.value;
       this._history.push(snapshot);
+      this._recordSlotValues(snapshot);
+      this._captureSpySample(snapshot);
 
       // Stop when we've transitioned to a different phase
       if (snapshot.phase !== currentPhase) {
@@ -241,6 +290,8 @@ export class StepDebugSession {
         return result.value;
       }
       this._history.push(result.value);
+      this._recordSlotValues(result.value);
+      this._captureSpySample(result.value);
     }
   }
 
@@ -372,6 +423,86 @@ export class StepDebugSession {
         this._previousSlotValues.set(String(slot), value.value);
       }
     }
+  }
+
+  private _captureSpySample(snapshot: StepSnapshot): void {
+    if (!Number.isFinite(snapshot.tMs)) {
+      return;
+    }
+    const intervalMs = this._resolveSpyIntervalMs();
+    if (snapshot.tMs < this._nextSpySampleAtMs) {
+      return;
+    }
+
+    // [LAW:dataflow-not-control-flow] Spy sampling always runs through one
+    // path; cadence/selection vary through configured data only.
+    const slotCap = Math.max(1, this._spyOptions.maxSlotsPerSample ?? 8);
+    const trackedSlots = this._spyOptions.trackedSlots;
+    const sampledSlots = new Map<ValueSlot, Float32Array>();
+
+    for (const [slot, value] of snapshot.writtenSlots) {
+      if (sampledSlots.size >= slotCap) break;
+      if (trackedSlots && !trackedSlots.has(slot)) continue;
+      if (value.kind === 'scalar') {
+        sampledSlots.set(slot, new Float32Array([value.value]));
+        continue;
+      }
+      if (value.kind === 'buffer') {
+        const clipped = this._copyBufferSample(value.buffer);
+        if (clipped.length > 0) {
+          sampledSlots.set(slot, clipped);
+        }
+      }
+    }
+
+    if (sampledSlots.size === 0) {
+      return;
+    }
+
+    this._spySamples.push({
+      frameId: snapshot.frameId,
+      capturedAtMs: snapshot.tMs,
+      phase: snapshot.phase,
+      stepIndex: snapshot.stepIndex,
+      slots: sampledSlots,
+    });
+
+    while (this._nextSpySampleAtMs <= snapshot.tMs) {
+      this._nextSpySampleAtMs += intervalMs;
+    }
+  }
+
+  private _resolveSpyIntervalMs(): number {
+    const hz = this._spyOptions.sampleHz ?? 15;
+    if (!Number.isFinite(hz) || hz <= 0) {
+      return 1000 / 15;
+    }
+    return 1000 / hz;
+  }
+
+  private _copyBufferSample(buffer: ArrayBufferView): Float32Array {
+    const maxComponents = Math.max(1, this._spyOptions.maxBufferComponents ?? 16);
+    const candidate = buffer as ArrayBufferView & { length?: number; [index: number]: number };
+    if (typeof candidate.length === 'number') {
+      const count = Math.min(maxComponents, candidate.length);
+      const out = new Float32Array(count);
+      for (let i = 0; i < count; i++) {
+        out[i] = Number(candidate[i] ?? 0);
+      }
+      return out;
+    }
+    // [LAW:one-source-of-truth] byteLength is the authoritative byte budget for
+    // decoding sampled floats; truncate partial trailing bytes deterministically.
+    const total = Math.min(maxComponents, Math.floor(buffer.byteLength / Float32Array.BYTES_PER_ELEMENT));
+    if (total <= 0) {
+      return new Float32Array(0);
+    }
+    const view = new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength);
+    const out = new Float32Array(total);
+    for (let i = 0; i < total; i++) {
+      out[i] = view.getFloat32(i * Float32Array.BYTES_PER_ELEMENT, true);
+    }
+    return out;
   }
 }
 
