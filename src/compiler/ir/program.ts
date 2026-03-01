@@ -219,6 +219,12 @@ export interface CompiledProgramIR {
   readonly drawPrepProgram?: DrawPrepProgramIR;
 
   /**
+   * Compiler-owned metadata used by the Naga compile boundary.
+   * WGSL emission remains in the Rust/WASM serializer boundary.
+   */
+  readonly generatedComputeProgram?: GeneratedComputeProgramIR;
+
+  /**
    * Compiler-generated typed Naga lowering artifact (P2-2).
    * Contains the structured module and expr/statement source-map provenance.
    */
@@ -331,6 +337,18 @@ export interface DrawPrepProgramIR {
   readonly wgsl: string;
 }
 
+export interface GeneratedComputeProgramIR {
+  /**
+   * Validated WGSL payload emitted by Naga. This is intentionally absent prior
+   * to the validation/emission boundary.
+   */
+  readonly wgsl?: string;
+  /**
+   * Canonical lane bound for compute entry guard generation.
+   */
+  readonly maxActiveLanes: number;
+  readonly offsetConstants: ReadonlyMap<ValueSlot, string>;
+}
 // =============================================================================
 // Slot Metadata
 // =============================================================================

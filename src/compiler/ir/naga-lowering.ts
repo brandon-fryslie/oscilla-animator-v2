@@ -12,7 +12,7 @@ import type {
   StepStateWrite,
 } from './types';
 
-export type NagaScalarKindIR = 'f32' | 'u32';
+export type NagaScalarKindIR = 'f32' | 'u32' | 'bool';
 
 export type NagaTypeIR =
   | {
@@ -65,7 +65,7 @@ export type NagaExpressionIR =
   | { readonly kind: 'access_index'; readonly base: number; readonly index: number }
   | {
       readonly kind: 'binary';
-      readonly op: 'add' | 'mul';
+      readonly op: 'add' | 'mul' | 'lt' | 'le' | 'gt' | 'ge' | 'eq' | 'ne';
       readonly left: number;
       readonly right: number;
     }
@@ -80,24 +80,46 @@ export type NagaExpressionIR =
       readonly expr: number;
     };
 
+export type NagaBlockIR = readonly number[];
+
 export type NagaStatementIR =
   | {
       readonly kind: 'store';
       readonly buffer: 'arena_out' | 'state_out';
       readonly index: number;
       readonly value: number;
-      readonly comment: string;
+      readonly comment?: string;
     }
   | {
       readonly kind: 'comment';
       readonly text: string;
+    }
+  | {
+      readonly kind: 'if';
+      readonly condition: number;
+      readonly accept: NagaBlockIR;
+      readonly reject: NagaBlockIR;
+    }
+  | {
+      readonly kind: 'loop';
+      readonly body: NagaBlockIR;
+    }
+  | {
+      readonly kind: 'break';
+    }
+  | {
+      readonly kind: 'continue';
+    }
+  | {
+      readonly kind: 'return';
     };
 
 export interface NagaFunctionIR {
   readonly name: string;
   readonly arguments: readonly NagaFunctionArgumentIR[];
   readonly expressions: readonly NagaExpressionIR[];
-  readonly body: readonly NagaStatementIR[];
+  readonly statements: readonly NagaStatementIR[];
+  readonly body: NagaBlockIR;
 }
 
 export interface NagaEntryPointIR {
@@ -166,7 +188,9 @@ class LoweringCtx {
   readonly sourceMap: Record<string, NagaSourceMapEntryIR> = {};
 
   private readonly expressions: NagaExpressionIR[] = [];
-  private readonly body: NagaStatementIR[] = [];
+  private readonly statements: NagaStatementIR[] = [];
+  private readonly rootBlock: number[] = [];
+  private activeBlock: number[] = this.rootBlock;
 
   addExpression(expr: NagaExpressionIR, source: NagaSourceMapEntryIR): number {
     const id = this.expressions.length;
@@ -175,9 +199,24 @@ class LoweringCtx {
     return id;
   }
 
-  addStatement(statement: NagaStatementIR, source: NagaSourceMapEntryIR): void {
-    this.body.push(statement);
-    this.sourceMap[`Stmt_${this.body.length - 1}`] = source;
+  addStatement(statement: NagaStatementIR, source: NagaSourceMapEntryIR): number {
+    const id = this.statements.length;
+    this.statements.push(statement);
+    this.sourceMap[`Stmt_${id}`] = source;
+    this.activeBlock.push(id);
+    return id;
+  }
+
+  withBlock<T>(emit: () => T): { readonly block: number[]; readonly value: T } {
+    const parent = this.activeBlock;
+    const block: number[] = [];
+    this.activeBlock = block;
+    try {
+      const value = emit();
+      return { block, value };
+    } finally {
+      this.activeBlock = parent;
+    }
   }
 
   internType(type: NagaTypeIR): number {
@@ -193,7 +232,8 @@ class LoweringCtx {
       name,
       arguments: args,
       expressions: this.expressions,
-      body: this.body,
+      statements: this.statements,
+      body: this.rootBlock,
     };
   }
 }
@@ -736,27 +776,59 @@ export function lowerScheduleToNagaModule(args: {
   );
 
   const steps = args.schedule.steps as readonly Step[];
-  for (let stepIndex = 0; stepIndex < steps.length; stepIndex++) {
-    lowerStep(
-      ctx,
-      builtins,
-      laneExpr,
-      steps[stepIndex],
-      stepIndex,
-      args.schedule,
-      args.runtimeAddressTable,
-      args.valueExprs,
-      args.exprToBlock,
-    );
-  }
+  const loweredStepBlock = ctx.withBlock(() => {
+    for (let stepIndex = 0; stepIndex < steps.length; stepIndex++) {
+      lowerStep(
+        ctx,
+        builtins,
+        laneExpr,
+        steps[stepIndex],
+        stepIndex,
+        args.schedule,
+        args.runtimeAddressTable,
+        args.valueExprs,
+        args.exprToBlock,
+      );
+    }
+  }).block;
 
-  const mainFunction = ctx.emitFunction('compute_main', functionArgs);
-  // [LAW:one-source-of-truth] MAX_ACTIVE_LANES is derived once from canonical
-  // runtimeAddressTable + stateMappings and consumed by the Naga serializer.
+  const guardSource: NagaSourceMapEntryIR = { blockId: null, stepIndex: -1 };
+  // [LAW:one-source-of-truth] Guard generation and compute metadata share one
+  // canonical max-lane derivation to prevent drift across lowering surfaces.
   const maxActiveLanes = deriveMaxActiveLanes({
     schedule: args.schedule,
     runtimeAddressTable: args.runtimeAddressTable,
   });
+  const maxLaneExpr = ctx.addExpression(
+    {
+      kind: 'constant',
+      constant: ctx.internNumberConstant(builtins.u32Type, maxActiveLanes),
+    },
+    guardSource,
+  );
+  const laneInBoundsExpr = ctx.addExpression(
+    {
+      kind: 'binary',
+      op: 'lt',
+      left: laneExpr,
+      right: maxLaneExpr,
+    },
+    guardSource,
+  );
+  const rejectBlock = ctx.withBlock(() => {
+    ctx.addStatement({ kind: 'return' }, guardSource);
+  }).block;
+  ctx.addStatement(
+    {
+      kind: 'if',
+      condition: laneInBoundsExpr,
+      accept: loweredStepBlock,
+      reject: rejectBlock,
+    },
+    guardSource,
+  );
+
+  const mainFunction = ctx.emitFunction('compute_main', functionArgs);
 
   return {
     module: {

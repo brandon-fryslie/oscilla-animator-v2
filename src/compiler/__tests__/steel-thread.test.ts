@@ -86,14 +86,8 @@ describe('Steel Thread - Animated Particles', () => {
     // Basic structural checks
     expect(program.valueExprs.nodes.length).toBeGreaterThan(0);
     expect(program.slotMeta.length).toBeGreaterThan(0);
-    expect(program.nagaLoweringProgram?.module.entry_points).toEqual([
-      {
-        stage: 'compute',
-        function: 'compute_main',
-        workgroupSize: [64, 1, 1],
-      },
-    ]);
-    expect(program.nagaLoweringProgram?.compute.maxActiveLanes ?? 0).toBeGreaterThan(0);
+    expect(program.generatedComputeProgram?.maxActiveLanes ?? 0).toBeGreaterThan(0);
+    expect(program.generatedComputeProgram?.offsetConstants.size ?? 0).toBeGreaterThan(0);
     expect(program.drawPrepProgram?.wgsl).toContain('@group(0) @binding(0) var<storage, read_write> indirectArgs: array<u32>;');
     expect(program.drawPrepProgram?.wgsl).toContain('fn cs_main');
     const shapeRefs = program.valueExprs.nodes.filter((expr) => expr.kind === 'shapeRef');

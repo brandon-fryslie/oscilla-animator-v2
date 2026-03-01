@@ -10,7 +10,6 @@
  */
 
 import {
-  assertWebGPUStartupContract,
   createWebGPURenderer,
   type WebGPURenderer,
   RenderBufferArena,
@@ -25,13 +24,13 @@ import {
   compileAndSwap,
   type CompileOrchestratorState,
 } from './CompileOrchestrator';
-import { CompileWorkerClient } from './CompileWorkerClient';
+import { CompileWorkerClient, type CompileWorkerRunRequest } from './CompileWorkerClient';
 import { createDomainChangeDetector, type DomainChangeDetector } from './DomainChangeDetector';
 import { createLiveRecompileController, type LiveRecompileController } from './LiveRecompile';
 import { patchProgramConstants } from './ConstantPatcher';
 import { debugService } from './DebugService';
 import { compilationInspector } from './CompilationInspectorService';
-import { AsyncCompilerService } from './AsyncCompilerService';
+import { AsyncCompilerService, type AsyncCompilerState } from './AsyncCompilerService';
 import {
   startAnimationLoop,
   createAnimationLoopState,
@@ -86,6 +85,9 @@ export class RuntimeService {
   private unsubCompilerState: (() => void) | null = null;
   private swapInFlight = false;
   private swapRafId: number | null = null;
+  // [LAW:one-source-of-truth] Swap mode is carried by one flag that is
+  // consumed by the next successful artifact application.
+  private nextSwapIsInitial = false;
   private lastWorkerFallbackLog = { message: '', atMs: 0 };
   private compileWorkerUnavailableLogged = false;
   private readonly liveRecompile: LiveRecompileController = createLiveRecompileController();
@@ -128,21 +130,21 @@ export class RuntimeService {
     if (unchanged && withinWindow) return;
 
     this.lastWorkerFallbackLog = { message, atMs: now };
-    // [LAW:no-silent-fallbacks] Worker recompile failures must surface as
+    // [LAW:no-silent-fallbacks] Worker compile failures must surface as
     // explicit diagnostics; this runtime does not support silent fallback.
     if (isCompileWorkerUnavailableError(err)) {
       if (this.compileWorkerUnavailableLogged) return;
       this.compileWorkerUnavailableLogged = true;
       this.store.diagnostics.log({
         level: 'error',
-        message: `Live recompile unavailable: Web Workers are required but could not be started (${message}). This platform/runtime is unsupported for graph edits.`,
+        message: `Async compile unavailable: Web Workers are required but could not be started (${message}). This platform/runtime is unsupported for compilation.`,
       });
       return;
     }
 
     this.store.diagnostics.log({
       level: 'error',
-      message: `Live recompile failed in worker: ${message}`,
+      message: `Async compile failed in worker: ${message}`,
     });
   }
 
@@ -210,23 +212,81 @@ export class RuntimeService {
     const next = this.asyncCompiler?.takeReadyArtifactsForSwap() ?? null;
     if (!next) return;
 
+    const isInitialSwap = this.nextSwapIsInitial;
+    this.nextSwapIsInitial = false;
     this.swapInFlight = true;
     try {
       // [LAW:single-enforcer] All compile/swap application goes through this queue.
-      await compileAndSwap(this.compileDeps(), false, next);
+      await compileAndSwap(this.compileDeps(), isInitialSwap, next);
       this.asyncCompiler?.markSwapComplete();
     } catch (err) {
       this.asyncCompiler?.markSwapFailed(err);
       const message = err instanceof Error ? err.message : String(err);
       this.store.diagnostics.log({
         level: 'error',
-        message: `Recompile swap failed: ${message}`,
+        message: `${isInitialSwap ? 'Initial compilation failed' : 'Recompile swap failed'}: ${message}`,
       });
     } finally {
       this.swapInFlight = false;
       if (this.asyncCompiler?.getState() === 'ready') {
         this.requestSwapFlush();
       }
+    }
+  }
+
+  private buildCompileRequest(): CompileWorkerRunRequest {
+    const debugValues = this.store.settings.get(debugSettings);
+    const flagOverrides = this.store.settings.get(compilerFlagsSettings);
+    return {
+      patch: this.store.patch.patch,
+      patchRevision: this.store.getPatchRevision(),
+      // [LAW:one-source-of-truth] Startup and live recompile must use one
+      // canonical compile request shape so diagnostics/settings cannot drift.
+      frontendOptions: {
+        traceCardinalitySolver: debugValues?.traceCardinalitySolver,
+        diagnosticOverrides: flagOverrides ?? undefined,
+      },
+    };
+  }
+
+  private async waitForCompilerState(
+    targets: readonly AsyncCompilerState[],
+  ): Promise<AsyncCompilerState> {
+    const compiler = this.asyncCompiler;
+    if (!compiler) {
+      throw new Error('RuntimeService: async compiler is required before waiting for state');
+    }
+    const targetSet = new Set<AsyncCompilerState>(targets);
+    const current = compiler.getState();
+    if (targetSet.has(current)) return current;
+    return await new Promise<AsyncCompilerState>((resolve) => {
+      const unsubscribe = compiler.subscribe((nextState) => {
+        if (!targetSet.has(nextState)) return;
+        unsubscribe();
+        resolve(nextState);
+      });
+    });
+  }
+
+  private async runInitialCompileViaWorker(): Promise<void> {
+    const compiler = this.asyncCompiler;
+    if (!compiler) {
+      throw new Error('RuntimeService: async compiler is required before startup compile');
+    }
+
+    this.nextSwapIsInitial = true;
+    try {
+      compiler.scheduleCompile(this.buildCompileRequest());
+      // [LAW:dataflow-not-control-flow] Startup and live compile artifacts flow
+      // through the same swap queue. Startup waits for ready/error, then forces
+      // one queue drain so init does not depend on RAF scheduling.
+      const compileState = await this.waitForCompilerState(['ready', 'error']);
+      if (compileState === 'ready') {
+        await this.flushPendingSwap();
+      }
+      await this.waitForCompilerState(['idle', 'error']);
+    } finally {
+      this.nextSwapIsInitial = false;
     }
   }
 
@@ -249,9 +309,6 @@ export class RuntimeService {
     if (!this.canvas) {
       throw new Error('RuntimeService: preview canvas is required before initialization');
     }
-    // [LAW:single-enforcer] RuntimeService owns startup capability validation.
-    // [LAW:no-silent-fallbacks] WebGPU-only runtime hard-fails when prerequisites are missing.
-    assertWebGPUStartupContract(this.canvas);
 
     this.compileWorkerClient = new CompileWorkerClient();
     this.asyncCompiler = new AsyncCompilerService({
@@ -348,20 +405,9 @@ export class RuntimeService {
       }
     }
 
-    // Initial compile (isInitial=true — hard swap)
-    try {
-      await compileAndSwap(
-        this.compileDeps(),
-        true
-      );
-    } catch (err) {
-      // [LAW:single-enforcer] RuntimeService logs unexpected startup failures once.
-      const message = err instanceof Error ? err.message : String(err);
-      store.diagnostics.log({
-        level: 'error',
-        message: `Initial compilation failed: ${message}`,
-      });
-    }
+    // [LAW:single-enforcer] Startup compile must flow through the async worker
+    // path so the main thread never runs compiler lowering/linking directly.
+    await this.runInitialCompileViaWorker();
 
     // Re-render App to update externalWriteBus prop now that runtime state exists.
     this.runtimeReadySink?.();
@@ -371,16 +417,7 @@ export class RuntimeService {
 
     // Set up live recompile reaction with fast-path for constant value changes
     this.liveRecompile.setup(store, async () => {
-      const debugValues = store.settings.get(debugSettings);
-      const flagOverrides = store.settings.get(compilerFlagsSettings);
-      this.asyncCompiler!.scheduleCompile({
-        patch: store.patch.patch,
-        patchRevision: store.getPatchRevision(),
-        frontendOptions: {
-          traceCardinalitySolver: debugValues?.traceCardinalitySolver,
-          diagnosticOverrides: flagOverrides ?? undefined,
-        },
-      });
+      this.asyncCompiler!.scheduleCompile(this.buildCompileRequest());
     }, (changes) => {
       const program = this.compileState.currentProgram;
       if (!program) return false;
