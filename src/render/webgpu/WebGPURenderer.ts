@@ -954,6 +954,7 @@ export class WebGPURenderer {
         });
         nextFirstInstance += op.instances.count;
       }
+      nextSourceSinkIndex += 1;
     }
     return prepared;
   }
