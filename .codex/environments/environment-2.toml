@@ -3,7 +3,7 @@ version = 1
 name = "oscilla-animator-v2"
 
 [setup]
-script = ""
+script = "npm install"
 
 [[actions]]
 name = "Run"
