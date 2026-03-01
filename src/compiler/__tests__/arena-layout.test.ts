@@ -25,6 +25,7 @@ import type { InstanceDecl } from '../ir/types';
 import { buildPatch } from '../../graph';
 import { compile } from '../compile';
 import { createRuntimeState } from '../../runtime';
+import { getOrCreateTargetState, type StableTargetId } from '../../runtime/ContinuityState';
 import type { ScheduleIR } from '../backend/schedule-program';
 import type { ValueSlot } from '../../types';
 
@@ -399,6 +400,123 @@ describe('arenaLayout integration', () => {
     expect(colorDesc?.packing).toBe('soa');
   });
 
+  it('allocates non-empty state zone banks for stateful schedules', () => {
+    const patch = buildPatch((b) => {
+      const time = b.addBlock('InfiniteTimeRoot');
+      const delay = b.addBlock('UnitDelay');
+      b.wire(time, 'tMs', delay, 'in');
+    });
+
+    const result = compile(patch);
+    if (result.kind === 'error') {
+      throw new Error(`Compile failed: ${result.errors.map((e) => e.message).join(', ')}`);
+    }
+    const program = result.program;
+    const schedule = program.schedule as ScheduleIR;
+    expect((schedule.stateSlotCount ?? 0)).toBeGreaterThan(0);
+
+    const stateZone = program.arenaZones?.zones.find((z) => z.kind === 'state');
+    expect(stateZone).toBeDefined();
+    if (!stateZone) {
+      throw new Error('Missing state zone metadata');
+    }
+    expect(stateZone.length).toBe((schedule.stateSlotCount ?? 0) * 2);
+
+    const stateLayout = program.arenaRuntimeLayout?.stateBank;
+    expect(stateLayout).toBeDefined();
+    if (!stateLayout) {
+      throw new Error('Missing arenaRuntimeLayout.stateBank metadata');
+    }
+    expect(stateLayout.bankLength).toBe(schedule.stateSlotCount ?? 0);
+    expect(stateLayout.offset).toBe(stateZone.start);
+
+    const state = createRuntimeState(
+      program.slotMeta.length,
+      schedule.stateSlotCount ?? 0,
+      schedule.eventSlotCount ?? 0,
+      schedule.eventCount ?? 0,
+      program.valueExprs.nodes.length,
+      program.arenaTotalFloats,
+      0,
+      undefined,
+      undefined,
+      program.arenaRuntimeLayout,
+    );
+    expect(state.arena.length).toBe(program.arenaTotalFloats);
+    expect(state.state.buffer).toBe(state.arena.buffer);
+    expect(state.stateWrite?.buffer).toBe(state.arena.buffer);
+    expect(state.stateArena.offset).toBe(stateZone.start);
+  });
+
+  it('binds continuity gauge targets to zone-5 arena slices', () => {
+    const patch = buildPatch((b) => {
+      b.addBlock('InfiniteTimeRoot');
+
+      const ellipse = b.addBlock('Ellipse');
+      const array = b.addBlock('Array');
+      b.setPortDefault(array, 'count', 4);
+      b.wire(ellipse, 'shape', array, 'element');
+
+      const grid = b.addBlock('GridLayoutUV');
+      b.setPortDefault(grid, 'rows', 2);
+      b.setPortDefault(grid, 'cols', 2);
+      b.wire(array, 'elements', grid, 'elements');
+
+      const colorSignal = b.addBlock('Const');
+      b.setConfig(colorSignal, 'value', { r: 1, g: 0.25, b: 0.1, a: 1 });
+      const colorField = b.addBlock('Broadcast');
+      b.wire(colorSignal, 'out', colorField, 'one');
+
+      const render = b.addBlock('RenderInstances2D');
+      b.wire(grid, 'controlPoints', render, 'controlPoints');
+      b.wire(colorField, 'field', render, 'color');
+    });
+
+    const result = compile(patch);
+    if (result.kind === 'error') {
+      throw new Error(`Compile failed: ${result.errors.map((e) => e.message).join(', ')}`);
+    }
+    const program = result.program;
+    const schedule = program.schedule as ScheduleIR;
+    const gaugeZone = program.arenaZones?.zones.find((z) => z.kind === 'gauge');
+    expect(gaugeZone).toBeDefined();
+    if (!gaugeZone) {
+      throw new Error('Missing gauge zone metadata');
+    }
+    expect(gaugeZone.length).toBeGreaterThan(0);
+
+    const gaugeTargets = program.arenaRuntimeLayout?.gaugeTargets ?? [];
+    expect(gaugeTargets.length).toBeGreaterThan(0);
+    const totalGaugeFloats = gaugeTargets.reduce((sum, target) => sum + target.descriptor.length, 0);
+    expect(gaugeZone.length).toBe(totalGaugeFloats);
+
+    const state = createRuntimeState(
+      program.slotMeta.length,
+      schedule.stateSlotCount ?? 0,
+      schedule.eventSlotCount ?? 0,
+      schedule.eventCount ?? 0,
+      program.valueExprs.nodes.length,
+      program.arenaTotalFloats,
+      0,
+      undefined,
+      undefined,
+      program.arenaRuntimeLayout,
+    );
+
+    for (const target of gaugeTargets) {
+      const targetState = getOrCreateTargetState(
+        state.continuity,
+        target.targetId as StableTargetId,
+        target.descriptor.length,
+        target.instanceId,
+      );
+      expect(targetState.gaugeBuffer.buffer).toBe(state.arena.buffer);
+      expect(targetState.gaugeBuffer.length).toBe(target.descriptor.length);
+      expect(target.descriptor.offset).toBeGreaterThanOrEqual(gaugeZone.start);
+      expect(target.descriptor.offset + target.descriptor.length).toBeLessThanOrEqual(gaugeZone.end);
+    }
+  });
+
   it('compiled program has consistent arenaLayout', () => {
     const patch = buildPatch((b) => {
       const time = b.addBlock('InfiniteTimeRoot');
@@ -521,6 +639,10 @@ describe('arenaLayout integration', () => {
       0, // eventExprCount
       0, // valueExprCount
       program.arenaTotalFloats,
+      0,
+      undefined,
+      undefined,
+      program.arenaRuntimeLayout,
     );
 
     expect(state.arena).toBeInstanceOf(Float32Array);

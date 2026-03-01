@@ -124,6 +124,10 @@ describe('Steel Thread - Dual Topology with Scale', () => {
       schedule.eventCount ?? 0,
       result.program.valueExprs.nodes.length,
       result.program.arenaTotalFloats,
+      0,
+      undefined,
+      undefined,
+      result.program.arenaRuntimeLayout,
     );
     const arena = getTestArena();
 

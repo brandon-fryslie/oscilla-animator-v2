@@ -6,17 +6,31 @@ import {
 } from '../RuntimeState';
 
 describe('RuntimeState state-bank ownership', () => {
-  it('allocates explicit read/write banks for persistent state', () => {
+  it('allocates explicit read/write banks from compiler arena runtime layout', () => {
+    const arenaRuntimeLayout = {
+      stateBank: {
+        offset: 10,
+        length: 8,
+        bankLength: 4,
+        readOffset: 10,
+        writeOffset: 14,
+      },
+      gaugeTargets: [],
+    } as const;
     const state = createRuntimeState(
       0, // slotCount (compat arg)
       4, // stateSlotCount
       0, // eventSlotCount
       0, // eventExprCount
       0, // valueExprCount
-      10, // arenaTotalFloats
+      18, // arenaTotalFloats (already includes state zone)
       0, // shape2dSlotCount
+      undefined,
+      undefined,
+      arenaRuntimeLayout,
     );
 
+    expect(state.arena.length).toBe(18);
     expect(state.state.length).toBe(4);
     expect(state.stateWrite?.length).toBe(4);
     expect(state.stateWrite).toBeDefined();
@@ -28,7 +42,17 @@ describe('RuntimeState state-bank ownership', () => {
   });
 
   it('prepares and commits phase-2 state writes via bank swap', () => {
-    const state = createRuntimeState(0, 3, 0, 0, 0, 5, 0);
+    const arenaRuntimeLayout = {
+      stateBank: {
+        offset: 0,
+        length: 6,
+        bankLength: 3,
+        readOffset: 0,
+        writeOffset: 3,
+      },
+      gaugeTargets: [],
+    } as const;
+    const state = createRuntimeState(0, 3, 0, 0, 0, 6, 0, undefined, undefined, arenaRuntimeLayout);
     state.state[0] = 1;
     state.state[1] = 2;
     state.state[2] = 3;
@@ -48,4 +72,3 @@ describe('RuntimeState state-bank ownership', () => {
     expect(state.stateArena.writeOffset).toBe(initialReadOffset);
   });
 });
-

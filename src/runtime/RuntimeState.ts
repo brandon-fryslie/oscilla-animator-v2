@@ -8,10 +8,10 @@
 import type { EffectiveTime, TimeState } from './timeResolution';
 import { createTimeState } from './timeResolution';
 import type { ContinuityState } from './ContinuityState';
-import { createContinuityState } from './ContinuityState';
+import { bindContinuityGaugeArena, createContinuityState } from './ContinuityState';
 import type { DebugTap } from './DebugTap';
 import type { RenderFrameIR } from '../render/types';
-import type { RuntimeScalarArenaAddress } from '../compiler/ir/program';
+import type { ArenaRuntimeLayoutIR, RuntimeScalarArenaAddress } from '../compiler/ir/program';
 import { ExternalChannelSystem } from './ExternalChannel';
 import { createArena } from './ArenaValueStore';
 
@@ -972,18 +972,46 @@ export function createProgramState(
   shape2dSlotCount: number = 0,
   shapeBankWordCapacity: number = DEFAULT_SHAPE_BANK_WORD_CAPACITY,
   shapeBankStaticBoundary: number = 0,
+  arenaRuntimeLayout?: ArenaRuntimeLayoutIR,
 ): ProgramState {
   // [LAW:one-source-of-truth] event wrap-edge state lives in eventWrapPredicate;
   // eventExprCount is accepted for callsite compatibility while compile/runtime
   // signatures converge on ValueExpr-driven sizing.
   void eventExprCount;
-  const stateArenaOffset = arenaTotalFloats;
-  // [LAW:one-source-of-truth] Persistent primitive state ownership is explicit:
-  // one read bank + one write bank in a single arena segment.
-  const stateBankLength = stateSlotCount;
-  const readOffset = stateArenaOffset;
-  const writeOffset = stateArenaOffset + stateBankLength;
-  const arena = createArena(arenaTotalFloats + stateBankLength * 2);
+  // [LAW:one-source-of-truth] Persistent primitive state offsets come from the
+  // compiler arena runtime layout when available.
+  const compilerStateBank = arenaRuntimeLayout?.stateBank;
+  if (
+    compilerStateBank &&
+    stateSlotCount !== 0 &&
+    stateSlotCount !== compilerStateBank.bankLength
+  ) {
+    throw new Error(
+      'createProgramState: stateSlotCount mismatch (schedule=' +
+        stateSlotCount +
+        ', arenaRuntimeLayout=' +
+        compilerStateBank.bankLength +
+        ')',
+    );
+  }
+  const stateBankLength = compilerStateBank?.bankLength ?? stateSlotCount;
+  const stateArenaOffset = compilerStateBank?.offset ?? arenaTotalFloats;
+  const stateArenaLength = compilerStateBank?.length ?? stateBankLength * 2;
+  const readOffset = compilerStateBank?.readOffset ?? stateArenaOffset;
+  const writeOffset = compilerStateBank?.writeOffset ?? (stateArenaOffset + stateBankLength);
+  const requiredArenaFloats = Math.max(arenaTotalFloats, stateArenaOffset + stateArenaLength);
+  const arena = createArena(requiredArenaFloats);
+  if (readOffset + stateBankLength > arena.length || writeOffset + stateBankLength > arena.length) {
+    throw new Error(
+      'createProgramState: state bank range exceeds arena (arena=' +
+        arena.length +
+        ', readEnd=' +
+        (readOffset + stateBankLength) +
+        ', writeEnd=' +
+        (writeOffset + stateBankLength) +
+        ')',
+    );
+  }
   const stateReadView = arena.subarray(readOffset, readOffset + stateBankLength);
   const stateWriteView = arena.subarray(writeOffset, writeOffset + stateBankLength);
   return {
@@ -994,7 +1022,7 @@ export function createProgramState(
     // arena segment contract with explicit read/write bank metadata.
     stateArena: {
       offset: stateArenaOffset,
-      length: stateBankLength * 2,
+      length: stateArenaLength,
       bankLength: stateBankLength,
       readOffset,
       writeOffset,
@@ -1034,6 +1062,7 @@ export function createRuntimeState(
   shape2dSlotCount: number = 0,
   shapeBankWordCapacity: number = DEFAULT_SHAPE_BANK_WORD_CAPACITY,
   shapeBankStaticBoundary: number = 0,
+  arenaRuntimeLayout?: ArenaRuntimeLayoutIR,
 ): RuntimeState {
   const session = createSessionState();
   // [LAW:no-mode-explosion] `slotCount` remains as a compatibility-only
@@ -1050,6 +1079,7 @@ export function createRuntimeState(
     shape2dSlotCount,
     shapeBankWordCapacity,
     shapeBankStaticBoundary,
+    arenaRuntimeLayout,
   );
 }
 
@@ -1068,6 +1098,7 @@ export function createRuntimeStateFromSession(
   shape2dSlotCount: number = 0,
   shapeBankWordCapacity: number = DEFAULT_SHAPE_BANK_WORD_CAPACITY,
   shapeBankStaticBoundary: number = 0,
+  arenaRuntimeLayout?: ArenaRuntimeLayoutIR,
 ): RuntimeState {
   const program = createProgramState(
     stateSlotCount,
@@ -1078,6 +1109,12 @@ export function createRuntimeStateFromSession(
     shape2dSlotCount,
     shapeBankWordCapacity,
     shapeBankStaticBoundary,
+    arenaRuntimeLayout,
+  );
+  bindContinuityGaugeArena(
+    session.continuity,
+    program.arena,
+    arenaRuntimeLayout?.gaugeTargets ?? [],
   );
   return {
     // ProgramState (fresh)
