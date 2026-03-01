@@ -56,6 +56,10 @@ function createStateForProgram(program: CompiledProgramIR): RuntimeState {
     schedule.eventCount ?? 0,
     program.valueExprs.nodes.length,
     program.arenaTotalFloats,
+    0,
+    undefined,
+    undefined,
+    program.arenaRuntimeLayout,
   );
 }
 

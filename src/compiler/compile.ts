@@ -38,6 +38,7 @@ import {
   deriveStorageLayout,
   deriveArenaZonePlan,
   DEFAULT_ARENA_ALIGNMENT_POLICY,
+  type ArenaGaugeTargetPlanInput,
 } from './ir/storage-class';
 import type { ArenaSlotDescriptor } from '../runtime/ArenaValueStore';
 import type { ValueExpr, ValueExprId } from './ir/value-expr';
@@ -365,6 +366,26 @@ function buildRuntimeAddressTable(
   };
 }
 
+function collectGaugeTargetPlanInputs(scheduleIR: ScheduleIR): readonly ArenaGaugeTargetPlanInput[] {
+  const entries: ArenaGaugeTargetPlanInput[] = [];
+  const seen = new Set<string>();
+  for (const step of scheduleIR.steps) {
+    if (step.kind !== 'continuityApply') {
+      continue;
+    }
+    if (seen.has(step.targetKey)) {
+      continue;
+    }
+    seen.add(step.targetKey);
+    entries.push({
+      targetId: step.targetKey,
+      instanceId: step.instanceId,
+      slot: step.outputSlot,
+    });
+  }
+  return entries;
+}
+
 function assertRuntimeAddressTableCoverage(
   runtimeSlots: readonly RuntimeSlotEntry[],
   runtimeAddressTable: RuntimeAddressTableIR,
@@ -480,10 +501,16 @@ function convertLinkedIRToProgram(
   }
 
   // [LAW:one-source-of-truth] Arena zones + aligned offsets are compiled once.
+  const gaugeTargetPlanInputs = collectGaugeTargetPlanInputs(scheduleIR);
   const arenaZonePlan = deriveArenaZonePlan(
     arenaSlotPlanInputs,
     instances,
     DEFAULT_ARENA_ALIGNMENT_POLICY,
+    {
+      stateBankLength: scheduleIR.stateSlotCount,
+      stateEntryCount: scheduleIR.stateMappings.length,
+      gaugeTargets: gaugeTargetPlanInputs,
+    },
   );
   const arenaLayout: ArenaSlotDescriptor[] = new Array(slotCount);
   const runtimeSlots: RuntimeSlotEntry[] = runtimeSlotEntries.map((entry) => {
@@ -659,6 +686,7 @@ function convertLinkedIRToProgram(
       : undefined,
     arenaLayout,
     arenaZones: arenaZonePlan.toIR(),
+    arenaRuntimeLayout: arenaZonePlan.runtimeLayout,
     arenaTotalFloats: arenaZonePlan.totalFloats,
     drawPrepProgram,
     generatedComputeProgram,

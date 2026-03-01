@@ -13,6 +13,35 @@
 import type { ValueSlot } from '../types';
 
 /**
+ * Spy probe slice request for asynchronous observability reads.
+ *
+ * [LAW:dataflow-not-control-flow] Probe selection is data (slice descriptors),
+ * not runtime-mode branching in frame execution.
+ */
+export interface SpyProbeSlice {
+  /** Canonical slot to sample */
+  readonly slotId: ValueSlot;
+  /** Source component offset inside the sampled slot payload */
+  readonly componentOffset: number;
+  /** Number of scalar components to read */
+  readonly componentCount: number;
+}
+
+/**
+ * Spy readback sample emitted at low cadence for UI observability.
+ */
+export interface SpyReadbackSample {
+  /** Runtime frame ID at capture time */
+  readonly frameId: number;
+  /** Absolute capture timestamp in milliseconds */
+  readonly capturedAtMs: number;
+  /** Canonical source slot */
+  readonly slotId: ValueSlot;
+  /** Sampled scalar values */
+  readonly values: Float32Array;
+}
+
+/**
  * DebugTap - Optional runtime instrumentation interface
  *
  * Injected into RuntimeState to record values during execution.
@@ -56,4 +85,16 @@ export interface DebugTap {
    * Returns undefined or empty set if no fields are being tracked.
    */
   getTrackedFieldSlots?(): ReadonlySet<ValueSlot> | undefined;
+
+  /**
+   * Provide active spy probes for low-rate async readback.
+   * Implementations may return empty/undefined when no probes are active.
+   */
+  getSpyProbeSlices?(): readonly SpyProbeSlice[] | undefined;
+
+  /**
+   * Record an asynchronously captured spy sample.
+   * Called by runtime-side spy cadence loop (not the hot execution path).
+   */
+  recordSpyReadbackSample?(sample: SpyReadbackSample): void;
 }

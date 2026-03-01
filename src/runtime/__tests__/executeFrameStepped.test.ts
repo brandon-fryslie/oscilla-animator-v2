@@ -100,6 +100,10 @@ function createStateForProgram(program: CompiledProgramIR) {
     (schedule as any).eventCount ?? 0,
     program.valueExprs.nodes.length,
     program.arenaTotalFloats,
+    0,
+    undefined,
+    undefined,
+    program.arenaRuntimeLayout,
   );
 }
 

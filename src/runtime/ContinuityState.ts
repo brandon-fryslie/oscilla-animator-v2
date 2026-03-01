@@ -13,6 +13,7 @@
  */
 
 import type { DomainInstance } from '../compiler/ir/types';
+import type { ArenaGaugeTargetLayoutIR } from '../compiler/ir/program';
 import type { PlacementBasisBuffers } from './PlacementBasis';
 
 // =============================================================================
@@ -86,6 +87,8 @@ export interface MappingState {
 export interface TargetContinuityState {
   /** Gauge offset buffer (Δ) - x_eff = x_base + Δ */
   gaugeBuffer: Float32Array;
+  /** Optional full-capacity arena-backed gauge slice for this target. */
+  gaugeBacking?: Float32Array;
 
   /** Slew state buffer (y) - current smoothed value */
   slewBuffer: Float32Array;
@@ -116,6 +119,12 @@ export interface TargetContinuityState {
 export interface ContinuityState {
   /** Per-target continuity buffers, keyed by StableTargetId */
   targets: Map<StableTargetId, TargetContinuityState>;
+
+  /** Active arena backing store for gauge zone views (per-program). */
+  gaugeArena: Float32Array | null;
+
+  /** Compiler-emitted gauge target layouts keyed by StableTargetId. */
+  gaugeLayouts: Map<StableTargetId, ArenaGaugeTargetLayoutIR>;
 
   /**
    * Canonical target ownership map: StableTargetId -> instanceId.
@@ -166,6 +175,8 @@ export interface ContinuityTargetOwnerBinding {
 export function createContinuityState(): ContinuityState {
   return {
     targets: new Map(),
+    gaugeArena: null,
+    gaugeLayouts: new Map(),
     targetOwners: new Map(),
     mappings: new Map(),
     prevDomains: new Map(),
@@ -189,6 +200,70 @@ export function resizePreservePrefix(old: Float32Array, newLen: number): Float32
   const copyCount = Math.min(old.length, newLen);
   result.set(old.subarray(0, copyCount));
   return result;
+}
+
+function resolveGaugeLayoutBacking(
+  continuity: ContinuityState,
+  targetId: StableTargetId,
+): Float32Array | null {
+  const layout = continuity.gaugeLayouts.get(targetId);
+  if (!layout) {
+    return null;
+  }
+  const arena = continuity.gaugeArena;
+  if (!arena) {
+    throw new Error(`resolveGaugeLayoutBacking: missing gauge arena for target ${targetId}`);
+  }
+  const { offset, length } = layout.descriptor;
+  if (offset < 0 || length < 0 || offset + length > arena.length) {
+    throw new Error(
+      `resolveGaugeLayoutBacking: gauge descriptor out of bounds for target ${targetId} (offset=${offset}, length=${length}, arena=${arena.length})`,
+    );
+  }
+  return arena.subarray(offset, offset + length);
+}
+
+export function bindContinuityGaugeArena(
+  continuity: ContinuityState,
+  arena: Float32Array,
+  gaugeTargets: readonly ArenaGaugeTargetLayoutIR[],
+): void {
+  continuity.gaugeArena = arena;
+  const nextLayouts = new Map<StableTargetId, ArenaGaugeTargetLayoutIR>();
+  for (const target of gaugeTargets) {
+    const targetId = target.targetId as StableTargetId;
+    if (nextLayouts.has(targetId)) {
+      continue;
+    }
+    nextLayouts.set(targetId, target);
+  }
+
+  // [LAW:one-source-of-truth] Active continuity gauge targets are rebound from
+  // one compiler-emitted layout map per program swap.
+  continuity.gaugeLayouts = nextLayouts;
+
+  for (const [targetId, state] of continuity.targets) {
+    const backing = resolveGaugeLayoutBacking(continuity, targetId);
+    if (!backing) {
+      if (state.gaugeBacking) {
+        state.gaugeBuffer = new Float32Array(state.gaugeBuffer);
+        state.gaugeBacking = undefined;
+      }
+      continue;
+    }
+    const previousGauge = state.gaugeBuffer;
+    const preserved = Math.min(previousGauge.length, backing.length);
+    backing.fill(0);
+    backing.set(previousGauge.subarray(0, preserved), 0);
+    const nextCount = Math.min(state.count, backing.length);
+    state.count = nextCount;
+    state.gaugeBacking = backing;
+    state.gaugeBuffer = backing.subarray(0, nextCount);
+    state.slewBuffer = resizePreservePrefix(state.slewBuffer, nextCount);
+    state.crossfadeOldBuffer = state.crossfadeOldBuffer
+      ? resizePreservePrefix(state.crossfadeOldBuffer, nextCount)
+      : undefined;
+  }
 }
 
 /**
@@ -219,28 +294,64 @@ export function getOrCreateTargetState(
   }
 
   let state = continuity.targets.get(targetId);
+  const gaugeBacking =
+    state?.gaugeBacking ??
+    resolveGaugeLayoutBacking(continuity, targetId);
+  if (gaugeBacking && count > gaugeBacking.length) {
+    throw new Error(
+      `getOrCreateTargetState: requested count ${count} exceeds gauge capacity ${gaugeBacking.length} for target ${targetId}`,
+    );
+  }
 
-  if (!state || state.count !== count) {
-    if (state) {
-      // Resize preserving prefix — existing elements keep their values
-      const crossfadeOldBuffer = state.crossfadeOldBuffer
-        ? resizePreservePrefix(state.crossfadeOldBuffer, count)
-        : undefined;
-      state = {
-        gaugeBuffer: resizePreservePrefix(state.gaugeBuffer, count),
-        slewBuffer: resizePreservePrefix(state.slewBuffer, count),
-        count,
-        ...(state.crossfadeStartMs !== undefined && { crossfadeStartMs: state.crossfadeStartMs }),
-        ...(crossfadeOldBuffer && { crossfadeOldBuffer }),
-      };
-    } else {
-      // Fresh allocation — no prefix to preserve
-      state = {
-        gaugeBuffer: new Float32Array(count),
-        slewBuffer: new Float32Array(count),
-        count,
-      };
-    }
+  if (!state) {
+    state = {
+      // [LAW:one-source-of-truth] Gauge ownership resolves to compiler arena
+      // views when available; detached buffers are legacy test fallback.
+      gaugeBuffer: gaugeBacking ? gaugeBacking.subarray(0, count) : new Float32Array(count),
+      ...(gaugeBacking && { gaugeBacking }),
+      slewBuffer: new Float32Array(count),
+      count,
+    };
+    continuity.targets.set(targetId, state);
+    return state;
+  }
+
+  const countChanged = state.count !== count;
+  const backingChanged =
+    gaugeBacking !== null &&
+    (!state.gaugeBacking ||
+      state.gaugeBacking.buffer !== gaugeBacking.buffer ||
+      state.gaugeBacking.byteOffset !== gaugeBacking.byteOffset ||
+      state.gaugeBacking.length !== gaugeBacking.length);
+  if (countChanged || backingChanged) {
+    const nextGaugeBuffer = (() => {
+      if (gaugeBacking) {
+        if (backingChanged) {
+          const preserved = Math.min(state.gaugeBuffer.length, gaugeBacking.length);
+          gaugeBacking.fill(0);
+          gaugeBacking.set(state.gaugeBuffer.subarray(0, preserved), 0);
+        } else if (count > state.count) {
+          gaugeBacking.fill(0, state.count, count);
+        } else if (count < state.count) {
+          gaugeBacking.fill(0, count, state.count);
+        }
+        return gaugeBacking.subarray(0, count);
+      }
+      return resizePreservePrefix(state.gaugeBuffer, count);
+    })();
+
+    // Resize preserving prefix — existing elements keep their values
+    const crossfadeOldBuffer = state.crossfadeOldBuffer
+      ? resizePreservePrefix(state.crossfadeOldBuffer, count)
+      : undefined;
+    state = {
+      gaugeBuffer: nextGaugeBuffer,
+      ...(gaugeBacking && { gaugeBacking }),
+      slewBuffer: resizePreservePrefix(state.slewBuffer, count),
+      count,
+      ...(state.crossfadeStartMs !== undefined && { crossfadeStartMs: state.crossfadeStartMs }),
+      ...(crossfadeOldBuffer && { crossfadeOldBuffer }),
+    };
     continuity.targets.set(targetId, state);
   }
 
@@ -255,6 +366,8 @@ export function getOrCreateTargetState(
  */
 export function clearContinuityState(continuity: ContinuityState): void {
   continuity.targets.clear();
+  continuity.gaugeArena = null;
+  continuity.gaugeLayouts.clear();
   continuity.targetOwners.clear();
   continuity.mappings.clear();
   continuity.prevDomains.clear();
