@@ -17,21 +17,6 @@ async function toBackendResult(
   result: ReturnType<typeof compileFromFrontend>,
 ): Promise<CompileWorkerBackendResult> {
   if (result.kind === 'ok') {
-    if (!result.program.generatedComputeProgram) {
-      return {
-        kind: 'error',
-        errors: [
-          {
-            code: 'IRValidationFailed',
-            message: 'Compiled program is missing generatedComputeProgram',
-            details: {
-              preNagaWarnings: result.warnings,
-            },
-          },
-        ],
-      };
-    }
-
     const nagaOutcome = await compileProgramWithNaga(result.program);
     if (nagaOutcome.kind === 'error') {
       const errorsWithWarningContext = nagaOutcome.errors.map((error, index) => {
@@ -50,17 +35,9 @@ async function toBackendResult(
       };
     }
 
-    const programWithValidatedWgsl = {
-      ...result.program,
-      generatedComputeProgram: {
-        ...result.program.generatedComputeProgram,
-        // [LAW:one-source-of-truth] Worker WGSL payload comes from one validated
-        // Naga emission path, not parallel string emitters.
-        wgsl: nagaOutcome.wgsl,
-      },
-    };
-
-    const program = stripKernelRegistry(programWithValidatedWgsl);
+    // [LAW:no-string-math] Compiler output remains structured IR; WGSL text stays
+    // at the serializer boundary and is not persisted back into program IR.
+    const program = stripKernelRegistry(result.program);
     const topologyIds = collectProgramTopologyIds(program);
     return {
       kind: 'ok',

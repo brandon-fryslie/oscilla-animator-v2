@@ -10,15 +10,6 @@ export type NagaCompilationOutcome =
   | { readonly kind: 'ok'; readonly wgsl: string }
   | { readonly kind: 'error'; readonly errors: readonly CompileError[] };
 
-function parseMaxActiveLanes(generatedWgsl: string | undefined): number | undefined {
-  if (!generatedWgsl) return undefined;
-  const match = /const\s+MAX_ACTIVE_LANES:\s*u32\s*=\s*(\d+)u\s*;/m.exec(generatedWgsl);
-  if (!match) return undefined;
-  const parsed = Number.parseInt(match[1], 10);
-  if (!Number.isFinite(parsed) || parsed <= 0) return undefined;
-  return parsed;
-}
-
 function parseExpressionId(value: string): number | null {
   const match = /Expression\s*\[(\d+)\]/i.exec(value);
   if (!match) return null;
@@ -58,27 +49,18 @@ export async function compileProgramWithNaga(
     };
   }
 
-  const generatedComputeWgsl = program.generatedComputeProgram?.wgsl;
-  if (!generatedComputeWgsl) {
+  const maxActiveLanes = lowering.compute?.maxActiveLanes;
+  if (
+    typeof maxActiveLanes !== 'number'
+    || !Number.isFinite(maxActiveLanes)
+    || maxActiveLanes <= 0
+  ) {
     return {
       kind: 'error',
       errors: [
         {
           code: 'IRValidationFailed',
-          message: 'Missing generatedComputeProgram WGSL on compiled IR',
-        },
-      ],
-    };
-  }
-
-  const maxActiveLanes = parseMaxActiveLanes(generatedComputeWgsl);
-  if (!maxActiveLanes) {
-    return {
-      kind: 'error',
-      errors: [
-        {
-          code: 'IRValidationFailed',
-          message: 'MAX_ACTIVE_LANES constant missing or invalid in generatedComputeProgram WGSL',
+          message: 'Missing or invalid nagaLoweringProgram.compute.maxActiveLanes on compiled IR',
         },
       ],
     };
@@ -86,7 +68,9 @@ export async function compileProgramWithNaga(
 
   try {
     await NagaService.boot();
-    const compiled = NagaService.compile(lowering.module, { maxActiveLanes });
+    const compiled = NagaService.compile(lowering.module, {
+      maxActiveLanes: Math.max(1, Math.trunc(maxActiveLanes)),
+    });
     return {
       kind: 'ok',
       wgsl: compiled.wgsl,
