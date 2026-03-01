@@ -236,7 +236,7 @@ describe('AnimationLoop', () => {
     executeAnimationFrame(16, deps, state);
 
     const renderArg = renderer.render.mock.calls[0]?.[0];
-    expect('drawPrepShaderWgsl' in renderArg).toBe(false);
+    expect(Object.prototype.hasOwnProperty.call(renderArg ?? {}, 'drawPrepShaderWgsl')).toBe(false);
   });
 
   it('derives renderer input channels from the canonical external snapshot', () => {

@@ -724,10 +724,10 @@ export class WebGPURenderer {
     const rawInput = input as unknown as Record<string, unknown>;
     // [LAW:no-string-math] Lowering-authored WGSL source injection is forbidden.
     // Renderer contract rejects legacy draw-prep WGSL payloads at the sink boundary.
-    if ('drawPrepShaderWgsl' in rawInput) {
+    if (Object.prototype.hasOwnProperty.call(rawInput, 'drawPrepShaderWgsl')) {
       throw new Error('WebGPURenderer: drawPrepShaderWgsl override is forbidden in P0');
     }
-    if ('topologyRegistrySnapshot' in rawInput) {
+    if (Object.prototype.hasOwnProperty.call(rawInput, 'topologyRegistrySnapshot')) {
       throw new Error('WebGPURenderer: topology registry snapshot payloads are forbidden in P0');
     }
     if (frame.version !== 2) {
