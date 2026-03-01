@@ -564,6 +564,25 @@ describe('WebGPURenderer', () => {
     expect(readbackBuffers.length).toBeGreaterThan(0);
   });
 
+  it('creates indirect-args buffers with COPY_SRC usage for debug readback compatibility', async () => {
+    const env = createFakeWebGPUEnvironment();
+    setNavigatorGpu(env.gpu);
+    const renderer = await createWebGPURenderer(env.canvas);
+    const topologyId = makeSimpleTopology('webgpu-indirect-copy-src-usage-topology');
+
+    renderer.render(
+      makeRenderInput([makeDrawOp(topologyId), makeDrawOp(topologyId, { style: { strokeColor: new Uint8ClampedArray([255, 255, 255, 255]), strokeWidth: 0.01 } })]),
+    );
+
+    const indirectBuffers = env.device.createBuffer.mock.calls
+      .map(([descriptor]: [unknown]) => descriptor as { usage: number })
+      .filter((descriptor) => (descriptor.usage & 0x0100) !== 0);
+    expect(indirectBuffers.length).toBeGreaterThan(0);
+    for (const descriptor of indirectBuffers) {
+      expect((descriptor.usage & 0x0004) !== 0).toBe(true);
+    }
+  });
+
   it('renders cubic path geometry without rejecting supported curve verbs', async () => {
     const env = createFakeWebGPUEnvironment();
     setNavigatorGpu(env.gpu);
@@ -927,6 +946,25 @@ describe('WebGPURenderer', () => {
         },
       }))
     ).toThrow('missing from shape bank');
+  });
+
+  it('fails render when shape-bank topology sidecar is shorter than volatile range', async () => {
+    const env = createFakeWebGPUEnvironment();
+    setNavigatorGpu(env.gpu);
+    const renderer = await createWebGPURenderer(env.canvas);
+    const topologyId = makeSimpleTopology('webgpu-shape-bank-sidecar-length-topology');
+    const input = makeRenderInput([makeDrawOp(topologyId)]);
+
+    expect(() =>
+      renderer.render({
+        ...input,
+        shapeBank: {
+          ...input.shapeBank,
+          topologyIdByHandle: new Uint32Array(0),
+          volatilePtr: input.shapeBank.volatilePtr,
+        },
+      })
+    ).toThrow(/topologyIdByHandle length .* volatilePtr/i);
   });
 
   it('uses createComputePipelineAsync for all compute pipelines (P2-1 enforcement)', async () => {
