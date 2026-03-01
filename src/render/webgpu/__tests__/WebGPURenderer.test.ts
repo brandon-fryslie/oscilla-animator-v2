@@ -855,7 +855,6 @@ describe('WebGPURenderer', () => {
       ],
     }))).toThrow('exceeds packed instance count');
   });
-
   it('applies static draw-prep sink override to both fill and stroke records of one logical sink', async () => {
     const env = createFakeWebGPUEnvironment();
     setNavigatorGpu(env.gpu);
