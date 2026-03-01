@@ -198,15 +198,11 @@ const _continuityResolverContext: ContinuityBufferResolverContext = {
 function resolveContinuityBuffer(slot: ValueSlot): Float32Array {
   if (slot === _continuityResolverContext.baseSlot) return _continuityResolverContext.baseBuffer;
   if (slot === _continuityResolverContext.outputSlot) return _continuityResolverContext.outputBuffer;
-  const buffer = resolveNumericBuffer(
+  return resolveNumericBuffer(
     _continuityResolverContext.slotToArena,
     _continuityResolverContext.state,
     slot,
   );
-  if (!buffer) {
-    throw new Error('Continuity: Buffer not found for slot ' + slot);
-  }
-  return buffer;
 }
 
 export interface ExecuteFrameOptions {
