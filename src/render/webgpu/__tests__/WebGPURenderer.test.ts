@@ -790,6 +790,55 @@ describe('WebGPURenderer', () => {
     expect(drawPrepParams[1]).toBe(4);
   });
 
+  it('applies static draw-prep sink override to both fill and stroke records of one logical sink', async () => {
+    const env = createFakeWebGPUEnvironment();
+    setNavigatorGpu(env.gpu);
+    const renderer = await createWebGPURenderer(env.canvas);
+    const topologyId = makeSimpleTopology('webgpu-draw-prep-static-sink-fill-stroke-topology');
+    const capturedDrawPrepWrites: number[][] = [];
+    const originalWriteBuffer = env.device.queue.writeBuffer.getMockImplementation();
+    env.device.queue.writeBuffer.mockImplementation((...args: unknown[]) => {
+      const data = args[2];
+      if (data instanceof Uint32Array && data.length === WEBGPU_RENDER_CONTRACT.drawPrepParamsU32) {
+        capturedDrawPrepWrites.push(Array.from(data));
+      }
+      return (originalWriteBuffer as ((...params: any[]) => unknown) | undefined)?.(...(args as any[]));
+    });
+
+    renderer.render(makeRenderInput([
+      makeDrawOp(topologyId, {
+        count: 9,
+        style: {
+          fillColor: new Uint8ClampedArray([255, 0, 0, 255]),
+          strokeColor: new Uint8ClampedArray([0, 255, 255, 255]),
+          strokeWidth: 0.02,
+          fillRule: 'nonzero',
+        },
+      }),
+    ], {
+      drawPrepSinks: [
+        {
+          sinkIndex: 0,
+          renderStepIndex: 0,
+          instanceId: 'inst-0',
+          indirectRecordIndex: 0,
+          instanceCountMode: 'static',
+          staticInstanceCount: 4,
+        },
+      ],
+    }));
+
+    expect(capturedDrawPrepWrites.length).toBeGreaterThanOrEqual(2);
+    const perRecordCounts = capturedDrawPrepWrites
+      .map((params) => [params[5] ?? -1, params[1] ?? -1] as const)
+      .filter(([recordIndex]) => recordIndex <= 1)
+      .sort((a, b) => a[0] - b[0]);
+    expect(perRecordCounts.slice(0, 2)).toEqual([
+      [0, 4],
+      [1, 4],
+    ]);
+  });
+
   it('grows compute arena geometrically and dispatches migration when simulation count exceeds current capacity', async () => {
     const env = createFakeWebGPUEnvironment();
     setNavigatorGpu(env.gpu);

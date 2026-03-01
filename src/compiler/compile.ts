@@ -750,6 +750,7 @@ function convertLinkedIRToProgram(
 
 function buildDrawPrepProgram(scheduleIR: ScheduleIR): DrawPrepProgramIR {
   const sinks: DrawPrepSinkIR[] = [];
+  const maxUint32 = 0xFFFF_FFFF;
   const steps = scheduleIR.steps as readonly Step[];
   for (let stepIndex = 0; stepIndex < steps.length; stepIndex++) {
     const step = steps[stepIndex];
@@ -760,6 +761,22 @@ function buildDrawPrepProgram(scheduleIR: ScheduleIR): DrawPrepProgramIR {
       throw new Error(`DrawPrepProgram: render step references missing instance ${String(step.instanceId)}`);
     }
     const staticInstanceCount = typeof instance.count === 'number' ? instance.count : undefined;
+    if (
+      staticInstanceCount !== undefined
+      && (
+        !Number.isFinite(staticInstanceCount)
+        || !Number.isInteger(staticInstanceCount)
+        || !Number.isSafeInteger(staticInstanceCount)
+        || staticInstanceCount < 0
+        || staticInstanceCount > maxUint32
+      )
+    ) {
+      // [LAW:no-silent-fallbacks] Invalid static instance counts must fail at
+      // compiler boundary so runtime dispatch never receives coerced metadata.
+      throw new Error(
+        `DrawPrepProgram: instance ${String(step.instanceId)} has invalid static count ${String(staticInstanceCount)}; expected uint32`,
+      );
+    }
 
     sinks.push({
       sinkIndex: sinks.length,

@@ -60,7 +60,9 @@ The Compiler counts the number of Render blocks in the graph. Let's say there ar
 
 ## 3. The Shader Logic (draw_prep.wgsl)
 
-The draw-prep shader is a canonical static kernel. The compiler emits only draw-prep sink metadata (`indirectRecordIndex`, `instanceCountMode`, `staticInstanceCount`) and the runtime resolves static-vs-dynamic instance counts before dispatch.
+The draw-prep shader is a canonical static kernel. The compiler emits only draw-prep sink metadata (`sinkIndex`, `indirectRecordIndex`, `instanceCountMode`, `staticInstanceCount`) and the runtime resolves static-vs-dynamic instance counts before dispatch.
+
+For debugging and development-only hot-swap experiments, the renderer still accepts a `drawPrepShaderWgsl` override. This override is an explicit escape hatch, not a stable production API: any override must preserve the canonical draw-prep bind-group layout and indirect-args semantics.
 
 Code snippet
 

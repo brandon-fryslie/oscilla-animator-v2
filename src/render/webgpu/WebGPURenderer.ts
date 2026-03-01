@@ -79,6 +79,7 @@ interface RenderInput {
 }
 
 interface DrawPrepSinkDescriptor {
+  readonly sinkIndex: number;
   readonly indirectRecordIndex: number;
   readonly instanceCountMode: 'static' | 'dynamic';
   readonly staticInstanceCount?: number;
@@ -88,11 +89,14 @@ interface PreparedDrawPathOp {
   readonly op: DrawPathInstancesOp;
   readonly mesh: GPUMesh;
   readonly shapeBankWordOffset: number;
+  readonly sourceSinkIndex: number;
   readonly indirectRecordIndex: number;
   readonly firstInstance: number;
   readonly instanceCount: number;
   readonly pass: 'fill' | 'stroke';
 }
+
+const MAX_UINT32 = 0xFFFF_FFFF;
 
 function buildDrawPrepStaticCountLookup(
   sinks: readonly DrawPrepSinkDescriptor[] | undefined,
@@ -102,14 +106,21 @@ function buildDrawPrepStaticCountLookup(
   for (const sink of sinks) {
     if (sink.instanceCountMode !== 'static') continue;
     const staticCount = sink.staticInstanceCount;
-    if (typeof staticCount !== 'number' || !Number.isFinite(staticCount) || staticCount < 0) {
+    if (
+      typeof staticCount !== 'number'
+      || !Number.isFinite(staticCount)
+      || !Number.isInteger(staticCount)
+      || !Number.isSafeInteger(staticCount)
+      || staticCount < 0
+      || staticCount > MAX_UINT32
+    ) {
       // [LAW:no-silent-fallbacks] Invalid compiler draw-prep metadata must fail
       // fast instead of silently emitting fallback instance counts.
       throw new Error(
         `WebGPURenderer: static draw-prep sink ${sink.indirectRecordIndex} missing valid staticInstanceCount`,
       );
     }
-    staticCounts.set(sink.indirectRecordIndex, staticCount >>> 0);
+    staticCounts.set(sink.sinkIndex, staticCount);
   }
   return staticCounts;
 }
@@ -685,7 +696,7 @@ export class WebGPURenderer {
     const staticDrawPrepCounts = buildDrawPrepStaticCountLookup(input.drawPrepSinks);
     for (const prepared of drawPlan) {
       const resolvedInstanceCount =
-        staticDrawPrepCounts.get(prepared.indirectRecordIndex)
+        staticDrawPrepCounts.get(prepared.sourceSinkIndex)
         ?? prepared.instanceCount;
       this.drawPrepRuntime.step(
         commandEncoder,
@@ -879,6 +890,7 @@ export class WebGPURenderer {
   private buildDrawPlan(frame: RenderFrameIR): PreparedDrawPathOp[] {
     const prepared: PreparedDrawPathOp[] = [];
     let nextFirstInstance = 0;
+    let nextSourceSinkIndex = 0;
     for (const op of frame.ops) {
       if (op.kind !== 'drawPathInstances') {
         throw new Error(`WebGPURenderer: unsupported draw op kind "${(op as { kind: string }).kind}"`);
@@ -905,6 +917,7 @@ export class WebGPURenderer {
           op,
           mesh,
           shapeBankWordOffset,
+          sourceSinkIndex: nextSourceSinkIndex,
           indirectRecordIndex: prepared.length,
           firstInstance: nextFirstInstance,
           instanceCount: op.instances.count,
@@ -917,6 +930,7 @@ export class WebGPURenderer {
           op,
           mesh,
           shapeBankWordOffset,
+          sourceSinkIndex: nextSourceSinkIndex,
           indirectRecordIndex: prepared.length,
           firstInstance: nextFirstInstance,
           instanceCount: op.instances.count,
@@ -924,6 +938,7 @@ export class WebGPURenderer {
         });
         nextFirstInstance += op.instances.count;
       }
+      nextSourceSinkIndex += 1;
     }
     return prepared;
   }
