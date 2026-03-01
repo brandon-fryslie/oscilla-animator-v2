@@ -37,7 +37,6 @@ async function toBackendResult(
 
     // [LAW:no-string-math] Compiler output remains structured IR; WGSL text stays
     // at the serializer boundary and is not persisted back into program IR.
-    void nagaOutcome;
     const program = stripKernelRegistry(result.program);
     const topologyIds = collectProgramTopologyIds(program);
     return {

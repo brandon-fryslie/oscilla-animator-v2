@@ -731,9 +731,12 @@ function buildDrawPrepProgram(scheduleIR: ScheduleIR): DrawPrepProgramIR {
   // [LAW:one-source-of-truth] Draw-prep sink constants are emitted from one
   // canonical compiler sink table used by runtime and shader generation.
   for (const sink of sinks) {
+    const staticInstanceCount = sink.instanceCountMode === 'static'
+      ? requireStaticInstanceCount(sink)
+      : undefined;
     const instanceCountLiteral =
       sink.instanceCountMode === 'static'
-        ? `${sink.staticInstanceCount === undefined ? 0 : sink.staticInstanceCount}u`
+        ? `${staticInstanceCount}u`
         : '/* dynamic instance count */ 0u';
     const isStaticLiteral = sink.instanceCountMode === 'static' ? '1u' : '0u';
     wgslLines.push(`const DRAW_SINK_${sink.sinkIndex}_RECORD: u32 = ${sink.indirectRecordIndex}u;`);
@@ -780,6 +783,17 @@ function buildDrawPrepProgram(scheduleIR: ScheduleIR): DrawPrepProgramIR {
     '}',
   );
   return { sinks, wgsl: wgslLines.join('\n') };
+}
+
+function requireStaticInstanceCount(sink: DrawPrepSinkIR): number {
+  if (sink.staticInstanceCount === undefined) {
+    // [LAW:no-silent-fallbacks] Invalid static sink metadata must fail fast
+    // instead of silently emitting a zeroed instance count.
+    throw new Error(
+      `DrawPrepProgram: static sink ${sink.sinkIndex} missing staticInstanceCount`,
+    );
+  }
+  return sink.staticInstanceCount;
 }
 
 /**
