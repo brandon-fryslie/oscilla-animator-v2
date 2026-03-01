@@ -83,7 +83,7 @@ describe('Steel Thread - Dual Topology with Scale', () => {
     if (result.kind !== 'ok') return;
 
     const schedule = result.program.schedule as ScheduleIR;
-    expect(result.program.generatedComputeProgram?.wgsl).toContain('OFFSET_SLOT_');
+    expect(result.program.nagaLoweringProgram?.compute.maxActiveLanes ?? 0).toBeGreaterThan(0);
     const renderSteps = schedule.steps.filter((step): step is StepRender => step.kind === 'render');
     expect(renderSteps.length).toBe(2);
     expect(result.program.drawPrepProgram?.sinks.length).toBe(2);

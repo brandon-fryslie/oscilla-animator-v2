@@ -372,7 +372,7 @@ describe('TimeModel', () => {
     }
   });
 
-  it('emits stage-2 template annotations and concrete arena addressing constants', () => {
+  it('emits structured compute lowering metadata without direct WGSL generation', () => {
     const patch = buildPatch((b) => {
       b.addBlock('InfiniteTimeRoot');
 
@@ -397,15 +397,27 @@ describe('TimeModel', () => {
     expect(result.kind).toBe('ok');
     if (result.kind !== 'ok') return;
 
-    const wgsl = result.program.generatedComputeProgram?.wgsl ?? '';
-    expect(wgsl).toContain('template=');
-    expect(wgsl).toContain('OFFSET_SLOT_');
-    expect(wgsl).toContain('LANE_STRIDE_SLOT_');
-    expect(wgsl).toContain('COMPONENT_STRIDE_SLOT_');
-    expect(wgsl).toContain('fn slot_index(');
+    const lowering = result.program.nagaLoweringProgram;
+    expect(lowering).toBeDefined();
+    if (!lowering) return;
+
+    expect(lowering.compute.maxActiveLanes).toBeGreaterThan(0);
+    expect(lowering.module.entry_points).toEqual([
+      {
+        stage: 'compute',
+        function: 'compute_main',
+        workgroupSize: [64, 1, 1],
+      },
+    ]);
+    expect(
+      lowering.module.global_variables.some((global) => global.name === 'arena_in'),
+    ).toBe(true);
+    expect(
+      lowering.module.global_variables.some((global) => global.name === 'arena_out'),
+    ).toBe(true);
   });
 
-  it('emits state bridge reads and writes for stateful blocks in generated compute WGSL', () => {
+  it('emits state bridge reads and writes in structured lowering IR', () => {
     const patch = buildPatch((b) => {
       const time = b.addBlock('InfiniteTimeRoot');
       const delay = b.addBlock('UnitDelay');
@@ -433,12 +445,29 @@ describe('TimeModel', () => {
     expect(result.kind).toBe('ok');
     if (result.kind !== 'ok') return;
 
-    const wgsl = result.program.generatedComputeProgram?.wgsl ?? '';
-    expect(wgsl).toContain('var<storage, read> state_in: array<f32>;');
-    expect(wgsl).toContain('var<storage, read_write> state_out: array<f32>;');
-    expect(wgsl).toContain('state-read stateKey=');
-    expect(wgsl).toContain('template=state.write');
-    expect(wgsl).toContain('STATE_SLOT_');
+    const lowering = result.program.nagaLoweringProgram;
+    expect(lowering).toBeDefined();
+    if (!lowering) return;
+
+    expect(
+      lowering.module.global_variables.some((global) => global.name === 'state_in'),
+    ).toBe(true);
+    expect(
+      lowering.module.global_variables.some((global) => global.name === 'state_out'),
+    ).toBe(true);
+
+    const fn = lowering.module.functions[0];
+    expect(fn).toBeDefined();
+    if (!fn) return;
+
+    const hasStateRead = fn.expressions.some(
+      (expr) => expr.kind === 'buffer_load' && expr.buffer === 'state_in',
+    );
+    const hasStateWrite = fn.body.some(
+      (stmt) => stmt.kind === 'store' && stmt.buffer === 'state_out',
+    );
+    expect(hasStateRead).toBe(true);
+    expect(hasStateWrite).toBe(true);
   });
 
   it('scalar write steps execute before render steps', () => {

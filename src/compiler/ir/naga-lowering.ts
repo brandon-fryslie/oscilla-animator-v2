@@ -123,6 +123,7 @@ export interface NagaSourceMapEntryIR {
 export interface NagaLoweringProgramIR {
   readonly module: NagaModuleIR;
   readonly sourceMap: Readonly<Record<string, NagaSourceMapEntryIR>>;
+  readonly compute: NagaComputeMetadataIR;
 }
 
 interface SlotAddressPlan {
@@ -132,6 +133,10 @@ interface SlotAddressPlan {
   readonly componentStride: number;
   readonly stride: number;
   readonly storage: 'f32' | 'i32' | 'u32' | 'shape2d';
+}
+
+export interface NagaComputeMetadataIR {
+  readonly maxActiveLanes: number;
 }
 
 class Interner<T> {
@@ -523,6 +528,24 @@ function createStateSlotAddressPlan(schedule: ScheduleIR, stateSlotStart: number
   return null;
 }
 
+function deriveMaxActiveLanes(args: {
+  readonly schedule: ScheduleIR;
+  readonly runtimeAddressTable: RuntimeAddressTableIR;
+}): number {
+  let maxLaneCount = 1;
+  for (const arena of args.runtimeAddressTable.slotToArena.values()) {
+    if (arena.laneCount > maxLaneCount) {
+      maxLaneCount = arena.laneCount;
+    }
+  }
+  for (const mapping of args.schedule.stateMappings) {
+    if (mapping.laneCount > maxLaneCount) {
+      maxLaneCount = mapping.laneCount;
+    }
+  }
+  return Number.isFinite(maxLaneCount) && maxLaneCount > 0 ? Math.trunc(maxLaneCount) : 1;
+}
+
 function lowerStep(
   ctx: LoweringCtx,
   builtins: LoweringBuiltins,
@@ -728,6 +751,12 @@ export function lowerScheduleToNagaModule(args: {
   }
 
   const mainFunction = ctx.emitFunction('compute_main', functionArgs);
+  // [LAW:one-source-of-truth] MAX_ACTIVE_LANES is derived once from canonical
+  // runtimeAddressTable + stateMappings and consumed by the Naga serializer.
+  const maxActiveLanes = deriveMaxActiveLanes({
+    schedule: args.schedule,
+    runtimeAddressTable: args.runtimeAddressTable,
+  });
 
   return {
     module: {
@@ -744,5 +773,8 @@ export function lowerScheduleToNagaModule(args: {
       ],
     },
     sourceMap: ctx.sourceMap,
+    compute: {
+      maxActiveLanes,
+    },
   };
 }
