@@ -66,6 +66,9 @@ export interface RustRendererRebuildSimulationPipelineSuccess {
 export interface RustRendererDeviceLost {
   readonly type: 'DEVICE_LOST';
   readonly code: string;
+  readonly message: string;
+  // [LAW:one-source-of-truth] exception: `reason` is retained as a temporary
+  // alias for backward compatibility; remove once all consumers read `message`.
   readonly reason: string;
 }
 
