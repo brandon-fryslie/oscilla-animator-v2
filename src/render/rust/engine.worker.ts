@@ -59,6 +59,7 @@ interface LegacyFramePacingPacket {
 const POLL_INTERVAL_MS = 250;
 
 let bootstrapped = false;
+let bootstrapInFlight = false;
 let runtimePollTimer: ReturnType<typeof setInterval> | null = null;
 let legacyHeartbeatSequence = 0;
 let legacyState: RustRendererSchedulerState = 'Booting';
@@ -229,6 +230,19 @@ function toOutboundRuntimeEvent(raw: RawRuntimeEvent): RustRendererRuntimeEvent 
 }
 
 async function handleBootstrap(message: Extract<RustRendererWorkerInboundMessage, { type: 'BOOTSTRAP' }>): Promise<void> {
+  if (bootstrapped) {
+    // [LAW:dataflow-not-control-flow] Duplicate bootstrap requests are treated
+    // as idempotent handshake replays; worker state stays on one canonical path.
+    postWorkerMessage({ type: 'BOOTSTRAP_SUCCESS' });
+    return;
+  }
+  if (bootstrapInFlight) {
+    // [LAW:single-enforcer] Bootstrap orchestration is serialized at this
+    // worker boundary so WASM init cannot execute concurrently.
+    return;
+  }
+  bootstrapInFlight = true;
+  try {
   await initRustRendererWasm();
   await initRustRendererEngine(message.canvas, message.config);
   attachRustRendererSharedInput(message.sharedInput);
@@ -237,6 +251,9 @@ async function handleBootstrap(message: Extract<RustRendererWorkerInboundMessage
   legacyState = 'Booting';
   startRuntimePolling();
   postWorkerMessage({ type: 'BOOTSTRAP_SUCCESS' });
+  } finally {
+    bootstrapInFlight = false;
+  }
 }
 
 async function handleRebuild(message: Extract<RustRendererWorkerInboundMessage, { type: 'REBUILD_PIPELINE' }>): Promise<void> {
