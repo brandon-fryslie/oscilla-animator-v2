@@ -23,12 +23,12 @@ if command -v rustup >/dev/null 2>&1; then
   TOOLCHAIN_BIN="${HOME}/.rustup/toolchains/${ACTIVE_TOOLCHAIN}/bin"
   rustup target add wasm32-unknown-unknown --toolchain "$ACTIVE_TOOLCHAIN" >/dev/null
   if [ -x "${TOOLCHAIN_BIN}/cargo" ]; then
-    RUSTC="${TOOLCHAIN_BIN}/rustc" "${TOOLCHAIN_BIN}/cargo" build --manifest-path "$CRATE_DIR/Cargo.toml" --target wasm32-unknown-unknown --release
+    RUSTC="${TOOLCHAIN_BIN}/rustc" "${TOOLCHAIN_BIN}/cargo" build --manifest-path "$CRATE_DIR/Cargo.toml" --target wasm32-unknown-unknown --release --locked
   else
-    cargo build --manifest-path "$CRATE_DIR/Cargo.toml" --target wasm32-unknown-unknown --release
+    cargo build --manifest-path "$CRATE_DIR/Cargo.toml" --target wasm32-unknown-unknown --release --locked
   fi
 else
-  cargo build --manifest-path "$CRATE_DIR/Cargo.toml" --target wasm32-unknown-unknown --release
+  cargo build --manifest-path "$CRATE_DIR/Cargo.toml" --target wasm32-unknown-unknown --release --locked
 fi
 
 mkdir -p "$PKG_DIR"
