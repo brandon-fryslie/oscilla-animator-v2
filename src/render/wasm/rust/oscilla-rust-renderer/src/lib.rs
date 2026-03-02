@@ -5,7 +5,6 @@ mod memory;
 mod render;
 
 use std::cell::RefCell;
-use std::rc::Rc;
 
 use js_sys::Object;
 use wasm_bindgen::closure::Closure;
@@ -17,11 +16,11 @@ use crate::engine::{Engine, EngineConfig};
 
 thread_local! {
     static ENGINE: RefCell<Option<Engine>> = RefCell::new(None);
-    static RAF_CALLBACK: RefCell<Option<Closure<dyn FnMut(f64)>>> = RefCell::new(None);
+    static LOOP_CALLBACK: RefCell<Option<Closure<dyn FnMut()>>> = RefCell::new(None);
 }
 
 fn worker_scope() -> Result<DedicatedWorkerGlobalScope, JsValue> {
-    js_sys::global().dyn_into::<DedicatedWorkerGlobalScope>()
+    Ok(js_sys::global().dyn_into::<DedicatedWorkerGlobalScope>()?)
 }
 
 #[wasm_bindgen]
@@ -170,37 +169,42 @@ pub fn take_frame_pacing_packet() -> Result<JsValue, JsValue> {
 
 fn start_worker_loop() -> Result<(), JsValue> {
     let global = worker_scope()?;
-    let callback_cell: Rc<RefCell<Option<Closure<dyn FnMut(f64)>>>> = Rc::new(RefCell::new(None));
-    let callback_cell_clone = Rc::clone(&callback_cell);
-
-    let closure = Closure::wrap(Box::new(move |timestamp_ms: f64| {
+    let closure = Closure::wrap(Box::new(move || {
         ENGINE.with(|engine_cell| {
             if let Some(engine) = engine_cell.borrow_mut().as_mut() {
-                if let Err(error) = engine.tick(timestamp_ms) {
+                if let Err(error) = engine.tick(js_sys::Date::now()) {
                     web_sys::console::error_1(&error);
                 }
             }
         });
 
         if let Ok(worker) = worker_scope() {
-            if let Some(next_callback) = callback_cell_clone.borrow().as_ref() {
-                let _ = worker.request_animation_frame(next_callback.as_ref().unchecked_ref());
-            }
+            LOOP_CALLBACK.with(|slot| {
+                if let Some(next_callback) = slot.borrow().as_ref() {
+                    // [LAW:single-enforcer] Scheduling is owned at this worker
+                    // boundary so tick cadence cannot diverge across callsites.
+                    let _ = worker.set_timeout_with_callback_and_timeout_and_arguments_0(
+                        next_callback.as_ref().unchecked_ref(),
+                        16,
+                    );
+                }
+            });
         }
-    }) as Box<dyn FnMut(f64)>);
+    }) as Box<dyn FnMut()>);
 
-    *callback_cell.borrow_mut() = Some(closure);
-
-    RAF_CALLBACK.with(|slot| {
-        *slot.borrow_mut() = callback_cell.borrow_mut().take();
+    LOOP_CALLBACK.with(|slot| {
+        *slot.borrow_mut() = Some(closure);
     });
 
-    RAF_CALLBACK.with(|slot| {
+    LOOP_CALLBACK.with(|slot| {
         if let Some(callback) = slot.borrow().as_ref() {
-            global.request_animation_frame(callback.as_ref().unchecked_ref())?;
+            global.set_timeout_with_callback_and_timeout_and_arguments_0(
+                callback.as_ref().unchecked_ref(),
+                16,
+            )?;
             Ok(())
         } else {
-            Err(JsValue::from_str("Rust engine failed to install worker RAF callback"))
+            Err(JsValue::from_str("Rust engine failed to install worker loop callback"))
         }
     })
 }

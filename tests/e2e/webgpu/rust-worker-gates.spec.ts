@@ -25,13 +25,13 @@ test.describe('Rust Worker Gates', () => {
       const canvas = document.createElement('canvas');
       canvas.width = 64;
       canvas.height = 64;
+      document.body.appendChild(canvas);
       const offscreen = canvas.transferControlToOffscreen();
       const sharedInput = new SharedArrayBuffer(36 * Float32Array.BYTES_PER_ELEMENT);
 
       const worker = new Worker(new URL('/src/render/rust/engine.worker.ts', window.location.href), {
         type: 'module',
       });
-
       const fatalPromise = new Promise<{ fatal: boolean; message: string }>((resolve) => {
         worker.onerror = (errorEvent) => {
           errorEvent.preventDefault();
@@ -84,6 +84,7 @@ test.describe('Rust Worker Gates', () => {
       });
       if (!bootResult.ok) {
         worker.terminate();
+        canvas.remove();
         return { skipped: true, reason: bootResult.reason ?? 'bootstrap failed' };
       }
 
@@ -97,10 +98,16 @@ test.describe('Rust Worker Gates', () => {
       ]);
 
       worker.terminate();
+      canvas.remove();
       return { skipped: false, ...outcome };
     });
 
     if (result.skipped) {
+      // [LAW:verifiable-goals] CI must fail when a gate cannot execute so the
+      // pipeline never reports a false-green with skipped enforcement.
+      if (process.env.CI) {
+        throw new Error(`Gate 2 skipped in CI: ${result.reason}`);
+      }
       test.skip(result.reason);
     }
 
@@ -124,6 +131,7 @@ test.describe('Rust Worker Gates', () => {
       const canvas = document.createElement('canvas');
       canvas.width = 64;
       canvas.height = 64;
+      document.body.appendChild(canvas);
       const offscreen = canvas.transferControlToOffscreen();
       const sharedInput = new SharedArrayBuffer(36 * Float32Array.BYTES_PER_ELEMENT);
       const inputView = new Float32Array(sharedInput);
@@ -131,6 +139,23 @@ test.describe('Rust Worker Gates', () => {
 
       const worker = new Worker(new URL('/src/render/rust/engine.worker.ts', window.location.href), {
         type: 'module',
+      });
+      const fatalPromise = new Promise<{ type: 'fatal'; reason: string }>((resolve) => {
+        worker.onerror = (event) => {
+          event.preventDefault();
+          resolve({
+            type: 'fatal',
+            reason: event.message || 'worker runtime error',
+          });
+        };
+        worker.addEventListener('message', (event: MessageEvent<any>) => {
+          if (event.data?.type === 'FATAL_ERROR') {
+            resolve({
+              type: 'fatal',
+              reason: String(event.data?.message ?? 'worker fatal message'),
+            });
+          }
+        });
       });
 
       worker.postMessage(
@@ -167,6 +192,7 @@ test.describe('Rust Worker Gates', () => {
       });
       if (!bootResult.ok) {
         worker.terminate();
+        canvas.remove();
         return { skipped: true, reason: bootResult.reason ?? 'bootstrap failed' };
       }
 
@@ -184,9 +210,14 @@ test.describe('Rust Worker Gates', () => {
           worker.addEventListener('message', onTelemetry);
         }),
         new Promise<null>((resolve) => setTimeout(() => resolve(null), 6000)),
+        fatalPromise,
       ]);
 
       worker.terminate();
+      canvas.remove();
+      if (packet && typeof packet === 'object' && 'type' in packet && packet.type === 'fatal') {
+        return { skipped: true, reason: packet.reason };
+      }
       if (!packet) {
         return { skipped: true, reason: 'telemetry packet not emitted in time' };
       }
@@ -194,6 +225,11 @@ test.describe('Rust Worker Gates', () => {
     });
 
     if (result.skipped) {
+      // [LAW:verifiable-goals] CI must fail when a gate cannot execute so the
+      // pipeline never reports a false-green with skipped enforcement.
+      if (process.env.CI) {
+        throw new Error(`Gate 4 skipped in CI: ${result.reason}`);
+      }
       test.skip(result.reason);
     }
 

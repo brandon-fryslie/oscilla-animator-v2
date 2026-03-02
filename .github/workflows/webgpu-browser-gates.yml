@@ -18,6 +18,11 @@ jobs:
         with:
           node-version: 20
 
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
@@ -28,6 +33,9 @@ jobs:
 
       - name: Install Playwright browser
         run: pnpm exec playwright install --with-deps chromium
+
+      - name: Install wasm-bindgen CLI
+        run: cargo install wasm-bindgen-cli --locked
 
       - name: Run Gate 2 + Gate 4 browser tests
         run: pnpm run -s test:rust-worker-gates

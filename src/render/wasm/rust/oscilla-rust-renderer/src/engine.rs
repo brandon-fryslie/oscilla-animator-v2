@@ -129,6 +129,7 @@ pub struct Engine {
     timing_window_sum_sq_ms: f64,
     timing_window_samples: u32,
     latest_timing_packet: Option<FramePacingTelemetry>,
+    strict_lock_start_frame: u64,
 }
 
 #[derive(Clone, Copy)]
@@ -146,7 +147,7 @@ impl Engine {
             ..Default::default()
         });
         let surface = instance
-            .create_surface(canvas)
+            .create_surface(wgpu::SurfaceTarget::OffscreenCanvas(canvas))
             .map_err(|error| JsValue::from_str(&format!("create_surface failed: {error}")))?;
 
         let adapter = instance
@@ -156,16 +157,25 @@ impl Engine {
                 force_fallback_adapter: false,
             })
             .await
-            .map_err(|error| JsValue::from_str(&format!("request_adapter failed: {error}")))?;
+            .ok_or_else(|| JsValue::from_str("request_adapter failed: no compatible adapter"))?;
+
+        // [LAW:single-enforcer] Required limits are negotiated in one place
+        // at device creation so runtime paths don't fork on capability checks.
+        let mut required_limits = wgpu::Limits::downlevel_webgl2_defaults();
+        required_limits.max_compute_invocations_per_workgroup = required_limits
+            .max_compute_invocations_per_workgroup
+            .max(256);
+        required_limits.max_storage_buffer_binding_size = required_limits
+            .max_storage_buffer_binding_size
+            .max(128 * 1024 * 1024);
 
         let (device, queue) = adapter
             .request_device(&wgpu::DeviceDescriptor {
                 label: Some("Oscilla.Render.Device"),
                 required_features: wgpu::Features::INDIRECT_FIRST_INSTANCE,
-                required_limits: wgpu::Limits::downlevel_webgl2_defaults(),
+                required_limits,
                 memory_hints: wgpu::MemoryHints::Performance,
-                trace: wgpu::Trace::default(),
-            })
+            }, None)
             .await
             .map_err(|error| JsValue::from_str(&format!("request_device failed: {error}")))?;
 
@@ -242,6 +252,7 @@ impl Engine {
             timing_window_sum_sq_ms: 0.0,
             timing_window_samples: 0,
             latest_timing_packet: None,
+            strict_lock_start_frame: 600,
         })
     }
 
@@ -312,29 +323,50 @@ impl Engine {
         let tick_start_ms = js_sys::Date::now();
         self.input_marshal_phase(timestamp_ms);
 
-        // [LAW:single-enforcer] Tick owns allocator lock boundary so any hot-path
-        // allocation violation fails immediately at one execution boundary.
-        StrictAllocator::lock();
+        // [LAW:single-enforcer] Tick owns allocator lock boundary so allocation
+        // enforcement remains centralized at one runtime boundary.
+        // [LAW:single-enforcer] exception: wgpu performs lazy backend setup in
+        // early frames; strict enforcement activates after warm-up.
+        let strict_lock_enabled = self.frame_count >= self.strict_lock_start_frame;
+        if strict_lock_enabled {
+            StrictAllocator::lock();
+        }
         let frame = match self.surface.get_current_texture() {
             Ok(frame) => frame,
             Err(wgpu::SurfaceError::Timeout) => {
-                StrictAllocator::unlock();
+                if strict_lock_enabled {
+                    StrictAllocator::unlock();
+                }
+                let tick_elapsed_ms = (js_sys::Date::now() - tick_start_ms).max(0.0);
+                self.record_tick_timing(tick_elapsed_ms);
                 return Ok(());
             }
             Err(wgpu::SurfaceError::Outdated | wgpu::SurfaceError::Lost) => {
-                StrictAllocator::unlock();
-                self.pause();
+                if strict_lock_enabled {
+                    StrictAllocator::unlock();
+                }
+                self.surface.configure(&self.device, &self.surface_config);
                 self.pending_event_code = 1;
+                let tick_elapsed_ms = (js_sys::Date::now() - tick_start_ms).max(0.0);
+                self.record_tick_timing(tick_elapsed_ms);
                 return Ok(());
             }
             Err(wgpu::SurfaceError::OutOfMemory) => {
-                StrictAllocator::unlock();
+                if strict_lock_enabled {
+                    StrictAllocator::unlock();
+                }
                 self.pending_event_code = 2;
+                let tick_elapsed_ms = (js_sys::Date::now() - tick_start_ms).max(0.0);
+                self.record_tick_timing(tick_elapsed_ms);
                 return Err(JsValue::from_str("Fatal Surface Error: OutOfMemory"));
             }
             Err(wgpu::SurfaceError::Other) => {
-                StrictAllocator::unlock();
+                if strict_lock_enabled {
+                    StrictAllocator::unlock();
+                }
                 self.pending_event_code = 2;
+                let tick_elapsed_ms = (js_sys::Date::now() - tick_start_ms).max(0.0);
+                self.record_tick_timing(tick_elapsed_ms);
                 return Err(JsValue::from_str("Fatal Surface Error: Other"));
             }
         };
@@ -363,7 +395,9 @@ impl Engine {
         self.queue.submit(std::iter::once(encoder.finish()));
         frame.present();
         self.frame_count = self.frame_count.wrapping_add(1);
-        StrictAllocator::unlock();
+        if strict_lock_enabled {
+            StrictAllocator::unlock();
+        }
 
         if is_debug_tick {
             self.trigger_debug_readback();
@@ -409,14 +443,15 @@ impl Engine {
         }
 
         let staging_buffer = self.arena.debug_staging_buffer().clone();
+        let staging_buffer_for_callback = staging_buffer.clone();
         let readback_gate = self.debug_readback_in_flight.clone();
         let slice = staging_buffer.slice(..);
         let _ = slice.map_async(wgpu::MapMode::Read, move |result| {
             if result.is_ok() {
-                let mapped = staging_buffer.slice(..).get_mapped_range();
+                let mapped = staging_buffer_for_callback.slice(..).get_mapped_range();
                 drop(mapped);
             }
-            staging_buffer.unmap();
+            staging_buffer_for_callback.unmap();
             readback_gate.store(false, Ordering::SeqCst);
         });
     }

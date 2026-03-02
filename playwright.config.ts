@@ -11,6 +11,11 @@ export default defineConfig({
     baseURL: 'http://localhost:5174',
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
+    launchOptions: {
+      // [LAW:single-enforcer] WebGPU feature-gating is centralized in the
+      // browser harness so all E2E lanes execute with the same capabilities.
+      args: ['--enable-unsafe-webgpu'],
+    },
   },
   projects: [
     {
@@ -19,7 +24,7 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: 'npm run dev',
+    command: 'pnpm run dev -- --port 5174 --strictPort',
     port: 5174,
     reuseExistingServer: !process.env.CI,
   },
