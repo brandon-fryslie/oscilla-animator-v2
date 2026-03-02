@@ -182,6 +182,19 @@ export interface SerializedDebugProbeRuntimeSnapshot {
   readonly slots: readonly SerializedDebugProbeRuntimeSlotSnapshot[];
 }
 
+export interface PackedDebugProbeRuntimeSnapshot {
+  readonly runtimeFrameId: number;
+  /**
+   * Fixed-width slot metadata records.
+   * [slotId, stride, laneCount, length, packingTag, laneStride, componentStride, componentOffsetsStart, componentOffsetsLen, valuesStart]
+   */
+  readonly slotMeta: Uint32Array;
+  readonly componentOffsets: Uint32Array;
+  readonly slotValues: Float32Array;
+}
+
+export const DEBUG_PROBE_SLOT_META_WORDS = 10;
+
 export function serializeDebugProbeRuntimeSnapshot(
   snapshot: DebugProbeRuntimeSnapshot,
 ): SerializedDebugProbeRuntimeSnapshot {
@@ -194,5 +207,72 @@ export function serializeDebugProbeRuntimeSnapshot(
       descriptor: slot.descriptor,
       values: slot.values,
     })),
+  };
+}
+
+export function packDebugProbeRuntimeSnapshot(
+  snapshot: SerializedDebugProbeRuntimeSnapshot,
+): PackedDebugProbeRuntimeSnapshot {
+  const slotCount = snapshot.slots.length;
+  let totalComponentOffsets = 0;
+  let totalSlotValues = 0;
+
+  for (const slot of snapshot.slots) {
+    const descriptor = slot.descriptor;
+    const values = slot.values;
+    // [LAW:verifiable-goals] The packed ABI is deterministic only when slot
+    // descriptors and slot-local values agree on length.
+    if (values.length !== descriptor.length) {
+      throw new Error(
+        `packDebugProbeRuntimeSnapshot: slot ${slot.slotId} value length mismatch (values=${values.length}, descriptor=${descriptor.length})`,
+      );
+    }
+    totalComponentOffsets += descriptor.componentOffsets?.length ?? 0;
+    totalSlotValues += values.length;
+  }
+
+  const slotMeta = new Uint32Array(slotCount * DEBUG_PROBE_SLOT_META_WORDS);
+  const componentOffsets = new Uint32Array(totalComponentOffsets);
+  const slotValues = new Float32Array(totalSlotValues);
+
+  let componentOffsetsCursor = 0;
+  let slotValuesCursor = 0;
+  let slotMetaCursor = 0;
+
+  for (const slot of snapshot.slots) {
+    const descriptor = slot.descriptor;
+    const values = slot.values;
+    const packingTag = descriptor.packing === 'aos' ? 1 : 0;
+    const laneStride = descriptor.laneStride ?? (descriptor.packing === 'aos' ? descriptor.stride : 1);
+    const componentStride = descriptor.componentStride ?? (descriptor.packing === 'aos' ? 1 : descriptor.laneCount);
+    const componentOffsetsStart = componentOffsetsCursor;
+    const componentOffsetsLen = descriptor.componentOffsets?.length ?? 0;
+    const valuesStart = slotValuesCursor;
+
+    if (descriptor.componentOffsets && descriptor.componentOffsets.length > 0) {
+      componentOffsets.set(descriptor.componentOffsets, componentOffsetsCursor);
+      componentOffsetsCursor += descriptor.componentOffsets.length;
+    }
+    slotValues.set(values, slotValuesCursor);
+    slotValuesCursor += values.length;
+
+    slotMeta[slotMetaCursor + 0] = slot.slotId;
+    slotMeta[slotMetaCursor + 1] = descriptor.stride;
+    slotMeta[slotMetaCursor + 2] = descriptor.laneCount;
+    slotMeta[slotMetaCursor + 3] = descriptor.length;
+    slotMeta[slotMetaCursor + 4] = packingTag;
+    slotMeta[slotMetaCursor + 5] = laneStride;
+    slotMeta[slotMetaCursor + 6] = componentStride;
+    slotMeta[slotMetaCursor + 7] = componentOffsetsStart;
+    slotMeta[slotMetaCursor + 8] = componentOffsetsLen;
+    slotMeta[slotMetaCursor + 9] = valuesStart;
+    slotMetaCursor += DEBUG_PROBE_SLOT_META_WORDS;
+  }
+
+  return {
+    runtimeFrameId: snapshot.runtimeFrameId,
+    slotMeta,
+    componentOffsets,
+    slotValues,
   };
 }
