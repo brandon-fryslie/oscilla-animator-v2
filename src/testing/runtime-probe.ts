@@ -24,7 +24,6 @@ export interface RuntimeProbeSnapshot {
   };
 }
 
-export function shouldEnableRuntimeProbe(): boolean {
 function shouldEnableRuntimeProbe(): boolean {
   if (typeof window === 'undefined') {
     return false;
@@ -33,7 +32,6 @@ function shouldEnableRuntimeProbe(): boolean {
   return value === 'true' || value === '1';
 }
 
-export function ensureRuntimeProbe(): RuntimeProbeSnapshot | null {
 function ensureRuntimeProbe(): RuntimeProbeSnapshot | null {
   if (!shouldEnableRuntimeProbe()) {
     return null;
@@ -64,6 +62,8 @@ function ensureRuntimeProbe(): RuntimeProbeSnapshot | null {
   host[RUNTIME_PROBE_GLOBAL_KEY] = created;
   return created;
 }
+
+export { ensureRuntimeProbe, shouldEnableRuntimeProbe };
 
 export function markRuntimeBootstrapStarted(nowMs: number = performance.now()): void {
   const probe = ensureRuntimeProbe();
