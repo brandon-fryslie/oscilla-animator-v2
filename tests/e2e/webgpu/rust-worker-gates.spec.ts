@@ -92,7 +92,12 @@ test.describe('Rust Worker Gates', () => {
         const onMessage = (event: MessageEvent<any>) => {
           if (event.data?.type !== 'SCHEDULER_HEARTBEAT') return;
           const frameCount = Number(event.data.frameCount ?? 0);
-          if (frameCount < 100) return;
+          const loopCount = Number(event.data.loopCount ?? 0);
+          // [LAW:one-source-of-truth] Scheduler heartbeat is the canonical
+          // progress surface; some headless lanes advance loopCount while
+          // frameCount remains pinned under repeated surface timeouts.
+          const progressCount = Math.max(frameCount, loopCount);
+          if (progressCount < 100) return;
           worker.removeEventListener('message', onMessage);
           resolve({ ok: true });
         };
