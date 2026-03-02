@@ -100,6 +100,7 @@ async function startManagedServer(url) {
   // [LAW:single-enforcer] Browser matrix owns prerequisite orchestration:
   // build -> serve -> probe in one deterministic pipeline.
   if (BUILD_FIRST) {
+    await runCommand('pnpm', ['run', 'build:rust-renderer'], 'build-rust-renderer');
     await runCommand('pnpm', ['run', 'build'], 'build');
   }
 
@@ -342,7 +343,28 @@ async function runBrowserCheck({ browserName, launcher, launchOptions, url, bloc
       const hasAdapter = Boolean(adapter);
       const canvas = document.querySelector('canvas');
       const hasCanvas = Boolean(canvas);
-      const hasWebGPUContext = Boolean(canvas?.getContext('webgpu'));
+      const contextProbe = (() => {
+        if (!canvas) {
+          return { hasWebGPUContext: false, webgpuContextProbe: 'canvas_missing' };
+        }
+        try {
+          return {
+            hasWebGPUContext: Boolean(canvas.getContext('webgpu')),
+            webgpuContextProbe: 'main_canvas',
+          };
+        } catch (error) {
+          const isTransferredOffscreen =
+            typeof DOMException !== 'undefined' &&
+            error instanceof DOMException &&
+            error.name === 'InvalidStateError';
+          // [LAW:one-source-of-truth] OffscreenCanvas transfer moves WebGPU
+          // context ownership to worker runtime, so probe state is canonical.
+          return {
+            hasWebGPUContext: isTransferredOffscreen,
+            webgpuContextProbe: isTransferredOffscreen ? 'offscreen_transferred' : 'context_probe_error',
+          };
+        }
+      })();
 
       const readProbe = () => {
         const names = Object.getOwnPropertyNames(globalThis);
@@ -430,7 +452,8 @@ async function runBrowserCheck({ browserName, launcher, launchOptions, url, bloc
         hasNavigatorGpu,
         hasAdapter,
         hasCanvas,
-        hasWebGPUContext,
+        hasWebGPUContext: contextProbe.hasWebGPUContext,
+        webgpuContextProbe: contextProbe.webgpuContextProbe,
         frameDeltasMs,
         runtimeProbe: {
           present: probeAfter !== null,
@@ -458,6 +481,7 @@ async function runBrowserCheck({ browserName, launcher, launchOptions, url, bloc
       hasAdapter: probe.hasAdapter,
       hasCanvas: probe.hasCanvas,
       hasWebGPUContext: probe.hasWebGPUContext,
+      webgpuContextProbe: probe.webgpuContextProbe,
       runtimeProbePresent: probe.runtimeProbe.present,
       bootstrapSucceeded: probe.runtimeProbe.bootstrapState === 'succeeded',
       frameAdvanceDetected:

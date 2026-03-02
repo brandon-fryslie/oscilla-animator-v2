@@ -43,14 +43,12 @@ export async function initRustRendererWasm(): Promise<void> {
     // [LAW:single-enforcer] WASM bootstrap happens at one bridge so all worker
     // callers load and initialize the same binary contract.
     initPromise = (async () => {
-      const modulePath = './pkg/oscilla_rust_renderer.js';
-      const rawModule = await import(/* @vite-ignore */ modulePath);
+      // [LAW:one-source-of-truth] Use a literal dynamic import so bundlers own
+      // wasm-glue asset pathing in both dev and production bundles.
+      const rawModule = await import('./pkg/oscilla_rust_renderer.js');
       const wasmModule = rawModule as RendererWasmModule;
       if (typeof wasmModule.default === 'function') {
-        // [LAW:one-source-of-truth] WASM asset resolution is centralized in one
-        // URL derivation so worker and runtime never drift on binary pathing.
-        const wasmUrl = new URL('./pkg/oscilla_rust_renderer_bg.wasm', import.meta.url);
-        await wasmModule.default(wasmUrl);
+        await wasmModule.default();
       }
       if (typeof wasmModule.init_engine !== 'function') {
         throw new Error('Rust renderer wasm module missing init_engine export');

@@ -9,6 +9,7 @@ import {
   createRuntimeState,
   readShapeBankHandleMetadata,
 } from '../RuntimeState';
+import { buildProgramTopologyTableFromIds } from '../../compiler/ir/program-topology';
 import { materializeValueExpr } from '../ValueExprMaterializer';
 import { registerDynamicTopology } from '../../shapes/registry';
 import type { RenderSpace2D } from '../../shapes/types';
@@ -39,6 +40,7 @@ function mockProgram(fieldExprToSlot: ReadonlyMap<number, number> = new Map()): 
     runtimeAddressTable: {
       fieldExprToSlot,
     },
+    topologyTable: buildProgramTopologyTableFromIds([PATH_TOPOLOGY_ID, NON_PATH_TOPOLOGY_ID]),
     kernelRegistry: {},
   } as unknown as CompiledProgramIR;
 }
