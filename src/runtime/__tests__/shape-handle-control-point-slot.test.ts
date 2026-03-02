@@ -12,6 +12,7 @@ import {
 import { buildProgramTopologyTableFromIds } from '../../compiler/ir/program-topology';
 import { materializeValueExpr } from '../ValueExprMaterializer';
 import { registerDynamicTopology } from '../../shapes/registry';
+import { exportSerializableTopologies } from '../../shapes/registry';
 import type { RenderSpace2D } from '../../shapes/types';
 import { PathVerb } from '../../shapes/types';
 
@@ -36,12 +37,23 @@ const NON_PATH_TOPOLOGY_ID = registerDynamicTopology(
 );
 
 function mockProgram(fieldExprToSlot: ReadonlyMap<number, number> = new Map()): CompiledProgramIR {
+  const topologyDefinitions = exportSerializableTopologies([
+    PATH_TOPOLOGY_ID,
+    NON_PATH_TOPOLOGY_ID,
+  ]);
+  const definitionIndexById = new Map(
+    topologyDefinitions.map((definition, index) => [definition.id, index] as const),
+  );
   return {
     runtimeAddressTable: {
       fieldExprToSlot,
     },
     topologyTable: buildProgramTopologyTableFromIds([PATH_TOPOLOGY_ID, NON_PATH_TOPOLOGY_ID]),
     kernelRegistry: {},
+    topologyTable: {
+      definitions: topologyDefinitions,
+      definitionIndexById,
+    },
   } as unknown as CompiledProgramIR;
 }
 
