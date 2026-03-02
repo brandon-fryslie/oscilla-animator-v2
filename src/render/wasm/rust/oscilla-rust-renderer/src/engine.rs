@@ -127,6 +127,7 @@ pub struct Engine {
     debug_readback_interval_frames: u64,
     debug_readback_in_flight: Arc<AtomicBool>,
     strict_lock_start_frame: u64,
+    max_particles: u32,
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -259,6 +260,7 @@ impl Engine {
             debug_readback_interval_frames,
             debug_readback_in_flight: Arc::new(AtomicBool::new(false)),
             strict_lock_start_frame: 600,
+            max_particles: config.max_particles as u32,
         })
     }
 
@@ -325,6 +327,22 @@ impl Engine {
             particle_count as usize,
             shape_count as usize,
         );
+    }
+
+    pub fn rebuild_simulation_pipeline(&mut self, simulation_wgsl: &str) {
+        // [LAW:single-enforcer] Compiler-owned simulation WGSL is published at
+        // one engine boundary so runtime hot path never recompiles or swaps ad hoc.
+        self.compute.rebuild_simulation_pipeline_with_compiler_wgsl(
+            &self.device,
+            simulation_wgsl,
+            self.max_particles,
+        );
+        let compiler_layout = self
+            .compute
+            .compiler_simulation_layout()
+            .expect("compiler simulation layout must exist after rebuild");
+        self.arena
+            .rebuild_compiler_simulation_bind_groups(&self.device, compiler_layout);
     }
 
     pub fn tick(&mut self, timestamp_ms: f64) -> Result<(), JsValue> {

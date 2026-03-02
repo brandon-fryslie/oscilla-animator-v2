@@ -6,7 +6,7 @@ import {
   initRustRendererEngine,
   initRustRendererWasm,
   pauseRustRendererEngine,
-  rebuildRustRendererPipeline,
+  rebuildRustRendererSimulationPipeline,
   resumeRustRendererEngine,
   resizeRustRendererSurface,
   takeRustRendererFramePacingPacket,
@@ -256,15 +256,11 @@ async function handleBootstrap(message: Extract<RustRendererWorkerInboundMessage
   }
 }
 
-async function handleRebuild(message: Extract<RustRendererWorkerInboundMessage, { type: 'REBUILD_PIPELINE' }>): Promise<void> {
-  await rebuildRustRendererPipeline(
-    message.simulationWgsl,
-    message.assemblyWgsl,
-    message.uberShaderWgsl,
-    message.particleCount,
-    message.shapeCount,
-  );
-  postWorkerMessage({ type: 'REBUILD_PIPELINE_SUCCESS' });
+async function handleRebuildSimulation(
+  message: Extract<RustRendererWorkerInboundMessage, { type: 'REBUILD_SIMULATION_PIPELINE' }>,
+): Promise<void> {
+  await rebuildRustRendererSimulationPipeline(message.simulationWgsl);
+  postWorkerMessage({ type: 'REBUILD_SIMULATION_PIPELINE_SUCCESS' });
 }
 
 function handleResize(message: Extract<RustRendererWorkerInboundMessage, { type: 'RESIZE_CANVAS' }>): void {
@@ -374,8 +370,8 @@ self.onmessage = (event: MessageEvent<RustRendererWorkerInboundMessage>) => {
     }
     return;
   }
-  if (message.type === 'REBUILD_PIPELINE') {
-    void handleRebuild(message).catch((error) => {
+  if (message.type === 'REBUILD_SIMULATION_PIPELINE') {
+    void handleRebuildSimulation(message).catch((error) => {
       const prefix = bootstrapped ? 'Rust worker pipeline rebuild failure' : 'Rust worker rebuild before bootstrap';
       postWorkerFatalError('pipeline_rebuild_failure', `${prefix}: ${error instanceof Error ? error.message : String(error)}`);
     });

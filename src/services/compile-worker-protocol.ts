@@ -4,10 +4,15 @@ import type { CompiledProgramIR } from '../compiler/ir/program';
 
 export type SerializableCompiledProgramIR = Omit<CompiledProgramIR, 'kernelRegistry'>;
 
+export interface CompiledComputeShaderArtifact {
+  readonly wgsl: string;
+}
+
 export type CompileWorkerBackendResult =
   | {
       readonly kind: 'ok';
       readonly program: SerializableCompiledProgramIR;
+      readonly compiledComputeShader: CompiledComputeShaderArtifact;
       readonly warnings: readonly CompileError[];
     }
   | {
