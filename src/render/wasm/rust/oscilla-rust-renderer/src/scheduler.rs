@@ -1,3 +1,5 @@
+use std::collections::VecDeque;
+
 const HEARTBEAT_INTERVAL_MS: f64 = 250.0;
 const TIMING_WINDOW_SAMPLES: u32 = 60;
 const MAX_PENDING_EVENTS: usize = 32;
@@ -82,7 +84,7 @@ pub struct WorkerScheduler {
     last_success_ms: f64,
     last_heartbeat_ms: f64,
     heartbeat_sequence: u64,
-    pending_events: Vec<RuntimeEvent>,
+    pending_events: VecDeque<RuntimeEvent>,
     legacy_runtime_event_code: u32,
 }
 
@@ -104,7 +106,7 @@ impl WorkerScheduler {
             // so callers never invent independent telemetry clocks.
             last_heartbeat_ms: now_ms.max(0.0) - HEARTBEAT_INTERVAL_MS,
             heartbeat_sequence: 0,
-            pending_events: Vec::with_capacity(MAX_PENDING_EVENTS),
+            pending_events: VecDeque::with_capacity(MAX_PENDING_EVENTS),
             legacy_runtime_event_code: 0,
         }
     }
@@ -201,7 +203,9 @@ impl WorkerScheduler {
         Some(WorkerObservabilityPacket {
             state: self.state,
             heartbeat,
-            events: std::mem::take(&mut self.pending_events),
+            events: std::mem::take(&mut self.pending_events)
+                .into_iter()
+                .collect(),
         })
     }
 
@@ -236,9 +240,9 @@ impl WorkerScheduler {
         // [LAW:no-shared-mutable-globals] Runtime event buffering is owned by a
         // single scheduler instance and exposed only via explicit drain APIs.
         if self.pending_events.len() >= MAX_PENDING_EVENTS {
-            self.pending_events.remove(0);
+            self.pending_events.pop_front();
         }
-        self.pending_events.push(RuntimeEvent {
+        self.pending_events.push_back(RuntimeEvent {
             severity,
             code,
             message: message.to_string(),

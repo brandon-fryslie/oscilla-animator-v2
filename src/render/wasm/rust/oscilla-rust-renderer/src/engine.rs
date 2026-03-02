@@ -2,6 +2,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use js_sys::{Float32Array, SharedArrayBuffer};
+use wasm_bindgen::JsCast;
 use wasm_bindgen::JsValue;
 use web_sys::OffscreenCanvas;
 
@@ -166,6 +167,15 @@ fn create_runtime_surface(
     ))
 }
 
+fn worker_monotonic_now_ms() -> f64 {
+    js_sys::global()
+        .dyn_into::<web_sys::DedicatedWorkerGlobalScope>()
+        .ok()
+        .and_then(|worker| worker.performance())
+        .map(|performance| performance.now())
+        .unwrap_or_else(js_sys::Date::now)
+}
+
 impl Engine {
     pub async fn new(canvas: OffscreenCanvas, config: EngineConfig) -> Result<Self, JsValue> {
         let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
@@ -256,7 +266,7 @@ impl Engine {
         );
         let depth_target = DepthTarget::new(&device, surface_config.width, surface_config.height);
         let debug_readback_interval_frames = (60 / config.debug_readback_hz.max(1)).max(1) as u64;
-        let scheduler = WorkerScheduler::new(js_sys::Date::now());
+        let scheduler = WorkerScheduler::new(worker_monotonic_now_ms());
 
         Ok(Self {
             device,
@@ -301,11 +311,11 @@ impl Engine {
     }
 
     pub fn pause(&mut self) {
-        self.scheduler.mark_paused(js_sys::Date::now());
+        self.scheduler.mark_paused(worker_monotonic_now_ms());
     }
 
     pub fn resume(&mut self) {
-        self.scheduler.mark_running(js_sys::Date::now());
+        self.scheduler.mark_running(worker_monotonic_now_ms());
     }
 
     pub fn rebuild_pipeline(
@@ -359,13 +369,20 @@ impl Engine {
     }
 
     pub fn tick(&mut self, timestamp_ms: f64) -> Result<(), JsValue> {
-        let tick_start_ms = js_sys::Date::now();
+        // [LAW:single-enforcer] requestAnimationFrame timestamp is the timing
+        // authority for scheduler loop accounting and tick duration math.
+        let tick_start_ms = if timestamp_ms.is_finite() {
+            timestamp_ms.max(0.0)
+        } else {
+            worker_monotonic_now_ms()
+        };
         self.scheduler.begin_loop_iteration(tick_start_ms);
-        self.input_marshal_phase(timestamp_ms);
+        self.input_marshal_phase(tick_start_ms);
         if self.scheduler.state() == SchedulerState::Paused {
-            let tick_elapsed_ms = (js_sys::Date::now() - tick_start_ms).max(0.0);
+            let now_ms = worker_monotonic_now_ms();
+            let tick_elapsed_ms = (now_ms - tick_start_ms).max(0.0);
             self.scheduler
-                .record_paused_tick(js_sys::Date::now(), tick_elapsed_ms);
+                .record_paused_tick(now_ms, tick_elapsed_ms);
             return Ok(());
         }
 
@@ -444,9 +461,10 @@ impl Engine {
                 if debug_tick {
                     self.trigger_debug_readback();
                 }
-                let tick_elapsed_ms = (js_sys::Date::now() - tick_start_ms).max(0.0);
+                let now_ms = worker_monotonic_now_ms();
+                let tick_elapsed_ms = (now_ms - tick_start_ms).max(0.0);
                 self.scheduler.record_tick_success(
-                    js_sys::Date::now(),
+                    now_ms,
                     tick_elapsed_ms,
                     frame_count,
                 );
@@ -466,16 +484,17 @@ impl Engine {
     }
 
     fn finish_timeout(&mut self, tick_start_ms: f64) -> Result<(), JsValue> {
-        let tick_elapsed_ms = (js_sys::Date::now() - tick_start_ms).max(0.0);
-        self.scheduler
-            .record_surface_timeout(js_sys::Date::now(), tick_elapsed_ms);
+        let now_ms = worker_monotonic_now_ms();
+        let tick_elapsed_ms = (now_ms - tick_start_ms).max(0.0);
+        self.scheduler.record_surface_timeout(now_ms, tick_elapsed_ms);
         Ok(())
     }
 
     fn finish_surface_lost(&mut self, tick_start_ms: f64) -> Result<(), JsValue> {
-        let tick_elapsed_ms = (js_sys::Date::now() - tick_start_ms).max(0.0);
+        let now_ms = worker_monotonic_now_ms();
+        let tick_elapsed_ms = (now_ms - tick_start_ms).max(0.0);
         self.scheduler.record_surface_lost(
-            js_sys::Date::now(),
+            now_ms,
             tick_elapsed_ms,
             "Surface acquire failed with Lost/Outdated",
         );
@@ -488,9 +507,9 @@ impl Engine {
         code: &'static str,
         message: &'static str,
     ) -> Result<(), JsValue> {
-        let tick_elapsed_ms = (js_sys::Date::now() - tick_start_ms).max(0.0);
-        self.scheduler
-            .record_fatal(js_sys::Date::now(), tick_elapsed_ms, code, message);
+        let now_ms = worker_monotonic_now_ms();
+        let tick_elapsed_ms = (now_ms - tick_start_ms).max(0.0);
+        self.scheduler.record_fatal(now_ms, tick_elapsed_ms, code, message);
         Err(JsValue::from_str(message))
     }
 
@@ -530,10 +549,9 @@ impl Engine {
             return;
         }
 
-        let staging_buffer = self.arena.debug_staging_buffer().clone();
-        let staging_buffer_for_callback = staging_buffer.clone();
         let readback_gate = self.debug_readback_in_flight.clone();
-        let slice = staging_buffer.slice(..);
+        let slice = self.arena.debug_staging_buffer().slice(..);
+        let staging_buffer_for_callback = self.arena.debug_staging_buffer().clone();
         let _ = slice.map_async(wgpu::MapMode::Read, move |result| {
             if result.is_ok() {
                 let mapped = staging_buffer_for_callback.slice(..).get_mapped_range();
@@ -552,12 +570,11 @@ impl Engine {
         // [LAW:single-enforcer] Scheduler is the only lifecycle/timing authority,
         // so all observability packets are drained from one owner.
         self.scheduler
-            .take_observability_packet(js_sys::Date::now())
+            .take_observability_packet(worker_monotonic_now_ms())
     }
 
     pub fn inject_poison_alloc(&self) {
-        StrictAllocator::lock();
+        let _guard = StrictAllocator::hot_path_guard();
         let _poison = Vec::<u8>::with_capacity(32);
-        StrictAllocator::unlock();
     }
 }
