@@ -5,6 +5,7 @@ import path from 'node:path';
 import process from 'node:process';
 import { pathToFileURL } from 'node:url';
 import { chromium } from '@playwright/test';
+import { RUNTIME_PROBE_GLOBAL_KEY } from '../src/testing/runtime-probe-contract.mjs';
 import { truncateForLog } from './matrix-utils.mjs';
 
 const BASE_URL = process.env.WEBGPU_MATRIX_URL ?? 'http://127.0.0.1:5174';
@@ -18,9 +19,6 @@ const SERVER_TIMEOUT_MS = Number.parseInt(process.env.WEBGPU_MATRIX_SERVER_TIMEO
 const FAIL_ON_SKIP = (process.env.WEBGPU_MATRIX_FAIL_ON_SKIP ?? (process.env.CI ? '1' : '0')) !== '0';
 const ALLOW_SERVER_REUSE = (process.env.WEBGPU_MATRIX_ALLOW_SERVER_REUSE ?? (process.env.CI ? '0' : '1')) !== '0';
 const SKIP_CHROMIUM = (process.env.WEBGPU_MATRIX_SKIP_CHROMIUM ?? '0') === '1';
-// NOTE: This string key is intentionally duplicated from src/testing/runtime-probe.ts.
-// Keep this in sync with RUNTIME_PROBE_GLOBAL_KEY exported at src/testing/runtime-probe.ts:8.
-const RUNTIME_PROBE_GLOBAL_KEY = '__OSCILLA_RUNTIME_PROBE__';
 
 function withPreviewParam(url) {
   const parsed = new URL(url);
@@ -260,205 +258,216 @@ function getChecks() {
 }
 
 async function runBrowserCheck({ browserName, launcher, launchOptions, url, blocking }) {
-  const browser = await launcher.launch({ headless: true, ...launchOptions });
-  const browserVersion = browser.version();
-  const page = await browser.newPage();
+  const startedAt = Date.now();
   const consoleErrors = [];
   const pageErrors = [];
+  let browser = null;
+  let page = null;
+  let browserVersion = null;
 
-  page.on('console', (message) => {
-    if (message.type() === 'error') {
-      consoleErrors.push(message.text());
-    }
-  });
-  page.on('pageerror', (error) => {
-    pageErrors.push(error.message);
-  });
+  try {
+    browser = await launcher.launch({ headless: true, ...launchOptions });
+    browserVersion = browser.version();
+    page = await browser.newPage();
 
-  const startedAt = Date.now();
-  await page.goto(url, { waitUntil: 'networkidle', timeout: 60_000 });
-  await page.waitForSelector('canvas', { timeout: 30_000 });
-  // [LAW:no-silent-fallbacks] Wait for a terminal bootstrap state so failed
-  // startup surfaces immediately instead of timing out the full sample window.
-  const bootstrapReadyBeforeSample = await page
-    .waitForFunction(
-      (probeKey) => {
-        const state = globalThis[probeKey]?.bootstrap?.state;
-        return (state === 'succeeded' || state === 'failed') ? state : null;
-      },
-      RUNTIME_PROBE_GLOBAL_KEY,
-      { timeout: 30_000 },
-    )
-    .then((handle) => handle.jsonValue())
-    .then((state) => state === 'succeeded')
-    .catch(() => false);
-
-  const probe = await page.evaluate(async ({
-    sampleFrames,
-    sampleTimeoutMs,
-    probeKey,
-    bootstrapReadyBeforeSample,
-  }) => {
-    const hasNavigatorGpu = Boolean(navigator.gpu);
-    const adapter = hasNavigatorGpu ? await navigator.gpu.requestAdapter() : null;
-    const hasAdapter = Boolean(adapter);
-    const canvas = document.querySelector('canvas');
-    const hasCanvas = Boolean(canvas);
-    const hasWebGPUContext = Boolean(canvas?.getContext('webgpu'));
-
-    const readProbe = () => {
-      // [LAW:one-source-of-truth] This key must stay aligned with
-      // `RUNTIME_PROBE_GLOBAL_KEY` in `src/testing/runtime-probe.ts`.
-      const host = globalThis;
-      const value = host[probeKey];
-      return value && typeof value === 'object' ? value : null;
-    };
-    const probeBefore = readProbe();
-    const beforeFrameCount =
-      typeof probeBefore?.loop?.renderedFrameCount === 'number'
-        ? probeBefore.loop.renderedFrameCount
-        : null;
-
-    const frameDeltasMs = [];
-    await new Promise((resolve) => {
-      let settled = false;
-      const finish = () => {
-        if (settled) {
-          return;
-        }
-        settled = true;
-        resolve();
-      };
-      let previous = performance.now();
-      let remaining = bootstrapReadyBeforeSample ? Math.max(1, sampleFrames) : 0;
-      if (remaining <= 0) {
-        finish();
-        return;
+    page.on('console', (message) => {
+      if (message.type() === 'error') {
+        consoleErrors.push(message.text());
       }
-      const timeoutId = setTimeout(finish, Math.max(1, sampleTimeoutMs));
-      const tick = (now) => {
-        if (settled) {
-          return;
-        }
-        frameDeltasMs.push(now - previous);
-        previous = now;
-        remaining -= 1;
+    });
+    page.on('pageerror', (error) => {
+      pageErrors.push(error.message);
+    });
+
+    await page.goto(url, { waitUntil: 'networkidle', timeout: 60_000 });
+    await page.waitForSelector('canvas', { timeout: 30_000 });
+    // [LAW:no-silent-fallbacks] Wait for a terminal bootstrap state so failed
+    // startup surfaces immediately instead of timing out the full sample window.
+    const bootstrapReadyBeforeSample = await page
+      .waitForFunction(
+        (probeKey) => {
+          const state = globalThis[probeKey]?.bootstrap?.state;
+          return (state === 'succeeded' || state === 'failed') ? state : null;
+        },
+        RUNTIME_PROBE_GLOBAL_KEY,
+        { timeout: 30_000 },
+      )
+      .then((handle) => handle.jsonValue())
+      .then((state) => state === 'succeeded')
+      .catch(() => false);
+
+    const probe = await page.evaluate(async ({
+      sampleFrames,
+      sampleTimeoutMs,
+      probeKey,
+      bootstrapReadyBeforeSample,
+    }) => {
+      const hasNavigatorGpu = Boolean(navigator.gpu);
+      const adapter = hasNavigatorGpu ? await navigator.gpu.requestAdapter() : null;
+      const hasAdapter = Boolean(adapter);
+      const canvas = document.querySelector('canvas');
+      const hasCanvas = Boolean(canvas);
+      const hasWebGPUContext = Boolean(canvas?.getContext('webgpu'));
+
+      const readProbe = () => {
+        const host = globalThis;
+        const value = host[probeKey];
+        return value && typeof value === 'object' ? value : null;
+      };
+      const probeBefore = readProbe();
+      const beforeFrameCount =
+        typeof probeBefore?.loop?.renderedFrameCount === 'number'
+          ? probeBefore.loop.renderedFrameCount
+          : null;
+
+      const frameDeltasMs = [];
+      await new Promise((resolve) => {
+        let settled = false;
+        const finish = () => {
+          if (settled) {
+            return;
+          }
+          settled = true;
+          resolve();
+        };
+        let previous = performance.now();
+        let remaining = bootstrapReadyBeforeSample ? Math.max(1, sampleFrames) : 0;
         if (remaining <= 0) {
-          clearTimeout(timeoutId);
           finish();
           return;
         }
+        const timeoutId = setTimeout(finish, Math.max(1, sampleTimeoutMs));
+        const tick = (now) => {
+          if (settled) {
+            return;
+          }
+          frameDeltasMs.push(now - previous);
+          previous = now;
+          remaining -= 1;
+          if (remaining <= 0) {
+            clearTimeout(timeoutId);
+            finish();
+            return;
+          }
+          requestAnimationFrame(tick);
+        };
         requestAnimationFrame(tick);
+      });
+
+      const probeAfter = readProbe();
+      const afterFrameCount =
+        typeof probeAfter?.loop?.renderedFrameCount === 'number'
+          ? probeAfter.loop.renderedFrameCount
+          : null;
+      const frameAdvanceCount =
+        beforeFrameCount === null || afterFrameCount === null ? null : afterFrameCount - beforeFrameCount;
+
+      return {
+        hasNavigatorGpu,
+        hasAdapter,
+        hasCanvas,
+        hasWebGPUContext,
+        frameDeltasMs,
+        runtimeProbe: {
+          present: probeAfter !== null,
+          bootstrapState:
+            typeof probeAfter?.bootstrap?.state === 'string' ? probeAfter.bootstrap.state : null,
+          bootstrapFailureMessage:
+            typeof probeAfter?.bootstrap?.failureMessage === 'string'
+              ? probeAfter.bootstrap.failureMessage
+              : null,
+          bootstrapReadyBeforeSample,
+          renderedFramesBeforeSample: beforeFrameCount,
+          renderedFramesAfterSample: afterFrameCount,
+          frameAdvanceCount,
+        },
       };
-      requestAnimationFrame(tick);
+    }, {
+      sampleFrames: SAMPLE_FRAMES,
+      sampleTimeoutMs: SAMPLE_TIMEOUT_MS,
+      probeKey: RUNTIME_PROBE_GLOBAL_KEY,
+      bootstrapReadyBeforeSample,
     });
 
-    const probeAfter = readProbe();
-    const afterFrameCount =
-      typeof probeAfter?.loop?.renderedFrameCount === 'number'
-        ? probeAfter.loop.renderedFrameCount
-        : null;
-    const frameAdvanceCount =
-      beforeFrameCount === null || afterFrameCount === null ? null : afterFrameCount - beforeFrameCount;
+    const timing = computeStats(probe.frameDeltasMs);
+    const readiness = {
+      hasNavigatorGpu: probe.hasNavigatorGpu,
+      hasAdapter: probe.hasAdapter,
+      hasCanvas: probe.hasCanvas,
+      hasWebGPUContext: probe.hasWebGPUContext,
+      runtimeProbePresent: probe.runtimeProbe.present,
+      bootstrapSucceeded: probe.runtimeProbe.bootstrapState === 'succeeded',
+      frameAdvanceDetected:
+        typeof probe.runtimeProbe.frameAdvanceCount === 'number' && probe.runtimeProbe.frameAdvanceCount > 0,
+      runtimeProbe: probe.runtimeProbe,
+      consoleErrorCount: consoleErrors.length,
+      pageErrorCount: pageErrors.length,
+    };
+
+    // [LAW:verifiable-goals] Gate verdict derives from explicit prerequisites and
+    // runtime evidence captured in one deterministic probe result.
+    // [LAW:no-silent-fallbacks] Missing bootstrap/frame progress is a hard failure.
+    const passed =
+      readiness.hasNavigatorGpu &&
+      readiness.hasAdapter &&
+      readiness.hasCanvas &&
+      readiness.hasWebGPUContext &&
+      readiness.runtimeProbePresent &&
+      readiness.bootstrapSucceeded &&
+      readiness.frameAdvanceDetected &&
+      readiness.consoleErrorCount === 0 &&
+      readiness.pageErrorCount === 0;
+
+    const failureReason =
+      passed
+        ? null
+        : !readiness.hasNavigatorGpu
+          ? 'webgpu_api_unavailable'
+          : !readiness.hasAdapter
+            ? 'webgpu_adapter_unavailable'
+            : !readiness.hasWebGPUContext
+              ? 'webgpu_context_unavailable'
+              : !readiness.runtimeProbePresent
+                ? 'runtime_probe_missing'
+                : !readiness.bootstrapSucceeded
+                  ? 'runtime_bootstrap_not_succeeded'
+                  : !readiness.frameAdvanceDetected
+                    ? 'runtime_frames_not_advancing'
+                    : readiness.consoleErrorCount > 0
+                      ? 'runtime_console_errors'
+                      : readiness.pageErrorCount > 0
+                        ? 'runtime_page_errors'
+                        : 'unknown';
 
     return {
-      hasNavigatorGpu,
-      hasAdapter,
-      hasCanvas,
-      hasWebGPUContext,
-      frameDeltasMs,
-      runtimeProbe: {
-        present: probeAfter !== null,
-        bootstrapState:
-          typeof probeAfter?.bootstrap?.state === 'string' ? probeAfter.bootstrap.state : null,
-        bootstrapFailureMessage:
-          typeof probeAfter?.bootstrap?.failureMessage === 'string'
-            ? probeAfter.bootstrap.failureMessage
-            : null,
-        bootstrapReadyBeforeSample,
-        renderedFramesBeforeSample: beforeFrameCount,
-        renderedFramesAfterSample: afterFrameCount,
-        frameAdvanceCount,
+      browser: browserName,
+      blocking,
+      status: passed ? 'passed' : 'failed',
+      browserVersion,
+      url,
+      startedAt: new Date(startedAt).toISOString(),
+      durationMs: Date.now() - startedAt,
+      readiness,
+      timing,
+      errors: {
+        console: consoleErrors,
+        page: pageErrors,
+        setup: [],
       },
+      failureReason,
+      passed,
+      skipped: false,
     };
-  }, {
-    sampleFrames: SAMPLE_FRAMES,
-    sampleTimeoutMs: SAMPLE_TIMEOUT_MS,
-    probeKey: RUNTIME_PROBE_GLOBAL_KEY,
-    bootstrapReadyBeforeSample,
-  });
-
-  await browser.close();
-
-  const timing = computeStats(probe.frameDeltasMs);
-  const readiness = {
-    hasNavigatorGpu: probe.hasNavigatorGpu,
-    hasAdapter: probe.hasAdapter,
-    hasCanvas: probe.hasCanvas,
-    hasWebGPUContext: probe.hasWebGPUContext,
-    runtimeProbePresent: probe.runtimeProbe.present,
-    bootstrapSucceeded: probe.runtimeProbe.bootstrapState === 'succeeded',
-    frameAdvanceDetected:
-      typeof probe.runtimeProbe.frameAdvanceCount === 'number' && probe.runtimeProbe.frameAdvanceCount > 0,
-    runtimeProbe: probe.runtimeProbe,
-    consoleErrorCount: consoleErrors.length,
-    pageErrorCount: pageErrors.length,
-  };
-
-  // [LAW:verifiable-goals] Gate verdict derives from explicit prerequisites and
-  // runtime evidence captured in one deterministic probe result.
-  // [LAW:no-silent-fallbacks] Missing bootstrap/frame progress is a hard failure.
-  const passed =
-    readiness.hasNavigatorGpu &&
-    readiness.hasAdapter &&
-    readiness.hasCanvas &&
-    readiness.hasWebGPUContext &&
-    readiness.runtimeProbePresent &&
-    readiness.bootstrapSucceeded &&
-    readiness.frameAdvanceDetected &&
-    readiness.consoleErrorCount === 0 &&
-    readiness.pageErrorCount === 0;
-
-  const failureReason =
-    passed
-      ? null
-      : !readiness.hasNavigatorGpu
-        ? 'webgpu_api_unavailable'
-        : !readiness.hasAdapter
-          ? 'webgpu_adapter_unavailable'
-          : !readiness.hasWebGPUContext
-            ? 'webgpu_context_unavailable'
-            : !readiness.runtimeProbePresent
-              ? 'runtime_probe_missing'
-              : !readiness.bootstrapSucceeded
-                ? 'runtime_bootstrap_not_succeeded'
-                : !readiness.frameAdvanceDetected
-                  ? 'runtime_frames_not_advancing'
-                  : readiness.consoleErrorCount > 0
-                    ? 'runtime_console_errors'
-                    : readiness.pageErrorCount > 0
-                      ? 'runtime_page_errors'
-                      : 'unknown';
-
-  return {
-    browser: browserName,
-    blocking,
-    status: passed ? 'passed' : 'failed',
-    browserVersion,
-    url,
-    startedAt: new Date(startedAt).toISOString(),
-    durationMs: Date.now() - startedAt,
-    readiness,
-    timing,
-    errors: {
-      console: consoleErrors,
-      page: pageErrors,
-      setup: [],
-    },
-    failureReason,
-    passed,
-    skipped: false,
-  };
+  } finally {
+    // [LAW:no-silent-fallbacks] Browser resources are always closed, even on
+    // probe/setup failures, so gate runs cannot leak and hang CI workers.
+    if (page) {
+      await page.close().catch(() => undefined);
+    }
+    if (browser) {
+      await browser.close().catch(() => undefined);
+    }
+  }
 }
 
 function makeSkippedResult(check) {
