@@ -187,4 +187,45 @@ describe('DebugProbeRuntimeSnapshot', () => {
       ],
     });
   });
+
+  it('throws when packed snapshot values length mismatches descriptor length', () => {
+    expect(() => packDebugProbeRuntimeSnapshot({
+      runtimeFrameId: 1,
+      slots: [
+        {
+          slotId: 1,
+          descriptor: { offset: 0, stride: 1, laneCount: 2, length: 2 },
+          values: new Float32Array([99]),
+        },
+      ],
+    })).toThrow(/value length mismatch/);
+  });
+
+  it('packs componentOffsets into metadata and side channel buffer', () => {
+    const packed = packDebugProbeRuntimeSnapshot({
+      runtimeFrameId: 2,
+      slots: [
+        {
+          slotId: 8,
+          descriptor: {
+            offset: 0,
+            stride: 2,
+            laneCount: 4,
+            length: 8,
+            packing: 'soa',
+            laneStride: 1,
+            componentStride: 4,
+            componentOffsets: [0, 4],
+          },
+          values: new Float32Array([1, 2, 3, 4, 10, 20, 30, 40]),
+        },
+      ],
+    });
+    expect(packed.runtimeFrameId).toBe(2);
+    expect(Array.from(packed.slotMeta)).toEqual([
+      8, 2, 4, 8, 0, 1, 4, 0, 2, 0,
+    ]);
+    expect(Array.from(packed.componentOffsets)).toEqual([0, 4]);
+    expect(Array.from(packed.slotValues)).toEqual([1, 2, 3, 4, 10, 20, 30, 40]);
+  });
 });

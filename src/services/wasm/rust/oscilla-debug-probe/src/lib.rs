@@ -344,7 +344,14 @@ fn decode_packed_runtime_snapshot(
     let mut slots = Vec::with_capacity(slot_meta.len() / SLOT_META_WORDS);
     for chunk in slot_meta.chunks_exact(SLOT_META_WORDS) {
         let slot_id = chunk[0];
-        let stride = chunk[1] as u16;
+        let stride_u32 = chunk[1];
+        if stride_u32 > u16::MAX as u32 {
+            return Err(js_error(format!(
+                "debug_poll_packed_runtime_packet stride {} out of range for u16",
+                stride_u32
+            )));
+        }
+        let stride = stride_u32 as u16;
         let lane_count = chunk[2];
         let length = chunk[3] as usize;
         let packing_tag = chunk[4];
@@ -378,6 +385,17 @@ fn decode_packed_runtime_snapshot(
             )));
         }
 
+        let packing = match packing_tag {
+            0 => "soa".to_string(),
+            1 => "aos".to_string(),
+            other => {
+                return Err(js_error(format!(
+                    "debug_poll_packed_runtime_packet invalid packing_tag value {} (expected 0 for soa or 1 for aos)",
+                    other
+                )));
+            }
+        };
+
         let descriptor = RuntimeArenaDescriptor {
             offset: 0,
             stride,
@@ -388,11 +406,7 @@ fn decode_packed_runtime_snapshot(
             } else {
                 None
             },
-            packing: Some(if packing_tag == 1 {
-                "aos".to_string()
-            } else {
-                "soa".to_string()
-            }),
+            packing: Some(packing),
             lane_stride: Some(lane_stride),
             component_stride: Some(component_stride),
         };
@@ -475,4 +489,9 @@ pub fn debug_poll_packed_runtime_packet(
 
     serde_wasm_bindgen::to_value(&packet)
         .map_err(|err| js_error(format!("debug_poll_packed_runtime_packet encode failed: {err}")))
+}
+
+#[wasm_bindgen]
+pub fn debug_probe_slot_meta_words() -> usize {
+    SLOT_META_WORDS
 }
