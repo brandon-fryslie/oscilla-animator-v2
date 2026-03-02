@@ -67,9 +67,9 @@ export interface RustRendererDeviceLost {
   readonly type: 'DEVICE_LOST';
   readonly code: string;
   readonly message: string;
-  // [LAW:one-source-of-truth] exception: `reason` is retained as a temporary
-  // alias for backward compatibility; remove once all consumers read `message`.
-  readonly reason: string;
+  /** @deprecated Use `message` instead. This alias will be removed after migration. */
+  // [LAW:one-source-of-truth] exception: Temporary alias for compatibility.
+  readonly reason?: string;
 }
 
 export type RustRendererSchedulerState = 'Booting' | 'Running' | 'Paused' | 'Lost';

@@ -221,6 +221,14 @@ export class WebGPURenderer {
           }
           if (payload.type === 'FATAL_ERROR') {
             settle(() => reject(new Error(`[${payload.code}] ${payload.message}`)));
+            return;
+          }
+          if (payload.type === 'DEVICE_LOST') {
+            settle(() => {
+              this.lifecycleState = 'Lost';
+              this.fatalError = new Error(`[${payload.code}] ${payload.message}`);
+              reject(this.fatalError);
+            });
           }
         };
         this.worker.addEventListener('message', onMessage);

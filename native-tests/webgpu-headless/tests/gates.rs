@@ -32,9 +32,14 @@ fn fs_main() -> @location(0) vec4<f32> {
 "#;
 
 fn request_device() -> (wgpu::Device, wgpu::Queue) {
-  // [LAW:verifiable-goals] Headless gate must run on CI (Vulkan/Lavapipe) and
-  // local dev hosts (Metal/DX12) with one deterministic backend policy.
-  let preferred_backends = wgpu::Backends::VULKAN | wgpu::Backends::METAL | wgpu::Backends::DX12;
+  // [LAW:verifiable-goals] Headless gate backend is deterministic per target OS.
+  let preferred_backends = if cfg!(target_os = "macos") {
+    wgpu::Backends::METAL
+  } else if cfg!(target_os = "windows") {
+    wgpu::Backends::DX12
+  } else {
+    wgpu::Backends::VULKAN
+  };
   let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
     backends: preferred_backends,
     ..Default::default()
