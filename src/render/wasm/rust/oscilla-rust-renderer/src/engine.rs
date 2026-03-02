@@ -121,7 +121,6 @@ pub struct Engine {
     arena: GpuMemoryArena,
     compute: ComputeDispatcher,
     render: RenderDispatcher,
-    assembly_write_bind_group: wgpu::BindGroup,
     shared_input: Option<Float32Array>,
     scheduler: WorkerScheduler,
     frame_count: u64,
@@ -240,7 +239,6 @@ impl Engine {
             config.max_particles,
             config.max_shapes,
         );
-        let assembly_write_bind_group = arena.assembly_write_bind_group.clone();
         let depth_target = DepthTarget::new(&device, surface_config.width, surface_config.height);
         let debug_readback_interval_frames = (60 / config.debug_readback_hz.max(1)).max(1) as u64;
         let scheduler = WorkerScheduler::new(js_sys::Date::now());
@@ -255,7 +253,6 @@ impl Engine {
             arena,
             compute,
             render,
-            assembly_write_bind_group,
             shared_input: None,
             scheduler,
             frame_count: 0,
@@ -328,7 +325,6 @@ impl Engine {
             particle_count as usize,
             shape_count as usize,
         );
-        self.assembly_write_bind_group = self.arena.assembly_write_bind_group.clone();
     }
 
     pub fn tick(&mut self, timestamp_ms: f64) -> Result<(), JsValue> {
@@ -411,11 +407,7 @@ impl Engine {
                 label: Some("HotPath.CommandEncoder"),
             });
 
-        self.compute.encode_passes(
-            &mut encoder,
-            &mut self.arena,
-            &self.assembly_write_bind_group,
-        );
+        self.compute.encode_passes(&mut encoder, &mut self.arena);
         self.render.encode_passes(
             &mut encoder,
             &self.arena,
