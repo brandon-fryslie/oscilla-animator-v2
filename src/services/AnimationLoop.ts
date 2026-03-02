@@ -236,8 +236,9 @@ export function executeAnimationFrame(
   if (!shapeBank) {
     throw new Error('AnimationLoop: RuntimeState.shapeBank is required for WebGPU rendering');
   }
-  // [LAW:one-source-of-truth] WebGPU sink input is sourced from runtime state
-  // shapeBank handles only; compile-time topology snapshots are never forwarded.
+  // [LAW:one-source-of-truth] Draw-prep instance-count policy comes from one
+  // compiler-emitted sink table; renderer resolves static-vs-dynamic counts.
+  const drawPrepSinks = currentProgram?.drawPrepProgram?.sinks;
   const inputChannels = resolveRendererInputChannels(currentState);
   renderer.render({
     frame: frameToRender,
@@ -249,6 +250,7 @@ export function executeAnimationFrame(
     panY: pan.y,
     timeMs: tMs,
     ...inputChannels,
+    drawPrepSinks,
   });
   state.renderTime = performance.now() - renderStart;
 

@@ -759,6 +759,182 @@ describe('WebGPURenderer', () => {
     expect(computeParams[3]).toBe(WEBGPU_RENDER_CONTRACT.simulationCapacity);
   });
 
+  it('uses static draw-prep sink metadata to override per-op instance count', async () => {
+    const env = createFakeWebGPUEnvironment();
+    setNavigatorGpu(env.gpu);
+    const renderer = await createWebGPURenderer(env.canvas);
+    const topologyId = makeSimpleTopology('webgpu-draw-prep-static-sink-count-topology');
+
+    renderer.render(makeRenderInput([
+      makeDrawOp(topologyId, { count: 9 }),
+    ], {
+      drawPrepSinks: [
+        {
+          sinkIndex: 0,
+          renderStepIndex: 0,
+          instanceId: 'inst-0',
+          indirectRecordIndex: 0,
+          instanceCountMode: 'static',
+          staticInstanceCount: 4,
+        },
+      ],
+    }));
+
+    const drawPrepParamsWrite = env.device.queue.writeBuffer.mock.calls.find((args: unknown[]) =>
+      args[2] instanceof Uint32Array
+      && (args[2] as Uint32Array).length === WEBGPU_RENDER_CONTRACT.drawPrepParamsU32
+      && ((args[2] as Uint32Array)[5] === 0)
+    );
+    expect(drawPrepParamsWrite).toBeDefined();
+    const drawPrepParams = drawPrepParamsWrite?.[2] as Uint32Array;
+    expect(drawPrepParams[1]).toBe(4);
+  });
+
+  it('keeps sink-index alignment when an earlier draw op produces zero prepared records', async () => {
+    const env = createFakeWebGPUEnvironment();
+    setNavigatorGpu(env.gpu);
+    const renderer = await createWebGPURenderer(env.canvas);
+    const topologyA = makeSimpleTopology('webgpu-draw-prep-zero-count-topology-a');
+    const topologyB = makeSimpleTopology('webgpu-draw-prep-zero-count-topology-b');
+    const capturedDrawPrepWrites: number[][] = [];
+    const originalWriteBuffer = env.device.queue.writeBuffer.getMockImplementation();
+    env.device.queue.writeBuffer.mockImplementation((...args: unknown[]) => {
+      const data = args[2];
+      if (data instanceof Uint32Array && data.length === WEBGPU_RENDER_CONTRACT.drawPrepParamsU32) {
+        capturedDrawPrepWrites.push(Array.from(data));
+      }
+      return (originalWriteBuffer as ((...params: any[]) => unknown) | undefined)?.(...(args as any[]));
+    });
+
+    renderer.render(makeRenderInput([
+      makeDrawOp(topologyA, { count: 0 }),
+      makeDrawOp(topologyB, { count: 9 }),
+    ], {
+      drawPrepSinks: [
+        {
+          sinkIndex: 0,
+          renderStepIndex: 0,
+          instanceId: 'inst-0',
+          indirectRecordIndex: 0,
+          instanceCountMode: 'dynamic',
+        },
+        {
+          sinkIndex: 1,
+          renderStepIndex: 1,
+          instanceId: 'inst-1',
+          indirectRecordIndex: 1,
+          instanceCountMode: 'static',
+          staticInstanceCount: 4,
+        },
+      ],
+    }));
+
+    const record0Write = capturedDrawPrepWrites.find((params) => (params[5] ?? -1) === 0);
+    expect(record0Write).toBeDefined();
+    expect(record0Write?.[1]).toBe(4);
+  });
+
+  it('fails fast when static draw-prep sink count exceeds packed instance count', async () => {
+    const env = createFakeWebGPUEnvironment();
+    setNavigatorGpu(env.gpu);
+    const renderer = await createWebGPURenderer(env.canvas);
+    const topologyId = makeSimpleTopology('webgpu-draw-prep-static-overflow-topology');
+
+    expect(() => renderer.render(makeRenderInput([
+      makeDrawOp(topologyId, { count: 4 }),
+    ], {
+      drawPrepSinks: [
+        {
+          sinkIndex: 0,
+          renderStepIndex: 0,
+          instanceId: 'inst-0',
+          indirectRecordIndex: 0,
+          instanceCountMode: 'static',
+          staticInstanceCount: 9,
+        },
+      ],
+    }))).toThrow('exceeds packed instance count');
+  });
+
+  it('applies static draw-prep sink override to both fill and stroke records of one logical sink', async () => {
+    const env = createFakeWebGPUEnvironment();
+    setNavigatorGpu(env.gpu);
+    const renderer = await createWebGPURenderer(env.canvas);
+    const topologyId = makeSimpleTopology('webgpu-draw-prep-static-sink-fill-stroke-topology');
+    const capturedDrawPrepWrites: number[][] = [];
+    const originalWriteBuffer = env.device.queue.writeBuffer.getMockImplementation();
+    env.device.queue.writeBuffer.mockImplementation((...args: unknown[]) => {
+      const data = args[2];
+      if (data instanceof Uint32Array && data.length === WEBGPU_RENDER_CONTRACT.drawPrepParamsU32) {
+        capturedDrawPrepWrites.push(Array.from(data));
+      }
+      return (originalWriteBuffer as ((...params: any[]) => unknown) | undefined)?.(...(args as any[]));
+    });
+
+    renderer.render(makeRenderInput([
+      makeDrawOp(topologyId, {
+        count: 9,
+        style: {
+          fillColor: new Uint8ClampedArray([255, 0, 0, 255]),
+          strokeColor: new Uint8ClampedArray([0, 255, 255, 255]),
+          strokeWidth: 0.02,
+          fillRule: 'nonzero',
+        },
+      }),
+    ], {
+      drawPrepSinks: [
+        {
+          sinkIndex: 0,
+          renderStepIndex: 0,
+          instanceId: 'inst-0',
+          indirectRecordIndex: 0,
+          instanceCountMode: 'static',
+          staticInstanceCount: 4,
+        },
+      ],
+    }));
+
+    expect(capturedDrawPrepWrites.length).toBeGreaterThanOrEqual(2);
+    const perRecordCounts = capturedDrawPrepWrites
+      .map((params) => [params[5] ?? -1, params[1] ?? -1] as const)
+      .filter(([recordIndex]) => recordIndex <= 1)
+      .sort((a, b) => a[0] - b[0]);
+    expect(perRecordCounts.slice(0, 2)).toEqual([
+      [0, 4],
+      [1, 4],
+    ]);
+  });
+
+  it('fails fast when static draw-prep sink metadata repeats sinkIndex', async () => {
+    const env = createFakeWebGPUEnvironment();
+    setNavigatorGpu(env.gpu);
+    const renderer = await createWebGPURenderer(env.canvas);
+    const topologyId = makeSimpleTopology('webgpu-draw-prep-duplicate-sink-index-topology');
+
+    expect(() => renderer.render(makeRenderInput([
+      makeDrawOp(topologyId, { count: 9 }),
+    ], {
+      drawPrepSinks: [
+        {
+          sinkIndex: 0,
+          renderStepIndex: 0,
+          instanceId: 'inst-0',
+          indirectRecordIndex: 0,
+          instanceCountMode: 'static',
+          staticInstanceCount: 4,
+        },
+        {
+          sinkIndex: 0,
+          renderStepIndex: 1,
+          instanceId: 'inst-1',
+          indirectRecordIndex: 1,
+          instanceCountMode: 'static',
+          staticInstanceCount: 5,
+        },
+      ],
+    }))).toThrow('duplicate static draw-prep sinkIndex');
+  });
+
   it('grows compute arena geometrically and dispatches migration when simulation count exceeds current capacity', async () => {
     const env = createFakeWebGPUEnvironment();
     setNavigatorGpu(env.gpu);
