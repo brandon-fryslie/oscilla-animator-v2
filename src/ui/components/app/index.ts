@@ -9,5 +9,6 @@ export { Toolbar } from './Toolbar';
 export { LogPanel } from './LogPanel';
 export { HelpPanel } from './HelpPanel';
 export { CanvasTab } from './CanvasTab';
+export { BootGateScreen } from './BootGateScreen';
 export { Tabs, type TabConfig } from './Tabs';
 export { SplitPanel } from './SplitPanel';

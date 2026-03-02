@@ -25,10 +25,11 @@ if (!navigating) {
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { NuqsAdapter } from 'nuqs/adapters/react';
-import { App } from './ui/components';
+import { App, BootGateScreen } from './ui/components';
 import { registerAllBlocks } from './blocks/all';
 import { StoreProvider, type RootStore } from './stores';
 import { RuntimeService } from './services/RuntimeService';
+import { BootService } from './services/BootService';
 import {
   initializeComposites,
   compositeStorage,
@@ -115,6 +116,7 @@ function createRuntimeBootstrap() {
 }
 
 const runtimeBootstrap = createRuntimeBootstrap();
+const bootService = new BootService();
 
 async function main() {
   registerAllBlocks();
@@ -124,6 +126,17 @@ async function main() {
   if (!appContainer) throw new Error('App container not found');
 
   const root = createRoot(appContainer);
+  const unsubscribeBoot = bootService.subscribe((snapshot) => {
+    root.render(React.createElement(BootGateScreen, { snapshot }));
+  });
+  const bootSnapshot = await bootService.start();
+  if (bootSnapshot.state !== 'ready') {
+    // [LAW:no-silent-fallbacks] WASM boot is a hard prerequisite; app UI stays
+    // in explicit fatal state instead of rendering without compiler runtime.
+    unsubscribeBoot();
+    return;
+  }
+  unsubscribeBoot();
 
   const renderApp = () => {
     root.render(
