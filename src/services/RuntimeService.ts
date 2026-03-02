@@ -117,7 +117,8 @@ export class RuntimeService {
   private spyReadbackHz = 5;
   private debugProbeTransport: DebugProbeTransport;
   private debugProbeUpgradeInFlight: Promise<void> | null = null;
-  private lastSpyReadbackAnomalyKey = '';
+  private spyReadbackAnomalyFrameId: number | null = null;
+  private readonly spyReadbackAnomalyKeysForFrame = new Set<string>();
 
   constructor(
     private readonly store: RootStore,
@@ -740,21 +741,30 @@ export class RuntimeService {
     if ((packet.packetFlags & DEBUG_PACKET_FLAG_NAN_DETECTED_ANY) === 0) {
       return;
     }
-    const anomalousSample = packet.samples.find((sample) =>
-      sample.values.some((value) => !Number.isFinite(value)));
-    if (!anomalousSample) {
-      return;
+
+    let anomalousSample: DebugProbePacketSample | undefined;
+    let anomalousValue: number | undefined;
+    for (const sample of packet.samples) {
+      const value = sample.values.find((candidate) => !Number.isFinite(candidate));
+      if (value !== undefined) {
+        anomalousSample = sample;
+        anomalousValue = value;
+        break;
+      }
     }
-    const anomalousValue = anomalousSample.values.find((value) => !Number.isFinite(value));
-    if (anomalousValue === undefined) {
+    if (!anomalousSample || anomalousValue === undefined) {
       return;
     }
 
-    const anomalyKey = `${packet.frameId}:${Number(anomalousSample.slotId)}:${anomalousSample.targetId}`;
-    if (this.lastSpyReadbackAnomalyKey === anomalyKey) {
+    if (this.spyReadbackAnomalyFrameId !== packet.frameId) {
+      this.spyReadbackAnomalyFrameId = packet.frameId;
+      this.spyReadbackAnomalyKeysForFrame.clear();
+    }
+    const anomalyKey = `${Number(anomalousSample.slotId)}:${anomalousSample.targetId}`;
+    if (this.spyReadbackAnomalyKeysForFrame.has(anomalyKey)) {
       return;
     }
-    this.lastSpyReadbackAnomalyKey = anomalyKey;
+    this.spyReadbackAnomalyKeysForFrame.add(anomalyKey);
 
     const valueLabel =
       Number.isNaN(anomalousValue)
