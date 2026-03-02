@@ -97,7 +97,9 @@ struct DebugProbePacket {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 enum DebugProbeCommand {
-    SetSubscriptions { subscriptions: Vec<DebugProbeSubscription> },
+    SetSubscriptions {
+        subscriptions: Vec<DebugProbeSubscription>,
+    },
     ClearSubscriptions,
     SetRateHz {
         #[serde(rename = "rateHz")]
@@ -203,9 +205,9 @@ fn resolve_arena_address(desc: &RuntimeArenaDescriptor) -> ArenaAddress {
     let lane_stride = desc
         .lane_stride
         .unwrap_or(if packing == "soa" { 1 } else { stride });
-    let component_stride = desc
-        .component_stride
-        .unwrap_or(if packing == "soa" { lane_count } else { 1 });
+    let component_stride =
+        desc.component_stride
+            .unwrap_or(if packing == "soa" { lane_count } else { 1 });
 
     ArenaAddress {
         base_offset: desc.offset,
@@ -361,6 +363,29 @@ fn decode_packed_runtime_snapshot(
         let component_offsets_len = chunk[8] as usize;
         let values_start = chunk[9] as usize;
 
+        // [LAW:single-enforcer] Packed descriptor invariants are enforced once
+        // at decode so downstream sampling can assume a valid, overflow-safe ABI.
+        if lane_count == 0 {
+            return Err(js_error(
+                "debug_poll_packed_runtime_packet lane_count must be >= 1",
+            ));
+        }
+        if stride == 0 {
+            return Err(js_error(
+                "debug_poll_packed_runtime_packet stride must be >= 1",
+            ));
+        }
+        if lane_stride == 0 {
+            return Err(js_error(
+                "debug_poll_packed_runtime_packet lane_stride must be >= 1",
+            ));
+        }
+        if component_stride == 0 {
+            return Err(js_error(
+                "debug_poll_packed_runtime_packet component_stride must be >= 1",
+            ));
+        }
+
         let values_end = values_start
             .checked_add(length)
             .ok_or_else(|| js_error("debug_poll_packed_runtime_packet values range overflow"))?;
@@ -375,13 +400,80 @@ fn decode_packed_runtime_snapshot(
 
         let component_offsets_end = component_offsets_start
             .checked_add(component_offsets_len)
-            .ok_or_else(|| js_error("debug_poll_packed_runtime_packet component offsets range overflow"))?;
+            .ok_or_else(|| {
+                js_error("debug_poll_packed_runtime_packet component offsets range overflow")
+            })?;
         if component_offsets_end > component_offsets.len() {
             return Err(js_error(format!(
                 "debug_poll_packed_runtime_packet component offsets range [{}..{}) out of bounds for component_offsets length {}",
                 component_offsets_start,
                 component_offsets_end,
                 component_offsets.len()
+            )));
+        }
+
+        let lane_count_usize = lane_count as usize;
+        let stride_usize = stride as usize;
+        let expected_length = stride_usize.checked_mul(lane_count_usize).ok_or_else(|| {
+            js_error("debug_poll_packed_runtime_packet descriptor length overflow")
+        })?;
+        if expected_length != length {
+            return Err(js_error(format!(
+                "debug_poll_packed_runtime_packet descriptor length mismatch (length={}, stride={}, lane_count={}, expected={})",
+                length, stride_usize, lane_count_usize, expected_length
+            )));
+        }
+        if component_offsets_len > stride_usize {
+            return Err(js_error(format!(
+                "debug_poll_packed_runtime_packet component_offsets_len {} exceeds stride {}",
+                component_offsets_len, stride_usize
+            )));
+        }
+        if length == 0 {
+            return Err(js_error(
+                "debug_poll_packed_runtime_packet length must be >= 1",
+            ));
+        }
+
+        let max_lane_offset = lane_count_usize
+            .checked_sub(1)
+            .and_then(|lane_max| lane_max.checked_mul(lane_stride))
+            .ok_or_else(|| js_error("debug_poll_packed_runtime_packet lane offset overflow"))?;
+
+        let component_offsets_slice =
+            &component_offsets[component_offsets_start..component_offsets_end];
+        let max_component_offset = if component_offsets_slice.is_empty() {
+            None
+        } else {
+            component_offsets_slice
+                .iter()
+                .map(|value| *value as usize)
+                .max()
+        };
+        let max_index_from_offsets = max_component_offset
+            .and_then(|component_offset| component_offset.checked_add(max_lane_offset));
+
+        let max_index_from_linear = if component_offsets_len < stride_usize {
+            stride_usize
+                .checked_sub(1)
+                .and_then(|component_max| component_max.checked_mul(component_stride))
+                .and_then(|component_offset| component_offset.checked_add(max_lane_offset))
+        } else {
+            Some(max_lane_offset)
+        };
+
+        let max_index = match (max_index_from_offsets, max_index_from_linear) {
+            (Some(from_offsets), Some(from_linear)) => Some(from_offsets.max(from_linear)),
+            (Some(from_offsets), None) => Some(from_offsets),
+            (None, Some(from_linear)) => Some(from_linear),
+            (None, None) => None,
+        }
+        .ok_or_else(|| js_error("debug_poll_packed_runtime_packet max index overflow"))?;
+
+        if max_index >= length {
+            return Err(js_error(format!(
+                "debug_poll_packed_runtime_packet descriptor index {} out of bounds for length {}",
+                max_index, length
             )));
         }
 
@@ -402,7 +494,12 @@ fn decode_packed_runtime_snapshot(
             lane_count,
             length,
             component_offsets: if component_offsets_len > 0 {
-                Some(component_offsets[component_offsets_start..component_offsets_end].iter().map(|value| *value as usize).collect())
+                Some(
+                    component_offsets_slice
+                        .iter()
+                        .map(|value| *value as usize)
+                        .collect(),
+                )
             } else {
                 None
             },
@@ -452,7 +549,10 @@ pub fn debug_command(command: JsValue) -> Result<(), JsValue> {
 }
 
 #[wasm_bindgen]
-pub fn debug_poll_runtime_packet(captured_at_ms: f64, snapshot: JsValue) -> Result<JsValue, JsValue> {
+pub fn debug_poll_runtime_packet(
+    captured_at_ms: f64,
+    snapshot: JsValue,
+) -> Result<JsValue, JsValue> {
     let parsed_snapshot: DebugProbeRuntimeSnapshot = serde_wasm_bindgen::from_value(snapshot)
         .map_err(|err| js_error(format!("debug_poll_runtime_packet decode failed: {err}")))?;
 
@@ -487,8 +587,11 @@ pub fn debug_poll_packed_runtime_packet(
             .build_packet_from_snapshot(captured_at_ms, parsed_snapshot)
     });
 
-    serde_wasm_bindgen::to_value(&packet)
-        .map_err(|err| js_error(format!("debug_poll_packed_runtime_packet encode failed: {err}")))
+    serde_wasm_bindgen::to_value(&packet).map_err(|err| {
+        js_error(format!(
+            "debug_poll_packed_runtime_packet encode failed: {err}"
+        ))
+    })
 }
 
 #[wasm_bindgen]
