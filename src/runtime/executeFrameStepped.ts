@@ -441,6 +441,7 @@ export function* executeFrameStepped(
   // --- PHASE BOUNDARY: Render assembly ---
   const resolvedCamera = resolveCameraFromGlobals(program, state);
   const assemblerContext: AssemblerContext = {
+    program,
     instances: instances as ReadonlyMap<string, InstanceDecl>,
     state,
     resolvedCamera,
