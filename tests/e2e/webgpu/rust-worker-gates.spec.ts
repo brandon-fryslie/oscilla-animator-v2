@@ -103,12 +103,9 @@ test.describe('Rust Worker Gates', () => {
     });
 
     if (result.skipped) {
-      // [LAW:verifiable-goals] CI must fail when a gate cannot execute so the
-      // pipeline never reports a false-green with skipped enforcement.
-      if (process.env.CI) {
-        throw new Error(`Gate 2 skipped in CI: ${result.reason}`);
-      }
-      test.skip(result.reason);
+      // [LAW:verifiable-goals] Browser gates must hard-fail on skipped
+      // execution so local and CI runs enforce the same contract.
+      throw new Error(`Gate 2 skipped: ${result.reason}`);
     }
 
     expect(result.fatal).toBe(true);
@@ -227,12 +224,9 @@ test.describe('Rust Worker Gates', () => {
     });
 
     if (result.skipped) {
-      // [LAW:verifiable-goals] CI must fail when a gate cannot execute so the
-      // pipeline never reports a false-green with skipped enforcement.
-      if (process.env.CI) {
-        throw new Error(`Gate 4 skipped in CI: ${result.reason}`);
-      }
-      test.skip(result.reason);
+      // [LAW:verifiable-goals] Browser gates must hard-fail on skipped
+      // execution so local and CI runs enforce the same contract.
+      throw new Error(`Gate 4 skipped: ${result.reason}`);
     }
 
     expect(result.sampleCount).toBeGreaterThanOrEqual(60);
