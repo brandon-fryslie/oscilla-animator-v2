@@ -13,6 +13,27 @@ function buildSimplePatch() {
   });
 }
 
+function buildRenderPatch() {
+  return buildPatch((b) => {
+    const time = b.addBlock('InfiniteTimeRoot');
+    b.setPortDefault(time, 'periodAMs', 1000);
+    b.setPortDefault(time, 'periodBMs', 2000);
+
+    const array = b.addBlock('Array');
+    b.setPortDefault(array, 'count', 4);
+    const ellipse = b.addBlock('Ellipse');
+    const layout = b.addBlock('GridLayoutUV');
+    const color = b.addBlock('Const');
+    b.setConfig(color, 'value', { r: 1, g: 0.4, b: 0.2, a: 1 });
+    const render = b.addBlock('RenderInstances2D');
+
+    b.wire(ellipse, 'shape', array, 'element');
+    b.wire(array, 'elements', layout, 'elements');
+    b.wire(layout, 'controlPoints', render, 'controlPoints');
+    b.wire(color, 'out', render, 'color');
+  });
+}
+
 describe('naga lowering artifact', () => {
   it('emits structured Naga module artifact with compute entrypoint', () => {
     const result = compile(buildSimplePatch());
@@ -80,5 +101,28 @@ describe('naga lowering artifact', () => {
     // address arithmetic literals are emitted once and referenced by ID.
     expect(zeroConstants.length).toBe(1);
     expect(oneConstants.length).toBe(1);
+  });
+
+  it('tracks coverage for non-compute steps without placeholder comment statements', () => {
+    const result = compile(buildRenderPatch());
+    expect(result.kind).toBe('ok');
+    if (result.kind !== 'ok') return;
+
+    const partialWarning = result.warnings.find((warning) => warning.code === 'W_NAGA_LOWERING_PARTIAL');
+    expect(partialWarning).toBeDefined();
+
+    const artifact = result.program.nagaLoweringProgram;
+    expect(artifact).toBeDefined();
+    if (!artifact) return;
+
+    expect(artifact.coverage.totalStepCount).toBeGreaterThan(0);
+    expect(artifact.coverage.semanticFallbacks.length).toBeGreaterThan(0);
+
+    const placeholderComments = artifact.module.functions[0]?.statements.filter(
+      (statement) =>
+        statement.kind === 'comment'
+        && statement.text.includes('lowered in non-compute stage'),
+    );
+    expect(placeholderComments?.length ?? 0).toBe(0);
   });
 });

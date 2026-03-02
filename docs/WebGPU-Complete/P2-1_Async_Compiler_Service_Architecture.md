@@ -204,23 +204,20 @@ This architecture ensures that no matter how complex the shader becomes, the UI 
 1. `createComputePipelineAsync` is now the exclusive path for all compute pipeline creation in `WebGPURenderer`:
    - `WebGPUComputeRuntime.create()` (static async factory) — simulation pipeline
    - `WebGPUDrawPrepRuntime.create()` (static async factory) — draw-prep pipeline
-   - `WebGPUDrawPrepRuntime.useShader()` — live shader hot-swap fires async creation
 
 2. `createRenderPipelineAsync` is now the exclusive path for the render (path) pipeline:
    - `WebGPURenderer.createPathPipelineAsync()` (static async factory)
 
 3. `WebGPURenderer.create()` awaits all three async factories in parallel via `Promise.all` before constructing the renderer.
 
-4. Hot-swap protocol implemented: `WebGPUDrawPrepRuntime.commitPendingPipeline()` is called at the top of each render frame to atomically swap in any resolved async pipeline.
-
-5. Generation counter prevents stale pipeline commits when multiple shader updates fire in rapid succession.
-
-6. Startup compile now flows through `AsyncCompilerService` + `CompileWorkerClient` and applies precomputed artifacts through `compileAndSwap(..., isInitial=true, precomputed)` in `RuntimeService`.
+4. Startup compile now flows through `AsyncCompilerService` + `CompileWorkerClient` and applies precomputed artifacts through `compileAndSwap(..., isInitial=true, precomputed)` in `RuntimeService`.
    - The synchronous startup `compileAndSwap(..., isInitial=true)` compile path was removed from `RuntimeService.init()`.
    - Startup and live recompiles share one canonical compile-request shape (`buildCompileRequest`) and one swap queue (`flushPendingSwap`).
    - Worker compile failures do not fall back to synchronous compile.
 
-**Remaining boundary:** Requirement 3 (Naga WASM boot/loader ownership) remains tracked by P2-2/P2-3.
+5. Runtime render input explicitly forbids draw-prep WGSL override payloads (`drawPrepShaderWgsl`) so shader source cannot bypass the canonical compile path.
+
+**Requirement 3 ownership:** Naga WASM boot/loader ownership is implemented by `NagaService.boot()` (`src/compiler/naga-bridge.ts`) delegating to `src/compiler/wasm/oscilla_naga_shim.ts`.
 
 **Verification commands:**
 
