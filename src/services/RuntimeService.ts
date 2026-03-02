@@ -49,6 +49,7 @@ import { compilerFlagsSettings } from '../settings/tokens/compiler-flags-setting
 import { appSettings } from '../settings/tokens/app-settings';
 import type { ValueSlot } from '../types';
 import {
+  DEBUG_PACKET_FLAG_NAN_DETECTED_ANY,
   type DebugProbePacketSample,
   type DebugProbeTransport,
 } from './DebugProbeProtocol';
@@ -66,6 +67,7 @@ export interface RuntimeSpyReadbackEntry {
 export interface RuntimeSpyReadbackPacket {
   readonly capturedAtMs: number;
   readonly frameId: number;
+  readonly packetFlags: number;
   readonly entries: readonly RuntimeSpyReadbackEntry[];
   readonly samples: readonly DebugProbePacketSample[];
 }
@@ -115,6 +117,7 @@ export class RuntimeService {
   private spyReadbackHz = 5;
   private debugProbeTransport: DebugProbeTransport;
   private debugProbeUpgradeInFlight: Promise<void> | null = null;
+  private lastSpyReadbackAnomalyKey = '';
 
   constructor(
     private readonly store: RootStore,
@@ -694,6 +697,7 @@ export class RuntimeService {
       if (!packet) {
         return;
       }
+      this.handleSpyReadbackAnomalies(packet);
       this.applySpyReadbackPacket(packet);
     } finally {
       this.spyReadbackInFlight = false;
@@ -713,7 +717,6 @@ export class RuntimeService {
           continue;
         }
         const value = sample.values[0];
-        if (!Number.isFinite(value)) continue;
         entries.push({
           slotId: sample.slotId,
           value,
@@ -727,9 +730,51 @@ export class RuntimeService {
     return {
       capturedAtMs: probePacket.capturedAtMs,
       frameId: probePacket.runtimeFrameId,
+      packetFlags: probePacket.packetFlags >>> 0,
       entries,
       samples: probePacket.samples,
     };
+  }
+
+  private handleSpyReadbackAnomalies(packet: RuntimeSpyReadbackPacket): void {
+    if ((packet.packetFlags & DEBUG_PACKET_FLAG_NAN_DETECTED_ANY) === 0) {
+      return;
+    }
+    const anomalousSample = packet.samples.find((sample) =>
+      sample.values.some((value) => !Number.isFinite(value)));
+    if (!anomalousSample) {
+      return;
+    }
+    const anomalousValue = anomalousSample.values.find((value) => !Number.isFinite(value));
+    if (anomalousValue === undefined) {
+      return;
+    }
+
+    const anomalyKey = `${packet.frameId}:${Number(anomalousSample.slotId)}:${anomalousSample.targetId}`;
+    if (this.lastSpyReadbackAnomalyKey === anomalyKey) {
+      return;
+    }
+    this.lastSpyReadbackAnomalyKey = anomalyKey;
+
+    const valueLabel =
+      Number.isNaN(anomalousValue)
+        ? 'NaN'
+        : anomalousValue > 0
+          ? '+Infinity'
+          : '-Infinity';
+
+    // [LAW:no-silent-fallbacks] Non-finite probe values are surfaced and the
+    // runtime is paused immediately so NaN/Inf propagation is explicit.
+    this.store.diagnostics.log({
+      level: 'error',
+      message:
+        `Spy readback detected ${valueLabel} on slot ${Number(anomalousSample.slotId)} ` +
+        `(target ${anomalousSample.targetId}, frame ${packet.frameId}); pausing playback.`,
+    });
+
+    if (this.store.playback.isPlaying) {
+      this.store.playback.pause();
+    }
   }
 
   private applySpyReadbackPacket(packet: RuntimeSpyReadbackPacket): void {
