@@ -92,6 +92,24 @@ describe('compileExpression Integration', () => {
   });
 
   describe('Component Access (Swizzle)', () => {
+    function expectExtractOrConst(
+      expr: ReturnType<IRBuilderImpl['getValueExpr']>,
+      expectedComponentIndex: number,
+      expectedConst: number,
+    ): void {
+      expect(expr).toBeDefined();
+      if (!expr) {
+        return;
+      }
+      if (expr.kind === 'extract') {
+        expect(expr.componentIndex).toBe(expectedComponentIndex);
+        return;
+      }
+      expect(expr.kind).toBe('const');
+      if (expr.kind === 'const') {
+        expect(expr.value).toEqual(floatConst(expectedConst));
+      }
+    }
 
     it('single-component swizzle compiles successfully (v.x)', () => {
       const vSig = builder.constant(vec3Const(1, 2, 3), canonicalType(VEC3));
@@ -105,13 +123,8 @@ describe('compileExpression Integration', () => {
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        // Verify the result is a valid ValueExprId
-        const expr = builder.getValueExpr(result.value);
-        expect(expr).toBeDefined();
-        expect(expr?.kind).toBe('extract');
-        if (expr && expr.kind === 'extract') {
-          expect(expr.componentIndex).toBe(0);
-        }
+        // Constant inputs may fold swizzles to const; non-folded paths remain extract.
+        expectExtractOrConst(builder.getValueExpr(result.value), 0, 1);
       }
     });
 
@@ -133,11 +146,11 @@ describe('compileExpression Integration', () => {
         expect(expr?.kind).toBe('construct');
         if (expr && expr.kind === 'construct') {
           expect(expr.components.length).toBe(2);
-          // Verify components are extract nodes
+          // Constant-folding may reduce extract nodes to const components.
           const comp0 = builder.getValueExpr(expr.components[0]);
           const comp1 = builder.getValueExpr(expr.components[1]);
-          expect(comp0?.kind).toBe('extract');
-          expect(comp1?.kind).toBe('extract');
+          expectExtractOrConst(comp0, 0, 1);
+          expectExtractOrConst(comp1, 1, 2);
         }
       }
     });
