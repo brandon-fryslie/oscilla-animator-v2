@@ -2,10 +2,9 @@
 
 Rust/WASM worker renderer engine for the hot-path migration.
 
-- `init_engine(...)`: creates the canonical engine state and starts a worker-owned timer tick loop (`setTimeout` cadence).
+- `init_engine(...)`: creates the canonical engine state and starts a worker-owned `requestAnimationFrame` tick loop.
 - `attach_shared_input(...)`: binds the main-thread shared input plane.
-- `rebuild_pipeline(...)`: compiles replacement simulation/assembly WGSL into compute pipelines outside hot path.
-- `rebuild_pipeline(...)` also recompiles the uber render pipeline WGSL outside hot path.
+- `rebuild_pipeline(...)`: compiles replacement simulation/assembly WGSL into compute pipelines and recompiles the uber render pipeline WGSL outside hot path.
 - `resize_surface(...)`: reconfigures surface + depth target outside hot path.
 - `pause_engine(...)` / `resume_engine(...)`: lifecycle control for rebuild windows.
 - `take_runtime_event_code(...)`: legacy numeric runtime event surface (compat only).

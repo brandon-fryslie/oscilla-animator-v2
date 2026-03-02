@@ -7,7 +7,7 @@ mod scheduler;
 
 use std::cell::RefCell;
 
-use js_sys::{Array, Object};
+use js_sys::{Array, Function, Object};
 use wasm_bindgen::closure::Closure;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
@@ -295,18 +295,19 @@ fn start_worker_loop() -> Result<(), JsValue> {
         }
     }) as Box<dyn FnMut(f64)>);
 
-    LOOP_CALLBACK.with(|slot| {
-        *slot.borrow_mut() = Some(closure);
+    let first_callback = LOOP_CALLBACK.with(|slot| {
+        let mut slot_mut = slot.borrow_mut();
+        *slot_mut = Some(closure);
+        slot_mut
+            .as_ref()
+            .map(|callback| callback.as_ref().unchecked_ref::<Function>().clone())
     });
-
-    LOOP_CALLBACK.with(|slot| {
-        if let Some(callback) = slot.borrow().as_ref() {
-            global.request_animation_frame(callback.as_ref().unchecked_ref())?;
-            Ok(())
-        } else {
-            Err(JsValue::from_str(
-                "Rust engine failed to install worker loop callback",
-            ))
-        }
-    })
+    if let Some(callback) = first_callback {
+        global.request_animation_frame(callback.unchecked_ref())?;
+        Ok(())
+    } else {
+        Err(JsValue::from_str(
+            "Rust engine failed to install worker loop callback",
+        ))
+    }
 }
