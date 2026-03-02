@@ -4,8 +4,7 @@
  * Exposes machine-readable runtime bootstrap/frame progress for browser gates.
  * The probe is only published for `showPreview=true|1` sessions.
  */
-import { RUNTIME_PROBE_GLOBAL_KEY } from './runtime-probe-contract.mjs';
-export { RUNTIME_PROBE_GLOBAL_KEY };
+export const RUNTIME_PROBE_GLOBAL_KEY = '__OSCILLA_RUNTIME_PROBE__' as const;
 
 type BootstrapState = 'not_started' | 'starting' | 'succeeded' | 'failed';
 

@@ -5,7 +5,6 @@ import path from 'node:path';
 import process from 'node:process';
 import { pathToFileURL } from 'node:url';
 import { chromium } from '@playwright/test';
-import { RUNTIME_PROBE_GLOBAL_KEY } from '../src/testing/runtime-probe-contract.mjs';
 import { truncateForLog } from './matrix-utils.mjs';
 
 const BASE_URL = process.env.WEBGPU_MATRIX_URL ?? 'http://127.0.0.1:5174';
@@ -281,17 +280,41 @@ async function runBrowserCheck({ browserName, launcher, launchOptions, url, bloc
 
     await page.goto(url, { waitUntil: 'networkidle', timeout: 60_000 });
     await page.waitForSelector('canvas', { timeout: 30_000 });
+    const runtimeProbeStateExpr = () => {
+      const host = globalThis;
+      const names = Object.getOwnPropertyNames(host);
+      for (let index = 0; index < names.length; index += 1) {
+        let candidate;
+        try {
+          candidate = host[names[index]];
+        } catch {
+          continue;
+        }
+        if (!candidate || typeof candidate !== 'object') {
+          continue;
+        }
+        if (candidate.version !== 1) {
+          continue;
+        }
+        const bootstrap = candidate.bootstrap;
+        const loop = candidate.loop;
+        if (!bootstrap || !loop) {
+          continue;
+        }
+        if (typeof loop.renderedFrameCount !== 'number') {
+          continue;
+        }
+        const state = bootstrap.state;
+        if (state === 'succeeded' || state === 'failed') {
+          return state;
+        }
+      }
+      return null;
+    };
     // [LAW:no-silent-fallbacks] Wait for a terminal bootstrap state so failed
     // startup surfaces immediately instead of timing out the full sample window.
     const bootstrapReadyBeforeSample = await page
-      .waitForFunction(
-        (probeKey) => {
-          const state = globalThis[probeKey]?.bootstrap?.state;
-          return (state === 'succeeded' || state === 'failed') ? state : null;
-        },
-        RUNTIME_PROBE_GLOBAL_KEY,
-        { timeout: 30_000 },
-      )
+      .waitForFunction(runtimeProbeStateExpr, null, { timeout: 30_000 })
       .then((handle) => handle.jsonValue())
       .then((state) => state === 'succeeded')
       .catch(() => false);
@@ -299,7 +322,6 @@ async function runBrowserCheck({ browserName, launcher, launchOptions, url, bloc
     const probe = await page.evaluate(async ({
       sampleFrames,
       sampleTimeoutMs,
-      probeKey,
       bootstrapReadyBeforeSample,
     }) => {
       const hasNavigatorGpu = Boolean(navigator.gpu);
@@ -310,9 +332,38 @@ async function runBrowserCheck({ browserName, launcher, launchOptions, url, bloc
       const hasWebGPUContext = Boolean(canvas?.getContext('webgpu'));
 
       const readProbe = () => {
-        const host = globalThis;
-        const value = host[probeKey];
-        return value && typeof value === 'object' ? value : null;
+        const names = Object.getOwnPropertyNames(globalThis);
+        for (let index = 0; index < names.length; index += 1) {
+          let value;
+          try {
+            value = globalThis[names[index]];
+          } catch {
+            continue;
+          }
+          if (!value || typeof value !== 'object') {
+            continue;
+          }
+          if (value.version !== 1) {
+            continue;
+          }
+          const bootstrap = value.bootstrap;
+          const loop = value.loop;
+          if (!bootstrap || !loop) {
+            continue;
+          }
+          if (typeof loop.renderedFrameCount !== 'number') {
+            continue;
+          }
+          if (
+            bootstrap.state === 'not_started' ||
+            bootstrap.state === 'starting' ||
+            bootstrap.state === 'succeeded' ||
+            bootstrap.state === 'failed'
+          ) {
+            return value;
+          }
+        }
+        return null;
       };
       const probeBefore = readProbe();
       const beforeFrameCount =
@@ -385,7 +436,6 @@ async function runBrowserCheck({ browserName, launcher, launchOptions, url, bloc
     }, {
       sampleFrames: SAMPLE_FRAMES,
       sampleTimeoutMs: SAMPLE_TIMEOUT_MS,
-      probeKey: RUNTIME_PROBE_GLOBAL_KEY,
       bootstrapReadyBeforeSample,
     });
 
