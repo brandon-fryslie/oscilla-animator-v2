@@ -75,7 +75,6 @@ interface RenderInput {
   readonly inputAudioHigh?: number;
   readonly inputGaugeActive?: number;
   readonly drawPrepSinks?: readonly DrawPrepSinkDescriptor[];
-  readonly drawPrepShaderWgsl?: string;
 }
 
 interface DrawPrepSinkDescriptor {

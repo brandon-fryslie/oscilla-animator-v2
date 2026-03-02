@@ -60,7 +60,7 @@ The renderer executes this dispatch once for each prepared draw record so `drawP
 
 The draw-prep shader is a canonical static kernel. The compiler emits only draw-prep sink metadata (`sinkIndex`, `indirectRecordIndex`, `instanceCountMode`, `staticInstanceCount`) and the runtime resolves static-vs-dynamic instance counts before dispatch.
 
-For debugging and development-only hot-swap experiments, the renderer still accepts a `drawPrepShaderWgsl` override. This override is an explicit escape hatch, not a stable production API: any override must preserve the canonical draw-prep bind-group layout and indirect-args semantics.
+Runtime input does not accept draw-prep WGSL source overrides. Any legacy `drawPrepShaderWgsl` payload is rejected at the render boundary to preserve one canonical kernel contract.
 
 Code snippet:
 
