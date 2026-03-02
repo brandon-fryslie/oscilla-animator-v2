@@ -146,6 +146,7 @@ export interface NagaLoweringProgramIR {
   readonly module: NagaModuleIR;
   readonly sourceMap: Readonly<Record<string, NagaSourceMapEntryIR>>;
   readonly compute: NagaComputeMetadataIR;
+  readonly coverage: NagaLoweringCoverageIR;
 }
 
 interface SlotAddressPlan {
@@ -159,6 +160,24 @@ interface SlotAddressPlan {
 
 export interface NagaComputeMetadataIR {
   readonly maxActiveLanes: number;
+}
+
+export interface NagaLoweringSemanticFallbackIR {
+  readonly stepIndex: number;
+  readonly stepKind: Step['kind'];
+  readonly exprKind?: ValueExpr['kind'];
+  readonly reason: string;
+}
+
+export interface NagaLoweringCoverageIR {
+  readonly totalStepCount: number;
+  readonly nonComputeStepCount: number;
+  readonly semanticFallbacks: readonly NagaLoweringSemanticFallbackIR[];
+}
+
+interface LoweringCoverageState {
+  nonComputeStepCount: number;
+  semanticFallbacks: NagaLoweringSemanticFallbackIR[];
 }
 
 class Interner<T> {
@@ -422,13 +441,17 @@ function resolveStepInputSlot(
   stepExpr: ValueExpr | undefined,
   schedule: ScheduleIR,
   runtimeAddressTable: RuntimeAddressTableIR,
-): { readonly buffer: 'arena_in' | 'state_in'; readonly slotOrStateOffset: ValueSlot | number } | null {
+): {
+  readonly buffer: 'arena_in' | 'state_in';
+  readonly slotOrStateOffset: ValueSlot | number;
+  readonly resolution: 'state' | 'explicit_input' | 'expr_fallback';
+} | null {
   const exprId = step.kind === 'evalOne' ? (step.expr as number) : (step.field as number);
 
   if (stepExpr?.kind === 'state') {
     const stateSlotStart = findStateSlotStart(schedule, stepExpr.stateKey);
     if (stateSlotStart === null) return null;
-    return { buffer: 'state_in', slotOrStateOffset: stateSlotStart };
+    return { buffer: 'state_in', slotOrStateOffset: stateSlotStart, resolution: 'state' };
   }
 
   const explicitInputs = collectExprInputs(stepExpr);
@@ -436,14 +459,14 @@ function resolveStepInputSlot(
     .map((candidate) => resolveInputSlotFromExpr(candidate, runtimeAddressTable))
     .find((candidate): candidate is ValueSlot => candidate !== null);
   if (explicitSource !== undefined) {
-    return { buffer: 'arena_in', slotOrStateOffset: explicitSource };
+    return { buffer: 'arena_in', slotOrStateOffset: explicitSource, resolution: 'explicit_input' };
   }
 
   const fallbackSource = resolveInputSlotFromExpr(exprId, runtimeAddressTable);
   if (fallbackSource === null) {
     return null;
   }
-  return { buffer: 'arena_in', slotOrStateOffset: fallbackSource };
+  return { buffer: 'arena_in', slotOrStateOffset: fallbackSource, resolution: 'expr_fallback' };
 }
 
 function emitAddressIndex(
@@ -596,6 +619,7 @@ function lowerStep(
   runtimeAddressTable: RuntimeAddressTableIR,
   valueExprs: readonly ValueExpr[],
   exprToBlock: ReadonlyMap<ValueExprId, BlockId>,
+  coverage: LoweringCoverageState,
 ): void {
   const maybeExprId = getStepExprId(step);
   const source = makeSource(
@@ -639,6 +663,18 @@ function lowerStep(
         source,
         `step ${stepIndex} kind=${step.kind}`,
       );
+      if (step.kind === 'evalOne') {
+        // [LAW:no-silent-fallbacks] Current lowering path for evalOne is still
+        // copy-oriented and does not model full kernel semantics yet.
+        coverage.semanticFallbacks.push({
+          stepIndex,
+          stepKind: step.kind,
+          exprKind: expr?.kind,
+          reason: sourceBinding.resolution === 'expr_fallback'
+            ? 'evalOne lowered through expr_fallback slot copy'
+            : 'evalOne lowered as typed slot copy (full kernel semantics pending)',
+        });
+      }
       return;
     }
 
@@ -665,13 +701,10 @@ function lowerStep(
     case 'eventDispatch':
     case 'continuityMapBuild':
     case 'render': {
-      ctx.addStatement(
-        {
-          kind: 'comment',
-          text: `step ${stepIndex} kind=${step.kind} lowered in non-compute stage`,
-        },
-        source,
-      );
+      // [LAW:one-source-of-truth] Non-compute schedule steps are not lowered
+      // into compute module statements. Their execution remains owned by
+      // runtime/render stage boundaries.
+      coverage.nonComputeStepCount += 1;
       return;
     }
 
@@ -754,6 +787,10 @@ export function lowerScheduleToNagaModule(args: {
   readonly exprToBlock: ReadonlyMap<ValueExprId, BlockId>;
 }): NagaLoweringProgramIR {
   const ctx = new LoweringCtx();
+  const coverage: LoweringCoverageState = {
+    nonComputeStepCount: 0,
+    semanticFallbacks: [],
+  };
   const builtins = registerBuiltinTypes(ctx);
   registerBuiltinGlobals(ctx, builtins);
 
@@ -788,6 +825,7 @@ export function lowerScheduleToNagaModule(args: {
         args.runtimeAddressTable,
         args.valueExprs,
         args.exprToBlock,
+        coverage,
       );
     }
   }).block;
@@ -847,6 +885,11 @@ export function lowerScheduleToNagaModule(args: {
     sourceMap: ctx.sourceMap,
     compute: {
       maxActiveLanes,
+    },
+    coverage: {
+      totalStepCount: steps.length,
+      nonComputeStepCount: coverage.nonComputeStepCount,
+      semanticFallbacks: coverage.semanticFallbacks,
     },
   };
 }
