@@ -5,13 +5,12 @@ import { compileFrontend } from '../compiler/frontend';
 import { compileProgramWithNaga } from '../compiler/naga-compile';
 import { EventHub } from '../events/EventHub';
 import { deserializePatch } from './PatchPersistence';
-import { exportSerializableTopologies } from '../shapes/registry';
 import type {
   CompileWorkerRequest,
   CompileWorkerResponse,
   CompileWorkerBackendResult,
 } from './compile-worker-protocol';
-import { collectProgramTopologyIds, stripKernelRegistry } from './compile-worker-serialization';
+import { stripKernelRegistry } from './compile-worker-serialization';
 
 async function toBackendResult(
   result: ReturnType<typeof compileFromFrontend>,
@@ -52,11 +51,9 @@ async function toBackendResult(
     // [LAW:no-string-math] Compiler output remains structured IR; WGSL text stays
     // at the serializer boundary and is not persisted back into program IR.
     const program = stripKernelRegistry(result.program);
-    const topologyIds = collectProgramTopologyIds(program);
     return {
       kind: 'ok',
       program,
-      topologies: exportSerializableTopologies(topologyIds),
       warnings: result.warnings,
     };
   }

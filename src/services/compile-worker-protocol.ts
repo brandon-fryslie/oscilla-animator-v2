@@ -1,7 +1,6 @@
 import type { FrontendResult } from '../compiler/frontend';
 import type { CompileError } from '../compiler/types';
 import type { CompiledProgramIR } from '../compiler/ir/program';
-import type { SerializableTopologyDef } from '../shapes/registry';
 
 export type SerializableCompiledProgramIR = Omit<CompiledProgramIR, 'kernelRegistry'>;
 
@@ -9,7 +8,6 @@ export type CompileWorkerBackendResult =
   | {
       readonly kind: 'ok';
       readonly program: SerializableCompiledProgramIR;
-      readonly topologies: readonly SerializableTopologyDef[];
       readonly warnings: readonly CompileError[];
     }
   | {

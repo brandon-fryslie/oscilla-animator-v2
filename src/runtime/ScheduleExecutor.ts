@@ -645,6 +645,7 @@ export function executeFrame(
 
   // Build assembler context with resolved camera and arena
   // Populate reusable module-level context to avoid per-frame object literal
+  _assemblerCtx.program = program;
   _assemblerCtx.instances = instances as ReadonlyMap<string, InstanceDecl>;
   _assemblerCtx.state = state;
   _assemblerCtx.resolvedCamera = resolvedCamera;
