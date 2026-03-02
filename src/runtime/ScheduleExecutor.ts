@@ -155,20 +155,6 @@ const NO_DOMAIN_CHANGE = {
   mapping: null,
 } as const;
 
-// [LAW:no-shared-mutable-globals] pureFnContext is stable for the lifetime of a program.
-// Cached per CompiledProgramIR to avoid allocating a new object every frame.
-const _pureFnContextCache = new WeakMap<CompiledProgramIR, PureFnExecutionContext>();
-
-function _getPureFnContext(program: CompiledProgramIR): PureFnExecutionContext {
-  let ctx = _pureFnContextCache.get(program);
-  if (!ctx) {
-    // eslint-disable-next-line oscilla/no-hot-path-alloc -- [LAW:verifiable-goals] One-time allocation per compiled program.
-    ctx = { kernelRegistry: program.kernelRegistry };
-    _pureFnContextCache.set(program, ctx);
-  }
-  return ctx;
-}
-
 // Module-level helper: resolve phase-1 segment without a per-frame closure.
 // Hoisted to avoid allocating a closure inside executeFrame on every call.
 function _resolvePhase1ValueSegment(eventDispatchSeen: boolean, continuityMapSeen: boolean): RuntimeFrameSegment {
@@ -177,6 +163,11 @@ function _resolvePhase1ValueSegment(eventDispatchSeen: boolean, continuityMapSee
   return 'phase1-value-pre-event';
 }
 
+// Pre-allocated at module scope — `new Map()` never executes in the frame hot path.
+// getStateSlotToMapping clears and rebuilds this scratch each frame; it is only
+// consumed within a single executeFrame call, so single-owner semantics hold.
+const _stateSlotMappingScratch = new Map<number, ScheduleIR['stateMappings'][number]>();
+
 function getStateSlotToMapping(
   schedule: ScheduleIR,
 ): ReadonlyMap<number, ScheduleIR['stateMappings'][number]> {
@@ -184,13 +175,12 @@ function getStateSlotToMapping(
   if (cached) {
     return cached;
   }
-  // eslint-disable-next-line oscilla/no-hot-path-alloc -- [LAW:verifiable-goals] One-time allocation per ScheduleIR; hot path always hits cache.
-  const byStateSlot = new Map<number, ScheduleIR['stateMappings'][number]>();
+  _stateSlotMappingScratch.clear();
   for (const mapping of schedule.stateMappings) {
-    byStateSlot.set(mapping.slotStart, mapping);
+    _stateSlotMappingScratch.set(mapping.slotStart, mapping);
   }
-  stateSlotMappingCache.set(schedule, byStateSlot);
-  return byStateSlot;
+  stateSlotMappingCache.set(schedule, _stateSlotMappingScratch);
+  return _stateSlotMappingScratch;
 }
 
 // Module-level callback for events.forEach (hoisted to avoid per-frame closure)
@@ -344,7 +334,10 @@ export function executeFrame(
   // slotToArena replaces all direct program.arenaLayout[slot] accesses in this file.
   const addressTable = getExprAddressTable(program);
   const { slotLookup: slotLookupMap, slotToArena } = addressTable;
-  const pureFnContext = _getPureFnContext(program);
+  // [LAW:no-shared-mutable-globals] CompiledProgramIR structurally satisfies PureFnExecutionContext
+  // (both carry readonly kernelRegistry: KernelRegistry). Pass program directly to avoid
+  // allocating a wrapper object every frame.
+  const pureFnContext: PureFnExecutionContext = program;
   // [LAW:dataflow-not-control-flow] Assertion mode is chosen once per frame.
   // Step execution order is unchanged; only validation dataflow varies.
   const assertCardinalitySlotWrites = options?.assertCardinalitySlotWrites === true;

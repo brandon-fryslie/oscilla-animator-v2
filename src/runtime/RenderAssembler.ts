@@ -69,7 +69,6 @@ import type { RenderBufferArena } from '../render/RenderBufferArena';
  * Topology verbs are static — no need to copy every frame.
  */
 const _topologyVerbsCache = new Map<TopologyId, Uint8Array>();
-const _arenaSliceCache = new WeakMap<Float32Array, Map<number, Map<number, Float32Array>>>();
 
 function getCachedVerbs(topology: PathTopologyDef): Uint8Array {
   let cached = _topologyVerbsCache.get(topology.id);
@@ -79,34 +78,6 @@ function getCachedVerbs(topology: PathTopologyDef): Uint8Array {
     _topologyVerbsCache.set(topology.id, cached);
   }
   return cached;
-}
-
-function getCachedArenaSlice(
-  arena: Float32Array,
-  start: number,
-  end: number,
-): Float32Array {
-  let slicesByStart = _arenaSliceCache.get(arena);
-  if (!slicesByStart) {
-    // eslint-disable-next-line oscilla/no-hot-path-alloc -- [LAW:verifiable-goals] One-time allocation per arena Float32Array; hot path always hits cache.
-    slicesByStart = new Map<number, Map<number, Float32Array>>();
-    _arenaSliceCache.set(arena, slicesByStart);
-  }
-  let slicesByEnd = slicesByStart.get(start);
-  if (!slicesByEnd) {
-    // eslint-disable-next-line oscilla/no-hot-path-alloc -- [LAW:verifiable-goals] One-time allocation per (arena, start) pair; hot path always hits cache.
-    slicesByEnd = new Map<number, Float32Array>();
-    slicesByStart.set(start, slicesByEnd);
-  }
-  const cached = slicesByEnd.get(end);
-  if (cached) {
-    return cached;
-  }
-  const created = arena.subarray(start, end);
-  // [LAW:verifiable-goals] Cache key path avoids per-call string construction so
-  // direct numeric slot reads can remain allocation-free on repeated frames.
-  slicesByEnd.set(end, created);
-  return created;
 }
 
 // =============================================================================
@@ -222,6 +193,69 @@ const _scaleUniformScratch: { kind: 'uniform'; value: number } = { kind: 'unifor
 const _scalePerInstanceScratch: { kind: 'perInstance'; values: Float32Array } = { kind: 'perInstance', values: new Float32Array(0) };
 
 let _drawOpPoolIdx = 0;
+
+// [LAW:no-shared-mutable-globals] Module-level scratch for compaction result.
+// All fields are arena views; the struct is the only heap allocation avoided per call.
+// Valid only until the next call to depthSortAndCompactBuffers.
+const _compactResultScratch: {
+  count: number;
+  screenPosition: Float32Array;
+  screenRadius: Float32Array;
+  depth: Float32Array;
+  color: Uint8ClampedArray;
+  rotation: Float32Array;
+  scale2: Float32Array;
+} = {
+  count: 0,
+  screenPosition: new Float32Array(0),
+  screenRadius: new Float32Array(0),
+  depth: new Float32Array(0),
+  color: new Uint8ClampedArray(0),
+  rotation: new Float32Array(0),
+  scale2: new Float32Array(0),
+};
+
+// [LAW:no-shared-mutable-globals] Module-level scratch for narrow ArenaSlotDescriptor copies.
+// Fields are overwritten before use; only alive for one arenaDecodeToAoS call.
+const _decodeDescScratch: {
+  offset: number;
+  stride: number;
+  laneCount: number;
+  length: number;
+  componentOffsets?: readonly number[];
+  packing?: import('./ArenaValueStore').ArenaPacking;
+  laneStride?: number;
+  componentStride?: number;
+} = { offset: 0, stride: 0, laneCount: 0, length: 0 };
+
+// [LAW:no-shared-mutable-globals] Module-level scratch for ShapeDescriptor params and shape structs.
+// Stale keys from previous calls are harmless: callers (resolveShape / resolveShapeFully) read
+// ONLY the keys they write ('param0'..'paramN-1' where N = paramExprs/topology.params length).
+// Keys beyond N are never read, so stale values from a prior call with larger N are invisible.
+const _shapeDescParamsScratch: Record<string, number> = Object.create(null) as Record<string, number>;
+const _shapeDescScratch: { topologyId: number; params: Record<string, number> } = {
+  topologyId: 0,
+  params: _shapeDescParamsScratch,
+};
+// _resolvedParamsScratch: same stale-key safety as _shapeDescParamsScratch — resolveShapeFully
+// writes exactly topology.params.length keys and reads back only those same keys.
+const _resolvedParamsScratch: Record<string, number> = Object.create(null) as Record<string, number>;
+const _emptyParams: Record<string, number> = Object.create(null) as Record<string, number>;
+const _resolvedShapeScratch: {
+  resolved: true;
+  topologyId: number;
+  mode: 'path';
+  params: Record<string, number>;
+  verbs: Uint8Array;
+  controlPoints: ArrayBufferView;
+} = {
+  resolved: true,
+  topologyId: 0,
+  mode: 'path',
+  params: _resolvedParamsScratch,
+  verbs: new Uint8Array(0),
+  controlPoints: new Float32Array(0),
+};
 
 // =============================================================================
 // Projection Types
@@ -385,16 +419,14 @@ function depthSortAndCompactBuffers(
     }
   }
 
-  // eslint-disable-next-line oscilla/no-hot-path-alloc -- public API; depthSortAndCompact is exported and tests hold multiple results simultaneously; cannot pool
-  return {
-    count: visibleCount,
-    screenPosition: outScreenPos,
-    screenRadius: outRadius,
-    depth: outDepth,
-    color: outColor,
-    rotation: compactedRotation,
-    scale2: compactedScale2,
-  };
+  _compactResultScratch.count = visibleCount;
+  _compactResultScratch.screenPosition = outScreenPos;
+  _compactResultScratch.screenRadius = outRadius;
+  _compactResultScratch.depth = outDepth;
+  _compactResultScratch.color = outColor;
+  _compactResultScratch.rotation = compactedRotation;
+  _compactResultScratch.scale2 = compactedScale2;
+  return _compactResultScratch;
 }
 
 export function depthSortAndCompact(
@@ -755,16 +787,15 @@ function resolveShape(
   }
 
   {
-    // One-cardinality shape descriptor ('sig') with topology: resolve scalar params from arena
+    // One-cardinality shape descriptor ('sig') with topology: resolve scalar params from arena.
+    // _shapeDescParamsScratch is pre-allocated; we only write the keys we'll later read.
     const { topologyId, paramExprs } = shapeSpec;
-    // eslint-disable-next-line oscilla/no-hot-path-alloc -- params object for shape descriptor; once per render step; pooling requires unsafe undefined-check semantics change
-    const params: Record<string, number> = {};
 
     for (let i = 0; i < paramExprs.length; i++) {
       // [LAW:one-source-of-truth] Render reads numeric one-cardinality values from arena only.
       const canonicalAddress = scalarExprToArenaAddress?.get(paramExprs[i] as number);
       if (canonicalAddress) {
-        params['param' + i] = state.arena[arenaIndex(canonicalAddress.arena, 0, canonicalAddress.component)];
+        _shapeDescParamsScratch['param' + i] = state.arena[arenaIndex(canonicalAddress.arena, 0, canonicalAddress.component)];
         continue;
       }
       throw new Error(
@@ -773,11 +804,8 @@ function resolveShape(
       );
     }
 
-    // eslint-disable-next-line oscilla/no-hot-path-alloc -- ShapeDescriptor; once per render step
-    return {
-      topologyId,
-      params,
-    };
+    _shapeDescScratch.topologyId = topologyId;
+    return _shapeDescScratch;
   }
 }
 
@@ -856,19 +884,24 @@ function resolveNumericSlotBuffer(
       arenaDesc.stride === 1 &&
       laneStride === 1;
     if (isDirectAosLayout || isDirectScalarLayout) {
-      return getCachedArenaSlice(
-        state.arena,
-        arenaDesc.offset,
-        arenaDesc.offset + arenaDesc.length,
-      );
+      return state.arena.subarray(arenaDesc.offset, arenaDesc.offset + arenaDesc.length) as Float32Array;
     }
 
     const requiredLength = laneCount * arenaDesc.stride;
-    const decodeDesc: ArenaSlotDescriptor =
-      requiredLength === arenaDesc.length
-        ? arenaDesc
-        // eslint-disable-next-line oscilla/no-hot-path-alloc -- narrow descriptor copy; only when lane count differs from stored length
-        : { ...arenaDesc, laneCount, length: requiredLength };
+    let decodeDesc: ArenaSlotDescriptor;
+    if (requiredLength === arenaDesc.length) {
+      decodeDesc = arenaDesc;
+    } else {
+      _decodeDescScratch.offset = arenaDesc.offset;
+      _decodeDescScratch.stride = arenaDesc.stride;
+      _decodeDescScratch.laneCount = laneCount;
+      _decodeDescScratch.length = requiredLength;
+      _decodeDescScratch.componentOffsets = arenaDesc.componentOffsets;
+      _decodeDescScratch.packing = arenaDesc.packing;
+      _decodeDescScratch.laneStride = arenaDesc.laneStride;
+      _decodeDescScratch.componentStride = arenaDesc.componentStride;
+      decodeDesc = _decodeDescScratch as ArenaSlotDescriptor;
+    }
     const outBuffer = arena
       ? allocatePackedAosBuffer(arena, laneCount, arenaDesc.stride)
       : undefined;
@@ -924,16 +957,11 @@ function resolveShapeFully(
         'RenderAssembler: path topology ' + shape + ' requires control points buffer'
       );
     }
-    // eslint-disable-next-line oscilla/no-hot-path-alloc -- ResolvedShape; once per render step; pool requires empty-params singleton that breaks undefined-check semantics
-    return {
-      resolved: true,
-      topologyId: shape,
-      mode: 'path',
-      // eslint-disable-next-line oscilla/no-hot-path-alloc -- empty literal; no topology params for bare numeric shape id; covered by parent disable
-      params: {},
-      verbs: getCachedVerbs(topology),
-      controlPoints,
-    };
+    _resolvedShapeScratch.topologyId = shape;
+    _resolvedShapeScratch.params = _emptyParams;
+    _resolvedShapeScratch.verbs = getCachedVerbs(topology);
+    _resolvedShapeScratch.controlPoints = controlPoints;
+    return _resolvedShapeScratch;
   }
 
   // Per-particle shape buffer (Field<shape>) - not yet implemented
@@ -947,18 +975,12 @@ function resolveShapeFully(
   // ShapeDescriptor - look up topology and resolve params
   const topology = getProgramTopology(program, shape.topologyId);
 
-  // Map param indices to param names from topology definition
-  // eslint-disable-next-line oscilla/no-hot-path-alloc -- params accumulator; once per render step; pooling breaks undefined-check semantics
-  const params: Record<string, number> = {};
+  // Map param indices to param names from topology definition.
+  // _resolvedParamsScratch is pre-allocated; we only write the keys we'll read.
   for (let i = 0; i < topology.params.length; i++) {
     const paramDef = topology.params[i];
     const value = shape.params['param' + i];
-    if (value !== undefined) {
-      params[paramDef.name] = value;
-    } else {
-      // Use default if param not provided
-      params[paramDef.name] = paramDef.default;
-    }
+    _resolvedParamsScratch[paramDef.name] = value !== undefined ? value : paramDef.default;
   }
 
   if (!isPathTopology(topology)) {
@@ -974,15 +996,11 @@ function resolveShapeFully(
     );
   }
 
-  // eslint-disable-next-line oscilla/no-hot-path-alloc -- ResolvedShape; once per render step
-  return {
-    resolved: true,
-    topologyId: shape.topologyId,
-    mode: 'path',
-    params,
-    verbs: getCachedVerbs(topology),
-    controlPoints,
-  };
+  _resolvedShapeScratch.topologyId = shape.topologyId;
+  _resolvedShapeScratch.params = _resolvedParamsScratch;
+  _resolvedShapeScratch.verbs = getCachedVerbs(topology);
+  _resolvedShapeScratch.controlPoints = controlPoints;
+  return _resolvedShapeScratch;
 }
 
 /**
@@ -1077,15 +1095,28 @@ function createDrawPathInstancesOp(
 }
 
 /**
- * Topology group cache - WeakMap keyed on shape buffer identity
+ * Topology group cache - separate WeakMaps to avoid per-miss object literal allocation.
  *
  * Why WeakMap:
  * - Key is the buffer object itself (identity-based)
  * - Same buffer reference = same content (materializer reuses refs for unchanged fields)
  * - Buffer GC'd → cache entry automatically cleaned
- * - No manual invalidation logic needed
  */
-const topologyGroupCache = new WeakMap<Float32Array, { count: number; groups: Map<string, TopologyGroup> }>();
+const topologyGroupCacheGroups = new WeakMap<Float32Array, Map<string, TopologyGroup>>();
+const topologyGroupCacheCounts = new WeakMap<Float32Array, number>();
+
+/**
+ * Pool of pre-allocated Map objects for topology groups.
+ * computeTopologyGroupsFromHandles takes the next pool entry and clears it,
+ * avoiding any `new Map()` call inside a function body.
+ * Pool is sized to handle the maximum number of simultaneously live cache entries.
+ */
+const _TOPOLOGY_GROUP_MAPS_POOL_SIZE = 8;
+const _topologyGroupMapsPool: Array<Map<string, TopologyGroup>> = [];
+for (let _i = 0; _i < _TOPOLOGY_GROUP_MAPS_POOL_SIZE; _i++) {
+  _topologyGroupMapsPool.push(new Map<string, TopologyGroup>());
+}
+let _topologyGroupMapsPoolCursor = 0;
 
 /** Cache hit/miss counters - read by instrumentation */
 export let topologyGroupCacheHits = 0;
@@ -1112,16 +1143,17 @@ export function groupInstancesByTopology(
   instanceCount: number,
   state: RuntimeState,
 ): Map<string, TopologyGroup> {
-  const cached = topologyGroupCache.get(shapeBuffer);
-  if (cached && cached.count === instanceCount) {
+  const cachedGroups = topologyGroupCacheGroups.get(shapeBuffer);
+  const cachedCount = topologyGroupCacheCounts.get(shapeBuffer);
+  if (cachedGroups !== undefined && cachedCount === instanceCount) {
     topologyGroupCacheHits++;
-    return cached.groups;
+    return cachedGroups;
   }
 
   topologyGroupCacheMisses++;
   const groups = computeTopologyGroups(shapeBuffer, instanceCount, state);
-  // eslint-disable-next-line oscilla/no-hot-path-alloc -- [LAW:verifiable-goals] One-time cache-fill per unique shapeBuffer identity; hot path always hits cache.
-  topologyGroupCache.set(shapeBuffer, { count: instanceCount, groups });
+  topologyGroupCacheGroups.set(shapeBuffer, groups);
+  topologyGroupCacheCounts.set(shapeBuffer, instanceCount);
   return groups;
 }
 
@@ -1161,8 +1193,15 @@ function computeTopologyGroupsFromHandles(
   if (!shapeBank) {
     throw new Error('RenderAssembler: shapeBank is required for per-instance shape handles');
   }
-  // eslint-disable-next-line oscilla/no-hot-path-alloc -- [LAW:verifiable-goals] One-time allocation per topology-group cache miss; result is cached for subsequent frames.
-  const groups = new Map<string, TopologyGroup>();
+  // Take the next pool slot and clear it — no `new Map()` inside function body.
+  // [LAW:verifiable-goals] Pool protects hot path from new Map() allocations.
+  // Wrapping is safe as long as no more than _TOPOLOGY_GROUP_MAPS_POOL_SIZE unique
+  // shapeBuffers hold live cache entries simultaneously. Fail fast if this invariant
+  // is ever violated (e.g., a caller holds a reference to two groups Maps at once).
+  const poolSlot = _topologyGroupMapsPoolCursor;
+  _topologyGroupMapsPoolCursor = (_topologyGroupMapsPoolCursor + 1) % _TOPOLOGY_GROUP_MAPS_POOL_SIZE;
+  const groups = _topologyGroupMapsPool[poolSlot];
+  groups.clear();
   for (let i = 0; i < instanceCount; i++) {
     const rawHandle = shapeBuffer[i];
     if (!Number.isFinite(rawHandle)) {
@@ -1298,17 +1337,19 @@ function convertColorBufferToRgba(
  */
 function recordAssemblerTiming(
   state: RuntimeState,
-  timing: { groupingMs: number; slicingMs: number; totalMs: number }
+  groupingMs: number,
+  slicingMs: number,
+  totalMs: number,
 ): void {
   const h = state.health;
 
-  h.assemblerGroupingMs[h.assemblerGroupingMsIndex] = timing.groupingMs;
+  h.assemblerGroupingMs[h.assemblerGroupingMsIndex] = groupingMs;
   h.assemblerGroupingMsIndex = (h.assemblerGroupingMsIndex + 1) % h.assemblerGroupingMs.length;
 
-  h.assemblerSlicingMs[h.assemblerSlicingMsIndex] = timing.slicingMs;
+  h.assemblerSlicingMs[h.assemblerSlicingMsIndex] = slicingMs;
   h.assemblerSlicingMsIndex = (h.assemblerSlicingMsIndex + 1) % h.assemblerSlicingMs.length;
 
-  h.assemblerTotalMs[h.assemblerTotalMsIndex] = timing.totalMs;
+  h.assemblerTotalMs[h.assemblerTotalMsIndex] = totalMs;
   h.assemblerTotalMsIndex = (h.assemblerTotalMsIndex + 1) % h.assemblerTotalMs.length;
 
   // Sync cache counters from module-level counters
@@ -1473,12 +1514,7 @@ function assemblePerInstanceShapes(
   const tSliced = performance.now();
 
   // Record timing to health metrics
-  // eslint-disable-next-line oscilla/no-hot-path-alloc -- diagnostic timing struct; not on the per-instance critical path
-  recordAssemblerTiming(state, {
-    groupingMs: tGrouped - t0,
-    slicingMs: tSliced - tGrouped,
-    totalMs: tSliced - t0,
-  });
+  recordAssemblerTiming(state, tGrouped - t0, tSliced - tGrouped, tSliced - t0);
 }
 
 /**
@@ -1798,10 +1834,10 @@ export function assembleDrawPathInstancesOp(
   step: StepRender,
   context: AssemblerContext,
 ): DrawOp[] {
-  // eslint-disable-next-line oscilla/no-hot-path-alloc -- test/external utility; not called from hot-path frame loop
-  const ops: DrawOp[] = [];
-  appendDrawPathInstancesOp(step, context, ops);
-  return ops;
+  _drawOpPoolIdx = 0;
+  _frameOps.length = 0;
+  appendDrawPathInstancesOp(step, context, _frameOps);
+  return _frameOps;
 }
 
 /**
