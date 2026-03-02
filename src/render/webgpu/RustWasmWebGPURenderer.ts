@@ -202,7 +202,11 @@ export class WebGPURenderer {
     if (!this.bootstrapped) {
       throw new Error('Rust renderer worker is not bootstrapped');
     }
-    this.worker.postMessage({ type: 'PAUSE' } satisfies RustRendererWorkerInboundMessage);
+    const shouldPauseScheduler =
+      this.lifecycleState === 'Running' || this.lifecycleState === 'Paused';
+    if (shouldPauseScheduler) {
+      this.worker.postMessage({ type: 'PAUSE' } satisfies RustRendererWorkerInboundMessage);
+    }
     try {
       await new Promise<void>((resolve, reject) => {
         let settled = false;
@@ -220,7 +224,18 @@ export class WebGPURenderer {
             return;
           }
           if (payload.type === 'FATAL_ERROR') {
-            settle(() => reject(new Error(`[${payload.code}] ${payload.message}`)));
+            settle(() => {
+              this.fatalError = new Error(`[${payload.code}] ${payload.message}`);
+              reject(this.fatalError);
+            });
+            return;
+          }
+          if (payload.type === 'DEVICE_LOST') {
+            settle(() => {
+              this.lifecycleState = 'Lost';
+              this.fatalError = new Error(`[${payload.code}] ${payload.message}`);
+              reject(this.fatalError);
+            });
           }
         };
         this.worker.addEventListener('message', onMessage);
@@ -231,7 +246,9 @@ export class WebGPURenderer {
         this.worker.postMessage(message);
       });
     } finally {
-      this.worker.postMessage({ type: 'RESUME' } satisfies RustRendererWorkerInboundMessage);
+      if (shouldPauseScheduler) {
+        this.worker.postMessage({ type: 'RESUME' } satisfies RustRendererWorkerInboundMessage);
+      }
     }
   }
 
