@@ -15,13 +15,9 @@ const SOURCE_PROOF_DIR = path.resolve('migration-proof');
 const SOURCE_ARTIFACTS_DIR = path.resolve('artifacts');
 
 async function writeCanonicalPassingMatrixReport(workspace: string): Promise<void> {
-  const w15 = JSON.parse(
-    await readFile(path.join(workspace, 'migration-proof', 'w15-browser-matrix-perf.json'), 'utf8'),
-  );
-  const chromium = w15.results?.chromium ?? {};
-  const reportGeneratedAt = String(w15.artifact?.report_generated_at ?? '2026-02-24T17:39:03.960Z');
-  const url = String(w15.artifact?.url ?? 'http://127.0.0.1:5174/?showPreview=true');
-  const sampleFrames = Number(w15.artifact?.sample_frames ?? 180);
+  const reportGeneratedAt = '2026-02-24T17:39:03.960Z';
+  const url = 'http://127.0.0.1:5174/?showPreview=true';
+  const sampleFrames = 180;
 
   const report = {
     generatedAt: reportGeneratedAt,
@@ -41,15 +37,16 @@ async function writeCanonicalPassingMatrixReport(workspace: string): Promise<voi
         browser: 'chromium',
         blocking: true,
         status: 'passed',
-        browserVersion: chromium.browser_version ?? null,
+        browserVersion: '143.0.7499.4',
         url,
         startedAt: reportGeneratedAt,
         durationMs: 0,
         readiness: {
-          hasNavigatorGpu: Boolean(chromium.readiness?.hasNavigatorGpu ?? true),
-          hasAdapter: Boolean(chromium.readiness?.hasAdapter ?? true),
-          hasCanvas: Boolean(chromium.readiness?.hasCanvas ?? true),
-          hasWebGPUContext: Boolean(chromium.readiness?.hasWebGPUContext ?? true),
+          hasNavigatorGpu: true,
+          hasAdapter: true,
+          hasCanvas: true,
+          hasWebGPUContext: true,
+          webgpuContextProbe: 'main_canvas',
           runtimeProbePresent: true,
           bootstrapSucceeded: true,
           frameAdvanceDetected: true,
@@ -62,14 +59,14 @@ async function writeCanonicalPassingMatrixReport(workspace: string): Promise<voi
             renderedFramesAfterSample: sampleFrames,
             frameAdvanceCount: sampleFrames,
           },
-          consoleErrorCount: Number(chromium.readiness?.consoleErrorCount ?? 0),
-          pageErrorCount: Number(chromium.readiness?.pageErrorCount ?? 0),
+          consoleErrorCount: 0,
+          pageErrorCount: 0,
         },
         timing: {
-          sampleCount: Number(chromium.timing?.sampleCount ?? sampleFrames),
-          avgFrameDeltaMs: Number(chromium.timing?.avgFrameDeltaMs ?? 8.333),
-          p95FrameDeltaMs: Number(chromium.timing?.p95FrameDeltaMs ?? 9.3),
-          avgFps: Number(chromium.timing?.avgFps ?? 120),
+          sampleCount: sampleFrames,
+          avgFrameDeltaMs: 8.333,
+          p95FrameDeltaMs: 9.3,
+          avgFps: 120.01,
         },
         errors: {
           console: [],

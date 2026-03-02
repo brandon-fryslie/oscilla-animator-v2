@@ -353,10 +353,12 @@ async function runBrowserCheck({ browserName, launcher, launchOptions, url, bloc
             webgpuContextProbe: 'main_canvas',
           };
         } catch (error) {
+          const errorName =
+            error && typeof error === 'object' && 'name' in error
+              ? String(error.name)
+              : '';
           const isTransferredOffscreen =
-            typeof DOMException !== 'undefined' &&
-            error instanceof DOMException &&
-            error.name === 'InvalidStateError';
+            errorName === 'InvalidStateError';
           // [LAW:one-source-of-truth] OffscreenCanvas transfer moves WebGPU
           // context ownership to worker runtime, so probe state is canonical.
           return {
@@ -571,6 +573,7 @@ function makeSkippedResult(check) {
       hasAdapter: false,
       hasCanvas: false,
       hasWebGPUContext: false,
+      webgpuContextProbe: 'skipped',
       runtimeProbePresent: false,
       bootstrapSucceeded: false,
       frameAdvanceDetected: false,
@@ -641,6 +644,7 @@ async function main() {
             hasAdapter: false,
             hasCanvas: false,
             hasWebGPUContext: false,
+            webgpuContextProbe: 'launch_failed',
             runtimeProbePresent: false,
             bootstrapSucceeded: false,
             frameAdvanceDetected: false,

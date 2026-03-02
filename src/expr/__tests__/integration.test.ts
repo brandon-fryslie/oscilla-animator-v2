@@ -92,6 +92,24 @@ describe('compileExpression Integration', () => {
   });
 
   describe('Component Access (Swizzle)', () => {
+    function expectExtractOrConst(
+      expr: ReturnType<IRBuilderImpl['getValueExpr']>,
+      expectedComponentIndex: number,
+      expectedConst: number,
+    ): void {
+      expect(expr).toBeDefined();
+      if (!expr) {
+        return;
+      }
+      if (expr.kind === 'extract') {
+        expect(expr.componentIndex).toBe(expectedComponentIndex);
+        return;
+      }
+      expect(expr.kind).toBe('const');
+      if (expr.kind === 'const') {
+        expect(expr.value).toEqual(floatConst(expectedConst));
+      }
+    }
 
     it('single-component swizzle compiles successfully (v.x)', () => {
       const vSig = builder.constant(vec3Const(1, 2, 3), canonicalType(VEC3));
@@ -106,16 +124,7 @@ describe('compileExpression Integration', () => {
       expect(result.ok).toBe(true);
       if (result.ok) {
         // Constant inputs may fold swizzles to const; non-folded paths remain extract.
-        const expr = builder.getValueExpr(result.value);
-        expect(expr).toBeDefined();
-        if (expr?.kind === 'extract') {
-          expect(expr.componentIndex).toBe(0);
-        } else {
-          expect(expr?.kind).toBe('const');
-          if (expr?.kind === 'const') {
-            expect(expr.value).toEqual(floatConst(1));
-          }
-        }
+        expectExtractOrConst(builder.getValueExpr(result.value), 0, 1);
       }
     });
 
@@ -140,22 +149,8 @@ describe('compileExpression Integration', () => {
           // Constant-folding may reduce extract nodes to const components.
           const comp0 = builder.getValueExpr(expr.components[0]);
           const comp1 = builder.getValueExpr(expr.components[1]);
-          if (comp0?.kind === 'extract') {
-            expect(comp0.componentIndex).toBe(0);
-          } else {
-            expect(comp0?.kind).toBe('const');
-            if (comp0?.kind === 'const') {
-              expect(comp0.value).toEqual(floatConst(1));
-            }
-          }
-          if (comp1?.kind === 'extract') {
-            expect(comp1.componentIndex).toBe(1);
-          } else {
-            expect(comp1?.kind).toBe('const');
-            if (comp1?.kind === 'const') {
-              expect(comp1.value).toEqual(floatConst(2));
-            }
-          }
+          expectExtractOrConst(comp0, 0, 1);
+          expectExtractOrConst(comp1, 1, 2);
         }
       }
     });
