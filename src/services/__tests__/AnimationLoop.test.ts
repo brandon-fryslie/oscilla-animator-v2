@@ -34,7 +34,6 @@ describe('AnimationLoop', () => {
 
   beforeEach(() => {
     assertSchedulePhaseBoundaryStateReadsMock.mockReset();
-    markRuntimeFrameAdvancedMock.mockReset();
     executeFrameMock.mockImplementation(() => {
       throw new Error('boom');
     });

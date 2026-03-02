@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => {
   const compileWorkerCompile = vi.fn();
   const compileWorkerDispose = vi.fn();
-  const compileAndSwap = vi.fn(async () => {});
+  const compileAndSwap = vi.fn(async (..._args: any[]) => {});
   const createWebGPURenderer = vi.fn(async () => ({
     dispose: vi.fn(),
     render: vi.fn(),
