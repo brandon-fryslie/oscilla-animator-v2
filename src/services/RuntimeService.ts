@@ -284,7 +284,11 @@ export class RuntimeService {
       if (compileState === 'ready') {
         await this.flushPendingSwap();
       }
-      await this.waitForCompilerState(['idle', 'error']);
+      const finalState = await this.waitForCompilerState(['idle', 'error']);
+      if (finalState === 'error') {
+        const errorMessage = compiler.getLastErrorMessage() ?? 'unknown startup compile failure';
+        throw new Error(`RuntimeService: initial async compile failed: ${errorMessage}`);
+      }
     } finally {
       this.nextSwapIsInitial = false;
     }
