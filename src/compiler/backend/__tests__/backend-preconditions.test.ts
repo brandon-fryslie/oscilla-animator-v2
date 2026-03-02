@@ -14,6 +14,7 @@ import { buildPatch } from '../../../graph';
 import { compileFrontend } from '../../frontend';
 import { compileBackend } from '../index';
 import type { CompiledProgramIR } from '../../ir/program';
+import { EMPTY_PROGRAM_TOPOLOGY_TABLE } from '../../ir/program-topology';
 import type { UnlinkedIRFragments } from '../lower-blocks';
 import type { ScheduleIR } from '../schedule-program';
 import type { AcyclicOrLegalGraph } from '../../ir/patches';
@@ -55,6 +56,7 @@ function testProgramConverter(
     fieldSlotRegistry: new Map(),
     renderGlobals: [],
     kernelRegistry: createDefaultRegistry(),
+    topologyTable: EMPTY_PROGRAM_TOPOLOGY_TABLE,
     arenaLayout: [],
     arenaPayloadFloats: 0,
     arenaTotalFloats: 0,

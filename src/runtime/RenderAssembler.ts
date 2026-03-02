@@ -18,9 +18,9 @@
 
 import type { StepRender, InstanceDecl } from '../compiler/ir/types';
 import type { RuntimeState } from './RuntimeState';
-import type { RuntimeScalarArenaAddress } from '../compiler/ir/program';
-import { getTopology } from '../shapes/registry';
+import type { CompiledProgramIR, RuntimeScalarArenaAddress } from '../compiler/ir/program';
 import type { PathTopologyDef, TopologyDef, TopologyId } from '../shapes/types';
+import { getProgramTopology } from '../compiler/ir/program-topology';
 import type {
   DrawOp,
   PathGeometry,
@@ -565,6 +565,8 @@ export function compactAndCopy(
  * AssemblerContext - Context needed for render assembly
  */
 export interface AssemblerContext {
+  /** Compiled program that owns all topology definitions used during assembly. */
+  program: CompiledProgramIR;
   /** Instance declarations */
   instances: ReadonlyMap<string, InstanceDecl>;
   /** Runtime state for reading one-cardinality expression slots and many buffers */
@@ -635,6 +637,7 @@ function resolveScale(
  * NO LEGACY NUMERIC ENCODING - all shapes use proper topology IDs.
  */
 function resolveShape(
+  program: CompiledProgramIR,
   shapeSpec: StepRender['shape'],
   scalarExprToArenaAddress: ReadonlyMap<number, RuntimeScalarArenaAddress> | undefined,
   state: RuntimeState,
@@ -695,7 +698,7 @@ function resolveShape(
     const metadata = readShapeBankHandleMetadata(shapeBank, handle);
     // Validate metadata + header presence at the single render boundary.
     readShapeBankHeader(shapeBank.data, handle);
-    getTopology(metadata.topologyId);
+    getProgramTopology(program, metadata.topologyId);
     return metadata.topologyId as TopologyId;
   }
 
@@ -849,11 +852,12 @@ function isShapeDescriptor(
  * @returns ResolvedShape for renderer
  */
 function resolveShapeFully(
+  program: CompiledProgramIR,
   shape: ShapeDescriptor | ArrayBufferView | TopologyId,
   controlPoints?: ArrayBufferView
 ): ResolvedShape {
   if (typeof shape === 'number') {
-    const topology = getTopology(shape);
+    const topology = getProgramTopology(program, shape);
     if (!isPathTopology(topology)) {
       throw new Error(
         `RenderAssembler: topology ${shape} is not a path topology. ` +
@@ -884,7 +888,7 @@ function resolveShapeFully(
   }
 
   // ShapeDescriptor - look up topology and resolve params
-  const topology = getTopology(shape.topologyId);
+  const topology = getProgramTopology(program, shape.topologyId);
 
   // Map param indices to param names from topology definition
   const params: Record<string, number> = {};
@@ -1279,7 +1283,7 @@ function assemblePerInstanceShapes(
   context: AssemblerContext,
   outOps: DrawOp[],
 ): void {
-  const { state, arena, slotToArena } = context;
+  const { program, state, arena, slotToArena } = context;
   const t0 = performance.now();
 
   // Group instances by topology
@@ -1315,7 +1319,7 @@ function assemblePerInstanceShapes(
     }
 
     // Validate topology exists (group-level validation, not per-instance)
-    const topology = getTopology(group.topologyId);
+    const topology = getProgramTopology(program, group.topologyId);
 
     // Slice RGBA color for this group (position is not needed post-projection)
     const color = sliceColorBuffer(fullColor, group.instanceIndices, arena);
@@ -1650,7 +1654,7 @@ function appendDrawPathInstancesOp(
   const isotropicScale = resolvedScale.kind === 'perInstance' ? resolvedScale.values : undefined;
 
   // Resolve shape
-  const shape = resolveShape(step.shape, scalarExprToArenaAddress, state, slotToArena);
+  const shape = resolveShape(context.program, step.shape, scalarExprToArenaAddress, state, slotToArena);
 
   // Check if per-instance shapes (shape buffer)
   if (shape instanceof Float32Array) {
@@ -1671,7 +1675,7 @@ function appendDrawPathInstancesOp(
 
   // Uniform shape: resolve fully and emit single op
   const packedControlPointsBuffer = resolveControlPoints(step.controlPoints, state, slotToArena, arena);
-  const resolvedShape = resolveShapeFully(shape, packedControlPointsBuffer);
+  const resolvedShape = resolveShapeFully(context.program, shape, packedControlPointsBuffer);
 
   // C-13: Read rotation and scale2 from slots if present
   const rotation = step.rotationSlot

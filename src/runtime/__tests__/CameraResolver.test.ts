@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { CompiledProgramIR, CameraDeclIR } from '../../compiler/ir/program';
+import { EMPTY_PROGRAM_TOPOLOGY_TABLE } from '../../compiler/ir/program-topology';
 import type { ValueSlot } from '../../compiler/ir/Indices';
 import { valueSlot } from '../../compiler/ir/Indices';
 import { resolveCameraDecl, resolveCameraFromGlobals, DEFAULT_CAMERA } from '../CameraResolver';
@@ -43,6 +44,7 @@ function mockProgram(
     fieldSlotRegistry: new Map(),
     renderGlobals,
     kernelRegistry: { resolve: () => undefined, entries: () => [] } as any,
+    topologyTable: EMPTY_PROGRAM_TOPOLOGY_TABLE,
     arenaLayout: [],
     arenaPayloadFloats: 0,
     arenaTotalFloats: 0,
