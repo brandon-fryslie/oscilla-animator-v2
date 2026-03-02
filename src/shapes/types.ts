@@ -185,6 +185,11 @@ export interface PathTopologyDef extends TopologyDef {
   readonly hasCubic: boolean;
 }
 
+export type SerializableTopologyDef = Omit<TopologyDef, 'render'> & Partial<Pick<
+  PathTopologyDef,
+  'verbs' | 'pointsPerVerb' | 'totalControlPoints' | 'closed' | 'segmentKind' | 'segmentPointBase' | 'hasQuad' | 'hasCubic'
+>>;
+
 
 
 /**

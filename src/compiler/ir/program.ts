@@ -20,6 +20,7 @@ import type { ValueExpr } from './value-expr';
 import type { KernelRegistry } from '../../runtime/KernelRegistry';
 import type { ArenaSlotDescriptor } from '../../runtime/ArenaValueStore';
 import type { NagaLoweringProgramIR } from './naga-emitter';
+import type { SerializableTopologyDef, TopologyId } from '../../shapes/types';
 
 // =============================================================================
 // Version and Core Types
@@ -154,6 +155,14 @@ export interface CompiledProgramIR {
   readonly kernelRegistry: KernelRegistry;
 
   /**
+   * Compiler-owned topology table for every topology referenced by this program.
+   *
+   * [LAW:one-source-of-truth] Runtime/render topology resolution reads the
+   * compiled program table, never the ambient mutable registry.
+   */
+  readonly topologyTable: ProgramTopologyTableIR;
+
+  /**
    * Constant provenance map for fast-path value patching.
    * Maps user-facing port key ("blockId:portId") to patchable constant expr IDs.
    * Only present when the program contains patchable constant-backed ports.
@@ -229,6 +238,11 @@ export interface CompiledProgramIR {
    * Contains the structured module and expr/statement source-map provenance.
    */
   readonly nagaLoweringProgram?: NagaLoweringProgramIR;
+}
+
+export interface ProgramTopologyTableIR {
+  readonly definitions: readonly SerializableTopologyDef[];
+  readonly definitionIndexById: ReadonlyMap<TopologyId, number>;
 }
 
 // =============================================================================

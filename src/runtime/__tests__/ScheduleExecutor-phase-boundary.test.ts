@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { CompiledProgramIR } from '../../compiler/ir/program';
+import { EMPTY_PROGRAM_TOPOLOGY_TABLE } from '../../compiler/ir/program-topology';
 import { SYSTEM_PALETTE_SLOT, valueExprId, valueSlot } from '../../compiler/ir/Indices';
 import { canonicalMany, canonicalScalar, FLOAT, instanceRef, unitNone } from '../../core/canonical-types';
 import { assertSchedulePhaseBoundaryStateReads } from '../PhaseBoundaryValidator';
@@ -71,6 +72,7 @@ function makeProgramWithPhaseBoundaryViolation(): CompiledProgramIR {
     fieldSlotRegistry: new Map(),
     renderGlobals: [],
     kernelRegistry: { resolve: () => undefined, entries: () => [] } as any,
+    topologyTable: EMPTY_PROGRAM_TOPOLOGY_TABLE,
     arenaLayout: [{ offset: 0, stride: 4, laneCount: 1, length: 4 }],
     arenaPayloadFloats: 4,
     arenaTotalFloats: 4,
@@ -142,6 +144,7 @@ function makeProgramWithCardinalityWriteMismatch(): CompiledProgramIR {
     fieldSlotRegistry: new Map(),
     renderGlobals: [],
     kernelRegistry: { resolve: () => undefined, entries: () => [] } as any,
+    topologyTable: EMPTY_PROGRAM_TOPOLOGY_TABLE,
     arenaLayout: [{ offset: 0, stride: 1, laneCount: 2, length: 2 }],
     arenaPayloadFloats: 2,
     arenaTotalFloats: 2,
