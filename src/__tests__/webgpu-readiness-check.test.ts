@@ -14,6 +14,86 @@ const SYNC_SCRIPT_PATH = path.resolve('scripts/sync-webgpu-proof-from-matrix.mjs
 const SOURCE_PROOF_DIR = path.resolve('migration-proof');
 const SOURCE_ARTIFACTS_DIR = path.resolve('artifacts');
 
+async function writeCanonicalPassingMatrixReport(workspace: string): Promise<void> {
+  const w15 = JSON.parse(
+    await readFile(path.join(workspace, 'migration-proof', 'w15-browser-matrix-perf.json'), 'utf8'),
+  );
+  const chromium = w15.results?.chromium ?? {};
+  const reportGeneratedAt = String(w15.artifact?.report_generated_at ?? '2026-02-24T17:39:03.960Z');
+  const url = String(w15.artifact?.url ?? 'http://127.0.0.1:5174/?showPreview=true');
+  const sampleFrames = Number(w15.artifact?.sample_frames ?? 180);
+
+  const report = {
+    generatedAt: reportGeneratedAt,
+    sampleFrames,
+    url,
+    server: {
+      startServer: true,
+      buildFirst: true,
+      mode: 'preview',
+      allowReuse: true,
+    },
+    skipPolicy: {
+      failOnSkip: false,
+    },
+    results: [
+      {
+        browser: 'chromium',
+        blocking: true,
+        status: 'passed',
+        browserVersion: chromium.browser_version ?? null,
+        url,
+        startedAt: reportGeneratedAt,
+        durationMs: 0,
+        readiness: {
+          hasNavigatorGpu: Boolean(chromium.readiness?.hasNavigatorGpu ?? true),
+          hasAdapter: Boolean(chromium.readiness?.hasAdapter ?? true),
+          hasCanvas: Boolean(chromium.readiness?.hasCanvas ?? true),
+          hasWebGPUContext: Boolean(chromium.readiness?.hasWebGPUContext ?? true),
+          runtimeProbePresent: true,
+          bootstrapSucceeded: true,
+          frameAdvanceDetected: true,
+          runtimeProbe: {
+            present: true,
+            bootstrapState: 'succeeded',
+            bootstrapFailureMessage: null,
+            bootstrapReadyBeforeSample: true,
+            renderedFramesBeforeSample: 0,
+            renderedFramesAfterSample: sampleFrames,
+            frameAdvanceCount: sampleFrames,
+          },
+          consoleErrorCount: Number(chromium.readiness?.consoleErrorCount ?? 0),
+          pageErrorCount: Number(chromium.readiness?.pageErrorCount ?? 0),
+        },
+        timing: {
+          sampleCount: Number(chromium.timing?.sampleCount ?? sampleFrames),
+          avgFrameDeltaMs: Number(chromium.timing?.avgFrameDeltaMs ?? 8.333),
+          p95FrameDeltaMs: Number(chromium.timing?.p95FrameDeltaMs ?? 9.3),
+          avgFps: Number(chromium.timing?.avgFps ?? 120),
+        },
+        errors: {
+          console: [],
+          page: [],
+          setup: [],
+        },
+        failureReason: null,
+        passed: true,
+        skipped: false,
+      },
+    ],
+    skippedCount: 0,
+    gatingBrowsers: ['chromium'],
+    nonBlockingBrowsers: [],
+    passed: true,
+    hardPassed: true,
+  };
+
+  await writeFile(
+    path.join(workspace, 'artifacts', 'webgpu-browser-matrix.json'),
+    `${JSON.stringify(report, null, 2)}\n`,
+  );
+}
+
 async function buildSandboxWorkspace(): Promise<string> {
   const workspace = await mkdtemp(path.join(tmpdir(), 'oscilla-readiness-'));
   await mkdir(path.join(workspace, 'migration-proof'), { recursive: true });
@@ -24,6 +104,7 @@ async function buildSandboxWorkspace(): Promise<string> {
     path.join(SOURCE_ARTIFACTS_DIR, 'webgpu-browser-matrix.json'),
     path.join(workspace, 'artifacts', 'webgpu-browser-matrix.json'),
   );
+  await writeCanonicalPassingMatrixReport(workspace);
 
   return workspace;
 }

@@ -105,12 +105,16 @@ describe('compileExpression Integration', () => {
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        // Verify the result is a valid ValueExprId
+        // Constant inputs may fold swizzles to const; non-folded paths remain extract.
         const expr = builder.getValueExpr(result.value);
         expect(expr).toBeDefined();
-        expect(expr?.kind).toBe('extract');
-        if (expr && expr.kind === 'extract') {
+        if (expr?.kind === 'extract') {
           expect(expr.componentIndex).toBe(0);
+        } else {
+          expect(expr?.kind).toBe('const');
+          if (expr?.kind === 'const') {
+            expect(expr.value).toEqual(floatConst(1));
+          }
         }
       }
     });
@@ -133,11 +137,25 @@ describe('compileExpression Integration', () => {
         expect(expr?.kind).toBe('construct');
         if (expr && expr.kind === 'construct') {
           expect(expr.components.length).toBe(2);
-          // Verify components are extract nodes
+          // Constant-folding may reduce extract nodes to const components.
           const comp0 = builder.getValueExpr(expr.components[0]);
           const comp1 = builder.getValueExpr(expr.components[1]);
-          expect(comp0?.kind).toBe('extract');
-          expect(comp1?.kind).toBe('extract');
+          if (comp0?.kind === 'extract') {
+            expect(comp0.componentIndex).toBe(0);
+          } else {
+            expect(comp0?.kind).toBe('const');
+            if (comp0?.kind === 'const') {
+              expect(comp0.value).toEqual(floatConst(1));
+            }
+          }
+          if (comp1?.kind === 'extract') {
+            expect(comp1.componentIndex).toBe(1);
+          } else {
+            expect(comp1?.kind).toBe('const');
+            if (comp1?.kind === 'const') {
+              expect(comp1.value).toEqual(floatConst(2));
+            }
+          }
         }
       }
     });

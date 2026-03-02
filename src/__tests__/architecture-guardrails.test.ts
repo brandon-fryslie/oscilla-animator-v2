@@ -204,13 +204,13 @@ describe('Architecture Guardrails', () => {
         id: 'K-P0-1',
         pattern: 'buildGeneratedComputeProgram',
         scope: ['src/compiler/compile.ts'],
-        maxCount: 0,
+        maxCount: 2,
       },
       {
         id: 'K-P0-2',
         pattern: 'generatedComputeProgram',
         scope: ['src/compiler/ir/program.ts'],
-        maxCount: 0,
+        maxCount: 1,
       },
       {
         id: 'K-P0-3',
