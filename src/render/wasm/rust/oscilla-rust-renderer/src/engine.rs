@@ -86,7 +86,10 @@ struct ShapeInstance {
 
 struct VertexOutput {
   @builtin(position) clip_position: vec4<f32>,
-  @location(0) color: vec4<f32>,
+  @location(0) uv: vec2<f32>,
+  @location(1) color: vec4<f32>,
+  @location(2) sdf_params: vec3<f32>,
+  @location(3) @interpolate(flat) material_id: u32,
 };
 
 @vertex
@@ -95,13 +98,25 @@ fn vs_main(@location(0) local_pos: vec2<f32>, @builtin(instance_index) instance_
   let world_pos = instance.transform * vec4<f32>(local_pos, 0.0, 1.0);
   var out: VertexOutput;
   out.clip_position = global.view_proj * world_pos;
+  out.uv = local_pos;
   out.color = instance.color;
+  out.sdf_params = instance.sdf_params;
+  out.material_id = instance.material_id;
   return out;
 }
 
 @fragment
 fn fs_main(in_data: VertexOutput) -> @location(0) vec4<f32> {
-  return vec4<f32>(in_data.color.rgb * in_data.color.a, in_data.color.a);
+  // [LAW:dataflow-not-control-flow] Material and SDF evaluation always run;
+  // draw variability is encoded in per-instance data values, not pass control flow.
+  let radius = max(in_data.sdf_params.x, 0.001);
+  let feather = max(in_data.sdf_params.y, 0.001);
+  let dist = length(in_data.uv) - radius;
+  let alpha = clamp(1.0 - smoothstep(0.0, feather, dist), 0.0, 1.0);
+  let shade = select(1.0, 0.9, (in_data.material_id & 1u) == 1u);
+  let premultiplied_rgb = in_data.color.rgb * (in_data.color.a * alpha * shade);
+  let out_alpha = in_data.color.a * alpha;
+  return vec4<f32>(premultiplied_rgb, out_alpha);
 }
 "#;
 

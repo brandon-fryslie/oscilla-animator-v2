@@ -162,6 +162,8 @@ impl RenderDispatcher {
         color_view: &wgpu::TextureView,
         depth_view: &wgpu::TextureView,
     ) {
+        // [LAW:dataflow-not-control-flow] Render pass executes in a fixed order
+        // every frame; instance variability comes from ShapeBank/indirect data.
         let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("Render.Uber.Pass"),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -194,6 +196,8 @@ impl RenderDispatcher {
         render_pass.set_bind_group(1, &arena.render_bind_group, &[]);
         render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
         render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
+        // [LAW:one-source-of-truth] Compute assembly writes the canonical
+        // DrawIndexedIndirect record; render consumes that record directly.
         render_pass.draw_indexed_indirect(&arena.indirect_buffer, 0);
     }
 }
