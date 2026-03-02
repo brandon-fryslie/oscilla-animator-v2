@@ -58,6 +58,8 @@ interface GPUMesh {
 
 interface RenderInput {
   readonly frame: RenderFrameIR;
+  // [LAW:one-source-of-truth] WebGPU sink topology metadata enters via runtime
+  // ShapeBank only; compile snapshots/aux payloads are forbidden here.
   readonly shapeBank: RenderShapeBankSource;
   readonly width: number;
   readonly height: number;
@@ -72,7 +74,6 @@ interface RenderInput {
   readonly inputAudioMid?: number;
   readonly inputAudioHigh?: number;
   readonly inputGaugeActive?: number;
-  readonly drawPrepShaderWgsl?: string;
 }
 
 interface PreparedDrawPathOp {
@@ -397,18 +398,13 @@ class WebGPUComputeRuntime {
 
 class WebGPUDrawPrepRuntime {
   private pipeline: any;
-  private activeShaderCode: string;
   private readonly paramsBuffer: any;
   private readonly paramsStaging = new Uint32Array(WEBGPU_RENDER_CONTRACT.drawPrepParamsU32);
   private activeBindGroup: any | null = null;
   private activeIndirectBuffer: any | null = null;
-  // [LAW:single-enforcer] Hot-swap pending pipeline follows P2-1 async protocol.
-  private pendingPipeline: any | null = null;
-  private shaderGeneration = 0;
 
-  private constructor(private readonly device: any, initialPipeline: any, initialShaderCode: string) {
+  private constructor(private readonly device: any, initialPipeline: any) {
     this.pipeline = initialPipeline;
-    this.activeShaderCode = initialShaderCode;
     this.paramsBuffer = device.createBuffer({
       size: WEBGPU_RENDER_CONTRACT.drawPrepParamsU32 * Uint32Array.BYTES_PER_ELEMENT,
       usage: GPU_BUFFER_USAGE.UNIFORM | GPU_BUFFER_USAGE.COPY_DST,
@@ -417,8 +413,8 @@ class WebGPUDrawPrepRuntime {
 
   // [LAW:single-enforcer] createComputePipelineAsync is the only permitted pipeline
   // creation path (P2-1: Async Compiler Service Architecture).
-  static async create(device: any, initialShaderCode: string = DRAW_PREP_COMPUTE_WGSL): Promise<WebGPUDrawPrepRuntime> {
-    const shaderModule = device.createShaderModule({ code: initialShaderCode });
+  static async create(device: any): Promise<WebGPUDrawPrepRuntime> {
+    const shaderModule = device.createShaderModule({ code: DRAW_PREP_COMPUTE_WGSL });
     const pipeline = await device.createComputePipelineAsync({
       layout: 'auto',
       compute: {
@@ -426,52 +422,7 @@ class WebGPUDrawPrepRuntime {
         entryPoint: 'cs_main',
       },
     });
-    return new WebGPUDrawPrepRuntime(device, pipeline, initialShaderCode);
-  }
-
-  // Commit any async-ready pipeline swap at the start of a render frame.
-  // Implements the hot-swap protocol from P2-1: Runtime Loop checks for a pending
-  // pipeline before dispatch and swaps atomically at frame boundary.
-  commitPendingPipeline(): void {
-    if (this.pendingPipeline !== null) {
-      // [LAW:one-source-of-truth] Draw-prep shader ownership is configured from
-      // one active WGSL source at runtime (compiler-provided or canonical default).
-      this.pipeline = this.pendingPipeline;
-      this.pendingPipeline = null;
-      // Invalidate cached bind group since pipeline layout may have changed.
-      this.activeBindGroup = null;
-      this.activeIndirectBuffer = null;
-    }
-  }
-
-  useShader(shaderCode: string | undefined): void {
-    const nextShaderCode =
-      typeof shaderCode === 'string' && shaderCode.trim().length > 0
-        ? shaderCode
-        : DRAW_PREP_COMPUTE_WGSL;
-    if (nextShaderCode === this.activeShaderCode) {
-      return;
-    }
-    this.activeShaderCode = nextShaderCode;
-    // Shader module is created synchronously; GPU pipeline link is async (hot-swap protocol).
-    const generation = ++this.shaderGeneration;
-    const shaderModule = this.device.createShaderModule({ code: nextShaderCode });
-    void this.device.createComputePipelineAsync({
-      layout: 'auto',
-      compute: {
-        module: shaderModule,
-        entryPoint: 'cs_main',
-      },
-    }).then((pipeline: any) => {
-      // Only commit if no newer shader update has superseded this one.
-      if (generation === this.shaderGeneration) {
-        this.pendingPipeline = pipeline;
-      }
-    }).catch((err: unknown) => {
-      // [LAW:no-silent-fallbacks] Pipeline creation errors are surfaced explicitly.
-      // The active pipeline remains in use; the next render will use the last valid pipeline.
-      console.error('WebGPUDrawPrepRuntime: async pipeline creation failed:', err);
-    });
+    return new WebGPUDrawPrepRuntime(device, pipeline);
   }
 
   private getOrCreateBindGroup(indirectBuffer: any): any {
@@ -664,10 +615,6 @@ export class WebGPURenderer {
     this.ensureCanvasConfiguration(input.width, input.height);
     this.shapeBankManager.sync(input.shapeBank);
     this.writeSceneUniforms(input);
-    // [LAW:single-enforcer] Hot-swap protocol: commit any ready async pipeline at
-    // frame boundary before use (P2-1: Async Compiler Service Architecture).
-    this.drawPrepRuntime.commitPendingPipeline();
-    this.drawPrepRuntime.useShader(input.drawPrepShaderWgsl);
     const drawPlan = this.buildDrawPlan(input.frame);
 
     const dtSeconds =
@@ -774,6 +721,15 @@ export class WebGPURenderer {
 
   private assertRenderInputContract(input: RenderInput): void {
     const { frame, shapeBank, width, height, zoom, panX, panY, timeMs } = input;
+    const rawInput = input as unknown as Record<string, unknown>;
+    // [LAW:no-string-math] Lowering-authored WGSL source injection is forbidden.
+    // Renderer contract rejects legacy draw-prep WGSL payloads at the sink boundary.
+    if (Object.prototype.hasOwnProperty.call(rawInput, 'drawPrepShaderWgsl')) {
+      throw new Error('WebGPURenderer: drawPrepShaderWgsl override is forbidden in P0');
+    }
+    if (Object.prototype.hasOwnProperty.call(rawInput, 'topologyRegistrySnapshot')) {
+      throw new Error('WebGPURenderer: topology registry snapshot payloads are forbidden in P0');
+    }
     if (frame.version !== 2) {
       throw new Error(`WebGPURenderer: unsupported frame version ${frame.version}`);
     }

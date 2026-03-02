@@ -1,4 +1,4 @@
-import type { NagaModuleIR } from '../ir/naga-lowering';
+import type { NagaModuleIR } from '../ir/naga-emitter';
 
 export interface ShimFormattedError {
   readonly message: string;

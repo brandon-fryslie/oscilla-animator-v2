@@ -19,7 +19,7 @@ import type { BlockId, PortId } from '../../types/compiler';
 import type { ValueExpr } from './value-expr';
 import type { KernelRegistry } from '../../runtime/KernelRegistry';
 import type { ArenaSlotDescriptor } from '../../runtime/ArenaValueStore';
-import type { NagaLoweringProgramIR } from './naga-lowering';
+import type { NagaLoweringProgramIR } from './naga-emitter';
 
 // =============================================================================
 // Version and Core Types
@@ -334,7 +334,6 @@ export interface DrawPrepSinkIR {
 
 export interface DrawPrepProgramIR {
   readonly sinks: readonly DrawPrepSinkIR[];
-  readonly wgsl: string;
 }
 
 export interface GeneratedComputeProgramIR {
