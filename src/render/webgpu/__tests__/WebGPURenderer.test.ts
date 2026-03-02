@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createWebGPURenderer } from '../WebGPURenderer';
-import { PATH_RENDER_WGSL, WEBGPU_RENDER_CONTRACT } from '../shaders';
+import { DRAW_PREP_COMPUTE_WGSL, PATH_RENDER_WGSL, WEBGPU_RENDER_CONTRACT } from '../shaders';
 import { registerDynamicTopology } from '../../../shapes/registry';
 import { PathVerb } from '../../../shapes/types';
 import type { DrawPathInstancesOp } from '../../types';
@@ -899,36 +899,17 @@ describe('WebGPURenderer', () => {
     ).toThrow(/size must be finite/i);
   });
 
-  it('rebuilds draw-prep pipeline from compiler-provided WGSL when supplied', async () => {
+  it('uses the canonical built-in draw-prep shader module', async () => {
     const env = createFakeWebGPUEnvironment();
     setNavigatorGpu(env.gpu);
     const renderer = await createWebGPURenderer(env.canvas);
-    const customDrawPrepWgsl = [
-      'struct DrawPrepParams {',
-      '  v0: vec4<u32>;',
-      '  v1: vec4<u32>;',
-      '};',
-      '@group(0) @binding(0) var<storage, read_write> indirectArgs: array<u32>;',
-      '@group(0) @binding(1) var<uniform> drawPrepParams: DrawPrepParams;',
-      '@compute @workgroup_size(1)',
-      'fn cs_main(@builtin(global_invocation_id) gid: vec3<u32>) {',
-      '  if (gid.x > 0u) { return; }',
-      '  let base = drawPrepParams.v1.y * 5u;',
-      '  indirectArgs[base + 0u] = drawPrepParams.v0.x;',
-      '  indirectArgs[base + 1u] = drawPrepParams.v0.y;',
-      '  indirectArgs[base + 2u] = drawPrepParams.v0.z;',
-      '  indirectArgs[base + 3u] = drawPrepParams.v0.w;',
-      '  indirectArgs[base + 4u] = drawPrepParams.v1.x;',
-      '}',
-    ].join('\n');
+    renderer.render(makeRenderInput([]));
 
-    renderer.render(makeRenderInput([], { drawPrepShaderWgsl: customDrawPrepWgsl }));
-
-    const usedCustomShader = env.device.createShaderModule.mock.calls.some((call: unknown[]) => {
+    const usedCanonicalDrawPrepShader = env.device.createShaderModule.mock.calls.some((call: unknown[]) => {
       const descriptor = call[0] as { code?: string };
-      return descriptor.code === customDrawPrepWgsl;
+      return descriptor.code === DRAW_PREP_COMPUTE_WGSL;
     });
-    expect(usedCustomShader).toBe(true);
+    expect(usedCanonicalDrawPrepShader).toBe(true);
   });
 
   it('fails render when an op topology is missing from the shape bank', async () => {
@@ -946,6 +927,26 @@ describe('WebGPURenderer', () => {
         },
       }))
     ).toThrow('missing from shape bank');
+  });
+
+  it('rejects legacy draw-prep WGSL override payloads', async () => {
+    const env = createFakeWebGPUEnvironment();
+    setNavigatorGpu(env.gpu);
+    const renderer = await createWebGPURenderer(env.canvas);
+
+    expect(() =>
+      renderer.render(makeRenderInput([], { drawPrepShaderWgsl: '@compute fn cs_main() {}' }))
+    ).toThrow(/drawPrepShaderWgsl override is forbidden/i);
+  });
+
+  it('rejects topology registry snapshot payloads on render input', async () => {
+    const env = createFakeWebGPUEnvironment();
+    setNavigatorGpu(env.gpu);
+    const renderer = await createWebGPURenderer(env.canvas);
+
+    expect(() =>
+      renderer.render(makeRenderInput([], { topologyRegistrySnapshot: {} }))
+    ).toThrow(/topology registry snapshot payloads are forbidden/i);
   });
 
   it('fails render when shape-bank topology sidecar is shorter than volatile range', async () => {
@@ -1042,25 +1043,14 @@ describe('WebGPURenderer', () => {
     expect(colorAttachment.clearValue?.a).toBe(0);
   });
 
-  it('commits async draw-prep pipeline on next frame after shader update (hot-swap protocol)', async () => {
+  it('does not rebuild draw-prep compute pipelines during render frames', async () => {
     const env = createFakeWebGPUEnvironment();
     setNavigatorGpu(env.gpu);
     const renderer = await createWebGPURenderer(env.canvas);
     const topologyId = makeSimpleTopology('webgpu-hotswap-protocol-topology');
-    const customWgsl = '@compute @workgroup_size(1) fn cs_main() {}';
-
-    // Frame 1: issue shader update; async pipeline creation starts but is not committed yet.
     env.device.createComputePipelineAsync.mockClear();
-    renderer.render(makeRenderInput([makeDrawOp(topologyId)], { drawPrepShaderWgsl: customWgsl }));
-    expect(env.device.createComputePipelineAsync).toHaveBeenCalledTimes(1);
-
-    // Flush microtasks so the async pipeline creation resolves.
-    await Promise.resolve();
-
-    // Frame 2: commitPendingPipeline() is called at frame start; the resolved pipeline is swapped in.
-    env.device.createComputePipelineAsync.mockClear();
-    renderer.render(makeRenderInput([makeDrawOp(topologyId)], { drawPrepShaderWgsl: customWgsl }));
-    // Same shader code on frame 2 — no new async creation needed.
+    renderer.render(makeRenderInput([makeDrawOp(topologyId)]));
+    renderer.render(makeRenderInput([makeDrawOp(topologyId)]));
     expect(env.device.createComputePipelineAsync).not.toHaveBeenCalled();
   });
 });

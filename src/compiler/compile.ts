@@ -43,7 +43,7 @@ import {
 import type { ArenaSlotDescriptor } from '../runtime/ArenaValueStore';
 import type { ValueExpr, ValueExprId } from './ir/value-expr';
 import type { Step } from './ir/types';
-import { lowerScheduleToNagaModule } from './ir/naga-lowering';
+import { lowerScheduleToNagaModule } from './ir/naga-emitter';
 import { compilationInspector } from '../services/CompilationInspectorService';
 import { computeRenderReachableBlocks } from './reachability';
 import { resolveKernels } from './resolve-kernels';
@@ -770,87 +770,9 @@ function buildDrawPrepProgram(scheduleIR: ScheduleIR): DrawPrepProgramIR {
       staticInstanceCount,
     });
   }
-  const wgslLines: string[] = [
-    '// Auto-generated draw-prep WGSL (v3 stage-3).',
-    'struct DrawPrepParams {',
-    '  // v0 = [indexCount, instanceCount, firstIndex, baseVertexBits]',
-    '  v0: vec4<u32>,',
-    '  // v1 = [firstInstance, recordIndex, maxRecords, _]',
-    '  v1: vec4<u32>,',
-    '};',
-    '',
-    '@group(0) @binding(0) var<storage, read_write> indirectArgs: array<u32>;',
-    '@group(0) @binding(1) var<uniform> drawPrepParams: DrawPrepParams;',
-    '',
-    'const INDIRECT_ARGS_WORDS: u32 = 5u;',
-    '',
-  ];
-  // [LAW:one-source-of-truth] Draw-prep sink constants are emitted from one
-  // canonical compiler sink table used by runtime and shader generation.
-  for (const sink of sinks) {
-    const staticInstanceCount = sink.instanceCountMode === 'static'
-      ? requireStaticInstanceCount(sink)
-      : undefined;
-    const instanceCountLiteral =
-      sink.instanceCountMode === 'static'
-        ? `${staticInstanceCount}u`
-        : '/* dynamic instance count */ 0u';
-    const isStaticLiteral = sink.instanceCountMode === 'static' ? '1u' : '0u';
-    wgslLines.push(`const DRAW_SINK_${sink.sinkIndex}_RECORD: u32 = ${sink.indirectRecordIndex}u;`);
-    wgslLines.push(`const DRAW_SINK_${sink.sinkIndex}_IS_STATIC: u32 = ${isStaticLiteral};`);
-    wgslLines.push(`const DRAW_SINK_${sink.sinkIndex}_INSTANCE_COUNT: u32 = ${instanceCountLiteral};`);
-  }
-  wgslLines.push(
-    '',
-    'fn resolveInstanceCount(recordIndex: u32, fallbackCount: u32) -> u32 {',
-    '  var count = fallbackCount;',
-    '  switch (recordIndex) {',
-  );
-  for (const sink of sinks) {
-    wgslLines.push(
-      `    case DRAW_SINK_${sink.sinkIndex}_RECORD: {`,
-      `      count = select(count, DRAW_SINK_${sink.sinkIndex}_INSTANCE_COUNT, DRAW_SINK_${sink.sinkIndex}_IS_STATIC == 1u);`,
-      '    }',
-    );
-  }
-  wgslLines.push(
-    '    default: {}',
-    '  }',
-    '  return count;',
-    '}',
-    '',
-    '@compute @workgroup_size(1)',
-    'fn cs_main(@builtin(global_invocation_id) gid: vec3<u32>) {',
-    '  if (gid.x > 0u) {',
-    '    return;',
-    '  }',
-    '',
-    '  let recordIndex = drawPrepParams.v1.y;',
-    '  let maxRecords = drawPrepParams.v1.z;',
-    '  if (recordIndex >= maxRecords) {',
-    '    return;',
-    '  }',
-    '',
-    '  let base = recordIndex * INDIRECT_ARGS_WORDS;',
-    '  indirectArgs[base + 0u] = drawPrepParams.v0.x; // indexCount',
-    '  indirectArgs[base + 1u] = resolveInstanceCount(recordIndex, drawPrepParams.v0.y); // instanceCount',
-    '  indirectArgs[base + 2u] = drawPrepParams.v0.z; // firstIndex',
-    '  indirectArgs[base + 3u] = drawPrepParams.v0.w; // baseVertex bits',
-    '  indirectArgs[base + 4u] = drawPrepParams.v1.x; // firstInstance',
-    '}',
-  );
-  return { sinks, wgsl: wgslLines.join('\n') };
-}
-
-function requireStaticInstanceCount(sink: DrawPrepSinkIR): number {
-  if (sink.staticInstanceCount === undefined) {
-    // [LAW:no-silent-fallbacks] Invalid static sink metadata must fail fast
-    // instead of silently emitting a zeroed instance count.
-    throw new Error(
-      `DrawPrepProgram: static sink ${sink.sinkIndex} missing staticInstanceCount`,
-    );
-  }
-  return sink.staticInstanceCount;
+  // [LAW:no-string-math] P0-0 forbids lowering-time WGSL source emission.
+  // Draw-prep lowering exports structured sink metadata only.
+  return { sinks };
 }
 
 function collectComputeSlots(scheduleIR: ScheduleIR): ValueSlot[] {
