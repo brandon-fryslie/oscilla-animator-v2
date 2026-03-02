@@ -185,7 +185,7 @@ describe('RuntimeService spy readback packet selection', () => {
     ]);
   });
 
-  it('logs and pauses playback when spy readback detects NaN', () => {
+  it('logs and pauses playback when spy readback detects NaN with frame-scoped dedupe', () => {
     const diagnosticsLog = vi.fn();
     const pause = vi.fn();
     const playback = {
@@ -200,37 +200,45 @@ describe('RuntimeService spy readback packet selection', () => {
       playback,
     } as any);
     const applySpyReadback = vi.spyOn(debugService, 'applySpyReadback');
+    let pollCount = 0;
 
     try {
       (runtime as any).debugProbeTransport = {
         debugCommand: () => {},
-        debugPollPacket: () => ({
-          version: 1,
-          sequence: 1,
-          capturedAtMs: 200,
-          runtimeFrameId: 33,
-          sampleCount: 1,
-          packetFlags: 1 << 3,
-          samples: [{
-            targetId: 77,
-            slotId: valueSlot(8),
-            payloadKind: 'scalar',
-            stride: 1,
-            laneCount: 1,
-            sampleFlags: 1 << 3,
-            values: [Number.NaN],
-          }],
-        }),
+        debugPollPacket: () => {
+          pollCount += 1;
+          const targetId = pollCount === 2 ? 88 : 77;
+          return {
+            version: 1,
+            sequence: pollCount,
+            capturedAtMs: 200 + pollCount,
+            runtimeFrameId: 33,
+            sampleCount: 1,
+            packetFlags: 1 << 3,
+            samples: [{
+              targetId,
+              slotId: valueSlot(8),
+              payloadKind: 'scalar',
+              stride: 1,
+              laneCount: 1,
+              sampleFlags: 1 << 3,
+              values: [Number.NaN],
+            }],
+          };
+        },
       };
 
       (runtime as any).runSpyReadbackCycle();
       (runtime as any).runSpyReadbackCycle();
+      (runtime as any).runSpyReadbackCycle();
 
-      expect(diagnosticsLog).toHaveBeenCalledTimes(1);
+      expect(diagnosticsLog).toHaveBeenCalledTimes(2);
       expect(diagnosticsLog.mock.calls[0]?.[0]).toMatchObject({ level: 'error' });
       expect(String(diagnosticsLog.mock.calls[0]?.[0]?.message)).toContain('Spy readback detected NaN');
       expect(pause).toHaveBeenCalledTimes(1);
-      expect(applySpyReadback).toHaveBeenCalledWith(valueSlot(8), Number.NaN, 200, 33);
+      expect(applySpyReadback).toHaveBeenCalledWith(valueSlot(8), Number.NaN, 201, 33);
+      expect(applySpyReadback).toHaveBeenCalledWith(valueSlot(8), Number.NaN, 202, 33);
+      expect(applySpyReadback).toHaveBeenCalledWith(valueSlot(8), Number.NaN, 203, 33);
     } finally {
       applySpyReadback.mockRestore();
     }
