@@ -65,19 +65,22 @@ test.describe('Rust Worker Gates', () => {
       );
 
       const bootResult = await new Promise<{ ok: boolean; reason?: string }>((resolve) => {
+        let timeoutId: ReturnType<typeof setTimeout> | null = null;
         const onMessage = (event: MessageEvent<any>) => {
           if (event.data?.type === 'BOOTSTRAP_SUCCESS') {
             worker.removeEventListener('message', onMessage);
+            if (timeoutId !== null) clearTimeout(timeoutId);
             resolve({ ok: true });
             return;
           }
           if (event.data?.type === 'FATAL_ERROR') {
             worker.removeEventListener('message', onMessage);
+            if (timeoutId !== null) clearTimeout(timeoutId);
             resolve({ ok: false, reason: String(event.data?.message ?? 'bootstrap failed') });
           }
         };
         worker.addEventListener('message', onMessage);
-        setTimeout(() => {
+        timeoutId = setTimeout(() => {
           worker.removeEventListener('message', onMessage);
           resolve({ ok: false, reason: 'bootstrap timeout' });
         }, 3000);
@@ -89,15 +92,17 @@ test.describe('Rust Worker Gates', () => {
       }
 
       const frameGateResult = await new Promise<{ ok: boolean; reason?: string }>((resolve) => {
+        let timeoutId: ReturnType<typeof setTimeout> | null = null;
         const onMessage = (event: MessageEvent<any>) => {
           if (event.data?.type !== 'SCHEDULER_HEARTBEAT') return;
           const frameCount = Number(event.data.frameCount ?? 0);
           if (frameCount < 100) return;
           worker.removeEventListener('message', onMessage);
+          if (timeoutId !== null) clearTimeout(timeoutId);
           resolve({ ok: true });
         };
         worker.addEventListener('message', onMessage);
-        setTimeout(() => {
+        timeoutId = setTimeout(() => {
           worker.removeEventListener('message', onMessage);
           resolve({ ok: false, reason: 'strict hot-path gate did not reach 100 frames in time' });
         }, 6000);
@@ -190,19 +195,22 @@ test.describe('Rust Worker Gates', () => {
       );
 
       const bootResult = await new Promise<{ ok: boolean; reason?: string }>((resolve) => {
+        let timeoutId: ReturnType<typeof setTimeout> | null = null;
         const onMessage = (event: MessageEvent<any>) => {
           if (event.data?.type === 'BOOTSTRAP_SUCCESS') {
             worker.removeEventListener('message', onMessage);
+            if (timeoutId !== null) clearTimeout(timeoutId);
             resolve({ ok: true });
             return;
           }
           if (event.data?.type === 'FATAL_ERROR') {
             worker.removeEventListener('message', onMessage);
+            if (timeoutId !== null) clearTimeout(timeoutId);
             resolve({ ok: false, reason: String(event.data?.message ?? 'bootstrap failed') });
           }
         };
         worker.addEventListener('message', onMessage);
-        setTimeout(() => {
+        timeoutId = setTimeout(() => {
           worker.removeEventListener('message', onMessage);
           resolve({ ok: false, reason: 'bootstrap timeout' });
         }, 3000);

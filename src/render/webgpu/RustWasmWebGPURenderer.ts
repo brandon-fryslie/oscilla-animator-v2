@@ -321,7 +321,7 @@ export class WebGPURenderer {
     }
     if (payload.type === 'DEVICE_LOST') {
       this.lifecycleState = 'Lost';
-      this.fatalError = new Error(`[${payload.code}] ${payload.reason}`);
+      this.fatalError = new Error(`[${payload.code}] ${payload.message}`);
       return;
     }
     if (payload.type === 'RUNTIME_EVENT') {

@@ -73,7 +73,7 @@ function postWorkerFatalError(code: string, message: string): void {
   postWorkerMessage({ type: 'FATAL_ERROR', code, message });
 }
 
-function postDeviceLost(code: string, reason: string): void {
+function postDeviceLost(code: string, message: string): void {
   if (deviceLostNotified) {
     return;
   }
@@ -81,7 +81,8 @@ function postDeviceLost(code: string, reason: string): void {
   postWorkerMessage({
     type: 'DEVICE_LOST',
     code,
-    reason,
+    message,
+    reason: message,
   });
 }
 
@@ -202,8 +203,8 @@ function toLegacyHeartbeat(raw: LegacyFramePacingPacket): RustRendererSchedulerH
 function emitLegacyRuntimeEvents(frameCount: number): void {
   const eventCode = takeRustRendererRuntimeEventCode();
   if (eventCode === 0) return;
+  legacyState = 'Lost';
   if (eventCode === 1) {
-    legacyState = 'Lost';
     postWorkerMessage({
       type: 'RUNTIME_EVENT',
       severity: 'error',
@@ -217,7 +218,6 @@ function emitLegacyRuntimeEvents(frameCount: number): void {
     postDeviceLost('surface_lost', 'Surface acquire failed with Lost/Outdated');
     return;
   }
-  legacyState = 'Lost';
   postWorkerMessage({
     type: 'RUNTIME_EVENT',
     severity: 'fatal',
@@ -323,7 +323,7 @@ function startRuntimePolling(): void {
         for (const rawEvent of packet.events) {
           const event = toOutboundRuntimeEvent(rawEvent);
           postWorkerMessage(event);
-          if (event.state === 'Lost') {
+          if (event.state === 'Lost' && rawEvent.state === 'Lost') {
             postDeviceLost(event.code, event.message);
           }
         }
