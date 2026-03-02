@@ -1,5 +1,6 @@
 # Build output
 dist/
+target/
 
 # Dependencies
 node_modules/
@@ -24,6 +25,8 @@ Thumbs.db
 # Test artifacts
 coverage/
 *.log
+playwright-report/
+test-results/
 
 # Vite cache
 node_modules/.vite/
@@ -31,3 +34,6 @@ node_modules/.vite/
 # TypeScript build info
 *.tsbuildinfo
 webkit-memory-profile-export-all.json
+
+# Rust/WASM build output
+src/render/wasm/pkg/
