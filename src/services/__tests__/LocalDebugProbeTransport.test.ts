@@ -112,4 +112,58 @@ describe('LocalDebugProbeTransport', () => {
     expect((packet.packetFlags & DEBUG_PACKET_FLAG_SUBSCRIPTION_INVALID) !== 0).toBe(true);
     expect(packet.samples.length).toBe(1);
   });
+
+  it('emits lane-window packet samples for tracked field subscriptions', () => {
+    const fieldSlot = valueSlot(5);
+    const transport = new LocalDebugProbeTransport(() => ({
+      program: {
+        runtimeAddressTable: {
+          slotLookup: new Map([
+            [fieldSlot, {
+              storage: 'f32',
+              offset: 0,
+              stride: 2,
+              slot: fieldSlot,
+              type: canonicalScalar(FLOAT),
+              arena: { offset: 0, stride: 2, laneCount: 2, length: 4 },
+            }],
+          ]),
+          fieldExprToSlot: new Map(),
+          scalarExprToArenaAddress: new Map(),
+          slotToArena: new Map([[fieldSlot, { offset: 0, stride: 2, laneCount: 2, length: 4 }]]),
+        },
+      } as any,
+      state: {
+        arena: new Float32Array([10, 20, 30, 40]),
+        cache: { frameId: 3 },
+      } as any,
+    }));
+
+    transport.debugCommand({
+      kind: 'set_subscriptions',
+      subscriptions: [{
+        targetId: fieldSlot as number,
+        slotId: fieldSlot,
+        sampleKind: 'lane_window',
+        componentMask: 0b0011,
+        priority: 0,
+        laneWindow: { start: 0, count: 2 },
+      }],
+    });
+
+    const packet = transport.debugPollPacket(3000);
+    expect(packet).toBeTruthy();
+    if (!packet) {
+      throw new Error('Expected lane-window packet');
+    }
+    expect(packet.samples).toEqual([
+      expect.objectContaining({
+        slotId: fieldSlot,
+        payloadKind: 'lane_window',
+        stride: 2,
+        laneCount: 2,
+        values: [10, 30, 20, 40],
+      }),
+    ]);
+  });
 });

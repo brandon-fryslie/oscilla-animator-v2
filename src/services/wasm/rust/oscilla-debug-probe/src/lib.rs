@@ -21,10 +21,14 @@ struct DebugProbeSubscription {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct DebugProbeInputSample {
+    target_id: u32,
     slot_id: u32,
-    value: f64,
+    payload_kind: String,
+    stride: u8,
+    lane_count: u16,
     valid: bool,
     finite: bool,
+    values: Vec<f64>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -111,7 +115,11 @@ impl DebugProbeEngine {
                 packet_flags |= DEBUG_PACKET_FLAG_SUBSCRIPTION_INVALID;
                 continue;
             };
-            if !sample.valid || sample.slot_id != sub.slot_id {
+            if !sample.valid || sample.slot_id != sub.slot_id || sample.target_id != sub.target_id {
+                packet_flags |= DEBUG_PACKET_FLAG_SUBSCRIPTION_INVALID;
+                continue;
+            }
+            if sample.payload_kind != sub.sample_kind {
                 packet_flags |= DEBUG_PACKET_FLAG_SUBSCRIPTION_INVALID;
                 continue;
             }
@@ -125,11 +133,15 @@ impl DebugProbeEngine {
             packet_samples.push(DebugProbePacketSample {
                 target_id: sub.target_id,
                 slot_id: sub.slot_id,
-                payload_kind: "scalar",
-                stride: 1,
-                lane_count: 1,
+                payload_kind: if sample.payload_kind == "lane_window" {
+                    "lane_window"
+                } else {
+                    "scalar"
+                },
+                stride: sample.stride,
+                lane_count: sample.lane_count,
                 sample_flags,
-                values: vec![sample.value],
+                values: sample.values.clone(),
             });
         }
 

@@ -30,8 +30,12 @@ const mocks = vi.hoisted(() => {
   }));
   const patchProgramConstants = vi.fn(() => null);
   const debugServiceClear = vi.fn();
-  const debugServiceOnTrackedSpyScalarSlotsChange = vi.fn(() => () => {});
-  const debugServiceGetTrackedSpyScalarSlots = vi.fn(() => []);
+  const debugServiceOnTrackedDebugProbeSubscriptionsChange = vi.fn(() => () => {});
+  const debugServiceGetTrackedDebugProbeSubscriptions = vi.fn(() => []);
+  const createWasmDebugProbeTransport = vi.fn(async () => ({
+    debugCommand: vi.fn(),
+    debugPollPacket: vi.fn(() => null),
+  }));
   const setErrorReporter = vi.fn();
 
   return {
@@ -52,8 +56,9 @@ const mocks = vi.hoisted(() => {
     createLiveRecompileController,
     patchProgramConstants,
     debugServiceClear,
-    debugServiceOnTrackedSpyScalarSlotsChange,
-    debugServiceGetTrackedSpyScalarSlots,
+    debugServiceOnTrackedDebugProbeSubscriptionsChange,
+    debugServiceGetTrackedDebugProbeSubscriptions,
+    createWasmDebugProbeTransport,
     setErrorReporter,
   };
 });
@@ -107,9 +112,13 @@ vi.mock('../ConstantPatcher', () => ({
 vi.mock('../DebugService', () => ({
   debugService: {
     clear: mocks.debugServiceClear,
-    onTrackedSpyScalarSlotsChange: mocks.debugServiceOnTrackedSpyScalarSlotsChange,
-    getTrackedSpyScalarSlots: mocks.debugServiceGetTrackedSpyScalarSlots,
+    onTrackedDebugProbeSubscriptionsChange: mocks.debugServiceOnTrackedDebugProbeSubscriptionsChange,
+    getTrackedDebugProbeSubscriptions: mocks.debugServiceGetTrackedDebugProbeSubscriptions,
   },
+}));
+
+vi.mock('../WasmDebugProbeTransport', () => ({
+  createWasmDebugProbeTransport: mocks.createWasmDebugProbeTransport,
 }));
 
 vi.mock('../CompilationInspectorService', () => ({

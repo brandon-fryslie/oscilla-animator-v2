@@ -18,13 +18,19 @@ export type DebugProbeCommand =
     readonly rateHz: number;
   };
 
+export type DebugProbeSampleKind = 'scalar' | 'lane_window';
+
 export interface DebugProbeSubscription {
   /** Stable debug target id. For current JS fallback this is slot-backed. */
   readonly targetId: number;
   readonly slotId: ValueSlot;
-  readonly sampleKind: 'scalar';
+  readonly sampleKind: DebugProbeSampleKind;
   readonly componentMask: number;
   readonly priority: number;
+  readonly laneWindow?: {
+    readonly start: number;
+    readonly count: number;
+  };
 }
 
 export interface DebugProbePacket {
@@ -40,7 +46,7 @@ export interface DebugProbePacket {
 export interface DebugProbePacketSample {
   readonly targetId: number;
   readonly slotId: ValueSlot;
-  readonly payloadKind: 'scalar';
+  readonly payloadKind: DebugProbeSampleKind;
   readonly stride: number;
   readonly laneCount: number;
   readonly sampleFlags: number;

@@ -1,5 +1,5 @@
 import type { CompiledProgramIR } from '../compiler/ir/program';
-import { arenaRead } from '../runtime/ArenaValueStore';
+import { arenaDecodeToAoS, arenaRead } from '../runtime/ArenaValueStore';
 import { getExprAddressTable } from '../runtime/ExprAddressTable';
 import type { RuntimeState } from '../runtime/RuntimeState';
 import {
@@ -73,24 +73,56 @@ export class LocalDebugProbeTransport implements DebugProbeTransport {
     for (const sub of this.subscriptions) {
       const lookup = table.slotLookup.get(sub.slotId);
       if (!lookup || lookup.arena.laneCount !== 1 || lookup.arena.stride < 1) {
+        if (sub.sampleKind === 'scalar') {
+          packetFlags |= DEBUG_PACKET_FLAG_SUBSCRIPTION_INVALID;
+          continue;
+        }
+      }
+      if (!lookup || lookup.arena.stride < 1) {
         packetFlags |= DEBUG_PACKET_FLAG_SUBSCRIPTION_INVALID;
         continue;
       }
+      if (sub.sampleKind === 'scalar') {
+        const value = arenaRead(view.state.arena, lookup.arena, 0, 0);
+        const finite = Number.isFinite(value);
+        if (!finite) {
+          packetFlags |= DEBUG_PACKET_FLAG_NAN_DETECTED_ANY;
+        }
 
-      const value = arenaRead(view.state.arena, lookup.arena, 0, 0);
-      const finite = Number.isFinite(value);
+        samples.push({
+          targetId: sub.targetId,
+          slotId: sub.slotId,
+          payloadKind: 'scalar',
+          stride: 1,
+          laneCount: 1,
+          sampleFlags: finite ? DEBUG_SAMPLE_FLAG_FRESH : DEBUG_SAMPLE_FLAG_NAN_DETECTED,
+          values: [value],
+        });
+        continue;
+      }
+
+      const laneStart = sub.laneWindow?.start ?? 0;
+      const laneCount = sub.laneWindow?.count ?? lookup.arena.laneCount;
+      if (laneStart < 0 || laneCount < 1 || laneStart + laneCount > lookup.arena.laneCount) {
+        packetFlags |= DEBUG_PACKET_FLAG_SUBSCRIPTION_INVALID;
+        continue;
+      }
+      const decoded = arenaDecodeToAoS(view.state.arena, lookup.arena);
+      const startOffset = laneStart * lookup.arena.stride;
+      const endOffset = startOffset + laneCount * lookup.arena.stride;
+      const values = Array.from(decoded.subarray(startOffset, endOffset));
+      const finite = values.every((value) => Number.isFinite(value));
       if (!finite) {
         packetFlags |= DEBUG_PACKET_FLAG_NAN_DETECTED_ANY;
       }
-
       samples.push({
         targetId: sub.targetId,
         slotId: sub.slotId,
-        payloadKind: 'scalar',
-        stride: 1,
-        laneCount: 1,
+        payloadKind: 'lane_window',
+        stride: lookup.arena.stride,
+        laneCount,
         sampleFlags: finite ? DEBUG_SAMPLE_FLAG_FRESH : DEBUG_SAMPLE_FLAG_NAN_DETECTED,
-        values: [value],
+        values,
       });
     }
 

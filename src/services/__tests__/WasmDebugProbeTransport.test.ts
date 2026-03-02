@@ -110,9 +110,12 @@ describe('WasmDebugProbeTransport', () => {
       {
         targetId: slot as number,
         slotId: slot as number,
-        value: 64,
+        payloadKind: 'scalar',
+        stride: 1,
+        laneCount: 1,
         valid: true,
         finite: true,
+        values: [64],
       },
     ]);
   });

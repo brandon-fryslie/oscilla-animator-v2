@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { debugService } from '../DebugService';
 import type { EdgeMetadata } from '../mapDebugEdges';
-import { FLOAT, VEC2, canonicalScalar } from '../../core/canonical-types';
+import { FLOAT, VEC2, canonicalManyDef, canonicalScalar } from '../../core/canonical-types';
 import { valueSlot } from '../../types';
 
 function edgeMeta(slot: number, type: ReturnType<typeof canonicalScalar>): EdgeMetadata {
@@ -84,5 +84,30 @@ describe('DebugService spy readback integration', () => {
     expect(history).toBeTruthy();
     expect(history!.writeIndex).toBe(1);
     expect(history!.buffer[0]).toBe(42);
+  });
+
+  it('derives lane-window subscriptions for tracked field slots from the canonical arena map', () => {
+    const slot = valueSlot(21);
+    debugService.setEdgeToSlotMap(new Map([
+      ['edge-field', edgeMeta(21, canonicalManyDef(VEC2))],
+    ]));
+    debugService.setPortToSlotMap(new Map());
+    debugService.setArenaRef(
+      new Float32Array([0, 1, 2, 3]),
+      new Map([[slot, { offset: 0, stride: 2, laneCount: 2, length: 4 }]]),
+    );
+
+    debugService.trackField(slot, canonicalManyDef(VEC2));
+
+    expect(debugService.getTrackedDebugProbeSubscriptions()).toEqual([
+      {
+        targetId: slot as number,
+        slotId: slot,
+        sampleKind: 'lane_window',
+        componentMask: 0b0011,
+        priority: 0,
+        laneWindow: { start: 0, count: 2 },
+      },
+    ]);
   });
 });

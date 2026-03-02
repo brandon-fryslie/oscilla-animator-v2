@@ -43,7 +43,7 @@ import { compilerFlagsSettings } from '../settings/tokens/compiler-flags-setting
 import { appSettings } from '../settings/tokens/app-settings';
 import type { ValueSlot } from '../types';
 import {
-  type DebugProbeSubscription,
+  type DebugProbePacketSample,
   type DebugProbeTransport,
 } from './DebugProbeProtocol';
 import { LocalDebugProbeTransport } from './LocalDebugProbeTransport';
@@ -58,6 +58,7 @@ export interface RuntimeSpyReadbackPacket {
   readonly capturedAtMs: number;
   readonly frameId: number;
   readonly entries: readonly RuntimeSpyReadbackEntry[];
+  readonly samples: readonly DebugProbePacketSample[];
 }
 
 function isCompileWorkerUnavailableError(err: unknown): boolean {
@@ -516,12 +517,12 @@ export class RuntimeService {
 
   private bindSpyReadbackTracking(): void {
     this.unsubSpyTracking?.();
-    this.unsubSpyTracking = debugService.onTrackedSpyScalarSlotsChange((trackedSlotCount) => {
+    this.unsubSpyTracking = debugService.onTrackedDebugProbeSubscriptionsChange((trackedSubscriptionCount) => {
       this.syncSpyReadbackSubscriptions();
-      this.syncSpyReadbackLoopForTrackedSlots(trackedSlotCount);
+      this.syncSpyReadbackLoopForTrackedSlots(trackedSubscriptionCount);
     });
     this.syncSpyReadbackSubscriptions();
-    this.syncSpyReadbackLoopForTrackedSlots(debugService.getTrackedSpyScalarSlots(1).length);
+    this.syncSpyReadbackLoopForTrackedSlots(debugService.getTrackedDebugProbeSubscriptions(1).length);
   }
 
   private primeWasmDebugProbeTransport(): void {
@@ -550,19 +551,11 @@ export class RuntimeService {
   }
 
   private syncSpyReadbackSubscriptions(): void {
-    const trackedSlots = debugService.getTrackedSpyScalarSlots(16);
-    if (trackedSlots.length === 0) {
+    const subscriptions = debugService.getTrackedDebugProbeSubscriptions(16);
+    if (subscriptions.length === 0) {
       this.debugProbeTransport.debugCommand({ kind: 'clear_subscriptions' });
       return;
     }
-
-    const subscriptions: DebugProbeSubscription[] = trackedSlots.map((slotId) => ({
-      targetId: slotId as number,
-      slotId,
-      sampleKind: 'scalar',
-      componentMask: 0b0001,
-      priority: 0,
-    }));
     // [LAW:single-enforcer] RuntimeService owns command-plane updates from UI
     // tracking state to debug probe transport subscriptions.
     this.debugProbeTransport.debugCommand({
@@ -588,7 +581,7 @@ export class RuntimeService {
       if (!this.spyReadbackLoopActive) {
         return;
       }
-      if (debugService.getTrackedSpyScalarSlots(1).length === 0) {
+      if (debugService.getTrackedDebugProbeSubscriptions(1).length === 0) {
         this.stopSpyReadbackLoop();
         return;
       }
@@ -630,7 +623,7 @@ export class RuntimeService {
     this.spyReadbackInFlight = true;
     try {
       const packet = this.buildSpyReadbackPacket(performance.now());
-      if (!packet || packet.entries.length === 0) {
+      if (!packet) {
         return;
       }
       this.applySpyReadbackPacket(packet);
@@ -648,17 +641,19 @@ export class RuntimeService {
 
     const entries: RuntimeSpyReadbackEntry[] = [];
     for (const sample of probePacket.samples) {
-      if (sample.payloadKind !== 'scalar' || sample.values.length < 1) {
-        continue;
+      if (sample.payloadKind === 'scalar') {
+        if (sample.values.length < 1) {
+          continue;
+        }
+        const value = sample.values[0];
+        if (!Number.isFinite(value)) continue;
+        entries.push({
+          slotId: sample.slotId,
+          value,
+        });
       }
-      const value = sample.values[0];
-      if (!Number.isFinite(value)) continue;
-      entries.push({
-        slotId: sample.slotId,
-        value,
-      });
     }
-    if (entries.length === 0) {
+    if (probePacket.samples.length === 0) {
       return null;
     }
 
@@ -666,6 +661,7 @@ export class RuntimeService {
       capturedAtMs: probePacket.capturedAtMs,
       frameId: probePacket.runtimeFrameId,
       entries,
+      samples: probePacket.samples,
     };
   }
 
@@ -679,6 +675,12 @@ export class RuntimeService {
         packet.capturedAtMs,
         packet.frameId,
       );
+    }
+    for (const sample of packet.samples) {
+      if (sample.payloadKind !== 'lane_window') {
+        continue;
+      }
+      debugService.updateFieldValue(sample.slotId, new Float32Array(sample.values));
     }
   }
 }

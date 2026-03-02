@@ -6,9 +6,12 @@ import type {
 export interface DebugProbeInputSample {
   readonly targetId: number;
   readonly slotId: number;
-  readonly value: number;
+  readonly payloadKind: 'scalar' | 'lane_window';
+  readonly stride: number;
+  readonly laneCount: number;
   readonly valid: boolean;
   readonly finite: boolean;
+  readonly values: readonly number[];
 }
 
 type RustDebugCommandFn = (command: DebugProbeCommand) => void;
