@@ -8,13 +8,15 @@ import {
 const mocks = vi.hoisted(() => ({
   initDebugProbeWasm: vi.fn(async () => {}),
   debug_probe_command: vi.fn(),
-  debug_probe_poll_runtime_packet: vi.fn<(capturedAtMs: number, snapshot: unknown) => unknown>(() => null),
+  debug_probe_poll_packed_runtime_packet: vi.fn<
+    (capturedAtMs: number, snapshot: { runtimeFrameId: number; slotMeta: Uint32Array; componentOffsets: Uint32Array; slotValues: Float32Array }) => unknown
+  >(() => null),
 }));
 
 vi.mock('../wasm/oscilla_debug_probe', () => ({
   initDebugProbeWasm: mocks.initDebugProbeWasm,
   debug_probe_command: mocks.debug_probe_command,
-  debug_probe_poll_runtime_packet: mocks.debug_probe_poll_runtime_packet,
+  debug_probe_poll_packed_runtime_packet: mocks.debug_probe_poll_packed_runtime_packet,
 }));
 
 function makeRuntimeView() {
@@ -77,7 +79,7 @@ describe('WasmDebugProbeTransport', () => {
 
   it('forwards runtime slot snapshots to wasm for Rust-owned extraction', async () => {
     const { slot, runtimeView } = makeRuntimeView();
-    mocks.debug_probe_poll_runtime_packet.mockReturnValueOnce({
+    mocks.debug_probe_poll_packed_runtime_packet.mockReturnValueOnce({
       version: 1,
       sequence: 2,
       capturedAtMs: 1010,
@@ -102,23 +104,17 @@ describe('WasmDebugProbeTransport', () => {
     const packet = transport.debugPollPacket(1010);
     expect(packet).toMatchObject({ runtimeFrameId: 12, sequence: 2 });
 
-    expect(mocks.debug_probe_poll_runtime_packet).toHaveBeenCalledTimes(1);
-    const [capturedAtMs, snapshot] = mocks.debug_probe_poll_runtime_packet.mock.calls[0] as [number, {
+    expect(mocks.debug_probe_poll_packed_runtime_packet).toHaveBeenCalledTimes(1);
+    const [capturedAtMs, snapshot] = mocks.debug_probe_poll_packed_runtime_packet.mock.calls[0] as [number, {
       runtimeFrameId: number;
-      slots: Array<{
-        slotId: number;
-        descriptor: { offset: number; stride: number; laneCount: number; length: number };
-        values: Float32Array;
-      }>;
+      slotMeta: Uint32Array;
+      componentOffsets: Uint32Array;
+      slotValues: Float32Array;
     }];
     expect(capturedAtMs).toBe(1010);
-    expect(snapshot).toEqual({
-      runtimeFrameId: 12,
-      slots: [{
-        slotId: slot as number,
-        descriptor: { offset: 0, stride: 1, laneCount: 1, length: 1 },
-        values: new Float32Array([64]),
-      }],
-    });
+    expect(snapshot.runtimeFrameId).toBe(12);
+    expect(Array.from(snapshot.slotMeta)).toEqual([slot as number, 1, 1, 1, 0, 1, 1, 0, 0, 0]);
+    expect(Array.from(snapshot.componentOffsets)).toEqual([]);
+    expect(Array.from(snapshot.slotValues)).toEqual([64]);
   });
 });

@@ -2,18 +2,25 @@ import type {
   DebugProbeCommand,
   DebugProbePacket,
 } from '../DebugProbeProtocol';
-import type { SerializedDebugProbeRuntimeSnapshot } from '../DebugProbeRuntimeSnapshot';
+import {
+  DEBUG_PROBE_SLOT_META_WORDS,
+  type PackedDebugProbeRuntimeSnapshot,
+} from '../DebugProbeRuntimeSnapshot';
 
 type RustDebugCommandFn = (command: DebugProbeCommand) => void;
-type RustDebugPollRuntimePacketFn = (
+type RustDebugPollPackedRuntimePacketFn = (
   capturedAtMs: number,
-  snapshot: SerializedDebugProbeRuntimeSnapshot,
+  runtimeFrameId: number,
+  slotMeta: Uint32Array,
+  componentOffsets: Uint32Array,
+  slotValues: Float32Array,
 ) => DebugProbePacket | null;
 
 interface DebugProbeWasmModule {
   readonly init?: () => void;
   readonly debug_command?: RustDebugCommandFn;
-  readonly debug_poll_runtime_packet?: RustDebugPollRuntimePacketFn;
+  readonly debug_poll_packed_runtime_packet?: RustDebugPollPackedRuntimePacketFn;
+  readonly debug_probe_slot_meta_words?: () => number;
   readonly default?: (
     moduleOrPath?: RequestInfo | URL | Response | BufferSource | WebAssembly.Module | Promise<unknown>,
   ) => Promise<unknown>;
@@ -22,7 +29,7 @@ interface DebugProbeWasmModule {
 let initialized = false;
 let initPromise: Promise<void> | null = null;
 let debugCommandImpl: RustDebugCommandFn | null = null;
-let debugPollRuntimePacketImpl: RustDebugPollRuntimePacketFn | null = null;
+let debugPollPackedRuntimePacketImpl: RustDebugPollPackedRuntimePacketFn | null = null;
 
 export async function initDebugProbeWasm(): Promise<void> {
   if (initialized) return;
@@ -42,12 +49,21 @@ export async function initDebugProbeWasm(): Promise<void> {
         if (typeof module.debug_command !== 'function') {
           throw new Error('oscilla_debug_probe.js missing debug_command export');
         }
-        if (typeof module.debug_poll_runtime_packet !== 'function') {
-          throw new Error('oscilla_debug_probe.js missing debug_poll_runtime_packet export');
+        if (typeof module.debug_poll_packed_runtime_packet !== 'function') {
+          throw new Error('oscilla_debug_probe.js missing debug_poll_packed_runtime_packet export');
+        }
+        if (typeof module.debug_probe_slot_meta_words !== 'function') {
+          throw new Error('oscilla_debug_probe.js missing debug_probe_slot_meta_words export');
+        }
+        const wasmSlotMetaWords = module.debug_probe_slot_meta_words();
+        if (wasmSlotMetaWords !== DEBUG_PROBE_SLOT_META_WORDS) {
+          throw new Error(
+            `Packed debug probe ABI mismatch: wasm slot_meta_words=${wasmSlotMetaWords}, ts slot_meta_words=${DEBUG_PROBE_SLOT_META_WORDS}`,
+          );
         }
         module.init();
         debugCommandImpl = module.debug_command;
-        debugPollRuntimePacketImpl = module.debug_poll_runtime_packet;
+        debugPollPackedRuntimePacketImpl = module.debug_poll_packed_runtime_packet;
         initialized = true;
       })
       .catch((error) => {
@@ -67,12 +83,18 @@ export function debug_probe_command(command: DebugProbeCommand): void {
   debugCommandImpl(command);
 }
 
-export function debug_probe_poll_runtime_packet(
+export function debug_probe_poll_packed_runtime_packet(
   capturedAtMs: number,
-  snapshot: SerializedDebugProbeRuntimeSnapshot,
+  snapshot: PackedDebugProbeRuntimeSnapshot,
 ): DebugProbePacket | null {
-  if (!initialized || !debugPollRuntimePacketImpl) {
+  if (!initialized || !debugPollPackedRuntimePacketImpl) {
     throw new Error('Rust/WASM debug probe module not initialized');
   }
-  return debugPollRuntimePacketImpl(capturedAtMs, snapshot);
+  return debugPollPackedRuntimePacketImpl(
+    capturedAtMs,
+    snapshot.runtimeFrameId,
+    snapshot.slotMeta,
+    snapshot.componentOffsets,
+    snapshot.slotValues,
+  );
 }

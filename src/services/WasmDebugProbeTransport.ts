@@ -7,11 +7,12 @@ import type {
 } from './DebugProbeProtocol';
 import {
   debug_probe_command,
-  debug_probe_poll_runtime_packet,
+  debug_probe_poll_packed_runtime_packet,
   initDebugProbeWasm,
 } from './wasm/oscilla_debug_probe';
 import {
   createDebugProbeRuntimeSnapshot,
+  packDebugProbeRuntimeSnapshot,
   serializeDebugProbeRuntimeSnapshot,
 } from './DebugProbeRuntimeSnapshot';
 
@@ -54,7 +55,10 @@ export class WasmDebugProbeTransport implements DebugProbeTransport {
     if (!snapshot) {
       return null;
     }
-    return debug_probe_poll_runtime_packet(capturedAtMs, serializeDebugProbeRuntimeSnapshot(snapshot));
+    return debug_probe_poll_packed_runtime_packet(
+      capturedAtMs,
+      packDebugProbeRuntimeSnapshot(serializeDebugProbeRuntimeSnapshot(snapshot)),
+    );
   }
 }
 

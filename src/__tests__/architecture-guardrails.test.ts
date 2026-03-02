@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { execFileSync } from 'child_process';
+import { rgLines } from '../testing/rg-search';
 
 type Gate = {
   readonly id: string;
@@ -7,27 +7,6 @@ type Gate = {
   readonly scope: readonly string[];
   readonly maxCount: number;
 };
-
-function rgLines(pattern: string, scope: readonly string[], globs: readonly string[] = ['*.ts', '*.tsx']): string[] {
-  const args = [
-    '-n',
-    '--no-heading',
-    '--color',
-    'never',
-    ...globs.flatMap((glob) => ['--glob', glob]),
-    pattern,
-    ...scope,
-  ];
-
-  try {
-    const out = execFileSync('rg', args, { encoding: 'utf-8', cwd: process.cwd() }).trim();
-    return out ? out.split('\n').filter(Boolean) : [];
-  } catch (err) {
-    const status = (err as { status?: number }).status;
-    if (status === 1) return [];
-    throw err;
-  }
-}
 
 function stripCommentOnly(lines: readonly string[]): string[] {
   return lines.filter((line) => {
