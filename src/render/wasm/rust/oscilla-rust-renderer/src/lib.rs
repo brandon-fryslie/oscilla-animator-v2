@@ -17,7 +17,7 @@ use crate::engine::{Engine, EngineConfig};
 
 thread_local! {
     static ENGINE: RefCell<Option<Engine>> = RefCell::new(None);
-    static LOOP_CALLBACK: RefCell<Option<Closure<dyn FnMut()>>> = RefCell::new(None);
+    static LOOP_CALLBACK: RefCell<Option<Closure<dyn FnMut(f64)>>> = RefCell::new(None);
 }
 
 fn worker_scope() -> Result<DedicatedWorkerGlobalScope, JsValue> {
@@ -275,10 +275,10 @@ pub fn take_frame_pacing_packet() -> Result<JsValue, JsValue> {
 
 fn start_worker_loop() -> Result<(), JsValue> {
     let global = worker_scope()?;
-    let closure = Closure::wrap(Box::new(move || {
+    let closure = Closure::wrap(Box::new(move |timestamp_ms: f64| {
         ENGINE.with(|engine_cell| {
             if let Some(engine) = engine_cell.borrow_mut().as_mut() {
-                if let Err(error) = engine.tick(js_sys::Date::now()) {
+                if let Err(error) = engine.tick(timestamp_ms) {
                     web_sys::console::error_1(&error);
                 }
             }
@@ -289,14 +289,11 @@ fn start_worker_loop() -> Result<(), JsValue> {
                 if let Some(next_callback) = slot.borrow().as_ref() {
                     // [LAW:single-enforcer] Scheduling is owned at this worker
                     // boundary so tick cadence cannot diverge across callsites.
-                    let _ = worker.set_timeout_with_callback_and_timeout_and_arguments_0(
-                        next_callback.as_ref().unchecked_ref(),
-                        16,
-                    );
+                    let _ = worker.request_animation_frame(next_callback.as_ref().unchecked_ref());
                 }
             });
         }
-    }) as Box<dyn FnMut()>);
+    }) as Box<dyn FnMut(f64)>);
 
     LOOP_CALLBACK.with(|slot| {
         *slot.borrow_mut() = Some(closure);
@@ -304,10 +301,7 @@ fn start_worker_loop() -> Result<(), JsValue> {
 
     LOOP_CALLBACK.with(|slot| {
         if let Some(callback) = slot.borrow().as_ref() {
-            global.set_timeout_with_callback_and_timeout_and_arguments_0(
-                callback.as_ref().unchecked_ref(),
-                16,
-            )?;
+            global.request_animation_frame(callback.as_ref().unchecked_ref())?;
             Ok(())
         } else {
             Err(JsValue::from_str(

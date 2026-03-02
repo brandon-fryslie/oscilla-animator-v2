@@ -86,7 +86,10 @@ struct ShapeInstance {
 
 struct VertexOutput {
   @builtin(position) clip_position: vec4<f32>,
-  @location(0) color: vec4<f32>,
+  @location(0) uv: vec2<f32>,
+  @location(1) color: vec4<f32>,
+  @location(2) sdf_params: vec3<f32>,
+  @location(3) @interpolate(flat) material_id: u32,
 };
 
 @vertex
@@ -95,13 +98,25 @@ fn vs_main(@location(0) local_pos: vec2<f32>, @builtin(instance_index) instance_
   let world_pos = instance.transform * vec4<f32>(local_pos, 0.0, 1.0);
   var out: VertexOutput;
   out.clip_position = global.view_proj * world_pos;
+  out.uv = local_pos;
   out.color = instance.color;
+  out.sdf_params = instance.sdf_params;
+  out.material_id = instance.material_id;
   return out;
 }
 
 @fragment
 fn fs_main(in_data: VertexOutput) -> @location(0) vec4<f32> {
-  return vec4<f32>(in_data.color.rgb * in_data.color.a, in_data.color.a);
+  // [LAW:dataflow-not-control-flow] Material and SDF evaluation always run;
+  // draw variability is encoded in per-instance data values, not pass control flow.
+  let radius = max(in_data.sdf_params.x, 0.001);
+  let feather = max(in_data.sdf_params.y, 0.001);
+  let dist = length(in_data.uv) - radius;
+  let alpha = clamp(1.0 - smoothstep(0.0, feather, dist), 0.0, 1.0);
+  let shade = select(1.0, 0.9, (in_data.material_id & 1u) == 1u);
+  let premultiplied_rgb = in_data.color.rgb * (in_data.color.a * alpha * shade);
+  let out_alpha = in_data.color.a * alpha;
+  return vec4<f32>(premultiplied_rgb, out_alpha);
 }
 "#;
 
@@ -126,7 +141,6 @@ pub struct Engine {
     frame_count: u64,
     debug_readback_interval_frames: u64,
     debug_readback_in_flight: Arc<AtomicBool>,
-    strict_lock_start_frame: u64,
     max_particles: u32,
 }
 
@@ -259,7 +273,6 @@ impl Engine {
             frame_count: 0,
             debug_readback_interval_frames,
             debug_readback_in_flight: Arc::new(AtomicBool::new(false)),
-            strict_lock_start_frame: 600,
             max_particles: config.max_particles as u32,
         })
     }
@@ -356,110 +369,129 @@ impl Engine {
             return Ok(());
         }
 
-        // [LAW:single-enforcer] Tick owns allocator lock boundary so allocation
-        // enforcement remains centralized at one runtime boundary.
-        // [LAW:single-enforcer] exception: wgpu performs lazy backend setup in
-        // early frames; strict enforcement activates after warm-up.
-        let strict_lock_enabled = self.frame_count >= self.strict_lock_start_frame;
-        if strict_lock_enabled {
-            StrictAllocator::lock();
+        enum HotPathOutcome {
+            Success { debug_tick: bool, frame_count: u64 },
+            SurfaceTimeout,
+            SurfaceLost,
+            FatalOutOfMemory,
+            FatalOther,
         }
-        let frame = match self.surface.get_current_texture() {
-            Ok(frame) => frame,
-            Err(wgpu::SurfaceError::Timeout) => {
-                if strict_lock_enabled {
-                    StrictAllocator::unlock();
+
+        // [LAW:single-enforcer] Tick owns one strict allocator boundary for the
+        // full per-frame command path.
+        let outcome = {
+            let _hot_path_guard = StrictAllocator::hot_path_guard();
+            match self.surface.get_current_texture() {
+                Ok(frame) => {
+                    let color_view = frame
+                        .texture
+                        .create_view(&wgpu::TextureViewDescriptor::default());
+                    let mut encoder =
+                        self.device
+                            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                                // [LAW:dataflow-not-control-flow] Hot-path labels
+                                // are static to avoid per-frame heap allocations.
+                                label: Some("HotPath.CommandEncoder"),
+                            });
+
+                    self.compute.encode_passes(&mut encoder, &mut self.arena);
+                    self.render.encode_passes(
+                        &mut encoder,
+                        &self.arena,
+                        &color_view,
+                        self.depth_target.view(),
+                    );
+
+                    let is_debug_tick = self.frame_count % self.debug_readback_interval_frames == 0;
+                    if is_debug_tick {
+                        encoder.copy_buffer_to_buffer(
+                            self.arena.read_state_buffer(),
+                            0,
+                            self.arena.debug_staging_buffer(),
+                            0,
+                            self.arena.debug_staging_buffer().size(),
+                        );
+                    }
+
+                    self.queue.submit(std::iter::once(encoder.finish()));
+                    frame.present();
+                    self.frame_count = self.frame_count.wrapping_add(1);
+
+                    HotPathOutcome::Success {
+                        debug_tick: is_debug_tick,
+                        frame_count: self.frame_count,
+                    }
                 }
-                let tick_elapsed_ms = (js_sys::Date::now() - tick_start_ms).max(0.0);
-                self.scheduler
-                    .record_surface_timeout(js_sys::Date::now(), tick_elapsed_ms);
-                return Ok(());
-            }
-            Err(wgpu::SurfaceError::Outdated | wgpu::SurfaceError::Lost) => {
-                if strict_lock_enabled {
-                    StrictAllocator::unlock();
+                Err(wgpu::SurfaceError::Timeout) => HotPathOutcome::SurfaceTimeout,
+                Err(wgpu::SurfaceError::Outdated | wgpu::SurfaceError::Lost) => {
+                    // [LAW:dataflow-not-control-flow] Surface reconfiguration is
+                    // handled by explicit resize/control messages outside the
+                    // hot path; tick only records the lost/outdated condition.
+                    HotPathOutcome::SurfaceLost
                 }
-                self.surface.configure(&self.device, &self.surface_config);
-                let tick_elapsed_ms = (js_sys::Date::now() - tick_start_ms).max(0.0);
-                self.scheduler.record_surface_lost(
-                    js_sys::Date::now(),
-                    tick_elapsed_ms,
-                    "Surface acquire failed with Lost/Outdated",
-                );
-                return Ok(());
-            }
-            Err(wgpu::SurfaceError::OutOfMemory) => {
-                if strict_lock_enabled {
-                    StrictAllocator::unlock();
-                }
-                let tick_elapsed_ms = (js_sys::Date::now() - tick_start_ms).max(0.0);
-                self.scheduler.record_fatal(
-                    js_sys::Date::now(),
-                    tick_elapsed_ms,
-                    "surface_out_of_memory",
-                    "Fatal Surface Error: OutOfMemory",
-                );
-                return Err(JsValue::from_str("Fatal Surface Error: OutOfMemory"));
-            }
-            Err(wgpu::SurfaceError::Other) => {
-                if strict_lock_enabled {
-                    StrictAllocator::unlock();
-                }
-                let tick_elapsed_ms = (js_sys::Date::now() - tick_start_ms).max(0.0);
-                self.scheduler.record_fatal(
-                    js_sys::Date::now(),
-                    tick_elapsed_ms,
-                    "surface_other",
-                    "Fatal Surface Error: Other",
-                );
-                return Err(JsValue::from_str("Fatal Surface Error: Other"));
+                Err(wgpu::SurfaceError::OutOfMemory) => HotPathOutcome::FatalOutOfMemory,
+                Err(wgpu::SurfaceError::Other) => HotPathOutcome::FatalOther,
             }
         };
 
-        let color_view = frame
-            .texture
-            .create_view(&wgpu::TextureViewDescriptor::default());
-        let mut encoder = self
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("HotPath.CommandEncoder"),
-            });
-
-        self.compute.encode_passes(&mut encoder, &mut self.arena);
-        self.render.encode_passes(
-            &mut encoder,
-            &self.arena,
-            &color_view,
-            self.depth_target.view(),
-        );
-
-        let is_debug_tick = self.frame_count % self.debug_readback_interval_frames == 0;
-        if is_debug_tick {
-            encoder.copy_buffer_to_buffer(
-                self.arena.read_state_buffer(),
-                0,
-                self.arena.debug_staging_buffer(),
-                0,
-                self.arena.debug_staging_buffer().size(),
-            );
+        match outcome {
+            HotPathOutcome::Success {
+                debug_tick,
+                frame_count,
+            } => {
+                // [LAW:single-enforcer] Async map callbacks can allocate in
+                // browser glue and therefore run only after lock scope exits.
+                if debug_tick {
+                    self.trigger_debug_readback();
+                }
+                let tick_elapsed_ms = (js_sys::Date::now() - tick_start_ms).max(0.0);
+                self.scheduler.record_tick_success(
+                    js_sys::Date::now(),
+                    tick_elapsed_ms,
+                    frame_count,
+                );
+                Ok(())
+            }
+            HotPathOutcome::SurfaceTimeout => self.finish_timeout(tick_start_ms),
+            HotPathOutcome::SurfaceLost => self.finish_surface_lost(tick_start_ms),
+            HotPathOutcome::FatalOutOfMemory => self.finish_fatal(
+                tick_start_ms,
+                "surface_out_of_memory",
+                "Fatal Surface Error: OutOfMemory",
+            ),
+            HotPathOutcome::FatalOther => {
+                self.finish_fatal(tick_start_ms, "surface_other", "Fatal Surface Error: Other")
+            }
         }
+    }
 
-        self.queue.submit(std::iter::once(encoder.finish()));
-        frame.present();
-        self.frame_count = self.frame_count.wrapping_add(1);
-        if strict_lock_enabled {
-            StrictAllocator::unlock();
-        }
-
-        if is_debug_tick {
-            self.trigger_debug_readback();
-        }
-
+    fn finish_timeout(&mut self, tick_start_ms: f64) -> Result<(), JsValue> {
         let tick_elapsed_ms = (js_sys::Date::now() - tick_start_ms).max(0.0);
         self.scheduler
-            .record_tick_success(js_sys::Date::now(), tick_elapsed_ms, self.frame_count);
-
+            .record_surface_timeout(js_sys::Date::now(), tick_elapsed_ms);
         Ok(())
+    }
+
+    fn finish_surface_lost(&mut self, tick_start_ms: f64) -> Result<(), JsValue> {
+        let tick_elapsed_ms = (js_sys::Date::now() - tick_start_ms).max(0.0);
+        self.scheduler.record_surface_lost(
+            js_sys::Date::now(),
+            tick_elapsed_ms,
+            "Surface acquire failed with Lost/Outdated",
+        );
+        Ok(())
+    }
+
+    fn finish_fatal(
+        &mut self,
+        tick_start_ms: f64,
+        code: &'static str,
+        message: &'static str,
+    ) -> Result<(), JsValue> {
+        let tick_elapsed_ms = (js_sys::Date::now() - tick_start_ms).max(0.0);
+        self.scheduler
+            .record_fatal(js_sys::Date::now(), tick_elapsed_ms, code, message);
+        Err(JsValue::from_str(message))
     }
 
     fn input_marshal_phase(&mut self, timestamp_ms: f64) {

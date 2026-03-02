@@ -9,12 +9,17 @@ import { truncateForLog } from './matrix-utils.mjs';
 
 const BASE_URL = process.env.WEBGPU_MATRIX_URL ?? 'http://127.0.0.1:5174';
 const DEFAULT_REPORT = process.env.WEBGPU_MATRIX_REPORT ?? 'artifacts/webgpu-browser-matrix.json';
-const SAMPLE_FRAMES = Number.parseInt(process.env.WEBGPU_MATRIX_FRAMES ?? '180', 10);
-const SAMPLE_TIMEOUT_MS = Number.parseInt(process.env.WEBGPU_MATRIX_SAMPLE_TIMEOUT_MS ?? '10000', 10);
+const parsePositiveIntegerEnv = (value, fallback) => {
+  const parsed = Number.parseInt(value ?? '', 10);
+  const isValid = Number.isFinite(parsed) && parsed > 0;
+  return isValid ? parsed : fallback;
+};
+const SAMPLE_FRAMES = parsePositiveIntegerEnv(process.env.WEBGPU_MATRIX_FRAMES, 180);
+const SAMPLE_TIMEOUT_MS = parsePositiveIntegerEnv(process.env.WEBGPU_MATRIX_SAMPLE_TIMEOUT_MS, 10000);
 const START_SERVER = (process.env.WEBGPU_MATRIX_START_SERVER ?? '1') !== '0';
 const BUILD_FIRST = (process.env.WEBGPU_MATRIX_BUILD_FIRST ?? '1') !== '0';
 const SERVER_MODE = process.env.WEBGPU_MATRIX_SERVER_MODE ?? 'preview';
-const SERVER_TIMEOUT_MS = Number.parseInt(process.env.WEBGPU_MATRIX_SERVER_TIMEOUT_MS ?? '45000', 10);
+const SERVER_TIMEOUT_MS = parsePositiveIntegerEnv(process.env.WEBGPU_MATRIX_SERVER_TIMEOUT_MS, 45000);
 const FAIL_ON_SKIP = (process.env.WEBGPU_MATRIX_FAIL_ON_SKIP ?? (process.env.CI ? '1' : '0')) !== '0';
 const ALLOW_SERVER_REUSE = (process.env.WEBGPU_MATRIX_ALLOW_SERVER_REUSE ?? (process.env.CI ? '0' : '1')) !== '0';
 const SKIP_CHROMIUM = (process.env.WEBGPU_MATRIX_SKIP_CHROMIUM ?? '0') === '1';
@@ -146,12 +151,20 @@ async function stopManagedServer(serverProcess) {
     timeoutId = setTimeout(() => finish(false), timeoutMs);
   });
 
-  serverProcess.kill('SIGTERM');
+  try {
+    serverProcess.kill('SIGTERM');
+  } catch {
+    // Ignore race/shutdown signal errors; process may have already exited.
+  }
   const exited = await awaitExit(5000);
   if (exited) {
     return;
   }
-  serverProcess.kill('SIGKILL');
+  try {
+    serverProcess.kill('SIGKILL');
+  } catch {
+    // Ignore race/shutdown signal errors; process may have already exited.
+  }
   await awaitExit(2000);
 }
 
