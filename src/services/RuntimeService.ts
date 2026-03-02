@@ -47,6 +47,7 @@ import {
   type DebugProbeTransport,
 } from './DebugProbeProtocol';
 import { LocalDebugProbeTransport } from './LocalDebugProbeTransport';
+import { createWasmDebugProbeTransport } from './WasmDebugProbeTransport';
 
 export interface RuntimeSpyReadbackEntry {
   readonly slotId: ValueSlot;
@@ -102,7 +103,8 @@ export class RuntimeService {
   private spyReadbackLoopActive = false;
   private spyReadbackInFlight = false;
   private spyReadbackHz = 5;
-  private readonly debugProbeTransport: DebugProbeTransport;
+  private debugProbeTransport: DebugProbeTransport;
+  private debugProbeUpgradeInFlight: Promise<void> | null = null;
 
   constructor(
     private readonly store: RootStore,
@@ -352,6 +354,7 @@ export class RuntimeService {
     });
     // [LAW:single-enforcer] RuntimeService owns debug lifecycle boundaries.
     debugService.clear();
+    this.primeWasmDebugProbeTransport();
     compilationInspector.setErrorReporter((payload) => {
       const phase = payload.passName ? `${payload.phase}(${payload.passName})` : payload.phase;
       const message = payload.error instanceof Error ? payload.error.message : String(payload.error);
@@ -519,6 +522,31 @@ export class RuntimeService {
     });
     this.syncSpyReadbackSubscriptions();
     this.syncSpyReadbackLoopForTrackedSlots(debugService.getTrackedSpyScalarSlots(1).length);
+  }
+
+  private primeWasmDebugProbeTransport(): void {
+    if (this.debugProbeUpgradeInFlight) {
+      return;
+    }
+    this.debugProbeUpgradeInFlight = createWasmDebugProbeTransport(() => ({
+      program: this.compileState.currentProgram,
+      state: this.compileState.currentState,
+    }))
+      .then((transport) => {
+        this.debugProbeTransport = transport;
+        this.debugProbeTransport.debugCommand({
+          kind: 'set_rate_hz',
+          rateHz: this.spyReadbackHz,
+        });
+        this.syncSpyReadbackSubscriptions();
+      })
+      .catch(() => {
+        // [LAW:no-silent-fallbacks] Local transport remains canonical fallback;
+        // runtime diagnostics already surface actual probe-cycle failures.
+      })
+      .finally(() => {
+        this.debugProbeUpgradeInFlight = null;
+      });
   }
 
   private syncSpyReadbackSubscriptions(): void {
