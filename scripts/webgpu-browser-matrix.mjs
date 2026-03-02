@@ -10,6 +10,7 @@ import { truncateForLog } from './matrix-utils.mjs';
 const BASE_URL = process.env.WEBGPU_MATRIX_URL ?? 'http://127.0.0.1:5174';
 const DEFAULT_REPORT = process.env.WEBGPU_MATRIX_REPORT ?? 'artifacts/webgpu-browser-matrix.json';
 const SAMPLE_FRAMES = Number.parseInt(process.env.WEBGPU_MATRIX_FRAMES ?? '180', 10);
+const SAMPLE_TIMEOUT_MS = Number.parseInt(process.env.WEBGPU_MATRIX_SAMPLE_TIMEOUT_MS ?? '10000', 10);
 const START_SERVER = (process.env.WEBGPU_MATRIX_START_SERVER ?? '1') !== '0';
 const BUILD_FIRST = (process.env.WEBGPU_MATRIX_BUILD_FIRST ?? '1') !== '0';
 const SERVER_MODE = process.env.WEBGPU_MATRIX_SERVER_MODE ?? 'preview';
@@ -121,7 +122,51 @@ async function startManagedServer(url) {
   return serverProcess;
 }
 
+async function stopManagedServer(serverProcess) {
+  if (!serverProcess) {
+    return;
+  }
+  if (serverProcess.exitCode !== null) {
+    return;
+  }
+
+  // [LAW:no-silent-fallbacks] Server shutdown is explicit with bounded waits;
+  // if graceful termination fails, hard-kill to avoid hanging CI gates.
+  const awaitExit = (timeoutMs) => new Promise((resolve) => {
+    let settled = false;
+    let timeoutId = null;
+    const finish = (exited) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      if (timeoutId !== null) {
+        clearTimeout(timeoutId);
+      }
+      resolve(exited);
+    };
+    serverProcess.once('exit', () => finish(true));
+    timeoutId = setTimeout(() => finish(false), timeoutMs);
+  });
+
+  serverProcess.kill('SIGTERM');
+  const exited = await awaitExit(5000);
+  if (exited) {
+    return;
+  }
+  serverProcess.kill('SIGKILL');
+  await awaitExit(2000);
+}
+
 function computeStats(frameDeltasMs) {
+  if (frameDeltasMs.length === 0) {
+    return {
+      sampleCount: 0,
+      avgFrameDeltaMs: 0,
+      p95FrameDeltaMs: 0,
+      avgFps: 0,
+    };
+  }
   const sorted = [...frameDeltasMs].sort((a, b) => a - b);
   const avg = sorted.reduce((sum, value) => sum + value, 0) / Math.max(1, sorted.length);
   const p95Index = Math.min(sorted.length - 1, Math.max(0, Math.floor(sorted.length * 0.95)));
@@ -248,7 +293,12 @@ async function runBrowserCheck({ browserName, launcher, launchOptions, url, bloc
     .then((state) => state === 'succeeded')
     .catch(() => false);
 
-  const probe = await page.evaluate(async ({ sampleFrames, probeKey, bootstrapReadyBeforeSample }) => {
+  const probe = await page.evaluate(async ({
+    sampleFrames,
+    sampleTimeoutMs,
+    probeKey,
+    bootstrapReadyBeforeSample,
+  }) => {
     const hasNavigatorGpu = Boolean(navigator.gpu);
     const adapter = hasNavigatorGpu ? await navigator.gpu.requestAdapter() : null;
     const hasAdapter = Boolean(adapter);
@@ -271,18 +321,31 @@ async function runBrowserCheck({ browserName, launcher, launchOptions, url, bloc
 
     const frameDeltasMs = [];
     await new Promise((resolve) => {
+      let settled = false;
+      const finish = () => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        resolve();
+      };
       let previous = performance.now();
       let remaining = bootstrapReadyBeforeSample ? Math.max(1, sampleFrames) : 0;
       if (remaining <= 0) {
-        resolve();
+        finish();
         return;
       }
+      const timeoutId = setTimeout(finish, Math.max(1, sampleTimeoutMs));
       const tick = (now) => {
+        if (settled) {
+          return;
+        }
         frameDeltasMs.push(now - previous);
         previous = now;
         remaining -= 1;
         if (remaining <= 0) {
-          resolve();
+          clearTimeout(timeoutId);
+          finish();
           return;
         }
         requestAnimationFrame(tick);
@@ -320,6 +383,7 @@ async function runBrowserCheck({ browserName, launcher, launchOptions, url, bloc
     };
   }, {
     sampleFrames: SAMPLE_FRAMES,
+    sampleTimeoutMs: SAMPLE_TIMEOUT_MS,
     probeKey: RUNTIME_PROBE_GLOBAL_KEY,
     bootstrapReadyBeforeSample,
   });
@@ -563,9 +627,7 @@ async function main() {
       process.exitCode = 1;
     }
   } finally {
-    if (managedServer) {
-      managedServer.kill('SIGTERM');
-    }
+    await stopManagedServer(managedServer);
   }
 }
 

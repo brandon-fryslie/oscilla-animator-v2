@@ -6,7 +6,7 @@ import {
   initRustRendererEngine,
   initRustRendererWasm,
   pauseRustRendererEngine,
-  rebuildRustRendererPipeline,
+  rebuildRustRendererSimulationPipeline,
   resumeRustRendererEngine,
   resizeRustRendererSurface,
   takeRustRendererFramePacingPacket,
@@ -59,6 +59,7 @@ interface LegacyFramePacingPacket {
 const POLL_INTERVAL_MS = 250;
 
 let bootstrapped = false;
+let bootstrapInFlight = false;
 let runtimePollTimer: ReturnType<typeof setInterval> | null = null;
 let legacyHeartbeatSequence = 0;
 let legacyState: RustRendererSchedulerState = 'Booting';
@@ -229,6 +230,19 @@ function toOutboundRuntimeEvent(raw: RawRuntimeEvent): RustRendererRuntimeEvent 
 }
 
 async function handleBootstrap(message: Extract<RustRendererWorkerInboundMessage, { type: 'BOOTSTRAP' }>): Promise<void> {
+  if (bootstrapped) {
+    // [LAW:dataflow-not-control-flow] Duplicate bootstrap requests are treated
+    // as idempotent handshake replays; worker state stays on one canonical path.
+    postWorkerMessage({ type: 'BOOTSTRAP_SUCCESS' });
+    return;
+  }
+  if (bootstrapInFlight) {
+    // [LAW:single-enforcer] Bootstrap orchestration is serialized at this
+    // worker boundary so WASM init cannot execute concurrently.
+    return;
+  }
+  bootstrapInFlight = true;
+  try {
   await initRustRendererWasm();
   await initRustRendererEngine(message.canvas, message.config);
   attachRustRendererSharedInput(message.sharedInput);
@@ -237,17 +251,16 @@ async function handleBootstrap(message: Extract<RustRendererWorkerInboundMessage
   legacyState = 'Booting';
   startRuntimePolling();
   postWorkerMessage({ type: 'BOOTSTRAP_SUCCESS' });
+  } finally {
+    bootstrapInFlight = false;
+  }
 }
 
-async function handleRebuild(message: Extract<RustRendererWorkerInboundMessage, { type: 'REBUILD_PIPELINE' }>): Promise<void> {
-  await rebuildRustRendererPipeline(
-    message.simulationWgsl,
-    message.assemblyWgsl,
-    message.uberShaderWgsl,
-    message.particleCount,
-    message.shapeCount,
-  );
-  postWorkerMessage({ type: 'REBUILD_PIPELINE_SUCCESS' });
+async function handleRebuildSimulation(
+  message: Extract<RustRendererWorkerInboundMessage, { type: 'REBUILD_SIMULATION_PIPELINE' }>,
+): Promise<void> {
+  await rebuildRustRendererSimulationPipeline(message.simulationWgsl);
+  postWorkerMessage({ type: 'REBUILD_SIMULATION_PIPELINE_SUCCESS' });
 }
 
 function handleResize(message: Extract<RustRendererWorkerInboundMessage, { type: 'RESIZE_CANVAS' }>): void {
@@ -357,8 +370,8 @@ self.onmessage = (event: MessageEvent<RustRendererWorkerInboundMessage>) => {
     }
     return;
   }
-  if (message.type === 'REBUILD_PIPELINE') {
-    void handleRebuild(message).catch((error) => {
+  if (message.type === 'REBUILD_SIMULATION_PIPELINE') {
+    void handleRebuildSimulation(message).catch((error) => {
       const prefix = bootstrapped ? 'Rust worker pipeline rebuild failure' : 'Rust worker rebuild before bootstrap';
       postWorkerFatalError('pipeline_rebuild_failure', `${prefix}: ${error instanceof Error ? error.message : String(error)}`);
     });

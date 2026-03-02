@@ -255,12 +255,16 @@ export function compileFromFrontend(
 
     // Convert to CompiledProgramIR (now with registry)
     const compiledIR = convertLinkedIRToProgram(unlinkedIR, scheduleIR, acyclicPatch, registry);
+    const nagaLoweringWarnings = collectNagaLoweringCoverageWarnings(compiledIR);
 
     compilationInspector.endCompile('success');
     return {
       kind: 'ok',
       program: compiledIR,
-      warnings: unreachableBlockWarnings,
+      warnings: [
+        ...unreachableBlockWarnings,
+        ...nagaLoweringWarnings,
+      ],
     };
   } catch (e: unknown) {
     const error = e instanceof Error ? e : new Error(String(e));
@@ -286,6 +290,39 @@ function frontendErrorToCompileError(e: FrontendError): CompileError {
 function makeFailure(errors: CompileError[]): CompileFailure {
   compilationInspector.endCompile('failure');
   return { kind: 'error', errors };
+}
+
+function collectNagaLoweringCoverageWarnings(program: CompiledProgramIR): CompileError[] {
+  const coverage = program.nagaLoweringProgram?.coverage;
+  if (!coverage) return [];
+
+  const semanticFallbackCount = coverage.semanticFallbacks.length;
+  if (coverage.nonComputeStepCount === 0 && semanticFallbackCount === 0) {
+    return [];
+  }
+
+  const sampleFallbacks = coverage.semanticFallbacks
+    .slice(0, 5)
+    .map((entry) => ({
+      stepIndex: entry.stepIndex,
+      stepKind: entry.stepKind,
+      exprKind: entry.exprKind,
+      reason: entry.reason,
+    }));
+
+  return [
+    {
+      code: 'W_NAGA_LOWERING_PARTIAL',
+      message:
+        'Naga lowering coverage is partial: compute module excludes non-compute steps and includes typed-copy semantic fallbacks.',
+      details: {
+        totalStepCount: coverage.totalStepCount,
+        nonComputeStepCount: coverage.nonComputeStepCount,
+        semanticFallbackCount,
+        sampleFallbacks,
+      },
+    },
+  ];
 }
 
 /**

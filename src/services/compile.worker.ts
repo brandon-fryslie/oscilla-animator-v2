@@ -54,6 +54,7 @@ async function toBackendResult(
     return {
       kind: 'ok',
       program,
+      compiledComputeShader: { wgsl: nagaOutcome.wgsl },
       warnings: result.warnings,
     };
   }

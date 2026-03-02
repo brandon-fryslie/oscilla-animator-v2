@@ -6,6 +6,7 @@ export const init_engine: (a: any, b: number, c: number, d: number) => any;
 export const inject_poison_alloc: () => [number, number];
 export const pause_engine: () => [number, number];
 export const rebuild_pipeline: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number];
+export const rebuild_simulation_pipeline: (a: number, b: number) => [number, number];
 export const resize_surface: (a: number, b: number) => [number, number];
 export const resume_engine: () => [number, number];
 export const take_frame_pacing_packet: () => [number, number, number];

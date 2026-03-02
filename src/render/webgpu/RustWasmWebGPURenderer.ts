@@ -80,7 +80,15 @@ export function assertWebGPUStartupContract(canvas: HTMLCanvasElement): void {
     throw new Error('Rust renderer requires Dedicated Worker support');
   }
   if (typeof SharedArrayBuffer === 'undefined') {
-    throw new Error('Rust renderer requires SharedArrayBuffer support');
+    const isolated = typeof crossOriginIsolated === 'boolean' ? crossOriginIsolated : null;
+    const secure = typeof isSecureContext === 'boolean' ? isSecureContext : null;
+    const origin =
+      typeof location !== 'undefined' ? `${location.protocol}//${location.host}` : 'unknown';
+    throw new Error(
+      `Rust renderer requires SharedArrayBuffer support ` +
+        `(crossOriginIsolated=${String(isolated)}, isSecureContext=${String(secure)}, origin=${origin}). ` +
+        `Serve with COOP/COEP headers and open via localhost or HTTPS.`,
+    );
   }
 }
 
@@ -185,12 +193,8 @@ export class WebGPURenderer {
     this.worker.terminate();
   }
 
-  async rebuildPipeline(
+  async rebuildSimulationPipeline(
     simulationWgsl: string,
-    assemblyWgsl: string,
-    uberShaderWgsl: string,
-    particleCount: number,
-    shapeCount: number,
   ): Promise<void> {
     if (this.fatalError) {
       throw this.fatalError;
@@ -211,7 +215,7 @@ export class WebGPURenderer {
         const onMessage = (event: MessageEvent<RustRendererWorkerOutboundMessage>): void => {
           const payload = event.data;
           if (!payload) return;
-          if (payload.type === 'REBUILD_PIPELINE_SUCCESS') {
+          if (payload.type === 'REBUILD_SIMULATION_PIPELINE_SUCCESS') {
             settle(resolve);
             return;
           }
@@ -221,12 +225,8 @@ export class WebGPURenderer {
         };
         this.worker.addEventListener('message', onMessage);
         const message: RustRendererWorkerInboundMessage = {
-          type: 'REBUILD_PIPELINE',
+          type: 'REBUILD_SIMULATION_PIPELINE',
           simulationWgsl,
-          assemblyWgsl,
-          uberShaderWgsl,
-          particleCount,
-          shapeCount,
         };
         this.worker.postMessage(message);
       });
