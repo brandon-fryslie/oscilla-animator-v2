@@ -148,6 +148,94 @@ describe('RuntimeService spy readback packet selection', () => {
     }
   });
 
+  it('preserves non-finite scalar samples in readback packets', () => {
+    const runtime = new RuntimeService({} as any);
+    const trackedSlot = valueSlot(5);
+
+    debugService.setEdgeToSlotMap(new Map([
+      ['edge-nan', edgeMeta(5)],
+    ]));
+    debugService.setPortToSlotMap(new Map());
+    debugService.trackHistoryKey({ kind: 'edge', edgeId: 'edge-nan' });
+
+    (runtime as any).compileState.currentProgram = {
+      runtimeAddressTable: {
+        slotLookup: new Map([
+          [trackedSlot, {
+            storage: 'f32',
+            offset: 5,
+            stride: 1,
+            slot: trackedSlot,
+            type: canonicalScalar(FLOAT),
+            arena: { offset: 5, stride: 1, laneCount: 1, length: 1 },
+          }],
+        ]),
+      },
+    };
+    (runtime as any).compileState.currentState = {
+      arena: new Float32Array([0, 0, 0, 0, 0, Number.NaN]),
+      cache: { frameId: 9 },
+    };
+    (runtime as any).syncSpyReadbackSubscriptions();
+
+    const packet = (runtime as any).buildSpyReadbackPacket(1000);
+    expect(packet).toBeTruthy();
+    expect(packet?.entries).toEqual([
+      { slotId: trackedSlot, value: Number.NaN },
+    ]);
+  });
+
+  it('logs and pauses playback when spy readback detects NaN', () => {
+    const diagnosticsLog = vi.fn();
+    const pause = vi.fn();
+    const playback = {
+      isPlaying: true,
+      pause: () => {
+        pause();
+        playback.isPlaying = false;
+      },
+    };
+    const runtime = new RuntimeService({
+      diagnostics: { log: diagnosticsLog },
+      playback,
+    } as any);
+    const applySpyReadback = vi.spyOn(debugService, 'applySpyReadback');
+
+    try {
+      (runtime as any).debugProbeTransport = {
+        debugCommand: () => {},
+        debugPollPacket: () => ({
+          version: 1,
+          sequence: 1,
+          capturedAtMs: 200,
+          runtimeFrameId: 33,
+          sampleCount: 1,
+          packetFlags: 1 << 3,
+          samples: [{
+            targetId: 77,
+            slotId: valueSlot(8),
+            payloadKind: 'scalar',
+            stride: 1,
+            laneCount: 1,
+            sampleFlags: 1 << 3,
+            values: [Number.NaN],
+          }],
+        }),
+      };
+
+      (runtime as any).runSpyReadbackCycle();
+      (runtime as any).runSpyReadbackCycle();
+
+      expect(diagnosticsLog).toHaveBeenCalledTimes(1);
+      expect(diagnosticsLog.mock.calls[0]?.[0]).toMatchObject({ level: 'error' });
+      expect(String(diagnosticsLog.mock.calls[0]?.[0]?.message)).toContain('Spy readback detected NaN');
+      expect(pause).toHaveBeenCalledTimes(1);
+      expect(applySpyReadback).toHaveBeenCalledWith(valueSlot(8), Number.NaN, 200, 33);
+    } finally {
+      applySpyReadback.mockRestore();
+    }
+  });
+
   it('applies lane-window packet samples back into DebugService field buffers', () => {
     const runtime = new RuntimeService({} as any);
     const fieldSlot = valueSlot(12);
