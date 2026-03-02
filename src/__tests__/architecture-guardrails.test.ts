@@ -230,6 +230,18 @@ describe('Architecture Guardrails', () => {
         scope: ['src/compiler/compile.ts'],
         maxCount: 0,
       },
+      {
+        id: 'K-P0-6',
+        pattern: '\\bemitWgslModule\\s*\\(',
+        scope: ['src'],
+        maxCount: 0,
+      },
+      {
+        id: 'K-P0-7',
+        pattern: '\\bcreateDrawPrepWgslAst\\s*\\(',
+        scope: ['src'],
+        maxCount: 0,
+      },
     ];
 
     for (const gate of gates) {
