@@ -12,11 +12,16 @@ fi
 docker run --rm \
   -e CI=1 \
   -e WGPU_BACKEND=vulkan \
+  -e XDG_RUNTIME_DIR=/tmp/xdg-runtime \
   -v "$ROOT_DIR:/workspace" \
   -w /workspace \
   "$CONTAINER_IMAGE" \
   bash -lc '
     set -euo pipefail
+    export CARGO_HOME=/usr/local/cargo
+    export RUSTUP_HOME=/usr/local/rustup
+    export PATH="$CARGO_HOME/bin:$PATH"
+    mkdir -p "$XDG_RUNTIME_DIR"
     apt-get update >/dev/null
     apt-get install -y --no-install-recommends libvulkan1 mesa-vulkan-drivers vulkan-tools >/dev/null
     cargo test --locked --manifest-path native-tests/webgpu-headless/Cargo.toml --features headless -- --nocapture
