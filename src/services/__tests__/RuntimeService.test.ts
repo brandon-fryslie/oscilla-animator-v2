@@ -238,8 +238,15 @@ describe('RuntimeService startup compile path', () => {
     runtime.setCanvas(document.createElement('canvas'));
 
     const initPromise = runtime.init();
+    const capturedError = initPromise.then(
+      () => null,
+      (error) => error,
+    );
     await vi.advanceTimersByTimeAsync(60);
-    await initPromise;
+    await expect(capturedError).resolves.toBeInstanceOf(Error);
+    await expect(capturedError).resolves.toMatchObject({
+      message: expect.stringContaining('initial async compile failed'),
+    });
 
     expect(mocks.markRuntimeBootstrapStarted).toHaveBeenCalledTimes(1);
     expect(mocks.markRuntimeBootstrapSucceeded).not.toHaveBeenCalled();
