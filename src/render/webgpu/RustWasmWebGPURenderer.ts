@@ -110,6 +110,14 @@ export class WebGPURenderer {
   private latestTelemetry: { meanMs: number; stdDevMs: number; sampleCount: number; frameCount: number } | null = null;
   private lifecycleState: RustRendererSchedulerState = 'Booting';
 
+  private markFatal(code: string, message: string): Error {
+    // [LAW:one-source-of-truth] Renderer terminal state is derived from one
+    // canonical worker terminal signal: `FATAL_ERROR`.
+    this.lifecycleState = 'Lost';
+    this.fatalError = new Error(`[${code}] ${message}`);
+    return this.fatalError;
+  }
+
   private constructor(
     worker: Worker,
     signalWords: Int32Array,
@@ -225,17 +233,9 @@ export class WebGPURenderer {
           }
           if (payload.type === 'FATAL_ERROR') {
             settle(() => {
-              this.fatalError = new Error(`[${payload.code}] ${payload.message}`);
-              reject(this.fatalError);
+              reject(this.markFatal(payload.code, payload.message));
             });
             return;
-          }
-          if (payload.type === 'DEVICE_LOST') {
-            settle(() => {
-              this.lifecycleState = 'Lost';
-              this.fatalError = new Error(`[${payload.code}] ${payload.message}`);
-              reject(this.fatalError);
-            });
           }
         };
         this.worker.addEventListener('message', onMessage);
@@ -294,8 +294,7 @@ export class WebGPURenderer {
         }
         if (payload.type === 'FATAL_ERROR') {
           settle(() => {
-            this.fatalError = new Error(`[${payload.code}] ${payload.message}`);
-            reject(this.fatalError);
+            reject(this.markFatal(payload.code, payload.message));
           });
         }
       };
@@ -333,12 +332,7 @@ export class WebGPURenderer {
     const payload = event.data;
     if (!payload) return;
     if (payload.type === 'FATAL_ERROR') {
-      this.fatalError = new Error(`[${payload.code}] ${payload.message}`);
-      return;
-    }
-    if (payload.type === 'DEVICE_LOST') {
-      this.lifecycleState = 'Lost';
-      this.fatalError = new Error(`[${payload.code}] ${payload.message}`);
+      this.markFatal(payload.code, payload.message);
       return;
     }
     if (payload.type === 'RUNTIME_EVENT') {

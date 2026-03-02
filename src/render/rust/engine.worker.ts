@@ -63,7 +63,7 @@ let bootstrapInFlight = false;
 let runtimePollTimer: ReturnType<typeof setInterval> | null = null;
 let legacyHeartbeatSequence = 0;
 let legacyState: RustRendererSchedulerState = 'Booting';
-let deviceLostNotified = false;
+let terminalLostFatalNotified = false;
 
 function postWorkerMessage(message: RustRendererWorkerOutboundMessage): void {
   self.postMessage(message);
@@ -73,17 +73,14 @@ function postWorkerFatalError(code: string, message: string): void {
   postWorkerMessage({ type: 'FATAL_ERROR', code, message });
 }
 
-function postDeviceLost(code: string, message: string): void {
-  if (deviceLostNotified) {
+function postTerminalLostFatal(code: string, message: string): void {
+  // [LAW:one-source-of-truth] Renderer terminal failures cross the worker
+  // boundary through one canonical channel (`FATAL_ERROR`).
+  if (terminalLostFatalNotified) {
     return;
   }
-  deviceLostNotified = true;
-  postWorkerMessage({
-    type: 'DEVICE_LOST',
-    code,
-    message,
-    reason: message,
-  });
+  terminalLostFatalNotified = true;
+  postWorkerFatalError(code, message);
 }
 
 function isSchedulerState(value: unknown): value is RustRendererSchedulerState {
@@ -215,7 +212,7 @@ function emitLegacyRuntimeEvents(frameCount: number): void {
       loopCount: frameCount,
       emittedAtMs: Date.now(),
     });
-    postDeviceLost('surface_lost', 'Surface acquire failed with Lost/Outdated');
+    postTerminalLostFatal('surface_lost', 'Surface acquire failed with Lost/Outdated');
     return;
   }
   postWorkerMessage({
@@ -228,7 +225,7 @@ function emitLegacyRuntimeEvents(frameCount: number): void {
     loopCount: frameCount,
     emittedAtMs: Date.now(),
   });
-  postDeviceLost('surface_fatal', 'Rust worker fatal surface error');
+  postTerminalLostFatal('surface_fatal', 'Rust worker fatal surface error');
 }
 
 function toOutboundRuntimeEvent(raw: RawRuntimeEvent): RustRendererRuntimeEvent {
@@ -264,7 +261,7 @@ async function handleBootstrap(message: Extract<RustRendererWorkerInboundMessage
   bootstrapped = true;
   legacyHeartbeatSequence = 0;
   legacyState = 'Booting';
-  deviceLostNotified = false;
+  terminalLostFatalNotified = false;
   startRuntimePolling();
   postWorkerMessage({ type: 'BOOTSTRAP_SUCCESS' });
   } finally {
@@ -318,13 +315,13 @@ function startRuntimePolling(): void {
       if (packet) {
         postWorkerMessage(toOutboundHeartbeat(packet.heartbeat));
         if (packet.heartbeat.state === 'Lost') {
-          postDeviceLost('scheduler_lost', 'Rust scheduler entered Lost state');
+          postTerminalLostFatal('scheduler_lost', 'Rust scheduler entered Lost state');
         }
         for (const rawEvent of packet.events) {
           const event = toOutboundRuntimeEvent(rawEvent);
           postWorkerMessage(event);
           if (event.state === 'Lost' && rawEvent.state === 'Lost') {
-            postDeviceLost(event.code, event.message);
+            postTerminalLostFatal(event.code, event.message);
           }
         }
         return;
