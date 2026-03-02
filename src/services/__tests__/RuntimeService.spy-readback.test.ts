@@ -57,6 +57,7 @@ describe('RuntimeService spy readback packet selection', () => {
       arena: new Float32Array([0, 0, 0, 31, 77]),
       cache: { frameId: 22 },
     };
+    (runtime as any).syncSpyReadbackSubscriptions();
 
     const packet = (runtime as any).buildSpyReadbackPacket(500);
     expect(packet).toBeTruthy();
@@ -182,6 +183,7 @@ describe('RuntimeService spy readback packet selection', () => {
       arena: new Float32Array([1, 2, 3, 4]),
       cache: { frameId: 7 },
     };
+    (runtime as any).syncSpyReadbackSubscriptions();
 
     const packet = (runtime as any).buildSpyReadbackPacket(250);
     expect(packet).toBeTruthy();

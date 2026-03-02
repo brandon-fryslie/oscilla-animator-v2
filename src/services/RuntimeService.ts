@@ -585,9 +585,14 @@ export class RuntimeService {
         });
         this.syncSpyReadbackSubscriptions();
       })
-      .catch(() => {
-        // [LAW:no-silent-fallbacks] Local transport remains canonical fallback;
-        // runtime diagnostics already surface actual probe-cycle failures.
+      .catch((error) => {
+        const message = error instanceof Error ? error.message : String(error);
+        // [LAW:no-silent-fallbacks] Transport upgrade failures must be
+        // observable even when local fallback remains active.
+        this.store.diagnostics.log({
+          level: 'warn',
+          message: `WASM debug probe transport upgrade failed; continuing with LocalDebugProbeTransport: ${message}`,
+        });
       })
       .finally(() => {
         this.debugProbeUpgradeInFlight = null;
@@ -677,7 +682,6 @@ export class RuntimeService {
   }
 
   private buildSpyReadbackPacket(capturedAtMs: number): RuntimeSpyReadbackPacket | null {
-    this.syncSpyReadbackSubscriptions();
     const probePacket = this.debugProbeTransport.debugPollPacket(capturedAtMs);
     if (!probePacket) {
       return null;

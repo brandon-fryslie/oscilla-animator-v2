@@ -68,7 +68,7 @@ struct DebugProbePacketSample {
     slot_id: u32,
     payload_kind: DebugProbeSampleKind,
     stride: u8,
-    lane_count: u16,
+    lane_count: u32,
     sample_flags: u16,
     values: Vec<f64>,
 }
@@ -90,7 +90,10 @@ struct DebugProbePacket {
 enum DebugProbeCommand {
     SetSubscriptions { subscriptions: Vec<DebugProbeSubscription> },
     ClearSubscriptions,
-    SetRateHz { rate_hz: u32 },
+    SetRateHz {
+        #[serde(rename = "rateHz")]
+        rate_hz: u32,
+    },
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -220,7 +223,7 @@ fn arena_index(desc: &RuntimeArenaDescriptor, lane: usize, component: usize) -> 
     Some(address.base_offset + component * address.component_stride + lane * address.lane_stride)
 }
 
-fn read_scalar_values(slot: &DebugProbeRuntimeSlotSnapshot) -> Option<(u8, u16, Vec<f64>)> {
+fn read_scalar_values(slot: &DebugProbeRuntimeSlotSnapshot) -> Option<(u8, u32, Vec<f64>)> {
     let desc = &slot.descriptor;
     if desc.lane_count != 1 || desc.stride < 1 {
         return None;
@@ -233,7 +236,7 @@ fn read_scalar_values(slot: &DebugProbeRuntimeSlotSnapshot) -> Option<(u8, u16, 
 fn read_lane_window_values(
     slot: &DebugProbeRuntimeSlotSnapshot,
     lane_window: Option<&DebugProbeLaneWindow>,
-) -> Option<(u8, u16, Vec<f64>)> {
+) -> Option<(u8, u32, Vec<f64>)> {
     let desc = &slot.descriptor;
     if desc.stride < 1 {
         return None;
@@ -258,7 +261,7 @@ fn read_lane_window_values(
         }
     }
 
-    Some((desc.stride as u8, lane_count as u16, values))
+    Some((desc.stride as u8, lane_count as u32, values))
 }
 
 fn build_packet_sample(
