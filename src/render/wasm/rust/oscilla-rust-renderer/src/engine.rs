@@ -377,7 +377,7 @@ impl Engine {
             worker_monotonic_now_ms()
         };
         self.scheduler.begin_loop_iteration(tick_start_ms);
-        self.input_marshal_phase(timestamp_ms);
+        self.input_marshal_phase(tick_start_ms);
         if self.scheduler.state() == SchedulerState::Paused {
             let now_ms = worker_monotonic_now_ms();
             let tick_elapsed_ms = (now_ms - tick_start_ms).max(0.0);
