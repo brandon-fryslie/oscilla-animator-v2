@@ -3,10 +3,11 @@ mod compute;
 mod engine;
 mod memory;
 mod render;
+mod scheduler;
 
 use std::cell::RefCell;
 
-use js_sys::Object;
+use js_sys::{Array, Object};
 use wasm_bindgen::closure::Closure;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
@@ -49,9 +50,9 @@ pub async fn init_engine(
 pub fn attach_shared_input(shared_input: js_sys::SharedArrayBuffer) -> Result<(), JsValue> {
     ENGINE.with(|engine_cell| {
         let mut engine_ref = engine_cell.borrow_mut();
-        let engine = engine_ref
-            .as_mut()
-            .ok_or_else(|| JsValue::from_str("Rust engine must be initialized before attaching shared input"))?;
+        let engine = engine_ref.as_mut().ok_or_else(|| {
+            JsValue::from_str("Rust engine must be initialized before attaching shared input")
+        })?;
         engine.attach_shared_input(shared_input);
         Ok(())
     })
@@ -61,9 +62,9 @@ pub fn attach_shared_input(shared_input: js_sys::SharedArrayBuffer) -> Result<()
 pub fn pause_engine() -> Result<(), JsValue> {
     ENGINE.with(|engine_cell| {
         let mut engine_ref = engine_cell.borrow_mut();
-        let engine = engine_ref
-            .as_mut()
-            .ok_or_else(|| JsValue::from_str("Rust engine must be initialized before pause_engine"))?;
+        let engine = engine_ref.as_mut().ok_or_else(|| {
+            JsValue::from_str("Rust engine must be initialized before pause_engine")
+        })?;
         engine.pause();
         Ok(())
     })
@@ -73,9 +74,9 @@ pub fn pause_engine() -> Result<(), JsValue> {
 pub fn resume_engine() -> Result<(), JsValue> {
     ENGINE.with(|engine_cell| {
         let mut engine_ref = engine_cell.borrow_mut();
-        let engine = engine_ref
-            .as_mut()
-            .ok_or_else(|| JsValue::from_str("Rust engine must be initialized before resume_engine"))?;
+        let engine = engine_ref.as_mut().ok_or_else(|| {
+            JsValue::from_str("Rust engine must be initialized before resume_engine")
+        })?;
         engine.resume();
         Ok(())
     })
@@ -91,9 +92,9 @@ pub fn rebuild_pipeline(
 ) -> Result<(), JsValue> {
     ENGINE.with(|engine_cell| {
         let mut engine_ref = engine_cell.borrow_mut();
-        let engine = engine_ref
-            .as_mut()
-            .ok_or_else(|| JsValue::from_str("Rust engine must be initialized before rebuild_pipeline"))?;
+        let engine = engine_ref.as_mut().ok_or_else(|| {
+            JsValue::from_str("Rust engine must be initialized before rebuild_pipeline")
+        })?;
         engine.rebuild_pipeline(
             simulation_wgsl.as_str(),
             assembly_wgsl.as_str(),
@@ -109,9 +110,9 @@ pub fn rebuild_pipeline(
 pub fn resize_surface(width: u32, height: u32) -> Result<(), JsValue> {
     ENGINE.with(|engine_cell| {
         let mut engine_ref = engine_cell.borrow_mut();
-        let engine = engine_ref
-            .as_mut()
-            .ok_or_else(|| JsValue::from_str("Rust engine must be initialized before resize_surface"))?;
+        let engine = engine_ref.as_mut().ok_or_else(|| {
+            JsValue::from_str("Rust engine must be initialized before resize_surface")
+        })?;
         engine.resize_surface(width, height);
         Ok(())
     })
@@ -121,9 +122,9 @@ pub fn resize_surface(width: u32, height: u32) -> Result<(), JsValue> {
 pub fn inject_poison_alloc() -> Result<(), JsValue> {
     ENGINE.with(|engine_cell| {
         let mut engine_ref = engine_cell.borrow_mut();
-        let engine = engine_ref
-            .as_mut()
-            .ok_or_else(|| JsValue::from_str("Rust engine must be initialized before inject_poison_alloc"))?;
+        let engine = engine_ref.as_mut().ok_or_else(|| {
+            JsValue::from_str("Rust engine must be initialized before inject_poison_alloc")
+        })?;
         engine.inject_poison_alloc();
         Ok(())
     })
@@ -133,9 +134,9 @@ pub fn inject_poison_alloc() -> Result<(), JsValue> {
 pub fn take_runtime_event_code() -> Result<u32, JsValue> {
     ENGINE.with(|engine_cell| {
         let mut engine_ref = engine_cell.borrow_mut();
-        let engine = engine_ref
-            .as_mut()
-            .ok_or_else(|| JsValue::from_str("Rust engine must be initialized before take_runtime_event_code"))?;
+        let engine = engine_ref.as_mut().ok_or_else(|| {
+            JsValue::from_str("Rust engine must be initialized before take_runtime_event_code")
+        })?;
         Ok(engine.take_runtime_event_code())
     })
 }
@@ -144,22 +145,115 @@ pub fn take_runtime_event_code() -> Result<u32, JsValue> {
 pub fn take_frame_pacing_packet() -> Result<JsValue, JsValue> {
     ENGINE.with(|engine_cell| {
         let mut engine_ref = engine_cell.borrow_mut();
-        let engine = engine_ref
-            .as_mut()
-            .ok_or_else(|| JsValue::from_str("Rust engine must be initialized before take_frame_pacing_packet"))?;
+        let engine = engine_ref.as_mut().ok_or_else(|| {
+            JsValue::from_str("Rust engine must be initialized before take_frame_pacing_packet")
+        })?;
         if let Some(packet) = engine.take_frame_pacing_packet() {
             let payload = Object::new();
-            js_sys::Reflect::set(&payload, &JsValue::from_str("meanMs"), &JsValue::from_f64(packet.mean_ms))?;
-            js_sys::Reflect::set(&payload, &JsValue::from_str("stdDevMs"), &JsValue::from_f64(packet.std_dev_ms))?;
             js_sys::Reflect::set(
                 &payload,
-                &JsValue::from_str("sampleCount"),
-                &JsValue::from_f64(packet.sample_count as f64),
+                &JsValue::from_str("state"),
+                &JsValue::from_str(packet.state.as_str()),
             )?;
+            let heartbeat = Object::new();
+            js_sys::Reflect::set(
+                &heartbeat,
+                &JsValue::from_str("sequence"),
+                &JsValue::from_f64(packet.heartbeat.sequence as f64),
+            )?;
+            js_sys::Reflect::set(
+                &heartbeat,
+                &JsValue::from_str("state"),
+                &JsValue::from_str(packet.heartbeat.state.as_str()),
+            )?;
+            js_sys::Reflect::set(
+                &heartbeat,
+                &JsValue::from_str("emittedAtMs"),
+                &JsValue::from_f64(packet.heartbeat.emitted_at_ms),
+            )?;
+            js_sys::Reflect::set(
+                &heartbeat,
+                &JsValue::from_str("frameCount"),
+                &JsValue::from_f64(packet.heartbeat.frame_count as f64),
+            )?;
+            js_sys::Reflect::set(
+                &heartbeat,
+                &JsValue::from_str("loopCount"),
+                &JsValue::from_f64(packet.heartbeat.loop_count as f64),
+            )?;
+            js_sys::Reflect::set(
+                &heartbeat,
+                &JsValue::from_str("meanTickMs"),
+                &JsValue::from_f64(packet.heartbeat.mean_tick_ms),
+            )?;
+            js_sys::Reflect::set(
+                &heartbeat,
+                &JsValue::from_str("stdDevTickMs"),
+                &JsValue::from_f64(packet.heartbeat.std_dev_tick_ms),
+            )?;
+            js_sys::Reflect::set(
+                &heartbeat,
+                &JsValue::from_str("sampleCount"),
+                &JsValue::from_f64(packet.heartbeat.sample_count as f64),
+            )?;
+            js_sys::Reflect::set(
+                &heartbeat,
+                &JsValue::from_str("lastTickMs"),
+                &JsValue::from_f64(packet.heartbeat.last_tick_ms),
+            )?;
+            js_sys::Reflect::set(
+                &heartbeat,
+                &JsValue::from_str("lastSuccessMs"),
+                &JsValue::from_f64(packet.heartbeat.last_success_ms),
+            )?;
+            js_sys::Reflect::set(&payload, &JsValue::from_str("heartbeat"), &heartbeat.into())?;
+
+            let events = Array::new();
+            for event in packet.events {
+                let event_payload = Object::new();
+                js_sys::Reflect::set(
+                    &event_payload,
+                    &JsValue::from_str("severity"),
+                    &JsValue::from_str(event.severity.as_str()),
+                )?;
+                js_sys::Reflect::set(
+                    &event_payload,
+                    &JsValue::from_str("code"),
+                    &JsValue::from_str(event.code),
+                )?;
+                js_sys::Reflect::set(
+                    &event_payload,
+                    &JsValue::from_str("message"),
+                    &JsValue::from_str(event.message.as_str()),
+                )?;
+                js_sys::Reflect::set(
+                    &event_payload,
+                    &JsValue::from_str("state"),
+                    &JsValue::from_str(event.state.as_str()),
+                )?;
+                js_sys::Reflect::set(
+                    &event_payload,
+                    &JsValue::from_str("frameCount"),
+                    &JsValue::from_f64(event.frame_count as f64),
+                )?;
+                js_sys::Reflect::set(
+                    &event_payload,
+                    &JsValue::from_str("loopCount"),
+                    &JsValue::from_f64(event.loop_count as f64),
+                )?;
+                js_sys::Reflect::set(
+                    &event_payload,
+                    &JsValue::from_str("emittedAtMs"),
+                    &JsValue::from_f64(event.emitted_at_ms),
+                )?;
+                events.push(&event_payload.into());
+            }
+            js_sys::Reflect::set(&payload, &JsValue::from_str("events"), &events.into())?;
+
             js_sys::Reflect::set(
                 &payload,
                 &JsValue::from_str("frameCount"),
-                &JsValue::from_f64(packet.frame_count as f64),
+                &JsValue::from_f64(packet.heartbeat.frame_count as f64),
             )?;
             return Ok(payload.into());
         }
@@ -204,7 +298,9 @@ fn start_worker_loop() -> Result<(), JsValue> {
             )?;
             Ok(())
         } else {
-            Err(JsValue::from_str("Rust engine failed to install worker loop callback"))
+            Err(JsValue::from_str(
+                "Rust engine failed to install worker loop callback",
+            ))
         }
     })
 }

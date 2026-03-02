@@ -1,3 +1,5 @@
+// [LAW:one-source-of-truth] Rust worker message ABI is declared in one module
+// so worker, renderer facade, and tests consume one canonical contract.
 export interface RustRendererBootstrapConfig {
   readonly maxParticles: number;
   readonly maxShapes: number;
@@ -57,6 +59,7 @@ export interface RustRendererBootstrapSuccess {
 
 export interface RustRendererFatalError {
   readonly type: 'FATAL_ERROR';
+  readonly code: string;
   readonly message: string;
 }
 
@@ -64,22 +67,36 @@ export interface RustRendererRebuildPipelineSuccess {
   readonly type: 'REBUILD_PIPELINE_SUCCESS';
 }
 
-export interface RustRendererDeviceLost {
-  readonly type: 'DEVICE_LOST';
-  readonly reason: string;
+export type RustRendererSchedulerState = 'Booting' | 'Running' | 'Paused' | 'Lost';
+
+export interface RustRendererSchedulerHeartbeat {
+  readonly type: 'SCHEDULER_HEARTBEAT';
+  readonly state: RustRendererSchedulerState;
+  readonly sequence: number;
+  readonly emittedAtMs: number;
+  readonly frameCount: number;
+  readonly loopCount: number;
+  readonly meanTickMs: number;
+  readonly stdDevTickMs: number;
+  readonly sampleCount: number;
+  readonly lastTickMs: number;
+  readonly lastSuccessMs: number;
 }
 
-export interface RustRendererTelemetryPacket {
-  readonly type: 'RUNTIME_TELEMETRY';
-  readonly meanMs: number;
-  readonly stdDevMs: number;
-  readonly sampleCount: number;
+export interface RustRendererRuntimeEvent {
+  readonly type: 'RUNTIME_EVENT';
+  readonly severity: 'error' | 'fatal';
+  readonly code: string;
+  readonly message: string;
+  readonly state: RustRendererSchedulerState;
   readonly frameCount: number;
+  readonly loopCount: number;
+  readonly emittedAtMs: number;
 }
 
 export type RustRendererWorkerOutboundMessage =
   | RustRendererBootstrapSuccess
   | RustRendererFatalError
   | RustRendererRebuildPipelineSuccess
-  | RustRendererDeviceLost
-  | RustRendererTelemetryPacket;
+  | RustRendererSchedulerHeartbeat
+  | RustRendererRuntimeEvent;

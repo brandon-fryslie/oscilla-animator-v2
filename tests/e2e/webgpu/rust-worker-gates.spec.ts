@@ -44,7 +44,7 @@ test.describe('Rust Worker Gates', () => {
           if (event.data?.type === 'FATAL_ERROR') {
             resolve({
               fatal: true,
-              message: String(event.data.message ?? 'fatal error'),
+              message: String(event.data.message ?? event.data.code ?? 'fatal error'),
             });
           }
         };
@@ -152,7 +152,7 @@ test.describe('Rust Worker Gates', () => {
           if (event.data?.type === 'FATAL_ERROR') {
             resolve({
               type: 'fatal',
-              reason: String(event.data?.message ?? 'worker fatal message'),
+              reason: String(event.data?.message ?? event.data?.code ?? 'worker fatal message'),
             });
           }
         });
@@ -199,12 +199,14 @@ test.describe('Rust Worker Gates', () => {
       const packet = await Promise.race([
         new Promise<{ meanMs: number; stdDevMs: number; sampleCount: number }>((resolve) => {
           const onTelemetry = (event: MessageEvent<any>) => {
-            if (event.data?.type !== 'RUNTIME_TELEMETRY') return;
+            if (event.data?.type !== 'SCHEDULER_HEARTBEAT') return;
+            const sampleCount = Number(event.data.sampleCount ?? 0);
+            if (sampleCount < 60) return;
             worker.removeEventListener('message', onTelemetry);
             resolve({
-              meanMs: Number(event.data.meanMs ?? 0),
-              stdDevMs: Number(event.data.stdDevMs ?? 0),
-              sampleCount: Number(event.data.sampleCount ?? 0),
+              meanMs: Number(event.data.meanTickMs ?? 0),
+              stdDevMs: Number(event.data.stdDevTickMs ?? 0),
+              sampleCount,
             });
           };
           worker.addEventListener('message', onTelemetry);

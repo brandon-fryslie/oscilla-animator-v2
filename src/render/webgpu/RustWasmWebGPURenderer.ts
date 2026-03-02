@@ -3,6 +3,7 @@ import type { RenderShapeBankSource } from './WebGPUShapeBankManager';
 import type { IndirectArgsReadbackSnapshot } from './WebGPUIndirectArgsInspector';
 import type {
   RustRendererBootstrapConfig,
+  RustRendererSchedulerState,
   RustRendererWorkerInboundMessage,
   RustRendererWorkerOutboundMessage,
 } from '../rust/worker-protocol';
@@ -99,6 +100,7 @@ export class WebGPURenderer {
   private lastResizeWidth = -1;
   private lastResizeHeight = -1;
   private latestTelemetry: { meanMs: number; stdDevMs: number; sampleCount: number; frameCount: number } | null = null;
+  private lifecycleState: RustRendererSchedulerState = 'Booting';
 
   private constructor(
     worker: Worker,
@@ -214,7 +216,7 @@ export class WebGPURenderer {
             return;
           }
           if (payload.type === 'FATAL_ERROR') {
-            settle(() => reject(new Error(payload.message)));
+            settle(() => reject(new Error(`[${payload.code}] ${payload.message}`)));
           }
         };
         this.worker.addEventListener('message', onMessage);
@@ -235,6 +237,10 @@ export class WebGPURenderer {
 
   getLatestRuntimeTelemetry(): { meanMs: number; stdDevMs: number; sampleCount: number; frameCount: number } | null {
     return this.latestTelemetry;
+  }
+
+  getLifecycleState(): RustRendererSchedulerState {
+    return this.lifecycleState;
   }
 
   private async bootstrap(
@@ -271,7 +277,7 @@ export class WebGPURenderer {
         }
         if (payload.type === 'FATAL_ERROR') {
           settle(() => {
-            this.fatalError = new Error(payload.message);
+            this.fatalError = new Error(`[${payload.code}] ${payload.message}`);
             reject(this.fatalError);
           });
         }
@@ -309,14 +315,23 @@ export class WebGPURenderer {
   private readonly handleRuntimeMessage = (event: MessageEvent<RustRendererWorkerOutboundMessage>): void => {
     const payload = event.data;
     if (!payload) return;
-    if (payload.type === 'DEVICE_LOST') {
-      this.fatalError = new Error(`Rust renderer device lost: ${payload.reason}`);
+    if (payload.type === 'FATAL_ERROR') {
+      this.fatalError = new Error(`[${payload.code}] ${payload.message}`);
       return;
     }
-    if (payload.type === 'RUNTIME_TELEMETRY') {
+    if (payload.type === 'RUNTIME_EVENT') {
+      if (payload.severity === 'fatal') {
+        this.fatalError = new Error(`[${payload.code}] ${payload.message}`);
+      }
+      return;
+    }
+    if (payload.type === 'SCHEDULER_HEARTBEAT') {
+      // [LAW:one-source-of-truth] Renderer mirrors scheduler state from
+      // heartbeat packets instead of deriving lifecycle state client-side.
+      this.lifecycleState = payload.state;
       this.latestTelemetry = {
-        meanMs: payload.meanMs,
-        stdDevMs: payload.stdDevMs,
+        meanMs: payload.meanTickMs,
+        stdDevMs: payload.stdDevTickMs,
         sampleCount: payload.sampleCount,
         frameCount: payload.frameCount,
       };
