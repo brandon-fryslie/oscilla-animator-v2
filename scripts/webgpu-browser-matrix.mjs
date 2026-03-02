@@ -3,6 +3,7 @@ import { spawn } from 'node:child_process';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
+import { pathToFileURL } from 'node:url';
 import { chromium } from '@playwright/test';
 import { truncateForLog } from './matrix-utils.mjs';
 
@@ -642,7 +643,7 @@ async function main() {
   }
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   main().catch((error) => {
     const message = error instanceof Error ? error.stack ?? error.message : String(error);
     process.stderr.write(`[matrix] Failed: ${message}\n`);

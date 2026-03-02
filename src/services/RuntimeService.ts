@@ -315,6 +315,7 @@ export class RuntimeService {
    */
   async init(): Promise<void> {
     const { store } = this;
+    let bootstrapFailureRecorded = false;
     markRuntimeBootstrapStarted();
     try {
       if (!this.canvas) {
@@ -481,6 +482,7 @@ export class RuntimeService {
         markRuntimeBootstrapSucceeded();
       } else {
         markRuntimeBootstrapFailed(INITIAL_COMPILE_FAILURE_PROBE_MESSAGE);
+        bootstrapFailureRecorded = true;
       }
 
       // Persist current patch immediately after initial compile
@@ -488,7 +490,9 @@ export class RuntimeService {
       savePatchToStorage(store.patch.patch, 0);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      markRuntimeBootstrapFailed(message);
+      if (!bootstrapFailureRecorded) {
+        markRuntimeBootstrapFailed(message);
+      }
       throw error;
     }
   }

@@ -255,6 +255,27 @@ describe('RuntimeService startup compile path', () => {
     );
   });
 
+  it('preserves the compile failure probe message when persistence fails afterwards', async () => {
+    mocks.compileWorkerCompile.mockRejectedValue(new Error('worker unavailable'));
+    mocks.savePatchToStorage.mockImplementation(() => {
+      throw new Error('storage offline');
+    });
+
+    const { store } = makeStore();
+    const runtime = new RuntimeService(store);
+    runtime.setCanvas(document.createElement('canvas'));
+
+    const initPromise = runtime.init();
+    const initRejection = expect(initPromise).rejects.toThrow('storage offline');
+    await vi.advanceTimersByTimeAsync(60);
+    await initRejection;
+
+    expect(mocks.markRuntimeBootstrapFailed).toHaveBeenCalledTimes(1);
+    expect(mocks.markRuntimeBootstrapFailed).toHaveBeenCalledWith(
+      'initial_compile_failed: animation loop started but no program is ready',
+    );
+  });
+
   it('marks bootstrap failed when initialization throws before renderer startup completes', async () => {
     const { store } = makeStore();
     const runtime = new RuntimeService(store);
