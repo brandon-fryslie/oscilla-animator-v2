@@ -1,30 +1,7 @@
-import { execFileSync } from 'node:child_process';
 import { describe, expect, it } from 'vitest';
 import { buildPatch } from '../../graph';
 import { compile } from '../compile';
-
-function rg(pattern: string, scope: readonly string[], globs: readonly string[] = ['*.ts', '*.tsx']): string[] {
-  try {
-    const out = execFileSync(
-      'rg',
-      [
-        '-n',
-        '--no-heading',
-        '--color',
-        'never',
-        ...globs.flatMap((glob) => ['--glob', glob]),
-        pattern,
-        ...scope,
-      ],
-      { encoding: 'utf8', cwd: process.cwd() },
-    ).trim();
-    return out ? out.split('\n').filter(Boolean) : [];
-  } catch (error) {
-    const status = (error as { status?: number }).status;
-    if (status === 1) return [];
-    throw error;
-  }
-}
+import { rgLines } from '../../testing/rg-search';
 
 function compileRenderProgram() {
   const patch = buildPatch((b) => {
@@ -62,7 +39,7 @@ function compileRenderProgram() {
 
 describe('no-legacy-types gate', () => {
   it('forbids production references to legacy expression aliases', () => {
-    const matches = rg('\\b(SigExpr|FieldExpr|EventExpr|SigExprId|FieldExprId|EventExprId)\\b', ['src'], [
+    const matches = rgLines('\\b(SigExpr|FieldExpr|EventExpr|SigExprId|FieldExprId|EventExprId)\\b', ['src'], [
       '*.ts',
       '*.tsx',
       '!**/*.test.*',
@@ -72,7 +49,7 @@ describe('no-legacy-types gate', () => {
   });
 
   it('forbids production deriveKind() dispatch remnants', () => {
-    const matches = rg('\\bderiveKind\\(', ['src'], [
+    const matches = rgLines('\\bderiveKind\\(', ['src'], [
       '*.ts',
       '*.tsx',
       '!**/*.test.*',
