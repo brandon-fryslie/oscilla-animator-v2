@@ -1,5 +1,5 @@
-use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 
 use js_sys::{Float32Array, SharedArrayBuffer};
 use wasm_bindgen::JsValue;
@@ -124,8 +124,30 @@ pub struct Engine {
     scheduler: WorkerScheduler,
     frame_count: u64,
     debug_readback_interval_frames: u64,
-    debug_readback_in_flight: Rc<AtomicBool>,
+    debug_readback_in_flight: Arc<AtomicBool>,
     strict_lock_start_frame: u64,
+}
+
+#[cfg(target_arch = "wasm32")]
+fn create_runtime_surface(
+    instance: &wgpu::Instance,
+    canvas: OffscreenCanvas,
+) -> Result<wgpu::Surface<'static>, JsValue> {
+    instance
+        .create_surface(wgpu::SurfaceTarget::OffscreenCanvas(canvas))
+        .map_err(|error| JsValue::from_str(&format!("create_surface failed: {error}")))
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn create_runtime_surface(
+    _instance: &wgpu::Instance,
+    _canvas: OffscreenCanvas,
+) -> Result<wgpu::Surface<'static>, JsValue> {
+    // [LAW:one-way-deps] exception: host-target checks compile this crate for
+    // diagnostics only; runtime surface initialization is wasm-only.
+    Err(JsValue::from_str(
+        "oscilla_rust_renderer surface initialization is only supported on wasm32",
+    ))
 }
 
 impl Engine {
@@ -134,9 +156,7 @@ impl Engine {
             backends: wgpu::Backends::BROWSER_WEBGPU,
             ..Default::default()
         });
-        let surface = instance
-            .create_surface(wgpu::SurfaceTarget::OffscreenCanvas(canvas))
-            .map_err(|error| JsValue::from_str(&format!("create_surface failed: {error}")))?;
+        let surface = create_runtime_surface(&instance, canvas)?;
 
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
@@ -238,7 +258,7 @@ impl Engine {
             scheduler,
             frame_count: 0,
             debug_readback_interval_frames,
-            debug_readback_in_flight: Rc::new(AtomicBool::new(false)),
+            debug_readback_in_flight: Arc::new(AtomicBool::new(false)),
             strict_lock_start_frame: 600,
         })
     }
