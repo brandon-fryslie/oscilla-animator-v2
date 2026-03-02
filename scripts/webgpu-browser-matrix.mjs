@@ -231,7 +231,8 @@ async function runBrowserCheck({ browserName, launcher, launchOptions, url, bloc
   const startedAt = Date.now();
   await page.goto(url, { waitUntil: 'networkidle', timeout: 60_000 });
   await page.waitForSelector('canvas', { timeout: 30_000 });
-// option 1
+  // [LAW:no-silent-fallbacks] Wait for a terminal bootstrap state so failed
+  // startup surfaces immediately instead of timing out the full sample window.
   const bootstrapReadyBeforeSample = await page
     .waitForFunction(
       (probeKey) => {
@@ -246,18 +247,6 @@ async function runBrowserCheck({ browserName, launcher, launchOptions, url, bloc
     .catch(() => false);
 
   const probe = await page.evaluate(async ({ sampleFrames, probeKey, bootstrapReadyBeforeSample }) => {
-// option 2
-//   await page.waitForFunction(
-//     (probeKey) => {
-//       const host = globalThis;
-//       return host[probeKey]?.bootstrap?.state === 'succeeded';
-//     },
-//     RUNTIME_PROBE_GLOBAL_KEY,
-//     { timeout: 30_000 },
-//   );
-
-//   const probe = await page.evaluate(async ({ sampleFrames, probeKey }) => {
-// remove either option 1 or option2@!
     const hasNavigatorGpu = Boolean(navigator.gpu);
     const adapter = hasNavigatorGpu ? await navigator.gpu.requestAdapter() : null;
     const hasAdapter = Boolean(adapter);
