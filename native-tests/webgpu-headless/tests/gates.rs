@@ -32,8 +32,11 @@ fn fs_main() -> @location(0) vec4<f32> {
 "#;
 
 fn request_device() -> (wgpu::Device, wgpu::Queue) {
+  // [LAW:verifiable-goals] Headless gate must run on CI (Vulkan/Lavapipe) and
+  // local dev hosts (Metal/DX12) with one deterministic backend policy.
+  let preferred_backends = wgpu::Backends::VULKAN | wgpu::Backends::METAL | wgpu::Backends::DX12;
   let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
-    backends: wgpu::Backends::VULKAN,
+    backends: preferred_backends,
     ..Default::default()
   });
   let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
@@ -41,7 +44,7 @@ fn request_device() -> (wgpu::Device, wgpu::Queue) {
     compatible_surface: None,
     force_fallback_adapter: false,
   }))
-  .expect("Gate 1/3: Vulkan adapter is required (Lavapipe should satisfy this in CI)");
+  .expect("Gate 1/3: Vulkan/Metal/DX12 adapter is required (Lavapipe should satisfy this in CI)");
 
   pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
     label: Some("webgpu-headless-gates-device"),
