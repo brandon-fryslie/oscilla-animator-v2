@@ -13,6 +13,8 @@ permissions:
 jobs:
   readiness:
     runs-on: ubuntu-latest
+    env:
+      PLAYWRIGHT_BROWSERS_PATH: ~/.cache/ms-playwright
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -31,7 +33,24 @@ jobs:
       - name: Install dependencies
         run: pnpm install
 
+      - name: Cache Playwright browser binaries
+        id: cache-playwright
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.PLAYWRIGHT_BROWSERS_PATH }}
+          key: ${{ runner.os }}-playwright-${{ hashFiles('pnpm-lock.yaml') }}
+
+      - name: Install Playwright browser
+        if: steps.cache-playwright.outputs.cache-hit != 'true'
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Validate cached Playwright browser
+        if: steps.cache-playwright.outputs.cache-hit == 'true'
+        run: pnpm exec playwright install chromium
+
       - name: Verify WebGPU readiness CI gate
+        env:
+          WEBGPU_READINESS_INSTALL_PLAYWRIGHT: '0'
         run: pnpm run -s ci:webgpu-readiness
 
       - name: Upload readiness report
