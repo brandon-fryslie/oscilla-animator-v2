@@ -13,16 +13,5 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install Vulkan software rasterizer
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libvulkan1 mesa-vulkan-drivers vulkan-tools
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-
       - name: Run Gate 1 + Gate 3 native tests
-        env:
-          WGPU_BACKEND: vulkan
-        run: |
-          cargo test --locked --manifest-path native-tests/webgpu-headless/Cargo.toml --features headless -- --nocapture
+        run: scripts/run-native-webgpu-gates.sh

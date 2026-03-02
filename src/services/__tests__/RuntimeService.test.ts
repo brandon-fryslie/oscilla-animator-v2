@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => {
   const compileWorkerCompile = vi.fn();
   const compileWorkerDispose = vi.fn();
-  const compileAndSwap = vi.fn(async () => {});
+  const compileAndSwap = vi.fn(async (..._args: any[]) => {});
   const createWebGPURenderer = vi.fn(async () => ({
     dispose: vi.fn(),
     render: vi.fn(),
@@ -33,6 +33,9 @@ const mocks = vi.hoisted(() => {
   const debugServiceOnTrackedSpyScalarSlotsChange = vi.fn(() => () => {});
   const debugServiceGetTrackedSpyScalarSlots = vi.fn(() => []);
   const setErrorReporter = vi.fn();
+  const markRuntimeBootstrapStarted = vi.fn();
+  const markRuntimeBootstrapSucceeded = vi.fn();
+  const markRuntimeBootstrapFailed = vi.fn();
 
   return {
     compileWorkerCompile,
@@ -55,6 +58,9 @@ const mocks = vi.hoisted(() => {
     debugServiceOnTrackedSpyScalarSlotsChange,
     debugServiceGetTrackedSpyScalarSlots,
     setErrorReporter,
+    markRuntimeBootstrapStarted,
+    markRuntimeBootstrapSucceeded,
+    markRuntimeBootstrapFailed,
   };
 });
 
@@ -90,6 +96,12 @@ vi.mock('../PatchPersistence', () => ({
 
 vi.mock('../../testing/test-params', () => ({
   consumeTestDemoFilename: mocks.consumeTestDemoFilename,
+}));
+
+vi.mock('../../testing/runtime-probe', () => ({
+  markRuntimeBootstrapStarted: mocks.markRuntimeBootstrapStarted,
+  markRuntimeBootstrapSucceeded: mocks.markRuntimeBootstrapSucceeded,
+  markRuntimeBootstrapFailed: mocks.markRuntimeBootstrapFailed,
 }));
 
 vi.mock('../DomainChangeDetector', () => ({
@@ -174,6 +186,10 @@ describe('RuntimeService startup compile path', () => {
   });
 
   it('uses async worker compile and precomputed initial swap during init', async () => {
+    mocks.compileAndSwap.mockImplementationOnce(async (deps) => {
+      deps.state.currentProgram = {} as any;
+      deps.state.currentState = {} as any;
+    });
     mocks.compileWorkerCompile.mockResolvedValue({
       sourcePatchRevision: 7,
       frontendResult: {} as any,
@@ -189,6 +205,9 @@ describe('RuntimeService startup compile path', () => {
     await vi.advanceTimersByTimeAsync(60);
     await initPromise;
 
+    expect(mocks.markRuntimeBootstrapStarted).toHaveBeenCalledTimes(1);
+    expect(mocks.markRuntimeBootstrapSucceeded).toHaveBeenCalledTimes(1);
+    expect(mocks.markRuntimeBootstrapFailed).not.toHaveBeenCalled();
     expect(mocks.compileWorkerCompile).toHaveBeenCalledTimes(1);
     const compileRequest = mocks.compileWorkerCompile.mock.calls[0]?.[0] as {
       patchRevision: number;
@@ -222,12 +241,53 @@ describe('RuntimeService startup compile path', () => {
     await vi.advanceTimersByTimeAsync(60);
     await initPromise;
 
+    expect(mocks.markRuntimeBootstrapStarted).toHaveBeenCalledTimes(1);
+    expect(mocks.markRuntimeBootstrapSucceeded).not.toHaveBeenCalled();
+    expect(mocks.markRuntimeBootstrapFailed).toHaveBeenCalledWith(
+      'initial_compile_failed: animation loop started but no program is ready',
+    );
     expect(mocks.compileAndSwap).not.toHaveBeenCalled();
     expect(diagnosticsLog).toHaveBeenCalledWith(
       expect.objectContaining({
         level: 'error',
         message: expect.stringContaining('Async compile'),
       }),
+    );
+  });
+
+  it('preserves the compile failure probe message when persistence fails afterwards', async () => {
+    mocks.compileWorkerCompile.mockRejectedValue(new Error('worker unavailable'));
+    mocks.savePatchToStorage.mockImplementation(() => {
+      throw new Error('storage offline');
+    });
+
+    const { store } = makeStore();
+    const runtime = new RuntimeService(store);
+    runtime.setCanvas(document.createElement('canvas'));
+
+    const initPromise = runtime.init();
+    const initRejection = expect(initPromise).rejects.toThrow('storage offline');
+    await vi.advanceTimersByTimeAsync(60);
+    await initRejection;
+
+    expect(mocks.markRuntimeBootstrapFailed).toHaveBeenCalledTimes(1);
+    expect(mocks.markRuntimeBootstrapFailed).toHaveBeenCalledWith(
+      'initial_compile_failed: animation loop started but no program is ready',
+    );
+  });
+
+  it('marks bootstrap failed when initialization throws before renderer startup completes', async () => {
+    const { store } = makeStore();
+    const runtime = new RuntimeService(store);
+
+    await expect(runtime.init()).rejects.toThrow(
+      'RuntimeService: preview canvas is required before initialization',
+    );
+
+    expect(mocks.markRuntimeBootstrapStarted).toHaveBeenCalledTimes(1);
+    expect(mocks.markRuntimeBootstrapSucceeded).not.toHaveBeenCalled();
+    expect(mocks.markRuntimeBootstrapFailed).toHaveBeenCalledWith(
+      'RuntimeService: preview canvas is required before initialization',
     );
   });
 });
