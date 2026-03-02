@@ -110,4 +110,28 @@ describe('DebugService spy readback integration', () => {
       },
     ]);
   });
+
+  it('reports uncapped tracked debug-probe subscription counts to subscribers', () => {
+    const entries: Array<[string, EdgeMetadata]> = [];
+    for (let i = 0; i < 20; i += 1) {
+      entries.push([`edge-${i}`, edgeMeta(i + 1, canonicalScalar(FLOAT))]);
+    }
+    debugService.setEdgeToSlotMap(new Map(entries));
+    debugService.setPortToSlotMap(new Map());
+
+    const counts: number[] = [];
+    const unsub = debugService.onTrackedDebugProbeSubscriptionsChange((count) => {
+      counts.push(count);
+    });
+    try {
+      for (let i = 0; i < 20; i += 1) {
+        debugService.trackHistoryKey({ kind: 'edge', edgeId: `edge-${i}` });
+      }
+      expect(debugService.getTrackedDebugProbeSubscriptions().length).toBe(16);
+      expect(debugService.getTrackedDebugProbeSubscriptionCount()).toBe(20);
+      expect(counts.at(-1)).toBe(20);
+    } finally {
+      unsub();
+    }
+  });
 });

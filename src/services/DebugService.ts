@@ -127,6 +127,9 @@ class DebugService {
   /** Port-to-slot-and-type mapping (for unconnected output queries) */
   private portToSlotMap = new Map<string, EdgeMetadata>();
 
+  /** Cached slot -> metadata index for O(1) slot metadata resolution. */
+  private slotMetadataBySlot: Map<ValueSlot, EdgeMetadata> | null = null;
+
   /** Scalar slot values (updated by runtime via tap) */
   private scalarValues = new Map<ValueSlot, number>();
 
@@ -218,6 +221,7 @@ class DebugService {
    */
   setEdgeToSlotMap(map: Map<string, EdgeMetadata>, constantValues?: Map<string, ConstantValue>): void {
     this.edgeToSlotMap = map;
+    this.slotMetadataBySlot = null;
     this.constantValues = constantValues ?? new Map();
     // Slot namespace changed — old values are stale and new slots haven't been written yet.
     // Reset so queries return undefined (graceful) instead of throwing (scheduling bug).
@@ -245,6 +249,7 @@ class DebugService {
    */
   setPortToSlotMap(map: Map<string, EdgeMetadata>): void {
     this.portToSlotMap = map;
+    this.slotMetadataBySlot = null;
     this.historyService.onMappingChanged();
     this.syncGlobalDebugTracking();
     this.rebuildTrackedSpyScalarSlots();
@@ -659,7 +664,12 @@ class DebugService {
       if (!encoding.sampleable || encoding.stride <= 0) {
         continue;
       }
-      const componentMask = (1 << encoding.stride) - 1;
+      if (encoding.stride > 32) {
+        continue;
+      }
+      const componentMask = encoding.stride >= 32
+        ? 0xFFFFFFFF
+        : (1 << encoding.stride) - 1;
       subscriptions.push({
         targetId: slotId as number,
         slotId,
@@ -690,10 +700,30 @@ class DebugService {
 
   onTrackedDebugProbeSubscriptionsChange(subscriber: (trackedSubscriptionCount: number) => void): () => void {
     this.debugProbeSubscribers.add(subscriber);
-    subscriber(this.getTrackedDebugProbeSubscriptions().length);
+    subscriber(this.getTrackedDebugProbeSubscriptionCount());
     return () => {
       this.debugProbeSubscribers.delete(subscriber);
     };
+  }
+
+  getTrackedDebugProbeSubscriptionCount(): number {
+    let count = this.trackedSpyScalarSlots.size;
+    if (!this.arenaRef) {
+      return count;
+    }
+    for (const slotId of this.trackedFieldSlots.values()) {
+      const desc = this.arenaRef.slotToArena.get(slotId);
+      const meta = this.resolveSlotMetadata(slotId);
+      if (!desc || !meta) {
+        continue;
+      }
+      const encoding = getSampleEncoding(meta.type.payload);
+      if (!encoding.sampleable || encoding.stride <= 0 || encoding.stride > 32) {
+        continue;
+      }
+      count += 1;
+    }
+    return count;
   }
 
   /**
@@ -710,6 +740,7 @@ class DebugService {
   clear(): void {
     this.edgeToSlotMap.clear();
     this.portToSlotMap.clear();
+    this.slotMetadataBySlot = null;
     this.scalarValues.clear();
     this.scalarTapSlots.clear();
     this.fieldBuffers.clear();
@@ -805,17 +836,22 @@ class DebugService {
   }
 
   private resolveSlotMetadata(slotId: ValueSlot): EdgeMetadata | undefined {
+    return this.getSlotMetadataIndex().get(slotId);
+  }
+
+  private getSlotMetadataIndex(): ReadonlyMap<ValueSlot, EdgeMetadata> {
+    if (this.slotMetadataBySlot) {
+      return this.slotMetadataBySlot;
+    }
+    const index = new Map<ValueSlot, EdgeMetadata>();
     for (const meta of this.edgeToSlotMap.values()) {
-      if (meta.slotId === slotId) {
-        return meta;
-      }
+      index.set(meta.slotId, meta);
     }
     for (const meta of this.portToSlotMap.values()) {
-      if (meta.slotId === slotId) {
-        return meta;
-      }
+      index.set(meta.slotId, meta);
     }
-    return undefined;
+    this.slotMetadataBySlot = index;
+    return index;
   }
 
   private trackSpyScalarSlotForKey(key: DebugTargetKey): void {
@@ -879,7 +915,7 @@ class DebugService {
   }
 
   private notifyTrackedDebugProbeSubscribers(): void {
-    const trackedSubscriptionCount = this.getTrackedDebugProbeSubscriptions().length;
+    const trackedSubscriptionCount = this.getTrackedDebugProbeSubscriptionCount();
     for (const subscriber of this.debugProbeSubscribers) {
       subscriber(trackedSubscriptionCount);
     }

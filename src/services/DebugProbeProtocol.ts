@@ -25,6 +25,7 @@ export interface DebugProbeSubscription {
   readonly targetId: number;
   readonly slotId: ValueSlot;
   readonly sampleKind: DebugProbeSampleKind;
+  /** Bitmask of components to sample (LSB => component 0). */
   readonly componentMask: number;
   readonly priority: number;
   readonly laneWindow?: {

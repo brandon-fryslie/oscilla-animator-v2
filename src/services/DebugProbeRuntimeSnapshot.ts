@@ -28,6 +28,20 @@ export interface DebugProbeRuntimeSnapshotExtraction {
   readonly samples: readonly DebugProbePacketSample[];
 }
 
+function getSelectedComponentIndices(stride: number, componentMask: number): number[] {
+  if (stride < 1 || stride > 32) {
+    return [];
+  }
+  const normalizedMask = componentMask >>> 0;
+  const selected: number[] = [];
+  for (let component = 0; component < stride; component += 1) {
+    if ((normalizedMask & (1 << component)) !== 0) {
+      selected.push(component);
+    }
+  }
+  return selected;
+}
+
 function localizeDescriptor(descriptor: ArenaSlotDescriptor): ArenaSlotDescriptor {
   return {
     ...descriptor,
@@ -95,7 +109,12 @@ export function extractDebugProbeSamplesFromRuntimeSnapshot(
         packetFlags |= DEBUG_PACKET_FLAG_SUBSCRIPTION_INVALID;
         continue;
       }
-      const value = arenaRead(slot.values, slot.descriptor, 0, 0);
+      const selectedComponents = getSelectedComponentIndices(slot.descriptor.stride, subscription.componentMask);
+      if (selectedComponents.length !== 1) {
+        packetFlags |= DEBUG_PACKET_FLAG_SUBSCRIPTION_INVALID;
+        continue;
+      }
+      const value = arenaRead(slot.values, slot.descriptor, 0, selectedComponents[0]!);
       const finite = Number.isFinite(value);
       if (!finite) {
         packetFlags |= DEBUG_PACKET_FLAG_NAN_DETECTED_ANY;
@@ -118,10 +137,19 @@ export function extractDebugProbeSamplesFromRuntimeSnapshot(
       packetFlags |= DEBUG_PACKET_FLAG_SUBSCRIPTION_INVALID;
       continue;
     }
+    const selectedComponents = getSelectedComponentIndices(slot.descriptor.stride, subscription.componentMask);
+    if (selectedComponents.length < 1) {
+      packetFlags |= DEBUG_PACKET_FLAG_SUBSCRIPTION_INVALID;
+      continue;
+    }
     const decoded = arenaDecodeToAoS(slot.values, slot.descriptor);
-    const startOffset = laneStart * slot.descriptor.stride;
-    const endOffset = startOffset + laneCount * slot.descriptor.stride;
-    const values = Array.from(decoded.subarray(startOffset, endOffset));
+    const values: number[] = [];
+    for (let lane = laneStart; lane < laneStart + laneCount; lane += 1) {
+      const laneBase = lane * slot.descriptor.stride;
+      for (const component of selectedComponents) {
+        values.push(decoded[laneBase + component]!);
+      }
+    }
     const finite = values.every((value) => Number.isFinite(value));
     if (!finite) {
       packetFlags |= DEBUG_PACKET_FLAG_NAN_DETECTED_ANY;
@@ -130,7 +158,7 @@ export function extractDebugProbeSamplesFromRuntimeSnapshot(
       targetId: subscription.targetId,
       slotId: subscription.slotId,
       payloadKind: 'lane_window',
-      stride: slot.descriptor.stride,
+      stride: selectedComponents.length,
       laneCount,
       sampleFlags: finite ? DEBUG_SAMPLE_FLAG_FRESH : DEBUG_SAMPLE_FLAG_NAN_DETECTED,
       values,

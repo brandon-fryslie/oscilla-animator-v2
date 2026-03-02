@@ -31,6 +31,10 @@ struct DebugProbeSubscription {
     slot_id: u32,
     sample_kind: DebugProbeSampleKind,
     lane_window: Option<DebugProbeLaneWindow>,
+    #[serde(default = "default_component_mask")]
+    component_mask: u32,
+    #[serde(default)]
+    priority: i32,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -44,6 +48,10 @@ struct RuntimeArenaDescriptor {
     packing: Option<String>,
     lane_stride: Option<usize>,
     component_stride: Option<usize>,
+}
+
+fn default_component_mask() -> u32 {
+    u32::MAX
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -208,27 +216,52 @@ fn resolve_arena_address(desc: &RuntimeArenaDescriptor) -> ArenaAddress {
 }
 
 fn arena_index(desc: &RuntimeArenaDescriptor, lane: usize, component: usize) -> Option<usize> {
+    let address = resolve_arena_address(desc);
+    if lane >= address.lane_count {
+        return None;
+    }
     if let Some(component_offsets) = &desc.component_offsets {
         if component < component_offsets.len() {
-            let lane_stride = desc.lane_stride.unwrap_or(1);
-            return Some(desc.offset + component_offsets[component] + lane * lane_stride);
+            return Some(desc.offset + component_offsets[component] + lane * address.lane_stride);
         }
     }
 
-    let address = resolve_arena_address(desc);
-    if lane >= address.lane_count || component >= address.stride {
+    if component >= address.stride {
         return None;
     }
 
     Some(address.base_offset + component * address.component_stride + lane * address.lane_stride)
 }
 
-fn read_scalar_values(slot: &DebugProbeRuntimeSlotSnapshot) -> Option<(u8, u32, Vec<f64>)> {
+fn selected_component_indices(stride: usize, component_mask: u32) -> Option<Vec<usize>> {
+    if stride < 1 || stride > 32 {
+        return None;
+    }
+    let mut selected = Vec::new();
+    for component in 0..stride {
+        if (component_mask & (1u32 << component)) != 0 {
+            selected.push(component);
+        }
+    }
+    if selected.is_empty() {
+        return None;
+    }
+    Some(selected)
+}
+
+fn read_scalar_values(
+    slot: &DebugProbeRuntimeSlotSnapshot,
+    component_mask: u32,
+) -> Option<(u8, u32, Vec<f64>)> {
     let desc = &slot.descriptor;
     if desc.lane_count != 1 || desc.stride < 1 {
         return None;
     }
-    let index = arena_index(desc, 0, 0)?;
+    let selected = selected_component_indices(desc.stride as usize, component_mask)?;
+    if selected.len() != 1 {
+        return None;
+    }
+    let index = arena_index(desc, 0, selected[0])?;
     let value = *slot.values.get(index)? as f64;
     Some((1, 1, vec![value]))
 }
@@ -236,11 +269,14 @@ fn read_scalar_values(slot: &DebugProbeRuntimeSlotSnapshot) -> Option<(u8, u32, 
 fn read_lane_window_values(
     slot: &DebugProbeRuntimeSlotSnapshot,
     lane_window: Option<&DebugProbeLaneWindow>,
+    component_mask: u32,
 ) -> Option<(u8, u32, Vec<f64>)> {
     let desc = &slot.descriptor;
     if desc.stride < 1 {
         return None;
     }
+    let selected_components = selected_component_indices(desc.stride as usize, component_mask)?;
+    let output_stride = u8::try_from(selected_components.len()).ok()?;
 
     let lane_start = lane_window.map(|window| window.start as usize).unwrap_or(0);
     let lane_count = lane_window
@@ -251,17 +287,16 @@ fn read_lane_window_values(
         return None;
     }
 
-    let stride = desc.stride as usize;
-    let mut values = Vec::with_capacity(lane_count * stride);
+    let mut values = Vec::with_capacity(lane_count * selected_components.len());
     for lane in lane_start..(lane_start + lane_count) {
-        for component in 0..stride {
-            let index = arena_index(desc, lane, component)?;
+        for component in &selected_components {
+            let index = arena_index(desc, lane, *component)?;
             let value = *slot.values.get(index)? as f64;
             values.push(value);
         }
     }
 
-    Some((desc.stride as u8, lane_count as u32, values))
+    Some((output_stride, lane_count as u32, values))
 }
 
 fn build_packet_sample(
@@ -272,9 +307,12 @@ fn build_packet_sample(
         return None;
     }
 
+    let _priority = sub.priority;
     let (stride, lane_count, values) = match sub.sample_kind {
-        DebugProbeSampleKind::Scalar => read_scalar_values(slot)?,
-        DebugProbeSampleKind::LaneWindow => read_lane_window_values(slot, sub.lane_window.as_ref())?,
+        DebugProbeSampleKind::Scalar => read_scalar_values(slot, sub.component_mask)?,
+        DebugProbeSampleKind::LaneWindow => {
+            read_lane_window_values(slot, sub.lane_window.as_ref(), sub.component_mask)?
+        }
     };
 
     Some(DebugProbePacketSample {

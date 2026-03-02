@@ -143,4 +143,36 @@ describe('DebugProbeRuntimeSnapshot', () => {
       ],
     });
   });
+
+  it('applies component masks during lane-window extraction', () => {
+    const { fieldSlot, program, state } = makeProgramAndState();
+    const subscriptions: DebugProbeSubscription[] = [
+      {
+        targetId: fieldSlot as number,
+        slotId: fieldSlot,
+        sampleKind: 'lane_window',
+        componentMask: 0b0001,
+        priority: 0,
+        laneWindow: { start: 0, count: 2 },
+      },
+    ];
+
+    const snapshot = createDebugProbeRuntimeSnapshot(program as any, state as any, subscriptions);
+    if (!snapshot) {
+      throw new Error('Expected debug probe runtime snapshot');
+    }
+
+    expect(extractDebugProbeSamplesFromRuntimeSnapshot(snapshot, subscriptions)).toMatchObject({
+      packetFlags: 0,
+      samples: [
+        {
+          slotId: fieldSlot,
+          payloadKind: 'lane_window',
+          stride: 1,
+          laneCount: 2,
+          values: [10, 20],
+        },
+      ],
+    });
+  });
 });

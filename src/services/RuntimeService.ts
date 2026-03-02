@@ -397,28 +397,18 @@ export class RuntimeService {
         state: this.asyncCompiler.getState(),
         errorMessage: this.asyncCompiler.getLastErrorMessage() ?? undefined,
       });
-      if (nextState === 'ready') {
-        this.requestSwapFlush();
-      }
-    });
-    store.events.emit({
-      type: 'CompilerStateChanged',
-      patchId: 'patch-0',
-      patchRevision: store.getPatchRevision(),
-      state: this.asyncCompiler.getState(),
-      errorMessage: this.asyncCompiler.getLastErrorMessage() ?? undefined,
-    });
-    // [LAW:single-enforcer] RuntimeService owns debug lifecycle boundaries.
-    debugService.clear();
-    this.primeWasmDebugProbeTransport();
-    compilationInspector.setErrorReporter((payload) => {
-      const phase = payload.passName ? `${payload.phase}(${payload.passName})` : payload.phase;
-      const message = payload.error instanceof Error ? payload.error.message : String(payload.error);
-      // [LAW:single-enforcer] RuntimeService is the single app-runtime boundary that
-      // forwards inspector internal failures to diagnostics.
-      store.diagnostics.log({
-        level: 'warn',
-        message: `Compilation inspector failure at ${phase}: ${message}`,
+      // [LAW:single-enforcer] RuntimeService owns debug lifecycle boundaries.
+      debugService.clear();
+      this.primeWasmDebugProbeTransport();
+      compilationInspector.setErrorReporter((payload) => {
+        const phase = payload.passName ? `${payload.phase}(${payload.passName})` : payload.phase;
+        const message = payload.error instanceof Error ? payload.error.message : String(payload.error);
+        // [LAW:single-enforcer] RuntimeService is the single app-runtime boundary that
+        // forwards inspector internal failures to diagnostics.
+        store.diagnostics.log({
+          level: 'warn',
+          message: `Compilation inspector failure at ${phase}: ${message}`,
+        });
       });
 
       // [LAW:no-shared-mutable-globals] RuntimeService owns one arena instance
