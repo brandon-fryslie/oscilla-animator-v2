@@ -324,6 +324,9 @@ describe('RuntimeService startup compile path', () => {
     const backendResult = {
       kind: 'ok' as const,
       program: {} as any,
+      compiledComputeShader: {
+        wgsl: '@compute @workgroup_size(64, 1, 1)\nfn compute_main() {}',
+      },
       warnings: [],
     };
     mocks.compileWorkerCompile.mockResolvedValue({

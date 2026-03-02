@@ -270,17 +270,17 @@ export class RuntimeService {
       readonly compiledComputeWgsl?: string | null;
     },
   ): Promise<void> {
-    const renderer = this.renderer;
-    if (!renderer) {
-      throw new Error('RuntimeService: renderer must exist before publishing compiled GPU pipelines');
-    }
-
     const compiledComputeWgsl =
       artifacts.backendResult?.kind === 'ok'
         ? artifacts.compiledComputeWgsl ?? null
         : null;
     if (!compiledComputeWgsl) {
       return;
+    }
+
+    const renderer = this.renderer;
+    if (!renderer) {
+      throw new Error('RuntimeService: renderer must exist before publishing compiled GPU pipelines');
     }
 
     // [LAW:single-enforcer] RuntimeService is the only boundary that publishes
