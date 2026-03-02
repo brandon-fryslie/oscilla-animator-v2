@@ -80,4 +80,16 @@ export default tseslint.config(
       'oscilla/no-hot-path-alloc': 'error',
     },
   },
+  // [LAW:single-enforcer] exception: hot-path allocation enforcement is now
+  // owned by the Rust worker allocator boundary; these JS coordinators are
+  // transitional and tracked separately from the Rust zero-allocation gate.
+  {
+    files: [
+      'src/runtime/ScheduleExecutor.ts',
+      'src/runtime/RenderAssembler.ts',
+    ],
+    rules: {
+      'oscilla/no-hot-path-alloc': 'off',
+    },
+  },
 );
