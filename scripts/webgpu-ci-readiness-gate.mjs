@@ -3,6 +3,7 @@ import { spawn } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
+import { truncateForLog } from './matrix-utils.mjs';
 
 const MATRIX_REPORT_PATH = path.resolve(
   process.env.WEBGPU_MATRIX_REPORT ?? 'artifacts/webgpu-browser-matrix.json',
@@ -26,16 +27,6 @@ function runNodeScript(scriptPath, envOverrides = {}) {
       reject(new Error(`${scriptPath} failed (code=${code}, signal=${signal ?? 'none'})`));
     });
   });
-}
-
-function truncateForLog(value, maxLength = 240) {
-  if (typeof value !== 'string') {
-    return '';
-  }
-  if (value.length <= maxLength) {
-    return value;
-  }
-  return `${value.slice(0, Math.max(0, maxLength - 3))}...`;
 }
 
 async function emitMatrixFailureSummary() {
