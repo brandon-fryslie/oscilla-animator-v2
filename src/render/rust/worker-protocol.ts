@@ -63,6 +63,12 @@ export interface RustRendererRebuildSimulationPipelineSuccess {
   readonly type: 'REBUILD_SIMULATION_PIPELINE_SUCCESS';
 }
 
+export interface RustRendererDeviceLost {
+  readonly type: 'DEVICE_LOST';
+  readonly code: string;
+  readonly reason: string;
+}
+
 export type RustRendererSchedulerState = 'Booting' | 'Running' | 'Paused' | 'Lost';
 
 export interface RustRendererSchedulerHeartbeat {
@@ -94,5 +100,6 @@ export type RustRendererWorkerOutboundMessage =
   | RustRendererBootstrapSuccess
   | RustRendererFatalError
   | RustRendererRebuildSimulationPipelineSuccess
+  | RustRendererDeviceLost
   | RustRendererSchedulerHeartbeat
   | RustRendererRuntimeEvent;

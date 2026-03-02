@@ -9,7 +9,7 @@ type TelemetryGateResult =
   | { skipped: false; meanMs: number; stdDevMs: number; sampleCount: number };
 
 test.describe('Rust Worker Gates', () => {
-  test('Gate 2: poison allocation crashes the worker hot path', async ({ page }) => {
+  test('Gate 2: 100-frame strict hot path then poison allocation trap', async ({ page }) => {
     await page.goto('/');
 
     const result = await page.evaluate(async (): Promise<WorkerGateResult> => {
@@ -86,6 +86,26 @@ test.describe('Rust Worker Gates', () => {
         worker.terminate();
         canvas.remove();
         return { skipped: true, reason: bootResult.reason ?? 'bootstrap failed' };
+      }
+
+      const frameGateResult = await new Promise<{ ok: boolean; reason?: string }>((resolve) => {
+        const onMessage = (event: MessageEvent<any>) => {
+          if (event.data?.type !== 'SCHEDULER_HEARTBEAT') return;
+          const frameCount = Number(event.data.frameCount ?? 0);
+          if (frameCount < 100) return;
+          worker.removeEventListener('message', onMessage);
+          resolve({ ok: true });
+        };
+        worker.addEventListener('message', onMessage);
+        setTimeout(() => {
+          worker.removeEventListener('message', onMessage);
+          resolve({ ok: false, reason: 'strict hot-path gate did not reach 100 frames in time' });
+        }, 6000);
+      });
+      if (!frameGateResult.ok) {
+        worker.terminate();
+        canvas.remove();
+        return { skipped: true, reason: frameGateResult.reason ?? '100-frame strict hot-path gate failed' };
       }
 
       worker.postMessage({ type: 'INJECT_POISON_ALLOC' });
