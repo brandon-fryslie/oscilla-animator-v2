@@ -50,7 +50,7 @@ import { resolveKernels } from './resolve-kernels';
 import { createDefaultRegistry } from '../runtime/kernels/default-registry';
 import { compileFrontend, type FrontendResult, type FrontendError } from './frontend';
 import type { CompileError } from './types';
-import { buildProgramTopologyTableFromIds, collectProgramTopologyIds } from './ir/program-topology';
+import { buildProgramTopologyTableFromIds, collectAllProgramTopologyIds } from './ir/program-topology';
 
 import { registerAllBlocks } from '../blocks/all';
 
@@ -717,7 +717,12 @@ function convertLinkedIRToProgram(
   }
 
   const topologyTable = buildProgramTopologyTableFromIds(
-    collectProgramTopologyIds({ valueExprs: { nodes: valueExprNodes } }),
+    // [LAW:one-source-of-truth] Program topology ownership must include every
+    // topology reference surface (ValueExpr + render-step inline shape refs).
+    collectAllProgramTopologyIds({
+      valueExprs: { nodes: valueExprNodes },
+      steps: scheduleIR.steps as readonly Step[],
+    }),
   );
 
   // Build the program (ValueExpr-only, with kernel registry)

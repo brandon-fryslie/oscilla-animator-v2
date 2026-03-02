@@ -1,6 +1,7 @@
 import { exportSerializableTopologies } from '../../shapes/registry';
 import type { SerializableTopologyDef, TopologyDef, TopologyId } from '../../shapes/types';
 import type { CompiledProgramIR, ProgramTopologyTableIR } from './program';
+import type { Step } from './types';
 
 type ProgramWithValueExprs = Pick<CompiledProgramIR, 'valueExprs'>;
 
@@ -29,6 +30,27 @@ export function collectProgramTopologyIds(program: ProgramWithValueExprs): reado
     ) {
       ids.add(candidate.topologyId as TopologyId);
     }
+  }
+  return [...ids];
+}
+
+export function collectRenderStepTopologyIds(steps: readonly Step[]): readonly TopologyId[] {
+  const ids = new Set<TopologyId>();
+  for (const step of steps) {
+    if (step.kind !== 'render') continue;
+    if (step.shape.k !== 'one') continue;
+    ids.add(step.shape.topologyId);
+  }
+  return [...ids];
+}
+
+export function collectAllProgramTopologyIds(input: {
+  readonly valueExprs: ProgramWithValueExprs['valueExprs'];
+  readonly steps: readonly Step[];
+}): readonly TopologyId[] {
+  const ids = new Set<TopologyId>(collectProgramTopologyIds({ valueExprs: input.valueExprs }));
+  for (const topologyId of collectRenderStepTopologyIds(input.steps)) {
+    ids.add(topologyId);
   }
   return [...ids];
 }
