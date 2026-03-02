@@ -98,14 +98,18 @@ If any one of the above fails, the spec is not complete.
 
 1. Before starting any work, ensure the working directory is clean and the branch is fully up to date with `master`.
 2. If there are outstanding local changes, review them for correctness, best practices, architectural law compliance, and merge readiness.
-3. If outstanding work needs more changes, complete the work to make it merge-ready before starting new scope.
-4. If outstanding work should be reverted, explain why and stop. Do not remove or revert it yourself unless explicitly instructed by the user.
-5. If outstanding work is merge-ready, commit the final state, push, and open PR(s) before starting new work.
-6. Start each new unit of work on a fresh branch named for the scope, using the `codex/` prefix, from up-to-date `master`.
-7. When a unit of work is complete, make a commit and ensure that commit is up to date with `master`.
-8. If work is complete and review-ready, open a PR.
-9. If work is not complete but an adjacent, directly related chunk can be safely completed with the current unmerged scope, include and complete that chunk before stopping.
-10. You must only stop when one of these is true:
+3. Any untracked file counts as outstanding work. Review it immediately, determine whether it is intentional, and either:
+   - complete and commit it if it belongs with the active scope, or
+   - explain why it should not be kept and stop for user direction before removing it.
+4. Do not treat untracked work as a passive stop condition. Review happens first; if the work is valid, get it committed immediately.
+5. If outstanding work needs more changes, complete the work to make it merge-ready before starting new scope.
+6. If outstanding work should be reverted, explain why and stop. Do not remove or revert it yourself unless explicitly instructed by the user.
+7. If outstanding work is merge-ready, commit the final state, push, and open PR(s) before starting new work.
+8. Start each new unit of work on a fresh branch named for the scope, using the `codex/` prefix, from up-to-date `master`.
+9. When a unit of work is complete, make a commit and ensure that commit is up to date with `master`.
+10. If work is complete and review-ready, open a PR.
+11. If work is not complete but an adjacent, directly related chunk can be safely completed with the current unmerged scope, include and complete that chunk before stopping.
+12. You must only stop when one of these is true:
     - The user explicitly tells you to stop.
     - Ambiguity or high-risk uncertainty prevents safe completion.
     - A full batch is complete and a PR is open, ready for review and merge.
@@ -115,6 +119,7 @@ If any one of the above fails, the spec is not complete.
 // [LAW:one-source-of-truth] `master` is the canonical integration baseline for all new branches and completion sync.
 // [LAW:single-enforcer] Start-work and stop-work process checks are enforced once in this section.
 // [LAW:verifiable-goals] Clean tree, sync state, and merge readiness are validated with deterministic git/test evidence.
+// [LAW:no-silent-fallbacks] Untracked work must be explicitly reviewed and either committed or escalated; it cannot be silently ignored.
 
 ## Mechanical Gating Rule
 
