@@ -41,8 +41,12 @@ import {
 import { debugSettings } from '../settings/tokens/debug-settings';
 import { compilerFlagsSettings } from '../settings/tokens/compiler-flags-settings';
 import { appSettings } from '../settings/tokens/app-settings';
-import { arenaRead } from '../runtime/ArenaValueStore';
 import type { ValueSlot } from '../types';
+import {
+  type DebugProbeSubscription,
+  type DebugProbeTransport,
+} from './DebugProbeProtocol';
+import { LocalDebugProbeTransport } from './LocalDebugProbeTransport';
 
 export interface RuntimeSpyReadbackEntry {
   readonly slotId: ValueSlot;
@@ -97,7 +101,8 @@ export class RuntimeService {
   private spyReadbackTimer: ReturnType<typeof setTimeout> | null = null;
   private spyReadbackLoopActive = false;
   private spyReadbackInFlight = false;
-  private spyReadbackHz = 15;
+  private spyReadbackHz = 5;
+  private readonly debugProbeTransport: DebugProbeTransport;
 
   constructor(
     private readonly store: RootStore,
@@ -108,6 +113,14 @@ export class RuntimeService {
   ) {
     this.statsSink = options.onStatsUpdate ?? null;
     this.runtimeReadySink = options.onRuntimeReady ?? null;
+    this.debugProbeTransport = new LocalDebugProbeTransport(() => ({
+      program: this.compileState.currentProgram,
+      state: this.compileState.currentState,
+    }));
+    this.debugProbeTransport.debugCommand({
+      kind: 'set_rate_hz',
+      rateHz: this.spyReadbackHz,
+    });
   }
 
   setStatsSink(onStatsUpdate: ((statsText: string) => void) | null): void {
@@ -501,9 +514,33 @@ export class RuntimeService {
   private bindSpyReadbackTracking(): void {
     this.unsubSpyTracking?.();
     this.unsubSpyTracking = debugService.onTrackedSpyScalarSlotsChange((trackedSlotCount) => {
+      this.syncSpyReadbackSubscriptions();
       this.syncSpyReadbackLoopForTrackedSlots(trackedSlotCount);
     });
+    this.syncSpyReadbackSubscriptions();
     this.syncSpyReadbackLoopForTrackedSlots(debugService.getTrackedSpyScalarSlots(1).length);
+  }
+
+  private syncSpyReadbackSubscriptions(): void {
+    const trackedSlots = debugService.getTrackedSpyScalarSlots(16);
+    if (trackedSlots.length === 0) {
+      this.debugProbeTransport.debugCommand({ kind: 'clear_subscriptions' });
+      return;
+    }
+
+    const subscriptions: DebugProbeSubscription[] = trackedSlots.map((slotId) => ({
+      targetId: slotId as number,
+      slotId,
+      sampleKind: 'scalar',
+      componentMask: 0b0001,
+      priority: 0,
+    }));
+    // [LAW:single-enforcer] RuntimeService owns command-plane updates from UI
+    // tracking state to debug probe transport subscriptions.
+    this.debugProbeTransport.debugCommand({
+      kind: 'set_subscriptions',
+      subscriptions,
+    });
   }
 
   private syncSpyReadbackLoopForTrackedSlots(trackedSlotCount: number): void {
@@ -575,39 +612,31 @@ export class RuntimeService {
   }
 
   private buildSpyReadbackPacket(capturedAtMs: number): RuntimeSpyReadbackPacket | null {
-    const program = this.compileState.currentProgram;
-    const state = this.compileState.currentState;
-    const table = program?.runtimeAddressTable;
-    if (!program || !state || !table) {
-      return null;
-    }
-
-    const trackedSlots = debugService.getTrackedSpyScalarSlots(16);
-    if (trackedSlots.length === 0) {
+    this.syncSpyReadbackSubscriptions();
+    const probePacket = this.debugProbeTransport.debugPollPacket(capturedAtMs);
+    if (!probePacket) {
       return null;
     }
 
     const entries: RuntimeSpyReadbackEntry[] = [];
-    for (const slotId of trackedSlots) {
-      const lookup = table.slotLookup.get(slotId);
-      if (!lookup || lookup.arena.laneCount !== 1 || lookup.arena.stride < 1) {
+    for (const sample of probePacket.samples) {
+      if (sample.payloadKind !== 'scalar' || sample.values.length < 1) {
         continue;
       }
-      const value = arenaRead(state.arena, lookup.arena, 0, 0);
+      const value = sample.values[0];
       if (!Number.isFinite(value)) continue;
       entries.push({
-        slotId,
+        slotId: sample.slotId,
         value,
       });
     }
-
     if (entries.length === 0) {
       return null;
     }
 
     return {
-      capturedAtMs,
-      frameId: state.cache.frameId,
+      capturedAtMs: probePacket.capturedAtMs,
+      frameId: probePacket.runtimeFrameId,
       entries,
     };
   }
