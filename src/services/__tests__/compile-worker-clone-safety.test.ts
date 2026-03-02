@@ -5,8 +5,7 @@ import { compileFromFrontend } from '../../compiler/compile';
 import { compileFrontend } from '../../compiler/frontend';
 import { EventHub } from '../../events/EventHub';
 import { deserializePatchFromHCL } from '../../patch-dsl';
-import { exportSerializableTopologies } from '../../shapes/registry';
-import { collectProgramTopologyIds, stripKernelRegistry } from '../compile-worker-serialization';
+import { stripKernelRegistry } from '../compile-worker-serialization';
 
 function listDemoFiles(): readonly string[] {
   const demoDir = join(process.cwd(), 'src', 'demo', 'hcl');
@@ -63,9 +62,6 @@ describe('compile worker payload clone safety', () => {
 
       if (backendResult?.kind === 'ok') {
         const serializableProgram = stripKernelRegistry(backendResult.program);
-        const topologies = exportSerializableTopologies(
-          collectProgramTopologyIds(serializableProgram),
-        );
         const workerPayload = {
           kind: 'compiled' as const,
           requestId: 1,
@@ -75,7 +71,6 @@ describe('compile worker payload clone safety', () => {
           backendResult: {
             kind: 'ok' as const,
             program: serializableProgram,
-            topologies,
             warnings: backendResult.warnings,
           },
         };

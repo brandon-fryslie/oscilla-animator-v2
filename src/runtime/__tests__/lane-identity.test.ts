@@ -12,6 +12,7 @@
 import { describe, it, expect } from 'vitest';
 import { buildLaneIdentityMap } from '../ValueInspector';
 import type { CompiledProgramIR, FieldSlotEntry } from '../../compiler/ir/program';
+import { EMPTY_PROGRAM_TOPOLOGY_TABLE } from '../../compiler/ir/program-topology';
 import type { InstanceDecl } from '../../compiler/ir/types';
 import type { ContinuityState } from '../ContinuityState';
 import { valueSlot, valueExprId } from '../../compiler/ir/Indices';
@@ -68,6 +69,7 @@ function makeMinimalProgram(opts: {
     runtimeSlots: [],
     renderGlobals: [],
     kernelRegistry: {} as any,
+    topologyTable: EMPTY_PROGRAM_TOPOLOGY_TABLE,
     arenaLayout: [],
     arenaPayloadFloats: 0,
     arenaTotalFloats: 0,

@@ -8,13 +8,15 @@
  * - Dynamic topologies: IDs 100+ (auto-assigned)
  */
 
-import type { TopologyId, TopologyDef, PathTopologyDef, AbstractTopologyDef, PathSegmentKind } from './types';
-import { PathVerb } from './types';
-
-export type SerializableTopologyDef = Omit<TopologyDef, 'render'> & Partial<Pick<
+import type {
+  TopologyId,
+  TopologyDef,
   PathTopologyDef,
-  'verbs' | 'pointsPerVerb' | 'totalControlPoints' | 'closed' | 'segmentKind' | 'segmentPointBase' | 'hasQuad' | 'hasCubic'
->>;
+  AbstractTopologyDef,
+  PathSegmentKind,
+  SerializableTopologyDef,
+} from './types';
+import { PathVerb } from './types';
 
 /**
  * Registry of all available topologies (array-indexed by TopologyId)

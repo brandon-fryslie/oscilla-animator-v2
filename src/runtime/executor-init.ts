@@ -29,6 +29,7 @@ export const singleArgBuf: number[] = [0];
 // Reusable AssemblerContext — populated in-place each frame to avoid per-frame object literal.
 // Fields are set before each use in executeFrame().
 export const assemblerCtx = {
+  program: null as any,
   instances: null as any,
   state: null as any,
   resolvedCamera: null as any,

@@ -5,6 +5,7 @@ import {
   assertNumericStride,
 } from '../ExprAddressTable';
 import type { CompiledProgramIR, SlotMetaEntry } from '../../compiler/ir/program';
+import { EMPTY_PROGRAM_TOPOLOGY_TABLE } from '../../compiler/ir/program-topology';
 import type { ScheduleIR } from '../../compiler/backend/schedule-program';
 import { SCALAR_INSTANCE_ID, valueSlot, type ValueSlot } from '../../compiler/ir/Indices';
 import { canonicalScalar, canonicalMany, FLOAT, unitNone, instanceRef } from '../../core/canonical-types';
@@ -130,6 +131,7 @@ function mockProgram(opts: {
     fieldSlotRegistry: new Map(),
     renderGlobals: [],
     kernelRegistry: { resolve: () => undefined, entries: () => [] } as any,
+    topologyTable: EMPTY_PROGRAM_TOPOLOGY_TABLE,
     arenaLayout,
     arenaPayloadFloats: arenaLayout.reduce((sum, d) => sum + Math.max(0, d.length), 0),
     arenaTotalFloats: 0,
