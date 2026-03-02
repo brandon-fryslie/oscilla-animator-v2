@@ -15,6 +15,8 @@ export interface ShimCompilationResult {
 export type ShimBootStage = 'fetching' | 'compiling' | 'binding';
 
 export interface ShimInitOptions {
+  // [LAW:single-enforcer] Init runs once, but all concurrent callers receive
+  // stage updates through this callback fan-out during the shared boot promise.
   readonly onStage?: (stage: ShimBootStage) => void;
 }
 
@@ -34,6 +36,7 @@ interface ShimModule {
 let initialized = false;
 let initPromise: Promise<void> | null = null;
 let compileImpl: RustCompileFn | null = null;
+const initStageListeners = new Set<(stage: ShimBootStage) => void>();
 
 function compileInitError(message: string, path: string): ShimCompilationResult {
   return {
@@ -51,15 +54,23 @@ function compileInitError(message: string, path: string): ShimCompilationResult 
 
 export default async function init(options?: ShimInitOptions): Promise<void> {
   if (initialized) return;
+  const onStage = options?.onStage;
+  if (onStage) {
+    initStageListeners.add(onStage);
+  }
   if (!initPromise) {
     // [LAW:single-enforcer] WASM boot ownership lives at one bridge boundary.
     initPromise = Promise.resolve()
       .then(async () => {
-        options?.onStage?.('fetching');
+        for (const listener of initStageListeners) {
+          listener('fetching');
+        }
         return await import('./pkg/oscilla_naga_shim.js');
       })
       .then(async (rawModule) => {
-        options?.onStage?.('compiling');
+        for (const listener of initStageListeners) {
+          listener('compiling');
+        }
         const module = rawModule as unknown as ShimModule;
         if (typeof module.default === 'function') {
           // [LAW:one-source-of-truth] WASM binary URL ownership is centralized
@@ -67,7 +78,9 @@ export default async function init(options?: ShimInitOptions): Promise<void> {
           const wasmUrl = new URL('./pkg/oscilla_naga_shim_bg.wasm', import.meta.url);
           await module.default(wasmUrl);
         }
-        options?.onStage?.('binding');
+        for (const listener of initStageListeners) {
+          listener('binding');
+        }
         const initWasm = module.init;
         const compileWasm = module.compile_ir;
         if (typeof initWasm !== 'function') {
@@ -87,7 +100,13 @@ export default async function init(options?: ShimInitOptions): Promise<void> {
         );
       });
   }
-  await initPromise;
+  try {
+    await initPromise;
+  } finally {
+    if (onStage) {
+      initStageListeners.delete(onStage);
+    }
+  }
 }
 
 export function compile_ir(module: NagaModuleIR, maxActiveLanes?: number): ShimCompilationResult {

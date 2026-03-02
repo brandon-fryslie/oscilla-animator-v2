@@ -133,6 +133,7 @@ async function main() {
   if (bootSnapshot.state !== 'ready') {
     // [LAW:no-silent-fallbacks] WASM boot is a hard prerequisite; app UI stays
     // in explicit fatal state instead of rendering without compiler runtime.
+    unsubscribeBoot();
     return;
   }
   unsubscribeBoot();

@@ -60,6 +60,18 @@ describe('BootService', () => {
     expect(hoisted.compileIrMock).not.toHaveBeenCalled();
   });
 
+  it('does not retry boot after terminal error state', async () => {
+    hoisted.bootMock.mockRejectedValue(new Error('network down'));
+    const service = new BootService();
+
+    const first = await service.start();
+    const second = await service.start();
+
+    expect(first.state).toBe('error');
+    expect(second.state).toBe('error');
+    expect(hoisted.bootMock).toHaveBeenCalledTimes(1);
+  });
+
   it('enters error state when smoke result is malformed', async () => {
     hoisted.bootMock.mockResolvedValue(undefined);
     hoisted.compileIrMock.mockReturnValue(null);

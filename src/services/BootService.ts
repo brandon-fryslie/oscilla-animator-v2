@@ -46,7 +46,7 @@ export class BootService {
   }
 
   async start(): Promise<BootSnapshot> {
-    if (this.snapshot.state === 'ready') {
+    if (this.snapshot.state === 'ready' || this.snapshot.state === 'error') {
       return this.snapshot;
     }
     if (this.startPromise) {
@@ -60,6 +60,8 @@ export class BootService {
   }
 
   private async runStart(): Promise<BootSnapshot> {
+    // [LAW:no-silent-fallbacks] Seed explicit fetching state before bridge init
+    // so import-time failures still surface a concrete pre-ready phase.
     this.setSnapshot({
       state: 'fetching',
       error: null,
@@ -113,4 +115,3 @@ export class BootService {
     }
   }
 }
-
