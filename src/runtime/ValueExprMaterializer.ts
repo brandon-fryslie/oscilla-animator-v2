@@ -239,7 +239,10 @@ export function materializeValueExpr(
   scratch?: MaterializeScratch,
   pureFnContext?: PureFnExecutionContext,
 ): Float32Array {
-  const activePureFnContext = pureFnContext ?? { kernelRegistry: program.kernelRegistry };
+  const activePureFnContext =
+    pureFnContext !== undefined
+      ? pureFnContext
+      : { kernelRegistry: program.kernelRegistry };
   const expr = table.nodes[exprId];
   if (!expr) {
     throw new Error(`ValueExpr ${exprId} not found in table`);
@@ -717,7 +720,10 @@ function fillBufferWithConst(
     }
   } else {
     const _exhaustive: never = value;
-    throw new Error(`Unsupported const value kind: ${String((_exhaustive as { kind?: string }).kind ?? 'unknown')}`);
+    const unknownKind = (_exhaustive as { kind?: string }).kind;
+    throw new Error(
+      `Unsupported const value kind: ${String(unknownKind !== undefined ? unknownKind : 'unknown')}`,
+    );
   }
 }
 
