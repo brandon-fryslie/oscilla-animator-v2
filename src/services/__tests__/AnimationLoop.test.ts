@@ -3,11 +3,19 @@ import { createAnimationLoopState, executeAnimationFrame, startAnimationLoop } f
 import { assertSchedulePhaseBoundaryStateReads, executeFrame } from '../../runtime';
 import { createHealthMetrics } from '../../runtime/RuntimeState';
 
+const runtimeProbeMocks = vi.hoisted(() => ({
+  markRuntimeFrameAdvanced: vi.fn(),
+}));
+
 vi.mock('../../runtime', () => ({
   assertSchedulePhaseBoundaryStateReads: vi.fn(),
   executeFrame: vi.fn(() => {
     throw new Error('boom');
   }),
+}));
+
+vi.mock('../../testing/runtime-probe', () => ({
+  markRuntimeFrameAdvanced: runtimeProbeMocks.markRuntimeFrameAdvanced,
 }));
 
 function makeEmptyShapeBank() {
@@ -18,7 +26,6 @@ function makeEmptyShapeBank() {
     topologyIdByHandle: new Uint32Array(1),
   };
 }
-
 describe('AnimationLoop', () => {
   const executeFrameMock = vi.mocked(executeFrame);
   const assertSchedulePhaseBoundaryStateReadsMock = vi.mocked(assertSchedulePhaseBoundaryStateReads);
@@ -30,6 +37,7 @@ describe('AnimationLoop', () => {
     executeFrameMock.mockImplementation(() => {
       throw new Error('boom');
     });
+    runtimeProbeMocks.markRuntimeFrameAdvanced.mockReset();
     let callback: FrameRequestCallback | null = null;
     vi.stubGlobal('requestAnimationFrame', vi.fn((cb: FrameRequestCallback) => {
       callback = cb;
@@ -303,6 +311,74 @@ describe('AnimationLoop', () => {
     expect(renderArg.inputAudioMid).toBe(0.2);
     expect(renderArg.inputAudioHigh).toBe(0.3);
     expect(renderArg.inputGaugeActive).toBe(1);
+  });
+
+  it('reports sentinel probe frame id when runtime cache is unavailable', () => {
+    const arena = { reset: vi.fn(), getTotalBytes: () => 0 };
+    const renderer = { render: vi.fn() };
+    executeFrameMock.mockReturnValue({ version: 2, ops: [] } as any);
+
+    const deps = {
+      getCurrentProgram: () => ({}),
+      getCurrentState: () => ({
+        health: createHealthMetrics(),
+        shapeBank: makeEmptyShapeBank(),
+        cache: null,
+      }),
+      getCanvas: () => ({ width: 100, height: 80 }),
+      getRenderer: () => renderer,
+      getArena: () => arena,
+      store: {
+        stepDebug: null,
+        diagnostics: {
+          recordJank: vi.fn(),
+          updateFrameTiming: vi.fn(),
+          updateMemoryStats: vi.fn(),
+        },
+        continuity: { updateFromRuntime: vi.fn() },
+        viewport: { zoom: 1, pan: { x: 0, y: 0 }, setContentBounds: vi.fn() },
+        events: { emit: vi.fn() },
+        getPatchRevision: () => 1,
+      },
+    } as any;
+
+    executeAnimationFrame(16, deps, createAnimationLoopState());
+
+    expect(runtimeProbeMocks.markRuntimeFrameAdvanced).toHaveBeenCalledWith(-1, 16);
+  });
+
+  it('reports runtime cache frame id to the probe when available', () => {
+    const arena = { reset: vi.fn(), getTotalBytes: () => 0 };
+    const renderer = { render: vi.fn() };
+    executeFrameMock.mockReturnValue({ version: 2, ops: [] } as any);
+
+    const deps = {
+      getCurrentProgram: () => ({}),
+      getCurrentState: () => ({
+        health: createHealthMetrics(),
+        shapeBank: makeEmptyShapeBank(),
+        cache: { frameId: 42 },
+      }),
+      getCanvas: () => ({ width: 100, height: 80 }),
+      getRenderer: () => renderer,
+      getArena: () => arena,
+      store: {
+        stepDebug: null,
+        diagnostics: {
+          recordJank: vi.fn(),
+          updateFrameTiming: vi.fn(),
+          updateMemoryStats: vi.fn(),
+        },
+        continuity: { updateFromRuntime: vi.fn() },
+        viewport: { zoom: 1, pan: { x: 0, y: 0 }, setContentBounds: vi.fn() },
+        events: { emit: vi.fn() },
+        getPatchRevision: () => 1,
+      },
+    } as any;
+
+    executeAnimationFrame(16, deps, createAnimationLoopState());
+
+    expect(runtimeProbeMocks.markRuntimeFrameAdvanced).toHaveBeenCalledWith(42, 16);
   });
 
   afterEach(() => {
