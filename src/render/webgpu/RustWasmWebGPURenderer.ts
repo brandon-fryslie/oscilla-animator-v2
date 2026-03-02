@@ -80,7 +80,15 @@ export function assertWebGPUStartupContract(canvas: HTMLCanvasElement): void {
     throw new Error('Rust renderer requires Dedicated Worker support');
   }
   if (typeof SharedArrayBuffer === 'undefined') {
-    throw new Error('Rust renderer requires SharedArrayBuffer support');
+    const isolated = typeof crossOriginIsolated === 'boolean' ? crossOriginIsolated : null;
+    const secure = typeof isSecureContext === 'boolean' ? isSecureContext : null;
+    const origin =
+      typeof location !== 'undefined' ? `${location.protocol}//${location.host}` : 'unknown';
+    throw new Error(
+      `Rust renderer requires SharedArrayBuffer support ` +
+        `(crossOriginIsolated=${String(isolated)}, isSecureContext=${String(secure)}, origin=${origin}). ` +
+        `Serve with COOP/COEP headers and open via localhost or HTTPS.`,
+    );
   }
 }
 
