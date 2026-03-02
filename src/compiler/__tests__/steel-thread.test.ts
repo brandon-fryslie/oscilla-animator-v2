@@ -100,6 +100,13 @@ describe('Steel Thread - Animated Particles', () => {
     expect(program.drawPrepProgram?.sinks.length ?? 0).toBeGreaterThan(0);
     expect(program.generatedComputeProgram?.maxActiveLanes ?? 0).toBeGreaterThan(0);
     expect(program.generatedComputeProgram?.offsetConstants.size ?? 0).toBeGreaterThan(0);
+    expect(program.drawPrepProgram?.sinks.length).toBe(1);
+    expect(program.drawPrepProgram?.sinks[0]).toMatchObject({
+      sinkIndex: 0,
+      indirectRecordIndex: 0,
+      instanceCountMode: 'static',
+      staticInstanceCount: 4,
+    });
     const shapeRefs = program.valueExprs.nodes.filter((expr) => expr.kind === 'shapeRef');
     expect(shapeRefs.length).toBeGreaterThan(0);
     for (const shapeRef of shapeRefs) {
