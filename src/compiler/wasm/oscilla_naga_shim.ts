@@ -12,6 +12,12 @@ export interface ShimCompilationResult {
   readonly errors: readonly ShimFormattedError[];
 }
 
+export type ShimBootStage = 'fetching' | 'compiling' | 'binding';
+
+export interface ShimInitOptions {
+  readonly onStage?: (stage: ShimBootStage) => void;
+}
+
 type RustCompileFn = (
   module: NagaModuleIR,
   maxActiveLanes?: number,
@@ -43,12 +49,17 @@ function compileInitError(message: string, path: string): ShimCompilationResult 
   };
 }
 
-export default async function init(): Promise<void> {
+export default async function init(options?: ShimInitOptions): Promise<void> {
   if (initialized) return;
   if (!initPromise) {
     // [LAW:single-enforcer] WASM boot ownership lives at one bridge boundary.
-    initPromise = import('./pkg/oscilla_naga_shim.js')
+    initPromise = Promise.resolve()
+      .then(async () => {
+        options?.onStage?.('fetching');
+        return await import('./pkg/oscilla_naga_shim.js');
+      })
       .then(async (rawModule) => {
+        options?.onStage?.('compiling');
         const module = rawModule as unknown as ShimModule;
         if (typeof module.default === 'function') {
           // [LAW:one-source-of-truth] WASM binary URL ownership is centralized
@@ -56,6 +67,7 @@ export default async function init(): Promise<void> {
           const wasmUrl = new URL('./pkg/oscilla_naga_shim_bg.wasm', import.meta.url);
           await module.default(wasmUrl);
         }
+        options?.onStage?.('binding');
         const initWasm = module.init;
         const compileWasm = module.compile_ir;
         if (typeof initWasm !== 'function') {
