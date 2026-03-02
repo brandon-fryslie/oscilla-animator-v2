@@ -203,7 +203,9 @@ impl WorkerScheduler {
         Some(WorkerObservabilityPacket {
             state: self.state,
             heartbeat,
-            events: self.pending_events.drain(..).collect(),
+            events: std::mem::take(&mut self.pending_events)
+                .into_iter()
+                .collect(),
         })
     }
 
