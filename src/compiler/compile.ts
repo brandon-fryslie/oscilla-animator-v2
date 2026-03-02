@@ -50,6 +50,7 @@ import { resolveKernels } from './resolve-kernels';
 import { createDefaultRegistry } from '../runtime/kernels/default-registry';
 import { compileFrontend, type FrontendResult, type FrontendError } from './frontend';
 import type { CompileError } from './types';
+import { buildProgramTopologyTableFromIds, collectProgramTopologyIds } from './ir/program-topology';
 
 import { registerAllBlocks } from '../blocks/all';
 
@@ -715,6 +716,10 @@ function convertLinkedIRToProgram(
     throw new Error('E_CAMERA_MULTIPLE: Only one Camera block is permitted.');
   }
 
+  const topologyTable = buildProgramTopologyTableFromIds(
+    collectProgramTopologyIds({ valueExprs: { nodes: valueExprNodes } }),
+  );
+
   // Build the program (ValueExpr-only, with kernel registry)
   const program: CompiledProgramIR = {
     irVersion: 1,
@@ -729,6 +734,7 @@ function convertLinkedIRToProgram(
     fieldSlotRegistry,
     renderGlobals, // NEW - Camera system: populated from builder
     kernelRegistry: registry, // Phase B: Kernel registry with resolved handles
+    topologyTable,
     constantProvenance: unlinkedIR.constantProvenance.size > 0
       ? unlinkedIR.constantProvenance
       : undefined,
