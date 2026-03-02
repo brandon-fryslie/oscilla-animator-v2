@@ -22,6 +22,7 @@ import type { FieldHistoryView, AggregateFieldStats } from '../ui/debug-viz/Fiel
 import { FieldStatsAccumulator } from '../ui/debug-viz/FieldStatsAccumulator';
 import type { ArenaSlotDescriptor } from '../runtime/ArenaValueStore';
 import { arenaDecodeToAoS, arenaRead } from '../runtime/ArenaValueStore';
+import type { DebugProbeSubscription } from './DebugProbeProtocol';
 
 /**
  * Scalar value result - scalar value from evalValue step.
@@ -126,6 +127,9 @@ class DebugService {
   /** Port-to-slot-and-type mapping (for unconnected output queries) */
   private portToSlotMap = new Map<string, EdgeMetadata>();
 
+  /** Cached slot -> metadata index for O(1) slot metadata resolution. */
+  private slotMetadataBySlot: Map<ValueSlot, EdgeMetadata> | null = null;
+
   /** Scalar slot values (updated by runtime via tap) */
   private scalarValues = new Map<ValueSlot, number>();
 
@@ -156,6 +160,8 @@ class DebugService {
   private spyReadbackMetaBySlot = new Map<ValueSlot, SpySlotReadbackMeta>();
   /** Subscribers for tracked spy-slot count changes. */
   private spyTrackedSlotSubscribers = new Set<(trackedSlotCount: number) => void>();
+  /** Subscribers for combined debug-probe subscription changes. */
+  private debugProbeSubscribers = new Set<(trackedSubscriptionCount: number) => void>();
 
   /** Global scalar history mode: pre-track mapped scalar history keys. */
   private autoTrackAllDebugData = false;
@@ -215,6 +221,7 @@ class DebugService {
    */
   setEdgeToSlotMap(map: Map<string, EdgeMetadata>, constantValues?: Map<string, ConstantValue>): void {
     this.edgeToSlotMap = map;
+    this.slotMetadataBySlot = null;
     this.constantValues = constantValues ?? new Map();
     // Slot namespace changed — old values are stale and new slots haven't been written yet.
     // Reset so queries return undefined (graceful) instead of throwing (scheduling bug).
@@ -233,6 +240,7 @@ class DebugService {
     this.historyService.onMappingChanged();
     this.syncGlobalDebugTracking();
     this.rebuildTrackedSpyScalarSlots();
+    this.notifyTrackedDebugProbeSubscribers();
   }
 
   /**
@@ -241,9 +249,11 @@ class DebugService {
    */
   setPortToSlotMap(map: Map<string, EdgeMetadata>): void {
     this.portToSlotMap = map;
+    this.slotMetadataBySlot = null;
     this.historyService.onMappingChanged();
     this.syncGlobalDebugTracking();
     this.rebuildTrackedSpyScalarSlots();
+    this.notifyTrackedDebugProbeSubscribers();
   }
 
   /**
@@ -326,6 +336,7 @@ class DebugService {
       const stride = payloadStride(type.payload) as Stride;
       this.fieldAccumulators.set(slotId, new FieldStatsAccumulator(stride));
     }
+    this.notifyTrackedDebugProbeSubscribers();
   }
 
   /**
@@ -344,6 +355,7 @@ class DebugService {
     this.trackedFieldSlots.delete(slotId);
     this.fieldBuffers.delete(slotId);
     this.fieldAccumulators.delete(slotId);
+    this.notifyTrackedDebugProbeSubscribers();
   }
 
   /**
@@ -612,6 +624,69 @@ class DebugService {
   }
 
   /**
+   * Return the canonical debug probe subscriptions for all actively tracked
+   * debug targets (scalar histories + tracked many-cardinality fields).
+   *
+   * [LAW:one-source-of-truth] RuntimeService derives probe subscriptions from
+   * this single service boundary, not from duplicated UI/runtime heuristics.
+   */
+  getTrackedDebugProbeSubscriptions(maxSubscriptions: number = 16): readonly DebugProbeSubscription[] {
+    const limit = Math.max(1, Math.floor(maxSubscriptions));
+    const subscriptions: DebugProbeSubscription[] = [];
+
+    for (const slotId of this.trackedSpyScalarSlots.values()) {
+      if (subscriptions.length >= limit) {
+        return subscriptions;
+      }
+      subscriptions.push({
+        targetId: slotId as number,
+        slotId,
+        sampleKind: 'scalar',
+        componentMask: 0b0001,
+        priority: 0,
+      });
+    }
+
+    if (!this.arenaRef) {
+      return subscriptions;
+    }
+
+    for (const slotId of this.trackedFieldSlots.values()) {
+      if (subscriptions.length >= limit) {
+        return subscriptions;
+      }
+      const desc = this.arenaRef.slotToArena.get(slotId);
+      const meta = this.resolveSlotMetadata(slotId);
+      if (!desc || !meta) {
+        continue;
+      }
+      const encoding = getSampleEncoding(meta.type.payload);
+      if (!encoding.sampleable || encoding.stride <= 0) {
+        continue;
+      }
+      if (encoding.stride > 32) {
+        continue;
+      }
+      const componentMask = encoding.stride >= 32
+        ? 0xFFFFFFFF
+        : (1 << encoding.stride) - 1;
+      subscriptions.push({
+        targetId: slotId as number,
+        slotId,
+        sampleKind: 'lane_window',
+        componentMask,
+        priority: 0,
+        laneWindow: {
+          start: 0,
+          count: desc.laneCount,
+        },
+      });
+    }
+
+    return subscriptions;
+  }
+
+  /**
    * Subscribe to tracked spy scalar-slot count changes.
    * RuntimeService uses this to start/stop the async spy readback loop.
    */
@@ -621,6 +696,34 @@ class DebugService {
     return () => {
       this.spyTrackedSlotSubscribers.delete(subscriber);
     };
+  }
+
+  onTrackedDebugProbeSubscriptionsChange(subscriber: (trackedSubscriptionCount: number) => void): () => void {
+    this.debugProbeSubscribers.add(subscriber);
+    subscriber(this.getTrackedDebugProbeSubscriptionCount());
+    return () => {
+      this.debugProbeSubscribers.delete(subscriber);
+    };
+  }
+
+  getTrackedDebugProbeSubscriptionCount(): number {
+    let count = this.trackedSpyScalarSlots.size;
+    if (!this.arenaRef) {
+      return count;
+    }
+    for (const slotId of this.trackedFieldSlots.values()) {
+      const desc = this.arenaRef.slotToArena.get(slotId);
+      const meta = this.resolveSlotMetadata(slotId);
+      if (!desc || !meta) {
+        continue;
+      }
+      const encoding = getSampleEncoding(meta.type.payload);
+      if (!encoding.sampleable || encoding.stride <= 0 || encoding.stride > 32) {
+        continue;
+      }
+      count += 1;
+    }
+    return count;
   }
 
   /**
@@ -637,6 +740,7 @@ class DebugService {
   clear(): void {
     this.edgeToSlotMap.clear();
     this.portToSlotMap.clear();
+    this.slotMetadataBySlot = null;
     this.scalarValues.clear();
     this.scalarTapSlots.clear();
     this.fieldBuffers.clear();
@@ -656,6 +760,7 @@ class DebugService {
     this.historyService.clear();
     this.clearIssues();
     this.notifyTrackedSpyScalarSlotSubscribers();
+    this.notifyTrackedDebugProbeSubscribers();
   }
 
   /**
@@ -730,6 +835,25 @@ class DebugService {
     return this.portToSlotMap.get(`${key.blockId}:${key.portName}`);
   }
 
+  private resolveSlotMetadata(slotId: ValueSlot): EdgeMetadata | undefined {
+    return this.getSlotMetadataIndex().get(slotId);
+  }
+
+  private getSlotMetadataIndex(): ReadonlyMap<ValueSlot, EdgeMetadata> {
+    if (this.slotMetadataBySlot) {
+      return this.slotMetadataBySlot;
+    }
+    const index = new Map<ValueSlot, EdgeMetadata>();
+    for (const meta of this.edgeToSlotMap.values()) {
+      index.set(meta.slotId, meta);
+    }
+    for (const meta of this.portToSlotMap.values()) {
+      index.set(meta.slotId, meta);
+    }
+    this.slotMetadataBySlot = index;
+    return index;
+  }
+
   private trackSpyScalarSlotForKey(key: DebugTargetKey): void {
     const meta = this.resolveDebugTargetMeta(key);
     if (!meta || !this.isScalarHistoryEligible(meta.type)) {
@@ -741,6 +865,7 @@ class DebugService {
     this.trackedSpyScalarSlots.add(meta.slotId);
     if (this.trackedSpyScalarSlots.size !== beforeSize) {
       this.notifyTrackedSpyScalarSlotSubscribers();
+      this.notifyTrackedDebugProbeSubscribers();
     }
   }
 
@@ -755,6 +880,7 @@ class DebugService {
       const removed = this.trackedSpyScalarSlots.delete(meta.slotId);
       if (removed) {
         this.notifyTrackedSpyScalarSlotSubscribers();
+        this.notifyTrackedDebugProbeSubscribers();
       }
       return;
     }
@@ -777,6 +903,7 @@ class DebugService {
     const after = Array.from(this.trackedSpyScalarSlots.values()).join(',');
     if (before !== after) {
       this.notifyTrackedSpyScalarSlotSubscribers();
+      this.notifyTrackedDebugProbeSubscribers();
     }
   }
 
@@ -784,6 +911,13 @@ class DebugService {
     const trackedSlotCount = this.trackedSpyScalarSlots.size;
     for (const subscriber of this.spyTrackedSlotSubscribers) {
       subscriber(trackedSlotCount);
+    }
+  }
+
+  private notifyTrackedDebugProbeSubscribers(): void {
+    const trackedSubscriptionCount = this.getTrackedDebugProbeSubscriptionCount();
+    for (const subscriber of this.debugProbeSubscribers) {
+      subscriber(trackedSubscriptionCount);
     }
   }
 

@@ -47,8 +47,13 @@ import {
 import { debugSettings } from '../settings/tokens/debug-settings';
 import { compilerFlagsSettings } from '../settings/tokens/compiler-flags-settings';
 import { appSettings } from '../settings/tokens/app-settings';
-import { arenaRead } from '../runtime/ArenaValueStore';
 import type { ValueSlot } from '../types';
+import {
+  type DebugProbePacketSample,
+  type DebugProbeTransport,
+} from './DebugProbeProtocol';
+import { LocalDebugProbeTransport } from './LocalDebugProbeTransport';
+import { createWasmDebugProbeTransport } from './WasmDebugProbeTransport';
 
 const INITIAL_COMPILE_FAILURE_PROBE_MESSAGE =
   'initial_compile_failed: animation loop started but no program is ready';
@@ -62,6 +67,7 @@ export interface RuntimeSpyReadbackPacket {
   readonly capturedAtMs: number;
   readonly frameId: number;
   readonly entries: readonly RuntimeSpyReadbackEntry[];
+  readonly samples: readonly DebugProbePacketSample[];
 }
 
 function isCompileWorkerUnavailableError(err: unknown): boolean {
@@ -106,7 +112,9 @@ export class RuntimeService {
   private spyReadbackTimer: ReturnType<typeof setTimeout> | null = null;
   private spyReadbackLoopActive = false;
   private spyReadbackInFlight = false;
-  private spyReadbackHz = 15;
+  private spyReadbackHz = 5;
+  private debugProbeTransport: DebugProbeTransport;
+  private debugProbeUpgradeInFlight: Promise<void> | null = null;
 
   constructor(
     private readonly store: RootStore,
@@ -117,6 +125,14 @@ export class RuntimeService {
   ) {
     this.statsSink = options.onStatsUpdate ?? null;
     this.runtimeReadySink = options.onRuntimeReady ?? null;
+    this.debugProbeTransport = new LocalDebugProbeTransport(() => ({
+      program: this.compileState.currentProgram,
+      state: this.compileState.currentState,
+    }));
+    this.debugProbeTransport.debugCommand({
+      kind: 'set_rate_hz',
+      rateHz: this.spyReadbackHz,
+    });
   }
 
   setStatsSink(onStatsUpdate: ((statsText: string) => void) | null): void {
@@ -383,6 +399,7 @@ export class RuntimeService {
       });
       // [LAW:single-enforcer] RuntimeService owns debug lifecycle boundaries.
       debugService.clear();
+      this.primeWasmDebugProbeTransport();
       compilationInspector.setErrorReporter((payload) => {
         const phase = payload.passName ? `${payload.phase}(${payload.passName})` : payload.phase;
         const message = payload.error instanceof Error ? payload.error.message : String(payload.error);
@@ -563,10 +580,56 @@ export class RuntimeService {
 
   private bindSpyReadbackTracking(): void {
     this.unsubSpyTracking?.();
-    this.unsubSpyTracking = debugService.onTrackedSpyScalarSlotsChange((trackedSlotCount) => {
-      this.syncSpyReadbackLoopForTrackedSlots(trackedSlotCount);
+    this.unsubSpyTracking = debugService.onTrackedDebugProbeSubscriptionsChange((trackedSubscriptionCount) => {
+      this.syncSpyReadbackSubscriptions();
+      this.syncSpyReadbackLoopForTrackedSlots(trackedSubscriptionCount);
     });
-    this.syncSpyReadbackLoopForTrackedSlots(debugService.getTrackedSpyScalarSlots(1).length);
+    this.syncSpyReadbackSubscriptions();
+    this.syncSpyReadbackLoopForTrackedSlots(debugService.getTrackedDebugProbeSubscriptions(1).length);
+  }
+
+  private primeWasmDebugProbeTransport(): void {
+    if (this.debugProbeUpgradeInFlight) {
+      return;
+    }
+    this.debugProbeUpgradeInFlight = createWasmDebugProbeTransport(() => ({
+      program: this.compileState.currentProgram,
+      state: this.compileState.currentState,
+    }))
+      .then((transport) => {
+        this.debugProbeTransport = transport;
+        this.debugProbeTransport.debugCommand({
+          kind: 'set_rate_hz',
+          rateHz: this.spyReadbackHz,
+        });
+        this.syncSpyReadbackSubscriptions();
+      })
+      .catch((error) => {
+        const message = error instanceof Error ? error.message : String(error);
+        // [LAW:no-silent-fallbacks] Transport upgrade failures must be
+        // observable even when local fallback remains active.
+        this.store.diagnostics.log({
+          level: 'warn',
+          message: `WASM debug probe transport upgrade failed; continuing with LocalDebugProbeTransport: ${message}`,
+        });
+      })
+      .finally(() => {
+        this.debugProbeUpgradeInFlight = null;
+      });
+  }
+
+  private syncSpyReadbackSubscriptions(): void {
+    const subscriptions = debugService.getTrackedDebugProbeSubscriptions(16);
+    if (subscriptions.length === 0) {
+      this.debugProbeTransport.debugCommand({ kind: 'clear_subscriptions' });
+      return;
+    }
+    // [LAW:single-enforcer] RuntimeService owns command-plane updates from UI
+    // tracking state to debug probe transport subscriptions.
+    this.debugProbeTransport.debugCommand({
+      kind: 'set_subscriptions',
+      subscriptions,
+    });
   }
 
   private syncSpyReadbackLoopForTrackedSlots(trackedSlotCount: number): void {
@@ -586,7 +649,7 @@ export class RuntimeService {
       if (!this.spyReadbackLoopActive) {
         return;
       }
-      if (debugService.getTrackedSpyScalarSlots(1).length === 0) {
+      if (debugService.getTrackedDebugProbeSubscriptions(1).length === 0) {
         this.stopSpyReadbackLoop();
         return;
       }
@@ -628,7 +691,7 @@ export class RuntimeService {
     this.spyReadbackInFlight = true;
     try {
       const packet = this.buildSpyReadbackPacket(performance.now());
-      if (!packet || packet.entries.length === 0) {
+      if (!packet) {
         return;
       }
       this.applySpyReadbackPacket(packet);
@@ -638,40 +701,34 @@ export class RuntimeService {
   }
 
   private buildSpyReadbackPacket(capturedAtMs: number): RuntimeSpyReadbackPacket | null {
-    const program = this.compileState.currentProgram;
-    const state = this.compileState.currentState;
-    const table = program?.runtimeAddressTable;
-    if (!program || !state || !table) {
-      return null;
-    }
-
-    const trackedSlots = debugService.getTrackedSpyScalarSlots(16);
-    if (trackedSlots.length === 0) {
+    const probePacket = this.debugProbeTransport.debugPollPacket(capturedAtMs);
+    if (!probePacket) {
       return null;
     }
 
     const entries: RuntimeSpyReadbackEntry[] = [];
-    for (const slotId of trackedSlots) {
-      const lookup = table.slotLookup.get(slotId);
-      if (!lookup || lookup.arena.laneCount !== 1 || lookup.arena.stride < 1) {
-        continue;
+    for (const sample of probePacket.samples) {
+      if (sample.payloadKind === 'scalar') {
+        if (sample.values.length < 1) {
+          continue;
+        }
+        const value = sample.values[0];
+        if (!Number.isFinite(value)) continue;
+        entries.push({
+          slotId: sample.slotId,
+          value,
+        });
       }
-      const value = arenaRead(state.arena, lookup.arena, 0, 0);
-      if (!Number.isFinite(value)) continue;
-      entries.push({
-        slotId,
-        value,
-      });
     }
-
-    if (entries.length === 0) {
+    if (probePacket.samples.length === 0) {
       return null;
     }
 
     return {
-      capturedAtMs,
-      frameId: state.cache.frameId,
+      capturedAtMs: probePacket.capturedAtMs,
+      frameId: probePacket.runtimeFrameId,
       entries,
+      samples: probePacket.samples,
     };
   }
 
@@ -685,6 +742,12 @@ export class RuntimeService {
         packet.capturedAtMs,
         packet.frameId,
       );
+    }
+    for (const sample of packet.samples) {
+      if (sample.payloadKind !== 'lane_window') {
+        continue;
+      }
+      debugService.updateFieldValue(sample.slotId, new Float32Array(sample.values));
     }
   }
 }

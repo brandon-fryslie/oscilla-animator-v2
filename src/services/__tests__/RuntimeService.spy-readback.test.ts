@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { RuntimeService } from '../RuntimeService';
 import { debugService } from '../DebugService';
 import type { EdgeMetadata } from '../mapDebugEdges';
-import { FLOAT, canonicalScalar } from '../../core/canonical-types';
+import { FLOAT, VEC2, canonicalManyDef, canonicalScalar } from '../../core/canonical-types';
 import { valueSlot } from '../../types';
 
 function edgeMeta(slot: number): EdgeMetadata {
@@ -57,6 +57,7 @@ describe('RuntimeService spy readback packet selection', () => {
       arena: new Float32Array([0, 0, 0, 31, 77]),
       cache: { frameId: 22 },
     };
+    (runtime as any).syncSpyReadbackSubscriptions();
 
     const packet = (runtime as any).buildSpyReadbackPacket(500);
     expect(packet).toBeTruthy();
@@ -144,6 +145,69 @@ describe('RuntimeService spy readback packet selection', () => {
       (runtime as any).unsubSpyTracking = null;
       runCycleSpy.mockRestore();
       vi.useRealTimers();
+    }
+  });
+
+  it('applies lane-window packet samples back into DebugService field buffers', () => {
+    const runtime = new RuntimeService({} as any);
+    const fieldSlot = valueSlot(12);
+
+    debugService.setEdgeToSlotMap(new Map([
+      ['edge-field', {
+        slotId: fieldSlot,
+        type: canonicalManyDef(VEC2),
+      }],
+    ]));
+    debugService.setPortToSlotMap(new Map());
+    debugService.setArenaRef(
+      new Float32Array([1, 2, 3, 4]),
+      new Map([[fieldSlot, { offset: 0, stride: 2, laneCount: 2, length: 4 }]]),
+    );
+    debugService.trackField(fieldSlot, canonicalManyDef(VEC2));
+
+    (runtime as any).compileState.currentProgram = {
+      runtimeAddressTable: {
+        slotLookup: new Map([
+          [fieldSlot, {
+            storage: 'f32',
+            offset: 0,
+            stride: 2,
+            slot: fieldSlot,
+            type: canonicalManyDef(VEC2),
+            arena: { offset: 0, stride: 2, laneCount: 2, length: 4 },
+          }],
+        ]),
+      },
+    };
+    (runtime as any).compileState.currentState = {
+      arena: new Float32Array([1, 2, 3, 4]),
+      cache: { frameId: 7 },
+    };
+    (runtime as any).syncSpyReadbackSubscriptions();
+
+    const packet = (runtime as any).buildSpyReadbackPacket(250);
+    expect(packet).toBeTruthy();
+    if (!packet) {
+      throw new Error('Expected lane-window readback packet');
+    }
+    expect(packet.samples).toEqual([
+      expect.objectContaining({
+        slotId: fieldSlot,
+        payloadKind: 'lane_window',
+        stride: 2,
+        laneCount: 2,
+        values: [1, 3, 2, 4],
+      }),
+    ]);
+
+    (runtime as any).applySpyReadbackPacket(packet);
+    const value = debugService.tryGetEdgeValue('edge-field');
+    expect(value).toMatchObject({
+      kind: 'field',
+      slotId: fieldSlot,
+    });
+    if (value && value.kind === 'field') {
+      expect(Array.from(value.buffer)).toEqual([1, 3, 2, 4]);
     }
   });
 });
