@@ -1,6 +1,7 @@
-use bytemuck::{bytes_of, Pod, Zeroable};
+use bytemuck::{bytes_of, cast_slice, Pod, Zeroable};
 
 pub const INDIRECT_WORDS_PER_RECORD: usize = 5;
+pub const INSTANCE_FLOATS_PER_RECORD: usize = 12;
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, Zeroable, Pod)]
@@ -9,27 +10,6 @@ pub struct GlobalUniforms {
     pub resolution: [f32; 2],
     pub time_seconds: f32,
     pub delta_time_seconds: f32,
-}
-
-#[repr(C)]
-#[derive(Clone, Copy, Debug, Default, Zeroable, Pod)]
-pub struct ShapeInstanceData {
-    pub transform: [[f32; 4]; 4],
-    pub color: [f32; 4],
-    pub sdf_params: [f32; 3],
-    pub _pad0: f32,
-    pub material_id: u32,
-    pub _pad1: [u32; 3],
-}
-
-#[repr(C)]
-#[derive(Clone, Copy, Debug, Default, Zeroable, Pod)]
-pub struct DrawIndexedIndirect {
-    pub index_count: u32,
-    pub instance_count: u32,
-    pub first_index: u32,
-    pub base_vertex: i32,
-    pub first_instance: u32,
 }
 
 #[repr(C)]
@@ -47,9 +27,21 @@ pub struct GpuMemoryArena {
     pub uniform_buffer: wgpu::Buffer,
     pub uniform_bind_group: wgpu::BindGroup,
     pub instance_buffer: wgpu::Buffer,
+    pub topology_buffer: wgpu::Buffer,
     pub indirect_buffer: wgpu::Buffer,
+    pub vertex_buffer: wgpu::Buffer,
+    pub index_buffer: wgpu::Buffer,
     pub assembly_write_bind_group: wgpu::BindGroup,
-    pub render_bind_group: wgpu::BindGroup,
+    pub instance_bind_group: wgpu::BindGroup,
+    pub topology_bind_group: wgpu::BindGroup,
+    assembly_layout: wgpu::BindGroupLayout,
+    instance_layout: wgpu::BindGroupLayout,
+    topology_layout: wgpu::BindGroupLayout,
+    instance_capacity_bytes: u64,
+    topology_capacity_words: usize,
+    indirect_capacity_words: usize,
+    vertex_capacity_bytes: u64,
+    index_capacity_bytes: u64,
     state_buffers: [wgpu::Buffer; 2],
     compiler_arena_buffers: [wgpu::Buffer; 2],
     state_bind_groups: [wgpu::BindGroup; 2],
@@ -64,7 +56,8 @@ impl GpuMemoryArena {
         uniform_layout: &wgpu::BindGroupLayout,
         state_layout: &wgpu::BindGroupLayout,
         assembly_layout: &wgpu::BindGroupLayout,
-        render_layout: &wgpu::BindGroupLayout,
+        instance_layout: &wgpu::BindGroupLayout,
+        topology_layout: &wgpu::BindGroupLayout,
         max_particles: usize,
         max_shapes: usize,
     ) -> Self {
@@ -83,7 +76,8 @@ impl GpuMemoryArena {
             }],
         });
 
-        let state_buffer_bytes = (max_particles.saturating_mul(4).saturating_mul(std::mem::size_of::<f32>())) as u64;
+        let state_buffer_bytes =
+            (max_particles.saturating_mul(4).saturating_mul(std::mem::size_of::<f32>())) as u64;
         let state_buffers = [
             device.create_buffer(&wgpu::BufferDescriptor {
                 label: Some("StateBuffer.A"),
@@ -139,26 +133,28 @@ impl GpuMemoryArena {
             }),
         ];
 
-        let instance_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("ShapeBank.InstanceBuffer"),
-            size: (max_shapes.saturating_mul(std::mem::size_of::<ShapeInstanceData>()) as u64).max(16),
-            usage: wgpu::BufferUsages::STORAGE
-                | wgpu::BufferUsages::COPY_DST
-                | wgpu::BufferUsages::COPY_SRC,
-            mapped_at_creation: false,
-        });
-        let indirect_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("ShapeBank.IndirectBuffer"),
-            size: (max_shapes
-                .saturating_mul(INDIRECT_WORDS_PER_RECORD)
-                .saturating_mul(std::mem::size_of::<u32>()) as u64)
-                .max(20),
-            usage: wgpu::BufferUsages::STORAGE
-                | wgpu::BufferUsages::INDIRECT
-                | wgpu::BufferUsages::COPY_DST
-                | wgpu::BufferUsages::COPY_SRC,
-            mapped_at_creation: false,
-        });
+        let initial_instance_bytes = (max_shapes
+            .saturating_mul(INSTANCE_FLOATS_PER_RECORD)
+            .saturating_mul(std::mem::size_of::<f32>())) as u64;
+        let initial_topology_words = max_shapes.saturating_mul(4);
+        let initial_indirect_words = max_shapes.saturating_mul(INDIRECT_WORDS_PER_RECORD);
+        let initial_vertex_bytes =
+            (max_shapes.saturating_mul(8).saturating_mul(std::mem::size_of::<f32>())) as u64;
+        let initial_index_bytes =
+            (max_shapes.saturating_mul(12).saturating_mul(std::mem::size_of::<u32>())) as u64;
+
+        let instance_capacity_bytes = initial_instance_bytes.max(16);
+        let topology_capacity_words = initial_topology_words.max(4);
+        let indirect_capacity_words = initial_indirect_words.max(INDIRECT_WORDS_PER_RECORD);
+        let vertex_capacity_bytes = initial_vertex_bytes.max(16);
+        let index_capacity_bytes = initial_index_bytes.max(16);
+
+        let instance_buffer = Self::create_instance_buffer(device, instance_capacity_bytes);
+        let topology_buffer = Self::create_topology_buffer(device, topology_capacity_words);
+        let indirect_buffer = Self::create_indirect_buffer(device, indirect_capacity_words);
+        let vertex_buffer = Self::create_vertex_buffer(device, vertex_capacity_bytes);
+        let index_buffer = Self::create_index_buffer(device, index_capacity_bytes);
+
         let assembly_write_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("ShapeBank.AssemblyWrite.BindGroup"),
             layout: assembly_layout,
@@ -173,12 +169,20 @@ impl GpuMemoryArena {
                 },
             ],
         });
-        let render_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("ShapeBank.Render.BindGroup"),
-            layout: render_layout,
+        let instance_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("Render.Instance.BindGroup"),
+            layout: instance_layout,
             entries: &[wgpu::BindGroupEntry {
                 binding: 0,
                 resource: instance_buffer.as_entire_binding(),
+            }],
+        });
+        let topology_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("Render.Topology.BindGroup"),
+            layout: topology_layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: topology_buffer.as_entire_binding(),
             }],
         });
 
@@ -204,9 +208,21 @@ impl GpuMemoryArena {
             uniform_buffer,
             uniform_bind_group,
             instance_buffer,
+            topology_buffer,
             indirect_buffer,
+            vertex_buffer,
+            index_buffer,
             assembly_write_bind_group,
-            render_bind_group,
+            instance_bind_group,
+            topology_bind_group,
+            assembly_layout: assembly_layout.clone(),
+            instance_layout: instance_layout.clone(),
+            topology_layout: topology_layout.clone(),
+            instance_capacity_bytes,
+            topology_capacity_words,
+            indirect_capacity_words,
+            vertex_capacity_bytes,
+            index_capacity_bytes,
             state_buffers,
             compiler_arena_buffers,
             state_bind_groups,
@@ -219,6 +235,60 @@ impl GpuMemoryArena {
     pub fn update_uniforms(&mut self, queue: &wgpu::Queue, next_uniforms: GlobalUniforms) {
         self.uniforms = next_uniforms;
         queue.write_buffer(&self.uniform_buffer, 0, bytes_of(&self.uniforms));
+    }
+
+    pub fn sync_render_payload(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        topology_words: &[u32],
+        instance_floats: &[f32],
+        indirect_words: &[u32],
+        vertex_floats: &[f32],
+        index_words: &[u32],
+    ) {
+        let mut needs_assembly_bind_group_rebuild = false;
+        let mut needs_instance_bind_group_rebuild = false;
+        let mut needs_topology_bind_group_rebuild = false;
+
+        if self.ensure_instance_capacity(device, instance_floats.len()) {
+            needs_assembly_bind_group_rebuild = true;
+            needs_instance_bind_group_rebuild = true;
+        }
+        if self.ensure_indirect_capacity(device, indirect_words.len()) {
+            needs_assembly_bind_group_rebuild = true;
+        }
+        if self.ensure_topology_capacity(device, topology_words.len()) {
+            needs_topology_bind_group_rebuild = true;
+        }
+        self.ensure_vertex_capacity(device, vertex_floats.len());
+        self.ensure_index_capacity(device, index_words.len());
+
+        if needs_assembly_bind_group_rebuild {
+            self.rebuild_assembly_write_bind_group(device);
+        }
+        if needs_instance_bind_group_rebuild {
+            self.rebuild_instance_bind_group(device);
+        }
+        if needs_topology_bind_group_rebuild {
+            self.rebuild_topology_bind_group(device);
+        }
+
+        if !topology_words.is_empty() {
+            queue.write_buffer(&self.topology_buffer, 0, cast_slice(topology_words));
+        }
+        if !instance_floats.is_empty() {
+            queue.write_buffer(&self.instance_buffer, 0, cast_slice(instance_floats));
+        }
+        if !indirect_words.is_empty() {
+            queue.write_buffer(&self.indirect_buffer, 0, cast_slice(indirect_words));
+        }
+        if !vertex_floats.is_empty() {
+            queue.write_buffer(&self.vertex_buffer, 0, cast_slice(vertex_floats));
+        }
+        if !index_words.is_empty() {
+            queue.write_buffer(&self.index_buffer, 0, cast_slice(index_words));
+        }
     }
 
     pub fn get_compute_read_bind_group(&self) -> &wgpu::BindGroup {
@@ -309,5 +379,161 @@ impl GpuMemoryArena {
 
     pub fn swap_ping_pong(&mut self) {
         self.ping_pong_index = (self.ping_pong_index + 1) & 1;
+    }
+
+    fn create_instance_buffer(device: &wgpu::Device, size_bytes: u64) -> wgpu::Buffer {
+        device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Render.InstanceBuffer"),
+            size: size_bytes.max(16),
+            usage: wgpu::BufferUsages::STORAGE
+                | wgpu::BufferUsages::COPY_DST
+                | wgpu::BufferUsages::COPY_SRC,
+            mapped_at_creation: false,
+        })
+    }
+
+    fn create_topology_buffer(device: &wgpu::Device, words: usize) -> wgpu::Buffer {
+        device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Render.TopologyBuffer"),
+            size: ((words.max(1) * std::mem::size_of::<u32>()) as u64).max(16),
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        })
+    }
+
+    fn create_indirect_buffer(device: &wgpu::Device, words: usize) -> wgpu::Buffer {
+        device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Render.IndirectArgsBuffer"),
+            size: ((words.max(INDIRECT_WORDS_PER_RECORD) * std::mem::size_of::<u32>()) as u64)
+                .max((INDIRECT_WORDS_PER_RECORD * std::mem::size_of::<u32>()) as u64),
+            usage: wgpu::BufferUsages::STORAGE
+                | wgpu::BufferUsages::INDIRECT
+                | wgpu::BufferUsages::COPY_DST
+                | wgpu::BufferUsages::COPY_SRC,
+            mapped_at_creation: false,
+        })
+    }
+
+    fn create_vertex_buffer(device: &wgpu::Device, size_bytes: u64) -> wgpu::Buffer {
+        device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Render.VertexBuffer"),
+            size: size_bytes.max(16),
+            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        })
+    }
+
+    fn create_index_buffer(device: &wgpu::Device, size_bytes: u64) -> wgpu::Buffer {
+        device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Render.IndexBuffer"),
+            size: size_bytes.max(16),
+            usage: wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        })
+    }
+
+    fn ensure_instance_capacity(&mut self, device: &wgpu::Device, required_floats: usize) -> bool {
+        let required_bytes = (required_floats.saturating_mul(std::mem::size_of::<f32>())) as u64;
+        if required_bytes <= self.instance_capacity_bytes {
+            return false;
+        }
+        let mut next_capacity = self.instance_capacity_bytes.max(16);
+        while next_capacity < required_bytes {
+            next_capacity = next_capacity.saturating_mul(2);
+        }
+        self.instance_buffer = Self::create_instance_buffer(device, next_capacity);
+        self.instance_capacity_bytes = next_capacity;
+        true
+    }
+
+    fn ensure_topology_capacity(&mut self, device: &wgpu::Device, required_words: usize) -> bool {
+        if required_words <= self.topology_capacity_words {
+            return false;
+        }
+        let mut next_capacity = self.topology_capacity_words.max(4);
+        while next_capacity < required_words {
+            next_capacity = next_capacity.saturating_mul(2);
+        }
+        self.topology_buffer = Self::create_topology_buffer(device, next_capacity);
+        self.topology_capacity_words = next_capacity;
+        true
+    }
+
+    fn ensure_indirect_capacity(&mut self, device: &wgpu::Device, required_words: usize) -> bool {
+        if required_words <= self.indirect_capacity_words {
+            return false;
+        }
+        let mut next_capacity = self.indirect_capacity_words.max(INDIRECT_WORDS_PER_RECORD);
+        while next_capacity < required_words {
+            next_capacity = next_capacity.saturating_mul(2);
+        }
+        self.indirect_buffer = Self::create_indirect_buffer(device, next_capacity);
+        self.indirect_capacity_words = next_capacity;
+        true
+    }
+
+    fn ensure_vertex_capacity(&mut self, device: &wgpu::Device, required_floats: usize) {
+        let required_bytes = (required_floats.saturating_mul(std::mem::size_of::<f32>())) as u64;
+        if required_bytes <= self.vertex_capacity_bytes {
+            return;
+        }
+        let mut next_capacity = self.vertex_capacity_bytes.max(16);
+        while next_capacity < required_bytes {
+            next_capacity = next_capacity.saturating_mul(2);
+        }
+        self.vertex_buffer = Self::create_vertex_buffer(device, next_capacity);
+        self.vertex_capacity_bytes = next_capacity;
+    }
+
+    fn ensure_index_capacity(&mut self, device: &wgpu::Device, required_words: usize) {
+        let required_bytes = (required_words.saturating_mul(std::mem::size_of::<u32>())) as u64;
+        if required_bytes <= self.index_capacity_bytes {
+            return;
+        }
+        let mut next_capacity = self.index_capacity_bytes.max(16);
+        while next_capacity < required_bytes {
+            next_capacity = next_capacity.saturating_mul(2);
+        }
+        self.index_buffer = Self::create_index_buffer(device, next_capacity);
+        self.index_capacity_bytes = next_capacity;
+    }
+
+    fn rebuild_assembly_write_bind_group(&mut self, device: &wgpu::Device) {
+        self.assembly_write_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("ShapeBank.AssemblyWrite.BindGroup"),
+            layout: &self.assembly_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: self.instance_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: self.indirect_buffer.as_entire_binding(),
+                },
+            ],
+        });
+    }
+
+    fn rebuild_instance_bind_group(&mut self, device: &wgpu::Device) {
+        self.instance_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("Render.Instance.BindGroup"),
+            layout: &self.instance_layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: self.instance_buffer.as_entire_binding(),
+            }],
+        });
+    }
+
+    fn rebuild_topology_bind_group(&mut self, device: &wgpu::Device) {
+        self.topology_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("Render.Topology.BindGroup"),
+            layout: &self.topology_layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: self.topology_buffer.as_entire_binding(),
+            }],
+        });
     }
 }
