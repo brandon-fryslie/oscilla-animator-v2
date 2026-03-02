@@ -24,6 +24,7 @@ Thumbs.db
 # Test artifacts
 coverage/
 *.log
+test-results/
 
 # Vite cache
 node_modules/.vite/

@@ -37,6 +37,12 @@ export default defineConfig({
     port: 5174,
     host: '0.0.0.0',
     allowedHosts: true,
+    // [LAW:single-enforcer] SharedArrayBuffer capability is enforced at the
+    // HTTP boundary so worker ABI availability does not vary by caller.
+    headers: {
+      'Cross-Origin-Opener-Policy': 'same-origin',
+      'Cross-Origin-Embedder-Policy': 'require-corp',
+    },
     // [LAW:one-source-of-truth] Dev-server filesystem access is centralized
     // here so every harness/browser lane resolves the same source roots.
     fs: {
