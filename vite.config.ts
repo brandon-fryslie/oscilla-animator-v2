@@ -24,6 +24,11 @@ const allowedFsRoots = Array.from(
   )
 );
 
+const crossOriginIsolationHeaders = {
+  'Cross-Origin-Opener-Policy': 'same-origin',
+  'Cross-Origin-Embedder-Policy': 'require-corp',
+} as const;
+
 export default defineConfig({
   base: process.env.BASE_URL || '/',
   root: 'public',
@@ -39,15 +44,17 @@ export default defineConfig({
     allowedHosts: true,
     // [LAW:single-enforcer] SharedArrayBuffer capability is enforced at the
     // HTTP boundary so worker ABI availability does not vary by caller.
-    headers: {
-      'Cross-Origin-Opener-Policy': 'same-origin',
-      'Cross-Origin-Embedder-Policy': 'require-corp',
-    },
+    headers: crossOriginIsolationHeaders,
     // [LAW:one-source-of-truth] Dev-server filesystem access is centralized
     // here so every harness/browser lane resolves the same source roots.
     fs: {
       allow: allowedFsRoots,
     },
+  },
+  preview: {
+    // [LAW:single-enforcer] Preview must enforce the same SAB prerequisites
+    // as dev so runtime capabilities do not vary by serve mode.
+    headers: crossOriginIsolationHeaders,
   },
   build: {
     outDir: '../dist',
