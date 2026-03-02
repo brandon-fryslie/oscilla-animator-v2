@@ -1,5 +1,9 @@
 import type { NagaModuleIR } from './ir/naga-emitter';
-import initShim, { compile_ir, type ShimFormattedError } from './wasm/oscilla_naga_shim';
+import initShim, {
+  compile_ir,
+  type ShimBootStage,
+  type ShimFormattedError,
+} from './wasm/oscilla_naga_shim';
 
 export interface NagaCompilationResult {
   readonly wgsl: string;
@@ -7,6 +11,10 @@ export interface NagaCompilationResult {
 
 export interface NagaCompileOptions {
   readonly maxActiveLanes?: number;
+}
+
+export interface NagaBootOptions {
+  readonly onStage?: (stage: ShimBootStage) => void;
 }
 
 export class NagaValidationError extends Error {
@@ -23,12 +31,12 @@ export class NagaService {
   private static bootPromise: Promise<void> | null = null;
   private static ready = false;
 
-  static async boot(): Promise<void> {
+  static async boot(options?: NagaBootOptions): Promise<void> {
     if (this.ready) return;
     if (!this.bootPromise) {
       // [LAW:single-enforcer] Naga WASM/bootstrap lifecycle is owned by one
       // service boundary to avoid duplicate initialization races.
-      this.bootPromise = initShim()
+      this.bootPromise = initShim({ onStage: options?.onStage })
         .then(() => {
           this.ready = true;
         })
