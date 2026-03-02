@@ -2,7 +2,10 @@ import type {
   DebugProbeCommand,
   DebugProbePacket,
 } from '../DebugProbeProtocol';
-import type { PackedDebugProbeRuntimeSnapshot } from '../DebugProbeRuntimeSnapshot';
+import {
+  DEBUG_PROBE_SLOT_META_WORDS,
+  type PackedDebugProbeRuntimeSnapshot,
+} from '../DebugProbeRuntimeSnapshot';
 
 type RustDebugCommandFn = (command: DebugProbeCommand) => void;
 type RustDebugPollPackedRuntimePacketFn = (
@@ -17,6 +20,7 @@ interface DebugProbeWasmModule {
   readonly init?: () => void;
   readonly debug_command?: RustDebugCommandFn;
   readonly debug_poll_packed_runtime_packet?: RustDebugPollPackedRuntimePacketFn;
+  readonly debug_probe_slot_meta_words?: () => number;
   readonly default?: (
     moduleOrPath?: RequestInfo | URL | Response | BufferSource | WebAssembly.Module | Promise<unknown>,
   ) => Promise<unknown>;
@@ -47,6 +51,15 @@ export async function initDebugProbeWasm(): Promise<void> {
         }
         if (typeof module.debug_poll_packed_runtime_packet !== 'function') {
           throw new Error('oscilla_debug_probe.js missing debug_poll_packed_runtime_packet export');
+        }
+        if (typeof module.debug_probe_slot_meta_words !== 'function') {
+          throw new Error('oscilla_debug_probe.js missing debug_probe_slot_meta_words export');
+        }
+        const wasmSlotMetaWords = module.debug_probe_slot_meta_words();
+        if (wasmSlotMetaWords !== DEBUG_PROBE_SLOT_META_WORDS) {
+          throw new Error(
+            `Packed debug probe ABI mismatch: wasm slot_meta_words=${wasmSlotMetaWords}, ts slot_meta_words=${DEBUG_PROBE_SLOT_META_WORDS}`,
+          );
         }
         module.init();
         debugCommandImpl = module.debug_command;

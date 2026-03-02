@@ -45,6 +45,14 @@ export function debug_poll_runtime_packet(captured_at_ms, snapshot) {
     return takeFromExternrefTable0(ret[0]);
 }
 
+/**
+ * @returns {number}
+ */
+export function debug_probe_slot_meta_words() {
+    const ret = wasm.debug_probe_slot_meta_words();
+    return ret >>> 0;
+}
+
 export function init() {
     wasm.init();
 }

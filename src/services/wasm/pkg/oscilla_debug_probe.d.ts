@@ -7,6 +7,8 @@ export function debug_poll_packed_runtime_packet(captured_at_ms: number, runtime
 
 export function debug_poll_runtime_packet(captured_at_ms: number, snapshot: any): any;
 
+export function debug_probe_slot_meta_words(): number;
+
 export function init(): void;
 
 export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembly.Module;
@@ -16,6 +18,7 @@ export interface InitOutput {
     readonly debug_command: (a: any) => [number, number];
     readonly debug_poll_packed_runtime_packet: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number, number];
     readonly debug_poll_runtime_packet: (a: number, b: any) => [number, number, number];
+    readonly debug_probe_slot_meta_words: () => number;
     readonly init: () => void;
     readonly __wbindgen_malloc: (a: number, b: number) => number;
     readonly __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;
