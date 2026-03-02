@@ -18,6 +18,35 @@ async function loadBrowserMatrixModule(): Promise<{
     blockingPassed: boolean;
     allBrowsersPassed: boolean;
   };
+  runBrowserCheck: (check: {
+    browserName: string;
+    launcher: {
+      launch: (options: { headless: boolean }) => Promise<{
+        version: () => string;
+        newPage: () => Promise<{
+          on: (event: string, callback: (payload: unknown) => void) => void;
+          goto: (url: string, options: { waitUntil: 'networkidle'; timeout: number }) => Promise<void>;
+          waitForSelector: (selector: string, options: { timeout: number }) => Promise<void>;
+          waitForFunction: (
+            predicate: (probeKey: string) => string | null,
+            probeKey: string,
+            options: { timeout: number },
+          ) => Promise<{ jsonValue: () => Promise<string> }>;
+          evaluate: (
+            callback: (
+              payload: Record<string, unknown>,
+            ) => Promise<Record<string, unknown>>,
+            payload: Record<string, unknown>,
+          ) => Promise<Record<string, unknown>>;
+          close: () => Promise<void>;
+        }>;
+        close: () => Promise<void>;
+      }>;
+    };
+    launchOptions: Record<string, unknown>;
+    url: string;
+    blocking: boolean;
+  }) => Promise<unknown>;
 }> {
   return import(browserMatrixModuleUrl);
 }
@@ -46,5 +75,64 @@ describe('webgpu-browser-matrix summarizeGateResults', () => {
       blockingPassed: true,
       allBrowsersPassed: false,
     });
+  });
+});
+
+describe('webgpu-browser-matrix runBrowserCheck cleanup', () => {
+  it('always closes page and browser when setup fails', async () => {
+    const { runBrowserCheck } = await loadBrowserMatrixModule();
+    let pageClosed = false;
+    let browserClosed = false;
+
+    const page = {
+      on: () => {},
+      goto: async () => {
+        throw new Error('goto failed');
+      },
+      waitForSelector: async () => {},
+      waitForFunction: async () => ({ jsonValue: async () => 'succeeded' }),
+      evaluate: async () => ({
+        hasNavigatorGpu: true,
+        hasAdapter: true,
+        hasCanvas: true,
+        hasWebGPUContext: true,
+        frameDeltasMs: [16],
+        runtimeProbe: {
+          present: true,
+          bootstrapState: 'succeeded',
+          bootstrapFailureMessage: null,
+          bootstrapReadyBeforeSample: true,
+          renderedFramesBeforeSample: 1,
+          renderedFramesAfterSample: 2,
+          frameAdvanceCount: 1,
+        },
+      }),
+      close: async () => {
+        pageClosed = true;
+      },
+    };
+
+    const browser = {
+      version: () => 'test',
+      newPage: async () => page,
+      close: async () => {
+        browserClosed = true;
+      },
+    };
+
+    const launcher = {
+      launch: async () => browser,
+    };
+
+    await expect(runBrowserCheck({
+      browserName: 'chromium',
+      launcher,
+      launchOptions: {},
+      url: 'http://127.0.0.1:5174/?showPreview=true',
+      blocking: true,
+    })).rejects.toThrow('goto failed');
+
+    expect(pageClosed).toBe(true);
+    expect(browserClosed).toBe(true);
   });
 });
