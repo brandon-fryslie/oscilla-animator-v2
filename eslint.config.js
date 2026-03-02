@@ -80,4 +80,15 @@ export default tseslint.config(
       'oscilla/no-hot-path-alloc': 'error',
     },
   },
+  // [LAW:single-enforcer] Rust worker owns strict hot-path alloc invariants.
+  // These JS modules remain temporary compatibility paths until removal.
+  {
+    files: [
+      'src/runtime/ScheduleExecutor.ts',
+      'src/runtime/RenderAssembler.ts',
+    ],
+    rules: {
+      'oscilla/no-hot-path-alloc': 'off',
+    },
+  },
 );

@@ -4,10 +4,6 @@
  * Executes the IR program schedule step-by-step to produce a frame.
  * Simplified for v2 - pure IR path, no legacy complexity.
  */
-/* eslint-disable oscilla/no-hot-path-alloc */
-// [LAW:single-enforcer] exception: JS scheduler remains as compatibility path
-// while Rust worker hot-path takes over allocation enforcement.
-
 import type { CompiledProgramIR } from '../compiler/ir/program';
 import type { ScheduleIR } from '../compiler/backend/schedule-program';
 import type { Step, InstanceDecl, StepRender } from '../compiler/ir/types';

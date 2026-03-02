@@ -15,10 +15,6 @@
  * Assembles RenderFrameIR using path-only DrawOp operations (v2 format).
  * Produces DrawPathInstancesOp.
  */
-/* eslint-disable oscilla/no-hot-path-alloc */
-// [LAW:single-enforcer] exception: JS assembler remains as compatibility path
-// while Rust worker hot-path takes over allocation enforcement.
-
 import type { StepRender, InstanceDecl } from '../compiler/ir/types';
 import type { RuntimeState } from './RuntimeState';
 import type { CompiledProgramIR, RuntimeScalarArenaAddress } from '../compiler/ir/program';
