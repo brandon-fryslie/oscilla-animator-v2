@@ -108,7 +108,7 @@ describe('WasmDebugProbeTransport', () => {
       slots: Array<{
         slotId: number;
         descriptor: { offset: number; stride: number; laneCount: number; length: number };
-        values: number[];
+        values: Float32Array;
       }>;
     }];
     expect(capturedAtMs).toBe(1010);
@@ -117,7 +117,7 @@ describe('WasmDebugProbeTransport', () => {
       slots: [{
         slotId: slot as number,
         descriptor: { offset: 0, stride: 1, laneCount: 1, length: 1 },
-        values: [64],
+        values: new Float32Array([64]),
       }],
     });
   });

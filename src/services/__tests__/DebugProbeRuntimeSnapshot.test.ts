@@ -83,21 +83,23 @@ describe('DebugProbeRuntimeSnapshot', () => {
     expect(Array.from(snapshot.slots[0]!.values)).toEqual([41]);
     expect(Array.from(snapshot.slots[1]!.values)).toEqual([10, 20, 30, 41]);
 
-    expect(serializeDebugProbeRuntimeSnapshot(snapshot)).toEqual({
+    const serialized = serializeDebugProbeRuntimeSnapshot(snapshot);
+    expect(serialized).toEqual({
       runtimeFrameId: 9,
       slots: [
         {
           slotId: scalarSlot as number,
           descriptor: { offset: 0, stride: 1, laneCount: 1, length: 1 },
-          values: [41],
+          values: new Float32Array([41]),
         },
         {
           slotId: fieldSlot as number,
           descriptor: { offset: 0, stride: 2, laneCount: 2, length: 4 },
-          values: [10, 20, 30, 41],
+          values: new Float32Array([10, 20, 30, 41]),
         },
       ],
     });
+    expect(serialized.slots[0]!.values.buffer).toBe(snapshot.slots[0]!.values.buffer);
   });
 
   it('extracts scalar and lane-window samples from the shared snapshot contract', () => {

@@ -174,7 +174,7 @@ export function extractDebugProbeSamplesFromRuntimeSnapshot(
 export interface SerializedDebugProbeRuntimeSlotSnapshot {
   readonly slotId: number;
   readonly descriptor: ArenaSlotDescriptor;
-  readonly values: readonly number[];
+  readonly values: Float32Array;
 }
 
 export interface SerializedDebugProbeRuntimeSnapshot {
@@ -192,7 +192,7 @@ export function serializeDebugProbeRuntimeSnapshot(
     slots: snapshot.slots.map((slot) => ({
       slotId: slot.slotId as number,
       descriptor: slot.descriptor,
-      values: Array.from(slot.values),
+      values: slot.values,
     })),
   };
 }
