@@ -26,7 +26,6 @@ function makeEmptyShapeBank() {
     topologyIdByHandle: new Uint32Array(1),
   };
 }
-
 describe('AnimationLoop', () => {
   const executeFrameMock = vi.mocked(executeFrame);
   const assertSchedulePhaseBoundaryStateReadsMock = vi.mocked(assertSchedulePhaseBoundaryStateReads);
@@ -35,6 +34,7 @@ describe('AnimationLoop', () => {
 
   beforeEach(() => {
     assertSchedulePhaseBoundaryStateReadsMock.mockReset();
+    markRuntimeFrameAdvancedMock.mockReset();
     executeFrameMock.mockImplementation(() => {
       throw new Error('boom');
     });

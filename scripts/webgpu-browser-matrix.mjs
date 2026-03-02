@@ -239,16 +239,19 @@ async function runBrowserCheck({ browserName, launcher, launchOptions, url, bloc
   const startedAt = Date.now();
   await page.goto(url, { waitUntil: 'networkidle', timeout: 60_000 });
   await page.waitForSelector('canvas', { timeout: 30_000 });
-  await page.waitForFunction(
-    (probeKey) => {
-      const host = globalThis;
-      return host[probeKey]?.bootstrap?.state === 'succeeded';
-    },
-    RUNTIME_PROBE_GLOBAL_KEY,
-    { timeout: 30_000 },
-  );
+  const bootstrapReadyBeforeSample = await page
+    .waitForFunction(
+      (probeKey) => {
+        const host = globalThis;
+        return host[probeKey]?.bootstrap?.state === 'succeeded';
+      },
+      RUNTIME_PROBE_GLOBAL_KEY,
+      { timeout: 30_000 },
+    )
+    .then(() => true)
+    .catch(() => false);
 
-  const probe = await page.evaluate(async ({ sampleFrames, probeKey }) => {
+  const probe = await page.evaluate(async ({ sampleFrames, probeKey, bootstrapReadyBeforeSample }) => {
     const hasNavigatorGpu = Boolean(navigator.gpu);
     const adapter = hasNavigatorGpu ? await navigator.gpu.requestAdapter() : null;
     const hasAdapter = Boolean(adapter);
@@ -272,7 +275,11 @@ async function runBrowserCheck({ browserName, launcher, launchOptions, url, bloc
     const frameDeltasMs = [];
     await new Promise((resolve) => {
       let previous = performance.now();
-      let remaining = Math.max(1, sampleFrames);
+      let remaining = bootstrapReadyBeforeSample ? Math.max(1, sampleFrames) : 0;
+      if (remaining <= 0) {
+        resolve();
+        return;
+      }
       const tick = (now) => {
         frameDeltasMs.push(now - previous);
         previous = now;
@@ -308,6 +315,7 @@ async function runBrowserCheck({ browserName, launcher, launchOptions, url, bloc
           typeof probeAfter?.bootstrap?.failureMessage === 'string'
             ? probeAfter.bootstrap.failureMessage
             : null,
+        bootstrapReadyBeforeSample,
         renderedFramesBeforeSample: beforeFrameCount,
         renderedFramesAfterSample: afterFrameCount,
         frameAdvanceCount,
@@ -316,6 +324,7 @@ async function runBrowserCheck({ browserName, launcher, launchOptions, url, bloc
   }, {
     sampleFrames: SAMPLE_FRAMES,
     probeKey: RUNTIME_PROBE_GLOBAL_KEY,
+    bootstrapReadyBeforeSample,
   });
 
   await browser.close();
@@ -429,6 +438,18 @@ function makeSkippedResult(check) {
   };
 }
 
+function summarizeGateResults(results) {
+  const skippedCount = results.filter((result) => result.status === 'skipped').length;
+  const blockingChecks = results.filter((result) => result.blocking && result.status !== 'skipped');
+  // [LAW:verifiable-goals] A blocking verdict requires at least one executed
+  // blocking result; an empty set cannot prove readiness.
+  const blockingPassed =
+    blockingChecks.length > 0 && blockingChecks.every((result) => result.passed);
+  const allBrowsersPassed =
+    results.length > 0 && results.every((result) => result.status === 'passed');
+  return { skippedCount, blockingPassed, allBrowsersPassed };
+}
+
 async function main() {
   const managedServer = await startManagedServer(TARGET_URL);
 
@@ -488,11 +509,7 @@ async function main() {
       }
     }
 
-    const skippedCount = results.filter((result) => result.status === 'skipped').length;
-    const blockingChecks = results.filter((result) => result.blocking && result.status !== 'skipped');
-    const blockingPassed =
-      blockingChecks.length > 0 && blockingChecks.every((result) => result.passed);
-    const allBrowsersPassed = results.every((result) => result.status === 'passed');
+    const { skippedCount, blockingPassed, allBrowsersPassed } = summarizeGateResults(results);
     const report = {
       generatedAt: new Date().toISOString(),
       sampleFrames: SAMPLE_FRAMES,
@@ -555,8 +572,12 @@ async function main() {
   }
 }
 
-main().catch((error) => {
-  const message = error instanceof Error ? error.stack ?? error.message : String(error);
-  process.stderr.write(`[matrix] Failed: ${message}\n`);
-  process.exit(1);
-});
+if (import.meta.url === `file://${process.argv[1]}`) {
+  main().catch((error) => {
+    const message = error instanceof Error ? error.stack ?? error.message : String(error);
+    process.stderr.write(`[matrix] Failed: ${message}\n`);
+    process.exit(1);
+  });
+}
+
+export { computeStats, getChecks, makeSkippedResult, runBrowserCheck, summarizeGateResults };
