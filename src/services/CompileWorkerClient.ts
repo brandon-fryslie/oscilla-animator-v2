@@ -4,7 +4,6 @@ import type { CompiledProgramIR } from '../compiler/ir/program';
 import { createDefaultRegistry } from '../runtime/kernels/default-registry';
 import type { Patch } from '../graph';
 import { serializePatch } from './PatchPersistence';
-import { installSerializableTopologies } from '../shapes/registry';
 import type {
   CompileWorkerRequest,
   CompileWorkerResponse,
@@ -80,10 +79,6 @@ function reviveBackendResult(
   if (backend.kind === 'error') {
     return { kind: 'error', errors: backend.errors };
   }
-
-  // [LAW:one-source-of-truth] Program IR topology IDs are only meaningful with
-  // the exact topology definitions from compile-time registration.
-  installSerializableTopologies(backend.topologies);
 
   // [LAW:one-source-of-truth] Kernel handles are compile-time data; runtime registry
   // is reconstructed deterministically from the canonical default registry definition.

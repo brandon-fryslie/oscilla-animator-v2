@@ -30,13 +30,13 @@ import { evaluateValueExprScalar, type ScalarEvalContext } from './ValueExprScal
 import { requireInst } from '../core/canonical-types';
 import { payloadStride } from '../core/canonical-types';
 import { constValueAsNumber, type ConstValue } from '../core/canonical-types';
-import { getTopology } from '../shapes/registry';
 import type { PathTopologyDef, TopologyDef } from '../shapes/types';
 import { applyOpcode } from './OpcodeInterpreter';
 import {
   applyPureFn as applySharedPureFn,
   type PureFnExecutionContext,
 } from './ScalarKernelLibrary';
+import { getProgramTopology } from '../compiler/ir/program-topology';
 
 function isPathTopology(topology: TopologyDef): topology is PathTopologyDef {
   return 'verbs' in topology;
@@ -81,7 +81,7 @@ function evaluateShapeRefHandle(
   if (!shapeBank) {
     throw new Error('RuntimeState.shapeBank is required to evaluate shape handles');
   }
-  const topology = getTopology(expr.topologyId);
+  const topology = getProgramTopology(program, expr.topologyId);
   const isPath = isPathTopology(topology);
   const vertexCount = isPath ? topology.totalControlPoints : 0;
   const flags = isPath && topology.closed ? Shape2DFlags.CLOSED : 0;
@@ -640,8 +640,11 @@ function materializeKernel(
       );
 
       // Look up topology for closed flag
-      const topology = getTopology(expr.topologyId) as PathTopologyDef | undefined;
-      const closed = topology ? topology.closed : false;
+      const topology = getProgramTopology(program, expr.topologyId);
+      if (!isPathTopology(topology)) {
+        throw new Error(`pathSample: topology ${String(expr.topologyId)} is not a path topology`);
+      }
+      const closed = topology.closed;
 
       if (expr.op === 'position') {
         fillBufferPathSamplePosition(buf, cpBuf, sourceCount, tBuf, count, closed, stride);

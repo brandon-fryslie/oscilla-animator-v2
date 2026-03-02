@@ -15,7 +15,7 @@ import { computeRuntimeStorageSizes } from '../ir/program';
 import { createRuntimeState, executeFrame } from '../../runtime';
 import { readShapeBankHandleMetadata, readShapeBankHeader } from '../../runtime/RuntimeState';
 import { getTestArena } from '../../runtime/__tests__/test-arena-helper';
-import { getTopology } from '../../shapes/registry';
+import { getProgramTopology } from '../ir/program-topology';
 
 /**
  * Helper: compile a patch and assert success.
@@ -150,7 +150,7 @@ describe('Steel Thread - Animated Particles', () => {
       const header = readShapeBankHeader(state.shapeBank.data, handle);
       const metadata = readShapeBankHandleMetadata(state.shapeBank, handle);
       expect(metadata.topologyId).toBe(expr.topologyId);
-      const topology = getTopology(expr.topologyId);
+      const topology = getProgramTopology(program, expr.topologyId);
       if ('totalControlPoints' in topology) {
         expect(header.vertexCount).toBe(topology.totalControlPoints);
       }

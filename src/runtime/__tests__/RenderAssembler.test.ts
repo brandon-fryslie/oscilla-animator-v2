@@ -10,6 +10,7 @@ import {
   isRenderStep,
   type AssemblerContext,
 } from '../RenderAssembler';
+import type { CompiledProgramIR } from '../../compiler/ir/program';
 import type { StepRender, InstanceDecl } from '../../compiler/ir/types';
 import type { ValueExpr } from '../../compiler/ir/value-expr';
 import { instanceId } from '../../core/ids';
@@ -30,6 +31,7 @@ import type { RenderSpace2D } from '../../shapes/types';
 import { PathVerb } from '../../shapes/types';
 import { DEFAULT_CAMERA } from '../CameraResolver';
 import { getTestArena } from './test-arena-helper';
+import { buildProgramTopologyTableFromIds } from '../../compiler/ir/program-topology';
 import {
   buildScalarExprToArenaAddressFromOffsets,
   buildSlotToArenaFromTestBuffers,
@@ -103,6 +105,41 @@ const TEST_NON_PATH_TOPOLOGY_ID = registerDynamicTopology({
   },
 }, 'test-non-path');
 
+function createMockProgram(): CompiledProgramIR {
+  return {
+    irVersion: 1,
+    valueExprs: { nodes: [] },
+    constants: { json: [] },
+    schedule: {
+      steps: [],
+      timeModel: { periodAMs: 4000, periodBMs: 8000 },
+      instances: new Map(),
+      stateMappings: [],
+      stateSlotCount: 0,
+      eventSlotCount: 0,
+      eventCount: 0,
+    } as any,
+    outputs: [],
+    slotMeta: [],
+    runtimeSlots: [],
+    debugIndex: {
+      stepToBlock: new Map(),
+      slotToBlock: new Map(),
+      exprToBlock: new Map(),
+      ports: [],
+      slotToPort: new Map(),
+      blockMap: new Map(),
+    },
+    fieldSlotRegistry: new Map(),
+    renderGlobals: [],
+    kernelRegistry: { resolve: () => undefined, entries: () => [] } as any,
+    topologyTable: buildProgramTopologyTableFromIds([TEST_PENTAGON_ID, TEST_NON_PATH_TOPOLOGY_ID]),
+    arenaLayout: [],
+    arenaPayloadFloats: 0,
+    arenaTotalFloats: 0,
+  };
+}
+
 describe('RenderAssembler', () => {
   describe('isRenderStep', () => {
     it('returns true for render steps', () => {
@@ -130,6 +167,7 @@ describe('RenderAssembler', () => {
       };
 
       const context: AssemblerContext = {
+        program: createMockProgram(),
         scalarExprToArenaAddress: new Map(),
         instances: new Map(),
         state,
@@ -153,6 +191,7 @@ describe('RenderAssembler', () => {
       };
 
       const context: AssemblerContext = {
+        program: createMockProgram(),
         scalarExprToArenaAddress: new Map(),
         instances: new Map([['empty-instance', createMockInstance(0)]]),
         state,
@@ -219,6 +258,7 @@ describe('RenderAssembler', () => {
       };
 
       const context: AssemblerContext = {
+        program: createMockProgram(),
         scalarExprToArenaAddress: buildScalarExprToArenaAddressFromOffsets(scalarExprToArenaOffset),
         instances: new Map([['culled-instance', createMockInstance(2)]]),
         state,
@@ -265,6 +305,7 @@ describe('RenderAssembler', () => {
       };
 
       const context: AssemblerContext = {
+        program: createMockProgram(),
         scalarExprToArenaAddress: buildScalarExprToArenaAddressFromOffsets(scalarExprToArenaOffset),
         instances: new Map([['test-instance', createMockInstance(10)]]),
         state,
@@ -329,6 +370,7 @@ describe('RenderAssembler', () => {
       };
 
       const context: AssemblerContext = {
+        program: createMockProgram(),
         scalarExprToArenaAddress: buildScalarExprToArenaAddressFromOffsets(scalarExprToArenaOffset),
         instances: new Map([['test-instance', createMockInstance(2)]]),
         state,
@@ -427,6 +469,7 @@ describe('RenderAssembler', () => {
       };
 
       const context: AssemblerContext = {
+        program: createMockProgram(),
         scalarExprToArenaAddress: buildScalarExprToArenaAddressFromOffsets(scalarExprToArenaOffset),
         instances: new Map([['test-instance', createMockInstance(2)]]),
         state,
@@ -477,6 +520,7 @@ describe('RenderAssembler', () => {
       };
 
       const context: AssemblerContext = {
+        program: createMockProgram(),
         scalarExprToArenaAddress: buildScalarExprToArenaAddressFromOffsets(scalarExprToArenaOffset),
         instances: new Map([['test-instance', createMockInstance(2)]]),
         state,
@@ -521,6 +565,7 @@ describe('RenderAssembler', () => {
       };
 
       const context: AssemblerContext = {
+        program: createMockProgram(),
         scalarExprToArenaAddress: buildScalarExprToArenaAddressFromOffsets(scalarExprToArenaOffset),
         instances: new Map([['test-instance', createMockInstance(2)]]),
         state,
@@ -575,6 +620,7 @@ describe('RenderAssembler', () => {
       };
 
       const context: AssemblerContext = {
+        program: createMockProgram(),
         scalarExprToArenaAddress: buildScalarExprToArenaAddressFromOffsets(scalarExprToArenaOffset),
         instances: new Map([['test-instance', createMockInstance(2)]]),
         state,
@@ -626,6 +672,7 @@ describe('RenderAssembler', () => {
       };
 
       const context: AssemblerContext = {
+        program: createMockProgram(),
         scalarExprToArenaAddress: buildScalarExprToArenaAddressFromOffsets(scalarExprToArenaOffset),
         instances: new Map([['test-instance', createMockInstance(10)]]),
         state,
@@ -701,6 +748,7 @@ describe('RenderAssembler', () => {
       ];
 
       const context: AssemblerContext = {
+        program: createMockProgram(),
         scalarExprToArenaAddress: buildScalarExprToArenaAddressFromOffsets(scalarExprToArenaOffset),
         instances: new Map([
           ['instance-a', createMockInstance(1)],
@@ -743,6 +791,7 @@ describe('RenderAssembler', () => {
       ];
 
       const context: AssemblerContext = {
+        program: createMockProgram(),
         scalarExprToArenaAddress: buildScalarExprToArenaAddressFromOffsets(scalarExprToArenaOffset),
         instances: new Map([
           ['empty-instance', createMockInstance(0)], // count = 0
@@ -816,6 +865,7 @@ describe('RenderAssembler', () => {
 
       const arena = getTestArena();
       const context: AssemblerContext = {
+        program: createMockProgram(),
         scalarExprToArenaAddress: buildScalarExprToArenaAddressFromOffsets(scalarExprToArenaOffset),
         instances: new Map([['budget-instance', createMockInstance(instanceCount)]]),
         state,
