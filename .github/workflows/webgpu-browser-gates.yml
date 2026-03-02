@@ -1,0 +1,88 @@
+name: webgpu-browser-gates
+
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+
+concurrency:
+  group: webgpu-browser-gates-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  browser-gates:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PLAYWRIGHT_BROWSERS_PATH: ~/.cache/ms-playwright
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Cache Rust dependencies and renderer target
+        # [LAW:single-enforcer] Rust dependency/build caching is owned in one
+        # workflow step so all Rust compile paths share the same cache policy.
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            src/render/wasm/rust/oscilla-rust-renderer -> target
+
+      - name: Cache wasm-bindgen CLI
+        id: cache-wasm-bindgen
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/wasm-bindgen
+            ~/.cargo/bin/wasm-bindgen-test-runner
+            ~/.cargo/bin/wasm2es6js
+            ~/.cargo/.crates2.json
+            ~/.cargo/.crates.toml
+          key: ${{ runner.os }}-wasm-bindgen-cli-0.2.114-v1
+
+      - name: Install wasm-bindgen CLI
+        if: steps.cache-wasm-bindgen.outputs.cache-hit != 'true'
+        run: cargo install wasm-bindgen-cli --version 0.2.114 --locked
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.2
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Cache Playwright browser binaries
+        id: cache-playwright
+        # [LAW:one-source-of-truth] PLAYWRIGHT_BROWSERS_PATH is the canonical
+        # browser artifact location used by cache + install steps.
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.PLAYWRIGHT_BROWSERS_PATH }}
+          key: ${{ runner.os }}-playwright-${{ hashFiles('pnpm-lock.yaml') }}
+
+      - name: Install Playwright browser
+        if: steps.cache-playwright.outputs.cache-hit != 'true'
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Validate cached Playwright browser
+        if: steps.cache-playwright.outputs.cache-hit == 'true'
+        run: pnpm exec playwright install chromium
+
+      - name: Run Gate 2 + Gate 4 browser tests
+        run: pnpm run -s test:rust-worker-gates
