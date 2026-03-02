@@ -172,6 +172,7 @@ export interface PrecomputedCompileArtifacts {
   readonly sourcePatchRevision: number;
   readonly frontendResult: FrontendResult;
   readonly backendResult: CompileResult | null;
+  readonly compiledComputeWgsl?: string | null;
   readonly compileDurationMs: number;
 }
 

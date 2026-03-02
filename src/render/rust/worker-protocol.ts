@@ -17,13 +17,9 @@ export interface RustRendererShutdownMessage {
   readonly type: 'SHUTDOWN';
 }
 
-export interface RustRendererRebuildPipelineMessage {
-  readonly type: 'REBUILD_PIPELINE';
+export interface RustRendererRebuildSimulationPipelineMessage {
+  readonly type: 'REBUILD_SIMULATION_PIPELINE';
   readonly simulationWgsl: string;
-  readonly assemblyWgsl: string;
-  readonly uberShaderWgsl: string;
-  readonly particleCount: number;
-  readonly shapeCount: number;
 }
 
 export interface RustRendererResizeCanvasMessage {
@@ -47,7 +43,7 @@ export interface RustRendererInjectPoisonAllocMessage {
 export type RustRendererWorkerInboundMessage =
   | RustRendererBootstrapMessage
   | RustRendererShutdownMessage
-  | RustRendererRebuildPipelineMessage
+  | RustRendererRebuildSimulationPipelineMessage
   | RustRendererResizeCanvasMessage
   | RustRendererPauseMessage
   | RustRendererResumeMessage
@@ -63,8 +59,8 @@ export interface RustRendererFatalError {
   readonly message: string;
 }
 
-export interface RustRendererRebuildPipelineSuccess {
-  readonly type: 'REBUILD_PIPELINE_SUCCESS';
+export interface RustRendererRebuildSimulationPipelineSuccess {
+  readonly type: 'REBUILD_SIMULATION_PIPELINE_SUCCESS';
 }
 
 export type RustRendererSchedulerState = 'Booting' | 'Running' | 'Paused' | 'Lost';
@@ -97,6 +93,6 @@ export interface RustRendererRuntimeEvent {
 export type RustRendererWorkerOutboundMessage =
   | RustRendererBootstrapSuccess
   | RustRendererFatalError
-  | RustRendererRebuildPipelineSuccess
+  | RustRendererRebuildSimulationPipelineSuccess
   | RustRendererSchedulerHeartbeat
   | RustRendererRuntimeEvent;

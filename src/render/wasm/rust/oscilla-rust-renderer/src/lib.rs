@@ -107,6 +107,18 @@ pub fn rebuild_pipeline(
 }
 
 #[wasm_bindgen]
+pub fn rebuild_simulation_pipeline(simulation_wgsl: String) -> Result<(), JsValue> {
+    ENGINE.with(|engine_cell| {
+        let mut engine_ref = engine_cell.borrow_mut();
+        let engine = engine_ref.as_mut().ok_or_else(|| {
+            JsValue::from_str("Rust engine must be initialized before rebuild_simulation_pipeline")
+        })?;
+        engine.rebuild_simulation_pipeline(simulation_wgsl.as_str());
+        Ok(())
+    })
+}
+
+#[wasm_bindgen]
 pub fn resize_surface(width: u32, height: u32) -> Result<(), JsValue> {
     ENGINE.with(|engine_cell| {
         let mut engine_ref = engine_cell.borrow_mut();
