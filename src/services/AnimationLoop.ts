@@ -19,6 +19,7 @@ import { JANK_THRESHOLD_MS } from '../stores/DiagnosticsStore';
 import type { RuntimeState } from '../runtime/RuntimeState';
 import type { RootStore } from '../stores';
 import type { RenderFrameIR } from '../render/types';
+import { markRuntimeFrameAdvanced } from '../testing/runtime-probe';
 
 export interface AnimationLoopState {
   frameCount: number;
@@ -253,6 +254,8 @@ export function executeAnimationFrame(
     drawPrepSinks,
   });
   state.renderTime = performance.now() - renderStart;
+  const probeFrameId = currentState.cache?.frameId ?? -1;
+  markRuntimeFrameAdvanced(probeFrameId, tMs);
 
   // [LAW:dataflow-not-control-flow] Canonical render loop avoids CPU-side
   // coordinate scans in the hot path; content-bounds updates are data-empty.
