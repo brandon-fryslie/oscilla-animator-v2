@@ -8,13 +8,13 @@ import {
 const mocks = vi.hoisted(() => ({
   initDebugProbeWasm: vi.fn(async () => {}),
   debug_probe_command: vi.fn(),
-  debug_probe_poll_packet: vi.fn<(capturedAtMs: number, runtimeFrameId: number, samples: unknown[]) => unknown>(() => null),
+  debug_probe_poll_runtime_packet: vi.fn<(capturedAtMs: number, snapshot: unknown) => unknown>(() => null),
 }));
 
 vi.mock('../wasm/oscilla_debug_probe', () => ({
   initDebugProbeWasm: mocks.initDebugProbeWasm,
   debug_probe_command: mocks.debug_probe_command,
-  debug_probe_poll_packet: mocks.debug_probe_poll_packet,
+  debug_probe_poll_runtime_packet: mocks.debug_probe_poll_runtime_packet,
 }));
 
 function makeRuntimeView() {
@@ -75,9 +75,9 @@ describe('WasmDebugProbeTransport', () => {
     expect(mocks.debug_probe_command.mock.calls[0][0]).toMatchObject({ kind: 'set_subscriptions' });
   });
 
-  it('polls runtime arena values and forwards encoded sample payloads to wasm', async () => {
+  it('forwards runtime slot snapshots to wasm for Rust-owned extraction', async () => {
     const { slot, runtimeView } = makeRuntimeView();
-    mocks.debug_probe_poll_packet.mockReturnValueOnce({
+    mocks.debug_probe_poll_runtime_packet.mockReturnValueOnce({
       version: 1,
       sequence: 2,
       capturedAtMs: 1010,
@@ -102,21 +102,23 @@ describe('WasmDebugProbeTransport', () => {
     const packet = transport.debugPollPacket(1010);
     expect(packet).toMatchObject({ runtimeFrameId: 12, sequence: 2 });
 
-    expect(mocks.debug_probe_poll_packet).toHaveBeenCalledTimes(1);
-    const [capturedAtMs, frameId, samples] = mocks.debug_probe_poll_packet.mock.calls[0] as [number, number, unknown[]];
+    expect(mocks.debug_probe_poll_runtime_packet).toHaveBeenCalledTimes(1);
+    const [capturedAtMs, snapshot] = mocks.debug_probe_poll_runtime_packet.mock.calls[0] as [number, {
+      runtimeFrameId: number;
+      slots: Array<{
+        slotId: number;
+        descriptor: { offset: number; stride: number; laneCount: number; length: number };
+        values: number[];
+      }>;
+    }];
     expect(capturedAtMs).toBe(1010);
-    expect(frameId).toBe(12);
-    expect(samples).toEqual([
-      {
-        targetId: slot as number,
+    expect(snapshot).toEqual({
+      runtimeFrameId: 12,
+      slots: [{
         slotId: slot as number,
-        payloadKind: 'scalar',
-        stride: 1,
-        laneCount: 1,
-        valid: true,
-        finite: true,
+        descriptor: { offset: 0, stride: 1, laneCount: 1, length: 1 },
         values: [64],
-      },
-    ]);
+      }],
+    });
   });
 });

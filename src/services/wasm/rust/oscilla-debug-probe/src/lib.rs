@@ -10,25 +10,55 @@ const DEBUG_PACKET_FLAG_NAN_DETECTED_ANY: u16 = 1 << 3;
 const DEBUG_SAMPLE_FLAG_FRESH: u16 = 1 << 0;
 const DEBUG_SAMPLE_FLAG_NAN_DETECTED: u16 = 1 << 3;
 
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+enum DebugProbeSampleKind {
+    Scalar,
+    LaneWindow,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct DebugProbeLaneWindow {
+    start: u32,
+    count: u32,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct DebugProbeSubscription {
     target_id: u32,
     slot_id: u32,
-    sample_kind: String,
+    sample_kind: DebugProbeSampleKind,
+    lane_window: Option<DebugProbeLaneWindow>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct DebugProbeInputSample {
-    target_id: u32,
+struct RuntimeArenaDescriptor {
+    offset: usize,
+    stride: u16,
+    lane_count: u32,
+    length: usize,
+    component_offsets: Option<Vec<usize>>,
+    packing: Option<String>,
+    lane_stride: Option<usize>,
+    component_stride: Option<usize>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct DebugProbeRuntimeSlotSnapshot {
     slot_id: u32,
-    payload_kind: String,
-    stride: u8,
-    lane_count: u16,
-    valid: bool,
-    finite: bool,
-    values: Vec<f64>,
+    descriptor: RuntimeArenaDescriptor,
+    values: Vec<f32>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct DebugProbeRuntimeSnapshot {
+    runtime_frame_id: u32,
+    slots: Vec<DebugProbeRuntimeSlotSnapshot>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -36,7 +66,7 @@ struct DebugProbeInputSample {
 struct DebugProbePacketSample {
     target_id: u32,
     slot_id: u32,
-    payload_kind: &'static str,
+    payload_kind: DebugProbeSampleKind,
     stride: u8,
     lane_count: u16,
     sample_flags: u16,
@@ -63,6 +93,15 @@ enum DebugProbeCommand {
     SetRateHz { rate_hz: u32 },
 }
 
+#[derive(Debug, Clone, Copy)]
+struct ArenaAddress {
+    base_offset: usize,
+    lane_stride: usize,
+    component_stride: usize,
+    stride: usize,
+    lane_count: usize,
+}
+
 #[derive(Default)]
 struct DebugProbeEngine {
     sequence: u32,
@@ -86,63 +125,45 @@ impl DebugProbeEngine {
         }
     }
 
-    fn build_packet(
+    fn build_packet_from_snapshot(
         &mut self,
         captured_at_ms: f64,
-        runtime_frame_id: u32,
-        samples: Vec<DebugProbeInputSample>,
+        snapshot: DebugProbeRuntimeSnapshot,
     ) -> Option<DebugProbePacket> {
         if self.subscriptions.is_empty() {
             return None;
         }
 
-        let sample_by_slot: HashMap<u32, DebugProbeInputSample> = samples
+        let slot_by_id: HashMap<u32, DebugProbeRuntimeSlotSnapshot> = snapshot
+            .slots
             .into_iter()
-            .map(|sample| (sample.slot_id, sample))
+            .map(|slot| (slot.slot_id, slot))
             .collect();
 
         let mut packet_flags = 0u16;
-        let mut packet_samples: Vec<DebugProbePacketSample> = Vec::with_capacity(self.subscriptions.len());
+        let mut packet_samples: Vec<DebugProbePacketSample> =
+            Vec::with_capacity(self.subscriptions.len());
 
-        // [LAW:dataflow-not-control-flow] Poll always walks the subscription set in one order;
-        // variability is encoded in validity/freshness flags.
+        // [LAW:dataflow-not-control-flow] Poll always walks the configured
+        // subscriptions in one order; sample validity/freshness flows through
+        // flags instead of branching the pipeline itself.
         for sub in &self.subscriptions {
-            if sub.sample_kind != "scalar" {
-                packet_flags |= DEBUG_PACKET_FLAG_SUBSCRIPTION_INVALID;
-                continue;
-            }
-            let Some(sample) = sample_by_slot.get(&sub.slot_id) else {
+            let Some(slot) = slot_by_id.get(&sub.slot_id) else {
                 packet_flags |= DEBUG_PACKET_FLAG_SUBSCRIPTION_INVALID;
                 continue;
             };
-            if !sample.valid || sample.slot_id != sub.slot_id || sample.target_id != sub.target_id {
-                packet_flags |= DEBUG_PACKET_FLAG_SUBSCRIPTION_INVALID;
-                continue;
-            }
-            if sample.payload_kind != sub.sample_kind {
-                packet_flags |= DEBUG_PACKET_FLAG_SUBSCRIPTION_INVALID;
-                continue;
-            }
 
-            let mut sample_flags = DEBUG_SAMPLE_FLAG_FRESH;
-            if !sample.finite {
+            let Some(mut sample) = build_packet_sample(sub, slot) else {
+                packet_flags |= DEBUG_PACKET_FLAG_SUBSCRIPTION_INVALID;
+                continue;
+            };
+
+            if sample.values.iter().any(|value| !value.is_finite()) {
                 packet_flags |= DEBUG_PACKET_FLAG_NAN_DETECTED_ANY;
-                sample_flags = DEBUG_SAMPLE_FLAG_NAN_DETECTED;
+                sample.sample_flags = DEBUG_SAMPLE_FLAG_NAN_DETECTED;
             }
 
-            packet_samples.push(DebugProbePacketSample {
-                target_id: sub.target_id,
-                slot_id: sub.slot_id,
-                payload_kind: if sample.payload_kind == "lane_window" {
-                    "lane_window"
-                } else {
-                    "scalar"
-                },
-                stride: sample.stride,
-                lane_count: sample.lane_count,
-                sample_flags,
-                values: sample.values.clone(),
-            });
+            packet_samples.push(sample);
         }
 
         if packet_samples.is_empty() {
@@ -155,12 +176,113 @@ impl DebugProbeEngine {
             version: 1,
             sequence: self.sequence,
             captured_at_ms,
-            runtime_frame_id,
+            runtime_frame_id: snapshot.runtime_frame_id,
             sample_count: packet_samples.len() as u16,
             packet_flags,
             samples: packet_samples,
         })
     }
+}
+
+fn resolve_arena_address(desc: &RuntimeArenaDescriptor) -> ArenaAddress {
+    let packing = desc.packing.as_deref().unwrap_or("soa");
+    let lane_count = desc.lane_count as usize;
+    let stride = desc.stride as usize;
+    let lane_stride = desc
+        .lane_stride
+        .unwrap_or(if packing == "soa" { 1 } else { stride });
+    let component_stride = desc
+        .component_stride
+        .unwrap_or(if packing == "soa" { lane_count } else { 1 });
+
+    ArenaAddress {
+        base_offset: desc.offset,
+        lane_stride,
+        component_stride,
+        stride,
+        lane_count,
+    }
+}
+
+fn arena_index(desc: &RuntimeArenaDescriptor, lane: usize, component: usize) -> Option<usize> {
+    if let Some(component_offsets) = &desc.component_offsets {
+        if component < component_offsets.len() {
+            let lane_stride = desc.lane_stride.unwrap_or(1);
+            return Some(desc.offset + component_offsets[component] + lane * lane_stride);
+        }
+    }
+
+    let address = resolve_arena_address(desc);
+    if lane >= address.lane_count || component >= address.stride {
+        return None;
+    }
+
+    Some(address.base_offset + component * address.component_stride + lane * address.lane_stride)
+}
+
+fn read_scalar_values(slot: &DebugProbeRuntimeSlotSnapshot) -> Option<(u8, u16, Vec<f64>)> {
+    let desc = &slot.descriptor;
+    if desc.lane_count != 1 || desc.stride < 1 {
+        return None;
+    }
+    let index = arena_index(desc, 0, 0)?;
+    let value = *slot.values.get(index)? as f64;
+    Some((1, 1, vec![value]))
+}
+
+fn read_lane_window_values(
+    slot: &DebugProbeRuntimeSlotSnapshot,
+    lane_window: Option<&DebugProbeLaneWindow>,
+) -> Option<(u8, u16, Vec<f64>)> {
+    let desc = &slot.descriptor;
+    if desc.stride < 1 {
+        return None;
+    }
+
+    let lane_start = lane_window.map(|window| window.start as usize).unwrap_or(0);
+    let lane_count = lane_window
+        .map(|window| window.count as usize)
+        .unwrap_or(desc.lane_count as usize);
+    let total_lane_count = desc.lane_count as usize;
+    if lane_count < 1 || lane_start.checked_add(lane_count)? > total_lane_count {
+        return None;
+    }
+
+    let stride = desc.stride as usize;
+    let mut values = Vec::with_capacity(lane_count * stride);
+    for lane in lane_start..(lane_start + lane_count) {
+        for component in 0..stride {
+            let index = arena_index(desc, lane, component)?;
+            let value = *slot.values.get(index)? as f64;
+            values.push(value);
+        }
+    }
+
+    Some((desc.stride as u8, lane_count as u16, values))
+}
+
+fn build_packet_sample(
+    sub: &DebugProbeSubscription,
+    slot: &DebugProbeRuntimeSlotSnapshot,
+) -> Option<DebugProbePacketSample> {
+    if slot.values.len() != slot.descriptor.length {
+        return None;
+    }
+
+    let (stride, lane_count, values) = match sub.sample_kind {
+        DebugProbeSampleKind::Scalar => read_scalar_values(slot)?,
+        DebugProbeSampleKind::LaneWindow => read_lane_window_values(slot, sub.lane_window.as_ref())?,
+    };
+
+    Some(DebugProbePacketSample {
+        target_id: sub.target_id,
+        slot_id: sub.slot_id,
+        payload_kind: sub.sample_kind.clone(),
+        stride,
+        lane_count,
+        sample_flags: DEBUG_SAMPLE_FLAG_FRESH,
+        values,
+    })
 }
 
 thread_local! {
@@ -191,20 +313,16 @@ pub fn debug_command(command: JsValue) -> Result<(), JsValue> {
 }
 
 #[wasm_bindgen]
-pub fn debug_poll_packet(
-    captured_at_ms: f64,
-    runtime_frame_id: u32,
-    samples: JsValue,
-) -> Result<JsValue, JsValue> {
-    let parsed_samples: Vec<DebugProbeInputSample> = serde_wasm_bindgen::from_value(samples)
-        .map_err(|err| js_error(format!("debug_poll_packet decode failed: {err}")))?;
+pub fn debug_poll_runtime_packet(captured_at_ms: f64, snapshot: JsValue) -> Result<JsValue, JsValue> {
+    let parsed_snapshot: DebugProbeRuntimeSnapshot = serde_wasm_bindgen::from_value(snapshot)
+        .map_err(|err| js_error(format!("debug_poll_runtime_packet decode failed: {err}")))?;
 
     let packet = ENGINE.with(|engine| {
         engine
             .borrow_mut()
-            .build_packet(captured_at_ms, runtime_frame_id, parsed_samples)
+            .build_packet_from_snapshot(captured_at_ms, parsed_snapshot)
     });
 
     serde_wasm_bindgen::to_value(&packet)
-        .map_err(|err| js_error(format!("debug_poll_packet encode failed: {err}")))
+        .map_err(|err| js_error(format!("debug_poll_runtime_packet encode failed: {err}")))
 }

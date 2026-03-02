@@ -3,7 +3,7 @@
 
 export function debug_command(command: any): void;
 
-export function debug_poll_packet(captured_at_ms: number, runtime_frame_id: number, samples: any): any;
+export function debug_poll_runtime_packet(captured_at_ms: number, snapshot: any): any;
 
 export function init(): void;
 
@@ -12,7 +12,7 @@ export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembl
 export interface InitOutput {
     readonly memory: WebAssembly.Memory;
     readonly debug_command: (a: any) => [number, number];
-    readonly debug_poll_packet: (a: number, b: number, c: any) => [number, number, number];
+    readonly debug_poll_runtime_packet: (a: number, b: any) => [number, number, number];
     readonly init: () => void;
     readonly __wbindgen_malloc: (a: number, b: number) => number;
     readonly __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;

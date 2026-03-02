@@ -12,12 +12,11 @@ export function debug_command(command) {
 
 /**
  * @param {number} captured_at_ms
- * @param {number} runtime_frame_id
- * @param {any} samples
+ * @param {any} snapshot
  * @returns {any}
  */
-export function debug_poll_packet(captured_at_ms, runtime_frame_id, samples) {
-    const ret = wasm.debug_poll_packet(captured_at_ms, runtime_frame_id, samples);
+export function debug_poll_runtime_packet(captured_at_ms, snapshot) {
+    const ret = wasm.debug_poll_runtime_packet(captured_at_ms, snapshot);
     if (ret[2]) {
         throw takeFromExternrefTable0(ret[1]);
     }
