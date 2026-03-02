@@ -1,0 +1,16 @@
+[package]
+name = "webgpu-headless-gates"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[features]
+default = []
+headless = []
+
+[dependencies]
+bytemuck = { version = "1.21", features = ["derive"] }
+futures-intrusive = "0.5"
+png = "0.17"
+pollster = "0.4"
+wgpu = { version = "24.0", default-features = false, features = ["vulkan", "wgsl"] }
