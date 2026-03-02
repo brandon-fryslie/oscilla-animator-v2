@@ -60,7 +60,6 @@ describe('CompositeStorage', () => {
       Object.defineProperty(globalThis, 'localStorage', originalLocalStorage);
       return;
     }
-    // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
     delete (globalThis as { localStorage?: unknown }).localStorage;
   });
 

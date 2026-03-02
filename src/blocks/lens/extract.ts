@@ -47,7 +47,7 @@ export function register(): void {
   
       // Component index is compile-time only (IR extract takes a literal integer).
       // Read from config — defaultValue in block def ensures it's always present.
-      const componentIndex = requireConfigInt(config ?? {}, 'component', 0, 2);
+      const componentIndex = requireConfigInt(config, 'component', 0, 2);
   
       const outType = ctx.outTypes[0];
   
