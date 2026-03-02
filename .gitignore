@@ -1,6 +1,5 @@
 # Build output
 dist/
-target/
 
 # Dependencies
 node_modules/
@@ -35,5 +34,5 @@ node_modules/.vite/
 *.tsbuildinfo
 webkit-memory-profile-export-all.json
 
-# Rust/WASM build output
-src/render/wasm/pkg/
+# Rust build output
+target/

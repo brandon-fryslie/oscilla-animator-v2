@@ -96,17 +96,6 @@ export function take_runtime_event_code() {
     return ret[0] >>> 0;
 }
 
-/**
- * @returns {any}
- */
-export function take_runtime_status() {
-    const ret = wasm.take_runtime_status();
-    if (ret[2]) {
-        throw takeFromExternrefTable0(ret[1]);
-    }
-    return takeFromExternrefTable0(ret[0]);
-}
-
 function __wbg_get_imports() {
     const import0 = {
         __proto__: null,
@@ -342,8 +331,8 @@ function __wbg_get_imports() {
             const ret = new Error();
             return ret;
         },
-        __wbg_new_2cb6f455748a4e89: function(arg0) {
-            const ret = new Float32Array(arg0);
+        __wbg_new_a70fbab9066b301f: function() {
+            const ret = new Array();
             return ret;
         },
         __wbg_new_ab79df5bd7c26067: function() {
@@ -374,6 +363,10 @@ function __wbg_get_imports() {
         },
         __wbg_new_typed_bccac67128ed885a: function() {
             const ret = new Array();
+            return ret;
+        },
+        __wbg_new_with_byte_offset_and_length_5853fcf6a5f0f4a8: function(arg0, arg1, arg2) {
+            const ret = new Float32Array(arg0, arg1 >>> 0, arg2 >>> 0);
             return ret;
         },
         __wbg_new_with_byte_offset_and_length_b2ec5bf7b2f35743: function(arg0, arg1, arg2) {
@@ -957,7 +950,7 @@ function __wbg_get_imports() {
             arg0.writeBuffer(arg1, arg2, arg3, arg4, arg5);
         }, arguments); },
         __wbindgen_cast_0000000000000001: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { dtor_idx: 1, function: Function { arguments: [], shim_idx: 2, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+            // Cast intrinsic for `Closure(Closure { dtor_idx: 15, function: Function { arguments: [], shim_idx: 16, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
             const ret = makeMutClosure(arg0, arg1, wasm.wasm_bindgen__closure__destroy__hd711683202404d31, wasm_bindgen__convert__closures_____invoke__h50e008be49128561);
             return ret;
         },
