@@ -77,6 +77,15 @@ test.describe('Rust Worker Gates', () => {
             worker.removeEventListener('message', onMessage);
             if (timeoutId !== null) clearTimeout(timeoutId);
             resolve({ ok: false, reason: String(event.data?.message ?? 'bootstrap failed') });
+            return;
+          }
+          if (event.data?.type === 'DEVICE_LOST') {
+            worker.removeEventListener('message', onMessage);
+            if (timeoutId !== null) clearTimeout(timeoutId);
+            resolve({
+              ok: false,
+              reason: String(event.data?.message ?? event.data?.code ?? 'device lost during bootstrap'),
+            });
           }
         };
         worker.addEventListener('message', onMessage);
@@ -94,6 +103,21 @@ test.describe('Rust Worker Gates', () => {
       const frameGateResult = await new Promise<{ ok: boolean; reason?: string }>((resolve) => {
         let timeoutId: ReturnType<typeof setTimeout> | null = null;
         const onMessage = (event: MessageEvent<any>) => {
+          if (event.data?.type === 'FATAL_ERROR') {
+            worker.removeEventListener('message', onMessage);
+            if (timeoutId !== null) clearTimeout(timeoutId);
+            resolve({ ok: false, reason: String(event.data?.message ?? 'fatal error before 100 frames') });
+            return;
+          }
+          if (event.data?.type === 'DEVICE_LOST') {
+            worker.removeEventListener('message', onMessage);
+            if (timeoutId !== null) clearTimeout(timeoutId);
+            resolve({
+              ok: false,
+              reason: String(event.data?.message ?? event.data?.code ?? 'device lost before 100 frames'),
+            });
+            return;
+          }
           if (event.data?.type !== 'SCHEDULER_HEARTBEAT') return;
           const frameCount = Number(event.data.frameCount ?? 0);
           if (frameCount < 100) return;
@@ -207,6 +231,15 @@ test.describe('Rust Worker Gates', () => {
             worker.removeEventListener('message', onMessage);
             if (timeoutId !== null) clearTimeout(timeoutId);
             resolve({ ok: false, reason: String(event.data?.message ?? 'bootstrap failed') });
+            return;
+          }
+          if (event.data?.type === 'DEVICE_LOST') {
+            worker.removeEventListener('message', onMessage);
+            if (timeoutId !== null) clearTimeout(timeoutId);
+            resolve({
+              ok: false,
+              reason: String(event.data?.message ?? event.data?.code ?? 'device lost during bootstrap'),
+            });
           }
         };
         worker.addEventListener('message', onMessage);
