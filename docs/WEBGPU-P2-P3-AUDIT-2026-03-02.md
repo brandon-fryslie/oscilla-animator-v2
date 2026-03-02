@@ -1,11 +1,17 @@
 # WebGPU P2/P3 Audit (2026-03-02)
 
+Historical audit snapshot only. This document does not define active architecture or readiness criteria.
+Canonical WebGPU architecture/design source remains `docs/WebGPU-Complete/`.
+
+## Evidence Baseline
+- Audit evidence references were captured against commit `6dd5b3730eeae7a90550ff741db6d360405a31e7` (`origin/master` at capture time).
+
 ## Scope
 - Phase 2 (P2-1..P2-4)
 - Phase 3 (P3-1..P3-5)
 
 ## Summary
-- Readiness scripts report `overall=ready`.
+- Readiness scripts report overall ready state (`overall: ready` / `overall=ready`).
 - Core P2 compiler-worker boundary is in place.
 - Active runtime wiring is still partial for full P3 contract execution.
 
