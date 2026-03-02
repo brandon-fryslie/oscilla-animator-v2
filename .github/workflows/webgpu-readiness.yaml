@@ -35,7 +35,17 @@ jobs:
         run: pnpm run -s ci:webgpu-readiness
 
       - name: Upload readiness report
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: webgpu-readiness-report
           path: artifacts/webgpu-readiness.json
+          if-no-files-found: ignore
+
+      - name: Upload browser matrix report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: webgpu-browser-matrix-report
+          path: artifacts/webgpu-browser-matrix.json
+          if-no-files-found: ignore
