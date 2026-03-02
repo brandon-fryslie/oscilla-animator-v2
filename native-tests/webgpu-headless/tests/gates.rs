@@ -48,8 +48,7 @@ fn request_device() -> (wgpu::Device, wgpu::Queue) {
     required_features: wgpu::Features::empty(),
     required_limits: wgpu::Limits::default(),
     memory_hints: wgpu::MemoryHints::Performance,
-    trace: wgpu::Trace::default(),
-  }))
+  }, None))
   .expect("Gate 1/3: request_device failed")
 }
 
@@ -195,7 +194,9 @@ fn gate3_render_snapshot_matches_golden_master_pixels() {
     cache: None,
   });
 
-  let bytes_per_row = width * 4;
+  let unpadded_bytes_per_row = width * 4;
+  let row_alignment = wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
+  let bytes_per_row = unpadded_bytes_per_row.div_ceil(row_alignment) * row_alignment;
   let readback_buffer = device.create_buffer(&wgpu::BufferDescriptor {
     label: Some("gate3-readback"),
     size: (bytes_per_row * height) as u64,
@@ -252,7 +253,11 @@ fn gate3_render_snapshot_matches_golden_master_pixels() {
   );
   queue.submit([encoder.finish()]);
 
-  let rendered = map_read_buffer(&device, &readback_buffer);
+  let rendered_with_padding = map_read_buffer(&device, &readback_buffer);
+  let rendered: Vec<u8> = rendered_with_padding
+    .chunks_exact(bytes_per_row as usize)
+    .flat_map(|row| row[..unpadded_bytes_per_row as usize].iter().copied())
+    .collect();
   let expected: Vec<u8> = std::iter::repeat([255u8, 0u8, 0u8, 255u8])
     .take((width * height) as usize)
     .flatten()

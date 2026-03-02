@@ -2,7 +2,7 @@
 
 Rust/WASM worker renderer engine for the hot-path migration.
 
-- `init_engine(...)`: creates the canonical engine state and starts worker-owned RAF.
+- `init_engine(...)`: creates the canonical engine state and starts a worker-owned timer tick loop (`setTimeout` cadence).
 - `attach_shared_input(...)`: binds the main-thread shared input plane.
 - `rebuild_pipeline(...)`: compiles replacement simulation/assembly WGSL into compute pipelines outside hot path.
 - `rebuild_pipeline(...)` also recompiles the uber render pipeline WGSL outside hot path.

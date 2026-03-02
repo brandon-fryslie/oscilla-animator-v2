@@ -24,6 +24,8 @@ const INPUT_WORD_AUDIO_LOW: usize = 9;
 const INPUT_WORD_AUDIO_MID: usize = 10;
 const INPUT_WORD_AUDIO_HIGH: usize = 11;
 const INPUT_WORD_GAUGE_ACTIVE: usize = 12;
+const INPUT_SIGNAL_WORDS: u32 = 4;
+const INPUT_FLOAT_WORDS: u32 = 32;
 
 const DEFAULT_SIMULATION_WGSL: &str = r#"
 @group(0) @binding(0) var<uniform> global_uniforms: array<vec4<f32>, 5>;
@@ -264,7 +266,13 @@ impl Engine {
     }
 
     pub fn attach_shared_input(&mut self, shared_input: SharedArrayBuffer) {
-        self.shared_input = Some(Float32Array::new(&shared_input));
+        // [LAW:one-source-of-truth] Shared input ABI layout is owned by the
+        // renderer input plane: first 4 i32 signal words, then 32 f32 words.
+        self.shared_input = Some(Float32Array::new_with_byte_offset_and_length(
+            &shared_input,
+            INPUT_SIGNAL_WORDS * std::mem::size_of::<i32>() as u32,
+            INPUT_FLOAT_WORDS,
+        ));
     }
 
     pub fn resize_surface(&mut self, width: u32, height: u32) {

@@ -13,4 +13,4 @@ bytemuck = { version = "1.21", features = ["derive"] }
 futures-intrusive = "0.5"
 png = "0.17"
 pollster = "0.4"
-wgpu = { version = "24.0", default-features = false, features = ["vulkan", "wgsl"] }
+wgpu = { version = "24.0", features = ["wgsl"] }

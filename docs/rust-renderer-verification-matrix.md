@@ -25,11 +25,11 @@
   - Performs pixel diff against fixed golden target (all-red frame).
 
 ## Gate 4: Frame Pacing Telemetry
-- Runtime channel: `RUNTIME_TELEMETRY` worker outbound message.
+- Runtime channel: `SCHEDULER_HEARTBEAT` worker outbound messages (with optional `RUNTIME_EVENT` annotations).
 - Playwright test: `tests/e2e/webgpu/rust-worker-gates.spec.ts`
 - Contract:
   - Rust engine records tick mean/stddev every 60 frames.
-  - Worker emits telemetry packet.
+  - Worker emits scheduler heartbeat packets with timing fields.
   - Test asserts `stdDevMs <= 1.0`.
 
 ## Binary ABI Rules
@@ -45,4 +45,4 @@
 ## Lifecycle Controls
 - `RESIZE_CANVAS`: surface/depth reconfigure out-of-band.
 - `PAUSE` / `RESUME`: suspend/resume frame tick around expensive rebuild operations.
-- `DEVICE_LOST`: emitted by worker when surface loss is detected; caller must cold-boot.
+- Surface/device loss is signaled as scheduler state `Lost` via `SCHEDULER_HEARTBEAT` and/or `RUNTIME_EVENT`; caller must cold-boot.
