@@ -10,6 +10,7 @@ import { truncateForLog } from './matrix-utils.mjs';
 const BASE_URL = process.env.WEBGPU_MATRIX_URL ?? 'http://127.0.0.1:5174';
 const DEFAULT_REPORT = process.env.WEBGPU_MATRIX_REPORT ?? 'artifacts/webgpu-browser-matrix.json';
 const SAMPLE_FRAMES = Number.parseInt(process.env.WEBGPU_MATRIX_FRAMES ?? '180', 10);
+const SAMPLE_TIMEOUT_MS = Number.parseInt(process.env.WEBGPU_MATRIX_SAMPLE_TIMEOUT_MS ?? '10000', 10);
 const START_SERVER = (process.env.WEBGPU_MATRIX_START_SERVER ?? '1') !== '0';
 const BUILD_FIRST = (process.env.WEBGPU_MATRIX_BUILD_FIRST ?? '1') !== '0';
 const SERVER_MODE = process.env.WEBGPU_MATRIX_SERVER_MODE ?? 'preview';
@@ -280,7 +281,12 @@ async function runBrowserCheck({ browserName, launcher, launchOptions, url, bloc
     .then((state) => state === 'succeeded')
     .catch(() => false);
 
-  const probe = await page.evaluate(async ({ sampleFrames, probeKey, bootstrapReadyBeforeSample }) => {
+  const probe = await page.evaluate(async ({
+    sampleFrames,
+    sampleTimeoutMs,
+    probeKey,
+    bootstrapReadyBeforeSample,
+  }) => {
     const hasNavigatorGpu = Boolean(navigator.gpu);
     const adapter = hasNavigatorGpu ? await navigator.gpu.requestAdapter() : null;
     const hasAdapter = Boolean(adapter);
@@ -303,18 +309,31 @@ async function runBrowserCheck({ browserName, launcher, launchOptions, url, bloc
 
     const frameDeltasMs = [];
     await new Promise((resolve) => {
+      let settled = false;
+      const finish = () => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        resolve();
+      };
       let previous = performance.now();
       let remaining = bootstrapReadyBeforeSample ? Math.max(1, sampleFrames) : 0;
       if (remaining <= 0) {
-        resolve();
+        finish();
         return;
       }
+      const timeoutId = setTimeout(finish, Math.max(1, sampleTimeoutMs));
       const tick = (now) => {
+        if (settled) {
+          return;
+        }
         frameDeltasMs.push(now - previous);
         previous = now;
         remaining -= 1;
         if (remaining <= 0) {
-          resolve();
+          clearTimeout(timeoutId);
+          finish();
           return;
         }
         requestAnimationFrame(tick);
@@ -352,6 +371,7 @@ async function runBrowserCheck({ browserName, launcher, launchOptions, url, bloc
     };
   }, {
     sampleFrames: SAMPLE_FRAMES,
+    sampleTimeoutMs: SAMPLE_TIMEOUT_MS,
     probeKey: RUNTIME_PROBE_GLOBAL_KEY,
     bootstrapReadyBeforeSample,
   });
