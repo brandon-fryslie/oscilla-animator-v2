@@ -182,6 +182,19 @@ export interface SerializedDebugProbeRuntimeSnapshot {
   readonly slots: readonly SerializedDebugProbeRuntimeSlotSnapshot[];
 }
 
+export interface PackedDebugProbeRuntimeSnapshot {
+  readonly runtimeFrameId: number;
+  /**
+   * Fixed-width slot metadata records.
+   * [slotId, stride, laneCount, length, packingTag, laneStride, componentStride, componentOffsetsStart, componentOffsetsLen, valuesStart]
+   */
+  readonly slotMeta: Uint32Array;
+  readonly componentOffsets: Uint32Array;
+  readonly slotValues: Float32Array;
+}
+
+export const DEBUG_PROBE_SLOT_META_WORDS = 10;
+
 export function serializeDebugProbeRuntimeSnapshot(
   snapshot: DebugProbeRuntimeSnapshot,
 ): SerializedDebugProbeRuntimeSnapshot {
@@ -194,5 +207,58 @@ export function serializeDebugProbeRuntimeSnapshot(
       descriptor: slot.descriptor,
       values: slot.values,
     })),
+  };
+}
+
+export function packDebugProbeRuntimeSnapshot(
+  snapshot: SerializedDebugProbeRuntimeSnapshot,
+): PackedDebugProbeRuntimeSnapshot {
+  const slotMetaWords: number[] = [];
+  const componentOffsetsWords: number[] = [];
+  const slotValuesWords: number[] = [];
+
+  for (const slot of snapshot.slots) {
+    const descriptor = slot.descriptor;
+    const packingTag = descriptor.packing === 'aos' ? 1 : 0;
+    const laneStride = descriptor.laneStride ?? (descriptor.packing === 'aos' ? descriptor.stride : 1);
+    const componentStride = descriptor.componentStride ?? (descriptor.packing === 'aos' ? 1 : descriptor.laneCount);
+    const componentOffsetsStart = componentOffsetsWords.length;
+    const componentOffsetsLen = descriptor.componentOffsets?.length ?? 0;
+    const valuesStart = slotValuesWords.length;
+    const values = slot.values;
+    // [LAW:verifiable-goals] The packed ABI is deterministic only when slot
+    // descriptors and slot-local values agree on length.
+    if (values.length !== descriptor.length) {
+      throw new Error(
+        `packDebugProbeRuntimeSnapshot: slot ${slot.slotId} value length mismatch (values=${values.length}, descriptor=${descriptor.length})`,
+      );
+    }
+
+    if (descriptor.componentOffsets) {
+      componentOffsetsWords.push(...descriptor.componentOffsets);
+    }
+    for (let i = 0; i < values.length; i += 1) {
+      slotValuesWords.push(values[i]!);
+    }
+
+    slotMetaWords.push(
+      slot.slotId,
+      descriptor.stride,
+      descriptor.laneCount,
+      descriptor.length,
+      packingTag,
+      laneStride,
+      componentStride,
+      componentOffsetsStart,
+      componentOffsetsLen,
+      valuesStart,
+    );
+  }
+
+  return {
+    runtimeFrameId: snapshot.runtimeFrameId,
+    slotMeta: new Uint32Array(slotMetaWords),
+    componentOffsets: new Uint32Array(componentOffsetsWords),
+    slotValues: new Float32Array(slotValuesWords),
   };
 }

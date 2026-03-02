@@ -6,6 +6,7 @@ use wasm_bindgen::prelude::*;
 
 const DEBUG_PACKET_FLAG_SUBSCRIPTION_INVALID: u16 = 1 << 2;
 const DEBUG_PACKET_FLAG_NAN_DETECTED_ANY: u16 = 1 << 3;
+const SLOT_META_WORDS: usize = 10;
 
 const DEBUG_SAMPLE_FLAG_FRESH: u16 = 1 << 0;
 const DEBUG_SAMPLE_FLAG_NAN_DETECTED: u16 = 1 << 3;
@@ -326,6 +327,89 @@ fn build_packet_sample(
     })
 }
 
+fn decode_packed_runtime_snapshot(
+    runtime_frame_id: u32,
+    slot_meta: Vec<u32>,
+    component_offsets: Vec<u32>,
+    slot_values: Vec<f32>,
+) -> Result<DebugProbeRuntimeSnapshot, JsValue> {
+    if slot_meta.len() % SLOT_META_WORDS != 0 {
+        return Err(js_error(format!(
+            "debug_poll_packed_runtime_packet invalid slot_meta length {} (expected multiple of {})",
+            slot_meta.len(),
+            SLOT_META_WORDS
+        )));
+    }
+
+    let mut slots = Vec::with_capacity(slot_meta.len() / SLOT_META_WORDS);
+    for chunk in slot_meta.chunks_exact(SLOT_META_WORDS) {
+        let slot_id = chunk[0];
+        let stride = chunk[1] as u16;
+        let lane_count = chunk[2];
+        let length = chunk[3] as usize;
+        let packing_tag = chunk[4];
+        let lane_stride = chunk[5] as usize;
+        let component_stride = chunk[6] as usize;
+        let component_offsets_start = chunk[7] as usize;
+        let component_offsets_len = chunk[8] as usize;
+        let values_start = chunk[9] as usize;
+
+        let values_end = values_start
+            .checked_add(length)
+            .ok_or_else(|| js_error("debug_poll_packed_runtime_packet values range overflow"))?;
+        if values_end > slot_values.len() {
+            return Err(js_error(format!(
+                "debug_poll_packed_runtime_packet values range [{}..{}) out of bounds for slot_values length {}",
+                values_start,
+                values_end,
+                slot_values.len()
+            )));
+        }
+
+        let component_offsets_end = component_offsets_start
+            .checked_add(component_offsets_len)
+            .ok_or_else(|| js_error("debug_poll_packed_runtime_packet component offsets range overflow"))?;
+        if component_offsets_end > component_offsets.len() {
+            return Err(js_error(format!(
+                "debug_poll_packed_runtime_packet component offsets range [{}..{}) out of bounds for component_offsets length {}",
+                component_offsets_start,
+                component_offsets_end,
+                component_offsets.len()
+            )));
+        }
+
+        let descriptor = RuntimeArenaDescriptor {
+            offset: 0,
+            stride,
+            lane_count,
+            length,
+            component_offsets: if component_offsets_len > 0 {
+                Some(component_offsets[component_offsets_start..component_offsets_end].iter().map(|value| *value as usize).collect())
+            } else {
+                None
+            },
+            packing: Some(if packing_tag == 1 {
+                "aos".to_string()
+            } else {
+                "soa".to_string()
+            }),
+            lane_stride: Some(lane_stride),
+            component_stride: Some(component_stride),
+        };
+
+        slots.push(DebugProbeRuntimeSlotSnapshot {
+            slot_id,
+            descriptor,
+            values: slot_values[values_start..values_end].to_vec(),
+        });
+    }
+
+    Ok(DebugProbeRuntimeSnapshot {
+        runtime_frame_id,
+        slots,
+    })
+}
+
 thread_local! {
     static ENGINE: RefCell<DebugProbeEngine> = RefCell::new(DebugProbeEngine {
         sequence: 0,
@@ -366,4 +450,29 @@ pub fn debug_poll_runtime_packet(captured_at_ms: f64, snapshot: JsValue) -> Resu
 
     serde_wasm_bindgen::to_value(&packet)
         .map_err(|err| js_error(format!("debug_poll_runtime_packet encode failed: {err}")))
+}
+
+#[wasm_bindgen]
+pub fn debug_poll_packed_runtime_packet(
+    captured_at_ms: f64,
+    runtime_frame_id: u32,
+    slot_meta: Vec<u32>,
+    component_offsets: Vec<u32>,
+    slot_values: Vec<f32>,
+) -> Result<JsValue, JsValue> {
+    let parsed_snapshot = decode_packed_runtime_snapshot(
+        runtime_frame_id,
+        slot_meta,
+        component_offsets,
+        slot_values,
+    )?;
+
+    let packet = ENGINE.with(|engine| {
+        engine
+            .borrow_mut()
+            .build_packet_from_snapshot(captured_at_ms, parsed_snapshot)
+    });
+
+    serde_wasm_bindgen::to_value(&packet)
+        .map_err(|err| js_error(format!("debug_poll_packed_runtime_packet encode failed: {err}")))
 }

@@ -4,6 +4,7 @@ import { valueSlot } from '../../types';
 import {
   createDebugProbeRuntimeSnapshot,
   extractDebugProbeSamplesFromRuntimeSnapshot,
+  packDebugProbeRuntimeSnapshot,
   serializeDebugProbeRuntimeSnapshot,
 } from '../DebugProbeRuntimeSnapshot';
 import type { DebugProbeSubscription } from '../DebugProbeProtocol';
@@ -100,6 +101,15 @@ describe('DebugProbeRuntimeSnapshot', () => {
       ],
     });
     expect(serialized.slots[0]!.values.buffer).toBe(snapshot.slots[0]!.values.buffer);
+
+    const packed = packDebugProbeRuntimeSnapshot(serialized);
+    expect(packed.runtimeFrameId).toBe(9);
+    expect(Array.from(packed.slotMeta)).toEqual([
+      scalarSlot as number, 1, 1, 1, 0, 1, 1, 0, 0, 0,
+      fieldSlot as number, 2, 2, 4, 0, 1, 2, 0, 0, 1,
+    ]);
+    expect(Array.from(packed.componentOffsets)).toEqual([]);
+    expect(Array.from(packed.slotValues)).toEqual([41, 10, 20, 30, 41]);
   });
 
   it('extracts scalar and lane-window samples from the shared snapshot contract', () => {
