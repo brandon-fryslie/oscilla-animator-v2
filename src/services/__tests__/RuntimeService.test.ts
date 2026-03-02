@@ -186,6 +186,7 @@ describe('RuntimeService startup compile path', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     vi.clearAllMocks();
+    mocks.savePatchToStorage.mockImplementation(() => {});
   });
 
   it('uses async worker compile and precomputed initial swap during init', async () => {
@@ -242,13 +243,20 @@ describe('RuntimeService startup compile path', () => {
     runtime.setCanvas(document.createElement('canvas'));
 
     const initPromise = runtime.init();
+    const capturedError = initPromise.then(
+      () => null,
+      (error) => error,
+    );
     await vi.advanceTimersByTimeAsync(60);
-    await initPromise;
+    await expect(capturedError).resolves.toBeInstanceOf(Error);
+    await expect(capturedError).resolves.toMatchObject({
+      message: expect.stringContaining('initial async compile failed'),
+    });
 
     expect(mocks.markRuntimeBootstrapStarted).toHaveBeenCalledTimes(1);
     expect(mocks.markRuntimeBootstrapSucceeded).not.toHaveBeenCalled();
     expect(mocks.markRuntimeBootstrapFailed).toHaveBeenCalledWith(
-      'initial_compile_failed: animation loop started but no program is ready',
+      'RuntimeService: initial async compile failed: worker unavailable',
     );
     expect(mocks.compileAndSwap).not.toHaveBeenCalled();
     expect(diagnosticsLog).toHaveBeenCalledWith(
@@ -259,8 +267,18 @@ describe('RuntimeService startup compile path', () => {
     );
   });
 
-  it('preserves the compile failure probe message when persistence fails afterwards', async () => {
-    mocks.compileWorkerCompile.mockRejectedValue(new Error('worker unavailable'));
+  it('marks bootstrap failed with persistence error after a successful initial compile', async () => {
+    mocks.compileAndSwap.mockImplementationOnce(async (deps) => {
+      deps.state.currentProgram = {} as any;
+      deps.state.currentState = {} as any;
+    });
+    mocks.compileWorkerCompile.mockResolvedValue({
+      sourcePatchRevision: 7,
+      frontendResult: {} as any,
+      backendResult: null,
+      compiledComputeWgsl: null,
+      compileDurationMs: 3,
+    });
     mocks.savePatchToStorage.mockImplementation(() => {
       throw new Error('storage offline');
     });
@@ -274,10 +292,8 @@ describe('RuntimeService startup compile path', () => {
     await vi.advanceTimersByTimeAsync(60);
     await initRejection;
 
-    expect(mocks.markRuntimeBootstrapFailed).toHaveBeenCalledTimes(1);
-    expect(mocks.markRuntimeBootstrapFailed).toHaveBeenCalledWith(
-      'initial_compile_failed: animation loop started but no program is ready',
-    );
+    expect(mocks.markRuntimeBootstrapSucceeded).toHaveBeenCalledTimes(1);
+    expect(mocks.markRuntimeBootstrapFailed).toHaveBeenCalledWith('storage offline');
   });
 
   it('marks bootstrap failed when initialization throws before renderer startup completes', async () => {

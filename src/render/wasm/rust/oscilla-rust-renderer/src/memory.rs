@@ -51,6 +51,7 @@ pub struct GpuMemoryArena {
     pub assembly_write_bind_group: wgpu::BindGroup,
     pub render_bind_group: wgpu::BindGroup,
     state_buffers: [wgpu::Buffer; 2],
+    compiler_arena_buffers: [wgpu::Buffer; 2],
     state_bind_groups: [wgpu::BindGroup; 2],
     compiler_simulation_bind_groups: Option<[wgpu::BindGroup; 2]>,
     staging_buffers: [wgpu::Buffer; 2],
@@ -117,6 +118,24 @@ impl GpuMemoryArena {
                     binding: 0,
                     resource: state_buffers[1].as_entire_binding(),
                 }],
+            }),
+        ];
+        let compiler_arena_buffers = [
+            device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("CompilerArenaBuffer.A"),
+                size: state_buffer_bytes.max(16),
+                usage: wgpu::BufferUsages::STORAGE
+                    | wgpu::BufferUsages::COPY_DST
+                    | wgpu::BufferUsages::COPY_SRC,
+                mapped_at_creation: false,
+            }),
+            device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("CompilerArenaBuffer.B"),
+                size: state_buffer_bytes.max(16),
+                usage: wgpu::BufferUsages::STORAGE
+                    | wgpu::BufferUsages::COPY_DST
+                    | wgpu::BufferUsages::COPY_SRC,
+                mapped_at_creation: false,
             }),
         ];
 
@@ -189,6 +208,7 @@ impl GpuMemoryArena {
             assembly_write_bind_group,
             render_bind_group,
             state_buffers,
+            compiler_arena_buffers,
             state_bind_groups,
             compiler_simulation_bind_groups: None,
             staging_buffers,
@@ -224,11 +244,11 @@ impl GpuMemoryArena {
                 entries: &[
                     wgpu::BindGroupEntry {
                         binding: 0,
-                        resource: self.state_buffers[0].as_entire_binding(),
+                        resource: self.compiler_arena_buffers[0].as_entire_binding(),
                     },
                     wgpu::BindGroupEntry {
                         binding: 1,
-                        resource: self.state_buffers[1].as_entire_binding(),
+                        resource: self.compiler_arena_buffers[1].as_entire_binding(),
                     },
                     wgpu::BindGroupEntry {
                         binding: 2,
@@ -250,11 +270,11 @@ impl GpuMemoryArena {
                 entries: &[
                     wgpu::BindGroupEntry {
                         binding: 0,
-                        resource: self.state_buffers[1].as_entire_binding(),
+                        resource: self.compiler_arena_buffers[1].as_entire_binding(),
                     },
                     wgpu::BindGroupEntry {
                         binding: 1,
-                        resource: self.state_buffers[0].as_entire_binding(),
+                        resource: self.compiler_arena_buffers[0].as_entire_binding(),
                     },
                     wgpu::BindGroupEntry {
                         binding: 2,
