@@ -21,7 +21,7 @@
     "lint": "eslint src/blocks/ src/runtime/ValueExprMaterializer.ts src/runtime/ValueExprEventEvaluator.ts src/runtime/ContinuityApply.ts src/compiler/compile.ts src/runtime/ScheduleExecutor.ts src/runtime/RenderAssembler.ts src/runtime/OpcodeInterpreter.ts src/render/RenderBufferArena.ts",
     "build:naga-shim": "scripts/build-naga-shim.sh",
     "build:rust-renderer": "scripts/build-rust-renderer.sh",
-    "test:native-webgpu-gates": "cargo test --manifest-path native-tests/webgpu-headless/Cargo.toml --features headless -- --nocapture",
+    "test:native-webgpu-gates": "scripts/run-native-webgpu-gates.sh",
     "verify:naga-shim": "node scripts/verify-naga-shim.mjs",
     "ci:release-readiness": "pnpm -s verify:naga-shim && pnpm -s typecheck && pnpm -s vitest run src/compiler/__tests__ src/services/__tests__/AsyncCompilerService.test.ts src/services/__tests__/CompileWorkerClient.test.ts src/services/__tests__/RuntimeService.test.ts src/runtime/__tests__/construct-one.test.ts"
   },
