@@ -121,6 +121,36 @@ async function startManagedServer(url) {
   return serverProcess;
 }
 
+async function stopManagedServer(serverProcess) {
+  if (!serverProcess) {
+    return;
+  }
+  if (serverProcess.exitCode !== null) {
+    return;
+  }
+
+  // [LAW:no-silent-fallbacks] Server shutdown is explicit with bounded waits;
+  // if graceful termination fails, hard-kill and surface timeout semantics.
+  const awaitExit = (timeoutMs) => new Promise((resolve) => {
+    let settled = false;
+    const finish = (exited) => {
+      if (settled) return;
+      settled = true;
+      resolve(exited);
+    };
+    serverProcess.once('exit', () => finish(true));
+    setTimeout(() => finish(false), timeoutMs);
+  });
+
+  serverProcess.kill('SIGTERM');
+  const exited = await awaitExit(5000);
+  if (exited) {
+    return;
+  }
+  serverProcess.kill('SIGKILL');
+  await awaitExit(2000);
+}
+
 function computeStats(frameDeltasMs) {
   const sorted = [...frameDeltasMs].sort((a, b) => a - b);
   const avg = sorted.reduce((sum, value) => sum + value, 0) / Math.max(1, sorted.length);
@@ -563,9 +593,7 @@ async function main() {
       process.exitCode = 1;
     }
   } finally {
-    if (managedServer) {
-      managedServer.kill('SIGTERM');
-    }
+    await stopManagedServer(managedServer);
   }
 }
 
