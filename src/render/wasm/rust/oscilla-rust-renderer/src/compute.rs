@@ -131,7 +131,6 @@ impl ComputeDispatcher {
         &self,
         encoder: &mut wgpu::CommandEncoder,
         arena: &mut GpuMemoryArena,
-        assembly_write_bind_group: &wgpu::BindGroup,
     ) {
         // [LAW:dataflow-not-control-flow] Compute stage order is immutable every
         // frame; variability is in uniforms/state payload values only.
@@ -155,7 +154,9 @@ impl ComputeDispatcher {
             compute_pass.set_pipeline(&self.render_assembly_pipeline);
             compute_pass.set_bind_group(0, &arena.uniform_bind_group, &[]);
             compute_pass.set_bind_group(1, arena.get_compute_write_bind_group(), &[]);
-            compute_pass.set_bind_group(2, assembly_write_bind_group, &[]);
+            // [LAW:one-source-of-truth] Arena owns the canonical assembly bind
+            // group used for draw-prep writes.
+            compute_pass.set_bind_group(2, &arena.assembly_write_bind_group, &[]);
             compute_pass.dispatch_workgroups(self.assembly_workgroup_count, 1, 1);
         }
 
