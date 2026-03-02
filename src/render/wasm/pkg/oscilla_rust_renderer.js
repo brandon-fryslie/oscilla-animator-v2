@@ -950,7 +950,7 @@ function __wbg_get_imports() {
             arg0.writeBuffer(arg1, arg2, arg3, arg4, arg5);
         }, arguments); },
         __wbindgen_cast_0000000000000001: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { dtor_idx: 15, function: Function { arguments: [], shim_idx: 16, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+            // Cast intrinsic for `Closure(Closure { dtor_idx: 19, function: Function { arguments: [], shim_idx: 20, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
             const ret = makeMutClosure(arg0, arg1, wasm.wasm_bindgen__closure__destroy__hd711683202404d31, wasm_bindgen__convert__closures_____invoke__h50e008be49128561);
             return ret;
         },
