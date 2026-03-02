@@ -9,19 +9,17 @@ import { truncateForLog } from './matrix-utils.mjs';
 
 const BASE_URL = process.env.WEBGPU_MATRIX_URL ?? 'http://127.0.0.1:5174';
 const DEFAULT_REPORT = process.env.WEBGPU_MATRIX_REPORT ?? 'artifacts/webgpu-browser-matrix.json';
-function parseEnvPositiveInt(name, fallback) {
-  const raw = process.env[name];
-  if (raw === undefined || raw === '') return fallback;
-  const parsed = Number.parseInt(raw, 10);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
-}
-
-const SAMPLE_FRAMES = parseEnvPositiveInt('WEBGPU_MATRIX_FRAMES', 180);
-const SAMPLE_TIMEOUT_MS = parseEnvPositiveInt('WEBGPU_MATRIX_SAMPLE_TIMEOUT_MS', 10000);
+const parsePositiveIntegerEnv = (value, fallback) => {
+  const parsed = Number.parseInt(value ?? '', 10);
+  const isValid = Number.isFinite(parsed) && parsed > 0;
+  return isValid ? parsed : fallback;
+};
+const SAMPLE_FRAMES = parsePositiveIntegerEnv(process.env.WEBGPU_MATRIX_FRAMES, 180);
+const SAMPLE_TIMEOUT_MS = parsePositiveIntegerEnv(process.env.WEBGPU_MATRIX_SAMPLE_TIMEOUT_MS, 10000);
 const START_SERVER = (process.env.WEBGPU_MATRIX_START_SERVER ?? '1') !== '0';
 const BUILD_FIRST = (process.env.WEBGPU_MATRIX_BUILD_FIRST ?? '1') !== '0';
 const SERVER_MODE = process.env.WEBGPU_MATRIX_SERVER_MODE ?? 'preview';
-const SERVER_TIMEOUT_MS = parseEnvPositiveInt('WEBGPU_MATRIX_SERVER_TIMEOUT_MS', 45000);
+const SERVER_TIMEOUT_MS = parsePositiveIntegerEnv(process.env.WEBGPU_MATRIX_SERVER_TIMEOUT_MS, 45000);
 const FAIL_ON_SKIP = (process.env.WEBGPU_MATRIX_FAIL_ON_SKIP ?? (process.env.CI ? '1' : '0')) !== '0';
 const ALLOW_SERVER_REUSE = (process.env.WEBGPU_MATRIX_ALLOW_SERVER_REUSE ?? (process.env.CI ? '0' : '1')) !== '0';
 const SKIP_CHROMIUM = (process.env.WEBGPU_MATRIX_SKIP_CHROMIUM ?? '0') === '1';
@@ -156,8 +154,7 @@ async function stopManagedServer(serverProcess) {
   try {
     serverProcess.kill('SIGTERM');
   } catch {
-    // [LAW:no-silent-fallbacks] exception: shutdown cleanup ignores kill races
-    // because process liveness is still validated via awaitExit timeout.
+    // Ignore race/shutdown signal errors; process may have already exited.
   }
   const exited = await awaitExit(5000);
   if (exited) {
@@ -166,8 +163,7 @@ async function stopManagedServer(serverProcess) {
   try {
     serverProcess.kill('SIGKILL');
   } catch {
-    // [LAW:no-silent-fallbacks] exception: forced cleanup tolerates kill races;
-    // CI gating still enforces explicit timeout-bounded process exit behavior.
+    // Ignore race/shutdown signal errors; process may have already exited.
   }
   await awaitExit(2000);
 }
