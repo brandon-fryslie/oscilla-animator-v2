@@ -640,7 +640,10 @@ function materializeKernel(
       );
 
       // Look up topology for closed flag
-      const topology = getProgramTopology(program, expr.topologyId) as PathTopologyDef;
+      const topology = getProgramTopology(program, expr.topologyId);
+      if (!isPathTopology(topology)) {
+        throw new Error(`pathSample: topology ${String(expr.topologyId)} is not a path topology`);
+      }
       const closed = topology.closed;
 
       if (expr.op === 'position') {
