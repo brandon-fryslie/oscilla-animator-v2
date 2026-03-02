@@ -1,10 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
+  ensureRuntimeProbe,
   markRuntimeBootstrapFailed,
   markRuntimeBootstrapStarted,
   markRuntimeBootstrapSucceeded,
   markRuntimeFrameAdvanced,
   RUNTIME_PROBE_GLOBAL_KEY,
+  shouldEnableRuntimeProbe,
 } from '../runtime-probe';
 
 type ProbeHost = typeof globalThis & {
@@ -48,6 +50,25 @@ describe('runtime-probe', () => {
     expect(probeHost()[RUNTIME_PROBE_GLOBAL_KEY]).toBeUndefined();
   });
 
+  it('enables only for showPreview=true or showPreview=1', () => {
+    window.history.replaceState({}, '', '/?showPreview=true');
+    expect(shouldEnableRuntimeProbe()).toBe(true);
+
+    window.history.replaceState({}, '', '/?showPreview=1');
+    expect(shouldEnableRuntimeProbe()).toBe(true);
+
+    window.history.replaceState({}, '', '/?showPreview=false');
+    expect(shouldEnableRuntimeProbe()).toBe(false);
+
+    window.history.replaceState({}, '', '/');
+    expect(shouldEnableRuntimeProbe()).toBe(false);
+  });
+
+  it('returns null when ensureRuntimeProbe runs with preview disabled', () => {
+    window.history.replaceState({}, '', '/');
+    expect(ensureRuntimeProbe()).toBeNull();
+  });
+
   it('publishes and reuses the canonical probe when showPreview=true', () => {
     window.history.replaceState({}, '', '/?showPreview=true');
 
@@ -88,6 +109,16 @@ describe('runtime-probe', () => {
     });
   });
 
+  it('reuses canonical version-1 probes returned by ensureRuntimeProbe', () => {
+    window.history.replaceState({}, '', '/?showPreview=true');
+
+    const first = ensureRuntimeProbe();
+    const second = ensureRuntimeProbe();
+
+    expect(first).toBeTruthy();
+    expect(second).toBe(first);
+  });
+
   it('accepts showPreview=1 and replaces stale probe versions', () => {
     window.history.replaceState({}, '', '/?showPreview=1');
     probeHost()[RUNTIME_PROBE_GLOBAL_KEY] = {
@@ -120,6 +151,22 @@ describe('runtime-probe', () => {
         renderedFrameCount: 0,
         lastFrameId: null,
         lastFrameAtMs: null,
+      },
+    });
+  });
+
+  it('clears prior completion state when bootstrap restarts', () => {
+    window.history.replaceState({}, '', '/?showPreview=true');
+
+    markRuntimeBootstrapFailed('prior failure', 5);
+    markRuntimeBootstrapStarted(10);
+
+    expect(probeHost()[RUNTIME_PROBE_GLOBAL_KEY]).toMatchObject({
+      bootstrap: {
+        state: 'starting',
+        startedAtMs: 10,
+        finishedAtMs: null,
+        failureMessage: null,
       },
     });
   });
