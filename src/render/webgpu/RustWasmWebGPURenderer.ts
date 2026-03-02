@@ -225,6 +225,8 @@ export class WebGPURenderer {
           }
           if (payload.type === 'DEVICE_LOST') {
             settle(() => {
+              // [LAW:single-enforcer] Device loss is a terminal runtime boundary.
+              // Any in-flight request must fail immediately at this listener.
               this.lifecycleState = 'Lost';
               this.fatalError = new Error(`[${payload.code}] ${payload.message}`);
               reject(this.fatalError);

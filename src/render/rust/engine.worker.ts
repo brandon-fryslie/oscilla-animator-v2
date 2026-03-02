@@ -78,11 +78,12 @@ function postDeviceLost(code: string, message: string): void {
     return;
   }
   deviceLostNotified = true;
+  // [LAW:one-source-of-truth] `message` is the canonical human-readable field
+  // for outbound failures. Keep `reason` as an optional legacy alias only.
   postWorkerMessage({
     type: 'DEVICE_LOST',
     code,
     message,
-    reason: message,
   });
 }
 

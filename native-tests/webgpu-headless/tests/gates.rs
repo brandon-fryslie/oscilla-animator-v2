@@ -32,12 +32,14 @@ fn fs_main() -> @location(0) vec4<f32> {
 "#;
 
 fn request_device() -> (wgpu::Device, wgpu::Queue) {
-  // [LAW:verifiable-goals] Headless gate backend is deterministic per target OS.
+  // [LAW:verifiable-goals] Headless gate uses one backend per target OS so the
+  // adapter choice is deterministic while still matching each platform's driver.
   let preferred_backends = if cfg!(target_os = "macos") {
     wgpu::Backends::METAL
   } else if cfg!(target_os = "windows") {
     wgpu::Backends::DX12
   } else {
+    // Linux CI runs with Vulkan + Lavapipe software rasterizer.
     wgpu::Backends::VULKAN
   };
   let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
