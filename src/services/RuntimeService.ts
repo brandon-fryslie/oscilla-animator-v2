@@ -11,6 +11,7 @@
 
 import {
   createWebGPURenderer,
+  assertWebGPUStartupContract,
   type WebGPURenderer,
   RenderBufferArena,
   setRenderIssueReporter,
@@ -20,6 +21,11 @@ import {
 import type { RootStore } from '../stores';
 import { loadPatchFromStorage, savePatchToStorage } from './PatchPersistence';
 import { consumeTestDemoFilename } from '../testing/test-params';
+import {
+  markRuntimeBootstrapFailed,
+  markRuntimeBootstrapStarted,
+  markRuntimeBootstrapSucceeded,
+} from '../testing/runtime-probe';
 import {
   compileAndSwap,
   type CompileOrchestratorState,
@@ -306,161 +312,182 @@ export class RuntimeService {
    */
   async init(): Promise<void> {
     const { store } = this;
-    if (!this.canvas) {
-      throw new Error('RuntimeService: preview canvas is required before initialization');
-    }
+    markRuntimeBootstrapStarted();
+    try {
+      if (!this.canvas) {
+        throw new Error('RuntimeService: preview canvas is required before initialization');
+      }
+      // [LAW:single-enforcer] RuntimeService owns startup capability validation.
+      // [LAW:no-silent-fallbacks] WebGPU-only runtime hard-fails when prerequisites are missing.
+      assertWebGPUStartupContract(this.canvas);
 
-    this.compileWorkerClient = new CompileWorkerClient();
-    this.asyncCompiler = new AsyncCompilerService({
-      runCompile: (request) => this.compileWorkerClient!.compile(request),
-      onCompileFailure: (error) => this.logWorkerFailure(error),
-      debounceMs: 50,
-    });
-    this.unsubCompilerState = this.asyncCompiler.subscribe((nextState) => {
-      // [LAW:single-enforcer] RuntimeService is the single boundary that exposes
-      // async compiler lifecycle state to app-level observers via EventHub.
+      this.compileWorkerClient = new CompileWorkerClient();
+      this.asyncCompiler = new AsyncCompilerService({
+        runCompile: (request) => this.compileWorkerClient!.compile(request),
+        onCompileFailure: (error) => this.logWorkerFailure(error),
+        debounceMs: 50,
+      });
+      this.unsubCompilerState = this.asyncCompiler.subscribe((nextState) => {
+        // [LAW:single-enforcer] RuntimeService is the single boundary that exposes
+        // async compiler lifecycle state to app-level observers via EventHub.
+        store.events.emit({
+          type: 'CompilerStateChanged',
+          patchId: 'patch-0',
+          patchRevision: store.getPatchRevision(),
+          state: nextState,
+          errorMessage: this.asyncCompiler?.getLastErrorMessage() ?? undefined,
+        });
+        if (nextState === 'ready') {
+          this.requestSwapFlush();
+        }
+      });
       store.events.emit({
         type: 'CompilerStateChanged',
         patchId: 'patch-0',
         patchRevision: store.getPatchRevision(),
-        state: nextState,
-        errorMessage: this.asyncCompiler?.getLastErrorMessage() ?? undefined,
+        state: this.asyncCompiler.getState(),
+        errorMessage: this.asyncCompiler.getLastErrorMessage() ?? undefined,
       });
-      if (nextState === 'ready') {
-        this.requestSwapFlush();
-      }
-    });
-    store.events.emit({
-      type: 'CompilerStateChanged',
-      patchId: 'patch-0',
-      patchRevision: store.getPatchRevision(),
-      state: this.asyncCompiler.getState(),
-      errorMessage: this.asyncCompiler.getLastErrorMessage() ?? undefined,
-    });
-    // [LAW:single-enforcer] RuntimeService owns debug lifecycle boundaries.
-    debugService.clear();
-    compilationInspector.setErrorReporter((payload) => {
-      const phase = payload.passName ? `${payload.phase}(${payload.passName})` : payload.phase;
-      const message = payload.error instanceof Error ? payload.error.message : String(payload.error);
-      // [LAW:single-enforcer] RuntimeService is the single app-runtime boundary that
-      // forwards inspector internal failures to diagnostics.
-      store.diagnostics.log({
-        level: 'warn',
-        message: `Compilation inspector failure at ${phase}: ${message}`,
-      });
-    });
-
-    // [LAW:no-shared-mutable-globals] RuntimeService owns one arena instance
-    // per runtime lifecycle instead of relying on module-level singleton state.
-    this.arena = new RenderBufferArena(50_000);
-    this.arena.init();
-    setRenderIssueReporter((issue) => {
-      // [LAW:single-enforcer] RuntimeService owns render issue routing into diagnostics.
-      store.diagnostics.log({
-        level: issue.level,
-        message: `Render: ${issue.message}`,
-      });
-    });
-    for (const issue of getRenderIssues()) {
-      store.diagnostics.log({
-        level: issue.level,
-        message: `Render: ${issue.message}`,
-      });
-    }
-    clearRenderIssues();
-
-    // Register settings tokens (before any compile call)
-    store.settings.register(appSettings);
-    store.settings.register(compilerFlagsSettings);
-
-    // [LAW:single-enforcer] RuntimeService is the only startup boundary that
-    // instantiates the renderer after prerequisites are validated.
-    try {
-      this.renderer = await createWebGPURenderer(this.canvas);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      throw new Error(`RuntimeService: WebGPU renderer initialization failed: ${message}`);
-    }
-
-    // Check for test automation demo marker (set by ?loadDemoPatch= before reload)
-    const testDemo = consumeTestDemoFilename();
-    if (testDemo) {
-      const loaded = store.demo.selectDemo(testDemo);
-      if (!loaded) {
+      // [LAW:single-enforcer] RuntimeService owns debug lifecycle boundaries.
+      debugService.clear();
+      compilationInspector.setErrorReporter((payload) => {
+        const phase = payload.passName ? `${payload.phase}(${payload.passName})` : payload.phase;
+        const message = payload.error instanceof Error ? payload.error.message : String(payload.error);
+        // [LAW:single-enforcer] RuntimeService is the single app-runtime boundary that
+        // forwards inspector internal failures to diagnostics.
         store.diagnostics.log({
           level: 'warn',
-          // [LAW:single-enforcer] RuntimeService owns startup diagnostics emission.
-          message: `[test-params] Demo not found: "${testDemo}". Available: ${store.demo.demos.map(d => d.filename).join(', ')}`,
+          message: `Compilation inspector failure at ${phase}: ${message}`,
         });
-        store.demo.loadDefault();
-      }
-    } else {
-      // Try to restore from localStorage, otherwise load default demo
-      const saved = loadPatchFromStorage();
-      if (saved) {
-        store.demo.currentFilename = null;
-        store.patch.loadPatch(saved.patch);
-      } else {
-        store.demo.loadDefault();
-      }
-    }
-
-    // [LAW:single-enforcer] Startup compile must flow through the async worker
-    // path so the main thread never runs compiler lowering/linking directly.
-    await this.runInitialCompileViaWorker();
-
-    // Re-render App to update externalWriteBus prop now that runtime state exists.
-    this.runtimeReadySink?.();
-
-    // Start auto-persistence (PatchStore watches itself)
-    store.patch.startPersistence();
-
-    // Set up live recompile reaction with fast-path for constant value changes
-    this.liveRecompile.setup(store, async () => {
-      this.asyncCompiler!.scheduleCompile(this.buildCompileRequest());
-    }, (changes) => {
-      const program = this.compileState.currentProgram;
-      if (!program) return false;
-      const patched = patchProgramConstants(program, changes);
-      if (!patched) return false;
-      this.compileState.currentProgram = patched;
-      return true;
-    }, (err) => {
-      // [LAW:single-enforcer] RuntimeService is the sole boundary for recompile failures.
-      const message = err instanceof Error ? err.message : String(err);
-      store.diagnostics.log({
-        level: 'error',
-        message: `Recompile failed: ${message}`,
       });
-    });
 
-    // Subscribe to CompileEnd events for compilation statistics
-    this.unsubCompileEnd = store.events.on('CompileEnd', (event) => {
-      if (event.status === 'success') {
-        store.diagnostics.recordCompilation(event.durationMs);
-        // [LAW:single-enforcer] CompileEnd success is the sole signal that a fresh
-        // program is active; the loop consumes that signal to reset stale render state.
-        if (this.animationLoop?.onCompileSuccess()) {
+      // [LAW:no-shared-mutable-globals] RuntimeService owns one arena instance
+      // per runtime lifecycle instead of relying on module-level singleton state.
+      this.arena = new RenderBufferArena(50_000);
+      this.arena.init();
+      setRenderIssueReporter((issue) => {
+        // [LAW:single-enforcer] RuntimeService owns render issue routing into diagnostics.
+        store.diagnostics.log({
+          level: issue.level,
+          message: `Render: ${issue.message}`,
+        });
+      });
+      for (const issue of getRenderIssues()) {
+        store.diagnostics.log({
+          level: issue.level,
+          message: `Render: ${issue.message}`,
+        });
+      }
+      clearRenderIssues();
+
+      // Register settings tokens (before any compile call)
+      store.settings.register(appSettings);
+      store.settings.register(compilerFlagsSettings);
+
+      // [LAW:single-enforcer] RuntimeService is the only startup boundary that
+      // instantiates the renderer after prerequisites are validated.
+      try {
+        this.renderer = await createWebGPURenderer(this.canvas);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        throw new Error(`RuntimeService: WebGPU renderer initialization failed: ${message}`);
+      }
+
+      // Check for test automation demo marker (set by ?loadDemoPatch= before reload)
+      const testDemo = consumeTestDemoFilename();
+      if (testDemo) {
+        const loaded = store.demo.selectDemo(testDemo);
+        if (!loaded) {
           store.diagnostics.log({
-            level: 'info',
-            message: 'Runtime loop resumed after successful recompile',
+            level: 'warn',
+            // [LAW:single-enforcer] RuntimeService owns startup diagnostics emission.
+            message: `[test-params] Demo not found: "${testDemo}". Available: ${store.demo.demos.map(d => d.filename).join(', ')}`,
           });
+          store.demo.loadDefault();
+        }
+      } else {
+        // Try to restore from localStorage, otherwise load default demo
+        const saved = loadPatchFromStorage();
+        if (saved) {
+          store.demo.currentFilename = null;
+          store.patch.loadPatch(saved.patch);
+        } else {
+          store.demo.loadDefault();
         }
       }
-    });
 
-    // Start animation loop
-    this.animationState = createAnimationLoopState();
-    this.animationLoop = startAnimationLoop(
-      this.animationLoopDeps(),
-      this.animationState,
-      this.handleAnimationLoopError,
-    );
-    this.bindSpyReadbackTracking();
+      // [LAW:single-enforcer] Startup compile must flow through the async worker
+      // path so the main thread never runs compiler lowering/linking directly.
+      await this.runInitialCompileViaWorker();
+      const initialCompileSucceeded =
+        this.compileState.currentProgram !== null &&
+        this.compileState.currentState !== null;
 
-    // Persist current patch immediately after initial compile
-    // (covers the case where we loaded a default demo)
-    savePatchToStorage(store.patch.patch, 0);
+      // Re-render App to update externalWriteBus prop now that runtime state exists.
+      this.runtimeReadySink?.();
+
+      // Start auto-persistence (PatchStore watches itself)
+      store.patch.startPersistence();
+
+      // Set up live recompile reaction with fast-path for constant value changes
+      this.liveRecompile.setup(store, async () => {
+        this.asyncCompiler!.scheduleCompile(this.buildCompileRequest());
+      }, (changes) => {
+        const program = this.compileState.currentProgram;
+        if (!program) return false;
+        const patched = patchProgramConstants(program, changes);
+        if (!patched) return false;
+        this.compileState.currentProgram = patched;
+        return true;
+      }, (err) => {
+        // [LAW:single-enforcer] RuntimeService is the sole boundary for recompile failures.
+        const message = err instanceof Error ? err.message : String(err);
+        store.diagnostics.log({
+          level: 'error',
+          message: `Recompile failed: ${message}`,
+        });
+      });
+
+      // Subscribe to CompileEnd events for compilation statistics
+      this.unsubCompileEnd = store.events.on('CompileEnd', (event) => {
+        if (event.status === 'success') {
+          store.diagnostics.recordCompilation(event.durationMs);
+          // [LAW:single-enforcer] CompileEnd success is the sole signal that a fresh
+          // program is active; the loop consumes that signal to reset stale render state.
+          if (this.animationLoop?.onCompileSuccess()) {
+            store.diagnostics.log({
+              level: 'info',
+              message: 'Runtime loop resumed after successful recompile',
+            });
+          }
+        }
+      });
+
+      // Start animation loop
+      this.animationState = createAnimationLoopState();
+      this.animationLoop = startAnimationLoop(
+        this.animationLoopDeps(),
+        this.animationState,
+        this.handleAnimationLoopError,
+      );
+      this.bindSpyReadbackTracking();
+
+      // [LAW:verifiable-goals] Browser matrix gates require explicit bootstrap
+      // success/failure state instead of inferring readiness from page liveness.
+      if (initialCompileSucceeded) {
+        markRuntimeBootstrapSucceeded();
+      } else {
+        markRuntimeBootstrapFailed('initial_compile_failed');
+      }
+
+      // Persist current patch immediately after initial compile
+      // (covers the case where we loaded a default demo)
+      savePatchToStorage(store.patch.patch, 0);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      markRuntimeBootstrapFailed(message);
+      throw error;
+    }
   }
 
   /**
