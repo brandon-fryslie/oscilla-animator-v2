@@ -17,6 +17,8 @@ const SERVER_TIMEOUT_MS = Number.parseInt(process.env.WEBGPU_MATRIX_SERVER_TIMEO
 const FAIL_ON_SKIP = (process.env.WEBGPU_MATRIX_FAIL_ON_SKIP ?? (process.env.CI ? '1' : '0')) !== '0';
 const ALLOW_SERVER_REUSE = (process.env.WEBGPU_MATRIX_ALLOW_SERVER_REUSE ?? (process.env.CI ? '0' : '1')) !== '0';
 const SKIP_CHROMIUM = (process.env.WEBGPU_MATRIX_SKIP_CHROMIUM ?? '0') === '1';
+// NOTE: This string key is intentionally duplicated from src/testing/runtime-probe.ts.
+// Keep this in sync with RUNTIME_PROBE_GLOBAL_KEY exported at src/testing/runtime-probe.ts:8.
 const RUNTIME_PROBE_GLOBAL_KEY = '__OSCILLA_RUNTIME_PROBE__';
 
 function withPreviewParam(url) {
