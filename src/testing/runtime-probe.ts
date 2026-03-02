@@ -25,6 +25,7 @@ export interface RuntimeProbeSnapshot {
 }
 
 export function shouldEnableRuntimeProbe(): boolean {
+function shouldEnableRuntimeProbe(): boolean {
   if (typeof window === 'undefined') {
     return false;
   }
@@ -33,6 +34,7 @@ export function shouldEnableRuntimeProbe(): boolean {
 }
 
 export function ensureRuntimeProbe(): RuntimeProbeSnapshot | null {
+function ensureRuntimeProbe(): RuntimeProbeSnapshot | null {
   if (!shouldEnableRuntimeProbe()) {
     return null;
   }

@@ -131,6 +131,16 @@ function computeStats(frameDeltasMs) {
   };
 }
 
+function truncateForLog(value, maxLength = 240) {
+  if (typeof value !== 'string') {
+    return '';
+  }
+  if (value.length <= maxLength) {
+    return value;
+  }
+  return `${value.slice(0, Math.max(0, maxLength - 3))}...`;
+}
+
 function failureHintForReason(failureReason) {
   switch (failureReason) {
     case 'webgpu_api_unavailable':
@@ -230,6 +240,7 @@ async function runBrowserCheck({ browserName, launcher, launchOptions, url, bloc
   const startedAt = Date.now();
   await page.goto(url, { waitUntil: 'networkidle', timeout: 60_000 });
   await page.waitForSelector('canvas', { timeout: 30_000 });
+// option 1
   const bootstrapReadyBeforeSample = await page
     .waitForFunction(
       (probeKey) => {
@@ -244,6 +255,18 @@ async function runBrowserCheck({ browserName, launcher, launchOptions, url, bloc
     .catch(() => false);
 
   const probe = await page.evaluate(async ({ sampleFrames, probeKey, bootstrapReadyBeforeSample }) => {
+// option 2
+//   await page.waitForFunction(
+//     (probeKey) => {
+//       const host = globalThis;
+//       return host[probeKey]?.bootstrap?.state === 'succeeded';
+//     },
+//     RUNTIME_PROBE_GLOBAL_KEY,
+//     { timeout: 30_000 },
+//   );
+
+//   const probe = await page.evaluate(async ({ sampleFrames, probeKey }) => {
+// remove either option 1 or option2@!
     const hasNavigatorGpu = Boolean(navigator.gpu);
     const adapter = hasNavigatorGpu ? await navigator.gpu.requestAdapter() : null;
     const hasAdapter = Boolean(adapter);
@@ -430,6 +453,44 @@ function makeSkippedResult(check) {
   };
 }
 
+function makeSkippedResult(check) {
+  return {
+    browser: check.browserName,
+    blocking: check.blocking,
+    status: 'skipped',
+    browserVersion: null,
+    url: TARGET_URL,
+    startedAt: new Date().toISOString(),
+    durationMs: 0,
+    readiness: {
+      hasNavigatorGpu: false,
+      hasAdapter: false,
+      hasCanvas: false,
+      hasWebGPUContext: false,
+      runtimeProbePresent: false,
+      bootstrapSucceeded: false,
+      frameAdvanceDetected: false,
+      runtimeProbe: null,
+      consoleErrorCount: 0,
+      pageErrorCount: 0,
+    },
+    timing: {
+      sampleCount: 0,
+      avgFrameDeltaMs: 0,
+      p95FrameDeltaMs: 0,
+      avgFps: 0,
+    },
+    errors: {
+      console: [],
+      page: [],
+      setup: [],
+    },
+    failureReason: check.skipReason,
+    passed: false,
+    skipped: true,
+  };
+}
+
 function summarizeGateResults(results) {
   const skippedCount = results.filter((result) => result.status === 'skipped').length;
   const blockingChecks = results.filter((result) => result.blocking && result.status !== 'skipped');
@@ -502,6 +563,11 @@ async function main() {
     }
 
     const { skippedCount, blockingPassed, allBrowsersPassed } = summarizeGateResults(results);
+    const skippedCount = results.filter((result) => result.status === 'skipped').length;
+    const blockingChecks = results.filter((result) => result.blocking && result.status !== 'skipped');
+    const blockingPassed =
+      blockingChecks.length > 0 && blockingChecks.every((result) => result.passed);
+    const allBrowsersPassed = results.every((result) => result.status === 'passed');
     const report = {
       generatedAt: new Date().toISOString(),
       sampleFrames: SAMPLE_FRAMES,
@@ -538,6 +604,18 @@ async function main() {
           `context=${result.readiness.hasWebGPUContext}, bootstrap=${result.readiness.bootstrapSucceeded}, ` +
           `frames=${result.readiness.frameAdvanceDetected}, ` +
           `avg=${result.timing.avgFrameDeltaMs}ms, p95=${result.timing.p95FrameDeltaMs}ms)\n`,
+      );
+      if (!result.passed || result.status === 'skipped') {
+        // [LAW:verifiable-goals] Failure diagnostics are emitted with explicit
+        // machine-captured probe evidence so CI failures are actionable.
+        logDetailedResult(result);
+      }
+    }
+
+    if (FAIL_ON_SKIP && skippedCount > 0) {
+      process.stderr.write(
+        `[matrix] Failed: ${skippedCount} browser checks were skipped and fail-on-skip is enabled.\n`,
+      );
       );
       if (!result.passed || result.status === 'skipped') {
         // [LAW:verifiable-goals] Failure diagnostics are emitted with explicit
