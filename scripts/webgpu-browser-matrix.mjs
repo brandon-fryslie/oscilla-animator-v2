@@ -134,15 +134,19 @@ async function stopManagedServer(serverProcess) {
   // if graceful termination fails, hard-kill to avoid hanging CI gates.
   const awaitExit = (timeoutMs) => new Promise((resolve) => {
     let settled = false;
+    let timeoutId = null;
     const finish = (exited) => {
       if (settled) {
         return;
       }
       settled = true;
+      if (timeoutId !== null) {
+        clearTimeout(timeoutId);
+      }
       resolve(exited);
     };
     serverProcess.once('exit', () => finish(true));
-    setTimeout(() => finish(false), timeoutMs);
+    timeoutId = setTimeout(() => finish(false), timeoutMs);
   });
 
   serverProcess.kill('SIGTERM');
@@ -155,6 +159,14 @@ async function stopManagedServer(serverProcess) {
 }
 
 function computeStats(frameDeltasMs) {
+  if (frameDeltasMs.length === 0) {
+    return {
+      sampleCount: 0,
+      avgFrameDeltaMs: 0,
+      p95FrameDeltaMs: 0,
+      avgFps: 0,
+    };
+  }
   const sorted = [...frameDeltasMs].sort((a, b) => a - b);
   const avg = sorted.reduce((sum, value) => sum + value, 0) / Math.max(1, sorted.length);
   const p95Index = Math.min(sorted.length - 1, Math.max(0, Math.floor(sorted.length * 0.95)));
