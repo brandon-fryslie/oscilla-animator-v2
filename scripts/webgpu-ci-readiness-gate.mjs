@@ -3,6 +3,7 @@ import { spawn } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
+import { truncateForLog } from './matrix-utils.mjs';
 
 const MATRIX_REPORT_PATH = path.resolve(
   process.env.WEBGPU_MATRIX_REPORT ?? 'artifacts/webgpu-browser-matrix.json',
