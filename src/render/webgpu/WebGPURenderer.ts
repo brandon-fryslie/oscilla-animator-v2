@@ -705,6 +705,13 @@ export class WebGPURenderer {
       const resolvedInstanceCount =
         staticDrawPrepCounts.get(prepared.sourceSinkIndex)
         ?? prepared.instanceCount;
+      if (resolvedInstanceCount > prepared.instanceCount) {
+        // [LAW:no-silent-fallbacks] Static metadata must never request more
+        // instances than the packed draw record provides.
+        throw new Error(
+          `WebGPURenderer: static draw-prep sink count ${resolvedInstanceCount} exceeds packed instance count ${prepared.instanceCount} at sinkIndex ${prepared.sourceSinkIndex}`,
+        );
+      }
       this.drawPrepRuntime.step(
         commandEncoder,
         this.indirectArgsBuffer,
@@ -902,6 +909,9 @@ export class WebGPURenderer {
       if (op.kind !== 'drawPathInstances') {
         throw new Error(`WebGPURenderer: unsupported draw op kind "${(op as { kind: string }).kind}"`);
       }
+      // [LAW:one-source-of-truth] sinkIndex is defined by compiler render-step
+      // order, so runtime mapping advances once per source op even when no
+      // draw record is emitted (zero instances/empty mesh).
       const sourceSinkIndex = nextSourceSinkIndex++;
       const mesh = this.getOrCreateMesh(op.geometry);
       if (mesh.indexCount === 0 || op.instances.count <= 0) {

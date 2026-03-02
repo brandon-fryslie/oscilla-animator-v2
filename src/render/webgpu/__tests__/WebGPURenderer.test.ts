@@ -834,6 +834,28 @@ describe('WebGPURenderer', () => {
     expect(record0Write?.[1]).toBe(4);
   });
 
+  it('fails fast when static draw-prep sink count exceeds packed instance count', async () => {
+    const env = createFakeWebGPUEnvironment();
+    setNavigatorGpu(env.gpu);
+    const renderer = await createWebGPURenderer(env.canvas);
+    const topologyId = makeSimpleTopology('webgpu-draw-prep-static-overflow-topology');
+
+    expect(() => renderer.render(makeRenderInput([
+      makeDrawOp(topologyId, { count: 4 }),
+    ], {
+      drawPrepSinks: [
+        {
+          sinkIndex: 0,
+          renderStepIndex: 0,
+          instanceId: 'inst-0',
+          indirectRecordIndex: 0,
+          instanceCountMode: 'static',
+          staticInstanceCount: 9,
+        },
+      ],
+    }))).toThrow('exceeds packed instance count');
+  });
+
   it('applies static draw-prep sink override to both fill and stroke records of one logical sink', async () => {
     const env = createFakeWebGPUEnvironment();
     setNavigatorGpu(env.gpu);

@@ -42,21 +42,19 @@ This kernel is small but vital. It runs extremely fast.
 
 ### 2.1 The Dispatch Size
 
-The Compiler counts the number of Render blocks in the graph. Let's say there are **N** renderers (e.g., a Background, a Main Character, and a Particle System).
+Draw-prep dispatch is per prepared indirect record, not one bulk dispatch over all render blocks.
 
-- **Dispatch:** dispatchWorkgroups(ceil(N / 64))
+- **Dispatch per record:** `dispatchWorkgroups(1)`
+- **Workgroup size:** `drawPrepWorkgroupSize = 1`
+- **Invocation count per dispatch:** exactly one active invocation (`gid.x == 0`)
 
-- **Workgroup Size:** 64 threads.
-
-- **Active Threads:** Exactly N.
+The renderer executes this dispatch once for each prepared draw record so `drawPrepParams.v1.y` (`recordIndex`) identifies which indirect slot to update.
 
 ### 2.2 The Thread Responsibility
 
-- **Thread ID (global_id.x):** Corresponds to the **Draw Call Index**.
-
-- **Input:** The "Render Manifest" (a uniform array or hardcoded constants in the shader).
-
-- **Output:** The IndirectCommandBuffer at index global_id.x.
+- **Thread ID:** `global_id.x` is only a local guard (`gid.x > 0u` returns immediately).
+- **Input:** `DrawPrepParams` uniform payload for one record (`indexCount`, `instanceCount`, `firstInstance`, `recordIndex`, `maxRecords`).
+- **Output:** `indirectArgs[recordIndex * 5 .. +4]`.
 
 ## 3. The Shader Logic (draw_prep.wgsl)
 
@@ -64,70 +62,39 @@ The draw-prep shader is a canonical static kernel. The compiler emits only draw-
 
 For debugging and development-only hot-swap experiments, the renderer still accepts a `drawPrepShaderWgsl` override. This override is an explicit escape hatch, not a stable production API: any override must preserve the canonical draw-prep bind-group layout and indirect-args semantics.
 
-Code snippet
+Code snippet:
 
-struct DrawIndexedIndirectArgs {\
-vertex_count: u32,\
-instance_count: u32,\
-first_index: u32,\
-base_vertex: i32,\
-first_instance: u32,\
-}\
-\
-@group(0) @binding(0) var\<storage, read_write\> indirect_args: array\<DrawIndexedIndirectArgs\>;\
-@group(0) @binding(1) var\<storage, read\> shape_bank: array\<u32\>;\
-@group(0) @binding(2) var\<storage, read\> arena_counters: array\<atomic\<u32\>\>; // or plain u32\
-\
-@compute @workgroup_size(64)\
-fn main(@builtin(global_invocation_id) global_id: vec3\<u32\>) {\
-let draw_id = global_id.x;\
-\
-// 1. Guard against overshoot\
-if (draw_id \>= TOTAL_DRAW_CALLS) { return; }\
-\
-// 2. Fetch the Configuration for this Draw Call\
-// (In v3.0, the compiler often hardcodes these constants into a switch for speed)\
-var shape_id: u32;\
-var counter_index: u32;\
-var base_instance: u32;\
-\
-switch (draw_id) {\
-case 0u: { // Render Block "Background"\
-shape_id = 1u; // Square\
-counter_index = 0u; // Always 1 instance\
-base_instance = 0u;\
-}\
-case 1u: { // Render Block "Particles"\
-shape_id = 5u; // Circle\
-counter_index = 1u; // Read dynamic count from Arena\
-base_instance = 0u;\
-}\
-default: { return; }\
-}\
-\
-// 3. Resolve Topology (Read from Shape Bank)\
-// We need to know how many indices a "Circle" has.\
-let shape_header_offset = shape_id \* 8u;\
-let index_count = shape_bank\[shape_header_offset + 1u\];\
-let first_index = shape_bank\[shape_header_offset + 2u\];\
-\
-// 4. Resolve Instance Count (The Dynamic Part)\
-// This value was written by the Physics Kernel via atomicAdd\
-// OR it is a fixed value (like 1000) if no culling is active.\
-let instance_count = atomicLoad(&arena_counters\[counter_index\]);\
-\
-// 5. Construct the Draw Command\
-let cmd = DrawIndexedIndirectArgs(\
-index_count,\
-instance_count,\
-first_index,\
-0, // base_vertex (usually 0 for 2D)\
-base_instance // offset into the Arena for instance data\
-);\
-\
-// 6. Write to Buffer\
-indirect_args\[draw_id\] = cmd;\
+```wgsl
+struct DrawPrepParams {
+  // v0 = [indexCount, instanceCount, firstIndex, baseVertexBits]
+  v0: vec4<u32>,
+  // v1 = [firstInstance, recordIndex, maxRecords, _]
+  v1: vec4<u32>,
+};
+
+@group(0) @binding(0) var<storage, read_write> indirectArgs: array<u32>;
+@group(0) @binding(1) var<uniform> drawPrepParams: DrawPrepParams;
+
+@compute @workgroup_size(1)
+fn cs_main(@builtin(global_invocation_id) gid: vec3<u32>) {
+  if (gid.x > 0u) {
+    return;
+  }
+
+  let recordIndex = drawPrepParams.v1.y;
+  let maxRecords = drawPrepParams.v1.z;
+  if (recordIndex >= maxRecords) {
+    return;
+  }
+
+  let base = recordIndex * 5u;
+  indirectArgs[base + 0u] = drawPrepParams.v0.x;
+  indirectArgs[base + 1u] = drawPrepParams.v0.y;
+  indirectArgs[base + 2u] = drawPrepParams.v0.z;
+  indirectArgs[base + 3u] = drawPrepParams.v0.w;
+  indirectArgs[base + 4u] = drawPrepParams.v1.x;
 }
+```
 
 ## 4. The Visibility Logic (Culling Integration)
 
