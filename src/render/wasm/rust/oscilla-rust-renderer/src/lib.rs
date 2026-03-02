@@ -119,6 +119,32 @@ pub fn rebuild_simulation_pipeline(simulation_wgsl: String) -> Result<(), JsValu
 }
 
 #[wasm_bindgen]
+pub fn sync_render_payload(
+    topology_words: js_sys::Uint32Array,
+    instance_floats: js_sys::Float32Array,
+    indirect_args_words: js_sys::Uint32Array,
+    vertex_floats: js_sys::Float32Array,
+    index_words: js_sys::Uint32Array,
+    draw_record_count: u32,
+) -> Result<(), JsValue> {
+    ENGINE.with(|engine_cell| {
+        let mut engine_ref = engine_cell.borrow_mut();
+        let engine = engine_ref.as_mut().ok_or_else(|| {
+            JsValue::from_str("Rust engine must be initialized before sync_render_payload")
+        })?;
+        engine.sync_render_payload(
+            &topology_words,
+            &instance_floats,
+            &indirect_args_words,
+            &vertex_floats,
+            &index_words,
+            draw_record_count,
+        )?;
+        Ok(())
+    })
+}
+
+#[wasm_bindgen]
 pub fn resize_surface(width: u32, height: u32) -> Result<(), JsValue> {
     ENGINE.with(|engine_cell| {
         let mut engine_ref = engine_cell.borrow_mut();

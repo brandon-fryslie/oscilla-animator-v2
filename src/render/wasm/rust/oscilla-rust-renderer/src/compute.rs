@@ -272,6 +272,7 @@ impl ComputeDispatcher {
         &self,
         encoder: &mut wgpu::CommandEncoder,
         arena: &mut GpuMemoryArena,
+        encode_assembly: bool,
     ) {
         // [LAW:dataflow-not-control-flow] Compute stage order is immutable every
         // frame; variability is in uniforms/state payload values only.
@@ -297,7 +298,7 @@ impl ComputeDispatcher {
             compute_pass.dispatch_workgroups(self.sim_workgroup_count, 1, 1);
         }
 
-        {
+        if encode_assembly {
             let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
                 label: Some("Compute.RenderAssembly.Pass"),
                 timestamp_writes: None,
