@@ -129,6 +129,81 @@ function computeStats(frameDeltasMs) {
   };
 }
 
+function truncateForLog(value, maxLength = 240) {
+  if (typeof value !== 'string') {
+    return '';
+  }
+  if (value.length <= maxLength) {
+    return value;
+  }
+  return `${value.slice(0, Math.max(0, maxLength - 3))}...`;
+}
+
+function failureHintForReason(failureReason) {
+  switch (failureReason) {
+    case 'webgpu_api_unavailable':
+      return 'navigator.gpu is unavailable (runner/browser lacks WebGPU exposure).';
+    case 'webgpu_adapter_unavailable':
+      return 'requestAdapter() returned null (no GPU adapter available to WebGPU).';
+    case 'webgpu_context_unavailable':
+      return 'canvas.getContext("webgpu") failed; WebGPU context was not created.';
+    case 'runtime_probe_missing':
+      return 'Runtime probe was not published on window (startup path likely did not initialize preview runtime).';
+    case 'runtime_bootstrap_not_succeeded':
+      return 'Runtime bootstrap probe did not reach succeeded state.';
+    case 'runtime_frames_not_advancing':
+      return 'Runtime probe frame counter did not advance during sampling window.';
+    case 'runtime_console_errors':
+      return 'Runtime emitted console errors during probe run.';
+    case 'runtime_page_errors':
+      return 'Runtime emitted uncaught page errors during probe run.';
+    case 'browser_launch_failed':
+      return 'Browser process failed before runtime probe could execute.';
+    default:
+      return 'No mapped hint for this failure reason.';
+  }
+}
+
+function logDetailedResult(result) {
+  const failureReason = result.failureReason ?? 'unknown';
+  const bootstrapState = result.readiness?.runtimeProbe?.bootstrapState ?? null;
+  const bootstrapFailureMessage =
+    result.readiness?.runtimeProbe?.bootstrapFailureMessage ?? null;
+  const frameAdvanceCount = result.readiness?.runtimeProbe?.frameAdvanceCount ?? null;
+
+  process.stderr.write(
+    `[matrix] detail ${result.browser}: reason=${failureReason}; ` +
+      `bootstrapState=${bootstrapState ?? 'null'}; ` +
+      `bootstrapFailure=${bootstrapFailureMessage ? truncateForLog(bootstrapFailureMessage) : 'null'}; ` +
+      `frameAdvanceCount=${frameAdvanceCount ?? 'null'}; ` +
+      `consoleErrors=${result.errors?.console?.length ?? 0}; ` +
+      `pageErrors=${result.errors?.page?.length ?? 0}; ` +
+      `setupErrors=${result.errors?.setup?.length ?? 0}\n`,
+  );
+  process.stderr.write(
+    `[matrix] hint ${result.browser}: ${failureHintForReason(failureReason)}\n`,
+  );
+
+  const consoleError = result.errors?.console?.[0];
+  if (consoleError) {
+    process.stderr.write(
+      `[matrix] ${result.browser} console[0]: ${truncateForLog(consoleError)}\n`,
+    );
+  }
+  const pageError = result.errors?.page?.[0];
+  if (pageError) {
+    process.stderr.write(
+      `[matrix] ${result.browser} page[0]: ${truncateForLog(pageError)}\n`,
+    );
+  }
+  const setupError = result.errors?.setup?.[0];
+  if (setupError) {
+    process.stderr.write(
+      `[matrix] ${result.browser} setup[0]: ${truncateForLog(setupError)}\n`,
+    );
+  }
+}
+
 function getChecks() {
   return [
     {
@@ -439,6 +514,11 @@ async function main() {
           `frames=${result.readiness.frameAdvanceDetected}, ` +
           `avg=${result.timing.avgFrameDeltaMs}ms, p95=${result.timing.p95FrameDeltaMs}ms)\n`,
       );
+      if (!result.passed || result.status === 'skipped') {
+        // [LAW:verifiable-goals] Failure diagnostics are emitted with explicit
+        // machine-captured probe evidence so CI failures are actionable.
+        logDetailedResult(result);
+      }
     }
 
     if (FAIL_ON_SKIP && skippedCount > 0) {
