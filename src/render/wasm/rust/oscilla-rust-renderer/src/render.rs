@@ -1,10 +1,6 @@
-use wgpu::util::DeviceExt;
-
 use crate::memory::GpuMemoryArena;
 
-const QUAD_VERTICES: &[f32] = &[-1.0, -1.0, 1.0, -1.0, 1.0, 1.0, -1.0, 1.0];
-
-const QUAD_INDICES: &[u16] = &[0, 1, 2, 0, 2, 3];
+const INDIRECT_RECORD_BYTES: u64 = 5 * std::mem::size_of::<u32>() as u64;
 
 pub struct DepthTarget {
     _depth_texture: wgpu::Texture,
@@ -52,17 +48,12 @@ impl DepthTarget {
     pub fn view(&self) -> &wgpu::TextureView {
         &self.depth_view
     }
-
-    pub fn size(&self) -> (u32, u32) {
-        (self.width, self.height)
-    }
 }
 
 pub struct RenderDispatcher {
     render_pipeline: wgpu::RenderPipeline,
-    vertex_buffer: wgpu::Buffer,
-    index_buffer: wgpu::Buffer,
-    pub render_layout: wgpu::BindGroupLayout,
+    pub instance_layout: wgpu::BindGroupLayout,
+    pub topology_layout: wgpu::BindGroupLayout,
 }
 
 impl RenderDispatcher {
@@ -72,11 +63,11 @@ impl RenderDispatcher {
         surface_format: wgpu::TextureFormat,
         uniform_layout: &wgpu::BindGroupLayout,
     ) -> Self {
-        let render_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("Render.ShapeBank.Layout"),
+        let instance_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("Render.Instance.Layout"),
             entries: &[wgpu::BindGroupLayoutEntry {
                 binding: 0,
-                visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
+                visibility: wgpu::ShaderStages::VERTEX,
                 ty: wgpu::BindingType::Buffer {
                     ty: wgpu::BufferBindingType::Storage { read_only: true },
                     has_dynamic_offset: false,
@@ -86,15 +77,18 @@ impl RenderDispatcher {
             }],
         });
 
-        let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Render.Quad.VertexBuffer"),
-            contents: bytemuck::cast_slice(QUAD_VERTICES),
-            usage: wgpu::BufferUsages::VERTEX,
-        });
-        let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Render.Quad.IndexBuffer"),
-            contents: bytemuck::cast_slice(QUAD_INDICES),
-            usage: wgpu::BufferUsages::INDEX,
+        let topology_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("Render.Topology.Layout"),
+            entries: &[wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::VERTEX,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Storage { read_only: true },
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            }],
         });
 
         let shader_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
@@ -103,7 +97,7 @@ impl RenderDispatcher {
         });
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("Render.PipelineLayout"),
-            bind_group_layouts: &[uniform_layout, &render_layout],
+            bind_group_layouts: &[uniform_layout, &instance_layout, &topology_layout],
             push_constant_ranges: &[],
         });
 
@@ -149,9 +143,8 @@ impl RenderDispatcher {
 
         Self {
             render_pipeline,
-            vertex_buffer,
-            index_buffer,
-            render_layout,
+            instance_layout,
+            topology_layout,
         }
     }
 
@@ -161,9 +154,10 @@ impl RenderDispatcher {
         arena: &GpuMemoryArena,
         color_view: &wgpu::TextureView,
         depth_view: &wgpu::TextureView,
+        draw_record_count: u32,
     ) {
-        // [LAW:dataflow-not-control-flow] Render pass executes in a fixed order
-        // every frame; instance variability comes from ShapeBank/indirect data.
+        // [LAW:dataflow-not-control-flow] Render pass executes every frame in one
+        // canonical order; record variability is encoded in payload counts.
         let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("Render.Uber.Pass"),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -193,11 +187,16 @@ impl RenderDispatcher {
 
         render_pass.set_pipeline(&self.render_pipeline);
         render_pass.set_bind_group(0, &arena.uniform_bind_group, &[]);
-        render_pass.set_bind_group(1, &arena.render_bind_group, &[]);
-        render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
-        render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
-        // [LAW:one-source-of-truth] Compute assembly writes the canonical
-        // DrawIndexedIndirect record; render consumes that record directly.
-        render_pass.draw_indexed_indirect(&arena.indirect_buffer, 0);
+        render_pass.set_bind_group(1, &arena.instance_bind_group, &[]);
+        render_pass.set_bind_group(2, &arena.topology_bind_group, &[]);
+        render_pass.set_vertex_buffer(0, arena.vertex_buffer.slice(..));
+        render_pass.set_index_buffer(arena.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+
+        for record_index in 0..draw_record_count {
+            render_pass.draw_indexed_indirect(
+                &arena.indirect_buffer,
+                (record_index as u64) * INDIRECT_RECORD_BYTES,
+            );
+        }
     }
 }
