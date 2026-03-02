@@ -71,6 +71,9 @@ describe('compile worker payload clone safety', () => {
           backendResult: {
             kind: 'ok' as const,
             program: serializableProgram,
+            compiledComputeShader: {
+              wgsl: '@compute @workgroup_size(64, 1, 1)\nfn compute_main() {}',
+            },
             warnings: backendResult.warnings,
           },
         };

@@ -17,12 +17,8 @@ interface RendererWasmModule {
   readonly inject_poison_alloc?: () => void;
   readonly take_runtime_event_code?: () => number;
   readonly take_frame_pacing_packet?: () => unknown;
-  readonly rebuild_pipeline?: (
+  readonly rebuild_simulation_pipeline?: (
     simulationWgsl: string,
-    assemblyWgsl: string,
-    uberShaderWgsl: string,
-    particleCount: number,
-    shapeCount: number,
   ) => Promise<void> | void;
 }
 
@@ -36,7 +32,7 @@ let resumeEngineImpl: RendererWasmModule['resume_engine'] | null = null;
 let injectPoisonAllocImpl: RendererWasmModule['inject_poison_alloc'] | null = null;
 let takeRuntimeEventCodeImpl: RendererWasmModule['take_runtime_event_code'] | null = null;
 let takeFramePacingPacketImpl: RendererWasmModule['take_frame_pacing_packet'] | null = null;
-let rebuildPipelineImpl: RendererWasmModule['rebuild_pipeline'] | null = null;
+let rebuildSimulationPipelineImpl: RendererWasmModule['rebuild_simulation_pipeline'] | null = null;
 
 export async function initRustRendererWasm(): Promise<void> {
   if (initialized) {
@@ -62,8 +58,8 @@ export async function initRustRendererWasm(): Promise<void> {
       if (typeof wasmModule.attach_shared_input !== 'function') {
         throw new Error('Rust renderer wasm module missing attach_shared_input export');
       }
-      if (typeof wasmModule.rebuild_pipeline !== 'function') {
-        throw new Error('Rust renderer wasm module missing rebuild_pipeline export');
+      if (typeof wasmModule.rebuild_simulation_pipeline !== 'function') {
+        throw new Error('Rust renderer wasm module missing rebuild_simulation_pipeline export');
       }
       if (typeof wasmModule.resize_surface !== 'function') {
         throw new Error('Rust renderer wasm module missing resize_surface export');
@@ -91,7 +87,7 @@ export async function initRustRendererWasm(): Promise<void> {
       injectPoisonAllocImpl = wasmModule.inject_poison_alloc.bind(wasmModule);
       takeRuntimeEventCodeImpl = wasmModule.take_runtime_event_code.bind(wasmModule);
       takeFramePacingPacketImpl = wasmModule.take_frame_pacing_packet.bind(wasmModule);
-      rebuildPipelineImpl = wasmModule.rebuild_pipeline.bind(wasmModule);
+      rebuildSimulationPipelineImpl = wasmModule.rebuild_simulation_pipeline.bind(wasmModule);
       initialized = true;
     })().catch((error) => {
       initPromise = null;
@@ -168,15 +164,11 @@ export function takeRustRendererFramePacingPacket(): unknown {
   return takeFramePacingPacketImpl();
 }
 
-export async function rebuildRustRendererPipeline(
+export async function rebuildRustRendererSimulationPipeline(
   simulationWgsl: string,
-  assemblyWgsl: string,
-  uberShaderWgsl: string,
-  particleCount: number,
-  shapeCount: number,
 ): Promise<void> {
-  if (!initialized || !rebuildPipelineImpl) {
+  if (!initialized || !rebuildSimulationPipelineImpl) {
     throw new Error('Rust renderer wasm is not initialized');
   }
-  await rebuildPipelineImpl(simulationWgsl, assemblyWgsl, uberShaderWgsl, particleCount, shapeCount);
+  await rebuildSimulationPipelineImpl(simulationWgsl);
 }

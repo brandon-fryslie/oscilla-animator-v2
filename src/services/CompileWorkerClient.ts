@@ -28,6 +28,7 @@ export interface CompileWorkerRunResult {
   readonly sourcePatchRevision: number;
   readonly frontendResult: CompileWorkerCompiledMessage['frontendResult'];
   readonly backendResult: CompileResult | null;
+  readonly compiledComputeWgsl: string | null;
   readonly compileDurationMs: number;
 }
 
@@ -181,6 +182,10 @@ export class CompileWorkerClient {
           sourcePatchRevision: message.patchRevision,
           frontendResult: message.frontendResult,
           backendResult: reviveBackendResult(message.backendResult),
+          compiledComputeWgsl:
+            message.backendResult?.kind === 'ok'
+              ? message.backendResult.compiledComputeShader.wgsl
+              : null,
           compileDurationMs: message.durationMs,
         });
       }

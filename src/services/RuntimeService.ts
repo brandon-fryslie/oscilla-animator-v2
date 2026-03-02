@@ -225,6 +225,7 @@ export class RuntimeService {
     this.nextSwapIsInitial = false;
     this.swapInFlight = true;
     try {
+      await this.publishRendererPipelines(next);
       // [LAW:single-enforcer] All compile/swap application goes through this queue.
       await compileAndSwap(this.compileDeps(), isInitialSwap, next);
       this.asyncCompiler?.markSwapComplete();
@@ -241,6 +242,30 @@ export class RuntimeService {
         this.requestSwapFlush();
       }
     }
+  }
+
+  private async publishRendererPipelines(
+    artifacts: {
+      readonly backendResult: import('../compiler/compile').CompileResult | null;
+      readonly compiledComputeWgsl?: string | null;
+    },
+  ): Promise<void> {
+    const renderer = this.renderer;
+    if (!renderer) {
+      throw new Error('RuntimeService: renderer must exist before publishing compiled GPU pipelines');
+    }
+
+    const compiledComputeWgsl =
+      artifacts.backendResult?.kind === 'ok'
+        ? artifacts.compiledComputeWgsl ?? null
+        : null;
+    if (!compiledComputeWgsl) {
+      return;
+    }
+
+    // [LAW:single-enforcer] RuntimeService is the only boundary that publishes
+    // compiler-emitted GPU shader artifacts into the active renderer.
+    await renderer.rebuildSimulationPipeline(compiledComputeWgsl);
   }
 
   private buildCompileRequest(): CompileWorkerRunRequest {

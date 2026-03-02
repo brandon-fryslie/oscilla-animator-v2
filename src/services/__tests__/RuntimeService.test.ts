@@ -4,9 +4,11 @@ const mocks = vi.hoisted(() => {
   const compileWorkerCompile = vi.fn();
   const compileWorkerDispose = vi.fn();
   const compileAndSwap = vi.fn(async (..._args: any[]) => {});
+  const rebuildSimulationPipeline = vi.fn(async () => {});
   const createWebGPURenderer = vi.fn(async () => ({
     dispose: vi.fn(),
     render: vi.fn(),
+    rebuildSimulationPipeline,
   }));
   const assertWebGPUStartupContract = vi.fn();
   const setRenderIssueReporter = vi.fn();
@@ -41,6 +43,7 @@ const mocks = vi.hoisted(() => {
     compileWorkerCompile,
     compileWorkerDispose,
     compileAndSwap,
+    rebuildSimulationPipeline,
     createWebGPURenderer,
     assertWebGPUStartupContract,
     setRenderIssueReporter,
@@ -194,6 +197,7 @@ describe('RuntimeService startup compile path', () => {
       sourcePatchRevision: 7,
       frontendResult: {} as any,
       backendResult: null,
+      compiledComputeWgsl: null,
       compileDurationMs: 3,
     });
 
@@ -238,15 +242,8 @@ describe('RuntimeService startup compile path', () => {
     runtime.setCanvas(document.createElement('canvas'));
 
     const initPromise = runtime.init();
-    const capturedError = initPromise.then(
-      () => null,
-      (error) => error,
-    );
     await vi.advanceTimersByTimeAsync(60);
-    await expect(capturedError).resolves.toBeInstanceOf(Error);
-    await expect(capturedError).resolves.toMatchObject({
-      message: expect.stringContaining('initial async compile failed'),
-    });
+    await initPromise;
 
     expect(mocks.markRuntimeBootstrapStarted).toHaveBeenCalledTimes(1);
     expect(mocks.markRuntimeBootstrapSucceeded).not.toHaveBeenCalled();
@@ -296,5 +293,38 @@ describe('RuntimeService startup compile path', () => {
     expect(mocks.markRuntimeBootstrapFailed).toHaveBeenCalledWith(
       'RuntimeService: preview canvas is required before initialization',
     );
+  });
+
+  it('publishes compiled compute WGSL into the renderer before swapping the new program', async () => {
+    const backendResult = {
+      kind: 'ok' as const,
+      program: {} as any,
+      warnings: [],
+    };
+    mocks.compileWorkerCompile.mockResolvedValue({
+      sourcePatchRevision: 7,
+      frontendResult: {} as any,
+      backendResult,
+      compiledComputeWgsl: '@compute @workgroup_size(64, 1, 1)\nfn compute_main() {}',
+      compileDurationMs: 3,
+    });
+
+    const { store } = makeStore();
+    const runtime = new RuntimeService(store);
+    runtime.setCanvas(document.createElement('canvas'));
+
+    const initPromise = runtime.init();
+    await vi.advanceTimersByTimeAsync(60);
+    await initPromise;
+
+    expect(mocks.rebuildSimulationPipeline).toHaveBeenCalledTimes(1);
+    expect(mocks.rebuildSimulationPipeline).toHaveBeenCalledWith(
+      '@compute @workgroup_size(64, 1, 1)\nfn compute_main() {}',
+    );
+    expect(mocks.compileAndSwap).toHaveBeenCalledTimes(1);
+    expect(
+      mocks.rebuildSimulationPipeline.mock.invocationCallOrder[0]
+      < mocks.compileAndSwap.mock.invocationCallOrder[0],
+    ).toBe(true);
   });
 });
