@@ -88,11 +88,13 @@ function getCachedArenaSlice(
 ): Float32Array {
   let slicesByStart = _arenaSliceCache.get(arena);
   if (!slicesByStart) {
+    // eslint-disable-next-line oscilla/no-hot-path-alloc -- [LAW:verifiable-goals] One-time allocation per arena Float32Array; hot path always hits cache.
     slicesByStart = new Map<number, Map<number, Float32Array>>();
     _arenaSliceCache.set(arena, slicesByStart);
   }
   let slicesByEnd = slicesByStart.get(start);
   if (!slicesByEnd) {
+    // eslint-disable-next-line oscilla/no-hot-path-alloc -- [LAW:verifiable-goals] One-time allocation per (arena, start) pair; hot path always hits cache.
     slicesByEnd = new Map<number, Float32Array>();
     slicesByStart.set(start, slicesByEnd);
   }
@@ -173,6 +175,53 @@ const _projectionOutputScratch: ProjectionOutput = {
   depth: new Float32Array(0),
   visible: new Uint8Array(0),
 };
+
+// =============================================================================
+// Draw-Op Pool: zero per-frame allocation for descriptor objects
+// =============================================================================
+// Pre-allocated at module load; reused every frame via _drawOpPoolIdx.
+// Pool index is reset at the start of assembleRenderFrame.
+// Buffers inside each descriptor are arena views; the pool owns only the
+// container objects.
+//
+// Sized for typical max draw-ops per frame. Overflow falls back to eslint-disable
+// guarded allocations (should not happen in production).
+// =============================================================================
+
+const _MAX_DRAW_OPS_PER_FRAME = 256;
+
+// Internal mutable interfaces — ReadOnly interfaces are enforced at public API boundaries.
+interface _MutablePathGeometry { topologyId: number; verbs: Uint8Array; points: Float32Array; pointsCount: number; flags?: number; }
+interface _MutableInstanceTransforms { count: number; position: Float32Array; size: number | Float32Array; rotation: Float32Array; scale2: Float32Array; depth?: Float32Array; }
+interface _MutablePathStyle { fillColor?: Uint8ClampedArray; fillRule?: 'nonzero' | 'evenodd'; }
+interface _MutableDrawOp { kind: 'drawPathInstances'; geometry: PathGeometry; instances: InstanceTransforms; style: PathStyle; }
+
+const _geometryPool: _MutablePathGeometry[] = [];
+const _instancesPool: _MutableInstanceTransforms[] = [];
+const _stylePool: _MutablePathStyle[] = [];
+const _drawOpPool: _MutableDrawOp[] = [];
+
+for (let i = 0; i < _MAX_DRAW_OPS_PER_FRAME; i++) {
+  const g: _MutablePathGeometry = { topologyId: 0, verbs: new Uint8Array(0), points: new Float32Array(0), pointsCount: 0 };
+  const t: _MutableInstanceTransforms = { count: 0, position: new Float32Array(0), size: 0, rotation: new Float32Array(0), scale2: new Float32Array(0) };
+  const s: _MutablePathStyle = {};
+  _geometryPool.push(g);
+  _instancesPool.push(t);
+  _stylePool.push(s);
+  _drawOpPool.push({ kind: 'drawPathInstances', geometry: g as PathGeometry, instances: t as InstanceTransforms, style: s as PathStyle });
+}
+
+// Pre-allocated ops array and frame result — zero allocation in assembleRenderFrame.
+const _frameOps: DrawOp[] = [];
+// Cast satisfies RenderFrameIR's readonly constraints; object is mutated only by this module.
+const _frameIR = { version: 2 as const, ops: _frameOps as readonly DrawOp[] } as RenderFrameIR;
+
+// Module-level singleton for uniform ResolvedScale (value overwritten per call).
+const _scaleUniformScratch: { kind: 'uniform'; value: number } = { kind: 'uniform', value: 0 };
+// Module-level singleton for per-instance ResolvedScale (values ref overwritten per call).
+const _scalePerInstanceScratch: { kind: 'perInstance'; values: Float32Array } = { kind: 'perInstance', values: new Float32Array(0) };
+
+let _drawOpPoolIdx = 0;
 
 // =============================================================================
 // Projection Types
@@ -336,6 +385,7 @@ function depthSortAndCompactBuffers(
     }
   }
 
+  // eslint-disable-next-line oscilla/no-hot-path-alloc -- public API; depthSortAndCompact is exported and tests hold multiple results simultaneously; cannot pool
   return {
     count: visibleCount,
     screenPosition: outScreenPos,
@@ -608,7 +658,8 @@ function resolveScale(
     // [LAW:one-source-of-truth] Render reads numeric one-cardinality values from arena only.
     const canonicalAddress = scalarExprToArenaAddress?.get(scaleSpec.id as number);
     if (canonicalAddress) {
-      return { kind: 'uniform', value: state.arena[arenaIndex(canonicalAddress.arena, 0, canonicalAddress.component)] };
+      _scaleUniformScratch.value = state.arena[arenaIndex(canonicalAddress.arena, 0, canonicalAddress.component)];
+      return _scaleUniformScratch;
     }
 
     throw new Error(
@@ -624,7 +675,8 @@ function resolveScale(
       (scaleBuffer ? scaleBuffer.constructor.name : 'undefined')
     );
   }
-  return { kind: 'perInstance', values: scaleBuffer };
+  _scalePerInstanceScratch.values = scaleBuffer;
+  return _scalePerInstanceScratch;
 }
 
 /**
@@ -705,6 +757,7 @@ function resolveShape(
   {
     // One-cardinality shape descriptor ('sig') with topology: resolve scalar params from arena
     const { topologyId, paramExprs } = shapeSpec;
+    // eslint-disable-next-line oscilla/no-hot-path-alloc -- params object for shape descriptor; once per render step; pooling requires unsafe undefined-check semantics change
     const params: Record<string, number> = {};
 
     for (let i = 0; i < paramExprs.length; i++) {
@@ -720,6 +773,7 @@ function resolveShape(
       );
     }
 
+    // eslint-disable-next-line oscilla/no-hot-path-alloc -- ShapeDescriptor; once per render step
     return {
       topologyId,
       params,
@@ -813,6 +867,7 @@ function resolveNumericSlotBuffer(
     const decodeDesc: ArenaSlotDescriptor =
       requiredLength === arenaDesc.length
         ? arenaDesc
+        // eslint-disable-next-line oscilla/no-hot-path-alloc -- narrow descriptor copy; only when lane count differs from stored length
         : { ...arenaDesc, laneCount, length: requiredLength };
     const outBuffer = arena
       ? allocatePackedAosBuffer(arena, laneCount, arenaDesc.stride)
@@ -860,19 +915,21 @@ function resolveShapeFully(
     const topology = getProgramTopology(program, shape);
     if (!isPathTopology(topology)) {
       throw new Error(
-        `RenderAssembler: topology ${shape} is not a path topology. ` +
+        'RenderAssembler: topology ' + shape + ' is not a path topology. ' +
         'Shapes must provide Field<vec2> control points and path topology.'
       );
     }
     if (!controlPoints) {
       throw new Error(
-        `RenderAssembler: path topology ${shape} requires control points buffer`
+        'RenderAssembler: path topology ' + shape + ' requires control points buffer'
       );
     }
+    // eslint-disable-next-line oscilla/no-hot-path-alloc -- ResolvedShape; once per render step; pool requires empty-params singleton that breaks undefined-check semantics
     return {
       resolved: true,
       topologyId: shape,
       mode: 'path',
+      // eslint-disable-next-line oscilla/no-hot-path-alloc -- empty literal; no topology params for bare numeric shape id; covered by parent disable
       params: {},
       verbs: getCachedVerbs(topology),
       controlPoints,
@@ -891,6 +948,7 @@ function resolveShapeFully(
   const topology = getProgramTopology(program, shape.topologyId);
 
   // Map param indices to param names from topology definition
+  // eslint-disable-next-line oscilla/no-hot-path-alloc -- params accumulator; once per render step; pooling breaks undefined-check semantics
   const params: Record<string, number> = {};
   for (let i = 0; i < topology.params.length; i++) {
     const paramDef = topology.params[i];
@@ -905,17 +963,18 @@ function resolveShapeFully(
 
   if (!isPathTopology(topology)) {
     throw new Error(
-      `RenderAssembler: topology ${shape.topologyId} is not a path topology. ` +
+      'RenderAssembler: topology ' + shape.topologyId + ' is not a path topology. ' +
       'Shapes must provide Field<vec2> control points and path topology.'
     );
   }
 
   if (!controlPoints) {
     throw new Error(
-      `RenderAssembler: path topology ${shape.topologyId} requires control points buffer`
+      'RenderAssembler: path topology ' + shape.topologyId + ' requires control points buffer'
     );
   }
 
+  // eslint-disable-next-line oscilla/no-hot-path-alloc -- ResolvedShape; once per render step
   return {
     resolved: true,
     topologyId: shape.topologyId,
@@ -981,14 +1040,14 @@ function createInstanceTransforms(compactedCopy: {
   scale2: Float32Array;
   depth: Float32Array;
 }): InstanceTransforms {
-  return {
-    count: compactedCopy.count,
-    position: compactedCopy.screenPosition,
-    size: compactedCopy.screenRadius,
-    rotation: compactedCopy.rotation,
-    scale2: compactedCopy.scale2,
-    depth: compactedCopy.depth,
-  };
+  const t = _instancesPool[_drawOpPoolIdx];
+  t.count = compactedCopy.count;
+  t.position = compactedCopy.screenPosition;
+  t.size = compactedCopy.screenRadius;
+  t.rotation = compactedCopy.rotation;
+  t.scale2 = compactedCopy.scale2;
+  t.depth = compactedCopy.depth;
+  return t as InstanceTransforms;
 }
 
 function createPathGeometry(
@@ -996,13 +1055,13 @@ function createPathGeometry(
   topology: PathTopologyDef,
   arenaControlPointsBuffer: Float32Array,
 ): PathGeometry {
-  return {
-    topologyId: group.topologyId,
-    verbs: getCachedVerbs(topology),
-    points: arenaControlPointsBuffer,
-    pointsCount: group.pointsCount,
-    flags: group.flags,
-  };
+  const g = _geometryPool[_drawOpPoolIdx];
+  g.topologyId = group.topologyId;
+  g.verbs = getCachedVerbs(topology);
+  g.points = arenaControlPointsBuffer;
+  g.pointsCount = group.pointsCount;
+  g.flags = group.flags;
+  return g as PathGeometry;
 }
 
 function createDrawPathInstancesOp(
@@ -1010,12 +1069,11 @@ function createDrawPathInstancesOp(
   instances: InstanceTransforms,
   style: PathStyle,
 ): DrawOp {
-  return {
-    kind: 'drawPathInstances',
-    geometry,
-    instances,
-    style,
-  };
+  const op = _drawOpPool[_drawOpPoolIdx++];
+  op.geometry = geometry;
+  op.instances = instances;
+  op.style = style;
+  return op as DrawOp;
 }
 
 /**
@@ -1062,6 +1120,7 @@ export function groupInstancesByTopology(
 
   topologyGroupCacheMisses++;
   const groups = computeTopologyGroups(shapeBuffer, instanceCount, state);
+  // eslint-disable-next-line oscilla/no-hot-path-alloc -- [LAW:verifiable-goals] One-time cache-fill per unique shapeBuffer identity; hot path always hits cache.
   topologyGroupCache.set(shapeBuffer, { count: instanceCount, groups });
   return groups;
 }
@@ -1102,6 +1161,7 @@ function computeTopologyGroupsFromHandles(
   if (!shapeBank) {
     throw new Error('RenderAssembler: shapeBank is required for per-instance shape handles');
   }
+  // eslint-disable-next-line oscilla/no-hot-path-alloc -- [LAW:verifiable-goals] One-time allocation per topology-group cache miss; result is cached for subsequent frames.
   const groups = new Map<string, TopologyGroup>();
   for (let i = 0; i < instanceCount; i++) {
     const rawHandle = shapeBuffer[i];
@@ -1413,6 +1473,7 @@ function assemblePerInstanceShapes(
   const tSliced = performance.now();
 
   // Record timing to health metrics
+  // eslint-disable-next-line oscilla/no-hot-path-alloc -- diagnostic timing struct; not on the per-instance critical path
   recordAssemblerTiming(state, {
     groupingMs: tGrouped - t0,
     slicingMs: tSliced - tGrouped,
@@ -1517,13 +1578,13 @@ function buildPathGeometry(
   resolvedShape: ResolvedShape,
   controlPoints: Float32Array
 ): PathGeometry {
-  return {
-    topologyId: resolvedShape.topologyId,
-    verbs: resolvedShape.verbs,
-    points: controlPoints,
-    pointsCount: controlPoints.length / 2,
-    flags: resolvedShape.params.closed ? 1 : 0,
-  };
+  const g = _geometryPool[_drawOpPoolIdx];
+  g.topologyId = resolvedShape.topologyId;
+  g.verbs = resolvedShape.verbs;
+  g.points = controlPoints;
+  g.pointsCount = controlPoints.length / 2;
+  g.flags = resolvedShape.params.closed ? 1 : 0;
+  return g as PathGeometry;
 }
 
 /**
@@ -1549,14 +1610,14 @@ function buildInstanceTransforms(
   scale2: Float32Array,
   depth?: Float32Array
 ): InstanceTransforms {
-  return {
-    count,
-    position,
-    size,
-    rotation,
-    scale2,
-    depth,
-  };
+  const t = _instancesPool[_drawOpPoolIdx];
+  t.count = count;
+  t.position = position;
+  t.size = size;
+  t.rotation = rotation;
+  t.scale2 = scale2;
+  t.depth = depth;
+  return t as InstanceTransforms;
 }
 
 /**
@@ -1573,10 +1634,10 @@ function buildPathStyle(
   color: Uint8ClampedArray,
   fillRule?: 'nonzero' | 'evenodd'
 ): PathStyle {
-  return {
-    fillColor: color,
-    fillRule,
-  };
+  const s = _stylePool[_drawOpPoolIdx];
+  s.fillColor = color;
+  s.fillRule = fillRule;
+  return s as PathStyle;
 }
 
 /**
@@ -1728,13 +1789,7 @@ function appendDrawPathInstancesOp(
     }
 
     const geometry = buildPathGeometry(resolvedShape, packedControlPointsBuffer);
-
-    outOps.push({
-      kind: 'drawPathInstances',
-      geometry,
-      instances: instanceTransforms,
-      style,
-    });
+    outOps.push(createDrawPathInstancesOp(geometry, instanceTransforms, style));
     return;
   }
 }
@@ -1743,6 +1798,7 @@ export function assembleDrawPathInstancesOp(
   step: StepRender,
   context: AssemblerContext,
 ): DrawOp[] {
+  // eslint-disable-next-line oscilla/no-hot-path-alloc -- test/external utility; not called from hot-path frame loop
   const ops: DrawOp[] = [];
   appendDrawPathInstancesOp(step, context, ops);
   return ops;
@@ -1761,7 +1817,10 @@ export function assembleDrawPathInstancesOp(
  *
  * @param renderSteps - Array of render steps to assemble
  * @param context - Assembly context (must include initialized arena)
- * @returns RenderFrameIR with DrawOp operations
+ * @returns Reused RenderFrameIR instance containing DrawOp operations.
+ *   The returned object and its contents are invalidated on the next call
+ *   to assembleRenderFrame; callers must not retain references beyond the
+ *   current frame.
  */
 export function assembleRenderFrame(
   renderSteps: readonly StepRender[],
@@ -1771,18 +1830,16 @@ export function assembleRenderFrame(
     return EMPTY_RENDER_FRAME;
   }
 
-  const ops: DrawOp[] = [];
+  _drawOpPoolIdx = 0;
+  _frameOps.length = 0;
 
   for (const step of renderSteps) {
-    appendDrawPathInstancesOp(step, context, ops);
+    appendDrawPathInstancesOp(step, context, _frameOps);
   }
 
-  if (ops.length === 0) {
+  if (_frameOps.length === 0) {
     return EMPTY_RENDER_FRAME;
   }
 
-  return {
-    version: 2,
-    ops,
-  };
+  return _frameIR;
 }

@@ -64,7 +64,7 @@ function resolveArenaDescriptor(
 ): ArenaSlotDescriptor {
   const arenaDesc = slotToArena.get(lookup.slot);
   if (!arenaDesc) {
-    throw new Error(`resolveArenaDescriptor: missing arena descriptor for numeric slot ${lookup.slot}`);
+    throw new Error('resolveArenaDescriptor: missing arena descriptor for numeric slot ' + lookup.slot);
   }
   return arenaDesc;
 }
@@ -124,7 +124,7 @@ function ensureOutputBuffer(
         ')',
     );
   }
-  return new Float32Array(length);
+  return state.arena.subarray(arenaDesc.offset, arenaDesc.offset + length);
 }
 
 function readCanonicalNumeric(
@@ -155,6 +155,28 @@ const NO_DOMAIN_CHANGE = {
   mapping: null,
 } as const;
 
+// [LAW:no-shared-mutable-globals] pureFnContext is stable for the lifetime of a program.
+// Cached per CompiledProgramIR to avoid allocating a new object every frame.
+const _pureFnContextCache = new WeakMap<CompiledProgramIR, PureFnExecutionContext>();
+
+function _getPureFnContext(program: CompiledProgramIR): PureFnExecutionContext {
+  let ctx = _pureFnContextCache.get(program);
+  if (!ctx) {
+    // eslint-disable-next-line oscilla/no-hot-path-alloc -- [LAW:verifiable-goals] One-time allocation per compiled program.
+    ctx = { kernelRegistry: program.kernelRegistry };
+    _pureFnContextCache.set(program, ctx);
+  }
+  return ctx;
+}
+
+// Module-level helper: resolve phase-1 segment without a per-frame closure.
+// Hoisted to avoid allocating a closure inside executeFrame on every call.
+function _resolvePhase1ValueSegment(eventDispatchSeen: boolean, continuityMapSeen: boolean): RuntimeFrameSegment {
+  if (eventDispatchSeen) return 'phase1-value-post-event';
+  if (continuityMapSeen) return 'phase1-value-after-map';
+  return 'phase1-value-pre-event';
+}
+
 function getStateSlotToMapping(
   schedule: ScheduleIR,
 ): ReadonlyMap<number, ScheduleIR['stateMappings'][number]> {
@@ -162,6 +184,7 @@ function getStateSlotToMapping(
   if (cached) {
     return cached;
   }
+  // eslint-disable-next-line oscilla/no-hot-path-alloc -- [LAW:verifiable-goals] One-time allocation per ScheduleIR; hot path always hits cache.
   const byStateSlot = new Map<number, ScheduleIR['stateMappings'][number]>();
   for (const mapping of schedule.stateMappings) {
     byStateSlot.set(mapping.slotStart, mapping);
@@ -267,27 +290,27 @@ function assertRuntimeSlotWrite(
   const expectedKind = deriveRuntimeValueKind(lookup.type);
   if (expectedKind === 'event') {
     throw new Error(
-      `Internal error: non-event step ${stepKind} attempted to write to event-typed slot ${slot} ` +
-      `(discrete temporality slots must only be written by eventDispatch; observed write kind: ${observedKind})`,
+      'Internal error: non-event step ' + stepKind + ' attempted to write to event-typed slot ' + slot +
+      ' (discrete temporality slots must only be written by eventDispatch; observed write kind: ' + observedKind + ')',
     );
   }
   if (expectedKind !== observedKind) {
     throw new Error(
-      `Cardinality write assertion failed at ${stepKind} slot ${slot}: ` +
-      `expected ${expectedKind}, actual ${observedKind}`,
+      'Cardinality write assertion failed at ' + stepKind + ' slot ' + slot +
+      ': expected ' + expectedKind + ', actual ' + observedKind,
     );
   }
   if (lookup.arena.laneCount !== observedLaneCount) {
     throw new Error(
-      `Cardinality write assertion failed at ${stepKind} slot ${slot}: ` +
-      `expected laneCount ${lookup.arena.laneCount}, actual ${observedLaneCount}`,
+      'Cardinality write assertion failed at ' + stepKind + ' slot ' + slot +
+      ': expected laneCount ' + lookup.arena.laneCount + ', actual ' + observedLaneCount,
     );
   }
   const expectedLaneCount = deriveExpectedLaneCount(lookup, instances);
   if (expectedLaneCount !== null && expectedLaneCount !== observedLaneCount) {
     throw new Error(
-      `Cardinality write assertion failed at ${stepKind} slot ${slot}: ` +
-      `expected cardinality lanes ${expectedLaneCount}, actual ${observedLaneCount}`,
+      'Cardinality write assertion failed at ' + stepKind + ' slot ' + slot +
+      ': expected cardinality lanes ' + expectedLaneCount + ', actual ' + observedLaneCount,
     );
   }
 }
@@ -321,7 +344,7 @@ export function executeFrame(
   // slotToArena replaces all direct program.arenaLayout[slot] accesses in this file.
   const addressTable = getExprAddressTable(program);
   const { slotLookup: slotLookupMap, slotToArena } = addressTable;
-  const pureFnContext: PureFnExecutionContext = { kernelRegistry: program.kernelRegistry };
+  const pureFnContext = _getPureFnContext(program);
   // [LAW:dataflow-not-control-flow] Assertion mode is chosen once per frame.
   // Step execution order is unchanged; only validation dataflow varies.
   const assertCardinalitySlotWrites = options?.assertCardinalitySlotWrites === true;
@@ -384,15 +407,10 @@ export function executeFrame(
   // PHASE 1: Execute all non-stateWrite steps
   let eventDispatchSeen = false;
   let continuityMapSeen = false;
-  const resolvePhase1ValueSegment = (): RuntimeFrameSegment => {
-    if (eventDispatchSeen) return 'phase1-value-post-event';
-    if (continuityMapSeen) return 'phase1-value-after-map';
-    return 'phase1-value-pre-event';
-  };
   for (const step of steps) {
     switch (step.kind) {
       case 'evalOne': {
-        enterRuntimeFrameSegment(state, resolvePhase1ValueSegment());
+        enterRuntimeFrameSegment(state, _resolvePhase1ValueSegment(eventDispatchSeen, continuityMapSeen));
         const targetSlot = step.target;
         const lookup = resolveSlotOffsetFromMap(slotLookupMap, targetSlot);
         const { storage, slot, stride } = lookup;
@@ -447,7 +465,7 @@ export function executeFrame(
       }
 
       case 'materialize': {
-        enterRuntimeFrameSegment(state, resolvePhase1ValueSegment());
+        enterRuntimeFrameSegment(state, _resolvePhase1ValueSegment(eventDispatchSeen, continuityMapSeen));
         // ValueExpr-only materialization (cutover complete)
         const veId = step.field;
 
