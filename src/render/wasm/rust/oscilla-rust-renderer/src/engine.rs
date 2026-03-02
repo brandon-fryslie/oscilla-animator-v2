@@ -1,5 +1,5 @@
-use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 
 use js_sys::{Float32Array, SharedArrayBuffer};
 use wasm_bindgen::JsValue;
@@ -9,7 +9,7 @@ use crate::allocator::StrictAllocator;
 use crate::compute::ComputeDispatcher;
 use crate::memory::GpuMemoryArena;
 use crate::render::{DepthTarget, RenderDispatcher};
-use crate::wgpu_compat;
+use crate::scheduler::{SchedulerState, WorkerObservabilityPacket, WorkerScheduler};
 
 const INPUT_WORD_WIDTH: usize = 0;
 const INPUT_WORD_HEIGHT: usize = 1;
@@ -24,6 +24,8 @@ const INPUT_WORD_AUDIO_LOW: usize = 9;
 const INPUT_WORD_AUDIO_MID: usize = 10;
 const INPUT_WORD_AUDIO_HIGH: usize = 11;
 const INPUT_WORD_GAUGE_ACTIVE: usize = 12;
+const INPUT_SIGNAL_WORDS: u32 = 4;
+const INPUT_FLOAT_WORDS: u32 = 32;
 
 const DEFAULT_SIMULATION_WGSL: &str = r#"
 @group(0) @binding(0) var<uniform> global_uniforms: array<vec4<f32>, 5>;
@@ -109,23 +111,6 @@ pub struct EngineConfig {
     pub debug_readback_hz: u32,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum RuntimeState {
-    Running,
-    Paused,
-    Fatal,
-}
-
-impl RuntimeState {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            RuntimeState::Running => "running",
-            RuntimeState::Paused => "paused",
-            RuntimeState::Fatal => "fatal",
-        }
-    }
-}
-
 pub struct Engine {
     device: wgpu::Device,
     queue: wgpu::Queue,
@@ -138,26 +123,33 @@ pub struct Engine {
     render: RenderDispatcher,
     assembly_write_bind_group: wgpu::BindGroup,
     shared_input: Option<Float32Array>,
-    runtime_state: RuntimeState,
-    last_error_message: Option<String>,
+    scheduler: WorkerScheduler,
     frame_count: u64,
     debug_readback_interval_frames: u64,
-    debug_readback_in_flight: Rc<AtomicBool>,
-    pending_event_code: u32,
-    last_event_code: u32,
-    timing_window_sum_ms: f64,
-    timing_window_sum_sq_ms: f64,
-    timing_window_samples: u32,
-    latest_timing_packet: Option<FramePacingTelemetry>,
+    debug_readback_in_flight: Arc<AtomicBool>,
     strict_lock_start_frame: u64,
 }
 
-#[derive(Clone, Copy)]
-pub struct FramePacingTelemetry {
-    pub mean_ms: f64,
-    pub std_dev_ms: f64,
-    pub sample_count: u32,
-    pub frame_count: u64,
+#[cfg(target_arch = "wasm32")]
+fn create_runtime_surface(
+    instance: &wgpu::Instance,
+    canvas: OffscreenCanvas,
+) -> Result<wgpu::Surface<'static>, JsValue> {
+    instance
+        .create_surface(wgpu::SurfaceTarget::OffscreenCanvas(canvas))
+        .map_err(|error| JsValue::from_str(&format!("create_surface failed: {error}")))
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn create_runtime_surface(
+    _instance: &wgpu::Instance,
+    _canvas: OffscreenCanvas,
+) -> Result<wgpu::Surface<'static>, JsValue> {
+    // [LAW:one-way-deps] exception: host-target checks compile this crate for
+    // diagnostics only; runtime surface initialization is wasm-only.
+    Err(JsValue::from_str(
+        "oscilla_rust_renderer surface initialization is only supported on wasm32",
+    ))
 }
 
 impl Engine {
@@ -166,8 +158,16 @@ impl Engine {
             backends: wgpu::Backends::BROWSER_WEBGPU,
             ..Default::default()
         });
-        let surface = wgpu_compat::create_surface(&instance, canvas)?;
-        let adapter = wgpu_compat::request_adapter(&instance, &surface).await?;
+        let surface = create_runtime_surface(&instance, canvas)?;
+
+        let adapter = instance
+            .request_adapter(&wgpu::RequestAdapterOptions {
+                power_preference: wgpu::PowerPreference::HighPerformance,
+                compatible_surface: Some(&surface),
+                force_fallback_adapter: false,
+            })
+            .await
+            .ok_or_else(|| JsValue::from_str("request_adapter failed: no compatible adapter"))?;
 
         // [LAW:single-enforcer] Required limits are negotiated in one place
         // at device creation so runtime paths don't fork on capability checks.
@@ -179,7 +179,18 @@ impl Engine {
             .max_storage_buffer_binding_size
             .max(128 * 1024 * 1024);
 
-        let (device, queue) = wgpu_compat::request_device(&adapter, required_limits).await?;
+        let (device, queue) = adapter
+            .request_device(
+                &wgpu::DeviceDescriptor {
+                    label: Some("Oscilla.Render.Device"),
+                    required_features: wgpu::Features::INDIRECT_FIRST_INSTANCE,
+                    required_limits,
+                    memory_hints: wgpu::MemoryHints::Performance,
+                },
+                None,
+            )
+            .await
+            .map_err(|error| JsValue::from_str(&format!("request_device failed: {error}")))?;
 
         let capabilities = surface.get_capabilities(&adapter);
         let surface_format = capabilities
@@ -232,6 +243,7 @@ impl Engine {
         let assembly_write_bind_group = arena.assembly_write_bind_group.clone();
         let depth_target = DepthTarget::new(&device, surface_config.width, surface_config.height);
         let debug_readback_interval_frames = (60 / config.debug_readback_hz.max(1)).max(1) as u64;
+        let scheduler = WorkerScheduler::new(js_sys::Date::now());
 
         Ok(Self {
             device,
@@ -245,23 +257,22 @@ impl Engine {
             render,
             assembly_write_bind_group,
             shared_input: None,
-            runtime_state: RuntimeState::Running,
-            last_error_message: None,
+            scheduler,
             frame_count: 0,
             debug_readback_interval_frames,
-            debug_readback_in_flight: Rc::new(AtomicBool::new(false)),
-            pending_event_code: 0,
-            last_event_code: 0,
-            timing_window_sum_ms: 0.0,
-            timing_window_sum_sq_ms: 0.0,
-            timing_window_samples: 0,
-            latest_timing_packet: None,
+            debug_readback_in_flight: Arc::new(AtomicBool::new(false)),
             strict_lock_start_frame: 600,
         })
     }
 
     pub fn attach_shared_input(&mut self, shared_input: SharedArrayBuffer) {
-        self.shared_input = Some(Float32Array::new(&shared_input));
+        // [LAW:one-source-of-truth] Shared input ABI layout is owned by the
+        // renderer input plane: first 4 i32 signal words, then 32 f32 words.
+        self.shared_input = Some(Float32Array::new_with_byte_offset_and_length(
+            &shared_input,
+            INPUT_SIGNAL_WORDS * std::mem::size_of::<i32>() as u32,
+            INPUT_FLOAT_WORDS,
+        ));
     }
 
     pub fn resize_surface(&mut self, width: u32, height: u32) {
@@ -273,17 +284,16 @@ impl Engine {
         self.surface_config.width = safe_width;
         self.surface_config.height = safe_height;
         self.surface.configure(&self.device, &self.surface_config);
-        self.depth_target.resize(&self.device, safe_width, safe_height);
+        self.depth_target
+            .resize(&self.device, safe_width, safe_height);
     }
 
     pub fn pause(&mut self) {
-        self.runtime_state = RuntimeState::Paused;
+        self.scheduler.mark_paused(js_sys::Date::now());
     }
 
     pub fn resume(&mut self) {
-        if self.runtime_state != RuntimeState::Fatal {
-            self.runtime_state = RuntimeState::Running;
-        }
+        self.scheduler.mark_running(js_sys::Date::now());
     }
 
     pub fn rebuild_pipeline(
@@ -322,12 +332,15 @@ impl Engine {
     }
 
     pub fn tick(&mut self, timestamp_ms: f64) -> Result<(), JsValue> {
-        if self.runtime_state != RuntimeState::Running {
+        let tick_start_ms = js_sys::Date::now();
+        self.scheduler.begin_loop_iteration(tick_start_ms);
+        self.input_marshal_phase(timestamp_ms);
+        if self.scheduler.state() == SchedulerState::Paused {
+            let tick_elapsed_ms = (js_sys::Date::now() - tick_start_ms).max(0.0);
+            self.scheduler
+                .record_paused_tick(js_sys::Date::now(), tick_elapsed_ms);
             return Ok(());
         }
-
-        let tick_start_ms = js_sys::Date::now();
-        self.input_marshal_phase(timestamp_ms);
 
         // [LAW:single-enforcer] Tick owns allocator lock boundary so allocation
         // enforcement remains centralized at one runtime boundary.
@@ -344,7 +357,8 @@ impl Engine {
                     StrictAllocator::unlock();
                 }
                 let tick_elapsed_ms = (js_sys::Date::now() - tick_start_ms).max(0.0);
-                self.record_tick_timing(tick_elapsed_ms);
+                self.scheduler
+                    .record_surface_timeout(js_sys::Date::now(), tick_elapsed_ms);
                 return Ok(());
             }
             Err(wgpu::SurfaceError::Outdated | wgpu::SurfaceError::Lost) => {
@@ -352,47 +366,62 @@ impl Engine {
                     StrictAllocator::unlock();
                 }
                 self.surface.configure(&self.device, &self.surface_config);
-                self.pending_event_code = 1;
-                self.last_event_code = 1;
                 let tick_elapsed_ms = (js_sys::Date::now() - tick_start_ms).max(0.0);
-                self.record_tick_timing(tick_elapsed_ms);
+                self.scheduler.record_surface_lost(
+                    js_sys::Date::now(),
+                    tick_elapsed_ms,
+                    "Surface acquire failed with Lost/Outdated",
+                );
                 return Ok(());
             }
             Err(wgpu::SurfaceError::OutOfMemory) => {
                 if strict_lock_enabled {
                     StrictAllocator::unlock();
                 }
-                self.pending_event_code = 2;
-                self.last_event_code = 2;
-                self.runtime_state = RuntimeState::Fatal;
-                self.last_error_message = Some("Fatal Surface Error: OutOfMemory".to_string());
                 let tick_elapsed_ms = (js_sys::Date::now() - tick_start_ms).max(0.0);
-                self.record_tick_timing(tick_elapsed_ms);
+                self.scheduler.record_fatal(
+                    js_sys::Date::now(),
+                    tick_elapsed_ms,
+                    "surface_out_of_memory",
+                    "Fatal Surface Error: OutOfMemory",
+                );
                 return Err(JsValue::from_str("Fatal Surface Error: OutOfMemory"));
             }
             Err(wgpu::SurfaceError::Other) => {
                 if strict_lock_enabled {
                     StrictAllocator::unlock();
                 }
-                self.pending_event_code = 2;
-                self.last_event_code = 2;
-                self.runtime_state = RuntimeState::Fatal;
-                self.last_error_message = Some("Fatal Surface Error: Other".to_string());
                 let tick_elapsed_ms = (js_sys::Date::now() - tick_start_ms).max(0.0);
-                self.record_tick_timing(tick_elapsed_ms);
+                self.scheduler.record_fatal(
+                    js_sys::Date::now(),
+                    tick_elapsed_ms,
+                    "surface_other",
+                    "Fatal Surface Error: Other",
+                );
                 return Err(JsValue::from_str("Fatal Surface Error: Other"));
             }
         };
 
-        let color_view = frame.texture.create_view(&wgpu::TextureViewDescriptor::default());
-        let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some("HotPath.CommandEncoder"),
-        });
+        let color_view = frame
+            .texture
+            .create_view(&wgpu::TextureViewDescriptor::default());
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("HotPath.CommandEncoder"),
+            });
 
-        self.compute
-            .encode_passes(&mut encoder, &mut self.arena, &self.assembly_write_bind_group);
-        self.render
-            .encode_passes(&mut encoder, &self.arena, &color_view, self.depth_target.view());
+        self.compute.encode_passes(
+            &mut encoder,
+            &mut self.arena,
+            &self.assembly_write_bind_group,
+        );
+        self.render.encode_passes(
+            &mut encoder,
+            &self.arena,
+            &color_view,
+            self.depth_target.view(),
+        );
 
         let is_debug_tick = self.frame_count % self.debug_readback_interval_frames == 0;
         if is_debug_tick {
@@ -417,7 +446,8 @@ impl Engine {
         }
 
         let tick_elapsed_ms = (js_sys::Date::now() - tick_start_ms).max(0.0);
-        self.record_tick_timing(tick_elapsed_ms);
+        self.scheduler
+            .record_tick_success(js_sys::Date::now(), tick_elapsed_ms, self.frame_count);
 
         Ok(())
     }
@@ -427,18 +457,21 @@ impl Engine {
         if let Some(shared_input) = self.shared_input.as_ref() {
             uniforms.resolution[0] = shared_input.get_index(INPUT_WORD_WIDTH as u32) as f32;
             uniforms.resolution[1] = shared_input.get_index(INPUT_WORD_HEIGHT as u32) as f32;
-            uniforms.time_seconds = (shared_input.get_index(INPUT_WORD_TIME_MS as u32).max(0.0) * 0.001) as f32;
+            uniforms.time_seconds =
+                (shared_input.get_index(INPUT_WORD_TIME_MS as u32).max(0.0) * 0.001) as f32;
             uniforms.delta_time_seconds = (1.0 / 60.0) as f32;
             uniforms.view_proj[0][0] = shared_input.get_index(INPUT_WORD_ZOOM as u32) as f32;
             uniforms.view_proj[0][1] = shared_input.get_index(INPUT_WORD_PAN_X as u32) as f32;
             uniforms.view_proj[0][2] = shared_input.get_index(INPUT_WORD_PAN_Y as u32) as f32;
             uniforms.view_proj[0][3] = shared_input.get_index(INPUT_WORD_MOUSE_X as u32) as f32;
             uniforms.view_proj[1][0] = shared_input.get_index(INPUT_WORD_MOUSE_Y as u32) as f32;
-            uniforms.view_proj[1][1] = shared_input.get_index(INPUT_WORD_MOUSE_BUTTONS as u32) as f32;
+            uniforms.view_proj[1][1] =
+                shared_input.get_index(INPUT_WORD_MOUSE_BUTTONS as u32) as f32;
             uniforms.view_proj[1][2] = shared_input.get_index(INPUT_WORD_AUDIO_LOW as u32) as f32;
             uniforms.view_proj[1][3] = shared_input.get_index(INPUT_WORD_AUDIO_MID as u32) as f32;
             uniforms.view_proj[2][0] = shared_input.get_index(INPUT_WORD_AUDIO_HIGH as u32) as f32;
-            uniforms.view_proj[2][1] = shared_input.get_index(INPUT_WORD_GAUGE_ACTIVE as u32) as f32;
+            uniforms.view_proj[2][1] =
+                shared_input.get_index(INPUT_WORD_GAUGE_ACTIVE as u32) as f32;
         } else {
             uniforms.time_seconds = (timestamp_ms.max(0.0) * 0.001) as f32;
             uniforms.delta_time_seconds = (1.0 / 60.0) as f32;
@@ -469,53 +502,15 @@ impl Engine {
         });
     }
 
-    fn record_tick_timing(&mut self, tick_elapsed_ms: f64) {
-        self.timing_window_sum_ms += tick_elapsed_ms;
-        self.timing_window_sum_sq_ms += tick_elapsed_ms * tick_elapsed_ms;
-        self.timing_window_samples = self.timing_window_samples.saturating_add(1);
-        if self.timing_window_samples < 60 {
-            return;
-        }
-        let sample_count = self.timing_window_samples.max(1);
-        let sample_count_f = sample_count as f64;
-        let mean = self.timing_window_sum_ms / sample_count_f;
-        let variance = (self.timing_window_sum_sq_ms / sample_count_f) - (mean * mean);
-        let std_dev = variance.max(0.0).sqrt();
-        self.latest_timing_packet = Some(FramePacingTelemetry {
-            mean_ms: mean,
-            std_dev_ms: std_dev,
-            sample_count,
-            frame_count: self.frame_count,
-        });
-        self.timing_window_sum_ms = 0.0;
-        self.timing_window_sum_sq_ms = 0.0;
-        self.timing_window_samples = 0;
-    }
-
     pub fn take_runtime_event_code(&mut self) -> u32 {
-        let event_code = self.pending_event_code;
-        self.pending_event_code = 0;
-        event_code
+        self.scheduler.take_legacy_runtime_event_code()
     }
 
-    pub fn runtime_state(&self) -> RuntimeState {
-        self.runtime_state
-    }
-
-    pub fn last_error_message(&self) -> Option<&str> {
-        self.last_error_message.as_deref()
-    }
-
-    pub fn last_event_code(&self) -> u32 {
-        self.last_event_code
-    }
-
-    pub fn frame_count(&self) -> u64 {
-        self.frame_count
-    }
-
-    pub fn take_frame_pacing_packet(&mut self) -> Option<FramePacingTelemetry> {
-        self.latest_timing_packet.take()
+    pub fn take_frame_pacing_packet(&mut self) -> Option<WorkerObservabilityPacket> {
+        // [LAW:single-enforcer] Scheduler is the only lifecycle/timing authority,
+        // so all observability packets are drained from one owner.
+        self.scheduler
+            .take_observability_packet(js_sys::Date::now())
     }
 
     pub fn inject_poison_alloc(&self) {

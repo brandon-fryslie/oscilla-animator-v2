@@ -19,8 +19,6 @@ export function take_frame_pacing_packet(): any;
 
 export function take_runtime_event_code(): number;
 
-export function take_runtime_status(): any;
-
 export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembly.Module;
 
 export interface InitOutput {
@@ -34,7 +32,6 @@ export interface InitOutput {
     readonly resume_engine: () => [number, number];
     readonly take_frame_pacing_packet: () => [number, number, number];
     readonly take_runtime_event_code: () => [number, number, number];
-    readonly take_runtime_status: () => [number, number, number];
     readonly wasm_bindgen__closure__destroy__hd711683202404d31: (a: number, b: number) => void;
     readonly wasm_bindgen__closure__destroy__h104c46f4b4241cc7: (a: number, b: number) => void;
     readonly wasm_bindgen__closure__destroy__h34af7beb892ac90c: (a: number, b: number) => void;

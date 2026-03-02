@@ -44,7 +44,7 @@ test.describe('Rust Worker Gates', () => {
           if (event.data?.type === 'FATAL_ERROR') {
             resolve({
               fatal: true,
-              message: String(event.data.message ?? 'fatal error'),
+              message: String(event.data.message ?? event.data.code ?? 'fatal error'),
             });
           }
         };
@@ -88,31 +88,6 @@ test.describe('Rust Worker Gates', () => {
         return { skipped: true, reason: bootResult.reason ?? 'bootstrap failed' };
       }
 
-      const heartbeat = await new Promise<{ ok: boolean; reason?: string }>((resolve) => {
-        const onStatus = (event: MessageEvent<any>) => {
-          if (event.data?.type !== 'RUNTIME_STATUS') return;
-          if (event.data.state === 'fatal') {
-            worker.removeEventListener('message', onStatus);
-            resolve({ ok: false, reason: String(event.data.lastError ?? 'fatal status') });
-            return;
-          }
-          if (Number(event.data.frameCount ?? 0) >= 2) {
-            worker.removeEventListener('message', onStatus);
-            resolve({ ok: true });
-          }
-        };
-        worker.addEventListener('message', onStatus);
-        setTimeout(() => {
-          worker.removeEventListener('message', onStatus);
-          resolve({ ok: false, reason: 'runtime heartbeat timeout' });
-        }, 3000);
-      });
-      if (!heartbeat.ok) {
-        worker.terminate();
-        canvas.remove();
-        return { skipped: true, reason: heartbeat.reason ?? 'runtime heartbeat failed' };
-      }
-
       worker.postMessage({ type: 'INJECT_POISON_ALLOC' });
 
       const outcome = await Promise.race([
@@ -128,12 +103,9 @@ test.describe('Rust Worker Gates', () => {
     });
 
     if (result.skipped) {
-      // [LAW:verifiable-goals] CI must fail when a gate cannot execute so the
-      // pipeline never reports a false-green with skipped enforcement.
-      if (process.env.CI) {
-        throw new Error(`Gate 2 skipped in CI: ${result.reason}`);
-      }
-      test.skip(result.reason);
+      // [LAW:verifiable-goals] Browser gates must hard-fail on skipped
+      // execution so local and CI runs enforce the same contract.
+      throw new Error(`Gate 2 skipped: ${result.reason}`);
     }
 
     expect(result.fatal).toBe(true);
@@ -177,7 +149,7 @@ test.describe('Rust Worker Gates', () => {
           if (event.data?.type === 'FATAL_ERROR') {
             resolve({
               type: 'fatal',
-              reason: String(event.data?.message ?? 'worker fatal message'),
+              reason: String(event.data?.message ?? event.data?.code ?? 'worker fatal message'),
             });
           }
         });
@@ -221,40 +193,17 @@ test.describe('Rust Worker Gates', () => {
         return { skipped: true, reason: bootResult.reason ?? 'bootstrap failed' };
       }
 
-      const heartbeat = await new Promise<{ ok: boolean; reason?: string }>((resolve) => {
-        const onStatus = (event: MessageEvent<any>) => {
-          if (event.data?.type !== 'RUNTIME_STATUS') return;
-          if (event.data.state === 'fatal') {
-            worker.removeEventListener('message', onStatus);
-            resolve({ ok: false, reason: String(event.data.lastError ?? 'fatal status') });
-            return;
-          }
-          if (Number(event.data.frameCount ?? 0) >= 2) {
-            worker.removeEventListener('message', onStatus);
-            resolve({ ok: true });
-          }
-        };
-        worker.addEventListener('message', onStatus);
-        setTimeout(() => {
-          worker.removeEventListener('message', onStatus);
-          resolve({ ok: false, reason: 'runtime heartbeat timeout' });
-        }, 3000);
-      });
-      if (!heartbeat.ok) {
-        worker.terminate();
-        canvas.remove();
-        return { skipped: true, reason: heartbeat.reason ?? 'runtime heartbeat failed' };
-      }
-
       const packet = await Promise.race([
         new Promise<{ meanMs: number; stdDevMs: number; sampleCount: number }>((resolve) => {
           const onTelemetry = (event: MessageEvent<any>) => {
-            if (event.data?.type !== 'RUNTIME_TELEMETRY') return;
+            if (event.data?.type !== 'SCHEDULER_HEARTBEAT') return;
+            const sampleCount = Number(event.data.sampleCount ?? 0);
+            if (sampleCount < 60) return;
             worker.removeEventListener('message', onTelemetry);
             resolve({
-              meanMs: Number(event.data.meanMs ?? 0),
-              stdDevMs: Number(event.data.stdDevMs ?? 0),
-              sampleCount: Number(event.data.sampleCount ?? 0),
+              meanMs: Number(event.data.meanTickMs ?? 0),
+              stdDevMs: Number(event.data.stdDevTickMs ?? 0),
+              sampleCount,
             });
           };
           worker.addEventListener('message', onTelemetry);
@@ -275,12 +224,9 @@ test.describe('Rust Worker Gates', () => {
     });
 
     if (result.skipped) {
-      // [LAW:verifiable-goals] CI must fail when a gate cannot execute so the
-      // pipeline never reports a false-green with skipped enforcement.
-      if (process.env.CI) {
-        throw new Error(`Gate 4 skipped in CI: ${result.reason}`);
-      }
-      test.skip(result.reason);
+      // [LAW:verifiable-goals] Browser gates must hard-fail on skipped
+      // execution so local and CI runs enforce the same contract.
+      throw new Error(`Gate 4 skipped: ${result.reason}`);
     }
 
     expect(result.sampleCount).toBeGreaterThanOrEqual(60);

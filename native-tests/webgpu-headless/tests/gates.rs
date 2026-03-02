@@ -31,7 +31,7 @@ fn fs_main() -> @location(0) vec4<f32> {
 }
 "#;
 
-fn request_device() -> Option<(wgpu::Device, wgpu::Queue)> {
+fn request_device() -> (wgpu::Device, wgpu::Queue) {
   let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
     backends: wgpu::Backends::VULKAN,
     ..Default::default()
@@ -40,22 +40,16 @@ fn request_device() -> Option<(wgpu::Device, wgpu::Queue)> {
     power_preference: wgpu::PowerPreference::HighPerformance,
     compatible_surface: None,
     force_fallback_adapter: false,
-  }));
-  let adapter = match adapter {
-    Some(adapter) => adapter,
-    None => return None,
-  };
+  }))
+  .expect("Gate 1/3: Vulkan adapter is required (Lavapipe should satisfy this in CI)");
 
-  pollster::block_on(adapter.request_device(
-    &wgpu::DeviceDescriptor {
-      label: Some("webgpu-headless-gates-device"),
-      required_features: wgpu::Features::empty(),
-      required_limits: wgpu::Limits::default(),
-      memory_hints: wgpu::MemoryHints::Performance,
-    },
-    None,
-  ))
-  .ok()
+  pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
+    label: Some("webgpu-headless-gates-device"),
+    required_features: wgpu::Features::empty(),
+    required_limits: wgpu::Limits::default(),
+    memory_hints: wgpu::MemoryHints::Performance,
+  }, None))
+  .expect("Gate 1/3: request_device failed")
 }
 
 fn map_read_buffer(device: &wgpu::Device, buffer: &wgpu::Buffer) -> Vec<u8> {
@@ -78,16 +72,7 @@ fn map_read_buffer(device: &wgpu::Device, buffer: &wgpu::Buffer) -> Vec<u8> {
 fn gate1_native_headless_compute_math_is_correct() {
   // [LAW:verifiable-goals] Gate 1 executes real compute work and asserts exact
   // numeric readback to prove compiler+dispatcher behavior outside browser/WASM.
-  let (device, queue) = match request_device() {
-    Some(device) => device,
-    None => {
-      if std::env::var("CI").is_ok() {
-        panic!("Gate 1/3: Vulkan adapter is required (Lavapipe should satisfy this in CI)");
-      }
-      eprintln!("Gate 1 skipped: Vulkan adapter unavailable");
-      return;
-    }
-  };
+  let (device, queue) = request_device();
 
   let src_data = [1.0f32, 2.0, 3.0, 4.0];
   let src_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -159,16 +144,7 @@ fn gate1_native_headless_compute_math_is_correct() {
 fn gate3_render_snapshot_matches_golden_master_pixels() {
   // [LAW:verifiable-goals] Gate 3 renders a deterministic frame and performs
   // pixel-level comparison against a fixed golden target.
-  let (device, queue) = match request_device() {
-    Some(device) => device,
-    None => {
-      if std::env::var("CI").is_ok() {
-        panic!("Gate 3: Vulkan adapter is required (Lavapipe should satisfy this in CI)");
-      }
-      eprintln!("Gate 3 skipped: Vulkan adapter unavailable");
-      return;
-    }
-  };
+  let (device, queue) = request_device();
   let width: u32 = 32;
   let height: u32 = 32;
 
@@ -218,7 +194,9 @@ fn gate3_render_snapshot_matches_golden_master_pixels() {
     cache: None,
   });
 
-  let bytes_per_row = width * 4;
+  let unpadded_bytes_per_row = width * 4;
+  let row_alignment = wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
+  let bytes_per_row = unpadded_bytes_per_row.div_ceil(row_alignment) * row_alignment;
   let readback_buffer = device.create_buffer(&wgpu::BufferDescriptor {
     label: Some("gate3-readback"),
     size: (bytes_per_row * height) as u64,
@@ -275,7 +253,11 @@ fn gate3_render_snapshot_matches_golden_master_pixels() {
   );
   queue.submit([encoder.finish()]);
 
-  let rendered = map_read_buffer(&device, &readback_buffer);
+  let rendered_with_padding = map_read_buffer(&device, &readback_buffer);
+  let rendered: Vec<u8> = rendered_with_padding
+    .chunks_exact(bytes_per_row as usize)
+    .flat_map(|row| row[..unpadded_bytes_per_row as usize].iter().copied())
+    .collect();
   let expected: Vec<u8> = std::iter::repeat([255u8, 0u8, 0u8, 255u8])
     .take((width * height) as usize)
     .flatten()

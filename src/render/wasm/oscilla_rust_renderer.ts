@@ -16,7 +16,6 @@ interface RendererWasmModule {
   readonly resume_engine?: () => void;
   readonly inject_poison_alloc?: () => void;
   readonly take_runtime_event_code?: () => number;
-  readonly take_runtime_status?: () => unknown;
   readonly take_frame_pacing_packet?: () => unknown;
   readonly rebuild_pipeline?: (
     simulationWgsl: string,
@@ -36,7 +35,6 @@ let pauseEngineImpl: RendererWasmModule['pause_engine'] | null = null;
 let resumeEngineImpl: RendererWasmModule['resume_engine'] | null = null;
 let injectPoisonAllocImpl: RendererWasmModule['inject_poison_alloc'] | null = null;
 let takeRuntimeEventCodeImpl: RendererWasmModule['take_runtime_event_code'] | null = null;
-let takeRuntimeStatusImpl: RendererWasmModule['take_runtime_status'] | null = null;
 let takeFramePacingPacketImpl: RendererWasmModule['take_frame_pacing_packet'] | null = null;
 let rebuildPipelineImpl: RendererWasmModule['rebuild_pipeline'] | null = null;
 
@@ -82,9 +80,6 @@ export async function initRustRendererWasm(): Promise<void> {
       if (typeof wasmModule.take_runtime_event_code !== 'function') {
         throw new Error('Rust renderer wasm module missing take_runtime_event_code export');
       }
-      if (typeof wasmModule.take_runtime_status !== 'function') {
-        throw new Error('Rust renderer wasm module missing take_runtime_status export');
-      }
       if (typeof wasmModule.take_frame_pacing_packet !== 'function') {
         throw new Error('Rust renderer wasm module missing take_frame_pacing_packet export');
       }
@@ -95,7 +90,6 @@ export async function initRustRendererWasm(): Promise<void> {
       resumeEngineImpl = wasmModule.resume_engine.bind(wasmModule);
       injectPoisonAllocImpl = wasmModule.inject_poison_alloc.bind(wasmModule);
       takeRuntimeEventCodeImpl = wasmModule.take_runtime_event_code.bind(wasmModule);
-      takeRuntimeStatusImpl = wasmModule.take_runtime_status.bind(wasmModule);
       takeFramePacingPacketImpl = wasmModule.take_frame_pacing_packet.bind(wasmModule);
       rebuildPipelineImpl = wasmModule.rebuild_pipeline.bind(wasmModule);
       initialized = true;
@@ -165,13 +159,6 @@ export function takeRustRendererRuntimeEventCode(): number {
     throw new Error('Rust renderer wasm is not initialized');
   }
   return takeRuntimeEventCodeImpl();
-}
-
-export function takeRustRendererRuntimeStatus(): unknown {
-  if (!initialized || !takeRuntimeStatusImpl) {
-    throw new Error('Rust renderer wasm is not initialized');
-  }
-  return takeRuntimeStatusImpl();
 }
 
 export function takeRustRendererFramePacingPacket(): unknown {

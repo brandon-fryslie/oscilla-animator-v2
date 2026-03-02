@@ -10,7 +10,6 @@ export const resize_surface: (a: number, b: number) => [number, number];
 export const resume_engine: () => [number, number];
 export const take_frame_pacing_packet: () => [number, number, number];
 export const take_runtime_event_code: () => [number, number, number];
-export const take_runtime_status: () => [number, number, number];
 export const wasm_bindgen__closure__destroy__hd711683202404d31: (a: number, b: number) => void;
 export const wasm_bindgen__closure__destroy__h104c46f4b4241cc7: (a: number, b: number) => void;
 export const wasm_bindgen__closure__destroy__h34af7beb892ac90c: (a: number, b: number) => void;
