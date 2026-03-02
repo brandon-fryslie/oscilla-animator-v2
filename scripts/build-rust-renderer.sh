@@ -5,23 +5,30 @@ ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 CRATE_DIR="$ROOT_DIR/src/render/wasm/rust/oscilla-rust-renderer"
 PKG_DIR="$ROOT_DIR/src/render/wasm/pkg"
 TARGET_DIR="$CRATE_DIR/target"
+EXPECTED_WASM_BINDGEN_VERSION="0.2.114"
 
 if ! command -v wasm-bindgen >/dev/null 2>&1; then
-  echo "wasm-bindgen CLI is required. Install with: cargo install wasm-bindgen-cli --locked" >&2
+  echo "wasm-bindgen CLI is required. Install with: cargo install wasm-bindgen-cli --version ${EXPECTED_WASM_BINDGEN_VERSION} --locked" >&2
   exit 1
 fi
 
+INSTALLED_WASM_BINDGEN_VERSION="$(wasm-bindgen --version 2>/dev/null || true)"
+if [ "${INSTALLED_WASM_BINDGEN_VERSION}" != "wasm-bindgen ${EXPECTED_WASM_BINDGEN_VERSION}" ]; then
+  echo "wasm-bindgen CLI version mismatch. Expected 'wasm-bindgen ${EXPECTED_WASM_BINDGEN_VERSION}', but found '${INSTALLED_WASM_BINDGEN_VERSION:-not installed}'." >&2
+  echo "Please install the correct version with: cargo install wasm-bindgen-cli --version ${EXPECTED_WASM_BINDGEN_VERSION} --locked" >&2
+  exit 1
+fi
 if command -v rustup >/dev/null 2>&1; then
   ACTIVE_TOOLCHAIN="$(rustup show active-toolchain | awk '{print $1}')"
   TOOLCHAIN_BIN="${HOME}/.rustup/toolchains/${ACTIVE_TOOLCHAIN}/bin"
   rustup target add wasm32-unknown-unknown --toolchain "$ACTIVE_TOOLCHAIN" >/dev/null
   if [ -x "${TOOLCHAIN_BIN}/cargo" ]; then
-    RUSTC="${TOOLCHAIN_BIN}/rustc" "${TOOLCHAIN_BIN}/cargo" build --manifest-path "$CRATE_DIR/Cargo.toml" --target wasm32-unknown-unknown --release
+    RUSTC="${TOOLCHAIN_BIN}/rustc" "${TOOLCHAIN_BIN}/cargo" build --manifest-path "$CRATE_DIR/Cargo.toml" --target wasm32-unknown-unknown --release --locked
   else
-    cargo build --manifest-path "$CRATE_DIR/Cargo.toml" --target wasm32-unknown-unknown --release
+    cargo build --manifest-path "$CRATE_DIR/Cargo.toml" --target wasm32-unknown-unknown --release --locked
   fi
 else
-  cargo build --manifest-path "$CRATE_DIR/Cargo.toml" --target wasm32-unknown-unknown --release
+  cargo build --manifest-path "$CRATE_DIR/Cargo.toml" --target wasm32-unknown-unknown --release --locked
 fi
 
 mkdir -p "$PKG_DIR"
