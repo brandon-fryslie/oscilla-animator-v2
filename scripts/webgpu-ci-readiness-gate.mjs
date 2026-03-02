@@ -29,16 +29,6 @@ function runNodeScript(scriptPath, envOverrides = {}) {
   });
 }
 
-function truncateForLog(value, maxLength = 240) {
-  if (typeof value !== 'string') {
-    return '';
-  }
-  if (value.length <= maxLength) {
-    return value;
-  }
-  return `${value.slice(0, Math.max(0, maxLength - 3))}...`;
-}
-
 async function emitMatrixFailureSummary() {
   try {
     const text = await readFile(MATRIX_REPORT_PATH, 'utf8');
