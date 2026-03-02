@@ -15,6 +15,7 @@ const SERVER_TIMEOUT_MS = Number.parseInt(process.env.WEBGPU_MATRIX_SERVER_TIMEO
 const FAIL_ON_SKIP = (process.env.WEBGPU_MATRIX_FAIL_ON_SKIP ?? (process.env.CI ? '1' : '0')) !== '0';
 const ALLOW_SERVER_REUSE = (process.env.WEBGPU_MATRIX_ALLOW_SERVER_REUSE ?? (process.env.CI ? '0' : '1')) !== '0';
 const SKIP_CHROMIUM = (process.env.WEBGPU_MATRIX_SKIP_CHROMIUM ?? '0') === '1';
+const RUNTIME_PROBE_GLOBAL_KEY = '__OSCILLA_RUNTIME_PROBE__';
 
 function withPreviewParam(url) {
   const parsed = new URL(url);
@@ -238,8 +239,16 @@ async function runBrowserCheck({ browserName, launcher, launchOptions, url, bloc
   const startedAt = Date.now();
   await page.goto(url, { waitUntil: 'networkidle', timeout: 60_000 });
   await page.waitForSelector('canvas', { timeout: 30_000 });
+  await page.waitForFunction(
+    (probeKey) => {
+      const host = globalThis;
+      return host[probeKey]?.bootstrap?.state === 'succeeded';
+    },
+    RUNTIME_PROBE_GLOBAL_KEY,
+    { timeout: 30_000 },
+  );
 
-  const probe = await page.evaluate(async (sampleFrames) => {
+  const probe = await page.evaluate(async ({ sampleFrames, probeKey }) => {
     const hasNavigatorGpu = Boolean(navigator.gpu);
     const adapter = hasNavigatorGpu ? await navigator.gpu.requestAdapter() : null;
     const hasAdapter = Boolean(adapter);
@@ -248,8 +257,10 @@ async function runBrowserCheck({ browserName, launcher, launchOptions, url, bloc
     const hasWebGPUContext = Boolean(canvas?.getContext('webgpu'));
 
     const readProbe = () => {
+      // [LAW:one-source-of-truth] This key must stay aligned with
+      // `RUNTIME_PROBE_GLOBAL_KEY` in `src/testing/runtime-probe.ts`.
       const host = globalThis;
-      const value = host.__OSCILLA_RUNTIME_PROBE__;
+      const value = host[probeKey];
       return value && typeof value === 'object' ? value : null;
     };
     const probeBefore = readProbe();
@@ -302,7 +313,10 @@ async function runBrowserCheck({ browserName, launcher, launchOptions, url, bloc
         frameAdvanceCount,
       },
     };
-  }, SAMPLE_FRAMES);
+  }, {
+    sampleFrames: SAMPLE_FRAMES,
+    probeKey: RUNTIME_PROBE_GLOBAL_KEY,
+  });
 
   await browser.close();
 
@@ -369,6 +383,7 @@ async function runBrowserCheck({ browserName, launcher, launchOptions, url, bloc
     errors: {
       console: consoleErrors,
       page: pageErrors,
+      setup: [],
     },
     failureReason,
     passed,
@@ -475,7 +490,8 @@ async function main() {
 
     const skippedCount = results.filter((result) => result.status === 'skipped').length;
     const blockingChecks = results.filter((result) => result.blocking && result.status !== 'skipped');
-    const blockingPassed = blockingChecks.every((result) => result.passed);
+    const blockingPassed =
+      blockingChecks.length > 0 && blockingChecks.every((result) => result.passed);
     const allBrowsersPassed = results.every((result) => result.status === 'passed');
     const report = {
       generatedAt: new Date().toISOString(),

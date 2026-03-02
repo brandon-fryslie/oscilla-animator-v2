@@ -50,6 +50,9 @@ import { appSettings } from '../settings/tokens/app-settings';
 import { arenaRead } from '../runtime/ArenaValueStore';
 import type { ValueSlot } from '../types';
 
+const INITIAL_COMPILE_FAILURE_PROBE_MESSAGE =
+  'initial_compile_failed: animation loop started but no program is ready';
+
 export interface RuntimeSpyReadbackEntry {
   readonly slotId: ValueSlot;
   readonly value: number;
@@ -477,7 +480,7 @@ export class RuntimeService {
       if (initialCompileSucceeded) {
         markRuntimeBootstrapSucceeded();
       } else {
-        markRuntimeBootstrapFailed('initial_compile_failed');
+        markRuntimeBootstrapFailed(INITIAL_COMPILE_FAILURE_PROBE_MESSAGE);
       }
 
       // Persist current patch immediately after initial compile
