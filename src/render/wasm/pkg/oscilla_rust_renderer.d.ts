@@ -17,6 +17,8 @@ export function resize_surface(width: number, height: number): void;
 
 export function resume_engine(): void;
 
+export function sync_render_payload(topology_words: Uint32Array, instance_floats: Float32Array, indirect_args_words: Uint32Array, vertex_floats: Float32Array, index_words: Uint32Array, draw_record_count: number): void;
+
 export function take_frame_pacing_packet(): any;
 
 export function take_runtime_event_code(): number;
@@ -33,15 +35,16 @@ export interface InitOutput {
     readonly rebuild_simulation_pipeline: (a: number, b: number) => [number, number];
     readonly resize_surface: (a: number, b: number) => [number, number];
     readonly resume_engine: () => [number, number];
+    readonly sync_render_payload: (a: any, b: any, c: any, d: any, e: any, f: number) => [number, number];
     readonly take_frame_pacing_packet: () => [number, number, number];
     readonly take_runtime_event_code: () => [number, number, number];
-    readonly wasm_bindgen__closure__destroy__hd711683202404d31: (a: number, b: number) => void;
-    readonly wasm_bindgen__closure__destroy__h104c46f4b4241cc7: (a: number, b: number) => void;
+    readonly wasm_bindgen__closure__destroy__h22c5c9496e43279b: (a: number, b: number) => void;
+    readonly wasm_bindgen__closure__destroy__haf1314f791359451: (a: number, b: number) => void;
     readonly wasm_bindgen__closure__destroy__h34af7beb892ac90c: (a: number, b: number) => void;
+    readonly wasm_bindgen__convert__closures_____invoke__h8725eb454c15ba22: (a: number, b: number, c: number) => void;
     readonly wasm_bindgen__convert__closures_____invoke__hcb563ba53ad42ec8: (a: number, b: number, c: any) => [number, number];
     readonly wasm_bindgen__convert__closures_____invoke__h1d4d9e8783fdfb62: (a: number, b: number, c: any, d: any) => void;
-    readonly wasm_bindgen__convert__closures_____invoke__h48352cd8a8d3e938: (a: number, b: number, c: any) => void;
-    readonly wasm_bindgen__convert__closures_____invoke__h50e008be49128561: (a: number, b: number) => void;
+    readonly wasm_bindgen__convert__closures_____invoke__h210728d8ddfda338: (a: number, b: number, c: any) => void;
     readonly __wbindgen_malloc: (a: number, b: number) => number;
     readonly __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;
     readonly __wbindgen_exn_store: (a: number) => void;
