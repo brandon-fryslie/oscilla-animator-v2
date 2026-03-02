@@ -63,6 +63,7 @@ let bootstrapInFlight = false;
 let runtimePollTimer: ReturnType<typeof setInterval> | null = null;
 let legacyHeartbeatSequence = 0;
 let legacyState: RustRendererSchedulerState = 'Booting';
+let deviceLostNotified = false;
 
 function postWorkerMessage(message: RustRendererWorkerOutboundMessage): void {
   self.postMessage(message);
@@ -70,6 +71,18 @@ function postWorkerMessage(message: RustRendererWorkerOutboundMessage): void {
 
 function postWorkerFatalError(code: string, message: string): void {
   postWorkerMessage({ type: 'FATAL_ERROR', code, message });
+}
+
+function postDeviceLost(code: string, reason: string): void {
+  if (deviceLostNotified) {
+    return;
+  }
+  deviceLostNotified = true;
+  postWorkerMessage({
+    type: 'DEVICE_LOST',
+    code,
+    reason,
+  });
 }
 
 function isSchedulerState(value: unknown): value is RustRendererSchedulerState {
@@ -201,6 +214,7 @@ function emitLegacyRuntimeEvents(frameCount: number): void {
       loopCount: frameCount,
       emittedAtMs: Date.now(),
     });
+    postDeviceLost('surface_lost', 'Surface acquire failed with Lost/Outdated');
     return;
   }
   legacyState = 'Lost';
@@ -214,6 +228,7 @@ function emitLegacyRuntimeEvents(frameCount: number): void {
     loopCount: frameCount,
     emittedAtMs: Date.now(),
   });
+  postDeviceLost('surface_fatal', 'Rust worker fatal surface error');
 }
 
 function toOutboundRuntimeEvent(raw: RawRuntimeEvent): RustRendererRuntimeEvent {
@@ -249,6 +264,7 @@ async function handleBootstrap(message: Extract<RustRendererWorkerInboundMessage
   bootstrapped = true;
   legacyHeartbeatSequence = 0;
   legacyState = 'Booting';
+  deviceLostNotified = false;
   startRuntimePolling();
   postWorkerMessage({ type: 'BOOTSTRAP_SUCCESS' });
   } finally {
@@ -301,9 +317,15 @@ function startRuntimePolling(): void {
       const packet = parseSchedulerPacket(rawPacket);
       if (packet) {
         postWorkerMessage(toOutboundHeartbeat(packet.heartbeat));
+        if (packet.heartbeat.state === 'Lost') {
+          postDeviceLost('scheduler_lost', 'Rust scheduler entered Lost state');
+        }
         for (const rawEvent of packet.events) {
           const event = toOutboundRuntimeEvent(rawEvent);
           postWorkerMessage(event);
+          if (event.state === 'Lost') {
+            postDeviceLost(event.code, event.message);
+          }
         }
         return;
       }
