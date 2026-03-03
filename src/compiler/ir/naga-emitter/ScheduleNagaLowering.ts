@@ -272,7 +272,7 @@ function registerBuiltinTypes(ctx: LoweringCtx): LoweringBuiltins {
   const arrayF32Type = ctx.internType({ kind: 'array', base: f32Type, size: 'dynamic' });
   const uniformsType = ctx.internType({
     kind: 'struct',
-    name: 'uniforms',
+    name: 'Uniforms',
     fields: [{ name: 'dummy', type: u32Type }],
   });
   return { f32Type, u32Type, vec3U32Type, arrayF32Type, uniformsType };
