@@ -13,6 +13,7 @@ import { registerBlock, requireConfig } from '../registry';
 import { canonicalType, canonicalManyDef, payloadStride, requireInst } from '../../core/canonical-types';
 import { BOOL, FLOAT, SHAPE, VEC2 } from '../../core/canonical-types';
 import { DOMAIN_CONTROL } from '../../core/domain-registry';
+import { registerDynamicTopology } from '../../shapes/registry';
 import { createLinePathTopology } from './_topology-helpers';
 
 /**
@@ -97,7 +98,7 @@ export function register(): void {
   
       // Create and register topology
       const topology = createLinePathTopology(pointCount, closed);
-      const topologyId = ctx.b.registerTopology(topology, `make-shape2d-${pointCount}-${closed}`);
+      const topologyId = registerDynamicTopology(topology, `make-shape2d-${pointCount}-${closed}`);
   
       // Create shape reference pointing to the (possibly deformed) control points
       const shapeRefSig = ctx.b.shapeRef(

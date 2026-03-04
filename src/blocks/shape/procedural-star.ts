@@ -8,6 +8,7 @@ import { registerBlock } from '../registry';
 import { canonicalType, canonicalMany, canonicalManyDef, payloadStride, floatConst, intConst, withInstance, instanceRef } from '../../core/canonical-types';
 import { FLOAT, SHAPE, INT, VEC2 } from '../../core/canonical-types';
 import { DOMAIN_CONTROL } from '../../core/domain-registry';
+import { registerDynamicTopology } from '../../shapes/registry';
 import { PathVerb, type PathTopologyDefInput } from '../../shapes/types';
 import { defaultSourceConst } from '../../types';
 import { OpCode } from '../../compiler/ir/types';
@@ -130,7 +131,7 @@ export function register(): void {
       const topology = createStarTopology(points);
   
       // Register topology and get assigned numeric ID
-      const topologyId = ctx.b.registerTopology(topology, `star-${points}`);
+      const topologyId = registerDynamicTopology(topology, `star-${points}`);
   
       // Total vertices = 2 * points (alternating outer/inner)
       const totalVertices = points * 2;

@@ -16,6 +16,7 @@ import {
 } from '../../core/canonical-types';
 import { FLOAT, SHAPE, INT, VEC2 } from '../../core/canonical-types';
 import { DOMAIN_CONTROL } from '../../core/domain-registry';
+import { registerDynamicTopology } from '../../shapes/registry';
 import { defaultSourceConst } from '../../types';
 import { OpCode } from '../../compiler/ir/types';
 import { resolveInputConstant } from '../lower-utils';
@@ -94,7 +95,7 @@ export function register(): void {
   
       // [LAW:one-source-of-truth] Geometry topology is declared at generation time and
       // shape handles reference the same control-point field used by deformation/layout.
-      const topologyId = ctx.b.registerTopology(
+      const topologyId = registerDynamicTopology(
         createLinePathTopology(resolution, true),
         `ellipse-${resolution}`
       );
