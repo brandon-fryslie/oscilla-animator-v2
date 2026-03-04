@@ -37,13 +37,10 @@ function stateFor(program: ReturnType<typeof compileOk>) {
   const schedule = program.schedule as ScheduleIR;
   const sizes = computeRuntimeStorageSizes(program.runtimeSlots);
   return createRuntimeState(
-    sizes.f32,
     schedule.stateSlotCount,
     0, // eventSlotCount
-    0, // eventExprCount
     program.valueExprs.nodes.length,
     program.arenaTotalFloats,
-    0,
     undefined,
     undefined,
     program.arenaRuntimeLayout,
@@ -106,6 +103,13 @@ describe('Steel Thread - Animated Particles', () => {
       indirectRecordIndex: 0,
       instanceCountMode: 'static',
       staticInstanceCount: 4,
+      drawMode: 'indexed',
+      indirectRegion: 'indexed',
+      indirectStrideBytes: 20,
+      topologySource: 'shapeHeaderV1',
+      firstInstanceSource: 'runtimePacked',
+      indexedFirstIndex: 0,
+      indexedBaseVertex: 0,
     });
     const shapeRefs = program.valueExprs.nodes.filter((expr) => expr.kind === 'shapeRef');
     expect(shapeRefs.length).toBeGreaterThan(0);
@@ -151,10 +155,15 @@ describe('Steel Thread - Animated Particles', () => {
       const metadata = readShapeBankHandleMetadata(state.shapeBank, handle);
       expect(metadata.topologyId).toBe(expr.topologyId);
       const topology = getProgramTopology(program, expr.topologyId);
-      if ('totalControlPoints' in topology) {
-        expect(header.vertexCount).toBe(topology.totalControlPoints);
+      const totalControlPoints = (topology as { totalControlPoints?: unknown }).totalControlPoints;
+      if (typeof totalControlPoints === 'number') {
+        expect(header.vertexCount).toBe(totalControlPoints);
+        const isClosed = (topology as { closed?: unknown }).closed === true;
+        const expectedIndexCount = isClosed && totalControlPoints >= 3
+          ? (totalControlPoints - 2) * 3
+          : 0;
+        expect(header.indexCount).toBe(expectedIndexCount);
       }
-      expect(header.indexCount).toBe(header.vertexCount);
     }
   });
 

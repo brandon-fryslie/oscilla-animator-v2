@@ -18,13 +18,14 @@ import {
 import {
   SHAPE_BANK_HEADER_WORDS,
   allocShapeBankWords,
+  createShapeBankHeaderV1,
   createRuntimeState,
   resetFrameVolatileShapeBank,
   writeShapeBankHandleMetadata,
   writeShapeBankHeader,
 } from '../RuntimeState';
 
-const TEST_STATE = createRuntimeState(0);
+const TEST_STATE = createRuntimeState();
 
 // Helper: create a handle buffer with N instances of given topologies
 function createShapeBuffer(
@@ -34,12 +35,17 @@ function createShapeBuffer(
   if (!TEST_STATE.shapeBank) throw new Error('Test state missing shapeBank');
   for (let i = 0; i < topologies.length; i++) {
     const handle = allocShapeBankWords(TEST_STATE.shapeBank, SHAPE_BANK_HEADER_WORDS);
-    writeShapeBankHeader(TEST_STATE.shapeBank.data, handle, {
-      indexCount: topologies[i].pointsCount,
-      indexOffset: 0,
-      vertexCount: topologies[i].pointsCount,
-      flags: topologies[i].flags,
-    });
+    writeShapeBankHeader(
+      TEST_STATE.shapeBank.data,
+      handle,
+      createShapeBankHeaderV1({
+        kind: 1,
+        topologyMode: 1,
+        indexCount: topologies[i].pointsCount,
+        vertexCount: topologies[i].pointsCount,
+        flags: topologies[i].flags,
+      }),
+    );
     writeShapeBankHandleMetadata(TEST_STATE.shapeBank, handle, {
       topologyId: topologies[i].topologyId,
       controlPointSlot: topologies[i].pointsFieldSlot,
@@ -136,24 +142,34 @@ describe('Topology Group Caching', () => {
 
   it('computeTopologyGroups preserves integer handle identity for numeric shape buffers', () => {
     const handleA = allocShapeBankWords(TEST_STATE.shapeBank!, SHAPE_BANK_HEADER_WORDS);
-    writeShapeBankHeader(TEST_STATE.shapeBank!.data, handleA, {
-      indexCount: 4,
-      indexOffset: 0,
-      vertexCount: 4,
-      flags: 1,
-    });
+    writeShapeBankHeader(
+      TEST_STATE.shapeBank!.data,
+      handleA,
+      createShapeBankHeaderV1({
+        kind: 1,
+        topologyMode: 1,
+        indexCount: 4,
+        vertexCount: 4,
+        flags: 1,
+      }),
+    );
     writeShapeBankHandleMetadata(TEST_STATE.shapeBank!, handleA, {
       topologyId: 7,
       controlPointSlot: 11,
     });
 
     const handleB = allocShapeBankWords(TEST_STATE.shapeBank!, SHAPE_BANK_HEADER_WORDS);
-    writeShapeBankHeader(TEST_STATE.shapeBank!.data, handleB, {
-      indexCount: 3,
-      indexOffset: 0,
-      vertexCount: 3,
-      flags: 0,
-    });
+    writeShapeBankHeader(
+      TEST_STATE.shapeBank!.data,
+      handleB,
+      createShapeBankHeaderV1({
+        kind: 1,
+        topologyMode: 1,
+        indexCount: 3,
+        vertexCount: 3,
+        flags: 0,
+      }),
+    );
     writeShapeBankHandleMetadata(TEST_STATE.shapeBank!, handleB, {
       topologyId: 9,
       controlPointSlot: 13,
@@ -169,12 +185,17 @@ describe('Topology Group Caching', () => {
 
   it('computeTopologyGroups rejects non-integer numeric handles', () => {
     const handleA = allocShapeBankWords(TEST_STATE.shapeBank!, SHAPE_BANK_HEADER_WORDS);
-    writeShapeBankHeader(TEST_STATE.shapeBank!.data, handleA, {
-      indexCount: 4,
-      indexOffset: 0,
-      vertexCount: 4,
-      flags: 1,
-    });
+    writeShapeBankHeader(
+      TEST_STATE.shapeBank!.data,
+      handleA,
+      createShapeBankHeaderV1({
+        kind: 1,
+        topologyMode: 1,
+        indexCount: 4,
+        vertexCount: 4,
+        flags: 1,
+      }),
+    );
     writeShapeBankHandleMetadata(TEST_STATE.shapeBank!, handleA, {
       topologyId: 7,
       controlPointSlot: 11,
@@ -217,7 +238,7 @@ describe('Buffer View Optimization', () => {
 
 describe('Assembler Timing Instrumentation', () => {
   it('HealthMetrics has assembler timing fields initialized', () => {
-    const state = createRuntimeState(10);
+    const state = createRuntimeState();
 
     expect(state.health.assemblerGroupingMs).toHaveLength(10);
     expect(state.health.assemblerGroupingMs.every(v => v === 0)).toBe(true);

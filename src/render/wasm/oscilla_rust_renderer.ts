@@ -11,22 +11,15 @@ interface RendererWasmModule {
     debugReadbackHz: number,
   ) => Promise<void> | void;
   readonly attach_shared_input?: (sharedInput: SharedArrayBuffer) => void;
+  readonly attach_shared_shape_bank?: (sharedShapeBank: SharedArrayBuffer) => void;
+  readonly attach_shared_sink_table?: (sharedSinkTable: SharedArrayBuffer) => void;
   readonly resize_surface?: (width: number, height: number) => void;
   readonly pause_engine?: () => void;
   readonly resume_engine?: () => void;
   readonly inject_poison_alloc?: () => void;
-  readonly take_runtime_event_code?: () => number;
   readonly take_frame_pacing_packet?: () => unknown;
   readonly rebuild_simulation_pipeline?: (
     simulationWgsl: string,
-  ) => Promise<void> | void;
-  readonly sync_render_payload?: (
-    topologyWords: Uint32Array,
-    instanceFloats: Float32Array,
-    indirectArgsWords: Uint32Array,
-    vertexFloats: Float32Array,
-    indexWords: Uint32Array,
-    drawRecordCount: number,
   ) => Promise<void> | void;
 }
 
@@ -34,14 +27,14 @@ let initialized = false;
 let initPromise: Promise<void> | null = null;
 let initEngineImpl: RendererWasmModule['init_engine'] | null = null;
 let attachSharedInputImpl: RendererWasmModule['attach_shared_input'] | null = null;
+let attachSharedShapeBankImpl: RendererWasmModule['attach_shared_shape_bank'] | null = null;
+let attachSharedSinkTableImpl: RendererWasmModule['attach_shared_sink_table'] | null = null;
 let resizeSurfaceImpl: RendererWasmModule['resize_surface'] | null = null;
 let pauseEngineImpl: RendererWasmModule['pause_engine'] | null = null;
 let resumeEngineImpl: RendererWasmModule['resume_engine'] | null = null;
 let injectPoisonAllocImpl: RendererWasmModule['inject_poison_alloc'] | null = null;
-let takeRuntimeEventCodeImpl: RendererWasmModule['take_runtime_event_code'] | null = null;
 let takeFramePacingPacketImpl: RendererWasmModule['take_frame_pacing_packet'] | null = null;
 let rebuildSimulationPipelineImpl: RendererWasmModule['rebuild_simulation_pipeline'] | null = null;
-let syncRenderPayloadImpl: RendererWasmModule['sync_render_payload'] | null = null;
 
 export async function initRustRendererWasm(): Promise<void> {
   if (initialized) {
@@ -65,11 +58,14 @@ export async function initRustRendererWasm(): Promise<void> {
       if (typeof wasmModule.attach_shared_input !== 'function') {
         throw new Error('Rust renderer wasm module missing attach_shared_input export');
       }
+      if (typeof wasmModule.attach_shared_shape_bank !== 'function') {
+        throw new Error('Rust renderer wasm module missing attach_shared_shape_bank export');
+      }
+      if (typeof wasmModule.attach_shared_sink_table !== 'function') {
+        throw new Error('Rust renderer wasm module missing attach_shared_sink_table export');
+      }
       if (typeof wasmModule.rebuild_simulation_pipeline !== 'function') {
         throw new Error('Rust renderer wasm module missing rebuild_simulation_pipeline export');
-      }
-      if (typeof wasmModule.sync_render_payload !== 'function') {
-        throw new Error('Rust renderer wasm module missing sync_render_payload export');
       }
       if (typeof wasmModule.resize_surface !== 'function') {
         throw new Error('Rust renderer wasm module missing resize_surface export');
@@ -83,22 +79,19 @@ export async function initRustRendererWasm(): Promise<void> {
       if (typeof wasmModule.inject_poison_alloc !== 'function') {
         throw new Error('Rust renderer wasm module missing inject_poison_alloc export');
       }
-      if (typeof wasmModule.take_runtime_event_code !== 'function') {
-        throw new Error('Rust renderer wasm module missing take_runtime_event_code export');
-      }
       if (typeof wasmModule.take_frame_pacing_packet !== 'function') {
         throw new Error('Rust renderer wasm module missing take_frame_pacing_packet export');
       }
       initEngineImpl = wasmModule.init_engine.bind(wasmModule);
       attachSharedInputImpl = wasmModule.attach_shared_input.bind(wasmModule);
+      attachSharedShapeBankImpl = wasmModule.attach_shared_shape_bank.bind(wasmModule);
+      attachSharedSinkTableImpl = wasmModule.attach_shared_sink_table.bind(wasmModule);
       resizeSurfaceImpl = wasmModule.resize_surface.bind(wasmModule);
       pauseEngineImpl = wasmModule.pause_engine.bind(wasmModule);
       resumeEngineImpl = wasmModule.resume_engine.bind(wasmModule);
       injectPoisonAllocImpl = wasmModule.inject_poison_alloc.bind(wasmModule);
-      takeRuntimeEventCodeImpl = wasmModule.take_runtime_event_code.bind(wasmModule);
       takeFramePacingPacketImpl = wasmModule.take_frame_pacing_packet.bind(wasmModule);
       rebuildSimulationPipelineImpl = wasmModule.rebuild_simulation_pipeline.bind(wasmModule);
-      syncRenderPayloadImpl = wasmModule.sync_render_payload.bind(wasmModule);
       initialized = true;
     })().catch((error) => {
       initPromise = null;
@@ -133,6 +126,20 @@ export function attachRustRendererSharedInput(sharedInput: SharedArrayBuffer): v
   attachSharedInputImpl(sharedInput);
 }
 
+export function attachRustRendererSharedShapeBank(sharedShapeBank: SharedArrayBuffer): void {
+  if (!initialized || !attachSharedShapeBankImpl) {
+    throw new Error('Rust renderer wasm is not initialized');
+  }
+  attachSharedShapeBankImpl(sharedShapeBank);
+}
+
+export function attachRustRendererSharedSinkTable(sharedSinkTable: SharedArrayBuffer): void {
+  if (!initialized || !attachSharedSinkTableImpl) {
+    throw new Error('Rust renderer wasm is not initialized');
+  }
+  attachSharedSinkTableImpl(sharedSinkTable);
+}
+
 export function resizeRustRendererSurface(width: number, height: number): void {
   if (!initialized || !resizeSurfaceImpl) {
     throw new Error('Rust renderer wasm is not initialized');
@@ -161,13 +168,6 @@ export function injectRustRendererPoisonAlloc(): void {
   injectPoisonAllocImpl();
 }
 
-export function takeRustRendererRuntimeEventCode(): number {
-  if (!initialized || !takeRuntimeEventCodeImpl) {
-    throw new Error('Rust renderer wasm is not initialized');
-  }
-  return takeRuntimeEventCodeImpl();
-}
-
 export function takeRustRendererFramePacingPacket(): unknown {
   if (!initialized || !takeFramePacingPacketImpl) {
     throw new Error('Rust renderer wasm is not initialized');
@@ -182,25 +182,4 @@ export async function rebuildRustRendererSimulationPipeline(
     throw new Error('Rust renderer wasm is not initialized');
   }
   await rebuildSimulationPipelineImpl(simulationWgsl);
-}
-
-export async function syncRustRendererRenderPayload(
-  topologyWords: Uint32Array,
-  instanceFloats: Float32Array,
-  indirectArgsWords: Uint32Array,
-  vertexFloats: Float32Array,
-  indexWords: Uint32Array,
-  drawRecordCount: number,
-): Promise<void> {
-  if (!initialized || !syncRenderPayloadImpl) {
-    throw new Error('Rust renderer wasm is not initialized');
-  }
-  await syncRenderPayloadImpl(
-    topologyWords,
-    instanceFloats,
-    indirectArgsWords,
-    vertexFloats,
-    indexWords,
-    drawRecordCount,
-  );
 }

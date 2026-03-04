@@ -179,6 +179,14 @@ export interface CompiledProgramIR {
   readonly instanceCountProvenance?: InstanceCountProvenanceMap;
 
   /**
+   * Compiler-owned runtime-live expression IDs for fast-path constant patching.
+   *
+   * [LAW:single-enforcer] Liveness/patchability ownership lives in compiler
+   * metadata; runtime services consume this set and do not infer from schedule.
+   */
+  readonly runtimeLiveExprIds?: readonly number[];
+
+  /**
    * Arena layout — flat Float32Array descriptor for every slot.
    * Indexed by slot ID (same ordering as slotMeta).
    *
@@ -344,9 +352,64 @@ export interface DrawPrepSinkIR {
   readonly instanceCountMode: 'static' | 'dynamic';
   /** Present only when instanceCountMode==='static' */
   readonly staticInstanceCount?: number;
+  /**
+   * Canonical indirect command mode for this sink record.
+   *
+   * [LAW:one-source-of-truth] Draw mode is compiler-owned metadata; runtime
+   * draws from this contract rather than deriving mixed-mode semantics ad hoc.
+   */
+  readonly drawMode: 'indexed' | 'nonIndexed';
+  /**
+   * Indirect command region in the shared indirect buffer.
+   */
+  readonly indirectRegion: 'indexed' | 'nonIndexed';
+  /**
+   * Hardware ABI stride for this sink's command records.
+   * - indexed: 20 bytes (`drawIndexedIndirect`)
+   * - nonIndexed: 16 bytes (`drawIndirect`)
+   */
+  readonly indirectStrideBytes: 20 | 16;
+  /**
+   * Source authority for topology fields consumed by draw-prep.
+   * Current sink contracts read topology counts/offsets from ShapeHeaderV1.
+   */
+  readonly topologySource: 'shapeHeaderV1';
+  /**
+   * Source authority for firstInstance field.
+   * Runtime packed draw plan currently owns firstInstance values.
+   */
+  readonly firstInstanceSource: 'runtimePacked';
+  /**
+   * Indexed command defaults (used when drawMode==='indexed').
+   */
+  readonly indexedFirstIndex?: number;
+  readonly indexedBaseVertex?: number;
+  /**
+   * Non-indexed command defaults (used when drawMode==='nonIndexed').
+   */
+  readonly nonIndexedFirstVertex?: number;
 }
 
 export interface DrawPrepProgramIR {
+  /**
+   * Total sink records emitted by the compiler draw-prep contract.
+   *
+   * [LAW:one-source-of-truth] Runtime/worker capacity validation reads this
+   * static count from the compiler contract instead of re-deriving it.
+   */
+  readonly totalRecordCount: number;
+  /**
+   * Indexed stream region metadata (words in the shared indirect buffer).
+   */
+  readonly indexedRecordCount: number;
+  readonly indexedRegionBaseWords: number;
+  readonly indexedStrideWords: 5;
+  /**
+   * Non-indexed stream region metadata (words in the shared indirect buffer).
+   */
+  readonly nonIndexedRecordCount: number;
+  readonly nonIndexedRegionBaseWords: number;
+  readonly nonIndexedStrideWords: 4;
   readonly sinks: readonly DrawPrepSinkIR[];
 }
 
@@ -380,7 +443,7 @@ export interface SlotMetaEntry {
    * [LAW:one-source-of-truth] Slot metadata mirrors canonical runtime ABI
    * vocabulary only; legacy f64/object labels are not part of this contract.
    */
-  readonly storage: 'f32' | 'i32' | 'u32' | 'shape2d';
+  readonly storage: 'f32' | 'i32' | 'u32';
 
   /**
    * REQUIRED: absolute offset into the backing store for this storage class.
@@ -418,7 +481,7 @@ export interface RuntimeSlotEntry {
    * [LAW:one-source-of-truth] Runtime hot path resolves addresses from this
    * canonical set only (no legacy f64/object labels).
    */
-  readonly storage: 'f32' | 'i32' | 'u32' | 'shape2d';
+  readonly storage: 'f32' | 'i32' | 'u32';
   readonly offset: number;
   readonly stride: number;
   readonly type: CanonicalType;
@@ -434,7 +497,7 @@ export interface RuntimeSlotLookupEntry {
    * [LAW:one-source-of-truth] Runtime lookup contracts must not expose legacy
    * f64/object storage labels.
    */
-  readonly storage: 'f32' | 'i32' | 'u32' | 'shape2d';
+  readonly storage: 'f32' | 'i32' | 'u32';
   readonly offset: number;
   readonly stride: number;
   readonly slot: ValueSlot;
@@ -552,7 +615,7 @@ export type ShapeDescIR =
   | { readonly kind: 'struct'; readonly fields: readonly StructFieldIR[] }
   | { readonly kind: 'array'; readonly length: number; readonly element: ShapeDescIR }
   | { readonly kind: 'object'; readonly class: string }
-  | { readonly kind: 'shape' }; // Shape2D descriptor (topology + params)
+  | { readonly kind: 'shape' }; // Shape handle descriptor (topology + params)
 
 export interface StructFieldIR {
   readonly name: string;
@@ -664,7 +727,6 @@ export interface RuntimeStorageSizes {
   f32: number;
   i32: number;
   u32: number;
-  shape2d: number;
 }
 
 type StorageExtentEntry = {
@@ -678,7 +740,6 @@ function accumulateStorageSizes(entries: readonly StorageExtentEntry[]): Runtime
     f32: 0,
     i32: 0,
     u32: 0,
-    shape2d: 0,
   };
   for (const entry of entries) {
     const requiredSize = entry.offset + entry.stride;

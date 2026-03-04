@@ -59,6 +59,34 @@ pub fn attach_shared_input(shared_input: js_sys::SharedArrayBuffer) -> Result<()
 }
 
 #[wasm_bindgen]
+pub fn attach_shared_shape_bank(
+    shared_shape_bank: js_sys::SharedArrayBuffer,
+) -> Result<(), JsValue> {
+    ENGINE.with(|engine_cell| {
+        let mut engine_ref = engine_cell.borrow_mut();
+        let engine = engine_ref.as_mut().ok_or_else(|| {
+            JsValue::from_str("Rust engine must be initialized before attaching shared shape bank")
+        })?;
+        engine.attach_shared_shape_bank(shared_shape_bank);
+        Ok(())
+    })
+}
+
+#[wasm_bindgen]
+pub fn attach_shared_sink_table(
+    shared_sink_table: js_sys::SharedArrayBuffer,
+) -> Result<(), JsValue> {
+    ENGINE.with(|engine_cell| {
+        let mut engine_ref = engine_cell.borrow_mut();
+        let engine = engine_ref.as_mut().ok_or_else(|| {
+            JsValue::from_str("Rust engine must be initialized before attaching shared sink table")
+        })?;
+        engine.attach_shared_sink_table(shared_sink_table);
+        Ok(())
+    })
+}
+
+#[wasm_bindgen]
 pub fn pause_engine() -> Result<(), JsValue> {
     ENGINE.with(|engine_cell| {
         let mut engine_ref = engine_cell.borrow_mut();
@@ -119,32 +147,6 @@ pub fn rebuild_simulation_pipeline(simulation_wgsl: String) -> Result<(), JsValu
 }
 
 #[wasm_bindgen]
-pub fn sync_render_payload(
-    topology_words: js_sys::Uint32Array,
-    instance_floats: js_sys::Float32Array,
-    indirect_args_words: js_sys::Uint32Array,
-    vertex_floats: js_sys::Float32Array,
-    index_words: js_sys::Uint32Array,
-    draw_record_count: u32,
-) -> Result<(), JsValue> {
-    ENGINE.with(|engine_cell| {
-        let mut engine_ref = engine_cell.borrow_mut();
-        let engine = engine_ref.as_mut().ok_or_else(|| {
-            JsValue::from_str("Rust engine must be initialized before sync_render_payload")
-        })?;
-        engine.sync_render_payload(
-            &topology_words,
-            &instance_floats,
-            &indirect_args_words,
-            &vertex_floats,
-            &index_words,
-            draw_record_count,
-        )?;
-        Ok(())
-    })
-}
-
-#[wasm_bindgen]
 pub fn resize_surface(width: u32, height: u32) -> Result<(), JsValue> {
     ENGINE.with(|engine_cell| {
         let mut engine_ref = engine_cell.borrow_mut();
@@ -165,17 +167,6 @@ pub fn inject_poison_alloc() -> Result<(), JsValue> {
         })?;
         engine.inject_poison_alloc();
         Ok(())
-    })
-}
-
-#[wasm_bindgen]
-pub fn take_runtime_event_code() -> Result<u32, JsValue> {
-    ENGINE.with(|engine_cell| {
-        let mut engine_ref = engine_cell.borrow_mut();
-        let engine = engine_ref.as_mut().ok_or_else(|| {
-            JsValue::from_str("Rust engine must be initialized before take_runtime_event_code")
-        })?;
-        Ok(engine.take_runtime_event_code())
     })
 }
 

@@ -1,26 +1,115 @@
 use crate::memory::GpuMemoryArena;
 
-enum SimulationBindingKind {
-    LegacySplit,
-    CompilerUnified,
+const DEFAULT_DRAW_PREP_WGSL: &str = r#"
+const DRAW_MODE_INDEXED: u32 = 0u;
+const DRAW_MODE_NON_INDEXED: u32 = 1u;
+const SHAPE_HEADER_WORDS: u32 = 16u;
+const SINK_TABLE_HEADER_WORDS: u32 = 8u;
+const SINK_TABLE_RECORD_WORDS: u32 = 29u;
+const DEFAULT_INDEXED_STRIDE_WORDS: u32 = 5u;
+const DEFAULT_NON_INDEXED_STRIDE_WORDS: u32 = 4u;
+
+const SHAPE_WORD_INDEX_COUNT: u32 = 4u;
+const SHAPE_WORD_FIRST_INDEX: u32 = 5u;
+const SHAPE_WORD_BASE_VERTEX: u32 = 6u;
+const SHAPE_WORD_VERTEX_COUNT: u32 = 7u;
+const SHAPE_WORD_FIRST_VERTEX: u32 = 8u;
+
+const TABLE_WORD_TOTAL_RECORD_COUNT: u32 = 1u;
+const TABLE_WORD_INDEXED_REGION_BASE_WORDS: u32 = 4u;
+const TABLE_WORD_NON_INDEXED_REGION_BASE_WORDS: u32 = 5u;
+const TABLE_WORD_INDEXED_STRIDE_WORDS: u32 = 6u;
+const TABLE_WORD_NON_INDEXED_STRIDE_WORDS: u32 = 7u;
+
+const RECORD_WORD_DRAW_MODE: u32 = 1u;
+const RECORD_WORD_SHAPE_HANDLE_WORD_OFFSET: u32 = 2u;
+const RECORD_WORD_INDIRECT_RECORD_INDEX: u32 = 3u;
+const RECORD_WORD_INSTANCE_COUNT: u32 = 4u;
+const RECORD_WORD_FIRST_INSTANCE: u32 = 5u;
+
+@group(0) @binding(0) var<storage, read> sinkTableWords: array<u32>;
+@group(0) @binding(1) var<storage, read> shapeBankWords: array<u32>;
+@group(0) @binding(2) var<storage, read_write> indirectWords: array<u32>;
+
+fn loadShapeWord(shapeHandleWordOffset: u32, wordOffset: u32) -> u32 {
+  let index = shapeHandleWordOffset + wordOffset;
+  if (index >= arrayLength(&shapeBankWords)) {
+    return 0u;
+  }
+  return shapeBankWords[index];
 }
+
+@compute @workgroup_size(1)
+fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
+  if (arrayLength(&sinkTableWords) < SINK_TABLE_HEADER_WORDS) {
+    return;
+  }
+
+  let totalRecordCount = sinkTableWords[TABLE_WORD_TOTAL_RECORD_COUNT];
+  if (gid.x >= totalRecordCount) {
+    return;
+  }
+
+  let recordBase = SINK_TABLE_HEADER_WORDS + gid.x * SINK_TABLE_RECORD_WORDS;
+  if (recordBase + RECORD_WORD_FIRST_INSTANCE >= arrayLength(&sinkTableWords)) {
+    return;
+  }
+
+  let drawMode = sinkTableWords[recordBase + RECORD_WORD_DRAW_MODE];
+  let shapeHandleWordOffset = sinkTableWords[recordBase + RECORD_WORD_SHAPE_HANDLE_WORD_OFFSET];
+  let indirectRecordIndex = sinkTableWords[recordBase + RECORD_WORD_INDIRECT_RECORD_INDEX];
+  let instanceCount = sinkTableWords[recordBase + RECORD_WORD_INSTANCE_COUNT];
+  let firstInstance = sinkTableWords[recordBase + RECORD_WORD_FIRST_INSTANCE];
+
+  if (shapeHandleWordOffset + SHAPE_HEADER_WORDS > arrayLength(&shapeBankWords)) {
+    return;
+  }
+
+  let indexedRegionBaseWords = sinkTableWords[TABLE_WORD_INDEXED_REGION_BASE_WORDS];
+  let nonIndexedRegionBaseWords = sinkTableWords[TABLE_WORD_NON_INDEXED_REGION_BASE_WORDS];
+  let indexedStrideWords = max(sinkTableWords[TABLE_WORD_INDEXED_STRIDE_WORDS], DEFAULT_INDEXED_STRIDE_WORDS);
+  let nonIndexedStrideWords = max(sinkTableWords[TABLE_WORD_NON_INDEXED_STRIDE_WORDS], DEFAULT_NON_INDEXED_STRIDE_WORDS);
+
+  if (drawMode == DRAW_MODE_INDEXED) {
+    let base = indexedRegionBaseWords + indirectRecordIndex * indexedStrideWords;
+    if (base + 4u >= arrayLength(&indirectWords)) {
+      return;
+    }
+    indirectWords[base + 0u] = loadShapeWord(shapeHandleWordOffset, SHAPE_WORD_INDEX_COUNT);
+    indirectWords[base + 1u] = instanceCount;
+    indirectWords[base + 2u] = loadShapeWord(shapeHandleWordOffset, SHAPE_WORD_FIRST_INDEX);
+    indirectWords[base + 3u] = loadShapeWord(shapeHandleWordOffset, SHAPE_WORD_BASE_VERTEX);
+    indirectWords[base + 4u] = firstInstance;
+    return;
+  }
+
+  if (drawMode == DRAW_MODE_NON_INDEXED) {
+    let base = nonIndexedRegionBaseWords + indirectRecordIndex * nonIndexedStrideWords;
+    if (base + 3u >= arrayLength(&indirectWords)) {
+      return;
+    }
+    indirectWords[base + 0u] = loadShapeWord(shapeHandleWordOffset, SHAPE_WORD_VERTEX_COUNT);
+    indirectWords[base + 1u] = instanceCount;
+    indirectWords[base + 2u] = loadShapeWord(shapeHandleWordOffset, SHAPE_WORD_FIRST_VERTEX);
+    indirectWords[base + 3u] = firstInstance;
+  }
+}
+"#;
 
 pub struct ComputeDispatcher {
     simulation_pipeline: wgpu::ComputePipeline,
-    render_assembly_pipeline: wgpu::ComputePipeline,
+    instance_assembly_pipeline: wgpu::ComputePipeline,
+    draw_prep_pipeline: wgpu::ComputePipeline,
     sim_workgroup_count: u32,
-    assembly_workgroup_count: u32,
-    compiler_simulation_layout: Option<wgpu::BindGroupLayout>,
-    simulation_binding_kind: SimulationBindingKind,
+    compiler_simulation_layout: wgpu::BindGroupLayout,
     pub uniform_layout: wgpu::BindGroupLayout,
     pub state_layout: wgpu::BindGroupLayout,
     pub assembly_layout: wgpu::BindGroupLayout,
+    pub draw_prep_layout: wgpu::BindGroupLayout,
 }
 
 impl ComputeDispatcher {
     fn parse_workgroup_size_x(simulation_wgsl: &str) -> u32 {
-        // [LAW:single-enforcer] Workgroup-size parsing is centralized in one
-        // helper so all simulation dispatch counts use the same contract.
         const DEFAULT_WORKGROUP_SIZE_X: u32 = 64;
         let start = match simulation_wgsl.find("@workgroup_size(") {
             Some(index) => index + "@workgroup_size(".len(),
@@ -50,10 +139,8 @@ impl ComputeDispatcher {
         simulation_wgsl: &str,
         assembly_wgsl: &str,
         particle_count: u32,
-        shape_count: u32,
+        _shape_count: u32,
     ) -> Self {
-        // [LAW:single-enforcer] The bind-group contract is declared once here
-        // so compile/rebuild and runtime pass encoding share one authority.
         let uniform_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("Compute.Uniform.Layout"),
             entries: &[wgpu::BindGroupLayoutEntry {
@@ -76,7 +163,9 @@ impl ComputeDispatcher {
                 binding: 0,
                 visibility: wgpu::ShaderStages::COMPUTE,
                 ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Storage { read_only: false },
+                    // [LAW:one-source-of-truth] Assembly consumes one canonical
+                    // compiler-arena input binding as read-only storage.
+                    ty: wgpu::BufferBindingType::Storage { read_only: true },
                     has_dynamic_offset: false,
                     min_binding_size: None,
                 },
@@ -101,6 +190,42 @@ impl ComputeDispatcher {
                     binding: 1,
                     visibility: wgpu::ShaderStages::COMPUTE,
                     ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Storage { read_only: true },
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },
+            ],
+        });
+
+        let draw_prep_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("Compute.DrawPrep.Layout"),
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::COMPUTE,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Storage { read_only: true },
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::COMPUTE,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Storage { read_only: true },
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 2,
+                    visibility: wgpu::ShaderStages::COMPUTE,
+                    ty: wgpu::BindingType::Buffer {
                         ty: wgpu::BufferBindingType::Storage { read_only: false },
                         has_dynamic_offset: false,
                         min_binding_size: None,
@@ -110,15 +235,19 @@ impl ComputeDispatcher {
             ],
         });
 
-        let simulation_pipeline = Self::create_legacy_simulation_pipeline(
+        let compiler_simulation_layout = Self::create_compiler_simulation_layout(device);
+        let simulation_pipeline = Self::create_compiler_simulation_pipeline(
             device,
             simulation_wgsl,
-            &uniform_layout,
-            &state_layout,
+            &compiler_simulation_layout,
         );
         let assembly_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("Compute.Assembly.Shader"),
             source: wgpu::ShaderSource::Wgsl(assembly_wgsl.into()),
+        });
+        let draw_prep_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("Compute.DrawPrep.Shader"),
+            source: wgpu::ShaderSource::Wgsl(DEFAULT_DRAW_PREP_WGSL.into()),
         });
 
         let assembly_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -126,7 +255,7 @@ impl ComputeDispatcher {
             bind_group_layouts: &[&uniform_layout, &state_layout, &assembly_layout],
             push_constant_ranges: &[],
         });
-        let render_assembly_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+        let instance_assembly_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
             label: Some("Compute.Assembly.Pipeline"),
             layout: Some(&assembly_pipeline_layout),
             module: &assembly_module,
@@ -135,42 +264,53 @@ impl ComputeDispatcher {
             compilation_options: wgpu::PipelineCompilationOptions::default(),
         });
 
-        let sim_workgroup_count = Self::simulation_dispatch_count(particle_count, simulation_wgsl);
-        let assembly_workgroup_count = (shape_count.saturating_add(63)) / 64;
+        let draw_prep_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("Compute.DrawPrep.PipelineLayout"),
+            bind_group_layouts: &[&draw_prep_layout],
+            push_constant_ranges: &[],
+        });
+        let draw_prep_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+            label: Some("Compute.DrawPrep.Pipeline"),
+            layout: Some(&draw_prep_pipeline_layout),
+            module: &draw_prep_module,
+            entry_point: Some("main"),
+            cache: None,
+            compilation_options: wgpu::PipelineCompilationOptions::default(),
+        });
 
+        let sim_workgroup_count = Self::simulation_dispatch_count(particle_count, simulation_wgsl);
         Self {
             simulation_pipeline,
-            render_assembly_pipeline,
+            instance_assembly_pipeline,
+            draw_prep_pipeline,
             sim_workgroup_count: sim_workgroup_count.max(1),
-            assembly_workgroup_count: assembly_workgroup_count.max(1),
-            compiler_simulation_layout: None,
-            simulation_binding_kind: SimulationBindingKind::LegacySplit,
+            compiler_simulation_layout,
             uniform_layout,
             state_layout,
             assembly_layout,
+            draw_prep_layout,
         }
     }
 
-    fn create_legacy_simulation_pipeline(
+    fn create_compiler_simulation_pipeline(
         device: &wgpu::Device,
         simulation_wgsl: &str,
-        uniform_layout: &wgpu::BindGroupLayout,
-        state_layout: &wgpu::BindGroupLayout,
+        compiler_simulation_layout: &wgpu::BindGroupLayout,
     ) -> wgpu::ComputePipeline {
         let simulation_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("Compute.Simulation.Shader"),
+            label: Some("Compute.CompilerSimulation.Shader"),
             source: wgpu::ShaderSource::Wgsl(simulation_wgsl.into()),
         });
         let simulation_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("Compute.Simulation.PipelineLayout"),
-            bind_group_layouts: &[uniform_layout, state_layout, state_layout],
+            label: Some("Compute.CompilerSimulation.PipelineLayout"),
+            bind_group_layouts: &[compiler_simulation_layout],
             push_constant_ranges: &[],
         });
         device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-            label: Some("Compute.Simulation.Pipeline"),
+            label: Some("Compute.CompilerSimulation.Pipeline"),
             layout: Some(&simulation_pipeline_layout),
             module: &simulation_module,
-            entry_point: Some("main"),
+            entry_point: Some("compute_main"),
             cache: None,
             compilation_options: wgpu::PipelineCompilationOptions::default(),
         })
@@ -240,77 +380,58 @@ impl ComputeDispatcher {
         simulation_wgsl: &str,
         particle_count: u32,
     ) {
-        let compiler_simulation_layout = Self::create_compiler_simulation_layout(device);
-        let simulation_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("Compute.CompilerSimulation.Shader"),
-            source: wgpu::ShaderSource::Wgsl(simulation_wgsl.into()),
-        });
-        let simulation_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("Compute.CompilerSimulation.PipelineLayout"),
-            bind_group_layouts: &[&compiler_simulation_layout],
-            push_constant_ranges: &[],
-        });
-        self.simulation_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-            label: Some("Compute.CompilerSimulation.Pipeline"),
-            layout: Some(&simulation_pipeline_layout),
-            module: &simulation_module,
-            entry_point: Some("compute_main"),
-            cache: None,
-            compilation_options: wgpu::PipelineCompilationOptions::default(),
-        });
+        self.simulation_pipeline = Self::create_compiler_simulation_pipeline(
+            device,
+            simulation_wgsl,
+            &self.compiler_simulation_layout,
+        );
         self.sim_workgroup_count =
             Self::simulation_dispatch_count(particle_count, simulation_wgsl);
-        self.compiler_simulation_layout = Some(compiler_simulation_layout);
-        self.simulation_binding_kind = SimulationBindingKind::CompilerUnified;
     }
 
-    pub fn compiler_simulation_layout(&self) -> Option<&wgpu::BindGroupLayout> {
-        self.compiler_simulation_layout.as_ref()
+    pub fn compiler_simulation_layout(&self) -> &wgpu::BindGroupLayout {
+        &self.compiler_simulation_layout
     }
 
     pub fn encode_passes(
         &self,
         encoder: &mut wgpu::CommandEncoder,
         arena: &mut GpuMemoryArena,
-        encode_assembly: bool,
+        assembly_instance_count: u32,
+        draw_prep_record_count: u32,
     ) {
-        // [LAW:dataflow-not-control-flow] Compute stage order is immutable every
-        // frame; variability is in uniforms/state payload values only.
         {
             let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
                 label: Some("Compute.Simulation.Pass"),
                 timestamp_writes: None,
             });
             compute_pass.set_pipeline(&self.simulation_pipeline);
-            match self.simulation_binding_kind {
-                SimulationBindingKind::LegacySplit => {
-                    compute_pass.set_bind_group(0, &arena.uniform_bind_group, &[]);
-                    compute_pass.set_bind_group(1, arena.get_compute_read_bind_group(), &[]);
-                    compute_pass.set_bind_group(2, arena.get_compute_write_bind_group(), &[]);
-                }
-                SimulationBindingKind::CompilerUnified => {
-                    let bind_group = arena
-                        .get_compiler_simulation_bind_group()
-                        .expect("compiler simulation bind group must be rebuilt before dispatch");
-                    compute_pass.set_bind_group(0, bind_group, &[]);
-                }
-            }
+            compute_pass.set_bind_group(0, arena.get_compiler_simulation_bind_group(), &[]);
             compute_pass.dispatch_workgroups(self.sim_workgroup_count, 1, 1);
         }
 
-        if encode_assembly {
+        {
             let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-                label: Some("Compute.RenderAssembly.Pass"),
+                label: Some("Compute.InstanceAssembly.Pass"),
                 timestamp_writes: None,
             });
-            compute_pass.set_pipeline(&self.render_assembly_pipeline);
+            compute_pass.set_pipeline(&self.instance_assembly_pipeline);
             compute_pass.set_bind_group(0, &arena.uniform_bind_group, &[]);
-            compute_pass.set_bind_group(1, arena.get_compute_write_bind_group(), &[]);
-            // [LAW:one-source-of-truth] Arena owns the canonical assembly bind
-            // group used for draw-prep writes.
+            // [LAW:one-source-of-truth] Instance assembly reads compiler-arena
+            // write bank produced by simulation dispatch in this same tick.
+            compute_pass.set_bind_group(1, arena.get_compiler_arena_write_bind_group(), &[]);
             compute_pass.set_bind_group(2, &arena.assembly_write_bind_group, &[]);
-            compute_pass.dispatch_workgroups(self.assembly_workgroup_count, 1, 1);
+            // [LAW:single-enforcer] Runtime sink-table instance totals are the
+            // canonical source for per-frame assembly dispatch size.
+            let assembly_workgroup_count =
+                ((assembly_instance_count.saturating_add(63)) / 64).max(1);
+            compute_pass.dispatch_workgroups(assembly_workgroup_count, 1, 1);
         }
+
+        let _ = draw_prep_record_count;
+        // [LAW:single-enforcer] exception: indirect args are temporarily
+        // materialized by CPU sink-table mirroring while GPU draw-prep parity
+        // debugging is in progress.
 
         arena.swap_ping_pong();
     }

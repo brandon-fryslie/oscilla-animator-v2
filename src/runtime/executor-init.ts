@@ -14,15 +14,6 @@ export const MATERIALIZE_SCRATCH = createMaterializeScratch();
 // Module-level render steps array — reused across frames to avoid per-frame allocation.
 export const renderStepsBuffer: StepRender[] = [];
 
-// Reusable Shape2D record — populated in-place before each writeShape2D call.
-export const shapeRecord = {
-  topologyId: 0,
-  pointsFieldSlot: 0,
-  pointsCount: 0,
-  styleRef: 0,
-  flags: 0,
-};
-
 // Pre-allocated single-element buffer for composed opcode pipeline in ScalarKernelLibrary
 export const singleArgBuf: number[] = [0];
 
@@ -36,4 +27,5 @@ export const assemblerCtx = {
   arena: null as any,
   scalarExprToArenaAddress: null as any,
   slotToArena: null as any,
+  pureFnContext: null as any,
 };

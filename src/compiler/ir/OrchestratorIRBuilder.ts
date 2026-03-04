@@ -30,6 +30,7 @@ import type {
 } from './types';
 import type { CameraDeclIR } from './program';
 import type { ValueExpr } from './value-expr';
+import type { SerializableTopologyDef } from '../../shapes/types';
 
 // =============================================================================
 // OrchestratorIRBuilder Interface (Full/Imperative)
@@ -145,6 +146,7 @@ export interface OrchestratorIRBuilder extends BlockIRBuilder {
   getFieldSlots(): ReadonlyMap<number, ValueSlot>;
   getEventSlots(): ReadonlyMap<ValueExprId, any>;
   getEventSlotCount(): number;
+  getSerializableTopologies(): readonly SerializableTopologyDef[];
 
   // =========================================================================
   // Debug Provenance Tracking

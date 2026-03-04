@@ -24,8 +24,6 @@ import { floatConst, intConst, boolConst, isMany } from '../core/canonical-types
 import type { ValueExpr } from '../compiler/ir/value-expr';
 import type { InstanceId } from '../compiler/ir/Indices';
 import type { ScheduleIR } from '../compiler/backend/schedule-program';
-import type { Step } from '../compiler/ir/types';
-import { getValueExprChildren } from '../runtime/ValueExprTreeWalker';
 
 /**
  * Patch constant values in a compiled program without full recompilation.
@@ -80,7 +78,9 @@ function patchConstants(
   changes: ReadonlyMap<string, unknown>,
 ): CompiledProgramIR | null {
   if (!program.constantProvenance) return null;
-  const runtimeLiveExprIds = collectRuntimeLiveExprIds(program);
+  const runtimeLiveExprIds = program.runtimeLiveExprIds;
+  if (!runtimeLiveExprIds) return null;
+  const runtimeLiveExprSet = new Set(runtimeLiveExprIds);
 
   const patches: Array<{ exprIndex: number; value: ConstValue }> = [];
 
@@ -97,7 +97,7 @@ function patchConstants(
       const exprIndex = entry.componentExprIds[i] as number;
       // [LAW:dataflow-not-control-flow] Fast path only patches constants that
       // are active in runtime dataflow; compile-time-only constants fall back.
-      if (!runtimeLiveExprIds.has(exprIndex)) return null;
+      if (!runtimeLiveExprSet.has(exprIndex)) return null;
       patches.push({
         exprIndex,
         value: constValues[i],
@@ -114,101 +114,6 @@ function patchConstants(
   }
 
   return { ...program, valueExprs: { nodes: newNodes } };
-}
-
-function collectRuntimeLiveExprIds(program: CompiledProgramIR): Set<number> {
-  // TODO(webgpu-migration): Move runtime-live patchability ownership to the compiler.
-  // [LAW:single-enforcer] Compiler should emit canonical patchability metadata so
-  // the patcher consumes data instead of inferring liveness from schedule shape.
-  // [LAW:one-source-of-truth] Runtime-liveness/patchability must have one authority.
-  const live = new Set<number>();
-  const stack: number[] = [];
-  const nodes = program.valueExprs.nodes;
-  const scheduleSteps = Array.isArray(program.schedule?.steps)
-    ? (program.schedule.steps as readonly Step[])
-    : ([] as readonly Step[]);
-  const fieldExprBySlot = new Map<number, number>();
-  if (program.fieldSlotRegistry) {
-    for (const [slot, entry] of program.fieldSlotRegistry.entries()) {
-      fieldExprBySlot.set(slot as number, entry.fieldId as number);
-    }
-  }
-
-  const pushExpr = (exprId: number | undefined | null): void => {
-    if (exprId === undefined || exprId === null) return;
-    if (!Number.isInteger(exprId) || exprId < 0) return;
-    if (!live.has(exprId)) {
-      stack.push(exprId);
-    }
-  };
-
-  const pushFieldExprForSlot = (slot: number | undefined): void => {
-    if (slot === undefined || slot === null) return;
-    const fieldExprId = fieldExprBySlot.get(slot);
-    if (fieldExprId === undefined) return;
-    pushExpr(fieldExprId);
-  };
-
-  // [LAW:dataflow-not-control-flow] Runtime liveness seeds only from runtime
-  // sink expressions/slots (render, event dispatch, state writes). Materialize
-  // and evalOne are execution plumbing and are not liveness roots.
-  for (const step of scheduleSteps) {
-    switch (step.kind) {
-      case 'eventDispatch':
-        pushExpr(step.expr as number);
-        break;
-      case 'stateWrite':
-      case 'fieldStateWrite':
-        pushExpr(step.value as number);
-        break;
-      case 'render':
-        // One-cardinality render params are direct expression sinks.
-        if (step.scale?.k === 'one') pushExpr(step.scale.id as number);
-        if (step.shape.k === 'oneHandle') pushExpr(step.shape.id as number);
-        if (step.shape.k === 'one') {
-          for (const exprId of step.shape.paramExprs) {
-            pushExpr(exprId as number);
-          }
-        }
-        // Field-backed render inputs are rooted via field-slot provenance.
-        pushFieldExprForSlot(step.controlPointsSlot as number);
-        pushFieldExprForSlot(step.colorSlot as number);
-        if (step.scale?.k === 'slot') {
-          pushFieldExprForSlot(step.scale.slot as number);
-        }
-        if (step.shape.k === 'slot') {
-          pushFieldExprForSlot(step.shape.slot as number);
-        }
-        if (step.controlPoints?.k === 'slot') {
-          pushFieldExprForSlot(step.controlPoints.slot as number);
-        }
-        pushFieldExprForSlot(step.rotationSlot as number | undefined);
-        pushFieldExprForSlot(step.scale2Slot as number | undefined);
-        break;
-      case 'continuityMapBuild':
-      case 'continuityApply':
-      case 'evalOne':
-      case 'materialize':
-        break;
-      default: {
-        const _exhaustive: never = step;
-        throw new Error(`Unhandled schedule step kind: ${(_exhaustive as Step).kind}`);
-      }
-    }
-  }
-
-  while (stack.length > 0) {
-    const exprId = stack.pop()!;
-    if (live.has(exprId)) continue;
-    live.add(exprId);
-    const expr = nodes[exprId];
-    if (!expr) continue;
-    for (const child of getValueExprChildren(expr)) {
-      pushExpr(child as number);
-    }
-  }
-
-  return live;
 }
 
 /**
@@ -239,6 +144,7 @@ function patchInstanceCounts(
     // Look up current instance declaration
     const instanceDecl = program.schedule.instances.get(entry.instanceId);
     if (!instanceDecl) return null;
+    if (instanceDecl.count === 'dynamic') return null;
 
     // Bounds: 0 <= newCount <= maxCount
     if (newCount < 0 || newCount > instanceDecl.maxCount) return null;

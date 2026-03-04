@@ -1,6 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createAnimationLoopState, executeAnimationFrame, startAnimationLoop } from '../AnimationLoop';
-import { assertSchedulePhaseBoundaryStateReads, executeFrame } from '../../runtime';
+import {
+  assertSchedulePhaseBoundaryStateReads,
+  executeFrame,
+  packDrawPrepSinkTableV1,
+} from '../../runtime';
 import { createHealthMetrics } from '../../runtime/RuntimeState';
 
 const runtimeProbeMocks = vi.hoisted(() => ({
@@ -12,6 +16,7 @@ vi.mock('../../runtime', () => ({
   executeFrame: vi.fn(() => {
     throw new Error('boom');
   }),
+  packDrawPrepSinkTableV1: vi.fn(() => null),
 }));
 
 vi.mock('../../testing/runtime-probe', () => ({
@@ -29,6 +34,7 @@ function makeEmptyShapeBank() {
 describe('AnimationLoop', () => {
   const executeFrameMock = vi.mocked(executeFrame);
   const assertSchedulePhaseBoundaryStateReadsMock = vi.mocked(assertSchedulePhaseBoundaryStateReads);
+  const packDrawPrepSinkTableV1Mock = vi.mocked(packDrawPrepSinkTableV1);
   const originalRaf = globalThis.requestAnimationFrame;
   const originalCancelRaf = globalThis.cancelAnimationFrame;
 
@@ -37,6 +43,8 @@ describe('AnimationLoop', () => {
     executeFrameMock.mockImplementation(() => {
       throw new Error('boom');
     });
+    packDrawPrepSinkTableV1Mock.mockReset();
+    packDrawPrepSinkTableV1Mock.mockReturnValue(null);
     runtimeProbeMocks.markRuntimeFrameAdvanced.mockReset();
     let callback: FrameRequestCallback | null = null;
     vi.stubGlobal('requestAnimationFrame', vi.fn((cb: FrameRequestCallback) => {
@@ -119,7 +127,7 @@ describe('AnimationLoop', () => {
     executeAnimationFrame(16, deps, state);
 
     const renderArg = renderer.render.mock.calls[0]?.[0];
-    expect(renderArg.frame).toEqual({ version: 2, ops: [] });
+    expect(Object.prototype.hasOwnProperty.call(renderArg ?? {}, 'frame')).toBe(false);
   });
 
   it('enables cardinality slot write assertions when cardinality debug tracing is on', () => {
@@ -212,21 +220,28 @@ describe('AnimationLoop', () => {
     expect(deps.store.viewport.setContentBounds).toHaveBeenCalledWith(null);
   });
 
-  it('forwards compiler draw-prep sink metadata to renderer input', () => {
+  it('forwards runtime-packed sink-table metadata to renderer input', () => {
     const arena = { reset: vi.fn(), getTotalBytes: () => 0 };
     const renderer = { render: vi.fn() };
-    const drawPrepSinks = [{
-      sinkIndex: 0,
-      renderStepIndex: 0,
-      instanceId: 'inst-0',
-      indirectRecordIndex: 0,
-      instanceCountMode: 'static',
-      staticInstanceCount: 4,
-    }] as const;
+    const packedWords = new Uint32Array([1, 0, 0, 0, 0, 0, 5, 4]);
+    packDrawPrepSinkTableV1Mock.mockReturnValue({
+      words: packedWords,
+      wordCount: packedWords.length,
+      header: {
+        version: 1,
+        totalRecordCount: 0,
+        indexedRecordCount: 0,
+        nonIndexedRecordCount: 0,
+        indexedRegionBaseWords: 0,
+        nonIndexedRegionBaseWords: 0,
+        indexedStrideWords: 5,
+        nonIndexedStrideWords: 4,
+      },
+    });
     executeFrameMock.mockReturnValue({ version: 2, ops: [] } as any);
 
     const deps = {
-      getCurrentProgram: () => ({ drawPrepProgram: { sinks: drawPrepSinks } }),
+      getCurrentProgram: () => ({}),
       getCurrentState: () => ({
         health: createHealthMetrics(),
         shapeBank: makeEmptyShapeBank(),
@@ -253,7 +268,8 @@ describe('AnimationLoop', () => {
 
     const renderArg = renderer.render.mock.calls[0]?.[0];
     expect(Object.prototype.hasOwnProperty.call(renderArg ?? {}, 'drawPrepShaderWgsl')).toBe(false);
-    expect(renderArg.drawPrepSinks).toEqual(drawPrepSinks);
+    expect(renderArg.drawPrepSinkTableV1).toBe(packedWords);
+    expect(renderArg.drawPrepSinkTableWordCount).toBe(packedWords.length);
   });
 
   it('derives renderer input channels from the canonical external snapshot', () => {

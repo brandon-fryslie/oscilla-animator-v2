@@ -20,7 +20,7 @@ function mockProgram(opts: {
   slotMeta: SlotMetaEntry[];
   steps: ScheduleIR['steps'];
 }): CompiledProgramIR {
-  const toRuntimeStorage = (storage: SlotMetaEntry['storage']): 'f32' | 'i32' | 'u32' | 'shape2d' =>
+  const toRuntimeStorage = (storage: SlotMetaEntry['storage']): 'f32' | 'i32' | 'u32' =>
     storage;
   const maxSlot = opts.slotMeta.reduce((max, meta) => Math.max(max, Number(meta.slot)), -1);
   const arenaLayout = Array.from({ length: maxSlot + 1 }, () => ({
@@ -33,9 +33,6 @@ function mockProgram(opts: {
     componentStride: 1,
   }));
   for (const meta of opts.slotMeta) {
-    if (meta.storage === 'shape2d') {
-      continue;
-    }
     arenaLayout[Number(meta.slot)] = {
       offset: meta.offset,
       stride: meta.stride,
@@ -83,16 +80,6 @@ function mockProgram(opts: {
             component: 0,
           });
         }
-      }
-    }
-    if (step.kind === 'evalOne') {
-      const arenaDesc = slotToArena.get(step.target);
-      if (arenaDesc) {
-        scalarExprToArenaAddress.set(step.expr as any as number, {
-          slot: step.target,
-          arena: arenaDesc,
-          component: 0,
-        });
       }
     }
   }
@@ -143,7 +130,7 @@ describe('getExprAddressTable', () => {
     const program = mockProgram({
       slotMeta: [
         { slot: valueSlot(0), storage: 'f32', offset: 0, stride: 1, type: SIG_FLOAT },
-        { slot: valueSlot(1), storage: 'shape2d', offset: 0, stride: 1, type: FIELD_FLOAT },
+        { slot: valueSlot(1), storage: 'u32', offset: 0, stride: 1, type: FIELD_FLOAT },
         { slot: valueSlot(2), storage: 'u32', offset: 1, stride: 3, type: SIG_FLOAT },
       ],
       steps: [],
@@ -155,7 +142,7 @@ describe('getExprAddressTable', () => {
       storage: 'f32', offset: 0, stride: 1, slot: valueSlot(0), type: SIG_FLOAT,
     }));
     expect(table.slotLookup.get(valueSlot(1))).toEqual(expect.objectContaining({
-      storage: 'shape2d', offset: 0, stride: 1, slot: valueSlot(1), type: FIELD_FLOAT,
+      storage: 'u32', offset: 0, stride: 1, slot: valueSlot(1), type: FIELD_FLOAT,
     }));
     expect(table.slotLookup.get(valueSlot(2))).toEqual(expect.objectContaining({
       storage: 'u32', offset: 1, stride: 3, slot: valueSlot(2), type: SIG_FLOAT,
@@ -183,8 +170,9 @@ describe('getExprAddressTable', () => {
       ],
       steps: [
         {
-          kind: 'evalOne',
-          expr: 42 as any,
+          kind: 'materialize',
+          field: 42 as any,
+          instanceId: SCALAR_INSTANCE_ID as any,
           target: valueSlot(3),
         },
       ],
@@ -276,15 +264,6 @@ describe('assertNumericStride', () => {
     }));
     const result = assertNumericStride(table.slotLookup, valueSlot(0), 2, 'test');
     expect(result.storage).toBe('f32');
-  });
-
-  it('throws for non-numeric storage', () => {
-    const table = getExprAddressTable(mockProgram({
-      slotMeta: [{ slot: valueSlot(0), storage: 'shape2d', offset: 0, stride: 1, type: FIELD_FLOAT }],
-      steps: [],
-    }));
-    expect(() => assertNumericStride(table.slotLookup, valueSlot(0), 1, 'test'))
-      .toThrow(/must use canonical numeric storage/);
   });
 
   it('throws for stride mismatch', () => {

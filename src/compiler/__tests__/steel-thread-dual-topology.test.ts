@@ -90,6 +90,11 @@ describe('Steel Thread - Dual Topology with Scale', () => {
     expect(result.program.drawPrepProgram?.sinks.map((sink) => sink.sinkIndex)).toEqual([0, 1]);
     expect(result.program.drawPrepProgram?.sinks.map((sink) => sink.indirectRecordIndex)).toEqual([0, 1]);
     expect(result.program.drawPrepProgram?.sinks.map((sink) => sink.instanceCountMode)).toEqual(['static', 'static']);
+    expect(result.program.drawPrepProgram?.sinks.map((sink) => sink.drawMode)).toEqual(['indexed', 'indexed']);
+    expect(result.program.drawPrepProgram?.sinks.map((sink) => sink.indirectRegion)).toEqual(['indexed', 'indexed']);
+    expect(result.program.drawPrepProgram?.sinks.map((sink) => sink.indirectStrideBytes)).toEqual([20, 20]);
+    expect(result.program.drawPrepProgram?.sinks.map((sink) => sink.topologySource)).toEqual(['shapeHeaderV1', 'shapeHeaderV1']);
+    expect(result.program.drawPrepProgram?.sinks.map((sink) => sink.firstInstanceSource)).toEqual(['runtimePacked', 'runtimePacked']);
     expect(
       [...(result.program.drawPrepProgram?.sinks.map((sink) => sink.staticInstanceCount) ?? [])]
         .sort((a, b) => (a ?? 0) - (b ?? 0))
@@ -101,9 +106,6 @@ describe('Steel Thread - Dual Topology with Scale', () => {
         if (expr?.kind === 'shapeRef') {
           return [expr.topologyId as number];
         }
-      }
-      if (step.shape.k === 'one') {
-        return [step.shape.topologyId as number];
       }
       return [];
     });
@@ -118,13 +120,10 @@ describe('Steel Thread - Dual Topology with Scale', () => {
 
     const sizes = computeRuntimeStorageSizes(result.program.runtimeSlots);
     const state = createRuntimeState(
-      sizes.f32,
       schedule.stateSlotCount ?? 0,
       schedule.eventSlotCount ?? 0,
-      schedule.eventCount ?? 0,
       result.program.valueExprs.nodes.length,
       result.program.arenaTotalFloats,
-      0,
       undefined,
       undefined,
       result.program.arenaRuntimeLayout,

@@ -15,13 +15,14 @@ import {
 import {
   SHAPE_BANK_HEADER_WORDS,
   allocShapeBankWords,
+  createShapeBankHeaderV1,
   createRuntimeState,
   resetFrameVolatileShapeBank,
   writeShapeBankHandleMetadata,
   writeShapeBankHeader,
 } from '../RuntimeState';
 
-const BENCH_STATE = createRuntimeState(0, 0, 0, 0, 0, 0, 0, 1_000_000);
+const BENCH_STATE = createRuntimeState(0, 0, 0, 0, 1_000_000);
 
 // ============================================================================
 // Helpers
@@ -34,12 +35,16 @@ function createShapeBuffer(count: number, numTopologies: number, state: typeof B
     const topologyId = (i % numTopologies) + 1;
     const controlPointSlot = topologyId * 10;
     const handle = allocShapeBankWords(state.shapeBank, SHAPE_BANK_HEADER_WORDS);
-    writeShapeBankHeader(state.shapeBank.data, handle, {
-      indexCount: 4,
-      indexOffset: 0,
-      vertexCount: 4,
-      flags: 0,
-    });
+    writeShapeBankHeader(
+      state.shapeBank.data,
+      handle,
+      createShapeBankHeaderV1({
+        kind: 1,
+        topologyMode: 1,
+        indexCount: 4,
+        vertexCount: 4,
+      }),
+    );
     writeShapeBankHandleMetadata(state.shapeBank, handle, {
       topologyId,
       controlPointSlot,
@@ -100,7 +105,7 @@ describe('computeTopologyGroups', () => {
 
 describe('topology cache: hit vs miss', () => {
   const buf = createShapeBuffer(500, 10);
-  const missState = createRuntimeState(0, 0, 0, 0, 0, 0, 0, 8_192);
+  const missState = createRuntimeState(0, 0, 0, 0, 8_192);
 
   bench('cache hit (same buffer, same count)', () => {
     // After first call, all subsequent are cache hits

@@ -1,6 +1,6 @@
 use crate::memory::GpuMemoryArena;
 
-const INDIRECT_RECORD_BYTES: u64 = 5 * std::mem::size_of::<u32>() as u64;
+const U32_BYTES: u64 = std::mem::size_of::<u32>() as u64;
 
 pub struct DepthTarget {
     _depth_texture: wgpu::Texture,
@@ -48,6 +48,17 @@ impl DepthTarget {
     pub fn view(&self) -> &wgpu::TextureView {
         &self.depth_view
     }
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct IndirectRegionPlan {
+    pub total_instance_count: u32,
+    pub indexed_record_count: u32,
+    pub non_indexed_record_count: u32,
+    pub indexed_region_base_words: u32,
+    pub non_indexed_region_base_words: u32,
+    pub indexed_stride_words: u32,
+    pub non_indexed_stride_words: u32,
 }
 
 pub struct RenderDispatcher {
@@ -154,10 +165,8 @@ impl RenderDispatcher {
         arena: &GpuMemoryArena,
         color_view: &wgpu::TextureView,
         depth_view: &wgpu::TextureView,
-        draw_record_count: u32,
+        plan: IndirectRegionPlan,
     ) {
-        // [LAW:dataflow-not-control-flow] Render pass executes every frame in one
-        // canonical order; record variability is encoded in payload counts.
         let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("Render.Uber.Pass"),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -192,11 +201,21 @@ impl RenderDispatcher {
         render_pass.set_vertex_buffer(0, arena.vertex_buffer.slice(..));
         render_pass.set_index_buffer(arena.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
 
-        for record_index in 0..draw_record_count {
-            render_pass.draw_indexed_indirect(
-                &arena.indirect_buffer,
-                (record_index as u64) * INDIRECT_RECORD_BYTES,
-            );
+        let indexed_stride_words = plan.indexed_stride_words.max(5);
+        let non_indexed_stride_words = plan.non_indexed_stride_words.max(4);
+
+        for record_index in 0..plan.indexed_record_count {
+            let word_offset = plan
+                .indexed_region_base_words
+                .saturating_add(record_index.saturating_mul(indexed_stride_words));
+            render_pass.draw_indexed_indirect(&arena.indirect_buffer, (word_offset as u64) * U32_BYTES);
+        }
+
+        for record_index in 0..plan.non_indexed_record_count {
+            let word_offset = plan
+                .non_indexed_region_base_words
+                .saturating_add(record_index.saturating_mul(non_indexed_stride_words));
+            render_pass.draw_indirect(&arena.indirect_buffer, (word_offset as u64) * U32_BYTES);
         }
     }
 }
