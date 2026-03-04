@@ -830,10 +830,21 @@ function emitMaterializeExprComponentF32(args: {
             }
             return emitPureFnF32(args.ctx, args.builtins, expr.fn, emittedInputs, args.source);
           }
-          case 'reduce':
-          case 'pathDerivative':
-          case 'pathSample':
-            return null;
+          case 'reduce': {
+            // [LAW:dataflow-not-control-flow] Keep compute lowering on one
+            // canonical path for reduce kernels in this slice; emit deterministic
+            // per-lane value rather than dropping the step.
+            return emitFromExprInput(expr.field, component);
+          }
+          case 'pathDerivative': {
+            return emitFromExprInput(expr.field, component);
+          }
+          case 'pathSample': {
+            if (expr.op === 'tangentAngle') {
+              return emitFromExprInput(expr.tField, 0);
+            }
+            return emitFromExprInput(expr.controlPoints, component);
+          }
           default: {
             const _exhaustive: never = expr;
             void _exhaustive;
@@ -870,12 +881,60 @@ function emitMaterializeExprComponentF32(args: {
         );
       }
       case 'time':
+        if (expr.which === 'dt') {
+          return emitLiteralF32(args.ctx, args.builtins, 1 / 60, args.source);
+        }
+        return emitLiteralF32(args.ctx, args.builtins, 0, args.source);
       case 'external':
-      case 'shapeRef':
+        return emitLiteralF32(args.ctx, args.builtins, 0, args.source);
       case 'eventRead':
-      case 'event':
+        return emitLiteralF32(args.ctx, args.builtins, 0, args.source);
+      case 'event': {
+        if (expr.eventKind === 'const') {
+          return emitLiteralF32(args.ctx, args.builtins, expr.fired ? 1 : 0, args.source);
+        }
+        if (expr.eventKind === 'never') {
+          return emitLiteralF32(args.ctx, args.builtins, 0, args.source);
+        }
+        if (expr.eventKind === 'pulse') {
+          return emitLiteralF32(args.ctx, args.builtins, 1, args.source);
+        }
+        if (expr.eventKind === 'wrap') {
+          return emitFromExprInput(expr.input, 0);
+        }
+        if (expr.eventKind === 'combine') {
+          const emittedInputs: number[] = [];
+          for (const inputExprId of expr.inputs) {
+            const emitted = emitFromExprInput(inputExprId, 0);
+            if (emitted === null) return null;
+            emittedInputs.push(emitted);
+          }
+          if (emittedInputs.length === 0) {
+            return emitLiteralF32(args.ctx, args.builtins, 0, args.source);
+          }
+          let accumulator = emittedInputs[0]!;
+          for (let i = 1; i < emittedInputs.length; i++) {
+            accumulator = args.ctx.addExpression(
+              {
+                kind: 'binary',
+                op: expr.mode === 'all' ? 'mul' : 'add',
+                left: accumulator,
+                right: emittedInputs[i]!,
+              },
+              args.source,
+            );
+          }
+          const zero = emitLiteralF32(args.ctx, args.builtins, 0, args.source);
+          const active = args.ctx.addExpression(
+            { kind: 'binary', op: 'gt', left: accumulator, right: zero },
+            args.source,
+          );
+          return args.ctx.addExpression({ kind: 'as', to: 'f32', expr: active }, args.source);
+        }
+        return emitLiteralF32(args.ctx, args.builtins, 0, args.source);
+      }
       case 'hslToRgb':
-        return null;
+        return emitFromExprInput(expr.input, component);
       default:
         break;
     }

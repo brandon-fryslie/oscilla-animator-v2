@@ -1,15 +1,22 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
-use js_sys::{Float32Array, SharedArrayBuffer};
+use js_sys::{Float32Array, SharedArrayBuffer, Uint32Array};
 use wasm_bindgen::JsCast;
 use wasm_bindgen::JsValue;
 use web_sys::OffscreenCanvas;
 
 use crate::allocator::StrictAllocator;
 use crate::compute::ComputeDispatcher;
-use crate::memory::GpuMemoryArena;
-use crate::render::{DepthTarget, RenderDispatcher};
+use crate::memory::{
+    GpuMemoryArena,
+    INDIRECT_INDEXED_STRIDE_WORDS,
+    INDIRECT_NON_INDEXED_STRIDE_WORDS,
+    SHAPE_BANK_HEADER_WORDS,
+    SINK_TABLE_HEADER_WORDS,
+    SINK_TABLE_RECORD_WORDS,
+};
+use crate::render::{DepthTarget, IndirectRegionPlan, RenderDispatcher};
 use crate::scheduler::{SchedulerState, WorkerObservabilityPacket, WorkerScheduler};
 
 const INPUT_WORD_WIDTH: usize = 0;
@@ -25,9 +32,8 @@ const INPUT_WORD_AUDIO_LOW: usize = 9;
 const INPUT_WORD_AUDIO_MID: usize = 10;
 const INPUT_WORD_AUDIO_HIGH: usize = 11;
 const INPUT_WORD_GAUGE_ACTIVE: usize = 12;
-const INPUT_WORD_DRAW_OP_COUNT: usize = 13;
-const INPUT_WORD_TOTAL_INSTANCE_COUNT: usize = 14;
-const INPUT_WORD_SHAPE_BANK_WORDS: usize = 15;
+const INPUT_WORD_SINK_TABLE_WORDS: usize = 13;
+const INPUT_WORD_SHAPE_BANK_WORDS: usize = 14;
 const INPUT_SIGNAL_WORDS: u32 = 4;
 const INPUT_FLOAT_WORDS: u32 = 32;
 
@@ -53,45 +59,181 @@ fn compute_main(@builtin(global_invocation_id) gid: vec3<u32>) {
 
 const DEFAULT_ASSEMBLY_WGSL: &str = r#"
 @group(0) @binding(0) var<uniform> global_uniforms: array<vec4<f32>, 5>;
-@group(1) @binding(0) var<storage, read> state_read: array<u32>;
+@group(1) @binding(0) var<storage, read> arena_words: array<u32>;
 @group(2) @binding(0) var<storage, read_write> instance_words: array<f32>;
-@group(2) @binding(1) var<storage, read_write> indirect_words: array<u32>;
+@group(2) @binding(1) var<storage, read> sink_table_words: array<u32>;
+
+const SINK_TABLE_HEADER_WORDS: u32 = 8u;
+const SINK_TABLE_RECORD_WORDS: u32 = 29u;
+const RECORD_WORD_SHAPE_HANDLE_WORD_OFFSET: u32 = 2u;
+const RECORD_WORD_INSTANCE_COUNT: u32 = 4u;
+const RECORD_WORD_FIRST_INSTANCE: u32 = 5u;
+const RECORD_WORD_SHAPE_SOURCE_CODE: u32 = 7u;
+const RECORD_WORD_POSITION_BASE_OFFSET: u32 = 8u;
+const RECORD_WORD_POSITION_LANE_STRIDE: u32 = 9u;
+const RECORD_WORD_POSITION_COMPONENT_STRIDE: u32 = 10u;
+const RECORD_WORD_COLOR_BASE_OFFSET: u32 = 11u;
+const RECORD_WORD_COLOR_LANE_STRIDE: u32 = 12u;
+const RECORD_WORD_COLOR_COMPONENT_STRIDE: u32 = 13u;
+const RECORD_WORD_SCALE_MODE_CODE: u32 = 14u;
+const RECORD_WORD_SCALE_VALUE_OR_BASE_OFFSET: u32 = 15u;
+const RECORD_WORD_SCALE_LANE_STRIDE: u32 = 16u;
+const RECORD_WORD_SCALE_COMPONENT_STRIDE: u32 = 17u;
+const RECORD_WORD_ROTATION_MODE_CODE: u32 = 18u;
+const RECORD_WORD_ROTATION_BASE_OFFSET: u32 = 19u;
+const RECORD_WORD_ROTATION_LANE_STRIDE: u32 = 20u;
+const RECORD_WORD_ROTATION_COMPONENT_STRIDE: u32 = 21u;
+const RECORD_WORD_SCALE2_MODE_CODE: u32 = 22u;
+const RECORD_WORD_SCALE2_BASE_OFFSET: u32 = 23u;
+const RECORD_WORD_SCALE2_LANE_STRIDE: u32 = 24u;
+const RECORD_WORD_SCALE2_COMPONENT_STRIDE: u32 = 25u;
+const RECORD_WORD_SHAPE_SLOT_BASE_OFFSET: u32 = 26u;
+const RECORD_WORD_SHAPE_SLOT_LANE_STRIDE: u32 = 27u;
+const RECORD_WORD_SHAPE_SLOT_COMPONENT_STRIDE: u32 = 28u;
+
+const SCALE_MODE_IDENTITY: u32 = 0u;
+const SCALE_MODE_SCALAR_BITS: u32 = 1u;
+const SCALE_MODE_SLOT: u32 = 2u;
+
+const OPTIONAL_MODE_IDENTITY: u32 = 0u;
+const OPTIONAL_MODE_SLOT: u32 = 1u;
+
+const SHAPE_SOURCE_ONE_HANDLE: u32 = 0u;
+const SHAPE_SOURCE_SLOT: u32 = 1u;
+
+fn arena_index(base_offset: u32, lane: u32, component: u32, lane_stride: u32, component_stride: u32) -> u32 {
+  return base_offset + lane * lane_stride + component * component_stride;
+}
+
+fn read_arena_f32(base_offset: u32, lane: u32, component: u32, lane_stride: u32, component_stride: u32) -> f32 {
+  let index = arena_index(base_offset, lane, component, lane_stride, component_stride);
+  if (index >= arrayLength(&arena_words)) {
+    return 0.0;
+  }
+  return bitcast<f32>(arena_words[index]);
+}
+
+fn read_arena_u32(base_offset: u32, lane: u32, component: u32, lane_stride: u32, component_stride: u32) -> u32 {
+  let index = arena_index(base_offset, lane, component, lane_stride, component_stride);
+  if (index >= arrayLength(&arena_words)) {
+    return 0u;
+  }
+  return arena_words[index];
+}
 
 @compute @workgroup_size(64)
 fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   let max_instance_words = arrayLength(&instance_words);
   let max_instances = max_instance_words / 12u;
-  let requested_instances = u32(max(global_uniforms[3].w, 0.0));
-  let active_count = min(max_instances, requested_instances);
-
-  if (gid.x == 0u && arrayLength(&indirect_words) >= 5u) {
-    indirect_words[0] = 6u;
-    indirect_words[1] = active_count;
-    indirect_words[2] = 0u;
-    indirect_words[3] = 0u;
-    indirect_words[4] = 0u;
-  }
-
-  if (gid.x >= active_count) {
+  if (gid.x >= max_instances) {
     return;
   }
 
   let base = gid.x * 12u;
-  let lane = f32(gid.x);
-  let phase = global_uniforms[4].z + lane * 0.03;
-  let radius = 0.28 + 0.18 * sin(lane * 0.07 + global_uniforms[4].z * 0.4);
-  instance_words[base + 0u] = 0.5 + cos(phase) * radius;
-  instance_words[base + 1u] = 0.5 + sin(phase) * radius;
-  instance_words[base + 2u] = 0.016 + 0.010 * fract(lane * 0.173);
-  instance_words[base + 3u] = phase;
-  instance_words[base + 4u] = 1.0;
-  instance_words[base + 5u] = 1.0;
-  instance_words[base + 6u] = 0.0;
+  var pos_x = 0.0;
+  var pos_y = 0.0;
+  var scale = 1.0;
+  var rotation = 0.0;
+  var scale2_x = 1.0;
+  var scale2_y = 1.0;
+  var shape_word_offset = 0u;
+  var color_r = 1.0;
+  var color_g = 1.0;
+  var color_b = 1.0;
+  var color_a = 1.0;
+
+  let sink_table_word_count = arrayLength(&sink_table_words);
+  if (sink_table_word_count >= SINK_TABLE_HEADER_WORDS) {
+    let sink_count = sink_table_words[1u];
+    var sink_index = 0u;
+    var sink_found = false;
+    var sink_base = 0u;
+    var sink_lane = 0u;
+    loop {
+      if (sink_index >= sink_count) {
+        break;
+      }
+      let candidate_sink_base = SINK_TABLE_HEADER_WORDS + sink_index * SINK_TABLE_RECORD_WORDS;
+      if (candidate_sink_base + RECORD_WORD_SHAPE_SLOT_COMPONENT_STRIDE >= sink_table_word_count) {
+        break;
+      }
+      let first_instance = sink_table_words[candidate_sink_base + RECORD_WORD_FIRST_INSTANCE];
+      let instance_count = sink_table_words[candidate_sink_base + RECORD_WORD_INSTANCE_COUNT];
+      let instance_end = first_instance + instance_count;
+      if (gid.x >= first_instance && gid.x < instance_end) {
+        sink_base = candidate_sink_base;
+        sink_lane = gid.x - first_instance;
+        sink_found = true;
+        break;
+      }
+      sink_index = sink_index + 1u;
+    }
+    if (sink_found) {
+      let pos_base_offset = sink_table_words[sink_base + RECORD_WORD_POSITION_BASE_OFFSET];
+      let pos_lane_stride = sink_table_words[sink_base + RECORD_WORD_POSITION_LANE_STRIDE];
+      let pos_component_stride = sink_table_words[sink_base + RECORD_WORD_POSITION_COMPONENT_STRIDE];
+      pos_x = read_arena_f32(pos_base_offset, sink_lane, 0u, pos_lane_stride, pos_component_stride);
+      pos_y = read_arena_f32(pos_base_offset, sink_lane, 1u, pos_lane_stride, pos_component_stride);
+
+      let color_base_offset = sink_table_words[sink_base + RECORD_WORD_COLOR_BASE_OFFSET];
+      let color_lane_stride = sink_table_words[sink_base + RECORD_WORD_COLOR_LANE_STRIDE];
+      let color_component_stride = sink_table_words[sink_base + RECORD_WORD_COLOR_COMPONENT_STRIDE];
+      color_r = read_arena_f32(color_base_offset, sink_lane, 0u, color_lane_stride, color_component_stride);
+      color_g = read_arena_f32(color_base_offset, sink_lane, 1u, color_lane_stride, color_component_stride);
+      color_b = read_arena_f32(color_base_offset, sink_lane, 2u, color_lane_stride, color_component_stride);
+      color_a = read_arena_f32(color_base_offset, sink_lane, 3u, color_lane_stride, color_component_stride);
+
+      let scale_mode = sink_table_words[sink_base + RECORD_WORD_SCALE_MODE_CODE];
+      if (scale_mode == SCALE_MODE_SCALAR_BITS) {
+        scale = bitcast<f32>(sink_table_words[sink_base + RECORD_WORD_SCALE_VALUE_OR_BASE_OFFSET]);
+      } else if (scale_mode == SCALE_MODE_SLOT) {
+        let scale_base_offset = sink_table_words[sink_base + RECORD_WORD_SCALE_VALUE_OR_BASE_OFFSET];
+        let scale_lane_stride = sink_table_words[sink_base + RECORD_WORD_SCALE_LANE_STRIDE];
+        let scale_component_stride = sink_table_words[sink_base + RECORD_WORD_SCALE_COMPONENT_STRIDE];
+        scale = read_arena_f32(scale_base_offset, sink_lane, 0u, scale_lane_stride, scale_component_stride);
+      }
+
+      let rotation_mode = sink_table_words[sink_base + RECORD_WORD_ROTATION_MODE_CODE];
+      if (rotation_mode == OPTIONAL_MODE_SLOT) {
+        let rotation_base_offset = sink_table_words[sink_base + RECORD_WORD_ROTATION_BASE_OFFSET];
+        let rotation_lane_stride = sink_table_words[sink_base + RECORD_WORD_ROTATION_LANE_STRIDE];
+        let rotation_component_stride = sink_table_words[sink_base + RECORD_WORD_ROTATION_COMPONENT_STRIDE];
+        rotation = read_arena_f32(rotation_base_offset, sink_lane, 0u, rotation_lane_stride, rotation_component_stride);
+      }
+
+      let scale2_mode = sink_table_words[sink_base + RECORD_WORD_SCALE2_MODE_CODE];
+      if (scale2_mode == OPTIONAL_MODE_SLOT) {
+        let scale2_base_offset = sink_table_words[sink_base + RECORD_WORD_SCALE2_BASE_OFFSET];
+        let scale2_lane_stride = sink_table_words[sink_base + RECORD_WORD_SCALE2_LANE_STRIDE];
+        let scale2_component_stride = sink_table_words[sink_base + RECORD_WORD_SCALE2_COMPONENT_STRIDE];
+        scale2_x = read_arena_f32(scale2_base_offset, sink_lane, 0u, scale2_lane_stride, scale2_component_stride);
+        scale2_y = read_arena_f32(scale2_base_offset, sink_lane, 1u, scale2_lane_stride, scale2_component_stride);
+      }
+
+      let shape_source = sink_table_words[sink_base + RECORD_WORD_SHAPE_SOURCE_CODE];
+      if (shape_source == SHAPE_SOURCE_SLOT) {
+        let shape_slot_base_offset = sink_table_words[sink_base + RECORD_WORD_SHAPE_SLOT_BASE_OFFSET];
+        let shape_slot_lane_stride = sink_table_words[sink_base + RECORD_WORD_SHAPE_SLOT_LANE_STRIDE];
+        let shape_slot_component_stride = sink_table_words[sink_base + RECORD_WORD_SHAPE_SLOT_COMPONENT_STRIDE];
+        shape_word_offset = read_arena_u32(shape_slot_base_offset, sink_lane, 0u, shape_slot_lane_stride, shape_slot_component_stride);
+      } else if (shape_source == SHAPE_SOURCE_ONE_HANDLE) {
+        shape_word_offset = sink_table_words[sink_base + RECORD_WORD_SHAPE_HANDLE_WORD_OFFSET];
+      }
+    }
+  }
+
+  instance_words[base + 0u] = pos_x;
+  instance_words[base + 1u] = pos_y;
+  instance_words[base + 2u] = scale;
+  instance_words[base + 3u] = rotation;
+  instance_words[base + 4u] = scale2_x;
+  instance_words[base + 5u] = scale2_y;
+  instance_words[base + 6u] = bitcast<f32>(shape_word_offset);
   instance_words[base + 7u] = 0.0;
-  instance_words[base + 8u] = 0.45 + 0.45 * sin(phase * 0.7);
-  instance_words[base + 9u] = 0.45 + 0.45 * sin(phase * 1.1 + 1.2);
-  instance_words[base + 10u] = 0.45 + 0.45 * sin(phase * 1.3 + 2.4);
-  instance_words[base + 11u] = 1.0;
+  instance_words[base + 8u] = color_r;
+  instance_words[base + 9u] = color_g;
+  instance_words[base + 10u] = color_b;
+  instance_words[base + 11u] = color_a;
 }
 "#;
 
@@ -175,12 +317,15 @@ pub struct Engine {
     compute: ComputeDispatcher,
     render: RenderDispatcher,
     shared_input: Option<Float32Array>,
+    shared_shape_bank: Option<Uint32Array>,
+    shared_sink_table: Option<Uint32Array>,
     scheduler: WorkerScheduler,
     frame_count: u64,
     debug_readback_interval_frames: u64,
     debug_readback_in_flight: Arc<AtomicBool>,
     max_particles: u32,
-    draw_record_count: u32,
+    max_shapes: u32,
+    draw_regions: IndirectRegionPlan,
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -212,6 +357,132 @@ fn worker_monotonic_now_ms() -> f64 {
         .and_then(|worker| worker.performance())
         .map(|performance| performance.now())
         .unwrap_or_else(js_sys::Date::now)
+}
+
+fn clamp_non_negative_u32(value: f32, max_value: u32) -> u32 {
+  if !value.is_finite() {
+        return 0;
+    }
+    if value <= 0.0 {
+        return 0;
+    }
+    let floored = value.floor();
+    if floored >= max_value as f32 {
+        return max_value;
+    }
+    floored as u32
+}
+
+const SHAPE_WORD_KIND: usize = 0;
+const SHAPE_WORD_FLAGS: usize = 2;
+const SHAPE_WORD_INDEX_COUNT: usize = 4;
+const SHAPE_WORD_FIRST_INDEX: usize = 5;
+const SHAPE_WORD_BASE_VERTEX: usize = 6;
+const SHAPE_WORD_VERTEX_COUNT: usize = 7;
+const SHAPE_WORD_FIRST_VERTEX: usize = 8;
+const SHAPE_WORD_PARAM_BLOCK_OFFSET: usize = 9;
+const SHAPE_WORD_PARAM_BLOCK_WORDS: usize = 10;
+const SHAPE_FLAG_CLOSED: u32 = 1;
+
+fn realize_shape_bank_geometry(shape_bank_words: &mut [u32]) -> (Vec<f32>, Vec<u32>) {
+    let mut vertex_floats: Vec<f32> = Vec::new();
+    let mut index_words: Vec<u32> = Vec::new();
+    let mut cursor: usize = 0;
+    while cursor < shape_bank_words.len() {
+        if cursor + SHAPE_BANK_HEADER_WORDS > shape_bank_words.len() {
+            panic!(
+                "shape bank payload truncated (cursor={}, words={}, header_words={})",
+                cursor,
+                shape_bank_words.len(),
+                SHAPE_BANK_HEADER_WORDS
+            );
+        }
+        let base = cursor;
+        let kind = shape_bank_words[base + SHAPE_WORD_KIND];
+        if kind == 0 {
+            panic!(
+                "shape bank contains non-shape record at word offset {} (kind=0)",
+                base
+            );
+        }
+        let vertex_count = shape_bank_words[base + SHAPE_WORD_VERTEX_COUNT];
+        let flags = shape_bank_words[base + SHAPE_WORD_FLAGS];
+        let param_block_offset = shape_bank_words[base + SHAPE_WORD_PARAM_BLOCK_OFFSET] as usize;
+        let param_block_words = shape_bank_words[base + SHAPE_WORD_PARAM_BLOCK_WORDS] as usize;
+        let first_vertex = (vertex_floats.len() / 2) as u32;
+        shape_bank_words[base + SHAPE_WORD_FIRST_VERTEX] = first_vertex;
+        shape_bank_words[base + SHAPE_WORD_BASE_VERTEX] = 0;
+        let first_index = index_words.len() as u32;
+        shape_bank_words[base + SHAPE_WORD_FIRST_INDEX] = first_index;
+
+        if vertex_count == 0 {
+            shape_bank_words[base + SHAPE_WORD_INDEX_COUNT] = 0;
+        } else {
+            let expected_param_words = (vertex_count as usize).saturating_mul(2);
+            if param_block_words < expected_param_words {
+                panic!(
+                    "shape bank control-point payload too small (handle={}, vertex_count={}, param_words={}, expected={})",
+                    base,
+                    vertex_count,
+                    param_block_words,
+                    expected_param_words
+                );
+            }
+            let param_payload_end = param_block_offset.saturating_add(expected_param_words);
+            if param_payload_end > shape_bank_words.len() {
+                panic!(
+                    "shape bank control-point payload out of range (handle={}, offset={}, end={}, words={})",
+                    base,
+                    param_block_offset,
+                    param_payload_end,
+                    shape_bank_words.len()
+                );
+            }
+            // [LAW:one-source-of-truth] Geometry payload is realized directly from
+            // canonical ShapeHeaderV1 param-block control points.
+            for point in 0..vertex_count as usize {
+                let param_index = param_block_offset + point * 2;
+                let x = f32::from_bits(shape_bank_words[param_index]);
+                let y = f32::from_bits(shape_bank_words[param_index + 1]);
+                vertex_floats.push(x);
+                vertex_floats.push(y);
+            }
+
+            if (flags & SHAPE_FLAG_CLOSED) != 0 && vertex_count >= 3 {
+                for fan in 1..(vertex_count - 1) {
+                    index_words.push(first_vertex);
+                    index_words.push(first_vertex + fan);
+                    index_words.push(first_vertex + fan + 1);
+                }
+            }
+
+            let generated_index_count = (index_words.len() as u32).saturating_sub(first_index);
+            shape_bank_words[base + SHAPE_WORD_INDEX_COUNT] = generated_index_count;
+        }
+        let next_cursor = if param_block_words == 0 {
+            base + SHAPE_BANK_HEADER_WORDS
+        } else {
+            param_block_offset
+                .saturating_add(param_block_words)
+                .max(base + SHAPE_BANK_HEADER_WORDS)
+        };
+        if next_cursor <= cursor {
+            panic!(
+                "shape bank cursor did not advance (cursor={}, next_cursor={})",
+                cursor,
+                next_cursor
+            );
+        }
+        cursor = next_cursor;
+    }
+    if cursor != shape_bank_words.len() {
+        panic!(
+            "shape bank parser ended at unexpected offset (cursor={}, words={})",
+            cursor,
+            shape_bank_words.len()
+        );
+    }
+    (vertex_floats, index_words)
 }
 
 impl Engine {
@@ -293,18 +564,18 @@ impl Engine {
             surface_config.format,
             &compute.uniform_layout,
         );
-        let mut arena = GpuMemoryArena::new(
+        let arena = GpuMemoryArena::new(
             &device,
             &compute.uniform_layout,
             &compute.state_layout,
             compute.compiler_simulation_layout(),
             &compute.assembly_layout,
+            &compute.draw_prep_layout,
             &render.instance_layout,
             &render.topology_layout,
             config.max_particles,
             config.max_shapes,
         );
-        arena.seed_default_render_payload(&queue);
         let depth_target = DepthTarget::new(&device, surface_config.width, surface_config.height);
         let debug_readback_interval_frames = (60 / config.debug_readback_hz.max(1)).max(1) as u64;
         let scheduler = WorkerScheduler::new(worker_monotonic_now_ms());
@@ -320,12 +591,15 @@ impl Engine {
             compute,
             render,
             shared_input: None,
+            shared_shape_bank: None,
+            shared_sink_table: None,
             scheduler,
             frame_count: 0,
             debug_readback_interval_frames,
             debug_readback_in_flight: Arc::new(AtomicBool::new(false)),
             max_particles: config.max_particles as u32,
-            draw_record_count: 1,
+            max_shapes: config.max_shapes as u32,
+            draw_regions: IndirectRegionPlan::default(),
         })
     }
 
@@ -337,6 +611,14 @@ impl Engine {
             INPUT_SIGNAL_WORDS * std::mem::size_of::<i32>() as u32,
             INPUT_FLOAT_WORDS,
         ));
+    }
+
+    pub fn attach_shared_shape_bank(&mut self, shared_shape_bank: SharedArrayBuffer) {
+        self.shared_shape_bank = Some(Uint32Array::new(&shared_shape_bank));
+    }
+
+    pub fn attach_shared_sink_table(&mut self, shared_sink_table: SharedArrayBuffer) {
+        self.shared_sink_table = Some(Uint32Array::new(&shared_sink_table));
     }
 
     pub fn resize_surface(&mut self, width: u32, height: u32) {
@@ -383,20 +665,20 @@ impl Engine {
             self.surface_format,
             &self.compute.uniform_layout,
         );
-        let mut arena = GpuMemoryArena::new(
+        let arena = GpuMemoryArena::new(
             &self.device,
             &self.compute.uniform_layout,
             &self.compute.state_layout,
             self.compute.compiler_simulation_layout(),
             &self.compute.assembly_layout,
+            &self.compute.draw_prep_layout,
             &self.render.instance_layout,
             &self.render.topology_layout,
             particle_count as usize,
             shape_count as usize,
         );
-        arena.seed_default_render_payload(&self.queue);
         self.arena = arena;
-        self.draw_record_count = 1;
+        self.draw_regions = IndirectRegionPlan::default();
     }
 
     pub fn rebuild_simulation_pipeline(&mut self, simulation_wgsl: &str) {
@@ -453,13 +735,18 @@ impl Engine {
                             });
 
                     self.compute
-                        .encode_passes(&mut encoder, &mut self.arena);
+                        .encode_passes(
+                            &mut encoder,
+                            &mut self.arena,
+                            self.draw_regions.indexed_record_count
+                                .saturating_add(self.draw_regions.non_indexed_record_count),
+                        );
                     self.render.encode_passes(
                         &mut encoder,
                         &self.arena,
                         &color_view,
                         self.depth_target.view(),
-                        self.draw_record_count,
+                        self.draw_regions,
                     );
 
                     let is_debug_tick = self.frame_count % self.debug_readback_interval_frames == 0;
@@ -556,6 +843,100 @@ impl Engine {
         Err(JsValue::from_str(message))
     }
 
+    fn sync_shape_bank_plane(&mut self, shape_bank_words: u32) {
+        let Some(shared_shape_bank) = self.shared_shape_bank.as_ref() else {
+            return;
+        };
+        if shape_bank_words == 0 {
+            return;
+        }
+        let available_words = shared_shape_bank.length();
+        if shape_bank_words > available_words {
+            panic!(
+                "shape bank plane overflow (requested={}, available={})",
+                shape_bank_words,
+                available_words
+            );
+        }
+        let mut plane_words = shared_shape_bank.subarray(0, shape_bank_words).to_vec();
+        let (vertex_payload, index_payload) = realize_shape_bank_geometry(&mut plane_words);
+        self.arena.write_geometry_payload(
+            &self.device,
+            &self.queue,
+            vertex_payload.as_slice(),
+            index_payload.as_slice(),
+        );
+        self.arena
+            .write_shape_bank_words(&self.device, &self.queue, &plane_words);
+    }
+
+    fn sync_sink_table_plane_and_parse_regions(&mut self, sink_table_words: u32) -> IndirectRegionPlan {
+        let Some(shared_sink_table) = self.shared_sink_table.as_ref() else {
+            return IndirectRegionPlan::default();
+        };
+        if sink_table_words == 0 {
+            return IndirectRegionPlan::default();
+        }
+
+        let available_words = shared_sink_table.length();
+        if sink_table_words > available_words {
+            panic!(
+                "sink table plane overflow (requested={}, available={})",
+                sink_table_words,
+                available_words
+            );
+        }
+        if sink_table_words < SINK_TABLE_HEADER_WORDS as u32 {
+            panic!(
+                "sink table missing header (words={}, required={})",
+                sink_table_words,
+                SINK_TABLE_HEADER_WORDS
+            );
+        }
+
+        let total_record_count = shared_sink_table.get_index(1);
+        let indexed_record_count = shared_sink_table.get_index(2);
+        let non_indexed_record_count = shared_sink_table.get_index(3);
+        let indexed_region_base_words = shared_sink_table.get_index(4);
+        let non_indexed_region_base_words = shared_sink_table.get_index(5);
+        let indexed_stride_words = shared_sink_table
+            .get_index(6)
+            .max(INDIRECT_INDEXED_STRIDE_WORDS as u32);
+        let non_indexed_stride_words = shared_sink_table
+            .get_index(7)
+            .max(INDIRECT_NON_INDEXED_STRIDE_WORDS as u32);
+        if total_record_count != indexed_record_count.saturating_add(non_indexed_record_count) {
+            panic!(
+                "sink table record count mismatch (total={}, indexed={}, nonIndexed={})",
+                total_record_count,
+                indexed_record_count,
+                non_indexed_record_count
+            );
+        }
+        let minimum_words = (SINK_TABLE_HEADER_WORDS as u32)
+            .saturating_add(total_record_count.saturating_mul(SINK_TABLE_RECORD_WORDS as u32));
+        if sink_table_words < minimum_words {
+            panic!(
+                "sink table truncated (words={}, required={})",
+                sink_table_words,
+                minimum_words
+            );
+        }
+
+        let plane_words = shared_sink_table.subarray(0, sink_table_words).to_vec();
+        self.arena
+            .write_sink_table_words(&self.device, &self.queue, &plane_words);
+
+        IndirectRegionPlan {
+            indexed_record_count,
+            non_indexed_record_count,
+            indexed_region_base_words,
+            non_indexed_region_base_words,
+            indexed_stride_words,
+            non_indexed_stride_words,
+        }
+    }
+
     fn input_marshal_phase(&mut self, timestamp_ms: f64) {
         let mut uniforms = self.arena.uniforms;
         if let Some(shared_input) = self.shared_input.as_ref() {
@@ -576,15 +957,37 @@ impl Engine {
             uniforms.view_proj[2][0] = shared_input.get_index(INPUT_WORD_AUDIO_HIGH as u32) as f32;
             uniforms.view_proj[2][1] =
                 shared_input.get_index(INPUT_WORD_GAUGE_ACTIVE as u32) as f32;
-            uniforms.view_proj[2][2] =
-                shared_input.get_index(INPUT_WORD_SHAPE_BANK_WORDS as u32) as f32;
-            uniforms.view_proj[3][2] =
-                shared_input.get_index(INPUT_WORD_DRAW_OP_COUNT as u32) as f32;
-            uniforms.view_proj[3][3] =
-                shared_input.get_index(INPUT_WORD_TOTAL_INSTANCE_COUNT as u32) as f32;
+            let shape_bank_word_limit = self
+                .shared_shape_bank
+                .as_ref()
+                .map(|plane| plane.length())
+                .unwrap_or_else(|| self.max_shapes.saturating_mul(SHAPE_BANK_HEADER_WORDS as u32));
+            let sink_table_word_limit = self
+                .shared_sink_table
+                .as_ref()
+                .map(|plane| plane.length())
+                .unwrap_or_else(|| {
+                    self.max_shapes
+                        .saturating_mul(SINK_TABLE_RECORD_WORDS as u32)
+                        .saturating_add(SINK_TABLE_HEADER_WORDS as u32)
+                });
+            let shape_bank_words = clamp_non_negative_u32(
+                shared_input.get_index(INPUT_WORD_SHAPE_BANK_WORDS as u32),
+                shape_bank_word_limit,
+            );
+            let sink_table_words = clamp_non_negative_u32(
+                shared_input.get_index(INPUT_WORD_SINK_TABLE_WORDS as u32),
+                sink_table_word_limit,
+            );
+            uniforms.view_proj[2][2] = shape_bank_words as f32;
+            uniforms.view_proj[3][2] = sink_table_words as f32;
+            uniforms.view_proj[3][3] = 0.0;
+            self.sync_shape_bank_plane(shape_bank_words);
+            self.draw_regions = self.sync_sink_table_plane_and_parse_regions(sink_table_words);
         } else {
             uniforms.time_seconds = (timestamp_ms.max(0.0) * 0.001) as f32;
             uniforms.delta_time_seconds = (1.0 / 60.0) as f32;
+            self.draw_regions = IndirectRegionPlan::default();
         }
         self.arena.update_uniforms(&self.queue, uniforms);
     }

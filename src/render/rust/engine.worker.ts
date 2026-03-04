@@ -2,6 +2,8 @@
 
 import {
   attachRustRendererSharedInput,
+  attachRustRendererSharedShapeBank,
+  attachRustRendererSharedSinkTable,
   injectRustRendererPoisonAlloc,
   initRustRendererEngine,
   initRustRendererWasm,
@@ -181,6 +183,8 @@ async function handleBootstrap(message: Extract<RustRendererWorkerInboundMessage
   await initRustRendererWasm();
   await initRustRendererEngine(message.canvas, message.config);
   attachRustRendererSharedInput(message.sharedInput);
+  attachRustRendererSharedShapeBank(message.sharedShapeBank);
+  attachRustRendererSharedSinkTable(message.sharedSinkTable);
   bootstrapped = true;
   deviceLostNotified = false;
   startRuntimePolling();
