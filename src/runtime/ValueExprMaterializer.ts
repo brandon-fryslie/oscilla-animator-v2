@@ -36,6 +36,7 @@ import {
   type PureFnExecutionContext,
 } from './ScalarKernelLibrary';
 import { getProgramTopology } from '../compiler/ir/program-topology';
+import { resolveInstanceLaneCount } from './InstanceCountResolver';
 
 function isPathTopology(topology: TopologyDef): topology is PathTopologyDef {
   return 'verbs' in topology;
@@ -146,7 +147,7 @@ function materializeReduceScalar(
   const reduceInstanceId = (typeof instanceRef === 'object' ? instanceRef.instanceId : instanceRef) as InstanceId;
   const instanceDecl = program.schedule.instances.get(reduceInstanceId);
   const laneCount = instanceDecl
-    ? (typeof instanceDecl.count === 'number' ? instanceDecl.count : instanceDecl.maxCount)
+    ? resolveInstanceLaneCount(instanceDecl, program, state, pureFnContext)
     : 0;
   if (laneCount <= 0) {
     return 0;
@@ -615,7 +616,7 @@ function materializeKernel(
       const sourceInstId = (typeof sourceInstRef === 'object' ? sourceInstRef.instanceId : sourceInstRef) as InstanceId;
       const sourceDecl = program.schedule.instances.get(sourceInstId);
       const sourceCount = sourceDecl
-        ? (typeof sourceDecl.count === 'number' ? sourceDecl.count : sourceDecl.maxCount)
+        ? resolveInstanceLaneCount(sourceDecl, program, state, pureFnContext)
         : 0;
 
       // Materialize controlPoints with source instance count

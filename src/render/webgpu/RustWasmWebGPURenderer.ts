@@ -1,17 +1,19 @@
 import type { RenderFrameIR } from '../types';
 import type { RenderShapeBankSource } from './WebGPUShapeBankManager';
 import type { IndirectArgsReadbackSnapshot } from './WebGPUIndirectArgsInspector';
-import {
-  RUST_RENDER_INSTANCE_FLOATS,
-  RustRenderPayloadPacker,
-  type DrawPrepSinkDescriptor,
-} from './RustRenderPayloadPacker';
 import type {
   RustRendererBootstrapConfig,
   RustRendererSchedulerState,
   RustRendererWorkerInboundMessage,
   RustRendererWorkerOutboundMessage,
 } from '../rust/worker-protocol';
+
+interface DrawPrepSinkDescriptor {
+  readonly sinkIndex: number;
+  readonly indirectRecordIndex: number;
+  readonly instanceCountMode: 'static' | 'dynamic';
+  readonly staticInstanceCount?: number;
+}
 
 interface RenderInput {
   readonly frame: RenderFrameIR;
@@ -65,6 +67,16 @@ function coerceFinite(value: number | undefined): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : 0;
 }
 
+function deriveTotalInstanceCount(frame: RenderFrameIR): number {
+  let total = 0;
+  for (const op of frame.ops) {
+    if (op.kind !== 'drawPathInstances') continue;
+    total += op.instances.count;
+  }
+  if (!Number.isFinite(total) || total <= 0) return 0;
+  return Math.floor(total);
+}
+
 export function assertWebGPUStartupContract(canvas: HTMLCanvasElement): void {
   const gpu = (navigator as Navigator & { gpu?: unknown }).gpu;
   if (!gpu) {
@@ -106,7 +118,6 @@ export class WebGPURenderer {
   private lastResizeHeight = -1;
   private latestTelemetry: { meanMs: number; stdDevMs: number; sampleCount: number; frameCount: number } | null = null;
   private lifecycleState: RustRendererSchedulerState = 'Booting';
-  private readonly payloadPacker = new RustRenderPayloadPacker();
 
   private constructor(
     worker: Worker,
@@ -149,23 +160,6 @@ export class WebGPURenderer {
       throw new Error('Rust renderer worker is not bootstrapped');
     }
     this.syncCanvasSize(input.width, input.height);
-    const payload = this.payloadPacker.pack(input.frame, input.shapeBank, input.drawPrepSinks);
-    const payloadMessage: RustRendererWorkerInboundMessage = {
-      type: 'SYNC_RENDER_PAYLOAD',
-      topologyWords: payload.topologyWords,
-      instanceFloats: payload.instanceFloats,
-      indirectArgsWords: payload.indirectArgsWords,
-      vertexFloats: payload.vertexFloats,
-      indexWords: payload.indexWords,
-      drawRecordCount: payload.drawRecordCount,
-    };
-    this.worker.postMessage(payloadMessage, [
-      payload.topologyWords.buffer,
-      payload.instanceFloats.buffer,
-      payload.indirectArgsWords.buffer,
-      payload.vertexFloats.buffer,
-      payload.indexWords.buffer,
-    ]);
 
     // [LAW:dataflow-not-control-flow] Renderer updates one canonical shared
     // input buffer each frame. The worker hot path always executes and reads
@@ -184,9 +178,8 @@ export class WebGPURenderer {
     this.inputWords[INPUT_INDEX.audioHigh] = coerceFinite(input.inputAudioHigh);
     this.inputWords[INPUT_INDEX.gaugeActive] = coerceFinite(input.inputGaugeActive);
     this.inputWords[INPUT_INDEX.drawOpCount] = input.frame.ops.length;
-    this.inputWords[INPUT_INDEX.totalInstanceCount] =
-      payload.instanceFloats.length / RUST_RENDER_INSTANCE_FLOATS;
-    this.inputWords[INPUT_INDEX.shapeBankWords] = payload.topologyWords.length;
+    this.inputWords[INPUT_INDEX.totalInstanceCount] = deriveTotalInstanceCount(input.frame);
+    this.inputWords[INPUT_INDEX.shapeBankWords] = input.shapeBank.volatilePtr;
     Atomics.add(this.signalWords, 0, 1);
   }
 

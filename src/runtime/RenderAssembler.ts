@@ -41,6 +41,8 @@ import {
   ORTHO_CAMERA_DEFAULTS,
 } from '../projection/ortho-kernel';
 import { hslToRgbScalar } from './color-math';
+import type { PureFnExecutionContext } from './ScalarKernelLibrary';
+import { resolveInstanceLaneCount } from './InstanceCountResolver';
 import {
   projectFieldPerspective,
   projectFieldRadiusPerspective,
@@ -570,6 +572,8 @@ export interface AssemblerContext {
   scalarExprToArenaAddress?: ReadonlyMap<number, RuntimeScalarArenaAddress>;
   /** Slot -> arena descriptor map (for numeric field reads). */
   slotToArena?: ReadonlyMap<ValueSlot, ArenaSlotDescriptor>;
+  /** Optional pure-function execution context for dynamic instance-count evaluation. */
+  pureFnContext?: PureFnExecutionContext;
 }
 
 /**
@@ -1512,7 +1516,7 @@ function appendDrawPathInstancesOp(
   context: AssemblerContext,
   outOps: DrawOp[],
 ): void {
-  const { scalarExprToArenaAddress, slotToArena, instances, state, arena } = context;
+  const { scalarExprToArenaAddress, slotToArena, instances, state, arena, pureFnContext } = context;
 
   // Get instance declaration
   const instance = instances.get(step.instanceId);
@@ -1524,7 +1528,7 @@ function appendDrawPathInstancesOp(
   }
 
   // Resolve count from instance
-  const count = typeof instance.count === 'number' ? instance.count : instance.maxCount;
+  const count = resolveInstanceLaneCount(instance, context.program, state, pureFnContext);
   if (count === 0) {
     return;
   }

@@ -40,16 +40,6 @@ export interface RustRendererInjectPoisonAllocMessage {
   readonly type: 'INJECT_POISON_ALLOC';
 }
 
-export interface RustRendererSyncRenderPayloadMessage {
-  readonly type: 'SYNC_RENDER_PAYLOAD';
-  readonly topologyWords: Uint32Array;
-  readonly instanceFloats: Float32Array;
-  readonly indirectArgsWords: Uint32Array;
-  readonly vertexFloats: Float32Array;
-  readonly indexWords: Uint32Array;
-  readonly drawRecordCount: number;
-}
-
 export type RustRendererWorkerInboundMessage =
   | RustRendererBootstrapMessage
   | RustRendererShutdownMessage
@@ -57,8 +47,7 @@ export type RustRendererWorkerInboundMessage =
   | RustRendererResizeCanvasMessage
   | RustRendererPauseMessage
   | RustRendererResumeMessage
-  | RustRendererInjectPoisonAllocMessage
-  | RustRendererSyncRenderPayloadMessage;
+  | RustRendererInjectPoisonAllocMessage;
 
 export interface RustRendererBootstrapSuccess {
   readonly type: 'BOOTSTRAP_SUCCESS';

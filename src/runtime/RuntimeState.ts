@@ -428,6 +428,15 @@ export interface FrameCache {
 
   /** Scalar ValueExprId -> canonical arena address metadata. */
   scalarExprToArenaAddress: ReadonlyMap<number, RuntimeScalarArenaAddress> | null;
+
+  /**
+   * Dynamic instance lane-count cache for current frame.
+   * Keyed by InstanceId string.
+   */
+  instanceLaneCounts?: Map<string, number>;
+
+  /** Frame stamp for `instanceLaneCounts` validity. */
+  instanceLaneCountFrameId?: number;
 }
 
 /**
@@ -443,6 +452,8 @@ export function createFrameCache(
     valueExprFieldBuffers: new Array(maxValueExprs).fill(null),
     valueExprFieldStamps: new Array(maxValueExprs).fill(-1),
     scalarExprToArenaAddress: null,
+    instanceLaneCounts: new Map<string, number>(),
+    instanceLaneCountFrameId: 0,
   };
 }
 

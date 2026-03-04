@@ -44,7 +44,7 @@ impl ComputeDispatcher {
         simulation_wgsl: &str,
         assembly_wgsl: &str,
         particle_count: u32,
-        shape_count: u32,
+        _shape_count: u32,
     ) -> Self {
         // [LAW:single-enforcer] The bind-group contract is declared once here
         // so compile/rebuild and runtime pass encoding share one authority.
@@ -130,7 +130,7 @@ impl ComputeDispatcher {
         });
 
         let sim_workgroup_count = Self::simulation_dispatch_count(particle_count, simulation_wgsl);
-        let assembly_workgroup_count = (shape_count.saturating_add(63)) / 64;
+        let assembly_workgroup_count = (particle_count.saturating_add(63)) / 64;
 
         Self {
             simulation_pipeline,
@@ -251,7 +251,6 @@ impl ComputeDispatcher {
         &self,
         encoder: &mut wgpu::CommandEncoder,
         arena: &mut GpuMemoryArena,
-        encode_assembly: bool,
     ) {
         // [LAW:dataflow-not-control-flow] Compute stage order is immutable every
         // frame; variability is in uniforms/state payload values only.
@@ -265,19 +264,17 @@ impl ComputeDispatcher {
             compute_pass.dispatch_workgroups(self.sim_workgroup_count, 1, 1);
         }
 
-        if encode_assembly {
-            let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-                label: Some("Compute.RenderAssembly.Pass"),
-                timestamp_writes: None,
-            });
-            compute_pass.set_pipeline(&self.render_assembly_pipeline);
-            compute_pass.set_bind_group(0, &arena.uniform_bind_group, &[]);
-            compute_pass.set_bind_group(1, arena.get_compute_write_bind_group(), &[]);
-            // [LAW:one-source-of-truth] Arena owns the canonical assembly bind
-            // group used for draw-prep writes.
-            compute_pass.set_bind_group(2, &arena.assembly_write_bind_group, &[]);
-            compute_pass.dispatch_workgroups(self.assembly_workgroup_count, 1, 1);
-        }
+        let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+            label: Some("Compute.RenderAssembly.Pass"),
+            timestamp_writes: None,
+        });
+        compute_pass.set_pipeline(&self.render_assembly_pipeline);
+        compute_pass.set_bind_group(0, &arena.uniform_bind_group, &[]);
+        compute_pass.set_bind_group(1, arena.get_compute_write_bind_group(), &[]);
+        // [LAW:one-source-of-truth] Arena owns the canonical assembly bind
+        // group used for draw-prep writes.
+        compute_pass.set_bind_group(2, &arena.assembly_write_bind_group, &[]);
+        compute_pass.dispatch_workgroups(self.assembly_workgroup_count, 1, 1);
 
         arena.swap_ping_pong();
     }

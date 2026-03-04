@@ -28,6 +28,7 @@ import type { TimeModelIR } from './schedule';
 import type {
   PureFn,
   InstanceDecl,
+  InstanceCountSpec,
   Step,
   IntrinsicPropertyName,
   PlacementFieldName,
@@ -691,17 +692,28 @@ export class IRBuilderImpl implements OrchestratorIRBuilder {
 
   createInstance(
     domainType: DomainTypeId,
-    count: number,
+    count: InstanceCountSpec,
     shapeField?: ValueExprId,
     lifecycle?: 'static' | 'dynamic' | 'pooled'
   ): InstanceId {
     const id = `inst-${this.instanceCounter++}` as InstanceId;
+    const isDynamic = typeof count !== 'number';
+    const staticCount = typeof count === 'number'
+      ? Math.max(0, Math.floor(count))
+      : 0;
+    const dynamicMaxCount = typeof count === 'number'
+      ? 0
+      : Math.max(1, Math.floor(count.maxCount));
+    const maxCount = typeof count === 'number'
+      ? Math.max(staticCount, 10_000)
+      : dynamicMaxCount;
     this.instances.set(id, {
       id,
       domainType,
-      count,
-      maxCount: Math.max(count, 10_000),
-      lifecycle: lifecycle ?? 'static',
+      count: isDynamic ? 'dynamic' : staticCount,
+      ...(isDynamic ? { countExpr: count.countExpr } : {}),
+      maxCount,
+      lifecycle: lifecycle ?? (isDynamic ? 'dynamic' : 'static'),
       identityMode: 'stable',
       ...(shapeField !== undefined && { shapeField }), // Store shape field reference if provided
     });

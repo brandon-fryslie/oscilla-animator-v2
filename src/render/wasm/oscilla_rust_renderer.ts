@@ -19,14 +19,6 @@ interface RendererWasmModule {
   readonly rebuild_simulation_pipeline?: (
     simulationWgsl: string,
   ) => Promise<void> | void;
-  readonly sync_render_payload?: (
-    topologyWords: Uint32Array,
-    instanceFloats: Float32Array,
-    indirectArgsWords: Uint32Array,
-    vertexFloats: Float32Array,
-    indexWords: Uint32Array,
-    drawRecordCount: number,
-  ) => Promise<void> | void;
 }
 
 let initialized = false;
@@ -39,7 +31,6 @@ let resumeEngineImpl: RendererWasmModule['resume_engine'] | null = null;
 let injectPoisonAllocImpl: RendererWasmModule['inject_poison_alloc'] | null = null;
 let takeFramePacingPacketImpl: RendererWasmModule['take_frame_pacing_packet'] | null = null;
 let rebuildSimulationPipelineImpl: RendererWasmModule['rebuild_simulation_pipeline'] | null = null;
-let syncRenderPayloadImpl: RendererWasmModule['sync_render_payload'] | null = null;
 
 export async function initRustRendererWasm(): Promise<void> {
   if (initialized) {
@@ -66,9 +57,6 @@ export async function initRustRendererWasm(): Promise<void> {
       if (typeof wasmModule.rebuild_simulation_pipeline !== 'function') {
         throw new Error('Rust renderer wasm module missing rebuild_simulation_pipeline export');
       }
-      if (typeof wasmModule.sync_render_payload !== 'function') {
-        throw new Error('Rust renderer wasm module missing sync_render_payload export');
-      }
       if (typeof wasmModule.resize_surface !== 'function') {
         throw new Error('Rust renderer wasm module missing resize_surface export');
       }
@@ -92,7 +80,6 @@ export async function initRustRendererWasm(): Promise<void> {
       injectPoisonAllocImpl = wasmModule.inject_poison_alloc.bind(wasmModule);
       takeFramePacingPacketImpl = wasmModule.take_frame_pacing_packet.bind(wasmModule);
       rebuildSimulationPipelineImpl = wasmModule.rebuild_simulation_pipeline.bind(wasmModule);
-      syncRenderPayloadImpl = wasmModule.sync_render_payload.bind(wasmModule);
       initialized = true;
     })().catch((error) => {
       initPromise = null;
@@ -169,25 +156,4 @@ export async function rebuildRustRendererSimulationPipeline(
     throw new Error('Rust renderer wasm is not initialized');
   }
   await rebuildSimulationPipelineImpl(simulationWgsl);
-}
-
-export async function syncRustRendererRenderPayload(
-  topologyWords: Uint32Array,
-  instanceFloats: Float32Array,
-  indirectArgsWords: Uint32Array,
-  vertexFloats: Float32Array,
-  indexWords: Uint32Array,
-  drawRecordCount: number,
-): Promise<void> {
-  if (!initialized || !syncRenderPayloadImpl) {
-    throw new Error('Rust renderer wasm is not initialized');
-  }
-  await syncRenderPayloadImpl(
-    topologyWords,
-    instanceFloats,
-    indirectArgsWords,
-    vertexFloats,
-    indexWords,
-    drawRecordCount,
-  );
 }

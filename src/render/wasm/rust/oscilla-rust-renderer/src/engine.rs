@@ -1,7 +1,7 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
-use js_sys::{Float32Array, SharedArrayBuffer, Uint32Array};
+use js_sys::{Float32Array, SharedArrayBuffer};
 use wasm_bindgen::JsCast;
 use wasm_bindgen::JsValue;
 use web_sys::OffscreenCanvas;
@@ -25,6 +25,9 @@ const INPUT_WORD_AUDIO_LOW: usize = 9;
 const INPUT_WORD_AUDIO_MID: usize = 10;
 const INPUT_WORD_AUDIO_HIGH: usize = 11;
 const INPUT_WORD_GAUGE_ACTIVE: usize = 12;
+const INPUT_WORD_DRAW_OP_COUNT: usize = 13;
+const INPUT_WORD_TOTAL_INSTANCE_COUNT: usize = 14;
+const INPUT_WORD_SHAPE_BANK_WORDS: usize = 15;
 const INPUT_SIGNAL_WORDS: u32 = 4;
 const INPUT_FLOAT_WORDS: u32 = 32;
 
@@ -51,21 +54,44 @@ fn compute_main(@builtin(global_invocation_id) gid: vec3<u32>) {
 const DEFAULT_ASSEMBLY_WGSL: &str = r#"
 @group(0) @binding(0) var<uniform> global_uniforms: array<vec4<f32>, 5>;
 @group(1) @binding(0) var<storage, read> state_read: array<u32>;
-@group(2) @binding(0) var<storage, read_write> instance_words: array<u32>;
+@group(2) @binding(0) var<storage, read_write> instance_words: array<f32>;
 @group(2) @binding(1) var<storage, read_write> indirect_words: array<u32>;
 
 @compute @workgroup_size(64)
 fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
+  let max_instance_words = arrayLength(&instance_words);
+  let max_instances = max_instance_words / 12u;
+  let requested_instances = u32(max(global_uniforms[3].w, 0.0));
+  let active_count = min(max_instances, requested_instances);
+
   if (gid.x == 0u && arrayLength(&indirect_words) >= 5u) {
     indirect_words[0] = 6u;
-    indirect_words[1] = max(1u, u32(global_uniforms[4].x));
+    indirect_words[1] = active_count;
     indirect_words[2] = 0u;
     indirect_words[3] = 0u;
     indirect_words[4] = 0u;
   }
-  if (gid.x < arrayLength(&instance_words)) {
-    instance_words[gid.x] = state_read[gid.x % max(1u, arrayLength(&state_read))];
+
+  if (gid.x >= active_count) {
+    return;
   }
+
+  let base = gid.x * 12u;
+  let lane = f32(gid.x);
+  let phase = global_uniforms[4].z + lane * 0.03;
+  let radius = 0.28 + 0.18 * sin(lane * 0.07 + global_uniforms[4].z * 0.4);
+  instance_words[base + 0u] = 0.5 + cos(phase) * radius;
+  instance_words[base + 1u] = 0.5 + sin(phase) * radius;
+  instance_words[base + 2u] = 0.016 + 0.010 * fract(lane * 0.173);
+  instance_words[base + 3u] = phase;
+  instance_words[base + 4u] = 1.0;
+  instance_words[base + 5u] = 1.0;
+  instance_words[base + 6u] = 0.0;
+  instance_words[base + 7u] = 0.0;
+  instance_words[base + 8u] = 0.45 + 0.45 * sin(phase * 0.7);
+  instance_words[base + 9u] = 0.45 + 0.45 * sin(phase * 1.1 + 1.2);
+  instance_words[base + 10u] = 0.45 + 0.45 * sin(phase * 1.3 + 2.4);
+  instance_words[base + 11u] = 1.0;
 }
 "#;
 
@@ -267,7 +293,7 @@ impl Engine {
             surface_config.format,
             &compute.uniform_layout,
         );
-        let arena = GpuMemoryArena::new(
+        let mut arena = GpuMemoryArena::new(
             &device,
             &compute.uniform_layout,
             &compute.state_layout,
@@ -278,6 +304,7 @@ impl Engine {
             config.max_particles,
             config.max_shapes,
         );
+        arena.seed_default_render_payload(&queue);
         let depth_target = DepthTarget::new(&device, surface_config.width, surface_config.height);
         let debug_readback_interval_frames = (60 / config.debug_readback_hz.max(1)).max(1) as u64;
         let scheduler = WorkerScheduler::new(worker_monotonic_now_ms());
@@ -298,7 +325,7 @@ impl Engine {
             debug_readback_interval_frames,
             debug_readback_in_flight: Arc::new(AtomicBool::new(false)),
             max_particles: config.max_particles as u32,
-            draw_record_count: 0,
+            draw_record_count: 1,
         })
     }
 
@@ -356,7 +383,7 @@ impl Engine {
             self.surface_format,
             &self.compute.uniform_layout,
         );
-        self.arena = GpuMemoryArena::new(
+        let mut arena = GpuMemoryArena::new(
             &self.device,
             &self.compute.uniform_layout,
             &self.compute.state_layout,
@@ -367,7 +394,9 @@ impl Engine {
             particle_count as usize,
             shape_count as usize,
         );
-        self.draw_record_count = 0;
+        arena.seed_default_render_payload(&self.queue);
+        self.arena = arena;
+        self.draw_record_count = 1;
     }
 
     pub fn rebuild_simulation_pipeline(&mut self, simulation_wgsl: &str) {
@@ -378,42 +407,6 @@ impl Engine {
             simulation_wgsl,
             self.max_particles,
         );
-    }
-
-    pub fn sync_render_payload(
-        &mut self,
-        topology_words: &Uint32Array,
-        instance_floats: &Float32Array,
-        indirect_args_words: &Uint32Array,
-        vertex_floats: &Float32Array,
-        index_words: &Uint32Array,
-        draw_record_count: u32,
-    ) -> Result<(), JsValue> {
-        let mut topology = vec![0u32; topology_words.length() as usize];
-        topology_words.copy_to(topology.as_mut_slice());
-        let mut instances = vec![0f32; instance_floats.length() as usize];
-        instance_floats.copy_to(instances.as_mut_slice());
-        let mut indirect = vec![0u32; indirect_args_words.length() as usize];
-        indirect_args_words.copy_to(indirect.as_mut_slice());
-        let mut vertices = vec![0f32; vertex_floats.length() as usize];
-        vertex_floats.copy_to(vertices.as_mut_slice());
-        let mut indices = vec![0u32; index_words.length() as usize];
-        index_words.copy_to(indices.as_mut_slice());
-
-        // [LAW:single-enforcer] Render payload upload is centralized in one
-        // engine boundary so all GPU buffer mutations follow one schema.
-        self.arena.sync_render_payload(
-            &self.device,
-            &self.queue,
-            topology.as_slice(),
-            instances.as_slice(),
-            indirect.as_slice(),
-            vertices.as_slice(),
-            indices.as_slice(),
-        );
-        let available_records = (indirect.len() / crate::memory::INDIRECT_WORDS_PER_RECORD) as u32;
-        self.draw_record_count = draw_record_count.min(available_records);
-        Ok(())
     }
 
     pub fn tick(&mut self, timestamp_ms: f64) -> Result<(), JsValue> {
@@ -446,87 +439,58 @@ impl Engine {
         // full per-frame command path.
         let outcome = {
             let _hot_path_guard = StrictAllocator::hot_path_guard();
-            if self.draw_record_count == 0 {
-                // [LAW:dataflow-not-control-flow] exception: when draw-record
-                // cardinality is zero there is no presentation work to submit;
-                // simulation and telemetry still execute in fixed order.
-                let mut encoder =
-                    self.device
-                        .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                            label: Some("HotPath.CommandEncoder"),
-                        });
-                self.compute
-                    .encode_passes(&mut encoder, &mut self.arena, false);
-                let is_debug_tick = self.frame_count % self.debug_readback_interval_frames == 0;
-                if is_debug_tick {
-                    encoder.copy_buffer_to_buffer(
-                        self.arena.read_state_buffer(),
-                        0,
-                        self.arena.debug_staging_buffer(),
-                        0,
-                        self.arena.debug_staging_buffer().size(),
+            match self.surface.get_current_texture() {
+                Ok(frame) => {
+                    let color_view = frame
+                        .texture
+                        .create_view(&wgpu::TextureViewDescriptor::default());
+                    let mut encoder =
+                        self.device
+                            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                                // [LAW:dataflow-not-control-flow] Hot-path labels
+                                // are static to avoid per-frame heap allocations.
+                                label: Some("HotPath.CommandEncoder"),
+                            });
+
+                    self.compute
+                        .encode_passes(&mut encoder, &mut self.arena);
+                    self.render.encode_passes(
+                        &mut encoder,
+                        &self.arena,
+                        &color_view,
+                        self.depth_target.view(),
+                        self.draw_record_count,
                     );
-                }
-                self.queue.submit(std::iter::once(encoder.finish()));
-                self.frame_count = self.frame_count.wrapping_add(1);
-                HotPathOutcome::Success {
-                    debug_tick: is_debug_tick,
-                    frame_count: self.frame_count,
-                }
-            } else {
-                match self.surface.get_current_texture() {
-                    Ok(frame) => {
-                        let color_view = frame
-                            .texture
-                            .create_view(&wgpu::TextureViewDescriptor::default());
-                        let mut encoder =
-                            self.device
-                                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                                    // [LAW:dataflow-not-control-flow] Hot-path labels
-                                    // are static to avoid per-frame heap allocations.
-                                    label: Some("HotPath.CommandEncoder"),
-                                });
 
-                        self.compute
-                            .encode_passes(&mut encoder, &mut self.arena, false);
-                        self.render.encode_passes(
-                            &mut encoder,
-                            &self.arena,
-                            &color_view,
-                            self.depth_target.view(),
-                            self.draw_record_count,
+                    let is_debug_tick = self.frame_count % self.debug_readback_interval_frames == 0;
+                    if is_debug_tick {
+                        encoder.copy_buffer_to_buffer(
+                            self.arena.read_state_buffer(),
+                            0,
+                            self.arena.debug_staging_buffer(),
+                            0,
+                            self.arena.debug_staging_buffer().size(),
                         );
-
-                        let is_debug_tick = self.frame_count % self.debug_readback_interval_frames == 0;
-                        if is_debug_tick {
-                            encoder.copy_buffer_to_buffer(
-                                self.arena.read_state_buffer(),
-                                0,
-                                self.arena.debug_staging_buffer(),
-                                0,
-                                self.arena.debug_staging_buffer().size(),
-                            );
-                        }
-
-                        self.queue.submit(std::iter::once(encoder.finish()));
-                        frame.present();
-                        self.frame_count = self.frame_count.wrapping_add(1);
-
-                        HotPathOutcome::Success {
-                            debug_tick: is_debug_tick,
-                            frame_count: self.frame_count,
-                        }
                     }
-                    Err(wgpu::SurfaceError::Timeout) => HotPathOutcome::SurfaceTimeout,
-                    Err(wgpu::SurfaceError::Outdated | wgpu::SurfaceError::Lost) => {
-                        // [LAW:dataflow-not-control-flow] Surface reconfiguration is
-                        // handled by explicit resize/control messages outside the
-                        // hot path; tick only records the lost/outdated condition.
-                        HotPathOutcome::SurfaceLost
+
+                    self.queue.submit(std::iter::once(encoder.finish()));
+                    frame.present();
+                    self.frame_count = self.frame_count.wrapping_add(1);
+
+                    HotPathOutcome::Success {
+                        debug_tick: is_debug_tick,
+                        frame_count: self.frame_count,
                     }
-                    Err(wgpu::SurfaceError::OutOfMemory) => HotPathOutcome::FatalOutOfMemory,
-                    Err(wgpu::SurfaceError::Other) => HotPathOutcome::FatalOther,
                 }
+                Err(wgpu::SurfaceError::Timeout) => HotPathOutcome::SurfaceTimeout,
+                Err(wgpu::SurfaceError::Outdated | wgpu::SurfaceError::Lost) => {
+                    // [LAW:dataflow-not-control-flow] Surface reconfiguration is
+                    // handled by explicit resize/control messages outside the
+                    // hot path; tick only records the lost/outdated condition.
+                    HotPathOutcome::SurfaceLost
+                }
+                Err(wgpu::SurfaceError::OutOfMemory) => HotPathOutcome::FatalOutOfMemory,
+                Err(wgpu::SurfaceError::Other) => HotPathOutcome::FatalOther,
             }
         };
 
@@ -612,6 +576,12 @@ impl Engine {
             uniforms.view_proj[2][0] = shared_input.get_index(INPUT_WORD_AUDIO_HIGH as u32) as f32;
             uniforms.view_proj[2][1] =
                 shared_input.get_index(INPUT_WORD_GAUGE_ACTIVE as u32) as f32;
+            uniforms.view_proj[2][2] =
+                shared_input.get_index(INPUT_WORD_SHAPE_BANK_WORDS as u32) as f32;
+            uniforms.view_proj[3][2] =
+                shared_input.get_index(INPUT_WORD_DRAW_OP_COUNT as u32) as f32;
+            uniforms.view_proj[3][3] =
+                shared_input.get_index(INPUT_WORD_TOTAL_INSTANCE_COUNT as u32) as f32;
         } else {
             uniforms.time_seconds = (timestamp_ms.max(0.0) * 0.001) as f32;
             uniforms.delta_time_seconds = (1.0 / 60.0) as f32;
