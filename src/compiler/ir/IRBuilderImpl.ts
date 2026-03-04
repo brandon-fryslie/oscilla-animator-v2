@@ -15,7 +15,15 @@ import type {
   DomainTypeId,
 } from './Indices';
 import type { BlockId } from '../../types/compiler';
-import type { TopologyId } from '../../shapes/types';
+import {
+  PathVerb,
+  type AbstractTopologyDef,
+  type PathSegmentKind,
+  type PathTopologyDef,
+  type PathTopologyDefInput,
+  type SerializableTopologyDef,
+  type TopologyId,
+} from '../../shapes/types';
 import type { TimeModelIR } from './schedule';
 import type {
   PureFn,
@@ -62,6 +70,9 @@ export class IRBuilderImpl implements OrchestratorIRBuilder {
   private renderGlobals: CameraDeclIR[] = [];
   private _currentBlockId: BlockId | null = null;
   private _exprToBlock = new Map<ValueExprId, BlockId>();
+  private readonly topologyByShapeSignature = new Map<string, TopologyId>();
+  private readonly topologiesById = new Map<TopologyId, SerializableTopologyDef>();
+  private nextTopologyId = 100;
 
   constructor() {
     // [LAW:one-source-of-truth] SCALAR_INSTANCE_ID is always registered with count=1.
@@ -373,6 +384,24 @@ export class IRBuilderImpl implements OrchestratorIRBuilder {
     controlPointField?: ValueExprId
   ): ValueExprId {
     return this.pushExpr({ kind: 'shapeRef', type, topologyId, paramArgs, controlPointField });
+  }
+
+  registerTopology(topology: AbstractTopologyDef | PathTopologyDefInput, _debugName?: string): TopologyId {
+    const normalized = toSerializableTopologyShape(topology);
+    const shapeSignature = topologyShapeSignature(normalized);
+    const existingId = this.topologyByShapeSignature.get(shapeSignature);
+    if (existingId !== undefined) {
+      return existingId;
+    }
+
+    const nextId = this.nextTopologyId as TopologyId;
+    this.nextTopologyId += 1;
+    const definition: SerializableTopologyDef = { ...normalized, id: nextId };
+    // [LAW:one-source-of-truth] Compiler-owned topology registration is scoped
+    // to this builder instance; no global mutable topology registry writes.
+    this.topologyByShapeSignature.set(shapeSignature, nextId);
+    this.topologiesById.set(nextId, definition);
+    return nextId;
   }
 
   combine(
@@ -758,6 +787,10 @@ export class IRBuilderImpl implements OrchestratorIRBuilder {
     return this.eventSlotCounter;
   }
 
+  getSerializableTopologies(): readonly SerializableTopologyDef[] {
+    return [...this.topologiesById.values()].sort((a, b) => a.id - b.id);
+  }
+
   // ===========================================================================
   // Internal Helpers
   // ===========================================================================
@@ -813,4 +846,93 @@ function eventSlotId(n: number): EventSlotId {
 
 function stateSlotId(n: number): StateSlotId {
   return n as StateSlotId;
+}
+
+function isPathTopologyInput(topology: AbstractTopologyDef | PathTopologyDefInput): topology is PathTopologyDefInput {
+  return 'verbs' in topology && Array.isArray(topology.verbs);
+}
+
+function computePathDispatchData(verbs: readonly PathVerb[]): {
+  readonly segmentKind: readonly PathSegmentKind[];
+  readonly segmentPointBase: readonly number[];
+  readonly hasQuad: boolean;
+  readonly hasCubic: boolean;
+} {
+  const segmentKind: PathSegmentKind[] = [];
+  const segmentPointBase: number[] = [];
+  let hasQuad = false;
+  let hasCubic = false;
+  let pointIndex = 0;
+
+  for (const verb of verbs) {
+    if (verb === PathVerb.LINE) {
+      segmentKind.push('line');
+      segmentPointBase.push(pointIndex);
+      pointIndex += 1;
+      continue;
+    }
+    if (verb === PathVerb.CUBIC) {
+      segmentKind.push('cubic');
+      segmentPointBase.push(pointIndex);
+      hasCubic = true;
+      pointIndex += 3;
+      continue;
+    }
+    if (verb === PathVerb.QUAD) {
+      segmentKind.push('quad');
+      segmentPointBase.push(pointIndex);
+      hasQuad = true;
+      pointIndex += 2;
+      continue;
+    }
+    if (verb === PathVerb.MOVE) {
+      pointIndex += 1;
+      continue;
+    }
+    if (verb === PathVerb.CLOSE) {
+      continue;
+    }
+  }
+
+  return {
+    segmentKind,
+    segmentPointBase,
+    hasQuad,
+    hasCubic,
+  };
+}
+
+function toSerializableTopologyShape(
+  topology: AbstractTopologyDef | PathTopologyDefInput,
+): Omit<SerializableTopologyDef, 'id'> {
+  if (isPathTopologyInput(topology)) {
+    const withDispatch: Omit<PathTopologyDef, 'id'> = {
+      ...topology,
+      ...computePathDispatchData(topology.verbs),
+    };
+    const { render: _render, ...serializable } = withDispatch;
+    return serializable;
+  }
+  const { render: _render, ...serializable } = topology;
+  return serializable as Omit<SerializableTopologyDef, 'id'>;
+}
+
+function topologyShapeSignature(topology: Omit<SerializableTopologyDef, 'id'>): string {
+  const pathFields =
+    topology.verbs !== undefined
+      ? {
+          verbs: topology.verbs,
+          pointsPerVerb: topology.pointsPerVerb,
+          totalControlPoints: topology.totalControlPoints,
+          closed: topology.closed,
+          segmentKind: topology.segmentKind,
+          segmentPointBase: topology.segmentPointBase,
+          hasQuad: topology.hasQuad,
+          hasCubic: topology.hasCubic,
+        }
+      : null;
+  return JSON.stringify({
+    params: topology.params,
+    path: pathFields,
+  });
 }

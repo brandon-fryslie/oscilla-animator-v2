@@ -6,7 +6,6 @@ import type { ValueExprId, ValueSlot } from '../Indices';
 import type {
   Step,
   StepContinuityApply,
-  StepEvalOne,
   StepFieldStateWrite,
   StepMaterialize,
   StepStateWrite,
@@ -155,29 +154,22 @@ interface SlotAddressPlan {
   readonly laneStride: number;
   readonly componentStride: number;
   readonly stride: number;
-  readonly storage: 'f32' | 'i32' | 'u32' | 'shape2d';
+  readonly storage: 'f32' | 'i32' | 'u32';
 }
 
 export interface NagaComputeMetadataIR {
   readonly maxActiveLanes: number;
 }
 
-export interface NagaLoweringSemanticFallbackIR {
-  readonly stepIndex: number;
-  readonly stepKind: Step['kind'];
-  readonly exprKind?: ValueExpr['kind'];
-  readonly reason: string;
-}
-
 export interface NagaLoweringCoverageIR {
   readonly totalStepCount: number;
-  readonly nonComputeStepCount: number;
-  readonly semanticFallbacks: readonly NagaLoweringSemanticFallbackIR[];
+  readonly boundaryStepCount: number;
+  readonly droppedComputeStepCount: number;
 }
 
 interface LoweringCoverageState {
-  nonComputeStepCount: number;
-  semanticFallbacks: NagaLoweringSemanticFallbackIR[];
+  boundaryStepCount: number;
+  droppedComputeStepCount: number;
 }
 
 class Interner<T> {
@@ -322,7 +314,6 @@ function registerBuiltinGlobals(ctx: LoweringCtx, builtins: LoweringBuiltins): v
 
 function getStepExprId(step: Step): ValueExprId | null {
   switch (step.kind) {
-    case 'evalOne':
     case 'eventDispatch':
       return step.expr;
     case 'materialize':
@@ -439,16 +430,16 @@ function collectExprInputs(expr: ValueExpr | undefined): readonly number[] {
 }
 
 function resolveStepInputSlot(
-  step: StepEvalOne | StepMaterialize,
+  step: StepMaterialize,
   stepExpr: ValueExpr | undefined,
   schedule: ScheduleIR,
   runtimeAddressTable: RuntimeAddressTableIR,
 ): {
   readonly buffer: 'arena_in' | 'state_in';
   readonly slotOrStateOffset: ValueSlot | number;
-  readonly resolution: 'state' | 'explicit_input' | 'expr_fallback';
+  readonly resolution: 'state' | 'explicit_input' | 'field_slot';
 } | null {
-  const exprId = step.kind === 'evalOne' ? (step.expr as number) : (step.field as number);
+  const exprId = step.field as number;
 
   if (stepExpr?.kind === 'state') {
     const stateSlotStart = findStateSlotStart(schedule, stepExpr.stateKey);
@@ -463,12 +454,15 @@ function resolveStepInputSlot(
   if (explicitSource !== undefined) {
     return { buffer: 'arena_in', slotOrStateOffset: explicitSource, resolution: 'explicit_input' };
   }
-
-  const fallbackSource = resolveInputSlotFromExpr(exprId, runtimeAddressTable);
-  if (fallbackSource === null) {
-    return null;
+  const fieldSlot = runtimeAddressTable.fieldExprToSlot.get(step.field as ValueExprId);
+  if (fieldSlot !== undefined) {
+    // [LAW:one-source-of-truth] Materialize source resolution can use the
+    // compiler-owned fieldExpr→slot map when expression inputs are structural.
+    return { buffer: 'arena_in', slotOrStateOffset: fieldSlot, resolution: 'field_slot' };
   }
-  return { buffer: 'arena_in', slotOrStateOffset: fallbackSource, resolution: 'expr_fallback' };
+  // [LAW:no-silent-fallbacks] Lowering no longer derives implicit source slots
+  // from output expressions; unsupported dataflow must fail at compile boundary.
+  return null;
 }
 
 function emitAddressIndex(
@@ -631,17 +625,18 @@ function lowerStep(
   );
 
   switch (step.kind) {
-    case 'evalOne':
     case 'materialize': {
       const targetPlan = toSlotAddressPlan(runtimeAddressTable, step.target);
       if (!targetPlan) {
+        coverage.droppedComputeStepCount += 1;
         ctx.addStatement({ kind: 'comment', text: `step ${stepIndex}: missing target slot metadata` }, source);
         return;
       }
-      const exprId = step.kind === 'evalOne' ? (step.expr as number) : (step.field as number);
+      const exprId = step.field as number;
       const expr = valueExprs[exprId];
       const sourceBinding = resolveStepInputSlot(step, expr, schedule, runtimeAddressTable);
       if (!sourceBinding) {
+        coverage.droppedComputeStepCount += 1;
         ctx.addStatement({ kind: 'comment', text: `step ${stepIndex}: unresolved source for ${step.kind}` }, source);
         return;
       }
@@ -650,6 +645,7 @@ function lowerStep(
         ? createStateSlotAddressPlan(schedule, sourceBinding.slotOrStateOffset as number)
         : toSlotAddressPlan(runtimeAddressTable, sourceBinding.slotOrStateOffset as ValueSlot);
       if (!sourcePlan) {
+        coverage.droppedComputeStepCount += 1;
         ctx.addStatement({ kind: 'comment', text: `step ${stepIndex}: missing source slot metadata` }, source);
         return;
       }
@@ -665,23 +661,20 @@ function lowerStep(
         source,
         `step ${stepIndex} kind=${step.kind}`,
       );
-      if (step.kind === 'evalOne') {
-        // [LAW:no-silent-fallbacks] Current lowering path for evalOne is still
-        // copy-oriented and does not model full kernel semantics yet.
-        coverage.semanticFallbacks.push({
-          stepIndex,
-          stepKind: step.kind,
-          exprKind: expr?.kind,
-          reason: sourceBinding.resolution === 'expr_fallback'
-            ? 'evalOne lowered through expr_fallback slot copy'
-            : 'evalOne lowered as typed slot copy (full kernel semantics pending)',
-        });
-      }
       return;
     }
 
     case 'continuityApply': {
-      lowerContinuityApply(ctx, builtins, laneExpr, step, stepIndex, runtimeAddressTable, source);
+      lowerContinuityApply(
+        ctx,
+        builtins,
+        laneExpr,
+        step,
+        stepIndex,
+        runtimeAddressTable,
+        source,
+        coverage,
+      );
       return;
     }
 
@@ -696,6 +689,7 @@ function lowerStep(
         schedule,
         runtimeAddressTable,
         source,
+        coverage,
       );
       return;
     }
@@ -703,10 +697,10 @@ function lowerStep(
     case 'eventDispatch':
     case 'continuityMapBuild':
     case 'render': {
-      // [LAW:one-source-of-truth] Non-compute schedule steps are not lowered
-      // into compute module statements. Their execution remains owned by
-      // runtime/render stage boundaries.
-      coverage.nonComputeStepCount += 1;
+      // [LAW:one-source-of-truth] Non-compute schedule steps are explicit
+      // runtime/render boundary work and are intentionally excluded from
+      // compute lowering coverage calculations.
+      coverage.boundaryStepCount += 1;
       return;
     }
 
@@ -725,10 +719,12 @@ function lowerContinuityApply(
   stepIndex: number,
   runtimeAddressTable: RuntimeAddressTableIR,
   source: NagaSourceMapEntryIR,
+  coverage: LoweringCoverageState,
 ): void {
   const sourcePlan = toSlotAddressPlan(runtimeAddressTable, step.baseSlot);
   const targetPlan = toSlotAddressPlan(runtimeAddressTable, step.outputSlot);
   if (!sourcePlan || !targetPlan) {
+    coverage.droppedComputeStepCount += 1;
     ctx.addStatement({ kind: 'comment', text: `step ${stepIndex}: continuityApply missing slot metadata` }, source);
     return;
   }
@@ -755,9 +751,11 @@ function lowerStateWrite(
   schedule: ScheduleIR,
   runtimeAddressTable: RuntimeAddressTableIR,
   source: NagaSourceMapEntryIR,
+  coverage: LoweringCoverageState,
 ): void {
   const sourceSlot = resolveInputSlotFromExpr(step.value as number, runtimeAddressTable);
   if (sourceSlot === null) {
+    coverage.droppedComputeStepCount += 1;
     ctx.addStatement({ kind: 'comment', text: `step ${stepIndex}: state write missing source slot` }, source);
     return;
   }
@@ -765,6 +763,7 @@ function lowerStateWrite(
   const sourcePlan = toSlotAddressPlan(runtimeAddressTable, sourceSlot);
   const targetPlan = createStateSlotAddressPlan(schedule, step.stateSlot as number);
   if (!sourcePlan || !targetPlan) {
+    coverage.droppedComputeStepCount += 1;
     ctx.addStatement({ kind: 'comment', text: `step ${stepIndex}: state write missing slot metadata` }, source);
     return;
   }
@@ -790,8 +789,8 @@ export function lowerScheduleToNagaModule(args: {
 }): NagaLoweringProgramIR {
   const ctx = new LoweringCtx();
   const coverage: LoweringCoverageState = {
-    nonComputeStepCount: 0,
-    semanticFallbacks: [],
+    boundaryStepCount: 0,
+    droppedComputeStepCount: 0,
   };
   const builtins = registerBuiltinTypes(ctx);
   registerBuiltinGlobals(ctx, builtins);
@@ -890,8 +889,8 @@ export function lowerScheduleToNagaModule(args: {
     },
     coverage: {
       totalStepCount: steps.length,
-      nonComputeStepCount: coverage.nonComputeStepCount,
-      semanticFallbacks: coverage.semanticFallbacks,
+      boundaryStepCount: coverage.boundaryStepCount,
+      droppedComputeStepCount: coverage.droppedComputeStepCount,
     },
   };
 }
