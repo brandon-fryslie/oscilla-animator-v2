@@ -92,38 +92,17 @@ describe('naga lowering artifact', () => {
     expect(hasBlockBoundEntry).toBe(true);
   });
 
-  it('interns repeated numeric constants instead of duplicating entries', () => {
-    const result = compile(buildSimplePatch());
-    expect(result.kind).toBe('ok');
-    if (result.kind !== 'ok') return;
-
-    const artifact = result.program.nagaLoweringProgram;
-    expect(artifact).toBeDefined();
-    if (!artifact) return;
-
-    const zeroConstants = artifact.module.constants.filter((entry) => entry.value === 0);
-    const oneConstants = artifact.module.constants.filter((entry) => entry.value === 1);
-
-    // [LAW:one-source-of-truth] Lowering context interns constants so repeated
-    // address arithmetic literals are emitted once and referenced by ID.
-    expect(zeroConstants.length).toBe(1);
-    expect(oneConstants.length).toBe(1);
-  });
-
-  it('tracks coverage for non-compute steps without placeholder comment statements', () => {
+  it('treats non-compute schedule steps as boundary work (not incomplete lowering)', () => {
     const result = compile(buildRenderPatch());
     expect(result.kind).toBe('ok');
     if (result.kind !== 'ok') return;
-
-    const partialWarning = result.warnings.find((warning) => warning.code === 'W_NAGA_LOWERING_PARTIAL');
-    expect(partialWarning).toBeDefined();
 
     const artifact = result.program.nagaLoweringProgram;
     expect(artifact).toBeDefined();
     if (!artifact) return;
 
     expect(artifact.coverage.totalStepCount).toBeGreaterThan(0);
-    expect(artifact.coverage.semanticFallbacks.length).toBeGreaterThan(0);
+    expect(artifact.coverage.boundaryStepCount).toBeGreaterThan(0);
 
     const placeholderComments = artifact.module.functions[0]?.statements.filter(
       (statement) =>

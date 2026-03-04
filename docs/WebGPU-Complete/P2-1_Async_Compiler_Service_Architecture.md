@@ -95,7 +95,7 @@ When scheduleCompile is called and the debounce timer (e.g., 50ms) expires, the 
 
 ### Stage 1: The IR Lowering (Synchronous - CPU)
 
-- **Action:** TypeScript converts NormalizedGraph into scoped `NagaEmitterInstruction` blocks, then emits Naga-like arenas via constrained builder APIs.
+- **Action:** TypeScript lowers NormalizedGraph schedule/ValueExpr IR through `ScheduleNagaLowering` into scoped Naga arenas via constrained builder APIs.
 
 - **Performance:** Extremely fast (\$\<2\$ms).
 

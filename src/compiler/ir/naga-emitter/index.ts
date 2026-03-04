@@ -14,7 +14,6 @@ export {
 export { type BlockContext, ExprHandle, NagaBuilder } from './NagaBuilder';
 export { ScopeEnvironment } from './ScopeEnvironment';
 export { NagaValidationError, collectNagaValidationIssues, validateNagaBuilder } from './NagaValidator';
-export { type NagaEmitterInstruction, WgslNagaCompiler } from './WgslNagaCompiler';
 export {
   lowerScheduleToNagaModule,
   type NagaLoweringProgramIR,

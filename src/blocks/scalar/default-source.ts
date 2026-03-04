@@ -17,7 +17,7 @@
  * - color → HueRainbow(phaseA) [cycling rainbow via macro expansion]
  * - event (discrete) → eventNever [never fires]
  * - unresolved generic → error
- * - camera projection, shape2d → error
+ * - camera projection, shape handle → error
  */
 
 import { registerBlock, requireBlockDef } from '../registry';

@@ -179,6 +179,14 @@ export interface CompiledProgramIR {
   readonly instanceCountProvenance?: InstanceCountProvenanceMap;
 
   /**
+   * Compiler-owned runtime-live expression IDs for fast-path constant patching.
+   *
+   * [LAW:single-enforcer] Liveness/patchability ownership lives in compiler
+   * metadata; runtime services consume this set and do not infer from schedule.
+   */
+  readonly runtimeLiveExprIds?: readonly number[];
+
+  /**
    * Arena layout — flat Float32Array descriptor for every slot.
    * Indexed by slot ID (same ordering as slotMeta).
    *
@@ -380,7 +388,7 @@ export interface SlotMetaEntry {
    * [LAW:one-source-of-truth] Slot metadata mirrors canonical runtime ABI
    * vocabulary only; legacy f64/object labels are not part of this contract.
    */
-  readonly storage: 'f32' | 'i32' | 'u32' | 'shape2d';
+  readonly storage: 'f32' | 'i32' | 'u32';
 
   /**
    * REQUIRED: absolute offset into the backing store for this storage class.
@@ -418,7 +426,7 @@ export interface RuntimeSlotEntry {
    * [LAW:one-source-of-truth] Runtime hot path resolves addresses from this
    * canonical set only (no legacy f64/object labels).
    */
-  readonly storage: 'f32' | 'i32' | 'u32' | 'shape2d';
+  readonly storage: 'f32' | 'i32' | 'u32';
   readonly offset: number;
   readonly stride: number;
   readonly type: CanonicalType;
@@ -434,7 +442,7 @@ export interface RuntimeSlotLookupEntry {
    * [LAW:one-source-of-truth] Runtime lookup contracts must not expose legacy
    * f64/object storage labels.
    */
-  readonly storage: 'f32' | 'i32' | 'u32' | 'shape2d';
+  readonly storage: 'f32' | 'i32' | 'u32';
   readonly offset: number;
   readonly stride: number;
   readonly slot: ValueSlot;
@@ -552,7 +560,7 @@ export type ShapeDescIR =
   | { readonly kind: 'struct'; readonly fields: readonly StructFieldIR[] }
   | { readonly kind: 'array'; readonly length: number; readonly element: ShapeDescIR }
   | { readonly kind: 'object'; readonly class: string }
-  | { readonly kind: 'shape' }; // Shape2D descriptor (topology + params)
+  | { readonly kind: 'shape' }; // Shape handle descriptor (topology + params)
 
 export interface StructFieldIR {
   readonly name: string;
@@ -664,7 +672,6 @@ export interface RuntimeStorageSizes {
   f32: number;
   i32: number;
   u32: number;
-  shape2d: number;
 }
 
 type StorageExtentEntry = {
@@ -678,7 +685,6 @@ function accumulateStorageSizes(entries: readonly StorageExtentEntry[]): Runtime
     f32: 0,
     i32: 0,
     u32: 0,
-    shape2d: 0,
   };
   for (const entry of entries) {
     const requiredSize = entry.offset + entry.stride;
