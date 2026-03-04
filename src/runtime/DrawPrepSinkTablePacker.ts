@@ -180,9 +180,9 @@ function assertShapeHandleInBankWindow(state: RuntimeState, shapeHandleWordOffse
   }
 }
 
-function resolveScaleOneBits(program: CompiledProgramIR, state: RuntimeState, step: StepRender): number {
+function resolveScaleOneValue(program: CompiledProgramIR, state: RuntimeState, step: StepRender): number {
   if (!step.scale || step.scale.k !== 'one') {
-    return 0;
+    return 1;
   }
   const address = program.runtimeAddressTable?.scalarExprToArenaAddress.get(step.scale.id as number);
   if (!address) {
@@ -197,7 +197,7 @@ function resolveScaleOneBits(program: CompiledProgramIR, state: RuntimeState, st
       'DrawPrepSinkTablePacker: sink scale one-value must be finite, got ' + String(rawScale),
     );
   }
-  return assertFiniteUint32(float32ToUint32Bits(rawScale), 'scaleOneBits');
+  return rawScale;
 }
 
 function resolveSinkInstanceCount(program: CompiledProgramIR, state: RuntimeState, sinkIndex: number): number {
@@ -248,16 +248,35 @@ export function packDrawPrepSinkTableV1(
   // [LAW:one-source-of-truth] Compiler owns static sink ordering and indirect
   // region metadata; runtime packs only per-frame shape/count/first-instance.
   const header = buildDrawPrepSinkTableHeader(drawPrepProgram);
-  const wordCount = computeDrawPrepSinkTableWordCapacity(header.totalRecordCount);
+  const sinkInstanceCounts: number[] = [];
+  let totalInstanceCount = 0;
+  for (let sinkIndex = 0; sinkIndex < drawPrepProgram.sinks.length; sinkIndex++) {
+    const instanceCount = resolveSinkInstanceCount(program, state, sinkIndex);
+    sinkInstanceCounts.push(instanceCount);
+    totalInstanceCount = assertFiniteUint32(
+      totalInstanceCount + instanceCount,
+      'totalInstanceCount',
+    );
+  }
+  // [LAW:single-enforcer] exception: runtime packs canonical per-frame instance
+  // payload directly into sink-table transport while worker-side arena ownership
+  // is being migrated.
+  const PER_INSTANCE_PAYLOAD_WORDS = 11;
+  const baseWordCount = computeDrawPrepSinkTableWordCapacity(header.totalRecordCount);
+  const wordCount = assertFiniteUint32(
+    baseWordCount + totalInstanceCount * PER_INSTANCE_PAYLOAD_WORDS,
+    'sinkTableWordCount',
+  );
   const words = ensureTableBuffer(state, wordCount);
   words.fill(0, 0, wordCount);
   writeDrawPrepSinkTableHeader(words, header);
 
   let firstInstance = 0;
+  let payloadCursor = baseWordCount;
   for (let sinkIndex = 0; sinkIndex < drawPrepProgram.sinks.length; sinkIndex++) {
     const sink = drawPrepProgram.sinks[sinkIndex];
     const renderStep = requireRenderStep(program, sink.renderStepIndex);
-    const instanceCount = resolveSinkInstanceCount(program, state, sinkIndex);
+    const instanceCount = sinkInstanceCounts[sinkIndex] ?? 0;
     const shapeHandleWordOffset =
       renderStep.shape.k === 'slot'
         ? resolveSlotShapeHandle(program, state, renderStep, instanceCount)
@@ -307,14 +326,57 @@ export function packDrawPrepSinkTableV1(
           `scale2Slot sink(instance=${String(renderStep.instanceId)})`,
         )
         : null;
-    const scaleModeCode = !renderStep.scale
-      ? 0
-      : renderStep.scale.k === 'one'
-        ? 1
-        : 2;
-    const scaleValueOrBaseOffset = renderStep.scale?.k === 'one'
-      ? resolveScaleOneBits(program, state, renderStep)
-      : (scaleSlotAddress?.baseOffset ?? 0);
+    const positionBaseOffset = payloadCursor;
+    payloadCursor += instanceCount * 2;
+    const colorBaseOffset = payloadCursor;
+    payloadCursor += instanceCount * 4;
+    const scaleBaseOffset = payloadCursor;
+    payloadCursor += instanceCount;
+    const rotationBaseOffset = payloadCursor;
+    payloadCursor += instanceCount;
+    const scale2BaseOffset = payloadCursor;
+    payloadCursor += instanceCount * 2;
+    const shapeSlotBaseOffset = payloadCursor;
+    payloadCursor += instanceCount;
+
+    const scaleOneValue = resolveScaleOneValue(program, state, renderStep);
+    for (let lane = 0; lane < instanceCount; lane++) {
+      const positionX = readArenaNumber(positionAddress, state, lane, 0);
+      const positionY = readArenaNumber(positionAddress, state, lane, 1);
+      const colorR = readArenaNumber(colorAddress, state, lane, 0);
+      const colorG = readArenaNumber(colorAddress, state, lane, 1);
+      const colorB = readArenaNumber(colorAddress, state, lane, 2);
+      const colorA = readArenaNumber(colorAddress, state, lane, 3);
+      const scaleValue = renderStep.scale?.k === 'slot'
+        ? readArenaNumber(scaleSlotAddress!, state, lane, 0)
+        : scaleOneValue;
+      const rotationValue = rotationSlotAddress
+        ? readArenaNumber(rotationSlotAddress, state, lane, 0)
+        : 0;
+      const scale2X = scale2SlotAddress
+        ? readArenaNumber(scale2SlotAddress, state, lane, 0)
+        : 1;
+      const scale2Y = scale2SlotAddress
+        ? readArenaNumber(scale2SlotAddress, state, lane, 1)
+        : 1;
+      const shapeHandle = renderStep.shape.k === 'slot'
+        ? assertFiniteUint32(
+          Math.trunc(readArenaNumber(shapeSlotAddress!, state, lane, 0)),
+          `shapeSlotHandle lane=${lane}`,
+        )
+        : shapeHandleWordOffset;
+      words[positionBaseOffset + lane] = float32ToUint32Bits(positionX);
+      words[positionBaseOffset + instanceCount + lane] = float32ToUint32Bits(positionY);
+      words[colorBaseOffset + lane] = float32ToUint32Bits(colorR);
+      words[colorBaseOffset + instanceCount + lane] = float32ToUint32Bits(colorG);
+      words[colorBaseOffset + instanceCount * 2 + lane] = float32ToUint32Bits(colorB);
+      words[colorBaseOffset + instanceCount * 3 + lane] = float32ToUint32Bits(colorA);
+      words[scaleBaseOffset + lane] = float32ToUint32Bits(scaleValue);
+      words[rotationBaseOffset + lane] = float32ToUint32Bits(rotationValue);
+      words[scale2BaseOffset + lane] = float32ToUint32Bits(scale2X);
+      words[scale2BaseOffset + instanceCount + lane] = float32ToUint32Bits(scale2Y);
+      words[shapeSlotBaseOffset + lane] = shapeHandle;
+    }
 
     writeDrawPrepSinkRecord(words, sinkIndex, {
       sinkIndex: sink.sinkIndex,
@@ -324,32 +386,38 @@ export function packDrawPrepSinkTableV1(
       instanceCount,
       firstInstance: packedFirstInstance,
       renderStepIndex: sink.renderStepIndex,
-      shapeSourceCode: renderStep.shape.k === 'slot' ? 1 : 0,
-      positionBaseOffset: positionAddress.baseOffset,
-      positionLaneStride: positionAddress.laneStride,
-      positionComponentStride: positionAddress.componentStride,
-      colorBaseOffset: colorAddress.baseOffset,
-      colorLaneStride: colorAddress.laneStride,
-      colorComponentStride: colorAddress.componentStride,
-      scaleModeCode,
-      scaleValueOrBaseOffset,
-      scaleLaneStride: scaleSlotAddress?.laneStride ?? 0,
-      scaleComponentStride: scaleSlotAddress?.componentStride ?? 0,
-      rotationModeCode: rotationSlotAddress ? 1 : 0,
-      rotationBaseOffset: rotationSlotAddress?.baseOffset ?? 0,
-      rotationLaneStride: rotationSlotAddress?.laneStride ?? 0,
-      rotationComponentStride: rotationSlotAddress?.componentStride ?? 0,
-      scale2ModeCode: scale2SlotAddress ? 1 : 0,
-      scale2BaseOffset: scale2SlotAddress?.baseOffset ?? 0,
-      scale2LaneStride: scale2SlotAddress?.laneStride ?? 0,
-      scale2ComponentStride: scale2SlotAddress?.componentStride ?? 0,
-      shapeSlotBaseOffset: shapeSlotAddress?.baseOffset ?? 0,
-      shapeSlotLaneStride: shapeSlotAddress?.laneStride ?? 0,
-      shapeSlotComponentStride: shapeSlotAddress?.componentStride ?? 0,
+      shapeSourceCode: 1,
+      positionBaseOffset,
+      positionLaneStride: 1,
+      positionComponentStride: instanceCount,
+      colorBaseOffset,
+      colorLaneStride: 1,
+      colorComponentStride: instanceCount,
+      scaleModeCode: 2,
+      scaleValueOrBaseOffset: scaleBaseOffset,
+      scaleLaneStride: 1,
+      scaleComponentStride: 1,
+      rotationModeCode: 1,
+      rotationBaseOffset,
+      rotationLaneStride: 1,
+      rotationComponentStride: 1,
+      scale2ModeCode: 1,
+      scale2BaseOffset,
+      scale2LaneStride: 1,
+      scale2ComponentStride: instanceCount,
+      shapeSlotBaseOffset,
+      shapeSlotLaneStride: 1,
+      shapeSlotComponentStride: 1,
     });
 
     const nextFirstInstance = packedFirstInstance + instanceCount;
     firstInstance = assertFiniteUint32(nextFirstInstance, 'firstInstancePrefixSum');
+  }
+  if (payloadCursor !== wordCount) {
+    throw new Error(
+      'DrawPrepSinkTablePacker: payload cursor mismatch ' +
+      `(cursor=${payloadCursor}, wordCount=${wordCount})`,
+    );
   }
 
   state.cache.drawPrepSinkTableWords = words;

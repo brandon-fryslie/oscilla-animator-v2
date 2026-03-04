@@ -150,7 +150,9 @@ describe('packDrawPrepSinkTableV1', () => {
 
     const words = packed!.words;
     expect(packed!.wordCount).toBe(
-      DRAW_PREP_SINK_TABLE_HEADER_WORDS + DRAW_PREP_SINK_TABLE_RECORD_WORDS * 2,
+      DRAW_PREP_SINK_TABLE_HEADER_WORDS
+      + DRAW_PREP_SINK_TABLE_RECORD_WORDS * 2
+      + (2 + 3) * 11,
     );
     expect(words[DrawPrepSinkTableHeaderWord.TotalRecordCount]).toBe(2);
     expect(words[DrawPrepSinkTableHeaderWord.IndexedRecordCount]).toBe(1);
@@ -164,16 +166,18 @@ describe('packDrawPrepSinkTableV1', () => {
     expect(words[record0 + DrawPrepSinkTableRecordWord.ShapeHandleWordOffset]).toBe(32);
     expect(words[record0 + DrawPrepSinkTableRecordWord.InstanceCount]).toBe(2);
     expect(words[record0 + DrawPrepSinkTableRecordWord.FirstInstance]).toBe(0);
-    expect(words[record0 + DrawPrepSinkTableRecordWord.ShapeSourceCode]).toBe(0);
-    expect(words[record0 + DrawPrepSinkTableRecordWord.PositionBaseOffset]).toBe(0);
+    expect(words[record0 + DrawPrepSinkTableRecordWord.ShapeSourceCode]).toBe(1);
+    expect(words[record0 + DrawPrepSinkTableRecordWord.PositionBaseOffset]).toBe(
+      DRAW_PREP_SINK_TABLE_HEADER_WORDS + DRAW_PREP_SINK_TABLE_RECORD_WORDS * 2,
+    );
     expect(words[record0 + DrawPrepSinkTableRecordWord.PositionLaneStride]).toBe(1);
-    expect(words[record0 + DrawPrepSinkTableRecordWord.PositionComponentStride]).toBe(32);
+    expect(words[record0 + DrawPrepSinkTableRecordWord.PositionComponentStride]).toBe(2);
 
     expect(words[record1 + DrawPrepSinkTableRecordWord.DrawMode]).toBe(1);
     expect(words[record1 + DrawPrepSinkTableRecordWord.ShapeHandleWordOffset]).toBe(96);
     expect(words[record1 + DrawPrepSinkTableRecordWord.InstanceCount]).toBe(3);
     expect(words[record1 + DrawPrepSinkTableRecordWord.FirstInstance]).toBe(2);
-    expect(words[record1 + DrawPrepSinkTableRecordWord.ShapeSourceCode]).toBe(0);
+    expect(words[record1 + DrawPrepSinkTableRecordWord.ShapeSourceCode]).toBe(1);
   });
 
   it('fails fast when a dynamic sink count is missing for the current frame', () => {
@@ -250,9 +254,9 @@ describe('packDrawPrepSinkTableV1', () => {
     const words = packed!.words;
     expect(words[record0 + DrawPrepSinkTableRecordWord.ShapeSourceCode]).toBe(1);
     expect(words[record0 + DrawPrepSinkTableRecordWord.ShapeHandleWordOffset]).toBe(64);
-    expect(words[record0 + DrawPrepSinkTableRecordWord.ShapeSlotBaseOffset]).toBe(300);
+    expect(words[record0 + DrawPrepSinkTableRecordWord.ShapeSlotBaseOffset]).toBe(67);
     expect(words[record0 + DrawPrepSinkTableRecordWord.ShapeSlotLaneStride]).toBe(1);
-    expect(words[record0 + DrawPrepSinkTableRecordWord.ShapeSlotComponentStride]).toBe(32);
+    expect(words[record0 + DrawPrepSinkTableRecordWord.ShapeSlotComponentStride]).toBe(1);
   });
 
   it('fails fast for heterogeneous slot-shape handles in one sink', () => {

@@ -29,6 +29,7 @@ export const CanvasTab: React.FC<CanvasTabProps> = ({ onCanvasReady }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [canvasSize, setCanvasSize] = useState({ width: 800, height: 600 });
+  const lastCanvasSizeRef = useRef({ width: 800, height: 600 });
 
   // Mouse state for external channels
   const mouseStateRef = useRef({
@@ -42,15 +43,9 @@ export const CanvasTab: React.FC<CanvasTabProps> = ({ onCanvasReady }) => {
   });
 
   // Resize canvas to fit container while maintaining aspect ratio
-  const updateCanvasSize = useCallback(() => {
-    const container = containerRef.current;
+  const updateCanvasSize = useCallback((containerWidth: number, containerHeight: number) => {
     const canvas = canvasRef.current;
-    if (!container || !canvas) return;
-
-    // Get container dimensions
-    const rect = container.getBoundingClientRect();
-    const containerWidth = Math.floor(rect.width);
-    const containerHeight = Math.floor(rect.height);
+    if (!canvas) return;
 
     if (containerWidth <= 0 || containerHeight <= 0) return;
 
@@ -69,8 +64,11 @@ export const CanvasTab: React.FC<CanvasTabProps> = ({ onCanvasReady }) => {
       height = Math.floor(width / TARGET_ASPECT_RATIO);
     }
 
-    // Only update if size actually changed (avoid unnecessary re-renders)
-    if (width !== canvasSize.width || height !== canvasSize.height) {
+    const previous = lastCanvasSizeRef.current;
+    // [LAW:dataflow-not-control-flow] Canvas sizing runs on every resize event;
+    // data equality keeps updates as no-ops without branching outer flow.
+    if (width !== previous.width || height !== previous.height) {
+      lastCanvasSizeRef.current = { width, height };
       setCanvasSize({ width, height });
       // Update canvas element dimensions directly for immediate effect
       canvas.width = width;
@@ -78,21 +76,25 @@ export const CanvasTab: React.FC<CanvasTabProps> = ({ onCanvasReady }) => {
       // Update viewport store with new canvas dimensions
       viewport.setCanvasDimensions(width, height);
     }
-  }, [canvasSize.width, canvasSize.height, viewport]);
+  }, [viewport]);
 
   // Set up ResizeObserver to track container size changes
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
 
-    const resizeObserver = new ResizeObserver(() => {
-      updateCanvasSize();
+    const resizeObserver = new ResizeObserver((entries) => {
+      const next = entries[0]?.contentRect;
+      if (!next) {
+        return;
+      }
+      updateCanvasSize(Math.floor(next.width), Math.floor(next.height));
     });
 
     resizeObserver.observe(container);
 
     // Initial size update
-    updateCanvasSize();
+    updateCanvasSize(Math.floor(container.clientWidth), Math.floor(container.clientHeight));
 
     return () => {
       resizeObserver.disconnect();
@@ -108,10 +110,11 @@ export const CanvasTab: React.FC<CanvasTabProps> = ({ onCanvasReady }) => {
 
   // Helper: normalize mouse position to [0,1] range
   const normalizeMousePosition = useCallback((e: MouseEvent, canvas: HTMLCanvasElement) => {
-    const rect = canvas.getBoundingClientRect();
+    const width = Math.max(1, canvas.clientWidth || canvas.width);
+    const height = Math.max(1, canvas.clientHeight || canvas.height);
     return {
-      x: Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)),
-      y: Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height)),
+      x: Math.max(0, Math.min(1, e.offsetX / width)),
+      y: Math.max(0, Math.min(1, e.offsetY / height)),
     };
   }, []);
 

@@ -366,6 +366,42 @@ export function executeAnimationFrame(
           DRAW_PREP_SINK_TABLE_HEADER_WORDS + DrawPrepSinkTableRecordWord.ShapeHandleWordOffset
         ] ?? NaN
         : NaN;
+      const firstRecordPositionBaseOffset = packedSinkTable
+        ? packedSinkTable.words[
+          DRAW_PREP_SINK_TABLE_HEADER_WORDS + DrawPrepSinkTableRecordWord.PositionBaseOffset
+        ] ?? NaN
+        : NaN;
+      const firstRecordPositionLaneStride = packedSinkTable
+        ? packedSinkTable.words[
+          DRAW_PREP_SINK_TABLE_HEADER_WORDS + DrawPrepSinkTableRecordWord.PositionLaneStride
+        ] ?? NaN
+        : NaN;
+      const firstRecordPositionComponentStride = packedSinkTable
+        ? packedSinkTable.words[
+          DRAW_PREP_SINK_TABLE_HEADER_WORDS + DrawPrepSinkTableRecordWord.PositionComponentStride
+        ] ?? NaN
+        : NaN;
+      let arenaPosLane0X = NaN;
+      let arenaPosLane0Y = NaN;
+      let arenaPosLane1X = NaN;
+      let arenaPosLane1Y = NaN;
+      if (
+        Number.isFinite(firstRecordPositionBaseOffset)
+        && Number.isFinite(firstRecordPositionLaneStride)
+        && Number.isFinite(firstRecordPositionComponentStride)
+      ) {
+        const base = firstRecordPositionBaseOffset as number;
+        const laneStride = firstRecordPositionLaneStride as number;
+        const componentStride = firstRecordPositionComponentStride as number;
+        const lane0XIndex = base;
+        const lane0YIndex = base + componentStride;
+        const lane1XIndex = base + laneStride;
+        const lane1YIndex = base + laneStride + componentStride;
+        arenaPosLane0X = currentState.arena[lane0XIndex] ?? NaN;
+        arenaPosLane0Y = currentState.arena[lane0YIndex] ?? NaN;
+        arenaPosLane1X = currentState.arena[lane1XIndex] ?? NaN;
+        arenaPosLane1Y = currentState.arena[lane1YIndex] ?? NaN;
+      }
       const firstRecordInstanceCount = packedSinkTable
         ? packedSinkTable.words[
           DRAW_PREP_SINK_TABLE_HEADER_WORDS + DrawPrepSinkTableRecordWord.InstanceCount
@@ -439,6 +475,8 @@ export function executeAnimationFrame(
         + ` | cpuAlpha=${Number.isFinite(firstAlpha) ? firstAlpha.toFixed(3) : 'na'}`
         + ` | shapeHandle=${Number.isFinite(firstShapeHandleWordOffset) ? String(firstShapeHandleWordOffset) : 'na'}`
         + ` | sinkRecord(instanceCount=${Number.isFinite(firstRecordInstanceCount) ? String(firstRecordInstanceCount) : 'na'},firstInstance=${Number.isFinite(firstRecordFirstInstance) ? String(firstRecordFirstInstance) : 'na'},indirectIndex=${Number.isFinite(firstRecordIndirectIndex) ? String(firstRecordIndirectIndex) : 'na'})`
+        + ` | sinkPos(base=${Number.isFinite(firstRecordPositionBaseOffset) ? String(firstRecordPositionBaseOffset) : 'na'},laneStride=${Number.isFinite(firstRecordPositionLaneStride) ? String(firstRecordPositionLaneStride) : 'na'},componentStride=${Number.isFinite(firstRecordPositionComponentStride) ? String(firstRecordPositionComponentStride) : 'na'})`
+        + ` | arenaPos(l0=(${Number.isFinite(arenaPosLane0X) ? arenaPosLane0X.toFixed(3) : 'na'},${Number.isFinite(arenaPosLane0Y) ? arenaPosLane0Y.toFixed(3) : 'na'}),l1=(${Number.isFinite(arenaPosLane1X) ? arenaPosLane1X.toFixed(3) : 'na'},${Number.isFinite(arenaPosLane1Y) ? arenaPosLane1Y.toFixed(3) : 'na'}))`
         + ` | shapeInPlane=${Number.isFinite(firstShapeHandleWordOffset) ? String((firstShapeHandleWordOffset as number) < shapeBank.volatilePtr) : 'na'}`
         + ` | shape(indexCount=${Number.isFinite(firstShapeIndexCount) ? String(firstShapeIndexCount) : 'na'}, vertexCount=${Number.isFinite(firstShapeVertexCount) ? String(firstShapeVertexCount) : 'na'})`
         + ` | shapePoints=(${Number.isFinite(shapePointMinX) ? shapePointMinX.toFixed(3) : 'na'}..${Number.isFinite(shapePointMaxX) ? shapePointMaxX.toFixed(3) : 'na'},${Number.isFinite(shapePointMinY) ? shapePointMinY.toFixed(3) : 'na'}..${Number.isFinite(shapePointMaxY) ? shapePointMaxY.toFixed(3) : 'na'})`,

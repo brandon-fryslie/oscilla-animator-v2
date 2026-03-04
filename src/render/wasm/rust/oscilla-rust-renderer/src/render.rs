@@ -52,6 +52,7 @@ impl DepthTarget {
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct IndirectRegionPlan {
+    pub total_instance_count: u32,
     pub indexed_record_count: u32,
     pub non_indexed_record_count: u32,
     pub indexed_region_base_words: u32,

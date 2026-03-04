@@ -53,7 +53,7 @@ const INPUT_INDEX = Object.freeze({
 const DEFAULT_BOOTSTRAP_CONFIG: RustRendererBootstrapConfig = Object.freeze({
   maxParticles: 65_536,
   maxShapes: 65_536,
-  debugReadbackHz: 5,
+  debugReadbackHz: 0,
 });
 
 function coerceFinite(value: number | undefined): number {
