@@ -105,9 +105,11 @@ export function planStatefulStorage(
   if (!instanceDecl) {
     throw new Error(`Stateful lowering: missing instance declaration for ${instanceId}`);
   }
-  if (instanceDecl.count === 'dynamic') {
-    throw new Error(`Stateful lowering: dynamic instance count is not supported for state slot ${stateKey}`);
-  }
+  // [LAW:one-source-of-truth] Stateful lane capacity follows canonical
+  // instance declaration capacity (dynamic instances use maxCount).
+  const laneCount = instanceDecl.count === 'dynamic'
+    ? instanceDecl.maxCount
+    : instanceDecl.count;
 
   return {
     stateDecl: {
@@ -115,7 +117,7 @@ export function planStatefulStorage(
       initialValue,
       stride,
       instanceId,
-      laneCount: instanceDecl.count,
+      laneCount,
     },
     writeKind: 'fieldStateWrite',
   };

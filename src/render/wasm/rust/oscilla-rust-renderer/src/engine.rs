@@ -29,19 +29,22 @@ const INPUT_SIGNAL_WORDS: u32 = 4;
 const INPUT_FLOAT_WORDS: u32 = 32;
 
 const DEFAULT_SIMULATION_WGSL: &str = r#"
-@group(0) @binding(0) var<uniform> global_uniforms: array<vec4<f32>, 5>;
-@group(1) @binding(0) var<storage, read> state_read: array<u32>;
-@group(2) @binding(0) var<storage, read_write> state_write: array<u32>;
+@group(0) @binding(0) var<storage, read> arena_read: array<u32>;
+@group(0) @binding(1) var<storage, read_write> arena_write: array<u32>;
+@group(0) @binding(2) var<storage, read> state_read: array<u32>;
+@group(0) @binding(3) var<storage, read_write> state_write: array<u32>;
+@group(0) @binding(4) var<uniform> global_uniforms: array<vec4<f32>, 5>;
 
 @compute @workgroup_size(64)
-fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
+fn compute_main(@builtin(global_invocation_id) gid: vec3<u32>) {
   let index = gid.x;
   if (index >= arrayLength(&state_write)) {
     return;
   }
-  let base = state_read[index];
+  let base = state_read[index] + arena_read[index];
   let dt_bits = bitcast<u32>(global_uniforms[4].y);
   state_write[index] = base + dt_bits + 1u;
+  arena_write[index] = state_write[index];
 }
 "#;
 
@@ -268,6 +271,7 @@ impl Engine {
             &device,
             &compute.uniform_layout,
             &compute.state_layout,
+            compute.compiler_simulation_layout(),
             &compute.assembly_layout,
             &render.instance_layout,
             &render.topology_layout,
@@ -356,6 +360,7 @@ impl Engine {
             &self.device,
             &self.compute.uniform_layout,
             &self.compute.state_layout,
+            self.compute.compiler_simulation_layout(),
             &self.compute.assembly_layout,
             &self.render.instance_layout,
             &self.render.topology_layout,
@@ -373,12 +378,6 @@ impl Engine {
             simulation_wgsl,
             self.max_particles,
         );
-        let compiler_layout = self
-            .compute
-            .compiler_simulation_layout()
-            .expect("compiler simulation layout must exist after rebuild");
-        self.arena
-            .rebuild_compiler_simulation_bind_groups(&self.device, compiler_layout);
     }
 
     pub fn sync_render_payload(
@@ -640,10 +639,6 @@ impl Engine {
             staging_buffer_for_callback.unmap();
             readback_gate.store(false, Ordering::SeqCst);
         });
-    }
-
-    pub fn take_runtime_event_code(&mut self) -> u32 {
-        self.scheduler.take_legacy_runtime_event_code()
     }
 
     pub fn take_frame_pacing_packet(&mut self) -> Option<WorkerObservabilityPacket> {

@@ -2,7 +2,7 @@
  * MakeShape2D Block
  *
  * Assembler: accepts deformed Field<vec2> control points and packs them
- * back into a One<shape2d> with auto-generated LINE-based topology.
+ * back into a One<shape> with auto-generated LINE-based topology.
  *
  * This is the critical piece that closes the Generator -> Deform -> Assemble loop.
  * Any Field<vec2> (e.g. from ProceduralPolygon.controlPoints run through
@@ -13,11 +13,10 @@ import { registerBlock, requireConfig } from '../registry';
 import { canonicalType, canonicalManyDef, payloadStride, requireInst } from '../../core/canonical-types';
 import { BOOL, FLOAT, SHAPE, VEC2 } from '../../core/canonical-types';
 import { DOMAIN_CONTROL } from '../../core/domain-registry';
-import { registerDynamicTopology } from '../../shapes/registry';
 import { createLinePathTopology } from './_topology-helpers';
 
 /**
- * MakeShape2D - Assemble Field<vec2> into One<shape2d>
+ * MakeShape2D - Assemble Field<vec2> into One<shape>
  *
  * Takes a control-points field (possibly deformed by upstream math) and
  * produces a renderable shape with auto-generated line topology.
@@ -27,7 +26,7 @@ import { createLinePathTopology } from './_topology-helpers';
  * - closed: bool               (config only, default true)
  *
  * Outputs:
- * - shape: One<shape2d>     (assembled shape with topology)
+ * - shape: One<shape>       (assembled shape with topology)
  *
  * Example:
  * ```
@@ -87,17 +86,18 @@ export function register(): void {
       if (!instanceDecl) {
         throw new Error(`MakeShape2D: instance '${instance}' not found in instance registry`);
       }
-      const pointCount = instanceDecl.count;
-      if (typeof pointCount !== 'number') {
-        throw new Error(`MakeShape2D: dynamic instance count not supported — topology requires compile-time count`);
-      }
+      // [LAW:one-source-of-truth] Topology lane capacity is derived from the
+      // canonical instance declaration (static count or dynamic maxCount).
+      const pointCount = typeof instanceDecl.count === 'number'
+        ? instanceDecl.count
+        : instanceDecl.maxCount;
   
       // [LAW:one-source-of-truth] Shape closure is represented canonically as boolean.
       const closed = requireConfig<boolean>(config, 'closed', 'boolean');
   
       // Create and register topology
       const topology = createLinePathTopology(pointCount, closed);
-      const topologyId = registerDynamicTopology(topology, `make-shape2d-${pointCount}-${closed}`);
+      const topologyId = ctx.b.registerTopology(topology, `make-shape2d-${pointCount}-${closed}`);
   
       // Create shape reference pointing to the (possibly deformed) control points
       const shapeRefSig = ctx.b.shapeRef(

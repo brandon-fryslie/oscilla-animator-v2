@@ -169,17 +169,6 @@ pub fn inject_poison_alloc() -> Result<(), JsValue> {
 }
 
 #[wasm_bindgen]
-pub fn take_runtime_event_code() -> Result<u32, JsValue> {
-    ENGINE.with(|engine_cell| {
-        let mut engine_ref = engine_cell.borrow_mut();
-        let engine = engine_ref.as_mut().ok_or_else(|| {
-            JsValue::from_str("Rust engine must be initialized before take_runtime_event_code")
-        })?;
-        Ok(engine.take_runtime_event_code())
-    })
-}
-
-#[wasm_bindgen]
 pub fn take_frame_pacing_packet() -> Result<JsValue, JsValue> {
     ENGINE.with(|engine_cell| {
         let mut engine_ref = engine_cell.borrow_mut();

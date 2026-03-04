@@ -282,42 +282,6 @@ export function* executeFrameStepped(
     const writtenSlots = new Map<ValueSlot, SlotValue>();
 
     switch (step.kind) {
-      case 'evalOne': {
-        const targetSlot = step.target;
-        const lookup = resolveSlotOffset(targetSlot);
-        const { storage, slot, stride } = lookup;
-
-        if (isNumericStorage(storage)) {
-          const arenaDesc = resolveArenaDescriptor(slotToArena, lookup);
-
-          const buffer = materializeValueExpr(
-            step.expr,
-            program.valueExprs,
-            SCALAR_INSTANCE_ID,
-            1,
-            state,
-            program,
-            undefined,
-            STEPPED_MATERIALIZE_SCRATCH,
-            pureFnContext,
-          );
-          arenaEncodeFromAoS(state.arena, arenaDesc, buffer);
-          if (buffer.length < stride) {
-            throw new Error(
-              `evalOne: materialized buffer too small for slot ${slot} (need ${stride}, got ${buffer.length})`
-            );
-          }
-          for (let i = 0; i < stride; i++) {
-            state.tap?.recordSlotValue?.((slot + i) as ValueSlot, readCanonicalNumeric(slotToArena, state, lookup, i));
-          }
-          // Capture written slot
-          writtenSlots.set(targetSlot, readSlotValue(state, lookup, slotToArena));
-        } else {
-          throw new Error(`evalOne: unsupported storage type '${storage}' for slot ${slot} expr ${step.expr}`);
-        }
-        break;
-      }
-
       case 'eventDispatch': {
         const fired = evaluateValueExprEvent(step.expr as any, program.valueExprs, state, program, pureFnContext);
         if (fired) {
@@ -335,7 +299,9 @@ export function* executeFrameStepped(
       case 'materialize': {
         const veId = step.field;
         const instanceDecl = instances.get(step.instanceId);
-        const count = instanceDecl && typeof instanceDecl.count === 'number' ? instanceDecl.count : 0;
+        const count = instanceDecl
+          ? (typeof instanceDecl.count === 'number' ? instanceDecl.count : instanceDecl.maxCount)
+          : 0;
         // [LAW:one-source-of-truth] Arena lookup via ExprAddressTable — no direct arenaLayout access.
         const arenaDesc = slotToArena.get(step.target);
         if (!arenaDesc || arenaDesc.offset < 0 || arenaDesc.length <= 0) {
@@ -361,10 +327,19 @@ export function* executeFrameStepped(
 
         state.tap?.recordFieldValue?.(step.target, buffer);
 
-        // Capture materialized buffer (materializeValueExpr returns Float32Array)
-        writtenSlots.set(step.target, {
-          kind: 'buffer', buffer, count: buffer.length, type: valueExprs[veId as number].type,
-        });
+        const valueType = valueExprs[veId as number].type;
+        if (step.instanceId === SCALAR_INSTANCE_ID && buffer.length === 1) {
+          writtenSlots.set(step.target, {
+            kind: 'scalar',
+            value: buffer[0],
+            type: valueType,
+          });
+        } else {
+          // Capture materialized buffer (materializeValueExpr returns Float32Array)
+          writtenSlots.set(step.target, {
+            kind: 'buffer', buffer, count: buffer.length, type: valueType,
+          });
+        }
         break;
       }
 
@@ -383,7 +358,7 @@ export function* executeFrameStepped(
         const { instanceId } = step;
         const instance = instances.get(instanceId as InstanceId);
         if (!instance) break;
-        const count = typeof instance.count === 'number' ? instance.count : 0;
+        const count = typeof instance.count === 'number' ? instance.count : instance.maxCount;
         if (count === 0) break;
         const seed = instance.elementIdSeed ?? 0;
         const previousDomain = state.continuity.prevDomains.get(instanceId);

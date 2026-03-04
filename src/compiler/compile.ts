@@ -48,9 +48,10 @@ import { compilationInspector } from '../services/CompilationInspectorService';
 import { computeRenderReachableBlocks } from './reachability';
 import { resolveKernels } from './resolve-kernels';
 import { createDefaultRegistry } from '../runtime/kernels/default-registry';
+import { getValueExprChildren } from '../runtime/ValueExprTreeWalker';
 import { compileFrontend, type FrontendResult, type FrontendError } from './frontend';
 import type { CompileError } from './types';
-import { buildProgramTopologyTableFromIds, collectAllProgramTopologyIds } from './ir/program-topology';
+import { buildProgramTopologyTable, collectAllProgramTopologyIds } from './ir/program-topology';
 
 import { registerAllBlocks } from '../blocks/all';
 
@@ -296,33 +297,104 @@ function collectNagaLoweringCoverageWarnings(program: CompiledProgramIR): Compil
   const coverage = program.nagaLoweringProgram?.coverage;
   if (!coverage) return [];
 
-  const semanticFallbackCount = coverage.semanticFallbacks.length;
-  if (coverage.nonComputeStepCount === 0 && semanticFallbackCount === 0) {
+  if (coverage.droppedComputeStepCount === 0) {
     return [];
   }
 
-  const sampleFallbacks = coverage.semanticFallbacks
-    .slice(0, 5)
-    .map((entry) => ({
-      stepIndex: entry.stepIndex,
-      stepKind: entry.stepKind,
-      exprKind: entry.exprKind,
-      reason: entry.reason,
-    }));
-
   return [
     {
-      code: 'W_NAGA_LOWERING_PARTIAL',
-      message:
-        'Naga lowering coverage is partial: compute module excludes non-compute steps and includes typed-copy semantic fallbacks.',
+      code: 'W_NAGA_LOWERING_INCOMPLETE',
+      message: 'Naga lowering dropped compute-owned steps due to unresolved slot/source metadata.',
       details: {
         totalStepCount: coverage.totalStepCount,
-        nonComputeStepCount: coverage.nonComputeStepCount,
-        semanticFallbackCount,
-        sampleFallbacks,
+        boundaryStepCount: coverage.boundaryStepCount,
+        droppedComputeStepCount: coverage.droppedComputeStepCount,
       },
     },
   ];
+}
+
+function collectRuntimeLiveExprIdsForPatching(args: {
+  readonly valueExprs: readonly ValueExpr[];
+  readonly schedule: ScheduleIR;
+  readonly fieldSlotRegistry: ReadonlyMap<ValueSlot, FieldSlotEntry>;
+}): readonly number[] {
+  // [LAW:single-enforcer] Compiler owns runtime-live patchability metadata so
+  // fast-path services consume one canonical source.
+  const live = new Set<number>();
+  const stack: number[] = [];
+  const fieldExprBySlot = new Map<number, number>();
+
+  for (const [slot, entry] of args.fieldSlotRegistry.entries()) {
+    fieldExprBySlot.set(slot as number, entry.fieldId as number);
+  }
+
+  const pushExpr = (exprId: number | undefined | null): void => {
+    if (exprId === undefined || exprId === null) return;
+    if (!Number.isInteger(exprId) || exprId < 0) return;
+    if (!live.has(exprId)) {
+      stack.push(exprId);
+    }
+  };
+
+  const pushFieldExprForSlot = (slot: number | undefined): void => {
+    if (slot === undefined || slot === null) return;
+    const fieldExprId = fieldExprBySlot.get(slot);
+    if (fieldExprId === undefined) return;
+    pushExpr(fieldExprId);
+  };
+
+  // [LAW:dataflow-not-control-flow] Liveness roots are runtime compute/render
+  // sinks; materialize is transfer plumbing and not a patchability root.
+  for (const step of args.schedule.steps as readonly Step[]) {
+    switch (step.kind) {
+      case 'eventDispatch':
+        pushExpr(step.expr as number);
+        break;
+      case 'stateWrite':
+      case 'fieldStateWrite':
+        pushExpr(step.value as number);
+        break;
+      case 'render':
+        if (step.scale?.k === 'one') pushExpr(step.scale.id as number);
+        if (step.shape.k === 'oneHandle') pushExpr(step.shape.id as number);
+        pushFieldExprForSlot(step.controlPointsSlot as number);
+        pushFieldExprForSlot(step.colorSlot as number);
+        if (step.scale?.k === 'slot') {
+          pushFieldExprForSlot(step.scale.slot as number);
+        }
+        if (step.shape.k === 'slot') {
+          pushFieldExprForSlot(step.shape.slot as number);
+        }
+        if (step.controlPoints?.k === 'slot') {
+          pushFieldExprForSlot(step.controlPoints.slot as number);
+        }
+        pushFieldExprForSlot(step.rotationSlot as number | undefined);
+        pushFieldExprForSlot(step.scale2Slot as number | undefined);
+        break;
+      case 'continuityMapBuild':
+      case 'continuityApply':
+      case 'materialize':
+        break;
+      default: {
+        const _exhaustive: never = step;
+        void _exhaustive;
+      }
+    }
+  }
+
+  while (stack.length > 0) {
+    const exprId = stack.pop()!;
+    if (live.has(exprId)) continue;
+    live.add(exprId);
+    const expr = args.valueExprs[exprId];
+    if (!expr) continue;
+    for (const child of getValueExprChildren(expr)) {
+      pushExpr(child as number);
+    }
+  }
+
+  return Array.from(live.values()).sort((a, b) => a - b);
 }
 
 /**
@@ -334,7 +406,7 @@ function isAlwaysFatalInvariantError(error: CompileError): boolean {
 }
 
 function assertCanonicalRuntimeStorage(storage: SlotMetaEntry['storage']): RuntimeSlotEntry['storage'] {
-  if (storage === 'f32' || storage === 'i32' || storage === 'u32' || storage === 'shape2d') {
+  if (storage === 'f32' || storage === 'i32' || storage === 'u32') {
     return storage;
   }
   // [LAW:single-enforcer] Compiler slot derivation is the single boundary that
@@ -374,6 +446,8 @@ function buildRuntimeAddressTable(
     if (step.kind === 'materialize') {
       fieldExprToSlot.set(step.field as number, step.target);
       if (step.instanceId === SCALAR_INSTANCE_ID) {
+        // [LAW:single-enforcer] Scalar arena addressability is established only
+        // from canonical scalar materialize steps at compile boundary.
         const arenaDesc = slotToArena.get(step.target);
         if (arenaDesc) {
           scalarExprToArenaAddress.set(step.field as number, {
@@ -382,16 +456,6 @@ function buildRuntimeAddressTable(
             component: 0,
           });
         }
-      }
-    }
-    if (step.kind === 'evalOne') {
-      const arenaDesc = slotToArena.get(step.target);
-      if (arenaDesc) {
-        scalarExprToArenaAddress.set(step.expr as number, {
-          slot: step.target,
-          arena: arenaDesc,
-          component: 0,
-        });
       }
     }
   }
@@ -539,7 +603,6 @@ function convertLinkedIRToProgram(
     f32: 0,
     i32: 0,
     u32: 0,
-    shape2d: 0,
   };
 
   const slotCount = builder.getSlotCount();
@@ -753,14 +816,27 @@ function convertLinkedIRToProgram(
     throw new Error('E_CAMERA_MULTIPLE: Only one Camera block is permitted.');
   }
 
-  const topologyTable = buildProgramTopologyTableFromIds(
-    // [LAW:one-source-of-truth] Program topology ownership must include every
-    // topology reference surface (ValueExpr + render-step inline shape refs).
-    collectAllProgramTopologyIds({
-      valueExprs: { nodes: valueExprNodes },
-      steps: scheduleIR.steps as readonly Step[],
-    }),
-  );
+  const topologyIds = collectAllProgramTopologyIds({
+    valueExprs: { nodes: valueExprNodes },
+    steps: scheduleIR.steps as readonly Step[],
+  });
+  const ownedTopologies = builder.getSerializableTopologies();
+  const ownedById = new Map(ownedTopologies.map((definition) => [definition.id, definition]));
+  const topologyDefinitions = topologyIds.map((id) => {
+    const owned = ownedById.get(id);
+    if (owned) {
+      return owned;
+    }
+    // [LAW:one-source-of-truth] Compiled programs must carry topology
+    // definitions from compile-owned builder registration only.
+    throw new Error(`Compiled program is missing owned topology definition ${id}`);
+  });
+  const topologyTable = buildProgramTopologyTable(topologyDefinitions);
+  const runtimeLiveExprIds = collectRuntimeLiveExprIdsForPatching({
+    valueExprs: valueExprNodes,
+    schedule: scheduleIR,
+    fieldSlotRegistry,
+  });
 
   // Build the program (ValueExpr-only, with kernel registry)
   const program: CompiledProgramIR = {
@@ -783,6 +859,7 @@ function convertLinkedIRToProgram(
     instanceCountProvenance: unlinkedIR.instanceCountProvenance.size > 0
       ? unlinkedIR.instanceCountProvenance
       : undefined,
+    runtimeLiveExprIds,
     arenaLayout,
     arenaZones: arenaZonePlan.toIR(),
     arenaRuntimeLayout: arenaZonePlan.runtimeLayout,
@@ -844,9 +921,6 @@ function collectComputeSlots(scheduleIR: ScheduleIR): ValueSlot[] {
   const slots = new Set<ValueSlot>();
   for (const step of scheduleIR.steps) {
     switch (step.kind) {
-      case 'evalOne':
-        slots.add(step.target);
-        break;
       case 'materialize':
         slots.add(step.target);
         break;
@@ -909,7 +983,6 @@ function buildGeneratedComputeProgram(
  */
 function getStepExprId(step: Step): ValueExprId | null {
   switch (step.kind) {
-    case 'evalOne':
     case 'eventDispatch':
       return step.expr;
     case 'materialize':
@@ -935,8 +1008,6 @@ function getStepExprId(step: Step): ValueExprId | null {
  */
 function getStepTargetSlot(step: Step): ValueSlot | null {
   switch (step.kind) {
-    case 'evalOne':
-      return step.target;
     case 'eventDispatch':
       return null;
     case 'materialize':

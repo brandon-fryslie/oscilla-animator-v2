@@ -1,17 +1,11 @@
 use crate::memory::GpuMemoryArena;
 
-enum SimulationBindingKind {
-    LegacySplit,
-    CompilerUnified,
-}
-
 pub struct ComputeDispatcher {
     simulation_pipeline: wgpu::ComputePipeline,
     render_assembly_pipeline: wgpu::ComputePipeline,
     sim_workgroup_count: u32,
     assembly_workgroup_count: u32,
-    compiler_simulation_layout: Option<wgpu::BindGroupLayout>,
-    simulation_binding_kind: SimulationBindingKind,
+    compiler_simulation_layout: wgpu::BindGroupLayout,
     pub uniform_layout: wgpu::BindGroupLayout,
     pub state_layout: wgpu::BindGroupLayout,
     pub assembly_layout: wgpu::BindGroupLayout,
@@ -110,11 +104,11 @@ impl ComputeDispatcher {
             ],
         });
 
-        let simulation_pipeline = Self::create_legacy_simulation_pipeline(
+        let compiler_simulation_layout = Self::create_compiler_simulation_layout(device);
+        let simulation_pipeline = Self::create_compiler_simulation_pipeline(
             device,
             simulation_wgsl,
-            &uniform_layout,
-            &state_layout,
+            &compiler_simulation_layout,
         );
         let assembly_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("Compute.Assembly.Shader"),
@@ -143,34 +137,32 @@ impl ComputeDispatcher {
             render_assembly_pipeline,
             sim_workgroup_count: sim_workgroup_count.max(1),
             assembly_workgroup_count: assembly_workgroup_count.max(1),
-            compiler_simulation_layout: None,
-            simulation_binding_kind: SimulationBindingKind::LegacySplit,
+            compiler_simulation_layout,
             uniform_layout,
             state_layout,
             assembly_layout,
         }
     }
 
-    fn create_legacy_simulation_pipeline(
+    fn create_compiler_simulation_pipeline(
         device: &wgpu::Device,
         simulation_wgsl: &str,
-        uniform_layout: &wgpu::BindGroupLayout,
-        state_layout: &wgpu::BindGroupLayout,
+        compiler_simulation_layout: &wgpu::BindGroupLayout,
     ) -> wgpu::ComputePipeline {
         let simulation_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("Compute.Simulation.Shader"),
+            label: Some("Compute.CompilerSimulation.Shader"),
             source: wgpu::ShaderSource::Wgsl(simulation_wgsl.into()),
         });
         let simulation_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("Compute.Simulation.PipelineLayout"),
-            bind_group_layouts: &[uniform_layout, state_layout, state_layout],
+            label: Some("Compute.CompilerSimulation.PipelineLayout"),
+            bind_group_layouts: &[compiler_simulation_layout],
             push_constant_ranges: &[],
         });
         device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-            label: Some("Compute.Simulation.Pipeline"),
+            label: Some("Compute.CompilerSimulation.Pipeline"),
             layout: Some(&simulation_pipeline_layout),
             module: &simulation_module,
-            entry_point: Some("main"),
+            entry_point: Some("compute_main"),
             cache: None,
             compilation_options: wgpu::PipelineCompilationOptions::default(),
         })
@@ -240,32 +232,19 @@ impl ComputeDispatcher {
         simulation_wgsl: &str,
         particle_count: u32,
     ) {
-        let compiler_simulation_layout = Self::create_compiler_simulation_layout(device);
-        let simulation_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("Compute.CompilerSimulation.Shader"),
-            source: wgpu::ShaderSource::Wgsl(simulation_wgsl.into()),
-        });
-        let simulation_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("Compute.CompilerSimulation.PipelineLayout"),
-            bind_group_layouts: &[&compiler_simulation_layout],
-            push_constant_ranges: &[],
-        });
-        self.simulation_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-            label: Some("Compute.CompilerSimulation.Pipeline"),
-            layout: Some(&simulation_pipeline_layout),
-            module: &simulation_module,
-            entry_point: Some("compute_main"),
-            cache: None,
-            compilation_options: wgpu::PipelineCompilationOptions::default(),
-        });
+        self.simulation_pipeline = Self::create_compiler_simulation_pipeline(
+            device,
+            simulation_wgsl,
+            &self.compiler_simulation_layout,
+        );
         self.sim_workgroup_count =
             Self::simulation_dispatch_count(particle_count, simulation_wgsl);
-        self.compiler_simulation_layout = Some(compiler_simulation_layout);
-        self.simulation_binding_kind = SimulationBindingKind::CompilerUnified;
     }
 
-    pub fn compiler_simulation_layout(&self) -> Option<&wgpu::BindGroupLayout> {
-        self.compiler_simulation_layout.as_ref()
+    pub fn compiler_simulation_layout(&self) -> &wgpu::BindGroupLayout {
+        // [LAW:one-type-per-behavior] Simulation always binds through one
+        // compiler-owned layout; dual binding modes are removed.
+        &self.compiler_simulation_layout
     }
 
     pub fn encode_passes(
@@ -282,19 +261,7 @@ impl ComputeDispatcher {
                 timestamp_writes: None,
             });
             compute_pass.set_pipeline(&self.simulation_pipeline);
-            match self.simulation_binding_kind {
-                SimulationBindingKind::LegacySplit => {
-                    compute_pass.set_bind_group(0, &arena.uniform_bind_group, &[]);
-                    compute_pass.set_bind_group(1, arena.get_compute_read_bind_group(), &[]);
-                    compute_pass.set_bind_group(2, arena.get_compute_write_bind_group(), &[]);
-                }
-                SimulationBindingKind::CompilerUnified => {
-                    let bind_group = arena
-                        .get_compiler_simulation_bind_group()
-                        .expect("compiler simulation bind group must be rebuilt before dispatch");
-                    compute_pass.set_bind_group(0, bind_group, &[]);
-                }
-            }
+            compute_pass.set_bind_group(0, arena.get_compiler_simulation_bind_group(), &[]);
             compute_pass.dispatch_workgroups(self.sim_workgroup_count, 1, 1);
         }
 

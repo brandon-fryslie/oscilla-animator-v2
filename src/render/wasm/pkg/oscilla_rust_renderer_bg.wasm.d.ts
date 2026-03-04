@@ -11,7 +11,6 @@ export const resize_surface: (a: number, b: number) => [number, number];
 export const resume_engine: () => [number, number];
 export const sync_render_payload: (a: any, b: any, c: any, d: any, e: any, f: number) => [number, number];
 export const take_frame_pacing_packet: () => [number, number, number];
-export const take_runtime_event_code: () => [number, number, number];
 export const wasm_bindgen__closure__destroy__h22c5c9496e43279b: (a: number, b: number) => void;
 export const wasm_bindgen__closure__destroy__haf1314f791359451: (a: number, b: number) => void;
 export const wasm_bindgen__closure__destroy__h34af7beb892ac90c: (a: number, b: number) => void;

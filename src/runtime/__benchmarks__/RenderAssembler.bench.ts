@@ -21,7 +21,7 @@ import {
   writeShapeBankHeader,
 } from '../RuntimeState';
 
-const BENCH_STATE = createRuntimeState(0, 0, 0, 0, 0, 0, 0, 1_000_000);
+const BENCH_STATE = createRuntimeState(0, 0, 0, 0, 1_000_000);
 
 // ============================================================================
 // Helpers
@@ -100,7 +100,7 @@ describe('computeTopologyGroups', () => {
 
 describe('topology cache: hit vs miss', () => {
   const buf = createShapeBuffer(500, 10);
-  const missState = createRuntimeState(0, 0, 0, 0, 0, 0, 0, 8_192);
+  const missState = createRuntimeState(0, 0, 0, 0, 8_192);
 
   bench('cache hit (same buffer, same count)', () => {
     // After first call, all subsequent are cache hits

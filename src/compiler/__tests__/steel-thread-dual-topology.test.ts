@@ -102,9 +102,6 @@ describe('Steel Thread - Dual Topology with Scale', () => {
           return [expr.topologyId as number];
         }
       }
-      if (step.shape.k === 'one') {
-        return [step.shape.topologyId as number];
-      }
       return [];
     });
     expect(new Set(topologyIds).size).toBe(2);
@@ -118,13 +115,10 @@ describe('Steel Thread - Dual Topology with Scale', () => {
 
     const sizes = computeRuntimeStorageSizes(result.program.runtimeSlots);
     const state = createRuntimeState(
-      sizes.f32,
       schedule.stateSlotCount ?? 0,
       schedule.eventSlotCount ?? 0,
-      schedule.eventCount ?? 0,
       result.program.valueExprs.nodes.length,
       result.program.arenaTotalFloats,
-      0,
       undefined,
       undefined,
       result.program.arenaRuntimeLayout,

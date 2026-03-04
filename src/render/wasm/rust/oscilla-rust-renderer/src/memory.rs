@@ -45,7 +45,7 @@ pub struct GpuMemoryArena {
     state_buffers: [wgpu::Buffer; 2],
     compiler_arena_buffers: [wgpu::Buffer; 2],
     state_bind_groups: [wgpu::BindGroup; 2],
-    compiler_simulation_bind_groups: Option<[wgpu::BindGroup; 2]>,
+    compiler_simulation_bind_groups: [wgpu::BindGroup; 2],
     staging_buffers: [wgpu::Buffer; 2],
     ping_pong_index: usize,
 }
@@ -55,6 +55,7 @@ impl GpuMemoryArena {
         device: &wgpu::Device,
         uniform_layout: &wgpu::BindGroupLayout,
         state_layout: &wgpu::BindGroupLayout,
+        compiler_simulation_layout: &wgpu::BindGroupLayout,
         assembly_layout: &wgpu::BindGroupLayout,
         instance_layout: &wgpu::BindGroupLayout,
         topology_layout: &wgpu::BindGroupLayout,
@@ -201,6 +202,62 @@ impl GpuMemoryArena {
                 mapped_at_creation: false,
             }),
         ];
+        // [LAW:single-enforcer] Compiler simulation bind groups are constructed
+        // once at arena creation from the canonical compiler layout.
+        let compiler_simulation_bind_groups = [
+            device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("Compute.CompilerSimulation.BindGroup.A"),
+                layout: compiler_simulation_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: compiler_arena_buffers[0].as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: compiler_arena_buffers[1].as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: state_buffers[0].as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 3,
+                        resource: state_buffers[1].as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 4,
+                        resource: uniform_buffer.as_entire_binding(),
+                    },
+                ],
+            }),
+            device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("Compute.CompilerSimulation.BindGroup.B"),
+                layout: compiler_simulation_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: compiler_arena_buffers[1].as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: compiler_arena_buffers[0].as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: state_buffers[1].as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 3,
+                        resource: state_buffers[0].as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 4,
+                        resource: uniform_buffer.as_entire_binding(),
+                    },
+                ],
+            }),
+        ];
 
         Self {
             uniforms: GlobalUniforms::default(),
@@ -226,7 +283,7 @@ impl GpuMemoryArena {
             state_buffers,
             compiler_arena_buffers,
             state_bind_groups,
-            compiler_simulation_bind_groups: None,
+            compiler_simulation_bind_groups,
             staging_buffers,
             ping_pong_index: 0,
         }
@@ -300,73 +357,10 @@ impl GpuMemoryArena {
         &self.state_bind_groups[write_index]
     }
 
-    pub fn rebuild_compiler_simulation_bind_groups(
-        &mut self,
-        device: &wgpu::Device,
-        layout: &wgpu::BindGroupLayout,
-    ) {
-        // [LAW:single-enforcer] Compiler-simulation bind groups are rebuilt in
-        // one place from the canonical layout so ping/pong bindings cannot drift.
-        self.compiler_simulation_bind_groups = Some([
-            device.create_bind_group(&wgpu::BindGroupDescriptor {
-                label: Some("Compute.CompilerSimulation.BindGroup.A"),
-                layout,
-                entries: &[
-                    wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: self.compiler_arena_buffers[0].as_entire_binding(),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 1,
-                        resource: self.compiler_arena_buffers[1].as_entire_binding(),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 2,
-                        resource: self.state_buffers[0].as_entire_binding(),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 3,
-                        resource: self.state_buffers[1].as_entire_binding(),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 4,
-                        resource: self.uniform_buffer.as_entire_binding(),
-                    },
-                ],
-            }),
-            device.create_bind_group(&wgpu::BindGroupDescriptor {
-                label: Some("Compute.CompilerSimulation.BindGroup.B"),
-                layout,
-                entries: &[
-                    wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: self.compiler_arena_buffers[1].as_entire_binding(),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 1,
-                        resource: self.compiler_arena_buffers[0].as_entire_binding(),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 2,
-                        resource: self.state_buffers[1].as_entire_binding(),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 3,
-                        resource: self.state_buffers[0].as_entire_binding(),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 4,
-                        resource: self.uniform_buffer.as_entire_binding(),
-                    },
-                ],
-            }),
-        ]);
-    }
-
-    pub fn get_compiler_simulation_bind_group(&self) -> Option<&wgpu::BindGroup> {
-        self.compiler_simulation_bind_groups
-            .as_ref()
-            .map(|bind_groups| &bind_groups[self.ping_pong_index])
+    pub fn get_compiler_simulation_bind_group(&self) -> &wgpu::BindGroup {
+        // [LAW:one-source-of-truth] Compiler simulation dispatch always reads
+        // from the canonical arena-owned ping/pong bind-group pair.
+        &self.compiler_simulation_bind_groups[self.ping_pong_index]
     }
 
     pub fn read_state_buffer(&self) -> &wgpu::Buffer {

@@ -205,25 +205,6 @@ describe('buildLaneIdentityMap', () => {
     expect(result.size).toBe(0);
   });
 
-  it('skips slots where instance has dynamic count', () => {
-    const instId = instanceId('dynamic-instance');
-    const slot = valueSlot(50);
-
-    const fieldReg = new Map<any, FieldSlotEntry>();
-    fieldReg.set(slot, { fieldId: valueExprId(5), instanceId: instId });
-
-    const instances = new Map<InstanceId, InstanceDecl>();
-    instances.set(instId, {
-      ...makeInstanceDecl(instId, 0),
-      count: 'dynamic' as any,
-    });
-
-    const program = makeMinimalProgram({ fieldSlotRegistry: fieldReg, instances });
-    const result = buildLaneIdentityMap(program, null);
-
-    expect(result.size).toBe(0);
-  });
-
   it('resolves instance label from debugIndex blockMap', () => {
     const instId = instanceId('inst_golden-spiral-block');
     const slot = valueSlot(60);

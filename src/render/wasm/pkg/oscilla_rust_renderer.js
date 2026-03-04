@@ -112,17 +112,6 @@ export function take_frame_pacing_packet() {
     return takeFromExternrefTable0(ret[0]);
 }
 
-/**
- * @returns {number}
- */
-export function take_runtime_event_code() {
-    const ret = wasm.take_runtime_event_code();
-    if (ret[2]) {
-        throw takeFromExternrefTable0(ret[1]);
-    }
-    return ret[0] >>> 0;
-}
-
 function __wbg_get_imports() {
     const import0 = {
         __proto__: null,

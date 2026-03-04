@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { CompiledProgramIR } from '../../compiler/ir/program';
 import { EMPTY_PROGRAM_TOPOLOGY_TABLE } from '../../compiler/ir/program-topology';
-import { SYSTEM_PALETTE_SLOT, valueExprId, valueSlot } from '../../compiler/ir/Indices';
+import { SCALAR_INSTANCE_ID, SYSTEM_PALETTE_SLOT, valueExprId, valueSlot } from '../../compiler/ir/Indices';
 import { canonicalMany, canonicalScalar, FLOAT, instanceRef, unitNone } from '../../core/canonical-types';
 import { assertSchedulePhaseBoundaryStateReads } from '../PhaseBoundaryValidator';
 import { createRuntimeState } from '../RuntimeState';
@@ -107,7 +107,7 @@ function makeProgramWithCardinalityWriteMismatch(): CompiledProgramIR {
     },
     constants: { json: [] },
     schedule: {
-      steps: [{ kind: 'evalOne', expr: valueExprId(0), target: targetSlot }],
+      steps: [{ kind: 'materialize', field: valueExprId(0), instanceId: SCALAR_INSTANCE_ID, target: targetSlot }],
       timeModel: { periodAMs: 1000, periodBMs: 2000 },
       instances: new Map([
         [fieldInstanceId, {
@@ -161,13 +161,10 @@ describe('phase-boundary assertion', () => {
   it('keeps executeFrame hot path free of phase-boundary assertion work', () => {
     const program = makeProgramWithPhaseBoundaryViolation();
     const state = createRuntimeState(
-      4,
       1,
-      0,
       0,
       1,
       program.arenaTotalFloats,
-      0,
       undefined,
       undefined,
       program.arenaRuntimeLayout,
@@ -175,35 +172,29 @@ describe('phase-boundary assertion', () => {
     expect(() => executeFrame(program, state, getTestArena(), 100)).not.toThrow();
   });
 
-  it('throws cardinality write assertion in debug mode when evalOne writes into field slot', () => {
+  it('throws cardinality write assertion in debug mode when scalar materialize writes into field slot', () => {
     const program = makeProgramWithCardinalityWriteMismatch();
     const state = createRuntimeState(
-      2,
-      0,
       0,
       0,
       1,
       program.arenaTotalFloats,
-      0,
       undefined,
       undefined,
       program.arenaRuntimeLayout,
     );
     expect(() =>
       executeFrame(program, state, getTestArena(), 100, { assertCardinalitySlotWrites: true })
-    ).toThrow(/Cardinality write assertion failed .* expected field, actual signal/);
+    ).toThrow(/Cardinality write assertion failed/);
   });
 
   it('keeps cardinality write assertions out of execution when disabled', () => {
     const program = makeProgramWithCardinalityWriteMismatch();
     const state = createRuntimeState(
-      2,
-      0,
       0,
       0,
       1,
       program.arenaTotalFloats,
-      0,
       undefined,
       undefined,
       program.arenaRuntimeLayout,

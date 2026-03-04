@@ -6,7 +6,6 @@
  */
 
 import type { RuntimeState } from './RuntimeState';
-import { readShape2D } from './RuntimeState';
 import type { CompiledProgramIR } from '../compiler/ir/program';
 import type { ValueSlot } from '../compiler/ir/Indices';
 import type { BlockId, PortId } from '../types';
@@ -56,11 +55,6 @@ export function readSlotValue(
         count: lookup.stride,
         type: lookup.type,
       };
-    }
-
-    case 'shape2d': {
-      const record = readShape2D(state.values.shape2d, lookup.offset);
-      return { kind: 'object', ref: record };
     }
 
     default: {
@@ -232,7 +226,7 @@ export function buildLaneIdentityMap(
     const instanceDecl = instances.get(entry.instanceId);
     if (!instanceDecl) continue;
 
-    const count = typeof instanceDecl.count === 'number' ? instanceDecl.count : 0;
+    const count = typeof instanceDecl.count === 'number' ? instanceDecl.count : instanceDecl.maxCount;
     if (count === 0) continue;
 
     // Derive a human-readable label for the instance
