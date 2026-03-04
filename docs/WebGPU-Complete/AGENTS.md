@@ -77,16 +77,17 @@ Complete in this exact order:
 8. `P2-1_Async_Compiler_Service_Architecture.md`
 9. `P2-2__Naga_Compiler_Lowering_Pipeline_Explained.md`
 10. `P2-3__Naga_WASM_Compiler_Validation_Layer.md`
-11. `P3-1_CPU_to_GPU_Input_Marshalling.md`
-12. `P3-2_GPU_Compute_Dispatch_Explained.md`
-13. `P3-3_GPU_Draw_Prep__Autonomous_Rendering_Logistics.md`
-14. `P3-4__WebGPU_Render_Pass_Deep_Dive.md`
-15. `P3-5__Runtime_Loop__The_Swap_Explained.md`
-16. `P4-1_GPU_Observability__Async_Readback_System.md`
-17. `P5-1__WASM_Boot__Developer_Experience_&_Migration.md`
-18. `P5-2_Error_Propagation__Developer_Experience.md`
-19. `P5-3__Phased_Rollout__Engine_Migration_Strategy.md`
-20. `P6-1__GPU_Physics_Engine_with_Compute_Shaders.md`
+11. `P2-4__Scoped_Naga_IR_Control_Flow_and_Memory_Model.md`
+12. `P3-1_CPU_to_GPU_Input_Marshalling.md`
+13. `P3-2_GPU_Compute_Dispatch_Explained.md`
+14. `P3-3_GPU_Draw_Prep__Autonomous_Rendering_Logistics.md`
+15. `P3-4__WebGPU_Render_Pass_Deep_Dive.md`
+16. `P3-5__Runtime_Loop__The_Swap_Explained.md`
+17. `P4-1_GPU_Observability__Async_Readback_System.md`
+18. `P5-1__WASM_Boot__Developer_Experience_&_Migration.md`
+19. `P5-2_Error_Propagation__Developer_Experience.md`
+20. `P5-3__Phased_Rollout__Engine_Migration_Strategy.md`
+21. `P6-1__GPU_Physics_Engine_with_Compute_Shaders.md`
 
 ## Definition of "Spec Complete" (All Required)
 

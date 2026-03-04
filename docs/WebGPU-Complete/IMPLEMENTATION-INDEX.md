@@ -104,7 +104,7 @@ Reference docs:
 ## Implementation Read Order
 
 1. `docs/WebGPU-Complete/P0-0__Overview_-_GPU-Native_Visual_Instrument_Architecture.md`
-2. `docs/WebGPU-Complete/IMPLEMENTATION-INDEX.md`
+2. `docs/WebGPU-Complete/AGENTS.md`
 3. `docs/WebGPU-Complete/P5-3__Phased_Rollout__Engine_Migration_Strategy.md`
 4. `docs/WebGPU-Complete/workstreams/WS-01-runtime-foundation.index.md`
 5. `docs/WebGPU-Complete/workstreams/WS-02-compiler-lowering.index.md`
