@@ -15,7 +15,6 @@ interface RendererWasmModule {
   readonly pause_engine?: () => void;
   readonly resume_engine?: () => void;
   readonly inject_poison_alloc?: () => void;
-  readonly take_runtime_event_code?: () => number;
   readonly take_frame_pacing_packet?: () => unknown;
   readonly rebuild_simulation_pipeline?: (
     simulationWgsl: string,
@@ -38,7 +37,6 @@ let resizeSurfaceImpl: RendererWasmModule['resize_surface'] | null = null;
 let pauseEngineImpl: RendererWasmModule['pause_engine'] | null = null;
 let resumeEngineImpl: RendererWasmModule['resume_engine'] | null = null;
 let injectPoisonAllocImpl: RendererWasmModule['inject_poison_alloc'] | null = null;
-let takeRuntimeEventCodeImpl: RendererWasmModule['take_runtime_event_code'] | null = null;
 let takeFramePacingPacketImpl: RendererWasmModule['take_frame_pacing_packet'] | null = null;
 let rebuildSimulationPipelineImpl: RendererWasmModule['rebuild_simulation_pipeline'] | null = null;
 let syncRenderPayloadImpl: RendererWasmModule['sync_render_payload'] | null = null;
@@ -83,9 +81,6 @@ export async function initRustRendererWasm(): Promise<void> {
       if (typeof wasmModule.inject_poison_alloc !== 'function') {
         throw new Error('Rust renderer wasm module missing inject_poison_alloc export');
       }
-      if (typeof wasmModule.take_runtime_event_code !== 'function') {
-        throw new Error('Rust renderer wasm module missing take_runtime_event_code export');
-      }
       if (typeof wasmModule.take_frame_pacing_packet !== 'function') {
         throw new Error('Rust renderer wasm module missing take_frame_pacing_packet export');
       }
@@ -95,7 +90,6 @@ export async function initRustRendererWasm(): Promise<void> {
       pauseEngineImpl = wasmModule.pause_engine.bind(wasmModule);
       resumeEngineImpl = wasmModule.resume_engine.bind(wasmModule);
       injectPoisonAllocImpl = wasmModule.inject_poison_alloc.bind(wasmModule);
-      takeRuntimeEventCodeImpl = wasmModule.take_runtime_event_code.bind(wasmModule);
       takeFramePacingPacketImpl = wasmModule.take_frame_pacing_packet.bind(wasmModule);
       rebuildSimulationPipelineImpl = wasmModule.rebuild_simulation_pipeline.bind(wasmModule);
       syncRenderPayloadImpl = wasmModule.sync_render_payload.bind(wasmModule);
@@ -159,13 +153,6 @@ export function injectRustRendererPoisonAlloc(): void {
     throw new Error('Rust renderer wasm is not initialized');
   }
   injectPoisonAllocImpl();
-}
-
-export function takeRustRendererRuntimeEventCode(): number {
-  if (!initialized || !takeRuntimeEventCodeImpl) {
-    throw new Error('Rust renderer wasm is not initialized');
-  }
-  return takeRuntimeEventCodeImpl();
 }
 
 export function takeRustRendererFramePacingPacket(): unknown {
