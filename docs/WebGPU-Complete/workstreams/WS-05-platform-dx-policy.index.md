@@ -32,5 +32,7 @@ Define startup behavior, developer-facing diagnostics, migration policy, observa
 ## Primary Functional Slices
 
 - `docs/WebGPU-Complete/workstreams/slices/S01-first-pixel.md`
-- `docs/WebGPU-Complete/workstreams/slices/S06-first-type5-text.md`
 
+## Upstream Slice Dependencies (Non-Owning)
+
+- `docs/WebGPU-Complete/workstreams/slices/S06-first-type5-text.md` (owned by WS-04; consumed for text boot/runtime policy integration)

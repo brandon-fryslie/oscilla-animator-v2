@@ -70,7 +70,7 @@ Draw Prep writes to two non-overlapping regions in one physical indirect buffer:
 struct DrawPrepParams {
   // v0 = [drawMode, countOrIndexCount, firstOrFirstIndex, baseVertexBits]
   v0: vec4<u32>,
-  // v1 = [instanceCount, firstInstance, recordIndex, _reserved]
+  // v1 = [instanceCount, firstInstance, recordIndex, maxRecords]
   v1: vec4<u32>,
   // v2 = [indexedRegionBaseWords, nonIndexedRegionBaseWords, indexedStrideWords, nonIndexedStrideWords]
   v2: vec4<u32>,
@@ -87,6 +87,9 @@ fn cs_main(@builtin(global_invocation_id) gid: vec3<u32>) {
   let instanceCount = drawPrepParams.v1.x;
   let firstInstance = drawPrepParams.v1.y;
   let recordIndex = drawPrepParams.v1.z;
+  let maxRecords = drawPrepParams.v1.w;
+
+  if (recordIndex >= maxRecords) { return; }
 
   if (drawMode == 0u) {
     // indexed: [indexCount, instanceCount, firstIndex, baseVertex, firstInstance]
@@ -107,7 +110,12 @@ fn cs_main(@builtin(global_invocation_id) gid: vec3<u32>) {
 }
 ```
 
-Note: actual uniform packing/fields are runtime-defined, but ABI of emitted indirect commands is fixed.
+Dispatch precondition and safety rule:
+
+- Runtime should dispatch exactly one invocation for a valid sink `recordIndex`.
+- Draw-prep still enforces a bounds guard with `maxRecords` so invalid dispatch input cannot write out of range.
+
+Note: actual uniform packing/field locations are runtime-defined, but ABI of emitted indirect commands is fixed.
 
 ## 4. Visibility and Culling Integration
 

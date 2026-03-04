@@ -52,9 +52,10 @@ The runtime factory consumes `WasmBootContext` and proceeds only when `state ===
 
 UI should gate editor/runtime mounting behind boot readiness:
 
-1. `loading` -> splash/progress shell
-2. `error` -> fatal boot diagnostics view
-3. `ready` -> create runtime/editor services
+1. `initial` -> treat as `loading`; show splash/progress shell and do not create runtime/editor services
+2. `loading` -> splash/progress shell
+3. `error` -> fatal boot diagnostics view
+4. `ready` -> create runtime/editor services
 
 This keeps failure handling deterministic and prevents partial startup states.
 
@@ -83,4 +84,3 @@ Failure handling requirements:
 4. E2E smoke: app enters fatal screen on forced WASM load failure.
 
 This contract keeps startup behavior deterministic and eliminates hidden fallback paths that would fragment runtime behavior.
-
