@@ -10,6 +10,13 @@ This document defines the subsystem responsible for extracting live data from th
 
 # The Observability System: The Async Readback
 
+## Related Contracts
+
+- `docs/WebGPU-Complete/IMPLEMENTATION-INDEX.md`
+- `docs/WebGPU-Complete/P1-1__Unified_GPU_Buffer_Strategy_Explained.md`
+- `docs/WebGPU-Complete/P3-5__Runtime_Loop__The_Swap_Explained.md`
+- `docs/WebGPU-Complete/P5-3__Phased_Rollout__Engine_Migration_Strategy.md`
+
 **Objective:** Visualize internal GPU state (signals, positions, counters) in the UI at 60fps.
 
 **Invariant:** Reading data must **never** cause a GPU pipeline stall or block the main JS thread.

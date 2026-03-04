@@ -3,6 +3,14 @@ As you push through the cc-dump complexity audit and finalize the Naga integrati
 
 ## ---
 
+## Related Contracts
+
+- `docs/WebGPU-Complete/IMPLEMENTATION-INDEX.md`
+- `docs/WebGPU-Complete/P1-2__Unified_GPU_Shape_Bank_Strategy.md`
+- `docs/WebGPU-Complete/P1-3__GPU-Driven_Rendering__Indirect_Buffer.md`
+- `docs/WebGPU-Complete/P3-3_GPU_Draw_Prep__Autonomous_Rendering_Logistics.md`
+- `docs/WebGPU-Complete/P3-4__WebGPU_Render_Pass_Deep_Dive.md`
+
 **1\. Inputs and Outputs (The Data Contract)**
 
 The Type 3 pipeline abandons the ShapeBank for topology. The geometry does not exist until the Vertex Shader pulls the history from the Arena and weaves it into a continuous 3D mesh.
@@ -122,5 +130,4 @@ To guarantee the Naga lowering pipeline correctly orchestrates this temporal arc
 
 ---
 
-By locking down this architecture, you gain the ability to render everything from fluid simulation streamlines to long-exposure light trails, fully isolated from CPU intervention.  
-Would you like to move on to the mathematical deep dive for **Type 4: The Procedural Volume (SDFs)**, or should we examine how the RenderAssembler orchestrates the final composite?
+By locking down this architecture, trail rendering remains deterministic and GPU-native without CPU-side topology synthesis in the frame loop.

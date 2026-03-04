@@ -1,8 +1,22 @@
-Text rendering is notoriously the most deceptive trap in computer graphics. What seems like a simple "draw some words" requirement quickly explodes into a nightmare of typography, localization, vector math, and specialized shader logic.
+This document defines the implementation contract for **Type 5: Text/Glyph Hybrid** rendering.
 
-Here is the deep dive into **The Text/Glyph Hybrid**. This is treated as a Special Case in shape taxonomies because text cannot be treated as static meshes nor pure mathematical procedures; it requires dynamic meshing (quads per character) paired with highly specialized fragment shading (usually Multi-Channel Signed Distance Fields, or MSDF) and complex CPU-side layout logic.
+Text is a hybrid pipeline:
+
+1. CPU/worker shaping and layout
+2. GPU instanced glyph-quad rendering
+3. MSDF fragment evaluation for quality at scale
+
+Text cannot be treated as purely rigid or purely procedural; it has explicit ownership boundaries across shaping, buffers, and fragment shading.
 
 ### ---
+
+## Related Contracts
+
+- `docs/WebGPU-Complete/IMPLEMENTATION-INDEX.md`
+- `docs/WebGPU-Complete/P1-2__Unified_GPU_Shape_Bank_Strategy.md`
+- `docs/WebGPU-Complete/P1-3__GPU-Driven_Rendering__Indirect_Buffer.md`
+- `docs/WebGPU-Complete/P3-3_GPU_Draw_Prep__Autonomous_Rendering_Logistics.md`
+- `docs/WebGPU-Complete/P3-4__WebGPU_Render_Pass_Deep_Dive.md`
 
 **I. Inputs and Outputs**
 
@@ -35,7 +49,7 @@ Text requires a hybrid storage approach. Storing text as raw geometry (convertin
 | :---- | :---- | :---- |
 | **Component Level (ECS)** | struct TextComponent { StringId text; AssetId font; Rect bounds; Color fill; float size; } | Strings should be stored in a centralized String Pool to avoid memory fragmentation. Components only store a 32-bit or 64-bit ID. |
 | **Asset Level (Font)** | struct FontAtlas { Texture2D msdf\_texture; HashMap\<char, GlyphMetrics\> metrics; } | The MSDF texture is typically a compact 512x512 or 1024x1024 RGB texture per font. Glyph metrics are stored in a contiguous lookup table. |
-| **Transient Rendering** | std::vector\<Vertex\> glyph\_quads | Regenerated *only* when the string, layout, or font size changes. Cached in a dirty-flagged buffer until modification. |
+| **Transient Rendering** | runtime glyph-run slices (`TypedArray`/GPU upload views) | Regenerated only when text/layout/style changes. Reused via dirty-slice updates and capacity pooling. |
 
 ### ---
 
@@ -77,5 +91,3 @@ These criteria are designed to be run in a CI/CD pipeline by automated testing a
 * **AC 3.2 (Outline Overlap):** The agent renders the word "AVA" with a thick outline. The agent sweeps the framebuffer for the background color within the bounding box of the word, asserting no background color bleeds through the spaces between the overlapping kerning of 'A' and 'V'.
 
 ---
-
-Would you like me to map out the specific GLSL/HLSL shader logic required to decode an MSDF texture into crisp text with drop shadows, or should we move on to another shape taxonomy type?

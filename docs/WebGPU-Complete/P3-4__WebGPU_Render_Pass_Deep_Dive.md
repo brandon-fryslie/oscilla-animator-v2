@@ -10,6 +10,14 @@ This document defines the final stage of the pipeline where simulation state is 
 
 # The Runtime Loop: The Render Pass (The "Sink")
 
+## Related Contracts
+
+- `docs/WebGPU-Complete/IMPLEMENTATION-INDEX.md`
+- `docs/WebGPU-Complete/P1-2__Unified_GPU_Shape_Bank_Strategy.md`
+- `docs/WebGPU-Complete/P1-3__GPU-Driven_Rendering__Indirect_Buffer.md`
+- `docs/WebGPU-Complete/P3-3_GPU_Draw_Prep__Autonomous_Rendering_Logistics.md`
+- `docs/WebGPU-Complete/shapes/Shapes 0_ Shape Taxonomy_ A Rendering Overview.md`
+
 **Objective:** Rasterize simulation state into the canvas texture.
 
 **Invariant:** Render pass reads exactly the state produced by prior compute/draw-prep passes.

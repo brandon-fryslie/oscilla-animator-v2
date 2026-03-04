@@ -10,11 +10,18 @@ This document defines the high-frequency data transfer protocol that occurs at t
 
 # The Runtime Loop: Input Marshalling
 
+## Related Contracts
+
+- `docs/WebGPU-Complete/IMPLEMENTATION-INDEX.md`
+- `docs/WebGPU-Complete/P1-1__Unified_GPU_Buffer_Strategy_Explained.md`
+- `docs/WebGPU-Complete/P3-2_GPU_Compute_Dispatch_Explained.md`
+- `docs/WebGPU-Complete/P3-5__Runtime_Loop__The_Swap_Explained.md`
+
 **Objective:** Synchronize the CPU's "User State" with the GPU's "Simulation State."
 
 **Invariant:** Input data for Frame \$N\$ must be visible to the Compute Shader before dispatch.
 
-**Mechanism:** A strictly typed ArrayBuffer write to a Staging Buffer, followed by a copyBufferToBuffer command to the Arena Header.
+**Mechanism:** A strictly typed `ArrayBuffer` payload serialized on CPU and uploaded via `device.queue.writeBuffer(...)` to the arena header before compute dispatch.
 
 ## 1. The Data Schema (The "Uniform Block")
 
@@ -38,19 +45,25 @@ The schema is a fixed-size **256-byte** block. It is defined in TypeScript as a 
 | **0x2C** | f32 | Gauge.Active | Bool (1.0/0.0) indicating hot-swap continuity mode. |
 | **0x30...** | ... | Reserved | Padding for MIDI / Future inputs. |
 
-## 2. The Marshalling Infrastructure (InputService)
+## 2. The Marshalling Infrastructure (Runtime-Scoped Input Context)
 
-The InputService is a singleton that listens to DOM events and MIDI messages. It maintains the "Authoritative Input State."
+Input ownership is runtime-scoped, not process-global.
+
+// [LAW:no-shared-mutable-globals] Input state must be owned by the active runtime instance to support multi-runtime and deterministic tests.
+
+A runtime instance owns:
+
+- one input snapshot object
+- one reusable 256-byte staging `ArrayBuffer`
+- one serializer that writes canonical header fields in fixed order
 
 ### 2.1 The Staging Buffer
 
 We do not create a new buffer every frame.
 
-- **CPU Side:** private stagingView: DataView = new DataView(new ArrayBuffer(256));
-
-- **GPU Side:** We allocate a dedicated staging_buffer (GPUBuffer, usage: COPY_SRC \| MAP_WRITE).
-
-  - *Optimization:* Actually, using device.queue.writeBuffer is preferred for small updates (\< 1KB) over mapping/unmapping, as the driver handles the staging internally. We will use writeBuffer.
+- **CPU Side:** `stagingView = new DataView(new ArrayBuffer(256))`.
+- **GPU Side:** no persistent mapped staging buffer required for this payload size.
+- **Upload Path:** `device.queue.writeBuffer(...)` (preferred for small writes).
 
 ### 2.2 The Serialization Loop
 
@@ -146,13 +159,10 @@ If more events arrive than fit in the buffer (rare for 60fps), the CPU drops the
 
 How do we ensure the input isn't lagging by a frame?
 
-1.  **Test:** Create a patch where Mouse.X controls the color of the screen (Left=Black, Right=White).
-
-2.  **Capture:** Use a high-speed camera (iPhone 240fps) to film the mouse click vs. the screen flash.
-
-3.  **Expectation:** The change should be visible on the *very next* monitor refresh.
-
-4.  **Failure:** If there is a 2-frame delay, it means we are writing to Arena_B (Write Buffer) instead of Arena_A (Read Buffer), causing the input to sit dormant until the *next* frame reads it.
+1.  **Test:** Build an integration fixture where `Mouse.X` drives a thresholded full-screen color output.
+2.  **Inject:** Programmatically update input snapshot at frame boundary `N` with timestamped marker.
+3.  **Assert:** Frame `N` compute/render output reflects the new marker; failure at `N+1` indicates a one-frame input upload lag.
+4.  **Diagnosis:** A one-frame lag usually indicates upload to `Arena_Write` instead of `Arena_Read` for the active frame.
 
 **Critical Correction:**
 
@@ -166,15 +176,15 @@ How do we ensure the input isn't lagging by a frame?
 
 ## 6. Summary of Implementation
 
-1.  **Class InputService:**
+1.  **Runtime Input Context:**
 
-    - Maintains the ArrayBuffer(256).
+    - Owns `ArrayBuffer(256)` + `DataView` serializer.
 
-    - Subscribes to mousemove, mousedown, keydown, WebMidi.
+    - Receives device/user event snapshots from app boundary.
 
 2.  **Update RuntimeContext:**
 
-    - Add inputBuffer: ArrayBuffer to the context passed to the executor.
+    - Add runtime-scoped input snapshot/payload to the frame executor context.
 
 3.  **Update Arena:**
 

@@ -10,6 +10,15 @@ This document defines the physical memory architecture of the GPU runtime. It de
 
 # The Unified Buffer Strategy: The "Arena"
 
+## Related Contracts
+
+- `docs/WebGPU-Complete/IMPLEMENTATION-INDEX.md`
+- `docs/WebGPU-Complete/P0-1__SoA_Mandate__Memory_Layout_Refactor.md`
+- `docs/WebGPU-Complete/P1-2__Unified_GPU_Shape_Bank_Strategy.md`
+- `docs/WebGPU-Complete/P1-3__GPU-Driven_Rendering__Indirect_Buffer.md`
+- `docs/WebGPU-Complete/P3-3_GPU_Draw_Prep__Autonomous_Rendering_Logistics.md`
+- `docs/WebGPU-Complete/P3-5__Runtime_Loop__The_Swap_Explained.md`
+
 **Objective:** Create a collision-free, massively parallel memory space for the entire graph state.
 
 **Invariant:** Every bit of data that changes per frame lives here.
@@ -206,8 +215,10 @@ The Arena stores the *data*, but it doesn't know *how much* data is valid to dra
 
   2.  "Draw Prep" Shader reads that Counter from the Arena.
 
-  3.  "Draw Prep" writes that value into the instanceCount field of the **Indirect Command Buffer**.
+  3.  "Draw Prep" writes that value into hardware-native indirect records in the **Indirect Command Buffer**:
+      - indexed stream (`DrawIndexedIndirectArgs`)
+      - non-indexed stream (`DrawIndirectArgs`)
 
-  4.  Renderer draws.
+  4.  Renderer executes both streams in deterministic order.
 
 This completes the memory loop. The Arena is the heart; the Indirect Buffer is the hand that draws.

@@ -4,13 +4,17 @@
 > [LAW:no-string-math] Direct WGSL string generation in lowering code is forbidden; dynamic WGSL emission is an engine serializer boundary concern.
 > Read this document with `docs/WebGPU-Complete/P2-4__Scoped_Naga_IR_Control_Flow_and_Memory_Model.md`.
 
-This is the comprehensive technical specification for **Phase 0: The SoA Mandate (Completed Baseline)**.
+This is the comprehensive technical specification for **Phase 0: The SoA Mandate**.
 
 # Phase 0: The Structure-of-Arrays Mandate
 
-**Objective:** Keep runtime memory layout canonical for WebGPU execution: channel-oriented, deterministic, and compiler-owned.
+## Related Contracts
 
-**Current State:** This is no longer a pre-migration plan. It is the enforced baseline contract for `master`.
+- `docs/WebGPU-Complete/IMPLEMENTATION-INDEX.md`
+- `docs/WebGPU-Complete/P1-1__Unified_GPU_Buffer_Strategy_Explained.md`
+- `docs/WebGPU-Complete/P0-3__Refactoring_to_Handle-Based_Architecture.md`
+
+**Objective:** Keep runtime memory layout canonical for WebGPU execution: channel-oriented, deterministic, and compiler-owned.
 
 // [LAW:one-source-of-truth] Arena layout and runtime addressing are emitted by the compiler as authoritative artifacts.
 // [LAW:single-enforcer] Runtime reads/writes must resolve through canonical arena descriptors and runtime address tables, not ad-hoc slot derivation.
@@ -39,7 +43,7 @@ This is the comprehensive technical specification for **Phase 0: The SoA Mandate
 
 // [LAW:one-way-deps] Render/runtime consume compiler-emitted numeric contracts; they do not re-derive schema from high-level graph objects.
 
-## 2. Compiler Requirements (Now Enforced)
+## 2. Compiler Requirements
 
 ### 2.1 Required Artifacts
 
@@ -68,7 +72,7 @@ The compiler must emit and keep consistent:
 
 // [LAW:verifiable-goals] These rules are mechanically enforced by compiler/runtime layout tests.
 
-## 3. Runtime Requirements (Now Enforced)
+## 3. Runtime Requirements
 
 ### 3.1 Addressing and Execution
 
@@ -86,30 +90,20 @@ The compiler must emit and keep consistent:
 
 ## 4. Verification Gates
 
-Run these to verify this phase remains complete:
+Run these to validate this contract:
 
 1. `pnpm vitest run src/compiler/__tests__/arena-layout.test.ts`
 2. `pnpm vitest run src/runtime/__tests__/ArenaValueStore.test.ts src/runtime/__tests__/RuntimeState-banks.test.ts`
 3. `pnpm vitest run src/runtime/__tests__/ExprAddressTable.test.ts`
 4. `pnpm vitest run src/__tests__/forbidden-patterns.test.ts src/compiler/__tests__/no-legacy-types.test.ts`
 
-## 5. Remaining Cleanup Scope (Non-Blocking)
+## 5. Contract Acceptance Criteria
 
-This phase is complete, but cleanup work can still reduce migration residue:
-
-1. Remove migration-era language and compatibility comments that no longer describe canonical behavior.
-2. Keep shrinking any non-canonical packing compatibility seams where not required by continuity/render contracts.
-3. Maintain test gates as the sole enforcement boundary for SoA/ABI invariants.
-
-// [LAW:behavior-not-structure] Keep tests focused on memory and addressing behavior contracts, not historical implementation shape.
-
-## 6. Definition of Done (Phase 0)
-
-Phase 0 is considered complete when all of the following remain true on `master`:
+This contract is satisfied when all of the following remain true:
 
 1. Compiler emits deterministic canonical arena/address artifacts.
 2. Runtime executes exclusively from those artifacts.
 3. Numeric slot ABI stays SoA-first and WebGPU-compatible.
 4. Guardrail tests prevent regression to legacy memory/addressing behavior.
 
-This condition is currently met; future work should treat this document as a maintained contract, not a migration checklist.
+// [LAW:behavior-not-structure] Tests should focus on memory/addressing behavior contracts, not historical implementation shape.
