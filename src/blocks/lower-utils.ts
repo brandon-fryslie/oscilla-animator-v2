@@ -54,11 +54,34 @@ export function resolveInputConstant(
   portId: string,
   opts?: { min?: number; max?: number }
 ): number {
+  const maybe = tryResolveInputConstant(ctx, input, portId, opts);
+  if (maybe !== null) {
+    return maybe;
+  }
+  const expr = ctx.b.getValueExpr(input.id);
+  throw new Error(
+    `Input '${portId}' must lower to a const expression, got ${expr?.kind ?? 'undefined'}`
+  );
+}
+
+/**
+ * Resolve an input to a compile-time constant value when possible.
+ *
+ * Returns:
+ * - number: validated integer const value
+ * - null: input is not a const expression
+ *
+ * Throws on invalid const values (non-finite, non-integer, or out-of-bounds).
+ */
+export function tryResolveInputConstant(
+  ctx: import('./registry').LowerCtx,
+  input: import('../compiler/ir/lowerTypes').ValueRefExpr,
+  portId: string,
+  opts?: { min?: number; max?: number }
+): number | null {
   const expr = ctx.b.getValueExpr(input.id);
   if (!expr || expr.kind !== 'const') {
-    throw new Error(
-      `Input '${portId}' must lower to a const expression, got ${expr?.kind ?? 'undefined'}`
-    );
+    return null;
   }
   const val = expr.value.value as number;
   if (!Number.isFinite(val)) {

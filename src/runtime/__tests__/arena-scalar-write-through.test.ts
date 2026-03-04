@@ -50,13 +50,10 @@ function createStateForProgram(program: CompiledProgramIR): RuntimeState {
   const schedule = program.schedule as ScheduleIR;
   const sizes = computeRuntimeStorageSizes(program.runtimeSlots);
   return createRuntimeState(
-    sizes.f32,
     schedule.stateSlotCount ?? 0,
     schedule.eventSlotCount ?? 0,
-    schedule.eventCount ?? 0,
     program.valueExprs.nodes.length,
     program.arenaTotalFloats,
-    0,
     undefined,
     undefined,
     program.arenaRuntimeLayout,
@@ -87,11 +84,9 @@ function assertScalarWritesInArena(program: CompiledProgramIR, state: RuntimeSta
   let scalarArenaSlots = 0;
   for (const step of schedule.steps) {
     const targetSlot =
-      step.kind === 'evalOne'
+      step.kind === 'materialize' && step.instanceId === SCALAR_INSTANCE_ID
         ? (step.target as number)
-        : step.kind === 'materialize' && step.instanceId === SCALAR_INSTANCE_ID
-          ? (step.target as number)
-          : null;
+        : null;
     if (targetSlot !== null) {
       const values = readArenaSlot(program, state, targetSlot);
       if (values.length === 1) {
@@ -144,9 +139,6 @@ describe('scalar writes target arena storage', () => {
     const schedule = program.schedule as ScheduleIR;
     const scalarWriteSlots = new Set<number>();
     for (const irStep of schedule.steps) {
-      if (irStep.kind === 'evalOne') {
-        scalarWriteSlots.add(irStep.target as number);
-      }
       if (irStep.kind === 'materialize' && irStep.instanceId === SCALAR_INSTANCE_ID) {
         scalarWriteSlots.add(irStep.target as number);
       }

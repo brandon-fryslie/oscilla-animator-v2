@@ -20,13 +20,10 @@ function createState(program: CompiledProgramIR) {
   const schedule = program.schedule as ScheduleIR;
   const sizes = computeRuntimeStorageSizes(program.runtimeSlots);
   return createRuntimeState(
-    sizes.f32,
     schedule.stateSlotCount ?? 0,
     schedule.eventSlotCount ?? 0,
-    schedule.eventCount ?? 0,
     program.valueExprs.nodes.length,
     program.arenaTotalFloats,
-    0,
     undefined,
     undefined,
     program.arenaRuntimeLayout,

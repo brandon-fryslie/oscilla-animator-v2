@@ -33,6 +33,7 @@ import type {
   IntrinsicPropertyName,
   PlacementFieldName,
   BasisKind,
+  InstanceCountSpec,
 } from './types';
 
 /**
@@ -120,7 +121,7 @@ export interface PureIRBuilder {
    */
   createInstance(
     domainType: DomainTypeId,
-    count: number,
+    count: InstanceCountSpec,
     shapeField?: ValueExprId,
     lifecycle?: 'static' | 'dynamic' | 'pooled'
   ): InstanceId;

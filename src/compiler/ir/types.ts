@@ -20,9 +20,6 @@ import type { CanonicalType, ConstValue } from '../../core/canonical-types';
 // Import branded indices for use in this file's type definitions
 import type { ValueSlot, StateSlotId, ValueExprId, EventSlotId } from './Indices';
 
-// Import shape types
-import type { TopologyId } from '../../shapes/types';
-
 // Import time model types
 import type { TimeModelIR } from './schedule';
 
@@ -181,6 +178,13 @@ export interface InstanceDecl {
   readonly id: InstanceId;
   readonly domainType: DomainTypeId;
   readonly count: number | 'dynamic';
+  /**
+   * Dynamic count expression for runtime-resolved instance cardinality.
+   *
+   * Present only when `count === 'dynamic'`.
+   * Runtime evaluates this scalar expression each frame and clamps to maxCount.
+   */
+  readonly countExpr?: ValueExprId;
   readonly lifecycle: 'static' | 'dynamic' | 'pooled';
 
   /**
@@ -210,6 +214,23 @@ export interface InstanceDecl {
    */
   readonly shapeField?: ValueExprId;
 }
+
+/**
+ * Dynamic instance count specification used at instance creation boundaries.
+ */
+export interface DynamicInstanceCountSpec {
+  readonly kind: 'dynamic';
+  readonly countExpr: ValueExprId;
+  readonly maxCount: number;
+}
+
+/**
+ * Instance count specification accepted by IR builders.
+ *
+ * - `number`: static count
+ * - `DynamicInstanceCountSpec`: runtime-resolved dynamic count with fixed capacity
+ */
+export type InstanceCountSpec = number | DynamicInstanceCountSpec;
 
 // =============================================================================
 // Continuity System Types (spec: topics/11-continuity-system.md)
@@ -266,17 +287,6 @@ export type TimeModel = TimeModelIR;
 // =============================================================================
 
 /**
- * Evaluate a cardinality-one expression into a value slot.
- * // [LAW:one-source-of-truth] One-lane values are still field data; this step
- * // writes directly to the canonical slot backing store instead of any legacy split path.
- */
-export interface StepEvalOne {
-  readonly kind: 'evalOne';
-  readonly expr: ValueExprId;
-  readonly target: ValueSlot;
-}
-
-/**
  * Evaluate an event expression into an event slot.
  */
 export interface StepEvalEvent {
@@ -285,8 +295,9 @@ export interface StepEvalEvent {
   readonly target: EventSlotId;
 }
 
+// [LAW:one-source-of-truth] Cardinality-one writes are expressed through
+// StepMaterialize with `instanceId=SCALAR_INSTANCE_ID`; no parallel step kind.
 export type Step =
-  | StepEvalOne
   | StepEvalEvent
   | StepMaterialize
   | StepRender
@@ -318,12 +329,11 @@ export interface StepRender {
   /**
    * Shape source for rendering.
    *
-   * [LAW:one-source-of-truth] Canonical path is `oneHandle`/`slot` (numeric handle flow
-   * via arena + ShapeBank). Legacy `one` is kept for compatibility while migration lands.
+   * [LAW:one-source-of-truth] Canonical path is `oneHandle`/`slot` only
+   * (numeric handle flow via arena + ShapeBank).
    */
   readonly shape:
     | { readonly k: 'oneHandle'; readonly id: ValueExprId }
-    | { readonly k: 'one'; readonly topologyId: TopologyId; readonly paramExprs: readonly ValueExprId[] }
     | { readonly k: 'slot'; readonly slot: ValueSlot };
   /** Optional control points for path rendering - P5c: Add control points field */
   readonly controlPoints?: { readonly k: 'slot'; readonly slot: ValueSlot };

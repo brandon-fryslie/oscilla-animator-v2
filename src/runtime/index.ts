@@ -51,6 +51,25 @@ export {
   ExternalChannelSystem,
 } from './ExternalChannel';
 export { executeFrame } from './ScheduleExecutor';
+export { packDrawPrepSinkTableV1, type PackedDrawPrepSinkTableV1 } from './DrawPrepSinkTablePacker';
+export {
+  DRAW_PREP_SINK_TABLE_V1_VERSION,
+  DRAW_PREP_SINK_TABLE_HEADER_WORDS,
+  DRAW_PREP_SINK_TABLE_RECORD_WORDS,
+  DrawPrepSinkTableHeaderWord,
+  DrawPrepSinkTableRecordWord,
+  buildDrawPrepSinkTableHeader,
+  computeDrawPrepSinkTableWordCapacity,
+  drawModeToCode,
+  codeToDrawMode,
+  readDrawPrepSinkTableHeader,
+  writeDrawPrepSinkTableHeader,
+  writeDrawPrepSinkRecord,
+  type DrawPrepDrawModeCode,
+  type DrawPrepSinkRecordV1,
+  type DrawPrepSinkTableHeaderV1,
+  type DrawPrepSinkTableV1,
+} from './DrawPrepSinkTable';
 export { assertSchedulePhaseBoundaryStateReads } from './PhaseBoundaryValidator';
 export {
   migrateState,

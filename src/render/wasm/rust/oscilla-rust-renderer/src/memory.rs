@@ -2,6 +2,11 @@ use bytemuck::{bytes_of, cast_slice, Pod, Zeroable};
 
 pub const INDIRECT_WORDS_PER_RECORD: usize = 5;
 pub const INSTANCE_FLOATS_PER_RECORD: usize = 12;
+pub const SHAPE_BANK_HEADER_WORDS: usize = 16;
+pub const SINK_TABLE_HEADER_WORDS: usize = 8;
+pub const SINK_TABLE_RECORD_WORDS: usize = 29;
+pub const INDIRECT_INDEXED_STRIDE_WORDS: usize = 5;
+pub const INDIRECT_NON_INDEXED_STRIDE_WORDS: usize = 4;
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, Zeroable, Pod)]
@@ -28,24 +33,29 @@ pub struct GpuMemoryArena {
     pub uniform_bind_group: wgpu::BindGroup,
     pub instance_buffer: wgpu::Buffer,
     pub topology_buffer: wgpu::Buffer,
+    pub sink_table_buffer: wgpu::Buffer,
     pub indirect_buffer: wgpu::Buffer,
     pub vertex_buffer: wgpu::Buffer,
     pub index_buffer: wgpu::Buffer,
     pub assembly_write_bind_group: wgpu::BindGroup,
+    pub draw_prep_bind_group: wgpu::BindGroup,
     pub instance_bind_group: wgpu::BindGroup,
     pub topology_bind_group: wgpu::BindGroup,
     assembly_layout: wgpu::BindGroupLayout,
+    draw_prep_layout: wgpu::BindGroupLayout,
     instance_layout: wgpu::BindGroupLayout,
     topology_layout: wgpu::BindGroupLayout,
     instance_capacity_bytes: u64,
     topology_capacity_words: usize,
+    sink_table_capacity_words: usize,
     indirect_capacity_words: usize,
     vertex_capacity_bytes: u64,
     index_capacity_bytes: u64,
     state_buffers: [wgpu::Buffer; 2],
     compiler_arena_buffers: [wgpu::Buffer; 2],
     state_bind_groups: [wgpu::BindGroup; 2],
-    compiler_simulation_bind_groups: Option<[wgpu::BindGroup; 2]>,
+    compiler_arena_bind_groups: [wgpu::BindGroup; 2],
+    compiler_simulation_bind_groups: [wgpu::BindGroup; 2],
     staging_buffers: [wgpu::Buffer; 2],
     ping_pong_index: usize,
 }
@@ -55,7 +65,9 @@ impl GpuMemoryArena {
         device: &wgpu::Device,
         uniform_layout: &wgpu::BindGroupLayout,
         state_layout: &wgpu::BindGroupLayout,
+        compiler_simulation_layout: &wgpu::BindGroupLayout,
         assembly_layout: &wgpu::BindGroupLayout,
+        draw_prep_layout: &wgpu::BindGroupLayout,
         instance_layout: &wgpu::BindGroupLayout,
         topology_layout: &wgpu::BindGroupLayout,
         max_particles: usize,
@@ -132,25 +144,52 @@ impl GpuMemoryArena {
                 mapped_at_creation: false,
             }),
         ];
+        let compiler_arena_bind_groups = [
+            device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("CompilerArena.BindGroup.A"),
+                layout: state_layout,
+                entries: &[wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: compiler_arena_buffers[0].as_entire_binding(),
+                }],
+            }),
+            device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("CompilerArena.BindGroup.B"),
+                layout: state_layout,
+                entries: &[wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: compiler_arena_buffers[1].as_entire_binding(),
+                }],
+            }),
+        ];
 
         let initial_instance_bytes = (max_shapes
             .saturating_mul(INSTANCE_FLOATS_PER_RECORD)
             .saturating_mul(std::mem::size_of::<f32>())) as u64;
-        let initial_topology_words = max_shapes.saturating_mul(4);
-        let initial_indirect_words = max_shapes.saturating_mul(INDIRECT_WORDS_PER_RECORD);
+        let initial_topology_words = max_shapes.saturating_mul(SHAPE_BANK_HEADER_WORDS);
+        let initial_sink_table_words =
+            SINK_TABLE_HEADER_WORDS + max_shapes.saturating_mul(SINK_TABLE_RECORD_WORDS);
+        let initial_indirect_words = max_shapes
+            .saturating_mul(INDIRECT_INDEXED_STRIDE_WORDS + INDIRECT_NON_INDEXED_STRIDE_WORDS);
         let initial_vertex_bytes =
             (max_shapes.saturating_mul(8).saturating_mul(std::mem::size_of::<f32>())) as u64;
         let initial_index_bytes =
             (max_shapes.saturating_mul(12).saturating_mul(std::mem::size_of::<u32>())) as u64;
 
-        let instance_capacity_bytes = initial_instance_bytes.max(16);
-        let topology_capacity_words = initial_topology_words.max(4);
+        let instance_capacity_bytes = initial_instance_bytes.max(
+            (INSTANCE_FLOATS_PER_RECORD * std::mem::size_of::<f32>()) as u64,
+        );
+        let topology_capacity_words = initial_topology_words.max(SHAPE_BANK_HEADER_WORDS);
+        let sink_table_capacity_words = initial_sink_table_words.max(SINK_TABLE_HEADER_WORDS);
         let indirect_capacity_words = initial_indirect_words.max(INDIRECT_WORDS_PER_RECORD);
-        let vertex_capacity_bytes = initial_vertex_bytes.max(16);
-        let index_capacity_bytes = initial_index_bytes.max(16);
+        let vertex_capacity_bytes =
+            initial_vertex_bytes.max((8 * std::mem::size_of::<f32>()) as u64);
+        let index_capacity_bytes =
+            initial_index_bytes.max((6 * std::mem::size_of::<u32>()) as u64);
 
         let instance_buffer = Self::create_instance_buffer(device, instance_capacity_bytes);
         let topology_buffer = Self::create_topology_buffer(device, topology_capacity_words);
+        let sink_table_buffer = Self::create_sink_table_buffer(device, sink_table_capacity_words);
         let indirect_buffer = Self::create_indirect_buffer(device, indirect_capacity_words);
         let vertex_buffer = Self::create_vertex_buffer(device, vertex_capacity_bytes);
         let index_buffer = Self::create_index_buffer(device, index_capacity_bytes);
@@ -165,6 +204,24 @@ impl GpuMemoryArena {
                 },
                 wgpu::BindGroupEntry {
                     binding: 1,
+                    resource: sink_table_buffer.as_entire_binding(),
+                },
+            ],
+        });
+        let draw_prep_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("DrawPrep.BindGroup"),
+            layout: draw_prep_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: sink_table_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: topology_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
                     resource: indirect_buffer.as_entire_binding(),
                 },
             ],
@@ -201,6 +258,62 @@ impl GpuMemoryArena {
                 mapped_at_creation: false,
             }),
         ];
+        // [LAW:single-enforcer] Compiler simulation bind groups are constructed
+        // once at arena creation from the canonical compiler layout.
+        let compiler_simulation_bind_groups = [
+            device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("Compute.CompilerSimulation.BindGroup.A"),
+                layout: compiler_simulation_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: compiler_arena_buffers[0].as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: compiler_arena_buffers[1].as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: state_buffers[0].as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 3,
+                        resource: state_buffers[1].as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 4,
+                        resource: uniform_buffer.as_entire_binding(),
+                    },
+                ],
+            }),
+            device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("Compute.CompilerSimulation.BindGroup.B"),
+                layout: compiler_simulation_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: compiler_arena_buffers[1].as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: compiler_arena_buffers[0].as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: state_buffers[1].as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 3,
+                        resource: state_buffers[0].as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 4,
+                        resource: uniform_buffer.as_entire_binding(),
+                    },
+                ],
+            }),
+        ];
 
         Self {
             uniforms: GlobalUniforms::default(),
@@ -209,24 +322,29 @@ impl GpuMemoryArena {
             uniform_bind_group,
             instance_buffer,
             topology_buffer,
+            sink_table_buffer,
             indirect_buffer,
             vertex_buffer,
             index_buffer,
             assembly_write_bind_group,
+            draw_prep_bind_group,
             instance_bind_group,
             topology_bind_group,
             assembly_layout: assembly_layout.clone(),
+            draw_prep_layout: draw_prep_layout.clone(),
             instance_layout: instance_layout.clone(),
             topology_layout: topology_layout.clone(),
             instance_capacity_bytes,
             topology_capacity_words,
+            sink_table_capacity_words,
             indirect_capacity_words,
             vertex_capacity_bytes,
             index_capacity_bytes,
             state_buffers,
             compiler_arena_buffers,
             state_bind_groups,
-            compiler_simulation_bind_groups: None,
+            compiler_arena_bind_groups,
+            compiler_simulation_bind_groups,
             staging_buffers,
             ping_pong_index: 0,
         }
@@ -235,60 +353,6 @@ impl GpuMemoryArena {
     pub fn update_uniforms(&mut self, queue: &wgpu::Queue, next_uniforms: GlobalUniforms) {
         self.uniforms = next_uniforms;
         queue.write_buffer(&self.uniform_buffer, 0, bytes_of(&self.uniforms));
-    }
-
-    pub fn sync_render_payload(
-        &mut self,
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
-        topology_words: &[u32],
-        instance_floats: &[f32],
-        indirect_words: &[u32],
-        vertex_floats: &[f32],
-        index_words: &[u32],
-    ) {
-        let mut needs_assembly_bind_group_rebuild = false;
-        let mut needs_instance_bind_group_rebuild = false;
-        let mut needs_topology_bind_group_rebuild = false;
-
-        if self.ensure_instance_capacity(device, instance_floats.len()) {
-            needs_assembly_bind_group_rebuild = true;
-            needs_instance_bind_group_rebuild = true;
-        }
-        if self.ensure_indirect_capacity(device, indirect_words.len()) {
-            needs_assembly_bind_group_rebuild = true;
-        }
-        if self.ensure_topology_capacity(device, topology_words.len()) {
-            needs_topology_bind_group_rebuild = true;
-        }
-        self.ensure_vertex_capacity(device, vertex_floats.len());
-        self.ensure_index_capacity(device, index_words.len());
-
-        if needs_assembly_bind_group_rebuild {
-            self.rebuild_assembly_write_bind_group(device);
-        }
-        if needs_instance_bind_group_rebuild {
-            self.rebuild_instance_bind_group(device);
-        }
-        if needs_topology_bind_group_rebuild {
-            self.rebuild_topology_bind_group(device);
-        }
-
-        if !topology_words.is_empty() {
-            queue.write_buffer(&self.topology_buffer, 0, cast_slice(topology_words));
-        }
-        if !instance_floats.is_empty() {
-            queue.write_buffer(&self.instance_buffer, 0, cast_slice(instance_floats));
-        }
-        if !indirect_words.is_empty() {
-            queue.write_buffer(&self.indirect_buffer, 0, cast_slice(indirect_words));
-        }
-        if !vertex_floats.is_empty() {
-            queue.write_buffer(&self.vertex_buffer, 0, cast_slice(vertex_floats));
-        }
-        if !index_words.is_empty() {
-            queue.write_buffer(&self.index_buffer, 0, cast_slice(index_words));
-        }
     }
 
     pub fn get_compute_read_bind_group(&self) -> &wgpu::BindGroup {
@@ -300,73 +364,15 @@ impl GpuMemoryArena {
         &self.state_bind_groups[write_index]
     }
 
-    pub fn rebuild_compiler_simulation_bind_groups(
-        &mut self,
-        device: &wgpu::Device,
-        layout: &wgpu::BindGroupLayout,
-    ) {
-        // [LAW:single-enforcer] Compiler-simulation bind groups are rebuilt in
-        // one place from the canonical layout so ping/pong bindings cannot drift.
-        self.compiler_simulation_bind_groups = Some([
-            device.create_bind_group(&wgpu::BindGroupDescriptor {
-                label: Some("Compute.CompilerSimulation.BindGroup.A"),
-                layout,
-                entries: &[
-                    wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: self.compiler_arena_buffers[0].as_entire_binding(),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 1,
-                        resource: self.compiler_arena_buffers[1].as_entire_binding(),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 2,
-                        resource: self.state_buffers[0].as_entire_binding(),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 3,
-                        resource: self.state_buffers[1].as_entire_binding(),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 4,
-                        resource: self.uniform_buffer.as_entire_binding(),
-                    },
-                ],
-            }),
-            device.create_bind_group(&wgpu::BindGroupDescriptor {
-                label: Some("Compute.CompilerSimulation.BindGroup.B"),
-                layout,
-                entries: &[
-                    wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: self.compiler_arena_buffers[1].as_entire_binding(),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 1,
-                        resource: self.compiler_arena_buffers[0].as_entire_binding(),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 2,
-                        resource: self.state_buffers[1].as_entire_binding(),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 3,
-                        resource: self.state_buffers[0].as_entire_binding(),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 4,
-                        resource: self.uniform_buffer.as_entire_binding(),
-                    },
-                ],
-            }),
-        ]);
+    pub fn get_compiler_arena_write_bind_group(&self) -> &wgpu::BindGroup {
+        let write_index = (self.ping_pong_index + 1) & 1;
+        &self.compiler_arena_bind_groups[write_index]
     }
 
-    pub fn get_compiler_simulation_bind_group(&self) -> Option<&wgpu::BindGroup> {
-        self.compiler_simulation_bind_groups
-            .as_ref()
-            .map(|bind_groups| &bind_groups[self.ping_pong_index])
+    pub fn get_compiler_simulation_bind_group(&self) -> &wgpu::BindGroup {
+        // [LAW:one-source-of-truth] Compiler simulation dispatch always reads
+        // from the canonical arena-owned ping/pong bind-group pair.
+        &self.compiler_simulation_bind_groups[self.ping_pong_index]
     }
 
     pub fn read_state_buffer(&self) -> &wgpu::Buffer {
@@ -379,6 +385,72 @@ impl GpuMemoryArena {
 
     pub fn swap_ping_pong(&mut self) {
         self.ping_pong_index = (self.ping_pong_index + 1) & 1;
+    }
+
+    pub fn write_shape_bank_words(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        words: &[u32],
+    ) {
+        let resized = self.ensure_topology_capacity(device, words.len());
+        if resized {
+            self.rebuild_topology_bind_group(device);
+            self.rebuild_draw_prep_bind_group(device);
+        }
+        if !words.is_empty() {
+            queue.write_buffer(&self.topology_buffer, 0, cast_slice(words));
+        }
+    }
+
+    pub fn write_sink_table_words(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        words: &[u32],
+    ) {
+        let resized = self.ensure_sink_table_capacity(device, words.len());
+        if resized {
+            self.rebuild_assembly_write_bind_group(device);
+            self.rebuild_draw_prep_bind_group(device);
+        }
+        if !words.is_empty() {
+            queue.write_buffer(&self.sink_table_buffer, 0, cast_slice(words));
+        }
+    }
+
+    pub fn write_geometry_payload(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        vertices: &[f32],
+        indices: &[u32],
+    ) {
+        // [LAW:one-source-of-truth] Geometry payload upload happens through one
+        // canonical arena method so render buffers are never seeded from ad-hoc defaults.
+        self.ensure_vertex_capacity(device, vertices.len().max(2));
+        self.ensure_index_capacity(device, indices.len().max(3));
+        if !vertices.is_empty() {
+            queue.write_buffer(&self.vertex_buffer, 0, cast_slice(vertices));
+        }
+        if !indices.is_empty() {
+            queue.write_buffer(&self.index_buffer, 0, cast_slice(indices));
+        }
+    }
+
+    pub fn write_indirect_words(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        words: &[u32],
+    ) {
+        let resized = self.ensure_indirect_capacity(device, words.len());
+        if resized {
+            self.rebuild_draw_prep_bind_group(device);
+        }
+        if !words.is_empty() {
+            queue.write_buffer(&self.indirect_buffer, 0, cast_slice(words));
+        }
     }
 
     fn create_instance_buffer(device: &wgpu::Device, size_bytes: u64) -> wgpu::Buffer {
@@ -395,6 +467,15 @@ impl GpuMemoryArena {
     fn create_topology_buffer(device: &wgpu::Device, words: usize) -> wgpu::Buffer {
         device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Render.TopologyBuffer"),
+            size: ((words.max(1) * std::mem::size_of::<u32>()) as u64).max(16),
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        })
+    }
+
+    fn create_sink_table_buffer(device: &wgpu::Device, words: usize) -> wgpu::Buffer {
+        device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Render.DrawPrepSinkTableBuffer"),
             size: ((words.max(1) * std::mem::size_of::<u32>()) as u64).max(16),
             usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
@@ -450,12 +531,25 @@ impl GpuMemoryArena {
         if required_words <= self.topology_capacity_words {
             return false;
         }
-        let mut next_capacity = self.topology_capacity_words.max(4);
+        let mut next_capacity = self.topology_capacity_words.max(SHAPE_BANK_HEADER_WORDS);
         while next_capacity < required_words {
             next_capacity = next_capacity.saturating_mul(2);
         }
         self.topology_buffer = Self::create_topology_buffer(device, next_capacity);
         self.topology_capacity_words = next_capacity;
+        true
+    }
+
+    fn ensure_sink_table_capacity(&mut self, device: &wgpu::Device, required_words: usize) -> bool {
+        if required_words <= self.sink_table_capacity_words {
+            return false;
+        }
+        let mut next_capacity = self.sink_table_capacity_words.max(SINK_TABLE_HEADER_WORDS);
+        while next_capacity < required_words {
+            next_capacity = next_capacity.saturating_mul(2);
+        }
+        self.sink_table_buffer = Self::create_sink_table_buffer(device, next_capacity);
+        self.sink_table_capacity_words = next_capacity;
         true
     }
 
@@ -509,6 +603,27 @@ impl GpuMemoryArena {
                 },
                 wgpu::BindGroupEntry {
                     binding: 1,
+                    resource: self.sink_table_buffer.as_entire_binding(),
+                },
+            ],
+        });
+    }
+
+    fn rebuild_draw_prep_bind_group(&mut self, device: &wgpu::Device) {
+        self.draw_prep_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("DrawPrep.BindGroup"),
+            layout: &self.draw_prep_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: self.sink_table_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: self.topology_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
                     resource: self.indirect_buffer.as_entire_binding(),
                 },
             ],

@@ -7,7 +7,6 @@ Rust/WASM worker renderer engine for the hot-path migration.
 - `rebuild_pipeline(...)`: compiles replacement simulation/assembly WGSL into compute pipelines and recompiles the uber render pipeline WGSL outside hot path.
 - `resize_surface(...)`: reconfigures surface + depth target outside hot path.
 - `pause_engine(...)` / `resume_engine(...)`: lifecycle control for rebuild windows.
-- `take_runtime_event_code(...)`: legacy numeric runtime event surface (compat only).
 - `take_frame_pacing_packet(...)`: canonical scheduler observability packet (state + heartbeat + structured runtime events).
 - `allocator.rs`: global strict allocator that panics on any hot-path allocation.
 - `memory.rs`: Stage 1 preallocated arena + aligned render data contracts.

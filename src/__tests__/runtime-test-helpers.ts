@@ -87,15 +87,14 @@ export function testStableTargetId(semantic: string, instancePortKey: string): S
  * Returns a freshly initialized RuntimeState with all subsystems created.
  * Use this as the base for building up test state structures.
  *
- * @param slotCount - Number of value slots (default 100)
  * @returns A new RuntimeState
  *
  * @example
  * const state = createTestRuntimeState();
  * // Now populate state.values, state.continuity, etc. as needed
  */
-export function createTestRuntimeState(slotCount: number = 100): RuntimeState {
-  return createRuntimeState(slotCount);
+export function createTestRuntimeState(): RuntimeState {
+  return createRuntimeState();
 }
 
 /**
@@ -107,7 +106,6 @@ export function createTestRuntimeState(slotCount: number = 100): RuntimeState {
  * continuity logic in isolation.
  *
  * @param overrides - Optional partial state to merge in
- * @param slotCount - Number of value slots (default 100)
  * @returns A properly typed RuntimeState
  *
  * @example
@@ -119,8 +117,7 @@ export function createTestRuntimeState(slotCount: number = 100): RuntimeState {
  */
 export function createMockRuntimeState(
   overrides?: Partial<RuntimeState>,
-  slotCount: number = 100
 ): RuntimeState {
-  const base = createRuntimeState(slotCount);
+  const base = createRuntimeState();
   return { ...base, ...overrides };
 }

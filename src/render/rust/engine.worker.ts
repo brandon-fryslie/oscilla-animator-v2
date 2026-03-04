@@ -2,6 +2,8 @@
 
 import {
   attachRustRendererSharedInput,
+  attachRustRendererSharedShapeBank,
+  attachRustRendererSharedSinkTable,
   injectRustRendererPoisonAlloc,
   initRustRendererEngine,
   initRustRendererWasm,
@@ -9,9 +11,7 @@ import {
   rebuildRustRendererSimulationPipeline,
   resumeRustRendererEngine,
   resizeRustRendererSurface,
-  syncRustRendererRenderPayload,
   takeRustRendererFramePacingPacket,
-  takeRustRendererRuntimeEventCode,
 } from '../wasm/oscilla_rust_renderer';
 import type {
   RustRendererRuntimeEvent,
@@ -50,20 +50,11 @@ interface RawSchedulerPacket {
   readonly events: readonly RawRuntimeEvent[];
 }
 
-interface LegacyFramePacingPacket {
-  readonly meanMs: number;
-  readonly stdDevMs: number;
-  readonly sampleCount: number;
-  readonly frameCount: number;
-}
-
 const POLL_INTERVAL_MS = 250;
 
 let bootstrapped = false;
 let bootstrapInFlight = false;
 let runtimePollTimer: ReturnType<typeof setInterval> | null = null;
-let legacyHeartbeatSequence = 0;
-let legacyState: RustRendererSchedulerState = 'Booting';
 let deviceLostNotified = false;
 
 function postWorkerMessage(message: RustRendererWorkerOutboundMessage): void {
@@ -145,25 +136,6 @@ function parseSchedulerPacket(packet: unknown): RawSchedulerPacket | null {
   };
 }
 
-function parseLegacyFramePacingPacket(packet: unknown): LegacyFramePacingPacket | null {
-  if (!packet || typeof packet !== 'object') return null;
-  const candidate = packet as Partial<LegacyFramePacingPacket>;
-  if (
-    !isFiniteNumber(candidate.meanMs)
-    || !isFiniteNumber(candidate.stdDevMs)
-    || !isFiniteNumber(candidate.sampleCount)
-    || !isFiniteNumber(candidate.frameCount)
-  ) {
-    return null;
-  }
-  return {
-    meanMs: candidate.meanMs,
-    stdDevMs: candidate.stdDevMs,
-    sampleCount: candidate.sampleCount,
-    frameCount: candidate.frameCount,
-  };
-}
-
 function toOutboundHeartbeat(raw: RawSchedulerHeartbeat): RustRendererSchedulerHeartbeat {
   const state = isSchedulerState(raw.state) ? raw.state : 'Lost';
   return {
@@ -179,57 +151,6 @@ function toOutboundHeartbeat(raw: RawSchedulerHeartbeat): RustRendererSchedulerH
     lastTickMs: raw.lastTickMs,
     lastSuccessMs: raw.lastSuccessMs,
   };
-}
-
-function toLegacyHeartbeat(raw: LegacyFramePacingPacket): RustRendererSchedulerHeartbeat {
-  legacyHeartbeatSequence += 1;
-  if (legacyState === 'Booting') legacyState = 'Running';
-  const now = Date.now();
-  return {
-    type: 'SCHEDULER_HEARTBEAT',
-    state: legacyState,
-    sequence: legacyHeartbeatSequence,
-    emittedAtMs: now,
-    frameCount: raw.frameCount,
-    loopCount: raw.frameCount,
-    meanTickMs: raw.meanMs,
-    stdDevTickMs: raw.stdDevMs,
-    sampleCount: raw.sampleCount,
-    lastTickMs: now,
-    lastSuccessMs: now,
-  };
-}
-
-function emitLegacyRuntimeEvents(frameCount: number): void {
-  const eventCode = takeRustRendererRuntimeEventCode();
-  if (eventCode === 0) return;
-  if (eventCode === 1) {
-    legacyState = 'Lost';
-    postWorkerMessage({
-      type: 'RUNTIME_EVENT',
-      severity: 'error',
-      code: 'surface_lost',
-      message: 'Surface acquire failed with Lost/Outdated',
-      state: legacyState,
-      frameCount,
-      loopCount: frameCount,
-      emittedAtMs: Date.now(),
-    });
-    postDeviceLost('surface_lost', 'Surface acquire failed with Lost/Outdated');
-    return;
-  }
-  legacyState = 'Lost';
-  postWorkerMessage({
-    type: 'RUNTIME_EVENT',
-    severity: 'fatal',
-    code: 'surface_fatal',
-    message: 'Rust worker fatal surface error',
-    state: legacyState,
-    frameCount,
-    loopCount: frameCount,
-    emittedAtMs: Date.now(),
-  });
-  postDeviceLost('surface_fatal', 'Rust worker fatal surface error');
 }
 
 function toOutboundRuntimeEvent(raw: RawRuntimeEvent): RustRendererRuntimeEvent {
@@ -262,9 +183,9 @@ async function handleBootstrap(message: Extract<RustRendererWorkerInboundMessage
   await initRustRendererWasm();
   await initRustRendererEngine(message.canvas, message.config);
   attachRustRendererSharedInput(message.sharedInput);
+  attachRustRendererSharedShapeBank(message.sharedShapeBank);
+  attachRustRendererSharedSinkTable(message.sharedSinkTable);
   bootstrapped = true;
-  legacyHeartbeatSequence = 0;
-  legacyState = 'Booting';
   deviceLostNotified = false;
   startRuntimePolling();
   postWorkerMessage({ type: 'BOOTSTRAP_SUCCESS' });
@@ -280,33 +201,16 @@ async function handleRebuildSimulation(
   postWorkerMessage({ type: 'REBUILD_SIMULATION_PIPELINE_SUCCESS' });
 }
 
-async function handleSyncRenderPayload(
-  message: Extract<RustRendererWorkerInboundMessage, { type: 'SYNC_RENDER_PAYLOAD' }>,
-): Promise<void> {
-  // [LAW:one-source-of-truth] Render payload marshalling is owned by one
-  // worker boundary so Rust hot-path buffers receive one canonical schema.
-  await syncRustRendererRenderPayload(
-    message.topologyWords,
-    message.instanceFloats,
-    message.indirectArgsWords,
-    message.vertexFloats,
-    message.indexWords,
-    message.drawRecordCount,
-  );
-}
-
 function handleResize(message: Extract<RustRendererWorkerInboundMessage, { type: 'RESIZE_CANVAS' }>): void {
   resizeRustRendererSurface(message.width, message.height);
 }
 
 function handlePause(): void {
   pauseRustRendererEngine();
-  legacyState = 'Paused';
 }
 
 function handleResume(): void {
   resumeRustRendererEngine();
-  if (legacyState === 'Paused') legacyState = 'Running';
 }
 
 function handleInjectPoisonAlloc(): void {
@@ -343,14 +247,6 @@ function startRuntimePolling(): void {
             postDeviceLost(event.code, event.message);
           }
         }
-        return;
-      }
-      const legacyPacket = parseLegacyFramePacingPacket(rawPacket);
-      if (legacyPacket) {
-        // [LAW:one-source-of-truth] exception: Legacy WASM builds emit the
-        // previous frame pacing shape; fallback exists only until ABI rebuild.
-        postWorkerMessage(toLegacyHeartbeat(legacyPacket));
-        emitLegacyRuntimeEvents(legacyPacket.frameCount);
         return;
       }
       postWorkerFatalError('scheduler_packet_invalid', 'Rust worker received invalid scheduler observability payload');
@@ -395,15 +291,6 @@ self.onmessage = (event: MessageEvent<RustRendererWorkerInboundMessage>) => {
   }
   if (message.type === 'INJECT_POISON_ALLOC') {
     handleInjectPoisonAlloc();
-    return;
-  }
-  if (message.type === 'SYNC_RENDER_PAYLOAD') {
-    void handleSyncRenderPayload(message).catch((error) => {
-      postWorkerFatalError(
-        'render_payload_sync_failure',
-        `Rust worker render payload sync failure: ${error instanceof Error ? error.message : String(error)}`,
-      );
-    });
     return;
   }
   if (message.type === 'RESIZE_CANVAS') {

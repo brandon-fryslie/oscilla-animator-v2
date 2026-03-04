@@ -90,7 +90,10 @@ struct NagaFunctionArgumentIR {
 #[serde(rename_all = "snake_case")]
 enum NagaBinaryOpIR {
     Add,
+    Sub,
     Mul,
+    Div,
+    Mod,
     Lt,
     Le,
     Gt,
@@ -386,7 +389,10 @@ impl<'a> ExpressionEmitter<'a> {
                 let right_expr = self.emit(*right)?;
                 let op_token = match op {
                     NagaBinaryOpIR::Add => "+",
+                    NagaBinaryOpIR::Sub => "-",
                     NagaBinaryOpIR::Mul => "*",
+                    NagaBinaryOpIR::Div => "/",
+                    NagaBinaryOpIR::Mod => "%",
                     NagaBinaryOpIR::Lt => "<",
                     NagaBinaryOpIR::Le => "<=",
                     NagaBinaryOpIR::Gt => ">",

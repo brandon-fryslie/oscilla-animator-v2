@@ -36,7 +36,7 @@ describe('construct one-cardinality evaluation', () => {
 
   beforeEach(() => {
     // Create minimal runtime state
-    state = createRuntimeState(64, 64, 8);
+    state = createRuntimeState(64, 8);
     state.cache.frameId = 1;
     // Set up minimal time state (required by evaluator)
     state.time = {
@@ -187,7 +187,7 @@ describe('extract one-cardinality evaluation', () => {
   let state: RuntimeState;
 
   beforeEach(() => {
-    state = createRuntimeState(64, 64, 8, 0, 0, 64);
+    state = createRuntimeState(64, 8, 0, 64);
     state.cache.frameId = 1;
     state.time = {
       tMs: 0,
@@ -368,7 +368,7 @@ describe('reduce kernel scalar evaluation', () => {
   let state: RuntimeState;
 
   beforeEach(() => {
-    state = createRuntimeState(16, 16, 4);
+    state = createRuntimeState(16, 4);
     state.cache.frameId = 1;
     state.time = {
       tMs: 0,

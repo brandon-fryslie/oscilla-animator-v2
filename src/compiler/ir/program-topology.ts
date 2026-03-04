@@ -1,7 +1,6 @@
 import { exportSerializableTopologies } from '../../shapes/registry';
 import type { SerializableTopologyDef, TopologyDef, TopologyId } from '../../shapes/types';
 import type { CompiledProgramIR, ProgramTopologyTableIR } from './program';
-import type { Step } from './types';
 
 type ProgramWithValueExprs = Pick<CompiledProgramIR, 'valueExprs'>;
 
@@ -34,25 +33,14 @@ export function collectProgramTopologyIds(program: ProgramWithValueExprs): reado
   return [...ids];
 }
 
-export function collectRenderStepTopologyIds(steps: readonly Step[]): readonly TopologyId[] {
-  const ids = new Set<TopologyId>();
-  for (const step of steps) {
-    if (step.kind !== 'render') continue;
-    if (step.shape.k !== 'one') continue;
-    ids.add(step.shape.topologyId);
-  }
-  return [...ids];
-}
-
 export function collectAllProgramTopologyIds(input: {
   readonly valueExprs: ProgramWithValueExprs['valueExprs'];
-  readonly steps: readonly Step[];
+  readonly steps: readonly unknown[];
 }): readonly TopologyId[] {
-  const ids = new Set<TopologyId>(collectProgramTopologyIds({ valueExprs: input.valueExprs }));
-  for (const topologyId of collectRenderStepTopologyIds(input.steps)) {
-    ids.add(topologyId);
-  }
-  return [...ids];
+  void input.steps;
+  // [LAW:one-source-of-truth] Topology ownership is derived from ValueExpr
+  // references only; render steps consume canonical shape handles.
+  return collectProgramTopologyIds({ valueExprs: input.valueExprs });
 }
 
 export function buildProgramTopologyTable(

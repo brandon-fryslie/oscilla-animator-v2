@@ -6,10 +6,25 @@ export interface RustRendererBootstrapConfig {
   readonly debugReadbackHz: number;
 }
 
+export const RUST_RENDERER_SHAPE_HEADER_WORDS = 16;
+export const RUST_RENDERER_SINK_TABLE_HEADER_WORDS = 8;
+export const RUST_RENDERER_SINK_TABLE_RECORD_WORDS = 29;
+
+export function computeRustRendererShapeBankWordCapacity(config: RustRendererBootstrapConfig): number {
+  return Math.max(RUST_RENDERER_SHAPE_HEADER_WORDS, Math.floor(config.maxShapes) * RUST_RENDERER_SHAPE_HEADER_WORDS);
+}
+
+export function computeRustRendererSinkTableWordCapacity(config: RustRendererBootstrapConfig): number {
+  const maxRecords = Math.max(0, Math.floor(config.maxShapes));
+  return RUST_RENDERER_SINK_TABLE_HEADER_WORDS + maxRecords * RUST_RENDERER_SINK_TABLE_RECORD_WORDS;
+}
+
 export interface RustRendererBootstrapMessage {
   readonly type: 'BOOTSTRAP';
   readonly canvas: OffscreenCanvas;
   readonly sharedInput: SharedArrayBuffer;
+  readonly sharedShapeBank: SharedArrayBuffer;
+  readonly sharedSinkTable: SharedArrayBuffer;
   readonly config: RustRendererBootstrapConfig;
 }
 
@@ -40,16 +55,6 @@ export interface RustRendererInjectPoisonAllocMessage {
   readonly type: 'INJECT_POISON_ALLOC';
 }
 
-export interface RustRendererSyncRenderPayloadMessage {
-  readonly type: 'SYNC_RENDER_PAYLOAD';
-  readonly topologyWords: Uint32Array;
-  readonly instanceFloats: Float32Array;
-  readonly indirectArgsWords: Uint32Array;
-  readonly vertexFloats: Float32Array;
-  readonly indexWords: Uint32Array;
-  readonly drawRecordCount: number;
-}
-
 export type RustRendererWorkerInboundMessage =
   | RustRendererBootstrapMessage
   | RustRendererShutdownMessage
@@ -57,8 +62,7 @@ export type RustRendererWorkerInboundMessage =
   | RustRendererResizeCanvasMessage
   | RustRendererPauseMessage
   | RustRendererResumeMessage
-  | RustRendererInjectPoisonAllocMessage
-  | RustRendererSyncRenderPayloadMessage;
+  | RustRendererInjectPoisonAllocMessage;
 
 export interface RustRendererBootstrapSuccess {
   readonly type: 'BOOTSTRAP_SUCCESS';

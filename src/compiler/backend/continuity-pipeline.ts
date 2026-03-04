@@ -27,7 +27,7 @@ import type { ValueRefPacked } from '../ir/lowerTypes';
 import { isExprRef } from '../ir/lowerTypes';
 import { getBlockDefinition } from '../../blocks/registry';
 import { getPolicyForSemantic } from '../../runtime/ContinuityDefaults';
-import { requireManyInstance, payloadStride } from '../../core/canonical-types';
+import { requireManyInstance, payloadStride, withInstance } from '../../core/canonical-types';
 import type { CanonicalType } from '../../core/canonical-types';
 
 // =============================================================================
@@ -230,7 +230,6 @@ function collectRenderTargets(
     }
 
     if (!isFieldExtent(controlPoints.id, valueExprs)) continue;
-    if (!isFieldExtent(color.id, valueExprs)) continue;
 
     const instanceId = inferFieldInstanceFromExprs(controlPoints.id, valueExprs);
     if (!instanceId) {
@@ -366,6 +365,11 @@ export function allocateContinuityPipeline(
 
   for (const target of renderTargets) {
     const { renderBlockId, instanceId, controlPoints, color, scale, shape } = target;
+    const controlPointsExpr = valueExprs[controlPoints.id as number];
+    if (!controlPointsExpr) {
+      throw new Error(`RenderInstances2D (${renderBlockId}): missing controlPoints expr ${controlPoints.id}`);
+    }
+    const renderInstance = requireManyInstance(controlPointsExpr.type);
 
     // Helper to get or create slots for a field
     const getFieldSlots = (
@@ -440,7 +444,27 @@ export function allocateContinuityPipeline(
     const posSlots = getFieldSlots(controlPoints.id, 'position', controlPoints.stride, `${renderBlockId}:controlPoints`);
 
     // Process color (semantic: color)
-    const colorSlots = getFieldSlots(color.id, 'color', color.stride, `${renderBlockId}:color`);
+    // [LAW:dataflow-not-control-flow] color always enters the continuity/materialize
+    // pipeline; one-cardinality colors are lifted to field data via broadcast.
+    const colorExpr = valueExprs[color.id as number];
+    if (!colorExpr) {
+      throw new Error(`RenderInstances2D (${renderBlockId}): missing color expr ${color.id}`);
+    }
+    const colorFieldExprId = isFieldExtent(color.id, valueExprs)
+      ? color.id
+      : builder.broadcast(color.id, withInstance(colorExpr.type, renderInstance));
+    const colorFieldExpr = valueExprs[colorFieldExprId as number];
+    if (!colorFieldExpr) {
+      throw new Error(
+        `RenderInstances2D (${renderBlockId}): missing broadcast color expr ${colorFieldExprId}`,
+      );
+    }
+    const colorSlots = getFieldSlots(
+      colorFieldExprId,
+      'color',
+      payloadStride(colorFieldExpr.type.payload),
+      `${renderBlockId}:color`,
+    );
 
     // [LAW:dataflow-not-control-flow] Scale is always processed through one of the declared variants.
     let scaleOutput: StepRender['scale'] = undefined;

@@ -19,10 +19,9 @@ import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR,  CAMERA_PROJECTION, canonicalType 
 import type { RuntimeState } from '../RuntimeState';
 import {
   allocShapeBankWords,
+  createShapeBankHeaderV1,
   createRuntimeState,
-  SHAPE2D_WORDS,
   SHAPE_BANK_HEADER_WORDS,
-  writeShape2D,
   writeShapeBankHandleMetadata,
   writeShapeBankHeader,
 } from '../RuntimeState';
@@ -48,10 +47,28 @@ function createPalette(r = 1, g = 1, b = 1, a = 1): Float32Array {
 
 // Helper to create a scalar one-cardinality type
 const SCALAR_TYPE: CanonicalType = canonicalType(FLOAT);
+const LEGACY_SHAPE_RECORD_WORDS = 8;
+
+type LegacyShapeRecord = {
+  readonly topologyId: number;
+  readonly pointsFieldSlot: number;
+  readonly pointsCount: number;
+  readonly styleRef: number;
+  readonly flags: number;
+};
+
+function writeLegacyShapeRecord(bank: Uint32Array, offset: number, record: LegacyShapeRecord): void {
+  const base = offset * LEGACY_SHAPE_RECORD_WORDS;
+  bank[base + 0] = record.topologyId >>> 0;
+  bank[base + 1] = record.pointsFieldSlot >>> 0;
+  bank[base + 2] = record.pointsCount >>> 0;
+  bank[base + 3] = record.styleRef >>> 0;
+  bank[base + 4] = record.flags >>> 0;
+}
 
 // Create a minimal runtime state for testing
 function createMockState(): RuntimeState {
-  const state = createRuntimeState(100, 0, 0, 0, 0, 256);
+  const state = createRuntimeState(0, 0, 0, 256);
   state.time = {
     tAbsMs: 0,
     tMs: 0,
@@ -82,21 +99,26 @@ function installShapeHandlesFromPacked(
   if (!shapeBank) {
     throw new Error('Test RuntimeState missing shapeBank');
   }
-  const count = Math.floor(packed.length / SHAPE2D_WORDS);
+  const count = Math.floor(packed.length / LEGACY_SHAPE_RECORD_WORDS);
   const handles = new Float32Array(count);
   for (let i = 0; i < count; i++) {
-    const base = i * SHAPE2D_WORDS;
+    const base = i * LEGACY_SHAPE_RECORD_WORDS;
     const topologyId = packed[base + 0];
     const pointsFieldSlot = packed[base + 1];
     const pointsCount = packed[base + 2];
     const flags = packed[base + 4];
     const handle = allocShapeBankWords(shapeBank, SHAPE_BANK_HEADER_WORDS);
-    writeShapeBankHeader(shapeBank.data, handle, {
-      indexCount: pointsCount,
-      indexOffset: 0,
-      vertexCount: pointsCount,
-      flags,
-    });
+    writeShapeBankHeader(
+      shapeBank.data,
+      handle,
+      createShapeBankHeaderV1({
+        kind: 1,
+        topologyMode: 1,
+        indexCount: pointsCount,
+        vertexCount: pointsCount,
+        flags,
+      }),
+    );
     writeShapeBankHandleMetadata(shapeBank, handle, {
       topologyId,
       controlPointSlot: pointsFieldSlot,
@@ -307,13 +329,13 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
       const instanceCount = 2;
       const positionBuffer = new Float32Array(instanceCount * 3);
       const colorBuffer = new Uint8ClampedArray(instanceCount * 4);
-      const shapeBuffer = new Uint32Array(instanceCount * SHAPE2D_WORDS);
+      const shapeBuffer = new Uint32Array(instanceCount * LEGACY_SHAPE_RECORD_WORDS);
       const controlPointsBuffer = new Float32Array([
         0, 1, 1, 0, 0, -1, -1, 0,
       ]);
 
       for (let i = 0; i < instanceCount; i++) {
-        writeShape2D(shapeBuffer, i, {
+        writeLegacyShapeRecord(shapeBuffer, i, {
           topologyId: CIRCLE_ID,
           pointsFieldSlot: 4,
           pointsCount: 4,
@@ -383,7 +405,7 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
       // Position buffer must be stride-3 (vec3 world-space positions)
       const positionBuffer = new Float32Array(instanceCount * 3);
       const colorBuffer = new Uint8ClampedArray(instanceCount * 4);
-      const shapeBuffer = new Uint32Array(instanceCount * SHAPE2D_WORDS);
+      const shapeBuffer = new Uint32Array(instanceCount * LEGACY_SHAPE_RECORD_WORDS);
       const controlPointsBuffer = new Float32Array([
         0, 1, 1, 0, 0, -1, -1, 0, // 4 points for circle
       ]);
@@ -399,7 +421,7 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
         colorBuffer[i * 4 + 3] = 255;
 
         // All instances use circle topology with same control points
-        writeShape2D(shapeBuffer, i, {
+        writeLegacyShapeRecord(shapeBuffer, i, {
           topologyId: CIRCLE_ID,
           pointsFieldSlot: 4, // All use slot 4
           pointsCount: 4,
@@ -457,7 +479,7 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
       // Position buffer must be stride-3 (vec3 world-space positions)
       const positionBuffer = new Float32Array(instanceCount * 3);
       const colorBuffer = new Uint8ClampedArray(instanceCount * 4);
-      const shapeBuffer = new Uint32Array(instanceCount * SHAPE2D_WORDS);
+      const shapeBuffer = new Uint32Array(instanceCount * LEGACY_SHAPE_RECORD_WORDS);
 
       // Control points for each topology
       const circlePoints = new Float32Array([0, 1, 1, 0, 0, -1, -1, 0]); // 4 points
@@ -488,7 +510,7 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
         colorBuffer[i * 4 + 2] = i < 5 ? 0 : (i < 8 ? 0 : 255);
         colorBuffer[i * 4 + 3] = 255;
 
-        writeShape2D(shapeBuffer, i, {
+        writeLegacyShapeRecord(shapeBuffer, i, {
           topologyId: topologies[i],
           pointsFieldSlot: slots[i],
           pointsCount: pointCounts[i],
@@ -555,7 +577,7 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
       // Position buffer must be stride-3 (vec3 world-space positions)
       const positionBuffer = new Float32Array(instanceCount * 3);
       const colorBuffer = new Uint8ClampedArray(instanceCount * 4);
-      const shapeBuffer = new Uint32Array(instanceCount * SHAPE2D_WORDS);
+      const shapeBuffer = new Uint32Array(instanceCount * LEGACY_SHAPE_RECORD_WORDS);
 
       const circlePoints = new Float32Array([0, 1, 1, 0, 0, -1, -1, 0]);
       const squarePoints = new Float32Array([-1, -1, 1, -1, 1, 1, -1, 1]);
@@ -578,7 +600,7 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
         colorBuffer[i * 4 + 2] = 0;
         colorBuffer[i * 4 + 3] = 255;
 
-        writeShape2D(shapeBuffer, i, {
+        writeLegacyShapeRecord(shapeBuffer, i, {
           topologyId: topologies[i],
           pointsFieldSlot: slots[i],
           pointsCount: 4,
@@ -648,7 +670,7 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
         0, 0, 255, 255,   // instance 2 (blue, square)
         255, 255, 0, 255, // instance 3 (yellow, circle)
       ]);
-      const shapeBuffer = new Uint32Array(instanceCount * SHAPE2D_WORDS);
+      const shapeBuffer = new Uint32Array(instanceCount * LEGACY_SHAPE_RECORD_WORDS);
 
       const circlePoints = new Float32Array([0, 1, 1, 0, 0, -1, -1, 0]);
       const squarePoints = new Float32Array([-1, -1, 1, -1, 1, 1, -1, 1]);
@@ -659,10 +681,10 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
       setTestSlotBuffer(state, 5 as ValueSlot, squarePoints);
 
       // Setup: circle, square, square, circle
-      writeShape2D(shapeBuffer, 0, { topologyId: CIRCLE_ID, pointsFieldSlot: 4, pointsCount: 4, styleRef: 0, flags: 1 });
-      writeShape2D(shapeBuffer, 1, { topologyId: SQUARE_ID, pointsFieldSlot: 5, pointsCount: 4, styleRef: 0, flags: 1 });
-      writeShape2D(shapeBuffer, 2, { topologyId: SQUARE_ID, pointsFieldSlot: 5, pointsCount: 4, styleRef: 0, flags: 1 });
-      writeShape2D(shapeBuffer, 3, { topologyId: CIRCLE_ID, pointsFieldSlot: 4, pointsCount: 4, styleRef: 0, flags: 1 });
+      writeLegacyShapeRecord(shapeBuffer, 0, { topologyId: CIRCLE_ID, pointsFieldSlot: 4, pointsCount: 4, styleRef: 0, flags: 1 });
+      writeLegacyShapeRecord(shapeBuffer, 1, { topologyId: SQUARE_ID, pointsFieldSlot: 5, pointsCount: 4, styleRef: 0, flags: 1 });
+      writeLegacyShapeRecord(shapeBuffer, 2, { topologyId: SQUARE_ID, pointsFieldSlot: 5, pointsCount: 4, styleRef: 0, flags: 1 });
+      writeLegacyShapeRecord(shapeBuffer, 3, { topologyId: CIRCLE_ID, pointsFieldSlot: 4, pointsCount: 4, styleRef: 0, flags: 1 });
       installShapeHandlesFromPacked(state, 3 as ValueSlot, shapeBuffer);
 
       // Build scalarExprToArenaOffset mapping
@@ -731,7 +753,7 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
       // Position buffer must be stride-3 (vec3 world-space positions)
       const positionBuffer = new Float32Array(instanceCount * 3);
       const colorBuffer = new Uint8ClampedArray(instanceCount * 4);
-      const shapeBuffer = new Uint32Array(instanceCount * SHAPE2D_WORDS);
+      const shapeBuffer = new Uint32Array(instanceCount * LEGACY_SHAPE_RECORD_WORDS);
       const controlPointsBuffer = new Float32Array(8);
 
       setTestSlotBuffer(state, 1 as ValueSlot, positionBuffer);
@@ -740,7 +762,7 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
 
       // Use non-existent topology ID
       for (let i = 0; i < instanceCount; i++) {
-        writeShape2D(shapeBuffer, i, {
+        writeLegacyShapeRecord(shapeBuffer, i, {
           topologyId: 999, // Non-existent topology
           pointsFieldSlot: 4,
           pointsCount: 4,
@@ -790,14 +812,14 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
       // Position buffer must be stride-3 (vec3 world-space positions)
       const positionBuffer = new Float32Array(instanceCount * 3);
       const colorBuffer = new Uint8ClampedArray(instanceCount * 4);
-      const shapeBuffer = new Uint32Array(instanceCount * SHAPE2D_WORDS);
+      const shapeBuffer = new Uint32Array(instanceCount * LEGACY_SHAPE_RECORD_WORDS);
 
       setTestSlotBuffer(state, 1 as ValueSlot, positionBuffer);
       setTestSlotBuffer(state, 2 as ValueSlot, colorBuffer);
       // No control points buffer at slot 4!
 
       for (let i = 0; i < instanceCount; i++) {
-        writeShape2D(shapeBuffer, i, {
+        writeLegacyShapeRecord(shapeBuffer, i, {
           topologyId: CIRCLE_ID,
           pointsFieldSlot: 4, // References missing slot
           pointsCount: 4,
@@ -851,11 +873,11 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
         0.5, 0.6, 400.0,
       ]);
       const colorBuffer = new Uint8ClampedArray(instanceCount * 4);
-      const shapeBuffer = new Uint32Array(instanceCount * SHAPE2D_WORDS);
+      const shapeBuffer = new Uint32Array(instanceCount * LEGACY_SHAPE_RECORD_WORDS);
       const controlPointsBuffer = new Float32Array([0, 1, 1, 0, 0, -1, -1, 0]);
 
       for (let i = 0; i < instanceCount; i++) {
-        writeShape2D(shapeBuffer, i, {
+        writeLegacyShapeRecord(shapeBuffer, i, {
           topologyId: CIRCLE_ID,
           pointsFieldSlot: 4,
           pointsCount: 4,
@@ -908,11 +930,11 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
       // Step 1: 3 circles (stride-3 positions)
       const pos1 = new Float32Array(9); // 3 * 3 components
       const color1 = new Uint8ClampedArray(12);
-      const shape1 = new Uint32Array(3 * SHAPE2D_WORDS);
+      const shape1 = new Uint32Array(3 * LEGACY_SHAPE_RECORD_WORDS);
       const circlePoints = new Float32Array([0, 1, 1, 0, 0, -1, -1, 0]);
 
       for (let i = 0; i < 3; i++) {
-        writeShape2D(shape1, i, { topologyId: CIRCLE_ID, pointsFieldSlot: 10, pointsCount: 4, styleRef: 0, flags: 1 });
+        writeLegacyShapeRecord(shape1, i, { topologyId: CIRCLE_ID, pointsFieldSlot: 10, pointsCount: 4, styleRef: 0, flags: 1 });
         pos1[i * 3] = i * 0.1;
         pos1[i * 3 + 1] = 0.5;
         pos1[i * 3 + 2] = 0.0;
@@ -921,13 +943,13 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
       // Step 2: mixed 2 circles + 2 squares (stride-3 positions)
       const pos2 = new Float32Array(12); // 4 * 3 components
       const color2 = new Uint8ClampedArray(16);
-      const shape2 = new Uint32Array(4 * SHAPE2D_WORDS);
+      const shape2 = new Uint32Array(4 * LEGACY_SHAPE_RECORD_WORDS);
       const squarePoints = new Float32Array([-1, -1, 1, -1, 1, 1, -1, 1]);
 
-      writeShape2D(shape2, 0, { topologyId: CIRCLE_ID, pointsFieldSlot: 10, pointsCount: 4, styleRef: 0, flags: 1 });
-      writeShape2D(shape2, 1, { topologyId: CIRCLE_ID, pointsFieldSlot: 10, pointsCount: 4, styleRef: 0, flags: 1 });
-      writeShape2D(shape2, 2, { topologyId: SQUARE_ID, pointsFieldSlot: 11, pointsCount: 4, styleRef: 0, flags: 1 });
-      writeShape2D(shape2, 3, { topologyId: SQUARE_ID, pointsFieldSlot: 11, pointsCount: 4, styleRef: 0, flags: 1 });
+      writeLegacyShapeRecord(shape2, 0, { topologyId: CIRCLE_ID, pointsFieldSlot: 10, pointsCount: 4, styleRef: 0, flags: 1 });
+      writeLegacyShapeRecord(shape2, 1, { topologyId: CIRCLE_ID, pointsFieldSlot: 10, pointsCount: 4, styleRef: 0, flags: 1 });
+      writeLegacyShapeRecord(shape2, 2, { topologyId: SQUARE_ID, pointsFieldSlot: 11, pointsCount: 4, styleRef: 0, flags: 1 });
+      writeLegacyShapeRecord(shape2, 3, { topologyId: SQUARE_ID, pointsFieldSlot: 11, pointsCount: 4, styleRef: 0, flags: 1 });
 
       for (let i = 0; i < 4; i++) {
         pos2[i * 3] = i * 0.1;
@@ -1018,7 +1040,7 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
 
       const positionBuffer = new Float32Array(instanceCount * 3);
       const colorBuffer = new Uint8ClampedArray(instanceCount * 4);
-      const shapeBuffer = new Uint32Array(instanceCount * SHAPE2D_WORDS);
+      const shapeBuffer = new Uint32Array(instanceCount * LEGACY_SHAPE_RECORD_WORDS);
       const circlePoints = new Float32Array([0, 1, 1, 0, 0, -1, -1, 0]);
       const squarePoints = new Float32Array([-1, -1, 1, -1, 1, 1, -1, 1]);
 
@@ -1032,7 +1054,7 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
         colorBuffer[i * 4 + 3] = 255;
 
         const isCircle = (i % 2) === 0;
-        writeShape2D(shapeBuffer, i, {
+        writeLegacyShapeRecord(shapeBuffer, i, {
           topologyId: isCircle ? CIRCLE_ID : SQUARE_ID,
           pointsFieldSlot: isCircle ? 10 : 11,
           pointsCount: 4,

@@ -107,6 +107,7 @@ function buildProgramForConstPatch(params: {
     constantProvenance: new Map([
       ['shape-1:resolution', { componentExprIds: [params.patchExprId], payloadKind: 'float' }],
     ]),
+    runtimeLiveExprIds: [params.liveExprId],
     schedule: {
       timeModel: { periodAMs: 1000, periodBMs: 2000 },
       instances: new Map(),
@@ -192,13 +193,10 @@ function frameSummary(program: CompiledProgramIR): {
   };
   const sizes = computeRuntimeStorageSizes(program.runtimeSlots);
   const state = createRuntimeState(
-    sizes.f32,
     schedule.stateSlotCount ?? 0,
     schedule.eventSlotCount ?? 0,
-    schedule.eventCount ?? 0,
     program.valueExprs.nodes.length,
     program.arenaTotalFloats,
-    0,
     undefined,
     undefined,
     program.arenaRuntimeLayout,

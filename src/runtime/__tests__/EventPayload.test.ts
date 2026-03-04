@@ -11,13 +11,13 @@ import type { EventPayload } from '../RuntimeState';
 
 describe('EventPayload Infrastructure', () => {
   it('events Map initializes empty', () => {
-    const state = createRuntimeState(10, 0, 5, 0);
+    const state = createRuntimeState(0, 5);
     expect(state.events).toBeInstanceOf(Map);
     expect(state.events.size).toBe(0);
   });
 
   it('can push EventPayload to event slot', () => {
-    const state = createRuntimeState(10, 0, 5, 0);
+    const state = createRuntimeState(0, 5);
     
     // Simulate event firing with payload
     const eventSlot = 2;
@@ -43,7 +43,7 @@ describe('EventPayload Infrastructure', () => {
   });
 
   it('multiple events can fire in same slot (same tick)', () => {
-    const state = createRuntimeState(10, 0, 5, 0);
+    const state = createRuntimeState(0, 5);
     
     const eventSlot = 1;
     state.events.set(eventSlot, []);
@@ -61,7 +61,7 @@ describe('EventPayload Infrastructure', () => {
   });
 
   it('clearing events Map reuses allocations', () => {
-    const state = createRuntimeState(10, 0, 5, 0);
+    const state = createRuntimeState(0, 5);
     
     // Set up some event slots with payloads
     state.events.set(0, [{ key: 'a', value: 1 }]);
@@ -84,7 +84,7 @@ describe('EventPayload Infrastructure', () => {
   });
 
   it('eventScalars and events Map coexist (backward compatibility)', () => {
-    const state = createRuntimeState(10, 0, 5, 0);
+    const state = createRuntimeState(0, 5);
     
     // Boolean event fires (legacy path)
     state.eventScalars[2] = 1;
@@ -105,7 +105,7 @@ describe('EventPayload Infrastructure', () => {
   });
 
   it('events carry numeric values (float and int)', () => {
-    const state = createRuntimeState(10, 0, 5, 0);
+    const state = createRuntimeState(0, 5);
     
     state.events.set(0, []);
     
@@ -125,7 +125,7 @@ describe('EventPayload Infrastructure', () => {
   });
 
   it('event keys are strings (semantic identifiers)', () => {
-    const state = createRuntimeState(10, 0, 5, 0);
+    const state = createRuntimeState(0, 5);
     
     state.events.set(0, []);
     

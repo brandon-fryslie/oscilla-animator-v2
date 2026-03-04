@@ -16,61 +16,73 @@ import { ExternalChannelSystem } from './ExternalChannel';
 import { createArena } from './ArenaValueStore';
 
 /**
- * Shape2D packed record word layout (8 x u32 words per shape)
+ * ShapeBank header word layout (`ShapeHeaderV1`, 16 x u32 words per record).
  *
- * Fixed-width record for efficient shape storage and dispatch.
- * See: .agent_planning/_future/12-shapes-types.md
+ * // [LAW:one-source-of-truth] Runtime and renderer consume one canonical
+ * // shape-header ABI that matches WS-01/P1-2 contracts.
  */
-export const SHAPE2D_WORDS = 8;
-
-export enum Shape2DWord {
-  /** Numeric topology ID (dispatch key) */
-  TopologyId = 0,
-  /** FieldSlot ID containing control points (vec2) */
-  PointsFieldSlot = 1,
-  /** Number of vec2 points expected (validation / fast path) */
-  PointsCount = 2,
-  /** Optional: scalar slot or style table ID (0 means default) */
-  StyleRef = 3,
-  /** Bitfield: fill/stroke, fillRule, closed, etc. */
-  Flags = 4,
-  /** Reserved for future use */
-  Reserved0 = 5,
-  Reserved1 = 6,
-  Reserved2 = 7,
-}
-
-/**
- * Shape2D flags bitfield values
- */
-export const Shape2DFlags = {
-  /** Shape path is closed */
-  CLOSED: 1 << 0,
-  /** Use fill rendering */
-  FILL: 1 << 1,
-  /** Use stroke rendering */
-  STROKE: 1 << 2,
-  /** Fill rule: 0 = nonzero, 1 = evenodd */
-  EVENODD_FILL: 1 << 3,
-} as const;
-
-/**
- * ShapeBank header word layout (4 x u32 words per shape topology record).
- */
-export const SHAPE_BANK_HEADER_WORDS = 4;
+export const SHAPE_BANK_HEADER_WORDS = 16;
 
 export enum ShapeBankHeaderWord {
-  IndexCount = 0,
-  IndexOffset = 1,
-  VertexCount = 2,
-  Flags = 3,
+  Kind = 0,
+  TopologyMode = 1,
+  Flags = 2,
+  MaterialClass = 3,
+  IndexCount = 4,
+  FirstIndex = 5,
+  BaseVertex = 6,
+  VertexCount = 7,
+  FirstVertex = 8,
+  ParamBlockOffset = 9,
+  ParamBlockWords = 10,
+  Reserved0 = 11,
+  BoundsMinPacked = 12,
+  BoundsMaxPacked = 13,
+  Reserved1 = 14,
+  Reserved2 = 15,
 }
 
 export interface ShapeBankHeaderRecord {
-  indexCount: number;
-  indexOffset: number;
-  vertexCount: number;
+  kind: number;
+  topologyMode: number;
   flags: number;
+  materialClass: number;
+  indexCount: number;
+  firstIndex: number;
+  baseVertex: number;
+  vertexCount: number;
+  firstVertex: number;
+  paramBlockOffset: number;
+  paramBlockWords: number;
+  reserved0: number;
+  boundsMinPacked: number;
+  boundsMaxPacked: number;
+  reserved1: number;
+  reserved2: number;
+}
+
+export function createShapeBankHeaderV1(
+  overrides: Partial<ShapeBankHeaderRecord> = {},
+): ShapeBankHeaderRecord {
+  return {
+    kind: 0,
+    topologyMode: 0,
+    flags: 0,
+    materialClass: 0,
+    indexCount: 0,
+    firstIndex: 0,
+    baseVertex: 0,
+    vertexCount: 0,
+    firstVertex: 0,
+    paramBlockOffset: 0,
+    paramBlockWords: 0,
+    reserved0: 0,
+    boundsMinPacked: 0,
+    boundsMaxPacked: 0,
+    reserved1: 0,
+    reserved2: 0,
+    ...overrides,
+  };
 }
 
 /** Sentinel for shape handles that do not reference a control-point field slot. */
@@ -87,7 +99,7 @@ export interface ShapeBankHandleMetadata {
  * [LAW:single-enforcer] RuntimeState owns default ShapeBank sizing for
  * handle-based shape execution when compile metadata does not override it.
  */
-export const DEFAULT_SHAPE_BANK_WORD_CAPACITY = 4096;
+export const DEFAULT_SHAPE_BANK_WORD_CAPACITY = 16384;
 
 /**
  * ShapeBankState - Uint32 topology bank + frame-volatile bump allocator.
@@ -179,10 +191,22 @@ export function readShapeBankHeader(
   handle: number,
 ): ShapeBankHeaderRecord {
   return {
-    indexCount: bank[handle + ShapeBankHeaderWord.IndexCount],
-    indexOffset: bank[handle + ShapeBankHeaderWord.IndexOffset],
-    vertexCount: bank[handle + ShapeBankHeaderWord.VertexCount],
-    flags: bank[handle + ShapeBankHeaderWord.Flags],
+    kind: bank[handle + ShapeBankHeaderWord.Kind] >>> 0,
+    topologyMode: bank[handle + ShapeBankHeaderWord.TopologyMode] >>> 0,
+    flags: bank[handle + ShapeBankHeaderWord.Flags] >>> 0,
+    materialClass: bank[handle + ShapeBankHeaderWord.MaterialClass] >>> 0,
+    indexCount: bank[handle + ShapeBankHeaderWord.IndexCount] >>> 0,
+    firstIndex: bank[handle + ShapeBankHeaderWord.FirstIndex] >>> 0,
+    baseVertex: bank[handle + ShapeBankHeaderWord.BaseVertex] | 0,
+    vertexCount: bank[handle + ShapeBankHeaderWord.VertexCount] >>> 0,
+    firstVertex: bank[handle + ShapeBankHeaderWord.FirstVertex] >>> 0,
+    paramBlockOffset: bank[handle + ShapeBankHeaderWord.ParamBlockOffset] >>> 0,
+    paramBlockWords: bank[handle + ShapeBankHeaderWord.ParamBlockWords] >>> 0,
+    reserved0: bank[handle + ShapeBankHeaderWord.Reserved0] >>> 0,
+    boundsMinPacked: bank[handle + ShapeBankHeaderWord.BoundsMinPacked] >>> 0,
+    boundsMaxPacked: bank[handle + ShapeBankHeaderWord.BoundsMaxPacked] >>> 0,
+    reserved1: bank[handle + ShapeBankHeaderWord.Reserved1] >>> 0,
+    reserved2: bank[handle + ShapeBankHeaderWord.Reserved2] >>> 0,
   };
 }
 
@@ -194,10 +218,22 @@ export function writeShapeBankHeader(
   handle: number,
   header: ShapeBankHeaderRecord,
 ): void {
-  bank[handle + ShapeBankHeaderWord.IndexCount] = header.indexCount;
-  bank[handle + ShapeBankHeaderWord.IndexOffset] = header.indexOffset;
-  bank[handle + ShapeBankHeaderWord.VertexCount] = header.vertexCount;
-  bank[handle + ShapeBankHeaderWord.Flags] = header.flags;
+  bank[handle + ShapeBankHeaderWord.Kind] = header.kind >>> 0;
+  bank[handle + ShapeBankHeaderWord.TopologyMode] = header.topologyMode >>> 0;
+  bank[handle + ShapeBankHeaderWord.Flags] = header.flags >>> 0;
+  bank[handle + ShapeBankHeaderWord.MaterialClass] = header.materialClass >>> 0;
+  bank[handle + ShapeBankHeaderWord.IndexCount] = header.indexCount >>> 0;
+  bank[handle + ShapeBankHeaderWord.FirstIndex] = header.firstIndex >>> 0;
+  bank[handle + ShapeBankHeaderWord.BaseVertex] = header.baseVertex >>> 0;
+  bank[handle + ShapeBankHeaderWord.VertexCount] = header.vertexCount >>> 0;
+  bank[handle + ShapeBankHeaderWord.FirstVertex] = header.firstVertex >>> 0;
+  bank[handle + ShapeBankHeaderWord.ParamBlockOffset] = header.paramBlockOffset >>> 0;
+  bank[handle + ShapeBankHeaderWord.ParamBlockWords] = header.paramBlockWords >>> 0;
+  bank[handle + ShapeBankHeaderWord.Reserved0] = header.reserved0 >>> 0;
+  bank[handle + ShapeBankHeaderWord.BoundsMinPacked] = header.boundsMinPacked >>> 0;
+  bank[handle + ShapeBankHeaderWord.BoundsMaxPacked] = header.boundsMaxPacked >>> 0;
+  bank[handle + ShapeBankHeaderWord.Reserved1] = header.reserved1 >>> 0;
+  bank[handle + ShapeBankHeaderWord.Reserved2] = header.reserved2 >>> 0;
 }
 
 /**
@@ -353,12 +389,8 @@ const RUNTIME_FRAME_SEGMENT_INDEX = new Map<RuntimeFrameSegment, number>(
  * Reset frame segment tracing for the current frame.
  */
 export function beginRuntimeFrameSemantics(state: RuntimeState): void {
-  if (!state.frameSemantics) {
-    state.frameSemantics = {
-      frameId: state.cache.frameId,
-      segments: [],
-    };
-  }
+  // [LAW:one-source-of-truth] RuntimeState construction allocates the canonical
+  // frame-semantics container; segment tracing never invents alternate holders.
   state.frameSemantics.frameId = state.cache.frameId;
   state.frameSemantics.segments.length = 0;
 }
@@ -373,10 +405,10 @@ export function enterRuntimeFrameSegment(
   state: RuntimeState,
   segment: RuntimeFrameSegment,
 ): void {
-  if (!state.frameSemantics || state.frameSemantics.frameId !== state.cache.frameId) {
+  if (state.frameSemantics.frameId !== state.cache.frameId) {
     beginRuntimeFrameSemantics(state);
   }
-  const semantics = state.frameSemantics!;
+  const semantics = state.frameSemantics;
   const previous = semantics.segments[semantics.segments.length - 1];
   if (previous === segment) return;
 
@@ -430,80 +462,13 @@ export interface EventBuffer {
  * Stores non-arena typed banks by slot ID.
  * [LAW:one-source-of-truth] Numeric slot values live only in RuntimeState.arena.
  */
-export interface ValueStore {
-  /**
-   * Packed shape2d values (8 x u32 words per shape)
-   *
-   * Layout: [shape0_word0..shape0_word7, shape1_word0..shape1_word7, ...]
-   * Access: shape2d[offset * SHAPE2D_WORDS + Shape2DWord.TopologyId]
-   */
-  shape2d: Uint32Array;
-}
+export interface ValueStore {}
 
 /**
  * Create a ValueStore
- *
- * @param shape2dSlotCount - Number of shape2d slots (defaults to 0)
  */
-export function createValueStore(shape2dSlotCount: number = 0): ValueStore {
-  return {
-    shape2d: new Uint32Array(shape2dSlotCount * SHAPE2D_WORDS),
-  };
-}
-
-// =============================================================================
-// Shape2D Pack/Unpack Utilities
-// =============================================================================
-
-/**
- * Unpacked shape2d record for easier manipulation
- */
-export interface Shape2DRecord {
-  /** Numeric topology ID (dispatch key) */
-  topologyId: number;
-  /** FieldSlot ID containing control points (vec2) */
-  pointsFieldSlot: number;
-  /** Number of vec2 points expected */
-  pointsCount: number;
-  /** Style reference (0 = default) */
-  styleRef: number;
-  /** Flags bitfield */
-  flags: number;
-}
-
-/**
- * Read a shape2d record from the packed bank
- *
- * @param bank - The shape2d Uint32Array bank
- * @param offset - Slot offset (not byte offset)
- * @returns Unpacked shape2d record
- */
-export function readShape2D(bank: Uint32Array, offset: number): Shape2DRecord {
-  const baseIndex = offset * SHAPE2D_WORDS;
-  return {
-    topologyId: bank[baseIndex + Shape2DWord.TopologyId],
-    pointsFieldSlot: bank[baseIndex + Shape2DWord.PointsFieldSlot],
-    pointsCount: bank[baseIndex + Shape2DWord.PointsCount],
-    styleRef: bank[baseIndex + Shape2DWord.StyleRef],
-    flags: bank[baseIndex + Shape2DWord.Flags],
-  };
-}
-
-/**
- * Write a shape2d record to the packed bank
- *
- * @param bank - The shape2d Uint32Array bank
- * @param offset - Slot offset (not byte offset)
- * @param record - Shape2d record to write
- */
-export function writeShape2D(bank: Uint32Array, offset: number, record: Shape2DRecord): void {
-  const baseIndex = offset * SHAPE2D_WORDS;
-  bank[baseIndex + Shape2DWord.TopologyId] = record.topologyId;
-  bank[baseIndex + Shape2DWord.PointsFieldSlot] = record.pointsFieldSlot;
-  bank[baseIndex + Shape2DWord.PointsCount] = record.pointsCount;
-  bank[baseIndex + Shape2DWord.StyleRef] = record.styleRef;
-  bank[baseIndex + Shape2DWord.Flags] = record.flags;
-  // Reserved words are left as 0
+export function createValueStore(): ValueStore {
+  return {};
 }
 
 /**
@@ -538,6 +503,25 @@ export interface FrameCache {
 
   /** Scalar ValueExprId -> canonical arena address metadata. */
   scalarExprToArenaAddress: ReadonlyMap<number, RuntimeScalarArenaAddress> | null;
+
+  /**
+   * Dynamic instance lane-count cache for current frame.
+   * Keyed by InstanceId string.
+   */
+  instanceLaneCounts?: Map<string, number>;
+
+  /** Frame stamp for `instanceLaneCounts` validity. */
+  instanceLaneCountFrameId?: number;
+
+  /**
+   * Runtime-owned packed draw-prep sink-table payload (`DrawPrepSinkTableV1`).
+   *
+   * [LAW:one-source-of-truth] Renderer/worker draw-prep uses one canonical
+   * runtime-packed table instead of dual CPU payload + derived metadata paths.
+   */
+  drawPrepSinkTableWords?: Uint32Array;
+  drawPrepSinkTableWordCount?: number;
+  drawPrepSinkTableFrameId?: number;
 }
 
 /**
@@ -553,6 +537,11 @@ export function createFrameCache(
     valueExprFieldBuffers: new Array(maxValueExprs).fill(null),
     valueExprFieldStamps: new Array(maxValueExprs).fill(-1),
     scalarExprToArenaAddress: null,
+    instanceLaneCounts: new Map<string, number>(),
+    instanceLaneCountFrameId: 0,
+    drawPrepSinkTableWords: undefined,
+    drawPrepSinkTableWordCount: 0,
+    drawPrepSinkTableFrameId: 0,
   };
 }
 
@@ -859,7 +848,6 @@ export interface ProgramState {
  * RuntimeState - Complete frame execution state
  *
  * Composes SessionState (long-lived) and ProgramState (per-compile).
- * The flat structure is kept for backwards compatibility with existing code.
  */
 export interface RuntimeState {
   // === ProgramState fields (recreated on compile) ===
@@ -889,7 +877,7 @@ export interface RuntimeState {
   cache: FrameCache;
 
   /** Deterministic frame segment trace for the current frame (W13). */
-  frameSemantics?: RuntimeFrameSemantics;
+  frameSemantics: RuntimeFrameSemantics;
 
   /** Current effective time (set each frame) */
   time: EffectiveTime | null;
@@ -898,7 +886,7 @@ export interface RuntimeState {
   state: Float32Array;
 
   /** Phase-2 state write target bank (committed via end-of-frame swap). */
-  stateWrite?: Float32Array;
+  stateWrite: Float32Array;
 
   /** Event scalar storage (0=not fired, 1=fired this tick). Cleared each frame. */
   eventScalars: Uint8Array;
@@ -924,7 +912,7 @@ export interface RuntimeState {
   events: Map<number, EventPayload[]>;
 
   /** Shape topology bank + frame-volatile allocator. */
-  shapeBank?: ShapeBankState;
+  shapeBank: ShapeBankState;
 
   // === SessionState fields (survive hot-swap) ===
 
@@ -966,18 +954,12 @@ export function createSessionState(): SessionState {
 export function createProgramState(
   stateSlotCount: number = 0,
   eventSlotCount: number = 0,
-  eventExprCount: number = 0,
   valueExprCount: number = 0,
   arenaTotalFloats: number = 0,
-  shape2dSlotCount: number = 0,
   shapeBankWordCapacity: number = DEFAULT_SHAPE_BANK_WORD_CAPACITY,
   shapeBankStaticBoundary: number = 0,
   arenaRuntimeLayout?: ArenaRuntimeLayoutIR,
 ): ProgramState {
-  // [LAW:one-source-of-truth] event wrap-edge state lives in eventWrapPredicate;
-  // eventExprCount is accepted for callsite compatibility while compile/runtime
-  // signatures converge on ValueExpr-driven sizing.
-  void eventExprCount;
   // [LAW:one-source-of-truth] Persistent primitive state offsets come from the
   // compiler arena runtime layout when available.
   const compilerStateBank = arenaRuntimeLayout?.stateBank;
@@ -1015,7 +997,7 @@ export function createProgramState(
   const stateReadView = arena.subarray(readOffset, readOffset + stateBankLength);
   const stateWriteView = arena.subarray(writeOffset, writeOffset + stateBankLength);
   return {
-    values: createValueStore(shape2dSlotCount),
+    values: createValueStore(),
     lastRenderFrame: null,
     arena,
     // [LAW:one-source-of-truth] Persistent state ownership is anchored to one
@@ -1053,30 +1035,21 @@ export function createProgramState(
  * @internal Not part of public API
  */
 export function createRuntimeState(
-  slotCount: number,
   stateSlotCount: number = 0,
   eventSlotCount: number = 0,
-  eventExprCount: number = 0,
   valueExprCount: number = 0,
   arenaTotalFloats: number = 0,
-  shape2dSlotCount: number = 0,
   shapeBankWordCapacity: number = DEFAULT_SHAPE_BANK_WORD_CAPACITY,
   shapeBankStaticBoundary: number = 0,
   arenaRuntimeLayout?: ArenaRuntimeLayoutIR,
 ): RuntimeState {
   const session = createSessionState();
-  // [LAW:no-mode-explosion] `slotCount` remains as a compatibility-only
-  // positional arg for legacy tests; program/runtime construction no longer
-  // depends on it.
-  void slotCount;
   return createRuntimeStateFromSession(
     session,
     stateSlotCount,
     eventSlotCount,
-    eventExprCount,
     valueExprCount,
     arenaTotalFloats,
-    shape2dSlotCount,
     shapeBankWordCapacity,
     shapeBankStaticBoundary,
     arenaRuntimeLayout,
@@ -1092,10 +1065,8 @@ export function createRuntimeStateFromSession(
   session: SessionState,
   stateSlotCount: number = 0,
   eventSlotCount: number = 0,
-  eventExprCount: number = 0,
   valueExprCount: number = 0,
   arenaTotalFloats: number = 0,
-  shape2dSlotCount: number = 0,
   shapeBankWordCapacity: number = DEFAULT_SHAPE_BANK_WORD_CAPACITY,
   shapeBankStaticBoundary: number = 0,
   arenaRuntimeLayout?: ArenaRuntimeLayoutIR,
@@ -1103,10 +1074,8 @@ export function createRuntimeStateFromSession(
   const program = createProgramState(
     stateSlotCount,
     eventSlotCount,
-    eventExprCount,
     valueExprCount,
     arenaTotalFloats,
-    shape2dSlotCount,
     shapeBankWordCapacity,
     shapeBankStaticBoundary,
     arenaRuntimeLayout,
@@ -1145,7 +1114,6 @@ export function createRuntimeStateFromSession(
  * Reset frame-volatile ShapeBank allocator for a new frame.
  */
 export function resetFrameVolatileShapeBank(state: RuntimeState): void {
-  if (!state.shapeBank) return;
   // [LAW:single-enforcer] Frame reset delegates to one allocator boundary.
   resetShapeBankFrameAllocator(state.shapeBank);
 }
@@ -1157,7 +1125,7 @@ export function resetFrameVolatileShapeBank(state: RuntimeState): void {
  * preserve previous-frame values when not explicitly rewritten this frame.
  */
 export function prepareStateWriteBank(state: RuntimeState): void {
-  const write = state.stateWrite ?? state.state;
+  const write = state.stateWrite;
   if (write.length !== state.state.length) {
     throw new Error(
       'prepareStateWriteBank: read/write bank length mismatch (read=' +
@@ -1168,9 +1136,6 @@ export function prepareStateWriteBank(state: RuntimeState): void {
     );
   }
   write.set(state.state);
-  if (!state.stateWrite) {
-    state.stateWrite = write;
-  }
 }
 
 /**

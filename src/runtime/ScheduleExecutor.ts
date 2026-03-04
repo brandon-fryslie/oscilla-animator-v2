@@ -44,6 +44,7 @@ import { evaluateValueExprEvent } from './ValueExprEventEvaluator';
 import { materializeValueExpr } from './ValueExprMaterializer';
 import { applyStateWritePolicy } from './StateWritePolicy';
 import type { PureFnExecutionContext } from './ScalarKernelLibrary';
+import { resolveInstanceLaneCount } from './InstanceCountResolver';
 import {
   arenaDecodeToAoS,
   arenaEncodeFromAoS,
@@ -243,21 +244,27 @@ function deriveRuntimeValueKind(type: CanonicalType): RuntimeValueKind {
 function deriveExpectedLaneCount(
   lookup: SlotLookup,
   instances: ReadonlyMap<InstanceId, InstanceDecl>,
+  state: RuntimeState,
 ): number | null {
   const cardinality = requireInst(lookup.type.extent.cardinality, 'cardinality');
   if (cardinality.kind !== 'many') {
     return 1;
   }
   const instance = instances.get(cardinality.instance.instanceId as InstanceId);
-  if (!instance || typeof instance.count !== 'number') {
+  if (!instance) {
     return null;
   }
-  return instance.count;
+  if (instance.count !== 'dynamic') {
+    return instance.count;
+  }
+  const cached = state.cache.instanceLaneCounts?.get(String(instance.id));
+  return cached ?? instance.maxCount;
 }
 
 function assertRuntimeSlotWrite(
   slotLookupMap: ReadonlyMap<ValueSlot, SlotLookup>,
   instances: ReadonlyMap<InstanceId, InstanceDecl>,
+  state: RuntimeState,
   stepKind: Step['kind'],
   slot: ValueSlot,
   observedKind: RuntimeWriteKind,
@@ -283,7 +290,7 @@ function assertRuntimeSlotWrite(
       `expected laneCount ${lookup.arena.laneCount}, actual ${observedLaneCount}`,
     );
   }
-  const expectedLaneCount = deriveExpectedLaneCount(lookup, instances);
+  const expectedLaneCount = deriveExpectedLaneCount(lookup, instances, state);
   if (expectedLaneCount !== null && expectedLaneCount !== observedLaneCount) {
     throw new Error(
       `Cardinality write assertion failed at ${stepKind} slot ${slot}: ` +
@@ -391,48 +398,6 @@ export function executeFrame(
   };
   for (const step of steps) {
     switch (step.kind) {
-      case 'evalOne': {
-        enterRuntimeFrameSegment(state, resolvePhase1ValueSegment());
-        const targetSlot = step.target;
-        const lookup = resolveSlotOffsetFromMap(slotLookupMap, targetSlot);
-        const { storage, slot, stride } = lookup;
-
-        if (isNumericStorage(storage)) {
-          const arenaDesc = resolveArenaDescriptor(slotToArena, lookup);
-
-          // [LAW:one-source-of-truth] Evaluate one-lane values through the same
-          // materialization path as many-lane values (count=1).
-          const buffer = materializeValueExpr(
-            step.expr,
-            program.valueExprs,
-            SCALAR_INSTANCE_ID,
-            1,
-            state,
-            program,
-            undefined,
-            MATERIALIZE_SCRATCH,
-            pureFnContext,
-          );
-          arenaEncodeFromAoS(state.arena, arenaDesc, buffer);
-          if (buffer.length < stride) {
-            throw new Error(
-              'evalOne: materialized buffer too small for slot ' + slot + ' (need ' + stride + ', got ' + buffer.length + ')',
-            );
-          }
-
-          // Debug tap: Record each component value
-          for (let i = 0; i < stride; i++) {
-            state.tap?.recordSlotValue?.((slot + i) as ValueSlot, readCanonicalNumeric(slotToArena, state, lookup, i));
-          }
-        } else {
-          throw new Error('evalOne: unsupported storage type \'' + storage + '\' for slot ' + slot + ' expr ' + step.expr);
-        }
-        if (assertCardinalitySlotWrites) {
-          assertRuntimeSlotWrite(slotLookupMap, instances, step.kind, targetSlot, 'signal', 1);
-        }
-        break;
-      }
-
       case 'eventDispatch': {
         enterRuntimeFrameSegment(state, 'phase1-event-dispatch');
         eventDispatchSeen = true;
@@ -454,7 +419,9 @@ export function executeFrame(
         // Use the instanceId from the schedule step (set by schedule-program.ts)
         // rather than deriving from the ValueExpr type, which may have a stale placeholder
         const instanceDecl = instances.get(step.instanceId);
-        const count = instanceDecl && typeof instanceDecl.count === 'number' ? instanceDecl.count : 0;
+        const count = instanceDecl
+          ? resolveInstanceLaneCount(instanceDecl, program, state, pureFnContext)
+          : 0;
         // [LAW:one-source-of-truth] Arena lookup via ExprAddressTable — no direct arenaLayout access.
         const arenaDesc = slotToArena.get(step.target);
         if (!arenaDesc || arenaDesc.offset < 0 || arenaDesc.length <= 0) {
@@ -487,7 +454,7 @@ export function executeFrame(
         // Debug tap: Record field value
         state.tap?.recordFieldValue?.(step.target, buffer);
         if (assertCardinalitySlotWrites) {
-          assertRuntimeSlotWrite(slotLookupMap, instances, step.kind, step.target, 'field', count);
+          assertRuntimeSlotWrite(slotLookupMap, instances, state, step.kind, step.target, 'field', count);
         }
         break;
       }
@@ -517,8 +484,7 @@ export function executeFrame(
           break;
         }
 
-        // Resolve count (dynamic counts need evaluation)
-        const count = typeof instance.count === 'number' ? instance.count : 0;
+        const count = resolveInstanceLaneCount(instance, program, state, pureFnContext);
         if (count === 0) break;
 
         const seed = instance.elementIdSeed ?? 0;
@@ -587,6 +553,7 @@ export function executeFrame(
           assertRuntimeSlotWrite(
             slotLookupMap,
             instances,
+            state,
             step.kind,
             outputSlot,
             'field',
@@ -652,6 +619,7 @@ export function executeFrame(
   _assemblerCtx.arena = arena;
   _assemblerCtx.scalarExprToArenaAddress = state.cache.scalarExprToArenaAddress ?? undefined;
   _assemblerCtx.slotToArena = addressTable.slotToArena;
+  _assemblerCtx.pureFnContext = pureFnContext;
   assemblerContext = _assemblerCtx as AssemblerContext;
 
   // Build v2 frame from collected render steps (zero allocations - uses arena)

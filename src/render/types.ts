@@ -177,7 +177,7 @@ export interface DrawPathInstancesOp {
  * The RenderAssembler (part of ScheduleExecutor) produces this by:
  * 1. Executing schedule → fill scalar banks, define field expr IDs
  * 2. Materializing required fields via Materializer
- * 3. Resolving shape2d → (topologyId, pointsBuffer, flags)
+ * 3. Resolving shape handles → (topologyId, pointsBuffer, header metadata)
  * 4. Emitting this structure with concrete buffers only
  */
 export interface RenderFrameIR {

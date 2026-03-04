@@ -80,6 +80,17 @@ describe('HCL demo patches', () => {
         expect(result.kind).toBe('ok');
       });
 
+      it('emits no naga-lowering coverage gap warnings for successful demos', () => {
+        expect(parsed.errors).toEqual([]);
+        expect(compileResult).not.toBeNull();
+        const result = compileResult!;
+        if (expectedCompileError !== null || result.kind !== 'ok') {
+          return;
+        }
+        const incompleteWarning = result.warnings.find((warning) => warning.code === 'W_NAGA_LOWERING_INCOMPLETE');
+        expect(incompleteWarning).toBeUndefined();
+      });
+
       it('round-trips through serialize → deserialize', () => {
         expect(parsed.errors).toEqual([]);
 
