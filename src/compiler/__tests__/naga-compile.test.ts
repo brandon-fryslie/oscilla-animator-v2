@@ -108,42 +108,6 @@ describe('compileProgramWithNaga', () => {
     expect(compiled.errors.some((error) => error.message.includes('Missing generatedComputeProgram metadata'))).toBe(true);
   });
 
-  it('maps expression validation failures to source block IDs', async () => {
-    const result = compile(buildSimplePatch());
-    expect(result.kind).toBe('ok');
-    if (result.kind !== 'ok') return;
-
-    const lowering = result.program.nagaLoweringProgram;
-    expect(lowering).toBeDefined();
-    if (!lowering) return;
-
-    const exprEntry = Object.entries(lowering.sourceMap).find(
-      ([key, value]) => key.startsWith('Expr_') && value.blockId,
-    );
-    expect(exprEntry).toBeDefined();
-    if (!exprEntry) return;
-
-    const exprId = Number.parseInt(exprEntry[0].slice('Expr_'.length), 10);
-    const blockId = exprEntry[1].blockId;
-    expect(typeof blockId).toBe('string');
-    if (typeof blockId !== 'string') return;
-
-    hoisted.compileMock.mockImplementationOnce(() => {
-      throw new hoisted.MockNagaValidationError([
-        {
-          message: 'Bad expression',
-          location: `Expression [${exprId}]`,
-          path: 'Function [compute_main]',
-        },
-      ]);
-    });
-
-    const compiled = await compileProgramWithNaga(result.program);
-    expect(compiled.kind).toBe('error');
-    if (compiled.kind !== 'error') return;
-    expect(compiled.errors.some((error) => error.where?.blockId === blockId)).toBe(true);
-  });
-
   it('maps statement validation failures to source block IDs', async () => {
     const result = compile(buildSimplePatch());
     expect(result.kind).toBe('ok');

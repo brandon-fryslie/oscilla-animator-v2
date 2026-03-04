@@ -1,8 +1,8 @@
 /**
  * Regression test for palette slot allocation bug.
  *
- * Bug: SYSTEM_PALETTE_SLOT (slot 0, stride=4) was being registered for evalOne,
- * causing a runtime error: "evalOne: expected stride=1 for scalar slot 0, got stride=4"
+ * Bug: SYSTEM_PALETTE_SLOT (slot 0, stride=4) was being scheduled as a scalar target,
+ * causing stride mismatch faults for one-lane writes.
  *
  * Root causes:
  * 1. IRBuilderImpl slotCounter started at 0, so first allocSlot() returned 0 (same as SYSTEM_PALETTE_SLOT)
@@ -15,10 +15,10 @@
 import { describe, it, expect } from 'vitest';
 import { compile } from '../compile';
 import { buildPatch } from '../../graph';
-import { SYSTEM_PALETTE_SLOT } from '../ir/Indices';
+import { SCALAR_INSTANCE_ID, SYSTEM_PALETTE_SLOT } from '../ir/Indices';
 
 describe('SYSTEM_PALETTE_SLOT reservation', () => {
-  it('slot 0 should be reserved for palette (stride=4), not used by other allocations', () => {
+  it('slot 0 uses canonical scalar materialize writes with stride=4 palette metadata', () => {
     // Compile patch with only InfiniteTimeRoot (reproduces "New" button scenario)
     const patch = buildPatch((b) => {
       b.addBlock('InfiniteTimeRoot');
@@ -31,14 +31,19 @@ describe('SYSTEM_PALETTE_SLOT reservation', () => {
       return;
     }
 
-    // Verify no evalOne steps reference palette slot (stride=4)
+    // [LAW:one-source-of-truth] Palette slot writes must flow through canonical
+    // scalar materialize scheduling, not deprecated one-off write steps.
     const steps = result.program.schedule.steps;
-    const paletteEvalSteps = steps.filter((step: any) => {
-      return step.kind === 'evalOne' && step.target === SYSTEM_PALETTE_SLOT;
+    const paletteTargetSteps = steps.filter((step: any) => {
+      return step.kind === 'materialize' && step.target === SYSTEM_PALETTE_SLOT;
     });
 
-    // Palette slot (stride=4) should NOT have evalOne step (only stride=1 single-instance values do)
-    expect(paletteEvalSteps.length).toBe(0);
+    expect(paletteTargetSteps.length).toBeGreaterThan(0);
+    expect(
+      paletteTargetSteps.every(
+        (step: any) => step.kind === 'materialize' && step.instanceId === SCALAR_INSTANCE_ID,
+      ),
+    ).toBe(true);
 
     // Verify palette slot metadata is correctly registered with stride=4
     const slotMeta = result.program.slotMeta;

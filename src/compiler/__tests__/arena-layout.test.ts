@@ -431,13 +431,10 @@ describe('arenaLayout integration', () => {
     expect(stateLayout.offset).toBe(stateZone.start);
 
     const state = createRuntimeState(
-      program.slotMeta.length,
       schedule.stateSlotCount ?? 0,
       schedule.eventSlotCount ?? 0,
-      schedule.eventCount ?? 0,
       program.valueExprs.nodes.length,
       program.arenaTotalFloats,
-      0,
       undefined,
       undefined,
       program.arenaRuntimeLayout,
@@ -491,13 +488,10 @@ describe('arenaLayout integration', () => {
     expect(gaugeZone.length).toBe(totalGaugeFloats);
 
     const state = createRuntimeState(
-      program.slotMeta.length,
       schedule.stateSlotCount ?? 0,
       schedule.eventSlotCount ?? 0,
-      schedule.eventCount ?? 0,
       program.valueExprs.nodes.length,
       program.arenaTotalFloats,
-      0,
       undefined,
       undefined,
       program.arenaRuntimeLayout,
@@ -636,13 +630,10 @@ describe('arenaLayout integration', () => {
     const program = result.program;
 
     const state = createRuntimeState(
-      program.slotMeta.length,
       0, // stateSlotCount
       0, // eventSlotCount
-      0, // eventExprCount
       0, // valueExprCount
       program.arenaTotalFloats,
-      0,
       undefined,
       undefined,
       program.arenaRuntimeLayout,
