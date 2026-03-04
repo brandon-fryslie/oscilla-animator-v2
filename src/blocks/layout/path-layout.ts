@@ -6,7 +6,7 @@
  *
  * Inputs:
  *   elements — Field<T> from upstream Array (required)
- *   shape    — One<shape2d> from MakeShape2D/ProceduralPolygon (no defaulting)
+ *   shape    — One<shape> from MakeShape2D/ProceduralPolygon (no defaulting)
  *   spacing  — One<float> distribution multiplier (default 1.0)
  *   offset   — One<float> unitTurns wrap01 flow animation (default 0.0)
  *

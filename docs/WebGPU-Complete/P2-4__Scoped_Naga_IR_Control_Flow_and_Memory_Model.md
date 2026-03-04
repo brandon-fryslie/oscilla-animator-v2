@@ -14,7 +14,7 @@ This document defines the architectural shift from a flat data-flow lowering mod
 
 **Objective:** Establish a deterministic, type-safe, hierarchical lowering boundary that supports loops, branches, dynamic indexing, and atomics without allowing direct WGSL string generation in lowering code.
 
-**Invariant:** All user graph lowering enters the GPU through the constrained `NagaBuilder` API and scoped `WgslNagaCompiler` instruction model.
+**Invariant:** All user graph lowering enters the GPU through the constrained `NagaBuilder` API and scoped `ScheduleNagaLowering` pipeline model.
 
 **Mechanism:** Recursive block compilation + lexical scope environments + centralized validation on expression and statement arenas.
 
@@ -99,6 +99,6 @@ The architecture is considered aligned only if all pass:
 - `docs/compiler/ONE-TRUE-EMITTER.md`
 - `src/compiler/ir/naga-emitter/naga-types.ts`
 - `src/compiler/ir/naga-emitter/NagaBuilder.ts`
-- `src/compiler/ir/naga-emitter/WgslNagaCompiler.ts`
+- `src/compiler/ir/naga-emitter/ScheduleNagaLowering.ts`
 - `src/compiler/ir/naga-emitter/NagaValidator.ts`
 - `src/compiler/ir/naga-emitter/ScopeEnvironment.ts`

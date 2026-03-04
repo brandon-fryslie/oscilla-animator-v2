@@ -7,11 +7,11 @@ The emitter is implemented in:
 - `src/compiler/ir/naga-emitter/naga-types.ts`
 - `src/compiler/ir/naga-emitter/NagaBuilder.ts`
 - `src/compiler/ir/naga-emitter/NagaValidator.ts`
-- `src/compiler/ir/naga-emitter/WgslNagaCompiler.ts`
+- `src/compiler/ir/naga-emitter/ScheduleNagaLowering.ts`
 - `src/compiler/ir/naga-emitter/ScopeEnvironment.ts`
 
 ## Architectural Contract
-- **[LAW:one-source-of-truth]** Opcode -> GPU construction is centralized in `WgslNagaCompiler` + `NagaBuilder`.
+- **[LAW:one-source-of-truth]** Schedule/step -> GPU construction is centralized in `ScheduleNagaLowering` + `NagaBuilder`.
 - **[LAW:single-enforcer]** Type and memory safety rules are enforced at one boundary (`NagaBuilder` + `NagaValidator`).
 - **[LAW:dataflow-not-control-flow]** Lowering executes deterministically; variability is encoded in handles and data values.
 - **[LAW:lexical-scoping]** Handles created in a child block are destroyed on block exit and are unavailable to siblings/parents.
@@ -37,7 +37,7 @@ The emitter is implemented in:
 Every method requires `BlockContext` with `visualBlockId`, allowing `NagaHandle -> visualBlockId` source mapping.
 
 ## Execution Architecture
-1. **Recursive evaluation:** `WgslNagaCompiler` recursively compiles `body`, `acceptBody`, and `rejectBody` blocks.
+1. **Recursive evaluation:** `ScheduleNagaLowering` compiles schedule steps into structured Naga module arenas/statements.
 2. **Lexical scope chain:** `ScopeEnvironment` push/pop isolates output IDs per block scope.
 3. **Hardware safety injection:** `bufferReadDynamic` emits `arrayLength`, `sub`, and `min` before `bufferRead`.
 
@@ -47,7 +47,9 @@ Every method requires `BlockContext` with `visualBlockId`, allowing `NagaHandle 
 3. The handle resolves to `visualBlockId`, allowing precise node-level diagnostics.
 
 ## Acceptance Criteria Coverage
-Implemented in `src/compiler/ir/__tests__/naga-emitter.test.ts`:
+Implemented across:
+- `src/compiler/__tests__/naga-lowering.test.ts`
+- `src/compiler/ir/__tests__/storage-class.test.ts`
 
 ### Phase 1: Arena and validator baseline
 - **AC1:** Arena push verification for ALU operations.
