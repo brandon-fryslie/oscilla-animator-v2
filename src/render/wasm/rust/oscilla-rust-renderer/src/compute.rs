@@ -417,9 +417,9 @@ impl ComputeDispatcher {
             });
             compute_pass.set_pipeline(&self.instance_assembly_pipeline);
             compute_pass.set_bind_group(0, &arena.uniform_bind_group, &[]);
-            // [LAW:one-source-of-truth] exception: live slot payloads are still
-            // authored in the runtime state bank for this migration slice.
-            compute_pass.set_bind_group(1, arena.get_compute_write_bind_group(), &[]);
+            // [LAW:one-source-of-truth] Instance assembly reads compiler-arena
+            // write bank produced by simulation dispatch in this same tick.
+            compute_pass.set_bind_group(1, arena.get_compiler_arena_write_bind_group(), &[]);
             compute_pass.set_bind_group(2, &arena.assembly_write_bind_group, &[]);
             // [LAW:single-enforcer] Runtime sink-table instance totals are the
             // canonical source for per-frame assembly dispatch size.
