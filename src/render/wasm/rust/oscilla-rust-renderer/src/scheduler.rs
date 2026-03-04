@@ -85,7 +85,6 @@ pub struct WorkerScheduler {
     last_heartbeat_ms: f64,
     heartbeat_sequence: u64,
     pending_events: VecDeque<RuntimeEvent>,
-    legacy_runtime_event_code: u32,
 }
 
 impl WorkerScheduler {
@@ -107,7 +106,6 @@ impl WorkerScheduler {
             last_heartbeat_ms: now_ms.max(0.0) - HEARTBEAT_INTERVAL_MS,
             heartbeat_sequence: 0,
             pending_events: VecDeque::with_capacity(MAX_PENDING_EVENTS),
-            legacy_runtime_event_code: 0,
         }
     }
 
@@ -170,12 +168,6 @@ impl WorkerScheduler {
         self.state = SchedulerState::Lost;
         self.record_tick_timing(now_ms, tick_elapsed_ms);
         self.push_event(RuntimeEventSeverity::Fatal, code, message, now_ms);
-    }
-
-    pub fn take_legacy_runtime_event_code(&mut self) -> u32 {
-        let code = self.legacy_runtime_event_code;
-        self.legacy_runtime_event_code = 0;
-        code
     }
 
     pub fn take_observability_packet(&mut self, now_ms: f64) -> Option<WorkerObservabilityPacket> {
@@ -251,9 +243,5 @@ impl WorkerScheduler {
             loop_count: self.loop_count,
             emitted_at_ms: now_ms.max(0.0),
         });
-        self.legacy_runtime_event_code = match severity {
-            RuntimeEventSeverity::Fatal => 2,
-            RuntimeEventSeverity::Error => 1,
-        };
     }
 }
