@@ -1,11 +1,10 @@
 import { WEBGPU_RENDER_CONTRACT } from './shaders';
+import { SHAPE_BANK_HEADER_WORDS } from '../../runtime/RuntimeState';
 
 const GPU_BUFFER_USAGE = {
   COPY_DST: 0x0008,
   STORAGE: 0x0080,
 } as const;
-
-const SHAPE_BANK_HEADER_WORDS = 4;
 
 export interface RenderShapeBankSource {
   readonly data: Uint32Array;
@@ -118,11 +117,13 @@ export class WebGPUShapeBankManager {
     const byTopologyId = new Map<number, number>();
     for (let handle = 0; handle + SHAPE_BANK_HEADER_WORDS <= source.volatilePtr; handle += SHAPE_BANK_HEADER_WORDS) {
       const topologyId = source.topologyIdByHandle[handle] >>> 0;
-      const hasHeaderPayload =
-        source.data[handle + 0] !== 0 ||
-        source.data[handle + 1] !== 0 ||
-        source.data[handle + 2] !== 0 ||
-        source.data[handle + 3] !== 0;
+      let hasHeaderPayload = false;
+      for (let word = 0; word < SHAPE_BANK_HEADER_WORDS; word++) {
+        if (source.data[handle + word] !== 0) {
+          hasHeaderPayload = true;
+          break;
+        }
+      }
       if (!hasHeaderPayload && topologyId === 0) {
         continue;
       }

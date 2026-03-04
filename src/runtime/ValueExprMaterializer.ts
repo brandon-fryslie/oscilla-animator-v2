@@ -16,6 +16,7 @@ import {
   SHAPE_BANK_HEADER_WORDS,
   SHAPE_BANK_NO_CONTROL_POINT_SLOT,
   allocShapeBankWords,
+  createShapeBankHeaderV1,
   writeShapeBankHandleMetadata,
   writeShapeBankHeader,
 } from './RuntimeState';
@@ -91,12 +92,17 @@ function evaluateShapeRefHandle(
   const handle = allocShapeBankWords(shapeBank, SHAPE_BANK_HEADER_WORDS);
   // [LAW:one-source-of-truth] Handle semantics are anchored in ShapeBank:
   // header stores draw topology dimensions, sidecar stores topology/control-slot metadata.
-  writeShapeBankHeader(shapeBank.data, handle, {
-    indexCount: vertexCount,
-    indexOffset: 0,
-    vertexCount,
-    flags,
-  });
+  writeShapeBankHeader(
+    shapeBank.data,
+    handle,
+    createShapeBankHeaderV1({
+      kind: 1,
+      topologyMode: 1,
+      flags,
+      indexCount: vertexCount,
+      vertexCount,
+    }),
+  );
   writeShapeBankHandleMetadata(shapeBank, handle, {
     topologyId: expr.topologyId as number,
     controlPointSlot,

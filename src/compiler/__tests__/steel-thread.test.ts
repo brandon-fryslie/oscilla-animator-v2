@@ -103,6 +103,13 @@ describe('Steel Thread - Animated Particles', () => {
       indirectRecordIndex: 0,
       instanceCountMode: 'static',
       staticInstanceCount: 4,
+      drawMode: 'indexed',
+      indirectRegion: 'indexed',
+      indirectStrideBytes: 20,
+      topologySource: 'shapeHeaderV1',
+      firstInstanceSource: 'runtimePacked',
+      indexedFirstIndex: 0,
+      indexedBaseVertex: 0,
     });
     const shapeRefs = program.valueExprs.nodes.filter((expr) => expr.kind === 'shapeRef');
     expect(shapeRefs.length).toBeGreaterThan(0);

@@ -4,6 +4,11 @@ import { DRAW_PREP_COMPUTE_WGSL, PATH_RENDER_WGSL, WEBGPU_RENDER_CONTRACT } from
 import { registerDynamicTopology } from '../../../shapes/registry';
 import { PathVerb } from '../../../shapes/types';
 import type { DrawPathInstancesOp } from '../../types';
+import {
+  createShapeBankHeaderV1,
+  SHAPE_BANK_HEADER_WORDS,
+  ShapeBankHeaderWord,
+} from '../../../runtime/RuntimeState';
 
 function setNavigatorGpu(value: unknown): void {
   Object.defineProperty(navigator, 'gpu', {
@@ -210,18 +215,37 @@ function makeRenderInput(
         uniqueTopology.set(op.geometry.topologyId, op.geometry);
       }
     }
-    const words = uniqueTopology.size * 4;
+    const words = uniqueTopology.size * SHAPE_BANK_HEADER_WORDS;
     const capacity = Math.max(1, words);
     const data = new Uint32Array(capacity);
     const topologyIdByHandle = new Uint32Array(capacity);
     let handle = 0;
     for (const [topologyId, geometry] of uniqueTopology.entries()) {
-      data[handle + 0] = geometry.pointsCount >>> 0;
-      data[handle + 1] = 0;
-      data[handle + 2] = geometry.pointsCount >>> 0;
-      data[handle + 3] = (geometry.flags ?? 0) >>> 0;
+      const header = createShapeBankHeaderV1({
+        kind: 1,
+        topologyMode: 1,
+        flags: (geometry.flags ?? 0) >>> 0,
+        indexCount: geometry.pointsCount >>> 0,
+        vertexCount: geometry.pointsCount >>> 0,
+      });
+      data[handle + ShapeBankHeaderWord.Kind] = header.kind >>> 0;
+      data[handle + ShapeBankHeaderWord.TopologyMode] = header.topologyMode >>> 0;
+      data[handle + ShapeBankHeaderWord.Flags] = header.flags >>> 0;
+      data[handle + ShapeBankHeaderWord.MaterialClass] = header.materialClass >>> 0;
+      data[handle + ShapeBankHeaderWord.IndexCount] = header.indexCount >>> 0;
+      data[handle + ShapeBankHeaderWord.FirstIndex] = header.firstIndex >>> 0;
+      data[handle + ShapeBankHeaderWord.BaseVertex] = header.baseVertex >>> 0;
+      data[handle + ShapeBankHeaderWord.VertexCount] = header.vertexCount >>> 0;
+      data[handle + ShapeBankHeaderWord.FirstVertex] = header.firstVertex >>> 0;
+      data[handle + ShapeBankHeaderWord.ParamBlockOffset] = header.paramBlockOffset >>> 0;
+      data[handle + ShapeBankHeaderWord.ParamBlockWords] = header.paramBlockWords >>> 0;
+      data[handle + ShapeBankHeaderWord.Reserved0] = header.reserved0 >>> 0;
+      data[handle + ShapeBankHeaderWord.BoundsMinPacked] = header.boundsMinPacked >>> 0;
+      data[handle + ShapeBankHeaderWord.BoundsMaxPacked] = header.boundsMaxPacked >>> 0;
+      data[handle + ShapeBankHeaderWord.Reserved1] = header.reserved1 >>> 0;
+      data[handle + ShapeBankHeaderWord.Reserved2] = header.reserved2 >>> 0;
       topologyIdByHandle[handle] = topologyId >>> 0;
-      handle += 4;
+      handle += SHAPE_BANK_HEADER_WORDS;
     }
     return {
       data,

@@ -910,6 +910,15 @@ function buildDrawPrepProgram(scheduleIR: ScheduleIR): DrawPrepProgramIR {
       indirectRecordIndex: sinks.length,
       instanceCountMode: staticInstanceCount === undefined ? 'dynamic' : 'static',
       staticInstanceCount,
+      // [LAW:one-source-of-truth] Draw-prep command ABI metadata is emitted by
+      // compiler and consumed by runtime/renderer as one canonical contract.
+      drawMode: 'indexed',
+      indirectRegion: 'indexed',
+      indirectStrideBytes: 20,
+      topologySource: 'shapeHeaderV1',
+      firstInstanceSource: 'runtimePacked',
+      indexedFirstIndex: 0,
+      indexedBaseVertex: 0,
     });
   }
   // [LAW:no-string-math] P0-0 forbids lowering-time WGSL source emission.

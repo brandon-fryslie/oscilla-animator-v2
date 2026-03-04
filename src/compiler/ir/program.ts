@@ -352,6 +352,42 @@ export interface DrawPrepSinkIR {
   readonly instanceCountMode: 'static' | 'dynamic';
   /** Present only when instanceCountMode==='static' */
   readonly staticInstanceCount?: number;
+  /**
+   * Canonical indirect command mode for this sink record.
+   *
+   * [LAW:one-source-of-truth] Draw mode is compiler-owned metadata; runtime
+   * draws from this contract rather than deriving mixed-mode semantics ad hoc.
+   */
+  readonly drawMode: 'indexed' | 'nonIndexed';
+  /**
+   * Indirect command region in the shared indirect buffer.
+   */
+  readonly indirectRegion: 'indexed' | 'nonIndexed';
+  /**
+   * Hardware ABI stride for this sink's command records.
+   * - indexed: 20 bytes (`drawIndexedIndirect`)
+   * - nonIndexed: 16 bytes (`drawIndirect`)
+   */
+  readonly indirectStrideBytes: 20 | 16;
+  /**
+   * Source authority for topology fields consumed by draw-prep.
+   * Current sink contracts read topology counts/offsets from ShapeHeaderV1.
+   */
+  readonly topologySource: 'shapeHeaderV1';
+  /**
+   * Source authority for firstInstance field.
+   * Runtime packed draw plan currently owns firstInstance values.
+   */
+  readonly firstInstanceSource: 'runtimePacked';
+  /**
+   * Indexed command defaults (used when drawMode==='indexed').
+   */
+  readonly indexedFirstIndex?: number;
+  readonly indexedBaseVertex?: number;
+  /**
+   * Non-indexed command defaults (used when drawMode==='nonIndexed').
+   */
+  readonly nonIndexedFirstVertex?: number;
 }
 
 export interface DrawPrepProgramIR {

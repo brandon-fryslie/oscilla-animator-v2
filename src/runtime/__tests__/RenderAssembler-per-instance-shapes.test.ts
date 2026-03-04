@@ -19,6 +19,7 @@ import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR,  CAMERA_PROJECTION, canonicalType 
 import type { RuntimeState } from '../RuntimeState';
 import {
   allocShapeBankWords,
+  createShapeBankHeaderV1,
   createRuntimeState,
   SHAPE_BANK_HEADER_WORDS,
   writeShapeBankHandleMetadata,
@@ -107,12 +108,17 @@ function installShapeHandlesFromPacked(
     const pointsCount = packed[base + 2];
     const flags = packed[base + 4];
     const handle = allocShapeBankWords(shapeBank, SHAPE_BANK_HEADER_WORDS);
-    writeShapeBankHeader(shapeBank.data, handle, {
-      indexCount: pointsCount,
-      indexOffset: 0,
-      vertexCount: pointsCount,
-      flags,
-    });
+    writeShapeBankHeader(
+      shapeBank.data,
+      handle,
+      createShapeBankHeaderV1({
+        kind: 1,
+        topologyMode: 1,
+        indexCount: pointsCount,
+        vertexCount: pointsCount,
+        flags,
+      }),
+    );
     writeShapeBankHandleMetadata(shapeBank, handle, {
       topologyId,
       controlPointSlot: pointsFieldSlot,

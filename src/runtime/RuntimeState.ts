@@ -16,22 +16,73 @@ import { ExternalChannelSystem } from './ExternalChannel';
 import { createArena } from './ArenaValueStore';
 
 /**
- * ShapeBank header word layout (4 x u32 words per shape topology record).
+ * ShapeBank header word layout (`ShapeHeaderV1`, 16 x u32 words per record).
+ *
+ * // [LAW:one-source-of-truth] Runtime and renderer consume one canonical
+ * // shape-header ABI that matches WS-01/P1-2 contracts.
  */
-export const SHAPE_BANK_HEADER_WORDS = 4;
+export const SHAPE_BANK_HEADER_WORDS = 16;
 
 export enum ShapeBankHeaderWord {
-  IndexCount = 0,
-  IndexOffset = 1,
-  VertexCount = 2,
-  Flags = 3,
+  Kind = 0,
+  TopologyMode = 1,
+  Flags = 2,
+  MaterialClass = 3,
+  IndexCount = 4,
+  FirstIndex = 5,
+  BaseVertex = 6,
+  VertexCount = 7,
+  FirstVertex = 8,
+  ParamBlockOffset = 9,
+  ParamBlockWords = 10,
+  Reserved0 = 11,
+  BoundsMinPacked = 12,
+  BoundsMaxPacked = 13,
+  Reserved1 = 14,
+  Reserved2 = 15,
 }
 
 export interface ShapeBankHeaderRecord {
-  indexCount: number;
-  indexOffset: number;
-  vertexCount: number;
+  kind: number;
+  topologyMode: number;
   flags: number;
+  materialClass: number;
+  indexCount: number;
+  firstIndex: number;
+  baseVertex: number;
+  vertexCount: number;
+  firstVertex: number;
+  paramBlockOffset: number;
+  paramBlockWords: number;
+  reserved0: number;
+  boundsMinPacked: number;
+  boundsMaxPacked: number;
+  reserved1: number;
+  reserved2: number;
+}
+
+export function createShapeBankHeaderV1(
+  overrides: Partial<ShapeBankHeaderRecord> = {},
+): ShapeBankHeaderRecord {
+  return {
+    kind: 0,
+    topologyMode: 0,
+    flags: 0,
+    materialClass: 0,
+    indexCount: 0,
+    firstIndex: 0,
+    baseVertex: 0,
+    vertexCount: 0,
+    firstVertex: 0,
+    paramBlockOffset: 0,
+    paramBlockWords: 0,
+    reserved0: 0,
+    boundsMinPacked: 0,
+    boundsMaxPacked: 0,
+    reserved1: 0,
+    reserved2: 0,
+    ...overrides,
+  };
 }
 
 /** Sentinel for shape handles that do not reference a control-point field slot. */
@@ -48,7 +99,7 @@ export interface ShapeBankHandleMetadata {
  * [LAW:single-enforcer] RuntimeState owns default ShapeBank sizing for
  * handle-based shape execution when compile metadata does not override it.
  */
-export const DEFAULT_SHAPE_BANK_WORD_CAPACITY = 4096;
+export const DEFAULT_SHAPE_BANK_WORD_CAPACITY = 16384;
 
 /**
  * ShapeBankState - Uint32 topology bank + frame-volatile bump allocator.
@@ -140,10 +191,22 @@ export function readShapeBankHeader(
   handle: number,
 ): ShapeBankHeaderRecord {
   return {
-    indexCount: bank[handle + ShapeBankHeaderWord.IndexCount],
-    indexOffset: bank[handle + ShapeBankHeaderWord.IndexOffset],
-    vertexCount: bank[handle + ShapeBankHeaderWord.VertexCount],
-    flags: bank[handle + ShapeBankHeaderWord.Flags],
+    kind: bank[handle + ShapeBankHeaderWord.Kind] >>> 0,
+    topologyMode: bank[handle + ShapeBankHeaderWord.TopologyMode] >>> 0,
+    flags: bank[handle + ShapeBankHeaderWord.Flags] >>> 0,
+    materialClass: bank[handle + ShapeBankHeaderWord.MaterialClass] >>> 0,
+    indexCount: bank[handle + ShapeBankHeaderWord.IndexCount] >>> 0,
+    firstIndex: bank[handle + ShapeBankHeaderWord.FirstIndex] >>> 0,
+    baseVertex: bank[handle + ShapeBankHeaderWord.BaseVertex] | 0,
+    vertexCount: bank[handle + ShapeBankHeaderWord.VertexCount] >>> 0,
+    firstVertex: bank[handle + ShapeBankHeaderWord.FirstVertex] >>> 0,
+    paramBlockOffset: bank[handle + ShapeBankHeaderWord.ParamBlockOffset] >>> 0,
+    paramBlockWords: bank[handle + ShapeBankHeaderWord.ParamBlockWords] >>> 0,
+    reserved0: bank[handle + ShapeBankHeaderWord.Reserved0] >>> 0,
+    boundsMinPacked: bank[handle + ShapeBankHeaderWord.BoundsMinPacked] >>> 0,
+    boundsMaxPacked: bank[handle + ShapeBankHeaderWord.BoundsMaxPacked] >>> 0,
+    reserved1: bank[handle + ShapeBankHeaderWord.Reserved1] >>> 0,
+    reserved2: bank[handle + ShapeBankHeaderWord.Reserved2] >>> 0,
   };
 }
 
@@ -155,10 +218,22 @@ export function writeShapeBankHeader(
   handle: number,
   header: ShapeBankHeaderRecord,
 ): void {
-  bank[handle + ShapeBankHeaderWord.IndexCount] = header.indexCount;
-  bank[handle + ShapeBankHeaderWord.IndexOffset] = header.indexOffset;
-  bank[handle + ShapeBankHeaderWord.VertexCount] = header.vertexCount;
-  bank[handle + ShapeBankHeaderWord.Flags] = header.flags;
+  bank[handle + ShapeBankHeaderWord.Kind] = header.kind >>> 0;
+  bank[handle + ShapeBankHeaderWord.TopologyMode] = header.topologyMode >>> 0;
+  bank[handle + ShapeBankHeaderWord.Flags] = header.flags >>> 0;
+  bank[handle + ShapeBankHeaderWord.MaterialClass] = header.materialClass >>> 0;
+  bank[handle + ShapeBankHeaderWord.IndexCount] = header.indexCount >>> 0;
+  bank[handle + ShapeBankHeaderWord.FirstIndex] = header.firstIndex >>> 0;
+  bank[handle + ShapeBankHeaderWord.BaseVertex] = header.baseVertex >>> 0;
+  bank[handle + ShapeBankHeaderWord.VertexCount] = header.vertexCount >>> 0;
+  bank[handle + ShapeBankHeaderWord.FirstVertex] = header.firstVertex >>> 0;
+  bank[handle + ShapeBankHeaderWord.ParamBlockOffset] = header.paramBlockOffset >>> 0;
+  bank[handle + ShapeBankHeaderWord.ParamBlockWords] = header.paramBlockWords >>> 0;
+  bank[handle + ShapeBankHeaderWord.Reserved0] = header.reserved0 >>> 0;
+  bank[handle + ShapeBankHeaderWord.BoundsMinPacked] = header.boundsMinPacked >>> 0;
+  bank[handle + ShapeBankHeaderWord.BoundsMaxPacked] = header.boundsMaxPacked >>> 0;
+  bank[handle + ShapeBankHeaderWord.Reserved1] = header.reserved1 >>> 0;
+  bank[handle + ShapeBankHeaderWord.Reserved2] = header.reserved2 >>> 0;
 }
 
 /**
