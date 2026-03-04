@@ -24,7 +24,7 @@ import {
   writeShapeBankHeader,
 } from '../RuntimeState';
 
-const TEST_STATE = createRuntimeState(0);
+const TEST_STATE = createRuntimeState();
 
 // Helper: create a handle buffer with N instances of given topologies
 function createShapeBuffer(
@@ -217,7 +217,7 @@ describe('Buffer View Optimization', () => {
 
 describe('Assembler Timing Instrumentation', () => {
   it('HealthMetrics has assembler timing fields initialized', () => {
-    const state = createRuntimeState(10);
+    const state = createRuntimeState();
 
     expect(state.health.assemblerGroupingMs).toHaveLength(10);
     expect(state.health.assemblerGroupingMs.every(v => v === 0)).toBe(true);

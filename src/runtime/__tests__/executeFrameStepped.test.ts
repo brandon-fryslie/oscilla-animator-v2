@@ -94,13 +94,10 @@ function createStateForProgram(program: CompiledProgramIR) {
   const schedule = program.schedule as ScheduleIR;
   const sizes = computeRuntimeStorageSizes(program.runtimeSlots);
   return createRuntimeState(
-    sizes.f32,
     schedule.stateSlotCount ?? 0,
     (schedule as any).eventSlotCount ?? 0,
-    (schedule as any).eventCount ?? 0,
     program.valueExprs.nodes.length,
     program.arenaTotalFloats,
-    0,
     undefined,
     undefined,
     program.arenaRuntimeLayout,
@@ -305,6 +302,7 @@ describe('executeFrameStepped', () => {
     let timeMs = 0;
     for (let frame = 0; frame < 1024; frame++) {
       timeMs += 16.67;
+      steppedArena.reset();
       let stepped = executeFrameStepped(program, steppedState, steppedArena, timeMs);
       let steppedResult = stepped.next();
       while (!steppedResult.done) {

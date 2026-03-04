@@ -25,7 +25,7 @@ describe('ValueExprEventEvaluator', () => {
           fired: true,
         },
       ];
-      const state = createRuntimeState(0, 0, 0, 0, 1);
+      const state = createRuntimeState(0, 0, 1);
       const program = {} as CompiledProgramIR;
 
       const result = evaluateValueExprEvent(valueExprId(0), { nodes }, state, program);
@@ -41,7 +41,7 @@ describe('ValueExprEventEvaluator', () => {
           fired: false,
         },
       ];
-      const state = createRuntimeState(0, 0, 0, 0, 1);
+      const state = createRuntimeState(0, 0, 1);
       const program = {} as CompiledProgramIR;
 
       const result = evaluateValueExprEvent(valueExprId(0), { nodes }, state, program);
@@ -58,7 +58,7 @@ describe('ValueExprEventEvaluator', () => {
           eventKind: 'never',
         },
       ];
-      const state = createRuntimeState(0, 0, 0, 0, 1);
+      const state = createRuntimeState(0, 0, 1);
       const program = {} as CompiledProgramIR;
 
       const result = evaluateValueExprEvent(valueExprId(0), { nodes }, state, program);
@@ -76,7 +76,7 @@ describe('ValueExprEventEvaluator', () => {
           source: 'timeRoot',
         },
       ];
-      const state = createRuntimeState(0, 0, 0, 0, 1);
+      const state = createRuntimeState(0, 0, 1);
       const program = {} as CompiledProgramIR;
 
       const result = evaluateValueExprEvent(valueExprId(0), { nodes }, state, program);
@@ -109,7 +109,7 @@ describe('ValueExprEventEvaluator', () => {
           mode: 'any',
         },
       ];
-      const state = createRuntimeState(0, 0, 0, 0, 3);
+      const state = createRuntimeState(0, 0, 3);
       const program = {} as CompiledProgramIR;
 
       const result = evaluateValueExprEvent(valueExprId(2), { nodes }, state, program);
@@ -139,7 +139,7 @@ describe('ValueExprEventEvaluator', () => {
           mode: 'any',
         },
       ];
-      const state = createRuntimeState(0, 0, 0, 0, 3);
+      const state = createRuntimeState(0, 0, 3);
       const program = {} as CompiledProgramIR;
 
       const result = evaluateValueExprEvent(valueExprId(2), { nodes }, state, program);
@@ -171,7 +171,7 @@ describe('ValueExprEventEvaluator', () => {
           mode: 'all',
         },
       ];
-      const state = createRuntimeState(0, 0, 0, 0, 3);
+      const state = createRuntimeState(0, 0, 3);
       const program = {} as CompiledProgramIR;
 
       const result = evaluateValueExprEvent(valueExprId(2), { nodes }, state, program);
@@ -202,7 +202,7 @@ describe('ValueExprEventEvaluator', () => {
           mode: 'all',
         },
       ];
-      const state = createRuntimeState(0, 0, 0, 0, 3);
+      const state = createRuntimeState(0, 0, 3);
       const program = {} as CompiledProgramIR;
 
       const result = evaluateValueExprEvent(valueExprId(2), { nodes }, state, program);
@@ -248,7 +248,7 @@ describe('ValueExprEventEvaluator', () => {
           mode: 'all',
         },
       ];
-      const state = createRuntimeState(0, 0, 0, 0, 5);
+      const state = createRuntimeState(0, 0, 5);
       const program = {} as CompiledProgramIR;
 
       const result = evaluateValueExprEvent(valueExprId(4), { nodes }, state, program);
@@ -273,7 +273,7 @@ describe('ValueExprEventEvaluator', () => {
           input: valueExprId(0),
         },
       ];
-      const state = createRuntimeState(0, 0, 0, 0, 2);
+      const state = createRuntimeState(0, 0, 2);
       const program = {} as CompiledProgramIR;
 
       // Initialize time (required for scalar evaluation)
@@ -313,7 +313,7 @@ describe('ValueExprEventEvaluator', () => {
           input: valueExprId(0),
         },
       ];
-      const state = createRuntimeState(0, 0, 0, 0, 2);
+      const state = createRuntimeState(0, 0, 2);
       const program = {} as CompiledProgramIR;
 
       // Initialize time
@@ -352,7 +352,7 @@ describe('ValueExprEventEvaluator', () => {
           input: valueExprId(0),
         },
       ];
-      const state = createRuntimeState(0, 0, 0, 0, 2);
+      const state = createRuntimeState(0, 0, 2);
       const program = {} as CompiledProgramIR;
 
       // Initialize time
@@ -388,7 +388,7 @@ describe('ValueExprEventEvaluator', () => {
           input: valueExprId(0),
         },
       ];
-      const state = createRuntimeState(0, 0, 0, 0, 2);
+      const state = createRuntimeState(0, 0, 2);
       const program = {} as CompiledProgramIR;
 
       // Initialize time
@@ -431,7 +431,7 @@ describe('ValueExprEventEvaluator', () => {
           mode: 'any',
         },
       ];
-      const state = createRuntimeState(0, 0, 0, 0, 2);
+      const state = createRuntimeState(0, 0, 2);
       const program = {} as CompiledProgramIR;
 
       // Should throw cycle error
@@ -450,7 +450,7 @@ describe('ValueExprEventEvaluator', () => {
           source: 'timeRoot',
         },
       ];
-      const state = createRuntimeState(0, 0, 0, 0, 1);
+      const state = createRuntimeState(0, 0, 1);
       const program = {} as CompiledProgramIR;
 
       // Evaluate once
@@ -465,7 +465,7 @@ describe('ValueExprEventEvaluator', () => {
   describe('error handling', () => {
     it('throws when ValueExpr not found', () => {
       const nodes: ValueExpr[] = [];
-      const state = createRuntimeState(0, 0, 0, 0, 1);
+      const state = createRuntimeState(0, 0, 1);
       const program = {} as CompiledProgramIR;
 
       expect(() => {
@@ -481,7 +481,7 @@ describe('ValueExprEventEvaluator', () => {
           value: { kind: 'float', value: 42 },
         },
       ];
-      const state = createRuntimeState(0, 0, 0, 0, 1);
+      const state = createRuntimeState(0, 0, 1);
       const program = {} as CompiledProgramIR;
 
       expect(() => {

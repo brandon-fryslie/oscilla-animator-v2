@@ -91,13 +91,10 @@ function createStateForProgram(program: ReturnType<typeof compileContinuityRende
   const schedule = program.schedule as ScheduleIR;
   const sizes = computeRuntimeStorageSizes(program.runtimeSlots);
   return createRuntimeState(
-    sizes.f32,
     schedule.stateSlotCount ?? 0,
     schedule.eventSlotCount ?? 0,
-    schedule.eventCount ?? 0,
     program.valueExprs.nodes.length,
     program.arenaTotalFloats,
-    0,
     undefined,
     undefined,
     program.arenaRuntimeLayout,
@@ -245,7 +242,7 @@ describe('Continuity Integration', () => {
 
   describe('Scenario: RuntimeState integration', () => {
     it('creates runtime state with continuity', () => {
-      const state = createRuntimeState(100);
+      const state = createRuntimeState();
 
       expect(state.continuity).toBeDefined();
       expect(state.continuity.targets.size).toBe(0);
@@ -254,7 +251,7 @@ describe('Continuity Integration', () => {
     });
 
     it('manages target state correctly', () => {
-      const state = createRuntimeState(100);
+      const state = createRuntimeState();
       const targetId = computeStableTargetId('position', 'instance_0', 'x');
 
       // Get or create target state
@@ -270,7 +267,7 @@ describe('Continuity Integration', () => {
     });
 
     it('finalizes frame correctly', () => {
-      const state = createRuntimeState(100);
+      const state = createRuntimeState();
       state.time = {
         tAbsMs: 100,
         tMs: 100,
@@ -335,7 +332,7 @@ describe('Continuity Integration', () => {
     });
 
     it('clears frame-local continuity mappings at finalize boundary', () => {
-      const state = createRuntimeState(8);
+      const state = createRuntimeState();
       state.time = {
         tAbsMs: 64,
         tMs: 64,
