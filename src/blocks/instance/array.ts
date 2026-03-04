@@ -12,7 +12,7 @@ import { cardinalityVar } from '../../core/inference-types';
 import { cardinalityVarId } from '../../core/ids';
 import { DOMAIN_CIRCLE } from '../../core/domain-registry';
 import { defaultSourceConst, defaultSource } from '../../types';
-import { resolveInputConstant } from '../lower-utils';
+import { tryResolveInputConstant } from '../lower-utils';
 
 // [LAW:one-source-of-truth] Array output cardinality behavior is declared on CT/ICT.
 const ARRAY_OUTPUT_CARD = cardinalityVar(cardinalityVarId('array_outputs'), {
@@ -74,10 +74,10 @@ export function register(): void {
         type: canonicalType(BOOL, { kind: 'none' }, { cardinality: ARRAY_OUTPUT_CARD }, contractClamp01()),
       },
     },
-    lower: ({ ctx, inputsById }) => {
+    lower: ({ ctx, inputsById, config }) => {
       const countInput = inputsById.count;
       if (!countInput) throw new Error('Array: count input not wired — normalization bug');
-      const count = resolveInputConstant(ctx, countInput, 'count', { min: 1, max: 100000 });
+      const staticCount = tryResolveInputConstant(ctx, countInput, 'count', { min: 1, max: 100000 });
       const elementInput = inputsById.element;
   
       // Validate element input
@@ -97,7 +97,24 @@ export function register(): void {
        *   Array.elements (Field<shape>) → Layout.controlPoints → RenderInstances2D.controlPoints
        *   RenderInstances2D extracts instanceId from controlPoints → looks up shapeField
        */
-      const instanceId = ctx.b.createInstance(DOMAIN_CIRCLE, count, elementInput.id);
+      const configuredCount = typeof config.count === 'number' && Number.isFinite(config.count)
+        ? Math.floor(config.count)
+        : 500;
+      const clampedMaxCount = Math.min(100_000, Math.max(1, configuredCount));
+      const instanceId = staticCount !== null
+        ? ctx.b.createInstance(DOMAIN_CIRCLE, staticCount, elementInput.id)
+        : ctx.b.createInstance(
+            DOMAIN_CIRCLE,
+            {
+              // [LAW:dataflow-not-control-flow] Dynamic instance cardinality is
+              // represented as data via countExpr+maxCount, not branching schedules.
+              kind: 'dynamic',
+              countExpr: countInput.id,
+              maxCount: clampedMaxCount,
+            },
+            elementInput.id,
+            'dynamic',
+          );
   
       // Rewrite output types with actual instance ref (ctx.outTypes has placeholder 'default')
       const ref = instanceRef(DOMAIN_CIRCLE as string, instanceId as string);

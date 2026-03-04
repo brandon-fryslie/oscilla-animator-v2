@@ -2,6 +2,9 @@ use bytemuck::{bytes_of, cast_slice, Pod, Zeroable};
 
 pub const INDIRECT_WORDS_PER_RECORD: usize = 5;
 pub const INSTANCE_FLOATS_PER_RECORD: usize = 12;
+const DEFAULT_TOPOLOGY_WORDS: [u32; 4] = [0, 0, 0, 1];
+const DEFAULT_VERTEX_FLOATS: [f32; 8] = [-0.5, -0.5, 0.5, -0.5, 0.5, 0.5, -0.5, 0.5];
+const DEFAULT_INDEX_WORDS: [u32; 6] = [0, 1, 2, 0, 2, 3];
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, Zeroable, Pod)]
@@ -144,11 +147,15 @@ impl GpuMemoryArena {
         let initial_index_bytes =
             (max_shapes.saturating_mul(12).saturating_mul(std::mem::size_of::<u32>())) as u64;
 
-        let instance_capacity_bytes = initial_instance_bytes.max(16);
+        let instance_capacity_bytes = initial_instance_bytes.max(
+            (INSTANCE_FLOATS_PER_RECORD * std::mem::size_of::<f32>()) as u64,
+        );
         let topology_capacity_words = initial_topology_words.max(4);
         let indirect_capacity_words = initial_indirect_words.max(INDIRECT_WORDS_PER_RECORD);
-        let vertex_capacity_bytes = initial_vertex_bytes.max(16);
-        let index_capacity_bytes = initial_index_bytes.max(16);
+        let vertex_capacity_bytes =
+            initial_vertex_bytes.max((DEFAULT_VERTEX_FLOATS.len() * std::mem::size_of::<f32>()) as u64);
+        let index_capacity_bytes =
+            initial_index_bytes.max((DEFAULT_INDEX_WORDS.len() * std::mem::size_of::<u32>()) as u64);
 
         let instance_buffer = Self::create_instance_buffer(device, instance_capacity_bytes);
         let topology_buffer = Self::create_topology_buffer(device, topology_capacity_words);
@@ -294,58 +301,12 @@ impl GpuMemoryArena {
         queue.write_buffer(&self.uniform_buffer, 0, bytes_of(&self.uniforms));
     }
 
-    pub fn sync_render_payload(
-        &mut self,
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
-        topology_words: &[u32],
-        instance_floats: &[f32],
-        indirect_words: &[u32],
-        vertex_floats: &[f32],
-        index_words: &[u32],
-    ) {
-        let mut needs_assembly_bind_group_rebuild = false;
-        let mut needs_instance_bind_group_rebuild = false;
-        let mut needs_topology_bind_group_rebuild = false;
-
-        if self.ensure_instance_capacity(device, instance_floats.len()) {
-            needs_assembly_bind_group_rebuild = true;
-            needs_instance_bind_group_rebuild = true;
-        }
-        if self.ensure_indirect_capacity(device, indirect_words.len()) {
-            needs_assembly_bind_group_rebuild = true;
-        }
-        if self.ensure_topology_capacity(device, topology_words.len()) {
-            needs_topology_bind_group_rebuild = true;
-        }
-        self.ensure_vertex_capacity(device, vertex_floats.len());
-        self.ensure_index_capacity(device, index_words.len());
-
-        if needs_assembly_bind_group_rebuild {
-            self.rebuild_assembly_write_bind_group(device);
-        }
-        if needs_instance_bind_group_rebuild {
-            self.rebuild_instance_bind_group(device);
-        }
-        if needs_topology_bind_group_rebuild {
-            self.rebuild_topology_bind_group(device);
-        }
-
-        if !topology_words.is_empty() {
-            queue.write_buffer(&self.topology_buffer, 0, cast_slice(topology_words));
-        }
-        if !instance_floats.is_empty() {
-            queue.write_buffer(&self.instance_buffer, 0, cast_slice(instance_floats));
-        }
-        if !indirect_words.is_empty() {
-            queue.write_buffer(&self.indirect_buffer, 0, cast_slice(indirect_words));
-        }
-        if !vertex_floats.is_empty() {
-            queue.write_buffer(&self.vertex_buffer, 0, cast_slice(vertex_floats));
-        }
-        if !index_words.is_empty() {
-            queue.write_buffer(&self.index_buffer, 0, cast_slice(index_words));
-        }
+    pub fn seed_default_render_payload(&mut self, queue: &wgpu::Queue) {
+        // [LAW:one-source-of-truth] Runtime-owned draw prep writes dynamic
+        // instance/indirect data each frame; static mesh/topology seed is set once here.
+        queue.write_buffer(&self.topology_buffer, 0, cast_slice(&DEFAULT_TOPOLOGY_WORDS));
+        queue.write_buffer(&self.vertex_buffer, 0, cast_slice(&DEFAULT_VERTEX_FLOATS));
+        queue.write_buffer(&self.index_buffer, 0, cast_slice(&DEFAULT_INDEX_WORDS));
     }
 
     pub fn get_compute_read_bind_group(&self) -> &wgpu::BindGroup {
