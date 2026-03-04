@@ -1296,7 +1296,10 @@ function buildProvenanceMaps(
     if (targetInputDef.semantic === 'instanceCount') {
       const instanceId = instanceContextByBlock.get(edge.toBlock);
       if (instanceId !== undefined) {
-        instanceCountProvenance.set(portKey, { instanceId });
+        const instanceDecl = builder.getInstances().get(instanceId);
+        if (instanceDecl && typeof instanceDecl.count === 'number') {
+          instanceCountProvenance.set(portKey, { instanceId });
+        }
       }
       // instanceCount ports are not added to constantProvenance
       continue;

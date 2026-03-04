@@ -1,17 +1,19 @@
 import type { RenderFrameIR } from '../types';
 import type { RenderShapeBankSource } from './WebGPUShapeBankManager';
 import type { IndirectArgsReadbackSnapshot } from './WebGPUIndirectArgsInspector';
-import {
-  RUST_RENDER_INSTANCE_FLOATS,
-  RustRenderPayloadPacker,
-  type DrawPrepSinkDescriptor,
-} from './RustRenderPayloadPacker';
 import type {
   RustRendererBootstrapConfig,
   RustRendererSchedulerState,
   RustRendererWorkerInboundMessage,
   RustRendererWorkerOutboundMessage,
 } from '../rust/worker-protocol';
+
+interface DrawPrepSinkDescriptor {
+  readonly sinkIndex: number;
+  readonly indirectRecordIndex: number;
+  readonly instanceCountMode: 'static' | 'dynamic';
+  readonly staticInstanceCount?: number;
+}
 
 interface RenderInput {
   readonly frame: RenderFrameIR;
@@ -65,6 +67,44 @@ function coerceFinite(value: number | undefined): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : 0;
 }
 
+function deriveTotalInstanceCount(frame: RenderFrameIR): number {
+  let total = 0;
+  for (const op of frame.ops) {
+    if (op.kind !== 'drawPathInstances') continue;
+    total += op.instances.count;
+  }
+  if (!Number.isFinite(total) || total <= 0) return 0;
+  return Math.floor(total);
+}
+
+function deriveDrawOpCount(input: RenderInput): number {
+  const sinkCount = input.drawPrepSinks?.length;
+  if (typeof sinkCount === 'number' && Number.isFinite(sinkCount) && sinkCount >= 0) {
+    return Math.floor(sinkCount);
+  }
+  return input.frame.ops.length;
+}
+
+function deriveCanonicalTotalInstanceCount(input: RenderInput): number {
+  const sinks = input.drawPrepSinks;
+  if (!sinks || sinks.length === 0) {
+    return deriveTotalInstanceCount(input.frame);
+  }
+  const hasDynamicSink = sinks.some((sink) => sink.instanceCountMode === 'dynamic');
+  if (hasDynamicSink) {
+    return deriveTotalInstanceCount(input.frame);
+  }
+
+  // [LAW:one-source-of-truth] Compiler-emitted draw-prep sink metadata is the
+  // canonical static instance-count source when dynamic sinks are absent.
+  let total = 0;
+  for (const sink of sinks) {
+    total += sink.staticInstanceCount ?? 0;
+  }
+  if (!Number.isFinite(total) || total <= 0) return 0;
+  return Math.floor(total);
+}
+
 export function assertWebGPUStartupContract(canvas: HTMLCanvasElement): void {
   const gpu = (navigator as Navigator & { gpu?: unknown }).gpu;
   if (!gpu) {
@@ -106,7 +146,6 @@ export class WebGPURenderer {
   private lastResizeHeight = -1;
   private latestTelemetry: { meanMs: number; stdDevMs: number; sampleCount: number; frameCount: number } | null = null;
   private lifecycleState: RustRendererSchedulerState = 'Booting';
-  private readonly payloadPacker = new RustRenderPayloadPacker();
 
   private constructor(
     worker: Worker,
@@ -149,23 +188,6 @@ export class WebGPURenderer {
       throw new Error('Rust renderer worker is not bootstrapped');
     }
     this.syncCanvasSize(input.width, input.height);
-    const payload = this.payloadPacker.pack(input.frame, input.shapeBank, input.drawPrepSinks);
-    const payloadMessage: RustRendererWorkerInboundMessage = {
-      type: 'SYNC_RENDER_PAYLOAD',
-      topologyWords: payload.topologyWords,
-      instanceFloats: payload.instanceFloats,
-      indirectArgsWords: payload.indirectArgsWords,
-      vertexFloats: payload.vertexFloats,
-      indexWords: payload.indexWords,
-      drawRecordCount: payload.drawRecordCount,
-    };
-    this.worker.postMessage(payloadMessage, [
-      payload.topologyWords.buffer,
-      payload.instanceFloats.buffer,
-      payload.indirectArgsWords.buffer,
-      payload.vertexFloats.buffer,
-      payload.indexWords.buffer,
-    ]);
 
     // [LAW:dataflow-not-control-flow] Renderer updates one canonical shared
     // input buffer each frame. The worker hot path always executes and reads
@@ -183,10 +205,9 @@ export class WebGPURenderer {
     this.inputWords[INPUT_INDEX.audioMid] = coerceFinite(input.inputAudioMid);
     this.inputWords[INPUT_INDEX.audioHigh] = coerceFinite(input.inputAudioHigh);
     this.inputWords[INPUT_INDEX.gaugeActive] = coerceFinite(input.inputGaugeActive);
-    this.inputWords[INPUT_INDEX.drawOpCount] = input.frame.ops.length;
-    this.inputWords[INPUT_INDEX.totalInstanceCount] =
-      payload.instanceFloats.length / RUST_RENDER_INSTANCE_FLOATS;
-    this.inputWords[INPUT_INDEX.shapeBankWords] = payload.topologyWords.length;
+    this.inputWords[INPUT_INDEX.drawOpCount] = deriveDrawOpCount(input);
+    this.inputWords[INPUT_INDEX.totalInstanceCount] = deriveCanonicalTotalInstanceCount(input);
+    this.inputWords[INPUT_INDEX.shapeBankWords] = input.shapeBank.volatilePtr;
     Atomics.add(this.signalWords, 0, 1);
   }
 

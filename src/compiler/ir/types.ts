@@ -178,6 +178,13 @@ export interface InstanceDecl {
   readonly id: InstanceId;
   readonly domainType: DomainTypeId;
   readonly count: number | 'dynamic';
+  /**
+   * Dynamic count expression for runtime-resolved instance cardinality.
+   *
+   * Present only when `count === 'dynamic'`.
+   * Runtime evaluates this scalar expression each frame and clamps to maxCount.
+   */
+  readonly countExpr?: ValueExprId;
   readonly lifecycle: 'static' | 'dynamic' | 'pooled';
 
   /**
@@ -207,6 +214,23 @@ export interface InstanceDecl {
    */
   readonly shapeField?: ValueExprId;
 }
+
+/**
+ * Dynamic instance count specification used at instance creation boundaries.
+ */
+export interface DynamicInstanceCountSpec {
+  readonly kind: 'dynamic';
+  readonly countExpr: ValueExprId;
+  readonly maxCount: number;
+}
+
+/**
+ * Instance count specification accepted by IR builders.
+ *
+ * - `number`: static count
+ * - `DynamicInstanceCountSpec`: runtime-resolved dynamic count with fixed capacity
+ */
+export type InstanceCountSpec = number | DynamicInstanceCountSpec;
 
 // =============================================================================
 // Continuity System Types (spec: topics/11-continuity-system.md)

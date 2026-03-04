@@ -3,11 +3,14 @@ import type { ScheduleIR } from '../../backend/schedule-program';
 import type { RuntimeAddressTableIR } from '../program';
 import type { ValueExpr } from '../value-expr';
 import type { ValueExprId, ValueSlot } from '../Indices';
+import { payloadStride } from '../../../core/canonical-types';
+import { OpCode } from '../types';
 import type {
   Step,
   StepContinuityApply,
   StepFieldStateWrite,
   StepMaterialize,
+  PureFn,
   StepStateWrite,
 } from '../types';
 
@@ -64,7 +67,7 @@ export type NagaExpressionIR =
   | { readonly kind: 'access_index'; readonly base: number; readonly index: number }
   | {
       readonly kind: 'binary';
-      readonly op: 'add' | 'mul' | 'lt' | 'le' | 'gt' | 'ge' | 'eq' | 'ne';
+      readonly op: 'add' | 'sub' | 'mul' | 'div' | 'mod' | 'lt' | 'le' | 'gt' | 'ge' | 'eq' | 'ne';
       readonly left: number;
       readonly right: number;
     }
@@ -509,6 +512,22 @@ function emitAddressIndex(
   );
 }
 
+function resolveLaneExprForPlan(
+  ctx: LoweringCtx,
+  builtins: LoweringBuiltins,
+  laneExpr: number,
+  plan: SlotAddressPlan,
+  source: NagaSourceMapEntryIR,
+): number {
+  if (plan.laneCount > 1) {
+    return laneExpr;
+  }
+  return ctx.addExpression(
+    { kind: 'constant', constant: ctx.internNumberConstant(builtins.u32Type, 0) },
+    source,
+  );
+}
+
 function emitTypedCopy(
   ctx: LoweringCtx,
   builtins: LoweringBuiltins,
@@ -521,13 +540,15 @@ function emitTypedCopy(
   comment: string,
 ): void {
   const componentCount = Math.min(sourcePlan.stride, targetPlan.stride);
+  const sourceLaneExpr = resolveLaneExprForPlan(ctx, builtins, laneExpr, sourcePlan, source);
+  const targetLaneExpr = resolveLaneExprForPlan(ctx, builtins, laneExpr, targetPlan, source);
   // [LAW:dataflow-not-control-flow] Lowering always emits the same per-component
   // sequence; lane participation is encoded as data in address expressions.
   for (let componentIndex = 0; componentIndex < componentCount; componentIndex++) {
     const sourceIndex = emitAddressIndex(
       ctx,
       builtins,
-      laneExpr,
+      sourceLaneExpr,
       sourcePlan.offset,
       sourcePlan.laneStride,
       sourcePlan.componentStride,
@@ -537,7 +558,7 @@ function emitTypedCopy(
     const targetIndex = emitAddressIndex(
       ctx,
       builtins,
-      laneExpr,
+      targetLaneExpr,
       targetPlan.offset,
       targetPlan.laneStride,
       targetPlan.componentStride,
@@ -605,6 +626,343 @@ function deriveMaxActiveLanes(args: {
   return Number.isFinite(maxLaneCount) && maxLaneCount > 0 ? Math.trunc(maxLaneCount) : 1;
 }
 
+function inferComponentStride(expr: ValueExpr | undefined): number {
+  if (!expr) return 1;
+  try {
+    return Math.max(1, payloadStride(expr.type.payload));
+  } catch {
+    return 1;
+  }
+}
+
+function emitLiteralF32(
+  ctx: LoweringCtx,
+  builtins: LoweringBuiltins,
+  value: number,
+  source: NagaSourceMapEntryIR,
+): number {
+  return ctx.addExpression(
+    { kind: 'constant', constant: ctx.internNumberConstant(builtins.f32Type, value) },
+    source,
+  );
+}
+
+function emitLoadedF32FromPlan(
+  ctx: LoweringCtx,
+  builtins: LoweringBuiltins,
+  laneExpr: number,
+  plan: SlotAddressPlan,
+  buffer: 'arena_in' | 'state_in',
+  componentIndex: number,
+  source: NagaSourceMapEntryIR,
+): number | null {
+  if (plan.storage !== 'f32') {
+    return null;
+  }
+  const laneForPlan = resolveLaneExprForPlan(ctx, builtins, laneExpr, plan, source);
+  const address = emitAddressIndex(
+    ctx,
+    builtins,
+    laneForPlan,
+    plan.offset,
+    plan.laneStride,
+    plan.componentStride,
+    componentIndex,
+    source,
+  );
+  return ctx.addExpression({ kind: 'buffer_load', buffer, index: address }, source);
+}
+
+function emitPureFnF32(
+  ctx: LoweringCtx,
+  builtins: LoweringBuiltins,
+  fn: PureFn,
+  inputExprs: readonly number[],
+  source: NagaSourceMapEntryIR,
+): number | null {
+  if (inputExprs.length === 0) return null;
+  if (fn.kind !== 'opcode') return null;
+
+  switch (fn.opcode) {
+    case OpCode.Identity:
+      return inputExprs[0] ?? null;
+    case OpCode.Add: {
+      let acc = inputExprs[0]!;
+      for (let i = 1; i < inputExprs.length; i++) {
+        acc = ctx.addExpression({ kind: 'binary', op: 'add', left: acc, right: inputExprs[i]! }, source);
+      }
+      return acc;
+    }
+    case OpCode.Sub: {
+      if (inputExprs.length !== 2) return null;
+      return ctx.addExpression({ kind: 'binary', op: 'sub', left: inputExprs[0]!, right: inputExprs[1]! }, source);
+    }
+    case OpCode.Mul: {
+      let acc = inputExprs[0]!;
+      for (let i = 1; i < inputExprs.length; i++) {
+        acc = ctx.addExpression({ kind: 'binary', op: 'mul', left: acc, right: inputExprs[i]! }, source);
+      }
+      return acc;
+    }
+    case OpCode.Div: {
+      if (inputExprs.length !== 2) return null;
+      return ctx.addExpression({ kind: 'binary', op: 'div', left: inputExprs[0]!, right: inputExprs[1]! }, source);
+    }
+    case OpCode.Mod: {
+      if (inputExprs.length !== 2) return null;
+      return ctx.addExpression({ kind: 'binary', op: 'mod', left: inputExprs[0]!, right: inputExprs[1]! }, source);
+    }
+    case OpCode.Avg: {
+      let acc = inputExprs[0]!;
+      for (let i = 1; i < inputExprs.length; i++) {
+        acc = ctx.addExpression({ kind: 'binary', op: 'add', left: acc, right: inputExprs[i]! }, source);
+      }
+      const invN = emitLiteralF32(ctx, builtins, 1 / inputExprs.length, source);
+      return ctx.addExpression({ kind: 'binary', op: 'mul', left: acc, right: invN }, source);
+    }
+    case OpCode.Neg: {
+      if (inputExprs.length !== 1) return null;
+      const zero = emitLiteralF32(ctx, builtins, 0, source);
+      return ctx.addExpression({ kind: 'binary', op: 'sub', left: zero, right: inputExprs[0]! }, source);
+    }
+    default:
+      return null;
+  }
+}
+
+function emitMaterializeExprComponentF32(args: {
+  readonly ctx: LoweringCtx;
+  readonly builtins: LoweringBuiltins;
+  readonly laneExpr: number;
+  readonly componentIndex: number;
+  readonly exprId: ValueExprId;
+  readonly schedule: ScheduleIR;
+  readonly runtimeAddressTable: RuntimeAddressTableIR;
+  readonly valueExprs: readonly ValueExpr[];
+  readonly source: NagaSourceMapEntryIR;
+  readonly targetPlan: SlotAddressPlan;
+  readonly cache: Map<string, number>;
+  readonly depth: number;
+}): number | null {
+  if (args.depth > 128) return null;
+  const cacheKey = `${args.exprId as number}:${args.componentIndex}`;
+  const cached = args.cache.get(cacheKey);
+  if (cached !== undefined) return cached;
+
+  const expr = args.valueExprs[args.exprId as number];
+  if (!expr) return null;
+  const component = Math.max(0, args.componentIndex);
+
+  const emitFromExprInput = (inputExprId: ValueExprId, requestedComponent: number): number | null => {
+    const inputExpr = args.valueExprs[inputExprId as number];
+    const inputStride = inferComponentStride(inputExpr);
+    const normalizedComponent = inputStride > 1
+      ? Math.min(requestedComponent, inputStride - 1)
+      : 0;
+    return emitMaterializeExprComponentF32({
+      ...args,
+      exprId: inputExprId,
+      componentIndex: normalizedComponent,
+      depth: args.depth + 1,
+    });
+  };
+
+  const resolved: number | null = (() => {
+    switch (expr.kind) {
+      case 'const': {
+        const value = expr.value;
+        if (value.kind === 'float' || value.kind === 'int') {
+          return emitLiteralF32(args.ctx, args.builtins, value.value, args.source);
+        }
+        if (value.kind === 'bool') {
+          return emitLiteralF32(args.ctx, args.builtins, value.value ? 1 : 0, args.source);
+        }
+        if (value.kind === 'vec2') {
+          const scalar = value.value[Math.min(component, 1)] ?? 0;
+          return emitLiteralF32(args.ctx, args.builtins, scalar, args.source);
+        }
+        if (value.kind === 'color') {
+          const rgba = value.value;
+          const scalar = rgba[Math.min(component, 3)] ?? 0;
+          return emitLiteralF32(args.ctx, args.builtins, scalar, args.source);
+        }
+        return null;
+      }
+      case 'extract':
+        return emitFromExprInput(expr.input, expr.componentIndex);
+      case 'construct': {
+        const componentExpr = expr.components[component];
+        if (componentExpr === undefined) return null;
+        return emitFromExprInput(componentExpr, 0);
+      }
+      case 'kernel': {
+        switch (expr.kernelKind) {
+          case 'broadcast': {
+            const explicit = expr.oneComponents?.[component];
+            if (explicit !== undefined) {
+              return emitFromExprInput(explicit, 0);
+            }
+            return emitFromExprInput(expr.one, component);
+          }
+          case 'map': {
+            const input = emitFromExprInput(expr.input, component);
+            if (input === null) return null;
+            return emitPureFnF32(args.ctx, args.builtins, expr.fn, [input], args.source);
+          }
+          case 'zip': {
+            const emittedInputs: number[] = [];
+            for (const inputExprId of expr.inputs) {
+              const emittedInput = emitFromExprInput(inputExprId, component);
+              if (emittedInput === null) return null;
+              emittedInputs.push(emittedInput);
+            }
+            return emitPureFnF32(args.ctx, args.builtins, expr.fn, emittedInputs, args.source);
+          }
+          case 'zipPromote': {
+            const emittedInputs: number[] = [];
+            const fieldInput = emitFromExprInput(expr.field, component);
+            if (fieldInput === null) return null;
+            emittedInputs.push(fieldInput);
+            for (const one of expr.ones) {
+              const oneInput = emitFromExprInput(one, component);
+              if (oneInput === null) return null;
+              emittedInputs.push(oneInput);
+            }
+            return emitPureFnF32(args.ctx, args.builtins, expr.fn, emittedInputs, args.source);
+          }
+          case 'reduce':
+          case 'pathDerivative':
+          case 'pathSample':
+            return null;
+          default: {
+            const _exhaustive: never = expr;
+            void _exhaustive;
+            return null;
+          }
+        }
+      }
+      case 'intrinsic': {
+        if (expr.intrinsicKind !== 'property') return null;
+        if (expr.intrinsic === 'index') {
+          return args.ctx.addExpression({ kind: 'as', to: 'f32', expr: args.laneExpr }, args.source);
+        }
+        if (expr.intrinsic === 'normalizedIndex') {
+          const denom = Math.max(1, args.targetPlan.laneCount - 1);
+          const inv = emitLiteralF32(args.ctx, args.builtins, 1 / denom, args.source);
+          const laneAsFloat = args.ctx.addExpression({ kind: 'as', to: 'f32', expr: args.laneExpr }, args.source);
+          return args.ctx.addExpression({ kind: 'binary', op: 'mul', left: laneAsFloat, right: inv }, args.source);
+        }
+        return null;
+      }
+      case 'state': {
+        const stateSlot = findStateSlotStart(args.schedule, expr.stateKey);
+        if (stateSlot === null) return null;
+        const statePlan = createStateSlotAddressPlan(args.schedule, stateSlot);
+        if (!statePlan) return null;
+        return emitLoadedF32FromPlan(
+          args.ctx,
+          args.builtins,
+          args.laneExpr,
+          statePlan,
+          'state_in',
+          component,
+          args.source,
+        );
+      }
+      case 'time':
+      case 'external':
+      case 'shapeRef':
+      case 'eventRead':
+      case 'event':
+      case 'hslToRgb':
+        return null;
+      default:
+        break;
+    }
+
+    const sourceSlot = resolveInputSlotFromExpr(args.exprId as number, args.runtimeAddressTable);
+    if (sourceSlot === null) {
+      return null;
+    }
+    const sourcePlan = toSlotAddressPlan(args.runtimeAddressTable, sourceSlot);
+    if (!sourcePlan) return null;
+    return emitLoadedF32FromPlan(
+      args.ctx,
+      args.builtins,
+      args.laneExpr,
+      sourcePlan,
+      'arena_in',
+      component,
+      args.source,
+    );
+  })();
+
+  if (resolved !== null) {
+    args.cache.set(cacheKey, resolved);
+  }
+  return resolved;
+}
+
+function emitMaterializeFromExpression(args: {
+  readonly ctx: LoweringCtx;
+  readonly builtins: LoweringBuiltins;
+  readonly laneExpr: number;
+  readonly step: StepMaterialize;
+  readonly stepIndex: number;
+  readonly schedule: ScheduleIR;
+  readonly runtimeAddressTable: RuntimeAddressTableIR;
+  readonly valueExprs: readonly ValueExpr[];
+  readonly source: NagaSourceMapEntryIR;
+  readonly targetPlan: SlotAddressPlan;
+}): boolean {
+  if (args.targetPlan.storage !== 'f32') {
+    return false;
+  }
+  const cache = new Map<string, number>();
+  const targetLaneExpr = resolveLaneExprForPlan(
+    args.ctx,
+    args.builtins,
+    args.laneExpr,
+    args.targetPlan,
+    args.source,
+  );
+
+  for (let componentIndex = 0; componentIndex < args.targetPlan.stride; componentIndex++) {
+    const valueExpr = emitMaterializeExprComponentF32({
+      ...args,
+      exprId: args.step.field,
+      componentIndex,
+      cache,
+      depth: 0,
+    });
+    if (valueExpr === null) {
+      return false;
+    }
+    const targetIndex = emitAddressIndex(
+      args.ctx,
+      args.builtins,
+      targetLaneExpr,
+      args.targetPlan.offset,
+      args.targetPlan.laneStride,
+      args.targetPlan.componentStride,
+      componentIndex,
+      args.source,
+    );
+    args.ctx.addStatement(
+      {
+        kind: 'store',
+        buffer: 'arena_out',
+        index: targetIndex,
+        value: valueExpr,
+        comment: `step ${args.stepIndex} kind=materialize expr-lowered`,
+      },
+      args.source,
+    );
+  }
+
+  return true;
+}
+
 function lowerStep(
   ctx: LoweringCtx,
   builtins: LoweringBuiltins,
@@ -634,6 +992,22 @@ function lowerStep(
       }
       const exprId = step.field as number;
       const expr = valueExprs[exprId];
+      // [LAW:one-source-of-truth] Compute-owned materialize lowering first
+      // lowers from canonical ValueExpr DAG, then falls back to slot-copy path.
+      if (emitMaterializeFromExpression({
+        ctx,
+        builtins,
+        laneExpr,
+        step,
+        stepIndex,
+        schedule,
+        runtimeAddressTable,
+        valueExprs,
+        source,
+        targetPlan,
+      })) {
+        return;
+      }
       const sourceBinding = resolveStepInputSlot(step, expr, schedule, runtimeAddressTable);
       if (!sourceBinding) {
         coverage.droppedComputeStepCount += 1;
