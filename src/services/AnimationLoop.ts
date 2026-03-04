@@ -28,6 +28,7 @@ import type { RootStore } from '../stores';
 import type { RenderFrameIR } from '../render/types';
 import { isRuntimeConsoleEnabled } from '../testing/test-params';
 import { markRuntimeFrameAdvanced } from '../testing/runtime-probe';
+import type { RuntimeHotpathWorkerClient } from './RuntimeHotpathWorkerClient';
 
 export interface AnimationLoopState {
   frameCount: number;
@@ -46,6 +47,7 @@ export interface AnimationLoopDeps {
   getCurrentState: () => RuntimeState | null;
   getCanvas: () => HTMLCanvasElement | null;
   getRenderer: () => WebGPURenderer | null;
+  getRuntimeHotpath?: () => RuntimeHotpathWorkerClient | null;
   getArena: () => RenderBufferArena | null;
   store: RootStore;
   onStatsUpdate?: (statsText: string) => void;
@@ -203,19 +205,73 @@ export function executeAnimationFrame(
   deps: AnimationLoopDeps,
   state: AnimationLoopState
 ): void {
-  const { getCurrentProgram, getCurrentState, getCanvas, getRenderer, getArena, store, onStatsUpdate } = deps;
+  const {
+    getCurrentProgram,
+    getCurrentState,
+    getCanvas,
+    getRenderer,
+    getRuntimeHotpath,
+    getArena,
+    store,
+    onStatsUpdate,
+  } = deps;
 
   const currentProgram = getCurrentProgram();
-  const currentState = getCurrentState();
   const canvas = getCanvas();
   const renderer = getRenderer();
-  const arena = getArena();
 
-  if (!canvas || !renderer || !arena) {
+  if (!canvas || !renderer) {
     throw new Error('AnimationLoop: WebGPU runtime contract requires canvas, renderer, and arena');
   }
 
-  if (!currentProgram || !currentState) {
+  if (!currentProgram) {
+    return;
+  }
+
+  const runtimeHotpath = getRuntimeHotpath?.() ?? null;
+  if (runtimeHotpath) {
+    const { zoom, pan } = store.viewport;
+    const renderWidth = Math.max(1, Math.floor(store.viewport.canvasWidth || canvas.width));
+    const renderHeight = Math.max(1, Math.floor(store.viewport.canvasHeight || canvas.height));
+    renderer.resizeCanvas(renderWidth, renderHeight);
+    runtimeHotpath.setViewportFrame({
+      width: renderWidth,
+      height: renderHeight,
+      zoom,
+      panX: pan.x,
+      panY: pan.y,
+    });
+
+    state.frameCount++;
+    const now = performance.now();
+    if (now - state.lastFpsUpdate > 500) {
+      state.fps = Math.round((state.frameCount * 1000) / (now - state.lastFpsUpdate));
+      const workerStats = runtimeHotpath.getLatestStats();
+      const schedulerState = renderer.getLifecycleState();
+      const telemetry = renderer.getLatestRuntimeTelemetry();
+      const statsText = `FPS: ${state.fps} | DrawOps: ${workerStats?.drawOpCount ?? 0} | `
+        + `Tick: ${(workerStats?.lastTickMs ?? 0).toFixed(1)}ms`;
+      onStatsUpdate?.(statsText);
+      if (RUNTIME_CONSOLE_ENABLED) {
+        console.info(
+          `[runtimeConsole] ${statsText}`
+          + ` | sinkWords=${workerStats?.sinkWordCount ?? 0}`
+          + ` | scheduler=${schedulerState}`
+          + ` | workerFrames=${workerStats?.frameCount ?? telemetry?.frameCount ?? 0}`,
+        );
+      }
+      state.frameCount = 0;
+      state.lastFpsUpdate = now;
+    }
+    return;
+  }
+
+  const currentState = getCurrentState();
+  const arena = getArena();
+  if (!arena) {
+    throw new Error('AnimationLoop: WebGPU runtime contract requires canvas, renderer, and arena');
+  }
+  if (!currentState) {
     return;
   }
 
