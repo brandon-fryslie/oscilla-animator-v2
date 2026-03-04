@@ -6,6 +6,7 @@
  * Two params:
  * - `loadDemoPatch=<filename>` — pre-React, raw URLSearchParams (EXCEPTION: cannot use nuqs)
  * - `showPreview=<true|false|1|0>` — nuqs hook for minimal preview layout
+ * - `runtimeConsole=<true|false|1|0>` — enable periodic runtime frame logs in browser console
  *
  * [LAW:one-source-of-truth] All test param logic lives here.
  * [LAW:single-enforcer] Pre-React validation runs once in main.ts.
@@ -67,6 +68,7 @@ export function consumeTestDemoFilename(): string | null {
 // ─── showPreview (nuqs) ─────────────────────────────────────────────────────
 
 const VALID_SHOW_PREVIEW = new Set(['true', 'false', '1', '0']);
+const VALID_RUNTIME_CONSOLE = new Set(['true', 'false', '1', '0']);
 
 /**
  * Validate ?showPreview= early (pre-React).
@@ -79,6 +81,21 @@ export function validateShowPreview(): void {
   if (value !== null && !VALID_SHOW_PREVIEW.has(value)) {
     throw new Error(
       `[test-params] Invalid showPreview value: "${value}". Must be true/false/1/0.`
+    );
+  }
+}
+
+/**
+ * Validate ?runtimeConsole= early (pre-React).
+ * Throws on invalid values — fast feedback for debugging sessions.
+ * No-op if param is absent.
+ */
+export function validateRuntimeConsole(): void {
+  const params = new URLSearchParams(window.location.search);
+  const value = params.get('runtimeConsole');
+  if (value !== null && !VALID_RUNTIME_CONSOLE.has(value)) {
+    throw new Error(
+      `[test-params] Invalid runtimeConsole value: "${value}". Must be true/false/1/0.`
     );
   }
 }
@@ -97,4 +114,16 @@ export const parseAsStrictBoolean = createParser({
 export function useShowPreview(): boolean {
   const [value] = useQueryState('showPreview', parseAsStrictBoolean.withDefault(false));
   return value;
+}
+
+/**
+ * Returns true when runtime console frame logs are enabled via
+ * ?runtimeConsole=true|1.
+ *
+ * [LAW:one-source-of-truth] Runtime console query parsing is centralized with
+ * other startup query params to avoid drift.
+ */
+export function isRuntimeConsoleEnabled(): boolean {
+  const value = new URLSearchParams(window.location.search).get('runtimeConsole');
+  return value === 'true' || value === '1';
 }
