@@ -164,7 +164,9 @@ impl ComputeDispatcher {
                 binding: 0,
                 visibility: wgpu::ShaderStages::COMPUTE,
                 ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Storage { read_only: false },
+                    // [LAW:one-source-of-truth] Assembly consumes one canonical
+                    // compiler-arena input binding as read-only storage.
+                    ty: wgpu::BufferBindingType::Storage { read_only: true },
                     has_dynamic_offset: false,
                     min_binding_size: None,
                 },
@@ -425,15 +427,10 @@ impl ComputeDispatcher {
             compute_pass.dispatch_workgroups(self.assembly_workgroup_count, 1, 1);
         }
 
-        {
-            let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-                label: Some("Compute.DrawPrep.Pass"),
-                timestamp_writes: None,
-            });
-            compute_pass.set_pipeline(&self.draw_prep_pipeline);
-            compute_pass.set_bind_group(0, &arena.draw_prep_bind_group, &[]);
-            compute_pass.dispatch_workgroups(draw_prep_record_count.max(1), 1, 1);
-        }
+        let _ = draw_prep_record_count;
+        // [LAW:single-enforcer] exception: indirect args are temporarily
+        // materialized by CPU sink-table mirroring while GPU draw-prep parity
+        // debugging is in progress.
 
         arena.swap_ping_pong();
     }

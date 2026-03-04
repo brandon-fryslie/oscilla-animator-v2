@@ -347,6 +347,10 @@ function __wbg_get_imports() {
             const ret = arg0.length;
             return ret;
         },
+        __wbg_load_d8bce92127bf3f7d: function() { return handleError(function (arg0, arg1) {
+            const ret = Atomics.load(arg0, arg1 >>> 0);
+            return ret;
+        }, arguments); },
         __wbg_mapAsync_f7fe2e4825742580: function(arg0, arg1, arg2, arg3) {
             const ret = arg0.mapAsync(arg1 >>> 0, arg2, arg3);
             return ret;
@@ -399,6 +403,10 @@ function __wbg_get_imports() {
         },
         __wbg_new_typed_bccac67128ed885a: function() {
             const ret = new Array();
+            return ret;
+        },
+        __wbg_new_with_byte_offset_and_length_4b177e4f97a08c76: function(arg0, arg1, arg2) {
+            const ret = new Int32Array(arg0, arg1 >>> 0, arg2 >>> 0);
             return ret;
         },
         __wbg_new_with_byte_offset_and_length_5853fcf6a5f0f4a8: function(arg0, arg1, arg2) {
@@ -1001,7 +1009,7 @@ function __wbg_get_imports() {
             arg0.writeBuffer(arg1, arg2, arg3, arg4, arg5);
         }, arguments); },
         __wbindgen_cast_0000000000000001: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { dtor_idx: 10, function: Function { arguments: [F64], shim_idx: 11, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+            // Cast intrinsic for `Closure(Closure { dtor_idx: 3, function: Function { arguments: [F64], shim_idx: 4, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
             const ret = makeMutClosure(arg0, arg1, wasm.wasm_bindgen__closure__destroy__h22c5c9496e43279b, wasm_bindgen__convert__closures_____invoke__h8725eb454c15ba22);
             return ret;
         },

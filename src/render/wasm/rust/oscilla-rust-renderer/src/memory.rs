@@ -438,6 +438,21 @@ impl GpuMemoryArena {
         }
     }
 
+    pub fn write_indirect_words(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        words: &[u32],
+    ) {
+        let resized = self.ensure_indirect_capacity(device, words.len());
+        if resized {
+            self.rebuild_draw_prep_bind_group(device);
+        }
+        if !words.is_empty() {
+            queue.write_buffer(&self.indirect_buffer, 0, cast_slice(words));
+        }
+    }
+
     fn create_instance_buffer(device: &wgpu::Device, size_bytes: u64) -> wgpu::Buffer {
         device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Render.InstanceBuffer"),
