@@ -62,6 +62,12 @@ describe('naga lowering artifact', () => {
 
     const globals = artifact.module.global_variables.map((g) => g.name);
     expect(globals).toEqual(expect.arrayContaining(['arena_in', 'arena_out', 'state_in', 'state_out', 'uniforms']));
+
+    const structNames = artifact.module.types
+      .filter((type) => type.kind === 'struct')
+      .map((type) => type.name);
+    const collidingNames = structNames.filter((name) => globals.includes(name));
+    expect(collidingNames).toEqual([]);
   });
 
   it('records source-map provenance for generated expressions and statements', () => {
