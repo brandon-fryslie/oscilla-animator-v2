@@ -249,10 +249,12 @@ function deriveExpectedLaneCount(
     return 1;
   }
   const instance = instances.get(cardinality.instance.instanceId as InstanceId);
-  if (!instance || typeof instance.count !== 'number') {
+  if (!instance) {
     return null;
   }
-  return instance.count;
+  // [LAW:one-source-of-truth] Runtime lane cardinality resolves from canonical
+  // instance declaration capacity (dynamic instances use maxCount).
+  return typeof instance.count === 'number' ? instance.count : instance.maxCount;
 }
 
 function assertRuntimeSlotWrite(
@@ -391,48 +393,6 @@ export function executeFrame(
   };
   for (const step of steps) {
     switch (step.kind) {
-      case 'evalOne': {
-        enterRuntimeFrameSegment(state, resolvePhase1ValueSegment());
-        const targetSlot = step.target;
-        const lookup = resolveSlotOffsetFromMap(slotLookupMap, targetSlot);
-        const { storage, slot, stride } = lookup;
-
-        if (isNumericStorage(storage)) {
-          const arenaDesc = resolveArenaDescriptor(slotToArena, lookup);
-
-          // [LAW:one-source-of-truth] Evaluate one-lane values through the same
-          // materialization path as many-lane values (count=1).
-          const buffer = materializeValueExpr(
-            step.expr,
-            program.valueExprs,
-            SCALAR_INSTANCE_ID,
-            1,
-            state,
-            program,
-            undefined,
-            MATERIALIZE_SCRATCH,
-            pureFnContext,
-          );
-          arenaEncodeFromAoS(state.arena, arenaDesc, buffer);
-          if (buffer.length < stride) {
-            throw new Error(
-              'evalOne: materialized buffer too small for slot ' + slot + ' (need ' + stride + ', got ' + buffer.length + ')',
-            );
-          }
-
-          // Debug tap: Record each component value
-          for (let i = 0; i < stride; i++) {
-            state.tap?.recordSlotValue?.((slot + i) as ValueSlot, readCanonicalNumeric(slotToArena, state, lookup, i));
-          }
-        } else {
-          throw new Error('evalOne: unsupported storage type \'' + storage + '\' for slot ' + slot + ' expr ' + step.expr);
-        }
-        if (assertCardinalitySlotWrites) {
-          assertRuntimeSlotWrite(slotLookupMap, instances, step.kind, targetSlot, 'signal', 1);
-        }
-        break;
-      }
-
       case 'eventDispatch': {
         enterRuntimeFrameSegment(state, 'phase1-event-dispatch');
         eventDispatchSeen = true;
@@ -454,7 +414,9 @@ export function executeFrame(
         // Use the instanceId from the schedule step (set by schedule-program.ts)
         // rather than deriving from the ValueExpr type, which may have a stale placeholder
         const instanceDecl = instances.get(step.instanceId);
-        const count = instanceDecl && typeof instanceDecl.count === 'number' ? instanceDecl.count : 0;
+        const count = instanceDecl
+          ? (typeof instanceDecl.count === 'number' ? instanceDecl.count : instanceDecl.maxCount)
+          : 0;
         // [LAW:one-source-of-truth] Arena lookup via ExprAddressTable — no direct arenaLayout access.
         const arenaDesc = slotToArena.get(step.target);
         if (!arenaDesc || arenaDesc.offset < 0 || arenaDesc.length <= 0) {
@@ -517,8 +479,7 @@ export function executeFrame(
           break;
         }
 
-        // Resolve count (dynamic counts need evaluation)
-        const count = typeof instance.count === 'number' ? instance.count : 0;
+        const count = typeof instance.count === 'number' ? instance.count : instance.maxCount;
         if (count === 0) break;
 
         const seed = instance.elementIdSeed ?? 0;

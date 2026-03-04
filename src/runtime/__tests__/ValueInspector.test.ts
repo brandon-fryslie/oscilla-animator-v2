@@ -6,7 +6,7 @@ import {
 } from '../ValueInspector';
 import type { SlotLookup } from '../ExprAddressTable';
 import type { ValueSlot } from '../../compiler/ir/Indices';
-import { createRuntimeState, writeShape2D } from '../RuntimeState';
+import { createRuntimeState } from '../RuntimeState';
 import { canonicalScalar } from '../../core/canonical-types';
 import { FLOAT } from '../../core/canonical-types/payloads';
 import { unitNone } from '../../core/canonical-types/units';
@@ -36,7 +36,7 @@ function makeLookup(slot: number, storage: SlotLookup['storage'], offset: number
 
 describe('readSlotValue', () => {
   it('reads scalar f32 value', () => {
-    const state = createRuntimeState(10, 0, 0, 0, 0, 20);
+    const state = createRuntimeState(0, 0, 0, 20);
     state.arena[3] = 42.5;
 
     const lookup = makeLookup(3, 'f32', 3, 1);
@@ -54,7 +54,7 @@ describe('readSlotValue', () => {
   });
 
   it('reads strided f32 value (vec3)', () => {
-    const state = createRuntimeState(20, 0, 0, 0, 0, 40);
+    const state = createRuntimeState(0, 0, 0, 40);
     state.arena[5] = 1.0;
     state.arena[6] = 2.0;
     state.arena[7] = 3.0;
@@ -73,36 +73,11 @@ describe('readSlotValue', () => {
     }
   });
 
-  it('reads shape2d records from the canonical shape2d bank', () => {
-    const state = createRuntimeState(10);
-    state.values.shape2d = new Uint32Array(8);
-    writeShape2D(state.values.shape2d, 0, {
-      topologyId: 7,
-      pointsFieldSlot: 13,
-      pointsCount: 24,
-      styleRef: 2,
-      flags: 5,
-    });
-
-    const lookup = makeLookup(4, 'shape2d', 0, 1);
-    const value = readSlotValue(state, lookup);
-
-    expect(value.kind).toBe('object');
-    if (value.kind === 'object') {
-      expect(value.ref).toEqual({
-        topologyId: 7,
-        pointsFieldSlot: 13,
-        pointsCount: 24,
-        styleRef: 2,
-        flags: 5,
-      });
-    }
-  });
 });
 
 describe('readEventSlotValue', () => {
   it('reads unfired event', () => {
-    const state = createRuntimeState(10, 0, 5);
+    const state = createRuntimeState(0, 5);
     state.eventScalars[2] = 0;
 
     const value = readEventSlotValue(state, 2);
@@ -110,7 +85,7 @@ describe('readEventSlotValue', () => {
   });
 
   it('reads fired event', () => {
-    const state = createRuntimeState(10, 0, 5);
+    const state = createRuntimeState(0, 5);
     state.eventScalars[2] = 1;
 
     const value = readEventSlotValue(state, 2);

@@ -15,7 +15,6 @@ import type { RuntimeState } from './RuntimeState';
 import {
   SHAPE_BANK_HEADER_WORDS,
   SHAPE_BANK_NO_CONTROL_POINT_SLOT,
-  Shape2DFlags,
   allocShapeBankWords,
   writeShapeBankHandleMetadata,
   writeShapeBankHeader,
@@ -84,7 +83,9 @@ function evaluateShapeRefHandle(
   const topology = getProgramTopology(program, expr.topologyId);
   const isPath = isPathTopology(topology);
   const vertexCount = isPath ? topology.totalControlPoints : 0;
-  const flags = isPath && topology.closed ? Shape2DFlags.CLOSED : 0;
+  // [LAW:one-source-of-truth] ShapeBank header flags are encoded directly at
+  // handle materialization (bit0 = closed path).
+  const flags = isPath && topology.closed ? 1 : 0;
   const controlPointSlot = resolveShapeControlPointSlot(expr, program, isPath);
   const handle = allocShapeBankWords(shapeBank, SHAPE_BANK_HEADER_WORDS);
   // [LAW:one-source-of-truth] Handle semantics are anchored in ShapeBank:
@@ -144,7 +145,9 @@ function materializeReduceScalar(
   const instanceRef = card.instance;
   const reduceInstanceId = (typeof instanceRef === 'object' ? instanceRef.instanceId : instanceRef) as InstanceId;
   const instanceDecl = program.schedule.instances.get(reduceInstanceId);
-  const laneCount = instanceDecl && typeof instanceDecl.count === 'number' ? instanceDecl.count : 0;
+  const laneCount = instanceDecl
+    ? (typeof instanceDecl.count === 'number' ? instanceDecl.count : instanceDecl.maxCount)
+    : 0;
   if (laneCount <= 0) {
     return 0;
   }
@@ -611,8 +614,9 @@ function materializeKernel(
       const sourceInstRef = sourceInstanceId.instance;
       const sourceInstId = (typeof sourceInstRef === 'object' ? sourceInstRef.instanceId : sourceInstRef) as InstanceId;
       const sourceDecl = program.schedule.instances.get(sourceInstId);
-      const rawCount = sourceDecl ? sourceDecl.count : 0;
-      const sourceCount = typeof rawCount === 'number' ? rawCount : 0;
+      const sourceCount = sourceDecl
+        ? (typeof sourceDecl.count === 'number' ? sourceDecl.count : sourceDecl.maxCount)
+        : 0;
 
       // Materialize controlPoints with source instance count
       const cpBuf = materializeValueExpr(

@@ -46,7 +46,7 @@ function mockProgram(fieldExprToSlot: ReadonlyMap<number, number> = new Map()): 
 }
 
 function createState(valueExprCount: number) {
-  const state = createRuntimeState(32, 0, 0, 0, valueExprCount, 32);
+  const state = createRuntimeState(0, 0, valueExprCount, 32);
   state.time = {
     tAbsMs: 0,
     tMs: 0,

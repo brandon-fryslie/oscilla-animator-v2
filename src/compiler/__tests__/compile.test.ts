@@ -9,7 +9,7 @@ import { buildPatch } from '../../graph';
 import { compile } from '../compile';
 import type { ScheduleIR } from '../backend/schedule-program';
 import { SCALAR_INSTANCE_ID } from '../ir/Indices';
-import type { StepEvalOne, StepMaterialize } from '../ir/types';
+import type { StepMaterialize } from '../ir/types';
 
 describe('compile', () => {
   describe('TimeRoot validation', () => {
@@ -230,10 +230,10 @@ describe('TimeModel', () => {
 });
 
   describe('Debug Probe Support', () => {
-  it('generates scalar write steps for one-cardinality values with registered slots (enables debug tap)', () => {
+  it('generates scalar materialize steps for one-cardinality values with registered slots (enables debug tap)', () => {
     // This test verifies that the compiler generates scalar slot write steps,
     // which are necessary for the runtime tap to record slot values.
-    // Without evalOne/materialize steps, the debug probe cannot show scalar values.
+    // Without scalar materialize steps, the debug probe cannot show scalar values.
     const patch = buildPatch((b) => {
       const time = b.addBlock('InfiniteTimeRoot');
       b.setPortDefault(time, 'periodAMs', 1000);
@@ -249,22 +249,16 @@ describe('TimeModel', () => {
     if (result.kind === 'ok') {
       const schedule = result.program.schedule as ScheduleIR;
       const scalarWriteSteps = schedule.steps.filter(
-        (s): s is StepEvalOne | StepMaterialize =>
-          s.kind === 'evalOne' ||
-          (s.kind === 'materialize' && s.instanceId === SCALAR_INSTANCE_ID),
+        (s): s is StepMaterialize =>
+          s.kind === 'materialize' && s.instanceId === SCALAR_INSTANCE_ID,
       );
 
       // Should have at least one scalar write step for scheduled scalar slots
       expect(scalarWriteSteps.length).toBeGreaterThan(0);
 
       for (const step of scalarWriteSteps) {
-        if (step.kind === 'evalOne') {
-          expect(typeof step.expr).toBe('number');
-          expect(typeof step.target).toBe('number');
-        } else {
-          expect(typeof step.field).toBe('number');
-          expect(typeof step.target).toBe('number');
-        }
+        expect(typeof step.field).toBe('number');
+        expect(typeof step.target).toBe('number');
       }
     }
   });
@@ -312,12 +306,14 @@ describe('TimeModel', () => {
         expect(['float', 'int', 'bool']).toContain(expr.type.payload.kind);
       }
 
-      const hasEvalOneForSameSlot = schedule.steps.some(
-        (step) =>
-          step.kind === 'evalOne' &&
-          step.target === scalarConstMat.target,
-      );
-      expect(hasEvalOneForSameSlot).toBe(false);
+      expect(
+        schedule.steps.some(
+          (step) =>
+            step.kind === 'materialize'
+            && step.instanceId === SCALAR_INSTANCE_ID
+            && step.target === scalarConstMat.target,
+        ),
+      ).toBe(true);
     }
   });
 
@@ -363,12 +359,14 @@ describe('TimeModel', () => {
       expect(scalarKernelMat).toBeDefined();
       if (!scalarKernelMat) return;
 
-      const hasEvalOneForSameSlot = schedule.steps.some(
-        (step) =>
-          step.kind === 'evalOne' &&
-          step.target === scalarKernelMat.target,
-      );
-      expect(hasEvalOneForSameSlot).toBe(false);
+      expect(
+        schedule.steps.some(
+          (step) =>
+            step.kind === 'materialize'
+            && step.instanceId === SCALAR_INSTANCE_ID
+            && step.target === scalarKernelMat.target,
+        ),
+      ).toBe(true);
     }
   });
 
@@ -476,7 +474,7 @@ describe('TimeModel', () => {
       const firstRender = steps.findIndex(s => s.kind === 'render');
       const scalarWriteIndices = steps
         .map((s, i) =>
-          s.kind === 'evalOne' || (s.kind === 'materialize' && s.instanceId === SCALAR_INSTANCE_ID)
+          s.kind === 'materialize' && s.instanceId === SCALAR_INSTANCE_ID
             ? i
             : -1,
         )
