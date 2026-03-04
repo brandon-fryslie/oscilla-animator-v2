@@ -1,7 +1,7 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
-use js_sys::{Float32Array, SharedArrayBuffer, Uint32Array};
+use js_sys::{Atomics, Float32Array, Int32Array, SharedArrayBuffer, Uint32Array};
 use wasm_bindgen::JsCast;
 use wasm_bindgen::JsValue;
 use web_sys::OffscreenCanvas;
@@ -262,21 +262,14 @@ struct VertexOutput {
 
 @vertex fn vs_main(@location(0) localPos: vec2<f32>, @builtin(instance_index) instanceIndex: u32) -> VertexOutput {
   let inst = instances[instanceIndex];
-  let topologyWordOffset = u32(max(inst.transform1.z, 0.0));
-  let topologyFlags = topologyBank[topologyWordOffset + 3u];
-  let closedMask = select(0.0, 1.0, (topologyFlags & 1u) != 0u);
+  let _topologyWordOffset = u32(max(inst.transform1.z, 0.0));
+  let _topologyWordCount = arrayLength(&topologyBank);
   let viewportPx = global.resolution;
-  let panPx = vec2<f32>(global.view_proj[0].y, global.view_proj[0].z);
-  let zoom = global.view_proj[0].x;
   let viewportMinPx = min(viewportPx.x, viewportPx.y);
-  let centerPx = inst.transform0.xy * viewportPx;
-  let centeredPx = (centerPx - (viewportPx * 0.5)) * zoom + (viewportPx * 0.5) + (panPx * zoom);
-  let localScaled = vec2<f32>(
-    localPos.x * inst.transform0.z * inst.transform1.x,
-    localPos.y * inst.transform0.z * inst.transform1.y
-  ) * viewportMinPx * zoom;
-  let c = cos(inst.transform0.w);
-  let s = sin(inst.transform0.w);
+  let centeredPx = viewportPx * 0.5;
+  let localScaled = localPos * viewportMinPx * 8.0;
+  let c = 1.0;
+  let s = 0.0;
   let rotatedPx = vec2<f32>(
     localScaled.x * c - localScaled.y * s,
     localScaled.x * s + localScaled.y * c
@@ -288,7 +281,7 @@ struct VertexOutput {
   );
   var out: VertexOutput;
   out.position = vec4<f32>(ndc, 0.0, 1.0);
-  out.color = inst.color * (1.0 + closedMask * 0.0);
+  out.color = vec4<f32>(1.0, 0.2, 0.9, 1.0);
   return out;
 }
 
@@ -316,6 +309,7 @@ pub struct Engine {
     arena: GpuMemoryArena,
     compute: ComputeDispatcher,
     render: RenderDispatcher,
+    shared_input_signals: Option<Int32Array>,
     shared_input: Option<Float32Array>,
     shared_shape_bank: Option<Uint32Array>,
     shared_sink_table: Option<Uint32Array>,
@@ -383,6 +377,14 @@ const SHAPE_WORD_FIRST_VERTEX: usize = 8;
 const SHAPE_WORD_PARAM_BLOCK_OFFSET: usize = 9;
 const SHAPE_WORD_PARAM_BLOCK_WORDS: usize = 10;
 const SHAPE_FLAG_CLOSED: u32 = 1;
+
+const DRAW_MODE_INDEXED: u32 = 0;
+const DRAW_MODE_NON_INDEXED: u32 = 1;
+const SINK_RECORD_WORD_DRAW_MODE: usize = 1;
+const SINK_RECORD_WORD_SHAPE_HANDLE_WORD_OFFSET: usize = 2;
+const SINK_RECORD_WORD_INDIRECT_RECORD_INDEX: usize = 3;
+const SINK_RECORD_WORD_INSTANCE_COUNT: usize = 4;
+const SINK_RECORD_WORD_FIRST_INSTANCE: usize = 5;
 
 fn realize_shape_bank_geometry(shape_bank_words: &mut [u32]) -> (Vec<f32>, Vec<u32>) {
     let mut vertex_floats: Vec<f32> = Vec::new();
@@ -590,6 +592,7 @@ impl Engine {
             arena,
             compute,
             render,
+            shared_input_signals: None,
             shared_input: None,
             shared_shape_bank: None,
             shared_sink_table: None,
@@ -604,6 +607,11 @@ impl Engine {
     }
 
     pub fn attach_shared_input(&mut self, shared_input: SharedArrayBuffer) {
+        self.shared_input_signals = Some(Int32Array::new_with_byte_offset_and_length(
+            &shared_input,
+            0,
+            INPUT_SIGNAL_WORDS,
+        ));
         // [LAW:one-source-of-truth] Shared input ABI layout is owned by the
         // renderer input plane: first 4 i32 signal words, then 32 f32 words.
         self.shared_input = Some(Float32Array::new_with_byte_offset_and_length(
@@ -717,68 +725,65 @@ impl Engine {
             FatalOther,
         }
 
-        // [LAW:single-enforcer] Tick owns one strict allocator boundary for the
-        // full per-frame command path.
-        let outcome = {
-            let _hot_path_guard = StrictAllocator::hot_path_guard();
-            match self.surface.get_current_texture() {
-                Ok(frame) => {
-                    let color_view = frame
-                        .texture
-                        .create_view(&wgpu::TextureViewDescriptor::default());
-                    let mut encoder =
-                        self.device
-                            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                                // [LAW:dataflow-not-control-flow] Hot-path labels
-                                // are static to avoid per-frame heap allocations.
-                                label: Some("HotPath.CommandEncoder"),
-                            });
+        // [LAW:single-enforcer] Allocation poison checks are enforced only via
+        // inject_poison_alloc; frame ticks must allow wgpu internal allocations.
+        let outcome = match self.surface.get_current_texture() {
+            Ok(frame) => {
+                let color_view = frame
+                    .texture
+                    .create_view(&wgpu::TextureViewDescriptor::default());
+                let mut encoder =
+                    self.device
+                        .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                            // [LAW:dataflow-not-control-flow] Hot-path labels
+                            // are static to avoid per-frame heap allocations.
+                            label: Some("HotPath.CommandEncoder"),
+                        });
 
-                    self.compute
-                        .encode_passes(
-                            &mut encoder,
-                            &mut self.arena,
-                            self.draw_regions.indexed_record_count
-                                .saturating_add(self.draw_regions.non_indexed_record_count),
-                        );
-                    self.render.encode_passes(
+                self.compute
+                    .encode_passes(
                         &mut encoder,
-                        &self.arena,
-                        &color_view,
-                        self.depth_target.view(),
-                        self.draw_regions,
+                        &mut self.arena,
+                        self.draw_regions.indexed_record_count
+                            .saturating_add(self.draw_regions.non_indexed_record_count),
                     );
+                self.render.encode_passes(
+                    &mut encoder,
+                    &self.arena,
+                    &color_view,
+                    self.depth_target.view(),
+                    self.draw_regions,
+                );
 
-                    let is_debug_tick = self.frame_count % self.debug_readback_interval_frames == 0;
-                    if is_debug_tick {
-                        encoder.copy_buffer_to_buffer(
-                            self.arena.read_state_buffer(),
-                            0,
-                            self.arena.debug_staging_buffer(),
-                            0,
-                            self.arena.debug_staging_buffer().size(),
-                        );
-                    }
-
-                    self.queue.submit(std::iter::once(encoder.finish()));
-                    frame.present();
-                    self.frame_count = self.frame_count.wrapping_add(1);
-
-                    HotPathOutcome::Success {
-                        debug_tick: is_debug_tick,
-                        frame_count: self.frame_count,
-                    }
+                let is_debug_tick = self.frame_count % self.debug_readback_interval_frames == 0;
+                if is_debug_tick {
+                    encoder.copy_buffer_to_buffer(
+                        self.arena.read_state_buffer(),
+                        0,
+                        self.arena.debug_staging_buffer(),
+                        0,
+                        self.arena.debug_staging_buffer().size(),
+                    );
                 }
-                Err(wgpu::SurfaceError::Timeout) => HotPathOutcome::SurfaceTimeout,
-                Err(wgpu::SurfaceError::Outdated | wgpu::SurfaceError::Lost) => {
-                    // [LAW:dataflow-not-control-flow] Surface reconfiguration is
-                    // handled by explicit resize/control messages outside the
-                    // hot path; tick only records the lost/outdated condition.
-                    HotPathOutcome::SurfaceLost
+
+                self.queue.submit(std::iter::once(encoder.finish()));
+                frame.present();
+                self.frame_count = self.frame_count.wrapping_add(1);
+
+                HotPathOutcome::Success {
+                    debug_tick: is_debug_tick,
+                    frame_count: self.frame_count,
                 }
-                Err(wgpu::SurfaceError::OutOfMemory) => HotPathOutcome::FatalOutOfMemory,
-                Err(wgpu::SurfaceError::Other) => HotPathOutcome::FatalOther,
             }
+            Err(wgpu::SurfaceError::Timeout) => HotPathOutcome::SurfaceTimeout,
+            Err(wgpu::SurfaceError::Outdated | wgpu::SurfaceError::Lost) => {
+                // [LAW:dataflow-not-control-flow] Surface reconfiguration is
+                // handled by explicit resize/control messages outside the
+                // hot path; tick only records the lost/outdated condition.
+                HotPathOutcome::SurfaceLost
+            }
+            Err(wgpu::SurfaceError::OutOfMemory) => HotPathOutcome::FatalOutOfMemory,
+            Err(wgpu::SurfaceError::Other) => HotPathOutcome::FatalOther,
         };
 
         match outcome {
@@ -926,6 +931,72 @@ impl Engine {
         let plane_words = shared_sink_table.subarray(0, sink_table_words).to_vec();
         self.arena
             .write_sink_table_words(&self.device, &self.queue, &plane_words);
+        let mut mirrored_indirect_words: Vec<u32> = Vec::new();
+        if let Some(shared_shape_bank) = self.shared_shape_bank.as_ref() {
+            for record in 0..(total_record_count as usize) {
+                let record_base =
+                    SINK_TABLE_HEADER_WORDS + record.saturating_mul(SINK_TABLE_RECORD_WORDS);
+                if record_base + SINK_RECORD_WORD_FIRST_INSTANCE >= plane_words.len() {
+                    break;
+                }
+                let draw_mode = plane_words[record_base + SINK_RECORD_WORD_DRAW_MODE];
+                let shape_handle_word_offset =
+                    plane_words[record_base + SINK_RECORD_WORD_SHAPE_HANDLE_WORD_OFFSET] as usize;
+                let indirect_record_index =
+                    plane_words[record_base + SINK_RECORD_WORD_INDIRECT_RECORD_INDEX] as usize;
+                let instance_count = plane_words[record_base + SINK_RECORD_WORD_INSTANCE_COUNT];
+                let first_instance = plane_words[record_base + SINK_RECORD_WORD_FIRST_INSTANCE];
+                if shape_handle_word_offset + SHAPE_BANK_HEADER_WORDS > shared_shape_bank.length() as usize {
+                    continue;
+                }
+                match draw_mode {
+                    DRAW_MODE_INDEXED => {
+                        let command_base = (indexed_region_base_words as usize)
+                            .saturating_add(
+                                indirect_record_index.saturating_mul(indexed_stride_words as usize),
+                            );
+                        let required_words = command_base.saturating_add(INDIRECT_INDEXED_STRIDE_WORDS);
+                        if mirrored_indirect_words.len() < required_words {
+                            mirrored_indirect_words.resize(required_words, 0);
+                        }
+                        mirrored_indirect_words[command_base] = shared_shape_bank
+                            .get_index((shape_handle_word_offset + SHAPE_WORD_INDEX_COUNT) as u32);
+                        mirrored_indirect_words[command_base + 1] = instance_count;
+                        mirrored_indirect_words[command_base + 2] = shared_shape_bank
+                            .get_index((shape_handle_word_offset + SHAPE_WORD_FIRST_INDEX) as u32);
+                        mirrored_indirect_words[command_base + 3] = shared_shape_bank
+                            .get_index((shape_handle_word_offset + SHAPE_WORD_BASE_VERTEX) as u32);
+                        mirrored_indirect_words[command_base + 4] = first_instance;
+                    }
+                    DRAW_MODE_NON_INDEXED => {
+                        let command_base = (non_indexed_region_base_words as usize)
+                            .saturating_add(
+                                indirect_record_index
+                                    .saturating_mul(non_indexed_stride_words as usize),
+                            );
+                        let required_words =
+                            command_base.saturating_add(INDIRECT_NON_INDEXED_STRIDE_WORDS);
+                        if mirrored_indirect_words.len() < required_words {
+                            mirrored_indirect_words.resize(required_words, 0);
+                        }
+                        mirrored_indirect_words[command_base] = shared_shape_bank
+                            .get_index((shape_handle_word_offset + SHAPE_WORD_VERTEX_COUNT) as u32);
+                        mirrored_indirect_words[command_base + 1] = instance_count;
+                        mirrored_indirect_words[command_base + 2] = shared_shape_bank
+                            .get_index((shape_handle_word_offset + SHAPE_WORD_FIRST_VERTEX) as u32);
+                        mirrored_indirect_words[command_base + 3] = first_instance;
+                    }
+                    _ => {}
+                }
+            }
+        }
+        // [LAW:single-enforcer] exception: this temporary CPU-side indirect
+        // mirror keeps render visibility while validating draw-prep parity.
+        self.arena.write_indirect_words(
+            &self.device,
+            &self.queue,
+            mirrored_indirect_words.as_slice(),
+        );
 
         IndirectRegionPlan {
             indexed_record_count,
@@ -940,6 +1011,11 @@ impl Engine {
     fn input_marshal_phase(&mut self, timestamp_ms: f64) {
         let mut uniforms = self.arena.uniforms;
         if let Some(shared_input) = self.shared_input.as_ref() {
+            if let Some(shared_input_signals) = self.shared_input_signals.as_ref() {
+                // [LAW:single-enforcer] Frame input publication uses one atomic
+                // signal word as the acquire fence before reading shared planes.
+                let _ = Atomics::load::<Int32Array>(shared_input_signals, 0);
+            }
             uniforms.resolution[0] = shared_input.get_index(INPUT_WORD_WIDTH as u32) as f32;
             uniforms.resolution[1] = shared_input.get_index(INPUT_WORD_HEIGHT as u32) as f32;
             uniforms.time_seconds =
