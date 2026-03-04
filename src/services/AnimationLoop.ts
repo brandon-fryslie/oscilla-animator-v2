@@ -6,6 +6,9 @@
  */
 
 import {
+  DRAW_PREP_SINK_TABLE_HEADER_WORDS,
+  DrawPrepSinkTableRecordWord,
+  ShapeBankHeaderWord,
   assertSchedulePhaseBoundaryStateReads,
   executeFrame,
   packDrawPrepSinkTableV1,
@@ -23,6 +26,7 @@ import { JANK_THRESHOLD_MS } from '../stores/DiagnosticsStore';
 import type { RuntimeState } from '../runtime/RuntimeState';
 import type { RootStore } from '../stores';
 import type { RenderFrameIR } from '../render/types';
+import { isRuntimeConsoleEnabled } from '../testing/test-params';
 import { markRuntimeFrameAdvanced } from '../testing/runtime-probe';
 
 export interface AnimationLoopState {
@@ -66,6 +70,14 @@ function assertWebGPULoopContract(deps: AnimationLoopDeps): void {
 
 const CONTINUITY_STORE_UPDATE_INTERVAL = 200; // 5Hz
 const EMPTY_RENDER_FRAME: RenderFrameIR = { version: 2, ops: [] };
+const RUNTIME_CONSOLE_ENABLED = isRuntimeConsoleEnabled();
+const shapeWordScratch = new Uint32Array(1);
+const shapeFloatScratch = new Float32Array(shapeWordScratch.buffer);
+
+function uint32BitsToFloat32(word: number): number {
+  shapeWordScratch[0] = word >>> 0;
+  return shapeFloatScratch[0];
+}
 
 function readChannel(snapshot: { getFloat: (name: string) => number } | undefined, name: string): number {
   return snapshot?.getFloat(name) ?? 0;
@@ -241,14 +253,16 @@ export function executeAnimationFrame(
   if (!shapeBank) {
     throw new Error('AnimationLoop: RuntimeState.shapeBank is required for WebGPU rendering');
   }
+  const renderWidth = Math.max(1, Math.floor(store.viewport.canvasWidth || canvas.width));
+  const renderHeight = Math.max(1, Math.floor(store.viewport.canvasHeight || canvas.height));
   // [LAW:single-enforcer] Runtime packs per-frame sink-table records once at
   // this frame boundary; worker executes the packed payload without re-deriving.
   const packedSinkTable = packDrawPrepSinkTableV1(currentProgram, currentState);
   const inputChannels = resolveRendererInputChannels(currentState);
   renderer.render({
     shapeBank,
-    width: canvas.width,
-    height: canvas.height,
+    width: renderWidth,
+    height: renderHeight,
     zoom,
     panX: pan.x,
     panY: pan.y,
@@ -325,6 +339,110 @@ export function executeAnimationFrame(
     // Update stats via callback
     if (onStatsUpdate) {
       onStatsUpdate(statsText);
+    }
+    if (RUNTIME_CONSOLE_ENABLED) {
+      const schedulerState = renderer.getLifecycleState();
+      const telemetry = renderer.getLatestRuntimeTelemetry();
+      const sinkHeader = packedSinkTable?.header;
+      const firstOp = frameToRender.ops[0];
+      const firstPosX = firstOp?.instances.position[0] ?? NaN;
+      const firstPosY = firstOp?.instances.position[1] ?? NaN;
+      let firstSize = NaN;
+      if (firstOp) {
+        const sizeValue = firstOp.instances.size;
+        firstSize = typeof sizeValue === 'number' ? sizeValue : (sizeValue[0] ?? NaN);
+      }
+      let firstAlpha = NaN;
+      if (firstOp) {
+        if (firstOp.style.fillColor instanceof Uint8ClampedArray) {
+          firstAlpha = (firstOp.style.fillColor[3] ?? NaN) / 255;
+        } else {
+          const alphaValue = firstOp.style.globalAlpha;
+          firstAlpha = typeof alphaValue === 'number' ? alphaValue : (alphaValue?.[0] ?? NaN);
+        }
+      }
+      const firstShapeHandleWordOffset = packedSinkTable
+        ? packedSinkTable.words[
+          DRAW_PREP_SINK_TABLE_HEADER_WORDS + DrawPrepSinkTableRecordWord.ShapeHandleWordOffset
+        ] ?? NaN
+        : NaN;
+      const firstRecordInstanceCount = packedSinkTable
+        ? packedSinkTable.words[
+          DRAW_PREP_SINK_TABLE_HEADER_WORDS + DrawPrepSinkTableRecordWord.InstanceCount
+        ] ?? NaN
+        : NaN;
+      const firstRecordFirstInstance = packedSinkTable
+        ? packedSinkTable.words[
+          DRAW_PREP_SINK_TABLE_HEADER_WORDS + DrawPrepSinkTableRecordWord.FirstInstance
+        ] ?? NaN
+        : NaN;
+      const firstRecordIndirectIndex = packedSinkTable
+        ? packedSinkTable.words[
+          DRAW_PREP_SINK_TABLE_HEADER_WORDS + DrawPrepSinkTableRecordWord.IndirectRecordIndex
+        ] ?? NaN
+        : NaN;
+      const firstShapeIndexCount = Number.isFinite(firstShapeHandleWordOffset)
+        ? shapeBank.data[(firstShapeHandleWordOffset as number) + ShapeBankHeaderWord.IndexCount] ?? NaN
+        : NaN;
+      const firstShapeVertexCount = Number.isFinite(firstShapeHandleWordOffset)
+        ? shapeBank.data[(firstShapeHandleWordOffset as number) + ShapeBankHeaderWord.VertexCount] ?? NaN
+        : NaN;
+      let shapePointMinX = NaN;
+      let shapePointMaxX = NaN;
+      let shapePointMinY = NaN;
+      let shapePointMaxY = NaN;
+      if (Number.isFinite(firstShapeHandleWordOffset)) {
+        const shapeBase = firstShapeHandleWordOffset as number;
+        const paramBlockOffset =
+          shapeBank.data[shapeBase + ShapeBankHeaderWord.ParamBlockOffset] ?? 0;
+        const paramBlockWords =
+          shapeBank.data[shapeBase + ShapeBankHeaderWord.ParamBlockWords] ?? 0;
+        let minX = Number.POSITIVE_INFINITY;
+        let maxX = Number.NEGATIVE_INFINITY;
+        let minY = Number.POSITIVE_INFINITY;
+        let maxY = Number.NEGATIVE_INFINITY;
+        for (let pointWord = 0; pointWord + 1 < paramBlockWords; pointWord += 2) {
+          const xWord = shapeBank.data[paramBlockOffset + pointWord];
+          const yWord = shapeBank.data[paramBlockOffset + pointWord + 1];
+          if (xWord === undefined || yWord === undefined) {
+            break;
+          }
+          const x = uint32BitsToFloat32(xWord);
+          const y = uint32BitsToFloat32(yWord);
+          minX = Math.min(minX, x);
+          maxX = Math.max(maxX, x);
+          minY = Math.min(minY, y);
+          maxY = Math.max(maxY, y);
+        }
+        shapePointMinX = Number.isFinite(minX) ? minX : NaN;
+        shapePointMaxX = Number.isFinite(maxX) ? maxX : NaN;
+        shapePointMinY = Number.isFinite(minY) ? minY : NaN;
+        shapePointMaxY = Number.isFinite(maxY) ? maxY : NaN;
+      }
+      // [LAW:single-enforcer] Runtime loop emits one canonical periodic
+      // console summary when URL opt-in is enabled.
+      console.info(
+        `[runtimeConsole] ${statsText}`
+        + ` | drawOps=${frameToRender.ops.length}`
+        + ` | sinkRecords=${sinkHeader?.totalRecordCount ?? 0}`
+        + ` (indexed=${sinkHeader?.indexedRecordCount ?? 0}, nonIndexed=${sinkHeader?.nonIndexedRecordCount ?? 0})`
+        + ` | sinkRegions=(iBase=${sinkHeader?.indexedRegionBaseWords ?? 0},nBase=${sinkHeader?.nonIndexedRegionBaseWords ?? 0},iStride=${sinkHeader?.indexedStrideWords ?? 0},nStride=${sinkHeader?.nonIndexedStrideWords ?? 0})`
+        + ` | viewport=${renderWidth}x${renderHeight}`
+        + ` | domCanvas=${canvas.width}x${canvas.height}`
+        + ` | shapeBankWords=${shapeBank.volatilePtr}`
+        + ` | sinkWords=${packedSinkTable?.wordCount ?? 0}`
+        + ` | frameId=${currentState.cache?.frameId ?? -1}`
+        + ` | scheduler=${schedulerState}`
+        + ` | workerFrames=${telemetry?.frameCount ?? 0}`
+        + ` | cpuPos=(${Number.isFinite(firstPosX) ? firstPosX.toFixed(3) : 'na'},${Number.isFinite(firstPosY) ? firstPosY.toFixed(3) : 'na'})`
+        + ` | cpuSize=${Number.isFinite(firstSize) ? firstSize.toFixed(3) : 'na'}`
+        + ` | cpuAlpha=${Number.isFinite(firstAlpha) ? firstAlpha.toFixed(3) : 'na'}`
+        + ` | shapeHandle=${Number.isFinite(firstShapeHandleWordOffset) ? String(firstShapeHandleWordOffset) : 'na'}`
+        + ` | sinkRecord(instanceCount=${Number.isFinite(firstRecordInstanceCount) ? String(firstRecordInstanceCount) : 'na'},firstInstance=${Number.isFinite(firstRecordFirstInstance) ? String(firstRecordFirstInstance) : 'na'},indirectIndex=${Number.isFinite(firstRecordIndirectIndex) ? String(firstRecordIndirectIndex) : 'na'})`
+        + ` | shapeInPlane=${Number.isFinite(firstShapeHandleWordOffset) ? String((firstShapeHandleWordOffset as number) < shapeBank.volatilePtr) : 'na'}`
+        + ` | shape(indexCount=${Number.isFinite(firstShapeIndexCount) ? String(firstShapeIndexCount) : 'na'}, vertexCount=${Number.isFinite(firstShapeVertexCount) ? String(firstShapeVertexCount) : 'na'})`
+        + ` | shapePoints=(${Number.isFinite(shapePointMinX) ? shapePointMinX.toFixed(3) : 'na'}..${Number.isFinite(shapePointMaxX) ? shapePointMaxX.toFixed(3) : 'na'},${Number.isFinite(shapePointMinY) ? shapePointMinY.toFixed(3) : 'na'}..${Number.isFinite(shapePointMaxY) ? shapePointMaxY.toFixed(3) : 'na'})`,
+      );
     }
 
     state.frameCount = 0;

@@ -9,15 +9,21 @@
  * All persistence is owned by PatchStore.
  */
 
-import { interceptLoadDemoPatch, validateShowPreview } from './testing/test-params';
+import {
+  interceptLoadDemoPatch,
+  validateRuntimeConsole,
+  validateShowPreview,
+} from './testing/test-params';
 
 // ─── Pre-React test parameter handling ───────────────────────────────────────
 // [LAW:single-enforcer] These run once before React mounts.
 // interceptLoadDemoPatch: clears localStorage, stashes filename, triggers reload.
 // validateShowPreview: throws on invalid values (fast feedback for test runners).
+// validateRuntimeConsole: validates runtime logging toggle for debug sessions.
 const navigating = interceptLoadDemoPatch();
 if (!navigating) {
   validateShowPreview();
+  validateRuntimeConsole();
 }
 
 // ─── Normal boot (only if not redirecting) ───────────────────────────────────
