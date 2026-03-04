@@ -8,8 +8,8 @@ import { registerBlock } from '../registry';
 import { canonicalType, canonicalMany, canonicalManyDef, payloadStride, floatConst, intConst, withInstance, instanceRef } from '../../core/canonical-types';
 import { FLOAT, SHAPE, INT, VEC2 } from '../../core/canonical-types';
 import { DOMAIN_CONTROL } from '../../core/domain-registry';
-import { PathVerb, type PathTopologyDef, PathTopologyDefInput } from '../../shapes/types';
 import { registerDynamicTopology } from '../../shapes/registry';
+import { PathVerb, type PathTopologyDefInput } from '../../shapes/types';
 import { defaultSourceConst } from '../../types';
 import { OpCode } from '../../compiler/ir/types';
 import { resolveInputConstant } from '../lower-utils';
@@ -208,7 +208,7 @@ export function register(): void {
   
       // Create shape reference with numeric topology ID
       const shapeRefSig = ctx.b.shapeRef(
-        topologyId,  // Numeric ID returned from registerDynamicTopology
+        topologyId,
         [],  // No topology params
         canonicalType(SHAPE),
         computedPositions  // Control point field (just the ValueExprId now)
