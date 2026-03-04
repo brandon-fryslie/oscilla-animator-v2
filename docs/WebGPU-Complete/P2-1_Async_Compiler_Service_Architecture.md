@@ -10,6 +10,14 @@ This document defines the lifecycle of the compilation process. It addresses the
 
 # The Compiler Architecture: The Async Compiler Service
 
+## Related Contracts
+
+- `docs/WebGPU-Complete/IMPLEMENTATION-INDEX.md`
+- `docs/WebGPU-Complete/P2-3__Naga_WASM_Compiler_Validation_Layer.md`
+- `docs/WebGPU-Complete/P2-4__Scoped_Naga_IR_Control_Flow_and_Memory_Model.md`
+- `docs/WebGPU-Complete/P5-1__WASM_Boot__Developer_Experience_&_Migration.md`
+- `docs/WebGPU-Complete/P5-2_Error_Propagation__Developer_Experience.md`
+
 **Objective:** Isolate the high-latency compilation tasks from the UI thread and the Render loop.
 
 **Invariant:** The CompilerService never blocks the main thread for more than 5ms.
@@ -155,13 +163,13 @@ Since Naga is a "Black Box," error messages come back as strings.
 
 - **The "Mangler":** When generating the IR, we attach metadata (comments or auxiliary maps) that links generated instruction indices back to the user's BlockID.
 
-- **UI Update:** The Service parses the error, finds the BlockID, and pushes an error object to the global ErrorState. The UI component for that block subscribes to this state and renders a red border.
+- **UI Update:** The Service parses the error, finds the `BlockID`, and pushes an error object to the runtime-scoped error store used by the editor UI.
 
-## 7. Caching Strategy (The Optimization)
+## 7. Caching Strategy
 
 Re-compiling the *entire* graph when moving a single "Math Add" node is wasteful. However, solving "Incremental Compilation" for global optimization is hard.
 
-**The v3.0 Compromise: The Module Cache.**
+Module cache strategy:
 
 - **Key:** Hash of the NagaModule JSON.
 
@@ -194,40 +202,3 @@ Re-compiling the *entire* graph when moving a single "Math Add" node is wasteful
 5.  **Cancellation:** Implement a token/version check to discard stale compilation results.
 
 This architecture ensures that no matter how complex the shader becomes, the UI remains responsive, capable of 60fps animations even while the compiler is churning in the background.
-
-## 9. Completion Note
-
-**Status:** Complete for runtime integration requirements in this phase (1, 2, 4, 5), including startup.
-
-**Evidence:**
-
-1. `createComputePipelineAsync` is now the exclusive path for all compute pipeline creation in `WebGPURenderer`:
-   - `WebGPUComputeRuntime.create()` (static async factory) — simulation pipeline
-   - `WebGPUDrawPrepRuntime.create()` (static async factory) — draw-prep pipeline
-
-2. `createRenderPipelineAsync` is now the exclusive path for the render (path) pipeline:
-   - `WebGPURenderer.createPathPipelineAsync()` (static async factory)
-
-3. `WebGPURenderer.create()` awaits all three async factories in parallel via `Promise.all` before constructing the renderer.
-
-4. Startup compile now flows through `AsyncCompilerService` + `CompileWorkerClient` and applies precomputed artifacts through `compileAndSwap(..., isInitial=true, precomputed)` in `RuntimeService`.
-   - The synchronous startup `compileAndSwap(..., isInitial=true)` compile path was removed from `RuntimeService.init()`.
-   - Startup and live recompiles share one canonical compile-request shape (`buildCompileRequest`) and one swap queue (`flushPendingSwap`).
-   - Worker compile failures do not fall back to synchronous compile.
-
-5. Runtime render input explicitly forbids draw-prep WGSL override payloads (`drawPrepShaderWgsl`) so shader source cannot bypass the canonical compile path.
-
-**Requirement 3 ownership:** Naga WASM boot/loader ownership is implemented by `NagaService.boot()` (`src/compiler/naga-bridge.ts`) delegating to `src/compiler/wasm/oscilla_naga_shim.ts`.
-
-**Verification commands:**
-
-```bash
-pnpm -s typecheck
-pnpm -s vitest run src/services/__tests__/RuntimeService.test.ts src/services/__tests__/AsyncCompilerService.test.ts src/render/webgpu/__tests__/WebGPURenderer.test.ts
-```
-
-**Changed files:**
-- `src/render/webgpu/WebGPURenderer.ts`
-- `src/render/webgpu/__tests__/WebGPURenderer.test.ts`
-- `src/services/RuntimeService.ts`
-- `src/services/__tests__/RuntimeService.test.ts`

@@ -10,6 +10,13 @@ This document defines the "immune system" of the application. It details how raw
 
 # The Developer Experience: Error Propagation
 
+## Related Contracts
+
+- `docs/WebGPU-Complete/IMPLEMENTATION-INDEX.md`
+- `docs/WebGPU-Complete/P2-1_Async_Compiler_Service_Architecture.md`
+- `docs/WebGPU-Complete/P2-3__Naga_WASM_Compiler_Validation_Layer.md`
+- `docs/WebGPU-Complete/P5-3__Phased_Rollout__Engine_Migration_Strategy.md`
+
 **Objective:** Transform compiler failures into actionable UI feedback (Red Borders).
 
 **Invariant:** A compilation error must **never** crash the running audio/visual engine. The previous valid program must continue to run until the error is resolved.
@@ -159,7 +166,7 @@ We translate: Arrays must use a fixed number as an index.
 
 ## 4. The UI Integration (The Feedback Loop)
 
-The React layer subscribes to the ErrorStore.
+The UI layer subscribes to a runtime-scoped error store.
 
 ### 4.1 The Block Component
 
@@ -170,7 +177,7 @@ TypeScript
 // Block.tsx\
 const Block = ({ id }) =\> {\
 // Selective Subscription: Only re-render if \*this\* block has an error\
-const error = useStore(state =\> state.errors\[id\]);\
+const error = useStore(state =\> state.runtimeErrors\[id\]);\
 \
 return (\
 \<div className={classNames("block", { "has-error": !!error })}\>\
@@ -216,25 +223,13 @@ We want to highlight Block A, not Block B.
 
   4.  **Gray Out:** Mark downstream blocks as "Disabled/Unreachable" rather than "Error."
 
-## 6. Migration Strategy: The "Strict Mode"
+## 6. Connection-Time Validation Policy
 
-During the transition from v2 (JS) to v3 (WASM), error handling becomes stricter.
+Type validation should be enforced before compile where possible.
 
-### 6.1 The "Lenient" Phase (Phase 0)
-
-- **Goal:** Don't annoy users with pedantic errors yet.
-
-- **Behavior:** If a type mismatch occurs (e.g., float connected to int), the compiler auto-injects a Cast node or a Floor node silently.
-
-- **Log:** A warning is printed to the console: "Implicit cast added at Block \[12\]."
-
-### 6.2 The "Strict" Phase (Phase 1)
-
-- **Goal:** Enforce correct types for performance.
-
-- **Behavior:** The compiler rejects the connection.
-
-- **UI:** When the user drags the wire, the target port glows **Red** (invalid) instead of **Green** (valid), preventing the connection from being made in the first place.
+1. Invalid links are rejected at interaction time.
+2. Compiler still validates full graph and emits source-mapped diagnostics.
+3. No implicit cast insertion in canonical mode unless an explicit cast node exists in graph IR.
 
 ## 7. Summary of Implementation
 
@@ -244,7 +239,7 @@ During the transition from v2 (JS) to v3 (WASM), error handling becomes stricter
 
 3.  **Update Rust Shim:** Ensure ValidationError structs are serialized fully (not just the message string).
 
-4.  **Create ErrorStore:** A global state manager for validation issues.
+4.  **Create Runtime Error Store:** A runtime-scoped state container for validation issues.
 
 5.  **Update UI:** Add the "Red Border" CSS and Tooltip logic to the Block component.
 

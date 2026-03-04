@@ -10,6 +10,13 @@ This document defines the architecture for **GPU-Driven Rendering**. It describe
 
 # The Unified Buffer Strategy: The "Indirect Command" Buffer
 
+## Related Contracts
+
+- `docs/WebGPU-Complete/IMPLEMENTATION-INDEX.md`
+- `docs/WebGPU-Complete/P1-2__Unified_GPU_Shape_Bank_Strategy.md`
+- `docs/WebGPU-Complete/P3-3_GPU_Draw_Prep__Autonomous_Rendering_Logistics.md`
+- `docs/WebGPU-Complete/P3-4__WebGPU_Render_Pass_Deep_Dive.md`
+
 **Objective:** Decouple the CPU from draw-call parameters.
 
 **Invariant:** The CPU never writes dynamic draw counts (`instanceCount`, `vertexCount`, `indexCount`) during the frame loop.

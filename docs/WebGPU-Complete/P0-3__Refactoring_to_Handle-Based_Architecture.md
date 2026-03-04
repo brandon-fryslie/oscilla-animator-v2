@@ -1,217 +1,135 @@
-> Alignment Notice (2026-02-27)
-> [LAW:one-source-of-truth] The canonical lowering boundary is `src/compiler/ir/naga-emitter/*` and `docs/compiler/ONE-TRUE-EMITTER.md`.
-> [LAW:dataflow-not-control-flow] Control flow is represented as recursive Naga blocks with lexical scopes, not flat instruction lists.
-> [LAW:no-string-math] Direct WGSL string generation in lowering code is forbidden; dynamic WGSL emission is an engine serializer boundary concern.
-> Read this document with `docs/WebGPU-Complete/P2-4__Scoped_Naga_IR_Control_Flow_and_Memory_Model.md`.
+> Alignment Notice (2026-03-03)
+> [LAW:one-source-of-truth] Canonical shape/storage contracts are owned by `docs/WebGPU-Complete/P1-2__Unified_GPU_Shape_Bank_Strategy.md`.
+> [LAW:single-enforcer] Handle validity and decode semantics are enforced at compiler/runtime boundaries, not ad-hoc in blocks.
+> [LAW:dataflow-not-control-flow] Handle propagation is value-driven through Arena channels; execution order remains fixed.
 
-This is the comprehensive technical specification for **Phase 0: The Object Purge**.
+This document defines the canonical numeric-handle model used by runtime blocks and render assembly.
 
-This document mandates the complete eradication of JavaScript object references (pointers) from the runtime hot path. It replaces the flexible but unportable "Object Graph" with a strict "Handle-Based" architecture, treating the CPU runtime as if it were already a GPU driver managing VRAM.
+# Phase 0: Handle-Based Runtime Contract
 
-# Phase 0: The Object Purge (Numeric Handles)
+## Objective
 
-**Objective:** Eliminate pointer-chasing and Garbage Collection (GC) overhead from the render loop.
+Eliminate object-shaped payloads from the runtime hot path and replace them with stable numeric handles that reference canonical storage banks.
 
-**Invariant:** Every data entity passed between blocks must be a scalar number (f32 value or u32 handle).
+## Related Contracts
 
-**Success Criteria:** The evaluate() function of any block can run without allocating a single new JavaScript object.
+- `docs/WebGPU-Complete/IMPLEMENTATION-INDEX.md`
+- `docs/WebGPU-Complete/P0-1__SoA_Mandate__Memory_Layout_Refactor.md`
+- `docs/WebGPU-Complete/P1-1__Unified_GPU_Buffer_Strategy_Explained.md`
+- `docs/WebGPU-Complete/P1-2__Unified_GPU_Shape_Bank_Strategy.md`
+- `docs/WebGPU-Complete/P1-3__GPU-Driven_Rendering__Indirect_Buffer.md`
+- `docs/WebGPU-Complete/P3-3_GPU_Draw_Prep__Autonomous_Rendering_Logistics.md`
 
-## 1. The "Handle" Concept
+## 1. Canonical Handle Model
 
-In the current architecture, a Generator block (like Square) likely returns a JavaScript object:
+1. A handle is a `u32` identity value for a persistent shape/topology record.
+2. Runtime numeric channels carry handles as bit-cast values through Arena slots.
+3. Blocks pass handles by value; no runtime object references are allowed in hot loops.
 
-JavaScript
+Example (forbidden -> canonical):
 
-// OLD (Forbidden)\
-return {\
-type: 'path',\
-closed: true,\
-vertexCount: 4,\
-indices: \[0, 1, 2, 3, 0\]\
-};
+```ts
+// Forbidden: object payload in hot path
+return { type: "path", indices: [0, 1, 2] };
 
-The GPU cannot read this. The GPU only understands flat memory arrays.
+// Canonical: numeric handle
+return shapeHandleU32;
+```
 
-### 1.1 The Numeric Handle
+## 2. Storage Ownership
 
-In the new architecture, the Generator returns a **Handle** (a u32 integer).
+### 2.1 Arena Ownership
 
-JavaScript
+Arena stores:
 
-// NEW (Mandated)\
-return 4096; // Handle pointing to index 4096 in the ShapeBank
+1. numeric state channels (`f32` contract)
+2. handle channels (bit-cast payloads where required)
+3. per-instance render params
 
-This Handle is passed through the graph via the Arena (as a float, bit-cast if necessary, or just treated as a raw number). Downstream blocks use this number to look up the actual data in a centralized storage buffer.
+Arena does **not** store shape topology schemas.
 
-## 2. The "Shape Bank" Architecture
+### 2.2 ShapeBank Ownership
 
-We introduce a new centralized memory store called the **Shape Bank**.
+ShapeBank stores:
 
-### 2.1 Memory Layout
+1. canonical `ShapeHeaderV1` records (16 words / 64 bytes)
+2. payload heap for indices, virtual-topology metadata, and parameter blocks
 
-The Shape Bank is a single Uint32Array. It acts as the "Heap" for structural data. It stores **Topology** (connectivity), not **Geometry** (positions).
+ShapeBank is the only canonical source for topology metadata.
 
-- **Geometry (Positions):** Lives in the Arena (SoA Fields).
+## 3. Canonical Header Fields (Implementation Summary)
 
-- **Topology (Connectivity):** Lives in the Shape Bank.
+`ShapeHeaderV1` is canonical and includes at least:
 
-**The Stride Layout (Header + Payload):**
+1. `kind`
+2. `topologyMode`
+3. `materialClass`
+4. indexed topology refs (`indexCount`, `firstIndex`, `baseVertex`)
+5. non-indexed refs (`vertexCount`, `firstVertex`)
+6. parameter block refs (`paramBlockOffset`, `paramBlockWords`)
+7. packed bounds
 
-Every Shape entry in the Bank follows a strict binary format:
+Do not introduce alternate header schemas in block-local code.
 
-| **Offset** | **Field** | **Type** | **Description** |
-|----|----|----|----|
-| **0** | IndexCount | u32 | Number of indices in the topology. |
-| **1** | IndexOffset | u32 | Offset into the global Index Buffer (if static) or ShapeBank (if inline). |
-| **2** | VertexCount | u32 | Number of vertices (defines the Field size). |
-| **3** | Flags | u32 | Bitmask: IS_CLOSED (1), IS_FILLED (2), HAS_UV (4). |
-| **4...N** | InlineData | u32 | (Optional) Inline index data for dynamic shapes. |
+## 4. Allocator Strategy
 
-### 2.2 The "Dual Representation" Link
+### 4.1 Immutable Region
 
-The Handle effectively links the **Field** (Physics) to the **Bank** (Structure).
+Used for:
 
-- **Block A (Spiral Generator):**
+1. built-in primitives
+2. imported static assets
+3. long-lived shape records
 
-  1.  Writes 1000 \$(x,y)\$ positions to Arena (Fields).
+### 4.2 Dynamic Region
 
-  2.  Writes { count: 1000, closed: false } to ShapeBank at index H.
+Used for dynamic/dirty topology updates.
 
-  3.  Outputs H to Arena (Scalars).
+Rules:
 
-- **Block B (Renderer):**
+1. update dirty slices only
+2. update header references atomically with payload updates
+3. do not treat full re-upload as default behavior
 
-  1.  Reads H from inputs.
+## 5. Block Responsibilities
 
-  2.  Reads metadata from ShapeBank\[H\].
+### 5.1 Producers (Generators)
 
-  3.  Draws ShapeBank\[H\].IndexCount vertices using positions from the input Field.
+1. write numeric output channels to Arena
+2. allocate/update shape payload in ShapeBank when topology changes
+3. emit a handle channel pointing to canonical header index
 
-## 3. The Allocator Strategy (Dynamic vs. Static)
+### 5.2 Transformers (Deformers)
 
-Managing this Uint32Array requires an allocation strategy. Since we are in JS (CPU) for Phase 0, we implement a simplified version of what the GPU will do.
+1. mutate numeric channels in Arena
+2. forward handles unchanged unless topology class changes
 
-### 3.1 The "Frame Volatile" Allocator
+### 5.3 Consumers (Draw Prep / Renderer)
 
-Most shapes in a generative system are dynamic (e.g., a trail that grows). We cannot malloc/free complex heaps every frame.
+1. read handle channels
+2. resolve `ShapeHeaderV1`
+3. emit indexed/non-indexed command records according to header + sink metadata
 
-- **Strategy:** A Linear Allocator (Bump Pointer).
+## 6. Multi-Shape and Batching Contract
 
-- **Cycle:**
+1. A render sink may reference many shape handles.
+2. Draw-prep must bucket commands into compatible records (topology mode, material/topology compatibility).
+3. A single indirect record cannot mix incompatible topology ABI formats.
+4. Runtime executes indexed and non-indexed streams separately.
 
-  1.  **Frame Start:** Set ShapeBankPtr = 0.
+## 7. Prohibited Patterns
 
-  2.  **During Frame:** Blocks call allocShape(size). We return the current pointer and increment it.
+1. object-returning geometry blocks in runtime hot paths
+2. parallel shape schema definitions outside canonical header docs
+3. fallback render paths that bypass handle decode contracts
+4. direct per-block command emission that skips draw-prep metadata ownership
 
-  3.  **Frame End:** Do nothing. The next frame overwrites the data.
+## 8. Verification Gates
 
-- **Benefit:** Zero GC overhead. \$O(1)\$ allocation cost.
+1. Shape header decode and stride tests (`ShapeHeaderV1` schema + offsets).
+2. Handle round-trip tests (write as float payload, decode as `u32` identity).
+3. Draw-prep bucketing tests (indexed vs non-indexed record emission).
+4. Forbidden-pattern tests blocking object payloads in execution hot paths.
 
-### 3.2 The "Static Asset" Allocator (Phase 1 Prep)
+This document defines the implementation contract for handle-based execution. New feature work should extend canonical metadata and tests instead of introducing alternate runtime representations.
 
-For imported SVGs or Fonts, we don't want to re-upload them every frame.
-
-- **Strategy:** Reserve the *bottom* half of the Shape Bank for Static Assets.
-
-- **Implementation:** The Frame Volatile pointer starts at STATIC_BOUNDARY (e.g., index 1,000,000) instead of 0.
-
-## 4. Refactoring the Blocks
-
-Every block that produces or consumes "Geometry" must be rewritten.
-
-### 4.1 The Generator Pattern (Producer)
-
-**Old Logic:**
-
-return new Path({ points: ... })
-
-**New Logic:**
-
-TypeScript
-
-evaluate(ctx) {\
-// 1. Calculate Geometry (Positions)\
-// ... write to ctx.outputs.position (Arena Field) ...\
-\
-// 2. Allocate Topology\
-const handle = ctx.runtime.shapeAllocator.alloc(4); // 4 u32 words for header\
-\
-// 3. Write Topology Header\
-const bank = ctx.runtime.shapeBank;\
-bank\[handle + 0\] = numPoints; // IndexCount\
-bank\[handle + 1\] = 0; // IndexOffset (0 = sequential line strip)\
-bank\[handle + 2\] = numPoints; // VertexCount\
-bank\[handle + 3\] = IS_CLOSED_BIT;\
-\
-// 4. Output the Handle\
-// Write 'handle' (casted to f32) to ctx.outputs.shape\
-ctx.outputs.shape\[0\] = handle;\
-}
-
-### 4.2 The Deformer Pattern (Transformer)
-
-Deformers (like Noise or Transform) usually operate on the *Field* (Arena), not the *Shape* (Bank).
-
-- **Pass-Through:** Most deformers simply **pass the Handle ID** from input to output unchanged.
-
-- **Action:** They only modify the Arena (Positions). They don't touch the ShapeBank.
-
-### 4.3 The Assembler/renderer (Consumer)
-
-The final step (the Sink) reads the handle.
-
-- **Action:**
-
-  1.  Read HandleID from input wire.
-
-  2.  Retrieve ShapeData from ShapeBank\[HandleID\].
-
-  3.  Generate the Draw Command using ShapeData.IndexCount and the linked Field data.
-
-## 5. Handling "List of Objects" (Multi-Instance)
-
-What if a Generator produces 10 circles?
-
-In the AoS world, this was \[Circle, Circle, Circle\].
-
-In the SoA/Handle world, this is a **Field of Handles**.
-
-### 5.1 The Field\<Handle\>
-
-The "Shape" output port usually has cardinality: one (one topology for the whole stream).
-
-- **Scenario:** A particle system where every particle is a *different* shape (Square, Circle, Triangle).
-
-- **Implementation:** The "Shape" wire becomes a Field\<u32\> (stored as f32 in Arena).
-
-- **Renderer:** Iterates through the Instance Count. For each instance \$i\$, it reads Handle\[i\] to decide what topology to draw.
-
-*Note:* For v3.0, we prioritize **Instancing** (One Handle, Many Positions) over **Multi-Shape** (Many Handles, Many Positions) because it is drastically faster on the GPU.
-
-## 6. Verification: The "No-Alloc" Test
-
-How do we prove Phase 0 is successful?
-
-### 6.1 The Heap Snapshot Test
-
-1.  **Tool:** Chrome DevTools Memory Profiler.
-
-2.  **Action:** Record an Allocation Timeline while the patch is running.
-
-3.  **Pass:** You should see **zero** (or near-zero) allocations of Object, Array, or Path2D during the animation loop. The only memory activity should be writing numbers into the pre-allocated Float32Array (Arena) and Uint32Array (ShapeBank).
-
-4.  **Fail:** If you see "Sawtooth" memory graphs (GC spikes), a block is still creating temporary objects.
-
-## 7. Summary of Required Changes
-
-1.  **New Runtime Primitive:** ShapeBank (Uint32Array) added to RuntimeState.
-
-2.  **New Service:** ShapeAllocator (Bump pointer logic).
-
-3.  **Update canonical-types.ts:** Define HANDLE type (alias for f32 in Arena, treated as u32 in logic).
-
-4.  **Refactor Generators:** Update Circle, Rect, Polygon, Spiral to write to ShapeBank and output a Handle.
-
-5.  **Refactor Sink:** Update RenderAssembler to read Handles and lookup topology from the Bank.
-
-This refactor bridges the gap between JavaScript's "Reference" world and the GPU's "Pointer" world. Once this is done, "uploading to GPU" is just a memcpy.

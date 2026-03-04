@@ -3,6 +3,14 @@ For Oscilla v3.0, specifically as you navigate the complexity audit of the cc-du
 
 ## ---
 
+## Related Contracts
+
+- `docs/WebGPU-Complete/IMPLEMENTATION-INDEX.md`
+- `docs/WebGPU-Complete/P1-2__Unified_GPU_Shape_Bank_Strategy.md`
+- `docs/WebGPU-Complete/P1-3__GPU-Driven_Rendering__Indirect_Buffer.md`
+- `docs/WebGPU-Complete/P3-3_GPU_Draw_Prep__Autonomous_Rendering_Logistics.md`
+- `docs/WebGPU-Complete/P3-4__WebGPU_Render_Pass_Deep_Dive.md`
+
 **1\. Inputs and Outputs (The Data Contract)**
 
 In a Type 2 pipeline, the concept of a "Vertex" is split in half. The CPU defines *time* ($t$), and the GPU computes *space* ($X, Y, Z$).
@@ -71,7 +79,7 @@ $$B'(t) \= 3(1-t)^2 (P\_1 \- P\_0) \+ 6(1-t)t (P\_2 \- P\_1) \+ 3t^2 (P\_3 \- P\
 
 **4\. Hard Invariants (The Unbreakable Rules)**
 
-1. **Uniform Resolution Mandate:** Hardware instancing (drawIndexedIndirect) dictates that every instance of a specific draw call processes the exact same IndexCount. You cannot have Instance 0 evaluate 10 segments and Instance 1 evaluate 100 segments. Resolution is globally locked per block.  
+1. **Uniform Resolution Mandate:** A single indirect record (indexed or non-indexed) requires a uniform topology count contract for all instances in that record. You cannot have Instance 0 evaluate 10 segments and Instance 1 evaluate 100 segments inside one command record. Resolution is locked per compatible bucket.  
 2. **The Register Ceiling:** The maximum number of control points $C$ evaluated in a single WGSL shader must be strictly capped (e.g., $C \\le 16$).  
    * *Why:* GPUs have a limited number of ultra-fast hardware registers per thread. If a user tries to evaluate a 256-point spline parametrically, the shader will "spill" those variables into slow VRAM. Performance will instantly drop by 90%.  
 3. **Template Immutability:** The $t$-value progression in the ShapeBank must remain static during the render pass.
@@ -117,5 +125,4 @@ To guarantee the Naga lowering pipeline and memory architecture are bulletproof,
   * *Test:* Analyze the JSON IR emitted to the Naga WASM shim.  
   * *Assert:* The Vertex Shader must not contain dynamic array indexing for control points. The Naga AST must explicitly construct variables via direct offset reads (e.g., Read(Arena, Base \+ Lane), Read(Arena, Base \+ Offset1 \+ Lane)).
 
-By strictly adhering to these invariants, Type 2 shapes will operate with the predictability of rigid meshes while offering the infinite topological flexibility of organic math.  
-Would you like to move on to the architectural details for **Type 3: The Continuous Ribbon (History Trails)**, or would you like to explore the DrawPrep sorting algorithms?
+By strictly adhering to these invariants, Type 2 shapes remain predictable while retaining high flexibility for analytic deformation workloads.

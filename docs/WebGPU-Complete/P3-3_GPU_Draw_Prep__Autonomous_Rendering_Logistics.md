@@ -10,6 +10,14 @@ This document defines the intermediate step between Physics Simulation and Raste
 
 # The Runtime Loop: The Draw Prep Dispatch
 
+## Related Contracts
+
+- `docs/WebGPU-Complete/IMPLEMENTATION-INDEX.md`
+- `docs/WebGPU-Complete/P1-2__Unified_GPU_Shape_Bank_Strategy.md`
+- `docs/WebGPU-Complete/P1-3__GPU-Driven_Rendering__Indirect_Buffer.md`
+- `docs/WebGPU-Complete/P3-2_GPU_Compute_Dispatch_Explained.md`
+- `docs/WebGPU-Complete/P3-4__WebGPU_Render_Pass_Deep_Dive.md`
+
 **Objective:** Translate simulation state into valid WebGPU indirect commands.
 
 **Invariant:** The indirect buffer must be fully populated before Render Pass begins.

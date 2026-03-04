@@ -10,6 +10,13 @@ This document defines the core transformation logic of the compiler. It details 
 
 # The Compiler Architecture: The Lowering Pipeline
 
+## Related Contracts
+
+- `docs/WebGPU-Complete/IMPLEMENTATION-INDEX.md`
+- `docs/WebGPU-Complete/P2-1_Async_Compiler_Service_Architecture.md`
+- `docs/WebGPU-Complete/P2-3__Naga_WASM_Compiler_Validation_Layer.md`
+- `docs/WebGPU-Complete/P2-4__Scoped_Naga_IR_Control_Flow_and_Memory_Model.md`
+
 **Objective:** Transform graph operations into a concrete, strictly-typed scoped IR that mirrors Naga-style expression/statement arenas and block bodies.
 
 **Invariant:** The output must be a valid NagaModule JSON object (or structurally identical AST) that is guaranteed to pass Naga’s validation.

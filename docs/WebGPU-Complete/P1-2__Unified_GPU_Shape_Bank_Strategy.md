@@ -10,11 +10,19 @@ This document defines the architecture for storing **Topology** (connectivity) s
 
 # The Unified Buffer Strategy: The "Shape Bank"
 
+## Related Contracts
+
+- `docs/WebGPU-Complete/IMPLEMENTATION-INDEX.md`
+- `docs/WebGPU-Complete/P1-1__Unified_GPU_Buffer_Strategy_Explained.md`
+- `docs/WebGPU-Complete/P1-3__GPU-Driven_Rendering__Indirect_Buffer.md`
+- `docs/WebGPU-Complete/P3-3_GPU_Draw_Prep__Autonomous_Rendering_Logistics.md`
+- `docs/WebGPU-Complete/P3-4__WebGPU_Render_Pass_Deep_Dive.md`
+
 **Objective:** Store structural definitions (SVGs, Glyphs, Primitives) in a unified, indexable GPU buffer.
 
 **Invariant:** Topology data is immutable during a Render Pass.
 
-**Mechanism:** A monolithic storage buffer containing packed u32 headers and index data.
+**Mechanism:** A monolithic storage buffer containing packed `u32` headers plus topology/parameter payload slices.
 
 ## 1. The Philosophy: Topology vs. Geometry
 
@@ -36,7 +44,7 @@ It is partitioned into two regions: **Headers** and **Payloads**.
 
 The first \$N\$ kilobytes of the buffer are reserved for **Shape Headers**.
 
-- **Stride:** 8 words (32 bytes) per shape.
+- **Stride:** 16 words (64 bytes) per shape (`ShapeHeaderV1`).
 
 - **Capacity:** Configurable (e.g., 4096 shapes max).
 
@@ -44,24 +52,30 @@ The first \$N\$ kilobytes of the buffer are reserved for **Shape Headers**.
 
 | **Offset (u32)** | **Field Name** | **Description** |
 |----|----|----|
-| 0 | VertexCount | The number of vertices in this shape (e.g., 4 for a Quad). |
-| 1 | IndexCount | The number of indices to draw (e.g., 6 for a Quad). |
-| 2 | IndexStart | The offset into **Region B** where the indices begin. |
-| 3 | BaseVertex | Added to index values (useful for batching). |
-| 4 | Flags | Bitmask: IS_CLOSED (1), IS_FILLED (2), HAS_UV (4). |
-| 5 | BoundingBox_Min | Packed f16 (2x16-bit) min bounds (for culling). |
-| 6 | BoundingBox_Max | Packed f16 (2x16-bit) max bounds. |
-| 7 | Reserved | Padding for alignment/future use. |
+| 0 | kind | Taxonomy class discriminator. |
+| 1 | topologyMode | Indexed vs non-indexed/virtual. |
+| 2 | flags | Shape behavior flags. |
+| 3 | materialClass | Material/render class reference. |
+| 4 | indexCount | Indexed topology count. |
+| 5 | firstIndex | Payload index start (indexed path). |
+| 6 | baseVertex | Indexed base-vertex offset. |
+| 7 | vertexCount | Non-indexed/virtual topology count. |
+| 8 | firstVertex | Non-indexed first vertex reference. |
+| 9 | paramBlockOffset | Parameter block offset in payload heap. |
+| 10 | paramBlockWords | Parameter block size in words. |
+| 11 | reserved0 | Reserved for version-safe expansion. |
+| 12 | boundsMinPacked | Packed bounds min for culling. |
+| 13 | boundsMaxPacked | Packed bounds max for culling. |
+| 14 | reserved1 | Reserved. |
+| 15 | reserved2 | Reserved. |
 
 ### 2.2 Region B: The Payload Heap (Variable Stride)
 
-The rest of the buffer acts as a heap for raw index data.
+The rest of the buffer acts as a heap for topology/parameter payload slices.
 
-- **Content:** Arrays of u32 indices (e.g., 0, 1, 2, 0, 2, 3).
-
-- **Allocation:** Contiguous blocks pointed to by IndexStart.
-
-- **Format:** We use u32 indices to support large meshes (\>65k vertices), though for most 2D shapes, the values are small.
+- **Content:** indexed payloads, virtual-topology metadata, and shape parameter blocks.
+- **Allocation:** contiguous blocks referenced by header fields (`firstIndex`, `firstVertex`, `paramBlockOffset`).
+- **Format:** payload uses `u32` words with explicit bit-cast conventions for float values when required.
 
 ## 3. The "Handle" Mechanism
 

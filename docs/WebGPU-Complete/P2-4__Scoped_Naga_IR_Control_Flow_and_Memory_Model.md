@@ -4,6 +4,14 @@ This document defines the architectural shift from a flat data-flow lowering mod
 
 # The Compiler Architecture: Scoped Naga IR Control Flow and Memory Model
 
+## Related Contracts
+
+- `docs/WebGPU-Complete/IMPLEMENTATION-INDEX.md`
+- `docs/WebGPU-Complete/P2-1_Async_Compiler_Service_Architecture.md`
+- `docs/WebGPU-Complete/P2-2__Naga_Compiler_Lowering_Pipeline_Explained.md`
+- `docs/WebGPU-Complete/P2-3__Naga_WASM_Compiler_Validation_Layer.md`
+- `docs/WebGPU-Complete/P3-2_GPU_Compute_Dispatch_Explained.md`
+
 **Objective:** Establish a deterministic, type-safe, hierarchical lowering boundary that supports loops, branches, dynamic indexing, and atomics without allowing direct WGSL string generation in lowering code.
 
 **Invariant:** All user graph lowering enters the GPU through the constrained `NagaBuilder` API and scoped `WgslNagaCompiler` instruction model.
