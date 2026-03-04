@@ -90,7 +90,9 @@ A single buffer of type storage \| copy_dst.
 
 A buffer of type indirect \| storage.
 
-- **Role:** Stores the DrawIndexedIndirectArgs structs.
+- **Role:** Stores both hardware-native indirect command streams in fixed non-overlapping regions:
+  - indexed records (`DrawIndexedIndirectArgs`, 20-byte stride)
+  - non-indexed records (`DrawIndirectArgs`, 16-byte stride)
 
 - **Invariants:** The CPU **never** writes to this during the frame loop. It is populated exclusively by the "Draw Prep" Compute Shader.
 
@@ -190,7 +192,9 @@ The generated module is passed to the Naga WASM binary.
 
 - **Bindings:** Arena_Write (as Instance Data), Shape_Bank (as Geometry Source).
 
-- **Draw:** drawIndexedIndirect(Indirect_Buffer, offset).
+- **Draw:** Execute indexed and non-indexed indirect command streams from the shared indirect buffer regions:
+  - `drawIndexedIndirect(...)` for indexed records (20-byte stride).
+  - `drawIndirect(...)` for non-indexed records (16-byte stride).
 
 - **Vertex Pulling:** The Vertex Shader generates geometry on the fly by reading VertexID and looking up the topology in the Shape_Bank.
 

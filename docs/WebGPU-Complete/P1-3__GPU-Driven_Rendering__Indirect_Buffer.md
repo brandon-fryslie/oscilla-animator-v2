@@ -10,172 +10,139 @@ This document defines the architecture for **GPU-Driven Rendering**. It describe
 
 # The Unified Buffer Strategy: The "Indirect Command" Buffer
 
-**Objective:** Decouple the CPU from the draw call parameters.
+**Objective:** Decouple the CPU from draw-call parameters.
 
-**Invariant:** The CPU never writes to instanceCount or vertexCount during the frame loop.
+**Invariant:** The CPU never writes dynamic draw counts (`instanceCount`, `vertexCount`, `indexCount`) during the frame loop.
 
-**Mechanism:** A storage \| indirect buffer populated by a dedicated Compute Pass ("Draw Prep") and consumed by the Render Pass.
+**Mechanism:** A storage | indirect buffer populated by a dedicated Compute Pass ("Draw Prep") and consumed by the Render Pass.
 
 ## 1. The Philosophy: The GPU as the Pilot
 
-In a traditional (Direct) render loop, the CPU must know exactly how many items to draw:
+In a traditional (direct) render loop, the CPU must know exactly how many items to draw:
 
-draw(vertexCount: 6, instanceCount: 1000)
+`draw(vertexCount: 6, instanceCount: 1000)`
 
-This fails in a generative system where logic happens on the GPU.
+This fails in a generative system where visibility/topology are resolved on GPU.
 
 - **Scenario:** A "Life" simulation where cells die.
+- **Problem:** CPU does not know final visible count without expensive readback.
+- **Solution:** GPU computes draw counts and writes hardware-native indirect commands.
 
-- **Problem:** The CPU doesn't know which cells died. To find out, it would have to read back the entire state (slow).
+## 2. The Memory Layout (Hardware-Native ABI)
 
-- **Solution:** The GPU counts the living cells itself and writes that number into a buffer. The Render Pass reads that buffer to execute the draw.
+WebGPU indirect APIs have strict byte layouts. We must respect these exactly.
 
-## 2. The Memory Layout (Strict Struct)
+### 2.1 Indexed Stream (`drawIndexedIndirect`)
 
-The Indirect Command Buffer is a standard GPUBuffer containing a sequence of tightly packed DrawIndexedIndirectArgs structs. The layout is hardware-defined and non-negotiable.
-
-### 2.1 The Struct Definition
-
-Every draw command occupies exactly **20 bytes** (5 x u32).
+Every indexed command occupies exactly **20 bytes** (5 words).
 
 | **Offset** | **Field Name** | **Type** | **Description** |
 |----|----|----|----|
-| **0** | indexCount | u32 | Number of indices to draw (e.g., 6 for a Quad). |
-| **1** | instanceCount | u32 | **The Dynamic Value.** How many items to draw. |
-| **2** | firstIndex | u32 | Offset into the Index Buffer (Shape Bank). |
-| **3** | baseVertex | i32 | Added to each index before reading vertex data. |
-| **4** | firstInstance | u32 | Offset into the Instance Buffer (Arena). |
+| 0 | indexCount | u32 | Number of indices to draw. |
+| 1 | instanceCount | u32 | Dynamic visible count. |
+| 2 | firstIndex | u32 | Offset into index payload. |
+| 3 | baseVertex | i32 | Added to each index before vertex fetch. |
+| 4 | firstInstance | u32 | Offset into instance stream. |
 
-### 2.2 The Buffer Composition
+### 2.2 Non-Indexed Stream (`drawIndirect`)
 
-The buffer acts as an array of these structs.
+Every non-indexed command occupies exactly **16 bytes** (4 words).
 
-- **Command 0:** Draws the "Background" layer.
+| **Offset** | **Field Name** | **Type** | **Description** |
+|----|----|----|----|
+| 0 | vertexCount | u32 | Number of vertices to draw. |
+| 1 | instanceCount | u32 | Dynamic visible count. |
+| 2 | firstVertex | u32 | Offset into virtual/non-indexed stream. |
+| 3 | firstInstance | u32 | Offset into instance stream. |
 
-- **Command 1:** Draws the "Main Particle System."
+### 2.3 One Physical Buffer, Two Non-Overlapping Regions
 
-- **Command 2:** Draws the "UI Overlay."
+We use one physical indirect GPU buffer with fixed regions:
 
-*Capacity:* Allocated once at startup. typically 1KB is enough for 50 distinct draw layers.
+- **Region A:** indexed records (`stride = 20`).
+- **Region B:** non-indexed records (`stride = 16`).
 
-## 3. The "Draw Prep" Compute Shader
+Draw Prep writes both regions. Runtime uses region base offsets when issuing draw calls.
 
-Since the CPU cannot touch this buffer efficiently, we introduce a micro-kernel whose sole job is to populate it.
+## 3. The Draw Prep Compute Shader
 
-### 3.1 The Input: Counters & Flags
+Since CPU cannot own dynamic draw counts efficiently, Draw Prep owns command emission.
 
-This kernel reads from the **Arena** (which contains the simulation state) and the **Shape Bank** (which contains topology info).
+### 3.1 Inputs
 
-- **Source 1: The Active Count**
+Draw Prep consumes:
 
-  - In the Arena, we maintain an atomic\<u32\> counter or a field_length uniform.
+- Arena counters/visibility results.
+- Shape/header metadata.
+- Compiler-emitted draw-prep sink metadata:
+  - `drawMode` (indexed/non-indexed)
+  - topology references (`indexCount`, `firstIndex`, `baseVertex`) when indexed
+  - non-indexed references (`vertexCount`, `firstVertex`) when non-indexed
+  - `firstInstance`, record index, and region info
 
-  - *Logic:* If the "Life" simulation killed 50 particles, the counter reads 950.
+### 3.2 Output
 
-- **Source 2: The Topology**
+For each sink record:
 
-  - The kernel reads the ShapeID for this batch.
+1. Read visibility count.
+2. Resolve topology fields from shape/sink metadata.
+3. Emit either:
+   - 20-byte indexed command into Region A, or
+   - 16-byte non-indexed command into Region B.
 
-  - It queries the Shape Bank to get indexCount and firstIndex.
+No mixed-format stream is allowed.
 
-### 3.2 The Output: The Command
+## 4. Culling Integration
 
-The kernel writes the DrawIndexedIndirectArgs struct to the Indirect Buffer at the index corresponding to the current Draw Call ID.
+Indirect command generation enables cheap GPU culling.
 
-**Logic Flow (Pseudo-Code):**
+### 4.1 Culling Pass
 
-1.  **Read Visibility:** count = atomicLoad(Arena.Counters\[BatchID\])
+Before Draw Prep:
 
-2.  **Read Topology:** shape = ShapeBank\[BatchID\]
+1. Check bounds/visibility.
+2. Compact visible instance IDs.
+3. Atomically increment visible counters.
 
-3.  **Construct Args:**
+### 4.2 Benefit
 
-    - indexCount = shape.indexCount
+- Without indirect: vertex stage runs on invisible instances.
+- With indirect: Draw Prep writes reduced counts; vertex stage runs only for visible work.
 
-    - instanceCount = count (Dynamic!)
+## 5. Handling Multi-Sink Rendering
 
-    - firstIndex = shape.indexStart
+Oscilla supports multiple render sinks/layers. Compiler assigns stable record indices.
 
-    - baseVertex = 0
+### 5.1 Record Mapping
 
-    - firstInstance = 0
+- `Render_Background -> indexed or non-indexed record`
+- `Render_Foreground -> indexed or non-indexed record`
 
-4.  **Write:** IndirectBuffer\[BatchID\] = Args
+### 5.2 Runtime Execution
 
-## 4. The Culling Engine (Frustum & Logic)
-
-The Indirect Buffer is the enabler for **GPU Culling**. We stop drawing things that are off-screen or invisible.
-
-### 4.1 The Culling Compute Pass
-
-Before the "Draw Prep" kernel runs, a "Culling" kernel runs over the Field.
-
-1.  **Check:** Is Position\[i\] inside the screen bounds?
-
-2.  **Check:** Is Opacity\[i\] \> 0.001?
-
-3.  **Action:**
-
-    - If **Visible**: Append InstanceID to a simplified "Visible Instances" list (Index Buffer compaction) and atomic increment the VisibleCount.
-
-    - If **Invisible**: Do nothing.
-
-### 4.2 The Benefit
-
-- **Without Indirect:** The GPU vertex shader runs for 10,000 particles, discards 9,000 of them. Waste of vertex processing power.
-
-- **With Indirect:** The "Draw Prep" kernel writes instanceCount = 1000. The vertex shader only runs 1,000 times. Massive performance gain for complex scenes.
-
-## 5. Handling Multi-Draw (The "Render Graph")
-
-Oscilla allows multiple independent "Sinks" (e.g., a Background layer and a Foreground layer).
-
-### 5.1 The Command List
-
-The Compiler assigns a **Draw ID** to every Render block in the graph.
-
-- Render_Background \$\rightarrow\$ Command Index 0
-
-- Render_Foreground \$\rightarrow\$ Command Index 1
-
-### 5.2 The Execution Loop
-
-The CPU Render Pass becomes a simple loop over these IDs.
-
-**CPU Logic:**
-
-1.  **Bind:** Indirect Buffer.
-
-2.  **Loop:** for (i = 0; i \< ActiveSinkCount; i++)
-
-    - drawIndexedIndirect(IndirectBuffer, offset = i \* 20)
-
-*Note on WebGPU vNext:* Future versions may support multiDrawIndexedIndirect, allowing this entire loop to become a single API call. For v3.0, we loop on the CPU, but the heavy lifting (arg generation) is still GPU-side.
+1. Bind indirect buffer once.
+2. Indexed loop:
+   - `drawIndexedIndirect(indirectBuffer, indexedRegionBase + i * 20)`
+3. Non-indexed loop:
+   - `drawIndirect(indirectBuffer, nonIndexedRegionBase + j * 16)`
 
 ## 6. Synchronization & Barriers
 
-Because one shader writes to the buffer and another reads it *within the same frame*, synchronization is key.
+Required ordering within a frame:
 
-- **Hazard:** The "Draw Prep" compute shader must finish writing *before* the Render Pass begins reading.
+1. Physics/Culling writes counters.
+2. Draw Prep reads counters and writes indirect records.
+3. Render pass reads indirect records.
 
-- **Solution (WebGPU):** Implicit synchronization via Pass encoding.
+WebGPU pass boundaries provide required visibility guarantees:
 
-  - End ComputePassEncoder (This issues a memory barrier).
+- EndComputePass -> BeginRenderPass ensures Draw Prep writes are visible to render reads.
 
-  - Begin RenderPassEncoder.
+## 7. Canonical Requirements
 
-  - Use IndirectBuffer.
+1. **Allocation:** Create one persistent indirect GPU buffer (`INDIRECT | STORAGE | COPY_DST`) with fixed indexed/non-indexed regions.
+2. **Draw Prep Ownership:** Use one canonical static draw-prep kernel; compiler emits structured metadata only.
+3. **Runtime Integration:** RenderAssembler executes two indirect streams (indexed + non-indexed) from the shared buffer.
+4. **Debug View:** Add async inspector readback for command counts and region occupancy.
 
-  - *Result:* The driver guarantees the write is visible to the read.
-
-## 7. Summary of Requirements
-
-1.  **Allocation:** Create a persistent GPUBuffer with usage INDIRECT \| STORAGE \| COPY_DST.
-
-2.  **Shader Generation:** The Compiler must generate a "Draw Prep" compute shader for every frame that maps ShapeIDs and ArenaCounters to DrawIndexedIndirectArgs.
-
-3.  **Runtime Integration:** The RenderAssembler must stop using CPU-side instanceCount logic and switch to binding this buffer.
-
-4.  **Debug View:** Create a specialized inspector that reads this buffer back to CPU (async) so you can see "Active Instance Counts" in the debug panel.
-
-This component completes the "GPU-Driven" architecture. The CPU starts the engine (Dispatch), but the GPU decides how fast to drive (Draw Count).
+This completes the GPU-driven command path while staying ABI-correct for WebGPU hardware.
