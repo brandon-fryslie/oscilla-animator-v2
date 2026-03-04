@@ -75,7 +75,7 @@ function valueExprChildren(expr: ValueExpr): readonly ValueExprId[] {
  * Searches the IR expression table for a shapeRef that matches the given
  * expression ID, returning the controlPointField and topologyId.
  *
- * Used by PathLayout to access path geometry from One<shape2d> inputs.
+ * Used by PathLayout to access path geometry from One<shape> inputs.
  */
 export function resolveShapeRef(
   builder: BlockIRBuilder,
