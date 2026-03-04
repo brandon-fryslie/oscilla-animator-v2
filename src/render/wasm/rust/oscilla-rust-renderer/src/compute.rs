@@ -101,7 +101,6 @@ pub struct ComputeDispatcher {
     instance_assembly_pipeline: wgpu::ComputePipeline,
     draw_prep_pipeline: wgpu::ComputePipeline,
     sim_workgroup_count: u32,
-    assembly_workgroup_count: u32,
     compiler_simulation_layout: wgpu::BindGroupLayout,
     pub uniform_layout: wgpu::BindGroupLayout,
     pub state_layout: wgpu::BindGroupLayout,
@@ -280,14 +279,11 @@ impl ComputeDispatcher {
         });
 
         let sim_workgroup_count = Self::simulation_dispatch_count(particle_count, simulation_wgsl);
-        let assembly_workgroup_count = (particle_count.saturating_add(63)) / 64;
-
         Self {
             simulation_pipeline,
             instance_assembly_pipeline,
             draw_prep_pipeline,
             sim_workgroup_count: sim_workgroup_count.max(1),
-            assembly_workgroup_count: assembly_workgroup_count.max(1),
             compiler_simulation_layout,
             uniform_layout,
             state_layout,
@@ -401,6 +397,7 @@ impl ComputeDispatcher {
         &self,
         encoder: &mut wgpu::CommandEncoder,
         arena: &mut GpuMemoryArena,
+        assembly_instance_count: u32,
         draw_prep_record_count: u32,
     ) {
         {
@@ -420,11 +417,15 @@ impl ComputeDispatcher {
             });
             compute_pass.set_pipeline(&self.instance_assembly_pipeline);
             compute_pass.set_bind_group(0, &arena.uniform_bind_group, &[]);
-            // [LAW:one-source-of-truth] Instance assembly reads compiler arena
-            // output from the simulation write bank, never the legacy state buffer.
-            compute_pass.set_bind_group(1, arena.get_compiler_arena_write_bind_group(), &[]);
+            // [LAW:one-source-of-truth] exception: live slot payloads are still
+            // authored in the runtime state bank for this migration slice.
+            compute_pass.set_bind_group(1, arena.get_compute_write_bind_group(), &[]);
             compute_pass.set_bind_group(2, &arena.assembly_write_bind_group, &[]);
-            compute_pass.dispatch_workgroups(self.assembly_workgroup_count, 1, 1);
+            // [LAW:single-enforcer] Runtime sink-table instance totals are the
+            // canonical source for per-frame assembly dispatch size.
+            let assembly_workgroup_count =
+                ((assembly_instance_count.saturating_add(63)) / 64).max(1);
+            compute_pass.dispatch_workgroups(assembly_workgroup_count, 1, 1);
         }
 
         let _ = draw_prep_record_count;

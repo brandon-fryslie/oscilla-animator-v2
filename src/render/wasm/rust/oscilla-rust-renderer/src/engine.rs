@@ -5,6 +5,7 @@ use js_sys::{Atomics, Float32Array, Int32Array, SharedArrayBuffer, Uint32Array};
 use wasm_bindgen::JsCast;
 use wasm_bindgen::JsValue;
 use web_sys::OffscreenCanvas;
+use web_sys::console;
 
 use crate::allocator::StrictAllocator;
 use crate::compute::ComputeDispatcher;
@@ -107,18 +108,18 @@ fn arena_index(base_offset: u32, lane: u32, component: u32, lane_stride: u32, co
 
 fn read_arena_f32(base_offset: u32, lane: u32, component: u32, lane_stride: u32, component_stride: u32) -> f32 {
   let index = arena_index(base_offset, lane, component, lane_stride, component_stride);
-  if (index >= arrayLength(&arena_words)) {
+  if (index >= arrayLength(&sink_table_words)) {
     return 0.0;
   }
-  return bitcast<f32>(arena_words[index]);
+  return bitcast<f32>(sink_table_words[index]);
 }
 
 fn read_arena_u32(base_offset: u32, lane: u32, component: u32, lane_stride: u32, component_stride: u32) -> u32 {
   let index = arena_index(base_offset, lane, component, lane_stride, component_stride);
-  if (index >= arrayLength(&arena_words)) {
+  if (index >= arrayLength(&sink_table_words)) {
     return 0u;
   }
-  return arena_words[index];
+  return sink_table_words[index];
 }
 
 @compute @workgroup_size(64)
@@ -262,14 +263,34 @@ struct VertexOutput {
 
 @vertex fn vs_main(@location(0) localPos: vec2<f32>, @builtin(instance_index) instanceIndex: u32) -> VertexOutput {
   let inst = instances[instanceIndex];
-  let _topologyWordOffset = u32(max(inst.transform1.z, 0.0));
-  let _topologyWordCount = arrayLength(&topologyBank);
+  let topologyWordOffset = u32(max(inst.transform1.z, 0.0));
+  let topologyFlags = topologyBank[topologyWordOffset + 3u];
+  let closedMask = select(0.0, 1.0, (topologyFlags & 1u) != 0u);
   let viewportPx = global.resolution;
+  let panPx = vec2<f32>(global.view_proj[0].y, global.view_proj[0].z);
+  let zoom = global.view_proj[0].x;
   let viewportMinPx = min(viewportPx.x, viewportPx.y);
-  let centeredPx = viewportPx * 0.5;
-  let localScaled = localPos * viewportMinPx * 8.0;
-  let c = 1.0;
-  let s = 0.0;
+  let rawCenterX = inst.transform0.x;
+  let rawCenterY = inst.transform0.y;
+  let finiteCenterX = select(0.0, rawCenterX, rawCenterX == rawCenterX);
+  let finiteCenterY = select(0.0, rawCenterY, rawCenterY == rawCenterY);
+  // [LAW:one-source-of-truth] Canonical runtime payload provides unit-space
+  // instance centers; render consumes them directly with no heuristic remap.
+  let centerX = clamp(finiteCenterX, 0.0, 1.0);
+  let centerY = clamp(finiteCenterY, 0.0, 1.0);
+  let centerPx = vec2<f32>(centerX, centerY) * viewportPx;
+  let centeredPx = (centerPx - (viewportPx * 0.5)) * zoom + (viewportPx * 0.5) + (panPx * zoom);
+  let rawScaleX = inst.transform0.z * inst.transform1.x;
+  let rawScaleY = inst.transform0.z * inst.transform1.y;
+  let finiteScaleX = select(1.0, rawScaleX, rawScaleX == rawScaleX);
+  let finiteScaleY = select(1.0, rawScaleY, rawScaleY == rawScaleY);
+  let scaleX = clamp(abs(finiteScaleX), 0.01, 4.0);
+  let scaleY = clamp(abs(finiteScaleY), 0.01, 4.0);
+  let localScaled = vec2<f32>(localPos.x * scaleX, localPos.y * scaleY) * viewportMinPx * zoom;
+  let rawRotation = inst.transform0.w;
+  let safeRotation = select(0.0, rawRotation, rawRotation == rawRotation);
+  let c = cos(safeRotation);
+  let s = sin(safeRotation);
   let rotatedPx = vec2<f32>(
     localScaled.x * c - localScaled.y * s,
     localScaled.x * s + localScaled.y * c
@@ -281,7 +302,15 @@ struct VertexOutput {
   );
   var out: VertexOutput;
   out.position = vec4<f32>(ndc, 0.0, 1.0);
-  out.color = vec4<f32>(1.0, 0.2, 0.9, 1.0);
+  let rawR = inst.color.x;
+  let rawG = inst.color.y;
+  let rawB = inst.color.z;
+  let rawA = inst.color.w;
+  let safeR = clamp(select(1.0, rawR, rawR == rawR), 0.0, 1.0);
+  let safeG = clamp(select(0.2, rawG, rawG == rawG), 0.0, 1.0);
+  let safeB = clamp(select(0.9, rawB, rawB == rawB), 0.0, 1.0);
+  let safeA = clamp(select(1.0, rawA, rawA == rawA), 0.0, 1.0);
+  out.color = vec4<f32>(safeR, safeG, safeB, safeA) * (1.0 + closedMask * 0.0);
   return out;
 }
 
@@ -579,7 +608,11 @@ impl Engine {
             config.max_shapes,
         );
         let depth_target = DepthTarget::new(&device, surface_config.width, surface_config.height);
-        let debug_readback_interval_frames = (60 / config.debug_readback_hz.max(1)).max(1) as u64;
+        let debug_readback_interval_frames = if config.debug_readback_hz == 0 {
+            0
+        } else {
+            (60 / config.debug_readback_hz.max(1)).max(1) as u64
+        };
         let scheduler = WorkerScheduler::new(worker_monotonic_now_ms());
 
         Ok(Self {
@@ -744,6 +777,7 @@ impl Engine {
                     .encode_passes(
                         &mut encoder,
                         &mut self.arena,
+                        self.draw_regions.total_instance_count,
                         self.draw_regions.indexed_record_count
                             .saturating_add(self.draw_regions.non_indexed_record_count),
                     );
@@ -755,14 +789,21 @@ impl Engine {
                     self.draw_regions,
                 );
 
-                let is_debug_tick = self.frame_count % self.debug_readback_interval_frames == 0;
+                let is_debug_tick =
+                    self.debug_readback_interval_frames > 0
+                        && self.frame_count % self.debug_readback_interval_frames == 0;
                 if is_debug_tick {
+                    let copy_bytes = self
+                        .arena
+                        .debug_staging_buffer()
+                        .size()
+                        .min(self.arena.instance_buffer.size());
                     encoder.copy_buffer_to_buffer(
-                        self.arena.read_state_buffer(),
+                        &self.arena.instance_buffer,
                         0,
                         self.arena.debug_staging_buffer(),
                         0,
-                        self.arena.debug_staging_buffer().size(),
+                        copy_bytes,
                     );
                 }
 
@@ -931,6 +972,15 @@ impl Engine {
         let plane_words = shared_sink_table.subarray(0, sink_table_words).to_vec();
         self.arena
             .write_sink_table_words(&self.device, &self.queue, &plane_words);
+        let mut total_instance_count: u32 = 0;
+        for record in 0..(total_record_count as usize) {
+            let record_base = SINK_TABLE_HEADER_WORDS + record.saturating_mul(SINK_TABLE_RECORD_WORDS);
+            if record_base + SINK_RECORD_WORD_INSTANCE_COUNT >= plane_words.len() {
+                break;
+            }
+            total_instance_count = total_instance_count
+                .saturating_add(plane_words[record_base + SINK_RECORD_WORD_INSTANCE_COUNT]);
+        }
         let mut mirrored_indirect_words: Vec<u32> = Vec::new();
         if let Some(shared_shape_bank) = self.shared_shape_bank.as_ref() {
             for record in 0..(total_record_count as usize) {
@@ -999,6 +1049,7 @@ impl Engine {
         );
 
         IndirectRegionPlan {
+            total_instance_count,
             indexed_record_count,
             non_indexed_record_count,
             indexed_region_base_words,
@@ -1083,6 +1134,29 @@ impl Engine {
         let _ = slice.map_async(wgpu::MapMode::Read, move |result| {
             if result.is_ok() {
                 let mapped = staging_buffer_for_callback.slice(..).get_mapped_range();
+                let preview_f32_count = (mapped.len() / std::mem::size_of::<f32>()).min(24);
+                if preview_f32_count > 0 {
+                    let mut preview = String::new();
+                    for index in 0..preview_f32_count {
+                        if index > 0 {
+                            preview.push_str(", ");
+                        }
+                        let byte_index = index * std::mem::size_of::<f32>();
+                        let value = f32::from_le_bytes([
+                            mapped[byte_index],
+                            mapped[byte_index + 1],
+                            mapped[byte_index + 2],
+                            mapped[byte_index + 3],
+                        ]);
+                        preview.push_str(&format!("{value:.3}"));
+                    }
+                    // [LAW:single-enforcer] exception: temporary observability log
+                    // for instance payload verification during migration.
+                    console::info_1(&JsValue::from_str(&format!(
+                        "[instancePreview] {}",
+                        preview
+                    )));
+                }
                 drop(mapped);
             }
             staging_buffer_for_callback.unmap();
