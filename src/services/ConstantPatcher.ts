@@ -144,6 +144,7 @@ function patchInstanceCounts(
     // Look up current instance declaration
     const instanceDecl = program.schedule.instances.get(entry.instanceId);
     if (!instanceDecl) return null;
+    if (instanceDecl.count === 'dynamic') return null;
 
     // Bounds: 0 <= newCount <= maxCount
     if (newCount < 0 || newCount > instanceDecl.maxCount) return null;

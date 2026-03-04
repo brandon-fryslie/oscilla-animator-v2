@@ -24,6 +24,7 @@ import type {
   PlacementFieldName,
   BasisKind,
   StableStateId,
+  InstanceCountSpec,
 } from './types';
 
 // =============================================================================
@@ -155,7 +156,7 @@ export interface BlockIRBuilder {
   /** Create a new instance of a domain type. */
   createInstance(
     domainType: DomainTypeId,
-    count: number,
+    count: InstanceCountSpec,
     shapeField?: ValueExprId,
     lifecycle?: 'static' | 'dynamic' | 'pooled'
   ): InstanceId;

@@ -9,7 +9,6 @@ import {
   rebuildRustRendererSimulationPipeline,
   resumeRustRendererEngine,
   resizeRustRendererSurface,
-  syncRustRendererRenderPayload,
   takeRustRendererFramePacingPacket,
 } from '../wasm/oscilla_rust_renderer';
 import type {
@@ -198,21 +197,6 @@ async function handleRebuildSimulation(
   postWorkerMessage({ type: 'REBUILD_SIMULATION_PIPELINE_SUCCESS' });
 }
 
-async function handleSyncRenderPayload(
-  message: Extract<RustRendererWorkerInboundMessage, { type: 'SYNC_RENDER_PAYLOAD' }>,
-): Promise<void> {
-  // [LAW:one-source-of-truth] Render payload marshalling is owned by one
-  // worker boundary so Rust hot-path buffers receive one canonical schema.
-  await syncRustRendererRenderPayload(
-    message.topologyWords,
-    message.instanceFloats,
-    message.indirectArgsWords,
-    message.vertexFloats,
-    message.indexWords,
-    message.drawRecordCount,
-  );
-}
-
 function handleResize(message: Extract<RustRendererWorkerInboundMessage, { type: 'RESIZE_CANVAS' }>): void {
   resizeRustRendererSurface(message.width, message.height);
 }
@@ -303,15 +287,6 @@ self.onmessage = (event: MessageEvent<RustRendererWorkerInboundMessage>) => {
   }
   if (message.type === 'INJECT_POISON_ALLOC') {
     handleInjectPoisonAlloc();
-    return;
-  }
-  if (message.type === 'SYNC_RENDER_PAYLOAD') {
-    void handleSyncRenderPayload(message).catch((error) => {
-      postWorkerFatalError(
-        'render_payload_sync_failure',
-        `Rust worker render payload sync failure: ${error instanceof Error ? error.message : String(error)}`,
-      );
-    });
     return;
   }
   if (message.type === 'RESIZE_CANVAS') {

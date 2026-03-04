@@ -43,6 +43,7 @@ import { evaluateValueExprEvent } from './ValueExprEventEvaluator';
 import { materializeValueExpr } from './ValueExprMaterializer';
 import { applyStateWritePolicy } from './StateWritePolicy';
 import type { PureFnExecutionContext } from './ScalarKernelLibrary';
+import { resolveInstanceLaneCount } from './InstanceCountResolver';
 import {
   arenaDecodeToAoS,
   arenaEncodeFromAoS,
@@ -300,7 +301,7 @@ export function* executeFrameStepped(
         const veId = step.field;
         const instanceDecl = instances.get(step.instanceId);
         const count = instanceDecl
-          ? (typeof instanceDecl.count === 'number' ? instanceDecl.count : instanceDecl.maxCount)
+          ? resolveInstanceLaneCount(instanceDecl, program, state, pureFnContext)
           : 0;
         // [LAW:one-source-of-truth] Arena lookup via ExprAddressTable — no direct arenaLayout access.
         const arenaDesc = slotToArena.get(step.target);
@@ -358,7 +359,7 @@ export function* executeFrameStepped(
         const { instanceId } = step;
         const instance = instances.get(instanceId as InstanceId);
         if (!instance) break;
-        const count = typeof instance.count === 'number' ? instance.count : instance.maxCount;
+        const count = resolveInstanceLaneCount(instance, program, state, pureFnContext);
         if (count === 0) break;
         const seed = instance.elementIdSeed ?? 0;
         const previousDomain = state.continuity.prevDomains.get(instanceId);
@@ -423,6 +424,7 @@ export function* executeFrameStepped(
     arena,
     scalarExprToArenaAddress: state.cache.scalarExprToArenaAddress ?? undefined,
     slotToArena: addressTable.slotToArena,
+    pureFnContext,
   };
   const frame = assembleRenderFrame(renderSteps, assemblerContext);
 
