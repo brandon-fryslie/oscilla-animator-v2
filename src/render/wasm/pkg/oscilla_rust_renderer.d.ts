@@ -3,6 +3,10 @@
 
 export function attach_shared_input(shared_input: SharedArrayBuffer): void;
 
+export function attach_shared_shape_bank(shared_shape_bank: SharedArrayBuffer): void;
+
+export function attach_shared_sink_table(shared_sink_table: SharedArrayBuffer): void;
+
 export function init_engine(canvas: OffscreenCanvas, max_particles: number, max_shapes: number, debug_readback_hz: number): Promise<void>;
 
 export function inject_poison_alloc(): void;
@@ -17,8 +21,6 @@ export function resize_surface(width: number, height: number): void;
 
 export function resume_engine(): void;
 
-export function sync_render_payload(topology_words: Uint32Array, instance_floats: Float32Array, indirect_args_words: Uint32Array, vertex_floats: Float32Array, index_words: Uint32Array, draw_record_count: number): void;
-
 export function take_frame_pacing_packet(): any;
 
 export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembly.Module;
@@ -26,6 +28,8 @@ export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembl
 export interface InitOutput {
     readonly memory: WebAssembly.Memory;
     readonly attach_shared_input: (a: any) => [number, number];
+    readonly attach_shared_shape_bank: (a: any) => [number, number];
+    readonly attach_shared_sink_table: (a: any) => [number, number];
     readonly init_engine: (a: any, b: number, c: number, d: number) => any;
     readonly inject_poison_alloc: () => [number, number];
     readonly pause_engine: () => [number, number];
@@ -33,7 +37,6 @@ export interface InitOutput {
     readonly rebuild_simulation_pipeline: (a: number, b: number) => [number, number];
     readonly resize_surface: (a: number, b: number) => [number, number];
     readonly resume_engine: () => [number, number];
-    readonly sync_render_payload: (a: any, b: any, c: any, d: any, e: any, f: number) => [number, number];
     readonly take_frame_pacing_packet: () => [number, number, number];
     readonly wasm_bindgen__closure__destroy__h22c5c9496e43279b: (a: number, b: number) => void;
     readonly wasm_bindgen__closure__destroy__haf1314f791359451: (a: number, b: number) => void;

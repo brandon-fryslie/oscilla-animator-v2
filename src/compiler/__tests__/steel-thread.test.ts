@@ -155,10 +155,15 @@ describe('Steel Thread - Animated Particles', () => {
       const metadata = readShapeBankHandleMetadata(state.shapeBank, handle);
       expect(metadata.topologyId).toBe(expr.topologyId);
       const topology = getProgramTopology(program, expr.topologyId);
-      if ('totalControlPoints' in topology) {
-        expect(header.vertexCount).toBe(topology.totalControlPoints);
+      const totalControlPoints = (topology as { totalControlPoints?: unknown }).totalControlPoints;
+      if (typeof totalControlPoints === 'number') {
+        expect(header.vertexCount).toBe(totalControlPoints);
+        const isClosed = (topology as { closed?: unknown }).closed === true;
+        const expectedIndexCount = isClosed && totalControlPoints >= 3
+          ? (totalControlPoints - 2) * 3
+          : 0;
+        expect(header.indexCount).toBe(expectedIndexCount);
       }
-      expect(header.indexCount).toBe(header.vertexCount);
     }
   });
 

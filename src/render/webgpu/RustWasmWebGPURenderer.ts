@@ -1,22 +1,15 @@
-import type { RenderFrameIR } from '../types';
 import type { RenderShapeBankSource } from './WebGPUShapeBankManager';
 import type { IndirectArgsReadbackSnapshot } from './WebGPUIndirectArgsInspector';
-import type {
-  RustRendererBootstrapConfig,
-  RustRendererSchedulerState,
-  RustRendererWorkerInboundMessage,
-  RustRendererWorkerOutboundMessage,
+import {
+  computeRustRendererShapeBankWordCapacity,
+  computeRustRendererSinkTableWordCapacity,
+  type RustRendererBootstrapConfig,
+  type RustRendererSchedulerState,
+  type RustRendererWorkerInboundMessage,
+  type RustRendererWorkerOutboundMessage,
 } from '../rust/worker-protocol';
 
-interface DrawPrepSinkDescriptor {
-  readonly sinkIndex: number;
-  readonly indirectRecordIndex: number;
-  readonly instanceCountMode: 'static' | 'dynamic';
-  readonly staticInstanceCount?: number;
-}
-
 interface RenderInput {
-  readonly frame: RenderFrameIR;
   readonly shapeBank: RenderShapeBankSource;
   readonly width: number;
   readonly height: number;
@@ -31,7 +24,8 @@ interface RenderInput {
   readonly inputAudioMid?: number;
   readonly inputAudioHigh?: number;
   readonly inputGaugeActive?: number;
-  readonly drawPrepSinks?: readonly DrawPrepSinkDescriptor[];
+  readonly drawPrepSinkTableV1?: Uint32Array;
+  readonly drawPrepSinkTableWordCount: number;
 }
 
 const INPUT_SIGNAL_WORDS = 4;
@@ -52,9 +46,8 @@ const INPUT_INDEX = Object.freeze({
   audioMid: 10,
   audioHigh: 11,
   gaugeActive: 12,
-  drawOpCount: 13,
-  totalInstanceCount: 14,
-  shapeBankWords: 15,
+  sinkTableWords: 13,
+  shapeBankWords: 14,
 } as const);
 
 const DEFAULT_BOOTSTRAP_CONFIG: RustRendererBootstrapConfig = Object.freeze({
@@ -67,43 +60,21 @@ function coerceFinite(value: number | undefined): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : 0;
 }
 
-function deriveTotalInstanceCount(frame: RenderFrameIR): number {
-  let total = 0;
-  for (const op of frame.ops) {
-    if (op.kind !== 'drawPathInstances') continue;
-    total += op.instances.count;
+const MAX_UINT32 = 0xFFFF_FFFF;
+
+function assertFiniteUint32(value: number, context: string): number {
+  if (
+    !Number.isFinite(value)
+    || !Number.isInteger(value)
+    || !Number.isSafeInteger(value)
+    || value < 0
+    || value > MAX_UINT32
+  ) {
+    throw new Error(`Rust renderer input contract violation: ${context} must be a uint32, got ${String(value)}`);
   }
-  if (!Number.isFinite(total) || total <= 0) return 0;
-  return Math.floor(total);
+  return value;
 }
 
-function deriveDrawOpCount(input: RenderInput): number {
-  const sinkCount = input.drawPrepSinks?.length;
-  if (typeof sinkCount === 'number' && Number.isFinite(sinkCount) && sinkCount >= 0) {
-    return Math.floor(sinkCount);
-  }
-  return input.frame.ops.length;
-}
-
-function deriveCanonicalTotalInstanceCount(input: RenderInput): number {
-  const sinks = input.drawPrepSinks;
-  if (!sinks || sinks.length === 0) {
-    return deriveTotalInstanceCount(input.frame);
-  }
-  const hasDynamicSink = sinks.some((sink) => sink.instanceCountMode === 'dynamic');
-  if (hasDynamicSink) {
-    return deriveTotalInstanceCount(input.frame);
-  }
-
-  // [LAW:one-source-of-truth] Compiler-emitted draw-prep sink metadata is the
-  // canonical static instance-count source when dynamic sinks are absent.
-  let total = 0;
-  for (const sink of sinks) {
-    total += sink.staticInstanceCount ?? 0;
-  }
-  if (!Number.isFinite(total) || total <= 0) return 0;
-  return Math.floor(total);
-}
 
 export function assertWebGPUStartupContract(canvas: HTMLCanvasElement): void {
   const gpu = (navigator as Navigator & { gpu?: unknown }).gpu;
@@ -139,6 +110,8 @@ export class WebGPURenderer {
   private readonly worker: Worker;
   private readonly signalWords: Int32Array;
   private readonly inputWords: Float32Array;
+  private readonly sharedShapeBankWords: Uint32Array;
+  private readonly sharedSinkTableWords: Uint32Array;
   private bootstrapped = false;
   private disposed = false;
   private fatalError: Error | null = null;
@@ -151,10 +124,14 @@ export class WebGPURenderer {
     worker: Worker,
     signalWords: Int32Array,
     inputWords: Float32Array,
+    sharedShapeBankWords: Uint32Array,
+    sharedSinkTableWords: Uint32Array,
   ) {
     this.worker = worker;
     this.signalWords = signalWords;
     this.inputWords = inputWords;
+    this.sharedShapeBankWords = sharedShapeBankWords;
+    this.sharedSinkTableWords = sharedSinkTableWords;
     this.worker.addEventListener('message', this.handleRuntimeMessage);
   }
 
@@ -168,12 +145,30 @@ export class WebGPURenderer {
       INPUT_SIGNAL_WORDS * Int32Array.BYTES_PER_ELEMENT,
       INPUT_FLOAT_WORDS,
     );
+    const shapeBankWordCapacity = computeRustRendererShapeBankWordCapacity(DEFAULT_BOOTSTRAP_CONFIG);
+    const sinkTableWordCapacity = computeRustRendererSinkTableWordCapacity(DEFAULT_BOOTSTRAP_CONFIG);
+    const sharedShapeBank = new SharedArrayBuffer(shapeBankWordCapacity * Uint32Array.BYTES_PER_ELEMENT);
+    const sharedSinkTable = new SharedArrayBuffer(sinkTableWordCapacity * Uint32Array.BYTES_PER_ELEMENT);
+    const sharedShapeBankWords = new Uint32Array(sharedShapeBank);
+    const sharedSinkTableWords = new Uint32Array(sharedSinkTable);
 
     const worker = new Worker(new URL('../rust/engine.worker.ts', import.meta.url), {
       type: 'module',
     });
-    const renderer = new WebGPURenderer(worker, signalWords, inputWords);
-    await renderer.bootstrap(offscreenCanvas, sharedInput, DEFAULT_BOOTSTRAP_CONFIG);
+    const renderer = new WebGPURenderer(
+      worker,
+      signalWords,
+      inputWords,
+      sharedShapeBankWords,
+      sharedSinkTableWords,
+    );
+    await renderer.bootstrap(
+      offscreenCanvas,
+      sharedInput,
+      sharedShapeBank,
+      sharedSinkTable,
+      DEFAULT_BOOTSTRAP_CONFIG,
+    );
     return renderer;
   }
 
@@ -205,9 +200,13 @@ export class WebGPURenderer {
     this.inputWords[INPUT_INDEX.audioMid] = coerceFinite(input.inputAudioMid);
     this.inputWords[INPUT_INDEX.audioHigh] = coerceFinite(input.inputAudioHigh);
     this.inputWords[INPUT_INDEX.gaugeActive] = coerceFinite(input.inputGaugeActive);
-    this.inputWords[INPUT_INDEX.drawOpCount] = deriveDrawOpCount(input);
-    this.inputWords[INPUT_INDEX.totalInstanceCount] = deriveCanonicalTotalInstanceCount(input);
-    this.inputWords[INPUT_INDEX.shapeBankWords] = input.shapeBank.volatilePtr;
+    const shapeBankWords = this.syncShapeBankPlane(input.shapeBank);
+    const sinkTableWords = this.syncSinkTablePlane(
+      input.drawPrepSinkTableV1,
+      input.drawPrepSinkTableWordCount,
+    );
+    this.inputWords[INPUT_INDEX.sinkTableWords] = sinkTableWords;
+    this.inputWords[INPUT_INDEX.shapeBankWords] = shapeBankWords;
     Atomics.add(this.signalWords, 0, 1);
   }
 
@@ -280,15 +279,65 @@ export class WebGPURenderer {
     return this.lifecycleState;
   }
 
+  private syncShapeBankPlane(shapeBank: RenderShapeBankSource): number {
+    const wordCount = assertFiniteUint32(shapeBank.volatilePtr, 'shapeBank.volatilePtr');
+    if (wordCount > this.sharedShapeBankWords.length) {
+      throw new Error(
+        'Rust renderer input contract violation: shapeBank capacity exceeded ' +
+          `(wordCount=${wordCount}, sharedCapacity=${this.sharedShapeBankWords.length})`,
+      );
+    }
+    if (shapeBank.data.length < wordCount) {
+      throw new Error(
+        'Rust renderer input contract violation: shapeBank.data shorter than volatilePtr ' +
+          `(dataLength=${shapeBank.data.length}, volatilePtr=${wordCount})`,
+      );
+    }
+    if (wordCount > 0) {
+      this.sharedShapeBankWords.set(shapeBank.data.subarray(0, wordCount), 0);
+    }
+    return wordCount;
+  }
+
+  private syncSinkTablePlane(sinkTableWords: Uint32Array | undefined, sinkTableWordCount: number): number {
+    const wordCount = assertFiniteUint32(sinkTableWordCount, 'drawPrepSinkTableWordCount');
+    if (wordCount === 0) {
+      return 0;
+    }
+    if (!sinkTableWords) {
+      throw new Error(
+        'Rust renderer input contract violation: drawPrepSinkTableV1 is required when drawPrepSinkTableWordCount > 0',
+      );
+    }
+    if (sinkTableWords.length < wordCount) {
+      throw new Error(
+        'Rust renderer input contract violation: drawPrepSinkTableV1 shorter than wordCount ' +
+          `(tableLength=${sinkTableWords.length}, wordCount=${wordCount})`,
+      );
+    }
+    if (wordCount > this.sharedSinkTableWords.length) {
+      throw new Error(
+        'Rust renderer input contract violation: sink table capacity exceeded ' +
+          `(wordCount=${wordCount}, sharedCapacity=${this.sharedSinkTableWords.length})`,
+      );
+    }
+    this.sharedSinkTableWords.set(sinkTableWords.subarray(0, wordCount), 0);
+    return wordCount;
+  }
+
   private async bootstrap(
     offscreenCanvas: OffscreenCanvas,
     sharedInput: SharedArrayBuffer,
+    sharedShapeBank: SharedArrayBuffer,
+    sharedSinkTable: SharedArrayBuffer,
     config: RustRendererBootstrapConfig,
   ): Promise<void> {
     const message: RustRendererWorkerInboundMessage = {
       type: 'BOOTSTRAP',
       canvas: offscreenCanvas,
       sharedInput,
+      sharedShapeBank,
+      sharedSinkTable,
       config,
     };
 

@@ -43,6 +43,14 @@ function isPathTopology(topology: TopologyDef): topology is PathTopologyDef {
   return 'verbs' in topology;
 }
 
+const f32BitScratch = new Float32Array(1);
+const u32BitScratch = new Uint32Array(f32BitScratch.buffer);
+
+function float32ToUint32Bits(value: number): number {
+  f32BitScratch[0] = value;
+  return u32BitScratch[0] >>> 0;
+}
+
 function resolveShapeControlPointSlot(
   expr: Extract<ValueExpr, { kind: 'shapeRef' }>,
   program: CompiledProgramIR,
@@ -75,8 +83,11 @@ function resolveShapeControlPointSlot(
 
 function evaluateShapeRefHandle(
   expr: Extract<ValueExpr, { kind: 'shapeRef' }>,
+  table: ValueExprTable,
   state: RuntimeState,
   program: CompiledProgramIR,
+  scratch: MaterializeScratch | undefined,
+  pureFnContext: PureFnExecutionContext,
 ): number {
   const shapeBank = state.shapeBank;
   if (!shapeBank) {
@@ -85,11 +96,80 @@ function evaluateShapeRefHandle(
   const topology = getProgramTopology(program, expr.topologyId);
   const isPath = isPathTopology(topology);
   const vertexCount = isPath ? topology.totalControlPoints : 0;
+  const indexCount = isPath && topology.closed && vertexCount >= 3
+    ? (vertexCount - 2) * 3
+    : 0;
   // [LAW:one-source-of-truth] ShapeBank header flags are encoded directly at
   // handle materialization (bit0 = closed path).
   const flags = isPath && topology.closed ? 1 : 0;
   const controlPointSlot = resolveShapeControlPointSlot(expr, program, isPath);
-  const handle = allocShapeBankWords(shapeBank, SHAPE_BANK_HEADER_WORDS);
+  const controlPointWordPayload = (() => {
+    if (!isPath || vertexCount <= 0) {
+      return new Uint32Array(0);
+    }
+    if (expr.controlPointField == null) {
+      throw new Error(
+        'shapeRef path topology requires controlPointField for shape-bank payload materialization',
+      );
+    }
+    const controlPointExpr = table.nodes[expr.controlPointField];
+    if (!controlPointExpr) {
+      throw new Error(
+        'shapeRef path topology missing controlPointField expression ' + String(expr.controlPointField),
+      );
+    }
+    const controlPointStride = payloadStride(controlPointExpr.type.payload);
+    if (controlPointStride < 2) {
+      throw new Error(
+        'shapeRef controlPointField must materialize vec2 payload (stride>=2), got stride=' +
+          String(controlPointStride),
+      );
+    }
+    const cardinality = requireInst(controlPointExpr.type.extent.cardinality, 'cardinality');
+    if (cardinality.kind !== 'many') {
+      throw new Error('shapeRef controlPointField must be many-cardinality');
+    }
+    const controlPointInstanceRef = cardinality.instance;
+    const controlPointInstanceId = (
+      typeof controlPointInstanceRef === 'object'
+        ? controlPointInstanceRef.instanceId
+        : controlPointInstanceRef
+    ) as InstanceId;
+    const controlPointInstanceDecl = program.schedule.instances.get(controlPointInstanceId);
+    if (!controlPointInstanceDecl) {
+      throw new Error(
+        'shapeRef controlPointField references missing instance ' + String(controlPointInstanceId),
+      );
+    }
+    const availablePointCount = resolveInstanceLaneCount(controlPointInstanceDecl, program, state, pureFnContext);
+    if (availablePointCount < vertexCount) {
+      throw new Error(
+        'shapeRef controlPointField has fewer lanes than topology requires ' +
+          `(topologyId=${String(expr.topologyId)}, needed=${vertexCount}, available=${availablePointCount})`,
+      );
+    }
+    const controlPoints = materializeValueExpr(
+      expr.controlPointField,
+      table,
+      controlPointInstanceId,
+      vertexCount,
+      state,
+      program,
+      undefined,
+      scratch,
+      pureFnContext,
+    );
+    const words = new Uint32Array(vertexCount * 2);
+    for (let point = 0; point < vertexCount; point++) {
+      const pointBase = point * controlPointStride;
+      words[point * 2] = float32ToUint32Bits(controlPoints[pointBase]);
+      words[point * 2 + 1] = float32ToUint32Bits(controlPoints[pointBase + 1]);
+    }
+    return words;
+  })();
+  const paramBlockWords = controlPointWordPayload.length;
+  const handle = allocShapeBankWords(shapeBank, SHAPE_BANK_HEADER_WORDS + paramBlockWords);
+  const paramBlockOffset = paramBlockWords > 0 ? handle + SHAPE_BANK_HEADER_WORDS : 0;
   // [LAW:one-source-of-truth] Handle semantics are anchored in ShapeBank:
   // header stores draw topology dimensions, sidecar stores topology/control-slot metadata.
   writeShapeBankHeader(
@@ -97,12 +177,17 @@ function evaluateShapeRefHandle(
     handle,
     createShapeBankHeaderV1({
       kind: 1,
-      topologyMode: 1,
+      topologyMode: isPath ? 1 : 0,
       flags,
-      indexCount: vertexCount,
+      indexCount,
       vertexCount,
+      paramBlockOffset,
+      paramBlockWords,
     }),
   );
+  if (paramBlockWords > 0) {
+    shapeBank.data.set(controlPointWordPayload, paramBlockOffset);
+  }
   writeShapeBankHandleMetadata(shapeBank, handle, {
     topologyId: expr.topologyId as number,
     controlPointSlot,
@@ -193,7 +278,7 @@ function evaluateScalarForMaterialize(
     evaluateReduceKernel: (expr, _valueExprs, runtimeState) =>
       materializeReduceScalar(expr, table, runtimeState, program, scratch, pureFnContext),
     evaluateShapeRef: (expr, _valueExprs, runtimeState) =>
-      evaluateShapeRefHandle(expr, runtimeState, program),
+      evaluateShapeRefHandle(expr, table, runtimeState, program, scratch, pureFnContext),
   };
   return evaluateValueExprScalar(exprId, table.nodes, state, context);
 }

@@ -59,6 +59,34 @@ pub fn attach_shared_input(shared_input: js_sys::SharedArrayBuffer) -> Result<()
 }
 
 #[wasm_bindgen]
+pub fn attach_shared_shape_bank(
+    shared_shape_bank: js_sys::SharedArrayBuffer,
+) -> Result<(), JsValue> {
+    ENGINE.with(|engine_cell| {
+        let mut engine_ref = engine_cell.borrow_mut();
+        let engine = engine_ref.as_mut().ok_or_else(|| {
+            JsValue::from_str("Rust engine must be initialized before attaching shared shape bank")
+        })?;
+        engine.attach_shared_shape_bank(shared_shape_bank);
+        Ok(())
+    })
+}
+
+#[wasm_bindgen]
+pub fn attach_shared_sink_table(
+    shared_sink_table: js_sys::SharedArrayBuffer,
+) -> Result<(), JsValue> {
+    ENGINE.with(|engine_cell| {
+        let mut engine_ref = engine_cell.borrow_mut();
+        let engine = engine_ref.as_mut().ok_or_else(|| {
+            JsValue::from_str("Rust engine must be initialized before attaching shared sink table")
+        })?;
+        engine.attach_shared_sink_table(shared_sink_table);
+        Ok(())
+    })
+}
+
+#[wasm_bindgen]
 pub fn pause_engine() -> Result<(), JsValue> {
     ENGINE.with(|engine_cell| {
         let mut engine_ref = engine_cell.borrow_mut();

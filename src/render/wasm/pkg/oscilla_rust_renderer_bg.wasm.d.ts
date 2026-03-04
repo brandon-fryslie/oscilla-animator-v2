@@ -2,6 +2,8 @@
 /* eslint-disable */
 export const memory: WebAssembly.Memory;
 export const attach_shared_input: (a: any) => [number, number];
+export const attach_shared_shape_bank: (a: any) => [number, number];
+export const attach_shared_sink_table: (a: any) => [number, number];
 export const init_engine: (a: any, b: number, c: number, d: number) => any;
 export const inject_poison_alloc: () => [number, number];
 export const pause_engine: () => [number, number];
@@ -9,7 +11,6 @@ export const rebuild_pipeline: (a: number, b: number, c: number, d: number, e: n
 export const rebuild_simulation_pipeline: (a: number, b: number) => [number, number];
 export const resize_surface: (a: number, b: number) => [number, number];
 export const resume_engine: () => [number, number];
-export const sync_render_payload: (a: any, b: any, c: any, d: any, e: any, f: number) => [number, number];
 export const take_frame_pacing_packet: () => [number, number, number];
 export const wasm_bindgen__closure__destroy__h22c5c9496e43279b: (a: number, b: number) => void;
 export const wasm_bindgen__closure__destroy__haf1314f791359451: (a: number, b: number) => void;

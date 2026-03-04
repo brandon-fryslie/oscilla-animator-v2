@@ -391,6 +391,25 @@ export interface DrawPrepSinkIR {
 }
 
 export interface DrawPrepProgramIR {
+  /**
+   * Total sink records emitted by the compiler draw-prep contract.
+   *
+   * [LAW:one-source-of-truth] Runtime/worker capacity validation reads this
+   * static count from the compiler contract instead of re-deriving it.
+   */
+  readonly totalRecordCount: number;
+  /**
+   * Indexed stream region metadata (words in the shared indirect buffer).
+   */
+  readonly indexedRecordCount: number;
+  readonly indexedRegionBaseWords: number;
+  readonly indexedStrideWords: 5;
+  /**
+   * Non-indexed stream region metadata (words in the shared indirect buffer).
+   */
+  readonly nonIndexedRecordCount: number;
+  readonly nonIndexedRegionBaseWords: number;
+  readonly nonIndexedStrideWords: 4;
   readonly sinks: readonly DrawPrepSinkIR[];
 }
 

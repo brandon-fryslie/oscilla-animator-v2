@@ -74,14 +74,6 @@ interface RenderInput {
   readonly inputAudioMid?: number;
   readonly inputAudioHigh?: number;
   readonly inputGaugeActive?: number;
-  readonly drawPrepSinks?: readonly DrawPrepSinkDescriptor[];
-}
-
-interface DrawPrepSinkDescriptor {
-  readonly sinkIndex: number;
-  readonly indirectRecordIndex: number;
-  readonly instanceCountMode: 'static' | 'dynamic';
-  readonly staticInstanceCount?: number;
 }
 
 interface PreparedDrawPathOp {
@@ -93,41 +85,6 @@ interface PreparedDrawPathOp {
   readonly firstInstance: number;
   readonly instanceCount: number;
   readonly pass: 'fill' | 'stroke';
-}
-
-const MAX_UINT32 = 0xFFFF_FFFF;
-function buildDrawPrepStaticCountLookup(
-  sinks: readonly DrawPrepSinkDescriptor[] | undefined,
-): ReadonlyMap<number, number> {
-  const staticCounts = new Map<number, number>();
-  if (!sinks) return staticCounts;
-  for (const sink of sinks) {
-    if (sink.instanceCountMode !== 'static') continue;
-    const staticCount = sink.staticInstanceCount;
-    if (
-      typeof staticCount !== 'number'
-      || !Number.isFinite(staticCount)
-      || !Number.isInteger(staticCount)
-      || !Number.isSafeInteger(staticCount)
-      || staticCount < 0
-      || staticCount > MAX_UINT32
-    ) {
-      // [LAW:no-silent-fallbacks] Invalid compiler draw-prep metadata must fail
-      // fast instead of silently emitting fallback instance counts.
-      throw new Error(
-        `WebGPURenderer: static draw-prep sink at sinkIndex ${sink.sinkIndex} (indirectRecordIndex=${sink.indirectRecordIndex}) missing valid staticInstanceCount`,
-      );
-    }
-    if (staticCounts.has(sink.sinkIndex)) {
-      // [LAW:no-silent-fallbacks] Duplicate static sinkIndex must fail fast
-      // instead of silently overwriting an existing entry.
-      throw new Error(
-        `WebGPURenderer: duplicate static draw-prep sinkIndex ${sink.sinkIndex} (indirectRecordIndex=${sink.indirectRecordIndex})`,
-      );
-    }
-    staticCounts.set(sink.sinkIndex, staticCount);
-  }
-  return staticCounts;
 }
 
 interface WebGPUStartupResources {
@@ -698,25 +655,14 @@ export class WebGPURenderer {
       );
     }
     this.ensureIndirectArgsCapacity(drawPlan.length);
-    const staticDrawPrepCounts = buildDrawPrepStaticCountLookup(input.drawPrepSinks);
     for (const prepared of drawPlan) {
-      const resolvedInstanceCount =
-        staticDrawPrepCounts.get(prepared.sourceSinkIndex)
-        ?? prepared.instanceCount;
-      if (resolvedInstanceCount > prepared.instanceCount) {
-        // [LAW:no-silent-fallbacks] Static metadata must never request more
-        // instances than the packed draw record provides.
-        throw new Error(
-          `WebGPURenderer: static draw-prep sink count ${resolvedInstanceCount} exceeds packed instance count ${prepared.instanceCount} at sinkIndex ${prepared.sourceSinkIndex}`,
-        );
-      }
       this.drawPrepRuntime.step(
         commandEncoder,
         this.indirectArgsBuffer,
         prepared.indirectRecordIndex,
         this.indirectArgsCapacityRecords,
         prepared.mesh.indexCount,
-        resolvedInstanceCount,
+        prepared.instanceCount,
         prepared.firstInstance,
       );
     }
