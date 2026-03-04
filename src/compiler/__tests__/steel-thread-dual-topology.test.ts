@@ -90,6 +90,11 @@ describe('Steel Thread - Dual Topology with Scale', () => {
     expect(result.program.drawPrepProgram?.sinks.map((sink) => sink.sinkIndex)).toEqual([0, 1]);
     expect(result.program.drawPrepProgram?.sinks.map((sink) => sink.indirectRecordIndex)).toEqual([0, 1]);
     expect(result.program.drawPrepProgram?.sinks.map((sink) => sink.instanceCountMode)).toEqual(['static', 'static']);
+    expect(result.program.drawPrepProgram?.sinks.map((sink) => sink.drawMode)).toEqual(['indexed', 'indexed']);
+    expect(result.program.drawPrepProgram?.sinks.map((sink) => sink.indirectRegion)).toEqual(['indexed', 'indexed']);
+    expect(result.program.drawPrepProgram?.sinks.map((sink) => sink.indirectStrideBytes)).toEqual([20, 20]);
+    expect(result.program.drawPrepProgram?.sinks.map((sink) => sink.topologySource)).toEqual(['shapeHeaderV1', 'shapeHeaderV1']);
+    expect(result.program.drawPrepProgram?.sinks.map((sink) => sink.firstInstanceSource)).toEqual(['runtimePacked', 'runtimePacked']);
     expect(
       [...(result.program.drawPrepProgram?.sinks.map((sink) => sink.staticInstanceCount) ?? [])]
         .sort((a, b) => (a ?? 0) - (b ?? 0))
