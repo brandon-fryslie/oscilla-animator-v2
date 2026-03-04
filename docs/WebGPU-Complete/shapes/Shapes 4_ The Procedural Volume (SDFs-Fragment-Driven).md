@@ -3,6 +3,13 @@ For Oscilla v3.0, mastering Type 4 shapes is the key to decoupling visual fideli
 
 ## ---
 
+## Related Contracts
+
+- `docs/WebGPU-Complete/IMPLEMENTATION-INDEX.md`
+- `docs/WebGPU-Complete/P1-2__Unified_GPU_Shape_Bank_Strategy.md`
+- `docs/WebGPU-Complete/P3-3_GPU_Draw_Prep__Autonomous_Rendering_Logistics.md`
+- `docs/WebGPU-Complete/P3-4__WebGPU_Render_Pass_Deep_Dive.md`
+
 **1\. Inputs and Outputs (The Data Contract)**
 
 In a Type 4 pipeline, the Vertex Shader is demoted to a mere "Courier." Its only job is to deliver a blank canvas (a bounding box) to the Fragment Shader, where the actual geometry is instantiated via math.
@@ -117,5 +124,4 @@ To guarantee the compiler and execution runtime correctly handle Procedural Volu
   * *Test:* Render a pure red (1.0, 0.0, 0.0) SDF with an edge pixel evaluating to $\\alpha \= 0.5$.  
   * *Assert:* The final color attachment output must strictly equal (0.5, 0.0, 0.0, 0.5).
 
-By mastering Type 4 shapes, Oscilla v3.0 achieves the crisp, resolution-independent aesthetic that defines modern generative UI and motion graphics.  
-This concludes the gritty technical details of the four Shape Taxonomies. Would you like to shift focus to how the **RenderAssembler** handles the Z-sorting and alpha blending of these diverse types, or explore the architectural requirements for the **Audio Routing/FFT subsystem**?
+By mastering Type 4 shapes, procedural rendering stays resolution-independent while respecting shared camera/depth and blend contracts.

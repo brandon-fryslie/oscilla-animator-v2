@@ -10,6 +10,14 @@ This document defines the critical "End of Frame" logic. It details how the engi
 
 # The Runtime Loop: The Swap
 
+## Related Contracts
+
+- `docs/WebGPU-Complete/IMPLEMENTATION-INDEX.md`
+- `docs/WebGPU-Complete/P1-1__Unified_GPU_Buffer_Strategy_Explained.md`
+- `docs/WebGPU-Complete/P3-2_GPU_Compute_Dispatch_Explained.md`
+- `docs/WebGPU-Complete/P3-3_GPU_Draw_Prep__Autonomous_Rendering_Logistics.md`
+- `docs/WebGPU-Complete/P3-4__WebGPU_Render_Pass_Deep_Dive.md`
+
 **Objective:** Advance the simulation timeline by rotating buffer roles.
 
 **Invariant:** The Arena_Write of Frame \$N\$ becomes the Arena_Read of Frame \$N+1\$.
@@ -40,97 +48,53 @@ The runtime maintains a monotonically increasing integer: frameIndex.
 
 - **Next State (Write):** (frameIndex + 1) % 2
 
-## 2. The Bind Group Strategy (The "Cached Swap")
+## 2. Canonical BindGroup Strategy
 
-In WebGPU, you cannot just say "swap buffers." You must bind a **BindGroup**. Creating a BindGroup is cheap, but creating one *every frame* is garbage.
+Bind groups are pre-allocated and reused. No per-frame bind-group creation in the hot path.
 
-### 2.1 Pre-Allocation
+### 2.1 Pre-Allocated Groups
 
-At the start of the application (or after a resize), we create **two permanent BindGroups**.
+At minimum, maintain:
 
-**BindGroup A (Index 0):**
+1. `physicsGroupA`: read `Arena_A`, write `Arena_B`
+2. `physicsGroupB`: read `Arena_B`, write `Arena_A`
+3. `readOnlyGroupA`: read `Arena_A` (+ shape/material/uniform bindings)
+4. `readOnlyGroupB`: read `Arena_B` (+ shape/material/uniform bindings)
 
-- **Binding 0 (Read):** Buffer_A
+This keeps pass intent explicit:
 
-- **Binding 1 (Write):** Buffer_B
+- physics uses read+write group
+- draw-prep/render use read-only group targeting the post-physics arena
 
-- **Binding 2:** Shape Bank
+### 2.2 Per-Frame Selection
 
-- **Binding 3:** Uniforms
+```ts
+const isEven = frameIndex % 2 === 0;
 
-**BindGroup B (Index 1):**
+const physicsGroup = isEven ? physicsGroupA : physicsGroupB;
+const postPhysicsReadGroup = isEven ? readOnlyGroupB : readOnlyGroupA;
 
-- **Binding 0 (Read):** Buffer_B
+// 1) Physics: read current, write next
+computePass.setBindGroup(0, physicsGroup);
+computePass.dispatchWorkgroups(...);
 
-- **Binding 1 (Write):** Buffer_A
+// 2) Draw Prep: read next (post-physics)
+drawPrepPass.setBindGroup(0, postPhysicsReadGroup);
+drawPrepPass.dispatchWorkgroups(...);
 
-- **Binding 2:** Shape Bank
+// 3) Render: read next (same target as draw-prep)
+renderPass.setBindGroup(0, postPhysicsReadGroup);
+```
 
-- **Binding 3:** Uniforms
+## 3. Read-After-Write Contract
 
-### 2.2 The Execution Logic
+Pass ordering is canonical:
 
-Inside executeFrame(), we simply toggle which group we use.
+1. Physics writes `Arena_Next`.
+2. Draw Prep reads `Arena_Next`.
+3. Render reads `Arena_Next`.
 
-TypeScript
-
-// RuntimeExecutor.ts\
-const isEven = frameIndex % 2 === 0;\
-const currentBindGroup = isEven ? bindGroupA : bindGroupB;\
-\
-// 1. Dispatch Physics (Writes to Next)\
-computePass.setBindGroup(0, currentBindGroup);\
-computePass.dispatchWorkgroups(...);\
-\
-// 2. Dispatch Draw Prep (Reads from Next)\
-// Wait! Draw Prep needs to read the \*Result\* of the Physics.\
-// So it needs to bind the 'Write' buffer as 'Read'.
-
-**Correction:** The DrawPrep pipeline uses a *different* BindGroup layout because it treats the "Future" state as "Present" (Read-Only).
-
-## 3. The "Read-After-Write" Hazard
-
-This is where the architecture gets tricky.
-
-### 3.1 The Pipeline Dependency
-
-1.  **Physics Kernel:** Writes to Buffer_Next.
-
-2.  **Draw Prep Kernel:** Reads Buffer_Next (to count particles).
-
-3.  **Render Pass:** Reads Buffer_Next (to draw positions).
-
-### 3.2 The BindGroup Permutations
-
-We actually need **Three** BindGroups per swap cycle, or a smarter layout.
-
-**Option A: The "Uniform" Layout (Simpler)**
-
-All pipelines use the same layout: @group(0) @binding(0) var\<storage, read\>.
-
-- *Physics Pass:* Binds Group_A (Read A, Write B).
-
-- *Draw Prep Pass:* Binds Group_B (Read B). *Note: It ignores the write binding.*
-
-- *Render Pass:* Binds Group_B (Read B).
-
-**Option B: The "Dedicated" Layout (Explicit)**
-
-- *Physics:* Uses Layout_Physics.
-
-- *Draw Prep:* Uses Layout_Read_Only.
-
-- *Render:* Uses Layout_Read_Only.
-
-**Decision:** **Option A** is preferred for v3.0. We create two "Master" BindGroups.
-
-- **Even Frame:**
-
-  - Physics uses BindGroup_A (Read A, Write B).
-
-  - Draw Prep uses BindGroup_B (Read B, Write A - *writes ignored*).
-
-  - Render uses BindGroup_B (Read B, Write A - *writes impossible in Render*).
+WebGPU pass boundaries provide required visibility guarantees when encoded in this order.
 
 ## 4. The "History" Mechanics (Feedback)
 
@@ -196,16 +160,16 @@ The RuntimeExecutor enters a while loop.
 
 2.  **Resource Creation:**
 
-    - Create bindGroupA and bindGroupB immediately after creating buffers.
+    - Create `physicsGroupA/B` and `readOnlyGroupA/B` immediately after creating buffers.
 
-    - Cache them. Do *not* create new GPUBindGroup inside the loop.
+    - Cache them. Do *not* create new `GPUBindGroup` instances inside the frame loop.
 
 3.  **Execution Update:**
 
-    - Determine readGroup and writeGroup based on parity.
+    - Determine simulation group (`physicsGroup*`) and post-physics read group (`readOnlyGroup*`) based on parity.
 
-    - Pass the correct group to computePass.setBindGroup(0, ...).
+    - Pass groups to physics, draw-prep, and render passes in canonical order.
 
-4.  **Cleanup:** If the Arena resizes, you **must** destroy and recreate both BindGroups.
+4.  **Cleanup:** If the Arena or bind-layout resources resize/change, recreate all precomputed groups.
 
 This simple integer increment (i++) drives the entire temporal evolution of your instrument. It is the tick of the clock.

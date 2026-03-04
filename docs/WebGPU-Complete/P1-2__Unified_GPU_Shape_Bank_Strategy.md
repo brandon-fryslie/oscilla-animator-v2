@@ -10,11 +10,19 @@ This document defines the architecture for storing **Topology** (connectivity) s
 
 # The Unified Buffer Strategy: The "Shape Bank"
 
+## Related Contracts
+
+- `docs/WebGPU-Complete/IMPLEMENTATION-INDEX.md`
+- `docs/WebGPU-Complete/P1-1__Unified_GPU_Buffer_Strategy_Explained.md`
+- `docs/WebGPU-Complete/P1-3__GPU-Driven_Rendering__Indirect_Buffer.md`
+- `docs/WebGPU-Complete/P3-3_GPU_Draw_Prep__Autonomous_Rendering_Logistics.md`
+- `docs/WebGPU-Complete/P3-4__WebGPU_Render_Pass_Deep_Dive.md`
+
 **Objective:** Store structural definitions (SVGs, Glyphs, Primitives) in a unified, indexable GPU buffer.
 
 **Invariant:** Topology data is immutable during a Render Pass.
 
-**Mechanism:** A monolithic storage buffer containing packed u32 headers and index data.
+**Mechanism:** A monolithic storage buffer containing packed `u32` headers plus topology/parameter payload slices.
 
 ## 1. The Philosophy: Topology vs. Geometry
 
@@ -36,7 +44,7 @@ It is partitioned into two regions: **Headers** and **Payloads**.
 
 The first \$N\$ kilobytes of the buffer are reserved for **Shape Headers**.
 
-- **Stride:** 8 words (32 bytes) per shape.
+- **Stride:** 16 words (64 bytes) per shape (`ShapeHeaderV1`).
 
 - **Capacity:** Configurable (e.g., 4096 shapes max).
 
@@ -44,24 +52,30 @@ The first \$N\$ kilobytes of the buffer are reserved for **Shape Headers**.
 
 | **Offset (u32)** | **Field Name** | **Description** |
 |----|----|----|
-| 0 | VertexCount | The number of vertices in this shape (e.g., 4 for a Quad). |
-| 1 | IndexCount | The number of indices to draw (e.g., 6 for a Quad). |
-| 2 | IndexStart | The offset into **Region B** where the indices begin. |
-| 3 | BaseVertex | Added to index values (useful for batching). |
-| 4 | Flags | Bitmask: IS_CLOSED (1), IS_FILLED (2), HAS_UV (4). |
-| 5 | BoundingBox_Min | Packed f16 (2x16-bit) min bounds (for culling). |
-| 6 | BoundingBox_Max | Packed f16 (2x16-bit) max bounds. |
-| 7 | Reserved | Padding for alignment/future use. |
+| 0 | kind | Taxonomy class discriminator. |
+| 1 | topologyMode | Indexed vs non-indexed/virtual. |
+| 2 | flags | Shape behavior flags. |
+| 3 | materialClass | Material/render class reference. |
+| 4 | indexCount | Indexed topology count. |
+| 5 | firstIndex | Payload index start (indexed path). |
+| 6 | baseVertex | Indexed base-vertex offset. |
+| 7 | vertexCount | Non-indexed/virtual topology count. |
+| 8 | firstVertex | Non-indexed first vertex reference. |
+| 9 | paramBlockOffset | Parameter block offset in payload heap. |
+| 10 | paramBlockWords | Parameter block size in words. |
+| 11 | reserved0 | Reserved for version-safe expansion. |
+| 12 | boundsMinPacked | Packed bounds min for culling. |
+| 13 | boundsMaxPacked | Packed bounds max for culling. |
+| 14 | reserved1 | Reserved. |
+| 15 | reserved2 | Reserved. |
 
 ### 2.2 Region B: The Payload Heap (Variable Stride)
 
-The rest of the buffer acts as a heap for raw index data.
+The rest of the buffer acts as a heap for topology/parameter payload slices.
 
-- **Content:** Arrays of u32 indices (e.g., 0, 1, 2, 0, 2, 3).
-
-- **Allocation:** Contiguous blocks pointed to by IndexStart.
-
-- **Format:** We use u32 indices to support large meshes (\>65k vertices), though for most 2D shapes, the values are small.
+- **Content:** indexed payloads, virtual-topology metadata, and shape parameter blocks.
+- **Allocation:** contiguous blocks referenced by header fields (`firstIndex`, `firstVertex`, `paramBlockOffset`).
+- **Format:** payload uses `u32` words with explicit bit-cast conventions for float values when required.
 
 ## 3. The "Handle" Mechanism
 
@@ -89,11 +103,11 @@ The **Shape ID** is simply the index of the header in Region A.
 
     - Reads ShapeID = Arena_Shapes\[InstanceID\].
 
-    - Reads Header = ShapeBank\[ShapeID \* 8\].
+    - Reads Header = ShapeBank\[ShapeID \* 16\] (canonical `ShapeHeaderV1` stride: 16 words / 64 bytes).
 
-    - Reads Index = ShapeBank\[Header.IndexStart + VertexID\].
+    - Reads topology references from the header.
 
-This allows **Heterogeneous Instancing**. Instance 0 can draw a Square, and Instance 1 can draw a Circle, within the *same* draw call, simply by pointing to different headers.
+This allows heterogeneous shape usage in one frame, but not arbitrary mixed topology inside one indexed indirect record. Draw Prep must bucket sinks into compatible command records (indexed vs non-indexed, plus topology/material compatibility).
 
 ## 4. Lifecycle & Allocation Strategy
 
@@ -109,85 +123,77 @@ Primitives (Square, Circle, Triangle) and imported assets (SVGs, Fonts) are uplo
 
 ### 4.2 Dynamic Topology (The "Procedural" Zone)
 
-Some blocks (like Polygon or TextGenerator) generate new topology every frame.
+Some blocks (like user-generated polygons) can produce dynamic topology.
 
-- **Challenge:** We cannot re-upload the entire buffer at 144Hz.
+- **Challenge:** We cannot re-upload the full ShapeBank at frame rate.
 
-- **Solution:** A **Ring Buffer** section at the end of the Payload Heap.
+- **Solution:** A bounded dynamic region at the end of the payload heap.
 
-  - **Frame N:** The CPU writes new indices to the Ring Buffer head.
+  - Update only dirty slices (`queue.writeBuffer`) when topology actually changes.
 
-  - **Upload:** The CPU uploads *only* the dirty slice of the Ring Buffer (queue.writeBuffer).
+  - Update corresponding headers to point at the new payload ranges.
 
-  - **Header Update:** The CPU updates the Header (Region A) to point to the new offset in the Ring Buffer.
+  - Do not treat per-frame topology churn as the default path.
 
 ### 4.3 The "Default" Topologies
 
 To save bandwidth, the Bank comes pre-loaded with standard primitives at fixed IDs.
 
-- **ID 1 (Line Strip):** A "Virtual" topology. We don't store indices 0, 1, 2.... The shader generates them: index = vertex_id. The Header sets IndexCount = 0 to signal "Procedural Indexing".
+- **ID 1 (Line Strip):** A "Virtual" topology. We don't store explicit index payload for this primitive; topology is resolved by shader logic and `topologyMode = NonIndexed/Virtual` metadata.
 
 - **ID 2 (Quad):** 0, 1, 2, 2, 1, 3 (Triangle Strip for a quad).
 
 ## 5. Shader Implementation (WGSL)
 
-Here is exactly how the Bank is bound and read in the Vertex Shader.
+The bank is bound once and decoded through canonical `ShapeHeaderV1` helpers.
 
 Code snippet
 
-struct ShapeHeader {\
-vertex_count: u32,\
-index_count: u32,\
-index_start: u32,\
-base_vertex: u32,\
+struct ShapeHeaderV1 {\
+kind: u32,\
+topology_mode: u32,\
 flags: u32,\
-// ... packed bounds ...\
+material_class: u32,\
+index_count: u32,\
+first_index: u32,\
+base_vertex: i32,\
+vertex_count: u32,\
+first_vertex: u32,\
+param_block_offset: u32,\
+param_block_words: u32,\
+_reserved0: u32,\
+bounds_min_packed: u32,\
+bounds_max_packed: u32,\
+_reserved1: u32,\
+_reserved2: u32,\
 }\
 \
 @group(0) @binding(2) var\<storage, read\> shape_bank: array\<u32\>;\
 \
-fn get_header(shape_id: u32) -\> ShapeHeader {\
-let base = shape_id \* 8u; // Stride is 8\
-return ShapeHeader(\
-shape_bank\[base + 0u\],\
-shape_bank\[base + 1u\],\
-shape_bank\[base + 2u\],\
-shape_bank\[base + 3u\],\
-shape_bank\[base + 4u\]\
-);\
-}\
-\
-fn get_index(header: ShapeHeader, vertex_id: u32) -\> u32 {\
-// Optimization: If IndexCount is 0, use Identity Indexing (Line Strip)\
-if (header.index_count == 0u) {\
-return vertex_id;\
-}\
-// Otherwise read from Payload Heap\
-return shape_bank\[header.index_start + vertex_id\];\
+fn get_header(shape_id: u32) -\> ShapeHeaderV1 {\
+let base = shape_id * 16u; // 16-word stride\
+// decode 16 words into ShapeHeaderV1\
 }
 
 ## 6. The "Text" Special Case
 
-Text Rendering is the ultimate stress test for the Shape Bank.
+Text rendering uses a hybrid ownership model.
 
-- **Font Atlas:** The Glyphs (curves) are stored as Shapes in the Bank. 'A' is ID 100, 'B' is ID 101.
+- **CPU/Worker shaping:** UTF-8 decode, bidi/ligatures, kerning, line-wrap.
+- **GPU rendering:** shared text quad topology + MSDF atlas sampling.
+- **Arena data:** glyph instance transforms, glyph indices, style params.
+- **ShapeBank data:** stable text proxy topology and atlas metadata tables.
 
-- **String Generation:** When the user types "HELLO", the TextGenerator block produces a Field of Instances.
-
-  - Instance 0: Pos=(0,0), ShapeID=107 ('H')
-
-  - Instance 1: Pos=(10,0), ShapeID=104 ('E')
-
-- **Rendering:** The renderer draws 5 instances. Each instance pulls a different topology from the Bank. Zero CPU triangulation required.
+Rendering stays in the same indirect pipeline; text records are typically non-indexed or indexed-quad batches depending on chosen proxy layout.
 
 ## 7. Summary of Requirements
 
 1.  **Refactor ShapeBank:** Move from runtime/Arena (if it was there conceptually) to a dedicated GPUBuffer manager.
 
-2.  **Implement ShapeAllocator:** A CPU-side service to manage the Heap and Ring Buffer offsets.
+2.  **Implement ShapeAllocator:** A CPU-side service to manage immutable and dynamic payload regions.
 
-3.  **Update CompiledProgramIR:** Add a ShapeTable to the compilation artifact, ensuring static assets are assigned stable IDs.
+3.  **Update CompiledProgramIR:** Add a ShapeTable plus draw-mode metadata so Draw Prep can emit indexed and non-indexed command streams.
 
-4.  **Shader Integration:** Inject the get_header and get_index helper functions into every Vertex Shader.
+4.  **Shader Integration:** Inject canonical `ShapeHeaderV1` decode helpers into vertex/fragment stages where needed.
 
 This architecture turns the GPU into a "Geometry Database." The graph logic simply queries this database to decide what to draw, decoupling the *simulation* of motion from the *definition* of form.

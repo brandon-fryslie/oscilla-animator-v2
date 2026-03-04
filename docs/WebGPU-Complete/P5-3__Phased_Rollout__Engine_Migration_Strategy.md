@@ -8,11 +8,14 @@ This is the comprehensive technical specification for **The Developer Experience
 
 # The Developer Experience: Post-Cutover Rollout
 
+## Related Contracts
+
+- `docs/WebGPU-Complete/IMPLEMENTATION-INDEX.md`
+- `docs/WebGPU-Complete/P5-1__WASM_Boot__Developer_Experience_&_Migration.md`
+- `docs/WebGPU-Complete/P5-2_Error_Propagation__Developer_Experience.md`
+- `docs/WebGPU-Complete/P2-4__Scoped_Naga_IR_Control_Flow_and_Memory_Model.md`
+
 **Objective:** Execute WebGPU migration completion work on top of a WebGPU-only engine.
-
-**Current State:** WebGPU is already the active runtime path on `master`.
-
-**Release Context:** Product is unreleased; no production customers depend on legacy behavior.
 
 **Core Policy:** No backward compatibility layers, no dual-runtime operation, no runtime fallback toggles.
 
@@ -22,7 +25,7 @@ This is the comprehensive technical specification for **The Developer Experience
 
 ## 1. Strategic Shift from Legacy Migration to Fix-Forward
 
-The prior staged migration model (legacy v2 + ghost v3 + feature flags + rollback toggles) is obsolete for this repository state.
+The prior staged migration model (dual runtime + feature-flag ownership switching + rollback toggles) is intentionally deprecated.
 
 ### 1.1 What is removed
 
