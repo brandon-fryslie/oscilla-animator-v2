@@ -7,7 +7,7 @@ This document maps the entire visual vocabulary of Oscilla v3.0. It defines how 
 
 **Objective:** Unify all visual generation under a strict, GPU-friendly memory contract.  
 **Invariant:** The ShapeBank (Topology) and the Arena (State) must be able to express any shape type without the renderer needing CPU intervention during the frame loop.  
-**Mechanism:** A polymorphous Uber-Shader that dynamically alters its Vertex and Fragment execution paths based on the ShapeID and its associated taxonomy classification.
+**Mechanism:** A polymorphous Uber-Shader plus canonical static Draw Prep. Draw Prep emits hardware-native indexed and non-indexed indirect command streams based on Shape taxonomy metadata.
 
 ## ---
 

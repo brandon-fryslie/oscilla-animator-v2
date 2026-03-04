@@ -20,10 +20,10 @@ To generate and render a text shape, the system must bridge high-level human lan
 
 #### **2\. Outputs**
 
-* **Vertex Buffer (VBO):** An array of dynamically generated 2D or 3D quads (two triangles per visible glyph).  
-* **Index Buffer (IBO):** The draw order for the quads.  
-* **UV Buffer:** Mapping coordinates pointing into the global font texture atlas for each specific glyph.  
-* **Calculated Bounds:** An Axis-Aligned Bounding Box (AABB) of the *actual* rendered text (which often differs from the input constraint box).
+* **Glyph Run Payload:** CPU-shaped glyph runs (glyph index + pen offset + style refs) packed into upload buffers.
+* **GPU Shape Payload:** Shared quad topology in ShapeBank plus per-glyph instance data in Arena channels.
+* **UV/Atlas Mapping:** UVs derived from atlas metadata per glyph index.
+* **Calculated Bounds:** Axis-Aligned Bounding Box (AABB) of rendered text for culling/layout feedback.
 
 ### ---
 
@@ -42,7 +42,7 @@ Text requires a hybrid storage approach. Storing text as raw geometry (convertin
 **III. Hard Invariants (Do Not Break)**
 
 1. **UTF-8 Strictness:** The input string parser must strictly validate UTF-8. Invalid byte sequences must default to the Unicode Replacement Character (U+FFFD) without crashing the parser or overflowing buffers.  
-2. **Vertex-to-Character Ratio:** For a string of $N$ visible characters (excluding spaces/newlines), the meshing system must generate exactly $4N$ vertices and $6N$ indices.  
+2. **Glyph Quad Ratio:** For a string of $N$ visible glyphs (excluding spaces/newlines), the text payload must produce exactly $4N$ quad vertices and $6N$ quad indices (or equivalent non-indexed vertex count when configured).  
 3. **UV Bound Adherence:** All generated UV coordinates must fall strictly within the normalized \[0.0, 1.0\] range of the font atlas. UVs mapping outside this range will result in texture bleeding or garbage rendering.  
 4. **Immutability of the Atlas:** Once a font's MSDF atlas is generated or loaded into VRAM, the texture data is read-only. Dynamic glyph addition (for CJK languages) requires a specialized double-buffered texture caching system, not direct mutation of the active atlas.
 
@@ -63,13 +63,13 @@ These criteria are designed to be run in a CI/CD pipeline by automated testing a
 #### **Phase 1: Text Shaping & Layout Logic**
 
 * **AC 1.1 (Vertex Count):** Given an input string of "Hello World\\n", the testing agent intercepts the mesh generator output and asserts vertex\_count \== 40 (10 non-whitespace characters \* 4 vertices).  
-* **AC 1.2 (Bounds Containment):** Given a constraint box of w=100, h=100 and a font size that forces wrapping, the agent calculates the min/max coordinates of the generated vertex buffer and asserts Max(X) \<= 100 and Max(Y) \<= 100\.  
+* **AC 1.2 (Bounds Containment):** Given a constraint box of w=100, h=100 and a font size that forces wrapping, the agent calculates the min/max coordinates of the generated glyph-run quad payload and asserts Max(X) \<= 100 and Max(Y) \<= 100\.  
 * **AC 1.3 (RTL Integrity):** When supplied the Arabic string "مرحبا" (Marhaba), the agent asserts that the generated X-coordinates of the quads are strictly decreasing (moving right to left).
 
 #### **Phase 2: Atlas & Memory Verification**
 
 * **AC 2.1 (UV Safety):** The agent scans the generated UV buffer for any text string and asserts that 0.0 \<= u \<= 1.0 and 0.0 \<= v \<= 1.0 for all vertices.  
-* **AC 2.2 (Buffer Reuse):** The agent updates a text component's string from a 10-character string to a 5-character string. The agent asserts that no new memory allocation occurred for the vertex buffer (verifying buffer pooling/capacity reuse).
+* **AC 2.2 (Buffer Reuse):** Update text from 10 glyphs to 5 glyphs and assert no new heap allocation in hot path buffers (verifying dirty-slice reuse / capacity reuse).
 
 #### **Phase 3: Shader & Rendering Accuracy (Headless)**
 

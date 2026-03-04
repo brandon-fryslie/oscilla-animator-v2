@@ -89,9 +89,9 @@ An AI agent implementing this phase must write unit and integration tests that p
 * **AC 1.2 (Float-to-Int Casting):**  
   * *Test:* Write a vertex position \[-1.5, 2.75, 0.0\] via the ShapeAllocator. Read the memory back through a Uint32Array view, then bit-cast it back to float in a JS test.  
   * *Assert:* extracted\_float \=== \-1.5 (Exact bitwise match).  
-* **AC 1.3 (Draw Prep Grouping):**  
-  * *Test:* Provide a Field of ShapeIDs to the Compiler Simulator: \[1, 1, 2, 1, 2\].  
-  * *Assert:* The generated Draw Prep WGSL must produce exactly **2** DrawIndexedIndirectArgs commands (one for ID 1 with instance\_count \= 3, one for ID 2 with instance\_count \= 2).
+* **AC 1.3 (Draw Prep Grouping):**
+  * *Test:* Provide a Field of ShapeIDs to the Compiler Simulator: \[1, 1, 2, 1, 2\].
+  * *Assert:* Compiler-emitted sink metadata plus the canonical static draw-prep kernel must produce exactly **2** indexed indirect records (one for ID 1 with `instanceCount = 3`, one for ID 2 with `instanceCount = 2`).
 
 ### **Phase 2: Shader Execution AC**
 

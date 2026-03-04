@@ -6,222 +6,154 @@
 
 This is the comprehensive technical specification for **The Runtime Loop: The Draw Prep Dispatch (The "Logistics")**.
 
-This document defines the critical intermediate step between the Physics Simulation and the Rasterization. It details how the GPU self-organizes its own drawing commands, enabling features like occlusion culling, dynamic particle counts, and trail rendering without the CPU ever needing to know "how many" things exist.
+This document defines the intermediate step between Physics Simulation and Rasterization. Draw Prep converts simulation counters and topology metadata into hardware-valid indirect draw commands.
 
 # The Runtime Loop: The Draw Prep Dispatch
 
-**Objective:** Translate the raw simulation state (Active Counts) into valid Draw Commands (DrawIndexedIndirectArgs).
+**Objective:** Translate simulation state into valid WebGPU indirect commands.
 
-**Invariant:** The IndirectCommandBuffer must be fully populated with valid draw arguments for every active render block *before* the Render Pass begins.
+**Invariant:** The indirect buffer must be fully populated before Render Pass begins.
 
-**Mechanism:** A dedicated Compute Pass with a 1:1 mapping between "Render Blocks" and "Workgroups".
+**Mechanism:** Canonical static draw-prep compute kernel + compiler-emitted metadata records.
 
-## 1. The Architectural Necessity
+## 1. Architectural Necessity
 
-Why do we need this step? Why can't the Main Physics Kernel just write the draw arguments?
+Why not write indirect args in the physics kernel?
 
-**The "Scatter" Problem:**
+- Physics threads map to particles.
+- Indirect records map to draw sinks.
+- Mixed ownership causes contention/races.
 
-- **Physics Kernel:** Threads map to *Particles* (10,000 threads).
+So we decouple:
 
-- **Draw Arguments:** Map to *Draw Calls* (5 threads).
+1. Physics/Culling computes visibility counts.
+2. Draw Prep emits one command per sink record.
 
-- **Conflict:** If 10,000 threads try to write to index 0 of the Indirect Buffer, you get a race condition. You would need atomic operations which serialize the pipeline.
+## 2. Dispatch Geometry and Ownership
 
-**The Solution:**
+### 2.1 Canonical Dispatch Shape
 
-We decouple "Simulation" from "Logistics."
+Draw Prep executes per sink record:
 
-1.  **Physics Kernel:** Updates positions and atomically increments an ActiveInstanceCount in the Arena.
+- `dispatchWorkgroups(1)` per record
+- `workgroup_size = 1`
+- one active invocation writes one command
 
-2.  **Draw Prep Kernel:** Launches exactly **1 thread per Render Block**. It reads that final ActiveInstanceCount and writes the DrawArgs once.
+`recordIndex` identifies destination slot.
 
-## 2. The Kernel Geometry (1:1 Mapping)
+### 2.2 Canonical Shader Ownership
 
-This kernel is small but vital. It runs extremely fast.
+Draw Prep kernel is static and immutable.
 
-### 2.1 The Dispatch Size
+- Compiler emits metadata only (`drawPrepProgram.sinks`).
+- Runtime does not accept draw-prep WGSL source overrides.
+- `drawPrepShaderWgsl`-style payloads are rejected.
 
-Draw-prep dispatch is per prepared indirect record, not one bulk dispatch over all render blocks.
+### 2.3 Output Streams
 
-- **Dispatch per record:** `dispatchWorkgroups(1)`
-- **Workgroup size:** `drawPrepWorkgroupSize = 1`
-- **Invocation count per dispatch:** exactly one active invocation (`gid.x == 0`)
+Draw Prep writes to two non-overlapping regions in one physical indirect buffer:
 
-The renderer executes this dispatch once for each prepared draw record so `drawPrepParams.v1.y` (`recordIndex`) identifies which indirect slot to update.
+- indexed region: 20-byte `DrawIndexedIndirectArgs`
+- non-indexed region: 16-byte `DrawIndirectArgs`
 
-### 2.2 The Thread Responsibility
-
-- **Thread ID:** `global_id.x` is only a local guard (`gid.x > 0u` returns immediately).
-- **Input:** `DrawPrepParams` uniform payload for one record (`indexCount`, `instanceCount`, `firstInstance`, `recordIndex`, `maxRecords`).
-- **Output:** `indirectArgs[recordIndex * 5 .. +4]`.
-
-## 3. The Shader Logic (draw_prep.wgsl)
-
-The draw-prep shader is a canonical static kernel. The compiler emits only draw-prep sink metadata (`sinkIndex`, `indirectRecordIndex`, `instanceCountMode`, `staticInstanceCount`) and the runtime resolves static-vs-dynamic instance counts before dispatch.
-
-Runtime input does not accept draw-prep WGSL source overrides. Any legacy `drawPrepShaderWgsl` payload is rejected at the render boundary to preserve one canonical kernel contract.
-
-Code snippet:
+## 3. Canonical Kernel Contract (WGSL)
 
 ```wgsl
 struct DrawPrepParams {
-  // v0 = [indexCount, instanceCount, firstIndex, baseVertexBits]
+  // v0 = [drawMode, countOrIndexCount, firstOrFirstIndex, baseVertexBits]
   v0: vec4<u32>,
-  // v1 = [firstInstance, recordIndex, maxRecords, _]
+  // v1 = [instanceCount, firstInstance, recordIndex, _reserved]
   v1: vec4<u32>,
+  // v2 = [indexedRegionBaseWords, nonIndexedRegionBaseWords, indexedStrideWords, nonIndexedStrideWords]
+  v2: vec4<u32>,
 };
 
-@group(0) @binding(0) var<storage, read_write> indirectArgs: array<u32>;
+@group(0) @binding(0) var<storage, read_write> indirectWords: array<u32>;
 @group(0) @binding(1) var<uniform> drawPrepParams: DrawPrepParams;
 
 @compute @workgroup_size(1)
 fn cs_main(@builtin(global_invocation_id) gid: vec3<u32>) {
-  if (gid.x > 0u) {
-    return;
-  }
+  if (gid.x > 0u) { return; }
 
-  let recordIndex = drawPrepParams.v1.y;
-  let maxRecords = drawPrepParams.v1.z;
-  if (recordIndex >= maxRecords) {
-    return;
-  }
+  let drawMode = drawPrepParams.v0.x; // 0 = indexed, 1 = non-indexed
+  let instanceCount = drawPrepParams.v1.x;
+  let firstInstance = drawPrepParams.v1.y;
+  let recordIndex = drawPrepParams.v1.z;
 
-  let base = recordIndex * 5u;
-  indirectArgs[base + 0u] = drawPrepParams.v0.x;
-  indirectArgs[base + 1u] = drawPrepParams.v0.y;
-  indirectArgs[base + 2u] = drawPrepParams.v0.z;
-  indirectArgs[base + 3u] = drawPrepParams.v0.w;
-  indirectArgs[base + 4u] = drawPrepParams.v1.x;
+  if (drawMode == 0u) {
+    // indexed: [indexCount, instanceCount, firstIndex, baseVertex, firstInstance]
+    let base = drawPrepParams.v2.x + recordIndex * drawPrepParams.v2.z;
+    indirectWords[base + 0u] = drawPrepParams.v0.y;
+    indirectWords[base + 1u] = instanceCount;
+    indirectWords[base + 2u] = drawPrepParams.v0.z;
+    indirectWords[base + 3u] = drawPrepParams.v0.w;
+    indirectWords[base + 4u] = firstInstance;
+  } else {
+    // non-indexed: [vertexCount, instanceCount, firstVertex, firstInstance]
+    let base = drawPrepParams.v2.y + recordIndex * drawPrepParams.v2.w;
+    indirectWords[base + 0u] = drawPrepParams.v0.y;
+    indirectWords[base + 1u] = instanceCount;
+    indirectWords[base + 2u] = drawPrepParams.v0.z;
+    indirectWords[base + 3u] = firstInstance;
+  }
 }
 ```
 
-## 4. The Visibility Logic (Culling Integration)
+Note: actual uniform packing/fields are runtime-defined, but ABI of emitted indirect commands is fixed.
 
-This phase allows us to implement **Frustum Culling** cheaply.
+## 4. Visibility and Culling Integration
 
-### 4.1 The Counter Reset
+### 4.1 Counter Reset
 
-Before the Physics Kernel runs, we must reset the ActiveInstanceCount to zero.
+Before physics dispatch, counters are reset.
 
-- **Mechanism:** device.queue.writeBuffer(arena_counters, 0, \[0, 0, 0...\]).
+### 4.2 Physics Role
 
-- **Timing:** Before the Compute Dispatch.
+Physics/Culling updates visibility and compaction structures.
 
-### 4.2 The Physics Kernel's Role
+### 4.3 Draw Prep Role
 
-Inside the main simulation:
+Draw Prep reads final counters and writes ABI-correct commands for each sink record.
 
-1.  **Update Position:** pos += vel \* dt.
+## 5. Multi-Layer Ordering
 
-2.  **Check Bounds:** if (pos.x \> screen.right \|\| pos.x \< screen.left) { return; }
+Layer order stays deterministic via sink ordering.
 
-3.  **Compaction:**
+- Draw record 0: background
+- Draw record 1: mid
+- Draw record 2: foreground
 
-    - If visible, perform index = atomicAdd(&counter, 1u).
+Runtime executes records in this order for stable blending.
 
-    - Write InstanceID to a VisibleIndices buffer at index.
+## 6. Ribbon Special Case
 
-    - *Note:* This effectively creates a "Compacted List" of visible particles.
+Ribbons are topology-generated trails and use the **non-indexed** stream.
 
-### 4.3 The Draw Prep's Role
+- Input: history count `N`
+- Output command:
+  - `vertexCount = (N - 1) * 2`
+  - `instanceCount = 1`
+  - `firstVertex = 0`
+  - `firstInstance = trailInstanceBase`
 
-The Draw Prep kernel reads that final atomic counter value.
+No indexed command is emitted for ribbon virtual topology.
 
-- If 500 particles were visible, instance_count becomes 500.
+## 7. Synchronization
 
-- The Renderer draws 500 instances.
+Required ordering:
 
-- The Vertex Shader reads VisibleIndices\[InstanceID\] to know *which* particle to draw.
+1. Physics/Culling writes counters.
+2. Draw Prep reads counters and writes indirect regions.
+3. Render reads indirect regions.
 
-## 5. Handling "Multi-Layer" Rendering
-
-Oscilla supports "Layers" (Background, Mid, Foreground). These are just sequential Draw Commands in the Indirect Buffer.
-
-### 5.1 The Sort Order
-
-The Compiler determines the order of the switch statement based on the Z-Index or connection order in the graph.
-
-- **Draw ID 0:** Background (Z = -10)
-
-- **Draw ID 1:** Mid (Z = 0)
-
-- **Draw ID 2:** Foreground (Z = 10)
-
-This ensures that when the CPU loops drawIndexedIndirect from 0 to N, the alpha blending works correctly.
-
-## 6. The "Trail" Renderer Special Case
-
-Rendering trails (ribbons) is complex because it involves **Topology Generation** inside the Draw Prep.
-
-### 6.1 The Problem
-
-A trail is not "Instances". It is a single long Triangle Strip.
-
-- **Input:** 1000 history points in the Arena.
-
-- **Output:** 1 Draw Call with VertexCount = 2000 (2 vertices per point for thickness).
-
-### 6.2 The Logic
-
-For a Trail Block, the Draw Prep kernel logic changes:
-
-1.  **Read History Count:** N = 1000.
-
-2.  **Calculate Vertex Count:** V = (N - 1) \* 2.
-
-3.  **Write Command:**
-
-    - vertex_count = V (Direct vertex drawing, no indices usually).
-
-    - instance_count = 1.
-
-    - first_vertex = 0.
-
-This allows the trail length to grow and shrink dynamically based on the simulation state (e.g., "Fade out old segments").
-
-## 7. Synchronization (Barriers)
-
-This is the most common source of "flickering" bugs.
-
-### 7.1 The Hazard
-
-1.  **Physics Kernel:** Writes to Arena_Counters.
-
-2.  **Draw Prep Kernel:** Reads Arena_Counters.
-
-3.  **Render Pass:** Reads IndirectBuffer.
-
-### 7.2 The Solution
-
-We must ensure memory coherency.
-
-- **Between Physics & Draw Prep:**
-
-  - If they are in the *same* Compute Pass: Insert workgroupBarrier() or distinct dispatch calls.
-
-  - **Recommendation:** Use **Two Separate Compute Passes**. The driver inserts an implicit memory barrier between EndComputePass and BeginComputePass. It is safer and the overhead is negligible (microseconds).
-
-- **Between Draw Prep & Render:**
-
-  - Implicit barrier exists between EndComputePass and BeginRenderPass.
+Use separate compute/render passes; WebGPU pass boundaries provide visibility guarantees.
 
 ## 8. Summary of Implementation
 
-1.  **Update CompiledProgramIR:** Add a RenderBlockTable that maps BlockID \$\to\$ DrawIndex.
+1. Update `CompiledProgramIR` to emit draw-prep sink metadata (draw mode, topology refs, region index).
+2. Keep one canonical static draw-prep shader module.
+3. Runtime dispatches draw prep once per record via `dispatchWorkgroups(1)`.
+4. Runtime executes indexed and non-indexed indirect loops from separate regions.
+5. Keep counters/compaction buffers in arena/state layout with deterministic ownership.
 
-2.  **Use canonical draw_prep.wgsl:**
-
-    - Keep one static shader module for draw-prep dispatch.
-
-    - Consume compiler-emitted sink metadata to resolve instance-count policy per record.
-
-3.  **Update RuntimeExecutor:**
-
-    - Add the DrawPrep pipeline creation.
-
-    - Add the DrawPrep dispatch call (dispatch(ceil(render_count / 64))) *after* the main physics dispatch.
-
-4.  **Allocate Buffers:** Ensure Arena has a dedicated region for Counters (Atomics).
-
-This step transforms the GPU from a generic calculator into an autonomous rendering engine. It bridges the gap between "Simulating the Universe" and "Drawing the Picture."
+This keeps draw command generation GPU-owned while matching strict WebGPU indirect ABI constraints.
