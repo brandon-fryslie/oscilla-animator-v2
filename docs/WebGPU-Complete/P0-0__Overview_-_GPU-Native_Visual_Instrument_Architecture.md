@@ -10,6 +10,16 @@ It is the single source of truth for the WebGPU-native, WASM-validated, SoA-opti
 
 # Oscilla v3.0: The "Moonshot" Specification
 
+## Cross-Doc Contract Index
+
+Use `docs/WebGPU-Complete/IMPLEMENTATION-INDEX.md` as the canonical cross-reference map for ABI ownership and execution order.
+
+- Arena/layout ownership: `docs/WebGPU-Complete/P0-1__SoA_Mandate__Memory_Layout_Refactor.md`, `docs/WebGPU-Complete/P1-1__Unified_GPU_Buffer_Strategy_Explained.md`
+- Shape header/topology ownership: `docs/WebGPU-Complete/P1-2__Unified_GPU_Shape_Bank_Strategy.md`
+- Indirect command ABI ownership: `docs/WebGPU-Complete/P1-3__GPU-Driven_Rendering__Indirect_Buffer.md`
+- Draw-prep ownership: `docs/WebGPU-Complete/P3-3_GPU_Draw_Prep__Autonomous_Rendering_Logistics.md`
+- Render camera/depth/blend ownership: `docs/WebGPU-Complete/P3-4__WebGPU_Render_Pass_Deep_Dive.md`
+
 **Target Platform:** WebGPU (Chrome/Edge/Safari latest).
 
 **Core Invariant:** The CPU is a scheduler; the GPU is the computer.
@@ -84,13 +94,15 @@ A single buffer of type storage \| copy_dst.
 
 - **Update Frequency:** Only when the user loads a patch or changes an SVG.
 
-- **Structure:** Packed u32 structs defining { index_start, index_count, vertex_start, flags }.
+- **Structure:** Packed `ShapeHeaderV1` records (16 words / 64 bytes) plus payload heap (`u32`), as defined in `docs/WebGPU-Complete/P1-2__Unified_GPU_Shape_Bank_Strategy.md`.
 
 **C. The "Indirect Command" Buffer**
 
 A buffer of type indirect \| storage.
 
-- **Role:** Stores the DrawIndexedIndirectArgs structs.
+- **Role:** Stores both hardware-native indirect command streams in fixed non-overlapping regions:
+  - indexed records (`DrawIndexedIndirectArgs`, 20-byte stride)
+  - non-indexed records (`DrawIndirectArgs`, 16-byte stride)
 
 - **Invariants:** The CPU **never** writes to this during the frame loop. It is populated exclusively by the "Draw Prep" Compute Shader.
 
@@ -190,7 +202,9 @@ The generated module is passed to the Naga WASM binary.
 
 - **Bindings:** Arena_Write (as Instance Data), Shape_Bank (as Geometry Source).
 
-- **Draw:** drawIndexedIndirect(Indirect_Buffer, offset).
+- **Draw:** Execute indexed and non-indexed indirect command streams from the shared indirect buffer regions:
+  - `drawIndexedIndirect(...)` for indexed records (20-byte stride).
+  - `drawIndirect(...)` for non-indexed records (16-byte stride).
 
 - **Vertex Pulling:** The Vertex Shader generates geometry on the fly by reading VertexID and looking up the topology in the Shape_Bank.
 

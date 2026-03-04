@@ -4,18 +4,22 @@
 > [LAW:no-string-math] Direct WGSL string generation in lowering code is forbidden; dynamic WGSL emission is an engine serializer boundary concern.
 > Read this document with `docs/WebGPU-Complete/P2-4__Scoped_Naga_IR_Control_Flow_and_Memory_Model.md`.
 
-This is the comprehensive technical specification for **Phase 0: The f32 Phase-Lock (Completed Baseline)**.
+This is the comprehensive technical specification for **Phase 0: The f32 Phase-Lock**.
 
 # Phase 0: The f32 Phase-Lock
 
-**Objective:** Guarantee infinite-runtime temporal stability under the WebGPU-oriented `f32` contract.
+## Related Contracts
 
-**Current State:** This is no longer a pre-migration plan. It is the enforced runtime baseline on `master`.
+- `docs/WebGPU-Complete/IMPLEMENTATION-INDEX.md`
+- `docs/WebGPU-Complete/P3-1_CPU_to_GPU_Input_Marshalling.md`
+- `docs/WebGPU-Complete/P3-2_GPU_Compute_Dispatch_Explained.md`
+
+**Objective:** Guarantee infinite-runtime temporal stability under the WebGPU-oriented `f32` contract.
 
 // [LAW:one-source-of-truth] Runtime time channels are produced by `resolveTime` and consumed through canonical time expressions (`tMs`, `dt`, `phaseA`, `phaseB`, `pulse`, `palette`, `energy`).
 // [LAW:single-enforcer] Phase boundedness for stateful phase accumulators is enforced at runtime write boundaries (`applyStateWritePolicy`) and phasor lowering (`Wrap01`).
 
-## 1. Canonical Time Contract (Now Enforced)
+## 1. Canonical Time Contract
 
 ### 1.1 Delta Time Is First-Class
 
@@ -36,7 +40,7 @@ This is the comprehensive technical specification for **Phase 0: The f32 Phase-L
 
 // [LAW:dataflow-not-control-flow] Time channels are resolved every frame in a fixed order; stability is encoded in bounded values (`dt`, wrapped phases), not conditional execution paths.
 
-## 2. Stateful Oscillation Contract (Now Enforced)
+## 2. Stateful Oscillation Contract
 
 ### 2.1 Phasor Is Stateful
 
@@ -56,7 +60,7 @@ This is the comprehensive technical specification for **Phase 0: The f32 Phase-L
 
 ## 3. Verification Gates
 
-Run these commands to verify this phase remains complete:
+Run these commands to validate this contract:
 
 1. `pnpm vitest run src/runtime/__tests__/phase-continuity-offset.test.ts`
 2. `pnpm vitest run src/runtime/__tests__/temporal-comparison.test.ts`
@@ -70,13 +74,11 @@ Run these commands to verify this phase remains complete:
 
 // [LAW:no-mode-explosion] Export-specific phase policies stay outside live runtime execution unless they become canonical and singular.
 
-## 5. Definition of Done (Phase 0)
+## 5. Contract Acceptance Criteria
 
-Phase 0 is complete when all of the following remain true:
+This contract is satisfied when all of the following remain true:
 
 1. Runtime emits stable, monotonic time channels with `dt` as canonical input.
 2. Stateful phasor execution remains bounded in `[0,1)` over long horizons.
 3. Hot-swap/time-model transitions preserve phase continuity.
 4. Regression tests enforce these invariants.
-
-This condition is currently met; future work should treat this document as a maintained contract, not a migration checklist.

@@ -3,6 +3,14 @@ As you push through the cc-dump complexity audit and finalize the Naga integrati
 
 ## ---
 
+## Related Contracts
+
+- `docs/WebGPU-Complete/IMPLEMENTATION-INDEX.md`
+- `docs/WebGPU-Complete/P1-2__Unified_GPU_Shape_Bank_Strategy.md`
+- `docs/WebGPU-Complete/P1-3__GPU-Driven_Rendering__Indirect_Buffer.md`
+- `docs/WebGPU-Complete/P3-3_GPU_Draw_Prep__Autonomous_Rendering_Logistics.md`
+- `docs/WebGPU-Complete/P3-4__WebGPU_Render_Pass_Deep_Dive.md`
+
 **1\. Inputs and Outputs (The Data Contract)**
 
 The Type 3 pipeline abandons the ShapeBank for topology. The geometry does not exist until the Vertex Shader pulls the history from the Arena and weaves it into a continuous 3D mesh.
@@ -14,7 +22,7 @@ The Type 3 pipeline abandons the ShapeBank for topology. The geometry does not e
 
 ### **1.2 Run-Time Inputs (GPU)**
 
-* **ShapeBank (The Dummy Header):** Contains no indices. The header merely flags IndexCount \= 0 (signaling virtual topology) and VertexCount \= H \* 2\.  
+* **ShapeBank (Virtual Topology Header):** Contains virtual-topology metadata (no explicit index payload). The header flags `topologyMode = NonIndexed/Virtual` and carries the canonical vertex-count contract (`H * 2`).  
 * **Arena\_Read (The State):** The history buffers. For a system with $N$ instances and history $H$, the Arena stores:  
   * Arena\_PosX \[f32\] (Size: $N \\times H$)  
   * Arena\_PosY \[f32\] (Size: $N \\times H$)  
@@ -112,7 +120,7 @@ To guarantee the Naga lowering pipeline correctly orchestrates this temporal arc
 
 * **AC 2.1 (DrawPrep Dynamic Counting):**  
   * *Test:* Inject an Arena\_ActiveCount of 15 into the DrawPrep uniform buffer.  
-  * *Assert:* The generated DrawIndexedIndirectArgs must output VertexCount \= 30 (15 segments $\\times$ 2 vertices) and InstanceCount \= 1\.  
+  * *Assert:* The generated `DrawIndirectArgs` record must output `vertexCount = 30` (15 segments $\\times$ 2 vertices) and `instanceCount = 1`\.  
 * **AC 2.2 (NaN Tangent Guardrail):**  
   * *Test:* Execute a headless Vertex Shader pass with a simulated ring buffer where $P\_0, P\_1, P\_2$ all equal $(5.0, 5.0)$.  
   * *Assert:* The output clip\_position must not contain NaN. The shader must safely fallback to a default width or degenerate the triangle.  
@@ -122,5 +130,4 @@ To guarantee the Naga lowering pipeline correctly orchestrates this temporal arc
 
 ---
 
-By locking down this architecture, you gain the ability to render everything from fluid simulation streamlines to long-exposure light trails, fully isolated from CPU intervention.  
-Would you like to move on to the mathematical deep dive for **Type 4: The Procedural Volume (SDFs)**, or should we examine how the RenderAssembler orchestrates the final composite?
+By locking down this architecture, trail rendering remains deterministic and GPU-native without CPU-side topology synthesis in the frame loop.

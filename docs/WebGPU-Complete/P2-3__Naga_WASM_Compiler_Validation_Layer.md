@@ -10,6 +10,14 @@ This document defines the interface and implementation of the **Validation + Emi
 
 # The Naga Validation Layer (WASM)
 
+## Related Contracts
+
+- `docs/WebGPU-Complete/IMPLEMENTATION-INDEX.md`
+- `docs/WebGPU-Complete/P2-1_Async_Compiler_Service_Architecture.md`
+- `docs/WebGPU-Complete/P2-2__Naga_Compiler_Lowering_Pipeline_Explained.md`
+- `docs/WebGPU-Complete/P2-4__Scoped_Naga_IR_Control_Flow_and_Memory_Model.md`
+- `docs/WebGPU-Complete/P5-1__WASM_Boot__Developer_Experience_&_Migration.md`
+
 **Objective:** Validate scoped TypeScript-generated IR (expressions, statements, blocks, memory operations) against strict WebGPU/Naga rules and emit shader artifacts.
 
 **Invariant:** Any module that passes this layer is guaranteed to be safe for the browser's GPU driver.

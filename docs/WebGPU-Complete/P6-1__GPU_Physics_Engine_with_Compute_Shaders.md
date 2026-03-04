@@ -10,6 +10,13 @@ It details how to implement a massively parallel, deterministic physics simulati
 
 # Part VII: The Physics Engine Module
 
+## Related Contracts
+
+- `docs/WebGPU-Complete/IMPLEMENTATION-INDEX.md`
+- `docs/WebGPU-Complete/P1-1__Unified_GPU_Buffer_Strategy_Explained.md`
+- `docs/WebGPU-Complete/P2-4__Scoped_Naga_IR_Control_Flow_and_Memory_Model.md`
+- `docs/WebGPU-Complete/P3-2_GPU_Compute_Dispatch_Explained.md`
+
 **Algorithm:** Extended Position Based Dynamics (XPBD).
 
 **Integration:** Semi-Implicit Euler.

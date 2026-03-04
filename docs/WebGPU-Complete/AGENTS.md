@@ -14,8 +14,20 @@ Deliver the WebGPU migration with strict phase discipline, zero partial roll-for
 Before changing code or tickets for WebGPU work:
 
 1. Read this file.
-2. Read the exact spec document(s) being implemented in this directory.
-3. Confirm the target ticket is ready via `bd ready`.
+2. Read `IMPLEMENTATION-INDEX.md`.
+3. Select exactly one workstream index (`workstreams/WS-*.index.md`) and exactly one functional slice (`workstreams/slices/S*.md`).
+4. Read the exact spec document(s) referenced by that workstream/slice pair.
+5. Confirm the target ticket is ready via `bd ready`.
+
+## Workstream + Slice Scoping (Required)
+
+1. Every implementation task must name exactly one owner workstream file (`WS-*`) and exactly one functional slice file (`S*`).
+2. If work spans multiple workstreams or slices, split it into separate tasks/PRs. Do not blend scopes.
+3. Out-of-scope changes are not allowed unless required by a dependency explicitly listed in the selected workstream/slice files.
+4. PR descriptions must include the chosen workstream and slice IDs.
+
+// [LAW:one-source-of-truth] Workstream index files define ownership boundaries; slice files define implementation units.
+// [LAW:no-mode-explosion] Multi-workstream mixed tasks create scope permutations and are prohibited.
 
 ## Non-Negotiable Rules
 
@@ -24,9 +36,32 @@ Before changing code or tickets for WebGPU work:
 3. No partial completion credit. A spec is either complete or incomplete.
 4. No compatibility detours to "go faster." Fix forward on the canonical architecture.
 5. No scope skipping. If a spec includes refactor, cleanup, tests, docs, and gates, all are required.
+6. Owner-first update rule for contract changes is mandatory:
+   - update the owning workstream/spec contract first,
+   - then update dependent workstreams/slices that reference it.
 
 // [LAW:single-enforcer] Completion gates are enforced once per spec by the checklist below; do not invent alternate pass criteria.
 // [LAW:no-mode-explosion] Do not introduce temporary execution modes/flags to bypass unresolved migration work.
+// [LAW:one-source-of-truth] Contract edits must land at the owner boundary before dependents are adjusted.
+
+## Workstream Dependency Order (Hard Gate Sequence)
+
+Complete workstreams in dependency order unless a selected slice explicitly requires an upstream prerequisite first:
+
+1. `workstreams/WS-01-runtime-foundation.index.md`
+2. `workstreams/WS-02-compiler-lowering.index.md`
+3. `workstreams/WS-03-frame-execution.index.md`
+4. `workstreams/WS-04-shape-taxonomy.index.md`
+5. `workstreams/WS-05-platform-dx-policy.index.md`
+
+Functional slice progression:
+
+1. `workstreams/slices/S01-first-pixel.md`
+2. `workstreams/slices/S02-first-type1-shape.md`
+3. `workstreams/slices/S03-first-type2-parametric.md`
+4. `workstreams/slices/S04-first-type3-ribbon.md`
+5. `workstreams/slices/S05-first-type4-sdf.md`
+6. `workstreams/slices/S06-first-type5-text.md`
 
 ## Canonical Spec Order (Hard Gate Sequence)
 
@@ -42,16 +77,17 @@ Complete in this exact order:
 8. `P2-1_Async_Compiler_Service_Architecture.md`
 9. `P2-2__Naga_Compiler_Lowering_Pipeline_Explained.md`
 10. `P2-3__Naga_WASM_Compiler_Validation_Layer.md`
-11. `P3-1_CPU_to_GPU_Input_Marshalling.md`
-12. `P3-2_GPU_Compute_Dispatch_Explained.md`
-13. `P3-3_GPU_Draw_Prep__Autonomous_Rendering_Logistics.md`
-14. `P3-4__WebGPU_Render_Pass_Deep_Dive.md`
-15. `P3-5__Runtime_Loop__The_Swap_Explained.md`
-16. `P4-1_GPU_Observability__Async_Readback_System.md`
-17. `P5-1__WASM_Boot__Developer_Experience_&_Migration.md`
-18. `P5-2_Error_Propagation__Developer_Experience.md`
-19. `P5-3__Phased_Rollout__Engine_Migration_Strategy.md`
-20. `P6-1__GPU_Physics_Engine_with_Compute_Shaders.md`
+11. `P2-4__Scoped_Naga_IR_Control_Flow_and_Memory_Model.md`
+12. `P3-1_CPU_to_GPU_Input_Marshalling.md`
+13. `P3-2_GPU_Compute_Dispatch_Explained.md`
+14. `P3-3_GPU_Draw_Prep__Autonomous_Rendering_Logistics.md`
+15. `P3-4__WebGPU_Render_Pass_Deep_Dive.md`
+16. `P3-5__Runtime_Loop__The_Swap_Explained.md`
+17. `P4-1_GPU_Observability__Async_Readback_System.md`
+18. `P5-1__WASM_Boot__Developer_Experience_&_Migration.md`
+19. `P5-2_Error_Propagation__Developer_Experience.md`
+20. `P5-3__Phased_Rollout__Engine_Migration_Strategy.md`
+21. `P6-1__GPU_Physics_Engine_with_Compute_Shaders.md`
 
 ## Definition of "Spec Complete" (All Required)
 
