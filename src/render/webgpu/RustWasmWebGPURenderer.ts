@@ -77,6 +77,34 @@ function deriveTotalInstanceCount(frame: RenderFrameIR): number {
   return Math.floor(total);
 }
 
+function deriveDrawOpCount(input: RenderInput): number {
+  const sinkCount = input.drawPrepSinks?.length;
+  if (typeof sinkCount === 'number' && Number.isFinite(sinkCount) && sinkCount >= 0) {
+    return Math.floor(sinkCount);
+  }
+  return input.frame.ops.length;
+}
+
+function deriveCanonicalTotalInstanceCount(input: RenderInput): number {
+  const sinks = input.drawPrepSinks;
+  if (!sinks || sinks.length === 0) {
+    return deriveTotalInstanceCount(input.frame);
+  }
+  const hasDynamicSink = sinks.some((sink) => sink.instanceCountMode === 'dynamic');
+  if (hasDynamicSink) {
+    return deriveTotalInstanceCount(input.frame);
+  }
+
+  // [LAW:one-source-of-truth] Compiler-emitted draw-prep sink metadata is the
+  // canonical static instance-count source when dynamic sinks are absent.
+  let total = 0;
+  for (const sink of sinks) {
+    total += sink.staticInstanceCount ?? 0;
+  }
+  if (!Number.isFinite(total) || total <= 0) return 0;
+  return Math.floor(total);
+}
+
 export function assertWebGPUStartupContract(canvas: HTMLCanvasElement): void {
   const gpu = (navigator as Navigator & { gpu?: unknown }).gpu;
   if (!gpu) {
@@ -177,8 +205,8 @@ export class WebGPURenderer {
     this.inputWords[INPUT_INDEX.audioMid] = coerceFinite(input.inputAudioMid);
     this.inputWords[INPUT_INDEX.audioHigh] = coerceFinite(input.inputAudioHigh);
     this.inputWords[INPUT_INDEX.gaugeActive] = coerceFinite(input.inputGaugeActive);
-    this.inputWords[INPUT_INDEX.drawOpCount] = input.frame.ops.length;
-    this.inputWords[INPUT_INDEX.totalInstanceCount] = deriveTotalInstanceCount(input.frame);
+    this.inputWords[INPUT_INDEX.drawOpCount] = deriveDrawOpCount(input);
+    this.inputWords[INPUT_INDEX.totalInstanceCount] = deriveCanonicalTotalInstanceCount(input);
     this.inputWords[INPUT_INDEX.shapeBankWords] = input.shapeBank.volatilePtr;
     Atomics.add(this.signalWords, 0, 1);
   }

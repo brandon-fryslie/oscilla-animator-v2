@@ -7,15 +7,15 @@ describe('dynamic instance count lowering', () => {
   it('lowers non-const Array.count to dynamic instance metadata (countExpr + maxCount)', () => {
     const patch = buildPatch((b) => {
       const time = b.addBlock('InfiniteTimeRoot');
-      const osc = b.addBlock('Oscillator');
+      const cast = b.addBlock('Adapter_CastFloatToInt');
       const array = b.addBlock('Array');
       const ellipse = b.addBlock('Ellipse');
       const layout = b.addBlock('GridLayoutUV');
       const render = b.addBlock('RenderInstances2D');
 
       b.setPortDefault(array, 'count', 64);
-      b.wire(time, 'phaseA', osc, 'phase');
-      b.wire(osc, 'out', array, 'count');
+      b.wire(time, 'phaseA', cast, 'in');
+      b.wire(cast, 'out', array, 'count');
       b.wire(ellipse, 'shape', array, 'element');
       b.wire(array, 'elements', layout, 'elements');
       b.wire(layout, 'controlPoints', render, 'controlPoints');
@@ -26,7 +26,7 @@ describe('dynamic instance count lowering', () => {
     if (result.kind !== 'ok') return;
 
     const dynamicInstance = [...result.program.schedule.instances.values()].find(
-      (instance) => instance.id !== SCALAR_INSTANCE_ID,
+      (instance) => instance.id !== SCALAR_INSTANCE_ID && instance.count === 'dynamic',
     );
     expect(dynamicInstance).toBeDefined();
     if (!dynamicInstance) return;
@@ -40,7 +40,7 @@ describe('dynamic instance count lowering', () => {
     let arrayBlockId = '';
     const patch = buildPatch((b) => {
       const time = b.addBlock('InfiniteTimeRoot');
-      const osc = b.addBlock('Oscillator');
+      const cast = b.addBlock('Adapter_CastFloatToInt');
       const array = b.addBlock('Array');
       arrayBlockId = array;
       const ellipse = b.addBlock('Ellipse');
@@ -48,8 +48,8 @@ describe('dynamic instance count lowering', () => {
       const render = b.addBlock('RenderInstances2D');
 
       b.setPortDefault(array, 'count', 32);
-      b.wire(time, 'phaseA', osc, 'phase');
-      b.wire(osc, 'out', array, 'count');
+      b.wire(time, 'phaseA', cast, 'in');
+      b.wire(cast, 'out', array, 'count');
       b.wire(ellipse, 'shape', array, 'element');
       b.wire(array, 'elements', layout, 'elements');
       b.wire(layout, 'controlPoints', render, 'controlPoints');
