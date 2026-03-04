@@ -512,6 +512,16 @@ export interface FrameCache {
 
   /** Frame stamp for `instanceLaneCounts` validity. */
   instanceLaneCountFrameId?: number;
+
+  /**
+   * Runtime-owned packed draw-prep sink-table payload (`DrawPrepSinkTableV1`).
+   *
+   * [LAW:one-source-of-truth] Renderer/worker draw-prep uses one canonical
+   * runtime-packed table instead of dual CPU payload + derived metadata paths.
+   */
+  drawPrepSinkTableWords?: Uint32Array;
+  drawPrepSinkTableWordCount?: number;
+  drawPrepSinkTableFrameId?: number;
 }
 
 /**
@@ -529,6 +539,9 @@ export function createFrameCache(
     scalarExprToArenaAddress: null,
     instanceLaneCounts: new Map<string, number>(),
     instanceLaneCountFrameId: 0,
+    drawPrepSinkTableWords: undefined,
+    drawPrepSinkTableWordCount: 0,
+    drawPrepSinkTableFrameId: 0,
   };
 }
 
