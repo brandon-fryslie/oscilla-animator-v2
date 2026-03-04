@@ -43,6 +43,7 @@ import {
 import type { ArenaSlotDescriptor } from '../runtime/ArenaValueStore';
 import type { ValueExpr, ValueExprId } from './ir/value-expr';
 import type { Step } from './ir/types';
+import type { SerializableTopologyDef } from '../shapes/types';
 import { lowerScheduleToNagaModule } from './ir/naga-emitter';
 import { compilationInspector } from '../services/CompilationInspectorService';
 import { computeRenderReachableBlocks } from './reachability';
@@ -676,7 +677,24 @@ function convertLinkedIRToProgram(
 
   // Build output specs from canonical output contract only.
   const outputs: OutputSpecIR[] = [{ kind: 'renderFrame' }];
-  const drawPrepProgram = buildDrawPrepProgram(scheduleIR);
+  const topologyIds = collectAllProgramTopologyIds({
+    valueExprs: { nodes: valueExprNodes },
+    steps: scheduleIR.steps as readonly Step[],
+  });
+  const ownedTopologies = builder.getSerializableTopologies();
+  const ownedById = new Map(ownedTopologies.map((definition) => [definition.id, definition]));
+  const topologyDefinitions = topologyIds.map((id) => {
+    const owned = ownedById.get(id);
+    if (owned) {
+      return owned;
+    }
+    // [LAW:one-source-of-truth] Compiled programs must carry topology
+    // definitions from compile-owned builder registration only.
+    throw new Error(`Compiled program is missing owned topology definition ${id}`);
+  });
+  const topologyTable = buildProgramTopologyTable(topologyDefinitions);
+
+  const drawPrepProgram = buildDrawPrepProgram(scheduleIR, valueExprNodes, ownedById);
   const runtimeAddressTable = buildRuntimeAddressTable(
     runtimeSlots,
     scheduleIR,
@@ -816,22 +834,6 @@ function convertLinkedIRToProgram(
     throw new Error('E_CAMERA_MULTIPLE: Only one Camera block is permitted.');
   }
 
-  const topologyIds = collectAllProgramTopologyIds({
-    valueExprs: { nodes: valueExprNodes },
-    steps: scheduleIR.steps as readonly Step[],
-  });
-  const ownedTopologies = builder.getSerializableTopologies();
-  const ownedById = new Map(ownedTopologies.map((definition) => [definition.id, definition]));
-  const topologyDefinitions = topologyIds.map((id) => {
-    const owned = ownedById.get(id);
-    if (owned) {
-      return owned;
-    }
-    // [LAW:one-source-of-truth] Compiled programs must carry topology
-    // definitions from compile-owned builder registration only.
-    throw new Error(`Compiled program is missing owned topology definition ${id}`);
-  });
-  const topologyTable = buildProgramTopologyTable(topologyDefinitions);
   const runtimeLiveExprIds = collectRuntimeLiveExprIdsForPatching({
     valueExprs: valueExprNodes,
     schedule: scheduleIR,
@@ -873,9 +875,67 @@ function convertLinkedIRToProgram(
   return program;
 }
 
-function buildDrawPrepProgram(scheduleIR: ScheduleIR): DrawPrepProgramIR {
+function inferDrawModeForRenderStep(
+  step: Extract<Step, { kind: 'render' }>,
+  valueExprNodes: readonly ValueExpr[],
+  topologyById: ReadonlyMap<number, SerializableTopologyDef>,
+  materializedFieldExprBySlot: ReadonlyMap<number, number>,
+): DrawPrepSinkIR['drawMode'] {
+  const shapeExprId =
+    step.shape.k === 'slot'
+      ? materializedFieldExprBySlot.get(step.shape.slot as number)
+      : (step.shape.id as number);
+  if (shapeExprId === undefined) {
+    // [LAW:no-silent-fallbacks] Draw-mode inference must fail fast when shape
+    // slot provenance is missing; hard-coded indexed defaults are forbidden.
+    throw new Error(
+      'DrawPrepProgram: render step shape slot has no materialize source ' +
+        `(slot=${String(step.shape.k === 'slot' ? step.shape.slot : step.shape.id)})`,
+    );
+  }
+  const shapeExpr = valueExprNodes[shapeExprId];
+  if (!shapeExpr || shapeExpr.kind !== 'shapeRef') {
+    // [LAW:one-source-of-truth] Draw-prep topology ownership is anchored to
+    // shapeRef topology IDs; non-shapeRef sources are compile-time violations.
+    throw new Error(
+      'DrawPrepProgram: draw mode requires shapeRef source expression ' +
+        `(exprId=${shapeExprId}, kind=${shapeExpr ? shapeExpr.kind : 'missing'})`,
+    );
+  }
+  const topology = topologyById.get(shapeExpr.topologyId as number);
+  if (!topology) {
+    throw new Error(
+      'DrawPrepProgram: missing topology definition for shapeRef ' +
+        `(topologyId=${String(shapeExpr.topologyId)})`,
+    );
+  }
+  if (!Array.isArray(topology.verbs)) {
+    return 'nonIndexed';
+  }
+  return topology.closed ? 'indexed' : 'nonIndexed';
+}
+
+function buildMaterializedFieldExprBySlot(scheduleIR: ScheduleIR): ReadonlyMap<number, number> {
+  const bySlot = new Map<number, number>();
+  for (const step of scheduleIR.steps as readonly Step[]) {
+    if (step.kind !== 'materialize') {
+      continue;
+    }
+    bySlot.set(step.target as number, step.field as number);
+  }
+  return bySlot;
+}
+
+function buildDrawPrepProgram(
+  scheduleIR: ScheduleIR,
+  valueExprNodes: readonly ValueExpr[],
+  topologyById: ReadonlyMap<number, SerializableTopologyDef>,
+): DrawPrepProgramIR {
   const sinks: DrawPrepSinkIR[] = [];
+  let indexedRecordCount = 0;
+  let nonIndexedRecordCount = 0;
   const maxUint32 = 0xFFFF_FFFF;
+  const materializedFieldExprBySlot = buildMaterializedFieldExprBySlot(scheduleIR);
   const steps = scheduleIR.steps as readonly Step[];
   for (let stepIndex = 0; stepIndex < steps.length; stepIndex++) {
     const step = steps[stepIndex];
@@ -903,27 +963,61 @@ function buildDrawPrepProgram(scheduleIR: ScheduleIR): DrawPrepProgramIR {
       );
     }
 
+    // [LAW:one-source-of-truth] Draw mode is derived from compile-owned shape
+    // topology metadata, never hard-coded in runtime/draw-prep packing.
+    const drawMode = inferDrawModeForRenderStep(
+      step,
+      valueExprNodes,
+      topologyById,
+      materializedFieldExprBySlot,
+    );
+    const indirectRecordIndex = drawMode === 'indexed' ? indexedRecordCount : nonIndexedRecordCount;
+    if (drawMode === 'indexed') {
+      indexedRecordCount += 1;
+    } else {
+      nonIndexedRecordCount += 1;
+    }
     sinks.push({
       sinkIndex: sinks.length,
       renderStepIndex: stepIndex,
       instanceId: step.instanceId,
-      indirectRecordIndex: sinks.length,
+      indirectRecordIndex,
       instanceCountMode: staticInstanceCount === undefined ? 'dynamic' : 'static',
       staticInstanceCount,
       // [LAW:one-source-of-truth] Draw-prep command ABI metadata is emitted by
       // compiler and consumed by runtime/renderer as one canonical contract.
-      drawMode: 'indexed',
-      indirectRegion: 'indexed',
-      indirectStrideBytes: 20,
+      drawMode,
+      indirectRegion: drawMode === 'indexed' ? 'indexed' : 'nonIndexed',
+      indirectStrideBytes: drawMode === 'indexed' ? 20 : 16,
       topologySource: 'shapeHeaderV1',
       firstInstanceSource: 'runtimePacked',
-      indexedFirstIndex: 0,
-      indexedBaseVertex: 0,
+      ...(drawMode === 'indexed'
+        ? {
+          indexedFirstIndex: 0,
+          indexedBaseVertex: 0,
+        }
+        : {
+          nonIndexedFirstVertex: 0,
+        }),
     });
   }
+  const indexedRegionBaseWords = 0;
+  const indexedStrideWords = 5 as const;
+  const nonIndexedStrideWords = 4 as const;
+  const nonIndexedRegionBaseWords = indexedRecordCount * indexedStrideWords;
+  const totalRecordCount = indexedRecordCount + nonIndexedRecordCount;
   // [LAW:no-string-math] P0-0 forbids lowering-time WGSL source emission.
   // Draw-prep lowering exports structured sink metadata only.
-  return { sinks };
+  return {
+    totalRecordCount,
+    indexedRecordCount,
+    indexedRegionBaseWords,
+    indexedStrideWords,
+    nonIndexedRecordCount,
+    nonIndexedRegionBaseWords,
+    nonIndexedStrideWords,
+    sinks,
+  };
 }
 
 function collectComputeSlots(scheduleIR: ScheduleIR): ValueSlot[] {

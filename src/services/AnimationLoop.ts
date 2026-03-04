@@ -5,7 +5,11 @@
  * and performance metrics tracking.
  */
 
-import { assertSchedulePhaseBoundaryStateReads, executeFrame } from '../runtime';
+import {
+  assertSchedulePhaseBoundaryStateReads,
+  executeFrame,
+  packDrawPrepSinkTableV1,
+} from '../runtime';
 import { RenderBufferArena, type WebGPURenderer } from '../render';
 import {
   recordFrameTime,
@@ -237,12 +241,11 @@ export function executeAnimationFrame(
   if (!shapeBank) {
     throw new Error('AnimationLoop: RuntimeState.shapeBank is required for WebGPU rendering');
   }
-  // [LAW:one-source-of-truth] Draw-prep instance-count policy comes from one
-  // compiler-emitted sink table; renderer resolves static-vs-dynamic counts.
-  const drawPrepSinks = currentProgram?.drawPrepProgram?.sinks;
+  // [LAW:single-enforcer] Runtime packs per-frame sink-table records once at
+  // this frame boundary; worker executes the packed payload without re-deriving.
+  const packedSinkTable = packDrawPrepSinkTableV1(currentProgram, currentState);
   const inputChannels = resolveRendererInputChannels(currentState);
   renderer.render({
-    frame: frameToRender,
     shapeBank,
     width: canvas.width,
     height: canvas.height,
@@ -251,7 +254,8 @@ export function executeAnimationFrame(
     panY: pan.y,
     timeMs: tMs,
     ...inputChannels,
-    drawPrepSinks,
+    drawPrepSinkTableV1: packedSinkTable?.words,
+    drawPrepSinkTableWordCount: packedSinkTable?.wordCount ?? 0,
   });
   state.renderTime = performance.now() - renderStart;
   const probeFrameId = currentState.cache?.frameId ?? -1;
