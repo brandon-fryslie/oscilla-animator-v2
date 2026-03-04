@@ -18,13 +18,10 @@ describe('RuntimeState state-bank ownership', () => {
       gaugeTargets: [],
     } as const;
     const state = createRuntimeState(
-      0, // slotCount (compat arg)
       4, // stateSlotCount
       0, // eventSlotCount
-      0, // eventExprCount
       0, // valueExprCount
       18, // arenaTotalFloats (already includes state zone)
-      0, // shape2dSlotCount
       undefined,
       undefined,
       arenaRuntimeLayout,
@@ -52,7 +49,7 @@ describe('RuntimeState state-bank ownership', () => {
       },
       gaugeTargets: [],
     } as const;
-    const state = createRuntimeState(0, 3, 0, 0, 0, 6, 0, undefined, undefined, arenaRuntimeLayout);
+    const state = createRuntimeState(3, 0, 0, 6, undefined, undefined, arenaRuntimeLayout);
     state.state[0] = 1;
     state.state[1] = 2;
     state.state[2] = 3;

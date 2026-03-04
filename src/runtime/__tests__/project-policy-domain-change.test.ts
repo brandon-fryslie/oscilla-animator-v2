@@ -21,7 +21,7 @@ import {
 } from '../ContinuityState';
 import type { StepContinuityApply } from '../../compiler/ir/types';
 import { instanceId } from '../../core/ids';
-import type { RuntimeState } from '../RuntimeState';
+import { createShapeBank, type RuntimeState } from '../RuntimeState';
 import { ExternalChannelSystem } from '../ExternalChannel';
 import type { ValueSlot } from '../../types';
 import { getTestSlotBuffer, setTestSlotBuffer } from './slot-buffer-helper';
@@ -48,16 +48,16 @@ function createTestRuntimeState(): RuntimeState {
       palette: createPalette(),
       energy: 0.5,
     },
-    values: {
-      shape2d: new Uint32Array(0),
-    },
+    values: {},
     lastRenderFrame: null,
     arena: new Float32Array(0),
     stateArena: { offset: 0, length: 0 },
     state: new Float32Array(0),
+    stateWrite: new Float32Array(0),
     eventScalars: new Uint8Array(0),
     eventWrapPredicate: new Uint8Array(0),
     events: new Map(),
+    shapeBank: createShapeBank(0, 0),
     cache: {
       frameId: 0,
       scalarValueExprValues: new Float32Array(0),
@@ -66,6 +66,10 @@ function createTestRuntimeState(): RuntimeState {
       valueExprFieldBuffers: [],
       valueExprFieldStamps: [],
       scalarExprToArenaAddress: null,
+    },
+    frameSemantics: {
+      frameId: 0,
+      segments: [],
     },
     timeState: {
       prevTAbsMs: null,

@@ -56,16 +56,11 @@ describe('Render scale reads arena by slot descriptor offset', () => {
     const scaleExprId = (renderStep as any).scale.id as number;
     const scaleWriteStep = schedule.steps.find(
       (s: any) =>
-        (s.kind === 'evalOne' &&
-          s.expr === scaleExprId) ||
         (s.kind === 'materialize' && s.field === scaleExprId),
     );
     expect(scaleWriteStep).toBeTruthy();
 
-    const scaleSlot =
-      (scaleWriteStep as any).kind === 'materialize'
-        ? ((scaleWriteStep as any).target as number)
-        : ((scaleWriteStep as any).target as number);
+    const scaleSlot = (scaleWriteStep as any).target as number;
     const scaleMeta = program.slotMeta.find((m: any) => m.slot === scaleSlot);
     expect(scaleMeta).toBeTruthy();
 
@@ -76,13 +71,10 @@ describe('Render scale reads arena by slot descriptor offset', () => {
     expect(arenaOffset).not.toBe(scaleSlot);
 
     const state = createRuntimeState(
-      program.slotMeta.length,
       schedule.stateSlotCount,
-      0,
       0,
       program.valueExprs.nodes.length,
       program.arenaTotalFloats,
-      0,
       undefined,
       undefined,
       program.arenaRuntimeLayout,
