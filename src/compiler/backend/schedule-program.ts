@@ -3,7 +3,7 @@
  *
  * Builds execution schedule with explicit phase ordering:
  * 1. Update rails/time inputs
- * 2. Execute cardinality-one values (evalOne/materialize)
+ * 2. Execute cardinality-one values (materialize)
  * 3. Build continuity mappings (continuityMapBuild)
  * 4. Execute continuous fields (materialize)
  * 5. Apply continuity to field targets (continuityApply)
@@ -18,7 +18,7 @@
  * All slots are allocated by Pass 6 (block lowering) and Pass 6b (continuity pipeline).
  */
 
-import type { Step, StepEvalOne, StepEvalEvent, StepMaterialize, TimeModel, StateMapping, ScalarSlotDecl, FieldSlotDecl } from '../ir/types';
+import type { Step, StepEvalEvent, StepMaterialize, TimeModel, StateMapping, ScalarSlotDecl, FieldSlotDecl } from '../ir/types';
 import { SCALAR_INSTANCE_ID, type InstanceId } from '../ir/Indices';
 import type { ValueExpr, ValueExprId } from '../ir/value-expr';
 import type { UnlinkedIRFragments } from './lower-blocks';
@@ -164,7 +164,9 @@ function isArenaScalarPayload(expr: ValueExpr): boolean {
     payloadKind === 'vec2' ||
     payloadKind === 'vec3' ||
     payloadKind === 'vec4' ||
-    payloadKind === 'color'
+    payloadKind === 'color' ||
+    payloadKind === 'shape' ||
+    payloadKind === 'cameraProjection'
   );
 }
 
@@ -210,6 +212,8 @@ function canMaterializeScalarExpr(
           );
           break;
         case 'reduce':
+          result = true;
+          break;
         case 'zipPromote':
         case 'broadcast':
         case 'pathDerivative':
@@ -230,6 +234,8 @@ function canMaterializeScalarExpr(
       result = canMaterializeScalarExpr(expr.input as number, valueExprs, cache, visiting);
       break;
     case 'shapeRef':
+      result = true;
+      break;
     case 'event':
       result = false;
       break;
@@ -455,8 +461,6 @@ export function pass7Schedule(
   // Pre-event ones go in Phase 1, post-event ones go after eventDispatch.
   const scalarSlots = unlinkedIR.builder.getScalarSlots();
   const scalarRootExprIds = new Set<number>(scalarSlots.keys());
-  const evalOneStepsPre: StepEvalOne[] = [];
-  const evalOneStepsPost: StepEvalOne[] = [];
   const scalarMaterializeStepsPre: StepMaterialize[] = [];
   const scalarMaterializeStepsPost: StepMaterialize[] = [];
   const scalarMaterializeEligibility = new Map<number, boolean>();
@@ -465,36 +469,27 @@ export function pass7Schedule(
     const expr = valueExprs[exprId as number];
     if (!expr) continue;
 
-    // [LAW:one-source-of-truth] Eligible arena-compatible scalar DAGs are migrated to the
-    // materializer path via SCALAR_INSTANCE_ID instead of evalValue.
-    if (
+    const canMaterialize =
       isArenaScalarPayload(expr) &&
-      canMaterializeScalarExpr(exprId as number, valueExprs, scalarMaterializeEligibility, new Set())
-    ) {
-      const scalarStep: StepMaterialize = {
-        kind: 'materialize',
-        field: exprId,
-        instanceId: SCALAR_INSTANCE_ID,
-        target: slot,
-      };
-      if (valueExprDependsOnEvent(scalarExprId as number, valueExprs)) {
-        scalarMaterializeStepsPost.push(scalarStep);
-      } else {
-        scalarMaterializeStepsPre.push(scalarStep);
-      }
-      continue;
+      canMaterializeScalarExpr(exprId as number, valueExprs, scalarMaterializeEligibility, new Set());
+    if (!canMaterialize) {
+      // [LAW:no-silent-fallbacks] Legacy evalOne scheduling is removed; scalar
+      // paths must compile through canonical materialize lowering or fail.
+      throw new Error(
+        `Schedule invariant violated: scalar expr ${String(exprId)} (${expr.kind}) requires deprecated evalOne fallback`,
+      );
     }
 
-    const step: StepEvalOne = {
-      kind: 'evalOne',
-      expr: exprId,
+    const scalarStep: StepMaterialize = {
+      kind: 'materialize',
+      field: exprId,
+      instanceId: SCALAR_INSTANCE_ID,
       target: slot,
     };
-
     if (valueExprDependsOnEvent(scalarExprId as number, valueExprs)) {
-      evalOneStepsPost.push(step);
+      scalarMaterializeStepsPost.push(scalarStep);
     } else {
-      evalOneStepsPre.push(step);
+      scalarMaterializeStepsPre.push(scalarStep);
     }
   }
 
@@ -528,23 +523,21 @@ export function pass7Schedule(
   }
 
   // Combine all steps in correct execution order:
-  // 1. EvalOne-pre (ones NOT dependent on events)
+  // 1. Materialize-pre (ones/fields NOT dependent on events)
   // 2. ContinuityMapBuild (detect domain changes, compute mappings)
   // 3. Materialize (evaluate fields to buffers)
   // 4. ContinuityApply (apply gauge/slew/crossfade to buffers)
   // 5. EvalEvent (evaluate discrete events → eventScalars)
-  // 6. EvalOne-post (ones that depend on eventRead)
+  // 6. Materialize-post (ones that depend on eventRead)
   // 7. Render (use continuity-applied buffers)
   // 8. StateWrite (persist state for next frame)
   const steps: Step[] = [
-    ...evalOneStepsPre,
     ...scalarMaterializeStepsPre,
     ...continuityPipeline.mapBuildSteps,
     ...continuityPipeline.materializeSteps,
     ...continuityPipeline.continuityApplySteps,
     ...eventDispatchSteps,
     ...scalarMaterializeStepsPost,
-    ...evalOneStepsPost,
     ...continuityPipeline.renderSteps,
     ...stateWriteSteps,
   ];

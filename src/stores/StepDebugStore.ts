@@ -517,7 +517,6 @@ export class StepDebugStore {
     const step = this.currentSnapshot?.step;
     if (!step) return null;
     switch (step.kind) {
-      case 'evalOne': return step.expr;
       case 'eventDispatch': return step.expr;
       case 'materialize': return step.field;
       case 'stateWrite': return step.value;
