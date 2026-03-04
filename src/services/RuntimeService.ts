@@ -55,6 +55,7 @@ import {
 } from './DebugProbeProtocol';
 import { LocalDebugProbeTransport } from './LocalDebugProbeTransport';
 import { createWasmDebugProbeTransport } from './WasmDebugProbeTransport';
+import { RuntimeHotpathWorkerClient } from './RuntimeHotpathWorkerClient';
 
 const INITIAL_COMPILE_FAILURE_PROBE_MESSAGE =
   'initial_compile_failed: animation loop started but no program is ready';
@@ -94,6 +95,8 @@ export class RuntimeService {
   private canvas: HTMLCanvasElement | null = null;
   private renderer: WebGPURenderer | null = null;
   private arena: RenderBufferArena | null = null;
+  private runtimeHotpath: RuntimeHotpathWorkerClient | null = null;
+  private unbindExternalWriteBridge: (() => void) | null = null;
 
   private animationLoop: AnimationLoopController | null = null;
   private unsubCompileEnd: (() => void) | null = null;
@@ -192,6 +195,7 @@ export class RuntimeService {
       getCurrentState: () => this.compileState.currentState,
       getCanvas: () => this.canvas,
       getRenderer: () => this.renderer,
+      getRuntimeHotpath: () => this.runtimeHotpath,
       getArena: () => this.arena,
       store: this.store,
       onStatsUpdate: (statsText) => this.statsSink?.(statsText),
@@ -248,6 +252,12 @@ export class RuntimeService {
       await this.publishRendererPipelines(next);
       // [LAW:single-enforcer] All compile/swap application goes through this queue.
       await compileAndSwap(this.compileDeps(), isInitialSwap, next);
+      // [LAW:single-enforcer] Runtime worker program ownership is published at
+      // one compile-swap boundary to keep runtime/renderer contracts in sync.
+      if (this.runtimeHotpath) {
+        this.runtimeHotpath.installProgram(this.compileState.currentProgram);
+        this.bindExternalWriteBridgeToRuntimeHotpath();
+      }
       this.asyncCompiler?.markSwapComplete();
     } catch (err) {
       this.asyncCompiler?.markSwapFailed(err);
@@ -262,6 +272,22 @@ export class RuntimeService {
         this.requestSwapFlush();
       }
     }
+  }
+
+  private bindExternalWriteBridgeToRuntimeHotpath(): void {
+    this.unbindExternalWriteBridge?.();
+    this.unbindExternalWriteBridge = null;
+    const runtimeHotpath = this.runtimeHotpath;
+    const currentState = this.compileState.currentState;
+    const writeBus = currentState?.externalChannels?.writeBus;
+    if (!runtimeHotpath || !writeBus) {
+      return;
+    }
+    // [LAW:single-enforcer] Worker runtime commits external input writes in
+    // hot-path mode, so UI write bus forwards to one owner boundary.
+    this.unbindExternalWriteBridge = runtimeHotpath.bindExternalWriteBus(
+      writeBus,
+    );
   }
 
   private async publishRendererPipelines(
@@ -446,6 +472,15 @@ export class RuntimeService {
         const message = error instanceof Error ? error.message : String(error);
         throw new Error(`RuntimeService: WebGPU renderer initialization failed: ${message}`);
       }
+      try {
+        this.runtimeHotpath = await RuntimeHotpathWorkerClient.create(
+          this.renderer.getRuntimeSharedPlanes(),
+          (error) => this.handleAnimationLoopError(error),
+        );
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        throw new Error(`RuntimeService: runtime hotpath worker initialization failed: ${message}`);
+      }
 
       // Check for test automation demo marker (set by ?loadDemoPatch= before reload)
       const testDemo = consumeTestDemoFilename();
@@ -555,6 +590,8 @@ export class RuntimeService {
     setRenderIssueReporter(null);
     this.animationLoop?.stop();
     this.animationLoop = null;
+    this.unbindExternalWriteBridge?.();
+    this.unbindExternalWriteBridge = null;
     this.stopSpyReadbackLoop();
     this.unsubSpyTracking?.();
     this.unsubSpyTracking = null;
@@ -575,6 +612,8 @@ export class RuntimeService {
     this.domainChangeDetector.cleanup();
     this.liveRecompile.cleanup();
     debugService.clear();
+    this.runtimeHotpath?.dispose();
+    this.runtimeHotpath = null;
     this.renderer?.dispose();
     this.renderer = null;
     this.arena = null;

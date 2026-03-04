@@ -8,6 +8,13 @@ import {
   type RustRendererWorkerInboundMessage,
   type RustRendererWorkerOutboundMessage,
 } from '../rust/worker-protocol';
+import {
+  RUNTIME_INPUT_BUFFER_BYTES,
+  RUNTIME_INPUT_FLOAT_WORDS,
+  RUNTIME_INPUT_INDEX,
+  RUNTIME_INPUT_SIGNAL_WORDS,
+  type RuntimeSharedPlanes,
+} from '../rust/runtime-input-layout';
 
 interface RenderInput {
   readonly shapeBank: RenderShapeBankSource;
@@ -27,28 +34,6 @@ interface RenderInput {
   readonly drawPrepSinkTableV1?: Uint32Array;
   readonly drawPrepSinkTableWordCount: number;
 }
-
-const INPUT_SIGNAL_WORDS = 4;
-const INPUT_FLOAT_WORDS = 32;
-const INPUT_BUFFER_BYTES = (INPUT_SIGNAL_WORDS + INPUT_FLOAT_WORDS) * Float32Array.BYTES_PER_ELEMENT;
-
-const INPUT_INDEX = Object.freeze({
-  width: 0,
-  height: 1,
-  zoom: 2,
-  panX: 3,
-  panY: 4,
-  timeMs: 5,
-  mouseX: 6,
-  mouseY: 7,
-  mouseButtons: 8,
-  audioLow: 9,
-  audioMid: 10,
-  audioHigh: 11,
-  gaugeActive: 12,
-  sinkTableWords: 13,
-  shapeBankWords: 14,
-} as const);
 
 const DEFAULT_BOOTSTRAP_CONFIG: RustRendererBootstrapConfig = Object.freeze({
   maxParticles: 65_536,
@@ -138,12 +123,12 @@ export class WebGPURenderer {
   static async create(canvas: HTMLCanvasElement): Promise<WebGPURenderer> {
     assertWebGPUStartupContract(canvas);
     const offscreenCanvas = canvas.transferControlToOffscreen();
-    const sharedInput = new SharedArrayBuffer(INPUT_BUFFER_BYTES);
-    const signalWords = new Int32Array(sharedInput, 0, INPUT_SIGNAL_WORDS);
+    const sharedInput = new SharedArrayBuffer(RUNTIME_INPUT_BUFFER_BYTES);
+    const signalWords = new Int32Array(sharedInput, 0, RUNTIME_INPUT_SIGNAL_WORDS);
     const inputWords = new Float32Array(
       sharedInput,
-      INPUT_SIGNAL_WORDS * Int32Array.BYTES_PER_ELEMENT,
-      INPUT_FLOAT_WORDS,
+      RUNTIME_INPUT_SIGNAL_WORDS * Int32Array.BYTES_PER_ELEMENT,
+      RUNTIME_INPUT_FLOAT_WORDS,
     );
     const shapeBankWordCapacity = computeRustRendererShapeBankWordCapacity(DEFAULT_BOOTSTRAP_CONFIG);
     const sinkTableWordCapacity = computeRustRendererSinkTableWordCapacity(DEFAULT_BOOTSTRAP_CONFIG);
@@ -187,27 +172,50 @@ export class WebGPURenderer {
     // [LAW:dataflow-not-control-flow] Renderer updates one canonical shared
     // input buffer each frame. The worker hot path always executes and reads
     // from this buffer in fixed stage order.
-    this.inputWords[INPUT_INDEX.width] = input.width;
-    this.inputWords[INPUT_INDEX.height] = input.height;
-    this.inputWords[INPUT_INDEX.zoom] = input.zoom;
-    this.inputWords[INPUT_INDEX.panX] = input.panX;
-    this.inputWords[INPUT_INDEX.panY] = input.panY;
-    this.inputWords[INPUT_INDEX.timeMs] = input.timeMs;
-    this.inputWords[INPUT_INDEX.mouseX] = coerceFinite(input.inputMouseX);
-    this.inputWords[INPUT_INDEX.mouseY] = coerceFinite(input.inputMouseY);
-    this.inputWords[INPUT_INDEX.mouseButtons] = coerceFinite(input.inputMouseButtons);
-    this.inputWords[INPUT_INDEX.audioLow] = coerceFinite(input.inputAudioLow);
-    this.inputWords[INPUT_INDEX.audioMid] = coerceFinite(input.inputAudioMid);
-    this.inputWords[INPUT_INDEX.audioHigh] = coerceFinite(input.inputAudioHigh);
-    this.inputWords[INPUT_INDEX.gaugeActive] = coerceFinite(input.inputGaugeActive);
+    this.inputWords[RUNTIME_INPUT_INDEX.width] = input.width;
+    this.inputWords[RUNTIME_INPUT_INDEX.height] = input.height;
+    this.inputWords[RUNTIME_INPUT_INDEX.zoom] = input.zoom;
+    this.inputWords[RUNTIME_INPUT_INDEX.panX] = input.panX;
+    this.inputWords[RUNTIME_INPUT_INDEX.panY] = input.panY;
+    this.inputWords[RUNTIME_INPUT_INDEX.timeMs] = input.timeMs;
+    this.inputWords[RUNTIME_INPUT_INDEX.mouseX] = coerceFinite(input.inputMouseX);
+    this.inputWords[RUNTIME_INPUT_INDEX.mouseY] = coerceFinite(input.inputMouseY);
+    this.inputWords[RUNTIME_INPUT_INDEX.mouseButtons] = coerceFinite(input.inputMouseButtons);
+    this.inputWords[RUNTIME_INPUT_INDEX.audioLow] = coerceFinite(input.inputAudioLow);
+    this.inputWords[RUNTIME_INPUT_INDEX.audioMid] = coerceFinite(input.inputAudioMid);
+    this.inputWords[RUNTIME_INPUT_INDEX.audioHigh] = coerceFinite(input.inputAudioHigh);
+    this.inputWords[RUNTIME_INPUT_INDEX.gaugeActive] = coerceFinite(input.inputGaugeActive);
     const shapeBankWords = this.syncShapeBankPlane(input.shapeBank);
     const sinkTableWords = this.syncSinkTablePlane(
       input.drawPrepSinkTableV1,
       input.drawPrepSinkTableWordCount,
     );
-    this.inputWords[INPUT_INDEX.sinkTableWords] = sinkTableWords;
-    this.inputWords[INPUT_INDEX.shapeBankWords] = shapeBankWords;
+    this.inputWords[RUNTIME_INPUT_INDEX.sinkTableWords] = sinkTableWords;
+    this.inputWords[RUNTIME_INPUT_INDEX.shapeBankWords] = shapeBankWords;
     Atomics.add(this.signalWords, 0, 1);
+  }
+
+  resizeCanvas(width: number, height: number): void {
+    if (this.fatalError) {
+      throw this.fatalError;
+    }
+    if (this.disposed) {
+      throw new Error('Rust renderer has been disposed');
+    }
+    if (!this.bootstrapped) {
+      throw new Error('Rust renderer worker is not bootstrapped');
+    }
+    this.syncCanvasSize(width, height);
+  }
+
+  getRuntimeSharedPlanes(): RuntimeSharedPlanes {
+    // [LAW:one-source-of-truth] Runtime workers write the same canonical shared
+    // planes that renderer.render uses; ownership is shared, layout is not.
+    return {
+      sharedInput: this.signalWords.buffer as SharedArrayBuffer,
+      sharedShapeBank: this.sharedShapeBankWords.buffer as SharedArrayBuffer,
+      sharedSinkTable: this.sharedSinkTableWords.buffer as SharedArrayBuffer,
+    };
   }
 
   async readIndirectArgsDebugView(maxRecords: number = 0): Promise<IndirectArgsReadbackSnapshot> {

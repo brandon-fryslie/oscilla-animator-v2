@@ -5,9 +5,27 @@ const mocks = vi.hoisted(() => {
   const compileWorkerDispose = vi.fn();
   const compileAndSwap = vi.fn(async (..._args: any[]) => {});
   const rebuildSimulationPipeline = vi.fn(async () => {});
+  const runtimeHotpathInstallProgram = vi.fn();
+  const runtimeHotpathDispose = vi.fn();
+  const runtimeHotpathSetViewportFrame = vi.fn();
+  const runtimeHotpathBindExternalWriteBus = vi.fn(() => () => {});
+  const runtimeHotpathGetLatestStats = vi.fn(() => null);
+  const runtimeHotpathCreate = vi.fn(async () => ({
+    installProgram: runtimeHotpathInstallProgram,
+    dispose: runtimeHotpathDispose,
+    setViewportFrame: runtimeHotpathSetViewportFrame,
+    bindExternalWriteBus: runtimeHotpathBindExternalWriteBus,
+    getLatestStats: runtimeHotpathGetLatestStats,
+  }));
   const createWebGPURenderer = vi.fn(async () => ({
     dispose: vi.fn(),
     render: vi.fn(),
+    resizeCanvas: vi.fn(),
+    getRuntimeSharedPlanes: vi.fn(() => ({
+      sharedInput: new SharedArrayBuffer(256),
+      sharedShapeBank: new SharedArrayBuffer(256),
+      sharedSinkTable: new SharedArrayBuffer(256),
+    })),
     rebuildSimulationPipeline,
   }));
   const assertWebGPUStartupContract = vi.fn();
@@ -48,6 +66,12 @@ const mocks = vi.hoisted(() => {
     compileWorkerDispose,
     compileAndSwap,
     rebuildSimulationPipeline,
+    runtimeHotpathInstallProgram,
+    runtimeHotpathDispose,
+    runtimeHotpathSetViewportFrame,
+    runtimeHotpathBindExternalWriteBus,
+    runtimeHotpathGetLatestStats,
+    runtimeHotpathCreate,
     createWebGPURenderer,
     assertWebGPUStartupContract,
     setRenderIssueReporter,
@@ -145,6 +169,12 @@ vi.mock('../CompilationInspectorService', () => ({
 vi.mock('../AnimationLoop', () => ({
   startAnimationLoop: mocks.startAnimationLoop,
   createAnimationLoopState: mocks.createAnimationLoopState,
+}));
+
+vi.mock('../RuntimeHotpathWorkerClient', () => ({
+  RuntimeHotpathWorkerClient: {
+    create: mocks.runtimeHotpathCreate,
+  },
 }));
 
 import { RuntimeService } from '../RuntimeService';

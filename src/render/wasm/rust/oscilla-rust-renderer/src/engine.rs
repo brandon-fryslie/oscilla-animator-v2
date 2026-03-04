@@ -108,18 +108,19 @@ fn arena_index(base_offset: u32, lane: u32, component: u32, lane_stride: u32, co
 
 fn read_arena_f32(base_offset: u32, lane: u32, component: u32, lane_stride: u32, component_stride: u32) -> f32 {
   let index = arena_index(base_offset, lane, component, lane_stride, component_stride);
-  if (index >= arrayLength(&sink_table_words)) {
+  if (index >= arrayLength(&arena_words)) {
     return 0.0;
   }
-  return bitcast<f32>(sink_table_words[index]);
+  let raw = bitcast<f32>(arena_words[index]);
+  return select(0.0, raw, raw == raw);
 }
 
 fn read_arena_u32(base_offset: u32, lane: u32, component: u32, lane_stride: u32, component_stride: u32) -> u32 {
   let index = arena_index(base_offset, lane, component, lane_stride, component_stride);
-  if (index >= arrayLength(&sink_table_words)) {
+  if (index >= arrayLength(&arena_words)) {
     return 0u;
   }
-  return sink_table_words[index];
+  return arena_words[index];
 }
 
 @compute @workgroup_size(64)
@@ -261,7 +262,10 @@ struct VertexOutput {
   @location(0) color: vec4<f32>,
 };
 
-@vertex fn vs_main(@location(0) localPos: vec2<f32>, @builtin(instance_index) instanceIndex: u32) -> VertexOutput {
+@vertex fn vs_main(
+  @location(0) localPos: vec2<f32>,
+  @builtin(instance_index) instanceIndex: u32,
+) -> VertexOutput {
   let inst = instances[instanceIndex];
   let topologyWordOffset = u32(max(inst.transform1.z, 0.0));
   let topologyFlags = topologyBank[topologyWordOffset + 3u];
@@ -296,19 +300,25 @@ struct VertexOutput {
     localScaled.x * s + localScaled.y * c
   );
   let finalPx = centeredPx + rotatedPx;
+  let safeViewportX = max(viewportPx.x, 1.0);
+  let safeViewportY = max(viewportPx.y, 1.0);
   let ndc = vec2<f32>(
-    (finalPx.x / viewportPx.x) * 2.0 - 1.0,
-    1.0 - (finalPx.y / viewportPx.y) * 2.0
+    (finalPx.x / safeViewportX) * 2.0 - 1.0,
+    1.0 - (finalPx.y / safeViewportY) * 2.0
+  );
+  let safeNdc = vec2<f32>(
+    clamp(select(0.0, ndc.x, ndc.x == ndc.x), -2.0, 2.0),
+    clamp(select(0.0, ndc.y, ndc.y == ndc.y), -2.0, 2.0),
   );
   var out: VertexOutput;
-  out.position = vec4<f32>(ndc, 0.0, 1.0);
+  out.position = vec4<f32>(safeNdc, 0.0, 1.0);
   let rawR = inst.color.x;
   let rawG = inst.color.y;
   let rawB = inst.color.z;
   let rawA = inst.color.w;
-  let safeR = clamp(select(1.0, rawR, rawR == rawR), 0.0, 1.0);
-  let safeG = clamp(select(0.2, rawG, rawG == rawG), 0.0, 1.0);
-  let safeB = clamp(select(0.9, rawB, rawB == rawB), 0.0, 1.0);
+  let safeR = clamp(select(0.0, rawR, rawR == rawR), 0.0, 1.0);
+  let safeG = clamp(select(0.0, rawG, rawG == rawG), 0.0, 1.0);
+  let safeB = clamp(select(0.0, rawB, rawB == rawB), 0.0, 1.0);
   let safeA = clamp(select(1.0, rawA, rawA == rawA), 0.0, 1.0);
   out.color = vec4<f32>(safeR, safeG, safeB, safeA) * (1.0 + closedMask * 0.0);
   return out;
@@ -1047,7 +1057,6 @@ impl Engine {
             &self.queue,
             mirrored_indirect_words.as_slice(),
         );
-
         IndirectRegionPlan {
             total_instance_count,
             indexed_record_count,
