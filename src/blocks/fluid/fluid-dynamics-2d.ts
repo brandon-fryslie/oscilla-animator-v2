@@ -4,7 +4,6 @@ import {
   payloadStride,
   withInstance,
   instanceRef,
-  requireInst,
   vec2Const,
   colorConst,
   unitNone,
@@ -19,7 +18,6 @@ import { inferType, cardinalityVar } from '../../core/inference-types';
 import { cardinalityVarId } from '../../core/ids';
 import { DOMAIN_CIRCLE } from '../../core/domain-registry';
 import { defaultSource, defaultSourceConst } from '../../types';
-import type { ValueRefExpr } from '../../compiler/ir/lowerTypes';
 import { resolveInputConstant } from '../lower-utils';
 
 // [LAW:one-source-of-truth] Fluid output cardinality + instance ownership are
@@ -29,17 +27,6 @@ const FLUID_OUTPUT_CARD = cardinalityVar(cardinalityVarId('fluid_outputs'), {
   acceptance: 'manyOnly',
   instanceBinding: { kind: 'create', domainType: DOMAIN_CIRCLE },
 });
-
-function expectExprInput(
-  inputsById: Record<string, ValueRefExpr | undefined>,
-  portId: string,
-): ValueRefExpr {
-  const ref = inputsById[portId];
-  if (!ref) {
-    throw new Error(`FluidDynamics2D: missing required input '${portId}'`);
-  }
-  return ref;
-}
 
 export function register(): void {
   registerBlock({
@@ -59,6 +46,8 @@ export function register(): void {
       count: {
         label: 'Count',
         type: canonicalType(INT),
+        // [LAW:one-source-of-truth] defaultValue drives UI defaults; defaultSource
+        // is the canonical compile-time fallback source materialized by frontend.
         defaultValue: 8192,
         defaultSource: defaultSourceConst(8192),
         semantic: 'instanceCount',
@@ -123,6 +112,8 @@ export function register(): void {
         label: 'Color',
         type: inferType(COLOR, unitHsl(), { cardinality: FLUID_OUTPUT_CARD }),
       },
+      // [LAW:single-enforcer] Hidden outputs are the canonical parameter bridge
+      // consumed by fluid bundle lowering; user-facing UI stays on block inputs.
       _simResolution: { hidden: true, type: canonicalType(INT) },
       _velocityDissipation: { hidden: true, type: canonicalType(FLOAT) },
       _dyeDissipation: { hidden: true, type: canonicalType(FLOAT) },
@@ -133,24 +124,17 @@ export function register(): void {
     },
     lower: ({ ctx, inputsById }) => {
       const shapeInput = inputsById.shape;
-      if (!shapeInput || requireInst(shapeInput.type.extent.cardinality, 'cardinality').kind !== 'one') {
-        throw new Error('FluidDynamics2D requires a one-cardinality shape input');
-      }
-
-      const countInput = expectExprInput(inputsById as Record<string, ValueRefExpr | undefined>, 'count');
+      const countInput = inputsById.count;
       const count = resolveInputConstant(ctx, countInput, 'count', { min: 64, max: 65_536 });
-      const simResolution = expectExprInput(inputsById as Record<string, ValueRefExpr | undefined>, 'simResolution');
-      const velocityDissipation = expectExprInput(inputsById as Record<string, ValueRefExpr | undefined>, 'velocityDissipation');
-      const dyeDissipation = expectExprInput(inputsById as Record<string, ValueRefExpr | undefined>, 'dyeDissipation');
-      const vorticity = expectExprInput(inputsById as Record<string, ValueRefExpr | undefined>, 'vorticity');
-      const splatRadius = expectExprInput(inputsById as Record<string, ValueRefExpr | undefined>, 'splatRadius');
-      const advection = expectExprInput(inputsById as Record<string, ValueRefExpr | undefined>, 'advection');
-      const particleScale = expectExprInput(inputsById as Record<string, ValueRefExpr | undefined>, 'particleScale');
+      const simResolution = inputsById.simResolution;
+      const velocityDissipation = inputsById.velocityDissipation;
+      const dyeDissipation = inputsById.dyeDissipation;
+      const vorticity = inputsById.vorticity;
+      const splatRadius = inputsById.splatRadius;
+      const advection = inputsById.advection;
+      const particleScale = inputsById.particleScale;
       const instanceId = ctx.b.createInstance(DOMAIN_CIRCLE, count, shapeInput.id);
-      const instanceDecl = ctx.instances.get(instanceId);
-      if (!instanceDecl) {
-        throw new Error('FluidDynamics2D failed to resolve created instance declaration');
-      }
+      const instanceDecl = ctx.instances.get(instanceId)!;
       const instance = instanceRef(instanceDecl.domainType as string, instanceId as string);
       const controlPointsType = withInstance(ctx.outTypes[0], instance);
       const colorType = withInstance(ctx.outTypes[1], instance);
@@ -159,6 +143,8 @@ export function register(): void {
       // by emitting canonical field slots every compile; shader variability is
       // expressed through data, not optional lowering branches.
       const defaultControl = ctx.b.constant(vec2Const(0.5, 0.5), canonicalType(VEC2));
+      // TODO(architecture): Replace authored color output with a first-class
+      // fluid shading contract once renderer presentation supports it.
       const defaultColor = ctx.b.constant(colorConst(0.1, 0.2, 0.95, 1.0), canonicalType(COLOR, unitHsl()));
       const controlField = ctx.b.broadcast(defaultControl, controlPointsType);
       const colorField = ctx.b.broadcast(defaultColor, colorType);
