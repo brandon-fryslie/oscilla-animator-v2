@@ -18,7 +18,16 @@
  * All slots are allocated by Pass 6 (block lowering) and Pass 6b (continuity pipeline).
  */
 
-import type { Step, StepEvalEvent, StepMaterialize, TimeModel, StateMapping, ScalarSlotDecl, FieldSlotDecl } from '../ir/types';
+import type {
+  Step,
+  StepEvalEvent,
+  StepMaterialize,
+  StepContinuityApply,
+  TimeModel,
+  StateMapping,
+  ScalarSlotDecl,
+  FieldSlotDecl,
+} from '../ir/types';
 import { SCALAR_INSTANCE_ID, type InstanceId } from '../ir/Indices';
 import type { ValueExpr, ValueExprId } from '../ir/value-expr';
 import type { UnlinkedIRFragments } from './lower-blocks';
@@ -522,22 +531,51 @@ export function pass7Schedule(
     }
   }
 
+  // [LAW:one-source-of-truth] Event-dependent field materializations are split
+  // here using canonical ValueExpr dependency analysis so runtime never reads
+  // stale pre-dispatch event scalars for field slots.
+  const continuityMaterializeStepsPre: StepMaterialize[] = [];
+  const continuityMaterializeStepsPost: StepMaterialize[] = [];
+  const continuityPostBaseSlots = new Set<number>();
+  for (const step of continuityPipeline.materializeSteps) {
+    if (valueExprDependsOnEvent(step.field as number, valueExprs)) {
+      continuityMaterializeStepsPost.push(step);
+      continuityPostBaseSlots.add(step.target as number);
+    } else {
+      continuityMaterializeStepsPre.push(step);
+    }
+  }
+
+  const continuityApplyStepsPre: StepContinuityApply[] = [];
+  const continuityApplyStepsPost: StepContinuityApply[] = [];
+  for (const step of continuityPipeline.continuityApplySteps) {
+    if (continuityPostBaseSlots.has(step.baseSlot as number)) {
+      continuityApplyStepsPost.push(step);
+    } else {
+      continuityApplyStepsPre.push(step);
+    }
+  }
+
   // Combine all steps in correct execution order:
   // 1. Materialize-pre (ones/fields NOT dependent on events)
   // 2. ContinuityMapBuild (detect domain changes, compute mappings)
-  // 3. Materialize (evaluate fields to buffers)
-  // 4. ContinuityApply (apply gauge/slew/crossfade to buffers)
+  // 3. Continuity Materialize-pre (fields independent of events)
+  // 4. ContinuityApply-pre
   // 5. EvalEvent (evaluate discrete events → eventScalars)
   // 6. Materialize-post (ones that depend on eventRead)
-  // 7. Render (use continuity-applied buffers)
-  // 8. StateWrite (persist state for next frame)
+  // 7. Continuity Materialize-post (event-dependent fields)
+  // 8. ContinuityApply-post
+  // 9. Render (use continuity-applied buffers)
+  // 10. StateWrite (persist state for next frame)
   const steps: Step[] = [
     ...scalarMaterializeStepsPre,
     ...continuityPipeline.mapBuildSteps,
-    ...continuityPipeline.materializeSteps,
-    ...continuityPipeline.continuityApplySteps,
+    ...continuityMaterializeStepsPre,
+    ...continuityApplyStepsPre,
     ...eventDispatchSteps,
     ...scalarMaterializeStepsPost,
+    ...continuityMaterializeStepsPost,
+    ...continuityApplyStepsPost,
     ...continuityPipeline.renderSteps,
     ...stateWriteSteps,
   ];

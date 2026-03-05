@@ -113,15 +113,21 @@ describe('S03 first type2 parametric shape fixture', () => {
       resolution: 4,
     });
 
-    expect(result.header.vertexCount).toBe(5);
-    expect(result.header.paramBlockWords).toBe(10);
+    expect(result.header.vertexCount).toBe(10);
+    expect(result.header.paramBlockWords).toBe(20);
     expect(result.header.paramBlockOffset).toBe(result.shapeHandleWordOffset + SHAPE_BANK_HEADER_WORDS);
     expect(result.header.flags & 1).toBe(1);
     expect(Array.from(result.vertices).every(Number.isFinite)).toBe(true);
 
-    // AC 2.1: B(0.5) for (0,0)-(0,1)-(1,1)-(1,0) is (0.5, 0.75)
-    expect(result.vertices[4]).toBeCloseTo(0.5, 6);
-    expect(result.vertices[5]).toBeCloseTo(0.75, 6);
+    // Ribbon midpoint samples should straddle the analytic centerline at B(0.5)=(0.5, 0.75).
+    const upperMidX = result.vertices[4];
+    const upperMidY = result.vertices[5];
+    const lowerMidX = result.vertices[14];
+    const lowerMidY = result.vertices[15];
+    expect(upperMidX).toBeCloseTo(0.5, 6);
+    expect(lowerMidX).toBeCloseTo(0.5, 6);
+    expect((upperMidY + lowerMidY) * 0.5).toBeCloseTo(0.75, 5);
+    expect(Math.abs(upperMidY - lowerMidY)).toBeGreaterThan(0);
   });
 
   it('guards degenerate control points without emitting NaN payload', () => {
@@ -133,7 +139,7 @@ describe('S03 first type2 parametric shape fixture', () => {
       resolution: 16,
     });
 
-    expect(result.header.vertexCount).toBe(17);
+    expect(result.header.vertexCount).toBe(34);
     expect(result.vertices.every((value) => Number.isFinite(value))).toBe(true);
     expect(result.vertices.every((value) => Math.abs(value) <= 1e-7)).toBe(true);
   });

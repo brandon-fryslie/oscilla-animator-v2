@@ -3,7 +3,7 @@ import type { ValueSlot } from '../compiler/ir/Indices';
 import type { Step, StepRender } from '../compiler/ir/types';
 import type { RuntimeState } from './RuntimeState';
 import { SHAPE_BANK_HEADER_WORDS } from './RuntimeState';
-import { arenaIndex, resolveArenaAddress } from './ArenaValueStore';
+import { resolveArenaAddress } from './ArenaValueStore';
 import {
   buildDrawPrepSinkTableHeader,
   computeDrawPrepSinkTableWordCapacity,
@@ -102,36 +102,12 @@ function readArenaNumber(address: PackedArenaAddress, state: RuntimeState, lane:
   return state.arena[index] as number;
 }
 
-function resolveOneShapeHandle(program: CompiledProgramIR, state: RuntimeState, step: StepRender): number {
-  if (step.shape.k !== 'oneHandle') {
-    throw new Error('resolveOneShapeHandle: expected oneHandle shape source');
-  }
-  const address = program.runtimeAddressTable?.scalarExprToArenaAddress.get(step.shape.id as number);
-  if (!address) {
-    throw new Error(
-      'DrawPrepSinkTablePacker: missing scalar arena address for sink shape handle expr ' +
-        String(step.shape.id),
-    );
-  }
-
-  const rawHandle = state.arena[arenaIndex(address.arena, 0, address.component)];
-  if (!Number.isFinite(rawHandle) || !Number.isInteger(rawHandle)) {
-    throw new Error(
-      'DrawPrepSinkTablePacker: sink oneHandle shape source must be a finite integer, got ' + String(rawHandle),
-    );
-  }
-  return assertFiniteUint32(Math.trunc(rawHandle), 'shapeHandleWordOffset');
-}
-
 function resolveSlotShapeHandle(
   program: CompiledProgramIR,
   state: RuntimeState,
   step: StepRender,
   instanceCount: number,
 ): number {
-  if (step.shape.k !== 'slot') {
-    throw new Error('resolveSlotShapeHandle: expected slot shape source');
-  }
   if (instanceCount <= 0) {
     return 0;
   }
@@ -257,10 +233,7 @@ export function packDrawPrepSinkTableV1(
     const sink = drawPrepProgram.sinks[sinkIndex];
     const renderStep = requireRenderStep(program, sink.renderStepIndex);
     const instanceCount = sinkInstanceCounts[sinkIndex] ?? 0;
-    const shapeHandleWordOffset =
-      renderStep.shape.k === 'slot'
-        ? resolveSlotShapeHandle(program, state, renderStep, instanceCount)
-        : resolveOneShapeHandle(program, state, renderStep);
+    const shapeHandleWordOffset = resolveSlotShapeHandle(program, state, renderStep, instanceCount);
     assertShapeHandleInBankWindow(state, shapeHandleWordOffset, instanceCount);
 
     const packedFirstInstance = assertFiniteUint32(firstInstance, `firstInstance sinkIndex=${sink.sinkIndex}`);
@@ -274,14 +247,11 @@ export function packDrawPrepSinkTableV1(
       renderStep.colorSlot,
       `colorSlot sink(instance=${String(renderStep.instanceId)})`,
     );
-    const shapeSlotAddress =
-      renderStep.shape.k === 'slot'
-        ? resolveSlotArenaAddress(
-          program,
-          renderStep.shape.slot,
-          `shapeSlot sink(instance=${String(renderStep.instanceId)})`,
-        )
-        : null;
+    const shapeSlotAddress = resolveSlotArenaAddress(
+      program,
+      renderStep.shape.slot,
+      `shapeSlot sink(instance=${String(renderStep.instanceId)})`,
+    );
     const scaleSlotAddress =
       renderStep.scale?.k === 'slot'
         ? resolveSlotArenaAddress(
@@ -342,12 +312,10 @@ export function packDrawPrepSinkTableV1(
       const scale2Y = scale2SlotAddress
         ? readArenaNumber(scale2SlotAddress, state, lane, 1)
         : 1;
-      const shapeHandle = renderStep.shape.k === 'slot'
-        ? assertFiniteUint32(
-          Math.trunc(readArenaNumber(shapeSlotAddress!, state, lane, 0)),
-          `shapeSlotHandle lane=${lane}`,
-        )
-        : shapeHandleWordOffset;
+      const shapeHandle = assertFiniteUint32(
+        Math.trunc(readArenaNumber(shapeSlotAddress, state, lane, 0)),
+        `shapeSlotHandle lane=${lane}`,
+      );
       words[positionBaseOffset + lane] = float32ToUint32Bits(positionX);
       words[positionBaseOffset + instanceCount + lane] = float32ToUint32Bits(positionY);
       words[colorBaseOffset + lane] = float32ToUint32Bits(colorR);

@@ -79,8 +79,12 @@ describe('Steel Thread - Dual Topology with Scale', () => {
     });
 
     const result = compile(patch);
+    if (result.kind !== 'ok') {
+      throw new Error(
+        'compile failed: ' + result.errors.map((error) => error.message).join(' | '),
+      );
+    }
     expect(result.kind).toBe('ok');
-    if (result.kind !== 'ok') return;
 
     const schedule = result.program.schedule as ScheduleIR;
     expect(result.program.generatedComputeProgram?.offsetConstants.size ?? 0).toBeGreaterThan(0);
@@ -100,22 +104,17 @@ describe('Steel Thread - Dual Topology with Scale', () => {
         .sort((a, b) => (a ?? 0) - (b ?? 0))
     ).toEqual([2, 3]);
 
-    const topologyIds = renderSteps.flatMap((step) => {
-      if (step.shape.k === 'oneHandle') {
-        const expr = result.program.valueExprs.nodes[step.shape.id as number];
-        if (expr?.kind === 'shapeRef') {
-          return [expr.topologyId as number];
-        }
-      }
-      return [];
-    });
-    expect(new Set(topologyIds).size).toBe(2);
+    expect(renderSteps.map((step) => step.shape.k)).toEqual(['slot', 'slot']);
+    const shapeSlots = renderSteps.map((step) => step.shape.slot as number);
+    expect(new Set(shapeSlots).size).toBe(2);
 
     const scaleSlots = renderSteps.flatMap((step) =>
       step.scale?.k === 'slot' ? [step.scale.slot as number] : []
     );
     expect(scaleSlots.length).toBe(2);
-    expect(new Set(scaleSlots).size).toBe(1);
+    // [LAW:one-type-per-behavior] Both render steps are slot-backed; each
+    // render instance may own a distinct many-cardinality scale slot.
+    expect(new Set(scaleSlots).size).toBe(2);
     const animatedScaleSlot = scaleSlots[0]!;
 
     const sizes = computeRuntimeStorageSizes(result.program.runtimeSlots);

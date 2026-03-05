@@ -51,16 +51,8 @@ describe('Render scale reads arena by slot descriptor offset', () => {
 
     const renderStep = schedule.steps.find((s): s is import('../../compiler/ir/types').StepRender => s.kind === 'render');
     expect(renderStep).toBeTruthy();
-    expect(renderStep?.scale).toBeTruthy();
-
-    const scaleExprId = (renderStep as any).scale.id as number;
-    const scaleWriteStep = schedule.steps.find(
-      (s: any) =>
-        (s.kind === 'materialize' && s.field === scaleExprId),
-    );
-    expect(scaleWriteStep).toBeTruthy();
-
-    const scaleSlot = (scaleWriteStep as any).target as number;
+    expect(renderStep?.scale?.k).toBe('slot');
+    const scaleSlot = (renderStep!.scale as { slot: number }).slot;
     const scaleMeta = program.slotMeta.find((m: any) => m.slot === scaleSlot);
     expect(scaleMeta).toBeTruthy();
 

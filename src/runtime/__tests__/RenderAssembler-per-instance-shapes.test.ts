@@ -244,10 +244,13 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
       const positionBuffer = new Float32Array(30); // 10 instances * 3 components
       const colorBuffer = new Uint8ClampedArray(40); // 10 instances
       const shapeBuffer = new Uint32Array(40); // Only 5 instances worth! (40 / 8 = 5)
+      const scaleBuffer = new Float32Array(10);
+      scaleBuffer.fill(1);
 
       setTestSlotBuffer(state, 1 as ValueSlot, positionBuffer);
       setTestSlotBuffer(state, 2 as ValueSlot, colorBuffer);
       installShapeHandlesFromPacked(state, 3 as ValueSlot, shapeBuffer);
+      setTestSlotBuffer(state, 4 as ValueSlot, scaleBuffer);
 
       // Build scalarExprToArenaOffset mapping
       const scalarExprToArenaOffset = new Map<number, number>([[0, 10]]);
@@ -255,6 +258,7 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
       const slotToArena = buildSlotToArenaWithShapeSlots(state, [
         { slot: 1 as ValueSlot, stride: 3 },
         { slot: 2 as ValueSlot, stride: 4 },
+        { slot: 4 as ValueSlot, stride: 1 },
       ]);
 
       const step: StepRender = {
@@ -288,16 +292,19 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
       const shapeHandles = new Float32Array([
         state.shapeBank!.data.length - SHAPE_BANK_HEADER_WORDS + 1,
       ]);
+      const scaleBuffer = new Float32Array([1]);
 
       setTestSlotBuffer(state, 1 as ValueSlot, positionBuffer);
       setTestSlotBuffer(state, 2 as ValueSlot, colorBuffer);
       setTestSlotBuffer(state, 3 as ValueSlot, shapeHandles);
+      setTestSlotBuffer(state, 4 as ValueSlot, scaleBuffer);
 
       const scalarExprToArenaOffset = new Map<number, number>([[0, 10]]);
       state.arena[10] = 1.0;
       const slotToArena = buildSlotToArenaWithShapeSlots(state, [
         { slot: 1 as ValueSlot, stride: 3 },
         { slot: 2 as ValueSlot, stride: 4 },
+        { slot: 4 as ValueSlot, stride: 1 },
       ]);
 
       const step: StepRender = {
@@ -813,9 +820,12 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
       const positionBuffer = new Float32Array(instanceCount * 3);
       const colorBuffer = new Uint8ClampedArray(instanceCount * 4);
       const shapeBuffer = new Uint32Array(instanceCount * LEGACY_SHAPE_RECORD_WORDS);
+      const scaleBuffer = new Float32Array(instanceCount);
+      scaleBuffer.fill(1);
 
       setTestSlotBuffer(state, 1 as ValueSlot, positionBuffer);
       setTestSlotBuffer(state, 2 as ValueSlot, colorBuffer);
+      setTestSlotBuffer(state, 5 as ValueSlot, scaleBuffer);
       // No control points buffer at slot 4!
 
       for (let i = 0; i < instanceCount; i++) {
@@ -835,6 +845,7 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
       const slotToArena = buildSlotToArenaWithShapeSlots(state, [
         { slot: 1 as ValueSlot, stride: 3 },
         { slot: 2 as ValueSlot, stride: 4 },
+        { slot: 5 as ValueSlot, stride: 1 },
       ]);
 
       const step: StepRender = {
@@ -842,7 +853,7 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
         instanceId: instanceId('test-instance'),
         controlPointsSlot: 1 as ValueSlot,
         colorSlot: 2 as ValueSlot,
-        scale: { k: 'slot', slot: 4 as ValueSlot },
+        scale: { k: 'slot', slot: 5 as ValueSlot },
         shape: { k: 'slot', slot: 3 as ValueSlot },
       };
 
@@ -1043,6 +1054,8 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
       const shapeBuffer = new Uint32Array(instanceCount * LEGACY_SHAPE_RECORD_WORDS);
       const circlePoints = new Float32Array([0, 1, 1, 0, 0, -1, -1, 0]);
       const squarePoints = new Float32Array([-1, -1, 1, -1, 1, 1, -1, 1]);
+      const scaleBuffer = new Float32Array(instanceCount);
+      scaleBuffer.fill(1);
 
       for (let i = 0; i < instanceCount; i++) {
         positionBuffer[i * 3] = (i % 4) / 3;
@@ -1068,6 +1081,7 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
       installShapeHandlesFromPacked(state, 3 as ValueSlot, shapeBuffer);
       setTestSlotBuffer(state, 10 as ValueSlot, circlePoints);
       setTestSlotBuffer(state, 11 as ValueSlot, squarePoints);
+      setTestSlotBuffer(state, 12 as ValueSlot, scaleBuffer);
 
       const scalarExprToArenaOffset = new Map<number, number>([[0, 10]]);
       state.arena[10] = 1.0;
@@ -1076,6 +1090,7 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
         { slot: 2 as ValueSlot, stride: 4 },
         { slot: 10 as ValueSlot, stride: 2 },
         { slot: 11 as ValueSlot, stride: 2 },
+        { slot: 12 as ValueSlot, stride: 1 },
       ]);
 
       const step: StepRender = {
@@ -1083,7 +1098,7 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
         instanceId: instanceId('stress-instance'),
         controlPointsSlot: 1 as ValueSlot,
         colorSlot: 2 as ValueSlot,
-        scale: { k: 'slot', slot: 4 as ValueSlot },
+        scale: { k: 'slot', slot: 12 as ValueSlot },
         shape: { k: 'slot', slot: 3 as ValueSlot },
       };
 
