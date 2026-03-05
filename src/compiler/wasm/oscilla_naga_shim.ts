@@ -25,11 +25,13 @@ type RustCompileFn = (
   maxActiveLanes?: number,
 ) => ShimCompilationResult;
 
+type WasmInitInput = RequestInfo | URL | Response | BufferSource | WebAssembly.Module;
+
 interface ShimModule {
   readonly compile_ir?: RustCompileFn;
   readonly init?: () => void;
   readonly default?: (
-    moduleOrPath?: RequestInfo | URL | Response | BufferSource | WebAssembly.Module | Promise<unknown>,
+    moduleOrPath?: { module_or_path: WasmInitInput | Promise<WasmInitInput> } | WasmInitInput | Promise<WasmInitInput>,
   ) => Promise<unknown>;
 }
 

@@ -16,13 +16,15 @@ type RustDebugPollPackedRuntimePacketFn = (
   slotValues: Float32Array,
 ) => DebugProbePacket | null;
 
+type WasmInitInput = RequestInfo | URL | Response | BufferSource | WebAssembly.Module;
+
 interface DebugProbeWasmModule {
   readonly init?: () => void;
   readonly debug_command?: RustDebugCommandFn;
   readonly debug_poll_packed_runtime_packet?: RustDebugPollPackedRuntimePacketFn;
   readonly debug_probe_slot_meta_words?: () => number;
   readonly default?: (
-    moduleOrPath?: RequestInfo | URL | Response | BufferSource | WebAssembly.Module | Promise<unknown>,
+    moduleOrPath?: { module_or_path: WasmInitInput | Promise<WasmInitInput> } | WasmInitInput | Promise<WasmInitInput>,
   ) => Promise<unknown>;
 }
 

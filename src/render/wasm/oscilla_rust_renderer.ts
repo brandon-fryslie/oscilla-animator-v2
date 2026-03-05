@@ -1,8 +1,10 @@
 import type { RustRendererBootstrapConfig, RustRendererGpuPass } from '../rust/worker-protocol';
 
+type WasmInitInput = RequestInfo | URL | Response | BufferSource | WebAssembly.Module;
+
 interface RendererWasmModule {
   readonly default?: (
-    moduleOrPath?: RequestInfo | URL | Response | BufferSource | WebAssembly.Module | Promise<unknown>,
+    moduleOrPath?: { module_or_path: WasmInitInput | Promise<WasmInitInput> } | WasmInitInput | Promise<WasmInitInput>,
   ) => Promise<unknown>;
   readonly init_engine?: (
     canvas: OffscreenCanvas,

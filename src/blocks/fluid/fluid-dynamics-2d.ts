@@ -38,6 +38,14 @@ export function register(): void {
     capability: 'render',
     loweringPurity: 'impure',
     inputs: {
+      // Input semantics:
+      // - count: number of fluid particles represented in presentation
+      // - simResolution: solver grid resolution
+      // - velocity/dye dissipation: per-step damping factors
+      // - vorticity: confinement gain for swirl
+      // - splatRadius: input injection radius
+      // - advection: advection scale factor
+      // - particleScale: present-stage particle size multiplier
       shape: {
         label: 'Shape',
         type: canonicalType(SHAPE),
@@ -110,6 +118,8 @@ export function register(): void {
       },
       color: {
         label: 'Color',
+        // TODO(architecture): Replace explicit color output with a first-class
+        // fluid shading contract once renderer presentation supports it.
         type: inferType(COLOR, unitHsl(), { cardinality: FLUID_OUTPUT_CARD }),
       },
       // [LAW:single-enforcer] Hidden outputs are the canonical parameter bridge
@@ -135,7 +145,7 @@ export function register(): void {
       const particleScale = inputsById.particleScale;
       const instanceId = ctx.b.createInstance(DOMAIN_CIRCLE, count, shapeInput.id);
       const instanceDecl = ctx.instances.get(instanceId)!;
-      const instance = instanceRef(instanceDecl.domainType as string, instanceId as string);
+      const instance = instanceRef(String(instanceDecl.domainType), String(instanceId));
       const controlPointsType = withInstance(ctx.outTypes[0], instance);
       const colorType = withInstance(ctx.outTypes[1], instance);
 
@@ -143,8 +153,6 @@ export function register(): void {
       // by emitting canonical field slots every compile; shader variability is
       // expressed through data, not optional lowering branches.
       const defaultControl = ctx.b.constant(vec2Const(0.5, 0.5), canonicalType(VEC2));
-      // TODO(architecture): Replace authored color output with a first-class
-      // fluid shading contract once renderer presentation supports it.
       const defaultColor = ctx.b.constant(colorConst(0.1, 0.2, 0.95, 1.0), canonicalType(COLOR, unitHsl()));
       const controlField = ctx.b.broadcast(defaultControl, controlPointsType);
       const colorField = ctx.b.broadcast(defaultColor, colorType);
