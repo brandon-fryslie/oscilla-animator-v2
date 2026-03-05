@@ -813,10 +813,14 @@ impl Engine {
                 let simulation_stage_end_ms = worker_monotonic_now_ms();
                 stage_timings.simulation_dispatch_ms =
                     (simulation_stage_end_ms - simulation_stage_start_ms).max(0.0);
-                // [LAW:one-source-of-truth] exception: fluid and dedicated
-                // draw-prep GPU stages are not emitted yet, so these timings
-                // remain zero-valued placeholders in the canonical packet.
-                stage_timings.fluid_pass_chain_ms = 0.0;
+                stage_timings.fluid_pass_chain_ms = if self.compute.simulation_dispatch_count() > 1
+                {
+                    stage_timings.simulation_dispatch_ms
+                } else {
+                    0.0
+                };
+                // [LAW:one-source-of-truth] exception: dedicated draw-prep
+                // timing instrumentation is pending; packet remains canonical.
                 stage_timings.draw_prep_ms = 0.0;
 
                 let render_stage_start_ms = worker_monotonic_now_ms();

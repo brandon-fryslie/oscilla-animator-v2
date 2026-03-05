@@ -387,10 +387,23 @@ impl GpuMemoryArena {
         &self.compiler_arena_bind_groups[write_index]
     }
 
+    pub fn get_compiler_arena_bind_group_for_index(&self, read_index: usize) -> &wgpu::BindGroup {
+        &self.compiler_arena_bind_groups[read_index & 1]
+    }
+
     pub fn get_compiler_simulation_bind_group(&self) -> &wgpu::BindGroup {
         // [LAW:one-source-of-truth] Compiler simulation dispatch always reads
         // from the canonical arena-owned ping/pong bind-group pair.
         &self.compiler_simulation_bind_groups[self.ping_pong_index]
+    }
+
+    pub fn get_compiler_simulation_bind_group_for_index(
+        &self,
+        read_index: usize,
+    ) -> &wgpu::BindGroup {
+        // [LAW:dataflow-not-control-flow] Multi-pass simulation chaining is
+        // expressed by deterministic ping/pong index progression per pass.
+        &self.compiler_simulation_bind_groups[read_index & 1]
     }
 
     pub fn read_state_buffer(&self) -> &wgpu::Buffer {
@@ -403,6 +416,10 @@ impl GpuMemoryArena {
 
     pub fn swap_ping_pong(&mut self) {
         self.ping_pong_index = (self.ping_pong_index + 1) & 1;
+    }
+
+    pub fn set_ping_pong_index(&mut self, index: usize) {
+        self.ping_pong_index = index & 1;
     }
 
     pub fn ping_pong_index(&self) -> usize {
