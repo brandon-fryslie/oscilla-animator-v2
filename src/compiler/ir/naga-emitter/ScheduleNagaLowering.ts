@@ -325,7 +325,7 @@ function getStepExprId(step: Step): ValueExprId | null {
     case 'fieldStateWrite':
       return step.value;
     case 'render':
-      return step.shape.k === 'oneHandle' ? step.shape.id : null;
+      return null;
     case 'continuityApply':
     case 'continuityMapBuild':
       return null;

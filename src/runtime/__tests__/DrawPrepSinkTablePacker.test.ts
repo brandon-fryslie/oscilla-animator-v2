@@ -31,39 +31,27 @@ function makeDrawPrepProgram(sinks: readonly DrawPrepSinkIR[]): DrawPrepProgramI
   };
 }
 
-function makeRenderStep(shapeExprId: number): StepRender {
+function makeRenderStep(shapeSlot: number): StepRender {
   return {
     kind: 'render',
     instanceId: 'inst-0' as any,
     controlPointsSlot: 10 as any,
     colorSlot: 20 as any,
-    shape: { k: 'oneHandle', id: shapeExprId as any },
+    scale: { k: 'slot', slot: 31 as any },
+    shape: { k: 'slot', slot: shapeSlot as any },
   };
 }
 
 function makeProgram(args: {
   readonly sinks: readonly DrawPrepSinkIR[];
   readonly renderSteps: readonly StepRender[];
-  readonly exprArenaOffsetById: ReadonlyMap<number, number>;
 }) {
-  const scalarExprToArenaAddress = new Map<number, { slot: number; arena: any; component: number }>();
-  for (const [exprId, offset] of args.exprArenaOffsetById.entries()) {
-    scalarExprToArenaAddress.set(exprId, {
-      slot: 0,
-      arena: {
-        offset,
-        stride: 1,
-        laneCount: 1,
-        length: 1,
-      },
-      component: 0,
-    });
-  }
-
   const slotToArena = new Map<number, any>([
     [10, { offset: 0, stride: 2, laneCount: 32, length: 64, packing: 'soa' }],
     [20, { offset: 128, stride: 4, laneCount: 32, length: 128, packing: 'soa' }],
     [30, { offset: 300, stride: 1, laneCount: 32, length: 32, packing: 'soa' }],
+    [32, { offset: 380, stride: 1, laneCount: 32, length: 32, packing: 'soa' }],
+    [31, { offset: 340, stride: 1, laneCount: 32, length: 32, packing: 'soa' }],
   ]);
 
   return {
@@ -72,7 +60,6 @@ function makeProgram(args: {
       steps: args.renderSteps,
     },
     runtimeAddressTable: {
-      scalarExprToArenaAddress,
       slotToArena,
     },
   } as any;
@@ -134,15 +121,14 @@ describe('packDrawPrepSinkTableV1', () => {
 
     const program = makeProgram({
       sinks,
-      renderSteps: [makeRenderStep(100), makeRenderStep(101)],
-      exprArenaOffsetById: new Map([
-        [100, 400],
-        [101, 401],
-      ]),
+      renderSteps: [makeRenderStep(30), makeRenderStep(32)],
     });
     const arena = new Float32Array(512);
-    arena[400] = 32;
-    arena[401] = 96;
+    arena[300] = 32;
+    arena[301] = 32;
+    arena[380] = 96;
+    arena[381] = 96;
+    arena[382] = 96;
     const state = makeRuntimeState(arena, new Map([['inst-dynamic', 3]]));
 
     const packed = packDrawPrepSinkTableV1(program, state);
@@ -199,11 +185,10 @@ describe('packDrawPrepSinkTableV1', () => {
     ];
     const program = makeProgram({
       sinks,
-      renderSteps: [makeRenderStep(200)],
-      exprArenaOffsetById: new Map([[200, 410]]),
+      renderSteps: [makeRenderStep(30)],
     });
     const arena = new Float32Array(512);
-    arena[410] = 16;
+    arena[300] = 16;
     const state = makeRuntimeState(arena);
 
     expect(() => packDrawPrepSinkTableV1(program, state)).toThrow('missing dynamic instance count');
@@ -236,10 +221,10 @@ describe('packDrawPrepSinkTableV1', () => {
           instanceId: 'inst-slot' as any,
           controlPointsSlot: 10 as any,
           colorSlot: 20 as any,
+          scale: { k: 'slot', slot: 31 as any },
           shape: { k: 'slot', slot: 30 as any },
         },
       ],
-      exprArenaOffsetById: new Map(),
     });
 
     const arena = new Float32Array(512);
@@ -286,10 +271,10 @@ describe('packDrawPrepSinkTableV1', () => {
           instanceId: 'inst-slot' as any,
           controlPointsSlot: 10 as any,
           colorSlot: 20 as any,
+          scale: { k: 'slot', slot: 31 as any },
           shape: { k: 'slot', slot: 30 as any },
         },
       ],
-      exprArenaOffsetById: new Map(),
     });
 
     const arena = new Float32Array(512);

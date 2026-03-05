@@ -763,6 +763,10 @@ fn write_arena(offset: u32, lane_stride: u32, component_stride: u32, lane: u32, 
   arena_out[idx] = value;
 }
 
+fn hash11(v: f32) -> f32 {
+  return fract(sin(v * 127.1 + 311.7) * 43758.5453123);
+}
+
 @compute @workgroup_size(64, 1, 1)
 fn compute_present_main(@builtin(global_invocation_id) gid: vec3<u32>) {
   let lane = gid.x;
@@ -771,34 +775,59 @@ fn compute_present_main(@builtin(global_invocation_id) gid: vec3<u32>) {
   }
   let grid_width = resolve_grid_width();
   let grid_height = resolve_grid_height(grid_width);
-  let uv = lane_uv(lane, grid_width, grid_height);
-  let vel = vec2<f32>(read_state_in(lane, 0u), read_state_in(lane, 1u));
-  let dye = max(read_state_in(lane, 2u), 0.0);
-  let aux = read_state_in(lane, 3u);
+  // [LAW:dataflow-not-control-flow] Particle placement is lane-stable but
+  // de-gridded using a low-discrepancy sequence to avoid strip collapse.
+  let lane_f = f32(lane);
+  let base_uv = vec2<f32>(
+    fract((lane_f + 0.5) * 0.7548776662466927),
+    fract((lane_f + 0.5) * 0.5698402909980532),
+  );
+  let sample_lane = sample_lane_from_uv(base_uv, grid_width, grid_height);
+  let uv = lane_uv(sample_lane, grid_width, grid_height);
+  let vel = vec2<f32>(read_state_in(sample_lane, 0u), read_state_in(sample_lane, 1u));
+  let dye = max(read_state_in(sample_lane, 2u), 0.0);
+  let aux = read_state_in(sample_lane, 3u);
 
   let particle_scale = clamp(read_scalar_param(PARAM_PARTICLE_SCALE_OFFSET, PARAM_PARTICLE_SCALE_LANE_STRIDE, PARAM_PARTICLE_SCALE_COMPONENT_STRIDE, PARAM_PARTICLE_SCALE_FALLBACK), 0.001, 0.2);
   let color_gain = clamp(read_scalar_param(PARAM_COLOR_GAIN_OFFSET, PARAM_COLOR_GAIN_LANE_STRIDE, PARAM_COLOR_GAIN_COMPONENT_STRIDE, PARAM_COLOR_GAIN_FALLBACK), 0.1, 2.5);
 
-  let wobble = vec2<f32>(
-    sin(global.time_seconds * 0.7 + uv.y * 16.0),
-    cos(global.time_seconds * 0.6 + uv.x * 14.0),
-  ) * 0.018;
-  let pos = clamp(uv + vel * 0.2 + wobble, vec2<f32>(0.0, 0.0), vec2<f32>(1.0, 1.0));
+  let lane_jitter = vec2<f32>(
+    hash11(lane_f * 1.37 + 0.11),
+    hash11(lane_f * 1.91 + 0.73),
+  ) - vec2<f32>(0.5, 0.5);
+  let jitter_strength = 0.04 + dye * 0.18;
+  let swirl = vec2<f32>(
+    sin(global.time_seconds * 0.9 + uv.y * 24.0 + lane_f * 0.013),
+    cos(global.time_seconds * 0.8 + uv.x * 21.0 - lane_f * 0.017),
+  ) * (0.015 + 0.035 * dye);
+  let flow = vel * (0.35 + dye * 0.65);
+  let pos = fract(base_uv + flow + swirl + lane_jitter * jitter_strength);
   let wave = vec3<f32>(
     abs(sin(6.28318 * (uv.x * 0.95 + global.time_seconds * 0.07 + dye * 0.09))),
     abs(sin(6.28318 * (uv.y * 1.10 + global.time_seconds * 0.11 + aux * 0.07))),
     abs(sin(6.28318 * ((uv.x + uv.y) * 0.6 + global.time_seconds * 0.09))),
   );
-  let rgb = clamp((vec3<f32>(0.22, 0.24, 0.28) + wave * vec3<f32>(0.78, 0.76, 0.72)) * color_gain, vec3<f32>(0.0), vec3<f32>(1.0));
-  let alpha = clamp(0.82 + dye * 0.18, 0.82, 1.0);
+  // [LAW:one-source-of-truth] Fluid present writes canonical HSL channels into
+  // COLOR; renderer is the single HSL->RGB conversion boundary.
+  let hue = fract(
+    uv.x * 0.65 +
+    uv.y * 0.85 +
+    wave.x * 0.35 +
+    wave.z * 0.25 +
+    global.time_seconds * 0.06 +
+    dye * 0.12
+  );
+  let saturation = clamp(0.82 + 0.18 * wave.y, 0.75, 1.0);
+  let lightness = clamp((0.52 + 0.32 * wave.z + 0.16 * dye) * color_gain, 0.0, 1.0);
+  let alpha = clamp(0.92 + dye * 0.08, 0.90, 1.0);
   let scale = clamp(particle_scale * (0.85 + dye * 0.20 + abs(aux) * 0.15), 0.001, 0.2);
 
   write_arena(CP_OFFSET, CP_LANE_STRIDE, CP_COMPONENT_STRIDE, lane, 0u, pos.x);
   write_arena(CP_OFFSET, CP_LANE_STRIDE, CP_COMPONENT_STRIDE, lane, 1u, pos.y);
 
-  write_arena(COLOR_OFFSET, COLOR_LANE_STRIDE, COLOR_COMPONENT_STRIDE, lane, 0u, rgb.x);
-  write_arena(COLOR_OFFSET, COLOR_LANE_STRIDE, COLOR_COMPONENT_STRIDE, lane, 1u, rgb.y);
-  write_arena(COLOR_OFFSET, COLOR_LANE_STRIDE, COLOR_COMPONENT_STRIDE, lane, 2u, rgb.z);
+  write_arena(COLOR_OFFSET, COLOR_LANE_STRIDE, COLOR_COMPONENT_STRIDE, lane, 0u, hue);
+  write_arena(COLOR_OFFSET, COLOR_LANE_STRIDE, COLOR_COMPONENT_STRIDE, lane, 1u, saturation);
+  write_arena(COLOR_OFFSET, COLOR_LANE_STRIDE, COLOR_COMPONENT_STRIDE, lane, 2u, lightness);
   write_arena(COLOR_OFFSET, COLOR_LANE_STRIDE, COLOR_COMPONENT_STRIDE, lane, 3u, alpha);
   write_arena(SCALE_OFFSET, SCALE_LANE_STRIDE, SCALE_COMPONENT_STRIDE, lane, 0u, scale);
 

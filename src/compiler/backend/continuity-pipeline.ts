@@ -36,6 +36,7 @@ import {
   withInstance,
 } from '../../core/canonical-types';
 import type { CanonicalType } from '../../core/canonical-types';
+import { getValueExprChildren } from '../../runtime/ValueExprTreeWalker';
 
 // =============================================================================
 // Public Interface
@@ -71,9 +72,7 @@ interface RenderTargetInfo {
   controlPoints: { id: ValueExprId; stride: number };
   color: { id: ValueExprId; stride: number };
   scale?: { id: ValueExprId; stride: number };
-  shape?:
-    | { k: 'one'; id: ValueExprId }
-    | { k: 'field'; id: ValueExprId; stride: number };
+  shape?: { sourceExprId: ValueExprId };
 }
 
 /**
@@ -163,37 +162,50 @@ function inferFieldInstanceFromExprs(
   }
 }
 
-/**
- * Resolve shape-local control-point field info from a cardinality-one expression.
- */
-function resolveShapeInfo(
-  shapeExprId: ValueExprId,
-  valueExprs: readonly ValueExpr[]
+function resolveShapeRefInfo(
+  rootExprId: ValueExprId,
+  valueExprs: readonly ValueExpr[],
 ):
   | {
       controlPointField?: { id: ValueExprId; stride: number };
     }
   | undefined {
-  const expr = valueExprs[shapeExprId as number];
-  if (!expr) return undefined;
-  if (isEventExtent(shapeExprId, valueExprs)) return undefined;
-
-  if (expr.kind === 'shapeRef') {
-    const cpId = (expr as any).controlPointField as ValueExprId | undefined;
-    const controlPointField = cpId !== undefined
-      ? (() => {
-          const cpExpr = valueExprs[cpId as number];
-          const stride = cpExpr ? payloadStride(cpExpr.type.payload) : 1;
-          return { id: cpId, stride };
-        })()
-      : undefined;
-
-    return {
-      controlPointField,
-    };
+  const stack = [rootExprId as number];
+  const visited = new Set<number>();
+  let resolved: ValueExprId | undefined;
+  while (stack.length > 0) {
+    const exprId = stack.pop()!;
+    if (visited.has(exprId)) continue;
+    visited.add(exprId);
+    const expr = valueExprs[exprId];
+    if (!expr) continue;
+    if (expr.kind === 'shapeRef') {
+      if (resolved !== undefined && resolved !== (exprId as ValueExprId)) {
+        throw new Error(
+          `RenderInstances2D: shape source ${String(rootExprId)} resolves to multiple shapeRef expressions (${String(resolved)}, ${String(exprId)})`,
+        );
+      }
+      resolved = exprId as ValueExprId;
+      continue;
+    }
+    for (const child of getValueExprChildren(expr)) {
+      stack.push(child as number);
+    }
   }
-
-  return undefined;
+  if (resolved === undefined) return undefined;
+  const shapeRefExpr = valueExprs[resolved as number];
+  if (!shapeRefExpr || shapeRefExpr.kind !== 'shapeRef') return undefined;
+  const cpId = (shapeRefExpr as any).controlPointField as ValueExprId | undefined;
+  const controlPointField = cpId !== undefined
+    ? (() => {
+        const cpExpr = valueExprs[cpId as number];
+        const stride = cpExpr ? payloadStride(cpExpr.type.payload) : 1;
+        return { id: cpId, stride };
+      })()
+    : undefined;
+  return {
+    controlPointField,
+  };
 }
 
 /**
@@ -261,10 +273,7 @@ function collectRenderTargets(
       );
     }
 
-    const shapeFieldStride = payloadStride(shapeExpr.type.payload);
-    const shape = isFieldExtent(shapeFieldId, valueExprs)
-      ? { k: 'field' as const, id: shapeFieldId, stride: shapeFieldStride }
-      : { k: 'one' as const, id: shapeFieldId };
+    const shape = { sourceExprId: shapeFieldId };
 
     targets.push({
       renderBlockId: block.id,
@@ -363,6 +372,13 @@ export function allocateContinuityPipeline(
       throw new Error(`RenderInstances2D (${renderBlockId}): missing controlPoints expr ${controlPoints.id}`);
     }
     const renderInstance = requireManyInstance(controlPointsExpr.type);
+    const readValueExpr = (id: ValueExprId, context: string): ValueExpr => {
+      const expr = builder.getValueExprs()[id as number];
+      if (!expr) {
+        throw new Error(`RenderInstances2D (${renderBlockId}): missing ${context} expr ${id}`);
+      }
+      return expr;
+    };
 
     // Helper to get or create slots for a field
     const getFieldSlots = (
@@ -379,6 +395,7 @@ export function allocateContinuityPipeline(
       const key = `${fieldInstanceId}:${semantic}:${roleKey}:${mode}`;
       let slots = fieldSlots.get(key);
       if (!slots) {
+        const fieldExpr = readValueExpr(fieldId, roleKey);
         if (mode === 'continuity') {
           ensureMapBuildStep(fieldInstanceId);
         }
@@ -387,7 +404,7 @@ export function allocateContinuityPipeline(
         // so materialize writes to the same slot the debug index references.
         const existingSlot = fieldExprToRefSlot.get(fieldId as number);
         const baseSlot = existingSlot ?? builder.allocTypedSlot(
-          valueExprs[fieldId as number].type,
+          fieldExpr.type,
           `continuity_base_${instanceId}_${semantic}`
         );
 
@@ -397,7 +414,7 @@ export function allocateContinuityPipeline(
         // not be transformed by continuity policies.
         const outputSlot = mode === 'continuity'
           ? builder.allocTypedSlot(
-              valueExprs[fieldId as number].type,
+              fieldExpr.type,
               `continuity_output_${instanceId}_${semantic}`,
             )
           : baseSlot;
@@ -480,11 +497,14 @@ export function allocateContinuityPipeline(
         `RenderInstances2D (${renderBlockId}): missing broadcast scale expr ${scaleFieldExprId}`,
       );
     }
+    // [LAW:one-source-of-truth] Scale modulation should follow the authored
+    // field directly (no continuity blending), keyed by the canonical expr id.
     const scaleSlots = getFieldSlots(
       scaleFieldExprId,
       'custom',
       payloadStride(scaleFieldExpr.type.payload),
-      `${renderBlockId}:scale`,
+      `scale:${String(scaleFieldExprId)}`,
+      'passthrough',
     );
     const scaleOutput: StepRender['scale'] = { k: 'slot', slot: scaleSlots.outputSlot };
 
@@ -493,27 +513,32 @@ export function allocateContinuityPipeline(
     let controlPointsOutput: StepRender['controlPoints'] = undefined;
 
     if (shape) {
-      if (shape.k === 'field') {
-        const shapeSlots = getFieldSlots(
-          shape.id,
-          'custom',
-          shape.stride,
-          `${renderBlockId}:shape`,
-          'passthrough',
+      const shapeSourceExprId = shape.sourceExprId;
+      const shapeSourceExpr = readValueExpr(shapeSourceExprId, 'shape');
+      const shapeFieldExprId = isFieldExtent(shapeSourceExprId, builder.getValueExprs())
+        ? shapeSourceExprId
+        : builder.broadcast(shapeSourceExprId, withInstance(shapeSourceExpr.type, renderInstance));
+      const shapeFieldExpr = readValueExpr(shapeFieldExprId, 'shape');
+      const shapeSlots = getFieldSlots(
+        shapeFieldExprId,
+        'custom',
+        payloadStride(shapeFieldExpr.type.payload),
+        `${renderBlockId}:shape`,
+        'passthrough',
+      );
+      // [LAW:one-source-of-truth] Render steps publish one canonical slot-backed
+      // shape-handle source for all sinks (no oneHandle branch at runtime).
+      shapeOutput = { k: 'slot', slot: shapeSlots.outputSlot };
+      // [LAW:single-enforcer] Continuity pipeline is the single compile-time
+      // boundary that resolves shape-handle ancestry and optional control-point
+      // field metadata.
+      const shapeInfo = resolveShapeRefInfo(shapeSourceExprId, builder.getValueExprs());
+      if (!shapeInfo) {
+        throw new Error(
+          `RenderInstances2D (${renderBlockId}) shape source ${String(shapeSourceExprId)} must resolve to a shapeRef expression`,
         );
-        shapeOutput = { k: 'slot', slot: shapeSlots.outputSlot };
-      } else {
-        // [LAW:one-source-of-truth] One-cardinality shape is rendered via canonical
-        // handle flow (arena scalar -> ShapeBank), not embedded topology literals.
-        shapeOutput = { k: 'oneHandle', id: shape.id };
-        // [LAW:single-enforcer] Continuity pipeline is the single compile-time
-        // boundary that guarantees shape-handle render geometry has control points.
-        const shapeInfo = resolveShapeInfo(shape.id, valueExprs);
-        if (!shapeInfo || shapeInfo.controlPointField === undefined) {
-          throw new Error(
-            `RenderInstances2D (${renderBlockId}) shape handle must resolve to a shapeRef with controlPointField`,
-          );
-        }
+      }
+      if (shapeInfo.controlPointField !== undefined) {
         const cpSlots = getFieldSlots(
           shapeInfo.controlPointField.id,
           'custom',

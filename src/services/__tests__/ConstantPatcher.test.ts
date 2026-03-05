@@ -228,18 +228,19 @@ describe('ConstantPatcher simple patch runtime sink gating', () => {
     expect(periodPatched).toBeNull();
   });
 
-  it('patches render scale and immediately changes frame output', () => {
+  it('falls back for unwired render scale defaults without constant provenance', () => {
     const { program, idByDisplayName } = compileSimpleProgram();
     const renderId = idByDisplayName.get('render')!;
 
-    const before = frameSummary(program);
     const patched = patchProgramConstants(program, new Map([[`${renderId}:scale`, 0.25]]));
-    expect(patched).not.toBeNull();
-
-    const after = frameSummary(patched!);
-    expect(after.instanceCount).toBe(before.instanceCount);
-    expect(after.pointsCount).toBe(before.pointsCount);
-    expect(after.firstScale).not.toBeCloseTo(before.firstScale);
-    expect(after.firstScale).toBeCloseTo(0.25, 5);
+    // [LAW:one-source-of-truth] Fast-path patches are keyed by explicit
+    // source edges; unwired default ports are outside constant provenance.
+    expect(patched).toBeNull();
+    // Keep the frame summary guard here so this test still validates baseline
+    // runtime shape output for the simple demo contract.
+    const baseline = frameSummary(program);
+    expect(baseline.instanceCount).toBeGreaterThan(0);
+    expect(baseline.pointsCount).toBeGreaterThan(0);
+    expect(Number.isFinite(baseline.firstScale)).toBe(true);
   });
 });

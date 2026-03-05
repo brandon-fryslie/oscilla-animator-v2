@@ -89,6 +89,13 @@ export function register(): void {
         defaultSource: defaultSourceConst(0.08),
         uiHint: { kind: 'slider', min: -0.5, max: 0.5, step: 0.001 },
       },
+      thickness: {
+        label: 'Thickness',
+        type: canonicalType(FLOAT),
+        defaultValue: 0.04,
+        defaultSource: defaultSourceConst(0.04),
+        uiHint: { kind: 'slider', min: 0.001, max: 0.25, step: 0.001 },
+      },
       resolution: {
         label: 'Resolution',
         type: canonicalType(INT),
@@ -127,20 +134,24 @@ export function register(): void {
       const p3yInput = inputsById.p3y;
       if (!p3yInput) throw new Error('CubicBezier2D: p3y input not wired — normalization bug');
       const p3y = p3yInput.id;
+      const thicknessInput = inputsById.thickness;
+      if (!thicknessInput) throw new Error('CubicBezier2D: thickness input not wired — normalization bug');
+      const thickness = thicknessInput.id;
 
       const resolutionInput = inputsById.resolution;
       if (!resolutionInput) throw new Error('CubicBezier2D: resolution input not wired — normalization bug');
       const resolution = resolveInputConstant(ctx, resolutionInput, 'resolution', { min: 4, max: 4096 });
       const sampleCount = resolution + 1;
+      const pointCount = sampleCount * 2;
 
       // [LAW:one-source-of-truth] Parametric sample topology is derived once
       // from compile-time resolution and reused by all runtime instances.
       const topologyId = ctx.b.registerTopology(
-        createLinePathTopology(sampleCount, true),
-        `cubic-bezier-${sampleCount}`,
+        createLinePathTopology(pointCount, true),
+        `cubic-bezier-ribbon-${resolution}`,
       );
 
-      const controlInstance = ctx.b.createInstance(DOMAIN_CONTROL, sampleCount, undefined, 'static');
+      const controlInstance = ctx.b.createInstance(DOMAIN_CONTROL, pointCount, undefined, 'static');
       const ref = instanceRef(DOMAIN_CONTROL as string, controlInstance as string);
       const floatFieldType = canonicalMany(FLOAT, { kind: 'none' }, ref);
       const vec2FieldType = canonicalMany(VEC2, { kind: 'none' }, ref);
@@ -149,17 +160,40 @@ export function register(): void {
       const resolutionAsFloat = ctx.b.constant(floatConst(resolution), canonicalType(FLOAT));
       const one = ctx.b.constant(floatConst(1), canonicalType(FLOAT));
       const three = ctx.b.constant(floatConst(3), canonicalType(FLOAT));
+      const two = ctx.b.constant(floatConst(2), canonicalType(FLOAT));
+      const half = ctx.b.constant(floatConst(0.5), canonicalType(FLOAT));
+      const six = ctx.b.constant(floatConst(6), canonicalType(FLOAT));
+      const eps = ctx.b.constant(floatConst(0.0001), canonicalType(FLOAT));
+      const minusOne = ctx.b.constant(floatConst(-1), canonicalType(FLOAT));
+      const halfCount = ctx.b.constant(floatConst(sampleCount), canonicalType(FLOAT));
+      const maxPointIndex = ctx.b.constant(floatConst(pointCount - 1), canonicalType(FLOAT));
 
       const div = ctx.b.opcode(OpCode.Div);
       const add = ctx.b.opcode(OpCode.Add);
       const sub = ctx.b.opcode(OpCode.Sub);
       const mul = ctx.b.opcode(OpCode.Mul);
+      const sqrt = ctx.b.opcode(OpCode.Sqrt);
+      const max = ctx.b.opcode(OpCode.Max);
+      const lt = ctx.b.opcode(OpCode.Lt);
+      const select = ctx.b.opcode(OpCode.Select);
 
       const resolutionBroadcast = ctx.b.broadcast(resolutionAsFloat, floatFieldType);
       const oneBroadcast = ctx.b.broadcast(one, floatFieldType);
       const threeBroadcast = ctx.b.broadcast(three, floatFieldType);
+      const twoBroadcast = ctx.b.broadcast(two, floatFieldType);
+      const halfBroadcast = ctx.b.broadcast(half, floatFieldType);
+      const sixBroadcast = ctx.b.broadcast(six, floatFieldType);
+      const epsBroadcast = ctx.b.broadcast(eps, floatFieldType);
+      const minusOneBroadcast = ctx.b.broadcast(minusOne, floatFieldType);
+      const halfCountBroadcast = ctx.b.broadcast(halfCount, floatFieldType);
+      const maxPointIndexBroadcast = ctx.b.broadcast(maxPointIndex, floatFieldType);
 
-      const t = ctx.b.zipAuto([indexField, resolutionBroadcast], div, floatFieldType);
+      // [LAW:dataflow-not-control-flow] Both ribbon rails are computed in one
+      // dataflow: first half uses forward sample index, second half reverse.
+      const reverseIndex = ctx.b.zipAuto([maxPointIndexBroadcast, indexField], sub, floatFieldType);
+      const isUpperRail = ctx.b.zipAuto([indexField, halfCountBroadcast], lt, floatFieldType);
+      const sampleIndex = ctx.b.zipAuto([isUpperRail, indexField, reverseIndex], select, floatFieldType);
+      const t = ctx.b.zipAuto([sampleIndex, resolutionBroadcast], div, floatFieldType);
       const oneMinusT = ctx.b.zipAuto([oneBroadcast, t], sub, floatFieldType);
       const oneMinusTSq = ctx.b.zipAuto([oneMinusT, oneMinusT], mul, floatFieldType);
       const oneMinusTCb = ctx.b.zipAuto([oneMinusTSq, oneMinusT], mul, floatFieldType);
@@ -199,7 +233,71 @@ export function register(): void {
         floatFieldType,
       );
 
-      const controlPoints = ctx.b.construct([x, y], vec2FieldType);
+      // Cubic derivative for tangent: B'(t)
+      const p1MinusP0x = ctx.b.zipAuto([p1x, p0x], sub, floatFieldType);
+      const p1MinusP0y = ctx.b.zipAuto([p1y, p0y], sub, floatFieldType);
+      const p2MinusP1x = ctx.b.zipAuto([p2x, p1x], sub, floatFieldType);
+      const p2MinusP1y = ctx.b.zipAuto([p2y, p1y], sub, floatFieldType);
+      const p3MinusP2x = ctx.b.zipAuto([p3x, p2x], sub, floatFieldType);
+      const p3MinusP2y = ctx.b.zipAuto([p3y, p2y], sub, floatFieldType);
+
+      const d0x = ctx.b.zipAuto(
+        [ctx.b.zipAuto([threeBroadcast, oneMinusTSq], mul, floatFieldType), p1MinusP0x],
+        mul,
+        floatFieldType,
+      );
+      const d0y = ctx.b.zipAuto(
+        [ctx.b.zipAuto([threeBroadcast, oneMinusTSq], mul, floatFieldType), p1MinusP0y],
+        mul,
+        floatFieldType,
+      );
+      const d1x = ctx.b.zipAuto(
+        [ctx.b.zipAuto([sixBroadcast, ctx.b.zipAuto([oneMinusT, t], mul, floatFieldType)], mul, floatFieldType), p2MinusP1x],
+        mul,
+        floatFieldType,
+      );
+      const d1y = ctx.b.zipAuto(
+        [ctx.b.zipAuto([sixBroadcast, ctx.b.zipAuto([oneMinusT, t], mul, floatFieldType)], mul, floatFieldType), p2MinusP1y],
+        mul,
+        floatFieldType,
+      );
+      const d2x = ctx.b.zipAuto(
+        [ctx.b.zipAuto([threeBroadcast, tSq], mul, floatFieldType), p3MinusP2x],
+        mul,
+        floatFieldType,
+      );
+      const d2y = ctx.b.zipAuto(
+        [ctx.b.zipAuto([threeBroadcast, tSq], mul, floatFieldType), p3MinusP2y],
+        mul,
+        floatFieldType,
+      );
+
+      const tangentX = ctx.b.zipAuto([ctx.b.zipAuto([d0x, d1x], add, floatFieldType), d2x], add, floatFieldType);
+      const tangentY = ctx.b.zipAuto([ctx.b.zipAuto([d0y, d1y], add, floatFieldType), d2y], add, floatFieldType);
+
+      const tangentLenSq = ctx.b.zipAuto(
+        [ctx.b.zipAuto([tangentX, tangentX], mul, floatFieldType), ctx.b.zipAuto([tangentY, tangentY], mul, floatFieldType)],
+        add,
+        floatFieldType,
+      );
+      const tangentLen = ctx.b.mapAuto(tangentLenSq, sqrt, floatFieldType);
+      const tangentLenSafe = ctx.b.zipAuto([tangentLen, epsBroadcast], max, floatFieldType);
+      const invLen = ctx.b.zipAuto([oneBroadcast, tangentLenSafe], div, floatFieldType);
+
+      const normalX = ctx.b.zipAuto([ctx.b.zipAuto([minusOneBroadcast, tangentY], mul, floatFieldType), invLen], mul, floatFieldType);
+      const normalY = ctx.b.zipAuto([tangentX, invLen], mul, floatFieldType);
+      const halfThickness = ctx.b.zipAuto([thickness, halfBroadcast], mul, floatFieldType);
+      const railSign = ctx.b.zipAuto(
+        [ctx.b.zipAuto([isUpperRail, twoBroadcast], mul, floatFieldType), oneBroadcast],
+        sub,
+        floatFieldType,
+      );
+      const offset = ctx.b.zipAuto([railSign, halfThickness], mul, floatFieldType);
+
+      const ribbonX = ctx.b.zipAuto([x, ctx.b.zipAuto([normalX, offset], mul, floatFieldType)], add, floatFieldType);
+      const ribbonY = ctx.b.zipAuto([y, ctx.b.zipAuto([normalY, offset], mul, floatFieldType)], add, floatFieldType);
+
+      const controlPoints = ctx.b.construct([ribbonX, ribbonY], vec2FieldType);
       const shapeRef = ctx.b.shapeRef(topologyId, [], canonicalType(SHAPE), controlPoints);
 
       const shapeType = ctx.outTypes[0];
