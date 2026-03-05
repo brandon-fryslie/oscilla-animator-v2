@@ -1072,6 +1072,17 @@ impl Engine {
         let plane_words = shared_sink_table.subarray(0, sink_table_words).to_vec();
         self.arena
             .write_sink_table_words(&self.device, &self.queue, &plane_words);
+        let payload_base_words = minimum_words as usize;
+        if (sink_table_words as usize) > payload_base_words {
+            // [LAW:one-source-of-truth] exception: CPU-packed Type 1 payload
+            // words are mirrored into compiler arena storage until opcode-complete
+            // GPU simulation lowering owns these slots directly.
+            self.arena.write_compiler_arena_words(
+                &self.queue,
+                payload_base_words,
+                &plane_words[payload_base_words..],
+            );
+        }
         let mut total_instance_count: u32 = 0;
         for record in 0..(total_record_count as usize) {
             let record_base =
