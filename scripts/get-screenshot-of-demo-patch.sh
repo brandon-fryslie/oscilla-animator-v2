@@ -9,7 +9,7 @@ set -euo pipefail
 # Requires: Chrome/Chromium, Node.js, ImageMagick (burst mode), dev server
 # ─────────────────────────────────────────────────────────────────────────────
 
-APP_PORT=5174
+APP_PORT="${APP_PORT:-}"
 DEFAULT_OUTPUT_DIR="/tmp/oscilla-test-screenshots"
 
 # ─── Colors (only if stderr is a tty) ────────────────────────────────────────
@@ -165,8 +165,18 @@ fi
 
 # ─── Dependency checks ───────────────────────────────────────────────────────
 
-if ! curl -s --max-time 3 "http://localhost:${APP_PORT}/" >/dev/null 2>&1; then
-  echo "${RED}Error:${RESET} Dev server not running on port ${APP_PORT}. Start it with: ${BOLD}npm run dev${RESET}" >&2
+if [[ -z "$APP_PORT" ]]; then
+  for candidate in 5174 5175 5176; do
+    if curl -s --max-time 3 "http://localhost:${candidate}/" >/dev/null 2>&1; then
+      APP_PORT="$candidate"
+      break
+    fi
+  done
+fi
+
+if [[ -z "$APP_PORT" ]] || ! curl -s --max-time 3 "http://localhost:${APP_PORT}/" >/dev/null 2>&1; then
+  echo "${RED}Error:${RESET} Dev server not running on detected/default ports (5174/5175/5176)." >&2
+  echo "Start it with: ${BOLD}npm run dev${RESET}" >&2
   exit 1
 fi
 
@@ -269,11 +279,19 @@ if $HEADLESS; then
   HEADLESS_FLAGS+=("--headless=new")
 fi
 
+GPU_FLAGS=(
+  "--enable-unsafe-webgpu"
+  "--enable-webgpu-developer-features"
+)
+if [[ "$(uname -s)" == "Darwin" ]]; then
+  GPU_FLAGS+=("--use-angle=metal")
+fi
+
 "$CHROME" \
   "${HEADLESS_FLAGS[@]}" \
+  "${GPU_FLAGS[@]}" \
   --remote-debugging-port="$DEBUG_PORT" \
   --user-data-dir="$PROFILE_DIR" \
-  --disable-gpu \
   --no-first-run \
   --no-default-browser-check \
   --disable-extensions \
@@ -310,7 +328,7 @@ done
 
 # ─── Run CDP capture ─────────────────────────────────────────────────────────
 
-APP_URL="http://localhost:${APP_PORT}/?loadDemoPatch=${DEMO_PATCH}&showPreview=true"
+APP_URL="http://localhost:${APP_PORT}/?loadDemoPatch=${DEMO_PATCH}&showPreview=true&runtimeConsole=true"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 if $BURST_MODE; then

@@ -5,6 +5,7 @@ import type {
   RuntimeExternalWrite,
   RuntimeHotpathWorkerInboundMessage,
   RuntimeHotpathWorkerOutboundMessage,
+  RuntimeHotpathSinkTableSample,
 } from './runtime-hotpath-worker-protocol';
 
 export interface RuntimeHotpathWorkerStats {
@@ -13,6 +14,7 @@ export interface RuntimeHotpathWorkerStats {
   readonly lastTickMs: number;
   readonly drawOpCount: number;
   readonly sinkWordCount: number;
+  readonly sinkTableSample: RuntimeHotpathSinkTableSample | null;
 }
 
 export interface RuntimeHotpathSharedPlanes {
@@ -197,6 +199,7 @@ export class RuntimeHotpathWorkerClient {
         lastTickMs: payload.lastTickMs,
         drawOpCount: payload.drawOpCount,
         sinkWordCount: payload.sinkWordCount,
+        sinkTableSample: payload.sinkTableSample ?? null,
       };
       return;
     }

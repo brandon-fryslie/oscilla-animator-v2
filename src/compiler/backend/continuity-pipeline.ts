@@ -63,9 +63,7 @@ interface RenderTargetInfo {
   instanceId: InstanceId;
   controlPoints: { id: ValueExprId; stride: number };
   color: { id: ValueExprId; stride: number };
-  scale?:
-    | { k: 'one'; id: ValueExprId }
-    | { k: 'field'; id: ValueExprId; stride: number };
+  scale?: { id: ValueExprId; stride: number };
   shape?:
     | { k: 'one'; id: ValueExprId }
     | { k: 'field'; id: ValueExprId; stride: number };
@@ -139,14 +137,6 @@ function isFieldExtent(id: ValueExprId, valueExprs: readonly ValueExpr[]): boole
   } catch {
     return false;
   }
-}
-
-function isCardinalityOneExpr(id: ValueExprId, valueExprs: readonly ValueExpr[]): boolean {
-  const expr = valueExprs[id as number];
-  if (!expr) return false;
-  if (expr.kind === 'event') return false;
-
-  return !isFieldExtent(id, valueExprs);
 }
 
 /**
@@ -252,11 +242,7 @@ function collectRenderTargets(
     }
 
     const scale = scaleExpr
-      ? isCardinalityOneExpr(scaleExpr.id, valueExprs)
-        ? { k: 'one' as const, id: scaleExpr.id }
-        : isFieldExtent(scaleExpr.id, valueExprs)
-          ? { k: 'field' as const, id: scaleExpr.id, stride: scaleExpr.stride }
-          : undefined
+      ? { id: scaleExpr.id, stride: scaleExpr.stride }
       : undefined;
 
     const shapeFieldId = instanceDecl.shapeField;
@@ -466,16 +452,30 @@ export function allocateContinuityPipeline(
       `${renderBlockId}:color`,
     );
 
-    // [LAW:dataflow-not-control-flow] Scale is always processed through one of the declared variants.
+    // [LAW:one-source-of-truth] Render scale is canonicalized to one slot-backed
+    // field path; cardinality-one inputs are broadcast into the render instance.
     let scaleOutput: StepRender['scale'] = undefined;
     if (scale) {
-      if (scale.k === 'one') {
-        scaleOutput = scale;
-      } else {
-        // [LAW:one-source-of-truth] Field scale follows the same materialize+continuity path as other field inputs.
-        const scaleSlots = getFieldSlots(scale.id, 'custom', scale.stride, `${renderBlockId}:scale`);
-        scaleOutput = { k: 'slot', slot: scaleSlots.outputSlot };
+      const scaleExpr = valueExprs[scale.id as number];
+      if (!scaleExpr) {
+        throw new Error(`RenderInstances2D (${renderBlockId}): missing scale expr ${scale.id}`);
       }
+      const scaleFieldExprId = isFieldExtent(scale.id, valueExprs)
+        ? scale.id
+        : builder.broadcast(scale.id, withInstance(scaleExpr.type, renderInstance));
+      const scaleFieldExpr = valueExprs[scaleFieldExprId as number];
+      if (!scaleFieldExpr) {
+        throw new Error(
+          `RenderInstances2D (${renderBlockId}): missing broadcast scale expr ${scaleFieldExprId}`,
+        );
+      }
+      const scaleSlots = getFieldSlots(
+        scaleFieldExprId,
+        'custom',
+        payloadStride(scaleFieldExpr.type.payload),
+        `${renderBlockId}:scale`,
+      );
+      scaleOutput = { k: 'slot', slot: scaleSlots.outputSlot };
     }
 
     // Process shape

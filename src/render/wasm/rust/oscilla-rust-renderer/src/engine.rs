@@ -4,21 +4,20 @@ use std::sync::Arc;
 use js_sys::{Atomics, Float32Array, Int32Array, SharedArrayBuffer, Uint32Array};
 use wasm_bindgen::JsCast;
 use wasm_bindgen::JsValue;
-use web_sys::OffscreenCanvas;
 use web_sys::console;
+use web_sys::OffscreenCanvas;
 
 use crate::allocator::StrictAllocator;
-use crate::compute::ComputeDispatcher;
+use crate::compute::{CompilerComputePassSpec, ComputeDispatcher};
 use crate::memory::{
-    GpuMemoryArena,
-    INDIRECT_INDEXED_STRIDE_WORDS,
-    INDIRECT_NON_INDEXED_STRIDE_WORDS,
-    SHAPE_BANK_HEADER_WORDS,
-    SINK_TABLE_HEADER_WORDS,
-    SINK_TABLE_RECORD_WORDS,
+    GpuMemoryArena, INDIRECT_INDEXED_STRIDE_WORDS, INDIRECT_NON_INDEXED_STRIDE_WORDS,
+    SHAPE_BANK_HEADER_WORDS, SINK_TABLE_HEADER_WORDS, SINK_TABLE_RECORD_WORDS,
 };
 use crate::render::{DepthTarget, IndirectRegionPlan, RenderDispatcher};
-use crate::scheduler::{SchedulerState, WorkerObservabilityPacket, WorkerScheduler};
+use crate::scheduler::{
+    DispatchCounters, ResourceStats, SchedulerState, SchedulerTelemetry, StageTimingsMs,
+    WorkerObservabilityPacket, WorkerScheduler,
+};
 
 const INPUT_WORD_WIDTH: usize = 0;
 const INPUT_WORD_HEIGHT: usize = 1;
@@ -359,6 +358,8 @@ pub struct Engine {
     max_particles: u32,
     max_shapes: u32,
     draw_regions: IndirectRegionPlan,
+    last_shape_bank_words: u32,
+    last_sink_table_words: u32,
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -393,7 +394,7 @@ fn worker_monotonic_now_ms() -> f64 {
 }
 
 fn clamp_non_negative_u32(value: f32, max_value: u32) -> u32 {
-  if !value.is_finite() {
+    if !value.is_finite() {
         return 0;
     }
     if value <= 0.0 {
@@ -510,8 +511,7 @@ fn realize_shape_bank_geometry(shape_bank_words: &mut [u32]) -> (Vec<f32>, Vec<u
         if next_cursor <= cursor {
             panic!(
                 "shape bank cursor did not advance (cursor={}, next_cursor={})",
-                cursor,
-                next_cursor
+                cursor, next_cursor
             );
         }
         cursor = next_cursor;
@@ -617,6 +617,7 @@ impl Engine {
             config.max_particles,
             config.max_shapes,
         );
+        arena.clear_simulation_planes(&queue);
         let depth_target = DepthTarget::new(&device, surface_config.width, surface_config.height);
         let debug_readback_interval_frames = if config.debug_readback_hz == 0 {
             0
@@ -646,6 +647,8 @@ impl Engine {
             max_particles: config.max_particles as u32,
             max_shapes: config.max_shapes as u32,
             draw_regions: IndirectRegionPlan::default(),
+            last_shape_bank_words: 0,
+            last_sink_table_words: 0,
         })
     }
 
@@ -728,18 +731,22 @@ impl Engine {
             particle_count as usize,
             shape_count as usize,
         );
+        arena.clear_simulation_planes(&self.queue);
         self.arena = arena;
         self.draw_regions = IndirectRegionPlan::default();
+        self.last_shape_bank_words = 0;
+        self.last_sink_table_words = 0;
     }
 
-    pub fn rebuild_simulation_pipeline(&mut self, simulation_wgsl: &str) {
-        // [LAW:single-enforcer] Compiler-owned simulation WGSL is published at
-        // one engine boundary so runtime hot path never recompiles or swaps ad hoc.
-        self.compute.rebuild_simulation_pipeline_with_compiler_wgsl(
+    pub fn rebuild_gpu_pipelines(&mut self, pass_specs: &[CompilerComputePassSpec]) {
+        // [LAW:single-enforcer] Compiler-owned GPU pass artifacts are published
+        // at one engine boundary so runtime hot path never recompiles ad hoc.
+        self.compute.rebuild_gpu_pipelines_with_compiler_wgsl(
             &self.device,
-            simulation_wgsl,
+            pass_specs,
             self.max_particles,
         );
+        self.arena.clear_simulation_planes(&self.queue);
     }
 
     pub fn tick(&mut self, timestamp_ms: f64) -> Result<(), JsValue> {
@@ -751,17 +758,28 @@ impl Engine {
             worker_monotonic_now_ms()
         };
         self.scheduler.begin_loop_iteration(tick_start_ms);
+        let input_stage_start_ms = worker_monotonic_now_ms();
         self.input_marshal_phase(tick_start_ms);
+        let input_stage_end_ms = worker_monotonic_now_ms();
+        let mut stage_timings = StageTimingsMs {
+            input_marshal_ms: (input_stage_end_ms - input_stage_start_ms).max(0.0),
+            ..StageTimingsMs::default()
+        };
         if self.scheduler.state() == SchedulerState::Paused {
             let now_ms = worker_monotonic_now_ms();
             let tick_elapsed_ms = (now_ms - tick_start_ms).max(0.0);
+            let telemetry = self.build_scheduler_telemetry(stage_timings);
             self.scheduler
-                .record_paused_tick(now_ms, tick_elapsed_ms);
+                .record_paused_tick(now_ms, tick_elapsed_ms, telemetry);
             return Ok(());
         }
 
         enum HotPathOutcome {
-            Success { debug_tick: bool, frame_count: u64 },
+            Success {
+                debug_tick: bool,
+                frame_count: u64,
+                stage_timings: StageTimingsMs,
+            },
             SurfaceTimeout,
             SurfaceLost,
             FatalOutOfMemory,
@@ -783,14 +801,25 @@ impl Engine {
                             label: Some("HotPath.CommandEncoder"),
                         });
 
-                self.compute
-                    .encode_passes(
-                        &mut encoder,
-                        &mut self.arena,
-                        self.draw_regions.total_instance_count,
-                        self.draw_regions.indexed_record_count
-                            .saturating_add(self.draw_regions.non_indexed_record_count),
-                    );
+                let simulation_stage_start_ms = worker_monotonic_now_ms();
+                self.compute.encode_passes(
+                    &mut encoder,
+                    &mut self.arena,
+                    self.draw_regions.total_instance_count,
+                    self.draw_regions
+                        .indexed_record_count
+                        .saturating_add(self.draw_regions.non_indexed_record_count),
+                );
+                let simulation_stage_end_ms = worker_monotonic_now_ms();
+                stage_timings.simulation_dispatch_ms =
+                    (simulation_stage_end_ms - simulation_stage_start_ms).max(0.0);
+                // [LAW:one-source-of-truth] exception: fluid and dedicated
+                // draw-prep GPU stages are not emitted yet, so these timings
+                // remain zero-valued placeholders in the canonical packet.
+                stage_timings.fluid_pass_chain_ms = 0.0;
+                stage_timings.draw_prep_ms = 0.0;
+
+                let render_stage_start_ms = worker_monotonic_now_ms();
                 self.render.encode_passes(
                     &mut encoder,
                     &self.arena,
@@ -798,10 +827,11 @@ impl Engine {
                     self.depth_target.view(),
                     self.draw_regions,
                 );
+                let render_stage_end_ms = worker_monotonic_now_ms();
+                stage_timings.render_ms = (render_stage_end_ms - render_stage_start_ms).max(0.0);
 
-                let is_debug_tick =
-                    self.debug_readback_interval_frames > 0
-                        && self.frame_count % self.debug_readback_interval_frames == 0;
+                let is_debug_tick = self.debug_readback_interval_frames > 0
+                    && self.frame_count % self.debug_readback_interval_frames == 0;
                 if is_debug_tick {
                     let copy_bytes = self
                         .arena
@@ -817,13 +847,17 @@ impl Engine {
                     );
                 }
 
+                let swap_stage_start_ms = worker_monotonic_now_ms();
                 self.queue.submit(std::iter::once(encoder.finish()));
                 frame.present();
+                let swap_stage_end_ms = worker_monotonic_now_ms();
+                stage_timings.swap_ms = (swap_stage_end_ms - swap_stage_start_ms).max(0.0);
                 self.frame_count = self.frame_count.wrapping_add(1);
 
                 HotPathOutcome::Success {
                     debug_tick: is_debug_tick,
                     frame_count: self.frame_count,
+                    stage_timings,
                 }
             }
             Err(wgpu::SurfaceError::Timeout) => HotPathOutcome::SurfaceTimeout,
@@ -841,6 +875,7 @@ impl Engine {
             HotPathOutcome::Success {
                 debug_tick,
                 frame_count,
+                stage_timings,
             } => {
                 // [LAW:single-enforcer] Async map callbacks can allocate in
                 // browser glue and therefore run only after lock scope exits.
@@ -849,40 +884,60 @@ impl Engine {
                 }
                 let now_ms = worker_monotonic_now_ms();
                 let tick_elapsed_ms = (now_ms - tick_start_ms).max(0.0);
-                self.scheduler.record_tick_success(
-                    now_ms,
-                    tick_elapsed_ms,
-                    frame_count,
-                );
+                let telemetry = self.build_scheduler_telemetry(stage_timings);
+                self.scheduler
+                    .record_tick_success(now_ms, tick_elapsed_ms, frame_count, telemetry);
                 Ok(())
             }
-            HotPathOutcome::SurfaceTimeout => self.finish_timeout(tick_start_ms),
-            HotPathOutcome::SurfaceLost => self.finish_surface_lost(tick_start_ms),
+            HotPathOutcome::SurfaceTimeout => {
+                let telemetry = self.build_scheduler_telemetry(stage_timings);
+                self.finish_timeout(tick_start_ms, telemetry)
+            }
+            HotPathOutcome::SurfaceLost => {
+                let telemetry = self.build_scheduler_telemetry(stage_timings);
+                self.finish_surface_lost(tick_start_ms, telemetry)
+            }
             HotPathOutcome::FatalOutOfMemory => self.finish_fatal(
                 tick_start_ms,
                 "surface_out_of_memory",
                 "Fatal Surface Error: OutOfMemory",
+                "swap",
+                self.build_scheduler_telemetry(stage_timings),
             ),
-            HotPathOutcome::FatalOther => {
-                self.finish_fatal(tick_start_ms, "surface_other", "Fatal Surface Error: Other")
-            }
+            HotPathOutcome::FatalOther => self.finish_fatal(
+                tick_start_ms,
+                "surface_other",
+                "Fatal Surface Error: Other",
+                "swap",
+                self.build_scheduler_telemetry(stage_timings),
+            ),
         }
     }
 
-    fn finish_timeout(&mut self, tick_start_ms: f64) -> Result<(), JsValue> {
+    fn finish_timeout(
+        &mut self,
+        tick_start_ms: f64,
+        telemetry: SchedulerTelemetry,
+    ) -> Result<(), JsValue> {
         let now_ms = worker_monotonic_now_ms();
         let tick_elapsed_ms = (now_ms - tick_start_ms).max(0.0);
-        self.scheduler.record_surface_timeout(now_ms, tick_elapsed_ms);
+        self.scheduler
+            .record_surface_timeout(now_ms, tick_elapsed_ms, telemetry);
         Ok(())
     }
 
-    fn finish_surface_lost(&mut self, tick_start_ms: f64) -> Result<(), JsValue> {
+    fn finish_surface_lost(
+        &mut self,
+        tick_start_ms: f64,
+        telemetry: SchedulerTelemetry,
+    ) -> Result<(), JsValue> {
         let now_ms = worker_monotonic_now_ms();
         let tick_elapsed_ms = (now_ms - tick_start_ms).max(0.0);
         self.scheduler.record_surface_lost(
             now_ms,
             tick_elapsed_ms,
             "Surface acquire failed with Lost/Outdated",
+            telemetry,
         );
         Ok(())
     }
@@ -892,11 +947,45 @@ impl Engine {
         tick_start_ms: f64,
         code: &'static str,
         message: &'static str,
+        stage: &'static str,
+        telemetry: SchedulerTelemetry,
     ) -> Result<(), JsValue> {
         let now_ms = worker_monotonic_now_ms();
         let tick_elapsed_ms = (now_ms - tick_start_ms).max(0.0);
-        self.scheduler.record_fatal(now_ms, tick_elapsed_ms, code, message);
+        self.scheduler
+            .record_fatal(now_ms, tick_elapsed_ms, code, message, stage, telemetry);
         Err(JsValue::from_str(message))
+    }
+
+    fn build_scheduler_telemetry(&self, stage_timings: StageTimingsMs) -> SchedulerTelemetry {
+        let assembly_workgroup_count =
+            ((self.draw_regions.total_instance_count.saturating_add(63)) / 64).max(1);
+        let simulation_workgroup_count = self.compute.simulation_workgroup_count();
+        let simulation_dispatch_count = self.compute.simulation_dispatch_count();
+        let dispatch_counters = DispatchCounters {
+            compute_dispatch_count: simulation_dispatch_count.saturating_add(1),
+            compute_workgroup_count: simulation_workgroup_count
+                .saturating_add(assembly_workgroup_count),
+            active_lane_count: self.draw_regions.total_instance_count,
+            guarded_lane_count: assembly_workgroup_count
+                .saturating_mul(64)
+                .saturating_sub(self.draw_regions.total_instance_count),
+        };
+        let resource_stats = ResourceStats {
+            shape_bank_word_count: self.last_shape_bank_words,
+            sink_table_word_count: self.last_sink_table_words,
+            indexed_record_count: self.draw_regions.indexed_record_count,
+            non_indexed_record_count: self.draw_regions.non_indexed_record_count,
+            total_instance_count: self.draw_regions.total_instance_count,
+            canvas_width: self.surface_config.width,
+            canvas_height: self.surface_config.height,
+            ping_pong_index: self.arena.ping_pong_index() as u32,
+        };
+        SchedulerTelemetry {
+            stage_timings,
+            dispatch_counters,
+            resource_stats,
+        }
     }
 
     fn sync_shape_bank_plane(&mut self, shape_bank_words: u32) {
@@ -910,8 +999,7 @@ impl Engine {
         if shape_bank_words > available_words {
             panic!(
                 "shape bank plane overflow (requested={}, available={})",
-                shape_bank_words,
-                available_words
+                shape_bank_words, available_words
             );
         }
         let mut plane_words = shared_shape_bank.subarray(0, shape_bank_words).to_vec();
@@ -926,7 +1014,10 @@ impl Engine {
             .write_shape_bank_words(&self.device, &self.queue, &plane_words);
     }
 
-    fn sync_sink_table_plane_and_parse_regions(&mut self, sink_table_words: u32) -> IndirectRegionPlan {
+    fn sync_sink_table_plane_and_parse_regions(
+        &mut self,
+        sink_table_words: u32,
+    ) -> IndirectRegionPlan {
         let Some(shared_sink_table) = self.shared_sink_table.as_ref() else {
             return IndirectRegionPlan::default();
         };
@@ -938,15 +1029,13 @@ impl Engine {
         if sink_table_words > available_words {
             panic!(
                 "sink table plane overflow (requested={}, available={})",
-                sink_table_words,
-                available_words
+                sink_table_words, available_words
             );
         }
         if sink_table_words < SINK_TABLE_HEADER_WORDS as u32 {
             panic!(
                 "sink table missing header (words={}, required={})",
-                sink_table_words,
-                SINK_TABLE_HEADER_WORDS
+                sink_table_words, SINK_TABLE_HEADER_WORDS
             );
         }
 
@@ -964,9 +1053,7 @@ impl Engine {
         if total_record_count != indexed_record_count.saturating_add(non_indexed_record_count) {
             panic!(
                 "sink table record count mismatch (total={}, indexed={}, nonIndexed={})",
-                total_record_count,
-                indexed_record_count,
-                non_indexed_record_count
+                total_record_count, indexed_record_count, non_indexed_record_count
             );
         }
         let minimum_words = (SINK_TABLE_HEADER_WORDS as u32)
@@ -974,8 +1061,7 @@ impl Engine {
         if sink_table_words < minimum_words {
             panic!(
                 "sink table truncated (words={}, required={})",
-                sink_table_words,
-                minimum_words
+                sink_table_words, minimum_words
             );
         }
 
@@ -984,7 +1070,8 @@ impl Engine {
             .write_sink_table_words(&self.device, &self.queue, &plane_words);
         let mut total_instance_count: u32 = 0;
         for record in 0..(total_record_count as usize) {
-            let record_base = SINK_TABLE_HEADER_WORDS + record.saturating_mul(SINK_TABLE_RECORD_WORDS);
+            let record_base =
+                SINK_TABLE_HEADER_WORDS + record.saturating_mul(SINK_TABLE_RECORD_WORDS);
             if record_base + SINK_RECORD_WORD_INSTANCE_COUNT >= plane_words.len() {
                 break;
             }
@@ -1006,16 +1093,18 @@ impl Engine {
                     plane_words[record_base + SINK_RECORD_WORD_INDIRECT_RECORD_INDEX] as usize;
                 let instance_count = plane_words[record_base + SINK_RECORD_WORD_INSTANCE_COUNT];
                 let first_instance = plane_words[record_base + SINK_RECORD_WORD_FIRST_INSTANCE];
-                if shape_handle_word_offset + SHAPE_BANK_HEADER_WORDS > shared_shape_bank.length() as usize {
+                if shape_handle_word_offset + SHAPE_BANK_HEADER_WORDS
+                    > shared_shape_bank.length() as usize
+                {
                     continue;
                 }
                 match draw_mode {
                     DRAW_MODE_INDEXED => {
-                        let command_base = (indexed_region_base_words as usize)
-                            .saturating_add(
-                                indirect_record_index.saturating_mul(indexed_stride_words as usize),
-                            );
-                        let required_words = command_base.saturating_add(INDIRECT_INDEXED_STRIDE_WORDS);
+                        let command_base = (indexed_region_base_words as usize).saturating_add(
+                            indirect_record_index.saturating_mul(indexed_stride_words as usize),
+                        );
+                        let required_words =
+                            command_base.saturating_add(INDIRECT_INDEXED_STRIDE_WORDS);
                         if mirrored_indirect_words.len() < required_words {
                             mirrored_indirect_words.resize(required_words, 0);
                         }
@@ -1029,11 +1118,9 @@ impl Engine {
                         mirrored_indirect_words[command_base + 4] = first_instance;
                     }
                     DRAW_MODE_NON_INDEXED => {
-                        let command_base = (non_indexed_region_base_words as usize)
-                            .saturating_add(
-                                indirect_record_index
-                                    .saturating_mul(non_indexed_stride_words as usize),
-                            );
+                        let command_base = (non_indexed_region_base_words as usize).saturating_add(
+                            indirect_record_index.saturating_mul(non_indexed_stride_words as usize),
+                        );
                         let required_words =
                             command_base.saturating_add(INDIRECT_NON_INDEXED_STRIDE_WORDS);
                         if mirrored_indirect_words.len() < required_words {
@@ -1097,7 +1184,10 @@ impl Engine {
                 .shared_shape_bank
                 .as_ref()
                 .map(|plane| plane.length())
-                .unwrap_or_else(|| self.max_shapes.saturating_mul(SHAPE_BANK_HEADER_WORDS as u32));
+                .unwrap_or_else(|| {
+                    self.max_shapes
+                        .saturating_mul(SHAPE_BANK_HEADER_WORDS as u32)
+                });
             let sink_table_word_limit = self
                 .shared_sink_table
                 .as_ref()
@@ -1118,11 +1208,15 @@ impl Engine {
             uniforms.view_proj[2][2] = shape_bank_words as f32;
             uniforms.view_proj[3][2] = sink_table_words as f32;
             uniforms.view_proj[3][3] = 0.0;
+            self.last_shape_bank_words = shape_bank_words;
+            self.last_sink_table_words = sink_table_words;
             self.sync_shape_bank_plane(shape_bank_words);
             self.draw_regions = self.sync_sink_table_plane_and_parse_regions(sink_table_words);
         } else {
             uniforms.time_seconds = (timestamp_ms.max(0.0) * 0.001) as f32;
             uniforms.delta_time_seconds = (1.0 / 60.0) as f32;
+            self.last_shape_bank_words = 0;
+            self.last_sink_table_words = 0;
             self.draw_regions = IndirectRegionPlan::default();
         }
         self.arena.update_uniforms(&self.queue, uniforms);

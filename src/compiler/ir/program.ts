@@ -242,6 +242,14 @@ export interface CompiledProgramIR {
   readonly generatedComputeProgram?: GeneratedComputeProgramIR;
 
   /**
+   * Compiler-owned GPU pass manifest describing installable runtime passes.
+   *
+   * [LAW:one-source-of-truth] Runtime pass identity/order metadata is emitted
+   * once by compile output and consumed by worker transport/renderer install.
+   */
+  readonly generatedGpuArtifactManifest?: GeneratedGpuArtifactManifestIR;
+
+  /**
    * Compiler-generated typed Naga lowering artifact (P2-2).
    * Contains the structured module and expr/statement source-map provenance.
    */
@@ -251,6 +259,17 @@ export interface CompiledProgramIR {
 export interface ProgramTopologyTableIR {
   readonly definitions: readonly SerializableTopologyDef[];
   readonly definitionIndexById: ReadonlyMap<TopologyId, number>;
+}
+
+export interface GpuPassManifestEntryIR {
+  readonly passId: string;
+  readonly stage: 'compute';
+  readonly entryPoint: string;
+}
+
+export interface GeneratedGpuArtifactManifestIR {
+  readonly schemaVersion: 1;
+  readonly passes: readonly GpuPassManifestEntryIR[];
 }
 
 // =============================================================================

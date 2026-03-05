@@ -5,6 +5,7 @@ import { createDefaultRegistry } from '../runtime/kernels/default-registry';
 import type { Patch } from '../graph';
 import { serializePatch } from './PatchPersistence';
 import type {
+  CompiledGpuArtifactBundle,
   CompileWorkerRequest,
   CompileWorkerResponse,
   CompileWorkerCompiledMessage,
@@ -28,6 +29,9 @@ export interface CompileWorkerRunResult {
   readonly sourcePatchRevision: number;
   readonly frontendResult: CompileWorkerCompiledMessage['frontendResult'];
   readonly backendResult: CompileResult | null;
+  readonly compiledGpuBundle: CompiledGpuArtifactBundle | null;
+  // [LAW:one-source-of-truth] exception: transitional projection for callsites
+  // still consuming one simulation WGSL string while bundle migration lands.
   readonly compiledComputeWgsl: string | null;
   readonly compileDurationMs: number;
 }
@@ -93,6 +97,13 @@ function reviveBackendResult(
     program: revivedProgram,
     warnings: backend.warnings,
   };
+}
+
+function selectSimulationPassWgsl(bundle: CompiledGpuArtifactBundle | null): string | null {
+  if (!bundle) return null;
+  const simulationPass = bundle.passes.find((pass) => pass.passId === 'simulation');
+  if (!simulationPass) return null;
+  return simulationPass.wgsl;
 }
 
 export class CompileWorkerClient {
@@ -178,14 +189,16 @@ export class CompileWorkerClient {
       }
 
       if (!inFlight.superseded) {
+        const compiledGpuBundle =
+          message.backendResult?.kind === 'ok'
+            ? message.backendResult.compiledGpuBundle
+            : null;
         inFlight.resolve({
           sourcePatchRevision: message.patchRevision,
           frontendResult: message.frontendResult,
           backendResult: reviveBackendResult(message.backendResult),
-          compiledComputeWgsl:
-            message.backendResult?.kind === 'ok'
-              ? message.backendResult.compiledComputeShader.wgsl
-              : null,
+          compiledGpuBundle,
+          compiledComputeWgsl: selectSimulationPassWgsl(compiledGpuBundle),
           compileDurationMs: message.durationMs,
         });
       }

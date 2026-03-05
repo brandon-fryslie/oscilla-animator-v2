@@ -35,11 +35,13 @@ import type {
   RuntimeExternalWrite,
   RuntimeHotpathWorkerInboundMessage,
   RuntimeHotpathWorkerOutboundMessage,
+  RuntimeHotpathSinkTableSample,
 } from './runtime-hotpath-worker-protocol';
 
 const DEFAULT_TICK_HZ = 60;
 const HEARTBEAT_INTERVAL_MS = 500;
 const MAX_UINT32 = 0xFFFF_FFFF;
+const DEFAULT_ARENA_ELEMENTS = 50_000;
 
 interface ViewportState {
   width: number;
@@ -61,8 +63,7 @@ let sharedSinkTableWords: Uint32Array | null = null;
 let sessionState: SessionState | null = null;
 let currentProgram: CompiledProgramIR | null = null;
 let currentState: RuntimeState | null = null;
-const arena = new RenderBufferArena(50_000);
-arena.init();
+let arena = createArena(DEFAULT_ARENA_ELEMENTS);
 const pendingExternalWrites: RuntimeExternalWrite[] = [];
 let frameCount = 0;
 let tickWindowCount = 0;
@@ -79,6 +80,7 @@ let gpuDrivenShapeBankWordCount = 0;
 let gpuDrivenPlanesDirty = false;
 let publishedSinkWordCount = 0;
 let publishedShapeWordCount = 0;
+let lastSinkTableSample: RuntimeHotpathSinkTableSample | null = null;
 let viewport: ViewportState = {
   width: 1,
   height: 1,
@@ -87,13 +89,25 @@ let viewport: ViewportState = {
   panY: 0,
 };
 
+function createArena(maxElements: number): RenderBufferArena {
+  const next = new RenderBufferArena(maxElements);
+  next.init();
+  return next;
+}
+
+function computeArenaCapacity(arenaTotalFloats: number): number {
+  const required = Number.isFinite(arenaTotalFloats) ? Math.ceil(arenaTotalFloats) : 0;
+  // [LAW:one-source-of-truth] Arena capacity derives from compiled program
+  // metadata; no hardcoded runtime hotpath capacity is authoritative.
+  return Math.max(DEFAULT_ARENA_ELEMENTS, Math.ceil(required * 1.25));
+}
+
 interface PackedArenaAddress {
   readonly baseOffset: number;
   readonly laneStride: number;
   readonly componentStride: number;
 }
 
-const SCALE_MODE_SCALAR_BITS = 1;
 const SCALE_MODE_SLOT = 2;
 const OPTIONAL_MODE_IDENTITY = 0;
 const OPTIONAL_MODE_SLOT = 1;
@@ -161,29 +175,6 @@ function resolveSlotArenaAddress(
   };
 }
 
-function resolveScalarArenaAddress(
-  program: CompiledProgramIR,
-  exprId: number,
-  context: string,
-  laneStrideOverride?: number,
-): PackedArenaAddress {
-  const scalarAddress = program.runtimeAddressTable?.scalarExprToArenaAddress.get(exprId);
-  if (!scalarAddress) {
-    throw new Error(`runtime-hotpath: missing scalarExprToArenaAddress for ${context}`);
-  }
-  const resolved = resolveArenaAddress(scalarAddress.arena);
-  const baseOffset =
-    resolved.baseOffset + scalarAddress.component * resolved.componentStride;
-  return {
-    baseOffset: assertFiniteUint32(baseOffset, `${context}.baseOffset`),
-    laneStride: assertFiniteUint32(
-      laneStrideOverride ?? resolved.laneStride,
-      `${context}.laneStride`,
-    ),
-    componentStride: 0,
-  };
-}
-
 function warmRecordWord(
   warmPackedWords: Uint32Array | null,
   sinkIndex: number,
@@ -239,12 +230,42 @@ function warmShapeHandleForSink(
   return warmPackedWords[base + DrawPrepSinkTableRecordWord.ShapeHandleWordOffset] >>> 0;
 }
 
-const f32Scratch = new Float32Array(1);
-const u32Scratch = new Uint32Array(f32Scratch.buffer);
-
-function float32ToUint32Bits(value: number): number {
-  f32Scratch[0] = value;
-  return u32Scratch[0] >>> 0;
+function buildSinkTableSample(
+  words: Uint32Array | null,
+  sinkTableWordCount: number,
+): RuntimeHotpathSinkTableSample | null {
+  if (!words || sinkTableWordCount <= 0) return null;
+  const headerWords = DRAW_PREP_SINK_TABLE_HEADER_WORDS;
+  const recordWords = DRAW_PREP_SINK_TABLE_RECORD_WORDS;
+  const totalRecords = words[1] ?? 0;
+  const base = headerWords;
+  const hasFirstRecord = totalRecords > 0 && sinkTableWordCount >= base + recordWords;
+  return {
+    sinkTableWordCount: sinkTableWordCount >>> 0,
+    totalRecords: totalRecords >>> 0,
+    firstRecord: hasFirstRecord
+      ? {
+        drawModeCode: words[base + DrawPrepSinkTableRecordWord.DrawMode] ?? 0,
+        shapeHandleWordOffset: words[base + DrawPrepSinkTableRecordWord.ShapeHandleWordOffset] ?? 0,
+        shapeSourceCode: words[base + DrawPrepSinkTableRecordWord.ShapeSourceCode] ?? 0,
+        instanceCount: words[base + DrawPrepSinkTableRecordWord.InstanceCount] ?? 0,
+        firstInstance: words[base + DrawPrepSinkTableRecordWord.FirstInstance] ?? 0,
+        positionBaseOffset: words[base + DrawPrepSinkTableRecordWord.PositionBaseOffset] ?? 0,
+        positionLaneStride: words[base + DrawPrepSinkTableRecordWord.PositionLaneStride] ?? 0,
+        positionComponentStride: words[base + DrawPrepSinkTableRecordWord.PositionComponentStride] ?? 0,
+        colorBaseOffset: words[base + DrawPrepSinkTableRecordWord.ColorBaseOffset] ?? 0,
+        colorLaneStride: words[base + DrawPrepSinkTableRecordWord.ColorLaneStride] ?? 0,
+        colorComponentStride: words[base + DrawPrepSinkTableRecordWord.ColorComponentStride] ?? 0,
+        scaleModeCode: words[base + DrawPrepSinkTableRecordWord.ScaleModeCode] ?? 0,
+        scaleValueOrBaseOffset: words[base + DrawPrepSinkTableRecordWord.ScaleValueOrBaseOffset] ?? 0,
+        scaleLaneStride: words[base + DrawPrepSinkTableRecordWord.ScaleLaneStride] ?? 0,
+        scaleComponentStride: words[base + DrawPrepSinkTableRecordWord.ScaleComponentStride] ?? 0,
+        shapeSlotBaseOffset: words[base + DrawPrepSinkTableRecordWord.ShapeSlotBaseOffset] ?? 0,
+        shapeSlotLaneStride: words[base + DrawPrepSinkTableRecordWord.ShapeSlotLaneStride] ?? 0,
+        shapeSlotComponentStride: words[base + DrawPrepSinkTableRecordWord.ShapeSlotComponentStride] ?? 0,
+      }
+      : null,
+  };
 }
 
 function buildGpuDrivenSinkTableWords(
@@ -283,52 +304,23 @@ function buildGpuDrivenSinkTableWords(
         renderStep.shape.slot as number,
         `shapeSlot sinkIndex=${sink.sinkIndex}`,
       )
-      : (() => {
-        try {
-          return resolveScalarArenaAddress(
-            program,
-            renderStep.shape.id as number,
-            `shapeOneHandle sinkIndex=${sink.sinkIndex}`,
-            0,
-          );
-        } catch {
-          return null;
-        }
-      })();
+      : null;
 
-    let scaleModeCode = SCALE_MODE_SCALAR_BITS;
-    let scaleValueOrBaseOffset = float32ToUint32Bits(1);
-    let scaleLaneStride = 0;
-    let scaleComponentStride = 0;
-    if (renderStep.scale?.k === 'slot') {
-      const scaleAddress = resolveSlotArenaAddress(
-        program,
-        renderStep.scale.slot as number,
-        `scaleSlot sinkIndex=${sink.sinkIndex}`,
+    const scaleSpec = renderStep.scale;
+    if (!scaleSpec || scaleSpec.k !== 'slot') {
+      throw new Error(
+        `runtime-hotpath: render scale must be slot-backed (sinkIndex=${sink.sinkIndex})`,
       );
-      scaleModeCode = SCALE_MODE_SLOT;
-      scaleValueOrBaseOffset = scaleAddress.baseOffset;
-      scaleLaneStride = scaleAddress.laneStride;
-      scaleComponentStride = scaleAddress.componentStride;
-    } else if (renderStep.scale?.k === 'one') {
-      try {
-        const scaleAddress = resolveScalarArenaAddress(
-          program,
-          renderStep.scale.id as number,
-          `scaleOne sinkIndex=${sink.sinkIndex}`,
-          0,
-        );
-        scaleModeCode = SCALE_MODE_SLOT;
-        scaleValueOrBaseOffset = scaleAddress.baseOffset;
-        scaleLaneStride = scaleAddress.laneStride;
-        scaleComponentStride = scaleAddress.componentStride;
-      } catch {
-        scaleModeCode = SCALE_MODE_SCALAR_BITS;
-        scaleValueOrBaseOffset = float32ToUint32Bits(1);
-        scaleLaneStride = 0;
-        scaleComponentStride = 0;
-      }
     }
+    const scaleAddress = resolveSlotArenaAddress(
+      program,
+      scaleSpec.slot as number,
+      `scaleSlot sinkIndex=${sink.sinkIndex}`,
+    );
+    const scaleModeCode = SCALE_MODE_SLOT;
+    const scaleValueOrBaseOffset = scaleAddress.baseOffset;
+    const scaleLaneStride = scaleAddress.laneStride;
+    const scaleComponentStride = scaleAddress.componentStride;
 
     const rotationAddress = renderStep.rotationSlot !== undefined
       ? resolveSlotArenaAddress(
@@ -355,7 +347,7 @@ function buildGpuDrivenSinkTableWords(
       instanceCount,
       firstInstance: assertFiniteUint32(firstInstance, `firstInstance sinkIndex=${sink.sinkIndex}`),
       renderStepIndex: sink.renderStepIndex,
-      shapeSourceCode: shapeAddress ? SHAPE_SOURCE_SLOT : SHAPE_SOURCE_ONE_HANDLE,
+      shapeSourceCode: renderStep.shape.k === 'slot' ? SHAPE_SOURCE_SLOT : SHAPE_SOURCE_ONE_HANDLE,
       positionBaseOffset: positionAddress.baseOffset,
       positionLaneStride: positionAddress.laneStride,
       positionComponentStride: positionAddress.componentStride,
@@ -388,6 +380,12 @@ function buildGpuDrivenSinkTableWords(
 
 function installProgram(program: SerializableCompiledProgramIR): void {
   const revived = reviveProgram(program);
+  const targetArenaCapacity = computeArenaCapacity(revived.arenaTotalFloats);
+  if (arena.maxElements < targetArenaCapacity) {
+    // [LAW:no-silent-fallbacks] If compiled arena demand exceeds the current
+    // buffer arena, resize eagerly at install time instead of failing warmup.
+    arena = createArena(targetArenaCapacity);
+  }
   const schedule = revived.schedule as {
     stateSlotCount?: number;
     stateMappings?: readonly any[];
@@ -471,6 +469,7 @@ function installProgram(program: SerializableCompiledProgramIR): void {
   gpuDrivenExecutionEnabled = false;
   gpuDrivenSinkTableWords = null;
   gpuDrivenSinkTableWordCount = 0;
+  lastSinkTableSample = null;
   gpuDrivenShapeBankWords = warmShapeBankWords;
   gpuDrivenShapeBankWordCount = warmShapeBankWordCount;
   publishedSinkWordCount = 0;
@@ -482,6 +481,7 @@ function installProgram(program: SerializableCompiledProgramIR): void {
       gpuDrivenExecutionEnabled = true;
       gpuDrivenSinkTableWords = gpuDriven.words;
       gpuDrivenSinkTableWordCount = gpuDriven.wordCount;
+      lastSinkTableSample = buildSinkTableSample(gpuDriven.words, gpuDriven.wordCount);
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -643,6 +643,7 @@ function maybeEmitHeartbeat(nowMs: number): void {
     lastTickMs,
     drawOpCount: lastDrawOpCount,
     sinkWordCount: lastSinkWordCount,
+    sinkTableSample: lastSinkTableSample,
   });
   lastHeartbeatMs = nowMs;
   tickWindowCount = 0;

@@ -1,9 +1,11 @@
 import type { RenderShapeBankSource } from './WebGPUShapeBankManager';
 import type { IndirectArgsReadbackSnapshot } from './WebGPUIndirectArgsInspector';
+import { isRuntimeConsoleEnabled } from '../../testing/test-params';
 import {
   computeRustRendererShapeBankWordCapacity,
   computeRustRendererSinkTableWordCapacity,
   type RustRendererBootstrapConfig,
+  type RustRendererGpuPass,
   type RustRendererSchedulerState,
   type RustRendererWorkerInboundMessage,
   type RustRendererWorkerOutboundMessage,
@@ -35,6 +37,66 @@ interface RenderInput {
   readonly drawPrepSinkTableWordCount: number;
 }
 
+export interface RuntimeEventBreadcrumb {
+  readonly severity: 'error' | 'fatal';
+  readonly code: string;
+  readonly stage: string;
+  readonly message: string;
+  readonly emittedAtMs: number;
+}
+
+export interface RustRendererRuntimeTelemetry {
+  readonly meanMs: number;
+  readonly stdDevMs: number;
+  readonly sampleCount: number;
+  readonly frameCount: number;
+  readonly stageTimings: {
+    readonly inputMarshalMs: number;
+    readonly simulationDispatchMs: number;
+    readonly fluidPassChainMs: number;
+    readonly drawPrepMs: number;
+    readonly renderMs: number;
+    readonly swapMs: number;
+    readonly totalFrameMs: number;
+  };
+  readonly dispatchCounters: {
+    readonly computeDispatchCount: number;
+    readonly computeWorkgroupCount: number;
+    readonly activeLaneCount: number;
+    readonly guardedLaneCount: number;
+  };
+  readonly resourceStats: {
+    readonly shapeBankWordCount: number;
+    readonly sinkTableWordCount: number;
+    readonly indexedRecordCount: number;
+    readonly nonIndexedRecordCount: number;
+    readonly totalInstanceCount: number;
+    readonly canvasWidth: number;
+    readonly canvasHeight: number;
+    readonly pingPongIndex: number;
+  };
+  readonly lastEvent: RuntimeEventBreadcrumb | null;
+}
+
+export interface SinkTableDebugSample {
+  readonly sinkTableWordCount: number;
+  readonly totalRecords: number;
+  readonly firstRecord: {
+    readonly instanceCount: number;
+    readonly firstInstance: number;
+    readonly positionBaseOffset: number;
+    readonly positionLaneStride: number;
+    readonly positionComponentStride: number;
+    readonly colorBaseOffset: number;
+    readonly colorLaneStride: number;
+    readonly colorComponentStride: number;
+    readonly scaleModeCode: number;
+    readonly scaleValueOrBaseOffset: number;
+    readonly scaleLaneStride: number;
+    readonly scaleComponentStride: number;
+  } | null;
+}
+
 const DEFAULT_BOOTSTRAP_CONFIG: RustRendererBootstrapConfig = Object.freeze({
   maxParticles: 65_536,
   maxShapes: 65_536,
@@ -46,6 +108,96 @@ function coerceFinite(value: number | undefined): number {
 }
 
 const MAX_UINT32 = 0xFFFF_FFFF;
+const RUNTIME_CONSOLE_ENABLED = isRuntimeConsoleEnabled();
+
+function getRuntimeBootstrapConfig(): RustRendererBootstrapConfig {
+  if (!RUNTIME_CONSOLE_ENABLED) return DEFAULT_BOOTSTRAP_CONFIG;
+  return {
+    ...DEFAULT_BOOTSTRAP_CONFIG,
+    // [LAW:single-enforcer] Debug readback cadence is configured once at
+    // renderer bootstrap when runtimeConsole diagnostics are enabled.
+    debugReadbackHz: 6,
+  };
+}
+
+function escapeRegex(source: string): string {
+  return source.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function previewWgsl(wgsl: string, maxLines: number = 4): string {
+  return wgsl
+    .split('\n')
+    .slice(0, maxLines)
+    .map((line) => line.trim())
+    .join(' | ');
+}
+
+function parseWgslU32Constant(wgsl: string, name: string): number | null {
+  const pattern = new RegExp(`const\\s+${escapeRegex(name)}\\s*:\\s*u32\\s*=\\s*(\\d+)u\\s*;`);
+  const match = wgsl.match(pattern);
+  if (!match) return null;
+  const parsed = Number.parseInt(match[1] ?? '', 10);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function extractPassDebugConstants(wgsl: string): Record<string, number> {
+  const keys = [
+    'ACTIVE_LANES',
+    'GRID_WIDTH',
+    'GRID_HEIGHT',
+    'CP_OFFSET',
+    'CP_LANE_STRIDE',
+    'CP_COMPONENT_STRIDE',
+    'COLOR_OFFSET',
+    'COLOR_LANE_STRIDE',
+    'COLOR_COMPONENT_STRIDE',
+    'SCALE_OFFSET',
+    'SCALE_LANE_STRIDE',
+    'SCALE_COMPONENT_STRIDE',
+  ] as const;
+  const constants: Record<string, number> = {};
+  for (const key of keys) {
+    const value = parseWgslU32Constant(wgsl, key);
+    if (value !== null) {
+      constants[key] = value;
+    }
+  }
+  return constants;
+}
+
+function validateGpuPass(pass: RustRendererGpuPass, index: number): RustRendererGpuPass {
+  if (typeof pass.passId !== 'string' || pass.passId.trim().length === 0) {
+    throw new Error(`Rust renderer GPU pass contract violation: passes[${index}].passId is required`);
+  }
+  if (pass.stage !== 'compute') {
+    throw new Error(
+      `Rust renderer GPU pass contract violation: pass "${pass.passId}" has unsupported stage "${String(pass.stage)}"`,
+    );
+  }
+  if (typeof pass.entryPoint !== 'string' || pass.entryPoint.trim().length === 0) {
+    throw new Error(`Rust renderer GPU pass contract violation: pass "${pass.passId}" is missing entryPoint`);
+  }
+  if (typeof pass.wgsl !== 'string' || pass.wgsl.trim().length === 0) {
+    throw new Error(`Rust renderer GPU pass contract violation: pass "${pass.passId}" is missing WGSL source`);
+  }
+  if (pass.wgsl.toLowerCase().includes("won't compile")) {
+    throw new Error(
+      `Rust renderer GPU pass contract violation: pass "${pass.passId}" contains placeholder invalid WGSL (${previewWgsl(pass.wgsl)})`,
+    );
+  }
+  if (!pass.wgsl.includes('@compute')) {
+    throw new Error(
+      `Rust renderer GPU pass contract violation: pass "${pass.passId}" is missing @compute entry annotation`,
+    );
+  }
+  const entryPattern = new RegExp(`\\bfn\\s+${escapeRegex(pass.entryPoint)}\\s*\\(`);
+  if (!entryPattern.test(pass.wgsl)) {
+    throw new Error(
+      `Rust renderer GPU pass contract violation: pass "${pass.passId}" is missing fn ${pass.entryPoint}(...)`,
+    );
+  }
+  return pass;
+}
 
 function assertFiniteUint32(value: number, context: string): number {
   if (
@@ -102,8 +254,13 @@ export class WebGPURenderer {
   private fatalError: Error | null = null;
   private lastResizeWidth = -1;
   private lastResizeHeight = -1;
-  private latestTelemetry: { meanMs: number; stdDevMs: number; sampleCount: number; frameCount: number } | null = null;
+  private latestTelemetry: RustRendererRuntimeTelemetry | null = null;
   private lifecycleState: RustRendererSchedulerState = 'Booting';
+  private latestRuntimeEvent: RuntimeEventBreadcrumb | null = null;
+  private lastInstalledPassIds: readonly string[] = [];
+  private latestSinkTableSample: SinkTableDebugSample | null = null;
+  private renderInputDebugLogged = false;
+  private sinkTableDebugLogCounter = 0;
 
   private constructor(
     worker: Worker,
@@ -152,7 +309,7 @@ export class WebGPURenderer {
       sharedInput,
       sharedShapeBank,
       sharedSinkTable,
-      DEFAULT_BOOTSTRAP_CONFIG,
+      getRuntimeBootstrapConfig(),
     );
     return renderer;
   }
@@ -190,6 +347,31 @@ export class WebGPURenderer {
       input.drawPrepSinkTableV1,
       input.drawPrepSinkTableWordCount,
     );
+    if (RUNTIME_CONSOLE_ENABLED && !this.renderInputDebugLogged && input.drawPrepSinkTableV1 && sinkTableWords > 0) {
+      this.renderInputDebugLogged = true;
+      const headerWords = 8;
+      const base = headerWords;
+      const sample = {
+        sinkTableWordCount: sinkTableWords,
+        totalRecords: input.drawPrepSinkTableV1[1] ?? 0,
+        firstRecord: {
+          instanceCount: input.drawPrepSinkTableV1[base + 4] ?? 0,
+          firstInstance: input.drawPrepSinkTableV1[base + 5] ?? 0,
+          positionBaseOffset: input.drawPrepSinkTableV1[base + 8] ?? 0,
+          positionLaneStride: input.drawPrepSinkTableV1[base + 9] ?? 0,
+          positionComponentStride: input.drawPrepSinkTableV1[base + 10] ?? 0,
+          colorBaseOffset: input.drawPrepSinkTableV1[base + 11] ?? 0,
+          colorLaneStride: input.drawPrepSinkTableV1[base + 12] ?? 0,
+          colorComponentStride: input.drawPrepSinkTableV1[base + 13] ?? 0,
+          scaleModeCode: input.drawPrepSinkTableV1[base + 14] ?? 0,
+          scaleValueOrBaseOffset: input.drawPrepSinkTableV1[base + 15] ?? 0,
+          scaleLaneStride: input.drawPrepSinkTableV1[base + 16] ?? 0,
+          scaleComponentStride: input.drawPrepSinkTableV1[base + 17] ?? 0,
+        },
+      } satisfies SinkTableDebugSample;
+      this.latestSinkTableSample = sample;
+      console.info(`[runtimeConsole] ${JSON.stringify({ kind: 'render-input-sample', ...sample })}`);
+    }
     this.inputWords[RUNTIME_INPUT_INDEX.sinkTableWords] = sinkTableWords;
     this.inputWords[RUNTIME_INPUT_INDEX.shapeBankWords] = shapeBankWords;
     Atomics.add(this.signalWords, 0, 1);
@@ -237,14 +419,32 @@ export class WebGPURenderer {
     this.worker.terminate();
   }
 
-  async rebuildSimulationPipeline(
-    simulationWgsl: string,
+  async rebuildGpuPipelines(
+    passes: readonly RustRendererGpuPass[],
   ): Promise<void> {
     if (this.fatalError) {
       throw this.fatalError;
     }
     if (!this.bootstrapped) {
       throw new Error('Rust renderer worker is not bootstrapped');
+    }
+    const validatedPasses = passes.map((pass, index) => validateGpuPass(pass, index));
+    this.lastInstalledPassIds = validatedPasses.map((pass) => pass.passId);
+    if (RUNTIME_CONSOLE_ENABLED) {
+      const payload = {
+        kind: 'gpu-pipeline-rebuild',
+        passCount: validatedPasses.length,
+        passes: validatedPasses.map((pass) => ({
+          passId: pass.passId,
+          stage: pass.stage,
+          entryPoint: pass.entryPoint,
+          wgslPreview: previewWgsl(pass.wgsl),
+          debugConstants: extractPassDebugConstants(pass.wgsl),
+        })),
+      };
+      // [LAW:one-source-of-truth] Renderer boundary emits one canonical
+      // structured line for pipeline install debugging in runtimeConsole mode.
+      console.info(`[runtimeConsole] ${JSON.stringify(payload)}`);
     }
     this.worker.postMessage({ type: 'PAUSE' } satisfies RustRendererWorkerInboundMessage);
     try {
@@ -259,7 +459,7 @@ export class WebGPURenderer {
         const onMessage = (event: MessageEvent<RustRendererWorkerOutboundMessage>): void => {
           const payload = event.data;
           if (!payload) return;
-          if (payload.type === 'REBUILD_SIMULATION_PIPELINE_SUCCESS') {
+          if (payload.type === 'REBUILD_GPU_PIPELINES_SUCCESS') {
             settle(resolve);
             return;
           }
@@ -269,8 +469,8 @@ export class WebGPURenderer {
         };
         this.worker.addEventListener('message', onMessage);
         const message: RustRendererWorkerInboundMessage = {
-          type: 'REBUILD_SIMULATION_PIPELINE',
-          simulationWgsl,
+          type: 'REBUILD_GPU_PIPELINES',
+          passes: validatedPasses,
         };
         this.worker.postMessage(message);
       });
@@ -279,12 +479,31 @@ export class WebGPURenderer {
     }
   }
 
-  getLatestRuntimeTelemetry(): { meanMs: number; stdDevMs: number; sampleCount: number; frameCount: number } | null {
+  async rebuildSimulationPipeline(simulationWgsl: string): Promise<void> {
+    // [LAW:one-source-of-truth] exception: transitional projection for callers
+    // still publishing a single simulation pass during bundle migration.
+    await this.rebuildGpuPipelines([{
+      passId: 'simulation',
+      stage: 'compute',
+      entryPoint: 'compute_main',
+      wgsl: simulationWgsl,
+    }]);
+  }
+
+  getLatestRuntimeTelemetry(): RustRendererRuntimeTelemetry | null {
     return this.latestTelemetry;
   }
 
   getLifecycleState(): RustRendererSchedulerState {
     return this.lifecycleState;
+  }
+
+  getInstalledGpuPassIds(): readonly string[] {
+    return this.lastInstalledPassIds;
+  }
+
+  getLatestSinkTableSample(): SinkTableDebugSample | null {
+    return this.latestSinkTableSample;
   }
 
   private syncShapeBankPlane(shapeBank: RenderShapeBankSource): number {
@@ -330,6 +549,45 @@ export class WebGPURenderer {
       );
     }
     this.sharedSinkTableWords.set(sinkTableWords.subarray(0, wordCount), 0);
+    if (RUNTIME_CONSOLE_ENABLED) {
+      this.sinkTableDebugLogCounter += 1;
+      if (this.sinkTableDebugLogCounter % 120 === 1) {
+        const headerWords = 8;
+        const recordWords = 29;
+        const totalRecords = sinkTableWords[1] ?? 0;
+        const firstRecordBase = headerWords;
+        const hasFirstRecord = totalRecords > 0 && wordCount >= firstRecordBase + recordWords;
+        const debugRecord = hasFirstRecord
+          ? {
+            instanceCount: sinkTableWords[firstRecordBase + 4] ?? 0,
+            firstInstance: sinkTableWords[firstRecordBase + 5] ?? 0,
+            positionBaseOffset: sinkTableWords[firstRecordBase + 8] ?? 0,
+            positionLaneStride: sinkTableWords[firstRecordBase + 9] ?? 0,
+            positionComponentStride: sinkTableWords[firstRecordBase + 10] ?? 0,
+            colorBaseOffset: sinkTableWords[firstRecordBase + 11] ?? 0,
+            colorLaneStride: sinkTableWords[firstRecordBase + 12] ?? 0,
+            colorComponentStride: sinkTableWords[firstRecordBase + 13] ?? 0,
+            scaleModeCode: sinkTableWords[firstRecordBase + 14] ?? 0,
+            scaleValueOrBaseOffset: sinkTableWords[firstRecordBase + 15] ?? 0,
+            scaleLaneStride: sinkTableWords[firstRecordBase + 16] ?? 0,
+            scaleComponentStride: sinkTableWords[firstRecordBase + 17] ?? 0,
+          }
+          : null;
+        this.latestSinkTableSample = {
+          sinkTableWordCount: wordCount,
+          totalRecords,
+          firstRecord: debugRecord,
+        };
+        console.info(
+          `[runtimeConsole] ${JSON.stringify({
+            kind: 'sink-table-sample',
+            wordCount,
+            totalRecords,
+            firstRecord: debugRecord,
+          })}`,
+        );
+      }
+    }
     return wordCount;
   }
 
@@ -419,6 +677,13 @@ export class WebGPURenderer {
       return;
     }
     if (payload.type === 'RUNTIME_EVENT') {
+      this.latestRuntimeEvent = {
+        severity: payload.severity,
+        code: payload.code,
+        stage: payload.stage,
+        message: payload.message,
+        emittedAtMs: payload.emittedAtMs,
+      };
       if (payload.severity === 'fatal') {
         this.fatalError = new Error(`[${payload.code}] ${payload.message}`);
       }
@@ -433,6 +698,10 @@ export class WebGPURenderer {
         stdDevMs: payload.stdDevTickMs,
         sampleCount: payload.sampleCount,
         frameCount: payload.frameCount,
+        stageTimings: payload.telemetry.stageTimings,
+        dispatchCounters: payload.telemetry.dispatchCounters,
+        resourceStats: payload.telemetry.resourceStats,
+        lastEvent: this.latestRuntimeEvent,
       };
     }
   };
