@@ -11,6 +11,7 @@ import { register as register_3_procedural_star } from './procedural-star';
 import { register as register_4_shape_wobble_2d } from './shape-wobble-2d';
 import { register as register_5_path_field } from './path-field';
 import { register as register_6_make_shape2d } from './make-shape2d';
+import { register as register_7_cubic_bezier_2d } from './cubic-bezier-2d';
 
 export function registerShapeBlocks(): void {
   register_0_ellipse();
@@ -20,4 +21,5 @@ export function registerShapeBlocks(): void {
   register_4_shape_wobble_2d();
   register_5_path_field();
   register_6_make_shape2d();
+  register_7_cubic_bezier_2d();
 }

@@ -154,6 +154,50 @@ patch "Test Shape Wobble" {
   });
 });
 
+describe('CubicBezier2D block', () => {
+  it('is registered', () => {
+    expect(getBlockDefinition('CubicBezier2D')).toBeDefined();
+  });
+
+  it('frontend compiles shape -> array -> render pipeline', () => {
+    const hcl = `
+patch "Test CubicBezier2D" {
+  block "InfiniteTimeRoot" "clock" {
+    periodAMs = 4000
+    role = "timeRoot"
+  }
+
+  block "CubicBezier2D" "curve" {
+    resolution = 48
+    outputs {
+      shape = arr.element
+    }
+  }
+
+  block "Array" "arr" {
+    count = 12
+    outputs {
+      elements = layout.elements
+    }
+  }
+
+  block "CircleLayoutUV" "layout" {
+    radius = 0.25
+    outputs {
+      controlPoints = render.controlPoints
+    }
+  }
+
+  block "RenderInstances2D" "render" {}
+}`;
+    const { patch, errors } = deserializePatchFromHCL(hcl);
+    expect(errors).toEqual([]);
+    const result = compileFrontend(patch);
+    expect(result.typedPatch.blocks.some((b) => b.type === 'CubicBezier2D')).toBe(true);
+    expect(result.typedPatch.blocks.some((b) => b.type === 'RenderInstances2D')).toBe(true);
+  });
+});
+
 describe('createLinePathTopology', () => {
   it('produces correct verbs for closed path', () => {
     const closed5 = createLinePathTopology(5, true);

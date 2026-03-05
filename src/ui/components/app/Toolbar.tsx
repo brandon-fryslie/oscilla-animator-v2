@@ -45,6 +45,23 @@ export const Toolbar: React.FC<ToolbarProps> = observer(({ stats = 'FPS: --', do
     () => PANEL_DEFINITIONS.filter((panel) => !panel.initiallyHidden),
     []
   );
+  const splitDemos = useMemo(() => {
+    const midpoint = Math.ceil(demo.demos.length / 2);
+    const primary = demo.demos.slice(0, midpoint);
+    const secondary = demo.demos.slice(midpoint);
+    const formatLabel = (items: readonly { name: string }[], fallback: string) => {
+      const first = items[0]?.name?.trim()?.[0]?.toUpperCase();
+      const last = items[items.length - 1]?.name?.trim()?.[0]?.toUpperCase();
+      if (!first || !last) return fallback;
+      return `Demos ${first}-${last}`;
+    };
+    return {
+      primary,
+      secondary,
+      primaryLabel: formatLabel(primary, 'Demos 1'),
+      secondaryLabel: formatLabel(secondary, 'Demos 2'),
+    };
+  }, [demo.demos]);
 
   const handleExport = async () => {
     const result = await exportPatch();
@@ -176,10 +193,10 @@ export const Toolbar: React.FC<ToolbarProps> = observer(({ stats = 'FPS: --', do
 
             <Menu shadow="md" width={260} withinPortal>
               <Menu.Target>
-                <Button variant="subtle" color="gray" size="xs">Demos</Button>
+                <Button variant="subtle" color="gray" size="xs">{splitDemos.primaryLabel}</Button>
               </Menu.Target>
               <Menu.Dropdown>
-                {demo.demos.map((item) => (
+                {splitDemos.primary.map((item) => (
                   <Menu.Item
                     key={item.filename}
                     onClick={() => handleDemoSelect(item.filename)}
@@ -189,6 +206,24 @@ export const Toolbar: React.FC<ToolbarProps> = observer(({ stats = 'FPS: --', do
                 ))}
               </Menu.Dropdown>
             </Menu>
+
+            {splitDemos.secondary.length > 0 ? (
+              <Menu shadow="md" width={260} withinPortal>
+                <Menu.Target>
+                  <Button variant="subtle" color="gray" size="xs">{splitDemos.secondaryLabel}</Button>
+                </Menu.Target>
+                <Menu.Dropdown>
+                  {splitDemos.secondary.map((item) => (
+                    <Menu.Item
+                      key={item.filename}
+                      onClick={() => handleDemoSelect(item.filename)}
+                    >
+                      {item.name}
+                    </Menu.Item>
+                  ))}
+                </Menu.Dropdown>
+              </Menu>
+            ) : null}
 
             <Menu shadow="md" width={220} withinPortal>
               <Menu.Target>
