@@ -50,7 +50,8 @@ export async function initRustRendererWasm(): Promise<void> {
       const rawModule = await import('./pkg/oscilla_rust_renderer.js');
       const wasmModule = rawModule as RendererWasmModule;
       if (typeof wasmModule.default === 'function') {
-        await wasmModule.default();
+        const wasmUrl = new URL('./pkg/oscilla_rust_renderer_bg.wasm', import.meta.url);
+        await wasmModule.default({ module_or_path: wasmUrl });
       }
       if (typeof wasmModule.init_engine !== 'function') {
         throw new Error('Rust renderer wasm module missing init_engine export');

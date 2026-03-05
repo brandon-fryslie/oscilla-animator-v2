@@ -121,6 +121,10 @@ function isFiniteNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value);
 }
 
+function isPositiveInt(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && Number.isFinite(value) && value > 0;
+}
+
 function isRawSchedulerStageTimingsTelemetry(value: unknown): value is RawSchedulerStageTimingsTelemetry {
   if (!value || typeof value !== 'object') return false;
   const telemetry = value as Partial<RawSchedulerStageTimingsTelemetry>;
@@ -287,11 +291,19 @@ async function handleBootstrap(message: Extract<RustRendererWorkerInboundMessage
 async function handleRebuildGpuPipelines(
   message: Extract<RustRendererWorkerInboundMessage, { type: 'REBUILD_GPU_PIPELINES' }>,
 ): Promise<void> {
+  if (message.passes.length === 0) {
+    throw new Error('Rust worker rebuild contract violation: REBUILD_GPU_PIPELINES requires at least one pass');
+  }
   await rebuildRustRendererGpuPipelines(message.passes);
   postWorkerMessage({ type: 'REBUILD_GPU_PIPELINES_SUCCESS' });
 }
 
 function handleResize(message: Extract<RustRendererWorkerInboundMessage, { type: 'RESIZE_CANVAS' }>): void {
+  if (!isPositiveInt(message.width) || !isPositiveInt(message.height)) {
+    throw new Error(
+      `Rust worker resize contract violation: width/height must be positive integers (width=${String(message.width)}, height=${String(message.height)})`,
+    );
+  }
   resizeRustRendererSurface(message.width, message.height);
 }
 

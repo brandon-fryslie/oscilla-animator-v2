@@ -76,7 +76,7 @@ export default async function init(options?: ShimInitOptions): Promise<void> {
           // [LAW:one-source-of-truth] WASM binary URL ownership is centralized
           // at this bridge boundary so every caller initializes identically.
           const wasmUrl = new URL('./pkg/oscilla_naga_shim_bg.wasm', import.meta.url);
-          await module.default(wasmUrl);
+          await module.default({ module_or_path: wasmUrl });
         }
         for (const listener of initStageListeners) {
           listener('binding');

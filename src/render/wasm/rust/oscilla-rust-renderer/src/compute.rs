@@ -345,37 +345,13 @@ impl ComputeDispatcher {
         particle_count: u32,
         pass_specs: &[CompilerComputePassSpec],
     ) -> Vec<CompiledComputePassPipeline> {
+        if pass_specs.is_empty() {
+            panic!(
+                "[LAW:no-silent-fallbacks] compile_simulation_passes requires at least one pass spec"
+            );
+        }
         let mut compiled = Vec::with_capacity(pass_specs.len().max(1));
-        let fallback_specs: Vec<CompilerComputePassSpec> = if pass_specs.is_empty() {
-            vec![CompilerComputePassSpec {
-                pass_id: "simulation".to_string(),
-                entry_point: "compute_main".to_string(),
-                wgsl: r#"
-@group(0) @binding(0) var<storage, read> arena_in: array<f32>;
-@group(0) @binding(1) var<storage, read_write> arena_out: array<f32>;
-@group(0) @binding(2) var<storage, read> state_in: array<f32>;
-@group(0) @binding(3) var<storage, read_write> state_out: array<f32>;
-@group(0) @binding(4) var<uniform> uniforms: array<vec4<f32>, 5>;
-
-@compute @workgroup_size(64, 1, 1)
-fn compute_main(@builtin(global_invocation_id) gid: vec3<u32>) {
-  let lane = gid.x;
-  if (lane >= arrayLength(&state_out)) {
-    return;
-  }
-  state_out[lane] = state_in[lane];
-  if (lane < arrayLength(&arena_out) && lane < arrayLength(&arena_in)) {
-    arena_out[lane] = arena_in[lane];
-  }
-  let _ = uniforms[0u].x;
-}
-"#
-                .to_string(),
-            }]
-        } else {
-            pass_specs.to_vec()
-        };
-        for spec in fallback_specs {
+        for spec in pass_specs {
             let pipeline = Self::create_compiler_simulation_pipeline(
                 device,
                 spec.wgsl.as_str(),
@@ -386,7 +362,7 @@ fn compute_main(@builtin(global_invocation_id) gid: vec3<u32>) {
                 Self::simulation_dispatch_count_for_wgsl(particle_count, spec.wgsl.as_str())
                     .max(1);
             compiled.push(CompiledComputePassPipeline {
-                _pass_id: spec.pass_id,
+                _pass_id: spec.pass_id.clone(),
                 pipeline,
                 workgroup_count,
             });

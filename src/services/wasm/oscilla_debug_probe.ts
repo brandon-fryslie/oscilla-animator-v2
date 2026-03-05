@@ -41,7 +41,7 @@ export async function initDebugProbeWasm(): Promise<void> {
         const module = raw as unknown as DebugProbeWasmModule;
         if (typeof module.default === 'function') {
           const wasmUrl = new URL('./pkg/oscilla_debug_probe_bg.wasm', import.meta.url);
-          await module.default(wasmUrl);
+          await module.default({ module_or_path: wasmUrl });
         }
         if (typeof module.init !== 'function') {
           throw new Error('oscilla_debug_probe.js missing init export');

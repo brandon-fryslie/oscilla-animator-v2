@@ -109,6 +109,17 @@ function coerceFinite(value: number | undefined): number {
 
 const MAX_UINT32 = 0xFFFF_FFFF;
 const RUNTIME_CONSOLE_ENABLED = isRuntimeConsoleEnabled();
+const WORKER_RESPONSE_TIMEOUT_MS = 10_000;
+const FLUID_PASS_ORDER = [
+  'fluid.splat',
+  'fluid.curl',
+  'fluid.vorticity',
+  'fluid.divergence',
+  'fluid.pressure',
+  'fluid.gradient-subtract',
+  'fluid.advect',
+  'fluid.present',
+] as const;
 
 function getRuntimeBootstrapConfig(): RustRendererBootstrapConfig {
   if (!RUNTIME_CONSOLE_ENABLED) return DEFAULT_BOOTSTRAP_CONFIG;
@@ -199,6 +210,46 @@ function validateGpuPass(pass: RustRendererGpuPass, index: number): RustRenderer
   return pass;
 }
 
+function validateGpuPassBundle(passes: readonly RustRendererGpuPass[]): readonly RustRendererGpuPass[] {
+  if (passes.length === 0) {
+    throw new Error('Rust renderer GPU pass contract violation: pass bundle must contain at least one pass');
+  }
+  const validated = passes.map((pass, index) => validateGpuPass(pass, index));
+  const seenPassIds = new Set<string>();
+  const seenEntryPoints = new Set<string>();
+  for (const pass of validated) {
+    if (seenPassIds.has(pass.passId)) {
+      throw new Error(`Rust renderer GPU pass contract violation: duplicate passId "${pass.passId}"`);
+    }
+    seenPassIds.add(pass.passId);
+    if (seenEntryPoints.has(pass.entryPoint)) {
+      throw new Error(`Rust renderer GPU pass contract violation: duplicate entryPoint "${pass.entryPoint}"`);
+    }
+    seenEntryPoints.add(pass.entryPoint);
+  }
+
+  const fluidPassIds = validated.filter((pass) => pass.passId.startsWith('fluid.')).map((pass) => pass.passId);
+  if (fluidPassIds.length > 0) {
+    if (!fluidPassIds.includes('fluid.present')) {
+      throw new Error('Rust renderer GPU pass contract violation: fluid pass bundle must include "fluid.present"');
+    }
+    let cursor = -1;
+    for (const passId of fluidPassIds) {
+      const nextIndex = FLUID_PASS_ORDER.indexOf(passId as (typeof FLUID_PASS_ORDER)[number]);
+      if (nextIndex === -1) {
+        throw new Error(`Rust renderer GPU pass contract violation: unknown fluid passId "${passId}"`);
+      }
+      if (nextIndex < cursor) {
+        throw new Error(
+          `Rust renderer GPU pass contract violation: fluid pass "${passId}" is out of canonical order`,
+        );
+      }
+      cursor = nextIndex;
+    }
+  }
+  return validated;
+}
+
 function assertFiniteUint32(value: number, context: string): number {
   if (
     !Number.isFinite(value)
@@ -261,6 +312,7 @@ export class WebGPURenderer {
   private latestSinkTableSample: SinkTableDebugSample | null = null;
   private renderInputDebugLogged = false;
   private sinkTableDebugLogCounter = 0;
+  private readonly emittedHealthWarningCodes = new Set<string>();
 
   private constructor(
     worker: Worker,
@@ -428,7 +480,9 @@ export class WebGPURenderer {
     if (!this.bootstrapped) {
       throw new Error('Rust renderer worker is not bootstrapped');
     }
-    const validatedPasses = passes.map((pass, index) => validateGpuPass(pass, index));
+    // [LAW:single-enforcer] Bundle-level GPU pass contract validation is owned
+    // at this renderer boundary before worker transport.
+    const validatedPasses = [...validateGpuPassBundle(passes)];
     this.lastInstalledPassIds = validatedPasses.map((pass) => pass.passId);
     if (RUNTIME_CONSOLE_ENABLED) {
       const payload = {
@@ -448,31 +502,16 @@ export class WebGPURenderer {
     }
     this.worker.postMessage({ type: 'PAUSE' } satisfies RustRendererWorkerInboundMessage);
     try {
-      await new Promise<void>((resolve, reject) => {
-        let settled = false;
-        const settle = (callback: () => void): void => {
-          if (settled) return;
-          settled = true;
-          this.worker.removeEventListener('message', onMessage);
-          callback();
-        };
-        const onMessage = (event: MessageEvent<RustRendererWorkerOutboundMessage>): void => {
-          const payload = event.data;
-          if (!payload) return;
-          if (payload.type === 'REBUILD_GPU_PIPELINES_SUCCESS') {
-            settle(resolve);
-            return;
-          }
-          if (payload.type === 'FATAL_ERROR') {
-            settle(() => reject(new Error(`[${payload.code}] ${payload.message}`)));
-          }
-        };
-        this.worker.addEventListener('message', onMessage);
-        const message: RustRendererWorkerInboundMessage = {
-          type: 'REBUILD_GPU_PIPELINES',
-          passes: validatedPasses,
-        };
-        this.worker.postMessage(message);
+      await this.awaitWorkerAck({
+        successType: 'REBUILD_GPU_PIPELINES_SUCCESS',
+        context: `rebuildGpuPipelines(${validatedPasses.length} passes)`,
+        dispatch: () => {
+          const message: RustRendererWorkerInboundMessage = {
+            type: 'REBUILD_GPU_PIPELINES',
+            passes: validatedPasses,
+          };
+          this.worker.postMessage(message);
+        },
       });
     } finally {
       this.worker.postMessage({ type: 'RESUME' } satisfies RustRendererWorkerInboundMessage);
@@ -608,44 +647,111 @@ export class WebGPURenderer {
     };
 
     await new Promise<void>((resolve, reject) => {
+      const onError = (event: ErrorEvent): void => {
+        this.fatalError = new Error(event.message || 'Rust renderer worker crashed');
+        reject(this.fatalError);
+      };
+      this.worker.addEventListener('error', onError, { once: true });
+      this.awaitWorkerAck({
+        successType: 'BOOTSTRAP_SUCCESS',
+        context: 'bootstrap',
+        dispatch: () => {
+          this.worker.postMessage(message, [offscreenCanvas]);
+        },
+      }).then(() => {
+        this.bootstrapped = true;
+        this.worker.removeEventListener('error', onError);
+        resolve();
+      }).catch((error) => {
+        this.worker.removeEventListener('error', onError);
+        reject(error);
+      });
+    });
+  }
+
+  private async awaitWorkerAck(
+    options: {
+      readonly successType: RustRendererWorkerOutboundMessage['type'];
+      readonly context: string;
+      readonly dispatch: () => void;
+    },
+  ): Promise<void> {
+    await new Promise<void>((resolve, reject) => {
       let settled = false;
+      const timeoutId = globalThis.setTimeout(() => {
+        settle(() => reject(new Error(`Rust renderer worker timed out during ${options.context}`)));
+      }, WORKER_RESPONSE_TIMEOUT_MS);
       const settle = (callback: () => void): void => {
         if (settled) return;
         settled = true;
+        globalThis.clearTimeout(timeoutId);
         this.worker.removeEventListener('message', onMessage);
-        this.worker.removeEventListener('error', onError);
         callback();
       };
-
       const onMessage = (event: MessageEvent<RustRendererWorkerOutboundMessage>): void => {
         const payload = event.data;
         if (!payload) return;
-        if (payload.type === 'BOOTSTRAP_SUCCESS') {
-          settle(() => {
-            this.bootstrapped = true;
-            resolve();
-          });
+        if (payload.type === options.successType) {
+          settle(resolve);
           return;
         }
         if (payload.type === 'FATAL_ERROR') {
-          settle(() => {
-            this.fatalError = new Error(`[${payload.code}] ${payload.message}`);
-            reject(this.fatalError);
-          });
+          settle(() => reject(new Error(`[${payload.code}] ${payload.message}`)));
         }
       };
-
-      const onError = (event: ErrorEvent): void => {
-        settle(() => {
-          this.fatalError = new Error(event.message || 'Rust renderer worker crashed');
-          reject(this.fatalError);
-        });
-      };
-
       this.worker.addEventListener('message', onMessage);
-      this.worker.addEventListener('error', onError);
-      this.worker.postMessage(message, [offscreenCanvas]);
+      options.dispatch();
     });
+  }
+
+  private emitRuntimeHealthWarning(code: string, details: Record<string, unknown>): void {
+    if (this.emittedHealthWarningCodes.has(code)) {
+      return;
+    }
+    this.emittedHealthWarningCodes.add(code);
+    if (RUNTIME_CONSOLE_ENABLED) {
+      console.warn(
+        `[runtimeConsole] ${JSON.stringify({
+          kind: 'render-health-warning',
+          code,
+          details,
+        })}`,
+      );
+    }
+  }
+
+  private validateHeartbeatHealth(payload: Extract<RustRendererWorkerOutboundMessage, { type: 'SCHEDULER_HEARTBEAT' }>): void {
+    const telemetry = payload.telemetry;
+    const installedPassCount = this.lastInstalledPassIds.length;
+    const expectedDispatchCount = installedPassCount > 0 ? installedPassCount + 1 : null;
+    if (
+      expectedDispatchCount !== null
+      && telemetry.dispatchCounters.computeDispatchCount !== expectedDispatchCount
+    ) {
+      this.emitRuntimeHealthWarning('dispatch_count_mismatch', {
+        installedPassCount,
+        expectedDispatchCount,
+        observedDispatchCount: telemetry.dispatchCounters.computeDispatchCount,
+      });
+    }
+    if (
+      telemetry.resourceStats.sinkTableWordCount > 0
+      && telemetry.resourceStats.totalInstanceCount === 0
+    ) {
+      this.emitRuntimeHealthWarning('sink_nonzero_with_zero_instances', {
+        sinkTableWordCount: telemetry.resourceStats.sinkTableWordCount,
+        totalInstanceCount: telemetry.resourceStats.totalInstanceCount,
+      });
+    }
+    if (
+      telemetry.stageTimings.totalFrameMs === 0
+      && telemetry.dispatchCounters.computeDispatchCount > 0
+    ) {
+      this.emitRuntimeHealthWarning('zero_total_frame_with_dispatches', {
+        totalFrameMs: telemetry.stageTimings.totalFrameMs,
+        computeDispatchCount: telemetry.dispatchCounters.computeDispatchCount,
+      });
+    }
   }
 
   private syncCanvasSize(width: number, height: number): void {
@@ -693,6 +799,7 @@ export class WebGPURenderer {
       // [LAW:one-source-of-truth] Renderer mirrors scheduler state from
       // heartbeat packets instead of deriving lifecycle state client-side.
       this.lifecycleState = payload.state;
+      this.validateHeartbeatHealth(payload);
       this.latestTelemetry = {
         meanMs: payload.meanTickMs,
         stdDevMs: payload.stdDevTickMs,
