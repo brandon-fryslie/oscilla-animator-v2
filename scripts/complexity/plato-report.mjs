@@ -64,6 +64,8 @@ async function main() {
     maxHalsteadVolume: files.reduce((max, file) => Math.max(max, file.halsteadVolume), 0),
     topCyclomatic: [...files].sort((a, b) => b.cyclomatic - a.cyclomatic).slice(0, 20),
     topLowMaintainability: [...files].sort((a, b) => a.maintainability - b.maintainability).slice(0, 20),
+    topHalsteadDifficulty: [...files].sort((a, b) => b.halsteadDifficulty - a.halsteadDifficulty).slice(0, 20),
+    topHalsteadVolume: [...files].sort((a, b) => b.halsteadVolume - a.halsteadVolume).slice(0, 20),
   };
 
   await writeJson(summaryPath, summary);

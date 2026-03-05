@@ -88,6 +88,8 @@ async function main() {
     maxHalsteadDifficulty: modules.reduce((max, module) => Math.max(max, module.halsteadDifficulty), 0),
     topCyclomatic: [...modules].sort((a, b) => b.cyclomatic - a.cyclomatic).slice(0, 20),
     topLowMaintainability: [...modules].sort((a, b) => a.maintainability - b.maintainability).slice(0, 20),
+    topHalsteadDifficulty: [...modules].sort((a, b) => b.halsteadDifficulty - a.halsteadDifficulty).slice(0, 20),
+    topHalsteadVolume: [...modules].sort((a, b) => b.halsteadVolume - a.halsteadVolume).slice(0, 20),
     failures: failures.slice(0, 50),
   };
 

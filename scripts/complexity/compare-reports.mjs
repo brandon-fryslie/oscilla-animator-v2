@@ -1,9 +1,17 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { reportsDir, writeJson, writeText } from './_shared.mjs';
+import {
+  formatSig2,
+  reportsDir,
+  renderHtmlDocument,
+  renderHtmlTable,
+  writeJson,
+  writeText,
+} from './_shared.mjs';
 
 const summaryJsonPath = path.join(reportsDir, 'comparison-summary.json');
 const summaryMdPath = path.join(reportsDir, 'comparison-summary.md');
+const summaryHtmlPath = path.join(reportsDir, 'comparison-summary.html');
 
 async function readJsonSafe(fileName) {
   const filePath = path.join(reportsDir, fileName);
@@ -27,6 +35,72 @@ function trackedRuleCount(eslintData, ruleId) {
   const rules = Array.isArray(eslintData?.trackedRuleCounts) ? eslintData.trackedRuleCounts : [];
   const match = rules.find((rule) => rule.ruleId === ruleId);
   return asNumber(match?.count);
+}
+
+function renderComparisonHtml(comparison, depCruiser) {
+  const highlights = comparison.highlights;
+  const toolRows = [
+    [
+      'ESLint + SonarJS',
+      'complexity, max-depth, max-lines-per-function, max-params, cognitive',
+      `errors=${highlights.eslintErrors}, warnings=${highlights.eslintWarnings}, complexity hits=${highlights.eslintComplexityHits}, depth hits=${highlights.eslintMaxDepthHits}, max-lines hits=${highlights.eslintMaxLinesPerFunctionHits}, max-params hits=${highlights.eslintMaxParamsHits}`,
+      comparison.artifacts.eslint,
+    ],
+    [
+      'ts-morph custom AST',
+      'cyclomatic, cognitive, Halstead, MI, LOC, nesting, fan-in/out',
+      `maxCyclomatic=${highlights.tsMorphMaxCyclomatic}, maxCognitive=${highlights.tsMorphMaxCognitive}, maxNesting=${highlights.tsMorphMaxNesting}, sourceLOC=${highlights.tsMorphSourceLocTotal}`,
+      comparison.artifacts.tsMorph,
+    ],
+    [
+      'dependency-cruiser',
+      'coupling, dependency graph, cycles, layer violations',
+      `errors=${highlights.dependencyCruiserErrors}, warnings=${highlights.dependencyCruiserWarnings}, modules=${highlights.dependencyCruiserModules}, deps=${highlights.dependencyCruiserDependencies}`,
+      comparison.artifacts.dependencyCruiser,
+    ],
+    [
+      'Plato',
+      'cyclomatic, Halstead, maintainability, SLOC',
+      `avgMI=${formatSig2(highlights.platoAvgMaintainability)}, maxCyclomatic=${highlights.platoMaxCyclomatic}, avgHalsteadDiff=${formatSig2(highlights.platoAvgHalsteadDifficulty)}`,
+      comparison.artifacts.plato,
+    ],
+    [
+      'TyphonJS ESComplex',
+      'cyclomatic, Halstead, maintainability, SLOC',
+      `avgMI=${formatSig2(highlights.typhonAvgMaintainability)}, maxCyclomatic=${highlights.typhonMaxCyclomatic}, avgHalsteadDiff=${formatSig2(highlights.typhonAvgHalsteadDifficulty)}`,
+      comparison.artifacts.typhon,
+    ],
+    [
+      'SonarQube / SonarCloud',
+      'cognitive complexity, debt, maintainability rating, duplication',
+      `status=${highlights.sonarStatus}`,
+      comparison.artifacts.sonar,
+    ],
+  ];
+  const coverageRows = comparison.metricCoverage.map((row) => [row.metric, row.tools, row.values]);
+
+  return renderHtmlDocument(
+    'TypeScript Complexity Toolchain Comparison',
+    [
+      '<h1>TypeScript Complexity Toolchain Comparison</h1>',
+      `<p class="small">Generated: ${comparison.generatedAt}</p>`,
+      '<h2>Tools</h2>',
+      renderHtmlTable(['Tool', 'Primary Metric(s)', 'Current Value(s)', 'Output'], toolRows),
+      '<h2>Metric Coverage Matrix</h2>',
+      renderHtmlTable(['Metric', 'Tools', 'Evidence'], coverageRows),
+      '<h2>Graph Artifacts</h2>',
+      '<ul>',
+      `<li>dependency JSON graph: <code>${depCruiser.data?.graph?.json ?? comparison.artifacts.dependencyCruiser}</code></li>`,
+      `<li>dependency DOT graph: <code>${comparison.artifacts.dependencyCruiserDot ?? 'not produced'}</code></li>`,
+      '</ul>',
+      '<h2>Notes</h2>',
+      '<ul>',
+      '<li>Sonar is marked skipped unless <code>SONAR_HOST_URL</code> and <code>SONAR_TOKEN</code> are present.</li>',
+      '<li>Plato and Typhon run on a transpiled JS snapshot generated from current TypeScript sources.</li>',
+      '<li>ts-morph metrics are computed directly from the TypeScript AST and include function-level and module-level rankings.</li>',
+      '</ul>',
+    ].join('\n'),
+  );
 }
 
 async function main() {
@@ -92,12 +166,12 @@ async function main() {
     {
       metric: 'Halstead metrics',
       tools: 'ts-morph, Plato, Typhon',
-      values: `ts-morph max volume=${highlights.tsMorphMaxHalsteadVolume.toFixed(2)}; plato avg volume=${highlights.platoAvgHalsteadVolume.toFixed(2)}; typhon avg volume=${highlights.typhonAvgHalsteadVolume.toFixed(2)}`,
+      values: `ts-morph max volume=${formatSig2(highlights.tsMorphMaxHalsteadVolume)}; plato avg volume=${formatSig2(highlights.platoAvgHalsteadVolume)}; typhon avg volume=${formatSig2(highlights.typhonAvgHalsteadVolume)}`,
     },
     {
       metric: 'Maintainability index',
       tools: 'ts-morph, Plato, Typhon, SonarQube',
-      values: `ts-morph avg=${highlights.tsMorphAvgMi.toFixed(2)}; plato avg=${highlights.platoAvgMaintainability.toFixed(2)}; typhon avg=${highlights.typhonAvgMaintainability.toFixed(2)}; sonar=${highlights.sonarStatus}`,
+      values: `ts-morph avg=${formatSig2(highlights.tsMorphAvgMi)}; plato avg=${formatSig2(highlights.platoAvgMaintainability)}; typhon avg=${formatSig2(highlights.typhonAvgMaintainability)}; sonar=${highlights.sonarStatus}`,
     },
     {
       metric: 'Coupling and dependency graph',
@@ -156,8 +230,8 @@ async function main() {
     `| ESLint + SonarJS | complexity, max-depth, max-lines-per-function, max-params, cognitive | errors=${highlights.eslintErrors}, warnings=${highlights.eslintWarnings}, complexity hits=${highlights.eslintComplexityHits}, depth hits=${highlights.eslintMaxDepthHits}, max-lines hits=${highlights.eslintMaxLinesPerFunctionHits}, max-params hits=${highlights.eslintMaxParamsHits} | ${comparison.artifacts.eslint} |`,
     `| ts-morph custom AST | cyclomatic, cognitive, Halstead, MI, LOC, nesting, fan-in/out | maxCyclomatic=${highlights.tsMorphMaxCyclomatic}, maxCognitive=${highlights.tsMorphMaxCognitive}, maxNesting=${highlights.tsMorphMaxNesting}, sourceLOC=${highlights.tsMorphSourceLocTotal} | ${comparison.artifacts.tsMorph} |`,
     `| dependency-cruiser | coupling, dependency graph, cycles, layer violations | errors=${highlights.dependencyCruiserErrors}, warnings=${highlights.dependencyCruiserWarnings}, modules=${highlights.dependencyCruiserModules}, deps=${highlights.dependencyCruiserDependencies} | ${comparison.artifacts.dependencyCruiser} |`,
-    `| Plato | cyclomatic, Halstead, maintainability, SLOC | avgMI=${highlights.platoAvgMaintainability.toFixed(2)}, maxCyclomatic=${highlights.platoMaxCyclomatic}, avgHalsteadDiff=${highlights.platoAvgHalsteadDifficulty.toFixed(2)} | ${comparison.artifacts.plato} |`,
-    `| TyphonJS ESComplex | cyclomatic, Halstead, maintainability, SLOC | avgMI=${highlights.typhonAvgMaintainability.toFixed(2)}, maxCyclomatic=${highlights.typhonMaxCyclomatic}, avgHalsteadDiff=${highlights.typhonAvgHalsteadDifficulty.toFixed(2)} | ${comparison.artifacts.typhon} |`,
+    `| Plato | cyclomatic, Halstead, maintainability, SLOC | avgMI=${formatSig2(highlights.platoAvgMaintainability)}, maxCyclomatic=${highlights.platoMaxCyclomatic}, avgHalsteadDiff=${formatSig2(highlights.platoAvgHalsteadDifficulty)} | ${comparison.artifacts.plato} |`,
+    `| TyphonJS ESComplex | cyclomatic, Halstead, maintainability, SLOC | avgMI=${formatSig2(highlights.typhonAvgMaintainability)}, maxCyclomatic=${highlights.typhonMaxCyclomatic}, avgHalsteadDiff=${formatSig2(highlights.typhonAvgHalsteadDifficulty)} | ${comparison.artifacts.typhon} |`,
     `| SonarQube / SonarCloud | cognitive complexity, debt, maintainability rating, duplication | status=${highlights.sonarStatus} | ${comparison.artifacts.sonar} |`,
     '',
     '## Metric Coverage Matrix',
@@ -180,8 +254,10 @@ async function main() {
   ].join('\n');
 
   await writeText(summaryMdPath, md);
+  await writeText(summaryHtmlPath, renderComparisonHtml(comparison, depCruiser));
   console.log(`wrote ${summaryJsonPath}`);
   console.log(`wrote ${summaryMdPath}`);
+  console.log(`wrote ${summaryHtmlPath}`);
 }
 
 await main();
