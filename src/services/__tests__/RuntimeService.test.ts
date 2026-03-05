@@ -4,6 +4,7 @@ const mocks = vi.hoisted(() => {
   const compileWorkerCompile = vi.fn();
   const compileWorkerDispose = vi.fn();
   const compileAndSwap = vi.fn(async (..._args: any[]) => {});
+  const rebuildGpuPipelines = vi.fn(async () => {});
   const rebuildSimulationPipeline = vi.fn(async () => {});
   const runtimeHotpathInstallProgram = vi.fn();
   const runtimeHotpathDispose = vi.fn();
@@ -26,6 +27,7 @@ const mocks = vi.hoisted(() => {
       sharedShapeBank: new SharedArrayBuffer(256),
       sharedSinkTable: new SharedArrayBuffer(256),
     })),
+    rebuildGpuPipelines,
     rebuildSimulationPipeline,
   }));
   const assertWebGPUStartupContract = vi.fn();
@@ -65,6 +67,7 @@ const mocks = vi.hoisted(() => {
     compileWorkerCompile,
     compileWorkerDispose,
     compileAndSwap,
+    rebuildGpuPipelines,
     rebuildSimulationPipeline,
     runtimeHotpathInstallProgram,
     runtimeHotpathDispose,
@@ -382,13 +385,18 @@ describe('RuntimeService startup compile path', () => {
     await vi.advanceTimersByTimeAsync(60);
     await initPromise;
 
-    expect(mocks.rebuildSimulationPipeline).toHaveBeenCalledTimes(1);
-    expect(mocks.rebuildSimulationPipeline).toHaveBeenCalledWith(
-      '@compute @workgroup_size(64, 1, 1)\nfn compute_main() {}',
-    );
+    expect(mocks.rebuildGpuPipelines).toHaveBeenCalledTimes(1);
+    expect(mocks.rebuildGpuPipelines).toHaveBeenCalledWith([
+      {
+        passId: 'simulation',
+        stage: 'compute',
+        entryPoint: 'compute_main',
+        wgsl: '@compute @workgroup_size(64, 1, 1)\nfn compute_main() {}',
+      },
+    ]);
     expect(mocks.compileAndSwap).toHaveBeenCalledTimes(1);
     expect(
-      mocks.rebuildSimulationPipeline.mock.invocationCallOrder[0]
+      mocks.rebuildGpuPipelines.mock.invocationCallOrder[0]
       < mocks.compileAndSwap.mock.invocationCallOrder[0],
     ).toBe(true);
   });
