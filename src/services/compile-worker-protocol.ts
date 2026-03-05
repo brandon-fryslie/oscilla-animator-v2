@@ -4,15 +4,23 @@ import type { CompiledProgramIR } from '../compiler/ir/program';
 
 export type SerializableCompiledProgramIR = Omit<CompiledProgramIR, 'kernelRegistry'>;
 
-export interface CompiledComputeShaderArtifact {
+export interface CompiledGpuPassArtifact {
+  readonly passId: string;
+  readonly stage: 'compute';
+  readonly entryPoint: string;
   readonly wgsl: string;
+}
+
+export interface CompiledGpuArtifactBundle {
+  readonly schemaVersion: 1;
+  readonly passes: readonly CompiledGpuPassArtifact[];
 }
 
 export type CompileWorkerBackendResult =
   | {
       readonly kind: 'ok';
       readonly program: SerializableCompiledProgramIR;
-      readonly compiledComputeShader: CompiledComputeShaderArtifact;
+      readonly compiledGpuBundle: CompiledGpuArtifactBundle;
       readonly warnings: readonly CompileError[];
     }
   | {

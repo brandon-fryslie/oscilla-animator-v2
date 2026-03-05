@@ -208,7 +208,8 @@ impl RenderDispatcher {
             let word_offset = plan
                 .indexed_region_base_words
                 .saturating_add(record_index.saturating_mul(indexed_stride_words));
-            render_pass.draw_indexed_indirect(&arena.indirect_buffer, (word_offset as u64) * U32_BYTES);
+            render_pass
+                .draw_indexed_indirect(&arena.indirect_buffer, (word_offset as u64) * U32_BYTES);
         }
 
         for record_index in 0..plan.non_indexed_record_count {

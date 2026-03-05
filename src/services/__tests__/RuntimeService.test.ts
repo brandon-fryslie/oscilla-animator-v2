@@ -354,8 +354,14 @@ describe('RuntimeService startup compile path', () => {
     const backendResult = {
       kind: 'ok' as const,
       program: {} as any,
-      compiledComputeShader: {
-        wgsl: '@compute @workgroup_size(64, 1, 1)\nfn compute_main() {}',
+      compiledGpuBundle: {
+        schemaVersion: 1 as const,
+        passes: [{
+          passId: 'simulation',
+          stage: 'compute' as const,
+          entryPoint: 'compute_main',
+          wgsl: '@compute @workgroup_size(64, 1, 1)\nfn compute_main() {}',
+        }],
       },
       warnings: [],
     };
@@ -363,6 +369,7 @@ describe('RuntimeService startup compile path', () => {
       sourcePatchRevision: 7,
       frontendResult: {} as any,
       backendResult,
+      compiledGpuBundle: backendResult.compiledGpuBundle,
       compiledComputeWgsl: '@compute @workgroup_size(64, 1, 1)\nfn compute_main() {}',
       compileDurationMs: 3,
     });

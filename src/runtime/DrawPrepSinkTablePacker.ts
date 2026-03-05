@@ -180,26 +180,6 @@ function assertShapeHandleInBankWindow(state: RuntimeState, shapeHandleWordOffse
   }
 }
 
-function resolveScaleOneValue(program: CompiledProgramIR, state: RuntimeState, step: StepRender): number {
-  if (!step.scale || step.scale.k !== 'one') {
-    return 1;
-  }
-  const address = program.runtimeAddressTable?.scalarExprToArenaAddress.get(step.scale.id as number);
-  if (!address) {
-    throw new Error(
-      'DrawPrepSinkTablePacker: missing scalar arena address for sink scale expr ' +
-        String(step.scale.id),
-    );
-  }
-  const rawScale = state.arena[arenaIndex(address.arena, 0, address.component)];
-  if (!Number.isFinite(rawScale)) {
-    throw new Error(
-      'DrawPrepSinkTablePacker: sink scale one-value must be finite, got ' + String(rawScale),
-    );
-  }
-  return rawScale;
-}
-
 function resolveSinkInstanceCount(program: CompiledProgramIR, state: RuntimeState, sinkIndex: number): number {
   const drawPrepProgram = program.drawPrepProgram;
   if (!drawPrepProgram) {
@@ -310,6 +290,12 @@ export function packDrawPrepSinkTableV1(
           `scaleSlot sink(instance=${String(renderStep.instanceId)})`,
         )
         : null;
+    if (!scaleSlotAddress) {
+      throw new Error(
+        'DrawPrepSinkTablePacker: render step scale must be slot-backed ' +
+          `(instance=${String(renderStep.instanceId)})`,
+      );
+    }
     const rotationSlotAddress =
       renderStep.rotationSlot !== undefined
         ? resolveSlotArenaAddress(
@@ -339,7 +325,6 @@ export function packDrawPrepSinkTableV1(
     const shapeSlotBaseOffset = payloadCursor;
     payloadCursor += instanceCount;
 
-    const scaleOneValue = resolveScaleOneValue(program, state, renderStep);
     for (let lane = 0; lane < instanceCount; lane++) {
       const positionX = readArenaNumber(positionAddress, state, lane, 0);
       const positionY = readArenaNumber(positionAddress, state, lane, 1);
@@ -347,9 +332,7 @@ export function packDrawPrepSinkTableV1(
       const colorG = readArenaNumber(colorAddress, state, lane, 1);
       const colorB = readArenaNumber(colorAddress, state, lane, 2);
       const colorA = readArenaNumber(colorAddress, state, lane, 3);
-      const scaleValue = renderStep.scale?.k === 'slot'
-        ? readArenaNumber(scaleSlotAddress!, state, lane, 0)
-        : scaleOneValue;
+      const scaleValue = readArenaNumber(scaleSlotAddress, state, lane, 0);
       const rotationValue = rotationSlotAddress
         ? readArenaNumber(rotationSlotAddress, state, lane, 0)
         : 0;

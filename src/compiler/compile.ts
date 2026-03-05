@@ -357,7 +357,6 @@ function collectRuntimeLiveExprIdsForPatching(args: {
         pushExpr(step.value as number);
         break;
       case 'render':
-        if (step.scale?.k === 'one') pushExpr(step.scale.id as number);
         if (step.shape.k === 'oneHandle') pushExpr(step.shape.id as number);
         pushFieldExprForSlot(step.controlPointsSlot as number);
         pushFieldExprForSlot(step.colorSlot as number);
@@ -1094,7 +1093,7 @@ function getStepExprId(step: Step): ValueExprId | null {
     case 'fieldStateWrite':
       return step.value;
     case 'render':
-      return step.scale?.k === 'one' ? step.scale.id : null;
+      return step.shape.k === 'oneHandle' ? step.shape.id : null;
     case 'continuityMapBuild':
     case 'continuityApply':
       return null;

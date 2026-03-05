@@ -599,19 +599,6 @@ function resolveScale(
     );
   }
 
-  if (scaleSpec.k === 'one') {
-    // [LAW:one-source-of-truth] Render reads numeric one-cardinality values from arena only.
-    const canonicalAddress = scalarExprToArenaAddress?.get(scaleSpec.id as number);
-    if (canonicalAddress) {
-      return { kind: 'uniform', value: state.arena[arenaIndex(canonicalAddress.arena, 0, canonicalAddress.component)] };
-    }
-
-    throw new Error(
-      'RenderAssembler: No canonical arena address for one-cardinality expression ' + scaleSpec.id + '. ' +
-      'One-cardinality values must be evaluated in schedule and resolved in scalarExprToArenaAddress before rendering.'
-    );
-  }
-
   const scaleBuffer = resolveNumericSlotBuffer(scaleSpec.slot, state, slotToArena);
   if (!(scaleBuffer instanceof Float32Array)) {
     throw new Error(

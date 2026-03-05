@@ -262,7 +262,7 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
         instanceId: instanceId('test-instance'),
         controlPointsSlot: 1 as ValueSlot,
         colorSlot: 2 as ValueSlot,
-        scale: { k: 'one', id: 0 as ValueExprId },
+        scale: { k: 'slot', slot: 4 as ValueSlot },
         shape: { k: 'slot', slot: 3 as ValueSlot }, // Per-instance shapes
       };
 
@@ -305,7 +305,7 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
         instanceId: instanceId('invalid-shape-header-span'),
         controlPointsSlot: 1 as ValueSlot,
         colorSlot: 2 as ValueSlot,
-        scale: { k: 'one', id: 0 as ValueExprId },
+        scale: { k: 'slot', slot: 4 as ValueSlot },
         shape: { k: 'slot', slot: 3 as ValueSlot },
       };
 
@@ -367,7 +367,7 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
         instanceId: instanceId('shape-bank-read-only'),
         controlPointsSlot: 1 as ValueSlot,
         colorSlot: 2 as ValueSlot,
-        scale: { k: 'one', id: 0 as ValueExprId },
+        scale: { k: 'slot', slot: 4 as ValueSlot },
         shape: { k: 'slot', slot: 3 as ValueSlot },
       };
 
@@ -449,7 +449,7 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
         instanceId: instanceId('test-instance'),
         controlPointsSlot: 1 as ValueSlot,
         colorSlot: 2 as ValueSlot,
-        scale: { k: 'one', id: 0 as ValueExprId },
+        scale: { k: 'slot', slot: 4 as ValueSlot },
         shape: { k: 'slot', slot: 3 as ValueSlot },
       };
 
@@ -536,7 +536,7 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
         instanceId: instanceId('test-instance'),
         controlPointsSlot: 1 as ValueSlot,
         colorSlot: 2 as ValueSlot,
-        scale: { k: 'one', id: 0 as ValueExprId },
+        scale: { k: 'slot', slot: 4 as ValueSlot },
         shape: { k: 'slot', slot: 3 as ValueSlot },
       };
 
@@ -625,7 +625,7 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
         instanceId: instanceId('test-instance'),
         controlPointsSlot: 1 as ValueSlot,
         colorSlot: 2 as ValueSlot,
-        scale: { k: 'one', id: 0 as ValueExprId },
+        scale: { k: 'slot', slot: 4 as ValueSlot },
         shape: { k: 'slot', slot: 3 as ValueSlot },
       };
 
@@ -702,7 +702,7 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
         instanceId: instanceId('test-instance'),
         controlPointsSlot: 1 as ValueSlot,
         colorSlot: 2 as ValueSlot,
-        scale: { k: 'one', id: 0 as ValueExprId },
+        scale: { k: 'slot', slot: 4 as ValueSlot },
         shape: { k: 'slot', slot: 3 as ValueSlot },
       };
 
@@ -786,7 +786,7 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
         instanceId: instanceId('test-instance'),
         controlPointsSlot: 1 as ValueSlot,
         colorSlot: 2 as ValueSlot,
-        scale: { k: 'one', id: 0 as ValueExprId },
+        scale: { k: 'slot', slot: 4 as ValueSlot },
         shape: { k: 'slot', slot: 3 as ValueSlot },
       };
 
@@ -842,7 +842,7 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
         instanceId: instanceId('test-instance'),
         controlPointsSlot: 1 as ValueSlot,
         colorSlot: 2 as ValueSlot,
-        scale: { k: 'one', id: 0 as ValueExprId },
+        scale: { k: 'slot', slot: 4 as ValueSlot },
         shape: { k: 'slot', slot: 3 as ValueSlot },
       };
 
@@ -904,7 +904,7 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
         instanceId: instanceId('culled-groups'),
         controlPointsSlot: 1 as ValueSlot,
         colorSlot: 2 as ValueSlot,
-        scale: { k: 'one', id: 0 as ValueExprId },
+        scale: { k: 'slot', slot: 4 as ValueSlot },
         shape: { k: 'slot', slot: 3 as ValueSlot },
       };
 
@@ -988,7 +988,7 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
           instanceId: instanceId('instance-a'),
           controlPointsSlot: 1 as ValueSlot,
           colorSlot: 2 as ValueSlot,
-          scale: { k: 'one', id: 0 as ValueExprId },
+          scale: { k: 'slot', slot: 4 as ValueSlot },
           shape: { k: 'slot', slot: 3 as ValueSlot },
         },
         {
@@ -996,7 +996,7 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
           instanceId: instanceId('instance-b'),
           controlPointsSlot: 4 as ValueSlot,
           colorSlot: 5 as ValueSlot,
-          scale: { k: 'one', id: 0 as ValueExprId },
+          scale: { k: 'slot', slot: 4 as ValueSlot },
           shape: { k: 'slot', slot: 6 as ValueSlot },
         },
       ];
@@ -1083,7 +1083,7 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
         instanceId: instanceId('stress-instance'),
         controlPointsSlot: 1 as ValueSlot,
         colorSlot: 2 as ValueSlot,
-        scale: { k: 'one', id: 0 as ValueExprId },
+        scale: { k: 'slot', slot: 4 as ValueSlot },
         shape: { k: 'slot', slot: 3 as ValueSlot },
       };
 

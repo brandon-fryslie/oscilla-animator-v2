@@ -322,10 +322,9 @@ export interface StepRender {
   readonly colorSlot: ValueSlot;
   /**
    * Scale multiplier for shape dimensions.
-   * - `sig`: uniform scale (cardinality one)
    * - `slot`: per-instance isotropic scale (cardinality many; stride 1)
    */
-  readonly scale?: { readonly k: 'one'; readonly id: ValueExprId } | { readonly k: 'slot'; readonly slot: ValueSlot };
+  readonly scale?: { readonly k: 'slot'; readonly slot: ValueSlot };
   /**
    * Shape source for rendering.
    *

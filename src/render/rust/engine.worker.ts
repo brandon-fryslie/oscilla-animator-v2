@@ -8,7 +8,7 @@ import {
   initRustRendererEngine,
   initRustRendererWasm,
   pauseRustRendererEngine,
-  rebuildRustRendererSimulationPipeline,
+  rebuildRustRendererGpuPipelines,
   resumeRustRendererEngine,
   resizeRustRendererSurface,
   takeRustRendererFramePacingPacket,
@@ -32,11 +32,47 @@ interface RawSchedulerHeartbeat {
   readonly sampleCount: number;
   readonly lastTickMs: number;
   readonly lastSuccessMs: number;
+  readonly telemetry: RawSchedulerTelemetry;
+}
+
+interface RawSchedulerStageTimingsTelemetry {
+  readonly inputMarshalMs: number;
+  readonly simulationDispatchMs: number;
+  readonly fluidPassChainMs: number;
+  readonly drawPrepMs: number;
+  readonly renderMs: number;
+  readonly swapMs: number;
+  readonly totalFrameMs: number;
+}
+
+interface RawSchedulerDispatchCountersTelemetry {
+  readonly computeDispatchCount: number;
+  readonly computeWorkgroupCount: number;
+  readonly activeLaneCount: number;
+  readonly guardedLaneCount: number;
+}
+
+interface RawSchedulerResourceStatsTelemetry {
+  readonly shapeBankWordCount: number;
+  readonly sinkTableWordCount: number;
+  readonly indexedRecordCount: number;
+  readonly nonIndexedRecordCount: number;
+  readonly totalInstanceCount: number;
+  readonly canvasWidth: number;
+  readonly canvasHeight: number;
+  readonly pingPongIndex: number;
+}
+
+interface RawSchedulerTelemetry {
+  readonly stageTimings: RawSchedulerStageTimingsTelemetry;
+  readonly dispatchCounters: RawSchedulerDispatchCountersTelemetry;
+  readonly resourceStats: RawSchedulerResourceStatsTelemetry;
 }
 
 interface RawRuntimeEvent {
   readonly severity: string;
   readonly code: string;
+  readonly stage: string;
   readonly message: string;
   readonly state: string;
   readonly frameCount: number;
@@ -85,6 +121,56 @@ function isFiniteNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value);
 }
 
+function isRawSchedulerStageTimingsTelemetry(value: unknown): value is RawSchedulerStageTimingsTelemetry {
+  if (!value || typeof value !== 'object') return false;
+  const telemetry = value as Partial<RawSchedulerStageTimingsTelemetry>;
+  return (
+    isFiniteNumber(telemetry.inputMarshalMs)
+    && isFiniteNumber(telemetry.simulationDispatchMs)
+    && isFiniteNumber(telemetry.fluidPassChainMs)
+    && isFiniteNumber(telemetry.drawPrepMs)
+    && isFiniteNumber(telemetry.renderMs)
+    && isFiniteNumber(telemetry.swapMs)
+    && isFiniteNumber(telemetry.totalFrameMs)
+  );
+}
+
+function isRawSchedulerDispatchCountersTelemetry(value: unknown): value is RawSchedulerDispatchCountersTelemetry {
+  if (!value || typeof value !== 'object') return false;
+  const telemetry = value as Partial<RawSchedulerDispatchCountersTelemetry>;
+  return (
+    isFiniteNumber(telemetry.computeDispatchCount)
+    && isFiniteNumber(telemetry.computeWorkgroupCount)
+    && isFiniteNumber(telemetry.activeLaneCount)
+    && isFiniteNumber(telemetry.guardedLaneCount)
+  );
+}
+
+function isRawSchedulerResourceStatsTelemetry(value: unknown): value is RawSchedulerResourceStatsTelemetry {
+  if (!value || typeof value !== 'object') return false;
+  const telemetry = value as Partial<RawSchedulerResourceStatsTelemetry>;
+  return (
+    isFiniteNumber(telemetry.shapeBankWordCount)
+    && isFiniteNumber(telemetry.sinkTableWordCount)
+    && isFiniteNumber(telemetry.indexedRecordCount)
+    && isFiniteNumber(telemetry.nonIndexedRecordCount)
+    && isFiniteNumber(telemetry.totalInstanceCount)
+    && isFiniteNumber(telemetry.canvasWidth)
+    && isFiniteNumber(telemetry.canvasHeight)
+    && isFiniteNumber(telemetry.pingPongIndex)
+  );
+}
+
+function isRawSchedulerTelemetry(value: unknown): value is RawSchedulerTelemetry {
+  if (!value || typeof value !== 'object') return false;
+  const telemetry = value as Partial<RawSchedulerTelemetry>;
+  return (
+    isRawSchedulerStageTimingsTelemetry(telemetry.stageTimings)
+    && isRawSchedulerDispatchCountersTelemetry(telemetry.dispatchCounters)
+    && isRawSchedulerResourceStatsTelemetry(telemetry.resourceStats)
+  );
+}
+
 function isRawSchedulerHeartbeat(value: unknown): value is RawSchedulerHeartbeat {
   if (!value || typeof value !== 'object') return false;
   const heartbeat = value as Partial<RawSchedulerHeartbeat>;
@@ -99,6 +185,7 @@ function isRawSchedulerHeartbeat(value: unknown): value is RawSchedulerHeartbeat
     && isFiniteNumber(heartbeat.sampleCount)
     && isFiniteNumber(heartbeat.lastTickMs)
     && isFiniteNumber(heartbeat.lastSuccessMs)
+    && isRawSchedulerTelemetry(heartbeat.telemetry)
   );
 }
 
@@ -108,6 +195,7 @@ function isRawRuntimeEvent(value: unknown): value is RawRuntimeEvent {
   return (
     typeof event.severity === 'string'
     && typeof event.code === 'string'
+    && typeof event.stage === 'string'
     && typeof event.message === 'string'
     && typeof event.state === 'string'
     && isFiniteNumber(event.frameCount)
@@ -150,6 +238,7 @@ function toOutboundHeartbeat(raw: RawSchedulerHeartbeat): RustRendererSchedulerH
     sampleCount: raw.sampleCount,
     lastTickMs: raw.lastTickMs,
     lastSuccessMs: raw.lastSuccessMs,
+    telemetry: raw.telemetry,
   };
 }
 
@@ -158,6 +247,7 @@ function toOutboundRuntimeEvent(raw: RawRuntimeEvent): RustRendererRuntimeEvent 
     type: 'RUNTIME_EVENT',
     severity: asRuntimeSeverity(raw.severity),
     code: raw.code,
+    stage: raw.stage,
     message: raw.message,
     state: isSchedulerState(raw.state) ? raw.state : 'Lost',
     frameCount: raw.frameCount,
@@ -194,11 +284,11 @@ async function handleBootstrap(message: Extract<RustRendererWorkerInboundMessage
   }
 }
 
-async function handleRebuildSimulation(
-  message: Extract<RustRendererWorkerInboundMessage, { type: 'REBUILD_SIMULATION_PIPELINE' }>,
+async function handleRebuildGpuPipelines(
+  message: Extract<RustRendererWorkerInboundMessage, { type: 'REBUILD_GPU_PIPELINES' }>,
 ): Promise<void> {
-  await rebuildRustRendererSimulationPipeline(message.simulationWgsl);
-  postWorkerMessage({ type: 'REBUILD_SIMULATION_PIPELINE_SUCCESS' });
+  await rebuildRustRendererGpuPipelines(message.passes);
+  postWorkerMessage({ type: 'REBUILD_GPU_PIPELINES_SUCCESS' });
 }
 
 function handleResize(message: Extract<RustRendererWorkerInboundMessage, { type: 'RESIZE_CANVAS' }>): void {
@@ -304,8 +394,8 @@ self.onmessage = (event: MessageEvent<RustRendererWorkerInboundMessage>) => {
     }
     return;
   }
-  if (message.type === 'REBUILD_SIMULATION_PIPELINE') {
-    void handleRebuildSimulation(message).catch((error) => {
+  if (message.type === 'REBUILD_GPU_PIPELINES') {
+    void handleRebuildGpuPipelines(message).catch((error) => {
       const prefix = bootstrapped ? 'Rust worker pipeline rebuild failure' : 'Rust worker rebuild before bootstrap';
       postWorkerFatalError('pipeline_rebuild_failure', `${prefix}: ${error instanceof Error ? error.message : String(error)}`);
     });

@@ -111,12 +111,12 @@ describe('Steel Thread - Dual Topology with Scale', () => {
     });
     expect(new Set(topologyIds).size).toBe(2);
 
-    const scaleExprIds = renderSteps.flatMap((step) =>
-      step.scale?.k === 'one' ? [step.scale.id as number] : []
+    const scaleSlots = renderSteps.flatMap((step) =>
+      step.scale?.k === 'slot' ? [step.scale.slot as number] : []
     );
-    expect(scaleExprIds.length).toBe(2);
-    expect(new Set(scaleExprIds).size).toBe(1);
-    const animatedScaleExprId = scaleExprIds[0]!;
+    expect(scaleSlots.length).toBe(2);
+    expect(new Set(scaleSlots).size).toBe(1);
+    const animatedScaleSlot = scaleSlots[0]!;
 
     const sizes = computeRuntimeStorageSizes(result.program.runtimeSlots);
     const state = createRuntimeState(
@@ -132,17 +132,17 @@ describe('Steel Thread - Dual Topology with Scale', () => {
 
     arena.reset();
     const frameA = executeFrame(result.program, state, arena, 0);
-    const scaleAddressA = state.cache.scalarExprToArenaAddress?.get(animatedScaleExprId);
-    expect(scaleAddressA).toBeDefined();
-    if (!scaleAddressA) return;
-    const scaleValueA = state.arena[scaleAddressA.arena.offset + scaleAddressA.component] ?? NaN;
+    const scaleDescriptorA = result.program.runtimeAddressTable?.slotToArena.get(animatedScaleSlot as any);
+    expect(scaleDescriptorA).toBeDefined();
+    if (!scaleDescriptorA) return;
+    const scaleValueA = state.arena[scaleDescriptorA.offset] ?? NaN;
 
     arena.reset();
     const frameB = executeFrame(result.program, state, arena, 137);
-    const scaleAddressB = state.cache.scalarExprToArenaAddress?.get(animatedScaleExprId);
-    expect(scaleAddressB).toBeDefined();
-    if (!scaleAddressB) return;
-    const scaleValueB = state.arena[scaleAddressB.arena.offset + scaleAddressB.component] ?? NaN;
+    const scaleDescriptorB = result.program.runtimeAddressTable?.slotToArena.get(animatedScaleSlot as any);
+    expect(scaleDescriptorB).toBeDefined();
+    if (!scaleDescriptorB) return;
+    const scaleValueB = state.arena[scaleDescriptorB.offset] ?? NaN;
 
     expect(frameA.version).toBe(2);
     expect(frameB.version).toBe(2);

@@ -61,6 +61,22 @@ pub struct GpuMemoryArena {
 }
 
 impl GpuMemoryArena {
+    fn clear_buffer_words(queue: &wgpu::Queue, buffer: &wgpu::Buffer) {
+        let byte_len = buffer.size() as usize;
+        let word_len = (byte_len / std::mem::size_of::<u32>()).max(1);
+        let zeros = vec![0u32; word_len];
+        queue.write_buffer(buffer, 0, cast_slice(zeros.as_slice()));
+    }
+
+    pub fn clear_simulation_planes(&self, queue: &wgpu::Queue) {
+        // [LAW:no-silent-fallbacks] Simulation state must start from a
+        // deterministic finite baseline; uninitialized GPU memory is invalid.
+        Self::clear_buffer_words(queue, &self.state_buffers[0]);
+        Self::clear_buffer_words(queue, &self.state_buffers[1]);
+        Self::clear_buffer_words(queue, &self.compiler_arena_buffers[0]);
+        Self::clear_buffer_words(queue, &self.compiler_arena_buffers[1]);
+    }
+
     pub fn new(
         device: &wgpu::Device,
         uniform_layout: &wgpu::BindGroupLayout,
@@ -88,8 +104,9 @@ impl GpuMemoryArena {
             }],
         });
 
-        let state_buffer_bytes =
-            (max_particles.saturating_mul(4).saturating_mul(std::mem::size_of::<f32>())) as u64;
+        let state_buffer_bytes = (max_particles
+            .saturating_mul(4)
+            .saturating_mul(std::mem::size_of::<f32>())) as u64;
         let state_buffers = [
             device.create_buffer(&wgpu::BufferDescriptor {
                 label: Some("StateBuffer.A"),
@@ -165,27 +182,28 @@ impl GpuMemoryArena {
 
         let initial_instance_bytes = (max_shapes
             .saturating_mul(INSTANCE_FLOATS_PER_RECORD)
-            .saturating_mul(std::mem::size_of::<f32>())) as u64;
+            .saturating_mul(std::mem::size_of::<f32>()))
+            as u64;
         let initial_topology_words = max_shapes.saturating_mul(SHAPE_BANK_HEADER_WORDS);
         let initial_sink_table_words =
             SINK_TABLE_HEADER_WORDS + max_shapes.saturating_mul(SINK_TABLE_RECORD_WORDS);
         let initial_indirect_words = max_shapes
             .saturating_mul(INDIRECT_INDEXED_STRIDE_WORDS + INDIRECT_NON_INDEXED_STRIDE_WORDS);
-        let initial_vertex_bytes =
-            (max_shapes.saturating_mul(8).saturating_mul(std::mem::size_of::<f32>())) as u64;
-        let initial_index_bytes =
-            (max_shapes.saturating_mul(12).saturating_mul(std::mem::size_of::<u32>())) as u64;
+        let initial_vertex_bytes = (max_shapes
+            .saturating_mul(8)
+            .saturating_mul(std::mem::size_of::<f32>())) as u64;
+        let initial_index_bytes = (max_shapes
+            .saturating_mul(12)
+            .saturating_mul(std::mem::size_of::<u32>())) as u64;
 
-        let instance_capacity_bytes = initial_instance_bytes.max(
-            (INSTANCE_FLOATS_PER_RECORD * std::mem::size_of::<f32>()) as u64,
-        );
+        let instance_capacity_bytes = initial_instance_bytes
+            .max((INSTANCE_FLOATS_PER_RECORD * std::mem::size_of::<f32>()) as u64);
         let topology_capacity_words = initial_topology_words.max(SHAPE_BANK_HEADER_WORDS);
         let sink_table_capacity_words = initial_sink_table_words.max(SINK_TABLE_HEADER_WORDS);
         let indirect_capacity_words = initial_indirect_words.max(INDIRECT_WORDS_PER_RECORD);
         let vertex_capacity_bytes =
             initial_vertex_bytes.max((8 * std::mem::size_of::<f32>()) as u64);
-        let index_capacity_bytes =
-            initial_index_bytes.max((6 * std::mem::size_of::<u32>()) as u64);
+        let index_capacity_bytes = initial_index_bytes.max((6 * std::mem::size_of::<u32>()) as u64);
 
         let instance_buffer = Self::create_instance_buffer(device, instance_capacity_bytes);
         let topology_buffer = Self::create_topology_buffer(device, topology_capacity_words);
@@ -385,6 +403,10 @@ impl GpuMemoryArena {
 
     pub fn swap_ping_pong(&mut self) {
         self.ping_pong_index = (self.ping_pong_index + 1) & 1;
+    }
+
+    pub fn ping_pong_index(&self) -> usize {
+        self.ping_pong_index
     }
 
     pub fn write_shape_bank_words(
