@@ -488,14 +488,20 @@ fn compute_main(@builtin(global_invocation_id) gid: vec3<u32>) {
         assembly_instance_count: u32,
         draw_prep_record_count: u32,
     ) {
+        let mut read_index = arena.ping_pong_index();
         for compiled_pass in &self.simulation_pipelines {
             let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
                 label: Some("Compute.Simulation.Pass"),
                 timestamp_writes: None,
             });
             compute_pass.set_pipeline(&compiled_pass.pipeline);
-            compute_pass.set_bind_group(0, arena.get_compiler_simulation_bind_group(), &[]);
+            compute_pass.set_bind_group(
+                0,
+                arena.get_compiler_simulation_bind_group_for_index(read_index),
+                &[],
+            );
             compute_pass.dispatch_workgroups(compiled_pass.workgroup_count, 1, 1);
+            read_index = (read_index + 1) & 1;
         }
 
         {
@@ -505,9 +511,9 @@ fn compute_main(@builtin(global_invocation_id) gid: vec3<u32>) {
             });
             compute_pass.set_pipeline(&self.instance_assembly_pipeline);
             compute_pass.set_bind_group(0, &arena.uniform_bind_group, &[]);
-            // [LAW:one-source-of-truth] Instance assembly reads compiler-arena
-            // write bank produced by simulation dispatch in this same tick.
-            compute_pass.set_bind_group(1, arena.get_compiler_arena_write_bind_group(), &[]);
+            // [LAW:one-source-of-truth] Instance assembly reads the final
+            // simulation output bank resolved by deterministic pass chaining.
+            compute_pass.set_bind_group(1, arena.get_compiler_arena_bind_group_for_index(read_index), &[]);
             compute_pass.set_bind_group(2, &arena.assembly_write_bind_group, &[]);
             // [LAW:single-enforcer] Runtime sink-table instance totals are the
             // canonical source for per-frame assembly dispatch size.
@@ -521,6 +527,6 @@ fn compute_main(@builtin(global_invocation_id) gid: vec3<u32>) {
         // materialized by CPU sink-table mirroring while GPU draw-prep parity
         // debugging is in progress.
 
-        arena.swap_ping_pong();
+        arena.set_ping_pong_index(read_index);
     }
 }

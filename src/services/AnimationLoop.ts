@@ -169,7 +169,12 @@ export function executeAnimationFrame(
         typeof renderer.getLatestSinkTableSample === 'function' ? renderer.getLatestSinkTableSample() : null;
       const sinkTableSample = workerStats?.sinkTableSample ?? rendererSinkTableSample ?? null;
       const schedulerFrameCount = telemetry?.frameCount ?? 0;
-      const expectedPingPongIndexFromParity = schedulerFrameCount & 1;
+      const simulationPassCount = telemetry?.dispatchCounters.computeDispatchCount
+        ? Math.max(1, telemetry.dispatchCounters.computeDispatchCount - 1)
+        : Math.max(1, installedGpuPassIds.length);
+      // [LAW:one-source-of-truth] Expected ping/pong parity derives from
+      // the canonical simulation pass count emitted by runtime telemetry.
+      const expectedPingPongIndexFromParity = (schedulerFrameCount * simulationPassCount) & 1;
       const line = {
         kind: 'runtime-heartbeat',
         fps: state.fps,
@@ -193,6 +198,7 @@ export function executeAnimationFrame(
           installedGpuPassIds,
           sinkTableSample,
           schedulerFrameCount,
+          simulationPassCount,
           expectedPingPongIndexFromParity,
         },
         breadcrumb: telemetry?.lastEvent ?? null,

@@ -18,7 +18,9 @@ import {
 import { inferType, cardinalityVar } from '../../core/inference-types';
 import { cardinalityVarId } from '../../core/ids';
 import { DOMAIN_CIRCLE } from '../../core/domain-registry';
-import { defaultSource } from '../../types';
+import { defaultSource, defaultSourceConst } from '../../types';
+import type { ValueRefExpr } from '../../compiler/ir/lowerTypes';
+import { resolveInputConstant } from '../lower-utils';
 
 // [LAW:one-source-of-truth] Fluid output cardinality + instance ownership are
 // declared once in port types and reused across lowering/runtime metadata.
@@ -28,9 +30,15 @@ const FLUID_OUTPUT_CARD = cardinalityVar(cardinalityVarId('fluid_outputs'), {
   instanceBinding: { kind: 'create', domainType: DOMAIN_CIRCLE },
 });
 
-function coerceCount(value: unknown): number {
-  if (typeof value !== 'number' || !Number.isFinite(value)) return 8192;
-  return Math.max(64, Math.min(65_536, Math.floor(value)));
+function expectExprInput(
+  inputsById: Record<string, ValueRefExpr | undefined>,
+  portId: string,
+): ValueRefExpr {
+  const ref = inputsById[portId];
+  if (!ref) {
+    throw new Error(`FluidDynamics2D: missing required input '${portId}'`);
+  }
+  return ref;
 }
 
 export function register(): void {
@@ -52,7 +60,7 @@ export function register(): void {
         label: 'Count',
         type: canonicalType(INT),
         defaultValue: 8192,
-        exposedAsPort: false,
+        defaultSource: defaultSourceConst(8192),
         semantic: 'instanceCount',
         uiHint: { kind: 'slider', min: 256, max: 32768, step: 256 },
       },
@@ -60,49 +68,49 @@ export function register(): void {
         label: 'Sim Resolution',
         type: canonicalType(INT),
         defaultValue: 128,
-        exposedAsPort: false,
+        defaultSource: defaultSourceConst(128),
         uiHint: { kind: 'slider', min: 32, max: 512, step: 32 },
       },
       velocityDissipation: {
         label: 'Velocity Dissipation',
         type: canonicalType(FLOAT),
         defaultValue: 0.992,
-        exposedAsPort: false,
+        defaultSource: defaultSourceConst(0.992),
         uiHint: { kind: 'slider', min: 0.85, max: 0.9995, step: 0.0005 },
       },
       dyeDissipation: {
         label: 'Dye Dissipation',
         type: canonicalType(FLOAT),
         defaultValue: 0.996,
-        exposedAsPort: false,
+        defaultSource: defaultSourceConst(0.996),
         uiHint: { kind: 'slider', min: 0.85, max: 0.9999, step: 0.0005 },
       },
       vorticity: {
         label: 'Vorticity',
         type: canonicalType(FLOAT),
         defaultValue: 18.0,
-        exposedAsPort: false,
+        defaultSource: defaultSourceConst(18.0),
         uiHint: { kind: 'slider', min: 0, max: 96, step: 0.5 },
       },
       splatRadius: {
         label: 'Splat Radius',
         type: canonicalType(FLOAT),
         defaultValue: 20.0,
-        exposedAsPort: false,
+        defaultSource: defaultSourceConst(20.0),
         uiHint: { kind: 'slider', min: 2, max: 128, step: 1 },
       },
       advection: {
         label: 'Advection',
         type: canonicalType(FLOAT),
         defaultValue: 1.0,
-        exposedAsPort: false,
+        defaultSource: defaultSourceConst(1.0),
         uiHint: { kind: 'slider', min: 0.1, max: 3, step: 0.01 },
       },
       particleScale: {
         label: 'Particle Scale',
         type: canonicalType(FLOAT),
         defaultValue: 0.02,
-        exposedAsPort: false,
+        defaultSource: defaultSourceConst(0.02),
         uiHint: { kind: 'slider', min: 0.001, max: 0.08, step: 0.001 },
       },
     },
@@ -115,14 +123,29 @@ export function register(): void {
         label: 'Color',
         type: inferType(COLOR, unitHsl(), { cardinality: FLUID_OUTPUT_CARD }),
       },
+      _simResolution: { hidden: true, type: canonicalType(INT) },
+      _velocityDissipation: { hidden: true, type: canonicalType(FLOAT) },
+      _dyeDissipation: { hidden: true, type: canonicalType(FLOAT) },
+      _vorticity: { hidden: true, type: canonicalType(FLOAT) },
+      _splatRadius: { hidden: true, type: canonicalType(FLOAT) },
+      _advection: { hidden: true, type: canonicalType(FLOAT) },
+      _particleScale: { hidden: true, type: canonicalType(FLOAT) },
     },
-    lower: ({ ctx, inputsById, config }) => {
+    lower: ({ ctx, inputsById }) => {
       const shapeInput = inputsById.shape;
       if (!shapeInput || requireInst(shapeInput.type.extent.cardinality, 'cardinality').kind !== 'one') {
         throw new Error('FluidDynamics2D requires a one-cardinality shape input');
       }
 
-      const count = coerceCount(config.count);
+      const countInput = expectExprInput(inputsById as Record<string, ValueRefExpr | undefined>, 'count');
+      const count = resolveInputConstant(ctx, countInput, 'count', { min: 64, max: 65_536 });
+      const simResolution = expectExprInput(inputsById as Record<string, ValueRefExpr | undefined>, 'simResolution');
+      const velocityDissipation = expectExprInput(inputsById as Record<string, ValueRefExpr | undefined>, 'velocityDissipation');
+      const dyeDissipation = expectExprInput(inputsById as Record<string, ValueRefExpr | undefined>, 'dyeDissipation');
+      const vorticity = expectExprInput(inputsById as Record<string, ValueRefExpr | undefined>, 'vorticity');
+      const splatRadius = expectExprInput(inputsById as Record<string, ValueRefExpr | undefined>, 'splatRadius');
+      const advection = expectExprInput(inputsById as Record<string, ValueRefExpr | undefined>, 'advection');
+      const particleScale = expectExprInput(inputsById as Record<string, ValueRefExpr | undefined>, 'particleScale');
       const instanceId = ctx.b.createInstance(DOMAIN_CIRCLE, count, shapeInput.id);
       const instanceDecl = ctx.instances.get(instanceId);
       if (!instanceDecl) {
@@ -154,11 +177,25 @@ export function register(): void {
             type: colorType,
             stride: payloadStride(colorType.payload),
           },
+          _simResolution: simResolution,
+          _velocityDissipation: velocityDissipation,
+          _dyeDissipation: dyeDissipation,
+          _vorticity: vorticity,
+          _splatRadius: splatRadius,
+          _advection: advection,
+          _particleScale: particleScale,
         },
         effects: {
           slotRequests: [
             { portId: 'controlPoints', type: controlPointsType },
             { portId: 'color', type: colorType },
+            { portId: '_simResolution', type: simResolution.type },
+            { portId: '_velocityDissipation', type: velocityDissipation.type },
+            { portId: '_dyeDissipation', type: dyeDissipation.type },
+            { portId: '_vorticity', type: vorticity.type },
+            { portId: '_splatRadius', type: splatRadius.type },
+            { portId: '_advection', type: advection.type },
+            { portId: '_particleScale', type: particleScale.type },
           ],
         },
         instanceContext: instanceId,
