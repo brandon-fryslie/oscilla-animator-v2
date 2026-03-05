@@ -25,6 +25,7 @@ async function main() {
   let warningCount = 0;
   const ruleCounts = new Map();
   const fileSummaries = [];
+  const findings = [];
 
   for (const result of results) {
     totalMessages += result.messages.length;
@@ -33,6 +34,16 @@ async function main() {
       if (message.severity === 1) warningCount += 1;
       const rule = message.ruleId ?? 'unknown';
       ruleCounts.set(rule, (ruleCounts.get(rule) ?? 0) + 1);
+      findings.push({
+        filePath: result.filePath,
+        line: message.line ?? 0,
+        column: message.column ?? 0,
+        endLine: message.endLine ?? message.line ?? 0,
+        endColumn: message.endColumn ?? message.column ?? 0,
+        severity: message.severity ?? 0,
+        ruleId: message.ruleId ?? 'unknown',
+        message: message.message ?? '',
+      });
     }
 
     if (result.messages.length > 0) {
@@ -63,6 +74,7 @@ async function main() {
     warningCount,
     avgMessagesPerFlaggedFile: fileSummaries.length === 0 ? 0 : mean(fileSummaries.map((f) => f.messageCount)),
     trackedRuleCounts,
+    findings,
     topRules: sortedRuleCounts.slice(0, 20),
     topFiles: fileSummaries.slice(0, 20),
   };

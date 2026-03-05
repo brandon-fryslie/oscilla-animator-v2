@@ -179,6 +179,8 @@ async function main() {
   const topCyclomatic = [...functionMetrics].sort((a, b) => b.cyclomatic - a.cyclomatic).slice(0, 25);
   const topCognitive = [...functionMetrics].sort((a, b) => b.cognitive - a.cognitive).slice(0, 25);
   const topNesting = [...functionMetrics].sort((a, b) => b.maxNestingDepth - a.maxNestingDepth).slice(0, 25);
+  const topHalsteadVolume = [...functionMetrics].sort((a, b) => b.halstead.volume - a.halstead.volume).slice(0, 25);
+  const topLowMaintainability = [...functionMetrics].sort((a, b) => a.maintainabilityIndex - b.maintainabilityIndex).slice(0, 25);
   const topFanOut = [...moduleFanOut].sort((a, b) => b.fanOut - a.fanOut).slice(0, 25);
   const topFanIn = [...moduleFanIn].sort((a, b) => b.fanIn - a.fanIn).slice(0, 25);
   const totalSourceLoc = sourceLocValues.reduce((sum, value) => sum + value, 0);
@@ -244,6 +246,8 @@ async function main() {
     topCyclomatic,
     topCognitive,
     topNesting,
+    topHalsteadVolume,
+    topLowMaintainability,
     topFanOut,
     topFanIn,
   };

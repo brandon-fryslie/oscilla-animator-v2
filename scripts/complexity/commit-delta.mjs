@@ -2,7 +2,17 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
-import { reportsDir, runCommand, runnerRoot, writeJson, writeText } from './_shared.mjs';
+import {
+  escapeHtml,
+  formatSig2,
+  reportsDir,
+  renderHtmlDocument,
+  renderHtmlTable,
+  runCommand,
+  runnerRoot,
+  writeJson,
+  writeText,
+} from './_shared.mjs';
 
 const DEFAULT_OUTPUT_ROOT = path.join(reportsDir, 'deltas');
 
@@ -113,6 +123,67 @@ function summarizeImpact(signal, classification, magnitude) {
     return classification === 'regressed' ? 'meaningful regression' : 'meaningful improvement';
   }
   return classification === 'regressed' ? 'minor regression' : 'minor improvement';
+}
+
+function formatMetricValue(value) {
+  return Number.isFinite(value) ? formatSig2(value) : 'n/a';
+}
+
+function formatDeltaValue(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return 'n/a';
+  return `${numeric > 0 ? '+' : ''}${formatSig2(numeric)}`;
+}
+
+function formatPctValue(value) {
+  if (!Number.isFinite(value)) return 'n/a';
+  return `${formatSig2(value)}%`;
+}
+
+function inferRepoRootFromSummaryPath(summaryPath) {
+  if (!summaryPath) return null;
+  return path.resolve(path.dirname(summaryPath), '..', '..');
+}
+
+function normalizeFilePath(filePath, repoRoot) {
+  if (typeof filePath !== 'string' || filePath.length === 0) return null;
+  const normalizedPath = filePath.replaceAll('\\', '/');
+  if (path.isAbsolute(filePath) && repoRoot) {
+    const rel = path.relative(repoRoot, filePath);
+    if (!rel.startsWith('..') && !path.isAbsolute(rel)) {
+      return rel.replaceAll('\\', '/');
+    }
+    const repoNormalized = repoRoot.replaceAll('\\', '/');
+    const directIndex = normalizedPath.indexOf(`${repoNormalized}/`);
+    if (directIndex >= 0) {
+      return normalizedPath.slice(directIndex + repoNormalized.length + 1);
+    }
+    const marker = `/${path.basename(repoNormalized)}/`;
+    const markerIndex = normalizedPath.indexOf(marker);
+    if (markerIndex >= 0) {
+      return normalizedPath.slice(markerIndex + marker.length);
+    }
+  }
+  for (const marker of ['/src/', '/scripts/', '/tests/']) {
+    const markerIndex = normalizedPath.indexOf(marker);
+    if (markerIndex >= 0) return normalizedPath.slice(markerIndex + 1);
+  }
+  return normalizedPath.replace(/^\.\//, '');
+}
+
+function uniqueItems(values) {
+  return [...new Set(values.filter(Boolean))];
+}
+
+function findingSignature(finding) {
+  return [
+    finding.filePath,
+    finding.line,
+    finding.column,
+    finding.ruleId,
+    finding.severity,
+    finding.message,
+  ].join('|');
 }
 
 async function fileExists(filePath) {
@@ -261,16 +332,225 @@ function buildDelta(baseSummary, headSummary) {
   };
 }
 
+function normalizeEslintFindings(eslintSummary, repoRoot) {
+  const findings = Array.isArray(eslintSummary?.findings) ? eslintSummary.findings : [];
+  return findings.map((finding) => ({
+    ...finding,
+    filePath: normalizeFilePath(finding.filePath, repoRoot),
+  }));
+}
+
+function fileFromViolation(violation, repoRoot) {
+  return [
+    normalizeFilePath(violation?.from ?? null, repoRoot),
+    normalizeFilePath(violation?.to ?? null, repoRoot),
+  ].filter(Boolean);
+}
+
+function collectMetricAttribution(row, context) {
+  const {
+    baseTools,
+    headTools,
+    baseRepoRoot,
+    headRepoRoot,
+  } = context;
+  const evidence = [];
+  const files = [];
+  const pushFile = (filePath) => {
+    if (filePath) files.push(filePath);
+  };
+  const pushEvidence = (line) => {
+    if (line) evidence.push(line);
+  };
+
+  const headEslint = normalizeEslintFindings(headTools.eslint, headRepoRoot);
+  const baseEslint = normalizeEslintFindings(baseTools.eslint, baseRepoRoot);
+  const baseEslintSigs = new Set(baseEslint.map(findingSignature));
+  const newEslintFindings = headEslint.filter((finding) => !baseEslintSigs.has(findingSignature(finding)));
+  const eslintRuleByMetric = {
+    eslintComplexityHits: 'complexity',
+    eslintMaxDepthHits: 'max-depth',
+    eslintMaxLinesPerFunctionHits: 'max-lines-per-function',
+    eslintMaxParamsHits: 'max-params',
+    eslintCognitiveHits: 'sonarjs/cognitive-complexity',
+  };
+
+  if (row.key === 'eslintErrors' || row.key === 'eslintWarnings' || eslintRuleByMetric[row.key]) {
+    const severityFilter = row.key === 'eslintErrors' ? 2 : row.key === 'eslintWarnings' ? 1 : null;
+    const ruleFilter = eslintRuleByMetric[row.key] ?? null;
+    const matchedFindings = newEslintFindings.filter((finding) => {
+      if (severityFilter !== null && finding.severity !== severityFilter) return false;
+      if (ruleFilter !== null && finding.ruleId !== ruleFilter) return false;
+      return true;
+    });
+    pushEvidence(`new findings in head for this metric: ${matchedFindings.length}`);
+    for (const finding of matchedFindings.slice(0, 6)) {
+      pushFile(finding.filePath);
+      pushEvidence(`${finding.filePath}:${finding.line}:${finding.column} [${finding.ruleId}] ${finding.message}`);
+    }
+  }
+
+  if (row.key === 'tsMorphMaxCyclomatic') {
+    const top = headTools.tsMorph?.topCyclomatic?.[0] ?? null;
+    pushFile(normalizeFilePath(top?.filePath, headRepoRoot));
+    if (top) pushEvidence(`head max cyclomatic function: ${top.name} (${formatMetricValue(top.cyclomatic)})`);
+  }
+  if (row.key === 'tsMorphMaxCognitive') {
+    const top = headTools.tsMorph?.topCognitive?.[0] ?? null;
+    pushFile(normalizeFilePath(top?.filePath, headRepoRoot));
+    if (top) pushEvidence(`head max cognitive function: ${top.name} (${formatMetricValue(top.cognitive)})`);
+  }
+  if (row.key === 'tsMorphMaxNesting') {
+    const top = headTools.tsMorph?.topNesting?.[0] ?? null;
+    pushFile(normalizeFilePath(top?.filePath, headRepoRoot));
+    if (top) pushEvidence(`head max nesting function: ${top.name} (${formatMetricValue(top.maxNestingDepth)})`);
+  }
+  if (row.key === 'tsMorphMaxHalsteadVolume') {
+    const top = headTools.tsMorph?.topHalsteadVolume?.[0] ?? null;
+    pushFile(normalizeFilePath(top?.filePath, headRepoRoot));
+    if (top) pushEvidence(`head max Halstead volume function: ${top.name} (${formatMetricValue(top.halstead?.volume)})`);
+  }
+  if (row.key === 'tsMorphAvgMi') {
+    const low = headTools.tsMorph?.topLowMaintainability?.[0] ?? null;
+    pushFile(normalizeFilePath(low?.filePath, headRepoRoot));
+    if (low) pushEvidence(`lowest maintainability function in head: ${low.name} (${formatMetricValue(low.maintainabilityIndex)})`);
+  }
+  if (row.key === 'tsMorphMaxFanOut') {
+    const top = headTools.tsMorph?.topFanOut?.[0] ?? null;
+    pushFile(normalizeFilePath(top?.filePath, headRepoRoot));
+    if (top) pushEvidence(`head max fan-out module: ${normalizeFilePath(top.filePath, headRepoRoot)} (${formatMetricValue(top.fanOut)})`);
+  }
+  if (row.key === 'tsMorphMaxFanIn') {
+    const top = headTools.tsMorph?.topFanIn?.[0] ?? null;
+    pushFile(normalizeFilePath(top?.filePath, headRepoRoot));
+    if (top) pushEvidence(`head max fan-in module: ${normalizeFilePath(top.filePath, headRepoRoot)} (${formatMetricValue(top.fanIn)})`);
+  }
+
+  if (row.key === 'dependencyCruiserErrors' || row.key === 'dependencyCruiserWarnings') {
+    const baseViolations = Array.isArray(baseTools.dependencyCruiser?.topViolations) ? baseTools.dependencyCruiser.topViolations : [];
+    const headViolations = Array.isArray(headTools.dependencyCruiser?.topViolations) ? headTools.dependencyCruiser.topViolations : [];
+    const baseViolationSigs = new Set(baseViolations.map((violation) => `${violation.rule}|${violation.from}|${violation.to}`));
+    const newViolations = headViolations.filter((violation) => !baseViolationSigs.has(`${violation.rule}|${violation.from}|${violation.to}`));
+    pushEvidence(`new visible dependency violations in head: ${newViolations.length}`);
+    for (const violation of newViolations.slice(0, 6)) {
+      for (const filePath of fileFromViolation(violation, headRepoRoot)) pushFile(filePath);
+      pushEvidence(`${violation.rule ?? 'rule'}: ${violation.from ?? 'unknown'} -> ${violation.to ?? 'unknown'}`);
+    }
+  }
+  if (row.key === 'dependencyCruiserMaxFanOut') {
+    const top = headTools.dependencyCruiser?.coupling?.topFanOutModules?.[0] ?? null;
+    pushFile(normalizeFilePath(top?.source, headRepoRoot));
+    if (top) pushEvidence(`head max dependency fan-out module: ${top.source} (${formatMetricValue(top.fanOut)})`);
+  }
+  if (row.key === 'dependencyCruiserMaxFanIn') {
+    const top = headTools.dependencyCruiser?.coupling?.topFanInModules?.[0] ?? null;
+    pushFile(normalizeFilePath(top?.source, headRepoRoot));
+    if (top) pushEvidence(`head max dependency fan-in module: ${top.source} (${formatMetricValue(top.fanIn)})`);
+  }
+
+  if (row.key === 'platoAvgMaintainability') {
+    const low = headTools.plato?.topLowMaintainability?.[0] ?? null;
+    pushFile(normalizeFilePath(low?.file, headRepoRoot));
+    if (low) pushEvidence(`lowest Plato maintainability file in head: ${low.file} (${formatMetricValue(low.maintainability)})`);
+  }
+  if (row.key === 'platoMaxCyclomatic') {
+    const top = headTools.plato?.topCyclomatic?.[0] ?? null;
+    pushFile(normalizeFilePath(top?.file, headRepoRoot));
+    if (top) pushEvidence(`highest Plato cyclomatic file in head: ${top.file} (${formatMetricValue(top.cyclomatic)})`);
+  }
+  if (row.key === 'platoAvgHalsteadDifficulty') {
+    const top = headTools.plato?.topHalsteadDifficulty?.[0] ?? null;
+    pushFile(normalizeFilePath(top?.file, headRepoRoot));
+    if (top) pushEvidence(`highest Plato Halstead difficulty file in head: ${top.file} (${formatMetricValue(top.halsteadDifficulty)})`);
+  }
+  if (row.key === 'platoAvgHalsteadVolume') {
+    const top = headTools.plato?.topHalsteadVolume?.[0] ?? null;
+    pushFile(normalizeFilePath(top?.file, headRepoRoot));
+    if (top) pushEvidence(`highest Plato Halstead volume file in head: ${top.file} (${formatMetricValue(top.halsteadVolume)})`);
+  }
+
+  if (row.key === 'typhonAvgMaintainability') {
+    const low = headTools.typhon?.topLowMaintainability?.[0] ?? null;
+    pushFile(normalizeFilePath(low?.srcPath, headRepoRoot));
+    if (low) pushEvidence(`lowest Typhon maintainability module in head: ${low.srcPath} (${formatMetricValue(low.maintainability)})`);
+  }
+  if (row.key === 'typhonMaxCyclomatic') {
+    const top = headTools.typhon?.topCyclomatic?.[0] ?? null;
+    pushFile(normalizeFilePath(top?.srcPath, headRepoRoot));
+    if (top) pushEvidence(`highest Typhon cyclomatic module in head: ${top.srcPath} (${formatMetricValue(top.cyclomatic)})`);
+  }
+  if (row.key === 'typhonAvgHalsteadDifficulty') {
+    const top = headTools.typhon?.topHalsteadDifficulty?.[0] ?? null;
+    pushFile(normalizeFilePath(top?.srcPath, headRepoRoot));
+    if (top) pushEvidence(`highest Typhon Halstead difficulty module in head: ${top.srcPath} (${formatMetricValue(top.halsteadDifficulty)})`);
+  }
+  if (row.key === 'typhonAvgHalsteadVolume') {
+    const top = headTools.typhon?.topHalsteadVolume?.[0] ?? null;
+    pushFile(normalizeFilePath(top?.srcPath, headRepoRoot));
+    if (top) pushEvidence(`highest Typhon Halstead volume module in head: ${top.srcPath} (${formatMetricValue(top.halsteadVolume)})`);
+  }
+
+  return {
+    evidence: uniqueItems(evidence),
+    files: uniqueItems(files),
+  };
+}
+
+async function buildRegressionAttribution(delta, baseLoaded, headLoaded) {
+  const baseSha = baseLoaded.metadata.commitSha ?? null;
+  const headSha = headLoaded.metadata.commitSha ?? null;
+  const baseRepoRoot = inferRepoRootFromSummaryPath(baseLoaded.metadata.summaryPath);
+  const headRepoRoot = inferRepoRootFromSummaryPath(headLoaded.metadata.summaryPath);
+  const context = {
+    baseTools: baseLoaded.summary.tools ?? {},
+    headTools: headLoaded.summary.tools ?? {},
+    baseRepoRoot,
+    headRepoRoot,
+  };
+  const diffCache = new Map();
+  const getDiff = async (filePath) => {
+    if (!baseSha || !headSha) return null;
+    if (diffCache.has(filePath)) return diffCache.get(filePath);
+    const run = await runCommand(
+      'git',
+      ['diff', '--unified=3', '--no-color', `${baseSha}..${headSha}`, '--', filePath],
+      { allowFailure: true },
+    );
+    const trimmed = run.stdout.trim();
+    const lines = trimmed.length === 0 ? [] : trimmed.split('\n');
+    const limited = lines.length > 220 ? `${lines.slice(0, 220).join('\n')}\n... (truncated)` : trimmed;
+    const value = limited.length > 0 ? limited : null;
+    diffCache.set(filePath, value);
+    return value;
+  };
+
+  const attribution = {};
+  for (const row of delta.regressed) {
+    const metricAttribution = collectMetricAttribution(row, context);
+    const files = metricAttribution.files.slice(0, 5);
+    const diffs = [];
+    for (const filePath of files) {
+      const diffText = await getDiff(filePath);
+      if (!diffText) continue;
+      diffs.push({ filePath, diffText });
+    }
+    attribution[row.key] = {
+      evidence: metricAttribution.evidence,
+      files,
+      diffs,
+    };
+  }
+  return attribution;
+}
+
 function renderDeltaMarkdown(delta, baseLabel, headLabel) {
-  const pct = (value) => (Number.isFinite(value) ? `${value.toFixed(2)}%` : 'n/a');
+  const pct = (value) => formatPctValue(value);
   const rowLine = (row) => {
-    const sign = row.delta > 0 ? '+' : '';
-    return `| ${row.label} | ${row.base} | ${row.head} | ${sign}${row.delta} | ${pct(row.relativeDeltaPct)} | ${row.magnitude} | ${row.impact} |`;
+    return `| ${row.label} | ${formatMetricValue(row.base)} | ${formatMetricValue(row.head)} | ${formatDeltaValue(row.delta)} | ${pct(row.relativeDeltaPct)} | ${row.magnitude} | ${row.impact} |`;
   };
 
   const allRows = delta.rows.map((row) => {
-    const sign = row.delta > 0 ? '+' : '';
-    return `| ${row.key} | ${row.label} | ${row.base} | ${row.head} | ${sign}${row.delta} | ${pct(row.relativeDeltaPct)} | ${row.classification} | ${row.magnitude} | ${row.signal} |`;
+    return `| ${row.key} | ${row.label} | ${formatMetricValue(row.base)} | ${formatMetricValue(row.head)} | ${formatDeltaValue(row.delta)} | ${pct(row.relativeDeltaPct)} | ${row.classification} | ${row.magnitude} | ${row.signal} |`;
   });
 
   return [
@@ -329,6 +609,112 @@ function renderDeltaMarkdown(delta, baseLabel, headLabel) {
     ...allRows,
     '',
   ].join('\n');
+}
+
+function renderDeltaHtml(delta, baseLabel, headLabel, regressionAttribution) {
+  const pct = (value) => formatPctValue(value);
+  const toRows = (rows) => rows.map((row) => [
+    row.label,
+    formatMetricValue(row.base),
+    formatMetricValue(row.head),
+    formatDeltaValue(row.delta),
+    pct(row.relativeDeltaPct),
+    row.magnitude,
+    row.impact,
+  ]);
+  const fullRows = delta.rows.map((row) => [
+    row.key,
+    row.label,
+    formatMetricValue(row.base),
+    formatMetricValue(row.head),
+    formatDeltaValue(row.delta),
+    pct(row.relativeDeltaPct),
+    row.classification,
+    row.magnitude,
+    row.signal,
+  ]);
+  const guideRows = delta.guide.map((row) => [row.label, row.directionLabel, row.target, row.signal]);
+  const regressionDetailsHtml = delta.regressed.length === 0
+    ? '<p>No regressed metrics.</p>'
+    : delta.regressed.map((row) => {
+      const details = regressionAttribution[row.key] ?? { evidence: [], files: [], diffs: [] };
+      const evidenceList = details.evidence.length > 0
+        ? `<ul>${details.evidence.map((line) => `<li>${escapeHtml(line)}</li>`).join('')}</ul>`
+        : '<p>No metric-level evidence captured.</p>';
+      const filesList = details.files.length > 0
+        ? `<p><strong>Candidate files:</strong> <code>${escapeHtml(details.files.join(', '))}</code></p>`
+        : '<p><strong>Candidate files:</strong> none</p>';
+      const diffs = details.diffs.length > 0
+        ? details.diffs.map((diff) => [
+          `<h4><code>${escapeHtml(diff.filePath)}</code></h4>`,
+          `<pre>${escapeHtml(diff.diffText)}</pre>`,
+        ].join('\n')).join('\n')
+        : '<p>No diff hunks available for this metric.</p>';
+      return [
+        '<details>',
+        `<summary>${escapeHtml(row.label)}: ${escapeHtml(formatMetricValue(row.base))} -> ${escapeHtml(formatMetricValue(row.head))} (${escapeHtml(formatDeltaValue(row.delta))}, ${escapeHtml(pct(row.relativeDeltaPct))})</summary>`,
+        '<div>',
+        evidenceList,
+        filesList,
+        diffs,
+        '</div>',
+        '</details>',
+      ].join('\n');
+    }).join('\n');
+
+  return renderHtmlDocument(
+    'Commit Complexity Delta',
+    [
+      '<h1>Commit Complexity Delta</h1>',
+      `<p class="small">Generated: ${delta.generatedAt}</p>`,
+      '<div class="meta">',
+      `<div><strong>Base</strong><br>${baseLabel}</div>`,
+      `<div><strong>Head</strong><br>${headLabel}</div>`,
+      `<div><strong>Base Report</strong><br>${delta.baseGeneratedAt ?? 'unknown'}</div>`,
+      `<div><strong>Head Report</strong><br>${delta.headGeneratedAt ?? 'unknown'}</div>`,
+      `<div><strong>Improved Metrics</strong><br>${delta.improvedCount}</div>`,
+      `<div><strong>Regressed Metrics</strong><br>${delta.regressedCount}</div>`,
+      `<div><strong>Unchanged / Informational</strong><br>${delta.unchangedCount}</div>`,
+      `<div><strong>Net Score</strong><br>${delta.score}</div>`,
+      '</div>',
+      '<h2>How To Read This</h2>',
+      '<ul>',
+      '<li>Lower-is-better metrics should trend down toward target. Zero is ideal for rule violations.</li>',
+      '<li>Higher-is-better metrics should trend up (for example maintainability index).</li>',
+      '<li><code>magnitude</code> expresses scale: tiny, small, moderate, large.</li>',
+      '<li><code>impact</code> combines metric signal strength and magnitude.</li>',
+      '</ul>',
+      '<h2>Metric Interpretation Guide</h2>',
+      renderHtmlTable(['Metric', 'Desired Trend', 'Practical Target Range', 'Signal'], guideRows),
+      '<h2>High-Signal Regressions</h2>',
+      renderHtmlTable(
+        ['Metric', 'Base', 'Head', 'Delta (head - base)', '% Delta', 'Magnitude', 'Impact'],
+        toRows(delta.highSignalRegressions),
+      ),
+      '<h2>High-Signal Improvements</h2>',
+      renderHtmlTable(
+        ['Metric', 'Base', 'Head', 'Delta (head - base)', '% Delta', 'Magnitude', 'Impact'],
+        toRows(delta.highSignalImprovements),
+      ),
+      '<h2>Regressions</h2>',
+      renderHtmlTable(
+        ['Metric', 'Base', 'Head', 'Delta (head - base)', '% Delta', 'Magnitude', 'Impact'],
+        toRows(delta.regressed),
+      ),
+      '<h2>Regression Drilldown (click row)</h2>',
+      regressionDetailsHtml,
+      '<h2>Improvements</h2>',
+      renderHtmlTable(
+        ['Metric', 'Base', 'Head', 'Delta (head - base)', '% Delta', 'Magnitude', 'Impact'],
+        toRows(delta.improved),
+      ),
+      '<h2>Full Delta Table</h2>',
+      renderHtmlTable(
+        ['Key', 'Metric', 'Base', 'Head', 'Delta (head - base)', '% Delta', 'Classification', 'Magnitude', 'Signal'],
+        fullRows,
+      ),
+    ].join('\n'),
+  );
 }
 
 async function loadSummaryFromPath(summaryPath, label) {
@@ -398,6 +784,7 @@ async function main() {
 
   // [LAW:one-source-of-truth] Delta output is derived only from canonical comparison-summary highlights from base/head.
   const delta = buildDelta(baseLoaded.summary, headLoaded.summary);
+  const regressionAttribution = await buildRegressionAttribution(delta, baseLoaded, headLoaded);
 
   const baseLabel = baseLoaded.metadata.label;
   const headLabel = headLoaded.metadata.label;
@@ -409,20 +796,24 @@ async function main() {
 
   const result = {
     ...delta,
+    regressionAttribution,
     base: baseLoaded.metadata,
     head: headLoaded.metadata,
   };
 
   const jsonPath = path.join(runDir, 'commit-delta.json');
   const mdPath = path.join(runDir, 'commit-delta.md');
+  const htmlPath = path.join(runDir, 'commit-delta.html');
 
   await writeJson(jsonPath, result);
   await writeText(mdPath, renderDeltaMarkdown(result, baseLabel, headLabel));
+  await writeText(htmlPath, renderDeltaHtml(result, baseLabel, headLabel, regressionAttribution));
   await writeLatestPointer(outputRoot, runId);
 
   // [LAW:verifiable-goals] Always emit machine-readable + human-readable outputs.
   console.log(`wrote ${jsonPath}`);
   console.log(`wrote ${mdPath}`);
+  console.log(`wrote ${htmlPath}`);
   console.log(`latest run: ${path.relative(process.cwd(), path.join(outputRoot, runId))}`);
 }
 
