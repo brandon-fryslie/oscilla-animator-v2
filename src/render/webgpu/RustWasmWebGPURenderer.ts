@@ -143,6 +143,15 @@ function previewWgsl(wgsl: string, maxLines: number = 4): string {
     .join(' | ');
 }
 
+function hashWgslSource(wgsl: string): string {
+  let hash = 2166136261 >>> 0;
+  for (let index = 0; index < wgsl.length; index++) {
+    hash ^= wgsl.charCodeAt(index);
+    hash = Math.imul(hash, 16777619) >>> 0;
+  }
+  return hash.toString(16).padStart(8, '0');
+}
+
 function parseWgslU32Constant(wgsl: string, name: string): number | null {
   const pattern = new RegExp(`const\\s+${escapeRegex(name)}\\s*:\\s*u32\\s*=\\s*(\\d+)u\\s*;`);
   const match = wgsl.match(pattern);
@@ -492,6 +501,8 @@ export class WebGPURenderer {
           passId: pass.passId,
           stage: pass.stage,
           entryPoint: pass.entryPoint,
+          wgslLength: pass.wgsl.length,
+          wgslHash: hashWgslSource(pass.wgsl),
           wgslPreview: previewWgsl(pass.wgsl),
           debugConstants: extractPassDebugConstants(pass.wgsl),
         })),
@@ -717,7 +728,7 @@ export class WebGPURenderer {
   private validateHeartbeatHealth(payload: Extract<RustRendererWorkerOutboundMessage, { type: 'SCHEDULER_HEARTBEAT' }>): void {
     const telemetry = payload.telemetry;
     const installedPassCount = this.lastInstalledPassIds.length;
-    const expectedDispatchCount = installedPassCount > 0 ? installedPassCount + 1 : null;
+    const expectedDispatchCount = installedPassCount > 0 ? installedPassCount + 2 : null;
     if (
       expectedDispatchCount !== null
       && telemetry.dispatchCounters.computeDispatchCount !== expectedDispatchCount

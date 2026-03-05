@@ -2,6 +2,7 @@
 
 import { compileFromFrontend } from '../compiler';
 import { compileFrontend } from '../compiler/frontend';
+import { compileProgramWithNaga } from '../compiler/naga-compile';
 import { EventHub } from '../events/EventHub';
 import { deserializePatch } from './PatchPersistence';
 import { maybeBuildFluidGpuBundle } from './fluid-gpu-bundle';
@@ -12,29 +13,6 @@ import type {
   CompileWorkerBackendResult,
 } from './compile-worker-protocol';
 import { stripKernelRegistry } from './compile-worker-serialization';
-
-const NON_FLUID_PASSTHROUGH_WGSL = `
-struct RuntimeUniforms {
-  dummy: u32,
-};
-
-@group(0) @binding(0) var<storage, read> arena_in: array<f32>;
-@group(0) @binding(1) var<storage, read_write> arena_out: array<f32>;
-@group(0) @binding(2) var<storage, read> state_in: array<f32>;
-@group(0) @binding(3) var<storage, read_write> state_out: array<f32>;
-@group(0) @binding(4) var<uniform> uniforms: RuntimeUniforms;
-
-@compute @workgroup_size(64, 1, 1)
-fn compute_main(@builtin(global_invocation_id) gid: vec3<u32>) {
-  let lane = gid.x;
-  if (lane < arrayLength(&arena_out)) {
-    arena_out[lane] = arena_in[lane];
-  }
-  if (lane < arrayLength(&state_out)) {
-    state_out[lane] = state_in[lane];
-  }
-}
-`;
 
 async function toBackendResult(
   frontendResult: ReturnType<typeof compileFrontend>,
@@ -62,16 +40,28 @@ async function toBackendResult(
       // pass bundle artifact and bypasses legacy single-pass lowering output.
       compiledGpuBundle = fluidBundle;
     } else {
-      // [LAW:one-source-of-truth] exception: non-fluid programs currently use one
-      // canonical passthrough simulation kernel while full opcode-complete Naga
-      // lowering is brought to parity for Type 1 rendering in the Rust path.
+      // [LAW:single-enforcer] Non-fluid shader lowering is validated by one
+      // Naga boundary before entering runtime worker transport.
+      const nagaCompilation = await compileProgramWithNaga(result.program);
+      if (nagaCompilation.kind === 'error') {
+        return {
+          kind: 'error',
+          errors: nagaCompilation.errors.map((error) => ({
+            ...error,
+            details: {
+              ...(error.details ?? {}),
+              preNagaWarnings: result.warnings,
+            },
+          })),
+        };
+      }
       compiledGpuBundle = {
         schemaVersion: 1,
         passes: [{
           passId: 'simulation',
           stage: 'compute',
           entryPoint: 'compute_main',
-          wgsl: NON_FLUID_PASSTHROUGH_WGSL,
+          wgsl: nagaCompilation.wgsl,
         }],
       };
     }
