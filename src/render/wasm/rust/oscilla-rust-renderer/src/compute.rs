@@ -457,12 +457,11 @@ impl ComputeDispatcher {
         self.simulation_pipelines.len() as u32
     }
 
-    pub fn encode_passes(
+    pub fn encode_simulation_and_assembly(
         &self,
         encoder: &mut wgpu::CommandEncoder,
         arena: &mut GpuMemoryArena,
         assembly_instance_count: u32,
-        draw_prep_record_count: u32,
     ) {
         let mut read_index = arena.ping_pong_index();
         for compiled_pass in &self.simulation_pipelines {
@@ -497,12 +496,24 @@ impl ComputeDispatcher {
                 ((assembly_instance_count.saturating_add(63)) / 64).max(1);
             compute_pass.dispatch_workgroups(assembly_workgroup_count, 1, 1);
         }
-
-        let _ = draw_prep_record_count;
-        // [LAW:single-enforcer] exception: indirect args are temporarily
-        // materialized by CPU sink-table mirroring while GPU draw-prep parity
-        // debugging is in progress.
-
         arena.set_ping_pong_index(read_index);
     }
+
+    pub fn encode_draw_prep(
+        &self,
+        encoder: &mut wgpu::CommandEncoder,
+        arena: &GpuMemoryArena,
+        draw_prep_record_count: u32,
+    ) {
+        let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+            label: Some("Compute.DrawPrep.Pass"),
+            timestamp_writes: None,
+        });
+        compute_pass.set_pipeline(&self.draw_prep_pipeline);
+        compute_pass.set_bind_group(0, &arena.draw_prep_bind_group, &[]);
+        // [LAW:dataflow-not-control-flow] Draw prep always dispatches on the
+        // canonical stage; record count data governs in-shader no-op behavior.
+        compute_pass.dispatch_workgroups(draw_prep_record_count.max(1), 1, 1);
+    }
+
 }

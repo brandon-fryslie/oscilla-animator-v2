@@ -418,13 +418,7 @@ const SHAPE_WORD_PARAM_BLOCK_OFFSET: usize = 9;
 const SHAPE_WORD_PARAM_BLOCK_WORDS: usize = 10;
 const SHAPE_FLAG_CLOSED: u32 = 1;
 
-const DRAW_MODE_INDEXED: u32 = 0;
-const DRAW_MODE_NON_INDEXED: u32 = 1;
-const SINK_RECORD_WORD_DRAW_MODE: usize = 1;
-const SINK_RECORD_WORD_SHAPE_HANDLE_WORD_OFFSET: usize = 2;
-const SINK_RECORD_WORD_INDIRECT_RECORD_INDEX: usize = 3;
 const SINK_RECORD_WORD_INSTANCE_COUNT: usize = 4;
-const SINK_RECORD_WORD_FIRST_INSTANCE: usize = 5;
 
 fn realize_shape_bank_geometry(shape_bank_words: &mut [u32]) -> (Vec<f32>, Vec<u32>) {
     let mut vertex_floats: Vec<f32> = Vec::new();
@@ -801,14 +795,16 @@ impl Engine {
                             label: Some("HotPath.CommandEncoder"),
                         });
 
+                let draw_prep_record_count = self
+                    .draw_regions
+                    .indexed_record_count
+                    .saturating_add(self.draw_regions.non_indexed_record_count);
+
                 let simulation_stage_start_ms = worker_monotonic_now_ms();
-                self.compute.encode_passes(
+                self.compute.encode_simulation_and_assembly(
                     &mut encoder,
                     &mut self.arena,
                     self.draw_regions.total_instance_count,
-                    self.draw_regions
-                        .indexed_record_count
-                        .saturating_add(self.draw_regions.non_indexed_record_count),
                 );
                 let simulation_stage_end_ms = worker_monotonic_now_ms();
                 stage_timings.simulation_dispatch_ms =
@@ -819,9 +815,12 @@ impl Engine {
                 } else {
                     0.0
                 };
-                // [LAW:one-source-of-truth] exception: dedicated draw-prep
-                // timing instrumentation is pending; packet remains canonical.
-                stage_timings.draw_prep_ms = 0.0;
+                let draw_prep_stage_start_ms = worker_monotonic_now_ms();
+                self.compute
+                    .encode_draw_prep(&mut encoder, &self.arena, draw_prep_record_count);
+                let draw_prep_stage_end_ms = worker_monotonic_now_ms();
+                stage_timings.draw_prep_ms =
+                    (draw_prep_stage_end_ms - draw_prep_stage_start_ms).max(0.0);
 
                 let render_stage_start_ms = worker_monotonic_now_ms();
                 self.render.encode_passes(
@@ -964,12 +963,20 @@ impl Engine {
     fn build_scheduler_telemetry(&self, stage_timings: StageTimingsMs) -> SchedulerTelemetry {
         let assembly_workgroup_count =
             ((self.draw_regions.total_instance_count.saturating_add(63)) / 64).max(1);
+        let draw_prep_record_count = self
+            .draw_regions
+            .indexed_record_count
+            .saturating_add(self.draw_regions.non_indexed_record_count);
+        let draw_prep_workgroup_count = draw_prep_record_count.max(1);
         let simulation_workgroup_count = self.compute.simulation_workgroup_count();
         let simulation_dispatch_count = self.compute.simulation_dispatch_count();
         let dispatch_counters = DispatchCounters {
-            compute_dispatch_count: simulation_dispatch_count.saturating_add(1),
+            compute_dispatch_count: simulation_dispatch_count
+                .saturating_add(1)
+                .saturating_add(1),
             compute_workgroup_count: simulation_workgroup_count
-                .saturating_add(assembly_workgroup_count),
+                .saturating_add(assembly_workgroup_count)
+                .saturating_add(draw_prep_workgroup_count),
             active_lane_count: self.draw_regions.total_instance_count,
             guarded_lane_count: assembly_workgroup_count
                 .saturating_mul(64)
@@ -1093,72 +1100,8 @@ impl Engine {
             total_instance_count = total_instance_count
                 .saturating_add(plane_words[record_base + SINK_RECORD_WORD_INSTANCE_COUNT]);
         }
-        let mut mirrored_indirect_words: Vec<u32> = Vec::new();
-        if let Some(shared_shape_bank) = self.shared_shape_bank.as_ref() {
-            for record in 0..(total_record_count as usize) {
-                let record_base =
-                    SINK_TABLE_HEADER_WORDS + record.saturating_mul(SINK_TABLE_RECORD_WORDS);
-                if record_base + SINK_RECORD_WORD_FIRST_INSTANCE >= plane_words.len() {
-                    break;
-                }
-                let draw_mode = plane_words[record_base + SINK_RECORD_WORD_DRAW_MODE];
-                let shape_handle_word_offset =
-                    plane_words[record_base + SINK_RECORD_WORD_SHAPE_HANDLE_WORD_OFFSET] as usize;
-                let indirect_record_index =
-                    plane_words[record_base + SINK_RECORD_WORD_INDIRECT_RECORD_INDEX] as usize;
-                let instance_count = plane_words[record_base + SINK_RECORD_WORD_INSTANCE_COUNT];
-                let first_instance = plane_words[record_base + SINK_RECORD_WORD_FIRST_INSTANCE];
-                if shape_handle_word_offset + SHAPE_BANK_HEADER_WORDS
-                    > shared_shape_bank.length() as usize
-                {
-                    continue;
-                }
-                match draw_mode {
-                    DRAW_MODE_INDEXED => {
-                        let command_base = (indexed_region_base_words as usize).saturating_add(
-                            indirect_record_index.saturating_mul(indexed_stride_words as usize),
-                        );
-                        let required_words =
-                            command_base.saturating_add(INDIRECT_INDEXED_STRIDE_WORDS);
-                        if mirrored_indirect_words.len() < required_words {
-                            mirrored_indirect_words.resize(required_words, 0);
-                        }
-                        mirrored_indirect_words[command_base] = shared_shape_bank
-                            .get_index((shape_handle_word_offset + SHAPE_WORD_INDEX_COUNT) as u32);
-                        mirrored_indirect_words[command_base + 1] = instance_count;
-                        mirrored_indirect_words[command_base + 2] = shared_shape_bank
-                            .get_index((shape_handle_word_offset + SHAPE_WORD_FIRST_INDEX) as u32);
-                        mirrored_indirect_words[command_base + 3] = shared_shape_bank
-                            .get_index((shape_handle_word_offset + SHAPE_WORD_BASE_VERTEX) as u32);
-                        mirrored_indirect_words[command_base + 4] = first_instance;
-                    }
-                    DRAW_MODE_NON_INDEXED => {
-                        let command_base = (non_indexed_region_base_words as usize).saturating_add(
-                            indirect_record_index.saturating_mul(non_indexed_stride_words as usize),
-                        );
-                        let required_words =
-                            command_base.saturating_add(INDIRECT_NON_INDEXED_STRIDE_WORDS);
-                        if mirrored_indirect_words.len() < required_words {
-                            mirrored_indirect_words.resize(required_words, 0);
-                        }
-                        mirrored_indirect_words[command_base] = shared_shape_bank
-                            .get_index((shape_handle_word_offset + SHAPE_WORD_VERTEX_COUNT) as u32);
-                        mirrored_indirect_words[command_base + 1] = instance_count;
-                        mirrored_indirect_words[command_base + 2] = shared_shape_bank
-                            .get_index((shape_handle_word_offset + SHAPE_WORD_FIRST_VERTEX) as u32);
-                        mirrored_indirect_words[command_base + 3] = first_instance;
-                    }
-                    _ => {}
-                }
-            }
-        }
-        // [LAW:single-enforcer] exception: this temporary CPU-side indirect
-        // mirror keeps render visibility while validating draw-prep parity.
-        self.arena.write_indirect_words(
-            &self.device,
-            &self.queue,
-            mirrored_indirect_words.as_slice(),
-        );
+        // [LAW:single-enforcer] Indirect args are authored by the canonical
+        // GPU draw-prep pass; CPU mirror writes are intentionally removed.
         IndirectRegionPlan {
             total_instance_count,
             indexed_record_count,
