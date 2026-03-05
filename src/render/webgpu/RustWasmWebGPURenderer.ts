@@ -646,27 +646,14 @@ export class WebGPURenderer {
       config,
     };
 
-    await new Promise<void>((resolve, reject) => {
-      const onError = (event: ErrorEvent): void => {
-        this.fatalError = new Error(event.message || 'Rust renderer worker crashed');
-        reject(this.fatalError);
-      };
-      this.worker.addEventListener('error', onError, { once: true });
-      this.awaitWorkerAck({
-        successType: 'BOOTSTRAP_SUCCESS',
-        context: 'bootstrap',
-        dispatch: () => {
-          this.worker.postMessage(message, [offscreenCanvas]);
-        },
-      }).then(() => {
-        this.bootstrapped = true;
-        this.worker.removeEventListener('error', onError);
-        resolve();
-      }).catch((error) => {
-        this.worker.removeEventListener('error', onError);
-        reject(error);
-      });
+    await this.awaitWorkerAck({
+      successType: 'BOOTSTRAP_SUCCESS',
+      context: 'bootstrap',
+      dispatch: () => {
+        this.worker.postMessage(message, [offscreenCanvas]);
+      },
     });
+    this.bootstrapped = true;
   }
 
   private async awaitWorkerAck(
@@ -686,6 +673,7 @@ export class WebGPURenderer {
         settled = true;
         globalThis.clearTimeout(timeoutId);
         this.worker.removeEventListener('message', onMessage);
+        this.worker.removeEventListener('error', onError);
         callback();
       };
       const onMessage = (event: MessageEvent<RustRendererWorkerOutboundMessage>): void => {
@@ -699,7 +687,13 @@ export class WebGPURenderer {
           settle(() => reject(new Error(`[${payload.code}] ${payload.message}`)));
         }
       };
+      const onError = (event: ErrorEvent): void => {
+        settle(() => reject(new Error(event.message || `Rust renderer worker crashed during ${options.context}`)));
+      };
       this.worker.addEventListener('message', onMessage);
+      this.worker.addEventListener('error', onError);
+      // [LAW:single-enforcer] Worker request/ack timeout ownership lives in
+      // one renderer boundary helper to avoid divergent wait logic.
       options.dispatch();
     });
   }
