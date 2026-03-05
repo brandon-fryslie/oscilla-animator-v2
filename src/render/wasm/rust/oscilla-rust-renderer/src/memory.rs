@@ -492,6 +492,33 @@ impl GpuMemoryArena {
         }
     }
 
+    pub fn write_compiler_arena_words(
+        &mut self,
+        queue: &wgpu::Queue,
+        offset_words: usize,
+        words: &[u32],
+    ) {
+        if words.is_empty() {
+            return;
+        }
+        let offset_bytes = (offset_words.saturating_mul(std::mem::size_of::<u32>())) as u64;
+        let payload_bytes = (words.len().saturating_mul(std::mem::size_of::<u32>())) as u64;
+        let end_bytes = offset_bytes.saturating_add(payload_bytes);
+        for buffer in &self.compiler_arena_buffers {
+            if end_bytes > buffer.size() {
+                panic!(
+                    "[LAW:no-silent-fallbacks] compiler arena mirror overflow (offset_words={}, payload_words={}, buffer_bytes={})",
+                    offset_words,
+                    words.len(),
+                    buffer.size(),
+                );
+            }
+        }
+        for buffer in &self.compiler_arena_buffers {
+            queue.write_buffer(buffer, offset_bytes, cast_slice(words));
+        }
+    }
+
     fn create_instance_buffer(device: &wgpu::Device, size_bytes: u64) -> wgpu::Buffer {
         device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Render.InstanceBuffer"),

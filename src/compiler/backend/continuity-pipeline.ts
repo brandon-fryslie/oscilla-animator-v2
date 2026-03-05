@@ -27,7 +27,14 @@ import type { ValueRefPacked } from '../ir/lowerTypes';
 import { isExprRef } from '../ir/lowerTypes';
 import { getBlockDefinition } from '../../blocks/registry';
 import { getPolicyForSemantic } from '../../runtime/ContinuityDefaults';
-import { requireManyInstance, payloadStride, withInstance } from '../../core/canonical-types';
+import {
+  FLOAT,
+  canonicalType,
+  payloadStride,
+  requireManyInstance,
+  unitNone,
+  withInstance,
+} from '../../core/canonical-types';
 import type { CanonicalType } from '../../core/canonical-types';
 
 // =============================================================================
@@ -452,31 +459,34 @@ export function allocateContinuityPipeline(
       `${renderBlockId}:color`,
     );
 
-    // [LAW:one-source-of-truth] Render scale is canonicalized to one slot-backed
-    // field path; cardinality-one inputs are broadcast into the render instance.
-    let scaleOutput: StepRender['scale'] = undefined;
-    if (scale) {
-      const scaleExpr = valueExprs[scale.id as number];
-      if (!scaleExpr) {
-        throw new Error(`RenderInstances2D (${renderBlockId}): missing scale expr ${scale.id}`);
-      }
-      const scaleFieldExprId = isFieldExtent(scale.id, valueExprs)
-        ? scale.id
-        : builder.broadcast(scale.id, withInstance(scaleExpr.type, renderInstance));
-      const scaleFieldExpr = valueExprs[scaleFieldExprId as number];
-      if (!scaleFieldExpr) {
-        throw new Error(
-          `RenderInstances2D (${renderBlockId}): missing broadcast scale expr ${scaleFieldExprId}`,
-        );
-      }
-      const scaleSlots = getFieldSlots(
-        scaleFieldExprId,
-        'custom',
-        payloadStride(scaleFieldExpr.type.payload),
-        `${renderBlockId}:scale`,
-      );
-      scaleOutput = { k: 'slot', slot: scaleSlots.outputSlot };
+    // [LAW:one-source-of-truth] Render scale is always materialized through one
+    // slot-backed field path. Unwired scale inputs are normalized to identity.
+    const identityScaleExprId = builder.constantWithKey(
+      { kind: 'float', value: 1 },
+      canonicalType(FLOAT, unitNone()),
+      'render.scale.identity.one',
+    );
+    const scaleSourceExprId = scale?.id ?? identityScaleExprId;
+    const scaleExpr = valueExprs[scaleSourceExprId as number];
+    if (!scaleExpr) {
+      throw new Error(`RenderInstances2D (${renderBlockId}): missing scale expr ${scaleSourceExprId}`);
     }
+    const scaleFieldExprId = isFieldExtent(scaleSourceExprId, valueExprs)
+      ? scaleSourceExprId
+      : builder.broadcast(scaleSourceExprId, withInstance(scaleExpr.type, renderInstance));
+    const scaleFieldExpr = valueExprs[scaleFieldExprId as number];
+    if (!scaleFieldExpr) {
+      throw new Error(
+        `RenderInstances2D (${renderBlockId}): missing broadcast scale expr ${scaleFieldExprId}`,
+      );
+    }
+    const scaleSlots = getFieldSlots(
+      scaleFieldExprId,
+      'custom',
+      payloadStride(scaleFieldExpr.type.payload),
+      `${renderBlockId}:scale`,
+    );
+    const scaleOutput: StepRender['scale'] = { k: 'slot', slot: scaleSlots.outputSlot };
 
     // Process shape
     let shapeOutput: StepRender['shape'] | undefined = undefined;

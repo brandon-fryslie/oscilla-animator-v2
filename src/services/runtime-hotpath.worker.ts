@@ -51,6 +51,8 @@ interface ViewportState {
   panY: number;
 }
 
+type RuntimeExecutionMode = 'gpuStatic' | 'cpuPayload';
+
 let bootstrapped = false;
 let disposed = false;
 let paused = false;
@@ -73,6 +75,7 @@ let lastDrawOpCount = 0;
 let lastSinkWordCount = 0;
 let lastHeartbeatMs = 0;
 let gpuDrivenExecutionEnabled = false;
+let executionMode: RuntimeExecutionMode = 'gpuStatic';
 let gpuDrivenSinkTableWords: Uint32Array | null = null;
 let gpuDrivenSinkTableWordCount = 0;
 let gpuDrivenShapeBankWords: Uint32Array | null = null;
@@ -146,6 +149,11 @@ function reviveProgram(program: SerializableCompiledProgramIR): CompiledProgramI
     // kernel registry from one definition instead of receiving function refs.
     kernelRegistry: createDefaultRegistry(),
   };
+}
+
+function isFluidProgram(program: CompiledProgramIR): boolean {
+  const passes = program.generatedGpuArtifactManifest?.passes ?? [];
+  return passes.some((pass) => typeof pass.passId === 'string' && pass.passId.startsWith('fluid.'));
 }
 
 function requireRenderStep(program: CompiledProgramIR, renderStepIndex: number): StepRender {
@@ -378,6 +386,31 @@ function buildGpuDrivenSinkTableWords(
   return { words, wordCount };
 }
 
+function refreshCpuPayloadPlanes(program: CompiledProgramIR, state: RuntimeState, tMs: number): void {
+  // [LAW:one-source-of-truth] exception: non-fluid runtime currently materializes
+  // canonical render payload via executeFrame+sink packing until opcode-complete
+  // compiler lowering owns full Type 1 simulation on GPU.
+  arena.reset();
+  executeFrame(program, state, arena, tMs);
+  const packed = packDrawPrepSinkTableV1(program, state);
+  gpuDrivenSinkTableWords = packed?.words ?? null;
+  gpuDrivenSinkTableWordCount = packed?.wordCount ?? 0;
+  lastSinkTableSample = buildSinkTableSample(gpuDrivenSinkTableWords, gpuDrivenSinkTableWordCount);
+
+  const shapeWordCount = assertFiniteUint32(
+    state.shapeBank.volatilePtr,
+    'cpuPayloadShapeBank.wordCount',
+  );
+  const shapeWords = new Uint32Array(shapeWordCount);
+  if (shapeWordCount > 0) {
+    shapeWords.set(state.shapeBank.data.subarray(0, shapeWordCount), 0);
+  }
+  gpuDrivenShapeBankWords = shapeWords;
+  gpuDrivenShapeBankWordCount = shapeWordCount;
+  gpuDrivenExecutionEnabled = true;
+  gpuDrivenPlanesDirty = true;
+}
+
 function installProgram(program: SerializableCompiledProgramIR): void {
   const revived = reviveProgram(program);
   const targetArenaCapacity = computeArenaCapacity(revived.arenaTotalFloats);
@@ -467,6 +500,7 @@ function installProgram(program: SerializableCompiledProgramIR): void {
   }
 
   gpuDrivenExecutionEnabled = false;
+  executionMode = isFluidProgram(revived) ? 'gpuStatic' : 'cpuPayload';
   gpuDrivenSinkTableWords = null;
   gpuDrivenSinkTableWordCount = 0;
   lastSinkTableSample = null;
@@ -475,17 +509,26 @@ function installProgram(program: SerializableCompiledProgramIR): void {
   publishedSinkWordCount = 0;
   publishedShapeWordCount = 0;
   gpuDrivenPlanesDirty = true;
-  try {
-    const gpuDriven = buildGpuDrivenSinkTableWords(revived, nextState, warmPackedWords);
-    if (gpuDriven) {
-      gpuDrivenExecutionEnabled = true;
-      gpuDrivenSinkTableWords = gpuDriven.words;
-      gpuDrivenSinkTableWordCount = gpuDriven.wordCount;
-      lastSinkTableSample = buildSinkTableSample(gpuDriven.words, gpuDriven.wordCount);
+  if (executionMode === 'gpuStatic') {
+    try {
+      const gpuDriven = buildGpuDrivenSinkTableWords(revived, nextState, warmPackedWords);
+      if (gpuDriven) {
+        gpuDrivenExecutionEnabled = true;
+        gpuDrivenSinkTableWords = gpuDriven.words;
+        gpuDrivenSinkTableWordCount = gpuDriven.wordCount;
+        lastSinkTableSample = buildSinkTableSample(gpuDriven.words, gpuDriven.wordCount);
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`[runtime-hotpath] GPU sink-table build failed: ${message}`);
     }
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    throw new Error(`[runtime-hotpath] GPU sink-table build failed: ${message}`);
+  } else {
+    try {
+      refreshCpuPayloadPlanes(revived, nextState, performance.now());
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`[runtime-hotpath] CPU payload warmup failed: ${message}`);
+    }
   }
   if (warmupFailed && (revived.drawPrepProgram?.sinks.length ?? 0) > 0) {
     // [LAW:no-silent-fallbacks] GPU hotpath programs cannot silently continue
@@ -656,8 +699,11 @@ function tick(): void {
   const tickStart = performance.now();
   flushExternalWrites(currentState);
   currentState.externalChannels.commit();
-  publishGpuDrivenPlanesIfDirty();
   const tMs = performance.now();
+  if (executionMode === 'cpuPayload') {
+    refreshCpuPayloadPlanes(currentProgram, currentState, tMs);
+  }
+  publishGpuDrivenPlanesIfDirty();
   writeSharedInputWords(
     currentState,
     tMs,
