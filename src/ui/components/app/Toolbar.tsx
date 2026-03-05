@@ -32,6 +32,7 @@ export const Toolbar: React.FC<ToolbarProps> = observer(({ stats = 'FPS: --', do
   const camera = useStore('camera');
   const patch = useStore('patch');
   const demo = useStore('demo');
+  const viewport = useStore('viewport');
   const diagnostics = useStore('diagnostics');
 
   const exportPatch = useExportPatch();
@@ -69,7 +70,14 @@ export const Toolbar: React.FC<ToolbarProps> = observer(({ stats = 'FPS: --', do
   };
 
   const handleDemoSelect = (filename: string) => {
-    demo.selectDemo(filename);
+    const loaded = demo.selectDemo(filename);
+    if (!loaded) {
+      setToastMessage(`Failed to load demo: ${filename}`);
+      setToastSeverity('error');
+      setToastOpen(true);
+      return;
+    }
+    viewport.resetView();
     setToastMessage(`Loaded demo: ${filename}`);
     setToastSeverity('success');
     setToastOpen(true);
@@ -175,7 +183,6 @@ export const Toolbar: React.FC<ToolbarProps> = observer(({ stats = 'FPS: --', do
                   <Menu.Item
                     key={item.filename}
                     onClick={() => handleDemoSelect(item.filename)}
-                    disabled={demo.currentFilename === item.filename}
                   >
                     {item.name}
                   </Menu.Item>
