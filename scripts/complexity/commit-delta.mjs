@@ -267,6 +267,7 @@ async function runComplexityForCommit(commitSha) {
     };
   } finally {
     await runCommand('git', ['worktree', 'remove', '--force', worktreeDir], { allowFailure: true });
+    await fs.rm(tempDir, { recursive: true, force: true });
   }
 }
 
