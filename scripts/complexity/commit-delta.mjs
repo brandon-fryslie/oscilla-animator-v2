@@ -724,7 +724,7 @@ function renderDeltaHtml(delta, baseLabel, headLabel, regressionAttribution) {
   );
 }
 
-async function loadSummaryFromPath(summaryPath, label) {
+async function loadSummaryFromPath(summaryPath, label, commitSha) {
   if (!(await fileExists(summaryPath))) {
     throw new Error(`${label} summary not found: ${summaryPath}`);
   }
@@ -734,6 +734,7 @@ async function loadSummaryFromPath(summaryPath, label) {
       label,
       source: 'provided-summary',
       summaryPath,
+      ...(commitSha ? { commitSha } : {}),
     },
   };
 }
@@ -763,14 +764,17 @@ async function main() {
   const args = parseArgs(process.argv.slice(2));
   if (args.help || args.h) {
     console.log('usage: node scripts/complexity/commit-delta.mjs [--base <ref>] [--head <ref>] [--output-dir <dir>]');
-    console.log('   or: node scripts/complexity/commit-delta.mjs --base-summary <path> --head-summary <path> [--output-dir <dir>]');
+    console.log('   or: node scripts/complexity/commit-delta.mjs --base-summary <path> --head-summary <path> [--base-sha <sha>] [--head-sha <sha>] [--output-dir <dir>]');
     console.log('defaults: base = @{upstream}, head = HEAD');
+    console.log('  --base-sha / --head-sha: only used with --base-summary / --head-summary; supply commit SHAs to enable regression diff drilldown');
     return;
   }
 
   const outputRoot = path.resolve(args['output-dir'] ?? DEFAULT_OUTPUT_ROOT);
   const baseSummaryPath = args['base-summary'];
   const headSummaryPath = args['head-summary'];
+  const baseShaArg = args['base-sha'] ?? null;
+  const headShaArg = args['head-sha'] ?? null;
 
   if ((baseSummaryPath && !headSummaryPath) || (!baseSummaryPath && headSummaryPath)) {
     throw new Error('both --base-summary and --head-summary are required together');
@@ -782,11 +786,11 @@ async function main() {
   const headRef = useSummaryInput ? null : (args.head ?? 'HEAD');
 
   const baseLoaded = useSummaryInput
-    ? await loadSummaryFromPath(path.resolve(baseSummaryPath), baseSummaryPath)
+    ? await loadSummaryFromPath(path.resolve(baseSummaryPath), baseSummaryPath, baseShaArg)
     : await loadSummaryFromRef(baseRef);
 
   const headLoaded = useSummaryInput
-    ? await loadSummaryFromPath(path.resolve(headSummaryPath), headSummaryPath)
+    ? await loadSummaryFromPath(path.resolve(headSummaryPath), headSummaryPath, headShaArg)
     : await loadSummaryFromRef(headRef);
 
   // [LAW:one-source-of-truth] Delta output is derived only from canonical comparison-summary highlights from base/head.
