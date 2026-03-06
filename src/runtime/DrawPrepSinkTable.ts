@@ -4,7 +4,8 @@ import type { DrawPrepProgramIR, DrawPrepSinkIR } from '../compiler/ir/program';
 // here so runtime packing, worker transport, and Rust execution share one ABI.
 export const DRAW_PREP_SINK_TABLE_V1_VERSION = 1;
 export const DRAW_PREP_SINK_TABLE_HEADER_WORDS = 8;
-export const DRAW_PREP_SINK_TABLE_RECORD_WORDS = 29;
+export const DRAW_PREP_SINK_TABLE_RECORD_WORDS = 8;
+export const DRAW_PREP_SINK_DESCRIPTOR_WORDS = 20;
 
 export type DrawPrepDrawModeCode = 0 | 1;
 
@@ -20,35 +21,39 @@ export enum DrawPrepSinkTableHeaderWord {
 }
 
 export enum DrawPrepSinkTableRecordWord {
-  SinkIndex = 0,
-  DrawMode = 1,
-  ShapeHandleWordOffset = 2,
-  IndirectRecordIndex = 3,
-  InstanceCount = 4,
+  DrawMode = 0,
+  Count = 1,
+  InstanceCount = 2,
+  First = 3,
+  BaseVertex = 4,
   FirstInstance = 5,
-  RenderStepIndex = 6,
-  ShapeSourceCode = 7,
-  PositionBaseOffset = 8,
-  PositionLaneStride = 9,
-  PositionComponentStride = 10,
-  ColorBaseOffset = 11,
-  ColorLaneStride = 12,
-  ColorComponentStride = 13,
-  ScaleModeCode = 14,
-  ScaleValueOrBaseOffset = 15,
-  ScaleLaneStride = 16,
-  ScaleComponentStride = 17,
-  RotationModeCode = 18,
-  RotationBaseOffset = 19,
-  RotationLaneStride = 20,
-  RotationComponentStride = 21,
-  Scale2ModeCode = 22,
-  Scale2BaseOffset = 23,
-  Scale2LaneStride = 24,
-  Scale2ComponentStride = 25,
-  ShapeSlotBaseOffset = 26,
-  ShapeSlotLaneStride = 27,
-  ShapeSlotComponentStride = 28,
+  ShapeWordOffset = 6,
+  MaterialId = 7,
+}
+
+// [LAW:one-source-of-truth] Sink descriptor schema is defined once so JS packers
+// and Rust assembly shader share one canonical static-address contract.
+export enum DrawPrepSinkDescriptorWord {
+  PositionBaseOffset = 0,
+  PositionLaneStride = 1,
+  PositionComponentStride = 2,
+  ColorBaseOffset = 3,
+  ColorLaneStride = 4,
+  ColorComponentStride = 5,
+  ScaleBaseOffset = 6,
+  ScaleLaneStride = 7,
+  ScaleComponentStride = 8,
+  RotationMode = 9,
+  RotationBaseOffset = 10,
+  RotationLaneStride = 11,
+  RotationComponentStride = 12,
+  RotationDefaultBits = 13,
+  Scale2Mode = 14,
+  Scale2BaseOffset = 15,
+  Scale2LaneStride = 16,
+  Scale2ComponentStride = 17,
+  Scale2DefaultXBits = 18,
+  Scale2DefaultYBits = 19,
 }
 
 export interface DrawPrepSinkTableHeaderV1 {
@@ -63,35 +68,14 @@ export interface DrawPrepSinkTableHeaderV1 {
 }
 
 export interface DrawPrepSinkRecordV1 {
-  readonly sinkIndex: number;
   readonly drawMode: DrawPrepDrawModeCode;
-  readonly shapeHandleWordOffset: number;
-  readonly indirectRecordIndex: number;
+  readonly count: number;
   readonly instanceCount: number;
+  readonly first: number;
+  readonly baseVertex: number;
   readonly firstInstance: number;
-  readonly renderStepIndex: number;
-  readonly shapeSourceCode: number;
-  readonly positionBaseOffset: number;
-  readonly positionLaneStride: number;
-  readonly positionComponentStride: number;
-  readonly colorBaseOffset: number;
-  readonly colorLaneStride: number;
-  readonly colorComponentStride: number;
-  readonly scaleModeCode: number;
-  readonly scaleValueOrBaseOffset: number;
-  readonly scaleLaneStride: number;
-  readonly scaleComponentStride: number;
-  readonly rotationModeCode: number;
-  readonly rotationBaseOffset: number;
-  readonly rotationLaneStride: number;
-  readonly rotationComponentStride: number;
-  readonly scale2ModeCode: number;
-  readonly scale2BaseOffset: number;
-  readonly scale2LaneStride: number;
-  readonly scale2ComponentStride: number;
-  readonly shapeSlotBaseOffset: number;
-  readonly shapeSlotLaneStride: number;
-  readonly shapeSlotComponentStride: number;
+  readonly shapeWordOffset: number;
+  readonly materialId: number;
 }
 
 export interface DrawPrepSinkTableV1 {
@@ -126,9 +110,24 @@ function assertFiniteUint32(value: number, context: string): number {
   return value;
 }
 
+function assertFiniteInt32(value: number, context: string): number {
+  if (
+    !Number.isFinite(value)
+    || !Number.isInteger(value)
+    || !Number.isSafeInteger(value)
+    || value < -0x8000_0000
+    || value > 0x7FFF_FFFF
+  ) {
+    throw new Error(`DrawPrepSinkTable: ${context} must be int32, got ${String(value)}`);
+  }
+  return value;
+}
+
 export function computeDrawPrepSinkTableWordCapacity(recordCount: number): number {
   const safeRecordCount = assertFiniteUint32(recordCount, 'recordCount');
-  return DRAW_PREP_SINK_TABLE_HEADER_WORDS + safeRecordCount * DRAW_PREP_SINK_TABLE_RECORD_WORDS;
+  return DRAW_PREP_SINK_TABLE_HEADER_WORDS
+    + safeRecordCount * DRAW_PREP_SINK_TABLE_RECORD_WORDS
+    + safeRecordCount * DRAW_PREP_SINK_DESCRIPTOR_WORDS;
 }
 
 export function buildDrawPrepSinkTableHeader(program: DrawPrepProgramIR): DrawPrepSinkTableHeaderV1 {
@@ -209,115 +208,31 @@ export function writeDrawPrepSinkRecord(
     );
   }
 
-  target[base + DrawPrepSinkTableRecordWord.SinkIndex] = assertFiniteUint32(record.sinkIndex, 'record.sinkIndex');
   target[base + DrawPrepSinkTableRecordWord.DrawMode] = assertFiniteUint32(record.drawMode, 'record.drawMode');
-  target[base + DrawPrepSinkTableRecordWord.ShapeHandleWordOffset] = assertFiniteUint32(
-    record.shapeHandleWordOffset,
-    'record.shapeHandleWordOffset',
-  );
-  target[base + DrawPrepSinkTableRecordWord.IndirectRecordIndex] = assertFiniteUint32(
-    record.indirectRecordIndex,
-    'record.indirectRecordIndex',
-  );
+  target[base + DrawPrepSinkTableRecordWord.Count] = assertFiniteUint32(record.count, 'record.count');
   target[base + DrawPrepSinkTableRecordWord.InstanceCount] = assertFiniteUint32(
     record.instanceCount,
     'record.instanceCount',
   );
+  target[base + DrawPrepSinkTableRecordWord.First] = assertFiniteUint32(record.first, 'record.first');
   target[base + DrawPrepSinkTableRecordWord.FirstInstance] = assertFiniteUint32(
     record.firstInstance,
     'record.firstInstance',
   );
-  target[base + DrawPrepSinkTableRecordWord.RenderStepIndex] = assertFiniteUint32(
-    record.renderStepIndex,
-    'record.renderStepIndex',
+  target[base + DrawPrepSinkTableRecordWord.ShapeWordOffset] = assertFiniteUint32(
+    record.shapeWordOffset,
+    'record.shapeWordOffset',
   );
-  target[base + DrawPrepSinkTableRecordWord.ShapeSourceCode] = assertFiniteUint32(
-    record.shapeSourceCode,
-    'record.shapeSourceCode',
+  target[base + DrawPrepSinkTableRecordWord.MaterialId] = assertFiniteUint32(
+    record.materialId,
+    'record.materialId',
   );
-  target[base + DrawPrepSinkTableRecordWord.PositionBaseOffset] = assertFiniteUint32(
-    record.positionBaseOffset,
-    'record.positionBaseOffset',
-  );
-  target[base + DrawPrepSinkTableRecordWord.PositionLaneStride] = assertFiniteUint32(
-    record.positionLaneStride,
-    'record.positionLaneStride',
-  );
-  target[base + DrawPrepSinkTableRecordWord.PositionComponentStride] = assertFiniteUint32(
-    record.positionComponentStride,
-    'record.positionComponentStride',
-  );
-  target[base + DrawPrepSinkTableRecordWord.ColorBaseOffset] = assertFiniteUint32(
-    record.colorBaseOffset,
-    'record.colorBaseOffset',
-  );
-  target[base + DrawPrepSinkTableRecordWord.ColorLaneStride] = assertFiniteUint32(
-    record.colorLaneStride,
-    'record.colorLaneStride',
-  );
-  target[base + DrawPrepSinkTableRecordWord.ColorComponentStride] = assertFiniteUint32(
-    record.colorComponentStride,
-    'record.colorComponentStride',
-  );
-  target[base + DrawPrepSinkTableRecordWord.ScaleModeCode] = assertFiniteUint32(
-    record.scaleModeCode,
-    'record.scaleModeCode',
-  );
-  target[base + DrawPrepSinkTableRecordWord.ScaleValueOrBaseOffset] = assertFiniteUint32(
-    record.scaleValueOrBaseOffset,
-    'record.scaleValueOrBaseOffset',
-  );
-  target[base + DrawPrepSinkTableRecordWord.ScaleLaneStride] = assertFiniteUint32(
-    record.scaleLaneStride,
-    'record.scaleLaneStride',
-  );
-  target[base + DrawPrepSinkTableRecordWord.ScaleComponentStride] = assertFiniteUint32(
-    record.scaleComponentStride,
-    'record.scaleComponentStride',
-  );
-  target[base + DrawPrepSinkTableRecordWord.RotationModeCode] = assertFiniteUint32(
-    record.rotationModeCode,
-    'record.rotationModeCode',
-  );
-  target[base + DrawPrepSinkTableRecordWord.RotationBaseOffset] = assertFiniteUint32(
-    record.rotationBaseOffset,
-    'record.rotationBaseOffset',
-  );
-  target[base + DrawPrepSinkTableRecordWord.RotationLaneStride] = assertFiniteUint32(
-    record.rotationLaneStride,
-    'record.rotationLaneStride',
-  );
-  target[base + DrawPrepSinkTableRecordWord.RotationComponentStride] = assertFiniteUint32(
-    record.rotationComponentStride,
-    'record.rotationComponentStride',
-  );
-  target[base + DrawPrepSinkTableRecordWord.Scale2ModeCode] = assertFiniteUint32(
-    record.scale2ModeCode,
-    'record.scale2ModeCode',
-  );
-  target[base + DrawPrepSinkTableRecordWord.Scale2BaseOffset] = assertFiniteUint32(
-    record.scale2BaseOffset,
-    'record.scale2BaseOffset',
-  );
-  target[base + DrawPrepSinkTableRecordWord.Scale2LaneStride] = assertFiniteUint32(
-    record.scale2LaneStride,
-    'record.scale2LaneStride',
-  );
-  target[base + DrawPrepSinkTableRecordWord.Scale2ComponentStride] = assertFiniteUint32(
-    record.scale2ComponentStride,
-    'record.scale2ComponentStride',
-  );
-  target[base + DrawPrepSinkTableRecordWord.ShapeSlotBaseOffset] = assertFiniteUint32(
-    record.shapeSlotBaseOffset,
-    'record.shapeSlotBaseOffset',
-  );
-  target[base + DrawPrepSinkTableRecordWord.ShapeSlotLaneStride] = assertFiniteUint32(
-    record.shapeSlotLaneStride,
-    'record.shapeSlotLaneStride',
-  );
-  target[base + DrawPrepSinkTableRecordWord.ShapeSlotComponentStride] = assertFiniteUint32(
-    record.shapeSlotComponentStride,
-    'record.shapeSlotComponentStride',
+
+  const dataView = new DataView(target.buffer, target.byteOffset, target.byteLength);
+  dataView.setInt32(
+    (base + DrawPrepSinkTableRecordWord.BaseVertex) * 4,
+    assertFiniteInt32(record.baseVertex, 'record.baseVertex'),
+    true,
   );
 }
 

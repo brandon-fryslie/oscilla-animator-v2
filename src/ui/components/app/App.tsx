@@ -24,6 +24,7 @@ import type { ExternalWriteBus } from '../../../runtime/ExternalChannel';
 import { ExternalWriteBusContext } from '../../ExternalWriteBusContext';
 import { useShowPreview } from '../../../testing/test-params';
 import { TestPreviewPanel } from '../../../testing/TestPreviewPanel';
+import { EngineDebugOverlay } from './EngineDebugOverlay';
 
 // Mantine dark theme configuration - gorgeous modern look
 const mantineTheme = createMantineTheme({
@@ -253,6 +254,7 @@ export const App: React.FC<AppProps> = ({ onCanvasReady, onStoreReady, onStatsSi
             severity={toastSeverity}
             onClose={handleToastClose}
           />
+          <EngineDebugOverlay />
         </EditorProvider>
         )}
       </ExternalWriteBusContext.Provider>

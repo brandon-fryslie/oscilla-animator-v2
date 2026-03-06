@@ -86,10 +86,11 @@ describe('S02 first type1 shape fixture', () => {
 
     const recordBase = DRAW_PREP_SINK_TABLE_HEADER_WORDS;
     expect(words[recordBase + DrawPrepSinkTableRecordWord.DrawMode]).toBe(0);
+    expect(words[recordBase + DrawPrepSinkTableRecordWord.Count]).toBeGreaterThan(0);
     expect(words[recordBase + DrawPrepSinkTableRecordWord.InstanceCount]).toBe(1);
     expect(words[recordBase + DrawPrepSinkTableRecordWord.FirstInstance]).toBe(0);
 
-    const shapeHandleWordOffset = words[recordBase + DrawPrepSinkTableRecordWord.ShapeHandleWordOffset] >>> 0;
+    const shapeHandleWordOffset = words[recordBase + DrawPrepSinkTableRecordWord.ShapeWordOffset] >>> 0;
     const shapeHeader = readShapeBankHeader(state.shapeBank.data, shapeHandleWordOffset);
 
     expect(shapeHeader.vertexCount).toBeGreaterThanOrEqual(3);
@@ -126,10 +127,10 @@ describe('S02 first type1 shape fixture', () => {
     expect(realizedIndices.length).toBeGreaterThan(0);
 
     const indexedIndirect = {
-      indexCount: shapeHeader.indexCount,
+      indexCount: words[recordBase + DrawPrepSinkTableRecordWord.Count] >>> 0,
       instanceCount: words[recordBase + DrawPrepSinkTableRecordWord.InstanceCount] >>> 0,
-      firstIndex: shapeHeader.firstIndex,
-      baseVertex: shapeHeader.baseVertex,
+      firstIndex: words[recordBase + DrawPrepSinkTableRecordWord.First] >>> 0,
+      baseVertex: words[recordBase + DrawPrepSinkTableRecordWord.BaseVertex] | 0,
       firstInstance: words[recordBase + DrawPrepSinkTableRecordWord.FirstInstance] >>> 0,
     };
 

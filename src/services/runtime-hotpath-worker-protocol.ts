@@ -10,23 +10,13 @@ export interface RuntimeHotpathSinkTableSample {
   readonly totalRecords: number;
   readonly firstRecord: {
     readonly drawModeCode: number;
-    readonly shapeHandleWordOffset: number;
-    readonly shapeSourceCode: number;
+    readonly count: number;
     readonly instanceCount: number;
+    readonly first: number;
+    readonly baseVertex: number;
     readonly firstInstance: number;
-    readonly positionBaseOffset: number;
-    readonly positionLaneStride: number;
-    readonly positionComponentStride: number;
-    readonly colorBaseOffset: number;
-    readonly colorLaneStride: number;
-    readonly colorComponentStride: number;
-    readonly scaleModeCode: number;
-    readonly scaleValueOrBaseOffset: number;
-    readonly scaleLaneStride: number;
-    readonly scaleComponentStride: number;
-    readonly shapeSlotBaseOffset: number;
-    readonly shapeSlotLaneStride: number;
-    readonly shapeSlotComponentStride: number;
+    readonly shapeWordOffset: number;
+    readonly materialId: number;
   } | null;
 }
 

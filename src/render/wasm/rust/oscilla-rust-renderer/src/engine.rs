@@ -9,9 +9,11 @@ use web_sys::OffscreenCanvas;
 
 use crate::allocator::StrictAllocator;
 use crate::compute::{CompilerComputePassSpec, ComputeDispatcher};
+use crate::error_boundary::{send_engine_error, EngineErrorPayload};
 use crate::memory::{
     GpuMemoryArena, INDIRECT_INDEXED_STRIDE_WORDS, INDIRECT_NON_INDEXED_STRIDE_WORDS,
-    SHAPE_BANK_HEADER_WORDS, SINK_TABLE_HEADER_WORDS, SINK_TABLE_RECORD_WORDS,
+    SHAPE_BANK_HEADER_WORDS, SINK_TABLE_DESCRIPTOR_WORDS, SINK_TABLE_HEADER_WORDS,
+    SINK_TABLE_RECORD_WORDS,
 };
 use crate::render::{DepthTarget, IndirectRegionPlan, RenderDispatcher};
 use crate::scheduler::{
@@ -25,13 +27,6 @@ const INPUT_WORD_ZOOM: usize = 2;
 const INPUT_WORD_PAN_X: usize = 3;
 const INPUT_WORD_PAN_Y: usize = 4;
 const INPUT_WORD_TIME_MS: usize = 5;
-const INPUT_WORD_MOUSE_X: usize = 6;
-const INPUT_WORD_MOUSE_Y: usize = 7;
-const INPUT_WORD_MOUSE_BUTTONS: usize = 8;
-const INPUT_WORD_AUDIO_LOW: usize = 9;
-const INPUT_WORD_AUDIO_MID: usize = 10;
-const INPUT_WORD_AUDIO_HIGH: usize = 11;
-const INPUT_WORD_GAUGE_ACTIVE: usize = 12;
 const INPUT_WORD_SINK_TABLE_WORDS: usize = 13;
 const INPUT_WORD_SHAPE_BANK_WORDS: usize = 14;
 const INPUT_SIGNAL_WORDS: u32 = 4;
@@ -64,62 +59,65 @@ const DEFAULT_ASSEMBLY_WGSL: &str = r#"
 @group(2) @binding(1) var<storage, read> sink_table_words: array<u32>;
 
 const SINK_TABLE_HEADER_WORDS: u32 = 8u;
-const SINK_TABLE_RECORD_WORDS: u32 = 29u;
-const RECORD_WORD_SHAPE_HANDLE_WORD_OFFSET: u32 = 2u;
-const RECORD_WORD_INSTANCE_COUNT: u32 = 4u;
+const SINK_TABLE_RECORD_WORDS: u32 = 8u;
+const SINK_TABLE_DESCRIPTOR_WORDS: u32 = 20u;
+const RECORD_WORD_INSTANCE_COUNT: u32 = 2u;
 const RECORD_WORD_FIRST_INSTANCE: u32 = 5u;
-const RECORD_WORD_SHAPE_SOURCE_CODE: u32 = 7u;
-const RECORD_WORD_POSITION_BASE_OFFSET: u32 = 8u;
-const RECORD_WORD_POSITION_LANE_STRIDE: u32 = 9u;
-const RECORD_WORD_POSITION_COMPONENT_STRIDE: u32 = 10u;
-const RECORD_WORD_COLOR_BASE_OFFSET: u32 = 11u;
-const RECORD_WORD_COLOR_LANE_STRIDE: u32 = 12u;
-const RECORD_WORD_COLOR_COMPONENT_STRIDE: u32 = 13u;
-const RECORD_WORD_SCALE_MODE_CODE: u32 = 14u;
-const RECORD_WORD_SCALE_VALUE_OR_BASE_OFFSET: u32 = 15u;
-const RECORD_WORD_SCALE_LANE_STRIDE: u32 = 16u;
-const RECORD_WORD_SCALE_COMPONENT_STRIDE: u32 = 17u;
-const RECORD_WORD_ROTATION_MODE_CODE: u32 = 18u;
-const RECORD_WORD_ROTATION_BASE_OFFSET: u32 = 19u;
-const RECORD_WORD_ROTATION_LANE_STRIDE: u32 = 20u;
-const RECORD_WORD_ROTATION_COMPONENT_STRIDE: u32 = 21u;
-const RECORD_WORD_SCALE2_MODE_CODE: u32 = 22u;
-const RECORD_WORD_SCALE2_BASE_OFFSET: u32 = 23u;
-const RECORD_WORD_SCALE2_LANE_STRIDE: u32 = 24u;
-const RECORD_WORD_SCALE2_COMPONENT_STRIDE: u32 = 25u;
-const RECORD_WORD_SHAPE_SLOT_BASE_OFFSET: u32 = 26u;
-const RECORD_WORD_SHAPE_SLOT_LANE_STRIDE: u32 = 27u;
-const RECORD_WORD_SHAPE_SLOT_COMPONENT_STRIDE: u32 = 28u;
+const RECORD_WORD_SHAPE_WORD_OFFSET: u32 = 6u;
 
-const SCALE_MODE_IDENTITY: u32 = 0u;
-const SCALE_MODE_SCALAR_BITS: u32 = 1u;
-const SCALE_MODE_SLOT: u32 = 2u;
+const DESCRIPTOR_WORD_POSITION_BASE_OFFSET: u32 = 0u;
+const DESCRIPTOR_WORD_POSITION_LANE_STRIDE: u32 = 1u;
+const DESCRIPTOR_WORD_POSITION_COMPONENT_STRIDE: u32 = 2u;
+const DESCRIPTOR_WORD_COLOR_BASE_OFFSET: u32 = 3u;
+const DESCRIPTOR_WORD_COLOR_LANE_STRIDE: u32 = 4u;
+const DESCRIPTOR_WORD_COLOR_COMPONENT_STRIDE: u32 = 5u;
+const DESCRIPTOR_WORD_SCALE_BASE_OFFSET: u32 = 6u;
+const DESCRIPTOR_WORD_SCALE_LANE_STRIDE: u32 = 7u;
+const DESCRIPTOR_WORD_SCALE_COMPONENT_STRIDE: u32 = 8u;
+const DESCRIPTOR_WORD_ROTATION_MODE: u32 = 9u;
+const DESCRIPTOR_WORD_ROTATION_BASE_OFFSET: u32 = 10u;
+const DESCRIPTOR_WORD_ROTATION_LANE_STRIDE: u32 = 11u;
+const DESCRIPTOR_WORD_ROTATION_COMPONENT_STRIDE: u32 = 12u;
+const DESCRIPTOR_WORD_ROTATION_DEFAULT_BITS: u32 = 13u;
+const DESCRIPTOR_WORD_SCALE2_MODE: u32 = 14u;
+const DESCRIPTOR_WORD_SCALE2_BASE_OFFSET: u32 = 15u;
+const DESCRIPTOR_WORD_SCALE2_LANE_STRIDE: u32 = 16u;
+const DESCRIPTOR_WORD_SCALE2_COMPONENT_STRIDE: u32 = 17u;
+const DESCRIPTOR_WORD_SCALE2_DEFAULT_X_BITS: u32 = 18u;
+const DESCRIPTOR_WORD_SCALE2_DEFAULT_Y_BITS: u32 = 19u;
 
-const OPTIONAL_MODE_IDENTITY: u32 = 0u;
+const OPTIONAL_MODE_CONSTANT: u32 = 0u;
 const OPTIONAL_MODE_SLOT: u32 = 1u;
 
-const SHAPE_SOURCE_ONE_HANDLE: u32 = 0u;
-const SHAPE_SOURCE_SLOT: u32 = 1u;
-
-fn arena_index(base_offset: u32, lane: u32, component: u32, lane_stride: u32, component_stride: u32) -> u32 {
-  return base_offset + lane * lane_stride + component * component_stride;
-}
-
-fn read_arena_f32(base_offset: u32, lane: u32, component: u32, lane_stride: u32, component_stride: u32) -> f32 {
-  let index = arena_index(base_offset, lane, component, lane_stride, component_stride);
-  if (index >= arrayLength(&arena_words)) {
-    return 0.0;
-  }
-  let raw = bitcast<f32>(arena_words[index]);
-  return select(0.0, raw, raw == raw);
-}
-
-fn read_arena_u32(base_offset: u32, lane: u32, component: u32, lane_stride: u32, component_stride: u32) -> u32 {
-  let index = arena_index(base_offset, lane, component, lane_stride, component_stride);
-  if (index >= arrayLength(&arena_words)) {
+fn read_sink_word(index: u32) -> u32 {
+  if (index >= arrayLength(&sink_table_words)) {
     return 0u;
   }
-  return arena_words[index];
+  return sink_table_words[index];
+}
+
+fn read_arena_f32(
+  base_offset: u32,
+  lane_stride: u32,
+  component_stride: u32,
+  lane: u32,
+  component: u32,
+  default_value: f32,
+) -> f32 {
+  let index = base_offset + lane * lane_stride + component * component_stride;
+  if (index >= arrayLength(&arena_words)) {
+    return default_value;
+  }
+  let raw = bitcast<f32>(arena_words[index]);
+  return select(default_value, raw, raw == raw);
+}
+
+fn read_sink_f32(index: u32, default_value: f32) -> f32 {
+  if (index >= arrayLength(&sink_table_words)) {
+    return default_value;
+  }
+  let raw = bitcast<f32>(sink_table_words[index]);
+  return select(default_value, raw, raw == raw);
 }
 
 @compute @workgroup_size(64)
@@ -145,21 +143,24 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
 
   let sink_table_word_count = arrayLength(&sink_table_words);
   if (sink_table_word_count >= SINK_TABLE_HEADER_WORDS) {
-    let sink_count = sink_table_words[1u];
+    let sink_count = read_sink_word(1u);
+    let records_base = SINK_TABLE_HEADER_WORDS;
+    let descriptors_base = records_base + sink_count * SINK_TABLE_RECORD_WORDS;
     var sink_index = 0u;
     var sink_found = false;
     var sink_base = 0u;
     var sink_lane = 0u;
+
     loop {
       if (sink_index >= sink_count) {
         break;
       }
-      let candidate_sink_base = SINK_TABLE_HEADER_WORDS + sink_index * SINK_TABLE_RECORD_WORDS;
-      if (candidate_sink_base + RECORD_WORD_SHAPE_SLOT_COMPONENT_STRIDE >= sink_table_word_count) {
+      let candidate_sink_base = records_base + sink_index * SINK_TABLE_RECORD_WORDS;
+      if (candidate_sink_base + RECORD_WORD_SHAPE_WORD_OFFSET >= sink_table_word_count) {
         break;
       }
-      let first_instance = sink_table_words[candidate_sink_base + RECORD_WORD_FIRST_INSTANCE];
-      let instance_count = sink_table_words[candidate_sink_base + RECORD_WORD_INSTANCE_COUNT];
+      let first_instance = read_sink_word(candidate_sink_base + RECORD_WORD_FIRST_INSTANCE);
+      let instance_count = read_sink_word(candidate_sink_base + RECORD_WORD_INSTANCE_COUNT);
       let instance_end = first_instance + instance_count;
       if (gid.x >= first_instance && gid.x < instance_end) {
         sink_base = candidate_sink_base;
@@ -169,57 +170,116 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
       }
       sink_index = sink_index + 1u;
     }
+
     if (sink_found) {
-      let pos_base_offset = sink_table_words[sink_base + RECORD_WORD_POSITION_BASE_OFFSET];
-      let pos_lane_stride = sink_table_words[sink_base + RECORD_WORD_POSITION_LANE_STRIDE];
-      let pos_component_stride = sink_table_words[sink_base + RECORD_WORD_POSITION_COMPONENT_STRIDE];
-      pos_x = read_arena_f32(pos_base_offset, sink_lane, 0u, pos_lane_stride, pos_component_stride);
-      pos_y = read_arena_f32(pos_base_offset, sink_lane, 1u, pos_lane_stride, pos_component_stride);
+      let descriptor_base = descriptors_base + sink_index * SINK_TABLE_DESCRIPTOR_WORDS;
+      let position_base_offset = read_sink_word(descriptor_base + DESCRIPTOR_WORD_POSITION_BASE_OFFSET);
+      let position_lane_stride = read_sink_word(descriptor_base + DESCRIPTOR_WORD_POSITION_LANE_STRIDE);
+      let position_component_stride = read_sink_word(descriptor_base + DESCRIPTOR_WORD_POSITION_COMPONENT_STRIDE);
+      let color_base_offset = read_sink_word(descriptor_base + DESCRIPTOR_WORD_COLOR_BASE_OFFSET);
+      let color_lane_stride = read_sink_word(descriptor_base + DESCRIPTOR_WORD_COLOR_LANE_STRIDE);
+      let color_component_stride = read_sink_word(descriptor_base + DESCRIPTOR_WORD_COLOR_COMPONENT_STRIDE);
+      let scale_base_offset = read_sink_word(descriptor_base + DESCRIPTOR_WORD_SCALE_BASE_OFFSET);
+      let scale_lane_stride = read_sink_word(descriptor_base + DESCRIPTOR_WORD_SCALE_LANE_STRIDE);
+      let scale_component_stride = read_sink_word(descriptor_base + DESCRIPTOR_WORD_SCALE_COMPONENT_STRIDE);
 
-      let color_base_offset = sink_table_words[sink_base + RECORD_WORD_COLOR_BASE_OFFSET];
-      let color_lane_stride = sink_table_words[sink_base + RECORD_WORD_COLOR_LANE_STRIDE];
-      let color_component_stride = sink_table_words[sink_base + RECORD_WORD_COLOR_COMPONENT_STRIDE];
-      color_r = read_arena_f32(color_base_offset, sink_lane, 0u, color_lane_stride, color_component_stride);
-      color_g = read_arena_f32(color_base_offset, sink_lane, 1u, color_lane_stride, color_component_stride);
-      color_b = read_arena_f32(color_base_offset, sink_lane, 2u, color_lane_stride, color_component_stride);
-      color_a = read_arena_f32(color_base_offset, sink_lane, 3u, color_lane_stride, color_component_stride);
+      pos_x = read_arena_f32(
+        position_base_offset,
+        position_lane_stride,
+        position_component_stride,
+        sink_lane,
+        0u,
+        0.0,
+      );
+      pos_y = read_arena_f32(
+        position_base_offset,
+        position_lane_stride,
+        position_component_stride,
+        sink_lane,
+        1u,
+        0.0,
+      );
+      color_r = read_arena_f32(
+        color_base_offset,
+        color_lane_stride,
+        color_component_stride,
+        sink_lane,
+        0u,
+        1.0,
+      );
+      color_g = read_arena_f32(
+        color_base_offset,
+        color_lane_stride,
+        color_component_stride,
+        sink_lane,
+        1u,
+        1.0,
+      );
+      color_b = read_arena_f32(
+        color_base_offset,
+        color_lane_stride,
+        color_component_stride,
+        sink_lane,
+        2u,
+        1.0,
+      );
+      color_a = read_arena_f32(
+        color_base_offset,
+        color_lane_stride,
+        color_component_stride,
+        sink_lane,
+        3u,
+        1.0,
+      );
+      scale = read_arena_f32(
+        scale_base_offset,
+        scale_lane_stride,
+        scale_component_stride,
+        sink_lane,
+        0u,
+        1.0,
+      );
 
-      let scale_mode = sink_table_words[sink_base + RECORD_WORD_SCALE_MODE_CODE];
-      if (scale_mode == SCALE_MODE_SCALAR_BITS) {
-        scale = bitcast<f32>(sink_table_words[sink_base + RECORD_WORD_SCALE_VALUE_OR_BASE_OFFSET]);
-      } else if (scale_mode == SCALE_MODE_SLOT) {
-        let scale_base_offset = sink_table_words[sink_base + RECORD_WORD_SCALE_VALUE_OR_BASE_OFFSET];
-        let scale_lane_stride = sink_table_words[sink_base + RECORD_WORD_SCALE_LANE_STRIDE];
-        let scale_component_stride = sink_table_words[sink_base + RECORD_WORD_SCALE_COMPONENT_STRIDE];
-        scale = read_arena_f32(scale_base_offset, sink_lane, 0u, scale_lane_stride, scale_component_stride);
-      }
+      let rotation_mode = read_sink_word(descriptor_base + DESCRIPTOR_WORD_ROTATION_MODE);
+      let rotation_default = read_sink_f32(descriptor_base + DESCRIPTOR_WORD_ROTATION_DEFAULT_BITS, 0.0);
+      let rotation_base_offset = read_sink_word(descriptor_base + DESCRIPTOR_WORD_ROTATION_BASE_OFFSET);
+      let rotation_lane_stride = read_sink_word(descriptor_base + DESCRIPTOR_WORD_ROTATION_LANE_STRIDE);
+      let rotation_component_stride = read_sink_word(descriptor_base + DESCRIPTOR_WORD_ROTATION_COMPONENT_STRIDE);
+      let rotation_from_slot = read_arena_f32(
+        rotation_base_offset,
+        rotation_lane_stride,
+        rotation_component_stride,
+        sink_lane,
+        0u,
+        rotation_default,
+      );
+      rotation = select(rotation_default, rotation_from_slot, rotation_mode == OPTIONAL_MODE_SLOT);
 
-      let rotation_mode = sink_table_words[sink_base + RECORD_WORD_ROTATION_MODE_CODE];
-      if (rotation_mode == OPTIONAL_MODE_SLOT) {
-        let rotation_base_offset = sink_table_words[sink_base + RECORD_WORD_ROTATION_BASE_OFFSET];
-        let rotation_lane_stride = sink_table_words[sink_base + RECORD_WORD_ROTATION_LANE_STRIDE];
-        let rotation_component_stride = sink_table_words[sink_base + RECORD_WORD_ROTATION_COMPONENT_STRIDE];
-        rotation = read_arena_f32(rotation_base_offset, sink_lane, 0u, rotation_lane_stride, rotation_component_stride);
-      }
-
-      let scale2_mode = sink_table_words[sink_base + RECORD_WORD_SCALE2_MODE_CODE];
-      if (scale2_mode == OPTIONAL_MODE_SLOT) {
-        let scale2_base_offset = sink_table_words[sink_base + RECORD_WORD_SCALE2_BASE_OFFSET];
-        let scale2_lane_stride = sink_table_words[sink_base + RECORD_WORD_SCALE2_LANE_STRIDE];
-        let scale2_component_stride = sink_table_words[sink_base + RECORD_WORD_SCALE2_COMPONENT_STRIDE];
-        scale2_x = read_arena_f32(scale2_base_offset, sink_lane, 0u, scale2_lane_stride, scale2_component_stride);
-        scale2_y = read_arena_f32(scale2_base_offset, sink_lane, 1u, scale2_lane_stride, scale2_component_stride);
-      }
-
-      let shape_source = sink_table_words[sink_base + RECORD_WORD_SHAPE_SOURCE_CODE];
-      if (shape_source == SHAPE_SOURCE_SLOT) {
-        let shape_slot_base_offset = sink_table_words[sink_base + RECORD_WORD_SHAPE_SLOT_BASE_OFFSET];
-        let shape_slot_lane_stride = sink_table_words[sink_base + RECORD_WORD_SHAPE_SLOT_LANE_STRIDE];
-        let shape_slot_component_stride = sink_table_words[sink_base + RECORD_WORD_SHAPE_SLOT_COMPONENT_STRIDE];
-        shape_word_offset = read_arena_u32(shape_slot_base_offset, sink_lane, 0u, shape_slot_lane_stride, shape_slot_component_stride);
-      } else if (shape_source == SHAPE_SOURCE_ONE_HANDLE) {
-        shape_word_offset = sink_table_words[sink_base + RECORD_WORD_SHAPE_HANDLE_WORD_OFFSET];
-      }
+      let scale2_mode = read_sink_word(descriptor_base + DESCRIPTOR_WORD_SCALE2_MODE);
+      let scale2_default_x = read_sink_f32(descriptor_base + DESCRIPTOR_WORD_SCALE2_DEFAULT_X_BITS, 1.0);
+      let scale2_default_y = read_sink_f32(descriptor_base + DESCRIPTOR_WORD_SCALE2_DEFAULT_Y_BITS, 1.0);
+      let scale2_base_offset = read_sink_word(descriptor_base + DESCRIPTOR_WORD_SCALE2_BASE_OFFSET);
+      let scale2_lane_stride = read_sink_word(descriptor_base + DESCRIPTOR_WORD_SCALE2_LANE_STRIDE);
+      let scale2_component_stride = read_sink_word(descriptor_base + DESCRIPTOR_WORD_SCALE2_COMPONENT_STRIDE);
+      let scale2_x_from_slot = read_arena_f32(
+        scale2_base_offset,
+        scale2_lane_stride,
+        scale2_component_stride,
+        sink_lane,
+        0u,
+        scale2_default_x,
+      );
+      let scale2_y_from_slot = read_arena_f32(
+        scale2_base_offset,
+        scale2_lane_stride,
+        scale2_component_stride,
+        sink_lane,
+        1u,
+        scale2_default_y,
+      );
+      scale2_x = select(scale2_default_x, scale2_x_from_slot, scale2_mode == OPTIONAL_MODE_SLOT);
+      scale2_y = select(scale2_default_y, scale2_y_from_slot, scale2_mode == OPTIONAL_MODE_SLOT);
+      shape_word_offset = read_sink_word(sink_base + RECORD_WORD_SHAPE_WORD_OFFSET);
     }
   }
 
@@ -269,48 +329,32 @@ struct VertexOutput {
   let topologyWordOffset = u32(max(inst.transform1.z, 0.0));
   let topologyFlags = topologyBank[topologyWordOffset + 3u];
   let closedMask = select(0.0, 1.0, (topologyFlags & 1u) != 0u);
-  let viewportPx = global.resolution;
-  let panPx = vec2<f32>(global.view_proj[0].y, global.view_proj[0].z);
-  let zoom = global.view_proj[0].x;
-  let viewportMinPx = min(viewportPx.x, viewportPx.y);
+
   let rawCenterX = inst.transform0.x;
   let rawCenterY = inst.transform0.y;
-  let finiteCenterX = select(0.0, rawCenterX, rawCenterX == rawCenterX);
-  let finiteCenterY = select(0.0, rawCenterY, rawCenterY == rawCenterY);
-  // [LAW:one-source-of-truth] Canonical runtime payload provides unit-space
-  // instance centers; render consumes them directly with no heuristic remap.
-  let centerX = clamp(finiteCenterX, 0.0, 1.0);
-  let centerY = clamp(finiteCenterY, 0.0, 1.0);
-  let centerPx = vec2<f32>(centerX, centerY) * viewportPx;
-  let centeredPx = (centerPx - (viewportPx * 0.5)) * zoom + (viewportPx * 0.5) + (panPx * zoom);
+  let centerX = select(0.0, rawCenterX, rawCenterX == rawCenterX);
+  let centerY = select(0.0, rawCenterY, rawCenterY == rawCenterY);
   let rawScaleX = inst.transform0.z * inst.transform1.x;
   let rawScaleY = inst.transform0.z * inst.transform1.y;
-  let finiteScaleX = select(1.0, rawScaleX, rawScaleX == rawScaleX);
-  let finiteScaleY = select(1.0, rawScaleY, rawScaleY == rawScaleY);
-  let scaleX = clamp(abs(finiteScaleX), 0.01, 4.0);
-  let scaleY = clamp(abs(finiteScaleY), 0.01, 4.0);
-  let localScaled = vec2<f32>(localPos.x * scaleX, localPos.y * scaleY) * viewportMinPx * zoom;
+  let scaleX = clamp(abs(select(1.0, rawScaleX, rawScaleX == rawScaleX)), 0.001, 1024.0);
+  let scaleY = clamp(abs(select(1.0, rawScaleY, rawScaleY == rawScaleY)), 0.001, 1024.0);
   let rawRotation = inst.transform0.w;
   let safeRotation = select(0.0, rawRotation, rawRotation == rawRotation);
+
   let c = cos(safeRotation);
   let s = sin(safeRotation);
-  let rotatedPx = vec2<f32>(
-    localScaled.x * c - localScaled.y * s,
-    localScaled.x * s + localScaled.y * c
+  let model = mat4x4<f32>(
+    vec4<f32>(c * scaleX, s * scaleX, 0.0, 0.0),
+    vec4<f32>(-s * scaleY, c * scaleY, 0.0, 0.0),
+    vec4<f32>(0.0, 0.0, 1.0, 0.0),
+    vec4<f32>(centerX, centerY, 0.0, 1.0),
   );
-  let finalPx = centeredPx + rotatedPx;
-  let safeViewportX = max(viewportPx.x, 1.0);
-  let safeViewportY = max(viewportPx.y, 1.0);
-  let ndc = vec2<f32>(
-    (finalPx.x / safeViewportX) * 2.0 - 1.0,
-    1.0 - (finalPx.y / safeViewportY) * 2.0
-  );
-  let safeNdc = vec2<f32>(
-    clamp(select(0.0, ndc.x, ndc.x == ndc.x), -2.0, 2.0),
-    clamp(select(0.0, ndc.y, ndc.y == ndc.y), -2.0, 2.0),
-  );
+
+  let worldPos = model * vec4<f32>(localPos.x, localPos.y, 0.0, 1.0);
+
   var out: VertexOutput;
-  out.position = vec4<f32>(safeNdc, 0.0, 1.0);
+  out.position = global.view_proj * worldPos;
+
   let rawR = inst.color.x;
   let rawG = inst.color.y;
   let rawB = inst.color.z;
@@ -418,7 +462,7 @@ const SHAPE_WORD_PARAM_BLOCK_OFFSET: usize = 9;
 const SHAPE_WORD_PARAM_BLOCK_WORDS: usize = 10;
 const SHAPE_FLAG_CLOSED: u32 = 1;
 
-const SINK_RECORD_WORD_INSTANCE_COUNT: usize = 4;
+const SINK_RECORD_WORD_INSTANCE_COUNT: usize = 2;
 
 fn realize_shape_bank_geometry(shape_bank_words: &mut [u32]) -> (Vec<f32>, Vec<u32>) {
     let mut vertex_floats: Vec<f32> = Vec::new();
@@ -559,6 +603,38 @@ impl Engine {
             )
             .await
             .map_err(|error| JsValue::from_str(&format!("request_device failed: {error}")))?;
+
+        // [LAW:single-enforcer] Asynchronous WebGPU validation/internal/OOM
+        // faults are classified and emitted through one runtime error boundary.
+        device.on_uncaptured_error(Box::new(|error| {
+            let payload = match error {
+                wgpu::Error::Validation {
+                    source: _,
+                    description,
+                } => EngineErrorPayload::new(
+                    "WEBGPU_VALIDATION",
+                    description,
+                    "GPU_DRIVER",
+                    false,
+                ),
+                wgpu::Error::OutOfMemory { source: _ } => EngineErrorPayload::new(
+                    "WEBGPU_OOM",
+                    "GPU out of memory",
+                    "GPU_DRIVER",
+                    true,
+                ),
+                wgpu::Error::Internal {
+                    source: _,
+                    description,
+                } => EngineErrorPayload::new(
+                    "WEBGPU_INTERNAL",
+                    description,
+                    "GPU_DRIVER",
+                    true,
+                ),
+            };
+            send_engine_error(&payload);
+        }));
 
         let capabilities = surface.get_capabilities(&adapter);
         let surface_format = capabilities
@@ -819,6 +895,9 @@ impl Engine {
                     0.0
                 };
                 let draw_prep_stage_start_ms = worker_monotonic_now_ms();
+                // [LAW:dataflow-not-control-flow] Draw-prep emits per-frame indirect
+                // instance counts; reset the target buffer before every draw-prep dispatch.
+                encoder.clear_buffer(&self.arena.indirect_buffer, 0, None);
                 self.compute
                     .encode_draw_prep(&mut encoder, &self.arena, draw_prep_record_count);
                 let draw_prep_stage_end_ms = worker_monotonic_now_ms();
@@ -976,7 +1055,8 @@ impl Engine {
             .draw_regions
             .indexed_record_count
             .saturating_add(self.draw_regions.non_indexed_record_count);
-        let draw_prep_workgroup_count = draw_prep_record_count.max(1);
+        let draw_prep_workgroup_count =
+            ((draw_prep_record_count.saturating_add(63)) / 64).max(1);
         let simulation_workgroup_count = self.compute.simulation_workgroup_count();
         let simulation_dispatch_count = self.compute.simulation_dispatch_count();
         let dispatch_counters = DispatchCounters {
@@ -1076,8 +1156,11 @@ impl Engine {
                 total_record_count, indexed_record_count, non_indexed_record_count
             );
         }
-        let minimum_words = (SINK_TABLE_HEADER_WORDS as u32)
+        let minimum_record_words = (SINK_TABLE_HEADER_WORDS as u32)
             .saturating_add(total_record_count.saturating_mul(SINK_TABLE_RECORD_WORDS as u32));
+        let minimum_descriptor_words = total_record_count
+            .saturating_mul(SINK_TABLE_DESCRIPTOR_WORDS as u32);
+        let minimum_words = minimum_record_words.saturating_add(minimum_descriptor_words);
         if sink_table_words < minimum_words {
             panic!(
                 "sink table truncated (words={}, required={})",
@@ -1088,17 +1171,6 @@ impl Engine {
         let plane_words = shared_sink_table.subarray(0, sink_table_words).to_vec();
         self.arena
             .write_sink_table_words(&self.device, &self.queue, &plane_words);
-        let payload_base_words = minimum_words as usize;
-        if (sink_table_words as usize) > payload_base_words {
-            // [LAW:one-source-of-truth] exception: CPU-packed Type 1 payload
-            // words are mirrored into compiler arena storage until opcode-complete
-            // GPU simulation lowering owns these slots directly.
-            self.arena.write_compiler_arena_words(
-                &self.queue,
-                payload_base_words,
-                &plane_words[payload_base_words..],
-            );
-        }
         let mut total_instance_count: u32 = 0;
         for record in 0..(total_record_count as usize) {
             let record_base =
@@ -1135,18 +1207,29 @@ impl Engine {
             uniforms.time_seconds =
                 (shared_input.get_index(INPUT_WORD_TIME_MS as u32).max(0.0) * 0.001) as f32;
             uniforms.delta_time_seconds = (1.0 / 60.0) as f32;
-            uniforms.view_proj[0][0] = shared_input.get_index(INPUT_WORD_ZOOM as u32) as f32;
-            uniforms.view_proj[0][1] = shared_input.get_index(INPUT_WORD_PAN_X as u32) as f32;
-            uniforms.view_proj[0][2] = shared_input.get_index(INPUT_WORD_PAN_Y as u32) as f32;
-            uniforms.view_proj[0][3] = shared_input.get_index(INPUT_WORD_MOUSE_X as u32) as f32;
-            uniforms.view_proj[1][0] = shared_input.get_index(INPUT_WORD_MOUSE_Y as u32) as f32;
-            uniforms.view_proj[1][1] =
-                shared_input.get_index(INPUT_WORD_MOUSE_BUTTONS as u32) as f32;
-            uniforms.view_proj[1][2] = shared_input.get_index(INPUT_WORD_AUDIO_LOW as u32) as f32;
-            uniforms.view_proj[1][3] = shared_input.get_index(INPUT_WORD_AUDIO_MID as u32) as f32;
-            uniforms.view_proj[2][0] = shared_input.get_index(INPUT_WORD_AUDIO_HIGH as u32) as f32;
-            uniforms.view_proj[2][1] =
-                shared_input.get_index(INPUT_WORD_GAUGE_ACTIVE as u32) as f32;
+            let viewport_width = uniforms.resolution[0].max(1.0);
+            let viewport_height = uniforms.resolution[1].max(1.0);
+            let raw_zoom = shared_input.get_index(INPUT_WORD_ZOOM as u32) as f32;
+            let zoom = if raw_zoom.is_finite() && raw_zoom > 0.0 {
+                raw_zoom
+            } else {
+                1.0
+            };
+            let pan_x_px = shared_input.get_index(INPUT_WORD_PAN_X as u32) as f32;
+            let pan_y_px = shared_input.get_index(INPUT_WORD_PAN_Y as u32) as f32;
+            let safe_pan_x_px = if pan_x_px.is_finite() { pan_x_px } else { 0.0 };
+            let safe_pan_y_px = if pan_y_px.is_finite() { pan_y_px } else { 0.0 };
+            let sx = 2.0 * zoom;
+            let sy = -2.0 * zoom;
+            let tx = -zoom + (2.0 * zoom * (safe_pan_x_px / viewport_width));
+            let ty = zoom - (2.0 * zoom * (safe_pan_y_px / viewport_height));
+            uniforms.view_proj = [[0.0; 4]; 4];
+            uniforms.view_proj[0][0] = sx;
+            uniforms.view_proj[1][1] = sy;
+            uniforms.view_proj[2][2] = 1.0;
+            uniforms.view_proj[3][0] = tx;
+            uniforms.view_proj[3][1] = ty;
+            uniforms.view_proj[3][3] = 1.0;
             let shape_bank_word_limit = self
                 .shared_shape_bank
                 .as_ref()
@@ -1162,6 +1245,10 @@ impl Engine {
                 .unwrap_or_else(|| {
                     self.max_shapes
                         .saturating_mul(SINK_TABLE_RECORD_WORDS as u32)
+                        .saturating_add(
+                            self.max_shapes
+                                .saturating_mul(SINK_TABLE_DESCRIPTOR_WORDS as u32),
+                        )
                         .saturating_add(SINK_TABLE_HEADER_WORDS as u32)
                 });
             let shape_bank_words = clamp_non_negative_u32(
@@ -1172,9 +1259,6 @@ impl Engine {
                 shared_input.get_index(INPUT_WORD_SINK_TABLE_WORDS as u32),
                 sink_table_word_limit,
             );
-            uniforms.view_proj[2][2] = shape_bank_words as f32;
-            uniforms.view_proj[3][2] = sink_table_words as f32;
-            uniforms.view_proj[3][3] = 0.0;
             self.last_shape_bank_words = shape_bank_words;
             self.last_sink_table_words = sink_table_words;
             self.sync_shape_bank_plane(shape_bank_words);
@@ -1182,6 +1266,13 @@ impl Engine {
         } else {
             uniforms.time_seconds = (timestamp_ms.max(0.0) * 0.001) as f32;
             uniforms.delta_time_seconds = (1.0 / 60.0) as f32;
+            uniforms.view_proj = [[0.0; 4]; 4];
+            uniforms.view_proj[0][0] = 2.0;
+            uniforms.view_proj[1][1] = -2.0;
+            uniforms.view_proj[2][2] = 1.0;
+            uniforms.view_proj[3][0] = -1.0;
+            uniforms.view_proj[3][1] = 1.0;
+            uniforms.view_proj[3][3] = 1.0;
             self.last_shape_bank_words = 0;
             self.last_sink_table_words = 0;
             self.draw_regions = IndirectRegionPlan::default();

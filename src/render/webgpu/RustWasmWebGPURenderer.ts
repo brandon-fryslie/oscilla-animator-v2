@@ -1,6 +1,7 @@
 import type { RenderShapeBankSource } from './WebGPUShapeBankManager';
 import type { IndirectArgsReadbackSnapshot } from './WebGPUIndirectArgsInspector';
 import { isRuntimeConsoleEnabled } from '../../testing/test-params';
+import { reportRenderIssue } from '../render-issues';
 import {
   computeRustRendererShapeBankWordCapacity,
   computeRustRendererSinkTableWordCapacity,
@@ -82,25 +83,21 @@ export interface SinkTableDebugSample {
   readonly sinkTableWordCount: number;
   readonly totalRecords: number;
   readonly firstRecord: {
+    readonly drawModeCode: number;
+    readonly count: number;
     readonly instanceCount: number;
+    readonly first: number;
+    readonly baseVertex: number;
     readonly firstInstance: number;
-    readonly positionBaseOffset: number;
-    readonly positionLaneStride: number;
-    readonly positionComponentStride: number;
-    readonly colorBaseOffset: number;
-    readonly colorLaneStride: number;
-    readonly colorComponentStride: number;
-    readonly scaleModeCode: number;
-    readonly scaleValueOrBaseOffset: number;
-    readonly scaleLaneStride: number;
-    readonly scaleComponentStride: number;
+    readonly shapeWordOffset: number;
+    readonly materialId: number;
   } | null;
 }
 
 type WorkerAckDisposition =
   | { readonly kind: 'success' }
   | { readonly kind: 'ignore' }
-  | { readonly kind: 'fail'; readonly error: Error };
+  | { readonly kind: 'fail'; readonly error: Error; readonly fatal: boolean };
 
 const DEFAULT_BOOTSTRAP_CONFIG: RustRendererBootstrapConfig = Object.freeze({
   maxParticles: 65_536,
@@ -152,6 +149,24 @@ function previewWgsl(wgsl: string, maxLines: number = 4): string {
     .slice(0, maxLines)
     .map((line) => line.trim())
     .join(' | ');
+}
+
+function formatWgslWithLineNumbers(wgsl: string): string {
+  return wgsl
+    .split('\n')
+    .map((line, index) => `${String(index + 1).padStart(4, ' ')} | ${line}`)
+    .join('\n');
+}
+
+function dumpShaderWithLineNumbers(name: string, wgsl: string): void {
+  if (!RUNTIME_CONSOLE_ENABLED) {
+    return;
+  }
+  // [LAW:verifiable-goals] Runtime shader dumps include line numbers so
+  // WebGPU validation line/column errors are directly traceable.
+  console.groupCollapsed(`[runtimeConsole] Generated WGSL: ${name}`);
+  console.info(formatWgslWithLineNumbers(wgsl));
+  console.groupEnd();
 }
 
 function hashWgslSource(wgsl: string): string {
@@ -334,10 +349,17 @@ function classifyWorkerAckMessage(
     return { kind: 'success' };
   }
   if (payload.type === 'FATAL_ERROR') {
-    return { kind: 'fail', error: new Error(`[${payload.code}] ${payload.message}`) };
+    return { kind: 'fail', error: new Error(`[${payload.code}] ${payload.message}`), fatal: true };
   }
   if (payload.type === 'DEVICE_LOST') {
-    return { kind: 'fail', error: new Error(`[${payload.code}] ${payload.reason}`) };
+    return { kind: 'fail', error: new Error(`[${payload.code}] ${payload.reason}`), fatal: true };
+  }
+  if (payload.type === 'ENGINE_ERROR') {
+    return {
+      kind: 'fail',
+      error: new Error(`[${payload.source}] ${payload.message} @ ${payload.location}`),
+      fatal: payload.fatal,
+    };
   }
   if (payload.type === 'SCHEDULER_HEARTBEAT' || payload.type === 'RUNTIME_EVENT') {
     return { kind: 'ignore' };
@@ -346,6 +368,7 @@ function classifyWorkerAckMessage(
   // all await paths share identical non-success handling.
   return {
     kind: 'fail',
+    fatal: true,
     error: new Error(
       `Rust renderer worker protocol violation: expected ${expectedSuccessType}, got ${payload.type}`,
     ),
@@ -409,6 +432,26 @@ export class WebGPURenderer {
   // https://github.com/brandon-fryslie/oscilla-animator-v2/issues/159
   private sinkTableDebugLogCounter = 0;
   private readonly emittedHealthWarningCodes = new Set<string>();
+
+  private reportEngineError(
+    source: string,
+    message: string,
+    location: string,
+    fatal: boolean,
+  ): void {
+    const level = fatal ? 'error' : 'warn';
+    reportRenderIssue(
+      level,
+      `[${source}] ${message}${location ? ` @ ${location}` : ''}`,
+      {
+        kind: 'engineError',
+        source,
+        message,
+        location,
+        fatal,
+      },
+    );
+  }
 
   private markRendererFatal(error: Error): void {
     // TODO(#182): Harden fatal-transition contract (idempotence, canonical
@@ -524,11 +567,35 @@ export class WebGPURenderer {
           'render-input-sample.totalRecords',
         ),
         firstRecord: {
+          drawModeCode: readRequiredSinkTableWord(
+            input.drawPrepSinkTableV1,
+            sinkTableWords,
+            base + 0,
+            'render-input-sample.firstRecord.drawModeCode',
+          ),
+          count: readRequiredSinkTableWord(
+            input.drawPrepSinkTableV1,
+            sinkTableWords,
+            base + 1,
+            'render-input-sample.firstRecord.count',
+          ),
           instanceCount: readRequiredSinkTableWord(
             input.drawPrepSinkTableV1,
             sinkTableWords,
-            base + 4,
+            base + 2,
             'render-input-sample.firstRecord.instanceCount',
+          ),
+          first: readRequiredSinkTableWord(
+            input.drawPrepSinkTableV1,
+            sinkTableWords,
+            base + 3,
+            'render-input-sample.firstRecord.first',
+          ),
+          baseVertex: readRequiredSinkTableWord(
+            input.drawPrepSinkTableV1,
+            sinkTableWords,
+            base + 4,
+            'render-input-sample.firstRecord.baseVertex',
           ),
           firstInstance: readRequiredSinkTableWord(
             input.drawPrepSinkTableV1,
@@ -536,65 +603,17 @@ export class WebGPURenderer {
             base + 5,
             'render-input-sample.firstRecord.firstInstance',
           ),
-          positionBaseOffset: readRequiredSinkTableWord(
+          shapeWordOffset: readRequiredSinkTableWord(
             input.drawPrepSinkTableV1,
             sinkTableWords,
-            base + 8,
-            'render-input-sample.firstRecord.positionBaseOffset',
+            base + 6,
+            'render-input-sample.firstRecord.shapeWordOffset',
           ),
-          positionLaneStride: readRequiredSinkTableWord(
+          materialId: readRequiredSinkTableWord(
             input.drawPrepSinkTableV1,
             sinkTableWords,
-            base + 9,
-            'render-input-sample.firstRecord.positionLaneStride',
-          ),
-          positionComponentStride: readRequiredSinkTableWord(
-            input.drawPrepSinkTableV1,
-            sinkTableWords,
-            base + 10,
-            'render-input-sample.firstRecord.positionComponentStride',
-          ),
-          colorBaseOffset: readRequiredSinkTableWord(
-            input.drawPrepSinkTableV1,
-            sinkTableWords,
-            base + 11,
-            'render-input-sample.firstRecord.colorBaseOffset',
-          ),
-          colorLaneStride: readRequiredSinkTableWord(
-            input.drawPrepSinkTableV1,
-            sinkTableWords,
-            base + 12,
-            'render-input-sample.firstRecord.colorLaneStride',
-          ),
-          colorComponentStride: readRequiredSinkTableWord(
-            input.drawPrepSinkTableV1,
-            sinkTableWords,
-            base + 13,
-            'render-input-sample.firstRecord.colorComponentStride',
-          ),
-          scaleModeCode: readRequiredSinkTableWord(
-            input.drawPrepSinkTableV1,
-            sinkTableWords,
-            base + 14,
-            'render-input-sample.firstRecord.scaleModeCode',
-          ),
-          scaleValueOrBaseOffset: readRequiredSinkTableWord(
-            input.drawPrepSinkTableV1,
-            sinkTableWords,
-            base + 15,
-            'render-input-sample.firstRecord.scaleValueOrBaseOffset',
-          ),
-          scaleLaneStride: readRequiredSinkTableWord(
-            input.drawPrepSinkTableV1,
-            sinkTableWords,
-            base + 16,
-            'render-input-sample.firstRecord.scaleLaneStride',
-          ),
-          scaleComponentStride: readRequiredSinkTableWord(
-            input.drawPrepSinkTableV1,
-            sinkTableWords,
-            base + 17,
-            'render-input-sample.firstRecord.scaleComponentStride',
+            base + 7,
+            'render-input-sample.firstRecord.materialId',
           ),
         },
       } satisfies SinkTableDebugSample;
@@ -663,6 +682,9 @@ export class WebGPURenderer {
     // [LAW:single-enforcer] Bundle-level GPU pass contract validation is owned
     // at this renderer boundary before worker transport.
     const validatedPasses = [...validateGpuPassBundle(passes)];
+    for (const pass of validatedPasses) {
+      dumpShaderWithLineNumbers(pass.passId, pass.wgsl);
+    }
     this.lastInstalledPassIds = validatedPasses.map((pass) => pass.passId);
     if (RUNTIME_CONSOLE_ENABLED) {
       // TODO(#159): Replace this inline payload assembly with:
@@ -776,7 +798,7 @@ export class WebGPURenderer {
       this.sinkTableDebugLogCounter += 1;
       if (this.sinkTableDebugLogCounter % 120 === 1) {
         const headerWords = 8;
-        const recordWords = 29;
+        const recordWords = 8;
         const totalRecords = readRequiredSinkTableWord(
           sinkTableWords,
           wordCount,
@@ -796,11 +818,35 @@ export class WebGPURenderer {
             // `buildSinkTableFirstRecordPayload(...)` must return this object
             // (instanceCount/firstInstance/offset/stride fields) as one unit.
             // https://github.com/brandon-fryslie/oscilla-animator-v2/issues/159
+            drawModeCode: readRequiredSinkTableWord(
+              sinkTableWords,
+              wordCount,
+              firstRecordBase + 0,
+              'sink-table-sample.firstRecord.drawModeCode',
+            ),
+            count: readRequiredSinkTableWord(
+              sinkTableWords,
+              wordCount,
+              firstRecordBase + 1,
+              'sink-table-sample.firstRecord.count',
+            ),
             instanceCount: readRequiredSinkTableWord(
               sinkTableWords,
               wordCount,
-              firstRecordBase + 4,
+              firstRecordBase + 2,
               'sink-table-sample.firstRecord.instanceCount',
+            ),
+            first: readRequiredSinkTableWord(
+              sinkTableWords,
+              wordCount,
+              firstRecordBase + 3,
+              'sink-table-sample.firstRecord.first',
+            ),
+            baseVertex: readRequiredSinkTableWord(
+              sinkTableWords,
+              wordCount,
+              firstRecordBase + 4,
+              'sink-table-sample.firstRecord.baseVertex',
             ),
             firstInstance: readRequiredSinkTableWord(
               sinkTableWords,
@@ -808,65 +854,17 @@ export class WebGPURenderer {
               firstRecordBase + 5,
               'sink-table-sample.firstRecord.firstInstance',
             ),
-            positionBaseOffset: readRequiredSinkTableWord(
+            shapeWordOffset: readRequiredSinkTableWord(
               sinkTableWords,
               wordCount,
-              firstRecordBase + 8,
-              'sink-table-sample.firstRecord.positionBaseOffset',
+              firstRecordBase + 6,
+              'sink-table-sample.firstRecord.shapeWordOffset',
             ),
-            positionLaneStride: readRequiredSinkTableWord(
+            materialId: readRequiredSinkTableWord(
               sinkTableWords,
               wordCount,
-              firstRecordBase + 9,
-              'sink-table-sample.firstRecord.positionLaneStride',
-            ),
-            positionComponentStride: readRequiredSinkTableWord(
-              sinkTableWords,
-              wordCount,
-              firstRecordBase + 10,
-              'sink-table-sample.firstRecord.positionComponentStride',
-            ),
-            colorBaseOffset: readRequiredSinkTableWord(
-              sinkTableWords,
-              wordCount,
-              firstRecordBase + 11,
-              'sink-table-sample.firstRecord.colorBaseOffset',
-            ),
-            colorLaneStride: readRequiredSinkTableWord(
-              sinkTableWords,
-              wordCount,
-              firstRecordBase + 12,
-              'sink-table-sample.firstRecord.colorLaneStride',
-            ),
-            colorComponentStride: readRequiredSinkTableWord(
-              sinkTableWords,
-              wordCount,
-              firstRecordBase + 13,
-              'sink-table-sample.firstRecord.colorComponentStride',
-            ),
-            scaleModeCode: readRequiredSinkTableWord(
-              sinkTableWords,
-              wordCount,
-              firstRecordBase + 14,
-              'sink-table-sample.firstRecord.scaleModeCode',
-            ),
-            scaleValueOrBaseOffset: readRequiredSinkTableWord(
-              sinkTableWords,
-              wordCount,
-              firstRecordBase + 15,
-              'sink-table-sample.firstRecord.scaleValueOrBaseOffset',
-            ),
-            scaleLaneStride: readRequiredSinkTableWord(
-              sinkTableWords,
-              wordCount,
-              firstRecordBase + 16,
-              'sink-table-sample.firstRecord.scaleLaneStride',
-            ),
-            scaleComponentStride: readRequiredSinkTableWord(
-              sinkTableWords,
-              wordCount,
-              firstRecordBase + 17,
-              'sink-table-sample.firstRecord.scaleComponentStride',
+              firstRecordBase + 7,
+              'sink-table-sample.firstRecord.materialId',
             ),
           }
           : null;
@@ -962,7 +960,9 @@ export class WebGPURenderer {
         // onError/timeout handling via one helper in awaitWorkerAck.
         // https://github.com/brandon-fryslie/oscilla-animator-v2/issues/184
         settle(() => {
-          this.markRendererFatal(disposition.error);
+          if (disposition.fatal) {
+            this.markRendererFatal(disposition.error);
+          }
           reject(disposition.error);
         });
       };
@@ -1059,11 +1059,20 @@ export class WebGPURenderer {
   private readonly handleRuntimeMessage = (event: MessageEvent<RustRendererWorkerOutboundMessage>): void => {
     const payload = event.data;
     if (!payload) return;
+    if (payload.type === 'ENGINE_ERROR') {
+      this.reportEngineError(payload.source, payload.message, payload.location, payload.fatal);
+      if (payload.fatal) {
+        this.markRendererFatal(new Error(`[${payload.source}] ${payload.message}`));
+      }
+      return;
+    }
     if (payload.type === 'FATAL_ERROR') {
+      this.reportEngineError(payload.code, payload.message, 'WORKER', true);
       this.markRendererFatal(new Error(`[${payload.code}] ${payload.message}`));
       return;
     }
     if (payload.type === 'DEVICE_LOST') {
+      this.reportEngineError(payload.code, payload.reason, 'WORKER', true);
       this.markRendererFatal(new Error(`[${payload.code}] ${payload.reason}`));
       return;
     }

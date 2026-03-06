@@ -19,11 +19,11 @@ export const wasm_bindgen__convert__closures_____invoke__h8725eb454c15ba22: (a: 
 export const wasm_bindgen__convert__closures_____invoke__hcb563ba53ad42ec8: (a: number, b: number, c: any) => [number, number];
 export const wasm_bindgen__convert__closures_____invoke__h1d4d9e8783fdfb62: (a: number, b: number, c: any, d: any) => void;
 export const wasm_bindgen__convert__closures_____invoke__h210728d8ddfda338: (a: number, b: number, c: any) => void;
+export const wasm_bindgen__convert__closures_____invoke__h210728d8ddfda338_1: (a: number, b: number, c: any) => void;
 export const __wbindgen_malloc: (a: number, b: number) => number;
 export const __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;
 export const __wbindgen_exn_store: (a: number) => void;
 export const __externref_table_alloc: () => number;
 export const __wbindgen_externrefs: WebAssembly.Table;
-export const __wbindgen_free: (a: number, b: number, c: number) => void;
 export const __externref_table_dealloc: (a: number) => void;
 export const __wbindgen_start: () => void;
