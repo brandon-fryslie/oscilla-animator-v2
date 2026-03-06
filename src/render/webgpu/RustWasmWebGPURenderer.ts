@@ -153,6 +153,9 @@ function hashWgslSource(wgsl: string): string {
 }
 
 function parseWgslU32Constant(wgsl: string, name: string): number | null {
+  // TODO(#179): Remove renderer regex parsing for WGSL constants; consume
+  // typed compiler/worker metadata instead of text matching.
+  // https://github.com/brandon-fryslie/oscilla-animator-v2/issues/179
   const pattern = new RegExp(`const\\s+${escapeRegex(name)}\\s*:\\s*u32\\s*=\\s*(\\d+)u\\s*;`);
   const match = wgsl.match(pattern);
   if (!match) return null;
@@ -210,6 +213,9 @@ function validateGpuPass(pass: RustRendererGpuPass, index: number): RustRenderer
       `Rust renderer GPU pass contract violation: pass "${pass.passId}" is missing @compute entry annotation`,
     );
   }
+  // TODO(#179): Remove renderer regex entrypoint validation; validate
+  // against structured pass signatures emitted by compiler lowering.
+  // https://github.com/brandon-fryslie/oscilla-animator-v2/issues/179
   const entryPattern = new RegExp(`\\bfn\\s+${escapeRegex(pass.entryPoint)}\\s*\\(`);
   if (!entryPattern.test(pass.wgsl)) {
     throw new Error(
