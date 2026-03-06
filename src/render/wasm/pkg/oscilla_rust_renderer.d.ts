@@ -13,9 +13,9 @@ export function inject_poison_alloc(): void;
 
 export function pause_engine(): void;
 
-export function rebuild_pipeline(simulation_wgsl: string, assembly_wgsl: string, uber_shader_wgsl: string, particle_count: number, shape_count: number): void;
+export function rebuild_gpu_pipelines(passes: any): void;
 
-export function rebuild_simulation_pipeline(simulation_wgsl: string): void;
+export function rebuild_pipeline(simulation_wgsl: string, assembly_wgsl: string, uber_shader_wgsl: string, particle_count: number, shape_count: number): void;
 
 export function resize_surface(width: number, height: number): void;
 
@@ -33,8 +33,8 @@ export interface InitOutput {
     readonly init_engine: (a: any, b: number, c: number, d: number) => any;
     readonly inject_poison_alloc: () => [number, number];
     readonly pause_engine: () => [number, number];
+    readonly rebuild_gpu_pipelines: (a: any) => [number, number];
     readonly rebuild_pipeline: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number];
-    readonly rebuild_simulation_pipeline: (a: number, b: number) => [number, number];
     readonly resize_surface: (a: number, b: number) => [number, number];
     readonly resume_engine: () => [number, number];
     readonly take_frame_pacing_packet: () => [number, number, number];

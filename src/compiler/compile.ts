@@ -357,16 +357,10 @@ function collectRuntimeLiveExprIdsForPatching(args: {
         pushExpr(step.value as number);
         break;
       case 'render':
-        if (step.scale?.k === 'one') pushExpr(step.scale.id as number);
-        if (step.shape.k === 'oneHandle') pushExpr(step.shape.id as number);
         pushFieldExprForSlot(step.controlPointsSlot as number);
         pushFieldExprForSlot(step.colorSlot as number);
-        if (step.scale?.k === 'slot') {
-          pushFieldExprForSlot(step.scale.slot as number);
-        }
-        if (step.shape.k === 'slot') {
-          pushFieldExprForSlot(step.shape.slot as number);
-        }
+        pushFieldExprForSlot(step.scale.slot as number);
+        pushFieldExprForSlot(step.shape.slot as number);
         if (step.controlPoints?.k === 'slot') {
           pushFieldExprForSlot(step.controlPoints.slot as number);
         }
@@ -881,25 +875,23 @@ function inferDrawModeForRenderStep(
   topologyById: ReadonlyMap<number, SerializableTopologyDef>,
   materializedFieldExprBySlot: ReadonlyMap<number, number>,
 ): DrawPrepSinkIR['drawMode'] {
-  const shapeExprId =
-    step.shape.k === 'slot'
-      ? materializedFieldExprBySlot.get(step.shape.slot as number)
-      : (step.shape.id as number);
+  const shapeExprId = materializedFieldExprBySlot.get(step.shape.slot as number);
   if (shapeExprId === undefined) {
     // [LAW:no-silent-fallbacks] Draw-mode inference must fail fast when shape
     // slot provenance is missing; hard-coded indexed defaults are forbidden.
     throw new Error(
       'DrawPrepProgram: render step shape slot has no materialize source ' +
-        `(slot=${String(step.shape.k === 'slot' ? step.shape.slot : step.shape.id)})`,
+        `(slot=${String(step.shape.slot)})`,
     );
   }
-  const shapeExpr = valueExprNodes[shapeExprId];
+  const shapeRefExprId = resolveShapeRefExprId(shapeExprId, valueExprNodes);
+  const shapeExpr = shapeRefExprId === null ? null : valueExprNodes[shapeRefExprId];
   if (!shapeExpr || shapeExpr.kind !== 'shapeRef') {
     // [LAW:one-source-of-truth] Draw-prep topology ownership is anchored to
     // shapeRef topology IDs; non-shapeRef sources are compile-time violations.
     throw new Error(
       'DrawPrepProgram: draw mode requires shapeRef source expression ' +
-        `(exprId=${shapeExprId}, kind=${shapeExpr ? shapeExpr.kind : 'missing'})`,
+        `(exprId=${shapeExprId}, kind=${valueExprNodes[shapeExprId]?.kind})`,
     );
   }
   const topology = topologyById.get(shapeExpr.topologyId as number);
@@ -913,6 +905,43 @@ function inferDrawModeForRenderStep(
     return 'nonIndexed';
   }
   return topology.closed ? 'indexed' : 'nonIndexed';
+}
+
+function resolveShapeRefExprId(
+  rootExprId: number,
+  valueExprNodes: readonly ValueExpr[],
+): number | null {
+  const stack = [rootExprId];
+  const visited = new Set<number>();
+  let resolved: number | null = null;
+  while (stack.length > 0) {
+    const exprId = stack.pop()!;
+    if (visited.has(exprId)) continue;
+    visited.add(exprId);
+    const expr = valueExprNodes[exprId];
+    if (!expr) continue;
+    if (expr.kind === 'shapeRef') {
+      if (resolved !== null && resolved !== exprId) {
+        throw new Error(
+          'DrawPrepProgram: shape slot resolves to multiple shapeRef sources ' +
+            `(rootExprId=${rootExprId}, first=${resolved}, second=${exprId})`,
+        );
+      }
+      resolved = exprId;
+      continue;
+    }
+    const children = getValueExprChildren(expr);
+    if (children.length === 0) {
+      throw new Error(
+        'DrawPrepProgram: shape slot resolves to non-shapeRef leaf expression ' +
+          `(rootExprId=${rootExprId}, leafExprId=${exprId}, leafKind=${expr.kind})`,
+      );
+    }
+    for (const child of children) {
+      stack.push(child as number);
+    }
+  }
+  return resolved;
 }
 
 function buildMaterializedFieldExprBySlot(scheduleIR: ScheduleIR): ReadonlyMap<number, number> {
@@ -1034,10 +1063,11 @@ function collectComputeSlots(scheduleIR: ScheduleIR): ValueSlot[] {
       case 'render':
         slots.add(step.controlPointsSlot);
         slots.add(step.colorSlot);
+        slots.add(step.shape.slot);
+        slots.add(step.scale.slot);
         if (step.rotationSlot !== undefined) slots.add(step.rotationSlot);
         if (step.scale2Slot !== undefined) slots.add(step.scale2Slot);
         if (step.controlPoints?.k === 'slot') slots.add(step.controlPoints.slot);
-        if (step.scale?.k === 'slot') slots.add(step.scale.slot);
         break;
       case 'eventDispatch':
       case 'stateWrite':
@@ -1094,7 +1124,7 @@ function getStepExprId(step: Step): ValueExprId | null {
     case 'fieldStateWrite':
       return step.value;
     case 'render':
-      return step.scale?.k === 'one' ? step.scale.id : null;
+      return null;
     case 'continuityMapBuild':
     case 'continuityApply':
       return null;

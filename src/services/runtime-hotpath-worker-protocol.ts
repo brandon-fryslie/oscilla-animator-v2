@@ -5,6 +5,31 @@ export type RuntimeExternalWrite =
   | { readonly op: 'pulse'; readonly name: string }
   | { readonly op: 'add'; readonly name: string; readonly dv: number };
 
+export interface RuntimeHotpathSinkTableSample {
+  readonly sinkTableWordCount: number;
+  readonly totalRecords: number;
+  readonly firstRecord: {
+    readonly drawModeCode: number;
+    readonly shapeHandleWordOffset: number;
+    readonly shapeSourceCode: number;
+    readonly instanceCount: number;
+    readonly firstInstance: number;
+    readonly positionBaseOffset: number;
+    readonly positionLaneStride: number;
+    readonly positionComponentStride: number;
+    readonly colorBaseOffset: number;
+    readonly colorLaneStride: number;
+    readonly colorComponentStride: number;
+    readonly scaleModeCode: number;
+    readonly scaleValueOrBaseOffset: number;
+    readonly scaleLaneStride: number;
+    readonly scaleComponentStride: number;
+    readonly shapeSlotBaseOffset: number;
+    readonly shapeSlotLaneStride: number;
+    readonly shapeSlotComponentStride: number;
+  } | null;
+}
+
 export type RuntimeHotpathWorkerInboundMessage =
   | {
       readonly type: 'BOOTSTRAP';
@@ -54,6 +79,7 @@ export type RuntimeHotpathWorkerOutboundMessage =
       readonly lastTickMs: number;
       readonly drawOpCount: number;
       readonly sinkWordCount: number;
+      readonly sinkTableSample: RuntimeHotpathSinkTableSample | null;
     }
   | {
       readonly type: 'FATAL';

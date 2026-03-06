@@ -32,9 +32,16 @@ export interface RustRendererShutdownMessage {
   readonly type: 'SHUTDOWN';
 }
 
-export interface RustRendererRebuildSimulationPipelineMessage {
-  readonly type: 'REBUILD_SIMULATION_PIPELINE';
-  readonly simulationWgsl: string;
+export interface RustRendererGpuPass {
+  readonly passId: string;
+  readonly stage: 'compute';
+  readonly entryPoint: string;
+  readonly wgsl: string;
+}
+
+export interface RustRendererRebuildGpuPipelinesMessage {
+  readonly type: 'REBUILD_GPU_PIPELINES';
+  readonly passes: readonly RustRendererGpuPass[];
 }
 
 export interface RustRendererResizeCanvasMessage {
@@ -58,7 +65,7 @@ export interface RustRendererInjectPoisonAllocMessage {
 export type RustRendererWorkerInboundMessage =
   | RustRendererBootstrapMessage
   | RustRendererShutdownMessage
-  | RustRendererRebuildSimulationPipelineMessage
+  | RustRendererRebuildGpuPipelinesMessage
   | RustRendererResizeCanvasMessage
   | RustRendererPauseMessage
   | RustRendererResumeMessage
@@ -74,8 +81,8 @@ export interface RustRendererFatalError {
   readonly message: string;
 }
 
-export interface RustRendererRebuildSimulationPipelineSuccess {
-  readonly type: 'REBUILD_SIMULATION_PIPELINE_SUCCESS';
+export interface RustRendererRebuildGpuPipelinesSuccess {
+  readonly type: 'REBUILD_GPU_PIPELINES_SUCCESS';
 }
 
 export interface RustRendererDeviceLost {
@@ -85,6 +92,40 @@ export interface RustRendererDeviceLost {
 }
 
 export type RustRendererSchedulerState = 'Booting' | 'Running' | 'Paused' | 'Lost';
+
+export interface RustRendererStageTimingsTelemetry {
+  readonly inputMarshalMs: number;
+  readonly simulationDispatchMs: number;
+  readonly fluidPassChainMs: number;
+  readonly drawPrepMs: number;
+  readonly renderMs: number;
+  readonly swapMs: number;
+  readonly totalFrameMs: number;
+}
+
+export interface RustRendererDispatchCountersTelemetry {
+  readonly computeDispatchCount: number;
+  readonly computeWorkgroupCount: number;
+  readonly activeLaneCount: number;
+  readonly guardedLaneCount: number;
+}
+
+export interface RustRendererResourceStatsTelemetry {
+  readonly shapeBankWordCount: number;
+  readonly sinkTableWordCount: number;
+  readonly indexedRecordCount: number;
+  readonly nonIndexedRecordCount: number;
+  readonly totalInstanceCount: number;
+  readonly canvasWidth: number;
+  readonly canvasHeight: number;
+  readonly pingPongIndex: number;
+}
+
+export interface RustRendererSchedulerTelemetry {
+  readonly stageTimings: RustRendererStageTimingsTelemetry;
+  readonly dispatchCounters: RustRendererDispatchCountersTelemetry;
+  readonly resourceStats: RustRendererResourceStatsTelemetry;
+}
 
 export interface RustRendererSchedulerHeartbeat {
   readonly type: 'SCHEDULER_HEARTBEAT';
@@ -98,12 +139,14 @@ export interface RustRendererSchedulerHeartbeat {
   readonly sampleCount: number;
   readonly lastTickMs: number;
   readonly lastSuccessMs: number;
+  readonly telemetry: RustRendererSchedulerTelemetry;
 }
 
 export interface RustRendererRuntimeEvent {
   readonly type: 'RUNTIME_EVENT';
   readonly severity: 'error' | 'fatal';
   readonly code: string;
+  readonly stage: string;
   readonly message: string;
   readonly state: RustRendererSchedulerState;
   readonly frameCount: number;
@@ -114,7 +157,7 @@ export interface RustRendererRuntimeEvent {
 export type RustRendererWorkerOutboundMessage =
   | RustRendererBootstrapSuccess
   | RustRendererFatalError
-  | RustRendererRebuildSimulationPipelineSuccess
+  | RustRendererRebuildGpuPipelinesSuccess
   | RustRendererDeviceLost
   | RustRendererSchedulerHeartbeat
   | RustRendererRuntimeEvent;

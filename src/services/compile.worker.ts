@@ -5,7 +5,9 @@ import { compileFrontend } from '../compiler/frontend';
 import { compileProgramWithNaga } from '../compiler/naga-compile';
 import { EventHub } from '../events/EventHub';
 import { deserializePatch } from './PatchPersistence';
+import { maybeBuildFluidGpuBundle } from './fluid-gpu-bundle';
 import type {
+  CompiledGpuArtifactBundle,
   CompileWorkerRequest,
   CompileWorkerResponse,
   CompileWorkerBackendResult,
@@ -13,6 +15,7 @@ import type {
 import { stripKernelRegistry } from './compile-worker-serialization';
 
 async function toBackendResult(
+  frontendResult: ReturnType<typeof compileFrontend>,
   result: ReturnType<typeof compileFromFrontend>,
 ): Promise<CompileWorkerBackendResult> {
   if (result.kind === 'ok') {
@@ -30,31 +33,65 @@ async function toBackendResult(
         ],
       };
     }
-    const nagaOutcome = await compileProgramWithNaga(result.program);
-    if (nagaOutcome.kind === 'error') {
-      const errorsWithWarningContext = nagaOutcome.errors.map((error, index) => {
-        if (index !== 0) return error;
+    const fluidBundle = maybeBuildFluidGpuBundle(frontendResult.normalizedPatch, result.program);
+    let compiledGpuBundle: CompiledGpuArtifactBundle;
+    if (fluidBundle) {
+      // [LAW:one-source-of-truth] Fluid-first compile emits one canonical
+      // pass bundle artifact and bypasses legacy single-pass lowering output.
+      compiledGpuBundle = fluidBundle;
+    } else {
+      // [LAW:single-enforcer] Non-fluid shader lowering is validated by one
+      // Naga boundary before entering runtime worker transport.
+      const nagaCompilation = await compileProgramWithNaga(result.program);
+      if (nagaCompilation.kind === 'error') {
         return {
-          ...error,
-          details: {
-            ...(error.details ?? {}),
-            preNagaWarnings: result.warnings,
-          },
+          kind: 'error',
+          errors: nagaCompilation.errors.map((error) => ({
+            ...error,
+            details: {
+              ...(error.details ?? {}),
+              preNagaWarnings: result.warnings,
+            },
+          })),
         };
-      });
-      return {
-        kind: 'error',
-        errors: errorsWithWarningContext,
+      }
+      compiledGpuBundle = {
+        schemaVersion: 1,
+        passes: [{
+          passId: 'simulation',
+          stage: 'compute',
+          entryPoint: 'compute_main',
+          wgsl: nagaCompilation.wgsl,
+        }],
       };
     }
 
-    // [LAW:no-string-math] Compiler output remains structured IR; WGSL text stays
-    // at the serializer boundary and is not persisted back into program IR.
+    if (!compiledGpuBundle?.passes?.length) {
+      return {
+        kind: 'error',
+        errors: [{
+          code: 'IRValidationFailed',
+          message: 'Compiler emitted an empty GPU artifact pass bundle',
+        }],
+      };
+    }
+
     const program = stripKernelRegistry(result.program);
+    const programWithGpuManifest = {
+      ...program,
+      generatedGpuArtifactManifest: {
+        schemaVersion: compiledGpuBundle.schemaVersion,
+        passes: compiledGpuBundle.passes.map((pass) => ({
+          passId: pass.passId,
+          stage: pass.stage,
+          entryPoint: pass.entryPoint,
+        })),
+      },
+    };
     return {
       kind: 'ok',
-      program,
-      compiledComputeShader: { wgsl: nagaOutcome.wgsl },
+      program: programWithGpuManifest,
+      compiledGpuBundle,
       warnings: result.warnings,
     };
   }
@@ -85,6 +122,7 @@ async function handleCompileMessage(
   const frontendResult = compileFrontend(patch, frontendOptions);
   const backendResult = frontendResult.backendReady
     ? await toBackendResult(
+        frontendResult,
         compileFromFrontend(frontendResult, {
           // [LAW:single-enforcer] Compiler event emission remains owned by CompileOrchestrator.
           // Worker compile uses an isolated no-listener hub for backend compile context.

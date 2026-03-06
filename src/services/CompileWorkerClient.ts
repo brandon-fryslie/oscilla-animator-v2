@@ -5,6 +5,7 @@ import { createDefaultRegistry } from '../runtime/kernels/default-registry';
 import type { Patch } from '../graph';
 import { serializePatch } from './PatchPersistence';
 import type {
+  CompiledGpuArtifactBundle,
   CompileWorkerRequest,
   CompileWorkerResponse,
   CompileWorkerCompiledMessage,
@@ -28,7 +29,7 @@ export interface CompileWorkerRunResult {
   readonly sourcePatchRevision: number;
   readonly frontendResult: CompileWorkerCompiledMessage['frontendResult'];
   readonly backendResult: CompileResult | null;
-  readonly compiledComputeWgsl: string | null;
+  readonly compiledGpuBundle: CompiledGpuArtifactBundle | null;
   readonly compileDurationMs: number;
 }
 
@@ -178,14 +179,15 @@ export class CompileWorkerClient {
       }
 
       if (!inFlight.superseded) {
+        const compiledGpuBundle =
+          message.backendResult?.kind === 'ok'
+            ? message.backendResult.compiledGpuBundle
+            : null;
         inFlight.resolve({
           sourcePatchRevision: message.patchRevision,
           frontendResult: message.frontendResult,
           backendResult: reviveBackendResult(message.backendResult),
-          compiledComputeWgsl:
-            message.backendResult?.kind === 'ok'
-              ? message.backendResult.compiledComputeShader.wgsl
-              : null,
+          compiledGpuBundle,
           compileDurationMs: message.durationMs,
         });
       }

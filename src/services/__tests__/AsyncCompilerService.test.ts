@@ -22,7 +22,7 @@ function makeResult(sourcePatchRevision: number): CompileWorkerRunResult {
     sourcePatchRevision,
     frontendResult: {} as any,
     backendResult: null,
-    compiledComputeWgsl: null,
+    compiledGpuBundle: null,
     compileDurationMs: 1,
   };
 }

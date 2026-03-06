@@ -35,11 +35,13 @@ import type {
   RuntimeExternalWrite,
   RuntimeHotpathWorkerInboundMessage,
   RuntimeHotpathWorkerOutboundMessage,
+  RuntimeHotpathSinkTableSample,
 } from './runtime-hotpath-worker-protocol';
 
 const DEFAULT_TICK_HZ = 60;
 const HEARTBEAT_INTERVAL_MS = 500;
 const MAX_UINT32 = 0xFFFF_FFFF;
+const DEFAULT_ARENA_ELEMENTS = 50_000;
 
 interface ViewportState {
   width: number;
@@ -61,8 +63,7 @@ let sharedSinkTableWords: Uint32Array | null = null;
 let sessionState: SessionState | null = null;
 let currentProgram: CompiledProgramIR | null = null;
 let currentState: RuntimeState | null = null;
-const arena = new RenderBufferArena(50_000);
-arena.init();
+let arena = createArena(DEFAULT_ARENA_ELEMENTS);
 const pendingExternalWrites: RuntimeExternalWrite[] = [];
 let frameCount = 0;
 let tickWindowCount = 0;
@@ -79,6 +80,7 @@ let gpuDrivenShapeBankWordCount = 0;
 let gpuDrivenPlanesDirty = false;
 let publishedSinkWordCount = 0;
 let publishedShapeWordCount = 0;
+let lastSinkTableSample: RuntimeHotpathSinkTableSample | null = null;
 let viewport: ViewportState = {
   width: 1,
   height: 1,
@@ -87,17 +89,28 @@ let viewport: ViewportState = {
   panY: 0,
 };
 
+function createArena(maxElements: number): RenderBufferArena {
+  const next = new RenderBufferArena(maxElements);
+  next.init();
+  return next;
+}
+
+function computeArenaCapacity(arenaTotalFloats: number): number {
+  const required = Number.isFinite(arenaTotalFloats) ? Math.ceil(arenaTotalFloats) : 0;
+  // [LAW:one-source-of-truth] Arena capacity derives from compiled program
+  // metadata; no hardcoded runtime hotpath capacity is authoritative.
+  return Math.max(DEFAULT_ARENA_ELEMENTS, Math.ceil(required * 1.25));
+}
+
 interface PackedArenaAddress {
   readonly baseOffset: number;
   readonly laneStride: number;
   readonly componentStride: number;
 }
 
-const SCALE_MODE_SCALAR_BITS = 1;
 const SCALE_MODE_SLOT = 2;
 const OPTIONAL_MODE_IDENTITY = 0;
 const OPTIONAL_MODE_SLOT = 1;
-const SHAPE_SOURCE_ONE_HANDLE = 0;
 const SHAPE_SOURCE_SLOT = 1;
 
 function postMessageToMain(payload: RuntimeHotpathWorkerOutboundMessage): void {
@@ -161,38 +174,16 @@ function resolveSlotArenaAddress(
   };
 }
 
-function resolveScalarArenaAddress(
-  program: CompiledProgramIR,
-  exprId: number,
-  context: string,
-  laneStrideOverride?: number,
-): PackedArenaAddress {
-  const scalarAddress = program.runtimeAddressTable?.scalarExprToArenaAddress.get(exprId);
-  if (!scalarAddress) {
-    throw new Error(`runtime-hotpath: missing scalarExprToArenaAddress for ${context}`);
-  }
-  const resolved = resolveArenaAddress(scalarAddress.arena);
-  const baseOffset =
-    resolved.baseOffset + scalarAddress.component * resolved.componentStride;
-  return {
-    baseOffset: assertFiniteUint32(baseOffset, `${context}.baseOffset`),
-    laneStride: assertFiniteUint32(
-      laneStrideOverride ?? resolved.laneStride,
-      `${context}.laneStride`,
-    ),
-    componentStride: 0,
-  };
-}
-
 function warmRecordWord(
   warmPackedWords: Uint32Array | null,
+  warmPackedWordCount: number,
   sinkIndex: number,
   wordOffset: number,
   fallback: number,
 ): number {
   if (!warmPackedWords) return fallback >>> 0;
   const base = DRAW_PREP_SINK_TABLE_HEADER_WORDS + sinkIndex * DRAW_PREP_SINK_TABLE_RECORD_WORDS;
-  if (base + wordOffset >= warmPackedWords.length) return fallback >>> 0;
+  if (base + wordOffset >= warmPackedWordCount) return fallback >>> 0;
   return (warmPackedWords[base + wordOffset] ?? fallback) >>> 0;
 }
 
@@ -201,6 +192,7 @@ function resolveSinkInstanceCount(
   state: RuntimeState,
   sinkIndex: number,
   warmPackedWords: Uint32Array | null,
+  warmPackedWordCount: number,
 ): number {
   const drawPrepProgram = program.drawPrepProgram;
   if (!drawPrepProgram) return 0;
@@ -217,6 +209,7 @@ function resolveSinkInstanceCount(
     return assertFiniteUint32(
       warmRecordWord(
         warmPackedWords,
+        warmPackedWordCount,
         sinkIndex,
         DrawPrepSinkTableRecordWord.InstanceCount,
         0,
@@ -229,29 +222,119 @@ function resolveSinkInstanceCount(
 
 function warmShapeHandleForSink(
   warmPackedWords: Uint32Array | null,
+  warmPackedWordCount: number,
   sinkIndex: number,
 ): number {
   if (!warmPackedWords) return 0;
   const base = DRAW_PREP_SINK_TABLE_HEADER_WORDS + sinkIndex * DRAW_PREP_SINK_TABLE_RECORD_WORDS;
-  if (base + DrawPrepSinkTableRecordWord.ShapeHandleWordOffset >= warmPackedWords.length) {
+  if (base + DrawPrepSinkTableRecordWord.ShapeHandleWordOffset >= warmPackedWordCount) {
     return 0;
   }
   return warmPackedWords[base + DrawPrepSinkTableRecordWord.ShapeHandleWordOffset] >>> 0;
 }
 
-const f32Scratch = new Float32Array(1);
-const u32Scratch = new Uint32Array(f32Scratch.buffer);
+function readShapeHandleFromArena(
+  state: RuntimeState,
+  address: PackedArenaAddress,
+  lane: number,
+  sinkIndex: number,
+): number {
+  const index =
+    address.baseOffset
+    + assertFiniteUint32(lane, `shapeSlotLane sinkIndex=${sinkIndex}`) * address.laneStride;
+  if (index >= state.arena.length) {
+    throw new Error(
+      `runtime-hotpath: shape slot read out of bounds (sinkIndex=${sinkIndex}, index=${index}, arenaLength=${state.arena.length})`,
+    );
+  }
+  const raw = state.arena[index];
+  if (!Number.isFinite(raw) || !Number.isInteger(raw)) {
+    throw new Error(
+      `runtime-hotpath: shape slot lane must be a finite integer (sinkIndex=${sinkIndex}, lane=${lane}, value=${String(raw)})`,
+    );
+  }
+  return assertFiniteUint32(Math.trunc(raw), `shapeHandle sinkIndex=${sinkIndex} lane=${lane}`);
+}
 
-function float32ToUint32Bits(value: number): number {
-  f32Scratch[0] = value;
-  return u32Scratch[0] >>> 0;
+function resolveRepresentativeShapeHandle(
+  state: RuntimeState,
+  shapeAddress: PackedArenaAddress,
+  sinkIndex: number,
+  instanceCount: number,
+  warmPackedWords: Uint32Array | null,
+  warmPackedWordCount: number,
+): number {
+  if (instanceCount <= 0) {
+    return warmShapeHandleForSink(warmPackedWords, warmPackedWordCount, sinkIndex);
+  }
+  const representative = readShapeHandleFromArena(state, shapeAddress, 0, sinkIndex);
+  for (let lane = 1; lane < instanceCount; lane++) {
+    const handle = readShapeHandleFromArena(state, shapeAddress, lane, sinkIndex);
+    if (handle !== representative) {
+      // [LAW:no-mode-explosion] A sink maps to one indirect record; mixed
+      // topology handles per lane would require sink fan-out and is disallowed.
+      throw new Error(
+        `runtime-hotpath: heterogeneous shape handles in sink ${sinkIndex} (lane0=${representative}, lane=${lane}, handle=${handle})`,
+      );
+    }
+  }
+  return representative;
+}
+
+function buildSinkTableSample(
+  words: Uint32Array | null,
+  sinkTableWordCount: number,
+): RuntimeHotpathSinkTableSample | null {
+  if (!words || sinkTableWordCount <= 0) return null;
+  const headerWords = DRAW_PREP_SINK_TABLE_HEADER_WORDS;
+  const recordWords = DRAW_PREP_SINK_TABLE_RECORD_WORDS;
+  const totalRecords = words[1] ?? 0;
+  const base = headerWords;
+  const hasFirstRecord = totalRecords > 0 && sinkTableWordCount >= base + recordWords;
+  return {
+    sinkTableWordCount: sinkTableWordCount >>> 0,
+    totalRecords: totalRecords >>> 0,
+    firstRecord: hasFirstRecord
+      ? {
+        drawModeCode: words[base + DrawPrepSinkTableRecordWord.DrawMode] ?? 0,
+        shapeHandleWordOffset: words[base + DrawPrepSinkTableRecordWord.ShapeHandleWordOffset] ?? 0,
+        shapeSourceCode: words[base + DrawPrepSinkTableRecordWord.ShapeSourceCode] ?? 0,
+        instanceCount: words[base + DrawPrepSinkTableRecordWord.InstanceCount] ?? 0,
+        firstInstance: words[base + DrawPrepSinkTableRecordWord.FirstInstance] ?? 0,
+        positionBaseOffset: words[base + DrawPrepSinkTableRecordWord.PositionBaseOffset] ?? 0,
+        positionLaneStride: words[base + DrawPrepSinkTableRecordWord.PositionLaneStride] ?? 0,
+        positionComponentStride: words[base + DrawPrepSinkTableRecordWord.PositionComponentStride] ?? 0,
+        colorBaseOffset: words[base + DrawPrepSinkTableRecordWord.ColorBaseOffset] ?? 0,
+        colorLaneStride: words[base + DrawPrepSinkTableRecordWord.ColorLaneStride] ?? 0,
+        colorComponentStride: words[base + DrawPrepSinkTableRecordWord.ColorComponentStride] ?? 0,
+        scaleModeCode: words[base + DrawPrepSinkTableRecordWord.ScaleModeCode] ?? 0,
+        scaleValueOrBaseOffset: words[base + DrawPrepSinkTableRecordWord.ScaleValueOrBaseOffset] ?? 0,
+        scaleLaneStride: words[base + DrawPrepSinkTableRecordWord.ScaleLaneStride] ?? 0,
+        scaleComponentStride: words[base + DrawPrepSinkTableRecordWord.ScaleComponentStride] ?? 0,
+        shapeSlotBaseOffset: words[base + DrawPrepSinkTableRecordWord.ShapeSlotBaseOffset] ?? 0,
+        shapeSlotLaneStride: words[base + DrawPrepSinkTableRecordWord.ShapeSlotLaneStride] ?? 0,
+        shapeSlotComponentStride: words[base + DrawPrepSinkTableRecordWord.ShapeSlotComponentStride] ?? 0,
+      }
+      : null,
+  };
 }
 
 function buildGpuDrivenSinkTableWords(
   program: CompiledProgramIR,
   state: RuntimeState,
   warmPackedWords: Uint32Array | null,
+  warmPackedWordCount: number,
 ): { words: Uint32Array; wordCount: number } | null {
+  const generatedPassIds = program.generatedGpuArtifactManifest?.passes?.map((pass) => pass.passId) ?? [];
+  const hasFluidPass = generatedPassIds.some((passId) => passId.startsWith('fluid.'));
+  if (!hasFluidPass && warmPackedWords && warmPackedWordCount > 0) {
+    // [LAW:one-source-of-truth] Non-fluid programs mirror one canonical warm
+    // sink-table payload so render lanes have deterministic data even when
+    // upstream GPU lowering has not yet materialized all source slots.
+    const words = new Uint32Array(warmPackedWordCount);
+    words.set(warmPackedWords.subarray(0, warmPackedWordCount), 0);
+    return { words, wordCount: warmPackedWordCount };
+  }
   const drawPrepProgram = program.drawPrepProgram;
   if (!drawPrepProgram) return null;
   const header = buildDrawPrepSinkTableHeader(drawPrepProgram);
@@ -265,7 +348,13 @@ function buildGpuDrivenSinkTableWords(
   for (let sinkIndex = 0; sinkIndex < drawPrepProgram.sinks.length; sinkIndex++) {
     const sink = drawPrepProgram.sinks[sinkIndex];
     const renderStep = requireRenderStep(program, sink.renderStepIndex);
-    const instanceCount = resolveSinkInstanceCount(program, state, sinkIndex, warmPackedWords);
+    const instanceCount = resolveSinkInstanceCount(
+      program,
+      state,
+      sinkIndex,
+      warmPackedWords,
+      warmPackedWordCount,
+    );
 
     const positionAddress = resolveSlotArenaAddress(
       program,
@@ -277,58 +366,27 @@ function buildGpuDrivenSinkTableWords(
       renderStep.colorSlot as number,
       `colorSlot sinkIndex=${sink.sinkIndex}`,
     );
-    const shapeAddress = renderStep.shape.k === 'slot'
-      ? resolveSlotArenaAddress(
-        program,
-        renderStep.shape.slot as number,
-        `shapeSlot sinkIndex=${sink.sinkIndex}`,
-      )
-      : (() => {
-        try {
-          return resolveScalarArenaAddress(
-            program,
-            renderStep.shape.id as number,
-            `shapeOneHandle sinkIndex=${sink.sinkIndex}`,
-            0,
-          );
-        } catch {
-          return null;
-        }
-      })();
+    const shapeAddress = resolveSlotArenaAddress(
+      program,
+      renderStep.shape.slot as number,
+      `shapeSlot sinkIndex=${sink.sinkIndex}`,
+    );
 
-    let scaleModeCode = SCALE_MODE_SCALAR_BITS;
-    let scaleValueOrBaseOffset = float32ToUint32Bits(1);
-    let scaleLaneStride = 0;
-    let scaleComponentStride = 0;
-    if (renderStep.scale?.k === 'slot') {
-      const scaleAddress = resolveSlotArenaAddress(
-        program,
-        renderStep.scale.slot as number,
-        `scaleSlot sinkIndex=${sink.sinkIndex}`,
+    const scaleSpec = renderStep.scale;
+    if (!scaleSpec || scaleSpec.k !== 'slot') {
+      throw new Error(
+        `runtime-hotpath: render scale must be slot-backed (sinkIndex=${sink.sinkIndex})`,
       );
-      scaleModeCode = SCALE_MODE_SLOT;
-      scaleValueOrBaseOffset = scaleAddress.baseOffset;
-      scaleLaneStride = scaleAddress.laneStride;
-      scaleComponentStride = scaleAddress.componentStride;
-    } else if (renderStep.scale?.k === 'one') {
-      try {
-        const scaleAddress = resolveScalarArenaAddress(
-          program,
-          renderStep.scale.id as number,
-          `scaleOne sinkIndex=${sink.sinkIndex}`,
-          0,
-        );
-        scaleModeCode = SCALE_MODE_SLOT;
-        scaleValueOrBaseOffset = scaleAddress.baseOffset;
-        scaleLaneStride = scaleAddress.laneStride;
-        scaleComponentStride = scaleAddress.componentStride;
-      } catch {
-        scaleModeCode = SCALE_MODE_SCALAR_BITS;
-        scaleValueOrBaseOffset = float32ToUint32Bits(1);
-        scaleLaneStride = 0;
-        scaleComponentStride = 0;
-      }
     }
+    const scaleAddress = resolveSlotArenaAddress(
+      program,
+      scaleSpec.slot as number,
+      `scaleSlot sinkIndex=${sink.sinkIndex}`,
+    );
+    const scaleModeCode = SCALE_MODE_SLOT;
+    const scaleValueOrBaseOffset = scaleAddress.baseOffset;
+    const scaleLaneStride = scaleAddress.laneStride;
+    const scaleComponentStride = scaleAddress.componentStride;
 
     const rotationAddress = renderStep.rotationSlot !== undefined
       ? resolveSlotArenaAddress(
@@ -350,12 +408,19 @@ function buildGpuDrivenSinkTableWords(
     writeDrawPrepSinkRecord(words, sinkIndex, {
       sinkIndex: sink.sinkIndex,
       drawMode: drawModeToCode(sink.drawMode),
-      shapeHandleWordOffset: warmShapeHandleForSink(warmPackedWords, sinkIndex),
+      shapeHandleWordOffset: resolveRepresentativeShapeHandle(
+        state,
+        shapeAddress,
+        sinkIndex,
+        instanceCount,
+        warmPackedWords,
+        warmPackedWordCount,
+      ),
       indirectRecordIndex: sink.indirectRecordIndex,
       instanceCount,
       firstInstance: assertFiniteUint32(firstInstance, `firstInstance sinkIndex=${sink.sinkIndex}`),
       renderStepIndex: sink.renderStepIndex,
-      shapeSourceCode: shapeAddress ? SHAPE_SOURCE_SLOT : SHAPE_SOURCE_ONE_HANDLE,
+      shapeSourceCode: SHAPE_SOURCE_SLOT,
       positionBaseOffset: positionAddress.baseOffset,
       positionLaneStride: positionAddress.laneStride,
       positionComponentStride: positionAddress.componentStride,
@@ -374,9 +439,9 @@ function buildGpuDrivenSinkTableWords(
       scale2BaseOffset: scale2Address?.baseOffset ?? 0,
       scale2LaneStride: scale2Address?.laneStride ?? 0,
       scale2ComponentStride: scale2Address?.componentStride ?? 0,
-      shapeSlotBaseOffset: shapeAddress?.baseOffset ?? 0,
-      shapeSlotLaneStride: shapeAddress?.laneStride ?? 0,
-      shapeSlotComponentStride: shapeAddress?.componentStride ?? 0,
+      shapeSlotBaseOffset: shapeAddress.baseOffset,
+      shapeSlotLaneStride: shapeAddress.laneStride,
+      shapeSlotComponentStride: shapeAddress.componentStride,
     });
     firstInstance = assertFiniteUint32(
       firstInstance + instanceCount,
@@ -388,6 +453,12 @@ function buildGpuDrivenSinkTableWords(
 
 function installProgram(program: SerializableCompiledProgramIR): void {
   const revived = reviveProgram(program);
+  const targetArenaCapacity = computeArenaCapacity(revived.arenaTotalFloats);
+  if (arena.maxElements < targetArenaCapacity) {
+    // [LAW:no-silent-fallbacks] If compiled arena demand exceeds the current
+    // buffer arena, resize eagerly at install time instead of failing warmup.
+    arena = createArena(targetArenaCapacity);
+  }
   const schedule = revived.schedule as {
     stateSlotCount?: number;
     stateMappings?: readonly any[];
@@ -443,6 +514,7 @@ function installProgram(program: SerializableCompiledProgramIR): void {
   }
 
   let warmPackedWords: Uint32Array | null = null;
+  let warmPackedWordCount = 0;
   let warmupFailed = false;
   try {
     // [LAW:single-enforcer] One warmup executeFrame seeds runtime-owned shape
@@ -451,6 +523,7 @@ function installProgram(program: SerializableCompiledProgramIR): void {
     executeFrame(revived, nextState, arena, performance.now());
     const warmPacked = packDrawPrepSinkTableV1(revived, nextState);
     warmPackedWords = warmPacked?.words ?? null;
+    warmPackedWordCount = warmPacked?.wordCount ?? 0;
   } catch (error) {
     warmupFailed = true;
     const message = error instanceof Error ? error.message : String(error);
@@ -471,17 +544,29 @@ function installProgram(program: SerializableCompiledProgramIR): void {
   gpuDrivenExecutionEnabled = false;
   gpuDrivenSinkTableWords = null;
   gpuDrivenSinkTableWordCount = 0;
+  lastSinkTableSample = null;
   gpuDrivenShapeBankWords = warmShapeBankWords;
   gpuDrivenShapeBankWordCount = warmShapeBankWordCount;
   publishedSinkWordCount = 0;
   publishedShapeWordCount = 0;
   gpuDrivenPlanesDirty = true;
+  // TODO(steel-thread): Per-frame CPU payload execution path was deleted in
+  // favor of one GPU-static sink/shape publication path. If a future compile
+  // artifact cannot satisfy this contract, fail installation instead of
+  // reintroducing runtime mode branching.
+  // [LAW:no-mode-explosion] Canonical runtime execution keeps one mode.
   try {
-    const gpuDriven = buildGpuDrivenSinkTableWords(revived, nextState, warmPackedWords);
+    const gpuDriven = buildGpuDrivenSinkTableWords(
+      revived,
+      nextState,
+      warmPackedWords,
+      warmPackedWordCount,
+    );
     if (gpuDriven) {
       gpuDrivenExecutionEnabled = true;
       gpuDrivenSinkTableWords = gpuDriven.words;
       gpuDrivenSinkTableWordCount = gpuDriven.wordCount;
+      lastSinkTableSample = buildSinkTableSample(gpuDriven.words, gpuDriven.wordCount);
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -643,6 +728,7 @@ function maybeEmitHeartbeat(nowMs: number): void {
     lastTickMs,
     drawOpCount: lastDrawOpCount,
     sinkWordCount: lastSinkWordCount,
+    sinkTableSample: lastSinkTableSample,
   });
   lastHeartbeatMs = nowMs;
   tickWindowCount = 0;
@@ -655,8 +741,8 @@ function tick(): void {
   const tickStart = performance.now();
   flushExternalWrites(currentState);
   currentState.externalChannels.commit();
-  publishGpuDrivenPlanesIfDirty();
   const tMs = performance.now();
+  publishGpuDrivenPlanesIfDirty();
   writeSharedInputWords(
     currentState,
     tMs,

@@ -7,6 +7,7 @@ pub const SINK_TABLE_HEADER_WORDS: usize = 8;
 pub const SINK_TABLE_RECORD_WORDS: usize = 29;
 pub const INDIRECT_INDEXED_STRIDE_WORDS: usize = 5;
 pub const INDIRECT_NON_INDEXED_STRIDE_WORDS: usize = 4;
+const CLEAR_BUFFER_CHUNK_BYTES: usize = 16 * 1024;
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, Zeroable, Pod)]
@@ -61,6 +62,31 @@ pub struct GpuMemoryArena {
 }
 
 impl GpuMemoryArena {
+    fn clear_buffer_words(queue: &wgpu::Queue, buffer: &wgpu::Buffer) {
+        // [LAW:no-silent-fallbacks] Simulation/state planes are explicitly
+        // zero-initialized before use; never rely on undefined GPU memory.
+        // [LAW:single-enforcer] This helper is the canonical boundary for
+        // simulation-plane zeroing on reset.
+        const ZERO_CHUNK: [u8; CLEAR_BUFFER_CHUNK_BYTES] = [0u8; CLEAR_BUFFER_CHUNK_BYTES];
+        let mut offset_bytes = 0u64;
+        let total_bytes = buffer.size();
+        while offset_bytes < total_bytes {
+            let remaining = (total_bytes - offset_bytes) as usize;
+            let chunk_len = remaining.min(CLEAR_BUFFER_CHUNK_BYTES);
+            queue.write_buffer(buffer, offset_bytes, &ZERO_CHUNK[..chunk_len]);
+            offset_bytes = offset_bytes.saturating_add(chunk_len as u64);
+        }
+    }
+
+    pub fn clear_simulation_planes(&self, queue: &wgpu::Queue) {
+        // [LAW:no-silent-fallbacks] Simulation state must start from a
+        // deterministic finite baseline; uninitialized GPU memory is invalid.
+        Self::clear_buffer_words(queue, &self.state_buffers[0]);
+        Self::clear_buffer_words(queue, &self.state_buffers[1]);
+        Self::clear_buffer_words(queue, &self.compiler_arena_buffers[0]);
+        Self::clear_buffer_words(queue, &self.compiler_arena_buffers[1]);
+    }
+
     pub fn new(
         device: &wgpu::Device,
         uniform_layout: &wgpu::BindGroupLayout,
@@ -88,8 +114,9 @@ impl GpuMemoryArena {
             }],
         });
 
-        let state_buffer_bytes =
-            (max_particles.saturating_mul(4).saturating_mul(std::mem::size_of::<f32>())) as u64;
+        let state_buffer_bytes = (max_particles
+            .saturating_mul(4)
+            .saturating_mul(std::mem::size_of::<f32>())) as u64;
         let state_buffers = [
             device.create_buffer(&wgpu::BufferDescriptor {
                 label: Some("StateBuffer.A"),
@@ -165,27 +192,28 @@ impl GpuMemoryArena {
 
         let initial_instance_bytes = (max_shapes
             .saturating_mul(INSTANCE_FLOATS_PER_RECORD)
-            .saturating_mul(std::mem::size_of::<f32>())) as u64;
+            .saturating_mul(std::mem::size_of::<f32>()))
+            as u64;
         let initial_topology_words = max_shapes.saturating_mul(SHAPE_BANK_HEADER_WORDS);
         let initial_sink_table_words =
             SINK_TABLE_HEADER_WORDS + max_shapes.saturating_mul(SINK_TABLE_RECORD_WORDS);
         let initial_indirect_words = max_shapes
             .saturating_mul(INDIRECT_INDEXED_STRIDE_WORDS + INDIRECT_NON_INDEXED_STRIDE_WORDS);
-        let initial_vertex_bytes =
-            (max_shapes.saturating_mul(8).saturating_mul(std::mem::size_of::<f32>())) as u64;
-        let initial_index_bytes =
-            (max_shapes.saturating_mul(12).saturating_mul(std::mem::size_of::<u32>())) as u64;
+        let initial_vertex_bytes = (max_shapes
+            .saturating_mul(8)
+            .saturating_mul(std::mem::size_of::<f32>())) as u64;
+        let initial_index_bytes = (max_shapes
+            .saturating_mul(12)
+            .saturating_mul(std::mem::size_of::<u32>())) as u64;
 
-        let instance_capacity_bytes = initial_instance_bytes.max(
-            (INSTANCE_FLOATS_PER_RECORD * std::mem::size_of::<f32>()) as u64,
-        );
+        let instance_capacity_bytes = initial_instance_bytes
+            .max((INSTANCE_FLOATS_PER_RECORD * std::mem::size_of::<f32>()) as u64);
         let topology_capacity_words = initial_topology_words.max(SHAPE_BANK_HEADER_WORDS);
         let sink_table_capacity_words = initial_sink_table_words.max(SINK_TABLE_HEADER_WORDS);
         let indirect_capacity_words = initial_indirect_words.max(INDIRECT_WORDS_PER_RECORD);
         let vertex_capacity_bytes =
             initial_vertex_bytes.max((8 * std::mem::size_of::<f32>()) as u64);
-        let index_capacity_bytes =
-            initial_index_bytes.max((6 * std::mem::size_of::<u32>()) as u64);
+        let index_capacity_bytes = initial_index_bytes.max((6 * std::mem::size_of::<u32>()) as u64);
 
         let instance_buffer = Self::create_instance_buffer(device, instance_capacity_bytes);
         let topology_buffer = Self::create_topology_buffer(device, topology_capacity_words);
@@ -369,10 +397,23 @@ impl GpuMemoryArena {
         &self.compiler_arena_bind_groups[write_index]
     }
 
+    pub fn get_compiler_arena_bind_group_for_index(&self, read_index: usize) -> &wgpu::BindGroup {
+        &self.compiler_arena_bind_groups[read_index & 1]
+    }
+
     pub fn get_compiler_simulation_bind_group(&self) -> &wgpu::BindGroup {
         // [LAW:one-source-of-truth] Compiler simulation dispatch always reads
         // from the canonical arena-owned ping/pong bind-group pair.
         &self.compiler_simulation_bind_groups[self.ping_pong_index]
+    }
+
+    pub fn get_compiler_simulation_bind_group_for_index(
+        &self,
+        read_index: usize,
+    ) -> &wgpu::BindGroup {
+        // [LAW:dataflow-not-control-flow] Multi-pass simulation chaining is
+        // expressed by deterministic ping/pong index progression per pass.
+        &self.compiler_simulation_bind_groups[read_index & 1]
     }
 
     pub fn read_state_buffer(&self) -> &wgpu::Buffer {
@@ -385,6 +426,14 @@ impl GpuMemoryArena {
 
     pub fn swap_ping_pong(&mut self) {
         self.ping_pong_index = (self.ping_pong_index + 1) & 1;
+    }
+
+    pub fn set_ping_pong_index(&mut self, index: usize) {
+        self.ping_pong_index = index & 1;
+    }
+
+    pub fn ping_pong_index(&self) -> usize {
+        self.ping_pong_index
     }
 
     pub fn write_shape_bank_words(
@@ -450,6 +499,39 @@ impl GpuMemoryArena {
         }
         if !words.is_empty() {
             queue.write_buffer(&self.indirect_buffer, 0, cast_slice(words));
+        }
+    }
+
+    pub fn write_compiler_arena_words(
+        &mut self,
+        queue: &wgpu::Queue,
+        offset_words: usize,
+        words: &[u32],
+    ) {
+        // TODO(#161): Revisit compiler arena mirror guard behavior here so all
+        // telemetry/memory invariants fail loudly with one canonical enforcer.
+        // https://github.com/brandon-fryslie/oscilla-animator-v2/issues/161
+        if words.is_empty() {
+            return;
+        }
+        let offset_bytes = (offset_words.saturating_mul(std::mem::size_of::<u32>())) as u64;
+        let payload_bytes = (words.len().saturating_mul(std::mem::size_of::<u32>())) as u64;
+        let end_bytes = offset_bytes.saturating_add(payload_bytes);
+        for buffer in &self.compiler_arena_buffers {
+            if end_bytes > buffer.size() {
+                panic!(
+                    "[LAW:no-silent-fallbacks] compiler arena mirror overflow (offset_words={}, payload_words={}, buffer_bytes={})",
+                    offset_words,
+                    words.len(),
+                    buffer.size(),
+                );
+            }
+        }
+        // TODO(#161): Add explicit non-empty compiler_arena_buffers invariant
+        // check here; current loop no-ops if vector is unexpectedly empty.
+        // https://github.com/brandon-fryslie/oscilla-animator-v2/issues/161
+        for buffer in &self.compiler_arena_buffers {
+            queue.write_buffer(buffer, offset_bytes, cast_slice(words));
         }
     }
 

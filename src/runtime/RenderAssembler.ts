@@ -599,19 +599,6 @@ function resolveScale(
     );
   }
 
-  if (scaleSpec.k === 'one') {
-    // [LAW:one-source-of-truth] Render reads numeric one-cardinality values from arena only.
-    const canonicalAddress = scalarExprToArenaAddress?.get(scaleSpec.id as number);
-    if (canonicalAddress) {
-      return { kind: 'uniform', value: state.arena[arenaIndex(canonicalAddress.arena, 0, canonicalAddress.component)] };
-    }
-
-    throw new Error(
-      'RenderAssembler: No canonical arena address for one-cardinality expression ' + scaleSpec.id + '. ' +
-      'One-cardinality values must be evaluated in schedule and resolved in scalarExprToArenaAddress before rendering.'
-    );
-  }
-
   const scaleBuffer = resolveNumericSlotBuffer(scaleSpec.slot, state, slotToArena);
   if (!(scaleBuffer instanceof Float32Array)) {
     throw new Error(
@@ -633,9 +620,7 @@ function resolveScale(
  * removed; render shape authority is handle-based only.
  */
 function resolveShape(
-  program: CompiledProgramIR,
   shapeSpec: StepRender['shape'],
-  scalarExprToArenaAddress: ReadonlyMap<number, RuntimeScalarArenaAddress> | undefined,
   state: RuntimeState,
   slotToArena: ReadonlyMap<ValueSlot, ArenaSlotDescriptor> | undefined,
 ): Float32Array | TopologyId {
@@ -646,60 +631,18 @@ function resolveShape(
     );
   }
 
-  if (shapeSpec.k === 'slot') {
-    // [LAW:one-source-of-truth] Per-instance shapes are canonical numeric
-    // handle fields in arena-backed slots.
-    const numericShapeBuffer = resolveNumericSlotBuffer(shapeSpec.slot, state, slotToArena);
-    if (numericShapeBuffer instanceof Float32Array) {
-      return numericShapeBuffer;
-    }
-    throw new Error(
-      'RenderAssembler: shape slot ' +
-        shapeSpec.slot +
-        ' must materialize to Float32Array handle field, got ' +
-        (numericShapeBuffer ? numericShapeBuffer.constructor.name : 'undefined'),
-    );
+  // [LAW:one-source-of-truth] Per-instance shapes are canonical numeric
+  // handle fields in arena-backed slots.
+  const numericShapeBuffer = resolveNumericSlotBuffer(shapeSpec.slot, state, slotToArena);
+  if (numericShapeBuffer instanceof Float32Array) {
+    return numericShapeBuffer;
   }
-
-  if (shapeSpec.k === 'oneHandle') {
-    const canonicalAddress = scalarExprToArenaAddress?.get(shapeSpec.id as number);
-    if (!canonicalAddress) {
-      throw new Error(
-        'RenderAssembler: No canonical arena address for one-cardinality shape handle expr ' +
-          shapeSpec.id +
-          '. One-cardinality values must be evaluated in schedule and resolved in scalarExprToArenaAddress before rendering.',
-      );
-    }
-    const rawHandle = state.arena[arenaIndex(canonicalAddress.arena, 0, canonicalAddress.component)];
-    if (!Number.isFinite(rawHandle)) {
-      throw new Error('RenderAssembler: shape handle is not finite for expr ' + shapeSpec.id);
-    }
-    if (!Number.isInteger(rawHandle)) {
-      throw new Error(
-        'RenderAssembler: shape handle must be an integer for expr ' +
-          shapeSpec.id +
-          ' (got ' +
-          rawHandle +
-          ')',
-      );
-    }
-    const handle = Math.trunc(rawHandle);
-    const shapeBank = state.shapeBank;
-    if (!shapeBank) {
-      throw new Error('RenderAssembler: shapeBank is required to resolve shape handles');
-    }
-    if (handle < 0 || handle + SHAPE_BANK_HEADER_WORDS > shapeBank.data.length) {
-      throw new Error('RenderAssembler: shape handle out of range: ' + handle);
-    }
-    const metadata = readShapeBankHandleMetadata(shapeBank, handle);
-    // Validate metadata + header presence at the single render boundary.
-    readShapeBankHeader(shapeBank.data, handle);
-    getProgramTopology(program, metadata.topologyId);
-    return metadata.topologyId as TopologyId;
-  }
-
-  const _exhaustive: never = shapeSpec;
-  throw new Error('RenderAssembler: unsupported shape spec variant: ' + String((_exhaustive as { k?: string }).k));
+  throw new Error(
+    'RenderAssembler: shape slot ' +
+      shapeSpec.slot +
+      ' must materialize to Float32Array handle field, got ' +
+      (numericShapeBuffer ? numericShapeBuffer.constructor.name : 'undefined'),
+  );
 }
 
 /**
@@ -1571,7 +1514,7 @@ function appendDrawPathInstancesOp(
   const isotropicScale = resolvedScale.kind === 'perInstance' ? resolvedScale.values : undefined;
 
   // Resolve shape
-  const shape = resolveShape(context.program, step.shape, scalarExprToArenaAddress, state, slotToArena);
+  const shape = resolveShape(step.shape, state, slotToArena);
 
   // Check if per-instance shapes (shape buffer)
   if (shape instanceof Float32Array) {

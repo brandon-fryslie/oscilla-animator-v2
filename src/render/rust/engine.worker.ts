@@ -8,47 +8,16 @@ import {
   initRustRendererEngine,
   initRustRendererWasm,
   pauseRustRendererEngine,
-  rebuildRustRendererSimulationPipeline,
+  rebuildRustRendererGpuPipelines,
   resumeRustRendererEngine,
   resizeRustRendererSurface,
   takeRustRendererFramePacingPacket,
 } from '../wasm/oscilla_rust_renderer';
+import { isPositiveInt, parseSchedulerPacket } from './engine-telemetry';
 import type {
-  RustRendererRuntimeEvent,
-  RustRendererSchedulerHeartbeat,
-  RustRendererSchedulerState,
   RustRendererWorkerInboundMessage,
   RustRendererWorkerOutboundMessage,
 } from './worker-protocol';
-
-interface RawSchedulerHeartbeat {
-  readonly sequence: number;
-  readonly state: string;
-  readonly emittedAtMs: number;
-  readonly frameCount: number;
-  readonly loopCount: number;
-  readonly meanTickMs: number;
-  readonly stdDevTickMs: number;
-  readonly sampleCount: number;
-  readonly lastTickMs: number;
-  readonly lastSuccessMs: number;
-}
-
-interface RawRuntimeEvent {
-  readonly severity: string;
-  readonly code: string;
-  readonly message: string;
-  readonly state: string;
-  readonly frameCount: number;
-  readonly loopCount: number;
-  readonly emittedAtMs: number;
-}
-
-interface RawSchedulerPacket {
-  readonly state: string;
-  readonly heartbeat: RawSchedulerHeartbeat;
-  readonly events: readonly RawRuntimeEvent[];
-}
 
 const POLL_INTERVAL_MS = 250;
 
@@ -77,94 +46,6 @@ function postDeviceLost(code: string, reason: string): void {
   });
 }
 
-function isSchedulerState(value: unknown): value is RustRendererSchedulerState {
-  return value === 'Booting' || value === 'Running' || value === 'Paused' || value === 'Lost';
-}
-
-function isFiniteNumber(value: unknown): value is number {
-  return typeof value === 'number' && Number.isFinite(value);
-}
-
-function isRawSchedulerHeartbeat(value: unknown): value is RawSchedulerHeartbeat {
-  if (!value || typeof value !== 'object') return false;
-  const heartbeat = value as Partial<RawSchedulerHeartbeat>;
-  return (
-    isFiniteNumber(heartbeat.sequence)
-    && typeof heartbeat.state === 'string'
-    && isFiniteNumber(heartbeat.emittedAtMs)
-    && isFiniteNumber(heartbeat.frameCount)
-    && isFiniteNumber(heartbeat.loopCount)
-    && isFiniteNumber(heartbeat.meanTickMs)
-    && isFiniteNumber(heartbeat.stdDevTickMs)
-    && isFiniteNumber(heartbeat.sampleCount)
-    && isFiniteNumber(heartbeat.lastTickMs)
-    && isFiniteNumber(heartbeat.lastSuccessMs)
-  );
-}
-
-function isRawRuntimeEvent(value: unknown): value is RawRuntimeEvent {
-  if (!value || typeof value !== 'object') return false;
-  const event = value as Partial<RawRuntimeEvent>;
-  return (
-    typeof event.severity === 'string'
-    && typeof event.code === 'string'
-    && typeof event.message === 'string'
-    && typeof event.state === 'string'
-    && isFiniteNumber(event.frameCount)
-    && isFiniteNumber(event.loopCount)
-    && isFiniteNumber(event.emittedAtMs)
-  );
-}
-
-function asRuntimeSeverity(value: string): 'error' | 'fatal' {
-  return value === 'fatal' ? 'fatal' : 'error';
-}
-
-function parseSchedulerPacket(packet: unknown): RawSchedulerPacket | null {
-  if (!packet || typeof packet !== 'object') return null;
-  const candidate = packet as Partial<RawSchedulerPacket>;
-  if (typeof candidate.state !== 'string' || !isRawSchedulerHeartbeat(candidate.heartbeat)) return null;
-  if (!Array.isArray(candidate.events)) return null;
-  if (!candidate.events.every(isRawRuntimeEvent)) return null;
-  if (!isSchedulerState(candidate.state)) return null;
-  if (!isSchedulerState(candidate.heartbeat.state)) return null;
-  if (!candidate.events.every((event) => isSchedulerState(event.state))) return null;
-  return {
-    state: candidate.state,
-    heartbeat: candidate.heartbeat,
-    events: candidate.events,
-  };
-}
-
-function toOutboundHeartbeat(raw: RawSchedulerHeartbeat): RustRendererSchedulerHeartbeat {
-  const state = isSchedulerState(raw.state) ? raw.state : 'Lost';
-  return {
-    type: 'SCHEDULER_HEARTBEAT',
-    state,
-    sequence: raw.sequence,
-    emittedAtMs: raw.emittedAtMs,
-    frameCount: raw.frameCount,
-    loopCount: raw.loopCount,
-    meanTickMs: raw.meanTickMs,
-    stdDevTickMs: raw.stdDevTickMs,
-    sampleCount: raw.sampleCount,
-    lastTickMs: raw.lastTickMs,
-    lastSuccessMs: raw.lastSuccessMs,
-  };
-}
-
-function toOutboundRuntimeEvent(raw: RawRuntimeEvent): RustRendererRuntimeEvent {
-  return {
-    type: 'RUNTIME_EVENT',
-    severity: asRuntimeSeverity(raw.severity),
-    code: raw.code,
-    message: raw.message,
-    state: isSchedulerState(raw.state) ? raw.state : 'Lost',
-    frameCount: raw.frameCount,
-    loopCount: raw.loopCount,
-    emittedAtMs: raw.emittedAtMs,
-  };
-}
 
 async function handleBootstrap(message: Extract<RustRendererWorkerInboundMessage, { type: 'BOOTSTRAP' }>): Promise<void> {
   if (bootstrapped) {
@@ -180,28 +61,36 @@ async function handleBootstrap(message: Extract<RustRendererWorkerInboundMessage
   }
   bootstrapInFlight = true;
   try {
-  await initRustRendererWasm();
-  await initRustRendererEngine(message.canvas, message.config);
-  attachRustRendererSharedInput(message.sharedInput);
-  attachRustRendererSharedShapeBank(message.sharedShapeBank);
-  attachRustRendererSharedSinkTable(message.sharedSinkTable);
-  bootstrapped = true;
-  deviceLostNotified = false;
-  startRuntimePolling();
-  postWorkerMessage({ type: 'BOOTSTRAP_SUCCESS' });
+    await initRustRendererWasm();
+    await initRustRendererEngine(message.canvas, message.config);
+    attachRustRendererSharedInput(message.sharedInput);
+    attachRustRendererSharedShapeBank(message.sharedShapeBank);
+    attachRustRendererSharedSinkTable(message.sharedSinkTable);
+    bootstrapped = true;
+    deviceLostNotified = false;
+    startRuntimePolling();
+    postWorkerMessage({ type: 'BOOTSTRAP_SUCCESS' });
   } finally {
     bootstrapInFlight = false;
   }
 }
 
-async function handleRebuildSimulation(
-  message: Extract<RustRendererWorkerInboundMessage, { type: 'REBUILD_SIMULATION_PIPELINE' }>,
+async function handleRebuildGpuPipelines(
+  message: Extract<RustRendererWorkerInboundMessage, { type: 'REBUILD_GPU_PIPELINES' }>,
 ): Promise<void> {
-  await rebuildRustRendererSimulationPipeline(message.simulationWgsl);
-  postWorkerMessage({ type: 'REBUILD_SIMULATION_PIPELINE_SUCCESS' });
+  if (message.passes.length === 0) {
+    throw new Error('Rust worker rebuild contract violation: REBUILD_GPU_PIPELINES requires at least one pass');
+  }
+  await rebuildRustRendererGpuPipelines(message.passes);
+  postWorkerMessage({ type: 'REBUILD_GPU_PIPELINES_SUCCESS' });
 }
 
 function handleResize(message: Extract<RustRendererWorkerInboundMessage, { type: 'RESIZE_CANVAS' }>): void {
+  if (!isPositiveInt(message.width) || !isPositiveInt(message.height)) {
+    throw new Error(
+      `Rust worker resize contract violation: width/height must be positive integers (width=${String(message.width)}, height=${String(message.height)})`,
+    );
+  }
   resizeRustRendererSurface(message.width, message.height);
 }
 
@@ -226,6 +115,9 @@ function stopRuntimePolling(): void {
 
 function startRuntimePolling(): void {
   if (runtimePollTimer !== null) return;
+  // TODO(#161): Keep worker polling boundary-only; move remaining telemetry
+  // orchestration/helpers out of this file into dedicated telemetry modules.
+  // https://github.com/brandon-fryslie/oscilla-animator-v2/issues/161
   // [LAW:single-enforcer] Rust scheduler owns lifecycle/timing state; worker
   // polling relays that packet and never re-derives runtime health locally.
   runtimePollTimer = setInterval(() => {
@@ -236,12 +128,11 @@ function startRuntimePolling(): void {
       }
       const packet = parseSchedulerPacket(rawPacket);
       if (packet) {
-        postWorkerMessage(toOutboundHeartbeat(packet.heartbeat));
+        postWorkerMessage(packet.heartbeat);
         if (packet.heartbeat.state === 'Lost') {
           postDeviceLost('scheduler_lost', 'Rust scheduler entered Lost state');
         }
-        for (const rawEvent of packet.events) {
-          const event = toOutboundRuntimeEvent(rawEvent);
+        for (const event of packet.events) {
           postWorkerMessage(event);
           if (event.state === 'Lost') {
             postDeviceLost(event.code, event.message);
@@ -304,17 +195,21 @@ self.onmessage = (event: MessageEvent<RustRendererWorkerInboundMessage>) => {
     }
     return;
   }
-  if (message.type === 'REBUILD_SIMULATION_PIPELINE') {
-    void handleRebuildSimulation(message).catch((error) => {
-      const prefix = bootstrapped ? 'Rust worker pipeline rebuild failure' : 'Rust worker rebuild before bootstrap';
-      postWorkerFatalError('pipeline_rebuild_failure', `${prefix}: ${error instanceof Error ? error.message : String(error)}`);
+  if (message.type === 'REBUILD_GPU_PIPELINES') {
+    void handleRebuildGpuPipelines(message).catch((error) => {
+      postWorkerFatalError(
+        'pipeline_rebuild_failure',
+        `Rust worker pipeline rebuild failure: ${error instanceof Error ? error.message : String(error)}`,
+      );
     });
     return;
   }
   if (message.type === 'BOOTSTRAP') {
     void handleBootstrap(message).catch((error) => {
-      const prefix = bootstrapped ? 'Rust worker runtime failure' : 'Rust worker bootstrap failure';
-      postWorkerFatalError('bootstrap_failure', `${prefix}: ${error instanceof Error ? error.message : String(error)}`);
+      postWorkerFatalError(
+        'bootstrap_failure',
+        `Rust worker bootstrap failure: ${error instanceof Error ? error.message : String(error)}`,
+      );
     });
   }
 };

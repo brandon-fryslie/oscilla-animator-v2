@@ -13,6 +13,7 @@ use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 use web_sys::{DedicatedWorkerGlobalScope, OffscreenCanvas};
 
+use crate::compute::CompilerComputePassSpec;
 use crate::engine::{Engine, EngineConfig};
 
 thread_local! {
@@ -22,6 +23,43 @@ thread_local! {
 
 fn worker_scope() -> Result<DedicatedWorkerGlobalScope, JsValue> {
     Ok(js_sys::global().dyn_into::<DedicatedWorkerGlobalScope>()?)
+}
+
+fn read_required_string_field(value: &JsValue, field: &str) -> Result<String, JsValue> {
+    let raw = js_sys::Reflect::get(value, &JsValue::from_str(field))?;
+    raw.as_string()
+        .ok_or_else(|| JsValue::from_str(format!("GPU pass field '{}' must be a string", field).as_str()))
+}
+
+fn parse_gpu_pass_specs(passes: JsValue) -> Result<Vec<CompilerComputePassSpec>, JsValue> {
+    if !Array::is_array(&passes) {
+        return Err(JsValue::from_str("GPU pass payload must be an array"));
+    }
+    let list = Array::from(&passes);
+    if list.length() == 0 {
+        return Err(JsValue::from_str("GPU pass payload must contain at least one pass"));
+    }
+    let mut specs = Vec::with_capacity(list.length() as usize);
+    for idx in 0..list.length() {
+        let item = list.get(idx);
+        if !item.is_object() {
+            return Err(JsValue::from_str(
+                format!("GPU pass payload item {} must be an object", idx).as_str(),
+            ));
+        }
+        let stage = read_required_string_field(&item, "stage")?;
+        if stage != "compute" {
+            return Err(JsValue::from_str(
+                format!("GPU pass {} has unsupported stage '{}'", idx, stage).as_str(),
+            ));
+        }
+        specs.push(CompilerComputePassSpec {
+            pass_id: read_required_string_field(&item, "passId")?,
+            entry_point: read_required_string_field(&item, "entryPoint")?,
+            wgsl: read_required_string_field(&item, "wgsl")?,
+        });
+    }
+    Ok(specs)
 }
 
 #[wasm_bindgen]
@@ -135,13 +173,14 @@ pub fn rebuild_pipeline(
 }
 
 #[wasm_bindgen]
-pub fn rebuild_simulation_pipeline(simulation_wgsl: String) -> Result<(), JsValue> {
+pub fn rebuild_gpu_pipelines(passes: JsValue) -> Result<(), JsValue> {
+    let pass_specs = parse_gpu_pass_specs(passes)?;
     ENGINE.with(|engine_cell| {
         let mut engine_ref = engine_cell.borrow_mut();
         let engine = engine_ref.as_mut().ok_or_else(|| {
-            JsValue::from_str("Rust engine must be initialized before rebuild_simulation_pipeline")
+            JsValue::from_str("Rust engine must be initialized before rebuild_gpu_pipelines")
         })?;
-        engine.rebuild_simulation_pipeline(simulation_wgsl.as_str());
+        engine.rebuild_gpu_pipelines(pass_specs.as_slice());
         Ok(())
     })
 }
@@ -172,6 +211,9 @@ pub fn inject_poison_alloc() -> Result<(), JsValue> {
 
 #[wasm_bindgen]
 pub fn take_frame_pacing_packet() -> Result<JsValue, JsValue> {
+    // TODO(#161): Split JS packet serialization helpers from lib.rs so this
+    // wasm boundary remains thin and telemetry shaping is module-owned.
+    // https://github.com/brandon-fryslie/oscilla-animator-v2/issues/161
     ENGINE.with(|engine_cell| {
         let mut engine_ref = engine_cell.borrow_mut();
         let engine = engine_ref.as_mut().ok_or_else(|| {
@@ -235,6 +277,190 @@ pub fn take_frame_pacing_packet() -> Result<JsValue, JsValue> {
                 &JsValue::from_str("lastSuccessMs"),
                 &JsValue::from_f64(packet.heartbeat.last_success_ms),
             )?;
+            let telemetry = Object::new();
+            let stage_timings = Object::new();
+            js_sys::Reflect::set(
+                &stage_timings,
+                &JsValue::from_str("inputMarshalMs"),
+                &JsValue::from_f64(packet.heartbeat.telemetry.stage_timings.input_marshal_ms),
+            )?;
+            js_sys::Reflect::set(
+                &stage_timings,
+                &JsValue::from_str("simulationDispatchMs"),
+                &JsValue::from_f64(
+                    packet
+                        .heartbeat
+                        .telemetry
+                        .stage_timings
+                        .simulation_dispatch_ms,
+                ),
+            )?;
+            js_sys::Reflect::set(
+                &stage_timings,
+                &JsValue::from_str("fluidPassChainMs"),
+                &JsValue::from_f64(packet.heartbeat.telemetry.stage_timings.fluid_pass_chain_ms),
+            )?;
+            js_sys::Reflect::set(
+                &stage_timings,
+                &JsValue::from_str("drawPrepMs"),
+                &JsValue::from_f64(packet.heartbeat.telemetry.stage_timings.draw_prep_ms),
+            )?;
+            js_sys::Reflect::set(
+                &stage_timings,
+                &JsValue::from_str("renderMs"),
+                &JsValue::from_f64(packet.heartbeat.telemetry.stage_timings.render_ms),
+            )?;
+            js_sys::Reflect::set(
+                &stage_timings,
+                &JsValue::from_str("swapMs"),
+                &JsValue::from_f64(packet.heartbeat.telemetry.stage_timings.swap_ms),
+            )?;
+            js_sys::Reflect::set(
+                &stage_timings,
+                &JsValue::from_str("totalFrameMs"),
+                &JsValue::from_f64(packet.heartbeat.telemetry.stage_timings.total_frame_ms),
+            )?;
+
+            let dispatch_counters = Object::new();
+            js_sys::Reflect::set(
+                &dispatch_counters,
+                &JsValue::from_str("computeDispatchCount"),
+                &JsValue::from_f64(
+                    packet
+                        .heartbeat
+                        .telemetry
+                        .dispatch_counters
+                        .compute_dispatch_count as f64,
+                ),
+            )?;
+            js_sys::Reflect::set(
+                &dispatch_counters,
+                &JsValue::from_str("computeWorkgroupCount"),
+                &JsValue::from_f64(
+                    packet
+                        .heartbeat
+                        .telemetry
+                        .dispatch_counters
+                        .compute_workgroup_count as f64,
+                ),
+            )?;
+            js_sys::Reflect::set(
+                &dispatch_counters,
+                &JsValue::from_str("activeLaneCount"),
+                &JsValue::from_f64(
+                    packet
+                        .heartbeat
+                        .telemetry
+                        .dispatch_counters
+                        .active_lane_count as f64,
+                ),
+            )?;
+            js_sys::Reflect::set(
+                &dispatch_counters,
+                &JsValue::from_str("guardedLaneCount"),
+                &JsValue::from_f64(
+                    packet
+                        .heartbeat
+                        .telemetry
+                        .dispatch_counters
+                        .guarded_lane_count as f64,
+                ),
+            )?;
+
+            let resource_stats = Object::new();
+            js_sys::Reflect::set(
+                &resource_stats,
+                &JsValue::from_str("shapeBankWordCount"),
+                &JsValue::from_f64(
+                    packet
+                        .heartbeat
+                        .telemetry
+                        .resource_stats
+                        .shape_bank_word_count as f64,
+                ),
+            )?;
+            js_sys::Reflect::set(
+                &resource_stats,
+                &JsValue::from_str("sinkTableWordCount"),
+                &JsValue::from_f64(
+                    packet
+                        .heartbeat
+                        .telemetry
+                        .resource_stats
+                        .sink_table_word_count as f64,
+                ),
+            )?;
+            js_sys::Reflect::set(
+                &resource_stats,
+                &JsValue::from_str("indexedRecordCount"),
+                &JsValue::from_f64(
+                    packet
+                        .heartbeat
+                        .telemetry
+                        .resource_stats
+                        .indexed_record_count as f64,
+                ),
+            )?;
+            js_sys::Reflect::set(
+                &resource_stats,
+                &JsValue::from_str("nonIndexedRecordCount"),
+                &JsValue::from_f64(
+                    packet
+                        .heartbeat
+                        .telemetry
+                        .resource_stats
+                        .non_indexed_record_count as f64,
+                ),
+            )?;
+            js_sys::Reflect::set(
+                &resource_stats,
+                &JsValue::from_str("totalInstanceCount"),
+                &JsValue::from_f64(
+                    packet
+                        .heartbeat
+                        .telemetry
+                        .resource_stats
+                        .total_instance_count as f64,
+                ),
+            )?;
+            js_sys::Reflect::set(
+                &resource_stats,
+                &JsValue::from_str("canvasWidth"),
+                &JsValue::from_f64(packet.heartbeat.telemetry.resource_stats.canvas_width as f64),
+            )?;
+            js_sys::Reflect::set(
+                &resource_stats,
+                &JsValue::from_str("canvasHeight"),
+                &JsValue::from_f64(packet.heartbeat.telemetry.resource_stats.canvas_height as f64),
+            )?;
+            js_sys::Reflect::set(
+                &resource_stats,
+                &JsValue::from_str("pingPongIndex"),
+                &JsValue::from_f64(
+                    packet.heartbeat.telemetry.resource_stats.ping_pong_index as f64,
+                ),
+            )?;
+
+            js_sys::Reflect::set(
+                &telemetry,
+                &JsValue::from_str("stageTimings"),
+                &stage_timings.into(),
+            )?;
+            js_sys::Reflect::set(
+                &telemetry,
+                &JsValue::from_str("dispatchCounters"),
+                &dispatch_counters.into(),
+            )?;
+            js_sys::Reflect::set(
+                &telemetry,
+                &JsValue::from_str("resourceStats"),
+                &resource_stats.into(),
+            )?;
+            js_sys::Reflect::set(
+                &heartbeat,
+                &JsValue::from_str("telemetry"),
+                &telemetry.into(),
+            )?;
             js_sys::Reflect::set(&payload, &JsValue::from_str("heartbeat"), &heartbeat.into())?;
 
             let events = Array::new();
@@ -249,6 +475,11 @@ pub fn take_frame_pacing_packet() -> Result<JsValue, JsValue> {
                     &event_payload,
                     &JsValue::from_str("code"),
                     &JsValue::from_str(event.code),
+                )?;
+                js_sys::Reflect::set(
+                    &event_payload,
+                    &JsValue::from_str("stage"),
+                    &JsValue::from_str(event.stage),
                 )?;
                 js_sys::Reflect::set(
                     &event_payload,

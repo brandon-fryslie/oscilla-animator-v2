@@ -322,19 +322,16 @@ export interface StepRender {
   readonly colorSlot: ValueSlot;
   /**
    * Scale multiplier for shape dimensions.
-   * - `sig`: uniform scale (cardinality one)
    * - `slot`: per-instance isotropic scale (cardinality many; stride 1)
    */
-  readonly scale?: { readonly k: 'one'; readonly id: ValueExprId } | { readonly k: 'slot'; readonly slot: ValueSlot };
+  readonly scale: { readonly k: 'slot'; readonly slot: ValueSlot };
   /**
    * Shape source for rendering.
    *
-   * [LAW:one-source-of-truth] Canonical path is `oneHandle`/`slot` only
+   * [LAW:one-source-of-truth] Canonical path is slot-backed shape handles only
    * (numeric handle flow via arena + ShapeBank).
    */
-  readonly shape:
-    | { readonly k: 'oneHandle'; readonly id: ValueExprId }
-    | { readonly k: 'slot'; readonly slot: ValueSlot };
+  readonly shape: { readonly k: 'slot'; readonly slot: ValueSlot };
   /** Optional control points for path rendering - P5c: Add control points field */
   readonly controlPoints?: { readonly k: 'slot'; readonly slot: ValueSlot };
   /** C-13: Per-instance rotation (radians) - slot containing Float32Array */

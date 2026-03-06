@@ -44,8 +44,7 @@ export const CanvasTab: React.FC<CanvasTabProps> = ({ onCanvasReady }) => {
 
   // Resize canvas to fit container while maintaining aspect ratio
   const updateCanvasSize = useCallback((containerWidth: number, containerHeight: number) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+    if (!canvasRef.current) return;
 
     if (containerWidth <= 0 || containerHeight <= 0) return;
 
@@ -70,9 +69,8 @@ export const CanvasTab: React.FC<CanvasTabProps> = ({ onCanvasReady }) => {
     if (width !== previous.width || height !== previous.height) {
       lastCanvasSizeRef.current = { width, height };
       setCanvasSize({ width, height });
-      // Update canvas element dimensions directly for immediate effect
-      canvas.width = width;
-      canvas.height = height;
+      // [LAW:single-enforcer] CanvasTab owns CSS sizing only. GPU backends own
+      // backing-store resize after OffscreenCanvas transfer.
       // Update viewport store with new canvas dimensions
       viewport.setCanvasDimensions(width, height);
     }
@@ -110,8 +108,8 @@ export const CanvasTab: React.FC<CanvasTabProps> = ({ onCanvasReady }) => {
 
   // Helper: normalize mouse position to [0,1] range
   const normalizeMousePosition = useCallback((e: MouseEvent, canvas: HTMLCanvasElement) => {
-    const width = Math.max(1, canvas.clientWidth || canvas.width);
-    const height = Math.max(1, canvas.clientHeight || canvas.height);
+    const width = Math.max(1, canvas.clientWidth || lastCanvasSizeRef.current.width);
+    const height = Math.max(1, canvas.clientHeight || lastCanvasSizeRef.current.height);
     return {
       x: Math.max(0, Math.min(1, e.offsetX / width)),
       y: Math.max(0, Math.min(1, e.offsetY / height)),
@@ -265,8 +263,10 @@ export const CanvasTab: React.FC<CanvasTabProps> = ({ onCanvasReady }) => {
         }
 
         // Scale to reasonable range (divide by canvas size for normalization)
-        dx /= canvas.width;
-        dy /= canvas.height;
+        const normWidth = Math.max(1, canvas.clientWidth || lastCanvasSizeRef.current.width);
+        const normHeight = Math.max(1, canvas.clientHeight || lastCanvasSizeRef.current.height);
+        dx /= normWidth;
+        dy /= normHeight;
 
         externalWriteBus.add('mouse.wheel.dx', dx);
         externalWriteBus.add('mouse.wheel.dy', dy);
@@ -322,10 +322,10 @@ export const CanvasTab: React.FC<CanvasTabProps> = ({ onCanvasReady }) => {
       <canvas
         id="canvas"
         ref={canvasRef}
-        width={canvasSize.width}
-        height={canvasSize.height}
         style={{
           cursor: 'grab',
+          width: `${canvasSize.width}px`,
+          height: `${canvasSize.height}px`,
         }}
       />
 

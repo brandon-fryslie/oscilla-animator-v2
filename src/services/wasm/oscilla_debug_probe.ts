@@ -6,6 +6,7 @@ import {
   DEBUG_PROBE_SLOT_META_WORDS,
   type PackedDebugProbeRuntimeSnapshot,
 } from '../DebugProbeRuntimeSnapshot';
+import type { WasmInitModuleOrPath } from '../../wasm/init-types';
 
 type RustDebugCommandFn = (command: DebugProbeCommand) => void;
 type RustDebugPollPackedRuntimePacketFn = (
@@ -22,7 +23,7 @@ interface DebugProbeWasmModule {
   readonly debug_poll_packed_runtime_packet?: RustDebugPollPackedRuntimePacketFn;
   readonly debug_probe_slot_meta_words?: () => number;
   readonly default?: (
-    moduleOrPath?: RequestInfo | URL | Response | BufferSource | WebAssembly.Module | Promise<unknown>,
+    moduleOrPath?: WasmInitModuleOrPath,
   ) => Promise<unknown>;
 }
 
@@ -41,7 +42,7 @@ export async function initDebugProbeWasm(): Promise<void> {
         const module = raw as unknown as DebugProbeWasmModule;
         if (typeof module.default === 'function') {
           const wasmUrl = new URL('./pkg/oscilla_debug_probe_bg.wasm', import.meta.url);
-          await module.default(wasmUrl);
+          await module.default({ module_or_path: wasmUrl });
         }
         if (typeof module.init !== 'function') {
           throw new Error('oscilla_debug_probe.js missing init export');

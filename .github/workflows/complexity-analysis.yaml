@@ -103,9 +103,20 @@ jobs:
           event: push
           name: complexity-master
           path: artifacts/master
-          if_no_artifact_found: fail
+          if_no_artifact_found: warn
+
+      - name: Detect master complexity baseline
+        id: master_baseline
+        run: |
+          BASE_SUMMARY="artifacts/master/reports/complexity/comparison-summary.json"
+          if [ -f "$BASE_SUMMARY" ]; then
+            echo "has_master_baseline=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_master_baseline=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Build PR vs master comparison
+        if: steps.master_baseline.outputs.has_master_baseline == 'true'
         run: >
           node scripts/complexity/commit-delta.mjs
           --base-summary artifacts/master/reports/complexity/comparison-summary.json
@@ -113,11 +124,18 @@ jobs:
           --output-dir artifacts/compare
 
       - name: Add comparison to job summary
+        if: steps.master_baseline.outputs.has_master_baseline == 'true'
         run: |
           LATEST_DIR="$(cat artifacts/compare/latest.txt)"
           cat "artifacts/compare/${LATEST_DIR}/commit-delta.md" >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Add baseline-missing note to job summary
+        if: steps.master_baseline.outputs.has_master_baseline != 'true'
+        run: |
+          echo "No master complexity baseline artifact found; skipped PR vs master comparison." >> "$GITHUB_STEP_SUMMARY"
+
       - name: Upload PR vs master comparison artifact
+        if: steps.master_baseline.outputs.has_master_baseline == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: complexity-pr-vs-master-${{ github.event.pull_request.number }}
