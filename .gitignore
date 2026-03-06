@@ -36,3 +36,7 @@ webkit-memory-profile-export-all.json
 
 # Rust build output
 target/
+
+# Complexity analysis artifacts
+.complexity-tmp/
+reports/complexity/
