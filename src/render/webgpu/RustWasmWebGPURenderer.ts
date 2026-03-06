@@ -911,6 +911,9 @@ export class WebGPURenderer {
     await new Promise<void>((resolve, reject) => {
       let settled = false;
       const timeoutId = globalThis.setTimeout(() => {
+        // TODO(#184): Route timeout failure through shared await-ack failure
+        // helper to deduplicate markRendererFatal + reject behavior.
+        // https://github.com/brandon-fryslie/oscilla-animator-v2/issues/184
         settle(() => {
           const error = new Error(`Rust renderer worker timed out during ${options.context}`);
           this.markRendererFatal(error);
@@ -937,12 +940,18 @@ export class WebGPURenderer {
           settle(resolve);
           return;
         }
+        // TODO(#184): Deduplicate this terminal-failure settle path with
+        // onError/timeout handling via one helper in awaitWorkerAck.
+        // https://github.com/brandon-fryslie/oscilla-animator-v2/issues/184
         settle(() => {
           this.markRendererFatal(disposition.error);
           reject(disposition.error);
         });
       };
       const onError = (event: ErrorEvent): void => {
+        // TODO(#184): Deduplicate this terminal-failure settle path with
+        // classified-message/timeout handling via one helper.
+        // https://github.com/brandon-fryslie/oscilla-animator-v2/issues/184
         settle(() => {
           const error = new Error(event.message || `Rust renderer worker crashed during ${options.context}`);
           this.markRendererFatal(error);
