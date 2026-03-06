@@ -97,6 +97,11 @@ export interface SinkTableDebugSample {
   } | null;
 }
 
+type WorkerAckDisposition =
+  | { readonly kind: 'success' }
+  | { readonly kind: 'ignore' }
+  | { readonly kind: 'fail'; readonly error: Error };
+
 const DEFAULT_BOOTSTRAP_CONFIG: RustRendererBootstrapConfig = Object.freeze({
   maxParticles: 65_536,
   maxShapes: 65_536,
@@ -315,6 +320,32 @@ function readRequiredSinkTableWord(
     );
   }
   return value;
+}
+
+function classifyWorkerAckMessage(
+  payload: RustRendererWorkerOutboundMessage,
+  expectedSuccessType: RustRendererWorkerOutboundMessage['type'],
+): WorkerAckDisposition {
+  if (payload.type === expectedSuccessType) {
+    return { kind: 'success' };
+  }
+  if (payload.type === 'FATAL_ERROR') {
+    return { kind: 'fail', error: new Error(`[${payload.code}] ${payload.message}`) };
+  }
+  if (payload.type === 'DEVICE_LOST') {
+    return { kind: 'fail', error: new Error(`[${payload.code}] ${payload.reason}`) };
+  }
+  if (payload.type === 'SCHEDULER_HEARTBEAT' || payload.type === 'RUNTIME_EVENT') {
+    return { kind: 'ignore' };
+  }
+  // [LAW:single-enforcer] Ack message classification happens in one helper so
+  // all await paths share identical non-success handling.
+  return {
+    kind: 'fail',
+    error: new Error(
+      `Rust renderer worker protocol violation: expected ${expectedSuccessType}, got ${payload.type}`,
+    ),
+  };
 }
 
 
@@ -906,17 +937,18 @@ export class WebGPURenderer {
       const onMessage = (event: MessageEvent<RustRendererWorkerOutboundMessage>): void => {
         const payload = event.data;
         if (!payload) return;
-        if (payload.type === options.successType) {
+        const disposition = classifyWorkerAckMessage(payload, options.successType);
+        if (disposition.kind === 'ignore') {
+          return;
+        }
+        if (disposition.kind === 'success') {
           settle(resolve);
           return;
         }
-        if (payload.type === 'FATAL_ERROR') {
-          settle(() => {
-            const error = new Error(`[${payload.code}] ${payload.message}`);
-            this.markRendererFatal(error);
-            reject(error);
-          });
-        }
+        settle(() => {
+          this.markRendererFatal(disposition.error);
+          reject(disposition.error);
+        });
       };
       const onError = (event: ErrorEvent): void => {
         settle(() => {
