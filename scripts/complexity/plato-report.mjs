@@ -1,6 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { reportsDir, tmpDir, runCommand, writeJson } from './_shared.mjs';
+import { reportsDir, tmpDir, runCommand, writeJson, mean } from './_shared.mjs';
 import './prepare-js-snapshot.mjs';
 
 const platoDir = path.join(reportsDir, 'plato');
@@ -38,6 +38,7 @@ async function main() {
     halsteadBugs: entry?.complexity?.methodAggregate?.halstead?.bugs ?? 0,
   }));
   const slocValues = files.map((file) => file.sloc);
+  const maintainabilityValues = files.map((file) => file.maintainability);
   const halsteadDifficultyValues = files.map((file) => file.halsteadDifficulty);
   const halsteadVolumeValues = files.map((file) => file.halsteadVolume);
 
@@ -47,18 +48,10 @@ async function main() {
     sourceSummary: report.summary ?? null,
     fileCount: files.length,
     totalLogicalSloc: slocValues.reduce((sum, value) => sum + value, 0),
-    avgLogicalSloc:
-      slocValues.length === 0 ? 0 : slocValues.reduce((sum, value) => sum + value, 0) / slocValues.length,
-    avgMaintainability:
-      files.length === 0 ? 0 : files.reduce((sum, file) => sum + file.maintainability, 0) / files.length,
-    avgHalsteadDifficulty:
-      halsteadDifficultyValues.length === 0
-        ? 0
-        : halsteadDifficultyValues.reduce((sum, value) => sum + value, 0) / halsteadDifficultyValues.length,
-    avgHalsteadVolume:
-      halsteadVolumeValues.length === 0
-        ? 0
-        : halsteadVolumeValues.reduce((sum, value) => sum + value, 0) / halsteadVolumeValues.length,
+    avgLogicalSloc: mean(slocValues),
+    avgMaintainability: mean(maintainabilityValues),
+    avgHalsteadDifficulty: mean(halsteadDifficultyValues),
+    avgHalsteadVolume: mean(halsteadVolumeValues),
     maxCyclomatic: files.reduce((max, file) => Math.max(max, file.cyclomatic), 0),
     maxHalsteadDifficulty: files.reduce((max, file) => Math.max(max, file.halsteadDifficulty), 0),
     maxHalsteadVolume: files.reduce((max, file) => Math.max(max, file.halsteadVolume), 0),
