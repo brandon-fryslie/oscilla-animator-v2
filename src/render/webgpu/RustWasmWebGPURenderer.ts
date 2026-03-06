@@ -164,6 +164,13 @@ function parseWgslU32Constant(wgsl: string, name: string): number | null {
 }
 
 function extractPassDebugConstants(wgsl: string): Record<string, number> {
+  // Extracts a small debug-telemetry snapshot of known WGSL `const u32`
+  // values so runtimeConsole logs can show lane/grid/offset context during
+  // pipeline-install debugging without opening shader source manually.
+  // [LAW:one-source-of-truth] This is temporary drift from canonical metadata:
+  // TODO(#179) moves these constants to structured compiler artifacts so the
+  // renderer stops parsing WGSL text entirely.
+  // https://github.com/brandon-fryslie/oscilla-animator-v2/issues/179
   const keys = [
     'ACTIVE_LANES',
     'GRID_WIDTH',
