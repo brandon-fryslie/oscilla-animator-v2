@@ -21,22 +21,32 @@ async function main() {
 
   const manifest = [];
 
-  for (const relativePath of files) {
-    const sourcePath = path.join(process.cwd(), relativePath);
-    const sourceText = await fs.readFile(sourcePath, 'utf8');
-    const transpiled = ts.transpileModule(sourceText, {
-      compilerOptions,
-      fileName: sourcePath,
-      reportDiagnostics: false,
-    });
+  try {
+    for (const relativePath of files) {
+      const sourcePath = path.join(process.cwd(), relativePath);
+      const sourceText = await fs.readFile(sourcePath, 'utf8');
+      const transpiled = ts.transpileModule(sourceText, {
+        compilerOptions,
+        fileName: sourcePath,
+        reportDiagnostics: false,
+      });
 
-    const outFile = path
-      .join(outDir, relativePath)
-      .replace(/\.ts$/, '.js');
+      const outFile = path
+        .join(outDir, relativePath)
+        .replace(/\.ts$/, '.js');
 
-    await ensureDir(path.dirname(outFile));
-    await fs.writeFile(outFile, transpiled.outputText, 'utf8');
-    manifest.push({ source: relativePath, js: path.relative(process.cwd(), outFile) });
+      await ensureDir(path.dirname(outFile));
+      await fs.writeFile(outFile, transpiled.outputText, 'utf8');
+      manifest.push({ source: relativePath, js: path.relative(process.cwd(), outFile) });
+    }
+  } catch (error) {
+    // Best-effort cleanup to avoid leaving a partially-written snapshot directory.
+    try {
+      await fs.rm(outDir, { recursive: true, force: true });
+    } catch (cleanupError) {
+      console.error('Failed to clean up JS snapshot output directory after error:', cleanupError);
+    }
+    throw error;
   }
 
   await writeJson(manifestPath, {
