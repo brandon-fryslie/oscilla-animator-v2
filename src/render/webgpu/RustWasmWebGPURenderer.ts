@@ -136,6 +136,8 @@ function escapeRegex(source: string): string {
 }
 
 function previewWgsl(wgsl: string, maxLines: number = 4): string {
+  // TODO(#159): Move debug WGSL preview formatting out of renderer runtime path.
+  // https://github.com/brandon-fryslie/oscilla-animator-v2/issues/159
   return wgsl
     .split('\n')
     .slice(0, maxLines)
@@ -144,6 +146,8 @@ function previewWgsl(wgsl: string, maxLines: number = 4): string {
 }
 
 function hashWgslSource(wgsl: string): string {
+  // TODO(#159): Move debug-only shader hashing out of renderer runtime path.
+  // https://github.com/brandon-fryslie/oscilla-animator-v2/issues/159
   let hash = 2166136261 >>> 0;
   for (let index = 0; index < wgsl.length; index++) {
     hash ^= wgsl.charCodeAt(index);
@@ -429,6 +433,9 @@ export class WebGPURenderer {
       input.drawPrepSinkTableV1,
       input.drawPrepSinkTableWordCount,
     );
+    // TODO(#159): Move render-input sink table sampling/logging to dedicated
+    // debug/telemetry adapter instead of renderer execution path.
+    // https://github.com/brandon-fryslie/oscilla-animator-v2/issues/159
     if (RUNTIME_CONSOLE_ENABLED && !this.renderInputDebugLogged && input.drawPrepSinkTableV1 && sinkTableWords > 0) {
       this.renderInputDebugLogged = true;
       const headerWords = 8;
@@ -515,6 +522,8 @@ export class WebGPURenderer {
     const validatedPasses = [...validateGpuPassBundle(passes)];
     this.lastInstalledPassIds = validatedPasses.map((pass) => pass.passId);
     if (RUNTIME_CONSOLE_ENABLED) {
+      // TODO(#159): Move pipeline rebuild debug logging out of renderer class.
+      // https://github.com/brandon-fryslie/oscilla-animator-v2/issues/159
       const payload = {
         kind: 'gpu-pipeline-rebuild',
         passCount: validatedPasses.length,
@@ -553,6 +562,9 @@ export class WebGPURenderer {
   async rebuildSimulationPipeline(simulationWgsl: string): Promise<void> {
     // [LAW:one-source-of-truth] exception: transitional projection for callers
     // still publishing a single simulation pass during bundle migration.
+    // TODO(#162): Remove this single-pass compatibility seam after runtime
+    // callers are fully migrated to canonical `rebuildGpuPipelines`.
+    // https://github.com/brandon-fryslie/oscilla-animator-v2/issues/162
     await this.rebuildGpuPipelines([{
       passId: 'simulation',
       stage: 'compute',
@@ -620,6 +632,9 @@ export class WebGPURenderer {
       );
     }
     this.sharedSinkTableWords.set(sinkTableWords.subarray(0, wordCount), 0);
+    // TODO(#159): Move recurring sink-table debug sampling/logging to dedicated
+    // debug/telemetry infrastructure; keep renderer focused on execution.
+    // https://github.com/brandon-fryslie/oscilla-animator-v2/issues/159
     if (RUNTIME_CONSOLE_ENABLED) {
       this.sinkTableDebugLogCounter += 1;
       if (this.sinkTableDebugLogCounter % 120 === 1) {
@@ -748,6 +763,9 @@ export class WebGPURenderer {
       return;
     }
     this.emittedHealthWarningCodes.add(code);
+    // TODO(#159): Move renderer health-warning logging into dedicated runtime
+    // diagnostics module once telemetry extraction lands.
+    // https://github.com/brandon-fryslie/oscilla-animator-v2/issues/159
     if (RUNTIME_CONSOLE_ENABLED) {
       console.warn(
         `[runtimeConsole] ${JSON.stringify({
