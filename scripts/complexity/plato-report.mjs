@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { reportsDir, tmpDir, runCommand, writeJson, mean } from './_shared.mjs';
+import './prepare-js-snapshot.mjs';
 
 const platoDir = path.join(reportsDir, 'plato');
 const summaryPath = path.join(reportsDir, 'plato-summary.json');
