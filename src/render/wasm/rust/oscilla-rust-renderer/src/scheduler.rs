@@ -3,6 +3,9 @@ use std::collections::VecDeque;
 const HEARTBEAT_INTERVAL_MS: f64 = 250.0;
 const TIMING_WINDOW_SAMPLES: u32 = 60;
 const MAX_PENDING_EVENTS: usize = 32;
+// TODO(#161): Split scheduler telemetry/statistics helpers into a dedicated
+// module so scheduler.rs owns state transitions and packet cadence only.
+// https://github.com/brandon-fryslie/oscilla-animator-v2/issues/161
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct StageTimingsMs {
@@ -275,6 +278,9 @@ impl WorkerScheduler {
         tick_elapsed_ms: f64,
         telemetry: SchedulerTelemetry,
     ) {
+        // TODO(#161): Extract timing-window aggregation into dedicated telemetry
+        // helper module to reduce scheduler centrality and hot-path coupling.
+        // https://github.com/brandon-fryslie/oscilla-animator-v2/issues/161
         let elapsed = tick_elapsed_ms.max(0.0);
         self.last_tick_ms = now_ms.max(0.0);
         let mut next_telemetry = telemetry;

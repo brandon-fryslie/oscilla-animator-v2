@@ -211,6 +211,9 @@ pub fn inject_poison_alloc() -> Result<(), JsValue> {
 
 #[wasm_bindgen]
 pub fn take_frame_pacing_packet() -> Result<JsValue, JsValue> {
+    // TODO(#161): Split JS packet serialization helpers from lib.rs so this
+    // wasm boundary remains thin and telemetry shaping is module-owned.
+    // https://github.com/brandon-fryslie/oscilla-animator-v2/issues/161
     ENGINE.with(|engine_cell| {
         let mut engine_ref = engine_cell.borrow_mut();
         let engine = engine_ref.as_mut().ok_or_else(|| {

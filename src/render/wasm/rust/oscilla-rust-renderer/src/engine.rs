@@ -801,6 +801,9 @@ impl Engine {
                     .saturating_add(self.draw_regions.non_indexed_record_count);
 
                 let simulation_stage_start_ms = worker_monotonic_now_ms();
+                // TODO(#161): Split hot-path telemetry timing capture from core
+                // tick execution so engine.rs owns execution only.
+                // https://github.com/brandon-fryslie/oscilla-animator-v2/issues/161
                 self.compute.encode_simulation_and_assembly(
                     &mut encoder,
                     &mut self.arena,
@@ -922,6 +925,9 @@ impl Engine {
         tick_start_ms: f64,
         telemetry: SchedulerTelemetry,
     ) -> Result<(), JsValue> {
+        // TODO(#161): Move timeout/lost/fatal telemetry routing into a dedicated
+        // telemetry boundary module shared with scheduler state transitions.
+        // https://github.com/brandon-fryslie/oscilla-animator-v2/issues/161
         let now_ms = worker_monotonic_now_ms();
         let tick_elapsed_ms = (now_ms - tick_start_ms).max(0.0);
         self.scheduler
@@ -961,6 +967,9 @@ impl Engine {
     }
 
     fn build_scheduler_telemetry(&self, stage_timings: StageTimingsMs) -> SchedulerTelemetry {
+        // TODO(#161): Consolidate scheduler telemetry construction outside the
+        // engine hot path so this function becomes a thin boundary adapter only.
+        // https://github.com/brandon-fryslie/oscilla-animator-v2/issues/161
         let assembly_workgroup_count =
             ((self.draw_regions.total_instance_count.saturating_add(63)) / 64).max(1);
         let draw_prep_record_count = self
