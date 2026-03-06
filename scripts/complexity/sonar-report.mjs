@@ -22,7 +22,6 @@ async function main() {
     'sonar-scanner',
     [
       `-Dsonar.host.url=${hostUrl}`,
-      `-Dsonar.token=${token}`,
       '-Dsonar.projectBaseDir=.',
     ],
     { allowFailure: true },
