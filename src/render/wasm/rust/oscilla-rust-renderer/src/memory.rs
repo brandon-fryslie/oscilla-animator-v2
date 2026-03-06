@@ -4,7 +4,8 @@ pub const INDIRECT_WORDS_PER_RECORD: usize = 5;
 pub const INSTANCE_FLOATS_PER_RECORD: usize = 12;
 pub const SHAPE_BANK_HEADER_WORDS: usize = 16;
 pub const SINK_TABLE_HEADER_WORDS: usize = 8;
-pub const SINK_TABLE_RECORD_WORDS: usize = 29;
+pub const SINK_TABLE_RECORD_WORDS: usize = 8;
+pub const SINK_TABLE_DESCRIPTOR_WORDS: usize = 20;
 pub const INDIRECT_INDEXED_STRIDE_WORDS: usize = 5;
 pub const INDIRECT_NON_INDEXED_STRIDE_WORDS: usize = 4;
 const CLEAR_BUFFER_CHUNK_BYTES: usize = 16 * 1024;
@@ -195,8 +196,9 @@ impl GpuMemoryArena {
             .saturating_mul(std::mem::size_of::<f32>()))
             as u64;
         let initial_topology_words = max_shapes.saturating_mul(SHAPE_BANK_HEADER_WORDS);
-        let initial_sink_table_words =
-            SINK_TABLE_HEADER_WORDS + max_shapes.saturating_mul(SINK_TABLE_RECORD_WORDS);
+        let initial_sink_table_words = SINK_TABLE_HEADER_WORDS
+            + max_shapes.saturating_mul(SINK_TABLE_RECORD_WORDS)
+            + max_shapes.saturating_mul(SINK_TABLE_DESCRIPTOR_WORDS);
         let initial_indirect_words = max_shapes
             .saturating_mul(INDIRECT_INDEXED_STRIDE_WORDS + INDIRECT_NON_INDEXED_STRIDE_WORDS);
         let initial_vertex_bytes = (max_shapes
@@ -499,39 +501,6 @@ impl GpuMemoryArena {
         }
         if !words.is_empty() {
             queue.write_buffer(&self.indirect_buffer, 0, cast_slice(words));
-        }
-    }
-
-    pub fn write_compiler_arena_words(
-        &mut self,
-        queue: &wgpu::Queue,
-        offset_words: usize,
-        words: &[u32],
-    ) {
-        // TODO(#161): Revisit compiler arena mirror guard behavior here so all
-        // telemetry/memory invariants fail loudly with one canonical enforcer.
-        // https://github.com/brandon-fryslie/oscilla-animator-v2/issues/161
-        if words.is_empty() {
-            return;
-        }
-        let offset_bytes = (offset_words.saturating_mul(std::mem::size_of::<u32>())) as u64;
-        let payload_bytes = (words.len().saturating_mul(std::mem::size_of::<u32>())) as u64;
-        let end_bytes = offset_bytes.saturating_add(payload_bytes);
-        for buffer in &self.compiler_arena_buffers {
-            if end_bytes > buffer.size() {
-                panic!(
-                    "[LAW:no-silent-fallbacks] compiler arena mirror overflow (offset_words={}, payload_words={}, buffer_bytes={})",
-                    offset_words,
-                    words.len(),
-                    buffer.size(),
-                );
-            }
-        }
-        // TODO(#161): Add explicit non-empty compiler_arena_buffers invariant
-        // check here; current loop no-ops if vector is unexpectedly empty.
-        // https://github.com/brandon-fryslie/oscilla-animator-v2/issues/161
-        for buffer in &self.compiler_arena_buffers {
-            queue.write_buffer(buffer, offset_bytes, cast_slice(words));
         }
     }
 

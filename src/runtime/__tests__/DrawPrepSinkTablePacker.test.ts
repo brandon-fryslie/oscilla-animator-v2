@@ -3,8 +3,10 @@ import type { DrawPrepProgramIR, DrawPrepSinkIR } from '../../compiler/ir/progra
 import type { StepRender } from '../../compiler/ir/types';
 import { packDrawPrepSinkTableV1 } from '../DrawPrepSinkTablePacker';
 import {
+  DRAW_PREP_SINK_DESCRIPTOR_WORDS,
   DRAW_PREP_SINK_TABLE_HEADER_WORDS,
   DRAW_PREP_SINK_TABLE_RECORD_WORDS,
+  DrawPrepSinkDescriptorWord,
   DrawPrepSinkTableHeaderWord,
   DrawPrepSinkTableRecordWord,
 } from '../DrawPrepSinkTable';
@@ -87,7 +89,7 @@ function makeRuntimeState(arenaValues: ArrayLike<number>, dynamicCounts?: Readon
 }
 
 describe('packDrawPrepSinkTableV1', () => {
-  it('packs mixed indexed/non-indexed sink records with runtime firstInstance prefix and assembly metadata', () => {
+  it('packs mixed indexed/non-indexed sink records with canonical 8-word command records', () => {
     const sinks: readonly DrawPrepSinkIR[] = [
       {
         sinkIndex: 0,
@@ -130,6 +132,13 @@ describe('packDrawPrepSinkTableV1', () => {
     arena[381] = 96;
     arena[382] = 96;
     const state = makeRuntimeState(arena, new Map([['inst-dynamic', 3]]));
+    state.shapeBank.data[32 + 3] = 11; // materialClass
+    state.shapeBank.data[32 + 4] = 12; // indexCount
+    state.shapeBank.data[32 + 5] = 4; // firstIndex
+    state.shapeBank.data[32 + 6] = 0; // baseVertex
+    state.shapeBank.data[96 + 3] = 7; // materialClass
+    state.shapeBank.data[96 + 7] = 9; // vertexCount
+    state.shapeBank.data[96 + 8] = 2; // firstVertex
 
     const packed = packDrawPrepSinkTableV1(program, state);
     expect(packed).not.toBeNull();
@@ -138,7 +147,7 @@ describe('packDrawPrepSinkTableV1', () => {
     expect(packed!.wordCount).toBe(
       DRAW_PREP_SINK_TABLE_HEADER_WORDS
       + DRAW_PREP_SINK_TABLE_RECORD_WORDS * 2
-      + (2 + 3) * 11,
+      + DRAW_PREP_SINK_DESCRIPTOR_WORDS * 2,
     );
     expect(words[DrawPrepSinkTableHeaderWord.TotalRecordCount]).toBe(2);
     expect(words[DrawPrepSinkTableHeaderWord.IndexedRecordCount]).toBe(1);
@@ -149,21 +158,34 @@ describe('packDrawPrepSinkTableV1', () => {
     const record1 = record0 + DRAW_PREP_SINK_TABLE_RECORD_WORDS;
 
     expect(words[record0 + DrawPrepSinkTableRecordWord.DrawMode]).toBe(0);
-    expect(words[record0 + DrawPrepSinkTableRecordWord.ShapeHandleWordOffset]).toBe(32);
+    expect(words[record0 + DrawPrepSinkTableRecordWord.Count]).toBe(12);
     expect(words[record0 + DrawPrepSinkTableRecordWord.InstanceCount]).toBe(2);
+    expect(words[record0 + DrawPrepSinkTableRecordWord.First]).toBe(4);
+    expect(words[record0 + DrawPrepSinkTableRecordWord.BaseVertex]).toBe(0);
     expect(words[record0 + DrawPrepSinkTableRecordWord.FirstInstance]).toBe(0);
-    expect(words[record0 + DrawPrepSinkTableRecordWord.ShapeSourceCode]).toBe(1);
-    expect(words[record0 + DrawPrepSinkTableRecordWord.PositionBaseOffset]).toBe(
-      DRAW_PREP_SINK_TABLE_HEADER_WORDS + DRAW_PREP_SINK_TABLE_RECORD_WORDS * 2,
-    );
-    expect(words[record0 + DrawPrepSinkTableRecordWord.PositionLaneStride]).toBe(1);
-    expect(words[record0 + DrawPrepSinkTableRecordWord.PositionComponentStride]).toBe(2);
+    expect(words[record0 + DrawPrepSinkTableRecordWord.ShapeWordOffset]).toBe(32);
+    expect(words[record0 + DrawPrepSinkTableRecordWord.MaterialId]).toBe(11);
 
     expect(words[record1 + DrawPrepSinkTableRecordWord.DrawMode]).toBe(1);
-    expect(words[record1 + DrawPrepSinkTableRecordWord.ShapeHandleWordOffset]).toBe(96);
+    expect(words[record1 + DrawPrepSinkTableRecordWord.Count]).toBe(9);
     expect(words[record1 + DrawPrepSinkTableRecordWord.InstanceCount]).toBe(3);
+    expect(words[record1 + DrawPrepSinkTableRecordWord.First]).toBe(2);
+    expect(words[record1 + DrawPrepSinkTableRecordWord.BaseVertex]).toBe(0);
     expect(words[record1 + DrawPrepSinkTableRecordWord.FirstInstance]).toBe(2);
-    expect(words[record1 + DrawPrepSinkTableRecordWord.ShapeSourceCode]).toBe(1);
+    expect(words[record1 + DrawPrepSinkTableRecordWord.ShapeWordOffset]).toBe(96);
+    expect(words[record1 + DrawPrepSinkTableRecordWord.MaterialId]).toBe(7);
+
+    const descriptor0 = DRAW_PREP_SINK_TABLE_HEADER_WORDS + DRAW_PREP_SINK_TABLE_RECORD_WORDS * 2;
+    const descriptor1 = descriptor0 + DRAW_PREP_SINK_DESCRIPTOR_WORDS;
+
+    expect(words[descriptor0 + DrawPrepSinkDescriptorWord.PositionBaseOffset]).toBe(0);
+    expect(words[descriptor0 + DrawPrepSinkDescriptorWord.ColorBaseOffset]).toBe(128);
+    expect(words[descriptor0 + DrawPrepSinkDescriptorWord.ScaleBaseOffset]).toBe(340);
+    expect(words[descriptor0 + DrawPrepSinkDescriptorWord.RotationMode]).toBe(0);
+    expect(words[descriptor0 + DrawPrepSinkDescriptorWord.Scale2Mode]).toBe(0);
+    expect(words[descriptor1 + DrawPrepSinkDescriptorWord.PositionBaseOffset]).toBe(0);
+    expect(words[descriptor1 + DrawPrepSinkDescriptorWord.ColorBaseOffset]).toBe(128);
+    expect(words[descriptor1 + DrawPrepSinkDescriptorWord.ScaleBaseOffset]).toBe(340);
   });
 
   it('fails fast when a dynamic sink count is missing for the current frame', () => {
@@ -237,11 +259,7 @@ describe('packDrawPrepSinkTableV1', () => {
     expect(packed).not.toBeNull();
     const record0 = DRAW_PREP_SINK_TABLE_HEADER_WORDS;
     const words = packed!.words;
-    expect(words[record0 + DrawPrepSinkTableRecordWord.ShapeSourceCode]).toBe(1);
-    expect(words[record0 + DrawPrepSinkTableRecordWord.ShapeHandleWordOffset]).toBe(64);
-    expect(words[record0 + DrawPrepSinkTableRecordWord.ShapeSlotBaseOffset]).toBe(67);
-    expect(words[record0 + DrawPrepSinkTableRecordWord.ShapeSlotLaneStride]).toBe(1);
-    expect(words[record0 + DrawPrepSinkTableRecordWord.ShapeSlotComponentStride]).toBe(1);
+    expect(words[record0 + DrawPrepSinkTableRecordWord.ShapeWordOffset]).toBe(64);
   });
 
   it('fails fast for heterogeneous slot-shape handles in one sink', () => {
