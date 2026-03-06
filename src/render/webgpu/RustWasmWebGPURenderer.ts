@@ -344,6 +344,11 @@ export class WebGPURenderer {
   private readonly emittedHealthWarningCodes = new Set<string>();
 
   private markRendererFatal(error: Error): void {
+    // TODO(#182): Harden fatal-transition contract (idempotence, canonical
+    // fatal record, and boundary-owned cleanup/log emission).
+    // [LAW:single-enforcer] Fatal state transition policy should be enforced
+    // at one dedicated boundary helper.
+    // https://github.com/brandon-fryslie/oscilla-animator-v2/issues/182
     this.lifecycleState = 'Lost';
     this.fatalError = error;
   }
