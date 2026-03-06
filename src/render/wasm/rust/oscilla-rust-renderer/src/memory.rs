@@ -4,7 +4,8 @@ pub const INDIRECT_WORDS_PER_RECORD: usize = 5;
 pub const INSTANCE_FLOATS_PER_RECORD: usize = 12;
 pub const SHAPE_BANK_HEADER_WORDS: usize = 16;
 pub const SINK_TABLE_HEADER_WORDS: usize = 8;
-pub const SINK_TABLE_RECORD_WORDS: usize = 29;
+pub const SINK_TABLE_RECORD_WORDS: usize = 8;
+pub const SINK_TABLE_DESCRIPTOR_WORDS: usize = 20;
 pub const INDIRECT_INDEXED_STRIDE_WORDS: usize = 5;
 pub const INDIRECT_NON_INDEXED_STRIDE_WORDS: usize = 4;
 const CLEAR_BUFFER_CHUNK_BYTES: usize = 16 * 1024;
@@ -195,8 +196,9 @@ impl GpuMemoryArena {
             .saturating_mul(std::mem::size_of::<f32>()))
             as u64;
         let initial_topology_words = max_shapes.saturating_mul(SHAPE_BANK_HEADER_WORDS);
-        let initial_sink_table_words =
-            SINK_TABLE_HEADER_WORDS + max_shapes.saturating_mul(SINK_TABLE_RECORD_WORDS);
+        let initial_sink_table_words = SINK_TABLE_HEADER_WORDS
+            + max_shapes.saturating_mul(SINK_TABLE_RECORD_WORDS)
+            + max_shapes.saturating_mul(SINK_TABLE_DESCRIPTOR_WORDS);
         let initial_indirect_words = max_shapes
             .saturating_mul(INDIRECT_INDEXED_STRIDE_WORDS + INDIRECT_NON_INDEXED_STRIDE_WORDS);
         let initial_vertex_bytes = (max_shapes

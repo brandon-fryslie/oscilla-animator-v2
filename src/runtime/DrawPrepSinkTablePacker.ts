@@ -1,10 +1,14 @@
-import type { CompiledProgramIR } from '../compiler/ir/program';
+import type { CompiledProgramIR, DrawPrepSinkIR } from '../compiler/ir/program';
 import type { ValueSlot } from '../compiler/ir/Indices';
 import type { Step, StepRender } from '../compiler/ir/types';
 import type { RuntimeState } from './RuntimeState';
-import { SHAPE_BANK_HEADER_WORDS } from './RuntimeState';
+import { readShapeBankHeader, SHAPE_BANK_HEADER_WORDS } from './RuntimeState';
 import { resolveArenaAddress } from './ArenaValueStore';
 import {
+  DRAW_PREP_SINK_DESCRIPTOR_WORDS,
+  DRAW_PREP_SINK_TABLE_HEADER_WORDS,
+  DRAW_PREP_SINK_TABLE_RECORD_WORDS,
+  DrawPrepSinkDescriptorWord,
   buildDrawPrepSinkTableHeader,
   computeDrawPrepSinkTableWordCapacity,
   drawModeToCode,
@@ -68,6 +72,9 @@ interface PackedArenaAddress {
   readonly laneStride: number;
   readonly componentStride: number;
 }
+
+const OPTIONAL_MODE_CONSTANT = 0;
+const OPTIONAL_MODE_SLOT = 1;
 
 function resolveSlotArenaAddress(
   program: CompiledProgramIR,
@@ -133,8 +140,7 @@ function resolveSlotShapeHandle(
     const handle = assertFiniteUint32(Math.trunc(laneHandle), `shapeSlotHandle lane=${lane}`);
     if (handle !== representative) {
       // [LAW:no-mode-explosion] Heterogeneous per-instance shape handles inside one
-      // sink would require dynamic sink fan-out; this slice keeps one sink→one
-      // indirect record contract and fails explicitly.
+      // sink would require dynamic sink fan-out; one sink maps to one command.
       throw new Error(
         'DrawPrepSinkTablePacker: heterogeneous per-instance shape handles in one sink are unsupported ' +
           `(sinkInstanceId=${String(step.instanceId)}, lane0=${representative}, lane=${lane}, handle=${handle})`,
@@ -189,6 +195,49 @@ function resolveSinkInstanceCount(program: CompiledProgramIR, state: RuntimeStat
   return assertFiniteUint32(dynamicCount, `dynamicInstanceCount sinkIndex=${sink.sinkIndex}`);
 }
 
+function orderedSinkIndicesByDrawMode(sinks: readonly DrawPrepSinkIR[]): number[] {
+  const indexed: number[] = [];
+  const nonIndexed: number[] = [];
+  for (let sinkIndex = 0; sinkIndex < sinks.length; sinkIndex++) {
+    const sink = sinks[sinkIndex];
+    if (sink?.drawMode === 'indexed') {
+      indexed.push(sinkIndex);
+    } else {
+      nonIndexed.push(sinkIndex);
+    }
+  }
+  return [...indexed, ...nonIndexed];
+}
+
+interface DrawCommandFields {
+  readonly count: number;
+  readonly first: number;
+  readonly baseVertex: number;
+  readonly materialId: number;
+}
+
+function resolveDrawCommandFields(
+  state: RuntimeState,
+  sink: DrawPrepSinkIR,
+  shapeHandleWordOffset: number,
+): DrawCommandFields {
+  const shapeHeader = readShapeBankHeader(state.shapeBank.data, shapeHandleWordOffset);
+  if (sink.drawMode === 'indexed') {
+    return {
+      count: assertFiniteUint32(shapeHeader.indexCount, `indexed.count sinkIndex=${sink.sinkIndex}`),
+      first: assertFiniteUint32(shapeHeader.firstIndex, `indexed.first sinkIndex=${sink.sinkIndex}`),
+      baseVertex: shapeHeader.baseVertex | 0,
+      materialId: assertFiniteUint32(shapeHeader.materialClass, `materialId sinkIndex=${sink.sinkIndex}`),
+    };
+  }
+  return {
+    count: assertFiniteUint32(shapeHeader.vertexCount, `nonIndexed.count sinkIndex=${sink.sinkIndex}`),
+    first: assertFiniteUint32(shapeHeader.firstVertex, `nonIndexed.first sinkIndex=${sink.sinkIndex}`),
+    baseVertex: 0,
+    materialId: assertFiniteUint32(shapeHeader.materialClass, `materialId sinkIndex=${sink.sinkIndex}`),
+  };
+}
+
 export function packDrawPrepSinkTableV1(
   program: CompiledProgramIR,
   state: RuntimeState,
@@ -201,40 +250,34 @@ export function packDrawPrepSinkTableV1(
     return null;
   }
 
-  // [LAW:one-source-of-truth] Compiler owns static sink ordering and indirect
-  // region metadata; runtime packs only per-frame shape/count/first-instance.
+  // [LAW:one-source-of-truth] Compiler owns sink ordering + indirect metadata.
+  // Runtime packs canonical command records + static source descriptors only.
   const header = buildDrawPrepSinkTableHeader(drawPrepProgram);
   const sinkInstanceCounts: number[] = [];
-  let totalInstanceCount = 0;
   for (let sinkIndex = 0; sinkIndex < drawPrepProgram.sinks.length; sinkIndex++) {
     const instanceCount = resolveSinkInstanceCount(program, state, sinkIndex);
     sinkInstanceCounts.push(instanceCount);
-    totalInstanceCount = assertFiniteUint32(
-      totalInstanceCount + instanceCount,
-      'totalInstanceCount',
-    );
   }
-  // [LAW:single-enforcer] exception: runtime packs canonical per-frame instance
-  // payload directly into sink-table transport while worker-side arena ownership
-  // is being migrated.
-  const PER_INSTANCE_PAYLOAD_WORDS = 11;
-  const baseWordCount = computeDrawPrepSinkTableWordCapacity(header.totalRecordCount);
-  const wordCount = assertFiniteUint32(
-    baseWordCount + totalInstanceCount * PER_INSTANCE_PAYLOAD_WORDS,
-    'sinkTableWordCount',
-  );
+
+  const wordCount = computeDrawPrepSinkTableWordCapacity(header.totalRecordCount);
   const words = ensureTableBuffer(state, wordCount);
   words.fill(0, 0, wordCount);
   writeDrawPrepSinkTableHeader(words, header);
+  const descriptorBaseWord = DRAW_PREP_SINK_TABLE_HEADER_WORDS
+    + header.totalRecordCount * DRAW_PREP_SINK_TABLE_RECORD_WORDS;
 
   let firstInstance = 0;
-  let payloadCursor = baseWordCount;
-  for (let sinkIndex = 0; sinkIndex < drawPrepProgram.sinks.length; sinkIndex++) {
+  let recordWriteIndex = 0;
+  for (const sinkIndex of orderedSinkIndicesByDrawMode(drawPrepProgram.sinks)) {
     const sink = drawPrepProgram.sinks[sinkIndex];
+    if (!sink) {
+      throw new Error(`DrawPrepSinkTablePacker: missing sink at index ${sinkIndex}`);
+    }
     const renderStep = requireRenderStep(program, sink.renderStepIndex);
     const instanceCount = sinkInstanceCounts[sinkIndex] ?? 0;
     const shapeHandleWordOffset = resolveSlotShapeHandle(program, state, renderStep, instanceCount);
     assertShapeHandleInBankWindow(state, shapeHandleWordOffset, instanceCount);
+    const command = resolveDrawCommandFields(state, sink, shapeHandleWordOffset);
 
     const packedFirstInstance = assertFiniteUint32(firstInstance, `firstInstance sinkIndex=${sink.sinkIndex}`);
     const positionAddress = resolveSlotArenaAddress(
@@ -246,11 +289,6 @@ export function packDrawPrepSinkTableV1(
       program,
       renderStep.colorSlot,
       `colorSlot sink(instance=${String(renderStep.instanceId)})`,
-    );
-    const shapeSlotAddress = resolveSlotArenaAddress(
-      program,
-      renderStep.shape.slot,
-      `shapeSlot sink(instance=${String(renderStep.instanceId)})`,
     );
     const scaleSlotAddress = resolveSlotArenaAddress(
       program,
@@ -273,93 +311,46 @@ export function packDrawPrepSinkTableV1(
           `scale2Slot sink(instance=${String(renderStep.instanceId)})`,
         )
         : null;
-    const positionBaseOffset = payloadCursor;
-    payloadCursor += instanceCount * 2;
-    const colorBaseOffset = payloadCursor;
-    payloadCursor += instanceCount * 4;
-    const scaleBaseOffset = payloadCursor;
-    payloadCursor += instanceCount;
-    const rotationBaseOffset = payloadCursor;
-    payloadCursor += instanceCount;
-    const scale2BaseOffset = payloadCursor;
-    payloadCursor += instanceCount * 2;
-    const shapeSlotBaseOffset = payloadCursor;
-    payloadCursor += instanceCount;
 
-    for (let lane = 0; lane < instanceCount; lane++) {
-      const positionX = readArenaNumber(positionAddress, state, lane, 0);
-      const positionY = readArenaNumber(positionAddress, state, lane, 1);
-      const colorR = readArenaNumber(colorAddress, state, lane, 0);
-      const colorG = readArenaNumber(colorAddress, state, lane, 1);
-      const colorB = readArenaNumber(colorAddress, state, lane, 2);
-      const colorA = readArenaNumber(colorAddress, state, lane, 3);
-      const scaleValue = readArenaNumber(scaleSlotAddress, state, lane, 0);
-      const rotationValue = rotationSlotAddress
-        ? readArenaNumber(rotationSlotAddress, state, lane, 0)
-        : 0;
-      const scale2X = scale2SlotAddress
-        ? readArenaNumber(scale2SlotAddress, state, lane, 0)
-        : 1;
-      const scale2Y = scale2SlotAddress
-        ? readArenaNumber(scale2SlotAddress, state, lane, 1)
-        : 1;
-      const shapeHandle = assertFiniteUint32(
-        Math.trunc(readArenaNumber(shapeSlotAddress, state, lane, 0)),
-        `shapeSlotHandle lane=${lane}`,
-      );
-      words[positionBaseOffset + lane] = float32ToUint32Bits(positionX);
-      words[positionBaseOffset + instanceCount + lane] = float32ToUint32Bits(positionY);
-      words[colorBaseOffset + lane] = float32ToUint32Bits(colorR);
-      words[colorBaseOffset + instanceCount + lane] = float32ToUint32Bits(colorG);
-      words[colorBaseOffset + instanceCount * 2 + lane] = float32ToUint32Bits(colorB);
-      words[colorBaseOffset + instanceCount * 3 + lane] = float32ToUint32Bits(colorA);
-      words[scaleBaseOffset + lane] = float32ToUint32Bits(scaleValue);
-      words[rotationBaseOffset + lane] = float32ToUint32Bits(rotationValue);
-      words[scale2BaseOffset + lane] = float32ToUint32Bits(scale2X);
-      words[scale2BaseOffset + instanceCount + lane] = float32ToUint32Bits(scale2Y);
-      words[shapeSlotBaseOffset + lane] = shapeHandle;
-    }
-
-    writeDrawPrepSinkRecord(words, sinkIndex, {
-      sinkIndex: sink.sinkIndex,
+    writeDrawPrepSinkRecord(words, recordWriteIndex, {
       drawMode: drawModeToCode(sink.drawMode),
-      shapeHandleWordOffset,
-      indirectRecordIndex: sink.indirectRecordIndex,
+      count: command.count,
       instanceCount,
+      first: command.first,
+      baseVertex: command.baseVertex,
       firstInstance: packedFirstInstance,
-      renderStepIndex: sink.renderStepIndex,
-      shapeSourceCode: 1,
-      positionBaseOffset,
-      positionLaneStride: 1,
-      positionComponentStride: instanceCount,
-      colorBaseOffset,
-      colorLaneStride: 1,
-      colorComponentStride: instanceCount,
-      scaleModeCode: 2,
-      scaleValueOrBaseOffset: scaleBaseOffset,
-      scaleLaneStride: 1,
-      scaleComponentStride: 1,
-      rotationModeCode: 1,
-      rotationBaseOffset,
-      rotationLaneStride: 1,
-      rotationComponentStride: 1,
-      scale2ModeCode: 1,
-      scale2BaseOffset,
-      scale2LaneStride: 1,
-      scale2ComponentStride: instanceCount,
-      shapeSlotBaseOffset,
-      shapeSlotLaneStride: 1,
-      shapeSlotComponentStride: 1,
+      shapeWordOffset: shapeHandleWordOffset,
+      materialId: command.materialId,
     });
+    const descriptorBase = descriptorBaseWord + recordWriteIndex * DRAW_PREP_SINK_DESCRIPTOR_WORDS;
+    words[descriptorBase + DrawPrepSinkDescriptorWord.PositionBaseOffset] = positionAddress.baseOffset;
+    words[descriptorBase + DrawPrepSinkDescriptorWord.PositionLaneStride] = positionAddress.laneStride;
+    words[descriptorBase + DrawPrepSinkDescriptorWord.PositionComponentStride] = positionAddress.componentStride;
+    words[descriptorBase + DrawPrepSinkDescriptorWord.ColorBaseOffset] = colorAddress.baseOffset;
+    words[descriptorBase + DrawPrepSinkDescriptorWord.ColorLaneStride] = colorAddress.laneStride;
+    words[descriptorBase + DrawPrepSinkDescriptorWord.ColorComponentStride] = colorAddress.componentStride;
+    words[descriptorBase + DrawPrepSinkDescriptorWord.ScaleBaseOffset] = scaleSlotAddress.baseOffset;
+    words[descriptorBase + DrawPrepSinkDescriptorWord.ScaleLaneStride] = scaleSlotAddress.laneStride;
+    words[descriptorBase + DrawPrepSinkDescriptorWord.ScaleComponentStride] = scaleSlotAddress.componentStride;
+    words[descriptorBase + DrawPrepSinkDescriptorWord.RotationMode] = rotationSlotAddress
+      ? OPTIONAL_MODE_SLOT
+      : OPTIONAL_MODE_CONSTANT;
+    words[descriptorBase + DrawPrepSinkDescriptorWord.RotationBaseOffset] = rotationSlotAddress?.baseOffset ?? 0;
+    words[descriptorBase + DrawPrepSinkDescriptorWord.RotationLaneStride] = rotationSlotAddress?.laneStride ?? 0;
+    words[descriptorBase + DrawPrepSinkDescriptorWord.RotationComponentStride] = rotationSlotAddress?.componentStride ?? 0;
+    words[descriptorBase + DrawPrepSinkDescriptorWord.RotationDefaultBits] = float32ToUint32Bits(0);
+    words[descriptorBase + DrawPrepSinkDescriptorWord.Scale2Mode] = scale2SlotAddress
+      ? OPTIONAL_MODE_SLOT
+      : OPTIONAL_MODE_CONSTANT;
+    words[descriptorBase + DrawPrepSinkDescriptorWord.Scale2BaseOffset] = scale2SlotAddress?.baseOffset ?? 0;
+    words[descriptorBase + DrawPrepSinkDescriptorWord.Scale2LaneStride] = scale2SlotAddress?.laneStride ?? 0;
+    words[descriptorBase + DrawPrepSinkDescriptorWord.Scale2ComponentStride] = scale2SlotAddress?.componentStride ?? 0;
+    words[descriptorBase + DrawPrepSinkDescriptorWord.Scale2DefaultXBits] = float32ToUint32Bits(1);
+    words[descriptorBase + DrawPrepSinkDescriptorWord.Scale2DefaultYBits] = float32ToUint32Bits(1);
 
     const nextFirstInstance = packedFirstInstance + instanceCount;
     firstInstance = assertFiniteUint32(nextFirstInstance, 'firstInstancePrefixSum');
-  }
-  if (payloadCursor !== wordCount) {
-    throw new Error(
-      'DrawPrepSinkTablePacker: payload cursor mismatch ' +
-      `(cursor=${payloadCursor}, wordCount=${wordCount})`,
-    );
+    recordWriteIndex += 1;
   }
 
   state.cache.drawPrepSinkTableWords = words;
