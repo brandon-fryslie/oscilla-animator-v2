@@ -227,10 +227,10 @@ function warmShapeHandleForSink(
 ): number {
   if (!warmPackedWords) return 0;
   const base = DRAW_PREP_SINK_TABLE_HEADER_WORDS + sinkIndex * DRAW_PREP_SINK_TABLE_RECORD_WORDS;
-  if (base + DrawPrepSinkTableRecordWord.ShapeHandleWordOffset >= warmPackedWordCount) {
+  if (base + DrawPrepSinkTableRecordWord.ShapeWordOffset >= warmPackedWordCount) {
     return 0;
   }
-  return warmPackedWords[base + DrawPrepSinkTableRecordWord.ShapeHandleWordOffset] >>> 0;
+  return warmPackedWords[base + DrawPrepSinkTableRecordWord.ShapeWordOffset] >>> 0;
 }
 
 function readShapeHandleFromArena(
@@ -297,23 +297,13 @@ function buildSinkTableSample(
     firstRecord: hasFirstRecord
       ? {
         drawModeCode: words[base + DrawPrepSinkTableRecordWord.DrawMode] ?? 0,
-        shapeHandleWordOffset: words[base + DrawPrepSinkTableRecordWord.ShapeHandleWordOffset] ?? 0,
-        shapeSourceCode: words[base + DrawPrepSinkTableRecordWord.ShapeSourceCode] ?? 0,
+        count: words[base + DrawPrepSinkTableRecordWord.Count] ?? 0,
         instanceCount: words[base + DrawPrepSinkTableRecordWord.InstanceCount] ?? 0,
+        first: words[base + DrawPrepSinkTableRecordWord.First] ?? 0,
+        baseVertex: words[base + DrawPrepSinkTableRecordWord.BaseVertex] ?? 0,
         firstInstance: words[base + DrawPrepSinkTableRecordWord.FirstInstance] ?? 0,
-        positionBaseOffset: words[base + DrawPrepSinkTableRecordWord.PositionBaseOffset] ?? 0,
-        positionLaneStride: words[base + DrawPrepSinkTableRecordWord.PositionLaneStride] ?? 0,
-        positionComponentStride: words[base + DrawPrepSinkTableRecordWord.PositionComponentStride] ?? 0,
-        colorBaseOffset: words[base + DrawPrepSinkTableRecordWord.ColorBaseOffset] ?? 0,
-        colorLaneStride: words[base + DrawPrepSinkTableRecordWord.ColorLaneStride] ?? 0,
-        colorComponentStride: words[base + DrawPrepSinkTableRecordWord.ColorComponentStride] ?? 0,
-        scaleModeCode: words[base + DrawPrepSinkTableRecordWord.ScaleModeCode] ?? 0,
-        scaleValueOrBaseOffset: words[base + DrawPrepSinkTableRecordWord.ScaleValueOrBaseOffset] ?? 0,
-        scaleLaneStride: words[base + DrawPrepSinkTableRecordWord.ScaleLaneStride] ?? 0,
-        scaleComponentStride: words[base + DrawPrepSinkTableRecordWord.ScaleComponentStride] ?? 0,
-        shapeSlotBaseOffset: words[base + DrawPrepSinkTableRecordWord.ShapeSlotBaseOffset] ?? 0,
-        shapeSlotLaneStride: words[base + DrawPrepSinkTableRecordWord.ShapeSlotLaneStride] ?? 0,
-        shapeSlotComponentStride: words[base + DrawPrepSinkTableRecordWord.ShapeSlotComponentStride] ?? 0,
+        shapeWordOffset: words[base + DrawPrepSinkTableRecordWord.ShapeWordOffset] ?? 0,
+        materialId: words[base + DrawPrepSinkTableRecordWord.MaterialId] ?? 0,
       }
       : null,
   };
@@ -335,120 +325,11 @@ function buildGpuDrivenSinkTableWords(
     words.set(warmPackedWords.subarray(0, warmPackedWordCount), 0);
     return { words, wordCount: warmPackedWordCount };
   }
-  const drawPrepProgram = program.drawPrepProgram;
-  if (!drawPrepProgram) return null;
-  const header = buildDrawPrepSinkTableHeader(drawPrepProgram);
-  const wordCount = assertFiniteUint32(
-    computeDrawPrepSinkTableWordCapacity(header.totalRecordCount),
-    'gpuDrivenSinkTable.wordCount',
-  );
-  const words = new Uint32Array(wordCount);
-  writeDrawPrepSinkTableHeader(words, header);
-  let firstInstance = 0;
-  for (let sinkIndex = 0; sinkIndex < drawPrepProgram.sinks.length; sinkIndex++) {
-    const sink = drawPrepProgram.sinks[sinkIndex];
-    const renderStep = requireRenderStep(program, sink.renderStepIndex);
-    const instanceCount = resolveSinkInstanceCount(
-      program,
-      state,
-      sinkIndex,
-      warmPackedWords,
-      warmPackedWordCount,
-    );
-
-    const positionAddress = resolveSlotArenaAddress(
-      program,
-      renderStep.controlPointsSlot as number,
-      `controlPointsSlot sinkIndex=${sink.sinkIndex}`,
-    );
-    const colorAddress = resolveSlotArenaAddress(
-      program,
-      renderStep.colorSlot as number,
-      `colorSlot sinkIndex=${sink.sinkIndex}`,
-    );
-    const shapeAddress = resolveSlotArenaAddress(
-      program,
-      renderStep.shape.slot as number,
-      `shapeSlot sinkIndex=${sink.sinkIndex}`,
-    );
-
-    const scaleSpec = renderStep.scale;
-    if (!scaleSpec || scaleSpec.k !== 'slot') {
-      throw new Error(
-        `runtime-hotpath: render scale must be slot-backed (sinkIndex=${sink.sinkIndex})`,
-      );
-    }
-    const scaleAddress = resolveSlotArenaAddress(
-      program,
-      scaleSpec.slot as number,
-      `scaleSlot sinkIndex=${sink.sinkIndex}`,
-    );
-    const scaleModeCode = SCALE_MODE_SLOT;
-    const scaleValueOrBaseOffset = scaleAddress.baseOffset;
-    const scaleLaneStride = scaleAddress.laneStride;
-    const scaleComponentStride = scaleAddress.componentStride;
-
-    const rotationAddress = renderStep.rotationSlot !== undefined
-      ? resolveSlotArenaAddress(
-        program,
-        renderStep.rotationSlot as number,
-        `rotationSlot sinkIndex=${sink.sinkIndex}`,
-      )
-      : null;
-    const scale2Address = renderStep.scale2Slot !== undefined
-      ? resolveSlotArenaAddress(
-        program,
-        renderStep.scale2Slot as number,
-        `scale2Slot sinkIndex=${sink.sinkIndex}`,
-      )
-      : null;
-
-    // [LAW:single-enforcer] GPU-driven sink table is authored once at install
-    // from compiler metadata; per-frame ticks only publish shared values.
-    writeDrawPrepSinkRecord(words, sinkIndex, {
-      sinkIndex: sink.sinkIndex,
-      drawMode: drawModeToCode(sink.drawMode),
-      shapeHandleWordOffset: resolveRepresentativeShapeHandle(
-        state,
-        shapeAddress,
-        sinkIndex,
-        instanceCount,
-        warmPackedWords,
-        warmPackedWordCount,
-      ),
-      indirectRecordIndex: sink.indirectRecordIndex,
-      instanceCount,
-      firstInstance: assertFiniteUint32(firstInstance, `firstInstance sinkIndex=${sink.sinkIndex}`),
-      renderStepIndex: sink.renderStepIndex,
-      shapeSourceCode: SHAPE_SOURCE_SLOT,
-      positionBaseOffset: positionAddress.baseOffset,
-      positionLaneStride: positionAddress.laneStride,
-      positionComponentStride: positionAddress.componentStride,
-      colorBaseOffset: colorAddress.baseOffset,
-      colorLaneStride: colorAddress.laneStride,
-      colorComponentStride: colorAddress.componentStride,
-      scaleModeCode,
-      scaleValueOrBaseOffset,
-      scaleLaneStride,
-      scaleComponentStride,
-      rotationModeCode: rotationAddress ? OPTIONAL_MODE_SLOT : OPTIONAL_MODE_IDENTITY,
-      rotationBaseOffset: rotationAddress?.baseOffset ?? 0,
-      rotationLaneStride: rotationAddress?.laneStride ?? 0,
-      rotationComponentStride: rotationAddress?.componentStride ?? 0,
-      scale2ModeCode: scale2Address ? OPTIONAL_MODE_SLOT : OPTIONAL_MODE_IDENTITY,
-      scale2BaseOffset: scale2Address?.baseOffset ?? 0,
-      scale2LaneStride: scale2Address?.laneStride ?? 0,
-      scale2ComponentStride: scale2Address?.componentStride ?? 0,
-      shapeSlotBaseOffset: shapeAddress.baseOffset,
-      shapeSlotLaneStride: shapeAddress.laneStride,
-      shapeSlotComponentStride: shapeAddress.componentStride,
-    });
-    firstInstance = assertFiniteUint32(
-      firstInstance + instanceCount,
-      `firstInstancePrefix sinkIndex=${sink.sinkIndex}`,
-    );
-  }
-  return { words, wordCount };
+  const packed = packDrawPrepSinkTableV1(program, state);
+  if (!packed) return null;
+  const words = new Uint32Array(packed.wordCount);
+  words.set(packed.words.subarray(0, packed.wordCount), 0);
+  return { words, wordCount: packed.wordCount };
 }
 
 function installProgram(program: SerializableCompiledProgramIR): void {

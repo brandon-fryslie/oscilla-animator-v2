@@ -82,18 +82,14 @@ export interface SinkTableDebugSample {
   readonly sinkTableWordCount: number;
   readonly totalRecords: number;
   readonly firstRecord: {
+    readonly drawModeCode: number;
+    readonly count: number;
     readonly instanceCount: number;
+    readonly first: number;
+    readonly baseVertex: number;
     readonly firstInstance: number;
-    readonly positionBaseOffset: number;
-    readonly positionLaneStride: number;
-    readonly positionComponentStride: number;
-    readonly colorBaseOffset: number;
-    readonly colorLaneStride: number;
-    readonly colorComponentStride: number;
-    readonly scaleModeCode: number;
-    readonly scaleValueOrBaseOffset: number;
-    readonly scaleLaneStride: number;
-    readonly scaleComponentStride: number;
+    readonly shapeWordOffset: number;
+    readonly materialId: number;
   } | null;
 }
 
@@ -524,11 +520,35 @@ export class WebGPURenderer {
           'render-input-sample.totalRecords',
         ),
         firstRecord: {
+          drawModeCode: readRequiredSinkTableWord(
+            input.drawPrepSinkTableV1,
+            sinkTableWords,
+            base + 0,
+            'render-input-sample.firstRecord.drawModeCode',
+          ),
+          count: readRequiredSinkTableWord(
+            input.drawPrepSinkTableV1,
+            sinkTableWords,
+            base + 1,
+            'render-input-sample.firstRecord.count',
+          ),
           instanceCount: readRequiredSinkTableWord(
             input.drawPrepSinkTableV1,
             sinkTableWords,
-            base + 4,
+            base + 2,
             'render-input-sample.firstRecord.instanceCount',
+          ),
+          first: readRequiredSinkTableWord(
+            input.drawPrepSinkTableV1,
+            sinkTableWords,
+            base + 3,
+            'render-input-sample.firstRecord.first',
+          ),
+          baseVertex: readRequiredSinkTableWord(
+            input.drawPrepSinkTableV1,
+            sinkTableWords,
+            base + 4,
+            'render-input-sample.firstRecord.baseVertex',
           ),
           firstInstance: readRequiredSinkTableWord(
             input.drawPrepSinkTableV1,
@@ -536,65 +556,17 @@ export class WebGPURenderer {
             base + 5,
             'render-input-sample.firstRecord.firstInstance',
           ),
-          positionBaseOffset: readRequiredSinkTableWord(
+          shapeWordOffset: readRequiredSinkTableWord(
             input.drawPrepSinkTableV1,
             sinkTableWords,
-            base + 8,
-            'render-input-sample.firstRecord.positionBaseOffset',
+            base + 6,
+            'render-input-sample.firstRecord.shapeWordOffset',
           ),
-          positionLaneStride: readRequiredSinkTableWord(
+          materialId: readRequiredSinkTableWord(
             input.drawPrepSinkTableV1,
             sinkTableWords,
-            base + 9,
-            'render-input-sample.firstRecord.positionLaneStride',
-          ),
-          positionComponentStride: readRequiredSinkTableWord(
-            input.drawPrepSinkTableV1,
-            sinkTableWords,
-            base + 10,
-            'render-input-sample.firstRecord.positionComponentStride',
-          ),
-          colorBaseOffset: readRequiredSinkTableWord(
-            input.drawPrepSinkTableV1,
-            sinkTableWords,
-            base + 11,
-            'render-input-sample.firstRecord.colorBaseOffset',
-          ),
-          colorLaneStride: readRequiredSinkTableWord(
-            input.drawPrepSinkTableV1,
-            sinkTableWords,
-            base + 12,
-            'render-input-sample.firstRecord.colorLaneStride',
-          ),
-          colorComponentStride: readRequiredSinkTableWord(
-            input.drawPrepSinkTableV1,
-            sinkTableWords,
-            base + 13,
-            'render-input-sample.firstRecord.colorComponentStride',
-          ),
-          scaleModeCode: readRequiredSinkTableWord(
-            input.drawPrepSinkTableV1,
-            sinkTableWords,
-            base + 14,
-            'render-input-sample.firstRecord.scaleModeCode',
-          ),
-          scaleValueOrBaseOffset: readRequiredSinkTableWord(
-            input.drawPrepSinkTableV1,
-            sinkTableWords,
-            base + 15,
-            'render-input-sample.firstRecord.scaleValueOrBaseOffset',
-          ),
-          scaleLaneStride: readRequiredSinkTableWord(
-            input.drawPrepSinkTableV1,
-            sinkTableWords,
-            base + 16,
-            'render-input-sample.firstRecord.scaleLaneStride',
-          ),
-          scaleComponentStride: readRequiredSinkTableWord(
-            input.drawPrepSinkTableV1,
-            sinkTableWords,
-            base + 17,
-            'render-input-sample.firstRecord.scaleComponentStride',
+            base + 7,
+            'render-input-sample.firstRecord.materialId',
           ),
         },
       } satisfies SinkTableDebugSample;
@@ -776,7 +748,7 @@ export class WebGPURenderer {
       this.sinkTableDebugLogCounter += 1;
       if (this.sinkTableDebugLogCounter % 120 === 1) {
         const headerWords = 8;
-        const recordWords = 29;
+        const recordWords = 8;
         const totalRecords = readRequiredSinkTableWord(
           sinkTableWords,
           wordCount,
@@ -796,11 +768,35 @@ export class WebGPURenderer {
             // `buildSinkTableFirstRecordPayload(...)` must return this object
             // (instanceCount/firstInstance/offset/stride fields) as one unit.
             // https://github.com/brandon-fryslie/oscilla-animator-v2/issues/159
+            drawModeCode: readRequiredSinkTableWord(
+              sinkTableWords,
+              wordCount,
+              firstRecordBase + 0,
+              'sink-table-sample.firstRecord.drawModeCode',
+            ),
+            count: readRequiredSinkTableWord(
+              sinkTableWords,
+              wordCount,
+              firstRecordBase + 1,
+              'sink-table-sample.firstRecord.count',
+            ),
             instanceCount: readRequiredSinkTableWord(
               sinkTableWords,
               wordCount,
-              firstRecordBase + 4,
+              firstRecordBase + 2,
               'sink-table-sample.firstRecord.instanceCount',
+            ),
+            first: readRequiredSinkTableWord(
+              sinkTableWords,
+              wordCount,
+              firstRecordBase + 3,
+              'sink-table-sample.firstRecord.first',
+            ),
+            baseVertex: readRequiredSinkTableWord(
+              sinkTableWords,
+              wordCount,
+              firstRecordBase + 4,
+              'sink-table-sample.firstRecord.baseVertex',
             ),
             firstInstance: readRequiredSinkTableWord(
               sinkTableWords,
@@ -808,65 +804,17 @@ export class WebGPURenderer {
               firstRecordBase + 5,
               'sink-table-sample.firstRecord.firstInstance',
             ),
-            positionBaseOffset: readRequiredSinkTableWord(
+            shapeWordOffset: readRequiredSinkTableWord(
               sinkTableWords,
               wordCount,
-              firstRecordBase + 8,
-              'sink-table-sample.firstRecord.positionBaseOffset',
+              firstRecordBase + 6,
+              'sink-table-sample.firstRecord.shapeWordOffset',
             ),
-            positionLaneStride: readRequiredSinkTableWord(
+            materialId: readRequiredSinkTableWord(
               sinkTableWords,
               wordCount,
-              firstRecordBase + 9,
-              'sink-table-sample.firstRecord.positionLaneStride',
-            ),
-            positionComponentStride: readRequiredSinkTableWord(
-              sinkTableWords,
-              wordCount,
-              firstRecordBase + 10,
-              'sink-table-sample.firstRecord.positionComponentStride',
-            ),
-            colorBaseOffset: readRequiredSinkTableWord(
-              sinkTableWords,
-              wordCount,
-              firstRecordBase + 11,
-              'sink-table-sample.firstRecord.colorBaseOffset',
-            ),
-            colorLaneStride: readRequiredSinkTableWord(
-              sinkTableWords,
-              wordCount,
-              firstRecordBase + 12,
-              'sink-table-sample.firstRecord.colorLaneStride',
-            ),
-            colorComponentStride: readRequiredSinkTableWord(
-              sinkTableWords,
-              wordCount,
-              firstRecordBase + 13,
-              'sink-table-sample.firstRecord.colorComponentStride',
-            ),
-            scaleModeCode: readRequiredSinkTableWord(
-              sinkTableWords,
-              wordCount,
-              firstRecordBase + 14,
-              'sink-table-sample.firstRecord.scaleModeCode',
-            ),
-            scaleValueOrBaseOffset: readRequiredSinkTableWord(
-              sinkTableWords,
-              wordCount,
-              firstRecordBase + 15,
-              'sink-table-sample.firstRecord.scaleValueOrBaseOffset',
-            ),
-            scaleLaneStride: readRequiredSinkTableWord(
-              sinkTableWords,
-              wordCount,
-              firstRecordBase + 16,
-              'sink-table-sample.firstRecord.scaleLaneStride',
-            ),
-            scaleComponentStride: readRequiredSinkTableWord(
-              sinkTableWords,
-              wordCount,
-              firstRecordBase + 17,
-              'sink-table-sample.firstRecord.scaleComponentStride',
+              firstRecordBase + 7,
+              'sink-table-sample.firstRecord.materialId',
             ),
           }
           : null;
