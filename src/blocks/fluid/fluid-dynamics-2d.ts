@@ -36,6 +36,9 @@ export function register(): void {
     description: 'GPU fluid field source for RenderInstances2D sinks',
     form: 'primitive',
     capability: 'render',
+    // [LAW:single-enforcer] LowerSandbox (`src/compiler/ir/LowerSandbox.ts`)
+    // allows macro expansion only for `loweringPurity: 'pure'`. This block
+    // emits instance/slot effect metadata and must stay out of pure-macro path.
     loweringPurity: 'impure',
     inputs: {
       // Input semantics:

@@ -891,7 +891,7 @@ function inferDrawModeForRenderStep(
     // shapeRef topology IDs; non-shapeRef sources are compile-time violations.
     throw new Error(
       'DrawPrepProgram: draw mode requires shapeRef source expression ' +
-        `(exprId=${shapeExprId}, kind=${valueExprNodes[shapeExprId]?.kind ?? 'missing'})`,
+        `(exprId=${shapeExprId}, kind=${valueExprNodes[shapeExprId]?.kind})`,
     );
   }
   const topology = topologyById.get(shapeExpr.topologyId as number);
