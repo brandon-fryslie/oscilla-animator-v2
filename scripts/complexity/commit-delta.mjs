@@ -2,6 +2,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
+import { spawnSync } from 'node:child_process';
 import {
   escapeHtml,
   formatSig2,
@@ -142,7 +143,12 @@ function formatPctValue(value) {
 
 function inferRepoRootFromSummaryPath(summaryPath) {
   if (!summaryPath) return null;
-  return path.resolve(path.dirname(summaryPath), '..', '..');
+  const cwd = path.isAbsolute(summaryPath) ? path.dirname(summaryPath) : process.cwd();
+  const result = spawnSync('git', ['rev-parse', '--show-toplevel'], { cwd, encoding: 'utf8' });
+  if (result.status === 0 && result.stdout) {
+    return result.stdout.trim();
+  }
+  return null;
 }
 
 function normalizeFilePath(filePath, repoRoot) {
