@@ -264,6 +264,9 @@ function validateGpuPassBundle(passes: readonly RustRendererGpuPass[]): readonly
     }
     let cursor = -1;
     for (const passId of fluidPassIds) {
+      // TODO(#183): Remove cast-based pass-id narrowing and use explicit
+      // guard-backed lookup for fluid pass ordering.
+      // https://github.com/brandon-fryslie/oscilla-animator-v2/issues/183
       const nextIndex = FLUID_PASS_ORDER.indexOf(passId as (typeof FLUID_PASS_ORDER)[number]);
       if (nextIndex === -1) {
         throw new Error(`Rust renderer GPU pass contract violation: unknown fluid passId "${passId}"`);
@@ -316,6 +319,9 @@ function readRequiredSinkTableWord(
 
 
 export function assertWebGPUStartupContract(canvas: HTMLCanvasElement): void {
+  // TODO(#183): Remove navigator type assertion and replace with boundary
+  // capability guard helper that does not rely on `as` casting.
+  // https://github.com/brandon-fryslie/oscilla-animator-v2/issues/183
   const gpu = (navigator as Navigator & { gpu?: unknown }).gpu;
   if (!gpu) {
     throw new Error('Rust renderer requires WebGPU (navigator.gpu is unavailable)');
@@ -574,6 +580,9 @@ export class WebGPURenderer {
   getRuntimeSharedPlanes(): RuntimeSharedPlanes {
     // [LAW:one-source-of-truth] Runtime workers write the same canonical shared
     // planes that renderer.render uses; ownership is shared, layout is not.
+    // TODO(#183): Replace SharedArrayBuffer assertions with explicit runtime
+    // guard-backed contract checks before returning typed planes.
+    // https://github.com/brandon-fryslie/oscilla-animator-v2/issues/183
     return {
       sharedInput: this.signalWords.buffer as SharedArrayBuffer,
       sharedShapeBank: this.sharedShapeBankWords.buffer as SharedArrayBuffer,
