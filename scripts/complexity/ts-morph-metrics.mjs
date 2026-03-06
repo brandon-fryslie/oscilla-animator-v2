@@ -183,7 +183,11 @@ async function main() {
   const topLowMaintainability = [...functionMetrics].sort((a, b) => a.maintainabilityIndex - b.maintainabilityIndex).slice(0, 25);
   const topFanOut = [...moduleFanOut].sort((a, b) => b.fanOut - a.fanOut).slice(0, 25);
   const topFanIn = [...moduleFanIn].sort((a, b) => b.fanIn - a.fanIn).slice(0, 25);
-  const totalSourceLoc = sourceLocValues.reduce((sum, value) => sum + value, 0);
+  // Compute total source lines of code from actual file contents rather than aggregating end line numbers.
+  const totalSourceLoc = sourceFiles.reduce(
+    (sum, sourceFile) => sum + sourceFile.getFullText().split(/\r?\n/).length,
+    0,
+  );
 
   const summary = {
     tool: 'ts-morph',
