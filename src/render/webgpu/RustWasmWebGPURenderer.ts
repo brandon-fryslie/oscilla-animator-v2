@@ -697,20 +697,6 @@ export class WebGPURenderer {
     }
   }
 
-  async rebuildSimulationPipeline(simulationWgsl: string): Promise<void> {
-    // [LAW:one-source-of-truth] exception: transitional projection for callers
-    // still publishing a single simulation pass during bundle migration.
-    // TODO(#162): Remove this single-pass compatibility seam after runtime
-    // callers are fully migrated to canonical `rebuildGpuPipelines`.
-    // https://github.com/brandon-fryslie/oscilla-animator-v2/issues/162
-    await this.rebuildGpuPipelines([{
-      passId: 'simulation',
-      stage: 'compute',
-      entryPoint: 'compute_main',
-      wgsl: simulationWgsl,
-    }]);
-  }
-
   getLatestRuntimeTelemetry(): RustRendererRuntimeTelemetry | null {
     return this.latestTelemetry;
   }

@@ -296,15 +296,15 @@ export class RuntimeService {
     artifacts: {
       readonly backendResult: import('../compiler/compile').CompileResult | null;
       readonly compiledGpuBundle?: CompiledGpuArtifactBundle | null;
-      readonly compiledComputeWgsl?: string | null;
     },
   ): Promise<void> {
     if (artifacts.backendResult?.kind !== 'ok') {
       return;
     }
     const bundlePasses = artifacts.compiledGpuBundle?.passes ?? null;
-    const fallbackSimulation = artifacts.compiledComputeWgsl ?? null;
-    if (!bundlePasses && !fallbackSimulation) return;
+    if (!bundlePasses) {
+      throw new Error('RuntimeService: compile backend result is missing required GPU pass bundle');
+    }
 
     const renderer = this.renderer;
     if (!renderer) {
@@ -313,11 +313,7 @@ export class RuntimeService {
 
     // [LAW:single-enforcer] RuntimeService is the only boundary that publishes
     // compiler-emitted GPU shader artifacts into the active renderer.
-    if (bundlePasses) {
-      await renderer.rebuildGpuPipelines(bundlePasses);
-      return;
-    }
-    await renderer.rebuildSimulationPipeline(fallbackSimulation!);
+    await renderer.rebuildGpuPipelines(bundlePasses);
   }
 
   private buildCompileRequest(): CompileWorkerRunRequest {

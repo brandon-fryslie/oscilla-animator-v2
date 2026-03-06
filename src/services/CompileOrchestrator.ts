@@ -174,7 +174,6 @@ export interface PrecomputedCompileArtifacts {
   readonly frontendResult: FrontendResult;
   readonly backendResult: CompileResult | null;
   readonly compiledGpuBundle?: CompiledGpuArtifactBundle | null;
-  readonly compiledComputeWgsl?: string | null;
   readonly compileDurationMs: number;
 }
 
