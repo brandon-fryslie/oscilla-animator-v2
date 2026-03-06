@@ -19,6 +19,7 @@ import {
   clearRenderIssues,
 } from '../render';
 import type { RootStore } from '../stores';
+import { runInAction } from 'mobx';
 import { loadPatchFromStorage, savePatchToStorage } from './PatchPersistence';
 import { consumeTestDemoFilename } from '../testing/test-params';
 import {
@@ -56,6 +57,7 @@ import {
 import { LocalDebugProbeTransport } from './LocalDebugProbeTransport';
 import { createWasmDebugProbeTransport } from './WasmDebugProbeTransport';
 import { RuntimeHotpathWorkerClient } from './RuntimeHotpathWorkerClient';
+import type { CompiledGpuArtifactBundle } from './compile-worker-protocol';
 
 const INITIAL_COMPILE_FAILURE_PROBE_MESSAGE =
   'initial_compile_failed: animation loop started but no program is ready';
@@ -293,15 +295,15 @@ export class RuntimeService {
   private async publishRendererPipelines(
     artifacts: {
       readonly backendResult: import('../compiler/compile').CompileResult | null;
-      readonly compiledComputeWgsl?: string | null;
+      readonly compiledGpuBundle?: CompiledGpuArtifactBundle | null;
     },
   ): Promise<void> {
-    const compiledComputeWgsl =
-      artifacts.backendResult?.kind === 'ok'
-        ? artifacts.compiledComputeWgsl ?? null
-        : null;
-    if (!compiledComputeWgsl) {
+    if (artifacts.backendResult?.kind !== 'ok') {
       return;
+    }
+    const bundlePasses = artifacts.compiledGpuBundle?.passes ?? null;
+    if (!bundlePasses) {
+      throw new Error('RuntimeService: compile backend result is missing required GPU pass bundle');
     }
 
     const renderer = this.renderer;
@@ -311,7 +313,7 @@ export class RuntimeService {
 
     // [LAW:single-enforcer] RuntimeService is the only boundary that publishes
     // compiler-emitted GPU shader artifacts into the active renderer.
-    await renderer.rebuildSimulationPipeline(compiledComputeWgsl);
+    await renderer.rebuildGpuPipelines(bundlePasses);
   }
 
   private buildCompileRequest(): CompileWorkerRunRequest {
@@ -473,6 +475,8 @@ export class RuntimeService {
         throw new Error(`RuntimeService: WebGPU renderer initialization failed: ${message}`);
       }
       try {
+        // TODO(steel-thread): Delete RuntimeHotpathWorkerClient once renderer
+        // worker absorbs viewport/input cadence ownership on the canonical path.
         this.runtimeHotpath = await RuntimeHotpathWorkerClient.create(
           this.renderer.getRuntimeSharedPlanes(),
           (error) => this.handleAnimationLoopError(error),
@@ -482,7 +486,7 @@ export class RuntimeService {
         throw new Error(`RuntimeService: runtime hotpath worker initialization failed: ${message}`);
       }
 
-      // Check for test automation demo marker (set by ?loadDemoPatch= before reload)
+      // Check for test automation demo marker (set by ?loadDemoPatch= during pre-React parse)
       const testDemo = consumeTestDemoFilename();
       if (testDemo) {
         const loaded = store.demo.selectDemo(testDemo);
@@ -498,7 +502,9 @@ export class RuntimeService {
         // Try to restore from localStorage, otherwise load default demo
         const saved = loadPatchFromStorage();
         if (saved) {
-          store.demo.currentFilename = null;
+          runInAction(() => {
+            store.demo.currentFilename = null;
+          });
           store.patch.loadPatch(saved.patch);
         } else {
           store.demo.loadDefault();

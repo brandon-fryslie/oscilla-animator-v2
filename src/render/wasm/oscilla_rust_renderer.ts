@@ -1,8 +1,9 @@
-import type { RustRendererBootstrapConfig } from '../rust/worker-protocol';
+import type { RustRendererBootstrapConfig, RustRendererGpuPass } from '../rust/worker-protocol';
+import type { WasmInitModuleOrPath } from '../../wasm/init-types';
 
 interface RendererWasmModule {
   readonly default?: (
-    moduleOrPath?: RequestInfo | URL | Response | BufferSource | WebAssembly.Module | Promise<unknown>,
+    moduleOrPath?: WasmInitModuleOrPath,
   ) => Promise<unknown>;
   readonly init_engine?: (
     canvas: OffscreenCanvas,
@@ -18,8 +19,8 @@ interface RendererWasmModule {
   readonly resume_engine?: () => void;
   readonly inject_poison_alloc?: () => void;
   readonly take_frame_pacing_packet?: () => unknown;
-  readonly rebuild_simulation_pipeline?: (
-    simulationWgsl: string,
+  readonly rebuild_gpu_pipelines?: (
+    passes: readonly RustRendererGpuPass[],
   ) => Promise<void> | void;
 }
 
@@ -34,7 +35,7 @@ let pauseEngineImpl: RendererWasmModule['pause_engine'] | null = null;
 let resumeEngineImpl: RendererWasmModule['resume_engine'] | null = null;
 let injectPoisonAllocImpl: RendererWasmModule['inject_poison_alloc'] | null = null;
 let takeFramePacingPacketImpl: RendererWasmModule['take_frame_pacing_packet'] | null = null;
-let rebuildSimulationPipelineImpl: RendererWasmModule['rebuild_simulation_pipeline'] | null = null;
+let rebuildGpuPipelinesImpl: RendererWasmModule['rebuild_gpu_pipelines'] | null = null;
 
 export async function initRustRendererWasm(): Promise<void> {
   if (initialized) {
@@ -50,7 +51,8 @@ export async function initRustRendererWasm(): Promise<void> {
       const rawModule = await import('./pkg/oscilla_rust_renderer.js');
       const wasmModule = rawModule as RendererWasmModule;
       if (typeof wasmModule.default === 'function') {
-        await wasmModule.default();
+        const wasmUrl = new URL('./pkg/oscilla_rust_renderer_bg.wasm', import.meta.url);
+        await wasmModule.default({ module_or_path: wasmUrl });
       }
       if (typeof wasmModule.init_engine !== 'function') {
         throw new Error('Rust renderer wasm module missing init_engine export');
@@ -64,8 +66,8 @@ export async function initRustRendererWasm(): Promise<void> {
       if (typeof wasmModule.attach_shared_sink_table !== 'function') {
         throw new Error('Rust renderer wasm module missing attach_shared_sink_table export');
       }
-      if (typeof wasmModule.rebuild_simulation_pipeline !== 'function') {
-        throw new Error('Rust renderer wasm module missing rebuild_simulation_pipeline export');
+      if (typeof wasmModule.rebuild_gpu_pipelines !== 'function') {
+        throw new Error('Rust renderer wasm module missing rebuild_gpu_pipelines export');
       }
       if (typeof wasmModule.resize_surface !== 'function') {
         throw new Error('Rust renderer wasm module missing resize_surface export');
@@ -91,7 +93,7 @@ export async function initRustRendererWasm(): Promise<void> {
       resumeEngineImpl = wasmModule.resume_engine.bind(wasmModule);
       injectPoisonAllocImpl = wasmModule.inject_poison_alloc.bind(wasmModule);
       takeFramePacingPacketImpl = wasmModule.take_frame_pacing_packet.bind(wasmModule);
-      rebuildSimulationPipelineImpl = wasmModule.rebuild_simulation_pipeline.bind(wasmModule);
+      rebuildGpuPipelinesImpl = wasmModule.rebuild_gpu_pipelines.bind(wasmModule);
       initialized = true;
     })().catch((error) => {
       initPromise = null;
@@ -175,11 +177,11 @@ export function takeRustRendererFramePacingPacket(): unknown {
   return takeFramePacingPacketImpl();
 }
 
-export async function rebuildRustRendererSimulationPipeline(
-  simulationWgsl: string,
+export async function rebuildRustRendererGpuPipelines(
+  passes: readonly RustRendererGpuPass[],
 ): Promise<void> {
-  if (!initialized || !rebuildSimulationPipelineImpl) {
+  if (!initialized || !rebuildGpuPipelinesImpl) {
     throw new Error('Rust renderer wasm is not initialized');
   }
-  await rebuildSimulationPipelineImpl(simulationWgsl);
+  await rebuildGpuPipelinesImpl(passes);
 }

@@ -4,7 +4,7 @@ const mocks = vi.hoisted(() => {
   const compileWorkerCompile = vi.fn();
   const compileWorkerDispose = vi.fn();
   const compileAndSwap = vi.fn(async (..._args: any[]) => {});
-  const rebuildSimulationPipeline = vi.fn(async () => {});
+  const rebuildGpuPipelines = vi.fn(async () => {});
   const runtimeHotpathInstallProgram = vi.fn();
   const runtimeHotpathDispose = vi.fn();
   const runtimeHotpathSetViewportFrame = vi.fn();
@@ -26,7 +26,7 @@ const mocks = vi.hoisted(() => {
       sharedShapeBank: new SharedArrayBuffer(256),
       sharedSinkTable: new SharedArrayBuffer(256),
     })),
-    rebuildSimulationPipeline,
+    rebuildGpuPipelines,
   }));
   const assertWebGPUStartupContract = vi.fn();
   const setRenderIssueReporter = vi.fn();
@@ -65,7 +65,7 @@ const mocks = vi.hoisted(() => {
     compileWorkerCompile,
     compileWorkerDispose,
     compileAndSwap,
-    rebuildSimulationPipeline,
+    rebuildGpuPipelines,
     runtimeHotpathInstallProgram,
     runtimeHotpathDispose,
     runtimeHotpathSetViewportFrame,
@@ -237,7 +237,6 @@ describe('RuntimeService startup compile path', () => {
       sourcePatchRevision: 7,
       frontendResult: {} as any,
       backendResult: null,
-      compiledComputeWgsl: null,
       compileDurationMs: 3,
     });
 
@@ -315,7 +314,6 @@ describe('RuntimeService startup compile path', () => {
       sourcePatchRevision: 7,
       frontendResult: {} as any,
       backendResult: null,
-      compiledComputeWgsl: null,
       compileDurationMs: 3,
     });
     mocks.savePatchToStorage.mockImplementation(() => {
@@ -350,12 +348,18 @@ describe('RuntimeService startup compile path', () => {
     );
   });
 
-  it('publishes compiled compute WGSL into the renderer before swapping the new program', async () => {
+  it('publishes compiled GPU pass bundle into the renderer before swapping the new program', async () => {
     const backendResult = {
       kind: 'ok' as const,
       program: {} as any,
-      compiledComputeShader: {
-        wgsl: '@compute @workgroup_size(64, 1, 1)\nfn compute_main() {}',
+      compiledGpuBundle: {
+        schemaVersion: 1 as const,
+        passes: [{
+          passId: 'simulation',
+          stage: 'compute' as const,
+          entryPoint: 'compute_main',
+          wgsl: '@compute @workgroup_size(64, 1, 1)\nfn compute_main() {}',
+        }],
       },
       warnings: [],
     };
@@ -363,7 +367,7 @@ describe('RuntimeService startup compile path', () => {
       sourcePatchRevision: 7,
       frontendResult: {} as any,
       backendResult,
-      compiledComputeWgsl: '@compute @workgroup_size(64, 1, 1)\nfn compute_main() {}',
+      compiledGpuBundle: backendResult.compiledGpuBundle,
       compileDurationMs: 3,
     });
 
@@ -375,13 +379,18 @@ describe('RuntimeService startup compile path', () => {
     await vi.advanceTimersByTimeAsync(60);
     await initPromise;
 
-    expect(mocks.rebuildSimulationPipeline).toHaveBeenCalledTimes(1);
-    expect(mocks.rebuildSimulationPipeline).toHaveBeenCalledWith(
-      '@compute @workgroup_size(64, 1, 1)\nfn compute_main() {}',
-    );
+    expect(mocks.rebuildGpuPipelines).toHaveBeenCalledTimes(1);
+    expect(mocks.rebuildGpuPipelines).toHaveBeenCalledWith([
+      {
+        passId: 'simulation',
+        stage: 'compute',
+        entryPoint: 'compute_main',
+        wgsl: '@compute @workgroup_size(64, 1, 1)\nfn compute_main() {}',
+      },
+    ]);
     expect(mocks.compileAndSwap).toHaveBeenCalledTimes(1);
     expect(
-      mocks.rebuildSimulationPipeline.mock.invocationCallOrder[0]
+      mocks.rebuildGpuPipelines.mock.invocationCallOrder[0]
       < mocks.compileAndSwap.mock.invocationCallOrder[0],
     ).toBe(true);
   });

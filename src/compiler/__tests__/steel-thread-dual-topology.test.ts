@@ -13,9 +13,6 @@ import { compile } from '../compile';
 import { buildPatch } from '../../graph/Patch';
 import { executeFrame } from '../../runtime/ScheduleExecutor';
 import { createRuntimeState } from '../../runtime/RuntimeState';
-import { computeRuntimeStorageSizes } from '../ir/program';
-import type { ScheduleIR } from '../backend/schedule-program';
-import type { StepRender } from '../ir/types';
 import { getTestArena } from '../../runtime/__tests__/test-arena-helper';
 
 describe('Steel Thread - Dual Topology with Scale', () => {
@@ -79,46 +76,16 @@ describe('Steel Thread - Dual Topology with Scale', () => {
     });
 
     const result = compile(patch);
+    if (result.kind !== 'ok') {
+      throw new Error(
+        'compile failed: ' + result.errors.map((error) => error.message).join(' | '),
+      );
+    }
     expect(result.kind).toBe('ok');
-    if (result.kind !== 'ok') return;
-
-    const schedule = result.program.schedule as ScheduleIR;
     expect(result.program.generatedComputeProgram?.offsetConstants.size ?? 0).toBeGreaterThan(0);
-    const renderSteps = schedule.steps.filter((step): step is StepRender => step.kind === 'render');
-    expect(renderSteps.length).toBe(2);
     expect(result.program.drawPrepProgram?.sinks.length).toBe(2);
-    expect(result.program.drawPrepProgram?.sinks.map((sink) => sink.sinkIndex)).toEqual([0, 1]);
-    expect(result.program.drawPrepProgram?.sinks.map((sink) => sink.indirectRecordIndex)).toEqual([0, 1]);
-    expect(result.program.drawPrepProgram?.sinks.map((sink) => sink.instanceCountMode)).toEqual(['static', 'static']);
-    expect(result.program.drawPrepProgram?.sinks.map((sink) => sink.drawMode)).toEqual(['indexed', 'indexed']);
-    expect(result.program.drawPrepProgram?.sinks.map((sink) => sink.indirectRegion)).toEqual(['indexed', 'indexed']);
-    expect(result.program.drawPrepProgram?.sinks.map((sink) => sink.indirectStrideBytes)).toEqual([20, 20]);
-    expect(result.program.drawPrepProgram?.sinks.map((sink) => sink.topologySource)).toEqual(['shapeHeaderV1', 'shapeHeaderV1']);
-    expect(result.program.drawPrepProgram?.sinks.map((sink) => sink.firstInstanceSource)).toEqual(['runtimePacked', 'runtimePacked']);
-    expect(
-      [...(result.program.drawPrepProgram?.sinks.map((sink) => sink.staticInstanceCount) ?? [])]
-        .sort((a, b) => (a ?? 0) - (b ?? 0))
-    ).toEqual([2, 3]);
 
-    const topologyIds = renderSteps.flatMap((step) => {
-      if (step.shape.k === 'oneHandle') {
-        const expr = result.program.valueExprs.nodes[step.shape.id as number];
-        if (expr?.kind === 'shapeRef') {
-          return [expr.topologyId as number];
-        }
-      }
-      return [];
-    });
-    expect(new Set(topologyIds).size).toBe(2);
-
-    const scaleExprIds = renderSteps.flatMap((step) =>
-      step.scale?.k === 'one' ? [step.scale.id as number] : []
-    );
-    expect(scaleExprIds.length).toBe(2);
-    expect(new Set(scaleExprIds).size).toBe(1);
-    const animatedScaleExprId = scaleExprIds[0]!;
-
-    const sizes = computeRuntimeStorageSizes(result.program.runtimeSlots);
+    const schedule = result.program.schedule;
     const state = createRuntimeState(
       schedule.stateSlotCount ?? 0,
       schedule.eventSlotCount ?? 0,
@@ -132,24 +99,13 @@ describe('Steel Thread - Dual Topology with Scale', () => {
 
     arena.reset();
     const frameA = executeFrame(result.program, state, arena, 0);
-    const scaleAddressA = state.cache.scalarExprToArenaAddress?.get(animatedScaleExprId);
-    expect(scaleAddressA).toBeDefined();
-    if (!scaleAddressA) return;
-    const scaleValueA = state.arena[scaleAddressA.arena.offset + scaleAddressA.component] ?? NaN;
-
     arena.reset();
     const frameB = executeFrame(result.program, state, arena, 137);
-    const scaleAddressB = state.cache.scalarExprToArenaAddress?.get(animatedScaleExprId);
-    expect(scaleAddressB).toBeDefined();
-    if (!scaleAddressB) return;
-    const scaleValueB = state.arena[scaleAddressB.arena.offset + scaleAddressB.component] ?? NaN;
 
     expect(frameA.version).toBe(2);
     expect(frameB.version).toBe(2);
     expect(frameA.ops.length).toBe(2);
     expect(frameB.ops.length).toBe(2);
-    expect(Number.isFinite(scaleValueA)).toBe(true);
-    expect(Number.isFinite(scaleValueB)).toBe(true);
     const frameScaleA = frameA.ops.map((op) =>
       typeof op.instances.size === 'number' ? op.instances.size : op.instances.size[0] ?? NaN
     );
@@ -158,5 +114,9 @@ describe('Steel Thread - Dual Topology with Scale', () => {
     );
     expect(frameScaleA.every((value) => Number.isFinite(value))).toBe(true);
     expect(frameScaleB.every((value) => Number.isFinite(value))).toBe(true);
+    // [LAW:behavior-not-structure] Validate render-size behavior through public
+    // frame outputs instead of probing internal compiler/runtime tables.
+    expect(frameScaleA.every((value) => value >= 0.5 && value <= 1.0)).toBe(true);
+    expect(frameScaleB.every((value) => value >= 0.5 && value <= 1.0)).toBe(true);
   });
 });

@@ -97,15 +97,27 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
 "#;
 
 pub struct ComputeDispatcher {
-    simulation_pipeline: wgpu::ComputePipeline,
+    simulation_pipelines: Vec<CompiledComputePassPipeline>,
     instance_assembly_pipeline: wgpu::ComputePipeline,
     draw_prep_pipeline: wgpu::ComputePipeline,
-    sim_workgroup_count: u32,
     compiler_simulation_layout: wgpu::BindGroupLayout,
     pub uniform_layout: wgpu::BindGroupLayout,
     pub state_layout: wgpu::BindGroupLayout,
     pub assembly_layout: wgpu::BindGroupLayout,
     pub draw_prep_layout: wgpu::BindGroupLayout,
+}
+
+#[derive(Clone, Debug)]
+pub struct CompilerComputePassSpec {
+    pub pass_id: String,
+    pub entry_point: String,
+    pub wgsl: String,
+}
+
+struct CompiledComputePassPipeline {
+    _pass_id: String,
+    pipeline: wgpu::ComputePipeline,
+    workgroup_count: u32,
 }
 
 impl ComputeDispatcher {
@@ -126,12 +138,15 @@ impl ComputeDispatcher {
             .unwrap_or_default()
             .parse::<u32>()
             .ok();
-        maybe_x.filter(|x| *x > 0).unwrap_or(DEFAULT_WORKGROUP_SIZE_X)
+        maybe_x
+            .filter(|x| *x > 0)
+            .unwrap_or(DEFAULT_WORKGROUP_SIZE_X)
     }
 
-    fn simulation_dispatch_count(particle_count: u32, simulation_wgsl: &str) -> u32 {
+    fn simulation_dispatch_count_for_wgsl(particle_count: u32, simulation_wgsl: &str) -> u32 {
         let workgroup_size_x = Self::parse_workgroup_size_x(simulation_wgsl);
-        ((particle_count.saturating_add(workgroup_size_x.saturating_sub(1))) / workgroup_size_x).max(1)
+        ((particle_count.saturating_add(workgroup_size_x.saturating_sub(1))) / workgroup_size_x)
+            .max(1)
     }
 
     pub fn new(
@@ -236,10 +251,15 @@ impl ComputeDispatcher {
         });
 
         let compiler_simulation_layout = Self::create_compiler_simulation_layout(device);
-        let simulation_pipeline = Self::create_compiler_simulation_pipeline(
+        let simulation_pipelines = Self::compile_simulation_passes(
             device,
-            simulation_wgsl,
             &compiler_simulation_layout,
+            particle_count,
+            &[CompilerComputePassSpec {
+                pass_id: "simulation".to_string(),
+                entry_point: "compute_main".to_string(),
+                wgsl: simulation_wgsl.to_string(),
+            }],
         );
         let assembly_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("Compute.Assembly.Shader"),
@@ -250,25 +270,28 @@ impl ComputeDispatcher {
             source: wgpu::ShaderSource::Wgsl(DEFAULT_DRAW_PREP_WGSL.into()),
         });
 
-        let assembly_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("Compute.Assembly.PipelineLayout"),
-            bind_group_layouts: &[&uniform_layout, &state_layout, &assembly_layout],
-            push_constant_ranges: &[],
-        });
-        let instance_assembly_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-            label: Some("Compute.Assembly.Pipeline"),
-            layout: Some(&assembly_pipeline_layout),
-            module: &assembly_module,
-            entry_point: Some("main"),
-            cache: None,
-            compilation_options: wgpu::PipelineCompilationOptions::default(),
-        });
+        let assembly_pipeline_layout =
+            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("Compute.Assembly.PipelineLayout"),
+                bind_group_layouts: &[&uniform_layout, &state_layout, &assembly_layout],
+                push_constant_ranges: &[],
+            });
+        let instance_assembly_pipeline =
+            device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+                label: Some("Compute.Assembly.Pipeline"),
+                layout: Some(&assembly_pipeline_layout),
+                module: &assembly_module,
+                entry_point: Some("main"),
+                cache: None,
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+            });
 
-        let draw_prep_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("Compute.DrawPrep.PipelineLayout"),
-            bind_group_layouts: &[&draw_prep_layout],
-            push_constant_ranges: &[],
-        });
+        let draw_prep_pipeline_layout =
+            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("Compute.DrawPrep.PipelineLayout"),
+                bind_group_layouts: &[&draw_prep_layout],
+                push_constant_ranges: &[],
+            });
         let draw_prep_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
             label: Some("Compute.DrawPrep.Pipeline"),
             layout: Some(&draw_prep_pipeline_layout),
@@ -278,12 +301,10 @@ impl ComputeDispatcher {
             compilation_options: wgpu::PipelineCompilationOptions::default(),
         });
 
-        let sim_workgroup_count = Self::simulation_dispatch_count(particle_count, simulation_wgsl);
         Self {
-            simulation_pipeline,
+            simulation_pipelines,
             instance_assembly_pipeline,
             draw_prep_pipeline,
-            sim_workgroup_count: sim_workgroup_count.max(1),
             compiler_simulation_layout,
             uniform_layout,
             state_layout,
@@ -295,25 +316,58 @@ impl ComputeDispatcher {
     fn create_compiler_simulation_pipeline(
         device: &wgpu::Device,
         simulation_wgsl: &str,
+        entry_point: &str,
         compiler_simulation_layout: &wgpu::BindGroupLayout,
     ) -> wgpu::ComputePipeline {
         let simulation_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("Compute.CompilerSimulation.Shader"),
             source: wgpu::ShaderSource::Wgsl(simulation_wgsl.into()),
         });
-        let simulation_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("Compute.CompilerSimulation.PipelineLayout"),
-            bind_group_layouts: &[compiler_simulation_layout],
-            push_constant_ranges: &[],
-        });
+        let simulation_pipeline_layout =
+            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("Compute.CompilerSimulation.PipelineLayout"),
+                bind_group_layouts: &[compiler_simulation_layout],
+                push_constant_ranges: &[],
+            });
         device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
             label: Some("Compute.CompilerSimulation.Pipeline"),
             layout: Some(&simulation_pipeline_layout),
             module: &simulation_module,
-            entry_point: Some("compute_main"),
+            entry_point: Some(entry_point),
             cache: None,
             compilation_options: wgpu::PipelineCompilationOptions::default(),
         })
+    }
+
+    fn compile_simulation_passes(
+        device: &wgpu::Device,
+        compiler_simulation_layout: &wgpu::BindGroupLayout,
+        particle_count: u32,
+        pass_specs: &[CompilerComputePassSpec],
+    ) -> Vec<CompiledComputePassPipeline> {
+        if pass_specs.is_empty() {
+            panic!(
+                "[LAW:no-silent-fallbacks] compile_simulation_passes requires at least one pass spec"
+            );
+        }
+        let mut compiled = Vec::with_capacity(pass_specs.len().max(1));
+        for spec in pass_specs {
+            let pipeline = Self::create_compiler_simulation_pipeline(
+                device,
+                spec.wgsl.as_str(),
+                spec.entry_point.as_str(),
+                compiler_simulation_layout,
+            );
+            let workgroup_count =
+                Self::simulation_dispatch_count_for_wgsl(particle_count, spec.wgsl.as_str())
+                    .max(1);
+            compiled.push(CompiledComputePassPipeline {
+                _pass_id: spec.pass_id.clone(),
+                pipeline,
+                workgroup_count,
+            });
+        }
+        compiled
     }
 
     fn create_compiler_simulation_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
@@ -374,40 +428,55 @@ impl ComputeDispatcher {
         })
     }
 
-    pub fn rebuild_simulation_pipeline_with_compiler_wgsl(
+    pub fn rebuild_gpu_pipelines_with_compiler_wgsl(
         &mut self,
         device: &wgpu::Device,
-        simulation_wgsl: &str,
+        pass_specs: &[CompilerComputePassSpec],
         particle_count: u32,
     ) {
-        self.simulation_pipeline = Self::create_compiler_simulation_pipeline(
+        self.simulation_pipelines = Self::compile_simulation_passes(
             device,
-            simulation_wgsl,
             &self.compiler_simulation_layout,
+            particle_count,
+            pass_specs,
         );
-        self.sim_workgroup_count =
-            Self::simulation_dispatch_count(particle_count, simulation_wgsl);
     }
 
     pub fn compiler_simulation_layout(&self) -> &wgpu::BindGroupLayout {
         &self.compiler_simulation_layout
     }
 
-    pub fn encode_passes(
+    pub fn simulation_workgroup_count(&self) -> u32 {
+        self.simulation_pipelines
+            .iter()
+            .map(|pipeline| pipeline.workgroup_count)
+            .fold(0u32, |acc, count| acc.saturating_add(count))
+    }
+
+    pub fn simulation_dispatch_count(&self) -> u32 {
+        self.simulation_pipelines.len() as u32
+    }
+
+    pub fn encode_simulation_and_assembly(
         &self,
         encoder: &mut wgpu::CommandEncoder,
         arena: &mut GpuMemoryArena,
         assembly_instance_count: u32,
-        draw_prep_record_count: u32,
     ) {
-        {
+        let mut read_index = arena.ping_pong_index();
+        for compiled_pass in &self.simulation_pipelines {
             let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
                 label: Some("Compute.Simulation.Pass"),
                 timestamp_writes: None,
             });
-            compute_pass.set_pipeline(&self.simulation_pipeline);
-            compute_pass.set_bind_group(0, arena.get_compiler_simulation_bind_group(), &[]);
-            compute_pass.dispatch_workgroups(self.sim_workgroup_count, 1, 1);
+            compute_pass.set_pipeline(&compiled_pass.pipeline);
+            compute_pass.set_bind_group(
+                0,
+                arena.get_compiler_simulation_bind_group_for_index(read_index),
+                &[],
+            );
+            compute_pass.dispatch_workgroups(compiled_pass.workgroup_count, 1, 1);
+            read_index = (read_index + 1) & 1;
         }
 
         {
@@ -417,9 +486,9 @@ impl ComputeDispatcher {
             });
             compute_pass.set_pipeline(&self.instance_assembly_pipeline);
             compute_pass.set_bind_group(0, &arena.uniform_bind_group, &[]);
-            // [LAW:one-source-of-truth] Instance assembly reads compiler-arena
-            // write bank produced by simulation dispatch in this same tick.
-            compute_pass.set_bind_group(1, arena.get_compiler_arena_write_bind_group(), &[]);
+            // [LAW:one-source-of-truth] Instance assembly reads the final
+            // simulation output bank resolved by deterministic pass chaining.
+            compute_pass.set_bind_group(1, arena.get_compiler_arena_bind_group_for_index(read_index), &[]);
             compute_pass.set_bind_group(2, &arena.assembly_write_bind_group, &[]);
             // [LAW:single-enforcer] Runtime sink-table instance totals are the
             // canonical source for per-frame assembly dispatch size.
@@ -427,12 +496,24 @@ impl ComputeDispatcher {
                 ((assembly_instance_count.saturating_add(63)) / 64).max(1);
             compute_pass.dispatch_workgroups(assembly_workgroup_count, 1, 1);
         }
-
-        let _ = draw_prep_record_count;
-        // [LAW:single-enforcer] exception: indirect args are temporarily
-        // materialized by CPU sink-table mirroring while GPU draw-prep parity
-        // debugging is in progress.
-
-        arena.swap_ping_pong();
+        arena.set_ping_pong_index(read_index);
     }
+
+    pub fn encode_draw_prep(
+        &self,
+        encoder: &mut wgpu::CommandEncoder,
+        arena: &GpuMemoryArena,
+        draw_prep_record_count: u32,
+    ) {
+        let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+            label: Some("Compute.DrawPrep.Pass"),
+            timestamp_writes: None,
+        });
+        compute_pass.set_pipeline(&self.draw_prep_pipeline);
+        compute_pass.set_bind_group(0, &arena.draw_prep_bind_group, &[]);
+        // [LAW:dataflow-not-control-flow] Draw prep always dispatches on the
+        // canonical stage; record count data governs in-shader no-op behavior.
+        compute_pass.dispatch_workgroups(draw_prep_record_count.max(1), 1, 1);
+    }
+
 }

@@ -39,6 +39,7 @@ import {
   type ContinuityTargetOwnerBinding,
 } from '../runtime/ContinuityState';
 import { getExprAddressTable } from '../runtime/ExprAddressTable';
+import type { CompiledGpuArtifactBundle } from './compile-worker-protocol';
 
 
 /**
@@ -172,7 +173,7 @@ export interface PrecomputedCompileArtifacts {
   readonly sourcePatchRevision: number;
   readonly frontendResult: FrontendResult;
   readonly backendResult: CompileResult | null;
-  readonly compiledComputeWgsl?: string | null;
+  readonly compiledGpuBundle?: CompiledGpuArtifactBundle | null;
   readonly compileDurationMs: number;
 }
 

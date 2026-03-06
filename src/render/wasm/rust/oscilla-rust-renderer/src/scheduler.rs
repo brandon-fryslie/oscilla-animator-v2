@@ -3,6 +3,47 @@ use std::collections::VecDeque;
 const HEARTBEAT_INTERVAL_MS: f64 = 250.0;
 const TIMING_WINDOW_SAMPLES: u32 = 60;
 const MAX_PENDING_EVENTS: usize = 32;
+// TODO(#161): Split scheduler telemetry/statistics helpers into a dedicated
+// module so scheduler.rs owns state transitions and packet cadence only.
+// https://github.com/brandon-fryslie/oscilla-animator-v2/issues/161
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct StageTimingsMs {
+    pub input_marshal_ms: f64,
+    pub simulation_dispatch_ms: f64,
+    pub fluid_pass_chain_ms: f64,
+    pub draw_prep_ms: f64,
+    pub render_ms: f64,
+    pub swap_ms: f64,
+    pub total_frame_ms: f64,
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct DispatchCounters {
+    pub compute_dispatch_count: u32,
+    pub compute_workgroup_count: u32,
+    pub active_lane_count: u32,
+    pub guarded_lane_count: u32,
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct ResourceStats {
+    pub shape_bank_word_count: u32,
+    pub sink_table_word_count: u32,
+    pub indexed_record_count: u32,
+    pub non_indexed_record_count: u32,
+    pub total_instance_count: u32,
+    pub canvas_width: u32,
+    pub canvas_height: u32,
+    pub ping_pong_index: u32,
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct SchedulerTelemetry {
+    pub stage_timings: StageTimingsMs,
+    pub dispatch_counters: DispatchCounters,
+    pub resource_stats: ResourceStats,
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SchedulerState {
@@ -42,6 +83,7 @@ impl RuntimeEventSeverity {
 pub struct RuntimeEvent {
     pub severity: RuntimeEventSeverity,
     pub code: &'static str,
+    pub stage: &'static str,
     pub message: String,
     pub state: SchedulerState,
     pub frame_count: u64,
@@ -61,6 +103,7 @@ pub struct SchedulerHeartbeat {
     pub sample_count: u32,
     pub last_tick_ms: f64,
     pub last_success_ms: f64,
+    pub telemetry: SchedulerTelemetry,
 }
 
 #[derive(Clone, Debug)]
@@ -85,6 +128,7 @@ pub struct WorkerScheduler {
     last_heartbeat_ms: f64,
     heartbeat_sequence: u64,
     pending_events: VecDeque<RuntimeEvent>,
+    latest_telemetry: SchedulerTelemetry,
 }
 
 impl WorkerScheduler {
@@ -106,6 +150,7 @@ impl WorkerScheduler {
             last_heartbeat_ms: now_ms.max(0.0) - HEARTBEAT_INTERVAL_MS,
             heartbeat_sequence: 0,
             pending_events: VecDeque::with_capacity(MAX_PENDING_EVENTS),
+            latest_telemetry: SchedulerTelemetry::default(),
         }
     }
 
@@ -128,23 +173,39 @@ impl WorkerScheduler {
         self.last_tick_ms = now_ms.max(0.0);
     }
 
-    pub fn record_paused_tick(&mut self, now_ms: f64, tick_elapsed_ms: f64) {
+    pub fn record_paused_tick(
+        &mut self,
+        now_ms: f64,
+        tick_elapsed_ms: f64,
+        telemetry: SchedulerTelemetry,
+    ) {
         self.state = SchedulerState::Paused;
-        self.record_tick_timing(now_ms, tick_elapsed_ms);
+        self.record_tick_timing(now_ms, tick_elapsed_ms, telemetry);
     }
 
-    pub fn record_tick_success(&mut self, now_ms: f64, tick_elapsed_ms: f64, frame_count: u64) {
+    pub fn record_tick_success(
+        &mut self,
+        now_ms: f64,
+        tick_elapsed_ms: f64,
+        frame_count: u64,
+        telemetry: SchedulerTelemetry,
+    ) {
         self.state = SchedulerState::Running;
         self.frame_count = frame_count;
         self.last_success_ms = now_ms.max(0.0);
-        self.record_tick_timing(now_ms, tick_elapsed_ms);
+        self.record_tick_timing(now_ms, tick_elapsed_ms, telemetry);
     }
 
-    pub fn record_surface_timeout(&mut self, now_ms: f64, tick_elapsed_ms: f64) {
+    pub fn record_surface_timeout(
+        &mut self,
+        now_ms: f64,
+        tick_elapsed_ms: f64,
+        telemetry: SchedulerTelemetry,
+    ) {
         if self.state == SchedulerState::Booting {
             self.state = SchedulerState::Running;
         }
-        self.record_tick_timing(now_ms, tick_elapsed_ms);
+        self.record_tick_timing(now_ms, tick_elapsed_ms, telemetry);
     }
 
     pub fn record_surface_lost(
@@ -152,10 +213,17 @@ impl WorkerScheduler {
         now_ms: f64,
         tick_elapsed_ms: f64,
         message: &'static str,
+        telemetry: SchedulerTelemetry,
     ) {
         self.state = SchedulerState::Lost;
-        self.record_tick_timing(now_ms, tick_elapsed_ms);
-        self.push_event(RuntimeEventSeverity::Error, "surface_lost", message, now_ms);
+        self.record_tick_timing(now_ms, tick_elapsed_ms, telemetry);
+        self.push_event(
+            RuntimeEventSeverity::Error,
+            "surface_lost",
+            "swap",
+            message,
+            now_ms,
+        );
     }
 
     pub fn record_fatal(
@@ -164,10 +232,12 @@ impl WorkerScheduler {
         tick_elapsed_ms: f64,
         code: &'static str,
         message: &'static str,
+        stage: &'static str,
+        telemetry: SchedulerTelemetry,
     ) {
         self.state = SchedulerState::Lost;
-        self.record_tick_timing(now_ms, tick_elapsed_ms);
-        self.push_event(RuntimeEventSeverity::Fatal, code, message, now_ms);
+        self.record_tick_timing(now_ms, tick_elapsed_ms, telemetry);
+        self.push_event(RuntimeEventSeverity::Fatal, code, stage, message, now_ms);
     }
 
     pub fn take_observability_packet(&mut self, now_ms: f64) -> Option<WorkerObservabilityPacket> {
@@ -191,6 +261,7 @@ impl WorkerScheduler {
             sample_count: self.sample_count,
             last_tick_ms: self.last_tick_ms,
             last_success_ms: self.last_success_ms,
+            telemetry: self.latest_telemetry,
         };
         Some(WorkerObservabilityPacket {
             state: self.state,
@@ -201,9 +272,22 @@ impl WorkerScheduler {
         })
     }
 
-    fn record_tick_timing(&mut self, now_ms: f64, tick_elapsed_ms: f64) {
+    fn record_tick_timing(
+        &mut self,
+        now_ms: f64,
+        tick_elapsed_ms: f64,
+        telemetry: SchedulerTelemetry,
+    ) {
+        // TODO(#161): Extract timing-window aggregation into dedicated telemetry
+        // helper module to reduce scheduler centrality and hot-path coupling.
+        // https://github.com/brandon-fryslie/oscilla-animator-v2/issues/161
         let elapsed = tick_elapsed_ms.max(0.0);
         self.last_tick_ms = now_ms.max(0.0);
+        let mut next_telemetry = telemetry;
+        // [LAW:one-source-of-truth] The scheduler is the canonical owner of
+        // final total-frame timing in heartbeat telemetry.
+        next_telemetry.stage_timings.total_frame_ms = elapsed;
+        self.latest_telemetry = next_telemetry;
         self.timing_window_sum_ms += elapsed;
         self.timing_window_sum_sq_ms += elapsed * elapsed;
         self.timing_window_samples = self.timing_window_samples.saturating_add(1);
@@ -226,6 +310,7 @@ impl WorkerScheduler {
         &mut self,
         severity: RuntimeEventSeverity,
         code: &'static str,
+        stage: &'static str,
         message: &'static str,
         now_ms: f64,
     ) {
@@ -237,6 +322,7 @@ impl WorkerScheduler {
         self.pending_events.push_back(RuntimeEvent {
             severity,
             code,
+            stage,
             message: message.to_string(),
             state: self.state,
             frame_count: self.frame_count,
