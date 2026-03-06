@@ -787,6 +787,11 @@ export class WebGPURenderer {
         // https://github.com/brandon-fryslie/oscilla-animator-v2/issues/159
         const debugRecord = hasFirstRecord
           ? {
+            // TODO(#159): R794 review thread "Ditto" applies here as well:
+            // do not assemble per-field payload members in renderer hot path.
+            // `buildSinkTableFirstRecordPayload(...)` must return this object
+            // (instanceCount/firstInstance/offset/stride fields) as one unit.
+            // https://github.com/brandon-fryslie/oscilla-animator-v2/issues/159
             instanceCount: readRequiredSinkTableWord(
               sinkTableWords,
               wordCount,
