@@ -1,6 +1,7 @@
 import type { RenderShapeBankSource } from './WebGPUShapeBankManager';
 import type { IndirectArgsReadbackSnapshot } from './WebGPUIndirectArgsInspector';
 import { isRuntimeConsoleEnabled } from '../../testing/test-params';
+import { reportRenderIssue } from '../render-issues';
 import {
   computeRustRendererShapeBankWordCapacity,
   computeRustRendererSinkTableWordCapacity,
@@ -96,7 +97,7 @@ export interface SinkTableDebugSample {
 type WorkerAckDisposition =
   | { readonly kind: 'success' }
   | { readonly kind: 'ignore' }
-  | { readonly kind: 'fail'; readonly error: Error };
+  | { readonly kind: 'fail'; readonly error: Error; readonly fatal: boolean };
 
 const DEFAULT_BOOTSTRAP_CONFIG: RustRendererBootstrapConfig = Object.freeze({
   maxParticles: 65_536,
@@ -148,6 +149,24 @@ function previewWgsl(wgsl: string, maxLines: number = 4): string {
     .slice(0, maxLines)
     .map((line) => line.trim())
     .join(' | ');
+}
+
+function formatWgslWithLineNumbers(wgsl: string): string {
+  return wgsl
+    .split('\n')
+    .map((line, index) => `${String(index + 1).padStart(4, ' ')} | ${line}`)
+    .join('\n');
+}
+
+function dumpShaderWithLineNumbers(name: string, wgsl: string): void {
+  if (!RUNTIME_CONSOLE_ENABLED) {
+    return;
+  }
+  // [LAW:verifiable-goals] Runtime shader dumps include line numbers so
+  // WebGPU validation line/column errors are directly traceable.
+  console.groupCollapsed(`[runtimeConsole] Generated WGSL: ${name}`);
+  console.info(formatWgslWithLineNumbers(wgsl));
+  console.groupEnd();
 }
 
 function hashWgslSource(wgsl: string): string {
@@ -330,10 +349,17 @@ function classifyWorkerAckMessage(
     return { kind: 'success' };
   }
   if (payload.type === 'FATAL_ERROR') {
-    return { kind: 'fail', error: new Error(`[${payload.code}] ${payload.message}`) };
+    return { kind: 'fail', error: new Error(`[${payload.code}] ${payload.message}`), fatal: true };
   }
   if (payload.type === 'DEVICE_LOST') {
-    return { kind: 'fail', error: new Error(`[${payload.code}] ${payload.reason}`) };
+    return { kind: 'fail', error: new Error(`[${payload.code}] ${payload.reason}`), fatal: true };
+  }
+  if (payload.type === 'ENGINE_ERROR') {
+    return {
+      kind: 'fail',
+      error: new Error(`[${payload.source}] ${payload.message} @ ${payload.location}`),
+      fatal: payload.fatal,
+    };
   }
   if (payload.type === 'SCHEDULER_HEARTBEAT' || payload.type === 'RUNTIME_EVENT') {
     return { kind: 'ignore' };
@@ -342,6 +368,7 @@ function classifyWorkerAckMessage(
   // all await paths share identical non-success handling.
   return {
     kind: 'fail',
+    fatal: true,
     error: new Error(
       `Rust renderer worker protocol violation: expected ${expectedSuccessType}, got ${payload.type}`,
     ),
@@ -405,6 +432,26 @@ export class WebGPURenderer {
   // https://github.com/brandon-fryslie/oscilla-animator-v2/issues/159
   private sinkTableDebugLogCounter = 0;
   private readonly emittedHealthWarningCodes = new Set<string>();
+
+  private reportEngineError(
+    source: string,
+    message: string,
+    location: string,
+    fatal: boolean,
+  ): void {
+    const level = fatal ? 'error' : 'warn';
+    reportRenderIssue(
+      level,
+      `[${source}] ${message}${location ? ` @ ${location}` : ''}`,
+      {
+        kind: 'engineError',
+        source,
+        message,
+        location,
+        fatal,
+      },
+    );
+  }
 
   private markRendererFatal(error: Error): void {
     // TODO(#182): Harden fatal-transition contract (idempotence, canonical
@@ -635,6 +682,9 @@ export class WebGPURenderer {
     // [LAW:single-enforcer] Bundle-level GPU pass contract validation is owned
     // at this renderer boundary before worker transport.
     const validatedPasses = [...validateGpuPassBundle(passes)];
+    for (const pass of validatedPasses) {
+      dumpShaderWithLineNumbers(pass.passId, pass.wgsl);
+    }
     this.lastInstalledPassIds = validatedPasses.map((pass) => pass.passId);
     if (RUNTIME_CONSOLE_ENABLED) {
       // TODO(#159): Replace this inline payload assembly with:
@@ -910,7 +960,9 @@ export class WebGPURenderer {
         // onError/timeout handling via one helper in awaitWorkerAck.
         // https://github.com/brandon-fryslie/oscilla-animator-v2/issues/184
         settle(() => {
-          this.markRendererFatal(disposition.error);
+          if (disposition.fatal) {
+            this.markRendererFatal(disposition.error);
+          }
           reject(disposition.error);
         });
       };
@@ -1007,11 +1059,20 @@ export class WebGPURenderer {
   private readonly handleRuntimeMessage = (event: MessageEvent<RustRendererWorkerOutboundMessage>): void => {
     const payload = event.data;
     if (!payload) return;
+    if (payload.type === 'ENGINE_ERROR') {
+      this.reportEngineError(payload.source, payload.message, payload.location, payload.fatal);
+      if (payload.fatal) {
+        this.markRendererFatal(new Error(`[${payload.source}] ${payload.message}`));
+      }
+      return;
+    }
     if (payload.type === 'FATAL_ERROR') {
+      this.reportEngineError(payload.code, payload.message, 'WORKER', true);
       this.markRendererFatal(new Error(`[${payload.code}] ${payload.message}`));
       return;
     }
     if (payload.type === 'DEVICE_LOST') {
+      this.reportEngineError(payload.code, payload.reason, 'WORKER', true);
       this.markRendererFatal(new Error(`[${payload.code}] ${payload.reason}`));
       return;
     }

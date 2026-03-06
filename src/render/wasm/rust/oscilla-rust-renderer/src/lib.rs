@@ -1,6 +1,7 @@
 mod allocator;
 mod compute;
 mod engine;
+mod error_boundary;
 mod memory;
 mod render;
 mod scheduler;
@@ -15,6 +16,7 @@ use web_sys::{DedicatedWorkerGlobalScope, OffscreenCanvas};
 
 use crate::compute::CompilerComputePassSpec;
 use crate::engine::{Engine, EngineConfig};
+use crate::error_boundary::install_panic_hook;
 
 thread_local! {
     static ENGINE: RefCell<Option<Engine>> = RefCell::new(None);
@@ -69,7 +71,7 @@ pub async fn init_engine(
     max_shapes: u32,
     debug_readback_hz: u32,
 ) -> Result<(), JsValue> {
-    console_error_panic_hook::set_once();
+    install_panic_hook();
     let config = EngineConfig {
         max_particles: max_particles as usize,
         max_shapes: max_shapes as usize,

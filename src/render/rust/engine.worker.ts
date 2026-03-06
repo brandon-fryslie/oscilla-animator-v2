@@ -15,6 +15,7 @@ import {
 } from '../wasm/oscilla_rust_renderer';
 import { isPositiveInt, parseSchedulerPacket } from './engine-telemetry';
 import type {
+  RustRendererEngineError,
   RustRendererWorkerInboundMessage,
   RustRendererWorkerOutboundMessage,
 } from './worker-protocol';
@@ -44,6 +45,20 @@ function postDeviceLost(code: string, reason: string): void {
     code,
     reason,
   });
+}
+
+function isEngineErrorPayload(payload: unknown): payload is RustRendererEngineError {
+  if (!payload || typeof payload !== 'object') {
+    return false;
+  }
+  const candidate = payload as Partial<RustRendererEngineError>;
+  return (
+    candidate.type === 'ENGINE_ERROR'
+    && typeof candidate.source === 'string'
+    && typeof candidate.message === 'string'
+    && typeof candidate.location === 'string'
+    && typeof candidate.fatal === 'boolean'
+  );
 }
 
 
@@ -213,3 +228,12 @@ self.onmessage = (event: MessageEvent<RustRendererWorkerInboundMessage>) => {
     });
   }
 };
+
+self.addEventListener('message', (event: MessageEvent<unknown>) => {
+  // [LAW:single-enforcer] Engine worker is the canonical boundary that forwards
+  // structured engine-fault payloads from the wasm/runtime side to the UI.
+  const payload = event.data;
+  if (isEngineErrorPayload(payload)) {
+    postWorkerMessage(payload);
+  }
+});

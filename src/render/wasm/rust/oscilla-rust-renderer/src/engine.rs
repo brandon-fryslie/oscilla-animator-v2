@@ -9,6 +9,7 @@ use web_sys::OffscreenCanvas;
 
 use crate::allocator::StrictAllocator;
 use crate::compute::{CompilerComputePassSpec, ComputeDispatcher};
+use crate::error_boundary::{send_engine_error, EngineErrorPayload};
 use crate::memory::{
     GpuMemoryArena, INDIRECT_INDEXED_STRIDE_WORDS, INDIRECT_NON_INDEXED_STRIDE_WORDS,
     SHAPE_BANK_HEADER_WORDS, SINK_TABLE_DESCRIPTOR_WORDS, SINK_TABLE_HEADER_WORDS,
@@ -602,6 +603,38 @@ impl Engine {
             )
             .await
             .map_err(|error| JsValue::from_str(&format!("request_device failed: {error}")))?;
+
+        // [LAW:single-enforcer] Asynchronous WebGPU validation/internal/OOM
+        // faults are classified and emitted through one runtime error boundary.
+        device.on_uncaptured_error(Box::new(|error| {
+            let payload = match error {
+                wgpu::Error::Validation {
+                    source: _,
+                    description,
+                } => EngineErrorPayload::new(
+                    "WEBGPU_VALIDATION",
+                    description,
+                    "GPU_DRIVER",
+                    false,
+                ),
+                wgpu::Error::OutOfMemory { source: _ } => EngineErrorPayload::new(
+                    "WEBGPU_OOM",
+                    "GPU out of memory",
+                    "GPU_DRIVER",
+                    true,
+                ),
+                wgpu::Error::Internal {
+                    source: _,
+                    description,
+                } => EngineErrorPayload::new(
+                    "WEBGPU_INTERNAL",
+                    description,
+                    "GPU_DRIVER",
+                    true,
+                ),
+            };
+            send_engine_error(&payload);
+        }));
 
         let capabilities = surface.get_capabilities(&adapter);
         let surface_format = capabilities

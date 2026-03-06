@@ -84,6 +84,14 @@ export interface RustRendererFatalError {
   readonly message: string;
 }
 
+export interface RustRendererEngineError {
+  readonly type: 'ENGINE_ERROR';
+  readonly source: 'RUST_PANIC' | 'WEBGPU_VALIDATION' | 'WEBGPU_OOM' | 'WEBGPU_INTERNAL';
+  readonly message: string;
+  readonly location: string;
+  readonly fatal: boolean;
+}
+
 export interface RustRendererRebuildGpuPipelinesSuccess {
   readonly type: 'REBUILD_GPU_PIPELINES_SUCCESS';
 }
@@ -159,6 +167,7 @@ export interface RustRendererRuntimeEvent {
 
 export type RustRendererWorkerOutboundMessage =
   | RustRendererBootstrapSuccess
+  | RustRendererEngineError
   | RustRendererFatalError
   | RustRendererRebuildGpuPipelinesSuccess
   | RustRendererDeviceLost

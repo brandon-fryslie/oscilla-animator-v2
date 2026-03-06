@@ -58,6 +58,7 @@ import { LocalDebugProbeTransport } from './LocalDebugProbeTransport';
 import { createWasmDebugProbeTransport } from './WasmDebugProbeTransport';
 import { RuntimeHotpathWorkerClient } from './RuntimeHotpathWorkerClient';
 import type { CompiledGpuArtifactBundle } from './compile-worker-protocol';
+import { shaderInspector } from './ShaderInspectorService';
 
 const INITIAL_COMPILE_FAILURE_PROBE_MESSAGE =
   'initial_compile_failed: animation loop started but no program is ready';
@@ -313,6 +314,7 @@ export class RuntimeService {
 
     // [LAW:single-enforcer] RuntimeService is the only boundary that publishes
     // compiler-emitted GPU shader artifacts into the active renderer.
+    shaderInspector.setPasses(bundlePasses);
     await renderer.rebuildGpuPipelines(bundlePasses);
   }
 
@@ -452,12 +454,14 @@ export class RuntimeService {
         store.diagnostics.log({
           level: issue.level,
           message: `Render: ${issue.message}`,
+          data: issue.detail,
         });
       });
       for (const issue of getRenderIssues()) {
         store.diagnostics.log({
           level: issue.level,
           message: `Render: ${issue.message}`,
+          data: issue.detail,
         });
       }
       clearRenderIssues();
@@ -622,6 +626,7 @@ export class RuntimeService {
     this.runtimeHotpath = null;
     this.renderer?.dispose();
     this.renderer = null;
+    shaderInspector.clear();
     this.arena = null;
     this.statsSink = null;
     this.runtimeReadySink = null;
