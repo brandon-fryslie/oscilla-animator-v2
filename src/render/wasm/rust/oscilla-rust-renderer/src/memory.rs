@@ -7,6 +7,7 @@ pub const SINK_TABLE_HEADER_WORDS: usize = 8;
 pub const SINK_TABLE_RECORD_WORDS: usize = 29;
 pub const INDIRECT_INDEXED_STRIDE_WORDS: usize = 5;
 pub const INDIRECT_NON_INDEXED_STRIDE_WORDS: usize = 4;
+const CLEAR_BUFFER_CHUNK_BYTES: usize = 16 * 1024;
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, Zeroable, Pod)]
@@ -62,13 +63,19 @@ pub struct GpuMemoryArena {
 
 impl GpuMemoryArena {
     fn clear_buffer_words(queue: &wgpu::Queue, buffer: &wgpu::Buffer) {
-        // TODO(#173): Replace full-size zero-vector allocation with a chunked/cached
-        // or GPU-side clear path to avoid large transient CPU allocations.
-        // https://github.com/brandon-fryslie/oscilla-animator-v2/issues/173
-        let byte_len = buffer.size() as usize;
-        let word_len = (byte_len / std::mem::size_of::<u32>()).max(1);
-        let zeros = vec![0u32; word_len];
-        queue.write_buffer(buffer, 0, cast_slice(zeros.as_slice()));
+        // [LAW:no-silent-fallbacks] Simulation/state planes are explicitly
+        // zero-initialized before use; never rely on undefined GPU memory.
+        // [LAW:single-enforcer] This helper is the canonical boundary for
+        // simulation-plane zeroing on reset.
+        const ZERO_CHUNK: [u8; CLEAR_BUFFER_CHUNK_BYTES] = [0u8; CLEAR_BUFFER_CHUNK_BYTES];
+        let mut offset_bytes = 0u64;
+        let total_bytes = buffer.size();
+        while offset_bytes < total_bytes {
+            let remaining = (total_bytes - offset_bytes) as usize;
+            let chunk_len = remaining.min(CLEAR_BUFFER_CHUNK_BYTES);
+            queue.write_buffer(buffer, offset_bytes, &ZERO_CHUNK[..chunk_len]);
+            offset_bytes = offset_bytes.saturating_add(chunk_len as u64);
+        }
     }
 
     pub fn clear_simulation_planes(&self, queue: &wgpu::Queue) {
@@ -501,6 +508,9 @@ impl GpuMemoryArena {
         offset_words: usize,
         words: &[u32],
     ) {
+        // TODO(#161): Revisit compiler arena mirror guard behavior here so all
+        // telemetry/memory invariants fail loudly with one canonical enforcer.
+        // https://github.com/brandon-fryslie/oscilla-animator-v2/issues/161
         if words.is_empty() {
             return;
         }
@@ -517,6 +527,9 @@ impl GpuMemoryArena {
                 );
             }
         }
+        // TODO(#161): Add explicit non-empty compiler_arena_buffers invariant
+        // check here; current loop no-ops if vector is unexpectedly empty.
+        // https://github.com/brandon-fryslie/oscilla-animator-v2/issues/161
         for buffer in &self.compiler_arena_buffers {
             queue.write_buffer(buffer, offset_bytes, cast_slice(words));
         }
