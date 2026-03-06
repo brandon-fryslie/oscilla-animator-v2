@@ -1,0 +1,126 @@
+name: Complexity Analysis
+
+on:
+  pull_request:
+    branches:
+      - master
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+
+concurrency:
+  group: complexity-analysis-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  complexity:
+    name: Run complexity toolchain
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      artifact_name: ${{ steps.artifact_name.outputs.name }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install ripgrep
+        run: sudo apt-get update && sudo apt-get install -y ripgrep
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run complexity analysis
+        run: pnpm -s complexity:all
+
+      - name: Choose artifact name
+        id: artifact_name
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref }}
+          PR_NUMBER: ${{ github.event.pull_request.number || '' }}
+          SHA: ${{ github.sha }}
+        run: |
+          if [ "$EVENT_NAME" = "push" ] && [ "$REF_NAME" = "refs/heads/master" ]; then
+            echo "name=complexity-master" >> "$GITHUB_OUTPUT"
+          else
+            if [ -z "$PR_NUMBER" ]; then
+              PR_NUMBER="manual"
+            fi
+            echo "name=complexity-pr-${PR_NUMBER}-${SHA}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Upload complexity artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.artifact_name.outputs.name }}
+          path: reports/complexity/**
+          if-no-files-found: error
+          retention-days: 30
+
+  compare-with-master:
+    name: Compare PR vs master complexity
+    runs-on: ubuntu-latest
+    needs: complexity
+    if: github.event_name == 'pull_request'
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Download current PR complexity artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.complexity.outputs.artifact_name }}
+          path: artifacts/current
+
+      - name: Download latest master complexity artifact
+        uses: dawidd6/action-download-artifact@v6
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          workflow: complexity-analysis.yaml
+          branch: master
+          event: push
+          name: complexity-master
+          path: artifacts/master
+          if_no_artifact_found: fail
+
+      - name: Build PR vs master comparison
+        run: >
+          node scripts/complexity/commit-delta.mjs
+          --base-summary artifacts/master/reports/complexity/comparison-summary.json
+          --head-summary artifacts/current/reports/complexity/comparison-summary.json
+          --output-dir artifacts/compare
+
+      - name: Add comparison to job summary
+        run: |
+          LATEST_DIR="$(cat artifacts/compare/latest.txt)"
+          cat "artifacts/compare/${LATEST_DIR}/commit-delta.md" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload PR vs master comparison artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: complexity-pr-vs-master-${{ github.event.pull_request.number }}
+          path: artifacts/compare/**
+          if-no-files-found: error
+          retention-days: 30
