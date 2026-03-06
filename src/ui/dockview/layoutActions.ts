@@ -2,6 +2,10 @@ import type { DockviewApi, DockviewGroupPanel } from 'dockview';
 import { PANEL_DEFINITIONS } from './panelRegistry';
 import { createDefaultLayout } from './defaultLayout';
 import { clearStoredDockviewLayout } from './layoutPersistence';
+import { getRightSidebarTabForPanelRequest } from './rightSidebarTabConfig';
+import {
+  requestRightSidebarTabByPanel,
+} from './rightSidebarTabs';
 import {
   SIDEBAR_DEFAULT_WIDTH,
   SIDEBAR_MAX_WIDTH,
@@ -15,7 +19,6 @@ const SIDEBAR_SIDES: readonly SidebarSide[] = ['left', 'right'];
 const LEGACY_PANEL_TO_SIDEBAR: Partial<Record<string, SidebarSide>> = {
   'block-library': 'left',
   'block-inspector': 'left',
-  settings: 'right',
 };
 
 const sidebarExpandedWidth: Record<SidebarSide, number> = {
@@ -37,6 +40,9 @@ export function getSidebarForPanel(panelId: string): SidebarSide | null {
     return 'left';
   }
   if (panelId === SIDEBAR_PANEL_IDS.right) {
+    return 'right';
+  }
+  if (getRightSidebarTabForPanelRequest(panelId)) {
     return 'right';
   }
   return LEGACY_PANEL_TO_SIDEBAR[panelId] ?? null;
@@ -180,6 +186,7 @@ export function openOrFocusPanel(api: DockviewApi, panelId: string): boolean {
   if (sidebarPanelId) {
     const sidebar = getSidebarForPanel(sidebarPanelId)!;
     setSidebarCollapsed(api, sidebar, false);
+    requestRightSidebarTabByPanel(panelId);
     api.getPanel(sidebarPanelId)?.api.setActive();
     return true;
   }
