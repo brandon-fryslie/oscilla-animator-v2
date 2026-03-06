@@ -292,6 +292,28 @@ function assertFiniteUint32(value: number, context: string): number {
   return value;
 }
 
+function readRequiredSinkTableWord(
+  words: Uint32Array,
+  wordCount: number,
+  index: number,
+  context: string,
+): number {
+  if (!Number.isInteger(index) || index < 0 || index >= wordCount) {
+    throw new Error(
+      'Rust renderer sink table debug contract violation: ' +
+        `${context} index out of bounds (index=${index}, wordCount=${wordCount})`,
+    );
+  }
+  const value = words[index];
+  if (value === undefined) {
+    throw new Error(
+      'Rust renderer sink table debug contract violation: ' +
+        `${context} missing value at index ${index}`,
+    );
+  }
+  return value;
+}
+
 
 export function assertWebGPUStartupContract(canvas: HTMLCanvasElement): void {
   const gpu = (navigator as Navigator & { gpu?: unknown }).gpu;
@@ -447,20 +469,85 @@ export class WebGPURenderer {
       const base = headerWords;
       const sample = {
         sinkTableWordCount: sinkTableWords,
-        totalRecords: input.drawPrepSinkTableV1[1] ?? 0,
+        totalRecords: readRequiredSinkTableWord(
+          input.drawPrepSinkTableV1,
+          sinkTableWords,
+          1,
+          'render-input-sample.totalRecords',
+        ),
         firstRecord: {
-          instanceCount: input.drawPrepSinkTableV1[base + 4] ?? 0,
-          firstInstance: input.drawPrepSinkTableV1[base + 5] ?? 0,
-          positionBaseOffset: input.drawPrepSinkTableV1[base + 8] ?? 0,
-          positionLaneStride: input.drawPrepSinkTableV1[base + 9] ?? 0,
-          positionComponentStride: input.drawPrepSinkTableV1[base + 10] ?? 0,
-          colorBaseOffset: input.drawPrepSinkTableV1[base + 11] ?? 0,
-          colorLaneStride: input.drawPrepSinkTableV1[base + 12] ?? 0,
-          colorComponentStride: input.drawPrepSinkTableV1[base + 13] ?? 0,
-          scaleModeCode: input.drawPrepSinkTableV1[base + 14] ?? 0,
-          scaleValueOrBaseOffset: input.drawPrepSinkTableV1[base + 15] ?? 0,
-          scaleLaneStride: input.drawPrepSinkTableV1[base + 16] ?? 0,
-          scaleComponentStride: input.drawPrepSinkTableV1[base + 17] ?? 0,
+          instanceCount: readRequiredSinkTableWord(
+            input.drawPrepSinkTableV1,
+            sinkTableWords,
+            base + 4,
+            'render-input-sample.firstRecord.instanceCount',
+          ),
+          firstInstance: readRequiredSinkTableWord(
+            input.drawPrepSinkTableV1,
+            sinkTableWords,
+            base + 5,
+            'render-input-sample.firstRecord.firstInstance',
+          ),
+          positionBaseOffset: readRequiredSinkTableWord(
+            input.drawPrepSinkTableV1,
+            sinkTableWords,
+            base + 8,
+            'render-input-sample.firstRecord.positionBaseOffset',
+          ),
+          positionLaneStride: readRequiredSinkTableWord(
+            input.drawPrepSinkTableV1,
+            sinkTableWords,
+            base + 9,
+            'render-input-sample.firstRecord.positionLaneStride',
+          ),
+          positionComponentStride: readRequiredSinkTableWord(
+            input.drawPrepSinkTableV1,
+            sinkTableWords,
+            base + 10,
+            'render-input-sample.firstRecord.positionComponentStride',
+          ),
+          colorBaseOffset: readRequiredSinkTableWord(
+            input.drawPrepSinkTableV1,
+            sinkTableWords,
+            base + 11,
+            'render-input-sample.firstRecord.colorBaseOffset',
+          ),
+          colorLaneStride: readRequiredSinkTableWord(
+            input.drawPrepSinkTableV1,
+            sinkTableWords,
+            base + 12,
+            'render-input-sample.firstRecord.colorLaneStride',
+          ),
+          colorComponentStride: readRequiredSinkTableWord(
+            input.drawPrepSinkTableV1,
+            sinkTableWords,
+            base + 13,
+            'render-input-sample.firstRecord.colorComponentStride',
+          ),
+          scaleModeCode: readRequiredSinkTableWord(
+            input.drawPrepSinkTableV1,
+            sinkTableWords,
+            base + 14,
+            'render-input-sample.firstRecord.scaleModeCode',
+          ),
+          scaleValueOrBaseOffset: readRequiredSinkTableWord(
+            input.drawPrepSinkTableV1,
+            sinkTableWords,
+            base + 15,
+            'render-input-sample.firstRecord.scaleValueOrBaseOffset',
+          ),
+          scaleLaneStride: readRequiredSinkTableWord(
+            input.drawPrepSinkTableV1,
+            sinkTableWords,
+            base + 16,
+            'render-input-sample.firstRecord.scaleLaneStride',
+          ),
+          scaleComponentStride: readRequiredSinkTableWord(
+            input.drawPrepSinkTableV1,
+            sinkTableWords,
+            base + 17,
+            'render-input-sample.firstRecord.scaleComponentStride',
+          ),
         },
       } satisfies SinkTableDebugSample;
       this.latestSinkTableSample = sample;
@@ -645,23 +732,88 @@ export class WebGPURenderer {
       if (this.sinkTableDebugLogCounter % 120 === 1) {
         const headerWords = 8;
         const recordWords = 29;
-        const totalRecords = sinkTableWords[1] ?? 0;
+        const totalRecords = readRequiredSinkTableWord(
+          sinkTableWords,
+          wordCount,
+          1,
+          'sink-table-sample.totalRecords',
+        );
         const firstRecordBase = headerWords;
         const hasFirstRecord = totalRecords > 0 && wordCount >= firstRecordBase + recordWords;
         const debugRecord = hasFirstRecord
           ? {
-            instanceCount: sinkTableWords[firstRecordBase + 4] ?? 0,
-            firstInstance: sinkTableWords[firstRecordBase + 5] ?? 0,
-            positionBaseOffset: sinkTableWords[firstRecordBase + 8] ?? 0,
-            positionLaneStride: sinkTableWords[firstRecordBase + 9] ?? 0,
-            positionComponentStride: sinkTableWords[firstRecordBase + 10] ?? 0,
-            colorBaseOffset: sinkTableWords[firstRecordBase + 11] ?? 0,
-            colorLaneStride: sinkTableWords[firstRecordBase + 12] ?? 0,
-            colorComponentStride: sinkTableWords[firstRecordBase + 13] ?? 0,
-            scaleModeCode: sinkTableWords[firstRecordBase + 14] ?? 0,
-            scaleValueOrBaseOffset: sinkTableWords[firstRecordBase + 15] ?? 0,
-            scaleLaneStride: sinkTableWords[firstRecordBase + 16] ?? 0,
-            scaleComponentStride: sinkTableWords[firstRecordBase + 17] ?? 0,
+            instanceCount: readRequiredSinkTableWord(
+              sinkTableWords,
+              wordCount,
+              firstRecordBase + 4,
+              'sink-table-sample.firstRecord.instanceCount',
+            ),
+            firstInstance: readRequiredSinkTableWord(
+              sinkTableWords,
+              wordCount,
+              firstRecordBase + 5,
+              'sink-table-sample.firstRecord.firstInstance',
+            ),
+            positionBaseOffset: readRequiredSinkTableWord(
+              sinkTableWords,
+              wordCount,
+              firstRecordBase + 8,
+              'sink-table-sample.firstRecord.positionBaseOffset',
+            ),
+            positionLaneStride: readRequiredSinkTableWord(
+              sinkTableWords,
+              wordCount,
+              firstRecordBase + 9,
+              'sink-table-sample.firstRecord.positionLaneStride',
+            ),
+            positionComponentStride: readRequiredSinkTableWord(
+              sinkTableWords,
+              wordCount,
+              firstRecordBase + 10,
+              'sink-table-sample.firstRecord.positionComponentStride',
+            ),
+            colorBaseOffset: readRequiredSinkTableWord(
+              sinkTableWords,
+              wordCount,
+              firstRecordBase + 11,
+              'sink-table-sample.firstRecord.colorBaseOffset',
+            ),
+            colorLaneStride: readRequiredSinkTableWord(
+              sinkTableWords,
+              wordCount,
+              firstRecordBase + 12,
+              'sink-table-sample.firstRecord.colorLaneStride',
+            ),
+            colorComponentStride: readRequiredSinkTableWord(
+              sinkTableWords,
+              wordCount,
+              firstRecordBase + 13,
+              'sink-table-sample.firstRecord.colorComponentStride',
+            ),
+            scaleModeCode: readRequiredSinkTableWord(
+              sinkTableWords,
+              wordCount,
+              firstRecordBase + 14,
+              'sink-table-sample.firstRecord.scaleModeCode',
+            ),
+            scaleValueOrBaseOffset: readRequiredSinkTableWord(
+              sinkTableWords,
+              wordCount,
+              firstRecordBase + 15,
+              'sink-table-sample.firstRecord.scaleValueOrBaseOffset',
+            ),
+            scaleLaneStride: readRequiredSinkTableWord(
+              sinkTableWords,
+              wordCount,
+              firstRecordBase + 16,
+              'sink-table-sample.firstRecord.scaleLaneStride',
+            ),
+            scaleComponentStride: readRequiredSinkTableWord(
+              sinkTableWords,
+              wordCount,
+              firstRecordBase + 17,
+              'sink-table-sample.firstRecord.scaleComponentStride',
+            ),
           }
           : null;
         this.latestSinkTableSample = {
