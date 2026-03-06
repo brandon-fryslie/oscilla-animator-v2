@@ -11,7 +11,7 @@ export type PanelGroup =
   | 'left-top'
   | 'left-bottom'
   | 'center'
-  | 'right-top'      // empty by default
+  | 'right-top'      // right sidebar (present in default layout)
   | 'right-bottom'   // empty by default
   | 'bottom-left'    // diagnostics
   | 'bottom-right'   // empty by default
