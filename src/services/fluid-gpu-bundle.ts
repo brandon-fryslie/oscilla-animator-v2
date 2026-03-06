@@ -192,9 +192,7 @@ function descriptorToPlan(program: CompiledProgramIR, slot: number): ArenaAddres
 function buildFluidRenderPlan(program: CompiledProgramIR, step: StepRender): FluidRenderPlan | null {
   const controlPoints = descriptorToPlan(program, step.controlPointsSlot);
   const color = descriptorToPlan(program, step.colorSlot as never);
-  const scale = step.scale?.k === 'slot'
-    ? descriptorToPlan(program, step.scale.slot as never)
-    : null;
+  const scale = descriptorToPlan(program, step.scale.slot as never);
   if (!controlPoints || !color || !scale) return null;
 
   const controlDescriptor = program.runtimeAddressTable?.slotToArena.get(step.controlPointsSlot as never);

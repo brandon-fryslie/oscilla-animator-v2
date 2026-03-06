@@ -1,4 +1,5 @@
 import type { NagaModuleIR } from '../ir/naga-emitter';
+import type { WasmInitModuleOrPath } from '../../wasm/init-types';
 
 export interface ShimFormattedError {
   readonly message: string;
@@ -25,13 +26,11 @@ type RustCompileFn = (
   maxActiveLanes?: number,
 ) => ShimCompilationResult;
 
-type WasmInitInput = RequestInfo | URL | Response | BufferSource | WebAssembly.Module;
-
 interface ShimModule {
   readonly compile_ir?: RustCompileFn;
   readonly init?: () => void;
   readonly default?: (
-    moduleOrPath?: { module_or_path: WasmInitInput | Promise<WasmInitInput> } | WasmInitInput | Promise<WasmInitInput>,
+    moduleOrPath?: WasmInitModuleOrPath,
   ) => Promise<unknown>;
 }
 

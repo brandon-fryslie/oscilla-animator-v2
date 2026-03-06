@@ -13,78 +13,11 @@ import {
   resizeRustRendererSurface,
   takeRustRendererFramePacingPacket,
 } from '../wasm/oscilla_rust_renderer';
+import { isPositiveInt, parseSchedulerPacket } from './engine-telemetry';
 import type {
-  RustRendererRuntimeEvent,
-  RustRendererSchedulerHeartbeat,
-  RustRendererSchedulerState,
   RustRendererWorkerInboundMessage,
   RustRendererWorkerOutboundMessage,
 } from './worker-protocol';
-
-interface RawSchedulerHeartbeat {
-  readonly sequence: number;
-  readonly state: string;
-  readonly emittedAtMs: number;
-  readonly frameCount: number;
-  readonly loopCount: number;
-  readonly meanTickMs: number;
-  readonly stdDevTickMs: number;
-  readonly sampleCount: number;
-  readonly lastTickMs: number;
-  readonly lastSuccessMs: number;
-  readonly telemetry: RawSchedulerTelemetry;
-}
-
-interface RawSchedulerStageTimingsTelemetry {
-  readonly inputMarshalMs: number;
-  readonly simulationDispatchMs: number;
-  readonly fluidPassChainMs: number;
-  readonly drawPrepMs: number;
-  readonly renderMs: number;
-  readonly swapMs: number;
-  readonly totalFrameMs: number;
-}
-
-interface RawSchedulerDispatchCountersTelemetry {
-  readonly computeDispatchCount: number;
-  readonly computeWorkgroupCount: number;
-  readonly activeLaneCount: number;
-  readonly guardedLaneCount: number;
-}
-
-interface RawSchedulerResourceStatsTelemetry {
-  readonly shapeBankWordCount: number;
-  readonly sinkTableWordCount: number;
-  readonly indexedRecordCount: number;
-  readonly nonIndexedRecordCount: number;
-  readonly totalInstanceCount: number;
-  readonly canvasWidth: number;
-  readonly canvasHeight: number;
-  readonly pingPongIndex: number;
-}
-
-interface RawSchedulerTelemetry {
-  readonly stageTimings: RawSchedulerStageTimingsTelemetry;
-  readonly dispatchCounters: RawSchedulerDispatchCountersTelemetry;
-  readonly resourceStats: RawSchedulerResourceStatsTelemetry;
-}
-
-interface RawRuntimeEvent {
-  readonly severity: string;
-  readonly code: string;
-  readonly stage: string;
-  readonly message: string;
-  readonly state: string;
-  readonly frameCount: number;
-  readonly loopCount: number;
-  readonly emittedAtMs: number;
-}
-
-interface RawSchedulerPacket {
-  readonly state: string;
-  readonly heartbeat: RawSchedulerHeartbeat;
-  readonly events: readonly RawRuntimeEvent[];
-}
 
 const POLL_INTERVAL_MS = 250;
 
@@ -113,152 +46,6 @@ function postDeviceLost(code: string, reason: string): void {
   });
 }
 
-function isSchedulerState(value: unknown): value is RustRendererSchedulerState {
-  return value === 'Booting' || value === 'Running' || value === 'Paused' || value === 'Lost';
-}
-
-function isFiniteNumber(value: unknown): value is number {
-  return typeof value === 'number' && Number.isFinite(value);
-}
-
-function isPositiveInt(value: unknown): value is number {
-  return typeof value === 'number' && Number.isInteger(value) && Number.isFinite(value) && value > 0;
-}
-
-function isRawSchedulerStageTimingsTelemetry(value: unknown): value is RawSchedulerStageTimingsTelemetry {
-  if (!value || typeof value !== 'object') return false;
-  const telemetry = value as Partial<RawSchedulerStageTimingsTelemetry>;
-  return (
-    isFiniteNumber(telemetry.inputMarshalMs)
-    && isFiniteNumber(telemetry.simulationDispatchMs)
-    && isFiniteNumber(telemetry.fluidPassChainMs)
-    && isFiniteNumber(telemetry.drawPrepMs)
-    && isFiniteNumber(telemetry.renderMs)
-    && isFiniteNumber(telemetry.swapMs)
-    && isFiniteNumber(telemetry.totalFrameMs)
-  );
-}
-
-function isRawSchedulerDispatchCountersTelemetry(value: unknown): value is RawSchedulerDispatchCountersTelemetry {
-  if (!value || typeof value !== 'object') return false;
-  const telemetry = value as Partial<RawSchedulerDispatchCountersTelemetry>;
-  return (
-    isFiniteNumber(telemetry.computeDispatchCount)
-    && isFiniteNumber(telemetry.computeWorkgroupCount)
-    && isFiniteNumber(telemetry.activeLaneCount)
-    && isFiniteNumber(telemetry.guardedLaneCount)
-  );
-}
-
-function isRawSchedulerResourceStatsTelemetry(value: unknown): value is RawSchedulerResourceStatsTelemetry {
-  if (!value || typeof value !== 'object') return false;
-  const telemetry = value as Partial<RawSchedulerResourceStatsTelemetry>;
-  return (
-    isFiniteNumber(telemetry.shapeBankWordCount)
-    && isFiniteNumber(telemetry.sinkTableWordCount)
-    && isFiniteNumber(telemetry.indexedRecordCount)
-    && isFiniteNumber(telemetry.nonIndexedRecordCount)
-    && isFiniteNumber(telemetry.totalInstanceCount)
-    && isFiniteNumber(telemetry.canvasWidth)
-    && isFiniteNumber(telemetry.canvasHeight)
-    && isFiniteNumber(telemetry.pingPongIndex)
-  );
-}
-
-function isRawSchedulerTelemetry(value: unknown): value is RawSchedulerTelemetry {
-  if (!value || typeof value !== 'object') return false;
-  const telemetry = value as Partial<RawSchedulerTelemetry>;
-  return (
-    isRawSchedulerStageTimingsTelemetry(telemetry.stageTimings)
-    && isRawSchedulerDispatchCountersTelemetry(telemetry.dispatchCounters)
-    && isRawSchedulerResourceStatsTelemetry(telemetry.resourceStats)
-  );
-}
-
-function isRawSchedulerHeartbeat(value: unknown): value is RawSchedulerHeartbeat {
-  if (!value || typeof value !== 'object') return false;
-  const heartbeat = value as Partial<RawSchedulerHeartbeat>;
-  return (
-    isFiniteNumber(heartbeat.sequence)
-    && typeof heartbeat.state === 'string'
-    && isFiniteNumber(heartbeat.emittedAtMs)
-    && isFiniteNumber(heartbeat.frameCount)
-    && isFiniteNumber(heartbeat.loopCount)
-    && isFiniteNumber(heartbeat.meanTickMs)
-    && isFiniteNumber(heartbeat.stdDevTickMs)
-    && isFiniteNumber(heartbeat.sampleCount)
-    && isFiniteNumber(heartbeat.lastTickMs)
-    && isFiniteNumber(heartbeat.lastSuccessMs)
-    && isRawSchedulerTelemetry(heartbeat.telemetry)
-  );
-}
-
-function isRawRuntimeEvent(value: unknown): value is RawRuntimeEvent {
-  if (!value || typeof value !== 'object') return false;
-  const event = value as Partial<RawRuntimeEvent>;
-  return (
-    typeof event.severity === 'string'
-    && typeof event.code === 'string'
-    && typeof event.stage === 'string'
-    && typeof event.message === 'string'
-    && typeof event.state === 'string'
-    && isFiniteNumber(event.frameCount)
-    && isFiniteNumber(event.loopCount)
-    && isFiniteNumber(event.emittedAtMs)
-  );
-}
-
-function asRuntimeSeverity(value: string): 'error' | 'fatal' {
-  return value === 'fatal' ? 'fatal' : 'error';
-}
-
-function parseSchedulerPacket(packet: unknown): RawSchedulerPacket | null {
-  if (!packet || typeof packet !== 'object') return null;
-  const candidate = packet as Partial<RawSchedulerPacket>;
-  if (typeof candidate.state !== 'string' || !isRawSchedulerHeartbeat(candidate.heartbeat)) return null;
-  if (!Array.isArray(candidate.events)) return null;
-  if (!candidate.events.every(isRawRuntimeEvent)) return null;
-  if (!isSchedulerState(candidate.state)) return null;
-  if (!isSchedulerState(candidate.heartbeat.state)) return null;
-  if (!candidate.events.every((event) => isSchedulerState(event.state))) return null;
-  return {
-    state: candidate.state,
-    heartbeat: candidate.heartbeat,
-    events: candidate.events,
-  };
-}
-
-function toOutboundHeartbeat(raw: RawSchedulerHeartbeat): RustRendererSchedulerHeartbeat {
-  const state = isSchedulerState(raw.state) ? raw.state : 'Lost';
-  return {
-    type: 'SCHEDULER_HEARTBEAT',
-    state,
-    sequence: raw.sequence,
-    emittedAtMs: raw.emittedAtMs,
-    frameCount: raw.frameCount,
-    loopCount: raw.loopCount,
-    meanTickMs: raw.meanTickMs,
-    stdDevTickMs: raw.stdDevTickMs,
-    sampleCount: raw.sampleCount,
-    lastTickMs: raw.lastTickMs,
-    lastSuccessMs: raw.lastSuccessMs,
-    telemetry: raw.telemetry,
-  };
-}
-
-function toOutboundRuntimeEvent(raw: RawRuntimeEvent): RustRendererRuntimeEvent {
-  return {
-    type: 'RUNTIME_EVENT',
-    severity: asRuntimeSeverity(raw.severity),
-    code: raw.code,
-    stage: raw.stage,
-    message: raw.message,
-    state: isSchedulerState(raw.state) ? raw.state : 'Lost',
-    frameCount: raw.frameCount,
-    loopCount: raw.loopCount,
-    emittedAtMs: raw.emittedAtMs,
-  };
-}
 
 async function handleBootstrap(message: Extract<RustRendererWorkerInboundMessage, { type: 'BOOTSTRAP' }>): Promise<void> {
   if (bootstrapped) {
@@ -274,15 +61,15 @@ async function handleBootstrap(message: Extract<RustRendererWorkerInboundMessage
   }
   bootstrapInFlight = true;
   try {
-  await initRustRendererWasm();
-  await initRustRendererEngine(message.canvas, message.config);
-  attachRustRendererSharedInput(message.sharedInput);
-  attachRustRendererSharedShapeBank(message.sharedShapeBank);
-  attachRustRendererSharedSinkTable(message.sharedSinkTable);
-  bootstrapped = true;
-  deviceLostNotified = false;
-  startRuntimePolling();
-  postWorkerMessage({ type: 'BOOTSTRAP_SUCCESS' });
+    await initRustRendererWasm();
+    await initRustRendererEngine(message.canvas, message.config);
+    attachRustRendererSharedInput(message.sharedInput);
+    attachRustRendererSharedShapeBank(message.sharedShapeBank);
+    attachRustRendererSharedSinkTable(message.sharedSinkTable);
+    bootstrapped = true;
+    deviceLostNotified = false;
+    startRuntimePolling();
+    postWorkerMessage({ type: 'BOOTSTRAP_SUCCESS' });
   } finally {
     bootstrapInFlight = false;
   }
@@ -338,12 +125,11 @@ function startRuntimePolling(): void {
       }
       const packet = parseSchedulerPacket(rawPacket);
       if (packet) {
-        postWorkerMessage(toOutboundHeartbeat(packet.heartbeat));
+        postWorkerMessage(packet.heartbeat);
         if (packet.heartbeat.state === 'Lost') {
           postDeviceLost('scheduler_lost', 'Rust scheduler entered Lost state');
         }
-        for (const rawEvent of packet.events) {
-          const event = toOutboundRuntimeEvent(rawEvent);
+        for (const event of packet.events) {
           postWorkerMessage(event);
           if (event.state === 'Lost') {
             postDeviceLost(event.code, event.message);
@@ -408,15 +194,19 @@ self.onmessage = (event: MessageEvent<RustRendererWorkerInboundMessage>) => {
   }
   if (message.type === 'REBUILD_GPU_PIPELINES') {
     void handleRebuildGpuPipelines(message).catch((error) => {
-      const prefix = bootstrapped ? 'Rust worker pipeline rebuild failure' : 'Rust worker rebuild before bootstrap';
-      postWorkerFatalError('pipeline_rebuild_failure', `${prefix}: ${error instanceof Error ? error.message : String(error)}`);
+      postWorkerFatalError(
+        'pipeline_rebuild_failure',
+        `Rust worker pipeline rebuild failure: ${error instanceof Error ? error.message : String(error)}`,
+      );
     });
     return;
   }
   if (message.type === 'BOOTSTRAP') {
     void handleBootstrap(message).catch((error) => {
-      const prefix = bootstrapped ? 'Rust worker runtime failure' : 'Rust worker bootstrap failure';
-      postWorkerFatalError('bootstrap_failure', `${prefix}: ${error instanceof Error ? error.message : String(error)}`);
+      postWorkerFatalError(
+        'bootstrap_failure',
+        `Rust worker bootstrap failure: ${error instanceof Error ? error.message : String(error)}`,
+      );
     });
   }
 };

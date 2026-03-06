@@ -16,20 +16,11 @@ export interface HclDemo {
   hcl: string;
 }
 
-import fluidDynamicsHcl from './hcl/fluid-dynamics.hcl?raw';
-
 // Vite glob import: all .hcl files as raw strings, eagerly loaded at build time
 const hclModules = import.meta.glob('./hcl/*.hcl', { query: '?raw', eager: true }) as Record<
   string,
   { default: string }
 >;
-
-// [LAW:no-silent-fallbacks] Steel-thread fluid demo must resolve deterministically
-// even when a running dev server hasn't refreshed glob matches for newly added files.
-const hclModulesWithSteelThread: Record<string, { default: string }> = {
-  './hcl/fluid-dynamics.hcl': { default: fluidDynamicsHcl },
-  ...hclModules,
-};
 
 function extractName(hcl: string, filename: string): string {
   const match = hcl.match(/patch\s+"([^"]+)"/);
@@ -37,7 +28,7 @@ function extractName(hcl: string, filename: string): string {
 }
 
 /** All HCL demo patches, sorted alphabetically by name */
-export const hclDemos: HclDemo[] = Object.entries(hclModulesWithSteelThread)
+export const hclDemos: HclDemo[] = Object.entries(hclModules)
   .map(([path, mod]) => {
     const filename = path.split('/').pop()!;
     const hcl = mod.default;

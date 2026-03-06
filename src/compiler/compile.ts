@@ -359,9 +359,7 @@ function collectRuntimeLiveExprIdsForPatching(args: {
       case 'render':
         pushFieldExprForSlot(step.controlPointsSlot as number);
         pushFieldExprForSlot(step.colorSlot as number);
-        if (step.scale?.k === 'slot') {
-          pushFieldExprForSlot(step.scale.slot as number);
-        }
+        pushFieldExprForSlot(step.scale.slot as number);
         pushFieldExprForSlot(step.shape.slot as number);
         if (step.controlPoints?.k === 'slot') {
           pushFieldExprForSlot(step.controlPoints.slot as number);
@@ -932,7 +930,14 @@ function resolveShapeRefExprId(
       resolved = exprId;
       continue;
     }
-    for (const child of getValueExprChildren(expr)) {
+    const children = getValueExprChildren(expr);
+    if (children.length === 0) {
+      throw new Error(
+        'DrawPrepProgram: shape slot resolves to non-shapeRef leaf expression ' +
+          `(rootExprId=${rootExprId}, leafExprId=${exprId}, leafKind=${expr.kind})`,
+      );
+    }
+    for (const child of children) {
       stack.push(child as number);
     }
   }
@@ -1059,10 +1064,10 @@ function collectComputeSlots(scheduleIR: ScheduleIR): ValueSlot[] {
         slots.add(step.controlPointsSlot);
         slots.add(step.colorSlot);
         slots.add(step.shape.slot);
+        slots.add(step.scale.slot);
         if (step.rotationSlot !== undefined) slots.add(step.rotationSlot);
         if (step.scale2Slot !== undefined) slots.add(step.scale2Slot);
         if (step.controlPoints?.k === 'slot') slots.add(step.controlPoints.slot);
-        if (step.scale?.k === 'slot') slots.add(step.scale.slot);
         break;
       case 'eventDispatch':
       case 'stateWrite':

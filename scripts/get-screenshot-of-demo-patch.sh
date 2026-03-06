@@ -328,7 +328,7 @@ done
 
 # ─── Run CDP capture ─────────────────────────────────────────────────────────
 
-APP_URL="http://localhost:${APP_PORT}/?loadDemoPatch=${DEMO_PATCH}&showPreview=true&runtimeConsole=true"
+APP_URL="http://localhost:${APP_PORT}/?loadDemoPatch=${DEMO_PATCH}&showPreview=true"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 if $BURST_MODE; then

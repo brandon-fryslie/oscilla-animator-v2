@@ -54,9 +54,7 @@ export function register(): void {
       count: {
         label: 'Count',
         type: canonicalType(INT),
-        // [LAW:one-source-of-truth] defaultValue drives UI defaults; defaultSource
-        // is the canonical compile-time fallback source materialized by frontend.
-        defaultValue: 8192,
+        // description: "Number of fluid particles represented in presentation."
         defaultSource: defaultSourceConst(8192),
         semantic: 'instanceCount',
         uiHint: { kind: 'slider', min: 256, max: 32768, step: 256 },
@@ -64,49 +62,49 @@ export function register(): void {
       simResolution: {
         label: 'Sim Resolution',
         type: canonicalType(INT),
-        defaultValue: 128,
+        // description: "Square simulation-grid resolution used by the solver."
         defaultSource: defaultSourceConst(128),
         uiHint: { kind: 'slider', min: 32, max: 512, step: 32 },
       },
       velocityDissipation: {
         label: 'Velocity Dissipation',
         type: canonicalType(FLOAT),
-        defaultValue: 0.992,
+        // description: "Per-step velocity damping factor."
         defaultSource: defaultSourceConst(0.992),
         uiHint: { kind: 'slider', min: 0.85, max: 0.9995, step: 0.0005 },
       },
       dyeDissipation: {
         label: 'Dye Dissipation',
         type: canonicalType(FLOAT),
-        defaultValue: 0.996,
+        // description: "Per-step dye/color damping factor."
         defaultSource: defaultSourceConst(0.996),
         uiHint: { kind: 'slider', min: 0.85, max: 0.9999, step: 0.0005 },
       },
       vorticity: {
         label: 'Vorticity',
         type: canonicalType(FLOAT),
-        defaultValue: 18.0,
+        // description: "Vorticity confinement gain applied during solve."
         defaultSource: defaultSourceConst(18.0),
         uiHint: { kind: 'slider', min: 0, max: 96, step: 0.5 },
       },
       splatRadius: {
         label: 'Splat Radius',
         type: canonicalType(FLOAT),
-        defaultValue: 20.0,
+        // description: "Mouse/input injection radius in simulation space."
         defaultSource: defaultSourceConst(20.0),
         uiHint: { kind: 'slider', min: 2, max: 128, step: 1 },
       },
       advection: {
         label: 'Advection',
         type: canonicalType(FLOAT),
-        defaultValue: 1.0,
+        // description: "Advection scale factor for velocity transport."
         defaultSource: defaultSourceConst(1.0),
         uiHint: { kind: 'slider', min: 0.1, max: 3, step: 0.01 },
       },
       particleScale: {
         label: 'Particle Scale',
         type: canonicalType(FLOAT),
-        defaultValue: 0.02,
+        // description: "Presentation particle size multiplier."
         defaultSource: defaultSourceConst(0.02),
         uiHint: { kind: 'slider', min: 0.001, max: 0.08, step: 0.001 },
       },

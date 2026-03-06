@@ -563,7 +563,7 @@ export function allocateContinuityPipeline(
       instanceId,
       controlPointsSlot: posSlots.outputSlot,
       colorSlot: colorSlots.outputSlot,
-      ...(scaleOutput && { scale: scaleOutput }),
+      scale: scaleOutput,
       shape: shapeOutput,
       ...(controlPointsOutput && { controlPoints: controlPointsOutput }),
     };
