@@ -399,6 +399,10 @@ export class WebGPURenderer {
   private lastInstalledPassIds: readonly string[] = [];
   private latestSinkTableSample: SinkTableDebugSample | null = null;
   private renderInputDebugLogged = false;
+  // TODO(#159): Move debug cadence state out of renderer core state.
+  // This counter is only for runtimeConsole sampling throttle and should live
+  // with debug emitter ownership, not render execution ownership.
+  // https://github.com/brandon-fryslie/oscilla-animator-v2/issues/159
   private sinkTableDebugLogCounter = 0;
   private readonly emittedHealthWarningCodes = new Set<string>();
 
@@ -759,6 +763,8 @@ export class WebGPURenderer {
     // TODO(#159): Replace this inline payload assembly with:
     // `buildSinkTableSamplePayload(sinkTableWords, wordCount)` and emit via
     // shared debug helper from this `syncSinkTablePlane(...)` call site.
+    // Also move this cadence gate (`sinkTableDebugLogCounter % 120 === 1`) to
+    // the debug emitter module so renderer hot path has zero debug policy code.
     // [LAW:locality-or-seam] Renderer execution path should not own payload
     // object construction details.
     // https://github.com/brandon-fryslie/oscilla-animator-v2/issues/159
