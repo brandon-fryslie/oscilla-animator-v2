@@ -324,7 +324,7 @@ export interface StepRender {
    * Scale multiplier for shape dimensions.
    * - `slot`: per-instance isotropic scale (cardinality many; stride 1)
    */
-  readonly scale?: { readonly k: 'slot'; readonly slot: ValueSlot };
+  readonly scale: { readonly k: 'slot'; readonly slot: ValueSlot };
   /**
    * Shape source for rendering.
    *

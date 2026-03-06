@@ -504,9 +504,6 @@ export class WebGPURenderer {
           wgslLength: pass.wgsl.length,
           wgslHash: hashWgslSource(pass.wgsl),
           wgslPreview: previewWgsl(pass.wgsl),
-          // [LAW:verifiable-goals] Runtime WGSL source is emitted once at
-          // pipeline rebuild so GPU-side slot addressing bugs are inspectable.
-          wgslSource: pass.wgsl,
           debugConstants: extractPassDebugConstants(pass.wgsl),
         })),
       };

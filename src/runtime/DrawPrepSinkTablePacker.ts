@@ -252,20 +252,11 @@ export function packDrawPrepSinkTableV1(
       renderStep.shape.slot,
       `shapeSlot sink(instance=${String(renderStep.instanceId)})`,
     );
-    const scaleSlotAddress =
-      renderStep.scale?.k === 'slot'
-        ? resolveSlotArenaAddress(
-          program,
-          renderStep.scale.slot,
-          `scaleSlot sink(instance=${String(renderStep.instanceId)})`,
-        )
-        : null;
-    if (!scaleSlotAddress) {
-      throw new Error(
-        'DrawPrepSinkTablePacker: render step scale must be slot-backed ' +
-          `(instance=${String(renderStep.instanceId)})`,
-      );
-    }
+    const scaleSlotAddress = resolveSlotArenaAddress(
+      program,
+      renderStep.scale.slot,
+      `scaleSlot sink(instance=${String(renderStep.instanceId)})`,
+    );
     const rotationSlotAddress =
       renderStep.rotationSlot !== undefined
         ? resolveSlotArenaAddress(
