@@ -17,7 +17,7 @@ import {
 
 // ─── Pre-React test parameter handling ───────────────────────────────────────
 // [LAW:single-enforcer] These run once before React mounts.
-// interceptLoadDemoPatch: stashes filename and strips query param without reload.
+// interceptLoadDemoPatch: clears localStorage, stashes filename, triggers reload.
 // validateShowPreview: throws on invalid values (fast feedback for test runners).
 // validateRuntimeConsole: validates runtime logging toggle for debug sessions.
 const navigating = interceptLoadDemoPatch();

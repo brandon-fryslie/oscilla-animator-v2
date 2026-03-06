@@ -13,39 +13,44 @@
  */
 
 import { createParser, useQueryState } from 'nuqs';
+import { resolveLocalStorageCapability } from '../services/local-storage-capability';
 
 // ─── loadDemoPatch (EXCEPTION: pre-React, raw URLSearchParams) ───────────────
-// Must run before React mounts.
+// Must run before React mounts to trigger browser reload for clean state.
 // Cannot use nuqs because nuqs hooks require the React tree.
 
 const SESSION_KEY = 'oscilla-test:loadDemoPatch';
 
 /**
- * Detect ?loadDemoPatch=<filename>, stash in sessionStorage, and strip the param
- * from the current URL without reloading.
- * Returns false because no navigation is performed.
+ * Detect ?loadDemoPatch=<filename>, clear localStorage, stash in sessionStorage, reload.
+ * Returns true if a reload was triggered (caller should bail out of main()).
  *
  * Flow:
  * 1. Test runner navigates to ?loadDemoPatch=breathing-ring.hcl&showPreview=true
- * 2. This function stashes filename in sessionStorage
- * 3. Removes loadDemoPatch from the URL via history.replaceState (same document)
- * 4. RuntimeService consumes the marker and applies demo load during init
+ * 2. This function clears localStorage (prevents stale patch restore)
+ * 3. Stashes filename in sessionStorage (survives reload)
+ * 4. window.location.replace() → same path without loadDemoPatch (preserves other params)
+ * 5. Full page reload → all JS state recreated fresh
  */
 export function interceptLoadDemoPatch(): boolean {
   const params = new URLSearchParams(window.location.search);
   const filename = params.get('loadDemoPatch');
   if (!filename) return false;
 
-  // [LAW:one-source-of-truth] sessionStorage marker remains the canonical
-  // carrier from pre-React parsing to RuntimeService init.
+  // Stash the filename for post-reload consumption
   sessionStorage.setItem(SESSION_KEY, filename);
 
-  // Strip loadDemoPatch from URL, preserve all other params, no reload.
+  // [LAW:single-enforcer] localStorage capability detection is centralized.
+  resolveLocalStorageCapability()?.clear?.();
+
+  // Strip loadDemoPatch from URL, preserve all other params
   params.delete('loadDemoPatch');
   const remaining = params.toString();
   const newUrl = window.location.pathname + (remaining ? `?${remaining}` : '');
-  window.history.replaceState(window.history.state, '', newUrl);
-  return false;
+
+  // Replace (not push) so back button doesn't re-trigger
+  window.location.replace(newUrl);
+  return true;
 }
 
 /**
