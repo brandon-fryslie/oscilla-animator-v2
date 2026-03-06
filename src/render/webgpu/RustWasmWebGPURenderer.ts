@@ -114,6 +114,10 @@ function coerceFinite(value: number | undefined): number {
 
 const MAX_UINT32 = 0xFFFF_FFFF;
 const RUNTIME_CONSOLE_ENABLED = isRuntimeConsoleEnabled();
+// TODO(#185): Keep current timeout unchanged for this PR, but measure ack
+// latency distributions by context (`bootstrap` vs `rebuildGpuPipelines`) and
+// decide whether to split/configure timeout policy from real data.
+// https://github.com/brandon-fryslie/oscilla-animator-v2/issues/185
 const WORKER_RESPONSE_TIMEOUT_MS = 20_000;
 const FLUID_PASS_ORDER = [
   'fluid.splat',
