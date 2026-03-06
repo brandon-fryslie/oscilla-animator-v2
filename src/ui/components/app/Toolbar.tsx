@@ -21,7 +21,7 @@ import {
   resetDockviewLayout,
   toggleSidebar,
 } from '../../dockview/layoutActions';
-import { PANEL_DEFINITIONS } from '../../dockview/panelRegistry';
+import { PANEL_MENU_ITEMS } from '../../dockview/panelRegistry';
 
 interface ToolbarProps {
   stats?: string;
@@ -41,10 +41,7 @@ export const Toolbar: React.FC<ToolbarProps> = observer(({ stats = 'FPS: --', do
   const [toastMessage, setToastMessage] = useState('');
   const [toastSeverity, setToastSeverity] = useState<'success' | 'error'>('success');
 
-  const visiblePanels = useMemo(
-    () => PANEL_DEFINITIONS.filter((panel) => !panel.initiallyHidden),
-    []
-  );
+  const panelMenuItems = useMemo(() => PANEL_MENU_ITEMS, []);
   const splitDemos = useMemo(() => {
     const midpoint = Math.ceil(demo.demos.length / 2);
     const primary = demo.demos.slice(0, midpoint);
@@ -257,7 +254,7 @@ export const Toolbar: React.FC<ToolbarProps> = observer(({ stats = 'FPS: --', do
                 <Button variant="subtle" color="gray" size="xs">Panels</Button>
               </Menu.Target>
               <Menu.Dropdown>
-                {visiblePanels.map((panel) => (
+                {panelMenuItems.map((panel) => (
                   <Menu.Item
                     key={panel.id}
                     onClick={() => dockviewApi && openOrFocusPanel(dockviewApi, panel.id)}
