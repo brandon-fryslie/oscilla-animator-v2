@@ -3,8 +3,10 @@ import type { DrawPrepProgramIR, DrawPrepSinkIR } from '../../compiler/ir/progra
 import type { StepRender } from '../../compiler/ir/types';
 import { packDrawPrepSinkTableV1 } from '../DrawPrepSinkTablePacker';
 import {
+  DRAW_PREP_SINK_DESCRIPTOR_WORDS,
   DRAW_PREP_SINK_TABLE_HEADER_WORDS,
   DRAW_PREP_SINK_TABLE_RECORD_WORDS,
+  DrawPrepSinkDescriptorWord,
   DrawPrepSinkTableHeaderWord,
   DrawPrepSinkTableRecordWord,
 } from '../DrawPrepSinkTable';
@@ -145,7 +147,7 @@ describe('packDrawPrepSinkTableV1', () => {
     expect(packed!.wordCount).toBe(
       DRAW_PREP_SINK_TABLE_HEADER_WORDS
       + DRAW_PREP_SINK_TABLE_RECORD_WORDS * 2
-      + (2 + 3) * 11,
+      + DRAW_PREP_SINK_DESCRIPTOR_WORDS * 2,
     );
     expect(words[DrawPrepSinkTableHeaderWord.TotalRecordCount]).toBe(2);
     expect(words[DrawPrepSinkTableHeaderWord.IndexedRecordCount]).toBe(1);
@@ -172,6 +174,18 @@ describe('packDrawPrepSinkTableV1', () => {
     expect(words[record1 + DrawPrepSinkTableRecordWord.FirstInstance]).toBe(2);
     expect(words[record1 + DrawPrepSinkTableRecordWord.ShapeWordOffset]).toBe(96);
     expect(words[record1 + DrawPrepSinkTableRecordWord.MaterialId]).toBe(7);
+
+    const descriptor0 = DRAW_PREP_SINK_TABLE_HEADER_WORDS + DRAW_PREP_SINK_TABLE_RECORD_WORDS * 2;
+    const descriptor1 = descriptor0 + DRAW_PREP_SINK_DESCRIPTOR_WORDS;
+
+    expect(words[descriptor0 + DrawPrepSinkDescriptorWord.PositionBaseOffset]).toBe(0);
+    expect(words[descriptor0 + DrawPrepSinkDescriptorWord.ColorBaseOffset]).toBe(128);
+    expect(words[descriptor0 + DrawPrepSinkDescriptorWord.ScaleBaseOffset]).toBe(340);
+    expect(words[descriptor0 + DrawPrepSinkDescriptorWord.RotationMode]).toBe(0);
+    expect(words[descriptor0 + DrawPrepSinkDescriptorWord.Scale2Mode]).toBe(0);
+    expect(words[descriptor1 + DrawPrepSinkDescriptorWord.PositionBaseOffset]).toBe(0);
+    expect(words[descriptor1 + DrawPrepSinkDescriptorWord.ColorBaseOffset]).toBe(128);
+    expect(words[descriptor1 + DrawPrepSinkDescriptorWord.ScaleBaseOffset]).toBe(340);
   });
 
   it('fails fast when a dynamic sink count is missing for the current frame', () => {

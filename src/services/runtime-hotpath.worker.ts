@@ -312,19 +312,11 @@ function buildSinkTableSample(
 function buildGpuDrivenSinkTableWords(
   program: CompiledProgramIR,
   state: RuntimeState,
-  warmPackedWords: Uint32Array | null,
-  warmPackedWordCount: number,
+  _warmPackedWords: Uint32Array | null,
+  _warmPackedWordCount: number,
 ): { words: Uint32Array; wordCount: number } | null {
-  const generatedPassIds = program.generatedGpuArtifactManifest?.passes?.map((pass) => pass.passId) ?? [];
-  const hasFluidPass = generatedPassIds.some((passId) => passId.startsWith('fluid.'));
-  if (!hasFluidPass && warmPackedWords && warmPackedWordCount > 0) {
-    // [LAW:one-source-of-truth] Non-fluid programs mirror one canonical warm
-    // sink-table payload so render lanes have deterministic data even when
-    // upstream GPU lowering has not yet materialized all source slots.
-    const words = new Uint32Array(warmPackedWordCount);
-    words.set(warmPackedWords.subarray(0, warmPackedWordCount), 0);
-    return { words, wordCount: warmPackedWordCount };
-  }
+  // [LAW:one-source-of-truth] Sink-table metadata comes from one canonical
+  // packer contract for all program types (fluid and non-fluid).
   const packed = packDrawPrepSinkTableV1(program, state);
   if (!packed) return null;
   const words = new Uint32Array(packed.wordCount);
