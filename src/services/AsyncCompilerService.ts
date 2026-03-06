@@ -159,7 +159,6 @@ export class AsyncCompilerService {
       frontendResult: result.frontendResult,
       backendResult: result.backendResult,
       compiledGpuBundle: result.compiledGpuBundle,
-      compiledComputeWgsl: result.compiledComputeWgsl,
       compileDurationMs: result.compileDurationMs,
     };
     this.lastErrorMessage = null;

@@ -5,7 +5,6 @@ const mocks = vi.hoisted(() => {
   const compileWorkerDispose = vi.fn();
   const compileAndSwap = vi.fn(async (..._args: any[]) => {});
   const rebuildGpuPipelines = vi.fn(async () => {});
-  const rebuildSimulationPipeline = vi.fn(async () => {});
   const runtimeHotpathInstallProgram = vi.fn();
   const runtimeHotpathDispose = vi.fn();
   const runtimeHotpathSetViewportFrame = vi.fn();
@@ -28,7 +27,6 @@ const mocks = vi.hoisted(() => {
       sharedSinkTable: new SharedArrayBuffer(256),
     })),
     rebuildGpuPipelines,
-    rebuildSimulationPipeline,
   }));
   const assertWebGPUStartupContract = vi.fn();
   const setRenderIssueReporter = vi.fn();
@@ -68,7 +66,6 @@ const mocks = vi.hoisted(() => {
     compileWorkerDispose,
     compileAndSwap,
     rebuildGpuPipelines,
-    rebuildSimulationPipeline,
     runtimeHotpathInstallProgram,
     runtimeHotpathDispose,
     runtimeHotpathSetViewportFrame,
@@ -240,7 +237,6 @@ describe('RuntimeService startup compile path', () => {
       sourcePatchRevision: 7,
       frontendResult: {} as any,
       backendResult: null,
-      compiledComputeWgsl: null,
       compileDurationMs: 3,
     });
 
@@ -318,7 +314,6 @@ describe('RuntimeService startup compile path', () => {
       sourcePatchRevision: 7,
       frontendResult: {} as any,
       backendResult: null,
-      compiledComputeWgsl: null,
       compileDurationMs: 3,
     });
     mocks.savePatchToStorage.mockImplementation(() => {
@@ -353,7 +348,7 @@ describe('RuntimeService startup compile path', () => {
     );
   });
 
-  it('publishes compiled compute WGSL into the renderer before swapping the new program', async () => {
+  it('publishes compiled GPU pass bundle into the renderer before swapping the new program', async () => {
     const backendResult = {
       kind: 'ok' as const,
       program: {} as any,
@@ -373,7 +368,6 @@ describe('RuntimeService startup compile path', () => {
       frontendResult: {} as any,
       backendResult,
       compiledGpuBundle: backendResult.compiledGpuBundle,
-      compiledComputeWgsl: '@compute @workgroup_size(64, 1, 1)\nfn compute_main() {}',
       compileDurationMs: 3,
     });
 

@@ -30,9 +30,6 @@ export interface CompileWorkerRunResult {
   readonly frontendResult: CompileWorkerCompiledMessage['frontendResult'];
   readonly backendResult: CompileResult | null;
   readonly compiledGpuBundle: CompiledGpuArtifactBundle | null;
-  // [LAW:one-source-of-truth] exception: transitional projection for callsites
-  // still consuming one simulation WGSL string while bundle migration lands.
-  readonly compiledComputeWgsl: string | null;
   readonly compileDurationMs: number;
 }
 
@@ -97,13 +94,6 @@ function reviveBackendResult(
     program: revivedProgram,
     warnings: backend.warnings,
   };
-}
-
-function selectSimulationPassWgsl(bundle: CompiledGpuArtifactBundle | null): string | null {
-  if (!bundle) return null;
-  const simulationPass = bundle.passes.find((pass) => pass.passId === 'simulation');
-  if (!simulationPass) return null;
-  return simulationPass.wgsl;
 }
 
 export class CompileWorkerClient {
@@ -198,7 +188,6 @@ export class CompileWorkerClient {
           frontendResult: message.frontendResult,
           backendResult: reviveBackendResult(message.backendResult),
           compiledGpuBundle,
-          compiledComputeWgsl: selectSimulationPassWgsl(compiledGpuBundle),
           compileDurationMs: message.durationMs,
         });
       }
