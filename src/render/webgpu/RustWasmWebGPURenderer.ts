@@ -237,6 +237,10 @@ function validateGpuPass(pass: RustRendererGpuPass, index: number): RustRenderer
 }
 
 function validateGpuPassBundle(passes: readonly RustRendererGpuPass[]): readonly RustRendererGpuPass[] {
+  // TODO(#181): Move bundle/order invariants to compiler artifact validation.
+  // [LAW:single-enforcer] Renderer should execute validated manifests, not
+  // enforce compiler-owned pass-order policy.
+  // https://github.com/brandon-fryslie/oscilla-animator-v2/issues/181
   if (passes.length === 0) {
     throw new Error('Rust renderer GPU pass contract violation: pass bundle must contain at least one pass');
   }
