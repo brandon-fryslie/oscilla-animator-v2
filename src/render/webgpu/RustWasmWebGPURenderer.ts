@@ -466,8 +466,11 @@ export class WebGPURenderer {
       input.drawPrepSinkTableV1,
       input.drawPrepSinkTableWordCount,
     );
-    // TODO(#159): Move render-input sink table sampling/logging to dedicated
-    // debug/telemetry adapter instead of renderer execution path.
+    // TODO(#159): Replace this inline payload assembly with:
+    // `buildRenderInputSamplePayload(drawPrepSinkTableV1, sinkTableWords)`
+    // and emit via a shared debug emitter helper from this `render(...)` call
+    // site. [LAW:locality-or-seam] Keep payload construction out of hot-path
+    // render orchestration.
     // https://github.com/brandon-fryslie/oscilla-animator-v2/issues/159
     if (RUNTIME_CONSOLE_ENABLED && !this.renderInputDebugLogged && input.drawPrepSinkTableV1 && sinkTableWords > 0) {
       this.renderInputDebugLogged = true;
@@ -623,7 +626,10 @@ export class WebGPURenderer {
     const validatedPasses = [...validateGpuPassBundle(passes)];
     this.lastInstalledPassIds = validatedPasses.map((pass) => pass.passId);
     if (RUNTIME_CONSOLE_ENABLED) {
-      // TODO(#159): Move pipeline rebuild debug logging out of renderer class.
+      // TODO(#159): Replace this inline payload assembly with:
+      // `buildGpuPipelineRebuildPayload(validatedPasses)` and emit through a
+      // shared `emitRuntimeConsolePayload(...)` helper from this
+      // `rebuildGpuPipelines(...)` call site.
       // https://github.com/brandon-fryslie/oscilla-animator-v2/issues/159
       const payload = {
         kind: 'gpu-pipeline-rebuild',
@@ -733,8 +739,11 @@ export class WebGPURenderer {
       );
     }
     this.sharedSinkTableWords.set(sinkTableWords.subarray(0, wordCount), 0);
-    // TODO(#159): Move recurring sink-table debug sampling/logging to dedicated
-    // debug/telemetry infrastructure; keep renderer focused on execution.
+    // TODO(#159): Replace this inline payload assembly with:
+    // `buildSinkTableSamplePayload(sinkTableWords, wordCount)` and emit via
+    // shared debug helper from this `syncSinkTablePlane(...)` call site.
+    // [LAW:locality-or-seam] Renderer execution path should not own payload
+    // object construction details.
     // https://github.com/brandon-fryslie/oscilla-animator-v2/issues/159
     if (RUNTIME_CONSOLE_ENABLED) {
       this.sinkTableDebugLogCounter += 1;
@@ -929,8 +938,11 @@ export class WebGPURenderer {
       return;
     }
     this.emittedHealthWarningCodes.add(code);
-    // TODO(#159): Move renderer health-warning logging into dedicated runtime
-    // diagnostics module once telemetry extraction lands.
+    // TODO(#159): Replace inline health-warning payload with
+    // `buildRenderHealthWarningPayload(code, details)` and emit through the
+    // same runtime-console emitter helper used by other debug payloads.
+    // [LAW:single-enforcer] One debug emitter boundary should own
+    // serialization/log formatting.
     // https://github.com/brandon-fryslie/oscilla-animator-v2/issues/159
     if (RUNTIME_CONSOLE_ENABLED) {
       console.warn(
