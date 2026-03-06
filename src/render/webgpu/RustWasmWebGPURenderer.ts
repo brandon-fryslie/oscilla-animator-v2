@@ -781,6 +781,10 @@ export class WebGPURenderer {
         );
         const firstRecordBase = headerWords;
         const hasFirstRecord = totalRecords > 0 && wordCount >= firstRecordBase + recordWords;
+        // TODO(#159): Do not build sink-table first-record payload objects here.
+        // Replace this object literal branch with a helper call:
+        // `buildSinkTableFirstRecordPayload(sinkTableWords, wordCount, firstRecordBase, hasFirstRecord)`.
+        // https://github.com/brandon-fryslie/oscilla-animator-v2/issues/159
         const debugRecord = hasFirstRecord
           ? {
             instanceCount: readRequiredSinkTableWord(
@@ -857,6 +861,11 @@ export class WebGPURenderer {
             ),
           }
           : null;
+        // TODO(#159): Do not build sink-table sample payloads inline here.
+        // This callsite should invoke:
+        // `buildSinkTableSamplePayload(sinkTableWords, wordCount)` and pass the
+        // result to `emitRuntimeConsolePayload(...)`.
+        // https://github.com/brandon-fryslie/oscilla-animator-v2/issues/159
         this.latestSinkTableSample = {
           sinkTableWordCount: wordCount,
           totalRecords,
