@@ -58,11 +58,11 @@ export const PANEL_DEFINITIONS: PanelDefinition[] = [
   { id: 'log-panel', component: 'log-panel', title: 'Logs', group: 'bottom-left' },
   { id: 'continuity-panel', component: 'continuity-panel', title: 'Continuity', group: 'bottom-left' },
   { id: 'compilation-inspector', component: 'compilation-inspector', title: 'Compilation', group: 'bottom-left' },
-  { id: 'debug-miniview', component: 'debug-miniview', title: 'Debug', group: 'bottom-right', initiallyHidden: true },
-  { id: 'step-debugger', component: 'step-debugger', title: 'Step Debugger', group: 'bottom-right', initiallyHidden: true },
+  { id: 'debug-miniview', component: 'debug-miniview', title: 'Debug', group: 'right-bottom', initiallyHidden: true },
+  { id: 'step-debugger', component: 'step-debugger', title: 'Step Debugger', group: 'right-bottom', initiallyHidden: true },
 
   // Help (not in default layout — opened on demand by ChartHelpButton)
-  { id: 'help', component: 'help', title: 'Help', group: 'bottom-right', initiallyHidden: true, menuHidden: true },
+  { id: 'help', component: 'help', title: 'Help', group: 'right-bottom', initiallyHidden: true, menuHidden: true },
 
   // Floating
   { id: 'preview', component: 'preview', title: 'Preview', group: 'preview-float', floating: true },
