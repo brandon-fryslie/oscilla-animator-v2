@@ -47,7 +47,7 @@ export async function listTypeScriptFiles() {
 
 export async function runCommand(command, args, options = {}) {
   const { cwd = repoRoot, allowFailure = false, env: envOverrides = {} } = options;
-  const mergedPath = [runnerBinDir, process.env.PATH ?? ''].join(':');
+  const mergedPath = [runnerBinDir, process.env.PATH ?? ''].join(path.delimiter);
   try {
     const result = await execFileAsync(command, args, {
       cwd,
