@@ -62,6 +62,9 @@ pub struct GpuMemoryArena {
 
 impl GpuMemoryArena {
     fn clear_buffer_words(queue: &wgpu::Queue, buffer: &wgpu::Buffer) {
+        // TODO(#173): Replace full-size zero-vector allocation with a chunked/cached
+        // or GPU-side clear path to avoid large transient CPU allocations.
+        // https://github.com/brandon-fryslie/oscilla-animator-v2/issues/173
         let byte_len = buffer.size() as usize;
         let word_len = (byte_len / std::mem::size_of::<u32>()).max(1);
         let zeros = vec![0u32; word_len];

@@ -109,7 +109,7 @@ function coerceFinite(value: number | undefined): number {
 
 const MAX_UINT32 = 0xFFFF_FFFF;
 const RUNTIME_CONSOLE_ENABLED = isRuntimeConsoleEnabled();
-const WORKER_RESPONSE_TIMEOUT_MS = 10_000;
+const WORKER_RESPONSE_TIMEOUT_MS = 20_000;
 const FLUID_PASS_ORDER = [
   'fluid.splat',
   'fluid.curl',
@@ -225,16 +225,11 @@ function validateGpuPassBundle(passes: readonly RustRendererGpuPass[]): readonly
   }
   const validated = passes.map((pass, index) => validateGpuPass(pass, index));
   const seenPassIds = new Set<string>();
-  const seenEntryPoints = new Set<string>();
   for (const pass of validated) {
     if (seenPassIds.has(pass.passId)) {
       throw new Error(`Rust renderer GPU pass contract violation: duplicate passId "${pass.passId}"`);
     }
     seenPassIds.add(pass.passId);
-    if (seenEntryPoints.has(pass.entryPoint)) {
-      throw new Error(`Rust renderer GPU pass contract violation: duplicate entryPoint "${pass.entryPoint}"`);
-    }
-    seenEntryPoints.add(pass.entryPoint);
   }
 
   const fluidPassIds = validated.filter((pass) => pass.passId.startsWith('fluid.')).map((pass) => pass.passId);
@@ -322,6 +317,11 @@ export class WebGPURenderer {
   private renderInputDebugLogged = false;
   private sinkTableDebugLogCounter = 0;
   private readonly emittedHealthWarningCodes = new Set<string>();
+
+  private markRendererFatal(error: Error): void {
+    this.lifecycleState = 'Lost';
+    this.fatalError = error;
+  }
 
   private constructor(
     worker: Worker,
@@ -677,7 +677,12 @@ export class WebGPURenderer {
     await new Promise<void>((resolve, reject) => {
       let settled = false;
       const timeoutId = globalThis.setTimeout(() => {
-        settle(() => reject(new Error(`Rust renderer worker timed out during ${options.context}`)));
+        settle(() => {
+          const error = new Error(`Rust renderer worker timed out during ${options.context}`);
+          this.markRendererFatal(error);
+          this.worker.terminate();
+          reject(error);
+        });
       }, WORKER_RESPONSE_TIMEOUT_MS);
       const settle = (callback: () => void): void => {
         if (settled) return;
@@ -695,11 +700,19 @@ export class WebGPURenderer {
           return;
         }
         if (payload.type === 'FATAL_ERROR') {
-          settle(() => reject(new Error(`[${payload.code}] ${payload.message}`)));
+          settle(() => {
+            const error = new Error(`[${payload.code}] ${payload.message}`);
+            this.markRendererFatal(error);
+            reject(error);
+          });
         }
       };
       const onError = (event: ErrorEvent): void => {
-        settle(() => reject(new Error(event.message || `Rust renderer worker crashed during ${options.context}`)));
+        settle(() => {
+          const error = new Error(event.message || `Rust renderer worker crashed during ${options.context}`);
+          this.markRendererFatal(error);
+          reject(error);
+        });
       };
       this.worker.addEventListener('message', onMessage);
       this.worker.addEventListener('error', onError);
@@ -779,12 +792,11 @@ export class WebGPURenderer {
     const payload = event.data;
     if (!payload) return;
     if (payload.type === 'FATAL_ERROR') {
-      this.fatalError = new Error(`[${payload.code}] ${payload.message}`);
+      this.markRendererFatal(new Error(`[${payload.code}] ${payload.message}`));
       return;
     }
     if (payload.type === 'DEVICE_LOST') {
-      this.lifecycleState = 'Lost';
-      this.fatalError = new Error(`[${payload.code}] ${payload.reason}`);
+      this.markRendererFatal(new Error(`[${payload.code}] ${payload.reason}`));
       return;
     }
     if (payload.type === 'RUNTIME_EVENT') {
@@ -796,7 +808,7 @@ export class WebGPURenderer {
         emittedAtMs: payload.emittedAtMs,
       };
       if (payload.severity === 'fatal') {
-        this.fatalError = new Error(`[${payload.code}] ${payload.message}`);
+        this.markRendererFatal(new Error(`[${payload.code}] ${payload.message}`));
       }
       return;
     }
