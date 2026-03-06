@@ -7,6 +7,9 @@ import type {
 // TODO(#159): Consolidate renderer debug/telemetry ownership once the
 // dedicated GPU renderer debug architecture is finalized.
 // https://github.com/brandon-fryslie/oscilla-animator-v2/issues/159
+// TODO(#161): Follow review cleanup plan for telemetry ownership split between
+// worker, scheduler packet parsing, and Rust-side hot-path boundaries.
+// https://github.com/brandon-fryslie/oscilla-animator-v2/issues/161
 
 interface RawSchedulerStageTimingsTelemetry {
   readonly inputMarshalMs: number;

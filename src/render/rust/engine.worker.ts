@@ -115,6 +115,9 @@ function stopRuntimePolling(): void {
 
 function startRuntimePolling(): void {
   if (runtimePollTimer !== null) return;
+  // TODO(#161): Keep worker polling boundary-only; move remaining telemetry
+  // orchestration/helpers out of this file into dedicated telemetry modules.
+  // https://github.com/brandon-fryslie/oscilla-animator-v2/issues/161
   // [LAW:single-enforcer] Rust scheduler owns lifecycle/timing state; worker
   // polling relays that packet and never re-derives runtime health locally.
   runtimePollTimer = setInterval(() => {
