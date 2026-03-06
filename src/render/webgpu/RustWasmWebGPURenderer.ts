@@ -196,6 +196,10 @@ function extractPassDebugConstants(wgsl: string): Record<string, number> {
 }
 
 function validateGpuPass(pass: RustRendererGpuPass, index: number): RustRendererGpuPass {
+  // TODO(#180): Move GPU pass semantic validation to compile/Naga boundary.
+  // [LAW:single-enforcer] Renderer should not be the long-term enforcer for
+  // pass contract validity; compiler validation is the canonical boundary.
+  // https://github.com/brandon-fryslie/oscilla-animator-v2/issues/180
   if (typeof pass.passId !== 'string' || pass.passId.trim().length === 0) {
     throw new Error(`Rust renderer GPU pass contract violation: passes[${index}].passId is required`);
   }
