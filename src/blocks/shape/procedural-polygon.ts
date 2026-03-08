@@ -52,11 +52,6 @@ function createPolygonTopology(sides: number): PathTopologyDefInput {
     verbs,
     pointsPerVerb,
     totalControlPoints,
-    render: (ctx: CanvasRenderingContext2D, params: Record<string, number>) => {
-      // Rendering will be handled by the unified path renderer
-      // This function is a placeholder - actual rendering happens in Canvas2DRenderer
-      throw new Error('PathTopologyDef render() should not be called directly - use Canvas2DRenderer');
-    },
   };
 }
 
