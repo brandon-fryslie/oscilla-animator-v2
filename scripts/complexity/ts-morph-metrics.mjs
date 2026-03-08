@@ -133,14 +133,18 @@ async function main() {
   );
   const functionMetrics = [];
   const sourceLocValues = [];
+  const sourceLocByFile = new Map();
 
   for (const sourceFile of sourceFiles) {
+    const sourceLoc = sourceFile.getFullText().split(/\r?\n/).length;
+    sourceLocByFile.set(sourceFile.getFilePath(), sourceLoc);
+
     const imports = sourceFile.getImportDeclarations();
     moduleFanOut.push({
       filePath: sourceFile.getFilePath(),
       fanOut: imports.length,
     });
-    sourceLocValues.push(sourceFile.getEndLineNumber());
+    sourceLocValues.push(sourceLoc);
 
     for (const imp of imports) {
       const target = imp.getModuleSpecifierSourceFile();
@@ -175,6 +179,14 @@ async function main() {
   const fanOutValues = moduleFanOut.map((m) => m.fanOut).sort((a, b) => a - b);
   const moduleFanIn = [...moduleFanInMap.entries()].map(([filePath, fanIn]) => ({ filePath, fanIn }));
   const fanInValues = moduleFanIn.map((m) => m.fanIn).sort((a, b) => a - b);
+  const fanOutByFile = new Map(moduleFanOut.map((entry) => [entry.filePath, entry.fanOut]));
+  const fanInByFile = new Map(moduleFanIn.map((entry) => [entry.filePath, entry.fanIn]));
+  const functionMetricsByFile = new Map();
+  for (const metric of functionMetrics) {
+    const list = functionMetricsByFile.get(metric.filePath) ?? [];
+    list.push(metric);
+    functionMetricsByFile.set(metric.filePath, list);
+  }
 
   const topCyclomatic = [...functionMetrics].sort((a, b) => b.cyclomatic - a.cyclomatic).slice(0, 25);
   const topCognitive = [...functionMetrics].sort((a, b) => b.cognitive - a.cognitive).slice(0, 25);
@@ -183,11 +195,29 @@ async function main() {
   const topLowMaintainability = [...functionMetrics].sort((a, b) => a.maintainabilityIndex - b.maintainabilityIndex).slice(0, 25);
   const topFanOut = [...moduleFanOut].sort((a, b) => b.fanOut - a.fanOut).slice(0, 25);
   const topFanIn = [...moduleFanIn].sort((a, b) => b.fanIn - a.fanIn).slice(0, 25);
-  // Compute total source lines of code from actual file contents rather than aggregating end line numbers.
-  const totalSourceLoc = sourceFiles.reduce(
-    (sum, sourceFile) => sum + sourceFile.getFullText().split(/\r?\n/).length,
-    0,
-  );
+  // Reuse canonical per-file source LOC, computed once during source-file traversal.
+  const totalSourceLoc = [...sourceLocByFile.values()].reduce((sum, value) => sum + value, 0);
+  const fileMetrics = sourceFiles
+    .map((sourceFile) => {
+      const filePath = sourceFile.getFilePath();
+      const functions = functionMetricsByFile.get(filePath) ?? [];
+      const maintainabilityValues = functions.map((metric) => metric.maintainabilityIndex);
+      const lineCount = sourceLocByFile.get(filePath) ?? 0;
+      return {
+        filePath: path.relative(process.cwd(), filePath).replaceAll('\\', '/'),
+        functionCount: functions.length,
+        maxCyclomatic: functions.reduce((max, metric) => Math.max(max, metric.cyclomatic), 0),
+        maxCognitive: functions.reduce((max, metric) => Math.max(max, metric.cognitive), 0),
+        maxNestingDepth: functions.reduce((max, metric) => Math.max(max, metric.maxNestingDepth), 0),
+        maxHalsteadVolume: functions.reduce((max, metric) => Math.max(max, metric.halstead.volume), 0),
+        avgMaintainabilityIndex: maintainabilityValues.length > 0 ? mean(maintainabilityValues) : null,
+        minMaintainabilityIndex: maintainabilityValues.length > 0 ? Math.min(...maintainabilityValues) : null,
+        moduleFanOut: fanOutByFile.get(filePath) ?? 0,
+        moduleFanIn: fanInByFile.get(filePath) ?? 0,
+        sourceLoc: lineCount,
+      };
+    })
+    .sort((a, b) => a.filePath.localeCompare(b.filePath));
 
   const summary = {
     tool: 'ts-morph',
@@ -254,6 +284,7 @@ async function main() {
     topLowMaintainability,
     topFanOut,
     topFanIn,
+    fileMetrics,
   };
 
   await writeJson(outJson, summary);
