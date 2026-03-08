@@ -84,6 +84,34 @@ function sanitizeHttpUrl(value) {
   }
 }
 
+function findLocationForEvidence(evidenceLine, locations) {
+  const match = String(evidenceLine).match(/^([^:\s][^:]*):(\d+):\d+/);
+  if (!match) return null;
+  const filePath = match[1];
+  const line = Number(match[2]);
+  if (!Number.isFinite(line)) return null;
+  return locations.find((location) => (
+    location?.filePath === filePath
+    && Number.isFinite(Number(location?.startLine))
+    && Number(location.startLine) <= line
+    && Number(location.endLine ?? location.startLine) >= line
+  )) ?? null;
+}
+
+function renderMetricInlineLinks(row, metricAttribution) {
+  const details = metricAttribution?.[row.key] ?? {};
+  const locations = Array.isArray(details.locations) ? details.locations : [];
+  const links = locations
+    .slice(0, 2)
+    .map((location) => {
+      const safeUrl = sanitizeHttpUrl(location.url);
+      if (!safeUrl) return null;
+      return `[\`${location.filePath}:${location.startLine}-${location.endLine}\`](${safeUrl})`;
+    })
+    .filter(Boolean);
+  return links.length > 0 ? `${row.label} · ${links.join(' · ')}` : row.label;
+}
+
 function renderTable(headers, rows) {
   const headerLine = `| ${headers.map(escapeCell).join(' | ')} |`;
   const dividerLine = `| ${headers.map(() => '---').join(' | ')} |`;
@@ -93,11 +121,11 @@ function renderTable(headers, rows) {
   return [headerLine, dividerLine, ...bodyLines].join('\n');
 }
 
-function rowToSummaryRow(row) {
+function rowToSummaryRow(row, metricAttribution) {
   const status = rowStatus(row);
   return [
     row.signal,
-    row.label,
+    renderMetricInlineLinks(row, metricAttribution),
     `${formatMetricValue(row.base)}/${formatMetricValue(row.head)}`,
     `${status.emoji} ${formatDeltaValue(row.delta)} (${formatPctValue(row.relativeDeltaPct)})`,
     row.magnitude,
@@ -123,24 +151,32 @@ function renderMetricContext(rows, metricAttribution) {
     const links = Array.isArray(details.locations) ? details.locations : [];
     const snippets = Array.isArray(details.snippets) ? details.snippets : [];
     const evidence = Array.isArray(details.evidence) ? details.evidence : [];
+    const evidenceLines = evidence.map((line) => {
+      const matchedLocation = findLocationForEvidence(line, links);
+      const safeUrl = sanitizeHttpUrl(matchedLocation?.url);
+      if (!safeUrl || !matchedLocation) return `- ${escapeSummaryText(String(line))}`;
+      const text = String(line);
+      const tokenMatch = text.match(/^([^:\s][^:]*:\d+:\d+)(.*)$/);
+      if (!tokenMatch) return `- ${escapeSummaryText(text)} (${safeUrl})`;
+      const token = tokenMatch[1];
+      const rest = tokenMatch[2] ?? '';
+      return `- [\`${escapeCell(token)}\`](${safeUrl})${escapeSummaryText(rest)}`;
+    });
+    const unmatchedLinks = links
+      .filter((location) => !evidence.some((line) => findLocationForEvidence(line, [location])))
+      .map((location) => {
+        const safeUrl = sanitizeHttpUrl(location.url);
+        if (!safeUrl) return null;
+        return `- [\`${escapeCell(`${location.filePath}:${location.startLine}-${location.endLine}`)}\`](${safeUrl})`;
+      })
+      .filter(Boolean);
     return [
       '<details>',
       `<summary>${status.emoji} ${escapeCell(row.label)} (${formatDeltaValue(row.delta)}, ${formatPctValue(row.relativeDeltaPct)})</summary>`,
       '',
-      ...(evidence.length > 0
-        ? ['Evidence:', ...evidence.slice(0, 5).map((line) => `- ${escapeSummaryText(String(line))}`), '']
+      ...((evidenceLines.length > 0 || unmatchedLinks.length > 0)
+        ? ['Evidence:', ...evidenceLines.slice(0, 5), ...unmatchedLinks.slice(0, 5), '']
         : ['Evidence: none captured', '']),
-      ...(links.length > 0
-        ? [
-          'Code links (commit + file + line range):',
-          ...links.slice(0, 6).map((link) => {
-            const safeUrl = sanitizeHttpUrl(link.url);
-            const label = `${escapeCell(String(link.filePath))}:${link.startLine}-${link.endLine}`;
-            return safeUrl ? `- [\`${label}\`](${safeUrl})` : `- \`${label}\` (link unavailable)`;
-          }),
-          '',
-        ]
-        : ['Code links: none captured', '']),
       ...(snippets.length > 0
         ? [
           'Snippets:',
@@ -174,13 +210,13 @@ function renderSummaryMarkdown(delta, options) {
   const baseSha = options.baseSha ? `\`${options.baseSha}\`` : 'unknown';
   const headSha = options.headSha ? `\`${options.headSha}\`` : 'unknown';
   const artifactUrl = options.artifactUrl ? `[Download archived HTML report](${options.artifactUrl})` : 'Artifact URL unavailable';
-  const highSignalRegressionRows = sortRowsForDisplay((delta.highSignalRegressions ?? []).filter(isComplexityMetric)).map(rowToSummaryRow);
-  const highSignalImprovementRows = sortRowsForDisplay((delta.highSignalImprovements ?? []).filter(isComplexityMetric)).map(rowToSummaryRow);
+  const metricAttribution = delta.metricAttribution ?? delta.regressionAttribution ?? {};
+  const highSignalRegressionRows = sortRowsForDisplay((delta.highSignalRegressions ?? []).filter(isComplexityMetric)).map((row) => rowToSummaryRow(row, metricAttribution));
+  const highSignalImprovementRows = sortRowsForDisplay((delta.highSignalImprovements ?? []).filter(isComplexityMetric)).map((row) => rowToSummaryRow(row, metricAttribution));
   const fullRows = sortedRows.map(rowToFullRow);
   const guideRows = (delta.guide ?? [])
     .filter((row) => row.direction !== 'info')
     .map((row) => [row.label, row.directionLabel, row.target, row.signal, row.description ?? '']);
-  const metricAttribution = delta.metricAttribution ?? delta.regressionAttribution ?? {};
 
   return [
     '## Complexity Delta Summary',
