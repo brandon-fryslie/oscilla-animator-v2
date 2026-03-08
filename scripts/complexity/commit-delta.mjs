@@ -798,14 +798,42 @@ function renderDeltaMarkdown(delta, baseLabel, headLabel) {
   ].join('\n');
 }
 
-function renderColorizedMetricTable(rows) {
+function findEvidenceLocation(evidenceLine, locations) {
+  const match = String(evidenceLine).match(/^([^:\s][^:]*):(\d+):\d+/);
+  if (!match) return null;
+  const filePath = match[1];
+  const line = Number(match[2]);
+  if (!Number.isFinite(line)) return null;
+  return locations.find((location) => (
+    location?.filePath === filePath
+    && Number.isFinite(Number(location?.startLine))
+    && Number(location.startLine) <= line
+    && Number(location.endLine ?? location.startLine) >= line
+  )) ?? null;
+}
+
+function renderInlineMetricLinks(row, metricAttribution) {
+  const details = metricAttribution?.[row.key] ?? {};
+  const locations = Array.isArray(details.locations) ? details.locations : [];
+  const links = locations.slice(0, 2)
+    .map((location) => {
+      if (!location?.url) return null;
+      const label = `${location.filePath}:${location.startLine}-${location.endLine}`;
+      return `<a href="${escapeHtml(location.url)}"><code>${escapeHtml(label)}</code></a>`;
+    })
+    .filter(Boolean);
+  return links.length > 0 ? `<div class="inline-links">${links.join('<br>')}</div>` : '';
+}
+
+function renderColorizedMetricTable(rows, metricAttribution = {}) {
   const headers = ['Signal', 'Metric', 'Base/Head', 'Delta (%)', 'Magnitude', 'Impact'];
   const headerHtml = headers.map((header) => `<th>${escapeHtml(header)}</th>`).join('');
   const bodyHtml = rows.length === 0
     ? `<tr><td colspan="${headers.length}">none</td></tr>`
     : rows.map((row) => {
       const status = rowStatus(row);
-      const metricCell = `<span title="${escapeHtml(row.description ?? row.label)}">${escapeHtml(row.label)}</span>`;
+      const inlineLinks = renderInlineMetricLinks(row, metricAttribution);
+      const metricCell = `<span title="${escapeHtml(row.description ?? row.label)}">${escapeHtml(row.label)}</span>${inlineLinks}`;
       const deltaCell = `${escapeHtml(status.emoji)} ${escapeHtml(formatDeltaValue(row.delta))} (${escapeHtml(formatPctValue(row.relativeDeltaPct))})`;
       const cells = [
         escapeHtml(row.signal),
@@ -820,26 +848,38 @@ function renderColorizedMetricTable(rows) {
   return `<table class="colorized-table"><thead><tr>${headerHtml}</tr></thead><tbody>${bodyHtml}</tbody></table>`;
 }
 
-function renderColorizedFullTable(rows) {
-  return renderColorizedMetricTable(rows);
+function renderColorizedFullTable(rows, metricAttribution = {}) {
+  return renderColorizedMetricTable(rows, metricAttribution);
 }
 
 function renderMetricDrilldownHtml(rows, metricAttribution) {
   if (rows.length === 0) return '<p>None.</p>';
   return rows.map((row) => {
     const details = metricAttribution[row.key] ?? { evidence: [], files: [], locations: [], snippets: [], diffs: [] };
-    const evidenceHtml = details.evidence.length > 0
-      ? `<ul>${details.evidence.map((line) => `<li>${escapeHtml(line)}</li>`).join('')}</ul>`
+    const locations = Array.isArray(details.locations) ? details.locations : [];
+    const evidenceItems = Array.isArray(details.evidence) ? details.evidence : [];
+    const evidenceLines = evidenceItems.map((line) => {
+      const matchedLocation = findEvidenceLocation(line, locations);
+      if (!matchedLocation?.url) return `<li>${escapeHtml(line)}</li>`;
+      const text = String(line);
+      const tokenMatch = text.match(/^([^:\s][^:]*:\d+:\d+)(.*)$/);
+      if (!tokenMatch) {
+        return `<li><a href="${escapeHtml(matchedLocation.url)}"><code>${escapeHtml(`${matchedLocation.filePath}:${matchedLocation.startLine}-${matchedLocation.endLine}`)}</code></a> — ${escapeHtml(text)}</li>`;
+      }
+      const token = tokenMatch[1];
+      const rest = tokenMatch[2] ?? '';
+      return `<li><a href="${escapeHtml(matchedLocation.url)}"><code>${escapeHtml(token)}</code></a>${escapeHtml(rest)}</li>`;
+    });
+    const uncoveredLocations = locations
+      .filter((location) => !evidenceItems.some((line) => findEvidenceLocation(line, [location])))
+      .map((location) => `<li><a href="${escapeHtml(location.url)}"><code>${escapeHtml(`${location.filePath}:${location.startLine}-${location.endLine}`)}</code></a>${location.reason ? ` — ${escapeHtml(location.reason)}` : ''}</li>`);
+    const mergedEvidenceItems = [...evidenceLines, ...uncoveredLocations];
+    const evidenceHtml = mergedEvidenceItems.length > 0
+      ? `<ul>${mergedEvidenceItems.join('')}</ul>`
       : '<p>No metric-level evidence captured.</p>';
     const candidateFilesHtml = details.files.length > 0
       ? `<p><strong>Candidate files:</strong> <code>${escapeHtml(details.files.join(', '))}</code></p>`
       : '<p><strong>Candidate files:</strong> none</p>';
-    const locationLinksHtml = details.locations?.length > 0
-      ? [
-        '<p><strong>Code links (commit + file + line range):</strong></p>',
-        `<ul>${details.locations.map((location) => `<li><a href="${escapeHtml(location.url)}"><code>${escapeHtml(location.filePath)}:${location.startLine}-${location.endLine}</code></a>${location.reason ? ` — ${escapeHtml(location.reason)}` : ''}</li>`).join('')}</ul>`,
-      ].join('\n')
-      : '<p><strong>Code links:</strong> none</p>';
     const snippetHtml = details.snippets?.length > 0
       ? details.snippets.map((snippet) => [
         '<details>',
@@ -853,9 +893,9 @@ function renderMetricDrilldownHtml(rows, metricAttribution) {
       '<details>',
       `<summary>${escapeHtml(rowStatus(row).emoji)} ${escapeHtml(row.label)}: ${escapeHtml(formatMetricValue(row.base))} -> ${escapeHtml(formatMetricValue(row.head))} (${escapeHtml(formatDeltaValue(row.delta))}, ${escapeHtml(formatPctValue(row.relativeDeltaPct))})</summary>`,
       '<div>',
+      '<p><strong>Evidence:</strong></p>',
       evidenceHtml,
       candidateFilesHtml,
-      locationLinksHtml,
       '<p><strong>Code snippets:</strong></p>',
       snippetHtml,
       '</div>',
@@ -878,6 +918,7 @@ function renderDeltaHtml(delta, baseLabel, headLabel, metricAttribution) {
     'Commit Complexity Delta',
     [
       '<style>',
+      '  .inline-links { margin-top: 4px; font-size: 12px; line-height: 1.4; }',
       '  .colorized-table .sev-row.sev-regression-4 td { background: #321010 !important; }',
       '  .colorized-table .sev-row.sev-regression-3 td { background: #2e1313 !important; }',
       '  .colorized-table .sev-row.sev-regression-2 td { background: #2d1c10 !important; }',
@@ -911,19 +952,19 @@ function renderDeltaHtml(delta, baseLabel, headLabel, metricAttribution) {
       '<h2>Metric Interpretation Guide</h2>',
       renderHtmlTable(['Metric', 'Desired Trend', 'Practical Target Range', 'Signal', 'Description'], guideRows),
       '<h2>High-Signal Regressions</h2>',
-      renderColorizedMetricTable(complexityHighSignalRegressions),
+      renderColorizedMetricTable(complexityHighSignalRegressions, metricAttribution),
       '<h2>High-Signal Improvements</h2>',
-      renderColorizedMetricTable(complexityHighSignalImprovements),
+      renderColorizedMetricTable(complexityHighSignalImprovements, metricAttribution),
       '<h2>Regressions</h2>',
-      renderColorizedMetricTable(complexityRegressed),
+      renderColorizedMetricTable(complexityRegressed, metricAttribution),
       '<h2>Regression Drilldown (click row)</h2>',
       renderMetricDrilldownHtml(complexityRegressed, metricAttribution),
       '<h2>Improvements</h2>',
-      renderColorizedMetricTable(complexityImproved),
+      renderColorizedMetricTable(complexityImproved, metricAttribution),
       '<h2>Improvement Drilldown (click row)</h2>',
       renderMetricDrilldownHtml(complexityImproved, metricAttribution),
       '<h2>Full Delta Table</h2>',
-      renderColorizedFullTable(complexityRows),
+      renderColorizedFullTable(complexityRows, metricAttribution),
     ].join('\n'),
   );
 }
