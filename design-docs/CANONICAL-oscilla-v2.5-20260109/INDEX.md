@@ -39,7 +39,7 @@ update_history:
     notes: "Formalized payload-generic block contract; Range-based StateMappings replace StateKey; Added vec3 to PayloadType; Stride concept; Deprecated Polymorphism section; Unit constraints deferred"
   - date: 2026-01-22T18:00:00Z
     action: "Kernel Roadmap & Local-Space Geometry Integration"
-    sources_integrated: [design-docs/_new/kernel-roadmap/0-kernel-roadmap.md, design-docs/_new/kernel-roadmap/1-local-space.md, design-docs/_new/kernel-roadmap/2-local-space-end-to-end-spec.md, design-docs/_new/kernel-roadmap/3-local-space-spec-deeper.md, design-docs/_new/kernel-roadmap/5-opcode-interpreter.md, design-docs/_new/kernel-roadmap/6-signal-kernel.md, design-docs/_new/kernel-roadmap/7-field-kernel.md]
+    sources_integrated: [design-docs/_new/kernel-roadmap/0-kernel-roadmap.md, design-docs/_new/kernel-roadmap/1-local-space.md, design-docs/_new/kernel-roadmap/2-local-space-end-to-end-spec.md, design-docs/_new/kernel-roadmap/3-local-space-spec-deeper.md, design-docs/_new/kernel-roadmap/5-opcode-interpreter.md, design-docs/_new/kernel-roadmap/6-scalar-kernel.md, design-docs/_new/kernel-roadmap/7-lane-kernel.md]
     topics_created: [16-coordinate-spaces]
     topics_updated: [01-type-system, 05-runtime, 06-renderer]
     resolutions_made: 7
@@ -56,7 +56,7 @@ update_history:
     topics_created: [17-layout-system]
     topics_updated: []
     resolutions_made: 7
-    notes: "New Topic 17 (Layout System); Layout as Field<vec2> from kernels; circleLayout/lineLayout/gridLayout with normative per-lane math; Intrinsic set closed to {index, normalizedIndex, randomId}; FieldExprLayout deprecated; InstanceDecl.layout removed; Layout kernel contract pattern"
+    notes: "New Topic 17 (Layout System); Layout as data channel from kernels; circleLayout/lineLayout/gridLayout with normative per-lane math; Intrinsic set closed to {index, normalizedIndex, randomId}; InstanceDecl.layout removed; Layout kernel contract pattern"
   - date: 2026-01-22T23:00:00Z
     action: "Camera & Projection Integration"
     sources_integrated: [design-docs/CANONICALIZED-QUESTIONS-shapes-layout-20260122.md (camera/projection questions)]
@@ -148,26 +148,26 @@ This condensed spec contains all invariants, glossary core terms, and T1 content
 | 03 | [Time System](./topics/03-time-system.md) | Time sources and rails | TimeRoot, Rails, tMs, phase |
 | 04 | [Compilation](./topics/04-compilation.md) | Graph normalization and IR | NormalizedGraph, CompiledProgramIR |
 | 05 | [Runtime](./topics/05-runtime.md) | Execution model and state | State slots, scheduling, erasure |
-| 06 | [Renderer](./topics/06-renderer.md) | Render pipeline and sinks | RenderInstances2D, batching |
+| 06 | [Renderer](./topics/06-renderer.md) | Render pipeline and sinks | RenderSink, batching |
 | 07 | [Diagnostics System](./topics/07-diagnostics-system.md) | Structured diagnostics and observability | Diagnostic, DiagnosticHub, TargetRef, Events |
 | 08 | [Observation System](./topics/08-observation-system.md) | Runtime state capture and queries | DebugGraph, DebugSnapshot, DebugTap, DebugService |
 | 08b | [Diagnostic Rules Engine](./topics/08b-diagnostic-rules-engine.md) | Heuristic rules for problem detection | Rules A-H, evidence, fixes |
 | 09 | [Debug UI](./topics/09-debug-ui-spec.md) | Non-technical inspection interface | Probe mode, Trace view, diagnostics drawer |
 | 10 | [Power-User Debugging](./topics/10-power-user-debugging.md) | Advanced observation tools (post-MVP) | TraceEvents, technical panel |
-| 11 | [Continuity System](./topics/11-continuity-system.md) | Anti-jank architecture (gauge invariance) | Phase offset, value reconciliation, field projection |
+| 11 | [Continuity System](./topics/11-continuity-system.md) | Anti-jank architecture (gauge invariance) | Phase offset, value reconciliation, lane projection |
 | 12 | [Event Hub](./topics/12-event-hub.md) | Event coordination spine | Typed events, emission patterns, decoupling |
 | 13 | [Event-Diagnostics Integration](./topics/13-event-diagnostics-integration.md) | How events drive diagnostics | DiagnosticHub subscriptions, snapshot semantics |
 | 14 | [Modulation Table UI](./topics/14-modulation-table-ui.md) | Table view for port connections (UI only) | Transform chains, Adapters, Lenses |
 | 15 | [Graph Editor UI](./topics/15-graph-editor-ui.md) | Linear auto-layout graph editor | Chain, Pivot Block, Perspective Rotation, Focus/Dimming |
 | 16 | [Coordinate Spaces](./topics/16-coordinate-spaces.md) | Three-space coordinate model | Local/World/Viewport, scale, transforms |
-| 17 | [Layout System](./topics/17-layout-system.md) | Field-based positioning via kernels | circleLayout, lineLayout, gridLayout, intrinsics |
+| 17 | [Layout System](./topics/17-layout-system.md) | Computation-based positioning via kernels | circleLayout, lineLayout, gridLayout, intrinsics |
 | 18 | [Camera & Projection](./topics/18-camera-projection.md) | Projection kernels and camera pipeline | projectWorldToScreenOrtho, Camera Block, depth ordering |
 | 19 | [2.5D Profile](./topics/19-2_5d-profile.md) | Constrained authoring mode (T3) | PatchProfile, depth policy, tilt-only camera |
 | 20 | [Type Validation](./topics/20-type-validation.md) | Enforcement gate and guardrails | validateAxes, AxisViolation, 17 Guardrails, BindingMismatchError |
 | 21 | [Adapter System](./topics/21-adapter-system.md) | Type pattern matching and transforms | TypePattern, ExtentPattern, ExtentTransform, AdapterSpec |
 | 22 | [External Input System](./topics/22-external-input-system.md) | Unified channel-based input (MIDI/OSC/audio/keyboard/mouse) | ExternalChannelSnapshot, ChannelKind, ExternalInput, frame-boundary commit |
 | 23 | [Color System](./topics/23-color-system.md) | Color space as UnitType extension | HSL/RGBA01 units, Extract/Construct, ColorPicker, HslToRgba adapter |
-| 24 | [Multi-Component Signals](./topics/24-multi-component-signals.md) | Stride-aware evaluation and slot allocation | SlotMetaEntry, Hybrid A+ evaluation, sampleability, HistoryService guard |
+| 24 | [Multi-Component Values](./topics/24-multi-component-values.md) | Stride-aware evaluation and slot allocation | SlotMetaEntry, Hybrid A+ evaluation, sampleability, HistoryService guard |
 | 25 | [Pure Lowering](./topics/25-pure-lowering.md) | Purity contract for block lowering | LowerSandbox, effects-as-data, macro lowering, DefaultPolicyTable |
 | 26 | [Lens System](./topics/26-lens-system.md) | Port-attached value transformations | Lens as port decorator, 8 categories, minimal ship set |
 | 27 | [Obligation-Driven Normalization](./topics/27-obligation-normalization.md) | Fixpoint loop for graph normalization | Obligation abstraction, DefaultPolicyTable, anchor-based stable IDs |
@@ -209,7 +209,7 @@ Looking for something specific? Here's where to find it:
 | Expression forms, broadcast, ZipSig | [04-compilation.md](./topics/04-compilation.md) |
 | Payload specialization, stride | [04-compilation.md](./topics/04-compilation.md) |
 | State slots, scheduling | [05-runtime.md](./topics/05-runtime.md) |
-| StateId, StateMappingScalar, StateMappingField | [05-runtime.md](./topics/05-runtime.md) |
+| StateId, StateMappingScalar, StateMappingLane | [05-runtime.md](./topics/05-runtime.md) |
 | Lane, stride, state migration | [05-runtime.md](./topics/05-runtime.md) |
 | RenderFrameIR, DrawPathInstancesOp, batching | [06-renderer.md](./topics/06-renderer.md) |
 | PathGeometryTemplate, PathInstanceSet, PathStyle | [06-renderer.md](./topics/06-renderer.md) |
@@ -221,11 +221,11 @@ Looking for something specific? Here's where to find it:
 | Coordinate-space enforcement, naming conventions | [16-coordinate-spaces.md](./topics/16-coordinate-spaces.md) |
 | Layout kernels, circleLayout, lineLayout, gridLayout | [17-layout-system.md](./topics/17-layout-system.md) |
 | Intrinsics (index, normalizedIndex, randomId) | [17-layout-system.md](./topics/17-layout-system.md) |
-| Position fields, world-normalized layout | [17-layout-system.md](./topics/17-layout-system.md) |
-| Three-layer architecture, Opcode/Signal Kernel/Field Kernel | [05-runtime.md](./topics/05-runtime.md) |
+| Position channels, world-normalized layout | [17-layout-system.md](./topics/17-layout-system.md) |
+| Three-layer architecture, Global/Lane Phases | [05-runtime.md](./topics/05-runtime.md) |
 | Materializer, typed banks | [05-runtime.md](./topics/05-runtime.md) |
 | shape2d, handle type | [01-type-system.md](./topics/01-type-system.md) |
-| RenderInstances2D | [06-renderer.md](./topics/06-renderer.md) |
+| RenderSink | [06-renderer.md](./topics/06-renderer.md) |
 | Diagnostic, DiagnosticHub, TargetRef | [07-diagnostics-system.md](./topics/07-diagnostics-system.md) |
 | DiagnosticCode, Severity, Events | [07-diagnostics-system.md](./topics/07-diagnostics-system.md) |
 | DebugGraph, DebugSnapshot, DebugTap | [08-observation-system.md](./topics/08-observation-system.md) |
@@ -251,7 +251,7 @@ Looking for something specific? Here's where to find it:
 | deriveKind, tryDeriveKind | [01-type-system.md](./topics/01-type-system.md) |
 | InferenceCanonicalType, InferencePayloadType | [01-type-system.md](./topics/01-type-system.md) |
 | ConstValue, CameraProjection enum | [01-type-system.md](./topics/01-type-system.md) |
-| Constructor contracts (canonicalSignal, canonicalField) | [01-type-system.md](./topics/01-type-system.md) |
+| Constructor contracts (canonicalOne, canonicalMany) | [01-type-system.md](./topics/01-type-system.md) |
 | tryGetManyInstance, requireManyInstance | [01-type-system.md](./topics/01-type-system.md) |
 | BindingValue (NOT a lattice) | [01-type-system.md](./topics/01-type-system.md) |
 | CardinalityValue.zero (compile-time-only) | [01-type-system.md](./topics/01-type-system.md) |
@@ -265,7 +265,7 @@ Looking for something specific? Here's where to find it:
 | External input channels (mouse, keyboard, MIDI, OSC, audio) | [22-external-input-system.md](./topics/22-external-input-system.md) |
 | All term definitions | [GLOSSARY.md](./GLOSSARY.md) |
 | Color UnitType, HSL/RGBA01, color blocks | [23-color-system.md](./topics/23-color-system.md) |
-| SlotMetaEntry, stride allocation, sampleability | [24-multi-component-signals.md](./topics/24-multi-component-signals.md) |
+| SlotMetaEntry, stride allocation, sampleability | [24-multi-component-values.md](./topics/24-multi-component-values.md) |
 | LowerSandbox, pure lowering, macro lowering | [25-pure-lowering.md](./topics/25-pure-lowering.md) |
 | Lens, port decorators, lens categories | [26-lens-system.md](./topics/26-lens-system.md) |
 | Obligation-Driven Normalization, fixpoint loop | [27-obligation-normalization.md](./topics/27-obligation-normalization.md) |

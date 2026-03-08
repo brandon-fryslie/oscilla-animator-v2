@@ -6,27 +6,27 @@ order: 4
 
 # Compilation Pipeline
 
-> How patches become executable programs.
+> How patches become validated Naga IR and WebGPU-native execution artifacts.
 
 **Related Topics**: [01-type-system](./01-type-system.md), [02-block-system](./02-block-system.md), [05-runtime](./05-runtime.md)
-**Key Terms**: [NormalizedGraph](../GLOSSARY.md#normalizedgraph), [CompiledProgramIR](../GLOSSARY.md#compiledprogramir)
+**Key Terms**: [NormalizedGraph](../GLOSSARY.md#normalizedgraph), [CompiledProgramIR](../GLOSSARY.md#compiledprogramir), [Scoped Naga IR](../GLOSSARY.md#scoped-naga-ir)
 **Relevant Invariants**: [I6](../INVARIANTS.md#i6-compiler-never-mutates-the-graph), [I7](../INVARIANTS.md#i7-explicit-cycle-semantics), [I8](../INVARIANTS.md#i8-slot-addressed-execution), [I9](../INVARIANTS.md#i9-schedule-is-data)
 
 ---
 
 ## Overview
 
-The compilation pipeline transforms user patches into efficient runtime code:
+The compilation pipeline transforms user patches into efficient, validated GPU code:
 
 ```
-RawGraph → GraphNormalization → NormalizedGraph → Compilation → CompiledProgramIR
+RawGraph → GraphNormalization → NormalizedGraph → Naga Lowering → Shader Artifacts
 ```
 
 Key principles:
 - **Compiler never mutates the graph** (Invariant I6)
-- **All structure is explicit** after normalization
-- **Runtime erasure** - No type info at runtime
-- **Schedule is data** (Invariant I9)
+- **Scoped Naga IR** - Lowering to structured IR with recursive blocks and lexical scopes
+- **Async Compiler Service** - Asynchronous validation and pipeline linking
+- **Runtime erasure** - No type info at runtime; CPU is a scheduler, GPU is the computer
 
 ---
 
@@ -37,46 +37,34 @@ Key principles:
 The user-authored patch before any processing:
 - User blocks and wires
 - May have unconnected inputs
-- May have implicit buses
 - Types may be partial (AxisTag.default)
 
-### Stage 2: GraphNormalization
+### Stage 2: GraphNormalization (Fixpoint)
 
 Makes all structure explicit through a **fixpoint loop**:
 - Iteratively inserts default sources based on type information
 - Solves types after each insertion
-- Checks if new defaults are needed
 - Repeats until the graph is stable (no new insertions)
-
-**Key components:**
-- `DefaultSourcePolicy` drives default source insertion with type-aware resolution
-- `buildDraftGraph()` returns `{ graph, diagnostics }` (not just graph)
-- Every default-source is still an actual `BlockInstance + Edge` — but insertion happens iteratively with type solving, not as a single pre-solve pass
 
 **Output**: NormalizedGraph
 
-#### Fixpoint Loop Details
+### Stage 3: Naga Lowering (TS → Scoped IR)
 
-The normalization process is not a single pass, but a fixpoint iteration:
+Transforms NormalizedGraph into a strictly-typed **Scoped Naga IR**:
+- **Recursive Scoped Walk**: Traverses execution edges and emits nested block bodies (`loop`, `if`).
+- **Address Resolution**: Queries the `GpuLayout` map to resolve slot IDs into concrete Arena offsets.
+- **Constrained Builder**: Emits Naga expressions through a typed builder API (no WGSL string concatenation).
 
-1. **Build Draft Graph**: Insert default sources based on current type knowledge
-2. **Solve Types**: Propagate and unify types across the graph
-3. **Check Convergence**: Determine if new default sources are needed based on newly resolved types
-4. **Repeat**: If new insertions occurred, loop back to step 1
-5. **Terminate**: When no new insertions are needed, graph is stable
+**Output**: NagaModule (Structured IR)
 
-This allows default source selection to depend on resolved types (e.g., choosing different defaults for `float` vs `vec2`), while still maintaining determinism and purity.
+### Stage 4: Validation & Linking (Async)
 
-### Stage 3: Compilation
+The `AsyncCompilerService` manages the asynchronous build lifecycle:
+- **Naga Validation (WASM)**: Validates the IR module for type-safety and memory invariants.
+- **Pipeline Linking**: Uses `createComputePipelineAsync` to link the validated IR into executable hardware pipelines.
+- **Hot-Swap Arming**: Prepares the atomic swap for the next frame boundary.
 
-Transforms NormalizedGraph to executable IR:
-- Type unification and resolution
-- Cycle detection and validation
-- Scheduling
-- Slot allocation
-- IR generation
-
-**Output**: CompiledProgramIR
+**Output**: Shader Artifacts (Pipelines + GpuLayout + Draw-Prep Metadata)
 
 ---
 
@@ -317,288 +305,101 @@ Existing blocks' `lower()` functions can be invoked through a LowerSandbox to pr
 
 ---
 
-## Scheduling
+## Scoped Naga IR & Control Flow
 
-### Schedule is Data (Invariant I9)
+The compiler targets a hierarchical instruction model that supports recursive blocks and explicit lexical scopes.
 
-The execution schedule is an explicit, inspectable data structure:
+### Recursive Block Lowering
 
-```typescript
-interface Schedule {
-  steps: Step[];
-  stateSlots: StateSlotDecl[];
-  fieldSlots: FieldSlotDecl[];
-  scalarSlots: ScalarSlotDecl[];
-}
-```
+Graph lowering traverses the NormalizedGraph and emits nested `Statement::Block` bodies:
+- **Loops**: Represented as recursive Naga blocks with internal lexical scopes.
+- **Branches**: `if/else` logic represented as accept/reject Naga blocks.
+- **Lexical Environment**: The `ScopeEnvironment` ensures expression handles produced in a child block are inaccessible after block exit.
 
-### Step Types
+### Dynamic Memory & Safety
 
-```typescript
-type Step =
-  | { kind: 'eval_scalar'; nodeId: NodeId; output: ScalarSlot }
-  | { kind: 'eval_field'; nodeId: NodeId; domain: DomainId; output: FieldSlot }
-  | { kind: 'eval_event'; nodeId: NodeId; output: EventSlot }
-  | { kind: 'state_read'; stateId: StateId; output: SlotRef }
-  | { kind: 'state_write'; input: SlotRef; stateId: StateId }
-  | { kind: 'combine'; inputs: SlotRef[]; mode: CombineMode; output: SlotRef }
-  | { kind: 'render'; sinkId: string; input: SlotRef };
-```
-
-> **Implementation Note**: Type and field naming conventions (e.g., snake_case vs camelCase) are not prescribed by this spec—implementations should follow standard conventions for their language and project.
-
-### Scheduling Order
-
-1. Read external inputs
-2. Update time (tMs, phases)
-3. Evaluate in topological order (respecting state reads/writes)
-4. Process events
-5. Write to render sinks
+The compiler enforces hardware safety during IR emission:
+- **Mandatory Clamping**: All dynamic buffer reads (`arena_in`) are injected with `min(index, arrayLength - 1)` guards to prevent GPU page faults.
+- **Pointer Model**: Lowering uses explicit `Access` and `Load/Store` primitives to interact with the Arena.
 
 ---
 
-## Slot Allocation
+## Arena Layout & GpuLayout
+
+The compiler owns the memory map of the instrument, resolving abstract ports into physical offsets.
 
 ### Slot-Addressed Execution (Invariant I8)
 
-Names are for UI; runtime uses indices:
+Names are for UI; runtime uses hardcoded byte offsets resolved by `GpuLayout`.
 
-```typescript
-type ScalarSlot = { kind: 'scalar_slot'; id: number };
-type FieldSlot  = { kind: 'field_slot'; id: number; domain: DomainId };
-type EventSlot  = { kind: 'event_slot'; id: number };
-type StateSlot  = { kind: 'state_slot'; id: number };
-```
+| Cardinality | Storage Type | Allocation Strategy |
+|-------------|--------------|----------------------|
+| `zero` | Constant | Inlined into Naga module |
+| `one` | Scalar | Fixed offset in Scalar Zone |
+| `many(instance)` | Array | Stride-aware range in Lane Zone (SoA) |
 
-> **Implementation Note**: Implementations may use a unified slot type (e.g., `ValueSlot`) with runtime metadata instead of distinct typed slots, provided slot semantics are preserved through type information stored elsewhere (such as `SlotMetaEntry`).
+### SoA Layout Rules
 
-### Slot Allocation by Cardinality
-
-| Cardinality | Slot Type |
-|-------------|-----------|
-| `zero` | Inlined constant (no slot) |
-| `one` | ScalarSlot |
-| `many(instance)` | FieldSlot |
-
-### Slot Stride by PayloadType
-
-Slot allocation accounts for the **stride** (number of float components) of the resolved payload:
-
-| PayloadType | Stride (floats) |
-|-------------|-----------------|
-| `float`, `int`, `phase`, `bool`, `unit` | 1 |
-| `vec2` | 2 |
-| `vec3` | 3 |
-| `color` | 4 (RGBA) |
-
-For FieldSlots, buffer size = `laneCount × stride`. The compiler must know stride and allocate buffers accordingly — runtime must not infer stride from payload names.
-
-### Stride-Aware Slot Allocation
-
-Slot allocation reserves `payloadStride(payload)` consecutive positions for multi-component values:
-- `SlotMetaEntry`: compiler-emitted metadata per slot (slot ID, base offset, stride, payload)
-- Compiler invariant: `stride === payloadStride(payload)` — stride is derived, never stored independently
-- Stride 0 (shape2d/shape3d) values are non-sampleable and use separate typed banks
-
-### State Slot Allocation
-
-For stateful blocks, state is allocated using stable `StateId` and range-based mappings:
-
-- `cardinality = one` → `StateMappingScalar { stateId, slotIndex, stride, initial }`
-- `cardinality = many(instance)` → `StateMappingField { stateId, instanceId, slotStart, laneCount, stride, initial }`
-
-State stride may exceed payload stride when a primitive stores multiple values per lane (e.g., a filter storing both y and dy has state stride 2 even for float payload).
-
-See [05-runtime](./05-runtime.md) for migration semantics.
-
----
-
-## Expression Forms (Implementation Note)
-
-Before lowering to final Ops, the compiler may use intermediate expression forms that distinguish signal-path and field-path computations:
-
-- **Signal path**: Map, Zip, StateRead over scalar values
-- **Field path**: Map, Zip, ZipSig (field + signal operands), Broadcast (signal → field)
-
-When a cardinality-generic block mixes Signal and Field inputs, the compiler represents broadcast explicitly in the IR (never implicit at runtime). The choice between "zip-with-signal" and "explicit broadcast then zip" is an implementation decision — both are valid as long as behavior is deterministic.
+The `GpuLayout` resolves abstract Slot IDs into concrete offsets:
+- **Stride**: `payloadStride(payload)` is the only source of truth.
+- **Coalescing**: Components are stored in channel-separated contiguous arrays (SoA).
+- **Alignment**: Every channel block is padded to 256-byte alignment.
 
 ---
 
 ## CompiledProgramIR
 
-The output of compilation - what the runtime executes.
+The output of compilation - what the engine executes.
 
-### Storage Model (MVP)
-
-```typescript
-type ScalarSlot = { kind: 'scalar_slot'; id: number };
-type FieldSlot  = { kind: 'field_slot'; id: number; domain: DomainId };
-type EventSlot  = { kind: 'event_slot'; id: number };
-type StateSlot  = { kind: 'state_slot'; id: number };
-```
-
-**No binding/perspective/branch at runtime.** These are erased.
-
-### Lowered Operations
+### Storage & Pipelines
 
 ```typescript
-type Op =
-  // Scalar operations
-  | { kind: 'scalar_unary'; op: UnaryOp; in: ScalarSlot; out: ScalarSlot }
-  | { kind: 'scalar_binary'; op: BinaryOp; a: ScalarSlot; b: ScalarSlot; out: ScalarSlot }
+interface CompiledProgramIR {
+  // Hard-linked GPU pipelines
+  pipelines: {
+    compute: GPUComputePipeline;
+    drawPrep: GPUComputePipeline;
+    render: GPURenderPipeline;
+  };
 
-  // Field operations
-  | { kind: 'field_unary'; op: UnaryOp; in: FieldSlot; out: FieldSlot }
-  | { kind: 'field_binary'; op: BinaryOp; a: FieldSlot; b: FieldSlot; out: FieldSlot }
+  // Memory Map
+  gpuLayout: GpuLayout;
+  arenaTotalFloats: number;
 
-  // Cardinality conversion
-  | { kind: 'broadcast_scalar_to_field'; scalar: ScalarSlot; out: FieldSlot }
-  | { kind: 'reduce_field_to_scalar'; op: ReduceOp; field: FieldSlot; out: ScalarSlot }
-
-  // State operations
-  | { kind: 'state_read'; state: StateSlot; out: ScalarSlot | FieldSlot }
-  | { kind: 'state_write'; in: ScalarSlot | FieldSlot; state: StateSlot }
-
-  // Event operations
-  | { kind: 'event_read'; events: EventSlot; out: ScalarSlot | FieldSlot }
-  | { kind: 'event_write'; in: ScalarSlot | FieldSlot; events: EventSlot }
-
-  // Render
-  | { kind: 'render_sink_write'; sinkId: string; in: ScalarSlot | FieldSlot };
-
-type UnaryOp = 'sin' | 'cos' | 'abs' | 'clamp' | 'negate';
-type BinaryOp = 'add' | 'sub' | 'mul' | 'div' | 'min' | 'max';
-type ReduceOp = 'min' | 'max' | 'sum' | 'avg';
-```
-
-### Loop Lowering
-
-Field operations are emitted inside domain loops:
-
-```typescript
-// For FixedCount/Voices: single contiguous loop
-for (let i = 0; i < domain.count; i++) {
-  fieldSlot[i] = op(inputSlot[i]);
-}
-
-// For Grid2D: contiguous with optional helpers
-for (let i = 0; i < domain.width * domain.height; i++) {
-  const x = i % domain.width;
-  const y = Math.floor(i / domain.width);
-  fieldSlot[i] = op(inputSlot[i], x, y);
+  // Sink Metadata (for Draw Prep)
+  drawPrepProgram: {
+    sinks: DrawPrepSinkRecord[];
+  };
 }
 ```
 
-Loop bounds are compile-time constants.
+### Parallel Lowering
+
+Operations over many lanes are lowered into highly optimized compute kernels:
+- **Lane Calculation**: Each thread computes its `lane_idx` (0..N-1) from `GlobalInvocationID`.
+- **Parallel Dispatch**: The GPU executes thousands of lanes in parallel via workgroups.
 
 ---
 
-## Runtime Erasure (MVP)
+## Error Handling & Source Mapping
 
-Hard constraints for 5-10ms performance budget:
+Since Naga is a "Black Box," the compiler maintains a **SourceMap** to translate Rust-style errors back to the user graph.
 
-1. **No axis tags** in runtime values
-2. **No referent ids** in runtime values
-3. **No domain objects** at runtime (only loop bounds + layout constants)
-4. **Perspective/Branch** are v0 defaults only
+### The Rosetta Stone
 
-Runtime sees only:
-- Scalar values
-- Dense arrays
-- Event buffers
-- Compiled schedules
+During lowering, we record every generated Naga expression or statement index:
+- `SourceMap.recordExpr(nagaExprId, blockId)`
+- `SourceMap.recordStmt(nagaStmtIndex, blockId)`
 
----
+### Propagation
 
-## Structural Sharing
-
-### Hash-Consing (Invariant I13)
-
-Identical FieldExpr/SignalExpr subtrees share an ExprId:
-
-```typescript
-// Instead of creating duplicate expressions:
-const expr1 = Add(a, b);  // ExprId: 1
-const expr2 = Add(a, b);  // ExprId: 1 (same!)
-
-// Hash-consing ensures:
-assert(expr1.id === expr2.id);
-```
-
-Benefits:
-- Cache hit rate increases as patches reuse structures
-- Recompile doesn't explode expr count for unchanged semantics
-
----
-
-## Cache Keys (Invariant I14)
-
-Every cache depends on explicit keys:
-
-```typescript
-interface CacheKey {
-  time: number;                    // tMs if time-varying
-  domain?: DomainId;              // For field caches
-  upstreamSlots: SlotRef[];       // Inputs
-  params: Record<string, unknown>; // Block parameters
-  stateVersion: number;           // If depends on state
-}
-```
-
-Properties:
-- Expresses "stable across frames" vs "changes each frame"
-- Supports cross-hot-swap reuse when StepIds persist
-
----
-
-## Error Handling
-
-### Type Errors
-
-```typescript
-type TypeError =
-  | { kind: 'axis_mismatch'; axis: string; expected: unknown; got: unknown; location: PortRef }
-  | { kind: 'domain_mismatch'; domainA: DomainId; domainB: DomainId; location: EdgeRef }
-  | { kind: 'invalid_phase_op'; operation: string; location: NodeRef }
-  | { kind: 'unresolved_type'; location: PortRef };
-```
-
-### Graph Errors
-
-```typescript
-type GraphError =
-  | { kind: 'invalid_cycle'; cycle: NodeId[]; suggestion: string }
-  | { kind: 'missing_input'; port: PortRef }
-  | { kind: 'invalid_edge'; from: PortRef; to: PortRef; reason: string };
-```
-
-### Error Attribution
-
-Every error includes location info for UI display:
-- Which node/port/edge is involved
-- Suggested fix if applicable
-
----
-
-## Payload Specialization
-
-Payload-generic blocks (see [02-block-system](./02-block-system.md#payload-generic-blocks)) are fully specialized at compile time:
-
-- Every block instance compiles to **concrete IR ops** with no runtime polymorphism
-- Payload type resolved during type unification
-- Lowering selected by resolved `(cardinality, payload)` pair
-- One `Add` block definition works for `Signal<float>`, `Field<float>`, `Signal<vec2>`, `Field<vec3>`, etc.
-- Compiler emits payload-aware opcodes (e.g., `Add_f32`, `Add_vec2`, `Add_vec3`) or a single opcode with known stride
-- Disallowed payload combinations produce compile-time errors (PAYLOAD_NOT_ALLOWED, PAYLOAD_COMBINATION_NOT_ALLOWED)
-
-No boxing, no per-lane type checks, no runtime dispatch on payload.
+When validation fails, the `CompilerService` parses the Naga error report, looks up the index in the `SourceMap`, and highlights the offending block in the UI.
 
 ---
 
 ## See Also
 
 - [01-type-system](./01-type-system.md) - Type definitions
-- [02-block-system](./02-block-system.md) - Block structure
-- [05-runtime](./05-runtime.md) - How IR executes
-- [Glossary: NormalizedGraph](../GLOSSARY.md#normalizedgraph)
-- [Invariant: I6](../INVARIANTS.md#i6-compiler-never-mutates-the-graph)
+- [05-runtime](./05-runtime.md) - How artifacts execute
+- [06-renderer](./06-renderer.md) - Render sinks
+- [Invariant: I8](../INVARIANTS.md#i8-slot-addressed-execution)

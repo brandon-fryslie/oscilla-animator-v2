@@ -6,7 +6,7 @@
 
 ## Overview
 
-Camera projection is a **Matrix Generation Kernel** executed entirely on the GPU as a specialized 1-thread compute pass. Because camera parameters are fully modulatable signals driven by the node graph, the CPU has no per-frame knowledge of the camera state. The projection kernel condenses the evaluated spatial signals into a single 4x4 View-Projection Matrix ($VP$).
+Camera projection is a **Matrix Generation Kernel** executed entirely on the GPU as a specialized 1-thread compute pass. Because camera parameters are fully modulatable values driven by the node graph, the CPU has no per-frame knowledge of the camera state. The projection kernel condenses the evaluated spatial data into a single 4x4 View-Projection Matrix ($VP$).
 
 This matrix is stored in a dedicated GPU buffer where the hardware pipeline consumes it to transform World space coordinates into Clip space (Normalized Device Coordinates).
 
@@ -16,7 +16,7 @@ The Camera & Projection system provides:
 * An optional Camera block for modulating projection parameters via the graph.
 * Hardware-native frustum culling and depth buffering contracts.
 
-**Architectural position**: Matrix generation is a GPU compute responsibility, executed strictly after the main Simulation pass (so signals are fully evaluated) but before Draw-Prep (so instances can be culled).
+**Architectural position**: Matrix generation is a GPU compute responsibility, executed strictly after the main Simulation pass (so values are fully evaluated) but before Draw-Prep (so instances can be culled).
 
 ---
 
@@ -26,8 +26,8 @@ The compilation phase emits a dedicated `@workgroup_size(1)` compute kernel to r
 
 ### Execution Order
 
-1. **Simulation Passes:** Evaluates all graph logic, writing the final `Signal<float>` values for camera Pan, Zoom, Tilt, etc., into the global GPU State Buffer.
-2. **Matrix Generation Pass (1 Thread):** Reads the assigned slots from the State Buffer, reads the physical aspect ratio from the global uniforms, and executes the math to build the $VP$ matrix. It writes this matrix to a dedicated `CameraState` storage buffer.
+1. **Simulation Passes:** Evaluates all graph logic, writing the final `one:float` values for camera Pan, Zoom, Tilt, etc., into the global GPU State Buffer.
+2. **Matrix Generation Pass (1 Thread):** Reads the assigned offsets from the State Buffer, reads the physical aspect ratio from the global uniforms, and executes the math to build the $VP$ matrix. It writes this matrix to a dedicated `CameraState` storage buffer.
 3. **Draw-Prep Pass:** Reads the $VP$ matrix to perform Frustum Culling, dropping instances that fall outside the view frustum.
 4. **Vertex Shader:** Reads the $VP$ matrix to project local geometric coordinates to Clip space.
 
@@ -65,22 +65,22 @@ The **Camera block** is a render-side declaration block. It defines the modulati
 * Not a compute node.
 * Not a source block.
 
-**Port Set** (all optional inputs, type `Signal<T>`):
+**Port Set** (all optional inputs, type `one:T`):
 
 | Port | Type | Default (if not connected) |
 | --- | --- | --- |
-| `center` | `Signal<vec2>` | `(0.5, 0.5)` |
-| `distance` | `Signal<float>` | `2.0` |
-| `tilt` | `Signal<float>` | `35.0` (degrees) |
-| `yaw` | `Signal<float>` | `0.0` (degrees) |
-| `fovY` | `Signal<float>` | `45.0` (degrees) |
-| `near` | `Signal<float>` | `0.01` |
-| `far` | `Signal<float>` | `100.0` |
-| `projection` | `Signal<int>` | `0` (0=ortho, 1=perspective) |
+| `center` | `one:vec2` | `(0.5, 0.5)` |
+| `distance` | `one:float` | `2.0` |
+| `tilt` | `one:float` | `35.0` (degrees) |
+| `yaw` | `one:float` | `0.0` (degrees) |
+| `fovY` | `one:float` | `45.0` (degrees) |
+| `near` | `one:float` | `0.01` |
+| `far` | `one:float` | `100.0` |
+| `projection` | `one:int` | `0` (0=ortho, 1=perspective) |
 
 **Notes:**
 
-* All inputs are modulatable (they accept time-varying signals evaluated during the Simulation pass).
+* All inputs are modulatable (they accept time-varying values evaluated during the Simulation pass).
 * `projection` discriminates the matrix kernel branching logic: `0` = ortho, `1` = perspective.
 
 ---
@@ -90,7 +90,7 @@ The **Camera block** is a render-side declaration block. It defines the modulati
 The compiler determines the structure of the 1-Thread Matrix Generation pass based on the presence of the Camera block. There is no runtime CPU evaluation.
 
 1. **Camera Block Present:**
-* The compiler hardcodes the physical State Buffer slot indices of the evaluated signal ports into the matrix generation WGSL.
+* The compiler hardcodes the physical State Buffer offsets of the evaluated ports into the matrix generation WGSL.
 * The GPU reads these dynamically computed values at frame-time to construct the matrix.
 * Unconnected ports compile to their static default values.
 
@@ -146,12 +146,12 @@ CPU-side stable sorting permutations are deprecated. Depth ordering is natively 
 
 ```typescript
 interface StepRender {
-  positionXYSlot: ValueSlot;           // Field<vec2>, mandatory, cardinality=many(instanceId)
-  positionZSlot: ValueSlot | null;     // Field<float>, optional, cardinality=many(instanceId)
+  positionXYSlot: ValueSlot;           // cardinality=many(instanceId)
+  positionZSlot: ValueSlot | null;     // optional, cardinality=many(instanceId)
   shapeSlot: ScalarSlotRef;            // shape2d handle, cardinality=one
-  colorSlot: ValueSlot;                // Field<vec4> or Signal<vec4>
-  scaleSlot: ValueSlot;                // Field<float> or Signal<float>, Isotropic uniform scale
-  rotationSlot: ValueSlot | null;      // Field<float> or Signal<float>, optional
+  colorSlot: ValueSlot;                // cardinality=one or many
+  scaleSlot: ValueSlot;                // Isotropic uniform scale
+  rotationSlot: ValueSlot | null;      // optional
   // ... additional render properties
 }
 

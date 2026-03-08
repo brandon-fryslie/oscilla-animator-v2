@@ -254,7 +254,7 @@ Within each category, evaluate in stable order:
 **Condition**:
 - `bus.range < threshold` AND
 - `bus.deltaMean < threshold` AND
-- History window > 1 second (meaningful signal)
+- History window > 1 second (meaningful value)
 
 **Severity**: `info`
 
@@ -338,10 +338,10 @@ Indicates high-frequency noise or jitter, not useful motion.
 
 ---
 
-### Rule H: Field Materialization Heavy
+### Rule H: Lane Materialization Heavy
 
 **Condition**:
-- `snapshot.perf.fieldMaterializations > threshold` in last sample OR
+- `snapshot.perf.laneMaterializations > threshold` in last sample OR
 - `topMaterializers[0].count > threshold`
 
 **Severity**: `info` (performance, not correctness)
@@ -349,10 +349,10 @@ Indicates high-frequency noise or jitter, not useful motion.
 **Target**: Top materializer block
 
 **Evidence**:
-- "RenderInstances2D materialized 8000 elements this frame"
+- "RenderSink materialized 8000 lanes this frame"
 - Show top 3 materializers
 
-**Message**: "Large domain materialization: 8000 elements in RenderInstances2D"
+**Message**: "Large lane materialization: 8000 lanes in RenderSink"
 
 **Fixes**:
 ```typescript
