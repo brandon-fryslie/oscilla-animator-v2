@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { rgLines } from '../testing/rg-search';
 
+const ACTIVE_RENDERER_FILE = 'src/render/webgpu/RustWasmWebGPURenderer.ts';
+
 describe('forbidden patterns (v3 hard rules)', () => {
   it('forbids legacy shape2d record writes in frame executors', () => {
     const matches = rgLines('writeShape2D\\s*\\(', [
@@ -51,7 +53,9 @@ describe('forbidden patterns (v3 hard rules)', () => {
   });
 
   it('forbids GPU full-buffer copy commands in the WebGPU hot path', () => {
-    const matches = rgLines('copyBufferToBuffer\\s*\\(', ['src/render/webgpu/WebGPURenderer.ts']);
+    // [LAW:single-enforcer] Guardrails enforce the active renderer boundary,
+    // not dormant implementation files.
+    const matches = rgLines('copyBufferToBuffer\\s*\\(', [ACTIVE_RENDERER_FILE]);
 
     // [LAW:dataflow-not-control-flow] Frame execution keeps one deterministic
     // compute->draw flow without whole-buffer copy detours.
@@ -72,14 +76,14 @@ describe('forbidden patterns (v3 hard rules)', () => {
   it('forbids shape-bank mutation helpers in renderer/assembler hot paths', () => {
     const matches = rgLines('writeShapeBank(Header|HandleMetadata)\\s*\\(', [
       'src/runtime/RenderAssembler.ts',
-      'src/render/webgpu/WebGPURenderer.ts',
+      ACTIVE_RENDERER_FILE,
     ]);
     expect(matches).toEqual([]);
   });
 
   it('forbids CPU-side direct indirect-args writes in WebGPU renderer', () => {
     const matches = rgLines('writeBuffer\\s*\\(\\s*this\\.indirectArgsBuffer', [
-      'src/render/webgpu/WebGPURenderer.ts',
+      ACTIVE_RENDERER_FILE,
     ]);
     expect(matches).toEqual([]);
   });

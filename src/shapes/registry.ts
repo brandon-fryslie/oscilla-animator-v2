@@ -279,8 +279,7 @@ export function getTopologyIdByName(name: string): TopologyId | undefined {
 }
 
 function toSerializableTopology(topology: TopologyDef): SerializableTopologyDef {
-  const { render: _render, ...serializable } = topology as TopologyDef & { render?: TopologyDef['render'] };
-  return serializable as SerializableTopologyDef;
+  return topology as SerializableTopologyDef;
 }
 
 function topologyShapeSignature(topology: Omit<SerializableTopologyDef, 'id'> | SerializableTopologyDef): string {

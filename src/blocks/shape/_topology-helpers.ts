@@ -48,9 +48,5 @@ export function createLinePathTopology(pointCount: number, closed: boolean): Pat
     verbs,
     pointsPerVerb,
     totalControlPoints: pointCount,
-    render: (_ctx: CanvasRenderingContext2D, _params: Record<string, number>) => {
-      // Rendering handled by the unified path renderer in Canvas2DRenderer
-      throw new Error('PathTopologyDef render() should not be called directly - use Canvas2DRenderer');
-    },
   };
 }
