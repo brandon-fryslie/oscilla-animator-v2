@@ -143,7 +143,10 @@ function renderBadge(trend) {
 }
 
 function renderMetricContext(rows, metricAttribution) {
-  const relevantRows = rows.filter((row) => row.classification === 'regressed' || row.classification === 'improved');
+  const relevantRows = rows.filter((row) => {
+    const status = rowStatus(row);
+    return status.kind === 'regression' || status.kind === 'improvement';
+  });
   if (relevantRows.length === 0) return 'No changed metrics.';
   return relevantRows.map((row) => {
     const status = rowStatus(row);

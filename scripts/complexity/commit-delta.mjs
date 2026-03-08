@@ -889,7 +889,10 @@ async function buildMetricAttribution(delta, baseLoaded, headLoaded) {
   };
 
   const attribution = {};
-  const rowsToAttribute = delta.rows.filter((row) => row.classification === 'regressed' || row.classification === 'improved');
+  const rowsToAttribute = delta.rows.filter((row) => {
+    const status = rowStatus(row);
+    return status.kind === 'regression' || status.kind === 'improvement';
+  });
   for (const row of rowsToAttribute) {
     const metricAttribution = collectMetricAttribution(row, context);
     const files = metricAttribution.files.slice(0, 5);
