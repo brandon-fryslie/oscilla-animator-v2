@@ -25,7 +25,26 @@ describe('actionExecutor', () => {
         removeBlock: vi.fn(),
         removeEdge: vi.fn(),
         patch: {
-          blocks: new Map([['block-123', { id: 'block-123', type: 'Gain' }]]),
+          blocks: new Map([
+            [
+              'block-123',
+              {
+                id: 'block-123',
+                type: 'Gain',
+                inputPorts: new Map([['in', { id: 'in', combineMode: 'last' }]]),
+                outputPorts: new Map([['out', { id: 'out' }]]),
+              },
+            ],
+            [
+              'block-tr',
+              {
+                id: 'block-tr',
+                type: 'InfiniteTimeRoot',
+                inputPorts: new Map(),
+                outputPorts: new Map([['t', { id: 't' }]]),
+              },
+            ],
+          ]),
           edges: [
             {
               id: 'edge-1',
