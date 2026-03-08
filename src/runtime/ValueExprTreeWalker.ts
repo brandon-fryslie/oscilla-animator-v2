@@ -9,6 +9,11 @@
 import type { ValueExpr } from '../compiler/ir/value-expr';
 import type { ValueExprId } from '../compiler/ir/Indices';
 
+function describeUnknownExprKind(value: never): string {
+  const candidate = value as unknown as { kind?: string; kernelKind?: string; eventKind?: string };
+  return candidate.kernelKind ?? candidate.eventKind ?? candidate.kind ?? 'unknown';
+}
+
 /**
  * Return the child ValueExprIds referenced by a ValueExpr node.
  *
@@ -66,7 +71,7 @@ export function getValueExprChildren(expr: ValueExpr): readonly ValueExprId[] {
           return [expr.controlPoints, expr.tField];
         default: {
           const _exhaustive: never = expr;
-          throw new Error(`Unknown kernel kind: ${(_exhaustive as any).kernelKind}`);
+          throw new Error(`Unknown kernel kind: ${describeUnknownExprKind(_exhaustive)}`);
         }
       }
     }
@@ -84,14 +89,14 @@ export function getValueExprChildren(expr: ValueExpr): readonly ValueExprId[] {
           return [];
         default: {
           const _exhaustive: never = expr;
-          throw new Error(`Unknown event kind: ${(_exhaustive as any).eventKind}`);
+          throw new Error(`Unknown event kind: ${describeUnknownExprKind(_exhaustive)}`);
         }
       }
     }
 
     default: {
       const _exhaustive: never = expr;
-      throw new Error(`Unknown ValueExpr kind: ${(_exhaustive as any).kind}`);
+      throw new Error(`Unknown ValueExpr kind: ${describeUnknownExprKind(_exhaustive)}`);
     }
   }
 }

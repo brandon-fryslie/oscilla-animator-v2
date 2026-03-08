@@ -402,7 +402,7 @@ export function executeFrame(
         enterRuntimeFrameSegment(state, 'phase1-event-dispatch');
         eventDispatchSeen = true;
         // ValueExpr-only event evaluation (cutover complete)
-        const fired = evaluateValueExprEvent(step.expr as any, program.valueExprs, state, program, pureFnContext);
+        const fired = evaluateValueExprEvent(step.expr, program.valueExprs, state, program, pureFnContext);
 
         // Monotone OR: only write 1, never write 0 back — ensures any-fired-stays-fired
         if (fired) {
@@ -639,7 +639,7 @@ export function executeFrame(
 
       // [LAW:one-source-of-truth] State mapping stride is the canonical write width.
       const oneValue = materializeValueExpr(
-        step.value as any,
+        step.value,
         program.valueExprs,
         SCALAR_INSTANCE_ID,
         1,
@@ -662,7 +662,7 @@ export function executeFrame(
         throw new Error('fieldStateWrite: missing field state mapping for slot ' + step.stateSlot);
       }
 
-      const veId = step.value as any;
+      const veId = step.value;
       const exprNode = valueExprs[veId as number];
       const count = mapping.laneCount;
       if (count === 0) continue;

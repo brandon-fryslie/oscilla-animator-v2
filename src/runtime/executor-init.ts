@@ -7,6 +7,7 @@
 
 import type { StepRender } from '../compiler/ir/types';
 import { createMaterializeScratch } from './MaterializeScratch';
+import type { AssemblerContext } from './RenderAssembler';
 
 // Module-level scratch allocator for Materializer buffers.
 export const MATERIALIZE_SCRATCH = createMaterializeScratch();
@@ -20,12 +21,12 @@ export const singleArgBuf: number[] = [0];
 // Reusable AssemblerContext — populated in-place each frame to avoid per-frame object literal.
 // Fields are set before each use in executeFrame().
 export const assemblerCtx = {
-  program: null as any,
-  instances: null as any,
-  state: null as any,
-  resolvedCamera: null as any,
-  arena: null as any,
-  scalarExprToArenaAddress: null as any,
-  slotToArena: null as any,
-  pureFnContext: null as any,
+  program: null as unknown as AssemblerContext['program'],
+  instances: null as unknown as AssemblerContext['instances'],
+  state: null as unknown as AssemblerContext['state'],
+  resolvedCamera: null as unknown as AssemblerContext['resolvedCamera'],
+  arena: null as unknown as AssemblerContext['arena'],
+  scalarExprToArenaAddress: undefined as AssemblerContext['scalarExprToArenaAddress'],
+  slotToArena: undefined as AssemblerContext['slotToArena'],
+  pureFnContext: undefined as AssemblerContext['pureFnContext'],
 };

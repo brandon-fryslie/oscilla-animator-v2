@@ -284,7 +284,7 @@ export function* executeFrameStepped(
 
     switch (step.kind) {
       case 'eventDispatch': {
-        const fired = evaluateValueExprEvent(step.expr as any, program.valueExprs, state, program, pureFnContext);
+        const fired = evaluateValueExprEvent(step.expr, program.valueExprs, state, program, pureFnContext);
         if (fired) {
           state.eventScalars[step.target as number] = 1;
         }
@@ -435,11 +435,11 @@ export function* executeFrameStepped(
   for (let stepIdx = 0; stepIdx < steps.length; stepIdx++) {
     const step = steps[stepIdx];
 
-    if (step.kind === 'stateWrite') {
+      if (step.kind === 'stateWrite') {
       const mapping = stateSlotToMapping.get(step.stateSlot as number);
       const stride = mapping?.stride ?? 1;
-      const oneValue = materializeValueExpr(
-        step.value as any,
+        const oneValue = materializeValueExpr(
+          step.value,
         program.valueExprs,
         SCALAR_INSTANCE_ID,
         1,
@@ -468,13 +468,13 @@ export function* executeFrameStepped(
       yield buildSnapshot(stepIdx, step, 'phase2', totalSteps, program, state, tAbsMs, new Map(), prevValues, writtenStateSlots);
     }
 
-    if (step.kind === 'fieldStateWrite') {
+      if (step.kind === 'fieldStateWrite') {
       const mapping = stateSlotToMapping.get(step.stateSlot as number);
       if (!mapping || mapping.instanceId === undefined) {
         throw new Error(`fieldStateWrite: missing field state mapping for slot ${step.stateSlot}`);
       }
 
-      const veId = step.value as any;
+        const veId = step.value;
       const exprNode = valueExprs[veId as number];
       const count = mapping.laneCount;
 
