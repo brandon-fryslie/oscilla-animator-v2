@@ -10,6 +10,7 @@ import type { Patch } from './Patch';
 import { getBlockAddress, getOutputAddress, getInputAddress, getAllAddresses, getShorthandForOutput } from './addressing';
 import { resolveAddress, ResolvedAddress } from './address-resolution';
 import { normalizeCanonicalName } from '../core/canonical-name';
+import { portId as toPortId } from '../types';
 
 /**
  * Normalize the canonical name portion of an address string.
@@ -80,21 +81,24 @@ export class AddressRegistry {
 
       // Output ports
       for (const [portId, port] of block.outputPorts || []) {
-        const outAddr = getOutputAddress(block, portId as any);
+        void port;
+        const typedPortId = toPortId(String(portId));
+        const outAddr = getOutputAddress(block, typedPortId);
         const resolved = resolveAddress(patch, addressToString(outAddr));
         if (resolved) {
           const addrStr = addressToString(outAddr);
           byCanonical.set(addrStr, resolved);
 
           // Add shorthand
-          const shorthand = getShorthandForOutput(block, portId as any);
+          const shorthand = getShorthandForOutput(block, typedPortId);
           byShorthand.set(shorthand, outAddr);
         }
       }
 
       // Input ports
       for (const [portId, port] of block.inputPorts || []) {
-        const inAddr = getInputAddress(block, portId as any);
+        void port;
+        const inAddr = getInputAddress(block, toPortId(String(portId)));
         const resolved = resolveAddress(patch, addressToString(inAddr));
         if (resolved) {
           const addrStr = addressToString(inAddr);

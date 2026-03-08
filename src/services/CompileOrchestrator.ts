@@ -10,7 +10,7 @@
 import type { FrontendError } from '../compiler/frontend';
 import type { FrontendResult } from '../compiler/frontend';
 import type { CompileResult } from '../compiler/compile';
-import type { CompiledProgramIR } from '../compiler/ir/program';
+import type { CompiledProgramIR, ScheduleIR } from '../compiler/ir/program';
 import type { Diagnostic } from '../diagnostics/types';
 import { convertFrontendErrorsToDiagnostics } from '../compiler/frontend/frontendDiagnosticConversion';
 import { convertCompileErrorsToDiagnostics } from '../compiler/diagnosticConversion';
@@ -318,7 +318,7 @@ export async function compileAndSwap(
 
   const program = result.program;
   const collectContinuityTargetOwnerBindings = (
-    schedule: { steps?: readonly any[] } | undefined,
+    schedule: Pick<ScheduleIR, 'steps'> | undefined,
   ): ContinuityTargetOwnerBinding[] => {
     if (!schedule?.steps) {
       return [];
@@ -347,15 +347,10 @@ export async function compileAndSwap(
   }
 
   // Get schedule info
-  const newSchedule = program.schedule as {
-    stateSlotCount?: number;
-    stateMappings?: readonly any[];
-    instances?: ReadonlyMap<string, any>;
-    steps?: readonly any[];
-  };
+  const newSchedule = program.schedule;
   const newStateSlotCount = newSchedule?.stateSlotCount ?? 0;
   const newStateMappings = newSchedule?.stateMappings ?? [];
-  const newEventSlotCount = (newSchedule as { eventSlotCount?: number })?.eventSlotCount ?? 0;
+  const newEventSlotCount = newSchedule?.eventSlotCount ?? 0;
   const newValueExprCount = program.valueExprs?.nodes.length ?? 0;
 
   // For recompile: detect domain changes
@@ -364,11 +359,7 @@ export async function compileAndSwap(
   }
 
   // Get old state info for migration
-  const oldSchedule = state.currentProgram?.schedule as {
-    stateSlotCount?: number;
-    stateMappings?: readonly any[];
-    steps?: readonly any[];
-  } | undefined;
+  const oldSchedule = state.currentProgram?.schedule;
   const oldStateMappings = oldSchedule?.stateMappings ?? [];
   const oldPrimitiveState = state.currentState?.state;
   const knownTargetOwnerBindings = [

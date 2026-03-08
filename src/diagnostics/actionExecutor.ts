@@ -21,7 +21,8 @@ import type { PatchStore } from '../stores/PatchStore';
 import type { SelectionStore } from '../stores/SelectionStore';
 import type { DiagnosticsStore } from '../stores/DiagnosticsStore';
 import { requireAnyBlockDef } from '../blocks/registry';
-import type { Endpoint } from '../graph/Patch';
+import type { Block, Endpoint } from '../graph/Patch';
+import type { PortId } from '../types';
 
 /**
  * Dependencies required for action execution.
@@ -39,6 +40,31 @@ export interface ActionExecutorDeps {
 export interface ActionResult {
   success: boolean;
   error?: string;
+}
+
+function resolveBlockForAction(patchStore: PatchStore, rawBlockId: string): Block | null {
+  // [LAW:single-enforcer] ActionExecutor owns action-target resolution and is
+  // the only boundary where serialized diagnostic IDs are validated/resolved.
+  for (const block of patchStore.patch.blocks.values()) {
+    if (block.id === rawBlockId) {
+      return block;
+    }
+  }
+  return null;
+}
+
+function isKnownPortIdForBlock(block: Block, rawPortId: string): rawPortId is PortId {
+  // [LAW:single-enforcer] ActionExecutor validates serialized port IDs before
+  // they enter SelectionStore's PortId-typed API.
+  return block.inputPorts.has(rawPortId) || block.outputPorts.has(rawPortId);
+}
+
+function unsupportedActionKind(_action: never): ActionResult {
+  return { success: false, error: 'Unknown action kind' };
+}
+
+function unsupportedTargetKind(_target: never): ActionResult {
+  return { success: false, error: 'Unsupported target kind' };
 }
 
 /**
@@ -74,9 +100,7 @@ export function executeAction(
     case 'openDocs':
       return handleOpenDocs(action, deps);
     default:
-      // Exhaustiveness check - TypeScript will error if we missed a case
-      const _exhaustive: never = action;
-      return { success: false, error: 'Unknown action kind' };
+      return unsupportedActionKind(action);
   }
 }
 
@@ -92,23 +116,44 @@ function handleGoToTarget(
   action: GoToTargetAction,
   deps: ActionExecutorDeps
 ): ActionResult {
-  const { selectionStore } = deps;
+  const { patchStore, selectionStore } = deps;
   const { target } = action;
 
   try {
     switch (target.kind) {
-      case 'block':
-        selectionStore.selectBlock(target.blockId as any);
+      case 'block': {
+        const resolvedBlock = resolveBlockForAction(patchStore, target.blockId);
+        if (!resolvedBlock) {
+          return { success: false, error: `Block ${target.blockId} not found` };
+        }
+        selectionStore.selectBlock(resolvedBlock.id);
         return { success: true };
+      }
 
-      case 'port':
-        selectionStore.selectPort(target.blockId as any, target.portId as any);
+      case 'port': {
+        const resolvedBlock = resolveBlockForAction(patchStore, target.blockId);
+        if (!resolvedBlock) {
+          return { success: false, error: `Block ${target.blockId} not found` };
+        }
+        if (!isKnownPortIdForBlock(resolvedBlock, target.portId)) {
+          return {
+            success: false,
+            error: `Port ${target.portId} not found on block ${target.blockId}`,
+          };
+        }
+        selectionStore.selectPort(resolvedBlock.id, target.portId);
         return { success: true };
+      }
 
-      case 'timeRoot':
+      case 'timeRoot': {
         // TimeRoot is a specialized block reference
-        selectionStore.selectBlock(target.blockId as any);
+        const resolvedBlock = resolveBlockForAction(patchStore, target.blockId);
+        if (!resolvedBlock) {
+          return { success: false, error: `Block ${target.blockId} not found` };
+        }
+        selectionStore.selectBlock(resolvedBlock.id);
         return { success: true };
+      }
 
       case 'bus':
       case 'binding':
@@ -121,10 +166,7 @@ function handleGoToTarget(
         };
 
       default:
-        return {
-          success: false,
-          error: `Unsupported target kind: ${(target as any).kind}`,
-        };
+        return unsupportedTargetKind(target);
     }
   } catch (err) {
     return {
@@ -172,8 +214,7 @@ function handleRemoveBlock(
 
   try {
     // Validate block exists
-    const patch = patchStore.patch;
-    const block = patch.blocks.get(blockId as any);
+    const block = resolveBlockForAction(patchStore, blockId);
 
     if (!block) {
       return {
@@ -183,7 +224,7 @@ function handleRemoveBlock(
     }
 
     // Remove block (also removes connected edges automatically)
-    patchStore.removeBlock(blockId as any);
+    patchStore.removeBlock(block.id);
 
     return { success: true };
   } catch (err) {
@@ -286,7 +327,7 @@ function handleAddAdapter(
       slotId: edgeToAdapt.to.slotId,
     };
 
-    patchStore.removeEdge(edgeToAdapt.id as any);
+    patchStore.removeEdge(edgeToAdapt.id);
     patchStore.addEdge(sourceEndpoint, adapterInputEndpoint);
     patchStore.addEdge(adapterOutputEndpoint, targetEndpoint);
 

@@ -7,6 +7,7 @@
 
 import { assertSchedulePhaseBoundaryStateReads } from '../runtime';
 import { RenderBufferArena, type WebGPURenderer } from '../render';
+import type { CompiledProgramIR } from '../compiler/ir/program';
 import type { RuntimeState } from '../runtime/RuntimeState';
 import type { RootStore } from '../stores';
 import { isRuntimeConsoleEnabled } from '../testing/test-params';
@@ -25,7 +26,7 @@ export interface AnimationLoopState {
 }
 
 export interface AnimationLoopDeps {
-  getCurrentProgram: () => any | null;
+  getCurrentProgram: () => CompiledProgramIR | null;
   getCurrentState: () => RuntimeState | null;
   getCanvas: () => HTMLCanvasElement | null;
   getRenderer: () => WebGPURenderer | null;
