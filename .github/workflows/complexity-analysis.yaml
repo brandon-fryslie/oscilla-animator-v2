@@ -85,14 +85,6 @@ jobs:
           --head "$HEAD_SHA"
           --output-dir artifacts/compare
 
-      - name: Add comparison to job summary
-        run: |
-          LATEST_DIR="$(cat artifacts/compare/latest.txt)"
-          cat "artifacts/compare/${LATEST_DIR}/commit-delta.md" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "Base: \`${{ github.event.pull_request.base.sha }}\`" >> "$GITHUB_STEP_SUMMARY"
-          echo "Head: \`${{ github.event.pull_request.head.sha }}\`" >> "$GITHUB_STEP_SUMMARY"
-
       - name: Prepare comparison HTML artifact
         id: html_artifact
         run: |
@@ -103,9 +95,24 @@ jobs:
           echo "path=$TARGET_HTML" >> "$GITHUB_OUTPUT"
 
       - name: Upload PR base-vs-head comparison HTML
+        id: upload_html_artifact
         uses: actions/upload-artifact@v4
         with:
           name: complexity-pr-base-vs-head-${{ github.event.pull_request.number }}
           path: ${{ steps.html_artifact.outputs.path }}
           if-no-files-found: error
           retention-days: 30
+
+      - name: Add comparison to job summary
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          ARTIFACT_URL: ${{ steps.upload_html_artifact.outputs.artifact-url }}
+        run: |
+          LATEST_DIR="$(cat artifacts/compare/latest.txt)"
+          node scripts/complexity/render-github-summary.mjs \
+            --delta-json "artifacts/compare/${LATEST_DIR}/commit-delta.json" \
+            --base-sha "$BASE_SHA" \
+            --head-sha "$HEAD_SHA" \
+            --artifact-url "$ARTIFACT_URL" \
+            >> "$GITHUB_STEP_SUMMARY"
