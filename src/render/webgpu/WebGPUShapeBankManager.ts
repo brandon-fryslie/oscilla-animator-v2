@@ -1,5 +1,6 @@
 import { WEBGPU_RENDER_CONTRACT } from './shaders';
 import { SHAPE_BANK_HEADER_WORDS } from '../../runtime/RuntimeState';
+import type { GpuBindGroup, GpuBuffer, GpuDevice, GpuRenderPipeline } from './gpu-api';
 
 const GPU_BUFFER_USAGE = {
   COPY_DST: 0x0008,
@@ -20,12 +21,12 @@ export interface RenderShapeBankSource {
  * ShapeBank only; no secondary topology registry export is used.
  */
 export class WebGPUShapeBankManager {
-  private shapeBankBuffer: any;
-  private shapeBankBindGroup: any;
+  private shapeBankBuffer: GpuBuffer;
+  private shapeBankBindGroup: GpuBindGroup;
   private shapeBankCapacityWords = 1;
   private topologyWordOffsetById = new Map<number, number>();
 
-  constructor(private readonly device: any, private readonly pathPipeline: any) {
+  constructor(private readonly device: GpuDevice, private readonly pathPipeline: GpuRenderPipeline) {
     this.shapeBankBuffer = this.device.createBuffer({
       size: Uint32Array.BYTES_PER_ELEMENT,
       usage: GPU_BUFFER_USAGE.STORAGE | GPU_BUFFER_USAGE.COPY_DST,
@@ -41,7 +42,7 @@ export class WebGPUShapeBankManager {
     });
   }
 
-  get bindGroup(): any {
+  get bindGroup(): GpuBindGroup {
     return this.shapeBankBindGroup;
   }
 
