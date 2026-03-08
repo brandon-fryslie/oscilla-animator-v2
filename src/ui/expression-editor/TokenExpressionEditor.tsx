@@ -355,7 +355,6 @@ export const TokenExpressionEditor = forwardRef<TokenExpressionEditorHandle, Tok
         editorRef.current.innerHTML = buildInnerHTML(value, addressRegistry, connectedShorthands);
         lastRenderedValue.current = value;
       }
-      // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     // Handle input (user typing)
