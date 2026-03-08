@@ -14,7 +14,7 @@ import {
   writeJson,
   writeText,
 } from './_shared.mjs';
-import { rowStatus } from './delta-visuals.mjs';
+import { isComplexityMetric, rowStatus, sortRowsForDisplay } from './delta-visuals.mjs';
 
 const DEFAULT_OUTPUT_ROOT = path.join(reportsDir, 'deltas');
 
@@ -27,19 +27,19 @@ const METRIC_META = {
   eslintMaxParamsHits: { label: 'ESLint max-params hits', direction: 'lower', signal: 'medium', target: '0', scale: 'count' },
   eslintCognitiveHits: { label: 'ESLint cognitive-complexity hits', direction: 'lower', signal: 'high', target: '0', scale: 'count' },
 
-  tsMorphMaxCyclomatic: { label: 'ts-morph max cyclomatic', direction: 'lower', signal: 'high', target: '<= 15 preferred', scale: 'count' },
-  tsMorphMaxCognitive: { label: 'ts-morph max cognitive', direction: 'lower', signal: 'high', target: '<= 20 preferred', scale: 'count' },
-  tsMorphMaxNesting: { label: 'ts-morph max nesting depth', direction: 'lower', signal: 'high', target: '<= 4 preferred', scale: 'count' },
-  tsMorphSourceLocTotal: { label: 'ts-morph total source LOC', direction: 'info', signal: 'low', target: 'context only', scale: 'size' },
-  tsMorphMaxHalsteadVolume: { label: 'ts-morph max Halstead volume', direction: 'lower', signal: 'medium', target: 'trend down over time', scale: 'size' },
-  tsMorphAvgMi: { label: 'ts-morph average maintainability index', direction: 'higher', signal: 'high', target: '>= 65 good, < 50 risky', scale: 'score' },
-  tsMorphMaxFanOut: { label: 'ts-morph max fan-out', direction: 'lower', signal: 'high', target: '<= 15 preferred', scale: 'count' },
-  tsMorphMaxFanIn: { label: 'ts-morph max fan-in', direction: 'lower', signal: 'medium', target: 'watch hotspots', scale: 'count' },
+  tsMorphMaxCyclomatic: { label: 'ts-morph max cyclomatic', direction: 'lower', signal: 'high', target: '<= 15 preferred', scale: 'count', description: 'Highest cyclomatic complexity across analyzed functions.' },
+  tsMorphMaxCognitive: { label: 'ts-morph max cognitive', direction: 'lower', signal: 'high', target: '<= 20 preferred', scale: 'count', description: 'Highest cognitive complexity across analyzed functions.' },
+  tsMorphMaxNesting: { label: 'ts-morph max nesting depth', direction: 'lower', signal: 'high', target: '<= 4 preferred', scale: 'count', description: 'Deepest nested control-flow depth found in a function.' },
+  tsMorphSourceLocTotal: { label: 'ts-morph total source LOC', direction: 'info', signal: 'low', target: 'context only', scale: 'size', description: 'Total lines of source code. Context-only size metric, not complexity.' },
+  tsMorphMaxHalsteadVolume: { label: 'ts-morph max Halstead volume', direction: 'lower', signal: 'medium', target: 'trend down over time', scale: 'size', description: 'Largest Halstead volume observed among functions.' },
+  tsMorphAvgMi: { label: 'ts-morph average maintainability index', direction: 'higher', signal: 'high', target: '>= 65 good, < 50 risky', scale: 'score', description: 'Average maintainability index across analyzed functions.' },
+  tsMorphMaxFanOut: { label: 'ts-morph max fan-out', direction: 'lower', signal: 'high', target: '<= 15 preferred', scale: 'count', description: 'Maximum number of internal modules imported by a single module.' },
+  tsMorphMaxFanIn: { label: 'ts-morph max fan-in', direction: 'lower', signal: 'medium', target: 'watch hotspots', scale: 'count', description: 'Maximum number of internal modules that import the same module (hotspot fan-in).' },
 
   dependencyCruiserErrors: { label: 'dependency-cruiser error violations', direction: 'lower', signal: 'high', target: '0', scale: 'count' },
   dependencyCruiserWarnings: { label: 'dependency-cruiser warning violations', direction: 'lower', signal: 'medium', target: '0', scale: 'count' },
   dependencyCruiserModules: { label: 'dependency-cruiser module count', direction: 'info', signal: 'low', target: 'context only', scale: 'size' },
-  dependencyCruiserDependencies: { label: 'dependency-cruiser dependency edges', direction: 'info', signal: 'low', target: 'context only', scale: 'size' },
+  dependencyCruiserDependencies: { label: 'dependency-cruiser dependency edges', direction: 'info', signal: 'low', target: 'context only', scale: 'size', description: 'Total number of dependency edges in the module graph.' },
   dependencyCruiserMaxFanOut: { label: 'dependency-cruiser max fan-out', direction: 'lower', signal: 'high', target: '<= 15 preferred', scale: 'count' },
   dependencyCruiserMaxFanIn: { label: 'dependency-cruiser max fan-in', direction: 'lower', signal: 'medium', target: 'watch hotspots', scale: 'count' },
 
@@ -47,13 +47,13 @@ const METRIC_META = {
   platoMaxCyclomatic: { label: 'Plato max cyclomatic', direction: 'lower', signal: 'medium', target: '<= 15 preferred', scale: 'count' },
   platoAvgHalsteadDifficulty: { label: 'Plato avg Halstead difficulty', direction: 'lower', signal: 'low', target: 'trend down', scale: 'size' },
   platoAvgHalsteadVolume: { label: 'Plato avg Halstead volume', direction: 'lower', signal: 'low', target: 'trend down', scale: 'size' },
-  platoTotalLogicalSloc: { label: 'Plato total logical SLOC', direction: 'info', signal: 'low', target: 'context only', scale: 'size' },
+  platoTotalLogicalSloc: { label: 'Plato total logical SLOC', direction: 'info', signal: 'low', target: 'context only', scale: 'size', description: 'Total logical source lines of code measured by Plato.' },
 
   typhonAvgMaintainability: { label: 'Typhon average maintainability', direction: 'higher', signal: 'medium', target: '>= 65 good', scale: 'score' },
   typhonMaxCyclomatic: { label: 'Typhon max cyclomatic', direction: 'lower', signal: 'medium', target: '<= 15 preferred', scale: 'count' },
   typhonAvgHalsteadDifficulty: { label: 'Typhon avg Halstead difficulty', direction: 'lower', signal: 'low', target: 'trend down', scale: 'size' },
   typhonAvgHalsteadVolume: { label: 'Typhon avg Halstead volume', direction: 'lower', signal: 'low', target: 'trend down', scale: 'size' },
-  typhonTotalLogicalSloc: { label: 'Typhon total logical SLOC', direction: 'info', signal: 'low', target: 'context only', scale: 'size' },
+  typhonTotalLogicalSloc: { label: 'Typhon total logical SLOC', direction: 'info', signal: 'low', target: 'context only', scale: 'size', description: 'Total logical source lines of code measured by Typhon.' },
 };
 
 function parseArgs(argv) {
@@ -84,6 +84,7 @@ function metricMeta(key) {
     signal: 'low',
     target: 'context only',
     scale: 'count',
+    description: `${key} metric.`,
   };
 }
 
@@ -128,12 +129,15 @@ function summarizeImpact(signal, classification, magnitude) {
 }
 
 function formatMetricValue(value) {
-  return Number.isFinite(value) ? formatSig2(value) : 'n/a';
+  if (!Number.isFinite(value)) return 'n/a';
+  if (Number.isInteger(value)) return String(value);
+  return formatSig2(value);
 }
 
 function formatDeltaValue(value) {
   const numeric = Number(value);
   if (!Number.isFinite(numeric)) return 'n/a';
+  if (Number.isInteger(numeric)) return `${numeric > 0 ? '+' : ''}${numeric}`;
   return `${numeric > 0 ? '+' : ''}${formatSig2(numeric)}`;
 }
 
@@ -324,6 +328,7 @@ function buildDelta(baseSummary, headSummary) {
       directionLabel: directionLabel(meta.direction),
       signal: meta.signal,
       target: meta.target,
+      description: meta.description ?? `${meta.label}. ${directionLabel(meta.direction)}.`,
       base,
       head,
       delta,
@@ -341,7 +346,12 @@ function buildDelta(baseSummary, headSummary) {
   const highSignalImprovements = improved.filter((row) => row.signal === 'high').sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta)).slice(0, 10);
 
   const guide = Object.entries(METRIC_META)
-    .map(([key, meta]) => ({ key, ...meta, directionLabel: directionLabel(meta.direction) }))
+    .map(([key, meta]) => ({
+      key,
+      ...meta,
+      directionLabel: directionLabel(meta.direction),
+      description: meta.description ?? `${meta.label}. ${directionLabel(meta.direction)}.`,
+    }))
     .sort((a, b) => a.key.localeCompare(b.key));
 
   return {
@@ -789,20 +799,19 @@ function renderDeltaMarkdown(delta, baseLabel, headLabel) {
 }
 
 function renderColorizedMetricTable(rows) {
-  const headers = ['Status', 'Metric', 'Base', 'Head', 'Delta (head - base)', '% Delta', 'Magnitude', 'Impact'];
+  const headers = ['Signal', 'Metric', 'Base/Head', 'Delta (%)', 'Magnitude', 'Impact'];
   const headerHtml = headers.map((header) => `<th>${escapeHtml(header)}</th>`).join('');
   const bodyHtml = rows.length === 0
     ? `<tr><td colspan="${headers.length}">none</td></tr>`
     : rows.map((row) => {
       const status = rowStatus(row);
-      const statusCell = `<span class="status-pill sev-${status.level}">${escapeHtml(status.emoji)} ${escapeHtml(status.label)}</span>`;
+      const metricCell = `<span title="${escapeHtml(row.description ?? row.label)}">${escapeHtml(row.label)}</span>`;
+      const deltaCell = `${escapeHtml(status.emoji)} ${escapeHtml(formatDeltaValue(row.delta))} (${escapeHtml(formatPctValue(row.relativeDeltaPct))})`;
       const cells = [
-        statusCell,
-        escapeHtml(row.label),
-        escapeHtml(formatMetricValue(row.base)),
-        escapeHtml(formatMetricValue(row.head)),
-        escapeHtml(formatDeltaValue(row.delta)),
-        escapeHtml(formatPctValue(row.relativeDeltaPct)),
+        escapeHtml(row.signal),
+        metricCell,
+        escapeHtml(`${formatMetricValue(row.base)}/${formatMetricValue(row.head)}`),
+        deltaCell,
         escapeHtml(row.magnitude),
         escapeHtml(row.impact),
       ];
@@ -812,28 +821,7 @@ function renderColorizedMetricTable(rows) {
 }
 
 function renderColorizedFullTable(rows) {
-  const headers = ['Status', 'Key', 'Metric', 'Base', 'Head', 'Delta (head - base)', '% Delta', 'Classification', 'Magnitude', 'Signal'];
-  const headerHtml = headers.map((header) => `<th>${escapeHtml(header)}</th>`).join('');
-  const bodyHtml = rows.length === 0
-    ? `<tr><td colspan="${headers.length}">none</td></tr>`
-    : rows.map((row) => {
-      const status = rowStatus(row);
-      const statusCell = `<span class="status-pill sev-${status.level}">${escapeHtml(status.emoji)} ${escapeHtml(status.label)}</span>`;
-      const cells = [
-        statusCell,
-        escapeHtml(row.key),
-        escapeHtml(row.label),
-        escapeHtml(formatMetricValue(row.base)),
-        escapeHtml(formatMetricValue(row.head)),
-        escapeHtml(formatDeltaValue(row.delta)),
-        escapeHtml(formatPctValue(row.relativeDeltaPct)),
-        escapeHtml(row.classification),
-        escapeHtml(row.magnitude),
-        escapeHtml(row.signal),
-      ];
-      return `<tr class="sev-row sev-${status.level}">${cells.map((cell) => `<td>${cell}</td>`).join('')}</tr>`;
-    }).join('\n');
-  return `<table class="colorized-table"><thead><tr>${headerHtml}</tr></thead><tbody>${bodyHtml}</tbody></table>`;
+  return renderColorizedMetricTable(rows);
 }
 
 function renderMetricDrilldownHtml(rows, metricAttribution) {
@@ -877,24 +865,29 @@ function renderMetricDrilldownHtml(rows, metricAttribution) {
 }
 
 function renderDeltaHtml(delta, baseLabel, headLabel, metricAttribution) {
-  const guideRows = delta.guide.map((row) => [row.label, row.directionLabel, row.target, row.signal]);
+  const complexityRows = sortRowsForDisplay(delta.rows.filter(isComplexityMetric));
+  const complexityRegressed = sortRowsForDisplay(delta.regressed.filter(isComplexityMetric));
+  const complexityImproved = sortRowsForDisplay(delta.improved.filter(isComplexityMetric));
+  const complexityHighSignalRegressions = sortRowsForDisplay(delta.highSignalRegressions.filter(isComplexityMetric));
+  const complexityHighSignalImprovements = sortRowsForDisplay(delta.highSignalImprovements.filter(isComplexityMetric));
+  const guideRows = delta.guide
+    .filter((row) => row.direction !== 'info')
+    .map((row) => [row.label, row.directionLabel, row.target, row.signal, row.description ?? '']);
+
   return renderHtmlDocument(
     'Commit Complexity Delta',
     [
       '<style>',
-      '  .status-pill { display: inline-block; border-radius: 999px; padding: 2px 10px; font-size: 11px; font-weight: 700; letter-spacing: 0.02em; text-transform: uppercase; }',
-      '  .sev-very-bad { color: #fff; background: #d63031; border: 1px solid #ff7675; }',
-      '  .sev-bad { color: #fff; background: #b71540; border: 1px solid #ff6b81; }',
-      '  .sev-warning { color: #201a00; background: #ffd43b; border: 1px solid #ffe066; }',
-      '  .sev-improvement { color: #102a00; background: #b7e95c; border: 1px solid #d8f49b; }',
-      '  .sev-solid { color: #072b07; background: #8ce99a; border: 1px solid #b2f2bb; }',
-      '  .sev-awesome { color: #fff; background: #2f9e44; border: 1px solid #51cf66; font-weight: 800; }',
-      '  .colorized-table .sev-row.sev-very-bad td { background: #2f1212 !important; }',
-      '  .colorized-table .sev-row.sev-bad td { background: #28121d !important; }',
-      '  .colorized-table .sev-row.sev-warning td { background: #2e2811 !important; }',
-      '  .colorized-table .sev-row.sev-improvement td { background: #1e2811 !important; }',
-      '  .colorized-table .sev-row.sev-solid td { background: #102419 !important; }',
-      '  .colorized-table .sev-row.sev-awesome td { background: #0f2a14 !important; }',
+      '  .colorized-table .sev-row.sev-regression-4 td { background: #321010 !important; }',
+      '  .colorized-table .sev-row.sev-regression-3 td { background: #2e1313 !important; }',
+      '  .colorized-table .sev-row.sev-regression-2 td { background: #2d1c10 !important; }',
+      '  .colorized-table .sev-row.sev-regression-1 td { background: #2a2410 !important; }',
+      '  .colorized-table .sev-row.sev-neutral td { background: #21242a !important; }',
+      '  .colorized-table .sev-row.sev-unchanged td { background: #1b1e25 !important; }',
+      '  .colorized-table .sev-row.sev-improvement-1 td { background: #162410 !important; }',
+      '  .colorized-table .sev-row.sev-improvement-2 td { background: #102819 !important; }',
+      '  .colorized-table .sev-row.sev-improvement-3 td { background: #0f2d1f !important; }',
+      '  .colorized-table .sev-row.sev-improvement-4 td { background: #0a331f !important; }',
       '</style>',
       '<h1>Commit Complexity Delta</h1>',
       `<p class="small">Generated: ${delta.generatedAt}</p>`,
@@ -903,33 +896,34 @@ function renderDeltaHtml(delta, baseLabel, headLabel, metricAttribution) {
       `<div><strong>Head</strong><br>${headLabel}</div>`,
       `<div><strong>Base Report</strong><br>${delta.baseGeneratedAt ?? 'unknown'}</div>`,
       `<div><strong>Head Report</strong><br>${delta.headGeneratedAt ?? 'unknown'}</div>`,
-      `<div><strong>Improved Metrics</strong><br>${delta.improvedCount}</div>`,
-      `<div><strong>Regressed Metrics</strong><br>${delta.regressedCount}</div>`,
-      `<div><strong>Unchanged / Informational</strong><br>${delta.unchangedCount}</div>`,
+      `<div><strong>Improved Metrics</strong><br>${complexityImproved.length}</div>`,
+      `<div><strong>Regressed Metrics</strong><br>${complexityRegressed.length}</div>`,
+      `<div><strong>Unchanged / Near-Zero</strong><br>${complexityRows.length - complexityImproved.length - complexityRegressed.length}</div>`,
       `<div><strong>Net Score</strong><br>${delta.score}</div>`,
       '</div>',
       '<h2>How To Read This</h2>',
       '<ul>',
-      '<li>Each row has an explicit status indicator and matching row color.</li>',
+      '<li>Delta indicator uses emojis only: unchanged `⬜️`, near-zero `😐`, worse `🟨🟧🟥‼️`, better `🟩✅❇️🤑`.</li>',
+      '<li>Tables are sorted by signal (high first), then worst-to-best delta.</li>',
       '<li>Lower-is-better metrics should trend down toward target. Zero is ideal for rule violations.</li>',
       '<li>Higher-is-better metrics should trend up (for example maintainability index).</li>',
       '</ul>',
       '<h2>Metric Interpretation Guide</h2>',
-      renderHtmlTable(['Metric', 'Desired Trend', 'Practical Target Range', 'Signal'], guideRows),
+      renderHtmlTable(['Metric', 'Desired Trend', 'Practical Target Range', 'Signal', 'Description'], guideRows),
       '<h2>High-Signal Regressions</h2>',
-      renderColorizedMetricTable(delta.highSignalRegressions),
+      renderColorizedMetricTable(complexityHighSignalRegressions),
       '<h2>High-Signal Improvements</h2>',
-      renderColorizedMetricTable(delta.highSignalImprovements),
+      renderColorizedMetricTable(complexityHighSignalImprovements),
       '<h2>Regressions</h2>',
-      renderColorizedMetricTable(delta.regressed),
+      renderColorizedMetricTable(complexityRegressed),
       '<h2>Regression Drilldown (click row)</h2>',
-      renderMetricDrilldownHtml(delta.regressed, metricAttribution),
+      renderMetricDrilldownHtml(complexityRegressed, metricAttribution),
       '<h2>Improvements</h2>',
-      renderColorizedMetricTable(delta.improved),
+      renderColorizedMetricTable(complexityImproved),
       '<h2>Improvement Drilldown (click row)</h2>',
-      renderMetricDrilldownHtml(delta.improved, metricAttribution),
+      renderMetricDrilldownHtml(complexityImproved, metricAttribution),
       '<h2>Full Delta Table</h2>',
-      renderColorizedFullTable(delta.rows),
+      renderColorizedFullTable(complexityRows),
     ].join('\n'),
   );
 }

@@ -1,6 +1,13 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { classifyTrend, rowStatus, scoreRows, summarizeTrendNarrative } from './delta-visuals.mjs';
+import {
+  classifyTrend,
+  isComplexityMetric,
+  rowStatus,
+  scoreRows,
+  sortRowsForDisplay,
+  summarizeTrendNarrative,
+} from './delta-visuals.mjs';
 
 function parseArgs(argv) {
   const args = {};
@@ -89,31 +96,17 @@ function renderTable(headers, rows) {
 function rowToSummaryRow(row) {
   const status = rowStatus(row);
   return [
-    `${status.emoji} ${status.label}`,
+    row.signal,
     row.label,
-    formatMetricValue(row.base),
-    formatMetricValue(row.head),
-    formatDeltaValue(row.delta),
-    formatPctValue(row.relativeDeltaPct),
+    `${formatMetricValue(row.base)}/${formatMetricValue(row.head)}`,
+    `${status.emoji} ${formatDeltaValue(row.delta)} (${formatPctValue(row.relativeDeltaPct)})`,
     row.magnitude,
     row.impact,
   ];
 }
 
 function rowToFullRow(row) {
-  const status = rowStatus(row);
-  return [
-    `${status.emoji} ${status.label}`,
-    row.key,
-    row.label,
-    formatMetricValue(row.base),
-    formatMetricValue(row.head),
-    formatDeltaValue(row.delta),
-    formatPctValue(row.relativeDeltaPct),
-    row.classification,
-    row.magnitude,
-    row.signal,
-  ];
+  return rowToSummaryRow(row);
 }
 
 function renderBadge(trend) {
@@ -170,17 +163,23 @@ function renderMetricContext(rows, metricAttribution) {
 }
 
 function renderSummaryMarkdown(delta, options) {
-  const rows = delta.rows ?? [];
+  const rows = (delta.rows ?? []).filter(isComplexityMetric);
+  const sortedRows = sortRowsForDisplay(rows);
   const weightedScore = scoreRows(rows);
   const trend = classifyTrend(weightedScore, rows);
   const trendLabel = trend.emphasize ? `**${trend.label}**` : trend.label;
+  const improvedCount = rows.filter((row) => rowStatus(row).kind === 'improvement').length;
+  const regressedCount = rows.filter((row) => rowStatus(row).kind === 'regression').length;
+  const neutralCount = rows.filter((row) => ['neutral', 'unchanged'].includes(rowStatus(row).kind)).length;
   const baseSha = options.baseSha ? `\`${options.baseSha}\`` : 'unknown';
   const headSha = options.headSha ? `\`${options.headSha}\`` : 'unknown';
   const artifactUrl = options.artifactUrl ? `[Download archived HTML report](${options.artifactUrl})` : 'Artifact URL unavailable';
-  const highSignalRegressionRows = (delta.highSignalRegressions ?? []).map(rowToSummaryRow);
-  const highSignalImprovementRows = (delta.highSignalImprovements ?? []).map(rowToSummaryRow);
-  const fullRows = rows.map(rowToFullRow);
-  const guideRows = (delta.guide ?? []).map((row) => [row.label, row.directionLabel, row.target, row.signal]);
+  const highSignalRegressionRows = sortRowsForDisplay((delta.highSignalRegressions ?? []).filter(isComplexityMetric)).map(rowToSummaryRow);
+  const highSignalImprovementRows = sortRowsForDisplay((delta.highSignalImprovements ?? []).filter(isComplexityMetric)).map(rowToSummaryRow);
+  const fullRows = sortedRows.map(rowToFullRow);
+  const guideRows = (delta.guide ?? [])
+    .filter((row) => row.direction !== 'info')
+    .map((row) => [row.label, row.directionLabel, row.target, row.signal, row.description ?? '']);
   const metricAttribution = delta.metricAttribution ?? delta.regressionAttribution ?? {};
 
   return [
@@ -191,27 +190,27 @@ function renderSummaryMarkdown(delta, options) {
     `- trend assessment: ${trendLabel} (${summarizeTrendNarrative(rows)})`,
     `- weighted trend score: ${weightedScore}`,
     `- net score (improved - regressed): ${delta.score}`,
-    `- improved metrics: ${delta.improvedCount}, regressed metrics: ${delta.regressedCount}, unchanged/informational: ${delta.unchangedCount}`,
+    `- improved metrics: ${improvedCount}, regressed metrics: ${regressedCount}, unchanged/near-zero: ${neutralCount}`,
     `- artifact: ${artifactUrl}`,
     '',
     '### High-Signal Regressions',
     '',
     renderTable(
-      ['Indicator', 'Metric', 'Base', 'Head', 'Delta', '% Delta', 'Magnitude', 'Impact'],
+      ['Signal', 'Metric', 'Base/Head', 'Delta (%)', 'Magnitude', 'Impact'],
       highSignalRegressionRows,
     ),
     '',
     '### High-Signal Improvements',
     '',
     renderTable(
-      ['Indicator', 'Metric', 'Base', 'Head', 'Delta', '% Delta', 'Magnitude', 'Impact'],
+      ['Signal', 'Metric', 'Base/Head', 'Delta (%)', 'Magnitude', 'Impact'],
       highSignalImprovementRows,
     ),
     '',
     '<details>',
     '<summary>Code Context (collapsed)</summary>',
     '',
-    renderMetricContext(rows, metricAttribution),
+    renderMetricContext(sortedRows, metricAttribution),
     '',
     '</details>',
     '',
@@ -233,12 +232,11 @@ function renderSummaryMarkdown(delta, options) {
     '- Signal weights: `high=5`, `medium=3`, `low=1`.',
     '- Magnitude weights: `tiny=1`, `small=2`, `moderate=3`, `large=5`.',
     '- Row-level indicators:',
-    '  - `🟥` = very bad',
-    '  - `🔴` = bad',
-    '  - `🟡` = warning',
-    '  - `🟨🟩` = improvement',
-    '  - `🟩` = solid improvement',
-    '  - `🟩✨` = awesome improvement',
+    '  - `⬜️` unchanged',
+    '  - `😐` changed < 2% (either direction)',
+    '  - Worse: `🟨` `🟧` `🟥` `‼️`',
+    '  - Better: `🟩` `✅` `❇️` `🤑`',
+    '- Sorting: signal (`high` first), then worst-to-best delta.',
     '',
     '</details>',
     '',
@@ -246,7 +244,7 @@ function renderSummaryMarkdown(delta, options) {
     '<summary>Metric Interpretation Guide (collapsed)</summary>',
     '',
     renderTable(
-      ['Metric', 'Desired Trend', 'Practical Target Range', 'Signal'],
+      ['Metric', 'Desired Trend', 'Practical Target Range', 'Signal', 'Description'],
       guideRows,
     ),
     '',
@@ -256,7 +254,7 @@ function renderSummaryMarkdown(delta, options) {
     '<summary>Full Delta Table (collapsed)</summary>',
     '',
     renderTable(
-      ['Indicator', 'Key', 'Metric', 'Base', 'Head', 'Delta', '% Delta', 'Classification', 'Magnitude', 'Signal'],
+      ['Signal', 'Metric', 'Base/Head', 'Delta (%)', 'Magnitude', 'Impact'],
       fullRows,
     ),
     '',
