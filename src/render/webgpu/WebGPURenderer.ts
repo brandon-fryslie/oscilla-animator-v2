@@ -16,6 +16,20 @@ import {
   WebGPUIndirectArgsInspector,
   type IndirectArgsReadbackSnapshot,
 } from './WebGPUIndirectArgsInspector';
+import type {
+  GpuBindGroup,
+  GpuBuffer,
+  GpuCanvasContext,
+  GpuCommandEncoder,
+  GpuComputePassEncoder,
+  GpuComputePipeline,
+  GpuDevice,
+  GpuRenderPassEncoder,
+  GpuRenderPipeline,
+  GpuTexture,
+  GpuTextureView,
+} from './gpu-api';
+import { getNavigatorGpu, toGpuCanvasContext } from './gpu-api';
 
 const GPU_BUFFER_USAGE = {
   COPY_SRC: 0x0004,
@@ -52,8 +66,8 @@ function computeDispatchWorkgroups(capacity: number, workgroupSize: number): num
 interface GPUMesh {
   readonly indexCount: number;
   readonly indexFormat: 'uint16' | 'uint32';
-  readonly vertexBuffer: any;
-  readonly indexBuffer: any;
+  readonly vertexBuffer: GpuBuffer;
+  readonly indexBuffer: GpuBuffer;
 }
 
 interface RenderInput {
@@ -88,19 +102,19 @@ interface PreparedDrawPathOp {
 }
 
 interface WebGPUStartupResources {
-  readonly device: any;
-  readonly context: any;
+  readonly device: GpuDevice;
+  readonly context: GpuCanvasContext;
   readonly canvasFormat: string;
   readonly adapterFeatures: ReadonlySet<string>;
 }
 
 export function assertWebGPUStartupContract(canvas: HTMLCanvasElement): void {
-  const gpu = (navigator as Navigator & { gpu?: any }).gpu;
+  const gpu = getNavigatorGpu();
   if (!gpu) {
     throw new Error('WebGPU is required but navigator.gpu is unavailable');
   }
 
-  const context = canvas.getContext('webgpu') as any;
+  const context = toGpuCanvasContext(canvas.getContext('webgpu'));
   if (!context) {
     // [LAW:no-silent-fallbacks] WebGPU-only runtime must fail fast when the
     // browser cannot create a WebGPU presentation context.
@@ -110,7 +124,10 @@ export function assertWebGPUStartupContract(canvas: HTMLCanvasElement): void {
 
 async function createStartupResources(canvas: HTMLCanvasElement): Promise<WebGPUStartupResources> {
   assertWebGPUStartupContract(canvas);
-  const gpu = (navigator as Navigator & { gpu?: any }).gpu!;
+  const gpu = getNavigatorGpu();
+  if (!gpu) {
+    throw new Error('WebGPU is required but navigator.gpu is unavailable');
+  }
 
   const adapter = await gpu.requestAdapter();
   if (!adapter) {
@@ -120,7 +137,7 @@ async function createStartupResources(canvas: HTMLCanvasElement): Promise<WebGPU
   // [LAW:dataflow-not-control-flow] Device allocation uses one request path
   // for all browsers; capability differences flow through adapter features.
   const device = await adapter.requestDevice();
-  const context = canvas.getContext('webgpu') as any;
+  const context = toGpuCanvasContext(canvas.getContext('webgpu'));
   if (!context) {
     throw new Error('WebGPU is required but canvas.getContext("webgpu") failed');
   }
@@ -140,18 +157,18 @@ async function createStartupResources(canvas: HTMLCanvasElement): Promise<WebGPU
 }
 
 class WebGPUComputeRuntime {
-  private readonly pipeline: any;
-  private readonly migrationPipeline: any;
-  private readonly paramsBuffer: any;
-  private readonly migrationParamsBuffer: any;
-  private stateBuffers: [any, any];
-  private bindGroups: [any, any];
+  private readonly pipeline: GpuComputePipeline;
+  private readonly migrationPipeline: GpuComputePipeline;
+  private readonly paramsBuffer: GpuBuffer;
+  private readonly migrationParamsBuffer: GpuBuffer;
+  private stateBuffers: [GpuBuffer, GpuBuffer];
+  private bindGroups: [GpuBindGroup, GpuBindGroup];
   private stateCapacity: number;
   private readonly paramsStaging = new Float32Array(WEBGPU_RENDER_CONTRACT.computeParamsFloats);
   private readonly migrationParamsStaging = new Uint32Array(WEBGPU_RENDER_CONTRACT.computeMigrationParamsU32);
-  private pendingRetiredStateBuffers: Array<[any, any]> = [];
+  private pendingRetiredStateBuffers: Array<[GpuBuffer, GpuBuffer]> = [];
 
-  private constructor(private readonly device: any, pipeline: any, migrationPipeline: any) {
+  private constructor(private readonly device: GpuDevice, pipeline: GpuComputePipeline, migrationPipeline: GpuComputePipeline) {
     this.pipeline = pipeline;
     this.migrationPipeline = migrationPipeline;
     this.stateCapacity = WEBGPU_RENDER_CONTRACT.simulationCapacity;
@@ -180,7 +197,7 @@ class WebGPUComputeRuntime {
 
   // [LAW:single-enforcer] createComputePipelineAsync is the only permitted pipeline
   // creation path (P2-1: Async Compiler Service Architecture).
-  static async create(device: any): Promise<WebGPUComputeRuntime> {
+  static async create(device: GpuDevice): Promise<WebGPUComputeRuntime> {
     const [pipeline, migrationPipeline] = await Promise.all([
       device.createComputePipelineAsync({
         layout: 'auto',
@@ -220,7 +237,7 @@ class WebGPUComputeRuntime {
   }
 
   step(
-    commandEncoder: any,
+    commandEncoder: GpuCommandEncoder,
     activeCount: number,
     dtSeconds: number,
     inputHeader: Uint8Array,
@@ -268,14 +285,14 @@ class WebGPUComputeRuntime {
     this.pendingRetiredStateBuffers = [];
   }
 
-  private createStateBuffer(capacity: number): any {
+  private createStateBuffer(capacity: number): GpuBuffer {
     return this.device.createBuffer({
       size: WEBGPU_RENDER_CONTRACT.inputHeaderBytes + capacity * SIMULATION_STATE_BYTES,
       usage: GPU_BUFFER_USAGE.STORAGE | GPU_BUFFER_USAGE.COPY_DST | GPU_BUFFER_USAGE.COPY_SRC,
     });
   }
 
-  private recreateBindGroups(): [any, any] {
+  private recreateBindGroups(): [GpuBindGroup, GpuBindGroup] {
     const bindLayout = this.pipeline.getBindGroupLayout(WEBGPU_RENDER_CONTRACT.computeBindGroup);
     return [
       this.device.createBindGroup({
@@ -315,7 +332,7 @@ class WebGPUComputeRuntime {
     ];
   }
 
-  private ensureStateCapacity(commandEncoder: any, requiredCount: number): void {
+  private ensureStateCapacity(commandEncoder: GpuCommandEncoder, requiredCount: number): void {
     if (requiredCount <= this.stateCapacity) {
       return;
     }
@@ -325,7 +342,7 @@ class WebGPUComputeRuntime {
       nextCapacity *= 2;
     }
 
-    const nextBuffers: [any, any] = [
+    const nextBuffers: [GpuBuffer, GpuBuffer] = [
       this.createStateBuffer(nextCapacity),
       this.createStateBuffer(nextCapacity),
     ];
@@ -376,8 +393,8 @@ class WebGPUComputeRuntime {
   }
 
   private initializeGrownStateBuffers(
-    commandEncoder: any,
-    buffers: readonly [any, any],
+    commandEncoder: GpuCommandEncoder,
+    buffers: readonly [GpuBuffer, GpuBuffer],
     capacity: number,
   ): void {
     const totalBytes = WEBGPU_RENDER_CONTRACT.inputHeaderBytes + capacity * SIMULATION_STATE_BYTES;
@@ -398,13 +415,13 @@ class WebGPUComputeRuntime {
 }
 
 class WebGPUDrawPrepRuntime {
-  private pipeline: any;
-  private readonly paramsBuffer: any;
+  private pipeline: GpuComputePipeline;
+  private readonly paramsBuffer: GpuBuffer;
   private readonly paramsStaging = new Uint32Array(WEBGPU_RENDER_CONTRACT.drawPrepParamsU32);
-  private activeBindGroup: any | null = null;
-  private activeIndirectBuffer: any | null = null;
+  private activeBindGroup: GpuBindGroup | null = null;
+  private activeIndirectBuffer: GpuBuffer | null = null;
 
-  private constructor(private readonly device: any, initialPipeline: any) {
+  private constructor(private readonly device: GpuDevice, initialPipeline: GpuComputePipeline) {
     this.pipeline = initialPipeline;
     this.paramsBuffer = device.createBuffer({
       size: WEBGPU_RENDER_CONTRACT.drawPrepParamsU32 * Uint32Array.BYTES_PER_ELEMENT,
@@ -414,7 +431,7 @@ class WebGPUDrawPrepRuntime {
 
   // [LAW:single-enforcer] createComputePipelineAsync is the only permitted pipeline
   // creation path (P2-1: Async Compiler Service Architecture).
-  static async create(device: any): Promise<WebGPUDrawPrepRuntime> {
+  static async create(device: GpuDevice): Promise<WebGPUDrawPrepRuntime> {
     const shaderModule = device.createShaderModule({ code: DRAW_PREP_COMPUTE_WGSL });
     const pipeline = await device.createComputePipelineAsync({
       layout: 'auto',
@@ -426,7 +443,7 @@ class WebGPUDrawPrepRuntime {
     return new WebGPUDrawPrepRuntime(device, pipeline);
   }
 
-  private getOrCreateBindGroup(indirectBuffer: any): any {
+  private getOrCreateBindGroup(indirectBuffer: GpuBuffer): GpuBindGroup {
     if (this.activeBindGroup && this.activeIndirectBuffer === indirectBuffer) {
       return this.activeBindGroup;
     }
@@ -450,8 +467,8 @@ class WebGPUDrawPrepRuntime {
   }
 
   step(
-    commandEncoder: any,
-    indirectBuffer: any,
+    commandEncoder: GpuCommandEncoder,
+    indirectBuffer: GpuBuffer,
     recordIndex: number,
     maxRecords: number,
     indexCount: number,
@@ -494,16 +511,16 @@ export class WebGPURenderer {
   private readonly drawPrepRuntime: WebGPUDrawPrepRuntime;
   private readonly adapterFeatures: ReadonlySet<string>;
 
-  private readonly pathPipeline: any;
-  private readonly sceneUniformBuffer: any;
-  private readonly sceneBindGroup: any;
+  private readonly pathPipeline: GpuRenderPipeline;
+  private readonly sceneUniformBuffer: GpuBuffer;
+  private readonly sceneBindGroup: GpuBindGroup;
   private readonly shapeBankManager: WebGPUShapeBankManager;
   private readonly indirectArgsInspector: WebGPUIndirectArgsInspector;
-  private indirectArgsBuffer: any;
+  private indirectArgsBuffer: GpuBuffer;
   private indirectArgsCapacityRecords = 1;
 
-  private instanceBuffer: any;
-  private instanceBindGroup: any;
+  private instanceBuffer: GpuBuffer;
+  private instanceBindGroup: GpuBindGroup;
   private instanceCapacity = 0;
   private instanceStaging = new Float32Array(0);
 
@@ -513,18 +530,18 @@ export class WebGPURenderer {
   private frameIndex = 0;
   private fatalError: Error | null = null;
   private lastConfiguredSize = { width: -1, height: -1 };
-  private msaaColorTexture: any | null = null;
-  private msaaColorView: any | null = null;
+  private msaaColorTexture: GpuTexture | null = null;
+  private msaaColorView: GpuTextureView | null = null;
 
   private constructor(
     private readonly canvas: HTMLCanvasElement,
-    private readonly device: any,
-    private readonly context: any,
+    private readonly device: GpuDevice,
+    private readonly context: GpuCanvasContext,
     private readonly canvasFormat: string,
     adapterFeatures: ReadonlySet<string>,
     computeRuntime: WebGPUComputeRuntime,
     drawPrepRuntime: WebGPUDrawPrepRuntime,
-    pathPipeline: any,
+    pathPipeline: GpuRenderPipeline,
   ) {
     this.adapterFeatures = adapterFeatures;
     this.computeRuntime = computeRuntime;
@@ -904,7 +921,7 @@ export class WebGPURenderer {
     return prepared;
   }
 
-  private drawPreparedPathOp(pass: any, prepared: PreparedDrawPathOp): void {
+  private drawPreparedPathOp(pass: GpuRenderPassEncoder, prepared: PreparedDrawPathOp): void {
     pass.setVertexBuffer(0, prepared.mesh.vertexBuffer);
     pass.setIndexBuffer(prepared.mesh.indexBuffer, prepared.mesh.indexFormat);
     pass.drawIndexedIndirect(
@@ -980,7 +997,7 @@ export class WebGPURenderer {
   private createUploadBuffer(
     data: Float32Array | Uint16Array | Uint32Array,
     usage: number
-  ): any {
+  ): GpuBuffer {
     // [LAW:no-silent-fallbacks] mappedAtCreation buffers must be 4-byte aligned;
     // enforce the WebGPU contract deterministically at allocation time.
     const safeSize = Math.max(4, alignTo4(data.byteLength));
@@ -1173,7 +1190,7 @@ export class WebGPURenderer {
 
   // [LAW:single-enforcer] createRenderPipelineAsync is the only permitted render pipeline
   // creation path (P2-1: Async Compiler Service Architecture).
-  private static async createPathPipelineAsync(device: any, canvasFormat: string): Promise<any> {
+  private static async createPathPipelineAsync(device: GpuDevice, canvasFormat: string): Promise<GpuRenderPipeline> {
     const shaderModule = device.createShaderModule({ code: PATH_RENDER_WGSL });
     return device.createRenderPipelineAsync({
       layout: 'auto',

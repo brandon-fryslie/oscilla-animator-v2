@@ -1,4 +1,5 @@
 import { WEBGPU_RENDER_CONTRACT } from './shaders';
+import type { GpuBuffer, GpuDevice } from './gpu-api';
 
 const GPU_BUFFER_USAGE = {
   MAP_READ: 0x0001,
@@ -30,12 +31,12 @@ export interface IndirectArgsReadbackSnapshot {
  * debug consumers observe one canonical parse/serialization contract.
  */
 export class WebGPUIndirectArgsInspector {
-  private readbackBuffer: any | null = null;
+  private readbackBuffer: GpuBuffer | null = null;
   private readbackCapacityRecords = 0;
 
-  constructor(private readonly device: any) {}
+  constructor(private readonly device: GpuDevice) {}
 
-  async readIndirectArgs(indirectArgsBuffer: any, recordCount: number): Promise<IndirectArgsReadbackSnapshot> {
+  async readIndirectArgs(indirectArgsBuffer: GpuBuffer, recordCount: number): Promise<IndirectArgsReadbackSnapshot> {
     const safeRecordCount = Math.max(0, Math.floor(recordCount));
     const byteLength = safeRecordCount * WEBGPU_RENDER_CONTRACT.indirectArgsBytes;
     if (byteLength === 0) {
