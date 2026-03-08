@@ -27,7 +27,6 @@ import {
 } from '../RuntimeState';
 import type { ValueSlot, ValueExprId } from '../../types';
 import { registerDynamicTopology } from '../../shapes/registry';
-import type { RenderSpace2D } from '../../shapes/types';
 import { PathVerb } from '../../shapes/types';
 import { DEFAULT_CAMERA } from '../CameraResolver';
 import { getTestArena } from './test-arena-helper';
@@ -150,11 +149,6 @@ const CIRCLE_ID = registerDynamicTopology({
     { name: 'radius', type: 'float', default: 0.02 },
     { name: 'closed', type: 'float', default: 1 },
   ],
-  render: (ctx: CanvasRenderingContext2D, p: Record<string, number>, space: RenderSpace2D) => {
-    ctx.beginPath();
-    ctx.arc(0, 0, p.radius, 0, Math.PI * 2);
-    ctx.fill();
-  },
   verbs: [PathVerb.MOVE, PathVerb.LINE, PathVerb.LINE, PathVerb.LINE, PathVerb.CLOSE],
   pointsPerVerb: [1, 1, 1, 1, 0],
   totalControlPoints: 4,
@@ -166,16 +160,6 @@ const SQUARE_ID = registerDynamicTopology({
     { name: 'size', type: 'float', default: 0.04 },
     { name: 'closed', type: 'float', default: 1 },
   ],
-  render: (ctx: CanvasRenderingContext2D, p: Record<string, number>, space: RenderSpace2D) => {
-    const s = p.size / 2;
-    ctx.beginPath();
-    ctx.moveTo(-s, -s);
-    ctx.lineTo(s, -s);
-    ctx.lineTo(s, s);
-    ctx.lineTo(-s, s);
-    ctx.closePath();
-    ctx.fill();
-  },
   verbs: [PathVerb.MOVE, PathVerb.LINE, PathVerb.LINE, PathVerb.LINE, PathVerb.CLOSE],
   pointsPerVerb: [1, 1, 1, 1, 0],
   totalControlPoints: 4,
@@ -187,14 +171,6 @@ const TRIANGLE_ID = registerDynamicTopology({
     { name: 'size', type: 'float', default: 0.03 },
     { name: 'closed', type: 'float', default: 1 },
   ],
-  render: (ctx: CanvasRenderingContext2D, p: Record<string, number>, space: RenderSpace2D) => {
-    ctx.beginPath();
-    ctx.moveTo(0, -1);
-    ctx.lineTo(0.87, 0.5);
-    ctx.lineTo(-0.87, 0.5);
-    ctx.closePath();
-    ctx.fill();
-  },
   verbs: [PathVerb.MOVE, PathVerb.LINE, PathVerb.LINE, PathVerb.CLOSE],
   pointsPerVerb: [1, 1, 1, 0],
   totalControlPoints: 3,
