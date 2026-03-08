@@ -15,7 +15,7 @@ concurrency:
 
 permissions:
   contents: read
-  actions: read
+  actions: write
 
 jobs:
   complexity:
@@ -116,3 +116,9 @@ jobs:
             --head-sha "$HEAD_SHA" \
             --artifact-url "$ARTIFACT_URL" \
             >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Enforce changed-file complexity thresholds
+        run: |
+          LATEST_DIR="$(cat artifacts/compare/latest.txt)"
+          node scripts/complexity/assert-file-gates.mjs \
+            --delta-json "artifacts/compare/${LATEST_DIR}/commit-delta.json"

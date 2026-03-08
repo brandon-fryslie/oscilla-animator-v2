@@ -133,8 +133,8 @@ function rowToSummaryRow(row, metricAttribution) {
   ];
 }
 
-function rowToFullRow(row) {
-  return rowToSummaryRow(row);
+function rowToFullRow(row, metricAttribution) {
+  return rowToSummaryRow(row, metricAttribution);
 }
 
 function renderBadge(trend) {
@@ -157,7 +157,10 @@ function renderMetricContext(rows, metricAttribution) {
       if (!safeUrl || !matchedLocation) return `- ${escapeSummaryText(String(line))}`;
       const text = String(line);
       const tokenMatch = text.match(/^([^:\s][^:]*:\d+:\d+)(.*)$/);
-      if (!tokenMatch) return `- ${escapeSummaryText(text)} (${safeUrl})`;
+      if (!tokenMatch) {
+        const fallbackToken = `${matchedLocation.filePath}:${matchedLocation.startLine}-${matchedLocation.endLine}`;
+        return `- [\`${escapeCell(fallbackToken)}\`](${safeUrl})${text ? ` ${escapeSummaryText(text)}` : ''}`;
+      }
       const token = tokenMatch[1];
       const rest = tokenMatch[2] ?? '';
       return `- [\`${escapeCell(token)}\`](${safeUrl})${escapeSummaryText(rest)}`;
@@ -181,14 +184,20 @@ function renderMetricContext(rows, metricAttribution) {
         ? [
           'Snippets:',
           ...snippets.slice(0, 3).flatMap((snippet) => [
-            `<details><summary>\`${escapeCell(String(snippet.filePath))}:${snippet.startLine}-${snippet.endLine}\`</summary>`,
-            '',
-            `${sanitizeHttpUrl(snippet.url) ? `[Open file at commit](${sanitizeHttpUrl(snippet.url)})` : 'No file link available'}${sanitizeHttpUrl(snippet.compareUrl) ? ` · [Open compare](${sanitizeHttpUrl(snippet.compareUrl)})` : ''}`,
-            '',
-            '```diff',
-            escapeCodeBlock(snippet.snippet),
-            '```',
-            '</details>',
+            (() => {
+              const safeSnippetUrl = sanitizeHttpUrl(snippet.url);
+              const safeCompareUrl = sanitizeHttpUrl(snippet.compareUrl);
+              return [
+                `<details><summary>\`${escapeCell(String(snippet.filePath))}:${snippet.startLine}-${snippet.endLine}\`</summary>`,
+                '',
+                `${safeSnippetUrl ? `[Open file at commit](${safeSnippetUrl})` : 'No file link available'}${safeCompareUrl ? ` · [Open compare](${safeCompareUrl})` : ''}`,
+                '',
+                '```diff',
+                escapeCodeBlock(snippet.snippet),
+                '```',
+                '</details>',
+              ].join('\n');
+            })(),
           ]),
           '',
         ]
@@ -212,9 +221,10 @@ function renderSummaryMarkdown(delta, options) {
   const safeArtifactUrl = sanitizeHttpUrl(options.artifactUrl);
   const artifactUrl = safeArtifactUrl ? `[Download archived HTML report](${safeArtifactUrl})` : 'Artifact URL unavailable';
   const metricAttribution = delta.metricAttribution ?? delta.regressionAttribution ?? {};
+  const fileGate = delta.fileThresholdGate ?? null;
   const highSignalRegressionRows = sortRowsForDisplay((delta.highSignalRegressions ?? []).filter(isComplexityMetric)).map((row) => rowToSummaryRow(row, metricAttribution));
   const highSignalImprovementRows = sortRowsForDisplay((delta.highSignalImprovements ?? []).filter(isComplexityMetric)).map((row) => rowToSummaryRow(row, metricAttribution));
-  const fullRows = sortedRows.map(rowToFullRow);
+  const fullRows = sortedRows.map((row) => rowToFullRow(row, metricAttribution));
   const guideRows = (delta.guide ?? [])
     .filter((row) => row.direction !== 'info')
     .map((row) => [row.label, row.directionLabel, row.target, row.signal, row.description ?? '']);
@@ -229,6 +239,10 @@ function renderSummaryMarkdown(delta, options) {
     `- net score (improved - regressed): ${delta.score}`,
     `- improved metrics: ${improvedCount}, regressed metrics: ${regressedCount}, unchanged/near-zero: ${neutralCount}`,
     `- artifact: ${artifactUrl}`,
+    ...(fileGate ? [
+      `- changed-file gate: ${fileGate.passed ? 'pass' : 'fail'} (${fileGate.failureCount}/${fileGate.evaluationCount} failing checks across ${fileGate.trackedChangedFilesCount} tracked changed files)`,
+      `- changed-file gate policy: under threshold OR >= ${formatPctValue(fileGate.minImprovementPct)} improvement`,
+    ] : []),
     '',
     '### High-Signal Regressions',
     '',
@@ -244,6 +258,29 @@ function renderSummaryMarkdown(delta, options) {
       highSignalImprovementRows,
     ),
     '',
+    ...(fileGate ? [
+      '### Changed-File Threshold Gate',
+      '',
+      renderTable(
+        ['File', 'Metric', 'Base/Head', 'Delta (%)', 'Threshold', 'Result'],
+        (fileGate.evaluations ?? []).slice(0, 300).map((evaluation) => {
+          const deltaValue = Number(evaluation.headValue) - Number(evaluation.baseValue);
+          const deltaPct = Number.isFinite(evaluation.improvementPct)
+            ? evaluation.improvementPct
+            : null;
+          const statusEmoji = evaluation.passed ? '✅' : '❌';
+          return [
+            evaluation.filePath,
+            evaluation.metricLabel,
+            `${formatMetricValue(evaluation.baseValue)}/${formatMetricValue(evaluation.headValue)}`,
+            `${statusEmoji} ${formatDeltaValue(deltaValue)} (${formatPctValue(deltaPct)})`,
+            `${evaluation.direction === 'higher' ? '>=' : '<='} ${formatMetricValue(evaluation.threshold)}`,
+            evaluation.passed ? 'pass' : 'fail',
+          ];
+        }),
+      ),
+      '',
+    ] : []),
     '<details>',
     '<summary>Code Context (collapsed)</summary>',
     '',
