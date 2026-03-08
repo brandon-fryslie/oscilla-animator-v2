@@ -15,15 +15,14 @@ concurrency:
 
 permissions:
   contents: read
-  actions: read
+  actions: write
 
 jobs:
   complexity:
     name: Run complexity toolchain
     runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request'
     timeout-minutes: 30
-    outputs:
-      artifact_name: ${{ steps.artifact_name.outputs.name }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -48,97 +47,95 @@ jobs:
       - name: Run complexity analysis
         run: pnpm -s complexity:all
 
-      - name: Choose artifact name
-        id: artifact_name
-        env:
-          EVENT_NAME: ${{ github.event_name }}
-          REF_NAME: ${{ github.ref }}
-          PR_NUMBER: ${{ github.event.pull_request.number || '' }}
-          SHA: ${{ github.sha }}
+      - name: Prepare complexity HTML artifact
+        id: complexity_html_artifact
         run: |
-          if [ "$EVENT_NAME" = "push" ] && [ "$REF_NAME" = "refs/heads/master" ]; then
-            echo "name=complexity-master" >> "$GITHUB_OUTPUT"
-          else
-            if [ -z "$PR_NUMBER" ]; then
-              PR_NUMBER="manual"
-            fi
-            echo "name=complexity-pr-${PR_NUMBER}-${SHA}" >> "$GITHUB_OUTPUT"
-          fi
+          SOURCE_HTML="reports/complexity/comparison-summary.html"
+          TARGET_HTML="artifacts/complexity-${GITHUB_SHA}-comparison.html"
+          mkdir -p artifacts
+          cp "$SOURCE_HTML" "$TARGET_HTML"
+          echo "path=$TARGET_HTML" >> "$GITHUB_OUTPUT"
 
-      - name: Upload complexity artifact
+      - name: Upload complexity comparison HTML
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ steps.artifact_name.outputs.name }}
-          path: reports/complexity/**
+          name: complexity-comparison-${{ github.sha }}
+          path: ${{ steps.complexity_html_artifact.outputs.path }}
           if-no-files-found: error
           retention-days: 30
 
-  compare-with-master:
-    name: Compare PR vs master complexity
+  compare-base-vs-head:
+    name: Compare PR base vs head complexity
     runs-on: ubuntu-latest
-    needs: complexity
     if: github.event_name == 'pull_request'
-    timeout-minutes: 10
+    timeout-minutes: 60
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.2
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: pnpm
 
-      - name: Download current PR complexity artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: ${{ needs.complexity.outputs.artifact_name }}
-          path: artifacts/current
+      - name: Install ripgrep
+        run: sudo apt-get update && sudo apt-get install -y ripgrep
 
-      - name: Download latest master complexity artifact
-        uses: dawidd6/action-download-artifact@v6
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          workflow: complexity-analysis.yaml
-          branch: master
-          event: push
-          name: complexity-master
-          path: artifacts/master
-          if_no_artifact_found: warn
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
 
-      - name: Detect master complexity baseline
-        id: master_baseline
-        run: |
-          BASE_SUMMARY="artifacts/master/reports/complexity/comparison-summary.json"
-          if [ -f "$BASE_SUMMARY" ]; then
-            echo "has_master_baseline=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "has_master_baseline=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Build PR vs master comparison
-        if: steps.master_baseline.outputs.has_master_baseline == 'true'
+      - name: Build PR base vs head comparison
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: >
           node scripts/complexity/commit-delta.mjs
-          --base-summary artifacts/master/reports/complexity/comparison-summary.json
-          --head-summary artifacts/current/reports/complexity/comparison-summary.json
+          --base "$BASE_SHA"
+          --head "$HEAD_SHA"
           --output-dir artifacts/compare
 
-      - name: Add comparison to job summary
-        if: steps.master_baseline.outputs.has_master_baseline == 'true'
+      - name: Prepare comparison HTML artifact
+        id: html_artifact
         run: |
           LATEST_DIR="$(cat artifacts/compare/latest.txt)"
-          cat "artifacts/compare/${LATEST_DIR}/commit-delta.md" >> "$GITHUB_STEP_SUMMARY"
+          SOURCE_HTML="artifacts/compare/${LATEST_DIR}/commit-delta.html"
+          TARGET_HTML="artifacts/complexity-pr-${{ github.event.pull_request.number }}-base-vs-head.html"
+          cp "$SOURCE_HTML" "$TARGET_HTML"
+          echo "path=$TARGET_HTML" >> "$GITHUB_OUTPUT"
 
-      - name: Add baseline-missing note to job summary
-        if: steps.master_baseline.outputs.has_master_baseline != 'true'
-        run: |
-          echo "No master complexity baseline artifact found; skipped PR vs master comparison." >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Upload PR vs master comparison artifact
-        if: steps.master_baseline.outputs.has_master_baseline == 'true'
+      - name: Upload PR base-vs-head comparison HTML
+        id: upload_html_artifact
         uses: actions/upload-artifact@v4
         with:
-          name: complexity-pr-vs-master-${{ github.event.pull_request.number }}
-          path: artifacts/compare/**
+          name: complexity-pr-base-vs-head-${{ github.event.pull_request.number }}
+          path: ${{ steps.html_artifact.outputs.path }}
           if-no-files-found: error
           retention-days: 30
+
+      - name: Add comparison to job summary
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          ARTIFACT_URL: ${{ steps.upload_html_artifact.outputs.artifact-url }}
+        run: |
+          LATEST_DIR="$(cat artifacts/compare/latest.txt)"
+          node scripts/complexity/render-github-summary.mjs \
+            --delta-json "artifacts/compare/${LATEST_DIR}/commit-delta.json" \
+            --base-sha "$BASE_SHA" \
+            --head-sha "$HEAD_SHA" \
+            --artifact-url "$ARTIFACT_URL" \
+            >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Enforce changed-file complexity thresholds
+        run: |
+          LATEST_DIR="$(cat artifacts/compare/latest.txt)"
+          node scripts/complexity/assert-file-gates.mjs \
+            --delta-json "artifacts/compare/${LATEST_DIR}/commit-delta.json"

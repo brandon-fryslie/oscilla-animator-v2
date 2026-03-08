@@ -14,6 +14,7 @@ import {
   writeJson,
   writeText,
 } from './_shared.mjs';
+import { isComplexityMetric, rowStatus, sortRowsForDisplay } from './delta-visuals.mjs';
 
 const DEFAULT_OUTPUT_ROOT = path.join(reportsDir, 'deltas');
 
@@ -26,19 +27,19 @@ const METRIC_META = {
   eslintMaxParamsHits: { label: 'ESLint max-params hits', direction: 'lower', signal: 'medium', target: '0', scale: 'count' },
   eslintCognitiveHits: { label: 'ESLint cognitive-complexity hits', direction: 'lower', signal: 'high', target: '0', scale: 'count' },
 
-  tsMorphMaxCyclomatic: { label: 'ts-morph max cyclomatic', direction: 'lower', signal: 'high', target: '<= 15 preferred', scale: 'count' },
-  tsMorphMaxCognitive: { label: 'ts-morph max cognitive', direction: 'lower', signal: 'high', target: '<= 20 preferred', scale: 'count' },
-  tsMorphMaxNesting: { label: 'ts-morph max nesting depth', direction: 'lower', signal: 'high', target: '<= 4 preferred', scale: 'count' },
-  tsMorphSourceLocTotal: { label: 'ts-morph total source LOC', direction: 'info', signal: 'low', target: 'context only', scale: 'size' },
-  tsMorphMaxHalsteadVolume: { label: 'ts-morph max Halstead volume', direction: 'lower', signal: 'medium', target: 'trend down over time', scale: 'size' },
-  tsMorphAvgMi: { label: 'ts-morph average maintainability index', direction: 'higher', signal: 'high', target: '>= 65 good, < 50 risky', scale: 'score' },
-  tsMorphMaxFanOut: { label: 'ts-morph max fan-out', direction: 'lower', signal: 'high', target: '<= 15 preferred', scale: 'count' },
-  tsMorphMaxFanIn: { label: 'ts-morph max fan-in', direction: 'lower', signal: 'medium', target: 'watch hotspots', scale: 'count' },
+  tsMorphMaxCyclomatic: { label: 'ts-morph max cyclomatic', direction: 'lower', signal: 'high', target: '<= 15 preferred', scale: 'count', description: 'Highest cyclomatic complexity across analyzed functions.' },
+  tsMorphMaxCognitive: { label: 'ts-morph max cognitive', direction: 'lower', signal: 'high', target: '<= 20 preferred', scale: 'count', description: 'Highest cognitive complexity across analyzed functions.' },
+  tsMorphMaxNesting: { label: 'ts-morph max nesting depth', direction: 'lower', signal: 'high', target: '<= 4 preferred', scale: 'count', description: 'Deepest nested control-flow depth found in a function.' },
+  tsMorphSourceLocTotal: { label: 'ts-morph total source LOC', direction: 'info', signal: 'low', target: 'context only', scale: 'size', description: 'Total lines of source code. Context-only size metric, not complexity.' },
+  tsMorphMaxHalsteadVolume: { label: 'ts-morph max Halstead volume', direction: 'lower', signal: 'medium', target: 'trend down over time', scale: 'size', description: 'Largest Halstead volume observed among functions.' },
+  tsMorphAvgMi: { label: 'ts-morph average maintainability index', direction: 'higher', signal: 'high', target: '>= 65 good, < 50 risky', scale: 'score', description: 'Average maintainability index across analyzed functions.' },
+  tsMorphMaxFanOut: { label: 'ts-morph max fan-out', direction: 'lower', signal: 'high', target: '<= 15 preferred', scale: 'count', description: 'Maximum number of internal modules imported by a single module.' },
+  tsMorphMaxFanIn: { label: 'ts-morph max fan-in', direction: 'lower', signal: 'medium', target: 'watch hotspots', scale: 'count', description: 'Maximum number of internal modules that import the same module (hotspot fan-in).' },
 
   dependencyCruiserErrors: { label: 'dependency-cruiser error violations', direction: 'lower', signal: 'high', target: '0', scale: 'count' },
   dependencyCruiserWarnings: { label: 'dependency-cruiser warning violations', direction: 'lower', signal: 'medium', target: '0', scale: 'count' },
   dependencyCruiserModules: { label: 'dependency-cruiser module count', direction: 'info', signal: 'low', target: 'context only', scale: 'size' },
-  dependencyCruiserDependencies: { label: 'dependency-cruiser dependency edges', direction: 'info', signal: 'low', target: 'context only', scale: 'size' },
+  dependencyCruiserDependencies: { label: 'dependency-cruiser dependency edges', direction: 'info', signal: 'low', target: 'context only', scale: 'size', description: 'Total number of dependency edges in the module graph.' },
   dependencyCruiserMaxFanOut: { label: 'dependency-cruiser max fan-out', direction: 'lower', signal: 'high', target: '<= 15 preferred', scale: 'count' },
   dependencyCruiserMaxFanIn: { label: 'dependency-cruiser max fan-in', direction: 'lower', signal: 'medium', target: 'watch hotspots', scale: 'count' },
 
@@ -46,14 +47,28 @@ const METRIC_META = {
   platoMaxCyclomatic: { label: 'Plato max cyclomatic', direction: 'lower', signal: 'medium', target: '<= 15 preferred', scale: 'count' },
   platoAvgHalsteadDifficulty: { label: 'Plato avg Halstead difficulty', direction: 'lower', signal: 'low', target: 'trend down', scale: 'size' },
   platoAvgHalsteadVolume: { label: 'Plato avg Halstead volume', direction: 'lower', signal: 'low', target: 'trend down', scale: 'size' },
-  platoTotalLogicalSloc: { label: 'Plato total logical SLOC', direction: 'info', signal: 'low', target: 'context only', scale: 'size' },
+  platoTotalLogicalSloc: { label: 'Plato total logical SLOC', direction: 'info', signal: 'low', target: 'context only', scale: 'size', description: 'Total logical source lines of code measured by Plato.' },
 
   typhonAvgMaintainability: { label: 'Typhon average maintainability', direction: 'higher', signal: 'medium', target: '>= 65 good', scale: 'score' },
   typhonMaxCyclomatic: { label: 'Typhon max cyclomatic', direction: 'lower', signal: 'medium', target: '<= 15 preferred', scale: 'count' },
   typhonAvgHalsteadDifficulty: { label: 'Typhon avg Halstead difficulty', direction: 'lower', signal: 'low', target: 'trend down', scale: 'size' },
   typhonAvgHalsteadVolume: { label: 'Typhon avg Halstead volume', direction: 'lower', signal: 'low', target: 'trend down', scale: 'size' },
-  typhonTotalLogicalSloc: { label: 'Typhon total logical SLOC', direction: 'info', signal: 'low', target: 'context only', scale: 'size' },
+  typhonTotalLogicalSloc: { label: 'Typhon total logical SLOC', direction: 'info', signal: 'low', target: 'context only', scale: 'size', description: 'Total logical source lines of code measured by Typhon.' },
 };
+
+const FILE_GATE_MIN_IMPROVEMENT_PCT = 3;
+const FILE_GATE_METRICS = [
+  { key: 'eslintComplexityHits', label: 'ESLint cyclomatic rule hits (per file)', direction: 'lower', threshold: 0, source: 'eslint-rule', sourceKey: 'complexity' },
+  { key: 'eslintMaxDepthHits', label: 'ESLint max-depth hits (per file)', direction: 'lower', threshold: 0, source: 'eslint-rule', sourceKey: 'max-depth' },
+  { key: 'eslintMaxLinesPerFunctionHits', label: 'ESLint max-lines-per-function hits (per file)', direction: 'lower', threshold: 0, source: 'eslint-rule', sourceKey: 'max-lines-per-function' },
+  { key: 'eslintMaxParamsHits', label: 'ESLint max-params hits (per file)', direction: 'lower', threshold: 0, source: 'eslint-rule', sourceKey: 'max-params' },
+  { key: 'eslintCognitiveHits', label: 'ESLint cognitive-complexity hits (per file)', direction: 'lower', threshold: 0, source: 'eslint-rule', sourceKey: 'sonarjs/cognitive-complexity' },
+  { key: 'tsMorphFileMaxCyclomatic', label: 'ts-morph max cyclomatic (per file)', direction: 'lower', threshold: 15, source: 'ts-morph', sourceKey: 'maxCyclomatic' },
+  { key: 'tsMorphFileMaxCognitive', label: 'ts-morph max cognitive (per file)', direction: 'lower', threshold: 20, source: 'ts-morph', sourceKey: 'maxCognitive' },
+  { key: 'tsMorphFileMaxNestingDepth', label: 'ts-morph max nesting depth (per file)', direction: 'lower', threshold: 4, source: 'ts-morph', sourceKey: 'maxNestingDepth' },
+  { key: 'tsMorphFileAvgMaintainability', label: 'ts-morph average maintainability index (per file)', direction: 'higher', threshold: 65, source: 'ts-morph', sourceKey: 'avgMaintainabilityIndex' },
+  { key: 'tsMorphFileModuleFanOut', label: 'ts-morph module fan-out (per file)', direction: 'lower', threshold: 15, source: 'ts-morph', sourceKey: 'moduleFanOut' },
+];
 
 function parseArgs(argv) {
   const args = {};
@@ -83,6 +98,7 @@ function metricMeta(key) {
     signal: 'low',
     target: 'context only',
     scale: 'count',
+    description: `${key} metric.`,
   };
 }
 
@@ -127,12 +143,15 @@ function summarizeImpact(signal, classification, magnitude) {
 }
 
 function formatMetricValue(value) {
-  return Number.isFinite(value) ? formatSig2(value) : 'n/a';
+  if (!Number.isFinite(value)) return 'n/a';
+  if (Number.isInteger(value)) return String(value);
+  return formatSig2(value);
 }
 
 function formatDeltaValue(value) {
   const numeric = Number(value);
   if (!Number.isFinite(numeric)) return 'n/a';
+  if (Number.isInteger(numeric)) return `${numeric > 0 ? '+' : ''}${numeric}`;
   return `${numeric > 0 ? '+' : ''}${formatSig2(numeric)}`;
 }
 
@@ -179,6 +198,218 @@ function normalizeFilePath(filePath, repoRoot) {
 
 function uniqueItems(values) {
   return [...new Set(values.filter(Boolean))];
+}
+
+function sanitizeHttpUrl(value) {
+  if (typeof value !== 'string' || value.length === 0) return null;
+  try {
+    const parsed = new URL(value);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null;
+    return parsed.toString();
+  } catch {
+    return null;
+  }
+}
+
+function normalizeGitFilePath(filePath) {
+  if (typeof filePath !== 'string' || filePath.length === 0) return null;
+  return filePath.replaceAll('\\', '/').replace(/^\.\//, '');
+}
+
+function isEslintTrackedFile(filePath) {
+  return /^src\/.+\.tsx?$/.test(filePath) || /^scripts\/.+\.mjs$/.test(filePath);
+}
+
+function isTsMorphTrackedFile(filePath) {
+  return /^src\/.+\.tsx?$/.test(filePath);
+}
+
+function isFileTrackedForMetric(metric, filePath) {
+  if (metric.source === 'ts-morph') return isTsMorphTrackedFile(filePath);
+  return isEslintTrackedFile(filePath);
+}
+
+function toFiniteNumber(value) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : null;
+}
+
+function passesThreshold(direction, value, threshold) {
+  if (!Number.isFinite(value) || !Number.isFinite(threshold)) return false;
+  if (direction === 'higher') return value >= threshold;
+  return value <= threshold;
+}
+
+function computeImprovementPct(direction, baseValue, headValue) {
+  if (!Number.isFinite(baseValue) || !Number.isFinite(headValue)) return null;
+  if (baseValue === 0) {
+    if (headValue === 0) return 0;
+    if (direction === 'higher') return 100;
+    return -100;
+  }
+  if (direction === 'higher') {
+    return ((headValue - baseValue) / Math.abs(baseValue)) * 100;
+  }
+  return ((baseValue - headValue) / Math.abs(baseValue)) * 100;
+}
+
+async function listChangedFiles(baseSha, headSha) {
+  if (!baseSha || !headSha) return [];
+  const run = await runCommand(
+    'git',
+    ['diff', '--name-only', '--diff-filter=ACMR', `${baseSha}..${headSha}`],
+    { allowFailure: true },
+  );
+  if (!run.ok) {
+    throw new Error(`unable to list changed files for ${baseSha}..${headSha}: ${run.stderr || run.stdout}`);
+  }
+  return uniqueItems(
+    run.stdout
+      .split('\n')
+      .map((line) => normalizeGitFilePath(line.trim()))
+      .filter(Boolean),
+  ).sort((a, b) => a.localeCompare(b));
+}
+
+function buildEslintRuleCountMaps(eslintSummary, repoRoot) {
+  const findings = normalizeEslintFindings(eslintSummary, repoRoot);
+  const maps = Object.fromEntries(
+    FILE_GATE_METRICS
+      .filter((metric) => metric.source === 'eslint-rule')
+      .map((metric) => [metric.sourceKey, new Map()]),
+  );
+  for (const finding of findings) {
+    const filePath = normalizeGitFilePath(finding.filePath);
+    if (!filePath || !maps[finding.ruleId]) continue;
+    const current = maps[finding.ruleId].get(filePath) ?? 0;
+    maps[finding.ruleId].set(filePath, current + 1);
+  }
+  return maps;
+}
+
+function buildTsMorphFieldMaps(tsMorphSummary, repoRoot) {
+  const rows = Array.isArray(tsMorphSummary?.fileMetrics) ? tsMorphSummary.fileMetrics : [];
+  const maps = Object.fromEntries(
+    FILE_GATE_METRICS
+      .filter((metric) => metric.source === 'ts-morph')
+      .map((metric) => [metric.sourceKey, new Map()]),
+  );
+  for (const row of rows) {
+    const normalizedPath = normalizeFilePath(row.filePath, repoRoot);
+    const filePath = normalizeGitFilePath(normalizedPath);
+    if (!filePath) continue;
+    for (const metric of FILE_GATE_METRICS.filter((entry) => entry.source === 'ts-morph')) {
+      const value = toFiniteNumber(row?.[metric.sourceKey]);
+      if (!Number.isFinite(value)) continue;
+      maps[metric.sourceKey].set(filePath, value);
+    }
+  }
+  return maps;
+}
+
+function metricValueFromMaps(metric, filePath, maps, fallback = null) {
+  const container = metric.source === 'ts-morph' ? maps.tsMorph : maps.eslint;
+  const value = container?.[metric.sourceKey]?.get(filePath);
+  if (Number.isFinite(value)) return value;
+  return fallback;
+}
+
+async function evaluateChangedFileThresholdGate(baseLoaded, headLoaded) {
+  const baseSha = baseLoaded.metadata.commitSha ?? null;
+  const headSha = headLoaded.metadata.commitSha ?? null;
+  const changedFiles = await listChangedFiles(baseSha, headSha);
+  const trackedChangedFiles = changedFiles.filter((filePath) => (
+    isEslintTrackedFile(filePath) || isTsMorphTrackedFile(filePath)
+  ));
+
+  const baseRepoRoot = inferRepoRootFromSummaryPath(baseLoaded.metadata.summaryPath);
+  const headRepoRoot = inferRepoRootFromSummaryPath(headLoaded.metadata.summaryPath);
+  const baseMaps = {
+    eslint: buildEslintRuleCountMaps(baseLoaded.summary.tools?.eslint ?? {}, baseRepoRoot),
+    tsMorph: buildTsMorphFieldMaps(baseLoaded.summary.tools?.tsMorph ?? {}, baseRepoRoot),
+  };
+  const headMaps = {
+    eslint: buildEslintRuleCountMaps(headLoaded.summary.tools?.eslint ?? {}, headRepoRoot),
+    tsMorph: buildTsMorphFieldMaps(headLoaded.summary.tools?.tsMorph ?? {}, headRepoRoot),
+  };
+
+  const evaluations = [];
+  for (const filePath of trackedChangedFiles) {
+    for (const metric of FILE_GATE_METRICS) {
+      if (!isFileTrackedForMetric(metric, filePath)) continue;
+      const defaultValue = metric.source === 'eslint-rule' ? 0 : null;
+      const headValue = metricValueFromMaps(metric, filePath, headMaps, defaultValue);
+      if (!Number.isFinite(headValue)) continue;
+      const baseValue = metricValueFromMaps(metric, filePath, baseMaps, defaultValue);
+      const underThreshold = passesThreshold(metric.direction, headValue, metric.threshold);
+      const improvementPct = computeImprovementPct(metric.direction, baseValue, headValue);
+      const improvedEnough = Number.isFinite(improvementPct) && improvementPct >= FILE_GATE_MIN_IMPROVEMENT_PCT;
+      const passed = underThreshold || improvedEnough;
+      const reason = underThreshold
+        ? 'under-threshold'
+        : improvedEnough
+          ? 'improved-enough'
+          : 'over-threshold-without-required-improvement';
+      evaluations.push({
+        filePath,
+        metricKey: metric.key,
+        metricLabel: metric.label,
+        direction: metric.direction,
+        threshold: metric.threshold,
+        baseValue,
+        headValue,
+        improvementPct,
+        underThreshold,
+        improvedEnough,
+        passed,
+        reason,
+      });
+    }
+  }
+
+  const failures = evaluations
+    .filter((evaluation) => !evaluation.passed)
+    .sort((a, b) => {
+      const fileOrder = a.filePath.localeCompare(b.filePath);
+      if (fileOrder !== 0) return fileOrder;
+      return a.metricLabel.localeCompare(b.metricLabel);
+    });
+
+  return {
+    enabled: true,
+    policy: 'changed-file-under-threshold-or-improve-by-3pct',
+    minImprovementPct: FILE_GATE_MIN_IMPROVEMENT_PCT,
+    changedFiles,
+    trackedChangedFiles,
+    trackedChangedFilesCount: trackedChangedFiles.length,
+    evaluations,
+    failures,
+    evaluationCount: evaluations.length,
+    failureCount: failures.length,
+    passed: failures.length === 0,
+  };
+}
+
+function uniqueLocations(locations) {
+  const seen = new Set();
+  const out = [];
+  for (const location of locations) {
+    const filePath = location?.filePath ?? null;
+    const startLine = Number(location?.startLine ?? 0);
+    const endLine = Number(location?.endLine ?? startLine);
+    if (!filePath || !Number.isFinite(startLine) || startLine <= 0) continue;
+    const normalized = {
+      filePath,
+      startLine,
+      endLine: Number.isFinite(endLine) && endLine >= startLine ? endLine : startLine,
+      reason: typeof location?.reason === 'string' ? location.reason : '',
+    };
+    const signature = `${normalized.filePath}|${normalized.startLine}|${normalized.endLine}|${normalized.reason}`;
+    if (seen.has(signature)) continue;
+    seen.add(signature);
+    out.push(normalized);
+  }
+  return out;
 }
 
 function findingSignature(finding) {
@@ -301,6 +532,7 @@ function buildDelta(baseSummary, headSummary) {
       directionLabel: directionLabel(meta.direction),
       signal: meta.signal,
       target: meta.target,
+      description: meta.description ?? `${meta.label}. ${directionLabel(meta.direction)}.`,
       base,
       head,
       delta,
@@ -311,14 +543,19 @@ function buildDelta(baseSummary, headSummary) {
     };
   });
 
-  const improved = rows.filter((row) => row.classification === 'improved');
-  const regressed = rows.filter((row) => row.classification === 'regressed');
-  const unchanged = rows.filter((row) => row.classification === 'unchanged');
+  const improved = rows.filter((row) => rowStatus(row).kind === 'improvement');
+  const regressed = rows.filter((row) => rowStatus(row).kind === 'regression');
+  const unchanged = rows.filter((row) => ['unchanged', 'neutral'].includes(rowStatus(row).kind));
   const highSignalRegressions = regressed.filter((row) => row.signal === 'high').sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta)).slice(0, 10);
   const highSignalImprovements = improved.filter((row) => row.signal === 'high').sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta)).slice(0, 10);
 
   const guide = Object.entries(METRIC_META)
-    .map(([key, meta]) => ({ key, ...meta, directionLabel: directionLabel(meta.direction) }))
+    .map(([key, meta]) => ({
+      key,
+      ...meta,
+      directionLabel: directionLabel(meta.direction),
+      description: meta.description ?? `${meta.label}. ${directionLabel(meta.direction)}.`,
+    }))
     .sort((a, b) => a.key.localeCompare(b.key));
 
   return {
@@ -354,6 +591,14 @@ function fileFromViolation(violation, repoRoot) {
   ].filter(Boolean);
 }
 
+function parseEmbeddedLine(name) {
+  if (typeof name !== 'string') return null;
+  const match = name.match(/:(\d+)$/);
+  if (!match) return null;
+  const line = Number(match[1]);
+  return Number.isFinite(line) && line > 0 ? line : null;
+}
+
 function collectMetricAttribution(row, context) {
   const {
     baseTools,
@@ -363,11 +608,15 @@ function collectMetricAttribution(row, context) {
   } = context;
   const evidence = [];
   const files = [];
+  const locations = [];
   const pushFile = (filePath) => {
     if (filePath) files.push(filePath);
   };
   const pushEvidence = (line) => {
     if (line) evidence.push(line);
+  };
+  const pushLocation = (filePath, startLine, endLine, reason) => {
+    locations.push({ filePath, startLine, endLine, reason });
   };
 
   const headEslint = normalizeEslintFindings(headTools.eslint, headRepoRoot);
@@ -394,6 +643,12 @@ function collectMetricAttribution(row, context) {
     for (const finding of matchedFindings.slice(0, 6)) {
       pushFile(finding.filePath);
       pushEvidence(`${finding.filePath}:${finding.line}:${finding.column} [${finding.ruleId}] ${finding.message}`);
+      pushLocation(
+        finding.filePath,
+        finding.line ?? 0,
+        finding.endLine ?? finding.line ?? 0,
+        finding.ruleId ?? 'eslint',
+      );
     }
   }
 
@@ -401,26 +656,36 @@ function collectMetricAttribution(row, context) {
     const top = headTools.tsMorph?.topCyclomatic?.[0] ?? null;
     pushFile(normalizeFilePath(top?.filePath, headRepoRoot));
     if (top) pushEvidence(`head max cyclomatic function: ${top.name} (${formatMetricValue(top.cyclomatic)})`);
+    const line = parseEmbeddedLine(top?.name);
+    if (top?.filePath && line) pushLocation(normalizeFilePath(top.filePath, headRepoRoot), line, line, 'ts-morph');
   }
   if (row.key === 'tsMorphMaxCognitive') {
     const top = headTools.tsMorph?.topCognitive?.[0] ?? null;
     pushFile(normalizeFilePath(top?.filePath, headRepoRoot));
     if (top) pushEvidence(`head max cognitive function: ${top.name} (${formatMetricValue(top.cognitive)})`);
+    const line = parseEmbeddedLine(top?.name);
+    if (top?.filePath && line) pushLocation(normalizeFilePath(top.filePath, headRepoRoot), line, line, 'ts-morph');
   }
   if (row.key === 'tsMorphMaxNesting') {
     const top = headTools.tsMorph?.topNesting?.[0] ?? null;
     pushFile(normalizeFilePath(top?.filePath, headRepoRoot));
     if (top) pushEvidence(`head max nesting function: ${top.name} (${formatMetricValue(top.maxNestingDepth)})`);
+    const line = parseEmbeddedLine(top?.name);
+    if (top?.filePath && line) pushLocation(normalizeFilePath(top.filePath, headRepoRoot), line, line, 'ts-morph');
   }
   if (row.key === 'tsMorphMaxHalsteadVolume') {
     const top = headTools.tsMorph?.topHalsteadVolume?.[0] ?? null;
     pushFile(normalizeFilePath(top?.filePath, headRepoRoot));
     if (top) pushEvidence(`head max Halstead volume function: ${top.name} (${formatMetricValue(top.halstead?.volume)})`);
+    const line = parseEmbeddedLine(top?.name);
+    if (top?.filePath && line) pushLocation(normalizeFilePath(top.filePath, headRepoRoot), line, line, 'ts-morph');
   }
   if (row.key === 'tsMorphAvgMi') {
     const low = headTools.tsMorph?.topLowMaintainability?.[0] ?? null;
     pushFile(normalizeFilePath(low?.filePath, headRepoRoot));
     if (low) pushEvidence(`lowest maintainability function in head: ${low.name} (${formatMetricValue(low.maintainabilityIndex)})`);
+    const line = parseEmbeddedLine(low?.name);
+    if (low?.filePath && line) pushLocation(normalizeFilePath(low.filePath, headRepoRoot), line, line, 'ts-morph');
   }
   if (row.key === 'tsMorphMaxFanOut') {
     const top = headTools.tsMorph?.topFanOut?.[0] ?? null;
@@ -500,14 +765,103 @@ function collectMetricAttribution(row, context) {
   return {
     evidence: uniqueItems(evidence),
     files: uniqueItems(files),
+    locations: uniqueLocations(locations),
   };
 }
 
-async function buildRegressionAttribution(delta, baseLoaded, headLoaded) {
+function normalizeRepositoryWebUrl(remoteUrl) {
+  if (typeof remoteUrl !== 'string' || remoteUrl.length === 0) return null;
+  const trimmed = remoteUrl.trim();
+  if (trimmed.startsWith('git@github.com:')) {
+    return `https://github.com/${trimmed.slice('git@github.com:'.length).replace(/\.git$/, '')}`;
+  }
+  if (trimmed.startsWith('ssh://git@github.com/')) {
+    return `https://github.com/${trimmed.slice('ssh://git@github.com/'.length).replace(/\.git$/, '')}`;
+  }
+  if (trimmed.startsWith('https://github.com/')) {
+    return trimmed.replace(/\.git$/, '').replace(/\/$/, '');
+  }
+  return null;
+}
+
+async function resolveRepositoryWebUrl(cwd) {
+  const run = await runCommand('git', ['config', '--get', 'remote.origin.url'], { cwd, allowFailure: true });
+  if (!run.ok) return null;
+  return normalizeRepositoryWebUrl(run.stdout.trim());
+}
+
+function encodePathSegments(filePath) {
+  return String(filePath).split('/').map((segment) => encodeURIComponent(segment)).join('/');
+}
+
+function buildBlobRangeUrl(repoWebUrl, commitSha, filePath, startLine, endLine) {
+  if (!repoWebUrl || !commitSha || !filePath || !Number.isFinite(startLine) || startLine <= 0) return null;
+  const normalizedEnd = Number.isFinite(endLine) && endLine >= startLine ? endLine : startLine;
+  return `${repoWebUrl}/blob/${commitSha}/${encodePathSegments(filePath)}#L${startLine}-L${normalizedEnd}`;
+}
+
+function buildCompareUrl(repoWebUrl, baseSha, headSha) {
+  if (!repoWebUrl || !baseSha || !headSha) return null;
+  return `${repoWebUrl}/compare/${baseSha}...${headSha}`;
+}
+
+function parseUnifiedDiffHunks(diffText, options = {}) {
+  const {
+    maxHunks = 12,
+    maxLinesPerHunk = 80,
+    maxTotalLines = 1600,
+  } = options;
+  const lines = diffText.split('\n');
+  const hunks = [];
+  let current = null;
+  let seenLines = 0;
+  const flushCurrent = () => {
+    if (!current) return;
+    const snippetLines = [current.header, ...current.lines];
+    const limitedSnippet = snippetLines.length > maxLinesPerHunk
+      ? `${snippetLines.slice(0, maxLinesPerHunk).join('\n')}\n... (truncated)`
+      : snippetLines.join('\n');
+    const normalizedNewCount = current.newCount > 0 ? current.newCount : 1;
+    hunks.push({
+      oldStart: current.oldStart,
+      oldCount: current.oldCount,
+      newStart: current.newStart,
+      newCount: current.newCount,
+      newEnd: current.newStart + normalizedNewCount - 1,
+      snippet: limitedSnippet,
+    });
+  };
+
+  for (const line of lines) {
+    seenLines += 1;
+    if (seenLines > maxTotalLines || hunks.length >= maxHunks) break;
+    const headerMatch = line.match(/^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/);
+    if (headerMatch) {
+      flushCurrent();
+      current = {
+        header: line,
+        oldStart: Number(headerMatch[1]),
+        oldCount: Number(headerMatch[2] ?? '1'),
+        newStart: Number(headerMatch[3]),
+        newCount: Number(headerMatch[4] ?? '1'),
+        lines: [],
+      };
+      continue;
+    }
+    if (!current) continue;
+    current.lines.push(line);
+  }
+  flushCurrent();
+  return hunks;
+}
+
+async function buildMetricAttribution(delta, baseLoaded, headLoaded) {
   const baseSha = baseLoaded.metadata.commitSha ?? null;
   const headSha = headLoaded.metadata.commitSha ?? null;
   const baseRepoRoot = inferRepoRootFromSummaryPath(baseLoaded.metadata.summaryPath);
   const headRepoRoot = inferRepoRootFromSummaryPath(headLoaded.metadata.summaryPath);
+  const repoWebUrl = await resolveRepositoryWebUrl(headRepoRoot ?? process.cwd());
+  const compareUrl = buildCompareUrl(repoWebUrl, baseSha, headSha);
   const context = {
     baseTools: baseLoaded.summary.tools ?? {},
     headTools: headLoaded.summary.tools ?? {},
@@ -526,25 +880,58 @@ async function buildRegressionAttribution(delta, baseLoaded, headLoaded) {
     const trimmed = run.stdout.trim();
     const lines = trimmed.length === 0 ? [] : trimmed.split('\n');
     const limited = lines.length > 220 ? `${lines.slice(0, 220).join('\n')}\n... (truncated)` : trimmed;
-    const value = limited.length > 0 ? limited : null;
+    const parseInput = trimmed.length > 250000 ? trimmed.slice(0, 250000) : trimmed;
+    const value = limited.length > 0
+      ? { diffText: limited, hunks: parseUnifiedDiffHunks(parseInput) }
+      : null;
     diffCache.set(filePath, value);
     return value;
   };
 
   const attribution = {};
-  for (const row of delta.regressed) {
+  const rowsToAttribute = delta.rows.filter((row) => {
+    const status = rowStatus(row);
+    return status.kind === 'regression' || status.kind === 'improvement';
+  });
+  for (const row of rowsToAttribute) {
     const metricAttribution = collectMetricAttribution(row, context);
     const files = metricAttribution.files.slice(0, 5);
     const diffs = [];
+    const snippets = [];
+    const locationLinks = [];
+
+    for (const location of metricAttribution.locations.slice(0, 8)) {
+      const url = buildBlobRangeUrl(repoWebUrl, headSha, location.filePath, location.startLine, location.endLine);
+      if (!url) continue;
+      locationLinks.push({
+        ...location,
+        url,
+      });
+    }
+
     for (const filePath of files) {
-      const diffText = await getDiff(filePath);
-      if (!diffText) continue;
-      diffs.push({ filePath, diffText });
+      const diffArtifact = await getDiff(filePath);
+      if (!diffArtifact) continue;
+      diffs.push({ filePath, diffText: diffArtifact.diffText });
+      for (const hunk of diffArtifact.hunks.slice(0, 3)) {
+        const url = buildBlobRangeUrl(repoWebUrl, headSha, filePath, hunk.newStart, hunk.newEnd);
+        snippets.push({
+          filePath,
+          startLine: hunk.newStart,
+          endLine: hunk.newEnd,
+          snippet: hunk.snippet,
+          url,
+          compareUrl,
+        });
+      }
     }
     attribution[row.key] = {
       evidence: metricAttribution.evidence,
       files,
+      locations: locationLinks,
+      snippets: snippets.slice(0, 10),
       diffs,
+      status: rowStatus(row),
     };
   }
   return attribution;
@@ -552,6 +939,7 @@ async function buildRegressionAttribution(delta, baseLoaded, headLoaded) {
 
 function renderDeltaMarkdown(delta, baseLabel, headLabel) {
   const pct = (value) => formatPctValue(value);
+  const gate = delta.fileThresholdGate ?? null;
   const rowLine = (row) => {
     return `| ${row.label} | ${formatMetricValue(row.base)} | ${formatMetricValue(row.head)} | ${formatDeltaValue(row.delta)} | ${pct(row.relativeDeltaPct)} | ${row.magnitude} | ${row.impact} |`;
   };
@@ -571,6 +959,10 @@ function renderDeltaMarkdown(delta, baseLabel, headLabel) {
     `- regressed metrics: ${delta.regressedCount}`,
     `- unchanged / informational metrics: ${delta.unchangedCount}`,
     `- net score (improved - regressed): ${delta.score}`,
+    ...(gate ? [
+      `- changed-file gate: ${gate.passed ? 'pass' : 'fail'} (${gate.failureCount}/${gate.evaluationCount} failing checks across ${gate.trackedChangedFilesCount} tracked changed files)`,
+      `- gate policy: file must be under threshold or improved by >= ${formatPctValue(gate.minImprovementPct)}`,
+    ] : []),
     '',
     '## How To Read This',
     '',
@@ -609,6 +1001,16 @@ function renderDeltaMarkdown(delta, baseLabel, headLabel) {
     '| --- | ---: | ---: | ---: | ---: | --- | --- |',
     ...(delta.improved.length > 0 ? delta.improved.map(rowLine) : ['| none | - | - | - | - | - | - |']),
     '',
+    ...(gate ? [
+      '## Changed-File Threshold Gate',
+      '',
+      '| File | Metric | Base | Head | Threshold | Improvement | Result |',
+      '| --- | --- | ---: | ---: | --- | ---: | --- |',
+      ...(gate.evaluations.length > 0
+        ? gate.evaluations.slice(0, 250).map((evaluation) => `| ${evaluation.filePath} | ${evaluation.metricLabel} | ${formatMetricValue(evaluation.baseValue)} | ${formatMetricValue(evaluation.headValue)} | ${evaluation.direction === 'higher' ? '>=' : '<='} ${formatMetricValue(evaluation.threshold)} | ${formatPctValue(evaluation.improvementPct)} | ${evaluation.passed ? 'pass' : 'fail'} |`)
+        : ['| none | - | - | - | - | - | - |']),
+      '',
+    ] : []),
     '## Full Delta Table',
     '',
     '| Key | Metric | Base | Head | Delta (head - base) | % Delta | Classification | Magnitude | Signal |',
@@ -618,108 +1020,204 @@ function renderDeltaMarkdown(delta, baseLabel, headLabel) {
   ].join('\n');
 }
 
-function renderDeltaHtml(delta, baseLabel, headLabel, regressionAttribution) {
-  const pct = (value) => formatPctValue(value);
-  const toRows = (rows) => rows.map((row) => [
-    row.label,
-    formatMetricValue(row.base),
-    formatMetricValue(row.head),
-    formatDeltaValue(row.delta),
-    pct(row.relativeDeltaPct),
-    row.magnitude,
-    row.impact,
-  ]);
-  const fullRows = delta.rows.map((row) => [
-    row.key,
-    row.label,
-    formatMetricValue(row.base),
-    formatMetricValue(row.head),
-    formatDeltaValue(row.delta),
-    pct(row.relativeDeltaPct),
-    row.classification,
-    row.magnitude,
-    row.signal,
-  ]);
-  const guideRows = delta.guide.map((row) => [row.label, row.directionLabel, row.target, row.signal]);
-  const regressionDetailsHtml = delta.regressed.length === 0
-    ? '<p>No regressed metrics.</p>'
-    : delta.regressed.map((row) => {
-      const details = regressionAttribution[row.key] ?? { evidence: [], files: [], diffs: [] };
-      const evidenceList = details.evidence.length > 0
-        ? `<ul>${details.evidence.map((line) => `<li>${escapeHtml(line)}</li>`).join('')}</ul>`
-        : '<p>No metric-level evidence captured.</p>';
-      const filesList = details.files.length > 0
-        ? `<p><strong>Candidate files:</strong> <code>${escapeHtml(details.files.join(', '))}</code></p>`
-        : '<p><strong>Candidate files:</strong> none</p>';
-      const diffs = details.diffs.length > 0
-        ? details.diffs.map((diff) => [
-          `<h4><code>${escapeHtml(diff.filePath)}</code></h4>`,
-          `<pre>${escapeHtml(diff.diffText)}</pre>`,
-        ].join('\n')).join('\n')
-        : '<p>No diff hunks available for this metric.</p>';
-      return [
-        '<details>',
-        `<summary>${escapeHtml(row.label)}: ${escapeHtml(formatMetricValue(row.base))} -> ${escapeHtml(formatMetricValue(row.head))} (${escapeHtml(formatDeltaValue(row.delta))}, ${escapeHtml(pct(row.relativeDeltaPct))})</summary>`,
-        '<div>',
-        evidenceList,
-        filesList,
-        diffs,
-        '</div>',
-        '</details>',
-      ].join('\n');
+function findEvidenceLocation(evidenceLine, locations) {
+  const match = String(evidenceLine).match(/^([^:\s][^:]*):(\d+):\d+/);
+  if (!match) return null;
+  const filePath = match[1];
+  const line = Number(match[2]);
+  if (!Number.isFinite(line)) return null;
+  return locations.find((location) => (
+    location?.filePath === filePath
+    && Number.isFinite(Number(location?.startLine))
+    && Number(location.startLine) <= line
+    && Number(location.endLine ?? location.startLine) >= line
+  )) ?? null;
+}
+
+function renderInlineMetricLinks(row, metricAttribution) {
+  const details = metricAttribution?.[row.key] ?? {};
+  const locations = Array.isArray(details.locations) ? details.locations : [];
+  const links = locations.slice(0, 2)
+    .map((location) => {
+      const safeUrl = sanitizeHttpUrl(location?.url);
+      if (!safeUrl) return null;
+      const label = `${location.filePath}:${location.startLine}-${location.endLine}`;
+      return `<a href="${escapeHtml(safeUrl)}"><code>${escapeHtml(label)}</code></a>`;
+    })
+    .filter(Boolean);
+  return links.length > 0 ? `<div class="inline-links">${links.join('<br>')}</div>` : '';
+}
+
+function renderColorizedMetricTable(rows, metricAttribution = {}) {
+  const headers = ['Signal', 'Metric', 'Base/Head', 'Delta (%)', 'Magnitude', 'Impact'];
+  const headerHtml = headers.map((header) => `<th>${escapeHtml(header)}</th>`).join('');
+  const bodyHtml = rows.length === 0
+    ? `<tr><td colspan="${headers.length}">none</td></tr>`
+    : rows.map((row) => {
+      const status = rowStatus(row);
+      const inlineLinks = renderInlineMetricLinks(row, metricAttribution);
+      const metricCell = `<span title="${escapeHtml(row.description ?? row.label)}">${escapeHtml(row.label)}</span>${inlineLinks}`;
+      const deltaCell = `${escapeHtml(status.emoji)} ${escapeHtml(formatDeltaValue(row.delta))} (${escapeHtml(formatPctValue(row.relativeDeltaPct))})`;
+      const cells = [
+        escapeHtml(row.signal),
+        metricCell,
+        escapeHtml(`${formatMetricValue(row.base)}/${formatMetricValue(row.head)}`),
+        deltaCell,
+        escapeHtml(row.magnitude),
+        escapeHtml(row.impact),
+      ];
+      return `<tr class="sev-row sev-${status.level}">${cells.map((cell) => `<td>${cell}</td>`).join('')}</tr>`;
     }).join('\n');
+  return `<table class="colorized-table"><thead><tr>${headerHtml}</tr></thead><tbody>${bodyHtml}</tbody></table>`;
+}
+
+function renderColorizedFullTable(rows, metricAttribution = {}) {
+  return renderColorizedMetricTable(rows, metricAttribution);
+}
+
+function renderMetricDrilldownHtml(rows, metricAttribution) {
+  if (rows.length === 0) return '<p>None.</p>';
+  return rows.map((row) => {
+    const details = metricAttribution[row.key] ?? { evidence: [], files: [], locations: [], snippets: [], diffs: [] };
+    const locations = Array.isArray(details.locations) ? details.locations : [];
+    const evidenceItems = Array.isArray(details.evidence) ? details.evidence : [];
+    const evidenceLines = evidenceItems.map((line) => {
+      const matchedLocation = findEvidenceLocation(line, locations);
+      const safeUrl = sanitizeHttpUrl(matchedLocation?.url);
+      if (!safeUrl || !matchedLocation) return `<li>${escapeHtml(line)}</li>`;
+      const text = String(line);
+      const tokenMatch = text.match(/^([^:\s][^:]*:\d+:\d+)(.*)$/);
+      if (!tokenMatch) {
+        return `<li><a href="${escapeHtml(safeUrl)}"><code>${escapeHtml(`${matchedLocation.filePath}:${matchedLocation.startLine}-${matchedLocation.endLine}`)}</code></a> — ${escapeHtml(text)}</li>`;
+      }
+      const token = tokenMatch[1];
+      const rest = tokenMatch[2] ?? '';
+      return `<li><a href="${escapeHtml(safeUrl)}"><code>${escapeHtml(token)}</code></a>${escapeHtml(rest)}</li>`;
+    });
+    const uncoveredLocations = locations
+      .filter((location) => !evidenceItems.some((line) => findEvidenceLocation(line, [location])))
+      .map((location) => {
+        const safeUrl = sanitizeHttpUrl(location.url);
+        if (!safeUrl) return null;
+        return `<li><a href="${escapeHtml(safeUrl)}"><code>${escapeHtml(`${location.filePath}:${location.startLine}-${location.endLine}`)}</code></a>${location.reason ? ` — ${escapeHtml(location.reason)}` : ''}</li>`;
+      })
+      .filter(Boolean);
+    const mergedEvidenceItems = [...evidenceLines, ...uncoveredLocations];
+    const evidenceHtml = mergedEvidenceItems.length > 0
+      ? `<ul>${mergedEvidenceItems.join('')}</ul>`
+      : '<p>No metric-level evidence captured.</p>';
+    const candidateFilesHtml = details.files.length > 0
+      ? `<p><strong>Candidate files:</strong> <code>${escapeHtml(details.files.join(', '))}</code></p>`
+      : '<p><strong>Candidate files:</strong> none</p>';
+    const snippetHtml = details.snippets?.length > 0
+      ? details.snippets.map((snippet) => {
+        const safeSnippetUrl = sanitizeHttpUrl(snippet.url);
+        const safeCompareUrl = sanitizeHttpUrl(snippet.compareUrl);
+        return [
+          '<details>',
+          `<summary><code>${escapeHtml(snippet.filePath)}:${snippet.startLine}-${snippet.endLine}</code></summary>`,
+          `<p>${safeSnippetUrl ? `<a href="${escapeHtml(safeSnippetUrl)}">Open file at commit</a>` : 'No file link available'}${safeCompareUrl ? ` · <a href="${escapeHtml(safeCompareUrl)}">Open compare view</a>` : ''}</p>`,
+          `<pre>${escapeHtml(snippet.snippet)}</pre>`,
+          '</details>',
+        ].join('\n');
+      }).join('\n')
+      : '<p>No diff snippet context captured.</p>';
+    return [
+      '<details>',
+      `<summary>${escapeHtml(rowStatus(row).emoji)} ${escapeHtml(row.label)}: ${escapeHtml(formatMetricValue(row.base))} -> ${escapeHtml(formatMetricValue(row.head))} (${escapeHtml(formatDeltaValue(row.delta))}, ${escapeHtml(formatPctValue(row.relativeDeltaPct))})</summary>`,
+      '<div>',
+      '<p><strong>Evidence:</strong></p>',
+      evidenceHtml,
+      candidateFilesHtml,
+      '<p><strong>Code snippets:</strong></p>',
+      snippetHtml,
+      '</div>',
+      '</details>',
+    ].join('\n');
+  }).join('\n');
+}
+
+function renderDeltaHtml(delta, baseLabel, headLabel, metricAttribution) {
+  const complexityRows = sortRowsForDisplay(delta.rows.filter(isComplexityMetric));
+  const complexityRegressed = sortRowsForDisplay(delta.regressed.filter(isComplexityMetric));
+  const complexityImproved = sortRowsForDisplay(delta.improved.filter(isComplexityMetric));
+  const complexityHighSignalRegressions = sortRowsForDisplay(delta.highSignalRegressions.filter(isComplexityMetric));
+  const complexityHighSignalImprovements = sortRowsForDisplay(delta.highSignalImprovements.filter(isComplexityMetric));
+  const fileGate = delta.fileThresholdGate ?? null;
+  const guideRows = delta.guide
+    .filter((row) => row.direction !== 'info')
+    .map((row) => [row.label, row.directionLabel, row.target, row.signal, row.description ?? '']);
 
   return renderHtmlDocument(
     'Commit Complexity Delta',
     [
+      '<style>',
+      '  .inline-links { margin-top: 4px; font-size: 12px; line-height: 1.4; }',
+      '  .colorized-table .sev-row.sev-regression-4 td { background: #321010 !important; }',
+      '  .colorized-table .sev-row.sev-regression-3 td { background: #2e1313 !important; }',
+      '  .colorized-table .sev-row.sev-regression-2 td { background: #2d1c10 !important; }',
+      '  .colorized-table .sev-row.sev-regression-1 td { background: #2a2410 !important; }',
+      '  .colorized-table .sev-row.sev-neutral td { background: #21242a !important; }',
+      '  .colorized-table .sev-row.sev-unchanged td { background: #1b1e25 !important; }',
+      '  .colorized-table .sev-row.sev-improvement-1 td { background: #162410 !important; }',
+      '  .colorized-table .sev-row.sev-improvement-2 td { background: #102819 !important; }',
+      '  .colorized-table .sev-row.sev-improvement-3 td { background: #0f2d1f !important; }',
+      '  .colorized-table .sev-row.sev-improvement-4 td { background: #0a331f !important; }',
+      '</style>',
       '<h1>Commit Complexity Delta</h1>',
       `<p class="small">Generated: ${delta.generatedAt}</p>`,
       '<div class="meta">',
-      `<div><strong>Base</strong><br>${baseLabel}</div>`,
-      `<div><strong>Head</strong><br>${headLabel}</div>`,
+      `<div><strong>Base</strong><br>${escapeHtml(baseLabel)}</div>`,
+      `<div><strong>Head</strong><br>${escapeHtml(headLabel)}</div>`,
       `<div><strong>Base Report</strong><br>${delta.baseGeneratedAt ?? 'unknown'}</div>`,
       `<div><strong>Head Report</strong><br>${delta.headGeneratedAt ?? 'unknown'}</div>`,
-      `<div><strong>Improved Metrics</strong><br>${delta.improvedCount}</div>`,
-      `<div><strong>Regressed Metrics</strong><br>${delta.regressedCount}</div>`,
-      `<div><strong>Unchanged / Informational</strong><br>${delta.unchangedCount}</div>`,
+      `<div><strong>Improved Metrics</strong><br>${complexityImproved.length}</div>`,
+      `<div><strong>Regressed Metrics</strong><br>${complexityRegressed.length}</div>`,
+      `<div><strong>Unchanged / Near-Zero</strong><br>${complexityRows.length - complexityImproved.length - complexityRegressed.length}</div>`,
       `<div><strong>Net Score</strong><br>${delta.score}</div>`,
+      ...(fileGate ? [`<div><strong>Changed-File Gate</strong><br>${fileGate.passed ? 'pass' : 'fail'} (${fileGate.failureCount}/${fileGate.evaluationCount})</div>`] : []),
       '</div>',
       '<h2>How To Read This</h2>',
       '<ul>',
+      '<li>Delta indicator uses emojis only: unchanged `⬜️`, near-zero `😐`, worse `🟨🟧🟥‼️`, better `🟩✅❇️🤑`.</li>',
+      '<li>Tables are sorted by signal (high first), then worst-to-best delta.</li>',
       '<li>Lower-is-better metrics should trend down toward target. Zero is ideal for rule violations.</li>',
       '<li>Higher-is-better metrics should trend up (for example maintainability index).</li>',
-      '<li><code>magnitude</code> expresses scale: tiny, small, moderate, large.</li>',
-      '<li><code>impact</code> combines metric signal strength and magnitude.</li>',
       '</ul>',
       '<h2>Metric Interpretation Guide</h2>',
-      renderHtmlTable(['Metric', 'Desired Trend', 'Practical Target Range', 'Signal'], guideRows),
+      renderHtmlTable(['Metric', 'Desired Trend', 'Practical Target Range', 'Signal', 'Description'], guideRows),
+      ...(fileGate ? [
+        '<h2>Changed-File Threshold Gate</h2>',
+        `<p>Policy: changed files must be under threshold or improve by at least ${escapeHtml(formatPctValue(fileGate.minImprovementPct))}. Tracked changed files: ${escapeHtml(String(fileGate.trackedChangedFilesCount))}.</p>`,
+        renderHtmlTable(
+          ['File', 'Metric', 'Base', 'Head', 'Threshold', 'Improvement', 'Result'],
+          fileGate.evaluations.length > 0
+            ? fileGate.evaluations.slice(0, 400).map((evaluation) => [
+              evaluation.filePath,
+              evaluation.metricLabel,
+              formatMetricValue(evaluation.baseValue),
+              formatMetricValue(evaluation.headValue),
+              `${evaluation.direction === 'higher' ? '>=' : '<='} ${formatMetricValue(evaluation.threshold)}`,
+              formatPctValue(evaluation.improvementPct),
+              evaluation.passed ? 'pass' : 'fail',
+            ])
+            : [['none', '-', '-', '-', '-', '-', '-']],
+        ),
+      ] : []),
       '<h2>High-Signal Regressions</h2>',
-      renderHtmlTable(
-        ['Metric', 'Base', 'Head', 'Delta (head - base)', '% Delta', 'Magnitude', 'Impact'],
-        toRows(delta.highSignalRegressions),
-      ),
+      renderColorizedMetricTable(complexityHighSignalRegressions, metricAttribution),
       '<h2>High-Signal Improvements</h2>',
-      renderHtmlTable(
-        ['Metric', 'Base', 'Head', 'Delta (head - base)', '% Delta', 'Magnitude', 'Impact'],
-        toRows(delta.highSignalImprovements),
-      ),
+      renderColorizedMetricTable(complexityHighSignalImprovements, metricAttribution),
       '<h2>Regressions</h2>',
-      renderHtmlTable(
-        ['Metric', 'Base', 'Head', 'Delta (head - base)', '% Delta', 'Magnitude', 'Impact'],
-        toRows(delta.regressed),
-      ),
+      renderColorizedMetricTable(complexityRegressed, metricAttribution),
       '<h2>Regression Drilldown (click row)</h2>',
-      regressionDetailsHtml,
+      renderMetricDrilldownHtml(complexityRegressed, metricAttribution),
       '<h2>Improvements</h2>',
-      renderHtmlTable(
-        ['Metric', 'Base', 'Head', 'Delta (head - base)', '% Delta', 'Magnitude', 'Impact'],
-        toRows(delta.improved),
-      ),
+      renderColorizedMetricTable(complexityImproved, metricAttribution),
+      '<h2>Improvement Drilldown (click row)</h2>',
+      renderMetricDrilldownHtml(complexityImproved, metricAttribution),
       '<h2>Full Delta Table</h2>',
-      renderHtmlTable(
-        ['Key', 'Metric', 'Base', 'Head', 'Delta (head - base)', '% Delta', 'Classification', 'Magnitude', 'Signal'],
-        fullRows,
-      ),
+      renderColorizedFullTable(complexityRows, metricAttribution),
     ].join('\n'),
   );
 }
@@ -795,7 +1293,12 @@ async function main() {
 
   // [LAW:one-source-of-truth] Delta output is derived only from canonical comparison-summary highlights from base/head.
   const delta = buildDelta(baseLoaded.summary, headLoaded.summary);
-  const regressionAttribution = await buildRegressionAttribution(delta, baseLoaded, headLoaded);
+  const metricAttribution = await buildMetricAttribution(delta, baseLoaded, headLoaded);
+  // [LAW:single-enforcer] Enforce changed-file threshold policy once, from canonical base/head summaries.
+  const fileThresholdGate = await evaluateChangedFileThresholdGate(baseLoaded, headLoaded);
+  const regressionAttribution = Object.fromEntries(
+    delta.regressed.map((row) => [row.key, metricAttribution[row.key] ?? { evidence: [], files: [], locations: [], snippets: [], diffs: [] }]),
+  );
 
   const baseLabel = baseLoaded.metadata.label;
   const headLabel = headLoaded.metadata.label;
@@ -807,7 +1310,9 @@ async function main() {
 
   const result = {
     ...delta,
+    metricAttribution,
     regressionAttribution,
+    fileThresholdGate,
     base: baseLoaded.metadata,
     head: headLoaded.metadata,
   };
@@ -818,7 +1323,7 @@ async function main() {
 
   await writeJson(jsonPath, result);
   await writeText(mdPath, renderDeltaMarkdown(result, baseLabel, headLabel));
-  await writeText(htmlPath, renderDeltaHtml(result, baseLabel, headLabel, regressionAttribution));
+  await writeText(htmlPath, renderDeltaHtml(result, baseLabel, headLabel, metricAttribution));
   await writeLatestPointer(outputRoot, runId);
 
   // [LAW:verifiable-goals] Always emit machine-readable + human-readable outputs.
