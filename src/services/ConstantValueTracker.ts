@@ -14,6 +14,7 @@ import { BOOL, CAMERA_PROJECTION, COLOR, FLOAT, VEC2, VEC3, canonicalType } from
 import { canonicalScalar } from '../core/canonical-types/canonical-type';
 import { EMPTY_SUBSTITUTION, finalizeInferenceType, isInferenceCanonicalizable } from '../core/inference-types';
 import { getAnyBlockDefinition } from '../blocks/registry';
+import { blockId as toBlockId } from '../types';
 
 /**
  * A constant value that can be displayed in the debug panel.
@@ -77,7 +78,7 @@ function resolveDefaultValue(
   blockId: string,
   inputPortId: string,
 ): ResolvedConstant | undefined {
-  const block = patch.blocks.get(blockId as any);
+  const block = patch.blocks.get(toBlockId(blockId));
   if (!block) return undefined;
   const blockDef = getAnyBlockDefinition(block.type);
   if (!blockDef) return undefined;
@@ -109,7 +110,7 @@ function resolveDeclaredOutputType(
   blockId: string,
   outputPort: string,
 ): CanonicalType | undefined {
-  const block = patch.blocks.get(blockId as any);
+  const block = patch.blocks.get(toBlockId(blockId));
   if (!block) return undefined;
   const blockDef = getAnyBlockDefinition(block.type);
   if (!blockDef) return undefined;
@@ -148,7 +149,7 @@ function resolveOutputConstant(
     return undefined;
   }
 
-  const block = patch.blocks.get(blockId as any);
+  const block = patch.blocks.get(toBlockId(blockId));
   if (!block) {
     cache.set(cacheKey, null);
     return undefined;
