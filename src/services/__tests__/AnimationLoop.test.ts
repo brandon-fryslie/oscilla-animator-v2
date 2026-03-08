@@ -44,7 +44,6 @@ function makeDeps(overrides: Partial<any> = {}) {
     getCanvas: () => ({ width: 100, height: 80 }),
     getRenderer: () => renderer,
     getRuntimeHotpath: () => runtimeHotpath,
-    getArena: () => ({ reset: vi.fn(), getTotalBytes: () => 0 }),
     store: {
       demo: { currentFilename: null },
       debug: { enabled: false, traceCardinalitySolver: false },

@@ -6,7 +6,7 @@
  */
 
 import { assertSchedulePhaseBoundaryStateReads } from '../runtime';
-import { RenderBufferArena, type WebGPURenderer } from '../render';
+import { type WebGPURenderer } from '../render';
 import type { RuntimeState } from '../runtime/RuntimeState';
 import type { RootStore } from '../stores';
 import { isRuntimeConsoleEnabled } from '../testing/test-params';
@@ -31,7 +31,6 @@ export interface AnimationLoopDeps {
   getCanvas: () => HTMLCanvasElement | null;
   getRenderer: () => WebGPURenderer | null;
   getRuntimeHotpath?: () => RuntimeHotpathWorkerClient | null;
-  getArena: () => RenderBufferArena | null;
   store: RootStore;
   onStatsUpdate?: (statsText: string) => void;
 }
@@ -44,12 +43,10 @@ export interface AnimationLoopController {
 function assertWebGPULoopContract(deps: AnimationLoopDeps): void {
   const canvas = deps.getCanvas();
   const renderer = deps.getRenderer();
-  const arena = deps.getArena();
-
-  if (!canvas || !renderer || !arena) {
+  if (!canvas || !renderer) {
     // [LAW:no-silent-fallbacks] Runtime loop must hard-fail when required
     // WebGPU rendering dependencies are missing.
-    throw new Error('AnimationLoop: WebGPU runtime contract requires canvas, renderer, and arena');
+    throw new Error('AnimationLoop: WebGPU runtime contract requires canvas and renderer');
   }
 }
 
@@ -121,7 +118,7 @@ export function executeAnimationFrame(
   const renderer = getRenderer();
 
   if (!canvas || !renderer) {
-    throw new Error('AnimationLoop: WebGPU runtime contract requires canvas, renderer, and arena');
+    throw new Error('AnimationLoop: WebGPU runtime contract requires canvas and renderer');
   }
 
   if (!currentProgram) {
