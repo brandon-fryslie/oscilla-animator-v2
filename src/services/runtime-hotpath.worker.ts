@@ -1,7 +1,6 @@
 /// <reference lib="webworker" />
 
 import type { CompiledProgramIR } from '../compiler/ir/program';
-import type { InstanceDecl, Step, StepMaterialize } from '../compiler/ir/types';
 import {
   DRAW_PREP_SINK_TABLE_HEADER_WORDS,
   DRAW_PREP_SINK_TABLE_RECORD_WORDS,
@@ -10,19 +9,11 @@ import {
   createRuntimeStateFromSession,
   createSessionState,
   migrateState,
-  packDrawPrepSinkTableV1,
   prepareStateWriteBank,
   reconcilePhaseOffsets,
-  resetShapeBankFrameAllocator,
-  resolveTime,
   type RuntimeState,
   type SessionState,
 } from '../runtime';
-import { arenaEncodeFromAoS, type ArenaSlotDescriptor } from '../runtime/ArenaValueStore';
-import { getExprAddressTable } from '../runtime/ExprAddressTable';
-import { resolveInstanceLaneCount } from '../runtime/InstanceCountResolver';
-import { createMaterializeScratch } from '../runtime/MaterializeScratch';
-import { materializeValueExpr } from '../runtime/ValueExprMaterializer';
 import { createDefaultRegistry } from '../runtime/kernels/default-registry';
 import {
   RUNTIME_INPUT_FLOAT_WORDS,
@@ -36,6 +27,7 @@ import type {
   RuntimeHotpathWorkerOutboundMessage,
   RuntimeHotpathSinkTableSample,
 } from './runtime-hotpath-worker-protocol';
+import { buildRuntimeHotpathInstallPlanes } from './runtime-hotpath-install';
 
 const DEFAULT_TICK_HZ = 60;
 const HEARTBEAT_INTERVAL_MS = 500;
@@ -85,7 +77,6 @@ let viewport: ViewportState = {
   panX: 0,
   panY: 0,
 };
-const WARMUP_MATERIALIZE_SCRATCH = createMaterializeScratch();
 
 function postMessageToMain(payload: RuntimeHotpathWorkerOutboundMessage): void {
   (self as DedicatedWorkerGlobalScope).postMessage(payload);
@@ -121,70 +112,6 @@ function reviveProgram(program: SerializableCompiledProgramIR): CompiledProgramI
   };
 }
 
-
-function materializeStepToArena(
-  program: CompiledProgramIR,
-  state: RuntimeState,
-  step: StepMaterialize,
-  instances: ReadonlyMap<unknown, InstanceDecl>,
-  slotToArena: ReadonlyMap<unknown, ArenaSlotDescriptor>,
-  pureFnContext: { kernelRegistry: CompiledProgramIR['kernelRegistry'] },
-): void {
-  const arenaDesc = slotToArena.get(step.target);
-  if (!arenaDesc || arenaDesc.offset < 0 || arenaDesc.length <= 0) {
-    throw new Error(`runtime-hotpath: materialize slot ${String(step.target)} missing arena descriptor`);
-  }
-  if (state.arena.length < arenaDesc.offset + arenaDesc.length) {
-    throw new Error(
-      `runtime-hotpath: materialize slot ${String(step.target)} exceeds arena ` +
-      `(need=${arenaDesc.offset + arenaDesc.length}, have=${state.arena.length})`,
-    );
-  }
-  const instanceDecl = instances.get(step.instanceId);
-  const count = instanceDecl
-    ? resolveInstanceLaneCount(instanceDecl, program, state, pureFnContext)
-    : 0;
-  const buffer = materializeValueExpr(
-    step.field,
-    program.valueExprs,
-    step.instanceId,
-    count,
-    state,
-    program,
-    undefined,
-    WARMUP_MATERIALIZE_SCRATCH,
-    pureFnContext,
-  );
-  arenaEncodeFromAoS(state.arena, arenaDesc, buffer);
-}
-
-function materializeProgramForGpuInstall(
-  program: CompiledProgramIR,
-  state: RuntimeState,
-  nowMs: number,
-): void {
-  const instances = program.schedule.instances as ReadonlyMap<unknown, InstanceDecl>;
-  const addressTable = getExprAddressTable(program);
-  // [LAW:one-source-of-truth] Worker materialization uses compiler-owned
-  // ExprAddressTable metadata; no local descriptor synthesis.
-  state.cache.scalarExprToArenaAddress = addressTable.scalarExprToArenaAddress;
-  resetShapeBankFrameAllocator(state.shapeBank);
-  WARMUP_MATERIALIZE_SCRATCH.reset();
-  state.time = resolveTime(nowMs, program.schedule.timeModel, state.timeState);
-  // [LAW:single-enforcer] Dynamic instance counts are seeded through the shared
-  // InstanceCountResolver cache contract consumed by DrawPrepSinkTablePacker.
-  state.cache.instanceLaneCounts?.clear();
-  state.cache.instanceLaneCountFrameId = state.cache.frameId;
-  const pureFnContext = { kernelRegistry: program.kernelRegistry };
-  for (const instanceDecl of instances.values()) {
-    resolveInstanceLaneCount(instanceDecl, program, state, pureFnContext);
-  }
-  for (const step of program.schedule.steps as readonly Step[]) {
-    if (step.kind !== 'materialize') continue;
-    materializeStepToArena(program, state, step, instances, addressTable.slotToArena, pureFnContext);
-  }
-}
-
 function buildSinkTableSample(
   words: Uint32Array | null,
   sinkTableWordCount: number,
@@ -211,19 +138,6 @@ function buildSinkTableSample(
       }
       : null,
   };
-}
-
-function buildGpuDrivenSinkTableWords(
-  program: CompiledProgramIR,
-  state: RuntimeState,
-): { words: Uint32Array; wordCount: number } | null {
-  // [LAW:one-source-of-truth] Sink-table metadata comes from one canonical
-  // packer contract for all program types (fluid and non-fluid).
-  const packed = packDrawPrepSinkTableV1(program, state);
-  if (!packed) return null;
-  const words = new Uint32Array(packed.wordCount);
-  words.set(packed.words.subarray(0, packed.wordCount), 0);
-  return { words, wordCount: packed.wordCount };
 }
 
 function installProgram(program: SerializableCompiledProgramIR): void {
@@ -282,30 +196,22 @@ function installProgram(program: SerializableCompiledProgramIR): void {
     );
   }
 
+  let installPlanes: ReturnType<typeof buildRuntimeHotpathInstallPlanes>;
   try {
-    materializeProgramForGpuInstall(revived, nextState, performance.now());
+    // [LAW:single-enforcer] Install-time runtime materialization + sink-table
+    // packing are enforced through one service module boundary.
+    installPlanes = buildRuntimeHotpathInstallPlanes(revived, nextState, performance.now());
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     throw new Error(`[runtime-hotpath] install materialization failed: ${message}`);
-  }
-  const warmShapeBankWordCount = assertFiniteUint32(
-    nextState.shapeBank.volatilePtr,
-    'gpuDrivenShapeBank.wordCount',
-  );
-  const warmShapeBankWords = new Uint32Array(warmShapeBankWordCount);
-  if (warmShapeBankWordCount > 0) {
-    warmShapeBankWords.set(
-      nextState.shapeBank.data.subarray(0, warmShapeBankWordCount),
-      0,
-    );
   }
 
   gpuDrivenExecutionEnabled = false;
   gpuDrivenSinkTableWords = null;
   gpuDrivenSinkTableWordCount = 0;
   lastSinkTableSample = null;
-  gpuDrivenShapeBankWords = warmShapeBankWords;
-  gpuDrivenShapeBankWordCount = warmShapeBankWordCount;
+  gpuDrivenShapeBankWords = installPlanes.shapeBankWords;
+  gpuDrivenShapeBankWordCount = installPlanes.shapeBankWordCount;
   publishedSinkWordCount = 0;
   publishedShapeWordCount = 0;
   gpuDrivenPlanesDirty = true;
@@ -314,20 +220,14 @@ function installProgram(program: SerializableCompiledProgramIR): void {
   // artifact cannot satisfy this contract, fail installation instead of
   // reintroducing runtime mode branching.
   // [LAW:no-mode-explosion] Canonical runtime execution keeps one mode.
-  try {
-    const gpuDriven = buildGpuDrivenSinkTableWords(
-      revived,
-      nextState,
+  if (installPlanes.sinkTableWords) {
+    gpuDrivenExecutionEnabled = true;
+    gpuDrivenSinkTableWords = installPlanes.sinkTableWords;
+    gpuDrivenSinkTableWordCount = installPlanes.sinkTableWordCount;
+    lastSinkTableSample = buildSinkTableSample(
+      installPlanes.sinkTableWords,
+      installPlanes.sinkTableWordCount,
     );
-    if (gpuDriven) {
-      gpuDrivenExecutionEnabled = true;
-      gpuDrivenSinkTableWords = gpuDriven.words;
-      gpuDrivenSinkTableWordCount = gpuDriven.wordCount;
-      lastSinkTableSample = buildSinkTableSample(gpuDriven.words, gpuDriven.wordCount);
-    }
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    throw new Error(`[runtime-hotpath] GPU sink-table build failed: ${message}`);
   }
   if ((revived.drawPrepProgram?.sinks.length ?? 0) > 0 && !gpuDrivenExecutionEnabled) {
     // [LAW:one-source-of-truth] Draw-prep sink metadata must come from one
