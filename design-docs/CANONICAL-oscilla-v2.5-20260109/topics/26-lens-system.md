@@ -17,15 +17,15 @@ order: 26
 A Lens is a value transformation attached to a **port** (input or output) that compiles to actual blocks in the patch. Lenses are NOT a separate type system — they are regular blocks used in a decorator pattern.
 
 **Key properties**:
-- Attached to ports, not edges
-- Can be attached to both input ports and output ports
-- Compile to standalone blocks via a separate lens expansion pass
-- There is no "lens catalog" — there is a block catalog, and blocks can be used as lenses
+- Attached to ports, not edges.
+- Can be attached to both input ports and output ports.
+- Compile to standalone blocks via a separate lens expansion pass.
+- There is no "lens catalog" — there is a block catalog, and blocks can be used as lenses.
 
 ## Lens vs Adapter (T2)
 
-- **Adapter**: Changes type compatibility (e.g., signal→field broadcast, HSL→RGB color conversion)
-- **Lens**: Changes values without changing type compatibility (e.g., Scale+Bias, Clamp, Slew)
+- **Adapter**: Changes type compatibility (e.g., scalar→array broadcast, HSL→RGB color conversion).
+- **Lens**: Changes values without changing type compatibility (e.g., Scale+Bias, Clamp, Slew).
 
 Both compile to blocks. The distinction is semantic, not structural.
 
@@ -38,8 +38,8 @@ Both compile to blocks. The distinction is semantic, not structural.
 | Quantization | StepQuantize, SnapToSet | Discretize values |
 | Curves | Smoothstep, Power/Gamma, Ease family | Nonlinear remapping |
 | Noise | AddDither, Jitter | Controlled randomization |
-| Domain/cardinality | Broadcast, Reduce, Mask | Cardinality transforms (overlap with adapters) |
-| Structural | ExtractComponent, Construct, Swizzle | Component-level operations |
+| Cardinality | Broadcast, Reduce | Cardinality transforms (overlap with adapters) |
+| Structural | Extract, Construct, Swizzle | Component-level operations |
 | Units | UnitConvert, Saturate01 | Unit conversion (overlap with adapters) |
 
 ## Normalized Unit Policy (cross-reference)

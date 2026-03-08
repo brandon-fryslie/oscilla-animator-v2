@@ -80,13 +80,13 @@ Standard card with 4 stacked sections. Always in same order, content changes by 
 ```
 ┌─────────────────────────────────────┐
 │ energy                              │
-│ Signal: Float | Clock               │ Jump ⊞
+│ One: Float | Clock               │ Jump ⊞
 └─────────────────────────────────────┘
 ```
 
 - **Title** (large): Bus/port name (e.g., "energy", "DotsRenderer.radius")
 - **Subtitle** (small): Two badges:
-  - **Type badge**: `Signal:Float` | `Signal:Phase` | `Signal:Color` | `Field` | `Trigger`
+  - **Type badge**: `One:Float` | `One:Phase` | `One:Color` | `Many:Float` | `One:Trigger`
   - **Role badge**: `Clock` | `Mixer` | `Silent` | `Conflicting` | `Unknown`
 - **Right corner**: Pin icon + Jump link
   - Jump navigates to BusBoard if bus, block inspector if port
@@ -329,12 +329,12 @@ Separate panel showing current diagnostics (from rules engine).
 ### Type Badges
 
 ```
-Signal:Float    Numeric single value
-Signal:Phase    Circular/wrapped value
-Signal:Color    RGBA or palette index
-Signal:Bool     Binary flag
-Signal:Trigger  Discrete pulse
-Field:Float     Array of floats
+One:Float      Numeric single value
+One:Phase      Circular/wrapped value
+One:Color      RGBA or palette index
+One:Bool       Binary flag
+One:Trigger    Discrete pulse
+Many:Float     Array of floats
 ```
 
 ### Role Badges

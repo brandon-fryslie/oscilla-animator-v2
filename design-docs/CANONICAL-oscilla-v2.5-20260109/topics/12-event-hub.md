@@ -412,7 +412,7 @@ if (shouldEmitHealthSnapshot()) {
     activePatchRevision,
     tMs: currentTime,
     frameBudget: { fpsEstimate, avgFrameMs, worstFrameMs },
-    evalStats: { fieldMaterializations, nanCount, infCount }
+    evalStats: { laneMaterializations, nanCount, infCount }
   });
 }
 ```
@@ -423,7 +423,7 @@ if (shouldEmitHealthSnapshot()) {
 
 ### Avoid High-Frequency Runtime Events
 
-Do NOT emit per-frame or per-phase-tick events:
+Do NOT emit per-frame events:
 
 ```typescript
 // BAD: Emits 60 times per second
@@ -432,7 +432,7 @@ onFrame() {
 }
 ```
 
-Frame ticks and phase changes are signals in the runtime model, not app-level events.
+Frame ticks and simulation steps are data channels in the runtime model, not app-level events.
 
 ### No Cancellation / Return Values
 

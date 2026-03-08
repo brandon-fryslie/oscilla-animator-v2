@@ -39,7 +39,7 @@ Local space is the coordinate system in which abstract geometry and control poin
 * Origin at `(0, 0, 0)`.
 * Magnitude $O(1)$. For 2.5D generative shapes, the default bounds are typically a unit square `[-0.5, 0.5]`.
 * Absolutely no relation to screen position, aspect ratio, or camera zoom.
-* For Procedural / Signed Distance Field (SDF) shapes, Euclidean distance is perfectly preserved here.
+* For Procedural / Signed Distance Function (SDF) shapes, Euclidean distance is perfectly preserved here.
 
 ### The "Bounds" Paradigm vs. Anisotropic Scaling
 
@@ -59,7 +59,7 @@ World space is the absolute, unbounded simulation domain. Layout blocks, physics
 
 * Range: Unbounded Cartesian space $\mathbb{R}^3$ ($-\infty$ to $+\infty$).
 * The $Z=0$ plane is the canonical 2D surface.
-* Layout blocks produce `Field<vec3>` positions (or `vec2` implicitly at $Z=0$).
+* Layout blocks produce `many:vec3` positions (or `vec2` implicitly at $Z=0$).
 
 ### The Canonical Visible Region
 
@@ -131,7 +131,7 @@ $$p_{clip} = VP \cdot (M \cdot p_{local})$$
 
 `scale` is the **strictly isotropic (uniform) scale factor** applied to an instance's Model Matrix.
 
-* Type: `Signal<float>` or `Field<float>`.
+* Type: `one:float` or `many:float`.
 * Semantics: Scales the Local space geometry uniformly across all axes before placing it in World space.
 * Because it is strictly uniform, it guarantees that procedural SDFs, stroke widths, and anti-aliasing math remain mathematically flawless regardless of transform depth.
 
@@ -139,14 +139,14 @@ $$p_{clip} = VP \cdot (M \cdot p_{local})$$
 
 ---
 
-## Coordinate-Space Enforcement
+### Coordinate-Space Enforcement
 
 Coordinate spaces are enforced by block-level naming conventions and typing:
 
 | Name Pattern | Space | Type Target | Example |
 | --- | --- | --- | --- |
 | `bounds`, `controlPoints`, `path` | Local | Geometry Definition | `vec2`, `float` |
-| `position`, `offset`, `center` | World | Layout / Physics | `vec3`, `vec2` |
+| `position`, `offset`, `center` | World | Layout / Simulation | `vec3`, `vec2` |
 | `viewProj`, `camera` | View/Clip | Uniforms | `mat4x4` |
 | `resolution`, `pixel` | Viewport | Renderer internals | `vec2` |
 
@@ -168,7 +168,7 @@ Connecting ports of different spaces (e.g., feeding a World position into a Loca
 
 ### Runtime (Topic 05)
 
-* Field buffers for positions hold **World space** coordinates.
+* Arena data channels for positions hold **World space** coordinates.
 * Camera Pan and Zoom are mapped directly to a 4x4 matrix on the CPU before transmission to the GPU.
 
 ### Renderer (Topic 06)
