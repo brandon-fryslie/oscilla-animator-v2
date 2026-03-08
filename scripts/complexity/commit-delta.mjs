@@ -543,9 +543,9 @@ function buildDelta(baseSummary, headSummary) {
     };
   });
 
-  const improved = rows.filter((row) => row.classification === 'improved');
-  const regressed = rows.filter((row) => row.classification === 'regressed');
-  const unchanged = rows.filter((row) => row.classification === 'unchanged');
+  const improved = rows.filter((row) => rowStatus(row).kind === 'improvement');
+  const regressed = rows.filter((row) => rowStatus(row).kind === 'regression');
+  const unchanged = rows.filter((row) => ['unchanged', 'neutral'].includes(rowStatus(row).kind));
   const highSignalRegressions = regressed.filter((row) => row.signal === 'high').sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta)).slice(0, 10);
   const highSignalImprovements = improved.filter((row) => row.signal === 'high').sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta)).slice(0, 10);
 
@@ -1164,8 +1164,8 @@ function renderDeltaHtml(delta, baseLabel, headLabel, metricAttribution) {
       '<h1>Commit Complexity Delta</h1>',
       `<p class="small">Generated: ${delta.generatedAt}</p>`,
       '<div class="meta">',
-      `<div><strong>Base</strong><br>${baseLabel}</div>`,
-      `<div><strong>Head</strong><br>${headLabel}</div>`,
+      `<div><strong>Base</strong><br>${escapeHtml(baseLabel)}</div>`,
+      `<div><strong>Head</strong><br>${escapeHtml(headLabel)}</div>`,
       `<div><strong>Base Report</strong><br>${delta.baseGeneratedAt ?? 'unknown'}</div>`,
       `<div><strong>Head Report</strong><br>${delta.headGeneratedAt ?? 'unknown'}</div>`,
       `<div><strong>Improved Metrics</strong><br>${complexityImproved.length}</div>`,
