@@ -1,29 +1,28 @@
 /// <reference lib="webworker" />
 
 import type { CompiledProgramIR } from '../compiler/ir/program';
-import type { Step, StepRender } from '../compiler/ir/types';
-import { RenderBufferArena } from '../render/RenderBufferArena';
+import type { InstanceDecl, Step, StepMaterialize } from '../compiler/ir/types';
 import {
   DRAW_PREP_SINK_TABLE_HEADER_WORDS,
   DRAW_PREP_SINK_TABLE_RECORD_WORDS,
   DrawPrepSinkTableRecordWord,
-  buildDrawPrepSinkTableHeader,
-  computeDrawPrepSinkTableWordCapacity,
-  drawModeToCode,
   createInitialState,
   createRuntimeStateFromSession,
   createSessionState,
-  executeFrame,
   migrateState,
   packDrawPrepSinkTableV1,
   prepareStateWriteBank,
   reconcilePhaseOffsets,
-  writeDrawPrepSinkRecord,
-  writeDrawPrepSinkTableHeader,
+  resetShapeBankFrameAllocator,
+  resolveTime,
   type RuntimeState,
   type SessionState,
 } from '../runtime';
-import { resolveArenaAddress } from '../runtime/ArenaValueStore';
+import { arenaEncodeFromAoS, type ArenaSlotDescriptor } from '../runtime/ArenaValueStore';
+import { getExprAddressTable } from '../runtime/ExprAddressTable';
+import { resolveInstanceLaneCount } from '../runtime/InstanceCountResolver';
+import { createMaterializeScratch } from '../runtime/MaterializeScratch';
+import { materializeValueExpr } from '../runtime/ValueExprMaterializer';
 import { createDefaultRegistry } from '../runtime/kernels/default-registry';
 import {
   RUNTIME_INPUT_FLOAT_WORDS,
@@ -41,7 +40,6 @@ import type {
 const DEFAULT_TICK_HZ = 60;
 const HEARTBEAT_INTERVAL_MS = 500;
 const MAX_UINT32 = 0xFFFF_FFFF;
-const DEFAULT_ARENA_ELEMENTS = 50_000;
 
 interface ViewportState {
   width: number;
@@ -63,7 +61,6 @@ let sharedSinkTableWords: Uint32Array | null = null;
 let sessionState: SessionState | null = null;
 let currentProgram: CompiledProgramIR | null = null;
 let currentState: RuntimeState | null = null;
-let arena = createArena(DEFAULT_ARENA_ELEMENTS);
 const pendingExternalWrites: RuntimeExternalWrite[] = [];
 let frameCount = 0;
 let tickWindowCount = 0;
@@ -88,30 +85,7 @@ let viewport: ViewportState = {
   panX: 0,
   panY: 0,
 };
-
-function createArena(maxElements: number): RenderBufferArena {
-  const next = new RenderBufferArena(maxElements);
-  next.init();
-  return next;
-}
-
-function computeArenaCapacity(arenaTotalFloats: number): number {
-  const required = Number.isFinite(arenaTotalFloats) ? Math.ceil(arenaTotalFloats) : 0;
-  // [LAW:one-source-of-truth] Arena capacity derives from compiled program
-  // metadata; no hardcoded runtime hotpath capacity is authoritative.
-  return Math.max(DEFAULT_ARENA_ELEMENTS, Math.ceil(required * 1.25));
-}
-
-interface PackedArenaAddress {
-  readonly baseOffset: number;
-  readonly laneStride: number;
-  readonly componentStride: number;
-}
-
-const SCALE_MODE_SLOT = 2;
-const OPTIONAL_MODE_IDENTITY = 0;
-const OPTIONAL_MODE_SLOT = 1;
-const SHAPE_SOURCE_SLOT = 1;
+const WARMUP_MATERIALIZE_SCRATCH = createMaterializeScratch();
 
 function postMessageToMain(payload: RuntimeHotpathWorkerOutboundMessage): void {
   (self as DedicatedWorkerGlobalScope).postMessage(payload);
@@ -147,138 +121,68 @@ function reviveProgram(program: SerializableCompiledProgramIR): CompiledProgramI
   };
 }
 
-function requireRenderStep(program: CompiledProgramIR, renderStepIndex: number): StepRender {
-  const step = (program.schedule.steps as readonly Step[])[renderStepIndex];
-  if (!step || step.kind !== 'render') {
-    throw new Error(
-      `runtime-hotpath: draw-prep sink references invalid render step ${String(renderStepIndex)}`,
-    );
-  }
-  return step;
-}
 
-function resolveSlotArenaAddress(
-  program: CompiledProgramIR,
-  slot: number,
-  context: string,
-): PackedArenaAddress {
-  const descriptor = program.runtimeAddressTable?.slotToArena.get(slot as any);
-  if (!descriptor) {
-    throw new Error(`runtime-hotpath: missing slotToArena descriptor for ${context}`);
-  }
-  const address = resolveArenaAddress(descriptor);
-  return {
-    baseOffset: assertFiniteUint32(address.baseOffset, `${context}.baseOffset`),
-    laneStride: assertFiniteUint32(address.laneStride, `${context}.laneStride`),
-    componentStride: assertFiniteUint32(address.componentStride, `${context}.componentStride`),
-  };
-}
-
-function warmRecordWord(
-  warmPackedWords: Uint32Array | null,
-  warmPackedWordCount: number,
-  sinkIndex: number,
-  wordOffset: number,
-  fallback: number,
-): number {
-  if (!warmPackedWords) return fallback >>> 0;
-  const base = DRAW_PREP_SINK_TABLE_HEADER_WORDS + sinkIndex * DRAW_PREP_SINK_TABLE_RECORD_WORDS;
-  if (base + wordOffset >= warmPackedWordCount) return fallback >>> 0;
-  return (warmPackedWords[base + wordOffset] ?? fallback) >>> 0;
-}
-
-function resolveSinkInstanceCount(
+function materializeStepToArena(
   program: CompiledProgramIR,
   state: RuntimeState,
-  sinkIndex: number,
-  warmPackedWords: Uint32Array | null,
-  warmPackedWordCount: number,
-): number {
-  const drawPrepProgram = program.drawPrepProgram;
-  if (!drawPrepProgram) return 0;
-  const sink = drawPrepProgram.sinks[sinkIndex];
-  if (!sink) return 0;
-  if (sink.instanceCountMode === 'static') {
-    return assertFiniteUint32(
-      sink.staticInstanceCount ?? Number.NaN,
-      `staticInstanceCount sinkIndex=${sink.sinkIndex}`,
-    );
+  step: StepMaterialize,
+  instances: ReadonlyMap<unknown, InstanceDecl>,
+  slotToArena: ReadonlyMap<unknown, ArenaSlotDescriptor>,
+  pureFnContext: { kernelRegistry: CompiledProgramIR['kernelRegistry'] },
+): void {
+  const arenaDesc = slotToArena.get(step.target);
+  if (!arenaDesc || arenaDesc.offset < 0 || arenaDesc.length <= 0) {
+    throw new Error(`runtime-hotpath: materialize slot ${String(step.target)} missing arena descriptor`);
   }
-  const dynamicCount = state.cache.instanceLaneCounts?.get(String(sink.instanceId));
-  if (dynamicCount === undefined) {
-    return assertFiniteUint32(
-      warmRecordWord(
-        warmPackedWords,
-        warmPackedWordCount,
-        sinkIndex,
-        DrawPrepSinkTableRecordWord.InstanceCount,
-        0,
-      ),
-      `dynamicInstanceCountFallback sinkIndex=${sink.sinkIndex}`,
-    );
-  }
-  return assertFiniteUint32(dynamicCount, `dynamicInstanceCount sinkIndex=${sink.sinkIndex}`);
-}
-
-function warmShapeHandleForSink(
-  warmPackedWords: Uint32Array | null,
-  warmPackedWordCount: number,
-  sinkIndex: number,
-): number {
-  if (!warmPackedWords) return 0;
-  const base = DRAW_PREP_SINK_TABLE_HEADER_WORDS + sinkIndex * DRAW_PREP_SINK_TABLE_RECORD_WORDS;
-  if (base + DrawPrepSinkTableRecordWord.ShapeWordOffset >= warmPackedWordCount) {
-    return 0;
-  }
-  return warmPackedWords[base + DrawPrepSinkTableRecordWord.ShapeWordOffset] >>> 0;
-}
-
-function readShapeHandleFromArena(
-  state: RuntimeState,
-  address: PackedArenaAddress,
-  lane: number,
-  sinkIndex: number,
-): number {
-  const index =
-    address.baseOffset
-    + assertFiniteUint32(lane, `shapeSlotLane sinkIndex=${sinkIndex}`) * address.laneStride;
-  if (index >= state.arena.length) {
+  if (state.arena.length < arenaDesc.offset + arenaDesc.length) {
     throw new Error(
-      `runtime-hotpath: shape slot read out of bounds (sinkIndex=${sinkIndex}, index=${index}, arenaLength=${state.arena.length})`,
+      `runtime-hotpath: materialize slot ${String(step.target)} exceeds arena ` +
+      `(need=${arenaDesc.offset + arenaDesc.length}, have=${state.arena.length})`,
     );
   }
-  const raw = state.arena[index];
-  if (!Number.isFinite(raw) || !Number.isInteger(raw)) {
-    throw new Error(
-      `runtime-hotpath: shape slot lane must be a finite integer (sinkIndex=${sinkIndex}, lane=${lane}, value=${String(raw)})`,
-    );
-  }
-  return assertFiniteUint32(Math.trunc(raw), `shapeHandle sinkIndex=${sinkIndex} lane=${lane}`);
+  const instanceDecl = instances.get(step.instanceId);
+  const count = instanceDecl
+    ? resolveInstanceLaneCount(instanceDecl, program, state, pureFnContext)
+    : 0;
+  const buffer = materializeValueExpr(
+    step.field,
+    program.valueExprs,
+    step.instanceId,
+    count,
+    state,
+    program,
+    undefined,
+    WARMUP_MATERIALIZE_SCRATCH,
+    pureFnContext,
+  );
+  arenaEncodeFromAoS(state.arena, arenaDesc, buffer);
 }
 
-function resolveRepresentativeShapeHandle(
+function materializeProgramForGpuInstall(
+  program: CompiledProgramIR,
   state: RuntimeState,
-  shapeAddress: PackedArenaAddress,
-  sinkIndex: number,
-  instanceCount: number,
-  warmPackedWords: Uint32Array | null,
-  warmPackedWordCount: number,
-): number {
-  if (instanceCount <= 0) {
-    return warmShapeHandleForSink(warmPackedWords, warmPackedWordCount, sinkIndex);
+  nowMs: number,
+): void {
+  const instances = program.schedule.instances as ReadonlyMap<unknown, InstanceDecl>;
+  const addressTable = getExprAddressTable(program);
+  // [LAW:one-source-of-truth] Worker materialization uses compiler-owned
+  // ExprAddressTable metadata; no local descriptor synthesis.
+  state.cache.scalarExprToArenaAddress = addressTable.scalarExprToArenaAddress;
+  resetShapeBankFrameAllocator(state.shapeBank);
+  WARMUP_MATERIALIZE_SCRATCH.reset();
+  state.time = resolveTime(nowMs, program.schedule.timeModel, state.timeState);
+  // [LAW:single-enforcer] Dynamic instance counts are seeded through the shared
+  // InstanceCountResolver cache contract consumed by DrawPrepSinkTablePacker.
+  state.cache.instanceLaneCounts?.clear();
+  state.cache.instanceLaneCountFrameId = state.cache.frameId;
+  const pureFnContext = { kernelRegistry: program.kernelRegistry };
+  for (const instanceDecl of instances.values()) {
+    resolveInstanceLaneCount(instanceDecl, program, state, pureFnContext);
   }
-  const representative = readShapeHandleFromArena(state, shapeAddress, 0, sinkIndex);
-  for (let lane = 1; lane < instanceCount; lane++) {
-    const handle = readShapeHandleFromArena(state, shapeAddress, lane, sinkIndex);
-    if (handle !== representative) {
-      // [LAW:no-mode-explosion] A sink maps to one indirect record; mixed
-      // topology handles per lane would require sink fan-out and is disallowed.
-      throw new Error(
-        `runtime-hotpath: heterogeneous shape handles in sink ${sinkIndex} (lane0=${representative}, lane=${lane}, handle=${handle})`,
-      );
-    }
+  for (const step of program.schedule.steps as readonly Step[]) {
+    if (step.kind !== 'materialize') continue;
+    materializeStepToArena(program, state, step, instances, addressTable.slotToArena, pureFnContext);
   }
-  return representative;
 }
 
 function buildSinkTableSample(
@@ -312,8 +216,6 @@ function buildSinkTableSample(
 function buildGpuDrivenSinkTableWords(
   program: CompiledProgramIR,
   state: RuntimeState,
-  _warmPackedWords: Uint32Array | null,
-  _warmPackedWordCount: number,
 ): { words: Uint32Array; wordCount: number } | null {
   // [LAW:one-source-of-truth] Sink-table metadata comes from one canonical
   // packer contract for all program types (fluid and non-fluid).
@@ -326,12 +228,6 @@ function buildGpuDrivenSinkTableWords(
 
 function installProgram(program: SerializableCompiledProgramIR): void {
   const revived = reviveProgram(program);
-  const targetArenaCapacity = computeArenaCapacity(revived.arenaTotalFloats);
-  if (arena.maxElements < targetArenaCapacity) {
-    // [LAW:no-silent-fallbacks] If compiled arena demand exceeds the current
-    // buffer arena, resize eagerly at install time instead of failing warmup.
-    arena = createArena(targetArenaCapacity);
-  }
   const schedule = revived.schedule as {
     stateSlotCount?: number;
     stateMappings?: readonly any[];
@@ -386,21 +282,11 @@ function installProgram(program: SerializableCompiledProgramIR): void {
     );
   }
 
-  let warmPackedWords: Uint32Array | null = null;
-  let warmPackedWordCount = 0;
-  let warmupFailed = false;
   try {
-    // [LAW:single-enforcer] One warmup executeFrame seeds runtime-owned shape
-    // bank and dynamic counts at compile boundary; tick path stays GPU-owned.
-    arena.reset();
-    executeFrame(revived, nextState, arena, performance.now());
-    const warmPacked = packDrawPrepSinkTableV1(revived, nextState);
-    warmPackedWords = warmPacked?.words ?? null;
-    warmPackedWordCount = warmPacked?.wordCount ?? 0;
+    materializeProgramForGpuInstall(revived, nextState, performance.now());
   } catch (error) {
-    warmupFailed = true;
     const message = error instanceof Error ? error.message : String(error);
-    console.error(`[runtime-hotpath] warmup executeFrame failed: ${message}`);
+    throw new Error(`[runtime-hotpath] install materialization failed: ${message}`);
   }
   const warmShapeBankWordCount = assertFiniteUint32(
     nextState.shapeBank.volatilePtr,
@@ -432,8 +318,6 @@ function installProgram(program: SerializableCompiledProgramIR): void {
     const gpuDriven = buildGpuDrivenSinkTableWords(
       revived,
       nextState,
-      warmPackedWords,
-      warmPackedWordCount,
     );
     if (gpuDriven) {
       gpuDrivenExecutionEnabled = true;
@@ -444,11 +328,6 @@ function installProgram(program: SerializableCompiledProgramIR): void {
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     throw new Error(`[runtime-hotpath] GPU sink-table build failed: ${message}`);
-  }
-  if (warmupFailed && (revived.drawPrepProgram?.sinks.length ?? 0) > 0) {
-    // [LAW:no-silent-fallbacks] GPU hotpath programs cannot silently continue
-    // after warmup failure because that would re-enable per-frame CPU paths.
-    throw new Error('[runtime-hotpath] warmup executeFrame failed for GPU hotpath program');
   }
   if ((revived.drawPrepProgram?.sinks.length ?? 0) > 0 && !gpuDrivenExecutionEnabled) {
     // [LAW:one-source-of-truth] Draw-prep sink metadata must come from one
