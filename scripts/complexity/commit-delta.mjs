@@ -14,6 +14,7 @@ import {
   writeJson,
   writeText,
 } from './_shared.mjs';
+import { rowStatus } from './delta-visuals.mjs';
 
 const DEFAULT_OUTPUT_ROOT = path.join(reportsDir, 'deltas');
 
@@ -590,15 +591,21 @@ function buildCompareUrl(repoWebUrl, baseSha, headSha) {
   return `${repoWebUrl}/compare/${baseSha}...${headSha}`;
 }
 
-function parseUnifiedDiffHunks(diffText) {
+function parseUnifiedDiffHunks(diffText, options = {}) {
+  const {
+    maxHunks = 12,
+    maxLinesPerHunk = 80,
+    maxTotalLines = 1600,
+  } = options;
   const lines = diffText.split('\n');
   const hunks = [];
   let current = null;
+  let seenLines = 0;
   const flushCurrent = () => {
     if (!current) return;
     const snippetLines = [current.header, ...current.lines];
-    const limitedSnippet = snippetLines.length > 80
-      ? `${snippetLines.slice(0, 80).join('\n')}\n... (truncated)`
+    const limitedSnippet = snippetLines.length > maxLinesPerHunk
+      ? `${snippetLines.slice(0, maxLinesPerHunk).join('\n')}\n... (truncated)`
       : snippetLines.join('\n');
     const normalizedNewCount = current.newCount > 0 ? current.newCount : 1;
     hunks.push({
@@ -612,6 +619,8 @@ function parseUnifiedDiffHunks(diffText) {
   };
 
   for (const line of lines) {
+    seenLines += 1;
+    if (seenLines > maxTotalLines || hunks.length >= maxHunks) break;
     const headerMatch = line.match(/^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/);
     if (headerMatch) {
       flushCurrent();
@@ -630,23 +639,6 @@ function parseUnifiedDiffHunks(diffText) {
   }
   flushCurrent();
   return hunks;
-}
-
-function rowStatus(row) {
-  if (row.classification === 'regressed') {
-    const severe = row.signal === 'high' && (row.magnitude === 'moderate' || row.magnitude === 'large');
-    if (severe) return { level: 'very-bad', label: 'very bad', emoji: '🟥' };
-    return { level: 'bad', label: 'bad', emoji: '🔴' };
-  }
-  if (row.classification === 'improved') {
-    const excellent = row.signal === 'high' && (row.magnitude === 'moderate' || row.magnitude === 'large');
-    if (excellent) return { level: 'awesome', label: 'awesome improvement', emoji: '🟩✨' };
-    if (row.magnitude === 'moderate' || row.magnitude === 'large') {
-      return { level: 'solid', label: 'solid improvement', emoji: '🟩' };
-    }
-    return { level: 'improvement', label: 'improvement', emoji: '🟨🟩' };
-  }
-  return { level: 'warning', label: 'warning', emoji: '🟡' };
 }
 
 async function buildMetricAttribution(delta, baseLoaded, headLoaded) {
@@ -674,8 +666,9 @@ async function buildMetricAttribution(delta, baseLoaded, headLoaded) {
     const trimmed = run.stdout.trim();
     const lines = trimmed.length === 0 ? [] : trimmed.split('\n');
     const limited = lines.length > 220 ? `${lines.slice(0, 220).join('\n')}\n... (truncated)` : trimmed;
+    const parseInput = trimmed.length > 250000 ? trimmed.slice(0, 250000) : trimmed;
     const value = limited.length > 0
-      ? { diffText: limited, hunks: parseUnifiedDiffHunks(trimmed) }
+      ? { diffText: limited, hunks: parseUnifiedDiffHunks(parseInput) }
       : null;
     diffCache.set(filePath, value);
     return value;
