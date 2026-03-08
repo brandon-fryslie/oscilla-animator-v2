@@ -14,36 +14,21 @@ vi.mock('../../testing/runtime-probe', () => ({
   markRuntimeFrameAdvanced: runtimeProbeMocks.markRuntimeFrameAdvanced,
 }));
 
-function makeHotpathMock() {
-  return {
-    setViewportFrame: vi.fn(),
-    getLatestStats: vi.fn(() => ({
-      frameCount: 0,
-      meanTickMs: 0,
-      lastTickMs: 0,
-      drawOpCount: 0,
-      sinkWordCount: 0,
-      sinkTableSample: null,
-    })),
-  };
-}
-
 function makeDeps(overrides: Partial<any> = {}) {
   const renderer = {
     resizeCanvas: vi.fn(),
+    setViewportFrame: vi.fn(),
     getLifecycleState: vi.fn(() => 'Running'),
-    getLatestRuntimeTelemetry: vi.fn(() => null),
+    getLatestRuntimeTelemetry: vi.fn(() => null as any),
     getInstalledGpuPassIds: vi.fn(() => []),
     getLatestSinkTableSample: vi.fn(() => null),
     render: vi.fn(),
   };
-  const runtimeHotpath = makeHotpathMock();
   const deps = {
     getCurrentProgram: () => ({}),
     getCurrentState: () => null,
     getCanvas: () => ({ width: 100, height: 80 }),
     getRenderer: () => renderer,
-    getRuntimeHotpath: () => runtimeHotpath,
     getArena: () => ({ reset: vi.fn(), getTotalBytes: () => 0 }),
     store: {
       demo: { currentFilename: null },
@@ -66,7 +51,7 @@ function makeDeps(overrides: Partial<any> = {}) {
       getPatchRevision: () => 1,
     },
   } as any;
-  return { deps: { ...deps, ...overrides }, renderer, runtimeHotpath };
+  return { deps: { ...deps, ...overrides }, renderer };
 }
 describe('AnimationLoop', () => {
   const assertSchedulePhaseBoundaryStateReadsMock = vi.mocked(assertSchedulePhaseBoundaryStateReads);
@@ -85,43 +70,49 @@ describe('AnimationLoop', () => {
     (globalThis as any).__testFrameCallback = () => callback;
   });
 
-  it('publishes canonical viewport frame to runtime hotpath and renderer', () => {
-    const { deps, renderer, runtimeHotpath } = makeDeps();
+  it('publishes canonical viewport frame to renderer worker boundary', () => {
+    const { deps, renderer } = makeDeps();
     executeAnimationFrame(16, deps, createAnimationLoopState());
     expect(renderer.resizeCanvas).toHaveBeenCalledWith(100, 80);
-    expect(runtimeHotpath.setViewportFrame).toHaveBeenCalledWith({
+    expect(renderer.setViewportFrame).toHaveBeenCalledWith({
       width: 100,
       height: 80,
       zoom: 1,
       panX: 0,
       panY: 0,
+      timeMs: 16,
     });
     expect(runtimeProbeMocks.markRuntimeFrameAdvanced).toHaveBeenCalledWith(-1, 16);
   });
 
   it('skips frame publication when no program is installed', () => {
-    const { deps, runtimeHotpath } = makeDeps({ getCurrentProgram: () => null });
+    const { deps, renderer } = makeDeps({ getCurrentProgram: () => null });
     executeAnimationFrame(16, deps, createAnimationLoopState());
-    expect(runtimeHotpath.setViewportFrame).not.toHaveBeenCalled();
+    expect(renderer.setViewportFrame).not.toHaveBeenCalled();
     expect(runtimeProbeMocks.markRuntimeFrameAdvanced).not.toHaveBeenCalled();
   });
 
-  it('throws when runtime hotpath worker is unavailable', () => {
-    const { deps } = makeDeps({ getRuntimeHotpath: () => null });
-    expect(() => executeAnimationFrame(16, deps, createAnimationLoopState()))
-      .toThrow('runtime hotpath worker is required');
+  it('throws when renderer runtime input publication fails', () => {
+    const { deps, renderer } = makeDeps();
+    renderer.setViewportFrame.mockImplementation(() => {
+      throw new Error('renderer input unavailable');
+    });
+    expect(() => executeAnimationFrame(16, deps, createAnimationLoopState())).toThrow('renderer input unavailable');
   });
 
-  it('emits stats updates from worker heartbeat data on cadence window', () => {
+  it('emits stats updates from renderer telemetry data on cadence window', () => {
     const statsSink = vi.fn();
-    const { deps, runtimeHotpath } = makeDeps({ onStatsUpdate: statsSink });
-    runtimeHotpath.getLatestStats.mockReturnValue({
+    const { deps, renderer } = makeDeps({ onStatsUpdate: statsSink });
+    renderer.getLatestRuntimeTelemetry.mockReturnValue({
+      meanMs: 0.8,
       frameCount: 42,
-      meanTickMs: 0.8,
-      lastTickMs: 1.5,
-      drawOpCount: 7,
-      sinkWordCount: 64,
-      sinkTableSample: null,
+      stageTimings: {
+        totalFrameMs: 1.5,
+      },
+      resourceStats: {
+        totalInstanceCount: 7,
+        sinkTableWordCount: 64,
+      },
     });
     const state = createAnimationLoopState();
     state.lastFpsUpdate = 0;
@@ -146,7 +137,10 @@ describe('AnimationLoop', () => {
 
   it('halts execution after first runtime exception', () => {
     const onError = vi.fn();
-    const { deps } = makeDeps({ getRuntimeHotpath: () => null });
+    const { deps, renderer } = makeDeps();
+    renderer.setViewportFrame.mockImplementation(() => {
+      throw new Error('renderer input unavailable');
+    });
     const loop = startAnimationLoop(deps, createAnimationLoopState(), onError);
     const firstFrame = (globalThis as any).__testFrameCallback() as FrameRequestCallback;
     firstFrame(0);
@@ -159,7 +153,10 @@ describe('AnimationLoop', () => {
 
   it('resumes after compile success is signaled', () => {
     const onError = vi.fn();
-    const { deps } = makeDeps({ getRuntimeHotpath: () => null });
+    const { deps, renderer } = makeDeps();
+    renderer.setViewportFrame.mockImplementation(() => {
+      throw new Error('renderer input unavailable');
+    });
     const loop = startAnimationLoop(deps, createAnimationLoopState(), onError);
     const firstFrame = (globalThis as any).__testFrameCallback() as FrameRequestCallback;
     firstFrame(0);
