@@ -64,21 +64,21 @@ function summarizeGraphDiff(
   const affectedBlockIds = new Set<string>();
 
   for (const blockId of currBlocks.keys()) {
-    if (!prevBlocks.has(blockId as any)) {
+    if (!prevBlocks.has(blockId)) {
       blocksAdded++;
       affectedBlockIds.add(String(blockId));
     }
   }
 
   for (const blockId of prevBlocks.keys()) {
-    if (!currBlocks.has(blockId as any)) {
+    if (!currBlocks.has(blockId)) {
       blocksRemoved++;
       affectedBlockIds.add(String(blockId));
     }
   }
 
   for (const [blockId, block] of currBlocks.entries()) {
-    const previousBlock = prevBlocks.get(blockId as any);
+    const previousBlock = prevBlocks.get(blockId);
     if (!previousBlock) continue;
     if (previousBlock !== block) {
       affectedBlockIds.add(String(blockId));
