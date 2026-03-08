@@ -46,24 +46,6 @@ export interface ParamDef {
 }
 
 /**
- * RenderSpace2D - Render-target facts provided by renderer
- *
- * The renderer provides these facts; topologies use them to convert
- * normalized world coordinates to device pixels.
- *
- * Policy: All shape geometry parameters are in normalized world coordinates (0..1).
- * Topology is responsible for interpreting params in render space.
- */
-export interface RenderSpace2D {
-  /** Canvas width in pixels */
-  readonly width: number;
-  /** Canvas height in pixels */
-  readonly height: number;
-  /** Scale multiplier from RenderInstances2D (default 1.0 = no scaling) */
-  readonly scale: number;
-}
-
-/**
  * TopologyDef - Topology definition (compile-time constant)
  *
  * Defines:
