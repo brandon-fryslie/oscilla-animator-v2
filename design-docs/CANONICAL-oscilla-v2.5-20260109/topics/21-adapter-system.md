@@ -29,7 +29,7 @@ type TypePattern = {
 };
 ```
 
-Patterns can match specific values or use wildcards. An omitted field matches anything.
+Patterns can match specific values or use wildcards. An omitted property matches anything.
 
 ---
 
@@ -80,7 +80,7 @@ type AdapterSpec = {
 };
 ```
 
-**Mandatory fields**:
+**Mandatory properties**:
 - `purity: 'pure'` — adapters must be pure (no side effects, no state)
 - `stability: 'stable'` — adapters must produce deterministic output for same input
 

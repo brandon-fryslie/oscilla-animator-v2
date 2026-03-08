@@ -21,7 +21,7 @@ If you're wondering "why is it this way?", check here.
 | D4 | Custom combine modes | Removed | Complexity not worth benefit |
 | D5 | Domain on wires | Compile-time resource | Runtime performance, cleaner types |
 | D6 | World replacement | Split into 5 axes | Clean separation of concerns |
-| D7 | Optional fields | Discriminated unions | TypeScript narrowing, explicit defaults |
+| D7 | Optional properties | Discriminated unions | TypeScript narrowing, explicit defaults |
 | D8 | Block.type naming | Rename to Block.kind | Reserve `type` for type system |
 | D9 | Role naming | `derived` not `structural` | Better describes system-generated |
 | D10 | Default sources | Useful values not zeros | Animation should move by default |
@@ -501,7 +501,7 @@ Canonical and debugger specs define overlapping codes (E_DOMAIN_MISMATCH vs E_FI
 **Impact**:
 - Canonical codes retained where more specific
 - Debugger codes merged into canonical set
-- E_FIELD_DOMAIN_MISMATCH is canonical (more precise than E_DOMAIN_MISMATCH)
+- E_LANE_DOMAIN_MISMATCH is canonical (more precise than E_DOMAIN_MISMATCH)
 - Similar pattern applied to all overlaps
 
 **Approved by**: Brandon Fryslie
@@ -1210,8 +1210,9 @@ The system conflated three orthogonal concerns: what kind of element, how many e
 **Options Considered**:
 
 1. **Option A: Adopt three-stage architecture**
-   - Primitive blocks create one element (Signal)
-   - Array block transforms one → many (Field)
+   - Primitive blocks create one element
+   - Array block expands one → many
+
    - Layout blocks compute positions
 
 2. **Option B: Keep existing DomainN pattern**
@@ -1279,7 +1280,7 @@ Should domains support inheritance/subtyping?
 - `shape` is base domain for geometric primitives
 - `circle`, `rectangle`, `polygon` extend `shape`
 - Operations valid for parent are valid for subtypes
-- `Field<circle>` can be passed where `Field<shape>` expected (covariance)
+- `many:circle` can be passed where `many:shape` expected (covariance)
 
 **Rationale**: Enables generic operations on domain categories.
 
@@ -1333,7 +1334,7 @@ How should users access domain-provided intrinsic properties?
 **Source**: 0-CardinalityGeneric-Block-Type-Spec.md
 
 **The Problem**:
-The canonical spec describes blocks that work on both Signal and Field (e.g., Add, UnitDelay) but never formally defines the contract that makes this possible.
+The canonical spec describes blocks that work on both Scalar and Array (e.g., Add, UnitDelay) but never formally defines the contract that makes this possible.
 
 **Resolution**: Add "Cardinality-Generic Block" as a formal concept in Topic 02 (Block System) with 4-property contract: lane-locality, cardinality preservation, instance alignment, deterministic per-lane execution.
 
@@ -1461,7 +1462,7 @@ The canonical spec describes blocks that work on both Signal and Field (e.g., Ad
 **Sources Analyzed**: 2 files (0-CardinalityGeneric-Block-Types-Impact.md, 0-PayloadGeneriic-Block-Type-Spec.md)
 **Topics Updated**: 3 (02-block-system, 04-compilation, 05-runtime)
 **Resolutions Made**: 5
-**New Terms**: 6 (Payload-Generic Block, StateMappingScalar, StateMappingField, Lane, Stride; vec3 added to PayloadType)
+**New Terms**: 6 (Payload-Generic Block, StateMappingScalar, StateMappingLane, Lane, Stride; vec3 added to PayloadType)
 **Deprecated**: Polymorphism/Monomorphization section (replaced by Payload-Generic concept), StateKey type
 
 ---
@@ -1477,13 +1478,13 @@ The canonical spec describes blocks that work on both Signal and Field (e.g., Ad
 **The Problem**:
 Topic 05 used `StateKey { blockId, laneIndex }` which embeds lane index as semantic identity. D19 introduced StateId but the code examples weren't updated. The source document argues lane index is positional (can be remapped by continuity) and should NOT be part of identity.
 
-**Resolution**: Replace StateKey with range-based StateMappingScalar and StateMappingField types. StateId identifies the state array; lane index is a buffer offset. Field-state migration uses continuity's lane mapping when identity is stable.
+**Resolution**: Replace StateKey with range-based StateMappingScalar and StateMappingLane types. StateId identifies the state array; lane index is a buffer offset. Lane-state migration uses continuity's lane mapping when identity is stable.
 
 **Impact**:
 - Topic 05: Complete rewrite of State Management section
 - Topic 02: Updated state allocation text to reference StateMappings
 - Topic 04: Updated State Slot Allocation to show mapping types
-- GLOSSARY: StateId updated, StateKey deprecated, StateMappingScalar/Field added
+- GLOSSARY: StateId updated, StateKey deprecated, StateMappingScalar/Lane added
 
 **Approved**: 2026-01-22 by Brandon Fryslie
 

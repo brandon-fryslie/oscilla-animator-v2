@@ -7,11 +7,11 @@ tier: T2 (Structural)
 
 > **Tier**: T2 (Structural)
 > **Prerequisites**: [01-type-system](./01-type-system.md) (PayloadType, CanonicalType), [05-runtime](./05-runtime.md) (RuntimeState, frame execution)
-> **Touchpoints**: Type System (I32), Runtime (frame boundary), IR (SigExpr), Blocks (ExternalInput), Diagnostics (W_UNKNOWN_CHANNEL)
+> **Touchpoints**: Type System (I32), Runtime (frame boundary), IR (ValueExpr), Blocks (ExternalInput), Diagnostics (W_UNKNOWN_CHANNEL)
 
 ## Overview
 
-The External Input System provides a unified channel-based interface for MIDI, OSC, audio (FFT/RMS), keyboard, and mouse inputs. All external inputs are sampled once per frame into an immutable snapshot, read as pure signals during evaluation, with no device-specific logic in the IR or runtime.
+The External Input System provides a unified channel-based interface for MIDI, OSC, audio (FFT/RMS), keyboard, and mouse inputs. All external inputs are sampled once per frame into an immutable snapshot, read as pure values during evaluation, with no device-specific logic in the IR or runtime.
 
 **Core Principle**: External inputs are frame-boundary-committed channels with deterministic snapshot semantics.
 
@@ -188,10 +188,10 @@ type ChannelDefResolver = (name: string) => ChannelDef | null;
 
 ## IR Integration
 
-### SigExpr Variant
+### ValueExpr Variant
 
 ```typescript
-type SigExpr =
+type ValueExpr =
   | ...
   | { kind: 'external'; which: string };
 ```
@@ -200,18 +200,18 @@ type SigExpr =
 
 ```typescript
 class IRBuilder {
-  sigExternal(channel: string, type: CanonicalType): SigExprId;
+  valExternal(channel: string, type: CanonicalType): ValueExprId;
 }
 ```
 
 **Lowering rule**: The type is for the compiler/type checker; runtime reads numeric. For vec2 channels, either:
-- Encode vec2 as packed payload in signal layer (requires support), or
+- Encode vec2 as packed payload in simulation layer.
 - Restrict sigExternal to scalars and use block-level packing (recommended initially)
 
 ### Evaluator Integration
 
 ```typescript
-// In SignalEvaluator
+// In Evaluation pass
 case 'external':
   return state.externalSnapshot.getFloat(expr.which);
 ```
@@ -353,7 +353,7 @@ Examples: `osc./1/fader1`, `osc./trigger`
 - Read-only during frame
 - Unknown channel returns default (0 / zero vector)
 - Channel kinds: value | pulse | accum (optionally latch)
-- No device-specific switches in SignalEvaluator / IR
+- No device-specific switches in Evaluator / IR
 - Naming + namespaces: reserve canonical prefixes (mouse.*, key.*, midi.*, osc.*, audio.*)
 
 **Deliverable**: merged spec + naming registry skeleton.
@@ -382,11 +382,11 @@ Examples: `osc./1/fader1`, `osc./trigger`
 
 ### Phase 2 — IR Support (1–2 PRs)
 
-**Goal**: The compiler and runtime can express "read channel X" as a first-class signal.
+**Goal**: The compiler and runtime can express "read channel X" as a first-class value.
 
-- IR: add `SigExpr { kind:'external', which:string }`
-- IRBuilder: `sigExternal(channel: string, type: CanonicalType)`
-- SignalEvaluator: `external` case is a single line: `return state.external.snapshot.getFloat(expr.which)`
+- IR: add `ValueExpr { kind:'external', which:string }`
+- IRBuilder: `valExternal(channel: string, type: CanonicalType)`
+- Evaluator: `external` case is a single line: `return state.external.snapshot.getFloat(expr.which)`
 
 **Deliverable**: IR can represent external reads; runtime reads from snapshot only.
 
@@ -411,7 +411,7 @@ Examples: `osc./1/fader1`, `osc./trigger`
 
 ### Phase 4 — Migrate Existing Hardcoded Externals (2–4 PRs)
 
-**Goal**: Delete legacy "external inputs" fields and switches, replace with channels.
+**Goal**: Delete legacy "external inputs" properties and switches, replace with channels.
 
 - Main/app layer writes:
   - `mouse.x`, `mouse.y`, `mouse.over` as value
@@ -504,7 +504,7 @@ Examples: `osc./1/fader1`, `osc./trigger`
 ## Related Topics
 
 - [01-type-system](./01-type-system.md) - PayloadType whitelist, CanonicalType (I32)
-- [04-compilation](./04-compilation.md) - SigExpr { kind: 'external' }
+- [04-compilation](./04-compilation.md) - ValueExpr { kind: 'external' }
 - [05-runtime](./05-runtime.md) - RuntimeState.externalSnapshot, executeFrame()
 - [07-diagnostics-system](./07-diagnostics-system.md) - W_UNKNOWN_CHANNEL
 - [INVARIANTS](../INVARIANTS.md) - I37 (External Inputs Are Snapshot-Immutable), I21 (Deterministic Replay), I8 (Slot-Addressed Execution)

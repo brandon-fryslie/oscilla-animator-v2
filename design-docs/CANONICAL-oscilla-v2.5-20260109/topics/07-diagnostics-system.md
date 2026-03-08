@@ -50,17 +50,17 @@ Every diagnostic belongs to one of three streams with different characteristics:
 
 ### Runtime Diagnostics
 
-**Produced by**: NaN/Infinity detection, performance monitoring, execution anomalies
+**Produced by**: NaN/Infinity detection, performance monitoring, execution anomalies.
 
 **Characteristics**:
-- Time-windowed (typically 10 seconds or last N samples)
-- Potentially transient (may resolve on next frame)
-- Aggregated to avoid spam (occurrence counts)
+- Time-windowed (typically 10 seconds or last N samples).
+- Potentially transient (may resolve on next frame).
+- Aggregated to avoid spam (occurrence counts).
 
 **Examples**:
-- `P_NAN_DETECTED`: Value became NaN during evaluation
-- `P_FRAME_BUDGET_EXCEEDED`: Frame took longer than budget
-- `P_FIELD_MATERIALIZATION_HEAVY`: Domain materialized too many elements
+- `P_NAN_DETECTED`: Value became NaN during evaluation.
+- `P_FRAME_BUDGET_EXCEEDED`: Frame took longer than budget.
+- `P_MATERIALIZATION_HEAVY`: Instance materialized too many lanes.
 
 ### Authoring Diagnostics
 
@@ -159,7 +159,7 @@ interface GraphCommittedEvent {
 }
 ```
 
-**Diagnostic Role**: Signals authoring validators to recompute immediately for fast feedback.
+**Diagnostic Role**: Triggers authoring validators to recompute immediately for fast feedback.
 
 ### 2. CompileBegin
 
@@ -233,7 +233,7 @@ interface RuntimeHealthSnapshotEvent {
     worstFrameMs?: number;
   };
   evalStats: {
-    fieldMaterializations: number;
+    laneMaterializations: number;
     worstOffenders?: Array<{ blockId: string; count: number }>;
     allocBytesEstimate?: number;
     nanCount: number;
@@ -267,7 +267,7 @@ type TargetRef =
   | { kind: 'composite'; compositeDefId: string; instanceId?: string };
 ```
 
-**Why discriminated union**: Makes it impossible to create invalid targets. Each kind defines exactly which fields are present.
+**Why discriminated union**: Makes it impossible to create invalid targets. Each kind defines exactly which properties are present.
 
 ### Severity Levels
 
@@ -352,7 +352,7 @@ function generateDiagnosticId(
 - `code` - Diagnostic type
 - `primaryTarget` - Serialized target reference
 - `patchRevision` - Which patch version this applies to (same error in different patch is different diagnostic)
-- `signature` - Optional key data fields defining the condition
+- `signature` - Optional key data properties defining the condition
 
 **Not included in ID** (goes in metadata):
 - Timestamps
@@ -518,7 +518,7 @@ Canonical diagnostic codes organized by domain and severity:
 
 | Code | Severity | Message |
 |------|----------|---------|
-| `P_FIELD_MATERIALIZATION_HEAVY` | warn | Domain materialized > threshold elements |
+| `P_MATERIALIZATION_HEAVY` | warn | Instance materialized > threshold lanes |
 | `P_FRAME_BUDGET_EXCEEDED` | warn | Frame eval exceeded time budget |
 | `P_NAN_DETECTED` | warn | NaN value produced during eval |
 | `P_INFINITY_DETECTED` | warn | Infinity value produced during eval |
@@ -798,10 +798,10 @@ This prevents the worst UX: errors vanishing when things break.
 ### Canonical Type Formatting
 
 Every `CanonicalType` must be representable as a stable string key:
-- `signal:number`
-- `field:vec2(point)`
+- `one:number`
+- `many:vec3(point)`
 - `special:renderTree`
-- `scalar:duration(ms)`
+- `one:duration(ms)`
 
 This key is used for:
 - Diagnostic IDs
@@ -810,8 +810,8 @@ This key is used for:
 - Serialization
 
 **Equality policy**:
-- **Compatibility** (can connect): `field:vec2(point)` and `field:vec2` are compatible
-- **Equality** (same): `field:vec2(point)` and `field:vec2` are NOT equal
+- **Compatibility** (can connect): `many:vec3(point)` and `many:vec3` are compatible
+- **Equality** (same): `many:vec3(point)` and `many:vec3` are NOT equal
 - **Display** (how shown): Always show the normalized type key + semantic tag
 
 ### Diagnostic Grouping
@@ -858,7 +858,7 @@ This enables:
 **Titles**:
 - Concrete, short, no blame, no internal jargon (unless user opted into "Expert" mode)
 - Bad: "Type mismatch in binding graph edge"
-- Good: "Radius expects Field but bus provides Signal"
+- Good: "Radius expects many-lane array but bus provides scalar"
 
 **Summaries** always contain:
 - What it affects (render/time/bus)

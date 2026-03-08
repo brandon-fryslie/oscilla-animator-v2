@@ -14,21 +14,19 @@ When reading topic documents, keep these rules in mind.
 
 ## A. Time, Continuity, and Edit-Safety
 
-### I1: Time is Monotonic and Unbounded
+### I1: Monotonic f32 Time
 
-**Rule**: `tMs` never wraps, resets, or clamps. Time is always increasing.
+**Rule**: `tMs` is monotonic at runtime. The simulation runs on `f32` with mandatory phase-locking to prevent precision jitter.
 
-**Rationale**: Monotonic time is required for deterministic phase calculations and replay.
+**Rationale**: Unbounded time accumulation leads to artifacts. Phase-locking ensures infinite runtime stability.
 
-**Consequences of Violation**: Phase discontinuities, non-deterministic behavior, broken replay.
-
-**Enforcement**: Runtime assertion; TimeRoot implementation.
+**Enforcement**: CPU marshalling layer; phasor `Wrap01` semantics.
 
 ---
 
 ### I2: Gauge Invariance (Transport Continuity)
 
-**Rule**: Effective values (phase, parameters, fields) are continuous across discontinuities unless explicitly reset by user action. This is enforced by gauge layers (phase offset, value reconciliation, field projection) that absorb discontinuities.
+**Rule**: Effective values (phase, parameters, channels) are continuous across discontinuities unless explicitly reset by user action. This is enforced by gauge layers (phase offset, value reconciliation, lane projection) that absorb discontinuities.
 
 **Formal Statement**: For all observables `x_eff(t)`:
 ```
@@ -45,7 +43,7 @@ Even when underlying `x_base(t)` jumps due to scrubbing, looping, hot-swap, or t
 
 **Consequences of Violation**: Visual pops, broken export parity, unusable live editing.
 
-**Enforcement**: Continuity System (topic 11); phase offset in timeDerive; value reconciliation and field projection at hot-swap boundaries.
+**Enforcement**: Continuity System (topic 11); phase offset in timeDerive; value reconciliation and lane projection at hot-swap boundaries.
 
 **See**: [11-continuity-system](./topics/11-continuity-system.md) for complete specification.
 
@@ -119,15 +117,13 @@ Even when underlying `x_base(t)` jumps due to scrubbing, looping, hot-swap, or t
 
 ---
 
-### I8: Slot-Addressed Execution
+### I8: Arena-Addressed Execution
 
-**Rule**: Names are for UI; runtime uses indices. No lookups by string, closures, or object graphs in hot loops.
+**Rule**: All runtime state lives in the **Arena**. Access is via hardcoded byte offsets resolved by `GpuLayout`. No string lookups, object graphs, or dynamic VBO authoring in the hot path.
 
-**Rationale**: Required for performance targets and Rust port.
+**Rationale**: Required for massive parallelism and WebGPU hardware efficiency.
 
-**Consequences of Violation**: Never hit perf targets; Rust will be miserable.
-
-**Enforcement**: CompiledProgramIR uses slot indices only.
+**Enforcement**: Naga module lowering; `GpuLayout` metadata.
 
 ---
 
@@ -147,9 +143,9 @@ Even when underlying `x_base(t)` jumps due to scrubbing, looping, hot-swap, or t
 
 **Rule**: Transforms are table-driven and type-driven:
 - Scalar transforms → scalars
-- Signal transforms → signal plans
-- Field transforms → field expr nodes
-- Reductions (field→signal) are explicit and diagnosable
+- Scalar transforms → scalar plans
+- Lane transforms → value expr nodes
+- Reductions (lane→scalar) are explicit and diagnosable
 
 **Rationale**: If transforms are "whatever each block does," you can't reason about patches.
 
@@ -159,7 +155,7 @@ Even when underlying `x_base(t)` jumps due to scrubbing, looping, hot-swap, or t
 
 ---
 
-## C. Fields, Identity, and Performance
+## C. Channels, Identity, and Performance
 
 ### I11: Stable Element Identity
 
@@ -173,21 +169,21 @@ Even when underlying `x_base(t)` jumps due to scrubbing, looping, hot-swap, or t
 
 ---
 
-### I12: Lazy Fields with Explicit Materialization
+### I12: Lazy Channels with Explicit Materialization
 
 **Rule**: Materialization must be scheduled, cached, and attributable.
 
-**Rationale**: If every field becomes an array "because it's easiest," you hit a wall.
+**Rationale**: If every channel becomes an array "because it's easiest," you hit a wall.
 
 **Consequences of Violation**: Memory and performance explosion.
 
-**Enforcement**: Explicit materialization points; field expr DAGs.
+**Enforcement**: Explicit materialization points; value expr DAGs.
 
 ---
 
 ### I13: Structural Sharing / Hash-Consing
 
-**Rule**: Identical FieldExpr/SignalExpr subtrees share an ExprId.
+**Rule**: Identical ValueExpr subtrees share an ExprId.
 
 **Rationale**: Without canonicalization, compilation and runtime explode.
 
@@ -211,27 +207,23 @@ Even when underlying `x_base(t)` jumps due to scrubbing, looping, hot-swap, or t
 
 ## D. Rendering
 
-### I15: Renderer is a Sink, Not an Engine
+### I15: GPU-Driven Rendering
 
-**Rule**: Renderer accepts render commands/instances, batches, sorts, culls, rasterizes. Zero "creative logic."
+**Rule**: The CPU is a scheduler; the GPU is the computer. The CPU never writes dynamic draw counts.
 
-**Rationale**: All motion/layout/color comes from the patch.
+**Rationale**: Decouples simulation from logistics; enables zero-CPU culling and dynamic topology.
 
-**Consequences of Violation**: Renderer becomes second patch system.
-
-**Enforcement**: Render IR; no "radius/wobble/spiral mode" in renderer.
+**Enforcement**: Draw Prep compute pass; Indirect Command Buffer.
 
 ---
 
-### I16: Real Render IR
+### I16: Indirect Draw ABI
 
-**Rule**: Generic render intermediate with instances, geometry assets, materials, layering.
+**Rule**: The renderer executes hardware-native indirect command streams (indexed and non-indexed) from fixed buffer regions.
 
-**Rationale**: Otherwise every new visual idea requires new renderer code.
+**Rationale**: Standardizes the "Sink" interface across all shape classes.
 
-**Consequences of Violation**: Renderer becomes bottleneck for features.
-
-**Enforcement**: Render IR specification.
+**Enforcement**: Render Pass indirect execution loop.
 
 ---
 
@@ -264,10 +256,10 @@ Even when underlying `x_base(t)` jumps due to scrubbing, looping, hot-swap, or t
 ### I19: First-Class Error Taxonomy
 
 **Rule**: Errors include:
-- Type mismatch: from/to, suggested adapters
-- Cycle illegal: show loop and missing memory edge
-- Bus conflict: show publishers + combine semantics
-- Forced materialization: show culprit sink and expr chain
+- Type mismatch: from/to, suggested adapters.
+- Cycle illegal: show loop and missing memory edge.
+- Bus conflict: show publishers + combine semantics.
+- Materialization cost: show culprit sink and lane count.
 
 **Rationale**: If errors are vague, only programmers can use it.
 
@@ -405,7 +397,7 @@ Even when underlying `x_base(t)` jumps due to scrubbing, looping, hot-swap, or t
 
 ### I30: Continuity is Deterministic
 
-**Rule**: All continuity operations (phase offset, value reconciliation, field projection, slew) use `t_model_ms` and deterministic algorithms. Given same inputs, continuity produces identical outputs.
+**Rule**: All continuity operations (phase offset, value reconciliation, lane projection, slew) use `t_model_ms` and deterministic algorithms. Given same inputs, continuity produces identical outputs.
 
 **Rationale**: Export must match playback. Non-deterministic continuity breaks replay and debugging.
 
@@ -431,9 +423,9 @@ Even when underlying `x_base(t)` jumps due to scrubbing, looping, hot-swap, or t
 
 ### I32: Single Type Authority
 
-**Rule**: CanonicalType (`{ payload, unit, extent }`) is the ONLY type authority for all values. No parallel type representations (SignalType, PortType, FieldType, EventType, ResolvedPortType) may exist. Signal/field/event are derived from axes via `deriveKind()`, never stored as authoritative data.
+**Rule**: CanonicalType (`{ payload, unit, extent }`) is the ONLY type authority for all values. No parallel type representations (SignalType, ArrayType, etc.) may exist. Value classifications are derived from axes, never stored as authoritative data.
 
-**Rationale**: Duplicate type information will drift. When it drifts, you get "the type says signal but the kind field says field" bugs that are invisible until production.
+**Rationale**: Duplicate type information will drift. When it drifts, you get "the type says one lane but the execution expects many" bugs that are invisible until production.
 
 **Consequences of Violation**: Type confusion, incorrect dispatch, silent data corruption, adapter insertion failures.
 
@@ -447,7 +439,7 @@ Even when underlying `x_base(t)` jumps due to scrubbing, looping, hot-swap, or t
 
 **Rationale**: If arbitrary operations could change axes, the type system cannot predict what a value "is" at any point in the graph.
 
-**Consequences of Violation**: Silent signal→field conversion in a math kernel breaks all downstream type assumptions.
+**Consequences of Violation**: Silent lane expansion in a math kernel breaks all downstream type assumptions.
 
 **Enforcement**: Kernel contracts are type-driven — output extent is determined by input extents and declared transform, never by "what kind of IR node this came from."
 
@@ -515,10 +507,10 @@ Even when underlying `x_base(t)` jumps due to scrubbing, looping, hot-swap, or t
 | I8 | Graph | Slot-addressed execution |
 | I9 | Graph | Schedule is data |
 | I10 | Graph | Uniform transform semantics |
-| I11 | Fields | Stable element identity |
-| I12 | Fields | Lazy fields, explicit materialization |
-| I13 | Fields | Structural sharing / hash-consing |
-| I14 | Fields | Explicit cache keys |
+| I11 | Channels | Stable element identity |
+| I12 | Channels | Lazy channels, explicit materialization |
+| I13 | Channels | Structural sharing / hash-consing |
+| I14 | Channels | Explicit cache keys |
 | I15 | Render | Renderer is sink only |
 | I16 | Render | Real render IR |
 | I17 | Render | Planned batching |
