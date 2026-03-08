@@ -1,6 +1,6 @@
 {
   "readiness_version": "1.0.0",
-  "generated_at_utc": "2026-02-24T17:40:47Z",
+  "generated_at_utc": "2026-03-08T05:07:41Z",
   "overall": "ready",
   "gates": {
     "G1": {
@@ -47,7 +47,7 @@
         "workstreams": [
           "W15"
         ],
-        "matrix_report": "/Users/bmf/.codex/worktrees/2acb/oscilla-animator-v2/artifacts/webgpu-browser-matrix.json"
+        "matrix_report": "/Users/bmf/.codex/worktrees/96be/oscilla-animator-v2/artifacts/webgpu-browser-matrix.json"
       }
     },
     "G5": {
