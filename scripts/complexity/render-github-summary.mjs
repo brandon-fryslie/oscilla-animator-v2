@@ -215,6 +215,7 @@ function renderSummaryMarkdown(delta, options) {
   const trendLabel = trend.emphasize ? `**${trend.label}**` : trend.label;
   const improvedCount = rows.filter((row) => rowStatus(row).kind === 'improvement').length;
   const regressedCount = rows.filter((row) => rowStatus(row).kind === 'regression').length;
+  const statusNetScore = improvedCount - regressedCount;
   const neutralCount = rows.filter((row) => ['neutral', 'unchanged'].includes(rowStatus(row).kind)).length;
   const baseSha = options.baseSha ? `\`${options.baseSha}\`` : 'unknown';
   const headSha = options.headSha ? `\`${options.headSha}\`` : 'unknown';
@@ -222,8 +223,16 @@ function renderSummaryMarkdown(delta, options) {
   const artifactUrl = safeArtifactUrl ? `[Download archived HTML report](${safeArtifactUrl})` : 'Artifact URL unavailable';
   const metricAttribution = delta.metricAttribution ?? delta.regressionAttribution ?? {};
   const fileGate = delta.fileThresholdGate ?? null;
-  const highSignalRegressionRows = sortRowsForDisplay((delta.highSignalRegressions ?? []).filter(isComplexityMetric)).map((row) => rowToSummaryRow(row, metricAttribution));
-  const highSignalImprovementRows = sortRowsForDisplay((delta.highSignalImprovements ?? []).filter(isComplexityMetric)).map((row) => rowToSummaryRow(row, metricAttribution));
+  const highSignalRegressionRows = sortRowsForDisplay(
+    (delta.highSignalRegressions ?? [])
+      .filter(isComplexityMetric)
+      .filter((row) => rowStatus(row).kind === 'regression'),
+  ).map((row) => rowToSummaryRow(row, metricAttribution));
+  const highSignalImprovementRows = sortRowsForDisplay(
+    (delta.highSignalImprovements ?? [])
+      .filter(isComplexityMetric)
+      .filter((row) => rowStatus(row).kind === 'improvement'),
+  ).map((row) => rowToSummaryRow(row, metricAttribution));
   const fullRows = sortedRows.map((row) => rowToFullRow(row, metricAttribution));
   const guideRows = (delta.guide ?? [])
     .filter((row) => row.direction !== 'info')
@@ -236,7 +245,7 @@ function renderSummaryMarkdown(delta, options) {
     '',
     `- trend assessment: ${trendLabel} (${summarizeTrendNarrative(rows)})`,
     `- weighted trend score: ${weightedScore}`,
-    `- net score (improved - regressed): ${delta.score}`,
+    `- net score (improved - regressed): ${statusNetScore}`,
     `- improved metrics: ${improvedCount}, regressed metrics: ${regressedCount}, unchanged/near-zero: ${neutralCount}`,
     `- artifact: ${artifactUrl}`,
     ...(fileGate ? [

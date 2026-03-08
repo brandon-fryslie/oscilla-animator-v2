@@ -47,11 +47,28 @@ jobs:
       - name: Run complexity analysis
         run: pnpm -s complexity:all
 
+      - name: Prepare complexity HTML artifact
+        id: complexity_html_artifact
+        run: |
+          SOURCE_HTML="reports/complexity/comparison-summary.html"
+          TARGET_HTML="artifacts/complexity-${GITHUB_SHA}-comparison.html"
+          mkdir -p artifacts
+          cp "$SOURCE_HTML" "$TARGET_HTML"
+          echo "path=$TARGET_HTML" >> "$GITHUB_OUTPUT"
+
+      - name: Upload complexity comparison HTML
+        uses: actions/upload-artifact@v4
+        with:
+          name: complexity-comparison-${{ github.sha }}
+          path: ${{ steps.complexity_html_artifact.outputs.path }}
+          if-no-files-found: error
+          retention-days: 30
+
   compare-base-vs-head:
     name: Compare PR base vs head complexity
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request'
-    timeout-minutes: 30
+    timeout-minutes: 60
     steps:
       - name: Checkout
         uses: actions/checkout@v4

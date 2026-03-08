@@ -89,11 +89,12 @@ export function sortRowsForDisplay(rows) {
 export function scoreRows(rows) {
   // [LAW:one-source-of-truth] Trend score derives strictly from canonical per-metric delta rows.
   return rows.reduce((total, row) => {
-    if (row.classification !== 'improved' && row.classification !== 'regressed') return total;
+    const status = rowStatus(row);
+    if (status.kind !== 'improvement' && status.kind !== 'regression') return total;
     const signalWeight = SIGNAL_WEIGHTS[row.signal] ?? 1;
     const magnitudeWeight = MAGNITUDE_WEIGHTS[row.magnitude] ?? 1;
     const contribution = signalWeight * magnitudeWeight;
-    return row.classification === 'improved' ? total + contribution : total - contribution;
+    return status.kind === 'improvement' ? total + contribution : total - contribution;
   }, 0);
 }
 
