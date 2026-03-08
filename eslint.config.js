@@ -8,7 +8,34 @@ import noHotPathAlloc from './eslint-rules/no-hot-path-alloc.js';
 export default tseslint.config(
   // Ignore build output
   {
-    ignores: ['dist/**'],
+    ignores: ['dist/**', 'src/**/*.d.ts', 'src/**/*.js'],
+  },
+  {
+    linterOptions: {
+      reportUnusedDisableDirectives: 'off',
+    },
+  },
+  {
+    files: ['src/**/*.{ts,tsx}'],
+    languageOptions: {
+      parser: tseslint.parser,
+      parserOptions: {
+        projectService: true,
+        tsconfigRootDir: import.meta.dirname,
+      },
+    },
+    plugins: {
+      '@typescript-eslint': tseslint.plugin,
+    },
+  },
+  {
+    // [LAW:single-enforcer] Enforce explicit "any" usage at one boundary.
+    files: ['src/**/*.{ts,tsx}'],
+    ignores: ['src/**/*.test.ts', 'src/**/*.test.tsx', 'src/**/__tests__/**'],
+    rules: {
+      '@typescript-eslint/no-explicit-any': ['error', { ignoreRestArgs: false }],
+      '@typescript-eslint/ban-ts-comment': ['error', { 'ts-ignore': true }],
+    },
   },
   // Block definitions: lower() function constraints
   {
