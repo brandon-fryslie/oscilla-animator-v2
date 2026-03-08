@@ -32,9 +32,9 @@ Extract and Construct are **structural intrinsics** (ValueExpr kinds), not regis
 
 These are the same Extract/Construct operations used for vec2/vec3.
 
-## Cardinality Polymorphism
+## Lane-Local Color Execution
 
-All color blocks are cardinality-polymorphic via the existing cardinality type variable system. No separate signal/field implementations — the same lowering shape works for both.
+All color blocks are lane-local via the existing cardinality axis. The same Naga lowering works for both scalar and array execution paths.
 
 ## Color Block Catalog (T3)
 

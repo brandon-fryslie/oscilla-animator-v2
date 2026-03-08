@@ -37,7 +37,7 @@ An observation is:
 1. **Bounded**: All data structures are fixed-size or capped. Ring buffers, not unbounded arrays.
 2. **Opt-in**: Debug capture is disabled by level (OFF → BASIC → TRACE → PERF → FULL).
 3. **Keyed by stable IDs**: Use `busId`, `bindingId`, `portKey`, `blockId`—never mutable references.
-4. **No forced materialization**: Observation must not materialize lazy Fields or traverse RenderTree.
+4. **No forced materialization**: Observation must not materialize lazy channels or traverse RenderTree.
 5. **Cheap queries**: UI questions answered from cached snapshots, not recomputed.
 
 ---
@@ -213,7 +213,7 @@ type ValueSummary =
   | { t: 'err'; code: string };           // 'nan', 'inf', 'type-mismatch'
 ```
 
-**Never include Field contents.** For field debugging, use sampled probes (see §3).
+**Never include Array contents.** For large data channels, use sampled probes (see §3).
 
 ### Interface
 
@@ -241,7 +241,7 @@ interface DebugSnapshot {
     fpsEstimate: number;
     avgFrameMs: number;
     worstFrameMs: number;
-    fieldMaterializations: number;
+    laneMaterializations: number;
     topMaterializers: Array<{
       blockId: string;
       count: number
@@ -394,9 +394,9 @@ export function compileBusAwarePatch(
    tap?.recordBindingNow?.(listenerId, valueSummary);
    ```
 
-3. **Field materialization**:
+3. **Lane materialization**:
    ```typescript
-   // In Field allocation function
+   // In Lane allocation function
    tap?.hitMaterialize?.({ blockId, reason });
    ```
 
@@ -530,14 +530,14 @@ All results are preformatted for UI (no further computation needed).
 - [ ] Allocate ring buffers per bus (capacity = sampleRate * windowSeconds)
 - [ ] Use typed arrays for numeric channels
 - [ ] Initialize bounded TopK counters for perf tracking
-- [ ] Pass tap to BusRuntime and field materializer
+- [ ] Pass tap to BusRuntime and lane materializer
 
 ### Runtime per Frame
 
 - [ ] Record busNow values after bus evaluation
 - [ ] Record bindingNow values after listener chains (if TRACE)
 - [ ] Increment hitAdapter/hitLens counters
-- [ ] Increment fieldMaterialization counter
+- [ ] Increment laneMaterialization counter
 
 ### Runtime at Sample Rate (~15 Hz)
 

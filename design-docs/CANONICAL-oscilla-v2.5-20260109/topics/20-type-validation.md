@@ -26,25 +26,18 @@ There is exactly ONE enforcement point for axis validity in the entire system. I
 
 Axis-shape contracts — the rules governing which combinations of extent axes are valid:
 
-- **Event invariants**: temporality=discrete ⇒ payload=bool AND unit=none (hard invariant)
-- **Field invariants**: cardinality must be many(instance) for field expressions
-- **Signal invariants**: cardinality must be one for signal expressions
-- **No var escape**: all axes must be `{ kind: 'inst' }` by the time they reach the gate
-
-### What the Gate Does NOT Do
-
-- **No inference**: The gate does not infer or fix types — it only validates
-- **No adapter insertion**: The gate does not insert adapters — that's a separate frontend transform
-- **No coercion**: The gate does not silently convert types — violations are errors
-- **No over-enforcement**: The gate enforces TRUE invariants, not "convenient expectations"
+- **Event invariants**: temporality=discrete ⇒ payload=bool AND unit=none.
+- **Array invariants**: cardinality=many(instance) ⇒ instance identity must be present.
+- **Scalar invariants**: cardinality=one ⇒ temporality must be continuous (unless trigger).
+- **No var escape**: all axes must be `{ kind: 'inst' }` by the time they reach the gate.
 
 ### Principles
 
-**Single Point**: All axis validation happens in one place. Scattered checks throughout the codebase are forbidden — they will diverge from the gate. Small local asserts at API boundaries are allowed as defense-in-depth, but they must be strict subsets of what the gate checks.
+**Single Point**: All axis validation happens in one place. Scattered checks throughout the codebase are forbidden.
 
-**No Bypass**: There is no "debug mode" that skips validation. There is no "preview mode" that relaxes rules. If compilation is partial, the output is explicitly tagged as "unvalidated" and backend code refuses to consume it.
+**No Bypass**: There is no "debug mode" or "preview mode" that relaxes rules.
 
-**Enforce Only True Invariants**: The gate must not over-constrain. If a combination of axes is theoretically valid but unusual, the gate should allow it.
+**Enforce Only True Invariants**: The gate must not over-constrain. If a combination of axes is theoretically valid, the gate should allow it.
 
 ---
 
@@ -62,23 +55,14 @@ For each expression:
    - temporality=discrete ⇒ payload=bool
    - temporality=discrete ⇒ unit=none
 
-2. **Field invariants**:
-   - Field expressions must have cardinality=many(instance)
-   - Instance identity must be present and valid
+2. **Array invariants**:
+   - cardinality=many(instance) requires a valid InstanceRef.
 
-3. **Signal invariants**:
-   - Signal expressions must have cardinality=one (or zero for consts)
-   - Signal expressions must have temporality=continuous
+3. **Scalar invariants**:
+   - cardinality=one expressions must have continuous temporality (except for Triggers).
 
 4. **No var escape**:
-   - All axes must be `{ kind: 'inst' }` — no unresolved type variables
-
-### Does NOT Check
-
-- Payload/unit combinations beyond event invariants (most combos are valid)
-- Whether adapters should be inserted (that's a separate pass)
-- Whether types can be inferred (that's the solver's job)
-- Whether the graph makes semantic sense (that's the user's problem)
+   - All axes must be `{ kind: 'inst' }` — no unresolved type variables.
 
 ---
 
@@ -92,15 +76,6 @@ type AxisViolation = {
 };
 ```
 
-### AxisInvalid Diagnostic Category
-
-All axis violations surface through the diagnostic system under `AxisInvalid`. Each diagnostic includes:
-
-- **Source context**: Block ID, port ID where the violation originated
-- **Expected**: What the axis value should be
-- **Actual**: What was found
-- **Suggestion**: When the fix is deterministic
-
 ### Example Diagnostics
 
 ```
@@ -110,158 +85,87 @@ AxisInvalid: ValueExpr at node 42 has temporality=discrete but payload=float.
 ```
 
 ```
-AxisInvalid: ValueExpr at node 17 is classified as field but has cardinality=one.
-  Field expressions require cardinality=many(instance).
-  Block: "FieldGenerator" (block-456), output port "values"
-```
-
-```
-AxisInvalid: ValueExpr at node 5 has unresolved type variable in cardinality axis.
-  All axes must be instantiated before backend compilation.
-  Block: "MathAdd" (block-789), output port "result"
+AxisInvalid: ValueExpr at node 17 is classified as many-lane but has cardinality=one.
+  Instance-aligned expressions require cardinality=many(instance).
 ```
 
 ### Diagnostic References
 
-Diagnostics reference CanonicalType and existing IDs only — no "hidden types" encoded in diagnostic fields (Guardrail 15).
+Diagnostics reference CanonicalType and existing IDs only.
 
 ```typescript
 // CORRECT
 { expected: CanonicalType, actual: CanonicalType }
 
 // WRONG - creates hidden type information
-{ expectedKind: 'signal', actualKind: 'field' }
+{ expectedKind: 'scalar', actualKind: 'array' }
 ```
-
----
-
-## BindingMismatchError
-
-Structured diagnostic for binding axis unification failures.
-
-```typescript
-type BindingMismatchError = {
-  readonly left: BindingValue;
-  readonly right: BindingValue;
-  readonly location: { blockId: BlockId; portId: PortId };
-  readonly remedy: 'insert-state-op' | 'insert-continuity-op' | 'rewire';
-};
-```
-
----
-
-## deriveKind Agreement Assertion
-
-At lowering and debug boundaries, any variant that carries both a discriminant tag and a `.type: CanonicalType` field must satisfy:
-
-```typescript
-if (hasType(v)) {
-  assert(v.tag === deriveKind(v.type));
-}
-```
-
-Tags are permitted ONLY as TypeScript discriminated union narrowing aids or for variants that lack a `.type` field. If a variant has `.type`, the tag MUST agree with `deriveKind(type)`.
-
----
-
-## eventRead Type Validation
-
-The axis validator checks that `eventRead` kernel outputs are continuous float signals:
-- Output type MUST be `canonicalSignal({ kind: 'float' }, { kind: 'scalar' })`
-- The IR builder enforces this at construction time
-- The validator provides defense-in-depth
 
 ---
 
 ## The 17 Guardrails
 
-Operational DO/DON'T pairs that encode the enforcement principles into concrete rules. The principles (gate, no bypass, true invariants) are foundational and cannot change. The specific guardrail implementations express the principles in actionable form.
+Operational DO/DON'T pairs that encode the enforcement principles.
 
 ### G1: Single Authority
-- DO NOT invent parallel type structures (SignalType, PortType, etc.)
-- Instead: every value's type is exactly `CanonicalType = { payload, unit, extent }`
+- DO NOT invent parallel type structures (OneType, ArrayType, etc.).
+- Instead: every value's type is exactly `CanonicalType`.
 
-### G2: Derived Kind Is Total and Deterministic
-- DO NOT special-case signal/field/event based on node classes
-- Instead: all dispatch uses `deriveKind(type)` and/or `payloadStride(type.payload)`
+### G2: Dispatch by Axis
+- DO NOT special-case behavior based on old node classes.
+- Instead: all dispatch uses `Axis` values and `payloadStride(type.payload)`.
 
 ### G3: Axis Shape Contracts Are Non-Negotiable
-- DO NOT allow "signal with cardinality many" or "field with cardinality one" post-validation
-- DO NOT allow discrete temporality for non-events
-- Instead: enforce via single axis-validation gate before backend compilation
+- DO NOT allow discrete temporality for non-events.
+- Instead: enforce via single axis-validation gate.
 
 ### G4: Vars Are Inference-Only
-- DO NOT let `Axis.kind:'var'` escape frontend into backend/runtime/renderer
-- DO NOT treat var as "default"
-- Instead: constructors produce `inst` values; after type solve, all axes are `inst`
+- DO NOT let `Axis.kind:'var'` escape frontend into backend/runtime/renderer.
 
 ### G5: One Enforcement Gate
-- DO NOT scatter ad-hoc axis checks throughout code
-- DO NOT bypass validation in debug/preview/partial compile paths
-- Instead: one gate + small local asserts at boundaries
+- DO NOT scatter ad-hoc axis checks throughout code.
 
 ### G6: No Untyped Values
-- DO NOT create value-producing nodes without `type: CanonicalType`
-- Instead: type is mandatory on every ValueExpr variant
+- DO NOT create value-producing nodes without `type: CanonicalType`.
 
 ### G7: Const Values Must Be Payload-Shaped
-- DO NOT store constants as `number | string | boolean`
-- Instead: discriminated `ConstValue` keyed by payload kind
+- DO NOT store constants as `number | string | boolean`.
+- Instead: discriminated `ConstValue` keyed by payload kind.
 
-### G8: Units Are Canonical, Not Inference Junk
-- DO NOT put unit variables inside UnitType
-- DO NOT interpret unit semantics outside adapters/lenses
-- Instead: only explicit ops change unit; solver tracks UnitVarId separately
+### G8: Units Are Canonical
+- DO NOT put unit variables inside UnitType.
 
 ### G9: Only Explicit Ops Change Axes
-- DO NOT mutate extent axes as side-effect of unrelated ops
-- DO NOT implicitly convert signal↔field/event in evaluator
-- Instead: small named set of ops (broadcast, reduce, state, adapter)
-
-### G9b: Cardinality Policy Declared On Axis Vars
-- DO NOT encode cardinality flexibility/propagation in opaque block mode enums
-- Instead: declare `relation`, `acceptance`, and `instanceBinding` on CT/ICT cardinality vars
-- Instead: compiler derives constraints from those axis declarations
+- DO NOT mutate extent axes as side-effect of unrelated ops.
+- Instead: small named set of ops (broadcast, reduce, state, adapter).
 
 ### G10: Instance Identity Lives in Type
-- DO NOT attach instanceId as separate field when it's in extent.cardinality
-- DO NOT use `string` for IDs when branded IDs exist
-- Instead: `requireManyInstance(type)` extracts identity
+- DO NOT attach instanceId as separate property when it's in extent.cardinality.
 
 ### G11: Naming and Discriminants Are Consistent
-- DO NOT introduce mixed discriminants across IR unions
-- Instead: all IR discriminated unions use `kind`; ValueExpr uses `kind`
-- DO NOT introduce snake_case discriminant values; use camelCase
+- All IR discriminated unions use `kind`.
 
 ### G12: Kernel/Op Contracts Are Type-Driven
-- DO NOT have kernel behavior depend on "this came from signal IR vs field IR"
-- Instead: kernel behavior defined by CanonicalType only; stride from `payloadStride`
+- DO NOT have kernel behavior depend on "this came from scalar IR vs array IR".
 
 ### G13: Adapter/Lens Policy Separate From Type Soundness
-- DO NOT bake auto-insert UX policy into type rules
-- Instead: adapter insertion is a frontend transform using explicit blocks
+- DO NOT bake auto-insert UX policy into type rules.
 
 ### G14: Frontend/Backend Boundary Is Strict
-- DO NOT have UI read intermediate compiler globals
-- Instead: UI reads pass snapshots and validated frontend artifacts
+- DO NOT have UI read intermediate compiler globals.
 
 ### G15: Diagnostics Can't Create Hidden Types
-- DO NOT encode type meaning into diagnostic-only fields
-- Instead: diagnostics reference CanonicalType and existing IDs only
+- DO NOT encode type meaning into diagnostic-only properties.
 
 ### G16: No Forbidden Patterns
-- DO NOT introduce forbidden type aliases (see GLOSSARY Forbidden Terms)
-- Instead: enforce via CI gate test; see [appendices/type-system-migration.md](../appendices/type-system-migration.md)
+- DO NOT introduce forbidden type aliases (One, Many, etc.).
 
 ### G17: Tests That Make Cheating Impossible
-- DO NOT accept "seems fine" without invariant tests
-- Instead: tests that fail if a second type system appears, if Axis.var escapes backend, if deriveKind isn't total
+- DO NOT accept "seems fine" without invariant tests.
 
 ---
 
 ## See Also
 
 - [01-type-system](./01-type-system.md) - Core type definitions
-- [21-adapter-system](./21-adapter-system.md) - Adapter matching and transforms
-- [07-diagnostics-system](./07-diagnostics-system.md) - How diagnostics are surfaced
 - [INVARIANTS](../INVARIANTS.md) - System-wide invariant rules

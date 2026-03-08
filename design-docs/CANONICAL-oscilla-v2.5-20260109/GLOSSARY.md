@@ -28,12 +28,102 @@ Phase is represented as `float` with `unit: { kind: 'angle', unit: 'phase01' }`.
 - `vec3` → 3
 - `color` → 4 (RGBA)
 - `cameraProjection` → 1
-- `shape2d` → 0 (non-sampleable; packed handle size: 8 u32 words)
-- `shape3d` → 0 (non-sampleable; packed handle size: 12 u32 words)
+- `shape2d` → 1 (u32 handle)
+- `shape3d` → 1 (u32 handle)
 
 **Source**: [01-type-system.md](./topics/01-type-system.md)
 
 **Note**: Does NOT include 'event' or 'domain'. Adding a new payload kind is a foundational change.
+
+---
+
+### Arena
+
+**Definition**: The monolithic GPU storage buffer containing all mutable simulation state (Scalars, Arrays, State). Partitioned into functional zones via GpuLayout.
+
+**Type**: concept (storage)
+
+**Source**: [05-runtime.md](./topics/05-runtime.md)
+
+---
+
+### ShapeBank
+
+**Definition**: The read-only GPU storage buffer containing static topology definitions (`ShapeHeaderV1` records) and payload data (indices, parameters).
+
+**Type**: concept (storage)
+
+**Source**: [06-renderer.md](./topics/06-renderer.md)
+
+---
+
+### Indirect Buffer
+
+**Definition**: The GPU buffer containing hardware-native indirect command records (`DrawIndexedIndirectArgs` and `DrawIndirectArgs`). Populated by Draw Prep.
+
+**Type**: concept (storage)
+
+**Source**: [06-renderer.md](./topics/06-renderer.md)
+
+---
+
+### Scoped Naga IR
+
+**Definition**: Structured intermediate representation used by the compiler to represent graph logic as recursive blocks with lexical scopes, interned types, and explicit memory operations.
+
+**Type**: concept (compilation)
+
+**Source**: [04-compilation.md](./topics/04-compilation.md)
+
+---
+
+### Handle
+
+**Definition**: A numeric `u32` identity value referencing a `ShapeHeaderV1` record in the ShapeBank. Replaces object references in the runtime hot path.
+
+**Type**: concept (data)
+
+**Source**: [01-type-system.md](./topics/01-type-system.md)
+
+---
+
+### Draw Prep
+
+**Definition**: A dedicated GPU compute pass that translates simulation counters and topology metadata into valid WebGPU indirect command records.
+
+**Type**: concept (pipeline)
+
+**Source**: [05-runtime.md](./topics/05-runtime.md)
+
+---
+
+### Vertex Pulling
+
+**Definition**: Programmable fetching of geometry and instance data from GPU storage buffers in the vertex shader, rather than using traditional CPU-authored vertex attributes.
+
+**Type**: concept (rendering)
+
+**Source**: [06-renderer.md](./topics/06-renderer.md)
+
+---
+
+### SoA (Structure of Arrays)
+
+**Definition**: Memory layout where components of multi-channel data (e.g., Position X, Y, Z) are stored in independent, contiguous arrays to maximize GPU memory bandwidth and coalescing.
+
+**Type**: concept (layout)
+
+**Source**: [04-compilation.md](./topics/04-compilation.md)
+
+---
+
+### Ping-Pong Storage
+
+**Definition**: Double-buffering strategy where one buffer is read and another is written in frame N, then roles rotate in frame N+1, ensuring Read-Modify-Write safety in parallel execution.
+
+**Type**: concept (architecture)
+
+**Source**: [05-runtime.md](./topics/05-runtime.md)
 
 ---
 
@@ -81,7 +171,7 @@ type CanonicalType = {
 
 **Source**: [01-type-system.md](./topics/01-type-system.md)
 
-**Note**: The ONLY type authority for all values. No parallel type systems (SignalType, PortType, etc.) may exist. Signal/field/event are derived from axes via `deriveKind()`, never stored.
+**Note**: The ONLY type authority for all values. No parallel type systems (SignalType, ArrayType, etc.) may exist. Value classifications are derived from axes, never stored.
 
 ---
 
@@ -109,8 +199,8 @@ type CanonicalType = {
 
 **Values**:
 - `{ kind: 'zero' }` - compile-time constant
-- `{ kind: 'one' }` - single lane (Signal)
-- `{ kind: 'many'; instance: InstanceRef }` - N lanes aligned by instance (Field)
+- `{ kind: 'one' }` - single lane
+- `{ kind: 'many'; instance: InstanceRef }` - N lanes aligned by instance
 
 **Source**: [01-type-system.md](./topics/01-type-system.md)
 
@@ -206,7 +296,7 @@ type CanonicalType = {
 
 **Canonical Form**: `ColorPicker`
 
-**Output**: Signal<color, HSL>
+**Output**: `one:color` (HSL)
 
 **Source**: Topic 23 (Color System)
 
@@ -384,7 +474,7 @@ interface InstanceRef {
 
 ### Lens
 
-**Definition**: A port decorator that modifies signal values. Attached to both input and output ports. Compiled to blocks. No separate lens catalog — blocks can be used as lenses.
+**Definition**: A port decorator that modifies values. Attached to both input and output ports. Compiled to blocks. No separate lens catalog — blocks can be used as lenses.
 
 **Type**: concept
 
@@ -404,8 +494,8 @@ interface InstanceRef {
 4. Slew/Lag (dynamics)
 5. StepQuantize (discretization)
 6. Smoothstep (curves)
-7. Broadcast (signal→field)
-8. Reduce (field→signal: avg/sum/min/max)
+7. Broadcast (scalar→array)
+8. Reduce (array→scalar: avg/sum/min/max)
 9. Mask (gate/hold)
 10. Extract/Construct (structural)
 
@@ -473,7 +563,7 @@ interface InstanceRef {
 
 ### Primitive Block
 
-**Definition**: A block that creates a single element of a specific domain type. Outputs `Signal<T>` (cardinality: one).
+**Definition**: A block that creates a single element of a specific domain type. Outputs `one:T` (cardinality: one).
 
 **Type**: concept (block category)
 
@@ -495,7 +585,7 @@ interface InstanceRef {
 
 **Canonical Form**: `sampleable`
 
-**Source**: Topic 24 (Multi-Component Signals)
+**Source**: Topic 24 (Multi-Component Values)
 
 **Note**: Stride 0 values cannot be stored in numeric slots and are never evaluated by numeric evaluators.
 
@@ -519,7 +609,7 @@ interface SlotMetaEntry {
 }
 ```
 
-**Source**: Topic 24 (Multi-Component Signals)
+**Source**: Topic 24 (Multi-Component Values)
 
 **Note**: stride === payloadStride(payload) is a compiler invariant.
 
@@ -545,7 +635,7 @@ interface SlotMetaEntry {
 
 **Canonical Form**: `Array`
 
-**Behavior**: `Signal<T>` → `Field<T, instance>`
+**Behavior**: `one:T` → `many:T`
 
 **Outputs**: elements, index, t (normalized 0..1), active (bool)
 
@@ -557,7 +647,7 @@ interface SlotMetaEntry {
 
 ### Layout Block
 
-**Definition**: A block that operates on field inputs and outputs positions. Determines spatial arrangement.
+**Definition**: A block that operates on array inputs and outputs positions. Determines spatial arrangement.
 
 **Type**: concept (block category)
 
@@ -571,13 +661,13 @@ interface SlotMetaEntry {
 
 ---
 
-### Cardinality-Generic Block
+### Lane-Local Block
 
-**Definition**: A block whose semantic function is per-lane and valid for both Signal (one lane) and Field (many lanes). Lane-local, cardinality-preserving, instance-aligned, and deterministic per lane.
+**Definition**: A block whose semantic function is per-lane and valid for both Scalar (one lane) and Array (many lanes). Lane-local, cardinality-preserving, instance-aligned, and deterministic per lane.
 
 **Type**: concept (block classification property)
 
-**Canonical Form**: `Cardinality-Generic Block`
+**Canonical Form**: `Lane-Local Block`
 
 **Contract**:
 1. Lane-locality (no cross-lane dependence)
@@ -589,7 +679,7 @@ interface SlotMetaEntry {
 
 **Source**: [02-block-system.md](./topics/02-block-system.md)
 
-**Note**: The compiler specializes each instance to either scalar or field evaluation — no runtime branching on cardinality.
+**Note**: The compiler specializes each instance to either scalar or array evaluation — no runtime branching on cardinality.
 
 ---
 
@@ -628,7 +718,7 @@ interface SlotMetaEntry {
 **Semantics**:
 - Identifies the **state array** (the conceptual unit), not individual lanes
 - For scalar state: maps to `stride` floats at a slot index
-- For field state: maps to a contiguous range of `laneCount × stride` floats
+- For lane state: maps to a contiguous range of `laneCount × stride` floats
 - Lane index is NOT part of StateId — it is a positional offset within the buffer
 - Used for state migration during hot-swap (see I3)
 
@@ -638,13 +728,13 @@ interface SlotMetaEntry {
 
 ### Lane
 
-**Definition**: An individual element within a Field. When a value has cardinality `many(instance)`, it contains N lanes — one per element in the instance.
+**Definition**: An individual element within an array. When a value has cardinality `many(instance)`, it contains N lanes — one per element in the instance.
 
 **Type**: concept
 
 **Canonical Form**: `lane`
 
-**Usage**: Lane index is a positional offset (0..N-1) within a field buffer. Lanes can be remapped by continuity; lane index is NOT semantic identity.
+**Usage**: Lane index is a positional offset (0..N-1) within a data channel. Lanes can be remapped by continuity; lane index is NOT semantic identity.
 
 **Source**: [01-type-system.md](./topics/01-type-system.md), [02-block-system.md](./topics/02-block-system.md)
 
@@ -692,17 +782,17 @@ interface StateMappingScalar {
 
 ---
 
-### StateMappingField
+### StateMappingLane
 
-**Definition**: State migration mapping for a field (cardinality: many) stateful block. Identifies the entire state buffer for all lanes of an instance.
+**Definition**: State migration mapping for an array (cardinality: many) stateful block. Identifies the entire state buffer for all lanes of an instance.
 
 **Type**: type
 
-**Canonical Form**: `StateMappingField`
+**Canonical Form**: `StateMappingLane`
 
 **Structure**:
 ```typescript
-interface StateMappingField {
+interface StateMappingLane {
   stateId: StateId;         // stable (identifies the whole state array)
   instanceId: InstanceId;   // ties buffer to lane set identity
   slotStart: number;        // unstable start offset
@@ -712,7 +802,7 @@ interface StateMappingField {
 }
 ```
 
-**Note**: Lane index is NOT part of StateId. Migration for field-state uses continuity's lane mapping when identity is stable.
+**Note**: Lane index is NOT part of StateId. Migration for lane-state uses continuity's lane mapping when identity is stable.
 
 **Source**: [05-runtime.md](./topics/05-runtime.md)
 
@@ -729,7 +819,7 @@ interface StateMappingField {
 **payloadStride**: 0 (non-sampleable)
 **Packed handle size**: 8 u32 words
 
-**Layout**: TopologyId, PointsFieldSlot, PointsCount, StyleRef, Flags, Reserved×3
+**Layout**: TopologyId, PointsChannelSlot, PointsCount, StyleRef, Flags, Reserved×3
 
 **Valid operations**: equality, assignment, pass-through
 **Invalid operations**: arithmetic, interpolation, combine modes (except last/first)
@@ -756,7 +846,7 @@ interface StateMappingField {
 
 ### World Space
 
-**Definition**: The normalized coordinate system for instance placement. Range [0..1] in both axes. Layout blocks produce positions in world space.
+**Definition**: The absolute coordinate system for instance placement. Range is unbounded Cartesian ℝ³. By convention, the unit cube [0..1]³ represents the default visible canvas. Layout blocks produce positions in world space.
 
 **Type**: concept (coordinate space)
 
@@ -784,7 +874,7 @@ interface StateMappingField {
 
 ### scale
 
-**Definition**: The isotropic local→world scale factor expressed in world-normalized units. Type: `Signal<float>` or `Field<float>`. Backend mapping: `scalePx = scale × min(viewportWidth, viewportHeight)`.
+**Definition**: The isotropic local→world scale factor expressed in world-normalized units. Type: `one:float` or `many:float`. Backend mapping: `scalePx = scale × min(viewportWidth, viewportHeight)`.
 
 **Type**: concept (transform parameter)
 
@@ -800,7 +890,7 @@ interface StateMappingField {
 
 ### scale2
 
-**Definition**: Optional anisotropic scale factor. Type: `Signal<vec2>` or `Field<vec2>`. Combined with scale: `S_effective = (scale × scale2.x, scale × scale2.y)`.
+**Definition**: Optional anisotropic scale factor. Type: `one:vec2` or `many:vec2`. Combined with scale: `S_effective = (scale × scale2.x, scale × scale2.y)`.
 
 **Type**: concept (transform parameter)
 
@@ -812,47 +902,23 @@ interface StateMappingField {
 
 ## Render IR
 
-### RenderFrameIR
+### Indirect Buffer
 
-**Definition**: The render intermediate representation produced by the materializer. A sequence of draw operations (passes), each combining local-space geometry with world-space instance transforms.
+**Definition**: The GPU buffer containing hardware-native indirect command records (`DrawIndexedIndirectArgs` and `DrawIndirectArgs`). Populated by Draw Prep.
 
-**Type**: type
-
-**Canonical Form**: `RenderFrameIR`
-
-**Structure**:
-```typescript
-interface RenderFrameIR {
-  passes: RenderPassIR[];
-}
-```
+**Type**: concept (storage)
 
 **Source**: [06-renderer.md](./topics/06-renderer.md)
-
-**Note**: Draw-op-centric model. Each pass contains draw operations that reference geometry templates and instance transforms.
 
 ---
 
-### DrawPathInstancesOp
+### Vertex Pulling
 
-**Definition**: Primary render operation combining a local-space geometry template with world-space instance transforms and shared style.
+**Definition**: Programmable fetching of geometry and instance data from GPU storage buffers in the vertex shader, rather than using traditional CPU-authored vertex attributes.
 
-**Type**: type
-
-**Canonical Form**: `DrawPathInstancesOp`
-
-**Structure**:
-```typescript
-interface DrawPathInstancesOp {
-  geometry: PathGeometryTemplate;
-  instances: PathInstanceSet;
-  style: PathStyle;
-}
-```
+**Type**: concept (rendering)
 
 **Source**: [06-renderer.md](./topics/06-renderer.md)
-
-**Note**: Enables natural batching — instances sharing geometry+style are pre-grouped.
 
 ---
 
@@ -896,77 +962,23 @@ interface DrawPathInstancesOp {
 
 ---
 
-### Signal Kernel
+### Global Phase
 
-**Definition**: Layer 2 of the three-layer execution architecture. Domain-specific `scalar → scalar` functions with documented domain/range contracts.
-
-**Type**: concept (architectural layer)
-
-**Canonical Form**: `Signal Kernel`
-
-**Categories**: Oscillators (phase→[-1,1]), Easing (t∈[0,1]→u∈[0,1]), Noise (any→[0,1))
-
-**Source**: [05-runtime.md](./topics/05-runtime.md)
-
----
-
-### Field Kernel
-
-**Definition**: Layer 3 of the three-layer execution architecture. Vec2/color/field operations applied lane-wise across field buffers.
+**Definition**: Layer 1 of the compute dispatch where global parameters (cardinality: one) are evaluated by Thread 0.
 
 **Type**: concept (architectural layer)
 
-**Canonical Form**: `Field Kernel`
-
-**Categories**: Geometry, Color, Effects
-
 **Source**: [05-runtime.md](./topics/05-runtime.md)
 
 ---
 
-### Materializer
+### Lane Phase
 
-**Definition**: The orchestrator that interprets IR, allocates buffers, dispatches to the three execution layers (opcode, signal kernel, field kernel), and writes to render sinks. Not a layer itself.
+**Definition**: Layer 2 of the compute dispatch where simulation logic is executed in parallel across all active lanes (SoA).
 
-**Type**: concept (architectural component)
-
-**Canonical Form**: `Materializer`
+**Type**: concept (architectural layer)
 
 **Source**: [05-runtime.md](./topics/05-runtime.md)
-
----
-
-## Derived Type Concepts
-
-### Field
-
-**Definition**: A CanonicalType where `cardinality = many(domain)` and `temporality = continuous`.
-
-**Type**: concept (type constraint)
-
-**Source**: [01-type-system.md](./topics/01-type-system.md)
-
-**Note**: UI still uses "field" terminology; it's a constraint, not a separate type.
-
----
-
-### Signal
-
-**Definition**: A CanonicalType where `cardinality = one` and `temporality = continuous`.
-
-**Type**: concept (type constraint)
-
-**Source**: [01-type-system.md](./topics/01-type-system.md)
-
----
-
-### Trigger
-
-**Definition**: A CanonicalType where `cardinality = one` and `temporality = discrete`.
-
-**Type**: concept (type constraint)
-
-**Source**: [01-type-system.md](./topics/01-type-system.md)
 
 ---
 
@@ -1222,9 +1234,19 @@ type NormalizedGraph = {
 
 ## Runtime
 
+### Arena Slot
+
+**Definition**: A hardcoded byte offset in the monolithic GPU Arena buffer referencing a specific data channel or constant.
+
+**Type**: concept (storage)
+
+**Source**: [05-runtime.md](./topics/05-runtime.md)
+
+---
+
 ### StateSlot
 
-**Definition**: Persistent storage for stateful primitive.
+**Definition**: Persistent storage for stateful primitive within the Arena State Zone.
 
 **Type**: type
 
@@ -1234,50 +1256,15 @@ type NormalizedGraph = {
 
 ---
 
-### ScalarSlot
-
-**Definition**: Storage for single-lane value.
-
-**Type**: type
-
-**Canonical Form**: `ScalarSlot`
-
-**Source**: [05-runtime.md](./topics/05-runtime.md)
-
----
-
-### FieldSlot
-
-**Definition**: Storage for multi-lane value (dense array).
-
-**Type**: type
-
-**Canonical Form**: `FieldSlot`
-
-**Source**: [05-runtime.md](./topics/05-runtime.md)
-
----
-
 ## Renderer
 
-### RenderAssembler
+### Draw Prep
 
-**Definition**: The runtime component that produces RenderFrameIR by walking render sinks, materializing field buffers, resolving shape2d handles, reading scalar banks, and executing camera projection. Lives in runtime, not renderer.
+**Definition**: A dedicated GPU compute pass that translates simulation counters and topology metadata into valid WebGPU indirect command records.
 
-**Type**: concept (architectural component)
+**Type**: concept (pipeline)
 
-**Canonical Form**: `RenderAssembler`
-
-**Responsibilities**:
-1. Materialize required fields via Materializer
-2. Read scalar banks for uniforms
-3. Execute camera projection (world → screen transform)
-4. Resolve shape2d → (topologyId, pointsBuffer, flags/style)
-5. Group into passes and output RenderFrameIR
-
-**Source**: [05-runtime.md](./topics/05-runtime.md), [18-camera-projection.md](./topics/18-camera-projection.md)
-
-**Note**: Enforces I15 (Renderer is sink-only). All IR interpretation happens here, not in renderer.
+**Source**: [05-runtime.md](./topics/05-runtime.md)
 
 ---
 
@@ -1326,47 +1313,41 @@ interface PathTopologyDef {
 
 ---
 
-### RenderInstances2D
+### RenderSink
 
-**Definition**: Primary render sink block.
+**Definition**: Primary render sink block that interfaces with the Draw Prep pipeline.
 
 **Type**: block
 
-**Canonical Form**: `RenderInstances2D`
+**Canonical Form**: `RenderSink`
 
 **Source**: [06-renderer.md](./topics/06-renderer.md)
 
 ---
 
-### projectWorldToScreenOrtho
+### build_ortho_matrix
 
-**Definition**: Orthographic projection kernel that transforms `Field<vec3>` worldPosition into screen-space coordinates. Default projection mode. Guarantees identity mapping at z=0 (worldX = screenX, worldY = screenY).
+**Definition**: Orthographic projection kernel executed on the GPU that generates a 4x4 View-Projection matrix. Guarantees identity mapping at z=0 for the [0,1]² world region.
 
-**Type**: kernel (pure function)
+**Type**: compute kernel
 
-**Canonical Form**: `projectWorldToScreenOrtho`
-
-**Output Contract**: `{ screenPosition: Field<vec2>, depth: Field<float>, visible: Field<bool> }`
+**Canonical Form**: `build_ortho_matrix`
 
 **Source**: [18-camera-projection.md](./topics/18-camera-projection.md)
 
-**Note**: Not a graph block. Executed by RenderAssembler as mandatory post-schedule stage.
+**Note**: Executed as a 1-thread GPU compute pass before draw prep.
 
 ---
 
-### projectWorldToScreenPerspective
+### build_perspective_matrix
 
-**Definition**: Perspective projection kernel with camera position, tilt, yaw, and field-of-view. Used for momentary preview (Shift) or when Camera block sets projection=1.
+**Definition**: Perspective projection kernel executed on the GPU that generates a 4x4 View-Projection matrix with camera position, tilt, yaw, and field-of-view.
 
-**Type**: kernel (pure function)
+**Type**: compute kernel
 
-**Canonical Form**: `projectWorldToScreenPerspective`
-
-**Output Contract**: `{ screenPosition: Field<vec2>, depth: Field<float>, visible: Field<bool> }`
+**Canonical Form**: `build_perspective_matrix`
 
 **Source**: [18-camera-projection.md](./topics/18-camera-projection.md)
-
-**Note**: Preview mode must not change compilation, state, or export.
 
 ---
 
@@ -1390,11 +1371,11 @@ interface PathTopologyDef {
 
 ### visible
 
-**Definition**: Contract output field from projection kernel indicating whether each instance should be drawn. Renderers MUST NOT re-derive visibility.
+**Definition**: Contract output property from projection kernel indicating whether each instance should be drawn. Renderers MUST NOT re-derive visibility.
 
-**Type**: concept (projection output field)
+**Type**: concept (projection output property)
 
-**Canonical Form**: `visible` (field name), `Field<bool>` (type)
+**Canonical Form**: `visible` (property name), `many:bool` (type)
 
 **Source**: [18-camera-projection.md](./topics/18-camera-projection.md)
 
@@ -1406,9 +1387,9 @@ interface PathTopologyDef {
 
 **Definition**: Normalized distance from camera, range [0, 1], where 0=near plane, 1=far plane. Primary key for stable depth ordering (far-to-near).
 
-**Type**: concept (projection output field)
+**Type**: concept (projection output property)
 
-**Canonical Form**: `depth` (field name), `Field<float>` (type)
+**Canonical Form**: `depth` (property name), `many:float` (type)
 
 **Source**: [18-camera-projection.md](./topics/18-camera-projection.md)
 
@@ -1440,7 +1421,7 @@ interface PathTopologyDef {
 
 ### Adapter
 
-**Definition**: A transform that changes signal type to enable port connections, without transforming the value itself.
+**Definition**: A transform that changes a value's type to enable port connections, without transforming the value itself.
 
 **Type**: concept (transform subtype)
 
@@ -1448,7 +1429,7 @@ interface PathTopologyDef {
 
 **Purpose**: Mechanical port compatibility
 
-**Example**: `phase → float` adapter allows phase output to connect to float input by converting type representation
+**Example**: `int → float` adapter allows integer output to connect to float input by converting type representation
 
 **Source**: [14-modulation-table-ui.md](./topics/14-modulation-table-ui.md)
 
@@ -1459,7 +1440,7 @@ interface PathTopologyDef {
 ### Type Names
 
 - **PascalCase**: `CanonicalType`, `PayloadType`, `BlockRole`, `Extent`
-- No generic syntax in names: `CanonicalType`, not `Signal<T>`
+- No generic syntax in names: `CanonicalType`, not `one:T` or `many:T`
 
 ### Block Names
 
@@ -1475,7 +1456,7 @@ interface PathTopologyDef {
 
 - Use `kind` as discriminator everywhere
 - Closed unions (no free-form keys)
-- No optional fields - use union branches
+- No optional properties - use union branches
 
 ---
 
@@ -1558,7 +1539,7 @@ type TargetRef =
 
 **Canonical Form**: `DiagnosticCode`
 
-**Examples**: `E_TIME_ROOT_MISSING`, `W_BUS_EMPTY`, `I_REDUCE_REQUIRED`, `P_FIELD_MATERIALIZATION_HEAVY`
+**Examples**: `E_TIME_ROOT_MISSING`, `W_BUS_EMPTY`, `I_REDUCE_REQUIRED`, `P_LANE_MATERIALIZATION_HEAVY`
 
 **Source**: [07-diagnostics-system.md](./topics/07-diagnostics-system.md)
 
@@ -1780,7 +1761,7 @@ type EditorEvent =
   activePatchRevision: number;
   tMs: number;
   frameBudget: { fpsEstimate, avgFrameMs, worstFrameMs };
-  evalStats: { fieldMaterializations, nanCount, infCount, worstOffenders };
+  evalStats: { laneMaterializations, nanCount, infCount, worstOffenders };
   diagnosticsDelta?: { raised: Diagnostic[]; resolved: string[] };
 }
 ```
@@ -1834,7 +1815,7 @@ type EditorEvent =
 - `onSnapshot(s: DebugSnapshot)` - Called at sample rate
 - `recordBusNow(busId, value)` - Record bus value
 - `recordBindingNow(bindingId, value)` - Record binding value
-- `hitMaterialize(who)` - Count field materialization
+- `hitMaterialize(who)` - Count lane materialization
 - `hitAdapter(id)`, `hitLens(id)` - Count adapter/lens invocations
 
 ---
@@ -1876,7 +1857,7 @@ type ValueSummary =
 
 **Source**: [08-observation-system.md](./topics/08-observation-system.md)
 
-**Note**: Never includes Field contents or large arrays.
+**Note**: Never includes array contents or large data channels.
 
 ---
 
@@ -1972,17 +1953,17 @@ type ValueSummary =
 
 **Source**: [01-type-system.md](./topics/01-type-system.md)
 
-**Note**: Unit variables exist only in inference-only wrappers (`InferenceUnitType`), never in `UnitType`. The `color` kind uses `unit` as the sub-field name (not `space`). 6 concrete kinds: none, count, angle, time, space, color. `scalar` and `norm01` removed.
+**Note**: Unit variables exist only in inference-only wrappers (`InferenceUnitType`), never in `UnitType`. The `color` kind uses `unit` as the sub-property name (not `space`). 6 concrete kinds: none, count, angle, time, space, color. `scalar` and `norm01` removed.
 
 ---
 
 ### DerivedKind
 
-**Definition**: Classification (signal/field/event) derived from CanonicalType axes. NOT stored, NOT authoritative.
+**Definition**: Categorization (scalar/array/event) derived from CanonicalType axes. NOT stored, NOT authoritative.
 
 **Type**: concept
 
-**Canonical Form**: `deriveKind(type): 'signal' | 'field' | 'event'`
+**Canonical Form**: `Classification` (derived from axes)
 
 **Source**: [01-type-system.md](./topics/01-type-system.md)
 
@@ -2030,7 +2011,7 @@ type ValueSummary =
 
 ### requireManyInstance
 
-**Definition**: Asserts field-ness. Returns InstanceRef. Throws if not many-instanced.
+**Definition**: Asserts array-ness (cardinality: many). Returns InstanceRef. Throws if not many-instanced.
 
 **Type**: function
 
@@ -2243,7 +2224,7 @@ class ExternalWriteBus {
 
 ### ExternalInput
 
-**Definition**: Block that reads a named external channel as a signal. Config-only (no inputs), single output.
+**Definition**: Block that reads a named external channel as a value. Config-only (no inputs), single output.
 
 **Type**: block
 
@@ -2252,7 +2233,7 @@ class ExternalWriteBus {
 **Config**: `channel: string`
 **Output**: `value: float` (or other allowed PayloadType)
 
-**Lowering**: `ctx.b.sigExternal(channel, canonicalType('float'))`
+**Lowering**: `ctx.b.valExternal(channel, canonicalType('float'))`
 
 **Source**: [22-external-input-system.md](./topics/22-external-input-system.md)
 
@@ -2266,6 +2247,9 @@ Terms that MUST NOT appear in new code. If encountered in existing code, use the
 
 | Forbidden | Canonical Term |
 |-----------|---------------|
+| `Signal` / `Field` | `Value` / `Channel` |
+| `ScalarSlot` / `FieldSlot` | `Arena Slot` |
+| `SigExpr` / `FieldExpr` / `EventExpr` | `ValueExpr` |
 | `DomainTag` | `PayloadType` |
 | `ValueType` | `PayloadType` |
 | `World` | `Extent` |
@@ -2278,7 +2262,7 @@ Terms that MUST NOT appear in new code. If encountered in existing code, use the
 | `DomainDef` | `InstanceDecl` |
 | `DomainN` block | Primitive + Array |
 | `GridDomain` block | Primitive + Array + Grid Layout |
-| `StateKey { blockId, laneIndex }` | `StateId` + `StateMappingScalar`/`StateMappingField` |
+| `StateKey` | `StateId` + `StateMappingScalar`/`StateMappingLane` |
 | `RenderIR` | `RenderFrameIR` |
 | `RenderInstance` | `DrawPathInstancesOp` + `PathInstanceSet` |
 | `GeometryAsset` | `PathGeometryTemplate` |
@@ -2286,13 +2270,7 @@ Terms that MUST NOT appear in new code. If encountered in existing code, use the
 | `MaterialAsset` | `PathStyle` |
 | `size` (as parameter name) | `scale` |
 | `AxisTag<T>` | `Axis<T, V>` |
-| `SignalType` | `CanonicalType` |
-| `PortType` | `CanonicalType` |
-| `FieldType` | `CanonicalType` |
-| `EventType` | `CanonicalType` |
-| `ResolvedPortType` | `CanonicalType` |
+| `SignalType` / `FieldType` | `CanonicalType` |
+| `EventType` / `ResolvedPortType` | `CanonicalType` |
 | `getManyInstance` | `tryGetManyInstance` + `requireManyInstance` |
 | `TypeSignature` | `TypePattern` |
-| `SigExpr` | `ValueExpr` |
-| `FieldExpr` | `ValueExpr` |
-| `EventExpr` | `ValueExpr` |

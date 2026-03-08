@@ -36,7 +36,7 @@ All tools are read-only inspection. No modification. Data is bounded (ring buffe
 
 ### What They Are
 
-Time-ordered log of actual runtime operations. Records every bus evaluation, adapter/lens application, combine step, field materialization, block execution.
+Time-ordered log of actual runtime operations. Records every bus evaluation, adapter/lens application, combine step, lane materialization, block execution.
 
 This is the "truth source" for "why did that happen?"
 
@@ -96,10 +96,10 @@ type TraceEvent =
     }
   | {
       tMs: number;
-      kind: 'FieldMaterialize';
+      kind: 'LaneMaterialize';
       blockId: string;
       outputPort?: string;
-      elementCount: number;
+      laneCount: number;
       reason: string;
     }
   | {
@@ -138,7 +138,8 @@ interface TraceConfig {
   // Detail level
   includeCombineSteps: boolean; // verbose, default off
   includeBeforeAfter: boolean;  // heavy, default off
-  includeFieldMaterialize: boolean;
+  includeLaneMaterialize: boolean;
+
 }
 ```
 
@@ -146,7 +147,7 @@ interface TraceConfig {
 
 - Bus event: targeted OR any targeted listener depends on it OR any targeted port reads it
 - Binding event: targeted OR in dependency chain of targeted port
-- Field materialization: targeted block OR downstream of targeted bus
+- Lane materialization: targeted block OR downstream of targeted bus
 - Block event: targeted
 
 This requires computing dependency closure once when starting trace.
@@ -191,8 +192,8 @@ Table view of all buses:
 ```
 Name       Type          Value    Producers    Consumers
 ───────────────────────────────────────────────────────
-phaseA     Signal:Phase  0.25     [TimeRoot]   [Repeat, Lag]
-energy     Signal:Float  0.8      [Slider]     [Scale, Clamp]
+phaseA     One:Phase  0.25     [TimeRoot]   [Repeat, Lag]
+energy     One:Float  0.8      [Slider]     [Scale, Clamp]
 ```
 
 Sortable. Click row to show detail panel (publishers, listeners, history sparkline).
@@ -233,8 +234,8 @@ Frame: 16.7ms (60fps)
 Worst frame: 22.3ms
 
 Top materializers:
-  RenderInstances2D: 8000 elements
-  Repeat: 200 elements
+  RenderSink: 8000 lanes
+  Repeat: 200 lanes
 
 Top lenses:
   Lag (lag): 450 invocations
@@ -279,7 +280,7 @@ DebugGraph should explicitly surface determinism contracts so users can understa
 
 ```typescript
 interface DebugGraph {
-  // ... existing fields ...
+  // ... existing properties ...
 
   determinism: {
     busCombineOrder: string;    // e.g., "publisher.sortKey asc, tie by publisher.id"
@@ -323,12 +324,13 @@ The technical debug panel can explain:
 ### Power User 3: "Optimize Materialization"
 
 1. Open Performance tab
-2. See RenderInstances2D materializes 8000 elements
+2. See RenderSink materializes 8000 lanes
 3. Enable trace for that block, 1 second
-4. Trace shows FieldMaterialize event + reason
-5. See: "domain size is 8000" from upstream computation
-6. Can trace back: where does this domain come from
-7. Consider: smaller domain, or lazy evaluation strategy
+4. Trace shows LaneMaterialize event + reason
+5. See: "lane count is 8000" from upstream computation
+6. Can trace back: where does this data channel come from
+7. Consider: smaller instance count, or lazy evaluation strategy
+
 
 ---
 

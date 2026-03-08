@@ -101,7 +101,7 @@ These affect T2 topics (diagnostics-system, observation-system, diagnostic-rules
 
 **Your Response**: "Agreed, A. No optional properties"
 
-**Status**: ✅ APPROVED - diagnostics field always required (empty array is valid)
+**Status**: ✅ APPROVED - diagnostics property always required (empty array is valid)
 
 ---
 
@@ -131,7 +131,7 @@ These affect T2 topics (diagnostics-system, observation-system, diagnostic-rules
 **Source**: Overlapping codes between canonical and debugger specs
 
 **Examples**:
-- E_DOMAIN_MISMATCH vs E_FIELD_DOMAIN_MISMATCH
+- E_DOMAIN_MISMATCH vs E_LANE_DOMAIN_MISMATCH
 - E_CYCLE_ILLEGAL vs E_GRAPH_CYCLE_ILLEGAL
 - W_BUS_EMPTY vs W_BUS_EMPTY_SILENT
 
