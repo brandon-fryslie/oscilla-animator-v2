@@ -217,11 +217,11 @@ function normalizeGitFilePath(filePath) {
 }
 
 function isEslintTrackedFile(filePath) {
-  return /^src\/.+\.ts$/.test(filePath) || /^scripts\/.+\.mjs$/.test(filePath);
+  return /^src\/.+\.tsx?$/.test(filePath) || /^scripts\/.+\.mjs$/.test(filePath);
 }
 
 function isTsMorphTrackedFile(filePath) {
-  return /^src\/.+\.ts$/.test(filePath);
+  return /^src\/.+\.tsx?$/.test(filePath);
 }
 
 function isFileTrackedForMetric(metric, filePath) {
