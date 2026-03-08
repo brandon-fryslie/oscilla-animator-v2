@@ -209,7 +209,8 @@ function renderSummaryMarkdown(delta, options) {
   const neutralCount = rows.filter((row) => ['neutral', 'unchanged'].includes(rowStatus(row).kind)).length;
   const baseSha = options.baseSha ? `\`${options.baseSha}\`` : 'unknown';
   const headSha = options.headSha ? `\`${options.headSha}\`` : 'unknown';
-  const artifactUrl = options.artifactUrl ? `[Download archived HTML report](${options.artifactUrl})` : 'Artifact URL unavailable';
+  const safeArtifactUrl = sanitizeHttpUrl(options.artifactUrl);
+  const artifactUrl = safeArtifactUrl ? `[Download archived HTML report](${safeArtifactUrl})` : 'Artifact URL unavailable';
   const metricAttribution = delta.metricAttribution ?? delta.regressionAttribution ?? {};
   const highSignalRegressionRows = sortRowsForDisplay((delta.highSignalRegressions ?? []).filter(isComplexityMetric)).map((row) => rowToSummaryRow(row, metricAttribution));
   const highSignalImprovementRows = sortRowsForDisplay((delta.highSignalImprovements ?? []).filter(isComplexityMetric)).map((row) => rowToSummaryRow(row, metricAttribution));
