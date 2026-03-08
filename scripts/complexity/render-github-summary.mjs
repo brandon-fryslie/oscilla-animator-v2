@@ -74,8 +74,27 @@ function renderTable(headers, rows) {
   return [headerLine, dividerLine, ...bodyLines].join('\n');
 }
 
+function rowStatus(row) {
+  if (row.classification === 'regressed') {
+    const severe = row.signal === 'high' && (row.magnitude === 'moderate' || row.magnitude === 'large');
+    if (severe) return { level: 'very-bad', label: 'very bad', emoji: '🟥' };
+    return { level: 'bad', label: 'bad', emoji: '🔴' };
+  }
+  if (row.classification === 'improved') {
+    const excellent = row.signal === 'high' && (row.magnitude === 'moderate' || row.magnitude === 'large');
+    if (excellent) return { level: 'awesome', label: 'awesome improvement', emoji: '🟩✨' };
+    if (row.magnitude === 'moderate' || row.magnitude === 'large') {
+      return { level: 'solid', label: 'solid improvement', emoji: '🟩' };
+    }
+    return { level: 'improvement', label: 'improvement', emoji: '🟨🟩' };
+  }
+  return { level: 'warning', label: 'warning', emoji: '🟡' };
+}
+
 function rowToSummaryRow(row) {
+  const status = rowStatus(row);
   return [
+    `${status.emoji} ${status.label}`,
     row.label,
     formatMetricValue(row.base),
     formatMetricValue(row.head),
@@ -87,7 +106,9 @@ function rowToSummaryRow(row) {
 }
 
 function rowToFullRow(row) {
+  const status = rowStatus(row);
   return [
+    `${status.emoji} ${status.label}`,
     row.key,
     row.label,
     formatMetricValue(row.base),
@@ -101,7 +122,7 @@ function rowToFullRow(row) {
 }
 
 function scoreRows(rows) {
-  // [LAW:one-source-of-truth] The indicator is derived only from canonical per-metric delta rows.
+  // [LAW:one-source-of-truth] Trend score derives strictly from canonical per-metric delta rows.
   return rows.reduce((total, row) => {
     if (row.classification !== 'improved' && row.classification !== 'regressed') return total;
     const signalWeight = SIGNAL_WEIGHTS[row.signal] ?? 1;
@@ -111,13 +132,13 @@ function scoreRows(rows) {
   }, 0);
 }
 
-function classifyTrend(weightedScore) {
-  if (weightedScore <= -20) {
+function classifyTrend(weightedScore, rows) {
+  const severeRegressions = rows.filter((row) => rowStatus(row).level === 'very-bad').length;
+  if (severeRegressions > 0 && weightedScore <= -20) {
     return {
-      label: 'VERY BAD',
+      label: 'very bad',
       badgeLabel: 'very bad',
       badgeColor: 'red',
-      description: 'bold+red: severe regression across high-impact metrics',
       emphasize: true,
     };
   }
@@ -126,7 +147,6 @@ function classifyTrend(weightedScore) {
       label: 'bad',
       badgeLabel: 'bad',
       badgeColor: 'red',
-      description: 'red: net regression',
       emphasize: false,
     };
   }
@@ -135,7 +155,6 @@ function classifyTrend(weightedScore) {
       label: 'warning',
       badgeLabel: 'warning',
       badgeColor: 'yellow',
-      description: 'yellow: flat-to-negative trend',
       emphasize: false,
     };
   }
@@ -144,7 +163,6 @@ function classifyTrend(weightedScore) {
       label: 'improvement',
       badgeLabel: 'improvement',
       badgeColor: 'yellowgreen',
-      description: 'yellow-green: modest improvement',
       emphasize: false,
     };
   }
@@ -153,17 +171,35 @@ function classifyTrend(weightedScore) {
       label: 'solid improvement',
       badgeLabel: 'solid improvement',
       badgeColor: 'green',
-      description: 'light green: strong positive trend',
       emphasize: false,
     };
   }
   return {
-    label: 'AWESOME IMPROVEMENT',
+    label: 'awesome improvement',
     badgeLabel: 'awesome improvement',
     badgeColor: 'brightgreen',
-    description: 'bright green + bold: major positive shift',
     emphasize: true,
   };
+}
+
+function summarizeTrendNarrative(rows) {
+  const regressed = rows.filter((row) => row.classification === 'regressed');
+  const improved = rows.filter((row) => row.classification === 'improved');
+  const severe = regressed.filter((row) => rowStatus(row).level === 'very-bad').length;
+  const minorRegressed = regressed.filter((row) => row.impact === 'minor regression').length;
+  const meaningfulRegressed = regressed.filter((row) => row.impact === 'meaningful regression').length;
+  const highValueImproved = improved.filter((row) => row.impact === 'high-value improvement').length;
+  const meaningfulImproved = improved.filter((row) => row.impact === 'meaningful improvement').length;
+
+  if (regressed.length === 0 && improved.length === 0) return 'No metric-level movement.';
+  if (severe > 0) return `${severe} severe row-level regressions detected.`;
+  if (regressed.length > improved.length) {
+    return `Net regression with mostly minor impacts (${minorRegressed}/${regressed.length} minor, ${meaningfulRegressed} meaningful).`;
+  }
+  if (improved.length > regressed.length) {
+    return `Net improvement (${highValueImproved} high-value, ${meaningfulImproved} meaningful improvements).`;
+  }
+  return 'Mixed trend with offsetting improvements and regressions.';
 }
 
 function renderBadge(trend) {
@@ -171,25 +207,66 @@ function renderBadge(trend) {
   return `![Complexity trend](https://img.shields.io/badge/Complexity%20trend-${label}-${trend.badgeColor}?style=for-the-badge)`;
 }
 
+function renderMetricContext(rows, metricAttribution) {
+  const relevantRows = rows.filter((row) => row.classification === 'regressed' || row.classification === 'improved');
+  if (relevantRows.length === 0) return 'No changed metrics.';
+  return relevantRows.map((row) => {
+    const status = rowStatus(row);
+    const details = metricAttribution[row.key] ?? { locations: [], snippets: [], evidence: [] };
+    const links = Array.isArray(details.locations) ? details.locations : [];
+    const snippets = Array.isArray(details.snippets) ? details.snippets : [];
+    const evidence = Array.isArray(details.evidence) ? details.evidence : [];
+    return [
+      '<details>',
+      `<summary>${status.emoji} ${escapeCell(row.label)} (${formatDeltaValue(row.delta)}, ${formatPctValue(row.relativeDeltaPct)})</summary>`,
+      '',
+      ...(evidence.length > 0
+        ? ['Evidence:', ...evidence.slice(0, 5).map((line) => `- ${line}`), '']
+        : ['Evidence: none captured', '']),
+      ...(links.length > 0
+        ? ['Code links (commit + file + line range):', ...links.slice(0, 6).map((link) => `- [\`${link.filePath}:${link.startLine}-${link.endLine}\`](${link.url})`), '']
+        : ['Code links: none captured', '']),
+      ...(snippets.length > 0
+        ? [
+          'Snippets:',
+          ...snippets.slice(0, 3).flatMap((snippet) => [
+            `<details><summary>\`${snippet.filePath}:${snippet.startLine}-${snippet.endLine}\`</summary>`,
+            '',
+            `${snippet.url ? `[Open file at commit](${snippet.url})` : 'No file link available'}${snippet.compareUrl ? ` · [Open compare](${snippet.compareUrl})` : ''}`,
+            '',
+            '```diff',
+            snippet.snippet,
+            '```',
+            '</details>',
+          ]),
+          '',
+        ]
+        : ['Snippets: none captured', '']),
+      '</details>',
+    ].join('\n');
+  }).join('\n');
+}
+
 function renderSummaryMarkdown(delta, options) {
-  const weightedScore = scoreRows(delta.rows ?? []);
-  const trend = classifyTrend(weightedScore);
-  const visibleTrendLabel = trend.emphasize ? `**${trend.label}**` : trend.label;
+  const rows = delta.rows ?? [];
+  const weightedScore = scoreRows(rows);
+  const trend = classifyTrend(weightedScore, rows);
+  const trendLabel = trend.emphasize ? `**${trend.label}**` : trend.label;
   const baseSha = options.baseSha ? `\`${options.baseSha}\`` : 'unknown';
   const headSha = options.headSha ? `\`${options.headSha}\`` : 'unknown';
   const artifactUrl = options.artifactUrl ? `[Download archived HTML report](${options.artifactUrl})` : 'Artifact URL unavailable';
-
   const highSignalRegressionRows = (delta.highSignalRegressions ?? []).map(rowToSummaryRow);
   const highSignalImprovementRows = (delta.highSignalImprovements ?? []).map(rowToSummaryRow);
-  const fullRows = (delta.rows ?? []).map(rowToFullRow);
+  const fullRows = rows.map(rowToFullRow);
   const guideRows = (delta.guide ?? []).map((row) => [row.label, row.directionLabel, row.target, row.signal]);
+  const metricAttribution = delta.metricAttribution ?? delta.regressionAttribution ?? {};
 
   return [
     '## Complexity Delta Summary',
     '',
-    `${renderBadge(trend)} ${visibleTrendLabel}`,
+    `${renderBadge(trend)}`,
     '',
-    `- trend class: ${trend.description}`,
+    `- trend assessment: ${trendLabel} (${summarizeTrendNarrative(rows)})`,
     `- weighted trend score: ${weightedScore}`,
     `- net score (improved - regressed): ${delta.score}`,
     `- improved metrics: ${delta.improvedCount}, regressed metrics: ${delta.regressedCount}, unchanged/informational: ${delta.unchangedCount}`,
@@ -198,16 +275,23 @@ function renderSummaryMarkdown(delta, options) {
     '### High-Signal Regressions',
     '',
     renderTable(
-      ['Metric', 'Base', 'Head', 'Delta', '% Delta', 'Magnitude', 'Impact'],
+      ['Indicator', 'Metric', 'Base', 'Head', 'Delta', '% Delta', 'Magnitude', 'Impact'],
       highSignalRegressionRows,
     ),
     '',
     '### High-Signal Improvements',
     '',
     renderTable(
-      ['Metric', 'Base', 'Head', 'Delta', '% Delta', 'Magnitude', 'Impact'],
+      ['Indicator', 'Metric', 'Base', 'Head', 'Delta', '% Delta', 'Magnitude', 'Impact'],
       highSignalImprovementRows,
     ),
+    '',
+    '<details>',
+    '<summary>Code Context (collapsed)</summary>',
+    '',
+    renderMetricContext(rows, metricAttribution),
+    '',
+    '</details>',
     '',
     '<details>',
     '<summary>Run Context (collapsed)</summary>',
@@ -226,13 +310,13 @@ function renderSummaryMarkdown(delta, options) {
     '- Each improved/regressed metric contributes a signed weight from `signal × magnitude`.',
     '- Signal weights: `high=5`, `medium=3`, `low=1`.',
     '- Magnitude weights: `tiny=1`, `small=2`, `moderate=3`, `large=5`.',
-    '- Weighted score bands:',
-    '  - `<= -20`: **VERY BAD** (bold + red)',
-    '  - `-19..-8`: bad (red)',
-    '  - `-7..0`: warning (yellow)',
-    '  - `1..7`: improvement (yellow-green)',
-    '  - `8..20`: solid improvement (light green)',
-    '  - `> 20`: **AWESOME IMPROVEMENT** (bold + bright green)',
+    '- Row-level indicators:',
+    '  - `🟥` = very bad',
+    '  - `🔴` = bad',
+    '  - `🟡` = warning',
+    '  - `🟨🟩` = improvement',
+    '  - `🟩` = solid improvement',
+    '  - `🟩✨` = awesome improvement',
     '',
     '</details>',
     '',
@@ -250,7 +334,7 @@ function renderSummaryMarkdown(delta, options) {
     '<summary>Full Delta Table (collapsed)</summary>',
     '',
     renderTable(
-      ['Key', 'Metric', 'Base', 'Head', 'Delta', '% Delta', 'Classification', 'Magnitude', 'Signal'],
+      ['Indicator', 'Key', 'Metric', 'Base', 'Head', 'Delta', '% Delta', 'Classification', 'Magnitude', 'Signal'],
       fullRows,
     ),
     '',

@@ -181,6 +181,28 @@ function uniqueItems(values) {
   return [...new Set(values.filter(Boolean))];
 }
 
+function uniqueLocations(locations) {
+  const seen = new Set();
+  const out = [];
+  for (const location of locations) {
+    const filePath = location?.filePath ?? null;
+    const startLine = Number(location?.startLine ?? 0);
+    const endLine = Number(location?.endLine ?? startLine);
+    if (!filePath || !Number.isFinite(startLine) || startLine <= 0) continue;
+    const normalized = {
+      filePath,
+      startLine,
+      endLine: Number.isFinite(endLine) && endLine >= startLine ? endLine : startLine,
+      reason: typeof location?.reason === 'string' ? location.reason : '',
+    };
+    const signature = `${normalized.filePath}|${normalized.startLine}|${normalized.endLine}|${normalized.reason}`;
+    if (seen.has(signature)) continue;
+    seen.add(signature);
+    out.push(normalized);
+  }
+  return out;
+}
+
 function findingSignature(finding) {
   return [
     finding.filePath,
@@ -354,6 +376,14 @@ function fileFromViolation(violation, repoRoot) {
   ].filter(Boolean);
 }
 
+function parseEmbeddedLine(name) {
+  if (typeof name !== 'string') return null;
+  const match = name.match(/:(\d+)$/);
+  if (!match) return null;
+  const line = Number(match[1]);
+  return Number.isFinite(line) && line > 0 ? line : null;
+}
+
 function collectMetricAttribution(row, context) {
   const {
     baseTools,
@@ -363,11 +393,15 @@ function collectMetricAttribution(row, context) {
   } = context;
   const evidence = [];
   const files = [];
+  const locations = [];
   const pushFile = (filePath) => {
     if (filePath) files.push(filePath);
   };
   const pushEvidence = (line) => {
     if (line) evidence.push(line);
+  };
+  const pushLocation = (filePath, startLine, endLine, reason) => {
+    locations.push({ filePath, startLine, endLine, reason });
   };
 
   const headEslint = normalizeEslintFindings(headTools.eslint, headRepoRoot);
@@ -394,6 +428,12 @@ function collectMetricAttribution(row, context) {
     for (const finding of matchedFindings.slice(0, 6)) {
       pushFile(finding.filePath);
       pushEvidence(`${finding.filePath}:${finding.line}:${finding.column} [${finding.ruleId}] ${finding.message}`);
+      pushLocation(
+        finding.filePath,
+        finding.line ?? 0,
+        finding.endLine ?? finding.line ?? 0,
+        finding.ruleId ?? 'eslint',
+      );
     }
   }
 
@@ -401,26 +441,36 @@ function collectMetricAttribution(row, context) {
     const top = headTools.tsMorph?.topCyclomatic?.[0] ?? null;
     pushFile(normalizeFilePath(top?.filePath, headRepoRoot));
     if (top) pushEvidence(`head max cyclomatic function: ${top.name} (${formatMetricValue(top.cyclomatic)})`);
+    const line = parseEmbeddedLine(top?.name);
+    if (top?.filePath && line) pushLocation(normalizeFilePath(top.filePath, headRepoRoot), line, line, 'ts-morph');
   }
   if (row.key === 'tsMorphMaxCognitive') {
     const top = headTools.tsMorph?.topCognitive?.[0] ?? null;
     pushFile(normalizeFilePath(top?.filePath, headRepoRoot));
     if (top) pushEvidence(`head max cognitive function: ${top.name} (${formatMetricValue(top.cognitive)})`);
+    const line = parseEmbeddedLine(top?.name);
+    if (top?.filePath && line) pushLocation(normalizeFilePath(top.filePath, headRepoRoot), line, line, 'ts-morph');
   }
   if (row.key === 'tsMorphMaxNesting') {
     const top = headTools.tsMorph?.topNesting?.[0] ?? null;
     pushFile(normalizeFilePath(top?.filePath, headRepoRoot));
     if (top) pushEvidence(`head max nesting function: ${top.name} (${formatMetricValue(top.maxNestingDepth)})`);
+    const line = parseEmbeddedLine(top?.name);
+    if (top?.filePath && line) pushLocation(normalizeFilePath(top.filePath, headRepoRoot), line, line, 'ts-morph');
   }
   if (row.key === 'tsMorphMaxHalsteadVolume') {
     const top = headTools.tsMorph?.topHalsteadVolume?.[0] ?? null;
     pushFile(normalizeFilePath(top?.filePath, headRepoRoot));
     if (top) pushEvidence(`head max Halstead volume function: ${top.name} (${formatMetricValue(top.halstead?.volume)})`);
+    const line = parseEmbeddedLine(top?.name);
+    if (top?.filePath && line) pushLocation(normalizeFilePath(top.filePath, headRepoRoot), line, line, 'ts-morph');
   }
   if (row.key === 'tsMorphAvgMi') {
     const low = headTools.tsMorph?.topLowMaintainability?.[0] ?? null;
     pushFile(normalizeFilePath(low?.filePath, headRepoRoot));
     if (low) pushEvidence(`lowest maintainability function in head: ${low.name} (${formatMetricValue(low.maintainabilityIndex)})`);
+    const line = parseEmbeddedLine(low?.name);
+    if (low?.filePath && line) pushLocation(normalizeFilePath(low.filePath, headRepoRoot), line, line, 'ts-morph');
   }
   if (row.key === 'tsMorphMaxFanOut') {
     const top = headTools.tsMorph?.topFanOut?.[0] ?? null;
@@ -500,14 +550,112 @@ function collectMetricAttribution(row, context) {
   return {
     evidence: uniqueItems(evidence),
     files: uniqueItems(files),
+    locations: uniqueLocations(locations),
   };
 }
 
-async function buildRegressionAttribution(delta, baseLoaded, headLoaded) {
+function normalizeRepositoryWebUrl(remoteUrl) {
+  if (typeof remoteUrl !== 'string' || remoteUrl.length === 0) return null;
+  const trimmed = remoteUrl.trim();
+  if (trimmed.startsWith('git@github.com:')) {
+    return `https://github.com/${trimmed.slice('git@github.com:'.length).replace(/\.git$/, '')}`;
+  }
+  if (trimmed.startsWith('ssh://git@github.com/')) {
+    return `https://github.com/${trimmed.slice('ssh://git@github.com/'.length).replace(/\.git$/, '')}`;
+  }
+  if (trimmed.startsWith('https://github.com/')) {
+    return trimmed.replace(/\.git$/, '').replace(/\/$/, '');
+  }
+  return null;
+}
+
+async function resolveRepositoryWebUrl(cwd) {
+  const run = await runCommand('git', ['config', '--get', 'remote.origin.url'], { cwd, allowFailure: true });
+  if (!run.ok) return null;
+  return normalizeRepositoryWebUrl(run.stdout.trim());
+}
+
+function encodePathSegments(filePath) {
+  return String(filePath).split('/').map((segment) => encodeURIComponent(segment)).join('/');
+}
+
+function buildBlobRangeUrl(repoWebUrl, commitSha, filePath, startLine, endLine) {
+  if (!repoWebUrl || !commitSha || !filePath || !Number.isFinite(startLine) || startLine <= 0) return null;
+  const normalizedEnd = Number.isFinite(endLine) && endLine >= startLine ? endLine : startLine;
+  return `${repoWebUrl}/blob/${commitSha}/${encodePathSegments(filePath)}#L${startLine}-L${normalizedEnd}`;
+}
+
+function buildCompareUrl(repoWebUrl, baseSha, headSha) {
+  if (!repoWebUrl || !baseSha || !headSha) return null;
+  return `${repoWebUrl}/compare/${baseSha}...${headSha}`;
+}
+
+function parseUnifiedDiffHunks(diffText) {
+  const lines = diffText.split('\n');
+  const hunks = [];
+  let current = null;
+  const flushCurrent = () => {
+    if (!current) return;
+    const snippetLines = [current.header, ...current.lines];
+    const limitedSnippet = snippetLines.length > 80
+      ? `${snippetLines.slice(0, 80).join('\n')}\n... (truncated)`
+      : snippetLines.join('\n');
+    const normalizedNewCount = current.newCount > 0 ? current.newCount : 1;
+    hunks.push({
+      oldStart: current.oldStart,
+      oldCount: current.oldCount,
+      newStart: current.newStart,
+      newCount: current.newCount,
+      newEnd: current.newStart + normalizedNewCount - 1,
+      snippet: limitedSnippet,
+    });
+  };
+
+  for (const line of lines) {
+    const headerMatch = line.match(/^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/);
+    if (headerMatch) {
+      flushCurrent();
+      current = {
+        header: line,
+        oldStart: Number(headerMatch[1]),
+        oldCount: Number(headerMatch[2] ?? '1'),
+        newStart: Number(headerMatch[3]),
+        newCount: Number(headerMatch[4] ?? '1'),
+        lines: [],
+      };
+      continue;
+    }
+    if (!current) continue;
+    current.lines.push(line);
+  }
+  flushCurrent();
+  return hunks;
+}
+
+function rowStatus(row) {
+  if (row.classification === 'regressed') {
+    const severe = row.signal === 'high' && (row.magnitude === 'moderate' || row.magnitude === 'large');
+    if (severe) return { level: 'very-bad', label: 'very bad', emoji: '🟥' };
+    return { level: 'bad', label: 'bad', emoji: '🔴' };
+  }
+  if (row.classification === 'improved') {
+    const excellent = row.signal === 'high' && (row.magnitude === 'moderate' || row.magnitude === 'large');
+    if (excellent) return { level: 'awesome', label: 'awesome improvement', emoji: '🟩✨' };
+    if (row.magnitude === 'moderate' || row.magnitude === 'large') {
+      return { level: 'solid', label: 'solid improvement', emoji: '🟩' };
+    }
+    return { level: 'improvement', label: 'improvement', emoji: '🟨🟩' };
+  }
+  return { level: 'warning', label: 'warning', emoji: '🟡' };
+}
+
+async function buildMetricAttribution(delta, baseLoaded, headLoaded) {
   const baseSha = baseLoaded.metadata.commitSha ?? null;
   const headSha = headLoaded.metadata.commitSha ?? null;
   const baseRepoRoot = inferRepoRootFromSummaryPath(baseLoaded.metadata.summaryPath);
   const headRepoRoot = inferRepoRootFromSummaryPath(headLoaded.metadata.summaryPath);
+  const repoWebUrl = await resolveRepositoryWebUrl(headRepoRoot ?? process.cwd());
+  const compareUrl = buildCompareUrl(repoWebUrl, baseSha, headSha);
   const context = {
     baseTools: baseLoaded.summary.tools ?? {},
     headTools: headLoaded.summary.tools ?? {},
@@ -526,25 +674,54 @@ async function buildRegressionAttribution(delta, baseLoaded, headLoaded) {
     const trimmed = run.stdout.trim();
     const lines = trimmed.length === 0 ? [] : trimmed.split('\n');
     const limited = lines.length > 220 ? `${lines.slice(0, 220).join('\n')}\n... (truncated)` : trimmed;
-    const value = limited.length > 0 ? limited : null;
+    const value = limited.length > 0
+      ? { diffText: limited, hunks: parseUnifiedDiffHunks(trimmed) }
+      : null;
     diffCache.set(filePath, value);
     return value;
   };
 
   const attribution = {};
-  for (const row of delta.regressed) {
+  const rowsToAttribute = delta.rows.filter((row) => row.classification === 'regressed' || row.classification === 'improved');
+  for (const row of rowsToAttribute) {
     const metricAttribution = collectMetricAttribution(row, context);
     const files = metricAttribution.files.slice(0, 5);
     const diffs = [];
+    const snippets = [];
+    const locationLinks = [];
+
+    for (const location of metricAttribution.locations.slice(0, 8)) {
+      const url = buildBlobRangeUrl(repoWebUrl, headSha, location.filePath, location.startLine, location.endLine);
+      if (!url) continue;
+      locationLinks.push({
+        ...location,
+        url,
+      });
+    }
+
     for (const filePath of files) {
-      const diffText = await getDiff(filePath);
-      if (!diffText) continue;
-      diffs.push({ filePath, diffText });
+      const diffArtifact = await getDiff(filePath);
+      if (!diffArtifact) continue;
+      diffs.push({ filePath, diffText: diffArtifact.diffText });
+      for (const hunk of diffArtifact.hunks.slice(0, 3)) {
+        const url = buildBlobRangeUrl(repoWebUrl, headSha, filePath, hunk.newStart, hunk.newEnd);
+        snippets.push({
+          filePath,
+          startLine: hunk.newStart,
+          endLine: hunk.newEnd,
+          snippet: hunk.snippet,
+          url,
+          compareUrl,
+        });
+      }
     }
     attribution[row.key] = {
       evidence: metricAttribution.evidence,
       files,
+      locations: locationLinks,
+      snippets: snippets.slice(0, 10),
       diffs,
+      status: rowStatus(row),
     };
   }
   return attribution;
@@ -618,60 +795,114 @@ function renderDeltaMarkdown(delta, baseLabel, headLabel) {
   ].join('\n');
 }
 
-function renderDeltaHtml(delta, baseLabel, headLabel, regressionAttribution) {
-  const pct = (value) => formatPctValue(value);
-  const toRows = (rows) => rows.map((row) => [
-    row.label,
-    formatMetricValue(row.base),
-    formatMetricValue(row.head),
-    formatDeltaValue(row.delta),
-    pct(row.relativeDeltaPct),
-    row.magnitude,
-    row.impact,
-  ]);
-  const fullRows = delta.rows.map((row) => [
-    row.key,
-    row.label,
-    formatMetricValue(row.base),
-    formatMetricValue(row.head),
-    formatDeltaValue(row.delta),
-    pct(row.relativeDeltaPct),
-    row.classification,
-    row.magnitude,
-    row.signal,
-  ]);
-  const guideRows = delta.guide.map((row) => [row.label, row.directionLabel, row.target, row.signal]);
-  const regressionDetailsHtml = delta.regressed.length === 0
-    ? '<p>No regressed metrics.</p>'
-    : delta.regressed.map((row) => {
-      const details = regressionAttribution[row.key] ?? { evidence: [], files: [], diffs: [] };
-      const evidenceList = details.evidence.length > 0
-        ? `<ul>${details.evidence.map((line) => `<li>${escapeHtml(line)}</li>`).join('')}</ul>`
-        : '<p>No metric-level evidence captured.</p>';
-      const filesList = details.files.length > 0
-        ? `<p><strong>Candidate files:</strong> <code>${escapeHtml(details.files.join(', '))}</code></p>`
-        : '<p><strong>Candidate files:</strong> none</p>';
-      const diffs = details.diffs.length > 0
-        ? details.diffs.map((diff) => [
-          `<h4><code>${escapeHtml(diff.filePath)}</code></h4>`,
-          `<pre>${escapeHtml(diff.diffText)}</pre>`,
-        ].join('\n')).join('\n')
-        : '<p>No diff hunks available for this metric.</p>';
-      return [
-        '<details>',
-        `<summary>${escapeHtml(row.label)}: ${escapeHtml(formatMetricValue(row.base))} -> ${escapeHtml(formatMetricValue(row.head))} (${escapeHtml(formatDeltaValue(row.delta))}, ${escapeHtml(pct(row.relativeDeltaPct))})</summary>`,
-        '<div>',
-        evidenceList,
-        filesList,
-        diffs,
-        '</div>',
-        '</details>',
-      ].join('\n');
+function renderColorizedMetricTable(rows) {
+  const headers = ['Status', 'Metric', 'Base', 'Head', 'Delta (head - base)', '% Delta', 'Magnitude', 'Impact'];
+  const headerHtml = headers.map((header) => `<th>${escapeHtml(header)}</th>`).join('');
+  const bodyHtml = rows.length === 0
+    ? `<tr><td colspan="${headers.length}">none</td></tr>`
+    : rows.map((row) => {
+      const status = rowStatus(row);
+      const statusCell = `<span class="status-pill sev-${status.level}">${escapeHtml(status.emoji)} ${escapeHtml(status.label)}</span>`;
+      const cells = [
+        statusCell,
+        escapeHtml(row.label),
+        escapeHtml(formatMetricValue(row.base)),
+        escapeHtml(formatMetricValue(row.head)),
+        escapeHtml(formatDeltaValue(row.delta)),
+        escapeHtml(formatPctValue(row.relativeDeltaPct)),
+        escapeHtml(row.magnitude),
+        escapeHtml(row.impact),
+      ];
+      return `<tr class="sev-row sev-${status.level}">${cells.map((cell) => `<td>${cell}</td>`).join('')}</tr>`;
     }).join('\n');
+  return `<table class="colorized-table"><thead><tr>${headerHtml}</tr></thead><tbody>${bodyHtml}</tbody></table>`;
+}
 
+function renderColorizedFullTable(rows) {
+  const headers = ['Status', 'Key', 'Metric', 'Base', 'Head', 'Delta (head - base)', '% Delta', 'Classification', 'Magnitude', 'Signal'];
+  const headerHtml = headers.map((header) => `<th>${escapeHtml(header)}</th>`).join('');
+  const bodyHtml = rows.length === 0
+    ? `<tr><td colspan="${headers.length}">none</td></tr>`
+    : rows.map((row) => {
+      const status = rowStatus(row);
+      const statusCell = `<span class="status-pill sev-${status.level}">${escapeHtml(status.emoji)} ${escapeHtml(status.label)}</span>`;
+      const cells = [
+        statusCell,
+        escapeHtml(row.key),
+        escapeHtml(row.label),
+        escapeHtml(formatMetricValue(row.base)),
+        escapeHtml(formatMetricValue(row.head)),
+        escapeHtml(formatDeltaValue(row.delta)),
+        escapeHtml(formatPctValue(row.relativeDeltaPct)),
+        escapeHtml(row.classification),
+        escapeHtml(row.magnitude),
+        escapeHtml(row.signal),
+      ];
+      return `<tr class="sev-row sev-${status.level}">${cells.map((cell) => `<td>${cell}</td>`).join('')}</tr>`;
+    }).join('\n');
+  return `<table class="colorized-table"><thead><tr>${headerHtml}</tr></thead><tbody>${bodyHtml}</tbody></table>`;
+}
+
+function renderMetricDrilldownHtml(rows, metricAttribution) {
+  if (rows.length === 0) return '<p>None.</p>';
+  return rows.map((row) => {
+    const details = metricAttribution[row.key] ?? { evidence: [], files: [], locations: [], snippets: [], diffs: [] };
+    const evidenceHtml = details.evidence.length > 0
+      ? `<ul>${details.evidence.map((line) => `<li>${escapeHtml(line)}</li>`).join('')}</ul>`
+      : '<p>No metric-level evidence captured.</p>';
+    const candidateFilesHtml = details.files.length > 0
+      ? `<p><strong>Candidate files:</strong> <code>${escapeHtml(details.files.join(', '))}</code></p>`
+      : '<p><strong>Candidate files:</strong> none</p>';
+    const locationLinksHtml = details.locations?.length > 0
+      ? [
+        '<p><strong>Code links (commit + file + line range):</strong></p>',
+        `<ul>${details.locations.map((location) => `<li><a href="${escapeHtml(location.url)}"><code>${escapeHtml(location.filePath)}:${location.startLine}-${location.endLine}</code></a>${location.reason ? ` — ${escapeHtml(location.reason)}` : ''}</li>`).join('')}</ul>`,
+      ].join('\n')
+      : '<p><strong>Code links:</strong> none</p>';
+    const snippetHtml = details.snippets?.length > 0
+      ? details.snippets.map((snippet) => [
+        '<details>',
+        `<summary><code>${escapeHtml(snippet.filePath)}:${snippet.startLine}-${snippet.endLine}</code></summary>`,
+        `<p>${snippet.url ? `<a href="${escapeHtml(snippet.url)}">Open file at commit</a>` : 'No file link available'}${snippet.compareUrl ? ` · <a href="${escapeHtml(snippet.compareUrl)}">Open compare view</a>` : ''}</p>`,
+        `<pre>${escapeHtml(snippet.snippet)}</pre>`,
+        '</details>',
+      ].join('\n')).join('\n')
+      : '<p>No diff snippet context captured.</p>';
+    return [
+      '<details>',
+      `<summary>${escapeHtml(rowStatus(row).emoji)} ${escapeHtml(row.label)}: ${escapeHtml(formatMetricValue(row.base))} -> ${escapeHtml(formatMetricValue(row.head))} (${escapeHtml(formatDeltaValue(row.delta))}, ${escapeHtml(formatPctValue(row.relativeDeltaPct))})</summary>`,
+      '<div>',
+      evidenceHtml,
+      candidateFilesHtml,
+      locationLinksHtml,
+      '<p><strong>Code snippets:</strong></p>',
+      snippetHtml,
+      '</div>',
+      '</details>',
+    ].join('\n');
+  }).join('\n');
+}
+
+function renderDeltaHtml(delta, baseLabel, headLabel, metricAttribution) {
+  const guideRows = delta.guide.map((row) => [row.label, row.directionLabel, row.target, row.signal]);
   return renderHtmlDocument(
     'Commit Complexity Delta',
     [
+      '<style>',
+      '  .status-pill { display: inline-block; border-radius: 999px; padding: 2px 10px; font-size: 11px; font-weight: 700; letter-spacing: 0.02em; text-transform: uppercase; }',
+      '  .sev-very-bad { color: #fff; background: #d63031; border: 1px solid #ff7675; }',
+      '  .sev-bad { color: #fff; background: #b71540; border: 1px solid #ff6b81; }',
+      '  .sev-warning { color: #201a00; background: #ffd43b; border: 1px solid #ffe066; }',
+      '  .sev-improvement { color: #102a00; background: #b7e95c; border: 1px solid #d8f49b; }',
+      '  .sev-solid { color: #072b07; background: #8ce99a; border: 1px solid #b2f2bb; }',
+      '  .sev-awesome { color: #fff; background: #2f9e44; border: 1px solid #51cf66; font-weight: 800; }',
+      '  .colorized-table .sev-row.sev-very-bad td { background: #2f1212 !important; }',
+      '  .colorized-table .sev-row.sev-bad td { background: #28121d !important; }',
+      '  .colorized-table .sev-row.sev-warning td { background: #2e2811 !important; }',
+      '  .colorized-table .sev-row.sev-improvement td { background: #1e2811 !important; }',
+      '  .colorized-table .sev-row.sev-solid td { background: #102419 !important; }',
+      '  .colorized-table .sev-row.sev-awesome td { background: #0f2a14 !important; }',
+      '</style>',
       '<h1>Commit Complexity Delta</h1>',
       `<p class="small">Generated: ${delta.generatedAt}</p>`,
       '<div class="meta">',
@@ -686,40 +917,26 @@ function renderDeltaHtml(delta, baseLabel, headLabel, regressionAttribution) {
       '</div>',
       '<h2>How To Read This</h2>',
       '<ul>',
+      '<li>Each row has an explicit status indicator and matching row color.</li>',
       '<li>Lower-is-better metrics should trend down toward target. Zero is ideal for rule violations.</li>',
       '<li>Higher-is-better metrics should trend up (for example maintainability index).</li>',
-      '<li><code>magnitude</code> expresses scale: tiny, small, moderate, large.</li>',
-      '<li><code>impact</code> combines metric signal strength and magnitude.</li>',
       '</ul>',
       '<h2>Metric Interpretation Guide</h2>',
       renderHtmlTable(['Metric', 'Desired Trend', 'Practical Target Range', 'Signal'], guideRows),
       '<h2>High-Signal Regressions</h2>',
-      renderHtmlTable(
-        ['Metric', 'Base', 'Head', 'Delta (head - base)', '% Delta', 'Magnitude', 'Impact'],
-        toRows(delta.highSignalRegressions),
-      ),
+      renderColorizedMetricTable(delta.highSignalRegressions),
       '<h2>High-Signal Improvements</h2>',
-      renderHtmlTable(
-        ['Metric', 'Base', 'Head', 'Delta (head - base)', '% Delta', 'Magnitude', 'Impact'],
-        toRows(delta.highSignalImprovements),
-      ),
+      renderColorizedMetricTable(delta.highSignalImprovements),
       '<h2>Regressions</h2>',
-      renderHtmlTable(
-        ['Metric', 'Base', 'Head', 'Delta (head - base)', '% Delta', 'Magnitude', 'Impact'],
-        toRows(delta.regressed),
-      ),
+      renderColorizedMetricTable(delta.regressed),
       '<h2>Regression Drilldown (click row)</h2>',
-      regressionDetailsHtml,
+      renderMetricDrilldownHtml(delta.regressed, metricAttribution),
       '<h2>Improvements</h2>',
-      renderHtmlTable(
-        ['Metric', 'Base', 'Head', 'Delta (head - base)', '% Delta', 'Magnitude', 'Impact'],
-        toRows(delta.improved),
-      ),
+      renderColorizedMetricTable(delta.improved),
+      '<h2>Improvement Drilldown (click row)</h2>',
+      renderMetricDrilldownHtml(delta.improved, metricAttribution),
       '<h2>Full Delta Table</h2>',
-      renderHtmlTable(
-        ['Key', 'Metric', 'Base', 'Head', 'Delta (head - base)', '% Delta', 'Classification', 'Magnitude', 'Signal'],
-        fullRows,
-      ),
+      renderColorizedFullTable(delta.rows),
     ].join('\n'),
   );
 }
@@ -795,7 +1012,10 @@ async function main() {
 
   // [LAW:one-source-of-truth] Delta output is derived only from canonical comparison-summary highlights from base/head.
   const delta = buildDelta(baseLoaded.summary, headLoaded.summary);
-  const regressionAttribution = await buildRegressionAttribution(delta, baseLoaded, headLoaded);
+  const metricAttribution = await buildMetricAttribution(delta, baseLoaded, headLoaded);
+  const regressionAttribution = Object.fromEntries(
+    delta.regressed.map((row) => [row.key, metricAttribution[row.key] ?? { evidence: [], files: [], locations: [], snippets: [], diffs: [] }]),
+  );
 
   const baseLabel = baseLoaded.metadata.label;
   const headLabel = headLoaded.metadata.label;
@@ -807,6 +1027,7 @@ async function main() {
 
   const result = {
     ...delta,
+    metricAttribution,
     regressionAttribution,
     base: baseLoaded.metadata,
     head: headLoaded.metadata,
@@ -818,7 +1039,7 @@ async function main() {
 
   await writeJson(jsonPath, result);
   await writeText(mdPath, renderDeltaMarkdown(result, baseLabel, headLabel));
-  await writeText(htmlPath, renderDeltaHtml(result, baseLabel, headLabel, regressionAttribution));
+  await writeText(htmlPath, renderDeltaHtml(result, baseLabel, headLabel, metricAttribution));
   await writeLatestPointer(outputRoot, runId);
 
   // [LAW:verifiable-goals] Always emit machine-readable + human-readable outputs.
