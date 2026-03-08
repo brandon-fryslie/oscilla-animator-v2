@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
 import { rgLines } from '../testing/rg-search';
 
 const ACTIVE_RENDERER_FILE = 'src/render/webgpu/RustWasmWebGPURenderer.ts';
+const ACTIVE_RUST_RENDER_ENGINE_FILE = 'src/render/wasm/rust/oscilla-rust-renderer/src/engine.rs';
+const ACTIVE_RUST_RENDER_SRC = 'src/render/wasm/rust/oscilla-rust-renderer/src';
 
 describe('forbidden patterns (v3 hard rules)', () => {
   it('forbids legacy shape2d record writes in frame executors', () => {
@@ -52,14 +55,19 @@ describe('forbidden patterns (v3 hard rules)', () => {
     expect(matches).toEqual([]);
   });
 
-  it('forbids GPU full-buffer copy commands in the WebGPU hot path', () => {
-    // [LAW:single-enforcer] Guardrails enforce the active renderer boundary,
-    // not dormant implementation files.
-    const matches = rgLines('copyBufferToBuffer\\s*\\(', [ACTIVE_RENDERER_FILE]);
+  it('forbids non-debug GPU copy commands in the active hot path', () => {
+    // [LAW:single-enforcer] Guardrails enforce the active Rust worker
+    // renderer boundary, not dormant TS implementations.
+    const rustCopyCalls = rgLines('copy_buffer_to_buffer\\s*\\(', [ACTIVE_RUST_RENDER_ENGINE_FILE], ['*.rs']);
+    expect(rustCopyCalls).toHaveLength(1);
 
-    // [LAW:dataflow-not-control-flow] Frame execution keeps one deterministic
-    // compute->draw flow without whole-buffer copy detours.
-    expect(matches).toEqual([]);
+    const engineSource = readFileSync(ACTIVE_RUST_RENDER_ENGINE_FILE, 'utf-8');
+    // [LAW:dataflow-not-control-flow] The only allowed copy operation in
+    // the hot path is debug-readback staging behind the explicit debug gate.
+    expect(engineSource).toMatch(/if is_debug_tick\s*\{[\s\S]*copy_buffer_to_buffer\s*\(/);
+
+    const tsCopyCalls = rgLines('copyBufferToBuffer\\s*\\(', [ACTIVE_RENDERER_FILE]);
+    expect(tsCopyCalls).toEqual([]);
   });
 
   it('forbids runtime arena reassignment in frame executors', () => {
@@ -82,9 +90,16 @@ describe('forbidden patterns (v3 hard rules)', () => {
   });
 
   it('forbids CPU-side direct indirect-args writes in WebGPU renderer', () => {
-    const matches = rgLines('writeBuffer\\s*\\(\\s*this\\.indirectArgsBuffer', [
+    const tsMatches = rgLines('writeBuffer\\s*\\(\\s*this\\.indirectArgsBuffer', [
       ACTIVE_RENDERER_FILE,
     ]);
-    expect(matches).toEqual([]);
+    expect(tsMatches).toEqual([]);
+
+    // [LAW:single-enforcer] Active indirect writes are owned by GPU draw-prep;
+    // Rust CPU helpers must not be invoked in the runtime hot path.
+    const rustCpuIndirectWriteCallsites = rgLines('\\.write_indirect_words\\s*\\(', [
+      ACTIVE_RUST_RENDER_SRC,
+    ], ['*.rs']);
+    expect(rustCpuIndirectWriteCallsites).toEqual([]);
   });
 });
