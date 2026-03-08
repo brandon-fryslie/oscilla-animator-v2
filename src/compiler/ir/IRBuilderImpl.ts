@@ -922,11 +922,9 @@ function toSerializableTopologyShape(
       ...topology,
       ...computePathDispatchData(topology.verbs),
     };
-    const { render: _render, ...serializable } = withDispatch;
-    return serializable;
+    return withDispatch;
   }
-  const { render: _render, ...serializable } = topology;
-  return serializable as Omit<SerializableTopologyDef, 'id'>;
+  return topology as Omit<SerializableTopologyDef, 'id'>;
 }
 
 function topologyShapeSignature(topology: Omit<SerializableTopologyDef, 'id'>): string {

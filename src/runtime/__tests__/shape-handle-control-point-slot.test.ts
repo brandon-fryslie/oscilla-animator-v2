@@ -12,13 +12,11 @@ import {
 import { buildProgramTopologyTableFromIds } from '../../compiler/ir/program-topology';
 import { materializeValueExpr } from '../ValueExprMaterializer';
 import { registerDynamicTopology } from '../../shapes/registry';
-import type { RenderSpace2D } from '../../shapes/types';
 import { PathVerb } from '../../shapes/types';
 
 const PATH_TOPOLOGY_ID = registerDynamicTopology(
   {
     params: [{ name: 'radius', type: 'float', default: 1 }],
-    render: (_ctx: CanvasRenderingContext2D, _p: Record<string, number>, _space: RenderSpace2D) => {},
     verbs: [PathVerb.MOVE, PathVerb.LINE, PathVerb.CLOSE],
     pointsPerVerb: [1, 1, 0],
     totalControlPoints: 2,
@@ -30,7 +28,6 @@ const PATH_TOPOLOGY_ID = registerDynamicTopology(
 const NON_PATH_TOPOLOGY_ID = registerDynamicTopology(
   {
     params: [{ name: 'radius', type: 'float', default: 1 }],
-    render: (_ctx: CanvasRenderingContext2D, _p: Record<string, number>, _space: RenderSpace2D) => {},
   },
   'shape-handle-control-point-slot-non-path',
 );

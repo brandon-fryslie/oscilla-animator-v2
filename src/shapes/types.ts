@@ -46,43 +46,17 @@ export interface ParamDef {
 }
 
 /**
- * RenderSpace2D - Render-target facts provided by renderer
- *
- * The renderer provides these facts; topologies use them to convert
- * normalized world coordinates to device pixels.
- *
- * Policy: All shape geometry parameters are in normalized world coordinates (0..1).
- * Topology is responsible for interpreting params in render space.
- */
-export interface RenderSpace2D {
-  /** Canvas width in pixels */
-  readonly width: number;
-  /** Canvas height in pixels */
-  readonly height: number;
-  /** Scale multiplier from RenderInstances2D (default 1.0 = no scaling) */
-  readonly scale: number;
-}
-
-/**
  * TopologyDef - Topology definition (compile-time constant)
  *
  * Defines:
  * - What kind of shape (id)
  * - What parameters it needs (params)
- * - How to render it (render function)
  *
  * Topologies are immutable and registered at module load time.
- * The render function receives normalized params and render-space context,
- * and is responsible for converting to device pixels.
  */
 export interface TopologyDef {
   readonly id: TopologyId;
   readonly params: readonly ParamDef[];
-  readonly render?: (
-    ctx: CanvasRenderingContext2D,
-    params: Record<string, number>,
-    space: RenderSpace2D
-  ) => void;
 }
 
 /**
@@ -185,7 +159,7 @@ export interface PathTopologyDef extends TopologyDef {
   readonly hasCubic: boolean;
 }
 
-export type SerializableTopologyDef = Omit<TopologyDef, 'render'> & Partial<Pick<
+export type SerializableTopologyDef = TopologyDef & Partial<Pick<
   PathTopologyDef,
   'verbs' | 'pointsPerVerb' | 'totalControlPoints' | 'closed' | 'segmentKind' | 'segmentPointBase' | 'hasQuad' | 'hasCubic'
 >>;
