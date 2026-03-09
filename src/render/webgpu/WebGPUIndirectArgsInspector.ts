@@ -60,7 +60,7 @@ export class WebGPUIndirectArgsInspector {
       throw new Error('WebGPUIndirectArgsInspector: readback buffer does not support mapAsync');
     }
     await this.readbackBuffer.mapAsync(GPU_MAP_MODE.READ, 0, byteLength);
-    const mappedRange = this.readbackBuffer.getMappedRange(0, byteLength) as ArrayBuffer;
+    const mappedRange = this.readbackBuffer.getMappedRange(0, byteLength);
     const bytes = new Uint8Array(mappedRange);
     const copied = new Uint8Array(byteLength);
     copied.set(bytes);
@@ -103,6 +103,7 @@ export class WebGPUIndirectArgsInspector {
     const nextBuffer = this.device.createBuffer({
       size: nextCapacity * WEBGPU_RENDER_CONTRACT.indirectArgsBytes,
       usage: GPU_BUFFER_USAGE.COPY_DST | GPU_BUFFER_USAGE.MAP_READ,
+      mappedAtCreation: false,
     });
     this.readbackBuffer?.destroy();
     this.readbackBuffer = nextBuffer;

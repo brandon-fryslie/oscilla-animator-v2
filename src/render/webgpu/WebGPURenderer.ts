@@ -81,13 +81,13 @@ interface RenderInput {
   readonly panX: number;
   readonly panY: number;
   readonly timeMs: number;
-  readonly inputMouseX?: number;
-  readonly inputMouseY?: number;
-  readonly inputMouseButtons?: number;
-  readonly inputAudioLow?: number;
-  readonly inputAudioMid?: number;
-  readonly inputAudioHigh?: number;
-  readonly inputGaugeActive?: number;
+  readonly inputMouseX: number;
+  readonly inputMouseY: number;
+  readonly inputMouseButtons: number;
+  readonly inputAudioLow: number;
+  readonly inputAudioMid: number;
+  readonly inputAudioHigh: number;
+  readonly inputGaugeActive: number;
 }
 
 interface PreparedDrawPathOp {
@@ -181,10 +181,12 @@ class WebGPUComputeRuntime {
     this.paramsBuffer = device.createBuffer({
       size: WEBGPU_RENDER_CONTRACT.computeParamsFloats * Float32Array.BYTES_PER_ELEMENT,
       usage: GPU_BUFFER_USAGE.UNIFORM | GPU_BUFFER_USAGE.COPY_DST,
+      mappedAtCreation: false,
     });
     this.migrationParamsBuffer = device.createBuffer({
       size: WEBGPU_RENDER_CONTRACT.computeMigrationParamsU32 * Uint32Array.BYTES_PER_ELEMENT,
       usage: GPU_BUFFER_USAGE.UNIFORM | GPU_BUFFER_USAGE.COPY_DST,
+      mappedAtCreation: false,
     });
     this.bindGroups = this.recreateBindGroups();
 
@@ -229,11 +231,7 @@ class WebGPUComputeRuntime {
       }
     };
     const queue = this.device.queue;
-    if (typeof queue?.onSubmittedWorkDone === 'function') {
-      void queue.onSubmittedWorkDone().then(destroyRetirements).catch(destroyRetirements);
-      return;
-    }
-    destroyRetirements();
+    void queue.onSubmittedWorkDone().then(destroyRetirements).catch(destroyRetirements);
   }
 
   step(
@@ -261,7 +259,7 @@ class WebGPUComputeRuntime {
     this.paramsStaging[1] = clampedDt;
     this.paramsStaging[2] = 0.999; // Mild damping keeps default simulation stable.
     this.paramsStaging[3] = this.stateCapacity;
-    this.device.queue.writeBuffer(this.paramsBuffer, 0, this.paramsStaging);
+    this.device.queue.writeBuffer(this.paramsBuffer, 0, this.paramsStaging, 0, this.paramsStaging.byteLength);
 
     // [LAW:dataflow-not-control-flow] Compute pass always executes.
     // Variability is encoded in activeCount/dt values, not whether the pass runs.
@@ -289,6 +287,7 @@ class WebGPUComputeRuntime {
     return this.device.createBuffer({
       size: WEBGPU_RENDER_CONTRACT.inputHeaderBytes + capacity * SIMULATION_STATE_BYTES,
       usage: GPU_BUFFER_USAGE.STORAGE | GPU_BUFFER_USAGE.COPY_DST | GPU_BUFFER_USAGE.COPY_SRC,
+      mappedAtCreation: false,
     });
   }
 
@@ -355,7 +354,13 @@ class WebGPUComputeRuntime {
     this.migrationParamsStaging[1] = 0;
     this.migrationParamsStaging[2] = 0;
     this.migrationParamsStaging[3] = 0;
-    this.device.queue.writeBuffer(this.migrationParamsBuffer, 0, this.migrationParamsStaging);
+    this.device.queue.writeBuffer(
+      this.migrationParamsBuffer,
+      0,
+      this.migrationParamsStaging,
+      0,
+      this.migrationParamsStaging.byteLength,
+    );
 
     const migrationBindLayout = this.migrationPipeline.getBindGroupLayout(WEBGPU_RENDER_CONTRACT.computeMigrationBindGroup);
     const migrationPass = commandEncoder.beginComputePass();
@@ -398,18 +403,10 @@ class WebGPUComputeRuntime {
     capacity: number,
   ): void {
     const totalBytes = WEBGPU_RENDER_CONTRACT.inputHeaderBytes + capacity * SIMULATION_STATE_BYTES;
-    const clearBuffer = commandEncoder?.clearBuffer;
-    if (typeof clearBuffer === 'function') {
-      for (const buffer of buffers) {
-        clearBuffer.call(commandEncoder, buffer, 0, totalBytes);
-      }
-      return;
-    }
-    const zeroBytes = new Uint8Array(totalBytes);
     for (const buffer of buffers) {
       // [LAW:dataflow-not-control-flow] Newly allocated lanes are always
       // initialized via one fixed operation sequence before migration reads.
-      this.device.queue.writeBuffer(buffer, 0, zeroBytes);
+      commandEncoder.clearBuffer(buffer, 0, totalBytes);
     }
   }
 }
@@ -426,6 +423,7 @@ class WebGPUDrawPrepRuntime {
     this.paramsBuffer = device.createBuffer({
       size: WEBGPU_RENDER_CONTRACT.drawPrepParamsU32 * Uint32Array.BYTES_PER_ELEMENT,
       usage: GPU_BUFFER_USAGE.UNIFORM | GPU_BUFFER_USAGE.COPY_DST,
+      mappedAtCreation: false,
     });
   }
 
@@ -483,7 +481,7 @@ class WebGPUDrawPrepRuntime {
     this.paramsStaging[5] = recordIndex >>> 0;
     this.paramsStaging[6] = maxRecords >>> 0;
     this.paramsStaging[7] = 0;
-    this.device.queue.writeBuffer(this.paramsBuffer, 0, this.paramsStaging);
+    this.device.queue.writeBuffer(this.paramsBuffer, 0, this.paramsStaging, 0, this.paramsStaging.byteLength);
 
     const bindGroup = this.getOrCreateBindGroup(indirectBuffer);
 
@@ -551,6 +549,7 @@ export class WebGPURenderer {
     this.sceneUniformBuffer = device.createBuffer({
       size: WEBGPU_RENDER_CONTRACT.sceneUniformBytes,
       usage: GPU_BUFFER_USAGE.UNIFORM | GPU_BUFFER_USAGE.COPY_DST,
+      mappedAtCreation: false,
     });
 
     this.sceneBindGroup = device.createBindGroup({
@@ -569,6 +568,7 @@ export class WebGPURenderer {
         GPU_BUFFER_USAGE.INDIRECT |
         GPU_BUFFER_USAGE.COPY_DST |
         GPU_BUFFER_USAGE.COPY_SRC,
+      mappedAtCreation: false,
     });
     this.shapeBankManager = new WebGPUShapeBankManager(this.device, this.pathPipeline);
     this.indirectArgsInspector = new WebGPUIndirectArgsInspector(this.device);
@@ -576,6 +576,7 @@ export class WebGPURenderer {
     this.instanceBuffer = device.createBuffer({
       size: MIN_INSTANCE_CAPACITY * INSTANCE_FLOATS * 4,
       usage: GPU_BUFFER_USAGE.STORAGE | GPU_BUFFER_USAGE.COPY_DST,
+      mappedAtCreation: false,
     });
     this.instanceCapacity = MIN_INSTANCE_CAPACITY;
     this.instanceStaging = new Float32Array(this.instanceCapacity * INSTANCE_FLOATS);
@@ -597,8 +598,8 @@ export class WebGPURenderer {
 
     // [LAW:single-enforcer] Renderer is the single boundary that captures GPU validation
     // failures and turns them into runtime-fatal errors.
-    this.device.addEventListener?.('uncapturederror', (event: { error?: { message?: string } }) => {
-      const message = event?.error?.message ?? 'Unknown WebGPU validation error';
+    this.device.addEventListener('uncapturederror', (event: { error: { message: string } }) => {
+      const message = event.error.message || 'Unknown WebGPU validation error';
       this.fatalError = new Error(`WebGPU uncaptured error: ${message}`);
     });
   }
@@ -650,13 +651,13 @@ export class WebGPURenderer {
       frameCount: frameIndex,
       width: input.width,
       height: input.height,
-      mouseX: input.inputMouseX ?? 0,
-      mouseY: input.inputMouseY ?? 0,
-      mouseButtons: input.inputMouseButtons ?? 0,
-      audioLow: input.inputAudioLow ?? 0,
-      audioMid: input.inputAudioMid ?? 0,
-      audioHigh: input.inputAudioHigh ?? 0,
-      gaugeActive: input.inputGaugeActive ?? 0,
+      mouseX: input.inputMouseX,
+      mouseY: input.inputMouseY,
+      mouseButtons: input.inputMouseButtons,
+      audioLow: input.inputAudioLow,
+      audioMid: input.inputAudioMid,
+      audioHigh: input.inputAudioHigh,
+      gaugeActive: input.inputGaugeActive,
     });
     this.computeRuntime.step(commandEncoder, simulationInstanceCount, dtSeconds, frameInputHeader, frameIndex);
     const totalInstances = this.countPlannedInstances(drawPlan);
@@ -739,13 +740,12 @@ export class WebGPURenderer {
 
   private assertRenderInputContract(input: RenderInput): void {
     const { frame, shapeBank, width, height, zoom, panX, panY, timeMs } = input;
-    const rawInput = input as unknown as Record<string, unknown>;
     // [LAW:no-string-math] Lowering-authored WGSL source injection is forbidden.
     // Renderer contract rejects legacy draw-prep WGSL payloads at the sink boundary.
-    if (Object.prototype.hasOwnProperty.call(rawInput, 'drawPrepShaderWgsl')) {
+    if (Object.prototype.hasOwnProperty.call(input, 'drawPrepShaderWgsl')) {
       throw new Error('WebGPURenderer: drawPrepShaderWgsl override is forbidden in P0');
     }
-    if (Object.prototype.hasOwnProperty.call(rawInput, 'topologyRegistrySnapshot')) {
+    if (Object.prototype.hasOwnProperty.call(input, 'topologyRegistrySnapshot')) {
       throw new Error('WebGPURenderer: topology registry snapshot payloads are forbidden in P0');
     }
     if (frame.version !== 2) {
@@ -784,7 +784,7 @@ export class WebGPURenderer {
       throw new Error(`WebGPURenderer: timeMs must be finite, got ${timeMs}`);
     }
 
-    const optionalFields = [
+    const requiredInputFields = [
       ['inputMouseX', input.inputMouseX],
       ['inputMouseY', input.inputMouseY],
       ['inputMouseButtons', input.inputMouseButtons],
@@ -793,9 +793,9 @@ export class WebGPURenderer {
       ['inputAudioHigh', input.inputAudioHigh],
       ['inputGaugeActive', input.inputGaugeActive],
     ] as const;
-    for (const [name, value] of optionalFields) {
-      if (value !== undefined && !Number.isFinite(value)) {
-        throw new Error(`WebGPURenderer: ${name} must be finite when provided, got ${value}`);
+    for (const [name, value] of requiredInputFields) {
+      if (!Number.isFinite(value)) {
+        throw new Error(`WebGPURenderer: ${name} must be finite, got ${value}`);
       }
     }
   }
@@ -859,7 +859,7 @@ export class WebGPURenderer {
     this.sceneUniforms[5] = Math.min(input.width, input.height);
     this.sceneUniforms[6] = 0;
     this.sceneUniforms[7] = 0;
-    this.device.queue.writeBuffer(this.sceneUniformBuffer, 0, this.sceneUniforms);
+    this.device.queue.writeBuffer(this.sceneUniformBuffer, 0, this.sceneUniforms, 0, this.sceneUniforms.byteLength);
   }
 
   private buildDrawPlan(frame: RenderFrameIR): PreparedDrawPathOp[] {
@@ -1007,7 +1007,7 @@ export class WebGPURenderer {
       mappedAtCreation: data.byteLength > 0,
     });
     if (data.byteLength > 0) {
-      const dst = new Uint8Array(buffer.getMappedRange());
+      const dst = new Uint8Array(buffer.getMappedRange(0, safeSize));
       const src = new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
       dst.set(src);
       buffer.unmap();
@@ -1148,6 +1148,7 @@ export class WebGPURenderer {
     const nextBuffer = this.device.createBuffer({
       size: nextCapacity * INSTANCE_FLOATS * 4,
       usage: GPU_BUFFER_USAGE.STORAGE | GPU_BUFFER_USAGE.COPY_DST,
+      mappedAtCreation: false,
     });
 
     this.instanceBuffer.destroy();
@@ -1182,6 +1183,7 @@ export class WebGPURenderer {
         GPU_BUFFER_USAGE.INDIRECT |
         GPU_BUFFER_USAGE.COPY_DST |
         GPU_BUFFER_USAGE.COPY_SRC,
+      mappedAtCreation: false,
     });
     this.indirectArgsBuffer.destroy();
     this.indirectArgsBuffer = nextBuffer;
