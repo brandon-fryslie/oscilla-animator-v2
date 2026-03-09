@@ -7,7 +7,7 @@ import { pathToFileURL } from 'node:url';
 import { chromium } from '@playwright/test';
 import { truncateForLog } from './matrix-utils.mjs';
 
-const BASE_URL = process.env.WEBGPU_MATRIX_URL ?? 'http://127.0.0.1:5174';
+const BASE_URL = process.env.WEBGPU_MATRIX_URL ?? 'http://127.0.0.1:5784';
 const DEFAULT_REPORT = process.env.WEBGPU_MATRIX_REPORT ?? 'artifacts/webgpu-browser-matrix.json';
 const parsePositiveIntegerEnv = (value, fallback) => {
   const parsed = Number.parseInt(value ?? '', 10);
@@ -106,8 +106,8 @@ async function startManagedServer(url) {
 
   const serverArgs =
     SERVER_MODE === 'dev'
-      ? ['run', 'dev', '--', '--host', '127.0.0.1', '--port', '5174', '--strictPort']
-      : ['exec', 'vite', 'preview', '--host', '127.0.0.1', '--port', '5174', '--strictPort'];
+      ? ['run', 'dev', '--', '--host', '127.0.0.1', '--port', '5784', '--strictPort']
+      : ['exec', 'vite', 'preview', '--host', '127.0.0.1', '--port', '5784', '--strictPort'];
 
   const serverProcess = spawn('pnpm', serverArgs, {
     stdio: ['ignore', 'pipe', 'pipe'],
