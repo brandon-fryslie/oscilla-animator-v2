@@ -11,6 +11,11 @@ import type { CompiledProgramIR, CameraDeclIR } from '../compiler/ir/program';
 import type { ValueSlot } from '../compiler/ir/Indices';
 import type { RuntimeState } from './RuntimeState';
 import { getExprAddressTable } from './ExprAddressTable';
+import {
+  CANONICAL_WORLD_CENTER_X,
+  CANONICAL_WORLD_CENTER_Y,
+  DEGREES_TO_RADIANS,
+} from '../core/coordinate-system';
 
 // =============================================================================
 // ResolvedCameraParams — The output contract
@@ -32,20 +37,18 @@ export interface ResolvedCameraParams {
 // Constants
 // =============================================================================
 
-const DEG_TO_RAD = Math.PI / 180;
-
 /**
  * Default camera when no Camera block exists (spec §6.2).
  * Ortho identity view — flat, centered, no tilt.
  */
 export const DEFAULT_CAMERA: Readonly<ResolvedCameraParams> = Object.freeze({
   projection: 'ortho' as const,
-  centerX: 0.5,
-  centerY: 0.5,
+  centerX: CANONICAL_WORLD_CENTER_X,
+  centerY: CANONICAL_WORLD_CENTER_Y,
   distance: 2.0,
   tiltRad: 0,
   yawRad: 0,
-  fovYRad: 45 * DEG_TO_RAD,
+  fovYRad: 45 * DEGREES_TO_RADIANS,
   near: 0.01,
   far: 100,
 });
@@ -152,9 +155,9 @@ export function resolveCameraDecl(
     centerX,
     centerY,
     distance,
-    tiltRad: tiltDeg * DEG_TO_RAD,
-    yawRad: yawDeg * DEG_TO_RAD,
-    fovYRad: fovYDeg * DEG_TO_RAD,
+    tiltRad: tiltDeg * DEGREES_TO_RADIANS,
+    yawRad: yawDeg * DEGREES_TO_RADIANS,
+    fovYRad: fovYDeg * DEGREES_TO_RADIANS,
     near,
     far,
   };
