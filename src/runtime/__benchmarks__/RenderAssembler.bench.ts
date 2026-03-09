@@ -11,7 +11,7 @@ import {
   // sliceInstanceBuffers - removed (function no longer exported)
   resetTopologyCacheCounters,
   topologyGroupCacheMisses,
-} from '../RenderAssembler';
+} from '../LegacyRenderAssembler';
 import {
   SHAPE_BANK_HEADER_WORDS,
   allocShapeBankWords,

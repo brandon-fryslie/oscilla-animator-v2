@@ -19,7 +19,7 @@ describe('forbidden patterns (v3 hard rules)', () => {
   });
 
   it('forbids shape2d object unpack helper in render hot path', () => {
-    const matches = rgLines('readShape2D\\s*\\(', ['src/runtime/RenderAssembler.ts']);
+    const matches = rgLines('readShape2D\\s*\\(', ['src/runtime/LegacyRenderAssembler.ts']);
 
     // [LAW:verifiable-goals] Static gate prevents per-instance object unpack
     // churn from reappearing in render grouping loops.
@@ -83,7 +83,7 @@ describe('forbidden patterns (v3 hard rules)', () => {
 
   it('forbids shape-bank mutation helpers in renderer/assembler hot paths', () => {
     const matches = rgLines('writeShapeBank(Header|HandleMetadata)\\s*\\(', [
-      'src/runtime/RenderAssembler.ts',
+      'src/runtime/LegacyRenderAssembler.ts',
       ACTIVE_RENDERER_FILE,
     ]);
     expect(matches).toEqual([]);
@@ -101,5 +101,32 @@ describe('forbidden patterns (v3 hard rules)', () => {
       ACTIVE_RUST_RENDER_SRC,
     ], ['*.rs']);
     expect(rustCpuIndirectWriteCallsites).toEqual([]);
+  });
+
+  it('forbids canonical runtime hotpath modules from importing legacy CPU projection assembly', () => {
+    const matches = rgLines(
+      "from\\s+['\"][^'\"]*(LegacyRenderAssembler|projection/ortho-kernel|projection/perspective-kernel|projection/fields)[^'\"]*['\"]",
+      [
+        'src/services/RuntimeService.ts',
+        'src/services/AnimationLoop.ts',
+        'src/services/runtime-hotpath.worker.ts',
+        'src/services/runtime-hotpath-install.ts',
+        ACTIVE_RENDERER_FILE,
+      ],
+    );
+
+    // [LAW:one-way-deps] Canonical hotpath ownership points toward GPU sink
+    // install/dispatch only; legacy CPU projection modules remain isolated.
+    expect(matches).toEqual([]);
+  });
+
+  it('forbids runtime public surface from exporting legacy CPU projection helpers', () => {
+    const matches = rgLines('LegacyRenderAssembler|projectAndCompact|compactAndCopy', [
+      'src/runtime/index.ts',
+    ]);
+
+    // [LAW:one-source-of-truth] Public runtime ownership is the GPU-native
+    // contract; legacy CPU projection helpers stay non-canonical/private.
+    expect(matches).toEqual([]);
   });
 });

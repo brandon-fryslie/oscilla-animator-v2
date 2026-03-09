@@ -22,7 +22,7 @@ describe('shape hot-path no-alloc gate', () => {
   });
 
   it('avoids shape2d object unpack helper in RenderAssembler hot grouping loop', () => {
-    const renderAssembler = readRuntimeFile('RenderAssembler.ts');
+    const renderAssembler = readRuntimeFile('LegacyRenderAssembler.ts');
 
     // [LAW:verifiable-goals] Static gate prevents reintroducing per-instance object
     // unpack allocation in render grouping hot path.
@@ -30,7 +30,7 @@ describe('shape hot-path no-alloc gate', () => {
   });
 
   it('forbids Path2D allocation in runtime hot modules', () => {
-    const renderAssembler = readRuntimeFile('RenderAssembler.ts');
+    const renderAssembler = readRuntimeFile('LegacyRenderAssembler.ts');
     const materializer = readRuntimeFile('ValueExprMaterializer.ts');
     const scheduleExecutor = readRuntimeFile('ScheduleExecutor.ts');
 

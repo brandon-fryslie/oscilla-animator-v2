@@ -1,8 +1,10 @@
 /**
- * RenderAssembler - Render Frame Assembly
+ * LegacyRenderAssembler - Transitional CPU Projection Assembly
  *
  * Assembles RenderFrameIR from schedule execution results.
  * This module is the single point where IR references become concrete render data.
+ * [LAW:one-way-deps] Canonical runtime hotpath ownership is GPU sink-table driven;
+ * this module is isolated for non-canonical stepping/test execution only.
  *
  * ARCHITECTURAL PURPOSE (from 8-before-render.md):
  * 1. Resolve field references via Materializer for every field the pass needs
@@ -52,6 +54,10 @@ import {
 import type { ResolvedCameraParams } from './CameraResolver';
 import { arenaDecodeToAoS, arenaIndex, type ArenaSlotDescriptor } from './ArenaValueStore';
 import { EMPTY_RENDER_FRAME } from '../render/types';
+import {
+  CANONICAL_CAMERA_UP,
+  CANONICAL_CAMERA_WORLD_TARGET_Z,
+} from '../core/coordinate-system';
 
 // =============================================================================
 // RenderBufferArena Integration
@@ -149,10 +155,10 @@ const _perspectiveParamsScratch: MutablePerspectiveCameraParams = {
   camPosZ: 0,
   camTargetX: 0,
   camTargetY: 0,
-  camTargetZ: 0,
-  camUpX: 0,
-  camUpY: 1,
-  camUpZ: 0,
+  camTargetZ: CANONICAL_CAMERA_WORLD_TARGET_Z,
+  camUpX: CANONICAL_CAMERA_UP.x,
+  camUpY: CANONICAL_CAMERA_UP.y,
+  camUpZ: CANONICAL_CAMERA_UP.z,
   fovY: 0,
   near: 0,
   far: 1,
@@ -172,15 +178,10 @@ const _projectionOutputScratch: ProjectionOutput = {
 // =============================================================================
 
 /**
- * Projection mode derived from ResolvedCameraParams.projection.
- */
-export type ProjectionMode = 'ortho' | 'persp';
-
-/**
  * Projection output for a set of instances.
  * Separate buffers — world-space inputs are never mutated.
  */
-export interface ProjectionOutput {
+interface ProjectionOutput {
   /** Screen-space positions (Float32Array, stride 2, normalized [0,1]) */
   screenPosition: Float32Array;
   /** Per-instance screen-space radius */
@@ -340,7 +341,7 @@ function depthSortAndCompactBuffers(
   };
 }
 
-export function depthSortAndCompact(
+function depthSortAndCompact(
   projection: ProjectionOutput,
   count: number,
   color: Uint8ClampedArray,
@@ -418,7 +419,7 @@ function ensureWorldPositionVec3(
  * @param arena - Pre-allocated buffer arena (required)
  * @returns Separate screen-space output buffers
  */
-export function projectInstances(
+function projectInstances(
   worldPositions: Float32Array,
   worldRadius: number,
   count: number,
@@ -450,10 +451,10 @@ export function projectInstances(
     _perspectiveParamsScratch.camPosZ = camPosZ;
     _perspectiveParamsScratch.camTargetX = resolved.centerX;
     _perspectiveParamsScratch.camTargetY = resolved.centerY;
-    _perspectiveParamsScratch.camTargetZ = 0;
-    _perspectiveParamsScratch.camUpX = 0;
-    _perspectiveParamsScratch.camUpY = 1;
-    _perspectiveParamsScratch.camUpZ = 0;
+    _perspectiveParamsScratch.camTargetZ = CANONICAL_CAMERA_WORLD_TARGET_Z;
+    _perspectiveParamsScratch.camUpX = CANONICAL_CAMERA_UP.x;
+    _perspectiveParamsScratch.camUpY = CANONICAL_CAMERA_UP.y;
+    _perspectiveParamsScratch.camUpZ = CANONICAL_CAMERA_UP.z;
     _perspectiveParamsScratch.fovY = resolved.fovYRad;
     _perspectiveParamsScratch.near = resolved.near;
     _perspectiveParamsScratch.far = resolved.far;
@@ -488,7 +489,7 @@ export function projectInstances(
  * @param scale2 - Optional per-instance anisotropic scale
  * @returns All buffers as arena views (valid until arena.reset())
  */
-export function projectAndCompact(
+function projectAndCompact(
   worldPositions: Float32Array,
   worldRadius: number,
   count: number,
@@ -533,7 +534,7 @@ export function projectAndCompact(
  * @param scale2 - Optional per-instance anisotropic scale
  * @returns Arena views (valid until arena.reset())
  */
-export function compactAndCopy(
+function compactAndCopy(
   projection: ProjectionOutput,
   count: number,
   color: Uint8ClampedArray,

@@ -34,7 +34,7 @@ import {
   createUnstableDomainInstance,
   shouldRebuildDomainInstance,
 } from './DomainIdentity';
-import { assembleRenderFrame, type AssemblerContext } from './RenderAssembler';
+import { assembleRenderFrame, type AssemblerContext } from './LegacyRenderAssembler';
 import { resolveCameraFromGlobals } from './CameraResolver';
 import type { CanonicalType } from '../core/canonical-types';
 import { payloadStride, requireInst } from '../core/canonical-types';
