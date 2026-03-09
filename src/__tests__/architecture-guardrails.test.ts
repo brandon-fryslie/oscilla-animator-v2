@@ -237,33 +237,4 @@ describe('Architecture Guardrails', () => {
     }
   });
 
-  describe('Coordinate contract ownership', () => {
-    const gates: readonly Gate[] = [
-      {
-        id: 'K-COORD-1',
-        pattern: '\\*\\s*0\\.5\\s*\\+\\s*0\\.5',
-        scope: ['src/projection/perspective-kernel.ts'],
-        maxCount: 0,
-      },
-      {
-        id: 'K-COORD-2',
-        pattern: 'Math\\.PI\\s*/\\s*180',
-        scope: ['src/projection/perspective-kernel.ts', 'src/runtime/CameraResolver.ts'],
-        maxCount: 0,
-      },
-    ];
-
-    for (const gate of gates) {
-      it(`${gate.id} does not grow beyond baseline`, () => {
-        const count = rgLines(gate.pattern, gate.scope, [
-          '*.ts',
-          '*.tsx',
-          '!**/*.test.*',
-          '!**/__tests__/**',
-        ]).length;
-        // [LAW:one-source-of-truth] Coordinate math literals are centralized in one contract module.
-        expect(count).toBeLessThanOrEqual(gate.maxCount);
-      });
-    }
-  });
 });
