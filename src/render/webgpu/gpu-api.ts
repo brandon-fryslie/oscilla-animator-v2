@@ -2,8 +2,8 @@ type GpuBufferSource = ArrayBuffer | SharedArrayBuffer | ArrayBufferView<ArrayBu
 
 export interface GpuBuffer {
   destroy(): void;
-  mapAsync(mode: number, offset?: number, size?: number): Promise<void>;
-  getMappedRange(offset?: number, size?: number): ArrayBuffer;
+  mapAsync(mode: number, offset: number, size: number): Promise<void>;
+  getMappedRange(offset: number, size: number): ArrayBuffer;
   unmap(): void;
 }
 
@@ -43,7 +43,7 @@ export interface GpuRenderPassEncoder {
 export interface GpuCommandEncoder {
   beginComputePass(): GpuComputePassEncoder;
   beginRenderPass(descriptor: unknown): GpuRenderPassEncoder;
-  clearBuffer?(buffer: GpuBuffer, offset?: number, size?: number): void;
+  clearBuffer(buffer: GpuBuffer, offset: number, size: number): void;
   copyBufferToBuffer(
     source: GpuBuffer,
     sourceOffset: number,
@@ -59,11 +59,11 @@ export interface GpuQueue {
     buffer: GpuBuffer,
     bufferOffset: number,
     data: GpuBufferSource,
-    dataOffset?: number,
-    size?: number,
+    dataOffset: number,
+    size: number,
   ): void;
   submit(commandBuffers: readonly unknown[]): void;
-  onSubmittedWorkDone?(): Promise<void>;
+  onSubmittedWorkDone(): Promise<void>;
 }
 
 export interface GpuDevice {
@@ -72,7 +72,7 @@ export interface GpuDevice {
   createBuffer(descriptor: {
     size: number;
     usage: number;
-    mappedAtCreation?: boolean;
+    mappedAtCreation: boolean;
   }): GpuBuffer;
   createBindGroup(descriptor: {
     layout: unknown;
@@ -86,9 +86,9 @@ export interface GpuDevice {
   createRenderPipelineAsync(descriptor: unknown): Promise<GpuRenderPipeline>;
   createTexture(descriptor: unknown): GpuTexture;
   createCommandEncoder(): GpuCommandEncoder;
-  addEventListener?(
+  addEventListener(
     type: 'uncapturederror',
-    listener: (event: { error?: { message?: string } }) => void,
+    listener: (event: { error: { message: string } }) => void,
   ): void;
 }
 
@@ -109,7 +109,7 @@ export interface GpuAdapter {
 }
 
 export interface NavigatorWithGpu extends Navigator {
-  readonly gpu?: GpuApi;
+  readonly gpu: GpuApi;
 }
 
 export interface GpuApi {
@@ -118,8 +118,8 @@ export interface GpuApi {
 }
 
 export function getNavigatorGpu(): GpuApi | null {
-  const gpu = (navigator as NavigatorWithGpu).gpu;
-  return gpu ?? null;
+  const navigatorWithGpu = navigator as Partial<NavigatorWithGpu>;
+  return navigatorWithGpu.gpu ?? null;
 }
 
 export function toGpuCanvasContext(value: RenderingContext | null): GpuCanvasContext | null {

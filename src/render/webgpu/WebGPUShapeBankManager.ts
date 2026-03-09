@@ -30,6 +30,7 @@ export class WebGPUShapeBankManager {
     this.shapeBankBuffer = this.device.createBuffer({
       size: Uint32Array.BYTES_PER_ELEMENT,
       usage: GPU_BUFFER_USAGE.STORAGE | GPU_BUFFER_USAGE.COPY_DST,
+      mappedAtCreation: false,
     });
     this.shapeBankBindGroup = this.device.createBindGroup({
       layout: this.pathPipeline.getBindGroupLayout(WEBGPU_RENDER_CONTRACT.topologyBankBindGroup),
@@ -85,6 +86,7 @@ export class WebGPUShapeBankManager {
       const nextBuffer = this.device.createBuffer({
         size: nextCapacity * Uint32Array.BYTES_PER_ELEMENT,
         usage: GPU_BUFFER_USAGE.STORAGE | GPU_BUFFER_USAGE.COPY_DST,
+        mappedAtCreation: false,
       });
       this.shapeBankBuffer.destroy();
       this.shapeBankBuffer = nextBuffer;
@@ -101,7 +103,8 @@ export class WebGPUShapeBankManager {
     }
 
     if (source.volatilePtr > 0) {
-      this.device.queue.writeBuffer(this.shapeBankBuffer, 0, source.data.subarray(0, source.volatilePtr));
+      const uploadSlice = source.data.subarray(0, source.volatilePtr);
+      this.device.queue.writeBuffer(this.shapeBankBuffer, 0, uploadSlice, 0, uploadSlice.byteLength);
     }
     this.topologyWordOffsetById = this.buildTopologyWordOffsetMap(source);
   }
