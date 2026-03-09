@@ -19,7 +19,7 @@ describe('forbidden patterns (v3 hard rules)', () => {
   });
 
   it('forbids shape2d object unpack helper in render hot path', () => {
-    const matches = rgLines('readShape2D\\s*\\(', ['src/runtime/LegacyRenderAssembler.ts']);
+    const matches = rgLines('readShape2D\\s*\\(', ['src/runtime']);
 
     // [LAW:verifiable-goals] Static gate prevents per-instance object unpack
     // churn from reappearing in render grouping loops.
@@ -83,7 +83,8 @@ describe('forbidden patterns (v3 hard rules)', () => {
 
   it('forbids shape-bank mutation helpers in renderer/assembler hot paths', () => {
     const matches = rgLines('writeShapeBank(Header|HandleMetadata)\\s*\\(', [
-      'src/runtime/LegacyRenderAssembler.ts',
+      'src/runtime/ScheduleExecutor.ts',
+      'src/runtime/executeFrameStepped.ts',
       ACTIVE_RENDERER_FILE,
     ]);
     expect(matches).toEqual([]);
@@ -105,7 +106,7 @@ describe('forbidden patterns (v3 hard rules)', () => {
 
   it('forbids canonical runtime hotpath modules from importing legacy CPU projection assembly', () => {
     const matches = rgLines(
-      "from\\s+['\"][^'\"]*(LegacyRenderAssembler|projection/ortho-kernel|projection/perspective-kernel|projection/fields)[^'\"]*['\"]",
+      "from\\s+['\"][^'\"]*(projection/ortho-kernel|projection/perspective-kernel|projection/fields)[^'\"]*['\"]",
       [
         'src/services/RuntimeService.ts',
         'src/services/AnimationLoop.ts',
@@ -121,7 +122,7 @@ describe('forbidden patterns (v3 hard rules)', () => {
   });
 
   it('forbids runtime public surface from exporting legacy CPU projection helpers', () => {
-    const matches = rgLines('LegacyRenderAssembler|projectAndCompact|compactAndCopy', [
+    const matches = rgLines('projectAndCompact|compactAndCopy', [
       'src/runtime/index.ts',
     ]);
 

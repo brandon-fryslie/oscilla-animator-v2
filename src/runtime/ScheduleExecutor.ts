@@ -7,11 +7,11 @@
 
 import type { CompiledProgramIR } from '../compiler/ir/program';
 import type { ScheduleIR } from '../compiler/backend/schedule-program';
-import type { Step, InstanceDecl, StepRender } from '../compiler/ir/types';
+import type { Step, InstanceDecl } from '../compiler/ir/types';
 import type { IrInstanceId as InstanceId } from '../types';
 import { instanceId as makeInstanceId } from '../core/ids';
 import type { RuntimeState } from './RuntimeState';
-import type { RenderFrameIR } from '../render/types';
+import { EMPTY_RENDER_FRAME, type RenderFrameIR } from '../render/types';
 import type { RenderBufferArena } from '../render/RenderBufferArena';
 import { resolveTime } from './timeResolution';
 import {
@@ -24,8 +24,6 @@ import {
 } from './RuntimeState';
 import {
   MATERIALIZE_SCRATCH,
-  renderStepsBuffer as _renderSteps,
-  assemblerCtx as _assemblerCtx,
 } from './executor-init';
 import { detectDomainChange, recordDomainTransition } from './ContinuityMapping';
 import { applyContinuity, finalizeContinuityFrame } from './ContinuityApply';
@@ -34,8 +32,6 @@ import {
   createUnstableDomainInstance,
   shouldRebuildDomainInstance,
 } from './DomainIdentity';
-import { assembleRenderFrame, type AssemblerContext } from './LegacyRenderAssembler';
-import { resolveCameraFromGlobals } from './CameraResolver';
 import type { CanonicalType } from '../core/canonical-types';
 import { payloadStride, requireInst } from '../core/canonical-types';
 import type { ValueSlot } from '../compiler/ir/Indices';
@@ -377,12 +373,8 @@ export function executeFrame(
   // Unified ValueExpr table (one/many/event values live here)
   const valueExprs = program.valueExprs.nodes;
 
-  // Resolve camera from program render globals (will be populated after value evaluation)
-  // Note: assemblerContext is constructed after Phase 1 when slots are populated
-  let assemblerContext: AssemblerContext;
-
-  // Collect render steps for v2 batch assembly (reuse module-level array)
-  _renderSteps.length = 0;
+  // [LAW:one-way-deps] CPU render-step collection is intentionally removed
+  // from the canonical frame executor; GPU draw-prep owns runtime draw data.
 
   // [LAW:one-source-of-truth] Populate canonical scalar arena addresses before Phase 1
   // so extract reads resolve from compiler-emitted ExprAddressTable metadata only.
@@ -461,8 +453,8 @@ export function executeFrame(
 
       case 'render': {
         enterRuntimeFrameSegment(state, 'phase1-render-collect');
-        // Collect render steps for v2 batch assembly (after Phase 1)
-        _renderSteps.push(step);
+        // [LAW:one-way-deps] Render-step ownership is GPU-side; CPU frame
+        // executor no longer assembles render operations here.
         break;
       }
 
@@ -607,24 +599,10 @@ export function executeFrame(
     }
   }
 
-  // Resolve camera from program render globals (slots now populated by value evaluation)
-  const resolvedCamera = resolveCameraFromGlobals(program, state);
-
-  // Build assembler context with resolved camera and arena
-  // Populate reusable module-level context to avoid per-frame object literal
-  _assemblerCtx.program = program;
-  _assemblerCtx.instances = instances as ReadonlyMap<string, InstanceDecl>;
-  _assemblerCtx.state = state;
-  _assemblerCtx.resolvedCamera = resolvedCamera;
-  _assemblerCtx.arena = arena;
-  _assemblerCtx.scalarExprToArenaAddress = state.cache.scalarExprToArenaAddress ?? undefined;
-  _assemblerCtx.slotToArena = addressTable.slotToArena;
-  _assemblerCtx.pureFnContext = pureFnContext;
-  assemblerContext = _assemblerCtx as AssemblerContext;
-
-  // Build v2 frame from collected render steps (zero allocations - uses arena)
+  // [LAW:one-way-deps] Canonical runtime execution publishes GPU sink-table
+  // planes; CPU RenderFrame assembly is removed from this path.
   enterRuntimeFrameSegment(state, 'render-assembly');
-  const frame = assembleRenderFrame(_renderSteps, assemblerContext);
+  const frame = EMPTY_RENDER_FRAME;
 
   // PHASE 2: Execute all stateWrite steps
   // This ensures state reads in Phase 1 saw previous frame's values

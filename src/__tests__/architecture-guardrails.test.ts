@@ -251,12 +251,6 @@ describe('Architecture Guardrails', () => {
         scope: ['src/projection/perspective-kernel.ts', 'src/runtime/CameraResolver.ts'],
         maxCount: 0,
       },
-      {
-        id: 'K-COORD-3',
-        pattern: 'camUp[XYZ]\\s*=\\s*[01](\\.0)?',
-        scope: ['src/runtime/LegacyRenderAssembler.ts'],
-        maxCount: 0,
-      },
     ];
 
     for (const gate of gates) {

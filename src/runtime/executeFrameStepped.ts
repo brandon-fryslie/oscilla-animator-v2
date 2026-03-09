@@ -14,11 +14,11 @@
 
 import type { CompiledProgramIR } from '../compiler/ir/program';
 import type { ScheduleIR } from '../compiler/backend/schedule-program';
-import type { Step, InstanceDecl, StepRender, StateMapping, StableStateId } from '../compiler/ir/types';
+import type { Step, StateMapping, StableStateId } from '../compiler/ir/types';
 import type { IrInstanceId as InstanceId } from '../types';
 import { instanceId as makeInstanceId } from '../core/ids';
 import type { RuntimeState } from './RuntimeState';
-import type { RenderFrameIR } from '../render/types';
+import { EMPTY_RENDER_FRAME, type RenderFrameIR } from '../render/types';
 import type { RenderBufferArena } from '../render/RenderBufferArena';
 import { createMaterializeScratch } from './MaterializeScratch';
 import { resolveTime } from './timeResolution';
@@ -34,8 +34,6 @@ import {
   createUnstableDomainInstance,
   shouldRebuildDomainInstance,
 } from './DomainIdentity';
-import { assembleRenderFrame, type AssemblerContext } from './LegacyRenderAssembler';
-import { resolveCameraFromGlobals } from './CameraResolver';
 import { payloadStride } from '../core/canonical-types';
 import type { ValueSlot, StateSlotId } from '../compiler/ir/Indices';
 import { SCALAR_INSTANCE_ID } from '../compiler/ir/Indices';
@@ -276,7 +274,6 @@ export function* executeFrameStepped(
 
   // --- PHASE 1: Execute all non-stateWrite steps ---
   const valueExprs = program.valueExprs.nodes;
-  const renderSteps: StepRender[] = [];
 
   for (let stepIdx = 0; stepIdx < steps.length; stepIdx++) {
     const step = steps[stepIdx];
@@ -345,7 +342,8 @@ export function* executeFrameStepped(
       }
 
       case 'render': {
-        renderSteps.push(step);
+        // [LAW:one-way-deps] Canonical runtime ownership of render execution
+        // is GPU-side; stepped executor no longer assembles CPU render frames.
         break;
       }
 
@@ -414,19 +412,8 @@ export function* executeFrameStepped(
     }
   }
 
-  // --- PHASE BOUNDARY: Render assembly ---
-  const resolvedCamera = resolveCameraFromGlobals(program, state);
-  const assemblerContext: AssemblerContext = {
-    program,
-    instances: instances as ReadonlyMap<string, InstanceDecl>,
-    state,
-    resolvedCamera,
-    arena,
-    scalarExprToArenaAddress: state.cache.scalarExprToArenaAddress ?? undefined,
-    slotToArena: addressTable.slotToArena,
-    pureFnContext,
-  };
-  const frame = assembleRenderFrame(renderSteps, assemblerContext);
+  // --- PHASE BOUNDARY: Render assembly removed from CPU path ---
+  const frame = EMPTY_RENDER_FRAME;
 
   yield buildSnapshot(-1, null, 'phase-boundary', totalSteps, program, state, tAbsMs, new Map(), prevValues);
 
