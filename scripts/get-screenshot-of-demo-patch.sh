@@ -165,20 +165,97 @@ fi
 
 # ─── Dependency checks ───────────────────────────────────────────────────────
 
-if [[ -z "$APP_PORT" ]]; then
-  for candidate in 5174 5175 5176; do
-    if curl -s --max-time 3 "http://localhost:${candidate}/" >/dev/null 2>&1; then
-      APP_PORT="$candidate"
-      break
-    fi
-  done
+# [LAW:one-source-of-truth] App identity markers are declared once and reused
+# for every candidate port validation.
+OSCILLA_APP_TITLE_MARKER="Oscilla v2 - Editor"
+OSCILLA_APP_MAIN_MARKER="interceptLoadDemoPatch"
+
+extract_html_title() {
+  local html="$1"
+  local title
+  title="$(printf '%s' "$html" | tr '\n' ' ' | sed -n 's|.*<title>\([^<]*\)</title>.*|\1|p')"
+  if [[ -z "$title" ]]; then
+    echo "<missing>"
+  else
+    echo "$title"
+  fi
+}
+
+# [LAW:single-enforcer] Server identity validation is centralized here so every
+# caller uses one deterministic acceptance rule.
+validate_oscilla_app_port() {
+  local candidate_port="$1"
+  local base_url="http://127.0.0.1:${candidate_port}"
+  local root_html
+  local observed_title
+  local main_module
+
+  if ! root_html="$(curl -fsS --max-time 3 "${base_url}/" 2>/dev/null)"; then
+    echo "unreachable (GET / failed)"
+    return 1
+  fi
+
+  observed_title="$(extract_html_title "$root_html")"
+  if [[ "$root_html" != *"$OSCILLA_APP_TITLE_MARKER"* ]]; then
+    echo "mismatch (title '${observed_title}', expected '${OSCILLA_APP_TITLE_MARKER}')"
+    return 1
+  fi
+
+  if ! main_module="$(curl -fsS --max-time 3 "${base_url}/src/main.ts" 2>/dev/null)"; then
+    echo "mismatch (/src/main.ts unavailable)"
+    return 1
+  fi
+
+  if [[ "$main_module" != *"$OSCILLA_APP_MAIN_MARKER"* ]]; then
+    local main_excerpt
+    main_excerpt="$(printf '%s' "$main_module" | tr '\n' ' ' | cut -c1-120)"
+    echo "mismatch (/src/main.ts missing marker '${OSCILLA_APP_MAIN_MARKER}', head='${main_excerpt}...')"
+    return 1
+  fi
+
+  echo "identity markers matched"
+}
+
+declare -a APP_PORT_CANDIDATES=()
+if [[ -n "$APP_PORT" ]]; then
+  APP_PORT_CANDIDATES=("$APP_PORT")
+else
+  APP_PORT_CANDIDATES=(5784 5785 5786)
 fi
 
-if [[ -z "$APP_PORT" ]] || ! curl -s --max-time 3 "http://localhost:${APP_PORT}/" >/dev/null 2>&1; then
-  echo "${RED}Error:${RESET} Dev server not running on detected/default ports (5174/5175/5176)." >&2
-  echo "Start it with: ${BOLD}npm run dev${RESET}" >&2
+declare -a APP_PORT_DIAGNOSTICS=()
+SELECTED_APP_PORT=""
+
+for candidate in "${APP_PORT_CANDIDATES[@]}"; do
+  if ! [[ "$candidate" =~ ^[0-9]+$ ]]; then
+    APP_PORT_DIAGNOSTICS+=("${candidate}: invalid port (must be numeric)")
+    continue
+  fi
+
+  validation_result=""
+  if validation_result="$(validate_oscilla_app_port "$candidate")"; then
+    APP_PORT_DIAGNOSTICS+=("${candidate}: ok (${validation_result})")
+    SELECTED_APP_PORT="$candidate"
+    break
+  fi
+  APP_PORT_DIAGNOSTICS+=("${candidate}: ${validation_result}")
+done
+
+if [[ -z "$SELECTED_APP_PORT" ]]; then
+  if [[ -n "$APP_PORT" ]]; then
+    echo "${RED}Error:${RESET} APP_PORT=${APP_PORT} does not point to the Oscilla app." >&2
+  else
+    echo "${RED}Error:${RESET} No matching Oscilla dev server found on candidate ports." >&2
+  fi
+  echo "Checked ports:" >&2
+  for diag in "${APP_PORT_DIAGNOSTICS[@]}"; do
+    echo "  - ${diag}" >&2
+  done
+  echo "Start Oscilla with: ${BOLD}npm run dev${RESET} (default: 5784), or set APP_PORT to a validated instance." >&2
   exit 1
 fi
+
+APP_PORT="$SELECTED_APP_PORT"
 
 find_chrome() {
   if [[ -n "${CHROME_BIN:-}" ]]; then echo "$CHROME_BIN"; return; fi

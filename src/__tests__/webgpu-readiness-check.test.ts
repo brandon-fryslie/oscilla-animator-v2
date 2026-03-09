@@ -16,7 +16,7 @@ const SOURCE_ARTIFACTS_DIR = path.resolve('artifacts');
 
 async function writeCanonicalPassingMatrixReport(workspace: string): Promise<void> {
   const reportGeneratedAt = '2026-02-24T17:39:03.960Z';
-  const url = 'http://127.0.0.1:5174/?showPreview=true';
+  const url = 'http://127.0.0.1:5784/?showPreview=true';
   const sampleFrames = 180;
 
   const report = {

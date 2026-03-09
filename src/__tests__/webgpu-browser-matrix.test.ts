@@ -128,7 +128,7 @@ describe('webgpu-browser-matrix runBrowserCheck cleanup', () => {
       browserName: 'chromium',
       launcher,
       launchOptions: {},
-      url: 'http://127.0.0.1:5174/?showPreview=true',
+      url: 'http://127.0.0.1:5784/?showPreview=true',
       blocking: true,
     })).rejects.toThrow('goto failed');
 
