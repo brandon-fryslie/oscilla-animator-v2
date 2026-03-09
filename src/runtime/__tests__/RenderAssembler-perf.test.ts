@@ -14,7 +14,7 @@ import {
   topologyGroupCacheHits,
   topologyGroupCacheMisses,
   resetTopologyCacheCounters,
-} from '../RenderAssembler';
+} from '../LegacyRenderAssembler';
 import {
   SHAPE_BANK_HEADER_WORDS,
   allocShapeBankWords,

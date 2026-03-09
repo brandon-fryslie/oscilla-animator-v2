@@ -9,7 +9,7 @@ import {
   assembleDrawPathInstancesOp,
   assembleRenderFrame,
   type AssemblerContext,
-} from '../RenderAssembler';
+} from '../LegacyRenderAssembler';
 import type { CompiledProgramIR } from '../../compiler/ir/program';
 import type { StepRender, InstanceDecl } from '../../compiler/ir/types';
 import type { ValueExpr } from '../../compiler/ir/value-expr';

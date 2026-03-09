@@ -77,14 +77,6 @@ export {
   type StateMigrationResult,
   type StateMigrationDetail,
 } from './StateMigration';
-export {
-  assembleDrawPathInstancesOp,
-  assembleRenderFrame,
-  projectAndCompact,
-  compactAndCopy,
-  type AssemblerContext,
-} from './RenderAssembler';
-
 // Test-only exports (for integration tests that bypass compile pipeline)
 export { materializeValueExpr, type ValueExprTable } from './ValueExprMaterializer';
 
