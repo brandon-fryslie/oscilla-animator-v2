@@ -72,6 +72,22 @@ describe('webgpu-browser-matrix resolveManagedServerEndpoint', () => {
       'Unsupported WEBGPU_MATRIX_URL protocol',
     );
   });
+
+  it('rejects URLs without explicit port for managed server startup', async () => {
+    const { resolveManagedServerEndpoint } = await loadBrowserMatrixModule();
+
+    expect(() => resolveManagedServerEndpoint('http://localhost/?showPreview=true')).toThrow(
+      'must include an explicit :port',
+    );
+  });
+
+  it('rejects https URLs because managed server startup is http-only', async () => {
+    const { resolveManagedServerEndpoint } = await loadBrowserMatrixModule();
+
+    expect(() => resolveManagedServerEndpoint('https://localhost:6123/?showPreview=true')).toThrow(
+      'Expected http:',
+    );
+  });
 });
 
 describe('webgpu-browser-matrix summarizeGateResults', () => {
