@@ -168,7 +168,6 @@ fi
 # [LAW:one-source-of-truth] App identity markers are declared once and reused
 # for every candidate port validation.
 OSCILLA_APP_TITLE_MARKER="Oscilla v2 - Editor"
-OSCILLA_APP_MAIN_MARKER="interceptLoadDemoPatch"
 
 extract_html_title() {
   local html="$1"
@@ -188,7 +187,6 @@ validate_oscilla_app_port() {
   local base_url="http://127.0.0.1:${candidate_port}"
   local root_html
   local observed_title
-  local main_module
 
   if ! root_html="$(curl -fsS --max-time 3 "${base_url}/" 2>/dev/null)"; then
     echo "unreachable (GET / failed)"
@@ -201,19 +199,7 @@ validate_oscilla_app_port() {
     return 1
   fi
 
-  if ! main_module="$(curl -fsS --max-time 3 "${base_url}/src/main.ts" 2>/dev/null)"; then
-    echo "mismatch (/src/main.ts unavailable)"
-    return 1
-  fi
-
-  if [[ "$main_module" != *"$OSCILLA_APP_MAIN_MARKER"* ]]; then
-    local main_excerpt
-    main_excerpt="$(printf '%s' "$main_module" | tr '\n' ' ' | cut -c1-120)"
-    echo "mismatch (/src/main.ts missing marker '${OSCILLA_APP_MAIN_MARKER}', head='${main_excerpt}...')"
-    return 1
-  fi
-
-  echo "identity markers matched"
+  echo "identity marker matched"
 }
 
 declare -a APP_PORT_CANDIDATES=()
