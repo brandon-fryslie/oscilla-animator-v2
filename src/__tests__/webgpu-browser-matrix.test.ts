@@ -47,9 +47,32 @@ async function loadBrowserMatrixModule(): Promise<{
     url: string;
     blocking: boolean;
   }) => Promise<unknown>;
+  resolveManagedServerEndpoint: (url: string) => {
+    host: string;
+    port: string;
+  };
 }> {
   return import(browserMatrixModuleUrl);
 }
+
+describe('webgpu-browser-matrix resolveManagedServerEndpoint', () => {
+  it('derives explicit host and port from URL overrides', async () => {
+    const { resolveManagedServerEndpoint } = await loadBrowserMatrixModule();
+
+    expect(resolveManagedServerEndpoint('http://localhost:6123/?showPreview=true')).toEqual({
+      host: 'localhost',
+      port: '6123',
+    });
+  });
+
+  it('rejects unsupported URL protocols', async () => {
+    const { resolveManagedServerEndpoint } = await loadBrowserMatrixModule();
+
+    expect(() => resolveManagedServerEndpoint('file:///tmp/index.html')).toThrow(
+      'Unsupported WEBGPU_MATRIX_URL protocol',
+    );
+  });
+});
 
 describe('webgpu-browser-matrix summarizeGateResults', () => {
   it('does not mark blocking gates passed when every blocking lane is skipped', async () => {
