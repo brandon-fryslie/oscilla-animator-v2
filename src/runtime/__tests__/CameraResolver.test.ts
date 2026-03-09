@@ -6,6 +6,11 @@ import { valueSlot } from '../../compiler/ir/Indices';
 import { resolveCameraDecl, resolveCameraFromGlobals, DEFAULT_CAMERA } from '../CameraResolver';
 import type { RuntimeState } from '../RuntimeState';
 import type { ArenaSlotDescriptor } from '../ArenaValueStore';
+import {
+  CANONICAL_WORLD_CENTER_X,
+  CANONICAL_WORLD_CENTER_Y,
+  DEGREES_TO_RADIANS,
+} from '../../core/coordinate-system';
 
 function mockProgram(
   slotToArena: ReadonlyMap<ValueSlot, ArenaSlotDescriptor>,
@@ -75,6 +80,9 @@ describe('CameraResolver', () => {
     const program = mockProgram(new Map(), []);
     const state = mockRuntimeState(new Float32Array(0));
     expect(resolveCameraFromGlobals(program, state)).toEqual(DEFAULT_CAMERA);
+    expect(DEFAULT_CAMERA.centerX).toBe(CANONICAL_WORLD_CENTER_X);
+    expect(DEFAULT_CAMERA.centerY).toBe(CANONICAL_WORLD_CENTER_Y);
+    expect(DEFAULT_CAMERA.fovYRad).toBeCloseTo(45 * DEGREES_TO_RADIANS, 12);
   });
 
   it('throws when a declared camera slot has no arena descriptor', () => {
