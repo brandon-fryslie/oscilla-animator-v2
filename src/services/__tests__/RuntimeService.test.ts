@@ -21,12 +21,6 @@ const mocks = vi.hoisted(() => {
   const setRenderIssueReporter = vi.fn();
   const getRenderIssues = vi.fn(() => []);
   const clearRenderIssues = vi.fn();
-  const renderBufferArenaInit = vi.fn();
-  const renderBufferArenaDispose = vi.fn();
-  const RenderBufferArena = class {
-    init = renderBufferArenaInit;
-    dispose = renderBufferArenaDispose;
-  };
   const savePatchToStorage = vi.fn();
   const loadPatchFromStorage = vi.fn(() => null);
   const consumeTestDemoFilename = vi.fn(() => null);
@@ -66,9 +60,7 @@ const mocks = vi.hoisted(() => {
     setRenderIssueReporter,
     getRenderIssues,
     clearRenderIssues,
-    RenderBufferArena,
-    renderBufferArenaInit,
-    renderBufferArenaDispose,
+    RenderBufferArena: class { init = vi.fn(); dispose = vi.fn(); },
     savePatchToStorage,
     loadPatchFromStorage,
     consumeTestDemoFilename,
