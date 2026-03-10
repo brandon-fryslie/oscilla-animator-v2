@@ -38,6 +38,22 @@ interface RenderInput {
   readonly drawPrepSinkTableWordCount: number;
 }
 
+interface ViewportFrameInput {
+  readonly width: number;
+  readonly height: number;
+  readonly zoom: number;
+  readonly panX: number;
+  readonly panY: number;
+  readonly timeMs: number;
+  readonly inputMouseX?: number;
+  readonly inputMouseY?: number;
+  readonly inputMouseButtons?: number;
+  readonly inputAudioLow?: number;
+  readonly inputAudioMid?: number;
+  readonly inputAudioHigh?: number;
+  readonly inputGaugeActive?: number;
+}
+
 export interface RuntimeEventBreadcrumb {
   readonly severity: 'error' | 'fatal';
   readonly code: string;
@@ -515,7 +531,7 @@ export class WebGPURenderer {
     return renderer;
   }
 
-  render(input: RenderInput): void {
+  setViewportFrame(input: ViewportFrameInput): void {
     if (this.fatalError) {
       throw this.fatalError;
     }
@@ -526,10 +542,6 @@ export class WebGPURenderer {
       throw new Error('Rust renderer worker is not bootstrapped');
     }
     this.syncCanvasSize(input.width, input.height);
-
-    // [LAW:dataflow-not-control-flow] Renderer updates one canonical shared
-    // input buffer each frame. The worker hot path always executes and reads
-    // from this buffer in fixed stage order.
     this.inputWords[RUNTIME_INPUT_INDEX.width] = input.width;
     this.inputWords[RUNTIME_INPUT_INDEX.height] = input.height;
     this.inputWords[RUNTIME_INPUT_INDEX.zoom] = input.zoom;
@@ -543,6 +555,21 @@ export class WebGPURenderer {
     this.inputWords[RUNTIME_INPUT_INDEX.audioMid] = coerceFinite(input.inputAudioMid);
     this.inputWords[RUNTIME_INPUT_INDEX.audioHigh] = coerceFinite(input.inputAudioHigh);
     this.inputWords[RUNTIME_INPUT_INDEX.gaugeActive] = coerceFinite(input.inputGaugeActive);
+  }
+
+  render(input: RenderInput): void {
+    if (this.fatalError) {
+      throw this.fatalError;
+    }
+    if (this.disposed) {
+      throw new Error('Rust renderer has been disposed');
+    }
+    if (!this.bootstrapped) {
+      throw new Error('Rust renderer worker is not bootstrapped');
+    }
+    // [LAW:single-enforcer] Shared runtime input-word publication is enforced by
+    // one boundary helper so viewport-only and full render paths cannot drift.
+    this.setViewportFrame(input);
     const shapeBankWords = this.syncShapeBankPlane(input.shapeBank);
     const sinkTableWords = this.syncSinkTablePlane(
       input.drawPrepSinkTableV1,
