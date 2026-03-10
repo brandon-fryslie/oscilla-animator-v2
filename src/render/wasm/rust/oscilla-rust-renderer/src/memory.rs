@@ -33,10 +33,12 @@ impl Iterator for BufferClearPlan {
         }
         // [LAW:dataflow-not-control-flow] Chunk segmentation is derived from
         // canonical buffer size; each clear executes the same write pipeline.
-        let remaining = (self.total_bytes - self.next_offset) as usize;
-        let chunk_len = remaining.min(CLEAR_BUFFER_CHUNK_BYTES);
+        let remaining = self.total_bytes - self.next_offset;
+        let chunk_len_u64 = remaining.min(CLEAR_BUFFER_CHUNK_BYTES as u64);
+        let chunk_len = chunk_len_u64 as usize;
+        debug_assert!(chunk_len > 0, "BufferClearPlan produced a zero-length chunk");
         let chunk_offset = self.next_offset;
-        self.next_offset = self.next_offset.saturating_add(chunk_len as u64);
+        self.next_offset = self.next_offset.saturating_add(chunk_len_u64);
         Some((chunk_offset, chunk_len))
     }
 }
