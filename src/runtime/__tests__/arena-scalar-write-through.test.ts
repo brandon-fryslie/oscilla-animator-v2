@@ -9,6 +9,8 @@ import { executeFrame } from '../ScheduleExecutor';
 import { executeFrameStepped } from '../executeFrameStepped';
 import type { RuntimeState } from '../RuntimeState';
 import { createRuntimeState } from '../RuntimeState';
+import { packDrawPrepSinkTableV1 } from '../DrawPrepSinkTablePacker';
+import { EMPTY_RENDER_FRAME, type RenderFrameIR } from '../../render/types';
 import { getTestArena } from './test-arena-helper';
 
 import { registerAllBlocks } from '../../blocks/all';
@@ -101,6 +103,31 @@ function assertScalarWritesInArena(program: CompiledProgramIR, state: RuntimeSta
   expect(scalarArenaSlots).toBeGreaterThan(0);
 }
 
+function runSteppedFrameToCompletion(
+  program: CompiledProgramIR,
+  state: RuntimeState,
+  tAbsMs: number,
+): RenderFrameIR {
+  const gen = executeFrameStepped(program, state, getTestArena(), tAbsMs);
+  let step = gen.next();
+  while (!step.done) {
+    step = gen.next();
+  }
+  return step.value;
+}
+
+function assertGpuPlanesRemainPackable(program: CompiledProgramIR, state: RuntimeState): void {
+  const packed = packDrawPrepSinkTableV1(program, state);
+  expect(packed).not.toBeNull();
+  if (!packed) {
+    return;
+  }
+  // [LAW:one-source-of-truth] Draw-prep readiness is asserted via the canonical
+  // sink-table packer contract, not ad-hoc render-frame op inspection.
+  expect(packed.wordCount).toBeGreaterThan(0);
+  expect(state.shapeBank.volatilePtr).toBeGreaterThan(0);
+}
+
 describe('scalar writes target arena storage', () => {
   it('executeFrame writes scalar values and system palette into arena', () => {
     const program = compileScalarValuePatch();
@@ -114,11 +141,7 @@ describe('scalar writes target arena storage', () => {
     const program = compileScalarValuePatch();
     const state = createStateForProgram(program);
 
-    const gen = executeFrameStepped(program, state, getTestArena(), 100);
-    let step = gen.next();
-    while (!step.done) {
-      step = gen.next();
-    }
+    runSteppedFrameToCompletion(program, state, 100);
 
     assertScalarWritesInArena(program, state);
   });
@@ -130,11 +153,7 @@ describe('scalar writes target arena storage', () => {
 
     executeFrame(program, frameState, getTestArena(), 100);
 
-    const gen = executeFrameStepped(program, steppedState, getTestArena(), 100);
-    let step = gen.next();
-    while (!step.done) {
-      step = gen.next();
-    }
+    runSteppedFrameToCompletion(program, steppedState, 100);
 
     const schedule = program.schedule as ScheduleIR;
     const scalarWriteSlots = new Set<number>();
@@ -151,5 +170,25 @@ describe('scalar writes target arena storage', () => {
         expect(a[i]).toBeCloseTo(b[i], 6);
       }
     }
+  });
+
+  it('executeFrame returns compute-only sentinel frame while keeping GPU planes packable', () => {
+    const program = compileScalarValuePatch();
+    const state = createStateForProgram(program);
+
+    const frame = executeFrame(program, state, getTestArena(), 100);
+    expect(frame).toBe(EMPTY_RENDER_FRAME);
+    assertScalarWritesInArena(program, state);
+    assertGpuPlanesRemainPackable(program, state);
+  });
+
+  it('executeFrameStepped returns compute-only sentinel frame while keeping GPU planes packable', () => {
+    const program = compileScalarValuePatch();
+    const state = createStateForProgram(program);
+
+    const frame = runSteppedFrameToCompletion(program, state, 100);
+    expect(frame).toBe(EMPTY_RENDER_FRAME);
+    assertScalarWritesInArena(program, state);
+    assertGpuPlanesRemainPackable(program, state);
   });
 });

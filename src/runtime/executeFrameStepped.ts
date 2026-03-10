@@ -222,7 +222,8 @@ function buildSnapshot(
  * same phase boundaries) but pauses between steps for inspection.
  *
  * @yields StepSnapshot after each step/phase marker
- * @returns RenderFrameIR when the frame completes
+ * @returns Canonical compute-only sentinel frame (`EMPTY_RENDER_FRAME`).
+ * Debug consumers should inspect runtime banks/snapshots for observable data.
  */
 export function* executeFrameStepped(
   program: CompiledProgramIR,
