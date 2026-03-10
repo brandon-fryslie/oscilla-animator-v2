@@ -20,7 +20,7 @@ Oscilla Animator v2 is a clean rewrite of the Oscilla animation system. It's a b
 ## Development Commands
 
 ```bash
-npm run dev          # Start dev server (port 5174)
+npm run dev          # Start dev server (port 5784)
 npm run build        # Type check with tsc, then Vite build
 npm run typecheck    # Type check only
 npm run test         # Run Vitest (all tests in single run)

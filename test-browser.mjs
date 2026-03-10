@@ -18,7 +18,7 @@ page.on('pageerror', err => {
 });
 
 try {
-  await page.goto('http://localhost:5174/', { timeout: 10000 });
+  await page.goto('http://localhost:5784/', { timeout: 10000 });
   await page.waitForTimeout(3000);
   await page.screenshot({ path: 'test-screenshot.png' });
   

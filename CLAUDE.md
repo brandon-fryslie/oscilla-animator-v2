@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### JavaScript/TypeScript
 ```bash
-npm run dev          # Dev server (port 5174)
+npm run dev          # Dev server (port 5784)
 npm run build        # tsc + Vite build
 npm run typecheck    # Type check only
 npm run test         # Run all Vitest tests
