@@ -1294,20 +1294,63 @@ export class WebGPURenderer {
     this.postWorkerMessage(message);
   }
 
+  private shouldIgnoreRuntimeMessage(
+    payload: RustRendererWorkerOutboundMessage,
+  ): boolean {
+    return this.fatalRecord !== null && (payload.type === 'SCHEDULER_HEARTBEAT' || payload.type === 'RUNTIME_EVENT');
+  }
+
+  private handleEngineErrorMessage(
+    payload: Extract<RustRendererWorkerOutboundMessage, { type: 'ENGINE_ERROR' }>,
+  ): void {
+    this.reportEngineError(payload.source, payload.message, payload.location, payload.fatal);
+    if (payload.fatal) {
+      this.markRendererFatal(this.buildEngineFatalTransition(payload));
+    }
+  }
+
+  private handleRuntimeEventMessage(
+    payload: Extract<RustRendererWorkerOutboundMessage, { type: 'RUNTIME_EVENT' }>,
+  ): void {
+    this.latestRuntimeEvent = {
+      severity: payload.severity,
+      code: payload.code,
+      stage: payload.stage,
+      message: payload.message,
+      emittedAtMs: payload.emittedAtMs,
+    };
+    if (payload.severity === 'fatal') {
+      this.markRendererFatal(this.buildRuntimeEventFatalTransition(payload));
+    }
+  }
+
+  private handleSchedulerHeartbeatMessage(
+    payload: Extract<RustRendererWorkerOutboundMessage, { type: 'SCHEDULER_HEARTBEAT' }>,
+  ): void {
+    // [LAW:one-source-of-truth] Renderer mirrors scheduler state from
+    // heartbeat packets instead of deriving lifecycle state client-side.
+    this.lifecycleState = payload.state;
+    this.validateHeartbeatHealth(payload);
+    this.latestTelemetry = {
+      meanMs: payload.meanTickMs,
+      stdDevMs: payload.stdDevTickMs,
+      sampleCount: payload.sampleCount,
+      frameCount: payload.frameCount,
+      stageTimings: payload.telemetry.stageTimings,
+      dispatchCounters: payload.telemetry.dispatchCounters,
+      resourceStats: payload.telemetry.resourceStats,
+      lastEvent: this.latestRuntimeEvent,
+    };
+  }
+
   private readonly handleRuntimeMessage = (event: MessageEvent<RustRendererWorkerOutboundMessage>): void => {
     const payload = event.data;
     if (!payload) return;
-    if (
-      this.fatalRecord !== null
-      && (payload.type === 'SCHEDULER_HEARTBEAT' || payload.type === 'RUNTIME_EVENT')
-    ) {
+    if (this.shouldIgnoreRuntimeMessage(payload)) {
       return;
     }
     if (payload.type === 'ENGINE_ERROR') {
-      this.reportEngineError(payload.source, payload.message, payload.location, payload.fatal);
-      if (payload.fatal) {
-        this.markRendererFatal(this.buildEngineFatalTransition(payload));
-      }
+      this.handleEngineErrorMessage(payload);
       return;
     }
     if (payload.type === 'FATAL_ERROR') {
@@ -1319,33 +1362,11 @@ export class WebGPURenderer {
       return;
     }
     if (payload.type === 'RUNTIME_EVENT') {
-      this.latestRuntimeEvent = {
-        severity: payload.severity,
-        code: payload.code,
-        stage: payload.stage,
-        message: payload.message,
-        emittedAtMs: payload.emittedAtMs,
-      };
-      if (payload.severity === 'fatal') {
-        this.markRendererFatal(this.buildRuntimeEventFatalTransition(payload));
-      }
+      this.handleRuntimeEventMessage(payload);
       return;
     }
     if (payload.type === 'SCHEDULER_HEARTBEAT') {
-      // [LAW:one-source-of-truth] Renderer mirrors scheduler state from
-      // heartbeat packets instead of deriving lifecycle state client-side.
-      this.lifecycleState = payload.state;
-      this.validateHeartbeatHealth(payload);
-      this.latestTelemetry = {
-        meanMs: payload.meanTickMs,
-        stdDevMs: payload.stdDevTickMs,
-        sampleCount: payload.sampleCount,
-        frameCount: payload.frameCount,
-        stageTimings: payload.telemetry.stageTimings,
-        dispatchCounters: payload.telemetry.dispatchCounters,
-        resourceStats: payload.telemetry.resourceStats,
-        lastEvent: this.latestRuntimeEvent,
-      };
+      this.handleSchedulerHeartbeatMessage(payload);
     }
   };
 }
