@@ -8,8 +8,8 @@
  *   u       = UV placement basis x-component (0..1)
  *   angle   = (u * turns + phase * spin) * 2PI
  *   r       = u * expansion
- *   x       = cos(angle) * r + 0.5
- *   y       = sin(angle) * r + 0.5
+ *   x       = cos(angle) * r
+ *   y       = sin(angle) * r
  */
 
 import { registerBlock, ALL_CONCRETE_PAYLOADS } from '../registry';
@@ -95,7 +95,6 @@ export function register(): void {
   
       // Constants
       const const0 = ctx.b.constant(floatConst(0), canonicalType(FLOAT));
-      const const0_5 = ctx.b.constant(floatConst(0.5), canonicalType(FLOAT));
       const const1 = ctx.b.constant(floatConst(1), canonicalType(FLOAT));
       const twoPi = ctx.b.constant(floatConst(Math.PI * 2), canonicalType(FLOAT));
   
@@ -119,13 +118,13 @@ export function register(): void {
       // radius = u * expansion (linear growth from center)
       const radius = ctx.b.zipAuto([u_clamped, expansionInput.id], mul, floatFieldType);
   
-      // x = cos(angle) * radius + 0.5, y = sin(angle) * radius + 0.5
+      // x = cos(angle) * radius, y = sin(angle) * radius
       const x_raw = ctx.b.mapAuto(angle, cos, floatFieldType);
       const y_raw = ctx.b.mapAuto(angle, sin, floatFieldType);
       const x_scaled = ctx.b.zipAuto([x_raw, radius], mul, floatFieldType);
       const y_scaled = ctx.b.zipAuto([y_raw, radius], mul, floatFieldType);
-      const x = ctx.b.zipAuto([x_scaled, const0_5], add, floatFieldType);
-      const y = ctx.b.zipAuto([y_scaled, const0_5], add, floatFieldType);
+      const x = x_scaled;
+      const y = y_scaled;
   
       const controlPointsField = ctx.b.constructAuto([x, y], controlPointsType);
   

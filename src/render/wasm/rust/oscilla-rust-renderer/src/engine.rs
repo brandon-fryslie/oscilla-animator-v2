@@ -29,6 +29,7 @@ const INPUT_WORD_PAN_Y: usize = 4;
 const INPUT_WORD_TIME_MS: usize = 5;
 const INPUT_WORD_SINK_TABLE_WORDS: usize = 13;
 const INPUT_WORD_SHAPE_BANK_WORDS: usize = 14;
+const INPUT_WORD_ARENA_WORDS: usize = 15;
 const INPUT_SIGNAL_WORDS: u32 = 4;
 const INPUT_FLOAT_WORDS: u32 = 32;
 
@@ -393,6 +394,7 @@ pub struct Engine {
     render: RenderDispatcher,
     shared_input_signals: Option<Int32Array>,
     shared_input: Option<Float32Array>,
+    shared_arena: Option<Float32Array>,
     shared_shape_bank: Option<Uint32Array>,
     shared_sink_table: Option<Uint32Array>,
     scheduler: WorkerScheduler,
@@ -708,6 +710,7 @@ impl Engine {
             render,
             shared_input_signals: None,
             shared_input: None,
+            shared_arena: None,
             shared_shape_bank: None,
             shared_sink_table: None,
             scheduler,
@@ -739,6 +742,10 @@ impl Engine {
 
     pub fn attach_shared_shape_bank(&mut self, shared_shape_bank: SharedArrayBuffer) {
         self.shared_shape_bank = Some(Uint32Array::new(&shared_shape_bank));
+    }
+
+    pub fn attach_shared_arena(&mut self, shared_arena: SharedArrayBuffer) {
+        self.shared_arena = Some(Float32Array::new(&shared_arena));
     }
 
     pub fn attach_shared_sink_table(&mut self, shared_sink_table: SharedArrayBuffer) {
@@ -1194,6 +1201,50 @@ impl Engine {
         }
     }
 
+    fn sync_compiler_arena_plane(&mut self, arena_words: u32, sink_table_words: u32) {
+        let Some(shared_arena) = self.shared_arena.as_ref() else {
+            // [LAW:no-silent-fallbacks] Draw-prep descriptors dereference
+            // compiler-arena slots; missing shared arena must fail hard.
+            if sink_table_words > 0 {
+                panic!(
+                    "compiler arena plane missing while sink table has draw records (sink_table_words={})",
+                    sink_table_words
+                );
+            }
+            return;
+        };
+        if arena_words == 0 {
+            // [LAW:no-silent-fallbacks] Draw records with an empty arena payload
+            // are invalid because descriptor offsets will resolve to zero/garbage.
+            if sink_table_words > 0 {
+                panic!(
+                    "compiler arena payload is empty while sink table has draw records (sink_table_words={}); \
+                     root cause: runtime did not publish arena-backed slot values",
+                    sink_table_words
+                );
+            }
+            return;
+        }
+        let available_words = shared_arena.length();
+        if arena_words > available_words {
+            panic!(
+                "compiler arena plane overflow (requested={}, available={})",
+                arena_words, available_words
+            );
+        }
+        let capacity_words = self.arena.compiler_arena_capacity_words() as u32;
+        if arena_words > capacity_words {
+            panic!(
+                "compiler arena plane exceeds GPU capacity (requested={}, capacity={}); \
+                 root cause: renderer bootstrap maxParticles under-allocates compiler arena for current program",
+                arena_words, capacity_words
+            );
+        }
+        let plane_values = shared_arena.subarray(0, arena_words).to_vec();
+        self.arena
+            .write_compiler_arena_values(&self.queue, plane_values.as_slice());
+    }
+
     fn input_marshal_phase(&mut self, timestamp_ms: f64) {
         let mut uniforms = self.arena.uniforms;
         if let Some(shared_input) = self.shared_input.as_ref() {
@@ -1219,10 +1270,12 @@ impl Engine {
             let pan_y_px = shared_input.get_index(INPUT_WORD_PAN_Y as u32) as f32;
             let safe_pan_x_px = if pan_x_px.is_finite() { pan_x_px } else { 0.0 };
             let safe_pan_y_px = if pan_y_px.is_finite() { pan_y_px } else { 0.0 };
-            let sx = 2.0 * zoom;
-            let sy = -2.0 * zoom;
-            let tx = -zoom + (2.0 * zoom * (safe_pan_x_px / viewport_width));
-            let ty = zoom - (2.0 * zoom * (safe_pan_y_px / viewport_height));
+            // [LAW:one-source-of-truth] World-space origin maps to clip-space
+            // origin at default camera; no implicit [0,1] -> [-1,1] remap.
+            let sx = zoom;
+            let sy = -zoom;
+            let tx = 2.0 * zoom * (safe_pan_x_px / viewport_width);
+            let ty = -2.0 * zoom * (safe_pan_y_px / viewport_height);
             uniforms.view_proj = [[0.0; 4]; 4];
             uniforms.view_proj[0][0] = sx;
             uniforms.view_proj[1][1] = sy;
@@ -1251,6 +1304,11 @@ impl Engine {
                         )
                         .saturating_add(SINK_TABLE_HEADER_WORDS as u32)
                 });
+            let arena_word_limit = self
+                .shared_arena
+                .as_ref()
+                .map(|plane| plane.length())
+                .unwrap_or_else(|| self.max_particles.saturating_mul(4));
             let shape_bank_words = clamp_non_negative_u32(
                 shared_input.get_index(INPUT_WORD_SHAPE_BANK_WORDS as u32),
                 shape_bank_word_limit,
@@ -1259,19 +1317,24 @@ impl Engine {
                 shared_input.get_index(INPUT_WORD_SINK_TABLE_WORDS as u32),
                 sink_table_word_limit,
             );
+            let arena_words = clamp_non_negative_u32(
+                shared_input.get_index(INPUT_WORD_ARENA_WORDS as u32),
+                arena_word_limit,
+            );
             self.last_shape_bank_words = shape_bank_words;
             self.last_sink_table_words = sink_table_words;
             self.sync_shape_bank_plane(shape_bank_words);
             self.draw_regions = self.sync_sink_table_plane_and_parse_regions(sink_table_words);
+            self.sync_compiler_arena_plane(arena_words, sink_table_words);
         } else {
             uniforms.time_seconds = (timestamp_ms.max(0.0) * 0.001) as f32;
             uniforms.delta_time_seconds = (1.0 / 60.0) as f32;
             uniforms.view_proj = [[0.0; 4]; 4];
-            uniforms.view_proj[0][0] = 2.0;
-            uniforms.view_proj[1][1] = -2.0;
+            uniforms.view_proj[0][0] = 1.0;
+            uniforms.view_proj[1][1] = -1.0;
             uniforms.view_proj[2][2] = 1.0;
-            uniforms.view_proj[3][0] = -1.0;
-            uniforms.view_proj[3][1] = 1.0;
+            uniforms.view_proj[3][0] = 0.0;
+            uniforms.view_proj[3][1] = 0.0;
             uniforms.view_proj[3][3] = 1.0;
             self.last_shape_bank_words = 0;
             self.last_sink_table_words = 0;

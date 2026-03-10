@@ -80,12 +80,17 @@ export class ViewportStore {
     const oldZoom = this.zoom;
     const newZoom = Math.max(0.1, Math.min(10, oldZoom * factor));
 
-    // If center is provided, adjust pan to zoom towards that point
+    // [LAW:one-source-of-truth] Viewport world-space is zero-centered; with
+    // zoom=1 the visible world span is [-1,1] per axis, so zoom anchoring must
+    // preserve the world point under the chosen screen pixel.
     if (centerX !== undefined && centerY !== undefined) {
-      const zoomChange = newZoom / oldZoom;
+      const halfWidth = this.canvasWidth * 0.5;
+      const halfHeight = this.canvasHeight * 0.5;
+      const invOldZoom = 1 / oldZoom;
+      const invNewZoom = 1 / newZoom;
       this.pan = {
-        x: centerX - (centerX - this.pan.x) * zoomChange,
-        y: centerY - (centerY - this.pan.y) * zoomChange,
+        x: this.pan.x + (centerX - halfWidth) * (invNewZoom - invOldZoom),
+        y: this.pan.y + (centerY - halfHeight) * (invNewZoom - invOldZoom),
       };
     }
 
@@ -117,7 +122,7 @@ export class ViewportStore {
 
   /**
    * Zooms and pans to fit all content in view with padding.
-   * Uses stored canvas dimensions and content bounds (in normalized [0,1] space).
+   * Uses stored canvas dimensions and content bounds in zero-centered world space.
    */
   zoomToFit(padding: number = 0.9): void {
     if (!this.contentBounds) {
@@ -127,7 +132,7 @@ export class ViewportStore {
     }
 
     const bounds = this.contentBounds;
-    // Bounds are in normalized [0,1] space
+    // Bounds are in world space (zero-centered, clip-like range at zoom=1)
     const contentWidth = bounds.maxX - bounds.minX;
     const contentHeight = bounds.maxY - bounds.minY;
 
@@ -137,27 +142,21 @@ export class ViewportStore {
       return;
     }
 
-    // Calculate how much to zoom to fill the viewport
-    // We want content to fill 'padding' fraction of the viewport (default 90%)
-    const zoomX = (this.canvasWidth * padding) / (contentWidth * this.canvasWidth);
-    const zoomY = (this.canvasHeight * padding) / (contentHeight * this.canvasHeight);
+    // [LAW:one-source-of-truth] At zoom=1 visible world span is 2 units per axis,
+    // so fit-zoom is derived from that canonical span.
+    const zoomX = (2 * padding) / contentWidth;
+    const zoomY = (2 * padding) / contentHeight;
     const newZoom = Math.min(zoomX, zoomY);
 
     // Clamp zoom to valid range
     const clampedZoom = Math.max(0.1, Math.min(10, newZoom));
 
-    // Calculate center of content in normalized space
-    const contentCenterNormX = (bounds.minX + bounds.maxX) / 2;
-    const contentCenterNormY = (bounds.minY + bounds.maxY) / 2;
-
-    // Convert to world pixels
-    const contentCenterPxX = contentCenterNormX * this.canvasWidth;
-    const contentCenterPxY = contentCenterNormY * this.canvasHeight;
-
-    // Calculate pan to center the content
-    // Pan moves the center of the canvas to align with content center
-    const newPanX = this.canvasWidth / 2 - contentCenterPxX;
-    const newPanY = this.canvasHeight / 2 - contentCenterPxY;
+    // Pan is stored in pre-zoom pixel units; center world coord c maps to
+    // center screen when pan = -(c * viewportPx/2).
+    const contentCenterWorldX = (bounds.minX + bounds.maxX) / 2;
+    const contentCenterWorldY = (bounds.minY + bounds.maxY) / 2;
+    const newPanX = -contentCenterWorldX * this.canvasWidth * 0.5;
+    const newPanY = -contentCenterWorldY * this.canvasHeight * 0.5;
 
     // Apply zoom and pan
     this.zoom = clampedZoom;

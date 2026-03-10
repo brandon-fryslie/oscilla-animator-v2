@@ -295,6 +295,8 @@ export class RuntimeService {
     const panY = viewport?.pan?.y ?? 0;
 
     renderer.render({
+      arenaWords: state.arena,
+      arenaWordCount: state.arena.length,
       shapeBank: {
         data: planes.shapeBankWords,
         volatilePtr: planes.shapeBankWordCount,

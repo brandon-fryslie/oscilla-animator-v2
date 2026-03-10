@@ -153,7 +153,9 @@ export function register(): void {
       // [LAW:dataflow-not-control-flow] Fluid runtime ownership is established
       // by emitting canonical field slots every compile; shader variability is
       // expressed through data, not optional lowering branches.
-      const defaultControl = ctx.b.constant(vec2Const(0.5, 0.5), canonicalType(VEC2));
+      // [LAW:one-source-of-truth] Fluid control points default to world origin
+      // so fluid and shape layouts share the same zero-centered world contract.
+      const defaultControl = ctx.b.constant(vec2Const(0, 0), canonicalType(VEC2));
       const defaultColor = ctx.b.constant(colorConst(0.1, 0.2, 0.95, 1.0), canonicalType(COLOR, unitHsl()));
       const controlField = ctx.b.broadcast(defaultControl, controlPointsType);
       const colorField = ctx.b.broadcast(defaultColor, colorType);

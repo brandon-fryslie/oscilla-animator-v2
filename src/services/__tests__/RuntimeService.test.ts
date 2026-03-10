@@ -9,6 +9,7 @@ function createRendererFacadeMock(rebuildGpuPipelines: ReturnType<typeof vi.fn>)
     resizeCanvas: vi.fn(),
     getRuntimeSharedPlanes: vi.fn(() => ({
       sharedInput: new SharedArrayBuffer(256),
+      sharedArena: new SharedArrayBuffer(256),
       sharedShapeBank: new SharedArrayBuffer(256),
       sharedSinkTable: new SharedArrayBuffer(256),
     })),
@@ -452,6 +453,7 @@ describe('RuntimeService startup compile path: hotpath install planes', () => {
     mocks.compileAndSwap.mockImplementationOnce(async (deps) => {
       deps.state.currentProgram = installedProgram;
       deps.state.currentState = {
+        arena: new Float32Array(32),
         shapeBank: {
           staticBoundary: 0,
           topologyIdByHandle: new Uint32Array(64),

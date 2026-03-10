@@ -15,8 +15,8 @@ export const DEGREES_TO_RADIANS = Math.PI / 180;
 /**
  * Canonical world-space center used by default camera targeting.
  */
-export const CANONICAL_WORLD_CENTER_X = 0.5;
-export const CANONICAL_WORLD_CENTER_Y = 0.5;
+export const CANONICAL_WORLD_CENTER_X = 0.0;
+export const CANONICAL_WORLD_CENTER_Y = 0.0;
 
 /**
  * Canonical world-space camera target z-plane for 2.5D rendering.

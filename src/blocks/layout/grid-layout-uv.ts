@@ -96,6 +96,7 @@ export function register(): void {
       // Constants (one-cardinality — zipAuto/constructAuto handle one→many broadcasting)
       const const0 = ctx.b.constant(floatConst(0), canonicalType(FLOAT));
       const const1 = ctx.b.constant(floatConst(1), canonicalType(FLOAT));
+      const const2 = ctx.b.constant(floatConst(2), canonicalType(FLOAT));
       const const0_5 = ctx.b.constant(floatConst(0.5), canonicalType(FLOAT));
   
       // Opcodes
@@ -131,11 +132,18 @@ export function register(): void {
       const x_ratio = ctx.b.zipAuto([col_safe, cols_m1], div, floatFieldType);
       const y_ratio = ctx.b.zipAuto([row_safe, rows_m1], div, floatFieldType);
   
-      // x = select(cols_m1 > 0, x_ratio, 0.5)
-      const x = ctx.b.zipAuto([cols_m1, x_ratio, const0_5], select, floatFieldType);
-  
-      // y = select(rows_m1 > 0, y_ratio, 0.5)
-      const y = ctx.b.zipAuto([rows_m1, y_ratio, const0_5], select, floatFieldType);
+      // x_unit = select(cols_m1 > 0, x_ratio, 0.5)
+      const x_unit = ctx.b.zipAuto([cols_m1, x_ratio, const0_5], select, floatFieldType);
+
+      // y_unit = select(rows_m1 > 0, y_ratio, 0.5)
+      const y_unit = ctx.b.zipAuto([rows_m1, y_ratio, const0_5], select, floatFieldType);
+
+      // [LAW:one-source-of-truth] Layout world-space is zero-centered;
+      // map basis-space unit ratios [0,1] to world-space [-1,1].
+      const x_scaled = ctx.b.zipAuto([x_unit, const2], mul, floatFieldType);
+      const y_scaled = ctx.b.zipAuto([y_unit, const2], mul, floatFieldType);
+      const x = ctx.b.zipAuto([x_scaled, const1], sub, floatFieldType);
+      const y = ctx.b.zipAuto([y_scaled, const1], sub, floatFieldType);
   
       const controlPointsField = ctx.b.constructAuto([x, y], controlPointsType);
   

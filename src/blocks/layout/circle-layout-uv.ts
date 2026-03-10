@@ -94,7 +94,6 @@
           // Constants (one-cardinality — zipAuto/constructAuto handle one→many broadcasting)
           const const0 = ctx.b.constant(floatConst(0), canonicalType(FLOAT));
           const const1 = ctx.b.constant(floatConst(1), canonicalType(FLOAT));
-          const const0_5 = ctx.b.constant(floatConst(0.5), canonicalType(FLOAT));
           const twoPi = ctx.b.constant(floatConst(Math.PI * 2), canonicalType(FLOAT));
     
           // Opcodes
@@ -121,9 +120,10 @@
           const x_scaled = ctx.b.zipAuto([x_raw, radiusInput.id], mul, floatFieldType);
           const y_scaled = ctx.b.zipAuto([y_raw, radiusInput.id], mul, floatFieldType);
     
-          // x = add(x_scaled, 0.5), y = add(y_scaled, 0.5)
-          const x = ctx.b.zipAuto([x_scaled, const0_5], add, floatFieldType);
-          const y = ctx.b.zipAuto([y_scaled, const0_5], add, floatFieldType);
+          // [LAW:one-source-of-truth] Layout world-space is zero-centered;
+          // CircleLayout emits coordinates around world origin.
+          const x = x_scaled;
+          const y = y_scaled;
     
           const controlPointsField = ctx.b.constructAuto([x, y], controlPointsType);
     

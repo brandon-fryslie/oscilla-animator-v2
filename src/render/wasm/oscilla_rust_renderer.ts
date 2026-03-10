@@ -12,6 +12,7 @@ interface RendererWasmModule {
     debugReadbackHz: number,
   ) => Promise<void> | void;
   readonly attach_shared_input?: (sharedInput: SharedArrayBuffer) => void;
+  readonly attach_shared_arena?: (sharedArena: SharedArrayBuffer) => void;
   readonly attach_shared_shape_bank?: (sharedShapeBank: SharedArrayBuffer) => void;
   readonly attach_shared_sink_table?: (sharedSinkTable: SharedArrayBuffer) => void;
   readonly resize_surface?: (width: number, height: number) => void;
@@ -28,6 +29,7 @@ let initialized = false;
 let initPromise: Promise<void> | null = null;
 let initEngineImpl: RendererWasmModule['init_engine'] | null = null;
 let attachSharedInputImpl: RendererWasmModule['attach_shared_input'] | null = null;
+let attachSharedArenaImpl: RendererWasmModule['attach_shared_arena'] | null = null;
 let attachSharedShapeBankImpl: RendererWasmModule['attach_shared_shape_bank'] | null = null;
 let attachSharedSinkTableImpl: RendererWasmModule['attach_shared_sink_table'] | null = null;
 let resizeSurfaceImpl: RendererWasmModule['resize_surface'] | null = null;
@@ -60,6 +62,9 @@ export async function initRustRendererWasm(): Promise<void> {
       if (typeof wasmModule.attach_shared_input !== 'function') {
         throw new Error('Rust renderer wasm module missing attach_shared_input export');
       }
+      if (typeof wasmModule.attach_shared_arena !== 'function') {
+        throw new Error('Rust renderer wasm module missing attach_shared_arena export');
+      }
       if (typeof wasmModule.attach_shared_shape_bank !== 'function') {
         throw new Error('Rust renderer wasm module missing attach_shared_shape_bank export');
       }
@@ -86,6 +91,7 @@ export async function initRustRendererWasm(): Promise<void> {
       }
       initEngineImpl = wasmModule.init_engine.bind(wasmModule);
       attachSharedInputImpl = wasmModule.attach_shared_input.bind(wasmModule);
+      attachSharedArenaImpl = wasmModule.attach_shared_arena.bind(wasmModule);
       attachSharedShapeBankImpl = wasmModule.attach_shared_shape_bank.bind(wasmModule);
       attachSharedSinkTableImpl = wasmModule.attach_shared_sink_table.bind(wasmModule);
       resizeSurfaceImpl = wasmModule.resize_surface.bind(wasmModule);
@@ -126,6 +132,13 @@ export function attachRustRendererSharedInput(sharedInput: SharedArrayBuffer): v
     throw new Error('Rust renderer wasm is not initialized');
   }
   attachSharedInputImpl(sharedInput);
+}
+
+export function attachRustRendererSharedArena(sharedArena: SharedArrayBuffer): void {
+  if (!initialized || !attachSharedArenaImpl) {
+    throw new Error('Rust renderer wasm is not initialized');
+  }
+  attachSharedArenaImpl(sharedArena);
 }
 
 export function attachRustRendererSharedShapeBank(sharedShapeBank: SharedArrayBuffer): void {

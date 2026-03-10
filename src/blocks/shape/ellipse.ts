@@ -40,18 +40,20 @@ export function register(): void {
     capability: 'pure',
     loweringPurity: 'pure',
     inputs: {
+      // [LAW:one-source-of-truth] Primitive local-space defaults are sized for
+      // canonical world rendering without hidden post-scale compensation.
       rx: {
         label: 'Radius X',
         type: canonicalType(FLOAT),
-        defaultValue: 0.02,
-        defaultSource: defaultSourceConst(0.02),
+        defaultValue: 0.08,
+        defaultSource: defaultSourceConst(0.08),
         uiHint: { kind: 'slider', min: 0.001, max: 0.5, step: 0.001 },
       },
       ry: {
         label: 'Radius Y',
         type: canonicalType(FLOAT),
-        defaultValue: 0.02,
-        defaultSource: defaultSourceConst(0.02),
+        defaultValue: 0.08,
+        defaultSource: defaultSourceConst(0.08),
         uiHint: { kind: 'slider', min: 0.001, max: 0.5, step: 0.001 },
       },
       rotation: {

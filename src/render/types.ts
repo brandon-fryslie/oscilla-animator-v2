@@ -34,7 +34,7 @@ export interface DrawPrepRenderContract {
  * Stroke properties are optional; absence means no stroke.
  *
  * VIEWPORT SCALING:
- * - Stroke width is in normalized world units (0-1 range relative to viewport)
+ * - Stroke width is in world units (zero-centered world-space)
  * - Final pixel width: strokeWidthPx = strokeWidth × D, where D = min(width, height)
  * - Dash pattern lengths also scale: dashPx[i] = dashPattern[i] × D
  * - This ensures strokes scale uniformly with viewport size
@@ -99,7 +99,7 @@ export interface PathGeometry {
  * Instance Transforms - World-space placement and scaling
  *
  * INVARIANT: Transforms are in WORLD SPACE
- * - position: normalized [0,1] coordinates (multiply by viewport dimensions)
+ * - position: zero-centered world coordinates (origin at clip center)
  *   - WHEN PROJECTED: screen-space vec2 positions (stride-2, normalized [0,1])
  * - size: isotropic scalar scale in world units
  *   - WHEN PROJECTED: per-instance Float32Array of screenRadius
@@ -113,7 +113,7 @@ export interface InstanceTransforms {
   /** Number of instances */
   readonly count: number;
 
-  /** Positions in normalized [0,1] space (x,y interleaved)
+  /** Positions in zero-centered world space (x,y interleaved)
    * WHEN PROJECTED: screen-space positions (stride-2, normalized [0,1]) */
   readonly position: Float32Array;
 

@@ -64,7 +64,7 @@ struct SceneUniforms {
 };
 
 struct InstanceData {
-  // transform0 = [posXNorm, posYNorm, sizeNorm, rotationRad]
+  // transform0 = [posXWorld, posYWorld, sizeWorld, rotationRad]
   transform0: vec4<f32>,
   // transform1 = [scale2X, scale2Y, topologyWordOffset, _]
   transform1: vec4<f32>,
@@ -98,7 +98,9 @@ fn vs_main(input: VertexInput, @builtin(instance_index) instanceIndex: u32) -> V
   let zoom = scene.v1.x;
   let viewportMinPx = scene.v1.y;
 
-  let centerPx = inst.transform0.xy * viewportPx;
+  // [LAW:one-source-of-truth] Instance position is canonical world-space;
+  // map world [-1,1] to viewport pixels once at vertex boundary.
+  let centerPx = (inst.transform0.xy * 0.5 + vec2<f32>(0.5, 0.5)) * viewportPx;
   let centeredPx = (centerPx - (viewportPx * 0.5)) * zoom + (viewportPx * 0.5) + (panPx * zoom);
 
   let localScaled = vec2<f32>(
