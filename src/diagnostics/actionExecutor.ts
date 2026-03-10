@@ -22,7 +22,7 @@ import type { SelectionStore } from '../stores/SelectionStore';
 import type { DiagnosticsStore } from '../stores/DiagnosticsStore';
 import { requireAnyBlockDef } from '../blocks/registry';
 import type { Block, Edge, Endpoint } from '../graph/Patch';
-import type { PortId } from '../types';
+import { blockId, type PortId } from '../types';
 
 /**
  * Dependencies required for action execution.
@@ -45,12 +45,7 @@ export interface ActionResult {
 function resolveBlockForAction(patchStore: PatchStore, rawBlockId: string): Block | null {
   // [LAW:single-enforcer] ActionExecutor owns action-target resolution and is
   // the only boundary where serialized diagnostic IDs are validated/resolved.
-  for (const block of patchStore.patch.blocks.values()) {
-    if (block.id === rawBlockId) {
-      return block;
-    }
-  }
-  return null;
+  return patchStore.patch.blocks.get(blockId(rawBlockId)) ?? null;
 }
 
 function isKnownPortIdForBlock(block: Block, rawPortId: string): rawPortId is PortId {
@@ -64,7 +59,9 @@ function unsupportedActionKind(_action: never): ActionResult {
 }
 
 function unsupportedTargetKind(_target: never): ActionResult {
-  return { success: false, error: 'Unsupported target kind' };
+  const kind = (_target as { kind?: unknown } | null | undefined)?.kind;
+  const suffix = kind === undefined ? '' : ` (kind: ${String(kind)})`;
+  return { success: false, error: `Unsupported target kind${suffix}` };
 }
 
 type ActionKind = DiagnosticAction['kind'];
@@ -339,8 +336,19 @@ function handleRemoveBlock(
       };
     }
 
-    // Remove block (also removes connected edges automatically)
+    const issueBeforeRemove = patchStore.lastIssue;
     patchStore.removeBlock(block.id);
+
+    if (resolveBlockForAction(patchStore, blockId)) {
+      // [LAW:no-silent-fallbacks] Report refusal to mutate as ActionResult failure.
+      const refusalMessage = patchStore.lastIssue && patchStore.lastIssue !== issueBeforeRemove
+        ? patchStore.lastIssue.message
+        : `Block ${blockId} could not be removed`;
+      return {
+        success: false,
+        error: refusalMessage,
+      };
+    }
 
     return { success: true };
   } catch (err) {

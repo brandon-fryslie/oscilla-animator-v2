@@ -13,7 +13,7 @@ import type {
   MuteDiagnosticAction,
   OpenDocsAction,
 } from '../types';
-import type { BlockId } from '../../types';
+import { blockId } from '../../types';
 import { createTestBlockMap, resetBlockFactory } from '../../test-utils/block-factory';
 
 type DepsGetter = () => ActionExecutorDeps;
@@ -24,36 +24,57 @@ type MutableDeps = ActionExecutorDeps & {
 };
 
 function createMockDeps(): ActionExecutorDeps {
-  return {
-    patchStore: {
-      addBlock: vi.fn(() => 'block-123'),
-      addEdge: vi.fn(() => 'edge-new'),
-      removeBlock: vi.fn(),
-      removeEdge: vi.fn(),
-      patch: {
-        blocks: createTestBlockMap([
-          {
-            id: 'block-123' as BlockId,
-            type: 'Gain',
-            inputPorts: new Map([['in', { id: 'in', combineMode: 'last' }]]),
-            outputPorts: new Map([['out', { id: 'out' }]]),
-          },
-          {
-            id: 'block-tr' as BlockId,
-            type: 'InfiniteTimeRoot',
-            inputPorts: new Map(),
-            outputPorts: new Map([['t', { id: 't' }]]),
-          },
-        ]),
-        edges: [
-          {
-            id: 'edge-1',
-            from: { kind: 'port', blockId: 'block-a', slotId: 'out' },
-            to: { kind: 'port', blockId: 'block-b', slotId: 'in' },
-          },
-        ],
+  const patch = {
+    blocks: createTestBlockMap([
+      {
+        id: blockId('block-123'),
+        type: 'Gain',
+        inputPorts: new Map([['in', { id: 'in', combineMode: 'last' }]]),
+        outputPorts: new Map([['out', { id: 'out' }]]),
       },
-    },
+      {
+        id: blockId('block-tr'),
+        type: 'InfiniteTimeRoot',
+        inputPorts: new Map(),
+        outputPorts: new Map([['t', { id: 't' }]]),
+      },
+    ]),
+    edges: [
+      {
+        id: 'edge-1',
+        from: { kind: 'port', blockId: 'block-a', slotId: 'out' },
+        to: { kind: 'port', blockId: 'block-b', slotId: 'in' },
+      },
+    ],
+  };
+
+  const patchStore = {
+    addBlock: vi.fn(() => 'block-123'),
+    addEdge: vi.fn(() => 'edge-new'),
+    removeEdge: vi.fn(),
+    patch,
+    lastIssue: null,
+  } as any;
+
+  patchStore.removeBlock = vi.fn((id: string) => {
+    const block = patch.blocks.get(blockId(id));
+    if (!block) {
+      patchStore.lastIssue = { level: 'warn', message: `Attempted to remove missing block '${id}'` };
+      return;
+    }
+    if (block.type === 'InfiniteTimeRoot') {
+      patchStore.lastIssue = {
+        level: 'warn',
+        message: `Cannot remove protected block '${id}' of type InfiniteTimeRoot`,
+      };
+      return;
+    }
+    patch.blocks.delete(block.id);
+    patch.edges = patch.edges.filter((edge) => edge.from.blockId !== id && edge.to.blockId !== id);
+  });
+
+  return {
+    patchStore,
     selectionStore: {
       selectBlock: vi.fn(),
       selectEdge: vi.fn(),
@@ -323,6 +344,20 @@ function registerRemoveBlockTests(getDeps: DepsGetter): void {
       expect(result.success).toBe(false);
       expect(result.error).toContain('Failed to remove block');
       expect(result.error).toContain('Removal failed');
+    });
+
+    it('fails when PatchStore refuses block removal', () => {
+      const action: RemoveBlockAction = {
+        kind: 'removeBlock',
+        label: 'Remove TimeRoot',
+        blockId: 'block-tr',
+      };
+
+      const result = executeAction(action, getDeps());
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('Cannot remove protected block');
+      expect(getDeps().patchStore.removeBlock).toHaveBeenCalledWith('block-tr');
     });
   });
 }
