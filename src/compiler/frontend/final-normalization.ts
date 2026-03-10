@@ -14,7 +14,7 @@
 
 import type { DraftGraph, DraftPortRef } from './draft-graph';
 import type { FixpointDiagnostic } from './fixpoint-diagnostic';
-import type { Obligation, ObligationId, FactDependency } from './obligations';
+import type { Obligation, ObligationId, ObligationKind, FactDependency } from './obligations';
 import { isOpen } from './obligations';
 import type { ElaborationPlan } from './elaboration';
 import { applyAllPlans } from './apply-elaboration';
@@ -577,7 +577,7 @@ function collectStrictFailureDiagnostics(
       ? 'depsReadyNoPlan'
       : 'depsNotReady';
     // [LAW:single-enforcer] Obligation ID display formatting is centralized here.
-    const displayObligationId = formatObligationIdForDisplay(obligation.id, blockTypeById);
+    const displayObligationId = formatObligationIdForDisplay(obligation, blockTypeById);
     diagnostics.push({
       diagnosticFlagCode: 'OpenObligation',
       message: `Open obligation '${displayObligationId}' (${obligation.kind}, policy=${obligation.policy.name}, ${reason})`,
@@ -603,17 +603,26 @@ function buildBlockTypeById(g: DraftGraph): ReadonlyMap<string, string> {
   return new Map(g.blocks.map((b) => [b.id, b.type] as const));
 }
 
-function formatObligationIdForDisplay(
-  obligationId: ObligationId,
+const EDGE_PAIR_OBLIGATION_KINDS: ReadonlySet<ObligationKind> = new Set<ObligationKind>([
+  'needsAdapter',
+  'needsCardinalityAdapter',
+  'needsCycleBreak',
+  'needsPayloadAnchor',
+]);
+
+export function formatObligationIdForDisplay(
+  obligation: Pick<Obligation, 'id' | 'kind'>,
   blockTypeById: ReadonlyMap<string, string>,
 ): string {
-  const raw = obligationId as string;
+  const raw = obligation.id as string;
   const firstColon = raw.indexOf(':');
   if (firstColon < 0) return raw;
   const kind = raw.slice(0, firstColon);
   const payload = raw.slice(firstColon + 1);
 
-  if (payload.includes('->')) {
+  // [LAW:one-source-of-truth] Only edge-pair obligation kinds are valid for
+  // arrow splitting; non-edge kinds remain endpoint-only and deterministic.
+  if (EDGE_PAIR_OBLIGATION_KINDS.has(obligation.kind) && payload.includes('->')) {
     const arrowIndex = payload.indexOf('->');
     if (arrowIndex <= 0 || arrowIndex >= payload.length - 2) return raw;
     const left = parseObligationEndpoint(payload.slice(0, arrowIndex));

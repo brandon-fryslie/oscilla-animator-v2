@@ -725,8 +725,8 @@ export class WebGPURenderer {
     const simulationInstanceCount = this.countSimulationInstances(drawPlan);
     const frameInputHeader = this.buildFrameInputHeader(input, dtSeconds, frameIndex);
     this.computeRuntime.step(commandEncoder, simulationInstanceCount, dtSeconds, frameInputHeader, frameIndex);
-    const totalInstances = this.countPlannedInstances(drawPlan);
-    this.ensureInstanceCapacity(totalInstances);
+    // [LAW:single-enforcer] createInstancePackingPlan validates per-op instance
+    // transform arrays before any capacity growth is allowed.
     const packedInstances = this.packDrawPlanInstances(drawPlan);
     this.uploadPackedInstances(packedInstances);
     this.ensureIndirectArgsCapacity(drawPlan.length);
@@ -1042,14 +1042,6 @@ export class WebGPURenderer {
       this.indirectArgsBuffer,
       prepared.indirectRecordIndex * WEBGPU_RENDER_CONTRACT.indirectArgsBytes,
     );
-  }
-
-  private countPlannedInstances(drawPlan: readonly PreparedDrawPathOp[]): number {
-    let total = 0;
-    for (const prepared of drawPlan) {
-      total += prepared.instanceCount;
-    }
-    return total;
   }
 
   private countSimulationInstances(drawPlan: readonly PreparedDrawPathOp[]): number {
