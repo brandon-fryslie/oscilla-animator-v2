@@ -7,10 +7,23 @@ import { AddressRegistry } from '../address-registry';
 import { buildPatch } from '../Patch';
 import { addressToString } from '../../types/canonical-address';
 import { getBlockAddress, getOutputAddress, getInputAddress, getShorthandForOutput } from '../addressing';
+import { portId as toPortId } from '../../types';
 
 // Import blocks to trigger registration
 import { registerAllBlocks } from '../../blocks/all';
 registerAllBlocks();
+
+function replacePatchBlock(
+  patch: ReturnType<typeof buildPatch>,
+  blockId: string,
+  block: unknown,
+): void {
+  const mapPrototype = Object.getPrototypeOf(patch.blocks);
+  if (typeof mapPrototype?.set !== 'function') {
+    throw new Error('Test invariant violation: patch.blocks is not mutable via Map#set');
+  }
+  mapPrototype.set.call(patch.blocks, blockId, block);
+}
 
 describe('AddressRegistry', () => {
   describe('buildFromPatch', () => {
@@ -61,7 +74,7 @@ describe('AddressRegistry', () => {
       const registry = AddressRegistry.buildFromPatch(patch);
 
       // Test output port resolution
-      const outputAddr = getOutputAddress(block, 'out' as any);
+      const outputAddr = getOutputAddress(block, toPortId('out'));
       const resolved = registry.resolve(addressToString(outputAddr));
 
       expect(resolved).not.toBeNull();
@@ -77,7 +90,7 @@ describe('AddressRegistry', () => {
       const registry = AddressRegistry.buildFromPatch(patch);
 
       // Test input port resolution
-      const inputAddr = getInputAddress(block, 'phase' as any);
+      const inputAddr = getInputAddress(block, toPortId('phase'));
       const resolved = registry.resolve(addressToString(inputAddr));
 
       expect(resolved).not.toBeNull();
@@ -98,6 +111,81 @@ describe('AddressRegistry', () => {
 
       expect(resolved).not.toBeNull();
       expect(resolved?.kind).toBe('block');
+    });
+
+  });
+
+  describe('buildFromPatch validation', () => {
+    it('fails explicitly when an output port key is not a string', () => {
+      const patch = buildPatch(b => {
+        const c = b.addBlock('Const', { displayName: 'My Const' });
+        b.setConfig(c, 'value', 1);
+      });
+      const block = Array.from(patch.blocks.values())[0];
+      const brokenBlock = {
+        ...block,
+        outputPorts: new Map<any, any>([[42, { id: 'out' }]]),
+      };
+      replacePatchBlock(patch, block.id, brokenBlock);
+
+      expect(() => AddressRegistry.buildFromPatch(patch)).toThrow(/output port key is not a string/);
+    });
+
+    it('fails explicitly when a port key does not match port.id', () => {
+      const patch = buildPatch(b => {
+        const c = b.addBlock('Const', { displayName: 'My Const' });
+        b.setConfig(c, 'value', 1);
+      });
+      const block = Array.from(patch.blocks.values())[0];
+      const brokenBlock = {
+        ...block,
+        outputPorts: new Map<any, any>([['wrong-key', { id: 'out' }]]),
+      };
+      replacePatchBlock(patch, block.id, brokenBlock);
+
+      expect(() => AddressRegistry.buildFromPatch(patch)).toThrow(/port key\/id mismatch/);
+    });
+
+    it('fails explicitly when an input port key is not a string', () => {
+      const patch = buildPatch(b => {
+        b.addBlock('Oscillator', { displayName: 'My Osc' });
+      });
+      const block = Array.from(patch.blocks.values())[0];
+      const brokenBlock = {
+        ...block,
+        inputPorts: new Map<any, any>([[42, { id: 'phase' }]]),
+      };
+      replacePatchBlock(patch, block.id, brokenBlock);
+
+      expect(() => AddressRegistry.buildFromPatch(patch)).toThrow(/input port key is not a string/);
+    });
+
+    it('fails explicitly when an input port key does not match port.id', () => {
+      const patch = buildPatch(b => {
+        b.addBlock('Oscillator', { displayName: 'My Osc' });
+      });
+      const block = Array.from(patch.blocks.values())[0];
+      const brokenBlock = {
+        ...block,
+        inputPorts: new Map<any, any>([['wrong-key', { id: 'phase' }]]),
+      };
+      replacePatchBlock(patch, block.id, brokenBlock);
+
+      expect(() => AddressRegistry.buildFromPatch(patch)).toThrow(/port key\/id mismatch/);
+    });
+
+    it('fails explicitly when an input port entry is missing string id', () => {
+      const patch = buildPatch(b => {
+        b.addBlock('Oscillator', { displayName: 'My Osc' });
+      });
+      const block = Array.from(patch.blocks.values())[0];
+      const brokenBlock = {
+        ...block,
+        inputPorts: new Map<unknown, unknown>([['phase', { key: 'phase' }]]),
+      };
+      replacePatchBlock(patch, block.id, brokenBlock);
+
+      expect(() => AddressRegistry.buildFromPatch(patch)).toThrow(/input port entry is missing string id/);
     });
   });
 
@@ -128,7 +216,7 @@ describe('AddressRegistry', () => {
       const block = Array.from(patch.blocks.values())[0];
       const registry = AddressRegistry.buildFromPatch(patch);
 
-      const outputAddr = getOutputAddress(block, 'out' as any);
+      const outputAddr = getOutputAddress(block, toPortId('out'));
       const resolved = registry.resolve(addressToString(outputAddr));
 
       expect(resolved).not.toBeNull();
@@ -147,7 +235,7 @@ describe('AddressRegistry', () => {
       const block = Array.from(patch.blocks.values())[0];
       const registry = AddressRegistry.buildFromPatch(patch);
 
-      const inputAddr = getInputAddress(block, 'phase' as any);
+      const inputAddr = getInputAddress(block, toPortId('phase'));
       const resolved = registry.resolve(addressToString(inputAddr));
 
       expect(resolved).not.toBeNull();
@@ -288,19 +376,19 @@ describe('AddressRegistry', () => {
         expect(directResolved?.block.id).toBe(block.id);
 
         // Test all output ports
-        for (const portId of block.outputPorts.keys()) {
-          const outputAddr = getOutputAddress(block, portId as any);
+        for (const outputPortId of block.outputPorts.keys()) {
+          const outputAddr = getOutputAddress(block, toPortId(outputPortId));
           const outputStr = addressToString(outputAddr);
 
           const resolved = registry.resolve(outputStr);
           expect(resolved).not.toBeNull();
           if (resolved?.kind === 'output') {
             expect(resolved.block.id).toBe(block.id);
-            expect(resolved.port.id).toBe(portId);
+            expect(resolved.port.id).toBe(outputPortId);
           }
 
           // Test shorthand
-          const shorthand = getShorthandForOutput(block, portId as any);
+          const shorthand = getShorthandForOutput(block, toPortId(outputPortId));
           const shortAddr = registry.resolveShorthand(shorthand);
           expect(shortAddr).not.toBeNull();
           expect(shortAddr?.blockId).toBe(block.id);

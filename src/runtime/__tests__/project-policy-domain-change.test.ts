@@ -49,7 +49,7 @@ function createTestRuntimeState(): RuntimeState {
       energy: 0.5,
     },
     values: {},
-    lastRenderFrame: null,
+    lastLegacyRenderFrame: null,
     arena: new Float32Array(0),
     stateArena: { offset: 0, length: 0 },
     state: new Float32Array(0),

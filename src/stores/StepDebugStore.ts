@@ -9,7 +9,7 @@ import { makeAutoObservable, runInAction } from 'mobx';
 import type { CompiledProgramIR, DebugIndexIR } from '../compiler/ir/program';
 import type { RuntimeState } from '../runtime/RuntimeState';
 import type { RenderBufferArena } from '../render/RenderBufferArena';
-import type { RenderFrameIR } from '../render/types';
+import type { LegacyRenderFrame } from '../render/types';
 import { StepDebugSession } from '../runtime/StepDebugSession';
 import type {
   StepSnapshot,
@@ -100,7 +100,7 @@ export class StepDebugStore {
   selectedExprId: ValueExprId | null = null;
 
   /** Last completed frame result */
-  lastFrameResult: RenderFrameIR | null = null;
+  lastFrameResult: LegacyRenderFrame | null = null;
 
   /** Internal session (not observable — accessed via actions) */
   private _session: StepDebugSession | null = null;
