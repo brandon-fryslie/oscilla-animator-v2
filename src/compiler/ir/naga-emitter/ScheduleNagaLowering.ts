@@ -61,6 +61,28 @@ export interface NagaFunctionArgumentIR {
   readonly builtin?: 'global_invocation_id';
 }
 
+type NagaBuiltinCallNameIR =
+  | 'abs'
+  | 'atan2'
+  | 'ceil'
+  | 'clamp'
+  | 'cos'
+  | 'exp'
+  | 'f32'
+  | 'floor'
+  | 'fract'
+  | 'log'
+  | 'max'
+  | 'min'
+  | 'pow'
+  | 'round'
+  | 'select'
+  | 'sign'
+  | 'sin'
+  | 'sqrt'
+  | 'tan'
+  | 'trunc';
+
 export type NagaExpressionIR =
   | { readonly kind: 'argument'; readonly argument: number }
   | { readonly kind: 'constant'; readonly constant: number }
@@ -80,6 +102,11 @@ export type NagaExpressionIR =
       readonly kind: 'as';
       readonly to: NagaScalarKindIR;
       readonly expr: number;
+    }
+  | {
+      readonly kind: 'call';
+      readonly function: NagaBuiltinCallNameIR;
+      readonly args: readonly number[];
     };
 
 export type NagaBlockIR = readonly number[];
@@ -673,6 +700,34 @@ function emitLoadedF32FromPlan(
   return ctx.addExpression({ kind: 'buffer_load', buffer, index: address }, source);
 }
 
+function emitBuiltinCall(
+  ctx: LoweringCtx,
+  fn: NagaBuiltinCallNameIR,
+  args: readonly number[],
+  source: NagaSourceMapEntryIR,
+): number {
+  return ctx.addExpression({ kind: 'call', function: fn, args }, source);
+}
+
+function emitBoolAsF32(
+  ctx: LoweringCtx,
+  builtins: LoweringBuiltins,
+  condition: number,
+  source: NagaSourceMapEntryIR,
+): number {
+  const zero = emitLiteralF32(ctx, builtins, 0, source);
+  const one = emitLiteralF32(ctx, builtins, 1, source);
+  return emitBuiltinCall(ctx, 'select', [zero, one, condition], source);
+}
+
+function expectArity(inputExprs: readonly number[], arity: number): boolean {
+  return inputExprs.length === arity;
+}
+
+function expectMinArity(inputExprs: readonly number[], minimum: number): boolean {
+  return inputExprs.length >= minimum;
+}
+
 function emitPureFnF32(
   ctx: LoweringCtx,
   builtins: LoweringBuiltins,
@@ -683,50 +738,180 @@ function emitPureFnF32(
   if (inputExprs.length === 0) return null;
   if (fn.kind !== 'opcode') return null;
 
+  const reduceBinary = (op: Extract<NagaExpressionIR, { kind: 'binary' }>['op']): number | null => {
+    if (!expectMinArity(inputExprs, 1)) return null;
+    let acc = inputExprs[0]!;
+    for (let i = 1; i < inputExprs.length; i++) {
+      acc = ctx.addExpression({ kind: 'binary', op, left: acc, right: inputExprs[i]! }, source);
+    }
+    return acc;
+  };
+
+  const reduceCall = (name: NagaBuiltinCallNameIR): number | null => {
+    if (!expectMinArity(inputExprs, 1)) return null;
+    let acc = inputExprs[0]!;
+    for (let i = 1; i < inputExprs.length; i++) {
+      acc = emitBuiltinCall(ctx, name, [acc, inputExprs[i]!], source);
+    }
+    return acc;
+  };
+
   switch (fn.opcode) {
-    case OpCode.Identity:
-      return inputExprs[0] ?? null;
-    case OpCode.Add: {
-      let acc = inputExprs[0]!;
-      for (let i = 1; i < inputExprs.length; i++) {
-        acc = ctx.addExpression({ kind: 'binary', op: 'add', left: acc, right: inputExprs[i]! }, source);
-      }
-      return acc;
-    }
-    case OpCode.Sub: {
-      if (inputExprs.length !== 2) return null;
-      return ctx.addExpression({ kind: 'binary', op: 'sub', left: inputExprs[0]!, right: inputExprs[1]! }, source);
-    }
-    case OpCode.Mul: {
-      let acc = inputExprs[0]!;
-      for (let i = 1; i < inputExprs.length; i++) {
-        acc = ctx.addExpression({ kind: 'binary', op: 'mul', left: acc, right: inputExprs[i]! }, source);
-      }
-      return acc;
-    }
-    case OpCode.Div: {
-      if (inputExprs.length !== 2) return null;
-      return ctx.addExpression({ kind: 'binary', op: 'div', left: inputExprs[0]!, right: inputExprs[1]! }, source);
-    }
-    case OpCode.Mod: {
-      if (inputExprs.length !== 2) return null;
-      return ctx.addExpression({ kind: 'binary', op: 'mod', left: inputExprs[0]!, right: inputExprs[1]! }, source);
-    }
-    case OpCode.Avg: {
-      let acc = inputExprs[0]!;
-      for (let i = 1; i < inputExprs.length; i++) {
-        acc = ctx.addExpression({ kind: 'binary', op: 'add', left: acc, right: inputExprs[i]! }, source);
-      }
-      const invN = emitLiteralF32(ctx, builtins, 1 / inputExprs.length, source);
-      return ctx.addExpression({ kind: 'binary', op: 'mul', left: acc, right: invN }, source);
-    }
+    case OpCode.Add:
+      return reduceBinary('add');
+    case OpCode.Sub:
+      return expectArity(inputExprs, 2)
+        ? ctx.addExpression({ kind: 'binary', op: 'sub', left: inputExprs[0]!, right: inputExprs[1]! }, source)
+        : null;
+    case OpCode.Mul:
+      return reduceBinary('mul');
+    case OpCode.Div:
+      return expectArity(inputExprs, 2)
+        ? ctx.addExpression({ kind: 'binary', op: 'div', left: inputExprs[0]!, right: inputExprs[1]! }, source)
+        : null;
+    case OpCode.Mod:
+      return expectArity(inputExprs, 2)
+        ? ctx.addExpression({ kind: 'binary', op: 'mod', left: inputExprs[0]!, right: inputExprs[1]! }, source)
+        : null;
+    case OpCode.Pow:
+      return expectArity(inputExprs, 2)
+        ? emitBuiltinCall(ctx, 'pow', [inputExprs[0]!, inputExprs[1]!], source)
+        : null;
     case OpCode.Neg: {
-      if (inputExprs.length !== 1) return null;
+      if (!expectArity(inputExprs, 1)) return null;
       const zero = emitLiteralF32(ctx, builtins, 0, source);
       return ctx.addExpression({ kind: 'binary', op: 'sub', left: zero, right: inputExprs[0]! }, source);
     }
-    default:
+    case OpCode.Abs:
+      return expectArity(inputExprs, 1) ? emitBuiltinCall(ctx, 'abs', [inputExprs[0]!], source) : null;
+
+    case OpCode.Sin:
+      return expectArity(inputExprs, 1) ? emitBuiltinCall(ctx, 'sin', [inputExprs[0]!], source) : null;
+    case OpCode.Cos:
+      return expectArity(inputExprs, 1) ? emitBuiltinCall(ctx, 'cos', [inputExprs[0]!], source) : null;
+    case OpCode.Tan:
+      return expectArity(inputExprs, 1) ? emitBuiltinCall(ctx, 'tan', [inputExprs[0]!], source) : null;
+    case OpCode.Atan2:
+      return expectArity(inputExprs, 2)
+        ? emitBuiltinCall(ctx, 'atan2', [inputExprs[0]!, inputExprs[1]!], source)
+        : null;
+
+    case OpCode.Min:
+      return reduceCall('min');
+    case OpCode.Max:
+      return reduceCall('max');
+    case OpCode.Avg: {
+      if (!expectMinArity(inputExprs, 1)) return null;
+      const sum = reduceBinary('add');
+      if (sum === null) return null;
+      const invN = emitLiteralF32(ctx, builtins, 1 / inputExprs.length, source);
+      return ctx.addExpression({ kind: 'binary', op: 'mul', left: sum, right: invN }, source);
+    }
+    case OpCode.Last:
+      return expectMinArity(inputExprs, 1) ? inputExprs[inputExprs.length - 1]! : null;
+    case OpCode.Clamp:
+      return expectArity(inputExprs, 3)
+        ? emitBuiltinCall(ctx, 'clamp', [inputExprs[0]!, inputExprs[1]!, inputExprs[2]!], source)
+        : null;
+    case OpCode.Lerp: {
+      if (!expectArity(inputExprs, 3)) return null;
+      const one = emitLiteralF32(ctx, builtins, 1, source);
+      const oneMinusT = ctx.addExpression({ kind: 'binary', op: 'sub', left: one, right: inputExprs[2]! }, source);
+      const lhs = ctx.addExpression({ kind: 'binary', op: 'mul', left: inputExprs[0]!, right: oneMinusT }, source);
+      const rhs = ctx.addExpression({ kind: 'binary', op: 'mul', left: inputExprs[1]!, right: inputExprs[2]! }, source);
+      return ctx.addExpression({ kind: 'binary', op: 'add', left: lhs, right: rhs }, source);
+    }
+
+    case OpCode.Eq: {
+      if (!expectArity(inputExprs, 2)) return null;
+      const condition = ctx.addExpression(
+        { kind: 'binary', op: 'eq', left: inputExprs[0]!, right: inputExprs[1]! },
+        source,
+      );
+      return emitBoolAsF32(ctx, builtins, condition, source);
+    }
+    case OpCode.Lt: {
+      if (!expectArity(inputExprs, 2)) return null;
+      const condition = ctx.addExpression(
+        { kind: 'binary', op: 'lt', left: inputExprs[0]!, right: inputExprs[1]! },
+        source,
+      );
+      return emitBoolAsF32(ctx, builtins, condition, source);
+    }
+    case OpCode.Gt: {
+      if (!expectArity(inputExprs, 2)) return null;
+      const condition = ctx.addExpression(
+        { kind: 'binary', op: 'gt', left: inputExprs[0]!, right: inputExprs[1]! },
+        source,
+      );
+      return emitBoolAsF32(ctx, builtins, condition, source);
+    }
+
+    case OpCode.Wrap01:
+      return expectArity(inputExprs, 1) ? emitBuiltinCall(ctx, 'fract', [inputExprs[0]!], source) : null;
+    case OpCode.Hash: {
+      if (!expectArity(inputExprs, 2)) return null;
+      const valueScale = emitLiteralF32(ctx, builtins, 12.9898, source);
+      const seedScale = emitLiteralF32(ctx, builtins, 78.233, source);
+      const hashScale = emitLiteralF32(ctx, builtins, 43758.5453123, source);
+      const valueTerm = ctx.addExpression({ kind: 'binary', op: 'mul', left: inputExprs[0]!, right: valueScale }, source);
+      const seedTerm = ctx.addExpression({ kind: 'binary', op: 'mul', left: inputExprs[1]!, right: seedScale }, source);
+      const phase = ctx.addExpression({ kind: 'binary', op: 'add', left: valueTerm, right: seedTerm }, source);
+      const wave = emitBuiltinCall(ctx, 'sin', [phase], source);
+      const scaled = ctx.addExpression({ kind: 'binary', op: 'mul', left: wave, right: hashScale }, source);
+      return emitBuiltinCall(ctx, 'fract', [scaled], source);
+    }
+
+    case OpCode.Floor:
+      return expectArity(inputExprs, 1) ? emitBuiltinCall(ctx, 'floor', [inputExprs[0]!], source) : null;
+    case OpCode.Ceil:
+      return expectArity(inputExprs, 1) ? emitBuiltinCall(ctx, 'ceil', [inputExprs[0]!], source) : null;
+    case OpCode.Round:
+      return expectArity(inputExprs, 1) ? emitBuiltinCall(ctx, 'round', [inputExprs[0]!], source) : null;
+    case OpCode.Fract:
+      return expectArity(inputExprs, 1) ? emitBuiltinCall(ctx, 'fract', [inputExprs[0]!], source) : null;
+    case OpCode.Sqrt:
+      return expectArity(inputExprs, 1) ? emitBuiltinCall(ctx, 'sqrt', [inputExprs[0]!], source) : null;
+    case OpCode.Exp:
+      return expectArity(inputExprs, 1) ? emitBuiltinCall(ctx, 'exp', [inputExprs[0]!], source) : null;
+    case OpCode.Log:
+      return expectArity(inputExprs, 1) ? emitBuiltinCall(ctx, 'log', [inputExprs[0]!], source) : null;
+    case OpCode.Sign:
+      return expectArity(inputExprs, 1) ? emitBuiltinCall(ctx, 'sign', [inputExprs[0]!], source) : null;
+
+    case OpCode.Select: {
+      if (!expectArity(inputExprs, 3)) return null;
+      const zero = emitLiteralF32(ctx, builtins, 0, source);
+      const condition = ctx.addExpression({ kind: 'binary', op: 'gt', left: inputExprs[0]!, right: zero }, source);
+      return emitBuiltinCall(ctx, 'select', [inputExprs[2]!, inputExprs[1]!, condition], source);
+    }
+
+    case OpCode.Identity:
+      return expectArity(inputExprs, 1) ? inputExprs[0]! : null;
+
+    case OpCode.F64ToI32Trunc: {
+      if (!expectArity(inputExprs, 1)) return null;
+      const minI32 = emitLiteralF32(ctx, builtins, -2147483648, source);
+      const maxI32 = emitLiteralF32(ctx, builtins, 2147483647, source);
+      const maxFiniteF32 = emitLiteralF32(ctx, builtins, 3.4028234663852886e38, source);
+      const truncated = emitBuiltinCall(ctx, 'trunc', [inputExprs[0]!], source);
+      const clamped = emitBuiltinCall(ctx, 'clamp', [truncated, minI32, maxI32], source);
+      const absValue = emitBuiltinCall(ctx, 'abs', [inputExprs[0]!], source);
+      const finiteCondition = ctx.addExpression(
+        { kind: 'binary', op: 'le', left: absValue, right: maxFiniteF32 },
+        source,
+      );
+      const zero = emitLiteralF32(ctx, builtins, 0, source);
+      return emitBuiltinCall(ctx, 'select', [zero, clamped, finiteCondition], source);
+    }
+    case OpCode.I32ToF64:
+      return expectArity(inputExprs, 1) ? inputExprs[0]! : null;
+
+    default: {
+      const _exhaustive: never = fn.opcode;
+      void _exhaustive;
       return null;
+    }
   }
 }
 
@@ -855,12 +1040,15 @@ function emitMaterializeExprComponentF32(args: {
       case 'intrinsic': {
         if (expr.intrinsicKind !== 'property') return null;
         if (expr.intrinsic === 'index') {
-          return args.ctx.addExpression({ kind: 'as', to: 'f32', expr: args.laneExpr }, args.source);
+          return args.ctx.addExpression({ kind: 'call', function: 'f32', args: [args.laneExpr] }, args.source);
         }
         if (expr.intrinsic === 'normalizedIndex') {
           const denom = Math.max(1, args.targetPlan.laneCount - 1);
           const inv = emitLiteralF32(args.ctx, args.builtins, 1 / denom, args.source);
-          const laneAsFloat = args.ctx.addExpression({ kind: 'as', to: 'f32', expr: args.laneExpr }, args.source);
+          const laneAsFloat = args.ctx.addExpression(
+            { kind: 'call', function: 'f32', args: [args.laneExpr] },
+            args.source,
+          );
           return args.ctx.addExpression({ kind: 'binary', op: 'mul', left: laneAsFloat, right: inv }, args.source);
         }
         return null;
@@ -929,7 +1117,7 @@ function emitMaterializeExprComponentF32(args: {
             { kind: 'binary', op: 'gt', left: accumulator, right: zero },
             args.source,
           );
-          return args.ctx.addExpression({ kind: 'as', to: 'f32', expr: active }, args.source);
+          return emitBoolAsF32(args.ctx, args.builtins, active, args.source);
         }
         return emitLiteralF32(args.ctx, args.builtins, 0, args.source);
       }

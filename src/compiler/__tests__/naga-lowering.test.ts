@@ -111,4 +111,14 @@ describe('naga lowering artifact', () => {
     );
     expect(placeholderComments?.length ?? 0).toBe(0);
   });
+
+  it('covers render-math opcode lowering without incomplete-lowering warnings', () => {
+    const result = compile(buildRenderPatch());
+    expect(result.kind).toBe('ok');
+    if (result.kind !== 'ok') return;
+
+    expect(result.program.nagaLoweringProgram?.coverage.droppedComputeStepCount ?? 0).toBe(0);
+    const warningCodes = result.warnings.map((warning) => warning.code);
+    expect(warningCodes).not.toContain('W_NAGA_LOWERING_INCOMPLETE');
+  });
 });
