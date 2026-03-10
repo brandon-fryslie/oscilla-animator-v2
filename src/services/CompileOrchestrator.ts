@@ -184,23 +184,39 @@ export interface CompileOrchestratorDeps {
 }
 
 function assertScheduleContract(schedule: CompiledProgramIR['schedule'] | undefined): ScheduleIR {
+  const assertNonNegativeIntegerField = (field: string, value: unknown): void => {
+    if (!Number.isInteger(value) || (value as number) < 0) {
+      throw new Error(`[compile] program.schedule.${field} must be a non-negative integer - compiler/runtime contract violation`);
+    }
+  };
+
+  const isReadonlyMap = (value: unknown): value is ReadonlyMap<unknown, unknown> => {
+    return Boolean(value)
+      && typeof value === 'object'
+      && typeof (value as ReadonlyMap<unknown, unknown>).get === 'function'
+      && typeof (value as ReadonlyMap<unknown, unknown>).entries === 'function';
+  };
+
   if (!schedule) {
     throw new Error('[compile] program.schedule is missing - compiler/runtime contract violation');
   }
   // [LAW:single-enforcer] compileAndSwap is the runtime boundary that enforces
   // required schedule contract fields for compiler output.
-  if (typeof schedule.stateSlotCount !== 'number') {
-    throw new Error('[compile] program.schedule.stateSlotCount is missing - compiler/runtime contract violation');
+  if (!schedule.timeModel || typeof schedule.timeModel !== 'object') {
+    throw new Error('[compile] program.schedule.timeModel is missing - compiler/runtime contract violation');
+  }
+  if (!isReadonlyMap(schedule.instances)) {
+    throw new Error('[compile] program.schedule.instances is missing - compiler/runtime contract violation');
   }
   if (!Array.isArray(schedule.stateMappings)) {
     throw new Error('[compile] program.schedule.stateMappings is missing - compiler/runtime contract violation');
   }
-  if (typeof schedule.eventSlotCount !== 'number') {
-    throw new Error('[compile] program.schedule.eventSlotCount is missing - compiler/runtime contract violation');
-  }
   if (!Array.isArray(schedule.steps)) {
     throw new Error('[compile] program.schedule.steps is missing - compiler/runtime contract violation');
   }
+  assertNonNegativeIntegerField('stateSlotCount', schedule.stateSlotCount);
+  assertNonNegativeIntegerField('eventSlotCount', schedule.eventSlotCount);
+  assertNonNegativeIntegerField('eventCount', schedule.eventCount);
   return schedule;
 }
 
