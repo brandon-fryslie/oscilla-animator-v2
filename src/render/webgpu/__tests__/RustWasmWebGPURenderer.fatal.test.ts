@@ -189,6 +189,14 @@ describe('RustWasmWebGPURenderer fatal transition', () => {
     worker!.emitMessage({ type: 'FATAL_ERROR', code: 'BOOT_FATAL', message: 'first fatal' });
     worker!.emitMessage({ type: 'DEVICE_LOST', code: 'DEVICE_LOST', reason: 'second fatal' });
 
+    const engineIssues = getEngineErrorIssues();
+    expect(engineIssues).toHaveLength(2);
+    const engineSources = engineIssues.map((issue) => {
+      const detail = issue.detail as { source?: string } | undefined;
+      return detail?.source;
+    });
+    expect(engineSources).toEqual(['BOOT_FATAL', 'DEVICE_LOST']);
+
     const fatalIssues = getRendererFatalIssues();
     expect(fatalIssues).toHaveLength(1);
     const detail = fatalIssues[0]?.detail as Record<string, unknown>;
