@@ -128,6 +128,10 @@ function assertFiniteRuntimeInput(value: number, field: string): number {
   return value;
 }
 
+function coerceFinite(value: number | undefined): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : 0;
+}
+
 const MAX_UINT32 = 0xFFFF_FFFF;
 const RUNTIME_CONSOLE_ENABLED = isRuntimeConsoleEnabled();
 // TODO(#185): Keep current timeout unchanged for this PR, but measure ack
