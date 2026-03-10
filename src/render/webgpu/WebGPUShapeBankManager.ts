@@ -1,5 +1,6 @@
 import { WEBGPU_RENDER_CONTRACT } from './shaders';
 import { SHAPE_BANK_HEADER_WORDS } from '../../runtime/RuntimeState';
+import type { GpuBindGroup, GpuBuffer, GpuDevice, GpuRenderPipeline } from './gpu-api';
 
 const GPU_BUFFER_USAGE = {
   COPY_DST: 0x0008,
@@ -20,15 +21,16 @@ export interface RenderShapeBankSource {
  * ShapeBank only; no secondary topology registry export is used.
  */
 export class WebGPUShapeBankManager {
-  private shapeBankBuffer: any;
-  private shapeBankBindGroup: any;
+  private shapeBankBuffer: GpuBuffer;
+  private shapeBankBindGroup: GpuBindGroup;
   private shapeBankCapacityWords = 1;
   private topologyWordOffsetById = new Map<number, number>();
 
-  constructor(private readonly device: any, private readonly pathPipeline: any) {
+  constructor(private readonly device: GpuDevice, private readonly pathPipeline: GpuRenderPipeline) {
     this.shapeBankBuffer = this.device.createBuffer({
       size: Uint32Array.BYTES_PER_ELEMENT,
       usage: GPU_BUFFER_USAGE.STORAGE | GPU_BUFFER_USAGE.COPY_DST,
+      mappedAtCreation: false,
     });
     this.shapeBankBindGroup = this.device.createBindGroup({
       layout: this.pathPipeline.getBindGroupLayout(WEBGPU_RENDER_CONTRACT.topologyBankBindGroup),
@@ -41,41 +43,79 @@ export class WebGPUShapeBankManager {
     });
   }
 
-  get bindGroup(): any {
+  get bindGroup(): GpuBindGroup {
     return this.shapeBankBindGroup;
   }
 
   sync(source: RenderShapeBankSource): void {
+    this.assertShapeBankSource(source);
+    this.ensureShapeBankCapacity(Math.max(1, source.volatilePtr));
+    this.uploadShapeBankData(source);
+    this.topologyWordOffsetById = this.buildTopologyWordOffsetMap(source);
+  }
+
+  resolveTopologyWordOffset(topologyId: number): number | undefined {
+    return this.topologyWordOffsetById.get(topologyId);
+  }
+
+  dispose(): void {
+    this.shapeBankBuffer.destroy();
+  }
+
+  private assertShapeBankSource(source: RenderShapeBankSource): void {
+    this.assertShapeBankArrays(source);
+    this.assertVolatilePtr(source.volatilePtr, source.data.length);
+    this.assertTopologyCoverage(source.topologyIdByHandle.length, source.volatilePtr);
+    this.assertStaticBoundary(source.staticBoundary, source.volatilePtr);
+    this.assertShapeBankAlignment(source.volatilePtr);
+  }
+
+  private assertShapeBankArrays(source: RenderShapeBankSource): void {
     if (!(source.data instanceof Uint32Array)) {
       throw new Error('WebGPUShapeBankManager: shapeBank.data must be Uint32Array');
     }
     if (!(source.topologyIdByHandle instanceof Uint32Array)) {
       throw new Error('WebGPUShapeBankManager: shapeBank.topologyIdByHandle must be Uint32Array');
     }
-    if (!Number.isInteger(source.volatilePtr) || source.volatilePtr < 0 || source.volatilePtr > source.data.length) {
+  }
+
+  private assertVolatilePtr(volatilePtr: number, capacity: number): void {
+    const isValid = Number.isInteger(volatilePtr) && volatilePtr >= 0 && volatilePtr <= capacity;
+    if (!isValid) {
       throw new Error(
-        `WebGPUShapeBankManager: invalid volatilePtr ${source.volatilePtr} for capacity ${source.data.length}`,
+        `WebGPUShapeBankManager: invalid volatilePtr ${volatilePtr} for capacity ${capacity}`,
       );
     }
-    if (source.topologyIdByHandle.length < source.volatilePtr) {
+  }
+
+  private assertTopologyCoverage(topologyIdByHandleLength: number, volatilePtr: number): void {
+    if (topologyIdByHandleLength < volatilePtr) {
       // [LAW:one-source-of-truth] ShapeBank sidecar/index stream must cover the
       // same handle address space as the canonical ShapeBank payload.
       throw new Error(
-        `WebGPUShapeBankManager: topologyIdByHandle length ${source.topologyIdByHandle.length} is smaller than volatilePtr ${source.volatilePtr}`,
+        `WebGPUShapeBankManager: topologyIdByHandle length ${topologyIdByHandleLength} is smaller than volatilePtr ${volatilePtr}`,
       );
     }
-    if (!Number.isInteger(source.staticBoundary) || source.staticBoundary < 0 || source.staticBoundary > source.volatilePtr) {
-      throw new Error(
-        `WebGPUShapeBankManager: invalid staticBoundary ${source.staticBoundary} for volatilePtr ${source.volatilePtr}`,
-      );
-    }
-    if ((source.volatilePtr % SHAPE_BANK_HEADER_WORDS) !== 0) {
-      throw new Error(
-        `WebGPUShapeBankManager: shapeBank volatilePtr ${source.volatilePtr} is not aligned to ${SHAPE_BANK_HEADER_WORDS} words`,
-      );
-    }
+  }
 
-    const requiredWords = Math.max(1, source.volatilePtr);
+  private assertStaticBoundary(staticBoundary: number, volatilePtr: number): void {
+    const isValid = Number.isInteger(staticBoundary) && staticBoundary >= 0 && staticBoundary <= volatilePtr;
+    if (!isValid) {
+      throw new Error(
+        `WebGPUShapeBankManager: invalid staticBoundary ${staticBoundary} for volatilePtr ${volatilePtr}`,
+      );
+    }
+  }
+
+  private assertShapeBankAlignment(volatilePtr: number): void {
+    if ((volatilePtr % SHAPE_BANK_HEADER_WORDS) !== 0) {
+      throw new Error(
+        `WebGPUShapeBankManager: shapeBank volatilePtr ${volatilePtr} is not aligned to ${SHAPE_BANK_HEADER_WORDS} words`,
+      );
+    }
+  }
+
+  private ensureShapeBankCapacity(requiredWords: number): void {
     if (requiredWords > this.shapeBankCapacityWords) {
       let nextCapacity = this.shapeBankCapacityWords;
       while (nextCapacity < requiredWords) {
@@ -84,6 +124,7 @@ export class WebGPUShapeBankManager {
       const nextBuffer = this.device.createBuffer({
         size: nextCapacity * Uint32Array.BYTES_PER_ELEMENT,
         usage: GPU_BUFFER_USAGE.STORAGE | GPU_BUFFER_USAGE.COPY_DST,
+        mappedAtCreation: false,
       });
       this.shapeBankBuffer.destroy();
       this.shapeBankBuffer = nextBuffer;
@@ -98,19 +139,13 @@ export class WebGPUShapeBankManager {
       });
       this.shapeBankCapacityWords = nextCapacity;
     }
+  }
 
+  private uploadShapeBankData(source: RenderShapeBankSource): void {
     if (source.volatilePtr > 0) {
-      this.device.queue.writeBuffer(this.shapeBankBuffer, 0, source.data.subarray(0, source.volatilePtr));
+      const uploadSlice = source.data.subarray(0, source.volatilePtr);
+      this.device.queue.writeBuffer(this.shapeBankBuffer, 0, uploadSlice, 0, uploadSlice.byteLength);
     }
-    this.topologyWordOffsetById = this.buildTopologyWordOffsetMap(source);
-  }
-
-  resolveTopologyWordOffset(topologyId: number): number | undefined {
-    return this.topologyWordOffsetById.get(topologyId);
-  }
-
-  dispose(): void {
-    this.shapeBankBuffer.destroy();
   }
 
   private buildTopologyWordOffsetMap(source: RenderShapeBankSource): Map<number, number> {
