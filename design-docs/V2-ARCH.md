@@ -973,7 +973,7 @@ We’ll fill this in sequentially with your answers and intent for V2 and V3.
   - Coverage uses V8 provider, includes `src/**/*.{ts,tsx}`, excludes tests and some type-only files, and applies global thresholds.
   - There are dedicated memory scripts/tests (e.g., `test:memory` runs `src/__tests__/memory-profile.test.ts` with `--expose-gc`).
 - End-to-end tests exist via Playwright:
-  - `playwright.config.ts` points to `tests/e2e` and starts the dev server (`npm run dev`) on port `5174`.
+  - `playwright.config.ts` points to `tests/e2e` and starts the dev server (`npm run dev`) on port `5784`.
   - E2E coverage includes core editor flows (add/delete blocks, connect/disconnect, undo/redo, selection, pan/zoom, context menus, parameter editing, minimap, auto-layout, and “no console errors” smoke checks).
   - Vitest excludes `tests/e2e` and `*.spec.ts` so unit tests and E2E tests are isolated.
 - There are “architecture enforcement / tripwire” tests:
@@ -1040,7 +1040,7 @@ We’ll fill this in sequentially with your answers and intent for V2 and V3.
     - forbid heap allocations in select “hot-path” files
   - This is effectively “mechanical enforcement of invariants” rather than conventional formatting.
 - E2E harness:
-  - Playwright is configured to run against the Vite dev server (`playwright.config.ts` starts `npm run dev`, expects port `5174`).
+  - Playwright is configured to run against the Vite dev server (`playwright.config.ts` starts `npm run dev`, expects port `5784`).
 
 **What looks right**
 - The `justfile` “check” recipe is a strong, repeatable gate for humans and agents.

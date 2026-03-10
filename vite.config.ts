@@ -39,7 +39,7 @@ export default defineConfig({
     format: 'es',
   },
   server: {
-    port: 5174,
+    port: 5784,
     host: '0.0.0.0',
     allowedHosts: true,
     // [LAW:single-enforcer] SharedArrayBuffer capability is enforced at the
