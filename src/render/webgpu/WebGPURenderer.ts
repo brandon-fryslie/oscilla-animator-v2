@@ -16,6 +16,19 @@ import {
   WebGPUIndirectArgsInspector,
   type IndirectArgsReadbackSnapshot,
 } from './WebGPUIndirectArgsInspector';
+import type {
+  GpuBindGroup,
+  GpuBuffer,
+  GpuCanvasContext,
+  GpuCommandEncoder,
+  GpuComputePipeline,
+  GpuDevice,
+  GpuRenderPassEncoder,
+  GpuRenderPipeline,
+  GpuTexture,
+  GpuTextureView,
+} from './gpu-api';
+import { getNavigatorGpu, toGpuCanvasContext } from './gpu-api';
 
 const GPU_BUFFER_USAGE = {
   COPY_SRC: 0x0004,
@@ -49,11 +62,19 @@ function computeDispatchWorkgroups(capacity: number, workgroupSize: number): num
   return Math.max(1, Math.ceil(capacity / workgroupSize));
 }
 
+function growPowerOfTwoCapacity(current: number, required: number): number {
+  let nextCapacity = current;
+  while (nextCapacity < required) {
+    nextCapacity *= 2;
+  }
+  return nextCapacity;
+}
+
 interface GPUMesh {
   readonly indexCount: number;
   readonly indexFormat: 'uint16' | 'uint32';
-  readonly vertexBuffer: any;
-  readonly indexBuffer: any;
+  readonly vertexBuffer: GpuBuffer;
+  readonly indexBuffer: GpuBuffer;
 }
 
 interface RenderInput {
@@ -67,13 +88,13 @@ interface RenderInput {
   readonly panX: number;
   readonly panY: number;
   readonly timeMs: number;
-  readonly inputMouseX?: number;
-  readonly inputMouseY?: number;
-  readonly inputMouseButtons?: number;
-  readonly inputAudioLow?: number;
-  readonly inputAudioMid?: number;
-  readonly inputAudioHigh?: number;
-  readonly inputGaugeActive?: number;
+  readonly inputMouseX: number;
+  readonly inputMouseY: number;
+  readonly inputMouseButtons: number;
+  readonly inputAudioLow: number;
+  readonly inputAudioMid: number;
+  readonly inputAudioHigh: number;
+  readonly inputGaugeActive: number;
 }
 
 interface PreparedDrawPathOp {
@@ -87,20 +108,62 @@ interface PreparedDrawPathOp {
   readonly pass: 'fill' | 'stroke';
 }
 
+interface DrawPrepStepInput {
+  readonly indirectBuffer: GpuBuffer;
+  readonly recordIndex: number;
+  readonly maxRecords: number;
+  readonly indexCount: number;
+  readonly instanceCount: number;
+  readonly firstInstance: number;
+}
+
+interface AppendDrawPassesInput {
+  readonly prepared: PreparedDrawPathOp[];
+  readonly op: DrawPathInstancesOp;
+  readonly mesh: GPUMesh;
+  readonly shapeBankWordOffset: number;
+  readonly sourceSinkIndex: number;
+  readonly nextFirstInstance: number;
+}
+
+interface InstancePackingPlan {
+  readonly count: number;
+  readonly position: Float32Array;
+  readonly rotation: Float32Array;
+  readonly scale2: Float32Array;
+  readonly size: number | Float32Array;
+  readonly activeColor: Uint8ClampedArray;
+  readonly isUniformColor: boolean;
+  readonly hasStroke: boolean;
+  readonly strokeWidthSource: number | Float32Array | null;
+  readonly renderPassKind: 'fill' | 'stroke';
+  readonly shapeBankWordOffset: number;
+}
+
+interface PackedTransformFields {
+  readonly posX: number;
+  readonly posY: number;
+  readonly sizeValue: number;
+  readonly rotationValue: number;
+  readonly scaleX: number;
+  readonly scaleY: number;
+  readonly shapeBankWordOffset: number;
+}
+
 interface WebGPUStartupResources {
-  readonly device: any;
-  readonly context: any;
+  readonly device: GpuDevice;
+  readonly context: GpuCanvasContext;
   readonly canvasFormat: string;
   readonly adapterFeatures: ReadonlySet<string>;
 }
 
 export function assertWebGPUStartupContract(canvas: HTMLCanvasElement): void {
-  const gpu = (navigator as Navigator & { gpu?: any }).gpu;
+  const gpu = getNavigatorGpu();
   if (!gpu) {
     throw new Error('WebGPU is required but navigator.gpu is unavailable');
   }
 
-  const context = canvas.getContext('webgpu') as any;
+  const context = toGpuCanvasContext(canvas.getContext('webgpu'));
   if (!context) {
     // [LAW:no-silent-fallbacks] WebGPU-only runtime must fail fast when the
     // browser cannot create a WebGPU presentation context.
@@ -110,7 +173,10 @@ export function assertWebGPUStartupContract(canvas: HTMLCanvasElement): void {
 
 async function createStartupResources(canvas: HTMLCanvasElement): Promise<WebGPUStartupResources> {
   assertWebGPUStartupContract(canvas);
-  const gpu = (navigator as Navigator & { gpu?: any }).gpu!;
+  const gpu = getNavigatorGpu();
+  if (!gpu) {
+    throw new Error('WebGPU is required but navigator.gpu is unavailable');
+  }
 
   const adapter = await gpu.requestAdapter();
   if (!adapter) {
@@ -120,7 +186,7 @@ async function createStartupResources(canvas: HTMLCanvasElement): Promise<WebGPU
   // [LAW:dataflow-not-control-flow] Device allocation uses one request path
   // for all browsers; capability differences flow through adapter features.
   const device = await adapter.requestDevice();
-  const context = canvas.getContext('webgpu') as any;
+  const context = toGpuCanvasContext(canvas.getContext('webgpu'));
   if (!context) {
     throw new Error('WebGPU is required but canvas.getContext("webgpu") failed');
   }
@@ -140,18 +206,18 @@ async function createStartupResources(canvas: HTMLCanvasElement): Promise<WebGPU
 }
 
 class WebGPUComputeRuntime {
-  private readonly pipeline: any;
-  private readonly migrationPipeline: any;
-  private readonly paramsBuffer: any;
-  private readonly migrationParamsBuffer: any;
-  private stateBuffers: [any, any];
-  private bindGroups: [any, any];
+  private readonly pipeline: GpuComputePipeline;
+  private readonly migrationPipeline: GpuComputePipeline;
+  private readonly paramsBuffer: GpuBuffer;
+  private readonly migrationParamsBuffer: GpuBuffer;
+  private stateBuffers: [GpuBuffer, GpuBuffer];
+  private bindGroups: [GpuBindGroup, GpuBindGroup];
   private stateCapacity: number;
   private readonly paramsStaging = new Float32Array(WEBGPU_RENDER_CONTRACT.computeParamsFloats);
   private readonly migrationParamsStaging = new Uint32Array(WEBGPU_RENDER_CONTRACT.computeMigrationParamsU32);
-  private pendingRetiredStateBuffers: Array<[any, any]> = [];
+  private pendingRetiredStateBuffers: Array<[GpuBuffer, GpuBuffer]> = [];
 
-  private constructor(private readonly device: any, pipeline: any, migrationPipeline: any) {
+  private constructor(private readonly device: GpuDevice, pipeline: GpuComputePipeline, migrationPipeline: GpuComputePipeline) {
     this.pipeline = pipeline;
     this.migrationPipeline = migrationPipeline;
     this.stateCapacity = WEBGPU_RENDER_CONTRACT.simulationCapacity;
@@ -164,10 +230,12 @@ class WebGPUComputeRuntime {
     this.paramsBuffer = device.createBuffer({
       size: WEBGPU_RENDER_CONTRACT.computeParamsFloats * Float32Array.BYTES_PER_ELEMENT,
       usage: GPU_BUFFER_USAGE.UNIFORM | GPU_BUFFER_USAGE.COPY_DST,
+      mappedAtCreation: false,
     });
     this.migrationParamsBuffer = device.createBuffer({
       size: WEBGPU_RENDER_CONTRACT.computeMigrationParamsU32 * Uint32Array.BYTES_PER_ELEMENT,
       usage: GPU_BUFFER_USAGE.UNIFORM | GPU_BUFFER_USAGE.COPY_DST,
+      mappedAtCreation: false,
     });
     this.bindGroups = this.recreateBindGroups();
 
@@ -180,7 +248,7 @@ class WebGPUComputeRuntime {
 
   // [LAW:single-enforcer] createComputePipelineAsync is the only permitted pipeline
   // creation path (P2-1: Async Compiler Service Architecture).
-  static async create(device: any): Promise<WebGPUComputeRuntime> {
+  static async create(device: GpuDevice): Promise<WebGPUComputeRuntime> {
     const [pipeline, migrationPipeline] = await Promise.all([
       device.createComputePipelineAsync({
         layout: 'auto',
@@ -212,15 +280,11 @@ class WebGPUComputeRuntime {
       }
     };
     const queue = this.device.queue;
-    if (typeof queue?.onSubmittedWorkDone === 'function') {
-      void queue.onSubmittedWorkDone().then(destroyRetirements).catch(destroyRetirements);
-      return;
-    }
-    destroyRetirements();
+    void queue.onSubmittedWorkDone().then(destroyRetirements).catch(destroyRetirements);
   }
 
   step(
-    commandEncoder: any,
+    commandEncoder: GpuCommandEncoder,
     activeCount: number,
     dtSeconds: number,
     inputHeader: Uint8Array,
@@ -244,7 +308,7 @@ class WebGPUComputeRuntime {
     this.paramsStaging[1] = clampedDt;
     this.paramsStaging[2] = 0.999; // Mild damping keeps default simulation stable.
     this.paramsStaging[3] = this.stateCapacity;
-    this.device.queue.writeBuffer(this.paramsBuffer, 0, this.paramsStaging);
+    this.device.queue.writeBuffer(this.paramsBuffer, 0, this.paramsStaging, 0, this.paramsStaging.byteLength);
 
     // [LAW:dataflow-not-control-flow] Compute pass always executes.
     // Variability is encoded in activeCount/dt values, not whether the pass runs.
@@ -268,14 +332,15 @@ class WebGPUComputeRuntime {
     this.pendingRetiredStateBuffers = [];
   }
 
-  private createStateBuffer(capacity: number): any {
+  private createStateBuffer(capacity: number): GpuBuffer {
     return this.device.createBuffer({
       size: WEBGPU_RENDER_CONTRACT.inputHeaderBytes + capacity * SIMULATION_STATE_BYTES,
       usage: GPU_BUFFER_USAGE.STORAGE | GPU_BUFFER_USAGE.COPY_DST | GPU_BUFFER_USAGE.COPY_SRC,
+      mappedAtCreation: false,
     });
   }
 
-  private recreateBindGroups(): [any, any] {
+  private recreateBindGroups(): [GpuBindGroup, GpuBindGroup] {
     const bindLayout = this.pipeline.getBindGroupLayout(WEBGPU_RENDER_CONTRACT.computeBindGroup);
     return [
       this.device.createBindGroup({
@@ -315,57 +380,88 @@ class WebGPUComputeRuntime {
     ];
   }
 
-  private ensureStateCapacity(commandEncoder: any, requiredCount: number): void {
+  private ensureStateCapacity(commandEncoder: GpuCommandEncoder, requiredCount: number): void {
     if (requiredCount <= this.stateCapacity) {
       return;
     }
+    const nextCapacity = growPowerOfTwoCapacity(this.stateCapacity, requiredCount);
+    const nextBuffers = this.allocateGrownStateBuffers(commandEncoder, nextCapacity);
+    const oldWordCount = this.computeStateWordCount(this.stateCapacity);
+    this.writeMigrationParams(oldWordCount);
+    this.migrateStateBuffers(commandEncoder, nextBuffers, oldWordCount);
+    this.swapStateBuffers(nextBuffers, nextCapacity);
+  }
 
-    let nextCapacity = this.stateCapacity;
-    while (nextCapacity < requiredCount) {
-      nextCapacity *= 2;
-    }
-
-    const nextBuffers: [any, any] = [
+  private allocateGrownStateBuffers(
+    commandEncoder: GpuCommandEncoder,
+    nextCapacity: number,
+  ): [GpuBuffer, GpuBuffer] {
+    const nextBuffers: [GpuBuffer, GpuBuffer] = [
       this.createStateBuffer(nextCapacity),
       this.createStateBuffer(nextCapacity),
     ];
     this.initializeGrownStateBuffers(commandEncoder, nextBuffers, nextCapacity);
+    return nextBuffers;
+  }
 
-    const oldWordCount =
-      (WEBGPU_RENDER_CONTRACT.inputHeaderBytes + this.stateCapacity * SIMULATION_STATE_BYTES) /
-      Uint32Array.BYTES_PER_ELEMENT;
+  private computeStateWordCount(capacity: number): number {
+    return (
+      (WEBGPU_RENDER_CONTRACT.inputHeaderBytes + capacity * SIMULATION_STATE_BYTES) /
+      Uint32Array.BYTES_PER_ELEMENT
+    );
+  }
+
+  private writeMigrationParams(oldWordCount: number): void {
     this.migrationParamsStaging[0] = oldWordCount >>> 0;
     this.migrationParamsStaging[1] = 0;
     this.migrationParamsStaging[2] = 0;
     this.migrationParamsStaging[3] = 0;
-    this.device.queue.writeBuffer(this.migrationParamsBuffer, 0, this.migrationParamsStaging);
+    this.device.queue.writeBuffer(
+      this.migrationParamsBuffer,
+      0,
+      this.migrationParamsStaging,
+      0,
+      this.migrationParamsStaging.byteLength,
+    );
+  }
 
+  private migrateStateBuffers(
+    commandEncoder: GpuCommandEncoder,
+    nextBuffers: readonly [GpuBuffer, GpuBuffer],
+    oldWordCount: number,
+  ): void {
     const migrationBindLayout = this.migrationPipeline.getBindGroupLayout(WEBGPU_RENDER_CONTRACT.computeMigrationBindGroup);
     const migrationPass = commandEncoder.beginComputePass();
     migrationPass.setPipeline(this.migrationPipeline);
     for (let i = 0; i < 2; i++) {
-      const migrationBindGroup = this.device.createBindGroup({
-        layout: migrationBindLayout,
-        entries: [
-          {
-            binding: WEBGPU_RENDER_CONTRACT.computeMigrationSrcBinding,
-            resource: { buffer: this.stateBuffers[i] },
-          },
-          {
-            binding: WEBGPU_RENDER_CONTRACT.computeMigrationDstBinding,
-            resource: { buffer: nextBuffers[i] },
-          },
-          {
-            binding: WEBGPU_RENDER_CONTRACT.computeMigrationParamsBinding,
-            resource: { buffer: this.migrationParamsBuffer },
-          },
-        ],
-      });
+      const migrationBindGroup = this.createMigrationBindGroup(migrationBindLayout, this.stateBuffers[i], nextBuffers[i]);
       migrationPass.setBindGroup(WEBGPU_RENDER_CONTRACT.computeMigrationBindGroup, migrationBindGroup);
       migrationPass.dispatchWorkgroups(computeDispatchWorkgroups(oldWordCount, SIMULATION_MIGRATION_WORKGROUP_SIZE));
     }
     migrationPass.end();
+  }
 
+  private createMigrationBindGroup(layout: ReturnType<GpuComputePipeline['getBindGroupLayout']>, src: GpuBuffer, dst: GpuBuffer): GpuBindGroup {
+    return this.device.createBindGroup({
+      layout,
+      entries: [
+        {
+          binding: WEBGPU_RENDER_CONTRACT.computeMigrationSrcBinding,
+          resource: { buffer: src },
+        },
+        {
+          binding: WEBGPU_RENDER_CONTRACT.computeMigrationDstBinding,
+          resource: { buffer: dst },
+        },
+        {
+          binding: WEBGPU_RENDER_CONTRACT.computeMigrationParamsBinding,
+          resource: { buffer: this.migrationParamsBuffer },
+        },
+      ],
+    });
+  }
+
+  private swapStateBuffers(nextBuffers: [GpuBuffer, GpuBuffer], nextCapacity: number): void {
     const retired = this.stateBuffers;
     this.stateBuffers = nextBuffers;
     this.stateCapacity = nextCapacity;
@@ -376,45 +472,38 @@ class WebGPUComputeRuntime {
   }
 
   private initializeGrownStateBuffers(
-    commandEncoder: any,
-    buffers: readonly [any, any],
+    commandEncoder: GpuCommandEncoder,
+    buffers: readonly [GpuBuffer, GpuBuffer],
     capacity: number,
   ): void {
     const totalBytes = WEBGPU_RENDER_CONTRACT.inputHeaderBytes + capacity * SIMULATION_STATE_BYTES;
-    const clearBuffer = commandEncoder?.clearBuffer;
-    if (typeof clearBuffer === 'function') {
-      for (const buffer of buffers) {
-        clearBuffer.call(commandEncoder, buffer, 0, totalBytes);
-      }
-      return;
-    }
-    const zeroBytes = new Uint8Array(totalBytes);
     for (const buffer of buffers) {
       // [LAW:dataflow-not-control-flow] Newly allocated lanes are always
       // initialized via one fixed operation sequence before migration reads.
-      this.device.queue.writeBuffer(buffer, 0, zeroBytes);
+      commandEncoder.clearBuffer(buffer, 0, totalBytes);
     }
   }
 }
 
 class WebGPUDrawPrepRuntime {
-  private pipeline: any;
-  private readonly paramsBuffer: any;
+  private pipeline: GpuComputePipeline;
+  private readonly paramsBuffer: GpuBuffer;
   private readonly paramsStaging = new Uint32Array(WEBGPU_RENDER_CONTRACT.drawPrepParamsU32);
-  private activeBindGroup: any | null = null;
-  private activeIndirectBuffer: any | null = null;
+  private activeBindGroup: GpuBindGroup | null = null;
+  private activeIndirectBuffer: GpuBuffer | null = null;
 
-  private constructor(private readonly device: any, initialPipeline: any) {
+  private constructor(private readonly device: GpuDevice, initialPipeline: GpuComputePipeline) {
     this.pipeline = initialPipeline;
     this.paramsBuffer = device.createBuffer({
       size: WEBGPU_RENDER_CONTRACT.drawPrepParamsU32 * Uint32Array.BYTES_PER_ELEMENT,
       usage: GPU_BUFFER_USAGE.UNIFORM | GPU_BUFFER_USAGE.COPY_DST,
+      mappedAtCreation: false,
     });
   }
 
   // [LAW:single-enforcer] createComputePipelineAsync is the only permitted pipeline
   // creation path (P2-1: Async Compiler Service Architecture).
-  static async create(device: any): Promise<WebGPUDrawPrepRuntime> {
+  static async create(device: GpuDevice): Promise<WebGPUDrawPrepRuntime> {
     const shaderModule = device.createShaderModule({ code: DRAW_PREP_COMPUTE_WGSL });
     const pipeline = await device.createComputePipelineAsync({
       layout: 'auto',
@@ -426,7 +515,7 @@ class WebGPUDrawPrepRuntime {
     return new WebGPUDrawPrepRuntime(device, pipeline);
   }
 
-  private getOrCreateBindGroup(indirectBuffer: any): any {
+  private getOrCreateBindGroup(indirectBuffer: GpuBuffer): GpuBindGroup {
     if (this.activeBindGroup && this.activeIndirectBuffer === indirectBuffer) {
       return this.activeBindGroup;
     }
@@ -450,25 +539,20 @@ class WebGPUDrawPrepRuntime {
   }
 
   step(
-    commandEncoder: any,
-    indirectBuffer: any,
-    recordIndex: number,
-    maxRecords: number,
-    indexCount: number,
-    instanceCount: number,
-    firstInstance: number,
+    commandEncoder: GpuCommandEncoder,
+    input: DrawPrepStepInput,
   ): void {
-    this.paramsStaging[0] = indexCount >>> 0;
-    this.paramsStaging[1] = instanceCount >>> 0;
+    this.paramsStaging[0] = input.indexCount >>> 0;
+    this.paramsStaging[1] = input.instanceCount >>> 0;
     this.paramsStaging[2] = 0; // firstIndex
     this.paramsStaging[3] = 0; // baseVertex
-    this.paramsStaging[4] = firstInstance >>> 0;
-    this.paramsStaging[5] = recordIndex >>> 0;
-    this.paramsStaging[6] = maxRecords >>> 0;
+    this.paramsStaging[4] = input.firstInstance >>> 0;
+    this.paramsStaging[5] = input.recordIndex >>> 0;
+    this.paramsStaging[6] = input.maxRecords >>> 0;
     this.paramsStaging[7] = 0;
-    this.device.queue.writeBuffer(this.paramsBuffer, 0, this.paramsStaging);
+    this.device.queue.writeBuffer(this.paramsBuffer, 0, this.paramsStaging, 0, this.paramsStaging.byteLength);
 
-    const bindGroup = this.getOrCreateBindGroup(indirectBuffer);
+    const bindGroup = this.getOrCreateBindGroup(input.indirectBuffer);
 
     const pass = commandEncoder.beginComputePass();
     pass.setPipeline(this.pipeline);
@@ -486,6 +570,10 @@ class WebGPUDrawPrepRuntime {
  * WebGPU renderer that consumes RenderFrameIR directly.
  */
 export class WebGPURenderer {
+  private readonly canvas: HTMLCanvasElement;
+  private readonly device: GpuDevice;
+  private readonly context: GpuCanvasContext;
+  private readonly canvasFormat: string;
   private readonly tessellator = new PathTessellator();
   private readonly inputService = new InputService();
   private readonly meshCache = new Map<string, GPUMesh>();
@@ -494,16 +582,16 @@ export class WebGPURenderer {
   private readonly drawPrepRuntime: WebGPUDrawPrepRuntime;
   private readonly adapterFeatures: ReadonlySet<string>;
 
-  private readonly pathPipeline: any;
-  private readonly sceneUniformBuffer: any;
-  private readonly sceneBindGroup: any;
+  private readonly pathPipeline: GpuRenderPipeline;
+  private readonly sceneUniformBuffer: GpuBuffer;
+  private readonly sceneBindGroup: GpuBindGroup;
   private readonly shapeBankManager: WebGPUShapeBankManager;
   private readonly indirectArgsInspector: WebGPUIndirectArgsInspector;
-  private indirectArgsBuffer: any;
+  private indirectArgsBuffer: GpuBuffer;
   private indirectArgsCapacityRecords = 1;
 
-  private instanceBuffer: any;
-  private instanceBindGroup: any;
+  private instanceBuffer: GpuBuffer;
+  private instanceBindGroup: GpuBindGroup;
   private instanceCapacity = 0;
   private instanceStaging = new Float32Array(0);
 
@@ -513,30 +601,36 @@ export class WebGPURenderer {
   private frameIndex = 0;
   private fatalError: Error | null = null;
   private lastConfiguredSize = { width: -1, height: -1 };
-  private msaaColorTexture: any | null = null;
-  private msaaColorView: any | null = null;
+  private msaaColorTexture: GpuTexture | null = null;
+  private msaaColorView: GpuTextureView | null = null;
 
-  private constructor(
-    private readonly canvas: HTMLCanvasElement,
-    private readonly device: any,
-    private readonly context: any,
-    private readonly canvasFormat: string,
-    adapterFeatures: ReadonlySet<string>,
-    computeRuntime: WebGPUComputeRuntime,
-    drawPrepRuntime: WebGPUDrawPrepRuntime,
-    pathPipeline: any,
-  ) {
+  private constructor(args: {
+    readonly canvas: HTMLCanvasElement;
+    readonly device: GpuDevice;
+    readonly context: GpuCanvasContext;
+    readonly canvasFormat: string;
+    readonly adapterFeatures: ReadonlySet<string>;
+    readonly computeRuntime: WebGPUComputeRuntime;
+    readonly drawPrepRuntime: WebGPUDrawPrepRuntime;
+    readonly pathPipeline: GpuRenderPipeline;
+  }) {
+    this.canvas = args.canvas;
+    this.device = args.device;
+    this.context = args.context;
+    this.canvasFormat = args.canvasFormat;
+    const { adapterFeatures, computeRuntime, drawPrepRuntime, pathPipeline } = args;
     this.adapterFeatures = adapterFeatures;
     this.computeRuntime = computeRuntime;
     this.drawPrepRuntime = drawPrepRuntime;
     this.pathPipeline = pathPipeline;
 
-    this.sceneUniformBuffer = device.createBuffer({
+    this.sceneUniformBuffer = this.device.createBuffer({
       size: WEBGPU_RENDER_CONTRACT.sceneUniformBytes,
       usage: GPU_BUFFER_USAGE.UNIFORM | GPU_BUFFER_USAGE.COPY_DST,
+      mappedAtCreation: false,
     });
 
-    this.sceneBindGroup = device.createBindGroup({
+    this.sceneBindGroup = this.device.createBindGroup({
       layout: this.pathPipeline.getBindGroupLayout(WEBGPU_RENDER_CONTRACT.sceneBindGroup),
       entries: [
         {
@@ -545,24 +639,26 @@ export class WebGPURenderer {
         },
       ],
     });
-    this.indirectArgsBuffer = device.createBuffer({
+    this.indirectArgsBuffer = this.device.createBuffer({
       size: WEBGPU_RENDER_CONTRACT.indirectArgsBytes,
       usage:
         GPU_BUFFER_USAGE.STORAGE |
         GPU_BUFFER_USAGE.INDIRECT |
         GPU_BUFFER_USAGE.COPY_DST |
         GPU_BUFFER_USAGE.COPY_SRC,
+      mappedAtCreation: false,
     });
     this.shapeBankManager = new WebGPUShapeBankManager(this.device, this.pathPipeline);
     this.indirectArgsInspector = new WebGPUIndirectArgsInspector(this.device);
 
-    this.instanceBuffer = device.createBuffer({
+    this.instanceBuffer = this.device.createBuffer({
       size: MIN_INSTANCE_CAPACITY * INSTANCE_FLOATS * 4,
       usage: GPU_BUFFER_USAGE.STORAGE | GPU_BUFFER_USAGE.COPY_DST,
+      mappedAtCreation: false,
     });
     this.instanceCapacity = MIN_INSTANCE_CAPACITY;
     this.instanceStaging = new Float32Array(this.instanceCapacity * INSTANCE_FLOATS);
-    this.instanceBindGroup = device.createBindGroup({
+    this.instanceBindGroup = this.device.createBindGroup({
       layout: this.pathPipeline.getBindGroupLayout(WEBGPU_RENDER_CONTRACT.instanceBindGroup),
       entries: [
         {
@@ -580,8 +676,8 @@ export class WebGPURenderer {
 
     // [LAW:single-enforcer] Renderer is the single boundary that captures GPU validation
     // failures and turns them into runtime-fatal errors.
-    this.device.addEventListener?.('uncapturederror', (event: { error?: { message?: string } }) => {
-      const message = event?.error?.message ?? 'Unknown WebGPU validation error';
+    this.device.addEventListener('uncapturederror', (event: { error: { message: string } }) => {
+      const message = event.error.message || 'Unknown WebGPU validation error';
       this.fatalError = new Error(`WebGPU uncaptured error: ${message}`);
     });
   }
@@ -595,7 +691,7 @@ export class WebGPURenderer {
       WebGPUDrawPrepRuntime.create(device),
       WebGPURenderer.createPathPipelineAsync(device, canvasFormat),
     ]);
-    return new WebGPURenderer(
+    return new WebGPURenderer({
       canvas,
       device,
       context,
@@ -604,7 +700,7 @@ export class WebGPURenderer {
       computeRuntime,
       drawPrepRuntime,
       pathPipeline,
-    );
+    });
   }
 
   render(input: RenderInput): void {
@@ -627,45 +723,14 @@ export class WebGPURenderer {
     const commandEncoder = this.device.createCommandEncoder();
     const frameIndex = this.frameIndex;
     const simulationInstanceCount = this.countSimulationInstances(drawPlan);
-    const frameInputHeader = this.inputService.marshal({
-      timeSeconds: input.timeMs / 1000,
-      deltaTimeSeconds: dtSeconds,
-      frameCount: frameIndex,
-      width: input.width,
-      height: input.height,
-      mouseX: input.inputMouseX ?? 0,
-      mouseY: input.inputMouseY ?? 0,
-      mouseButtons: input.inputMouseButtons ?? 0,
-      audioLow: input.inputAudioLow ?? 0,
-      audioMid: input.inputAudioMid ?? 0,
-      audioHigh: input.inputAudioHigh ?? 0,
-      gaugeActive: input.inputGaugeActive ?? 0,
-    });
+    const frameInputHeader = this.buildFrameInputHeader(input, dtSeconds, frameIndex);
     this.computeRuntime.step(commandEncoder, simulationInstanceCount, dtSeconds, frameInputHeader, frameIndex);
     const totalInstances = this.countPlannedInstances(drawPlan);
     this.ensureInstanceCapacity(totalInstances);
     const packedInstances = this.packDrawPlanInstances(drawPlan);
-    if (packedInstances > 0) {
-      this.device.queue.writeBuffer(
-        this.instanceBuffer,
-        0,
-        this.instanceStaging.buffer,
-        0,
-        packedInstances * WEBGPU_RENDER_CONTRACT.instanceBytes
-      );
-    }
+    this.uploadPackedInstances(packedInstances);
     this.ensureIndirectArgsCapacity(drawPlan.length);
-    for (const prepared of drawPlan) {
-      this.drawPrepRuntime.step(
-        commandEncoder,
-        this.indirectArgsBuffer,
-        prepared.indirectRecordIndex,
-        this.indirectArgsCapacityRecords,
-        prepared.mesh.indexCount,
-        prepared.instanceCount,
-        prepared.firstInstance,
-      );
-    }
+    this.runDrawPrepPasses(commandEncoder, drawPlan);
 
     const currentTextureView = this.context.getCurrentTexture().createView();
     const colorAttachmentView = this.msaaColorView ?? currentTextureView;
@@ -698,6 +763,52 @@ export class WebGPURenderer {
     this.frameIndex += 1;
   }
 
+  private buildFrameInputHeader(input: RenderInput, dtSeconds: number, frameIndex: number): Uint8Array {
+    return this.inputService.marshal({
+      timeSeconds: input.timeMs / 1000,
+      deltaTimeSeconds: dtSeconds,
+      frameCount: frameIndex,
+      width: input.width,
+      height: input.height,
+      mouseX: input.inputMouseX,
+      mouseY: input.inputMouseY,
+      mouseButtons: input.inputMouseButtons,
+      audioLow: input.inputAudioLow,
+      audioMid: input.inputAudioMid,
+      audioHigh: input.inputAudioHigh,
+      gaugeActive: input.inputGaugeActive,
+    });
+  }
+
+  private uploadPackedInstances(packedInstances: number): void {
+    if (packedInstances <= 0) {
+      return;
+    }
+    this.device.queue.writeBuffer(
+      this.instanceBuffer,
+      0,
+      this.instanceStaging.buffer,
+      0,
+      packedInstances * WEBGPU_RENDER_CONTRACT.instanceBytes
+    );
+  }
+
+  private runDrawPrepPasses(
+    commandEncoder: GpuCommandEncoder,
+    drawPlan: readonly PreparedDrawPathOp[],
+  ): void {
+    for (const prepared of drawPlan) {
+      this.drawPrepRuntime.step(commandEncoder, {
+        indirectBuffer: this.indirectArgsBuffer,
+        recordIndex: prepared.indirectRecordIndex,
+        maxRecords: this.indirectArgsCapacityRecords,
+        indexCount: prepared.mesh.indexCount,
+        instanceCount: prepared.instanceCount,
+        firstInstance: prepared.firstInstance,
+      });
+    }
+  }
+
   async readIndirectArgsDebugView(maxRecords: number = this.indirectArgsCapacityRecords): Promise<IndirectArgsReadbackSnapshot> {
     const safeRecords = Math.max(0, Math.min(this.indirectArgsCapacityRecords, Math.floor(maxRecords)));
     return this.indirectArgsInspector.readIndirectArgs(this.indirectArgsBuffer, safeRecords);
@@ -722,18 +833,23 @@ export class WebGPURenderer {
 
   private assertRenderInputContract(input: RenderInput): void {
     const { frame, shapeBank, width, height, zoom, panX, panY, timeMs } = input;
-    const rawInput = input as unknown as Record<string, unknown>;
     // [LAW:no-string-math] Lowering-authored WGSL source injection is forbidden.
     // Renderer contract rejects legacy draw-prep WGSL payloads at the sink boundary.
-    if (Object.prototype.hasOwnProperty.call(rawInput, 'drawPrepShaderWgsl')) {
+    if (Object.prototype.hasOwnProperty.call(input, 'drawPrepShaderWgsl')) {
       throw new Error('WebGPURenderer: drawPrepShaderWgsl override is forbidden in P0');
     }
-    if (Object.prototype.hasOwnProperty.call(rawInput, 'topologyRegistrySnapshot')) {
+    if (Object.prototype.hasOwnProperty.call(input, 'topologyRegistrySnapshot')) {
       throw new Error('WebGPURenderer: topology registry snapshot payloads are forbidden in P0');
     }
     if (frame.version !== 2) {
       throw new Error(`WebGPURenderer: unsupported frame version ${frame.version}`);
     }
+    this.assertShapeBankContract(shapeBank);
+    this.assertViewportContract(input);
+    this.assertSignalInputContract(input);
+  }
+
+  private assertShapeBankContract(shapeBank: RenderShapeBankSource): void {
     if (!shapeBank) {
       throw new Error('WebGPURenderer: render input must provide shapeBank');
     }
@@ -751,6 +867,10 @@ export class WebGPURenderer {
         `WebGPURenderer: shapeBank.staticBoundary must be a non-negative integer, got ${shapeBank.staticBoundary}`,
       );
     }
+  }
+
+  private assertViewportContract(input: RenderInput): void {
+    const { width, height, zoom, panX, panY, timeMs } = input;
     if (!Number.isFinite(width) || width < 0) {
       throw new Error(`WebGPURenderer: width must be a finite non-negative number, got ${width}`);
     }
@@ -766,8 +886,10 @@ export class WebGPURenderer {
     if (!Number.isFinite(timeMs)) {
       throw new Error(`WebGPURenderer: timeMs must be finite, got ${timeMs}`);
     }
+  }
 
-    const optionalFields = [
+  private assertSignalInputContract(input: RenderInput): void {
+    const requiredInputFields = [
       ['inputMouseX', input.inputMouseX],
       ['inputMouseY', input.inputMouseY],
       ['inputMouseButtons', input.inputMouseButtons],
@@ -776,9 +898,9 @@ export class WebGPURenderer {
       ['inputAudioHigh', input.inputAudioHigh],
       ['inputGaugeActive', input.inputGaugeActive],
     ] as const;
-    for (const [name, value] of optionalFields) {
-      if (value !== undefined && !Number.isFinite(value)) {
-        throw new Error(`WebGPURenderer: ${name} must be finite when provided, got ${value}`);
+    for (const [name, value] of requiredInputFields) {
+      if (!Number.isFinite(value)) {
+        throw new Error(`WebGPURenderer: ${name} must be finite, got ${value}`);
       }
     }
   }
@@ -842,7 +964,7 @@ export class WebGPURenderer {
     this.sceneUniforms[5] = Math.min(input.width, input.height);
     this.sceneUniforms[6] = 0;
     this.sceneUniforms[7] = 0;
-    this.device.queue.writeBuffer(this.sceneUniformBuffer, 0, this.sceneUniforms);
+    this.device.queue.writeBuffer(this.sceneUniformBuffer, 0, this.sceneUniforms, 0, this.sceneUniforms.byteLength);
   }
 
   private buildDrawPlan(frame: RenderFrameIR): PreparedDrawPathOp[] {
@@ -867,44 +989,53 @@ export class WebGPURenderer {
       if (shapeBankWordOffset === undefined) {
         throw new Error(`WebGPURenderer: topology ${op.geometry.topologyId} missing from shape bank`);
       }
-      const hasFill = Boolean(op.style.fillColor && op.style.fillColor.length > 0);
-      const hasStroke = Boolean(op.style.strokeColor && op.style.strokeColor.length > 0);
-      if (!hasFill && !hasStroke) {
-        throw new Error('WebGPURenderer: drawPathInstances op must provide fillColor and/or strokeColor');
-      }
-      // [LAW:dataflow-not-control-flow] Draw planning uses one canonical pass
-      // order; fill/stroke variability is encoded in pass data, not alternate pipelines.
-      if (hasFill) {
-        prepared.push({
-          op,
-          mesh,
-          shapeBankWordOffset,
-          sourceSinkIndex,
-          indirectRecordIndex: prepared.length,
-          firstInstance: nextFirstInstance,
-          instanceCount: op.instances.count,
-          pass: 'fill',
-        });
-        nextFirstInstance += op.instances.count;
-      }
-      if (hasStroke) {
-        prepared.push({
-          op,
-          mesh,
-          shapeBankWordOffset,
-          sourceSinkIndex,
-          indirectRecordIndex: prepared.length,
-          firstInstance: nextFirstInstance,
-          instanceCount: op.instances.count,
-          pass: 'stroke',
-        });
-        nextFirstInstance += op.instances.count;
-      }
+      nextFirstInstance = this.appendDrawPassesForOp({
+        prepared,
+        op,
+        mesh,
+        shapeBankWordOffset,
+        sourceSinkIndex,
+        nextFirstInstance,
+      });
     }
     return prepared;
   }
 
-  private drawPreparedPathOp(pass: any, prepared: PreparedDrawPathOp): void {
+  private appendDrawPassesForOp(input: AppendDrawPassesInput): number {
+    const { prepared, op, mesh, shapeBankWordOffset, sourceSinkIndex } = input;
+    let nextFirstInstance = input.nextFirstInstance;
+    const passes = this.resolveRenderPasses(op.style);
+    // [LAW:dataflow-not-control-flow] Draw planning uses one canonical pass
+    // order; fill/stroke variability is encoded in pass data, not alternate pipelines.
+    for (const pass of passes) {
+      prepared.push({
+        op,
+        mesh,
+        shapeBankWordOffset,
+        sourceSinkIndex,
+        indirectRecordIndex: prepared.length,
+        firstInstance: nextFirstInstance,
+        instanceCount: op.instances.count,
+        pass,
+      });
+      nextFirstInstance += op.instances.count;
+    }
+    return nextFirstInstance;
+  }
+
+  private resolveRenderPasses(style: DrawPathInstancesOp['style']): readonly ('fill' | 'stroke')[] {
+    const hasFill = Boolean(style.fillColor && style.fillColor.length > 0);
+    const hasStroke = Boolean(style.strokeColor && style.strokeColor.length > 0);
+    if (!hasFill && !hasStroke) {
+      throw new Error('WebGPURenderer: drawPathInstances op must provide fillColor and/or strokeColor');
+    }
+    if (hasFill && hasStroke) {
+      return ['fill', 'stroke'];
+    }
+    return hasFill ? ['fill'] : ['stroke'];
+  }
+
+  private drawPreparedPathOp(pass: GpuRenderPassEncoder, prepared: PreparedDrawPathOp): void {
     pass.setVertexBuffer(0, prepared.mesh.vertexBuffer);
     pass.setIndexBuffer(prepared.mesh.indexBuffer, prepared.mesh.indexFormat);
     pass.drawIndexedIndirect(
@@ -980,7 +1111,7 @@ export class WebGPURenderer {
   private createUploadBuffer(
     data: Float32Array | Uint16Array | Uint32Array,
     usage: number
-  ): any {
+  ): GpuBuffer {
     // [LAW:no-silent-fallbacks] mappedAtCreation buffers must be 4-byte aligned;
     // enforce the WebGPU contract deterministically at allocation time.
     const safeSize = Math.max(4, alignTo4(data.byteLength));
@@ -990,7 +1121,7 @@ export class WebGPURenderer {
       mappedAtCreation: data.byteLength > 0,
     });
     if (data.byteLength > 0) {
-      const dst = new Uint8Array(buffer.getMappedRange());
+      const dst = new Uint8Array(buffer.getMappedRange(0, safeSize));
       const src = new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
       dst.set(src);
       buffer.unmap();
@@ -1004,118 +1135,212 @@ export class WebGPURenderer {
     renderPassKind: 'fill' | 'stroke',
     firstInstance: number,
   ): number {
-    const count = op.instances.count;
-    if (count <= 0) {
+    if (op.instances.count <= 0) {
       return 0;
     }
+    const plan = this.createInstancePackingPlan(op, shapeBankWordOffset, renderPassKind);
+    this.ensureInstanceCapacity(firstInstance + plan.count);
+    for (let i = 0; i < plan.count; i++) {
+      this.writePackedInstance(plan, firstInstance, i);
+    }
+    return plan.count;
+  }
 
-    const { position, size, rotation, scale2 } = op.instances;
-    const { style } = op;
-    const hasFill = Boolean(style.fillColor && style.fillColor.length > 0);
-    const hasStroke = Boolean(style.strokeColor && style.strokeColor.length > 0);
-    const activeColor = renderPassKind === 'stroke' ? style.strokeColor : style.fillColor;
+  private createInstancePackingPlan(
+    op: DrawPathInstancesOp,
+    shapeBankWordOffset: number,
+    renderPassKind: 'fill' | 'stroke',
+  ): InstancePackingPlan {
+    const count = op.instances.count;
+    const { position, rotation, scale2 } = this.assertInstanceTransformArrays(op.instances, count);
+    const { activeColor, isUniformColor, hasStroke } = this.resolvePassColor(op.style, renderPassKind, count);
+    this.assertFillRuleSupport(op.style.fillColor, op.style.fillRule);
+    const size = this.resolveInstanceSizeSource(op.instances.size, count);
+    const strokeWidthSource = this.resolveStrokeWidthSource(op.style.strokeWidth, hasStroke, count);
 
+    return {
+      count,
+      position,
+      rotation,
+      scale2,
+      size,
+      activeColor,
+      isUniformColor,
+      hasStroke,
+      strokeWidthSource,
+      renderPassKind,
+      shapeBankWordOffset,
+    };
+  }
+
+  private assertInstanceTransformArrays(
+    instances: DrawPathInstancesOp['instances'],
+    count: number,
+  ): Pick<InstancePackingPlan, 'position' | 'rotation' | 'scale2'> {
+    const { position, rotation, scale2 } = instances;
     if (!(position instanceof Float32Array) || position.length !== count * 2) {
       throw new Error(`WebGPURenderer: position must be Float32Array(count*2), got ${position.length}`);
     }
-
     if (!(rotation instanceof Float32Array) || rotation.length !== count) {
       throw new Error(`WebGPURenderer: rotation must be Float32Array(count), got ${rotation.length}`);
     }
-
     if (!(scale2 instanceof Float32Array) || scale2.length !== count * 2) {
       throw new Error(`WebGPURenderer: scale2 must be Float32Array(count*2), got ${scale2.length}`);
     }
+    return { position, rotation, scale2 };
+  }
 
+  private resolvePassColor(
+    style: DrawPathInstancesOp['style'],
+    renderPassKind: 'fill' | 'stroke',
+    count: number,
+  ): Pick<InstancePackingPlan, 'activeColor' | 'isUniformColor' | 'hasStroke'> {
+    const hasStroke = Boolean(style.strokeColor && style.strokeColor.length > 0);
+    const activeColor = renderPassKind === 'stroke' ? style.strokeColor : style.fillColor;
     if (!activeColor || !(activeColor instanceof Uint8ClampedArray) || activeColor.length === 0) {
       throw new Error(`WebGPURenderer: ${renderPassKind}Color must be provided as Uint8ClampedArray`);
     }
-
-    const fillRule = style.fillRule ?? 'nonzero';
-    if (hasFill && fillRule !== 'nonzero') {
-      throw new Error(`WebGPURenderer: fillRule "${fillRule}" is not supported`);
-    }
-
-    const isUniformSize = typeof size === 'number';
-    if (!isUniformSize && (!(size instanceof Float32Array) || size.length !== count)) {
-      throw new Error('WebGPURenderer: size must be number or Float32Array(count)');
-    }
-    if (isUniformSize && !Number.isFinite(size as number)) {
-      throw new Error('WebGPURenderer: size must be finite when provided as a number');
-    }
-
     const isUniformColor = activeColor.length === 4;
     if (!isUniformColor && activeColor.length !== count * 4) {
       throw new Error(`WebGPURenderer: ${renderPassKind}Color must be length 4 or count*4`);
     }
+    return { activeColor, isUniformColor, hasStroke };
+  }
 
-    let strokeWidthSource: number | Float32Array | null = null;
-    if (hasStroke) {
-      strokeWidthSource = style.strokeWidth ?? 0.01;
-      if (typeof strokeWidthSource !== 'number' &&
-          (!(strokeWidthSource instanceof Float32Array) || strokeWidthSource.length !== count)) {
-        throw new Error('WebGPURenderer: strokeWidth must be number or Float32Array(count)');
+  private assertFillRuleSupport(
+    fillColor: DrawPathInstancesOp['style']['fillColor'],
+    fillRule: DrawPathInstancesOp['style']['fillRule'],
+  ): void {
+    const hasFill = Boolean(fillColor && fillColor.length > 0);
+    const resolvedFillRule = fillRule ?? 'nonzero';
+    if (hasFill && resolvedFillRule !== 'nonzero') {
+      throw new Error(`WebGPURenderer: fillRule "${resolvedFillRule}" is not supported`);
+    }
+  }
+
+  private resolveInstanceSizeSource(size: DrawPathInstancesOp['instances']['size'], count: number): number | Float32Array {
+    if (typeof size === 'number') {
+      if (!Number.isFinite(size)) {
+        throw new Error('WebGPURenderer: size must be finite when provided as a number');
       }
-      if (typeof strokeWidthSource === 'number' && !Number.isFinite(strokeWidthSource)) {
+      return size;
+    }
+    if (!(size instanceof Float32Array) || size.length !== count) {
+      throw new Error('WebGPURenderer: size must be number or Float32Array(count)');
+    }
+    return size;
+  }
+
+  private resolveStrokeWidthSource(
+    strokeWidth: DrawPathInstancesOp['style']['strokeWidth'],
+    hasStroke: boolean,
+    count: number,
+  ): number | Float32Array | null {
+    if (!hasStroke) {
+      return null;
+    }
+    const source = strokeWidth ?? 0.01;
+    if (typeof source === 'number') {
+      if (!Number.isFinite(source)) {
         throw new Error('WebGPURenderer: strokeWidth must be finite when provided as a number');
       }
+      return source;
     }
-
-    this.ensureInstanceCapacity(firstInstance + count);
-
-    for (let i = 0; i < count; i++) {
-      const base = (firstInstance + i) * INSTANCE_FLOATS;
-      const posX = position[i * 2];
-      const posY = position[i * 2 + 1];
-      const rotationValue = rotation[i];
-      const scaleX = scale2[i * 2];
-      const scaleY = scale2[i * 2 + 1];
-      // [LAW:single-enforcer] Per-instance numeric validity is enforced once at
-      // GPU payload packing so downstream shader stages never receive NaN/Inf.
-      if (!Number.isFinite(posX) || !Number.isFinite(posY) ||
-          !Number.isFinite(rotationValue) || !Number.isFinite(scaleX) || !Number.isFinite(scaleY)) {
-        throw new Error(`WebGPURenderer: instance ${firstInstance + i} contains non-finite transform values`);
-      }
-
-      const sizeBase = isUniformSize ? (size as number) : (size as Float32Array)[i];
-      if (!Number.isFinite(sizeBase)) {
-        throw new Error(`WebGPURenderer: instance ${firstInstance + i} size must be finite`);
-      }
-      const strokeWidth = hasStroke
-        ? (typeof strokeWidthSource === 'number'
-          ? strokeWidthSource
-          : (strokeWidthSource as Float32Array)[i] ?? 0)
-        : 0;
-      if (!Number.isFinite(strokeWidth)) {
-        throw new Error(`WebGPURenderer: instance ${firstInstance + i} strokeWidth must be finite`);
-      }
-      const strokeHalf = Math.max(0, strokeWidth) * 0.5;
-      const sizeValue = renderPassKind === 'stroke'
-        ? sizeBase + strokeHalf
-        : hasStroke
-          ? Math.max(0, sizeBase - strokeHalf)
-          : sizeBase;
-      if (!Number.isFinite(sizeValue)) {
-        throw new Error(`WebGPURenderer: instance ${firstInstance + i} resolved size must be finite`);
-      }
-
-      this.instanceStaging[base] = posX;
-      this.instanceStaging[base + 1] = posY;
-      this.instanceStaging[base + 2] = sizeValue;
-      this.instanceStaging[base + 3] = rotationValue;
-      this.instanceStaging[base + 4] = scaleX;
-      this.instanceStaging[base + 5] = scaleY;
-      this.instanceStaging[base + 6] = shapeBankWordOffset;
-      this.instanceStaging[base + 7] = 0;
-
-      const colorOffset = isUniformColor ? 0 : i * 4;
-      this.instanceStaging[base + 8] = activeColor[colorOffset] / 255;
-      this.instanceStaging[base + 9] = activeColor[colorOffset + 1] / 255;
-      this.instanceStaging[base + 10] = activeColor[colorOffset + 2] / 255;
-      this.instanceStaging[base + 11] = activeColor[colorOffset + 3] / 255;
+    if (!(source instanceof Float32Array) || source.length !== count) {
+      throw new Error('WebGPURenderer: strokeWidth must be number or Float32Array(count)');
     }
+    return source;
+  }
 
-    return count;
+  private writePackedInstance(plan: InstancePackingPlan, firstInstance: number, index: number): void {
+    const instanceId = firstInstance + index;
+    const base = (firstInstance + index) * INSTANCE_FLOATS;
+    const posX = plan.position[index * 2];
+    const posY = plan.position[index * 2 + 1];
+    const rotationValue = plan.rotation[index];
+    const scaleX = plan.scale2[index * 2];
+    const scaleY = plan.scale2[index * 2 + 1];
+    this.assertFiniteInstanceValue(instanceId, 'positionX', posX);
+    this.assertFiniteInstanceValue(instanceId, 'positionY', posY);
+    this.assertFiniteInstanceValue(instanceId, 'rotation', rotationValue);
+    this.assertFiniteInstanceValue(instanceId, 'scaleX', scaleX);
+    this.assertFiniteInstanceValue(instanceId, 'scaleY', scaleY);
+
+    const sizeBase = typeof plan.size === 'number' ? plan.size : plan.size[index];
+    this.assertFiniteInstanceValue(instanceId, 'size', sizeBase);
+    const strokeWidth = this.resolveStrokeWidth(plan.strokeWidthSource, index);
+    this.assertFiniteInstanceValue(instanceId, 'strokeWidth', strokeWidth);
+    const sizeValue = this.resolvePackedSize(plan.renderPassKind, plan.hasStroke, sizeBase, strokeWidth);
+    this.assertFiniteInstanceValue(instanceId, 'resolvedSize', sizeValue);
+
+    this.writePackedTransformFields(base, {
+      posX,
+      posY,
+      sizeValue,
+      rotationValue,
+      scaleX,
+      scaleY,
+      shapeBankWordOffset: plan.shapeBankWordOffset,
+    });
+    this.writePackedColorFields(base, plan.activeColor, plan.isUniformColor, index);
+  }
+
+  private assertFiniteInstanceValue(instanceId: number, fieldName: string, value: number): void {
+    // [LAW:single-enforcer] Per-instance numeric validity is enforced once at
+    // GPU payload packing so downstream shader stages never receive NaN/Inf.
+    if (!Number.isFinite(value)) {
+      throw new Error(`WebGPURenderer: instance ${instanceId} ${fieldName} must be finite`);
+    }
+  }
+
+  private writePackedTransformFields(base: number, fields: PackedTransformFields): void {
+    this.instanceStaging[base] = fields.posX;
+    this.instanceStaging[base + 1] = fields.posY;
+    this.instanceStaging[base + 2] = fields.sizeValue;
+    this.instanceStaging[base + 3] = fields.rotationValue;
+    this.instanceStaging[base + 4] = fields.scaleX;
+    this.instanceStaging[base + 5] = fields.scaleY;
+    this.instanceStaging[base + 6] = fields.shapeBankWordOffset;
+    this.instanceStaging[base + 7] = 0;
+  }
+
+  private writePackedColorFields(
+    base: number,
+    activeColor: Uint8ClampedArray,
+    isUniformColor: boolean,
+    index: number,
+  ): void {
+    const colorOffset = isUniformColor ? 0 : index * 4;
+    this.instanceStaging[base + 8] = activeColor[colorOffset] / 255;
+    this.instanceStaging[base + 9] = activeColor[colorOffset + 1] / 255;
+    this.instanceStaging[base + 10] = activeColor[colorOffset + 2] / 255;
+    this.instanceStaging[base + 11] = activeColor[colorOffset + 3] / 255;
+  }
+
+  private resolveStrokeWidth(strokeWidthSource: number | Float32Array | null, index: number): number {
+    if (strokeWidthSource === null) {
+      return 0;
+    }
+    if (typeof strokeWidthSource === 'number') {
+      return strokeWidthSource;
+    }
+    return strokeWidthSource[index];
+  }
+
+  private resolvePackedSize(
+    renderPassKind: 'fill' | 'stroke',
+    hasStroke: boolean,
+    sizeBase: number,
+    strokeWidth: number,
+  ): number {
+    const strokeHalf = Math.max(0, strokeWidth) * 0.5;
+    if (renderPassKind === 'stroke') {
+      return sizeBase + strokeHalf;
+    }
+    if (hasStroke) {
+      return Math.max(0, sizeBase - strokeHalf);
+    }
+    return sizeBase;
   }
 
   private ensureInstanceCapacity(requiredCount: number): void {
@@ -1123,14 +1348,12 @@ export class WebGPURenderer {
       return;
     }
 
-    let nextCapacity = this.instanceCapacity;
-    while (nextCapacity < requiredCount) {
-      nextCapacity *= 2;
-    }
+    const nextCapacity = growPowerOfTwoCapacity(this.instanceCapacity, requiredCount);
 
     const nextBuffer = this.device.createBuffer({
       size: nextCapacity * INSTANCE_FLOATS * 4,
       usage: GPU_BUFFER_USAGE.STORAGE | GPU_BUFFER_USAGE.COPY_DST,
+      mappedAtCreation: false,
     });
 
     this.instanceBuffer.destroy();
@@ -1153,10 +1376,7 @@ export class WebGPURenderer {
       return;
     }
 
-    let nextCapacity = this.indirectArgsCapacityRecords;
-    while (nextCapacity < requiredRecords) {
-      nextCapacity *= 2;
-    }
+    const nextCapacity = growPowerOfTwoCapacity(this.indirectArgsCapacityRecords, requiredRecords);
 
     const nextBuffer = this.device.createBuffer({
       size: nextCapacity * WEBGPU_RENDER_CONTRACT.indirectArgsBytes,
@@ -1165,6 +1385,7 @@ export class WebGPURenderer {
         GPU_BUFFER_USAGE.INDIRECT |
         GPU_BUFFER_USAGE.COPY_DST |
         GPU_BUFFER_USAGE.COPY_SRC,
+      mappedAtCreation: false,
     });
     this.indirectArgsBuffer.destroy();
     this.indirectArgsBuffer = nextBuffer;
@@ -1173,7 +1394,7 @@ export class WebGPURenderer {
 
   // [LAW:single-enforcer] createRenderPipelineAsync is the only permitted render pipeline
   // creation path (P2-1: Async Compiler Service Architecture).
-  private static async createPathPipelineAsync(device: any, canvasFormat: string): Promise<any> {
+  private static async createPathPipelineAsync(device: GpuDevice, canvasFormat: string): Promise<GpuRenderPipeline> {
     const shaderModule = device.createShaderModule({ code: PATH_RENDER_WGSL });
     return device.createRenderPipelineAsync({
       layout: 'auto',
