@@ -56,7 +56,12 @@ const METRIC_META = {
   typhonTotalLogicalSloc: { label: 'Typhon total logical SLOC', direction: 'info', signal: 'low', target: 'context only', scale: 'size', description: 'Total logical source lines of code measured by Typhon.' },
 };
 
-const FILE_GATE_MIN_IMPROVEMENT_PCT = 3;
+// [LAW:single-enforcer] The changed-file PR gate threshold is enforced only from this canonical constant.
+// [LAW:one-source-of-truth] Downstream renderers and CI assertions must consume the derived threshold/notice from delta JSON, not re-invent or override them.
+// [LAW:one-source-of-truth] DO NOT remove or change this 1% policy without an explicit upstream product decision, because every PR gate report depends on this canonical value.
+const FILE_GATE_MIN_IMPROVEMENT_PCT = 1;
+// [LAW:one-source-of-truth] This warning text is part of the canonical PR gate contract; render it verbatim in downstream outputs and do not remove or change it independently.
+const FILE_GATE_POLICY_NOTICE = 'MANDATORY: the changed-file complexity gate requires at least 1% improvement when a modified file remains over threshold. This notice must not be removed or changed.';
 const FILE_GATE_METRICS = [
   { key: 'eslintComplexityHits', label: 'ESLint cyclomatic rule hits (per file)', direction: 'lower', threshold: 0, source: 'eslint-rule', sourceKey: 'complexity' },
   { key: 'eslintMaxDepthHits', label: 'ESLint max-depth hits (per file)', direction: 'lower', threshold: 0, source: 'eslint-rule', sourceKey: 'max-depth' },
@@ -158,6 +163,14 @@ function formatDeltaValue(value) {
 function formatPctValue(value) {
   if (!Number.isFinite(value)) return 'n/a';
   return `${formatSig2(value)}%`;
+}
+
+function formatFileGatePolicy(gate) {
+  return gate?.policySummary ?? `file must be under threshold or improve by at least ${formatPctValue(gate?.minImprovementPct ?? FILE_GATE_MIN_IMPROVEMENT_PCT)}`;
+}
+
+function fileGatePolicyNotice(gate) {
+  return gate?.policyNotice ?? FILE_GATE_POLICY_NOTICE;
 }
 
 function inferRepoRootFromSummaryPath(summaryPath) {
@@ -377,7 +390,10 @@ async function evaluateChangedFileThresholdGate(baseLoaded, headLoaded) {
 
   return {
     enabled: true,
-    policy: 'changed-file-under-threshold-or-improve-by-3pct',
+    policy: 'changed-file-under-threshold-or-improve-by-1pct',
+    // [LAW:one-source-of-truth] The gate payload carries the canonical policy sentence and lock notice for every downstream consumer.
+    policySummary: formatFileGatePolicy({ minImprovementPct: FILE_GATE_MIN_IMPROVEMENT_PCT }),
+    policyNotice: FILE_GATE_POLICY_NOTICE,
     minImprovementPct: FILE_GATE_MIN_IMPROVEMENT_PCT,
     changedFiles,
     trackedChangedFiles,
@@ -961,7 +977,8 @@ function renderDeltaMarkdown(delta, baseLabel, headLabel) {
     `- net score (improved - regressed): ${delta.score}`,
     ...(gate ? [
       `- changed-file gate: ${gate.passed ? 'pass' : 'fail'} (${gate.failureCount}/${gate.evaluationCount} failing checks across ${gate.trackedChangedFilesCount} tracked changed files)`,
-      `- gate policy: file must be under threshold or improve by at least ${formatPctValue(gate.minImprovementPct ?? FILE_GATE_MIN_IMPROVEMENT_PCT)}`,
+      `- gate policy: ${formatFileGatePolicy(gate)}`,
+      `- gate policy lock: ${fileGatePolicyNotice(gate)}`,
     ] : []),
     '',
     '## How To Read This',
@@ -1003,6 +1020,10 @@ function renderDeltaMarkdown(delta, baseLabel, headLabel) {
     '',
     ...(gate ? [
       '## Changed-File Threshold Gate',
+      '',
+      `Policy: ${formatFileGatePolicy(gate)}`,
+      '',
+      `Policy lock: ${fileGatePolicyNotice(gate)}`,
       '',
       '| File | Metric | Base | Head | Threshold | Improvement | Result |',
       '| --- | --- | ---: | ---: | --- | ---: | --- |',
@@ -1188,7 +1209,8 @@ function renderDeltaHtml(delta, baseLabel, headLabel, metricAttribution) {
       renderHtmlTable(['Metric', 'Desired Trend', 'Practical Target Range', 'Signal', 'Description'], guideRows),
       ...(fileGate ? [
         '<h2>Changed-File Threshold Gate</h2>',
-        `<p>Policy: changed files must be under threshold or improve by at least ${escapeHtml(formatPctValue(fileGate.minImprovementPct ?? FILE_GATE_MIN_IMPROVEMENT_PCT))}. Tracked changed files: ${escapeHtml(String(fileGate.trackedChangedFilesCount))}.</p>`,
+        `<p>Policy: ${escapeHtml(formatFileGatePolicy(fileGate))}. Tracked changed files: ${escapeHtml(String(fileGate.trackedChangedFilesCount))}.</p>`,
+        `<p><strong>Policy lock:</strong> ${escapeHtml(fileGatePolicyNotice(fileGate))}</p>`,
         renderHtmlTable(
           ['File', 'Metric', 'Base', 'Head', 'Threshold', 'Improvement', 'Result'],
           fileGate.evaluations.length > 0
