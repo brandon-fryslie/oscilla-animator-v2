@@ -654,28 +654,28 @@ export interface StructFieldIR {
  * This is the ONLY place where "meta" information lives.
  */
 export interface DebugIndexIR {
-  /** Maps step IDs to source block IDs */
+  /** Maps step indices to source block indices */
   readonly stepToBlock: ReadonlyMap<StepIndex, BlockIndex>;
 
-  /** Maps slots to source block IDs */
+  /** Maps slots to source block indices */
   readonly slotToBlock: ReadonlyMap<ValueSlot, BlockIndex>;
 
   /** Maps value expression IDs to the block that emitted them */
   readonly exprToBlock: ReadonlyMap<ValueExprId, BlockId>;
 
-  /** Port binding information */
+  /** Port binding metadata keyed by DebugPortId */
   readonly ports: readonly PortBindingIR[];
 
-  /** Maps slots to ports */
+  /** Maps slots to debug port indices */
   readonly slotToPort: ReadonlyMap<ValueSlot, DebugPortId>;
 
   /**
-   * Maps numeric BlockId to permanent string ID.
-   * Required because compiled program uses numeric BlockId but patch uses string ID.
+   * Maps compile-owned block indices to canonical string BlockId values.
+   * Required because runtime debug mappings are index-based while patch identity is string-based.
    */
   readonly blockMap: ReadonlyMap<BlockIndex, string>;
 
-  /** Maps numeric BlockId to user-facing display name (e.g., "Golden Spiral") */
+  /** Maps block indices to user-facing display names (e.g., "Golden Spiral") */
   readonly blockDisplayNames?: ReadonlyMap<BlockIndex, string>;
 
   /** Optional: maps steps to ports */
