@@ -96,6 +96,34 @@ interface Phase1StepResult {
   readonly writtenSlots: Map<ValueSlot, SlotValue>;
 }
 
+function createWrittenSlots(): Map<ValueSlot, SlotValue> {
+  return new Map<ValueSlot, SlotValue>();
+}
+
+function createWrittenStateSlots(): Map<StateSlotId, StateSlotValue> {
+  return new Map<StateSlotId, StateSlotValue>();
+}
+
+function resolveStateSlotIndex(slot: StateSlotId): number {
+  return slot as number;
+}
+
+function resolveStride(mapping: StateMapping | undefined): number {
+  return mapping?.stride ?? 1;
+}
+
+function resolveFieldCopyStride(srcStride: number, mapping: StateMapping): number {
+  return Math.min(srcStride, mapping.stride);
+}
+
+function toInstanceId(value: unknown): InstanceId {
+  return makeInstanceId(String(value));
+}
+
+function hasRenderFrameOutput(program: CompiledProgramIR): boolean {
+  return program.outputs[0]?.kind === 'renderFrame';
+}
+
 function getSteppedStateSlotToMapping(schedule: ScheduleIR): ReadonlyMap<number, StateMapping> {
   const cached = steppedStateSlotMappingCache.get(schedule);
   if (cached) return cached;
@@ -201,7 +229,7 @@ function buildSnapshot(input: SnapshotBuildInput): StepSnapshot {
     frameId: input.state.cache.frameId,
     tMs: input.tMs,
     writtenSlots: input.writtenSlots,
-    writtenStateSlots: input.writtenStateSlots ?? new Map(),
+    writtenStateSlots: input.writtenStateSlots ?? createWrittenStateSlots(),
     anomalies,
     previousFrameValues: input.previousFrameValues,
   };
@@ -329,7 +357,7 @@ function applyPhase1Continuity(
 }
 
 function runPhase1Step(context: SteppedContext, step: Step): Phase1StepResult {
-  const writtenSlots = new Map<ValueSlot, SlotValue>();
+  const writtenSlots = createWrittenSlots();
   switch (step.kind) {
     case 'eventDispatch': {
       const fired = evaluateValueExprEvent(step.expr as any, context.program.valueExprs, context.state, context.program, context.pureFnContext);
@@ -396,8 +424,9 @@ function createScalarStateWriteSnapshot(
   context: SteppedContext,
   step: Extract<Step, { kind: 'stateWrite' }>,
 ): Map<StateSlotId, StateSlotValue> {
-  const mapping = context.stateSlotToMapping.get(step.stateSlot as number);
-  const stride = mapping?.stride ?? 1;
+  const stateSlot = resolveStateSlotIndex(step.stateSlot);
+  const mapping = context.stateSlotToMapping.get(stateSlot);
+  const stride = resolveStride(mapping);
   const values = materializeValueExpr(
     step.value as any,
     context.program.valueExprs,
@@ -409,7 +438,7 @@ function createScalarStateWriteSnapshot(
     STEPPED_MATERIALIZE_SCRATCH,
     context.pureFnContext,
   );
-  const baseSlot = step.stateSlot as number;
+  const baseSlot = stateSlot;
   for (let c = 0; c < stride; c++) {
     const fallback = mapping?.initial[c] ?? 0;
     context.state.stateWrite![baseSlot + c] = applyStateWritePolicy(mapping, values[c] ?? fallback);
@@ -418,10 +447,10 @@ function createScalarStateWriteSnapshot(
   if (!stateId) {
     throw new Error(`State slot ${step.stateSlot} has no mapping - incomplete compiler metadata`);
   }
-  const written = new Map<StateSlotId, StateSlotValue>();
+  const written = createWrittenStateSlots();
   written.set(step.stateSlot, {
     kind: 'scalar',
-    value: context.state.stateWrite![step.stateSlot as number] ?? 0,
+    value: context.state.stateWrite![stateSlot] ?? 0,
     stateId,
   });
   return written;
@@ -460,16 +489,17 @@ function createFieldStateWriteSnapshot(
   context: SteppedContext,
   step: Extract<Step, { kind: 'fieldStateWrite' }>,
 ): Map<StateSlotId, StateSlotValue> {
-  const mapping = context.stateSlotToMapping.get(step.stateSlot as number);
+  const stateSlot = resolveStateSlotIndex(step.stateSlot);
+  const mapping = context.stateSlotToMapping.get(stateSlot);
   if (!mapping || mapping.instanceId === undefined) {
     throw new Error(`fieldStateWrite: missing field state mapping for slot ${step.stateSlot}`);
   }
-  const written = new Map<StateSlotId, StateSlotValue>();
+  const written = createWrittenStateSlots();
   if (mapping.laneCount === 0) return written;
   const tempBuffer = materializeValueExpr(
     step.value as any,
     context.program.valueExprs,
-    makeInstanceId(String(mapping.instanceId)),
+    toInstanceId(mapping.instanceId),
     mapping.laneCount,
     context.state,
     context.program,
@@ -479,10 +509,10 @@ function createFieldStateWriteSnapshot(
   );
   const exprNode = context.valueExprs[step.value as number];
   const srcStride = payloadStride(exprNode.type.payload);
-  const copyStride = Math.min(srcStride, mapping.stride);
+  const copyStride = resolveFieldCopyStride(srcStride, mapping);
   const writtenValues = writeFieldStateValues({
     mapping,
-    stepStateSlot: step.stateSlot as number,
+    stepStateSlot: stateSlot,
     src: tempBuffer as Float32Array,
     srcStride,
     copyStride,
@@ -520,7 +550,7 @@ function* runPhase2(context: SteppedContext): Generator<StepSnapshot, void, void
       program: context.program,
       state: context.state,
       tMs: context.tAbsMs,
-      writtenSlots: new Map(),
+      writtenSlots: createWrittenSlots(),
       previousFrameValues: context.previousFrameValues,
       writtenStateSlots,
     });
@@ -531,7 +561,7 @@ function* runPhase2(context: SteppedContext): Generator<StepSnapshot, void, void
 function validateFrameOutput(program: CompiledProgramIR, frame: RenderFrameIR): RenderFrameIR {
   const outputSpec = program.outputs[0];
   if (!outputSpec) return frame;
-  if (outputSpec.kind !== 'renderFrame') {
+  if (!hasRenderFrameOutput(program)) {
     throw new Error(`Unsupported output kind: ${(outputSpec as { kind?: string }).kind}`);
   }
   return frame;
@@ -559,7 +589,7 @@ export function* executeFrameStepped(
     program,
     state,
     tMs: tAbsMs,
-    writtenSlots: new Map(),
+    writtenSlots: createWrittenSlots(),
     previousFrameValues: context.previousFrameValues,
   });
 
@@ -574,7 +604,7 @@ export function* executeFrameStepped(
     program,
     state,
     tMs: tAbsMs,
-    writtenSlots: new Map(),
+    writtenSlots: createWrittenSlots(),
     previousFrameValues: context.previousFrameValues,
   });
 
@@ -591,7 +621,7 @@ export function* executeFrameStepped(
     program,
     state,
     tMs: tAbsMs,
-    writtenSlots: new Map(),
+    writtenSlots: createWrittenSlots(),
     previousFrameValues: context.previousFrameValues,
   });
 
