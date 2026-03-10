@@ -573,81 +573,20 @@ export class WebGPURenderer {
       input.drawPrepSinkTableV1,
       input.drawPrepSinkTableWordCount,
     );
-    // TODO(#159): Replace this inline payload assembly with:
-    // `buildRenderInputSamplePayload(drawPrepSinkTableV1, sinkTableWords)`
-    // and emit via a shared debug emitter helper from this `render(...)` call
-    // site. [LAW:locality-or-seam] Keep payload construction out of hot-path
-    // render orchestration.
-    // https://github.com/brandon-fryslie/oscilla-animator-v2/issues/159
-    if (RUNTIME_CONSOLE_ENABLED && !this.renderInputDebugLogged && sinkTableWords > 0) {
-      this.renderInputDebugLogged = true;
-      const headerWords = 8;
-      const base = headerWords;
-      const sample = {
-        sinkTableWordCount: sinkTableWords,
-        totalRecords: readRequiredSinkTableWord(
-          input.drawPrepSinkTableV1,
-          sinkTableWords,
-          1,
-          'render-input-sample.totalRecords',
-        ),
-        firstRecord: {
-          drawModeCode: readRequiredSinkTableWord(
-            input.drawPrepSinkTableV1,
-            sinkTableWords,
-            base + 0,
-            'render-input-sample.firstRecord.drawModeCode',
-          ),
-          count: readRequiredSinkTableWord(
-            input.drawPrepSinkTableV1,
-            sinkTableWords,
-            base + 1,
-            'render-input-sample.firstRecord.count',
-          ),
-          instanceCount: readRequiredSinkTableWord(
-            input.drawPrepSinkTableV1,
-            sinkTableWords,
-            base + 2,
-            'render-input-sample.firstRecord.instanceCount',
-          ),
-          first: readRequiredSinkTableWord(
-            input.drawPrepSinkTableV1,
-            sinkTableWords,
-            base + 3,
-            'render-input-sample.firstRecord.first',
-          ),
-          baseVertex: readRequiredSinkTableWord(
-            input.drawPrepSinkTableV1,
-            sinkTableWords,
-            base + 4,
-            'render-input-sample.firstRecord.baseVertex',
-          ),
-          firstInstance: readRequiredSinkTableWord(
-            input.drawPrepSinkTableV1,
-            sinkTableWords,
-            base + 5,
-            'render-input-sample.firstRecord.firstInstance',
-          ),
-          shapeWordOffset: readRequiredSinkTableWord(
-            input.drawPrepSinkTableV1,
-            sinkTableWords,
-            base + 6,
-            'render-input-sample.firstRecord.shapeWordOffset',
-          ),
-          materialId: readRequiredSinkTableWord(
-            input.drawPrepSinkTableV1,
-            sinkTableWords,
-            base + 7,
-            'render-input-sample.firstRecord.materialId',
-          ),
-        },
-      } satisfies SinkTableDebugSample;
-      this.latestSinkTableSample = sample;
-      console.info(`[runtimeConsole] ${JSON.stringify({ kind: 'render-input-sample', ...sample })}`);
-    }
+    this.maybeEmitRenderInputDebugSample(input.drawPrepSinkTableV1, sinkTableWords);
     this.inputWords[RUNTIME_INPUT_INDEX.sinkTableWords] = sinkTableWords;
     this.inputWords[RUNTIME_INPUT_INDEX.shapeBankWords] = shapeBankWords;
     Atomics.add(this.signalWords, 0, 1);
+  }
+
+  private maybeEmitRenderInputDebugSample(sinkTableWords: Uint32Array, wordCount: number): void {
+    if (!RUNTIME_CONSOLE_ENABLED || this.renderInputDebugLogged || wordCount <= 0) {
+      return;
+    }
+    this.renderInputDebugLogged = true;
+    const sample = this.buildSinkTableDebugSample(sinkTableWords, wordCount);
+    this.latestSinkTableSample = sample;
+    console.info(`[runtimeConsole] ${JSON.stringify({ kind: 'render-input-sample', ...sample })}`);
   }
 
   setViewportFrame(frame: RuntimeViewportFrame): void {
