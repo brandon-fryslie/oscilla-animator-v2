@@ -203,18 +203,18 @@ function assertScheduleContract(schedule: CompiledProgramIR['schedule'] | undefi
   // [LAW:single-enforcer] compileAndSwap is the runtime boundary that enforces
   // required schedule contract fields for compiler output.
   if (typeof schedule.timeModel !== 'object' || schedule.timeModel === null) {
-    throw new Error('[compile] program.schedule.timeModel is missing - compiler/runtime contract violation');
+    throw new Error('[compile] program.schedule.timeModel must be a non-null object - compiler/runtime contract violation');
   }
   assertNonNegativeNumber(schedule.timeModel.periodAMs, 'timeModel.periodAMs');
   assertNonNegativeNumber(schedule.timeModel.periodBMs, 'timeModel.periodBMs');
   if (!(schedule.instances instanceof Map)) {
-    throw new Error('[compile] program.schedule.instances is missing - compiler/runtime contract violation');
+    throw new Error('[compile] program.schedule.instances must be a Map - compiler/runtime contract violation');
   }
   if (!Array.isArray(schedule.stateMappings)) {
-    throw new Error('[compile] program.schedule.stateMappings is missing - compiler/runtime contract violation');
+    throw new Error('[compile] program.schedule.stateMappings must be an array - compiler/runtime contract violation');
   }
   if (!Array.isArray(schedule.steps)) {
-    throw new Error('[compile] program.schedule.steps is missing - compiler/runtime contract violation');
+    throw new Error('[compile] program.schedule.steps must be an array - compiler/runtime contract violation');
   }
   assertNonNegativeInteger(schedule.stateSlotCount, 'stateSlotCount');
   assertNonNegativeInteger(schedule.eventSlotCount, 'eventSlotCount');
