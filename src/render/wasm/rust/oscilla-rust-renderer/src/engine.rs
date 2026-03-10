@@ -409,6 +409,7 @@ pub struct Engine {
     last_sink_table_words: u32,
     last_compiler_arena_words: u32,
     last_plane_install_epoch: u32,
+    last_input_time_ms: Option<f64>,
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -727,10 +728,12 @@ impl Engine {
             last_sink_table_words: 0,
             last_compiler_arena_words: 0,
             last_plane_install_epoch: u32::MAX,
+            last_input_time_ms: None,
         })
     }
 
     pub fn attach_shared_input(&mut self, shared_input: SharedArrayBuffer) {
+        self.last_input_time_ms = None;
         self.shared_input_signals = Some(Int32Array::new_with_byte_offset_and_length(
             &shared_input,
             0,
@@ -820,6 +823,7 @@ impl Engine {
         self.last_sink_table_words = 0;
         self.last_compiler_arena_words = 0;
         self.last_plane_install_epoch = u32::MAX;
+        self.last_input_time_ms = None;
     }
 
     pub fn rebuild_gpu_pipelines(&mut self, pass_specs: &[CompilerComputePassSpec]) {
@@ -1262,9 +1266,14 @@ impl Engine {
             }
             uniforms.resolution[0] = shared_input.get_index(INPUT_WORD_WIDTH as u32) as f32;
             uniforms.resolution[1] = shared_input.get_index(INPUT_WORD_HEIGHT as u32) as f32;
-            uniforms.time_seconds =
-                (shared_input.get_index(INPUT_WORD_TIME_MS as u32).max(0.0) * 0.001) as f32;
-            uniforms.delta_time_seconds = (1.0 / 60.0) as f32;
+            let input_time_ms = shared_input.get_index(INPUT_WORD_TIME_MS as u32).max(0.0) as f64;
+            let previous_input_time_ms = self.last_input_time_ms.unwrap_or(input_time_ms);
+            // [LAW:dataflow-not-control-flow] Delta-time is derived every frame
+            // from absolute timestamps; backward movement is represented as dt=0.
+            let delta_time_ms = (input_time_ms - previous_input_time_ms).max(0.0);
+            self.last_input_time_ms = Some(input_time_ms);
+            uniforms.time_seconds = (input_time_ms * 0.001) as f32;
+            uniforms.delta_time_seconds = (delta_time_ms * 0.001) as f32;
             let viewport_width = uniforms.resolution[0].max(1.0);
             let viewport_height = uniforms.resolution[1].max(1.0);
             let raw_zoom = shared_input.get_index(INPUT_WORD_ZOOM as u32) as f32;
@@ -1346,8 +1355,12 @@ impl Engine {
                 self.last_compiler_arena_words = arena_words;
             }
         } else {
-            uniforms.time_seconds = (timestamp_ms.max(0.0) * 0.001) as f32;
-            uniforms.delta_time_seconds = (1.0 / 60.0) as f32;
+            let safe_timestamp_ms = timestamp_ms.max(0.0);
+            let previous_time_ms = self.last_input_time_ms.unwrap_or(safe_timestamp_ms);
+            let delta_time_ms = (safe_timestamp_ms - previous_time_ms).max(0.0);
+            self.last_input_time_ms = Some(safe_timestamp_ms);
+            uniforms.time_seconds = (safe_timestamp_ms * 0.001) as f32;
+            uniforms.delta_time_seconds = (delta_time_ms * 0.001) as f32;
             uniforms.view_proj = [[0.0; 4]; 4];
             uniforms.view_proj[0][0] = 1.0;
             uniforms.view_proj[1][1] = -1.0;
