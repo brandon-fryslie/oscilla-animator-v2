@@ -2,7 +2,7 @@
  * Unit tests for Action Executor
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { executeAction, type ActionExecutorDeps } from '../actionExecutor';
 import type {
   GoToTargetAction,
@@ -22,6 +22,8 @@ type MutableDeps = ActionExecutorDeps & {
   selectionStore: Record<string, any>;
   diagnosticsStore: Record<string, any>;
 };
+
+const CREATED_BLOCK_ID = blockId('block-created-123');
 
 function createMockDeps(): ActionExecutorDeps {
   const fixtureBlockId = blockId('block-123');
@@ -51,7 +53,7 @@ function createMockDeps(): ActionExecutorDeps {
   };
 
   const patchStore = {
-    addBlock: vi.fn(() => 'block-123'),
+    addBlock: vi.fn(() => CREATED_BLOCK_ID),
     addEdge: vi.fn(() => 'edge-new'),
     removeEdge: vi.fn(),
     patch,
@@ -315,7 +317,7 @@ function registerCreateTimeRootTests(getDeps: DepsGetter): void {
           role: { kind: 'timeRoot', meta: {} },
         }
       );
-      expect(deps.selectionStore.selectBlock).toHaveBeenCalledWith('block-123');
+      expect(deps.selectionStore.selectBlock).toHaveBeenCalledWith(CREATED_BLOCK_ID);
     });
 
     it('rejects unsupported timeRootKind', () => {
@@ -432,7 +434,7 @@ function registerInsertBlockTests(getDeps: DepsGetter): void {
 
       expect(result.success).toBe(true);
       expect(getDeps().patchStore.addBlock).toHaveBeenCalledWith('Gain', {});
-      expect(getDeps().selectionStore.selectBlock).toHaveBeenCalledWith('block-123');
+      expect(getDeps().selectionStore.selectBlock).toHaveBeenCalledWith(CREATED_BLOCK_ID);
     });
 
     it('handles addBlock errors', () => {
@@ -466,14 +468,14 @@ function registerAddAdapterSuccessTests(getDeps: DepsGetter): void {
     expect(deps.patchStore.addEdge).toHaveBeenNthCalledWith(
       1,
       { kind: 'port', blockId: 'block-a', slotId: 'out' },
-      { kind: 'port', blockId: 'block-123', slotId: 'one' }
+      { kind: 'port', blockId: CREATED_BLOCK_ID, slotId: 'one' }
     );
     expect(deps.patchStore.addEdge).toHaveBeenNthCalledWith(
       2,
-      { kind: 'port', blockId: 'block-123', slotId: 'field' },
+      { kind: 'port', blockId: CREATED_BLOCK_ID, slotId: 'field' },
       { kind: 'port', blockId: 'block-b', slotId: 'in' }
     );
-    expect(deps.selectionStore.selectBlock).toHaveBeenCalledWith('block-123');
+    expect(deps.selectionStore.selectBlock).toHaveBeenCalledWith(CREATED_BLOCK_ID);
   });
 
   it('handles addBlock errors', () => {
@@ -563,6 +565,12 @@ function registerMuteDiagnosticTests(getDeps: DepsGetter): void {
 
 function registerOpenDocsTests(getDeps: DepsGetter): void {
   describe('openDocs', () => {
+    const originalWindow = global.window;
+
+    afterEach(() => {
+      global.window = originalWindow as any;
+    });
+
     it('opens URL in new window', () => {
       const mockOpen = vi.fn(() => null);
       global.window = { open: mockOpen } as any;
