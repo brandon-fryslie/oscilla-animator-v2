@@ -20,8 +20,7 @@ This document defines the canonical coordinate contract used by the current runt
 
 2. Clip space:
 - Scalar clip coordinate range is `[-1, 1]`.
-- Perspective projection computes clip-like intermediates before normalization.
-- Ortho projection is an identity path for x/y and emits normalized screen-space directly.
+- Perspective projection resolves clip-space values before normalization; the orthographic kernel currently emits normalized screen XY directly for the default ortho identity path.
 
 3. Normalized screen space:
 - Scalar normalized screen coordinate range is `[0, 1]`.
@@ -55,3 +54,4 @@ Machine-verifiable checks for this contract:
 1. `src/core/__tests__/coordinate-system.test.ts` validates constants and reciprocal mappings.
 2. `src/projection/__tests__/level3-perspective-kernel.test.ts` validates default perspective target/up alignment with canonical constants.
 3. `src/runtime/__tests__/CameraResolver.test.ts` validates default camera center/FOV alignment with canonical constants.
+4. `src/__tests__/architecture-guardrails.test.ts` enforces broader architecture invariants (legacy type/dispatch and migration gates); coordinate-specific literal drift is currently verified by targeted module tests above.
