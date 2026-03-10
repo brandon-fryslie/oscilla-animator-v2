@@ -38,7 +38,7 @@ interface RenderInput {
   readonly drawPrepSinkTableWordCount: number;
 }
 
-interface ViewportFrameInput {
+interface RuntimeViewportFrame {
   readonly width: number;
   readonly height: number;
   readonly zoom: number;
@@ -531,45 +531,9 @@ export class WebGPURenderer {
     return renderer;
   }
 
-  setViewportFrame(input: ViewportFrameInput): void {
-    if (this.fatalError) {
-      throw this.fatalError;
-    }
-    if (this.disposed) {
-      throw new Error('Rust renderer has been disposed');
-    }
-    if (!this.bootstrapped) {
-      throw new Error('Rust renderer worker is not bootstrapped');
-    }
-    this.syncCanvasSize(input.width, input.height);
-    this.inputWords[RUNTIME_INPUT_INDEX.width] = input.width;
-    this.inputWords[RUNTIME_INPUT_INDEX.height] = input.height;
-    this.inputWords[RUNTIME_INPUT_INDEX.zoom] = input.zoom;
-    this.inputWords[RUNTIME_INPUT_INDEX.panX] = input.panX;
-    this.inputWords[RUNTIME_INPUT_INDEX.panY] = input.panY;
-    this.inputWords[RUNTIME_INPUT_INDEX.timeMs] = input.timeMs;
-    this.inputWords[RUNTIME_INPUT_INDEX.mouseX] = coerceFinite(input.inputMouseX);
-    this.inputWords[RUNTIME_INPUT_INDEX.mouseY] = coerceFinite(input.inputMouseY);
-    this.inputWords[RUNTIME_INPUT_INDEX.mouseButtons] = coerceFinite(input.inputMouseButtons);
-    this.inputWords[RUNTIME_INPUT_INDEX.audioLow] = coerceFinite(input.inputAudioLow);
-    this.inputWords[RUNTIME_INPUT_INDEX.audioMid] = coerceFinite(input.inputAudioMid);
-    this.inputWords[RUNTIME_INPUT_INDEX.audioHigh] = coerceFinite(input.inputAudioHigh);
-    this.inputWords[RUNTIME_INPUT_INDEX.gaugeActive] = coerceFinite(input.inputGaugeActive);
-  }
-
   render(input: RenderInput): void {
-    if (this.fatalError) {
-      throw this.fatalError;
-    }
-    if (this.disposed) {
-      throw new Error('Rust renderer has been disposed');
-    }
-    if (!this.bootstrapped) {
-      throw new Error('Rust renderer worker is not bootstrapped');
-    }
-    // [LAW:single-enforcer] Shared runtime input-word publication is enforced by
-    // one boundary helper so viewport-only and full render paths cannot drift.
-    this.setViewportFrame(input);
+    this.assertRuntimeInputBoundaryReady();
+    this.writeViewportFrame(input);
     const shapeBankWords = this.syncShapeBankPlane(input.shapeBank);
     const sinkTableWords = this.syncSinkTablePlane(
       input.drawPrepSinkTableV1,
@@ -652,16 +616,16 @@ export class WebGPURenderer {
     Atomics.add(this.signalWords, 0, 1);
   }
 
+  setViewportFrame(frame: RuntimeViewportFrame): void {
+    this.assertRuntimeInputBoundaryReady();
+    // [LAW:single-enforcer] Runtime viewport/input publication enters the
+    // renderer worker through one boundary method in canonical execution.
+    this.writeViewportFrame(frame);
+    Atomics.add(this.signalWords, 0, 1);
+  }
+
   resizeCanvas(width: number, height: number): void {
-    if (this.fatalError) {
-      throw this.fatalError;
-    }
-    if (this.disposed) {
-      throw new Error('Rust renderer has been disposed');
-    }
-    if (!this.bootstrapped) {
-      throw new Error('Rust renderer worker is not bootstrapped');
-    }
+    this.assertRuntimeInputBoundaryReady();
     this.syncCanvasSize(width, height);
   }
 
@@ -768,6 +732,37 @@ export class WebGPURenderer {
 
   getLatestSinkTableSample(): SinkTableDebugSample | null {
     return this.latestSinkTableSample;
+  }
+
+  private assertRuntimeInputBoundaryReady(): void {
+    if (this.fatalError) {
+      throw this.fatalError;
+    }
+    if (this.disposed) {
+      throw new Error('Rust renderer has been disposed');
+    }
+    if (!this.bootstrapped) {
+      throw new Error('Rust renderer worker is not bootstrapped');
+    }
+  }
+
+  private writeViewportFrame(input: RuntimeViewportFrame): void {
+    // [LAW:dataflow-not-control-flow] Renderer always publishes the same
+    // runtime input envelope; optional channels vary by value, not by branch.
+    this.syncCanvasSize(input.width, input.height);
+    this.inputWords[RUNTIME_INPUT_INDEX.width] = input.width;
+    this.inputWords[RUNTIME_INPUT_INDEX.height] = input.height;
+    this.inputWords[RUNTIME_INPUT_INDEX.zoom] = input.zoom;
+    this.inputWords[RUNTIME_INPUT_INDEX.panX] = input.panX;
+    this.inputWords[RUNTIME_INPUT_INDEX.panY] = input.panY;
+    this.inputWords[RUNTIME_INPUT_INDEX.timeMs] = input.timeMs;
+    this.inputWords[RUNTIME_INPUT_INDEX.mouseX] = coerceFinite(input.inputMouseX);
+    this.inputWords[RUNTIME_INPUT_INDEX.mouseY] = coerceFinite(input.inputMouseY);
+    this.inputWords[RUNTIME_INPUT_INDEX.mouseButtons] = coerceFinite(input.inputMouseButtons);
+    this.inputWords[RUNTIME_INPUT_INDEX.audioLow] = coerceFinite(input.inputAudioLow);
+    this.inputWords[RUNTIME_INPUT_INDEX.audioMid] = coerceFinite(input.inputAudioMid);
+    this.inputWords[RUNTIME_INPUT_INDEX.audioHigh] = coerceFinite(input.inputAudioHigh);
+    this.inputWords[RUNTIME_INPUT_INDEX.gaugeActive] = coerceFinite(input.inputGaugeActive);
   }
 
   private syncShapeBankPlane(shapeBank: RenderShapeBankSource): number {
