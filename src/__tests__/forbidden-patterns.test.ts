@@ -106,7 +106,6 @@ function registerCanonicalProjectionOwnershipGuards(): void {
       [
         'src/services/RuntimeService.ts',
         'src/services/AnimationLoop.ts',
-        'src/services/runtime-hotpath.worker.ts',
         'src/services/runtime-hotpath-install.ts',
         ACTIVE_RENDERER_FILE,
       ],
