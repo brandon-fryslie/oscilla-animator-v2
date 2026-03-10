@@ -83,10 +83,6 @@ export class StepDebugSession {
     return this._currentSnapshot;
   }
 
-  /**
-   * Final frame result from stepped execution.
-   * Current executor contract returns the shared compute-only sentinel frame.
-   */
   get frameResult(): RenderFrameIR | null {
     return this._frameResult;
   }
@@ -271,8 +267,7 @@ export class StepDebugSession {
   }
 
   /**
-   * Run the rest of the frame to completion.
-   * Returns the stepped executor frame result (currently `EMPTY_RENDER_FRAME`).
+   * Run the rest of the frame to completion. Returns the frame result.
    */
   finishFrame(): RenderFrameIR | null {
     if (this._mode === 'completed') {

@@ -68,6 +68,12 @@ function readArenaSlot(program: CompiledProgramIR, state: RuntimeState, slot: nu
   return Array.from(state.arena.subarray(arenaDesc.offset, arenaDesc.offset + arenaDesc.length));
 }
 
+function assertFiniteValues(values: readonly number[]): void {
+  for (const value of values) {
+    expect(Number.isFinite(value)).toBe(true);
+  }
+}
+
 function assertScalarWritesInArena(program: CompiledProgramIR, state: RuntimeState): void {
   const schedule = program.schedule as ScheduleIR;
   const paletteDesc = program.arenaLayout[SYSTEM_PALETTE_SLOT as number];
@@ -76,9 +82,7 @@ function assertScalarWritesInArena(program: CompiledProgramIR, state: RuntimeSta
   }
   expect(paletteDesc.offset).toBeGreaterThanOrEqual(0);
   const palette = Array.from(state.arena.subarray(paletteDesc.offset, paletteDesc.offset + 4));
-  for (const value of palette) {
-    expect(Number.isFinite(value)).toBe(true);
-  }
+  assertFiniteValues(palette);
   expect(Math.abs(palette[0]) + Math.abs(palette[1]) + Math.abs(palette[2])).toBeGreaterThan(0);
   expect(palette[3]).toBeGreaterThanOrEqual(0);
   expect(palette[3]).toBeLessThanOrEqual(1);
@@ -94,9 +98,7 @@ function assertScalarWritesInArena(program: CompiledProgramIR, state: RuntimeSta
       if (values.length === 1) {
         scalarArenaSlots++;
       }
-      for (const value of values) {
-        expect(Number.isFinite(value)).toBe(true);
-      }
+      assertFiniteValues(values);
     }
   }
 

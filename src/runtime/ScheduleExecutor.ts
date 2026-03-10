@@ -316,6 +316,14 @@ interface ExecuteFrameContext {
   continuityMapSeen: boolean;
 }
 
+function isCardinalityAssertionEnabled(options?: ExecuteFrameOptions): boolean {
+  return options?.assertCardinalitySlotWrites === true;
+}
+
+function hasRenderFrameOutput(program: CompiledProgramIR): boolean {
+  return program.outputs[0]?.kind === 'renderFrame';
+}
+
 function createExecuteFrameContext(
   program: CompiledProgramIR,
   state: RuntimeState,
@@ -331,7 +339,7 @@ function createExecuteFrameContext(
   const addressTable = getExprAddressTable(program);
   const { slotLookup: slotLookupMap, slotToArena } = addressTable;
   const pureFnContext: PureFnExecutionContext = { kernelRegistry: program.kernelRegistry };
-  const assertCardinalitySlotWrites = options?.assertCardinalitySlotWrites === true;
+  const assertCardinalitySlotWrites = isCardinalityAssertionEnabled(options);
   return {
     program,
     state,
@@ -627,10 +635,9 @@ function finalizeFrame(context: ExecuteFrameContext, frame: RenderFrameIR): Rend
   finalizeContinuityFrame(context.state);
   enterRuntimeFrameSegment(context.state, 'frame-output');
   context.state.lastRenderFrame = frame;
-  const outputSpec = context.program.outputs[0];
-  if (!outputSpec) return frame;
-  if (outputSpec.kind !== 'renderFrame') {
-    throw new Error('Unsupported output kind: ' + (outputSpec as { kind?: string }).kind);
+  if (!context.program.outputs[0]) return frame;
+  if (!hasRenderFrameOutput(context.program)) {
+    throw new Error('Unsupported output kind: ' + (context.program.outputs[0] as { kind?: string }).kind);
   }
   return frame;
 }
