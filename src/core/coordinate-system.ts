@@ -7,8 +7,8 @@
 
 /**
  * Degrees-to-radians conversion constant.
- * // [LAW:one-source-of-truth] Projection/runtime camera defaults share one
- * // canonical degree->radian conversion constant at this boundary.
+ * // [LAW:one-source-of-truth] Projection/runtime boundaries share this constant.
+ * Expression-library constants may still expose equivalent literals for DSL semantics.
  */
 export const DEGREES_TO_RADIANS = Math.PI / 180;
 
