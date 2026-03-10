@@ -12,7 +12,7 @@ export default tseslint.config(
   },
   {
     linterOptions: {
-      reportUnusedDisableDirectives: 'off',
+      reportUnusedDisableDirectives: 'warn',
     },
   },
   {
@@ -34,7 +34,16 @@ export default tseslint.config(
     ignores: ['src/**/*.test.ts', 'src/**/*.test.tsx', 'src/**/__tests__/**'],
     rules: {
       '@typescript-eslint/no-explicit-any': ['error', { ignoreRestArgs: false }],
-      '@typescript-eslint/ban-ts-comment': ['error', { 'ts-ignore': true }],
+      '@typescript-eslint/ban-ts-comment': [
+        'error',
+        {
+          'ts-check': false,
+          'ts-expect-error': 'allow-with-description',
+          'ts-ignore': 'allow-with-description',
+          'ts-nocheck': true,
+          minimumDescriptionLength: 3,
+        },
+      ],
     },
   },
   // Block definitions: lower() function constraints
