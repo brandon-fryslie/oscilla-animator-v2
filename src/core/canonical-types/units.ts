@@ -63,12 +63,12 @@ export function unitSeconds(): UnitType {
   return { kind: 'time', unit: 'seconds' };
 }
 
-/** Normalized device coordinates vec2 [0,1]^2 */
+/** Normalized device coordinates vec2 [-1,1]^2 */
 export function unitNdc2(): UnitType {
   return { kind: 'space', unit: 'ndc', dims: 2 };
 }
 
-/** Normalized device coordinates vec3 [0,1]^3 */
+/** Normalized device coordinates vec3 with x/y in [-1,1] (clip-aligned) */
 export function unitNdc3(): UnitType {
   return { kind: 'space', unit: 'ndc', dims: 3 };
 }
