@@ -81,6 +81,13 @@ describe('AnimationLoop', () => {
       panX: 0,
       panY: 0,
       timeMs: 16,
+      inputMouseX: 0,
+      inputMouseY: 0,
+      inputMouseButtons: 0,
+      inputAudioLow: 0,
+      inputAudioMid: 0,
+      inputAudioHigh: 0,
+      inputGaugeActive: 0,
     });
     expect(runtimeProbeMocks.markRuntimeFrameAdvanced).toHaveBeenCalledWith(-1, 16);
   });

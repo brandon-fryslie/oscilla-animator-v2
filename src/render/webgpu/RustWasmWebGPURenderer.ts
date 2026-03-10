@@ -18,6 +18,7 @@ import {
   RUNTIME_INPUT_SIGNAL_WORDS,
   type RuntimeSharedPlanes,
 } from '../rust/runtime-input-layout';
+import { getNavigatorGpu } from './gpu-api';
 
 interface RenderInput {
   readonly shapeBank: RenderShapeBankSource;
@@ -45,13 +46,13 @@ interface RuntimeViewportFrame {
   readonly panX: number;
   readonly panY: number;
   readonly timeMs: number;
-  readonly inputMouseX?: number;
-  readonly inputMouseY?: number;
-  readonly inputMouseButtons?: number;
-  readonly inputAudioLow?: number;
-  readonly inputAudioMid?: number;
-  readonly inputAudioHigh?: number;
-  readonly inputGaugeActive?: number;
+  readonly inputMouseX: number;
+  readonly inputMouseY: number;
+  readonly inputMouseButtons: number;
+  readonly inputAudioLow: number;
+  readonly inputAudioMid: number;
+  readonly inputAudioHigh: number;
+  readonly inputGaugeActive: number;
 }
 
 export interface RuntimeEventBreadcrumb {
@@ -128,8 +129,13 @@ function assertFiniteRuntimeInput(value: number, field: string): number {
   return value;
 }
 
-function coerceFinite(value: number | undefined): number {
-  return typeof value === 'number' && Number.isFinite(value) ? value : 0;
+function assertPositiveCanvasDimension(value: number, field: string): number {
+  if (!Number.isFinite(value) || !Number.isInteger(value) || value <= 0) {
+    throw new Error(
+      `Rust renderer input contract violation: ${field} must be a positive integer, got ${String(value)}`,
+    );
+  }
+  return value;
 }
 
 const MAX_UINT32 = 0xFFFF_FFFF;
@@ -400,10 +406,7 @@ function classifyWorkerAckMessage(
 
 
 export function assertWebGPUStartupContract(canvas: HTMLCanvasElement): void {
-  // TODO(#183): Remove navigator type assertion and replace with boundary
-  // capability guard helper that does not rely on `as` casting.
-  // https://github.com/brandon-fryslie/oscilla-animator-v2/issues/183
-  const gpu = (navigator as Navigator & { gpu?: unknown }).gpu;
+  const gpu = getNavigatorGpu();
   if (!gpu) {
     throw new Error('Rust renderer requires WebGPU (navigator.gpu is unavailable)');
   }
@@ -540,6 +543,9 @@ export class WebGPURenderer {
 
   render(input: RenderInput): void {
     this.assertRuntimeInputBoundaryReady();
+    if (!(input.drawPrepSinkTableV1 instanceof Uint32Array)) {
+      throw new Error('Rust renderer input contract violation: drawPrepSinkTableV1 must be Uint32Array');
+    }
     this.writeViewportFrame(input);
     const shapeBankWords = this.syncShapeBankPlane(input.shapeBank);
     const sinkTableWords = this.syncSinkTablePlane(
@@ -754,22 +760,39 @@ export class WebGPURenderer {
   }
 
   private writeViewportFrame(input: RuntimeViewportFrame): void {
-    // [LAW:dataflow-not-control-flow] Renderer always publishes the same
-    // runtime input envelope; optional channels vary by value, not by branch.
-    this.syncCanvasSize(input.width, input.height);
-    this.inputWords[RUNTIME_INPUT_INDEX.width] = input.width;
-    this.inputWords[RUNTIME_INPUT_INDEX.height] = input.height;
-    this.inputWords[RUNTIME_INPUT_INDEX.zoom] = input.zoom;
-    this.inputWords[RUNTIME_INPUT_INDEX.panX] = input.panX;
-    this.inputWords[RUNTIME_INPUT_INDEX.panY] = input.panY;
-    this.inputWords[RUNTIME_INPUT_INDEX.timeMs] = input.timeMs;
-    this.inputWords[RUNTIME_INPUT_INDEX.mouseX] = coerceFinite(input.inputMouseX);
-    this.inputWords[RUNTIME_INPUT_INDEX.mouseY] = coerceFinite(input.inputMouseY);
-    this.inputWords[RUNTIME_INPUT_INDEX.mouseButtons] = coerceFinite(input.inputMouseButtons);
-    this.inputWords[RUNTIME_INPUT_INDEX.audioLow] = coerceFinite(input.inputAudioLow);
-    this.inputWords[RUNTIME_INPUT_INDEX.audioMid] = coerceFinite(input.inputAudioMid);
-    this.inputWords[RUNTIME_INPUT_INDEX.audioHigh] = coerceFinite(input.inputAudioHigh);
-    this.inputWords[RUNTIME_INPUT_INDEX.gaugeActive] = coerceFinite(input.inputGaugeActive);
+    // [LAW:dataflow-not-control-flow] Runtime frame publication always executes
+    // in the same order; contract validation fails fast at the boundary.
+    const width = assertPositiveCanvasDimension(input.width, 'width');
+    const height = assertPositiveCanvasDimension(input.height, 'height');
+    const zoom = assertFiniteRuntimeInput(input.zoom, 'zoom');
+    if (zoom <= 0) {
+      throw new Error(`Rust renderer input contract violation: zoom must be positive, got ${zoom}`);
+    }
+    const panX = assertFiniteRuntimeInput(input.panX, 'panX');
+    const panY = assertFiniteRuntimeInput(input.panY, 'panY');
+    const timeMs = assertFiniteRuntimeInput(input.timeMs, 'timeMs');
+    const inputMouseX = assertFiniteRuntimeInput(input.inputMouseX, 'inputMouseX');
+    const inputMouseY = assertFiniteRuntimeInput(input.inputMouseY, 'inputMouseY');
+    const inputMouseButtons = assertFiniteRuntimeInput(input.inputMouseButtons, 'inputMouseButtons');
+    const inputAudioLow = assertFiniteRuntimeInput(input.inputAudioLow, 'inputAudioLow');
+    const inputAudioMid = assertFiniteRuntimeInput(input.inputAudioMid, 'inputAudioMid');
+    const inputAudioHigh = assertFiniteRuntimeInput(input.inputAudioHigh, 'inputAudioHigh');
+    const inputGaugeActive = assertFiniteRuntimeInput(input.inputGaugeActive, 'inputGaugeActive');
+
+    this.syncCanvasSize(width, height);
+    this.inputWords[RUNTIME_INPUT_INDEX.width] = width;
+    this.inputWords[RUNTIME_INPUT_INDEX.height] = height;
+    this.inputWords[RUNTIME_INPUT_INDEX.zoom] = zoom;
+    this.inputWords[RUNTIME_INPUT_INDEX.panX] = panX;
+    this.inputWords[RUNTIME_INPUT_INDEX.panY] = panY;
+    this.inputWords[RUNTIME_INPUT_INDEX.timeMs] = timeMs;
+    this.inputWords[RUNTIME_INPUT_INDEX.mouseX] = inputMouseX;
+    this.inputWords[RUNTIME_INPUT_INDEX.mouseY] = inputMouseY;
+    this.inputWords[RUNTIME_INPUT_INDEX.mouseButtons] = inputMouseButtons;
+    this.inputWords[RUNTIME_INPUT_INDEX.audioLow] = inputAudioLow;
+    this.inputWords[RUNTIME_INPUT_INDEX.audioMid] = inputAudioMid;
+    this.inputWords[RUNTIME_INPUT_INDEX.audioHigh] = inputAudioHigh;
+    this.inputWords[RUNTIME_INPUT_INDEX.gaugeActive] = inputGaugeActive;
   }
 
   private syncShapeBankPlane(shapeBank: RenderShapeBankSource): number {

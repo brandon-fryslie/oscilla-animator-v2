@@ -253,7 +253,7 @@ function renderSummaryMarkdown(delta, options) {
     `- artifact: ${artifactUrl}`,
     ...(fileGate ? [
       `- changed-file gate: ${fileGate.passed ? 'pass' : 'fail'} (${fileGate.failureCount}/${fileGate.evaluationCount} failing checks across ${fileGate.trackedChangedFilesCount} tracked changed files)`,
-      `- changed-file gate policy: under threshold OR regression <= ${formatPctValue(fileGate.maxRegressionPct ?? 0)}`,
+      `- changed-file gate policy: under threshold OR >= ${formatPctValue(fileGate.minImprovementPct)} improvement`,
     ] : []),
     '',
     '### High-Signal Regressions',
