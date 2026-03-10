@@ -59,7 +59,9 @@ export type StateSlotValue =
 export interface ValueAnomaly {
   readonly slot: ValueSlot;
   readonly kind: 'nan' | 'infinity' | 'neg-infinity';
+  /** Source block index (from debugIndex.slotToBlock) */
   readonly blockId: BlockIndex | null;
+  /** Source debug port index (from debugIndex.slotToPort) */
   readonly portId: DebugPortId | null;
 }
 
@@ -79,11 +81,11 @@ export interface StepSnapshot {
   readonly phase: ExecutionPhase;
   /** Total number of steps in the schedule */
   readonly totalSteps: number;
-  /** Source block ID (from debugIndex.stepToBlock) */
+  /** Source block index (from debugIndex.stepToBlock) */
   readonly blockId: BlockIndex | null;
   /** Human-readable block name (from debugIndex.blockMap) */
   readonly blockName: string | null;
-  /** Source port ID (from debugIndex.stepToPort) */
+  /** Source debug port index (from debugIndex.stepToPort) */
   readonly portId: DebugPortId | null;
   /** Current frame ID */
   readonly frameId: number;

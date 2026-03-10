@@ -57,6 +57,7 @@ const METRIC_META = {
 };
 
 const FILE_GATE_MIN_IMPROVEMENT_PCT = 3;
+const FILE_GATE_REGRESSION_TOLERANCE_PCT = 5;
 const FILE_GATE_METRICS = [
   { key: 'eslintComplexityHits', label: 'ESLint cyclomatic rule hits (per file)', direction: 'lower', threshold: 0, source: 'eslint-rule', sourceKey: 'complexity' },
   { key: 'eslintMaxDepthHits', label: 'ESLint max-depth hits (per file)', direction: 'lower', threshold: 0, source: 'eslint-rule', sourceKey: 'max-depth' },
@@ -344,12 +345,16 @@ async function evaluateChangedFileThresholdGate(baseLoaded, headLoaded) {
       const underThreshold = passesThreshold(metric.direction, headValue, metric.threshold);
       const improvementPct = computeImprovementPct(metric.direction, baseValue, headValue);
       const improvedEnough = Number.isFinite(improvementPct) && improvementPct >= FILE_GATE_MIN_IMPROVEMENT_PCT;
-      const passed = underThreshold || improvedEnough;
+      const withinRegressionTolerance = Number.isFinite(improvementPct)
+        && improvementPct >= -FILE_GATE_REGRESSION_TOLERANCE_PCT;
+      const passed = underThreshold || improvedEnough || withinRegressionTolerance;
       const reason = underThreshold
         ? 'under-threshold'
         : improvedEnough
           ? 'over-threshold-improved-enough'
-          : 'over-threshold-improvement-insufficient';
+          : withinRegressionTolerance
+            ? 'over-threshold-within-regression-tolerance'
+            : 'over-threshold-improvement-insufficient';
       evaluations.push({
         filePath,
         metricKey: metric.key,
@@ -361,6 +366,7 @@ async function evaluateChangedFileThresholdGate(baseLoaded, headLoaded) {
         improvementPct,
         underThreshold,
         improvedEnough,
+        withinRegressionTolerance,
         passed,
         reason,
       });
@@ -377,8 +383,9 @@ async function evaluateChangedFileThresholdGate(baseLoaded, headLoaded) {
 
   return {
     enabled: true,
-    policy: 'changed-file-under-threshold-or-improve-by-3pct',
+    policy: 'changed-file-under-threshold-or-improve-by-3pct-or-regress-by-no-more-than-5pct',
     minImprovementPct: FILE_GATE_MIN_IMPROVEMENT_PCT,
+    regressionTolerancePct: FILE_GATE_REGRESSION_TOLERANCE_PCT,
     changedFiles,
     trackedChangedFiles,
     trackedChangedFilesCount: trackedChangedFiles.length,
@@ -961,7 +968,7 @@ function renderDeltaMarkdown(delta, baseLabel, headLabel) {
     `- net score (improved - regressed): ${delta.score}`,
     ...(gate ? [
       `- changed-file gate: ${gate.passed ? 'pass' : 'fail'} (${gate.failureCount}/${gate.evaluationCount} failing checks across ${gate.trackedChangedFilesCount} tracked changed files)`,
-      `- gate policy: file must be under threshold or improve by at least ${formatPctValue(gate.minImprovementPct ?? FILE_GATE_MIN_IMPROVEMENT_PCT)}`,
+      `- gate policy: file must be under threshold, improve by at least ${formatPctValue(gate.minImprovementPct ?? FILE_GATE_MIN_IMPROVEMENT_PCT)}, or stay within ${formatPctValue(gate.regressionTolerancePct ?? FILE_GATE_REGRESSION_TOLERANCE_PCT)} regression tolerance`,
     ] : []),
     '',
     '## How To Read This',
@@ -1188,7 +1195,7 @@ function renderDeltaHtml(delta, baseLabel, headLabel, metricAttribution) {
       renderHtmlTable(['Metric', 'Desired Trend', 'Practical Target Range', 'Signal', 'Description'], guideRows),
       ...(fileGate ? [
         '<h2>Changed-File Threshold Gate</h2>',
-        `<p>Policy: changed files must be under threshold or improve by at least ${escapeHtml(formatPctValue(fileGate.minImprovementPct ?? FILE_GATE_MIN_IMPROVEMENT_PCT))}. Tracked changed files: ${escapeHtml(String(fileGate.trackedChangedFilesCount))}.</p>`,
+        `<p>Policy: changed files must be under threshold, improve by at least ${escapeHtml(formatPctValue(fileGate.minImprovementPct ?? FILE_GATE_MIN_IMPROVEMENT_PCT))}, or stay within ${escapeHtml(formatPctValue(fileGate.regressionTolerancePct ?? FILE_GATE_REGRESSION_TOLERANCE_PCT))} regression tolerance. Tracked changed files: ${escapeHtml(String(fileGate.trackedChangedFilesCount))}.</p>`,
         renderHtmlTable(
           ['File', 'Metric', 'Base', 'Head', 'Threshold', 'Improvement', 'Result'],
           fileGate.evaluations.length > 0
