@@ -47,9 +47,48 @@ async function loadBrowserMatrixModule(): Promise<{
     url: string;
     blocking: boolean;
   }) => Promise<unknown>;
+  resolveManagedServerEndpoint: (url: string) => {
+    host: string;
+    port: string;
+  };
 }> {
   return import(browserMatrixModuleUrl);
 }
+
+describe('webgpu-browser-matrix resolveManagedServerEndpoint', () => {
+  it('derives explicit host and port from URL overrides', async () => {
+    const { resolveManagedServerEndpoint } = await loadBrowserMatrixModule();
+
+    expect(resolveManagedServerEndpoint('http://localhost:6123/?showPreview=true')).toEqual({
+      host: 'localhost',
+      port: '6123',
+    });
+  });
+
+  it('rejects unsupported URL protocols', async () => {
+    const { resolveManagedServerEndpoint } = await loadBrowserMatrixModule();
+
+    expect(() => resolveManagedServerEndpoint('file:///tmp/index.html')).toThrow(
+      'Unsupported WEBGPU_MATRIX_URL protocol',
+    );
+  });
+
+  it('rejects URLs without explicit port for managed server startup', async () => {
+    const { resolveManagedServerEndpoint } = await loadBrowserMatrixModule();
+
+    expect(() => resolveManagedServerEndpoint('http://localhost/?showPreview=true')).toThrow(
+      'must include an explicit :port',
+    );
+  });
+
+  it('rejects https URLs because managed server startup is http-only', async () => {
+    const { resolveManagedServerEndpoint } = await loadBrowserMatrixModule();
+
+    expect(() => resolveManagedServerEndpoint('https://localhost:6123/?showPreview=true')).toThrow(
+      'Expected http:',
+    );
+  });
+});
 
 describe('webgpu-browser-matrix summarizeGateResults', () => {
   it('does not mark blocking gates passed when every blocking lane is skipped', async () => {
@@ -128,7 +167,7 @@ describe('webgpu-browser-matrix runBrowserCheck cleanup', () => {
       browserName: 'chromium',
       launcher,
       launchOptions: {},
-      url: 'http://127.0.0.1:5174/?showPreview=true',
+      url: 'http://127.0.0.1:5784/?showPreview=true',
       blocking: true,
     })).rejects.toThrow('goto failed');
 
