@@ -11,7 +11,6 @@ import type { RuntimeState } from '../runtime/RuntimeState';
 import type { RootStore } from '../stores';
 import { isRuntimeConsoleEnabled } from '../testing/test-params';
 import { markRuntimeFrameAdvanced } from '../testing/runtime-probe';
-import type { RuntimeHotpathWorkerClient } from './RuntimeHotpathWorkerClient';
 
 export interface AnimationLoopState {
   frameCount: number;
@@ -30,7 +29,6 @@ export interface AnimationLoopDeps {
   getCurrentState: () => RuntimeState | null;
   getCanvas: () => HTMLCanvasElement | null;
   getRenderer: () => WebGPURenderer | null;
-  getRuntimeHotpath?: () => RuntimeHotpathWorkerClient | null;
   store: RootStore;
   onStatsUpdate?: (statsText: string) => void;
 }
@@ -108,7 +106,6 @@ export function executeAnimationFrame(
     getCurrentProgram,
     getCanvas,
     getRenderer,
-    getRuntimeHotpath,
     store,
     onStatsUpdate,
   } = deps;
@@ -125,20 +122,11 @@ export function executeAnimationFrame(
     return;
   }
 
-  const runtimeHotpath = getRuntimeHotpath?.() ?? null;
-  if (!runtimeHotpath) {
-    // [LAW:no-mode-explosion] CPU executeFrame playback fallback is deleted;
-    // runtime playback must use one worker-owned hot path.
-    // TODO(steel-thread): Move runtime-hotpath responsibilities into renderer
-    // worker once compiled GPU artifact bundles own full frame execution.
-    throw new Error('AnimationLoop: runtime hotpath worker is required (CPU fallback removed)');
-  }
-
   const { zoom, pan } = store.viewport;
   const renderWidth = Math.max(1, Math.floor(store.viewport.canvasWidth || canvas.width));
   const renderHeight = Math.max(1, Math.floor(store.viewport.canvasHeight || canvas.height));
   renderer.resizeCanvas(renderWidth, renderHeight);
-  runtimeHotpath.setViewportFrame({
+  renderer.setRuntimeViewportFrame({
     width: renderWidth,
     height: renderHeight,
     zoom,
@@ -151,7 +139,7 @@ export function executeAnimationFrame(
   const now = performance.now();
   if (now - state.lastFpsUpdate > 500) {
     state.fps = Math.round((state.frameCount * 1000) / (now - state.lastFpsUpdate));
-    const workerStats = runtimeHotpath.getLatestStats();
+    const workerStats = renderer.getRuntimeHotpathStats();
     const schedulerState = renderer.getLifecycleState();
     const telemetry = renderer.getLatestRuntimeTelemetry();
     const statsText = `FPS: ${state.fps} | DrawOps: ${workerStats?.drawOpCount ?? 0} | `

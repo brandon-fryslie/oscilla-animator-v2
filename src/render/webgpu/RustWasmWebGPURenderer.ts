@@ -2,6 +2,13 @@ import type { RenderShapeBankSource } from './WebGPUShapeBankManager';
 import type { IndirectArgsReadbackSnapshot } from './WebGPUIndirectArgsInspector';
 import { isRuntimeConsoleEnabled } from '../../testing/test-params';
 import { reportRenderIssue } from '../render-issues';
+import type { CompiledProgramIR } from '../../compiler/ir/program';
+import type { ExternalWriteBus } from '../../runtime';
+import {
+  RuntimeHotpathWorkerClient,
+  type RuntimeHotpathWorkerStats,
+  type RuntimeHotpathViewportFrame,
+} from '../../services/RuntimeHotpathWorkerClient';
 import {
   computeRustRendererShapeBankWordCapacity,
   computeRustRendererSinkTableWordCapacity,
@@ -432,6 +439,8 @@ export class WebGPURenderer {
   // https://github.com/brandon-fryslie/oscilla-animator-v2/issues/159
   private sinkTableDebugLogCounter = 0;
   private readonly emittedHealthWarningCodes = new Set<string>();
+  private runtimeHotpath: RuntimeHotpathWorkerClient | null = null;
+  private unbindExternalWriteBridge: (() => void) | null = null;
 
   private reportEngineError(
     source: string,
@@ -512,7 +521,66 @@ export class WebGPURenderer {
       sharedSinkTable,
       getRuntimeBootstrapConfig(),
     );
+    await renderer.bootstrapRuntimeHotpath();
     return renderer;
+  }
+
+  private async bootstrapRuntimeHotpath(): Promise<void> {
+    try {
+      this.runtimeHotpath = await RuntimeHotpathWorkerClient.create(
+        this.getRuntimeSharedPlanes(),
+        (error) => {
+          this.reportEngineError(
+            'RUNTIME_HOTPATH',
+            error.message,
+            'runtime-hotpath-worker',
+            true,
+          );
+          this.markRendererFatal(error);
+        },
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`Rust renderer hotpath worker initialization failed: ${message}`);
+    }
+  }
+
+  private requireRuntimeHotpath(): RuntimeHotpathWorkerClient {
+    if (this.fatalError) {
+      throw this.fatalError;
+    }
+    const runtimeHotpath = this.runtimeHotpath;
+    if (!runtimeHotpath) {
+      throw new Error('Rust renderer runtime hotpath worker is unavailable');
+    }
+    return runtimeHotpath;
+  }
+
+  installRuntimeProgram(program: CompiledProgramIR | null): void {
+    const runtimeHotpath = this.requireRuntimeHotpath();
+    runtimeHotpath.installProgram(program);
+  }
+
+  setRuntimeViewportFrame(frame: RuntimeHotpathViewportFrame): void {
+    const runtimeHotpath = this.requireRuntimeHotpath();
+    runtimeHotpath.setViewportFrame(frame);
+  }
+
+  getRuntimeHotpathStats(): RuntimeHotpathWorkerStats | null {
+    const runtimeHotpath = this.runtimeHotpath;
+    return runtimeHotpath ? runtimeHotpath.getLatestStats() : null;
+  }
+
+  bindRuntimeExternalWriteBus(writeBus: ExternalWriteBus | null): void {
+    this.unbindExternalWriteBridge?.();
+    this.unbindExternalWriteBridge = null;
+    if (!writeBus) {
+      return;
+    }
+    const runtimeHotpath = this.requireRuntimeHotpath();
+    // [LAW:single-enforcer] Runtime external write ownership is bound once at
+    // the renderer boundary; RuntimeService does not patch write bus methods.
+    this.unbindExternalWriteBridge = runtimeHotpath.bindExternalWriteBus(writeBus);
   }
 
   render(input: RenderInput): void {
@@ -668,6 +736,10 @@ export class WebGPURenderer {
     const message: RustRendererWorkerInboundMessage = { type: 'SHUTDOWN' };
     this.worker.postMessage(message);
     this.worker.terminate();
+    this.unbindExternalWriteBridge?.();
+    this.unbindExternalWriteBridge = null;
+    this.runtimeHotpath?.dispose();
+    this.runtimeHotpath = null;
   }
 
   async rebuildGpuPipelines(
