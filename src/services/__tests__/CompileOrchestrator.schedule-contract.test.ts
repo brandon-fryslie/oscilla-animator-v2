@@ -103,4 +103,44 @@ describe('compileAndSwap schedule contract enforcement', () => {
       '[compile] program.schedule.stateSlotCount must be a non-negative integer - compiler/runtime contract violation',
     );
   });
+
+  it('fails fast when eventSlotCount is not a non-negative integer', async () => {
+    const schedule = makeValidSchedule();
+    schedule.eventSlotCount = '2';
+    const { deps, precomputed } = makeHarness(schedule);
+
+    await expect(compileAndSwap(deps, false, precomputed)).rejects.toThrow(
+      '[compile] program.schedule.eventSlotCount must be a non-negative integer - compiler/runtime contract violation',
+    );
+  });
+
+  it('fails fast when stateMappings is missing', async () => {
+    const schedule = makeValidSchedule();
+    schedule.stateMappings = undefined;
+    const { deps, precomputed } = makeHarness(schedule);
+
+    await expect(compileAndSwap(deps, false, precomputed)).rejects.toThrow(
+      '[compile] program.schedule.stateMappings is missing - compiler/runtime contract violation',
+    );
+  });
+
+  it('fails fast when steps is missing', async () => {
+    const schedule = makeValidSchedule();
+    schedule.steps = undefined;
+    const { deps, precomputed } = makeHarness(schedule);
+
+    await expect(compileAndSwap(deps, false, precomputed)).rejects.toThrow(
+      '[compile] program.schedule.steps is missing - compiler/runtime contract violation',
+    );
+  });
+
+  it('fails fast when timeModel.periodAMs is invalid', async () => {
+    const schedule = makeValidSchedule();
+    schedule.timeModel = { periodAMs: -1, periodBMs: 2000 };
+    const { deps, precomputed } = makeHarness(schedule);
+
+    await expect(compileAndSwap(deps, false, precomputed)).rejects.toThrow(
+      '[compile] program.schedule.timeModel.periodAMs must be a non-negative number - compiler/runtime contract violation',
+    );
+  });
 });

@@ -190,6 +190,12 @@ function assertScheduleContract(schedule: CompiledProgramIR['schedule'] | undefi
     }
     return value;
   };
+  const assertNonNegativeNumber = (value: unknown, field: string): number => {
+    if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
+      throw new Error(`[compile] program.schedule.${field} must be a non-negative number - compiler/runtime contract violation`);
+    }
+    return value;
+  };
 
   if (!schedule) {
     throw new Error('[compile] program.schedule is missing - compiler/runtime contract violation');
@@ -199,6 +205,8 @@ function assertScheduleContract(schedule: CompiledProgramIR['schedule'] | undefi
   if (typeof schedule.timeModel !== 'object' || schedule.timeModel === null) {
     throw new Error('[compile] program.schedule.timeModel is missing - compiler/runtime contract violation');
   }
+  assertNonNegativeNumber(schedule.timeModel.periodAMs, 'timeModel.periodAMs');
+  assertNonNegativeNumber(schedule.timeModel.periodBMs, 'timeModel.periodBMs');
   if (!(schedule.instances instanceof Map)) {
     throw new Error('[compile] program.schedule.instances is missing - compiler/runtime contract violation');
   }
