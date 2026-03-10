@@ -1324,6 +1324,20 @@ export class WebGPURenderer {
     }
   }
 
+  private handleFatalErrorMessage(
+    payload: Extract<RustRendererWorkerOutboundMessage, { type: 'FATAL_ERROR' }>,
+  ): void {
+    this.reportEngineError(payload.code, payload.message, 'WORKER', true);
+    this.markRendererFatal(this.buildFatalErrorTransition(payload));
+  }
+
+  private handleDeviceLostMessage(
+    payload: Extract<RustRendererWorkerOutboundMessage, { type: 'DEVICE_LOST' }>,
+  ): void {
+    this.reportEngineError(payload.code, payload.reason, 'WORKER', true);
+    this.markRendererFatal(this.buildDeviceLostTransition(payload));
+  }
+
   private handleSchedulerHeartbeatMessage(
     payload: Extract<RustRendererWorkerOutboundMessage, { type: 'SCHEDULER_HEARTBEAT' }>,
   ): void {
@@ -1354,11 +1368,11 @@ export class WebGPURenderer {
       return;
     }
     if (payload.type === 'FATAL_ERROR') {
-      this.markRendererFatal(this.buildFatalErrorTransition(payload));
+      this.handleFatalErrorMessage(payload);
       return;
     }
     if (payload.type === 'DEVICE_LOST') {
-      this.markRendererFatal(this.buildDeviceLostTransition(payload));
+      this.handleDeviceLostMessage(payload);
       return;
     }
     if (payload.type === 'RUNTIME_EVENT') {
