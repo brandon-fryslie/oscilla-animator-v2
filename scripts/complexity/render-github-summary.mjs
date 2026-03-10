@@ -52,6 +52,18 @@ function formatPctValue(value) {
   return `${formatSig2(value)}%`;
 }
 
+function formatFileGatePolicy(fileGate) {
+  return typeof fileGate?.policySummary === 'string' && fileGate.policySummary.length > 0
+    ? fileGate.policySummary
+    : `under threshold OR >= ${formatPctValue(fileGate?.minImprovementPct)} improvement`;
+}
+
+function fileGatePolicyNotice(fileGate) {
+  return typeof fileGate?.policyNotice === 'string' && fileGate.policyNotice.length > 0
+    ? fileGate.policyNotice
+    : 'MANDATORY: changed-file gate policy notice missing from delta JSON.';
+}
+
 function escapeCell(value) {
   return String(value ?? '')
     .replaceAll('&', '&amp;')
@@ -253,7 +265,9 @@ function renderSummaryMarkdown(delta, options) {
     `- artifact: ${artifactUrl}`,
     ...(fileGate ? [
       `- changed-file gate: ${fileGate.passed ? 'pass' : 'fail'} (${fileGate.failureCount}/${fileGate.evaluationCount} failing checks across ${fileGate.trackedChangedFilesCount} tracked changed files)`,
-      `- changed-file gate policy: under threshold OR >= ${formatPctValue(fileGate.minImprovementPct)} improvement`,
+      `- changed-file gate policy: ${formatFileGatePolicy(fileGate)}`,
+      // [LAW:one-source-of-truth] Render the canonical lock notice from delta JSON so CI output cannot drift from the enforced policy.
+      `- changed-file gate policy lock: ${fileGatePolicyNotice(fileGate)}`,
     ] : []),
     '',
     '### High-Signal Regressions',
@@ -272,6 +286,10 @@ function renderSummaryMarkdown(delta, options) {
     '',
     ...(fileGate ? [
       '### Changed-File Threshold Gate',
+      '',
+      `Policy: ${escapeSummaryText(formatFileGatePolicy(fileGate))}`,
+      '',
+      `Policy lock: ${escapeSummaryText(fileGatePolicyNotice(fileGate))}`,
       '',
       renderTable(
         ['File', 'Metric', 'Base/Head', 'Delta (%)', 'Threshold', 'Result'],
