@@ -75,8 +75,10 @@ function oneDefault(
       throw new Error(
         `DefaultSource: camera projection type requires explicit source (no meaningful default)`
       );
-    default:
-      throw new Error(`DefaultSource: unsupported payload type: ${(payload as any).kind}`);
+    default: {
+      const payloadKind = (payload as { kind?: string }).kind;
+      throw new Error(`DefaultSource: unsupported payload type: ${String(payloadKind)}`);
+    }
   }
 }
 
