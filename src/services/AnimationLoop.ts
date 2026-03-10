@@ -6,12 +6,12 @@
  */
 
 import { assertSchedulePhaseBoundaryStateReads } from '../runtime';
-import { type WebGPURenderer } from '../render';
+import { RenderBufferArena, type WebGPURenderer } from '../render';
+import type { CompiledProgramIR } from '../compiler/ir/program';
 import type { RuntimeState } from '../runtime/RuntimeState';
 import type { RootStore } from '../stores';
 import { isRuntimeConsoleEnabled } from '../testing/test-params';
 import { markRuntimeFrameAdvanced } from '../testing/runtime-probe';
-import type { RuntimeHotpathWorkerClient } from './RuntimeHotpathWorkerClient';
 
 export interface AnimationLoopState {
   frameCount: number;
@@ -26,11 +26,11 @@ export interface AnimationLoopState {
 }
 
 export interface AnimationLoopDeps {
-  getCurrentProgram: () => any | null;
+  getCurrentProgram: () => CompiledProgramIR | null;
   getCurrentState: () => RuntimeState | null;
   getCanvas: () => HTMLCanvasElement | null;
   getRenderer: () => WebGPURenderer | null;
-  getRuntimeHotpath?: () => RuntimeHotpathWorkerClient | null;
+  getArena: () => RenderBufferArena | null;
   store: RootStore;
   onStatsUpdate?: (statsText: string) => void;
 }
@@ -43,10 +43,12 @@ export interface AnimationLoopController {
 function assertWebGPULoopContract(deps: AnimationLoopDeps): void {
   const canvas = deps.getCanvas();
   const renderer = deps.getRenderer();
-  if (!canvas || !renderer) {
+  const arena = deps.getArena();
+
+  if (!canvas || !renderer || !arena) {
     // [LAW:no-silent-fallbacks] Runtime loop must hard-fail when required
     // WebGPU rendering dependencies are missing.
-    throw new Error('AnimationLoop: WebGPU runtime contract requires canvas and renderer');
+    throw new Error('AnimationLoop: WebGPU runtime contract requires canvas, renderer, and arena');
   }
 }
 
@@ -108,7 +110,7 @@ export function executeAnimationFrame(
     getCurrentProgram,
     getCanvas,
     getRenderer,
-    getRuntimeHotpath,
+    getArena,
     store,
     onStatsUpdate,
   } = deps;
@@ -116,34 +118,30 @@ export function executeAnimationFrame(
   const currentProgram = getCurrentProgram();
   const canvas = getCanvas();
   const renderer = getRenderer();
+  const arena = getArena();
 
-  if (!canvas || !renderer) {
-    throw new Error('AnimationLoop: WebGPU runtime contract requires canvas and renderer');
+  if (!canvas || !renderer || !arena) {
+    throw new Error('AnimationLoop: WebGPU runtime contract requires canvas, renderer, and arena');
   }
 
   if (!currentProgram) {
     return;
   }
 
-  const runtimeHotpath = getRuntimeHotpath?.() ?? null;
-  if (!runtimeHotpath) {
-    // [LAW:no-mode-explosion] CPU executeFrame playback fallback is deleted;
-    // runtime playback must use one worker-owned hot path.
-    // TODO(steel-thread): Move runtime-hotpath responsibilities into renderer
-    // worker once compiled GPU artifact bundles own full frame execution.
-    throw new Error('AnimationLoop: runtime hotpath worker is required (CPU fallback removed)');
-  }
-
   const { zoom, pan } = store.viewport;
   const renderWidth = Math.max(1, Math.floor(store.viewport.canvasWidth || canvas.width));
   const renderHeight = Math.max(1, Math.floor(store.viewport.canvasHeight || canvas.height));
   renderer.resizeCanvas(renderWidth, renderHeight);
-  runtimeHotpath.setViewportFrame({
+  // [LAW:single-enforcer] Renderer worker is the one runtime-input boundary;
+  // animation loop publishes viewport/time there and does not dual-publish to
+  // any secondary runtime worker seam.
+  renderer.setViewportFrame({
     width: renderWidth,
     height: renderHeight,
     zoom,
     panX: pan.x,
     panY: pan.y,
+    timeMs: tMs,
   });
   markRuntimeFrameAdvanced(-1, tMs);
 
@@ -151,11 +149,12 @@ export function executeAnimationFrame(
   const now = performance.now();
   if (now - state.lastFpsUpdate > 500) {
     state.fps = Math.round((state.frameCount * 1000) / (now - state.lastFpsUpdate));
-    const workerStats = runtimeHotpath.getLatestStats();
     const schedulerState = renderer.getLifecycleState();
     const telemetry = renderer.getLatestRuntimeTelemetry();
-    const statsText = `FPS: ${state.fps} | DrawOps: ${workerStats?.drawOpCount ?? 0} | `
-      + `Tick: ${(workerStats?.lastTickMs ?? 0).toFixed(1)}ms`;
+    const drawOps = telemetry?.resourceStats.totalInstanceCount ?? 0;
+    const tickMs = telemetry?.stageTimings.totalFrameMs ?? telemetry?.meanMs ?? 0;
+    const statsText = `FPS: ${state.fps} | DrawOps: ${drawOps} | `
+      + `Tick: ${tickMs.toFixed(1)}ms`;
     onStatsUpdate?.(statsText);
     if (RUNTIME_CONSOLE_ENABLED) {
       const programScheduleSteps = Array.isArray(currentProgram?.schedule?.steps) ? currentProgram.schedule.steps : [];
@@ -164,7 +163,7 @@ export function executeAnimationFrame(
         typeof renderer.getInstalledGpuPassIds === 'function' ? renderer.getInstalledGpuPassIds() : [];
       const rendererSinkTableSample =
         typeof renderer.getLatestSinkTableSample === 'function' ? renderer.getLatestSinkTableSample() : null;
-      const sinkTableSample = workerStats?.sinkTableSample ?? rendererSinkTableSample ?? null;
+      const sinkTableSample = rendererSinkTableSample ?? null;
       const schedulerFrameCount = telemetry?.frameCount ?? 0;
       const overheadDispatches = 2; // instance assembly + draw-prep
       const simulationPassCount = telemetry?.dispatchCounters.computeDispatchCount
@@ -177,11 +176,11 @@ export function executeAnimationFrame(
         kind: 'runtime-heartbeat',
         fps: state.fps,
         stats: {
-          drawOps: workerStats?.drawOpCount ?? 0,
-          lastTickMs: workerStats?.lastTickMs ?? 0,
-          meanTickMs: workerStats?.meanTickMs ?? telemetry?.meanMs ?? 0,
-          sinkWords: workerStats?.sinkWordCount ?? telemetry?.resourceStats.sinkTableWordCount ?? 0,
-          frameCount: workerStats?.frameCount ?? telemetry?.frameCount ?? 0,
+          drawOps,
+          lastTickMs: tickMs,
+          meanTickMs: telemetry?.meanMs ?? 0,
+          sinkWords: telemetry?.resourceStats.sinkTableWordCount ?? 0,
+          frameCount: telemetry?.frameCount ?? 0,
         },
         scheduler: schedulerState,
         telemetry: telemetry ? {
