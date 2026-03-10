@@ -1238,7 +1238,7 @@ export class WebGPURenderer {
 
   private writePackedInstance(plan: InstancePackingPlan, firstInstance: number, index: number): void {
     const instanceId = firstInstance + index;
-    const base = (firstInstance + index) * INSTANCE_FLOATS;
+    const base = this.instanceRecordBase(firstInstance, index);
     const posX = plan.position[index * 2];
     const posY = plan.position[index * 2 + 1];
     const rotationValue = plan.rotation[index];
@@ -1267,6 +1267,10 @@ export class WebGPURenderer {
       shapeBankWordOffset: plan.shapeBankWordOffset,
     });
     this.writePackedColorFields(base, plan.activeColor, plan.isUniformColor, index);
+  }
+
+  private instanceRecordBase(firstInstance: number, index: number): number {
+    return (firstInstance + index) * INSTANCE_FLOATS;
   }
 
   private assertFiniteInstanceValue(instanceId: number, fieldName: string, value: number): void {
