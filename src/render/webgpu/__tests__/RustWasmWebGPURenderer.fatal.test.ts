@@ -156,14 +156,12 @@ function makeSchedulerHeartbeat(state: 'Booting' | 'Running' | 'Paused' | 'Lost'
   };
 }
 
-describe('RustWasmWebGPURenderer fatal transition', () => {
-  let originalNavigatorGpu: PropertyDescriptor | undefined;
-
+function installRendererSuiteHooks(state: { originalNavigatorGpu: PropertyDescriptor | undefined }): void {
   beforeEach(() => {
     clearRenderIssues();
     FakeWorker.instances.length = 0;
     vi.stubGlobal('Worker', FakeWorker as unknown as typeof Worker);
-    originalNavigatorGpu = Object.getOwnPropertyDescriptor(globalThis.navigator, 'gpu');
+    state.originalNavigatorGpu = Object.getOwnPropertyDescriptor(globalThis.navigator, 'gpu');
     Object.defineProperty(globalThis.navigator, 'gpu', {
       configurable: true,
       value: {},
@@ -173,14 +171,19 @@ describe('RustWasmWebGPURenderer fatal transition', () => {
   afterEach(() => {
     clearRenderIssues();
     FakeWorker.instances.length = 0;
-    if (originalNavigatorGpu) {
-      Object.defineProperty(globalThis.navigator, 'gpu', originalNavigatorGpu);
+    if (state.originalNavigatorGpu) {
+      Object.defineProperty(globalThis.navigator, 'gpu', state.originalNavigatorGpu);
     } else {
       Reflect.deleteProperty(globalThis.navigator, 'gpu');
     }
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });
+}
+
+describe('RustWasmWebGPURenderer fatal transition', () => {
+  const suiteState: { originalNavigatorGpu: PropertyDescriptor | undefined } = { originalNavigatorGpu: undefined };
+  installRendererSuiteHooks(suiteState);
 
   it('keeps the first fatal record and emits one fatal issue across repeated fatal events', async () => {
     const renderer = await createWebGPURenderer(makeCanvas());
@@ -255,30 +258,8 @@ describe('RustWasmWebGPURenderer fatal transition', () => {
 });
 
 describe('RustWasmWebGPURenderer fatal transition guardrails', () => {
-  let originalNavigatorGpu: PropertyDescriptor | undefined;
-
-  beforeEach(() => {
-    clearRenderIssues();
-    FakeWorker.instances.length = 0;
-    vi.stubGlobal('Worker', FakeWorker as unknown as typeof Worker);
-    originalNavigatorGpu = Object.getOwnPropertyDescriptor(globalThis.navigator, 'gpu');
-    Object.defineProperty(globalThis.navigator, 'gpu', {
-      configurable: true,
-      value: {},
-    });
-  });
-
-  afterEach(() => {
-    clearRenderIssues();
-    FakeWorker.instances.length = 0;
-    if (originalNavigatorGpu) {
-      Object.defineProperty(globalThis.navigator, 'gpu', originalNavigatorGpu);
-    } else {
-      Reflect.deleteProperty(globalThis.navigator, 'gpu');
-    }
-    vi.unstubAllGlobals();
-    vi.restoreAllMocks();
-  });
+  const suiteState: { originalNavigatorGpu: PropertyDescriptor | undefined } = { originalNavigatorGpu: undefined };
+  installRendererSuiteHooks(suiteState);
 
   it('keeps lifecycle Lost even if heartbeat messages arrive after fatal', async () => {
     const renderer = await createWebGPURenderer(makeCanvas());
