@@ -89,6 +89,8 @@ vi.mock('../../render', () => ({
   clearRenderIssues: mocks.clearRenderIssues,
   RenderBufferArena: class {
     init = mocks.renderBufferArenaInit;
+    reset(): void {}
+    getTotalBytes(): number { return 0; }
   },
 }));
 
