@@ -14,8 +14,9 @@ vi.mock('../../testing/runtime-probe', () => ({
   markRuntimeFrameAdvanced: runtimeProbeMocks.markRuntimeFrameAdvanced,
 }));
 
-function makeRuntimeStatsMock() {
+function makeHotpathMock() {
   return {
+    setViewportFrame: vi.fn(),
     getLatestStats: vi.fn(() => ({
       frameCount: 0,
       meanTickMs: 0,
@@ -28,22 +29,21 @@ function makeRuntimeStatsMock() {
 }
 
 function makeDeps(overrides: Partial<any> = {}) {
-  const runtimeStats = makeRuntimeStatsMock();
   const renderer = {
     resizeCanvas: vi.fn(),
-    setRuntimeViewportFrame: vi.fn(),
-    getRuntimeHotpathStats: vi.fn(() => runtimeStats.getLatestStats()),
     getLifecycleState: vi.fn(() => 'Running'),
     getLatestRuntimeTelemetry: vi.fn(() => null),
     getInstalledGpuPassIds: vi.fn(() => []),
     getLatestSinkTableSample: vi.fn(() => null),
     render: vi.fn(),
   };
+  const runtimeHotpath = makeHotpathMock();
   const deps = {
     getCurrentProgram: () => ({}),
     getCurrentState: () => null,
     getCanvas: () => ({ width: 100, height: 80 }),
     getRenderer: () => renderer,
+    getRuntimeHotpath: () => runtimeHotpath,
     store: {
       demo: { currentFilename: null },
       debug: { enabled: false, traceCardinalitySolver: false },
@@ -65,7 +65,7 @@ function makeDeps(overrides: Partial<any> = {}) {
       getPatchRevision: () => 1,
     },
   } as any;
-  return { deps: { ...deps, ...overrides }, renderer, runtimeStats };
+  return { deps: { ...deps, ...overrides }, renderer, runtimeHotpath };
 }
 describe('AnimationLoop', () => {
   const assertSchedulePhaseBoundaryStateReadsMock = vi.mocked(assertSchedulePhaseBoundaryStateReads);
@@ -84,11 +84,11 @@ describe('AnimationLoop', () => {
     (globalThis as any).__testFrameCallback = () => callback;
   });
 
-  it('publishes canonical viewport frame through renderer runtime boundary', () => {
-    const { deps, renderer } = makeDeps();
+  it('publishes canonical viewport frame to runtime hotpath and renderer', () => {
+    const { deps, renderer, runtimeHotpath } = makeDeps();
     executeAnimationFrame(16, deps, createAnimationLoopState());
     expect(renderer.resizeCanvas).toHaveBeenCalledWith(100, 80);
-    expect(renderer.setRuntimeViewportFrame).toHaveBeenCalledWith({
+    expect(runtimeHotpath.setViewportFrame).toHaveBeenCalledWith({
       width: 100,
       height: 80,
       zoom: 1,
@@ -99,25 +99,22 @@ describe('AnimationLoop', () => {
   });
 
   it('skips frame publication when no program is installed', () => {
-    const { deps, renderer } = makeDeps({ getCurrentProgram: () => null });
+    const { deps, runtimeHotpath } = makeDeps({ getCurrentProgram: () => null });
     executeAnimationFrame(16, deps, createAnimationLoopState());
-    expect(renderer.setRuntimeViewportFrame).not.toHaveBeenCalled();
+    expect(runtimeHotpath.setViewportFrame).not.toHaveBeenCalled();
     expect(runtimeProbeMocks.markRuntimeFrameAdvanced).not.toHaveBeenCalled();
   });
 
-  it('throws when renderer runtime boundary cannot publish viewport frame', () => {
-    const { deps, renderer } = makeDeps();
-    renderer.setRuntimeViewportFrame.mockImplementation(() => {
-      throw new Error('runtime hotpath worker is unavailable');
-    });
+  it('throws when runtime hotpath worker is unavailable', () => {
+    const { deps } = makeDeps({ getRuntimeHotpath: () => null });
     expect(() => executeAnimationFrame(16, deps, createAnimationLoopState()))
-      .toThrow('runtime hotpath worker is unavailable');
+      .toThrow('runtime hotpath worker is required');
   });
 
   it('emits stats updates from worker heartbeat data on cadence window', () => {
     const statsSink = vi.fn();
-    const { deps, runtimeStats } = makeDeps({ onStatsUpdate: statsSink });
-    runtimeStats.getLatestStats.mockReturnValue({
+    const { deps, runtimeHotpath } = makeDeps({ onStatsUpdate: statsSink });
+    runtimeHotpath.getLatestStats.mockReturnValue({
       frameCount: 42,
       meanTickMs: 0.8,
       lastTickMs: 1.5,
@@ -148,10 +145,7 @@ describe('AnimationLoop', () => {
 
   it('halts execution after first runtime exception', () => {
     const onError = vi.fn();
-    const { deps, renderer } = makeDeps();
-    renderer.setRuntimeViewportFrame.mockImplementation(() => {
-      throw new Error('runtime hotpath worker is unavailable');
-    });
+    const { deps } = makeDeps({ getRuntimeHotpath: () => null });
     const loop = startAnimationLoop(deps, createAnimationLoopState(), onError);
     const firstFrame = (globalThis as any).__testFrameCallback() as FrameRequestCallback;
     firstFrame(0);
@@ -164,10 +158,7 @@ describe('AnimationLoop', () => {
 
   it('resumes after compile success is signaled', () => {
     const onError = vi.fn();
-    const { deps, renderer } = makeDeps();
-    renderer.setRuntimeViewportFrame.mockImplementation(() => {
-      throw new Error('runtime hotpath worker is unavailable');
-    });
+    const { deps } = makeDeps({ getRuntimeHotpath: () => null });
     const loop = startAnimationLoop(deps, createAnimationLoopState(), onError);
     const firstFrame = (globalThis as any).__testFrameCallback() as FrameRequestCallback;
     firstFrame(0);
