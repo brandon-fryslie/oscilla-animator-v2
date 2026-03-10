@@ -10,6 +10,7 @@ import type { InputPort, OutputPort, Patch } from './Patch';
 import { getBlockAddress, getOutputAddress, getInputAddress, getAllAddresses, getShorthandForOutput } from './addressing';
 import { resolveAddress, ResolvedAddress } from './address-resolution';
 import { normalizeCanonicalName } from '../core/canonical-name';
+import type { PortId } from '../types';
 import { portId as toPortId } from '../types';
 
 /**
@@ -29,22 +30,39 @@ function strictPortId(
   port: InputPort | OutputPort,
   blockId: string,
   direction: 'input' | 'output'
-) {
+): PortId {
   if (typeof rawPortId !== 'string') {
     throw new Error(
       `AddressRegistry invariant violation: ${direction} port key is not a string on block "${blockId}" (${String(rawPortId)})`
     );
   }
-  const normalizedPortId = rawPortId.trim();
-  if (normalizedPortId.length === 0) {
-    throw new Error(`AddressRegistry invariant violation: ${direction} port id is empty on block "${blockId}"`);
-  }
-  if (port.id !== normalizedPortId) {
+  const trimmedPortId = rawPortId.trim();
+  if (rawPortId !== trimmedPortId) {
     throw new Error(
-      `AddressRegistry invariant violation: ${direction} port key/id mismatch on block "${blockId}" (${normalizedPortId} !== ${port.id})`
+      `AddressRegistry invariant violation: ${direction} port key has leading or trailing whitespace on block "${blockId}" ("${rawPortId}")`
     );
   }
-  return toPortId(normalizedPortId);
+  if (rawPortId.length === 0) {
+    throw new Error(`AddressRegistry invariant violation: ${direction} port id is empty on block "${blockId}"`);
+  }
+  if (port.id !== rawPortId) {
+    throw new Error(
+      `AddressRegistry invariant violation: ${direction} port key/id mismatch on block "${blockId}" (${rawPortId} !== ${port.id})`
+    );
+  }
+  return toPortId(rawPortId);
+}
+
+function assertPortMap(
+  ports: unknown,
+  blockId: string,
+  direction: 'input' | 'output',
+): asserts ports is ReadonlyMap<unknown, InputPort | OutputPort> {
+  if (!(ports instanceof Map)) {
+    throw new Error(
+      `AddressRegistry invariant violation: ${direction}Ports is not a Map on block "${blockId}"`
+    );
+  }
 }
 
 /**
@@ -102,6 +120,7 @@ export class AddressRegistry {
         byCanonical.set(addressToString(blockAddr), resolved);
       }
 
+      assertPortMap(block.outputPorts, String(block.id), 'output');
       // Output ports
       for (const [portId, port] of block.outputPorts) {
         const typedPortId = strictPortId(portId, port, String(block.id), 'output');
@@ -117,6 +136,7 @@ export class AddressRegistry {
         }
       }
 
+      assertPortMap(block.inputPorts, String(block.id), 'input');
       // Input ports
       for (const [portId, port] of block.inputPorts) {
         const typedPortId = strictPortId(portId, port, String(block.id), 'input');

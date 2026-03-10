@@ -132,6 +132,34 @@ describe('AddressRegistry', () => {
 
       expect(() => AddressRegistry.buildFromPatch(patch)).toThrow(/port key\/id mismatch/);
     });
+
+    it('fails explicitly when an input port key is not a string', () => {
+      const patch = buildPatch(b => {
+        b.addBlock('Oscillator', { displayName: 'My Osc' });
+      });
+      const block = Array.from(patch.blocks.values())[0];
+      const brokenBlock = {
+        ...block,
+        inputPorts: new Map<any, any>([[42, { id: 'phase' }]]),
+      };
+      (patch.blocks as any).set(block.id, brokenBlock);
+
+      expect(() => AddressRegistry.buildFromPatch(patch)).toThrow(/input port key is not a string/);
+    });
+
+    it('fails explicitly when an input port key does not match port.id', () => {
+      const patch = buildPatch(b => {
+        b.addBlock('Oscillator', { displayName: 'My Osc' });
+      });
+      const block = Array.from(patch.blocks.values())[0];
+      const brokenBlock = {
+        ...block,
+        inputPorts: new Map<any, any>([['wrong-key', { id: 'phase' }]]),
+      };
+      (patch.blocks as any).set(block.id, brokenBlock);
+
+      expect(() => AddressRegistry.buildFromPatch(patch)).toThrow(/port key\/id mismatch/);
+    });
   });
 
   describe('resolve', () => {
