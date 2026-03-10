@@ -6,8 +6,16 @@ const runtimeProbeMocks = vi.hoisted(() => ({
   markRuntimeFrameAdvanced: vi.fn(),
 }));
 
-vi.mock('../../runtime', () => ({
+const runtimeMocks = vi.hoisted(() => ({
   assertSchedulePhaseBoundaryStateReads: vi.fn(),
+  executeFrame: vi.fn(),
+  packDrawPrepSinkTableV1: vi.fn(() => null),
+}));
+
+vi.mock('../../runtime', () => ({
+  assertSchedulePhaseBoundaryStateReads: runtimeMocks.assertSchedulePhaseBoundaryStateReads,
+  executeFrame: runtimeMocks.executeFrame,
+  packDrawPrepSinkTableV1: runtimeMocks.packDrawPrepSinkTableV1,
 }));
 
 vi.mock('../../testing/runtime-probe', () => ({
@@ -32,7 +40,24 @@ function makeDeps(overrides: Partial<any> = {}) {
   };
   const deps = {
     getCurrentProgram: () => ({}),
-    getCurrentState: () => null,
+    getCurrentState: () => ({
+      arena: new Float32Array(16),
+      shapeBank: {
+        data: new Uint32Array(16),
+        volatilePtr: 0,
+        staticBoundary: 0,
+        topologyIdByHandle: new Int32Array(16),
+      },
+      cache: {
+        frameId: 0,
+      },
+      externalChannels: {
+        commit: vi.fn(),
+        snapshot: {
+          getFloat: vi.fn(() => 0),
+        },
+      },
+    }),
     getCanvas: () => ({ width: 100, height: 80 }),
     getRenderer: () => renderer,
     getArena: () => arena,
@@ -61,11 +86,16 @@ function makeDeps(overrides: Partial<any> = {}) {
 }
 describe('AnimationLoop', () => {
   const assertSchedulePhaseBoundaryStateReadsMock = vi.mocked(assertSchedulePhaseBoundaryStateReads);
+  const executeFrameMock = runtimeMocks.executeFrame;
+  const packDrawPrepSinkTableV1Mock = runtimeMocks.packDrawPrepSinkTableV1;
   const originalRaf = globalThis.requestAnimationFrame;
   const originalCancelRaf = globalThis.cancelAnimationFrame;
 
   beforeEach(() => {
     assertSchedulePhaseBoundaryStateReadsMock.mockReset();
+    executeFrameMock.mockReset();
+    packDrawPrepSinkTableV1Mock.mockReset();
+    packDrawPrepSinkTableV1Mock.mockReturnValue(null);
     runtimeProbeMocks.markRuntimeFrameAdvanced.mockReset();
     let callback: FrameRequestCallback | null = null;
     vi.stubGlobal('requestAnimationFrame', vi.fn((cb: FrameRequestCallback) => {
@@ -76,13 +106,13 @@ describe('AnimationLoop', () => {
     (globalThis as any).__testFrameCallback = () => callback;
   });
 
-  it('publishes canonical viewport frame to renderer worker boundary', () => {
+  it('publishes canonical runtime frame to renderer worker boundary', () => {
     const { deps, renderer, arena } = makeDeps();
     executeAnimationFrame(16, deps, createAnimationLoopState());
     expect(renderer.resizeCanvas).toHaveBeenCalledWith(100, 80);
     expect(arena.beginFrame).toHaveBeenCalledTimes(1);
     expect(arena.endFrame).toHaveBeenCalledTimes(1);
-    expect(renderer.setViewportFrame).toHaveBeenCalledWith({
+    expect(renderer.render).toHaveBeenCalledWith(expect.objectContaining({
       width: 100,
       height: 80,
       zoom: 1,
@@ -96,8 +126,8 @@ describe('AnimationLoop', () => {
       inputAudioMid: 0,
       inputAudioHigh: 0,
       inputGaugeActive: 0,
-    });
-    expect(runtimeProbeMocks.markRuntimeFrameAdvanced).toHaveBeenCalledWith(-1, 16);
+    }));
+    expect(runtimeProbeMocks.markRuntimeFrameAdvanced).toHaveBeenCalledWith(0, 16);
   });
 
   it('commits external channel state and forwards mapped input values', () => {
@@ -114,6 +144,16 @@ describe('AnimationLoop', () => {
     })[name] ?? 0);
     const { deps, renderer } = makeDeps({
       getCurrentState: () => ({
+        arena: new Float32Array(16),
+        shapeBank: {
+          data: new Uint32Array(16),
+          volatilePtr: 0,
+          staticBoundary: 0,
+          topologyIdByHandle: new Int32Array(16),
+        },
+        cache: {
+          frameId: 0,
+        },
         externalChannels: {
           commit,
           snapshot: { getFloat },
@@ -124,7 +164,7 @@ describe('AnimationLoop', () => {
     executeAnimationFrame(16, deps, createAnimationLoopState());
 
     expect(commit).toHaveBeenCalledTimes(1);
-    expect(renderer.setViewportFrame).toHaveBeenCalledWith(expect.objectContaining({
+    expect(renderer.render).toHaveBeenCalledWith(expect.objectContaining({
       inputMouseX: 0.25,
       inputMouseY: 0.75,
       inputMouseButtons: 1,
@@ -138,13 +178,13 @@ describe('AnimationLoop', () => {
   it('skips frame publication when no program is installed', () => {
     const { deps, renderer } = makeDeps({ getCurrentProgram: () => null });
     executeAnimationFrame(16, deps, createAnimationLoopState());
-    expect(renderer.setViewportFrame).not.toHaveBeenCalled();
+    expect(renderer.render).not.toHaveBeenCalled();
     expect(runtimeProbeMocks.markRuntimeFrameAdvanced).not.toHaveBeenCalled();
   });
 
   it('throws when renderer runtime input publication fails', () => {
     const { deps, renderer, arena } = makeDeps();
-    renderer.setViewportFrame.mockImplementation(() => {
+    renderer.render.mockImplementation(() => {
       throw new Error('renderer input unavailable');
     });
     expect(() => executeAnimationFrame(16, deps, createAnimationLoopState())).toThrow('renderer input unavailable');
@@ -190,7 +230,7 @@ describe('AnimationLoop', () => {
   it('halts execution after first runtime exception', () => {
     const onError = vi.fn();
     const { deps, renderer } = makeDeps();
-    renderer.setViewportFrame.mockImplementation(() => {
+    renderer.render.mockImplementation(() => {
       throw new Error('renderer input unavailable');
     });
     const loop = startAnimationLoop(deps, createAnimationLoopState(), onError);
@@ -206,7 +246,7 @@ describe('AnimationLoop', () => {
   it('resumes after compile success is signaled', () => {
     const onError = vi.fn();
     const { deps, renderer } = makeDeps();
-    renderer.setViewportFrame.mockImplementation(() => {
+    renderer.render.mockImplementation(() => {
       throw new Error('renderer input unavailable');
     });
     const loop = startAnimationLoop(deps, createAnimationLoopState(), onError);
