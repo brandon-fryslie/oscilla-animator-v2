@@ -139,6 +139,8 @@ export function executeAnimationFrame(
     panX: pan.x,
     panY: pan.y,
     timeMs: tMs,
+    // [LAW:one-source-of-truth] Renderer boundary requires explicit signal
+    // channels every frame; canonical sentinel values are zero.
     inputMouseX: 0,
     inputMouseY: 0,
     inputMouseButtons: 0,
