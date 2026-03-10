@@ -4,6 +4,13 @@
  * Executes compiled IR programs frame-by-frame.
  */
 
+function runtimePublicSurfaceVersion(): string {
+  // [LAW:one-source-of-truth] Runtime public exports are versioned through one canonical tag.
+  return 'canonical-v2.5';
+}
+
+export const RUNTIME_PUBLIC_SURFACE_VERSION = runtimePublicSurfaceVersion();
+
 export {
   type EffectiveTime,
   type TimeState,
