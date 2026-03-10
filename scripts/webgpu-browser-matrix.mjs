@@ -7,7 +7,7 @@ import { pathToFileURL } from 'node:url';
 import { chromium } from '@playwright/test';
 import { truncateForLog } from './matrix-utils.mjs';
 
-const BASE_URL = process.env.WEBGPU_MATRIX_URL ?? 'http://127.0.0.1:5174';
+const BASE_URL = process.env.WEBGPU_MATRIX_URL ?? 'http://127.0.0.1:5784';
 const DEFAULT_REPORT = process.env.WEBGPU_MATRIX_REPORT ?? 'artifacts/webgpu-browser-matrix.json';
 const parsePositiveIntegerEnv = (value, fallback) => {
   const parsed = Number.parseInt(value ?? '', 10);
@@ -81,6 +81,24 @@ async function runCommand(command, args, label) {
   });
 }
 
+function resolveManagedServerEndpoint(url) {
+  const parsed = new URL(url);
+  if (parsed.protocol !== 'http:') {
+    throw new Error(
+      `Unsupported WEBGPU_MATRIX_URL protocol "${parsed.protocol}". Expected http:.`,
+    );
+  }
+  if (!parsed.port) {
+    throw new Error(
+      'WEBGPU_MATRIX_URL must include an explicit :port when WEBGPU_MATRIX_START_SERVER=1.',
+    );
+  }
+  // [LAW:one-source-of-truth] Managed server host/port derive once from URL.
+  const host = parsed.hostname;
+  const port = parsed.port;
+  return { host, port };
+}
+
 async function startManagedServer(url) {
   if (!START_SERVER) {
     return null;
@@ -104,10 +122,11 @@ async function startManagedServer(url) {
     await runCommand('pnpm', ['run', 'build'], 'build');
   }
 
+  const { host: managedHost, port: managedPort } = resolveManagedServerEndpoint(url);
   const serverArgs =
     SERVER_MODE === 'dev'
-      ? ['run', 'dev', '--', '--host', '127.0.0.1', '--port', '5174', '--strictPort']
-      : ['exec', 'vite', 'preview', '--host', '127.0.0.1', '--port', '5174', '--strictPort'];
+      ? ['run', 'dev', '--', '--host', managedHost, '--port', managedPort, '--strictPort']
+      : ['exec', 'vite', 'preview', '--host', managedHost, '--port', managedPort, '--strictPort'];
 
   const serverProcess = spawn('pnpm', serverArgs, {
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -739,4 +758,11 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   });
 }
 
-export { computeStats, getChecks, makeSkippedResult, runBrowserCheck, summarizeGateResults };
+export {
+  computeStats,
+  getChecks,
+  makeSkippedResult,
+  resolveManagedServerEndpoint,
+  runBrowserCheck,
+  summarizeGateResults,
+};
