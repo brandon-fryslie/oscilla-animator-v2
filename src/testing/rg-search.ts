@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 
 function isNotFoundError(error: unknown): boolean {
@@ -23,7 +23,9 @@ function resolveScopedFiles(scope: readonly string[]): string[] {
   }
 
   for (const scopedPath of scope) {
-    walk(path.resolve(process.cwd(), scopedPath));
+    const absoluteScopePath = path.resolve(process.cwd(), scopedPath);
+    if (!existsSync(absoluteScopePath)) continue;
+    walk(absoluteScopePath);
   }
 
   return files;
@@ -83,6 +85,9 @@ export function rgLines(
   scope: readonly string[],
   globs: readonly string[] = ['*.ts', '*.tsx'],
 ): string[] {
+  const existingScope = scope.filter((scopedPath) => existsSync(path.resolve(process.cwd(), scopedPath)));
+  if (existingScope.length === 0) return [];
+
   const args = [
     '-n',
     '--no-heading',
@@ -90,7 +95,7 @@ export function rgLines(
     'never',
     ...globs.flatMap((glob) => ['--glob', glob]),
     pattern,
-    ...scope,
+    ...existingScope,
   ];
 
   try {
@@ -104,6 +109,10 @@ export function rgLines(
     }
     const status = (error as { status?: number }).status;
     if (status === 1) return [];
+    if (status === 2) {
+      const stderr = String((error as { stderr?: string }).stderr ?? '');
+      if (stderr.includes('No such file or directory')) return [];
+    }
     throw error;
   }
 }
