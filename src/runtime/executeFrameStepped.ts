@@ -7,9 +7,7 @@
 
 import type { CompiledProgramIR } from '../compiler/ir/program';
 import type { ScheduleIR } from '../compiler/backend/schedule-program';
-import type { Step, StateMapping, StableStateId } from '../compiler/ir/types';
-import type { IrInstanceId as InstanceId } from '../types';
-import { instanceId as makeInstanceId } from '../core/ids';
+import type { Step, StateMapping, StableStateId, InstanceDecl } from '../compiler/ir/types';
 import type { RuntimeState } from './RuntimeState';
 import { EMPTY_LEGACY_RENDER_FRAME, type LegacyRenderFrame } from '../render/types';
 import type { RenderBufferArena } from '../render/RenderBufferArena';
@@ -28,7 +26,8 @@ import {
   shouldRebuildDomainInstance,
 } from './DomainIdentity';
 import { payloadStride } from '../core/canonical-types';
-import type { ValueSlot, StateSlotId } from '../compiler/ir/Indices';
+import { valueSlot } from '../compiler/ir/Indices';
+import type { ValueExprId, ValueSlot, StateSlotId, InstanceId } from '../compiler/ir/Indices';
 import { SCALAR_INSTANCE_ID } from '../compiler/ir/Indices';
 import { evaluateValueExprEvent } from './ValueExprEventEvaluator';
 import { materializeValueExpr } from './ValueExprMaterializer';
@@ -81,7 +80,7 @@ interface SteppedContext {
   readonly tAbsMs: number;
   readonly totalSteps: number;
   readonly schedule: ScheduleIR;
-  readonly instances: ReadonlyMap<InstanceId, ScheduleIR['instances'] extends ReadonlyMap<any, infer V> ? V : never>;
+  readonly instances: ReadonlyMap<InstanceId, InstanceDecl>;
   readonly steps: readonly Step[];
   readonly valueExprs: readonly CompiledProgramIR['valueExprs']['nodes'][number][];
   readonly slotLookupMap: ReadonlyMap<ValueSlot, SlotLookup>;
@@ -114,10 +113,6 @@ function resolveStride(mapping: StateMapping | undefined): number {
 
 function resolveFieldCopyStride(srcStride: number, mapping: StateMapping): number {
   return Math.min(srcStride, mapping.stride);
-}
-
-function toInstanceId(value: unknown): InstanceId {
-  return makeInstanceId(String(value));
 }
 
 function hasRenderFrameOutput(program: CompiledProgramIR): boolean {
@@ -275,7 +270,7 @@ function initializeSteppedFrame(context: SteppedContext): void {
 
 function createMaterializedSlotValue(
   context: SteppedContext,
-  veId: number,
+  veId: ValueExprId,
   stepTarget: ValueSlot,
   stepInstanceId: InstanceId,
 ): SlotValue {
@@ -293,7 +288,7 @@ function createMaterializedSlotValue(
     );
   }
   const buffer = materializeValueExpr(
-    veId as any,
+    veId,
     context.program.valueExprs,
     stepInstanceId,
     count,
@@ -360,16 +355,16 @@ function runPhase1Step(context: SteppedContext, step: Step): Phase1StepResult {
   const writtenSlots = createWrittenSlots();
   switch (step.kind) {
     case 'eventDispatch': {
-      const fired = evaluateValueExprEvent(step.expr as any, context.program.valueExprs, context.state, context.program, context.pureFnContext);
+      const fired = evaluateValueExprEvent(step.expr, context.program.valueExprs, context.state, context.program, context.pureFnContext);
       if (fired) {
-        context.state.eventScalars[step.target as number] = 1;
+        context.state.eventScalars[step.target] = 1;
       }
-      writtenSlots.set(step.target as unknown as ValueSlot, readEventSlotValue(context.state, step.target as number));
+      writtenSlots.set(valueSlot(step.target), readEventSlotValue(context.state, step.target));
       return { shouldYield: true, writtenSlots };
     }
 
     case 'materialize': {
-      const value = createMaterializedSlotValue(context, step.field as number, step.target, step.instanceId);
+      const value = createMaterializedSlotValue(context, step.field, step.target, step.instanceId);
       writtenSlots.set(step.target, value);
       return { shouldYield: true, writtenSlots };
     }
@@ -428,7 +423,7 @@ function createScalarStateWriteSnapshot(
   const mapping = context.stateSlotToMapping.get(stateSlot);
   const stride = resolveStride(mapping);
   const values = materializeValueExpr(
-    step.value as any,
+    step.value,
     context.program.valueExprs,
     SCALAR_INSTANCE_ID,
     1,
@@ -497,9 +492,9 @@ function createFieldStateWriteSnapshot(
   const written = createWrittenStateSlots();
   if (mapping.laneCount === 0) return written;
   const tempBuffer = materializeValueExpr(
-    step.value as any,
+    step.value,
     context.program.valueExprs,
-    toInstanceId(mapping.instanceId),
+    mapping.instanceId,
     mapping.laneCount,
     context.state,
     context.program,
@@ -507,13 +502,13 @@ function createFieldStateWriteSnapshot(
     STEPPED_MATERIALIZE_SCRATCH,
     context.pureFnContext,
   );
-  const exprNode = context.valueExprs[step.value as number];
+  const exprNode = context.valueExprs[step.value];
   const srcStride = payloadStride(exprNode.type.payload);
   const copyStride = resolveFieldCopyStride(srcStride, mapping);
   const writtenValues = writeFieldStateValues({
     mapping,
     stepStateSlot: stateSlot,
-    src: tempBuffer as Float32Array,
+    src: tempBuffer,
     srcStride,
     copyStride,
     stateWrite: context.state.stateWrite!,
