@@ -10,6 +10,7 @@ export const RUST_RENDERER_SHAPE_HEADER_WORDS = 16;
 export const RUST_RENDERER_SINK_TABLE_HEADER_WORDS = 8;
 export const RUST_RENDERER_SINK_TABLE_RECORD_WORDS = 8;
 export const RUST_RENDERER_SINK_TABLE_DESCRIPTOR_WORDS = 20;
+export const RUST_RENDERER_ARENA_WORDS_PER_PARTICLE = 4;
 
 export function computeRustRendererShapeBankWordCapacity(config: RustRendererBootstrapConfig): number {
   return Math.max(RUST_RENDERER_SHAPE_HEADER_WORDS, Math.floor(config.maxShapes) * RUST_RENDERER_SHAPE_HEADER_WORDS);
@@ -22,10 +23,16 @@ export function computeRustRendererSinkTableWordCapacity(config: RustRendererBoo
     + maxRecords * RUST_RENDERER_SINK_TABLE_DESCRIPTOR_WORDS;
 }
 
+export function computeRustRendererArenaWordCapacity(config: RustRendererBootstrapConfig): number {
+  const maxParticles = Math.max(0, Math.floor(config.maxParticles));
+  return maxParticles * RUST_RENDERER_ARENA_WORDS_PER_PARTICLE;
+}
+
 export interface RustRendererBootstrapMessage {
   readonly type: 'BOOTSTRAP';
   readonly canvas: OffscreenCanvas;
   readonly sharedInput: SharedArrayBuffer;
+  readonly sharedArena: SharedArrayBuffer;
   readonly sharedShapeBank: SharedArrayBuffer;
   readonly sharedSinkTable: SharedArrayBuffer;
   readonly config: RustRendererBootstrapConfig;

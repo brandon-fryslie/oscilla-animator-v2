@@ -413,6 +413,19 @@ impl GpuMemoryArena {
         queue.write_buffer(&self.uniform_buffer, 0, bytes_of(&self.uniforms));
     }
 
+    pub fn compiler_arena_capacity_words(&self) -> usize {
+        (self.compiler_arena_buffers[0].size() / std::mem::size_of::<u32>() as u64) as usize
+    }
+
+    pub fn write_compiler_arena_values(&mut self, queue: &wgpu::Queue, values: &[f32]) {
+        if values.is_empty() {
+            return;
+        }
+        let bytes = cast_slice(values);
+        queue.write_buffer(&self.compiler_arena_buffers[0], 0, bytes);
+        queue.write_buffer(&self.compiler_arena_buffers[1], 0, bytes);
+    }
+
     pub fn get_compute_read_bind_group(&self) -> &wgpu::BindGroup {
         &self.state_bind_groups[self.ping_pong_index]
     }

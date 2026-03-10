@@ -195,4 +195,51 @@ describe('arena field materialization', () => {
     expect(state.arena.length).toBe(program.arenaTotalFloats);
     expect(program.arenaTotalFloats).toBeGreaterThan(0);
   });
+
+  it('keeps low-count GridLayoutUV placement away from clip-space corners', () => {
+    const patch = buildPatch((b) => {
+      b.addBlock('InfiniteTimeRoot');
+      const ellipse = b.addBlock('Ellipse');
+      const array = b.addBlock('Array');
+      b.setPortDefault(array, 'count', 2);
+      const layout = b.addBlock('GridLayoutUV');
+      const render = b.addBlock('RenderInstances2D');
+
+      const colorSig = b.addBlock('Const');
+      b.setConfig(colorSig, 'value', { r: 1, g: 1, b: 1, a: 1 });
+      const colorField = b.addBlock('Broadcast');
+
+      b.wire(ellipse, 'shape', array, 'element');
+      b.wire(array, 'elements', layout, 'elements');
+      b.wire(layout, 'controlPoints', render, 'controlPoints');
+      b.wire(colorSig, 'out', colorField, 'one');
+      b.wire(colorField, 'field', render, 'color');
+    });
+
+    const program = compileOk(patch);
+    const state = stateFor(program);
+    executeFrame(program, state, getTestArena(), 0);
+
+    const renderStep = (program.schedule.steps as readonly Step[]).find(
+      (step): step is Extract<Step, { kind: 'render' }> => step.kind === 'render',
+    );
+    expect(renderStep).toBeDefined();
+    if (!renderStep) return;
+
+    const desc = program.arenaLayout[renderStep.controlPointsSlot as number];
+    expect(desc).toBeDefined();
+    if (!desc || desc.offset < 0) return;
+
+    const positions = arenaSlice(state.arena, desc);
+    expect(positions.length).toBeGreaterThanOrEqual(4);
+    const x0 = positions[0] ?? 0;
+    const y0 = positions[1] ?? 0;
+    const x1 = positions[2] ?? 0;
+    const y1 = positions[3] ?? 0;
+
+    // [LAW:one-source-of-truth] Grid placement should remain centered in world
+    // space for low counts instead of pinning to +/-1 clip-adjacent corners.
+    expect(Math.max(Math.abs(x0), Math.abs(x1))).toBeLessThan(0.9);
+    expect(Math.max(Math.abs(y0), Math.abs(y1))).toBeLessThanOrEqual(0.5);
+  });
 });
