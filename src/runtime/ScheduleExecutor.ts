@@ -11,7 +11,7 @@ import type { Step, InstanceDecl } from '../compiler/ir/types';
 import type { IrInstanceId as InstanceId } from '../types';
 import { instanceId as makeInstanceId } from '../core/ids';
 import type { RuntimeState } from './RuntimeState';
-import { EMPTY_RENDER_FRAME, type RenderFrameIR } from '../render/types';
+import { EMPTY_LEGACY_RENDER_FRAME, type LegacyRenderFrame } from '../render/types';
 import type { RenderBufferArena } from '../render/RenderBufferArena';
 import { resolveTime } from './timeResolution';
 import {
@@ -629,12 +629,12 @@ function runPhase2(context: ExecuteFrameContext): void {
   commitStateWriteBank(context.state);
 }
 
-function finalizeFrame(context: ExecuteFrameContext, frame: RenderFrameIR): RenderFrameIR {
+function finalizeFrame(context: ExecuteFrameContext, frame: LegacyRenderFrame): LegacyRenderFrame {
   MATERIALIZE_SCRATCH.reset();
   enterRuntimeFrameSegment(context.state, 'continuity-finalize');
   finalizeContinuityFrame(context.state);
   enterRuntimeFrameSegment(context.state, 'frame-output');
-  context.state.lastRenderFrame = frame;
+  context.state.lastLegacyRenderFrame = frame;
   if (!context.program.outputs[0]) return frame;
   if (!hasRenderFrameOutput(context.program)) {
     throw new Error('Unsupported output kind: ' + (context.program.outputs[0] as { kind?: string }).kind);
@@ -645,7 +645,7 @@ function finalizeFrame(context: ExecuteFrameContext, frame: RenderFrameIR): Rend
 /**
  * Execute one frame of the program.
  *
- * @returns Canonical compute-only sentinel frame (`EMPTY_RENDER_FRAME`).
+ * @returns Canonical compute-only sentinel frame (`EMPTY_LEGACY_RENDER_FRAME`).
  * Draw-ready payloads are emitted to runtime banks (arena, shape bank, sink table).
  */
 export function executeFrame(
@@ -654,7 +654,7 @@ export function executeFrame(
   arena: RenderBufferArena,
   tAbsMs: number,
   options?: ExecuteFrameOptions,
-): RenderFrameIR {
+): LegacyRenderFrame {
   const context = createExecuteFrameContext(program, state, arena, tAbsMs, options);
   // [LAW:one-source-of-truth] Canonical runtime flow initializes once, then runs fixed phase order.
   initializeFrame(context);
@@ -663,5 +663,5 @@ export function executeFrame(
   // [LAW:one-way-deps] CPU frame assembly remains removed from canonical runtime.
   enterRuntimeFrameSegment(context.state, 'render-assembly');
   runPhase2(context);
-  return finalizeFrame(context, EMPTY_RENDER_FRAME);
+  return finalizeFrame(context, EMPTY_LEGACY_RENDER_FRAME);
 }

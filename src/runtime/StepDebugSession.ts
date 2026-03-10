@@ -14,7 +14,7 @@ import type { CompiledProgramIR } from '../compiler/ir/program';
 import type { ValueSlot } from '../compiler/ir/Indices';
 import type { RuntimeState } from './RuntimeState';
 import type { RenderBufferArena } from '../render/RenderBufferArena';
-import type { RenderFrameIR } from '../render/types';
+import type { LegacyRenderFrame } from '../render/types';
 import type { ValueExprId } from '../compiler/ir/Indices';
 import type { StepSnapshot, Breakpoint, SessionMode, LaneIdentity } from './StepDebugTypes';
 import { executeFrameStepped } from './executeFrameStepped';
@@ -44,10 +44,10 @@ export class StepDebugSession {
   private readonly _state: RuntimeState;
   private readonly _arena: RenderBufferArena;
 
-  private _generator: Generator<StepSnapshot, RenderFrameIR, void> | null = null;
+  private _generator: Generator<StepSnapshot, LegacyRenderFrame, void> | null = null;
   private _mode: SessionMode = 'idle';
   private _currentSnapshot: StepSnapshot | null = null;
-  private _frameResult: RenderFrameIR | null = null;
+  private _frameResult: LegacyRenderFrame | null = null;
   // [LAW:one-source-of-truth] Snapshots come from executeFrameStepped/ValueInspector,
   // which reads canonical runtime banks for slot inspection (never values.objects).
   private _history: StepSnapshot[] = [];
@@ -83,7 +83,7 @@ export class StepDebugSession {
     return this._currentSnapshot;
   }
 
-  get frameResult(): RenderFrameIR | null {
+  get frameResult(): LegacyRenderFrame | null {
     return this._frameResult;
   }
 
@@ -269,7 +269,7 @@ export class StepDebugSession {
   /**
    * Run the rest of the frame to completion. Returns the frame result.
    */
-  finishFrame(): RenderFrameIR | null {
+  finishFrame(): LegacyRenderFrame | null {
     if (this._mode === 'completed') {
       return this._frameResult;
     }
