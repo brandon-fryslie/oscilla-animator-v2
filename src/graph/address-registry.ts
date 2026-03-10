@@ -6,10 +6,12 @@
  */
 
 import { CanonicalAddress, addressToString } from '../types/canonical-address';
-import type { Patch } from './Patch';
+import type { InputPort, OutputPort, Patch } from './Patch';
 import { getBlockAddress, getOutputAddress, getInputAddress, getAllAddresses, getShorthandForOutput } from './addressing';
 import { resolveAddress, ResolvedAddress } from './address-resolution';
 import { normalizeCanonicalName } from '../core/canonical-name';
+import type { BlockId, PortId } from '../types';
+import { portId as toPortId } from '../types';
 
 /**
  * Normalize the canonical name portion of an address string.
@@ -21,6 +23,64 @@ function normalizeAddressCanonicalName(address: string): string {
   if (!match) return address;
   const [, prefix, canonicalName, suffix] = match;
   return `${prefix}${normalizeCanonicalName(canonicalName)}${suffix}`;
+}
+
+function strictPortId(
+  rawPortId: unknown,
+  port: InputPort | OutputPort,
+  blockId: BlockId,
+  direction: 'input' | 'output'
+): PortId {
+  if (typeof rawPortId !== 'string') {
+    throw new Error(
+      `AddressRegistry invariant violation: ${direction} port key is not a string on block "${blockId}" (${String(rawPortId)})`
+    );
+  }
+  const trimmedPortId = rawPortId.trim();
+  if (rawPortId !== trimmedPortId) {
+    throw new Error(
+      `AddressRegistry invariant violation: ${direction} port key has leading or trailing whitespace on block "${blockId}" ("${rawPortId}")`
+    );
+  }
+  if (rawPortId.length === 0) {
+    throw new Error(`AddressRegistry invariant violation: ${direction} port id is empty on block "${blockId}"`);
+  }
+  if (port.id !== rawPortId) {
+    throw new Error(
+      `AddressRegistry invariant violation: ${direction} port key/id mismatch on block "${blockId}" (${rawPortId} !== ${port.id})`
+    );
+  }
+  return toPortId(rawPortId);
+}
+
+function assertPortMap(
+  ports: unknown,
+  blockId: BlockId,
+  direction: 'input' | 'output',
+): asserts ports is ReadonlyMap<unknown, unknown> {
+  if (!(ports instanceof Map)) {
+    throw new Error(
+      `AddressRegistry invariant violation: ${direction}Ports is not a Map on block "${blockId}"`
+    );
+  }
+}
+
+function assertPortShape(
+  port: unknown,
+  blockId: BlockId,
+  direction: 'input' | 'output',
+): asserts port is InputPort | OutputPort {
+  if (typeof port !== 'object' || port === null) {
+    throw new Error(
+      `AddressRegistry invariant violation: ${direction} port entry is not an object on block "${blockId}"`
+    );
+  }
+  const rawId = Object.getOwnPropertyDescriptor(port, 'id')?.value;
+  if (typeof rawId !== 'string') {
+    throw new Error(
+      `AddressRegistry invariant violation: ${direction} port entry is missing string id on block "${blockId}"`
+    );
+  }
 }
 
 /**
@@ -78,23 +138,29 @@ export class AddressRegistry {
         byCanonical.set(addressToString(blockAddr), resolved);
       }
 
+      assertPortMap(block.outputPorts, block.id, 'output');
       // Output ports
-      for (const [portId, port] of block.outputPorts || []) {
-        const outAddr = getOutputAddress(block, portId as any);
+      for (const [portId, port] of block.outputPorts) {
+        assertPortShape(port, block.id, 'output');
+        const typedPortId = strictPortId(portId, port, block.id, 'output');
+        const outAddr = getOutputAddress(block, typedPortId);
         const resolved = resolveAddress(patch, addressToString(outAddr));
         if (resolved) {
           const addrStr = addressToString(outAddr);
           byCanonical.set(addrStr, resolved);
 
           // Add shorthand
-          const shorthand = getShorthandForOutput(block, portId as any);
+          const shorthand = getShorthandForOutput(block, typedPortId);
           byShorthand.set(shorthand, outAddr);
         }
       }
 
+      assertPortMap(block.inputPorts, block.id, 'input');
       // Input ports
-      for (const [portId, port] of block.inputPorts || []) {
-        const inAddr = getInputAddress(block, portId as any);
+      for (const [portId, port] of block.inputPorts) {
+        assertPortShape(port, block.id, 'input');
+        const typedPortId = strictPortId(portId, port, block.id, 'input');
+        const inAddr = getInputAddress(block, typedPortId);
         const resolved = resolveAddress(patch, addressToString(inAddr));
         if (resolved) {
           const addrStr = addressToString(inAddr);
