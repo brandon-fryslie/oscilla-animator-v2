@@ -6,7 +6,7 @@
  */
 
 import { CanonicalAddress, addressToString } from '../types/canonical-address';
-import type { Patch } from './Patch';
+import type { InputPort, OutputPort, Patch } from './Patch';
 import { getBlockAddress, getOutputAddress, getInputAddress, getAllAddresses, getShorthandForOutput } from './addressing';
 import { resolveAddress, ResolvedAddress } from './address-resolution';
 import { normalizeCanonicalName } from '../core/canonical-name';
@@ -22,6 +22,24 @@ function normalizeAddressCanonicalName(address: string): string {
   if (!match) return address;
   const [, prefix, canonicalName, suffix] = match;
   return `${prefix}${normalizeCanonicalName(canonicalName)}${suffix}`;
+}
+
+function strictPortId(
+  rawPortId: string,
+  port: InputPort | OutputPort,
+  blockId: string,
+  direction: 'input' | 'output'
+) {
+  const normalizedPortId = rawPortId.trim();
+  if (normalizedPortId.length === 0) {
+    throw new Error(`AddressRegistry invariant violation: ${direction} port id is empty on block "${blockId}"`);
+  }
+  if (port.id !== normalizedPortId) {
+    throw new Error(
+      `AddressRegistry invariant violation: ${direction} port key/id mismatch on block "${blockId}" (${normalizedPortId} !== ${port.id})`
+    );
+  }
+  return toPortId(normalizedPortId);
 }
 
 /**
@@ -81,8 +99,7 @@ export class AddressRegistry {
 
       // Output ports
       for (const [portId, port] of block.outputPorts || []) {
-        void port;
-        const typedPortId = toPortId(String(portId));
+        const typedPortId = strictPortId(String(portId), port, String(block.id), 'output');
         const outAddr = getOutputAddress(block, typedPortId);
         const resolved = resolveAddress(patch, addressToString(outAddr));
         if (resolved) {
@@ -97,8 +114,8 @@ export class AddressRegistry {
 
       // Input ports
       for (const [portId, port] of block.inputPorts || []) {
-        void port;
-        const inAddr = getInputAddress(block, toPortId(String(portId)));
+        const typedPortId = strictPortId(String(portId), port, String(block.id), 'input');
+        const inAddr = getInputAddress(block, typedPortId);
         const resolved = resolveAddress(patch, addressToString(inAddr));
         if (resolved) {
           const addrStr = addressToString(inAddr);
