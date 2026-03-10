@@ -10,8 +10,14 @@ import type { ValueExpr } from '../compiler/ir/value-expr';
 import type { ValueExprId } from '../compiler/ir/Indices';
 
 function describeUnknownExprKind(value: never): string {
-  const candidate = value as unknown as { kind?: string; kernelKind?: string; eventKind?: string };
-  return candidate.kernelKind ?? candidate.eventKind ?? candidate.kind ?? 'unknown';
+  if (typeof value === 'object' && value !== null) {
+    const candidate = value as Record<string, unknown>;
+    const kernelKind = typeof candidate.kernelKind === 'string' ? candidate.kernelKind : null;
+    const eventKind = typeof candidate.eventKind === 'string' ? candidate.eventKind : null;
+    const kind = typeof candidate.kind === 'string' ? candidate.kind : null;
+    return kernelKind ?? eventKind ?? kind ?? 'unknown';
+  }
+  return 'unknown';
 }
 
 /**

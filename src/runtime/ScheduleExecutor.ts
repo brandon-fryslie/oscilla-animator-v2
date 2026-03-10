@@ -182,7 +182,7 @@ interface ContinuityBufferResolverContext {
   baseBuffer: Float32Array;
   outputBuffer: Float32Array;
   slotToArena: ReadonlyMap<ValueSlot, ArenaSlotDescriptor>;
-  state: RuntimeState;
+  state: RuntimeState | null;
 }
 
 // [LAW:no-shared-mutable-globals] Resolver context is single-owner runtime scratch
@@ -193,7 +193,7 @@ const _continuityResolverContext: ContinuityBufferResolverContext = {
   baseBuffer: new Float32Array(0),
   outputBuffer: new Float32Array(0),
   slotToArena: new Map<ValueSlot, ArenaSlotDescriptor>(),
-  state: null as unknown as RuntimeState,
+  state: null,
 };
 const _continuityEmptyBaseBuffer = _continuityResolverContext.baseBuffer;
 const _continuityEmptyOutputBuffer = _continuityResolverContext.outputBuffer;
@@ -208,10 +208,13 @@ function clearContinuityResolverContext(): void {
   _continuityResolverContext.baseBuffer = _continuityEmptyBaseBuffer;
   _continuityResolverContext.outputBuffer = _continuityEmptyOutputBuffer;
   _continuityResolverContext.slotToArena = _continuityEmptySlotMap;
-  _continuityResolverContext.state = null as unknown as RuntimeState;
+  _continuityResolverContext.state = null;
 }
 
 function resolveContinuityBuffer(slot: ValueSlot): Float32Array {
+  if (_continuityResolverContext.state === null) {
+    throw new Error('resolveContinuityBuffer: runtime state is not bound');
+  }
   if (slot === _continuityResolverContext.baseSlot) return _continuityResolverContext.baseBuffer;
   if (slot === _continuityResolverContext.outputSlot) return _continuityResolverContext.outputBuffer;
   return resolveNumericBuffer(

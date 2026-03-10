@@ -285,14 +285,16 @@ export function* executeFrameStepped(
     switch (step.kind) {
       case 'eventDispatch': {
         const fired = evaluateValueExprEvent(step.expr, program.valueExprs, state, program, pureFnContext);
+        const eventSlot = step.target as ValueSlot;
+        const eventSlotIndex = eventSlot as number;
         if (fired) {
-          state.eventScalars[step.target as number] = 1;
+          state.eventScalars[eventSlotIndex] = 1;
         }
 
         // Capture event value
         writtenSlots.set(
-          step.target as unknown as ValueSlot,
-          readEventSlotValue(state, step.target as number),
+          eventSlot,
+          readEventSlotValue(state, eventSlotIndex),
         );
         break;
       }
