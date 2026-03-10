@@ -143,11 +143,13 @@ describe('AnimationLoop', () => {
   });
 
   it('throws when renderer runtime input publication fails', () => {
-    const { deps, renderer } = makeDeps();
+    const { deps, renderer, arena } = makeDeps();
     renderer.setViewportFrame.mockImplementation(() => {
       throw new Error('renderer input unavailable');
     });
     expect(() => executeAnimationFrame(16, deps, createAnimationLoopState())).toThrow('renderer input unavailable');
+    expect(arena.beginFrame).toHaveBeenCalledTimes(1);
+    expect(arena.endFrame).toHaveBeenCalledTimes(1);
   });
 
   it('emits stats updates from renderer telemetry data on cadence window', () => {
