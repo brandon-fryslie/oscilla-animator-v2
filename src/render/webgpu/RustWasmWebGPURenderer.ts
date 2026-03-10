@@ -27,14 +27,14 @@ interface RenderInput {
   readonly panX: number;
   readonly panY: number;
   readonly timeMs: number;
-  readonly inputMouseX?: number;
-  readonly inputMouseY?: number;
-  readonly inputMouseButtons?: number;
-  readonly inputAudioLow?: number;
-  readonly inputAudioMid?: number;
-  readonly inputAudioHigh?: number;
-  readonly inputGaugeActive?: number;
-  readonly drawPrepSinkTableV1?: Uint32Array;
+  readonly inputMouseX: number;
+  readonly inputMouseY: number;
+  readonly inputMouseButtons: number;
+  readonly inputAudioLow: number;
+  readonly inputAudioMid: number;
+  readonly inputAudioHigh: number;
+  readonly inputGaugeActive: number;
+  readonly drawPrepSinkTableV1: Uint32Array;
   readonly drawPrepSinkTableWordCount: number;
 }
 
@@ -45,13 +45,13 @@ interface RuntimeViewportFrame {
   readonly panX: number;
   readonly panY: number;
   readonly timeMs: number;
-  readonly inputMouseX?: number;
-  readonly inputMouseY?: number;
-  readonly inputMouseButtons?: number;
-  readonly inputAudioLow?: number;
-  readonly inputAudioMid?: number;
-  readonly inputAudioHigh?: number;
-  readonly inputGaugeActive?: number;
+  readonly inputMouseX: number;
+  readonly inputMouseY: number;
+  readonly inputMouseButtons: number;
+  readonly inputAudioLow: number;
+  readonly inputAudioMid: number;
+  readonly inputAudioHigh: number;
+  readonly inputGaugeActive: number;
 }
 
 export interface RuntimeEventBreadcrumb {
@@ -121,8 +121,11 @@ const DEFAULT_BOOTSTRAP_CONFIG: RustRendererBootstrapConfig = Object.freeze({
   debugReadbackHz: 0,
 });
 
-function coerceFinite(value: number | undefined): number {
-  return typeof value === 'number' && Number.isFinite(value) ? value : 0;
+function assertFiniteRuntimeInput(value: number, field: string): number {
+  if (!Number.isFinite(value)) {
+    throw new Error(`Rust renderer input contract violation: ${field} must be finite, got ${value}`);
+  }
+  return value;
 }
 
 const MAX_UINT32 = 0xFFFF_FFFF;
@@ -545,7 +548,7 @@ export class WebGPURenderer {
     // site. [LAW:locality-or-seam] Keep payload construction out of hot-path
     // render orchestration.
     // https://github.com/brandon-fryslie/oscilla-animator-v2/issues/159
-    if (RUNTIME_CONSOLE_ENABLED && !this.renderInputDebugLogged && input.drawPrepSinkTableV1 && sinkTableWords > 0) {
+    if (RUNTIME_CONSOLE_ENABLED && !this.renderInputDebugLogged && sinkTableWords > 0) {
       this.renderInputDebugLogged = true;
       const headerWords = 8;
       const base = headerWords;
@@ -748,7 +751,7 @@ export class WebGPURenderer {
 
   private writeViewportFrame(input: RuntimeViewportFrame): void {
     // [LAW:dataflow-not-control-flow] Renderer always publishes the same
-    // runtime input envelope; optional channels vary by value, not by branch.
+    // runtime input envelope in fixed order.
     this.syncCanvasSize(input.width, input.height);
     this.inputWords[RUNTIME_INPUT_INDEX.width] = input.width;
     this.inputWords[RUNTIME_INPUT_INDEX.height] = input.height;
@@ -756,13 +759,15 @@ export class WebGPURenderer {
     this.inputWords[RUNTIME_INPUT_INDEX.panX] = input.panX;
     this.inputWords[RUNTIME_INPUT_INDEX.panY] = input.panY;
     this.inputWords[RUNTIME_INPUT_INDEX.timeMs] = input.timeMs;
-    this.inputWords[RUNTIME_INPUT_INDEX.mouseX] = coerceFinite(input.inputMouseX);
-    this.inputWords[RUNTIME_INPUT_INDEX.mouseY] = coerceFinite(input.inputMouseY);
-    this.inputWords[RUNTIME_INPUT_INDEX.mouseButtons] = coerceFinite(input.inputMouseButtons);
-    this.inputWords[RUNTIME_INPUT_INDEX.audioLow] = coerceFinite(input.inputAudioLow);
-    this.inputWords[RUNTIME_INPUT_INDEX.audioMid] = coerceFinite(input.inputAudioMid);
-    this.inputWords[RUNTIME_INPUT_INDEX.audioHigh] = coerceFinite(input.inputAudioHigh);
-    this.inputWords[RUNTIME_INPUT_INDEX.gaugeActive] = coerceFinite(input.inputGaugeActive);
+    this.inputWords[RUNTIME_INPUT_INDEX.mouseX] = assertFiniteRuntimeInput(input.inputMouseX, 'inputMouseX');
+    this.inputWords[RUNTIME_INPUT_INDEX.mouseY] = assertFiniteRuntimeInput(input.inputMouseY, 'inputMouseY');
+    this.inputWords[RUNTIME_INPUT_INDEX.mouseButtons] =
+      assertFiniteRuntimeInput(input.inputMouseButtons, 'inputMouseButtons');
+    this.inputWords[RUNTIME_INPUT_INDEX.audioLow] = assertFiniteRuntimeInput(input.inputAudioLow, 'inputAudioLow');
+    this.inputWords[RUNTIME_INPUT_INDEX.audioMid] = assertFiniteRuntimeInput(input.inputAudioMid, 'inputAudioMid');
+    this.inputWords[RUNTIME_INPUT_INDEX.audioHigh] = assertFiniteRuntimeInput(input.inputAudioHigh, 'inputAudioHigh');
+    this.inputWords[RUNTIME_INPUT_INDEX.gaugeActive] =
+      assertFiniteRuntimeInput(input.inputGaugeActive, 'inputGaugeActive');
   }
 
   private syncShapeBankPlane(shapeBank: RenderShapeBankSource): number {
@@ -785,15 +790,10 @@ export class WebGPURenderer {
     return wordCount;
   }
 
-  private syncSinkTablePlane(sinkTableWords: Uint32Array | undefined, sinkTableWordCount: number): number {
+  private syncSinkTablePlane(sinkTableWords: Uint32Array, sinkTableWordCount: number): number {
     const wordCount = assertFiniteUint32(sinkTableWordCount, 'drawPrepSinkTableWordCount');
     if (wordCount === 0) {
       return 0;
-    }
-    if (!sinkTableWords) {
-      throw new Error(
-        'Rust renderer input contract violation: drawPrepSinkTableV1 is required when drawPrepSinkTableWordCount > 0',
-      );
     }
     if (sinkTableWords.length < wordCount) {
       throw new Error(
