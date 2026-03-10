@@ -130,12 +130,13 @@ function assertFiniteRuntimeInput(value: number, field: string): number {
   return value;
 }
 
-function assertNonNegativeRuntimeInput(value: number, field: string): number {
-  const finiteValue = assertFiniteRuntimeInput(value, field);
-  if (finiteValue < 0) {
-    throw new Error(`Rust renderer input contract violation: ${field} must be non-negative, got ${finiteValue}`);
+function assertPositiveCanvasDimension(value: number, field: string): number {
+  if (!Number.isFinite(value) || !Number.isInteger(value) || value <= 0) {
+    throw new Error(
+      `Rust renderer input contract violation: ${field} must be a positive integer, got ${String(value)}`,
+    );
   }
-  return finiteValue;
+  return value;
 }
 
 const MAX_UINT32 = 0xFFFF_FFFF;
@@ -562,6 +563,9 @@ export class WebGPURenderer {
 
   render(input: RenderInput): void {
     this.assertRuntimeInputBoundaryReady();
+    if (!(input.drawPrepSinkTableV1 instanceof Uint32Array)) {
+      throw new Error('Rust renderer input contract violation: drawPrepSinkTableV1 must be Uint32Array');
+    }
     this.writeViewportFrame(input);
     const shapeBankWords = this.syncShapeBankPlane(input.shapeBank);
     const sinkTableWords = this.syncSinkTablePlane(
@@ -776,9 +780,14 @@ export class WebGPURenderer {
   }
 
   private writeViewportFrame(input: RuntimeViewportFrame): void {
-    const width = assertNonNegativeRuntimeInput(input.width, 'width');
-    const height = assertNonNegativeRuntimeInput(input.height, 'height');
+    // [LAW:dataflow-not-control-flow] Runtime frame publication always executes
+    // in the same order; contract validation fails fast at the boundary.
+    const width = assertPositiveCanvasDimension(input.width, 'width');
+    const height = assertPositiveCanvasDimension(input.height, 'height');
     const zoom = assertFiniteRuntimeInput(input.zoom, 'zoom');
+    if (zoom <= 0) {
+      throw new Error(`Rust renderer input contract violation: zoom must be positive, got ${zoom}`);
+    }
     const panX = assertFiniteRuntimeInput(input.panX, 'panX');
     const panY = assertFiniteRuntimeInput(input.panY, 'panY');
     const timeMs = assertFiniteRuntimeInput(input.timeMs, 'timeMs');
@@ -790,8 +799,6 @@ export class WebGPURenderer {
     const inputAudioHigh = assertFiniteRuntimeInput(input.inputAudioHigh, 'inputAudioHigh');
     const inputGaugeActive = assertFiniteRuntimeInput(input.inputGaugeActive, 'inputGaugeActive');
 
-    // [LAW:dataflow-not-control-flow] Renderer always publishes the same
-    // runtime input envelope in fixed order.
     this.syncCanvasSize(width, height);
     this.inputWords[RUNTIME_INPUT_INDEX.width] = width;
     this.inputWords[RUNTIME_INPUT_INDEX.height] = height;
@@ -840,12 +847,6 @@ export class WebGPURenderer {
   }
 
   private assertSinkTableInputCapacity(sinkTableWords: Uint32Array, wordCount: number): void {
-    if (!(sinkTableWords instanceof Uint32Array)) {
-      throw new Error(
-        'Rust renderer input contract violation: drawPrepSinkTableV1 must be Uint32Array ' +
-          `(received=${Object.prototype.toString.call(sinkTableWords)})`,
-      );
-    }
     if (sinkTableWords.length < wordCount) {
       throw new Error(
         'Rust renderer input contract violation: drawPrepSinkTableV1 shorter than wordCount ' +
