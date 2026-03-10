@@ -69,7 +69,7 @@ async function main() {
       `tracked files=${gate.trackedChangedFilesCount ?? 0}`,
       `checks=${gate.evaluationCount}`,
       `failures=${gate.failureCount}`,
-      `required improvement=${formatPct(gate.minImprovementPct)}`,
+      `max allowed regression=${formatPct(gate.maxRegressionPct ?? 0)}`,
     ].join(' | '),
   );
   for (const row of rows.slice(0, 80)) {
