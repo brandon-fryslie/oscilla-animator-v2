@@ -21,6 +21,11 @@ const mocks = vi.hoisted(() => {
   const setRenderIssueReporter = vi.fn();
   const getRenderIssues = vi.fn(() => []);
   const clearRenderIssues = vi.fn();
+  const renderBufferArenaInit = vi.fn();
+  class RenderBufferArena {
+    constructor(_capacity: number) {}
+    init = renderBufferArenaInit;
+  }
   const savePatchToStorage = vi.fn();
   const loadPatchFromStorage = vi.fn(() => null);
   const consumeTestDemoFilename = vi.fn(() => null);
@@ -60,6 +65,8 @@ const mocks = vi.hoisted(() => {
     setRenderIssueReporter,
     getRenderIssues,
     clearRenderIssues,
+    RenderBufferArena,
+    renderBufferArenaInit,
     savePatchToStorage,
     loadPatchFromStorage,
     consumeTestDemoFilename,
@@ -88,6 +95,7 @@ vi.mock('../../render', () => ({
   },
   assertWebGPUStartupContract: mocks.assertWebGPUStartupContract,
   createWebGPURenderer: mocks.createWebGPURenderer,
+  RenderBufferArena: mocks.RenderBufferArena,
   setRenderIssueReporter: mocks.setRenderIssueReporter,
   getRenderIssues: mocks.getRenderIssues,
   clearRenderIssues: mocks.clearRenderIssues,
