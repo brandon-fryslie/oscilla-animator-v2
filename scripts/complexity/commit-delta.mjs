@@ -56,7 +56,6 @@ const METRIC_META = {
   typhonTotalLogicalSloc: { label: 'Typhon total logical SLOC', direction: 'info', signal: 'low', target: 'context only', scale: 'size', description: 'Total logical source lines of code measured by Typhon.' },
 };
 
-const FILE_GATE_MIN_IMPROVEMENT_PCT = 0;
 const FILE_GATE_MAX_REGRESSION_PCT = 1;
 const FILE_GATE_METRICS = [
   { key: 'eslintComplexityHits', label: 'ESLint cyclomatic rule hits (per file)', direction: 'lower', threshold: 0, source: 'eslint-rule', sourceKey: 'complexity' },
@@ -344,7 +343,6 @@ async function evaluateChangedFileThresholdGate(baseLoaded, headLoaded) {
       const baseValue = metricValueFromMaps(metric, filePath, baseMaps, defaultValue);
       const underThreshold = passesThreshold(metric.direction, headValue, metric.threshold);
       const improvementPct = computeImprovementPct(metric.direction, baseValue, headValue);
-      const improvedEnough = Number.isFinite(improvementPct) && improvementPct >= FILE_GATE_MIN_IMPROVEMENT_PCT;
       const withinRegressionTolerance =
         Number.isFinite(improvementPct) && improvementPct >= -FILE_GATE_MAX_REGRESSION_PCT;
       const passed = underThreshold || withinRegressionTolerance;
@@ -363,7 +361,6 @@ async function evaluateChangedFileThresholdGate(baseLoaded, headLoaded) {
         headValue,
         improvementPct,
         underThreshold,
-        improvedEnough,
         withinRegressionTolerance,
         passed,
         reason,
@@ -382,7 +379,6 @@ async function evaluateChangedFileThresholdGate(baseLoaded, headLoaded) {
   return {
     enabled: true,
     policy: 'changed-file-under-threshold-or-regression-within-1pct',
-    minImprovementPct: FILE_GATE_MIN_IMPROVEMENT_PCT,
     maxRegressionPct: FILE_GATE_MAX_REGRESSION_PCT,
     changedFiles,
     trackedChangedFiles,
