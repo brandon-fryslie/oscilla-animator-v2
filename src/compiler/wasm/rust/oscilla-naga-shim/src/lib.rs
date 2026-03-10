@@ -26,6 +26,13 @@ enum NagaScalarKindIR {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+#[serde(untagged)]
+enum NagaArraySizeIR {
+    Dynamic(String),
+    Fixed(u32),
+}
+
+#[derive(Debug, Clone, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 enum NagaTypeIR {
     Scalar {
@@ -39,7 +46,7 @@ enum NagaTypeIR {
     },
     Array {
         base: usize,
-        size: String,
+        size: NagaArraySizeIR,
     },
     Struct {
         name: String,
@@ -270,16 +277,19 @@ fn emit_type_ref(type_index: usize, types: &[NagaTypeIR]) -> Result<String, Form
             }
             Ok(format!("vec{size}<{}>", scalar_to_wgsl(*scalar)))
         }
-        NagaTypeIR::Array { base, size } => {
-            if size != "dynamic" {
-                return Err(make_error(
-                    format!("Unsupported array size kind: {size}"),
-                    "Module",
-                    format!("Type[{type_index}]"),
-                ));
+        NagaTypeIR::Array { base, size } => match size {
+            NagaArraySizeIR::Dynamic(tag) => {
+                if tag != "dynamic" {
+                    return Err(make_error(
+                        format!("Unsupported array size kind: {tag}"),
+                        "Module",
+                        format!("Type[{type_index}]"),
+                    ));
+                }
+                Ok(format!("array<{}>", emit_type_ref(*base, types)?))
             }
-            Ok(format!("array<{}>", emit_type_ref(*base, types)?))
-        }
+            NagaArraySizeIR::Fixed(len) => Ok(format!("array<{}, {}>", emit_type_ref(*base, types)?, len)),
+        },
         NagaTypeIR::Struct { name, .. } => Ok(name.clone()),
     }
 }

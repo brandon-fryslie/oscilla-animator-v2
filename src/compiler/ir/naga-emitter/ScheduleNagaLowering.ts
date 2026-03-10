@@ -31,7 +31,7 @@ export type NagaTypeIR =
   | {
       readonly kind: 'array';
       readonly base: number;
-      readonly size: 'dynamic';
+      readonly size: 'dynamic' | number;
     }
   | {
       readonly kind: 'struct';
@@ -95,7 +95,7 @@ export type NagaExpressionIR =
     }
   | {
       readonly kind: 'buffer_load';
-      readonly buffer: 'arena_in' | 'arena_out' | 'state_in' | 'state_out';
+      readonly buffer: 'arena_in' | 'arena_out' | 'state_in' | 'state_out' | 'uniforms';
       readonly index: number;
     }
   | {
@@ -283,6 +283,7 @@ interface LoweringBuiltins {
   readonly f32Type: number;
   readonly u32Type: number;
   readonly vec3U32Type: number;
+  readonly vec4F32Type: number;
   readonly arrayF32Type: number;
   readonly uniformsType: number;
 }
@@ -291,15 +292,10 @@ function registerBuiltinTypes(ctx: LoweringCtx): LoweringBuiltins {
   const f32Type = ctx.internType({ kind: 'scalar', scalar: 'f32', width: 4 });
   const u32Type = ctx.internType({ kind: 'scalar', scalar: 'u32', width: 4 });
   const vec3U32Type = ctx.internType({ kind: 'vector', size: 3, scalar: 'u32', width: 4 });
+  const vec4F32Type = ctx.internType({ kind: 'vector', size: 4, scalar: 'f32', width: 4 });
   const arrayF32Type = ctx.internType({ kind: 'array', base: f32Type, size: 'dynamic' });
-  const uniformsType = ctx.internType({
-    kind: 'struct',
-    // [LAW:one-source-of-truth] Keep type and global identifiers distinct so
-    // WGSL/Naga declaration namespaces have one unambiguous symbol per concept.
-    name: 'RuntimeUniforms',
-    fields: [{ name: 'dummy', type: u32Type }],
-  });
-  return { f32Type, u32Type, vec3U32Type, arrayF32Type, uniformsType };
+  const uniformsType = ctx.internType({ kind: 'array', base: vec4F32Type, size: 5 });
+  return { f32Type, u32Type, vec3U32Type, vec4F32Type, arrayF32Type, uniformsType };
 }
 
 function registerBuiltinGlobals(ctx: LoweringCtx, builtins: LoweringBuiltins): void {
@@ -672,6 +668,150 @@ function emitLiteralF32(
     { kind: 'constant', constant: ctx.internNumberConstant(builtins.f32Type, value) },
     source,
   );
+}
+
+const UNIFORMS_TIME_VEC_INDEX = 4;
+const UNIFORMS_TIME_SECONDS_COMPONENT = 2;
+const UNIFORMS_DELTA_SECONDS_COMPONENT = 3;
+const TWO_PI_F32 = Math.PI * 2;
+
+function emitUniformVec4(
+  ctx: LoweringCtx,
+  builtins: LoweringBuiltins,
+  vecIndex: number,
+  source: NagaSourceMapEntryIR,
+): number {
+  const uniformIndex = ctx.addExpression(
+    { kind: 'constant', constant: ctx.internNumberConstant(builtins.u32Type, vecIndex) },
+    source,
+  );
+  return ctx.addExpression(
+    { kind: 'buffer_load', buffer: 'uniforms', index: uniformIndex },
+    source,
+  );
+}
+
+function emitUniformComponentF32(
+  ctx: LoweringCtx,
+  builtins: LoweringBuiltins,
+  vecIndex: number,
+  componentIndex: 0 | 1 | 2 | 3,
+  source: NagaSourceMapEntryIR,
+): number {
+  const uniformVec = emitUniformVec4(ctx, builtins, vecIndex, source);
+  return ctx.addExpression({ kind: 'access_index', base: uniformVec, index: componentIndex }, source);
+}
+
+function emitRuntimeTimeMsF32(
+  ctx: LoweringCtx,
+  builtins: LoweringBuiltins,
+  source: NagaSourceMapEntryIR,
+): number {
+  const timeSeconds = emitUniformComponentF32(
+    ctx,
+    builtins,
+    UNIFORMS_TIME_VEC_INDEX,
+    UNIFORMS_TIME_SECONDS_COMPONENT,
+    source,
+  );
+  const oneThousand = emitLiteralF32(ctx, builtins, 1000, source);
+  return ctx.addExpression({ kind: 'binary', op: 'mul', left: timeSeconds, right: oneThousand }, source);
+}
+
+function emitRuntimeDeltaMsF32(
+  ctx: LoweringCtx,
+  builtins: LoweringBuiltins,
+  source: NagaSourceMapEntryIR,
+): number {
+  const dtSeconds = emitUniformComponentF32(
+    ctx,
+    builtins,
+    UNIFORMS_TIME_VEC_INDEX,
+    UNIFORMS_DELTA_SECONDS_COMPONENT,
+    source,
+  );
+  const oneThousand = emitLiteralF32(ctx, builtins, 1000, source);
+  return ctx.addExpression({ kind: 'binary', op: 'mul', left: dtSeconds, right: oneThousand }, source);
+}
+
+function emitPhaseFromRuntimeTime(
+  ctx: LoweringCtx,
+  builtins: LoweringBuiltins,
+  periodMs: number,
+  source: NagaSourceMapEntryIR,
+): number {
+  if (!Number.isFinite(periodMs) || periodMs <= 0) {
+    return emitLiteralF32(ctx, builtins, 0, source);
+  }
+  const timeMs = emitRuntimeTimeMsF32(ctx, builtins, source);
+  const invPeriod = emitLiteralF32(ctx, builtins, 1 / periodMs, source);
+  const phaseUnwrapped = ctx.addExpression({ kind: 'binary', op: 'mul', left: timeMs, right: invPeriod }, source);
+  return emitBuiltinCall(ctx, 'fract', [phaseUnwrapped], source);
+}
+
+function emitPaletteComponentFromPhase(
+  ctx: LoweringCtx,
+  builtins: LoweringBuiltins,
+  phaseA: number,
+  componentIndex: number,
+  source: NagaSourceMapEntryIR,
+): number {
+  if (componentIndex === 3) {
+    return emitLiteralF32(ctx, builtins, 1, source);
+  }
+  const offsets = [0, 2 / 3, 1 / 3] as const;
+  const hueOffset = emitLiteralF32(ctx, builtins, offsets[Math.max(0, Math.min(2, componentIndex))] ?? 0, source);
+  const shiftedHue = ctx.addExpression({ kind: 'binary', op: 'add', left: phaseA, right: hueOffset }, source);
+  const wrappedHue = emitBuiltinCall(ctx, 'fract', [shiftedHue], source);
+  const six = emitLiteralF32(ctx, builtins, 6, source);
+  const three = emitLiteralF32(ctx, builtins, 3, source);
+  const one = emitLiteralF32(ctx, builtins, 1, source);
+  const half = emitLiteralF32(ctx, builtins, 0.5, source);
+  const zero = emitLiteralF32(ctx, builtins, 0, source);
+  const scaled = ctx.addExpression({ kind: 'binary', op: 'mul', left: wrappedHue, right: six }, source);
+  const shifted = ctx.addExpression({ kind: 'binary', op: 'sub', left: scaled, right: three }, source);
+  const distance = emitBuiltinCall(ctx, 'abs', [shifted], source);
+  const ramp = ctx.addExpression({ kind: 'binary', op: 'sub', left: distance, right: one }, source);
+  const clamped = emitBuiltinCall(ctx, 'clamp', [ramp, zero, one], source);
+  return ctx.addExpression({ kind: 'binary', op: 'mul', left: clamped, right: half }, source);
+}
+
+function emitTimeChannelF32(args: {
+  readonly ctx: LoweringCtx;
+  readonly builtins: LoweringBuiltins;
+  readonly which: 'tMs' | 'phaseA' | 'phaseB' | 'dt' | 'progress' | 'palette' | 'energy';
+  readonly componentIndex: number;
+  readonly periodAMs: number;
+  readonly periodBMs: number;
+  readonly source: NagaSourceMapEntryIR;
+}): number {
+  const { ctx, builtins, which, componentIndex, periodAMs, periodBMs, source } = args;
+  if (which === 'tMs') {
+    return emitRuntimeTimeMsF32(ctx, builtins, source);
+  }
+  if (which === 'dt') {
+    return emitRuntimeDeltaMsF32(ctx, builtins, source);
+  }
+  if (which === 'phaseA') {
+    return emitPhaseFromRuntimeTime(ctx, builtins, periodAMs, source);
+  }
+  if (which === 'phaseB') {
+    return emitPhaseFromRuntimeTime(ctx, builtins, periodBMs, source);
+  }
+  if (which === 'progress') {
+    return emitLiteralF32(ctx, builtins, 0, source);
+  }
+  if (which === 'energy') {
+    const phaseA = emitPhaseFromRuntimeTime(ctx, builtins, periodAMs, source);
+    const tau = emitLiteralF32(ctx, builtins, TWO_PI_F32, source);
+    const phaseRadians = ctx.addExpression({ kind: 'binary', op: 'mul', left: phaseA, right: tau }, source);
+    const wave = emitBuiltinCall(ctx, 'sin', [phaseRadians], source);
+    const half = emitLiteralF32(ctx, builtins, 0.5, source);
+    const centered = ctx.addExpression({ kind: 'binary', op: 'mul', left: wave, right: half }, source);
+    return ctx.addExpression({ kind: 'binary', op: 'add', left: half, right: centered }, source);
+  }
+  const phaseA = emitPhaseFromRuntimeTime(ctx, builtins, periodAMs, source);
+  return emitPaletteComponentFromPhase(ctx, builtins, phaseA, componentIndex, source);
 }
 
 function emitLoadedF32FromPlan(
@@ -1069,10 +1209,15 @@ function emitMaterializeExprComponentF32(args: {
         );
       }
       case 'time':
-        if (expr.which === 'dt') {
-          return emitLiteralF32(args.ctx, args.builtins, 1 / 60, args.source);
-        }
-        return emitLiteralF32(args.ctx, args.builtins, 0, args.source);
+        return emitTimeChannelF32({
+          ctx: args.ctx,
+          builtins: args.builtins,
+          which: expr.which,
+          componentIndex: component,
+          periodAMs: args.schedule.timeModel.periodAMs,
+          periodBMs: args.schedule.timeModel.periodBMs,
+          source: args.source,
+        });
       case 'external':
         return emitLiteralF32(args.ctx, args.builtins, 0, args.source);
       case 'eventRead':
