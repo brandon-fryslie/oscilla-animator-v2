@@ -56,8 +56,7 @@ const METRIC_META = {
   typhonTotalLogicalSloc: { label: 'Typhon total logical SLOC', direction: 'info', signal: 'low', target: 'context only', scale: 'size', description: 'Total logical source lines of code measured by Typhon.' },
 };
 
-const FILE_GATE_MIN_IMPROVEMENT_PCT = 0;
-const FILE_GATE_MAX_REGRESSION_PCT = 1;
+const FILE_GATE_MIN_IMPROVEMENT_PCT = 3;
 const FILE_GATE_METRICS = [
   { key: 'eslintComplexityHits', label: 'ESLint cyclomatic rule hits (per file)', direction: 'lower', threshold: 0, source: 'eslint-rule', sourceKey: 'complexity' },
   { key: 'eslintMaxDepthHits', label: 'ESLint max-depth hits (per file)', direction: 'lower', threshold: 0, source: 'eslint-rule', sourceKey: 'max-depth' },
@@ -345,14 +344,12 @@ async function evaluateChangedFileThresholdGate(baseLoaded, headLoaded) {
       const underThreshold = passesThreshold(metric.direction, headValue, metric.threshold);
       const improvementPct = computeImprovementPct(metric.direction, baseValue, headValue);
       const improvedEnough = Number.isFinite(improvementPct) && improvementPct >= FILE_GATE_MIN_IMPROVEMENT_PCT;
-      const withinRegressionTolerance =
-        Number.isFinite(improvementPct) && improvementPct >= -FILE_GATE_MAX_REGRESSION_PCT;
-      const passed = underThreshold || withinRegressionTolerance;
+      const passed = underThreshold || improvedEnough;
       const reason = underThreshold
         ? 'under-threshold'
-        : withinRegressionTolerance
-          ? 'over-threshold-within-regression-tolerance'
-          : 'over-threshold-regressed-beyond-tolerance';
+        : improvedEnough
+          ? 'improved-enough'
+          : 'over-threshold-without-required-improvement';
       evaluations.push({
         filePath,
         metricKey: metric.key,
@@ -364,7 +361,6 @@ async function evaluateChangedFileThresholdGate(baseLoaded, headLoaded) {
         improvementPct,
         underThreshold,
         improvedEnough,
-        withinRegressionTolerance,
         passed,
         reason,
       });
@@ -381,9 +377,8 @@ async function evaluateChangedFileThresholdGate(baseLoaded, headLoaded) {
 
   return {
     enabled: true,
-    policy: 'changed-file-under-threshold-or-regression-within-1pct',
+    policy: 'changed-file-under-threshold-or-improve-by-3pct',
     minImprovementPct: FILE_GATE_MIN_IMPROVEMENT_PCT,
-    maxRegressionPct: FILE_GATE_MAX_REGRESSION_PCT,
     changedFiles,
     trackedChangedFiles,
     trackedChangedFilesCount: trackedChangedFiles.length,
@@ -966,7 +961,7 @@ function renderDeltaMarkdown(delta, baseLabel, headLabel) {
     `- net score (improved - regressed): ${delta.score}`,
     ...(gate ? [
       `- changed-file gate: ${gate.passed ? 'pass' : 'fail'} (${gate.failureCount}/${gate.evaluationCount} failing checks across ${gate.trackedChangedFilesCount} tracked changed files)`,
-      `- gate policy: file must be under threshold or regress by no more than ${formatPctValue(gate.maxRegressionPct ?? 0)}`,
+      `- gate policy: file must be under threshold or improved by >= ${formatPctValue(gate.minImprovementPct)}`,
     ] : []),
     '',
     '## How To Read This',
@@ -1193,7 +1188,7 @@ function renderDeltaHtml(delta, baseLabel, headLabel, metricAttribution) {
       renderHtmlTable(['Metric', 'Desired Trend', 'Practical Target Range', 'Signal', 'Description'], guideRows),
       ...(fileGate ? [
         '<h2>Changed-File Threshold Gate</h2>',
-        `<p>Policy: changed files must be under threshold or regress by no more than ${escapeHtml(formatPctValue(fileGate.maxRegressionPct ?? 0))}. Tracked changed files: ${escapeHtml(String(fileGate.trackedChangedFilesCount))}.</p>`,
+        `<p>Policy: changed files must be under threshold or improve by at least ${escapeHtml(formatPctValue(fileGate.minImprovementPct))}. Tracked changed files: ${escapeHtml(String(fileGate.trackedChangedFilesCount))}.</p>`,
         renderHtmlTable(
           ['File', 'Metric', 'Base', 'Head', 'Threshold', 'Improvement', 'Result'],
           fileGate.evaluations.length > 0

@@ -1,4 +1,4 @@
-import type { DrawPathInstancesOp, PathGeometry, RenderFrameIR } from '../types';
+import type { DrawPathInstancesOp, PathGeometry, LegacyRenderFrame } from '../types';
 import { PathTessellator } from './PathTessellator';
 import { InputService } from './InputService';
 import {
@@ -78,7 +78,7 @@ interface GPUMesh {
 }
 
 interface RenderInput {
-  readonly frame: RenderFrameIR;
+  readonly frame: LegacyRenderFrame;
   // [LAW:one-source-of-truth] WebGPU sink topology metadata enters via runtime
   // ShapeBank only; compile snapshots/aux payloads are forbidden here.
   readonly shapeBank: RenderShapeBankSource;
@@ -567,7 +567,7 @@ class WebGPUDrawPrepRuntime {
 }
 
 /**
- * WebGPU renderer that consumes RenderFrameIR directly.
+ * WebGPU renderer that consumes LegacyRenderFrame directly.
  */
 export class WebGPURenderer {
   private readonly canvas: HTMLCanvasElement;
@@ -967,7 +967,7 @@ export class WebGPURenderer {
     this.device.queue.writeBuffer(this.sceneUniformBuffer, 0, this.sceneUniforms, 0, this.sceneUniforms.byteLength);
   }
 
-  private buildDrawPlan(frame: RenderFrameIR): PreparedDrawPathOp[] {
+  private buildDrawPlan(frame: LegacyRenderFrame): PreparedDrawPathOp[] {
     const prepared: PreparedDrawPathOp[] = [];
     let nextFirstInstance = 0;
     let nextSourceSinkIndex = 0;

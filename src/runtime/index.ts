@@ -111,6 +111,6 @@ export type {
   PathGeometry,
   InstanceTransforms,
   PathStyle,
-  RenderFrameIR,
+  LegacyRenderFrame,
   DrawOp,
 } from '../render/types';
