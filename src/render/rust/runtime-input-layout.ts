@@ -22,6 +22,7 @@ export const RUNTIME_INPUT_INDEX = Object.freeze({
   sinkTableWords: 13,
   shapeBankWords: 14,
   arenaWords: 15,
+  installEpoch: 16,
 } as const);
 
 export interface RuntimeSharedPlanes {

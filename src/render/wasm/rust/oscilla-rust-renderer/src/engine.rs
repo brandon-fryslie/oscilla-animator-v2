@@ -30,6 +30,7 @@ const INPUT_WORD_TIME_MS: usize = 5;
 const INPUT_WORD_SINK_TABLE_WORDS: usize = 13;
 const INPUT_WORD_SHAPE_BANK_WORDS: usize = 14;
 const INPUT_WORD_ARENA_WORDS: usize = 15;
+const INPUT_WORD_INSTALL_EPOCH: usize = 16;
 const INPUT_SIGNAL_WORDS: u32 = 4;
 const INPUT_FLOAT_WORDS: u32 = 32;
 
@@ -406,6 +407,8 @@ pub struct Engine {
     draw_regions: IndirectRegionPlan,
     last_shape_bank_words: u32,
     last_sink_table_words: u32,
+    last_compiler_arena_words: u32,
+    last_plane_install_epoch: u32,
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -722,6 +725,8 @@ impl Engine {
             draw_regions: IndirectRegionPlan::default(),
             last_shape_bank_words: 0,
             last_sink_table_words: 0,
+            last_compiler_arena_words: 0,
+            last_plane_install_epoch: u32::MAX,
         })
     }
 
@@ -813,6 +818,8 @@ impl Engine {
         self.draw_regions = IndirectRegionPlan::default();
         self.last_shape_bank_words = 0;
         self.last_sink_table_words = 0;
+        self.last_compiler_arena_words = 0;
+        self.last_plane_install_epoch = u32::MAX;
     }
 
     pub fn rebuild_gpu_pipelines(&mut self, pass_specs: &[CompilerComputePassSpec]) {
@@ -1321,11 +1328,23 @@ impl Engine {
                 shared_input.get_index(INPUT_WORD_ARENA_WORDS as u32),
                 arena_word_limit,
             );
-            self.last_shape_bank_words = shape_bank_words;
-            self.last_sink_table_words = sink_table_words;
-            self.sync_shape_bank_plane(shape_bank_words);
-            self.draw_regions = self.sync_sink_table_plane_and_parse_regions(sink_table_words);
-            self.sync_compiler_arena_plane(arena_words, sink_table_words);
+            let install_epoch = clamp_non_negative_u32(
+                shared_input.get_index(INPUT_WORD_INSTALL_EPOCH as u32),
+                u32::MAX,
+            );
+            let should_sync_planes = install_epoch != self.last_plane_install_epoch
+                || shape_bank_words != self.last_shape_bank_words
+                || sink_table_words != self.last_sink_table_words
+                || arena_words != self.last_compiler_arena_words;
+            if should_sync_planes {
+                self.sync_shape_bank_plane(shape_bank_words);
+                self.draw_regions = self.sync_sink_table_plane_and_parse_regions(sink_table_words);
+                self.sync_compiler_arena_plane(arena_words, sink_table_words);
+                self.last_plane_install_epoch = install_epoch;
+                self.last_shape_bank_words = shape_bank_words;
+                self.last_sink_table_words = sink_table_words;
+                self.last_compiler_arena_words = arena_words;
+            }
         } else {
             uniforms.time_seconds = (timestamp_ms.max(0.0) * 0.001) as f32;
             uniforms.delta_time_seconds = (1.0 / 60.0) as f32;
@@ -1338,6 +1357,8 @@ impl Engine {
             uniforms.view_proj[3][3] = 1.0;
             self.last_shape_bank_words = 0;
             self.last_sink_table_words = 0;
+            self.last_compiler_arena_words = 0;
+            self.last_plane_install_epoch = u32::MAX;
             self.draw_regions = IndirectRegionPlan::default();
         }
         self.arena.update_uniforms(&self.queue, uniforms);

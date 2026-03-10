@@ -5,7 +5,7 @@
  * and performance metrics tracking.
  */
 
-import { assertSchedulePhaseBoundaryStateReads, executeFrame, packDrawPrepSinkTableV1 } from '../runtime';
+import { assertSchedulePhaseBoundaryStateReads } from '../runtime';
 import { RenderBufferArena, type WebGPURenderer } from '../render';
 import type { RuntimeState } from '../runtime/RuntimeState';
 import type { RootStore } from '../stores';
@@ -111,7 +111,6 @@ function readRuntimeInputPlaneValues(currentState: RuntimeState | null): Runtime
 }
 
 const RUNTIME_CONSOLE_ENABLED = isRuntimeConsoleEnabled();
-const EMPTY_U32_WORDS = new Uint32Array(0);
 
 function assertProgramPhaseBoundary(deps: AnimationLoopDeps): void {
   const program = deps.getCurrentProgram();
@@ -157,8 +156,8 @@ function resetAnimationLoopState(state: AnimationLoopState): void {
  * Execute a single animation frame.
  *
  * [LAW:dataflow-not-control-flow] Main-thread execution always performs the
- * same runtime execute + render publication order; worker-owned telemetry
- * drives observability while value variability flows through runtime state.
+ * same input publication order; worker-owned compute/render stages advance
+ * frame state from a single GPU runtime authority.
  */
 export function executeAnimationFrame(
   tMs: number,
@@ -186,21 +185,9 @@ export function executeAnimationFrame(
   arena.beginFrame();
   try {
     renderer.resizeCanvas(renderWidth, renderHeight);
-    executeFrame(currentProgram, currentState, arena, tMs);
-    const packedSinkTable = packDrawPrepSinkTableV1(currentProgram, currentState);
-    // [LAW:single-enforcer] AnimationLoop is the per-frame boundary that
-    // executes runtime + publishes hotpath planes into renderer transport.
-    renderer.render({
-      arenaWords: currentState.arena,
-      arenaWordCount: currentState.arena.length,
-      shapeBank: {
-        data: currentState.shapeBank.data,
-        volatilePtr: currentState.shapeBank.volatilePtr,
-        staticBoundary: currentState.shapeBank.staticBoundary,
-        topologyIdByHandle: currentState.shapeBank.topologyIdByHandle,
-      },
-      drawPrepSinkTableV1: packedSinkTable?.words ?? EMPTY_U32_WORDS,
-      drawPrepSinkTableWordCount: packedSinkTable?.wordCount ?? 0,
+    // [LAW:single-enforcer] AnimationLoop is the frame boundary that marshals
+    // per-frame CPU inputs into one renderer-owned runtime input envelope.
+    renderer.setViewportFrame({
       width: renderWidth,
       height: renderHeight,
       zoom,
@@ -215,7 +202,7 @@ export function executeAnimationFrame(
       inputAudioHigh: runtimeInputPlaneValues.inputAudioHigh,
       inputGaugeActive: runtimeInputPlaneValues.inputGaugeActive,
     });
-    markRuntimeFrameAdvanced(currentState.cache.frameId, tMs);
+    markRuntimeFrameAdvanced(-1, tMs);
   } finally {
     // [LAW:single-enforcer] Frame arena lifecycle is owned at the animation-loop
     // boundary so begin/end stay paired even when frame publication throws.
