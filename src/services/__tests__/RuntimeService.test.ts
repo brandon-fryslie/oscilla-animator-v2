@@ -83,6 +83,10 @@ vi.mock('../../render', () => ({
   RenderBufferArena: class {
     buffers = new Map();
     init = vi.fn();
+    beginFrame(): void {}
+    endFrame(): void {}
+    reset(): void {}
+    getTotalBytes(): number { return 0; }
     registerBufferMetadata = vi.fn();
     getBuffer = vi.fn((id: number) => this.buffers.get(id) ?? null);
   },
