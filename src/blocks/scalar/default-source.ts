@@ -114,7 +114,7 @@ export function register(): void {
         );
       }
   
-      const payload = outType.payload as PayloadType;
+      const payload: PayloadType = outType.payload;
       const temporal = requireInst(outType.extent.temporality, 'temporality');
   
       // Event-typed defaults are represented as "never fire" event streams.

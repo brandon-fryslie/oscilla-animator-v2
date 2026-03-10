@@ -53,6 +53,7 @@ import { getValueExprChildren } from '../runtime/ValueExprTreeWalker';
 import { compileFrontend, type FrontendResult, type FrontendError } from './frontend';
 import type { CompileError } from './types';
 import { buildProgramTopologyTable, collectAllProgramTopologyIds } from './ir/program-topology';
+import { blockId as toBlockId, portId as toPortId } from '../types/compiler';
 
 import { registerAllBlocks } from '../blocks/all';
 
@@ -571,7 +572,7 @@ function convertLinkedIRToProgram(
   if (unlinkedIR.blockOutputs) {
     for (const [, outputs] of unlinkedIR.blockOutputs.entries()) {
       for (const [, ref] of outputs.entries()) {
-        const valueId = ref.id as unknown as ValueExprId;
+        const valueId = ref.id;
         const instanceId = inferFieldInstanceFromValueExprs(valueId, valueExprNodes);
         if (instanceId) {
           fieldSlotRegistry.set(ref.slot!, { fieldId: valueId, instanceId });
@@ -715,25 +716,35 @@ function convertLinkedIRToProgram(
   const slotToPort = new Map();
   const blockMap = new Map(); // Map numeric BlockId -> string ID
   const blockDisplayNames = new Map(); // Map numeric BlockId -> user-facing name
-  const toDebugPortId = (index: number): DebugPortBinding['port'] => index as unknown as DebugPortBinding['port'];
-  const toDebugBlockId = (index: number): DebugPortBinding['block'] => index as unknown as DebugPortBinding['block'];
+  const toDebugPortId = (index: number): DebugPortBinding['port'] => toPortId(`p${index}`);
 
   // Populate debug index from unlinkedIR.blockOutputs (provenance)
   if (unlinkedIR.blockOutputs) {
     let portCounter = 0;
 
     // Build block map from acyclicPatch
-    // We need to look up blocks by index to get their string ID
-    const blocks = acyclicPatch.blocks || []; // AcyclicOrLegalGraph has blocks array
+    // We use canonical block IDs directly for provenance/debug joins.
+    const blocks = acyclicPatch.blocks;
+    const debugBlockIds = blocks.map((block) => toBlockId(block.id));
+    const resolveDebugBlockId = (index: number): PortBindingIR['block'] => {
+      const blockId = debugBlockIds[index];
+      if (blockId === undefined) {
+        throw new Error(`debug index invariant violation: missing block for index ${index}`);
+      }
+      return blockId;
+    };
     for (let i = 0; i < blocks.length; i++) {
-      blockMap.set(i, blocks[i].id);
-      blockDisplayNames.set(i, blocks[i].id || blocks[i].type);
+      const blockId = debugBlockIds[i];
+      const block = blocks[i];
+      blockMap.set(blockId, block.id);
+      blockDisplayNames.set(blockId, block.id || block.type);
     }
 
     for (const [blockIndex, outputs] of unlinkedIR.blockOutputs.entries()) {
+      const debugBlockId = resolveDebugBlockId(blockIndex);
       for (const [portId, ref] of outputs.entries()) {
-        const valueId = ref.id as unknown as ValueExprId;
-        const expr = valueExprNodes[valueId as unknown as number];
+        const valueId = ref.id;
+        const expr = valueExprNodes[valueId];
         if (!expr) continue;
         const card = requireInst(expr.type.extent.cardinality, 'cardinality').kind;
         const temp = requireInst(expr.type.extent.temporality, 'temporality').kind;
@@ -751,7 +762,7 @@ function convertLinkedIRToProgram(
         // Add port binding info
         ports.push({
           port: portIndex,
-          block: toDebugBlockId(blockIndex),
+          block: debugBlockId,
           portName: portId,
           direction: 'out',
           cardinality: card,
@@ -791,17 +802,17 @@ function convertLinkedIRToProgram(
 
   if (exprToBlock.size > 0) {
     // Map ValueExprId → portName via blockOutputs
-    const exprIdToPortName = new Map<number, string>();
+    const exprIdToPortName = new Map<ValueExprId, string>();
     if (unlinkedIR.blockOutputs) {
       for (const [, outputsByPort] of unlinkedIR.blockOutputs.entries()) {
         for (const [portName, ref] of outputsByPort.entries()) {
-          exprIdToPortName.set(ref.id as unknown as number, portName);
+          exprIdToPortName.set(ref.id, portName);
         }
       }
     }
 
     for (const [exprId, blockStringId] of exprToBlock) {
-      const portNameResult = exprIdToPortName.get(exprId as unknown as number);
+      const portNameResult = exprIdToPortName.get(exprId);
       const portName = portNameResult !== undefined ? portNameResult : null;
 
       exprProvenance.set(exprId, {
@@ -1169,7 +1180,7 @@ function inferFieldInstanceFromValueExprs(
   fieldId: ValueExprId,
   valueExprs: readonly ValueExpr[]
 ): InstanceId | undefined {
-  const expr = valueExprs[fieldId as unknown as number];
+  const expr = valueExprs[fieldId];
   if (!expr) return undefined;
 
   // Only field-extent expressions have a meaningful instance.

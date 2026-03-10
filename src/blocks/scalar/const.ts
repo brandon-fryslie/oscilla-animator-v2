@@ -126,11 +126,11 @@ export function register(): void {
           };
         }
         case 'vec2': {
-          const val = rawValue as unknown[];
-          if (!Array.isArray(val) || val.length !== 2 ||
-            typeof val[0] !== 'number' || typeof val[1] !== 'number') {
+          if (!Array.isArray(rawValue) || rawValue.length !== 2 ||
+            typeof rawValue[0] !== 'number' || typeof rawValue[1] !== 'number') {
             throw new Error(`Const<vec2> requires [x, y] array of numbers, got ${JSON.stringify(rawValue)}`);
           }
+          const val = rawValue;
   
           // Pure lowering: construct multi-component one value from scalar components
           const xSig = ctx.b.constantWithKey(floatConst(val[0]), canonicalType(FLOAT), ctx.instanceId);
@@ -147,11 +147,11 @@ export function register(): void {
           };
         }
         case 'vec3': {
-          const val = rawValue as unknown[];
-          if (!Array.isArray(val) || val.length !== 3 ||
-            typeof val[0] !== 'number' || typeof val[1] !== 'number' || typeof val[2] !== 'number') {
+          if (!Array.isArray(rawValue) || rawValue.length !== 3 ||
+            typeof rawValue[0] !== 'number' || typeof rawValue[1] !== 'number' || typeof rawValue[2] !== 'number') {
             throw new Error(`Const<vec3> requires [x, y, z] array of numbers, got ${JSON.stringify(rawValue)}`);
           }
+          const val = rawValue;
   
           const x3Sig = ctx.b.constantWithKey(floatConst(val[0]), canonicalType(FLOAT), ctx.instanceId);
           const y3Sig = ctx.b.constantWithKey(floatConst(val[1]), canonicalType(FLOAT), ctx.instanceId);
@@ -168,12 +168,12 @@ export function register(): void {
           };
         }
         case 'vec4': {
-          const val = rawValue as unknown[];
-          if (!Array.isArray(val) || val.length !== 4 ||
-            typeof val[0] !== 'number' || typeof val[1] !== 'number' ||
-            typeof val[2] !== 'number' || typeof val[3] !== 'number') {
+          if (!Array.isArray(rawValue) || rawValue.length !== 4 ||
+            typeof rawValue[0] !== 'number' || typeof rawValue[1] !== 'number' ||
+            typeof rawValue[2] !== 'number' || typeof rawValue[3] !== 'number') {
             throw new Error(`Const<vec4> requires [x, y, z, w] array of numbers, got ${JSON.stringify(rawValue)}`);
           }
+          const val = rawValue;
   
           const x4Sig = ctx.b.constantWithKey(floatConst(val[0]), canonicalType(FLOAT), ctx.instanceId);
           const y4Sig = ctx.b.constantWithKey(floatConst(val[1]), canonicalType(FLOAT), ctx.instanceId);
