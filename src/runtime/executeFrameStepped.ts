@@ -567,6 +567,27 @@ function validateFrameOutput(program: CompiledProgramIR, frame: RenderFrameIR): 
   return frame;
 }
 
+function createPhaseMarkerSnapshot(
+  context: SteppedContext,
+  phase: Extract<ExecutionPhase, 'pre-frame' | 'phase-boundary' | 'post-frame'>,
+): StepSnapshot {
+  return buildSnapshot({
+    stepIndex: -1,
+    step: null,
+    phase,
+    totalSteps: context.totalSteps,
+    program: context.program,
+    state: context.state,
+    tMs: context.tAbsMs,
+    writtenSlots: createWrittenSlots(),
+    previousFrameValues: context.previousFrameValues,
+  });
+}
+
+function createSteppedFrameSentinel(): RenderFrameIR {
+  return EMPTY_RENDER_FRAME;
+}
+
 /**
  * Generator-based frame executor that yields StepSnapshot at each step.
  */
@@ -581,49 +602,19 @@ export function* executeFrameStepped(
   const context = createSteppedContext(program, state, arena, tAbsMs, previousFrameValues);
   initializeSteppedFrame(context);
 
-  yield buildSnapshot({
-    stepIndex: -1,
-    step: null,
-    phase: 'pre-frame',
-    totalSteps: context.totalSteps,
-    program,
-    state,
-    tMs: tAbsMs,
-    writtenSlots: createWrittenSlots(),
-    previousFrameValues: context.previousFrameValues,
-  });
+  yield createPhaseMarkerSnapshot(context, 'pre-frame');
 
   yield* runPhase1(context);
 
-  const frame = EMPTY_RENDER_FRAME;
-  yield buildSnapshot({
-    stepIndex: -1,
-    step: null,
-    phase: 'phase-boundary',
-    totalSteps: context.totalSteps,
-    program,
-    state,
-    tMs: tAbsMs,
-    writtenSlots: createWrittenSlots(),
-    previousFrameValues: context.previousFrameValues,
-  });
+  const frame = createSteppedFrameSentinel();
+  yield createPhaseMarkerSnapshot(context, 'phase-boundary');
 
   yield* runPhase2(context);
   finalizeContinuityFrame(state);
   // [LAW:one-source-of-truth] RenderFrame output uses canonical runtime field.
   state.lastRenderFrame = frame;
 
-  yield buildSnapshot({
-    stepIndex: -1,
-    step: null,
-    phase: 'post-frame',
-    totalSteps: context.totalSteps,
-    program,
-    state,
-    tMs: tAbsMs,
-    writtenSlots: createWrittenSlots(),
-    previousFrameValues: context.previousFrameValues,
-  });
+  yield createPhaseMarkerSnapshot(context, 'post-frame');
 
   STEPPED_MATERIALIZE_SCRATCH.reset();
   return validateFrameOutput(program, frame);
