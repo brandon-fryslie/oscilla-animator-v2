@@ -5,7 +5,7 @@
  * and performance metrics tracking.
  */
 
-import { assertSchedulePhaseBoundaryStateReads } from '../runtime';
+import { assertSchedulePhaseBoundaryStateReads, executeFrame, packDrawPrepSinkTableV1 } from '../runtime';
 import { RenderBufferArena, type WebGPURenderer } from '../render';
 import type { RuntimeState } from '../runtime/RuntimeState';
 import type { RootStore } from '../stores';
@@ -111,6 +111,7 @@ function readRuntimeInputPlaneValues(currentState: RuntimeState | null): Runtime
 }
 
 const RUNTIME_CONSOLE_ENABLED = isRuntimeConsoleEnabled();
+const EMPTY_U32_WORDS = new Uint32Array(0);
 
 function assertProgramPhaseBoundary(deps: AnimationLoopDeps): void {
   const program = deps.getCurrentProgram();
@@ -156,8 +157,8 @@ function resetAnimationLoopState(state: AnimationLoopState): void {
  * Execute a single animation frame.
  *
  * [LAW:dataflow-not-control-flow] Main-thread execution always performs the
- * same viewport publication + telemetry read; worker-owned runtime data drives
- * variability through shared planes and scheduler packets.
+ * same runtime execute + render publication order; worker-owned telemetry
+ * drives observability while value variability flows through runtime state.
  */
 export function executeAnimationFrame(
   tMs: number,
@@ -173,30 +174,48 @@ export function executeAnimationFrame(
 
   const { canvas, renderer, arena } = resolveWebGPULoopRuntime(deps);
   const currentProgram = getCurrentProgram();
-  if (!currentProgram) {
+  const currentState = getCurrentState();
+  if (!currentProgram || !currentState) {
     return;
   }
 
-  const runtimeInputPlaneValues = readRuntimeInputPlaneValues(getCurrentState());
+  const runtimeInputPlaneValues = readRuntimeInputPlaneValues(currentState);
   const { zoom, pan } = store.viewport;
   const renderWidth = Math.max(1, Math.floor(store.viewport.canvasWidth || canvas.width));
   const renderHeight = Math.max(1, Math.floor(store.viewport.canvasHeight || canvas.height));
   arena.beginFrame();
   try {
     renderer.resizeCanvas(renderWidth, renderHeight);
-    // [LAW:single-enforcer] Renderer worker is the one runtime-input boundary;
-    // animation loop publishes viewport/time there and does not dual-publish to
-    // any secondary runtime worker seam.
-    renderer.setViewportFrame({
+    executeFrame(currentProgram, currentState, arena, tMs);
+    const packedSinkTable = packDrawPrepSinkTableV1(currentProgram, currentState);
+    // [LAW:single-enforcer] AnimationLoop is the per-frame boundary that
+    // executes runtime + publishes hotpath planes into renderer transport.
+    renderer.render({
+      arenaWords: currentState.arena,
+      arenaWordCount: currentState.arena.length,
+      shapeBank: {
+        data: currentState.shapeBank.data,
+        volatilePtr: currentState.shapeBank.volatilePtr,
+        staticBoundary: currentState.shapeBank.staticBoundary,
+        topologyIdByHandle: currentState.shapeBank.topologyIdByHandle,
+      },
+      drawPrepSinkTableV1: packedSinkTable?.words ?? EMPTY_U32_WORDS,
+      drawPrepSinkTableWordCount: packedSinkTable?.wordCount ?? 0,
       width: renderWidth,
       height: renderHeight,
       zoom,
       panX: pan.x,
       panY: pan.y,
       timeMs: tMs,
-      ...runtimeInputPlaneValues,
+      inputMouseX: runtimeInputPlaneValues.inputMouseX,
+      inputMouseY: runtimeInputPlaneValues.inputMouseY,
+      inputMouseButtons: runtimeInputPlaneValues.inputMouseButtons,
+      inputAudioLow: runtimeInputPlaneValues.inputAudioLow,
+      inputAudioMid: runtimeInputPlaneValues.inputAudioMid,
+      inputAudioHigh: runtimeInputPlaneValues.inputAudioHigh,
+      inputGaugeActive: runtimeInputPlaneValues.inputGaugeActive,
     });
-    markRuntimeFrameAdvanced(-1, tMs);
+    markRuntimeFrameAdvanced(currentState.cache.frameId, tMs);
   } finally {
     // [LAW:single-enforcer] Frame arena lifecycle is owned at the animation-loop
     // boundary so begin/end stay paired even when frame publication throws.
