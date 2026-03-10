@@ -1,5 +1,5 @@
 /**
- * Render - Convert RenderFrameIR to pixels
+ * Render - Runtime renderer boundary exports
  */
 
 // [LAW:one-type-per-behavior] Runtime rendering uses a single renderer type:
@@ -19,11 +19,12 @@ export {
 
 // Re-export v2 types (now the only types)
 export type {
+  DrawPrepRenderContract,
   PathStyle,
   PathGeometry,
   InstanceTransforms,
   DrawPathInstancesOp,
-  RenderFrameIR,
+  LegacyRenderFrame,
   DrawOp,
 } from './types';
 

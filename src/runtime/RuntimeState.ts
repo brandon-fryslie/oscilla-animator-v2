@@ -10,7 +10,7 @@ import { createTimeState } from './timeResolution';
 import type { ContinuityState } from './ContinuityState';
 import { bindContinuityGaugeArena, createContinuityState } from './ContinuityState';
 import type { DebugTap } from './DebugTap';
-import type { RenderFrameIR } from '../render/types';
+import type { LegacyRenderFrame } from '../render/types';
 import type { ArenaRuntimeLayoutIR, RuntimeScalarArenaAddress } from '../compiler/ir/program';
 import { ExternalChannelSystem } from './ExternalChannel';
 import { createArena } from './ArenaValueStore';
@@ -353,7 +353,7 @@ export const RUNTIME_FRAME_SEGMENT_OWNERSHIP: Readonly<
   },
   'render-assembly': {
     reads: ['render step buffer', 'arena'],
-    writes: ['lastRenderFrame'],
+    writes: ['lastLegacyRenderFrame'],
   },
   'phase2-state-write': {
     reads: ['arena', 'state.readBank', 'state mappings'],
@@ -369,8 +369,8 @@ export const RUNTIME_FRAME_SEGMENT_OWNERSHIP: Readonly<
     ],
   },
   'frame-output': {
-    reads: ['lastRenderFrame'],
-    writes: ['lastRenderFrame'],
+    reads: ['lastLegacyRenderFrame'],
+    writes: ['lastLegacyRenderFrame'],
   },
 } as const;
 
@@ -786,7 +786,7 @@ export interface ProgramState {
   values: ValueStore;
 
   /** Last assembled frame for the current program execution. */
-  lastRenderFrame: RenderFrameIR | null;
+  lastLegacyRenderFrame: LegacyRenderFrame | null;
 
   /** Float32 arena for unified value store (cardinality unification migration) */
   arena: Float32Array;
@@ -856,7 +856,7 @@ export interface RuntimeState {
   values: ValueStore;
 
   /** Last assembled frame for the current program execution. */
-  lastRenderFrame: RenderFrameIR | null;
+  lastLegacyRenderFrame: LegacyRenderFrame | null;
 
   /** Float32 arena for unified value store (cardinality unification migration) */
   arena: Float32Array;
@@ -998,7 +998,7 @@ export function createProgramState(
   const stateWriteView = arena.subarray(writeOffset, writeOffset + stateBankLength);
   return {
     values: createValueStore(),
-    lastRenderFrame: null,
+    lastLegacyRenderFrame: null,
     arena,
     // [LAW:one-source-of-truth] Persistent state ownership is anchored to one
     // arena segment contract with explicit read/write bank metadata.
@@ -1088,7 +1088,7 @@ export function createRuntimeStateFromSession(
   return {
     // ProgramState (fresh)
     values: program.values,
-    lastRenderFrame: program.lastRenderFrame,
+    lastLegacyRenderFrame: program.lastLegacyRenderFrame,
     arena: program.arena,
     stateArena: program.stateArena,
     cache: program.cache,

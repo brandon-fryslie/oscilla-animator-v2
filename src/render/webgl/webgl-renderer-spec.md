@@ -1,11 +1,11 @@
 WebGL Renderer Architecture Spec
 
-Scope: Replace (or sit alongside) Canvas2DRenderer/SVGRenderer with a GPU-backed renderer that consumes the existing sink-only RenderFrameIR (v2) produced by RenderAssembler. This spec is intentionally strict: one data model, one render pipeline, one buffer layout, one shader set, one batching policy.
+Scope: Replace (or sit alongside) Canvas2DRenderer/SVGRenderer with a GPU-backed renderer that consumes the existing sink-only LegacyRenderFrame (v2) produced by RenderAssembler. This spec is intentionally strict: one data model, one render pipeline, one buffer layout, one shader set, one batching policy.
 
 ⸻
 
 0. Non-Negotiable Invariants
-    1.	Renderer is a sink. It does not interpret graph semantics, does not evaluate one/many values, and does not resolve topology IDs. It only consumes RenderFrameIR.
+    1.	Renderer is a sink. It does not interpret graph semantics, does not evaluate one/many values, and does not resolve topology IDs. It only consumes LegacyRenderFrame.
     2.	World→screen projection is upstream. RenderAssembler produces screen-space instance position (vec2, normalized [0,1]), size (radius/scale), and optional rotation/scale2, already depth-sorted (painter’s order) inside each DrawOp.
     3.	No per-frame allocations in hot path. Every per-frame GPU upload uses pre-allocated CPU staging buffers and persistent GL buffers sized with growth strategy.
     4.	One canonical GPU format. All instance attributes are uploaded in a fixed interleaved layout. No alternate layouts. No “special cases” per topology.
@@ -18,11 +18,11 @@ Scope: Replace (or sit alongside) Canvas2DRenderer/SVGRenderer with a GPU-backed
 1.1 Render Input
 
 Renderer entrypoint consumes:
-•	frame: RenderFrameIR (must be version: 2)
+•	frame: LegacyRenderFrame (must be version: 2)
 •	widthPx: number
 •	heightPx: number
 
-RenderFrameIR.ops contains ops of:
+LegacyRenderFrame.ops contains ops of:
 •	DrawPathInstancesOp
 •	DrawPrimitiveInstancesOp
 
@@ -175,7 +175,7 @@ A single stateful renderer instance owns:
 •	Path mesh cache
 
 It exposes:
-•	render(frame: RenderFrameIR, widthPx: number, heightPx: number): void
+•	render(frame: LegacyRenderFrame, widthPx: number, heightPx: number): void
 •	dispose(): void
 
 6.2 Path mesh cache key
@@ -303,12 +303,12 @@ Where you currently select Canvas2DRenderer/SVGRenderer:
 •	instantiate WebGLRenderer once
 •	each frame:
 1.	run runtime schedule (already)
-2.	assemble RenderFrameIR (already)
+2.	assemble LegacyRenderFrame (already)
 3.	call webglRenderer.render(frame, canvas.width, canvas.height)
 
 11.3 No changes to compiler/IR required
 
-This renderer consumes existing v2 RenderFrameIR. Any additional fields (like stroke) are out of scope.
+This renderer consumes existing v2 LegacyRenderFrame. Any additional fields (like stroke) are out of scope.
 
 ⸻
 
@@ -347,7 +347,7 @@ No warnings. No silent fallback.
 ⸻
 
 15. Minimal Acceptance Checklist
-    •	Renders the same RenderFrameIR output as Canvas2DRenderer for primitives (ellipse/rect) with visually consistent position/scale/color.
+    •	Renders the same LegacyRenderFrame output as Canvas2DRenderer for primitives (ellipse/rect) with visually consistent position/scale/color.
     •	Produces stable animation at 60fps for large instance counts (GPU-bound rather than CPU path construction).
     •	Demonstrates path rendering for at least one path topology with fill.
     •	Zero allocations per frame in renderer (measured via performance tools), aside from growth events.

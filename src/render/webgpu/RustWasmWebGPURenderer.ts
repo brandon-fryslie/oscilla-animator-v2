@@ -1,5 +1,6 @@
 import type { RenderShapeBankSource } from './WebGPUShapeBankManager';
 import type { IndirectArgsReadbackSnapshot } from './WebGPUIndirectArgsInspector';
+import type { DrawPrepRenderContract } from '../types';
 import { isRuntimeConsoleEnabled } from '../../testing/test-params';
 import { reportRenderIssue } from '../render-issues';
 import {
@@ -19,7 +20,7 @@ import {
   type RuntimeSharedPlanes,
 } from '../rust/runtime-input-layout';
 
-interface RenderInput {
+interface RenderInput extends DrawPrepRenderContract {
   readonly shapeBank: RenderShapeBankSource;
   readonly width: number;
   readonly height: number;
@@ -34,8 +35,6 @@ interface RenderInput {
   readonly inputAudioMid?: number;
   readonly inputAudioHigh?: number;
   readonly inputGaugeActive?: number;
-  readonly drawPrepSinkTableV1?: Uint32Array;
-  readonly drawPrepSinkTableWordCount: number;
 }
 
 interface RuntimeViewportFrame {

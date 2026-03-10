@@ -10,7 +10,7 @@ import { executeFrameStepped } from '../executeFrameStepped';
 import type { RuntimeState } from '../RuntimeState';
 import { createRuntimeState } from '../RuntimeState';
 import { packDrawPrepSinkTableV1 } from '../DrawPrepSinkTablePacker';
-import { EMPTY_RENDER_FRAME, type RenderFrameIR } from '../../render/types';
+import { EMPTY_LEGACY_RENDER_FRAME, type LegacyRenderFrame } from '../../render/types';
 import { getTestArena } from './test-arena-helper';
 
 import { registerAllBlocks } from '../../blocks/all';
@@ -109,7 +109,7 @@ function runSteppedFrameToCompletion(
   program: CompiledProgramIR,
   state: RuntimeState,
   tAbsMs: number,
-): RenderFrameIR {
+): LegacyRenderFrame {
   const gen = executeFrameStepped(program, state, getTestArena(), tAbsMs);
   let step = gen.next();
   while (!step.done) {
@@ -179,7 +179,7 @@ describe('scalar writes target arena storage', () => {
     const state = createStateForProgram(program);
 
     const frame = executeFrame(program, state, getTestArena(), 100);
-    expect(frame).toBe(EMPTY_RENDER_FRAME);
+    expect(frame).toBe(EMPTY_LEGACY_RENDER_FRAME);
     assertScalarWritesInArena(program, state);
     assertGpuPlanesRemainPackable(program, state);
   });
@@ -189,7 +189,7 @@ describe('scalar writes target arena storage', () => {
     const state = createStateForProgram(program);
 
     const frame = runSteppedFrameToCompletion(program, state, 100);
-    expect(frame).toBe(EMPTY_RENDER_FRAME);
+    expect(frame).toBe(EMPTY_LEGACY_RENDER_FRAME);
     assertScalarWritesInArena(program, state);
     assertGpuPlanesRemainPackable(program, state);
   });
