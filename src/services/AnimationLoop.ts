@@ -9,6 +9,7 @@ import { assertSchedulePhaseBoundaryStateReads } from '../runtime';
 import { RenderBufferArena, type WebGPURenderer } from '../render';
 import type { RuntimeState } from '../runtime/RuntimeState';
 import type { RootStore } from '../stores';
+import type { CompiledProgramIR } from '../compiler/ir/program';
 import { isRuntimeConsoleEnabled } from '../testing/test-params';
 import { markRuntimeFrameAdvanced } from '../testing/runtime-probe';
 
@@ -25,7 +26,7 @@ export interface AnimationLoopState {
 }
 
 export interface AnimationLoopDeps {
-  getCurrentProgram: () => any | null;
+  getCurrentProgram: () => CompiledProgramIR | null;
   getCurrentState: () => RuntimeState | null;
   getCanvas: () => HTMLCanvasElement | null;
   getRenderer: () => WebGPURenderer | null;
@@ -39,7 +40,33 @@ export interface AnimationLoopController {
   onCompileSuccess: () => boolean;
 }
 
-function assertWebGPULoopContract(deps: AnimationLoopDeps): void {
+interface ResolvedWebGPULoopRuntime {
+  canvas: HTMLCanvasElement;
+  renderer: WebGPURenderer;
+  arena: RenderBufferArena;
+}
+
+interface RuntimeInputPlaneValues {
+  inputMouseX: number;
+  inputMouseY: number;
+  inputMouseButtons: number;
+  inputAudioLow: number;
+  inputAudioMid: number;
+  inputAudioHigh: number;
+  inputGaugeActive: number;
+}
+
+const EMPTY_RUNTIME_INPUT_VALUES: RuntimeInputPlaneValues = Object.freeze({
+  inputMouseX: 0,
+  inputMouseY: 0,
+  inputMouseButtons: 0,
+  inputAudioLow: 0,
+  inputAudioMid: 0,
+  inputAudioHigh: 0,
+  inputGaugeActive: 0,
+});
+
+function resolveWebGPULoopRuntime(deps: AnimationLoopDeps): ResolvedWebGPULoopRuntime {
   const canvas = deps.getCanvas();
   const renderer = deps.getRenderer();
   const arena = deps.getArena();
@@ -49,6 +76,38 @@ function assertWebGPULoopContract(deps: AnimationLoopDeps): void {
     // WebGPU rendering dependencies are missing.
     throw new Error('AnimationLoop: WebGPU runtime contract requires canvas, renderer, and arena');
   }
+
+  return { canvas, renderer, arena };
+}
+
+function toHeldBit(value: number): number {
+  return value > 0 ? 1 : 0;
+}
+
+function readRuntimeInputPlaneValues(currentState: RuntimeState | null): RuntimeInputPlaneValues {
+  const channels = currentState?.externalChannels;
+  if (!channels) {
+    return EMPTY_RUNTIME_INPUT_VALUES;
+  }
+
+  // [LAW:single-enforcer] AnimationLoop is the frame boundary that commits
+  // staged external writes exactly once before publishing runtime inputs.
+  channels.commit();
+  const snapshot = channels.snapshot;
+  const leftHeld = toHeldBit(snapshot.getFloat('mouse.button.left.held'));
+  const rightHeld = toHeldBit(snapshot.getFloat('mouse.button.right.held'));
+
+  // [LAW:dataflow-not-control-flow] Runtime input publication always writes the
+  // same input envelope each frame; external channels only vary field values.
+  return {
+    inputMouseX: snapshot.getFloat('mouse.x'),
+    inputMouseY: snapshot.getFloat('mouse.y'),
+    inputMouseButtons: leftHeld | (rightHeld << 1),
+    inputAudioLow: snapshot.getFloat('audio.low'),
+    inputAudioMid: snapshot.getFloat('audio.mid'),
+    inputAudioHigh: snapshot.getFloat('audio.high'),
+    inputGaugeActive: snapshot.getFloat('gauge.active'),
+  };
 }
 
 const RUNTIME_CONSOLE_ENABLED = isRuntimeConsoleEnabled();
@@ -107,47 +166,42 @@ export function executeAnimationFrame(
 ): void {
   const {
     getCurrentProgram,
-    getCanvas,
-    getRenderer,
+    getCurrentState,
     store,
     onStatsUpdate,
   } = deps;
 
+  const { canvas, renderer, arena } = resolveWebGPULoopRuntime(deps);
   const currentProgram = getCurrentProgram();
-  const canvas = getCanvas();
-  const renderer = getRenderer();
-
-  if (!canvas || !renderer) {
-    throw new Error('AnimationLoop: WebGPU runtime contract requires canvas, renderer, and arena');
-  }
-
   if (!currentProgram) {
     return;
   }
 
+  const runtimeInputPlaneValues = readRuntimeInputPlaneValues(getCurrentState());
   const { zoom, pan } = store.viewport;
   const renderWidth = Math.max(1, Math.floor(store.viewport.canvasWidth || canvas.width));
   const renderHeight = Math.max(1, Math.floor(store.viewport.canvasHeight || canvas.height));
-  renderer.resizeCanvas(renderWidth, renderHeight);
-  // [LAW:single-enforcer] Renderer worker is the one runtime-input boundary;
-  // animation loop publishes viewport/time there and does not dual-publish to
-  // any secondary runtime worker seam.
-  renderer.setViewportFrame({
-    width: renderWidth,
-    height: renderHeight,
-    zoom,
-    panX: pan.x,
-    panY: pan.y,
-    timeMs: tMs,
-    inputMouseX: 0,
-    inputMouseY: 0,
-    inputMouseButtons: 0,
-    inputAudioLow: 0,
-    inputAudioMid: 0,
-    inputAudioHigh: 0,
-    inputGaugeActive: 0,
-  });
-  markRuntimeFrameAdvanced(-1, tMs);
+  arena.beginFrame();
+  try {
+    renderer.resizeCanvas(renderWidth, renderHeight);
+    // [LAW:single-enforcer] Renderer worker is the one runtime-input boundary;
+    // animation loop publishes viewport/time there and does not dual-publish to
+    // any secondary runtime worker seam.
+    renderer.setViewportFrame({
+      width: renderWidth,
+      height: renderHeight,
+      zoom,
+      panX: pan.x,
+      panY: pan.y,
+      timeMs: tMs,
+      ...runtimeInputPlaneValues,
+    });
+    markRuntimeFrameAdvanced(-1, tMs);
+  } finally {
+    // [LAW:single-enforcer] Frame arena lifecycle is owned at the animation-loop
+    // boundary so begin/end stay paired even when frame publication throws.
+    arena.endFrame();
+  }
 
   state.frameCount++;
   const now = performance.now();
@@ -226,7 +280,7 @@ export function startAnimationLoop(
   state: AnimationLoopState,
   onError: (err: unknown) => void
 ): AnimationLoopController {
-  assertWebGPULoopContract(deps);
+  resolveWebGPULoopRuntime(deps);
   // [LAW:single-enforcer] AnimationLoop owns runtime startup/compile boundaries,
   // so boundary checks are enforced here exactly once per published program.
   assertProgramPhaseBoundary(deps);

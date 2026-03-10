@@ -40,21 +40,22 @@ interface RenderInput extends DrawPrepRenderContract {
   readonly drawPrepSinkTableWordCount: number;
 }
 
-interface RuntimeViewportFrame {
-  readonly width: number;
-  readonly height: number;
-  readonly zoom: number;
-  readonly panX: number;
-  readonly panY: number;
-  readonly timeMs: number;
-  readonly inputMouseX: number;
-  readonly inputMouseY: number;
-  readonly inputMouseButtons: number;
-  readonly inputAudioLow: number;
-  readonly inputAudioMid: number;
-  readonly inputAudioHigh: number;
-  readonly inputGaugeActive: number;
-}
+type RuntimeViewportFrame = Pick<
+  RenderInput,
+  | 'width'
+  | 'height'
+  | 'zoom'
+  | 'panX'
+  | 'panY'
+  | 'timeMs'
+  | 'inputMouseX'
+  | 'inputMouseY'
+  | 'inputMouseButtons'
+  | 'inputAudioLow'
+  | 'inputAudioMid'
+  | 'inputAudioHigh'
+  | 'inputGaugeActive'
+>;
 
 export interface RuntimeEventBreadcrumb {
   readonly severity: 'error' | 'fatal';

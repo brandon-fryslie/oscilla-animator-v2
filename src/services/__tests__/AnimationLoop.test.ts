@@ -19,17 +19,23 @@ function makeDeps(overrides: Partial<any> = {}) {
     resizeCanvas: vi.fn(),
     setViewportFrame: vi.fn(),
     getLifecycleState: vi.fn(() => 'Running'),
-    getLatestRuntimeTelemetry: vi.fn(() => null as any),
+    getLatestRuntimeTelemetry: vi.fn<() => Record<string, unknown> | null>(() => null),
     getInstalledGpuPassIds: vi.fn(() => []),
     getLatestSinkTableSample: vi.fn(() => null),
     render: vi.fn(),
+  };
+  const arena = {
+    beginFrame: vi.fn(),
+    endFrame: vi.fn(),
+    reset: vi.fn(),
+    getTotalBytes: () => 0,
   };
   const deps = {
     getCurrentProgram: () => ({}),
     getCurrentState: () => null,
     getCanvas: () => ({ width: 100, height: 80 }),
     getRenderer: () => renderer,
-    getArena: () => ({ reset: vi.fn(), getTotalBytes: () => 0 }),
+    getArena: () => arena,
     store: {
       demo: { currentFilename: null },
       debug: { enabled: false, traceCardinalitySolver: false },
@@ -51,7 +57,7 @@ function makeDeps(overrides: Partial<any> = {}) {
       getPatchRevision: () => 1,
     },
   } as any;
-  return { deps: { ...deps, ...overrides }, renderer };
+  return { deps: { ...deps, ...overrides }, renderer, arena };
 }
 describe('AnimationLoop', () => {
   const assertSchedulePhaseBoundaryStateReadsMock = vi.mocked(assertSchedulePhaseBoundaryStateReads);
@@ -71,9 +77,11 @@ describe('AnimationLoop', () => {
   });
 
   it('publishes canonical viewport frame to renderer worker boundary', () => {
-    const { deps, renderer } = makeDeps();
+    const { deps, renderer, arena } = makeDeps();
     executeAnimationFrame(16, deps, createAnimationLoopState());
     expect(renderer.resizeCanvas).toHaveBeenCalledWith(100, 80);
+    expect(arena.beginFrame).toHaveBeenCalledTimes(1);
+    expect(arena.endFrame).toHaveBeenCalledTimes(1);
     expect(renderer.setViewportFrame).toHaveBeenCalledWith({
       width: 100,
       height: 80,
@@ -90,6 +98,41 @@ describe('AnimationLoop', () => {
       inputGaugeActive: 0,
     });
     expect(runtimeProbeMocks.markRuntimeFrameAdvanced).toHaveBeenCalledWith(-1, 16);
+  });
+
+  it('commits external channel state and forwards mapped input values', () => {
+    const commit = vi.fn();
+    const getFloat = vi.fn((name: string) => ({
+      'mouse.x': 0.25,
+      'mouse.y': 0.75,
+      'mouse.button.left.held': 1,
+      'mouse.button.right.held': 0,
+      'audio.low': 0.1,
+      'audio.mid': 0.2,
+      'audio.high': 0.3,
+      'gauge.active': 0.4,
+    })[name] ?? 0);
+    const { deps, renderer } = makeDeps({
+      getCurrentState: () => ({
+        externalChannels: {
+          commit,
+          snapshot: { getFloat },
+        },
+      }),
+    });
+
+    executeAnimationFrame(16, deps, createAnimationLoopState());
+
+    expect(commit).toHaveBeenCalledTimes(1);
+    expect(renderer.setViewportFrame).toHaveBeenCalledWith(expect.objectContaining({
+      inputMouseX: 0.25,
+      inputMouseY: 0.75,
+      inputMouseButtons: 1,
+      inputAudioLow: 0.1,
+      inputAudioMid: 0.2,
+      inputAudioHigh: 0.3,
+      inputGaugeActive: 0.4,
+    }));
   });
 
   it('skips frame publication when no program is installed', () => {
