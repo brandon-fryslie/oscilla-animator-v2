@@ -1,36 +1,31 @@
 /**
- * RenderIR Types - v2 Format
+ * Render Contract Types
  *
  * See: design-docs/ for architecture and design notes
  *
- * This file defines the v2 shape of RenderIR used in production.
- * These types are the output of RenderAssembler and input to renderers.
+ * [LAW:one-source-of-truth] This module defines one canonical runtime->renderer
+ * contract (`DrawPrepRenderContract`) and one explicitly legacy debug payload
+ * (`LegacyRenderFrame`). They must not be conflated.
  *
- * KEY PRINCIPLES:
- * 1. Local-space geometry: Control points centered at (0,0), |p|≈O(1)
- * 2. World-space instances: position in [0,1], size as isotropic scalar
- * 3. Explicit transforms: translate/rotate/scale at instance level
- * 4. No shape interpretation in renderer: all resolution happens in RenderAssembler
+ * Canonical path:
+ * - Runtime publishes draw-prep sink descriptors.
+ * - Renderer applies model + VP transforms (matrix-space ownership).
  *
- * COORDINATE SPACE MODEL:
- * - Geometry (control points): Local space, centered at origin
- *   - Example: Regular pentagon vertices at radius 1.0
- *   - Independent of viewport, instance position, or size
- * - Instance transforms: World space [0,1] → viewport pixels
- *   - position: normalized [0,1] coordinates
- *   - size: isotropic scale in world units (combined with optional scale2)
- *   - rotation: radians
- *   - scale2: optional anisotropic vec2 scale
- *
- * RENDERING MODEL:
- * For each instance:
- *   ctx.translate(position.x * width, position.y * height);
- *   ctx.rotate(rotation);
- *   ctx.scale(size * scale2.x, size * scale2.y);
- *   drawPath(localSpaceGeometry);
- *
- * This makes all shapes respond uniformly to position/size/rotation modulators.
+ * Legacy debug path:
+ * - `LegacyRenderFrame` carries fully materialized draw payloads for debugger
+ *   and compatibility-only tooling.
  */
+
+/**
+ * Canonical draw-prep render boundary.
+ *
+ * [LAW:dataflow-not-control-flow] Runtime always publishes one sink-table
+ * payload shape; variability is encoded in table contents/count, not schema.
+ */
+export interface DrawPrepRenderContract {
+  readonly drawPrepSinkTableV1?: Uint32Array;
+  readonly drawPrepSinkTableWordCount: number;
+}
 
 /**
  * Path Style - Explicit styling for path rendering
@@ -169,10 +164,10 @@ export interface DrawPathInstancesOp {
 }
 
 /**
- * RenderFrameIR - Render frame structure (v2 format)
+ * LegacyRenderFrame - compatibility/debug render payload
  *
- * Contains fully-resolved draw operations.
- * No IR references, no shape descriptors, no slot IDs.
+ * This is non-canonical. Canonical runtime rendering uses Draw Prep sink
+ * tables and GPU-owned matrix transforms.
  *
  * The RenderAssembler (part of ScheduleExecutor) produces this by:
  * 1. Executing schedule → fill scalar banks, define field expr IDs
@@ -180,7 +175,7 @@ export interface DrawPathInstancesOp {
  * 3. Resolving shape handles → (topologyId, pointsBuffer, header metadata)
  * 4. Emitting this structure with concrete buffers only
  */
-export interface RenderFrameIR {
+export interface LegacyRenderFrame {
   readonly version: 2;
   readonly ops: readonly DrawOp[];
 }
@@ -200,12 +195,12 @@ export type DrawOp = DrawPathInstancesOp;
 /**
  * Canonical shared empty frame.
  *
- * [LAW:one-source-of-truth] One shared empty RenderFrameIR avoids duplicate
+ * [LAW:one-source-of-truth] One shared empty LegacyRenderFrame avoids duplicate
  * ad-hoc `{ version: 2, ops: [] }` construction across runtime/services.
  */
 export const EMPTY_DRAW_OPS: readonly DrawOp[] = Object.freeze([] as DrawOp[]);
 
-export const EMPTY_RENDER_FRAME: RenderFrameIR = Object.freeze({
+export const EMPTY_LEGACY_RENDER_FRAME: LegacyRenderFrame = Object.freeze({
   version: 2 as const,
   ops: EMPTY_DRAW_OPS,
 });

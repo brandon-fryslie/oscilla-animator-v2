@@ -1,5 +1,6 @@
 import type { RenderShapeBankSource } from './WebGPUShapeBankManager';
 import type { IndirectArgsReadbackSnapshot } from './WebGPUIndirectArgsInspector';
+import type { DrawPrepRenderContract } from '../types';
 import { isRuntimeConsoleEnabled } from '../../testing/test-params';
 import { reportRenderIssue } from '../render-issues';
 import {
@@ -20,7 +21,7 @@ import {
 } from '../rust/runtime-input-layout';
 import { getNavigatorGpu } from './gpu-api';
 
-interface RenderInput {
+interface RenderInput extends DrawPrepRenderContract {
   readonly shapeBank: RenderShapeBankSource;
   readonly width: number;
   readonly height: number;
