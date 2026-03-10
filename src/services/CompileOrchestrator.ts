@@ -318,9 +318,9 @@ export async function compileAndSwap(
 
   const program = result.program;
   const collectContinuityTargetOwnerBindings = (
-    schedule: Pick<ScheduleIR, 'steps'> | undefined,
+    schedule: ScheduleIR | undefined,
   ): ContinuityTargetOwnerBinding[] => {
-    if (!schedule?.steps) {
+    if (!schedule) {
       return [];
     }
     const bindings: ContinuityTargetOwnerBinding[] = [];
@@ -348,9 +348,12 @@ export async function compileAndSwap(
 
   // Get schedule info
   const newSchedule = program.schedule;
-  const newStateSlotCount = newSchedule?.stateSlotCount ?? 0;
-  const newStateMappings = newSchedule?.stateMappings ?? [];
-  const newEventSlotCount = newSchedule?.eventSlotCount ?? 0;
+  if (!newSchedule) {
+    throw new Error('[compile] program.schedule is missing - compiler/runtime contract violation');
+  }
+  const newStateSlotCount = newSchedule.stateSlotCount;
+  const newStateMappings = newSchedule.stateMappings;
+  const newEventSlotCount = newSchedule.eventSlotCount;
   const newValueExprCount = program.valueExprs?.nodes.length ?? 0;
 
   // For recompile: detect domain changes
@@ -359,7 +362,7 @@ export async function compileAndSwap(
   }
 
   // Get old state info for migration
-  const oldSchedule = state.currentProgram?.schedule;
+  const oldSchedule = state.currentProgram ? state.currentProgram.schedule : undefined;
   const oldStateMappings = oldSchedule?.stateMappings ?? [];
   const oldPrimitiveState = state.currentState?.state;
   const knownTargetOwnerBindings = [

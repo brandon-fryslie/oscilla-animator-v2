@@ -196,7 +196,7 @@ export class RuntimeService {
       getCurrentState: () => this.compileState.currentState,
       getCanvas: () => this.canvas,
       getRenderer: () => this.renderer,
-      getRuntimeHotpath: () => this.runtimeHotpath,
+      getArena: () => this.compileState.currentState?.arena ?? null,
       store: this.store,
       onStatsUpdate: (statsText) => this.statsSink?.(statsText),
     };
