@@ -183,6 +183,27 @@ export interface CompileOrchestratorDeps {
   onDomainChange?: (oldProgram: CompiledProgramIR, newProgram: CompiledProgramIR) => void;
 }
 
+function assertScheduleContract(schedule: CompiledProgramIR['schedule'] | undefined): ScheduleIR {
+  if (!schedule) {
+    throw new Error('[compile] program.schedule is missing - compiler/runtime contract violation');
+  }
+  // [LAW:single-enforcer] compileAndSwap is the runtime boundary that enforces
+  // required schedule contract fields for compiler output.
+  if (typeof schedule.stateSlotCount !== 'number') {
+    throw new Error('[compile] program.schedule.stateSlotCount is missing - compiler/runtime contract violation');
+  }
+  if (!Array.isArray(schedule.stateMappings)) {
+    throw new Error('[compile] program.schedule.stateMappings is missing - compiler/runtime contract violation');
+  }
+  if (typeof schedule.eventSlotCount !== 'number') {
+    throw new Error('[compile] program.schedule.eventSlotCount is missing - compiler/runtime contract violation');
+  }
+  if (!Array.isArray(schedule.steps)) {
+    throw new Error('[compile] program.schedule.steps is missing - compiler/runtime contract violation');
+  }
+  return schedule;
+}
+
 /**
  * Compile the current patch from store and swap to the new program.
  *
@@ -347,10 +368,7 @@ export async function compileAndSwap(
   }
 
   // Get schedule info
-  const newSchedule = program.schedule;
-  if (!newSchedule) {
-    throw new Error('[compile] program.schedule is missing - compiler/runtime contract violation');
-  }
+  const newSchedule = assertScheduleContract(program.schedule);
   const newStateSlotCount = newSchedule.stateSlotCount;
   const newStateMappings = newSchedule.stateMappings;
   const newEventSlotCount = newSchedule.eventSlotCount;
