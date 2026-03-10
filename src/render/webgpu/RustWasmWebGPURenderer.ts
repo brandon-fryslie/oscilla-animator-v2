@@ -541,6 +541,7 @@ export class WebGPURenderer {
   // https://github.com/brandon-fryslie/oscilla-animator-v2/issues/159
   private sinkTableDebugLogCounter = 0;
   private readonly emittedHealthWarningCodes = new Set<string>();
+  private hotpathInstallEpoch = 0;
   private installedHotpathPlanes: InstalledHotpathPlanes = {
     arenaWords: EMPTY_F32_WORDS,
     arenaWordCount: 0,
@@ -780,12 +781,13 @@ export class WebGPURenderer {
       sinkTableWords: input.drawPrepSinkTableV1,
       sinkTableWordCount: input.drawPrepSinkTableWordCount,
     };
-    // [LAW:one-source-of-truth] Render-path installs are cached once and reused
-    // by per-frame publication, so one canonical hotpath plane snapshot exists.
-    this.publishFrame(input);
+    // [LAW:one-source-of-truth] Render-path installs publish one canonical
+    // hotpath-plane snapshot + install epoch used by worker-side plane sync.
+    this.hotpathInstallEpoch = (this.hotpathInstallEpoch + 1) >>> 0;
+    this.publishFrame(input, this.hotpathInstallEpoch);
   }
 
-  private publishFrame(input: RenderInput): void {
+  private publishFrame(input: RenderInput, installEpoch: number): void {
     this.writeViewportFrame(input);
     const shapeBankWords = this.syncShapeBankPlane(input.shapeBank);
     const sinkTableWords = this.syncSinkTablePlane(
@@ -796,6 +798,13 @@ export class WebGPURenderer {
     this.maybeEmitRenderInputDebugSample(input.drawPrepSinkTableV1, sinkTableWords);
     this.setSinkAndShapeWordCounts(sinkTableWords, shapeBankWords);
     this.setInputWord(RUNTIME_INPUT_INDEX.arenaWords, arenaWords);
+    this.setInputWord(RUNTIME_INPUT_INDEX.installEpoch, installEpoch);
+    this.publishSignalWord();
+  }
+
+  private publishViewportFrame(frame: RuntimeViewportFrame): void {
+    this.writeViewportFrame(frame);
+    this.setInputWord(RUNTIME_INPUT_INDEX.installEpoch, this.hotpathInstallEpoch);
     this.publishSignalWord();
   }
 
@@ -811,22 +820,9 @@ export class WebGPURenderer {
 
   setViewportFrame(frame: RuntimeViewportFrame): void {
     this.assertRuntimeInputBoundaryReady();
-    const installed = this.installedHotpathPlanes;
-    // [LAW:single-enforcer] Runtime frame publication always runs through the
-    // same render envelope, with variability carried in installed plane values.
-    this.publishFrame({
-      ...frame,
-      arenaWords: installed.arenaWords,
-      arenaWordCount: installed.arenaWordCount,
-      shapeBank: {
-        data: installed.shapeBankData,
-        volatilePtr: installed.shapeBankVolatilePtr,
-        staticBoundary: installed.shapeBankStaticBoundary,
-        topologyIdByHandle: installed.shapeBankTopologyIdByHandle,
-      },
-      drawPrepSinkTableV1: installed.sinkTableWords,
-      drawPrepSinkTableWordCount: installed.sinkTableWordCount,
-    });
+    // [LAW:single-enforcer] Per-frame publication marshals viewport/input
+    // fields only; hotpath plane installation is owned by render() boundary.
+    this.publishViewportFrame(frame);
   }
 
   resizeCanvas(width: number, height: number): void {
