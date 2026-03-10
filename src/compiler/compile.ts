@@ -726,7 +726,7 @@ function convertLinkedIRToProgram(
     // We use canonical block IDs directly for provenance/debug joins.
     const blocks = acyclicPatch.blocks;
     const debugBlockIds = blocks.map((block) => toBlockId(block.id));
-    const resolveDebugBlockId = (index: number): PortBindingIR['block'] => {
+    const resolveDebugBlockId = (index: number): DebugPortBinding['block'] => {
       const blockId = debugBlockIds[index];
       if (blockId === undefined) {
         throw new Error(`debug index invariant violation: missing block for index ${index}`);
