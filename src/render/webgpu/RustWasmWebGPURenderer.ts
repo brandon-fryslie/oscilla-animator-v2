@@ -116,7 +116,31 @@ export interface SinkTableDebugSample {
 type WorkerAckDisposition =
   | { readonly kind: 'success' }
   | { readonly kind: 'ignore' }
-  | { readonly kind: 'fail'; readonly error: Error; readonly fatal: boolean };
+  | {
+    readonly kind: 'fail';
+    readonly error: Error;
+    readonly fatal: boolean;
+    readonly code: string;
+    readonly stage: string;
+    readonly message: string;
+  };
+
+interface RendererFatalRecord {
+  readonly code: string;
+  readonly stage: string;
+  readonly message: string;
+  readonly timestamp: number;
+  readonly cause: Error;
+}
+
+interface RendererFatalTransition {
+  readonly code: string;
+  readonly stage: string;
+  readonly message: string;
+  readonly timestamp: number;
+  readonly cause: Error;
+  readonly terminationPolicy: 'keep-worker-alive' | 'terminate-worker';
+}
 
 const DEFAULT_BOOTSTRAP_CONFIG: RustRendererBootstrapConfig = Object.freeze({
   maxParticles: 65_536,
@@ -399,16 +423,33 @@ function classifyWorkerAckMessage(
     return { kind: 'success' };
   }
   if (payload.type === 'FATAL_ERROR') {
-    return { kind: 'fail', error: new Error(`[${payload.code}] ${payload.message}`), fatal: true };
+    return {
+      kind: 'fail',
+      error: new Error(`[${payload.code}] ${payload.message}`),
+      fatal: true,
+      code: payload.code,
+      stage: 'WORKER',
+      message: payload.message,
+    };
   }
   if (payload.type === 'DEVICE_LOST') {
-    return { kind: 'fail', error: new Error(`[${payload.code}] ${payload.reason}`), fatal: true };
+    return {
+      kind: 'fail',
+      error: new Error(`[${payload.code}] ${payload.reason}`),
+      fatal: true,
+      code: payload.code,
+      stage: 'WORKER',
+      message: payload.reason,
+    };
   }
   if (payload.type === 'ENGINE_ERROR') {
     return {
       kind: 'fail',
-      error: new Error(`[${payload.source}] ${payload.message} @ ${payload.location}`),
+      error: new Error(`[${payload.source}] ${payload.message}${payload.location ? ` @ ${payload.location}` : ''}`),
       fatal: payload.fatal,
+      code: payload.source,
+      stage: payload.location,
+      message: payload.message,
     };
   }
   if (payload.type === 'SCHEDULER_HEARTBEAT' || payload.type === 'RUNTIME_EVENT') {
@@ -419,6 +460,9 @@ function classifyWorkerAckMessage(
   return {
     kind: 'fail',
     fatal: true,
+    code: 'WORKER_PROTOCOL_VIOLATION',
+    stage: expectedSuccessType,
+    message: `expected ${expectedSuccessType}, got ${payload.type}`,
     error: new Error(
       `Rust renderer worker protocol violation: expected ${expectedSuccessType}, got ${payload.type}`,
     ),
@@ -465,6 +509,7 @@ export class WebGPURenderer {
   private bootstrapped = false;
   private disposed = false;
   private fatalError: Error | null = null;
+  private fatalRecord: RendererFatalRecord | null = null;
   private lastResizeWidth = -1;
   private lastResizeHeight = -1;
   private latestTelemetry: RustRendererRuntimeTelemetry | null = null;
@@ -500,14 +545,37 @@ export class WebGPURenderer {
     );
   }
 
-  private markRendererFatal(error: Error): void {
-    // TODO(#182): Harden fatal-transition contract (idempotence, canonical
-    // fatal record, and boundary-owned cleanup/log emission).
-    // [LAW:single-enforcer] Fatal state transition policy should be enforced
-    // at one dedicated boundary helper.
-    // https://github.com/brandon-fryslie/oscilla-animator-v2/issues/182
+  private markRendererFatal(transition: RendererFatalTransition): Error {
+    // [LAW:single-enforcer] Fatal transition mutation, record ownership, and
+    // terminal issue emission are enforced at one boundary helper.
+    const existingRecord = this.fatalRecord;
+    if (existingRecord !== null) {
+      return existingRecord.cause;
+    }
+    const fatalRecord: RendererFatalRecord = {
+      code: transition.code,
+      stage: transition.stage,
+      message: transition.message,
+      timestamp: transition.timestamp,
+      cause: transition.cause,
+    };
+    // [LAW:one-source-of-truth] Renderer fatal record is persisted once and
+    // reused for all post-fatal behavior.
+    this.fatalRecord = fatalRecord;
     this.lifecycleState = 'Lost';
-    this.fatalError = error;
+    this.fatalError = fatalRecord.cause;
+    reportRenderIssue('error', `[${fatalRecord.code}] ${fatalRecord.message}`, {
+      kind: 'rendererFatal',
+      code: fatalRecord.code,
+      stage: fatalRecord.stage,
+      message: fatalRecord.message,
+      timestamp: fatalRecord.timestamp,
+      cause: fatalRecord.cause,
+    });
+    if (transition.terminationPolicy === 'terminate-worker') {
+      this.worker.terminate();
+    }
+    return fatalRecord.cause;
   }
 
   private constructor(
@@ -687,7 +755,9 @@ export class WebGPURenderer {
         },
       });
     } finally {
-      this.worker.postMessage({ type: 'RESUME' } satisfies RustRendererWorkerInboundMessage);
+      if (!this.fatalError) {
+        this.worker.postMessage({ type: 'RESUME' } satisfies RustRendererWorkerInboundMessage);
+      }
     }
   }
 
@@ -945,14 +1015,17 @@ export class WebGPURenderer {
     await new Promise<void>((resolve, reject) => {
       let settled = false;
       const timeoutId = globalThis.setTimeout(() => {
-        // TODO(#184): Route timeout failure through shared await-ack failure
-        // helper to deduplicate markRendererFatal + reject behavior.
-        // https://github.com/brandon-fryslie/oscilla-animator-v2/issues/184
         settle(() => {
           const error = new Error(`Rust renderer worker timed out during ${options.context}`);
-          this.markRendererFatal(error);
-          this.worker.terminate();
-          reject(error);
+          const fatalError = this.markRendererFatal({
+            code: 'WORKER_ACK_TIMEOUT',
+            stage: options.context,
+            message: error.message,
+            timestamp: performance.now(),
+            cause: error,
+            terminationPolicy: 'terminate-worker',
+          });
+          reject(fatalError);
         });
       }, WORKER_RESPONSE_TIMEOUT_MS);
       const settle = (callback: () => void): void => {
@@ -974,24 +1047,35 @@ export class WebGPURenderer {
           settle(resolve);
           return;
         }
-        // TODO(#184): Deduplicate this terminal-failure settle path with
-        // onError/timeout handling via one helper in awaitWorkerAck.
-        // https://github.com/brandon-fryslie/oscilla-animator-v2/issues/184
         settle(() => {
           if (disposition.fatal) {
-            this.markRendererFatal(disposition.error);
+            const fatalError = this.markRendererFatal({
+              code: disposition.code,
+              stage: disposition.stage,
+              message: disposition.message,
+              timestamp: performance.now(),
+              cause: disposition.error,
+              terminationPolicy: 'keep-worker-alive',
+            });
+            reject(fatalError);
+            return;
           }
           reject(disposition.error);
         });
       };
       const onError = (event: ErrorEvent): void => {
-        // TODO(#184): Deduplicate this terminal-failure settle path with
-        // classified-message/timeout handling via one helper.
-        // https://github.com/brandon-fryslie/oscilla-animator-v2/issues/184
         settle(() => {
-          const error = new Error(event.message || `Rust renderer worker crashed during ${options.context}`);
-          this.markRendererFatal(error);
-          reject(error);
+          const message = event.message || `Rust renderer worker crashed during ${options.context}`;
+          const error = new Error(message);
+          const fatalError = this.markRendererFatal({
+            code: 'WORKER_ERROR',
+            stage: options.context,
+            message,
+            timestamp: performance.now(),
+            cause: error,
+            terminationPolicy: 'keep-worker-alive',
+          });
+          reject(fatalError);
         });
       };
       this.worker.addEventListener('message', onMessage);
@@ -1078,20 +1162,40 @@ export class WebGPURenderer {
     const payload = event.data;
     if (!payload) return;
     if (payload.type === 'ENGINE_ERROR') {
-      this.reportEngineError(payload.source, payload.message, payload.location, payload.fatal);
-      if (payload.fatal) {
-        this.markRendererFatal(new Error(`[${payload.source}] ${payload.message}`));
+      if (!payload.fatal) {
+        this.reportEngineError(payload.source, payload.message, payload.location, payload.fatal);
+        return;
       }
+      this.markRendererFatal({
+        code: payload.source,
+        stage: payload.location,
+        message: payload.message,
+        timestamp: performance.now(),
+        cause: new Error(`[${payload.source}] ${payload.message}${payload.location ? ` @ ${payload.location}` : ''}`),
+        terminationPolicy: 'keep-worker-alive',
+      });
       return;
     }
     if (payload.type === 'FATAL_ERROR') {
-      this.reportEngineError(payload.code, payload.message, 'WORKER', true);
-      this.markRendererFatal(new Error(`[${payload.code}] ${payload.message}`));
+      this.markRendererFatal({
+        code: payload.code,
+        stage: 'WORKER',
+        message: payload.message,
+        timestamp: performance.now(),
+        cause: new Error(`[${payload.code}] ${payload.message}`),
+        terminationPolicy: 'keep-worker-alive',
+      });
       return;
     }
     if (payload.type === 'DEVICE_LOST') {
-      this.reportEngineError(payload.code, payload.reason, 'WORKER', true);
-      this.markRendererFatal(new Error(`[${payload.code}] ${payload.reason}`));
+      this.markRendererFatal({
+        code: payload.code,
+        stage: 'WORKER',
+        message: payload.reason,
+        timestamp: performance.now(),
+        cause: new Error(`[${payload.code}] ${payload.reason}`),
+        terminationPolicy: 'keep-worker-alive',
+      });
       return;
     }
     if (payload.type === 'RUNTIME_EVENT') {
@@ -1103,7 +1207,14 @@ export class WebGPURenderer {
         emittedAtMs: payload.emittedAtMs,
       };
       if (payload.severity === 'fatal') {
-        this.markRendererFatal(new Error(`[${payload.code}] ${payload.message}`));
+        this.markRendererFatal({
+          code: payload.code,
+          stage: payload.stage,
+          message: payload.message,
+          timestamp: payload.emittedAtMs,
+          cause: new Error(`[${payload.code}] ${payload.message}`),
+          terminationPolicy: 'keep-worker-alive',
+        });
       }
       return;
     }
