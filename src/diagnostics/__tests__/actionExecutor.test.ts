@@ -13,6 +13,7 @@ import type {
   MuteDiagnosticAction,
   OpenDocsAction,
 } from '../types';
+import { createTestBlockMap } from '../../test-utils/block-factory';
 
 describe('actionExecutor', () => {
   let mockDeps: ActionExecutorDeps;
@@ -25,25 +26,19 @@ describe('actionExecutor', () => {
         removeBlock: vi.fn(),
         removeEdge: vi.fn(),
         patch: {
-          blocks: new Map([
-            [
-              'block-123',
-              {
-                id: 'block-123',
-                type: 'Gain',
-                inputPorts: new Map([['in', { id: 'in', combineMode: 'last' }]]),
-                outputPorts: new Map([['out', { id: 'out' }]]),
-              },
-            ],
-            [
-              'block-tr',
-              {
-                id: 'block-tr',
-                type: 'InfiniteTimeRoot',
-                inputPorts: new Map(),
-                outputPorts: new Map([['t', { id: 't' }]]),
-              },
-            ],
+          blocks: createTestBlockMap([
+            {
+              id: 'block-123' as any,
+              type: 'Gain',
+              inputPorts: new Map([['in', { id: 'in', combineMode: 'last' }]]),
+              outputPorts: new Map([['out', { id: 'out' }]]),
+            },
+            {
+              id: 'block-tr' as any,
+              type: 'InfiniteTimeRoot',
+              inputPorts: new Map(),
+              outputPorts: new Map([['t', { id: 't' }]]),
+            },
           ]),
           edges: [
             {
@@ -120,6 +115,22 @@ describe('actionExecutor', () => {
       expect(mockDeps.selectionStore.selectBlock).toHaveBeenCalledWith('block-123');
     });
 
+    it('fails block navigation when blockId is unknown', () => {
+      const action: GoToTargetAction = {
+        kind: 'goToTarget',
+        label: 'Go to Missing Block',
+        target: { kind: 'block', blockId: 'block-missing' },
+      };
+
+      const result = executeAction(action, mockDeps);
+
+      expect(result).toEqual({
+        success: false,
+        error: 'Block block-missing not found',
+      });
+      expect(mockDeps.selectionStore.selectBlock).not.toHaveBeenCalled();
+    });
+
     it('selects port target', () => {
       const action: GoToTargetAction = {
         kind: 'goToTarget',
@@ -133,6 +144,22 @@ describe('actionExecutor', () => {
       expect(mockDeps.selectionStore.selectPort).toHaveBeenCalledWith('block-123', 'in');
     });
 
+    it('fails port navigation when portId is unknown on an existing block', () => {
+      const action: GoToTargetAction = {
+        kind: 'goToTarget',
+        label: 'Go to Missing Port',
+        target: { kind: 'port', blockId: 'block-123', portId: 'missing-port' },
+      };
+
+      const result = executeAction(action, mockDeps);
+
+      expect(result).toEqual({
+        success: false,
+        error: 'Port missing-port not found on block block-123',
+      });
+      expect(mockDeps.selectionStore.selectPort).not.toHaveBeenCalled();
+    });
+
     it('selects block for timeRoot target', () => {
       const action: GoToTargetAction = {
         kind: 'goToTarget',
@@ -144,6 +171,22 @@ describe('actionExecutor', () => {
 
       expect(result.success).toBe(true);
       expect(mockDeps.selectionStore.selectBlock).toHaveBeenCalledWith('block-tr');
+    });
+
+    it('fails timeRoot navigation when blockId is unknown', () => {
+      const action: GoToTargetAction = {
+        kind: 'goToTarget',
+        label: 'Go to Missing TimeRoot',
+        target: { kind: 'timeRoot', blockId: 'block-missing' },
+      };
+
+      const result = executeAction(action, mockDeps);
+
+      expect(result).toEqual({
+        success: false,
+        error: 'Block block-missing not found',
+      });
+      expect(mockDeps.selectionStore.selectBlock).not.toHaveBeenCalled();
     });
 
     it('returns error for unsupported bus target', () => {
