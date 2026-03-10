@@ -89,7 +89,6 @@ const mocks = vi.hoisted(() => {
 vi.mock('../../render', () => ({
   assertWebGPUStartupContract: mocks.assertWebGPUStartupContract,
   createWebGPURenderer: mocks.createWebGPURenderer,
-  RenderBufferArena: mocks.RenderBufferArena,
   setRenderIssueReporter: mocks.setRenderIssueReporter,
   getRenderIssues: mocks.getRenderIssues,
   clearRenderIssues: mocks.clearRenderIssues,

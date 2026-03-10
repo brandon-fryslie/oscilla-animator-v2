@@ -118,6 +118,7 @@ export function executeAnimationFrame(
   const currentProgram = getCurrentProgram();
   const canvas = getCanvas();
   const renderer = getRenderer();
+  const arena = getArena();
 
   if (!canvas || !renderer || !arena) {
     throw new Error('AnimationLoop: WebGPU runtime contract requires canvas, renderer, and arena');
