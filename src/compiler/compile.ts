@@ -27,7 +27,7 @@ import type {
   ExprProvenanceIR,
   GeneratedComputeProgramIR,
 } from './ir/program';
-import type { ValueSlot } from './ir/Indices';
+import type { InstanceId, ValueSlot } from './ir/Indices';
 import { SCALAR_INSTANCE_ID } from './ir/Indices';
 import type { UnlinkedIRFragments } from './backend/lower-blocks';
 import type { ScheduleIR } from './backend/schedule-program';
@@ -710,7 +710,7 @@ function convertLinkedIRToProgram(
   // Build debug index
   const stepToBlock = new Map();
   const slotToBlock = new Map();
-  const ports: any[] = [];
+  const ports: unknown[] = [];
   const slotToPort = new Map();
   const blockMap = new Map(); // Map numeric BlockId -> string ID
   const blockDisplayNames = new Map(); // Map numeric BlockId -> user-facing name
@@ -812,7 +812,7 @@ function convertLinkedIRToProgram(
     stepToBlock,
     slotToBlock,
     exprToBlock,
-    ports,
+    ports: ports as CompiledProgramIR['debugIndex']['ports'],
     slotToPort,
     blockMap,
     blockDisplayNames,
@@ -1165,7 +1165,7 @@ function getStepTargetSlot(step: Step): ValueSlot | null {
 function inferFieldInstanceFromValueExprs(
   fieldId: ValueExprId,
   valueExprs: readonly ValueExpr[]
-): any {
+): InstanceId | undefined {
   const expr = valueExprs[fieldId as unknown as number];
   if (!expr) return undefined;
 
