@@ -7,7 +7,8 @@
 
 /**
  * Degrees-to-radians conversion constant.
- * // [LAW:one-source-of-truth] Angle conversion is centralized here.
+ * // [LAW:one-source-of-truth] Projection/runtime camera defaults share one
+ * // canonical degree->radian conversion constant at this boundary.
  */
 export const DEGREES_TO_RADIANS = Math.PI / 180;
 
