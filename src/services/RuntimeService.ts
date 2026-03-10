@@ -56,7 +56,6 @@ import {
 } from './DebugProbeProtocol';
 import { LocalDebugProbeTransport } from './LocalDebugProbeTransport';
 import { createWasmDebugProbeTransport } from './WasmDebugProbeTransport';
-import { RuntimeHotpathWorkerClient } from './RuntimeHotpathWorkerClient';
 import type { CompiledGpuArtifactBundle } from './compile-worker-protocol';
 import { shaderInspector } from './ShaderInspectorService';
 
@@ -98,8 +97,6 @@ export class RuntimeService {
   private canvas: HTMLCanvasElement | null = null;
   private renderer: WebGPURenderer | null = null;
   private arena: RenderBufferArena | null = null;
-  private runtimeHotpath: RuntimeHotpathWorkerClient | null = null;
-  private unbindExternalWriteBridge: (() => void) | null = null;
 
   private animationLoop: AnimationLoopController | null = null;
   private unsubCompileEnd: (() => void) | null = null;
@@ -254,12 +251,6 @@ export class RuntimeService {
       await this.publishRendererPipelines(next);
       // [LAW:single-enforcer] All compile/swap application goes through this queue.
       await compileAndSwap(this.compileDeps(), isInitialSwap, next);
-      // [LAW:single-enforcer] Runtime worker program ownership is published at
-      // one compile-swap boundary to keep runtime/renderer contracts in sync.
-      if (this.runtimeHotpath) {
-        this.runtimeHotpath.installProgram(this.compileState.currentProgram);
-        this.bindExternalWriteBridgeToRuntimeHotpath();
-      }
       this.asyncCompiler?.markSwapComplete();
     } catch (err) {
       this.asyncCompiler?.markSwapFailed(err);
@@ -274,22 +265,6 @@ export class RuntimeService {
         this.requestSwapFlush();
       }
     }
-  }
-
-  private bindExternalWriteBridgeToRuntimeHotpath(): void {
-    this.unbindExternalWriteBridge?.();
-    this.unbindExternalWriteBridge = null;
-    const runtimeHotpath = this.runtimeHotpath;
-    const currentState = this.compileState.currentState;
-    const writeBus = currentState?.externalChannels?.writeBus;
-    if (!runtimeHotpath || !writeBus) {
-      return;
-    }
-    // [LAW:single-enforcer] Worker runtime commits external input writes in
-    // hot-path mode, so UI write bus forwards to one owner boundary.
-    this.unbindExternalWriteBridge = runtimeHotpath.bindExternalWriteBus(
-      writeBus,
-    );
   }
 
   private async publishRendererPipelines(
@@ -477,17 +452,6 @@ export class RuntimeService {
         const message = error instanceof Error ? error.message : String(error);
         throw new Error(`RuntimeService: WebGPU renderer initialization failed: ${message}`);
       }
-      try {
-        // TODO(steel-thread): Delete RuntimeHotpathWorkerClient once renderer
-        // worker absorbs viewport/input cadence ownership on the canonical path.
-        this.runtimeHotpath = await RuntimeHotpathWorkerClient.create(
-          this.renderer.getRuntimeSharedPlanes(),
-          (error) => this.handleAnimationLoopError(error),
-        );
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        throw new Error(`RuntimeService: runtime hotpath worker initialization failed: ${message}`);
-      }
 
       // Check for test automation demo marker (set by ?loadDemoPatch= during pre-React parse)
       const testDemo = consumeTestDemoFilename();
@@ -599,8 +563,6 @@ export class RuntimeService {
     setRenderIssueReporter(null);
     this.animationLoop?.stop();
     this.animationLoop = null;
-    this.unbindExternalWriteBridge?.();
-    this.unbindExternalWriteBridge = null;
     this.stopSpyReadbackLoop();
     this.unsubSpyTracking?.();
     this.unsubSpyTracking = null;
@@ -621,12 +583,11 @@ export class RuntimeService {
     this.domainChangeDetector.cleanup();
     this.liveRecompile.cleanup();
     debugService.clear();
-    this.runtimeHotpath?.dispose();
-    this.runtimeHotpath = null;
     this.renderer?.dispose();
     this.renderer = null;
     this.arena = null;
     shaderInspector.clear();
+    this.arena = null;
     this.statsSink = null;
     this.runtimeReadySink = null;
   }
