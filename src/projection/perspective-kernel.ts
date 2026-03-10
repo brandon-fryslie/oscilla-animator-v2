@@ -17,6 +17,14 @@
 
 import type { ProjectionResult } from './ortho-kernel';
 import { assertFieldBufferSizes, assertRadiusBufferSizes } from './kernel-assertions';
+import {
+  CANONICAL_CAMERA_UP,
+  CANONICAL_CAMERA_WORLD_TARGET_Z,
+  CANONICAL_WORLD_CENTER_X,
+  CANONICAL_WORLD_CENTER_Y,
+  DEGREES_TO_RADIANS,
+  clipToNormalizedScreen,
+} from '../core/coordinate-system';
 
 // =============================================================================
 // Camera Params
@@ -98,12 +106,12 @@ export function deriveCamPos(
  * THE canonical default perspective camera.
  * Derived from spec: tilt=35°, yaw=0°, distance=2.0, target=(0.5, 0.5, 0)
  */
-const TILT_RAD = 35 * Math.PI / 180;
+const TILT_RAD = 35 * DEGREES_TO_RADIANS;
 const YAW_RAD = 0;
 const DISTANCE = 2.0;
-const TARGET_X = 0.5;
-const TARGET_Y = 0.5;
-const TARGET_Z = 0.0;
+const TARGET_X = CANONICAL_WORLD_CENTER_X;
+const TARGET_Y = CANONICAL_WORLD_CENTER_Y;
+const TARGET_Z = CANONICAL_CAMERA_WORLD_TARGET_Z;
 
 const [defaultCamX, defaultCamY, defaultCamZ] = deriveCamPos(
   TARGET_X, TARGET_Y, TARGET_Z,
@@ -117,10 +125,10 @@ export const PERSP_CAMERA_DEFAULTS: PerspectiveCameraParams = Object.freeze({
   camTargetX: TARGET_X,
   camTargetY: TARGET_Y,
   camTargetZ: TARGET_Z,
-  camUpX: 0.0,
-  camUpY: 1.0,
-  camUpZ: 0.0,
-  fovY: 45 * Math.PI / 180,
+  camUpX: CANONICAL_CAMERA_UP.x,
+  camUpY: CANONICAL_CAMERA_UP.y,
+  camUpZ: CANONICAL_CAMERA_UP.z,
+  fovY: 45 * DEGREES_TO_RADIANS,
   near: 0.01,
   far: 100.0,
 });
@@ -237,9 +245,9 @@ export function projectWorldToScreenPerspective(
   const projX = viewX / (viewZ * tanHalfFov);
   const projY = viewY / (viewZ * tanHalfFov);
 
-  // Map from [-1,1] clip space to [0,1] normalized screen space
-  out.screenX = projX * 0.5 + 0.5;
-  out.screenY = projY * 0.5 + 0.5;
+  // [LAW:one-source-of-truth] Clip-to-screen normalization routes through one helper.
+  out.screenX = clipToNormalizedScreen(projX);
+  out.screenY = clipToNormalizedScreen(projY);
 
   // Depth: linear map of viewZ from [near, far] → [0, 1]
   const range = camera.far - camera.near;
@@ -311,10 +319,10 @@ export function projectFieldPerspective(
       continue;
     }
 
-    // Perspective divide + map to [0,1]
+    // Perspective divide + map to normalized screen coordinates.
     const invViewZ = 1.0 / (viewZ * tanHalfFov);
-    outScreenPos[i * 2 + 0] = viewX * invViewZ * 0.5 + 0.5;
-    outScreenPos[i * 2 + 1] = viewY * invViewZ * 0.5 + 0.5;
+    outScreenPos[i * 2 + 0] = clipToNormalizedScreen(viewX * invViewZ);
+    outScreenPos[i * 2 + 1] = clipToNormalizedScreen(viewY * invViewZ);
 
     // Depth: linear [near, far] → [0, 1]
     outDepth[i] = (viewZ - near) / range;
