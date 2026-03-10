@@ -85,9 +85,6 @@ vi.mock('../../render', () => ({
   setRenderIssueReporter: mocks.setRenderIssueReporter,
   getRenderIssues: mocks.getRenderIssues,
   clearRenderIssues: mocks.clearRenderIssues,
-  RenderBufferArena: class {
-    init = vi.fn();
-  },
 }));
 
 vi.mock('../CompileOrchestrator', () => ({
