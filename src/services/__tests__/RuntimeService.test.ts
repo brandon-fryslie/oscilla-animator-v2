@@ -80,6 +80,12 @@ const mocks = vi.hoisted(() => {
 });
 
 vi.mock('../../render', () => ({
+  RenderBufferArena: class {
+    buffers = new Map();
+    init = mocks.renderBufferArenaInit;
+    registerBufferMetadata = vi.fn();
+    getBuffer = vi.fn((id: number) => this.buffers.get(id) ?? null);
+  },
   assertWebGPUStartupContract: mocks.assertWebGPUStartupContract,
   createWebGPURenderer: mocks.createWebGPURenderer,
   RenderBufferArena: class {

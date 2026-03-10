@@ -9,6 +9,21 @@
 import type { ValueExpr } from '../compiler/ir/value-expr';
 import type { ValueExprId } from '../compiler/ir/Indices';
 
+function readOwnString(value: object, key: 'kernelKind' | 'eventKind' | 'kind'): string | null {
+  const property = Object.getOwnPropertyDescriptor(value, key)?.value;
+  return typeof property === 'string' ? property : null;
+}
+
+function describeUnknownExprKind(value: unknown): string {
+  if (typeof value !== 'object' || value === null) {
+    return 'unknown';
+  }
+  return readOwnString(value, 'kernelKind')
+    ?? readOwnString(value, 'eventKind')
+    ?? readOwnString(value, 'kind')
+    ?? 'unknown';
+}
+
 /**
  * Return the child ValueExprIds referenced by a ValueExpr node.
  *
@@ -66,7 +81,7 @@ export function getValueExprChildren(expr: ValueExpr): readonly ValueExprId[] {
           return [expr.controlPoints, expr.tField];
         default: {
           const _exhaustive: never = expr;
-          throw new Error(`Unknown kernel kind: ${(_exhaustive as any).kernelKind}`);
+          throw new Error(`Unknown kernel kind: ${describeUnknownExprKind(_exhaustive)}`);
         }
       }
     }
@@ -84,14 +99,14 @@ export function getValueExprChildren(expr: ValueExpr): readonly ValueExprId[] {
           return [];
         default: {
           const _exhaustive: never = expr;
-          throw new Error(`Unknown event kind: ${(_exhaustive as any).eventKind}`);
+          throw new Error(`Unknown event kind: ${describeUnknownExprKind(_exhaustive)}`);
         }
       }
     }
 
     default: {
       const _exhaustive: never = expr;
-      throw new Error(`Unknown ValueExpr kind: ${(_exhaustive as any).kind}`);
+      throw new Error(`Unknown ValueExpr kind: ${describeUnknownExprKind(_exhaustive)}`);
     }
   }
 }

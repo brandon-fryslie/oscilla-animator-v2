@@ -178,7 +178,7 @@ interface ContinuityBufferResolverContext {
   baseBuffer: Float32Array;
   outputBuffer: Float32Array;
   slotToArena: ReadonlyMap<ValueSlot, ArenaSlotDescriptor>;
-  state: RuntimeState;
+  state: RuntimeState | null;
 }
 
 // [LAW:no-shared-mutable-globals] Resolver context is single-owner runtime scratch
@@ -189,7 +189,7 @@ const _continuityResolverContext: ContinuityBufferResolverContext = {
   baseBuffer: new Float32Array(0),
   outputBuffer: new Float32Array(0),
   slotToArena: new Map<ValueSlot, ArenaSlotDescriptor>(),
-  state: null as unknown as RuntimeState,
+  state: null,
 };
 const _continuityEmptyBaseBuffer = _continuityResolverContext.baseBuffer;
 const _continuityEmptyOutputBuffer = _continuityResolverContext.outputBuffer;
@@ -204,10 +204,13 @@ function clearContinuityResolverContext(): void {
   _continuityResolverContext.baseBuffer = _continuityEmptyBaseBuffer;
   _continuityResolverContext.outputBuffer = _continuityEmptyOutputBuffer;
   _continuityResolverContext.slotToArena = _continuityEmptySlotMap;
-  _continuityResolverContext.state = null as unknown as RuntimeState;
+  _continuityResolverContext.state = null;
 }
 
 function resolveContinuityBuffer(slot: ValueSlot): Float32Array {
+  if (_continuityResolverContext.state === null) {
+    throw new Error('resolveContinuityBuffer: runtime state is not bound');
+  }
   if (slot === _continuityResolverContext.baseSlot) return _continuityResolverContext.baseBuffer;
   if (slot === _continuityResolverContext.outputSlot) return _continuityResolverContext.outputBuffer;
   return resolveNumericBuffer(
@@ -494,8 +497,8 @@ function executePhase1Step(context: ExecuteFrameContext, step: Step): void {
     case 'eventDispatch': {
       enterRuntimeFrameSegment(context.state, 'phase1-event-dispatch');
       context.eventDispatchSeen = true;
-      const fired = evaluateValueExprEvent(step.expr as any, context.program.valueExprs, context.state, context.program, context.pureFnContext);
-      if (fired) context.state.eventScalars[step.target as number] = 1;
+      const fired = evaluateValueExprEvent(step.expr, context.program.valueExprs, context.state, context.program, context.pureFnContext);
+      if (fired) context.state.eventScalars[step.target] = 1;
       return;
     }
     case 'materialize': {
@@ -559,10 +562,10 @@ function runDebugFieldMaterialization(context: ExecuteFrameContext): void {
 }
 
 function applyStateWriteStep(context: ExecuteFrameContext, step: Extract<Step, { kind: 'stateWrite' }>): void {
-  const mapping = context.stateSlotToMapping.get(step.stateSlot as number);
+  const mapping = context.stateSlotToMapping.get(step.stateSlot);
   const stride = mapping?.stride ?? 1;
   const values = materializeValueExpr(
-    step.value as any,
+    step.value,
     context.program.valueExprs,
     SCALAR_INSTANCE_ID,
     1,
@@ -580,14 +583,14 @@ function applyStateWriteStep(context: ExecuteFrameContext, step: Extract<Step, {
 }
 
 function applyFieldStateWriteStep(context: ExecuteFrameContext, step: Extract<Step, { kind: 'fieldStateWrite' }>): void {
-  const mapping = context.stateSlotToMapping.get(step.stateSlot as number);
+  const mapping = context.stateSlotToMapping.get(step.stateSlot);
   if (!mapping || mapping.instanceId === undefined) {
     throw new Error('fieldStateWrite: missing field state mapping for slot ' + step.stateSlot);
   }
   const count = mapping.laneCount;
   if (count === 0) return;
   const tempBuffer = materializeValueExpr(
-    step.value as any,
+    step.value,
     context.program.valueExprs,
     makeInstanceId(String(mapping.instanceId)),
     count,
@@ -597,12 +600,12 @@ function applyFieldStateWriteStep(context: ExecuteFrameContext, step: Extract<St
     MATERIALIZE_SCRATCH,
     context.pureFnContext,
   );
-  const exprNode = context.valueExprs[step.value as number];
+  const exprNode = context.valueExprs[step.value];
   const srcStride = payloadStride(exprNode.type.payload);
   const copyStride = Math.min(srcStride, mapping.stride);
-  const src = tempBuffer as Float32Array;
+  const src = tempBuffer;
   for (let lane = 0; lane < count; lane++) {
-    const dstLaneBase = (step.stateSlot as number) + lane * mapping.stride;
+    const dstLaneBase = step.stateSlot + lane * mapping.stride;
     const srcLaneBase = lane * srcStride;
     for (let c = 0; c < copyStride; c++) {
       context.state.stateWrite![dstLaneBase + c] = applyStateWritePolicy(mapping, src[srcLaneBase + c] ?? 0);
