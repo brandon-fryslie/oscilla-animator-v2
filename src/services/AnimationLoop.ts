@@ -7,7 +7,7 @@
 
 import { assertSchedulePhaseBoundaryStateReads } from '../runtime';
 import { RenderBufferArena, type WebGPURenderer } from '../render';
-import type { CompiledProgramIR } from '../runtime/ir';
+import type { CompiledProgramIR } from '../compiler/ir/program';
 import type { RuntimeState } from '../runtime/RuntimeState';
 import type { RootStore } from '../stores';
 import { isRuntimeConsoleEnabled } from '../testing/test-params';
