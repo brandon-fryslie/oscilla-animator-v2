@@ -10,7 +10,7 @@ import type { InputPort, OutputPort, Patch } from './Patch';
 import { getBlockAddress, getOutputAddress, getInputAddress, getAllAddresses, getShorthandForOutput } from './addressing';
 import { resolveAddress, ResolvedAddress } from './address-resolution';
 import { normalizeCanonicalName } from '../core/canonical-name';
-import type { PortId } from '../types';
+import type { BlockId, PortId } from '../types';
 import { portId as toPortId } from '../types';
 
 /**
@@ -28,7 +28,7 @@ function normalizeAddressCanonicalName(address: string): string {
 function strictPortId(
   rawPortId: unknown,
   port: InputPort | OutputPort,
-  blockId: string,
+  blockId: BlockId,
   direction: 'input' | 'output'
 ): PortId {
   if (typeof rawPortId !== 'string') {
@@ -55,12 +55,30 @@ function strictPortId(
 
 function assertPortMap(
   ports: unknown,
-  blockId: string,
+  blockId: BlockId,
   direction: 'input' | 'output',
-): asserts ports is ReadonlyMap<unknown, InputPort | OutputPort> {
+): asserts ports is ReadonlyMap<unknown, unknown> {
   if (!(ports instanceof Map)) {
     throw new Error(
       `AddressRegistry invariant violation: ${direction}Ports is not a Map on block "${blockId}"`
+    );
+  }
+}
+
+function assertPortShape(
+  port: unknown,
+  blockId: BlockId,
+  direction: 'input' | 'output',
+): asserts port is InputPort | OutputPort {
+  if (typeof port !== 'object' || port === null) {
+    throw new Error(
+      `AddressRegistry invariant violation: ${direction} port entry is not an object on block "${blockId}"`
+    );
+  }
+  const rawId = Object.getOwnPropertyDescriptor(port, 'id')?.value;
+  if (typeof rawId !== 'string') {
+    throw new Error(
+      `AddressRegistry invariant violation: ${direction} port entry is missing string id on block "${blockId}"`
     );
   }
 }
@@ -120,10 +138,11 @@ export class AddressRegistry {
         byCanonical.set(addressToString(blockAddr), resolved);
       }
 
-      assertPortMap(block.outputPorts, String(block.id), 'output');
+      assertPortMap(block.outputPorts, block.id, 'output');
       // Output ports
       for (const [portId, port] of block.outputPorts) {
-        const typedPortId = strictPortId(portId, port, String(block.id), 'output');
+        assertPortShape(port, block.id, 'output');
+        const typedPortId = strictPortId(portId, port, block.id, 'output');
         const outAddr = getOutputAddress(block, typedPortId);
         const resolved = resolveAddress(patch, addressToString(outAddr));
         if (resolved) {
@@ -136,10 +155,11 @@ export class AddressRegistry {
         }
       }
 
-      assertPortMap(block.inputPorts, String(block.id), 'input');
+      assertPortMap(block.inputPorts, block.id, 'input');
       // Input ports
       for (const [portId, port] of block.inputPorts) {
-        const typedPortId = strictPortId(portId, port, String(block.id), 'input');
+        assertPortShape(port, block.id, 'input');
+        const typedPortId = strictPortId(portId, port, block.id, 'input');
         const inAddr = getInputAddress(block, typedPortId);
         const resolved = resolveAddress(patch, addressToString(inAddr));
         if (resolved) {
