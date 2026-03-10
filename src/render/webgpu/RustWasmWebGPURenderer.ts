@@ -56,6 +56,8 @@ interface RuntimeViewportFrame {
   readonly inputGaugeActive: number;
 }
 
+interface ValidatedRuntimeViewportFrame extends RuntimeViewportFrame {}
+
 export interface RuntimeEventBreadcrumb {
   readonly severity: 'error' | 'fatal';
   readonly code: string;
@@ -137,6 +139,30 @@ function assertPositiveCanvasDimension(value: number, field: string): number {
     );
   }
   return value;
+}
+
+function validateRuntimeViewportFrame(input: RuntimeViewportFrame): ValidatedRuntimeViewportFrame {
+  const width = assertPositiveCanvasDimension(input.width, 'width');
+  const height = assertPositiveCanvasDimension(input.height, 'height');
+  const zoom = assertFiniteRuntimeInput(input.zoom, 'zoom');
+  if (zoom <= 0) {
+    throw new Error(`Rust renderer input contract violation: zoom must be positive, got ${zoom}`);
+  }
+  return {
+    width,
+    height,
+    zoom,
+    panX: assertFiniteRuntimeInput(input.panX, 'panX'),
+    panY: assertFiniteRuntimeInput(input.panY, 'panY'),
+    timeMs: assertFiniteRuntimeInput(input.timeMs, 'timeMs'),
+    inputMouseX: assertFiniteRuntimeInput(input.inputMouseX, 'inputMouseX'),
+    inputMouseY: assertFiniteRuntimeInput(input.inputMouseY, 'inputMouseY'),
+    inputMouseButtons: assertFiniteRuntimeInput(input.inputMouseButtons, 'inputMouseButtons'),
+    inputAudioLow: assertFiniteRuntimeInput(input.inputAudioLow, 'inputAudioLow'),
+    inputAudioMid: assertFiniteRuntimeInput(input.inputAudioMid, 'inputAudioMid'),
+    inputAudioHigh: assertFiniteRuntimeInput(input.inputAudioHigh, 'inputAudioHigh'),
+    inputGaugeActive: assertFiniteRuntimeInput(input.inputGaugeActive, 'inputGaugeActive'),
+  };
 }
 
 const MAX_UINT32 = 0xFFFF_FFFF;
@@ -563,9 +589,7 @@ export class WebGPURenderer {
 
   render(input: RenderInput): void {
     this.assertRuntimeInputBoundaryReady();
-    if (!(input.drawPrepSinkTableV1 instanceof Uint32Array)) {
-      throw new Error('Rust renderer input contract violation: drawPrepSinkTableV1 must be Uint32Array');
-    }
+    this.assertRenderInputContract(input);
     this.writeViewportFrame(input);
     const shapeBankWords = this.syncShapeBankPlane(input.shapeBank);
     const sinkTableWords = this.syncSinkTablePlane(
@@ -779,40 +803,34 @@ export class WebGPURenderer {
     }
   }
 
+  private assertRenderInputContract(input: RenderInput): void {
+    if (!(input.drawPrepSinkTableV1 instanceof Uint32Array)) {
+      throw new Error('Rust renderer input contract violation: drawPrepSinkTableV1 must be Uint32Array');
+    }
+  }
+
   private writeViewportFrame(input: RuntimeViewportFrame): void {
     // [LAW:dataflow-not-control-flow] Runtime frame publication always executes
     // in the same order; contract validation fails fast at the boundary.
-    const width = assertPositiveCanvasDimension(input.width, 'width');
-    const height = assertPositiveCanvasDimension(input.height, 'height');
-    const zoom = assertFiniteRuntimeInput(input.zoom, 'zoom');
-    if (zoom <= 0) {
-      throw new Error(`Rust renderer input contract violation: zoom must be positive, got ${zoom}`);
-    }
-    const panX = assertFiniteRuntimeInput(input.panX, 'panX');
-    const panY = assertFiniteRuntimeInput(input.panY, 'panY');
-    const timeMs = assertFiniteRuntimeInput(input.timeMs, 'timeMs');
-    const inputMouseX = assertFiniteRuntimeInput(input.inputMouseX, 'inputMouseX');
-    const inputMouseY = assertFiniteRuntimeInput(input.inputMouseY, 'inputMouseY');
-    const inputMouseButtons = assertFiniteRuntimeInput(input.inputMouseButtons, 'inputMouseButtons');
-    const inputAudioLow = assertFiniteRuntimeInput(input.inputAudioLow, 'inputAudioLow');
-    const inputAudioMid = assertFiniteRuntimeInput(input.inputAudioMid, 'inputAudioMid');
-    const inputAudioHigh = assertFiniteRuntimeInput(input.inputAudioHigh, 'inputAudioHigh');
-    const inputGaugeActive = assertFiniteRuntimeInput(input.inputGaugeActive, 'inputGaugeActive');
+    const validated = validateRuntimeViewportFrame(input);
+    this.syncCanvasSize(validated.width, validated.height);
+    this.publishValidatedViewportFrame(validated);
+  }
 
-    this.syncCanvasSize(width, height);
-    this.inputWords[RUNTIME_INPUT_INDEX.width] = width;
-    this.inputWords[RUNTIME_INPUT_INDEX.height] = height;
-    this.inputWords[RUNTIME_INPUT_INDEX.zoom] = zoom;
-    this.inputWords[RUNTIME_INPUT_INDEX.panX] = panX;
-    this.inputWords[RUNTIME_INPUT_INDEX.panY] = panY;
-    this.inputWords[RUNTIME_INPUT_INDEX.timeMs] = timeMs;
-    this.inputWords[RUNTIME_INPUT_INDEX.mouseX] = inputMouseX;
-    this.inputWords[RUNTIME_INPUT_INDEX.mouseY] = inputMouseY;
-    this.inputWords[RUNTIME_INPUT_INDEX.mouseButtons] = inputMouseButtons;
-    this.inputWords[RUNTIME_INPUT_INDEX.audioLow] = inputAudioLow;
-    this.inputWords[RUNTIME_INPUT_INDEX.audioMid] = inputAudioMid;
-    this.inputWords[RUNTIME_INPUT_INDEX.audioHigh] = inputAudioHigh;
-    this.inputWords[RUNTIME_INPUT_INDEX.gaugeActive] = inputGaugeActive;
+  private publishValidatedViewportFrame(input: ValidatedRuntimeViewportFrame): void {
+    this.inputWords[RUNTIME_INPUT_INDEX.width] = input.width;
+    this.inputWords[RUNTIME_INPUT_INDEX.height] = input.height;
+    this.inputWords[RUNTIME_INPUT_INDEX.zoom] = input.zoom;
+    this.inputWords[RUNTIME_INPUT_INDEX.panX] = input.panX;
+    this.inputWords[RUNTIME_INPUT_INDEX.panY] = input.panY;
+    this.inputWords[RUNTIME_INPUT_INDEX.timeMs] = input.timeMs;
+    this.inputWords[RUNTIME_INPUT_INDEX.mouseX] = input.inputMouseX;
+    this.inputWords[RUNTIME_INPUT_INDEX.mouseY] = input.inputMouseY;
+    this.inputWords[RUNTIME_INPUT_INDEX.mouseButtons] = input.inputMouseButtons;
+    this.inputWords[RUNTIME_INPUT_INDEX.audioLow] = input.inputAudioLow;
+    this.inputWords[RUNTIME_INPUT_INDEX.audioMid] = input.inputAudioMid;
+    this.inputWords[RUNTIME_INPUT_INDEX.audioHigh] = input.inputAudioHigh;
+    this.inputWords[RUNTIME_INPUT_INDEX.gaugeActive] = input.inputGaugeActive;
   }
 
   private syncShapeBankPlane(shapeBank: RenderShapeBankSource): number {
