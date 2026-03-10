@@ -364,7 +364,7 @@ export class StepDebugStore {
     if (this.mode !== 'completed' || this.history.length === 0) return null;
 
     const blockAccum = new Map<string, {
-      blockId: BlockId | null;
+      blockId: StepSnapshot['blockId'];
       blockName: string;
       stepCount: number;
       anomalyCount: number;
@@ -388,7 +388,7 @@ export class StepDebugStore {
 
       const key = snap.blockName ?? '(system)';
       let acc = blockAccum.get(key);
-      if (!acc) {
+      if (acc === undefined) {
         acc = {
           blockId: snap.blockId,
           blockName: key,
@@ -403,10 +403,11 @@ export class StepDebugStore {
         };
         blockAccum.set(key, acc);
       }
+      if (acc === undefined) continue;
 
       acc.stepCount++;
       acc.anomalyCount += snap.anomalies.length;
-      if (snap.portId) acc.portNames.add(snap.portId as string);
+      if (snap.portId !== null) acc.portNames.add(String(snap.portId));
       if (snap.step) acc.stepKinds.add(snap.step.kind);
 
       for (const [, val] of snap.writtenSlots) {

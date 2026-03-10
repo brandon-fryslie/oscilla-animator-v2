@@ -6,9 +6,10 @@
  */
 
 import type { RuntimeState } from './RuntimeState';
-import type { CompiledProgramIR } from '../compiler/ir/program';
+import type { CompiledProgramIR, DebugPortId } from '../compiler/ir/program';
+import type { BlockIndex } from '../compiler/ir/BlockIndex';
 import type { ValueSlot } from '../compiler/ir/Indices';
-import type { BlockId, PortId } from '../types';
+import type { BlockId } from '../types';
 import type { SlotLookup } from './ExprAddressTable';
 import { getExprAddressTable } from './ExprAddressTable';
 import type { SlotValue, ValueAnomaly, LaneIdentity } from './StepDebugTypes';
@@ -116,8 +117,8 @@ export function detectAnomalies(
 function checkNumber(
   n: number,
   slot: ValueSlot,
-  blockId: BlockId | null,
-  portId: PortId | null,
+  blockId: BlockIndex | null,
+  portId: DebugPortId | null,
   out: ValueAnomaly[],
 ): void {
   if (Number.isNaN(n)) {
@@ -147,10 +148,14 @@ export function inspectBlockSlots(
   const addressTable = getExprAddressTable(program);
   const lookupMap = slotLookupMap ?? addressTable.slotLookup;
   const result = new Map<ValueSlot, SlotValue>();
+  const numericBlockId = resolveNumericBlockIndex(blockId, program);
+  if (numericBlockId === undefined) {
+    return result;
+  }
 
   // Find all slots belonging to this block
   for (const [slot, ownerBlockId] of program.debugIndex.slotToBlock) {
-    if (ownerBlockId !== blockId) continue;
+    if (ownerBlockId !== numericBlockId) continue;
 
     const lookup = lookupMap.get(slot);
     if (!lookup) continue;
@@ -159,6 +164,19 @@ export function inspectBlockSlots(
   }
 
   return result;
+}
+
+function resolveNumericBlockIndex(
+  blockId: BlockId,
+  program: CompiledProgramIR,
+): BlockIndex | undefined {
+  const blockIdStr = blockId as string;
+  for (const [numericBlockId, stringBlockId] of program.debugIndex.blockMap) {
+    if (stringBlockId === blockIdStr) {
+      return numericBlockId;
+    }
+  }
+  return undefined;
 }
 
 // =============================================================================
