@@ -591,9 +591,9 @@ export class WebGPURenderer {
   private indirectArgsCapacityRecords = 1;
 
   private instanceBuffer: GpuBuffer;
-  private instanceBindGroup: GpuBindGroup;
+  private instanceBindGroup!: GpuBindGroup;
   private instanceCapacity = 0;
-  private instanceStaging = new Float32Array(0);
+  private instanceStaging: Float32Array<ArrayBufferLike> = new Float32Array(0);
 
   private lastFrameTimeMs: number | null = null;
   // [LAW:one-source-of-truth] Renderer-owned frameIndex is the canonical swap
@@ -652,21 +652,13 @@ export class WebGPURenderer {
     this.indirectArgsInspector = new WebGPUIndirectArgsInspector(this.device);
 
     this.instanceBuffer = this.device.createBuffer({
-      size: MIN_INSTANCE_CAPACITY * INSTANCE_FLOATS * 4,
+      size: this.instanceBufferSizeBytes(MIN_INSTANCE_CAPACITY),
       usage: GPU_BUFFER_USAGE.STORAGE | GPU_BUFFER_USAGE.COPY_DST,
       mappedAtCreation: false,
     });
     this.instanceCapacity = MIN_INSTANCE_CAPACITY;
     this.instanceStaging = new Float32Array(this.instanceCapacity * INSTANCE_FLOATS);
-    this.instanceBindGroup = this.device.createBindGroup({
-      layout: this.pathPipeline.getBindGroupLayout(WEBGPU_RENDER_CONTRACT.instanceBindGroup),
-      entries: [
-        {
-          binding: WEBGPU_RENDER_CONTRACT.instanceBinding,
-          resource: { buffer: this.instanceBuffer },
-        },
-      ],
-    });
+    this.rebuildInstanceBindGroup();
 
     void this.device.lost.then((lostInfo: { reason: string; message: string }) => {
       this.fatalError = new Error(
@@ -1340,10 +1332,11 @@ export class WebGPURenderer {
       return;
     }
 
+    const previousStaging = this.instanceStaging;
     const nextCapacity = growPowerOfTwoCapacity(this.instanceCapacity, requiredCount);
 
     const nextBuffer = this.device.createBuffer({
-      size: nextCapacity * INSTANCE_FLOATS * 4,
+      size: this.instanceBufferSizeBytes(nextCapacity),
       usage: GPU_BUFFER_USAGE.STORAGE | GPU_BUFFER_USAGE.COPY_DST,
       mappedAtCreation: false,
     });
@@ -1351,7 +1344,24 @@ export class WebGPURenderer {
     this.instanceBuffer.destroy();
     this.instanceBuffer = nextBuffer;
     this.instanceCapacity = nextCapacity;
-    this.instanceStaging = new Float32Array(this.instanceCapacity * INSTANCE_FLOATS);
+    // [LAW:one-source-of-truth] instanceStaging is the canonical CPU-side
+    // packed payload for the in-flight frame; preserve already-packed rows
+    // when capacity grows mid-pack.
+    this.instanceStaging = this.createResizedInstanceStaging(previousStaging, this.instanceCapacity);
+    this.rebuildInstanceBindGroup();
+  }
+
+  private instanceBufferSizeBytes(capacity: number): number {
+    return capacity * INSTANCE_FLOATS * Float32Array.BYTES_PER_ELEMENT;
+  }
+
+  private createResizedInstanceStaging(previousStaging: Float32Array, nextCapacity: number): Float32Array {
+    const nextStaging = new Float32Array(nextCapacity * INSTANCE_FLOATS);
+    nextStaging.set(previousStaging);
+    return nextStaging;
+  }
+
+  private rebuildInstanceBindGroup(): void {
     this.instanceBindGroup = this.device.createBindGroup({
       layout: this.pathPipeline.getBindGroupLayout(WEBGPU_RENDER_CONTRACT.instanceBindGroup),
       entries: [
