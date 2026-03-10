@@ -84,7 +84,7 @@ const mocks = vi.hoisted(() => {
 vi.mock('../../render', () => ({
   RenderBufferArena: class {
     buffers = new Map();
-    init = vi.fn();
+    init = mocks.renderBufferArenaInit;
     registerBufferMetadata = vi.fn();
     getBuffer = vi.fn((id: number) => this.buffers.get(id) ?? null);
   },
@@ -93,9 +93,6 @@ vi.mock('../../render', () => ({
   setRenderIssueReporter: mocks.setRenderIssueReporter,
   getRenderIssues: mocks.getRenderIssues,
   clearRenderIssues: mocks.clearRenderIssues,
-  RenderBufferArena: class {
-    init = mocks.renderBufferArenaInit;
-  },
 }));
 
 vi.mock('../CompileOrchestrator', () => ({
