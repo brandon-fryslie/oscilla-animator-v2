@@ -26,7 +26,6 @@ import type {
   DrawPrepSinkIR,
   ExprProvenanceIR,
   GeneratedComputeProgramIR,
-  PortBindingIR,
 } from './ir/program';
 import type { InstanceId, ValueSlot } from './ir/Indices';
 import { SCALAR_INSTANCE_ID } from './ir/Indices';
@@ -709,14 +708,15 @@ function convertLinkedIRToProgram(
   });
 
   // Build debug index
+  type DebugPortBinding = CompiledProgramIR['debugIndex']['ports'][number];
   const stepToBlock = new Map();
   const slotToBlock = new Map();
-  const ports: PortBindingIR[] = [];
+  const ports: DebugPortBinding[] = [];
   const slotToPort = new Map();
   const blockMap = new Map(); // Map numeric BlockId -> string ID
   const blockDisplayNames = new Map(); // Map numeric BlockId -> user-facing name
-  const toDebugPortId = (index: number): PortBindingIR['port'] => index as unknown as PortBindingIR['port'];
-  const toDebugBlockId = (index: number): PortBindingIR['block'] => index as unknown as PortBindingIR['block'];
+  const toDebugPortId = (index: number): DebugPortBinding['port'] => index as unknown as DebugPortBinding['port'];
+  const toDebugBlockId = (index: number): DebugPortBinding['block'] => index as unknown as DebugPortBinding['block'];
 
   // Populate debug index from unlinkedIR.blockOutputs (provenance)
   if (unlinkedIR.blockOutputs) {
