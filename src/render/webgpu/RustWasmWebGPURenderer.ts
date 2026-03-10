@@ -545,22 +545,8 @@ export class WebGPURenderer {
     );
   }
 
-  private buildFatalTransition(
-    code: string,
-    stage: string,
-    message: string,
-    timestamp: number,
-    cause: Error,
-    terminationPolicy: RendererFatalTransition['terminationPolicy'],
-  ): RendererFatalTransition {
-    return {
-      code,
-      stage,
-      message,
-      timestamp,
-      cause,
-      terminationPolicy,
-    };
+  private buildFatalTransition(transition: RendererFatalTransition): RendererFatalTransition {
+    return transition;
   }
 
   private buildBracketedError(code: string, message: string, location?: string): Error {
@@ -568,90 +554,90 @@ export class WebGPURenderer {
   }
 
   private buildAckTimeoutFatalTransition(context: string, error: Error): RendererFatalTransition {
-    return this.buildFatalTransition(
-      'WORKER_ACK_TIMEOUT',
-      context,
-      error.message,
-      performance.now(),
-      error,
-      'terminate-worker',
-    );
+    return this.buildFatalTransition({
+      code: 'WORKER_ACK_TIMEOUT',
+      stage: context,
+      message: error.message,
+      timestamp: performance.now(),
+      cause: error,
+      terminationPolicy: 'terminate-worker',
+    });
   }
 
   private buildAckFailureFatalTransition(
     disposition: Extract<WorkerAckDisposition, { kind: 'fail'; fatal: boolean }>,
   ): RendererFatalTransition {
-    return this.buildFatalTransition(
-      disposition.code,
-      disposition.stage,
-      disposition.message,
-      performance.now(),
-      disposition.error,
-      'keep-worker-alive',
-    );
+    return this.buildFatalTransition({
+      code: disposition.code,
+      stage: disposition.stage,
+      message: disposition.message,
+      timestamp: performance.now(),
+      cause: disposition.error,
+      terminationPolicy: 'keep-worker-alive',
+    });
   }
 
   private buildWorkerErrorFatalTransition(context: string, message: string): RendererFatalTransition {
-    return this.buildFatalTransition(
-      'WORKER_ERROR',
-      context,
+    return this.buildFatalTransition({
+      code: 'WORKER_ERROR',
+      stage: context,
       message,
-      performance.now(),
-      new Error(message),
-      'keep-worker-alive',
-    );
+      timestamp: performance.now(),
+      cause: new Error(message),
+      terminationPolicy: 'keep-worker-alive',
+    });
   }
 
   private buildEngineFatalTransition(
     payload: Extract<RustRendererWorkerOutboundMessage, { type: 'ENGINE_ERROR' }>,
   ): RendererFatalTransition {
-    return this.buildFatalTransition(
-      payload.source,
-      payload.location,
-      payload.message,
-      performance.now(),
-      this.buildBracketedError(payload.source, payload.message, payload.location),
-      'keep-worker-alive',
-    );
+    return this.buildFatalTransition({
+      code: payload.source,
+      stage: payload.location,
+      message: payload.message,
+      timestamp: performance.now(),
+      cause: this.buildBracketedError(payload.source, payload.message, payload.location),
+      terminationPolicy: 'keep-worker-alive',
+    });
   }
 
   private buildFatalErrorTransition(
     payload: Extract<RustRendererWorkerOutboundMessage, { type: 'FATAL_ERROR' }>,
   ): RendererFatalTransition {
-    return this.buildFatalTransition(
-      payload.code,
-      'WORKER',
-      payload.message,
-      performance.now(),
-      this.buildBracketedError(payload.code, payload.message),
-      'keep-worker-alive',
-    );
+    return this.buildFatalTransition({
+      code: payload.code,
+      stage: 'WORKER',
+      message: payload.message,
+      timestamp: performance.now(),
+      cause: this.buildBracketedError(payload.code, payload.message),
+      terminationPolicy: 'keep-worker-alive',
+    });
   }
 
   private buildDeviceLostTransition(
     payload: Extract<RustRendererWorkerOutboundMessage, { type: 'DEVICE_LOST' }>,
   ): RendererFatalTransition {
-    return this.buildFatalTransition(
-      payload.code,
-      'WORKER',
-      payload.reason,
-      performance.now(),
-      this.buildBracketedError(payload.code, payload.reason),
-      'keep-worker-alive',
-    );
+    return this.buildFatalTransition({
+      code: payload.code,
+      stage: 'WORKER',
+      message: payload.reason,
+      timestamp: performance.now(),
+      cause: this.buildBracketedError(payload.code, payload.reason),
+      terminationPolicy: 'keep-worker-alive',
+    });
   }
 
   private buildRuntimeEventFatalTransition(
     payload: Extract<RustRendererWorkerOutboundMessage, { type: 'RUNTIME_EVENT' }>,
   ): RendererFatalTransition {
-    return this.buildFatalTransition(
-      payload.code,
-      payload.stage,
-      payload.message,
-      payload.emittedAtMs,
-      this.buildBracketedError(payload.code, payload.message),
-      'keep-worker-alive',
-    );
+    return this.buildFatalTransition({
+      code: payload.code,
+      stage: payload.stage,
+      message: payload.message,
+      timestamp: payload.emittedAtMs,
+      cause: this.buildBracketedError(payload.code, payload.message),
+      terminationPolicy: 'keep-worker-alive',
+    });
   }
 
   private markRendererFatal(transition: RendererFatalTransition): Error {
