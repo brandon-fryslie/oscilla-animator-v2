@@ -113,10 +113,36 @@ export interface SinkTableDebugSample {
   } | null;
 }
 
+type SinkTableFirstRecord = NonNullable<SinkTableDebugSample['firstRecord']>;
+
+const SINK_TABLE_FIRST_RECORD_FIELDS = Object.freeze([
+  { key: 'drawModeCode', offset: 0 },
+  { key: 'count', offset: 1 },
+  { key: 'instanceCount', offset: 2 },
+  { key: 'first', offset: 3 },
+  { key: 'baseVertex', offset: 4 },
+  { key: 'firstInstance', offset: 5 },
+  { key: 'shapeWordOffset', offset: 6 },
+  { key: 'materialId', offset: 7 },
+] satisfies ReadonlyArray<{ readonly key: keyof SinkTableFirstRecord; readonly offset: number }>);
+
 type WorkerAckDisposition =
   | { readonly kind: 'success' }
   | { readonly kind: 'ignore' }
   | { readonly kind: 'fail'; readonly error: Error; readonly fatal: boolean };
+
+type AwaitWorkerAckOptions = {
+  readonly successType: RustRendererWorkerOutboundMessage['type'];
+  readonly context: string;
+  readonly dispatch: () => void;
+};
+
+type AwaitWorkerAckState = {
+  settled: boolean;
+  timeoutId: ReturnType<typeof globalThis.setTimeout> | null;
+  onMessage: (event: MessageEvent<RustRendererWorkerOutboundMessage>) => void;
+  onError: (event: ErrorEvent) => void;
+};
 
 const DEFAULT_BOOTSTRAP_CONFIG: RustRendererBootstrapConfig = Object.freeze({
   maxParticles: 65_536,
@@ -836,61 +862,21 @@ export class WebGPURenderer {
     totalRecords: number,
     firstRecordBase: number,
   ): SinkTableDebugSample['firstRecord'] {
-    const recordWords = 8;
+    const recordWords = SINK_TABLE_FIRST_RECORD_FIELDS.length;
     const hasFirstRecord = totalRecords > 0 && wordCount >= firstRecordBase + recordWords;
     if (!hasFirstRecord) {
       return null;
     }
-    return {
-      drawModeCode: readRequiredSinkTableWord(
+    const entries = SINK_TABLE_FIRST_RECORD_FIELDS.map(({ key, offset }) => [
+      key,
+      readRequiredSinkTableWord(
         sinkTableWords,
         wordCount,
-        firstRecordBase + 0,
-        'sink-table-sample.firstRecord.drawModeCode',
+        firstRecordBase + offset,
+        `sink-table-sample.firstRecord.${key}`,
       ),
-      count: readRequiredSinkTableWord(
-        sinkTableWords,
-        wordCount,
-        firstRecordBase + 1,
-        'sink-table-sample.firstRecord.count',
-      ),
-      instanceCount: readRequiredSinkTableWord(
-        sinkTableWords,
-        wordCount,
-        firstRecordBase + 2,
-        'sink-table-sample.firstRecord.instanceCount',
-      ),
-      first: readRequiredSinkTableWord(
-        sinkTableWords,
-        wordCount,
-        firstRecordBase + 3,
-        'sink-table-sample.firstRecord.first',
-      ),
-      baseVertex: readRequiredSinkTableWord(
-        sinkTableWords,
-        wordCount,
-        firstRecordBase + 4,
-        'sink-table-sample.firstRecord.baseVertex',
-      ),
-      firstInstance: readRequiredSinkTableWord(
-        sinkTableWords,
-        wordCount,
-        firstRecordBase + 5,
-        'sink-table-sample.firstRecord.firstInstance',
-      ),
-      shapeWordOffset: readRequiredSinkTableWord(
-        sinkTableWords,
-        wordCount,
-        firstRecordBase + 6,
-        'sink-table-sample.firstRecord.shapeWordOffset',
-      ),
-      materialId: readRequiredSinkTableWord(
-        sinkTableWords,
-        wordCount,
-        firstRecordBase + 7,
-        'sink-table-sample.firstRecord.materialId',
-      ),
-    };
+    ] as const);
+    return Object.fromEntries(entries) as SinkTableFirstRecord;
   }
 
   private emitSinkTableDebugSample(sample: SinkTableDebugSample): void {
@@ -936,70 +922,98 @@ export class WebGPURenderer {
   }
 
   private async awaitWorkerAck(
-    options: {
-      readonly successType: RustRendererWorkerOutboundMessage['type'];
-      readonly context: string;
-      readonly dispatch: () => void;
-    },
+    options: AwaitWorkerAckOptions,
   ): Promise<void> {
     await new Promise<void>((resolve, reject) => {
-      let settled = false;
-      const timeoutId = globalThis.setTimeout(() => {
-        // TODO(#184): Route timeout failure through shared await-ack failure
-        // helper to deduplicate markRendererFatal + reject behavior.
-        // https://github.com/brandon-fryslie/oscilla-animator-v2/issues/184
-        settle(() => {
-          const error = new Error(`Rust renderer worker timed out during ${options.context}`);
-          this.markRendererFatal(error);
-          this.worker.terminate();
-          reject(error);
-        });
-      }, WORKER_RESPONSE_TIMEOUT_MS);
-      const settle = (callback: () => void): void => {
-        if (settled) return;
-        settled = true;
-        globalThis.clearTimeout(timeoutId);
-        this.worker.removeEventListener('message', onMessage);
-        this.worker.removeEventListener('error', onError);
-        callback();
+      const state: AwaitWorkerAckState = {
+        settled: false,
+        timeoutId: null,
+        onMessage: () => undefined,
+        onError: () => undefined,
       };
-      const onMessage = (event: MessageEvent<RustRendererWorkerOutboundMessage>): void => {
-        const payload = event.data;
-        if (!payload) return;
-        const disposition = classifyWorkerAckMessage(payload, options.successType);
-        if (disposition.kind === 'ignore') {
-          return;
-        }
-        if (disposition.kind === 'success') {
-          settle(resolve);
-          return;
-        }
-        // TODO(#184): Deduplicate this terminal-failure settle path with
-        // onError/timeout handling via one helper in awaitWorkerAck.
-        // https://github.com/brandon-fryslie/oscilla-animator-v2/issues/184
-        settle(() => {
-          if (disposition.fatal) {
-            this.markRendererFatal(disposition.error);
-          }
-          reject(disposition.error);
-        });
-      };
-      const onError = (event: ErrorEvent): void => {
-        // TODO(#184): Deduplicate this terminal-failure settle path with
-        // classified-message/timeout handling via one helper.
-        // https://github.com/brandon-fryslie/oscilla-animator-v2/issues/184
-        settle(() => {
-          const error = new Error(event.message || `Rust renderer worker crashed during ${options.context}`);
-          this.markRendererFatal(error);
-          reject(error);
-        });
-      };
-      this.worker.addEventListener('message', onMessage);
-      this.worker.addEventListener('error', onError);
+      state.onMessage = this.createAckMessageHandler(options, state, resolve, reject);
+      state.onError = this.createAckErrorHandler(options.context, state, reject);
+      state.timeoutId = globalThis.setTimeout(
+        () => this.failWorkerAckTimeout(options.context, state, reject),
+        WORKER_RESPONSE_TIMEOUT_MS,
+      );
+      this.worker.addEventListener('message', state.onMessage);
+      this.worker.addEventListener('error', state.onError);
       // [LAW:single-enforcer] Worker request/ack timeout ownership lives in
       // one renderer boundary helper to avoid divergent wait logic.
       options.dispatch();
     });
+  }
+
+  private settleWorkerAck(state: AwaitWorkerAckState, callback: () => void): void {
+    if (state.settled) {
+      return;
+    }
+    state.settled = true;
+    if (state.timeoutId !== null) {
+      globalThis.clearTimeout(state.timeoutId);
+    }
+    this.worker.removeEventListener('message', state.onMessage);
+    this.worker.removeEventListener('error', state.onError);
+    callback();
+  }
+
+  private failWorkerAck(
+    state: AwaitWorkerAckState,
+    reject: (reason?: unknown) => void,
+    error: Error,
+    fatal: boolean,
+  ): void {
+    this.settleWorkerAck(state, () => {
+      if (fatal) {
+        this.markRendererFatal(error);
+      }
+      reject(error);
+    });
+  }
+
+  private failWorkerAckTimeout(
+    context: string,
+    state: AwaitWorkerAckState,
+    reject: (reason?: unknown) => void,
+  ): void {
+    const error = new Error(`Rust renderer worker timed out during ${context}`);
+    this.failWorkerAck(state, reject, error, true);
+    this.worker.terminate();
+  }
+
+  private createAckErrorHandler(
+    context: string,
+    state: AwaitWorkerAckState,
+    reject: (reason?: unknown) => void,
+  ): (event: ErrorEvent) => void {
+    return (event: ErrorEvent): void => {
+      const error = new Error(event.message || `Rust renderer worker crashed during ${context}`);
+      this.failWorkerAck(state, reject, error, true);
+    };
+  }
+
+  private createAckMessageHandler(
+    options: AwaitWorkerAckOptions,
+    state: AwaitWorkerAckState,
+    resolve: () => void,
+    reject: (reason?: unknown) => void,
+  ): (event: MessageEvent<RustRendererWorkerOutboundMessage>) => void {
+    return (event: MessageEvent<RustRendererWorkerOutboundMessage>): void => {
+      const payload = event.data;
+      if (!payload) {
+        return;
+      }
+      const disposition = classifyWorkerAckMessage(payload, options.successType);
+      if (disposition.kind === 'ignore') {
+        return;
+      }
+      if (disposition.kind === 'success') {
+        this.settleWorkerAck(state, resolve);
+        return;
+      }
+      this.failWorkerAck(state, reject, disposition.error, disposition.fatal);
+    };
   }
 
   private emitRuntimeHealthWarning(code: string, details: Record<string, unknown>): void {
@@ -1074,55 +1088,82 @@ export class WebGPURenderer {
     this.worker.postMessage(message);
   }
 
+  private handleEngineError(payload: Extract<RustRendererWorkerOutboundMessage, { type: 'ENGINE_ERROR' }>): void {
+    this.reportEngineError(payload.source, payload.message, payload.location, payload.fatal);
+    if (payload.fatal) {
+      this.markRendererFatal(new Error(`[${payload.source}] ${payload.message}`));
+    }
+  }
+
+  private handleFatalError(payload: Extract<RustRendererWorkerOutboundMessage, { type: 'FATAL_ERROR' }>): void {
+    this.reportEngineError(payload.code, payload.message, 'WORKER', true);
+    this.markRendererFatal(new Error(`[${payload.code}] ${payload.message}`));
+  }
+
+  private handleDeviceLost(payload: Extract<RustRendererWorkerOutboundMessage, { type: 'DEVICE_LOST' }>): void {
+    this.reportEngineError(payload.code, payload.reason, 'WORKER', true);
+    this.markRendererFatal(new Error(`[${payload.code}] ${payload.reason}`));
+  }
+
+  private handleRuntimeEvent(payload: Extract<RustRendererWorkerOutboundMessage, { type: 'RUNTIME_EVENT' }>): void {
+    this.latestRuntimeEvent = {
+      severity: payload.severity,
+      code: payload.code,
+      stage: payload.stage,
+      message: payload.message,
+      emittedAtMs: payload.emittedAtMs,
+    };
+    if (payload.severity === 'fatal') {
+      this.markRendererFatal(new Error(`[${payload.code}] ${payload.message}`));
+    }
+  }
+
+  private handleSchedulerHeartbeat(
+    payload: Extract<RustRendererWorkerOutboundMessage, { type: 'SCHEDULER_HEARTBEAT' }>,
+  ): void {
+    // [LAW:one-source-of-truth] Renderer mirrors scheduler state from
+    // heartbeat packets instead of deriving lifecycle state client-side.
+    this.lifecycleState = payload.state;
+    this.validateHeartbeatHealth(payload);
+    this.latestTelemetry = {
+      meanMs: payload.meanTickMs,
+      stdDevMs: payload.stdDevTickMs,
+      sampleCount: payload.sampleCount,
+      frameCount: payload.frameCount,
+      stageTimings: payload.telemetry.stageTimings,
+      dispatchCounters: payload.telemetry.dispatchCounters,
+      resourceStats: payload.telemetry.resourceStats,
+      lastEvent: this.latestRuntimeEvent,
+    };
+  }
+
+  private handleWorkerMessage(payload: RustRendererWorkerOutboundMessage): void {
+    switch (payload.type) {
+      case 'ENGINE_ERROR':
+        this.handleEngineError(payload);
+        return;
+      case 'FATAL_ERROR':
+        this.handleFatalError(payload);
+        return;
+      case 'DEVICE_LOST':
+        this.handleDeviceLost(payload);
+        return;
+      case 'RUNTIME_EVENT':
+        this.handleRuntimeEvent(payload);
+        return;
+      case 'SCHEDULER_HEARTBEAT':
+        this.handleSchedulerHeartbeat(payload);
+        return;
+      case 'BOOTSTRAP_SUCCESS':
+      case 'REBUILD_GPU_PIPELINES_SUCCESS':
+        return;
+    }
+  }
+
   private readonly handleRuntimeMessage = (event: MessageEvent<RustRendererWorkerOutboundMessage>): void => {
     const payload = event.data;
     if (!payload) return;
-    if (payload.type === 'ENGINE_ERROR') {
-      this.reportEngineError(payload.source, payload.message, payload.location, payload.fatal);
-      if (payload.fatal) {
-        this.markRendererFatal(new Error(`[${payload.source}] ${payload.message}`));
-      }
-      return;
-    }
-    if (payload.type === 'FATAL_ERROR') {
-      this.reportEngineError(payload.code, payload.message, 'WORKER', true);
-      this.markRendererFatal(new Error(`[${payload.code}] ${payload.message}`));
-      return;
-    }
-    if (payload.type === 'DEVICE_LOST') {
-      this.reportEngineError(payload.code, payload.reason, 'WORKER', true);
-      this.markRendererFatal(new Error(`[${payload.code}] ${payload.reason}`));
-      return;
-    }
-    if (payload.type === 'RUNTIME_EVENT') {
-      this.latestRuntimeEvent = {
-        severity: payload.severity,
-        code: payload.code,
-        stage: payload.stage,
-        message: payload.message,
-        emittedAtMs: payload.emittedAtMs,
-      };
-      if (payload.severity === 'fatal') {
-        this.markRendererFatal(new Error(`[${payload.code}] ${payload.message}`));
-      }
-      return;
-    }
-    if (payload.type === 'SCHEDULER_HEARTBEAT') {
-      // [LAW:one-source-of-truth] Renderer mirrors scheduler state from
-      // heartbeat packets instead of deriving lifecycle state client-side.
-      this.lifecycleState = payload.state;
-      this.validateHeartbeatHealth(payload);
-      this.latestTelemetry = {
-        meanMs: payload.meanTickMs,
-        stdDevMs: payload.stdDevTickMs,
-        sampleCount: payload.sampleCount,
-        frameCount: payload.frameCount,
-        stageTimings: payload.telemetry.stageTimings,
-        dispatchCounters: payload.telemetry.dispatchCounters,
-        resourceStats: payload.telemetry.resourceStats,
-        lastEvent: this.latestRuntimeEvent,
-      };
-    }
+    this.handleWorkerMessage(payload);
   };
 }
 
