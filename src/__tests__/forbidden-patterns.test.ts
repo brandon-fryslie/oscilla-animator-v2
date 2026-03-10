@@ -107,15 +107,24 @@ function registerRendererBoundaryGuards(): void {
 
 function registerCanonicalProjectionOwnershipGuards(): void {
   it('forbids canonical runtime hotpath modules from importing legacy CPU projection assembly', () => {
+    const canonicalHotpathScope = existingScope([
+      'src/services/RuntimeService.ts',
+      'src/services/AnimationLoop.ts',
+      'src/services/runtime-hotpath.worker.ts',
+      'src/services/runtime-hotpath-install.ts',
+      ACTIVE_RENDERER_FILE,
+    ]);
+
+    // [LAW:verifiable-goals] Guardrails must fail loudly when canonical scope
+    // becomes empty, preventing vacuous pass conditions.
+    expect(canonicalHotpathScope.length).toBeGreaterThan(0);
+    // [LAW:one-source-of-truth] Active renderer file is canonical for the
+    // hotpath render boundary and must remain in scope.
+    expect(canonicalHotpathScope).toContain(ACTIVE_RENDERER_FILE);
+
     expectNoMatches(
       "from\\s+['\"][^'\"]*(projection/ortho-kernel|projection/perspective-kernel|projection/fields)[^'\"]*['\"]",
-      existingScope([
-        'src/services/RuntimeService.ts',
-        'src/services/AnimationLoop.ts',
-        'src/services/runtime-hotpath.worker.ts',
-        'src/services/runtime-hotpath-install.ts',
-        ACTIVE_RENDERER_FILE,
-      ]),
+      canonicalHotpathScope,
     );
 
     // [LAW:one-way-deps] Canonical hotpath ownership points toward GPU sink
