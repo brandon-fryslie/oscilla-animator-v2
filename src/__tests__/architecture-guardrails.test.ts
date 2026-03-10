@@ -8,6 +8,157 @@ type Gate = {
   readonly maxCount: number;
 };
 
+const NON_TEST_SRC_GLOBS = ['*.ts', '*.tsx', '!**/*.test.*', '!**/__tests__/**'] as const;
+
+const LEGACY_KIND_DISPATCH_PATTERNS = [
+  "kind === 'slot'",
+  "kind === 'external'",
+  "kind === 'map'",
+  "kind === 'zip'",
+  "kind === 'stateRead'",
+  "kind === 'reduceField'",
+  "kind === 'eventRead'",
+  "kind === 'intrinsic'",
+  "kind === 'placement'",
+  "kind === 'broadcast'",
+  "kind === 'zipPromote'",
+  "kind === 'pathDerivative'",
+  "kind === 'pulse'",
+  "kind === 'wrap'",
+  "kind === 'combine'",
+  "kind === 'never'",
+] as const;
+
+const COMPILED_IR_FOUNDATION_GATES: readonly Gate[] = [
+  // W11
+  {
+    id: 'K-W11-1',
+    pattern: "export type \\{ IRBuilder \\} from './IRBuilder'",
+    scope: ['src/compiler/ir/index.ts'],
+    maxCount: 0,
+  },
+  {
+    id: 'K-W11-2',
+    pattern: "export type \\{ IRBuilder, Step, TimeModel, ValueExpr \\} from './ir'",
+    scope: ['src/compiler/index.ts'],
+    maxCount: 0,
+  },
+  {
+    id: 'K-W11-3',
+    pattern: "from '../compiler/ir/IRBuilder'",
+    scope: ['src'],
+    maxCount: 0,
+  },
+  // W5
+  {
+    id: 'K-W5-1',
+    pattern: 'Optional during migration',
+    scope: ['src/blocks/registry.ts'],
+    maxCount: 0,
+  },
+  {
+    id: 'K-W5-2',
+    pattern: 'Pure block fallback - allocate slot now',
+    scope: ['src/compiler/backend/binding-pass.ts'],
+    maxCount: 0,
+  },
+  {
+    id: 'K-W5-3',
+    pattern: '= builder\\.findStateSlot\\(',
+    scope: ['src/compiler/backend/binding-pass.ts'],
+    maxCount: 0,
+  },
+  // W6
+  {
+    id: 'K-W6-1',
+    pattern: 'runs in parallel with legacy scalar evaluators during migration',
+    scope: ['src/runtime/ValueExprScalarEvaluator.ts'],
+    maxCount: 0,
+  },
+  {
+    id: 'K-W6-2',
+    pattern: 'runs in parallel with legacy EventEvaluator during migration',
+    scope: ['src/runtime/ValueExprEventEvaluator.ts'],
+    maxCount: 0,
+  },
+  {
+    id: 'K-W6-3',
+    pattern: 'eventPrevPredicate',
+    scope: ['src/runtime/RuntimeState.ts'],
+    maxCount: 0,
+  },
+  // W2
+  {
+    id: 'K-W2-1',
+    pattern: 'program\\.slotMeta',
+    scope: ['src/runtime/ExprAddressTable.ts', 'src/runtime/ScheduleExecutor.ts', 'src/runtime/executeFrameStepped.ts'],
+    maxCount: 0,
+  },
+  {
+    id: 'K-W2-2',
+    pattern: 'jammed into slotMeta with a fake type',
+    scope: ['src/compiler/compile.ts'],
+    maxCount: 0,
+  },
+  // W7
+  {
+    id: 'K-W7-1',
+    pattern: 'assertF64Stride',
+    scope: ['src/runtime/ExprAddressTable.ts', 'src/runtime/ScheduleExecutor.ts', 'src/runtime/executeFrameStepped.ts'],
+    maxCount: 0,
+  },
+  // W12
+  {
+    id: 'K-W12-1',
+    pattern: '= program\\.arenaLayout\\[',
+    scope: ['src/runtime', 'src/services'],
+    maxCount: 0,
+  },
+  // P0 no-string-math
+  {
+    id: 'K-P0-1',
+    pattern: 'buildGeneratedComputeProgram',
+    scope: ['src/compiler/compile.ts'],
+    maxCount: 2,
+  },
+  {
+    id: 'K-P0-2',
+    pattern: 'generatedComputeProgram',
+    scope: ['src/compiler/ir/program.ts'],
+    maxCount: 1,
+  },
+  {
+    id: 'K-P0-3',
+    pattern: 'MAX_ACTIVE_LANES',
+    scope: ['src/compiler/compile.ts'],
+    maxCount: 0,
+  },
+  {
+    id: 'K-P0-4',
+    pattern: 'state_in:\\s*array<f32>',
+    scope: ['src/compiler/compile.ts'],
+    maxCount: 0,
+  },
+  {
+    id: 'K-P0-5',
+    pattern: "packingPreference:\\s*'aos'",
+    scope: ['src/compiler/compile.ts'],
+    maxCount: 0,
+  },
+  {
+    id: 'K-P0-6',
+    pattern: '\\bemitWgslModule\\s*\\(',
+    scope: ['src'],
+    maxCount: 0,
+  },
+  {
+    id: 'K-P0-7',
+    pattern: '\\bcreateDrawPrepWgslAst\\s*\\(',
+    scope: ['src'],
+    maxCount: 0,
+  },
+];
+
 function stripCommentOnly(lines: readonly string[]): string[] {
   return lines.filter((line) => {
     const firstColon = line.indexOf(':');
@@ -21,12 +172,10 @@ function filterAllowlist(lines: readonly string[], allowlist: readonly RegExp[])
   return lines.filter((line) => !allowlist.some((re) => re.test(line)));
 }
 
-describe('Architecture Guardrails', () => {
+function registerLegacyValueExprTypeRemovalOwnershipSuite(): void {
   describe('Legacy ValueExpr type removal ownership', () => {
-    const nonTestSrcGlobs = ['*.ts', '*.tsx', '!**/*.test.*', '!**/__tests__/**'];
-
     it('no production references to legacy expression unions', () => {
-      const matches = rgLines('\\b(SigExpr|FieldExpr|EventExpr)\\b', ['src'], nonTestSrcGlobs);
+      const matches = rgLines('\\b(SigExpr|FieldExpr|EventExpr)\\b', ['src'], NON_TEST_SRC_GLOBS);
       const filtered = filterAllowlist(stripCommentOnly(matches), [
         /ValueExpr/, // allow the canonical type name
         /architecture-guardrails\.test\.ts/,
@@ -35,18 +184,20 @@ describe('Architecture Guardrails', () => {
     });
 
     it('no production references to legacy expression ID aliases', () => {
-      const matches = rgLines('\\b(SigExprId|FieldExprId|EventExprId)\\b', ['src'], nonTestSrcGlobs);
+      const matches = rgLines('\\b(SigExprId|FieldExprId|EventExprId)\\b', ['src'], NON_TEST_SRC_GLOBS);
       const filtered = filterAllowlist(stripCommentOnly(matches), [/architecture-guardrails\.test\.ts/]);
       expect(filtered).toEqual([]);
     });
 
     it('no production deriveKind() calls', () => {
-      const matches = rgLines('\\bderiveKind\\(', ['src'], nonTestSrcGlobs);
+      const matches = rgLines('\\bderiveKind\\(', ['src'], NON_TEST_SRC_GLOBS);
       const filtered = filterAllowlist(stripCommentOnly(matches), [/architecture-guardrails\.test\.ts/]);
       expect(filtered).toEqual([]);
     });
   });
+}
 
+function registerValueExprFlatteningOwnershipSuite(): void {
   describe('ValueExpr flattening ownership', () => {
     const valueExprFile = ['src/compiler/ir/value-expr.ts'];
 
@@ -60,30 +211,13 @@ describe('Architecture Guardrails', () => {
       expect(stripCommentOnly(matches)).toEqual([]);
     });
   });
+}
 
+function registerLegacyKindDispatchOwnershipSuite(): void {
   describe('Legacy kind dispatch ownership', () => {
-    const forbiddenPatterns = [
-      "kind === 'slot'",
-      "kind === 'external'",
-      "kind === 'map'",
-      "kind === 'zip'",
-      "kind === 'stateRead'",
-      "kind === 'reduceField'",
-      "kind === 'eventRead'",
-      "kind === 'intrinsic'",
-      "kind === 'placement'",
-      "kind === 'broadcast'",
-      "kind === 'zipPromote'",
-      "kind === 'pathDerivative'",
-      "kind === 'pulse'",
-      "kind === 'wrap'",
-      "kind === 'combine'",
-      "kind === 'never'",
-    ] as const;
-
-    for (const pattern of forbiddenPatterns) {
+    for (const pattern of LEGACY_KIND_DISPATCH_PATTERNS) {
       it(`no production legacy dispatch pattern: ${pattern}`, () => {
-        const matches = rgLines(pattern, ['src'], ['*.ts', '*.tsx', '!**/*.test.*', '!**/__tests__/**']);
+        const matches = rgLines(pattern, ['src'], NON_TEST_SRC_GLOBS);
         const filtered = filterAllowlist(stripCommentOnly(matches), [
           /architecture-guardrails\.test\.ts/,
         ]);
@@ -91,149 +225,23 @@ describe('Architecture Guardrails', () => {
       });
     }
   });
+}
 
+function registerCompiledIrFoundationGateSuite(): void {
   describe('CompiledIR foundation gates ownership', () => {
-    const gates: readonly Gate[] = [
-      // W11
-      {
-        id: 'K-W11-1',
-        pattern: "export type \\{ IRBuilder \\} from './IRBuilder'",
-        scope: ['src/compiler/ir/index.ts'],
-        maxCount: 0,
-      },
-      {
-        id: 'K-W11-2',
-        pattern: "export type \\{ IRBuilder, Step, TimeModel, ValueExpr \\} from './ir'",
-        scope: ['src/compiler/index.ts'],
-        maxCount: 0,
-      },
-      {
-        id: 'K-W11-3',
-        pattern: "from '../compiler/ir/IRBuilder'",
-        scope: ['src'],
-        maxCount: 0,
-      },
-      // W5
-      {
-        id: 'K-W5-1',
-        pattern: 'Optional during migration',
-        scope: ['src/blocks/registry.ts'],
-        maxCount: 0,
-      },
-      {
-        id: 'K-W5-2',
-        pattern: 'Pure block fallback - allocate slot now',
-        scope: ['src/compiler/backend/binding-pass.ts'],
-        maxCount: 0,
-      },
-      {
-        id: 'K-W5-3',
-        pattern: '= builder\\.findStateSlot\\(',
-        scope: ['src/compiler/backend/binding-pass.ts'],
-        maxCount: 0,
-      },
-      // W6
-      {
-        id: 'K-W6-1',
-        pattern: 'runs in parallel with legacy scalar evaluators during migration',
-        scope: ['src/runtime/ValueExprScalarEvaluator.ts'],
-        maxCount: 0,
-      },
-      {
-        id: 'K-W6-2',
-        pattern: 'runs in parallel with legacy EventEvaluator during migration',
-        scope: ['src/runtime/ValueExprEventEvaluator.ts'],
-        maxCount: 0,
-      },
-      {
-        id: 'K-W6-3',
-        pattern: 'eventPrevPredicate',
-        scope: ['src/runtime/RuntimeState.ts'],
-        maxCount: 0,
-      },
-      // W2
-      {
-        id: 'K-W2-1',
-        pattern: 'program\\.slotMeta',
-        scope: ['src/runtime/ExprAddressTable.ts', 'src/runtime/ScheduleExecutor.ts', 'src/runtime/executeFrameStepped.ts'],
-        maxCount: 0,
-      },
-      {
-        id: 'K-W2-2',
-        pattern: 'jammed into slotMeta with a fake type',
-        scope: ['src/compiler/compile.ts'],
-        maxCount: 0,
-      },
-      // W7
-      {
-        id: 'K-W7-1',
-        pattern: 'assertF64Stride',
-        scope: ['src/runtime/ExprAddressTable.ts', 'src/runtime/ScheduleExecutor.ts', 'src/runtime/executeFrameStepped.ts'],
-        maxCount: 0,
-      },
-      // W12
-      {
-        id: 'K-W12-1',
-        pattern: '= program\\.arenaLayout\\[',
-        scope: ['src/runtime', 'src/services'],
-        maxCount: 0,
-      },
-      // P0 no-string-math
-      {
-        id: 'K-P0-1',
-        pattern: 'buildGeneratedComputeProgram',
-        scope: ['src/compiler/compile.ts'],
-        maxCount: 2,
-      },
-      {
-        id: 'K-P0-2',
-        pattern: 'generatedComputeProgram',
-        scope: ['src/compiler/ir/program.ts'],
-        maxCount: 1,
-      },
-      {
-        id: 'K-P0-3',
-        pattern: 'MAX_ACTIVE_LANES',
-        scope: ['src/compiler/compile.ts'],
-        maxCount: 0,
-      },
-      {
-        id: 'K-P0-4',
-        pattern: 'state_in:\\s*array<f32>',
-        scope: ['src/compiler/compile.ts'],
-        maxCount: 0,
-      },
-      {
-        id: 'K-P0-5',
-        pattern: "packingPreference:\\s*'aos'",
-        scope: ['src/compiler/compile.ts'],
-        maxCount: 0,
-      },
-      {
-        id: 'K-P0-6',
-        pattern: '\\bemitWgslModule\\s*\\(',
-        scope: ['src'],
-        maxCount: 0,
-      },
-      {
-        id: 'K-P0-7',
-        pattern: '\\bcreateDrawPrepWgslAst\\s*\\(',
-        scope: ['src'],
-        maxCount: 0,
-      },
-    ];
-
-    for (const gate of gates) {
+    for (const gate of COMPILED_IR_FOUNDATION_GATES) {
       it(`${gate.id} does not grow beyond baseline`, () => {
-        const count = rgLines(gate.pattern, gate.scope, [
-          '*.ts',
-          '*.tsx',
-          '!**/*.test.*',
-          '!**/__tests__/**',
-        ]).length;
+        const count = rgLines(gate.pattern, gate.scope, NON_TEST_SRC_GLOBS).length;
         // [LAW:single-enforcer] Each migration invariant is enforced in one canonical guardrail suite.
         expect(count).toBeLessThanOrEqual(gate.maxCount);
       });
     }
   });
+}
+
+describe('Architecture Guardrails', () => {
+  registerLegacyValueExprTypeRemovalOwnershipSuite();
+  registerValueExprFlatteningOwnershipSuite();
+  registerLegacyKindDispatchOwnershipSuite();
+  registerCompiledIrFoundationGateSuite();
 });
