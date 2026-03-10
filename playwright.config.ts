@@ -8,7 +8,7 @@ export default defineConfig({
   workers: process.env.CI ? 1 : undefined,
   reporter: 'html',
   use: {
-    baseURL: 'http://localhost:5174',
+    baseURL: 'http://localhost:5784',
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
     launchOptions: {
@@ -24,8 +24,8 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: 'pnpm run dev -- --port 5174 --strictPort',
-    port: 5174,
+    command: 'pnpm run dev -- --port 5784 --strictPort',
+    port: 5784,
     reuseExistingServer: !process.env.CI,
   },
 });
