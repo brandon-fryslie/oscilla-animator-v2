@@ -31,6 +31,7 @@ Documentation is organized by subsystem:
 ### `runtime/`
 Deep technical documentation of the runtime execution model:
 - `execution-model.md` - Frame execution lifecycle and two-phase pattern
+- `coordinate-system-canonical-spec.md` - Canonical world/clip/screen contract and camera orientation constants
 
 ### Patch DSL
 - `patch-dsl-hcl2-support.md` - Supported HCL2 subset, unsupported features, and string interpolation policy
