@@ -1,7 +1,6 @@
 /// <reference lib="webworker" />
 
 import {
-  attachRustRendererSharedArena,
   attachRustRendererSharedInput,
   attachRustRendererSharedShapeBank,
   attachRustRendererSharedSinkTable,
@@ -80,7 +79,6 @@ async function handleBootstrap(message: Extract<RustRendererWorkerInboundMessage
     await initRustRendererWasm();
     await initRustRendererEngine(message.canvas, message.config);
     attachRustRendererSharedInput(message.sharedInput);
-    attachRustRendererSharedArena(message.sharedArena);
     attachRustRendererSharedShapeBank(message.sharedShapeBank);
     attachRustRendererSharedSinkTable(message.sharedSinkTable);
     bootstrapped = true;

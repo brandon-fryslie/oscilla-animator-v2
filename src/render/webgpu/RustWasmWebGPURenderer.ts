@@ -4,7 +4,6 @@ import type { DrawPrepRenderContract } from '../types';
 import { isRuntimeConsoleEnabled } from '../../testing/test-params';
 import { reportRenderIssue } from '../render-issues';
 import {
-  computeRustRendererArenaWordCapacity,
   computeRustRendererShapeBankWordCapacity,
   computeRustRendererSinkTableWordCapacity,
   type RustRendererBootstrapConfig,
@@ -23,8 +22,6 @@ import {
 import { getNavigatorGpu } from './gpu-api';
 
 interface RenderInput extends DrawPrepRenderContract {
-  readonly arenaWords: Float32Array;
-  readonly arenaWordCount: number;
   readonly shapeBank: RenderShapeBankSource;
   readonly width: number;
   readonly height: number;
@@ -41,17 +38,6 @@ interface RenderInput extends DrawPrepRenderContract {
   readonly inputGaugeActive: number;
   readonly drawPrepSinkTableV1: Uint32Array;
   readonly drawPrepSinkTableWordCount: number;
-}
-
-interface InstalledHotpathPlanes {
-  readonly arenaWords: Float32Array;
-  readonly arenaWordCount: number;
-  readonly shapeBankData: Uint32Array;
-  readonly shapeBankVolatilePtr: number;
-  readonly shapeBankStaticBoundary: number;
-  readonly shapeBankTopologyIdByHandle: Uint32Array;
-  readonly sinkTableWords: Uint32Array;
-  readonly sinkTableWordCount: number;
 }
 
 type RuntimeViewportFrame = Pick<
@@ -180,8 +166,6 @@ function assertPositiveCanvasDimension(value: number, field: string): number {
 
 const MAX_UINT32 = 0xFFFF_FFFF;
 const RUNTIME_CONSOLE_ENABLED = isRuntimeConsoleEnabled();
-const EMPTY_U32_WORDS = new Uint32Array(0);
-const EMPTY_F32_WORDS = new Float32Array(0);
 // TODO(#185): Keep current timeout unchanged for this PR, but measure ack
 // latency distributions by context (`bootstrap` vs `rebuildGpuPipelines`) and
 // decide whether to split/configure timeout policy from real data.
@@ -520,7 +504,6 @@ export class WebGPURenderer {
   private readonly worker: Worker;
   private readonly signalWords: Int32Array;
   private readonly inputWords: Float32Array;
-  private readonly sharedArenaWords: Float32Array;
   private readonly sharedShapeBankWords: Uint32Array;
   private readonly sharedSinkTableWords: Uint32Array;
   private bootstrapped = false;
@@ -541,17 +524,6 @@ export class WebGPURenderer {
   // https://github.com/brandon-fryslie/oscilla-animator-v2/issues/159
   private sinkTableDebugLogCounter = 0;
   private readonly emittedHealthWarningCodes = new Set<string>();
-  private hotpathInstallEpoch = 0;
-  private installedHotpathPlanes: InstalledHotpathPlanes = {
-    arenaWords: EMPTY_F32_WORDS,
-    arenaWordCount: 0,
-    shapeBankData: EMPTY_U32_WORDS,
-    shapeBankVolatilePtr: 0,
-    shapeBankStaticBoundary: 0,
-    shapeBankTopologyIdByHandle: EMPTY_U32_WORDS,
-    sinkTableWords: EMPTY_U32_WORDS,
-    sinkTableWordCount: 0,
-  };
 
   private reportEngineError(
     source: string,
@@ -708,14 +680,12 @@ export class WebGPURenderer {
     worker: Worker,
     signalWords: Int32Array,
     inputWords: Float32Array,
-    sharedArenaWords: Float32Array,
     sharedShapeBankWords: Uint32Array,
     sharedSinkTableWords: Uint32Array,
   ) {
     this.worker = worker;
     this.signalWords = signalWords;
     this.inputWords = inputWords;
-    this.sharedArenaWords = sharedArenaWords;
     this.sharedShapeBankWords = sharedShapeBankWords;
     this.sharedSinkTableWords = sharedSinkTableWords;
     this.worker.addEventListener('message', this.handleRuntimeMessage);
@@ -731,11 +701,8 @@ export class WebGPURenderer {
       RUNTIME_INPUT_SIGNAL_WORDS * Int32Array.BYTES_PER_ELEMENT,
       RUNTIME_INPUT_FLOAT_WORDS,
     );
-    const arenaWordCapacity = computeRustRendererArenaWordCapacity(DEFAULT_BOOTSTRAP_CONFIG);
-    const sharedArena = new SharedArrayBuffer(arenaWordCapacity * Float32Array.BYTES_PER_ELEMENT);
     const shapeBankWordCapacity = computeRustRendererShapeBankWordCapacity(DEFAULT_BOOTSTRAP_CONFIG);
     const sinkTableWordCapacity = computeRustRendererSinkTableWordCapacity(DEFAULT_BOOTSTRAP_CONFIG);
-    const sharedArenaWords = new Float32Array(sharedArena);
     const sharedShapeBank = new SharedArrayBuffer(shapeBankWordCapacity * Uint32Array.BYTES_PER_ELEMENT);
     const sharedSinkTable = new SharedArrayBuffer(sinkTableWordCapacity * Uint32Array.BYTES_PER_ELEMENT);
     const sharedShapeBankWords = new Uint32Array(sharedShapeBank);
@@ -748,14 +715,12 @@ export class WebGPURenderer {
       worker,
       signalWords,
       inputWords,
-      sharedArenaWords,
       sharedShapeBankWords,
       sharedSinkTableWords,
     );
     await renderer.bootstrap(
       offscreenCanvas,
       sharedInput,
-      sharedArena,
       sharedShapeBank,
       sharedSinkTable,
       getRuntimeBootstrapConfig(),
@@ -768,43 +733,14 @@ export class WebGPURenderer {
     if (!(input.drawPrepSinkTableV1 instanceof Uint32Array)) {
       throw new Error('Rust renderer input contract violation: drawPrepSinkTableV1 must be Uint32Array');
     }
-    if (!(input.arenaWords instanceof Float32Array)) {
-      throw new Error('Rust renderer input contract violation: arenaWords must be Float32Array');
-    }
-    this.installedHotpathPlanes = {
-      arenaWords: input.arenaWords,
-      arenaWordCount: input.arenaWordCount,
-      shapeBankData: input.shapeBank.data,
-      shapeBankVolatilePtr: input.shapeBank.volatilePtr,
-      shapeBankStaticBoundary: input.shapeBank.staticBoundary,
-      shapeBankTopologyIdByHandle: input.shapeBank.topologyIdByHandle,
-      sinkTableWords: input.drawPrepSinkTableV1,
-      sinkTableWordCount: input.drawPrepSinkTableWordCount,
-    };
-    // [LAW:one-source-of-truth] Render-path installs publish one canonical
-    // hotpath-plane snapshot + install epoch used by worker-side plane sync.
-    this.hotpathInstallEpoch = (this.hotpathInstallEpoch + 1) >>> 0;
-    this.publishFrame(input, this.hotpathInstallEpoch);
-  }
-
-  private publishFrame(input: RenderInput, installEpoch: number): void {
     this.writeViewportFrame(input);
     const shapeBankWords = this.syncShapeBankPlane(input.shapeBank);
     const sinkTableWords = this.syncSinkTablePlane(
       input.drawPrepSinkTableV1,
       input.drawPrepSinkTableWordCount,
     );
-    const arenaWords = this.syncArenaPlane(input.arenaWords, input.arenaWordCount, sinkTableWords);
     this.maybeEmitRenderInputDebugSample(input.drawPrepSinkTableV1, sinkTableWords);
     this.setSinkAndShapeWordCounts(sinkTableWords, shapeBankWords);
-    this.setInputWord(RUNTIME_INPUT_INDEX.arenaWords, arenaWords);
-    this.setInputWord(RUNTIME_INPUT_INDEX.installEpoch, installEpoch);
-    this.publishSignalWord();
-  }
-
-  private publishViewportFrame(frame: RuntimeViewportFrame): void {
-    this.writeViewportFrame(frame);
-    this.setInputWord(RUNTIME_INPUT_INDEX.installEpoch, this.hotpathInstallEpoch);
     this.publishSignalWord();
   }
 
@@ -820,9 +756,10 @@ export class WebGPURenderer {
 
   setViewportFrame(frame: RuntimeViewportFrame): void {
     this.assertRuntimeInputBoundaryReady();
-    // [LAW:single-enforcer] Per-frame publication marshals viewport/input
-    // fields only; hotpath plane installation is owned by render() boundary.
-    this.publishViewportFrame(frame);
+    // [LAW:single-enforcer] Runtime viewport/input publication enters the
+    // renderer worker through one boundary method in canonical execution.
+    this.writeViewportFrame(frame);
+    this.publishSignalWord();
   }
 
   resizeCanvas(width: number, height: number): void {
@@ -838,7 +775,6 @@ export class WebGPURenderer {
     // https://github.com/brandon-fryslie/oscilla-animator-v2/issues/183
     return {
       sharedInput: this.signalWords.buffer as SharedArrayBuffer,
-      sharedArena: this.sharedArenaWords.buffer as SharedArrayBuffer,
       sharedShapeBank: this.sharedShapeBankWords.buffer as SharedArrayBuffer,
       sharedSinkTable: this.sharedSinkTableWords.buffer as SharedArrayBuffer,
     };
@@ -1113,34 +1049,6 @@ export class WebGPURenderer {
     return wordCount;
   }
 
-  private syncArenaPlane(arenaWords: Float32Array, arenaWordCount: number, sinkTableWordCount: number): number {
-    const wordCount = assertFiniteUint32(arenaWordCount, 'arenaWordCount');
-    if (arenaWords.length < wordCount) {
-      throw new Error(
-        'Rust renderer input contract violation: arenaWords shorter than arenaWordCount ' +
-          `(arenaLength=${arenaWords.length}, arenaWordCount=${wordCount})`,
-      );
-    }
-    if (wordCount > this.sharedArenaWords.length) {
-      throw new Error(
-        'Rust renderer input contract violation: compiler arena capacity exceeded ' +
-          `(arenaWordCount=${wordCount}, sharedCapacity=${this.sharedArenaWords.length})`,
-      );
-    }
-    // [LAW:no-silent-fallbacks] Sink-table descriptors require compiler-arena
-    // slot payload; absence must fail fast with explicit root-cause guidance.
-    if (sinkTableWordCount > 0 && wordCount === 0) {
-      throw new Error(
-        'Rust renderer input contract violation: sink table contains draw records but compiler arena payload is empty. ' +
-          'Root cause: runtime did not publish arena-backed slot values for draw-prep descriptors.',
-      );
-    }
-    if (wordCount > 0) {
-      this.sharedArenaWords.set(arenaWords.subarray(0, wordCount), 0);
-    }
-    return wordCount;
-  }
-
   private assertSinkTableInputCapacity(sinkTableWords: Uint32Array, wordCount: number): void {
     if (sinkTableWords.length < wordCount) {
       throw new Error(
@@ -1267,7 +1175,6 @@ export class WebGPURenderer {
   private async bootstrap(
     offscreenCanvas: OffscreenCanvas,
     sharedInput: SharedArrayBuffer,
-    sharedArena: SharedArrayBuffer,
     sharedShapeBank: SharedArrayBuffer,
     sharedSinkTable: SharedArrayBuffer,
     config: RustRendererBootstrapConfig,
@@ -1276,7 +1183,6 @@ export class WebGPURenderer {
       type: 'BOOTSTRAP',
       canvas: offscreenCanvas,
       sharedInput,
-      sharedArena,
       sharedShapeBank,
       sharedSinkTable,
       config,

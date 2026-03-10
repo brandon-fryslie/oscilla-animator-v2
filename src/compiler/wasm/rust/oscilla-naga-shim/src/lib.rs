@@ -209,6 +209,15 @@ fn make_error(message: impl Into<String>, location: impl Into<String>, path: imp
     }
 }
 
+fn is_valid_wgsl_identifier(identifier: &str) -> bool {
+    let mut chars = identifier.chars();
+    match chars.next() {
+        Some(first) if first == '_' || first.is_ascii_alphabetic() => {}
+        _ => return false,
+    }
+    chars.all(|ch| ch == '_' || ch.is_ascii_alphanumeric())
+}
+
 fn scalar_to_wgsl(scalar: NagaScalarKindIR) -> &'static str {
     match scalar {
         NagaScalarKindIR::F32 => "f32",
@@ -428,6 +437,15 @@ impl<'a> ExpressionEmitter<'a> {
                 }
             }
             NagaExpressionIR::Call { function, args } => {
+                // [LAW:single-enforcer] Validate IR-driven call targets once at
+                // the shim emission boundary before any WGSL string formatting.
+                if !is_valid_wgsl_identifier(function) {
+                    return Err(make_error(
+                        "Invalid call target identifier",
+                        format!("Expression [{expr_id}]"),
+                        format!("Function [{}]", self.function_ir.name),
+                    ));
+                }
                 let mut emitted_args: Vec<String> = Vec::with_capacity(args.len());
                 for arg in args {
                     emitted_args.push(self.emit(*arg)?);
