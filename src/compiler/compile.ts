@@ -26,6 +26,7 @@ import type {
   DrawPrepSinkIR,
   ExprProvenanceIR,
   GeneratedComputeProgramIR,
+  PortBindingIR,
 } from './ir/program';
 import type { InstanceId, ValueSlot } from './ir/Indices';
 import { SCALAR_INSTANCE_ID } from './ir/Indices';
@@ -710,10 +711,12 @@ function convertLinkedIRToProgram(
   // Build debug index
   const stepToBlock = new Map();
   const slotToBlock = new Map();
-  const ports: unknown[] = [];
+  const ports: PortBindingIR[] = [];
   const slotToPort = new Map();
   const blockMap = new Map(); // Map numeric BlockId -> string ID
   const blockDisplayNames = new Map(); // Map numeric BlockId -> user-facing name
+  const toDebugPortId = (index: number): PortBindingIR['port'] => index as unknown as PortBindingIR['port'];
+  const toDebugBlockId = (index: number): PortBindingIR['block'] => index as unknown as PortBindingIR['block'];
 
   // Populate debug index from unlinkedIR.blockOutputs (provenance)
   if (unlinkedIR.blockOutputs) {
@@ -737,7 +740,7 @@ function convertLinkedIRToProgram(
         const slot = ref.slot;
 
         // Generate stable port ID
-        const portIndex = portCounter++;
+        const portIndex = toDebugPortId(portCounter++);
 
         // [LAW:one-source-of-truth] Slot mapping is only for slot-backed outputs.
         // Discrete outputs are represented in ports metadata but do not require slot aliases.
@@ -748,7 +751,7 @@ function convertLinkedIRToProgram(
         // Add port binding info
         ports.push({
           port: portIndex,
-          block: blockIndex,
+          block: toDebugBlockId(blockIndex),
           portName: portId,
           direction: 'out',
           cardinality: card,
@@ -812,7 +815,7 @@ function convertLinkedIRToProgram(
     stepToBlock,
     slotToBlock,
     exprToBlock,
-    ports: ports as CompiledProgramIR['debugIndex']['ports'],
+    ports,
     slotToPort,
     blockMap,
     blockDisplayNames,
