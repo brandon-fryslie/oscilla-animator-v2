@@ -2,8 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { RuntimeHotpathInstallPlanes } from '../runtime-hotpath-install';
 
 const mocks = vi.hoisted(() => {
-  const compileWorkerCompile = vi.fn();
-  const compileWorkerDispose = vi.fn();
+  const compileWorkerCompile = vi.fn(), compileWorkerDispose = vi.fn();
   const compileAndSwap = vi.fn(async (..._args: any[]) => {});
   const buildRuntimeHotpathInstallPlanes = vi.fn<() => RuntimeHotpathInstallPlanes>(() => ({
     sinkTableWords: null,
@@ -25,9 +24,7 @@ const mocks = vi.hoisted(() => {
     rebuildGpuPipelines,
   }));
   const assertWebGPUStartupContract = vi.fn();
-  const setRenderIssueReporter = vi.fn();
-  const getRenderIssues = vi.fn(() => []);
-  const clearRenderIssues = vi.fn();
+  const setRenderIssueReporter = vi.fn(), getRenderIssues = vi.fn(() => []), clearRenderIssues = vi.fn();
   const savePatchToStorage = vi.fn();
   const loadPatchFromStorage = vi.fn(() => null);
   const consumeTestDemoFilename = vi.fn(() => null);
@@ -52,11 +49,8 @@ const mocks = vi.hoisted(() => {
     debugCommand: vi.fn(),
     debugPollPacket: vi.fn(() => null),
   }));
-  const setErrorReporter = vi.fn();
-  const markRuntimeBootstrapStarted = vi.fn();
-  const markRuntimeBootstrapSucceeded = vi.fn();
-  const markRuntimeBootstrapFailed = vi.fn();
-
+  const setErrorReporter = vi.fn(), markRuntimeBootstrapStarted = vi.fn();
+  const markRuntimeBootstrapSucceeded = vi.fn(), markRuntimeBootstrapFailed = vi.fn();
   return {
     compileWorkerCompile,
     compileWorkerDispose,
