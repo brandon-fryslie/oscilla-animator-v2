@@ -25,7 +25,7 @@ export interface AnimationLoopState {
 }
 
 export interface AnimationLoopDeps {
-  getCurrentProgram: () => CompiledProgramIR | null;
+  getCurrentProgram: () => any | null;
   getCurrentState: () => RuntimeState | null;
   getCanvas: () => HTMLCanvasElement | null;
   getRenderer: () => WebGPURenderer | null;
@@ -116,7 +116,6 @@ export function executeAnimationFrame(
   const currentProgram = getCurrentProgram();
   const canvas = getCanvas();
   const renderer = getRenderer();
-  const arena = getArena();
 
   if (!canvas || !renderer) {
     throw new Error('AnimationLoop: WebGPU runtime contract requires canvas, renderer, and arena');
