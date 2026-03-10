@@ -645,6 +645,9 @@ export class WebGPURenderer {
     // terminal issue emission are enforced at one boundary helper.
     const existingRecord = this.fatalRecord;
     if (existingRecord !== null) {
+      if (transition.terminationPolicy === 'terminate-worker') {
+        this.worker.terminate();
+      }
       return existingRecord.cause;
     }
     const fatalRecord: RendererFatalRecord = {
@@ -1294,12 +1297,17 @@ export class WebGPURenderer {
   private readonly handleRuntimeMessage = (event: MessageEvent<RustRendererWorkerOutboundMessage>): void => {
     const payload = event.data;
     if (!payload) return;
+    if (
+      this.fatalRecord !== null
+      && (payload.type === 'SCHEDULER_HEARTBEAT' || payload.type === 'RUNTIME_EVENT')
+    ) {
+      return;
+    }
     if (payload.type === 'ENGINE_ERROR') {
-      if (!payload.fatal) {
-        this.reportEngineError(payload.source, payload.message, payload.location, payload.fatal);
-        return;
+      this.reportEngineError(payload.source, payload.message, payload.location, payload.fatal);
+      if (payload.fatal) {
+        this.markRendererFatal(this.buildEngineFatalTransition(payload));
       }
-      this.markRendererFatal(this.buildEngineFatalTransition(payload));
       return;
     }
     if (payload.type === 'FATAL_ERROR') {
