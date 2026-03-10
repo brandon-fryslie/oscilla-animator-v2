@@ -27,7 +27,7 @@ import type {
   ExprProvenanceIR,
   GeneratedComputeProgramIR,
 } from './ir/program';
-import type { ValueSlot } from './ir/Indices';
+import type { InstanceId, ValueSlot } from './ir/Indices';
 import { SCALAR_INSTANCE_ID } from './ir/Indices';
 import type { UnlinkedIRFragments } from './backend/lower-blocks';
 import type { ScheduleIR } from './backend/schedule-program';
@@ -53,6 +53,7 @@ import { getValueExprChildren } from '../runtime/ValueExprTreeWalker';
 import { compileFrontend, type FrontendResult, type FrontendError } from './frontend';
 import type { CompileError } from './types';
 import { buildProgramTopologyTable, collectAllProgramTopologyIds } from './ir/program-topology';
+import { blockId as toBlockId, portId as toPortId } from '../types/compiler';
 
 import { registerAllBlocks } from '../blocks/all';
 
@@ -571,7 +572,7 @@ function convertLinkedIRToProgram(
   if (unlinkedIR.blockOutputs) {
     for (const [, outputs] of unlinkedIR.blockOutputs.entries()) {
       for (const [, ref] of outputs.entries()) {
-        const valueId = ref.id as unknown as ValueExprId;
+        const valueId = ref.id;
         const instanceId = inferFieldInstanceFromValueExprs(valueId, valueExprNodes);
         if (instanceId) {
           fieldSlotRegistry.set(ref.slot!, { fieldId: valueId, instanceId });
@@ -708,36 +709,49 @@ function convertLinkedIRToProgram(
   });
 
   // Build debug index
+  type DebugPortBinding = CompiledProgramIR['debugIndex']['ports'][number];
   const stepToBlock = new Map();
   const slotToBlock = new Map();
-  const ports: any[] = [];
+  const ports: DebugPortBinding[] = [];
   const slotToPort = new Map();
   const blockMap = new Map(); // Map numeric BlockId -> string ID
   const blockDisplayNames = new Map(); // Map numeric BlockId -> user-facing name
+  const toDebugPortId = (index: number): DebugPortBinding['port'] => toPortId(`p${index}`);
 
   // Populate debug index from unlinkedIR.blockOutputs (provenance)
   if (unlinkedIR.blockOutputs) {
     let portCounter = 0;
 
     // Build block map from acyclicPatch
-    // We need to look up blocks by index to get their string ID
-    const blocks = acyclicPatch.blocks || []; // AcyclicOrLegalGraph has blocks array
+    // We use canonical block IDs directly for provenance/debug joins.
+    const blocks = acyclicPatch.blocks;
+    const debugBlockIds = blocks.map((block) => toBlockId(block.id));
+    const resolveDebugBlockId = (index: number): PortBindingIR['block'] => {
+      const blockId = debugBlockIds[index];
+      if (blockId === undefined) {
+        throw new Error(`debug index invariant violation: missing block for index ${index}`);
+      }
+      return blockId;
+    };
     for (let i = 0; i < blocks.length; i++) {
-      blockMap.set(i, blocks[i].id);
-      blockDisplayNames.set(i, blocks[i].id || blocks[i].type);
+      const blockId = debugBlockIds[i];
+      const block = blocks[i];
+      blockMap.set(blockId, block.id);
+      blockDisplayNames.set(blockId, block.id || block.type);
     }
 
     for (const [blockIndex, outputs] of unlinkedIR.blockOutputs.entries()) {
+      const debugBlockId = resolveDebugBlockId(blockIndex);
       for (const [portId, ref] of outputs.entries()) {
-        const valueId = ref.id as unknown as ValueExprId;
-        const expr = valueExprNodes[valueId as unknown as number];
+        const valueId = ref.id;
+        const expr = valueExprNodes[valueId];
         if (!expr) continue;
         const card = requireInst(expr.type.extent.cardinality, 'cardinality').kind;
         const temp = requireInst(expr.type.extent.temporality, 'temporality').kind;
         const slot = ref.slot;
 
         // Generate stable port ID
-        const portIndex = portCounter++;
+        const portIndex = toDebugPortId(portCounter++);
 
         // [LAW:one-source-of-truth] Slot mapping is only for slot-backed outputs.
         // Discrete outputs are represented in ports metadata but do not require slot aliases.
@@ -748,7 +762,7 @@ function convertLinkedIRToProgram(
         // Add port binding info
         ports.push({
           port: portIndex,
-          block: blockIndex,
+          block: debugBlockId,
           portName: portId,
           direction: 'out',
           cardinality: card,
@@ -788,17 +802,17 @@ function convertLinkedIRToProgram(
 
   if (exprToBlock.size > 0) {
     // Map ValueExprId → portName via blockOutputs
-    const exprIdToPortName = new Map<number, string>();
+    const exprIdToPortName = new Map<ValueExprId, string>();
     if (unlinkedIR.blockOutputs) {
       for (const [, outputsByPort] of unlinkedIR.blockOutputs.entries()) {
         for (const [portName, ref] of outputsByPort.entries()) {
-          exprIdToPortName.set(ref.id as unknown as number, portName);
+          exprIdToPortName.set(ref.id, portName);
         }
       }
     }
 
     for (const [exprId, blockStringId] of exprToBlock) {
-      const portNameResult = exprIdToPortName.get(exprId as unknown as number);
+      const portNameResult = exprIdToPortName.get(exprId);
       const portName = portNameResult !== undefined ? portNameResult : null;
 
       exprProvenance.set(exprId, {
@@ -1165,8 +1179,8 @@ function getStepTargetSlot(step: Step): ValueSlot | null {
 function inferFieldInstanceFromValueExprs(
   fieldId: ValueExprId,
   valueExprs: readonly ValueExpr[]
-): any {
-  const expr = valueExprs[fieldId as unknown as number];
+): InstanceId | undefined {
+  const expr = valueExprs[fieldId];
   if (!expr) return undefined;
 
   // Only field-extent expressions have a meaningful instance.

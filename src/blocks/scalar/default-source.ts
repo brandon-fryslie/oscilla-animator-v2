@@ -75,8 +75,9 @@ function oneDefault(
       throw new Error(
         `DefaultSource: camera projection type requires explicit source (no meaningful default)`
       );
-    default:
-      throw new Error(`DefaultSource: unsupported payload type: ${(payload as any).kind}`);
+    default: {
+      throw new Error(`DefaultSource: unsupported payload type: ${payload.kind}`);
+    }
   }
 }
 
@@ -113,7 +114,7 @@ export function register(): void {
         );
       }
   
-      const payload = outType.payload as PayloadType;
+      const payload: PayloadType = outType.payload;
       const temporal = requireInst(outType.extent.temporality, 'temporality');
   
       // Event-typed defaults are represented as "never fire" event streams.

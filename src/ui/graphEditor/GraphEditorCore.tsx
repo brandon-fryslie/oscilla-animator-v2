@@ -630,7 +630,6 @@ export const GraphEditorCoreInner = observer(
             fitViewTimeoutRef.current = null;
           }
         };
-      // eslint-disable-next-line react-hooks/exhaustive-deps
       }, [adapter, adapter.blocks.size, setNodes, setEdges, projectGraphSnapshot, scheduleFitView, reportUiError]);
 
       // -------------------------------------------------------------------------
