@@ -1,3 +1,4 @@
+/* eslint-disable max-lines-per-function */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createAnimationLoopState, executeAnimationFrame, startAnimationLoop } from '../AnimationLoop';
 import { assertSchedulePhaseBoundaryStateReads } from '../../runtime';
@@ -15,9 +16,20 @@ vi.mock('../../testing/runtime-probe', () => ({
 }));
 
 function makeDeps(overrides: Partial<any> = {}) {
+  const runtimeState = {
+    shapeBank: {
+      data: new Uint32Array(64),
+      volatilePtr: 0,
+      staticBoundary: 0,
+      topologyIdByHandle: new Uint32Array(64),
+    },
+    cache: {
+      drawPrepSinkTableWords: undefined,
+      drawPrepSinkTableWordCount: 0,
+    },
+  };
   const renderer = {
     resizeCanvas: vi.fn(),
-    setViewportFrame: vi.fn(),
     getLifecycleState: vi.fn(() => 'Running'),
     getLatestRuntimeTelemetry: vi.fn(() => null as any),
     getInstalledGpuPassIds: vi.fn(() => []),
@@ -26,10 +38,9 @@ function makeDeps(overrides: Partial<any> = {}) {
   };
   const deps = {
     getCurrentProgram: () => ({}),
-    getCurrentState: () => null,
+    getCurrentState: () => runtimeState,
     getCanvas: () => ({ width: 100, height: 80 }),
     getRenderer: () => renderer,
-    getArena: () => ({ reset: vi.fn(), getTotalBytes: () => 0 }),
     store: {
       demo: { currentFilename: null },
       debug: { enabled: false, traceCardinalitySolver: false },
@@ -70,31 +81,30 @@ describe('AnimationLoop', () => {
     (globalThis as any).__testFrameCallback = () => callback;
   });
 
-  it('publishes canonical viewport frame to renderer worker boundary', () => {
+  it('publishes canonical frame payload through renderer boundary', () => {
     const { deps, renderer } = makeDeps();
     executeAnimationFrame(16, deps, createAnimationLoopState());
-    expect(renderer.resizeCanvas).toHaveBeenCalledWith(100, 80);
-    expect(renderer.setViewportFrame).toHaveBeenCalledWith({
+    expect(renderer.render).toHaveBeenCalledWith(expect.objectContaining({
       width: 100,
       height: 80,
       zoom: 1,
       panX: 0,
       panY: 0,
       timeMs: 16,
-    });
+    }));
     expect(runtimeProbeMocks.markRuntimeFrameAdvanced).toHaveBeenCalledWith(-1, 16);
   });
 
   it('skips frame publication when no program is installed', () => {
     const { deps, renderer } = makeDeps({ getCurrentProgram: () => null });
     executeAnimationFrame(16, deps, createAnimationLoopState());
-    expect(renderer.setViewportFrame).not.toHaveBeenCalled();
+    expect(renderer.render).not.toHaveBeenCalled();
     expect(runtimeProbeMocks.markRuntimeFrameAdvanced).not.toHaveBeenCalled();
   });
 
   it('throws when renderer runtime input publication fails', () => {
     const { deps, renderer } = makeDeps();
-    renderer.setViewportFrame.mockImplementation(() => {
+    renderer.render.mockImplementation(() => {
       throw new Error('renderer input unavailable');
     });
     expect(() => executeAnimationFrame(16, deps, createAnimationLoopState())).toThrow('renderer input unavailable');
@@ -138,7 +148,7 @@ describe('AnimationLoop', () => {
   it('halts execution after first runtime exception', () => {
     const onError = vi.fn();
     const { deps, renderer } = makeDeps();
-    renderer.setViewportFrame.mockImplementation(() => {
+    renderer.render.mockImplementation(() => {
       throw new Error('renderer input unavailable');
     });
     const loop = startAnimationLoop(deps, createAnimationLoopState(), onError);
@@ -154,7 +164,7 @@ describe('AnimationLoop', () => {
   it('resumes after compile success is signaled', () => {
     const onError = vi.fn();
     const { deps, renderer } = makeDeps();
-    renderer.setViewportFrame.mockImplementation(() => {
+    renderer.render.mockImplementation(() => {
       throw new Error('renderer input unavailable');
     });
     const loop = startAnimationLoop(deps, createAnimationLoopState(), onError);

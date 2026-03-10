@@ -17,6 +17,11 @@ const mocks = vi.hoisted(() => {
     })),
     rebuildGpuPipelines,
   }));
+  const RenderBufferArena = vi.fn().mockImplementation(() => ({
+    init: vi.fn(),
+    clear: vi.fn(),
+    dispose: vi.fn(),
+  }));
   const assertWebGPUStartupContract = vi.fn();
   const setRenderIssueReporter = vi.fn();
   const getRenderIssues = vi.fn(() => []);
@@ -56,6 +61,7 @@ const mocks = vi.hoisted(() => {
     compileAndSwap,
     rebuildGpuPipelines,
     createWebGPURenderer,
+    RenderBufferArena,
     assertWebGPUStartupContract,
     setRenderIssueReporter,
     getRenderIssues,
@@ -82,6 +88,7 @@ const mocks = vi.hoisted(() => {
 vi.mock('../../render', () => ({
   assertWebGPUStartupContract: mocks.assertWebGPUStartupContract,
   createWebGPURenderer: mocks.createWebGPURenderer,
+  RenderBufferArena: mocks.RenderBufferArena,
   setRenderIssueReporter: mocks.setRenderIssueReporter,
   getRenderIssues: mocks.getRenderIssues,
   clearRenderIssues: mocks.clearRenderIssues,

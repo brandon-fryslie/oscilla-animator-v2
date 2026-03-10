@@ -13,7 +13,6 @@ import {
   createWebGPURenderer,
   assertWebGPUStartupContract,
   type WebGPURenderer,
-  RenderBufferArena,
   setRenderIssueReporter,
   getRenderIssues,
   clearRenderIssues,
@@ -96,7 +95,6 @@ export class RuntimeService {
   private animationState: AnimationLoopState = createAnimationLoopState();
   private canvas: HTMLCanvasElement | null = null;
   private renderer: WebGPURenderer | null = null;
-  private arena: RenderBufferArena | null = null;
 
   private animationLoop: AnimationLoopController | null = null;
   private unsubCompileEnd: (() => void) | null = null;
@@ -195,7 +193,6 @@ export class RuntimeService {
       getCurrentState: () => this.compileState.currentState,
       getCanvas: () => this.canvas,
       getRenderer: () => this.renderer,
-      getArena: () => this.arena,
       store: this.store,
       onStatsUpdate: (statsText) => this.statsSink?.(statsText),
     };
@@ -419,10 +416,6 @@ export class RuntimeService {
         });
       });
 
-      // [LAW:no-shared-mutable-globals] RuntimeService owns one arena instance
-      // per runtime lifecycle instead of relying on module-level singleton state.
-      this.arena = new RenderBufferArena(50_000);
-      this.arena.init();
       setRenderIssueReporter((issue) => {
         // [LAW:single-enforcer] RuntimeService owns render issue routing into diagnostics.
         store.diagnostics.log({
@@ -586,7 +579,6 @@ export class RuntimeService {
     this.renderer?.dispose();
     this.renderer = null;
     shaderInspector.clear();
-    this.arena = null;
     this.statsSink = null;
     this.runtimeReadySink = null;
   }

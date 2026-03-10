@@ -6,7 +6,7 @@
  */
 
 import { assertSchedulePhaseBoundaryStateReads } from '../runtime';
-import { RenderBufferArena, type WebGPURenderer } from '../render';
+import { type WebGPURenderer } from '../render';
 import type { RuntimeState } from '../runtime/RuntimeState';
 import type { RootStore } from '../stores';
 import { isRuntimeConsoleEnabled } from '../testing/test-params';
@@ -29,7 +29,6 @@ export interface AnimationLoopDeps {
   getCurrentState: () => RuntimeState | null;
   getCanvas: () => HTMLCanvasElement | null;
   getRenderer: () => WebGPURenderer | null;
-  getArena: () => RenderBufferArena | null;
   store: RootStore;
   onStatsUpdate?: (statsText: string) => void;
 }
@@ -42,12 +41,10 @@ export interface AnimationLoopController {
 function assertWebGPULoopContract(deps: AnimationLoopDeps): void {
   const canvas = deps.getCanvas();
   const renderer = deps.getRenderer();
-  const arena = deps.getArena();
-
-  if (!canvas || !renderer || !arena) {
+  if (!canvas || !renderer) {
     // [LAW:no-silent-fallbacks] Runtime loop must hard-fail when required
     // WebGPU rendering dependencies are missing.
-    throw new Error('AnimationLoop: WebGPU runtime contract requires canvas, renderer, and arena');
+    throw new Error('AnimationLoop: WebGPU runtime contract requires canvas and renderer');
   }
 }
 
@@ -107,6 +104,7 @@ export function executeAnimationFrame(
 ): void {
   const {
     getCurrentProgram,
+    getCurrentState,
     getCanvas,
     getRenderer,
     store,
@@ -114,31 +112,32 @@ export function executeAnimationFrame(
   } = deps;
 
   const currentProgram = getCurrentProgram();
+  const currentState = getCurrentState();
   const canvas = getCanvas();
   const renderer = getRenderer();
 
   if (!canvas || !renderer) {
-    throw new Error('AnimationLoop: WebGPU runtime contract requires canvas, renderer, and arena');
+    throw new Error('AnimationLoop: WebGPU runtime contract requires canvas and renderer');
   }
 
-  if (!currentProgram) {
+  if (!currentProgram || !currentState) {
     return;
   }
 
-  const { zoom, pan } = store.viewport;
   const renderWidth = Math.max(1, Math.floor(store.viewport.canvasWidth || canvas.width));
   const renderHeight = Math.max(1, Math.floor(store.viewport.canvasHeight || canvas.height));
-  renderer.resizeCanvas(renderWidth, renderHeight);
-  // [LAW:single-enforcer] Renderer worker is the one runtime-input boundary;
-  // animation loop publishes viewport/time there and does not dual-publish to
-  // any secondary runtime worker seam.
-  renderer.setViewportFrame({
+  const { zoom, pan } = store.viewport;
+
+  renderer.render({
+    shapeBank: currentState.shapeBank,
     width: renderWidth,
     height: renderHeight,
     zoom,
     panX: pan.x,
     panY: pan.y,
     timeMs: tMs,
+    drawPrepSinkTableV1: currentState.cache.drawPrepSinkTableWords,
+    drawPrepSinkTableWordCount: currentState.cache.drawPrepSinkTableWordCount ?? 0,
   });
   markRuntimeFrameAdvanced(-1, tMs);
 
@@ -153,60 +152,85 @@ export function executeAnimationFrame(
     const statsText = `FPS: ${state.fps} | DrawOps: ${drawOps} | `
       + `Tick: ${tickMs.toFixed(1)}ms`;
     onStatsUpdate?.(statsText);
-    if (RUNTIME_CONSOLE_ENABLED) {
-      const programScheduleSteps = Array.isArray(currentProgram?.schedule?.steps) ? currentProgram.schedule.steps : [];
-      const renderStepCount = programScheduleSteps.filter((step: { kind?: string }) => step?.kind === 'render').length;
-      const installedGpuPassIds =
-        typeof renderer.getInstalledGpuPassIds === 'function' ? renderer.getInstalledGpuPassIds() : [];
-      const rendererSinkTableSample =
-        typeof renderer.getLatestSinkTableSample === 'function' ? renderer.getLatestSinkTableSample() : null;
-      const sinkTableSample = rendererSinkTableSample ?? null;
-      const schedulerFrameCount = telemetry?.frameCount ?? 0;
-      const overheadDispatches = 2; // instance assembly + draw-prep
-      const simulationPassCount = telemetry?.dispatchCounters.computeDispatchCount
-        ? Math.max(1, telemetry.dispatchCounters.computeDispatchCount - overheadDispatches)
-        : Math.max(1, installedGpuPassIds.length);
-      // [LAW:one-source-of-truth] Expected ping/pong parity derives from
-      // the canonical simulation pass count emitted by runtime telemetry.
-      const expectedPingPongIndexFromParity = (schedulerFrameCount * simulationPassCount) & 1;
-      const line = {
-        kind: 'runtime-heartbeat',
-        fps: state.fps,
-        stats: {
-          drawOps,
-          lastTickMs: tickMs,
-          meanTickMs: telemetry?.meanMs ?? 0,
-          sinkWords: telemetry?.resourceStats.sinkTableWordCount ?? 0,
-          frameCount: telemetry?.frameCount ?? 0,
-        },
-        scheduler: schedulerState,
-        telemetry: telemetry ? {
-          stageTimings: telemetry.stageTimings,
-          dispatchCounters: telemetry.dispatchCounters,
-          resourceStats: telemetry.resourceStats,
-        } : null,
-        runtime: {
-          demoFilename: store.demo.currentFilename ?? null,
-          renderStepCount,
-          drawPrepSinkCount: currentProgram?.drawPrepProgram?.sinks?.length ?? 0,
-          installedGpuPassIds,
-          sinkTableSample,
-          schedulerFrameCount,
-          simulationPassCount,
-          expectedPingPongIndexFromParity,
-        },
-        breadcrumb: telemetry?.lastEvent ?? null,
-      };
-      // [LAW:one-source-of-truth] Runtime console emits one canonical JSON
-      // heartbeat line so DevTools/MCP parsing never depends on ad-hoc strings.
-      console.info(`[runtimeConsole] ${JSON.stringify(line)}`);
-    }
+    emitRuntimeConsoleHeartbeat({
+      currentProgram,
+      drawOps,
+      fps: state.fps,
+      renderer,
+      schedulerState,
+      store,
+      telemetry,
+      tickMs,
+    });
     state.frameCount = 0;
     state.lastFpsUpdate = now;
     state.minFrameTime = Infinity;
     state.maxFrameTime = 0;
     state.frameTimeSum = 0;
   }
+}
+
+function emitRuntimeConsoleHeartbeat(args: {
+  readonly currentProgram: any;
+  readonly drawOps: number;
+  readonly fps: number;
+  readonly renderer: WebGPURenderer;
+  readonly schedulerState: unknown;
+  readonly store: RootStore;
+  readonly telemetry: ReturnType<WebGPURenderer['getLatestRuntimeTelemetry']>;
+  readonly tickMs: number;
+}): void {
+  if (!RUNTIME_CONSOLE_ENABLED) {
+    return;
+  }
+  const { currentProgram, drawOps, fps, renderer, schedulerState, store, telemetry, tickMs } = args;
+  const programScheduleSteps = Array.isArray(currentProgram?.schedule?.steps)
+    ? currentProgram.schedule.steps as Array<{ kind?: string }>
+    : [];
+  const renderStepCount = programScheduleSteps.filter((step) => step?.kind === 'render').length;
+  const installedGpuPassIds =
+    typeof renderer.getInstalledGpuPassIds === 'function' ? renderer.getInstalledGpuPassIds() : [];
+  const sinkTableSample =
+    typeof renderer.getLatestSinkTableSample === 'function' ? renderer.getLatestSinkTableSample() : null;
+  const schedulerFrameCount = telemetry?.frameCount ?? 0;
+  const overheadDispatches = 2; // instance assembly + draw-prep
+  const simulationPassCount = telemetry?.dispatchCounters.computeDispatchCount
+    ? Math.max(1, telemetry.dispatchCounters.computeDispatchCount - overheadDispatches)
+    : Math.max(1, installedGpuPassIds.length);
+  // [LAW:one-source-of-truth] Expected ping/pong parity derives from
+  // the canonical simulation pass count emitted by runtime telemetry.
+  const expectedPingPongIndexFromParity = (schedulerFrameCount * simulationPassCount) & 1;
+  const line = {
+    kind: 'runtime-heartbeat',
+    fps,
+    stats: {
+      drawOps,
+      lastTickMs: tickMs,
+      meanTickMs: telemetry?.meanMs ?? 0,
+      sinkWords: telemetry?.resourceStats.sinkTableWordCount ?? 0,
+      frameCount: telemetry?.frameCount ?? 0,
+    },
+    scheduler: schedulerState,
+    telemetry: telemetry ? {
+      stageTimings: telemetry.stageTimings,
+      dispatchCounters: telemetry.dispatchCounters,
+      resourceStats: telemetry.resourceStats,
+    } : null,
+    runtime: {
+      demoFilename: store.demo.currentFilename ?? null,
+      renderStepCount,
+      drawPrepSinkCount: currentProgram?.drawPrepProgram?.sinks?.length ?? 0,
+      installedGpuPassIds,
+      sinkTableSample,
+      schedulerFrameCount,
+      simulationPassCount,
+      expectedPingPongIndexFromParity,
+    },
+    breadcrumb: telemetry?.lastEvent ?? null,
+  };
+  // [LAW:one-source-of-truth] Runtime console emits one canonical JSON
+  // heartbeat line so DevTools/MCP parsing never depends on ad-hoc strings.
+  console.info(`[runtimeConsole] ${JSON.stringify(line)}`);
 }
 
 /**
