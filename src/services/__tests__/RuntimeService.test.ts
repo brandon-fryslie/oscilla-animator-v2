@@ -83,12 +83,12 @@ vi.mock('../../render', () => ({
   RenderBufferArena: class {
     buffers = new Map();
     init = vi.fn();
+    reset = vi.fn();
     beginFrame(): void {}
     endFrame(): void {}
-    reset(): void {}
-    getTotalBytes(): number { return 0; }
     registerBufferMetadata = vi.fn();
     getBuffer = vi.fn((id: number) => this.buffers.get(id) ?? null);
+    getTotalBytes(): number { return 0; }
   },
   assertWebGPUStartupContract: mocks.assertWebGPUStartupContract,
   createWebGPURenderer: mocks.createWebGPURenderer,

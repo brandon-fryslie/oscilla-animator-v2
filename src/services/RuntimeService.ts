@@ -585,8 +585,8 @@ export class RuntimeService {
     debugService.clear();
     this.renderer?.dispose();
     this.renderer = null;
-    shaderInspector.clear();
     this.arena = null;
+    shaderInspector.clear();
     this.statsSink = null;
     this.runtimeReadySink = null;
   }
