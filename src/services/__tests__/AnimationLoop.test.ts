@@ -209,4 +209,11 @@ describe('AnimationLoop', () => {
     expect(() => startAnimationLoop(deps, createAnimationLoopState(), onError))
       .toThrow('WebGPU runtime contract');
   });
+
+  it('fails fast when arena dependency is missing', () => {
+    const onError = vi.fn();
+    const { deps } = makeDeps({ getArena: () => null });
+    expect(() => startAnimationLoop(deps, createAnimationLoopState(), onError))
+      .toThrow('WebGPU runtime contract');
+  });
 });
