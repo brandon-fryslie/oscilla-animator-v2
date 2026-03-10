@@ -839,6 +839,12 @@ export class WebGPURenderer {
   }
 
   private assertSinkTableInputCapacity(sinkTableWords: Uint32Array, wordCount: number): void {
+    if (!(sinkTableWords instanceof Uint32Array)) {
+      throw new Error(
+        'Rust renderer input contract violation: drawPrepSinkTableV1 must be Uint32Array ' +
+          `(received=${Object.prototype.toString.call(sinkTableWords)})`,
+      );
+    }
     if (sinkTableWords.length < wordCount) {
       throw new Error(
         'Rust renderer input contract violation: drawPrepSinkTableV1 shorter than wordCount ' +
