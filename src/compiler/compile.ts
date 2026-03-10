@@ -29,7 +29,7 @@ import type {
   PortBindingIR,
 } from './ir/program';
 import type { InstanceId, StepIndex, ValueSlot } from './ir/Indices';
-import { SCALAR_INSTANCE_ID } from './ir/Indices';
+import { SCALAR_INSTANCE_ID, stepIndex } from './ir/Indices';
 import { blockIndex, type BlockIndex } from './ir/BlockIndex';
 import type { UnlinkedIRFragments } from './backend/lower-blocks';
 import type { ScheduleIR } from './backend/schedule-program';
@@ -751,6 +751,9 @@ function convertLinkedIRToProgram(
         // [LAW:one-source-of-truth] Slot mapping is only for slot-backed outputs.
         // Discrete outputs are represented in ports metadata but do not require slot aliases.
         if (slot !== undefined) {
+          // [LAW:one-source-of-truth] Slot-backed debug provenance is authored
+          // once at compile time, then consumed read-only by runtime inspectors.
+          slotToBlock.set(slot, debugBlockId);
           slotToPort.set(slot, portIndex);
         }
 
@@ -774,7 +777,7 @@ function convertLinkedIRToProgram(
   const scheduleSteps = scheduleIR.steps as readonly Step[];
   for (let i = 0; i < scheduleSteps.length; i++) {
     const step = scheduleSteps[i];
-    const stepId = i as StepIndex;
+    const stepId = stepIndex(i);
     const exprId = getStepExprId(step);
     if (exprId !== null) {
       const blockId = exprToBlock.get(exprId);

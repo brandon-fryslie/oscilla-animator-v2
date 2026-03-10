@@ -403,7 +403,6 @@ export class StepDebugStore {
         };
         blockAccum.set(key, acc);
       }
-      if (acc === undefined) continue;
 
       acc.stepCount++;
       acc.anomalyCount += snap.anomalies.length;
