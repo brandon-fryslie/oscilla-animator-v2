@@ -82,16 +82,16 @@ const mocks = vi.hoisted(() => {
 vi.mock('../../render', () => ({
   RenderBufferArena: class {
     buffers = new Map();
-    init = mocks.renderBufferArenaInit;
+    init = vi.fn();
+    beginFrame(): void {}
+    endFrame(): void {}
+    reset(): void {}
+    getTotalBytes(): number { return 0; }
     registerBufferMetadata = vi.fn();
     getBuffer = vi.fn((id: number) => this.buffers.get(id) ?? null);
   },
   assertWebGPUStartupContract: mocks.assertWebGPUStartupContract,
   createWebGPURenderer: mocks.createWebGPURenderer,
-  RenderBufferArena: class {
-    init = vi.fn();
-    reset = vi.fn();
-  },
   setRenderIssueReporter: mocks.setRenderIssueReporter,
   getRenderIssues: mocks.getRenderIssues,
   clearRenderIssues: mocks.clearRenderIssues,
