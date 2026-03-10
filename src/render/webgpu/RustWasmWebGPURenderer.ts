@@ -18,6 +18,7 @@ import {
   RUNTIME_INPUT_SIGNAL_WORDS,
   type RuntimeSharedPlanes,
 } from '../rust/runtime-input-layout';
+import { getNavigatorGpu } from './gpu-api';
 
 interface RenderInput {
   readonly shapeBank: RenderShapeBankSource;
@@ -27,14 +28,14 @@ interface RenderInput {
   readonly panX: number;
   readonly panY: number;
   readonly timeMs: number;
-  readonly inputMouseX?: number;
-  readonly inputMouseY?: number;
-  readonly inputMouseButtons?: number;
-  readonly inputAudioLow?: number;
-  readonly inputAudioMid?: number;
-  readonly inputAudioHigh?: number;
-  readonly inputGaugeActive?: number;
-  readonly drawPrepSinkTableV1?: Uint32Array;
+  readonly inputMouseX: number;
+  readonly inputMouseY: number;
+  readonly inputMouseButtons: number;
+  readonly inputAudioLow: number;
+  readonly inputAudioMid: number;
+  readonly inputAudioHigh: number;
+  readonly inputGaugeActive: number;
+  readonly drawPrepSinkTableV1: Uint32Array;
   readonly drawPrepSinkTableWordCount: number;
 }
 
@@ -45,13 +46,13 @@ interface RuntimeViewportFrame {
   readonly panX: number;
   readonly panY: number;
   readonly timeMs: number;
-  readonly inputMouseX?: number;
-  readonly inputMouseY?: number;
-  readonly inputMouseButtons?: number;
-  readonly inputAudioLow?: number;
-  readonly inputAudioMid?: number;
-  readonly inputAudioHigh?: number;
-  readonly inputGaugeActive?: number;
+  readonly inputMouseX: number;
+  readonly inputMouseY: number;
+  readonly inputMouseButtons: number;
+  readonly inputAudioLow: number;
+  readonly inputAudioMid: number;
+  readonly inputAudioHigh: number;
+  readonly inputGaugeActive: number;
 }
 
 export interface RuntimeEventBreadcrumb {
@@ -121,8 +122,19 @@ const DEFAULT_BOOTSTRAP_CONFIG: RustRendererBootstrapConfig = Object.freeze({
   debugReadbackHz: 0,
 });
 
-function coerceFinite(value: number | undefined): number {
-  return typeof value === 'number' && Number.isFinite(value) ? value : 0;
+function assertFiniteRuntimeInput(value: number, field: string): number {
+  if (!Number.isFinite(value)) {
+    throw new Error(`Rust renderer input contract violation: ${field} must be finite, got ${value}`);
+  }
+  return value;
+}
+
+function assertNonNegativeRuntimeInput(value: number, field: string): number {
+  const finiteValue = assertFiniteRuntimeInput(value, field);
+  if (finiteValue < 0) {
+    throw new Error(`Rust renderer input contract violation: ${field} must be non-negative, got ${finiteValue}`);
+  }
+  return finiteValue;
 }
 
 const MAX_UINT32 = 0xFFFF_FFFF;
@@ -239,42 +251,55 @@ function extractPassDebugConstants(wgsl: string): Record<string, number> {
   return constants;
 }
 
+function requireNonEmptyString(value: unknown, message: string): string {
+  if (typeof value !== 'string') {
+    throw new Error(message);
+  }
+  if (value.trim().length === 0) {
+    throw new Error(message);
+  }
+  return value;
+}
+
 function validateGpuPass(pass: RustRendererGpuPass, index: number): RustRendererGpuPass {
   // TODO(#180): Move GPU pass semantic validation to compile/Naga boundary.
   // [LAW:single-enforcer] Renderer should not be the long-term enforcer for
   // pass contract validity; compiler validation is the canonical boundary.
   // https://github.com/brandon-fryslie/oscilla-animator-v2/issues/180
-  if (typeof pass.passId !== 'string' || pass.passId.trim().length === 0) {
-    throw new Error(`Rust renderer GPU pass contract violation: passes[${index}].passId is required`);
-  }
+  const passId = requireNonEmptyString(
+    pass.passId,
+    `Rust renderer GPU pass contract violation: passes[${index}].passId is required`,
+  );
   if (pass.stage !== 'compute') {
     throw new Error(
-      `Rust renderer GPU pass contract violation: pass "${pass.passId}" has unsupported stage "${String(pass.stage)}"`,
+      `Rust renderer GPU pass contract violation: pass "${passId}" has unsupported stage "${String(pass.stage)}"`,
     );
   }
-  if (typeof pass.entryPoint !== 'string' || pass.entryPoint.trim().length === 0) {
-    throw new Error(`Rust renderer GPU pass contract violation: pass "${pass.passId}" is missing entryPoint`);
-  }
-  if (typeof pass.wgsl !== 'string' || pass.wgsl.trim().length === 0) {
-    throw new Error(`Rust renderer GPU pass contract violation: pass "${pass.passId}" is missing WGSL source`);
-  }
-  if (pass.wgsl.toLowerCase().includes("won't compile")) {
+  const entryPoint = requireNonEmptyString(
+    pass.entryPoint,
+    `Rust renderer GPU pass contract violation: pass "${passId}" is missing entryPoint`,
+  );
+  const wgsl = requireNonEmptyString(
+    pass.wgsl,
+    `Rust renderer GPU pass contract violation: pass "${passId}" is missing WGSL source`,
+  );
+  if (wgsl.toLowerCase().includes("won't compile")) {
     throw new Error(
-      `Rust renderer GPU pass contract violation: pass "${pass.passId}" contains placeholder invalid WGSL (${previewWgsl(pass.wgsl)})`,
+      `Rust renderer GPU pass contract violation: pass "${passId}" contains placeholder invalid WGSL (${previewWgsl(wgsl)})`,
     );
   }
-  if (!pass.wgsl.includes('@compute')) {
+  if (!wgsl.includes('@compute')) {
     throw new Error(
-      `Rust renderer GPU pass contract violation: pass "${pass.passId}" is missing @compute entry annotation`,
+      `Rust renderer GPU pass contract violation: pass "${passId}" is missing @compute entry annotation`,
     );
   }
   // TODO(#179): Remove renderer regex entrypoint validation; validate
   // against structured pass signatures emitted by compiler lowering.
   // https://github.com/brandon-fryslie/oscilla-animator-v2/issues/179
-  const entryPattern = new RegExp(`\\bfn\\s+${escapeRegex(pass.entryPoint)}\\s*\\(`);
-  if (!entryPattern.test(pass.wgsl)) {
+  const entryPattern = new RegExp(`\\bfn\\s+${escapeRegex(entryPoint)}\\s*\\(`);
+  if (!entryPattern.test(wgsl)) {
     throw new Error(
-      `Rust renderer GPU pass contract violation: pass "${pass.passId}" is missing fn ${pass.entryPoint}(...)`,
+      `Rust renderer GPU pass contract violation: pass "${passId}" is missing fn ${entryPoint}(...)`,
     );
   }
   return pass;
@@ -323,13 +348,19 @@ function validateGpuPassBundle(passes: readonly RustRendererGpuPass[]): readonly
 }
 
 function assertFiniteUint32(value: number, context: string): number {
-  if (
-    !Number.isFinite(value)
-    || !Number.isInteger(value)
-    || !Number.isSafeInteger(value)
-    || value < 0
-    || value > MAX_UINT32
-  ) {
+  if (!Number.isFinite(value)) {
+    throw new Error(`Rust renderer input contract violation: ${context} must be a uint32, got ${String(value)}`);
+  }
+  if (!Number.isInteger(value)) {
+    throw new Error(`Rust renderer input contract violation: ${context} must be a uint32, got ${String(value)}`);
+  }
+  if (!Number.isSafeInteger(value)) {
+    throw new Error(`Rust renderer input contract violation: ${context} must be a uint32, got ${String(value)}`);
+  }
+  if (value < 0) {
+    throw new Error(`Rust renderer input contract violation: ${context} must be a uint32, got ${String(value)}`);
+  }
+  if (value > MAX_UINT32) {
     throw new Error(`Rust renderer input contract violation: ${context} must be a uint32, got ${String(value)}`);
   }
   return value;
@@ -393,10 +424,7 @@ function classifyWorkerAckMessage(
 
 
 export function assertWebGPUStartupContract(canvas: HTMLCanvasElement): void {
-  // TODO(#183): Remove navigator type assertion and replace with boundary
-  // capability guard helper that does not rely on `as` casting.
-  // https://github.com/brandon-fryslie/oscilla-animator-v2/issues/183
-  const gpu = (navigator as Navigator & { gpu?: unknown }).gpu;
+  const gpu = getNavigatorGpu();
   if (!gpu) {
     throw new Error('Rust renderer requires WebGPU (navigator.gpu is unavailable)');
   }
@@ -545,7 +573,7 @@ export class WebGPURenderer {
     // site. [LAW:locality-or-seam] Keep payload construction out of hot-path
     // render orchestration.
     // https://github.com/brandon-fryslie/oscilla-animator-v2/issues/159
-    if (RUNTIME_CONSOLE_ENABLED && !this.renderInputDebugLogged && input.drawPrepSinkTableV1 && sinkTableWords > 0) {
+    if (RUNTIME_CONSOLE_ENABLED && !this.renderInputDebugLogged && sinkTableWords > 0) {
       this.renderInputDebugLogged = true;
       const headerWords = 8;
       const base = headerWords;
@@ -747,22 +775,36 @@ export class WebGPURenderer {
   }
 
   private writeViewportFrame(input: RuntimeViewportFrame): void {
+    const width = assertNonNegativeRuntimeInput(input.width, 'width');
+    const height = assertNonNegativeRuntimeInput(input.height, 'height');
+    const zoom = assertFiniteRuntimeInput(input.zoom, 'zoom');
+    const panX = assertFiniteRuntimeInput(input.panX, 'panX');
+    const panY = assertFiniteRuntimeInput(input.panY, 'panY');
+    const timeMs = assertFiniteRuntimeInput(input.timeMs, 'timeMs');
+    const inputMouseX = assertFiniteRuntimeInput(input.inputMouseX, 'inputMouseX');
+    const inputMouseY = assertFiniteRuntimeInput(input.inputMouseY, 'inputMouseY');
+    const inputMouseButtons = assertFiniteRuntimeInput(input.inputMouseButtons, 'inputMouseButtons');
+    const inputAudioLow = assertFiniteRuntimeInput(input.inputAudioLow, 'inputAudioLow');
+    const inputAudioMid = assertFiniteRuntimeInput(input.inputAudioMid, 'inputAudioMid');
+    const inputAudioHigh = assertFiniteRuntimeInput(input.inputAudioHigh, 'inputAudioHigh');
+    const inputGaugeActive = assertFiniteRuntimeInput(input.inputGaugeActive, 'inputGaugeActive');
+
     // [LAW:dataflow-not-control-flow] Renderer always publishes the same
-    // runtime input envelope; optional channels vary by value, not by branch.
-    this.syncCanvasSize(input.width, input.height);
-    this.inputWords[RUNTIME_INPUT_INDEX.width] = input.width;
-    this.inputWords[RUNTIME_INPUT_INDEX.height] = input.height;
-    this.inputWords[RUNTIME_INPUT_INDEX.zoom] = input.zoom;
-    this.inputWords[RUNTIME_INPUT_INDEX.panX] = input.panX;
-    this.inputWords[RUNTIME_INPUT_INDEX.panY] = input.panY;
-    this.inputWords[RUNTIME_INPUT_INDEX.timeMs] = input.timeMs;
-    this.inputWords[RUNTIME_INPUT_INDEX.mouseX] = coerceFinite(input.inputMouseX);
-    this.inputWords[RUNTIME_INPUT_INDEX.mouseY] = coerceFinite(input.inputMouseY);
-    this.inputWords[RUNTIME_INPUT_INDEX.mouseButtons] = coerceFinite(input.inputMouseButtons);
-    this.inputWords[RUNTIME_INPUT_INDEX.audioLow] = coerceFinite(input.inputAudioLow);
-    this.inputWords[RUNTIME_INPUT_INDEX.audioMid] = coerceFinite(input.inputAudioMid);
-    this.inputWords[RUNTIME_INPUT_INDEX.audioHigh] = coerceFinite(input.inputAudioHigh);
-    this.inputWords[RUNTIME_INPUT_INDEX.gaugeActive] = coerceFinite(input.inputGaugeActive);
+    // runtime input envelope in fixed order.
+    this.syncCanvasSize(width, height);
+    this.inputWords[RUNTIME_INPUT_INDEX.width] = width;
+    this.inputWords[RUNTIME_INPUT_INDEX.height] = height;
+    this.inputWords[RUNTIME_INPUT_INDEX.zoom] = zoom;
+    this.inputWords[RUNTIME_INPUT_INDEX.panX] = panX;
+    this.inputWords[RUNTIME_INPUT_INDEX.panY] = panY;
+    this.inputWords[RUNTIME_INPUT_INDEX.timeMs] = timeMs;
+    this.inputWords[RUNTIME_INPUT_INDEX.mouseX] = inputMouseX;
+    this.inputWords[RUNTIME_INPUT_INDEX.mouseY] = inputMouseY;
+    this.inputWords[RUNTIME_INPUT_INDEX.mouseButtons] = inputMouseButtons;
+    this.inputWords[RUNTIME_INPUT_INDEX.audioLow] = inputAudioLow;
+    this.inputWords[RUNTIME_INPUT_INDEX.audioMid] = inputAudioMid;
+    this.inputWords[RUNTIME_INPUT_INDEX.audioHigh] = inputAudioHigh;
+    this.inputWords[RUNTIME_INPUT_INDEX.gaugeActive] = inputGaugeActive;
   }
 
   private syncShapeBankPlane(shapeBank: RenderShapeBankSource): number {
@@ -785,14 +827,22 @@ export class WebGPURenderer {
     return wordCount;
   }
 
-  private syncSinkTablePlane(sinkTableWords: Uint32Array | undefined, sinkTableWordCount: number): number {
+  private syncSinkTablePlane(sinkTableWords: Uint32Array, sinkTableWordCount: number): number {
     const wordCount = assertFiniteUint32(sinkTableWordCount, 'drawPrepSinkTableWordCount');
     if (wordCount === 0) {
       return 0;
     }
-    if (!sinkTableWords) {
+    this.assertSinkTableInputCapacity(sinkTableWords, wordCount);
+    this.sharedSinkTableWords.set(sinkTableWords.subarray(0, wordCount), 0);
+    this.maybeCaptureSinkTableDebugSample(sinkTableWords, wordCount);
+    return wordCount;
+  }
+
+  private assertSinkTableInputCapacity(sinkTableWords: Uint32Array, wordCount: number): void {
+    if (!(sinkTableWords instanceof Uint32Array)) {
       throw new Error(
-        'Rust renderer input contract violation: drawPrepSinkTableV1 is required when drawPrepSinkTableWordCount > 0',
+        'Rust renderer input contract violation: drawPrepSinkTableV1 must be Uint32Array ' +
+          `(received=${Object.prototype.toString.call(sinkTableWords)})`,
       );
     }
     if (sinkTableWords.length < wordCount) {
@@ -807,110 +857,114 @@ export class WebGPURenderer {
           `(wordCount=${wordCount}, sharedCapacity=${this.sharedSinkTableWords.length})`,
       );
     }
-    this.sharedSinkTableWords.set(sinkTableWords.subarray(0, wordCount), 0);
-    // TODO(#159): Replace this inline payload assembly with:
-    // `buildSinkTableSamplePayload(sinkTableWords, wordCount)` and emit via
-    // shared debug helper from this `syncSinkTablePlane(...)` call site.
-    // Also move this cadence gate (`sinkTableDebugLogCounter % 120 === 1`) to
-    // the debug emitter module so renderer hot path has zero debug policy code.
-    // [LAW:locality-or-seam] Renderer execution path should not own payload
-    // object construction details.
-    // https://github.com/brandon-fryslie/oscilla-animator-v2/issues/159
-    if (RUNTIME_CONSOLE_ENABLED) {
-      this.sinkTableDebugLogCounter += 1;
-      if (this.sinkTableDebugLogCounter % 120 === 1) {
-        const headerWords = 8;
-        const recordWords = 8;
-        const totalRecords = readRequiredSinkTableWord(
-          sinkTableWords,
-          wordCount,
-          1,
-          'sink-table-sample.totalRecords',
-        );
-        const firstRecordBase = headerWords;
-        const hasFirstRecord = totalRecords > 0 && wordCount >= firstRecordBase + recordWords;
-        // TODO(#159): Do not build sink-table first-record payload objects here.
-        // Replace this object literal branch with a helper call:
-        // `buildSinkTableFirstRecordPayload(sinkTableWords, wordCount, firstRecordBase, hasFirstRecord)`.
-        // https://github.com/brandon-fryslie/oscilla-animator-v2/issues/159
-        const debugRecord = hasFirstRecord
-          ? {
-            // TODO(#159): R794 review thread "Ditto" applies here as well:
-            // do not assemble per-field payload members in renderer hot path.
-            // `buildSinkTableFirstRecordPayload(...)` must return this object
-            // (instanceCount/firstInstance/offset/stride fields) as one unit.
-            // https://github.com/brandon-fryslie/oscilla-animator-v2/issues/159
-            drawModeCode: readRequiredSinkTableWord(
-              sinkTableWords,
-              wordCount,
-              firstRecordBase + 0,
-              'sink-table-sample.firstRecord.drawModeCode',
-            ),
-            count: readRequiredSinkTableWord(
-              sinkTableWords,
-              wordCount,
-              firstRecordBase + 1,
-              'sink-table-sample.firstRecord.count',
-            ),
-            instanceCount: readRequiredSinkTableWord(
-              sinkTableWords,
-              wordCount,
-              firstRecordBase + 2,
-              'sink-table-sample.firstRecord.instanceCount',
-            ),
-            first: readRequiredSinkTableWord(
-              sinkTableWords,
-              wordCount,
-              firstRecordBase + 3,
-              'sink-table-sample.firstRecord.first',
-            ),
-            baseVertex: readRequiredSinkTableWord(
-              sinkTableWords,
-              wordCount,
-              firstRecordBase + 4,
-              'sink-table-sample.firstRecord.baseVertex',
-            ),
-            firstInstance: readRequiredSinkTableWord(
-              sinkTableWords,
-              wordCount,
-              firstRecordBase + 5,
-              'sink-table-sample.firstRecord.firstInstance',
-            ),
-            shapeWordOffset: readRequiredSinkTableWord(
-              sinkTableWords,
-              wordCount,
-              firstRecordBase + 6,
-              'sink-table-sample.firstRecord.shapeWordOffset',
-            ),
-            materialId: readRequiredSinkTableWord(
-              sinkTableWords,
-              wordCount,
-              firstRecordBase + 7,
-              'sink-table-sample.firstRecord.materialId',
-            ),
-          }
-          : null;
-        // TODO(#159): Do not build sink-table sample payloads inline here.
-        // This callsite should invoke:
-        // `buildSinkTableSamplePayload(sinkTableWords, wordCount)` and pass the
-        // result to `emitRuntimeConsolePayload(...)`.
-        // https://github.com/brandon-fryslie/oscilla-animator-v2/issues/159
-        this.latestSinkTableSample = {
-          sinkTableWordCount: wordCount,
-          totalRecords,
-          firstRecord: debugRecord,
-        };
-        console.info(
-          `[runtimeConsole] ${JSON.stringify({
-            kind: 'sink-table-sample',
-            wordCount,
-            totalRecords,
-            firstRecord: debugRecord,
-          })}`,
-        );
-      }
+  }
+
+  private maybeCaptureSinkTableDebugSample(sinkTableWords: Uint32Array, wordCount: number): void {
+    if (!RUNTIME_CONSOLE_ENABLED) {
+      return;
     }
-    return wordCount;
+    this.sinkTableDebugLogCounter += 1;
+    if ((this.sinkTableDebugLogCounter % 120) !== 1) {
+      return;
+    }
+    const sample = this.buildSinkTableDebugSample(sinkTableWords, wordCount);
+    this.latestSinkTableSample = sample;
+    this.emitSinkTableDebugSample(sample);
+  }
+
+  private buildSinkTableDebugSample(sinkTableWords: Uint32Array, wordCount: number): SinkTableDebugSample {
+    const headerWords = 8;
+    const totalRecords = readRequiredSinkTableWord(
+      sinkTableWords,
+      wordCount,
+      1,
+      'sink-table-sample.totalRecords',
+    );
+    const firstRecord = this.buildSinkTableFirstRecord(sinkTableWords, wordCount, totalRecords, headerWords);
+    return {
+      sinkTableWordCount: wordCount,
+      totalRecords,
+      firstRecord,
+    };
+  }
+
+  private buildSinkTableFirstRecord(
+    sinkTableWords: Uint32Array,
+    wordCount: number,
+    totalRecords: number,
+    firstRecordBase: number,
+  ): SinkTableDebugSample['firstRecord'] {
+    const recordWords = 8;
+    const hasFirstRecord = totalRecords > 0 && wordCount >= firstRecordBase + recordWords;
+    if (!hasFirstRecord) {
+      return null;
+    }
+    return {
+      drawModeCode: readRequiredSinkTableWord(
+        sinkTableWords,
+        wordCount,
+        firstRecordBase + 0,
+        'sink-table-sample.firstRecord.drawModeCode',
+      ),
+      count: readRequiredSinkTableWord(
+        sinkTableWords,
+        wordCount,
+        firstRecordBase + 1,
+        'sink-table-sample.firstRecord.count',
+      ),
+      instanceCount: readRequiredSinkTableWord(
+        sinkTableWords,
+        wordCount,
+        firstRecordBase + 2,
+        'sink-table-sample.firstRecord.instanceCount',
+      ),
+      first: readRequiredSinkTableWord(
+        sinkTableWords,
+        wordCount,
+        firstRecordBase + 3,
+        'sink-table-sample.firstRecord.first',
+      ),
+      baseVertex: readRequiredSinkTableWord(
+        sinkTableWords,
+        wordCount,
+        firstRecordBase + 4,
+        'sink-table-sample.firstRecord.baseVertex',
+      ),
+      firstInstance: readRequiredSinkTableWord(
+        sinkTableWords,
+        wordCount,
+        firstRecordBase + 5,
+        'sink-table-sample.firstRecord.firstInstance',
+      ),
+      shapeWordOffset: readRequiredSinkTableWord(
+        sinkTableWords,
+        wordCount,
+        firstRecordBase + 6,
+        'sink-table-sample.firstRecord.shapeWordOffset',
+      ),
+      materialId: readRequiredSinkTableWord(
+        sinkTableWords,
+        wordCount,
+        firstRecordBase + 7,
+        'sink-table-sample.firstRecord.materialId',
+      ),
+    };
+  }
+
+  private emitSinkTableDebugSample(sample: SinkTableDebugSample): void {
+    // TODO(#159): Replace this inline payload emission with a dedicated debug
+    // emitter helper module and keep render hot path free of debug policy.
+    // [LAW:locality-or-seam] Renderer execution should not own debug payload
+    // transport and cadence policy details.
+    // https://github.com/brandon-fryslie/oscilla-animator-v2/issues/159
+    console.info(
+      `[runtimeConsole] ${JSON.stringify({
+        kind: 'sink-table-sample',
+        wordCount: sample.sinkTableWordCount,
+        totalRecords: sample.totalRecords,
+        firstRecord: sample.firstRecord,
+      })}`,
+    );
   }
 
   private async bootstrap(

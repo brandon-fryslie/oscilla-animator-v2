@@ -81,6 +81,13 @@ describe('AnimationLoop', () => {
       panX: 0,
       panY: 0,
       timeMs: 16,
+      inputMouseX: 0,
+      inputMouseY: 0,
+      inputMouseButtons: 0,
+      inputAudioLow: 0,
+      inputAudioMid: 0,
+      inputAudioHigh: 0,
+      inputGaugeActive: 0,
     });
     expect(runtimeProbeMocks.markRuntimeFrameAdvanced).toHaveBeenCalledWith(-1, 16);
   });
@@ -206,6 +213,13 @@ describe('AnimationLoop', () => {
   it('fails fast when required WebGPU loop dependencies are missing', () => {
     const onError = vi.fn();
     const { deps } = makeDeps({ getRenderer: () => null });
+    expect(() => startAnimationLoop(deps, createAnimationLoopState(), onError))
+      .toThrow('WebGPU runtime contract');
+  });
+
+  it('fails fast when arena dependency is missing', () => {
+    const onError = vi.fn();
+    const { deps } = makeDeps({ getArena: () => null });
     expect(() => startAnimationLoop(deps, createAnimationLoopState(), onError))
       .toThrow('WebGPU runtime contract');
   });

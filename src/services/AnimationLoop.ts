@@ -139,6 +139,13 @@ export function executeAnimationFrame(
     panX: pan.x,
     panY: pan.y,
     timeMs: tMs,
+    inputMouseX: 0,
+    inputMouseY: 0,
+    inputMouseButtons: 0,
+    inputAudioLow: 0,
+    inputAudioMid: 0,
+    inputAudioHigh: 0,
+    inputGaugeActive: 0,
   });
   markRuntimeFrameAdvanced(-1, tMs);
 
