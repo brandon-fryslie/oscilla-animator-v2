@@ -13,9 +13,11 @@ import type {
   InstanceId,
   ValueSlot,
   StepId,
+  StepIndex,
   ValueExprId,
 } from './Indices';
-import type { BlockId, PortId } from '../../types/compiler';
+import type { BlockIndex } from './BlockIndex';
+import type { BlockId } from '../../types/compiler';
 import type { ValueExpr } from './value-expr';
 import type { KernelRegistry } from '../../runtime/KernelRegistry';
 import type { ArenaSlotDescriptor } from '../../runtime/ArenaValueStore';
@@ -653,10 +655,10 @@ export interface StructFieldIR {
  */
 export interface DebugIndexIR {
   /** Maps step IDs to source block IDs */
-  readonly stepToBlock: ReadonlyMap<StepId, BlockId>;
+  readonly stepToBlock: ReadonlyMap<StepIndex, BlockIndex>;
 
   /** Maps slots to source block IDs */
-  readonly slotToBlock: ReadonlyMap<ValueSlot, BlockId>;
+  readonly slotToBlock: ReadonlyMap<ValueSlot, BlockIndex>;
 
   /** Maps value expression IDs to the block that emitted them */
   readonly exprToBlock: ReadonlyMap<ValueExprId, BlockId>;
@@ -665,19 +667,19 @@ export interface DebugIndexIR {
   readonly ports: readonly PortBindingIR[];
 
   /** Maps slots to ports */
-  readonly slotToPort: ReadonlyMap<ValueSlot, PortId>;
+  readonly slotToPort: ReadonlyMap<ValueSlot, DebugPortId>;
 
   /**
    * Maps numeric BlockId to permanent string ID.
    * Required because compiled program uses numeric BlockId but patch uses string ID.
    */
-  readonly blockMap: ReadonlyMap<BlockId, string>;
+  readonly blockMap: ReadonlyMap<BlockIndex, string>;
 
   /** Maps numeric BlockId to user-facing display name (e.g., "Golden Spiral") */
-  readonly blockDisplayNames?: ReadonlyMap<BlockId, string>;
+  readonly blockDisplayNames?: ReadonlyMap<BlockIndex, string>;
 
   /** Optional: maps steps to ports */
-  readonly stepToPort?: ReadonlyMap<StepId, PortId>;
+  readonly stepToPort?: ReadonlyMap<StepIndex, DebugPortId>;
 
   /** Optional: combine provenance */
   readonly combines?: readonly CombineDebugIR[];
@@ -708,8 +710,8 @@ export interface ExprProvenanceIR {
  * Enables "click value → see port" debugging.
  */
 export interface PortBindingIR {
-  readonly port: PortId;
-  readonly block: BlockId;
+  readonly port: DebugPortId;
+  readonly block: BlockIndex;
 
   /** Stable identifiers for UI and logs */
   readonly portName: string; // "in.color", "out.field", etc.
@@ -722,6 +724,8 @@ export interface PortBindingIR {
   /** Why does this value exist? */
   readonly role: 'userWire' | 'implicitCoerce' | 'internalHelper';
 }
+
+export type DebugPortId = number & { readonly __brand: 'DebugPortId' };
 
 /**
  * Combine Debug Info
