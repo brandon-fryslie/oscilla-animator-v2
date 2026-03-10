@@ -9,10 +9,10 @@
 
 import { describe, it, expect } from 'vitest';
 import type { Step } from '../../compiler/ir/types';
-import type { ValueExprId } from '../../compiler/ir/Indices';
-import type { DebugIndexIR, PortBindingIR } from '../../compiler/ir/program';
-import type { ValueSlot } from '../../compiler/ir/Indices';
-import type { BlockId, PortId } from '../../types';
+import { stepIndex, type ValueExprId, type ValueSlot } from '../../compiler/ir/Indices';
+import type { DebugIndexIR, DebugPortId, PortBindingIR } from '../../compiler/ir/program';
+import type { BlockIndex } from '../../compiler/ir/BlockIndex';
+import type { BlockId } from '../../types';
 import type { Breakpoint, StepSnapshot } from '../StepDebugTypes';
 
 // =============================================================================
@@ -104,20 +104,20 @@ describe('getStepExprId', () => {
 describe('block-id breakpoint matching', () => {
   const makeDebugIndex = (): DebugIndexIR => ({
     stepToBlock: new Map([
-      [0, 0 as unknown as BlockId],  // step 0 → block index 0
-      [1, 1 as unknown as BlockId],  // step 1 → block index 1
-    ] as any),
+      [stepIndex(0), 0 as BlockIndex],  // step 0 → block index 0
+      [stepIndex(1), 1 as BlockIndex],  // step 1 → block index 1
+    ]),
     slotToBlock: new Map(),
     exprToBlock: new Map(),
     ports: [],
     slotToPort: new Map(),
     blockMap: new Map([
-      [0, 'b0'] as any,
-      [1, 'b1'] as any,
+      [0 as BlockIndex, 'b0'],
+      [1 as BlockIndex, 'b1'],
     ]),
     blockDisplayNames: new Map([
-      [0, 'Oscillator 1'] as any,
-      [1, 'Lag 1'] as any,
+      [0 as BlockIndex, 'Oscillator 1'],
+      [1 as BlockIndex, 'Lag 1'],
     ]),
   });
 
@@ -138,14 +138,14 @@ describe('block-id breakpoint matching', () => {
 
   it('matches when blockMap resolves to the same string ID', () => {
     const debugIndex = makeDebugIndex();
-    const snapshot = { blockId: 0 as unknown as BlockId };
+    const snapshot = { blockId: 0 as BlockIndex };
     const bp = { kind: 'block-id' as const, blockId: 'b0' as BlockId };
     expect(blockIdBreakpointMatches(snapshot, bp, debugIndex)).toBe(true);
   });
 
   it('does not match when blockMap resolves to a different string ID', () => {
     const debugIndex = makeDebugIndex();
-    const snapshot = { blockId: 0 as unknown as BlockId };
+    const snapshot = { blockId: 0 as BlockIndex };
     const bp = { kind: 'block-id' as const, blockId: 'b1' as BlockId };
     expect(blockIdBreakpointMatches(snapshot, bp, debugIndex)).toBe(false);
   });
@@ -159,7 +159,7 @@ describe('block-id breakpoint matching', () => {
 
   it('does not match when blockId is not in blockMap', () => {
     const debugIndex = makeDebugIndex();
-    const snapshot = { blockId: 99 as unknown as BlockId };
+    const snapshot = { blockId: 99 as BlockIndex };
     const bp = { kind: 'block-id' as const, blockId: 'b0' as BlockId };
     expect(blockIdBreakpointMatches(snapshot, bp, debugIndex)).toBe(false);
   });
@@ -198,10 +198,10 @@ describe('resolveSlotName', () => {
       stepToBlock: new Map(),
       slotToBlock: new Map(),
       exprToBlock: new Map(),
-      ports: [{ port: 0 as unknown as PortId, block: 0 as unknown as BlockId, portName: 'out', direction: 'out', cardinality: 'one', temporality: 'continuous', role: 'userWire' } as PortBindingIR],
-      slotToPort: new Map([[5 as ValueSlot, 0 as unknown as PortId]]),
-      blockMap: new Map([[0 as unknown as BlockId, 'b0']]),
-      blockDisplayNames: new Map([[0 as unknown as BlockId, 'Oscillator 1']]),
+      ports: [{ port: 0 as DebugPortId, block: 0 as BlockIndex, portName: 'out', direction: 'out', cardinality: 'one', temporality: 'continuous', role: 'userWire' } as PortBindingIR],
+      slotToPort: new Map([[5 as ValueSlot, 0 as DebugPortId]]),
+      blockMap: new Map([[0 as BlockIndex, 'b0']]),
+      blockDisplayNames: new Map([[0 as BlockIndex, 'Oscillator 1']]),
     };
     expect(resolveSlotName(5 as ValueSlot, debugIndex, null)).toBe('Oscillator 1.out');
   });
@@ -227,9 +227,9 @@ describe('resolveSlotName', () => {
       stepToBlock: new Map(),
       slotToBlock: new Map(),
       exprToBlock: new Map(),
-      ports: [{ port: 0 as unknown as PortId, block: 0 as unknown as BlockId, portName: 'phase', direction: 'out', cardinality: 'one', temporality: 'continuous', role: 'userWire' } as PortBindingIR],
-      slotToPort: new Map([[3 as ValueSlot, 0 as unknown as PortId]]),
-      blockMap: new Map([[0 as unknown as BlockId, 'b0']]),
+      ports: [{ port: 0 as DebugPortId, block: 0 as BlockIndex, portName: 'phase', direction: 'out', cardinality: 'one', temporality: 'continuous', role: 'userWire' } as PortBindingIR],
+      slotToPort: new Map([[3 as ValueSlot, 0 as DebugPortId]]),
+      blockMap: new Map([[0 as BlockIndex, 'b0']]),
     };
     const blocks = new Map([['b0', { displayName: 'Phasor 1', type: 'Phasor' }]]);
     expect(resolveSlotName(3 as ValueSlot, debugIndex, blocks)).toBe('Phasor 1.phase');
@@ -240,9 +240,9 @@ describe('resolveSlotName', () => {
       stepToBlock: new Map(),
       slotToBlock: new Map(),
       exprToBlock: new Map(),
-      ports: [{ port: 0 as unknown as PortId, block: 0 as unknown as BlockId, portName: 'out', direction: 'out', cardinality: 'one', temporality: 'continuous', role: 'userWire' } as PortBindingIR],
-      slotToPort: new Map([[7 as ValueSlot, 0 as unknown as PortId]]),
-      blockMap: new Map([[0 as unknown as BlockId, 'b0']]),
+      ports: [{ port: 0 as DebugPortId, block: 0 as BlockIndex, portName: 'out', direction: 'out', cardinality: 'one', temporality: 'continuous', role: 'userWire' } as PortBindingIR],
+      slotToPort: new Map([[7 as ValueSlot, 0 as DebugPortId]]),
+      blockMap: new Map([[0 as BlockIndex, 'b0']]),
     };
     expect(resolveSlotName(7 as ValueSlot, debugIndex, null)).toBe('b0.out');
   });
