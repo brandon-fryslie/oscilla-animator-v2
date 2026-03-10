@@ -98,6 +98,13 @@ function expectThrownError(action: () => void): Error {
   throw new Error('Expected action to throw');
 }
 
+function getRendererFatalIssues() {
+  return getRenderIssues().filter((issue) => {
+    const detail = issue.detail as { kind?: string } | undefined;
+    return detail?.kind === 'rendererFatal';
+  });
+}
+
 describe('RustWasmWebGPURenderer fatal transition', () => {
   let originalNavigatorGpu: PropertyDescriptor | undefined;
 
@@ -131,10 +138,7 @@ describe('RustWasmWebGPURenderer fatal transition', () => {
     worker!.emitMessage({ type: 'FATAL_ERROR', code: 'BOOT_FATAL', message: 'first fatal' });
     worker!.emitMessage({ type: 'DEVICE_LOST', code: 'DEVICE_LOST', reason: 'second fatal' });
 
-    const fatalIssues = getRenderIssues().filter((issue) => {
-      const detail = issue.detail as { kind?: string } | undefined;
-      return detail?.kind === 'rendererFatal';
-    });
+    const fatalIssues = getRendererFatalIssues();
     expect(fatalIssues).toHaveLength(1);
     const detail = fatalIssues[0]?.detail as Record<string, unknown>;
     expect(detail.code).toBe('BOOT_FATAL');
@@ -174,10 +178,7 @@ describe('RustWasmWebGPURenderer fatal transition', () => {
     expect(rebuildError).toBeInstanceOf(Error);
     expect(rebuildError?.message).toContain('worker crashed');
 
-    let fatalIssues = getRenderIssues().filter((issue) => {
-      const detail = issue.detail as { kind?: string } | undefined;
-      return detail?.kind === 'rendererFatal';
-    });
+    let fatalIssues = getRendererFatalIssues();
     expect(fatalIssues).toHaveLength(1);
     const fatalDetail = fatalIssues[0]?.detail as Record<string, unknown>;
     expect(fatalDetail.code).toBe('WORKER_ERROR');
@@ -186,10 +187,7 @@ describe('RustWasmWebGPURenderer fatal transition', () => {
     expect(fatalDetail.cause).toBeInstanceOf(Error);
 
     worker!.emitMessage({ type: 'FATAL_ERROR', code: 'LATE_FATAL', message: 'late fatal' });
-    fatalIssues = getRenderIssues().filter((issue) => {
-      const detail = issue.detail as { kind?: string } | undefined;
-      return detail?.kind === 'rendererFatal';
-    });
+    fatalIssues = getRendererFatalIssues();
     expect(fatalIssues).toHaveLength(1);
 
     const postFatalError = expectThrownError(() => renderer.setViewportFrame(makeViewportFrame()));

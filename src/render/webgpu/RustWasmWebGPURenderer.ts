@@ -545,6 +545,115 @@ export class WebGPURenderer {
     );
   }
 
+  private buildFatalTransition(
+    code: string,
+    stage: string,
+    message: string,
+    timestamp: number,
+    cause: Error,
+    terminationPolicy: RendererFatalTransition['terminationPolicy'],
+  ): RendererFatalTransition {
+    return {
+      code,
+      stage,
+      message,
+      timestamp,
+      cause,
+      terminationPolicy,
+    };
+  }
+
+  private buildBracketedError(code: string, message: string, location?: string): Error {
+    return new Error(`[${code}] ${message}${location ? ` @ ${location}` : ''}`);
+  }
+
+  private buildAckTimeoutFatalTransition(context: string, error: Error): RendererFatalTransition {
+    return this.buildFatalTransition(
+      'WORKER_ACK_TIMEOUT',
+      context,
+      error.message,
+      performance.now(),
+      error,
+      'terminate-worker',
+    );
+  }
+
+  private buildAckFailureFatalTransition(
+    disposition: Extract<WorkerAckDisposition, { kind: 'fail'; fatal: boolean }>,
+  ): RendererFatalTransition {
+    return this.buildFatalTransition(
+      disposition.code,
+      disposition.stage,
+      disposition.message,
+      performance.now(),
+      disposition.error,
+      'keep-worker-alive',
+    );
+  }
+
+  private buildWorkerErrorFatalTransition(context: string, message: string): RendererFatalTransition {
+    return this.buildFatalTransition(
+      'WORKER_ERROR',
+      context,
+      message,
+      performance.now(),
+      new Error(message),
+      'keep-worker-alive',
+    );
+  }
+
+  private buildEngineFatalTransition(
+    payload: Extract<RustRendererWorkerOutboundMessage, { type: 'ENGINE_ERROR' }>,
+  ): RendererFatalTransition {
+    return this.buildFatalTransition(
+      payload.source,
+      payload.location,
+      payload.message,
+      performance.now(),
+      this.buildBracketedError(payload.source, payload.message, payload.location),
+      'keep-worker-alive',
+    );
+  }
+
+  private buildFatalErrorTransition(
+    payload: Extract<RustRendererWorkerOutboundMessage, { type: 'FATAL_ERROR' }>,
+  ): RendererFatalTransition {
+    return this.buildFatalTransition(
+      payload.code,
+      'WORKER',
+      payload.message,
+      performance.now(),
+      this.buildBracketedError(payload.code, payload.message),
+      'keep-worker-alive',
+    );
+  }
+
+  private buildDeviceLostTransition(
+    payload: Extract<RustRendererWorkerOutboundMessage, { type: 'DEVICE_LOST' }>,
+  ): RendererFatalTransition {
+    return this.buildFatalTransition(
+      payload.code,
+      'WORKER',
+      payload.reason,
+      performance.now(),
+      this.buildBracketedError(payload.code, payload.reason),
+      'keep-worker-alive',
+    );
+  }
+
+  private buildRuntimeEventFatalTransition(
+    payload: Extract<RustRendererWorkerOutboundMessage, { type: 'RUNTIME_EVENT' }>,
+  ): RendererFatalTransition {
+    return this.buildFatalTransition(
+      payload.code,
+      payload.stage,
+      payload.message,
+      payload.emittedAtMs,
+      this.buildBracketedError(payload.code, payload.message),
+      'keep-worker-alive',
+    );
+  }
+
   private markRendererFatal(transition: RendererFatalTransition): Error {
     // [LAW:single-enforcer] Fatal transition mutation, record ownership, and
     // terminal issue emission are enforced at one boundary helper.
@@ -642,9 +751,8 @@ export class WebGPURenderer {
       input.drawPrepSinkTableWordCount,
     );
     this.maybeEmitRenderInputDebugSample(input.drawPrepSinkTableV1, sinkTableWords);
-    this.inputWords[RUNTIME_INPUT_INDEX.sinkTableWords] = sinkTableWords;
-    this.inputWords[RUNTIME_INPUT_INDEX.shapeBankWords] = shapeBankWords;
-    Atomics.add(this.signalWords, 0, 1);
+    this.setSinkAndShapeWordCounts(sinkTableWords, shapeBankWords);
+    this.publishSignalWord();
   }
 
   private maybeEmitRenderInputDebugSample(sinkTableWords: Uint32Array, wordCount: number): void {
@@ -662,7 +770,7 @@ export class WebGPURenderer {
     // [LAW:single-enforcer] Runtime viewport/input publication enters the
     // renderer worker through one boundary method in canonical execution.
     this.writeViewportFrame(frame);
-    Atomics.add(this.signalWords, 0, 1);
+    this.publishSignalWord();
   }
 
   resizeCanvas(width: number, height: number): void {
@@ -697,8 +805,8 @@ export class WebGPURenderer {
     }
     this.disposed = true;
     this.worker.removeEventListener('message', this.handleRuntimeMessage);
-    const message: RustRendererWorkerInboundMessage = { type: 'SHUTDOWN' };
-    this.worker.postMessage(message);
+    const message = this.createShutdownMessage();
+    this.postWorkerMessage(message);
     this.worker.terminate();
   }
 
@@ -777,16 +885,84 @@ export class WebGPURenderer {
     return this.latestSinkTableSample;
   }
 
-  private assertRuntimeInputBoundaryReady(): void {
+  private throwIfFatalError(): void {
     if (this.fatalError) {
       throw this.fatalError;
     }
+  }
+
+  private throwIfDisposed(): void {
     if (this.disposed) {
       throw new Error('Rust renderer has been disposed');
     }
+  }
+
+  private throwIfNotBootstrapped(): void {
     if (!this.bootstrapped) {
       throw new Error('Rust renderer worker is not bootstrapped');
     }
+  }
+
+  private setInputWord(index: number, value: number): void {
+    this.inputWords[index] = value;
+  }
+
+  private publishSignalWord(): void {
+    Atomics.add(this.signalWords, 0, 1);
+  }
+
+  private setSinkAndShapeWordCounts(sinkTableWords: number, shapeBankWords: number): void {
+    this.setInputWord(RUNTIME_INPUT_INDEX.sinkTableWords, sinkTableWords);
+    this.setInputWord(RUNTIME_INPUT_INDEX.shapeBankWords, shapeBankWords);
+  }
+
+  private createResizeCanvasMessage(width: number, height: number): RustRendererWorkerInboundMessage {
+    return {
+      type: 'RESIZE_CANVAS',
+      width,
+      height,
+    };
+  }
+
+  private createShutdownMessage(): RustRendererWorkerInboundMessage {
+    return { type: 'SHUTDOWN' };
+  }
+
+  private postWorkerMessage(message: RustRendererWorkerInboundMessage): void {
+    this.worker.postMessage(message);
+  }
+
+  private isCanvasSizeUnchanged(width: number, height: number): boolean {
+    return width === this.lastResizeWidth && height === this.lastResizeHeight;
+  }
+
+  private hasDispatchCountMismatch(
+    telemetry: RustRendererRuntimeTelemetry['dispatchCounters'],
+    expectedDispatchCount: number | null,
+  ): boolean {
+    return expectedDispatchCount !== null
+      && telemetry.computeDispatchCount !== expectedDispatchCount;
+  }
+
+  private hasSinkWordsButNoInstances(
+    telemetry: RustRendererRuntimeTelemetry['resourceStats'],
+  ): boolean {
+    return telemetry.sinkTableWordCount > 0
+      && telemetry.totalInstanceCount === 0;
+  }
+
+  private hasZeroTotalFrameWithDispatches(
+    stageTimings: RustRendererRuntimeTelemetry['stageTimings'],
+    dispatchCounters: RustRendererRuntimeTelemetry['dispatchCounters'],
+  ): boolean {
+    return stageTimings.totalFrameMs === 0
+      && dispatchCounters.computeDispatchCount > 0;
+  }
+
+  private assertRuntimeInputBoundaryReady(): void {
+    this.throwIfFatalError();
+    this.throwIfDisposed();
+    this.throwIfNotBootstrapped();
   }
 
   private writeViewportFrame(input: RuntimeViewportFrame): void {
@@ -810,19 +986,19 @@ export class WebGPURenderer {
     const inputGaugeActive = assertFiniteRuntimeInput(input.inputGaugeActive, 'inputGaugeActive');
 
     this.syncCanvasSize(width, height);
-    this.inputWords[RUNTIME_INPUT_INDEX.width] = width;
-    this.inputWords[RUNTIME_INPUT_INDEX.height] = height;
-    this.inputWords[RUNTIME_INPUT_INDEX.zoom] = zoom;
-    this.inputWords[RUNTIME_INPUT_INDEX.panX] = panX;
-    this.inputWords[RUNTIME_INPUT_INDEX.panY] = panY;
-    this.inputWords[RUNTIME_INPUT_INDEX.timeMs] = timeMs;
-    this.inputWords[RUNTIME_INPUT_INDEX.mouseX] = inputMouseX;
-    this.inputWords[RUNTIME_INPUT_INDEX.mouseY] = inputMouseY;
-    this.inputWords[RUNTIME_INPUT_INDEX.mouseButtons] = inputMouseButtons;
-    this.inputWords[RUNTIME_INPUT_INDEX.audioLow] = inputAudioLow;
-    this.inputWords[RUNTIME_INPUT_INDEX.audioMid] = inputAudioMid;
-    this.inputWords[RUNTIME_INPUT_INDEX.audioHigh] = inputAudioHigh;
-    this.inputWords[RUNTIME_INPUT_INDEX.gaugeActive] = inputGaugeActive;
+    this.setInputWord(RUNTIME_INPUT_INDEX.width, width);
+    this.setInputWord(RUNTIME_INPUT_INDEX.height, height);
+    this.setInputWord(RUNTIME_INPUT_INDEX.zoom, zoom);
+    this.setInputWord(RUNTIME_INPUT_INDEX.panX, panX);
+    this.setInputWord(RUNTIME_INPUT_INDEX.panY, panY);
+    this.setInputWord(RUNTIME_INPUT_INDEX.timeMs, timeMs);
+    this.setInputWord(RUNTIME_INPUT_INDEX.mouseX, inputMouseX);
+    this.setInputWord(RUNTIME_INPUT_INDEX.mouseY, inputMouseY);
+    this.setInputWord(RUNTIME_INPUT_INDEX.mouseButtons, inputMouseButtons);
+    this.setInputWord(RUNTIME_INPUT_INDEX.audioLow, inputAudioLow);
+    this.setInputWord(RUNTIME_INPUT_INDEX.audioMid, inputAudioMid);
+    this.setInputWord(RUNTIME_INPUT_INDEX.audioHigh, inputAudioHigh);
+    this.setInputWord(RUNTIME_INPUT_INDEX.gaugeActive, inputGaugeActive);
   }
 
   private syncShapeBankPlane(shapeBank: RenderShapeBankSource): number {
@@ -1017,14 +1193,9 @@ export class WebGPURenderer {
       const timeoutId = globalThis.setTimeout(() => {
         settle(() => {
           const error = new Error(`Rust renderer worker timed out during ${options.context}`);
-          const fatalError = this.markRendererFatal({
-            code: 'WORKER_ACK_TIMEOUT',
-            stage: options.context,
-            message: error.message,
-            timestamp: performance.now(),
-            cause: error,
-            terminationPolicy: 'terminate-worker',
-          });
+          const fatalError = this.markRendererFatal(
+            this.buildAckTimeoutFatalTransition(options.context, error),
+          );
           reject(fatalError);
         });
       }, WORKER_RESPONSE_TIMEOUT_MS);
@@ -1049,14 +1220,9 @@ export class WebGPURenderer {
         }
         settle(() => {
           if (disposition.fatal) {
-            const fatalError = this.markRendererFatal({
-              code: disposition.code,
-              stage: disposition.stage,
-              message: disposition.message,
-              timestamp: performance.now(),
-              cause: disposition.error,
-              terminationPolicy: 'keep-worker-alive',
-            });
+            const fatalError = this.markRendererFatal(
+              this.buildAckFailureFatalTransition(disposition),
+            );
             reject(fatalError);
             return;
           }
@@ -1066,15 +1232,9 @@ export class WebGPURenderer {
       const onError = (event: ErrorEvent): void => {
         settle(() => {
           const message = event.message || `Rust renderer worker crashed during ${options.context}`;
-          const error = new Error(message);
-          const fatalError = this.markRendererFatal({
-            code: 'WORKER_ERROR',
-            stage: options.context,
-            message,
-            timestamp: performance.now(),
-            cause: error,
-            terminationPolicy: 'keep-worker-alive',
-          });
+          const fatalError = this.markRendererFatal(
+            this.buildWorkerErrorFatalTransition(options.context, message),
+          );
           reject(fatalError);
         });
       };
@@ -1112,29 +1272,20 @@ export class WebGPURenderer {
     const telemetry = payload.telemetry;
     const installedPassCount = this.lastInstalledPassIds.length;
     const expectedDispatchCount = installedPassCount > 0 ? installedPassCount + 2 : null;
-    if (
-      expectedDispatchCount !== null
-      && telemetry.dispatchCounters.computeDispatchCount !== expectedDispatchCount
-    ) {
+    if (this.hasDispatchCountMismatch(telemetry.dispatchCounters, expectedDispatchCount)) {
       this.emitRuntimeHealthWarning('dispatch_count_mismatch', {
         installedPassCount,
         expectedDispatchCount,
         observedDispatchCount: telemetry.dispatchCounters.computeDispatchCount,
       });
     }
-    if (
-      telemetry.resourceStats.sinkTableWordCount > 0
-      && telemetry.resourceStats.totalInstanceCount === 0
-    ) {
+    if (this.hasSinkWordsButNoInstances(telemetry.resourceStats)) {
       this.emitRuntimeHealthWarning('sink_nonzero_with_zero_instances', {
         sinkTableWordCount: telemetry.resourceStats.sinkTableWordCount,
         totalInstanceCount: telemetry.resourceStats.totalInstanceCount,
       });
     }
-    if (
-      telemetry.stageTimings.totalFrameMs === 0
-      && telemetry.dispatchCounters.computeDispatchCount > 0
-    ) {
+    if (this.hasZeroTotalFrameWithDispatches(telemetry.stageTimings, telemetry.dispatchCounters)) {
       this.emitRuntimeHealthWarning('zero_total_frame_with_dispatches', {
         totalFrameMs: telemetry.stageTimings.totalFrameMs,
         computeDispatchCount: telemetry.dispatchCounters.computeDispatchCount,
@@ -1145,17 +1296,13 @@ export class WebGPURenderer {
   private syncCanvasSize(width: number, height: number): void {
     const safeWidth = Math.max(1, Math.floor(width));
     const safeHeight = Math.max(1, Math.floor(height));
-    if (safeWidth === this.lastResizeWidth && safeHeight === this.lastResizeHeight) {
+    if (this.isCanvasSizeUnchanged(safeWidth, safeHeight)) {
       return;
     }
     this.lastResizeWidth = safeWidth;
     this.lastResizeHeight = safeHeight;
-    const message: RustRendererWorkerInboundMessage = {
-      type: 'RESIZE_CANVAS',
-      width: safeWidth,
-      height: safeHeight,
-    };
-    this.worker.postMessage(message);
+    const message = this.createResizeCanvasMessage(safeWidth, safeHeight);
+    this.postWorkerMessage(message);
   }
 
   private readonly handleRuntimeMessage = (event: MessageEvent<RustRendererWorkerOutboundMessage>): void => {
@@ -1166,36 +1313,15 @@ export class WebGPURenderer {
         this.reportEngineError(payload.source, payload.message, payload.location, payload.fatal);
         return;
       }
-      this.markRendererFatal({
-        code: payload.source,
-        stage: payload.location,
-        message: payload.message,
-        timestamp: performance.now(),
-        cause: new Error(`[${payload.source}] ${payload.message}${payload.location ? ` @ ${payload.location}` : ''}`),
-        terminationPolicy: 'keep-worker-alive',
-      });
+      this.markRendererFatal(this.buildEngineFatalTransition(payload));
       return;
     }
     if (payload.type === 'FATAL_ERROR') {
-      this.markRendererFatal({
-        code: payload.code,
-        stage: 'WORKER',
-        message: payload.message,
-        timestamp: performance.now(),
-        cause: new Error(`[${payload.code}] ${payload.message}`),
-        terminationPolicy: 'keep-worker-alive',
-      });
+      this.markRendererFatal(this.buildFatalErrorTransition(payload));
       return;
     }
     if (payload.type === 'DEVICE_LOST') {
-      this.markRendererFatal({
-        code: payload.code,
-        stage: 'WORKER',
-        message: payload.reason,
-        timestamp: performance.now(),
-        cause: new Error(`[${payload.code}] ${payload.reason}`),
-        terminationPolicy: 'keep-worker-alive',
-      });
+      this.markRendererFatal(this.buildDeviceLostTransition(payload));
       return;
     }
     if (payload.type === 'RUNTIME_EVENT') {
@@ -1207,14 +1333,7 @@ export class WebGPURenderer {
         emittedAtMs: payload.emittedAtMs,
       };
       if (payload.severity === 'fatal') {
-        this.markRendererFatal({
-          code: payload.code,
-          stage: payload.stage,
-          message: payload.message,
-          timestamp: payload.emittedAtMs,
-          cause: new Error(`[${payload.code}] ${payload.message}`),
-          terminationPolicy: 'keep-worker-alive',
-        });
+        this.markRendererFatal(this.buildRuntimeEventFatalTransition(payload));
       }
       return;
     }
