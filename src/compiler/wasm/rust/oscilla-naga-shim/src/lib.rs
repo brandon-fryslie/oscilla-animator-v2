@@ -128,6 +128,10 @@ enum NagaExpressionIR {
         to: NagaScalarKindIR,
         expr: usize,
     },
+    Call {
+        function: String,
+        args: Vec<usize>,
+    },
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -412,6 +416,13 @@ impl<'a> ExpressionEmitter<'a> {
                     NagaScalarKindIR::Bool => format!("({source} != 0u)"),
                     _ => format!("bitcast<{}>({source})", scalar_to_wgsl(*to)),
                 }
+            }
+            NagaExpressionIR::Call { function, args } => {
+                let mut emitted_args: Vec<String> = Vec::with_capacity(args.len());
+                for arg in args {
+                    emitted_args.push(self.emit(*arg)?);
+                }
+                format!("{function}({})", emitted_args.join(", "))
             }
         };
 
