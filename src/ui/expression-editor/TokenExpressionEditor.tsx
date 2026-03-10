@@ -355,7 +355,7 @@ export const TokenExpressionEditor = forwardRef<TokenExpressionEditorHandle, Tok
         editorRef.current.innerHTML = buildInnerHTML(value, addressRegistry, connectedShorthands);
         lastRenderedValue.current = value;
       }
-    }, []);
+    }, [value, addressRegistry, connectedShorthands]);
 
     // Handle input (user typing)
     const handleInput = useCallback(() => {
