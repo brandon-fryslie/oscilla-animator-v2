@@ -65,7 +65,7 @@ export function halton(index: number, base: number): number {
  * @param index - Element index
  * @param base1 - Base for first dimension
  * @param base2 - Base for second dimension
- * @returns [u, v] basis coordinates in [0, 1] x [0, 1]
+ * @returns [u, v] in [0, 1] x [0, 1]
  */
 export function halton2D(index: number, base1: number, base2: number): [number, number] {
   if (typeof base1 !== 'number' || typeof base2 !== 'number') {
@@ -141,7 +141,7 @@ export function generateSeed(instanceId: string, elementIndex: number): number {
  * @param basisKind - Generation algorithm
  * @param index - Element index
  * @param instanceId - Instance identifier (used for random seed)
- * @returns [u, v] basis coordinates in [0, 1] x [0, 1]
+ * @returns [u, v] in [0, 1] x [0, 1]
  */
 export function generateUV(
   basisKind: BasisKind,

@@ -6,7 +6,7 @@
  *
  * Inputs:
  *   points        — Field<vec2> from upstream layout/shape (required, no defaulting)
- *   target        — One<vec2> attraction point (default [0, 0])
+ *   target        — One<vec2> attraction point (default [0.5, 0.5])
  *   strength  — One<float> 0..1 slider (default 0.5)
  *
  * Output:
@@ -40,8 +40,7 @@ export function register(): void {
     loweringPurity: 'pure',
     inputs: {
       points: { label: 'Points', type: inferType(VEC2, { kind: 'none' }, { cardinality: ATTRACTOR_FIELD_CARD }), defaulting: 'forbidden' },
-      // [LAW:one-source-of-truth] World-space default target is the canonical origin.
-      target: { label: 'Target', type: canonicalType(VEC2), defaultValue: [0, 0], defaultSource: defaultSourceConst([0, 0]), exposedAsPort: true },
+      target: { label: 'Target', type: canonicalType(VEC2), defaultValue: [0.5, 0.5], defaultSource: defaultSourceConst([0.5, 0.5]), exposedAsPort: true },
       strength: { label: 'Strength', type: canonicalType(FLOAT), defaultValue: 0.5, defaultSource: defaultSourceConst(0.5), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
     },
     outputs: {

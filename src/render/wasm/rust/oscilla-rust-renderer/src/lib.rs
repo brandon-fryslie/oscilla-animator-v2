@@ -99,18 +99,6 @@ pub fn attach_shared_input(shared_input: js_sys::SharedArrayBuffer) -> Result<()
 }
 
 #[wasm_bindgen]
-pub fn attach_shared_arena(shared_arena: js_sys::SharedArrayBuffer) -> Result<(), JsValue> {
-    ENGINE.with(|engine_cell| {
-        let mut engine_ref = engine_cell.borrow_mut();
-        let engine = engine_ref.as_mut().ok_or_else(|| {
-            JsValue::from_str("Rust engine must be initialized before attaching shared arena")
-        })?;
-        engine.attach_shared_arena(shared_arena);
-        Ok(())
-    })
-}
-
-#[wasm_bindgen]
 pub fn attach_shared_shape_bank(
     shared_shape_bank: js_sys::SharedArrayBuffer,
 ) -> Result<(), JsValue> {

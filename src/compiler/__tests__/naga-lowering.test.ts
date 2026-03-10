@@ -117,7 +117,10 @@ describe('naga lowering artifact', () => {
     expect(result.kind).toBe('ok');
     if (result.kind !== 'ok') return;
 
-    expect(result.program.nagaLoweringProgram?.coverage.droppedComputeStepCount ?? 0).toBe(0);
+    const artifact = result.program.nagaLoweringProgram;
+    expect(artifact).toBeDefined();
+    if (!artifact) return;
+    expect(artifact.coverage.droppedComputeStepCount).toBe(0);
     const warningCodes = result.warnings.map((warning) => warning.code);
     expect(warningCodes).not.toContain('W_NAGA_LOWERING_INCOMPLETE');
   });

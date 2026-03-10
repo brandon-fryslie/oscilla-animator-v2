@@ -1042,7 +1042,11 @@ function emitPureFnF32(
         source,
       );
       const zero = emitLiteralF32(ctx, builtins, 0, source);
-      return emitBuiltinCall(ctx, 'select', [zero, clamped, finiteCondition], source);
+      const normalizedClamped = ctx.addExpression(
+        { kind: 'binary', op: 'add', left: clamped, right: zero },
+        source,
+      );
+      return emitBuiltinCall(ctx, 'select', [zero, normalizedClamped, finiteCondition], source);
     }
     case OpCode.I32ToF64:
       return expectArity(inputExprs, 1) ? inputExprs[0]! : null;

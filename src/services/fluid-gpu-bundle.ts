@@ -327,13 +327,13 @@ function composeFluidBindings(
       program,
       composable.splat?.id ?? null,
       '_centerX',
-      clamp(asFinite(composable.splat?.params.centerX, 0.0), -2.0, 2.0),
+      clamp(asFinite(composable.splat?.params.centerX, 0.5), 0.0, 1.0),
     ),
     centerY: resolveScalarBinding(
       program,
       composable.splat?.id ?? null,
       '_centerY',
-      clamp(asFinite(composable.splat?.params.centerY, 0.0), -2.0, 2.0),
+      clamp(asFinite(composable.splat?.params.centerY, 0.5), 0.0, 1.0),
     ),
     curlStrength: resolveScalarBinding(
       program,
@@ -508,8 +508,8 @@ fn compute_splat_main(@builtin(global_invocation_id) gid: vec3<u32>) {
 
   let splat_radius = clamp(read_scalar_param(PARAM_SPLAT_RADIUS_OFFSET, PARAM_SPLAT_RADIUS_LANE_STRIDE, PARAM_SPLAT_RADIUS_COMPONENT_STRIDE, PARAM_SPLAT_RADIUS_FALLBACK), 2.0, 256.0);
   let splat_strength = max(0.0, read_scalar_param(PARAM_SPLAT_STRENGTH_OFFSET, PARAM_SPLAT_STRENGTH_LANE_STRIDE, PARAM_SPLAT_STRENGTH_COMPONENT_STRIDE, PARAM_SPLAT_STRENGTH_FALLBACK));
-  let center_x = clamp(read_scalar_param(PARAM_CENTER_X_OFFSET, PARAM_CENTER_X_LANE_STRIDE, PARAM_CENTER_X_COMPONENT_STRIDE, PARAM_CENTER_X_FALLBACK), -2.0, 2.0);
-  let center_y = clamp(read_scalar_param(PARAM_CENTER_Y_OFFSET, PARAM_CENTER_Y_LANE_STRIDE, PARAM_CENTER_Y_COMPONENT_STRIDE, PARAM_CENTER_Y_FALLBACK), -2.0, 2.0);
+  let center_x = clamp(read_scalar_param(PARAM_CENTER_X_OFFSET, PARAM_CENTER_X_LANE_STRIDE, PARAM_CENTER_X_COMPONENT_STRIDE, PARAM_CENTER_X_FALLBACK), 0.0, 1.0);
+  let center_y = clamp(read_scalar_param(PARAM_CENTER_Y_OFFSET, PARAM_CENTER_Y_LANE_STRIDE, PARAM_CENTER_Y_COMPONENT_STRIDE, PARAM_CENTER_Y_FALLBACK), 0.0, 1.0);
 
   let dt = clamp(global.delta_time_seconds, 1.0 / 240.0, 1.0 / 20.0);
   let mouse = vec2<f32>(
@@ -519,11 +519,9 @@ fn compute_splat_main(@builtin(global_invocation_id) gid: vec3<u32>) {
   let mouse_buttons = global.view_proj[1][1];
   let user_strength = select(0.0, 1.0, mouse_buttons > 0.5);
 
-  // [LAW:one-source-of-truth] Splat center parameters are world-space; convert
-  // once at this simulation boundary for UV-grid operations.
   let center = vec2<f32>(
-    center_x * 0.5 + 0.5 + 0.22 * cos(global.time_seconds * 0.19),
-    center_y * 0.5 + 0.5 + 0.22 * sin(global.time_seconds * 0.17),
+    center_x + 0.22 * cos(global.time_seconds * 0.19),
+    center_y + 0.22 * sin(global.time_seconds * 0.17),
   );
   let to_center = uv - center;
   let center_falloff = exp(-dot(to_center, to_center) * 24.0);
@@ -801,10 +799,7 @@ fn compute_present_main(@builtin(global_invocation_id) gid: vec3<u32>) {
     cos(global.time_seconds * 0.8 + uv.x * 21.0 - lane_f * 0.017),
   ) * (0.015 + 0.035 * dye);
   let flow = vel * (0.35 + dye * 0.65);
-  let pos01 = fract(base_uv + flow + swirl + lane_jitter * jitter_strength);
-  // [LAW:one-source-of-truth] Runtime controlPoints are world-space; fluid
-  // present maps UV particle positions to zero-centered world coordinates.
-  let pos = pos01 * 2.0 - vec2<f32>(1.0, 1.0);
+  let pos = fract(base_uv + flow + swirl + lane_jitter * jitter_strength);
   let wave = vec3<f32>(
     abs(sin(6.28318 * (uv.x * 0.95 + global.time_seconds * 0.07 + dye * 0.09))),
     abs(sin(6.28318 * (uv.y * 1.10 + global.time_seconds * 0.11 + aux * 0.07))),

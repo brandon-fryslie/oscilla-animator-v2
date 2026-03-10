@@ -239,10 +239,11 @@ export const CanvasTab: React.FC<CanvasTabProps> = ({ onCanvasReady }) => {
     const handleWheel = (e: WheelEvent) => {
       e.preventDefault();
 
-      // [LAW:one-source-of-truth] Zoom is anchored at cursor position so
-      // viewport interaction matches the canonical world-space transform.
+      // Simple zoom without mouse-following
       const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
-      viewport.zoomBy(zoomFactor, e.offsetX, e.offsetY);
+      const newZoom = Math.max(0.1, Math.min(10, viewport.zoom * zoomFactor));
+
+      viewport.setZoom(newZoom);
 
       // External channel: wheel delta (normalized)
       if (externalWriteBus) {

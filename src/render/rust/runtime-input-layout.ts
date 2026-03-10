@@ -21,13 +21,10 @@ export const RUNTIME_INPUT_INDEX = Object.freeze({
   gaugeActive: 12,
   sinkTableWords: 13,
   shapeBankWords: 14,
-  arenaWords: 15,
-  installEpoch: 16,
 } as const);
 
 export interface RuntimeSharedPlanes {
   readonly sharedInput: SharedArrayBuffer;
-  readonly sharedArena: SharedArrayBuffer;
   readonly sharedShapeBank: SharedArrayBuffer;
   readonly sharedSinkTable: SharedArrayBuffer;
 }

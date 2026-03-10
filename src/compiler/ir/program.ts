@@ -52,8 +52,8 @@ export type IrVersion = 1;
 export interface CameraDeclIR {
   readonly kind: 'camera';
   readonly projectionSlot: ValueSlot;  // cameraProjection payload (0=ortho, 1=persp)
-  readonly centerXSlot: ValueSlot;     // float world-space x
-  readonly centerYSlot: ValueSlot;     // float world-space y
+  readonly centerXSlot: ValueSlot;     // float unit=norm01
+  readonly centerYSlot: ValueSlot;     // float unit=norm01
   readonly distanceSlot: ValueSlot;    // float unit=scalar
   readonly tiltDegSlot: ValueSlot;     // float unit=deg
   readonly yawDegSlot: ValueSlot;      // float unit=deg

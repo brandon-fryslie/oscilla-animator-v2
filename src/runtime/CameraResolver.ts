@@ -23,8 +23,8 @@ import {
 
 export interface ResolvedCameraParams {
   readonly projection: 'ortho' | 'persp';
-  readonly centerX: number;   // world-space x
-  readonly centerY: number;   // world-space y
+  readonly centerX: number;   // [0, 1]
+  readonly centerY: number;   // [0, 1]
   readonly distance: number;  // > 0
   readonly tiltRad: number;   // radians, clamped
   readonly yawRad: number;    // radians, wrapped
@@ -59,6 +59,10 @@ export const DEFAULT_CAMERA: Readonly<ResolvedCameraParams> = Object.freeze({
 
 function clamp(v: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, v));
+}
+
+function clamp01(v: number): number {
+  return clamp(v, 0, 1);
 }
 
 function wrapDegrees(d: number): number {
@@ -125,8 +129,8 @@ export function resolveCameraDecl(
 
   // Read raw values with NaN/Inf fallbacks to spec defaults
   const projRaw = sanitize(readSlot(decl.projectionSlot), 0);
-  const centerXRaw = sanitize(readSlot(decl.centerXSlot), CANONICAL_WORLD_CENTER_X);
-  const centerYRaw = sanitize(readSlot(decl.centerYSlot), CANONICAL_WORLD_CENTER_Y);
+  const centerXRaw = sanitize(readSlot(decl.centerXSlot), 0.5);
+  const centerYRaw = sanitize(readSlot(decl.centerYSlot), 0.5);
   const distanceRaw = sanitize(readSlot(decl.distanceSlot), 2.0);
   const tiltDegRaw = sanitize(readSlot(decl.tiltDegSlot), 0);
   const yawDegRaw = sanitize(readSlot(decl.yawDegSlot), 0);
@@ -137,8 +141,8 @@ export function resolveCameraDecl(
   // Apply deterministic sanitization rules (spec §5.2)
   const projI32 = (projRaw | 0);
   const projection: 'ortho' | 'persp' = projI32 === 1 ? 'persp' : 'ortho';
-  const centerX = centerXRaw;
-  const centerY = centerYRaw;
+  const centerX = clamp01(centerXRaw);
+  const centerY = clamp01(centerYRaw);
   const distance = Math.max(distanceRaw, 0.0001);
   const tiltDeg = clamp(tiltDegRaw, -89.9, 89.9);
   const yawDeg = wrapDegrees(yawDegRaw);

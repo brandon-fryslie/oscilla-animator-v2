@@ -402,16 +402,260 @@ export function applyContinuity(
   state: RuntimeState,
   getBuffer: (slot: ValueSlot) => Float32Array
 ): void {
-  // [LAW:single-enforcer] Continuity behavior is temporarily disabled at this
-  // runtime boundary; render-path values flow directly from base to output.
-  // [LAW:one-source-of-truth] The materialized base slot is the canonical
-  // source for current-frame field values while continuity is disabled.
-  void state;
-  const { baseSlot, outputSlot } = step;
+  // [LAW:one-source-of-truth] Continuity kernels operate on AoS/interleaved
+  // working buffers; runtime frame execution owns SoA<->AoS arena transcoding.
+  const { targetKey, instanceId, policy, baseSlot, outputSlot, semantic, stride } = step;
+  const targetId = targetKey as StableTargetId;
+  const instanceChangedThisFrame = state.continuity.changedInstancesThisFrame.has(instanceId);
+
+  // Get current base buffer
   const baseBuffer = getBuffer(baseSlot);
-  const outputBuffer = baseSlot === outputSlot ? baseBuffer : getBuffer(outputSlot);
-  if (outputBuffer !== baseBuffer) {
-    outputBuffer.set(baseBuffer);
+  const bufferLength = baseBuffer.length;
+
+  // Stride comes from compiled type metadata (not semantic heuristics)
+  const elementCount = bufferLength / stride;
+
+  // CRITICAL: Capture old buffer values BEFORE getOrCreateTargetState replaces them
+  // When count changes, getOrCreateTargetState creates new zero-filled buffers,
+  // discarding the old values we need for continuity
+  const ctx = capturePreAllocationState(
+    state.continuity,
+    targetId,
+    bufferLength,
+    instanceChangedThisFrame,
+  );
+
+  // Get or create continuity state for this target
+  // NOTE: This may replace the state with new zero-filled buffers if count changed
+  const targetState = getOrCreateTargetState(
+    state.continuity,
+    targetId,
+    bufferLength,
+    instanceId
+  );
+
+  // Compute dt for slew (I30: use t_model_ms only)
+  const tModelMs = state.time !== null ? state.time.tMs : 0;
+  const dtMs = Math.max(0, tModelMs - state.continuity.lastTModelMs);
+
+  // If this is a newly created target state (slew buffer is all zeros),
+  // initialize it to the base values to avoid starting from zero
+  if (!ctx.hadPreviousState) {
+    // Initialize slew buffer to base values for smooth first-frame behavior
+    initializeSlewBuffer(baseBuffer, targetState.slewBuffer, bufferLength);
+    // Initialize gauge to zero (no offset needed on first frame)
+    targetState.gaugeBuffer.fill(0);
+  }
+
+  // Get mapping if domain changed
+  const mapping = resolveMappingForApply(state.continuity, instanceId);
+
+  // For crossfade, capture old effective values for blending
+  // Use the pre-captured snapshot (before getOrCreateTargetState zeroed it)
+  let oldEffectiveSnapshot: Float32Array | null = null;
+  if (instanceChangedThisFrame && ctx.hadPreviousState) {
+    oldEffectiveSnapshot = ctx.oldSlewSnapshot;
+  }
+
+  // Handle domain change - reinitialize buffers (for non-crossfade policies)
+  // Crossfade handles its own initialization differently
+  if (instanceChangedThisFrame && policy.kind !== 'crossfade') {
+    // [LAW:one-source-of-truth] Domain-change continuity initialization reads
+    // one pre-allocation snapshot for both effective and slew transfer paths.
+    const oldEffective = ctx.oldSlewSnapshot;
+    const oldSlew = ctx.oldSlewSnapshot;
+
+    // For ALL policies that use gauge (preserve, slew, project):
+    // Initialize gauge to preserve effective values at boundary (spec §2.5)
+    // This ensures mapped elements maintain their visual position at the boundary
+    initializeGaugeOnDomainChange(
+      oldEffective,
+      baseBuffer,
+      targetState.gaugeBuffer,
+      mapping,
+      elementCount,
+      stride
+    );
+
+    // Initialize slew with mapped values
+    // For project: Old effective -> slews toward base (no offset)
+    // For slew with gauge: Old effective -> slews toward base+gauge
+    initializeSlewWithMapping(
+      oldSlew,
+      baseBuffer,
+      targetState.slewBuffer,
+      mapping,
+      elementCount,
+      stride
+    );
+  }
+
+  // Get output buffer (may be same as base for in-place)
+  const outputBuffer =
+    baseSlot === outputSlot ? baseBuffer : getBuffer(outputSlot);
+
+  // Read config for decay exponent, tau multiplier, and base tau
+  const config = state.continuityConfig;
+  const decayExponent = config && config.decayExponent !== undefined ? config.decayExponent : 0.7;
+  const tauMultiplier = config && config.tauMultiplier !== undefined ? config.tauMultiplier : 1.0;
+  const baseTauMs = config && config.baseTauMs !== undefined ? config.baseTauMs : 150;
+
+  // Compute base tau factor: (baseTauMs / 150)
+  // This normalizes around the canonical 150ms average semantic tau
+  const baseTauFactor = baseTauMs / 150;
+
+  // Handle test pulse request (inject into gauge buffer before applying policy)
+  const pulseRequest = config?.testPulseRequest;
+  if (pulseRequest && pulseRequest.appliedFrameId !== state.cache.frameId) {
+    // Check if this target matches the pulse semantic (or if no semantic filter)
+    const shouldApplyPulse = !pulseRequest.targetSemantic || pulseRequest.targetSemantic === semantic;
+
+    if (shouldApplyPulse) {
+      // Inject pulse into gauge buffer
+      const magnitude = pulseRequest.magnitude;
+      for (let i = 0; i < bufferLength; i++) {
+        targetState.gaugeBuffer[i] += magnitude;
+      }
+
+      // Mark pulse as applied this frame
+      pulseRequest.appliedFrameId = state.cache.frameId;
+    }
+  }
+
+  // Apply policy
+  switch (policy.kind) {
+    case 'none':
+      // Pass through unchanged
+      if (outputBuffer !== baseBuffer) {
+        outputBuffer.set(baseBuffer);
+      }
+      break;
+
+    case 'preserve':
+      // Apply gauge only (hard continuity)
+      // [LAW:dataflow-not-control-flow] Preserve path always computes into a
+      // dedicated target buffer first, then writes output.
+      {
+        const preserveTarget = ensureContinuityScratch(bufferLength);
+        applyAdditiveGauge(baseBuffer, targetState.gaugeBuffer, preserveTarget, bufferLength);
+        if (outputBuffer !== preserveTarget) {
+          outputBuffer.set(preserveTarget);
+        }
+      }
+      break;
+
+    case 'slew': {
+      // Slew toward base value (apply tau multiplier and base tau factor)
+      const effectiveTau = policy.tauMs * baseTauFactor * tauMultiplier;
+      applySlewFilter(
+        baseBuffer,
+        targetState.slewBuffer,
+        outputBuffer,
+        effectiveTau,
+        dtMs,
+        bufferLength
+      );
+      break;
+    }
+
+    case 'project': {
+      // Project policy: Map elements by ID, decay gauge, apply gauge, then slew (spec §3)
+      // 1. Decay gauge toward zero (for animated properties like rotating spirals)
+      // 2. Apply gauge: gauged = base + gauge (preserves continuity at boundary)
+      // 3. Slew toward gauged values (smooths any transitions)
+
+      // Apply tau multiplier and base tau factor to policy tau
+      const effectiveTau = policy.tauMs * baseTauFactor * tauMultiplier;
+
+      // Decay gauge toward zero over time (using config exponent)
+      decayGauge(targetState.gaugeBuffer, effectiveTau, dtMs, bufferLength, decayExponent);
+
+      // [LAW:one-source-of-truth] Keep continuity read/write ownership explicit:
+      // read base into a staged gauged buffer, then write output via slew.
+      const gaugedTarget = ensureContinuityScratch(bufferLength);
+      applyAdditiveGauge(baseBuffer, targetState.gaugeBuffer, gaugedTarget, bufferLength);
+
+      // Slew toward gauged values
+      applySlewFilter(
+        gaugedTarget,       // Target: gauged values (base + gauge)
+        targetState.slewBuffer,
+        outputBuffer,
+        effectiveTau,
+        dtMs,
+        bufferLength
+      );
+      break;
+    }
+
+    case 'crossfade': {
+      // Crossfade for unmappable cases (spec §3.7)
+      // Blend old effective buffer with new base buffer over time window
+      const { windowMs, curve } = policy;
+
+      // On domain change, snapshot the old effective values to blend from
+      // We use the pre-captured oldEffectiveSnapshot to get values before any reinitialization
+      if (instanceChangedThisFrame) {
+        // Allocate buffer for old values if needed
+        if (!targetState.crossfadeOldBuffer || targetState.crossfadeOldBuffer.length !== bufferLength) {
+          targetState.crossfadeOldBuffer = new Float32Array(bufferLength);
+        }
+
+        // Use the snapshot captured at the start of applyContinuity
+        if (oldEffectiveSnapshot && oldEffectiveSnapshot.length > 0) {
+          // Copy from snapshot (the real old values before any modification)
+          const copyCount = Math.min(oldEffectiveSnapshot.length, bufferLength);
+          for (let i = 0; i < copyCount; i++) {
+            targetState.crossfadeOldBuffer[i] = oldEffectiveSnapshot[i];
+          }
+          // New elements beyond old count start at base
+          for (let i = copyCount; i < bufferLength; i++) {
+            targetState.crossfadeOldBuffer[i] = baseBuffer[i];
+          }
+        } else {
+          // No previous state - start from base (instant transition)
+          targetState.crossfadeOldBuffer.set(baseBuffer);
+        }
+
+        // Mark crossfade start time
+        targetState.crossfadeStartMs = tModelMs;
+      }
+
+      // [LAW:one-source-of-truth] crossfadeStartMs is the single authority for
+      // whether a crossfade is currently active.
+      if (targetState.crossfadeStartMs === undefined || !targetState.crossfadeOldBuffer) {
+        // No active crossfade in this frame: pass through base values.
+        if (outputBuffer !== baseBuffer) {
+          outputBuffer.set(baseBuffer);
+        }
+        break;
+      }
+
+      // Compute blend weight based on elapsed time
+      const startMs = targetState.crossfadeStartMs;
+      const elapsed = Math.max(0, tModelMs - startMs);
+      const t = Math.min(1.0, elapsed / windowMs);
+
+      // Apply curve function
+      const w = curve === 'smoothstep' || curve === 'ease-in-out'
+        ? smoothstep(t)
+        : t; // linear
+
+      if (w >= 1.0) {
+        // Crossfade complete or not initialized - pass through base
+        if (outputBuffer !== baseBuffer) {
+          outputBuffer.set(baseBuffer);
+        }
+        // Clear active-state marker when complete; retain old buffer for reuse.
+        targetState.crossfadeStartMs = undefined;
+      } else {
+        // Blend old and new: X_out[i] = lerp(X_old_eff[i], X_new_base[i], w)
+        const oldBuffer = targetState.crossfadeOldBuffer;
+        for (let i = 0; i < bufferLength; i++) {
+          outputBuffer[i] = lerp(oldBuffer[i], baseBuffer[i], w);
+        }
+      }
+      break;
+    }
   }
 }
 

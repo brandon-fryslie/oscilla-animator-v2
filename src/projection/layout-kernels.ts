@@ -25,10 +25,8 @@ export function gridLayout3D(out: Float32Array, N: number, cols: number, rows: n
   for (let i = 0; i < N; i++) {
     const col = i % cols;
     const row = Math.floor(i / cols) % rows;
-    // [LAW:one-source-of-truth] Grid helper emits centered cell coordinates so
-    // grid positions avoid hard-clamping to world-space boundaries.
-    const x = (col + 0.5) / cols;
-    const y = (row + 0.5) / rows;
+    const x = cols > 1 ? col / (cols - 1) : 0.5;
+    const y = rows > 1 ? row / (rows - 1) : 0.5;
     out[i * 3 + 0] = x;
     out[i * 3 + 1] = y;
     out[i * 3 + 2] = 0.0; // Explicit z=0

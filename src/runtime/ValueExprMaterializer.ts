@@ -994,7 +994,7 @@ function materializeIntrinsic(
  * Materialize placement basis field (uv, rank, seed).
  *
  * Produces per-element values based on the chosen basis algorithm.
- * - uv: 2D basis coordinates in [0,1]² (stride=2), mapped to world by layout kernels
+ * - uv: 2D coordinates in [0,1]² (stride=2)
  * - rank: 1D ordering value in [0,1) (stride=1)
  * - seed: pseudo-random value per element (stride=1)
  */
@@ -1010,16 +1010,14 @@ function materializePlacement(
       // Produce vec2 UV coordinates based on basis kind
       switch (basisKind) {
         case 'grid': {
-          // [LAW:one-source-of-truth] Grid UV sampling uses centered cell
-          // coordinates so low-cardinality layouts stay centered instead of
-          // snapping to boundary cells at u/v = 0 or 1.
-          const cols = Math.max(1, Math.ceil(Math.sqrt(Math.max(count, 1))));
-          const rows = Math.max(1, Math.ceil(count / cols));
+          // Grid-aligned: approximate square grid from count
+          const cols = Math.ceil(Math.sqrt(count));
+          const rows = Math.ceil(count / cols);
           for (let i = 0; i < count; i++) {
             const col = i % cols;
             const row = Math.floor(i / cols);
-            buf[laneComponentIndex(i, 0, stride)] = (col + 0.5) / cols;
-            buf[laneComponentIndex(i, 1, stride)] = (row + 0.5) / rows;
+            buf[laneComponentIndex(i, 0, stride)] = cols > 1 ? col / (cols - 1) : 0.5;
+            buf[laneComponentIndex(i, 1, stride)] = rows > 1 ? row / (rows - 1) : 0.5;
           }
           break;
         }

@@ -156,8 +156,8 @@ function resetAnimationLoopState(state: AnimationLoopState): void {
  * Execute a single animation frame.
  *
  * [LAW:dataflow-not-control-flow] Main-thread execution always performs the
- * same input publication order; worker-owned compute/render stages advance
- * frame state from a single GPU runtime authority.
+ * same viewport publication + telemetry read; worker-owned runtime data drives
+ * variability through shared planes and scheduler packets.
  */
 export function executeAnimationFrame(
   tMs: number,
@@ -173,20 +173,20 @@ export function executeAnimationFrame(
 
   const { canvas, renderer, arena } = resolveWebGPULoopRuntime(deps);
   const currentProgram = getCurrentProgram();
-  const currentState = getCurrentState();
-  if (!currentProgram || !currentState) {
+  if (!currentProgram) {
     return;
   }
 
-  const runtimeInputPlaneValues = readRuntimeInputPlaneValues(currentState);
+  const runtimeInputPlaneValues = readRuntimeInputPlaneValues(getCurrentState());
   const { zoom, pan } = store.viewport;
   const renderWidth = Math.max(1, Math.floor(store.viewport.canvasWidth || canvas.width));
   const renderHeight = Math.max(1, Math.floor(store.viewport.canvasHeight || canvas.height));
   arena.beginFrame();
   try {
     renderer.resizeCanvas(renderWidth, renderHeight);
-    // [LAW:single-enforcer] AnimationLoop is the frame boundary that marshals
-    // per-frame CPU inputs into one renderer-owned runtime input envelope.
+    // [LAW:single-enforcer] Renderer worker is the one runtime-input boundary;
+    // animation loop publishes viewport/time there and does not dual-publish to
+    // any secondary runtime worker seam.
     renderer.setViewportFrame({
       width: renderWidth,
       height: renderHeight,
@@ -194,13 +194,7 @@ export function executeAnimationFrame(
       panX: pan.x,
       panY: pan.y,
       timeMs: tMs,
-      inputMouseX: runtimeInputPlaneValues.inputMouseX,
-      inputMouseY: runtimeInputPlaneValues.inputMouseY,
-      inputMouseButtons: runtimeInputPlaneValues.inputMouseButtons,
-      inputAudioLow: runtimeInputPlaneValues.inputAudioLow,
-      inputAudioMid: runtimeInputPlaneValues.inputAudioMid,
-      inputAudioHigh: runtimeInputPlaneValues.inputAudioHigh,
-      inputGaugeActive: runtimeInputPlaneValues.inputGaugeActive,
+      ...runtimeInputPlaneValues,
     });
     markRuntimeFrameAdvanced(-1, tMs);
   } finally {

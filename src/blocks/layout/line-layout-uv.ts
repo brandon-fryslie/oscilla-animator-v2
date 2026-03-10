@@ -45,10 +45,10 @@ export function register(): void {
     },
     inputs: {
       elements: { label: 'Elements', type: inferType(payloadVar('line_elements_payload'), { kind: 'none' }, { cardinality: LINE_FIELD_CARD }) },
-      x0: { label: 'Start X', type: canonicalType(FLOAT), defaultValue: -0.8, defaultSource: defaultSourceConst(-0.8), exposedAsPort: true, uiHint: { kind: 'slider', min: -2, max: 2, step: 0.01 } },
-      y0: { label: 'Start Y', type: canonicalType(FLOAT), defaultValue: -0.8, defaultSource: defaultSourceConst(-0.8), exposedAsPort: true, uiHint: { kind: 'slider', min: -2, max: 2, step: 0.01 } },
-      x1: { label: 'End X', type: canonicalType(FLOAT), defaultValue: 0.8, defaultSource: defaultSourceConst(0.8), exposedAsPort: true, uiHint: { kind: 'slider', min: -2, max: 2, step: 0.01 } },
-      y1: { label: 'End Y', type: canonicalType(FLOAT), defaultValue: 0.8, defaultSource: defaultSourceConst(0.8), exposedAsPort: true, uiHint: { kind: 'slider', min: -2, max: 2, step: 0.01 } },
+      x0: { label: 'Start X', type: canonicalType(FLOAT), defaultValue: 0.2, defaultSource: defaultSourceConst(0.2), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
+      y0: { label: 'Start Y', type: canonicalType(FLOAT), defaultValue: 0.2, defaultSource: defaultSourceConst(0.2), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
+      x1: { label: 'End X', type: canonicalType(FLOAT), defaultValue: 0.8, defaultSource: defaultSourceConst(0.8), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
+      y1: { label: 'End Y', type: canonicalType(FLOAT), defaultValue: 0.8, defaultSource: defaultSourceConst(0.8), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
     },
     outputs: {
       rotation: { label: 'Rotation', type: inferType(FLOAT, { kind: 'none' }, { cardinality: LINE_FIELD_CARD }) },

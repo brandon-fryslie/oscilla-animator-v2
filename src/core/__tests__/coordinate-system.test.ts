@@ -34,8 +34,8 @@ describe('Coordinate system contract', () => {
   });
 
   it('exposes canonical camera axes and center constants', () => {
-    expect(CANONICAL_WORLD_CENTER_X).toBe(0);
-    expect(CANONICAL_WORLD_CENTER_Y).toBe(0);
+    expect(CANONICAL_WORLD_CENTER_X).toBe(0.5);
+    expect(CANONICAL_WORLD_CENTER_Y).toBe(0.5);
     expect(CANONICAL_CAMERA_WORLD_TARGET_Z).toBe(0);
     expect(CANONICAL_CAMERA_UP).toEqual({ x: 0, y: 1, z: 0 });
   });
