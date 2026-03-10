@@ -25,11 +25,16 @@ function normalizeAddressCanonicalName(address: string): string {
 }
 
 function strictPortId(
-  rawPortId: string,
+  rawPortId: unknown,
   port: InputPort | OutputPort,
   blockId: string,
   direction: 'input' | 'output'
 ) {
+  if (typeof rawPortId !== 'string') {
+    throw new Error(
+      `AddressRegistry invariant violation: ${direction} port key is not a string on block "${blockId}" (${String(rawPortId)})`
+    );
+  }
   const normalizedPortId = rawPortId.trim();
   if (normalizedPortId.length === 0) {
     throw new Error(`AddressRegistry invariant violation: ${direction} port id is empty on block "${blockId}"`);
@@ -98,8 +103,8 @@ export class AddressRegistry {
       }
 
       // Output ports
-      for (const [portId, port] of block.outputPorts || []) {
-        const typedPortId = strictPortId(String(portId), port, String(block.id), 'output');
+      for (const [portId, port] of block.outputPorts) {
+        const typedPortId = strictPortId(portId, port, String(block.id), 'output');
         const outAddr = getOutputAddress(block, typedPortId);
         const resolved = resolveAddress(patch, addressToString(outAddr));
         if (resolved) {
@@ -113,8 +118,8 @@ export class AddressRegistry {
       }
 
       // Input ports
-      for (const [portId, port] of block.inputPorts || []) {
-        const typedPortId = strictPortId(String(portId), port, String(block.id), 'input');
+      for (const [portId, port] of block.inputPorts) {
+        const typedPortId = strictPortId(portId, port, String(block.id), 'input');
         const inAddr = getInputAddress(block, typedPortId);
         const resolved = resolveAddress(patch, addressToString(inAddr));
         if (resolved) {
