@@ -125,7 +125,7 @@
 │   state: RuntimeState,                                                                                                │
 │   arena: RenderBufferArena,                                                                                           │
 │   tAbsMs: number,                                                                                                     │
-│ ): Generator<StepSnapshot, RenderFrameIR, void>                                                                       │
+│ ): Generator<StepSnapshot, LegacyRenderFrame, void>                                                                       │
 │                                                                                                                       │
 │ Mirrors executeFrame() structure (lines 163–671 of ScheduleExecutor.ts) using the same imported helpers               │
 │ (evaluateValueExprScalar, materializeValueExpr, evaluateValueExprEvent, resolveTime, assembleRenderFrame, etc.).      │
@@ -156,7 +156,7 @@
 │   // State                                                                                                            │
 │   get mode(): SessionMode                                                                                             │
 │   get currentSnapshot(): StepSnapshot | null                                                                          │
-│   get frameResult(): RenderFrameIR | null                                                                             │
+│   get frameResult(): LegacyRenderFrame | null                                                                             │
 │   get stepHistory(): readonly StepSnapshot[]                                                                          │
 │                                                                                                                       │
 │   // Breakpoints                                                                                                      │
@@ -169,7 +169,7 @@
 │   stepNext(): StepSnapshot | null                                                                                     │
 │   runToBreakpoint(): StepSnapshot | null                                                                              │
 │   runToPhaseEnd(): StepSnapshot | null                                                                                │
-│   finishFrame(): RenderFrameIR                                                                                        │
+│   finishFrame(): LegacyRenderFrame                                                                                        │
 │   dispose(): void                                                                                                     │
 │ }                                                                                                                     │
 │                                                                                                                       │

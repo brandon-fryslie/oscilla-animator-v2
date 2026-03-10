@@ -11,7 +11,7 @@ import type { Step, StateMapping, StableStateId } from '../compiler/ir/types';
 import type { IrInstanceId as InstanceId } from '../types';
 import { instanceId as makeInstanceId } from '../core/ids';
 import type { RuntimeState } from './RuntimeState';
-import { EMPTY_RENDER_FRAME, type RenderFrameIR } from '../render/types';
+import { EMPTY_LEGACY_RENDER_FRAME, type LegacyRenderFrame } from '../render/types';
 import type { RenderBufferArena } from '../render/RenderBufferArena';
 import { createMaterializeScratch } from './MaterializeScratch';
 import { resolveTime } from './timeResolution';
@@ -558,7 +558,7 @@ function* runPhase2(context: SteppedContext): Generator<StepSnapshot, void, void
   commitStateWriteBank(context.state);
 }
 
-function validateFrameOutput(program: CompiledProgramIR, frame: RenderFrameIR): RenderFrameIR {
+function validateFrameOutput(program: CompiledProgramIR, frame: LegacyRenderFrame): LegacyRenderFrame {
   const outputSpec = program.outputs[0];
   if (!outputSpec) return frame;
   if (!hasRenderFrameOutput(program)) {
@@ -584,8 +584,8 @@ function createPhaseMarkerSnapshot(
   });
 }
 
-function createSteppedFrameSentinel(): RenderFrameIR {
-  return EMPTY_RENDER_FRAME;
+function createSteppedFrameSentinel(): LegacyRenderFrame {
+  return EMPTY_LEGACY_RENDER_FRAME;
 }
 
 /**
@@ -597,7 +597,7 @@ export function* executeFrameStepped(
   arena: RenderBufferArena,
   tAbsMs: number,
   previousFrameValues?: ReadonlyMap<ValueSlot, number> | null,
-): Generator<StepSnapshot, RenderFrameIR, void> {
+): Generator<StepSnapshot, LegacyRenderFrame, void> {
   STEPPED_MATERIALIZE_SCRATCH.reset();
   const context = createSteppedContext(program, state, arena, tAbsMs, previousFrameValues);
   initializeSteppedFrame(context);
@@ -612,7 +612,7 @@ export function* executeFrameStepped(
   yield* runPhase2(context);
   finalizeContinuityFrame(state);
   // [LAW:one-source-of-truth] RenderFrame output uses canonical runtime field.
-  state.lastRenderFrame = frame;
+  state.lastLegacyRenderFrame = frame;
 
   yield createPhaseMarkerSnapshot(context, 'post-frame');
 
