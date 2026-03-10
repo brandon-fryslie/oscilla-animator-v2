@@ -231,8 +231,7 @@ export function register(): void {
           };
         }
         default: {
-          const payloadKind = (payloadType as { kind?: string }).kind;
-          throw new Error(`Unsupported payload type for Const: ${String(payloadKind)}`);
+          throw new Error(`Unsupported payload type for Const: ${payloadType.kind}`);
         }
       }
     },
