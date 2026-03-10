@@ -11,6 +11,7 @@ class FakeWorker {
 
   readonly posted: RustRendererWorkerInboundMessage[] = [];
   terminateCount = 0;
+  private terminated = false;
   private readonly messageListeners = new Set<MessageListener>();
   private readonly errorListeners = new Set<ErrorListener>();
 
@@ -19,6 +20,9 @@ class FakeWorker {
   }
 
   postMessage(message: RustRendererWorkerInboundMessage): void {
+    if (this.terminated) {
+      throw new Error('InvalidStateError: Worker is terminated');
+    }
     this.posted.push(message);
     if (message.type === 'BOOTSTRAP') {
       queueMicrotask(() => {
@@ -28,6 +32,10 @@ class FakeWorker {
   }
 
   terminate(): void {
+    if (this.terminated) {
+      throw new Error('InvalidStateError: Worker is already terminated');
+    }
+    this.terminated = true;
     this.terminateCount += 1;
   }
 
@@ -308,6 +316,36 @@ describe('RustWasmWebGPURenderer fatal transition guardrails', () => {
       terminationPolicy: 'terminate-worker',
     });
 
+    expect(worker!.terminateCount).toBe(1);
+  });
+
+  it('dispose remains non-throwing when worker was already terminated by a fatal transition', async () => {
+    const renderer = await createWebGPURenderer(makeCanvas());
+    const worker = FakeWorker.instances[0];
+    expect(worker).toBeDefined();
+
+    const rendererAny = renderer as unknown as {
+      markRendererFatal: (transition: {
+        code: string;
+        stage: string;
+        message: string;
+        timestamp: number;
+        cause: Error;
+        terminationPolicy: 'keep-worker-alive' | 'terminate-worker';
+      }) => Error;
+    };
+    rendererAny.markRendererFatal({
+      code: 'ACK_TIMEOUT',
+      stage: 'rebuildGpuPipelines(1 passes)',
+      message: 'worker already terminated',
+      timestamp: 3,
+      cause: new Error('worker already terminated'),
+      terminationPolicy: 'terminate-worker',
+    });
+    expect(worker!.terminateCount).toBe(1);
+
+    expect(() => renderer.dispose()).not.toThrow();
+    expect(() => renderer.dispose()).not.toThrow();
     expect(worker!.terminateCount).toBe(1);
   });
 });

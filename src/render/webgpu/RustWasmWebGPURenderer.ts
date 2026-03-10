@@ -795,8 +795,13 @@ export class WebGPURenderer {
     this.disposed = true;
     this.worker.removeEventListener('message', this.handleRuntimeMessage);
     const message = this.createShutdownMessage();
-    this.postWorkerMessage(message);
-    this.worker.terminate();
+    this.tryPostWorkerMessage(
+      message,
+      'Failed to post SHUTDOWN message; worker may already be terminated.',
+    );
+    this.tryTerminateWorker(
+      'Failed to terminate worker during dispose; worker may already be terminated.',
+    );
   }
 
   async rebuildGpuPipelines(
@@ -919,6 +924,29 @@ export class WebGPURenderer {
 
   private postWorkerMessage(message: RustRendererWorkerInboundMessage): void {
     this.worker.postMessage(message);
+  }
+
+  private tryPostWorkerMessage(message: RustRendererWorkerInboundMessage, warningMessage: string): void {
+    try {
+      this.postWorkerMessage(message);
+    } catch (error) {
+      this.warnWorkerLifecycleBoundary(warningMessage, error);
+    }
+  }
+
+  private tryTerminateWorker(warningMessage: string): void {
+    try {
+      this.worker.terminate();
+    } catch (error) {
+      this.warnWorkerLifecycleBoundary(warningMessage, error);
+    }
+  }
+
+  private warnWorkerLifecycleBoundary(message: string, error: unknown): void {
+    if (!RUNTIME_CONSOLE_ENABLED) {
+      return;
+    }
+    console.warn(`[RustWasmWebGPURenderer] ${message}`, error);
   }
 
   private isCanvasSizeUnchanged(width: number, height: number): boolean {
