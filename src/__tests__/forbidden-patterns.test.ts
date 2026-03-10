@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { rgLines } from '../testing/rg-search';
 
 const ACTIVE_RENDERER_FILE = 'src/render/webgpu/RustWasmWebGPURenderer.ts';
@@ -8,6 +8,12 @@ const ACTIVE_RUST_RENDER_SRC = 'src/render/wasm/rust/oscilla-rust-renderer/src';
 
 function expectNoMatches(pattern: string, scope: readonly string[], globs?: readonly string[]): void {
   expect(rgLines(pattern, scope, globs)).toEqual([]);
+}
+
+function existingScope(paths: readonly string[]): string[] {
+  // [LAW:verifiable-goals] Static guards must execute deterministically against
+  // the current canonical file set, including intentional deletions.
+  return paths.filter((path) => existsSync(path));
 }
 
 function registerRuntimeHotpathGuards(): void {
@@ -103,13 +109,13 @@ function registerCanonicalProjectionOwnershipGuards(): void {
   it('forbids canonical runtime hotpath modules from importing legacy CPU projection assembly', () => {
     expectNoMatches(
       "from\\s+['\"][^'\"]*(projection/ortho-kernel|projection/perspective-kernel|projection/fields)[^'\"]*['\"]",
-      [
+      existingScope([
         'src/services/RuntimeService.ts',
         'src/services/AnimationLoop.ts',
         'src/services/runtime-hotpath.worker.ts',
         'src/services/runtime-hotpath-install.ts',
         ACTIVE_RENDERER_FILE,
-      ],
+      ]),
     );
 
     // [LAW:one-way-deps] Canonical hotpath ownership points toward GPU sink
