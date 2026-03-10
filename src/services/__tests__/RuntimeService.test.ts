@@ -5,21 +5,10 @@ const mocks = vi.hoisted(() => {
   const compileWorkerDispose = vi.fn();
   const compileAndSwap = vi.fn(async (..._args: any[]) => {});
   const rebuildGpuPipelines = vi.fn(async () => {});
-  const runtimeHotpathInstallProgram = vi.fn();
-  const runtimeHotpathDispose = vi.fn();
-  const runtimeHotpathSetViewportFrame = vi.fn();
-  const runtimeHotpathBindExternalWriteBus = vi.fn(() => () => {});
-  const runtimeHotpathGetLatestStats = vi.fn(() => null);
-  const runtimeHotpathCreate = vi.fn(async () => ({
-    installProgram: runtimeHotpathInstallProgram,
-    dispose: runtimeHotpathDispose,
-    setViewportFrame: runtimeHotpathSetViewportFrame,
-    bindExternalWriteBus: runtimeHotpathBindExternalWriteBus,
-    getLatestStats: runtimeHotpathGetLatestStats,
-  }));
   const createWebGPURenderer = vi.fn(async () => ({
     dispose: vi.fn(),
     render: vi.fn(),
+    setViewportFrame: vi.fn(),
     resizeCanvas: vi.fn(),
     getRuntimeSharedPlanes: vi.fn(() => ({
       sharedInput: new SharedArrayBuffer(256),
@@ -32,6 +21,7 @@ const mocks = vi.hoisted(() => {
   const setRenderIssueReporter = vi.fn();
   const getRenderIssues = vi.fn(() => []);
   const clearRenderIssues = vi.fn();
+  const renderBufferArenaInit = vi.fn();
   const savePatchToStorage = vi.fn();
   const loadPatchFromStorage = vi.fn(() => null);
   const consumeTestDemoFilename = vi.fn(() => null);
@@ -66,17 +56,12 @@ const mocks = vi.hoisted(() => {
     compileWorkerDispose,
     compileAndSwap,
     rebuildGpuPipelines,
-    runtimeHotpathInstallProgram,
-    runtimeHotpathDispose,
-    runtimeHotpathSetViewportFrame,
-    runtimeHotpathBindExternalWriteBus,
-    runtimeHotpathGetLatestStats,
-    runtimeHotpathCreate,
     createWebGPURenderer,
     assertWebGPUStartupContract,
     setRenderIssueReporter,
     getRenderIssues,
     clearRenderIssues,
+    renderBufferArenaInit,
     savePatchToStorage,
     loadPatchFromStorage,
     consumeTestDemoFilename,
@@ -108,6 +93,9 @@ vi.mock('../../render', () => ({
   setRenderIssueReporter: mocks.setRenderIssueReporter,
   getRenderIssues: mocks.getRenderIssues,
   clearRenderIssues: mocks.clearRenderIssues,
+  RenderBufferArena: class {
+    init = mocks.renderBufferArenaInit;
+  },
 }));
 
 vi.mock('../CompileOrchestrator', () => ({
@@ -170,12 +158,6 @@ vi.mock('../CompilationInspectorService', () => ({
 vi.mock('../AnimationLoop', () => ({
   startAnimationLoop: mocks.startAnimationLoop,
   createAnimationLoopState: mocks.createAnimationLoopState,
-}));
-
-vi.mock('../RuntimeHotpathWorkerClient', () => ({
-  RuntimeHotpathWorkerClient: {
-    create: mocks.runtimeHotpathCreate,
-  },
 }));
 
 import { RuntimeService } from '../RuntimeService';

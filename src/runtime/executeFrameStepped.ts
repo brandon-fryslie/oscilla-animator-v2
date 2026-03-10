@@ -3,22 +3,15 @@
  *
  * Mirrors the structure of executeFrame() in ScheduleExecutor.ts but yields
  * a StepSnapshot after each schedule step, enabling step-through debugging.
- *
- * IMPORTANT: This is a debug-only code path. The production executeFrame()
- * is never modified — this generator uses the same imported helpers.
- *
- * Invariant: Once started, the generator MUST be run to completion (or
- * finalized via .return()) to leave RuntimeState in a consistent state.
- * Abandoning mid-frame would leave incomplete Phase 2 writes.
  */
 
 import type { CompiledProgramIR } from '../compiler/ir/program';
 import type { ScheduleIR } from '../compiler/backend/schedule-program';
-import type { Step, InstanceDecl, StepRender, StateMapping, StableStateId } from '../compiler/ir/types';
+import type { Step, StateMapping, StableStateId } from '../compiler/ir/types';
 import type { IrInstanceId as InstanceId } from '../types';
 import { instanceId as makeInstanceId } from '../core/ids';
 import type { RuntimeState } from './RuntimeState';
-import type { RenderFrameIR } from '../render/types';
+import { EMPTY_RENDER_FRAME, type RenderFrameIR } from '../render/types';
 import type { RenderBufferArena } from '../render/RenderBufferArena';
 import { createMaterializeScratch } from './MaterializeScratch';
 import { resolveTime } from './timeResolution';
@@ -34,8 +27,6 @@ import {
   createUnstableDomainInstance,
   shouldRebuildDomainInstance,
 } from './DomainIdentity';
-import { assembleRenderFrame, type AssemblerContext } from './RenderAssembler';
-import { resolveCameraFromGlobals } from './CameraResolver';
 import { payloadStride } from '../core/canonical-types';
 import type { ValueSlot, StateSlotId } from '../compiler/ir/Indices';
 import { SCALAR_INSTANCE_ID } from '../compiler/ir/Indices';
@@ -53,12 +44,10 @@ import {
 import {
   type SlotLookup,
   getExprAddressTable,
-  isNumericStorage,
 } from './ExprAddressTable';
 import type { StepSnapshot, SlotValue, StateSlotValue, ExecutionPhase } from './StepDebugTypes';
-import { readSlotValue, readEventSlotValue, detectAnomalies } from './ValueInspector';
+import { readEventSlotValue, detectAnomalies } from './ValueInspector';
 
-// Separate scratch allocator for stepped execution (avoid interference with production scratch)
 const STEPPED_MATERIALIZE_SCRATCH = createMaterializeScratch();
 const steppedStateSlotMappingCache = new WeakMap<ScheduleIR, ReadonlyMap<number, StateMapping>>();
 const NO_DOMAIN_CHANGE = {
@@ -66,44 +55,84 @@ const NO_DOMAIN_CHANGE = {
   mapping: null,
 } as const;
 
+interface SnapshotBuildInput {
+  readonly stepIndex: number;
+  readonly step: Step | null;
+  readonly phase: ExecutionPhase;
+  readonly totalSteps: number;
+  readonly program: CompiledProgramIR;
+  readonly state: RuntimeState;
+  readonly tMs: number;
+  readonly writtenSlots: Map<ValueSlot, SlotValue>;
+  readonly previousFrameValues: ReadonlyMap<ValueSlot, number> | null;
+  readonly writtenStateSlots?: Map<StateSlotId, StateSlotValue>;
+}
+
+interface SnapshotStepBinding {
+  readonly blockId: StepSnapshot['blockId'];
+  readonly blockName: StepSnapshot['blockName'];
+  readonly portId: StepSnapshot['portId'];
+}
+
+interface SteppedContext {
+  readonly program: CompiledProgramIR;
+  readonly state: RuntimeState;
+  readonly arena: RenderBufferArena;
+  readonly tAbsMs: number;
+  readonly totalSteps: number;
+  readonly schedule: ScheduleIR;
+  readonly instances: ReadonlyMap<InstanceId, ScheduleIR['instances'] extends ReadonlyMap<any, infer V> ? V : never>;
+  readonly steps: readonly Step[];
+  readonly valueExprs: readonly CompiledProgramIR['valueExprs']['nodes'][number][];
+  readonly slotLookupMap: ReadonlyMap<ValueSlot, SlotLookup>;
+  readonly slotToArena: ReadonlyMap<ValueSlot, ArenaSlotDescriptor>;
+  readonly stateSlotToMapping: ReadonlyMap<number, StateMapping>;
+  readonly pureFnContext: PureFnExecutionContext;
+  readonly previousFrameValues: ReadonlyMap<ValueSlot, number> | null;
+}
+
+interface Phase1StepResult {
+  readonly shouldYield: boolean;
+  readonly writtenSlots: Map<ValueSlot, SlotValue>;
+}
+
+function createWrittenSlots(): Map<ValueSlot, SlotValue> {
+  return new Map<ValueSlot, SlotValue>();
+}
+
+function createWrittenStateSlots(): Map<StateSlotId, StateSlotValue> {
+  return new Map<StateSlotId, StateSlotValue>();
+}
+
+function resolveStateSlotIndex(slot: StateSlotId): number {
+  return slot as number;
+}
+
+function resolveStride(mapping: StateMapping | undefined): number {
+  return mapping?.stride ?? 1;
+}
+
+function resolveFieldCopyStride(srcStride: number, mapping: StateMapping): number {
+  return Math.min(srcStride, mapping.stride);
+}
+
+function toInstanceId(value: unknown): InstanceId {
+  return makeInstanceId(String(value));
+}
+
+function hasRenderFrameOutput(program: CompiledProgramIR): boolean {
+  return program.outputs[0]?.kind === 'renderFrame';
+}
+
 function getSteppedStateSlotToMapping(schedule: ScheduleIR): ReadonlyMap<number, StateMapping> {
   const cached = steppedStateSlotMappingCache.get(schedule);
-  if (cached) {
-    return cached;
-  }
+  if (cached) return cached;
   const byStateSlot = new Map<number, StateMapping>();
   for (const mapping of schedule.stateMappings) {
     byStateSlot.set(mapping.slotStart, mapping);
   }
   steppedStateSlotMappingCache.set(schedule, byStateSlot);
   return byStateSlot;
-}
-
-// =============================================================================
-// Helpers (duplicated from ScheduleExecutor — these are private in the original)
-// =============================================================================
-
-// [LAW:one-source-of-truth] Arena is the canonical numeric store.
-// slotToArena comes from ExprAddressTable — no direct program.arenaLayout accesses here.
-function resolveArenaDescriptor(
-  slotToArena: ReadonlyMap<ValueSlot, ArenaSlotDescriptor>,
-  lookup: SlotLookup,
-): ArenaSlotDescriptor {
-  const arenaDesc = slotToArena.get(lookup.slot);
-  if (!arenaDesc) {
-    throw new Error(`resolveArenaDescriptor: missing arena descriptor for numeric slot ${lookup.slot}`);
-  }
-  return arenaDesc;
-}
-
-function readCanonicalNumeric(
-  slotToArena: ReadonlyMap<ValueSlot, ArenaSlotDescriptor>,
-  state: RuntimeState,
-  lookup: SlotLookup,
-  component: number = 0,
-): number {
-  const arenaDesc = resolveArenaDescriptor(slotToArena, lookup);
-  return arenaRead(state.arena, arenaDesc, 0, component);
 }
 
 function resolveNumericBuffer(
@@ -146,85 +175,421 @@ function ensureOutputBuffer(
   return new Float32Array(length);
 }
 
-// =============================================================================
-// Snapshot builder
-// =============================================================================
+function resolveSlotOffset(slotLookupMap: ReadonlyMap<ValueSlot, SlotLookup>, slot: ValueSlot): SlotLookup {
+  const lookup = slotLookupMap.get(slot);
+  if (!lookup) throw new Error(`Slot ${slot} not found in canonical slot lookup`);
+  return lookup;
+}
 
-function buildSnapshot(
-  stepIndex: number,
-  step: Step | null,
-  phase: ExecutionPhase,
-  totalSteps: number,
-  program: CompiledProgramIR,
-  state: RuntimeState,
-  tMs: number,
-  writtenSlots: Map<ValueSlot, SlotValue>,
-  previousFrameValues: ReadonlyMap<ValueSlot, number> | null,
-  writtenStateSlots?: Map<StateSlotId, StateSlotValue>,
-): StepSnapshot {
-  const debugIndex = program.debugIndex;
-
-  // Resolve block/port provenance
-  let blockId = null as StepSnapshot['blockId'];
-  let blockName = null as StepSnapshot['blockName'];
-  let portId = null as StepSnapshot['portId'];
-
-  if (step && stepIndex >= 0) {
-    // Use step index as a StepId for lookup (the debugIndex.stepToBlock keys are StepId strings)
-    // Try numeric-keyed lookup first
-    for (const [sid, bid] of debugIndex.stepToBlock) {
-      // StepId is a branded string, but the map may use numeric or string keys
-      if (String(sid) === String(stepIndex)) {
-        blockId = bid;
-        break;
-      }
-    }
-    if (blockId !== null) {
-      blockName = debugIndex.blockDisplayNames?.get(blockId)
-        ?? debugIndex.blockMap.get(blockId)
-        ?? null;
-    }
-    if (debugIndex.stepToPort) {
-      for (const [sid, pid] of debugIndex.stepToPort) {
-        if (String(sid) === String(stepIndex)) {
-          portId = pid;
-          break;
-        }
-      }
+function findStepBinding<T>(entries: ReadonlyMap<unknown, T> | undefined, stepIndex: number): T | null {
+  if (!entries) return null;
+  for (const [sid, value] of entries) {
+    if (String(sid) === String(stepIndex)) {
+      return value;
     }
   }
+  return null;
+}
 
-  const anomalies = detectAnomalies(writtenSlots, debugIndex);
-
+function resolveSnapshotStepBinding(
+  program: CompiledProgramIR,
+  stepIndex: number,
+  step: Step | null,
+): SnapshotStepBinding {
+  if (!step || stepIndex < 0) {
+    return {
+      blockId: null,
+      blockName: null,
+      portId: null,
+    };
+  }
+  const debugIndex = program.debugIndex;
+  const blockId = findStepBinding(debugIndex.stepToBlock, stepIndex);
+  const blockName = blockId === null
+    ? null
+    : debugIndex.blockDisplayNames?.get(blockId) ?? debugIndex.blockMap.get(blockId) ?? null;
   return {
-    stepIndex,
-    step,
-    phase,
-    totalSteps,
     blockId,
     blockName,
-    portId,
-    frameId: state.cache.frameId,
-    tMs,
-    writtenSlots,
-    writtenStateSlots: writtenStateSlots ?? new Map(),
-    anomalies,
-    previousFrameValues,
+    portId: findStepBinding(debugIndex.stepToPort, stepIndex),
   };
 }
 
-// =============================================================================
-// Generator executor
-// =============================================================================
+function buildSnapshot(input: SnapshotBuildInput): StepSnapshot {
+  const binding = resolveSnapshotStepBinding(input.program, input.stepIndex, input.step);
+  const anomalies = detectAnomalies(input.writtenSlots, input.program.debugIndex);
+  return {
+    stepIndex: input.stepIndex,
+    step: input.step,
+    phase: input.phase,
+    totalSteps: input.totalSteps,
+    blockId: binding.blockId,
+    blockName: binding.blockName,
+    portId: binding.portId,
+    frameId: input.state.cache.frameId,
+    tMs: input.tMs,
+    writtenSlots: input.writtenSlots,
+    writtenStateSlots: input.writtenStateSlots ?? createWrittenStateSlots(),
+    anomalies,
+    previousFrameValues: input.previousFrameValues,
+  };
+}
+
+function createSteppedContext(
+  program: CompiledProgramIR,
+  state: RuntimeState,
+  arena: RenderBufferArena,
+  tAbsMs: number,
+  previousFrameValues?: ReadonlyMap<ValueSlot, number> | null,
+): SteppedContext {
+  const schedule = program.schedule as ScheduleIR;
+  const addressTable = getExprAddressTable(program);
+  return {
+    program,
+    state,
+    arena,
+    tAbsMs,
+    totalSteps: schedule.steps.length,
+    schedule,
+    instances: schedule.instances,
+    steps: schedule.steps,
+    valueExprs: program.valueExprs.nodes,
+    slotLookupMap: addressTable.slotLookup,
+    slotToArena: addressTable.slotToArena,
+    stateSlotToMapping: getSteppedStateSlotToMapping(schedule),
+    pureFnContext: { kernelRegistry: program.kernelRegistry },
+    previousFrameValues: previousFrameValues ?? null,
+  };
+}
+
+function initializeSteppedFrame(context: SteppedContext): void {
+  context.state.cache.frameId++;
+  resetFrameVolatileShapeBank(context.state);
+  context.state.externalChannels.commit();
+  context.state.time = resolveTime(context.tAbsMs, context.schedule.timeModel, context.state.timeState);
+  context.state.eventScalars.fill(0);
+  context.state.events.forEach((payloads) => { payloads.length = 0; });
+  // [LAW:one-source-of-truth] Scalar expr addresses come from ExprAddressTable only.
+  context.state.cache.scalarExprToArenaAddress = getExprAddressTable(context.program).scalarExprToArenaAddress;
+}
+
+function createMaterializedSlotValue(
+  context: SteppedContext,
+  veId: number,
+  stepTarget: ValueSlot,
+  stepInstanceId: InstanceId,
+): SlotValue {
+  const instanceDecl = context.instances.get(stepInstanceId);
+  const count = instanceDecl
+    ? resolveInstanceLaneCount(instanceDecl, context.program, context.state, context.pureFnContext)
+    : 0;
+  const arenaDesc = context.slotToArena.get(stepTarget);
+  if (!arenaDesc || arenaDesc.offset < 0 || arenaDesc.length <= 0) {
+    throw new Error(`materialize: missing arena descriptor for slot ${stepTarget}`);
+  }
+  if (context.state.arena.length < arenaDesc.offset + arenaDesc.length) {
+    throw new Error(
+      `materialize: arena too small for slot ${stepTarget} (need ${arenaDesc.offset + arenaDesc.length}, have ${context.state.arena.length})`,
+    );
+  }
+  const buffer = materializeValueExpr(
+    veId as any,
+    context.program.valueExprs,
+    stepInstanceId,
+    count,
+    context.state,
+    context.program,
+    undefined,
+    STEPPED_MATERIALIZE_SCRATCH,
+    context.pureFnContext,
+  );
+  arenaEncodeFromAoS(context.state.arena, arenaDesc, buffer);
+  context.state.tap?.recordFieldValue?.(stepTarget, buffer);
+  const valueType = context.valueExprs[veId].type;
+  if (stepInstanceId === SCALAR_INSTANCE_ID && buffer.length === 1) {
+    return { kind: 'scalar', value: buffer[0], type: valueType };
+  }
+  return { kind: 'buffer', buffer, count: buffer.length, type: valueType };
+}
+
+function applyPhase1ContinuityMap(
+  context: SteppedContext,
+  step: Extract<Step, { kind: 'continuityMapBuild' }>,
+): void {
+  const instance = context.instances.get(step.instanceId as InstanceId);
+  if (!instance) return;
+  const count = resolveInstanceLaneCount(instance, context.program, context.state, context.pureFnContext);
+  if (count === 0) return;
+  const seed = instance.elementIdSeed ?? 0;
+  const previousDomain = context.state.continuity.prevDomains.get(step.instanceId);
+  const identityMode = instance.identityMode === 'stable' ? 'stable' : 'none';
+  if (!shouldRebuildDomainInstance(previousDomain, count, identityMode, seed)) {
+    recordDomainTransition(context.state.continuity, step.instanceId, NO_DOMAIN_CHANGE);
+    return;
+  }
+  const newDomain = identityMode === 'stable'
+    ? createStableDomainInstance(count, seed)
+    : createUnstableDomainInstance(count);
+  const change = detectDomainChange(step.instanceId, newDomain, context.state.continuity.prevDomains);
+  // [LAW:single-enforcer] Continuity transition ownership is enforced once at record boundary.
+  recordDomainTransition(context.state.continuity, step.instanceId, change);
+  context.state.continuity.prevDomains.set(step.instanceId, newDomain);
+}
+
+function applyPhase1Continuity(
+  context: SteppedContext,
+  step: Extract<Step, { kind: 'continuityApply' }>,
+): void {
+  const outputDesc = context.slotToArena.get(step.outputSlot);
+  if (!outputDesc || outputDesc.offset < 0 || outputDesc.length <= 0) {
+    throw new Error(`Continuity: missing arena descriptor for output slot ${step.outputSlot}`);
+  }
+  const baseBuffer = resolveNumericBuffer(context.slotToArena, context.state, step.baseSlot);
+  const outputBuffer = step.baseSlot === step.outputSlot
+    ? baseBuffer
+    : ensureOutputBuffer(context.slotToArena, context.state, step.outputSlot, baseBuffer.length);
+  applyContinuity(step, context.state, (slot: ValueSlot) => {
+    if (slot === step.baseSlot) return baseBuffer;
+    if (slot === step.outputSlot) return outputBuffer;
+    return resolveNumericBuffer(context.slotToArena, context.state, slot);
+  });
+  arenaEncodeFromAoS(context.state.arena, outputDesc, outputBuffer);
+}
+
+function runPhase1Step(context: SteppedContext, step: Step): Phase1StepResult {
+  const writtenSlots = createWrittenSlots();
+  switch (step.kind) {
+    case 'eventDispatch': {
+      const fired = evaluateValueExprEvent(step.expr as any, context.program.valueExprs, context.state, context.program, context.pureFnContext);
+      if (fired) {
+        context.state.eventScalars[step.target as number] = 1;
+      }
+      writtenSlots.set(step.target as unknown as ValueSlot, readEventSlotValue(context.state, step.target as number));
+      return { shouldYield: true, writtenSlots };
+    }
+
+    case 'materialize': {
+      const value = createMaterializedSlotValue(context, step.field as number, step.target, step.instanceId);
+      writtenSlots.set(step.target, value);
+      return { shouldYield: true, writtenSlots };
+    }
+
+    case 'render': {
+      // [LAW:one-way-deps] Canonical render execution is GPU-owned.
+      return { shouldYield: true, writtenSlots };
+    }
+
+    case 'stateWrite':
+    case 'fieldStateWrite': {
+      return { shouldYield: false, writtenSlots };
+    }
+
+    case 'continuityMapBuild': {
+      applyPhase1ContinuityMap(context, step);
+      return { shouldYield: true, writtenSlots };
+    }
+
+    case 'continuityApply': {
+      applyPhase1Continuity(context, step);
+      return { shouldYield: true, writtenSlots };
+    }
+
+    default: {
+      const _exhaustive: never = step;
+      throw new Error(`Unknown step kind: ${(_exhaustive as Step).kind}`);
+    }
+  }
+}
+
+function* runPhase1(context: SteppedContext): Generator<StepSnapshot, void, void> {
+  for (let stepIdx = 0; stepIdx < context.steps.length; stepIdx++) {
+    const step = context.steps[stepIdx];
+    const result = runPhase1Step(context, step);
+    if (!result.shouldYield) continue;
+    yield buildSnapshot({
+      stepIndex: stepIdx,
+      step,
+      phase: 'phase1',
+      totalSteps: context.totalSteps,
+      program: context.program,
+      state: context.state,
+      tMs: context.tAbsMs,
+      writtenSlots: result.writtenSlots,
+      previousFrameValues: context.previousFrameValues,
+    });
+  }
+}
+
+function createScalarStateWriteSnapshot(
+  context: SteppedContext,
+  step: Extract<Step, { kind: 'stateWrite' }>,
+): Map<StateSlotId, StateSlotValue> {
+  const stateSlot = resolveStateSlotIndex(step.stateSlot);
+  const mapping = context.stateSlotToMapping.get(stateSlot);
+  const stride = resolveStride(mapping);
+  const values = materializeValueExpr(
+    step.value as any,
+    context.program.valueExprs,
+    SCALAR_INSTANCE_ID,
+    1,
+    context.state,
+    context.program,
+    undefined,
+    STEPPED_MATERIALIZE_SCRATCH,
+    context.pureFnContext,
+  );
+  const baseSlot = stateSlot;
+  for (let c = 0; c < stride; c++) {
+    const fallback = mapping?.initial[c] ?? 0;
+    context.state.stateWrite![baseSlot + c] = applyStateWritePolicy(mapping, values[c] ?? fallback);
+  }
+  const stateId = mapping?.stateId;
+  if (!stateId) {
+    throw new Error(`State slot ${step.stateSlot} has no mapping - incomplete compiler metadata`);
+  }
+  const written = createWrittenStateSlots();
+  written.set(step.stateSlot, {
+    kind: 'scalar',
+    value: context.state.stateWrite![stateSlot] ?? 0,
+    stateId,
+  });
+  return written;
+}
+
+interface FieldStateWriteValuesInput {
+  readonly mapping: StateMapping;
+  readonly stepStateSlot: number;
+  readonly src: Float32Array;
+  readonly srcStride: number;
+  readonly copyStride: number;
+  readonly stateWrite: Float32Array;
+}
+
+function writeFieldStateValues(input: FieldStateWriteValuesInput): number[] {
+  const writtenValues: number[] = [];
+  const { mapping, stepStateSlot, src, srcStride, copyStride, stateWrite } = input;
+  for (let lane = 0; lane < mapping.laneCount; lane++) {
+    const dstLaneBase = stepStateSlot + lane * mapping.stride;
+    const srcLaneBase = lane * srcStride;
+    for (let c = 0; c < copyStride; c++) {
+      const normalized = applyStateWritePolicy(mapping, src[srcLaneBase + c] ?? 0);
+      stateWrite[dstLaneBase + c] = normalized;
+      writtenValues.push(normalized);
+    }
+    for (let c = copyStride; c < mapping.stride; c++) {
+      const normalized = applyStateWritePolicy(mapping, mapping.initial[c] ?? 0);
+      stateWrite[dstLaneBase + c] = normalized;
+      writtenValues.push(normalized);
+    }
+  }
+  return writtenValues;
+}
+
+function createFieldStateWriteSnapshot(
+  context: SteppedContext,
+  step: Extract<Step, { kind: 'fieldStateWrite' }>,
+): Map<StateSlotId, StateSlotValue> {
+  const stateSlot = resolveStateSlotIndex(step.stateSlot);
+  const mapping = context.stateSlotToMapping.get(stateSlot);
+  if (!mapping || mapping.instanceId === undefined) {
+    throw new Error(`fieldStateWrite: missing field state mapping for slot ${step.stateSlot}`);
+  }
+  const written = createWrittenStateSlots();
+  if (mapping.laneCount === 0) return written;
+  const tempBuffer = materializeValueExpr(
+    step.value as any,
+    context.program.valueExprs,
+    toInstanceId(mapping.instanceId),
+    mapping.laneCount,
+    context.state,
+    context.program,
+    undefined,
+    STEPPED_MATERIALIZE_SCRATCH,
+    context.pureFnContext,
+  );
+  const exprNode = context.valueExprs[step.value as number];
+  const srcStride = payloadStride(exprNode.type.payload);
+  const copyStride = resolveFieldCopyStride(srcStride, mapping);
+  const writtenValues = writeFieldStateValues({
+    mapping,
+    stepStateSlot: stateSlot,
+    src: tempBuffer as Float32Array,
+    srcStride,
+    copyStride,
+    stateWrite: context.state.stateWrite!,
+  });
+  if (!mapping.stateId) {
+    throw new Error(`State slot ${step.stateSlot} has no mapping - incomplete compiler metadata`);
+  }
+  written.set(step.stateSlot, {
+    kind: 'field',
+    values: writtenValues,
+    stateId: mapping.stateId as StableStateId,
+    laneCount: mapping.laneCount,
+  });
+  return written;
+}
+
+function* runPhase2(context: SteppedContext): Generator<StepSnapshot, void, void> {
+  prepareStateWriteBank(context.state);
+  for (let stepIdx = 0; stepIdx < context.steps.length; stepIdx++) {
+    const step = context.steps[stepIdx];
+    let writtenStateSlots: Map<StateSlotId, StateSlotValue> | null = null;
+    if (step.kind === 'stateWrite') {
+      writtenStateSlots = createScalarStateWriteSnapshot(context, step);
+    }
+    if (step.kind === 'fieldStateWrite') {
+      writtenStateSlots = createFieldStateWriteSnapshot(context, step);
+    }
+    if (!writtenStateSlots) continue;
+    yield buildSnapshot({
+      stepIndex: stepIdx,
+      step,
+      phase: 'phase2',
+      totalSteps: context.totalSteps,
+      program: context.program,
+      state: context.state,
+      tMs: context.tAbsMs,
+      writtenSlots: createWrittenSlots(),
+      previousFrameValues: context.previousFrameValues,
+      writtenStateSlots,
+    });
+  }
+  commitStateWriteBank(context.state);
+}
+
+function validateFrameOutput(program: CompiledProgramIR, frame: RenderFrameIR): RenderFrameIR {
+  const outputSpec = program.outputs[0];
+  if (!outputSpec) return frame;
+  if (!hasRenderFrameOutput(program)) {
+    throw new Error(`Unsupported output kind: ${(outputSpec as { kind?: string }).kind}`);
+  }
+  return frame;
+}
+
+function createPhaseMarkerSnapshot(
+  context: SteppedContext,
+  phase: Extract<ExecutionPhase, 'pre-frame' | 'phase-boundary' | 'post-frame'>,
+): StepSnapshot {
+  return buildSnapshot({
+    stepIndex: -1,
+    step: null,
+    phase,
+    totalSteps: context.totalSteps,
+    program: context.program,
+    state: context.state,
+    tMs: context.tAbsMs,
+    writtenSlots: createWrittenSlots(),
+    previousFrameValues: context.previousFrameValues,
+  });
+}
+
+function createSteppedFrameSentinel(): RenderFrameIR {
+  return EMPTY_RENDER_FRAME;
+}
 
 /**
  * Generator-based frame executor that yields StepSnapshot at each step.
- *
- * Mirrors executeFrame() exactly (same imports, same execution order,
- * same phase boundaries) but pauses between steps for inspection.
- *
- * @yields StepSnapshot after each step/phase marker
- * @returns RenderFrameIR when the frame completes
  */
 export function* executeFrameStepped(
   program: CompiledProgramIR,
@@ -234,320 +599,23 @@ export function* executeFrameStepped(
   previousFrameValues?: ReadonlyMap<ValueSlot, number> | null,
 ): Generator<StepSnapshot, RenderFrameIR, void> {
   STEPPED_MATERIALIZE_SCRATCH.reset();
+  const context = createSteppedContext(program, state, arena, tAbsMs, previousFrameValues);
+  initializeSteppedFrame(context);
 
-  const schedule = program.schedule as ScheduleIR;
-  const timeModel = schedule.timeModel;
-  const instances = schedule.instances;
-  const steps = schedule.steps;
-  const totalSteps = steps.length;
+  yield createPhaseMarkerSnapshot(context, 'pre-frame');
 
-  const prevValues = previousFrameValues ?? null;
+  yield* runPhase1(context);
 
-  // [LAW:one-source-of-truth] Single address table for all slot/expr/field queries.
-  // slotToArena replaces all direct program.arenaLayout[slot] accesses in this file.
-  const addressTable = getExprAddressTable(program);
-  const { slotLookup: slotLookupMap, slotToArena } = addressTable;
-  const pureFnContext: PureFnExecutionContext = { kernelRegistry: program.kernelRegistry };
+  const frame = createSteppedFrameSentinel();
+  yield createPhaseMarkerSnapshot(context, 'phase-boundary');
 
-  const resolveSlotOffset = (slot: ValueSlot): SlotLookup => {
-    const lookup = slotLookupMap.get(slot);
-    if (!lookup) throw new Error(`Slot ${slot} not found in canonical slot lookup`);
-    return lookup;
-  };
-
-  // Build reverse lookup from state slot index to StateMapping for debug labeling
-  const stateSlotToMapping = getSteppedStateSlotToMapping(schedule);
-
-  // --- PRE-FRAME SETUP ---
-  state.cache.frameId++;
-  resetFrameVolatileShapeBank(state);
-  state.externalChannels.commit();
-  const time = resolveTime(tAbsMs, timeModel, state.timeState);
-  state.time = time;
-  state.eventScalars.fill(0);
-  state.events.forEach((payloads) => { payloads.length = 0; });
-
-  // Yield pre-frame snapshot
-  yield buildSnapshot(-1, null, 'pre-frame', totalSteps, program, state, tAbsMs, new Map(), prevValues);
-
-  // [LAW:one-source-of-truth] Populate canonical scalar arena addresses before Phase 1
-  // so extract reads resolve from compiler-emitted ExprAddressTable metadata only.
-  state.cache.scalarExprToArenaAddress = addressTable.scalarExprToArenaAddress;
-
-  // --- PHASE 1: Execute all non-stateWrite steps ---
-  const valueExprs = program.valueExprs.nodes;
-  const renderSteps: StepRender[] = [];
-
-  for (let stepIdx = 0; stepIdx < steps.length; stepIdx++) {
-    const step = steps[stepIdx];
-    const writtenSlots = new Map<ValueSlot, SlotValue>();
-
-    switch (step.kind) {
-      case 'eventDispatch': {
-        const fired = evaluateValueExprEvent(step.expr as any, program.valueExprs, state, program, pureFnContext);
-        if (fired) {
-          state.eventScalars[step.target as number] = 1;
-        }
-
-        // Capture event value
-        writtenSlots.set(
-          step.target as unknown as ValueSlot,
-          readEventSlotValue(state, step.target as number),
-        );
-        break;
-      }
-
-      case 'materialize': {
-        const veId = step.field;
-        const instanceDecl = instances.get(step.instanceId);
-        const count = instanceDecl
-          ? resolveInstanceLaneCount(instanceDecl, program, state, pureFnContext)
-          : 0;
-        // [LAW:one-source-of-truth] Arena lookup via ExprAddressTable — no direct arenaLayout access.
-        const arenaDesc = slotToArena.get(step.target);
-        if (!arenaDesc || arenaDesc.offset < 0 || arenaDesc.length <= 0) {
-          throw new Error(`materialize: missing arena descriptor for slot ${step.target}`);
-        }
-        if (state.arena.length < arenaDesc.offset + arenaDesc.length) {
-          throw new Error(
-            `materialize: arena too small for slot ${step.target} (need ${arenaDesc.offset + arenaDesc.length}, have ${state.arena.length})`,
-          );
-        }
-        const buffer = materializeValueExpr(
-          veId,
-          program.valueExprs,
-          step.instanceId,
-          count,
-          state,
-          program,
-          undefined,
-          STEPPED_MATERIALIZE_SCRATCH,
-          pureFnContext,
-        );
-        arenaEncodeFromAoS(state.arena, arenaDesc, buffer);
-
-        state.tap?.recordFieldValue?.(step.target, buffer);
-
-        const valueType = valueExprs[veId as number].type;
-        if (step.instanceId === SCALAR_INSTANCE_ID && buffer.length === 1) {
-          writtenSlots.set(step.target, {
-            kind: 'scalar',
-            value: buffer[0],
-            type: valueType,
-          });
-        } else {
-          // Capture materialized buffer (materializeValueExpr returns Float32Array)
-          writtenSlots.set(step.target, {
-            kind: 'buffer', buffer, count: buffer.length, type: valueType,
-          });
-        }
-        break;
-      }
-
-      case 'render': {
-        renderSteps.push(step);
-        break;
-      }
-
-      case 'stateWrite':
-      case 'fieldStateWrite': {
-        // Skipped in Phase 1 — handled in Phase 2
-        break;
-      }
-
-      case 'continuityMapBuild': {
-        const { instanceId } = step;
-        const instance = instances.get(instanceId as InstanceId);
-        if (!instance) break;
-        const count = resolveInstanceLaneCount(instance, program, state, pureFnContext);
-        if (count === 0) break;
-        const seed = instance.elementIdSeed ?? 0;
-        const previousDomain = state.continuity.prevDomains.get(instanceId);
-        const identityMode = instance.identityMode === 'stable' ? 'stable' : 'none';
-        if (!shouldRebuildDomainInstance(previousDomain, count, identityMode, seed)) {
-          recordDomainTransition(state.continuity, instanceId, NO_DOMAIN_CHANGE);
-          break;
-        }
-        const newDomain = identityMode === 'stable'
-          ? createStableDomainInstance(count, seed)
-          : createUnstableDomainInstance(count);
-        const change = detectDomainChange(instanceId, newDomain, state.continuity.prevDomains);
-        // [LAW:single-enforcer] Continuity transition ownership is enforced at one boundary.
-        recordDomainTransition(state.continuity, instanceId, change);
-        state.continuity.prevDomains.set(instanceId, newDomain);
-        break;
-      }
-
-      case 'continuityApply': {
-        const { policy, baseSlot, outputSlot } = step;
-        void policy;
-        const outputDesc = slotToArena.get(outputSlot);
-        if (!outputDesc || outputDesc.offset < 0 || outputDesc.length <= 0) {
-          throw new Error(`Continuity: missing arena descriptor for output slot ${outputSlot}`);
-        }
-        const baseBuffer = resolveNumericBuffer(slotToArena, state, baseSlot);
-        const outputBuffer = baseSlot === outputSlot
-          ? baseBuffer
-          : ensureOutputBuffer(slotToArena, state, outputSlot, baseBuffer.length);
-        applyContinuity(step, state, (slot: ValueSlot) => {
-          if (slot === baseSlot) return baseBuffer;
-          if (slot === outputSlot) return outputBuffer;
-          const buffer = resolveNumericBuffer(slotToArena, state, slot);
-          if (!buffer) throw new Error(`Continuity: Buffer not found for slot ${slot}`);
-          return buffer;
-        });
-        arenaEncodeFromAoS(state.arena, outputDesc, outputBuffer);
-        break;
-      }
-
-      default: {
-        const _exhaustive: never = step;
-        throw new Error(`Unknown step kind: ${(_exhaustive as Step).kind}`);
-      }
-    }
-
-    // Yield snapshot for non-skipped steps
-    // stateWrite and fieldStateWrite are skipped in Phase 1, but we still yield for them
-    // so the debugger shows their position in the schedule
-    if (step.kind !== 'stateWrite' && step.kind !== 'fieldStateWrite') {
-      yield buildSnapshot(stepIdx, step, 'phase1', totalSteps, program, state, tAbsMs, writtenSlots, prevValues);
-    }
-  }
-
-  // --- PHASE BOUNDARY: Render assembly ---
-  const resolvedCamera = resolveCameraFromGlobals(program, state);
-  const assemblerContext: AssemblerContext = {
-    program,
-    instances: instances as ReadonlyMap<string, InstanceDecl>,
-    state,
-    resolvedCamera,
-    arena,
-    scalarExprToArenaAddress: state.cache.scalarExprToArenaAddress ?? undefined,
-    slotToArena: addressTable.slotToArena,
-    pureFnContext,
-  };
-  const frame = assembleRenderFrame(renderSteps, assemblerContext);
-
-  yield buildSnapshot(-1, null, 'phase-boundary', totalSteps, program, state, tAbsMs, new Map(), prevValues);
-
-  // --- PHASE 2: State writes ---
-  prepareStateWriteBank(state);
-  for (let stepIdx = 0; stepIdx < steps.length; stepIdx++) {
-    const step = steps[stepIdx];
-
-    if (step.kind === 'stateWrite') {
-      const mapping = stateSlotToMapping.get(step.stateSlot as number);
-      const stride = mapping?.stride ?? 1;
-      const oneValue = materializeValueExpr(
-        step.value as any,
-        program.valueExprs,
-        SCALAR_INSTANCE_ID,
-        1,
-        state,
-        program,
-        undefined,
-        STEPPED_MATERIALIZE_SCRATCH,
-        pureFnContext,
-      );
-      const baseSlot = step.stateSlot as number;
-      for (let c = 0; c < stride; c++) {
-        const fallback = mapping?.initial[c] ?? 0;
-        state.stateWrite![baseSlot + c] = applyStateWritePolicy(mapping, oneValue[c] ?? fallback);
-      }
-
-      const writtenStateSlots = new Map<StateSlotId, StateSlotValue>();
-      writtenStateSlots.set(step.stateSlot, {
-        kind: 'scalar',
-        value: state.stateWrite![step.stateSlot as number] ?? 0,
-        stateId: (() => {
-          if (!mapping?.stateId) throw new Error(`State slot ${step.stateSlot} has no mapping — incomplete compiler metadata`);
-          return mapping.stateId;
-        })(),
-      });
-
-      yield buildSnapshot(stepIdx, step, 'phase2', totalSteps, program, state, tAbsMs, new Map(), prevValues, writtenStateSlots);
-    }
-
-    if (step.kind === 'fieldStateWrite') {
-      const mapping = stateSlotToMapping.get(step.stateSlot as number);
-      if (!mapping || mapping.instanceId === undefined) {
-        throw new Error(`fieldStateWrite: missing field state mapping for slot ${step.stateSlot}`);
-      }
-
-      const veId = step.value as any;
-      const exprNode = valueExprs[veId as number];
-      const count = mapping.laneCount;
-
-      const writtenStateSlots = new Map<StateSlotId, StateSlotValue>();
-
-      if (count > 0) {
-        const instanceIdStr = String(mapping.instanceId);
-        const tempBuffer = materializeValueExpr(
-          veId,
-          program.valueExprs,
-          makeInstanceId(instanceIdStr),
-          count,
-          state,
-          program,
-          undefined,
-          STEPPED_MATERIALIZE_SCRATCH,
-          pureFnContext,
-        );
-        const baseSlot = step.stateSlot as number;
-        const srcStride = payloadStride(exprNode.type.payload);
-        const copyStride = Math.min(srcStride, mapping.stride);
-        const src = tempBuffer as Float32Array;
-        const writtenValues: number[] = [];
-        for (let lane = 0; lane < count; lane++) {
-          const dstLaneBase = baseSlot + lane * mapping.stride;
-          const srcLaneBase = lane * srcStride;
-          for (let c = 0; c < copyStride; c++) {
-            const value = src[srcLaneBase + c] ?? 0;
-            const normalized = applyStateWritePolicy(mapping, value);
-            state.stateWrite![dstLaneBase + c] = normalized;
-            writtenValues.push(normalized);
-          }
-          for (let c = copyStride; c < mapping.stride; c++) {
-            const value = mapping.initial[c] ?? 0;
-            const normalized = applyStateWritePolicy(mapping, value);
-            state.stateWrite![dstLaneBase + c] = normalized;
-            writtenValues.push(normalized);
-          }
-        }
-
-        writtenStateSlots.set(step.stateSlot, {
-          kind: 'field',
-          values: writtenValues,
-          stateId: (() => {
-            if (!mapping?.stateId) throw new Error(`State slot ${step.stateSlot} has no mapping — incomplete compiler metadata`);
-            return mapping.stateId;
-          })(),
-          laneCount: count,
-        });
-      }
-
-      yield buildSnapshot(stepIdx, step, 'phase2', totalSteps, program, state, tAbsMs, new Map(), prevValues, writtenStateSlots);
-    }
-  }
-  commitStateWriteBank(state);
-
-  // --- POST-FRAME: Finalize continuity ---
+  yield* runPhase2(context);
   finalizeContinuityFrame(state);
-
   // [LAW:one-source-of-truth] RenderFrame output uses canonical runtime field.
   state.lastRenderFrame = frame;
 
-  yield buildSnapshot(-1, null, 'post-frame', totalSteps, program, state, tAbsMs, new Map(), prevValues);
+  yield createPhaseMarkerSnapshot(context, 'post-frame');
 
   STEPPED_MATERIALIZE_SCRATCH.reset();
-
-  // Return the frame result
-  if (program.outputs.length > 0) {
-    const outputSpec = program.outputs[0];
-    if (outputSpec.kind !== 'renderFrame') {
-      throw new Error(`Unsupported output kind: ${(outputSpec as { kind?: string }).kind}`);
-    }
-    return frame;
-  }
-  return frame;
+  return validateFrameOutput(program, frame);
 }

@@ -7,11 +7,11 @@
 
 import type { CompiledProgramIR } from '../compiler/ir/program';
 import type { ScheduleIR } from '../compiler/backend/schedule-program';
-import type { Step, InstanceDecl, StepRender } from '../compiler/ir/types';
+import type { Step, InstanceDecl } from '../compiler/ir/types';
 import type { IrInstanceId as InstanceId } from '../types';
 import { instanceId as makeInstanceId } from '../core/ids';
 import type { RuntimeState } from './RuntimeState';
-import type { RenderFrameIR } from '../render/types';
+import { EMPTY_RENDER_FRAME, type RenderFrameIR } from '../render/types';
 import type { RenderBufferArena } from '../render/RenderBufferArena';
 import { resolveTime } from './timeResolution';
 import {
@@ -24,8 +24,6 @@ import {
 } from './RuntimeState';
 import {
   MATERIALIZE_SCRATCH,
-  renderStepsBuffer as _renderSteps,
-  assemblerCtx as _assemblerCtx,
 } from './executor-init';
 import { detectDomainChange, recordDomainTransition } from './ContinuityMapping';
 import { applyContinuity, finalizeContinuityFrame } from './ContinuityApply';
@@ -34,8 +32,6 @@ import {
   createUnstableDomainInstance,
   shouldRebuildDomainInstance,
 } from './DomainIdentity';
-import { assembleRenderFrame, type AssemblerContext } from './RenderAssembler';
-import { resolveCameraFromGlobals } from './CameraResolver';
 import type { CanonicalType } from '../core/canonical-types';
 import { payloadStride, requireInst } from '../core/canonical-types';
 import type { ValueSlot } from '../compiler/ir/Indices';
@@ -229,6 +225,7 @@ export interface ExecuteFrameOptions {
   readonly assertCardinalitySlotWrites?: boolean;
 }
 
+type StateSlotMapping = ScheduleIR['stateMappings'][number];
 type RuntimeValueKind = 'signal' | 'field' | 'event';
 type RuntimeWriteKind = 'signal' | 'field';
 
@@ -261,52 +258,395 @@ function deriveExpectedLaneCount(
   return cached ?? instance.maxCount;
 }
 
-function assertRuntimeSlotWrite(
-  slotLookupMap: ReadonlyMap<ValueSlot, SlotLookup>,
-  instances: ReadonlyMap<InstanceId, InstanceDecl>,
-  state: RuntimeState,
-  stepKind: Step['kind'],
-  slot: ValueSlot,
-  observedKind: RuntimeWriteKind,
-  observedLaneCount: number,
-): void {
-  const lookup = resolveSlotOffsetFromMap(slotLookupMap, slot);
+interface RuntimeWriteAssertionInput {
+  readonly slotLookupMap: ReadonlyMap<ValueSlot, SlotLookup>;
+  readonly instances: ReadonlyMap<InstanceId, InstanceDecl>;
+  readonly state: RuntimeState;
+  readonly stepKind: Step['kind'];
+  readonly slot: ValueSlot;
+  readonly observedKind: RuntimeWriteKind;
+  readonly observedLaneCount: number;
+}
+
+function assertRuntimeSlotWrite(input: RuntimeWriteAssertionInput): void {
+  const lookup = resolveSlotOffsetFromMap(input.slotLookupMap, input.slot);
   const expectedKind = deriveRuntimeValueKind(lookup.type);
   if (expectedKind === 'event') {
     throw new Error(
-      `Internal error: non-event step ${stepKind} attempted to write to event-typed slot ${slot} ` +
-      `(discrete temporality slots must only be written by eventDispatch; observed write kind: ${observedKind})`,
+      `Internal error: non-event step ${input.stepKind} attempted to write to event-typed slot ${input.slot} ` +
+      `(discrete temporality slots must only be written by eventDispatch; observed write kind: ${input.observedKind})`,
     );
   }
-  if (expectedKind !== observedKind) {
+  if (expectedKind !== input.observedKind) {
     throw new Error(
-      `Cardinality write assertion failed at ${stepKind} slot ${slot}: ` +
-      `expected ${expectedKind}, actual ${observedKind}`,
+      `Cardinality write assertion failed at ${input.stepKind} slot ${input.slot}: ` +
+      `expected ${expectedKind}, actual ${input.observedKind}`,
     );
   }
-  if (lookup.arena.laneCount !== observedLaneCount) {
+  if (lookup.arena.laneCount !== input.observedLaneCount) {
     throw new Error(
-      `Cardinality write assertion failed at ${stepKind} slot ${slot}: ` +
-      `expected laneCount ${lookup.arena.laneCount}, actual ${observedLaneCount}`,
+      `Cardinality write assertion failed at ${input.stepKind} slot ${input.slot}: ` +
+      `expected laneCount ${lookup.arena.laneCount}, actual ${input.observedLaneCount}`,
     );
   }
-  const expectedLaneCount = deriveExpectedLaneCount(lookup, instances, state);
-  if (expectedLaneCount !== null && expectedLaneCount !== observedLaneCount) {
+  const expectedLaneCount = deriveExpectedLaneCount(lookup, input.instances, input.state);
+  if (expectedLaneCount !== null && expectedLaneCount !== input.observedLaneCount) {
     throw new Error(
-      `Cardinality write assertion failed at ${stepKind} slot ${slot}: ` +
-      `expected cardinality lanes ${expectedLaneCount}, actual ${observedLaneCount}`,
+      `Cardinality write assertion failed at ${input.stepKind} slot ${input.slot}: ` +
+      `expected cardinality lanes ${expectedLaneCount}, actual ${input.observedLaneCount}`,
     );
   }
 }
 
+interface ExecuteFrameContext {
+  readonly program: CompiledProgramIR;
+  readonly state: RuntimeState;
+  readonly arena: RenderBufferArena;
+  readonly tAbsMs: number;
+  readonly schedule: ScheduleIR;
+  readonly instances: ReadonlyMap<InstanceId, InstanceDecl>;
+  readonly steps: readonly Step[];
+  readonly stateSlotToMapping: ReadonlyMap<number, StateSlotMapping>;
+  readonly slotLookupMap: ReadonlyMap<ValueSlot, SlotLookup>;
+  readonly slotToArena: ReadonlyMap<ValueSlot, ArenaSlotDescriptor>;
+  readonly pureFnContext: PureFnExecutionContext;
+  readonly assertCardinalitySlotWrites: boolean;
+  readonly valueExprs: readonly CompiledProgramIR['valueExprs']['nodes'][number][];
+  eventDispatchSeen: boolean;
+  continuityMapSeen: boolean;
+}
+
+function isCardinalityAssertionEnabled(options?: ExecuteFrameOptions): boolean {
+  return options?.assertCardinalitySlotWrites === true;
+}
+
+function hasRenderFrameOutput(program: CompiledProgramIR): boolean {
+  return program.outputs[0]?.kind === 'renderFrame';
+}
+
+function createExecuteFrameContext(
+  program: CompiledProgramIR,
+  state: RuntimeState,
+  arena: RenderBufferArena,
+  tAbsMs: number,
+  options?: ExecuteFrameOptions,
+): ExecuteFrameContext {
+  MATERIALIZE_SCRATCH.reset();
+  const schedule = program.schedule as ScheduleIR;
+  const instances = schedule.instances;
+  const steps = schedule.steps;
+  const stateSlotToMapping = getStateSlotToMapping(schedule);
+  const addressTable = getExprAddressTable(program);
+  const { slotLookup: slotLookupMap, slotToArena } = addressTable;
+  const pureFnContext: PureFnExecutionContext = { kernelRegistry: program.kernelRegistry };
+  const assertCardinalitySlotWrites = isCardinalityAssertionEnabled(options);
+  return {
+    program,
+    state,
+    arena,
+    tAbsMs,
+    schedule,
+    instances,
+    steps,
+    stateSlotToMapping,
+    slotLookupMap,
+    slotToArena,
+    pureFnContext,
+    assertCardinalitySlotWrites,
+    valueExprs: program.valueExprs.nodes,
+    eventDispatchSeen: false,
+    continuityMapSeen: false,
+  };
+}
+
+function initializeFrame(context: ExecuteFrameContext): void {
+  const { program, schedule, state, tAbsMs } = context;
+  state.cache.frameId++;
+  beginRuntimeFrameSemantics(state);
+  resetFrameVolatileShapeBank(state);
+  enterRuntimeFrameSegment(state, 'preframe-external-input');
+  state.externalChannels.commit();
+  enterRuntimeFrameSegment(state, 'preframe-time-resolve');
+  const time = resolveTime(tAbsMs, schedule.timeModel, state.timeState);
+  state.time = time;
+  enterRuntimeFrameSegment(state, 'preframe-event-reset');
+  state.eventScalars.fill(0);
+  state.events.forEach(_clearEventPayloads);
+  // [LAW:one-source-of-truth] Populate canonical scalar arena addresses before Phase 1.
+  state.cache.scalarExprToArenaAddress = getExprAddressTable(program).scalarExprToArenaAddress;
+}
+
+function resolvePhase1ValueSegment(context: ExecuteFrameContext): RuntimeFrameSegment {
+  if (context.eventDispatchSeen) return 'phase1-value-post-event';
+  if (context.continuityMapSeen) return 'phase1-value-after-map';
+  return 'phase1-value-pre-event';
+}
+
+function assertSlotWriteIfEnabled(context: ExecuteFrameContext, input: Omit<RuntimeWriteAssertionInput, 'slotLookupMap' | 'instances' | 'state'>): void {
+  if (!context.assertCardinalitySlotWrites) return;
+  assertRuntimeSlotWrite({
+    ...input,
+    slotLookupMap: context.slotLookupMap,
+    instances: context.instances,
+    state: context.state,
+  });
+}
+
+function materializeStepBuffer(context: ExecuteFrameContext, step: Extract<Step, { kind: 'materialize' }>): Float32Array {
+  const instanceDecl = context.instances.get(step.instanceId);
+  const count = instanceDecl
+    ? resolveInstanceLaneCount(instanceDecl, context.program, context.state, context.pureFnContext)
+    : 0;
+  const arenaDesc = context.slotToArena.get(step.target);
+  if (!arenaDesc || arenaDesc.offset < 0 || arenaDesc.length <= 0) {
+    throw new Error('materialize: missing arena descriptor for slot ' + step.target);
+  }
+  if (context.state.arena.length < arenaDesc.offset + arenaDesc.length) {
+    throw new Error(
+      'materialize: arena too small for slot ' + step.target + ' (need ' + (arenaDesc.offset + arenaDesc.length) + ', have ' + context.state.arena.length + ')',
+    );
+  }
+  const buffer = materializeValueExpr(
+    step.field,
+    context.program.valueExprs,
+    step.instanceId,
+    count,
+    context.state,
+    context.program,
+    undefined,
+    MATERIALIZE_SCRATCH,
+    context.pureFnContext,
+  );
+  arenaEncodeFromAoS(context.state.arena, arenaDesc, buffer);
+  context.state.tap?.recordFieldValue?.(step.target, buffer);
+  assertSlotWriteIfEnabled(context, {
+    stepKind: step.kind,
+    slot: step.target,
+    observedKind: 'field',
+    observedLaneCount: count,
+  });
+  return buffer;
+}
+
+function handleContinuityMapBuild(context: ExecuteFrameContext, step: Extract<Step, { kind: 'continuityMapBuild' }>): void {
+  const instance = context.instances.get(step.instanceId as InstanceId);
+  if (!instance) return;
+  const count = resolveInstanceLaneCount(instance, context.program, context.state, context.pureFnContext);
+  if (count === 0) return;
+  const seed = instance.elementIdSeed ?? 0;
+  const previousDomain = context.state.continuity.prevDomains.get(step.instanceId);
+  const identityMode = instance.identityMode === 'stable' ? 'stable' : 'none';
+  if (!shouldRebuildDomainInstance(previousDomain, count, identityMode, seed)) {
+    // [LAW:dataflow-not-control-flow] Continuity transition recording runs every frame.
+    recordDomainTransition(context.state.continuity, step.instanceId, NO_DOMAIN_CHANGE);
+    return;
+  }
+  const newDomain = identityMode === 'stable'
+    ? createStableDomainInstance(count, seed)
+    : createUnstableDomainInstance(count);
+  const change = detectDomainChange(step.instanceId, newDomain, context.state.continuity.prevDomains);
+  // [LAW:single-enforcer] Continuity ownership is enforced at one transition boundary.
+  recordDomainTransition(context.state.continuity, step.instanceId, change);
+  context.state.continuity.prevDomains.set(step.instanceId, newDomain);
+}
+
+function resolveContinuityOutputDescriptor(
+  context: ExecuteFrameContext,
+  outputSlot: ValueSlot,
+): ArenaSlotDescriptor {
+  const outputDesc = context.slotToArena.get(outputSlot);
+  if (!outputDesc || outputDesc.offset < 0 || outputDesc.length <= 0) {
+    throw new Error('Continuity: missing arena descriptor for output slot ' + outputSlot);
+  }
+  return outputDesc;
+}
+
+function applyContinuityStep(context: ExecuteFrameContext, step: Extract<Step, { kind: 'continuityApply' }>): void {
+  const outputDesc = resolveContinuityOutputDescriptor(context, step.outputSlot);
+  const baseBuffer = resolveNumericBuffer(context.slotToArena, context.state, step.baseSlot);
+  const outputBuffer = step.baseSlot === step.outputSlot
+    ? baseBuffer
+    : ensureOutputBuffer(context.slotToArena, context.state, step.outputSlot, baseBuffer.length);
+  _continuityResolverContext.baseSlot = step.baseSlot;
+  _continuityResolverContext.outputSlot = step.outputSlot;
+  _continuityResolverContext.baseBuffer = baseBuffer;
+  _continuityResolverContext.outputBuffer = outputBuffer;
+  _continuityResolverContext.slotToArena = context.slotToArena;
+  _continuityResolverContext.state = context.state;
+  try {
+    applyContinuity(step, context.state, resolveContinuityBuffer);
+  } finally {
+    clearContinuityResolverContext();
+  }
+  arenaEncodeFromAoS(context.state.arena, outputDesc, outputBuffer);
+  context.state.tap?.recordFieldValue?.(step.outputSlot, outputBuffer);
+  const observedLaneCount = step.stride > 0 ? Math.floor(baseBuffer.length / step.stride) : 0;
+  assertSlotWriteIfEnabled(context, {
+    stepKind: step.kind,
+    slot: step.outputSlot,
+    observedKind: 'field',
+    observedLaneCount,
+  });
+}
+
+function executePhase1Step(context: ExecuteFrameContext, step: Step): void {
+  switch (step.kind) {
+    case 'eventDispatch': {
+      enterRuntimeFrameSegment(context.state, 'phase1-event-dispatch');
+      context.eventDispatchSeen = true;
+      const fired = evaluateValueExprEvent(step.expr as any, context.program.valueExprs, context.state, context.program, context.pureFnContext);
+      if (fired) context.state.eventScalars[step.target as number] = 1;
+      return;
+    }
+    case 'materialize': {
+      enterRuntimeFrameSegment(context.state, resolvePhase1ValueSegment(context));
+      materializeStepBuffer(context, step);
+      return;
+    }
+    case 'render': {
+      // [LAW:one-way-deps] Render-step ownership is GPU-side.
+      enterRuntimeFrameSegment(context.state, 'phase1-render-collect');
+      return;
+    }
+    case 'stateWrite':
+    case 'fieldStateWrite':
+      return;
+    case 'continuityMapBuild': {
+      enterRuntimeFrameSegment(context.state, 'phase1-continuity-map');
+      context.continuityMapSeen = true;
+      handleContinuityMapBuild(context, step);
+      return;
+    }
+    case 'continuityApply': {
+      enterRuntimeFrameSegment(context.state, 'phase1-continuity-apply');
+      applyContinuityStep(context, step);
+      return;
+    }
+    default: {
+      const _exhaustive: never = step;
+      throw new Error('Unknown step kind: ' + (_exhaustive as Step).kind);
+    }
+  }
+}
+
+function runPhase1(context: ExecuteFrameContext): void {
+  for (const step of context.steps) {
+    executePhase1Step(context, step);
+  }
+}
+
+function recordTrackedFieldValue(context: ExecuteFrameContext, slot: ValueSlot): void {
+  const arenaDesc = context.slotToArena.get(slot);
+  if (!arenaDesc || arenaDesc.offset < 0 || arenaDesc.length <= 0) {
+    // [LAW:one-source-of-truth] Debug reads resolve from canonical arena descriptors only.
+    throw new Error('debug tracked slot missing arena descriptor for slot ' + slot);
+  }
+  if (context.state.arena.length < arenaDesc.offset + arenaDesc.length) {
+    throw new Error(
+      'debug tracked slot arena too small for slot ' + slot + ' (need ' + (arenaDesc.offset + arenaDesc.length) + ', have ' + context.state.arena.length + ')',
+    );
+  }
+  context.state.tap?.recordFieldValue?.(slot, arenaDecodeToAoS(context.state.arena, arenaDesc));
+}
+
+function runDebugFieldMaterialization(context: ExecuteFrameContext): void {
+  const trackedSlots = context.state.tap?.getTrackedFieldSlots?.();
+  if (!trackedSlots || trackedSlots.size === 0) return;
+  enterRuntimeFrameSegment(context.state, 'phase1-debug-materialize');
+  for (const slot of trackedSlots) {
+    recordTrackedFieldValue(context, slot);
+  }
+}
+
+function applyStateWriteStep(context: ExecuteFrameContext, step: Extract<Step, { kind: 'stateWrite' }>): void {
+  const mapping = context.stateSlotToMapping.get(step.stateSlot as number);
+  const stride = mapping?.stride ?? 1;
+  const values = materializeValueExpr(
+    step.value as any,
+    context.program.valueExprs,
+    SCALAR_INSTANCE_ID,
+    1,
+    context.state,
+    context.program,
+    undefined,
+    MATERIALIZE_SCRATCH,
+    context.pureFnContext,
+  );
+  const baseSlot = step.stateSlot as number;
+  for (let c = 0; c < stride; c++) {
+    const fallback = mapping?.initial[c] ?? 0;
+    context.state.stateWrite![baseSlot + c] = applyStateWritePolicy(mapping, values[c] ?? fallback);
+  }
+}
+
+function applyFieldStateWriteStep(context: ExecuteFrameContext, step: Extract<Step, { kind: 'fieldStateWrite' }>): void {
+  const mapping = context.stateSlotToMapping.get(step.stateSlot as number);
+  if (!mapping || mapping.instanceId === undefined) {
+    throw new Error('fieldStateWrite: missing field state mapping for slot ' + step.stateSlot);
+  }
+  const count = mapping.laneCount;
+  if (count === 0) return;
+  const tempBuffer = materializeValueExpr(
+    step.value as any,
+    context.program.valueExprs,
+    makeInstanceId(String(mapping.instanceId)),
+    count,
+    context.state,
+    context.program,
+    undefined,
+    MATERIALIZE_SCRATCH,
+    context.pureFnContext,
+  );
+  const exprNode = context.valueExprs[step.value as number];
+  const srcStride = payloadStride(exprNode.type.payload);
+  const copyStride = Math.min(srcStride, mapping.stride);
+  const src = tempBuffer as Float32Array;
+  for (let lane = 0; lane < count; lane++) {
+    const dstLaneBase = (step.stateSlot as number) + lane * mapping.stride;
+    const srcLaneBase = lane * srcStride;
+    for (let c = 0; c < copyStride; c++) {
+      context.state.stateWrite![dstLaneBase + c] = applyStateWritePolicy(mapping, src[srcLaneBase + c] ?? 0);
+    }
+    for (let c = copyStride; c < mapping.stride; c++) {
+      context.state.stateWrite![dstLaneBase + c] = applyStateWritePolicy(mapping, mapping.initial[c] ?? 0);
+    }
+  }
+}
+
+function runPhase2(context: ExecuteFrameContext): void {
+  enterRuntimeFrameSegment(context.state, 'phase2-state-write');
+  // [LAW:dataflow-not-control-flow] Phase 2 always prepares write storage first.
+  prepareStateWriteBank(context.state);
+  for (const step of context.steps) {
+    if (step.kind === 'stateWrite') {
+      applyStateWriteStep(context, step);
+      continue;
+    }
+    if (step.kind === 'fieldStateWrite') {
+      applyFieldStateWriteStep(context, step);
+    }
+  }
+  commitStateWriteBank(context.state);
+}
+
+function finalizeFrame(context: ExecuteFrameContext, frame: RenderFrameIR): RenderFrameIR {
+  MATERIALIZE_SCRATCH.reset();
+  enterRuntimeFrameSegment(context.state, 'continuity-finalize');
+  finalizeContinuityFrame(context.state);
+  enterRuntimeFrameSegment(context.state, 'frame-output');
+  context.state.lastRenderFrame = frame;
+  if (!context.program.outputs[0]) return frame;
+  if (!hasRenderFrameOutput(context.program)) {
+    throw new Error('Unsupported output kind: ' + (context.program.outputs[0] as { kind?: string }).kind);
+  }
+  return frame;
+}
+
 /**
- * Execute one frame of the program
+ * Execute one frame of the program.
  *
- * @param program - Compiled IR program (CompiledProgramIR)
- * @param state - Runtime state
- * @param arena - Pre-allocated buffer arena for render operations
- * @param tAbsMs - Absolute time in milliseconds
- * @returns RenderFrameIR for this frame
+ * @returns Canonical compute-only sentinel frame (`EMPTY_RENDER_FRAME`).
+ * Draw-ready payloads are emitted to runtime banks (arena, shape bank, sink table).
  */
 export function executeFrame(
   program: CompiledProgramIR,
@@ -315,408 +655,13 @@ export function executeFrame(
   tAbsMs: number,
   options?: ExecuteFrameOptions,
 ): RenderFrameIR {
-  MATERIALIZE_SCRATCH.reset();
-
-  // Extract schedule components
-  const schedule = program.schedule as ScheduleIR;
-  const timeModel = schedule.timeModel;
-  const instances = schedule.instances;
-  const steps = schedule.steps;
-  const stateSlotToMapping = getStateSlotToMapping(schedule);
-
-  // [LAW:one-source-of-truth] Single address table for all slot/expr/field queries.
-  // slotToArena replaces all direct program.arenaLayout[slot] accesses in this file.
-  const addressTable = getExprAddressTable(program);
-  const { slotLookup: slotLookupMap, slotToArena } = addressTable;
-  const pureFnContext: PureFnExecutionContext = { kernelRegistry: program.kernelRegistry };
-  // [LAW:dataflow-not-control-flow] Assertion mode is chosen once per frame.
-  // Step execution order is unchanged; only validation dataflow varies.
-  const assertCardinalitySlotWrites = options?.assertCardinalitySlotWrites === true;
-
-  // Helper uses module-level resolveSlotOffsetFromMap() — no closure needed
-
-  // 1. Advance frame (cache owns frameId)
-  state.cache.frameId++;
-  beginRuntimeFrameSemantics(state);
-  resetFrameVolatileShapeBank(state);
-
-  // 1.5. Commit external channel writes (spec: External Input System Section 3.1)
-  enterRuntimeFrameSegment(state, 'preframe-external-input');
-  state.externalChannels.commit();
-
-  // 2. Resolve effective time
-  enterRuntimeFrameSegment(state, 'preframe-time-resolve');
-  const time = resolveTime(tAbsMs, timeModel, state.timeState);
-  state.time = time;
-
-  // 2.5. Clear event scalars and payloads (events fire for exactly one tick, spec §6.1)
-  enterRuntimeFrameSegment(state, 'preframe-event-reset');
-  state.eventScalars.fill(0);
-
-  // Clear event payload arrays (spec-compliant event storage)
-  // Monotone OR semantics: clear at frame start, only append during frame
-  state.events.forEach(_clearEventPayloads);
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // TWO-PHASE EXECUTION MODEL
-  // ═══════════════════════════════════════════════════════════════════════════
-  //
-  // Phase 1 (below): Evaluate all one-cardinality values, materialize fields, fire events,
-  //                  collect render ops. Reads state from PREVIOUS frame.
-  // Phase 2 (line ~464): Write new state values for NEXT frame.
-  //
-  // This separation is NON-NEGOTIABLE. It ensures:
-  // - Stateful blocks (UnitDelay, Lag, etc.) maintain proper delay semantics
-  // - Cycles only cross frame boundaries via state (invariant I7)
-  // - All one-cardinality values see consistent state within a frame
-  // - Hot-swap can migrate state without corruption
-  //
-  // See: docs/runtime/execution-model.md for full rationale and examples.
-  // ═══════════════════════════════════════════════════════════════════════════
-
-  // Unified ValueExpr table (one/many/event values live here)
-  const valueExprs = program.valueExprs.nodes;
-
-  // Resolve camera from program render globals (will be populated after value evaluation)
-  // Note: assemblerContext is constructed after Phase 1 when slots are populated
-  let assemblerContext: AssemblerContext;
-
-  // Collect render steps for v2 batch assembly (reuse module-level array)
-  _renderSteps.length = 0;
-
-  // [LAW:one-source-of-truth] Populate canonical scalar arena addresses before Phase 1
-  // so extract reads resolve from compiler-emitted ExprAddressTable metadata only.
-  state.cache.scalarExprToArenaAddress = addressTable.scalarExprToArenaAddress;
-
-  // PHASE 1: Execute all non-stateWrite steps
-  let eventDispatchSeen = false;
-  let continuityMapSeen = false;
-  const resolvePhase1ValueSegment = (): RuntimeFrameSegment => {
-    if (eventDispatchSeen) return 'phase1-value-post-event';
-    if (continuityMapSeen) return 'phase1-value-after-map';
-    return 'phase1-value-pre-event';
-  };
-  for (const step of steps) {
-    switch (step.kind) {
-      case 'eventDispatch': {
-        enterRuntimeFrameSegment(state, 'phase1-event-dispatch');
-        eventDispatchSeen = true;
-        // ValueExpr-only event evaluation (cutover complete)
-        const fired = evaluateValueExprEvent(step.expr as any, program.valueExprs, state, program, pureFnContext);
-
-        // Monotone OR: only write 1, never write 0 back — ensures any-fired-stays-fired
-        if (fired) {
-          state.eventScalars[step.target as number] = 1;
-        }
-        break;
-      }
-
-      case 'materialize': {
-        enterRuntimeFrameSegment(state, resolvePhase1ValueSegment());
-        // ValueExpr-only materialization (cutover complete)
-        const veId = step.field;
-
-        // Use the instanceId from the schedule step (set by schedule-program.ts)
-        // rather than deriving from the ValueExpr type, which may have a stale placeholder
-        const instanceDecl = instances.get(step.instanceId);
-        const count = instanceDecl
-          ? resolveInstanceLaneCount(instanceDecl, program, state, pureFnContext)
-          : 0;
-        // [LAW:one-source-of-truth] Arena lookup via ExprAddressTable — no direct arenaLayout access.
-        const arenaDesc = slotToArena.get(step.target);
-        if (!arenaDesc || arenaDesc.offset < 0 || arenaDesc.length <= 0) {
-          throw new Error('materialize: missing arena descriptor for slot ' + step.target);
-        }
-        if (state.arena.length < arenaDesc.offset + arenaDesc.length) {
-          throw new Error(
-            'materialize: arena too small for slot ' +
-              step.target +
-              ' (need ' +
-              (arenaDesc.offset + arenaDesc.length) +
-              ', have ' +
-              state.arena.length +
-              ')',
-          );
-        }
-        const buffer = materializeValueExpr(
-          veId,
-          program.valueExprs,
-          step.instanceId,
-          count,
-          state,
-          program,
-          undefined,
-          MATERIALIZE_SCRATCH,
-          pureFnContext,
-        );
-        arenaEncodeFromAoS(state.arena, arenaDesc, buffer);
-
-        // Debug tap: Record field value
-        state.tap?.recordFieldValue?.(step.target, buffer);
-        if (assertCardinalitySlotWrites) {
-          assertRuntimeSlotWrite(slotLookupMap, instances, state, step.kind, step.target, 'field', count);
-        }
-        break;
-      }
-
-      case 'render': {
-        enterRuntimeFrameSegment(state, 'phase1-render-collect');
-        // Collect render steps for v2 batch assembly (after Phase 1)
-        _renderSteps.push(step);
-        break;
-      }
-
-      case 'stateWrite': {
-        // SKIP in Phase 1 - will be executed in Phase 2
-        break;
-      }
-
-      case 'continuityMapBuild': {
-        enterRuntimeFrameSegment(state, 'phase1-continuity-map');
-        continuityMapSeen = true;
-        // Continuity System: Build element mapping when domain changes (spec §5.1)
-        const { instanceId } = step;
-
-        // Get instance declaration
-        const instance = instances.get(instanceId as InstanceId);
-        if (!instance) {
-          // Instance not found - skip
-          break;
-        }
-
-        const count = resolveInstanceLaneCount(instance, program, state, pureFnContext);
-        if (count === 0) break;
-
-        const seed = instance.elementIdSeed ?? 0;
-        const previousDomain = state.continuity.prevDomains.get(instanceId);
-        const identityMode = instance.identityMode === 'stable' ? 'stable' : 'none';
-        if (!shouldRebuildDomainInstance(previousDomain, count, identityMode, seed)) {
-          // [LAW:dataflow-not-control-flow] Continuity transition recording runs
-          // every frame; unchanged domains emit canonical "no change" data.
-          recordDomainTransition(state.continuity, instanceId, NO_DOMAIN_CHANGE);
-          break;
-        }
-        const newDomain = identityMode === 'stable'
-          ? createStableDomainInstance(count, seed)
-          : createUnstableDomainInstance(count);
-
-        // Detect domain change and compute mapping
-        const change = detectDomainChange(
-          instanceId,
-          newDomain,
-          state.continuity.prevDomains,
-        );
-        // [LAW:one-source-of-truth] Domain transition ownership is updated through
-        // a single continuity mapping boundary.
-        recordDomainTransition(state.continuity, instanceId, change);
-
-        // Update prevDomains for next frame comparison
-        state.continuity.prevDomains.set(instanceId, newDomain);
-        break;
-      }
-
-      case 'continuityApply': {
-        enterRuntimeFrameSegment(state, 'phase1-continuity-apply');
-        // Continuity System: Apply continuity policy to field target (spec §5.1)
-        const { baseSlot, outputSlot } = step;
-
-        // Resolve base/output through canonical numeric arena descriptors only.
-        const baseDesc = slotToArena.get(baseSlot);
-        if (!baseDesc || baseDesc.offset < 0 || baseDesc.length <= 0) {
-          throw new Error('Continuity: missing arena descriptor for base slot ' + baseSlot);
-        }
-        const outputDesc = slotToArena.get(outputSlot);
-        if (!outputDesc || outputDesc.offset < 0 || outputDesc.length <= 0) {
-          throw new Error('Continuity: missing arena descriptor for output slot ' + outputSlot);
-        }
-        const baseBuffer = resolveNumericBuffer(slotToArena, state, baseSlot);
-
-        const outputBuffer = baseSlot === outputSlot
-          ? baseBuffer
-          : ensureOutputBuffer(slotToArena, state, outputSlot, baseBuffer.length);
-
-        _continuityResolverContext.baseSlot = baseSlot;
-        _continuityResolverContext.outputSlot = outputSlot;
-        _continuityResolverContext.baseBuffer = baseBuffer;
-        _continuityResolverContext.outputBuffer = outputBuffer;
-        _continuityResolverContext.slotToArena = slotToArena;
-        _continuityResolverContext.state = state;
-        try {
-          applyContinuity(step, state, resolveContinuityBuffer);
-        } finally {
-          clearContinuityResolverContext();
-        }
-        arenaEncodeFromAoS(state.arena, outputDesc, outputBuffer);
-        state.tap?.recordFieldValue?.(outputSlot, outputBuffer);
-        if (assertCardinalitySlotWrites) {
-          const observedLaneCount = step.stride > 0 ? Math.floor(baseBuffer.length / step.stride) : 0;
-          assertRuntimeSlotWrite(
-            slotLookupMap,
-            instances,
-            state,
-            step.kind,
-            outputSlot,
-            'field',
-            observedLaneCount,
-          );
-        }
-        break;
-      }
-
-
-
-      case 'fieldStateWrite': {
-        // Per-lane state write is handled in PHASE 2 (after all reads complete)
-        break;
-      }
-
-      default: {
-        const _exhaustive: never = step;
-        throw new Error('Unknown step kind: ' + (_exhaustive as Step).kind);
-      }
-    }
-  }
-
-  // PHASE 1.5: Demand-driven field materialization for debug tracking
-  // Materialize any tracked field slots that weren't already written by the render pipeline
-  if (state.tap) {
-    const trackedSlots = state.tap.getTrackedFieldSlots?.();
-    if (trackedSlots && trackedSlots.size > 0) {
-      enterRuntimeFrameSegment(state, 'phase1-debug-materialize');
-      for (const slot of trackedSlots) {
-        const arenaDesc = slotToArena.get(slot);
-        if (arenaDesc && arenaDesc.offset >= 0 && arenaDesc.length > 0) {
-          if (state.arena.length < arenaDesc.offset + arenaDesc.length) {
-            throw new Error(
-              'debug tracked slot arena too small for slot ' +
-                slot +
-                ' (need ' +
-                (arenaDesc.offset + arenaDesc.length) +
-                ', have ' +
-                state.arena.length +
-                ')',
-            );
-          }
-          state.tap.recordFieldValue?.(slot, arenaDecodeToAoS(state.arena, arenaDesc));
-          continue;
-        }
-        // [LAW:one-source-of-truth] Debug-tracked field reads must resolve through
-        // the canonical arena descriptor map only.
-        throw new Error('debug tracked slot missing arena descriptor for slot ' + slot);
-      }
-    }
-  }
-
-  // Resolve camera from program render globals (slots now populated by value evaluation)
-  const resolvedCamera = resolveCameraFromGlobals(program, state);
-
-  // Build assembler context with resolved camera and arena
-  // Populate reusable module-level context to avoid per-frame object literal
-  _assemblerCtx.program = program;
-  _assemblerCtx.instances = instances as ReadonlyMap<string, InstanceDecl>;
-  _assemblerCtx.state = state;
-  _assemblerCtx.resolvedCamera = resolvedCamera;
-  _assemblerCtx.arena = arena;
-  _assemblerCtx.scalarExprToArenaAddress = state.cache.scalarExprToArenaAddress ?? undefined;
-  _assemblerCtx.slotToArena = addressTable.slotToArena;
-  _assemblerCtx.pureFnContext = pureFnContext;
-  assemblerContext = _assemblerCtx as AssemblerContext;
-
-  // Build v2 frame from collected render steps (zero allocations - uses arena)
-  enterRuntimeFrameSegment(state, 'render-assembly');
-  const frame = assembleRenderFrame(_renderSteps, assemblerContext);
-
-  // PHASE 2: Execute all stateWrite steps
-  // This ensures state reads in Phase 1 saw previous frame's values
-  enterRuntimeFrameSegment(state, 'phase2-state-write');
-  // [LAW:dataflow-not-control-flow] Phase 2 always prepares the write bank first;
-  // per-step variability is encoded in written values, not whether prep runs.
-  prepareStateWriteBank(state);
-  for (const step of steps) {
-    if (step.kind === 'stateWrite') {
-      const mapping = stateSlotToMapping.get(step.stateSlot as number);
-      const stride = mapping?.stride ?? 1;
-
-      // [LAW:one-source-of-truth] State mapping stride is the canonical write width.
-      const oneValue = materializeValueExpr(
-        step.value as any,
-        program.valueExprs,
-        SCALAR_INSTANCE_ID,
-        1,
-        state,
-        program,
-        undefined,
-        MATERIALIZE_SCRATCH,
-        pureFnContext,
-      );
-      const baseSlot = step.stateSlot as number;
-      for (let c = 0; c < stride; c++) {
-        const fallback = mapping?.initial[c] ?? 0;
-        state.stateWrite![baseSlot + c] = applyStateWritePolicy(mapping, oneValue[c] ?? fallback);
-      }
-    }
-    if (step.kind === 'fieldStateWrite') {
-      // Per-lane state write: evaluate field and write each lane+component.
-      const mapping = stateSlotToMapping.get(step.stateSlot as number);
-      if (!mapping || mapping.instanceId === undefined) {
-        throw new Error('fieldStateWrite: missing field state mapping for slot ' + step.stateSlot);
-      }
-
-      const veId = step.value as any;
-      const exprNode = valueExprs[veId as number];
-      const count = mapping.laneCount;
-      if (count === 0) continue;
-
-      const tempBuffer = materializeValueExpr(
-        veId,
-        program.valueExprs,
-        makeInstanceId(String(mapping.instanceId)),
-        count,
-        state,
-        program,
-        undefined,
-        MATERIALIZE_SCRATCH,
-        pureFnContext,
-      );
-
-      const srcStride = payloadStride(exprNode.type.payload);
-      const copyStride = Math.min(srcStride, mapping.stride);
-      const baseSlot = step.stateSlot as number;
-      const src = tempBuffer as Float32Array;
-      for (let lane = 0; lane < count; lane++) {
-        const dstLaneBase = baseSlot + lane * mapping.stride;
-        const srcLaneBase = lane * srcStride;
-        for (let c = 0; c < copyStride; c++) {
-          state.stateWrite![dstLaneBase + c] = applyStateWritePolicy(mapping, src[srcLaneBase + c] ?? 0);
-        }
-        for (let c = copyStride; c < mapping.stride; c++) {
-          state.stateWrite![dstLaneBase + c] = applyStateWritePolicy(mapping, mapping.initial[c] ?? 0);
-        }
-      }
-    }
-  }
-  commitStateWriteBank(state);
-
-  // Reset scratch allocator after all materialized buffers have been consumed.
-  MATERIALIZE_SCRATCH.reset();
-
-  // 3.5 Finalize continuity frame (spec §5.1)
-  // Updates time tracking and clears frame-local flags
-  enterRuntimeFrameSegment(state, 'continuity-finalize');
-  finalizeContinuityFrame(state);
-
-  // [LAW:one-source-of-truth] RenderFrame output flows through one canonical
-  // runtime field, not a synthetic object slot indirection.
-  enterRuntimeFrameSegment(state, 'frame-output');
-  state.lastRenderFrame = frame;
-  if (program.outputs.length > 0) {
-    const outputSpec = program.outputs[0];
-    if (outputSpec.kind !== 'renderFrame') {
-      throw new Error('Unsupported output kind: ' + (outputSpec as { kind?: string }).kind);
-    }
-    return frame;
-  }
-
-  // Fallback: no outputs defined (shouldn't happen with proper compilation)
-  return frame;
+  const context = createExecuteFrameContext(program, state, arena, tAbsMs, options);
+  // [LAW:one-source-of-truth] Canonical runtime flow initializes once, then runs fixed phase order.
+  initializeFrame(context);
+  runPhase1(context);
+  runDebugFieldMaterialization(context);
+  // [LAW:one-way-deps] CPU frame assembly remains removed from canonical runtime.
+  enterRuntimeFrameSegment(context.state, 'render-assembly');
+  runPhase2(context);
+  return finalizeFrame(context, EMPTY_RENDER_FRAME);
 }
