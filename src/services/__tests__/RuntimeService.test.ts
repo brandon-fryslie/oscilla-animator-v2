@@ -4,6 +4,12 @@ const mocks = vi.hoisted(() => {
   const compileWorkerCompile = vi.fn();
   const compileWorkerDispose = vi.fn();
   const compileAndSwap = vi.fn(async (..._args: any[]) => {});
+  const buildRuntimeHotpathInstallPlanes = vi.fn(() => ({
+    sinkTableWords: null,
+    sinkTableWordCount: 0,
+    shapeBankWords: new Uint32Array(0),
+    shapeBankWordCount: 0,
+  }));
   const rebuildGpuPipelines = vi.fn(async () => {});
   const createWebGPURenderer = vi.fn(async () => ({
     dispose: vi.fn(),
@@ -54,6 +60,7 @@ const mocks = vi.hoisted(() => {
     compileWorkerCompile,
     compileWorkerDispose,
     compileAndSwap,
+    buildRuntimeHotpathInstallPlanes,
     rebuildGpuPipelines,
     createWebGPURenderer,
     assertWebGPUStartupContract,
@@ -99,6 +106,10 @@ vi.mock('../../render', () => ({
 
 vi.mock('../CompileOrchestrator', () => ({
   compileAndSwap: mocks.compileAndSwap,
+}));
+
+vi.mock('../runtime-hotpath-install', () => ({
+  buildRuntimeHotpathInstallPlanes: mocks.buildRuntimeHotpathInstallPlanes,
 }));
 
 vi.mock('../CompileWorkerClient', () => ({
@@ -375,5 +386,64 @@ describe('RuntimeService startup compile path', () => {
       mocks.rebuildGpuPipelines.mock.invocationCallOrder[0]
       < mocks.compileAndSwap.mock.invocationCallOrder[0],
     ).toBe(true);
+  });
+
+  it('installs runtime hotpath planes after successful program swap', async () => {
+    const installedProgram = { id: 'program-after-swap' } as any;
+    mocks.buildRuntimeHotpathInstallPlanes.mockReturnValue({
+      sinkTableWords: new Uint32Array([0, 1, 1, 0, 0, 5, 5, 4, 0]),
+      sinkTableWordCount: 9,
+      shapeBankWords: new Uint32Array([1, 1, 0, 0, 3, 0, 0, 3, 0, 16, 6, 0, 0, 0, 0, 0]),
+      shapeBankWordCount: 16,
+    });
+    const backendResult = {
+      kind: 'ok' as const,
+      program: installedProgram,
+      warnings: [],
+    };
+    const compiledGpuBundle = {
+      schemaVersion: 1 as const,
+      passes: [{
+        passId: 'simulation',
+        stage: 'compute' as const,
+        entryPoint: 'compute_main',
+        wgsl: '@compute @workgroup_size(64, 1, 1)\nfn compute_main() {}',
+      }],
+    };
+    mocks.compileAndSwap.mockImplementationOnce(async (deps) => {
+      deps.state.currentProgram = installedProgram;
+      deps.state.currentState = {
+        shapeBank: {
+          staticBoundary: 0,
+          topologyIdByHandle: new Uint32Array(64),
+        },
+      };
+    });
+    mocks.compileWorkerCompile.mockResolvedValue({
+      sourcePatchRevision: 7,
+      frontendResult: {} as any,
+      backendResult,
+      compiledGpuBundle,
+      compileDurationMs: 2,
+    });
+
+    const { store } = makeStore();
+    const runtime = new RuntimeService(store);
+    runtime.setCanvas(document.createElement('canvas'));
+
+    const initPromise = runtime.init();
+    await vi.advanceTimersByTimeAsync(60);
+    await initPromise;
+
+    const renderer = await mocks.createWebGPURenderer.mock.results[0]?.value;
+    expect(mocks.buildRuntimeHotpathInstallPlanes).toHaveBeenCalledTimes(1);
+    expect(renderer.render).toHaveBeenCalledTimes(1);
+    expect(renderer.render).toHaveBeenCalledWith(
+      expect.objectContaining({
+        drawPrepSinkTableWordCount: 9,
+        width: 300,
+        height: 150,
+      }),
+    );
   });
 });
