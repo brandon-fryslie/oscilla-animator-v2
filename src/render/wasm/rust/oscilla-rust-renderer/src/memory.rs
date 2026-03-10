@@ -10,6 +10,37 @@ pub const INDIRECT_INDEXED_STRIDE_WORDS: usize = 5;
 pub const INDIRECT_NON_INDEXED_STRIDE_WORDS: usize = 4;
 const CLEAR_BUFFER_CHUNK_BYTES: usize = 16 * 1024;
 
+struct BufferClearPlan {
+    total_bytes: u64,
+    next_offset: u64,
+}
+
+impl BufferClearPlan {
+    fn new(total_bytes: u64) -> Self {
+        Self {
+            total_bytes,
+            next_offset: 0,
+        }
+    }
+}
+
+impl Iterator for BufferClearPlan {
+    type Item = (u64, usize);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.next_offset >= self.total_bytes {
+            return None;
+        }
+        // [LAW:dataflow-not-control-flow] Chunk segmentation is derived from
+        // canonical buffer size; each clear executes the same write pipeline.
+        let remaining = (self.total_bytes - self.next_offset) as usize;
+        let chunk_len = remaining.min(CLEAR_BUFFER_CHUNK_BYTES);
+        let chunk_offset = self.next_offset;
+        self.next_offset = self.next_offset.saturating_add(chunk_len as u64);
+        Some((chunk_offset, chunk_len))
+    }
+}
+
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, Zeroable, Pod)]
 pub struct GlobalUniforms {
@@ -69,13 +100,8 @@ impl GpuMemoryArena {
         // [LAW:single-enforcer] This helper is the canonical boundary for
         // simulation-plane zeroing on reset.
         const ZERO_CHUNK: [u8; CLEAR_BUFFER_CHUNK_BYTES] = [0u8; CLEAR_BUFFER_CHUNK_BYTES];
-        let mut offset_bytes = 0u64;
-        let total_bytes = buffer.size();
-        while offset_bytes < total_bytes {
-            let remaining = (total_bytes - offset_bytes) as usize;
-            let chunk_len = remaining.min(CLEAR_BUFFER_CHUNK_BYTES);
+        for (offset_bytes, chunk_len) in BufferClearPlan::new(buffer.size()) {
             queue.write_buffer(buffer, offset_bytes, &ZERO_CHUNK[..chunk_len]);
-            offset_bytes = offset_bytes.saturating_add(chunk_len as u64);
         }
     }
 
@@ -701,5 +727,42 @@ impl GpuMemoryArena {
                 resource: self.topology_buffer.as_entire_binding(),
             }],
         });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{BufferClearPlan, CLEAR_BUFFER_CHUNK_BYTES};
+
+    #[test]
+    fn clear_plan_empty_buffer_has_no_chunks() {
+        let chunks: Vec<(u64, usize)> = BufferClearPlan::new(0).collect();
+        assert!(chunks.is_empty());
+    }
+
+    #[test]
+    fn clear_plan_exact_chunk_uses_single_write() {
+        let chunks: Vec<(u64, usize)> =
+            BufferClearPlan::new(CLEAR_BUFFER_CHUNK_BYTES as u64).collect();
+        assert_eq!(chunks, vec![(0, CLEAR_BUFFER_CHUNK_BYTES)]);
+    }
+
+    #[test]
+    fn clear_plan_large_buffer_splits_into_bounded_chunks() {
+        let total_bytes = (CLEAR_BUFFER_CHUNK_BYTES as u64 * 10) + 123;
+        let chunks: Vec<(u64, usize)> = BufferClearPlan::new(total_bytes).collect();
+        assert_eq!(chunks.len(), 11);
+        assert_eq!(chunks[0], (0, CLEAR_BUFFER_CHUNK_BYTES));
+        assert_eq!(
+            chunks[9],
+            (
+                (CLEAR_BUFFER_CHUNK_BYTES as u64) * 9,
+                CLEAR_BUFFER_CHUNK_BYTES
+            )
+        );
+        assert_eq!(chunks[10], ((CLEAR_BUFFER_CHUNK_BYTES as u64) * 10, 123));
+        assert!(chunks
+            .iter()
+            .all(|(_, chunk_len)| *chunk_len <= CLEAR_BUFFER_CHUNK_BYTES));
     }
 }
