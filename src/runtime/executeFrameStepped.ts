@@ -9,7 +9,6 @@ import type { CompiledProgramIR } from '../compiler/ir/program';
 import type { ScheduleIR } from '../compiler/backend/schedule-program';
 import type { Step, StateMapping, StableStateId } from '../compiler/ir/types';
 import type { IrInstanceId as InstanceId } from '../types';
-import { instanceId as makeInstanceId } from '../core/ids';
 import type { RuntimeState } from './RuntimeState';
 import { EMPTY_RENDER_FRAME, type RenderFrameIR } from '../render/types';
 import type { RenderBufferArena } from '../render/RenderBufferArena';
@@ -118,7 +117,7 @@ function resolveFieldCopyStride(srcStride: number, mapping: StateMapping): numbe
 }
 
 function toInstanceId(value: unknown): InstanceId {
-  return makeInstanceId(String(value));
+  return String(value) as InstanceId;
 }
 
 function hasRenderFrameOutput(program: CompiledProgramIR): boolean {
