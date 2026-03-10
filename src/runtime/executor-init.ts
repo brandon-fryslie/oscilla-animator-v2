@@ -6,7 +6,6 @@
  */
 
 import { createMaterializeScratch } from './MaterializeScratch';
-import type { AssemblerContext } from './RenderAssembler';
 
 // Module-level scratch allocator for Materializer buffers.
 export const MATERIALIZE_SCRATCH = createMaterializeScratch();
