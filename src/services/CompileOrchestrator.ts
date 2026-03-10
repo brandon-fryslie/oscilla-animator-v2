@@ -10,7 +10,7 @@
 import type { FrontendError } from '../compiler/frontend';
 import type { FrontendResult } from '../compiler/frontend';
 import type { CompileResult } from '../compiler/compile';
-import type { CompiledProgramIR } from '../compiler/ir/program';
+import type { CompiledProgramIR, ScheduleIR } from '../compiler/ir/program';
 import type { Diagnostic } from '../diagnostics/types';
 import { convertFrontendErrorsToDiagnostics } from '../compiler/frontend/frontendDiagnosticConversion';
 import { convertCompileErrorsToDiagnostics } from '../compiler/diagnosticConversion';
@@ -183,6 +183,45 @@ export interface CompileOrchestratorDeps {
   onDomainChange?: (oldProgram: CompiledProgramIR, newProgram: CompiledProgramIR) => void;
 }
 
+function assertScheduleContract(schedule: CompiledProgramIR['schedule'] | undefined): ScheduleIR {
+  const assertNonNegativeInteger = (value: unknown, field: string): number => {
+    if (typeof value !== 'number' || !Number.isFinite(value) || !Number.isInteger(value) || value < 0) {
+      throw new Error(`[compile] program.schedule.${field} must be a non-negative integer - compiler/runtime contract violation`);
+    }
+    return value;
+  };
+  const assertNonNegativeNumber = (value: unknown, field: string): number => {
+    if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
+      throw new Error(`[compile] program.schedule.${field} must be a non-negative number - compiler/runtime contract violation`);
+    }
+    return value;
+  };
+
+  if (!schedule) {
+    throw new Error('[compile] program.schedule is missing - compiler/runtime contract violation');
+  }
+  // [LAW:single-enforcer] compileAndSwap is the runtime boundary that enforces
+  // required schedule contract fields for compiler output.
+  if (typeof schedule.timeModel !== 'object' || schedule.timeModel === null) {
+    throw new Error('[compile] program.schedule.timeModel must be a non-null object - compiler/runtime contract violation');
+  }
+  assertNonNegativeNumber(schedule.timeModel.periodAMs, 'timeModel.periodAMs');
+  assertNonNegativeNumber(schedule.timeModel.periodBMs, 'timeModel.periodBMs');
+  if (!(schedule.instances instanceof Map)) {
+    throw new Error('[compile] program.schedule.instances must be a Map - compiler/runtime contract violation');
+  }
+  if (!Array.isArray(schedule.stateMappings)) {
+    throw new Error('[compile] program.schedule.stateMappings must be an array - compiler/runtime contract violation');
+  }
+  if (!Array.isArray(schedule.steps)) {
+    throw new Error('[compile] program.schedule.steps must be an array - compiler/runtime contract violation');
+  }
+  assertNonNegativeInteger(schedule.stateSlotCount, 'stateSlotCount');
+  assertNonNegativeInteger(schedule.eventSlotCount, 'eventSlotCount');
+  assertNonNegativeInteger(schedule.eventCount, 'eventCount');
+  return schedule;
+}
+
 /**
  * Compile the current patch from store and swap to the new program.
  *
@@ -318,9 +357,9 @@ export async function compileAndSwap(
 
   const program = result.program;
   const collectContinuityTargetOwnerBindings = (
-    schedule: { steps?: readonly any[] } | undefined,
+    schedule: ScheduleIR | undefined,
   ): ContinuityTargetOwnerBinding[] => {
-    if (!schedule?.steps) {
+    if (!schedule) {
       return [];
     }
     const bindings: ContinuityTargetOwnerBinding[] = [];
@@ -347,15 +386,10 @@ export async function compileAndSwap(
   }
 
   // Get schedule info
-  const newSchedule = program.schedule as {
-    stateSlotCount?: number;
-    stateMappings?: readonly any[];
-    instances?: ReadonlyMap<string, any>;
-    steps?: readonly any[];
-  };
-  const newStateSlotCount = newSchedule?.stateSlotCount ?? 0;
-  const newStateMappings = newSchedule?.stateMappings ?? [];
-  const newEventSlotCount = (newSchedule as { eventSlotCount?: number })?.eventSlotCount ?? 0;
+  const newSchedule = assertScheduleContract(program.schedule);
+  const newStateSlotCount = newSchedule.stateSlotCount;
+  const newStateMappings = newSchedule.stateMappings;
+  const newEventSlotCount = newSchedule.eventSlotCount;
   const newValueExprCount = program.valueExprs?.nodes.length ?? 0;
 
   // For recompile: detect domain changes
@@ -364,11 +398,7 @@ export async function compileAndSwap(
   }
 
   // Get old state info for migration
-  const oldSchedule = state.currentProgram?.schedule as {
-    stateSlotCount?: number;
-    stateMappings?: readonly any[];
-    steps?: readonly any[];
-  } | undefined;
+  const oldSchedule = state.currentProgram ? state.currentProgram.schedule : undefined;
   const oldStateMappings = oldSchedule?.stateMappings ?? [];
   const oldPrimitiveState = state.currentState?.state;
   const knownTargetOwnerBindings = [
