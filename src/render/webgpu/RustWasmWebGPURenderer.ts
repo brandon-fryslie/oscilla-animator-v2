@@ -568,15 +568,10 @@ export class WebGPURenderer {
     }
     this.writeViewportFrame(input);
     const shapeBankWords = this.syncShapeBankPlane(input.shapeBank);
-    const sinkTableWords = this.syncSinkTablePlane(
-      input.drawPrepSinkTableV1,
-      input.drawPrepSinkTableWordCount,
-    );
-    // TODO(#159): Replace this inline payload assembly with:
-    // `buildRenderInputSamplePayload(drawPrepSinkTableV1, sinkTableWords)`
-    // and emit via a shared debug emitter helper from this `render(...)` call
-    // site. [LAW:locality-or-seam] Keep payload construction out of hot-path
-    // render orchestration.
+    const sinkTableWords = this.syncSinkTablePlane(input.drawPrepSinkTableV1, input.drawPrepSinkTableWordCount);
+    // TODO(#159): Replace this inline payload assembly with `buildRenderInputSamplePayload(drawPrepSinkTableV1, sinkTableWords)`
+    // and emit via a shared debug emitter helper from this `render(...)` call site. [LAW:locality-or-seam] Keep payload
+    // construction out of hot-path render orchestration.
     // https://github.com/brandon-fryslie/oscilla-animator-v2/issues/159
     if (RUNTIME_CONSOLE_ENABLED && !this.renderInputDebugLogged && sinkTableWords > 0) {
       this.renderInputDebugLogged = true;
