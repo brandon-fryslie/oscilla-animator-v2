@@ -21,7 +21,6 @@ import type {
   GpuBuffer,
   GpuCanvasContext,
   GpuCommandEncoder,
-  GpuComputePassEncoder,
   GpuComputePipeline,
   GpuDevice,
   GpuRenderPassEncoder,
