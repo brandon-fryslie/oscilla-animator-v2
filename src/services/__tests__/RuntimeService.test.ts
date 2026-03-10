@@ -1,10 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { RuntimeHotpathInstallPlanes } from '../runtime-hotpath-install';
 
 const mocks = vi.hoisted(() => {
   const compileWorkerCompile = vi.fn();
   const compileWorkerDispose = vi.fn();
   const compileAndSwap = vi.fn(async (..._args: any[]) => {});
-  const buildRuntimeHotpathInstallPlanes = vi.fn(() => ({
+  const buildRuntimeHotpathInstallPlanes = vi.fn<() => RuntimeHotpathInstallPlanes>(() => ({
     sinkTableWords: null,
     sinkTableWordCount: 0,
     shapeBankWords: new Uint32Array(0),
