@@ -201,14 +201,13 @@ function makeStore() {
   };
 }
 
-describe('RuntimeService startup compile path', () => {
-  beforeEach(() => {
-    vi.useFakeTimers();
-    vi.clearAllMocks();
-    mocks.savePatchToStorage.mockImplementation(() => {});
-  });
+beforeEach(() => {
+  vi.useFakeTimers();
+  vi.clearAllMocks();
+  mocks.savePatchToStorage.mockImplementation(() => {});
+});
 
-  it('uses async worker compile and precomputed initial swap during init', async () => {
+it('uses async worker compile and precomputed initial swap during init', async () => {
     mocks.compileAndSwap.mockImplementationOnce(async (deps) => {
       deps.state.currentProgram = {} as any;
       deps.state.currentState = {} as any;
@@ -251,9 +250,9 @@ describe('RuntimeService startup compile path', () => {
       sourcePatchRevision: 7,
       compileDurationMs: 3,
     });
-  });
+});
 
-  it('does not fall back to synchronous initial compile when worker compile fails', async () => {
+it('does not fall back to synchronous initial compile when worker compile fails', async () => {
     mocks.compileWorkerCompile.mockRejectedValue(new Error('worker unavailable'));
 
     const { store, diagnosticsLog } = makeStore();
@@ -283,9 +282,9 @@ describe('RuntimeService startup compile path', () => {
         message: expect.stringContaining('Async compile'),
       }),
     );
-  });
+});
 
-  it('marks bootstrap failed with persistence error after a successful initial compile', async () => {
+it('marks bootstrap failed with persistence error after a successful initial compile', async () => {
     mocks.compileAndSwap.mockImplementationOnce(async (deps) => {
       deps.state.currentProgram = {} as any;
       deps.state.currentState = {} as any;
@@ -311,9 +310,9 @@ describe('RuntimeService startup compile path', () => {
 
     expect(mocks.markRuntimeBootstrapSucceeded).toHaveBeenCalledTimes(1);
     expect(mocks.markRuntimeBootstrapFailed).toHaveBeenCalledWith('storage offline');
-  });
+});
 
-  it('marks bootstrap failed when initialization throws before renderer startup completes', async () => {
+it('marks bootstrap failed when initialization throws before renderer startup completes', async () => {
     const { store } = makeStore();
     const runtime = new RuntimeService(store);
 
@@ -326,9 +325,9 @@ describe('RuntimeService startup compile path', () => {
     expect(mocks.markRuntimeBootstrapFailed).toHaveBeenCalledWith(
       'RuntimeService: preview canvas is required before initialization',
     );
-  });
+});
 
-  it('publishes compiled GPU pass bundle into the renderer before swapping the new program', async () => {
+it('publishes compiled GPU pass bundle into the renderer before swapping the new program', async () => {
     const backendResult = {
       kind: 'ok' as const,
       program: {} as any,
@@ -373,5 +372,4 @@ describe('RuntimeService startup compile path', () => {
       mocks.rebuildGpuPipelines.mock.invocationCallOrder[0]
       < mocks.compileAndSwap.mock.invocationCallOrder[0],
     ).toBe(true);
-  });
 });

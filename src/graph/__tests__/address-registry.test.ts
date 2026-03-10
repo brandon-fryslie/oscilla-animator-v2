@@ -25,8 +25,7 @@ function replacePatchBlock(
   mapPrototype.set.call(patch.blocks, blockId, block);
 }
 
-describe('AddressRegistry', () => {
-  describe('buildFromPatch', () => {
+describe('AddressRegistry buildFromPatch basics', () => {
     it('builds registry from empty patch', () => {
       const patch = buildPatch(_b => {});
       const registry = AddressRegistry.buildFromPatch(patch);
@@ -63,7 +62,9 @@ describe('AddressRegistry', () => {
       // Should index all blocks and ports
       expect(registry.size).toBeGreaterThan(3);
     });
+});
 
+describe('AddressRegistry buildFromPatch address indexing', () => {
     it('indexes all output ports', () => {
       const patch = buildPatch(b => {
         const c = b.addBlock('Const', { displayName: 'My Const' });
@@ -112,10 +113,9 @@ describe('AddressRegistry', () => {
       expect(resolved).not.toBeNull();
       expect(resolved?.kind).toBe('block');
     });
+});
 
-  });
-
-  describe('buildFromPatch validation', () => {
+describe('AddressRegistry buildFromPatch validation', () => {
     it('fails explicitly when an output port key is not a string', () => {
       const patch = buildPatch(b => {
         const c = b.addBlock('Const', { displayName: 'My Const' });
@@ -187,9 +187,9 @@ describe('AddressRegistry', () => {
 
       expect(() => AddressRegistry.buildFromPatch(patch)).toThrow(/input port entry is missing string id/);
     });
-  });
+});
 
-  describe('resolve', () => {
+describe('AddressRegistry resolve', () => {
     it('resolves valid block address', () => {
       const patch = buildPatch(b => {
         const c = b.addBlock('Const', { displayName: 'My Const' });
@@ -258,9 +258,9 @@ describe('AddressRegistry', () => {
       expect(registry.resolve('v1:blocks.nonexistent')).toBeNull();
     });
 
-  });
+});
 
-  describe('resolveShorthand', () => {
+describe('AddressRegistry resolveShorthand', () => {
     it('resolves valid output shorthand', () => {
       const patch = buildPatch(b => {
         const c = b.addBlock('Const', { displayName: 'My Const' });
@@ -308,9 +308,9 @@ describe('AddressRegistry', () => {
       expect(addr).not.toBeNull();
       expect(elapsed).toBeLessThan(1); // Should be sub-millisecond
     });
-  });
+});
 
-  describe('large patch handling', () => {
+describe('AddressRegistry large patch handling', () => {
     it('handles large patches efficiently', () => {
       const patch = buildPatch(b => {
         // Create 1000 blocks
@@ -354,9 +354,9 @@ describe('AddressRegistry', () => {
       // Each Const has 1 output shorthand
       expect(registry.shorthandCount).toBe(100);
     });
-  });
+});
 
-  describe('integration', () => {
+describe('AddressRegistry integration', () => {
     it('registry and direct resolution produce same results', () => {
       const patch = buildPatch(b => {
         const c = b.addBlock('Const', { displayName: 'My Const' });
@@ -395,5 +395,4 @@ describe('AddressRegistry', () => {
         }
       }
     });
-  });
 });
