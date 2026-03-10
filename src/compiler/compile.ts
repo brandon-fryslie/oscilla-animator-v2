@@ -26,6 +26,7 @@ import type {
   DrawPrepSinkIR,
   ExprProvenanceIR,
   GeneratedComputeProgramIR,
+  PortBindingIR,
 } from './ir/program';
 import type { InstanceId, ValueSlot } from './ir/Indices';
 import { SCALAR_INSTANCE_ID } from './ir/Indices';
