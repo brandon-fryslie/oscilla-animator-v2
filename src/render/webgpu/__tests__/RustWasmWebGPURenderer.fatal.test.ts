@@ -10,6 +10,7 @@ class FakeWorker {
   static instances: FakeWorker[] = [];
 
   readonly posted: RustRendererWorkerInboundMessage[] = [];
+  terminateCount = 0;
   private readonly messageListeners = new Set<MessageListener>();
   private readonly errorListeners = new Set<ErrorListener>();
 
@@ -27,7 +28,7 @@ class FakeWorker {
   }
 
   terminate(): void {
-    return;
+    this.terminateCount += 1;
   }
 
   addEventListener(type: string, listener: EventListenerOrEventListenerObject): void {
@@ -103,6 +104,56 @@ function getRendererFatalIssues() {
     const detail = issue.detail as { kind?: string } | undefined;
     return detail?.kind === 'rendererFatal';
   });
+}
+
+function getEngineErrorIssues() {
+  return getRenderIssues().filter((issue) => {
+    const detail = issue.detail as { kind?: string } | undefined;
+    return detail?.kind === 'engineError';
+  });
+}
+
+function makeSchedulerHeartbeat(state: 'Booting' | 'Running' | 'Paused' | 'Lost'): RustRendererWorkerOutboundMessage {
+  return {
+    type: 'SCHEDULER_HEARTBEAT',
+    state,
+    sequence: 1,
+    emittedAtMs: 1,
+    frameCount: 1,
+    loopCount: 1,
+    meanTickMs: 0,
+    stdDevTickMs: 0,
+    sampleCount: 1,
+    lastTickMs: 0,
+    lastSuccessMs: 0,
+    telemetry: {
+      stageTimings: {
+        inputMarshalMs: 0,
+        simulationDispatchMs: 0,
+        fluidPassChainMs: 0,
+        drawPrepMs: 0,
+        renderMs: 0,
+        swapMs: 0,
+        totalFrameMs: 0,
+      },
+      dispatchCounters: {
+        computeDispatchCount: 0,
+        computeWorkgroupCount: 0,
+        activeLaneCount: 0,
+        guardedLaneCount: 0,
+      },
+      resourceStats: {
+        shapeBankWordCount: 0,
+        sinkTableWordCount: 0,
+        indexedRecordCount: 0,
+        nonIndexedRecordCount: 0,
+        totalInstanceCount: 0,
+        canvasWidth: 0,
+        canvasHeight: 0,
+        pingPongIndex: 0,
+      },
+    },
+  };
 }
 
 describe('RustWasmWebGPURenderer fatal transition', () => {
@@ -192,5 +243,82 @@ describe('RustWasmWebGPURenderer fatal transition', () => {
 
     const postFatalError = expectThrownError(() => renderer.setViewportFrame(makeViewportFrame()));
     expect(postFatalError).toBe(rebuildError as Error);
+  });
+});
+
+describe('RustWasmWebGPURenderer fatal transition guardrails', () => {
+  let originalNavigatorGpu: PropertyDescriptor | undefined;
+
+  beforeEach(() => {
+    clearRenderIssues();
+    FakeWorker.instances.length = 0;
+    vi.stubGlobal('Worker', FakeWorker as unknown as typeof Worker);
+    originalNavigatorGpu = Object.getOwnPropertyDescriptor(globalThis.navigator, 'gpu');
+    Object.defineProperty(globalThis.navigator, 'gpu', {
+      configurable: true,
+      value: {},
+    });
+  });
+
+  afterEach(() => {
+    clearRenderIssues();
+    FakeWorker.instances.length = 0;
+    if (originalNavigatorGpu) {
+      Object.defineProperty(globalThis.navigator, 'gpu', originalNavigatorGpu);
+    } else {
+      Reflect.deleteProperty(globalThis.navigator, 'gpu');
+    }
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it('keeps lifecycle Lost even if heartbeat messages arrive after fatal', async () => {
+    const renderer = await createWebGPURenderer(makeCanvas());
+    const worker = FakeWorker.instances[0];
+    expect(worker).toBeDefined();
+
+    worker!.emitMessage({ type: 'FATAL_ERROR', code: 'BOOT_FATAL', message: 'first fatal' });
+    expect(renderer.getLifecycleState()).toBe('Lost');
+    worker!.emitMessage(makeSchedulerHeartbeat('Running'));
+
+    expect(renderer.getLifecycleState()).toBe('Lost');
+  });
+
+  it('emits engineError for fatal ENGINE_ERROR and still applies terminate policy on repeated fatal transition', async () => {
+    const renderer = await createWebGPURenderer(makeCanvas());
+    const worker = FakeWorker.instances[0];
+    expect(worker).toBeDefined();
+
+    worker!.emitMessage({
+      type: 'ENGINE_ERROR',
+      source: 'WEBGPU_VALIDATION',
+      message: 'fatal validation issue',
+      location: 'WORKER',
+      fatal: true,
+    });
+
+    expect(getEngineErrorIssues()).toHaveLength(1);
+    expect(getRendererFatalIssues()).toHaveLength(1);
+
+    const rendererAny = renderer as unknown as {
+      markRendererFatal: (transition: {
+        code: string;
+        stage: string;
+        message: string;
+        timestamp: number;
+        cause: Error;
+        terminationPolicy: 'keep-worker-alive' | 'terminate-worker';
+      }) => Error;
+    };
+    rendererAny.markRendererFatal({
+      code: 'ACK_TIMEOUT',
+      stage: 'rebuildGpuPipelines(1 passes)',
+      message: 'late timeout after fatal',
+      timestamp: 2,
+      cause: new Error('late timeout after fatal'),
+      terminationPolicy: 'terminate-worker',
+    });
+
+    expect(worker!.terminateCount).toBe(1);
   });
 });
