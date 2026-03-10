@@ -7,6 +7,7 @@
 
 import { assertSchedulePhaseBoundaryStateReads } from '../runtime';
 import { RenderBufferArena, type WebGPURenderer } from '../render';
+import type { CompiledProgramIR } from '../compiler/ir/program';
 import type { RuntimeState } from '../runtime/RuntimeState';
 import type { RootStore } from '../stores';
 import { isRuntimeConsoleEnabled } from '../testing/test-params';
@@ -109,6 +110,7 @@ export function executeAnimationFrame(
     getCurrentProgram,
     getCanvas,
     getRenderer,
+    getArena,
     store,
     onStatsUpdate,
   } = deps;
@@ -117,7 +119,7 @@ export function executeAnimationFrame(
   const canvas = getCanvas();
   const renderer = getRenderer();
 
-  if (!canvas || !renderer) {
+  if (!canvas || !renderer || !arena) {
     throw new Error('AnimationLoop: WebGPU runtime contract requires canvas, renderer, and arena');
   }
 
