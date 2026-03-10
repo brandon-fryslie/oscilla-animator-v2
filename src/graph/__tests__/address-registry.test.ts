@@ -100,6 +100,9 @@ describe('AddressRegistry', () => {
       expect(resolved?.kind).toBe('block');
     });
 
+  });
+
+  describe('buildFromPatch validation', () => {
     it('fails explicitly when an output port key is not a string', () => {
       const patch = buildPatch(b => {
         const c = b.addBlock('Const', { displayName: 'My Const' });
