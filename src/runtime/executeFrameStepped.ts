@@ -37,6 +37,7 @@ import {
 import { assembleRenderFrame, type AssemblerContext } from './RenderAssembler';
 import { resolveCameraFromGlobals } from './CameraResolver';
 import { payloadStride } from '../core/canonical-types';
+import { valueSlot } from '../compiler/ir/Indices';
 import type { ValueSlot, StateSlotId } from '../compiler/ir/Indices';
 import { SCALAR_INSTANCE_ID } from '../compiler/ir/Indices';
 import { evaluateValueExprEvent } from './ValueExprEventEvaluator';
@@ -285,8 +286,8 @@ export function* executeFrameStepped(
     switch (step.kind) {
       case 'eventDispatch': {
         const fired = evaluateValueExprEvent(step.expr, program.valueExprs, state, program, pureFnContext);
-        const eventSlot = step.target as ValueSlot;
-        const eventSlotIndex = eventSlot as number;
+        const eventSlot = valueSlot(step.target as number);
+        const eventSlotIndex = step.target as number;
         if (fired) {
           state.eventScalars[eventSlotIndex] = 1;
         }
