@@ -17,10 +17,7 @@ function makeHarness(schedule: unknown): { deps: CompileDeps; precomputed: Preco
     currentState: null,
     sessionState: null,
   } satisfies CompileDeps['state'];
-  const deps = {
-    store,
-    state,
-  } satisfies CompileDeps;
+  const deps = { store, state } satisfies CompileDeps;
 
   const frontendResult = {
     backendReady: true,
@@ -42,10 +39,7 @@ function makeHarness(schedule: unknown): { deps: CompileDeps; precomputed: Preco
     compileDurationMs: 1,
   } satisfies PrecomputedArtifacts;
 
-  return {
-    deps,
-    precomputed,
-  };
+  return { deps, precomputed };
 }
 
 function baseSchedule() {
@@ -71,6 +65,8 @@ describe('compileAndSwap schedule contract enforcement', () => {
   it.each([
     ['timeModel', { timeModel: undefined }, '[compile] program.schedule.timeModel must be a non-null object - compiler/runtime contract violation'],
     ['instances', { instances: [] }, '[compile] program.schedule.instances must be a Map - compiler/runtime contract violation'],
+    ['stateMappings', { stateMappings: {} }, '[compile] program.schedule.stateMappings must be an array - compiler/runtime contract violation'],
+    ['steps', { steps: {} }, '[compile] program.schedule.steps must be an array - compiler/runtime contract violation'],
     ['stateSlotCount', { stateSlotCount: 0.5 }, '[compile] program.schedule.stateSlotCount must be a non-negative integer - compiler/runtime contract violation'],
     ['eventCount', { eventCount: -1 }, '[compile] program.schedule.eventCount must be a non-negative integer - compiler/runtime contract violation'],
   ])('fails fast when %s is invalid', async (_field, override, message) => {
