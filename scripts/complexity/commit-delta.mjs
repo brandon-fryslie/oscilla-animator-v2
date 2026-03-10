@@ -161,6 +161,21 @@ function formatPctValue(value) {
   return `${formatSig2(value)}%`;
 }
 
+function formatGateEvaluationReason(reason) {
+  switch (reason) {
+    case 'under-threshold':
+      return 'under threshold';
+    case 'over-threshold-improved-enough':
+      return 'over threshold, improved enough';
+    case 'over-threshold-regression-within-allowed-tolerance-small-regressions-permitted':
+      return 'over threshold, small regression permitted by tolerance';
+    case 'over-threshold-regression-exceeds-allowed-tolerance-improvement-insufficient':
+      return 'over threshold, improvement insufficient or regression exceeds tolerance';
+    default:
+      return String(reason ?? 'unknown');
+  }
+}
+
 function inferRepoRootFromSummaryPath(summaryPath) {
   if (!summaryPath) return null;
   const cwd = path.isAbsolute(summaryPath) ? path.dirname(summaryPath) : process.cwd();
@@ -353,8 +368,8 @@ async function evaluateChangedFileThresholdGate(baseLoaded, headLoaded) {
         : improvedEnough
           ? 'over-threshold-improved-enough'
           : withinRegressionTolerance
-            ? 'over-threshold-within-regression-tolerance'
-            : 'over-threshold-improvement-insufficient';
+            ? 'over-threshold-regression-within-allowed-tolerance-small-regressions-permitted'
+            : 'over-threshold-regression-exceeds-allowed-tolerance-improvement-insufficient';
       evaluations.push({
         filePath,
         metricKey: metric.key,
@@ -383,7 +398,7 @@ async function evaluateChangedFileThresholdGate(baseLoaded, headLoaded) {
 
   return {
     enabled: true,
-    policy: 'changed-file-under-threshold-or-improve-by-3pct-or-regress-by-no-more-than-5pct',
+    policy: 'changed-file-under-threshold-or-improve-by-3pct-or-permit-up-to-5pct-regression-for-over-threshold-files',
     minImprovementPct: FILE_GATE_MIN_IMPROVEMENT_PCT,
     regressionTolerancePct: FILE_GATE_REGRESSION_TOLERANCE_PCT,
     changedFiles,
@@ -968,7 +983,7 @@ function renderDeltaMarkdown(delta, baseLabel, headLabel) {
     `- net score (improved - regressed): ${delta.score}`,
     ...(gate ? [
       `- changed-file gate: ${gate.passed ? 'pass' : 'fail'} (${gate.failureCount}/${gate.evaluationCount} failing checks across ${gate.trackedChangedFilesCount} tracked changed files)`,
-      `- gate policy: file must be under threshold, improve by at least ${formatPctValue(gate.minImprovementPct ?? FILE_GATE_MIN_IMPROVEMENT_PCT)}, or stay within ${formatPctValue(gate.regressionTolerancePct ?? FILE_GATE_REGRESSION_TOLERANCE_PCT)} regression tolerance`,
+      `- gate policy: file must be under threshold, improve by at least ${formatPctValue(gate.minImprovementPct ?? FILE_GATE_MIN_IMPROVEMENT_PCT)}, or may regress by up to ${formatPctValue(gate.regressionTolerancePct ?? FILE_GATE_REGRESSION_TOLERANCE_PCT)} while still over threshold (small regressions are intentionally permitted)`,
     ] : []),
     '',
     '## How To Read This',
@@ -1011,11 +1026,11 @@ function renderDeltaMarkdown(delta, baseLabel, headLabel) {
     ...(gate ? [
       '## Changed-File Threshold Gate',
       '',
-      '| File | Metric | Base | Head | Threshold | Improvement | Result |',
-      '| --- | --- | ---: | ---: | --- | ---: | --- |',
+      '| File | Metric | Base | Head | Threshold | Improvement | Result | Reason |',
+      '| --- | --- | ---: | ---: | --- | ---: | --- | --- |',
       ...(gate.evaluations.length > 0
-        ? gate.evaluations.slice(0, 250).map((evaluation) => `| ${evaluation.filePath} | ${evaluation.metricLabel} | ${formatMetricValue(evaluation.baseValue)} | ${formatMetricValue(evaluation.headValue)} | ${evaluation.direction === 'higher' ? '>=' : '<='} ${formatMetricValue(evaluation.threshold)} | ${formatPctValue(evaluation.improvementPct)} | ${evaluation.passed ? 'pass' : 'fail'} |`)
-        : ['| none | - | - | - | - | - | - |']),
+        ? gate.evaluations.slice(0, 250).map((evaluation) => `| ${evaluation.filePath} | ${evaluation.metricLabel} | ${formatMetricValue(evaluation.baseValue)} | ${formatMetricValue(evaluation.headValue)} | ${evaluation.direction === 'higher' ? '>=' : '<='} ${formatMetricValue(evaluation.threshold)} | ${formatPctValue(evaluation.improvementPct)} | ${evaluation.passed ? 'pass' : 'fail'} | ${formatGateEvaluationReason(evaluation.reason)} |`)
+        : ['| none | - | - | - | - | - | - | - |']),
       '',
     ] : []),
     '## Full Delta Table',
@@ -1195,9 +1210,9 @@ function renderDeltaHtml(delta, baseLabel, headLabel, metricAttribution) {
       renderHtmlTable(['Metric', 'Desired Trend', 'Practical Target Range', 'Signal', 'Description'], guideRows),
       ...(fileGate ? [
         '<h2>Changed-File Threshold Gate</h2>',
-        `<p>Policy: changed files must be under threshold, improve by at least ${escapeHtml(formatPctValue(fileGate.minImprovementPct ?? FILE_GATE_MIN_IMPROVEMENT_PCT))}, or stay within ${escapeHtml(formatPctValue(fileGate.regressionTolerancePct ?? FILE_GATE_REGRESSION_TOLERANCE_PCT))} regression tolerance. Tracked changed files: ${escapeHtml(String(fileGate.trackedChangedFilesCount))}.</p>`,
+        `<p>Policy: changed files must be under threshold, improve by at least ${escapeHtml(formatPctValue(fileGate.minImprovementPct ?? FILE_GATE_MIN_IMPROVEMENT_PCT))}, or may regress by up to ${escapeHtml(formatPctValue(fileGate.regressionTolerancePct ?? FILE_GATE_REGRESSION_TOLERANCE_PCT))} while still over threshold (small regressions are intentionally permitted). Tracked changed files: ${escapeHtml(String(fileGate.trackedChangedFilesCount))}.</p>`,
         renderHtmlTable(
-          ['File', 'Metric', 'Base', 'Head', 'Threshold', 'Improvement', 'Result'],
+          ['File', 'Metric', 'Base', 'Head', 'Threshold', 'Improvement', 'Result', 'Reason'],
           fileGate.evaluations.length > 0
             ? fileGate.evaluations.slice(0, 400).map((evaluation) => [
               evaluation.filePath,
@@ -1207,8 +1222,9 @@ function renderDeltaHtml(delta, baseLabel, headLabel, metricAttribution) {
               `${evaluation.direction === 'higher' ? '>=' : '<='} ${formatMetricValue(evaluation.threshold)}`,
               formatPctValue(evaluation.improvementPct),
               evaluation.passed ? 'pass' : 'fail',
+              formatGateEvaluationReason(evaluation.reason),
             ])
-            : [['none', '-', '-', '-', '-', '-', '-']],
+            : [['none', '-', '-', '-', '-', '-', '-', '-']],
         ),
       ] : []),
       '<h2>High-Signal Regressions</h2>',

@@ -17,6 +17,7 @@ import type { InstanceId } from '../core/ids';
 import type { ContinuityState } from './ContinuityState';
 import type { ArenaSlotDescriptor } from './ArenaValueStore';
 import { arenaRead } from './ArenaValueStore';
+import { resolveBlockIndexFromBlockId } from './DebugIndexLookup';
 
 /**
  * Read the current value of a slot from runtime state.
@@ -148,7 +149,7 @@ export function inspectBlockSlots(
   const addressTable = getExprAddressTable(program);
   const lookupMap = slotLookupMap ?? addressTable.slotLookup;
   const result = new Map<ValueSlot, SlotValue>();
-  const numericBlockId = resolveNumericBlockIndex(blockId, program);
+  const numericBlockId = resolveBlockIndexFromBlockId(blockId, program);
   if (numericBlockId === undefined) {
     return result;
   }
@@ -164,19 +165,6 @@ export function inspectBlockSlots(
   }
 
   return result;
-}
-
-function resolveNumericBlockIndex(
-  blockId: BlockId,
-  program: CompiledProgramIR,
-): BlockIndex | undefined {
-  const blockIdStr = blockId as string;
-  for (const [numericBlockId, stringBlockId] of program.debugIndex.blockMap) {
-    if (stringBlockId === blockIdStr) {
-      return numericBlockId;
-    }
-  }
-  return undefined;
 }
 
 // =============================================================================

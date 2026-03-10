@@ -9,8 +9,10 @@
  */
 
 import type { CompiledProgramIR } from '../compiler/ir/program';
+import type { BlockIndex } from '../compiler/ir/BlockIndex';
 import type { CompilationSnapshot } from '../services/CompilationInspectorService';
 import type { BlockId, PortId } from '../types';
+import { resolveBlockIdFromIndex, resolveBlockIndexFromBlockId } from './DebugIndexLookup';
 
 // =============================================================================
 // Result Types
@@ -79,9 +81,7 @@ export function analyzeWhyNotEvaluated(
   }
 
   // Resolve blockId string to numeric block index used in program.
-  // debugIndex.blockMap stores (numeric block index → string ID) despite the
-  // typed key being BlockId (branded string). We iterate values to reverse-lookup.
-  const numericBlockIndex = resolveNumericBlockIndex(blockId, program);
+  const numericBlockIndex = resolveBlockIndexFromBlockId(blockId, program);
   if (numericBlockIndex === undefined) {
     reasons.push({
       kind: 'unknown',
@@ -175,53 +175,32 @@ function findCompileErrorsForBlock(
 }
 
 /**
- * Resolve a string block ID to its numeric block index via debugIndex.blockMap.
- *
- * The blockMap is typed as ReadonlyMap<BlockId, string> but the implementation
- * stores numeric block indices as keys (from the compiler's block array).
- * We iterate to find the entry whose value matches the blockId string.
- */
-function resolveNumericBlockIndex(
-  blockId: BlockId,
-  program: CompiledProgramIR,
-): number | undefined {
-  const blockIdStr = blockId as string;
-  for (const [key, strId] of program.debugIndex.blockMap) {
-    if (strId === blockIdStr) {
-      // Key is stored as a number at runtime despite the BlockId type
-      return key as unknown as number;
-    }
-  }
-  return undefined;
-}
-
-/**
  * Check if a block has any representation in the debug index.
  *
  * A block that was lowered and scheduled will have port bindings,
  * stepToBlock entries, or slotToBlock entries in the debug index.
  */
 function isBlockInSchedule(
-  numericBlockIndex: number,
+  numericBlockIndex: BlockIndex,
   program: CompiledProgramIR,
 ): boolean {
   // Check debugIndex.ports — if the block has port bindings, it was lowered
   for (const port of program.debugIndex.ports) {
-    if ((port.block as unknown as number) === numericBlockIndex) {
+    if (port.block === numericBlockIndex) {
       return true;
     }
   }
 
   // Also check stepToBlock mapping
   for (const [, blockRef] of program.debugIndex.stepToBlock) {
-    if ((blockRef as unknown as number) === numericBlockIndex) {
+    if (blockRef === numericBlockIndex) {
       return true;
     }
   }
 
   // Check slotToBlock mapping
   for (const [, blockRef] of program.debugIndex.slotToBlock) {
-    if ((blockRef as unknown as number) === numericBlockIndex) {
+    if (blockRef === numericBlockIndex) {
       return true;
     }
   }
@@ -234,7 +213,7 @@ function isBlockInSchedule(
  * If present there but not in schedule, it was pruned during SCC or scheduling.
  */
 function checkDepGraphPresence(
-  numericBlockIndex: number,
+  numericBlockIndex: BlockIndex,
   snapshot: CompilationSnapshot | null,
 ): 'present-in-depgraph' | 'absent' | 'unknown' {
   if (!snapshot) return 'unknown';
@@ -262,7 +241,7 @@ function checkDepGraphPresence(
  * Returns false if the block has no edges, true if it has edges, undefined if unknown.
  */
 function checkBlockHasConnections(
-  numericBlockIndex: number,
+  numericBlockIndex: BlockIndex,
   snapshot: CompilationSnapshot | null,
 ): boolean | undefined {
   if (!snapshot) return undefined;
@@ -288,20 +267,14 @@ function checkBlockHasConnections(
  * Event values are only present when the event fires.
  */
 function checkEventNotFired(
-  numericBlockIndex: number,
+  numericBlockIndex: BlockIndex,
   program: CompiledProgramIR,
 ): string | undefined {
   for (const port of program.debugIndex.ports) {
-    if ((port.block as unknown as number) !== numericBlockIndex) continue;
+    if (port.block !== numericBlockIndex) continue;
     if (port.temporality === 'discrete') {
-      // Resolve the block's string name for the message
-      let blockName: string = String(numericBlockIndex);
-      for (const [key, strId] of program.debugIndex.blockMap) {
-        if ((key as unknown as number) === numericBlockIndex) {
-          blockName = strId;
-          break;
-        }
-      }
+      // Resolve the block's string name for the message.
+      const blockName = resolveBlockIdFromIndex(numericBlockIndex, program) ?? String(numericBlockIndex);
       return `Block "${blockName}" produces event outputs. Event values are only present when the event fires (discrete temporality).`;
     }
   }

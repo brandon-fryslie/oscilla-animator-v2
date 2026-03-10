@@ -783,9 +783,13 @@ function convertLinkedIRToProgram(
       const blockId = exprToBlock.get(exprId);
       if (blockId !== undefined) {
         const numericBlockId = blockIdToIndex.get(blockId);
-        if (numericBlockId !== undefined) {
-          stepToBlock.set(stepId, numericBlockId);
+        if (numericBlockId === undefined) {
+          throw new Error(
+            `compile(): Missing blockIdToIndex entry for blockId "${blockId}" (exprId=${exprId}, stepIndex=${i}). `
+            + 'This indicates exprToBlock provenance is out of sync with compile-owned block ordering.',
+          );
         }
+        stepToBlock.set(stepId, numericBlockId);
       }
       // Resolve step → port via slotToPort (for steps that write to a slot)
       const targetSlot = getStepTargetSlot(step);
