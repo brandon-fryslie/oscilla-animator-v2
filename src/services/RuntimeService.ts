@@ -55,6 +55,7 @@ import {
 } from './DebugProbeProtocol';
 import { LocalDebugProbeTransport } from './LocalDebugProbeTransport';
 import { createWasmDebugProbeTransport } from './WasmDebugProbeTransport';
+import { RuntimeHotpathWorkerClient } from './RuntimeHotpathWorkerClient';
 import type { CompiledGpuArtifactBundle } from './compile-worker-protocol';
 import { shaderInspector } from './ShaderInspectorService';
 
@@ -95,6 +96,8 @@ export class RuntimeService {
   private animationState: AnimationLoopState = createAnimationLoopState();
   private canvas: HTMLCanvasElement | null = null;
   private renderer: WebGPURenderer | null = null;
+  private runtimeHotpath: RuntimeHotpathWorkerClient | null = null;
+  private unbindExternalWriteBridge: (() => void) | null = null;
 
   private animationLoop: AnimationLoopController | null = null;
   private unsubCompileEnd: (() => void) | null = null;
@@ -193,6 +196,7 @@ export class RuntimeService {
       getCurrentState: () => this.compileState.currentState,
       getCanvas: () => this.canvas,
       getRenderer: () => this.renderer,
+      getRuntimeHotpath: () => this.runtimeHotpath,
       store: this.store,
       onStatsUpdate: (statsText) => this.statsSink?.(statsText),
     };
@@ -250,10 +254,9 @@ export class RuntimeService {
       await compileAndSwap(this.compileDeps(), isInitialSwap, next);
       // [LAW:single-enforcer] Runtime worker program ownership is published at
       // one compile-swap boundary to keep runtime/renderer contracts in sync.
-      const renderer = this.renderer;
-      if (renderer) {
-        renderer.installRuntimeProgram(this.compileState.currentProgram);
-        this.bindExternalWriteBridgeToRenderer();
+      if (this.runtimeHotpath) {
+        this.runtimeHotpath.installProgram(this.compileState.currentProgram);
+        this.bindExternalWriteBridgeToRuntimeHotpath();
       }
       this.asyncCompiler?.markSwapComplete();
     } catch (err) {
@@ -271,16 +274,20 @@ export class RuntimeService {
     }
   }
 
-  private bindExternalWriteBridgeToRenderer(): void {
-    const renderer = this.renderer;
+  private bindExternalWriteBridgeToRuntimeHotpath(): void {
+    this.unbindExternalWriteBridge?.();
+    this.unbindExternalWriteBridge = null;
+    const runtimeHotpath = this.runtimeHotpath;
     const currentState = this.compileState.currentState;
-    const writeBus = currentState?.externalChannels?.writeBus ?? null;
-    if (!renderer) {
+    const writeBus = currentState?.externalChannels?.writeBus;
+    if (!runtimeHotpath || !writeBus) {
       return;
     }
-    // [LAW:single-enforcer] Runtime external write forwarding is owned at the
-    // renderer boundary so RuntimeService does not mutate bus methods directly.
-    renderer.bindRuntimeExternalWriteBus(writeBus);
+    // [LAW:single-enforcer] Worker runtime commits external input writes in
+    // hot-path mode, so UI write bus forwards to one owner boundary.
+    this.unbindExternalWriteBridge = runtimeHotpath.bindExternalWriteBus(
+      writeBus,
+    );
   }
 
   private async publishRendererPipelines(
@@ -464,6 +471,18 @@ export class RuntimeService {
         const message = error instanceof Error ? error.message : String(error);
         throw new Error(`RuntimeService: WebGPU renderer initialization failed: ${message}`);
       }
+      try {
+        // TODO(steel-thread): Delete RuntimeHotpathWorkerClient once renderer
+        // worker absorbs viewport/input cadence ownership on the canonical path.
+        this.runtimeHotpath = await RuntimeHotpathWorkerClient.create(
+          this.renderer.getRuntimeSharedPlanes(),
+          (error) => this.handleAnimationLoopError(error),
+        );
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        throw new Error(`RuntimeService: runtime hotpath worker initialization failed: ${message}`);
+      }
+
       // Check for test automation demo marker (set by ?loadDemoPatch= during pre-React parse)
       const testDemo = consumeTestDemoFilename();
       if (testDemo) {
@@ -574,6 +593,8 @@ export class RuntimeService {
     setRenderIssueReporter(null);
     this.animationLoop?.stop();
     this.animationLoop = null;
+    this.unbindExternalWriteBridge?.();
+    this.unbindExternalWriteBridge = null;
     this.stopSpyReadbackLoop();
     this.unsubSpyTracking?.();
     this.unsubSpyTracking = null;
@@ -594,7 +615,8 @@ export class RuntimeService {
     this.domainChangeDetector.cleanup();
     this.liveRecompile.cleanup();
     debugService.clear();
-    this.renderer?.bindRuntimeExternalWriteBus(null);
+    this.runtimeHotpath?.dispose();
+    this.runtimeHotpath = null;
     this.renderer?.dispose();
     this.renderer = null;
     shaderInspector.clear();
