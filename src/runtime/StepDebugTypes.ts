@@ -7,7 +7,9 @@
 
 import type { Step, StableStateId } from '../compiler/ir/types';
 import type { ValueSlot, StateSlotId } from '../compiler/ir/Indices';
-import type { BlockId, PortId } from '../types';
+import type { BlockId } from '../types';
+import type { BlockIndex } from '../compiler/ir/BlockIndex';
+import type { DebugPortId } from '../compiler/ir/program';
 import type { CanonicalType } from '../core/canonical-types';
 import type { InstanceId } from '../core/ids';
 
@@ -57,8 +59,10 @@ export type StateSlotValue =
 export interface ValueAnomaly {
   readonly slot: ValueSlot;
   readonly kind: 'nan' | 'infinity' | 'neg-infinity';
-  readonly blockId: BlockId | null;
-  readonly portId: PortId | null;
+  /** Source block index (from debugIndex.slotToBlock) */
+  readonly blockId: BlockIndex | null;
+  /** Source debug port index (from debugIndex.slotToPort) */
+  readonly portId: DebugPortId | null;
 }
 
 // =============================================================================
@@ -77,12 +81,12 @@ export interface StepSnapshot {
   readonly phase: ExecutionPhase;
   /** Total number of steps in the schedule */
   readonly totalSteps: number;
-  /** Source block ID (from debugIndex.stepToBlock) */
-  readonly blockId: BlockId | null;
+  /** Source block index (from debugIndex.stepToBlock) */
+  readonly blockId: BlockIndex | null;
   /** Human-readable block name (from debugIndex.blockMap) */
   readonly blockName: string | null;
-  /** Source port ID (from debugIndex.stepToPort) */
-  readonly portId: PortId | null;
+  /** Source debug port index (from debugIndex.stepToPort) */
+  readonly portId: DebugPortId | null;
   /** Current frame ID */
   readonly frameId: number;
   /** Absolute time in milliseconds */
@@ -146,7 +150,7 @@ export interface LaneIdentity {
  * Groups steps by source block and aggregates metrics for non-technical display.
  */
 export interface BlockSummary {
-  readonly blockId: BlockId | null;
+  readonly blockId: BlockIndex | null;
   readonly blockName: string;
   readonly stepCount: number;
   readonly anomalyCount: number;
@@ -179,7 +183,7 @@ export interface FrameSummary {
  * A group of steps belonging to a single block, for the block-centric view.
  */
 export interface BlockGroup {
-  readonly blockId: BlockId | null;
+  readonly blockId: BlockIndex | null;
   readonly blockName: string;
   readonly steps: readonly StepSnapshot[];
   readonly anomalyCount: number;
