@@ -98,6 +98,15 @@ function makeViewportFrame() {
   };
 }
 
+function makeComputePass(passId: string = 'test.compute'): RustRendererGpuPass {
+  return {
+    passId,
+    stage: 'compute',
+    entryPoint: 'main',
+    wgsl: '@compute @workgroup_size(1) fn main() {}',
+  };
+}
+
 function expectThrownError(action: () => void): Error {
   try {
     action();
@@ -228,14 +237,7 @@ describe('RustWasmWebGPURenderer fatal transition', () => {
     const renderer = await createWebGPURenderer(makeCanvas());
     const worker = FakeWorker.instances[0];
     expect(worker).toBeDefined();
-    const passes: readonly RustRendererGpuPass[] = [
-      {
-        passId: 'test.compute',
-        stage: 'compute',
-        entryPoint: 'main',
-        wgsl: '@compute @workgroup_size(1) fn main() {}',
-      },
-    ];
+    const passes: readonly RustRendererGpuPass[] = [makeComputePass()];
 
     const rebuildPromise = renderer.rebuildGpuPipelines(passes);
     worker!.emitError('worker crashed');
@@ -262,6 +264,90 @@ describe('RustWasmWebGPURenderer fatal transition', () => {
 
     const postFatalError = expectThrownError(() => renderer.setViewportFrame(makeViewportFrame()));
     expect(postFatalError).toBe(rebuildError as Error);
+  });
+
+  it('routes worker ack timeout through the fatal boundary once and keeps deterministic post-fatal errors', async () => {
+    vi.useFakeTimers();
+    try {
+      const renderer = await createWebGPURenderer(makeCanvas());
+      const passes: readonly RustRendererGpuPass[] = [makeComputePass('timeout.compute')];
+      let rebuildError: Error | null = null;
+      const rebuildPromise = renderer.rebuildGpuPipelines(passes).catch((error) => {
+        rebuildError = error as Error;
+      });
+
+      await vi.advanceTimersByTimeAsync(20_000);
+      await rebuildPromise;
+
+      expect(rebuildError).toBeInstanceOf(Error);
+      const timeoutError = rebuildError ?? new Error('Expected rebuildGpuPipelines timeout error');
+      expect(timeoutError.message).toContain('timed out');
+
+      const fatalIssues = getRendererFatalIssues();
+      expect(fatalIssues).toHaveLength(1);
+      const fatalDetail = fatalIssues[0]?.detail as Record<string, unknown>;
+      expect(fatalDetail.code).toBe('WORKER_ACK_TIMEOUT');
+      expect(fatalDetail.stage).toBe('rebuildGpuPipelines(1 passes)');
+
+      const postFatalError = expectThrownError(() => renderer.setViewportFrame(makeViewportFrame()));
+      expect(postFatalError).toBe(timeoutError);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('routes classified fatal ack message failures through the fatal boundary once', async () => {
+    const renderer = await createWebGPURenderer(makeCanvas());
+    const worker = FakeWorker.instances[0];
+    expect(worker).toBeDefined();
+
+    const passes: readonly RustRendererGpuPass[] = [makeComputePass('fatal-message.compute')];
+    const rebuildPromise = renderer.rebuildGpuPipelines(passes);
+    worker!.emitMessage({ type: 'FATAL_ERROR', code: 'ACK_FATAL', message: 'ack failed' });
+
+    let rebuildError: Error | null = null;
+    try {
+      await rebuildPromise;
+    } catch (error) {
+      rebuildError = error as Error;
+    }
+
+    expect(rebuildError).toBeInstanceOf(Error);
+    expect(rebuildError?.message).toContain('ack failed');
+
+    const fatalIssues = getRendererFatalIssues();
+    expect(fatalIssues).toHaveLength(1);
+    const fatalDetail = fatalIssues[0]?.detail as Record<string, unknown>;
+    expect(fatalDetail.code).toBe('ACK_FATAL');
+    expect(fatalDetail.stage).toBe('WORKER');
+  });
+
+  it('keeps classified non-fatal ack message failures non-fatal', async () => {
+    const renderer = await createWebGPURenderer(makeCanvas());
+    const worker = FakeWorker.instances[0];
+    expect(worker).toBeDefined();
+
+    const passes: readonly RustRendererGpuPass[] = [makeComputePass('nonfatal-message.compute')];
+    const rebuildPromise = renderer.rebuildGpuPipelines(passes);
+    worker!.emitMessage({
+      type: 'ENGINE_ERROR',
+      source: 'WEBGPU_VALIDATION',
+      message: 'recoverable ack failure',
+      location: 'ACK',
+      fatal: false,
+    });
+
+    let rebuildError: Error | null = null;
+    try {
+      await rebuildPromise;
+    } catch (error) {
+      rebuildError = error as Error;
+    }
+
+    expect(rebuildError).toBeInstanceOf(Error);
+    expect(rebuildError?.message).toContain('WEBGPU_VALIDATION');
+    expect(getRendererFatalIssues()).toHaveLength(0);
+    expect(getEngineErrorIssues()).toHaveLength(1);
   });
 });
 
