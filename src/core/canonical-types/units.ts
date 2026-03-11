@@ -88,7 +88,7 @@ export function unitRgba01(): UnitType {
   return { kind: 'color', unit: 'rgba01' };
 }
 
-/** OKLCH+A color: h ∈ [0,1) wrap, s/l/a ∈ [0,1] clamp */
+/** OKLCH+A color: h ∈ [0,1) wrap, c/l/a ∈ [0,1] clamp */
 export function unitOklch(): UnitType {
   return { kind: 'color', unit: 'oklch' };
 }
