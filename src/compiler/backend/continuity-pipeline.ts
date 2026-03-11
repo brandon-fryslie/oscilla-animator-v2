@@ -1,5 +1,5 @@
 /**
- * Pass 6b: Continuity Pipeline Allocation
+ * Pass 6b: Render Materialization Pipeline Allocation
  *
  * Analyzes render targets and allocates continuity pipeline slots through
  * the IRBuilder. This sub-pass runs after block lowering (pass 6) and before
@@ -7,8 +7,8 @@
  *
  * Responsibilities:
  * - Render target analysis (which fields need materialization)
- * - Continuity slot allocation via builder (no shadow allocator)
- * - Building pre-resolved pipeline steps (mapBuild, materialize, continuityApply, render)
+ * - Slot allocation via builder (no shadow allocator)
+ * - Building pre-resolved pipeline steps (materialize, render)
  *
  * Pass 7 consumes the output and only orders steps — it never allocates.
  *
@@ -17,7 +17,7 @@
  * and runtime reference the same slot.
  */
 
-import type { StepRender, StepMaterialize, StepContinuityMapBuild, StepContinuityApply, InstanceDecl } from '../ir/types';
+import type { StepRender, StepMaterialize, InstanceDecl } from '../ir/types';
 import type { InstanceId, ValueSlot } from '../ir/Indices';
 import type { ValueExpr, ValueExprId } from '../ir/value-expr';
 import type { UnlinkedIRFragments } from './lower-blocks';
@@ -26,7 +26,6 @@ import type { CompilerGraphBlock } from '../ir/CompilerGraph';
 import type { ValueRefPacked } from '../ir/lowerTypes';
 import { isExprRef } from '../ir/lowerTypes';
 import { getBlockDefinition } from '../../blocks/registry';
-import { getPolicyForSemantic } from '../../runtime/ContinuityDefaults';
 import {
   FLOAT,
   canonicalType,
@@ -43,17 +42,13 @@ import { getValueExprChildren } from '../../runtime/ValueExprTreeWalker';
 // =============================================================================
 
 /**
- * Output of pass 6b — pre-built continuity pipeline steps with all slots resolved.
+ * Output of pass 6b — pre-built render materialization steps with all slots resolved.
  *
  * Pass 7 consumes these arrays and only determines execution ordering.
  */
 export interface ContinuityPipelineIR {
-  /** ContinuityMapBuild steps (one per instance with render targets) */
-  readonly mapBuildSteps: readonly StepContinuityMapBuild[];
   /** Materialize steps (one per unique field+semantic) */
   readonly materializeSteps: readonly StepMaterialize[];
-  /** ContinuityApply steps (one per unique field+semantic) */
-  readonly continuityApplySteps: readonly StepContinuityApply[];
   /** Render steps (one per render block) */
   readonly renderSteps: readonly StepRender[];
 }
@@ -64,7 +59,7 @@ export interface ContinuityPipelineIR {
 
 /**
  * Target info collected from render blocks.
- * Used to generate materialize → continuity → render chain.
+ * Used to generate materialize -> render chain.
  */
 interface RenderTargetInfo {
   renderBlockId: string;
@@ -343,27 +338,13 @@ export function allocateContinuityPipeline(
     valueExprs
   );
 
-  // Build the continuity pipeline with builder-allocated slots
-  const mapBuildSteps: StepContinuityMapBuild[] = [];
+  // Build the render materialization pipeline with builder-allocated slots
   const materializeSteps: StepMaterialize[] = [];
-  const continuityApplySteps: StepContinuityApply[] = [];
   const renderSteps: StepRender[] = [];
 
-  // Track which instances we've already emitted mapBuild for
-  const mapBuildEmitted = new Set<InstanceId>();
-
-  // Track materialize-instance+field+semantic → slot mappings to avoid duplicate materializations
-  const fieldSlots = new Map<string, { baseSlot: ValueSlot; outputSlot: ValueSlot }>();
-
-  const ensureMapBuildStep = (instanceId: InstanceId): void => {
-    if (mapBuildEmitted.has(instanceId)) return;
-    mapBuildSteps.push({
-      kind: 'continuityMapBuild',
-      instanceId,
-      outputMapping: `mapping_${instanceId}`,
-    });
-    mapBuildEmitted.add(instanceId);
-  };
+  // Track materialize-instance+field+semantic -> slot mappings to avoid duplicate materializations.
+  // [LAW:one-source-of-truth] Canonical render path has one slot representation per field semantic.
+  const fieldSlots = new Map<string, ValueSlot>();
 
   for (const target of renderTargets) {
     const { renderBlockId, instanceId, controlPoints, color, scale, shape } = target;
@@ -380,82 +361,45 @@ export function allocateContinuityPipeline(
       return expr;
     };
 
-    // Helper to get or create slots for a field
+    // Helper to get or create slot for a field
     const getFieldSlots = (
       fieldId: ValueExprId,
       semantic: 'position' | 'radius' | 'opacity' | 'color' | 'custom',
       stride: number,
       roleKey: string,
-      mode: 'continuity' | 'passthrough' = 'continuity',
     ): { baseSlot: ValueSlot; outputSlot: ValueSlot } => {
-      // [LAW:one-source-of-truth] Materialization count/continuity mapping are derived from the field's own instance.
+      // [LAW:one-source-of-truth] Materialization count is derived from the field's own instance.
       const fieldInstanceId = inferFieldInstanceFromExprs(fieldId, valueExprs) ?? instanceId;
-      // [LAW:one-source-of-truth] Continuity keys must be stable across recompiles.
-      // Compile-ephemeral ValueExprIds are excluded from runtime continuity identity.
-      const key = `${fieldInstanceId}:${semantic}:${roleKey}:${mode}`;
-      let slots = fieldSlots.get(key);
-      if (!slots) {
+      const key = `${fieldInstanceId}:${semantic}:${roleKey}`;
+      let slot = fieldSlots.get(key);
+      if (slot === undefined) {
         const fieldExpr = readValueExpr(fieldId, roleKey);
-        if (mode === 'continuity') {
-          ensureMapBuildStep(fieldInstanceId);
-        }
 
         // [LAW:one-source-of-truth] Reuse the binding-pass-allocated ref.slot as baseSlot
         // so materialize writes to the same slot the debug index references.
-        const existingSlot = fieldExprToRefSlot.get(fieldId as number);
-        const baseSlot = existingSlot ?? builder.allocTypedSlot(
+        slot = fieldExprToRefSlot.get(fieldId as number) ?? builder.allocTypedSlot(
           fieldExpr.type,
-          `continuity_base_${instanceId}_${semantic}`
+          `render_materialize_${instanceId}_${semantic}`,
         );
-
-        // [LAW:dataflow-not-control-flow] Shape-handle passthrough still materializes
-        // the field every frame; variability lives in whether continuity mutates outputs.
-        // [LAW:one-source-of-truth] Topology handle identity is canonical data and must
-        // not be transformed by continuity policies.
-        const outputSlot = mode === 'continuity'
-          ? builder.allocTypedSlot(
-              fieldExpr.type,
-              `continuity_output_${instanceId}_${semantic}`,
-            )
-          : baseSlot;
-
-        slots = { baseSlot, outputSlot };
-        fieldSlots.set(key, slots);
+        fieldSlots.set(key, slot);
 
         // 2. Emit Materialize step
         materializeSteps.push({
           kind: 'materialize',
           field: fieldId,
           instanceId: fieldInstanceId,
-          target: baseSlot,
+          target: slot,
         });
-
-        // 3. Emit ContinuityApply step
-        if (mode === 'continuity') {
-          const policy = getPolicyForSemantic(semantic);
-          const targetKey = `${semantic}:${fieldInstanceId}:${roleKey}`;
-          continuityApplySteps.push({
-            kind: 'continuityApply',
-            targetKey,
-            instanceId: fieldInstanceId,
-            policy,
-            baseSlot,
-            outputSlot,
-            semantic,
-            stride,
-          });
-        }
       }
-      return slots;
+      return { baseSlot: slot, outputSlot: slot };
     };
 
-    // [LAW:one-source-of-truth] Render position continuity is keyed from RenderInstances2D.controlPoints.
-    // We preserve semantic='position' for continuity policy ownership.
+    // [LAW:one-source-of-truth] Render position is keyed from RenderInstances2D.controlPoints.
     const posSlots = getFieldSlots(controlPoints.id, 'position', controlPoints.stride, `${renderBlockId}:controlPoints`);
 
     // Process color (semantic: color)
-    // [LAW:dataflow-not-control-flow] color always enters the continuity/materialize
-    // pipeline; one-cardinality colors are lifted to field data via broadcast.
+    // [LAW:dataflow-not-control-flow] Color always enters the materialize pipeline;
+    // one-cardinality colors are lifted to field data via broadcast.
     const colorExpr = valueExprs[color.id as number];
     if (!colorExpr) {
       throw new Error(`RenderInstances2D (${renderBlockId}): missing color expr ${color.id}`);
@@ -497,14 +441,12 @@ export function allocateContinuityPipeline(
         `RenderInstances2D (${renderBlockId}): missing broadcast scale expr ${scaleFieldExprId}`,
       );
     }
-    // [LAW:one-source-of-truth] Scale modulation should follow the authored
-    // field directly (no continuity blending), keyed by the canonical expr id.
+    // [LAW:one-source-of-truth] Scale modulation follows the authored field directly.
     const scaleSlots = getFieldSlots(
       scaleFieldExprId,
       'custom',
       payloadStride(scaleFieldExpr.type.payload),
       `scale:${String(scaleFieldExprId)}`,
-      'passthrough',
     );
     const scaleOutput: StepRender['scale'] = { k: 'slot', slot: scaleSlots.outputSlot };
 
@@ -524,12 +466,11 @@ export function allocateContinuityPipeline(
         'custom',
         payloadStride(shapeFieldExpr.type.payload),
         `${renderBlockId}:shape`,
-        'passthrough',
       );
       // [LAW:one-source-of-truth] Render steps publish one canonical slot-backed
       // shape-handle source for all sinks (no oneHandle branch at runtime).
       shapeOutput = { k: 'slot', slot: shapeSlots.outputSlot };
-      // [LAW:single-enforcer] Continuity pipeline is the single compile-time
+      // [LAW:single-enforcer] Render materialization pipeline is the single compile-time
       // boundary that resolves shape-handle ancestry and optional control-point
       // field metadata.
       const shapeInfo = resolveShapeRefInfo(shapeSourceExprId, builder.getValueExprs());
@@ -572,9 +513,7 @@ export function allocateContinuityPipeline(
   }
 
   return {
-    mapBuildSteps,
     materializeSteps,
-    continuityApplySteps,
     renderSteps,
   };
 }

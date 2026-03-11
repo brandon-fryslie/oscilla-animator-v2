@@ -56,7 +56,6 @@ export const PANEL_DEFINITIONS: PanelDefinition[] = [
   // Bottom (split)
   { id: 'diagnostic-console', component: 'diagnostic-console', title: 'Console', group: 'bottom-left' },
   { id: 'log-panel', component: 'log-panel', title: 'Logs', group: 'bottom-left' },
-  { id: 'continuity-panel', component: 'continuity-panel', title: 'Continuity', group: 'bottom-left' },
   { id: 'compilation-inspector', component: 'compilation-inspector', title: 'Compilation', group: 'bottom-left' },
   { id: 'debug-miniview', component: 'debug-miniview', title: 'Debug', group: 'right-bottom', initiallyHidden: true },
 

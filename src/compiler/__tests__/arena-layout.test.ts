@@ -25,7 +25,6 @@ import type { InstanceDecl } from '../ir/types';
 import { buildPatch } from '../../graph';
 import { compile } from '../compile';
 import { createRuntimeState } from '../../runtime';
-import { getOrCreateTargetState, type StableTargetId } from '../../runtime/ContinuityState';
 import type { ScheduleIR } from '../backend/schedule-program';
 import type { ValueSlot } from '../../types';
 
@@ -351,7 +350,7 @@ describe('arenaLayout integration', () => {
     expect(first.program.arenaZones).toEqual(second.program.arenaZones);
   });
 
-  it('keeps continuity-owned multi-component render slots in SoA descriptors', () => {
+  it('keeps canonical render slots materialized in SoA descriptors', () => {
     const patch = buildPatch((b) => {
       b.addBlock('InfiniteTimeRoot');
 
@@ -384,17 +383,17 @@ describe('arenaLayout integration', () => {
     expect(renderStep).toBeDefined();
     if (!renderStep || renderStep.kind !== 'render') return;
 
-    const continuityOutputSlots = new Set(
+    const materializedSlots = new Set(
       schedule.steps
-        .filter((s): s is Extract<ScheduleIR['steps'][number], { kind: 'continuityApply' }> => s.kind === 'continuityApply')
-        .map((s) => s.outputSlot),
+        .filter((s): s is Extract<ScheduleIR['steps'][number], { kind: 'materialize' }> => s.kind === 'materialize')
+        .map((s) => s.target as number),
     );
-    expect(continuityOutputSlots.has(renderStep.controlPointsSlot)).toBe(true);
-    expect(continuityOutputSlots.has(renderStep.colorSlot)).toBe(true);
+    expect(materializedSlots.has(renderStep.controlPointsSlot as number)).toBe(true);
+    expect(materializedSlots.has(renderStep.colorSlot as number)).toBe(true);
 
     const positionDesc = result.program.runtimeAddressTable?.slotToArena.get(renderStep.controlPointsSlot);
     const colorDesc = result.program.runtimeAddressTable?.slotToArena.get(renderStep.colorSlot);
-    // [LAW:dataflow-not-control-flow] Continuity does not change packing mode;
+    // [LAW:dataflow-not-control-flow] Canonical materialization does not change packing mode;
     // render multi-component lanes stay channel-separated in SoA layout.
     expect(positionDesc?.packing).toBe('soa');
     expect(colorDesc?.packing).toBe('soa');
@@ -445,7 +444,7 @@ describe('arenaLayout integration', () => {
     expect(state.stateArena.offset).toBe(stateZone.start);
   });
 
-  it('binds continuity gauge targets to zone-5 arena slices', () => {
+  it('keeps gauge zone empty when continuity is removed from canonical schedule', () => {
     const patch = buildPatch((b) => {
       b.addBlock('InfiniteTimeRoot');
 
@@ -480,12 +479,10 @@ describe('arenaLayout integration', () => {
     if (!gaugeZone) {
       throw new Error('Missing gauge zone metadata');
     }
-    expect(gaugeZone.length).toBeGreaterThan(0);
+    expect(gaugeZone.length).toBe(0);
 
     const gaugeTargets = program.arenaRuntimeLayout?.gaugeTargets ?? [];
-    expect(gaugeTargets.length).toBeGreaterThan(0);
-    const totalGaugeFloats = gaugeTargets.reduce((sum, target) => sum + target.descriptor.length, 0);
-    expect(gaugeZone.length).toBe(totalGaugeFloats);
+    expect(gaugeTargets.length).toBe(0);
 
     const state = createRuntimeState(
       schedule.stateSlotCount ?? 0,
@@ -496,19 +493,7 @@ describe('arenaLayout integration', () => {
       undefined,
       program.arenaRuntimeLayout,
     );
-
-    for (const target of gaugeTargets) {
-      const targetState = getOrCreateTargetState(
-        state.continuity,
-        target.targetId as StableTargetId,
-        target.descriptor.length,
-        target.instanceId,
-      );
-      expect(targetState.gaugeBuffer.buffer).toBe(state.arena.buffer);
-      expect(targetState.gaugeBuffer.length).toBe(target.descriptor.length);
-      expect(target.descriptor.offset).toBeGreaterThanOrEqual(gaugeZone.start);
-      expect(target.descriptor.offset + target.descriptor.length).toBeLessThanOrEqual(gaugeZone.end);
-    }
+    expect(state.arena.length).toBe(program.arenaTotalFloats);
   });
 
   it('compiled program has consistent arenaLayout', () => {
