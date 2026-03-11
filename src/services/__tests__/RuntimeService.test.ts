@@ -1,18 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { RuntimeHotpathInstallPlanes } from '../runtime-hotpath-install';
 
-const mocks = vi.hoisted(() => {
-  const compileWorkerCompile = vi.fn();
-  const compileWorkerDispose = vi.fn();
-  const compileAndSwap = vi.fn(async (..._args: any[]) => {});
-  const buildRuntimeHotpathInstallPlanes = vi.fn<() => RuntimeHotpathInstallPlanes>(() => ({
-    sinkTableWords: null,
-    sinkTableWordCount: 0,
-    shapeBankWords: new Uint32Array(0),
-    shapeBankWordCount: 0,
-  }));
-  const rebuildGpuPipelines = vi.fn(async () => {});
-  const createWebGPURenderer = vi.fn(async () => ({
+function createRendererFacadeMock(rebuildGpuPipelines: ReturnType<typeof vi.fn>) {
+  return {
     dispose: vi.fn(),
     render: vi.fn(),
     setViewportFrame: vi.fn(),
@@ -23,7 +13,21 @@ const mocks = vi.hoisted(() => {
       sharedSinkTable: new SharedArrayBuffer(256),
     })),
     rebuildGpuPipelines,
+  };
+}
+
+const mocks = vi.hoisted(() => {
+  const compileWorkerCompile = vi.fn();
+  const compileWorkerDispose = vi.fn();
+  const compileAndSwap = vi.fn(async (..._args: any[]) => {});
+  const buildRuntimeHotpathInstallPlanes = vi.fn((): RuntimeHotpathInstallPlanes => ({
+    sinkTableWords: null,
+    sinkTableWordCount: 0,
+    shapeBankWords: new Uint32Array(0),
+    shapeBankWordCount: 0,
   }));
+  const rebuildGpuPipelines = vi.fn(async () => {});
+  const createWebGPURenderer = vi.fn(async () => createRendererFacadeMock(rebuildGpuPipelines));
   const assertWebGPUStartupContract = vi.fn();
   const setRenderIssueReporter = vi.fn();
   const getRenderIssues = vi.fn(() => []);
@@ -215,11 +219,15 @@ function makeStore() {
   };
 }
 
-describe('RuntimeService startup compile path', () => {
+function setupStartupCompilePathTest(): void {
+  vi.useFakeTimers();
+  vi.clearAllMocks();
+  mocks.savePatchToStorage.mockImplementation(() => {});
+}
+
+describe('RuntimeService startup compile path: async worker precompute', () => {
   beforeEach(() => {
-    vi.useFakeTimers();
-    vi.clearAllMocks();
-    mocks.savePatchToStorage.mockImplementation(() => {});
+    setupStartupCompilePathTest();
   });
 
   it('uses async worker compile and precomputed initial swap during init', async () => {
@@ -266,6 +274,12 @@ describe('RuntimeService startup compile path', () => {
       compileDurationMs: 3,
     });
   });
+});
+
+describe('RuntimeService startup compile path: worker failure handling', () => {
+  beforeEach(() => {
+    setupStartupCompilePathTest();
+  });
 
   it('does not fall back to synchronous initial compile when worker compile fails', async () => {
     mocks.compileWorkerCompile.mockRejectedValue(new Error('worker unavailable'));
@@ -298,6 +312,12 @@ describe('RuntimeService startup compile path', () => {
       }),
     );
   });
+});
+
+describe('RuntimeService startup compile path: post-compile persistence failure', () => {
+  beforeEach(() => {
+    setupStartupCompilePathTest();
+  });
 
   it('marks bootstrap failed with persistence error after a successful initial compile', async () => {
     mocks.compileAndSwap.mockImplementationOnce(async (deps) => {
@@ -326,6 +346,12 @@ describe('RuntimeService startup compile path', () => {
     expect(mocks.markRuntimeBootstrapSucceeded).toHaveBeenCalledTimes(1);
     expect(mocks.markRuntimeBootstrapFailed).toHaveBeenCalledWith('storage offline');
   });
+});
+
+describe('RuntimeService startup compile path: pre-canvas initialization failure', () => {
+  beforeEach(() => {
+    setupStartupCompilePathTest();
+  });
 
   it('marks bootstrap failed when initialization throws before renderer startup completes', async () => {
     const { store } = makeStore();
@@ -340,6 +366,12 @@ describe('RuntimeService startup compile path', () => {
     expect(mocks.markRuntimeBootstrapFailed).toHaveBeenCalledWith(
       'RuntimeService: preview canvas is required before initialization',
     );
+  });
+});
+
+describe('RuntimeService startup compile path: GPU bundle install ordering', () => {
+  beforeEach(() => {
+    setupStartupCompilePathTest();
   });
 
   it('publishes compiled GPU pass bundle into the renderer before swapping the new program', async () => {
@@ -387,6 +419,12 @@ describe('RuntimeService startup compile path', () => {
       mocks.rebuildGpuPipelines.mock.invocationCallOrder[0]
       < mocks.compileAndSwap.mock.invocationCallOrder[0],
     ).toBe(true);
+  });
+});
+
+describe('RuntimeService startup compile path: hotpath install planes', () => {
+  beforeEach(() => {
+    setupStartupCompilePathTest();
   });
 
   it('installs runtime hotpath planes after successful program swap', async () => {

@@ -35,6 +35,18 @@ function formatValue(value) {
   return numeric.toLocaleString('en-US', { maximumSignificantDigits: 6 });
 }
 
+function formatPolicyNotice(gate) {
+  return typeof gate?.policyNotice === 'string' && gate.policyNotice.length > 0
+    ? gate.policyNotice
+    : 'MANDATORY: changed-file gate policy notice missing from delta JSON.';
+}
+
+function formatPolicySummary(gate) {
+  return typeof gate?.policySummary === 'string' && gate.policySummary.length > 0
+    ? gate.policySummary
+    : `under threshold OR >= ${formatPct(gate?.minImprovementPct)} improvement`;
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   const deltaJsonPath = args['delta-json'];
@@ -57,8 +69,12 @@ async function main() {
         `tracked files=${gate.trackedChangedFilesCount ?? 0}`,
         `checks=${gate.evaluationCount}`,
         `failures=${gate.failureCount}`,
+        `required improvement=${formatPct(gate.minImprovementPct)}`,
+        `policy=${formatPolicySummary(gate)}`,
       ].join(' | '),
     );
+    // [LAW:one-source-of-truth] Emit the canonical policy lock notice from delta JSON so the CI log matches the enforced policy.
+    console.log(`policy lock=${formatPolicyNotice(gate)}`);
     return;
   }
 
@@ -70,8 +86,11 @@ async function main() {
       `checks=${gate.evaluationCount}`,
       `failures=${gate.failureCount}`,
       `required improvement=${formatPct(gate.minImprovementPct)}`,
+      `policy=${formatPolicySummary(gate)}`,
     ].join(' | '),
   );
+  // [LAW:one-source-of-truth] Emit the canonical policy lock notice from delta JSON so the CI log matches the enforced policy.
+  console.error(`policy lock=${formatPolicyNotice(gate)}`);
   for (const row of rows.slice(0, 80)) {
     console.error(
       [
