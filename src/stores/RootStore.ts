@@ -26,7 +26,6 @@ import { FrontendResultStore } from './FrontendResultStore';
 import { EventHub } from '../events/EventHub';
 import { DiagnosticHub } from '../diagnostics/DiagnosticHub';
 import { CompositeEditorStore } from './CompositeEditorStore';
-import { StepDebugStore } from './StepDebugStore';
 import { DemoStore } from './DemoStore';
 import { HelpStore } from './HelpStore';
 import { ExpressionEditorStore } from './ExpressionEditorStore';
@@ -145,7 +144,6 @@ export class RootStore {
   readonly events: EventHub;
   readonly compositeEditor: CompositeEditorStore;
   readonly frontend: FrontendResultStore;
-  readonly stepDebug: StepDebugStore;
   readonly demo: DemoStore;
   readonly help: HelpStore;
   readonly expressionEditor: ExpressionEditorStore;
@@ -219,9 +217,6 @@ export class RootStore {
         message: `CompositeEditor: ${issue.message}`,
       });
     });
-
-    // Create StepDebugStore (step-through schedule debugger)
-    this.stepDebug = new StepDebugStore();
 
     // Create DemoStore (inject PatchStore dependency)
     this.demo = new DemoStore(this.patch);
@@ -362,9 +357,6 @@ export class RootStore {
 
     // Dispose SettingsStore
     this.settings.dispose();
-
-    // Dispose StepDebugStore
-    this.stepDebug.dispose();
 
     // [LAW:single-enforcer] Release persistence reporter when RootStore is disposed.
     setPatchPersistenceIssueReporter(null);
