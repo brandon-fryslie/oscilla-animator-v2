@@ -1,13 +1,13 @@
 /**
  * ColorPicker Block
  *
- * A constant authoring source that produces a user-space color (HSL+A).
+ * A constant authoring source that produces a user-space color (OKLCH+A).
  * h/s/l/a are exposed as inputs with defaults, allowing both constant
  * use (via UI sliders on the defaults) and dynamic wiring.
  */
 
 import { registerBlock } from '../registry';
-import { canonicalType, payloadStride, unitHsl, unitTurns, unitNone, contractWrap01, contractClamp01 } from '../../core/canonical-types';
+import { canonicalType, payloadStride, unitOklch, unitTurns, unitNone, contractWrap01, contractClamp01 } from '../../core/canonical-types';
 import { FLOAT, COLOR } from '../../core/canonical-types';
 import { cardinalityVar } from '../../core/inference-types';
 import { cardinalityVarId } from '../../core/ids';
@@ -27,7 +27,7 @@ export function register(): void {
     type: 'ColorPicker',
     label: 'Color Picker',
     category: 'color',
-    description: 'Constant HSL+A color source',
+    description: 'Constant OKLCH+A color source',
     form: 'primitive',
     capability: 'pure',
     loweringPurity: 'pure',
@@ -38,7 +38,7 @@ export function register(): void {
       a: { label: 'Alpha', type: canonicalType(FLOAT, unitNone(), { cardinality: COLOR_PICKER_CARD }, contractClamp01()), defaultSource: defaultSourceConst(1.0), uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
     },
     outputs: {
-      color: { label: 'Color', type: canonicalType(COLOR, unitHsl(), { cardinality: COLOR_PICKER_CARD }) },
+      color: { label: 'Color', type: canonicalType(COLOR, unitOklch(), { cardinality: COLOR_PICKER_CARD }) },
     },
     lower: ({ ctx, inputsById }) => {
       const hInput = inputsById.h;

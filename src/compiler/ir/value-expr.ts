@@ -79,7 +79,7 @@ export type KernelId =
  * - event: Event-specific operations (pulse, wrap, combine, never)
  * - extract: Extract component from composite payload (structural, not compute)
  * - construct: Construct composite from components (structural, not compute)
- * - hslToRgb: HSL→RGB color space conversion (structural intrinsic)
+ * - oklchToRgb: OKLCH→RGB color space conversion (structural intrinsic)
  */
 export type ValueExpr =
   | ValueExprConst
@@ -356,16 +356,16 @@ export interface ValueExprConstruct {
 }
 
 /**
- * HSL→RGB color space conversion (structural intrinsic).
+ * OKLCH→RGB color space conversion (structural intrinsic).
  *
- * Takes a color+hsl input (stride 4: h,s,l,a) and produces color+rgba01
+ * Takes a color+oklch input (stride 4: h,s,l,a) and produces color+rgba01
  * output (stride 4: r,g,b,a). Alpha passes through unchanged.
  *
  * This is a structural intrinsic (not a component-wise opcode) because
- * HSL→RGB conversion requires access to all 3 color components at once.
+ * OKLCH→RGB conversion requires access to all 3 color components at once.
  */
 export interface ValueExprHslToRgb {
-  readonly kind: 'hslToRgb';
+  readonly kind: 'oklchToRgb';
   readonly type: CanonicalType;
-  readonly input: ValueExprId; // Must be color+hsl (stride 4)
+  readonly input: ValueExprId; // Must be color+oklch (stride 4)
 }

@@ -144,7 +144,7 @@ patch "Debug Lens Coverage" {
     }
   }
 
-  block "MakeColorHSL" "color" {
+  block "MakeColorOKLCH" "color" {
     outputs {
       color = render.color
     }

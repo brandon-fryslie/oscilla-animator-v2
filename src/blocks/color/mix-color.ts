@@ -7,7 +7,7 @@
  */
 
 import { registerBlock } from '../registry';
-import { canonicalType, payloadStride, unitHsl, unitNone, contractClamp01 } from '../../core/canonical-types';
+import { canonicalType, payloadStride, unitOklch, unitNone, contractClamp01 } from '../../core/canonical-types';
 import { FLOAT, COLOR } from '../../core/canonical-types';
 import { cardinalityVar } from '../../core/inference-types';
 import { cardinalityVarId } from '../../core/ids';
@@ -27,17 +27,17 @@ export function register(): void {
     type: 'MixColor',
     label: 'Mix Color',
     category: 'color',
-    description: 'Blend two HSL colors using shortest-arc hue interpolation',
+    description: 'Blend two OKLCH colors using shortest-arc hue interpolation',
     form: 'primitive',
     capability: 'pure',
     loweringPurity: 'pure',
     inputs: {
-      a: { label: 'Color A', type: canonicalType(COLOR, unitHsl(), { cardinality: MIX_COLOR_CARD }) },
-      b: { label: 'Color B', type: canonicalType(COLOR, unitHsl(), { cardinality: MIX_COLOR_CARD }) },
+      a: { label: 'Color A', type: canonicalType(COLOR, unitOklch(), { cardinality: MIX_COLOR_CARD }) },
+      b: { label: 'Color B', type: canonicalType(COLOR, unitOklch(), { cardinality: MIX_COLOR_CARD }) },
       t: { label: 'Mix', type: canonicalType(FLOAT, unitNone(), { cardinality: MIX_COLOR_CARD }, contractClamp01()), defaultSource: defaultSourceConst(0.5) },
     },
     outputs: {
-      color: { label: 'Color', type: canonicalType(COLOR, unitHsl(), { cardinality: MIX_COLOR_CARD }) },
+      color: { label: 'Color', type: canonicalType(COLOR, unitOklch(), { cardinality: MIX_COLOR_CARD }) },
     },
     lower: ({ ctx, inputsById }) => {
       const aInput = inputsById.a;

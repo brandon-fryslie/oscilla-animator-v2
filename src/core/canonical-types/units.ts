@@ -22,7 +22,7 @@ export type UnitType =
   | { readonly kind: 'angle'; readonly unit: 'radians' | 'degrees' | 'turns' }
   | { readonly kind: 'time'; readonly unit: 'ms' | 'seconds' }
   | { readonly kind: 'space'; readonly unit: 'ndc' | 'world' | 'view'; readonly dims: 2 | 3 }
-  | { readonly kind: 'color'; readonly unit: 'rgba01' | 'hsl' };
+  | { readonly kind: 'color'; readonly unit: 'rgba01' | 'oklch' };
 
 // =============================================================================
 // Constructors
@@ -88,9 +88,9 @@ export function unitRgba01(): UnitType {
   return { kind: 'color', unit: 'rgba01' };
 }
 
-/** HSL+A color: h ∈ [0,1) wrap, s/l/a ∈ [0,1] clamp */
-export function unitHsl(): UnitType {
-  return { kind: 'color', unit: 'hsl' };
+/** OKLCH+A color: h ∈ [0,1) wrap, s/l/a ∈ [0,1] clamp */
+export function unitOklch(): UnitType {
+  return { kind: 'color', unit: 'oklch' };
 }
 
 // =============================================================================

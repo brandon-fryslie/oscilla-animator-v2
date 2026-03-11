@@ -134,7 +134,7 @@ patch "Path Flow" {
 
   # --- Per-element rainbow color from normalized index ---
 
-  block "MakeColorHSL" "color" {
+  block "MakeColorOKLCH" "color" {
     outputs {
       color = render.color
     }

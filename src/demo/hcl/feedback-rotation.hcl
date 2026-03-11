@@ -133,7 +133,7 @@ patch "Feedback Rotation" {
     }
   }
 
-  block "MakeColorHSL" "outer-color" {
+  block "MakeColorOKLCH" "outer-color" {
     outputs {
       color = render-outer.color
     }
