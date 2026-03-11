@@ -361,13 +361,12 @@ export function allocateContinuityPipeline(
       return expr;
     };
 
-    // Helper to get or create slot for a field
-    const getFieldSlots = (
+    // Helper to get or create canonical materialize slot for a field
+    const getFieldSlot = (
       fieldId: ValueExprId,
       semantic: 'position' | 'radius' | 'opacity' | 'color' | 'custom',
-      stride: number,
       roleKey: string,
-    ): { baseSlot: ValueSlot; outputSlot: ValueSlot } => {
+    ): ValueSlot => {
       // [LAW:one-source-of-truth] Materialization count is derived from the field's own instance.
       const fieldInstanceId = inferFieldInstanceFromExprs(fieldId, valueExprs) ?? instanceId;
       const key = `${fieldInstanceId}:${semantic}:${roleKey}`;
@@ -391,11 +390,11 @@ export function allocateContinuityPipeline(
           target: slot,
         });
       }
-      return { baseSlot: slot, outputSlot: slot };
+      return slot;
     };
 
     // [LAW:one-source-of-truth] Render position is keyed from RenderInstances2D.controlPoints.
-    const posSlots = getFieldSlots(controlPoints.id, 'position', controlPoints.stride, `${renderBlockId}:controlPoints`);
+    const posSlot = getFieldSlot(controlPoints.id, 'position', `${renderBlockId}:controlPoints`);
 
     // Process color (semantic: color)
     // [LAW:dataflow-not-control-flow] Color always enters the materialize pipeline;
@@ -413,10 +412,9 @@ export function allocateContinuityPipeline(
         `RenderInstances2D (${renderBlockId}): missing broadcast color expr ${colorFieldExprId}`,
       );
     }
-    const colorSlots = getFieldSlots(
+    const colorSlot = getFieldSlot(
       colorFieldExprId,
       'color',
-      payloadStride(colorFieldExpr.type.payload),
       `${renderBlockId}:color`,
     );
 
@@ -442,13 +440,12 @@ export function allocateContinuityPipeline(
       );
     }
     // [LAW:one-source-of-truth] Scale modulation follows the authored field directly.
-    const scaleSlots = getFieldSlots(
+    const scaleSlot = getFieldSlot(
       scaleFieldExprId,
       'custom',
-      payloadStride(scaleFieldExpr.type.payload),
       `scale:${String(scaleFieldExprId)}`,
     );
-    const scaleOutput: StepRender['scale'] = { k: 'slot', slot: scaleSlots.outputSlot };
+    const scaleOutput: StepRender['scale'] = { k: 'slot', slot: scaleSlot };
 
     // Process shape
     let shapeOutput: StepRender['shape'] | undefined = undefined;
@@ -461,15 +458,14 @@ export function allocateContinuityPipeline(
         ? shapeSourceExprId
         : builder.broadcast(shapeSourceExprId, withInstance(shapeSourceExpr.type, renderInstance));
       const shapeFieldExpr = readValueExpr(shapeFieldExprId, 'shape');
-      const shapeSlots = getFieldSlots(
+      const shapeSlot = getFieldSlot(
         shapeFieldExprId,
         'custom',
-        payloadStride(shapeFieldExpr.type.payload),
         `${renderBlockId}:shape`,
       );
       // [LAW:one-source-of-truth] Render steps publish one canonical slot-backed
       // shape-handle source for all sinks (no oneHandle branch at runtime).
-      shapeOutput = { k: 'slot', slot: shapeSlots.outputSlot };
+      shapeOutput = { k: 'slot', slot: shapeSlot };
       // [LAW:single-enforcer] Render materialization pipeline is the single compile-time
       // boundary that resolves shape-handle ancestry and optional control-point
       // field metadata.
@@ -480,13 +476,12 @@ export function allocateContinuityPipeline(
         );
       }
       if (shapeInfo.controlPointField !== undefined) {
-        const cpSlots = getFieldSlots(
+        const cpSlot = getFieldSlot(
           shapeInfo.controlPointField.id,
           'custom',
-          shapeInfo.controlPointField.stride,
           `${renderBlockId}:controlPoints`,
         );
-        controlPointsOutput = { k: 'slot', slot: cpSlots.outputSlot };
+        controlPointsOutput = { k: 'slot', slot: cpSlot };
       }
     }
 
@@ -502,8 +497,8 @@ export function allocateContinuityPipeline(
     const renderStep: StepRender = {
       kind: 'render',
       instanceId,
-      controlPointsSlot: posSlots.outputSlot,
-      colorSlot: colorSlots.outputSlot,
+      controlPointsSlot: posSlot,
+      colorSlot,
       scale: scaleOutput,
       shape: shapeOutput,
       ...(controlPointsOutput && { controlPoints: controlPointsOutput }),
