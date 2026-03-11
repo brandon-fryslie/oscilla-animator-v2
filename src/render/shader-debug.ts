@@ -20,8 +20,8 @@ export function dumpShaderWithLineNumbers(
   if (!enabled) {
     return;
   }
-  // Utility helper for WGSL line-number formatting/logging used by runtime
-  // renderer and UI debug consumers where wired up.
+  // [LAW:one-source-of-truth] WGSL line-number formatting/logging is shared
+  // by runtime renderer and UI debug consumers via one utility boundary.
   logger.groupCollapsed(`[runtimeConsole] Generated WGSL: ${name}`);
   logger.info(formatWgslWithLineNumbers(wgsl));
   logger.groupEnd();
