@@ -1238,8 +1238,10 @@ impl Engine {
             uniforms.view_proj[3][0] = tx;
             uniforms.view_proj[3][1] = ty;
             uniforms.view_proj[3][3] = 1.0;
-            let install_revision =
-                parse_finite_u32(shared_input.get_index(INPUT_WORD_INSTALL_REVISION as u32), "installRevision");
+            let install_revision = parse_finite_u32(
+                f64::from(shared_input.get_index(INPUT_WORD_INSTALL_REVISION as u32)),
+                "installRevision",
+            );
             // [LAW:single-enforcer] Shared-plane upload ownership is gated by
             // one install revision word; per-frame ticks do not re-copy planes.
             if install_revision != self.last_install_revision {
@@ -1265,11 +1267,11 @@ impl Engine {
                             .saturating_add(SINK_TABLE_HEADER_WORDS as u32)
                     });
                 let shape_bank_words = parse_finite_u32(
-                    shared_input.get_index(INPUT_WORD_SHAPE_BANK_WORDS as u32),
+                    f64::from(shared_input.get_index(INPUT_WORD_SHAPE_BANK_WORDS as u32)),
                     "shapeBankWordCount",
                 );
                 let sink_table_words = parse_finite_u32(
-                    shared_input.get_index(INPUT_WORD_SINK_TABLE_WORDS as u32),
+                    f64::from(shared_input.get_index(INPUT_WORD_SINK_TABLE_WORDS as u32)),
                     "sinkTableWordCount",
                 );
                 if shape_bank_words > shape_bank_word_limit {

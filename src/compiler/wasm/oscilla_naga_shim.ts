@@ -25,9 +25,13 @@ type RustCompileFn = (
   module: NagaModuleIR,
   maxActiveLanes?: number,
 ) => ShimCompilationResult;
+type RustCompileWgslFn = (
+  wgslSource: string,
+) => ShimCompilationResult;
 
 interface ShimModule {
   readonly compile_ir?: RustCompileFn;
+  readonly compile_wgsl?: RustCompileWgslFn;
   readonly init?: () => void;
   readonly default?: (
     moduleOrPath?: WasmInitModuleOrPath,
@@ -37,6 +41,7 @@ interface ShimModule {
 let initialized = false;
 let initPromise: Promise<void> | null = null;
 let compileImpl: RustCompileFn | null = null;
+let compileWgslImpl: RustCompileWgslFn | null = null;
 const initStageListeners = new Set<(stage: ShimBootStage) => void>();
 
 function compileInitError(message: string, path: string): ShimCompilationResult {
@@ -84,14 +89,19 @@ export default async function init(options?: ShimInitOptions): Promise<void> {
         }
         const initWasm = module.init;
         const compileWasm = module.compile_ir;
+        const compileWgslWasm = module.compile_wgsl;
         if (typeof initWasm !== 'function') {
           throw new Error('oscilla_naga_shim.js missing init export');
         }
         if (typeof compileWasm !== 'function') {
           throw new Error('oscilla_naga_shim.js missing compile_ir export');
         }
+        if (typeof compileWgslWasm !== 'function') {
+          throw new Error('oscilla_naga_shim.js missing compile_wgsl export');
+        }
         await initWasm();
         compileImpl = compileWasm as RustCompileFn;
+        compileWgslImpl = compileWgslWasm as RustCompileWgslFn;
         initialized = true;
       })
       .catch((error) => {
@@ -115,4 +125,11 @@ export function compile_ir(module: NagaModuleIR, maxActiveLanes?: number): ShimC
     return compileInitError('Shim not initialized', 'init');
   }
   return compileImpl(module, maxActiveLanes);
+}
+
+export function compile_wgsl(wgslSource: string): ShimCompilationResult {
+  if (!initialized || !compileWgslImpl) {
+    return compileInitError('Shim not initialized', 'init');
+  }
+  return compileWgslImpl(wgslSource);
 }

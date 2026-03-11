@@ -154,8 +154,8 @@ interface RendererFatalTransition {
 }
 
 const DEFAULT_BOOTSTRAP_CONFIG: RustRendererBootstrapConfig = Object.freeze({
-  maxParticles: 65_536,
-  maxShapes: 65_536,
+  maxParticles: 100_000,
+  maxShapes: 100_000,
   debugReadbackHz: 0,
 });
 
@@ -706,6 +706,7 @@ export class WebGPURenderer {
   static async create(canvas: HTMLCanvasElement): Promise<WebGPURenderer> {
     assertWebGPUStartupContract(canvas);
     const offscreenCanvas = canvas.transferControlToOffscreen();
+    const bootstrapConfig = getRuntimeBootstrapConfig();
     const sharedInput = new SharedArrayBuffer(RUNTIME_INPUT_BUFFER_BYTES);
     const signalWords = new Int32Array(sharedInput, 0, RUNTIME_INPUT_SIGNAL_WORDS);
     const inputWords = new Float32Array(
@@ -713,8 +714,8 @@ export class WebGPURenderer {
       RUNTIME_INPUT_SIGNAL_WORDS * Int32Array.BYTES_PER_ELEMENT,
       RUNTIME_INPUT_FLOAT_WORDS,
     );
-    const shapeBankWordCapacity = computeRustRendererShapeBankWordCapacity(DEFAULT_BOOTSTRAP_CONFIG);
-    const sinkTableWordCapacity = computeRustRendererSinkTableWordCapacity(DEFAULT_BOOTSTRAP_CONFIG);
+    const shapeBankWordCapacity = computeRustRendererShapeBankWordCapacity(bootstrapConfig);
+    const sinkTableWordCapacity = computeRustRendererSinkTableWordCapacity(bootstrapConfig);
     const sharedShapeBank = new SharedArrayBuffer(shapeBankWordCapacity * Uint32Array.BYTES_PER_ELEMENT);
     const sharedSinkTable = new SharedArrayBuffer(sinkTableWordCapacity * Uint32Array.BYTES_PER_ELEMENT);
     const sharedShapeBankWords = new Uint32Array(sharedShapeBank);
@@ -735,7 +736,7 @@ export class WebGPURenderer {
       sharedInput,
       sharedShapeBank,
       sharedSinkTable,
-      getRuntimeBootstrapConfig(),
+      bootstrapConfig,
     );
     return renderer;
   }
@@ -1372,7 +1373,9 @@ export class WebGPURenderer {
   private validateHeartbeatHealth(payload: Extract<RustRendererWorkerOutboundMessage, { type: 'SCHEDULER_HEARTBEAT' }>): void {
     const telemetry = payload.telemetry;
     const installedPassCount = this.lastInstalledPassIds.length;
-    const expectedDispatchCount = installedPassCount > 0 ? installedPassCount + 2 : null;
+    // [LAW:one-source-of-truth] Installed pass bundles now include draw-prep,
+    // so expected overhead is one extra dispatch for instance assembly only.
+    const expectedDispatchCount = installedPassCount > 0 ? installedPassCount + 1 : null;
     if (this.hasDispatchCountMismatch(telemetry.dispatchCounters, expectedDispatchCount)) {
       this.emitRuntimeHealthWarning('dispatch_count_mismatch', {
         installedPassCount,

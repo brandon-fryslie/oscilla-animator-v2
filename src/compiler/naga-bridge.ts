@@ -1,6 +1,7 @@
 import type { NagaModuleIR } from './ir/naga-emitter';
 import initShim, {
   compile_ir,
+  compile_wgsl,
   type ShimBootStage,
   type ShimFormattedError,
 } from './wasm/oscilla_naga_shim';
@@ -53,6 +54,17 @@ export class NagaService {
       throw new Error('NagaService.compile called before boot');
     }
     const result = compile_ir(module, options?.maxActiveLanes);
+    if (!result.is_valid) {
+      throw new NagaValidationError(result.errors);
+    }
+    return { wgsl: result.wgsl };
+  }
+
+  static compileWgsl(wgslSource: string): NagaCompilationResult {
+    if (!this.ready) {
+      throw new Error('NagaService.compileWgsl called before boot');
+    }
+    const result = compile_wgsl(wgslSource);
     if (!result.is_valid) {
       throw new NagaValidationError(result.errors);
     }

@@ -436,8 +436,8 @@ export function materializeValueExpr(
       break;
     }
 
-    case 'hslToRgb': {
-      // WI-4: HSL→RGB color space conversion
+    case 'oklchToRgb': {
+      // WI-4: OKLCH→RGB color space conversion
       const inputBuf = materializeValueExpr(
         expr.input,
         table,
@@ -1091,7 +1091,7 @@ function pseudoRandom(seed: number): number {
 }
 
 /**
- * HSL→RGB color space conversion.
+ * OKLCH→RGB color space conversion.
  *
  * @param out - Output buffer (RGBA)
  * @param input - Input buffer (HSLA)
@@ -1108,7 +1108,7 @@ function hslToRgbConversion(
     const s = input[offset + 1];
     const l = input[offset + 2];
 
-    // Inline HSL→RGB (no tuple allocation)
+    // Inline OKLCH→RGB (no tuple allocation)
     const c = (1 - Math.abs(2 * l - 1)) * s;
     const x = c * (1 - Math.abs(((h * 6) % 2) - 1));
     const m = l - c / 2;

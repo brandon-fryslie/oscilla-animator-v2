@@ -2,17 +2,57 @@
 
 import { compileFromFrontend } from '../compiler';
 import { compileFrontend } from '../compiler/frontend';
-import { compileProgramWithNaga } from '../compiler/naga-compile';
+import { compileProgramWithNaga, compileWgslWithNaga } from '../compiler/naga-compile';
+import type { CompileError } from '../compiler/types';
 import { EventHub } from '../events/EventHub';
 import { deserializePatch } from './PatchPersistence';
 import { maybeBuildFluidGpuBundle } from './fluid-gpu-bundle';
+import {
+  DRAW_PREP_ENTRY_POINT,
+  DRAW_PREP_PASS_ID,
+  DRAW_PREP_WGSL_SOURCE,
+} from './draw-prep-pass';
 import type {
   CompiledGpuArtifactBundle,
+  CompiledGpuPassArtifact,
   CompileWorkerRequest,
   CompileWorkerResponse,
   CompileWorkerBackendResult,
 } from './compile-worker-protocol';
 import { stripKernelRegistry } from './compile-worker-serialization';
+
+let drawPrepPassPromise: Promise<
+  | { readonly kind: 'ok'; readonly pass: CompiledGpuPassArtifact }
+  | { readonly kind: 'error'; readonly errors: readonly CompileError[] }
+> | null = null;
+
+async function compileDrawPrepPass(): Promise<
+  | { readonly kind: 'ok'; readonly pass: CompiledGpuPassArtifact }
+  | { readonly kind: 'error'; readonly errors: readonly CompileError[] }
+> {
+  if (!drawPrepPassPromise) {
+    // [LAW:one-source-of-truth] Draw-prep compilation emits one canonical pass
+    // artifact reused across compile requests in this worker lifetime.
+    drawPrepPassPromise = compileWgslWithNaga(DRAW_PREP_WGSL_SOURCE).then((result) => {
+      if (result.kind === 'error') {
+        return {
+          kind: 'error',
+          errors: result.errors,
+        } as const;
+      }
+      return {
+        kind: 'ok',
+        pass: {
+          passId: DRAW_PREP_PASS_ID,
+          stage: 'compute',
+          entryPoint: DRAW_PREP_ENTRY_POINT,
+          wgsl: result.wgsl,
+        },
+      } as const;
+    });
+  }
+  return drawPrepPassPromise;
+}
 
 async function toBackendResult(
   frontendResult: ReturnType<typeof compileFrontend>,
@@ -65,6 +105,26 @@ async function toBackendResult(
         }],
       };
     }
+
+    const drawPrepPass = await compileDrawPrepPass();
+    if (drawPrepPass.kind === 'error') {
+      return {
+        kind: 'error',
+        errors: drawPrepPass.errors.map((error) => ({
+          ...error,
+          details: {
+            ...(error.details ?? {}),
+            preNagaWarnings: result.warnings,
+          },
+        })),
+      };
+    }
+    compiledGpuBundle = {
+      ...compiledGpuBundle,
+      // [LAW:dataflow-not-control-flow] Pass install shape is deterministic:
+      // simulation/fluid pass chain always followed by draw-prep.
+      passes: [...compiledGpuBundle.passes, drawPrepPass.pass],
+    };
 
     if (!compiledGpuBundle?.passes?.length) {
       return {

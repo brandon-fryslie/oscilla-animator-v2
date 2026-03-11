@@ -362,7 +362,7 @@ export const UnifiedNode: React.FC<NodeProps<UnifiedNodeData>> = observer(({ dat
         style={{
           textAlign: 'center',
           fontWeight: 600,
-          marginBottom: '6px',
+          marginBottom: '2px',
           fontSize: '14px',
           letterSpacing: '0.3px',
           color: '#f1f5f9',
@@ -394,6 +394,21 @@ export const UnifiedNode: React.FC<NodeProps<UnifiedNodeData>> = observer(({ dat
           // No editing - just display name
           <span>{data.displayName}</span>
         )}
+      </div>
+      <div
+        style={{
+          textAlign: 'center',
+          marginBottom: '6px',
+          fontSize: '9px',
+          letterSpacing: '0.35px',
+          color: '#8fa0b4',
+          textTransform: 'none',
+          fontWeight: 500,
+          fontFamily: 'var(--mantine-font-family-monospace, monospace)',
+        }}
+        title={`Block kind: ${data.blockType}`}
+      >
+        {data.blockType}
       </div>
 
       {/* Comment Block Body */}

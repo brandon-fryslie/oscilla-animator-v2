@@ -1,5 +1,8 @@
 use crate::memory::GpuMemoryArena;
 
+const DRAW_PREP_PASS_ID: &str = "draw.prep";
+const DEFAULT_DRAW_PREP_ENTRY_POINT: &str = "main";
+
 const DEFAULT_DRAW_PREP_WGSL: &str = r#"
 const DRAW_MODE_INDEXED: u32 = 0u;
 const DRAW_MODE_NON_INDEXED: u32 = 1u;
@@ -254,10 +257,6 @@ impl ComputeDispatcher {
             label: Some("Compute.Assembly.Shader"),
             source: wgpu::ShaderSource::Wgsl(assembly_wgsl.into()),
         });
-        let draw_prep_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("Compute.DrawPrep.Shader"),
-            source: wgpu::ShaderSource::Wgsl(DEFAULT_DRAW_PREP_WGSL.into()),
-        });
 
         let assembly_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -275,20 +274,12 @@ impl ComputeDispatcher {
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
             });
 
-        let draw_prep_pipeline_layout =
-            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                label: Some("Compute.DrawPrep.PipelineLayout"),
-                bind_group_layouts: &[&draw_prep_layout],
-                push_constant_ranges: &[],
-            });
-        let draw_prep_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-            label: Some("Compute.DrawPrep.Pipeline"),
-            layout: Some(&draw_prep_pipeline_layout),
-            module: &draw_prep_module,
-            entry_point: Some("main"),
-            cache: None,
-            compilation_options: wgpu::PipelineCompilationOptions::default(),
-        });
+        let draw_prep_pipeline = Self::create_draw_prep_pipeline(
+            device,
+            &draw_prep_layout,
+            DEFAULT_DRAW_PREP_WGSL,
+            DEFAULT_DRAW_PREP_ENTRY_POINT,
+        );
 
         Self {
             simulation_pipelines,
@@ -328,6 +319,32 @@ impl ComputeDispatcher {
         })
     }
 
+    fn create_draw_prep_pipeline(
+        device: &wgpu::Device,
+        draw_prep_layout: &wgpu::BindGroupLayout,
+        draw_prep_wgsl: &str,
+        entry_point: &str,
+    ) -> wgpu::ComputePipeline {
+        let draw_prep_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("Compute.DrawPrep.Shader"),
+            source: wgpu::ShaderSource::Wgsl(draw_prep_wgsl.into()),
+        });
+        let draw_prep_pipeline_layout =
+            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("Compute.DrawPrep.PipelineLayout"),
+                bind_group_layouts: &[draw_prep_layout],
+                push_constant_ranges: &[],
+            });
+        device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+            label: Some("Compute.DrawPrep.Pipeline"),
+            layout: Some(&draw_prep_pipeline_layout),
+            module: &draw_prep_module,
+            entry_point: Some(entry_point),
+            cache: None,
+            compilation_options: wgpu::PipelineCompilationOptions::default(),
+        })
+    }
+
     fn compile_simulation_passes(
         device: &wgpu::Device,
         compiler_simulation_layout: &wgpu::BindGroupLayout,
@@ -357,6 +374,36 @@ impl ComputeDispatcher {
             });
         }
         compiled
+    }
+
+    fn split_pass_specs(
+        pass_specs: &[CompilerComputePassSpec],
+    ) -> (Vec<CompilerComputePassSpec>, CompilerComputePassSpec) {
+        let mut simulation_specs: Vec<CompilerComputePassSpec> = Vec::with_capacity(pass_specs.len());
+        let mut draw_prep_spec: Option<CompilerComputePassSpec> = None;
+        for spec in pass_specs {
+            if spec.pass_id == DRAW_PREP_PASS_ID {
+                if draw_prep_spec.is_some() {
+                    panic!(
+                        "[LAW:one-source-of-truth] GPU pass bundle must contain exactly one draw.prep pass"
+                    );
+                }
+                draw_prep_spec = Some(spec.clone());
+                continue;
+            }
+            simulation_specs.push(spec.clone());
+        }
+        if simulation_specs.is_empty() {
+            panic!(
+                "[LAW:no-silent-fallbacks] GPU pass bundle must contain at least one simulation pass"
+            );
+        }
+        let Some(draw_prep) = draw_prep_spec else {
+            panic!(
+                "[LAW:no-silent-fallbacks] GPU pass bundle missing required draw.prep pass"
+            );
+        };
+        (simulation_specs, draw_prep)
     }
 
     fn create_compiler_simulation_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
@@ -423,11 +470,18 @@ impl ComputeDispatcher {
         pass_specs: &[CompilerComputePassSpec],
         particle_count: u32,
     ) {
+        let (simulation_specs, draw_prep_spec) = Self::split_pass_specs(pass_specs);
         self.simulation_pipelines = Self::compile_simulation_passes(
             device,
             &self.compiler_simulation_layout,
             particle_count,
-            pass_specs,
+            simulation_specs.as_slice(),
+        );
+        self.draw_prep_pipeline = Self::create_draw_prep_pipeline(
+            device,
+            &self.draw_prep_layout,
+            draw_prep_spec.wgsl.as_str(),
+            draw_prep_spec.entry_point.as_str(),
         );
     }
 

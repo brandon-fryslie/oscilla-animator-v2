@@ -42,10 +42,12 @@ export const Toolbar: React.FC<ToolbarProps> = observer(({ stats = 'FPS: --', do
   const [toastSeverity, setToastSeverity] = useState<'success' | 'error'>('success');
 
   const panelMenuItems = useMemo(() => PANEL_MENU_ITEMS, []);
-  const splitDemos = useMemo(() => {
-    const midpoint = Math.ceil(demo.demos.length / 2);
-    const primary = demo.demos.slice(0, midpoint);
-    const secondary = demo.demos.slice(midpoint);
+  const groupedDemos = useMemo(() => {
+    const standard = demo.demos.filter((item) => item.category === 'standard');
+    const diagnostic = demo.demos.filter((item) => item.category === 'diagnostic');
+    const midpoint = Math.ceil(standard.length / 2);
+    const primary = standard.slice(0, midpoint);
+    const secondary = standard.slice(midpoint);
     const formatLabel = (items: readonly { name: string }[], fallback: string) => {
       const first = items[0]?.name?.trim()?.[0]?.toUpperCase();
       const last = items[items.length - 1]?.name?.trim()?.[0]?.toUpperCase();
@@ -55,6 +57,7 @@ export const Toolbar: React.FC<ToolbarProps> = observer(({ stats = 'FPS: --', do
     return {
       primary,
       secondary,
+      diagnostic,
       primaryLabel: formatLabel(primary, 'Demos 1'),
       secondaryLabel: formatLabel(secondary, 'Demos 2'),
     };
@@ -190,10 +193,10 @@ export const Toolbar: React.FC<ToolbarProps> = observer(({ stats = 'FPS: --', do
 
             <Menu shadow="md" width={260} withinPortal>
               <Menu.Target>
-                <Button variant="subtle" color="gray" size="xs">{splitDemos.primaryLabel}</Button>
+                <Button variant="subtle" color="gray" size="xs">{groupedDemos.primaryLabel}</Button>
               </Menu.Target>
               <Menu.Dropdown>
-                {splitDemos.primary.map((item) => (
+                {groupedDemos.primary.map((item) => (
                   <Menu.Item
                     key={item.filename}
                     onClick={() => handleDemoSelect(item.filename)}
@@ -204,13 +207,31 @@ export const Toolbar: React.FC<ToolbarProps> = observer(({ stats = 'FPS: --', do
               </Menu.Dropdown>
             </Menu>
 
-            {splitDemos.secondary.length > 0 ? (
+            {groupedDemos.secondary.length > 0 ? (
               <Menu shadow="md" width={260} withinPortal>
                 <Menu.Target>
-                  <Button variant="subtle" color="gray" size="xs">{splitDemos.secondaryLabel}</Button>
+                  <Button variant="subtle" color="gray" size="xs">{groupedDemos.secondaryLabel}</Button>
                 </Menu.Target>
                 <Menu.Dropdown>
-                  {splitDemos.secondary.map((item) => (
+                  {groupedDemos.secondary.map((item) => (
+                    <Menu.Item
+                      key={item.filename}
+                      onClick={() => handleDemoSelect(item.filename)}
+                    >
+                      {item.name}
+                    </Menu.Item>
+                  ))}
+                </Menu.Dropdown>
+              </Menu>
+            ) : null}
+
+            {groupedDemos.diagnostic.length > 0 ? (
+              <Menu shadow="md" width={320} withinPortal>
+                <Menu.Target>
+                  <Button variant="subtle" color="orange" size="xs">Diagnostic Demo Patches</Button>
+                </Menu.Target>
+                <Menu.Dropdown>
+                  {groupedDemos.diagnostic.map((item) => (
                     <Menu.Item
                       key={item.filename}
                       onClick={() => handleDemoSelect(item.filename)}

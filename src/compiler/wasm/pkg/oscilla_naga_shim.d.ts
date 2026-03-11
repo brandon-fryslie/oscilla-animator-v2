@@ -3,6 +3,8 @@
 
 export function compile_ir(module_ir: any, max_active_lanes?: number | null): any;
 
+export function compile_wgsl(wgsl_source: string): any;
+
 export function init(): void;
 
 export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembly.Module;
@@ -10,6 +12,7 @@ export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembl
 export interface InitOutput {
     readonly memory: WebAssembly.Memory;
     readonly compile_ir: (a: any, b: number) => any;
+    readonly compile_wgsl: (a: number, b: number) => any;
     readonly init: () => void;
     readonly __wbindgen_malloc: (a: number, b: number) => number;
     readonly __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;

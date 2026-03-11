@@ -44,7 +44,7 @@ export const WEBGPU_RENDER_CONTRACT = Object.freeze({
   inputHeaderSimStateOffset: 16,
   computeWorkgroupSize: 64,
   computeMigrationWorkgroupSize: 64,
-  simulationCapacity: 65_536,
+  simulationCapacity: 100_000,
   indirectArgsWords: 5,
   indirectArgsBytes: 5 * Uint32Array.BYTES_PER_ELEMENT,
   drawPrepBindGroup: 0,

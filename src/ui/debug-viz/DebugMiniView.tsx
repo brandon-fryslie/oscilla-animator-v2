@@ -25,6 +25,7 @@ import { WarmupIndicator } from './charts/WarmupIndicator';
 import { ColorPalette } from './charts/ColorPalette';
 import { FieldBandChart } from './charts/FieldBandChart';
 import { RasterHeatmap } from './charts/RasterHeatmap';
+import { ScalarHistogram } from './charts/ScalarHistogram';
 import { selectFieldCharts, type FieldChartId } from './vizSelector';
 import { ChartHelpButton } from './charts/ChartHelpButton';
 import type { HelpTopicId } from '../../help/types';
@@ -198,6 +199,9 @@ export function OneValueSection({ value, meta, history, spyReadbackMeta }: {
     return React.createElement('div', { style: debugMiniViewStyles.valueSection }, ...children);
   }
 
+  let renderedScalarValue: React.ReactElement | null = null;
+  let renderedReadbackMeta: React.ReactElement | null = null;
+
   // Current value via renderer (runtime scalar)
   if (value && value.kind === 'scalar') {
     const sample: RendererSample = {
@@ -210,25 +214,47 @@ export function OneValueSection({ value, meta, history, spyReadbackMeta }: {
       renderer.renderFull(sample),
       spyReadbackMeta ?? undefined,
     );
-    children.push(
-      React.createElement('div', { key: 'value' }, renderedValue)
+    renderedScalarValue = React.createElement(
+      'div',
+      {
+        key: 'value-secondary',
+        style: {
+          marginTop: '6px',
+          paddingTop: '6px',
+          borderTop: '1px solid rgba(255,255,255,0.08)',
+          opacity: 0.88,
+        },
+      },
+      React.createElement(
+        'div',
+        {
+          style: {
+            color: '#777',
+            fontSize: '9px',
+            fontFamily: 'monospace',
+            textTransform: 'uppercase',
+            letterSpacing: '0.5px',
+            marginBottom: '3px',
+          },
+        },
+        'current value',
+      ),
+      renderedValue,
     );
     if (spyReadbackMeta) {
       const freshness = getSpyReadbackFreshness(spyReadbackMeta);
       const ageMs = Math.round(getSpyReadbackAgeMs(spyReadbackMeta));
-      children.push(
-        React.createElement(
-          'div',
-          {
-            key: 'spy-readback-meta',
-            style: {
-              marginTop: '2px',
-              fontSize: '10px',
-              color: freshness === 'fresh' ? '#4ecdc4' : '#ffb86c',
-            },
+      renderedReadbackMeta = React.createElement(
+        'div',
+        {
+          key: 'spy-readback-meta',
+          style: {
+            marginTop: '4px',
+            fontSize: '10px',
+            color: freshness === 'fresh' ? '#4ecdc4' : '#ffb86c',
           },
-          `readback: ${freshness} (${ageMs}ms)`,
-        )
+        },
+        `readback: ${freshness} (${ageMs}ms)`,
       );
     }
   } else {
@@ -257,6 +283,40 @@ export function OneValueSection({ value, meta, history, spyReadbackMeta }: {
       )
     );
 
+    const scalarStats = computeScalarHistoryStats(history);
+    if (scalarStats) {
+      children.push(
+        React.createElement('div', { key: 'distribution-label', style: chartLabelRowStyle },
+          React.createElement('span', { style: chartLabelTextStyle }, 'distribution'),
+          React.createElement(ChartHelpButton, { topicId: 'viz-distribution-bar' }),
+        )
+      );
+      children.push(
+        React.createElement('div', { key: 'distribution', style: { marginTop: '2px' } },
+          React.createElement(DistributionBar, {
+            stats: scalarStats,
+            width: 280,
+            height: 10,
+          }),
+        ),
+      );
+      children.push(
+        React.createElement('div', { key: 'hist-label', style: chartLabelRowStyle },
+          React.createElement('span', { style: chartLabelTextStyle }, 'histogram'),
+        ),
+      );
+      children.push(
+        React.createElement('div', { key: 'histogram', style: { marginTop: '2px' } },
+          React.createElement(ScalarHistogram, {
+            history,
+            width: 280,
+            height: 42,
+            bins: 24,
+          }),
+        ),
+      );
+    }
+
     // Warmup indicator
     children.push(
       React.createElement('div', { key: 'warmup' },
@@ -268,7 +328,55 @@ export function OneValueSection({ value, meta, history, spyReadbackMeta }: {
     );
   }
 
+  if (renderedScalarValue) {
+    children.push(renderedScalarValue);
+  }
+  if (renderedReadbackMeta) {
+    children.push(renderedReadbackMeta);
+  }
+
   return React.createElement('div', { style: debugMiniViewStyles.valueSection }, ...children);
+}
+
+function computeScalarHistoryStats(history: HistoryView): AggregateStats | null {
+  if (history.stride <= 0) return null;
+  const sampleCount = history.filled ? history.capacity : Math.min(history.writeIndex, history.capacity);
+  if (sampleCount <= 0) return null;
+
+  const startIdx = history.filled ? history.writeIndex % history.capacity : 0;
+  let min = Infinity;
+  let max = -Infinity;
+  let sum = 0;
+  let count = 0;
+
+  // [LAW:dataflow-not-control-flow] Scalar history aggregation always walks the
+  // same sample pipeline; invalid values affect output via data exclusion only.
+  for (let i = 0; i < sampleCount; i += 1) {
+    const sampleIdx = (startIdx + i) % history.capacity;
+    const value = history.buffer[sampleIdx * history.stride];
+    if (!Number.isFinite(value)) continue;
+    if (value < min) min = value;
+    if (value > max) max = value;
+    sum += value;
+    count += 1;
+  }
+
+  if (count <= 0 || !Number.isFinite(min) || !Number.isFinite(max)) return null;
+
+  const minArr = new Float32Array(4);
+  const maxArr = new Float32Array(4);
+  const meanArr = new Float32Array(4);
+  minArr[0] = min;
+  maxArr[0] = max;
+  meanArr[0] = sum / count;
+
+  return {
+    count,
+    stride: 1,
+    min: minArr,
+    max: maxArr,
+    mean: meanArr,
+  };
 }
 
 export function FieldValueSection({ value, meta, fieldHistory, fieldInstanceHistory, fieldBufferHistory }: {

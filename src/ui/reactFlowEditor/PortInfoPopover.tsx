@@ -12,7 +12,7 @@ import { Text, Stack, Group, Badge, Box, Divider } from '@mantine/core';
 import { observer } from 'mobx-react-lite';
 import type { PortData } from '../graphEditor/nodeDataTransform';
 import type { DefaultSource } from '../../types';
-import { useStores, formatDebugValue } from '../../stores';
+import { useStores } from '../../stores';
 import { getLensLabel } from './lensUtils';
 import { BasePopover, POPUP_SURFACE_STYLE, type PopoverAnchorPosition } from './BasePopover';
 import {
@@ -25,6 +25,8 @@ import {
   formatDefaultSourceLabel,
   isTimeDefaultSource,
 } from '../defaultSourcePresentation';
+import { useDebugMiniView, useDebugPortMiniView } from '../debug-viz/useDebugMiniView';
+import { DebugEdgeValueDisplay } from '../debug-viz/DebugMiniView';
 
 interface PortInfoPopoverProps {
   port: PortData | null;
@@ -53,6 +55,16 @@ export const PortInfoPopover: React.FC<PortInfoPopoverProps> = observer(({
 }) => {
   const { debug, diagnostics } = useStores();
   const debugEnabled = debug.enabled;
+  const connectedEdgeId = debugEnabled && port?.connection ? port.connection.edgeId : null;
+  const edgeDebugData = useDebugMiniView(connectedEdgeId, null);
+  const outputPortDebugData = useDebugPortMiniView(
+    debugEnabled && !port?.connection && !isInput ? (blockId ?? null) : null,
+    debugEnabled && !port?.connection && !isInput ? (port?.id ?? null) : null,
+    null,
+  );
+  // [LAW:single-enforcer] useDebugMiniView hooks are the single UI polling
+  // boundary for debug values across edge/port inspectors.
+  const debugData = edgeDebugData ?? outputPortDebugData;
 
   useEffect(() => {
     const active = Boolean(port && anchorPosition);
@@ -66,15 +78,6 @@ export const PortInfoPopover: React.FC<PortInfoPopoverProps> = observer(({
     return null;
   }
 
-  let debugValue = undefined;
-  if (debugEnabled) {
-    if (port.connection) {
-      debugValue = debug.getEdgeValue(port.connection.edgeId);
-    } else if (!isInput && blockId) {
-      debugValue = debug.getPortValue(blockId, port.id);
-    }
-  }
-
   return (
     <BasePopover
       open={Boolean(port && anchorPosition)}
@@ -86,7 +89,9 @@ export const PortInfoPopover: React.FC<PortInfoPopoverProps> = observer(({
       paperStyle={{
         ...POPUP_SURFACE_STYLE,
         padding: '12px',
-        width: '260px',
+        width: '420px',
+        maxHeight: '520px',
+        overflowY: 'auto',
       }}
     >
       <div style={{ position: 'relative' }}>
@@ -208,29 +213,16 @@ export const PortInfoPopover: React.FC<PortInfoPopoverProps> = observer(({
             </Box>
           )}
 
-          {debugValue && debugValue.kind === 'scalar' && (
+          {debugEnabled && debugData && (
             <>
               <Divider color="#444" />
               <Box>
                 <Text size="xs" c="dimmed">
-                  Current Value
+                  Runtime Probe
                 </Text>
-                <Text size="lg" fw={600} c="cyan" mt={2} style={{ fontFamily: 'monospace' }}>
-                  {formatDebugValue(debugValue.value, debugValue.type)}
-                </Text>
-              </Box>
-            </>
-          )}
-          {debugValue && debugValue.kind === 'field' && (
-            <>
-              <Divider color="#444" />
-              <Box>
-                <Text size="xs" c="dimmed">
-                  Field [{debugValue.stats.count}]
-                </Text>
-                <Text size="sm" fw={600} c="violet" mt={2} style={{ fontFamily: 'monospace' }}>
-                  mean: {debugValue.stats.mean[0].toFixed(3)}
-                </Text>
+                <Box mt={6}>
+                  <DebugEdgeValueDisplay data={debugData} />
+                </Box>
               </Box>
             </>
           )}

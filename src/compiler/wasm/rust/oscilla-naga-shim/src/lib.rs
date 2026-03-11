@@ -665,10 +665,8 @@ fn emit_module_to_wgsl(module_ir: &NagaModuleIR, max_active_lanes: Option<u32>) 
     Ok(lines.join("\n"))
 }
 
-fn compile_internal(module_ir: NagaModuleIR, max_active_lanes: Option<u32>) -> Result<String, Vec<FormattedError>> {
-    let emitted_wgsl = emit_module_to_wgsl(&module_ir, max_active_lanes).map_err(|error| vec![error])?;
-
-    let module = naga::front::wgsl::parse_str(&emitted_wgsl).map_err(|error| {
+fn canonicalize_wgsl(wgsl_source: &str) -> Result<String, Vec<FormattedError>> {
+    let module = naga::front::wgsl::parse_str(wgsl_source).map_err(|error| {
         vec![make_error(
             format!("WGSL Parse Failure: {error}"),
             "Module",
@@ -698,6 +696,15 @@ fn compile_internal(module_ir: NagaModuleIR, max_active_lanes: Option<u32>) -> R
     Ok(canonical_wgsl)
 }
 
+fn compile_internal(module_ir: NagaModuleIR, max_active_lanes: Option<u32>) -> Result<String, Vec<FormattedError>> {
+    let emitted_wgsl = emit_module_to_wgsl(&module_ir, max_active_lanes).map_err(|error| vec![error])?;
+    canonicalize_wgsl(emitted_wgsl.as_str())
+}
+
+fn compilation_result_to_js(result: CompilationResult) -> JsValue {
+    serde_wasm_bindgen::to_value(&result).expect("failed to serialize compile result")
+}
+
 #[wasm_bindgen]
 pub fn compile_ir(module_ir: JsValue, max_active_lanes: Option<u32>) -> JsValue {
     console_error_panic_hook::set_once();
@@ -714,7 +721,7 @@ pub fn compile_ir(module_ir: JsValue, max_active_lanes: Option<u32>) -> JsValue 
                     "serde_wasm_bindgen",
                 )],
             };
-            return serde_wasm_bindgen::to_value(&result).expect("failed to serialize compile result");
+            return compilation_result_to_js(result);
         }
     };
 
@@ -731,7 +738,25 @@ pub fn compile_ir(module_ir: JsValue, max_active_lanes: Option<u32>) -> JsValue 
         },
     };
 
-    serde_wasm_bindgen::to_value(&result).expect("failed to serialize compile result")
+    compilation_result_to_js(result)
+}
+
+#[wasm_bindgen]
+pub fn compile_wgsl(wgsl_source: String) -> JsValue {
+    console_error_panic_hook::set_once();
+    let result = match canonicalize_wgsl(wgsl_source.as_str()) {
+        Ok(wgsl) => CompilationResult {
+            wgsl,
+            is_valid: true,
+            errors: vec![],
+        },
+        Err(errors) => CompilationResult {
+            wgsl: String::new(),
+            is_valid: false,
+            errors,
+        },
+    };
+    compilation_result_to_js(result)
 }
 
 #[wasm_bindgen]

@@ -251,6 +251,61 @@ async function main() {
     console.error('Warning: Canvas not found after 30s. Capturing anyway.');
   }
 
+  // 4b. Wait for a rendered (non-empty) frame when possible.
+  // Canvas mount can happen before compile/bootstrap finishes, which produces
+  // misleading all-dark captures.
+  const RENDER_READY_TIMEOUT_MS = 15_000;
+  const renderReadyStart = Date.now();
+  let renderReady = false;
+
+  while (Date.now() - renderReadyStart < RENDER_READY_TIMEOUT_MS) {
+    try {
+      const result = await cdp.send('Runtime.evaluate', {
+        expression: `(() => {
+          const canvas = document.querySelector('canvas');
+          if (!(canvas instanceof HTMLCanvasElement)) return false;
+          const w = canvas.width | 0;
+          const h = canvas.height | 0;
+          if (w <= 0 || h <= 0) return false;
+          const sampleW = Math.max(1, Math.min(192, w));
+          const sampleH = Math.max(1, Math.min(192, h));
+          const probe = document.createElement('canvas');
+          probe.width = sampleW;
+          probe.height = sampleH;
+          const ctx = probe.getContext('2d', { willReadFrequently: true });
+          if (!ctx) return false;
+          ctx.drawImage(canvas, 0, 0, sampleW, sampleH);
+          const data = ctx.getImageData(0, 0, sampleW, sampleH).data;
+          let brightPixels = 0;
+          for (let i = 0; i < data.length; i += 4) {
+            const r = data[i] ?? 0;
+            const g = data[i + 1] ?? 0;
+            const b = data[i + 2] ?? 0;
+            if ((r + g + b) > 72) {
+              brightPixels++;
+              if (brightPixels >= 24) return true;
+            }
+          }
+          return false;
+        })()`,
+        returnByValue: true,
+      });
+      if (result?.result?.value === true) {
+        renderReady = true;
+        break;
+      }
+    } catch {
+      // execution context can churn during reload/boot; retry until timeout
+    }
+    await sleep(200);
+  }
+
+  if (renderReady) {
+    console.error('Rendered frame detected.');
+  } else {
+    console.error('Warning: Render-ready probe timed out; capturing current canvas state.');
+  }
+
   // 5. Wait burst_wait before starting capture (default 0 — capture from animation start)
   if (burst.wait > 0) {
     console.error(`Waiting ${burst.wait}ms before capture...`);

@@ -224,9 +224,12 @@ export function executeAnimationFrame(
       const sinkTableSample = rendererSinkTableSample ?? null;
       const schedulerFrameCount = telemetry?.frameCount ?? 0;
       const overheadDispatches = 2; // instance assembly + draw-prep
+      const installedSimulationPassCount = installedGpuPassIds
+        .filter((passId) => passId !== 'draw.prep')
+        .length;
       const simulationPassCount = telemetry?.dispatchCounters.computeDispatchCount
         ? Math.max(1, telemetry.dispatchCounters.computeDispatchCount - overheadDispatches)
-        : Math.max(1, installedGpuPassIds.length);
+        : Math.max(1, installedSimulationPassCount);
       // [LAW:one-source-of-truth] Expected ping/pong parity derives from
       // the canonical simulation pass count emitted by runtime telemetry.
       const expectedPingPongIndexFromParity = (schedulerFrameCount * simulationPassCount) & 1;

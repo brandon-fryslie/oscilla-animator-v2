@@ -7,6 +7,9 @@ const hoisted = vi.hoisted(() => ({
   compileMock: vi.fn((_: unknown, options?: { maxActiveLanes?: number }) => ({
     wgsl: `const MAX_ACTIVE_LANES: u32 = ${options?.maxActiveLanes ?? 1}u;\n@compute @workgroup_size(64, 1, 1)\nfn compute_main() {}`,
   })),
+  compileWgslMock: vi.fn((source: string) => ({
+    wgsl: `${source}\n`,
+  })),
   MockNagaValidationError: class MockNagaValidationError extends Error {
     readonly errors: readonly { message: string; location: string; path: string }[];
 
@@ -22,11 +25,12 @@ vi.mock('../naga-bridge', () => ({
   NagaService: {
     boot: hoisted.bootMock,
     compile: hoisted.compileMock,
+    compileWgsl: hoisted.compileWgslMock,
   },
   NagaValidationError: hoisted.MockNagaValidationError,
 }));
 
-import { compileProgramWithNaga } from '../naga-compile';
+import { compileProgramWithNaga, compileWgslWithNaga } from '../naga-compile';
 
 function buildSimplePatch() {
   return buildPatch((b) => {
@@ -43,6 +47,7 @@ describe('compileProgramWithNaga', () => {
   beforeEach(() => {
     hoisted.bootMock.mockClear();
     hoisted.compileMock.mockClear();
+    hoisted.compileWgslMock.mockClear();
   });
 
   it('compiles lowering artifact to WGSL through NagaService boundary', async () => {
@@ -165,5 +170,31 @@ describe('compileProgramWithNaga', () => {
         error.message.includes('generatedComputeProgram.maxActiveLanes is missing or invalid'),
       ),
     ).toBe(true);
+  });
+
+  it('compiles raw WGSL through NagaService compileWgsl boundary', async () => {
+    const source = '@compute @workgroup_size(1)\nfn main() {}';
+    const compiled = await compileWgslWithNaga(source);
+    expect(compiled.kind).toBe('ok');
+    if (compiled.kind !== 'ok') return;
+    expect(hoisted.bootMock).toHaveBeenCalledTimes(1);
+    expect(hoisted.compileWgslMock).toHaveBeenCalledTimes(1);
+    expect(hoisted.compileWgslMock).toHaveBeenCalledWith(source);
+  });
+
+  it('maps raw WGSL validation errors to compile diagnostics', async () => {
+    hoisted.compileWgslMock.mockImplementationOnce(() => {
+      throw new hoisted.MockNagaValidationError([
+        {
+          message: 'bad wgsl',
+          location: 'Module',
+          path: 'WGSL parse',
+        },
+      ]);
+    });
+    const compiled = await compileWgslWithNaga('@compute @workgroup_size(1)\nfn main() {');
+    expect(compiled.kind).toBe('error');
+    if (compiled.kind !== 'error') return;
+    expect(compiled.errors[0]?.message).toContain('bad wgsl');
   });
 });

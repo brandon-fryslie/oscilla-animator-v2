@@ -37,8 +37,8 @@ if (!entryJs.includes('oscilla_naga_shim_bg.wasm')) {
   fail('Entry shim does not import compiled wasm payload.');
 }
 
-if (!entryJs.includes('compile_ir') || !entryJs.includes('init')) {
-  fail('Entry shim does not export required compile_ir/init symbols.');
+if (!entryJs.includes('compile_ir') || !entryJs.includes('compile_wgsl') || !entryJs.includes('init')) {
+  fail('Entry shim does not export required compile_ir/compile_wgsl/init symbols.');
 }
 
 const wasmPath = path.join(pkgDir, 'oscilla_naga_shim_bg.wasm');

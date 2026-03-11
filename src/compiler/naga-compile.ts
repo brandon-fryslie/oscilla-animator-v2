@@ -50,6 +50,14 @@ function toCompileErrors(
   });
 }
 
+function toModuleCompileErrors(error: NagaValidationError): readonly CompileError[] {
+  return error.errors.map((entry) => ({
+    code: 'IRValidationFailed',
+    message: `${entry.message} (${entry.location})`,
+    details: { path: entry.path },
+  }) as const);
+}
+
 export async function compileProgramWithNaga(
   program: CompiledProgramIR,
 ): Promise<NagaCompilationOutcome> {
@@ -114,6 +122,47 @@ export async function compileProgramWithNaga(
         {
           code: 'IRValidationFailed',
           message: `Naga compilation bridge failure: ${error instanceof Error ? error.message : String(error)}`,
+        },
+      ],
+    };
+  }
+}
+
+export async function compileWgslWithNaga(
+  wgslSource: string,
+): Promise<NagaCompilationOutcome> {
+  if (typeof wgslSource !== 'string' || wgslSource.trim().length === 0) {
+    return {
+      kind: 'error',
+      errors: [
+        {
+          code: 'IRValidationFailed',
+          message: 'WGSL source is missing or empty',
+        },
+      ],
+    };
+  }
+
+  try {
+    await NagaService.boot();
+    const compiled = NagaService.compileWgsl(wgslSource);
+    return {
+      kind: 'ok',
+      wgsl: compiled.wgsl,
+    };
+  } catch (error) {
+    if (error instanceof NagaValidationError) {
+      return {
+        kind: 'error',
+        errors: toModuleCompileErrors(error),
+      };
+    }
+    return {
+      kind: 'error',
+      errors: [
+        {
+          code: 'IRValidationFailed',
+          message: `Naga WGSL compilation bridge failure: ${error instanceof Error ? error.message : String(error)}`,
         },
       ],
     };

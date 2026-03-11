@@ -601,7 +601,7 @@ Requires:
 ### Color Functions (Deferred)
 
 Future support for color operations:
-- `hsl(h: float, s: float, l: float) → color`
+- `oklch(h: float, s: float, l: float) → color`
 - `rgb(r: float, g: float, b: float) → color`
 
 Requires:

@@ -10,6 +10,17 @@ export function compile_ir(module_ir, max_active_lanes) {
     return ret;
 }
 
+/**
+ * @param {string} wgsl_source
+ * @returns {any}
+ */
+export function compile_wgsl(wgsl_source) {
+    const ptr0 = passStringToWasm0(wgsl_source, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.compile_wgsl(ptr0, len0);
+    return ret;
+}
+
 export function init() {
     wasm.init();
 }

@@ -44,7 +44,7 @@ patch "Error Isolation Demo" {
   }
 
   # Per-element rainbow
-  block "MakeColorHSL" "color" {
+  block "MakeColorOKLCH" "color" {
     outputs {
       color = render.color
     }

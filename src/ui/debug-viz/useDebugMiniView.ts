@@ -16,7 +16,7 @@ import type { TrackedEntry } from './HistoryService';
 import type { SpyReadbackMeta } from './ValueRenderer';
 
 /** Poll interval for value updates (ms). */
-const POLL_INTERVAL_MS = 250;
+const POLL_INTERVAL_MS = 100;
 
 /**
  * Resolved data for the DebugMiniView to render.
