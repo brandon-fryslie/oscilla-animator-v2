@@ -45,7 +45,7 @@ export function register(): void {
       },
       seed: {
         label: 'Seed',
-        type: canonicalType(FLOAT, unitVar('noisy_broadcast_u'), { cardinality: NOISY_BROADCAST_IN_CARD }),
+        type: inferType(FLOAT, unitVar('noisy_broadcast_u'), { cardinality: NOISY_BROADCAST_IN_CARD }),
         defaultValue: 0,
         defaultSource: defaultSourceConst(0),
         exposedAsPort: true,
