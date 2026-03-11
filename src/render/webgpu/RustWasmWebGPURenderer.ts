@@ -1,6 +1,10 @@
 import type { RenderShapeBankSource } from './WebGPUShapeBankManager';
 import type { IndirectArgsReadbackSnapshot } from './WebGPUIndirectArgsInspector';
-import type { DrawPrepRenderContract } from '../types';
+import type {
+  DrawPrepRenderContract,
+  MatrixViewportContract,
+  RuntimeInputSignalContract,
+} from '../types';
 import { isRuntimeConsoleEnabled } from '../../testing/test-params';
 import { reportRenderIssue } from '../render-issues';
 import {
@@ -21,41 +25,11 @@ import {
 } from '../rust/runtime-input-layout';
 import { getNavigatorGpu } from './gpu-api';
 
-interface RenderInput extends DrawPrepRenderContract {
+interface RenderInput extends DrawPrepRenderContract, MatrixViewportContract, RuntimeInputSignalContract {
   readonly shapeBank: RenderShapeBankSource;
-  readonly width: number;
-  readonly height: number;
-  readonly zoom: number;
-  readonly panX: number;
-  readonly panY: number;
-  readonly timeMs: number;
-  readonly inputMouseX: number;
-  readonly inputMouseY: number;
-  readonly inputMouseButtons: number;
-  readonly inputAudioLow: number;
-  readonly inputAudioMid: number;
-  readonly inputAudioHigh: number;
-  readonly inputGaugeActive: number;
-  readonly drawPrepSinkTableV1: Uint32Array;
-  readonly drawPrepSinkTableWordCount: number;
 }
 
-type RuntimeViewportFrame = Pick<
-  RenderInput,
-  | 'width'
-  | 'height'
-  | 'zoom'
-  | 'panX'
-  | 'panY'
-  | 'timeMs'
-  | 'inputMouseX'
-  | 'inputMouseY'
-  | 'inputMouseButtons'
-  | 'inputAudioLow'
-  | 'inputAudioMid'
-  | 'inputAudioHigh'
-  | 'inputGaugeActive'
->;
+type RuntimeViewportFrame = MatrixViewportContract & RuntimeInputSignalContract;
 
 export interface RuntimeEventBreadcrumb {
   readonly severity: 'error' | 'fatal';
