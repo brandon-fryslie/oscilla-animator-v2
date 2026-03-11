@@ -497,6 +497,11 @@ export interface FrameCache {
   /** Frame stamp for `instanceLaneCounts` validity. */
   instanceLaneCountFrameId?: number;
 
+  /** Optional draw-prep sink-table scratch words for renderer handoff. */
+  drawPrepSinkTableWords?: Uint32Array;
+  drawPrepSinkTableWordCount?: number;
+  drawPrepSinkTableFrameId?: number;
+
 }
 
 /**
@@ -514,6 +519,9 @@ export function createFrameCache(
     scalarExprToArenaAddress: null,
     instanceLaneCounts: new Map<string, number>(),
     instanceLaneCountFrameId: 0,
+    drawPrepSinkTableWords: undefined,
+    drawPrepSinkTableWordCount: 0,
+    drawPrepSinkTableFrameId: 0,
   };
 }
 
