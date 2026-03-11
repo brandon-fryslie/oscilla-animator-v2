@@ -3,6 +3,7 @@ import type { IndirectArgsReadbackSnapshot } from './WebGPUIndirectArgsInspector
 import type { DrawPrepRenderContract } from '../types';
 import { isRuntimeConsoleEnabled } from '../../testing/test-params';
 import { reportRenderIssue } from '../render-issues';
+import { dumpShaderWithLineNumbers } from '../shader-debug';
 import {
   computeRustRendererShapeBankWordCapacity,
   computeRustRendererSinkTableWordCapacity,
@@ -215,24 +216,6 @@ function previewWgsl(wgsl: string, maxLines: number = 4): string {
     .slice(0, maxLines)
     .map((line) => line.trim())
     .join(' | ');
-}
-
-function formatWgslWithLineNumbers(wgsl: string): string {
-  return wgsl
-    .split('\n')
-    .map((line, index) => `${String(index + 1).padStart(4, ' ')} | ${line}`)
-    .join('\n');
-}
-
-function dumpShaderWithLineNumbers(name: string, wgsl: string): void {
-  if (!RUNTIME_CONSOLE_ENABLED) {
-    return;
-  }
-  // [LAW:verifiable-goals] Runtime shader dumps include line numbers so
-  // WebGPU validation line/column errors are directly traceable.
-  console.groupCollapsed(`[runtimeConsole] Generated WGSL: ${name}`);
-  console.info(formatWgslWithLineNumbers(wgsl));
-  console.groupEnd();
 }
 
 function hashWgslSource(wgsl: string): string {
@@ -830,7 +813,9 @@ export class WebGPURenderer {
     // at this renderer boundary before worker transport.
     const validatedPasses = [...validateGpuPassBundle(passes)];
     for (const pass of validatedPasses) {
-      dumpShaderWithLineNumbers(pass.passId, pass.wgsl);
+      // [LAW:verifiable-goals] Runtime shader dumps include line numbers so
+      // WebGPU validation line/column errors are directly traceable.
+      dumpShaderWithLineNumbers(pass.passId, pass.wgsl, RUNTIME_CONSOLE_ENABLED);
     }
     this.lastInstalledPassIds = validatedPasses.map((pass) => pass.passId);
     if (RUNTIME_CONSOLE_ENABLED) {
