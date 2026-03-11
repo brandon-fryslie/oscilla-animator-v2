@@ -20,6 +20,7 @@ import { cardinalityVarId } from '../../core/ids';
 import { defaultSourceConst } from '../../types';
 import { OpCode } from '../../compiler/ir/types';
 import { rewriteFieldType } from './_helpers';
+import { promoteToMany } from '../lower-utils';
 
 // [LAW:one-source-of-truth] Field cardinality behavior is declared on CT/ICT port types.
 const SPIRAL_FIELD_CARD = cardinalityVar(cardinalityVarId('spiral_fields'), {
@@ -131,7 +132,7 @@ export function register(): void {
   
       // rotation = angle (the spiral angle per element, already computed)
       // scale = broadcast constant 1.0
-      const scaleField = ctx.b.broadcast(const1, floatFieldType);
+      const scaleField = promoteToMany(const1, floatFieldType, ctx.b);
   
       return {
         outputsById: {
