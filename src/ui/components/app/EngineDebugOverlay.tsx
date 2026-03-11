@@ -11,6 +11,47 @@ interface EngineErrorDetail {
   readonly fatal: boolean;
 }
 
+interface RuntimeTelemetryDetail {
+  readonly kind: 'runtimeTelemetry';
+  readonly schedulerState: 'Booting' | 'Running' | 'Paused' | 'Lost';
+  readonly fps: number;
+  readonly telemetry: {
+    readonly meanMs: number;
+    readonly stdDevMs: number;
+    readonly sampleCount: number;
+    readonly frameCount: number;
+    readonly stageTimings: {
+      readonly inputMarshalMs: number;
+      readonly simulationDispatchMs: number;
+      readonly fluidPassChainMs: number;
+      readonly drawPrepMs: number;
+      readonly renderMs: number;
+      readonly swapMs: number;
+      readonly totalFrameMs: number;
+    };
+    readonly dispatchCounters: {
+      readonly computeDispatchCount: number;
+      readonly computeWorkgroupCount: number;
+      readonly activeLaneCount: number;
+      readonly guardedLaneCount: number;
+    };
+    readonly resourceStats: {
+      readonly sinkTableWordCount: number;
+      readonly totalInstanceCount: number;
+      readonly pingPongIndex: number;
+      readonly canvasWidth: number;
+      readonly canvasHeight: number;
+    };
+    readonly lastEvent: {
+      readonly severity: 'error' | 'fatal';
+      readonly code: string;
+      readonly stage: string;
+      readonly message: string;
+      readonly emittedAtMs: number;
+    } | null;
+  };
+}
+
 function isEngineErrorDetail(value: unknown): value is EngineErrorDetail {
   if (!value || typeof value !== 'object') {
     return false;
@@ -22,6 +63,20 @@ function isEngineErrorDetail(value: unknown): value is EngineErrorDetail {
     && typeof candidate.message === 'string'
     && typeof candidate.location === 'string'
     && typeof candidate.fatal === 'boolean'
+  );
+}
+
+function isRuntimeTelemetryDetail(value: unknown): value is RuntimeTelemetryDetail {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+  const candidate = value as Partial<RuntimeTelemetryDetail>;
+  return (
+    candidate.kind === 'runtimeTelemetry'
+    && typeof candidate.schedulerState === 'string'
+    && typeof candidate.fps === 'number'
+    && !!candidate.telemetry
+    && typeof candidate.telemetry === 'object'
   );
 }
 
@@ -138,6 +193,82 @@ const ShaderInspectorPanel: React.FC = () => {
   );
 };
 
+const RuntimeTelemetryPanel: React.FC = observer(() => {
+  const { diagnostics } = useStores();
+  const latest = useMemo(() => {
+    for (let index = diagnostics.logs.length - 1; index >= 0; index -= 1) {
+      const entry = diagnostics.logs[index];
+      if (entry && isRuntimeTelemetryDetail(entry.data)) {
+        return { timestamp: entry.timestamp, payload: entry.data };
+      }
+    }
+    return null;
+  }, [diagnostics.logs]);
+
+  if (!latest) {
+    return null;
+  }
+
+  const { payload } = latest;
+  const telemetry = payload.telemetry;
+  const stageTimings = telemetry.stageTimings;
+  const dispatchCounters = telemetry.dispatchCounters;
+  const resourceStats = telemetry.resourceStats;
+  const lastEvent = telemetry.lastEvent;
+
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        top: 56,
+        right: 12,
+        width: 'min(420px, 90vw)',
+        zIndex: 55,
+        border: '1px solid #1e3a8a',
+        borderRadius: 10,
+        background: '#0b1220',
+        color: '#dbeafe',
+        fontFamily: 'monospace',
+        fontSize: 12,
+        boxShadow: '0 12px 24px rgba(0, 0, 0, 0.45)',
+        overflow: 'hidden',
+      }}
+    >
+      <div
+        style={{
+          padding: '8px 10px',
+          borderBottom: '1px solid #1e3a8a',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+        }}
+      >
+        <strong>Runtime Telemetry</strong>
+        <span style={{ color: '#93c5fd' }}>{payload.schedulerState}</span>
+      </div>
+      <div style={{ padding: 10, display: 'grid', gap: 6 }}>
+        <div>FPS {payload.fps} | Frame {telemetry.frameCount} | Samples {telemetry.sampleCount}</div>
+        <div>Tick {stageTimings.totalFrameMs.toFixed(2)}ms | Mean {telemetry.meanMs.toFixed(2)}ms | StdDev {telemetry.stdDevMs.toFixed(2)}ms</div>
+        <div>Dispatch {dispatchCounters.computeDispatchCount} | Workgroups {dispatchCounters.computeWorkgroupCount}</div>
+        <div>Instances {resourceStats.totalInstanceCount} | SinkWords {resourceStats.sinkTableWordCount} | PingPong {resourceStats.pingPongIndex}</div>
+        <div>Canvas {resourceStats.canvasWidth}x{resourceStats.canvasHeight}</div>
+        <div>
+          Stages in {stageTimings.inputMarshalMs.toFixed(2)}
+          {' | '}sim {stageTimings.simulationDispatchMs.toFixed(2)}
+          {' | '}draw {stageTimings.drawPrepMs.toFixed(2)}
+          {' | '}render {stageTimings.renderMs.toFixed(2)}
+          {' | '}swap {stageTimings.swapMs.toFixed(2)}
+        </div>
+        {lastEvent ? (
+          <div style={{ color: lastEvent.severity === 'fatal' ? '#fda4af' : '#fcd34d' }}>
+            Last event [{lastEvent.code}] {lastEvent.stage}: {lastEvent.message}
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+});
+
 const EngineErrorPanel: React.FC = observer(() => {
   const { diagnostics } = useStores();
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
@@ -244,7 +375,7 @@ const EngineErrorPanel: React.FC = observer(() => {
 export const EngineDebugOverlay: React.FC = () => (
   <>
     <ShaderInspectorPanel />
+    <RuntimeTelemetryPanel />
     <EngineErrorPanel />
   </>
 );
-

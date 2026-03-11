@@ -214,6 +214,29 @@ export function executeAnimationFrame(
     const statsText = `FPS: ${state.fps} | DrawOps: ${drawOps} | `
       + `Tick: ${tickMs.toFixed(1)}ms`;
     onStatsUpdate?.(statsText);
+    if (telemetry) {
+      // [LAW:single-enforcer] AnimationLoop is the one UI-facing bridge that
+      // publishes runtime heartbeat telemetry to diagnostics consumers.
+      store.diagnostics.log({
+        level: 'debug',
+        message: `Runtime telemetry heartbeat (${schedulerState})`,
+        data: {
+          kind: 'runtimeTelemetry',
+          schedulerState,
+          fps: state.fps,
+          telemetry: {
+            meanMs: telemetry.meanMs,
+            stdDevMs: telemetry.stdDevMs,
+            sampleCount: telemetry.sampleCount,
+            frameCount: telemetry.frameCount,
+            stageTimings: telemetry.stageTimings,
+            dispatchCounters: telemetry.dispatchCounters,
+            resourceStats: telemetry.resourceStats,
+            lastEvent: telemetry.lastEvent,
+          },
+        },
+      });
+    }
     if (RUNTIME_CONSOLE_ENABLED) {
       const programScheduleSteps = Array.isArray(currentProgram?.schedule?.steps) ? currentProgram.schedule.steps : [];
       const renderStepCount = programScheduleSteps.filter((step: { kind?: string }) => step?.kind === 'render').length;
