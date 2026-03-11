@@ -16,53 +16,21 @@
  * - Uses MobX observer pattern for reactivity
  */
 
-import React, { useMemo, useState } from 'react';
+import React, { useState } from 'react';
 import { observer } from 'mobx-react-lite';
 import { ToggleButton, ToggleButtonGroup } from '@mui/material';
 import { useStores } from '../../../stores';
 import type { RootStore } from '../../../stores';
 import type { LogEntry } from '../../../stores/DiagnosticsStore';
 import type { Diagnostic, Severity, TargetRef, DiagnosticAction } from '../../../diagnostics/types';
+import type { RustRendererSchedulerState } from '../../../render/rust/worker-protocol';
+import type { RustRendererRuntimeTelemetry } from '../../../render/webgpu/RustWasmWebGPURenderer';
 
 interface RuntimeTelemetryDetail {
   readonly kind: 'runtimeTelemetry';
-  readonly schedulerState: 'Booting' | 'Running' | 'Paused' | 'Lost';
+  readonly schedulerState: RustRendererSchedulerState;
   readonly fps: number;
-  readonly telemetry: {
-    readonly meanMs: number;
-    readonly stdDevMs: number;
-    readonly sampleCount: number;
-    readonly frameCount: number;
-    readonly stageTimings: {
-      readonly inputMarshalMs: number;
-      readonly simulationDispatchMs: number;
-      readonly fluidPassChainMs: number;
-      readonly drawPrepMs: number;
-      readonly renderMs: number;
-      readonly swapMs: number;
-      readonly totalFrameMs: number;
-    };
-    readonly dispatchCounters: {
-      readonly computeDispatchCount: number;
-      readonly computeWorkgroupCount: number;
-      readonly activeLaneCount: number;
-      readonly guardedLaneCount: number;
-    };
-    readonly resourceStats: {
-      readonly sinkTableWordCount: number;
-      readonly totalInstanceCount: number;
-      readonly pingPongIndex: number;
-      readonly canvasWidth: number;
-      readonly canvasHeight: number;
-    };
-    readonly lastEvent: {
-      readonly severity: 'error' | 'fatal';
-      readonly code: string;
-      readonly stage: string;
-      readonly message: string;
-      readonly emittedAtMs: number;
-    } | null;
-  };
+  readonly telemetry: RustRendererRuntimeTelemetry;
 }
 
 interface RuntimeTelemetryLog {
@@ -138,10 +106,7 @@ export const DiagnosticConsole: React.FC = observer(() => {
 
   // [LAW:one-source-of-truth] Renderer heartbeat telemetry is surfaced from
   // diagnostics logs, which are the canonical UI debug stream.
-  const runtimeTelemetry = useMemo(
-    () => selectLatestRuntimeTelemetryLog(diagnosticsStore.logs),
-    [diagnosticsStore.logs]
-  );
+  const runtimeTelemetry = selectLatestRuntimeTelemetryLog(diagnosticsStore.logs);
 
   return (
     <div
