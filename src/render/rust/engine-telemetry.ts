@@ -181,29 +181,53 @@ export interface ParsedSchedulerPacket {
   readonly events: readonly RustRendererRuntimeEvent[];
 }
 
-export function parseSchedulerPacket(packet: unknown): ParsedSchedulerPacket | null {
-  // Validate envelope object.
-  if (!packet || typeof packet !== 'object') return null;
+function failSchedulerPacketContract(details: string): never {
+  throw new Error(`Rust scheduler telemetry contract violation: ${details}`);
+}
+
+function requireSchedulerState(value: unknown, path: string): RustRendererSchedulerState {
+  if (!isSchedulerState(value)) {
+    failSchedulerPacketContract(`${path} must be one of Booting|Running|Paused|Lost`);
+  }
+  return value;
+}
+
+export function parseSchedulerPacket(packet: unknown): ParsedSchedulerPacket {
+  if (!packet || typeof packet !== 'object') {
+    failSchedulerPacketContract('packet must be an object');
+  }
   const candidate = packet as Partial<RawSchedulerPacket>;
-  // Validate mandatory packet fields.
-  if (typeof candidate.state !== 'string' || !isRawSchedulerHeartbeat(candidate.heartbeat)) return null;
-  // Validate event list shape.
-  if (!Array.isArray(candidate.events)) return null;
-  if (!candidate.events.every(isRawRuntimeEvent)) return null;
-  // Validate scheduler-state enums.
-  if (!isSchedulerState(candidate.state)) return null;
-  if (!isSchedulerState(candidate.heartbeat.state)) return null;
-  if (!candidate.events.every((event) => isSchedulerState(event.state))) return null;
+  if (typeof candidate.state !== 'string') {
+    failSchedulerPacketContract('packet.state must be a string');
+  }
+  const heartbeatCandidate = candidate.heartbeat;
+  if (!isRawSchedulerHeartbeat(heartbeatCandidate)) {
+    failSchedulerPacketContract('packet.heartbeat is missing required telemetry fields');
+  }
+  const eventsCandidate = candidate.events;
+  if (!Array.isArray(eventsCandidate)) {
+    failSchedulerPacketContract('packet.events must be an array');
+  }
+  if (!eventsCandidate.every(isRawRuntimeEvent)) {
+    failSchedulerPacketContract('packet.events contains invalid runtime-event payloads');
+  }
+  const rawEvents = eventsCandidate as readonly RawRuntimeEvent[];
+
+  const packetState = requireSchedulerState(candidate.state, 'packet.state');
+  const heartbeatState = requireSchedulerState(heartbeatCandidate.state, 'packet.heartbeat.state');
+  const events = rawEvents.map((event, index) => toOutboundRuntimeEvent(event, index));
 
   return {
-    state: candidate.state,
-    heartbeat: toOutboundHeartbeat(candidate.heartbeat),
-    events: candidate.events.map(toOutboundRuntimeEvent),
+    state: packetState,
+    heartbeat: toOutboundHeartbeat(heartbeatCandidate, heartbeatState),
+    events,
   };
 }
 
-function toOutboundHeartbeat(raw: RawSchedulerHeartbeat): RustRendererSchedulerHeartbeat {
-  const state = isSchedulerState(raw.state) ? raw.state : 'Lost';
+function toOutboundHeartbeat(
+  raw: RawSchedulerHeartbeat,
+  state: RustRendererSchedulerState,
+): RustRendererSchedulerHeartbeat {
   return {
     type: 'SCHEDULER_HEARTBEAT',
     state,
@@ -220,14 +244,14 @@ function toOutboundHeartbeat(raw: RawSchedulerHeartbeat): RustRendererSchedulerH
   };
 }
 
-function toOutboundRuntimeEvent(raw: RawRuntimeEvent): RustRendererRuntimeEvent {
+function toOutboundRuntimeEvent(raw: RawRuntimeEvent, index: number): RustRendererRuntimeEvent {
   return {
     type: 'RUNTIME_EVENT',
     severity: asRuntimeSeverity(raw.severity),
     code: raw.code,
     stage: raw.stage,
     message: raw.message,
-    state: isSchedulerState(raw.state) ? raw.state : 'Lost',
+    state: requireSchedulerState(raw.state, `packet.events[${String(index)}].state`),
     frameCount: raw.frameCount,
     loopCount: raw.loopCount,
     emittedAtMs: raw.emittedAtMs,

@@ -141,21 +141,32 @@ function startRuntimePolling(): void {
       if (rawPacket == null) {
         return;
       }
-      const packet = parseSchedulerPacket(rawPacket);
-      if (packet) {
-        postWorkerMessage(packet.heartbeat);
-        if (packet.heartbeat.state === 'Lost') {
-          postDeviceLost('scheduler_lost', 'Rust scheduler entered Lost state');
+      const packet = (() => {
+        try {
+          // [LAW:single-enforcer] Packet contract validation is enforced at
+          // the telemetry parser boundary, not duplicated at worker callsites.
+          return parseSchedulerPacket(rawPacket);
+        } catch (error) {
+          postWorkerFatalError(
+            'scheduler_packet_invalid',
+            `Rust worker received invalid scheduler observability payload: ${error instanceof Error ? error.message : String(error)}`,
+          );
+          return null;
         }
-        for (const event of packet.events) {
-          postWorkerMessage(event);
-          if (event.state === 'Lost') {
-            postDeviceLost(event.code, event.message);
-          }
-        }
+      })();
+      if (packet === null) {
         return;
       }
-      postWorkerFatalError('scheduler_packet_invalid', 'Rust worker received invalid scheduler observability payload');
+      postWorkerMessage(packet.heartbeat);
+      if (packet.heartbeat.state === 'Lost') {
+        postDeviceLost('scheduler_lost', 'Rust scheduler entered Lost state');
+      }
+      for (const event of packet.events) {
+        postWorkerMessage(event);
+        if (event.state === 'Lost') {
+          postDeviceLost(event.code, event.message);
+        }
+      }
     } catch (error) {
       postWorkerFatalError(
         'runtime_poll_failure',

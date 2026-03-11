@@ -44,6 +44,7 @@ function makeDeps(overrides: Partial<any> = {}) {
         recordJank: vi.fn(),
         updateFrameTiming: vi.fn(),
         updateMemoryStats: vi.fn(),
+        log: vi.fn(),
       },
       continuity: { updateFromRuntime: vi.fn() },
       viewport: {
@@ -157,14 +158,35 @@ describe('AnimationLoop', () => {
     const { deps, renderer } = makeDeps({ onStatsUpdate: statsSink });
     renderer.getLatestRuntimeTelemetry.mockReturnValue({
       meanMs: 0.8,
+      stdDevMs: 0.2,
+      sampleCount: 60,
       frameCount: 42,
       stageTimings: {
+        inputMarshalMs: 0.1,
+        simulationDispatchMs: 0.2,
+        fluidPassChainMs: 0.0,
+        drawPrepMs: 0.1,
+        renderMs: 0.7,
+        swapMs: 0.4,
         totalFrameMs: 1.5,
       },
+      dispatchCounters: {
+        computeDispatchCount: 3,
+        computeWorkgroupCount: 9,
+        activeLaneCount: 7,
+        guardedLaneCount: 0,
+      },
       resourceStats: {
+        shapeBankWordCount: 64,
         totalInstanceCount: 7,
         sinkTableWordCount: 64,
+        indexedRecordCount: 1,
+        nonIndexedRecordCount: 1,
+        canvasWidth: 100,
+        canvasHeight: 80,
+        pingPongIndex: 1,
       },
+      lastEvent: null,
     });
     const state = createAnimationLoopState();
     state.lastFpsUpdate = 0;
@@ -178,6 +200,13 @@ describe('AnimationLoop', () => {
     const line = statsSink.mock.calls[0]?.[0] as string;
     expect(line).toContain('FPS');
     expect(line).toContain('DrawOps: 7');
+    expect(deps.store.diagnostics.log).toHaveBeenCalledWith(expect.objectContaining({
+      level: 'debug',
+      data: expect.objectContaining({
+        kind: 'runtimeTelemetry',
+        schedulerState: 'Running',
+      }),
+    }));
   });
 
   afterEach(() => {
