@@ -3,7 +3,7 @@
  *
  * Blend between two colors with parameter t.
  * Uses shortest-arc hue interpolation (correct for circular hue space).
- * s/l/a use standard linear lerp.
+ * c/l/a use standard linear lerp.
  */
 
 import { registerBlock } from '../registry';
@@ -55,12 +55,12 @@ export function register(): void {
   
       // Extract channels from both colors
       const ah = ctx.b.extract(aInput.id, 0, intermediateFloat);
-      const as = ctx.b.extract(aInput.id, 1, intermediateFloat);
+      const ac = ctx.b.extract(aInput.id, 1, intermediateFloat);
       const al = ctx.b.extract(aInput.id, 2, intermediateFloat);
       const aa = ctx.b.extract(aInput.id, 3, intermediateFloat);
   
       const bh = ctx.b.extract(bInput.id, 0, intermediateFloat);
-      const bs = ctx.b.extract(bInput.id, 1, intermediateFloat);
+      const bc = ctx.b.extract(bInput.id, 1, intermediateFloat);
       const bl = ctx.b.extract(bInput.id, 2, intermediateFloat);
       const ba = ctx.b.extract(bInput.id, 3, intermediateFloat);
   
@@ -90,14 +90,14 @@ export function register(): void {
       const hSum = zipAuto([ah, dhScaled], addFn, intermediateFloat, ctx.b);
       const hOut = mapAuto(hSum, wrap01Fn, intermediateFloat, ctx.b);
   
-      // Linear lerp for s, l, a
+      // Linear lerp for c, l, a
       const lerpFn = ctx.b.opcode(OpCode.Lerp);
-      const sOut = zipAuto([as, bs, tClamped], lerpFn, intermediateFloat, ctx.b);
+      const cOut = zipAuto([ac, bc, tClamped], lerpFn, intermediateFloat, ctx.b);
       const lOut = zipAuto([al, bl, tClamped], lerpFn, intermediateFloat, ctx.b);
       const aOut = zipAuto([aa, ba, tClamped], lerpFn, intermediateFloat, ctx.b);
   
       // Reconstruct
-      const result = ctx.b.construct([hOut, sOut, lOut, aOut], outType);
+      const result = ctx.b.construct([hOut, cOut, lOut, aOut], outType);
   
       return {
         outputsById: {

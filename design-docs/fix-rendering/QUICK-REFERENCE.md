@@ -86,7 +86,7 @@ if (expr.opcode === 'log' && arg <= 0) {
 
 ### Wrong Colors
 1. `src/runtime/ValueExprMaterializer.ts` — Lines 410, 412 (sqrt, log)
-2. Color space conversion (hslToRgb)
+2. Color space conversion (oklchToRgb)
 
 ### Wrong Positions/Transforms
 1. `src/shapes/topologies.ts` — Lines 34, 64 (rotation)

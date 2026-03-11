@@ -33,6 +33,7 @@ import type { EdgeValueResult } from '../../services/DebugService';
 import type { EdgeMetadata } from '../../services/mapDebugEdges';
 import type { CanonicalType } from '../../core/canonical-types';
 import { payloadStride, requireInst } from '../../core/canonical-types';
+import { oklchToEncodedSrgb, toCssOklch } from '../../core/color/oklch';
 
 // Side-effect import: registers all renderers
 import './renderers/register';
@@ -293,11 +294,12 @@ export function FieldValueSection({ value, meta, fieldHistory, fieldInstanceHist
   // Value display (always shown before charts)
   const isColor = meta.type.payload.kind === 'color';
   if (isColor) {
-    // Mean swatch + hex reference
-    const meanR = stats.mean[0], meanG = stats.mean[1], meanB = stats.mean[2], meanA = stats.mean[3];
+    // Mean swatch + hex reference (derived from OKLCH payload)
+    const meanH = stats.mean[0], meanC = stats.mean[1], meanL = stats.mean[2], meanA = stats.mean[3];
+    const [meanR, meanG, meanB] = oklchToEncodedSrgb(meanH, meanC, meanL);
     const hex = (v: number) => Math.round(Math.max(0, Math.min(1, v)) * 255).toString(16).padStart(2, '0');
     const hexStr = `#${hex(meanR)}${hex(meanG)}${hex(meanB)}`;
-    const rgba = `rgba(${Math.round(meanR * 255)}, ${Math.round(meanG * 255)}, ${Math.round(meanB * 255)}, ${meanA})`;
+    const cssColor = toCssOklch(meanH, meanC, meanL, meanA);
 
     children.push(
       React.createElement('div', { key: 'mean-ref', style: { display: 'flex', alignItems: 'center', gap: '6px' } },
@@ -305,7 +307,7 @@ export function FieldValueSection({ value, meta, fieldHistory, fieldInstanceHist
           style: {
             width: '14px', height: '14px', borderRadius: '2px',
             border: '1px solid rgba(255,255,255,0.2)',
-            background: rgba, position: 'relative' as const,
+            background: cssColor, position: 'relative' as const,
           },
         }),
         React.createElement('span', { style: { color: '#aaa', fontSize: '11px', fontFamily: 'monospace' } }, `mean: ${hexStr}`),

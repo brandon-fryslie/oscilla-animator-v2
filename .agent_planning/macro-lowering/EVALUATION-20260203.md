@@ -95,7 +95,7 @@ The macro lowering system described in `01-macro-lowering.md` has almost zero im
    - Phase C: Implement `LowerSandbox` as a restricted `IRBuilder` proxy. Wire it into DefaultSource's lower() for macro expansion.
    - Phase D: Migrate pure blocks to two-result model (exprOutputs + effects). This is the big migration.
 
-3. **Create HueRainbow block** (or choose an existing block like `MakeColorHSL` as the color default target). The design doc's example can't work without this.
+3. **Create HueRainbow block** (or choose an existing block like `MakeColorOKLCH` as the color default target). The design doc's example can't work without this.
 
 4. **Do NOT attempt the full pure lowering contract yet**. The `allocSlot()` calls in 80+ blocks are deeply embedded. Extracting them as effects is a major refactor that should be planned separately.
 
@@ -108,7 +108,7 @@ The macro lowering system described in `01-macro-lowering.md` has almost zero im
 
 2. **Color default target**: The design doc says "color -> invoke HueRainbow(phaseA)". HueRainbow doesn't exist. Should we:
    (a) Create a new HueRainbow block
-   (b) Use existing `MakeColorHSL` block as the macro target
+   (b) Use existing `MakeColorOKLCH` block as the macro target
    (c) Use a simpler `Const({r:1,g:0,b:1,a:1})` fallback for now
 
 3. **allocSlot migration scope**: The two-result model (exprOutputs + effects) requires blocks to stop calling allocSlot. Is this meant to be a full codebase migration, or only for blocks invoked as macros by DefaultSource?

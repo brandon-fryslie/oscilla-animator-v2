@@ -2,7 +2,7 @@
  * ColorPicker Block
  *
  * A constant authoring source that produces a user-space color (OKLCH+A).
- * h/s/l/a are exposed as inputs with defaults, allowing both constant
+ * h/c/l/a are exposed as inputs with defaults, allowing both constant
  * use (via UI sliders on the defaults) and dynamic wiring.
  */
 
@@ -33,7 +33,7 @@ export function register(): void {
     loweringPurity: 'pure',
     inputs: {
       h: { label: 'Hue', type: canonicalType(FLOAT, unitTurns(), { cardinality: COLOR_PICKER_CARD }, contractWrap01()), defaultSource: defaultSourceConst(0.0), uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
-      s: { label: 'Saturation', type: canonicalType(FLOAT, unitNone(), { cardinality: COLOR_PICKER_CARD }, contractClamp01()), defaultSource: defaultSourceConst(1.0), uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
+      s: { label: 'Chroma', type: canonicalType(FLOAT, unitNone(), { cardinality: COLOR_PICKER_CARD }, contractClamp01()), defaultSource: defaultSourceConst(1.0), uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
       l: { label: 'Lightness', type: canonicalType(FLOAT, unitNone(), { cardinality: COLOR_PICKER_CARD }, contractClamp01()), defaultSource: defaultSourceConst(0.5), uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
       a: { label: 'Alpha', type: canonicalType(FLOAT, unitNone(), { cardinality: COLOR_PICKER_CARD }, contractClamp01()), defaultSource: defaultSourceConst(1.0), uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
     },
@@ -46,14 +46,14 @@ export function register(): void {
       const lInput = inputsById.l;
       const aInput = inputsById.a;
       if (!hInput || !sInput || !lInput || !aInput) {
-        throw new Error('ColorPicker requires all inputs (h, s, l, a)');
+        throw new Error('ColorPicker requires all inputs (h, c, l, a)');
       }
   
       const outType = ctx.outTypes[0];
       const hType = canonicalType(FLOAT, unitTurns(), outType.extent, contractWrap01());
       const unitType = canonicalType(FLOAT, unitNone(), outType.extent, contractClamp01());
   
-      // Enforce color validity: wrap hue, clamp s/l/a
+      // Enforce color validity: wrap hue, clamp c/l/a
       const wrap01 = ctx.b.opcode(OpCode.Wrap01);
       const clamp = ctx.b.opcode(OpCode.Clamp);
       const zero = ctx.b.constant({ kind: 'float', value: 0 }, unitType);

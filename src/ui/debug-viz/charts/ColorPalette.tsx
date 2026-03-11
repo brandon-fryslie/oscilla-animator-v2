@@ -13,9 +13,10 @@
  */
 
 import React, { useRef, useEffect } from 'react';
+import { OKLCH_HUE_TAU, toCssOklch } from '../../../core/color/oklch';
 
 export interface ColorPaletteProps {
-  /** Interleaved RGBA float buffer (stride 4) */
+  /** Interleaved OKLCH+A float buffer (stride 4) */
   buffer: Float32Array;
   /** Number of colors (lanes) in the buffer */
   count: number;
@@ -31,10 +32,10 @@ const CHECK_LIGHT = '#c0c0c0';
 const CHECK_DARK = '#808080';
 
 /**
- * Luminance from linear RGB components.
+ * Luminance proxy from OKLCH (lightness channel).
  */
-function luminance(r: number, g: number, b: number): number {
-  return 0.299 * r + 0.587 * g + 0.114 * b;
+function luminanceFromOklch(lightness: number): number {
+  return lightness;
 }
 
 /**
@@ -60,14 +61,16 @@ function drawPalette(
     return;
   }
 
-  // Extract and sort colors by luminance
-  const colors: { r: number; g: number; b: number; a: number; lum: number }[] = new Array(count);
+  // [LAW:dataflow-not-control-flow] Palette rendering always consumes all lanes;
+  // variability (sorting/visual result) is encoded in per-lane color values.
+  // Extract and sort colors by lightness (OKLCH L channel)
+  const colors: { h: number; c: number; l: number; a: number; lum: number }[] = new Array(count);
   for (let i = 0; i < count; i++) {
-    const r = buffer[i * 4];
-    const g = buffer[i * 4 + 1];
-    const b = buffer[i * 4 + 2];
+    const hTurns = buffer[i * 4];
+    const chroma = buffer[i * 4 + 1];
+    const lightness = buffer[i * 4 + 2];
     const a = buffer[i * 4 + 3];
-    colors[i] = { r, g, b, a, lum: luminance(r, g, b) };
+    colors[i] = { h: hTurns, c: chroma, l: lightness, a, lum: luminanceFromOklch(lightness) };
   }
   colors.sort((a, b) => a.lum - b.lum);
 
@@ -87,7 +90,7 @@ function drawPalette(
     const colW = w / count;
     for (let i = 0; i < count; i++) {
       const c = colors[i];
-      ctx.fillStyle = `rgba(${Math.round(c.r * 255)}, ${Math.round(c.g * 255)}, ${Math.round(c.b * 255)}, ${c.a})`;
+      ctx.fillStyle = toCssOklch(c.h, c.c, c.l, c.a);
       ctx.fillRect(Math.floor(i * colW), 0, Math.ceil(colW), h);
     }
   } else {
@@ -97,14 +100,23 @@ function drawPalette(
       const start = Math.floor(px * groupSize);
       const end = Math.floor((px + 1) * groupSize);
       const n = end - start;
-      let rSum = 0, gSum = 0, bSum = 0, aSum = 0;
+      let hueX = 0;
+      let hueY = 0;
+      let cSum = 0;
+      let lSum = 0;
+      let aSum = 0;
       for (let i = start; i < end; i++) {
-        rSum += colors[i].r;
-        gSum += colors[i].g;
-        bSum += colors[i].b;
+        const angle = colors[i].h * OKLCH_HUE_TAU;
+        hueX += Math.cos(angle);
+        hueY += Math.sin(angle);
+        cSum += colors[i].c;
+        lSum += colors[i].l;
         aSum += colors[i].a;
       }
-      ctx.fillStyle = `rgba(${Math.round(rSum / n * 255)}, ${Math.round(gSum / n * 255)}, ${Math.round(bSum / n * 255)}, ${aSum / n})`;
+      const avgHue = hueX === 0 && hueY === 0
+        ? 0
+        : ((Math.atan2(hueY, hueX) / OKLCH_HUE_TAU) + 1) % 1;
+      ctx.fillStyle = toCssOklch(avgHue, cSum / n, lSum / n, aSum / n);
       ctx.fillRect(px * dpr, 0, dpr, h);
     }
   }

@@ -322,19 +322,19 @@ case 'random': {
 
 ## 4. Color Space Conversion
 
-### 4.1 HSL to RGB (Not shown in excerpt)
+### 4.1 OKLCH to RGB (Not shown in excerpt)
 
 **Line 124:**
 ```typescript
-hslToRgbConversion(buf, inputBuf, count);
+oklchToRgbConversion(buf, inputBuf, count);
 ```
 
-⚠️ HSL→RGB conversion involves division and domain mapping.
+⚠️ OKLCH→RGB conversion involves division and domain mapping.
 Common bugs:
 - Division by zero in chroma calculation
 - Negative hue/saturation/lightness
 
-**Recommendation:** Check `hslToRgbConversion` implementation for validation.
+**Recommendation:** Check `oklchToRgbConversion` implementation for validation.
 
 ---
 
@@ -491,7 +491,7 @@ case 'log': return args[0] > 0 ? Math.log(args[0]) : Math.log(0.0001);
    - Mark instances with NaN position as invisible
    - Prevents canvas state corruption
 
-6. **Audit `hslToRgbConversion` for NaN/Inf**:
+6. **Audit `oklchToRgbConversion` for NaN/Inf**:
    - Check for division by zero
    - Validate domain ranges
 
@@ -564,7 +564,7 @@ expect(projection.visible[0]).toBe(0);
 1. 🔥 **Opcode evaluation** (div, sqrt, log, pow) — **No validation**
 2. 🔥 **Intrinsic materialization** (normalizedIndex) — **count=1 edge case**
 3. ✅ **Placement** (grid, rank) — **Already has fallbacks**
-4. ❓ **HSL→RGB conversion** — **Not audited**
+4. ❓ **OKLCH→RGB conversion** — **Not audited**
 
 **Impact:**
 - Division by zero → Inf position → invisible instances

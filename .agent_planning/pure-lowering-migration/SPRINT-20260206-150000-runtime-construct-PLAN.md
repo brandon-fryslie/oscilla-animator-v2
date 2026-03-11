@@ -11,7 +11,7 @@ Extend the runtime to handle `construct()` expressions in signal context, enabli
 **Deliverables:**
 - construct() case in ValueExprSignalEvaluator that evaluates components and writes contiguously
 - Removal of stride=1 restriction in ScheduleExecutor evalValue handler
-- hslToRgb case in ValueExprSignalEvaluator (same pattern as construct)
+- oklchToRgb case in ValueExprSignalEvaluator (same pattern as construct)
 - Tests for multi-component signal construction via construct()
 
 ## Work Items
@@ -34,11 +34,11 @@ The challenge is that `evaluateValueExprSignal()` returns a single `number`, but
 
 Approach A is cleaner because the evaluator's return type stays honest (single number for scalar, void for strided writes).
 
-Similarly, the `hslToRgb` case (line 199) also throws. This needs the same treatment: evaluate the input construct, apply HSL-to-RGB conversion, and write the 4 RGBA components.
+Similarly, the `oklchToRgb` case (line 199) also throws. This needs the same treatment: evaluate the input construct, apply OKLCH-to-RGB conversion, and write the 4 RGBA components.
 
 #### Acceptance Criteria
 - [ ] `evaluateSignalExtent()` handles `case 'construct'` without throwing
-- [ ] `evaluateSignalExtent()` handles `case 'hslToRgb'` without throwing
+- [ ] `evaluateSignalExtent()` handles `case 'oklchToRgb'` without throwing
 - [ ] Multi-component values (vec2=2, vec3=3, color=4 components) are written correctly to contiguous f64 slots
 - [ ] Existing scalar signal evaluation is not affected (no regression)
 - [ ] New tests pass for construct with vec2, vec3, and color payloads
@@ -46,7 +46,7 @@ Similarly, the `hslToRgb` case (line 199) also throws. This needs the same treat
 #### Technical Notes
 - The materializer (`ValueExprMaterializer.ts:96-108`) already has a working `construct` case for field-extent. The signal-extent version should mirror this pattern but write to `state.values.f64` instead of a Float32Array buffer.
 - The evaluator currently returns `number`. For strided writes, we need either a separate entry point or a way to write multiple values. A separate `evaluateValueExprSignalStrided(veId, valueExprs, state, targetOffset, stride)` function is the cleanest approach.
-- For hslToRgb: reuse the same conversion math already in `ValueExprMaterializer.ts:580-631`.
+- For oklchToRgb: reuse the same conversion math already in `ValueExprMaterializer.ts:580-631`.
 
 ---
 
@@ -59,7 +59,7 @@ Similarly, the `hslToRgb` case (line 199) also throws. This needs the same treat
 #### Description
 In `ScheduleExecutor.ts:249-250`, the evalValue handler for ContinuousScalar/ContinuousField strategy throws when `stride !== 1`. This restriction must be relaxed so that multi-component signal slots can be written via the unified evalValue path.
 
-When stride > 1 and the expression root is a `construct` or `hslToRgb` node:
+When stride > 1 and the expression root is a `construct` or `oklchToRgb` node:
 1. Call the new strided evaluator function
 2. Write all component values to the target slot at `offset`, `offset+1`, ... `offset+stride-1`
 3. Record debug tap values for each component
@@ -67,7 +67,7 @@ When stride > 1 and the expression root is a `construct` or `hslToRgb` node:
 The existing scalar path (stride === 1) should remain unchanged for performance.
 
 #### Acceptance Criteria
-- [ ] ScheduleExecutor handles evalValue with stride > 1 for construct/hslToRgb expression roots
+- [ ] ScheduleExecutor handles evalValue with stride > 1 for construct/oklchToRgb expression roots
 - [ ] Scalar signals (stride=1) still use the fast scalar path (no regression)
 - [ ] Debug tap records values for each component of a multi-component signal
 - [ ] shape2d storage path is unaffected
@@ -96,7 +96,7 @@ These tests should be added to the existing test file `src/runtime/__tests__/Val
 #### Acceptance Criteria
 - [ ] Unit test: construct([const(1.0), const(2.0)], vec2) writes 1.0 and 2.0 to consecutive f64 slots
 - [ ] Unit test: construct with 4 components (color) writes all 4 values correctly
-- [ ] Unit test: hslToRgb on a construct of 4 HSL components produces correct RGB values
+- [ ] Unit test: oklchToRgb on a construct of 4 OKLCH components produces correct RGB values
 - [ ] Existing tests continue to pass (run full `npm run test`)
 
 #### Technical Notes

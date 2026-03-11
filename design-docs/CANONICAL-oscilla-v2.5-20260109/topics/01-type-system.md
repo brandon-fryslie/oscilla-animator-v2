@@ -123,7 +123,7 @@ type UnitType =
   | { kind: 'angle'; unit: 'radians' | 'degrees' | 'phase01' }
   | { kind: 'time'; unit: 'ms' | 'seconds' }
   | { kind: 'space'; space: 'ndc' | 'world' | 'view'; dims: 2 | 3 }
-  | { kind: 'color'; unit: 'rgba01' | 'hsl' };
+  | { kind: 'color'; unit: 'rgba01' | 'oklch' };
 ```
 
 ### Normalized Unit Policy (Foundational)

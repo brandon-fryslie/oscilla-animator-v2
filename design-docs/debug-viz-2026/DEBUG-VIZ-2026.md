@@ -126,7 +126,7 @@ instance index, and if instance index has no spatial meaning (e.g., randomly ass
 The instance-reordering enhancement fixes this, but without it, a field of 400 random-phase oscillators looks like TV
 static.
 
-Also a dud for: color payload — you'd need an RGB heatmap (3 channels) or HSL conversion. A single-channel intensity
+Also a dud for: color payload — you'd need an RGB heatmap (3 channels) or OKLCH conversion. A single-channel intensity
 heatmap loses the color information that the palette strip shows perfectly.
 
 

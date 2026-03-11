@@ -145,7 +145,7 @@ This document introduced:
 | Color space as UnitType extension | `_new/colors/01-colors.md` |
 | Compatibility rules | `_new/colors/02-color-units.md` |
 | Block catalog | `_new/colors/01-colors.md` |
-| HSL→RGB conversion | `_new/colors/01-colors.md` |
+| OKLCH→RGB conversion | `_new/colors/01-colors.md` |
 | Extract/Construct intrinsics | `_new/colors/01-colors.md` |
 
 ### Topic 24 (Multi-Component Signals)
