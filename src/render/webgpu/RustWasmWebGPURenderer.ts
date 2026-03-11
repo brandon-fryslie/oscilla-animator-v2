@@ -529,6 +529,7 @@ export class WebGPURenderer {
   private lastInstalledPassIds: readonly string[] = [];
   private latestSinkTableSample: SinkTableDebugSample | null = null;
   private renderInputDebugLogged = false;
+  private installRevision = 0;
   // TODO(#159): Move debug cadence state out of renderer core state.
   // This counter is only for runtimeConsole sampling throttle and should live
   // with debug emitter ownership, not render execution ownership.
@@ -752,6 +753,7 @@ export class WebGPURenderer {
     );
     this.maybeEmitRenderInputDebugSample(input.drawPrepSinkTableV1, sinkTableWords);
     this.setSinkAndShapeWordCounts(sinkTableWords, shapeBankWords);
+    this.bumpInstallRevision();
     this.publishSignalWord();
   }
 
@@ -919,6 +921,13 @@ export class WebGPURenderer {
   private setSinkAndShapeWordCounts(sinkTableWords: number, shapeBankWords: number): void {
     this.setInputWord(RUNTIME_INPUT_INDEX.sinkTableWords, sinkTableWords);
     this.setInputWord(RUNTIME_INPUT_INDEX.shapeBankWords, shapeBankWords);
+  }
+
+  private bumpInstallRevision(): void {
+    // [LAW:single-enforcer] Install-plane publication is versioned through one
+    // monotonic word so worker-side plane sync runs only on explicit installs.
+    this.installRevision = (this.installRevision + 1) >>> 0;
+    this.setInputWord(RUNTIME_INPUT_INDEX.installRevision, this.installRevision);
   }
 
   private createResizeCanvasMessage(width: number, height: number): RustRendererWorkerInboundMessage {
