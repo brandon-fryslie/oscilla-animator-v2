@@ -109,7 +109,7 @@ patch "Judder Hot-Swap Test" {
     }
   }
 
-  block "MakeColorHSL" "color" {
+  block "MakeColorOKLCH" "color" {
     outputs {
       color = render.color
     }

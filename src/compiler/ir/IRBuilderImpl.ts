@@ -498,8 +498,8 @@ export class IRBuilderImpl implements OrchestratorIRBuilder {
     return this.construct(aligned, type);
   }
 
-  hslToRgb(input: ValueExprId, type: CanonicalType): ValueExprId {
-    return this.pushExpr({ kind: 'hslToRgb', type, input });
+  oklchToRgb(input: ValueExprId, type: CanonicalType): ValueExprId {
+    return this.pushExpr({ kind: 'oklchToRgb', type, input });
   }
 
   // ===========================================================================

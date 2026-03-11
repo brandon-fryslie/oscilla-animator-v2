@@ -432,7 +432,7 @@ function collectExprInputs(expr: ValueExpr | undefined): readonly number[] {
       return [expr.input as number];
     case 'construct':
       return expr.components.map((id) => id as number);
-    case 'hslToRgb':
+    case 'oklchToRgb':
       return [expr.input as number];
     case 'event':
       switch (expr.eventKind) {
@@ -1676,7 +1676,7 @@ function emitMaterializeExprComponentF32(args: {
         emitFromExprInput,
       });
       break;
-    case 'hslToRgb':
+    case 'oklchToRgb':
       resolved = emitFromExprInput(expr.input, component);
       break;
     default:

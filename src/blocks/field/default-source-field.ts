@@ -23,7 +23,7 @@ import {
   FLOAT,
   COLOR,
   unitTurns,
-  unitHsl,
+  unitOklch,
 } from '../../core/canonical-types';
 import type { PayloadType, CanonicalType } from '../../core/canonical-types';
 import { isPayloadVar, payloadVar, unitVar, inferType, cardinalityVar } from '../../core/inference-types';
@@ -82,7 +82,7 @@ function fieldVec3Default(ctx: LowerCtx, outType: CanonicalType): ValueExprId {
  * color field default: per-element rainbow that shifts over time.
  * hue = normalizedIndex + phaseA
  * saturation = 0.8, lightness = 0.5, alpha = 1.0
- * Output is HSL — conversion to RGB happens at render boundary.
+ * Output is OKLCH — conversion to RGB happens at render boundary.
  */
 function fieldColorDefault(ctx: LowerCtx, outType: CanonicalType): ValueExprId {
   const floatFieldType = { ...canonicalScalar(FLOAT), extent: outType.extent };
@@ -95,7 +95,7 @@ function fieldColorDefault(ctx: LowerCtx, outType: CanonicalType): ValueExprId {
   const lightField = ctx.b.broadcast(light, floatFieldType);
   const alphaField = ctx.b.broadcast(alpha, floatFieldType);
 
-  const hslType: CanonicalType = { ...canonicalType(COLOR, unitHsl()), extent: outType.extent };
+  const hslType: CanonicalType = { ...canonicalType(COLOR, unitOklch()), extent: outType.extent };
   return ctx.b.construct([hue, satField, lightField, alphaField], hslType);
 }
 

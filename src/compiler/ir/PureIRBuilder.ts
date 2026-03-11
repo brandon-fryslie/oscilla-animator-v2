@@ -94,8 +94,8 @@ export interface PureIRBuilder {
   /** Construct a composite from components (makeVec2, makeVec3). */
   construct(components: readonly ValueExprId[], type: CanonicalType): ValueExprId;
 
-  /** Convert color from HSL to RGB (alpha passthrough). */
-  hslToRgb(input: ValueExprId, type: CanonicalType): ValueExprId;
+  /** Convert color from OKLCH to RGB (alpha passthrough). */
+  oklchToRgb(input: ValueExprId, type: CanonicalType): ValueExprId;
 
   // =========================================================================
   // Event Expression Methods

@@ -67,7 +67,7 @@ describe('hslToRgbScalar', () => {
   });
 
   it('all outputs are in [0,1] for random inputs', () => {
-    // Property test: for any valid HSL input, outputs are bounded
+    // Property test: for any valid OKLCH input, outputs are bounded
     const testValues = [0, 0.1, 0.25, 1 / 3, 0.5, 2 / 3, 0.75, 0.9, 0.999];
     for (const h of testValues) {
       for (const s of testValues) {

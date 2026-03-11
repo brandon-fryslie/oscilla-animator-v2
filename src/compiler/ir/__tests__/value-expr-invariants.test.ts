@@ -39,7 +39,7 @@ const EXPECTED_KINDS = [
   'event',
   'extract',
   'construct',
-  'hslToRgb',
+  'oklchToRgb',
 ] as const;
 
 // =============================================================================
@@ -106,7 +106,7 @@ describe('ValueExpr structural invariants', () => {
       { kind: 'event', type: mockType, eventKind: 'never' },
       { kind: 'extract', type: mockType, input: 0 as any, componentIndex: 0 },
       { kind: 'construct', type: mockType, components: [] },
-      { kind: 'hslToRgb', type: mockType, input: 0 as any },
+      { kind: 'oklchToRgb', type: mockType, input: 0 as any },
     ];
 
     for (const v of variants) {
@@ -130,7 +130,7 @@ describe('ValueExpr structural invariants', () => {
       { kind: 'event', type: mockType, eventKind: 'never' },
       { kind: 'extract', type: mockType, input: 0 as any, componentIndex: 0 },
       { kind: 'construct', type: mockType, components: [] },
-      { kind: 'hslToRgb', type: mockType, input: 0 as any },
+      { kind: 'oklchToRgb', type: mockType, input: 0 as any },
     ];
 
     for (const v of variants) {
@@ -154,7 +154,7 @@ describe('ValueExpr structural invariants', () => {
       { kind: 'event', type: mockType, eventKind: 'never' },
       { kind: 'extract', type: mockType, input: 0 as any, componentIndex: 0 },
       { kind: 'construct', type: mockType, components: [] },
-      { kind: 'hslToRgb', type: mockType, input: 0 as any },
+      { kind: 'oklchToRgb', type: mockType, input: 0 as any },
     ];
 
     for (const v of variants) {

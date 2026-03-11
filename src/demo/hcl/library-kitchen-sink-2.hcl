@@ -306,7 +306,7 @@ patch "Library Kitchen Sink 2" {
     }
   }
 
-  block "MakeColorHSL" "color" {
+  block "MakeColorOKLCH" "color" {
     s = 0.9
     l = 0.56
     outputs {

@@ -18,7 +18,7 @@
  */
 
 import { registerBlock } from '../registry';
-import { unitHsl, unitNone, requireInst, VEC2, COLOR, FLOAT } from '../../core/canonical-types';
+import { unitOklch, unitNone, requireInst, VEC2, COLOR, FLOAT } from '../../core/canonical-types';
 import { inferType, cardinalityVar, unitVar } from '../../core/inference-types';
 import { cardinalityVarId } from '../../core/ids';
 import { defaultSourceConst } from '../../types';
@@ -50,7 +50,7 @@ export function register(): void {
       // [LAW:one-source-of-truth] RenderInstances2D position authority is controlPoints.
       // No parallel "pos" input is kept because duplicate carriers drift.
       controlPoints: { label: 'Control Points', type: inferType(VEC2, unitNone(), { cardinality: RENDER_CONTROL_POINTS_CARD }) },
-      color: { label: 'Color', type: inferType(COLOR, unitHsl(), { cardinality: RENDER_COLOR_CARD }) },
+      color: { label: 'Color', type: inferType(COLOR, unitOklch(), { cardinality: RENDER_COLOR_CARD }) },
       // Shape input REMOVED - now looked up automatically from instance
       scale: {
         label: 'Scale',

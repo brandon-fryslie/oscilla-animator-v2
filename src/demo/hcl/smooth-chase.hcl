@@ -103,7 +103,7 @@ patch "Smooth Chase" {
     }
   }
 
-  block "MakeColorHSL" "outer-color" {
+  block "MakeColorOKLCH" "outer-color" {
     outputs {
       color = render-raw.color
     }
@@ -136,7 +136,7 @@ patch "Smooth Chase" {
     }
   }
 
-  block "MakeColorHSL" "inner-color" {
+  block "MakeColorOKLCH" "inner-color" {
     outputs {
       color = render-smooth.color
     }

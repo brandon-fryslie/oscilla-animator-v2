@@ -805,8 +805,8 @@ fn compute_present_main(@builtin(global_invocation_id) gid: vec3<u32>) {
     abs(sin(6.28318 * (uv.y * 1.10 + global.time_seconds * 0.11 + aux * 0.07))),
     abs(sin(6.28318 * ((uv.x + uv.y) * 0.6 + global.time_seconds * 0.09))),
   );
-  // [LAW:one-source-of-truth] Fluid present writes canonical HSL channels into
-  // COLOR; renderer is the single HSL->RGB conversion boundary.
+  // [LAW:one-source-of-truth] Fluid present writes canonical OKLCH channels into
+  // COLOR; renderer is the single OKLCH->RGB conversion boundary.
   let hue = fract(
     uv.x * 0.65 +
     uv.y * 0.85 +

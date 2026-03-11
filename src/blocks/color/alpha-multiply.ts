@@ -6,7 +6,7 @@
  */
 
 import { registerBlock } from '../registry';
-import { canonicalType, payloadStride, unitHsl, unitTurns, unitNone, contractWrap01, contractClamp01 } from '../../core/canonical-types';
+import { canonicalType, payloadStride, unitOklch, unitTurns, unitNone, contractWrap01, contractClamp01 } from '../../core/canonical-types';
 import { FLOAT, COLOR } from '../../core/canonical-types';
 import { cardinalityVar } from '../../core/inference-types';
 import { cardinalityVarId } from '../../core/ids';
@@ -31,11 +31,11 @@ export function register(): void {
     capability: 'pure',
     loweringPurity: 'pure',
     inputs: {
-      in: { label: 'Color', type: canonicalType(COLOR, unitHsl(), { cardinality: ALPHA_MULTIPLY_CARD }) },
+      in: { label: 'Color', type: canonicalType(COLOR, unitOklch(), { cardinality: ALPHA_MULTIPLY_CARD }) },
       alpha: { label: 'Alpha', type: canonicalType(FLOAT, unitNone(), { cardinality: ALPHA_MULTIPLY_CARD }, contractClamp01()), defaultSource: defaultSourceConst(1.0) },
     },
     outputs: {
-      out: { label: 'Color', type: canonicalType(COLOR, unitHsl(), { cardinality: ALPHA_MULTIPLY_CARD }) },
+      out: { label: 'Color', type: canonicalType(COLOR, unitOklch(), { cardinality: ALPHA_MULTIPLY_CARD }) },
     },
     lower: ({ ctx, inputsById }) => {
       const colorInput = inputsById.in;

@@ -6,7 +6,7 @@
  */
 
 import { registerBlock } from '../registry';
-import { canonicalType, payloadStride, unitHsl, unitNone } from '../../core/canonical-types';
+import { canonicalType, payloadStride, unitOklch, unitNone } from '../../core/canonical-types';
 import { FLOAT, COLOR } from '../../core/canonical-types';
 import { cardinalityVar } from '../../core/inference-types';
 import { cardinalityVarId } from '../../core/ids';
@@ -31,11 +31,11 @@ export function register(): void {
     capability: 'pure',
     loweringPurity: 'pure',
     inputs: {
-      in: { label: 'Color', type: canonicalType(COLOR, unitHsl(), { cardinality: HUE_SHIFT_CARD }) },
+      in: { label: 'Color', type: canonicalType(COLOR, unitOklch(), { cardinality: HUE_SHIFT_CARD }) },
       shift: { label: 'Shift', type: canonicalType(FLOAT, unitNone(), { cardinality: HUE_SHIFT_CARD }), defaultSource: defaultSourceConst(0.0) },
     },
     outputs: {
-      out: { label: 'Color', type: canonicalType(COLOR, unitHsl(), { cardinality: HUE_SHIFT_CARD }) },
+      out: { label: 'Color', type: canonicalType(COLOR, unitOklch(), { cardinality: HUE_SHIFT_CARD }) },
     },
     lower: ({ ctx, inputsById }) => {
       const colorInput = inputsById.in;

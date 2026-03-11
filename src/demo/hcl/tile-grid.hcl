@@ -100,7 +100,7 @@ patch "Tile Grid" {
   }
 
   # Per-element rainbow
-  block "MakeColorHSL" "color" {
+  block "MakeColorOKLCH" "color" {
     outputs {
       color = render.color
     }

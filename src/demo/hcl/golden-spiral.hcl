@@ -102,7 +102,7 @@ patch "Golden Spiral" {
   }
 
   # Per-element rainbow from Array.t
-  block "MakeColorHSL" "color" {
+  block "MakeColorOKLCH" "color" {
     outputs {
       color = render.color
     }

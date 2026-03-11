@@ -81,7 +81,7 @@ patch "Test MakeShape2D + SpiralLayout" {
     }
   }
 
-  block "MakeColorHSL" "color" {
+  block "MakeColorOKLCH" "color" {
     outputs {
       color = render.color
     }

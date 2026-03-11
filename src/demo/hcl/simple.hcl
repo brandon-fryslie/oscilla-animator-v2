@@ -52,7 +52,7 @@ patch "Simple" {
   }
 
   # Per-element rainbow: each dot gets its own hue from Array.t
-  block "MakeColorHSL" "color" {
+  block "MakeColorOKLCH" "color" {
     outputs {
       color = render.color
     }
