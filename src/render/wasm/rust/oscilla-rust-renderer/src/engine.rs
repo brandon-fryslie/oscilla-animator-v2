@@ -16,9 +16,10 @@ use crate::memory::{
     SINK_TABLE_RECORD_WORDS,
 };
 use crate::render::{DepthTarget, IndirectRegionPlan, RenderDispatcher};
-use crate::scheduler::{
-    DispatchCounters, ResourceStats, SchedulerState, SchedulerTelemetry, StageTimingsMs,
-    WorkerObservabilityPacket, WorkerScheduler,
+use crate::scheduler::WorkerScheduler;
+use crate::telemetry::{
+    build_scheduler_telemetry as build_scheduler_telemetry_packet, SchedulerState,
+    SchedulerTelemetry, SchedulerTelemetryInputs, StageTimingsMs, WorkerObservabilityPacket,
 };
 
 const INPUT_WORD_WIDTH: usize = 0;
@@ -643,27 +644,14 @@ impl Engine {
                 wgpu::Error::Validation {
                     source: _,
                     description,
-                } => EngineErrorPayload::new(
-                    "WEBGPU_VALIDATION",
-                    description,
-                    "GPU_DRIVER",
-                    false,
-                ),
-                wgpu::Error::OutOfMemory { source: _ } => EngineErrorPayload::new(
-                    "WEBGPU_OOM",
-                    "GPU out of memory",
-                    "GPU_DRIVER",
-                    true,
-                ),
+                } => EngineErrorPayload::new("WEBGPU_VALIDATION", description, "GPU_DRIVER", false),
+                wgpu::Error::OutOfMemory { source: _ } => {
+                    EngineErrorPayload::new("WEBGPU_OOM", "GPU out of memory", "GPU_DRIVER", true)
+                }
                 wgpu::Error::Internal {
                     source: _,
                     description,
-                } => EngineErrorPayload::new(
-                    "WEBGPU_INTERNAL",
-                    description,
-                    "GPU_DRIVER",
-                    true,
-                ),
+                } => EngineErrorPayload::new("WEBGPU_INTERNAL", description, "GPU_DRIVER", true),
             };
             send_engine_error(&payload);
         }));
@@ -911,9 +899,6 @@ impl Engine {
                     .saturating_add(self.draw_regions.non_indexed_record_count);
 
                 let simulation_stage_start_ms = worker_monotonic_now_ms();
-                // TODO(#161): Split hot-path telemetry timing capture from core
-                // tick execution so engine.rs owns execution only.
-                // https://github.com/brandon-fryslie/oscilla-animator-v2/issues/161
                 self.compute.encode_simulation_and_assembly(
                     &mut encoder,
                     &mut self.arena,
@@ -1080,45 +1065,23 @@ impl Engine {
     }
 
     fn build_scheduler_telemetry(&self, stage_timings: StageTimingsMs) -> SchedulerTelemetry {
-        // TODO(#161): Consolidate scheduler telemetry construction outside the
-        // engine hot path so this function becomes a thin boundary adapter only.
-        // https://github.com/brandon-fryslie/oscilla-animator-v2/issues/161
-        let assembly_workgroup_count =
-            ((self.draw_regions.total_instance_count.saturating_add(63)) / 64).max(1);
-        let draw_prep_record_count = self
-            .draw_regions
-            .indexed_record_count
-            .saturating_add(self.draw_regions.non_indexed_record_count);
-        let draw_prep_workgroup_count = draw_prep_record_count.max(1);
-        let simulation_workgroup_count = self.compute.simulation_workgroup_count();
-        let simulation_dispatch_count = self.compute.simulation_dispatch_count();
-        let dispatch_counters = DispatchCounters {
-            compute_dispatch_count: simulation_dispatch_count
-                .saturating_add(1)
-                .saturating_add(1),
-            compute_workgroup_count: simulation_workgroup_count
-                .saturating_add(assembly_workgroup_count)
-                .saturating_add(draw_prep_workgroup_count),
-            active_lane_count: self.draw_regions.total_instance_count,
-            guarded_lane_count: assembly_workgroup_count
-                .saturating_mul(64)
-                .saturating_sub(self.draw_regions.total_instance_count),
-        };
-        let resource_stats = ResourceStats {
-            shape_bank_word_count: self.last_shape_bank_words,
-            sink_table_word_count: self.last_sink_table_words,
-            indexed_record_count: self.draw_regions.indexed_record_count,
-            non_indexed_record_count: self.draw_regions.non_indexed_record_count,
-            total_instance_count: self.draw_regions.total_instance_count,
-            canvas_width: self.surface_config.width,
-            canvas_height: self.surface_config.height,
-            ping_pong_index: self.arena.ping_pong_index() as u32,
-        };
-        SchedulerTelemetry {
+        // [LAW:one-source-of-truth] Telemetry packet shaping is centralized in
+        // telemetry.rs, while engine.rs only publishes execution measurements.
+        build_scheduler_telemetry_packet(
             stage_timings,
-            dispatch_counters,
-            resource_stats,
-        }
+            SchedulerTelemetryInputs {
+                simulation_dispatch_count: self.compute.simulation_dispatch_count(),
+                simulation_workgroup_count: self.compute.simulation_workgroup_count(),
+                indexed_record_count: self.draw_regions.indexed_record_count,
+                non_indexed_record_count: self.draw_regions.non_indexed_record_count,
+                total_instance_count: self.draw_regions.total_instance_count,
+                shape_bank_word_count: self.last_shape_bank_words,
+                sink_table_word_count: self.last_sink_table_words,
+                canvas_width: self.surface_config.width,
+                canvas_height: self.surface_config.height,
+                ping_pong_index: self.arena.ping_pong_index() as u32,
+            },
+        )
     }
 
     fn sync_shape_bank_plane(&mut self, shape_bank_words: u32) {
@@ -1191,8 +1154,8 @@ impl Engine {
         }
         let minimum_record_words = (SINK_TABLE_HEADER_WORDS as u32)
             .saturating_add(total_record_count.saturating_mul(SINK_TABLE_RECORD_WORDS as u32));
-        let minimum_descriptor_words = total_record_count
-            .saturating_mul(SINK_TABLE_DESCRIPTOR_WORDS as u32);
+        let minimum_descriptor_words =
+            total_record_count.saturating_mul(SINK_TABLE_DESCRIPTOR_WORDS as u32);
         let minimum_words = minimum_record_words.saturating_add(minimum_descriptor_words);
         if sink_table_words < minimum_words {
             panic!(
