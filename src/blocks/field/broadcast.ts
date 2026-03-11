@@ -9,6 +9,7 @@ import { payloadStride, type PayloadType } from '../../core/canonical-types';
 import { unitVar, payloadVar, inferType, cardinalityVar } from '../../core/inference-types';
 import { cardinalityVarId } from '../../core/ids';
 import { rewriteFieldType } from '../layout/_helpers';
+import { promoteToMany } from '../lower-utils';
 
 // [LAW:one-source-of-truth] Broadcast output field behavior is declared on CT/ICT.
 const BROADCAST_FIELD_CARD = cardinalityVar(cardinalityVarId('broadcast_field'), {
@@ -86,9 +87,10 @@ export function register(): void {
   
       // For multi-component one-cardinality values (vec2, vec3, color), pass component IDs
       // so the materializer can evaluate each component separately
-      const fieldId = ctx.b.broadcast(
+      const fieldId = promoteToMany(
         oneValue.id,
         outType,
+        ctx.b,
         oneValue.components && oneValue.components.length > 1
           ? oneValue.components
           : undefined

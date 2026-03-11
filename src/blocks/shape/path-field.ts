@@ -9,6 +9,7 @@ import { canonicalType, canonicalManyDef, payloadStride, floatConst, requireInst
 import { FLOAT, INT, VEC2, VEC3 } from '../../core/canonical-types';
 import type { ValueExprId } from '../../compiler/ir/Indices';
 import type { TopologyId } from '../../shapes/types';
+import { promoteToMany } from '../lower-utils';
 
 /**
  * Find the topologyId for a given control point field by searching for
@@ -124,7 +125,7 @@ export function register(): void {
       const xField = ctx.b.extract(controlPointsFieldId, 0, floatFieldType);  // X component
       const yField = ctx.b.extract(controlPointsFieldId, 1, floatFieldType);  // Y component
       const const0 = ctx.b.constant(floatConst(0), canonicalType(FLOAT));
-      const zField = ctx.b.broadcast(const0, floatFieldType);  // Z = 0
+      const zField = promoteToMany(const0, floatFieldType, ctx.b);  // Z = 0
   
       const positionFieldId = ctx.b.construct(
         [xField, yField, zField],

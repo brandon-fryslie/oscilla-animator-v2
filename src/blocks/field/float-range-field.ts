@@ -10,6 +10,7 @@ import { canonicalType, payloadStride, floatConst, FLOAT } from '../../core/cano
 import { inferType, cardinalityVar } from '../../core/inference-types';
 import { cardinalityVarId } from '../../core/ids';
 import { OpCode } from '../../compiler/ir/types';
+import { promoteToMany } from '../lower-utils';
 
 // [LAW:one-source-of-truth] Field output cardinality behavior is declared on CT/ICT.
 const FLOAT_RANGE_FIELD_OUT_CARD = cardinalityVar(cardinalityVarId('float_range_field_out'), {
@@ -81,9 +82,9 @@ export function register(): void {
       const maxConst = ctx.b.constant(floatConst(max), canonicalType(FLOAT, outType.unit));
       const stepConst = ctx.b.constant(floatConst(step), canonicalType(FLOAT, outType.unit));
   
-      const minField = ctx.b.broadcast(minConst, floatFieldType);
-      const maxField = ctx.b.broadcast(maxConst, floatFieldType);
-      const stepField = ctx.b.broadcast(stepConst, floatFieldType);
+      const minField = promoteToMany(minConst, floatFieldType, ctx.b);
+      const maxField = promoteToMany(maxConst, floatFieldType, ctx.b);
+      const stepField = promoteToMany(stepConst, floatFieldType, ctx.b);
   
       const range = ctx.b.zipAuto([maxField, minField], subFn, floatFieldType);
       const scaled = ctx.b.zipAuto([t, range], mulFn, floatFieldType);
