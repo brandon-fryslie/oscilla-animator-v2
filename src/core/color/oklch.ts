@@ -108,6 +108,43 @@ export function oklchToEncodedSrgb(
 }
 
 /**
+ * Write normalized OKLCH channels as encoded sRGB channels into a target buffer.
+ *
+ * This variant avoids tuple allocation for hot materialization loops.
+ */
+export function oklchToEncodedSrgbInto(
+  out: Float32Array,
+  offset: number,
+  hTurns: number,
+  chroma: number,
+  lightness: number,
+): void {
+  const wrappedHue = wrapToPhase01(hTurns) * OKLCH_HUE_TAU;
+  const a = chroma * Math.cos(wrappedHue);
+  const b = chroma * Math.sin(wrappedHue);
+
+  const lPrime = OKLAB_L_FROM_OKLAB.l.l * lightness + OKLAB_L_FROM_OKLAB.l.a * a + OKLAB_L_FROM_OKLAB.l.b * b;
+  const mPrime = OKLAB_L_FROM_OKLAB.m.l * lightness + OKLAB_L_FROM_OKLAB.m.a * a + OKLAB_L_FROM_OKLAB.m.b * b;
+  const sPrime = OKLAB_L_FROM_OKLAB.s.l * lightness + OKLAB_L_FROM_OKLAB.s.a * a + OKLAB_L_FROM_OKLAB.s.b * b;
+
+  const lCube = lPrime * lPrime * lPrime;
+  const mCube = mPrime * mPrime * mPrime;
+  const sCube = sPrime * sPrime * sPrime;
+
+  const x = XYZ_FROM_LMS_CUBED.x.l * lCube + XYZ_FROM_LMS_CUBED.x.m * mCube + XYZ_FROM_LMS_CUBED.x.s * sCube;
+  const y = XYZ_FROM_LMS_CUBED.y.l * lCube + XYZ_FROM_LMS_CUBED.y.m * mCube + XYZ_FROM_LMS_CUBED.y.s * sCube;
+  const z = XYZ_FROM_LMS_CUBED.z.l * lCube + XYZ_FROM_LMS_CUBED.z.m * mCube + XYZ_FROM_LMS_CUBED.z.s * sCube;
+
+  const linearR = LINEAR_SRGB_FROM_XYZ.r.x * x + LINEAR_SRGB_FROM_XYZ.r.y * y + LINEAR_SRGB_FROM_XYZ.r.z * z;
+  const linearG = LINEAR_SRGB_FROM_XYZ.g.x * x + LINEAR_SRGB_FROM_XYZ.g.y * y + LINEAR_SRGB_FROM_XYZ.g.z * z;
+  const linearB = LINEAR_SRGB_FROM_XYZ.b.x * x + LINEAR_SRGB_FROM_XYZ.b.y * y + LINEAR_SRGB_FROM_XYZ.b.z * z;
+
+  out[offset] = clamp01(linearSrgbToEncoded(linearR));
+  out[offset + 1] = clamp01(linearSrgbToEncoded(linearG));
+  out[offset + 2] = clamp01(linearSrgbToEncoded(linearB));
+}
+
+/**
  * Format normalized channels as CSS `oklch(...)`.
  */
 export function toCssOklch(hTurns: number, chroma: number, lightness: number, alpha: number): string {

@@ -25,7 +25,7 @@ const RECORD_WORD_FIRST_INSTANCE: u32 = 5u;
 @group(0) @binding(0) var<storage, read> sinkTableWords: array<u32>;
 @group(0) @binding(2) var<storage, read_write> indirectWords: array<atomic<u32>>;
 
-@compute @workgroup_size(1)
+@compute @workgroup_size(64)
 fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   if (arrayLength(&sinkTableWords) < SINK_TABLE_HEADER_WORDS) {
     return;
@@ -502,7 +502,8 @@ impl ComputeDispatcher {
         compute_pass.set_bind_group(0, &arena.draw_prep_bind_group, &[]);
         // [LAW:dataflow-not-control-flow] Draw prep always dispatches on the
         // canonical stage; record count data governs in-shader no-op behavior.
-        let draw_prep_workgroup_count = draw_prep_record_count.max(1);
+        let draw_prep_workgroup_count =
+            ((draw_prep_record_count.saturating_add(63)) / 64).max(1);
         compute_pass.dispatch_workgroups(draw_prep_workgroup_count, 1, 1);
     }
 
