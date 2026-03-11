@@ -29,7 +29,7 @@ import { SCALAR_INSTANCE_ID, type InstanceId } from '../ir/Indices';
 import type { ValueExpr, ValueExprId } from '../ir/value-expr';
 import type { UnlinkedIRFragments } from './lower-blocks';
 import type { AcyclicOrLegalGraph } from '../ir/patches';
-import type { ContinuityPipelineIR } from './continuity-pipeline';
+import type { RenderMaterializationPipelineIR } from './render-materialization-pipeline';
 import { requireInst } from '../../core/canonical-types';
 import type { InstanceDecl } from '../ir/types';
 import { payloadStride } from '../../core/canonical-types';
@@ -441,13 +441,13 @@ function validateScalarExtractInputs(
  *
  * @param unlinkedIR - Block IR fragments from Pass 6
  * @param validated - Validated graph with SCC information
- * @param continuityPipeline - Pre-built render materialization steps from Pass 6b
+ * @param renderMaterializationPipeline - Pre-built render materialization steps from Pass 6b
  * @returns Execution schedule with phase ordering
  */
 export function pass7Schedule(
   unlinkedIR: UnlinkedIRFragments,
   validated: AcyclicOrLegalGraph,
-  continuityPipeline: ContinuityPipelineIR
+  renderMaterializationPipeline: RenderMaterializationPipelineIR
 ): ScheduleIR {
   // [LAW:one-source-of-truth] Time model authority is the IR builder schedule
   // emitted by block lowering effects (not pass-threaded metadata).
@@ -531,13 +531,13 @@ export function pass7Schedule(
   // [LAW:one-source-of-truth] Event-dependent field materializations are split
   // here using canonical ValueExpr dependency analysis so runtime never reads
   // stale pre-dispatch event scalars for field slots.
-  const continuityMaterializeStepsPre: StepMaterialize[] = [];
-  const continuityMaterializeStepsPost: StepMaterialize[] = [];
-  for (const step of continuityPipeline.materializeSteps) {
+  const renderMaterializeStepsPre: StepMaterialize[] = [];
+  const renderMaterializeStepsPost: StepMaterialize[] = [];
+  for (const step of renderMaterializationPipeline.materializeSteps) {
     if (valueExprDependsOnEvent(step.field as number, valueExprs)) {
-      continuityMaterializeStepsPost.push(step);
+      renderMaterializeStepsPost.push(step);
     } else {
-      continuityMaterializeStepsPre.push(step);
+      renderMaterializeStepsPre.push(step);
     }
   }
 
@@ -553,11 +553,11 @@ export function pass7Schedule(
   // fixed order; stage inputs may be empty.
   const steps: Step[] = [
     ...scalarMaterializeStepsPre,
-    ...continuityMaterializeStepsPre,
+    ...renderMaterializeStepsPre,
     ...eventDispatchSteps,
     ...scalarMaterializeStepsPost,
-    ...continuityMaterializeStepsPost,
-    ...continuityPipeline.renderSteps,
+    ...renderMaterializeStepsPost,
+    ...renderMaterializationPipeline.renderSteps,
     ...stateWriteSteps,
   ];
 

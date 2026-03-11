@@ -1,7 +1,7 @@
 /**
  * Pass 6b: Render Materialization Pipeline Allocation
  *
- * Analyzes render targets and allocates continuity pipeline slots through
+ * Analyzes render targets and allocates render materialization slots through
  * the IRBuilder. This sub-pass runs after block lowering (pass 6) and before
  * schedule construction (pass 7).
  *
@@ -46,7 +46,7 @@ import { getValueExprChildren } from '../../runtime/ValueExprTreeWalker';
  *
  * Pass 7 consumes these arrays and only determines execution ordering.
  */
-export interface ContinuityPipelineIR {
+export interface RenderMaterializationPipelineIR {
   /** Materialize steps (one per unique field+semantic) */
   readonly materializeSteps: readonly StepMaterialize[];
   /** Render steps (one per render block) */
@@ -288,9 +288,9 @@ function collectRenderTargets(
 // =============================================================================
 
 /**
- * Pass 6b: Continuity Pipeline Allocation
+ * Pass 6b: Render Materialization Pipeline Allocation
  *
- * Analyzes render targets and allocates all continuity pipeline slots through
+ * Analyzes render targets and allocates all render materialization slots through
  * the IRBuilder. Returns pre-built steps that pass 7 can order without allocating.
  *
  * [LAW:single-enforcer] All slot allocation goes through builder.allocTypedSlot().
@@ -298,12 +298,12 @@ function collectRenderTargets(
  *
  * @param unlinkedIR - Block IR fragments from Pass 6
  * @param validated - Validated graph with blocks and edges
- * @returns ContinuityPipelineIR with pre-built steps (all slots allocated through builder)
+ * @returns RenderMaterializationPipelineIR with pre-built steps (all slots allocated through builder)
  */
-export function allocateContinuityPipeline(
+export function allocateRenderMaterializationPipeline(
   unlinkedIR: UnlinkedIRFragments,
   validated: AcyclicOrLegalGraph
-): ContinuityPipelineIR {
+): RenderMaterializationPipelineIR {
   const builder = unlinkedIR.builder;
   const instances = builder.getInstances();
   const valueExprs = builder.getValueExprs();
