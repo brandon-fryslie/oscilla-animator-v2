@@ -56,7 +56,7 @@ export interface SpyReadbackSample {
 export interface DebugTap {
   /**
    * Record a scalar slot value after it's written.
-   * Called by ScheduleExecutor after each scalar slot write.
+   * Called by the runtime executor after each scalar slot write.
    *
    * Sprint 1: Records every slot, every frame.
    * Sprint 2: Will add DebugLevel filtering.
@@ -68,7 +68,7 @@ export interface DebugTap {
 
   /**
    * Record a field (buffer) slot value after materialization.
-   * Called by ScheduleExecutor after each field is materialized.
+   * Called by the runtime executor after each field is materialized.
    *
    * Fields produce arrays of data (one value per element in the instance).
    * For debug purposes, we might want first element, stats, or full buffer.
@@ -80,7 +80,7 @@ export interface DebugTap {
 
   /**
    * Get the set of field slots currently being tracked for debug inspection.
-   * Called by ScheduleExecutor to determine which fields need demand-driven materialization.
+   * Called by the runtime executor to determine which fields need demand-driven materialization.
    *
    * Returns undefined or empty set if no fields are being tracked.
    */

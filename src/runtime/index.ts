@@ -57,27 +57,9 @@ export {
   ExternalChannelSnapshot,
   ExternalChannelSystem,
 } from './ExternalChannel';
-export { executeFrame } from './ScheduleExecutor';
-export { packDrawPrepSinkTableV1, type PackedDrawPrepSinkTableV1 } from './DrawPrepSinkTablePacker';
 export {
-  DRAW_PREP_SINK_TABLE_V1_VERSION,
-  DRAW_PREP_SINK_TABLE_HEADER_WORDS,
-  DRAW_PREP_SINK_TABLE_RECORD_WORDS,
-  DrawPrepSinkTableHeaderWord,
-  DrawPrepSinkTableRecordWord,
-  buildDrawPrepSinkTableHeader,
-  computeDrawPrepSinkTableWordCapacity,
-  drawModeToCode,
-  codeToDrawMode,
-  readDrawPrepSinkTableHeader,
-  writeDrawPrepSinkTableHeader,
-  writeDrawPrepSinkRecord,
-  type DrawPrepDrawModeCode,
-  type DrawPrepSinkRecordV1,
-  type DrawPrepSinkTableHeaderV1,
-  type DrawPrepSinkTableV1,
-} from './DrawPrepSinkTable';
-export { assertSchedulePhaseBoundaryStateReads } from './PhaseBoundaryValidator';
+  assertSchedulePhaseBoundaryStateReads,
+} from './PhaseBoundaryValidator';
 export {
   migrateState,
   createInitialState,
@@ -88,8 +70,6 @@ export {
 export { materializeValueExpr, type ValueExprTable } from './ValueExprMaterializer';
 
 // Step-through schedule debugger
-export { executeFrameStepped } from './executeFrameStepped';
-export { StepDebugSession } from './StepDebugSession';
 export { getValueExprChildren, walkValueExprTree } from './ValueExprTreeWalker';
 export { readSlotValue, readEventSlotValue, detectAnomalies, inspectBlockSlots } from './ValueInspector';
 export { getExprAddressTable, type ExprAddressTable, type SlotLookup } from './ExprAddressTable';
@@ -104,13 +84,3 @@ export type {
 
 // Float32 arena (cardinality unification)
 export { type ArenaSlotDescriptor, createArena, arenaRead, arenaWrite, arenaSlice } from './ArenaValueStore';
-
-// Re-export v2 types (now the only types)
-export type {
-  DrawPathInstancesOp,
-  PathGeometry,
-  InstanceTransforms,
-  PathStyle,
-  LegacyRenderFrame,
-  DrawOp,
-} from '../render/types';
