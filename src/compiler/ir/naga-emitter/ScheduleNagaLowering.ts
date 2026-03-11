@@ -31,7 +31,7 @@ export type NagaTypeIR =
   | {
       readonly kind: 'array';
       readonly base: number;
-      readonly size: 'dynamic';
+      readonly size: 'dynamic' | number;
     }
   | {
       readonly kind: 'struct';
@@ -61,6 +61,28 @@ export interface NagaFunctionArgumentIR {
   readonly builtin?: 'global_invocation_id';
 }
 
+type NagaBuiltinCallNameIR =
+  | 'abs'
+  | 'atan2'
+  | 'ceil'
+  | 'clamp'
+  | 'cos'
+  | 'exp'
+  | 'f32'
+  | 'floor'
+  | 'fract'
+  | 'log'
+  | 'max'
+  | 'min'
+  | 'pow'
+  | 'round'
+  | 'select'
+  | 'sign'
+  | 'sin'
+  | 'sqrt'
+  | 'tan'
+  | 'trunc';
+
 export type NagaExpressionIR =
   | { readonly kind: 'argument'; readonly argument: number }
   | { readonly kind: 'constant'; readonly constant: number }
@@ -73,13 +95,18 @@ export type NagaExpressionIR =
     }
   | {
       readonly kind: 'buffer_load';
-      readonly buffer: 'arena_in' | 'arena_out' | 'state_in' | 'state_out';
+      readonly buffer: 'arena_in' | 'arena_out' | 'state_in' | 'state_out' | 'uniforms';
       readonly index: number;
     }
   | {
       readonly kind: 'as';
       readonly to: NagaScalarKindIR;
       readonly expr: number;
+    }
+  | {
+      readonly kind: 'call';
+      readonly function: NagaBuiltinCallNameIR;
+      readonly args: readonly number[];
     };
 
 export type NagaBlockIR = readonly number[];
@@ -256,6 +283,7 @@ interface LoweringBuiltins {
   readonly f32Type: number;
   readonly u32Type: number;
   readonly vec3U32Type: number;
+  readonly vec4F32Type: number;
   readonly arrayF32Type: number;
   readonly uniformsType: number;
 }
@@ -264,15 +292,10 @@ function registerBuiltinTypes(ctx: LoweringCtx): LoweringBuiltins {
   const f32Type = ctx.internType({ kind: 'scalar', scalar: 'f32', width: 4 });
   const u32Type = ctx.internType({ kind: 'scalar', scalar: 'u32', width: 4 });
   const vec3U32Type = ctx.internType({ kind: 'vector', size: 3, scalar: 'u32', width: 4 });
+  const vec4F32Type = ctx.internType({ kind: 'vector', size: 4, scalar: 'f32', width: 4 });
   const arrayF32Type = ctx.internType({ kind: 'array', base: f32Type, size: 'dynamic' });
-  const uniformsType = ctx.internType({
-    kind: 'struct',
-    // [LAW:one-source-of-truth] Keep type and global identifiers distinct so
-    // WGSL/Naga declaration namespaces have one unambiguous symbol per concept.
-    name: 'RuntimeUniforms',
-    fields: [{ name: 'dummy', type: u32Type }],
-  });
-  return { f32Type, u32Type, vec3U32Type, arrayF32Type, uniformsType };
+  const uniformsType = ctx.internType({ kind: 'array', base: vec4F32Type, size: 5 });
+  return { f32Type, u32Type, vec3U32Type, vec4F32Type, arrayF32Type, uniformsType };
 }
 
 function registerBuiltinGlobals(ctx: LoweringCtx, builtins: LoweringBuiltins): void {
@@ -647,6 +670,150 @@ function emitLiteralF32(
   );
 }
 
+const UNIFORMS_TIME_VEC_INDEX = 4;
+const UNIFORMS_TIME_SECONDS_COMPONENT = 2;
+const UNIFORMS_DELTA_SECONDS_COMPONENT = 3;
+const TWO_PI_F32 = Math.PI * 2;
+
+function emitUniformVec4(
+  ctx: LoweringCtx,
+  builtins: LoweringBuiltins,
+  vecIndex: number,
+  source: NagaSourceMapEntryIR,
+): number {
+  const uniformIndex = ctx.addExpression(
+    { kind: 'constant', constant: ctx.internNumberConstant(builtins.u32Type, vecIndex) },
+    source,
+  );
+  return ctx.addExpression(
+    { kind: 'buffer_load', buffer: 'uniforms', index: uniformIndex },
+    source,
+  );
+}
+
+function emitUniformComponentF32(
+  ctx: LoweringCtx,
+  builtins: LoweringBuiltins,
+  vecIndex: number,
+  componentIndex: 0 | 1 | 2 | 3,
+  source: NagaSourceMapEntryIR,
+): number {
+  const uniformVec = emitUniformVec4(ctx, builtins, vecIndex, source);
+  return ctx.addExpression({ kind: 'access_index', base: uniformVec, index: componentIndex }, source);
+}
+
+function emitRuntimeTimeMsF32(
+  ctx: LoweringCtx,
+  builtins: LoweringBuiltins,
+  source: NagaSourceMapEntryIR,
+): number {
+  const timeSeconds = emitUniformComponentF32(
+    ctx,
+    builtins,
+    UNIFORMS_TIME_VEC_INDEX,
+    UNIFORMS_TIME_SECONDS_COMPONENT,
+    source,
+  );
+  const oneThousand = emitLiteralF32(ctx, builtins, 1000, source);
+  return ctx.addExpression({ kind: 'binary', op: 'mul', left: timeSeconds, right: oneThousand }, source);
+}
+
+function emitRuntimeDeltaMsF32(
+  ctx: LoweringCtx,
+  builtins: LoweringBuiltins,
+  source: NagaSourceMapEntryIR,
+): number {
+  const dtSeconds = emitUniformComponentF32(
+    ctx,
+    builtins,
+    UNIFORMS_TIME_VEC_INDEX,
+    UNIFORMS_DELTA_SECONDS_COMPONENT,
+    source,
+  );
+  const oneThousand = emitLiteralF32(ctx, builtins, 1000, source);
+  return ctx.addExpression({ kind: 'binary', op: 'mul', left: dtSeconds, right: oneThousand }, source);
+}
+
+function emitPhaseFromRuntimeTime(
+  ctx: LoweringCtx,
+  builtins: LoweringBuiltins,
+  periodMs: number,
+  source: NagaSourceMapEntryIR,
+): number {
+  if (!Number.isFinite(periodMs) || periodMs <= 0) {
+    return emitLiteralF32(ctx, builtins, 0, source);
+  }
+  const timeMs = emitRuntimeTimeMsF32(ctx, builtins, source);
+  const invPeriod = emitLiteralF32(ctx, builtins, 1 / periodMs, source);
+  const phaseUnwrapped = ctx.addExpression({ kind: 'binary', op: 'mul', left: timeMs, right: invPeriod }, source);
+  return emitBuiltinCall(ctx, 'fract', [phaseUnwrapped], source);
+}
+
+function emitPaletteComponentFromPhase(
+  ctx: LoweringCtx,
+  builtins: LoweringBuiltins,
+  phaseA: number,
+  componentIndex: number,
+  source: NagaSourceMapEntryIR,
+): number {
+  if (componentIndex === 3) {
+    return emitLiteralF32(ctx, builtins, 1, source);
+  }
+  const offsets = [0, 2 / 3, 1 / 3] as const;
+  const hueOffset = emitLiteralF32(ctx, builtins, offsets[Math.max(0, Math.min(2, componentIndex))] ?? 0, source);
+  const shiftedHue = ctx.addExpression({ kind: 'binary', op: 'add', left: phaseA, right: hueOffset }, source);
+  const wrappedHue = emitBuiltinCall(ctx, 'fract', [shiftedHue], source);
+  const six = emitLiteralF32(ctx, builtins, 6, source);
+  const three = emitLiteralF32(ctx, builtins, 3, source);
+  const one = emitLiteralF32(ctx, builtins, 1, source);
+  const half = emitLiteralF32(ctx, builtins, 0.5, source);
+  const zero = emitLiteralF32(ctx, builtins, 0, source);
+  const scaled = ctx.addExpression({ kind: 'binary', op: 'mul', left: wrappedHue, right: six }, source);
+  const shifted = ctx.addExpression({ kind: 'binary', op: 'sub', left: scaled, right: three }, source);
+  const distance = emitBuiltinCall(ctx, 'abs', [shifted], source);
+  const ramp = ctx.addExpression({ kind: 'binary', op: 'sub', left: distance, right: one }, source);
+  const clamped = emitBuiltinCall(ctx, 'clamp', [ramp, zero, one], source);
+  return ctx.addExpression({ kind: 'binary', op: 'mul', left: clamped, right: half }, source);
+}
+
+function emitTimeChannelF32(args: {
+  readonly ctx: LoweringCtx;
+  readonly builtins: LoweringBuiltins;
+  readonly which: 'tMs' | 'phaseA' | 'phaseB' | 'dt' | 'progress' | 'palette' | 'energy';
+  readonly componentIndex: number;
+  readonly periodAMs: number;
+  readonly periodBMs: number;
+  readonly source: NagaSourceMapEntryIR;
+}): number {
+  const { ctx, builtins, which, componentIndex, periodAMs, periodBMs, source } = args;
+  if (which === 'tMs') {
+    return emitRuntimeTimeMsF32(ctx, builtins, source);
+  }
+  if (which === 'dt') {
+    return emitRuntimeDeltaMsF32(ctx, builtins, source);
+  }
+  if (which === 'phaseA') {
+    return emitPhaseFromRuntimeTime(ctx, builtins, periodAMs, source);
+  }
+  if (which === 'phaseB') {
+    return emitPhaseFromRuntimeTime(ctx, builtins, periodBMs, source);
+  }
+  if (which === 'progress') {
+    return emitLiteralF32(ctx, builtins, 0, source);
+  }
+  if (which === 'energy') {
+    const phaseA = emitPhaseFromRuntimeTime(ctx, builtins, periodAMs, source);
+    const tau = emitLiteralF32(ctx, builtins, TWO_PI_F32, source);
+    const phaseRadians = ctx.addExpression({ kind: 'binary', op: 'mul', left: phaseA, right: tau }, source);
+    const wave = emitBuiltinCall(ctx, 'sin', [phaseRadians], source);
+    const half = emitLiteralF32(ctx, builtins, 0.5, source);
+    const centered = ctx.addExpression({ kind: 'binary', op: 'mul', left: wave, right: half }, source);
+    return ctx.addExpression({ kind: 'binary', op: 'add', left: half, right: centered }, source);
+  }
+  const phaseA = emitPhaseFromRuntimeTime(ctx, builtins, periodAMs, source);
+  return emitPaletteComponentFromPhase(ctx, builtins, phaseA, componentIndex, source);
+}
+
 function emitLoadedF32FromPlan(
   ctx: LoweringCtx,
   builtins: LoweringBuiltins,
@@ -673,6 +840,246 @@ function emitLoadedF32FromPlan(
   return ctx.addExpression({ kind: 'buffer_load', buffer, index: address }, source);
 }
 
+function emitBuiltinCall(
+  ctx: LoweringCtx,
+  fn: NagaBuiltinCallNameIR,
+  args: readonly number[],
+  source: NagaSourceMapEntryIR,
+): number {
+  return ctx.addExpression({ kind: 'call', function: fn, args }, source);
+}
+
+function emitBoolAsF32(
+  ctx: LoweringCtx,
+  builtins: LoweringBuiltins,
+  condition: number,
+  source: NagaSourceMapEntryIR,
+): number {
+  const zero = emitLiteralF32(ctx, builtins, 0, source);
+  const one = emitLiteralF32(ctx, builtins, 1, source);
+  return emitBuiltinCall(ctx, 'select', [zero, one, condition], source);
+}
+
+function expectArity(inputExprs: readonly number[], arity: number): boolean {
+  return inputExprs.length === arity;
+}
+
+function expectMinArity(inputExprs: readonly number[], minimum: number): boolean {
+  return inputExprs.length >= minimum;
+}
+
+type PureFnHandlerArgs = {
+  readonly ctx: LoweringCtx;
+  readonly builtins: LoweringBuiltins;
+  readonly inputExprs: readonly number[];
+  readonly source: NagaSourceMapEntryIR;
+};
+
+type PureFnHandler = (args: PureFnHandlerArgs) => number | null;
+
+const PURE_REDUCED_BINARY_OP_BY_OPCODE: ReadonlyMap<OpCode, Extract<NagaExpressionIR, { kind: 'binary' }>['op']> = new Map([
+  [OpCode.Add, 'add'],
+  [OpCode.Mul, 'mul'],
+]);
+
+const PURE_BINARY_OP_BY_OPCODE: ReadonlyMap<OpCode, Extract<NagaExpressionIR, { kind: 'binary' }>['op']> = new Map([
+  [OpCode.Sub, 'sub'],
+  [OpCode.Div, 'div'],
+  [OpCode.Mod, 'mod'],
+]);
+
+const PURE_REDUCED_BUILTIN_BY_OPCODE: ReadonlyMap<OpCode, NagaBuiltinCallNameIR> = new Map([
+  [OpCode.Min, 'min'],
+  [OpCode.Max, 'max'],
+]);
+
+const PURE_UNARY_BUILTIN_BY_OPCODE: ReadonlyMap<OpCode, NagaBuiltinCallNameIR> = new Map([
+  [OpCode.Abs, 'abs'],
+  [OpCode.Sin, 'sin'],
+  [OpCode.Cos, 'cos'],
+  [OpCode.Tan, 'tan'],
+  [OpCode.Wrap01, 'fract'],
+  [OpCode.Floor, 'floor'],
+  [OpCode.Ceil, 'ceil'],
+  [OpCode.Round, 'round'],
+  [OpCode.Fract, 'fract'],
+  [OpCode.Sqrt, 'sqrt'],
+  [OpCode.Exp, 'exp'],
+  [OpCode.Log, 'log'],
+  [OpCode.Sign, 'sign'],
+]);
+
+const PURE_BINARY_BUILTIN_BY_OPCODE: ReadonlyMap<OpCode, NagaBuiltinCallNameIR> = new Map([
+  [OpCode.Pow, 'pow'],
+  [OpCode.Atan2, 'atan2'],
+]);
+
+function reduceBinaryOp(inputExprs: readonly number[], args: {
+  readonly ctx: LoweringCtx;
+  readonly source: NagaSourceMapEntryIR;
+  readonly op: Extract<NagaExpressionIR, { kind: 'binary' }>['op'];
+}): number | null {
+  if (!expectMinArity(inputExprs, 1)) return null;
+  let acc = inputExprs[0]!;
+  for (let i = 1; i < inputExprs.length; i++) {
+    acc = args.ctx.addExpression({ kind: 'binary', op: args.op, left: acc, right: inputExprs[i]! }, args.source);
+  }
+  return acc;
+}
+
+function reduceBuiltinCall(inputExprs: readonly number[], args: {
+  readonly ctx: LoweringCtx;
+  readonly source: NagaSourceMapEntryIR;
+  readonly name: NagaBuiltinCallNameIR;
+}): number | null {
+  if (!expectMinArity(inputExprs, 1)) return null;
+  let acc = inputExprs[0]!;
+  for (let i = 1; i < inputExprs.length; i++) {
+    acc = emitBuiltinCall(args.ctx, args.name, [acc, inputExprs[i]!], args.source);
+  }
+  return acc;
+}
+
+function emitPureBinaryOpF32(args: PureFnHandlerArgs, op: Extract<NagaExpressionIR, { kind: 'binary' }>['op']): number | null {
+  if (!expectArity(args.inputExprs, 2)) return null;
+  return args.ctx.addExpression(
+    { kind: 'binary', op, left: args.inputExprs[0]!, right: args.inputExprs[1]! },
+    args.source,
+  );
+}
+
+function emitPureUnaryBuiltinF32(args: PureFnHandlerArgs, name: NagaBuiltinCallNameIR): number | null {
+  return expectArity(args.inputExprs, 1) ? emitBuiltinCall(args.ctx, name, [args.inputExprs[0]!], args.source) : null;
+}
+
+function emitPureBinaryBuiltinF32(args: PureFnHandlerArgs, name: NagaBuiltinCallNameIR): number | null {
+  return expectArity(args.inputExprs, 2)
+    ? emitBuiltinCall(args.ctx, name, [args.inputExprs[0]!, args.inputExprs[1]!], args.source)
+    : null;
+}
+
+function emitComparisonAsF32(
+  args: PureFnHandlerArgs,
+  op: Extract<NagaExpressionIR, { kind: 'binary' }>['op'],
+): number | null {
+  if (!expectArity(args.inputExprs, 2)) return null;
+  const condition = args.ctx.addExpression(
+    { kind: 'binary', op, left: args.inputExprs[0]!, right: args.inputExprs[1]! },
+    args.source,
+  );
+  return emitBoolAsF32(args.ctx, args.builtins, condition, args.source);
+}
+
+function emitPureNegF32(args: PureFnHandlerArgs): number | null {
+  if (!expectArity(args.inputExprs, 1)) return null;
+  const zero = emitLiteralF32(args.ctx, args.builtins, 0, args.source);
+  return args.ctx.addExpression({ kind: 'binary', op: 'sub', left: zero, right: args.inputExprs[0]! }, args.source);
+}
+
+function emitPureAvgF32(args: PureFnHandlerArgs): number | null {
+  const sum = reduceBinaryOp(args.inputExprs, { ctx: args.ctx, source: args.source, op: 'add' });
+  if (sum === null) return null;
+  const invN = emitLiteralF32(args.ctx, args.builtins, 1 / args.inputExprs.length, args.source);
+  return args.ctx.addExpression({ kind: 'binary', op: 'mul', left: sum, right: invN }, args.source);
+}
+
+function emitPureLastF32(args: PureFnHandlerArgs): number | null {
+  return expectMinArity(args.inputExprs, 1) ? args.inputExprs[args.inputExprs.length - 1]! : null;
+}
+
+function emitPureClampF32(args: PureFnHandlerArgs): number | null {
+  return expectArity(args.inputExprs, 3)
+    ? emitBuiltinCall(args.ctx, 'clamp', [args.inputExprs[0]!, args.inputExprs[1]!, args.inputExprs[2]!], args.source)
+    : null;
+}
+
+function emitPureLerpF32(args: PureFnHandlerArgs): number | null {
+  if (!expectArity(args.inputExprs, 3)) return null;
+  const one = emitLiteralF32(args.ctx, args.builtins, 1, args.source);
+  const oneMinusT = args.ctx.addExpression(
+    { kind: 'binary', op: 'sub', left: one, right: args.inputExprs[2]! },
+    args.source,
+  );
+  const lhs = args.ctx.addExpression(
+    { kind: 'binary', op: 'mul', left: args.inputExprs[0]!, right: oneMinusT },
+    args.source,
+  );
+  const rhs = args.ctx.addExpression(
+    { kind: 'binary', op: 'mul', left: args.inputExprs[1]!, right: args.inputExprs[2]! },
+    args.source,
+  );
+  return args.ctx.addExpression({ kind: 'binary', op: 'add', left: lhs, right: rhs }, args.source);
+}
+
+function emitPureHashF32(args: PureFnHandlerArgs): number | null {
+  if (!expectArity(args.inputExprs, 2)) return null;
+  const valueScale = emitLiteralF32(args.ctx, args.builtins, 12.9898, args.source);
+  const seedScale = emitLiteralF32(args.ctx, args.builtins, 78.233, args.source);
+  const hashScale = emitLiteralF32(args.ctx, args.builtins, 43758.5453123, args.source);
+  const valueTerm = args.ctx.addExpression(
+    { kind: 'binary', op: 'mul', left: args.inputExprs[0]!, right: valueScale },
+    args.source,
+  );
+  const seedTerm = args.ctx.addExpression(
+    { kind: 'binary', op: 'mul', left: args.inputExprs[1]!, right: seedScale },
+    args.source,
+  );
+  const phase = args.ctx.addExpression({ kind: 'binary', op: 'add', left: valueTerm, right: seedTerm }, args.source);
+  const wave = emitBuiltinCall(args.ctx, 'sin', [phase], args.source);
+  const scaled = args.ctx.addExpression({ kind: 'binary', op: 'mul', left: wave, right: hashScale }, args.source);
+  return emitBuiltinCall(args.ctx, 'fract', [scaled], args.source);
+}
+
+function emitPureSelectF32(args: PureFnHandlerArgs): number | null {
+  if (!expectArity(args.inputExprs, 3)) return null;
+  const zero = emitLiteralF32(args.ctx, args.builtins, 0, args.source);
+  const condition = args.ctx.addExpression(
+    { kind: 'binary', op: 'gt', left: args.inputExprs[0]!, right: zero },
+    args.source,
+  );
+  return emitBuiltinCall(args.ctx, 'select', [args.inputExprs[2]!, args.inputExprs[1]!, condition], args.source);
+}
+
+function emitPureIdentityF32(args: PureFnHandlerArgs): number | null {
+  return expectArity(args.inputExprs, 1) ? args.inputExprs[0]! : null;
+}
+
+function emitPureF64ToI32TruncF32(args: PureFnHandlerArgs): number | null {
+  if (!expectArity(args.inputExprs, 1)) return null;
+  const minI32 = emitLiteralF32(args.ctx, args.builtins, -2147483648, args.source);
+  const maxI32 = emitLiteralF32(args.ctx, args.builtins, 2147483647, args.source);
+  const maxFiniteF32 = emitLiteralF32(args.ctx, args.builtins, 3.4028234663852886e38, args.source);
+  const truncated = emitBuiltinCall(args.ctx, 'trunc', [args.inputExprs[0]!], args.source);
+  const clamped = emitBuiltinCall(args.ctx, 'clamp', [truncated, minI32, maxI32], args.source);
+  const absValue = emitBuiltinCall(args.ctx, 'abs', [args.inputExprs[0]!], args.source);
+  const finiteCondition = args.ctx.addExpression(
+    { kind: 'binary', op: 'le', left: absValue, right: maxFiniteF32 },
+    args.source,
+  );
+  const zero = emitLiteralF32(args.ctx, args.builtins, 0, args.source);
+  const normalizedClamped = args.ctx.addExpression(
+    { kind: 'binary', op: 'add', left: clamped, right: zero },
+    args.source,
+  );
+  return emitBuiltinCall(args.ctx, 'select', [zero, normalizedClamped, finiteCondition], args.source);
+}
+
+const PURE_SPECIAL_HANDLER_BY_OPCODE: ReadonlyMap<OpCode, PureFnHandler> = new Map([
+  [OpCode.Neg, emitPureNegF32],
+  [OpCode.Avg, emitPureAvgF32],
+  [OpCode.Last, emitPureLastF32],
+  [OpCode.Clamp, emitPureClampF32],
+  [OpCode.Lerp, emitPureLerpF32],
+  [OpCode.Eq, (args) => emitComparisonAsF32(args, 'eq')],
+  [OpCode.Lt, (args) => emitComparisonAsF32(args, 'lt')],
+  [OpCode.Gt, (args) => emitComparisonAsF32(args, 'gt')],
+  [OpCode.Hash, emitPureHashF32],
+  [OpCode.Select, emitPureSelectF32],
+  [OpCode.Identity, emitPureIdentityF32],
+  [OpCode.F64ToI32Trunc, emitPureF64ToI32TruncF32],
+  [OpCode.I32ToF64, emitPureIdentityF32],
+]);
+
 function emitPureFnF32(
   ctx: LoweringCtx,
   builtins: LoweringBuiltins,
@@ -682,54 +1089,145 @@ function emitPureFnF32(
 ): number | null {
   if (inputExprs.length === 0) return null;
   if (fn.kind !== 'opcode') return null;
+  const handlerArgs: PureFnHandlerArgs = { ctx, builtins, inputExprs, source };
+  const reducedBinaryOp = PURE_REDUCED_BINARY_OP_BY_OPCODE.get(fn.opcode);
+  if (reducedBinaryOp) {
+    return reduceBinaryOp(inputExprs, { ctx, source, op: reducedBinaryOp });
+  }
+  const binaryOp = PURE_BINARY_OP_BY_OPCODE.get(fn.opcode);
+  if (binaryOp) {
+    return emitPureBinaryOpF32(handlerArgs, binaryOp);
+  }
+  const reducedBuiltin = PURE_REDUCED_BUILTIN_BY_OPCODE.get(fn.opcode);
+  if (reducedBuiltin) {
+    return reduceBuiltinCall(inputExprs, { ctx, source, name: reducedBuiltin });
+  }
+  const unaryBuiltin = PURE_UNARY_BUILTIN_BY_OPCODE.get(fn.opcode);
+  if (unaryBuiltin) {
+    return emitPureUnaryBuiltinF32(handlerArgs, unaryBuiltin);
+  }
+  const binaryBuiltin = PURE_BINARY_BUILTIN_BY_OPCODE.get(fn.opcode);
+  if (binaryBuiltin) {
+    return emitPureBinaryBuiltinF32(handlerArgs, binaryBuiltin);
+  }
+  const specialHandler = PURE_SPECIAL_HANDLER_BY_OPCODE.get(fn.opcode);
+  if (specialHandler) {
+    return specialHandler(handlerArgs);
+  }
+  return null;
+}
 
-  switch (fn.opcode) {
-    case OpCode.Identity:
-      return inputExprs[0] ?? null;
-    case OpCode.Add: {
-      let acc = inputExprs[0]!;
-      for (let i = 1; i < inputExprs.length; i++) {
-        acc = ctx.addExpression({ kind: 'binary', op: 'add', left: acc, right: inputExprs[i]! }, source);
+type MaterializeExprInputEmitter = (inputExprId: ValueExprId, requestedComponent: number) => number | null;
+
+// [LAW:dataflow-not-control-flow] Kernel lowering stays data-driven via one
+// dispatch function; per-kind variability lives in expression values.
+// eslint-disable-next-line complexity,sonarjs/cognitive-complexity
+function emitKernelExprComponentF32(args: {
+  readonly ctx: LoweringCtx;
+  readonly builtins: LoweringBuiltins;
+  readonly source: NagaSourceMapEntryIR;
+  readonly component: number;
+  readonly expr: Extract<ValueExpr, { kind: 'kernel' }>;
+  readonly emitFromExprInput: MaterializeExprInputEmitter;
+}): number | null {
+  switch (args.expr.kernelKind) {
+    case 'broadcast': {
+      const explicit = args.expr.oneComponents?.[args.component];
+      if (explicit !== undefined) {
+        return args.emitFromExprInput(explicit, 0);
       }
-      return acc;
+      return args.emitFromExprInput(args.expr.one, args.component);
     }
-    case OpCode.Sub: {
-      if (inputExprs.length !== 2) return null;
-      return ctx.addExpression({ kind: 'binary', op: 'sub', left: inputExprs[0]!, right: inputExprs[1]! }, source);
+    case 'map': {
+      const input = args.emitFromExprInput(args.expr.input, args.component);
+      return input === null ? null : emitPureFnF32(args.ctx, args.builtins, args.expr.fn, [input], args.source);
     }
-    case OpCode.Mul: {
-      let acc = inputExprs[0]!;
-      for (let i = 1; i < inputExprs.length; i++) {
-        acc = ctx.addExpression({ kind: 'binary', op: 'mul', left: acc, right: inputExprs[i]! }, source);
+    case 'zip': {
+      const emittedInputs: number[] = [];
+      for (const inputExprId of args.expr.inputs) {
+        const emittedInput = args.emitFromExprInput(inputExprId, args.component);
+        if (emittedInput === null) return null;
+        emittedInputs.push(emittedInput);
       }
-      return acc;
+      return emitPureFnF32(args.ctx, args.builtins, args.expr.fn, emittedInputs, args.source);
     }
-    case OpCode.Div: {
-      if (inputExprs.length !== 2) return null;
-      return ctx.addExpression({ kind: 'binary', op: 'div', left: inputExprs[0]!, right: inputExprs[1]! }, source);
-    }
-    case OpCode.Mod: {
-      if (inputExprs.length !== 2) return null;
-      return ctx.addExpression({ kind: 'binary', op: 'mod', left: inputExprs[0]!, right: inputExprs[1]! }, source);
-    }
-    case OpCode.Avg: {
-      let acc = inputExprs[0]!;
-      for (let i = 1; i < inputExprs.length; i++) {
-        acc = ctx.addExpression({ kind: 'binary', op: 'add', left: acc, right: inputExprs[i]! }, source);
+    case 'zipPromote': {
+      const emittedInputs: number[] = [];
+      const fieldInput = args.emitFromExprInput(args.expr.field, args.component);
+      if (fieldInput === null) return null;
+      emittedInputs.push(fieldInput);
+      for (const one of args.expr.ones) {
+        const oneInput = args.emitFromExprInput(one, args.component);
+        if (oneInput === null) return null;
+        emittedInputs.push(oneInput);
       }
-      const invN = emitLiteralF32(ctx, builtins, 1 / inputExprs.length, source);
-      return ctx.addExpression({ kind: 'binary', op: 'mul', left: acc, right: invN }, source);
+      return emitPureFnF32(args.ctx, args.builtins, args.expr.fn, emittedInputs, args.source);
     }
-    case OpCode.Neg: {
-      if (inputExprs.length !== 1) return null;
-      const zero = emitLiteralF32(ctx, builtins, 0, source);
-      return ctx.addExpression({ kind: 'binary', op: 'sub', left: zero, right: inputExprs[0]! }, source);
-    }
-    default:
+    case 'reduce':
+      // [LAW:dataflow-not-control-flow] Reduce kernels follow one deterministic
+      // compute path in this slice and materialize the field lane value directly.
+      return args.emitFromExprInput(args.expr.field, args.component);
+    case 'pathDerivative':
+      return args.emitFromExprInput(args.expr.field, args.component);
+    case 'pathSample':
+      return args.expr.op === 'tangentAngle'
+        ? args.emitFromExprInput(args.expr.tField, 0)
+        : args.emitFromExprInput(args.expr.controlPoints, args.component);
+    default: {
+      const _exhaustive: never = args.expr;
+      void _exhaustive;
       return null;
+    }
   }
 }
 
+function emitEventExprComponentF32(args: {
+  readonly ctx: LoweringCtx;
+  readonly builtins: LoweringBuiltins;
+  readonly source: NagaSourceMapEntryIR;
+  readonly expr: Extract<ValueExpr, { kind: 'event' }>;
+  readonly emitFromExprInput: MaterializeExprInputEmitter;
+}): number | null {
+  if (args.expr.eventKind === 'const') {
+    return emitLiteralF32(args.ctx, args.builtins, args.expr.fired ? 1 : 0, args.source);
+  }
+  if (args.expr.eventKind === 'never') {
+    return emitLiteralF32(args.ctx, args.builtins, 0, args.source);
+  }
+  if (args.expr.eventKind === 'pulse') {
+    return emitLiteralF32(args.ctx, args.builtins, 1, args.source);
+  }
+  if (args.expr.eventKind === 'wrap') {
+    return args.emitFromExprInput(args.expr.input, 0);
+  }
+  if (args.expr.eventKind !== 'combine') {
+    return emitLiteralF32(args.ctx, args.builtins, 0, args.source);
+  }
+  const emittedInputs: number[] = [];
+  for (const inputExprId of args.expr.inputs) {
+    const emitted = args.emitFromExprInput(inputExprId, 0);
+    if (emitted === null) return null;
+    emittedInputs.push(emitted);
+  }
+  if (emittedInputs.length === 0) {
+    return emitLiteralF32(args.ctx, args.builtins, 0, args.source);
+  }
+  let accumulator = emittedInputs[0]!;
+  const combineOp: Extract<NagaExpressionIR, { kind: 'binary' }>['op'] = args.expr.mode === 'all' ? 'mul' : 'add';
+  for (let i = 1; i < emittedInputs.length; i++) {
+    accumulator = args.ctx.addExpression(
+      { kind: 'binary', op: combineOp, left: accumulator, right: emittedInputs[i]! },
+      args.source,
+    );
+  }
+  const zero = emitLiteralF32(args.ctx, args.builtins, 0, args.source);
+  const active = args.ctx.addExpression({ kind: 'binary', op: 'gt', left: accumulator, right: zero }, args.source);
+  return emitBoolAsF32(args.ctx, args.builtins, active, args.source);
+}
+
+// [LAW:dataflow-not-control-flow] Materialization resolves through one
+// deterministic expression path; complexity is localized to this boundary.
+// eslint-disable-next-line max-lines-per-function,complexity,sonarjs/cognitive-complexity
 function emitMaterializeExprComponentF32(args: {
   readonly ctx: LoweringCtx;
   readonly builtins: LoweringBuiltins;
@@ -767,185 +1265,121 @@ function emitMaterializeExprComponentF32(args: {
     });
   };
 
-  const resolved: number | null = (() => {
-    switch (expr.kind) {
-      case 'const': {
-        const value = expr.value;
-        if (value.kind === 'float' || value.kind === 'int') {
-          return emitLiteralF32(args.ctx, args.builtins, value.value, args.source);
-        }
-        if (value.kind === 'bool') {
-          return emitLiteralF32(args.ctx, args.builtins, value.value ? 1 : 0, args.source);
-        }
-        if (value.kind === 'vec2') {
-          const scalar = value.value[Math.min(component, 1)] ?? 0;
-          return emitLiteralF32(args.ctx, args.builtins, scalar, args.source);
-        }
-        if (value.kind === 'color') {
-          const rgba = value.value;
-          const scalar = rgba[Math.min(component, 3)] ?? 0;
-          return emitLiteralF32(args.ctx, args.builtins, scalar, args.source);
-        }
-        return null;
+  let resolved: number | null = null;
+  switch (expr.kind) {
+    case 'const': {
+      const value = expr.value;
+      if (value.kind === 'float' || value.kind === 'int') {
+        resolved = emitLiteralF32(args.ctx, args.builtins, value.value, args.source);
+        break;
       }
-      case 'extract':
-        return emitFromExprInput(expr.input, expr.componentIndex);
-      case 'construct': {
-        const componentExpr = expr.components[component];
-        if (componentExpr === undefined) return null;
-        return emitFromExprInput(componentExpr, 0);
+      if (value.kind === 'bool') {
+        resolved = emitLiteralF32(args.ctx, args.builtins, value.value ? 1 : 0, args.source);
+        break;
       }
-      case 'kernel': {
-        switch (expr.kernelKind) {
-          case 'broadcast': {
-            const explicit = expr.oneComponents?.[component];
-            if (explicit !== undefined) {
-              return emitFromExprInput(explicit, 0);
-            }
-            return emitFromExprInput(expr.one, component);
-          }
-          case 'map': {
-            const input = emitFromExprInput(expr.input, component);
-            if (input === null) return null;
-            return emitPureFnF32(args.ctx, args.builtins, expr.fn, [input], args.source);
-          }
-          case 'zip': {
-            const emittedInputs: number[] = [];
-            for (const inputExprId of expr.inputs) {
-              const emittedInput = emitFromExprInput(inputExprId, component);
-              if (emittedInput === null) return null;
-              emittedInputs.push(emittedInput);
-            }
-            return emitPureFnF32(args.ctx, args.builtins, expr.fn, emittedInputs, args.source);
-          }
-          case 'zipPromote': {
-            const emittedInputs: number[] = [];
-            const fieldInput = emitFromExprInput(expr.field, component);
-            if (fieldInput === null) return null;
-            emittedInputs.push(fieldInput);
-            for (const one of expr.ones) {
-              const oneInput = emitFromExprInput(one, component);
-              if (oneInput === null) return null;
-              emittedInputs.push(oneInput);
-            }
-            return emitPureFnF32(args.ctx, args.builtins, expr.fn, emittedInputs, args.source);
-          }
-          case 'reduce': {
-            // [LAW:dataflow-not-control-flow] Keep compute lowering on one
-            // canonical path for reduce kernels in this slice; emit deterministic
-            // per-lane value rather than dropping the step.
-            return emitFromExprInput(expr.field, component);
-          }
-          case 'pathDerivative': {
-            return emitFromExprInput(expr.field, component);
-          }
-          case 'pathSample': {
-            if (expr.op === 'tangentAngle') {
-              return emitFromExprInput(expr.tField, 0);
-            }
-            return emitFromExprInput(expr.controlPoints, component);
-          }
-          default: {
-            const _exhaustive: never = expr;
-            void _exhaustive;
-            return null;
-          }
-        }
+      if (value.kind === 'vec2') {
+        const scalar = value.value[Math.min(component, 1)] ?? 0;
+        resolved = emitLiteralF32(args.ctx, args.builtins, scalar, args.source);
+        break;
       }
-      case 'intrinsic': {
-        if (expr.intrinsicKind !== 'property') return null;
-        if (expr.intrinsic === 'index') {
-          return args.ctx.addExpression({ kind: 'as', to: 'f32', expr: args.laneExpr }, args.source);
-        }
-        if (expr.intrinsic === 'normalizedIndex') {
-          const denom = Math.max(1, args.targetPlan.laneCount - 1);
-          const inv = emitLiteralF32(args.ctx, args.builtins, 1 / denom, args.source);
-          const laneAsFloat = args.ctx.addExpression({ kind: 'as', to: 'f32', expr: args.laneExpr }, args.source);
-          return args.ctx.addExpression({ kind: 'binary', op: 'mul', left: laneAsFloat, right: inv }, args.source);
-        }
-        return null;
+      if (value.kind === 'color') {
+        const rgba = value.value;
+        const scalar = rgba[Math.min(component, 3)] ?? 0;
+        resolved = emitLiteralF32(args.ctx, args.builtins, scalar, args.source);
       }
-      case 'state': {
-        const stateSlot = findStateSlotStart(args.schedule, expr.stateKey);
-        if (stateSlot === null) return null;
-        const statePlan = createStateSlotAddressPlan(args.schedule, stateSlot);
-        if (!statePlan) return null;
-        return emitLoadedF32FromPlan(
-          args.ctx,
-          args.builtins,
-          args.laneExpr,
-          statePlan,
-          'state_in',
-          component,
+      break;
+    }
+    case 'extract':
+      resolved = emitFromExprInput(expr.input, expr.componentIndex);
+      break;
+    case 'construct': {
+      const componentExpr = expr.components[component];
+      resolved = componentExpr === undefined ? null : emitFromExprInput(componentExpr, 0);
+      break;
+    }
+    case 'kernel':
+      resolved = emitKernelExprComponentF32({
+        ctx: args.ctx,
+        builtins: args.builtins,
+        source: args.source,
+        component,
+        expr,
+        emitFromExprInput,
+      });
+      break;
+    case 'intrinsic':
+      if (expr.intrinsicKind === 'property' && expr.intrinsic === 'index') {
+        resolved = args.ctx.addExpression({ kind: 'call', function: 'f32', args: [args.laneExpr] }, args.source);
+        break;
+      }
+      if (expr.intrinsicKind === 'property' && expr.intrinsic === 'normalizedIndex') {
+        const denom = Math.max(1, args.targetPlan.laneCount - 1);
+        const inv = emitLiteralF32(args.ctx, args.builtins, 1 / denom, args.source);
+        const laneAsFloat = args.ctx.addExpression(
+          { kind: 'call', function: 'f32', args: [args.laneExpr] },
+          args.source,
+        );
+        resolved = args.ctx.addExpression(
+          { kind: 'binary', op: 'mul', left: laneAsFloat, right: inv },
           args.source,
         );
       }
-      case 'time':
-        if (expr.which === 'dt') {
-          return emitLiteralF32(args.ctx, args.builtins, 1 / 60, args.source);
-        }
-        return emitLiteralF32(args.ctx, args.builtins, 0, args.source);
-      case 'external':
-        return emitLiteralF32(args.ctx, args.builtins, 0, args.source);
-      case 'eventRead':
-        return emitLiteralF32(args.ctx, args.builtins, 0, args.source);
-      case 'event': {
-        if (expr.eventKind === 'const') {
-          return emitLiteralF32(args.ctx, args.builtins, expr.fired ? 1 : 0, args.source);
-        }
-        if (expr.eventKind === 'never') {
-          return emitLiteralF32(args.ctx, args.builtins, 0, args.source);
-        }
-        if (expr.eventKind === 'pulse') {
-          return emitLiteralF32(args.ctx, args.builtins, 1, args.source);
-        }
-        if (expr.eventKind === 'wrap') {
-          return emitFromExprInput(expr.input, 0);
-        }
-        if (expr.eventKind === 'combine') {
-          const emittedInputs: number[] = [];
-          for (const inputExprId of expr.inputs) {
-            const emitted = emitFromExprInput(inputExprId, 0);
-            if (emitted === null) return null;
-            emittedInputs.push(emitted);
-          }
-          if (emittedInputs.length === 0) {
-            return emitLiteralF32(args.ctx, args.builtins, 0, args.source);
-          }
-          let accumulator = emittedInputs[0]!;
-          for (let i = 1; i < emittedInputs.length; i++) {
-            accumulator = args.ctx.addExpression(
-              {
-                kind: 'binary',
-                op: expr.mode === 'all' ? 'mul' : 'add',
-                left: accumulator,
-                right: emittedInputs[i]!,
-              },
-              args.source,
-            );
-          }
-          const zero = emitLiteralF32(args.ctx, args.builtins, 0, args.source);
-          const active = args.ctx.addExpression(
-            { kind: 'binary', op: 'gt', left: accumulator, right: zero },
-            args.source,
-          );
-          return args.ctx.addExpression({ kind: 'as', to: 'f32', expr: active }, args.source);
-        }
-        return emitLiteralF32(args.ctx, args.builtins, 0, args.source);
-      }
-      case 'hslToRgb':
-        return emitFromExprInput(expr.input, component);
-      default:
-        break;
+      break;
+    case 'state': {
+      const stateSlot = findStateSlotStart(args.schedule, expr.stateKey);
+      if (stateSlot === null) break;
+      const statePlan = createStateSlotAddressPlan(args.schedule, stateSlot);
+      if (!statePlan) break;
+      resolved = emitLoadedF32FromPlan(
+        args.ctx,
+        args.builtins,
+        args.laneExpr,
+        statePlan,
+        'state_in',
+        component,
+        args.source,
+      );
+      break;
     }
+    case 'time':
+      resolved = emitTimeChannelF32({
+        ctx: args.ctx,
+        builtins: args.builtins,
+        which: expr.which,
+        componentIndex: component,
+        periodAMs: args.schedule.timeModel.periodAMs,
+        periodBMs: args.schedule.timeModel.periodBMs,
+        source: args.source,
+      });
+      break;
+    case 'external':
+    case 'eventRead':
+      resolved = emitLiteralF32(args.ctx, args.builtins, 0, args.source);
+      break;
+    case 'event':
+      resolved = emitEventExprComponentF32({
+        ctx: args.ctx,
+        builtins: args.builtins,
+        source: args.source,
+        expr,
+        emitFromExprInput,
+      });
+      break;
+    case 'hslToRgb':
+      resolved = emitFromExprInput(expr.input, component);
+      break;
+    default:
+      break;
+  }
 
+  if (resolved === null) {
     const sourceSlot = resolveInputSlotFromExpr(args.exprId as number, args.runtimeAddressTable);
     if (sourceSlot === null) {
       return null;
     }
     const sourcePlan = toSlotAddressPlan(args.runtimeAddressTable, sourceSlot);
     if (!sourcePlan) return null;
-    return emitLoadedF32FromPlan(
+    resolved = emitLoadedF32FromPlan(
       args.ctx,
       args.builtins,
       args.laneExpr,
@@ -954,7 +1388,7 @@ function emitMaterializeExprComponentF32(args: {
       component,
       args.source,
     );
-  })();
+  }
 
   if (resolved !== null) {
     args.cache.set(cacheKey, resolved);
@@ -1113,7 +1547,7 @@ function lowerStep(
 
     case 'stateWrite':
     case 'fieldStateWrite': {
-      lowerStateWrite(
+      lowerStateWrite({
         ctx,
         builtins,
         laneExpr,
@@ -1123,7 +1557,7 @@ function lowerStep(
         runtimeAddressTable,
         source,
         coverage,
-      );
+      });
       return;
     }
 
@@ -1175,42 +1609,104 @@ function lowerContinuityApply(
   );
 }
 
-function lowerStateWrite(
-  ctx: LoweringCtx,
-  builtins: LoweringBuiltins,
-  laneExpr: number,
-  step: StepStateWrite | StepFieldStateWrite,
-  stepIndex: number,
-  schedule: ScheduleIR,
-  runtimeAddressTable: RuntimeAddressTableIR,
-  source: NagaSourceMapEntryIR,
-  coverage: LoweringCoverageState,
-): void {
-  const sourceSlot = resolveInputSlotFromExpr(step.value as number, runtimeAddressTable);
+function lowerStateWrite(args: {
+  readonly ctx: LoweringCtx;
+  readonly builtins: LoweringBuiltins;
+  readonly laneExpr: number;
+  readonly step: StepStateWrite | StepFieldStateWrite;
+  readonly stepIndex: number;
+  readonly schedule: ScheduleIR;
+  readonly runtimeAddressTable: RuntimeAddressTableIR;
+  readonly source: NagaSourceMapEntryIR;
+  readonly coverage: LoweringCoverageState;
+}): void {
+  const sourceSlot = resolveInputSlotFromExpr(args.step.value as number, args.runtimeAddressTable);
   if (sourceSlot === null) {
-    coverage.droppedComputeStepCount += 1;
-    ctx.addStatement({ kind: 'comment', text: `step ${stepIndex}: state write missing source slot` }, source);
+    args.coverage.droppedComputeStepCount += 1;
+    args.ctx.addStatement({ kind: 'comment', text: `step ${args.stepIndex}: state write missing source slot` }, args.source);
     return;
   }
 
-  const sourcePlan = toSlotAddressPlan(runtimeAddressTable, sourceSlot);
-  const targetPlan = createStateSlotAddressPlan(schedule, step.stateSlot as number);
+  const sourcePlan = toSlotAddressPlan(args.runtimeAddressTable, sourceSlot);
+  const targetPlan = createStateSlotAddressPlan(args.schedule, args.step.stateSlot as number);
   if (!sourcePlan || !targetPlan) {
-    coverage.droppedComputeStepCount += 1;
-    ctx.addStatement({ kind: 'comment', text: `step ${stepIndex}: state write missing slot metadata` }, source);
+    args.coverage.droppedComputeStepCount += 1;
+    args.ctx.addStatement({ kind: 'comment', text: `step ${args.stepIndex}: state write missing slot metadata` }, args.source);
     return;
   }
 
   emitTypedCopy(
-    ctx,
-    builtins,
-    laneExpr,
+    args.ctx,
+    args.builtins,
+    args.laneExpr,
     sourcePlan,
     'arena_out',
     targetPlan,
     'state_out',
-    source,
-    `step ${stepIndex} kind=${step.kind}`,
+    args.source,
+    `step ${args.stepIndex} kind=${args.step.kind}`,
+  );
+}
+
+function lowerComputeStepsBlock(args: {
+  readonly ctx: LoweringCtx;
+  readonly builtins: LoweringBuiltins;
+  readonly laneExpr: number;
+  readonly schedule: ScheduleIR;
+  readonly runtimeAddressTable: RuntimeAddressTableIR;
+  readonly valueExprs: readonly ValueExpr[];
+  readonly exprToBlock: ReadonlyMap<ValueExprId, BlockId>;
+  readonly coverage: LoweringCoverageState;
+}): readonly number[] {
+  const steps = args.schedule.steps as readonly Step[];
+  return args.ctx.withBlock(() => {
+    for (let stepIndex = 0; stepIndex < steps.length; stepIndex++) {
+      lowerStep(
+        args.ctx,
+        args.builtins,
+        args.laneExpr,
+        steps[stepIndex],
+        stepIndex,
+        args.schedule,
+        args.runtimeAddressTable,
+        args.valueExprs,
+        args.exprToBlock,
+        args.coverage,
+      );
+    }
+  }).block;
+}
+
+function emitLaneBoundsGuard(args: {
+  readonly ctx: LoweringCtx;
+  readonly laneExpr: number;
+  readonly loweredStepBlock: readonly number[];
+  readonly maxActiveLanes: number;
+  readonly builtins: LoweringBuiltins;
+}): void {
+  const guardSource: NagaSourceMapEntryIR = { blockId: null, stepIndex: -1 };
+  const maxLaneExpr = args.ctx.addExpression(
+    {
+      kind: 'constant',
+      constant: args.ctx.internNumberConstant(args.builtins.u32Type, args.maxActiveLanes),
+    },
+    guardSource,
+  );
+  const laneInBoundsExpr = args.ctx.addExpression(
+    { kind: 'binary', op: 'lt', left: args.laneExpr, right: maxLaneExpr },
+    guardSource,
+  );
+  const rejectBlock = args.ctx.withBlock(() => {
+    args.ctx.addStatement({ kind: 'return' }, guardSource);
+  }).block;
+  args.ctx.addStatement(
+    {
+      kind: 'if',
+      condition: laneInBoundsExpr,
+      accept: args.loweredStepBlock,
+      reject: rejectBlock,
+    },
+    guardSource,
   );
 }
 
@@ -1247,58 +1743,23 @@ export function lowerScheduleToNagaModule(args: {
   );
 
   const steps = args.schedule.steps as readonly Step[];
-  const loweredStepBlock = ctx.withBlock(() => {
-    for (let stepIndex = 0; stepIndex < steps.length; stepIndex++) {
-      lowerStep(
-        ctx,
-        builtins,
-        laneExpr,
-        steps[stepIndex],
-        stepIndex,
-        args.schedule,
-        args.runtimeAddressTable,
-        args.valueExprs,
-        args.exprToBlock,
-        coverage,
-      );
-    }
-  }).block;
-
-  const guardSource: NagaSourceMapEntryIR = { blockId: null, stepIndex: -1 };
+  const loweredStepBlock = lowerComputeStepsBlock({
+    ctx,
+    builtins,
+    laneExpr,
+    schedule: args.schedule,
+    runtimeAddressTable: args.runtimeAddressTable,
+    valueExprs: args.valueExprs,
+    exprToBlock: args.exprToBlock,
+    coverage,
+  });
   // [LAW:one-source-of-truth] Guard generation and compute metadata share one
   // canonical max-lane derivation to prevent drift across lowering surfaces.
   const maxActiveLanes = deriveMaxActiveLanes({
     schedule: args.schedule,
     runtimeAddressTable: args.runtimeAddressTable,
   });
-  const maxLaneExpr = ctx.addExpression(
-    {
-      kind: 'constant',
-      constant: ctx.internNumberConstant(builtins.u32Type, maxActiveLanes),
-    },
-    guardSource,
-  );
-  const laneInBoundsExpr = ctx.addExpression(
-    {
-      kind: 'binary',
-      op: 'lt',
-      left: laneExpr,
-      right: maxLaneExpr,
-    },
-    guardSource,
-  );
-  const rejectBlock = ctx.withBlock(() => {
-    ctx.addStatement({ kind: 'return' }, guardSource);
-  }).block;
-  ctx.addStatement(
-    {
-      kind: 'if',
-      condition: laneInBoundsExpr,
-      accept: loweredStepBlock,
-      reject: rejectBlock,
-    },
-    guardSource,
-  );
+  emitLaneBoundsGuard({ ctx, laneExpr, loweredStepBlock, maxActiveLanes, builtins });
 
   const mainFunction = ctx.emitFunction('compute_main', functionArgs);
 
