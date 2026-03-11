@@ -18,6 +18,11 @@ const NOISY_BROADCAST_OUT_CARD = cardinalityVar(cardinalityVarId('noisy_broadcas
   acceptance: 'manyOnly',
   instanceBinding: 'inherit',
 });
+const NOISY_BROADCAST_IN_CARD = cardinalityVar(cardinalityVarId('noisy_broadcast_in'), {
+  relation: 'promoteToMany',
+  acceptance: 'oneOrMany',
+  instanceBinding: 'inherit',
+});
 
 export function register(): void {
   registerBlock({
@@ -29,10 +34,10 @@ export function register(): void {
     capability: 'pure',
     loweringPurity: 'pure',
     inputs: {
-      value: { label: 'Value', type: inferType(FLOAT, unitVar('noisy_broadcast_u')) },
+      value: { label: 'Value', type: inferType(FLOAT, unitVar('noisy_broadcast_u'), { cardinality: NOISY_BROADCAST_IN_CARD }) },
       amount: {
         label: 'Noise Amount',
-        type: inferType(FLOAT, unitVar('noisy_broadcast_u')),
+        type: inferType(FLOAT, unitVar('noisy_broadcast_u'), { cardinality: NOISY_BROADCAST_IN_CARD }),
         defaultValue: 0.1,
         defaultSource: defaultSourceConst(0.1),
         exposedAsPort: true,
@@ -40,7 +45,7 @@ export function register(): void {
       },
       seed: {
         label: 'Seed',
-        type: canonicalType(FLOAT),
+        type: canonicalType(FLOAT, unitVar('noisy_broadcast_u'), { cardinality: NOISY_BROADCAST_IN_CARD }),
         defaultValue: 0,
         defaultSource: defaultSourceConst(0),
         exposedAsPort: true,
@@ -64,23 +69,21 @@ export function register(): void {
       const outType = ctx.outTypes[0];
       const floatFieldType = { ...canonicalType(FLOAT, outType.unit), extent: outType.extent };
   
-      const baseField = ctx.b.broadcast(value.id, outType);
       const indexField = ctx.b.intrinsic('normalizedIndex', floatFieldType);
-      const seedField = ctx.b.broadcast(seed.id, floatFieldType);
   
       const hashFn = ctx.b.opcode(OpCode.Hash);
       const subFn = ctx.b.opcode(OpCode.Sub);
       const mulFn = ctx.b.opcode(OpCode.Mul);
       const addFn = ctx.b.opcode(OpCode.Add);
   
-      const noise01 = zipAuto([indexField, seedField], hashFn, floatFieldType, ctx.b);
+      // [LAW:dataflow-not-control-flow] Cardinality alignment is expressed
+      // through zipAuto promotion, never ad-hoc raw broadcast calls.
+      const noise01 = zipAuto([indexField, seed.id], hashFn, floatFieldType, ctx.b);
       const half = ctx.b.constant(floatConst(0.5), canonicalType(FLOAT, outType.unit));
-      const halfField = ctx.b.broadcast(half, floatFieldType);
-      const centeredNoise = zipAuto([noise01, halfField], subFn, floatFieldType, ctx.b);
+      const centeredNoise = zipAuto([noise01, half], subFn, floatFieldType, ctx.b);
   
-      const amountField = ctx.b.broadcast(amount.id, outType);
-      const scaledNoise = zipAuto([centeredNoise, amountField], mulFn, outType, ctx.b);
-      const outId = zipAuto([baseField, scaledNoise], addFn, outType, ctx.b);
+      const scaledNoise = zipAuto([centeredNoise, amount.id], mulFn, outType, ctx.b);
+      const outId = zipAuto([value.id, scaledNoise], addFn, outType, ctx.b);
   
       return {
         outputsById: {
