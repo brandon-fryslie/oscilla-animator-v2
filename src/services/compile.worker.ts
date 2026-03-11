@@ -12,6 +12,7 @@ import type {
   CompileWorkerResponse,
   CompileWorkerBackendResult,
 } from './compile-worker-protocol';
+import { validateCompiledGpuPassBundle } from './compiled-gpu-pass-validation';
 import { stripKernelRegistry } from './compile-worker-serialization';
 
 async function toBackendResult(
@@ -66,32 +67,29 @@ async function toBackendResult(
       };
     }
 
-    if (!compiledGpuBundle?.passes?.length) {
+    const passValidation = validateCompiledGpuPassBundle(compiledGpuBundle);
+    if (passValidation.kind === 'error') {
       return {
         kind: 'error',
-        errors: [{
-          code: 'IRValidationFailed',
-          message: 'Compiler emitted an empty GPU artifact pass bundle',
-        }],
+        errors: passValidation.errors.map((error) => ({
+          ...error,
+          details: {
+            ...(error.details ?? {}),
+            preNagaWarnings: result.warnings,
+          },
+        })),
       };
     }
 
     const program = stripKernelRegistry(result.program);
     const programWithGpuManifest = {
       ...program,
-      generatedGpuArtifactManifest: {
-        schemaVersion: compiledGpuBundle.schemaVersion,
-        passes: compiledGpuBundle.passes.map((pass) => ({
-          passId: pass.passId,
-          stage: pass.stage,
-          entryPoint: pass.entryPoint,
-        })),
-      },
+      generatedGpuArtifactManifest: passValidation.manifest,
     };
     return {
       kind: 'ok',
       program: programWithGpuManifest,
-      compiledGpuBundle,
+      compiledGpuBundle: passValidation.bundle,
       warnings: result.warnings,
     };
   }
