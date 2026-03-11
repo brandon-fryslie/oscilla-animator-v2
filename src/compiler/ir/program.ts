@@ -660,7 +660,7 @@ export interface DebugIndexIR {
   /** Maps slots to source block indices */
   readonly slotToBlock: ReadonlyMap<ValueSlot, BlockIndex>;
 
-  /** Maps value expression IDs to the block that emitted them */
+  /** Maps value expression IDs to emitting string BlockId values (patch identity) */
   readonly exprToBlock: ReadonlyMap<ValueExprId, BlockId>;
 
   /** Port binding metadata keyed by DebugPortId */
@@ -670,7 +670,7 @@ export interface DebugIndexIR {
   readonly slotToPort: ReadonlyMap<ValueSlot, DebugPortId>;
 
   /**
-   * Maps compile-owned block indices to canonical string BlockId values.
+   * Maps debug BlockIndex values to canonical string BlockId patch IDs.
    * Required because runtime debug mappings are index-based while patch identity is string-based.
    */
   readonly blockMap: ReadonlyMap<BlockIndex, string>;
@@ -678,7 +678,7 @@ export interface DebugIndexIR {
   /** Maps block indices to user-facing display names (e.g., "Golden Spiral") */
   readonly blockDisplayNames?: ReadonlyMap<BlockIndex, string>;
 
-  /** Optional: maps steps to ports */
+  /** Optional: maps step indices to debug port indices */
   readonly stepToPort?: ReadonlyMap<StepIndex, DebugPortId>;
 
   /** Optional: combine provenance */
