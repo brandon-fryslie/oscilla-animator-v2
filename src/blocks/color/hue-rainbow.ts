@@ -2,14 +2,14 @@
  * HueRainbow Block
  *
  * Creates a cycling rainbow color from a phase/time input (0→1).
- * Maps input t to full hue cycle (360°), with fixed saturation and lightness.
+ * Maps input t to full hue cycle (360°), with fixed chroma and lightness.
  *
  * This block is pure and can be invoked as a macro by other blocks
  * (e.g., DefaultSource for color-typed ports).
  */
 
 import { registerBlock } from '../registry';
-import { canonicalType, payloadStride, unitTurns, unitHsl } from '../../core/canonical-types';
+import { canonicalType, payloadStride, unitTurns, unitOklch } from '../../core/canonical-types';
 import { FLOAT, COLOR } from '../../core/canonical-types';
 import { cardinalityVar } from '../../core/inference-types';
 import { cardinalityVarId } from '../../core/ids';
@@ -39,7 +39,7 @@ export function register(): void {
       },
     },
     outputs: {
-      out: { label: 'Color', type: canonicalType(COLOR, unitHsl(), { cardinality: HUE_RAINBOW_CARD }) },
+      out: { label: 'Color', type: canonicalType(COLOR, unitOklch(), { cardinality: HUE_RAINBOW_CARD }) },
     },
     lower: ({ ctx, inputsById }) => {
       const tInput = inputsById.t;
@@ -55,19 +55,19 @@ export function register(): void {
         extent: outType.extent,
       };
   
-      // Fixed saturation (~0.8), lightness (~0.5), alpha (1.0)
-      const sat = ctx.b.constant({ kind: 'float', value: 0.8 }, intermediateFloat);
+      // Fixed chroma (~0.8), lightness (~0.5), alpha (1.0)
+      const chroma = ctx.b.constant({ kind: 'float', value: 0.8 }, intermediateFloat);
       const light = ctx.b.constant({ kind: 'float', value: 0.5 }, intermediateFloat);
       const alpha = ctx.b.constant({ kind: 'float', value: 1.0 }, intermediateFloat);
-  
-      // Construct HSL color (t as hue, fixed s/l/a)
-      // Output is HSL - conversion to RGB happens at render boundary (single enforcer)
-      const hsl = ctx.b.construct([tInput.id, sat, light, alpha], outType);
+
+      // Construct OKLCH color (t as hue, fixed c/l/a)
+      // Output is OKLCH - conversion to RGB happens at render boundary (single enforcer)
+      const oklch = ctx.b.construct([tInput.id, chroma, light, alpha], outType);
   
       // Pure block: no slot allocation (orchestrator handles it)
       return {
         outputsById: {
-          out: { id: hsl, slot: undefined, type: outType, stride: payloadStride(outType.payload) },
+          out: { id: oklch, slot: undefined, type: outType, stride: payloadStride(outType.payload) },
         },
         effects: {
           slotRequests: [

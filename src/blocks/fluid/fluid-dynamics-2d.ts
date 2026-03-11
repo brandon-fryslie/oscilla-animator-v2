@@ -7,7 +7,7 @@ import {
   vec2Const,
   colorConst,
   unitNone,
-  unitHsl,
+  unitOklch,
   VEC2,
   COLOR,
   SHAPE,
@@ -121,7 +121,7 @@ export function register(): void {
         label: 'Color',
         // TODO(architecture): Replace explicit color output with a first-class
         // fluid shading contract once renderer presentation supports it.
-        type: inferType(COLOR, unitHsl(), { cardinality: FLUID_OUTPUT_CARD }),
+        type: inferType(COLOR, unitOklch(), { cardinality: FLUID_OUTPUT_CARD }),
       },
       // [LAW:single-enforcer] Hidden outputs are the canonical parameter bridge
       // consumed by fluid bundle lowering; user-facing UI stays on block inputs.
@@ -154,7 +154,7 @@ export function register(): void {
       // by emitting canonical field slots every compile; shader variability is
       // expressed through data, not optional lowering branches.
       const defaultControl = ctx.b.constant(vec2Const(0.5, 0.5), canonicalType(VEC2));
-      const defaultColor = ctx.b.constant(colorConst(0.1, 0.2, 0.95, 1.0), canonicalType(COLOR, unitHsl()));
+      const defaultColor = ctx.b.constant(colorConst(0.1, 0.2, 0.95, 1.0), canonicalType(COLOR, unitOklch()));
       const controlField = ctx.b.broadcast(defaultControl, controlPointsType);
       const colorField = ctx.b.broadcast(defaultColor, colorType);
 

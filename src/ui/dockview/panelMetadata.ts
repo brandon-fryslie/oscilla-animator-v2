@@ -59,7 +59,6 @@ export const PANEL_DEFINITIONS: PanelDefinition[] = [
   { id: 'continuity-panel', component: 'continuity-panel', title: 'Continuity', group: 'bottom-left' },
   { id: 'compilation-inspector', component: 'compilation-inspector', title: 'Compilation', group: 'bottom-left' },
   { id: 'debug-miniview', component: 'debug-miniview', title: 'Debug', group: 'right-bottom', initiallyHidden: true },
-  { id: 'step-debugger', component: 'step-debugger', title: 'Step Debugger', group: 'right-bottom', initiallyHidden: true },
 
   // Help (not in default layout — opened on demand by ChartHelpButton)
   { id: 'help', component: 'help', title: 'Help', group: 'right-bottom', initiallyHidden: true, menuHidden: true },

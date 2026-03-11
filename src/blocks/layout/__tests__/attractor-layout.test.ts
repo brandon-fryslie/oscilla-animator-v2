@@ -82,7 +82,7 @@ patch "Test AttractorLayout Full" {
     outputs { controlPoints = render.controlPoints }
   }
 
-  block "MakeColorHSL" "color" {
+  block "MakeColorOKLCH" "color" {
     outputs { color = render.color }
   }
 

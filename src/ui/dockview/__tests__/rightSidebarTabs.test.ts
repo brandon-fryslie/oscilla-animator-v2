@@ -3,14 +3,11 @@ import { PANEL_DEFINITIONS, PANEL_MENU_ITEMS } from '../panelMetadata';
 import { getRightSidebarTabForPanelRequest } from '../rightSidebarTabConfig';
 
 describe('right sidebar layout defaults', () => {
-  it('keeps Step Debugger hidden by default while exposing it in the panel menu', () => {
+  it('does not register the removed Step Debugger panel', () => {
     const stepDebugger = PANEL_DEFINITIONS.find((panel) => panel.id === 'step-debugger');
 
-    expect(stepDebugger?.initiallyHidden).toBe(true);
-    expect(PANEL_MENU_ITEMS).toContainEqual({
-      id: 'step-debugger',
-      title: 'Step Debugger',
-    });
+    expect(stepDebugger).toBeUndefined();
+    expect(PANEL_MENU_ITEMS.some((item) => item.id === 'step-debugger')).toBe(false);
   });
 
   it('routes Debug and Settings requests to right-sidebar tabs', () => {

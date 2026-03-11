@@ -4,12 +4,12 @@ Confidence: HIGH: 6, MEDIUM: 1, LOW: 0
 Status: PARTIALLY READY
 
 ## Sprint Goal
-Implement all 7 color blocks from the design spec, providing a complete HSL color workflow.
+Implement all 7 color blocks from the design spec, providing a complete OKLCH color workflow.
 
 ## Scope
 **Deliverables:**
-- 6 new color blocks: ColorPicker, MakeColorHSL, SplitColorHSL, HueShift, MixColor, AlphaMultiply
-- 1 adapter block: HslToRgba
+- 6 new color blocks: ColorPicker, MakeColorOKLCH, SplitColorOKLCH, HueShift, MixColor, AlphaMultiply
+- 1 adapter block: OklchToRgba
 - Tests for all blocks
 
 ## Work Items
@@ -18,7 +18,7 @@ Implement all 7 color blocks from the design spec, providing a complete HSL colo
 **Confidence: HIGH**
 
 **Acceptance Criteria:**
-- [ ] Block outputs `color` payload with unit `hsl`
+- [ ] Block outputs `color` payload with unit `oklch`
 - [ ] Parameters h, s, l, a are UI-controlled (not graph inputs)
 - [ ] Output is a ConstValue color with h wrapped, s/l/a clamped
 - [ ] Optional convenience outputs (h, s, l, a as individual floats) — extract from color
@@ -29,11 +29,11 @@ Implement all 7 color blocks from the design spec, providing a complete HSL colo
 - Parameters stored as block instance data, not as input ports
 - File: `src/blocks/color/color-picker.ts` (new file)
 
-### P1: MakeColorHSL (pack block)
+### P1: MakeColorOKLCH (pack block)
 **Confidence: HIGH**
 
 **Acceptance Criteria:**
-- [ ] Takes 4 float inputs (h, s, l, a), outputs color+hsl
+- [ ] Takes 4 float inputs (h, s, l, a), outputs color+oklch
 - [ ] h is wrapped via Wrap01, s/l/a are clamped via Clamp(x,0,1)
 - [ ] Cardinality-polymorphic (signal or field)
 - [ ] a defaults to 1.0 if not connected
@@ -41,26 +41,26 @@ Implement all 7 color blocks from the design spec, providing a complete HSL colo
 **Technical Notes:**
 - This is the **enforcement point** for color validity per spec
 - Lower: wrap h, clamp s/l/a, then `construct([h', s', l', a'], colorHslType)`
-- File: `src/blocks/color/make-color-hsl.ts` (new file)
+- File: `src/blocks/color/make-color-oklch.ts` (new file)
 
-### P2: SplitColorHSL (unpack block)
+### P2: SplitColorOKLCH (unpack block)
 **Confidence: HIGH**
 
 **Acceptance Criteria:**
-- [ ] Takes color+hsl input, outputs 4 float channels (h, s, l, a)
+- [ ] Takes color+oklch input, outputs 4 float channels (h, s, l, a)
 - [ ] Uses `extract(color, 0..3)` intrinsic
 - [ ] No additional clamping/wrapping (assumes upstream enforced)
 
 **Technical Notes:**
-- Inverse of MakeColorHSL
+- Inverse of MakeColorOKLCH
 - Lower: 4x `extract(input, i, floatType)` for i in 0..3
-- File: `src/blocks/color/split-color-hsl.ts` (new file)
+- File: `src/blocks/color/split-color-oklch.ts` (new file)
 
 ### P3: HueShift
 **Confidence: HIGH**
 
 **Acceptance Criteria:**
-- [ ] Takes color+hsl and float shift, outputs color+hsl
+- [ ] Takes color+oklch and float shift, outputs color+oklch
 - [ ] Hue shifted by offset with wrapping: `wrap01(h + shift)`
 - [ ] s/l/a pass through unchanged
 - [ ] Cardinality-polymorphic
@@ -73,7 +73,7 @@ Implement all 7 color blocks from the design spec, providing a complete HSL colo
 **Confidence: HIGH**
 
 **Acceptance Criteria:**
-- [ ] Takes color+hsl and float alpha, outputs color+hsl
+- [ ] Takes color+oklch and float alpha, outputs color+oklch
 - [ ] Alpha multiplied and clamped: `clamp01(a * alpha')`
 - [ ] h/s/l pass through unchanged
 
@@ -85,7 +85,7 @@ Implement all 7 color blocks from the design spec, providing a complete HSL colo
 **Confidence: HIGH**
 
 **Acceptance Criteria:**
-- [ ] Takes two color+hsl inputs and float t, outputs color+hsl
+- [ ] Takes two color+oklch inputs and float t, outputs color+oklch
 - [ ] Hue uses shortest-arc interpolation (not linear lerp)
 - [ ] s/l/a use standard linear lerp
 - [ ] t clamped to [0,1]
@@ -97,33 +97,33 @@ Implement all 7 color blocks from the design spec, providing a complete HSL colo
 - s/l/a: `lerp(a_val, b_val, t')` — Lerp opcode exists
 - File: `src/blocks/color/mix-color.ts` (new file)
 
-### P6: HslToRgba (adapter block)
+### P6: OklchToRgba (adapter block)
 **Confidence: MEDIUM**
 
 **Acceptance Criteria:**
-- [ ] Takes color+hsl input, outputs color+rgba01
+- [ ] Takes color+oklch input, outputs color+rgba01
 - [ ] Registered as adapter block (adapterSpec) for auto-insertion
-- [ ] HSL→RGB conversion is correct per test vectors from Sprint 1 DOD
+- [ ] OKLCH→RGB conversion is correct per test vectors from Sprint 1 DOD
 - [ ] Alpha passes through unchanged
 
 #### Unknowns to Resolve
-- How to implement HSL→RGB in the IR depends on Sprint 1's decision (opcode vs lowering)
+- How to implement OKLCH→RGB in the IR depends on Sprint 1's decision (opcode vs lowering)
 - If new opcode: block lowering is simple (single opcode call)
 - If pure lowering: block lowering is verbose but uses only existing opcodes
 
 #### Exit Criteria
-- Sprint 1 P1 (HSL→RGB conversion) is complete and approach is decided
+- Sprint 1 P1 (OKLCH→RGB conversion) is complete and approach is decided
 
 **Technical Notes:**
 - This is the only unit-conversion adapter for colors
-- Must have `adapterSpec` for auto-insertion between hsl→rgba01 wiring
-- File: `src/blocks/color/hsl-to-rgba.ts` (new file, or `src/blocks/adapter/hsl-to-rgba.ts`)
+- Must have `adapterSpec` for auto-insertion between oklch→rgba01 wiring
+- File: `src/blocks/color/oklch-to-rgba.ts` (new file, or `src/blocks/adapter/oklch-to-rgba.ts`)
 
 ## Dependencies
-- **Depends on Sprint: color-foundation** — HSL unit must exist, HSL→RGB conversion approach must be decided
-- P0-P5 can be implemented in parallel once Sprint 1 P0 (HSL unit) is done
-- P6 depends on Sprint 1 P1 (HSL→RGB conversion)
+- **Depends on Sprint: color-foundation** — OKLCH unit must exist, OKLCH→RGB conversion approach must be decided
+- P0-P5 can be implemented in parallel once Sprint 1 P0 (OKLCH unit) is done
+- P6 depends on Sprint 1 P1 (OKLCH→RGB conversion)
 
 ## Risks
 - MixColor shortest-arc hue logic is the most complex lowering — needs careful testing with edge cases (hue near 0/1 boundary, colors on opposite sides of the wheel)
-- HslToRgba adapter auto-insertion: verify the adapter system handles `{ kind: 'color' }` units correctly
+- OklchToRgba adapter auto-insertion: verify the adapter system handles `{ kind: 'color' }` units correctly

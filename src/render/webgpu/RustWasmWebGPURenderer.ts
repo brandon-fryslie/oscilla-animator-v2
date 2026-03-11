@@ -111,23 +111,18 @@ export interface SinkTableDebugSample {
     readonly shapeWordOffset: number;
     readonly materialId: number;
   } | null;
+  readonly firstDescriptor: {
+    readonly positionBaseOffset: number;
+    readonly positionLaneStride: number;
+    readonly positionComponentStride: number;
+    readonly colorBaseOffset: number;
+    readonly colorLaneStride: number;
+    readonly colorComponentStride: number;
+    readonly scaleBaseOffset: number;
+    readonly scaleLaneStride: number;
+    readonly scaleComponentStride: number;
+  } | null;
 }
-
-type SinkTableFirstRecord = NonNullable<SinkTableDebugSample['firstRecord']>;
-
-const SINK_TABLE_FIRST_RECORD_FIELDS = Object.freeze([
-  Object.freeze({ key: 'drawModeCode', offset: 0 }),
-  Object.freeze({ key: 'count', offset: 1 }),
-  Object.freeze({ key: 'instanceCount', offset: 2 }),
-  Object.freeze({ key: 'first', offset: 3 }),
-  Object.freeze({ key: 'baseVertex', offset: 4 }),
-  Object.freeze({ key: 'firstInstance', offset: 5 }),
-  Object.freeze({ key: 'shapeWordOffset', offset: 6 }),
-  Object.freeze({ key: 'materialId', offset: 7 }),
-] satisfies ReadonlyArray<{ readonly key: keyof SinkTableFirstRecord; readonly offset: number }>);
-
-const SINK_TABLE_FIRST_RECORD_WORDS =
-  SINK_TABLE_FIRST_RECORD_FIELDS.reduce((max, { offset }) => Math.max(max, offset), -1) + 1;
 
 type WorkerAckDisposition =
   | { readonly kind: 'success' }
@@ -534,6 +529,7 @@ export class WebGPURenderer {
   private lastInstalledPassIds: readonly string[] = [];
   private latestSinkTableSample: SinkTableDebugSample | null = null;
   private renderInputDebugLogged = false;
+  private installRevision = 0;
   // TODO(#159): Move debug cadence state out of renderer core state.
   // This counter is only for runtimeConsole sampling throttle and should live
   // with debug emitter ownership, not render execution ownership.
@@ -757,6 +753,7 @@ export class WebGPURenderer {
     );
     this.maybeEmitRenderInputDebugSample(input.drawPrepSinkTableV1, sinkTableWords);
     this.setSinkAndShapeWordCounts(sinkTableWords, shapeBankWords);
+    this.bumpInstallRevision();
     this.publishSignalWord();
   }
 
@@ -924,6 +921,13 @@ export class WebGPURenderer {
   private setSinkAndShapeWordCounts(sinkTableWords: number, shapeBankWords: number): void {
     this.setInputWord(RUNTIME_INPUT_INDEX.sinkTableWords, sinkTableWords);
     this.setInputWord(RUNTIME_INPUT_INDEX.shapeBankWords, shapeBankWords);
+  }
+
+  private bumpInstallRevision(): void {
+    // [LAW:single-enforcer] Install-plane publication is versioned through one
+    // monotonic word so worker-side plane sync runs only on explicit installs.
+    this.installRevision = (this.installRevision + 1) >>> 0;
+    this.setInputWord(RUNTIME_INPUT_INDEX.installRevision, this.installRevision);
   }
 
   private createResizeCanvasMessage(width: number, height: number): RustRendererWorkerInboundMessage {
@@ -1095,6 +1099,8 @@ export class WebGPURenderer {
 
   private buildSinkTableDebugSample(sinkTableWords: Uint32Array, wordCount: number): SinkTableDebugSample {
     const headerWords = 8;
+    const recordWords = 8;
+    const descriptorWords = 20;
     const totalRecords = readRequiredSinkTableWord(
       sinkTableWords,
       wordCount,
@@ -1102,10 +1108,71 @@ export class WebGPURenderer {
       'sink-table-sample.totalRecords',
     );
     const firstRecord = this.buildSinkTableFirstRecord(sinkTableWords, wordCount, totalRecords, headerWords);
+    const descriptorBase = headerWords + totalRecords * recordWords;
+    const hasFirstDescriptor = totalRecords > 0 && wordCount >= descriptorBase + descriptorWords;
+    const firstDescriptor = hasFirstDescriptor
+      ? {
+          positionBaseOffset: readRequiredSinkTableWord(
+            sinkTableWords,
+            wordCount,
+            descriptorBase + 0,
+            'sink-table-sample.firstDescriptor.positionBaseOffset',
+          ),
+          positionLaneStride: readRequiredSinkTableWord(
+            sinkTableWords,
+            wordCount,
+            descriptorBase + 1,
+            'sink-table-sample.firstDescriptor.positionLaneStride',
+          ),
+          positionComponentStride: readRequiredSinkTableWord(
+            sinkTableWords,
+            wordCount,
+            descriptorBase + 2,
+            'sink-table-sample.firstDescriptor.positionComponentStride',
+          ),
+          colorBaseOffset: readRequiredSinkTableWord(
+            sinkTableWords,
+            wordCount,
+            descriptorBase + 3,
+            'sink-table-sample.firstDescriptor.colorBaseOffset',
+          ),
+          colorLaneStride: readRequiredSinkTableWord(
+            sinkTableWords,
+            wordCount,
+            descriptorBase + 4,
+            'sink-table-sample.firstDescriptor.colorLaneStride',
+          ),
+          colorComponentStride: readRequiredSinkTableWord(
+            sinkTableWords,
+            wordCount,
+            descriptorBase + 5,
+            'sink-table-sample.firstDescriptor.colorComponentStride',
+          ),
+          scaleBaseOffset: readRequiredSinkTableWord(
+            sinkTableWords,
+            wordCount,
+            descriptorBase + 6,
+            'sink-table-sample.firstDescriptor.scaleBaseOffset',
+          ),
+          scaleLaneStride: readRequiredSinkTableWord(
+            sinkTableWords,
+            wordCount,
+            descriptorBase + 7,
+            'sink-table-sample.firstDescriptor.scaleLaneStride',
+          ),
+          scaleComponentStride: readRequiredSinkTableWord(
+            sinkTableWords,
+            wordCount,
+            descriptorBase + 8,
+            'sink-table-sample.firstDescriptor.scaleComponentStride',
+          ),
+        }
+      : null;
     return {
       sinkTableWordCount: wordCount,
       totalRecords,
       firstRecord,
+      firstDescriptor,
     };
   }
 
@@ -1115,21 +1182,61 @@ export class WebGPURenderer {
     totalRecords: number,
     firstRecordBase: number,
   ): SinkTableDebugSample['firstRecord'] {
-    const recordWords = SINK_TABLE_FIRST_RECORD_WORDS;
+    const recordWords = 8;
     const hasFirstRecord = totalRecords > 0 && wordCount >= firstRecordBase + recordWords;
     if (!hasFirstRecord) {
       return null;
     }
-    const entries = SINK_TABLE_FIRST_RECORD_FIELDS.map(({ key, offset }) => [
-      key,
-      readRequiredSinkTableWord(
+    return {
+      drawModeCode: readRequiredSinkTableWord(
         sinkTableWords,
         wordCount,
-        firstRecordBase + offset,
-        `sink-table-sample.firstRecord.${key}`,
+        firstRecordBase + 0,
+        'sink-table-sample.firstRecord.drawModeCode',
       ),
-    ] as const);
-    return Object.fromEntries(entries) as SinkTableFirstRecord;
+      count: readRequiredSinkTableWord(
+        sinkTableWords,
+        wordCount,
+        firstRecordBase + 1,
+        'sink-table-sample.firstRecord.count',
+      ),
+      instanceCount: readRequiredSinkTableWord(
+        sinkTableWords,
+        wordCount,
+        firstRecordBase + 2,
+        'sink-table-sample.firstRecord.instanceCount',
+      ),
+      first: readRequiredSinkTableWord(
+        sinkTableWords,
+        wordCount,
+        firstRecordBase + 3,
+        'sink-table-sample.firstRecord.first',
+      ),
+      baseVertex: readRequiredSinkTableWord(
+        sinkTableWords,
+        wordCount,
+        firstRecordBase + 4,
+        'sink-table-sample.firstRecord.baseVertex',
+      ),
+      firstInstance: readRequiredSinkTableWord(
+        sinkTableWords,
+        wordCount,
+        firstRecordBase + 5,
+        'sink-table-sample.firstRecord.firstInstance',
+      ),
+      shapeWordOffset: readRequiredSinkTableWord(
+        sinkTableWords,
+        wordCount,
+        firstRecordBase + 6,
+        'sink-table-sample.firstRecord.shapeWordOffset',
+      ),
+      materialId: readRequiredSinkTableWord(
+        sinkTableWords,
+        wordCount,
+        firstRecordBase + 7,
+        'sink-table-sample.firstRecord.materialId',
+      ),
+    };
   }
 
   private emitSinkTableDebugSample(sample: SinkTableDebugSample): void {
@@ -1144,6 +1251,7 @@ export class WebGPURenderer {
         wordCount: sample.sinkTableWordCount,
         totalRecords: sample.totalRecords,
         firstRecord: sample.firstRecord,
+        firstDescriptor: sample.firstDescriptor,
       })}`,
     );
   }
@@ -1183,21 +1291,14 @@ export class WebGPURenderer {
   ): Promise<void> {
     await new Promise<void>((resolve, reject) => {
       let settled = false;
-      const rejectWithTerminalFailure = (
-        error: Error,
-        buildFatalTransition: (() => RendererFatalTransition) | null,
-      ): void => {
-        settle(() => {
-          const terminalError =
-            buildFatalTransition === null ? error : this.markRendererFatal(buildFatalTransition());
-          reject(terminalError);
-        });
-      };
       const timeoutId = globalThis.setTimeout(() => {
-        const error = new Error(`Rust renderer worker timed out during ${options.context}`);
-        rejectWithTerminalFailure(error, () =>
-          this.buildAckTimeoutFatalTransition(options.context, error),
-        );
+        settle(() => {
+          const error = new Error(`Rust renderer worker timed out during ${options.context}`);
+          const fatalError = this.markRendererFatal(
+            this.buildAckTimeoutFatalTransition(options.context, error),
+          );
+          reject(fatalError);
+        });
       }, WORKER_RESPONSE_TIMEOUT_MS);
       const settle = (callback: () => void): void => {
         if (settled) return;
@@ -1218,19 +1319,25 @@ export class WebGPURenderer {
           settle(resolve);
           return;
         }
-        // [LAW:single-enforcer] Terminal ack settle/reject behavior is owned
-        // by one helper so timeout/message/error paths cannot drift.
-        // [LAW:dataflow-not-control-flow] The ack path always executes the
-        // same settle helper; fatal vs non-fatal variability is data.
-        rejectWithTerminalFailure(
-          disposition.error,
-          disposition.fatal ? () => this.buildAckFailureFatalTransition(disposition) : null,
-        );
+        settle(() => {
+          if (disposition.fatal) {
+            const fatalError = this.markRendererFatal(
+              this.buildAckFailureFatalTransition(disposition),
+            );
+            reject(fatalError);
+            return;
+          }
+          reject(disposition.error);
+        });
       };
       const onError = (event: ErrorEvent): void => {
-        const message = event.message || `Rust renderer worker crashed during ${options.context}`;
-        const transition = this.buildWorkerErrorFatalTransition(options.context, message);
-        rejectWithTerminalFailure(transition.cause, () => transition);
+        settle(() => {
+          const message = event.message || `Rust renderer worker crashed during ${options.context}`;
+          const fatalError = this.markRendererFatal(
+            this.buildWorkerErrorFatalTransition(options.context, message),
+          );
+          reject(fatalError);
+        });
       };
       this.worker.addEventListener('message', onMessage);
       this.worker.addEventListener('error', onError);
@@ -1362,43 +1469,31 @@ export class WebGPURenderer {
     };
   }
 
-  private handleWorkerMessage(payload: RustRendererWorkerOutboundMessage): void {
-    switch (payload.type) {
-      case 'ENGINE_ERROR':
-        this.handleEngineErrorMessage(payload);
-        return;
-      case 'FATAL_ERROR':
-        this.handleFatalErrorMessage(payload);
-        return;
-      case 'DEVICE_LOST':
-        this.handleDeviceLostMessage(payload);
-        return;
-      case 'RUNTIME_EVENT':
-        this.handleRuntimeEventMessage(payload);
-        return;
-      case 'SCHEDULER_HEARTBEAT':
-        this.handleSchedulerHeartbeatMessage(payload);
-        return;
-      case 'BOOTSTRAP_SUCCESS':
-      case 'REBUILD_GPU_PIPELINES_SUCCESS':
-        return;
-      default: {
-        // [LAW:no-silent-fallbacks] Runtime protocol dispatch must be exhaustive.
-        const exhaustiveCheck: never = payload;
-        throw new Error(
-          `Unhandled RustRendererWorkerOutboundMessage type: ${(exhaustiveCheck as { type: string }).type}`,
-        );
-      }
-    }
-  }
-
   private readonly handleRuntimeMessage = (event: MessageEvent<RustRendererWorkerOutboundMessage>): void => {
     const payload = event.data;
     if (!payload) return;
     if (this.shouldIgnoreRuntimeMessage(payload)) {
       return;
     }
-    this.handleWorkerMessage(payload);
+    if (payload.type === 'ENGINE_ERROR') {
+      this.handleEngineErrorMessage(payload);
+      return;
+    }
+    if (payload.type === 'FATAL_ERROR') {
+      this.handleFatalErrorMessage(payload);
+      return;
+    }
+    if (payload.type === 'DEVICE_LOST') {
+      this.handleDeviceLostMessage(payload);
+      return;
+    }
+    if (payload.type === 'RUNTIME_EVENT') {
+      this.handleRuntimeEventMessage(payload);
+      return;
+    }
+    if (payload.type === 'SCHEDULER_HEARTBEAT') {
+      this.handleSchedulerHeartbeatMessage(payload);
+    }
   };
 }
 

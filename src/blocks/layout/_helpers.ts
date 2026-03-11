@@ -59,7 +59,7 @@ function valueExprChildren(expr: ValueExpr): readonly ValueExprId[] {
       return [expr.input];
     case 'construct':
       return expr.components;
-    case 'hslToRgb':
+    case 'oklchToRgb':
       return [expr.input];
     default:
       return [];

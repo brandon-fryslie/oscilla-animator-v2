@@ -134,7 +134,7 @@ export function stateId(s: string): StateId {
 /**
  * Fixed slot for time.palette (COLOR, stride=4).
  * Reserved at slot 0 by IRBuilderImpl constructor.
- * Written each frame by ScheduleExecutor before phase execution.
+ * Written each frame by the runtime executor before phase execution.
  */
 export const SYSTEM_PALETTE_SLOT = 0 as ValueSlot;
 

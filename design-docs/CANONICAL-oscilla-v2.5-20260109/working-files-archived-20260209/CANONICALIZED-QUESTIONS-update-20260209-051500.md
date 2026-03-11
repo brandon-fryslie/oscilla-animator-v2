@@ -72,7 +72,7 @@ source_files:
 
 **Conflict**:
 - **Canonical spec** (01-type-system.md line 181): `{ kind: 'color'; space: 'rgba01' }` — uses `space` sub-field
-- **01-colors.md**: `{ kind: 'color', unit: 'hsl' }` — uses `unit` sub-field
+- **01-colors.md**: `{ kind: 'color', unit: 'oklch' }` — uses `unit` sub-field
 - **02-color-units.md**: "The existing `{ kind: 'color', unit: 'rgba01' }` pattern" — also uses `unit` sub-field
 
 **Why it matters**: The sub-field name must be consistent for TypeScript interfaces, adapter matching, and all code referencing color units.

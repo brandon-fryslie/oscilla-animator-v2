@@ -15,20 +15,20 @@ indexed: true
 **Depends on**: Q2 (UnitType sub-field naming), Q3 (UnitType kind set)
 
 **T2 content (structural)**:
-- Color space as UnitType extension: `{ kind: 'color', space: 'hsl' }` and `{ kind: 'color', space: 'rgba01' }`
-- Compatibility rule: HSL and RGBA01 require explicit adapter (HslToRgba)
-- Color validity enforcement: MakeColorHSL wraps hue, clamps s/l/a
+- Color space as UnitType extension: `{ kind: 'color', space: 'oklch' }` and `{ kind: 'color', space: 'rgba01' }`
+- Compatibility rule: OKLCH and RGBA01 require explicit adapter (OklchToRgba)
+- Color validity enforcement: MakeColorOKLCH wraps hue, clamps s/l/a
 - Extract/Construct as structural intrinsics (new ValueExpr kinds, not registry kernels)
 - All color blocks are cardinality-polymorphic
 
 **T3 content (details)**:
-- Block catalog: ColorPicker, MakeColorHSL, SplitColorHSL, HueShift, MixColor, AlphaMultiply, HslToRgba
+- Block catalog: ColorPicker, MakeColorOKLCH, SplitColorOKLCH, HueShift, MixColor, AlphaMultiply, OklchToRgba
 - Per-block lowering semantics
-- HSL→RGB conversion algorithm (hue2rgb)
+- OKLCH→RGB conversion algorithm (hue2rgb)
 - Convenience outputs (scalar h/s/l/a from ColorPicker)
 - Shortest-arc hue interpolation for MixColor
 
-**Cross-references**: 01-type-system (UnitType), 02-block-system (block definitions), 21-adapter-system (HslToRgba adapter)
+**Cross-references**: 01-type-system (UnitType), 02-block-system (block definitions), 21-adapter-system (OklchToRgba adapter)
 
 **Source documents**: `01-colors.md`, `02-color-units.md`
 
@@ -141,7 +141,7 @@ indexed: true
 
 ### Topic 01 (Type System) — Updates
 
-1. **UnitType kinds**: Remove `scalar` (unified with `none`). Clarify `norm01`. Add `{ kind: 'color', space: 'hsl' }`. (Blocked on Q2, Q3)
+1. **UnitType kinds**: Remove `scalar` (unified with `none`). Clarify `norm01`. Add `{ kind: 'color', space: 'oklch' }`. (Blocked on Q2, Q3)
 2. **Normalized unit policy**: Add T3 note: "Normalize glue signals (phase, mix, masks, easings, normalizedIndex). Keep time/space/physics in real units."
 3. **Cardinality type variables**: Note that DefaultSource and cardinality-generic blocks can declare output type with cardinality var, resolved via inference
 
