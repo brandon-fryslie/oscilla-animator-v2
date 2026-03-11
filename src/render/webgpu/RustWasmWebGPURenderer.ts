@@ -300,19 +300,12 @@ function requireNonEmptyString(value: unknown, message: string): string {
 }
 
 function validateGpuPass(pass: RustRendererGpuPass, index: number): RustRendererGpuPass {
-  // TODO(#180): Move GPU pass semantic validation to compile/Naga boundary.
-  // [LAW:single-enforcer] Renderer should not be the long-term enforcer for
-  // pass contract validity; compiler validation is the canonical boundary.
-  // https://github.com/brandon-fryslie/oscilla-animator-v2/issues/180
+  // [LAW:single-enforcer] Renderer enforces transport/runtime payload integrity
+  // only; semantic pass-signature validation is owned by compile worker.
   const passId = requireNonEmptyString(
     pass.passId,
     `Rust renderer GPU pass contract violation: passes[${index}].passId is required`,
   );
-  if (pass.stage !== 'compute') {
-    throw new Error(
-      `Rust renderer GPU pass contract violation: pass "${passId}" has unsupported stage "${String(pass.stage)}"`,
-    );
-  }
   const entryPoint = requireNonEmptyString(
     pass.entryPoint,
     `Rust renderer GPU pass contract violation: pass "${passId}" is missing entryPoint`,
@@ -321,26 +314,12 @@ function validateGpuPass(pass: RustRendererGpuPass, index: number): RustRenderer
     pass.wgsl,
     `Rust renderer GPU pass contract violation: pass "${passId}" is missing WGSL source`,
   );
-  if (wgsl.toLowerCase().includes("won't compile")) {
-    throw new Error(
-      `Rust renderer GPU pass contract violation: pass "${passId}" contains placeholder invalid WGSL (${previewWgsl(wgsl)})`,
-    );
-  }
-  if (!wgsl.includes('@compute')) {
-    throw new Error(
-      `Rust renderer GPU pass contract violation: pass "${passId}" is missing @compute entry annotation`,
-    );
-  }
-  // TODO(#179): Remove renderer regex entrypoint validation; validate
-  // against structured pass signatures emitted by compiler lowering.
-  // https://github.com/brandon-fryslie/oscilla-animator-v2/issues/179
-  const entryPattern = new RegExp(`\\bfn\\s+${escapeRegex(entryPoint)}\\s*\\(`);
-  if (!entryPattern.test(wgsl)) {
-    throw new Error(
-      `Rust renderer GPU pass contract violation: pass "${passId}" is missing fn ${entryPoint}(...)`,
-    );
-  }
-  return pass;
+  return {
+    passId,
+    stage: 'compute',
+    entryPoint,
+    wgsl,
+  };
 }
 
 function validateGpuPassBundle(passes: readonly RustRendererGpuPass[]): readonly RustRendererGpuPass[] {
@@ -826,8 +805,8 @@ export class WebGPURenderer {
     if (!this.bootstrapped) {
       throw new Error('Rust renderer worker is not bootstrapped');
     }
-    // [LAW:single-enforcer] Bundle-level GPU pass contract validation is owned
-    // at this renderer boundary before worker transport.
+    // [LAW:single-enforcer] Renderer validates transport/runtime payload shape;
+    // semantic pass signatures are already validated at compile worker boundary.
     const validatedPasses = [...validateGpuPassBundle(passes)];
     for (const pass of validatedPasses) {
       dumpShaderWithLineNumbers(pass.passId, pass.wgsl);
