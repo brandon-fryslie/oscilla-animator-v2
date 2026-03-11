@@ -136,7 +136,7 @@ export function register(): void {
     lower: ({ ctx, inputsById }) => {
       const shapeInput = inputsById.shape;
       const countInput = inputsById.count;
-      const count = resolveInputConstant(ctx, countInput, 'count', { min: 64, max: 100_000 });
+      const count = resolveInputConstant(ctx, countInput, 'count', { min: 64, max: 65_536 });
       const simResolution = inputsById.simResolution;
       const velocityDissipation = inputsById.velocityDissipation;
       const dyeDissipation = inputsById.dyeDissipation;

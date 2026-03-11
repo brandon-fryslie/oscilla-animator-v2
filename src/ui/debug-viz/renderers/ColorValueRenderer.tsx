@@ -77,7 +77,11 @@ function toCssColor(h: number, c: number, l: number, a: number): string {
  */
 function toHex(h: number, c: number, l: number): string {
   const [r, g, b] = oklchToEncodedSrgb(h, c, l);
-  const hex = (v: number) => Math.round(v * 255).toString(16).padStart(2, '0');
+  const hex = (v: number) => {
+    const finite = Number.isFinite(v) ? v : 0;
+    const clamped = Math.max(0, Math.min(1, finite));
+    return Math.round(clamped * 255).toString(16).padStart(2, '0');
+  };
   return `#${hex(r)}${hex(g)}${hex(b)}`;
 }
 
