@@ -11,9 +11,18 @@ export interface CompiledGpuPassArtifact {
   readonly wgsl: string;
 }
 
+export interface CompiledGpuPassSignature {
+  readonly passId: string;
+  readonly stage: 'compute';
+  readonly entryPoint: string;
+}
+
 export interface CompiledGpuArtifactBundle {
   readonly schemaVersion: 1;
   readonly passes: readonly CompiledGpuPassArtifact[];
+  // [LAW:single-enforcer] Pass signature semantics are enforced once at
+  // compile boundary and transported as typed metadata.
+  readonly passSignatures?: readonly CompiledGpuPassSignature[];
 }
 
 export type CompileWorkerBackendResult =

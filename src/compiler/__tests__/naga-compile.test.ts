@@ -26,7 +26,10 @@ vi.mock('../naga-bridge', () => ({
   NagaValidationError: hoisted.MockNagaValidationError,
 }));
 
-import { compileProgramWithNaga } from '../naga-compile';
+import {
+  compileProgramWithNaga,
+  validateGpuPassSignaturesAtCompileBoundary,
+} from '../naga-compile';
 
 function buildSimplePatch() {
   return buildPatch((b) => {
@@ -165,5 +168,54 @@ describe('compileProgramWithNaga', () => {
         error.message.includes('generatedComputeProgram.maxActiveLanes is missing or invalid'),
       ),
     ).toBe(true);
+  });
+});
+
+describe('validateGpuPassSignaturesAtCompileBoundary', () => {
+  it('accepts valid compute pass signatures', () => {
+    const result = validateGpuPassSignaturesAtCompileBoundary([
+      {
+        passId: 'simulation',
+        stage: 'compute',
+        entryPoint: 'compute_main',
+        wgsl: '@compute @workgroup_size(64, 1, 1)\nfn compute_main() {}',
+      },
+    ]);
+    expect(result).toMatchObject({
+      kind: 'ok',
+      signatures: [{
+        passId: 'simulation',
+        stage: 'compute',
+        entryPoint: 'compute_main',
+      }],
+    });
+  });
+
+  it('rejects invalid stage metadata', () => {
+    const result = validateGpuPassSignaturesAtCompileBoundary([
+      {
+        passId: 'simulation',
+        stage: 'fragment',
+        entryPoint: 'compute_main',
+        wgsl: '@compute @workgroup_size(64, 1, 1)\nfn compute_main() {}',
+      },
+    ]);
+    expect(result.kind).toBe('error');
+    if (result.kind !== 'error') return;
+    expect(result.errors.some((error) => error.message.includes('unsupported stage'))).toBe(true);
+  });
+
+  it('rejects WGSL payloads missing the declared entrypoint', () => {
+    const result = validateGpuPassSignaturesAtCompileBoundary([
+      {
+        passId: 'simulation',
+        stage: 'compute',
+        entryPoint: 'compute_main',
+        wgsl: '@compute @workgroup_size(64, 1, 1)\nfn wrong_entry() {}',
+      },
+    ]);
+    expect(result.kind).toBe('error');
+    if (result.kind !== 'error') return;
+    expect(result.errors.some((error) => error.message.includes('missing fn compute_main'))).toBe(true);
   });
 });

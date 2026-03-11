@@ -300,46 +300,20 @@ function requireNonEmptyString(value: unknown, message: string): string {
 }
 
 function validateGpuPass(pass: RustRendererGpuPass, index: number): RustRendererGpuPass {
-  // TODO(#180): Move GPU pass semantic validation to compile/Naga boundary.
-  // [LAW:single-enforcer] Renderer should not be the long-term enforcer for
-  // pass contract validity; compiler validation is the canonical boundary.
-  // https://github.com/brandon-fryslie/oscilla-animator-v2/issues/180
+  // [LAW:single-enforcer] Compile worker/Naga boundary owns pass-signature
+  // semantics; renderer checks transport/runtime payload integrity only.
   const passId = requireNonEmptyString(
     pass.passId,
     `Rust renderer GPU pass contract violation: passes[${index}].passId is required`,
   );
-  if (pass.stage !== 'compute') {
-    throw new Error(
-      `Rust renderer GPU pass contract violation: pass "${passId}" has unsupported stage "${String(pass.stage)}"`,
-    );
-  }
-  const entryPoint = requireNonEmptyString(
+  requireNonEmptyString(
     pass.entryPoint,
     `Rust renderer GPU pass contract violation: pass "${passId}" is missing entryPoint`,
   );
-  const wgsl = requireNonEmptyString(
+  requireNonEmptyString(
     pass.wgsl,
     `Rust renderer GPU pass contract violation: pass "${passId}" is missing WGSL source`,
   );
-  if (wgsl.toLowerCase().includes("won't compile")) {
-    throw new Error(
-      `Rust renderer GPU pass contract violation: pass "${passId}" contains placeholder invalid WGSL (${previewWgsl(wgsl)})`,
-    );
-  }
-  if (!wgsl.includes('@compute')) {
-    throw new Error(
-      `Rust renderer GPU pass contract violation: pass "${passId}" is missing @compute entry annotation`,
-    );
-  }
-  // TODO(#179): Remove renderer regex entrypoint validation; validate
-  // against structured pass signatures emitted by compiler lowering.
-  // https://github.com/brandon-fryslie/oscilla-animator-v2/issues/179
-  const entryPattern = new RegExp(`\\bfn\\s+${escapeRegex(entryPoint)}\\s*\\(`);
-  if (!entryPattern.test(wgsl)) {
-    throw new Error(
-      `Rust renderer GPU pass contract violation: pass "${passId}" is missing fn ${entryPoint}(...)`,
-    );
-  }
   return pass;
 }
 
