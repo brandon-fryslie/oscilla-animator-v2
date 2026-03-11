@@ -425,7 +425,7 @@ patch "Library Kitchen Sink" {
     }
   }
 
-  block "MakeColorHSL" "grid-color" {
+  block "MakeColorOKLCH" "grid-color" {
     s = 1
     l = 0.55
     outputs {
@@ -480,7 +480,7 @@ patch "Library Kitchen Sink" {
     }
   }
 
-  block "MakeColorHSL" "circle-color" {
+  block "MakeColorOKLCH" "circle-color" {
     s = 0.9
     l = 0.6
     outputs {
@@ -648,7 +648,7 @@ patch "Library Kitchen Sink" {
     }
   }
 
-  block "MakeColorHSL" "path-color" {
+  block "MakeColorOKLCH" "path-color" {
     s = 0.95
     l = 0.55
     outputs {
@@ -662,7 +662,7 @@ patch "Library Kitchen Sink" {
     }
   }
 
-  block "SplitColorHSL" "split-path" {
+  block "SplitColorOKLCH" "split-path" {
     outputs {
       h = picker-path.h
       s = picker-path.s
@@ -679,11 +679,11 @@ patch "Library Kitchen Sink" {
 
   block "AlphaMultiply" "path-alpha" {
     outputs {
-      out = [path-render.color, hsl-to-rgba.in]
+      out = [path-render.color, oklch-to-rgba.in]
     }
   }
 
-  block "Adapter_HslToRgba" "hsl-to-rgba" {}
+  block "Adapter_OklchToRgba" "oklch-to-rgba" {}
 
   block "PathField" "path-field" {
     outputs {

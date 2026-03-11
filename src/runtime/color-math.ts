@@ -1,13 +1,13 @@
 /**
- * HSL → RGB color space conversion (sRGB-encoded).
+ * OKLCH → RGB color space conversion (sRGB-encoded).
  *
- * Single enforcer for HSL→RGB math. Used by both
+ * Single enforcer for OKLCH→RGB math. Used by both
  * ValueExprMaterializer (many extent) and ValueExprScalarEvaluator (one extent).
  *
  * Input: h ∈ [0,1), s ∈ [0,1], l ∈ [0,1] (all normalized floats)
  * Output: [r, g, b] each ∈ [0,1] (sRGB-encoded)
  *
- * Algorithm: Standard HSL→RGB per CSS Color Level 3 spec.
+ * Algorithm: Standard OKLCH→RGB per CSS Color Level 3 spec.
  */
 
 import { wrapToPhase01 } from '../utilities/phase';
@@ -23,7 +23,7 @@ function hue2rgb(p: number, q: number, t: number): number {
 }
 
 /**
- * Convert HSL to RGB.
+ * Convert OKLCH to RGB.
  *
  * @param h - Hue in [0,1) (wrapped)
  * @param s - Saturation in [0,1]
