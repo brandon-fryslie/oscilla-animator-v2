@@ -265,6 +265,11 @@ describe('RustWasmWebGPURenderer fatal transition', () => {
     const postFatalError = expectThrownError(() => renderer.setViewportFrame(makeViewportFrame()));
     expect(postFatalError).toBe(rebuildError as Error);
   });
+});
+
+describe('RustWasmWebGPURenderer fatal transition ack timeout path', () => {
+  const suiteState: { originalNavigatorGpu: PropertyDescriptor | undefined } = { originalNavigatorGpu: undefined };
+  installRendererSuiteHooks(suiteState);
 
   it('routes worker ack timeout through the fatal boundary once and keeps deterministic post-fatal errors', async () => {
     vi.useFakeTimers();
@@ -295,6 +300,11 @@ describe('RustWasmWebGPURenderer fatal transition', () => {
       vi.useRealTimers();
     }
   });
+});
+
+describe('RustWasmWebGPURenderer fatal transition ack message classification', () => {
+  const suiteState: { originalNavigatorGpu: PropertyDescriptor | undefined } = { originalNavigatorGpu: undefined };
+  installRendererSuiteHooks(suiteState);
 
   it('routes classified fatal ack message failures through the fatal boundary once', async () => {
     const renderer = await createWebGPURenderer(makeCanvas());
