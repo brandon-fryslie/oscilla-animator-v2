@@ -271,7 +271,7 @@ function buildRuntimeHeartbeatRuntime(
   return {
     demoFilename: store.demo.currentFilename ?? null,
     renderStepCount,
-    drawPrepSinkCount: currentProgram.drawPrepProgram?.sinks?.length ?? 0,
+    drawPrepSinkCount: currentProgram.drawPrepProgram.sinks.length,
     installedGpuPassIds,
     sinkTableSample,
     schedulerFrameCount,

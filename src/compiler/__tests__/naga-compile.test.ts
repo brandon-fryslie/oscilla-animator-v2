@@ -68,8 +68,7 @@ describe('compileProgramWithNaga', () => {
     expect(result.kind).toBe('ok');
     if (result.kind !== 'ok') return;
 
-    const expected = result.program.generatedComputeProgram?.maxActiveLanes;
-    expect(typeof expected).toBe('number');
+    const expected = result.program.generatedComputeProgram.maxActiveLanes;
 
     const compiled = await compileProgramWithNaga(result.program);
     expect(compiled.kind).toBe('ok');
@@ -81,44 +80,12 @@ describe('compileProgramWithNaga', () => {
     expect(compiled.wgsl).toContain(`const MAX_ACTIVE_LANES: u32 = ${expected}u;`);
   });
 
-  it('fails when compiled program has no lowering artifact', async () => {
-    const result = compile(buildSimplePatch());
-    expect(result.kind).toBe('ok');
-    if (result.kind !== 'ok') return;
-
-    const withoutLowering = {
-      ...result.program,
-      nagaLoweringProgram: undefined,
-    };
-    const compiled = await compileProgramWithNaga(withoutLowering as typeof result.program);
-    expect(compiled.kind).toBe('error');
-    if (compiled.kind !== 'error') return;
-    expect(compiled.errors.some((error) => error.code === 'IRValidationFailed')).toBe(true);
-  });
-
-  it('fails when compiled program has no generated compute metadata', async () => {
-    const result = compile(buildSimplePatch());
-    expect(result.kind).toBe('ok');
-    if (result.kind !== 'ok') return;
-
-    const withoutComputeMetadata = {
-      ...result.program,
-      generatedComputeProgram: undefined,
-    };
-    const compiled = await compileProgramWithNaga(withoutComputeMetadata as unknown as typeof result.program);
-    expect(compiled.kind).toBe('error');
-    if (compiled.kind !== 'error') return;
-    expect(compiled.errors.some((error) => error.message.includes('Missing generatedComputeProgram metadata'))).toBe(true);
-  });
-
   it('maps statement validation failures to source block IDs', async () => {
     const result = compile(buildSimplePatch());
     expect(result.kind).toBe('ok');
     if (result.kind !== 'ok') return;
 
     const lowering = result.program.nagaLoweringProgram;
-    expect(lowering).toBeDefined();
-    if (!lowering) return;
 
     const stmtEntry = Object.entries(lowering.sourceMap).find(
       ([key, value]) => key.startsWith('Stmt_') && value.blockId,
@@ -155,7 +122,7 @@ describe('compileProgramWithNaga', () => {
     const faultyProgram = {
       ...result.program,
       generatedComputeProgram: {
-        ...result.program.generatedComputeProgram!,
+        ...result.program.generatedComputeProgram,
         maxActiveLanes: 0,
       },
     };

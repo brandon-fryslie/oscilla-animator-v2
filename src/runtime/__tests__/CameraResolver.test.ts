@@ -53,6 +53,38 @@ function mockProgram(
     arenaLayout: [],
     arenaPayloadFloats: 0,
     arenaTotalFloats: 0,
+    drawPrepProgram: {
+      totalRecordCount: 0,
+      indexedRecordCount: 0,
+      indexedRegionBaseWords: 0,
+      indexedStrideWords: 5,
+      nonIndexedRecordCount: 0,
+      nonIndexedRegionBaseWords: 0,
+      nonIndexedStrideWords: 4,
+      sinks: [],
+    },
+    generatedComputeProgram: {
+      maxActiveLanes: 1,
+      offsetConstants: new Map(),
+    },
+    nagaLoweringProgram: {
+      module: {
+        types: [],
+        constants: [],
+        global_variables: [],
+        functions: [],
+        entry_points: [],
+      },
+      sourceMap: {},
+      compute: {
+        maxActiveLanes: 1,
+      },
+      coverage: {
+        totalStepCount: 0,
+        boundaryStepCount: 0,
+        droppedComputeStepCount: 0,
+      },
+    },
   };
 }
 

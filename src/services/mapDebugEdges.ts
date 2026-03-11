@@ -102,7 +102,7 @@ export function mapDebugMappings(patch: Patch, program: CompiledProgramIR): Debu
     if (!debugIndex.slotToPort) {
         throw new Error('[mapDebugEdges] debugIndex.slotToPort is missing - compiler debug index is incomplete');
     }
-    if (!runtimeAddressTable?.slotLookup) {
+    if (!runtimeAddressTable.slotLookup) {
         // [LAW:single-enforcer] Slot type/address metadata is owned by
         // compiler-emitted runtimeAddressTable; debug mapping must not derive
         // types from legacy metadata mirrors.

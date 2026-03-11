@@ -173,7 +173,7 @@ export interface PrecomputedCompileArtifacts {
   readonly sourcePatchRevision: number;
   readonly frontendResult: FrontendResult;
   readonly backendResult: CompileResult | null;
-  readonly compiledGpuBundle?: CompiledGpuArtifactBundle | null;
+  readonly compiledGpuBundle: CompiledGpuArtifactBundle | null;
   readonly compileDurationMs: number;
 }
 
@@ -379,7 +379,7 @@ export async function compileAndSwap(
   };
 
   const runtimeAddressTable = program.runtimeAddressTable;
-  if (!runtimeAddressTable?.slotLookup) {
+  if (!runtimeAddressTable.slotLookup) {
     // [LAW:single-enforcer] Runtime slot cardinality comes from the compiler
     // runtime-address contract; orchestrator must not derive from legacy metadata.
     throw new Error('[compile] runtimeAddressTable.slotLookup is missing - compiler/runtime contract violation');

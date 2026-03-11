@@ -179,7 +179,7 @@ function selectFluidRenderStep(program: CompiledProgramIR, fluidBlockIds: readon
 }
 
 function descriptorToPlan(program: CompiledProgramIR, slot: number): ArenaAddressPlan | null {
-  const descriptor = program.runtimeAddressTable?.slotToArena.get(slot as never);
+  const descriptor = program.runtimeAddressTable.slotToArena.get(slot as never);
   if (!descriptor) return null;
   const packing = descriptor.packing ?? 'soa';
   const laneStride = descriptor.laneStride ?? (packing === 'soa' ? 1 : descriptor.stride);
@@ -197,10 +197,10 @@ function buildFluidRenderPlan(program: CompiledProgramIR, step: StepRender): Flu
   const scale = descriptorToPlan(program, step.scale.slot as never);
   if (!controlPoints || !color || !scale) return null;
 
-  const controlDescriptor = program.runtimeAddressTable?.slotToArena.get(step.controlPointsSlot as never);
+  const controlDescriptor = program.runtimeAddressTable.slotToArena.get(step.controlPointsSlot as never);
   if (!controlDescriptor) return null;
 
-  const maxActiveLanes = Math.max(1, Math.floor(program.generatedComputeProgram?.maxActiveLanes ?? controlDescriptor.laneCount));
+  const maxActiveLanes = Math.max(1, Math.floor(program.generatedComputeProgram.maxActiveLanes));
   const activeLanes = Math.max(1, Math.min(maxActiveLanes, controlDescriptor.laneCount));
   return { controlPoints, color, scale, activeLanes };
 }
@@ -240,7 +240,7 @@ function resolveScalarBinding(
 ): FluidScalarBinding {
   const slot = resolveBlockPortSlot(program, blockId, outputPortName);
   const descriptor = slot !== null
-    ? program.runtimeAddressTable?.slotToArena.get(slot as never)
+    ? program.runtimeAddressTable.slotToArena.get(slot as never)
     : undefined;
   if (!descriptor) {
     return {

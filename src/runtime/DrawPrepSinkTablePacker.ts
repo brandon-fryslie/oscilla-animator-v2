@@ -81,7 +81,7 @@ function resolveSlotArenaAddress(
   slot: ValueSlot,
   context: string,
 ): PackedArenaAddress {
-  const descriptor = program.runtimeAddressTable?.slotToArena.get(slot);
+  const descriptor = program.runtimeAddressTable.slotToArena.get(slot);
   if (!descriptor) {
     throw new Error(
       'DrawPrepSinkTablePacker: missing runtimeAddressTable slotToArena descriptor for ' + context,
@@ -164,9 +164,6 @@ function assertShapeHandleInBankWindow(state: RuntimeState, shapeHandleWordOffse
 
 function resolveSinkInstanceCount(program: CompiledProgramIR, state: RuntimeState, sinkIndex: number): number {
   const drawPrepProgram = program.drawPrepProgram;
-  if (!drawPrepProgram) {
-    throw new Error('DrawPrepSinkTablePacker: missing drawPrepProgram');
-  }
   const sink = drawPrepProgram.sinks[sinkIndex];
   if (!sink) {
     throw new Error(`DrawPrepSinkTablePacker: sink ${sinkIndex} missing`);
@@ -243,7 +240,7 @@ export function packDrawPrepSinkTableV1(
   state: RuntimeState,
 ): PackedDrawPrepSinkTableV1 | null {
   const drawPrepProgram = program.drawPrepProgram;
-  if (!drawPrepProgram) {
+  if (drawPrepProgram.sinks.length === 0) {
     state.cache.drawPrepSinkTableWords = undefined;
     state.cache.drawPrepSinkTableWordCount = 0;
     state.cache.drawPrepSinkTableFrameId = state.cache.frameId;
