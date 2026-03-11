@@ -377,7 +377,7 @@ function collectExprInputs(expr: ValueExpr | undefined): readonly number[] {
       }
     case 'extract': return [expr.input as number];
     case 'construct': return expr.components.map((id) => id as number);
-    case 'hslToRgb': return [expr.input as number];
+    case 'oklchToRgb': return [expr.input as number];
     case 'event':
       switch (expr.eventKind) {
         case 'wrap': return [expr.input as number];
@@ -1035,7 +1035,7 @@ function emitMaterializeExprComponentF32(args: {
     case 'time': resolved = emitTimeChannelF32({ ctx: args.ctx, builtins: args.builtins, which: expr.which, componentIndex: component, periodAMs: args.schedule.timeModel.periodAMs, periodBMs: args.schedule.timeModel.periodBMs, source: args.source }); break;
     case 'external': case 'eventRead': resolved = emitLiteralF32(args.ctx, args.builtins, 0, args.source); break;
     case 'event': resolved = emitEventExprComponentF32({ ctx: args.ctx, builtins: args.builtins, source: args.source, expr, emitFromExprInput }); break;
-    case 'hslToRgb': resolved = emitFromExprInput(expr.input, component); break;
+    case 'oklchToRgb': resolved = emitFromExprInput(expr.input, component); break;
   }
 
   if (resolved === null) {

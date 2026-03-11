@@ -12,7 +12,7 @@ import { cardinalityVar } from '../../core/inference-types';
 import { cardinalityVarId } from '../../core/ids';
 
 // [LAW:one-source-of-truth] Per-port cardinality behavior is declared on CT/ICT.
-const SPLIT_COLOR_HSL_CARD = cardinalityVar(cardinalityVarId('split_color_hsl_cardinality'), {
+const SPLIT_COLOR_OKLCH_CARD = cardinalityVar(cardinalityVarId('split_color_oklch_cardinality'), {
   relation: 'promoteToMany',
   acceptance: 'oneOrMany',
   instanceBinding: 'inherit',
@@ -23,18 +23,18 @@ export function register(): void {
     type: 'SplitColorOKLCH',
     label: 'Split Color OKLCH',
     category: 'color',
-    description: 'Unpack color+oklch into h, s, l, a channels',
+    description: 'Unpack color+oklch into h, c, l, a channels',
     form: 'primitive',
     capability: 'pure',
     loweringPurity: 'pure',
     inputs: {
-      color: { label: 'Color', type: canonicalType(COLOR, unitOklch(), { cardinality: SPLIT_COLOR_HSL_CARD }) },
+      color: { label: 'Color', type: canonicalType(COLOR, unitOklch(), { cardinality: SPLIT_COLOR_OKLCH_CARD }) },
     },
     outputs: {
-      h: { label: 'Hue', type: canonicalType(FLOAT, unitTurns(), { cardinality: SPLIT_COLOR_HSL_CARD }, contractWrap01()) },
-      s: { label: 'Saturation', type: canonicalType(FLOAT, unitNone(), { cardinality: SPLIT_COLOR_HSL_CARD }, contractClamp01()) },
-      l: { label: 'Lightness', type: canonicalType(FLOAT, unitNone(), { cardinality: SPLIT_COLOR_HSL_CARD }, contractClamp01()) },
-      a: { label: 'Alpha', type: canonicalType(FLOAT, unitNone(), { cardinality: SPLIT_COLOR_HSL_CARD }, contractClamp01()) },
+      h: { label: 'Hue', type: canonicalType(FLOAT, unitTurns(), { cardinality: SPLIT_COLOR_OKLCH_CARD }, contractWrap01()) },
+      s: { label: 'Chroma', type: canonicalType(FLOAT, unitNone(), { cardinality: SPLIT_COLOR_OKLCH_CARD }, contractClamp01()) },
+      l: { label: 'Lightness', type: canonicalType(FLOAT, unitNone(), { cardinality: SPLIT_COLOR_OKLCH_CARD }, contractClamp01()) },
+      a: { label: 'Alpha', type: canonicalType(FLOAT, unitNone(), { cardinality: SPLIT_COLOR_OKLCH_CARD }, contractClamp01()) },
     },
     lower: ({ ctx, inputsById }) => {
       const colorInput = inputsById.color;

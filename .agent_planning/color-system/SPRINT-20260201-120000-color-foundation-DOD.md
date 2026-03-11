@@ -3,20 +3,20 @@
 ## Verification Criteria
 
 ### Type System
-- `unitHsl()` returns `{ kind: 'color', unit: 'hsl' }`
+- `unitHsl()` returns `{ kind: 'color', unit: 'oklch' }`
 - `unitsEqual(unitHsl(), unitHsl())` returns true
 - `unitsEqual(unitHsl(), unitRgba01())` returns false
 - TypeScript compiles with no errors (exhaustive switches handle new variant)
 
-### HSL→RGB Conversion
+### OKLCH→RGB Conversion
 - Test vectors (at minimum):
-  - HSL(0, 1, 0.5, 1) → RGB(1, 0, 0, 1) — pure red
-  - HSL(1/3, 1, 0.5, 1) → RGB(0, 1, 0, 1) — pure green (h=0.333...)
-  - HSL(2/3, 1, 0.5, 1) → RGB(0, 0, 1, 1) — pure blue
-  - HSL(0, 0, 0.5, 1) → RGB(0.5, 0.5, 0.5, 1) — achromatic gray
-  - HSL(0, 0, 0, 1) → RGB(0, 0, 0, 1) — black
-  - HSL(0, 0, 1, 1) → RGB(1, 1, 1, 1) — white
-  - Alpha passthrough: HSL(0, 1, 0.5, 0.5) → RGB(1, 0, 0, 0.5)
+  - OKLCH(0, 1, 0.5, 1) → RGB(1, 0, 0, 1) — pure red
+  - OKLCH(1/3, 1, 0.5, 1) → RGB(0, 1, 0, 1) — pure green (h=0.333...)
+  - OKLCH(2/3, 1, 0.5, 1) → RGB(0, 0, 1, 1) — pure blue
+  - OKLCH(0, 0, 0.5, 1) → RGB(0.5, 0.5, 0.5, 1) — achromatic gray
+  - OKLCH(0, 0, 0, 1) → RGB(0, 0, 0, 1) — black
+  - OKLCH(0, 0, 1, 1) → RGB(1, 1, 1, 1) — white
+  - Alpha passthrough: OKLCH(0, 1, 0.5, 0.5) → RGB(1, 0, 0, 0.5)
 
 ### FieldConstColor Fix
 - `FieldConstColor` block compiles without error

@@ -2,7 +2,7 @@
  * AlphaMultiply Block
  *
  * Multiply color alpha by a scalar factor, clamping the result.
- * h/s/l pass through unchanged.
+ * h/c/l pass through unchanged.
  */
 
 import { registerBlock } from '../registry';
@@ -48,7 +48,7 @@ export function register(): void {
   
       // Extract channels
       const h = ctx.b.extract(colorInput.id, 0, hueType);
-      const s = ctx.b.extract(colorInput.id, 1, normType);
+      const c = ctx.b.extract(colorInput.id, 1, normType);
       const l = ctx.b.extract(colorInput.id, 2, normType);
       const a = ctx.b.extract(colorInput.id, 3, normType);
   
@@ -60,9 +60,9 @@ export function register(): void {
   
       const aMultiplied = zipAuto([a, alphaInput.id], mulFn, normType, ctx.b);
       const aClamped = zipAuto([aMultiplied, zero, one], clampFn, normType, ctx.b);
-  
+
       // Reconstruct with modified alpha
-      const result = ctx.b.construct([h, s, l, aClamped], outType);
+      const result = ctx.b.construct([h, c, l, aClamped], outType);
       return {
         outputsById: {
           out: { id: result, slot: undefined, type: outType, stride: payloadStride(outType.payload) },

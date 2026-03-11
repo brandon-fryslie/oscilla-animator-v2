@@ -18,8 +18,8 @@ Fix 18 block port unit annotations to match the normalized-units design philosop
 
 ### P0: Fix color block hue VALUE ports to unitPhase01()
 **Acceptance Criteria:**
-- [ ] `make-color-hsl.ts` hue input uses `unitPhase01()`
-- [ ] `split-color-hsl.ts` hue output uses `unitPhase01()`
+- [ ] `make-color-oklch.ts` hue input uses `unitPhase01()`
+- [ ] `split-color-oklch.ts` hue output uses `unitPhase01()`
 - [ ] `color-picker.ts` hue port uses `unitPhase01()`
 - [ ] `hue-shift.ts` shift port STAYS as `unitScalar()` (signed offset, not cyclic value)
 
@@ -31,8 +31,8 @@ Fix 18 block port unit annotations to match the normalized-units design philosop
 
 ### P1: Fix color block s/l/a ports to unitNorm01()
 **Acceptance Criteria:**
-- [ ] `make-color-hsl.ts` s, l, a inputs use `unitNorm01()`
-- [ ] `split-color-hsl.ts` s, l, a outputs use `unitNorm01()`
+- [ ] `make-color-oklch.ts` s, l, a inputs use `unitNorm01()`
+- [ ] `split-color-oklch.ts` s, l, a outputs use `unitNorm01()`
 - [ ] `color-picker.ts` s, l, a ports use `unitNorm01()`
 - [ ] `alpha-multiply.ts` alpha input uses `unitNorm01()`
 - [ ] `field-const-color.ts` r, g, b, a inputs use `unitNorm01()`

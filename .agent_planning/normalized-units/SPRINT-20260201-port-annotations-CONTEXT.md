@@ -5,8 +5,8 @@ Generated: 2026-02-01
 
 | File | Ports | Change |
 |------|-------|--------|
-| `src/blocks/color/make-color-hsl.ts` | h, s, l, a | h→unitPhase01(), s/l/a→unitNorm01() |
-| `src/blocks/color/split-color-hsl.ts` | h, s, l, a | h→unitPhase01(), s/l/a→unitNorm01() |
+| `src/blocks/color/make-color-oklch.ts` | h, s, l, a | h→unitPhase01(), s/l/a→unitNorm01() |
+| `src/blocks/color/split-color-oklch.ts` | h, s, l, a | h→unitPhase01(), s/l/a→unitNorm01() |
 | `src/blocks/color/color-picker.ts` | h, s, l, a | h→unitPhase01(), s/l/a→unitNorm01() |
 | `src/blocks/color/hue-shift.ts` | shift | NO CHANGE — stays scalar (signed offset) |
 | `src/blocks/color/alpha-multiply.ts` | alpha | →unitNorm01() |

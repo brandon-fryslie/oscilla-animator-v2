@@ -78,7 +78,7 @@ Dud: CameraProjectionConst output — only 2 values, use enum badge
 Shines: Noise.out field — Gaussian vs uniform?
 Dud: Broadcast.field of a Const — all identical, one bin
 ────────────────────────────────────────
-Shines: HueRainbow.out (color:hsl) — hue spread uniformity
+Shines: HueRainbow.out (color:oklch) — hue spread uniformity
 Dud: DomainIndex.out with N instances — N bins each with count 1
 ────────────────────────────────────────
 Shines: Clamp.out field — spikes at boundaries = clamping rate

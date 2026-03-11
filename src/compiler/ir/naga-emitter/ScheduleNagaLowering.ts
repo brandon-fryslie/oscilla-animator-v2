@@ -4,6 +4,12 @@ import type { RuntimeAddressTableIR } from '../program';
 import type { ValueExpr } from '../value-expr';
 import type { ValueExprId, ValueSlot } from '../Indices';
 import { payloadStride } from '../../../core/canonical-types';
+import {
+  LINEAR_SRGB_FROM_XYZ,
+  OKLAB_L_FROM_OKLAB,
+  OKLCH_HUE_TAU,
+  XYZ_FROM_LMS_CUBED,
+} from '../../../core/color/oklch';
 import { OpCode } from '../types';
 import type {
   Step,
@@ -1155,6 +1161,225 @@ function emitBoolAsF32(
   return emitBuiltinCall(ctx, 'select', [zero, one, condition], source);
 }
 
+function emitLinearCombination3(args: {
+  readonly ctx: LoweringCtx;
+  readonly source: NagaSourceMapEntryIR;
+  readonly x: number;
+  readonly xCoeff: number;
+  readonly y: number;
+  readonly yCoeff: number;
+  readonly z: number;
+  readonly zCoeff: number;
+  readonly builtins: LoweringBuiltins;
+}): number {
+  const xCoeffExpr = emitLiteralF32(args.ctx, args.builtins, args.xCoeff, args.source);
+  const yCoeffExpr = emitLiteralF32(args.ctx, args.builtins, args.yCoeff, args.source);
+  const zCoeffExpr = emitLiteralF32(args.ctx, args.builtins, args.zCoeff, args.source);
+  const xTerm = args.ctx.addExpression({ kind: 'binary', op: 'mul', left: args.x, right: xCoeffExpr }, args.source);
+  const yTerm = args.ctx.addExpression({ kind: 'binary', op: 'mul', left: args.y, right: yCoeffExpr }, args.source);
+  const zTerm = args.ctx.addExpression({ kind: 'binary', op: 'mul', left: args.z, right: zCoeffExpr }, args.source);
+  const xy = args.ctx.addExpression({ kind: 'binary', op: 'add', left: xTerm, right: yTerm }, args.source);
+  return args.ctx.addExpression({ kind: 'binary', op: 'add', left: xy, right: zTerm }, args.source);
+}
+
+function emitLinearSrgbToEncodedF32(args: {
+  readonly ctx: LoweringCtx;
+  readonly builtins: LoweringBuiltins;
+  readonly source: NagaSourceMapEntryIR;
+  readonly linear: number;
+}): number {
+  const zero = emitLiteralF32(args.ctx, args.builtins, 0, args.source);
+  const one = emitLiteralF32(args.ctx, args.builtins, 1, args.source);
+  const linearNonNegative = emitBuiltinCall(args.ctx, 'max', [args.linear, zero], args.source);
+  const threshold = emitLiteralF32(args.ctx, args.builtins, 0.0031308, args.source);
+  const scaleLow = emitLiteralF32(args.ctx, args.builtins, 12.92, args.source);
+  const low = args.ctx.addExpression(
+    { kind: 'binary', op: 'mul', left: linearNonNegative, right: scaleLow },
+    args.source,
+  );
+
+  const invGamma = emitLiteralF32(args.ctx, args.builtins, 1 / 2.4, args.source);
+  const powTerm = emitBuiltinCall(args.ctx, 'pow', [linearNonNegative, invGamma], args.source);
+  const scaleHigh = emitLiteralF32(args.ctx, args.builtins, 1.055, args.source);
+  const highScaled = args.ctx.addExpression(
+    { kind: 'binary', op: 'mul', left: scaleHigh, right: powTerm },
+    args.source,
+  );
+  const highOffset = emitLiteralF32(args.ctx, args.builtins, 0.055, args.source);
+  const high = args.ctx.addExpression(
+    { kind: 'binary', op: 'sub', left: highScaled, right: highOffset },
+    args.source,
+  );
+
+  const useLow = args.ctx.addExpression(
+    { kind: 'binary', op: 'le', left: linearNonNegative, right: threshold },
+    args.source,
+  );
+  const encoded = emitBuiltinCall(args.ctx, 'select', [high, low, useLow], args.source);
+  return emitBuiltinCall(args.ctx, 'clamp', [encoded, zero, one], args.source);
+}
+
+function emitOklchToSrgbComponentF32(args: {
+  readonly ctx: LoweringCtx;
+  readonly builtins: LoweringBuiltins;
+  readonly source: NagaSourceMapEntryIR;
+  readonly componentIndex: number;
+  readonly inputExprId: ValueExprId;
+  readonly emitFromExprInput: (inputExprId: ValueExprId, componentIndex: number) => number | null;
+}): number | null {
+  // [LAW:one-source-of-truth] Naga lowering reuses canonical color-space
+  // constants from core/color/oklch to stay aligned with runtime conversion.
+  const component = Math.max(0, args.componentIndex);
+  if (component >= 3) {
+    return args.emitFromExprInput(args.inputExprId, 3);
+  }
+  const h = args.emitFromExprInput(args.inputExprId, 0);
+  const c = args.emitFromExprInput(args.inputExprId, 1);
+  const l = args.emitFromExprInput(args.inputExprId, 2);
+  if (h === null || c === null || l === null) {
+    return null;
+  }
+
+  const tau = emitLiteralF32(args.ctx, args.builtins, OKLCH_HUE_TAU, args.source);
+  const hueRadians = args.ctx.addExpression({ kind: 'binary', op: 'mul', left: h, right: tau }, args.source);
+  const cosHue = emitBuiltinCall(args.ctx, 'cos', [hueRadians], args.source);
+  const sinHue = emitBuiltinCall(args.ctx, 'sin', [hueRadians], args.source);
+  const oklabA = args.ctx.addExpression({ kind: 'binary', op: 'mul', left: c, right: cosHue }, args.source);
+  const oklabB = args.ctx.addExpression({ kind: 'binary', op: 'mul', left: c, right: sinHue }, args.source);
+
+  const lPrime = emitLinearCombination3({
+    ctx: args.ctx,
+    builtins: args.builtins,
+    source: args.source,
+    x: l,
+    xCoeff: OKLAB_L_FROM_OKLAB.l.l,
+    y: oklabA,
+    yCoeff: OKLAB_L_FROM_OKLAB.l.a,
+    z: oklabB,
+    zCoeff: OKLAB_L_FROM_OKLAB.l.b,
+  });
+  const mPrime = emitLinearCombination3({
+    ctx: args.ctx,
+    builtins: args.builtins,
+    source: args.source,
+    x: l,
+    xCoeff: OKLAB_L_FROM_OKLAB.m.l,
+    y: oklabA,
+    yCoeff: OKLAB_L_FROM_OKLAB.m.a,
+    z: oklabB,
+    zCoeff: OKLAB_L_FROM_OKLAB.m.b,
+  });
+  const sPrime = emitLinearCombination3({
+    ctx: args.ctx,
+    builtins: args.builtins,
+    source: args.source,
+    x: l,
+    xCoeff: OKLAB_L_FROM_OKLAB.s.l,
+    y: oklabA,
+    yCoeff: OKLAB_L_FROM_OKLAB.s.a,
+    z: oklabB,
+    zCoeff: OKLAB_L_FROM_OKLAB.s.b,
+  });
+
+  const lSquare = args.ctx.addExpression({ kind: 'binary', op: 'mul', left: lPrime, right: lPrime }, args.source);
+  const mSquare = args.ctx.addExpression({ kind: 'binary', op: 'mul', left: mPrime, right: mPrime }, args.source);
+  const sSquare = args.ctx.addExpression({ kind: 'binary', op: 'mul', left: sPrime, right: sPrime }, args.source);
+  const lCube = args.ctx.addExpression({ kind: 'binary', op: 'mul', left: lSquare, right: lPrime }, args.source);
+  const mCube = args.ctx.addExpression({ kind: 'binary', op: 'mul', left: mSquare, right: mPrime }, args.source);
+  const sCube = args.ctx.addExpression({ kind: 'binary', op: 'mul', left: sSquare, right: sPrime }, args.source);
+
+  const x = emitLinearCombination3({
+    ctx: args.ctx,
+    builtins: args.builtins,
+    source: args.source,
+    x: lCube,
+    xCoeff: XYZ_FROM_LMS_CUBED.x.l,
+    y: mCube,
+    yCoeff: XYZ_FROM_LMS_CUBED.x.m,
+    z: sCube,
+    zCoeff: XYZ_FROM_LMS_CUBED.x.s,
+  });
+  const y = emitLinearCombination3({
+    ctx: args.ctx,
+    builtins: args.builtins,
+    source: args.source,
+    x: lCube,
+    xCoeff: XYZ_FROM_LMS_CUBED.y.l,
+    y: mCube,
+    yCoeff: XYZ_FROM_LMS_CUBED.y.m,
+    z: sCube,
+    zCoeff: XYZ_FROM_LMS_CUBED.y.s,
+  });
+  const z = emitLinearCombination3({
+    ctx: args.ctx,
+    builtins: args.builtins,
+    source: args.source,
+    x: lCube,
+    xCoeff: XYZ_FROM_LMS_CUBED.z.l,
+    y: mCube,
+    yCoeff: XYZ_FROM_LMS_CUBED.z.m,
+    z: sCube,
+    zCoeff: XYZ_FROM_LMS_CUBED.z.s,
+  });
+
+  const linearR = emitLinearCombination3({
+    ctx: args.ctx,
+    builtins: args.builtins,
+    source: args.source,
+    x,
+    xCoeff: LINEAR_SRGB_FROM_XYZ.r.x,
+    y,
+    yCoeff: LINEAR_SRGB_FROM_XYZ.r.y,
+    z,
+    zCoeff: LINEAR_SRGB_FROM_XYZ.r.z,
+  });
+  const linearG = emitLinearCombination3({
+    ctx: args.ctx,
+    builtins: args.builtins,
+    source: args.source,
+    x,
+    xCoeff: LINEAR_SRGB_FROM_XYZ.g.x,
+    y,
+    yCoeff: LINEAR_SRGB_FROM_XYZ.g.y,
+    z,
+    zCoeff: LINEAR_SRGB_FROM_XYZ.g.z,
+  });
+  const linearB = emitLinearCombination3({
+    ctx: args.ctx,
+    builtins: args.builtins,
+    source: args.source,
+    x,
+    xCoeff: LINEAR_SRGB_FROM_XYZ.b.x,
+    y,
+    yCoeff: LINEAR_SRGB_FROM_XYZ.b.y,
+    z,
+    zCoeff: LINEAR_SRGB_FROM_XYZ.b.z,
+  });
+
+  const encodedR = emitLinearSrgbToEncodedF32({
+    ctx: args.ctx,
+    builtins: args.builtins,
+    source: args.source,
+    linear: linearR,
+  });
+  const encodedG = emitLinearSrgbToEncodedF32({
+    ctx: args.ctx,
+    builtins: args.builtins,
+    source: args.source,
+    linear: linearG,
+  });
+  const encodedB = emitLinearSrgbToEncodedF32({
+    ctx: args.ctx,
+    builtins: args.builtins,
+    source: args.source,
+    linear: linearB,
+  });
+
+  if (component === 0) return encodedR;
+  if (component === 1) return encodedG;
+  return encodedB;
+}
+
 function expectArity(inputExprs: readonly number[], arity: number): boolean {
   return inputExprs.length === arity;
 }
@@ -1677,7 +1902,14 @@ function emitMaterializeExprComponentF32(args: {
       });
       break;
     case 'oklchToRgb':
-      resolved = emitFromExprInput(expr.input, component);
+      resolved = emitOklchToSrgbComponentF32({
+        ctx: args.ctx,
+        builtins: args.builtins,
+        source: args.source,
+        componentIndex: component,
+        inputExprId: expr.input,
+        emitFromExprInput,
+      });
       break;
     default:
       break;
