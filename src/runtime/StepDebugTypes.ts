@@ -196,7 +196,7 @@ export interface BlockGroup {
 /**
  * View model for a single node in the expression DAG tree.
  *
- * Built by StepDebugStore.buildExprTree() from the compiled program's
+ * Built by step-debug view-model construction from the compiled program's
  * ValueExpr table + debugIndex provenance. The UI component receives only
  * this type — never CompiledProgramIR or ValueExpr directly.
  */

@@ -1,5 +1,5 @@
 /**
- * Executor Init — Module-level allocations for ScheduleExecutor
+ * Executor Init — Module-level allocations for the runtime executor
  *
  * This file is NOT in the ESLint hot-path target list, so allocations here
  * are allowed. These are created once at module load and reused every frame.
