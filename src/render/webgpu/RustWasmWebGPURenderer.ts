@@ -1183,14 +1183,21 @@ export class WebGPURenderer {
   ): Promise<void> {
     await new Promise<void>((resolve, reject) => {
       let settled = false;
-      const timeoutId = globalThis.setTimeout(() => {
+      const rejectWithTerminalFailure = (
+        error: Error,
+        buildFatalTransition: (() => RendererFatalTransition) | null,
+      ): void => {
         settle(() => {
-          const error = new Error(`Rust renderer worker timed out during ${options.context}`);
-          const fatalError = this.markRendererFatal(
-            this.buildAckTimeoutFatalTransition(options.context, error),
-          );
-          reject(fatalError);
+          const terminalError =
+            buildFatalTransition === null ? error : this.markRendererFatal(buildFatalTransition());
+          reject(terminalError);
         });
+      };
+      const timeoutId = globalThis.setTimeout(() => {
+        const error = new Error(`Rust renderer worker timed out during ${options.context}`);
+        rejectWithTerminalFailure(error, () =>
+          this.buildAckTimeoutFatalTransition(options.context, error),
+        );
       }, WORKER_RESPONSE_TIMEOUT_MS);
       const settle = (callback: () => void): void => {
         if (settled) return;
@@ -1211,25 +1218,19 @@ export class WebGPURenderer {
           settle(resolve);
           return;
         }
-        settle(() => {
-          if (disposition.fatal) {
-            const fatalError = this.markRendererFatal(
-              this.buildAckFailureFatalTransition(disposition),
-            );
-            reject(fatalError);
-            return;
-          }
-          reject(disposition.error);
-        });
+        // [LAW:single-enforcer] Terminal ack settle/reject behavior is owned
+        // by one helper so timeout/message/error paths cannot drift.
+        // [LAW:dataflow-not-control-flow] The ack path always executes the
+        // same settle helper; fatal vs non-fatal variability is data.
+        rejectWithTerminalFailure(
+          disposition.error,
+          disposition.fatal ? () => this.buildAckFailureFatalTransition(disposition) : null,
+        );
       };
       const onError = (event: ErrorEvent): void => {
-        settle(() => {
-          const message = event.message || `Rust renderer worker crashed during ${options.context}`;
-          const fatalError = this.markRendererFatal(
-            this.buildWorkerErrorFatalTransition(options.context, message),
-          );
-          reject(fatalError);
-        });
+        const message = event.message || `Rust renderer worker crashed during ${options.context}`;
+        const transition = this.buildWorkerErrorFatalTransition(options.context, message);
+        rejectWithTerminalFailure(transition.cause, () => transition);
       };
       this.worker.addEventListener('message', onMessage);
       this.worker.addEventListener('error', onError);
