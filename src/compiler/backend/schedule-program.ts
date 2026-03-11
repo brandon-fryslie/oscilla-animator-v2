@@ -4,25 +4,22 @@
  * Builds execution schedule with explicit phase ordering:
  * 1. Update rails/time inputs
  * 2. Execute cardinality-one values (materialize)
- * 3. Build continuity mappings (continuityMapBuild)
- * 4. Execute continuous fields (materialize)
- * 5. Apply continuity to field targets (continuityApply)
- * 6. Apply discrete ops (eventDispatch)
- * 7. Sinks (render)
- * 8. State writes (stateWrite)
+ * 3. Execute render-field materialization
+ * 4. Apply discrete ops (eventDispatch)
+ * 5. Sinks (render)
+ * 6. State writes (stateWrite)
  *
  * The schedule respects data dependencies within each phase and provides
  * deterministic execution order.
  *
  * [LAW:single-enforcer] This pass is PURE ORDERING — no slot allocation.
- * All slots are allocated by Pass 6 (block lowering) and Pass 6b (continuity pipeline).
+ * All slots are allocated by Pass 6 (block lowering) and Pass 6b (render materialization pipeline).
  */
 
 import type {
   Step,
   StepEvalEvent,
   StepMaterialize,
-  StepContinuityApply,
   TimeModel,
   StateMapping,
   ScalarSlotDecl,
@@ -437,14 +434,14 @@ function validateScalarExtractInputs(
  * Pass 7: Schedule Construction (pure ordering)
  *
  * Builds topologically-ordered execution schedule from unlinked IR fragments
- * and pre-built continuity pipeline steps.
+ * and pre-built render materialization steps.
  *
  * [LAW:single-enforcer] This pass ONLY orders steps. All slot allocation is done by
- * Pass 6 (block lowering) and Pass 6b (continuity pipeline).
+ * Pass 6 (block lowering) and Pass 6b (render materialization pipeline).
  *
  * @param unlinkedIR - Block IR fragments from Pass 6
  * @param validated - Validated graph with SCC information
- * @param continuityPipeline - Pre-built continuity pipeline steps from Pass 6b
+ * @param continuityPipeline - Pre-built render materialization steps from Pass 6b
  * @returns Execution schedule with phase ordering
  */
 export function pass7Schedule(
@@ -508,7 +505,7 @@ export function pass7Schedule(
   validateScalarExtractInputs(valueExprs, scalarRootExprIds);
 
   // Generate eventDispatch steps for all registered event slots.
-  // Events are evaluated after continuityApply and before render.
+  // Events are evaluated after materialization and before render.
   const eventSlots = unlinkedIR.builder.getEventSlots();
   const eventDispatchSteps: StepEvalEvent[] = [];
   for (const [eventId, eventSlot] of eventSlots) {
@@ -536,46 +533,30 @@ export function pass7Schedule(
   // stale pre-dispatch event scalars for field slots.
   const continuityMaterializeStepsPre: StepMaterialize[] = [];
   const continuityMaterializeStepsPost: StepMaterialize[] = [];
-  const continuityPostBaseSlots = new Set<number>();
   for (const step of continuityPipeline.materializeSteps) {
     if (valueExprDependsOnEvent(step.field as number, valueExprs)) {
       continuityMaterializeStepsPost.push(step);
-      continuityPostBaseSlots.add(step.target as number);
     } else {
       continuityMaterializeStepsPre.push(step);
     }
   }
 
-  const continuityApplyStepsPre: StepContinuityApply[] = [];
-  const continuityApplyStepsPost: StepContinuityApply[] = [];
-  for (const step of continuityPipeline.continuityApplySteps) {
-    if (continuityPostBaseSlots.has(step.baseSlot as number)) {
-      continuityApplyStepsPost.push(step);
-    } else {
-      continuityApplyStepsPre.push(step);
-    }
-  }
-
   // Combine all steps in correct execution order:
   // 1. Materialize-pre (ones/fields NOT dependent on events)
-  // 2. ContinuityMapBuild (detect domain changes, compute mappings)
-  // 3. Continuity Materialize-pre (fields independent of events)
-  // 4. ContinuityApply-pre
-  // 5. EvalEvent (evaluate discrete events → eventScalars)
-  // 6. Materialize-post (ones that depend on eventRead)
-  // 7. Continuity Materialize-post (event-dependent fields)
-  // 8. ContinuityApply-post
-  // 9. Render (use continuity-applied buffers)
-  // 10. StateWrite (persist state for next frame)
+  // 2. Render materialize-pre (fields independent of events)
+  // 3. EvalEvent (evaluate discrete events -> eventScalars)
+  // 4. Materialize-post (ones that depend on eventRead)
+  // 5. Render materialize-post (event-dependent fields)
+  // 6. Render
+  // 7. StateWrite (persist state for next frame)
+  // [LAW:dataflow-not-control-flow] Canonical schedule executes all stages in
+  // fixed order; stage inputs may be empty.
   const steps: Step[] = [
     ...scalarMaterializeStepsPre,
-    ...continuityPipeline.mapBuildSteps,
     ...continuityMaterializeStepsPre,
-    ...continuityApplyStepsPre,
     ...eventDispatchSteps,
     ...scalarMaterializeStepsPost,
     ...continuityMaterializeStepsPost,
-    ...continuityApplyStepsPost,
     ...continuityPipeline.renderSteps,
     ...stateWriteSteps,
   ];
