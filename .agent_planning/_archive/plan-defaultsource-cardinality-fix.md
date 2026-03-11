@@ -33,10 +33,10 @@ Per-element rainbow that shifts over time:
 1. `normalizedIndex` intrinsic field (0→1 per element)
 2. `phaseA` signal (time) → broadcast to field
 3. `hue = normalizedIndex + phaseA` (each element gets different hue, all shift with time)
-4. `construct([hue, 0.8, 0.5, 1.0], outType_hsl)` → HSL color field
-5. `hslToRgb(hsl, outType)` → RGB color field
+4. `construct([hue, 0.8, 0.5, 1.0], outType_oklch)` → OKLCH color field
+5. `oklchToRgb(oklch, outType)` → RGB color field
 
-IR ops: `intrinsic`, `broadcast`, `kernelZip(Add)`, `constant(sat/light/alpha)`, `broadcast(sat/light/alpha)`, `construct`, `hslToRgb`.
+IR ops: `intrinsic`, `broadcast`, `kernelZip(Add)`, `constant(sat/light/alpha)`, `broadcast(sat/light/alpha)`, `construct`, `oklchToRgb`.
 
 #### Other field types (float, int, bool, vec2)
 Broadcast the signal constant uniformly — uniform values are fine for these types:
@@ -68,7 +68,7 @@ Add to imports: `canonicalSignal`, `isMany`, `unitTurns`, `unitHsl`, `COLOR`, `V
 Create `src/blocks/__tests__/default-source.test.ts`:
 - Signal-cardinality outputs work as before (regression)
 - Field vec3 produces construct with cos/sin from normalizedIndex + phaseA
-- Field color produces hslToRgb from normalizedIndex + phaseA
+- Field color produces oklchToRgb from normalizedIndex + phaseA
 - Field float produces broadcast of constant
 - Event still produces eventNever
 

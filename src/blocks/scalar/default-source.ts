@@ -29,7 +29,7 @@ import {
   FLOAT,
   COLOR,
   unitTurns,
-  unitHsl,
+  unitOklch,
   requireInst,
 } from '../../core/canonical-types';
 import type { PayloadType, CanonicalType } from '../../core/canonical-types';

@@ -121,7 +121,7 @@ patch "Feedback Accumulator" {
     }
   }
 
-  block "MakeColorHSL" "color" {
+  block "MakeColorOKLCH" "color" {
     outputs {
       color = render.color
     }

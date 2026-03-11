@@ -94,9 +94,9 @@ describe('getValueExprChildren', () => {
     expect(getValueExprChildren(expr)).toEqual([id(5)]);
   });
 
-  it('hslToRgb — single child', () => {
+  it('oklchToRgb — single child', () => {
     const expr: ValueExpr = {
-      kind: 'hslToRgb',
+      kind: 'oklchToRgb',
       type: SIG_FLOAT,
       input: id(10),
     };

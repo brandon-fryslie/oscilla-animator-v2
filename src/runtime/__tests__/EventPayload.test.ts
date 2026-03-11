@@ -71,7 +71,7 @@ describe('EventPayload Infrastructure', () => {
     const array0 = state.events.get(0)!;
     const array1 = state.events.get(1)!;
     
-    // Clear like ScheduleExecutor does
+    // Clear like the runtime executor does
     state.events.forEach((payloads) => {
       payloads.length = 0; // Clear array but reuse allocation
     });

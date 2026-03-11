@@ -25,8 +25,8 @@ The design doc establishes a clear philosophy: normalize "glue signals" (phase, 
 ### Port Unit Annotations (19 ports across 7 files)
 | Category | Count | Files |
 |----------|-------|-------|
-| Hue → unitPhase01() | 4 | make-color-hsl, split-color-hsl, color-picker, hue-shift |
-| S/L/A → unitNorm01() | 13 | make-color-hsl, split-color-hsl, color-picker, alpha-multiply, field-const-color |
+| Hue → unitPhase01() | 4 | make-color-oklch, split-color-oklch, color-picker, hue-shift |
+| S/L/A → unitNorm01() | 13 | make-color-oklch, split-color-oklch, color-picker, alpha-multiply, field-const-color |
 | Smoothing → unitNorm01() | 1 | lag |
 | Normalized index → unitNorm01() | 1 | array |
 

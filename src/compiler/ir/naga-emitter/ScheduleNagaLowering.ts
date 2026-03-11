@@ -4,6 +4,12 @@ import type { RuntimeAddressTableIR } from '../program';
 import type { ValueExpr } from '../value-expr';
 import type { ValueExprId, ValueSlot } from '../Indices';
 import { payloadStride } from '../../../core/canonical-types';
+import {
+  LINEAR_SRGB_FROM_XYZ,
+  OKLAB_L_FROM_OKLAB,
+  OKLCH_HUE_TAU,
+  XYZ_FROM_LMS_CUBED,
+} from '../../../core/color/oklch';
 import { OpCode } from '../types';
 import type {
   Step,
@@ -432,7 +438,7 @@ function collectExprInputs(expr: ValueExpr | undefined): readonly number[] {
       return [expr.input as number];
     case 'construct':
       return expr.components.map((id) => id as number);
-    case 'hslToRgb':
+    case 'oklchToRgb':
       return [expr.input as number];
     case 'event':
       switch (expr.eventKind) {
@@ -535,6 +541,32 @@ function emitAddressIndex(
   );
 }
 
+function emitLaneExprForLaneCount(
+  ctx: LoweringCtx,
+  builtins: LoweringBuiltins,
+  laneExpr: number,
+  laneCount: number,
+  source: NagaSourceMapEntryIR,
+): number {
+  const normalizedLaneCount = Number.isFinite(laneCount) && laneCount > 0
+    ? Math.trunc(laneCount)
+    : 1;
+  if (normalizedLaneCount <= 1) {
+    return ctx.addExpression(
+      { kind: 'constant', constant: ctx.internNumberConstant(builtins.u32Type, 0) },
+      source,
+    );
+  }
+  const laneMaxExpr = ctx.addExpression(
+    {
+      kind: 'constant',
+      constant: ctx.internNumberConstant(builtins.u32Type, normalizedLaneCount - 1),
+    },
+    source,
+  );
+  return emitBuiltinCall(ctx, 'min', [laneExpr, laneMaxExpr], source);
+}
+
 function resolveLaneExprForPlan(
   ctx: LoweringCtx,
   builtins: LoweringBuiltins,
@@ -542,12 +574,63 @@ function resolveLaneExprForPlan(
   plan: SlotAddressPlan,
   source: NagaSourceMapEntryIR,
 ): number {
-  if (plan.laneCount > 1) {
-    return laneExpr;
+  // [LAW:single-enforcer] Slot/cardinality-aware lane normalization is owned by
+  // this helper so every read/write path applies the same address-domain rule.
+  return emitLaneExprForLaneCount(ctx, builtins, laneExpr, plan.laneCount, source);
+}
+
+function withTargetLaneGuard(args: {
+  readonly ctx: LoweringCtx;
+  readonly builtins: LoweringBuiltins;
+  readonly laneExpr: number;
+  readonly targetLaneCount: number;
+  readonly source: NagaSourceMapEntryIR;
+  readonly emit: () => void;
+}): void {
+  const normalizedLaneCount = Number.isFinite(args.targetLaneCount) && args.targetLaneCount > 0
+    ? Math.trunc(args.targetLaneCount)
+    : 0;
+  const laneLimitExpr = args.ctx.addExpression(
+    {
+      kind: 'constant',
+      constant: args.ctx.internNumberConstant(args.builtins.u32Type, normalizedLaneCount),
+    },
+    args.source,
+  );
+  const laneInTargetExpr = args.ctx.addExpression(
+    { kind: 'binary', op: 'lt', left: args.laneExpr, right: laneLimitExpr },
+    args.source,
+  );
+  const acceptBlock = args.ctx.withBlock(() => {
+    args.emit();
+  }).block;
+  if (acceptBlock.length === 0) {
+    return;
   }
-  return ctx.addExpression(
-    { kind: 'constant', constant: ctx.internNumberConstant(builtins.u32Type, 0) },
-    source,
+  args.ctx.addStatement(
+    {
+      kind: 'if',
+      condition: laneInTargetExpr,
+      accept: acceptBlock,
+      reject: [],
+    },
+    args.source,
+  );
+}
+
+function resolveTypedCopySourceLaneExpr(args: {
+  readonly ctx: LoweringCtx;
+  readonly builtins: LoweringBuiltins;
+  readonly laneExpr: number;
+  readonly sourcePlan: SlotAddressPlan;
+  readonly source: NagaSourceMapEntryIR;
+}): number {
+  return emitLaneExprForLaneCount(
+    args.ctx,
+    args.builtins,
+    args.laneExpr,
+    args.sourcePlan.laneCount,
+    args.source,
   );
 }
 
@@ -563,8 +646,13 @@ function emitTypedCopy(
   comment: string,
 ): void {
   const componentCount = Math.min(sourcePlan.stride, targetPlan.stride);
-  const sourceLaneExpr = resolveLaneExprForPlan(ctx, builtins, laneExpr, sourcePlan, source);
-  const targetLaneExpr = resolveLaneExprForPlan(ctx, builtins, laneExpr, targetPlan, source);
+  const sourceLaneExpr = resolveTypedCopySourceLaneExpr({
+    ctx,
+    builtins,
+    laneExpr,
+    sourcePlan,
+    source,
+  });
   // [LAW:dataflow-not-control-flow] Lowering always emits the same per-component
   // sequence; lane participation is encoded as data in address expressions.
   for (let componentIndex = 0; componentIndex < componentCount; componentIndex++) {
@@ -581,7 +669,7 @@ function emitTypedCopy(
     const targetIndex = emitAddressIndex(
       ctx,
       builtins,
-      targetLaneExpr,
+      laneExpr,
       targetPlan.offset,
       targetPlan.laneStride,
       targetPlan.componentStride,
@@ -668,6 +756,219 @@ function emitLiteralF32(
     { kind: 'constant', constant: ctx.internNumberConstant(builtins.f32Type, value) },
     source,
   );
+}
+
+function emitLiteralU32(
+  ctx: LoweringCtx,
+  builtins: LoweringBuiltins,
+  value: number,
+  source: NagaSourceMapEntryIR,
+): number {
+  return ctx.addExpression(
+    { kind: 'constant', constant: ctx.internNumberConstant(builtins.u32Type, value) },
+    source,
+  );
+}
+
+function emitLaneAsF32(
+  ctx: LoweringCtx,
+  laneExpr: number,
+  source: NagaSourceMapEntryIR,
+): number {
+  return ctx.addExpression({ kind: 'call', function: 'f32', args: [laneExpr] }, source);
+}
+
+function emitPseudoRandomFromLaneSeed(args: {
+  readonly ctx: LoweringCtx;
+  readonly builtins: LoweringBuiltins;
+  readonly laneSeedExpr: number;
+  readonly source: NagaSourceMapEntryIR;
+}): number {
+  const seedF32 = emitLaneAsF32(args.ctx, args.laneSeedExpr, args.source);
+  const valueScale = emitLiteralF32(args.ctx, args.builtins, 12.9898, args.source);
+  const hashScale = emitLiteralF32(args.ctx, args.builtins, 43758.5453123, args.source);
+  const phase = args.ctx.addExpression(
+    { kind: 'binary', op: 'mul', left: seedF32, right: valueScale },
+    args.source,
+  );
+  const wave = emitBuiltinCall(args.ctx, 'sin', [phase], args.source);
+  const scaled = args.ctx.addExpression({ kind: 'binary', op: 'mul', left: wave, right: hashScale }, args.source);
+  return emitBuiltinCall(args.ctx, 'fract', [scaled], args.source);
+}
+
+function computeHaltonDigitCount(base: number, laneCount: number): number {
+  const safeBase = Number.isFinite(base) && base > 1 ? Math.trunc(base) : 2;
+  let value = Math.max(1, Math.trunc(laneCount)) + 1;
+  let digits = 0;
+  while (value > 0) {
+    value = Math.floor(value / safeBase);
+    digits += 1;
+  }
+  return Math.max(1, digits);
+}
+
+function emitHaltonFromLane(args: {
+  readonly ctx: LoweringCtx;
+  readonly builtins: LoweringBuiltins;
+  readonly laneExpr: number;
+  readonly laneCount: number;
+  readonly base: 2 | 3;
+  readonly source: NagaSourceMapEntryIR;
+}): number {
+  const count = Math.max(1, Math.trunc(args.laneCount));
+  if (count <= 1) {
+    return emitLiteralF32(args.ctx, args.builtins, 0, args.source);
+  }
+  const baseConst = emitLiteralU32(args.ctx, args.builtins, args.base, args.source);
+  const oneU32 = emitLiteralU32(args.ctx, args.builtins, 1, args.source);
+  const lanePlusOne = args.ctx.addExpression(
+    { kind: 'binary', op: 'add', left: args.laneExpr, right: oneU32 },
+    args.source,
+  );
+
+  let accumulator = emitLiteralF32(args.ctx, args.builtins, 0, args.source);
+  let divisorPow = 1;
+  const digitCount = computeHaltonDigitCount(args.base, count);
+  for (let digitIndex = 0; digitIndex < digitCount; digitIndex++) {
+    const divisorExpr = divisorPow === 1
+      ? lanePlusOne
+      : args.ctx.addExpression(
+        {
+          kind: 'binary',
+          op: 'div',
+          left: lanePlusOne,
+          right: emitLiteralU32(args.ctx, args.builtins, divisorPow, args.source),
+        },
+        args.source,
+      );
+    const digitU32 = args.ctx.addExpression(
+      { kind: 'binary', op: 'mod', left: divisorExpr, right: baseConst },
+      args.source,
+    );
+    const digitF32 = emitLaneAsF32(args.ctx, digitU32, args.source);
+    const weight = emitLiteralF32(args.ctx, args.builtins, 1 / Math.pow(args.base, digitIndex + 1), args.source);
+    const weightedDigit = args.ctx.addExpression(
+      { kind: 'binary', op: 'mul', left: digitF32, right: weight },
+      args.source,
+    );
+    accumulator = args.ctx.addExpression(
+      { kind: 'binary', op: 'add', left: accumulator, right: weightedDigit },
+      args.source,
+    );
+    divisorPow *= args.base;
+  }
+  return accumulator;
+}
+
+function emitPlacementIntrinsicF32(args: {
+  readonly ctx: LoweringCtx;
+  readonly builtins: LoweringBuiltins;
+  readonly laneExpr: number;
+  readonly laneCount: number;
+  readonly componentIndex: number;
+  readonly field: 'uv' | 'rank' | 'seed';
+  readonly basisKind: 'halton2D' | 'random' | 'spiral' | 'grid';
+  readonly source: NagaSourceMapEntryIR;
+}): number {
+  const normalizedLaneCount = Math.max(1, Math.trunc(args.laneCount));
+  if (args.field === 'rank') {
+    if (normalizedLaneCount <= 1) {
+      return emitLiteralF32(args.ctx, args.builtins, 0, args.source);
+    }
+    const laneAsF32 = emitLaneAsF32(args.ctx, args.laneExpr, args.source);
+    const denom = emitLiteralF32(args.ctx, args.builtins, normalizedLaneCount - 1, args.source);
+    return args.ctx.addExpression({ kind: 'binary', op: 'div', left: laneAsF32, right: denom }, args.source);
+  }
+  if (args.field === 'seed') {
+    return emitPseudoRandomFromLaneSeed({
+      ctx: args.ctx,
+      builtins: args.builtins,
+      laneSeedExpr: args.laneExpr,
+      source: args.source,
+    });
+  }
+  const component = Math.max(0, Math.min(1, args.componentIndex));
+  switch (args.basisKind) {
+    case 'grid': {
+      const cols = Math.max(1, Math.ceil(Math.sqrt(normalizedLaneCount)));
+      const rows = Math.max(1, Math.ceil(normalizedLaneCount / cols));
+      const laneCol = args.ctx.addExpression(
+        {
+          kind: 'binary',
+          op: 'mod',
+          left: args.laneExpr,
+          right: emitLiteralU32(args.ctx, args.builtins, cols, args.source),
+        },
+        args.source,
+      );
+      const laneRow = args.ctx.addExpression(
+        {
+          kind: 'binary',
+          op: 'div',
+          left: args.laneExpr,
+          right: emitLiteralU32(args.ctx, args.builtins, cols, args.source),
+        },
+        args.source,
+      );
+      const gridCoord = component === 0 ? laneCol : laneRow;
+      const gridExtent = component === 0 ? cols : rows;
+      if (gridExtent <= 1) {
+        return emitLiteralF32(args.ctx, args.builtins, 0.5, args.source);
+      }
+      const coordF32 = emitLaneAsF32(args.ctx, gridCoord, args.source);
+      const denom = emitLiteralF32(args.ctx, args.builtins, gridExtent - 1, args.source);
+      return args.ctx.addExpression({ kind: 'binary', op: 'div', left: coordF32, right: denom }, args.source);
+    }
+    case 'spiral': {
+      const laneAsF32 = emitLaneAsF32(args.ctx, args.laneExpr, args.source);
+      const countF32 = emitLiteralF32(args.ctx, args.builtins, normalizedLaneCount, args.source);
+      const laneRatio = args.ctx.addExpression({ kind: 'binary', op: 'div', left: laneAsF32, right: countF32 }, args.source);
+      const radial = emitBuiltinCall(args.ctx, 'sqrt', [laneRatio], args.source);
+      const goldenAngle = emitLiteralF32(args.ctx, args.builtins, Math.PI * (3 - Math.sqrt(5)), args.source);
+      const theta = args.ctx.addExpression({ kind: 'binary', op: 'mul', left: laneAsF32, right: goldenAngle }, args.source);
+      const trig = component === 0
+        ? emitBuiltinCall(args.ctx, 'cos', [theta], args.source)
+        : emitBuiltinCall(args.ctx, 'sin', [theta], args.source);
+      const half = emitLiteralF32(args.ctx, args.builtins, 0.5, args.source);
+      const scaled = args.ctx.addExpression({ kind: 'binary', op: 'mul', left: radial, right: trig }, args.source);
+      const centered = args.ctx.addExpression({ kind: 'binary', op: 'mul', left: scaled, right: half }, args.source);
+      return args.ctx.addExpression({ kind: 'binary', op: 'add', left: half, right: centered }, args.source);
+    }
+    case 'random': {
+      const twoU32 = emitLiteralU32(args.ctx, args.builtins, 2, args.source);
+      const doubledLane = args.ctx.addExpression(
+        { kind: 'binary', op: 'mul', left: args.laneExpr, right: twoU32 },
+        args.source,
+      );
+      const seedExpr = component === 0
+        ? doubledLane
+        : args.ctx.addExpression(
+          {
+            kind: 'binary',
+            op: 'add',
+            left: doubledLane,
+            right: emitLiteralU32(args.ctx, args.builtins, 1, args.source),
+          },
+          args.source,
+        );
+      return emitPseudoRandomFromLaneSeed({
+        ctx: args.ctx,
+        builtins: args.builtins,
+        laneSeedExpr: seedExpr,
+        source: args.source,
+      });
+    }
+    case 'halton2D':
+    default:
+      return emitHaltonFromLane({
+        ctx: args.ctx,
+        builtins: args.builtins,
+        laneExpr: args.laneExpr,
+        laneCount: normalizedLaneCount,
+        base: component === 0 ? 2 : 3,
+        source: args.source,
+      });
+  }
 }
 
 const UNIFORMS_TIME_VEC_INDEX = 4;
@@ -858,6 +1159,225 @@ function emitBoolAsF32(
   const zero = emitLiteralF32(ctx, builtins, 0, source);
   const one = emitLiteralF32(ctx, builtins, 1, source);
   return emitBuiltinCall(ctx, 'select', [zero, one, condition], source);
+}
+
+function emitLinearCombination3(args: {
+  readonly ctx: LoweringCtx;
+  readonly source: NagaSourceMapEntryIR;
+  readonly x: number;
+  readonly xCoeff: number;
+  readonly y: number;
+  readonly yCoeff: number;
+  readonly z: number;
+  readonly zCoeff: number;
+  readonly builtins: LoweringBuiltins;
+}): number {
+  const xCoeffExpr = emitLiteralF32(args.ctx, args.builtins, args.xCoeff, args.source);
+  const yCoeffExpr = emitLiteralF32(args.ctx, args.builtins, args.yCoeff, args.source);
+  const zCoeffExpr = emitLiteralF32(args.ctx, args.builtins, args.zCoeff, args.source);
+  const xTerm = args.ctx.addExpression({ kind: 'binary', op: 'mul', left: args.x, right: xCoeffExpr }, args.source);
+  const yTerm = args.ctx.addExpression({ kind: 'binary', op: 'mul', left: args.y, right: yCoeffExpr }, args.source);
+  const zTerm = args.ctx.addExpression({ kind: 'binary', op: 'mul', left: args.z, right: zCoeffExpr }, args.source);
+  const xy = args.ctx.addExpression({ kind: 'binary', op: 'add', left: xTerm, right: yTerm }, args.source);
+  return args.ctx.addExpression({ kind: 'binary', op: 'add', left: xy, right: zTerm }, args.source);
+}
+
+function emitLinearSrgbToEncodedF32(args: {
+  readonly ctx: LoweringCtx;
+  readonly builtins: LoweringBuiltins;
+  readonly source: NagaSourceMapEntryIR;
+  readonly linear: number;
+}): number {
+  const zero = emitLiteralF32(args.ctx, args.builtins, 0, args.source);
+  const one = emitLiteralF32(args.ctx, args.builtins, 1, args.source);
+  const linearNonNegative = emitBuiltinCall(args.ctx, 'max', [args.linear, zero], args.source);
+  const threshold = emitLiteralF32(args.ctx, args.builtins, 0.0031308, args.source);
+  const scaleLow = emitLiteralF32(args.ctx, args.builtins, 12.92, args.source);
+  const low = args.ctx.addExpression(
+    { kind: 'binary', op: 'mul', left: linearNonNegative, right: scaleLow },
+    args.source,
+  );
+
+  const invGamma = emitLiteralF32(args.ctx, args.builtins, 1 / 2.4, args.source);
+  const powTerm = emitBuiltinCall(args.ctx, 'pow', [linearNonNegative, invGamma], args.source);
+  const scaleHigh = emitLiteralF32(args.ctx, args.builtins, 1.055, args.source);
+  const highScaled = args.ctx.addExpression(
+    { kind: 'binary', op: 'mul', left: scaleHigh, right: powTerm },
+    args.source,
+  );
+  const highOffset = emitLiteralF32(args.ctx, args.builtins, 0.055, args.source);
+  const high = args.ctx.addExpression(
+    { kind: 'binary', op: 'sub', left: highScaled, right: highOffset },
+    args.source,
+  );
+
+  const useLow = args.ctx.addExpression(
+    { kind: 'binary', op: 'le', left: linearNonNegative, right: threshold },
+    args.source,
+  );
+  const encoded = emitBuiltinCall(args.ctx, 'select', [high, low, useLow], args.source);
+  return emitBuiltinCall(args.ctx, 'clamp', [encoded, zero, one], args.source);
+}
+
+function emitOklchToSrgbComponentF32(args: {
+  readonly ctx: LoweringCtx;
+  readonly builtins: LoweringBuiltins;
+  readonly source: NagaSourceMapEntryIR;
+  readonly componentIndex: number;
+  readonly inputExprId: ValueExprId;
+  readonly emitFromExprInput: (inputExprId: ValueExprId, componentIndex: number) => number | null;
+}): number | null {
+  // [LAW:one-source-of-truth] Naga lowering reuses canonical color-space
+  // constants from core/color/oklch to stay aligned with runtime conversion.
+  const component = Math.max(0, args.componentIndex);
+  if (component >= 3) {
+    return args.emitFromExprInput(args.inputExprId, 3);
+  }
+  const h = args.emitFromExprInput(args.inputExprId, 0);
+  const c = args.emitFromExprInput(args.inputExprId, 1);
+  const l = args.emitFromExprInput(args.inputExprId, 2);
+  if (h === null || c === null || l === null) {
+    return null;
+  }
+
+  const tau = emitLiteralF32(args.ctx, args.builtins, OKLCH_HUE_TAU, args.source);
+  const hueRadians = args.ctx.addExpression({ kind: 'binary', op: 'mul', left: h, right: tau }, args.source);
+  const cosHue = emitBuiltinCall(args.ctx, 'cos', [hueRadians], args.source);
+  const sinHue = emitBuiltinCall(args.ctx, 'sin', [hueRadians], args.source);
+  const oklabA = args.ctx.addExpression({ kind: 'binary', op: 'mul', left: c, right: cosHue }, args.source);
+  const oklabB = args.ctx.addExpression({ kind: 'binary', op: 'mul', left: c, right: sinHue }, args.source);
+
+  const lPrime = emitLinearCombination3({
+    ctx: args.ctx,
+    builtins: args.builtins,
+    source: args.source,
+    x: l,
+    xCoeff: OKLAB_L_FROM_OKLAB.l.l,
+    y: oklabA,
+    yCoeff: OKLAB_L_FROM_OKLAB.l.a,
+    z: oklabB,
+    zCoeff: OKLAB_L_FROM_OKLAB.l.b,
+  });
+  const mPrime = emitLinearCombination3({
+    ctx: args.ctx,
+    builtins: args.builtins,
+    source: args.source,
+    x: l,
+    xCoeff: OKLAB_L_FROM_OKLAB.m.l,
+    y: oklabA,
+    yCoeff: OKLAB_L_FROM_OKLAB.m.a,
+    z: oklabB,
+    zCoeff: OKLAB_L_FROM_OKLAB.m.b,
+  });
+  const sPrime = emitLinearCombination3({
+    ctx: args.ctx,
+    builtins: args.builtins,
+    source: args.source,
+    x: l,
+    xCoeff: OKLAB_L_FROM_OKLAB.s.l,
+    y: oklabA,
+    yCoeff: OKLAB_L_FROM_OKLAB.s.a,
+    z: oklabB,
+    zCoeff: OKLAB_L_FROM_OKLAB.s.b,
+  });
+
+  const lSquare = args.ctx.addExpression({ kind: 'binary', op: 'mul', left: lPrime, right: lPrime }, args.source);
+  const mSquare = args.ctx.addExpression({ kind: 'binary', op: 'mul', left: mPrime, right: mPrime }, args.source);
+  const sSquare = args.ctx.addExpression({ kind: 'binary', op: 'mul', left: sPrime, right: sPrime }, args.source);
+  const lCube = args.ctx.addExpression({ kind: 'binary', op: 'mul', left: lSquare, right: lPrime }, args.source);
+  const mCube = args.ctx.addExpression({ kind: 'binary', op: 'mul', left: mSquare, right: mPrime }, args.source);
+  const sCube = args.ctx.addExpression({ kind: 'binary', op: 'mul', left: sSquare, right: sPrime }, args.source);
+
+  const x = emitLinearCombination3({
+    ctx: args.ctx,
+    builtins: args.builtins,
+    source: args.source,
+    x: lCube,
+    xCoeff: XYZ_FROM_LMS_CUBED.x.l,
+    y: mCube,
+    yCoeff: XYZ_FROM_LMS_CUBED.x.m,
+    z: sCube,
+    zCoeff: XYZ_FROM_LMS_CUBED.x.s,
+  });
+  const y = emitLinearCombination3({
+    ctx: args.ctx,
+    builtins: args.builtins,
+    source: args.source,
+    x: lCube,
+    xCoeff: XYZ_FROM_LMS_CUBED.y.l,
+    y: mCube,
+    yCoeff: XYZ_FROM_LMS_CUBED.y.m,
+    z: sCube,
+    zCoeff: XYZ_FROM_LMS_CUBED.y.s,
+  });
+  const z = emitLinearCombination3({
+    ctx: args.ctx,
+    builtins: args.builtins,
+    source: args.source,
+    x: lCube,
+    xCoeff: XYZ_FROM_LMS_CUBED.z.l,
+    y: mCube,
+    yCoeff: XYZ_FROM_LMS_CUBED.z.m,
+    z: sCube,
+    zCoeff: XYZ_FROM_LMS_CUBED.z.s,
+  });
+
+  const linearR = emitLinearCombination3({
+    ctx: args.ctx,
+    builtins: args.builtins,
+    source: args.source,
+    x,
+    xCoeff: LINEAR_SRGB_FROM_XYZ.r.x,
+    y,
+    yCoeff: LINEAR_SRGB_FROM_XYZ.r.y,
+    z,
+    zCoeff: LINEAR_SRGB_FROM_XYZ.r.z,
+  });
+  const linearG = emitLinearCombination3({
+    ctx: args.ctx,
+    builtins: args.builtins,
+    source: args.source,
+    x,
+    xCoeff: LINEAR_SRGB_FROM_XYZ.g.x,
+    y,
+    yCoeff: LINEAR_SRGB_FROM_XYZ.g.y,
+    z,
+    zCoeff: LINEAR_SRGB_FROM_XYZ.g.z,
+  });
+  const linearB = emitLinearCombination3({
+    ctx: args.ctx,
+    builtins: args.builtins,
+    source: args.source,
+    x,
+    xCoeff: LINEAR_SRGB_FROM_XYZ.b.x,
+    y,
+    yCoeff: LINEAR_SRGB_FROM_XYZ.b.y,
+    z,
+    zCoeff: LINEAR_SRGB_FROM_XYZ.b.z,
+  });
+
+  const encodedR = emitLinearSrgbToEncodedF32({
+    ctx: args.ctx,
+    builtins: args.builtins,
+    source: args.source,
+    linear: linearR,
+  });
+  const encodedG = emitLinearSrgbToEncodedF32({
+    ctx: args.ctx,
+    builtins: args.builtins,
+    source: args.source,
+    linear: linearG,
+  });
+  const encodedB = emitLinearSrgbToEncodedF32({
+    ctx: args.ctx,
+    builtins: args.builtins,
+    source: args.source,
+    linear: linearB,
+  });
+
+  if (component === 0) return encodedR;
+  if (component === 1) return encodedG;
+  return encodedB;
 }
 
 function expectArity(inputExprs: readonly number[], arity: number): boolean {
@@ -1323,6 +1843,22 @@ function emitMaterializeExprComponentF32(args: {
           { kind: 'binary', op: 'mul', left: laneAsFloat, right: inv },
           args.source,
         );
+        break;
+      }
+      if (expr.intrinsicKind === 'placement') {
+        // [LAW:one-source-of-truth] Placement intrinsics are lowered at the
+        // compute boundary so GPU and CPU materialization share one semantic
+        // contract (`uv`/`rank`/`seed` over declared basis kinds).
+        resolved = emitPlacementIntrinsicF32({
+          ctx: args.ctx,
+          builtins: args.builtins,
+          laneExpr: args.laneExpr,
+          laneCount: args.targetPlan.laneCount,
+          componentIndex: component,
+          field: expr.field,
+          basisKind: expr.basisKind,
+          source: args.source,
+        });
       }
       break;
     case 'state': {
@@ -1365,8 +1901,15 @@ function emitMaterializeExprComponentF32(args: {
         emitFromExprInput,
       });
       break;
-    case 'hslToRgb':
-      resolved = emitFromExprInput(expr.input, component);
+    case 'oklchToRgb':
+      resolved = emitOklchToSrgbComponentF32({
+        ctx: args.ctx,
+        builtins: args.builtins,
+        source: args.source,
+        componentIndex: component,
+        inputExprId: expr.input,
+        emitFromExprInput,
+      });
       break;
     default:
       break;
@@ -1412,17 +1955,11 @@ function emitMaterializeFromExpression(args: {
     return false;
   }
   const cache = new Map<string, number>();
-  const targetLaneExpr = resolveLaneExprForPlan(
-    args.ctx,
-    args.builtins,
-    args.laneExpr,
-    args.targetPlan,
-    args.source,
-  );
 
   for (let componentIndex = 0; componentIndex < args.targetPlan.stride; componentIndex++) {
     const valueExpr = emitMaterializeExprComponentF32({
       ...args,
+      laneExpr: args.laneExpr,
       exprId: args.step.field,
       componentIndex,
       cache,
@@ -1434,7 +1971,7 @@ function emitMaterializeFromExpression(args: {
     const targetIndex = emitAddressIndex(
       args.ctx,
       args.builtins,
-      targetLaneExpr,
+      args.laneExpr,
       args.targetPlan.offset,
       args.targetPlan.laneStride,
       args.targetPlan.componentStride,
@@ -1487,47 +2024,56 @@ function lowerStep(
       const expr = valueExprs[exprId];
       // [LAW:one-source-of-truth] Compute-owned materialize lowering first
       // lowers from canonical ValueExpr DAG, then falls back to slot-copy path.
-      if (emitMaterializeFromExpression({
+      withTargetLaneGuard({
         ctx,
         builtins,
         laneExpr,
-        step,
-        stepIndex,
-        schedule,
-        runtimeAddressTable,
-        valueExprs,
+        targetLaneCount: targetPlan.laneCount,
         source,
-        targetPlan,
-      })) {
-        return;
-      }
-      const sourceBinding = resolveStepInputSlot(step, expr, schedule, runtimeAddressTable);
-      if (!sourceBinding) {
-        coverage.droppedComputeStepCount += 1;
-        ctx.addStatement({ kind: 'comment', text: `step ${stepIndex}: unresolved source for ${step.kind}` }, source);
-        return;
-      }
+        emit: () => {
+          if (emitMaterializeFromExpression({
+            ctx,
+            builtins,
+            laneExpr,
+            step,
+            stepIndex,
+            schedule,
+            runtimeAddressTable,
+            valueExprs,
+            source,
+            targetPlan,
+          })) {
+            return;
+          }
+          const sourceBinding = resolveStepInputSlot(step, expr, schedule, runtimeAddressTable);
+          if (!sourceBinding) {
+            coverage.droppedComputeStepCount += 1;
+            ctx.addStatement({ kind: 'comment', text: `step ${stepIndex}: unresolved source for ${step.kind}` }, source);
+            return;
+          }
 
-      const sourcePlan = sourceBinding.buffer === 'state_in'
-        ? createStateSlotAddressPlan(schedule, sourceBinding.slotOrStateOffset as number)
-        : toSlotAddressPlan(runtimeAddressTable, sourceBinding.slotOrStateOffset as ValueSlot);
-      if (!sourcePlan) {
-        coverage.droppedComputeStepCount += 1;
-        ctx.addStatement({ kind: 'comment', text: `step ${stepIndex}: missing source slot metadata` }, source);
-        return;
-      }
+          const sourcePlan = sourceBinding.buffer === 'state_in'
+            ? createStateSlotAddressPlan(schedule, sourceBinding.slotOrStateOffset as number)
+            : toSlotAddressPlan(runtimeAddressTable, sourceBinding.slotOrStateOffset as ValueSlot);
+          if (!sourcePlan) {
+            coverage.droppedComputeStepCount += 1;
+            ctx.addStatement({ kind: 'comment', text: `step ${stepIndex}: missing source slot metadata` }, source);
+            return;
+          }
 
-      emitTypedCopy(
-        ctx,
-        builtins,
-        laneExpr,
-        sourcePlan,
-        sourceBinding.buffer,
-        targetPlan,
-        'arena_out',
-        source,
-        `step ${stepIndex} kind=${step.kind}`,
-      );
+          emitTypedCopy(
+            ctx,
+            builtins,
+            laneExpr,
+            sourcePlan,
+            sourceBinding.buffer,
+            targetPlan,
+            'arena_out',
+            source,
+            `step ${stepIndex} kind=${step.kind}`,
+          );
+        },
+      });
       return;
     }
 
@@ -1596,17 +2142,26 @@ function lowerContinuityApply(
     return;
   }
 
-  emitTypedCopy(
+  withTargetLaneGuard({
     ctx,
     builtins,
     laneExpr,
-    sourcePlan,
-    'arena_in',
-    targetPlan,
-    'arena_out',
+    targetLaneCount: targetPlan.laneCount,
     source,
-    `step ${stepIndex} kind=continuityApply semantic=${step.semantic}`,
-  );
+    emit: () => {
+      emitTypedCopy(
+        ctx,
+        builtins,
+        laneExpr,
+        sourcePlan,
+        'arena_in',
+        targetPlan,
+        'arena_out',
+        source,
+        `step ${stepIndex} kind=continuityApply semantic=${step.semantic}`,
+      );
+    },
+  });
 }
 
 function lowerStateWrite(args: {
@@ -1635,17 +2190,26 @@ function lowerStateWrite(args: {
     return;
   }
 
-  emitTypedCopy(
-    args.ctx,
-    args.builtins,
-    args.laneExpr,
-    sourcePlan,
-    'arena_out',
-    targetPlan,
-    'state_out',
-    args.source,
-    `step ${args.stepIndex} kind=${args.step.kind}`,
-  );
+  withTargetLaneGuard({
+    ctx: args.ctx,
+    builtins: args.builtins,
+    laneExpr: args.laneExpr,
+    targetLaneCount: targetPlan.laneCount,
+    source: args.source,
+    emit: () => {
+      emitTypedCopy(
+        args.ctx,
+        args.builtins,
+        args.laneExpr,
+        sourcePlan,
+        'arena_out',
+        targetPlan,
+        'state_out',
+        args.source,
+        `step ${args.stepIndex} kind=${args.step.kind}`,
+      );
+    },
+  });
 }
 
 function lowerComputeStepsBlock(args: {

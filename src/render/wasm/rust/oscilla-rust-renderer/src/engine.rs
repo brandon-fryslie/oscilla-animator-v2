@@ -29,6 +29,7 @@ const INPUT_WORD_PAN_Y: usize = 4;
 const INPUT_WORD_TIME_MS: usize = 5;
 const INPUT_WORD_SINK_TABLE_WORDS: usize = 13;
 const INPUT_WORD_SHAPE_BANK_WORDS: usize = 14;
+const INPUT_WORD_INSTALL_REVISION: usize = 15;
 const INPUT_SIGNAL_WORDS: u32 = 4;
 const INPUT_FLOAT_WORDS: u32 = 32;
 
@@ -321,6 +322,30 @@ struct VertexOutput {
   @location(0) color: vec4<f32>,
 };
 
+fn oklch_to_linear_srgb(h: f32, c: f32, l: f32) -> vec3<f32> {
+  let hue = fract(h) * 6.283185307179586;
+  let a = c * cos(hue);
+  let b = c * sin(hue);
+
+  let l_prime = l + 0.3963377774 * a + 0.2158037573 * b;
+  let m_prime = l - 0.1055613458 * a - 0.0638541728 * b;
+  let s_prime = l - 0.0894841775 * a - 1.2914855480 * b;
+
+  let l3 = l_prime * l_prime * l_prime;
+  let m3 = m_prime * m_prime * m_prime;
+  let s3 = s_prime * s_prime * s_prime;
+
+  let x = 1.2270138511035211 * l3 - 0.5577999806518222 * m3 + 0.2812561489664678 * s3;
+  let y = -0.0405801784232806 * l3 + 1.11225686961683 * m3 - 0.0716766786656012 * s3;
+  let z = -0.0763812845057069 * l3 - 0.4214819784180127 * m3 + 1.5861632204407947 * s3;
+
+  return vec3<f32>(
+    3.240969941904521 * x - 1.537383177570093 * y - 0.498610760293 * z,
+    -0.96924363628087 * x + 1.87596750150772 * y + 0.041555057407175 * z,
+    0.055630079696993 * x - 0.20397695888897 * y + 1.056971514242878 * z
+  );
+}
+
 @vertex fn vs_main(
   @location(0) localPos: vec2<f32>,
   @builtin(instance_index) instanceIndex: u32,
@@ -355,15 +380,16 @@ struct VertexOutput {
   var out: VertexOutput;
   out.position = global.view_proj * worldPos;
 
-  let rawR = inst.color.x;
-  let rawG = inst.color.y;
-  let rawB = inst.color.z;
+  let rawH = inst.color.x;
+  let rawC = inst.color.y;
+  let rawL = inst.color.z;
   let rawA = inst.color.w;
-  let safeR = clamp(select(0.0, rawR, rawR == rawR), 0.0, 1.0);
-  let safeG = clamp(select(0.0, rawG, rawG == rawG), 0.0, 1.0);
-  let safeB = clamp(select(0.0, rawB, rawB == rawB), 0.0, 1.0);
+  let safeH = select(0.0, rawH, rawH == rawH);
+  let safeC = max(0.0, select(0.0, rawC, rawC == rawC));
+  let safeL = clamp(select(0.0, rawL, rawL == rawL), 0.0, 1.0);
   let safeA = clamp(select(1.0, rawA, rawA == rawA), 0.0, 1.0);
-  out.color = vec4<f32>(safeR, safeG, safeB, safeA) * (1.0 + closedMask * 0.0);
+  let safeRgb = clamp(oklch_to_linear_srgb(safeH, safeC, safeL), vec3<f32>(0.0), vec3<f32>(1.0));
+  out.color = vec4<f32>(safeRgb, safeA) * (1.0 + closedMask * 0.0);
   return out;
 }
 
@@ -404,6 +430,7 @@ pub struct Engine {
     draw_regions: IndirectRegionPlan,
     last_shape_bank_words: u32,
     last_sink_table_words: u32,
+    last_install_revision: u32,
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -437,16 +464,21 @@ fn worker_monotonic_now_ms() -> f64 {
         .unwrap_or_else(js_sys::Date::now)
 }
 
-fn clamp_non_negative_u32(value: f32, max_value: u32) -> u32 {
+fn parse_finite_u32(value: f64, context: &str) -> u32 {
+    // [LAW:no-silent-fallbacks] Invalid shared-plane metadata must fail fast;
+    // clamping hides contract violations and desynchronizes runtime ownership.
     if !value.is_finite() {
-        return 0;
+        panic!("{context} must be finite (value={value})");
     }
-    if value <= 0.0 {
-        return 0;
+    if value < 0.0 {
+        panic!("{context} must be non-negative (value={value})");
     }
     let floored = value.floor();
-    if floored >= max_value as f32 {
-        return max_value;
+    if (value - floored).abs() > f64::EPSILON {
+        panic!("{context} must be an integer (value={value})");
+    }
+    if floored > u32::MAX as f64 {
+        panic!("{context} exceeds u32 max (value={value})");
     }
     floored as u32
 }
@@ -719,6 +751,7 @@ impl Engine {
             draw_regions: IndirectRegionPlan::default(),
             last_shape_bank_words: 0,
             last_sink_table_words: 0,
+            last_install_revision: 0,
         })
     }
 
@@ -806,6 +839,7 @@ impl Engine {
         self.draw_regions = IndirectRegionPlan::default();
         self.last_shape_bank_words = 0;
         self.last_sink_table_words = 0;
+        self.last_install_revision = 0;
     }
 
     pub fn rebuild_gpu_pipelines(&mut self, pass_specs: &[CompilerComputePassSpec]) {
@@ -1055,8 +1089,7 @@ impl Engine {
             .draw_regions
             .indexed_record_count
             .saturating_add(self.draw_regions.non_indexed_record_count);
-        let draw_prep_workgroup_count =
-            ((draw_prep_record_count.saturating_add(63)) / 64).max(1);
+        let draw_prep_workgroup_count = draw_prep_record_count.max(1);
         let simulation_workgroup_count = self.compute.simulation_workgroup_count();
         let simulation_dispatch_count = self.compute.simulation_dispatch_count();
         let dispatch_counters = DispatchCounters {
@@ -1230,39 +1263,61 @@ impl Engine {
             uniforms.view_proj[3][0] = tx;
             uniforms.view_proj[3][1] = ty;
             uniforms.view_proj[3][3] = 1.0;
-            let shape_bank_word_limit = self
-                .shared_shape_bank
-                .as_ref()
-                .map(|plane| plane.length())
-                .unwrap_or_else(|| {
-                    self.max_shapes
-                        .saturating_mul(SHAPE_BANK_HEADER_WORDS as u32)
-                });
-            let sink_table_word_limit = self
-                .shared_sink_table
-                .as_ref()
-                .map(|plane| plane.length())
-                .unwrap_or_else(|| {
-                    self.max_shapes
-                        .saturating_mul(SINK_TABLE_RECORD_WORDS as u32)
-                        .saturating_add(
-                            self.max_shapes
-                                .saturating_mul(SINK_TABLE_DESCRIPTOR_WORDS as u32),
-                        )
-                        .saturating_add(SINK_TABLE_HEADER_WORDS as u32)
-                });
-            let shape_bank_words = clamp_non_negative_u32(
-                shared_input.get_index(INPUT_WORD_SHAPE_BANK_WORDS as u32),
-                shape_bank_word_limit,
-            );
-            let sink_table_words = clamp_non_negative_u32(
-                shared_input.get_index(INPUT_WORD_SINK_TABLE_WORDS as u32),
-                sink_table_word_limit,
-            );
-            self.last_shape_bank_words = shape_bank_words;
-            self.last_sink_table_words = sink_table_words;
-            self.sync_shape_bank_plane(shape_bank_words);
-            self.draw_regions = self.sync_sink_table_plane_and_parse_regions(sink_table_words);
+            let install_revision =
+                parse_finite_u32(
+                    shared_input.get_index(INPUT_WORD_INSTALL_REVISION as u32).into(),
+                    "installRevision",
+                );
+            // [LAW:single-enforcer] Shared-plane upload ownership is gated by
+            // one install revision word; per-frame ticks do not re-copy planes.
+            if install_revision != self.last_install_revision {
+                let shape_bank_word_limit = self
+                    .shared_shape_bank
+                    .as_ref()
+                    .map(|plane| plane.length())
+                    .unwrap_or_else(|| {
+                        self.max_shapes
+                            .saturating_mul(SHAPE_BANK_HEADER_WORDS as u32)
+                    });
+                let sink_table_word_limit = self
+                    .shared_sink_table
+                    .as_ref()
+                    .map(|plane| plane.length())
+                    .unwrap_or_else(|| {
+                        self.max_shapes
+                            .saturating_mul(SINK_TABLE_RECORD_WORDS as u32)
+                            .saturating_add(
+                                self.max_shapes
+                                    .saturating_mul(SINK_TABLE_DESCRIPTOR_WORDS as u32),
+                            )
+                            .saturating_add(SINK_TABLE_HEADER_WORDS as u32)
+                    });
+                let shape_bank_words = parse_finite_u32(
+                    shared_input.get_index(INPUT_WORD_SHAPE_BANK_WORDS as u32).into(),
+                    "shapeBankWordCount",
+                );
+                let sink_table_words = parse_finite_u32(
+                    shared_input.get_index(INPUT_WORD_SINK_TABLE_WORDS as u32).into(),
+                    "sinkTableWordCount",
+                );
+                if shape_bank_words > shape_bank_word_limit {
+                    panic!(
+                        "shape bank word count exceeds shared plane limit (requested={}, limit={})",
+                        shape_bank_words, shape_bank_word_limit
+                    );
+                }
+                if sink_table_words > sink_table_word_limit {
+                    panic!(
+                        "sink table word count exceeds shared plane limit (requested={}, limit={})",
+                        sink_table_words, sink_table_word_limit
+                    );
+                }
+                self.last_shape_bank_words = shape_bank_words;
+                self.last_sink_table_words = sink_table_words;
+                self.sync_shape_bank_plane(shape_bank_words);
+                self.draw_regions = self.sync_sink_table_plane_and_parse_regions(sink_table_words);
+                self.last_install_revision = install_revision;
+            }
         } else {
             uniforms.time_seconds = (timestamp_ms.max(0.0) * 0.001) as f32;
             uniforms.delta_time_seconds = (1.0 / 60.0) as f32;
@@ -1275,6 +1330,7 @@ impl Engine {
             uniforms.view_proj[3][3] = 1.0;
             self.last_shape_bank_words = 0;
             self.last_sink_table_words = 0;
+            self.last_install_revision = 0;
             self.draw_regions = IndirectRegionPlan::default();
         }
         self.arena.update_uniforms(&self.queue, uniforms);

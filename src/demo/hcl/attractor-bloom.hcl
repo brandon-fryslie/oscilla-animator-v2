@@ -175,7 +175,7 @@ patch "Attractor Bloom" {
     }
   }
 
-  block "MakeColorHSL" "soft_color" {
+  block "MakeColorOKLCH" "soft_color" {
     s = 0.88
     l = 0.56
     a = 0.62
@@ -268,7 +268,7 @@ patch "Attractor Bloom" {
     }
   }
 
-  block "MakeColorHSL" "hard_color" {
+  block "MakeColorOKLCH" "hard_color" {
     s = 0.82
     l = 0.6
     a = 0.78

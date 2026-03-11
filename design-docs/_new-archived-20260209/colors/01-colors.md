@@ -1,7 +1,7 @@
 Canonical conventions
 
 Color representation in user-space
-•	HSL uses normalized floats:
+•	OKLCH uses normalized floats:
 •	h ∈ [0,1) (wrap)
 •	s ∈ [0,1] (clamp)
 •	l ∈ [0,1] (clamp)
@@ -14,14 +14,14 @@ Field vs signal
 Every block below is cardinality-polymorphic:
 •	If inputs are signals → outputs are signals.
 •	If any input is a field (same instance extent) → outputs are fields.
-•	No separate signal/field implementations; it's the same lowering shape with per-lane opcode dispatch for the scalar ops and a small set of structural intrinsics for pack/unpack and HSL→RGB.
+•	No separate signal/field implementations; it's the same lowering shape with per-lane opcode dispatch for the scalar ops and a small set of structural intrinsics for pack/unpack and OKLCH→RGB.
 
 Required intrinsics (minimal)
 
 You need these runtime intrinsics (they can be registry kernels or dedicated ValueExpr kinds; see note at end):
 •	construct(payloadKind, components...) for `color` payload
 •	extract(componentIndex) for `color` payload
-•	hslToRgb() (returns `vec3` or `color`; spec below)
+•	oklchToRgb() (returns `vec3` or `color`; spec below)
 Everything else can be opcodes.
 
 ⸻
@@ -30,7 +30,7 @@ Everything else can be opcodes.
 
 Purpose
 
-A constant authoring source that produces a user-space color (HSL+A).
+A constant authoring source that produces a user-space color (OKLCH+A).
 
 Block identity
 •	type: ColorPicker
@@ -45,7 +45,7 @@ Outputs:
 •	color: `color` payload with unit colorHsl
 CanonicalType:
 •	payload: `color`
-•	unit: `{ kind: 'color', unit: 'hsl' }`
+•	unit: `{ kind: 'color', unit: 'oklch' }`
 •	extent: cardinality=one, temporality=continuous
 
 Optional convenience outputs (if you want ergonomic wiring):
@@ -68,19 +68,19 @@ Lowering
 •	If you expose the scalar outputs, also emit scalar consts or extract from the color const (preferred: extract from color for consistency).
 
 Invariants
-•	Always outputs a valid HSL color:
+•	Always outputs a valid OKLCH color:
 •	h wrapped, others clamped at construction.
 
 ⸻
 
-2) MakeColorHSL
+2) MakeColorOKLCH
 
 Purpose
 
 Pack scalar channels into a color value for ergonomics + composability.
 
 Block identity
-•	type: MakeColorHSL
+•	type: MakeColorOKLCH
 •	category: color
 
 Ports
@@ -110,14 +110,14 @@ Notes
 
 ⸻
 
-3) SplitColorHSL
+3) SplitColorOKLCH
 
 Purpose
 
 Unpack a colorHsl color into channels for ergonomic graph editing.
 
 Block identity
-•	type: SplitColorHSL
+•	type: SplitColorOKLCH
 •	category: color
 
 Ports
@@ -164,11 +164,11 @@ Outputs:
 
 Lowering semantics
 1.	Unpack:
-•	h,s,l,a = SplitColorHSL(color)
+•	h,s,l,a = SplitColorOKLCH(color)
 2.	Compute:
 •	h2 = wrap01(h + shift)
 3.	Repack:
-•	MakeColorHSL(h2, s, l, a)
+•	MakeColorOKLCH(h2, s, l, a)
 
 Constraints
 •	shift can be signal or field; output cardinality follows "any-field makes field".
@@ -196,7 +196,7 @@ Inputs:
 Outputs:
 •	color: `color` payload, unit colorHsl
 
-Semantics (HSL-space mix with hue wrap)
+Semantics (OKLCH-space mix with hue wrap)
 
 Mix rules:
 •	t' = clamp01(t) (recommended; if you want power-user overshoot, skip clamp)
@@ -216,7 +216,7 @@ Lowering shape
 •	Split both colors → 8 scalars
 •	Compute shortest-arc hue mix
 •	Lerp other channels
-•	Pack with MakeColorHSL (which wraps/clamps again)
+•	Pack with MakeColorOKLCH (which wraps/clamps again)
 
 Notes
 •	This is the "correct" behavior artists expect; plain lerp on hue gives ugly jumps at wrap.
@@ -252,7 +252,7 @@ Lowering
 
 ⸻
 
-7) HSL → RGB (conversion)
+7) OKLCH → RGB (conversion)
 
 You have two reasonable shapes. Pick one and be consistent.
 
@@ -261,7 +261,7 @@ Option 7A (recommended): convert colorHsl → rgba01 at materialization
 This makes conversion the explicit boundary into render formats.
 
 Block identity
-•	type: HslToRgba
+•	type: OklchToRgba
 •	category: color or render
 
 Ports
@@ -276,7 +276,7 @@ Outputs:
 
 Semantics
 1.	Unpack h,s,l,a.
-2.	Convert HSL→RGB in float [0,1]:
+2.	Convert OKLCH→RGB in float [0,1]:
 •	Define:
 •	If s == 0: r=g=b=l
 •	Else:
@@ -329,13 +329,13 @@ Do you need new kernel kinds?
 No. All blocks above lower using:
 •	existing opcode path for math
 •	structural intrinsics for extract/construct
-•	one registry kernel for HSL→RGB conversion
+•	one registry kernel for OKLCH→RGB conversion
 Everything fits your current map/zip/zipSig/broadcast/reduce shapes.
 
 ⸻
 
 Small but important implementation rules
-1.	MakeColorHSL is the enforcement point: wrap/clamp there.
+1.	MakeColorOKLCH is the enforcement point: wrap/clamp there.
 2.	HueShift + MixColor must use wrap-aware hue logic.
-3.	HslToRgba is the only place you do HSL→RGB conversion.
-4.	Color uses the existing `color` payload kind (stride 4) — no new payload types needed. HSL vs RGB is distinguished by UnitType, not payload kind.
+3.	OklchToRgba is the only place you do OKLCH→RGB conversion.
+4.	Color uses the existing `color` payload kind (stride 4) — no new payload types needed. OKLCH vs RGB is distinguished by UnitType, not payload kind.

@@ -23,7 +23,7 @@ zipSig (line ~217):    new Array<number>(sigCount)               // 1-3 elements
 
 3. **Accept the cost** — These allocate once per expression per frame, NOT per instance. With ~20 expressions, that's ~20 tiny arrays/frame = ~1200/sec at 60fps. Each is 2-4 elements. This is orders of magnitude less GC pressure than the per-instance allocations we already fixed (which were ~240K/sec). Practically, this is negligible.
 
-**Recommendation:** Option 3 (accept) unless profiling shows it matters. The per-instance fixes (`applyZip`, `applyZipSig`, `applyMap`, `hslToRgb`) eliminated >99% of the hot-path allocations. These per-expression allocations are in the noise.
+**Recommendation:** Option 3 (accept) unless profiling shows it matters. The per-instance fixes (`applyZip`, `applyZipSig`, `applyMap`, `oklchToRgb`) eliminated >99% of the hot-path allocations. These per-expression allocations are in the noise.
 
 If you DO want to pursue it, option 1 (depth-indexed pool) is simplest:
 ```typescript
@@ -50,7 +50,7 @@ const _scratchNums: number[][] = Array.from({length: 16}, () => []);
    - Confirmed janks are browser/GC (gap >> exec+render)
 
 3. **GC pressure fixes** (the main deliverable):
-   - `src/runtime/ValueExprMaterializer.ts`: Module-level `_mapArgs`, `_zipArgs`, `_zipSigArgs` buffers; `.map()` → imperative loops; `.slice()` → `.subarray()` view; inlined `hslToRgb`
+   - `src/runtime/ValueExprMaterializer.ts`: Module-level `_mapArgs`, `_zipArgs`, `_zipSigArgs` buffers; `.map()` → imperative loops; `.slice()` → `.subarray()` view; inlined `oklchToRgb`
    - `src/runtime/RenderAssembler.ts`: `ops.push(...spread)` → for loop; `new Uint8Array(topology.verbs)` → `getCachedVerbs()` with `_topologyVerbsCache`;
    - `src/render/canvas/Canvas2DRenderer.ts`: `setLineDash([])` → `EMPTY_DASH` singleton; `dashPattern.map()` → reusable `_dashBuffer`
 

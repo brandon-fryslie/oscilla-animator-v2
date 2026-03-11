@@ -31,7 +31,7 @@ patch "Adapter Obligation Name Demo" {
     }
   }
 
-  block "MakeColorHSL" "color" {
+  block "MakeColorOKLCH" "color" {
     outputs {
       color = render.color
     }

@@ -166,7 +166,7 @@ This condensed spec contains all invariants, glossary core terms, and T1 content
 | 20 | [Type Validation](./topics/20-type-validation.md) | Enforcement gate and guardrails | validateAxes, AxisViolation, 17 Guardrails, BindingMismatchError |
 | 21 | [Adapter System](./topics/21-adapter-system.md) | Type pattern matching and transforms | TypePattern, ExtentPattern, ExtentTransform, AdapterSpec |
 | 22 | [External Input System](./topics/22-external-input-system.md) | Unified channel-based input (MIDI/OSC/audio/keyboard/mouse) | ExternalChannelSnapshot, ChannelKind, ExternalInput, frame-boundary commit |
-| 23 | [Color System](./topics/23-color-system.md) | Color space as UnitType extension | HSL/RGBA01 units, Extract/Construct, ColorPicker, HslToRgba adapter |
+| 23 | [Color System](./topics/23-color-system.md) | Color space as UnitType extension | OKLCH/RGBA01 units, Extract/Construct, ColorPicker, OklchToRgba adapter |
 | 24 | [Multi-Component Values](./topics/24-multi-component-values.md) | Stride-aware evaluation and slot allocation | SlotMetaEntry, Hybrid A+ evaluation, sampleability, HistoryService guard |
 | 25 | [Pure Lowering](./topics/25-pure-lowering.md) | Purity contract for block lowering | LowerSandbox, effects-as-data, macro lowering, DefaultPolicyTable |
 | 26 | [Lens System](./topics/26-lens-system.md) | Port-attached value transformations | Lens as port decorator, 8 categories, minimal ship set |
@@ -264,7 +264,7 @@ Looking for something specific? Here's where to find it:
 | ExternalChannelSnapshot, ExternalWriteBus, ChannelKind | [22-external-input-system.md](./topics/22-external-input-system.md) |
 | External input channels (mouse, keyboard, MIDI, OSC, audio) | [22-external-input-system.md](./topics/22-external-input-system.md) |
 | All term definitions | [GLOSSARY.md](./GLOSSARY.md) |
-| Color UnitType, HSL/RGBA01, color blocks | [23-color-system.md](./topics/23-color-system.md) |
+| Color UnitType, OKLCH/RGBA01, color blocks | [23-color-system.md](./topics/23-color-system.md) |
 | SlotMetaEntry, stride allocation, sampleability | [24-multi-component-values.md](./topics/24-multi-component-values.md) |
 | LowerSandbox, pure lowering, macro lowering | [25-pure-lowering.md](./topics/25-pure-lowering.md) |
 | Lens, port decorators, lens categories | [26-lens-system.md](./topics/26-lens-system.md) |

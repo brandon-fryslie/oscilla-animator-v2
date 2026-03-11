@@ -38,5 +38,5 @@ Generated: 2026-02-01
 ## Notes
 
 - No IR extensions needed - existing `extract()` and `construct()` operations in IRBuilder fully support this
-- Reference implementations: `SplitColorHSL` (extract pattern), `MakeColorHSL` (construct pattern)
+- Reference implementations: `SplitColorOKLCH` (extract pattern), `MakeColorOKLCH` (construct pattern)
 - These are the first type-CHANGING lenses (Sprints 1-2 were type-preserving)

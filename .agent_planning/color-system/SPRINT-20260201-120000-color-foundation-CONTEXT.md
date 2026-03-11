@@ -3,10 +3,10 @@
 ## Key Files
 
 ### UnitType (P0)
-- `src/core/canonical-types/units.ts` — Add `'hsl'` to color unit union, add `unitHsl()` constructor
+- `src/core/canonical-types/units.ts` — Add `'oklch'` to color unit union, add `unitHsl()` constructor
 - `src/core/canonical-types/index.ts` — Export `unitHsl`
 
-### HSL→RGB Conversion (P1)
+### OKLCH→RGB Conversion (P1)
 - Algorithm from spec (`design-docs/_new/colors/01-colors.md` lines 278-296):
   ```
   if s == 0: r=g=b=l

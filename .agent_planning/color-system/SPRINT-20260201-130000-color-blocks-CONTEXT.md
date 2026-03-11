@@ -6,22 +6,22 @@ All new color blocks go in `src/blocks/color/`:
 ```
 src/blocks/color/
 ├── color-picker.ts       # ColorPicker source
-├── make-color-hsl.ts     # MakeColorHSL (pack)
-├── split-color-hsl.ts    # SplitColorHSL (unpack)
+├── make-color-oklch.ts     # MakeColorOKLCH (pack)
+├── split-color-oklch.ts    # SplitColorOKLCH (unpack)
 ├── hue-shift.ts          # HueShift
 ├── mix-color.ts          # MixColor (shortest-arc blend)
 ├── alpha-multiply.ts     # AlphaMultiply
-├── hsl-to-rgba.ts        # HslToRgba adapter
+├── oklch-to-rgba.ts        # OklchToRgba adapter
 └── __tests__/
     └── color-blocks.test.ts
 ```
 
-The HslToRgba block may alternatively go in `src/blocks/adapter/hsl-to-rgba.ts` depending on convention — check where other adapter blocks live.
+The OklchToRgba block may alternatively go in `src/blocks/adapter/oklch-to-rgba.ts` depending on convention — check where other adapter blocks live.
 
 ## Common Type Patterns
 
 ```typescript
-// HSL color type (signal)
+// OKLCH color type (signal)
 const colorHslType = canonicalType(COLOR, unitHsl());
 
 // RGBA color type (signal)
@@ -84,11 +84,11 @@ In opcodes:
 Follow the pattern in `src/blocks/adapter/radians-to-phase.ts`:
 ```typescript
 adapterSpec: {
-  from: { payload: COLOR, unit: { kind: 'color', unit: 'hsl' }, extent: 'any' },
+  from: { payload: COLOR, unit: { kind: 'color', unit: 'oklch' }, extent: 'any' },
   to: { payload: COLOR, unit: { kind: 'color', unit: 'rgba01' }, extent: 'any' },
   inputPortId: 'in',
   outputPortId: 'out',
-  description: 'HSL → RGBA color space conversion',
+  description: 'OKLCH → RGBA color space conversion',
   purity: 'pure',
   stability: 'stable',
 },
