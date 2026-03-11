@@ -113,6 +113,22 @@ export interface SinkTableDebugSample {
   } | null;
 }
 
+type SinkTableFirstRecord = NonNullable<SinkTableDebugSample['firstRecord']>;
+
+const SINK_TABLE_FIRST_RECORD_FIELDS = Object.freeze([
+  Object.freeze({ key: 'drawModeCode', offset: 0 }),
+  Object.freeze({ key: 'count', offset: 1 }),
+  Object.freeze({ key: 'instanceCount', offset: 2 }),
+  Object.freeze({ key: 'first', offset: 3 }),
+  Object.freeze({ key: 'baseVertex', offset: 4 }),
+  Object.freeze({ key: 'firstInstance', offset: 5 }),
+  Object.freeze({ key: 'shapeWordOffset', offset: 6 }),
+  Object.freeze({ key: 'materialId', offset: 7 }),
+] satisfies ReadonlyArray<{ readonly key: keyof SinkTableFirstRecord; readonly offset: number }>);
+
+const SINK_TABLE_FIRST_RECORD_WORDS =
+  SINK_TABLE_FIRST_RECORD_FIELDS.reduce((max, { offset }) => Math.max(max, offset), -1) + 1;
+
 type WorkerAckDisposition =
   | { readonly kind: 'success' }
   | { readonly kind: 'ignore' }
@@ -1099,61 +1115,21 @@ export class WebGPURenderer {
     totalRecords: number,
     firstRecordBase: number,
   ): SinkTableDebugSample['firstRecord'] {
-    const recordWords = 8;
+    const recordWords = SINK_TABLE_FIRST_RECORD_WORDS;
     const hasFirstRecord = totalRecords > 0 && wordCount >= firstRecordBase + recordWords;
     if (!hasFirstRecord) {
       return null;
     }
-    return {
-      drawModeCode: readRequiredSinkTableWord(
+    const entries = SINK_TABLE_FIRST_RECORD_FIELDS.map(({ key, offset }) => [
+      key,
+      readRequiredSinkTableWord(
         sinkTableWords,
         wordCount,
-        firstRecordBase + 0,
-        'sink-table-sample.firstRecord.drawModeCode',
+        firstRecordBase + offset,
+        `sink-table-sample.firstRecord.${key}`,
       ),
-      count: readRequiredSinkTableWord(
-        sinkTableWords,
-        wordCount,
-        firstRecordBase + 1,
-        'sink-table-sample.firstRecord.count',
-      ),
-      instanceCount: readRequiredSinkTableWord(
-        sinkTableWords,
-        wordCount,
-        firstRecordBase + 2,
-        'sink-table-sample.firstRecord.instanceCount',
-      ),
-      first: readRequiredSinkTableWord(
-        sinkTableWords,
-        wordCount,
-        firstRecordBase + 3,
-        'sink-table-sample.firstRecord.first',
-      ),
-      baseVertex: readRequiredSinkTableWord(
-        sinkTableWords,
-        wordCount,
-        firstRecordBase + 4,
-        'sink-table-sample.firstRecord.baseVertex',
-      ),
-      firstInstance: readRequiredSinkTableWord(
-        sinkTableWords,
-        wordCount,
-        firstRecordBase + 5,
-        'sink-table-sample.firstRecord.firstInstance',
-      ),
-      shapeWordOffset: readRequiredSinkTableWord(
-        sinkTableWords,
-        wordCount,
-        firstRecordBase + 6,
-        'sink-table-sample.firstRecord.shapeWordOffset',
-      ),
-      materialId: readRequiredSinkTableWord(
-        sinkTableWords,
-        wordCount,
-        firstRecordBase + 7,
-        'sink-table-sample.firstRecord.materialId',
-      ),
-    };
+    ] as const);
+    return Object.fromEntries(entries) as SinkTableFirstRecord;
   }
 
   private emitSinkTableDebugSample(sample: SinkTableDebugSample): void {
@@ -1385,31 +1361,43 @@ export class WebGPURenderer {
     };
   }
 
+  private handleWorkerMessage(payload: RustRendererWorkerOutboundMessage): void {
+    switch (payload.type) {
+      case 'ENGINE_ERROR':
+        this.handleEngineErrorMessage(payload);
+        return;
+      case 'FATAL_ERROR':
+        this.handleFatalErrorMessage(payload);
+        return;
+      case 'DEVICE_LOST':
+        this.handleDeviceLostMessage(payload);
+        return;
+      case 'RUNTIME_EVENT':
+        this.handleRuntimeEventMessage(payload);
+        return;
+      case 'SCHEDULER_HEARTBEAT':
+        this.handleSchedulerHeartbeatMessage(payload);
+        return;
+      case 'BOOTSTRAP_SUCCESS':
+      case 'REBUILD_GPU_PIPELINES_SUCCESS':
+        return;
+      default: {
+        // [LAW:no-silent-fallbacks] Runtime protocol dispatch must be exhaustive.
+        const exhaustiveCheck: never = payload;
+        throw new Error(
+          `Unhandled RustRendererWorkerOutboundMessage type: ${(exhaustiveCheck as { type: string }).type}`,
+        );
+      }
+    }
+  }
+
   private readonly handleRuntimeMessage = (event: MessageEvent<RustRendererWorkerOutboundMessage>): void => {
     const payload = event.data;
     if (!payload) return;
     if (this.shouldIgnoreRuntimeMessage(payload)) {
       return;
     }
-    if (payload.type === 'ENGINE_ERROR') {
-      this.handleEngineErrorMessage(payload);
-      return;
-    }
-    if (payload.type === 'FATAL_ERROR') {
-      this.handleFatalErrorMessage(payload);
-      return;
-    }
-    if (payload.type === 'DEVICE_LOST') {
-      this.handleDeviceLostMessage(payload);
-      return;
-    }
-    if (payload.type === 'RUNTIME_EVENT') {
-      this.handleRuntimeEventMessage(payload);
-      return;
-    }
-    if (payload.type === 'SCHEDULER_HEARTBEAT') {
-      this.handleSchedulerHeartbeatMessage(payload);
-    }
+    this.handleWorkerMessage(payload);
   };
 }
 
