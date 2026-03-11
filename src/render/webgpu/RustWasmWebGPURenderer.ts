@@ -111,6 +111,17 @@ export interface SinkTableDebugSample {
     readonly shapeWordOffset: number;
     readonly materialId: number;
   } | null;
+  readonly firstDescriptor: {
+    readonly positionBaseOffset: number;
+    readonly positionLaneStride: number;
+    readonly positionComponentStride: number;
+    readonly colorBaseOffset: number;
+    readonly colorLaneStride: number;
+    readonly colorComponentStride: number;
+    readonly scaleBaseOffset: number;
+    readonly scaleLaneStride: number;
+    readonly scaleComponentStride: number;
+  } | null;
 }
 
 type SinkTableFirstRecord = NonNullable<SinkTableDebugSample['firstRecord']>;
@@ -1095,6 +1106,8 @@ export class WebGPURenderer {
 
   private buildSinkTableDebugSample(sinkTableWords: Uint32Array, wordCount: number): SinkTableDebugSample {
     const headerWords = 8;
+    const recordWords = 8;
+    const descriptorWords = 20;
     const totalRecords = readRequiredSinkTableWord(
       sinkTableWords,
       wordCount,
@@ -1102,10 +1115,71 @@ export class WebGPURenderer {
       'sink-table-sample.totalRecords',
     );
     const firstRecord = this.buildSinkTableFirstRecord(sinkTableWords, wordCount, totalRecords, headerWords);
+    const descriptorBase = headerWords + totalRecords * recordWords;
+    const hasFirstDescriptor = totalRecords > 0 && wordCount >= descriptorBase + descriptorWords;
+    const firstDescriptor = hasFirstDescriptor
+      ? {
+          positionBaseOffset: readRequiredSinkTableWord(
+            sinkTableWords,
+            wordCount,
+            descriptorBase + 0,
+            'sink-table-sample.firstDescriptor.positionBaseOffset',
+          ),
+          positionLaneStride: readRequiredSinkTableWord(
+            sinkTableWords,
+            wordCount,
+            descriptorBase + 1,
+            'sink-table-sample.firstDescriptor.positionLaneStride',
+          ),
+          positionComponentStride: readRequiredSinkTableWord(
+            sinkTableWords,
+            wordCount,
+            descriptorBase + 2,
+            'sink-table-sample.firstDescriptor.positionComponentStride',
+          ),
+          colorBaseOffset: readRequiredSinkTableWord(
+            sinkTableWords,
+            wordCount,
+            descriptorBase + 3,
+            'sink-table-sample.firstDescriptor.colorBaseOffset',
+          ),
+          colorLaneStride: readRequiredSinkTableWord(
+            sinkTableWords,
+            wordCount,
+            descriptorBase + 4,
+            'sink-table-sample.firstDescriptor.colorLaneStride',
+          ),
+          colorComponentStride: readRequiredSinkTableWord(
+            sinkTableWords,
+            wordCount,
+            descriptorBase + 5,
+            'sink-table-sample.firstDescriptor.colorComponentStride',
+          ),
+          scaleBaseOffset: readRequiredSinkTableWord(
+            sinkTableWords,
+            wordCount,
+            descriptorBase + 6,
+            'sink-table-sample.firstDescriptor.scaleBaseOffset',
+          ),
+          scaleLaneStride: readRequiredSinkTableWord(
+            sinkTableWords,
+            wordCount,
+            descriptorBase + 7,
+            'sink-table-sample.firstDescriptor.scaleLaneStride',
+          ),
+          scaleComponentStride: readRequiredSinkTableWord(
+            sinkTableWords,
+            wordCount,
+            descriptorBase + 8,
+            'sink-table-sample.firstDescriptor.scaleComponentStride',
+          ),
+        }
+      : null;
     return {
       sinkTableWordCount: wordCount,
       totalRecords,
       firstRecord,
+      firstDescriptor,
     };
   }
 
@@ -1144,6 +1218,7 @@ export class WebGPURenderer {
         wordCount: sample.sinkTableWordCount,
         totalRecords: sample.totalRecords,
         firstRecord: sample.firstRecord,
+        firstDescriptor: sample.firstDescriptor,
       })}`,
     );
   }
