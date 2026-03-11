@@ -122,6 +122,38 @@ function mockProgram(opts: {
     arenaLayout,
     arenaPayloadFloats: arenaLayout.reduce((sum, d) => sum + Math.max(0, d.length), 0),
     arenaTotalFloats: 0,
+    drawPrepProgram: {
+      totalRecordCount: 0,
+      indexedRecordCount: 0,
+      indexedRegionBaseWords: 0,
+      indexedStrideWords: 5,
+      nonIndexedRecordCount: 0,
+      nonIndexedRegionBaseWords: 0,
+      nonIndexedStrideWords: 4,
+      sinks: [],
+    },
+    generatedComputeProgram: {
+      maxActiveLanes: 1,
+      offsetConstants: new Map(),
+    },
+    nagaLoweringProgram: {
+      module: {
+        types: [],
+        constants: [],
+        global_variables: [],
+        functions: [],
+        entry_points: [],
+      },
+      sourceMap: {},
+      compute: {
+        maxActiveLanes: 1,
+      },
+      coverage: {
+        totalStepCount: 0,
+        boundaryStepCount: 0,
+        droppedComputeStepCount: 0,
+      },
+    },
   } as CompiledProgramIR;
 }
 
@@ -221,7 +253,7 @@ describe('getExprAddressTable', () => {
       slotMeta: [{ slot: valueSlot(0), storage: 'f32', offset: 0, stride: 1, type: SIG_FLOAT }],
       steps: [],
     });
-    const brokenProgram = { ...program, runtimeAddressTable: undefined } as CompiledProgramIR;
+    const brokenProgram = { ...program, runtimeAddressTable: undefined } as unknown as CompiledProgramIR;
     expect(() => getExprAddressTable(brokenProgram))
       .toThrow(/legacy metadata-based runtime address derivation is forbidden/);
   });

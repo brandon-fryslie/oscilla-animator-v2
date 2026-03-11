@@ -27,8 +27,7 @@ export type GpuPassSignatureValidationOutcome =
   | { readonly kind: 'ok'; readonly signatures: readonly ValidatedGpuPassSignature[] }
   | { readonly kind: 'error'; readonly errors: readonly CompileError[] };
 
-function parseMaxActiveLanes(maxActiveLanes: number | undefined): number | undefined {
-  if (typeof maxActiveLanes !== 'number') return undefined;
+function parseMaxActiveLanes(maxActiveLanes: number): number | undefined {
   const parsed = Math.trunc(maxActiveLanes);
   if (!Number.isFinite(parsed) || parsed <= 0) return undefined;
   return parsed;
@@ -165,32 +164,7 @@ export async function compileProgramWithNaga(
   program: CompiledProgramIR,
 ): Promise<NagaCompilationOutcome> {
   const lowering = program.nagaLoweringProgram;
-  if (!lowering) {
-    return {
-      kind: 'error',
-      errors: [
-        {
-          code: 'IRValidationFailed',
-          message: 'Missing nagaLoweringProgram on compiled IR',
-        },
-      ],
-    };
-  }
-
-  const generatedComputeProgram = program.generatedComputeProgram;
-  if (!generatedComputeProgram) {
-    return {
-      kind: 'error',
-      errors: [
-        {
-          code: 'IRValidationFailed',
-          message: 'Missing generatedComputeProgram metadata on compiled IR',
-        },
-      ],
-    };
-  }
-
-  const maxActiveLanes = parseMaxActiveLanes(generatedComputeProgram.maxActiveLanes);
+  const maxActiveLanes = parseMaxActiveLanes(program.generatedComputeProgram.maxActiveLanes);
   if (!maxActiveLanes) {
     return {
       kind: 'error',

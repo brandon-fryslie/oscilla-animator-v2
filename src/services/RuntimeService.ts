@@ -322,7 +322,7 @@ export class RuntimeService {
   private async publishRendererPipelines(
     artifacts: {
       readonly backendResult: import('../compiler/compile').CompileResult | null;
-      readonly compiledGpuBundle?: CompiledGpuArtifactBundle | null;
+      readonly compiledGpuBundle: CompiledGpuArtifactBundle | null;
     },
   ): Promise<void> {
     if (artifacts.backendResult?.kind !== 'ok') {
