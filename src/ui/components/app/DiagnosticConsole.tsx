@@ -16,13 +16,14 @@
  * - Uses MobX observer pattern for reactivity
  */
 
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { observer } from 'mobx-react-lite';
 import { ToggleButton, ToggleButtonGroup } from '@mui/material';
 import { useStores } from '../../../stores';
 import type { RootStore } from '../../../stores';
 import type { Diagnostic, Severity, TargetRef, DiagnosticAction } from '../../../diagnostics/types';
-import type { TimingWindowEntry, TimingRangeStats, JankEvent } from '../../../stores/DiagnosticsStore';
+import type { RuntimeTelemetryLog } from './runtimeTelemetry';
+import { selectLatestRuntimeTelemetryLog } from './runtimeTelemetry';
 
 // =============================================================================
 // DiagnosticConsole Component
@@ -61,14 +62,12 @@ export const DiagnosticConsole: React.FC = observer(() => {
   const medianMs = diagnosticsStore.medianCompileMs;
   const lastMs = diagnosticsStore.lastCompileMs;
 
-  // Get multi-window frame timing stats (reactive)
-  const timingWindows = diagnosticsStore.frameTimingWindows;
-
-  // Get jank events (reactive)
-  const jankLog = diagnosticsStore.jankLog;
-
-  // Get memory stats (reactive) - Sprint: memory-instrumentation
-  const memory = diagnosticsStore.memoryStats;
+  // [LAW:one-source-of-truth] Renderer heartbeat telemetry is surfaced from
+  // diagnostics logs, which are the canonical UI debug stream.
+  const runtimeTelemetry = useMemo(
+    () => selectLatestRuntimeTelemetryLog(diagnosticsStore.logs),
+    [diagnosticsStore.logs]
+  );
 
   return (
     <div
@@ -80,141 +79,7 @@ export const DiagnosticConsole: React.FC = observer(() => {
         color: '#eee',
       }}
     >
-      {/* Frame Timing Multi-Window Table */}
-      {timingWindows.length > 0 && (
-        <div
-          style={{
-            padding: '4px 12px',
-            borderBottom: '1px solid #0f3460',
-            fontFamily: 'monospace',
-            fontSize: '11px',
-            background: '#0a0a18',
-          }}
-        >
-          {/* Header row */}
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: '36px 1fr 1fr 1fr 60px',
-            gap: '0 6px',
-            color: '#8af',
-            paddingBottom: '2px',
-            borderBottom: '1px solid #1a2a4a',
-            marginBottom: '1px',
-          }}>
-            <span></span>
-            <span style={{ textAlign: 'right' }}>fps</span>
-            <span style={{ textAlign: 'right' }}>ms/frame</span>
-            <span style={{ textAlign: 'right' }}>jitter</span>
-            <span style={{ textAlign: 'right' }}>dropped</span>
-          </div>
-          {/* Data rows */}
-          {timingWindows.map((w: TimingWindowEntry) => (
-            <div key={w.label} style={{
-              display: 'grid',
-              gridTemplateColumns: '36px 1fr 1fr 1fr 60px',
-              gap: '0 6px',
-              lineHeight: '16px',
-              opacity: w.full ? 1 : 0.5,
-            }}>
-              <span style={{ color: '#888' }}>{w.label}</span>
-              <span style={{ textAlign: 'right', color: fpsColor(w.stats.fps.mean) }}>
-                {formatRange(w.stats.fps, 0)}
-              </span>
-              <span style={{ textAlign: 'right', color: msColor(w.stats.msPerFrame.max) }}>
-                {formatRange(w.stats.msPerFrame, 1)}
-              </span>
-              <span style={{ textAlign: 'right', color: jitterColor(w.stats.jitter.mean) }}>
-                {formatRange(w.stats.jitter, 1)}
-              </span>
-              <span style={{ textAlign: 'right', color: droppedColor(w.stats.dropped) }}>
-                {w.stats.dropped}
-              </span>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Jank Event Log */}
-      {jankLog.length > 0 && (
-        <div
-          style={{
-            padding: '4px 12px',
-            borderBottom: '1px solid #0f3460',
-            fontFamily: 'monospace',
-            fontSize: '11px',
-            background: '#0a0a18',
-            maxHeight: '120px',
-            overflowY: 'auto',
-          }}
-        >
-          <div style={{ color: '#f88', paddingBottom: '2px', borderBottom: '1px solid #1a2a4a', marginBottom: '1px' }}>
-            Jank Log ({jankLog.length} events)
-          </div>
-          {/* Header */}
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: '64px 70px 60px 60px 1fr',
-            gap: '0 6px',
-            color: '#666',
-            lineHeight: '14px',
-          }}>
-            <span>time</span>
-            <span style={{ textAlign: 'right' }}>delta</span>
-            <span style={{ textAlign: 'right' }}>exec</span>
-            <span style={{ textAlign: 'right' }}>render</span>
-            <span style={{ textAlign: 'right' }}>browser gap</span>
-          </div>
-          {/* Events, newest first */}
-          {[...jankLog].reverse().map((e: JankEvent, i: number) => {
-            const isBrowser = e.browserGapMs > e.prevExecMs + e.prevRenderMs;
-            return (
-              <div key={i} style={{
-                display: 'grid',
-                gridTemplateColumns: '64px 70px 60px 60px 1fr',
-                gap: '0 6px',
-                lineHeight: '16px',
-                color: '#ccc',
-              }}>
-                <span style={{ color: '#888' }}>{e.wallTime}</span>
-                <span style={{ textAlign: 'right', color: '#f88' }}>{e.deltaMs.toFixed(0)}ms</span>
-                <span style={{ textAlign: 'right', color: e.prevExecMs > 50 ? '#f88' : '#8a8' }}>
-                  {e.prevExecMs.toFixed(1)}ms
-                </span>
-                <span style={{ textAlign: 'right', color: e.prevRenderMs > 50 ? '#f88' : '#8a8' }}>
-                  {e.prevRenderMs.toFixed(1)}ms
-                </span>
-                <span style={{ textAlign: 'right', color: isBrowser ? '#fa8' : '#8a8' }}>
-                  {e.browserGapMs.toFixed(0)}ms{isBrowser ? ' ← browser/GC' : ''}
-                </span>
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {/* Memory Stats Bar (Sprint: memory-instrumentation) */}
-      {memory.pooledBytes > 0 && (
-        <div
-          style={{
-            padding: '6px 12px',
-            borderBottom: '1px solid #0f3460',
-            fontFamily: 'monospace',
-            fontSize: '11px',
-            background: '#0a0a18',
-            color: memory.poolAllocs !== memory.poolReleases ? '#f88' : '#8a8',
-          }}
-        >
-          <span style={{ color: '#8af' }}>Memory:</span>{' '}
-          {formatBytes(memory.pooledBytes)} pooled |{' '}
-          <span style={{ color: memory.poolAllocs !== memory.poolReleases ? '#f88' : '#8a8' }}>
-            {memory.poolAllocs} alloc / {memory.poolReleases} release
-          </span>{' '}
-          {memory.poolAllocs !== memory.poolReleases && (
-            <span style={{ color: '#f88' }}>(LEAK!)</span>
-          )}
-          | {memory.poolKeyCount} sizes
-        </div>
-      )}
+      <RuntimeTelemetryStrip runtimeTelemetry={runtimeTelemetry} />
 
       {/* Compilation Stats Bar */}
       {stats.count > 0 && (
@@ -347,6 +212,73 @@ export const DiagnosticConsole: React.FC = observer(() => {
     </div>
   );
 });
+
+interface RuntimeTelemetryStripProps {
+  runtimeTelemetry: RuntimeTelemetryLog | null;
+}
+
+const RuntimeTelemetryStrip: React.FC<RuntimeTelemetryStripProps> = ({ runtimeTelemetry }) => {
+  if (!runtimeTelemetry) {
+    return null;
+  }
+
+  const { payload, timestamp } = runtimeTelemetry;
+  const telemetry = payload.telemetry;
+  const stageTimings = telemetry.stageTimings;
+  const dispatchCounters = telemetry.dispatchCounters;
+  const resourceStats = telemetry.resourceStats;
+  const lastEvent = telemetry.lastEvent;
+
+  return (
+    <div
+      style={{
+        padding: '6px 12px',
+        borderBottom: '1px solid #0f3460',
+        fontFamily: 'monospace',
+        fontSize: '11px',
+        background: '#0a0a18',
+        color: '#dbeafe',
+        display: 'grid',
+        gap: '2px',
+      }}
+    >
+      <div>
+        <span style={{ color: '#8af' }}>Renderer:</span>
+        {' '}
+        {payload.schedulerState}
+        {' | '}FPS {payload.fps}
+        {' | '}Frame {telemetry.frameCount}
+        {' | '}Samples {telemetry.sampleCount}
+        {' | '}Last {new Date(timestamp).toLocaleTimeString()}
+      </div>
+      <div>
+        Tick {stageTimings.totalFrameMs.toFixed(2)}ms
+        {' | '}Mean {telemetry.meanMs.toFixed(2)}ms
+        {' | '}StdDev {telemetry.stdDevMs.toFixed(2)}ms
+        {' | '}Dispatch {dispatchCounters.computeDispatchCount}
+        {' | '}Workgroups {dispatchCounters.computeWorkgroupCount}
+      </div>
+      <div>
+        Stages in {stageTimings.inputMarshalMs.toFixed(2)}
+        {' | '}sim {stageTimings.simulationDispatchMs.toFixed(2)}
+        {' | '}draw {stageTimings.drawPrepMs.toFixed(2)}
+        {' | '}render {stageTimings.renderMs.toFixed(2)}
+        {' | '}swap {stageTimings.swapMs.toFixed(2)}
+      </div>
+      <div>
+        Instances {resourceStats.totalInstanceCount}
+        {' | '}SinkWords {resourceStats.sinkTableWordCount}
+        {' | '}PingPong {resourceStats.pingPongIndex}
+        {' | '}Canvas {resourceStats.canvasWidth}x{resourceStats.canvasHeight}
+      </div>
+      {lastEvent ? (
+        <div style={{ color: lastEvent.severity === 'fatal' ? '#fda4af' : '#fcd34d' }}>
+          Last event [{lastEvent.code}] {lastEvent.stage}: {lastEvent.message}
+        </div>
+      ) : null}
+    </div>
+  );
+};
 
 // =============================================================================
 // DiagnosticRow Component
@@ -494,53 +426,6 @@ const DiagnosticRow: React.FC<DiagnosticRowProps> = ({ diagnostic, rootStore }) 
 // =============================================================================
 // Helper Functions
 // =============================================================================
-
-/**
- * Format a range stat as "mean [min-max]"
- */
-function formatRange(r: TimingRangeStats, decimals: number): string {
-  const m = r.mean.toFixed(decimals);
-  const lo = r.min.toFixed(decimals);
-  const hi = r.max.toFixed(decimals);
-  return `${m} [${lo}-${hi}]`;
-}
-
-/** Color for fps values (higher = better) */
-function fpsColor(fps: number): string {
-  if (fps >= 58) return '#8a8';
-  if (fps >= 50) return '#fa8';
-  return '#f88';
-}
-
-/** Color for ms/frame max values (lower = better) */
-function msColor(maxMs: number): string {
-  if (maxMs < 20) return '#8a8';
-  if (maxMs < 33) return '#fa8';
-  return '#f88';
-}
-
-/** Color for jitter mean (lower = better) */
-function jitterColor(jitter: number): string {
-  if (jitter < 1) return '#8a8';
-  if (jitter < 2) return '#fa8';
-  return '#f88';
-}
-
-/** Color for dropped frame count (zero = best) */
-function droppedColor(dropped: number): string {
-  if (dropped === 0) return '#8a8';
-  if (dropped < 5) return '#fa8';
-  return '#f88';
-}
-
-/**
- * Formats bytes into human-readable string.
- */
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes}B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(2)}MB`;
-}
 
 /**
  * Returns icon for severity level.
