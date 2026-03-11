@@ -28,8 +28,9 @@ import type {
   GeneratedComputeProgramIR,
   PortBindingIR,
 } from './ir/program';
-import type { InstanceId, ValueSlot } from './ir/Indices';
-import { SCALAR_INSTANCE_ID } from './ir/Indices';
+import type { InstanceId, StepIndex, ValueSlot } from './ir/Indices';
+import { SCALAR_INSTANCE_ID, stepIndex } from './ir/Indices';
+import { blockIndex, type BlockIndex } from './ir/BlockIndex';
 import type { UnlinkedIRFragments } from './backend/lower-blocks';
 import type { ScheduleIR } from './backend/schedule-program';
 import type { AcyclicOrLegalGraph } from './ir/patches';
@@ -54,7 +55,6 @@ import { getValueExprChildren } from '../runtime/ValueExprTreeWalker';
 import { compileFrontend, type FrontendResult, type FrontendError } from './frontend';
 import type { CompileError } from './types';
 import { buildProgramTopologyTable, collectAllProgramTopologyIds } from './ir/program-topology';
-import { blockId as toBlockId, portId as toPortId } from '../types/compiler';
 
 import { registerAllBlocks } from '../blocks/all';
 
@@ -711,38 +711,32 @@ function convertLinkedIRToProgram(
 
   // Build debug index
   type DebugPortBinding = CompiledProgramIR['debugIndex']['ports'][number];
-  const stepToBlock = new Map();
-  const slotToBlock = new Map();
+  const stepToBlock = new Map<StepIndex, BlockIndex>();
+  const slotToBlock = new Map<ValueSlot, BlockIndex>();
   const ports: DebugPortBinding[] = [];
-  const slotToPort = new Map();
-  const blockMap = new Map(); // Map numeric BlockId -> string ID
-  const blockDisplayNames = new Map(); // Map numeric BlockId -> user-facing name
-  const toDebugPortId = (index: number): DebugPortBinding['port'] => toPortId(`p${index}`);
+  const slotToPort = new Map<ValueSlot, DebugPortBinding['port']>();
+  const blockMap = new Map<BlockIndex, string>(); // Map numeric BlockId -> string ID
+  const blockDisplayNames = new Map<BlockIndex, string>(); // Map numeric BlockId -> user-facing name
+  // [LAW:one-source-of-truth] Numeric debug block references are derived only from
+  // compile-owned block ordering; downstream consumers must not invent alternate keys.
+  const blockIdToIndex = new Map<string, BlockIndex>();
+  const toDebugPortId = (index: number): DebugPortBinding['port'] => index as DebugPortBinding['port'];
 
   // Populate debug index from unlinkedIR.blockOutputs (provenance)
   if (unlinkedIR.blockOutputs) {
     let portCounter = 0;
 
     // Build block map from acyclicPatch
-    // We use canonical block IDs directly for provenance/debug joins.
     const blocks = acyclicPatch.blocks;
-    const debugBlockIds = blocks.map((block) => toBlockId(block.id));
-    const resolveDebugBlockId = (index: number): DebugPortBinding['block'] => {
-      const blockId = debugBlockIds[index];
-      if (blockId === undefined) {
-        throw new Error(`debug index invariant violation: missing block for index ${index}`);
-      }
-      return blockId;
-    };
     for (let i = 0; i < blocks.length; i++) {
-      const blockId = debugBlockIds[i];
-      const block = blocks[i];
-      blockMap.set(blockId, block.id);
-      blockDisplayNames.set(blockId, block.id || block.type);
+      const numericBlockId = blockIndex(i);
+      blockMap.set(numericBlockId, blocks[i].id);
+      blockDisplayNames.set(numericBlockId, blocks[i].id || blocks[i].type);
+      blockIdToIndex.set(blocks[i].id, numericBlockId);
     }
 
-    for (const [blockIndex, outputs] of unlinkedIR.blockOutputs.entries()) {
-      const debugBlockId = resolveDebugBlockId(blockIndex);
+    for (const [numericBlockIndex, outputs] of unlinkedIR.blockOutputs.entries()) {
+      const debugBlockId = blockIndex(numericBlockIndex);
       for (const [portId, ref] of outputs.entries()) {
         const valueId = ref.id;
         const expr = valueExprNodes[valueId];
@@ -757,6 +751,9 @@ function convertLinkedIRToProgram(
         // [LAW:one-source-of-truth] Slot mapping is only for slot-backed outputs.
         // Discrete outputs are represented in ports metadata but do not require slot aliases.
         if (slot !== undefined) {
+          // [LAW:one-source-of-truth] Slot-backed debug provenance is authored
+          // once at compile time, then consumed read-only by runtime inspectors.
+          slotToBlock.set(slot, debugBlockId);
           slotToPort.set(slot, portIndex);
         }
 
@@ -776,22 +773,30 @@ function convertLinkedIRToProgram(
 
   // Populate stepToBlock and stepToPort from schedule steps + exprToBlock provenance
   const exprToBlock = builder.getExprToBlock();
-  const stepToPortMap = new Map();
+  const stepToPortMap = new Map<StepIndex, DebugPortBinding['port']>();
   const scheduleSteps = scheduleIR.steps as readonly Step[];
   for (let i = 0; i < scheduleSteps.length; i++) {
     const step = scheduleSteps[i];
+    const stepId = stepIndex(i);
     const exprId = getStepExprId(step);
     if (exprId !== null) {
-      const blockIdx = exprToBlock.get(exprId);
-      if (blockIdx !== undefined) {
-        stepToBlock.set(i, blockIdx);
+      const blockId = exprToBlock.get(exprId);
+      if (blockId !== undefined) {
+        const numericBlockId = blockIdToIndex.get(blockId);
+        if (numericBlockId === undefined) {
+          throw new Error(
+            `compile(): Missing blockIdToIndex entry for blockId "${blockId}" (exprId=${exprId}, stepIndex=${i}). `
+            + 'This indicates exprToBlock provenance is out of sync with compile-owned block ordering.',
+          );
+        }
+        stepToBlock.set(stepId, numericBlockId);
       }
       // Resolve step → port via slotToPort (for steps that write to a slot)
       const targetSlot = getStepTargetSlot(step);
       if (targetSlot !== null) {
         const portIdx = slotToPort.get(targetSlot);
         if (portIdx !== undefined) {
-          stepToPortMap.set(i, portIdx);
+          stepToPortMap.set(stepId, portIdx);
         }
       }
     }

@@ -1,6 +1,6 @@
 import type { Patch } from '../graph';
 import type { CompiledProgramIR } from '../compiler/ir/program';
-import type { ValueSlot, PortId } from '../types';
+import type { ValueSlot } from '../types';
 import type { CanonicalType } from '../core/canonical-types';
 
 /**
@@ -116,13 +116,14 @@ export function mapDebugMappings(patch: Patch, program: CompiledProgramIR): Debu
     // Build lookup map: "blockId:portName" -> Slot
     // The debugIndex provides:
     // - ports: Array<PortBindingIR> (block index + port name)
-    // - slotToPort: Map<ValueSlot, PortId>
+    // - slotToPort: Map<ValueSlot, DebugPortId>
     // - blockMap: Map<BlockIndex, BlockId>
     //
     // We reverse slotToPort to get portToSlot, then construct the string key.
 
-    // First build PortId -> Slot lookup (reverse of slotToPort)
-    const portToSlot = new Map<PortId, ValueSlot>();
+    // First build DebugPortId -> Slot lookup (reverse of slotToPort)
+    type DebugPortId = CompiledProgramIR['debugIndex']['ports'][number]['port'];
+    const portToSlot = new Map<DebugPortId, ValueSlot>();
     for (const [slot, portId] of debugIndex.slotToPort) {
         portToSlot.set(portId, slot);
     }

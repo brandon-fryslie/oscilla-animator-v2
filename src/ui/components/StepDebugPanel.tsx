@@ -248,9 +248,9 @@ const StepList: React.FC<{ store: StepDebugStore }> = observer(({ store }) => {
             <span className="sdp-step-block" title={snap.blockName ?? undefined}>
               {snap.blockName ?? '(marker)'}
             </span>
-            {snap.portId && (
-              <span className="sdp-step-port" title={snap.portId as string}>
-                .{snap.portId as string}
+            {snap.portId !== null && (
+              <span className="sdp-step-port" title={String(snap.portId)}>
+                .{String(snap.portId)}
               </span>
             )}
           </div>
@@ -359,9 +359,9 @@ const BlockCentricStepList: React.FC<{ store: StepDebugStore }> = observer(({ st
                   <span className="sdp-step-index">{snap.stepIndex >= 0 ? snap.stepIndex : '-'}</span>
                   <PhaseBadge phase={snap.phase} />
                   <StepStatusIcon snap={snap} />
-                  {snap.portId && (
-                    <span className="sdp-step-port" title={snap.portId as string}>
-                      .{snap.portId as string}
+                  {snap.portId !== null && (
+                    <span className="sdp-step-port" title={String(snap.portId)}>
+                      .{String(snap.portId)}
                     </span>
                   )}
                 </div>
