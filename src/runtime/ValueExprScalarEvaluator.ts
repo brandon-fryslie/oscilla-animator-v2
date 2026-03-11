@@ -252,9 +252,9 @@ function evaluateScalarExtent(
       return evaluateValueExprScalar(expr.components[0], valueExprs, state, context);
     }
 
-    case 'hslToRgb': {
-      // HSL→RGB is field-extent only.
-      throw new Error('hslToRgb expressions are field-extent, not scalar-extent');
+    case 'oklchToRgb': {
+      // OKLCH→RGB is field-extent only.
+      throw new Error('oklchToRgb expressions are field-extent, not scalar-extent');
     }
 
     default: {

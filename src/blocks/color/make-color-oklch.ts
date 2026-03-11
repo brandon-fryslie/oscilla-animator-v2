@@ -1,13 +1,13 @@
 /**
- * MakeColorHSL Block
+ * MakeColorOKLCH Block
  *
- * Pack scalar channels into a color+hsl value.
+ * Pack scalar channels into a color+oklch value.
  * This is THE enforcement point for color validity:
- * h is wrapped via Wrap01, s/l/a are clamped to [0,1].
+ * h is wrapped via Wrap01, c/l/a are clamped to [0,1].
  */
 
 import { registerBlock } from '../registry';
-import { canonicalType, canonicalConst, payloadStride, unitHsl, unitTurns, unitNone, contractWrap01, contractClamp01 } from '../../core/canonical-types';
+import { canonicalType, canonicalConst, payloadStride, unitOklch, unitTurns, unitNone, contractWrap01, contractClamp01 } from '../../core/canonical-types';
 import { FLOAT, COLOR } from '../../core/canonical-types';
 import { cardinalityVar } from '../../core/inference-types';
 import { cardinalityVarId } from '../../core/ids';
@@ -16,7 +16,7 @@ import { defaultSourceConst } from '../../types';
 import { withoutContract, zipAuto } from '../lower-utils';
 
 // [LAW:one-source-of-truth] Per-port cardinality behavior is declared on CT/ICT.
-const MAKE_COLOR_HSL_CARD = cardinalityVar(cardinalityVarId('make_color_hsl_cardinality'), {
+const MAKE_COLOR_OKLCH_CARD = cardinalityVar(cardinalityVarId('make_color_oklch_cardinality'), {
   relation: 'promoteToMany',
   acceptance: 'oneOrMany',
   instanceBinding: 'inherit',
@@ -24,21 +24,21 @@ const MAKE_COLOR_HSL_CARD = cardinalityVar(cardinalityVarId('make_color_hsl_card
 
 export function register(): void {
   registerBlock({
-    type: 'MakeColorHSL',
-    label: 'Make Color HSL',
+    type: 'MakeColorOKLCH',
+    label: 'Make Color OKLCH',
     category: 'color',
-    description: 'Pack h, s, l, a into a color+hsl value with enforcement (wrap hue, clamp others)',
+    description: 'Pack h, c, l, a into a color+oklch value with enforcement (wrap hue, clamp others)',
     form: 'primitive',
     capability: 'pure',
     loweringPurity: 'pure',
     inputs: {
-      h: { label: 'Hue', type: canonicalType(FLOAT, unitTurns(), { cardinality: MAKE_COLOR_HSL_CARD }, contractWrap01()), defaultSource: defaultSourceConst(0.0) },
-      s: { label: 'Saturation', type: canonicalType(FLOAT, unitNone(), { cardinality: MAKE_COLOR_HSL_CARD }, contractClamp01()), defaultSource: defaultSourceConst(1.0) },
-      l: { label: 'Lightness', type: canonicalType(FLOAT, unitNone(), { cardinality: MAKE_COLOR_HSL_CARD }, contractClamp01()), defaultSource: defaultSourceConst(0.5) },
-      a: { label: 'Alpha', type: canonicalType(FLOAT, unitNone(), { cardinality: MAKE_COLOR_HSL_CARD }, contractClamp01()), defaultSource: defaultSourceConst(1.0) },
+      h: { label: 'Hue', type: canonicalType(FLOAT, unitTurns(), { cardinality: MAKE_COLOR_OKLCH_CARD }, contractWrap01()), defaultSource: defaultSourceConst(0.0) },
+      s: { label: 'Chroma', type: canonicalType(FLOAT, unitNone(), { cardinality: MAKE_COLOR_OKLCH_CARD }, contractClamp01()), defaultSource: defaultSourceConst(1.0) },
+      l: { label: 'Lightness', type: canonicalType(FLOAT, unitNone(), { cardinality: MAKE_COLOR_OKLCH_CARD }, contractClamp01()), defaultSource: defaultSourceConst(0.5) },
+      a: { label: 'Alpha', type: canonicalType(FLOAT, unitNone(), { cardinality: MAKE_COLOR_OKLCH_CARD }, contractClamp01()), defaultSource: defaultSourceConst(1.0) },
     },
     outputs: {
-      color: { label: 'Color', type: canonicalType(COLOR, unitHsl(), { cardinality: MAKE_COLOR_HSL_CARD }) },
+      color: { label: 'Color', type: canonicalType(COLOR, unitOklch(), { cardinality: MAKE_COLOR_OKLCH_CARD }) },
     },
     lower: ({ ctx, inputsById }) => {
       const hInput = inputsById.h;
@@ -46,7 +46,7 @@ export function register(): void {
       const lInput = inputsById.l;
       const aInput = inputsById.a;
       if (!hInput || !sInput || !lInput || !aInput) {
-        throw new Error('MakeColorHSL requires all inputs (h, s, l, a)');
+        throw new Error('MakeColorOKLCH requires all inputs (h, c, l, a)');
       }
   
       const outType = ctx.outTypes[0];
@@ -56,7 +56,7 @@ export function register(): void {
         unit: unitTurns(),
         extent: outType.extent,
       });
-      // Enforce: wrap hue, clamp s/l/a
+      // Enforce: wrap hue, clamp c/l/a
       const wrap01 = ctx.b.opcode(OpCode.Wrap01);
       const clamp = ctx.b.opcode(OpCode.Clamp);
       // Constants are card=zero (universal donors) — zipAuto handles cardinality alignment

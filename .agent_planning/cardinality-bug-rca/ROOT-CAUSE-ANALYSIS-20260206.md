@@ -20,7 +20,7 @@ The cardinality constraint solver uses union-find (UF) to resolve port cardinali
 The problem: committing `one` to port `19:h:in` also sets the shared UF root to `one`. Now port `2:out:out` (the adapter's output) also resolves to `one` — even though the adapter's output must be `many` because it's in a zipBroadcast group that has a `many` input.
 
 **In concrete terms:**
-- Adapter block #2 (ScalarToPhase01) connects its output to MakeColorHSL block #19's `h` input
+- Adapter block #2 (ScalarToPhase01) connects its output to MakeColorOKLCH block #19's `h` input
 - Phase 3 unions `2:out:out` and `19:h:in` → they share a UF root
 - Phase 4 processes block #19's zipBroadcast group and commits `one` to `19:h:in` (a signal port broadcasting into a field block)
 - This poisons the shared root → `2:out:out` also resolves to `one`
@@ -215,15 +215,15 @@ After Phase 3 (edge unions), the solver should check: for any zip OUTPUT port, i
 
 This is the exact sequence that causes the runtime crash. No investigation steps — only the chain of causation.
 
-1. **Adapter block #2 (ScalarToPhase01) is auto-inserted** between Array's `t` output (scalar, card=many) and MakeColorHSL's `h` input (phase/turns, card=one). The adapter has `cardinalityMode: 'preserve'` with `broadcastPolicy: 'allowZipSig'`.
+1. **Adapter block #2 (ScalarToPhase01) is auto-inserted** between Array's `t` output (scalar, card=many) and MakeColorOKLCH's `h` input (phase/turns, card=one). The adapter has `cardinalityMode: 'preserve'` with `broadcastPolicy: 'allowZipSig'`.
 
 2. **Phase 1 of the solver** creates UF nodes for the adapter's ports. Because it's `zipBroadcast`, its ports (`2:in:in`, `2:out:out`) stay independent (not unioned to each other or to a group node).
 
-3. **Phase 2 of the solver** encounters MakeColorHSL's `h` input port `19:h:in`. Its static type has `card=one`. Because `19:h:in` is a `zipMemberPort`, the solver defers it to `pendingOneNodes` instead of assigning `one` immediately.
+3. **Phase 2 of the solver** encounters MakeColorOKLCH's `h` input port `19:h:in`. Its static type has `card=one`. Because `19:h:in` is a `zipMemberPort`, the solver defers it to `pendingOneNodes` instead of assigning `one` immediately.
 
 4. **Phase 3 of the solver** processes edges. Edge `2:out:out → 19:h:in` causes `uf.union(fromNode, toNode)`. Both are unresolved, so the union succeeds and they now **share a UF root**.
 
-5. **Phase 4, iteration 1** processes the zipBroadcast group for MakeColorHSL. It finds `bestMany` from another port in the group. It iterates over the group's ports and reaches `19:h:in`:
+5. **Phase 4, iteration 1** processes the zipBroadcast group for MakeColorOKLCH. It finds `bestMany` from another port in the group. It iterates over the group's ports and reaches `19:h:in`:
    - `19:h:in` is unresolved
    - `19:h:in` has a `pendingOne` entry
    - `19:h:in` is an input port (not output)
@@ -241,6 +241,6 @@ This is the exact sequence that causes the runtime crash. No investigation steps
 
 9. **ScalarToPhase01's `lower()` function** creates a `kernelMap` expression with `outType` that has `card=one`. Even though the input expression has `card=many` (it comes from a field source), the output expression is tagged as signal-extent.
 
-10. **Downstream blocks** (MakeColorHSL) receive this expression and try to zip it with other field expressions. The evaluator tries to evaluate it as a signal (because `card=one`), hits an intrinsic expression (which is field-only), and throws: `Intrinsic expressions are field-extent, not signal-extent`.
+10. **Downstream blocks** (MakeColorOKLCH) receive this expression and try to zip it with other field expressions. The evaluator tries to evaluate it as a signal (because `card=one`), hits an intrinsic expression (which is field-only), and throws: `Intrinsic expressions are field-extent, not signal-extent`.
 
 **The fix** adds step 5b: before committing `one` to `19:h:in`, check if its UF root is shared with a zip OUTPUT port from a *different block*. Since `2:out:out` (block #2) shares the root and is a zip output port, the commit is skipped. `2:out:out` later gets `many` from the group's `bestMany`, which is correct.

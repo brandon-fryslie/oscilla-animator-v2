@@ -124,4 +124,32 @@ describe('naga lowering artifact', () => {
     const warningCodes = result.warnings.map((warning) => warning.code);
     expect(warningCodes).not.toContain('W_NAGA_LOWERING_INCOMPLETE');
   });
+
+  it('clamps lane addressing to slot cardinality in compute lowering', () => {
+    const result = compile(buildRenderPatch());
+    expect(result.kind).toBe('ok');
+    if (result.kind !== 'ok') return;
+
+    const artifact = result.program.nagaLoweringProgram;
+    expect(artifact).toBeDefined();
+    if (!artifact) return;
+
+    const mainFn = artifact.module.functions[0];
+    const argumentExprId = mainFn.expressions.findIndex(
+      (expr) => expr.kind === 'argument' && expr.argument === 0,
+    );
+    expect(argumentExprId).toBeGreaterThanOrEqual(0);
+
+    const laneExprId = mainFn.expressions.findIndex(
+      (expr) => expr.kind === 'access_index' && expr.base === argumentExprId && expr.index === 0,
+    );
+    expect(laneExprId).toBeGreaterThanOrEqual(0);
+
+    const minCalls = mainFn.expressions.filter(
+      (expr): expr is Extract<(typeof mainFn.expressions)[number], { kind: 'call' }> =>
+        expr.kind === 'call' && expr.function === 'min',
+    );
+    expect(minCalls.length).toBeGreaterThan(0);
+    expect(minCalls.some((expr) => expr.args.includes(laneExprId))).toBe(true);
+  });
 });

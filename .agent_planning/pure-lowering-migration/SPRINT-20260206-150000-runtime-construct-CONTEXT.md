@@ -7,7 +7,7 @@ Confidence: HIGH
 
 ### File: /Users/bmf/code/oscilla-animator-v2/src/runtime/ValueExprSignalEvaluator.ts
 
-**Lines to modify**: 191-199 (construct and hslToRgb cases)
+**Lines to modify**: 191-199 (construct and oklchToRgb cases)
 
 **Current code (line 191-199)**:
 ```typescript
@@ -16,9 +16,9 @@ case 'construct': {
   throw new Error('construct expressions are field-extent, not signal-extent');
 }
 
-case 'hslToRgb': {
-  // HSL→RGB is field-extent only (signal color uses slotWriteStrided).
-  throw new Error('hslToRgb expressions are field-extent, not signal-extent');
+case 'oklchToRgb': {
+  // OKLCH→RGB is field-extent only (signal color uses slotWriteStrided).
+  throw new Error('oklchToRgb expressions are field-extent, not signal-extent');
 }
 ```
 
@@ -29,7 +29,7 @@ case 'hslToRgb': {
  * Evaluate a multi-component (strided) ValueExpr signal, writing components
  * directly to state f64 storage.
  *
- * Used for construct() and hslToRgb() expressions where stride > 1.
+ * Used for construct() and oklchToRgb() expressions where stride > 1.
  * Unlike evaluateValueExprSignal() which returns a single number,
  * this writes `stride` values starting at `targetOffset` in state.values.f64.
  */
@@ -44,9 +44,9 @@ export function evaluateValueExprSignalStrided(
 
 **Implementation pattern** (mirror materializer construct case at ValueExprMaterializer.ts:96-108):
 - For `construct`: iterate `expr.components`, call `evaluateValueExprSignal()` for each, write to `state.values.f64[targetOffset + i]`
-- For `hslToRgb`: evaluate input (which should be a construct of 4 HSL components), apply HSL-to-RGB conversion (reuse math from ValueExprMaterializer.ts:607-628), write 4 RGBA values
+- For `oklchToRgb`: evaluate input (which should be a construct of 4 OKLCH components), apply OKLCH-to-RGB conversion (reuse math from ValueExprMaterializer.ts:607-628), write 4 RGBA values
 
-**Also update the existing `construct` and `hslToRgb` cases** in `evaluateSignalExtent()` to return the first component value (for backward compatibility with any code that calls the scalar evaluator on a construct root):
+**Also update the existing `construct` and `oklchToRgb` cases** in `evaluateSignalExtent()` to return the first component value (for backward compatibility with any code that calls the scalar evaluator on a construct root):
 ```typescript
 case 'construct': {
   // Evaluate first component as representative scalar value
@@ -69,9 +69,9 @@ case 'construct': {
 }
 ```
 
-**HSL-to-RGB math** (from ValueExprMaterializer.ts:607-628):
+**OKLCH-to-RGB math** (from ValueExprMaterializer.ts:607-628):
 ```typescript
-function hslToRgb(h: number, s: number, l: number): [number, number, number] {
+function oklchToRgb(h: number, s: number, l: number): [number, number, number] {
   const c = (1 - Math.abs(2 * l - 1)) * s;
   const x = c * (1 - Math.abs(((h * 6) % 2) - 1));
   const m = l - c / 2;
@@ -114,7 +114,7 @@ function hslToRgb(h: number, s: number, l: number): [number, number, number] {
     state.cache.values[step.expr as number] = value;
     state.cache.stamps[step.expr as number] = state.cache.frameId;
   } else {
-    // Multi-component path (construct/hslToRgb)
+    // Multi-component path (construct/oklchToRgb)
     evaluateValueExprSignalStrided(
       step.expr as any, program.valueExprs.nodes, state, offset, stride
     );

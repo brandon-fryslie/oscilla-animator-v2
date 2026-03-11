@@ -2,11 +2,11 @@
  * AlphaMultiply Block
  *
  * Multiply color alpha by a scalar factor, clamping the result.
- * h/s/l pass through unchanged.
+ * h/c/l pass through unchanged.
  */
 
 import { registerBlock } from '../registry';
-import { canonicalType, payloadStride, unitHsl, unitTurns, unitNone, contractWrap01, contractClamp01 } from '../../core/canonical-types';
+import { canonicalType, payloadStride, unitOklch, unitTurns, unitNone, contractWrap01, contractClamp01 } from '../../core/canonical-types';
 import { FLOAT, COLOR } from '../../core/canonical-types';
 import { cardinalityVar } from '../../core/inference-types';
 import { cardinalityVarId } from '../../core/ids';
@@ -31,11 +31,11 @@ export function register(): void {
     capability: 'pure',
     loweringPurity: 'pure',
     inputs: {
-      in: { label: 'Color', type: canonicalType(COLOR, unitHsl(), { cardinality: ALPHA_MULTIPLY_CARD }) },
+      in: { label: 'Color', type: canonicalType(COLOR, unitOklch(), { cardinality: ALPHA_MULTIPLY_CARD }) },
       alpha: { label: 'Alpha', type: canonicalType(FLOAT, unitNone(), { cardinality: ALPHA_MULTIPLY_CARD }, contractClamp01()), defaultSource: defaultSourceConst(1.0) },
     },
     outputs: {
-      out: { label: 'Color', type: canonicalType(COLOR, unitHsl(), { cardinality: ALPHA_MULTIPLY_CARD }) },
+      out: { label: 'Color', type: canonicalType(COLOR, unitOklch(), { cardinality: ALPHA_MULTIPLY_CARD }) },
     },
     lower: ({ ctx, inputsById }) => {
       const colorInput = inputsById.in;
@@ -48,7 +48,7 @@ export function register(): void {
   
       // Extract channels
       const h = ctx.b.extract(colorInput.id, 0, hueType);
-      const s = ctx.b.extract(colorInput.id, 1, normType);
+      const c = ctx.b.extract(colorInput.id, 1, normType);
       const l = ctx.b.extract(colorInput.id, 2, normType);
       const a = ctx.b.extract(colorInput.id, 3, normType);
   
@@ -60,9 +60,9 @@ export function register(): void {
   
       const aMultiplied = zipAuto([a, alphaInput.id], mulFn, normType, ctx.b);
       const aClamped = zipAuto([aMultiplied, zero, one], clampFn, normType, ctx.b);
-  
+
       // Reconstruct with modified alpha
-      const result = ctx.b.construct([h, s, l, aClamped], outType);
+      const result = ctx.b.construct([h, c, l, aClamped], outType);
       return {
         outputsById: {
           out: { id: result, slot: undefined, type: outType, stride: payloadStride(outType.payload) },

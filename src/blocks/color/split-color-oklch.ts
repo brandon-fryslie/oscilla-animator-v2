@@ -1,18 +1,18 @@
 /**
- * SplitColorHSL Block
+ * SplitColorOKLCH Block
  *
- * Unpack a color+hsl value into its 4 scalar channels.
+ * Unpack a color+oklch value into its 4 scalar channels.
  * No additional clamping/wrapping — assumes upstream enforced.
  */
 
 import { registerBlock } from '../registry';
-import { canonicalType, payloadStride, unitHsl, unitTurns, unitNone, contractWrap01, contractClamp01 } from '../../core/canonical-types';
+import { canonicalType, payloadStride, unitOklch, unitTurns, unitNone, contractWrap01, contractClamp01 } from '../../core/canonical-types';
 import { FLOAT, COLOR } from '../../core/canonical-types';
 import { cardinalityVar } from '../../core/inference-types';
 import { cardinalityVarId } from '../../core/ids';
 
 // [LAW:one-source-of-truth] Per-port cardinality behavior is declared on CT/ICT.
-const SPLIT_COLOR_HSL_CARD = cardinalityVar(cardinalityVarId('split_color_hsl_cardinality'), {
+const SPLIT_COLOR_OKLCH_CARD = cardinalityVar(cardinalityVarId('split_color_oklch_cardinality'), {
   relation: 'promoteToMany',
   acceptance: 'oneOrMany',
   instanceBinding: 'inherit',
@@ -20,32 +20,32 @@ const SPLIT_COLOR_HSL_CARD = cardinalityVar(cardinalityVarId('split_color_hsl_ca
 
 export function register(): void {
   registerBlock({
-    type: 'SplitColorHSL',
-    label: 'Split Color HSL',
+    type: 'SplitColorOKLCH',
+    label: 'Split Color OKLCH',
     category: 'color',
-    description: 'Unpack color+hsl into h, s, l, a channels',
+    description: 'Unpack color+oklch into h, c, l, a channels',
     form: 'primitive',
     capability: 'pure',
     loweringPurity: 'pure',
     inputs: {
-      color: { label: 'Color', type: canonicalType(COLOR, unitHsl(), { cardinality: SPLIT_COLOR_HSL_CARD }) },
+      color: { label: 'Color', type: canonicalType(COLOR, unitOklch(), { cardinality: SPLIT_COLOR_OKLCH_CARD }) },
     },
     outputs: {
-      h: { label: 'Hue', type: canonicalType(FLOAT, unitTurns(), { cardinality: SPLIT_COLOR_HSL_CARD }, contractWrap01()) },
-      s: { label: 'Saturation', type: canonicalType(FLOAT, unitNone(), { cardinality: SPLIT_COLOR_HSL_CARD }, contractClamp01()) },
-      l: { label: 'Lightness', type: canonicalType(FLOAT, unitNone(), { cardinality: SPLIT_COLOR_HSL_CARD }, contractClamp01()) },
-      a: { label: 'Alpha', type: canonicalType(FLOAT, unitNone(), { cardinality: SPLIT_COLOR_HSL_CARD }, contractClamp01()) },
+      h: { label: 'Hue', type: canonicalType(FLOAT, unitTurns(), { cardinality: SPLIT_COLOR_OKLCH_CARD }, contractWrap01()) },
+      s: { label: 'Chroma', type: canonicalType(FLOAT, unitNone(), { cardinality: SPLIT_COLOR_OKLCH_CARD }, contractClamp01()) },
+      l: { label: 'Lightness', type: canonicalType(FLOAT, unitNone(), { cardinality: SPLIT_COLOR_OKLCH_CARD }, contractClamp01()) },
+      a: { label: 'Alpha', type: canonicalType(FLOAT, unitNone(), { cardinality: SPLIT_COLOR_OKLCH_CARD }, contractClamp01()) },
     },
     lower: ({ ctx, inputsById }) => {
       const colorInput = inputsById.color;
-      if (!colorInput) throw new Error('SplitColorHSL requires color input');
+      if (!colorInput) throw new Error('SplitColorOKLCH requires color input');
   
       const hueType = ctx.outTypes[0];
       const satType = ctx.outTypes[1];
       const lightType = ctx.outTypes[2];
       const alphaType = ctx.outTypes[3];
       if (!hueType || !satType || !lightType || !alphaType) {
-        throw new Error('SplitColorHSL missing resolved output types from pass1');
+        throw new Error('SplitColorOKLCH missing resolved output types from pass1');
       }
   
       const h = ctx.b.extract(colorInput.id, 0, hueType);

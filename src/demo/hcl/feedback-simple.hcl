@@ -116,7 +116,7 @@ patch "Feedback Simple" {
     }
   }
 
-  block "MakeColorHSL" "outer-color" {
+  block "MakeColorOKLCH" "outer-color" {
     outputs {
       color = render-outer.color
     }
@@ -149,7 +149,7 @@ patch "Feedback Simple" {
     }
   }
 
-  block "MakeColorHSL" "inner-color" {
+  block "MakeColorOKLCH" "inner-color" {
     outputs {
       color = render-inner.color
     }

@@ -239,7 +239,7 @@ function canMaterializeScalarExpr(
         canMaterializeScalarExpr(id as number, valueExprs, cache, visiting),
       );
       break;
-    case 'hslToRgb':
+    case 'oklchToRgb':
       result = canMaterializeScalarExpr(expr.input as number, valueExprs, cache, visiting);
       break;
     case 'shapeRef':
@@ -333,9 +333,9 @@ function validateScalarExtractInputs(
         continue;
       }
 
-      case 'hslToRgb': {
+      case 'oklchToRgb': {
         throw new Error(
-          `Schedule invariant violated: scalar root depends on field-only hslToRgb expr ${exprId}`,
+          `Schedule invariant violated: scalar root depends on field-only oklchToRgb expr ${exprId}`,
         );
       }
 

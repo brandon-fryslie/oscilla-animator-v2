@@ -91,7 +91,7 @@ patch "Expression Vec3 Orbit" {
     }
   }
 
-  block "MakeColorHSL" "color" {
+  block "MakeColorOKLCH" "color" {
     outputs {
       color = render.color
     }
