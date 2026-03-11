@@ -26,6 +26,13 @@ enum NagaScalarKindIR {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+#[serde(untagged)]
+enum NagaArraySizeIR {
+    Dynamic(String),
+    Fixed(u32),
+}
+
+#[derive(Debug, Clone, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 enum NagaTypeIR {
     Scalar {
@@ -39,7 +46,7 @@ enum NagaTypeIR {
     },
     Array {
         base: usize,
-        size: String,
+        size: NagaArraySizeIR,
     },
     Struct {
         name: String,
@@ -128,6 +135,10 @@ enum NagaExpressionIR {
         to: NagaScalarKindIR,
         expr: usize,
     },
+    Call {
+        function: String,
+        args: Vec<usize>,
+    },
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -198,6 +209,15 @@ fn make_error(message: impl Into<String>, location: impl Into<String>, path: imp
     }
 }
 
+fn is_valid_wgsl_identifier(identifier: &str) -> bool {
+    let mut chars = identifier.chars();
+    match chars.next() {
+        Some(first) if first == '_' || first.is_ascii_alphabetic() => {}
+        _ => return false,
+    }
+    chars.all(|ch| ch == '_' || ch.is_ascii_alphanumeric())
+}
+
 fn scalar_to_wgsl(scalar: NagaScalarKindIR) -> &'static str {
     match scalar {
         NagaScalarKindIR::F32 => "f32",
@@ -266,16 +286,19 @@ fn emit_type_ref(type_index: usize, types: &[NagaTypeIR]) -> Result<String, Form
             }
             Ok(format!("vec{size}<{}>", scalar_to_wgsl(*scalar)))
         }
-        NagaTypeIR::Array { base, size } => {
-            if size != "dynamic" {
-                return Err(make_error(
-                    format!("Unsupported array size kind: {size}"),
-                    "Module",
-                    format!("Type[{type_index}]"),
-                ));
+        NagaTypeIR::Array { base, size } => match size {
+            NagaArraySizeIR::Dynamic(tag) => {
+                if tag != "dynamic" {
+                    return Err(make_error(
+                        format!("Unsupported array size kind: {tag}"),
+                        "Module",
+                        format!("Type[{type_index}]"),
+                    ));
+                }
+                Ok(format!("array<{}>", emit_type_ref(*base, types)?))
             }
-            Ok(format!("array<{}>", emit_type_ref(*base, types)?))
-        }
+            NagaArraySizeIR::Fixed(len) => Ok(format!("array<{}, {}>", emit_type_ref(*base, types)?, len)),
+        },
         NagaTypeIR::Struct { name, .. } => Ok(name.clone()),
     }
 }
@@ -412,6 +435,22 @@ impl<'a> ExpressionEmitter<'a> {
                     NagaScalarKindIR::Bool => format!("({source} != 0u)"),
                     _ => format!("bitcast<{}>({source})", scalar_to_wgsl(*to)),
                 }
+            }
+            NagaExpressionIR::Call { function, args } => {
+                // [LAW:single-enforcer] Validate IR-driven call targets once at
+                // the shim emission boundary before any WGSL string formatting.
+                if !is_valid_wgsl_identifier(function) {
+                    return Err(make_error(
+                        "Invalid call target identifier",
+                        format!("Expression [{expr_id}]"),
+                        format!("Function [{}]", self.function_ir.name),
+                    ));
+                }
+                let mut emitted_args: Vec<String> = Vec::with_capacity(args.len());
+                for arg in args {
+                    emitted_args.push(self.emit(*arg)?);
+                }
+                format!("{function}({})", emitted_args.join(", "))
             }
         };
 
