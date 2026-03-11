@@ -68,6 +68,7 @@ export {
 } from './StateMigration';
 // Test-only exports (for integration tests that bypass compile pipeline)
 export { materializeValueExpr, type ValueExprTable } from './ValueExprMaterializer';
+export { packDrawPrepSinkTableV1 } from './DrawPrepSinkTablePacker';
 
 // Step-through schedule debugger
 export { getValueExprChildren, walkValueExprTree } from './ValueExprTreeWalker';
