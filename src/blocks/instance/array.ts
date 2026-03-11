@@ -12,7 +12,7 @@ import { cardinalityVar } from '../../core/inference-types';
 import { cardinalityVarId } from '../../core/ids';
 import { DOMAIN_CIRCLE } from '../../core/domain-registry';
 import { defaultSourceConst, defaultSource } from '../../types';
-import { tryResolveInputConstant } from '../lower-utils';
+import { promoteToMany, tryResolveInputConstant } from '../lower-utils';
 
 // [LAW:one-source-of-truth] Array output cardinality behavior is declared on CT/ICT.
 const ARRAY_OUTPUT_CARD = cardinalityVar(cardinalityVarId('array_outputs'), {
@@ -20,6 +20,9 @@ const ARRAY_OUTPUT_CARD = cardinalityVar(cardinalityVarId('array_outputs'), {
   acceptance: 'manyOnly',
   instanceBinding: { kind: 'create', domainType: DOMAIN_CIRCLE },
 });
+
+// [LAW:single-enforcer] Array instance fan-out safety is enforced at one boundary.
+const ARRAY_SAFE_MAX_COUNT = 1_000_000;
 
 export function register(): void {
   registerBlock({
@@ -77,7 +80,7 @@ export function register(): void {
     lower: ({ ctx, inputsById, config }) => {
       const countInput = inputsById.count;
       if (!countInput) throw new Error('Array: count input not wired — normalization bug');
-      const staticCount = tryResolveInputConstant(ctx, countInput, 'count', { min: 1, max: 100000 });
+      const staticCount = tryResolveInputConstant(ctx, countInput, 'count', { min: 1, max: ARRAY_SAFE_MAX_COUNT });
       const elementInput = inputsById.element;
   
       // Validate element input
@@ -100,7 +103,7 @@ export function register(): void {
       const configuredCount = typeof config.count === 'number' && Number.isFinite(config.count)
         ? Math.floor(config.count)
         : 500;
-      const clampedMaxCount = Math.min(100_000, Math.max(1, configuredCount));
+      const clampedMaxCount = Math.min(ARRAY_SAFE_MAX_COUNT, Math.max(1, configuredCount));
       const instanceId = staticCount !== null
         ? ctx.b.createInstance(DOMAIN_CIRCLE, staticCount, elementInput.id)
         : ctx.b.createInstance(
@@ -124,13 +127,13 @@ export function register(): void {
       const outType3 = withInstance(ctx.outTypes[3], ref);
   
       // Create field expressions
-      const elementsField = ctx.b.broadcast(elementInput.id, outType0);
+      const elementsField = promoteToMany(elementInput.id, outType0, ctx.b);
   
       // Intrinsic fields (index, t, active)
       const indexField = ctx.b.intrinsic('index', outType1);
       const tField = ctx.b.intrinsic('normalizedIndex', outType2);
       const activeOne = ctx.b.constant(boolConst(true), canonicalType(BOOL));
-      const activeField = ctx.b.broadcast(activeOne, outType3);
+      const activeField = promoteToMany(activeOne, outType3, ctx.b);
   
       return {
         outputsById: {

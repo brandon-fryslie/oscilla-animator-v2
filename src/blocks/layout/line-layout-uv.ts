@@ -13,6 +13,7 @@ import { cardinalityVarId } from '../../core/ids';
 import { defaultSourceConst } from '../../types';
 import { OpCode } from '../../compiler/ir/types';
 import { rewriteFieldType } from './_helpers';
+import { promoteToMany } from '../lower-utils';
 
 // [LAW:one-source-of-truth] Field cardinality behavior is declared on CT/ICT port types.
 const LINE_FIELD_CARD = cardinalityVar(cardinalityVarId('line_fields'), {
@@ -124,10 +125,10 @@ export function register(): void {
       const dy = ctx.b.zipAuto([y1Input.id, y0Input.id], sub, floatOneType);
       const dx = ctx.b.zipAuto([x1Input.id, x0Input.id], sub, floatOneType);
       const lineAngle = ctx.b.zipAuto([dy, dx], atan2, floatOneType);
-      const rotationField = ctx.b.broadcast(lineAngle, floatFieldType);
+      const rotationField = promoteToMany(lineAngle, floatFieldType, ctx.b);
   
       // scale = broadcast constant 1.0
-      const scaleField = ctx.b.broadcast(const1, floatFieldType);
+      const scaleField = promoteToMany(const1, floatFieldType, ctx.b);
   
       return {
         outputsById: {
