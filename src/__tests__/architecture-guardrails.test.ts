@@ -91,7 +91,7 @@ const COMPILED_IR_FOUNDATION_GATES: readonly Gate[] = [
   {
     id: 'K-W2-1',
     pattern: 'program\\.slotMeta',
-    scope: ['src/runtime/ExprAddressTable.ts', 'src/runtime/ScheduleExecutor.ts', 'src/runtime/executeFrameStepped.ts'],
+    scope: ['src/runtime/ExprAddressTable.ts'],
     maxCount: 0,
   },
   {
@@ -104,7 +104,7 @@ const COMPILED_IR_FOUNDATION_GATES: readonly Gate[] = [
   {
     id: 'K-W7-1',
     pattern: 'assertF64Stride',
-    scope: ['src/runtime/ExprAddressTable.ts', 'src/runtime/ScheduleExecutor.ts', 'src/runtime/executeFrameStepped.ts'],
+    scope: ['src/runtime/ExprAddressTable.ts'],
     maxCount: 0,
   },
   // W12

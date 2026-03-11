@@ -82,7 +82,7 @@ class LowerSandbox {
   placement(field: PlacementFieldName, basis: BasisKind, type: CanonicalType): ValueExprId;
   extract(input: ValueExprId, idx: number, type: CanonicalType): ValueExprId;
   construct(components: readonly ValueExprId[], type: CanonicalType): ValueExprId;
-  hslToRgb(input: ValueExprId, type: CanonicalType): ValueExprId;
+  oklchToRgb(input: ValueExprId, type: CanonicalType): ValueExprId;
   opcode(op: OpCode): PureFn;
   kernel(name: string): PureFn;
   eventNever(): ValueExprId;
@@ -136,8 +136,8 @@ const t = inputsById.t;  // ValueExprId
 const sat = ctx.b.constant(floatConst(0.8), canonicalType(FLOAT));
 const light = ctx.b.constant(floatConst(0.5), canonicalType(FLOAT));
 const alpha = ctx.b.constant(floatConst(1.0), canonicalType(FLOAT));
-const hsl = ctx.b.construct([t, sat, light, alpha], canonicalType(COLOR));
-const rgb = ctx.b.hslToRgb(hsl, canonicalType(COLOR));
+const oklch = ctx.b.construct([t, sat, light, alpha], canonicalType(COLOR));
+const rgb = ctx.b.oklchToRgb(oklch, canonicalType(COLOR));
 return { kind: 'pure', exprOutputs: { out: rgb } };
 ```
 

@@ -110,7 +110,7 @@ interface SlotMetaEntry {
 
 ### ColorPicker
 
-**Definition**: Constant authoring source block producing a user-space HSL+A color. Parameters (h, s, l, a) are UI-controlled, not graph inputs.
+**Definition**: Constant authoring source block producing a user-space OKLCH+A color. Parameters (h, s, l, a) are UI-controlled, not graph inputs.
 
 **Type**: block
 
@@ -118,31 +118,31 @@ interface SlotMetaEntry {
 
 ---
 
-### MakeColorHSL
+### MakeColorOKLCH
 
-**Definition**: Pack scalar h, s, l, a channels into a `color` payload with HSL unit. Enforces color validity: wrap hue, clamp others.
-
-**Type**: block
-
-**Source**: `01-colors.md`
-
-**Note**: The enforcement point for HSL color validity.
-
----
-
-### SplitColorHSL
-
-**Definition**: Unpack a `color` payload with HSL unit into scalar h, s, l, a channels.
+**Definition**: Pack scalar h, s, l, a channels into a `color` payload with OKLCH unit. Enforces color validity: wrap hue, clamp others.
 
 **Type**: block
 
 **Source**: `01-colors.md`
 
+**Note**: The enforcement point for OKLCH color validity.
+
 ---
 
-### HslToRgba
+### SplitColorOKLCH
 
-**Definition**: Adapter block converting `color` payload from HSL unit to RGBA01 unit. The only place HSL→RGB conversion occurs.
+**Definition**: Unpack a `color` payload with OKLCH unit into scalar h, s, l, a channels.
+
+**Type**: block
+
+**Source**: `01-colors.md`
+
+---
+
+### OklchToRgba
+
+**Definition**: Adapter block converting `color` payload from OKLCH unit to RGBA01 unit. The only place OKLCH→RGB conversion occurs.
 
 **Type**: block (adapter)
 
@@ -168,7 +168,7 @@ interface SlotMetaEntry {
 
 **Resolution**: Use `unit` (not `space`). Consistent with all other UnitType kinds.
 - `{ kind: 'color', unit: 'rgba01' }` — RGB+A color space
-- `{ kind: 'color', unit: 'hsl' }` — HSL+A color space (NEW)
+- `{ kind: 'color', unit: 'oklch' }` — OKLCH+A color space (NEW)
 
 ### UnitType Scalar Kind — RESOLVED (Q3)
 

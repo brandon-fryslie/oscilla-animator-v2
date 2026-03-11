@@ -6,7 +6,7 @@ Move RenderAssembler read paths from legacy value stores (`state.values.f64`, `s
 
 ## Architectural constraints
 - [LAW:one-source-of-truth] Arena is the numeric read authority for render assembly.
-- [LAW:single-enforcer] Keep HSL->RGBA conversion at render boundary unchanged.
+- [LAW:single-enforcer] Keep OKLCH->RGBA conversion at render boundary unchanged.
 - [LAW:dataflow-not-control-flow] Preserve existing render execution order and optional-slot semantics; only change data source.
 
 ## Scope
@@ -81,7 +81,7 @@ Run these and ensure zero matches after migration:
 
 Ensure these are unchanged by this ticket:
 - render frame output slot object handling outside RenderAssembler
-- HSL/RGBA conversion boundary behavior
+- OKLCH/RGBA conversion boundary behavior
 
 ## Verification commands
 - `pnpm exec vitest run src/runtime/__tests__/RenderAssembler.test.ts src/runtime/__tests__/RenderAssembler-per-instance-shapes.test.ts src/runtime/__tests__/executeFrameStepped.test.ts`

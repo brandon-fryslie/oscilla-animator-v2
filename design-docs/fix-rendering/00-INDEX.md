@@ -317,7 +317,7 @@ Capture screenshots for edge cases:
 1. **Precision issues in depth sorting** — Mentioned in 02-projection, but not critical
 2. **Topology render performance** — RECT redundant save/restore is a perf hit, not a bug
 3. **Arena capacity planning** — No dynamic resize, fixed at init (by design)
-4. **HSL→RGB conversion** — Not audited (potential NaN source)
+4. **OKLCH→RGB conversion** — Not audited (potential NaN source)
 
 ---
 

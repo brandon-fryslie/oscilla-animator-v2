@@ -68,7 +68,7 @@ struct InstanceData {
   transform0: vec4<f32>,
   // transform1 = [scale2X, scale2Y, topologyWordOffset, _]
   transform1: vec4<f32>,
-  // color = [r, g, b, a] in 0..1
+  // color = [h, c, l, a] where h is turns and c/l/a are normalized
   color: vec4<f32>,
 };
 
@@ -84,6 +84,30 @@ struct VertexOutput {
   @builtin(position) position: vec4<f32>,
   @location(0) color: vec4<f32>,
 };
+
+fn oklch_to_linear_srgb(h: f32, c: f32, l: f32) -> vec3<f32> {
+  let hue = fract(h) * 6.283185307179586;
+  let a = c * cos(hue);
+  let b = c * sin(hue);
+
+  let l_prime = l + 0.3963377774 * a + 0.2158037573 * b;
+  let m_prime = l - 0.1055613458 * a - 0.0638541728 * b;
+  let s_prime = l - 0.0894841775 * a - 1.2914855480 * b;
+
+  let l3 = l_prime * l_prime * l_prime;
+  let m3 = m_prime * m_prime * m_prime;
+  let s3 = s_prime * s_prime * s_prime;
+
+  let x = 1.2270138511035211 * l3 - 0.5577999806518222 * m3 + 0.2812561489664678 * s3;
+  let y = -0.0405801784232806 * l3 + 1.11225686961683 * m3 - 0.0716766786656012 * s3;
+  let z = -0.0763812845057069 * l3 - 0.4214819784180127 * m3 + 1.5861632204407947 * s3;
+
+  return vec3<f32>(
+    3.240969941904521 * x - 1.537383177570093 * y - 0.498610760293 * z,
+    -0.96924363628087 * x + 1.87596750150772 * y + 0.041555057407175 * z,
+    0.055630079696993 * x - 0.20397695888897 * y + 1.056971514242878 * z
+  );
+}
 
 @vertex
 fn vs_main(input: VertexInput, @builtin(instance_index) instanceIndex: u32) -> VertexOutput {
@@ -121,7 +145,12 @@ fn vs_main(input: VertexInput, @builtin(instance_index) instanceIndex: u32) -> V
 
   var output: VertexOutput;
   output.position = vec4<f32>(ndc, 0.0, 1.0);
-  output.color = inst.color * (1.0 + closedMask * 0.0);
+  let safeH = select(0.0, inst.color.x, inst.color.x == inst.color.x);
+  let safeC = max(0.0, select(0.0, inst.color.y, inst.color.y == inst.color.y));
+  let safeL = clamp(select(0.0, inst.color.z, inst.color.z == inst.color.z), 0.0, 1.0);
+  let safeA = clamp(select(1.0, inst.color.w, inst.color.w == inst.color.w), 0.0, 1.0);
+  let safeRgb = clamp(oklch_to_linear_srgb(safeH, safeC, safeL), vec3<f32>(0.0), vec3<f32>(1.0));
+  output.color = vec4<f32>(safeRgb, safeA) * (1.0 + closedMask * 0.0);
   return output;
 }
 

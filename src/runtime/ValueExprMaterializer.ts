@@ -38,6 +38,7 @@ import {
 } from './ScalarKernelLibrary';
 import { getProgramTopology } from '../compiler/ir/program-topology';
 import { resolveInstanceLaneCount } from './InstanceCountResolver';
+import { oklchToEncodedSrgbInto } from '../core/color/oklch';
 
 function isPathTopology(topology: TopologyDef): topology is PathTopologyDef {
   return 'verbs' in topology;
@@ -436,8 +437,8 @@ export function materializeValueExpr(
       break;
     }
 
-    case 'hslToRgb': {
-      // WI-4: HSL→RGB color space conversion
+    case 'oklchToRgb': {
+      // WI-4: OKLCH→RGB color space conversion
       const inputBuf = materializeValueExpr(
         expr.input,
         table,
@@ -449,7 +450,7 @@ export function materializeValueExpr(
         scratch,
         activePureFnContext,
       );
-      hslToRgbConversion(buf, inputBuf, count);
+      oklchToRgbaConversion(buf, inputBuf, count);
       break;
     }
 
@@ -1091,13 +1092,13 @@ function pseudoRandom(seed: number): number {
 }
 
 /**
- * HSL→RGB color space conversion.
+ * OKLCH→RGBA color space conversion.
  *
  * @param out - Output buffer (RGBA)
- * @param input - Input buffer (HSLA)
+ * @param input - Input buffer (OKLCH+A)
  * @param count - Number of colors
  */
-function hslToRgbConversion(
+function oklchToRgbaConversion(
   out: Float32Array,
   input: Float32Array,
   count: number
@@ -1105,34 +1106,9 @@ function hslToRgbConversion(
   for (let i = 0; i < count; i++) {
     const offset = i * 4;
     const h = input[offset];
-    const s = input[offset + 1];
+    const c = input[offset + 1];
     const l = input[offset + 2];
-
-    // Inline HSL→RGB (no tuple allocation)
-    const c = (1 - Math.abs(2 * l - 1)) * s;
-    const x = c * (1 - Math.abs(((h * 6) % 2) - 1));
-    const m = l - c / 2;
-
-    let r = 0, g = 0, b = 0;
-    const hSector = h * 6;
-
-    if (hSector < 1) {
-      r = c; g = x; b = 0;
-    } else if (hSector < 2) {
-      r = x; g = c; b = 0;
-    } else if (hSector < 3) {
-      r = 0; g = c; b = x;
-    } else if (hSector < 4) {
-      r = 0; g = x; b = c;
-    } else if (hSector < 5) {
-      r = x; g = 0; b = c;
-    } else {
-      r = c; g = 0; b = x;
-    }
-
-    out[offset] = r + m;
-    out[offset + 1] = g + m;
-    out[offset + 2] = b + m;
+    oklchToEncodedSrgbInto(out, offset, h, c, l);
     out[offset + 3] = input[offset + 3]; // Alpha passthrough
   }
 }

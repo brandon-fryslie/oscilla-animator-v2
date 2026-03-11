@@ -3,7 +3,7 @@ import { IRBuilderImpl } from '../IRBuilderImpl';
 import { LowerSandbox } from '../LowerSandbox';
 import {
   canonicalMany, canonicalScalar,
-  FLOAT, COLOR, instanceRef, unitHsl, unitTurns,
+  FLOAT, COLOR, instanceRef, unitOklch, unitTurns,
   requireInst, isMany, isOne,
 } from '../../../core/canonical-types';
 
@@ -16,7 +16,7 @@ describe('LowerSandbox field-extent types', () => {
 
     // Create a field-extent color type (many cardinality)
     const ref = instanceRef('circle-domain', 'inst-1');
-    const fieldColorType = canonicalMany(COLOR, unitHsl(), ref);
+    const fieldColorType = canonicalMany(COLOR, unitOklch(), ref);
 
     // Create a one-cardinality float input (phase)
     const phaseType = canonicalScalar(FLOAT, unitTurns());
@@ -45,7 +45,7 @@ describe('LowerSandbox field-extent types', () => {
     const instances = new Map();
     const sandbox = new LowerSandbox(builder, 'test-parent-1', instances);
 
-    const oneColorType = canonicalScalar(COLOR, unitHsl());
+    const oneColorType = canonicalScalar(COLOR, unitOklch());
     const phaseType = canonicalScalar(FLOAT, unitTurns());
     const phaseExpr = builder.constant({ kind: 'float', value: 0.5 }, phaseType);
 

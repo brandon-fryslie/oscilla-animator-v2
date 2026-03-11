@@ -10,7 +10,6 @@ import { createTimeState } from './timeResolution';
 import type { ContinuityState } from './ContinuityState';
 import { bindContinuityGaugeArena, createContinuityState } from './ContinuityState';
 import type { DebugTap } from './DebugTap';
-import type { LegacyRenderFrame } from '../render/types';
 import type { ArenaRuntimeLayoutIR, RuntimeScalarArenaAddress } from '../compiler/ir/program';
 import { ExternalChannelSystem } from './ExternalChannel';
 import { createArena } from './ArenaValueStore';
@@ -281,12 +280,9 @@ export const RUNTIME_FRAME_SEGMENT_ORDER = [
   'phase1-continuity-apply',
   'phase1-event-dispatch',
   'phase1-value-post-event',
-  'phase1-render-collect',
   'phase1-debug-materialize',
-  'render-assembly',
   'phase2-state-write',
   'continuity-finalize',
-  'frame-output',
 ] as const;
 
 export type RuntimeFrameSegment = (typeof RUNTIME_FRAME_SEGMENT_ORDER)[number];
@@ -343,17 +339,9 @@ export const RUNTIME_FRAME_SEGMENT_OWNERSHIP: Readonly<
     reads: ['arena', 'state.readBank', 'eventScalars', 'externalChannels.snapshot'],
     writes: ['arena', 'cache.scalarValueExprValues', 'cache.scalarValueExprStamps'],
   },
-  'phase1-render-collect': {
-    reads: ['arena'],
-    writes: ['render step buffer'],
-  },
   'phase1-debug-materialize': {
     reads: ['arena'],
     writes: ['debug tap'],
-  },
-  'render-assembly': {
-    reads: ['render step buffer', 'arena'],
-    writes: ['lastLegacyRenderFrame'],
   },
   'phase2-state-write': {
     reads: ['arena', 'state.readBank', 'state mappings'],
@@ -367,10 +355,6 @@ export const RUNTIME_FRAME_SEGMENT_OWNERSHIP: Readonly<
       'continuity.changedInstancesThisFrame',
       'continuity.mappings',
     ],
-  },
-  'frame-output': {
-    reads: ['lastLegacyRenderFrame'],
-    writes: ['lastLegacyRenderFrame'],
   },
 } as const;
 
@@ -513,15 +497,11 @@ export interface FrameCache {
   /** Frame stamp for `instanceLaneCounts` validity. */
   instanceLaneCountFrameId?: number;
 
-  /**
-   * Runtime-owned packed draw-prep sink-table payload (`DrawPrepSinkTableV1`).
-   *
-   * [LAW:one-source-of-truth] Renderer/worker draw-prep uses one canonical
-   * runtime-packed table instead of dual CPU payload + derived metadata paths.
-   */
+  /** Optional draw-prep sink-table scratch words for renderer handoff. */
   drawPrepSinkTableWords?: Uint32Array;
   drawPrepSinkTableWordCount?: number;
   drawPrepSinkTableFrameId?: number;
+
 }
 
 /**
@@ -785,9 +765,6 @@ export interface ProgramState {
   /** Per-frame value storage (slot-based) */
   values: ValueStore;
 
-  /** Last assembled frame for the current program execution. */
-  lastLegacyRenderFrame: LegacyRenderFrame | null;
-
   /** Float32 arena for unified value store (cardinality unification migration) */
   arena: Float32Array;
 
@@ -854,9 +831,6 @@ export interface RuntimeState {
 
   /** Per-frame value storage (slot-based) */
   values: ValueStore;
-
-  /** Last assembled frame for the current program execution. */
-  lastLegacyRenderFrame: LegacyRenderFrame | null;
 
   /** Float32 arena for unified value store (cardinality unification migration) */
   arena: Float32Array;
@@ -998,7 +972,6 @@ export function createProgramState(
   const stateWriteView = arena.subarray(writeOffset, writeOffset + stateBankLength);
   return {
     values: createValueStore(),
-    lastLegacyRenderFrame: null,
     arena,
     // [LAW:one-source-of-truth] Persistent state ownership is anchored to one
     // arena segment contract with explicit read/write bank metadata.
@@ -1088,7 +1061,6 @@ export function createRuntimeStateFromSession(
   return {
     // ProgramState (fresh)
     values: program.values,
-    lastLegacyRenderFrame: program.lastLegacyRenderFrame,
     arena: program.arena,
     stateArena: program.stateArena,
     cache: program.cache,

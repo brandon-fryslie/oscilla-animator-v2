@@ -40,15 +40,15 @@ source_files:
 
 | File | Content | Size |
 |------|---------|------|
-| `_new/colors/01-colors.md` | Color block catalog: ColorPicker, MakeColorHSL, SplitColorHSL, HueShift, MixColor, AlphaMultiply, HslToRgba | Comprehensive |
-| `_new/colors/02-color-units.md` | Using UnitType to distinguish HSL vs RGB color spaces; compatibility rules | Focused |
+| `_new/colors/01-colors.md` | Color block catalog: ColorPicker, MakeColorOKLCH, SplitColorOKLCH, HueShift, MixColor, AlphaMultiply, OklchToRgba | Comprehensive |
+| `_new/colors/02-color-units.md` | Using UnitType to distinguish OKLCH vs RGB color spaces; compatibility rules | Focused |
 
 **Key contributions**:
 - Complete color block catalog with lowering semantics
-- HSL color space as new UnitType sub-kind: `{ kind: 'color', space: 'hsl' }`
+- OKLCH color space as new UnitType sub-kind: `{ kind: 'color', space: 'oklch' }`
 - Color validity enforcement (wrap hue, clamp saturation/lightness)
 - Structural intrinsics for extract/construct operations on color payload
-- HSL→RGB conversion as explicit adapter block
+- OKLCH→RGB conversion as explicit adapter block
 
 **Affects existing topics**: [01-type-system](./topics/01-type-system.md) (UnitType extension), [02-block-system](./topics/02-block-system.md) (new block category)
 
@@ -158,7 +158,7 @@ source_files:
 ### Topic 23: Color System (T2/T3)
 
 **Tier classification**:
-- T2: Color space as UnitType extension, HSL vs RGB distinction, compatibility rules
+- T2: Color space as UnitType extension, OKLCH vs RGB distinction, compatibility rules
 - T3: Specific block catalog, lowering details, convenience outputs
 
 **Content from**:
@@ -226,7 +226,7 @@ source_files:
 
 ### 01-type-system.md — Updates Required
 
-1. **UnitType structured kinds**: Remove `scalar` kind (already removed in implementation). Clarify `norm01` status. Add `{ kind: 'color', space: 'hsl' }` sub-kind. (Depends on Q2, Q3)
+1. **UnitType structured kinds**: Remove `scalar` kind (already removed in implementation). Clarify `norm01` status. Add `{ kind: 'color', space: 'oklch' }` sub-kind. (Depends on Q2, Q3)
 2. **Cardinality type variables**: Note that DefaultSource and cardinality-generic blocks use axis vars for cardinality inference
 3. **Unit normalization policy**: Add T3 note on when to use 0..1 vs natural units
 
@@ -264,7 +264,7 @@ source_files:
 | Gap | Source | Severity | Notes |
 |-----|--------|----------|-------|
 | Lens compilation strategy | 01-base-lenses | Medium | How lenses compile to IR not specified |
-| Color render pipeline integration | 01-colors | Medium | How HSL→RGB connects to render sinks |
+| Color render pipeline integration | 01-colors | Medium | How OKLCH→RGB connects to render sinks |
 | ODN adapter obligations | 01-obligations | Low | CoerceObligation not fully specified |
 | SigExpr → multi-component mapping | MultiValueSignals | Medium | Migration path from current SigExpr system |
 | Cardinality var propagation for instance refs | 01-cardinality-type-var | Low | How many(instanceRef) propagates through inference |

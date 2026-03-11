@@ -106,7 +106,7 @@ patch "Mouse Reactive" {
     }
   }
 
-  block "MakeColorHSL" "color" {
+  block "MakeColorOKLCH" "color" {
     outputs {
       color = render.color
     }

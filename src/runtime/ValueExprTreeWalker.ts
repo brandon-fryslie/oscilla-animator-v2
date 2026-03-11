@@ -28,7 +28,7 @@ function describeUnknownExprKind(value: unknown): string {
  * Return the child ValueExprIds referenced by a ValueExpr node.
  *
  * Exhaustive over all 12 kinds (const, external, intrinsic, kernel, state,
- * time, shapeRef, eventRead, event, extract, construct, hslToRgb).
+ * time, shapeRef, eventRead, event, extract, construct, oklchToRgb).
  * Adding a new kind without updating this function is a compile error.
  */
 export function getValueExprChildren(expr: ValueExpr): readonly ValueExprId[] {
@@ -44,7 +44,7 @@ export function getValueExprChildren(expr: ValueExpr): readonly ValueExprId[] {
 
     // Single input
     case 'extract':
-    case 'hslToRgb':
+    case 'oklchToRgb':
       return [expr.input];
 
     // Multiple components

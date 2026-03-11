@@ -789,13 +789,13 @@ type CanonicalType = {
 
 ### ColorPicker
 
-**Definition**: Constant authoring source block producing a user-space HSL+A color.
+**Definition**: Constant authoring source block producing a user-space OKLCH+A color.
 
 **Type**: block
 
 **Canonical Form**: `ColorPicker`
 
-**Output**: Signal<color, HSL>
+**Output**: Signal<color, OKLCH>
 
 **Source**: Topic 23 (Color System)
 
@@ -878,17 +878,17 @@ interface DomainSpec {
 
 ---
 
-### HslToRgba
+### OklchToRgba
 
-**Definition**: Adapter block converting color payload from HSL unit to RGBA01 unit.
+**Definition**: Adapter block converting color payload from OKLCH unit to RGBA01 unit.
 
 **Type**: block (adapter)
 
-**Canonical Form**: `HslToRgba`
+**Canonical Form**: `OklchToRgba`
 
 **Source**: Topic 23 (Color System)
 
-**Note**: The only place HSL→RGB conversion occurs.
+**Note**: The only place OKLCH→RGB conversion occurs.
 
 ---
 
@@ -1046,17 +1046,17 @@ interface InstanceRef {
 
 ---
 
-### MakeColorHSL
+### MakeColorOKLCH
 
-**Definition**: Pack scalar h,s,l,a channels into a color payload with HSL unit. Enforces color validity.
+**Definition**: Pack scalar h,s,l,a channels into a color payload with OKLCH unit. Enforces color validity.
 
 **Type**: block
 
-**Canonical Form**: `MakeColorHSL`
+**Canonical Form**: `MakeColorOKLCH`
 
 **Source**: Topic 23 (Color System)
 
-**Note**: The enforcement point for HSL color validity.
+**Note**: The enforcement point for OKLCH color validity.
 
 ---
 
@@ -1114,13 +1114,13 @@ interface SlotMetaEntry {
 
 ---
 
-### SplitColorHSL
+### SplitColorOKLCH
 
-**Definition**: Unpack a color payload with HSL unit into scalar h,s,l,a channels.
+**Definition**: Unpack a color payload with OKLCH unit into scalar h,s,l,a channels.
 
 **Type**: block
 
-**Canonical Form**: `SplitColorHSL`
+**Canonical Form**: `SplitColorOKLCH`
 
 **Source**: Topic 23 (Color System)
 
@@ -2557,7 +2557,7 @@ type ValueSummary =
 
 **Type**: type
 
-**Canonical Form**: `none | count | angle(radians|degrees|phase01) | time(ms|seconds) | space(ndc|world|view, dims:2|3) | color(hsl|rgba01)`
+**Canonical Form**: `none | count | angle(radians|degrees|phase01) | time(ms|seconds) | space(ndc|world|view, dims:2|3) | color(oklch|rgba01)`
 
 **Source**: [01-type-system.md](./topics/01-type-system.md)
 
@@ -2988,7 +2988,7 @@ Terms that MUST NOT appear in new code. If encountered in existing code, use the
 
 **payloadStride()**: Always derived from payload. `float/int/bool=1`, `vec2=2`, `vec3=3`, `color=4`, `cameraProjection=1`, `shape2d=0`, `shape3d=0`
 
-**UnitType**: 6 structured kinds - `none | count | angle(radians|degrees|phase01) | time(ms|seconds) | space(ndc|world|view, dims:2|3) | color(hsl|rgba01)`. No `var` in canonical type.
+**UnitType**: 6 structured kinds - `none | count | angle(radians|degrees|phase01) | time(ms|seconds) | space(ndc|world|view, dims:2|3) | color(oklch|rgba01)`. No `var` in canonical type.
 
 **Phase**: Represented as `float` with `unit: { kind: 'angle', unit: 'phase01' }`. Not a distinct PayloadType.
 
@@ -3176,7 +3176,7 @@ Units refine payload types. A `float` may carry a unit that constrains valid ope
 | `angle` | `radians`, `degrees`, `phase01` | rotation, oscillator phase |
 | `time` | `ms`, `seconds` | durations, timestamps |
 | `space` | `ndc`/`world`/`view`, dims: 2/3 | positions, coordinates |
-| `color` | `hsl`, `rgba01` | color space encoding |
+| `color` | `oklch`, `rgba01` | color space encoding |
 
 **Unit checking is strict**: edges require exact unit match. No implicit conversion.
 

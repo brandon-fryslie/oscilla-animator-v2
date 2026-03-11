@@ -101,7 +101,7 @@
 
 **payloadStride()**: Always derived from payload. `float/int/bool=1`, `vec2=2`, `vec3=3`, `color=4`, `cameraProjection=1`, `shape2d=1`, `shape3d=1`
 
-**UnitType**: 6 structured kinds - `none | count | angle(radians|degrees|phase01) | time(ms|seconds) | space(ndc|world|view, dims:2|3) | color(hsl|rgba01)`.
+**UnitType**: 6 structured kinds - `none | count | angle(radians|degrees|phase01) | time(ms|seconds) | space(ndc|world|view, dims:2|3) | color(oklch|rgba01)`.
 
 **Handle**: A `u32` identity value for a persistent shape/topology record in the **ShapeBank**.
 

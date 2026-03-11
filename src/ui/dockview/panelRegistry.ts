@@ -21,7 +21,6 @@ import { ContinuityPanel } from './panels/ContinuityPanel';
 import { CompilationInspectorPanel } from './panels/CompilationInspectorPanel';
 import { DebugMiniViewPanel } from './panels/DebugMiniViewPanel';
 import { CompositeEditorPanel } from './panels/CompositeEditorPanel';
-import { StepDebugPanel } from './panels/StepDebugPanel';
 import { HelpPanelWrapper } from './panels/HelpPanelWrapper';
 import { ExpressionEditorPanel } from './panels/ExpressionEditorPanel';
 import { LeftSidebarPanel } from './panels/LeftSidebarPanel';
@@ -44,7 +43,6 @@ export const PANEL_COMPONENTS = {
   'continuity-panel': ContinuityPanel,
   'compilation-inspector': CompilationInspectorPanel,
   'debug-miniview': DebugMiniViewPanel,
-  'step-debugger': StepDebugPanel,
   'help': HelpPanelWrapper,
   'expression-editor': ExpressionEditorPanel,
 };

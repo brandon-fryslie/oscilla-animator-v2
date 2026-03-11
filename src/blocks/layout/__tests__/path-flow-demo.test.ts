@@ -57,7 +57,7 @@ patch "Path Flow" {
     }
   }
 
-  block "MakeColorHSL" "color" {
+  block "MakeColorOKLCH" "color" {
     outputs {
       color = render.color
     }

@@ -9,7 +9,7 @@ Register a `DefaultSource` block with type-indexed policy table, create `HueRain
 ## Scope
 **Deliverables:**
 1. DefaultSource block with type-indexed policy table
-2. HueRainbow block (phase → cycling HSL→RGB color)
+2. HueRainbow block (phase → cycling OKLCH→RGB color)
 3. LowerSandbox (constrained IR builder for pure macro expansion)
 4. Effects-as-data pattern (PureLowerResult + LowerEffects types)
 5. Migrate one existing block to pure pattern as proof
@@ -40,21 +40,21 @@ Register a `DefaultSource` block with type-indexed policy table, create `HueRain
 - [ ] Input: `t` (float, phase/time parameter, 0→1 range)
 - [ ] Output: `out` (color, RGBA)
 - [ ] Semantics: converts `t` to hue (full 360° cycle over 0→1), fixed saturation ~0.8, fixed lightness ~0.5, full alpha
-- [ ] Uses `ctx.b.hslToRgb()` (already exists in IRBuilder) for the HSL→RGB conversion
+- [ ] Uses `ctx.b.oklchToRgb()` (already exists in IRBuilder) for the OKLCH→RGB conversion
 - [ ] Block is tagged `loweringPurity: 'pure'` (first block to carry this tag)
 - [ ] Unit test: HueRainbow(0) ≈ red, HueRainbow(0.33) ≈ green, HueRainbow(0.67) ≈ blue
 - [ ] Block file: `src/blocks/color/hue-rainbow.ts`
 
 **Technical Notes:**
-- The block constructs an HSL color from input `t` (as hue), then applies hslToRgb
-- Implementation: `construct([t, const(0.8), const(0.5), const(1.0)], COLOR)` → `hslToRgb(constructed, COLOR)`
+- The block constructs an OKLCH color from input `t` (as hue), then applies oklchToRgb
+- Implementation: `construct([t, const(0.8), const(0.5), const(1.0)], COLOR)` → `oklchToRgb(constructed, COLOR)`
 - This block must work both as a normal graph block AND as a macro expansion target
 
 ### WI-3 [MEDIUM]: Build LowerSandbox (constrained IR builder)
 **Acceptance Criteria:**
 - [ ] `LowerSandbox` class/type exists in `src/compiler/ir/LowerSandbox.ts`
 - [ ] Wraps an `IRBuilder` instance but restricts the API surface to pure operations only
-- [ ] Allowed methods: `constant`, `time`, `kernelMap`, `kernelZip`, `kernelZipSig`, `broadcast`, `reduce`, `combine`, `intrinsic`, `placement`, `extract`, `construct`, `hslToRgb`, `opcode`, `kernel`, `expr`, `eventNever`, `eventPulse`
+- [ ] Allowed methods: `constant`, `time`, `kernelMap`, `kernelZip`, `kernelZipSig`, `broadcast`, `reduce`, `combine`, `intrinsic`, `placement`, `extract`, `construct`, `oklchToRgb`, `opcode`, `kernel`, `expr`, `eventNever`, `eventPulse`
 - [ ] Blocked methods: `allocSlot`, `allocTypedSlot`, `allocStateSlot`, `allocEventSlot`, `registerSlotType`, `registerSigSlot`, `registerFieldSlot`, `stepSlotWriteStrided`, `stepStateWrite`, `stepFieldStateWrite`, `stepEvalSig`, `stepMaterialize`, `stepContinuityMapBuild`, `stepContinuityApply`, `addRenderGlobal`
 - [ ] `lowerBlock(blockType, inputs, params)` method that invokes a registered block's `lower()` through the sandbox, returning only `ValueExprId` per output (no slots)
 - [ ] Throws if invoked block is not tagged `loweringPurity: 'pure'`
@@ -124,5 +124,5 @@ LowerSandbox and effects-as-data are **prerequisites** — DefaultSource and Hue
 
 ## Risks
 - **allocSlot removal for pure blocks**: The lowering orchestrator needs to allocate slots on behalf of pure blocks. If the slot allocation logic in lower-blocks.ts is tightly coupled to the current flow, this may be harder than expected. Mitigation: keep both paths (LowerResult and PureLowerResult) working simultaneously.
-- **hslToRgb correctness**: The IRBuilder already has `hslToRgb()` but it may not have a runtime implementation in ValueExprMaterializer. Need to verify. Mitigation: check and add if missing.
+- **oklchToRgb correctness**: The IRBuilder already has `oklchToRgb()` but it may not have a runtime implementation in ValueExprMaterializer. Need to verify. Mitigation: check and add if missing.
 - **Type resolution for DefaultSource**: The generic output type needs to resolve correctly through pass1 constraint propagation. If it doesn't unify properly (e.g., the target port has a complex type), the policy table won't get the right type. Mitigation: test with all payload types.

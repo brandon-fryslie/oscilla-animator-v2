@@ -24,7 +24,7 @@ A Lens is a value transformation attached to a **port** (input or output) that c
 
 ## Lens vs Adapter (T2)
 
-- **Adapter**: Changes type compatibility (e.g., scalar→array broadcast, HSL→RGB color conversion).
+- **Adapter**: Changes type compatibility (e.g., scalar→array broadcast, OKLCH→RGB color conversion).
 - **Lens**: Changes values without changing type compatibility (e.g., Scale+Bias, Clamp, Slew).
 
 Both compile to blocks. The distinction is semantic, not structural.
