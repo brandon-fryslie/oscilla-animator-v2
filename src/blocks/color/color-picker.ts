@@ -46,7 +46,7 @@ export function register(): void {
       const lInput = inputsById.l;
       const aInput = inputsById.a;
       if (!hInput || !sInput || !lInput || !aInput) {
-        throw new Error('ColorPicker requires all inputs (h, c, l, a)');
+        throw new Error('ColorPicker requires all inputs (h, s/chroma, l, a)');
       }
   
       const outType = ctx.outTypes[0];

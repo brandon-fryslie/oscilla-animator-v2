@@ -326,7 +326,7 @@ case 'random': {
 
 **Line 124:**
 ```typescript
-oklchToRgbConversion(buf, inputBuf, count);
+oklchToRgbaConversion(buf, inputBuf, count);
 ```
 
 ⚠️ OKLCH→RGB conversion involves division and domain mapping.
@@ -334,7 +334,7 @@ Common bugs:
 - Division by zero in chroma calculation
 - Negative hue/saturation/lightness
 
-**Recommendation:** Check `oklchToRgbConversion` implementation for validation.
+**Recommendation:** Check `oklchToRgbaConversion` implementation for validation.
 
 ---
 
@@ -491,7 +491,7 @@ case 'log': return args[0] > 0 ? Math.log(args[0]) : Math.log(0.0001);
    - Mark instances with NaN position as invisible
    - Prevents canvas state corruption
 
-6. **Audit `oklchToRgbConversion` for NaN/Inf**:
+6. **Audit `oklchToRgbaConversion` for NaN/Inf**:
    - Check for division by zero
    - Validate domain ranges
 

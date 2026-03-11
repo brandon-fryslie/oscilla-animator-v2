@@ -38,7 +38,7 @@ import {
 } from './ScalarKernelLibrary';
 import { getProgramTopology } from '../compiler/ir/program-topology';
 import { resolveInstanceLaneCount } from './InstanceCountResolver';
-import { oklchToRgbScalar } from './color-math';
+import { oklchToEncodedSrgbInto } from '../core/color/oklch';
 
 function isPathTopology(topology: TopologyDef): topology is PathTopologyDef {
   return 'verbs' in topology;
@@ -1108,10 +1108,7 @@ function oklchToRgbaConversion(
     const h = input[offset];
     const c = input[offset + 1];
     const l = input[offset + 2];
-    const [r, g, b] = oklchToRgbScalar(h, c, l);
-    out[offset] = r;
-    out[offset + 1] = g;
-    out[offset + 2] = b;
+    oklchToEncodedSrgbInto(out, offset, h, c, l);
     out[offset + 3] = input[offset + 3]; // Alpha passthrough
   }
 }
