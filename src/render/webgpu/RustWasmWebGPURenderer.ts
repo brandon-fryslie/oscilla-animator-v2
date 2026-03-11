@@ -1229,9 +1229,8 @@ export class WebGPURenderer {
       };
       const onError = (event: ErrorEvent): void => {
         const message = event.message || `Rust renderer worker crashed during ${options.context}`;
-        rejectWithTerminalFailure(new Error(message), () =>
-          this.buildWorkerErrorFatalTransition(options.context, message),
-        );
+        const transition = this.buildWorkerErrorFatalTransition(options.context, message);
+        rejectWithTerminalFailure(transition.cause, () => transition);
       };
       this.worker.addEventListener('message', onMessage);
       this.worker.addEventListener('error', onError);

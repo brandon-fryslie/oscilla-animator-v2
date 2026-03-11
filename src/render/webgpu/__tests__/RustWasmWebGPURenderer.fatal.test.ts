@@ -281,7 +281,7 @@ describe('RustWasmWebGPURenderer fatal transition ack timeout path', () => {
         rebuildError = error as Error;
       });
 
-      await vi.advanceTimersByTimeAsync(20_000);
+      await vi.runOnlyPendingTimersAsync();
       await rebuildPromise;
 
       expect(rebuildError).toBeInstanceOf(Error);
