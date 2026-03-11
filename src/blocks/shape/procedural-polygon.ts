@@ -11,7 +11,7 @@ import { DOMAIN_CONTROL } from '../../core/domain-registry';
 import { PathVerb, type PathTopologyDefInput } from '../../shapes/types';
 import { defaultSourceConst } from '../../types';
 import { OpCode } from '../../compiler/ir/types';
-import { resolveInputConstant } from '../lower-utils';
+import { promoteToMany, resolveInputConstant } from '../lower-utils';
 
 /**
  * Create a polygon path topology definition.
@@ -171,11 +171,11 @@ export function register(): void {
       const floatFieldType = canonicalMany(FLOAT, { kind: 'none' }, ref);
   
       // Step 1: broadcast single-instance values to field extent
-      const sidesBroadcast = ctx.b.broadcast(sidesSig, floatFieldType);
-      const radiusXBroadcast = ctx.b.broadcast(radiusXSig, floatFieldType);
-      const radiusYBroadcast = ctx.b.broadcast(radiusYSig, floatFieldType);
-      const twoPiBroadcast = ctx.b.broadcast(twoPi, floatFieldType);
-      const halfPiBroadcast = ctx.b.broadcast(halfPi, floatFieldType);
+      const sidesBroadcast = promoteToMany(sidesSig, floatFieldType, ctx.b);
+      const radiusXBroadcast = promoteToMany(radiusXSig, floatFieldType, ctx.b);
+      const radiusYBroadcast = promoteToMany(radiusYSig, floatFieldType, ctx.b);
+      const twoPiBroadcast = promoteToMany(twoPi, floatFieldType, ctx.b);
+      const halfPiBroadcast = promoteToMany(halfPi, floatFieldType, ctx.b);
   
       // Step 2: angle = (index / sides) * 2π - π/2
       const div = ctx.b.opcode(OpCode.Div);

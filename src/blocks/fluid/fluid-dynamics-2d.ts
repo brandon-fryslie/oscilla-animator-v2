@@ -18,7 +18,7 @@ import { inferType, cardinalityVar } from '../../core/inference-types';
 import { cardinalityVarId } from '../../core/ids';
 import { DOMAIN_CIRCLE } from '../../core/domain-registry';
 import { defaultSource, defaultSourceConst } from '../../types';
-import { resolveInputConstant } from '../lower-utils';
+import { promoteToMany, resolveInputConstant } from '../lower-utils';
 
 // [LAW:one-source-of-truth] Fluid output cardinality + instance ownership are
 // declared once in port types and reused across lowering/runtime metadata.
@@ -155,8 +155,8 @@ export function register(): void {
       // expressed through data, not optional lowering branches.
       const defaultControl = ctx.b.constant(vec2Const(0.5, 0.5), canonicalType(VEC2));
       const defaultColor = ctx.b.constant(colorConst(0.1, 0.2, 0.95, 1.0), canonicalType(COLOR, unitOklch()));
-      const controlField = ctx.b.broadcast(defaultControl, controlPointsType);
-      const colorField = ctx.b.broadcast(defaultColor, colorType);
+      const controlField = promoteToMany(defaultControl, controlPointsType, ctx.b);
+      const colorField = promoteToMany(defaultColor, colorType, ctx.b);
 
       return {
         outputsById: {
