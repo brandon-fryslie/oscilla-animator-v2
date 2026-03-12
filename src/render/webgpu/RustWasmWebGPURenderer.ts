@@ -24,6 +24,12 @@ import {
   type RuntimeSharedPlanes,
 } from '../rust/runtime-input-layout';
 import { getNavigatorGpu } from './gpu-api';
+import {
+  extractPassDebugConstants,
+  formatWgslWithLineNumbers,
+  hashWgslSource,
+  previewWgsl,
+} from './gpu-pass-debug';
 
 interface RenderInput extends DrawPrepRenderContract, MatrixViewportContract, RuntimeInputSignalContract {
   readonly shapeBank: RenderShapeBankSource;
@@ -156,16 +162,6 @@ const RUNTIME_CONSOLE_ENABLED = isRuntimeConsoleEnabled();
 // decide whether to split/configure timeout policy from real data.
 // https://github.com/brandon-fryslie/oscilla-animator-v2/issues/185
 const WORKER_RESPONSE_TIMEOUT_MS = 20_000;
-const FLUID_PASS_ORDER = [
-  'fluid.splat',
-  'fluid.curl',
-  'fluid.vorticity',
-  'fluid.divergence',
-  'fluid.pressure',
-  'fluid.gradient-subtract',
-  'fluid.advect',
-  'fluid.present',
-] as const;
 
 function getRuntimeBootstrapConfig(): RustRendererBootstrapConfig {
   if (!RUNTIME_CONSOLE_ENABLED) return DEFAULT_BOOTSTRAP_CONFIG;
@@ -177,29 +173,8 @@ function getRuntimeBootstrapConfig(): RustRendererBootstrapConfig {
   };
 }
 
-function escapeRegex(source: string): string {
-  return source.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-function previewWgsl(wgsl: string, maxLines: number = 4): string {
-  // TODO(#159): Move debug WGSL preview formatting out of renderer runtime path.
-  // https://github.com/brandon-fryslie/oscilla-animator-v2/issues/159
-  return wgsl
-    .split('\n')
-    .slice(0, maxLines)
-    .map((line) => line.trim())
-    .join(' | ');
-}
-
-function formatWgslWithLineNumbers(wgsl: string): string {
-  return wgsl
-    .split('\n')
-    .map((line, index) => `${String(index + 1).padStart(4, ' ')} | ${line}`)
-    .join('\n');
-}
-
 function dumpShaderWithLineNumbers(name: string, wgsl: string): void {
-  if (!RUNTIME_CONSOLE_ENABLED) {
+  if (!shouldDumpRuntimeShaderPayload()) {
     return;
   }
   // [LAW:verifiable-goals] Runtime shader dumps include line numbers so
@@ -207,60 +182,6 @@ function dumpShaderWithLineNumbers(name: string, wgsl: string): void {
   console.groupCollapsed(`[runtimeConsole] Generated WGSL: ${name}`);
   console.info(formatWgslWithLineNumbers(wgsl));
   console.groupEnd();
-}
-
-function hashWgslSource(wgsl: string): string {
-  // TODO(#159): Move debug-only shader hashing out of renderer runtime path.
-  // https://github.com/brandon-fryslie/oscilla-animator-v2/issues/159
-  let hash = 2166136261 >>> 0;
-  for (let index = 0; index < wgsl.length; index++) {
-    hash ^= wgsl.charCodeAt(index);
-    hash = Math.imul(hash, 16777619) >>> 0;
-  }
-  return hash.toString(16).padStart(8, '0');
-}
-
-function parseWgslU32Constant(wgsl: string, name: string): number | null {
-  // TODO(#179): Remove renderer regex parsing for WGSL constants; consume
-  // typed compiler/worker metadata instead of text matching.
-  // https://github.com/brandon-fryslie/oscilla-animator-v2/issues/179
-  const pattern = new RegExp(`const\\s+${escapeRegex(name)}\\s*:\\s*u32\\s*=\\s*(\\d+)u\\s*;`);
-  const match = wgsl.match(pattern);
-  if (!match) return null;
-  const parsed = Number.parseInt(match[1] ?? '', 10);
-  return Number.isFinite(parsed) ? parsed : null;
-}
-
-function extractPassDebugConstants(wgsl: string): Record<string, number> {
-  // Extracts a small debug-telemetry snapshot of known WGSL `const u32`
-  // values so runtimeConsole logs can show lane/grid/offset context during
-  // pipeline-install debugging without opening shader source manually.
-  // [LAW:one-source-of-truth] This is temporary drift from canonical metadata:
-  // TODO(#179) moves these constants to structured compiler artifacts so the
-  // renderer stops parsing WGSL text entirely.
-  // https://github.com/brandon-fryslie/oscilla-animator-v2/issues/179
-  const keys = [
-    'ACTIVE_LANES',
-    'GRID_WIDTH',
-    'GRID_HEIGHT',
-    'CP_OFFSET',
-    'CP_LANE_STRIDE',
-    'CP_COMPONENT_STRIDE',
-    'COLOR_OFFSET',
-    'COLOR_LANE_STRIDE',
-    'COLOR_COMPONENT_STRIDE',
-    'SCALE_OFFSET',
-    'SCALE_LANE_STRIDE',
-    'SCALE_COMPONENT_STRIDE',
-  ] as const;
-  const constants: Record<string, number> = {};
-  for (const key of keys) {
-    const value = parseWgslU32Constant(wgsl, key);
-    if (value !== null) {
-      constants[key] = value;
-    }
-  }
-  return constants;
 }
 
 function requireNonEmptyString(value: unknown, message: string): string {
@@ -273,89 +194,127 @@ function requireNonEmptyString(value: unknown, message: string): string {
   return value;
 }
 
-function validateGpuPass(pass: RustRendererGpuPass, index: number): RustRendererGpuPass {
-  // [LAW:single-enforcer] Compile worker/Naga boundary owns pass-signature
-  // semantics; renderer checks transport/runtime payload integrity only.
-  const passId = requireNonEmptyString(
+function requireGpuPassId(pass: RustRendererGpuPass, index: number): string {
+  return requireNonEmptyString(
     pass.passId,
     `Rust renderer GPU pass contract violation: passes[${index}].passId is required`,
   );
-  requireNonEmptyString(
-    pass.entryPoint,
-    `Rust renderer GPU pass contract violation: pass "${passId}" is missing entryPoint`,
-  );
-  requireNonEmptyString(
-    pass.wgsl,
-    `Rust renderer GPU pass contract violation: pass "${passId}" is missing WGSL source`,
-  );
-  if (pass.stage !== 'compute') {
-    throw new Error(
-      `Rust renderer GPU pass contract violation: pass "${passId}" has invalid stage "${String(
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (pass as any).stage,
-      )}", expected "compute"`,
-    );
-  }
-  return pass;
 }
 
-function validateGpuPassBundle(passes: readonly RustRendererGpuPass[]): readonly RustRendererGpuPass[] {
-  // TODO(#181): Move bundle/order invariants to compiler artifact validation.
-  // [LAW:single-enforcer] Renderer should execute validated manifests, not
-  // enforce compiler-owned pass-order policy.
-  // https://github.com/brandon-fryslie/oscilla-animator-v2/issues/181
-  if (passes.length === 0) {
-    throw new Error('Rust renderer GPU pass contract violation: pass bundle must contain at least one pass');
-  }
-  const validated = passes.map((pass, index) => validateGpuPass(pass, index));
-  const seenPassIds = new Set<string>();
-  for (const pass of validated) {
-    if (seenPassIds.has(pass.passId)) {
-      throw new Error(`Rust renderer GPU pass contract violation: duplicate passId "${pass.passId}"`);
-    }
-    seenPassIds.add(pass.passId);
-  }
+function requireGpuPassEntryPoint(pass: RustRendererGpuPass, passId: string): string {
+  return requireNonEmptyString(
+    pass.entryPoint,
+    `Rust renderer GPU pass contract violation: pass \"${passId}\" is missing entryPoint`,
+  );
+}
 
-  const fluidPassIds = validated.filter((pass) => pass.passId.startsWith('fluid.')).map((pass) => pass.passId);
-  if (fluidPassIds.length > 0) {
-    if (!fluidPassIds.includes('fluid.present')) {
-      throw new Error('Rust renderer GPU pass contract violation: fluid pass bundle must include "fluid.present"');
-    }
-    let cursor = -1;
-    for (const passId of fluidPassIds) {
-      // TODO(#183): Remove cast-based pass-id narrowing and use explicit
-      // guard-backed lookup for fluid pass ordering.
-      // https://github.com/brandon-fryslie/oscilla-animator-v2/issues/183
-      const nextIndex = FLUID_PASS_ORDER.indexOf(passId as (typeof FLUID_PASS_ORDER)[number]);
-      if (nextIndex === -1) {
-        throw new Error(`Rust renderer GPU pass contract violation: unknown fluid passId "${passId}"`);
-      }
-      if (nextIndex < cursor) {
-        throw new Error(
-          `Rust renderer GPU pass contract violation: fluid pass "${passId}" is out of canonical order`,
-        );
-      }
-      cursor = nextIndex;
-    }
+function isComputePassStage(stage: RustRendererGpuPass['stage']): stage is 'compute' {
+  return stage === 'compute';
+}
+
+function requireGpuPassStage(pass: RustRendererGpuPass, passId: string): 'compute' {
+  if (!isComputePassStage(pass.stage)) {
+    throw new Error(
+      `Rust renderer GPU pass contract violation: pass \"${passId}\" has unsupported stage \"${String(pass.stage)}\"`,
+    );
   }
-  return validated;
+  return pass.stage;
+}
+
+function requireGpuPassWgsl(pass: RustRendererGpuPass, passId: string): string {
+  return requireNonEmptyString(
+    pass.wgsl,
+    `Rust renderer GPU pass contract violation: pass \"${passId}\" is missing WGSL source`,
+  );
+}
+
+function hasGpuPassPayloads(passes: readonly RustRendererGpuPass[]): boolean {
+  return passes.length > 0;
+}
+
+function createEmptyGpuPassBundleError(): Error {
+  return new Error('Rust renderer GPU pass contract violation: pass bundle must contain at least one pass');
+}
+
+function normalizeGpuPassPayloads(passes: readonly RustRendererGpuPass[]): readonly RustRendererGpuPass[] {
+  return passes.map((pass, index) => validateGpuPass(pass, index));
+}
+
+function buildValidatedGpuPassPayload(
+  passId: string,
+  stage: 'compute',
+  entryPoint: string,
+  wgsl: string,
+): RustRendererGpuPass {
+  return {
+    passId,
+    stage,
+    entryPoint,
+    wgsl,
+  };
+}
+
+function shouldDumpRuntimeShaderPayload(): boolean {
+  return RUNTIME_CONSOLE_ENABLED;
+}
+
+/**
+ * Transport-level GPU pass normalization.
+ *
+ * This renderer boundary intentionally validates only worker-transport safety:
+ * - required identifiers are present and non-empty
+ * - required stage payload is the expected literal (`compute`)
+ * - shader payload exists as non-empty text
+ *
+ * Semantic guarantees are established upstream at compile worker validation:
+ * - stage contract correctness
+ * - entrypoint/WGSL signature agreement
+ * - bundle policy (duplicate IDs / fluid order)
+ *
+ * Keeping this boundary narrow avoids semantic policy drift between compiler
+ * and renderer install paths.
+ */
+function validateGpuPass(pass: RustRendererGpuPass, index: number): RustRendererGpuPass {
+  // [LAW:single-enforcer] Renderer enforces transport/runtime payload integrity
+  // only; semantic pass-signature validation is owned by compile worker.
+  const passId = requireGpuPassId(pass, index);
+  const stage = requireGpuPassStage(pass, passId);
+  const entryPoint = requireGpuPassEntryPoint(pass, passId);
+  const wgsl = requireGpuPassWgsl(pass, passId);
+  return buildValidatedGpuPassPayload(passId, stage, entryPoint, wgsl);
+}
+
+/**
+ * Bundle-level transport integrity guard.
+ *
+ * Renderer receives compile-validated pass bundles and only enforces that at
+ * least one pass is present and each pass satisfies transport payload shape.
+ * Compiler-side validation remains the single semantic authority.
+ */
+function validateGpuPassBundle(passes: readonly RustRendererGpuPass[]): readonly RustRendererGpuPass[] {
+  // [LAW:single-enforcer] Renderer owns transport/runtime payload integrity
+  // only; compile boundary owns semantic pass and bundle policy validation.
+  if (!hasGpuPassPayloads(passes)) {
+    throw createEmptyGpuPassBundleError();
+  }
+  return normalizeGpuPassPayloads(passes);
+}
+
+function isFiniteUint32Value(value: number): boolean {
+  return Number.isFinite(value)
+    && Number.isInteger(value)
+    && Number.isSafeInteger(value)
+    && value >= 0
+    && value <= MAX_UINT32;
+}
+
+function createUint32ContractError(context: string, value: number): Error {
+  return new Error(`Rust renderer input contract violation: ${context} must be a uint32, got ${String(value)}`);
 }
 
 function assertFiniteUint32(value: number, context: string): number {
-  if (!Number.isFinite(value)) {
-    throw new Error(`Rust renderer input contract violation: ${context} must be a uint32, got ${String(value)}`);
-  }
-  if (!Number.isInteger(value)) {
-    throw new Error(`Rust renderer input contract violation: ${context} must be a uint32, got ${String(value)}`);
-  }
-  if (!Number.isSafeInteger(value)) {
-    throw new Error(`Rust renderer input contract violation: ${context} must be a uint32, got ${String(value)}`);
-  }
-  if (value < 0) {
-    throw new Error(`Rust renderer input contract violation: ${context} must be a uint32, got ${String(value)}`);
-  }
-  if (value > MAX_UINT32) {
-    throw new Error(`Rust renderer input contract violation: ${context} must be a uint32, got ${String(value)}`);
+  if (!isFiniteUint32Value(value)) {
+    throw createUint32ContractError(context, value);
   }
   return value;
 }
@@ -382,13 +341,11 @@ function readRequiredSinkTableWord(
   return value;
 }
 
-function classifyWorkerAckMessage(
-  payload: RustRendererWorkerOutboundMessage,
-  expectedSuccessType: RustRendererWorkerOutboundMessage['type'],
-): WorkerAckDisposition {
-  if (payload.type === expectedSuccessType) {
-    return { kind: 'success' };
-  }
+function isIgnorableAckType(type: RustRendererWorkerOutboundMessage['type']): boolean {
+  return type === 'SCHEDULER_HEARTBEAT' || type === 'RUNTIME_EVENT';
+}
+
+function toWorkerFailureDisposition(payload: RustRendererWorkerOutboundMessage): WorkerAckDisposition | null {
   if (payload.type === 'FATAL_ERROR') {
     return {
       kind: 'fail',
@@ -419,21 +376,42 @@ function classifyWorkerAckMessage(
       message: payload.message,
     };
   }
-  if (payload.type === 'SCHEDULER_HEARTBEAT' || payload.type === 'RUNTIME_EVENT') {
-    return { kind: 'ignore' };
-  }
-  // [LAW:single-enforcer] Ack message classification happens in one helper so
-  // all await paths share identical non-success handling.
+  return null;
+}
+
+function buildWorkerProtocolViolation(
+  expectedSuccessType: RustRendererWorkerOutboundMessage['type'],
+  actualType: RustRendererWorkerOutboundMessage['type'],
+): WorkerAckDisposition {
   return {
     kind: 'fail',
     fatal: true,
     code: 'WORKER_PROTOCOL_VIOLATION',
     stage: expectedSuccessType,
-    message: `expected ${expectedSuccessType}, got ${payload.type}`,
+    message: `expected ${expectedSuccessType}, got ${actualType}`,
     error: new Error(
-      `Rust renderer worker protocol violation: expected ${expectedSuccessType}, got ${payload.type}`,
+      `Rust renderer worker protocol violation: expected ${expectedSuccessType}, got ${actualType}`,
     ),
   };
+}
+
+function classifyWorkerAckMessage(
+  payload: RustRendererWorkerOutboundMessage,
+  expectedSuccessType: RustRendererWorkerOutboundMessage['type'],
+): WorkerAckDisposition {
+  if (payload.type === expectedSuccessType) {
+    return { kind: 'success' };
+  }
+  if (isIgnorableAckType(payload.type)) {
+    return { kind: 'ignore' };
+  }
+  const workerFailure = toWorkerFailureDisposition(payload);
+  if (workerFailure) {
+    return workerFailure;
+  }
+  // [LAW:single-enforcer] Ack message classification happens in one helper so
+  // all await paths share identical non-success handling.
+  return buildWorkerProtocolViolation(expectedSuccessType, payload.type);
 }
 
 
@@ -798,8 +776,8 @@ export class WebGPURenderer {
     if (!this.bootstrapped) {
       throw new Error('Rust renderer worker is not bootstrapped');
     }
-    // [LAW:single-enforcer] Bundle-level GPU pass contract validation is owned
-    // at this renderer boundary before worker transport.
+    // [LAW:single-enforcer] Renderer validates transport/runtime payload shape;
+    // semantic pass signatures are already validated at compile worker boundary.
     const validatedPasses = [...validateGpuPassBundle(passes)];
     for (const pass of validatedPasses) {
       dumpShaderWithLineNumbers(pass.passId, pass.wgsl);
