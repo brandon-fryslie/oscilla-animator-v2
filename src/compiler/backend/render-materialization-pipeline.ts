@@ -375,26 +375,26 @@ function createFieldSlotAllocator(args: {
   };
 }
 
-function resolveFieldExprId(
-  sourceExprId: ValueExprId,
-  renderInstance: ReturnType<typeof requireManyInstance>,
-  valueExprs: readonly ValueExpr[],
-  builder: UnlinkedIRFragments['builder'],
-  renderBlockId: string,
-  label: string,
-): ValueExprId {
+function resolveFieldExprId(args: {
+  readonly sourceExprId: ValueExprId;
+  readonly renderInstance: ReturnType<typeof requireManyInstance>;
+  readonly valueExprs: readonly ValueExpr[];
+  readonly builder: UnlinkedIRFragments['builder'];
+  readonly renderBlockId: string;
+  readonly label: string;
+}): ValueExprId {
   const sourceExpr = readValueExprOrThrow(
-    valueExprs,
-    sourceExprId,
-    `RenderInstances2D (${renderBlockId}): missing ${label} expr ${sourceExprId}`,
+    args.valueExprs,
+    args.sourceExprId,
+    `RenderInstances2D (${args.renderBlockId}): missing ${args.label} expr ${args.sourceExprId}`,
   );
-  const fieldExprId = isFieldExtent(sourceExprId, valueExprs)
-    ? sourceExprId
-    : builder.broadcast(sourceExprId, withInstance(sourceExpr.type, renderInstance));
+  const fieldExprId = isFieldExtent(args.sourceExprId, args.valueExprs)
+    ? args.sourceExprId
+    : args.builder.broadcast(args.sourceExprId, withInstance(sourceExpr.type, args.renderInstance));
   readValueExprOrThrow(
-    valueExprs,
+    args.valueExprs,
     fieldExprId,
-    `RenderInstances2D (${renderBlockId}): missing broadcast ${label} expr ${fieldExprId}`,
+    `RenderInstances2D (${args.renderBlockId}): missing broadcast ${args.label} expr ${fieldExprId}`,
   );
   return fieldExprId;
 }
@@ -407,14 +407,14 @@ function resolveShapeOutputs(args: {
   readonly builder: UnlinkedIRFragments['builder'];
   readonly getFieldSlot: (fieldId: ValueExprId, semantic: FieldSemantic, roleKey: string) => ValueSlot;
 }): Pick<StepRender, 'shape' | 'controlPoints'> {
-  const shapeFieldExprId = resolveFieldExprId(
-    args.shape.sourceExprId,
-    args.renderInstance,
-    args.valueExprs,
-    args.builder,
-    args.renderBlockId,
-    'shape',
-  );
+  const shapeFieldExprId = resolveFieldExprId({
+    sourceExprId: args.shape.sourceExprId,
+    renderInstance: args.renderInstance,
+    valueExprs: args.valueExprs,
+    builder: args.builder,
+    renderBlockId: args.renderBlockId,
+    label: 'shape',
+  });
   const shapeSlot = args.getFieldSlot(shapeFieldExprId, 'custom', `${args.renderBlockId}:shape`);
 
   const shapeInfo = resolveShapeRefInfo(args.shape.sourceExprId, args.valueExprs);
@@ -466,14 +466,14 @@ function buildRenderStepForTarget(args: {
     `${target.renderBlockId}:controlPoints`,
   );
 
-  const colorFieldExprId = resolveFieldExprId(
-    target.color.id,
+  const colorFieldExprId = resolveFieldExprId({
+    sourceExprId: target.color.id,
     renderInstance,
     valueExprs,
     builder,
-    target.renderBlockId,
-    'color',
-  );
+    renderBlockId: target.renderBlockId,
+    label: 'color',
+  });
   const colorSlot = getFieldSlot(colorFieldExprId, 'color', `${target.renderBlockId}:color`);
 
   const identityScaleExprId = builder.constantWithKey(
@@ -482,14 +482,14 @@ function buildRenderStepForTarget(args: {
     'render.scale.identity.one',
   );
   const scaleSourceExprId = target.scale?.id ?? identityScaleExprId;
-  const scaleFieldExprId = resolveFieldExprId(
-    scaleSourceExprId,
+  const scaleFieldExprId = resolveFieldExprId({
+    sourceExprId: scaleSourceExprId,
     renderInstance,
     valueExprs,
     builder,
-    target.renderBlockId,
-    'scale',
-  );
+    renderBlockId: target.renderBlockId,
+    label: 'scale',
+  });
   const scaleSlot = getFieldSlot(scaleFieldExprId, 'custom', `scale:${String(scaleFieldExprId)}`);
 
   if (!target.shape) {

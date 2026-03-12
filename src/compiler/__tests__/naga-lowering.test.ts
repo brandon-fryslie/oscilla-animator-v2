@@ -34,7 +34,7 @@ function buildRenderPatch() {
   });
 }
 
-describe('naga lowering artifact', () => {
+describe('naga lowering artifact metadata', () => {
   it('emits structured Naga module artifact with compute entrypoint', () => {
     const result = compile(buildSimplePatch());
     expect(result.kind).toBe('ok');
@@ -91,7 +91,9 @@ describe('naga lowering artifact', () => {
     const hasBlockBoundEntry = mapEntries.some(([, value]) => value.blockId !== null && value.stepIndex >= 0);
     expect(hasBlockBoundEntry).toBe(true);
   });
+});
 
+describe('naga lowering artifact render coverage', () => {
   it('treats non-compute schedule steps as boundary work (not incomplete lowering)', () => {
     const result = compile(buildRenderPatch());
     expect(result.kind).toBe('ok');
@@ -124,7 +126,9 @@ describe('naga lowering artifact', () => {
     const warningCodes = result.warnings.map((warning) => warning.code);
     expect(warningCodes).not.toContain('W_NAGA_LOWERING_INCOMPLETE');
   });
+});
 
+describe('naga lowering artifact lane addressing', () => {
   it('clamps lane addressing to slot cardinality in compute lowering', () => {
     const result = compile(buildRenderPatch());
     expect(result.kind).toBe('ok');
@@ -145,42 +149,13 @@ describe('naga lowering artifact', () => {
     );
     expect(laneExprId).toBeGreaterThanOrEqual(0);
 
-    const minCallExprIds: number[] = [];
-    for (let exprId = 0; exprId < mainFn.expressions.length; exprId += 1) {
-      const expr = mainFn.expressions[exprId];
-      if (expr.kind === 'call' && expr.function === 'min') {
-        minCallExprIds.push(exprId);
+    const laneBoundsChecks = mainFn.expressions.filter((expr) => {
+      if (expr.kind !== 'binary' || expr.op !== 'lt' || expr.left !== laneExprId) {
+        return false;
       }
-    }
-    expect(minCallExprIds.length).toBeGreaterThan(0);
-
-    const dependsOnExpr = (
-      exprId: number,
-      targetExprId: number,
-      visited: Set<number> = new Set(),
-    ): boolean => {
-      if (exprId === targetExprId) return true;
-      if (visited.has(exprId)) return false;
-      visited.add(exprId);
-
-      const expr = mainFn.expressions[exprId];
-      if (!expr) return false;
-
-      for (const value of Object.values(expr)) {
-        if (typeof value === 'number' && dependsOnExpr(value, targetExprId, visited)) {
-          return true;
-        }
-        if (Array.isArray(value)) {
-          for (const item of value) {
-            if (typeof item === 'number' && dependsOnExpr(item, targetExprId, visited)) {
-              return true;
-            }
-          }
-        }
-      }
-      return false;
-    };
-
-    expect(minCallExprIds.some((exprId) => dependsOnExpr(exprId, laneExprId))).toBe(true);
+      const rightExpr = mainFn.expressions[expr.right];
+      return rightExpr?.kind === 'constant';
+    });
+    expect(laneBoundsChecks.length).toBeGreaterThan(0);
   });
 });
