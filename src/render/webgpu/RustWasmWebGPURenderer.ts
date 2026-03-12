@@ -37,6 +37,20 @@ interface RenderInput extends DrawPrepRenderContract, MatrixViewportContract, Ru
 
 type RuntimeViewportFrame = MatrixViewportContract & RuntimeInputSignalContract;
 
+/**
+ * GPU fault descriptor emitted to the main thread when a GPU error or device
+ * loss is detected in the Rust renderer worker.
+ */
+export interface GpuFault {
+  readonly severity: 'warning' | 'fatal';
+  readonly code: string;
+  readonly message: string;
+  readonly source: string;
+  readonly recoverable: boolean;
+}
+
+export type GpuFaultCallback = (fault: GpuFault) => void;
+
 export interface RuntimeEventBreadcrumb {
   readonly severity: 'error' | 'fatal';
   readonly code: string;
@@ -470,6 +484,7 @@ export class WebGPURenderer {
   // https://github.com/brandon-fryslie/oscilla-animator-v2/issues/159
   private sinkTableDebugLogCounter = 0;
   private readonly emittedHealthWarningCodes = new Set<string>();
+  private gpuFaultCallback: GpuFaultCallback | null = null;
 
   private reportEngineError(
     source: string,
@@ -840,6 +855,16 @@ export class WebGPURenderer {
 
   getLatestSinkTableSample(): SinkTableDebugSample | null {
     return this.latestSinkTableSample;
+  }
+
+  // [LAW:single-enforcer] GPU fault callback is set once by RuntimeService;
+  // renderer handlers invoke it for all GPU error/device-lost classifications.
+  setGpuFaultCallback(callback: GpuFaultCallback | null): void {
+    this.gpuFaultCallback = callback;
+  }
+
+  private emitGpuFault(fault: GpuFault): void {
+    this.gpuFaultCallback?.(fault);
   }
 
   private throwIfFatalError(): void {
@@ -1362,6 +1387,13 @@ export class WebGPURenderer {
     payload: Extract<RustRendererWorkerOutboundMessage, { type: 'ENGINE_ERROR' }>,
   ): void {
     this.reportEngineError(payload.source, payload.message, payload.location, payload.fatal);
+    this.emitGpuFault({
+      severity: payload.fatal ? 'fatal' : 'warning',
+      code: payload.source,
+      message: payload.message,
+      source: payload.location,
+      recoverable: !payload.fatal,
+    });
     if (payload.fatal) {
       this.markRendererFatal(this.buildEngineFatalTransition(payload));
     }
@@ -1386,6 +1418,13 @@ export class WebGPURenderer {
     payload: Extract<RustRendererWorkerOutboundMessage, { type: 'FATAL_ERROR' }>,
   ): void {
     this.reportEngineError(payload.code, payload.message, 'WORKER', true);
+    this.emitGpuFault({
+      severity: 'fatal',
+      code: payload.code,
+      message: payload.message,
+      source: 'WORKER',
+      recoverable: false,
+    });
     this.markRendererFatal(this.buildFatalErrorTransition(payload));
   }
 
@@ -1393,6 +1432,13 @@ export class WebGPURenderer {
     payload: Extract<RustRendererWorkerOutboundMessage, { type: 'DEVICE_LOST' }>,
   ): void {
     this.reportEngineError(payload.code, payload.reason, 'WORKER', true);
+    this.emitGpuFault({
+      severity: 'fatal',
+      code: 'DEVICE_LOST',
+      message: payload.reason,
+      source: 'WORKER',
+      recoverable: false,
+    });
     this.markRendererFatal(this.buildDeviceLostTransition(payload));
   }
 

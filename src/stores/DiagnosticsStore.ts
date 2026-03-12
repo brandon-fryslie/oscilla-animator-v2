@@ -340,6 +340,9 @@ export class DiagnosticsStore {
     poolKeyCount: 0,
   };
 
+  // GPU fault state (set when a GPU error or device loss is detected)
+  private _gpuFaultState: { severity: 'warning' | 'fatal'; code: string; message: string } | null = null;
+
   // =============================================================================
   // Constructor
   // =============================================================================
@@ -349,7 +352,7 @@ export class DiagnosticsStore {
 
     makeObservable<
       DiagnosticsStore,
-      '_revision' | '_mutedDiagnosticIds' | '_logs' | '_compilationStats' | '_frameTiming' | '_frameTimingHistory' | '_lifetimeStats' | '_jankLog' | '_memoryStats' | 'incrementRevision'
+      '_revision' | '_mutedDiagnosticIds' | '_logs' | '_compilationStats' | '_frameTiming' | '_frameTimingHistory' | '_lifetimeStats' | '_jankLog' | '_memoryStats' | '_gpuFaultState' | 'incrementRevision'
     >(this, {
       // Observable revision counter
       _revision: observable,
@@ -399,6 +402,12 @@ export class DiagnosticsStore {
       _memoryStats: observable,
       memoryStats: computed,
       updateMemoryStats: action,
+
+      // GPU Fault API
+      _gpuFaultState: observable,
+      gpuFaultState: computed,
+      setGpuFault: action,
+      clearGpuFault: action,
     });
   }
 
@@ -852,5 +861,21 @@ export class DiagnosticsStore {
    */
   updateMemoryStats(stats: MemoryStats): void {
     this._memoryStats = stats;
+  }
+
+  // =============================================================================
+  // GPU Fault API
+  // =============================================================================
+
+  get gpuFaultState(): { severity: 'warning' | 'fatal'; code: string; message: string } | null {
+    return this._gpuFaultState;
+  }
+
+  setGpuFault(fault: { severity: 'warning' | 'fatal'; code: string; message: string }): void {
+    this._gpuFaultState = fault;
+  }
+
+  clearGpuFault(): void {
+    this._gpuFaultState = null;
   }
 }
