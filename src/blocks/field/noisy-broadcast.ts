@@ -34,6 +34,13 @@ function sliderUiHint(min: number, max: number, step: number): { kind: 'slider';
   return { kind: 'slider', min, max, step };
 }
 
+function requireInput<T>(value: T | undefined, label: string): T {
+  if (value === undefined) {
+    throw new Error(`NoisyBroadcast ${label} input is required`);
+  }
+  return value;
+}
+
 export function register(): void {
   registerBlock({
     type: 'NoisyBroadcast',
