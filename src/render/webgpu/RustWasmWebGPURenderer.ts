@@ -531,6 +531,18 @@ export class WebGPURenderer {
     );
   }
 
+  private formatRuntimeConsolePayload(payload: Record<string, unknown>): string {
+    return `[runtimeConsole] ${JSON.stringify(payload)}`;
+  }
+
+  private emitRuntimeConsoleInfo(payload: Record<string, unknown>): void {
+    console.info(this.formatRuntimeConsolePayload(payload));
+  }
+
+  private emitRuntimeConsoleWarn(payload: Record<string, unknown>): void {
+    console.warn(this.formatRuntimeConsolePayload(payload));
+  }
+
   private buildFatalTransition(transition: RendererFatalTransition): RendererFatalTransition {
     return transition;
   }
@@ -738,7 +750,7 @@ export class WebGPURenderer {
     this.renderInputDebugLogged = true;
     const sample = this.buildSinkTableDebugSample(sinkTableWords, wordCount);
     this.latestSinkTableSample = sample;
-    console.info(`[runtimeConsole] ${JSON.stringify({ kind: 'render-input-sample', ...sample })}`);
+    this.emitRuntimeConsoleInfo({ kind: 'render-input-sample', ...sample });
   }
 
   setViewportFrame(frame: RuntimeViewportFrame): void {
@@ -828,7 +840,7 @@ export class WebGPURenderer {
       };
       // [LAW:one-source-of-truth] Renderer boundary emits one canonical
       // structured line for pipeline install debugging in runtimeConsole mode.
-      console.info(`[runtimeConsole] ${JSON.stringify(payload)}`);
+      this.emitRuntimeConsoleInfo(payload);
     }
     this.worker.postMessage({ type: 'PAUSE' } satisfies RustRendererWorkerInboundMessage);
     try {
@@ -1219,15 +1231,13 @@ export class WebGPURenderer {
     // [LAW:locality-or-seam] Renderer execution should not own debug payload
     // transport and cadence policy details.
     // https://github.com/brandon-fryslie/oscilla-animator-v2/issues/159
-    console.info(
-      `[runtimeConsole] ${JSON.stringify({
-        kind: 'sink-table-sample',
-        wordCount: sample.sinkTableWordCount,
-        totalRecords: sample.totalRecords,
-        firstRecord: sample.firstRecord,
-        firstDescriptor: sample.firstDescriptor,
-      })}`,
-    );
+    this.emitRuntimeConsoleInfo({
+      kind: 'sink-table-sample',
+      wordCount: sample.sinkTableWordCount,
+      totalRecords: sample.totalRecords,
+      firstRecord: sample.firstRecord,
+      firstDescriptor: sample.firstDescriptor,
+    });
   }
 
   private async bootstrap(
@@ -1333,13 +1343,11 @@ export class WebGPURenderer {
     // serialization/log formatting.
     // https://github.com/brandon-fryslie/oscilla-animator-v2/issues/159
     if (RUNTIME_CONSOLE_ENABLED) {
-      console.warn(
-        `[runtimeConsole] ${JSON.stringify({
-          kind: 'render-health-warning',
-          code,
-          details,
-        })}`,
-      );
+      this.emitRuntimeConsoleWarn({
+        kind: 'render-health-warning',
+        code,
+        details,
+      });
     }
   }
 

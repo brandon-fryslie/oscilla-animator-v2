@@ -24,6 +24,13 @@ const NOISY_BROADCAST_IN_CARD = cardinalityVar(cardinalityVarId('noisy_broadcast
   instanceBinding: 'inherit',
 });
 
+function requireInput<T>(value: T | undefined, label: string): T {
+  if (value === undefined) {
+    throw new Error(`NoisyBroadcast ${label} input is required`);
+  }
+  return value;
+}
+
 export function register(): void {
   registerBlock({
     type: 'NoisyBroadcast',
@@ -59,12 +66,9 @@ export function register(): void {
       },
     },
     lower: ({ ctx, inputsById }) => {
-      const value = inputsById.value;
-      const amount = inputsById.amount;
-      const seed = inputsById.seed;
-      if (!value) throw new Error('NoisyBroadcast value input is required');
-      if (!amount) throw new Error('NoisyBroadcast amount input is required');
-      if (!seed) throw new Error('NoisyBroadcast seed input is required');
+      const value = requireInput(inputsById.value, 'value');
+      const amount = requireInput(inputsById.amount, 'amount');
+      const seed = requireInput(inputsById.seed, 'seed');
   
       const outType = ctx.outTypes[0];
       const floatFieldType = { ...canonicalType(FLOAT, outType.unit), extent: outType.extent };
