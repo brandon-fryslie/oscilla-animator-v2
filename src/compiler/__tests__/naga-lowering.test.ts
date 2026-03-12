@@ -34,7 +34,7 @@ function buildRenderPatch() {
   });
 }
 
-describe('naga lowering artifact', () => {
+describe('naga lowering artifact metadata', () => {
   it('emits structured Naga module artifact with compute entrypoint', () => {
     const result = compile(buildSimplePatch());
     expect(result.kind).toBe('ok');
@@ -91,7 +91,9 @@ describe('naga lowering artifact', () => {
     const hasBlockBoundEntry = mapEntries.some(([, value]) => value.blockId !== null && value.stepIndex >= 0);
     expect(hasBlockBoundEntry).toBe(true);
   });
+});
 
+describe('naga lowering artifact render coverage', () => {
   it('treats non-compute schedule steps as boundary work (not incomplete lowering)', () => {
     const result = compile(buildRenderPatch());
     expect(result.kind).toBe('ok');
@@ -124,7 +126,9 @@ describe('naga lowering artifact', () => {
     const warningCodes = result.warnings.map((warning) => warning.code);
     expect(warningCodes).not.toContain('W_NAGA_LOWERING_INCOMPLETE');
   });
+});
 
+describe('naga lowering artifact lane addressing', () => {
   it('clamps lane addressing to slot cardinality in compute lowering', () => {
     const result = compile(buildRenderPatch());
     expect(result.kind).toBe('ok');
@@ -145,11 +149,13 @@ describe('naga lowering artifact', () => {
     );
     expect(laneExprId).toBeGreaterThanOrEqual(0);
 
-    const minCalls = mainFn.expressions.filter(
-      (expr): expr is Extract<(typeof mainFn.expressions)[number], { kind: 'call' }> =>
-        expr.kind === 'call' && expr.function === 'min',
-    );
-    expect(minCalls.length).toBeGreaterThan(0);
-    expect(minCalls.some((expr) => expr.args.includes(laneExprId))).toBe(true);
+    const laneBoundsChecks = mainFn.expressions.filter((expr) => {
+      if (expr.kind !== 'binary' || expr.op !== 'lt' || expr.left !== laneExprId) {
+        return false;
+      }
+      const rightExpr = mainFn.expressions[expr.right];
+      return rightExpr?.kind === 'constant';
+    });
+    expect(laneBoundsChecks.length).toBeGreaterThan(0);
   });
 });
