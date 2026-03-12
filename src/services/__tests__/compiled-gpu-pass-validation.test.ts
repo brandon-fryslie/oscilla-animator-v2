@@ -46,6 +46,13 @@ describe('validateCompiledGpuPassBundle', () => {
     expect(result.bundle.passes[0]).toEqual(buildPass());
   });
 
+  it('rejects empty pass bundles', () => {
+    const result = validateCompiledGpuPassBundle(buildBundle([]));
+    expect(result.kind).toBe('error');
+    if (result.kind !== 'error') return;
+    expect(result.errors.some((error) => error.message.includes('empty GPU artifact pass bundle'))).toBe(true);
+  });
+
   it('rejects pass bundles with invalid stage', () => {
     expectValidationError(
       { stage: 'vertex' as unknown as 'compute' },
@@ -66,6 +73,15 @@ describe('validateCompiledGpuPassBundle', () => {
 
   it('rejects WGSL payloads missing compute annotation', () => {
     expectValidationError({ wgsl: 'fn compute_main() {}' }, 'missing @compute entry annotation');
+  });
+
+  it('rejects WGSL payloads where @compute is not on the declared entrypoint', () => {
+    expectValidationError(
+      {
+        wgsl: '@compute @workgroup_size(64, 1, 1)\nfn other_main() {}\nfn compute_main() {}',
+      },
+      'missing @compute entry annotation',
+    );
   });
 
   it('rejects WGSL payloads missing declared entrypoint function', () => {

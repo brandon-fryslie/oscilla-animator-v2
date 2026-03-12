@@ -99,15 +99,20 @@ function validateWgslSignature(
   index: number,
   errors: CompileError[],
 ): void {
-  if (wgsl && !wgsl.includes('@compute')) {
-    errors.push(createPassError(index, `pass "${passId}" is missing @compute entry annotation`));
-  }
   if (!wgsl || !entryPoint) {
     return;
   }
-  const entryPattern = new RegExp(`\\bfn\\s+${escapeRegex(entryPoint)}\\s*\\(`);
-  if (!entryPattern.test(wgsl)) {
+  const entryPattern = new RegExp(
+    `((?:\\s*@[\\w:]+(?:\\([^)]*\\))?)*)\\s*fn\\s+${escapeRegex(entryPoint)}\\s*\\(`,
+  );
+  const entryMatch = entryPattern.exec(wgsl);
+  if (entryMatch === null) {
     errors.push(createPassError(index, `pass "${passId}" is missing fn ${entryPoint}(...)`));
+    return;
+  }
+  const entryAttributes = entryMatch[1] ?? '';
+  if (!entryAttributes.includes('@compute')) {
+    errors.push(createPassError(index, `pass "${passId}" is missing @compute entry annotation`));
   }
 }
 
