@@ -25,6 +25,16 @@ export interface CompiledGpuArtifactBundle {
   readonly passSignatures?: readonly CompiledGpuPassSignature[];
 }
 
+export function toCompiledGpuPassSignature(
+  pass: Pick<CompiledGpuPassArtifact, 'passId' | 'stage' | 'entryPoint'>,
+): CompiledGpuPassSignature {
+  return {
+    passId: pass.passId,
+    stage: pass.stage,
+    entryPoint: pass.entryPoint,
+  };
+}
+
 export type CompileWorkerBackendResult =
   | {
       readonly kind: 'ok';
