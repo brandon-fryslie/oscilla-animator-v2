@@ -303,14 +303,6 @@ export function packDrawPrepSinkTableV1(
           `rotationSlot sink(instance=${String(renderStep.instanceId)})`,
         )
         : null;
-    const scale2SlotAddress =
-      renderStep.scale2Slot !== undefined
-        ? resolveSlotArenaAddress(
-          program,
-          renderStep.scale2Slot,
-          `scale2Slot sink(instance=${String(renderStep.instanceId)})`,
-        )
-        : null;
 
     writeDrawPrepSinkRecord(words, recordWriteIndex, {
       drawMode: drawModeToCode(sink.drawMode),
@@ -339,12 +331,13 @@ export function packDrawPrepSinkTableV1(
     words[descriptorBase + DrawPrepSinkDescriptorWord.RotationLaneStride] = rotationSlotAddress?.laneStride ?? 0;
     words[descriptorBase + DrawPrepSinkDescriptorWord.RotationComponentStride] = rotationSlotAddress?.componentStride ?? 0;
     words[descriptorBase + DrawPrepSinkDescriptorWord.RotationDefaultBits] = float32ToUint32Bits(0);
-    words[descriptorBase + DrawPrepSinkDescriptorWord.Scale2Mode] = scale2SlotAddress
-      ? OPTIONAL_MODE_SLOT
-      : OPTIONAL_MODE_CONSTANT;
-    words[descriptorBase + DrawPrepSinkDescriptorWord.Scale2BaseOffset] = scale2SlotAddress?.baseOffset ?? 0;
-    words[descriptorBase + DrawPrepSinkDescriptorWord.Scale2LaneStride] = scale2SlotAddress?.laneStride ?? 0;
-    words[descriptorBase + DrawPrepSinkDescriptorWord.Scale2ComponentStride] = scale2SlotAddress?.componentStride ?? 0;
+    // [LAW:single-enforcer] Canonical isotropic-scale policy is enforced at the
+    // runtime sink-table boundary: deprecated scale2 descriptor lanes are pinned
+    // to identity constants and never sourced from slots.
+    words[descriptorBase + DrawPrepSinkDescriptorWord.Scale2Mode] = OPTIONAL_MODE_CONSTANT;
+    words[descriptorBase + DrawPrepSinkDescriptorWord.Scale2BaseOffset] = 0;
+    words[descriptorBase + DrawPrepSinkDescriptorWord.Scale2LaneStride] = 0;
+    words[descriptorBase + DrawPrepSinkDescriptorWord.Scale2ComponentStride] = 0;
     words[descriptorBase + DrawPrepSinkDescriptorWord.Scale2DefaultXBits] = float32ToUint32Bits(1);
     words[descriptorBase + DrawPrepSinkDescriptorWord.Scale2DefaultYBits] = float32ToUint32Bits(1);
 

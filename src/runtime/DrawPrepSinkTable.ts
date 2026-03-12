@@ -48,6 +48,8 @@ export enum DrawPrepSinkDescriptorWord {
   RotationLaneStride = 11,
   RotationComponentStride = 12,
   RotationDefaultBits = 13,
+  // [LAW:one-source-of-truth] Descriptor layout keeps v1 wire compatibility;
+  // canonical execution treats scale2 lanes as deprecated identity placeholders.
   Scale2Mode = 14,
   Scale2BaseOffset = 15,
   Scale2LaneStride = 16,

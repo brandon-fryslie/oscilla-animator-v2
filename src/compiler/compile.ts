@@ -367,7 +367,6 @@ function collectRuntimeLiveExprIdsForPatching(args: {
           pushFieldExprForSlot(step.controlPoints.slot as number);
         }
         pushFieldExprForSlot(step.rotationSlot as number | undefined);
-        pushFieldExprForSlot(step.scale2Slot as number | undefined);
         break;
       case 'continuityMapBuild':
       case 'continuityApply':
@@ -1086,7 +1085,6 @@ function collectComputeSlots(scheduleIR: ScheduleIR): ValueSlot[] {
         slots.add(step.shape.slot);
         slots.add(step.scale.slot);
         if (step.rotationSlot !== undefined) slots.add(step.rotationSlot);
-        if (step.scale2Slot !== undefined) slots.add(step.scale2Slot);
         if (step.controlPoints?.k === 'slot') slots.add(step.controlPoints.slot);
         break;
       case 'eventDispatch':
