@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   PATH_RENDER_WGSL,
   shaderEncodesViewToClipAspectCorrection,
+  shaderUsesCanonicalIsotropicScale,
   shaderUsesCanonicalVpMTransformChain,
 } from '../shaders';
 
@@ -14,6 +15,10 @@ describe('PATH_RENDER_WGSL transform contract', () => {
 
   it('keeps aspect correction in the view->clip stage', () => {
     expect(shaderEncodesViewToClipAspectCorrection(PATH_RENDER_WGSL)).toBe(true);
+  });
+
+  it('enforces isotropic scale in the canonical transform path', () => {
+    expect(shaderUsesCanonicalIsotropicScale(PATH_RENDER_WGSL)).toBe(true);
   });
 
   it('does not rely on legacy inline finalPx/ndc projection variables', () => {

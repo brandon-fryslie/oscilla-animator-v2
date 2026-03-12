@@ -303,14 +303,6 @@ export function packDrawPrepSinkTableV1(
           `rotationSlot sink(instance=${String(renderStep.instanceId)})`,
         )
         : null;
-    const scale2SlotAddress =
-      renderStep.scale2Slot !== undefined
-        ? resolveSlotArenaAddress(
-          program,
-          renderStep.scale2Slot,
-          `scale2Slot sink(instance=${String(renderStep.instanceId)})`,
-        )
-        : null;
 
     writeDrawPrepSinkRecord(words, recordWriteIndex, {
       drawMode: drawModeToCode(sink.drawMode),
@@ -339,14 +331,6 @@ export function packDrawPrepSinkTableV1(
     words[descriptorBase + DrawPrepSinkDescriptorWord.RotationLaneStride] = rotationSlotAddress?.laneStride ?? 0;
     words[descriptorBase + DrawPrepSinkDescriptorWord.RotationComponentStride] = rotationSlotAddress?.componentStride ?? 0;
     words[descriptorBase + DrawPrepSinkDescriptorWord.RotationDefaultBits] = float32ToUint32Bits(0);
-    words[descriptorBase + DrawPrepSinkDescriptorWord.Scale2Mode] = scale2SlotAddress
-      ? OPTIONAL_MODE_SLOT
-      : OPTIONAL_MODE_CONSTANT;
-    words[descriptorBase + DrawPrepSinkDescriptorWord.Scale2BaseOffset] = scale2SlotAddress?.baseOffset ?? 0;
-    words[descriptorBase + DrawPrepSinkDescriptorWord.Scale2LaneStride] = scale2SlotAddress?.laneStride ?? 0;
-    words[descriptorBase + DrawPrepSinkDescriptorWord.Scale2ComponentStride] = scale2SlotAddress?.componentStride ?? 0;
-    words[descriptorBase + DrawPrepSinkDescriptorWord.Scale2DefaultXBits] = float32ToUint32Bits(1);
-    words[descriptorBase + DrawPrepSinkDescriptorWord.Scale2DefaultYBits] = float32ToUint32Bits(1);
 
     const nextFirstInstance = packedFirstInstance + instanceCount;
     firstInstance = assertFiniteUint32(nextFirstInstance, 'firstInstancePrefixSum');

@@ -66,7 +66,7 @@ struct SceneUniforms {
 struct InstanceData {
   // transform0 = [posXNorm, posYNorm, sizeNorm, rotationRad]
   transform0: vec4<f32>,
-  // transform1 = [scale2X, scale2Y, topologyWordOffset, _]
+  // transform1 = [reservedX, reservedY, topologyWordOffset, _]
   transform1: vec4<f32>,
   // color = [h, c, l, a] where h is turns and c/l/a are normalized
   color: vec4<f32>,
@@ -155,10 +155,10 @@ fn vs_main(input: VertexInput, @builtin(instance_index) instanceIndex: u32) -> V
   let viewportMinPx = scene.v1.y;
 
   let centerPx = inst.transform0.xy * viewportPx;
-  let scalePx = vec2<f32>(
-    inst.transform0.z * inst.transform1.x,
-    inst.transform0.z * inst.transform1.y
-  ) * viewportMinPx;
+  // [LAW:single-enforcer] Canonical transform semantics are isotropic at the
+  // renderer boundary: only scalar scale from transform0.z is applied.
+  let uniformScalePx = inst.transform0.z * viewportMinPx;
+  let scalePx = vec2<f32>(uniformScalePx, uniformScalePx);
   let localPos = vec3<f32>(input.localPos, 1.0);
   let model = build_model_matrix(centerPx, scalePx, inst.transform0.w);
   let viewProjection = build_view_projection_matrix(viewportPx, panPx, zoom);
@@ -281,4 +281,11 @@ export function shaderUsesCanonicalVpMTransformChain(source: string = PATH_RENDE
 
 export function shaderEncodesViewToClipAspectCorrection(source: string = PATH_RENDER_WGSL): boolean {
   return source.includes('2.0 / viewportPx.x') && source.includes('-2.0 / viewportPx.y');
+}
+
+export function shaderUsesCanonicalIsotropicScale(source: string = PATH_RENDER_WGSL): boolean {
+  return source.includes('let uniformScalePx = inst.transform0.z * viewportMinPx;')
+    && source.includes('let scalePx = vec2<f32>(uniformScalePx, uniformScalePx);')
+    && !source.includes('inst.transform1.x')
+    && !source.includes('inst.transform1.y');
 }
