@@ -20,7 +20,9 @@ const ALL_FLUID_BLOCK_TYPES = new Set<string>([
   ...COMPOSABLE_FLUID_BLOCK_TYPES,
 ]);
 const NO_SLOT_U32 = 0xFFFF_FFFF;
-const CANONICAL_FLUID_PASS_STAGES = [
+// [LAW:one-source-of-truth] Single canonical ordering for fluid pass stages.
+// Validation in compiled-gpu-pass-validation.ts derives from this array.
+export const CANONICAL_FLUID_PASS_STAGES = [
   'splat',
   'curl',
   'vorticity',

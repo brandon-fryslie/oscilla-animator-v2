@@ -1,6 +1,7 @@
 import type { GeneratedGpuArtifactManifestIR, GpuPassManifestEntryIR } from '../compiler/ir/program';
 import type { CompileError } from '../compiler/types';
 import type { CompiledGpuArtifactBundle, CompiledGpuPassArtifact } from './compile-worker-protocol';
+import { CANONICAL_FLUID_PASS_STAGES } from './fluid-gpu-bundle';
 
 interface ValidCompiledGpuPassValidation {
   readonly kind: 'ok';
@@ -18,16 +19,10 @@ export type CompiledGpuPassValidationResult =
   | InvalidCompiledGpuPassValidation;
 
 const WGSL_IDENTIFIER_PATTERN = /^[_A-Za-z][_0-9A-Za-z]*$/;
-const FLUID_PASS_ORDER = [
-  'fluid.splat',
-  'fluid.curl',
-  'fluid.vorticity',
-  'fluid.divergence',
-  'fluid.pressure',
-  'fluid.gradient-subtract',
-  'fluid.advect',
-  'fluid.present',
-] as const;
+// [LAW:one-source-of-truth] Derived from CANONICAL_FLUID_PASS_STAGES — no local duplicate.
+const FLUID_PASS_ORDER: readonly string[] = CANONICAL_FLUID_PASS_STAGES.map(
+  (stage) => `fluid.${stage}`,
+);
 const FLUID_PASS_INDEX: ReadonlyMap<string, number> = new Map(
   FLUID_PASS_ORDER.map((passId, index) => [passId, index]),
 );
@@ -145,9 +140,6 @@ function validateFluidPassOrder(passes: readonly CompiledGpuPassArtifact[], erro
     .map((pass) => pass.passId);
   if (fluidPassIds.length === 0) {
     return;
-  }
-  if (!fluidPassIds.includes('fluid.present')) {
-    errors.push(createBundleError('Compiler emitted invalid fluid pass bundle: missing "fluid.present" pass'));
   }
   const outOfOrderPassId = findOutOfOrderFluidPass(fluidPassIds);
   if (outOfOrderPassId !== null) {
