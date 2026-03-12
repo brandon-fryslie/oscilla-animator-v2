@@ -145,11 +145,42 @@ describe('naga lowering artifact', () => {
     );
     expect(laneExprId).toBeGreaterThanOrEqual(0);
 
-    const minCalls = mainFn.expressions.filter(
-      (expr): expr is Extract<(typeof mainFn.expressions)[number], { kind: 'call' }> =>
-        expr.kind === 'call' && expr.function === 'min',
-    );
-    expect(minCalls.length).toBeGreaterThan(0);
-    expect(minCalls.some((expr) => expr.args.includes(laneExprId))).toBe(true);
+    const minCallExprIds: number[] = [];
+    for (let exprId = 0; exprId < mainFn.expressions.length; exprId += 1) {
+      const expr = mainFn.expressions[exprId];
+      if (expr.kind === 'call' && expr.function === 'min') {
+        minCallExprIds.push(exprId);
+      }
+    }
+    expect(minCallExprIds.length).toBeGreaterThan(0);
+
+    const dependsOnExpr = (
+      exprId: number,
+      targetExprId: number,
+      visited: Set<number> = new Set(),
+    ): boolean => {
+      if (exprId === targetExprId) return true;
+      if (visited.has(exprId)) return false;
+      visited.add(exprId);
+
+      const expr = mainFn.expressions[exprId];
+      if (!expr) return false;
+
+      for (const value of Object.values(expr)) {
+        if (typeof value === 'number' && dependsOnExpr(value, targetExprId, visited)) {
+          return true;
+        }
+        if (Array.isArray(value)) {
+          for (const item of value) {
+            if (typeof item === 'number' && dependsOnExpr(item, targetExprId, visited)) {
+              return true;
+            }
+          }
+        }
+      }
+      return false;
+    };
+
+    expect(minCallExprIds.some((exprId) => dependsOnExpr(exprId, laneExprId))).toBe(true);
   });
 });

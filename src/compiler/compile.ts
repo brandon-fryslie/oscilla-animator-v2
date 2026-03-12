@@ -63,7 +63,7 @@ import { pass4DepGraph } from './backend/derive-dep-graph';
 import { pass5CycleValidation } from './backend/schedule-scc';
 import { pass6BlockLowering } from './backend/lower-blocks';
 import { pass7Schedule } from './backend/schedule-program';
-import { allocateRenderMaterializationPipeline } from './backend/render-materialization-pipeline';
+import { allocateContinuityPipeline } from './backend/continuity-pipeline';
 
 registerAllBlocks();
 
@@ -234,12 +234,12 @@ export function compileFromFrontend(
     }
 
 
-    // Pass 6b: Render materialization pipeline allocation.
-    // [LAW:single-enforcer] All render materialization slots are allocated through builder.
-    const renderMaterializationPipeline = allocateRenderMaterializationPipeline(unlinkedIR, acyclicPatch);
+    // Pass 6b: Continuity Pipeline Allocation
+    // [LAW:single-enforcer] All continuity pipeline slots allocated through builder.
+    const continuityPipeline = allocateContinuityPipeline(unlinkedIR, acyclicPatch);
 
     // Pass 7: Schedule Construction (pure ordering, no allocation)
-    const scheduleIR = pass7Schedule(unlinkedIR, acyclicPatch, renderMaterializationPipeline);
+    const scheduleIR = pass7Schedule(unlinkedIR, acyclicPatch, continuityPipeline);
 
     compilationInspector.capturePass('schedule', unlinkedIR, scheduleIR);
 
