@@ -26,6 +26,7 @@ let bootstrapped = false;
 let bootstrapInFlight = false;
 let runtimePollTimer: ReturnType<typeof setInterval> | null = null;
 let deviceLostNotified = false;
+let runtimePollFatalNotified = false;
 
 function postWorkerMessage(message: RustRendererWorkerOutboundMessage): void {
   self.postMessage(message);
@@ -33,6 +34,19 @@ function postWorkerMessage(message: RustRendererWorkerOutboundMessage): void {
 
 function postWorkerFatalError(code: string, message: string): void {
   postWorkerMessage({ type: 'FATAL_ERROR', code, message });
+}
+
+function toErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function postRuntimePollFatalError(code: string, message: string): void {
+  if (runtimePollFatalNotified) {
+    return;
+  }
+  runtimePollFatalNotified = true;
+  stopRuntimePolling();
+  postWorkerFatalError(code, message);
 }
 
 function postDeviceLost(code: string, reason: string): void {
@@ -83,6 +97,7 @@ async function handleBootstrap(message: Extract<RustRendererWorkerInboundMessage
     attachRustRendererSharedSinkTable(message.sharedSinkTable);
     bootstrapped = true;
     deviceLostNotified = false;
+    runtimePollFatalNotified = false;
     startRuntimePolling();
     postWorkerMessage({ type: 'BOOTSTRAP_SUCCESS' });
   } finally {
@@ -129,7 +144,10 @@ function stopRuntimePolling(): void {
 }
 
 function startRuntimePolling(): void {
-  if (runtimePollTimer !== null) return;
+  if (runtimePollTimer !== null) {
+    return;
+  }
+  runtimePollFatalNotified = false;
   // TODO(#161): Keep worker polling boundary-only; move remaining telemetry
   // orchestration/helpers out of this file into dedicated telemetry modules.
   // https://github.com/brandon-fryslie/oscilla-animator-v2/issues/161
@@ -141,92 +159,105 @@ function startRuntimePolling(): void {
       if (rawPacket == null) {
         return;
       }
-      const packet = parseSchedulerPacket(rawPacket);
-      if (packet) {
-        postWorkerMessage(packet.heartbeat);
-        if (packet.heartbeat.state === 'Lost') {
-          postDeviceLost('scheduler_lost', 'Rust scheduler entered Lost state');
-        }
-        for (const event of packet.events) {
-          postWorkerMessage(event);
-          if (event.state === 'Lost') {
-            postDeviceLost(event.code, event.message);
-          }
-        }
+      const packet = parseRuntimeSchedulerPacket(rawPacket);
+      if (packet === null) {
         return;
       }
-      postWorkerFatalError('scheduler_packet_invalid', 'Rust worker received invalid scheduler observability payload');
+      publishRuntimeSchedulerPacket(packet.heartbeat, packet.events);
     } catch (error) {
-      postWorkerFatalError(
+      postRuntimePollFatalError(
         'runtime_poll_failure',
-        `Rust worker runtime poll failure: ${error instanceof Error ? error.message : String(error)}`,
+        `Rust worker runtime poll failure: ${toErrorMessage(error)}`,
       );
     }
   }, POLL_INTERVAL_MS);
 }
 
-self.onmessage = (event: MessageEvent<RustRendererWorkerInboundMessage>) => {
-  const message = event.data;
-  if (!message) return;
-  if (message.type === 'SHUTDOWN') {
+function parseRuntimeSchedulerPacket(rawPacket: unknown): ReturnType<typeof parseSchedulerPacket> | null {
+  try {
+    // [LAW:single-enforcer] Packet contract validation is enforced at the
+    // telemetry parser boundary, not duplicated at worker callsites.
+    return parseSchedulerPacket(rawPacket);
+  } catch (error) {
+    postRuntimePollFatalError(
+      'scheduler_packet_invalid',
+      `Rust worker received invalid scheduler observability payload: ${toErrorMessage(error)}`,
+    );
+    return null;
+  }
+}
+
+function publishRuntimeSchedulerPacket(
+  heartbeat: ReturnType<typeof parseSchedulerPacket>['heartbeat'],
+  events: ReturnType<typeof parseSchedulerPacket>['events'],
+): void {
+  postWorkerMessage(heartbeat);
+  if (heartbeat.state === 'Lost') {
+    postDeviceLost('scheduler_lost', 'Rust scheduler entered Lost state');
+  }
+  for (const event of events) {
+    postWorkerMessage(event);
+    if (event.state === 'Lost') {
+      postDeviceLost(event.code, event.message);
+    }
+  }
+}
+
+function withFatalBoundary(code: string, prefix: string, operation: () => void): void {
+  try {
+    operation();
+  } catch (error) {
+    postWorkerFatalError(code, `${prefix}: ${toErrorMessage(error)}`);
+  }
+}
+
+function withAsyncFatalBoundary(code: string, prefix: string, operation: () => Promise<void>): void {
+  void operation().catch((error) => {
+    postWorkerFatalError(code, `${prefix}: ${toErrorMessage(error)}`);
+  });
+}
+
+type InboundMessage = RustRendererWorkerInboundMessage;
+type InboundMessageType = InboundMessage['type'];
+type InboundHandler = (message: InboundMessage) => void;
+
+const INBOUND_HANDLERS: Record<InboundMessageType, InboundHandler> = {
+  SHUTDOWN: () => {
     stopRuntimePolling();
     self.close();
-    return;
-  }
-  if (message.type === 'PAUSE') {
-    try {
-      handlePause();
-    } catch (error) {
-      postWorkerFatalError(
-        'pause_failure',
-        `Rust worker pause failure: ${error instanceof Error ? error.message : String(error)}`,
-      );
-    }
-    return;
-  }
-  if (message.type === 'RESUME') {
-    try {
-      handleResume();
-    } catch (error) {
-      postWorkerFatalError(
-        'resume_failure',
-        `Rust worker resume failure: ${error instanceof Error ? error.message : String(error)}`,
-      );
-    }
-    return;
-  }
-  if (message.type === 'INJECT_POISON_ALLOC') {
+  },
+  PAUSE: () => {
+    withFatalBoundary('pause_failure', 'Rust worker pause failure', handlePause);
+  },
+  RESUME: () => {
+    withFatalBoundary('resume_failure', 'Rust worker resume failure', handleResume);
+  },
+  INJECT_POISON_ALLOC: () => {
     handleInjectPoisonAlloc();
-    return;
-  }
-  if (message.type === 'RESIZE_CANVAS') {
-    try {
-      handleResize(message);
-    } catch (error) {
-      postWorkerFatalError(
-        'resize_failure',
-        `Rust worker resize failure: ${error instanceof Error ? error.message : String(error)}`,
-      );
-    }
-    return;
-  }
-  if (message.type === 'REBUILD_GPU_PIPELINES') {
-    void handleRebuildGpuPipelines(message).catch((error) => {
-      postWorkerFatalError(
-        'pipeline_rebuild_failure',
-        `Rust worker pipeline rebuild failure: ${error instanceof Error ? error.message : String(error)}`,
-      );
+  },
+  RESIZE_CANVAS: (message) => {
+    withFatalBoundary('resize_failure', 'Rust worker resize failure', () => {
+      handleResize(message as Extract<InboundMessage, { type: 'RESIZE_CANVAS' }>);
     });
+  },
+  REBUILD_GPU_PIPELINES: (message) => {
+    withAsyncFatalBoundary('pipeline_rebuild_failure', 'Rust worker pipeline rebuild failure', () => (
+      handleRebuildGpuPipelines(message as Extract<InboundMessage, { type: 'REBUILD_GPU_PIPELINES' }>)
+    ));
+  },
+  BOOTSTRAP: (message) => {
+    withAsyncFatalBoundary('bootstrap_failure', 'Rust worker bootstrap failure', () => (
+      handleBootstrap(message as Extract<InboundMessage, { type: 'BOOTSTRAP' }>)
+    ));
+  },
+};
+
+self.onmessage = (event: MessageEvent<RustRendererWorkerInboundMessage>) => {
+  const message = event.data;
+  if (!message) {
     return;
   }
-  if (message.type === 'BOOTSTRAP') {
-    void handleBootstrap(message).catch((error) => {
-      postWorkerFatalError(
-        'bootstrap_failure',
-        `Rust worker bootstrap failure: ${error instanceof Error ? error.message : String(error)}`,
-      );
-    });
-  }
+  INBOUND_HANDLERS[message.type](message);
 };
 
 self.addEventListener('message', (event: MessageEvent<unknown>) => {

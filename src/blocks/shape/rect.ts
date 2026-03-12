@@ -18,7 +18,7 @@ import { FLOAT, SHAPE, INT, VEC2 } from '../../core/canonical-types';
 import { DOMAIN_CONTROL } from '../../core/domain-registry';
 import { defaultSourceConst } from '../../types';
 import { OpCode } from '../../compiler/ir/types';
-import { resolveInputConstant } from '../lower-utils';
+import { promoteToMany, resolveInputConstant } from '../lower-utils';
 import { createLinePathTopology } from './_topology-helpers';
 
 /**
@@ -140,8 +140,8 @@ export function register(): void {
       const cos = ctx.b.opcode(OpCode.Cos);
       const sin = ctx.b.opcode(OpCode.Sin);
   
-      const resolutionBroadcast = ctx.b.broadcast(resolutionSig, floatFieldType);
-      const twoPiBroadcast = ctx.b.broadcast(twoPi, floatFieldType);
+      const resolutionBroadcast = promoteToMany(resolutionSig, floatFieldType, ctx.b);
+      const twoPiBroadcast = promoteToMany(twoPi, floatFieldType, ctx.b);
       const angleFrac = ctx.b.zipAuto([indexField, resolutionBroadcast], div, floatFieldType);
       const angle = ctx.b.zipAuto([angleFrac, twoPiBroadcast], mul, floatFieldType);
   

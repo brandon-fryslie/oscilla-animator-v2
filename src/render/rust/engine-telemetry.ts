@@ -88,49 +88,97 @@ export function isPositiveInt(value: unknown): value is number {
   return typeof value === 'number' && Number.isInteger(value) && Number.isFinite(value) && value > 0;
 }
 
+type UnknownRecord = Record<string, unknown>;
+
+const STAGE_TIMING_FIELDS = [
+  'inputMarshalMs',
+  'simulationDispatchMs',
+  'fluidPassChainMs',
+  'drawPrepMs',
+  'renderMs',
+  'swapMs',
+  'totalFrameMs',
+] as const;
+
+const DISPATCH_COUNTER_FIELDS = [
+  'computeDispatchCount',
+  'computeWorkgroupCount',
+  'activeLaneCount',
+  'guardedLaneCount',
+] as const;
+
+const RESOURCE_STATS_FIELDS = [
+  'shapeBankWordCount',
+  'sinkTableWordCount',
+  'indexedRecordCount',
+  'nonIndexedRecordCount',
+  'totalInstanceCount',
+  'canvasWidth',
+  'canvasHeight',
+  'pingPongIndex',
+] as const;
+
+const HEARTBEAT_NUMBER_FIELDS = [
+  'sequence',
+  'emittedAtMs',
+  'frameCount',
+  'loopCount',
+  'meanTickMs',
+  'stdDevTickMs',
+  'sampleCount',
+  'lastTickMs',
+  'lastSuccessMs',
+] as const;
+
+const RUNTIME_EVENT_STRING_FIELDS = [
+  'severity',
+  'code',
+  'stage',
+  'message',
+  'state',
+] as const;
+
+const RUNTIME_EVENT_NUMBER_FIELDS = [
+  'frameCount',
+  'loopCount',
+  'emittedAtMs',
+] as const;
+
+function asUnknownRecord(value: unknown): UnknownRecord | null {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+  return value as UnknownRecord;
+}
+
+function hasFiniteNumberFields(record: UnknownRecord, keys: readonly string[]): boolean {
+  return keys.every((key) => isFiniteNumber(record[key]));
+}
+
+function hasStringFields(record: UnknownRecord, keys: readonly string[]): boolean {
+  return keys.every((key) => typeof record[key] === 'string');
+}
+
 function isRawSchedulerStageTimingsTelemetry(value: unknown): value is RawSchedulerStageTimingsTelemetry {
-  if (!value || typeof value !== 'object') return false;
-  const telemetry = value as Partial<RawSchedulerStageTimingsTelemetry>;
-  return (
-    isFiniteNumber(telemetry.inputMarshalMs)
-    && isFiniteNumber(telemetry.simulationDispatchMs)
-    && isFiniteNumber(telemetry.fluidPassChainMs)
-    && isFiniteNumber(telemetry.drawPrepMs)
-    && isFiniteNumber(telemetry.renderMs)
-    && isFiniteNumber(telemetry.swapMs)
-    && isFiniteNumber(telemetry.totalFrameMs)
-  );
+  const telemetry = asUnknownRecord(value);
+  return telemetry !== null && hasFiniteNumberFields(telemetry, STAGE_TIMING_FIELDS);
 }
 
 function isRawSchedulerDispatchCountersTelemetry(value: unknown): value is RawSchedulerDispatchCountersTelemetry {
-  if (!value || typeof value !== 'object') return false;
-  const telemetry = value as Partial<RawSchedulerDispatchCountersTelemetry>;
-  return (
-    isFiniteNumber(telemetry.computeDispatchCount)
-    && isFiniteNumber(telemetry.computeWorkgroupCount)
-    && isFiniteNumber(telemetry.activeLaneCount)
-    && isFiniteNumber(telemetry.guardedLaneCount)
-  );
+  const telemetry = asUnknownRecord(value);
+  return telemetry !== null && hasFiniteNumberFields(telemetry, DISPATCH_COUNTER_FIELDS);
 }
 
 function isRawSchedulerResourceStatsTelemetry(value: unknown): value is RawSchedulerResourceStatsTelemetry {
-  if (!value || typeof value !== 'object') return false;
-  const telemetry = value as Partial<RawSchedulerResourceStatsTelemetry>;
-  return (
-    isFiniteNumber(telemetry.shapeBankWordCount)
-    && isFiniteNumber(telemetry.sinkTableWordCount)
-    && isFiniteNumber(telemetry.indexedRecordCount)
-    && isFiniteNumber(telemetry.nonIndexedRecordCount)
-    && isFiniteNumber(telemetry.totalInstanceCount)
-    && isFiniteNumber(telemetry.canvasWidth)
-    && isFiniteNumber(telemetry.canvasHeight)
-    && isFiniteNumber(telemetry.pingPongIndex)
-  );
+  const telemetry = asUnknownRecord(value);
+  return telemetry !== null && hasFiniteNumberFields(telemetry, RESOURCE_STATS_FIELDS);
 }
 
 function isRawSchedulerTelemetry(value: unknown): value is RawSchedulerTelemetry {
-  if (!value || typeof value !== 'object') return false;
-  const telemetry = value as Partial<RawSchedulerTelemetry>;
+  const telemetry = asUnknownRecord(value);
+  if (telemetry === null) {
+    return false;
+  }
   return (
     isRawSchedulerStageTimingsTelemetry(telemetry.stageTimings)
     && isRawSchedulerDispatchCountersTelemetry(telemetry.dispatchCounters)
@@ -139,35 +187,25 @@ function isRawSchedulerTelemetry(value: unknown): value is RawSchedulerTelemetry
 }
 
 function isRawSchedulerHeartbeat(value: unknown): value is RawSchedulerHeartbeat {
-  if (!value || typeof value !== 'object') return false;
-  const heartbeat = value as Partial<RawSchedulerHeartbeat>;
+  const heartbeat = asUnknownRecord(value);
+  if (heartbeat === null) {
+    return false;
+  }
   return (
-    isFiniteNumber(heartbeat.sequence)
+    hasFiniteNumberFields(heartbeat, HEARTBEAT_NUMBER_FIELDS)
     && typeof heartbeat.state === 'string'
-    && isFiniteNumber(heartbeat.emittedAtMs)
-    && isFiniteNumber(heartbeat.frameCount)
-    && isFiniteNumber(heartbeat.loopCount)
-    && isFiniteNumber(heartbeat.meanTickMs)
-    && isFiniteNumber(heartbeat.stdDevTickMs)
-    && isFiniteNumber(heartbeat.sampleCount)
-    && isFiniteNumber(heartbeat.lastTickMs)
-    && isFiniteNumber(heartbeat.lastSuccessMs)
     && isRawSchedulerTelemetry(heartbeat.telemetry)
   );
 }
 
 function isRawRuntimeEvent(value: unknown): value is RawRuntimeEvent {
-  if (!value || typeof value !== 'object') return false;
-  const event = value as Partial<RawRuntimeEvent>;
+  const event = asUnknownRecord(value);
+  if (event === null) {
+    return false;
+  }
   return (
-    typeof event.severity === 'string'
-    && typeof event.code === 'string'
-    && typeof event.stage === 'string'
-    && typeof event.message === 'string'
-    && typeof event.state === 'string'
-    && isFiniteNumber(event.frameCount)
-    && isFiniteNumber(event.loopCount)
-    && isFiniteNumber(event.emittedAtMs)
+    hasStringFields(event, RUNTIME_EVENT_STRING_FIELDS)
+    && hasFiniteNumberFields(event, RUNTIME_EVENT_NUMBER_FIELDS)
   );
 }
 
@@ -181,29 +219,53 @@ export interface ParsedSchedulerPacket {
   readonly events: readonly RustRendererRuntimeEvent[];
 }
 
-export function parseSchedulerPacket(packet: unknown): ParsedSchedulerPacket | null {
-  // Validate envelope object.
-  if (!packet || typeof packet !== 'object') return null;
+function failSchedulerPacketContract(details: string): never {
+  throw new Error(`Rust scheduler telemetry contract violation: ${details}`);
+}
+
+function requireSchedulerState(value: unknown, path: string): RustRendererSchedulerState {
+  if (!isSchedulerState(value)) {
+    failSchedulerPacketContract(`${path} must be one of Booting|Running|Paused|Lost`);
+  }
+  return value;
+}
+
+export function parseSchedulerPacket(packet: unknown): ParsedSchedulerPacket {
+  if (!packet || typeof packet !== 'object') {
+    failSchedulerPacketContract('packet must be an object');
+  }
   const candidate = packet as Partial<RawSchedulerPacket>;
-  // Validate mandatory packet fields.
-  if (typeof candidate.state !== 'string' || !isRawSchedulerHeartbeat(candidate.heartbeat)) return null;
-  // Validate event list shape.
-  if (!Array.isArray(candidate.events)) return null;
-  if (!candidate.events.every(isRawRuntimeEvent)) return null;
-  // Validate scheduler-state enums.
-  if (!isSchedulerState(candidate.state)) return null;
-  if (!isSchedulerState(candidate.heartbeat.state)) return null;
-  if (!candidate.events.every((event) => isSchedulerState(event.state))) return null;
+  if (typeof candidate.state !== 'string') {
+    failSchedulerPacketContract('packet.state must be a string');
+  }
+  const heartbeatCandidate = candidate.heartbeat;
+  if (!isRawSchedulerHeartbeat(heartbeatCandidate)) {
+    failSchedulerPacketContract('packet.heartbeat is missing required telemetry fields');
+  }
+  const eventsCandidate = candidate.events;
+  if (!Array.isArray(eventsCandidate)) {
+    failSchedulerPacketContract('packet.events must be an array');
+  }
+  if (!eventsCandidate.every(isRawRuntimeEvent)) {
+    failSchedulerPacketContract('packet.events contains invalid runtime-event payloads');
+  }
+  const rawEvents = eventsCandidate as readonly RawRuntimeEvent[];
+
+  const packetState = requireSchedulerState(candidate.state, 'packet.state');
+  const heartbeatState = requireSchedulerState(heartbeatCandidate.state, 'packet.heartbeat.state');
+  const events = rawEvents.map((event, index) => toOutboundRuntimeEvent(event, index));
 
   return {
-    state: candidate.state,
-    heartbeat: toOutboundHeartbeat(candidate.heartbeat),
-    events: candidate.events.map(toOutboundRuntimeEvent),
+    state: packetState,
+    heartbeat: toOutboundHeartbeat(heartbeatCandidate, heartbeatState),
+    events,
   };
 }
 
-function toOutboundHeartbeat(raw: RawSchedulerHeartbeat): RustRendererSchedulerHeartbeat {
-  const state = isSchedulerState(raw.state) ? raw.state : 'Lost';
+function toOutboundHeartbeat(
+  raw: RawSchedulerHeartbeat,
+  state: RustRendererSchedulerState,
+): RustRendererSchedulerHeartbeat {
   return {
     type: 'SCHEDULER_HEARTBEAT',
     state,
@@ -220,14 +282,14 @@ function toOutboundHeartbeat(raw: RawSchedulerHeartbeat): RustRendererSchedulerH
   };
 }
 
-function toOutboundRuntimeEvent(raw: RawRuntimeEvent): RustRendererRuntimeEvent {
+function toOutboundRuntimeEvent(raw: RawRuntimeEvent, index: number): RustRendererRuntimeEvent {
   return {
     type: 'RUNTIME_EVENT',
     severity: asRuntimeSeverity(raw.severity),
     code: raw.code,
     stage: raw.stage,
     message: raw.message,
-    state: isSchedulerState(raw.state) ? raw.state : 'Lost',
+    state: requireSchedulerState(raw.state, `packet.events[${String(index)}].state`),
     frameCount: raw.frameCount,
     loopCount: raw.loopCount,
     emittedAtMs: raw.emittedAtMs,

@@ -31,6 +31,7 @@ import { cardinalityVarId } from '../../core/ids';
 import { OpCode } from '../../compiler/ir/types';
 import type { ValueExprId } from '../../compiler/ir/value-expr';
 import { rewriteFieldType } from '../layout/_helpers';
+import { promoteToMany } from '../lower-utils';
 
 // ============================================================================
 // Field default helpers (per-element variation)
@@ -46,7 +47,7 @@ function perElementPhase(ctx: LowerCtx, outType: CanonicalType): ValueExprId {
   const normIdx = ctx.b.intrinsic('normalizedIndex', floatFieldType);
 
   const phaseValue = ctx.b.time('phaseA', canonicalScalar(FLOAT, unitTurns()));
-  const phaseField = ctx.b.broadcast(phaseValue, floatFieldType);
+  const phaseField = promoteToMany(phaseValue, floatFieldType, ctx.b);
 
   const addFn = ctx.b.opcode(OpCode.Add);
   return ctx.b.zipAuto([normIdx, phaseField], addFn, floatFieldType);
@@ -63,7 +64,7 @@ function fieldVec3Default(ctx: LowerCtx, outType: CanonicalType): ValueExprId {
   const phase = perElementPhase(ctx, outType);
 
   const tau = ctx.b.constant({ kind: 'float', value: Math.PI * 2 }, canonicalScalar(FLOAT));
-  const tauField = ctx.b.broadcast(tau, floatFieldType);
+  const tauField = promoteToMany(tau, floatFieldType, ctx.b);
   const mulFn = ctx.b.opcode(OpCode.Mul);
   const angle = ctx.b.zipAuto([phase, tauField], mulFn, floatFieldType);
 
@@ -73,7 +74,7 @@ function fieldVec3Default(ctx: LowerCtx, outType: CanonicalType): ValueExprId {
   const y = ctx.b.mapAuto(angle, sinFn, floatFieldType);
 
   const zero = ctx.b.constant({ kind: 'float', value: 0 }, canonicalScalar(FLOAT));
-  const z = ctx.b.broadcast(zero, floatFieldType);
+  const z = promoteToMany(zero, floatFieldType, ctx.b);
 
   return ctx.b.construct([x, y, z], outType);
 }
@@ -91,9 +92,9 @@ function fieldColorDefault(ctx: LowerCtx, outType: CanonicalType): ValueExprId {
   const chroma = ctx.b.constant({ kind: 'float', value: 0.8 }, canonicalScalar(FLOAT));
   const light = ctx.b.constant({ kind: 'float', value: 0.5 }, canonicalScalar(FLOAT));
   const alpha = ctx.b.constant({ kind: 'float', value: 1.0 }, canonicalScalar(FLOAT));
-  const chromaField = ctx.b.broadcast(chroma, floatFieldType);
-  const lightField = ctx.b.broadcast(light, floatFieldType);
-  const alphaField = ctx.b.broadcast(alpha, floatFieldType);
+  const chromaField = promoteToMany(chroma, floatFieldType, ctx.b);
+  const lightField = promoteToMany(light, floatFieldType, ctx.b);
+  const alphaField = promoteToMany(alpha, floatFieldType, ctx.b);
 
   const oklchType: CanonicalType = { ...canonicalType(COLOR, unitOklch()), extent: outType.extent };
   return ctx.b.construct([hue, chromaField, lightField, alphaField], oklchType);
@@ -128,7 +129,7 @@ function fieldBroadcastDefault(
       oneId = ctx.b.constant({ kind: 'float', value: 0 }, canonicalScalar(FLOAT));
       break;
   }
-  return ctx.b.broadcast(oneId, outType);
+  return promoteToMany(oneId, outType, ctx.b);
 }
 
 // ============================================================================

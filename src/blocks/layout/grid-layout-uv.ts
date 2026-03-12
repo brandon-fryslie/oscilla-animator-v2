@@ -13,6 +13,7 @@ import { cardinalityVarId } from '../../core/ids';
 import { defaultSourceConst } from '../../types';
 import { OpCode } from '../../compiler/ir/types';
 import { rewriteFieldType } from './_helpers';
+import { promoteToMany } from '../lower-utils';
 
 // [LAW:one-source-of-truth] Field cardinality behavior is declared on CT/ICT port types.
 const GRID_FIELD_CARD = cardinalityVar(cardinalityVarId('grid_fields'), {
@@ -140,10 +141,10 @@ export function register(): void {
       const controlPointsField = ctx.b.constructAuto([x, y], controlPointsType);
   
       // rotation = broadcast constant 0.0 (grid has no inherent rotation)
-      const rotationField = ctx.b.broadcast(const0, floatFieldType);
+      const rotationField = promoteToMany(const0, floatFieldType, ctx.b);
   
       // scale = broadcast constant 1.0
-      const scaleField = ctx.b.broadcast(const1, floatFieldType);
+      const scaleField = promoteToMany(const1, floatFieldType, ctx.b);
   
       return {
         outputsById: {
