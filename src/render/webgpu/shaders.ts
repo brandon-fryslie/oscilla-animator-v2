@@ -66,7 +66,7 @@ struct SceneUniforms {
 struct InstanceData {
   // transform0 = [posXNorm, posYNorm, sizeNorm, rotationRad]
   transform0: vec4<f32>,
-  // transform1 = [deprecatedScale2X, deprecatedScale2Y, topologyWordOffset, _]
+  // transform1 = [reservedX, reservedY, topologyWordOffset, _]
   transform1: vec4<f32>,
   // color = [h, c, l, a] where h is turns and c/l/a are normalized
   color: vec4<f32>,

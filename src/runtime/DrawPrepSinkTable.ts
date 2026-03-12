@@ -5,7 +5,7 @@ import type { DrawPrepProgramIR, DrawPrepSinkIR } from '../compiler/ir/program';
 export const DRAW_PREP_SINK_TABLE_V1_VERSION = 1;
 export const DRAW_PREP_SINK_TABLE_HEADER_WORDS = 8;
 export const DRAW_PREP_SINK_TABLE_RECORD_WORDS = 8;
-export const DRAW_PREP_SINK_DESCRIPTOR_WORDS = 20;
+export const DRAW_PREP_SINK_DESCRIPTOR_WORDS = 14;
 
 export type DrawPrepDrawModeCode = 0 | 1;
 
@@ -48,14 +48,6 @@ export enum DrawPrepSinkDescriptorWord {
   RotationLaneStride = 11,
   RotationComponentStride = 12,
   RotationDefaultBits = 13,
-  // [LAW:one-source-of-truth] Descriptor layout keeps v1 wire compatibility;
-  // canonical execution treats scale2 lanes as deprecated identity placeholders.
-  Scale2Mode = 14,
-  Scale2BaseOffset = 15,
-  Scale2LaneStride = 16,
-  Scale2ComponentStride = 17,
-  Scale2DefaultXBits = 18,
-  Scale2DefaultYBits = 19,
 }
 
 export interface DrawPrepSinkTableHeaderV1 {

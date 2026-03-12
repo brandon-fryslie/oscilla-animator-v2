@@ -8,13 +8,15 @@ const ENGINE_RS_SOURCE = readFileSync(
 );
 
 describe('Rust engine isotropic-scale contract', () => {
-  it('does not read deprecated scale2 descriptor lanes in canonical draw-prep assembly', () => {
+  it('removes legacy scale2 descriptor plumbing from canonical draw-prep assembly', () => {
+    expect(ENGINE_RS_SOURCE).toContain('const SINK_TABLE_DESCRIPTOR_WORDS: u32 = 14u;');
+    expect(ENGINE_RS_SOURCE.includes('DESCRIPTOR_WORD_SCALE2')).toBe(false);
     expect(ENGINE_RS_SOURCE.includes('let scale2_mode = read_sink_word')).toBe(false);
     expect(ENGINE_RS_SOURCE.includes('let scale2_x_from_slot = read_arena_f32')).toBe(false);
     expect(ENGINE_RS_SOURCE.includes('let scale2_y_from_slot = read_arena_f32')).toBe(false);
   });
 
-  it('pins deprecated transform1 scale2 lanes to identity at assembly output', () => {
+  it('pins reserved transform1 xy lanes to identity at assembly output', () => {
     expect(ENGINE_RS_SOURCE).toContain('instance_words[base + 4u] = 1.0;');
     expect(ENGINE_RS_SOURCE).toContain('instance_words[base + 5u] = 1.0;');
   });
