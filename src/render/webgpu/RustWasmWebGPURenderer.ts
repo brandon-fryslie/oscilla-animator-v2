@@ -1,6 +1,10 @@
 import type { RenderShapeBankSource } from './WebGPUShapeBankManager';
 import type { IndirectArgsReadbackSnapshot } from './WebGPUIndirectArgsInspector';
-import type { DrawPrepRenderContract } from '../types';
+import type {
+  DrawPrepRenderContract,
+  MatrixViewportContract,
+  RuntimeInputSignalContract,
+} from '../types';
 import { isRuntimeConsoleEnabled } from '../../testing/test-params';
 import { reportRenderIssue } from '../render-issues';
 import {
@@ -27,41 +31,11 @@ import {
   previewWgsl,
 } from './gpu-pass-debug';
 
-interface RenderInput extends DrawPrepRenderContract {
+interface RenderInput extends DrawPrepRenderContract, MatrixViewportContract, RuntimeInputSignalContract {
   readonly shapeBank: RenderShapeBankSource;
-  readonly width: number;
-  readonly height: number;
-  readonly zoom: number;
-  readonly panX: number;
-  readonly panY: number;
-  readonly timeMs: number;
-  readonly inputMouseX: number;
-  readonly inputMouseY: number;
-  readonly inputMouseButtons: number;
-  readonly inputAudioLow: number;
-  readonly inputAudioMid: number;
-  readonly inputAudioHigh: number;
-  readonly inputGaugeActive: number;
-  readonly drawPrepSinkTableV1: Uint32Array;
-  readonly drawPrepSinkTableWordCount: number;
 }
 
-type RuntimeViewportFrame = Pick<
-  RenderInput,
-  | 'width'
-  | 'height'
-  | 'zoom'
-  | 'panX'
-  | 'panY'
-  | 'timeMs'
-  | 'inputMouseX'
-  | 'inputMouseY'
-  | 'inputMouseButtons'
-  | 'inputAudioLow'
-  | 'inputAudioMid'
-  | 'inputAudioHigh'
-  | 'inputGaugeActive'
->;
+type RuntimeViewportFrame = MatrixViewportContract & RuntimeInputSignalContract;
 
 export interface RuntimeEventBreadcrumb {
   readonly severity: 'error' | 'fatal';
@@ -517,6 +491,22 @@ export class WebGPURenderer {
     );
   }
 
+  private formatRuntimeConsolePayload(payload: Record<string, unknown>): string {
+    return `[runtimeConsole] ${JSON.stringify(payload)}`;
+  }
+
+  private emitRuntimeConsoleInfo(payload: Record<string, unknown>): void {
+    console.info(this.formatRuntimeConsolePayload(payload));
+  }
+
+  private emitRuntimeConsoleWarn(payload: Record<string, unknown>): void {
+    console.warn(this.formatRuntimeConsolePayload(payload));
+  }
+
+  private shouldEmitRuntimeConsole(): boolean {
+    return RUNTIME_CONSOLE_ENABLED;
+  }
+
   private buildFatalTransition(transition: RendererFatalTransition): RendererFatalTransition {
     return transition;
   }
@@ -718,13 +708,13 @@ export class WebGPURenderer {
   }
 
   private maybeEmitRenderInputDebugSample(sinkTableWords: Uint32Array, wordCount: number): void {
-    if (!RUNTIME_CONSOLE_ENABLED || this.renderInputDebugLogged || wordCount <= 0) {
+    if (!this.shouldEmitRuntimeConsole() || this.renderInputDebugLogged || wordCount <= 0) {
       return;
     }
     this.renderInputDebugLogged = true;
     const sample = this.buildSinkTableDebugSample(sinkTableWords, wordCount);
     this.latestSinkTableSample = sample;
-    console.info(`[runtimeConsole] ${JSON.stringify({ kind: 'render-input-sample', ...sample })}`);
+    this.emitRuntimeConsoleInfo({ kind: 'render-input-sample', ...sample });
   }
 
   setViewportFrame(frame: RuntimeViewportFrame): void {
@@ -793,7 +783,7 @@ export class WebGPURenderer {
       dumpShaderWithLineNumbers(pass.passId, pass.wgsl);
     }
     this.lastInstalledPassIds = validatedPasses.map((pass) => pass.passId);
-    if (RUNTIME_CONSOLE_ENABLED) {
+    if (this.shouldEmitRuntimeConsole()) {
       // TODO(#159): Replace this inline payload assembly with:
       // `buildGpuPipelineRebuildPayload(validatedPasses)` and emit through a
       // shared `emitRuntimeConsolePayload(...)` helper from this
@@ -814,7 +804,7 @@ export class WebGPURenderer {
       };
       // [LAW:one-source-of-truth] Renderer boundary emits one canonical
       // structured line for pipeline install debugging in runtimeConsole mode.
-      console.info(`[runtimeConsole] ${JSON.stringify(payload)}`);
+      this.emitRuntimeConsoleInfo(payload);
     }
     this.worker.postMessage({ type: 'PAUSE' } satisfies RustRendererWorkerInboundMessage);
     try {
@@ -923,7 +913,7 @@ export class WebGPURenderer {
   }
 
   private warnWorkerLifecycleBoundary(message: string, error: unknown): void {
-    if (!RUNTIME_CONSOLE_ENABLED) {
+    if (!this.shouldEmitRuntimeConsole()) {
       return;
     }
     console.warn(`[RustWasmWebGPURenderer] ${message}`, error);
@@ -1045,7 +1035,7 @@ export class WebGPURenderer {
   }
 
   private maybeCaptureSinkTableDebugSample(sinkTableWords: Uint32Array, wordCount: number): void {
-    if (!RUNTIME_CONSOLE_ENABLED) {
+    if (!this.shouldEmitRuntimeConsole()) {
       return;
     }
     this.sinkTableDebugLogCounter += 1;
@@ -1205,15 +1195,13 @@ export class WebGPURenderer {
     // [LAW:locality-or-seam] Renderer execution should not own debug payload
     // transport and cadence policy details.
     // https://github.com/brandon-fryslie/oscilla-animator-v2/issues/159
-    console.info(
-      `[runtimeConsole] ${JSON.stringify({
-        kind: 'sink-table-sample',
-        wordCount: sample.sinkTableWordCount,
-        totalRecords: sample.totalRecords,
-        firstRecord: sample.firstRecord,
-        firstDescriptor: sample.firstDescriptor,
-      })}`,
-    );
+    this.emitRuntimeConsoleInfo({
+      kind: 'sink-table-sample',
+      wordCount: sample.sinkTableWordCount,
+      totalRecords: sample.totalRecords,
+      firstRecord: sample.firstRecord,
+      firstDescriptor: sample.firstDescriptor,
+    });
   }
 
   private async bootstrap(
@@ -1318,14 +1306,12 @@ export class WebGPURenderer {
     // [LAW:single-enforcer] One debug emitter boundary should own
     // serialization/log formatting.
     // https://github.com/brandon-fryslie/oscilla-animator-v2/issues/159
-    if (RUNTIME_CONSOLE_ENABLED) {
-      console.warn(
-        `[runtimeConsole] ${JSON.stringify({
-          kind: 'render-health-warning',
-          code,
-          details,
-        })}`,
-      );
+    if (this.shouldEmitRuntimeConsole()) {
+      this.emitRuntimeConsoleWarn({
+        kind: 'render-health-warning',
+        code,
+        details,
+      });
     }
   }
 
