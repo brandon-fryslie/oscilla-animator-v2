@@ -174,6 +174,33 @@ export const Toolbar: React.FC<ToolbarProps> = observer(({ stats = 'FPS: --', do
               {stats}
             </Badge>
 
+            {diagnostics.gpuFaultState && (
+              <Tooltip
+                label={diagnostics.gpuFaultState.message}
+                withArrow
+                multiline
+                w={300}
+              >
+                <Badge
+                  variant="filled"
+                  color={diagnostics.gpuFaultState.severity === 'fatal' ? 'red' : 'orange'}
+                  size="lg"
+                  radius="md"
+                  styles={{
+                    root: {
+                      fontFamily: 'var(--mantine-font-family-monospace)',
+                      fontWeight: 700,
+                      fontSize: rem(11),
+                      padding: `${rem(4)} ${rem(12)}`,
+                      cursor: 'help',
+                    },
+                  }}
+                >
+                  {diagnostics.gpuFaultState.severity === 'fatal' ? 'GPU LOST' : 'GPU ERROR'}
+                </Badge>
+              </Tooltip>
+            )}
+
             <Menu shadow="md" width={220} withinPortal>
               <Menu.Target>
                 <Button variant="subtle" color="gray" size="xs">Patch</Button>
