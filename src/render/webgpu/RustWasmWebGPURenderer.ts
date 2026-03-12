@@ -220,6 +220,27 @@ function requireNonEmptyString(value: unknown, message: string): string {
   return value;
 }
 
+function requireGpuPassId(pass: RustRendererGpuPass, index: number): string {
+  return requireNonEmptyString(
+    pass.passId,
+    `Rust renderer GPU pass contract violation: passes[${index}].passId is required`,
+  );
+}
+
+function requireGpuPassEntryPoint(pass: RustRendererGpuPass, passId: string): string {
+  return requireNonEmptyString(
+    pass.entryPoint,
+    `Rust renderer GPU pass contract violation: pass \"${passId}\" is missing entryPoint`,
+  );
+}
+
+function requireGpuPassWgsl(pass: RustRendererGpuPass, passId: string): string {
+  return requireNonEmptyString(
+    pass.wgsl,
+    `Rust renderer GPU pass contract violation: pass \"${passId}\" is missing WGSL source`,
+  );
+}
+
 /**
  * Transport-level GPU pass normalization.
  *
@@ -238,18 +259,9 @@ function requireNonEmptyString(value: unknown, message: string): string {
 function validateGpuPass(pass: RustRendererGpuPass, index: number): RustRendererGpuPass {
   // [LAW:single-enforcer] Renderer enforces transport/runtime payload integrity
   // only; semantic pass-signature validation is owned by compile worker.
-  const passId = requireNonEmptyString(
-    pass.passId,
-    `Rust renderer GPU pass contract violation: passes[${index}].passId is required`,
-  );
-  const entryPoint = requireNonEmptyString(
-    pass.entryPoint,
-    `Rust renderer GPU pass contract violation: pass "${passId}" is missing entryPoint`,
-  );
-  const wgsl = requireNonEmptyString(
-    pass.wgsl,
-    `Rust renderer GPU pass contract violation: pass "${passId}" is missing WGSL source`,
-  );
+  const passId = requireGpuPassId(pass, index);
+  const entryPoint = requireGpuPassEntryPoint(pass, passId);
+  const wgsl = requireGpuPassWgsl(pass, passId);
   return {
     passId,
     stage: 'compute',
