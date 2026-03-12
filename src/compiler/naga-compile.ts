@@ -10,6 +10,23 @@ export type NagaCompilationOutcome =
   | { readonly kind: 'ok'; readonly wgsl: string }
   | { readonly kind: 'error'; readonly errors: readonly CompileError[] };
 
+export interface GpuPassSignatureCandidate {
+  readonly passId: string;
+  readonly stage: string;
+  readonly entryPoint: string;
+  readonly wgsl: string;
+}
+
+export interface ValidatedGpuPassSignature {
+  readonly passId: string;
+  readonly stage: 'compute';
+  readonly entryPoint: string;
+}
+
+export type GpuPassSignatureValidationOutcome =
+  | { readonly kind: 'ok'; readonly signatures: readonly ValidatedGpuPassSignature[] }
+  | { readonly kind: 'error'; readonly errors: readonly CompileError[] };
+
 function parseMaxActiveLanes(maxActiveLanes: number | undefined): number | undefined {
   if (typeof maxActiveLanes !== 'number') return undefined;
   const parsed = Math.trunc(maxActiveLanes);
@@ -26,6 +43,100 @@ function parseSourceHandle(value: string): { readonly kind: 'expression' | 'stat
     kind: match[1].toLowerCase() === 'statement' ? 'statement' : 'expression',
     id,
   };
+}
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
+function escapeRegex(source: string): string {
+  return source.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function isValidWgslIdentifier(value: string): boolean {
+  return /^[_A-Za-z][_A-Za-z0-9]*$/.test(value);
+}
+
+function makeGpuPassError(message: string): CompileError {
+  return {
+    code: 'IRValidationFailed',
+    message,
+  };
+}
+
+export function validateGpuPassSignaturesAtCompileBoundary(
+  passes: readonly GpuPassSignatureCandidate[],
+): GpuPassSignatureValidationOutcome {
+  if (passes.length === 0) {
+    return {
+      kind: 'error',
+      errors: [makeGpuPassError('Compiler emitted an empty GPU artifact pass bundle')],
+    };
+  }
+
+  const signatures: ValidatedGpuPassSignature[] = [];
+  const errors: CompileError[] = [];
+  for (const [index, pass] of passes.entries()) {
+    const passRef = isNonEmptyString(pass.passId) ? `"${pass.passId}"` : `at index ${index}`;
+    if (!isNonEmptyString(pass.passId)) {
+      errors.push(makeGpuPassError(`GPU pass contract violation: pass ${index} is missing passId`));
+      continue;
+    }
+    if (pass.stage !== 'compute') {
+      errors.push(
+        makeGpuPassError(`GPU pass contract violation: pass ${passRef} has unsupported stage "${String(pass.stage)}"`),
+      );
+      continue;
+    }
+    if (!isNonEmptyString(pass.entryPoint)) {
+      errors.push(makeGpuPassError(`GPU pass contract violation: pass ${passRef} is missing entryPoint`));
+      continue;
+    }
+    if (!isValidWgslIdentifier(pass.entryPoint)) {
+      errors.push(
+        makeGpuPassError(
+          `GPU pass contract violation: pass ${passRef} has invalid entryPoint "${pass.entryPoint}"`,
+        ),
+      );
+      continue;
+    }
+    if (!isNonEmptyString(pass.wgsl)) {
+      errors.push(makeGpuPassError(`GPU pass contract violation: pass ${passRef} is missing WGSL source`));
+      continue;
+    }
+    if (!pass.wgsl.includes('@compute')) {
+      errors.push(
+        makeGpuPassError(`GPU pass contract violation: pass ${passRef} WGSL is missing @compute annotation`),
+      );
+      continue;
+    }
+
+    const entryPattern = new RegExp(`\\bfn\\s+${escapeRegex(pass.entryPoint)}\\s*\\(`);
+    if (!entryPattern.test(pass.wgsl)) {
+      errors.push(
+        makeGpuPassError(
+          `GPU pass contract violation: pass ${passRef} WGSL is missing fn ${pass.entryPoint}(...)`,
+        ),
+      );
+      continue;
+    }
+
+    signatures.push({
+      passId: pass.passId,
+      stage: 'compute',
+      entryPoint: pass.entryPoint,
+    });
+  }
+
+  return errors.length > 0
+    ? {
+        kind: 'error',
+        errors,
+      }
+    : {
+        kind: 'ok',
+        signatures,
+      };
 }
 
 function toCompileErrors(
