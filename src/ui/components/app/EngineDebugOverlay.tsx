@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { observer } from 'mobx-react-lite';
-import { formatWgslWithLineNumbers } from '../../../render/webgpu/gpu-pass-debug';
+import { formatWgslWithLineNumbers } from '../../../render/shader-debug';
 import { shaderInspector } from '../../../services/ShaderInspectorService';
 import { useStores } from '../../../stores';
 
@@ -241,4 +241,3 @@ export const EngineDebugOverlay: React.FC = () => (
     <EngineErrorPanel />
   </>
 );
-
