@@ -29,7 +29,7 @@ function expectValidationError(
   expect(result.errors.some((error) => error.message.includes(expectedMessageFragment))).toBe(true);
 }
 
-describe('validateCompiledGpuPassBundle', () => {
+describe('validateCompiledGpuPassBundle pass signature validation', () => {
   it('accepts valid pass signatures and emits manifest signatures', () => {
     const result = validateCompiledGpuPassBundle(buildBundle([buildPass()]));
 
@@ -91,6 +91,9 @@ describe('validateCompiledGpuPassBundle', () => {
     );
   });
 
+});
+
+describe('validateCompiledGpuPassBundle bundle policy validation', () => {
   it('rejects duplicate pass identifiers', () => {
     const result = validateCompiledGpuPassBundle(
       buildBundle([
