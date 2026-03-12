@@ -4,25 +4,22 @@
  * Builds execution schedule with explicit phase ordering:
  * 1. Update rails/time inputs
  * 2. Execute cardinality-one values (materialize)
- * 3. Build continuity mappings (continuityMapBuild)
- * 4. Execute continuous fields (materialize)
- * 5. Apply continuity to field targets (continuityApply)
- * 6. Apply discrete ops (eventDispatch)
- * 7. Sinks (render)
- * 8. State writes (stateWrite)
+ * 3. Execute render-field materialization
+ * 4. Apply discrete ops (eventDispatch)
+ * 5. Sinks (render)
+ * 6. State writes (stateWrite)
  *
  * The schedule respects data dependencies within each phase and provides
  * deterministic execution order.
  *
  * [LAW:single-enforcer] This pass is PURE ORDERING — no slot allocation.
- * All slots are allocated by Pass 6 (block lowering) and Pass 6b (continuity pipeline).
+ * All slots are allocated by Pass 6 (block lowering) and Pass 6b (render materialization pipeline).
  */
 
 import type {
   Step,
   StepEvalEvent,
   StepMaterialize,
-  StepContinuityApply,
   TimeModel,
   StateMapping,
   ScalarSlotDecl,
@@ -32,10 +29,11 @@ import { SCALAR_INSTANCE_ID, type InstanceId } from '../ir/Indices';
 import type { ValueExpr, ValueExprId } from '../ir/value-expr';
 import type { UnlinkedIRFragments } from './lower-blocks';
 import type { AcyclicOrLegalGraph } from '../ir/patches';
-import type { ContinuityPipelineIR } from './continuity-pipeline';
+import type { RenderMaterializationPipelineIR } from './render-materialization-pipeline';
 import { requireInst } from '../../core/canonical-types';
 import type { InstanceDecl } from '../ir/types';
 import { payloadStride } from '../../core/canonical-types';
+import { getValueExprChildren } from '../../runtime/ValueExprTreeWalker';
 
 // =============================================================================
 // Schedule IR Types
@@ -164,19 +162,48 @@ export function getFieldSlots(schedule: ScheduleIR): FieldSlotDecl[] {
   );
 }
 
+const ARENA_SCALAR_PAYLOAD_KINDS = new Set([
+  'float',
+  'int',
+  'bool',
+  'vec2',
+  'vec3',
+  'vec4',
+  'color',
+  'shape',
+  'cameraProjection',
+]);
+
 function isArenaScalarPayload(expr: ValueExpr): boolean {
-  const payloadKind = expr.type.payload.kind;
-  return (
-    payloadKind === 'float' ||
-    payloadKind === 'int' ||
-    payloadKind === 'bool' ||
-    payloadKind === 'vec2' ||
-    payloadKind === 'vec3' ||
-    payloadKind === 'vec4' ||
-    payloadKind === 'color' ||
-    payloadKind === 'shape' ||
-    payloadKind === 'cameraProjection'
-  );
+  return ARENA_SCALAR_PAYLOAD_KINDS.has(expr.type.payload.kind);
+}
+
+function canMaterializeScalarKernelExpr(
+  expr: Extract<ValueExpr, { kind: 'kernel' }>,
+  valueExprs: readonly ValueExpr[],
+  cache: Map<number, boolean>,
+  visiting: Set<number>,
+): boolean {
+  switch (expr.kernelKind) {
+    case 'map':
+      return canMaterializeScalarExpr(expr.input as number, valueExprs, cache, visiting);
+    case 'zip':
+      return expr.inputs.every((id) =>
+        canMaterializeScalarExpr(id as number, valueExprs, cache, visiting),
+      );
+    case 'reduce':
+      return true;
+    case 'zipPromote':
+    case 'broadcast':
+    case 'pathDerivative':
+    case 'pathSample':
+      return false;
+    default: {
+      throw new Error(
+        `Unknown kernel kind during scalar materialize eligibility check: ${(expr as { kernelKind?: string }).kernelKind ?? 'unknown'}`,
+      );
+    }
+  }
 }
 
 function canMaterializeScalarExpr(
@@ -200,63 +227,59 @@ function canMaterializeScalarExpr(
     return false;
   }
 
-  let result = false;
-  switch (expr.kind) {
-    case 'const':
-    case 'time':
-    case 'external':
-    case 'state':
-    case 'eventRead':
-    case 'intrinsic':
-      result = true;
-      break;
-    case 'kernel':
-      switch (expr.kernelKind) {
-        case 'map':
-          result = canMaterializeScalarExpr(expr.input as number, valueExprs, cache, visiting);
-          break;
-        case 'zip':
-          result = expr.inputs.every((id) =>
-            canMaterializeScalarExpr(id as number, valueExprs, cache, visiting),
-          );
-          break;
-        case 'reduce':
-          result = true;
-          break;
-        case 'zipPromote':
-        case 'broadcast':
-        case 'pathDerivative':
-        case 'pathSample':
-          result = false;
-          break;
+  const result = (() => {
+    switch (expr.kind) {
+      case 'const':
+      case 'time':
+      case 'external':
+      case 'state':
+      case 'eventRead':
+      case 'intrinsic':
+      case 'shapeRef':
+        return true;
+      case 'event':
+        return false;
+      case 'kernel':
+        return canMaterializeScalarKernelExpr(expr, valueExprs, cache, visiting);
+      case 'extract':
+        return canMaterializeScalarExpr(expr.input as number, valueExprs, cache, visiting);
+      case 'construct':
+        return expr.components.every((id) =>
+          canMaterializeScalarExpr(id as number, valueExprs, cache, visiting),
+        );
+      case 'oklchToRgb':
+        return canMaterializeScalarExpr(expr.input as number, valueExprs, cache, visiting);
+      default: {
+        const _exhaustive: never = expr;
+        throw new Error(
+          `Unknown ValueExpr kind during scalar materialize eligibility check: ${(_exhaustive as ValueExpr).kind}`,
+        );
       }
-      break;
-    case 'extract':
-      result = canMaterializeScalarExpr(expr.input as number, valueExprs, cache, visiting);
-      break;
-    case 'construct':
-      result = expr.components.every((id) =>
-        canMaterializeScalarExpr(id as number, valueExprs, cache, visiting),
-      );
-      break;
-    case 'oklchToRgb':
-      result = canMaterializeScalarExpr(expr.input as number, valueExprs, cache, visiting);
-      break;
-    case 'shapeRef':
-      result = true;
-      break;
-    case 'event':
-      result = false;
-      break;
-    default: {
-      const _exhaustive: never = expr;
-      throw new Error(`Unknown ValueExpr kind during scalar materialize eligibility check: ${(_exhaustive as ValueExpr).kind}`);
     }
-  }
+  })();
 
   cache.set(exprId, result);
   visiting.delete(exprId);
   return result;
+}
+
+function validateBroadcastComponentExpr(
+  broadcastExprId: number,
+  componentExprId: number,
+  valueExprs: readonly ValueExpr[],
+): void {
+  const componentExpr = valueExprs[componentExprId as number];
+  if (!componentExpr) {
+    throw new Error(
+      `Schedule invariant violated: broadcast expr ${broadcastExprId} references missing component expr ${componentExprId}`,
+    );
+  }
+  const componentCard = requireInst(componentExpr.type.extent.cardinality, 'cardinality').kind;
+  if (componentCard === 'many') {
+    throw new Error(
+      `Schedule invariant violated: broadcast expr ${broadcastExprId} component expr ${componentExprId} is many-cardinality`,
+    );
+  }
 }
 
 function validateBroadcastKernelInputs(valueExprs: readonly ValueExpr[]): void {
@@ -279,18 +302,150 @@ function validateBroadcastKernelInputs(valueExprs: readonly ValueExpr[]): void {
     }
 
     for (const componentExprId of expr.oneComponents ?? []) {
-      const componentExpr = valueExprs[componentExprId as number];
-      if (!componentExpr) {
-        throw new Error(
-          `Schedule invariant violated: broadcast expr ${exprId} references missing component expr ${componentExprId}`,
-        );
+      validateBroadcastComponentExpr(exprId, componentExprId as number, valueExprs);
+    }
+  }
+}
+
+function validateScalarIntrinsic(
+  exprId: number,
+  expr: Extract<ValueExpr, { kind: 'intrinsic' }>,
+): void {
+  const card = requireInst(expr.type.extent.cardinality, 'cardinality').kind;
+  if (card === 'many') {
+    // [LAW:single-enforcer] Scalar-evaluation compatibility is enforced once at schedule construction.
+    throw new Error(
+      `Schedule invariant violated: scalar root depends on field intrinsic expr ${exprId}`,
+    );
+  }
+}
+
+function validateScalarExtractExpr(
+  exprId: number,
+  expr: Extract<ValueExpr, { kind: 'extract' }>,
+  valueExprs: readonly ValueExpr[],
+  scalarRootExprIds: ReadonlySet<number>,
+  stack: number[],
+): void {
+  const inputExprId = expr.input as number;
+  const inputExpr = valueExprs[inputExprId];
+  if (!inputExpr) {
+    throw new Error(
+      `Schedule invariant violated: extract expr ${exprId} references missing input expr ${inputExprId}`,
+    );
+  }
+
+  const inputCard = requireInst(inputExpr.type.extent.cardinality, 'cardinality').kind;
+  if (inputCard === 'many') {
+    throw new Error(
+      `Schedule invariant violated: scalar extract expr ${exprId} input expr ${inputExprId} is many-cardinality`,
+    );
+  }
+
+  const inputStride = payloadStride(inputExpr.type.payload);
+  if (expr.componentIndex < 0 || expr.componentIndex >= inputStride) {
+    throw new Error(
+      `Schedule invariant violated: extract expr ${exprId} requests component ${expr.componentIndex} but input stride is ${inputStride}`,
+    );
+  }
+
+  const inputIsAddressable = scalarRootExprIds.has(inputExprId);
+  if (!inputIsAddressable && inputExpr.kind !== 'construct') {
+    throw new Error(
+      `Schedule invariant violated: scalar extract expr ${exprId} input expr ${inputExprId} has no scalar slot mapping`,
+    );
+  }
+
+  if (inputIsAddressable) {
+    stack.push(inputExprId);
+    return;
+  }
+  if (inputExpr.kind !== 'construct') {
+    throw new Error(
+      `Schedule invariant violated: scalar extract expr ${exprId} input expr ${inputExprId} has no scalar construct source`,
+    );
+  }
+
+  const componentExprId = inputExpr.components[expr.componentIndex];
+  if (componentExprId === undefined) {
+    throw new Error(
+      `Schedule invariant violated: extract expr ${exprId} component ${expr.componentIndex} missing in construct expr ${inputExprId}`,
+    );
+  }
+  stack.push(componentExprId as number);
+}
+
+function validateScalarKernelExpr(
+  exprId: number,
+  expr: Extract<ValueExpr, { kind: 'kernel' }>,
+  stack: number[],
+): void {
+  switch (expr.kernelKind) {
+    case 'map':
+      stack.push(expr.input as number);
+      return;
+    case 'zip':
+      for (const inputId of expr.inputs) {
+        stack.push(inputId as number);
       }
-      const componentCard = requireInst(componentExpr.type.extent.cardinality, 'cardinality').kind;
-      if (componentCard === 'many') {
-        throw new Error(
-          `Schedule invariant violated: broadcast expr ${exprId} component expr ${componentExprId} is many-cardinality`,
-        );
+      return;
+    case 'reduce':
+      // [LAW:single-enforcer] Reduce sub-graph evaluation is delegated to executor context.
+      return;
+    case 'zipPromote':
+    case 'broadcast':
+    case 'pathDerivative':
+    case 'pathSample':
+      throw new Error(
+        `Schedule invariant violated: scalar root depends on field-only kernel ${expr.kernelKind} (expr ${exprId})`,
+      );
+    default: {
+      throw new Error(
+        `Unknown kernel kind during scalar invariant validation: ${(expr as { kernelKind?: string }).kernelKind ?? 'unknown'} (expr ${exprId})`,
+      );
+    }
+  }
+}
+
+function validateScalarExpr(
+  exprId: number,
+  expr: ValueExpr,
+  valueExprs: readonly ValueExpr[],
+  scalarRootExprIds: ReadonlySet<number>,
+  stack: number[],
+): void {
+  switch (expr.kind) {
+    case 'const':
+    case 'time':
+    case 'external':
+    case 'state':
+    case 'eventRead':
+    case 'shapeRef':
+    case 'event':
+      return;
+    case 'intrinsic':
+      validateScalarIntrinsic(exprId, expr);
+      return;
+    case 'oklchToRgb':
+      throw new Error(
+        `Schedule invariant violated: scalar root depends on field-only oklchToRgb expr ${exprId}`,
+      );
+    case 'construct':
+      for (const componentId of expr.components) {
+        stack.push(componentId as number);
       }
+      return;
+    case 'extract':
+      validateScalarExtractExpr(exprId, expr, valueExprs, scalarRootExprIds, stack);
+      return;
+    case 'kernel':
+      validateScalarKernelExpr(exprId, expr, stack);
+      return;
+    default: {
+      const _exhaustive: never = expr;
+      throw new Error(
+        `Unknown ValueExpr kind during scalar invariant validation: ${(_exhaustive as ValueExpr).kind}`,
+      );
     }
   }
 }
@@ -311,121 +466,7 @@ function validateScalarExtractInputs(
     if (!expr) {
       throw new Error(`Schedule invariant violated: scalar root references missing expr ${exprId}`);
     }
-
-    switch (expr.kind) {
-      case 'const':
-      case 'time':
-      case 'external':
-      case 'state':
-      case 'eventRead':
-      case 'shapeRef':
-      case 'event':
-        continue;
-
-      case 'intrinsic': {
-        const card = requireInst(expr.type.extent.cardinality, 'cardinality').kind;
-        if (card === 'many') {
-          // [LAW:single-enforcer] Scalar-evaluation compatibility is enforced once at schedule construction.
-          throw new Error(
-            `Schedule invariant violated: scalar root depends on field intrinsic expr ${exprId}`,
-          );
-        }
-        continue;
-      }
-
-      case 'oklchToRgb': {
-        throw new Error(
-          `Schedule invariant violated: scalar root depends on field-only oklchToRgb expr ${exprId}`,
-        );
-      }
-
-      case 'construct': {
-        for (const componentId of expr.components) {
-          stack.push(componentId as number);
-        }
-        continue;
-      }
-
-      case 'extract': {
-        const inputExprId = expr.input as number;
-        const inputExpr = valueExprs[inputExprId];
-        if (!inputExpr) {
-          throw new Error(
-            `Schedule invariant violated: extract expr ${exprId} references missing input expr ${inputExprId}`,
-          );
-        }
-
-        const inputCard = requireInst(inputExpr.type.extent.cardinality, 'cardinality').kind;
-        if (inputCard === 'many') {
-          throw new Error(
-            `Schedule invariant violated: scalar extract expr ${exprId} input expr ${inputExprId} is many-cardinality`,
-          );
-        }
-
-        const inputStride = payloadStride(inputExpr.type.payload);
-        if (expr.componentIndex < 0 || expr.componentIndex >= inputStride) {
-          throw new Error(
-            `Schedule invariant violated: extract expr ${exprId} requests component ${expr.componentIndex} but input stride is ${inputStride}`,
-          );
-        }
-
-        const inputIsAddressable = scalarRootExprIds.has(inputExprId);
-        if (!inputIsAddressable && inputExpr.kind !== 'construct') {
-          throw new Error(
-            `Schedule invariant violated: scalar extract expr ${exprId} input expr ${inputExprId} has no scalar slot mapping`,
-          );
-        }
-
-        if (!inputIsAddressable && inputExpr.kind === 'construct') {
-          const componentExprId = inputExpr.components[expr.componentIndex];
-          if (componentExprId === undefined) {
-            throw new Error(
-              `Schedule invariant violated: extract expr ${exprId} component ${expr.componentIndex} missing in construct expr ${inputExprId}`,
-            );
-          }
-          stack.push(componentExprId as number);
-        } else {
-          stack.push(inputExprId);
-        }
-        continue;
-      }
-
-      case 'kernel': {
-        switch (expr.kernelKind) {
-          case 'map':
-            stack.push(expr.input as number);
-            continue;
-          case 'zip':
-            for (const inputId of expr.inputs) {
-              stack.push(inputId as number);
-            }
-            continue;
-          case 'reduce':
-            // [LAW:single-enforcer] Reduce sub-graph evaluation is delegated to executor context.
-            continue;
-          case 'zipPromote':
-          case 'broadcast':
-          case 'pathDerivative':
-          case 'pathSample':
-            throw new Error(
-              `Schedule invariant violated: scalar root depends on field-only kernel ${expr.kernelKind} (expr ${exprId})`,
-            );
-          default: {
-            const _exhaustive: never = expr;
-            throw new Error(
-              `Unknown kernel kind during scalar invariant validation: ${(_exhaustive as ValueExpr).kind}`,
-            );
-          }
-        }
-      }
-
-      default: {
-        const _exhaustive: never = expr;
-        throw new Error(
-          `Unknown ValueExpr kind during scalar invariant validation: ${(_exhaustive as ValueExpr).kind}`,
-        );
-      }
-    }
+    validateScalarExpr(exprId, expr, valueExprs, scalarRootExprIds, stack);
   }
 }
 
@@ -437,20 +478,20 @@ function validateScalarExtractInputs(
  * Pass 7: Schedule Construction (pure ordering)
  *
  * Builds topologically-ordered execution schedule from unlinked IR fragments
- * and pre-built continuity pipeline steps.
+ * and pre-built render materialization steps.
  *
  * [LAW:single-enforcer] This pass ONLY orders steps. All slot allocation is done by
- * Pass 6 (block lowering) and Pass 6b (continuity pipeline).
+ * Pass 6 (block lowering) and Pass 6b (render materialization pipeline).
  *
  * @param unlinkedIR - Block IR fragments from Pass 6
  * @param validated - Validated graph with SCC information
- * @param continuityPipeline - Pre-built continuity pipeline steps from Pass 6b
+ * @param renderMaterializationPipeline - Pre-built render materialization steps from Pass 6b
  * @returns Execution schedule with phase ordering
  */
 export function pass7Schedule(
   unlinkedIR: UnlinkedIRFragments,
   validated: AcyclicOrLegalGraph,
-  continuityPipeline: ContinuityPipelineIR
+  renderMaterializationPipeline: RenderMaterializationPipelineIR
 ): ScheduleIR {
   // [LAW:one-source-of-truth] Time model authority is the IR builder schedule
   // emitted by block lowering effects (not pass-threaded metadata).
@@ -465,42 +506,14 @@ export function pass7Schedule(
   // Collect steps from builder (stateWrite steps from stateful blocks)
   const builderSteps = unlinkedIR.builder.getSteps();
 
-  // Generate scalar write steps for all registered cardinality-one slots.
-  // Scalar expressions that depend on eventRead must be evaluated AFTER events.
-  // Pre-event ones go in Phase 1, post-event ones go after eventDispatch.
-  const scalarSlots = unlinkedIR.builder.getScalarSlots();
-  const scalarRootExprIds = new Set<number>(scalarSlots.keys());
-  const scalarMaterializeStepsPre: StepMaterialize[] = [];
-  const scalarMaterializeStepsPost: StepMaterialize[] = [];
-  const scalarMaterializeEligibility = new Map<number, boolean>();
-  for (const [scalarExprId, slot] of scalarSlots) {
-    const exprId = scalarExprId as ValueExprId;
-    const expr = valueExprs[exprId as number];
-    if (!expr) continue;
-
-    const canMaterialize =
-      isArenaScalarPayload(expr) &&
-      canMaterializeScalarExpr(exprId as number, valueExprs, scalarMaterializeEligibility, new Set());
-    if (!canMaterialize) {
-      // [LAW:no-silent-fallbacks] Legacy evalOne scheduling is removed; scalar
-      // paths must compile through canonical materialize lowering or fail.
-      throw new Error(
-        `Schedule invariant violated: scalar expr ${String(exprId)} (${expr.kind}) requires deprecated evalOne fallback`,
-      );
-    }
-
-    const scalarStep: StepMaterialize = {
-      kind: 'materialize',
-      field: exprId,
-      instanceId: SCALAR_INSTANCE_ID,
-      target: slot,
-    };
-    if (valueExprDependsOnEvent(scalarExprId as number, valueExprs)) {
-      scalarMaterializeStepsPost.push(scalarStep);
-    } else {
-      scalarMaterializeStepsPre.push(scalarStep);
-    }
-  }
+  const { scalarMaterializeSteps, scalarRootExprIds } = buildScalarMaterializeSteps(
+    unlinkedIR.builder,
+    valueExprs,
+  );
+  const {
+    pre: scalarMaterializeStepsPre,
+    post: scalarMaterializeStepsPost,
+  } = splitEventDependentMaterializeSteps(scalarMaterializeSteps, valueExprs);
 
   // [LAW:single-enforcer] Schedule construction is the single compile-time boundary
   // that validates ValueExpr runtime invariants before execution.
@@ -508,84 +521,42 @@ export function pass7Schedule(
   validateScalarExtractInputs(valueExprs, scalarRootExprIds);
 
   // Generate eventDispatch steps for all registered event slots.
-  // Events are evaluated after continuityApply and before render.
-  const eventSlots = unlinkedIR.builder.getEventSlots();
-  const eventDispatchSteps: StepEvalEvent[] = [];
-  for (const [eventId, eventSlot] of eventSlots) {
-    const expr = valueExprs[eventId as number];
-    if (!expr) continue;
-
-    eventDispatchSteps.push({
-      kind: 'eventDispatch',
-      expr: eventId,
-      target: eventSlot,
-    });
-  }
-
-  // Separate builder steps by kind:
-  // - stateWrite/fieldStateWrite goes in Phase 8 (end)
-  const stateWriteSteps: Step[] = [];
-  for (const step of builderSteps) {
-    if (step.kind === 'stateWrite' || step.kind === 'fieldStateWrite') {
-      stateWriteSteps.push(step);
-    }
-  }
+  // Events are evaluated after materialization and before render.
+  const eventDispatchSteps = collectEventDispatchSteps(unlinkedIR.builder, valueExprs);
+  const stateWriteSteps = collectStateWriteSteps(builderSteps);
 
   // [LAW:one-source-of-truth] Event-dependent field materializations are split
   // here using canonical ValueExpr dependency analysis so runtime never reads
   // stale pre-dispatch event scalars for field slots.
-  const continuityMaterializeStepsPre: StepMaterialize[] = [];
-  const continuityMaterializeStepsPost: StepMaterialize[] = [];
-  const continuityPostBaseSlots = new Set<number>();
-  for (const step of continuityPipeline.materializeSteps) {
-    if (valueExprDependsOnEvent(step.field as number, valueExprs)) {
-      continuityMaterializeStepsPost.push(step);
-      continuityPostBaseSlots.add(step.target as number);
-    } else {
-      continuityMaterializeStepsPre.push(step);
-    }
-  }
-
-  const continuityApplyStepsPre: StepContinuityApply[] = [];
-  const continuityApplyStepsPost: StepContinuityApply[] = [];
-  for (const step of continuityPipeline.continuityApplySteps) {
-    if (continuityPostBaseSlots.has(step.baseSlot as number)) {
-      continuityApplyStepsPost.push(step);
-    } else {
-      continuityApplyStepsPre.push(step);
-    }
-  }
+  const {
+    pre: renderMaterializeStepsPre,
+    post: renderMaterializeStepsPost,
+  } = splitEventDependentMaterializeSteps(renderMaterializationPipeline.materializeSteps, valueExprs);
 
   // Combine all steps in correct execution order:
   // 1. Materialize-pre (ones/fields NOT dependent on events)
-  // 2. ContinuityMapBuild (detect domain changes, compute mappings)
-  // 3. Continuity Materialize-pre (fields independent of events)
-  // 4. ContinuityApply-pre
-  // 5. EvalEvent (evaluate discrete events → eventScalars)
-  // 6. Materialize-post (ones that depend on eventRead)
-  // 7. Continuity Materialize-post (event-dependent fields)
-  // 8. ContinuityApply-post
-  // 9. Render (use continuity-applied buffers)
-  // 10. StateWrite (persist state for next frame)
-  const steps: Step[] = [
-    ...scalarMaterializeStepsPre,
-    ...continuityPipeline.mapBuildSteps,
-    ...continuityMaterializeStepsPre,
-    ...continuityApplyStepsPre,
-    ...eventDispatchSteps,
-    ...scalarMaterializeStepsPost,
-    ...continuityMaterializeStepsPost,
-    ...continuityApplyStepsPost,
-    ...continuityPipeline.renderSteps,
-    ...stateWriteSteps,
-  ];
+  // 2. Render materialize-pre (fields independent of events)
+  // 3. EvalEvent (evaluate discrete events -> eventScalars)
+  // 4. Materialize-post (ones that depend on eventRead)
+  // 5. Render materialize-post (event-dependent fields)
+  // 6. Render
+  // 7. StateWrite (persist state for next frame)
+  const steps = buildOrderedScheduleSteps({
+    scalarPre: scalarMaterializeStepsPre,
+    renderPre: renderMaterializeStepsPre,
+    eventDispatch: eventDispatchSteps,
+    scalarPost: scalarMaterializeStepsPost,
+    renderPost: renderMaterializeStepsPost,
+    renderSteps: renderMaterializationPipeline.renderSteps,
+    stateWriteSteps,
+  });
 
-  const stateSlotCount = unlinkedIR.builder.getStateSlotCount();
-  const stateMappings = unlinkedIR.builder.getStateMappings();
+  const stateSlotCount = readStateSlotCount(unlinkedIR.builder);
+  const stateMappings = readStateMappings(unlinkedIR.builder);
 
   // Get event counts for runtime allocation
-  const eventSlotCount = unlinkedIR.builder.getEventSlotCount();
-  const eventCount = unlinkedIR.builder.getValueExprs().filter(e => e.kind === 'event').length;
+  const eventSlotCount = readEventSlotCount(unlinkedIR.builder);
+  const eventCount = countEventExprs(valueExprs);
 
   return {
     timeModel,
@@ -603,54 +574,173 @@ export function pass7Schedule(
  * Used to schedule event-dependent cardinality-one values after event evaluation.
  */
 function valueExprDependsOnEvent(valueExprId: number, valueExprs: readonly ValueExpr[]): boolean {
+  // [LAW:one-source-of-truth] ValueExpr child traversal uses the canonical
+  // runtime walker to keep dependency analysis aligned across all expr kinds.
   const visited = new Set<number>();
+  const stack = [valueExprId];
 
-  function check(id: number): boolean {
-    if (visited.has(id)) return false;
+  while (stack.length > 0) {
+    const id = nextStackId(stack);
+    if (id === undefined) continue;
+    if (visited.has(id)) continue;
     visited.add(id);
-
     const expr = valueExprs[id];
-    if (!expr) return false;
-
-    switch (expr.kind) {
-      case 'eventRead':
-        return true;
-
-      case 'kernel': {
-        switch (expr.kernelKind) {
-          case 'map':
-            return check(expr.input as number);
-          case 'zip':
-            return expr.inputs.some(input => check(input as number));
-          case 'zipPromote':
-            return (
-              check(expr.field as number) ||
-              expr.ones.some(sig => check(sig as number))
-            );
-          case 'broadcast':
-            return check(expr.one as number);
-          case 'reduce':
-            return check(expr.field as number);
-          case 'pathDerivative':
-            return check(expr.field as number);
-          default:
-            return false;
-        }
-      }
-
-      case 'const':
-      case 'time':
-      case 'external':
-      case 'state':
-      case 'shapeRef':
-      case 'intrinsic':
-      case 'event':
-        return false;
-
-      default:
-        return false;
-    }
+    if (!expr) continue;
+    if (isEventReadDependency(expr)) return true;
+    pushExprChildren(stack, expr);
   }
 
-  return check(valueExprId);
+  return false;
+}
+
+function buildScalarMaterializeSteps(
+  builder: UnlinkedIRFragments['builder'],
+  valueExprs: readonly ValueExpr[],
+): {
+  scalarMaterializeSteps: StepMaterialize[];
+  scalarRootExprIds: Set<number>;
+} {
+  const scalarSlots = builder.getScalarSlots();
+  const scalarRootExprIds = new Set<number>(scalarSlots.keys());
+  const scalarMaterializeEligibility = new Map<number, boolean>();
+  const scalarMaterializeSteps: StepMaterialize[] = [];
+
+  for (const [scalarExprId, target] of scalarSlots) {
+    const exprId = scalarExprId as ValueExprId;
+    const expr = valueExprs[valueExprIndex(exprId)];
+    if (!expr) continue;
+
+    const canMaterialize =
+      isArenaScalarPayload(expr) &&
+      canMaterializeScalarExpr(valueExprIndex(exprId), valueExprs, scalarMaterializeEligibility, new Set());
+    if (!canMaterialize) {
+      // [LAW:no-silent-fallbacks] Legacy evalOne scheduling is removed; scalar
+      // paths must compile through canonical materialize lowering or fail.
+      throw new Error(
+        `Schedule invariant violated: scalar expr ${String(exprId)} (${expr.kind}) requires deprecated evalOne fallback`,
+      );
+    }
+    scalarMaterializeSteps.push(toMaterializeStep(exprId, SCALAR_INSTANCE_ID, target));
+  }
+
+  return { scalarMaterializeSteps, scalarRootExprIds };
+}
+
+function collectEventDispatchSteps(
+  builder: UnlinkedIRFragments['builder'],
+  valueExprs: readonly ValueExpr[],
+): StepEvalEvent[] {
+  const eventDispatchSteps: StepEvalEvent[] = [];
+  for (const [eventId, target] of builder.getEventSlots()) {
+    const expr = valueExprs[eventId as number];
+    if (!expr) continue;
+    eventDispatchSteps.push(toEventDispatchStep(eventId, target));
+  }
+  return eventDispatchSteps;
+}
+
+function isStateWriteStep(step: Step): boolean {
+  return step.kind === 'stateWrite' || step.kind === 'fieldStateWrite';
+}
+
+function collectStateWriteSteps(builderSteps: readonly Step[]): Step[] {
+  return builderSteps.filter(isStateWriteStep);
+}
+
+function toMaterializeStep(
+  field: ValueExprId,
+  instanceId: InstanceId,
+  target: StepMaterialize['target'],
+): StepMaterialize {
+  return { kind: 'materialize', field, instanceId, target };
+}
+
+function toEventDispatchStep(
+  expr: ValueExprId,
+  target: StepEvalEvent['target'],
+): StepEvalEvent {
+  return { kind: 'eventDispatch', expr, target };
+}
+
+function splitEventDependentMaterializeSteps(
+  materializeSteps: readonly StepMaterialize[],
+  valueExprs: readonly ValueExpr[],
+): { pre: StepMaterialize[]; post: StepMaterialize[] } {
+  const pre: StepMaterialize[] = [];
+  const post: StepMaterialize[] = [];
+  for (const step of materializeSteps) {
+    if (valueExprDependsOnEvent(valueExprIndex(step.field), valueExprs)) {
+      post.push(step);
+    } else {
+      pre.push(step);
+    }
+  }
+  return { pre, post };
+}
+
+function buildOrderedScheduleSteps(args: {
+  readonly scalarPre: readonly StepMaterialize[];
+  readonly renderPre: readonly StepMaterialize[];
+  readonly eventDispatch: readonly StepEvalEvent[];
+  readonly scalarPost: readonly StepMaterialize[];
+  readonly renderPost: readonly StepMaterialize[];
+  readonly renderSteps: readonly Step[];
+  readonly stateWriteSteps: readonly Step[];
+}): Step[] {
+  // [LAW:dataflow-not-control-flow] Canonical schedule executes all stages in
+  // fixed order; stage inputs may be empty.
+  return [
+    ...args.scalarPre,
+    ...args.renderPre,
+    ...args.eventDispatch,
+    ...args.scalarPost,
+    ...args.renderPost,
+    ...args.renderSteps,
+    ...args.stateWriteSteps,
+  ];
+}
+
+function readStateSlotCount(builder: UnlinkedIRFragments['builder']): number {
+  return builder.getStateSlotCount();
+}
+
+function readStateMappings(
+  builder: UnlinkedIRFragments['builder'],
+): readonly StateMapping[] {
+  return builder.getStateMappings();
+}
+
+function readEventSlotCount(builder: UnlinkedIRFragments['builder']): number {
+  return builder.getEventSlotCount();
+}
+
+function countEventExprs(valueExprs: readonly ValueExpr[]): number {
+  return valueExprs.filter(isEventExpr).length;
+}
+
+function isEventExpr(expr: ValueExpr): boolean {
+  return expr.kind === 'event';
+}
+
+function valueExprIndex(exprId: ValueExprId): number {
+  return exprId as number;
+}
+
+function isEventReadDependency(expr: ValueExpr): boolean {
+  switch (expr.kind) {
+    case 'eventRead':
+      return true;
+    default:
+      return false;
+  }
+}
+
+function pushExprChildren(stack: number[], expr: ValueExpr): void {
+  for (const child of getValueExprChildren(expr)) {
+    stack.push(child as number);
+  }
+}
+
+function nextStackId(stack: number[]): number | undefined {
+  return stack.pop();
 }
