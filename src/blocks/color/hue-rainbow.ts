@@ -2,7 +2,7 @@
  * HueRainbow Block
  *
  * Creates a cycling rainbow color from a phase/time input (0→1).
- * Maps input t to full hue cycle (360°), with fixed saturation and lightness.
+ * Maps input t to full hue cycle (360°), with fixed chroma and lightness.
  *
  * This block is pure and can be invoked as a macro by other blocks
  * (e.g., DefaultSource for color-typed ports).
@@ -55,14 +55,14 @@ export function register(): void {
         extent: outType.extent,
       };
   
-      // Fixed saturation (~0.8), lightness (~0.5), alpha (1.0)
-      const sat = ctx.b.constant({ kind: 'float', value: 0.8 }, intermediateFloat);
+      // Fixed chroma (~0.8), lightness (~0.5), alpha (1.0)
+      const chroma = ctx.b.constant({ kind: 'float', value: 0.8 }, intermediateFloat);
       const light = ctx.b.constant({ kind: 'float', value: 0.5 }, intermediateFloat);
       const alpha = ctx.b.constant({ kind: 'float', value: 1.0 }, intermediateFloat);
-  
-      // Construct OKLCH color (t as hue, fixed s/l/a)
+
+      // Construct OKLCH color (t as hue, fixed c/l/a)
       // Output is OKLCH - conversion to RGB happens at render boundary (single enforcer)
-      const oklch = ctx.b.construct([tInput.id, sat, light, alpha], outType);
+      const oklch = ctx.b.construct([tInput.id, chroma, light, alpha], outType);
   
       // Pure block: no slot allocation (orchestrator handles it)
       return {

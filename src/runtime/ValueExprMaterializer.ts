@@ -31,11 +31,6 @@ import { requireInst } from '../core/canonical-types';
 import { payloadStride } from '../core/canonical-types';
 import { constValueAsNumber, type ConstValue } from '../core/canonical-types';
 import type { PathTopologyDef, TopologyDef } from '../shapes/types';
-import {
-  PARAMETRIC_CUBIC_CONTROL_POINT_COUNT,
-  PARAMETRIC_RESOLUTION_DEFAULT,
-  PARAMETRIC_THICKNESS_DEFAULT,
-} from '../shapes/parametric-contract';
 import { applyOpcode } from './OpcodeInterpreter';
 import {
   applyPureFn as applySharedPureFn,
@@ -43,11 +38,7 @@ import {
 } from './ScalarKernelLibrary';
 import { getProgramTopology } from '../compiler/ir/program-topology';
 import { resolveInstanceLaneCount } from './InstanceCountResolver';
-import {
-  buildCubicRibbonContour,
-  clampParametricResolution,
-  clampParametricThickness,
-} from './ParametricCurveGeometry';
+import { oklchToEncodedSrgbInto } from '../core/color/oklch';
 
 function isPathTopology(topology: TopologyDef): topology is PathTopologyDef {
   return 'verbs' in topology;
@@ -91,123 +82,6 @@ function resolveShapeControlPointSlot(
   return slot as number;
 }
 
-const SHAPE_KIND_RIGID = 1;
-const SHAPE_KIND_PARAMETRIC = 2;
-const SHAPE_FLAG_CLOSED = 1;
-const SHAPE_TOPOLOGY_MODE_PATH_INDEXED = 1;
-
-function hasTopologyParam(topology: PathTopologyDef, paramName: string): boolean {
-  return topology.params.some((param) => param.name === paramName);
-}
-
-function classifyType2ParametricTopology(topology: TopologyDef): topology is PathTopologyDef {
-  if (!isPathTopology(topology)) {
-    return false;
-  }
-  const isCubicFourPointPath = topology.hasCubic && topology.totalControlPoints === PARAMETRIC_CUBIC_CONTROL_POINT_COUNT;
-  if (!isCubicFourPointPath) {
-    return false;
-  }
-  const hasResolution = hasTopologyParam(topology, 'resolution');
-  const hasThickness = hasTopologyParam(topology, 'thickness');
-  if (hasResolution !== hasThickness) {
-    // [LAW:single-enforcer] Type 2 topology schema validity is enforced at the
-    // runtime materialization boundary where param semantics are consumed.
-    const missing = hasResolution ? 'thickness' : 'resolution';
-    throw new Error(`Type2 shape topology missing required param '${missing}'`);
-  }
-  return hasResolution && hasThickness;
-}
-
-function resolveTopologyParamDefault(
-  topology: PathTopologyDef,
-  paramName: string,
-  fallback: number,
-): number {
-  const match = topology.params.find((param) => param.name === paramName);
-  if (!match) {
-    return fallback;
-  }
-  return match.default;
-}
-
-function resolveTopologyParamIndex(
-  topology: PathTopologyDef,
-  paramName: string,
-): number {
-  const paramIndex = topology.params.findIndex((param) => param.name === paramName);
-  if (paramIndex < 0) {
-    // [LAW:single-enforcer] Type 2 topology-param schema is validated at
-    // materialization, the boundary that consumes param payload semantics.
-    throw new Error(`Type2 shape topology missing required param '${paramName}'`);
-  }
-  return paramIndex;
-}
-
-function resolveShapeParamValueByName(
-  expr: Extract<ValueExpr, { kind: 'shapeRef' }>,
-  topology: PathTopologyDef,
-  table: ValueExprTable,
-  state: RuntimeState,
-  program: CompiledProgramIR,
-  scratch: MaterializeScratch | undefined,
-  pureFnContext: PureFnExecutionContext,
-  paramName: string,
-  fallback: number,
-): number {
-  const paramIndex = resolveTopologyParamIndex(topology, paramName);
-  const paramFallback = resolveTopologyParamDefault(topology, paramName, fallback);
-  return resolveShapeParamValue(
-    expr,
-    table,
-    state,
-    program,
-    scratch,
-    pureFnContext,
-    paramIndex,
-    paramFallback,
-  );
-}
-
-function resolveShapeParamValue(
-  expr: Extract<ValueExpr, { kind: 'shapeRef' }>,
-  table: ValueExprTable,
-  state: RuntimeState,
-  program: CompiledProgramIR,
-  scratch: MaterializeScratch | undefined,
-  pureFnContext: PureFnExecutionContext,
-  paramIndex: number,
-  fallback: number,
-): number {
-  const paramExpr = expr.paramArgs[paramIndex];
-  if (paramExpr === undefined) {
-    return fallback;
-  }
-  const paramNode = table.nodes[paramExpr];
-  if (!paramNode) {
-    throw new Error(
-      `shapeRef paramArgs[${String(paramIndex)}] references missing expression ${String(paramExpr)}`,
-    );
-  }
-  const paramCardinality = requireInst(paramNode.type.extent.cardinality, 'cardinality');
-  if (paramCardinality.kind === 'many') {
-    // [LAW:single-enforcer] Type 2 scalar shape params (resolution/thickness)
-    // are enforced at this materialization boundary to keep one handle contract.
-    throw new Error(
-      `shapeRef paramArgs[${String(paramIndex)}] must be scalar/const cardinality, got many`,
-    );
-  }
-  const value = evaluateScalarForMaterialize(
-    paramExpr,
-    table,
-    state,
-    program,
-    scratch,
-    pureFnContext,
-  );
-  return Number.isFinite(value) ? value : fallback;
-}
-
 function evaluateShapeRefHandle(
   expr: Extract<ValueExpr, { kind: 'shapeRef' }>,
   table: ValueExprTable,
@@ -222,18 +96,16 @@ function evaluateShapeRefHandle(
   }
   const topology = getProgramTopology(program, expr.topologyId);
   const isPath = isPathTopology(topology);
-  const isType2Curve = classifyType2ParametricTopology(topology);
-  const controlPointCount = isPath ? topology.totalControlPoints : 0;
-  let shapeKind = SHAPE_KIND_RIGID;
-  let topologyMode = isPath ? SHAPE_TOPOLOGY_MODE_PATH_INDEXED : 0;
-  let flags = isPath && topology.closed ? SHAPE_FLAG_CLOSED : 0;
-  let vertexCount = controlPointCount;
-  let indexCount = isPath && topology.closed && vertexCount >= 3
+  const vertexCount = isPath ? topology.totalControlPoints : 0;
+  const indexCount = isPath && topology.closed && vertexCount >= 3
     ? (vertexCount - 2) * 3
     : 0;
+  // [LAW:one-source-of-truth] ShapeBank header flags are encoded directly at
+  // handle materialization (bit0 = closed path).
+  const flags = isPath && topology.closed ? 1 : 0;
   const controlPointSlot = resolveShapeControlPointSlot(expr, program, isPath);
   const controlPointWordPayload = (() => {
-    if (!isPath || controlPointCount <= 0) {
+    if (!isPath || vertexCount <= 0) {
       return new Uint32Array(0);
     }
     if (expr.controlPointField == null) {
@@ -271,79 +143,28 @@ function evaluateShapeRefHandle(
       );
     }
     const availablePointCount = resolveInstanceLaneCount(controlPointInstanceDecl, program, state, pureFnContext);
-    if (availablePointCount < controlPointCount) {
+    if (availablePointCount < vertexCount) {
       throw new Error(
         'shapeRef controlPointField has fewer lanes than topology requires ' +
-          `(topologyId=${String(expr.topologyId)}, needed=${controlPointCount}, available=${availablePointCount})`,
+          `(topologyId=${String(expr.topologyId)}, needed=${vertexCount}, available=${availablePointCount})`,
       );
     }
     const controlPoints = materializeValueExpr(
       expr.controlPointField,
       table,
       controlPointInstanceId,
-      controlPointCount,
+      vertexCount,
       state,
       program,
       undefined,
       scratch,
       pureFnContext,
     );
-
-    if (!isType2Curve) {
-      const words = new Uint32Array(controlPointCount * 2);
-      for (let point = 0; point < controlPointCount; point++) {
-        const pointBase = point * controlPointStride;
-        words[point * 2] = float32ToUint32Bits(controlPoints[pointBase]);
-        words[point * 2 + 1] = float32ToUint32Bits(controlPoints[pointBase + 1]);
-      }
-      return words;
-    }
-
-    const cpScalars = new Float32Array(PARAMETRIC_CUBIC_CONTROL_POINT_COUNT * 2);
-    for (let point = 0; point < PARAMETRIC_CUBIC_CONTROL_POINT_COUNT; point++) {
+    const words = new Uint32Array(vertexCount * 2);
+    for (let point = 0; point < vertexCount; point++) {
       const pointBase = point * controlPointStride;
-      cpScalars[point * 2] = controlPoints[pointBase];
-      cpScalars[point * 2 + 1] = controlPoints[pointBase + 1];
-    }
-
-    const resolution = clampParametricResolution(
-      resolveShapeParamValueByName(
-        expr,
-        topology,
-        table,
-        state,
-        program,
-        scratch,
-        pureFnContext,
-        'resolution',
-        PARAMETRIC_RESOLUTION_DEFAULT,
-      ),
-    );
-    const thickness = clampParametricThickness(
-      resolveShapeParamValueByName(
-        expr,
-        topology,
-        table,
-        state,
-        program,
-        scratch,
-        pureFnContext,
-        'thickness',
-        PARAMETRIC_THICKNESS_DEFAULT,
-      ),
-    );
-
-    // [LAW:dataflow-not-control-flow] Type 2 geometry always runs through the
-    // same cubic sampling path; variability is encoded in resolution/thickness values.
-    const contour = buildCubicRibbonContour(cpScalars, resolution, thickness);
-    vertexCount = contour.length >>> 1;
-    indexCount = vertexCount >= 3 ? (vertexCount - 2) * 3 : 0;
-    flags = SHAPE_FLAG_CLOSED;
-    shapeKind = SHAPE_KIND_PARAMETRIC;
-    topologyMode = 1;
-    const words = new Uint32Array(contour.length);
-    for (let i = 0; i < contour.length; i++) {
-      words[i] = float32ToUint32Bits(contour[i] as number);
+      words[point * 2] = float32ToUint32Bits(controlPoints[pointBase]);
+      words[point * 2 + 1] = float32ToUint32Bits(controlPoints[pointBase + 1]);
     }
     return words;
   })();
@@ -356,8 +177,8 @@ function evaluateShapeRefHandle(
     shapeBank.data,
     handle,
     createShapeBankHeaderV1({
-      kind: shapeKind,
-      topologyMode,
+      kind: 1,
+      topologyMode: isPath ? 1 : 0,
       flags,
       indexCount,
       vertexCount,
@@ -629,7 +450,7 @@ export function materializeValueExpr(
         scratch,
         activePureFnContext,
       );
-      hslToRgbConversion(buf, inputBuf, count);
+      oklchToRgbaConversion(buf, inputBuf, count);
       break;
     }
 
@@ -1271,13 +1092,13 @@ function pseudoRandom(seed: number): number {
 }
 
 /**
- * OKLCH→RGB color space conversion.
+ * OKLCH→RGBA color space conversion.
  *
  * @param out - Output buffer (RGBA)
- * @param input - Input buffer (HSLA)
+ * @param input - Input buffer (OKLCH+A)
  * @param count - Number of colors
  */
-function hslToRgbConversion(
+function oklchToRgbaConversion(
   out: Float32Array,
   input: Float32Array,
   count: number
@@ -1285,34 +1106,9 @@ function hslToRgbConversion(
   for (let i = 0; i < count; i++) {
     const offset = i * 4;
     const h = input[offset];
-    const s = input[offset + 1];
+    const c = input[offset + 1];
     const l = input[offset + 2];
-
-    // Inline OKLCH→RGB (no tuple allocation)
-    const c = (1 - Math.abs(2 * l - 1)) * s;
-    const x = c * (1 - Math.abs(((h * 6) % 2) - 1));
-    const m = l - c / 2;
-
-    let r = 0, g = 0, b = 0;
-    const hSector = h * 6;
-
-    if (hSector < 1) {
-      r = c; g = x; b = 0;
-    } else if (hSector < 2) {
-      r = x; g = c; b = 0;
-    } else if (hSector < 3) {
-      r = 0; g = c; b = x;
-    } else if (hSector < 4) {
-      r = 0; g = x; b = c;
-    } else if (hSector < 5) {
-      r = x; g = 0; b = c;
-    } else {
-      r = c; g = 0; b = x;
-    }
-
-    out[offset] = r + m;
-    out[offset + 1] = g + m;
-    out[offset + 2] = b + m;
+    oklchToEncodedSrgbInto(out, offset, h, c, l);
     out[offset + 3] = input[offset + 3]; // Alpha passthrough
   }
 }

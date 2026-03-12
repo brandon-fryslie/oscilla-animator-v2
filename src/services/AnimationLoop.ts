@@ -16,6 +16,7 @@ import { markRuntimeFrameAdvanced } from '../testing/runtime-probe';
 export interface AnimationLoopState {
   frameCount: number;
   lastFpsUpdate: number;
+  lastTelemetryLogAt: number;
   fps: number;
   execTime: number;
   renderTime: number;
@@ -111,6 +112,254 @@ function readRuntimeInputPlaneValues(currentState: RuntimeState | null): Runtime
 }
 
 const RUNTIME_CONSOLE_ENABLED = isRuntimeConsoleEnabled();
+const FPS_UPDATE_INTERVAL_MS = 500;
+const TELEMETRY_LOG_INTERVAL_MS = 5000;
+const TELEMETRY_INITIAL_LOG_AT = 0;
+
+type RuntimeTelemetrySnapshot = ReturnType<WebGPURenderer['getLatestRuntimeTelemetry']>;
+type RuntimeTelemetryValue = NonNullable<RuntimeTelemetrySnapshot>;
+
+function shouldRunFpsCadence(now: number, lastFpsUpdate: number): boolean {
+  return now - lastFpsUpdate > FPS_UPDATE_INTERVAL_MS;
+}
+
+function formatStatsText(fps: number, drawOps: number, tickMs: number): string {
+  return `FPS: ${fps} | DrawOps: ${drawOps} | Tick: ${tickMs.toFixed(1)}ms`;
+}
+
+interface RuntimeTelemetryLogInputs {
+  store: RootStore;
+  state: AnimationLoopState;
+  now: number;
+  schedulerState: string;
+  fps: number;
+  telemetry: RuntimeTelemetrySnapshot;
+}
+
+function maybeLogRuntimeTelemetry(inputs: RuntimeTelemetryLogInputs): void {
+  const {
+    store,
+    state,
+    now,
+    schedulerState,
+    fps,
+    telemetry,
+  } = inputs;
+  if (!telemetry) {
+    return;
+  }
+  const shouldPublish = state.lastTelemetryLogAt === TELEMETRY_INITIAL_LOG_AT
+    || (now - state.lastTelemetryLogAt) >= TELEMETRY_LOG_INTERVAL_MS;
+  if (!shouldPublish) {
+    return;
+  }
+  // [LAW:single-enforcer] AnimationLoop is the one UI-facing bridge that
+  // publishes runtime heartbeat telemetry to diagnostics consumers.
+  store.diagnostics.log({
+    level: 'debug',
+    message: `Runtime telemetry heartbeat (${schedulerState})`,
+    data: {
+      kind: 'runtimeTelemetry',
+      schedulerState,
+      fps,
+      telemetry: {
+        meanMs: telemetry.meanMs,
+        stdDevMs: telemetry.stdDevMs,
+        sampleCount: telemetry.sampleCount,
+        frameCount: telemetry.frameCount,
+        stageTimings: telemetry.stageTimings,
+        dispatchCounters: telemetry.dispatchCounters,
+        resourceStats: telemetry.resourceStats,
+        lastEvent: telemetry.lastEvent,
+      },
+    },
+  });
+  state.lastTelemetryLogAt = now;
+}
+
+function computeSimulationPassCount(
+  telemetry: RuntimeTelemetrySnapshot,
+  installedGpuPassIds: readonly string[],
+): number {
+  const overheadDispatches = 2; // instance assembly + draw-prep
+  if (telemetry?.dispatchCounters.computeDispatchCount) {
+    return Math.max(1, telemetry.dispatchCounters.computeDispatchCount - overheadDispatches);
+  }
+  return Math.max(1, installedGpuPassIds.length);
+}
+
+function readInstalledGpuPassIds(renderer: WebGPURenderer): readonly string[] {
+  return typeof renderer.getInstalledGpuPassIds === 'function' ? renderer.getInstalledGpuPassIds() : [];
+}
+
+function readSinkTableSample(renderer: WebGPURenderer): ReturnType<WebGPURenderer['getLatestSinkTableSample']> {
+  return typeof renderer.getLatestSinkTableSample === 'function' ? renderer.getLatestSinkTableSample() : null;
+}
+
+interface RuntimeConsoleHeartbeatInputs {
+  currentProgram: CompiledProgramIR;
+  store: RootStore;
+  renderer: WebGPURenderer;
+  schedulerState: string;
+  fps: number;
+  drawOps: number;
+  tickMs: number;
+  telemetry: RuntimeTelemetrySnapshot;
+}
+
+function readProgramScheduleSteps(currentProgram: CompiledProgramIR): readonly { kind?: string }[] {
+  return Array.isArray(currentProgram.schedule?.steps) ? currentProgram.schedule.steps : [];
+}
+
+function buildRuntimeHeartbeatStats(
+  telemetry: RuntimeTelemetrySnapshot,
+  drawOps: number,
+  tickMs: number,
+): {
+  drawOps: number;
+  lastTickMs: number;
+  meanTickMs: number;
+  sinkWords: number;
+  frameCount: number;
+} {
+  return {
+    drawOps,
+    lastTickMs: tickMs,
+    meanTickMs: telemetry?.meanMs ?? 0,
+    sinkWords: telemetry?.resourceStats.sinkTableWordCount ?? 0,
+    frameCount: telemetry?.frameCount ?? 0,
+  };
+}
+
+function buildRuntimeHeartbeatTelemetry(telemetry: RuntimeTelemetrySnapshot): {
+  stageTimings: RuntimeTelemetryValue['stageTimings'];
+  dispatchCounters: RuntimeTelemetryValue['dispatchCounters'];
+  resourceStats: RuntimeTelemetryValue['resourceStats'];
+} | null {
+  if (!telemetry) {
+    return null;
+  }
+  return {
+    stageTimings: telemetry.stageTimings,
+    dispatchCounters: telemetry.dispatchCounters,
+    resourceStats: telemetry.resourceStats,
+  };
+}
+
+function buildRuntimeHeartbeatRuntime(
+  currentProgram: CompiledProgramIR,
+  store: RootStore,
+  telemetry: RuntimeTelemetrySnapshot,
+  installedGpuPassIds: readonly string[],
+  sinkTableSample: ReturnType<WebGPURenderer['getLatestSinkTableSample']>,
+): {
+  demoFilename: string | null;
+  renderStepCount: number;
+  drawPrepSinkCount: number;
+  installedGpuPassIds: readonly string[];
+  sinkTableSample: ReturnType<WebGPURenderer['getLatestSinkTableSample']>;
+  schedulerFrameCount: number;
+  simulationPassCount: number;
+  expectedPingPongIndexFromParity: number;
+} {
+  const renderStepCount = readProgramScheduleSteps(currentProgram).filter((step) => step?.kind === 'render').length;
+  const schedulerFrameCount = telemetry?.frameCount ?? 0;
+  const simulationPassCount = computeSimulationPassCount(telemetry, installedGpuPassIds);
+  // [LAW:one-source-of-truth] Expected ping/pong parity derives from
+  // the canonical simulation pass count emitted by runtime telemetry.
+  const expectedPingPongIndexFromParity = (schedulerFrameCount * simulationPassCount) & 1;
+  return {
+    demoFilename: store.demo.currentFilename ?? null,
+    renderStepCount,
+    drawPrepSinkCount: currentProgram.drawPrepProgram?.sinks?.length ?? 0,
+    installedGpuPassIds,
+    sinkTableSample,
+    schedulerFrameCount,
+    simulationPassCount,
+    expectedPingPongIndexFromParity,
+  };
+}
+
+function emitRuntimeConsoleHeartbeat(inputs: RuntimeConsoleHeartbeatInputs): void {
+  const {
+    currentProgram,
+    store,
+    renderer,
+    schedulerState,
+    fps,
+    drawOps,
+    tickMs,
+    telemetry,
+  } = inputs;
+  if (!RUNTIME_CONSOLE_ENABLED) {
+    return;
+  }
+  const installedGpuPassIds = readInstalledGpuPassIds(renderer);
+  const sinkTableSample = readSinkTableSample(renderer);
+  const runtime = buildRuntimeHeartbeatRuntime(
+    currentProgram,
+    store,
+    telemetry,
+    installedGpuPassIds,
+    sinkTableSample,
+  );
+  const line = {
+    kind: 'runtime-heartbeat',
+    fps,
+    stats: buildRuntimeHeartbeatStats(telemetry, drawOps, tickMs),
+    scheduler: schedulerState,
+    telemetry: buildRuntimeHeartbeatTelemetry(telemetry),
+    runtime,
+    breadcrumb: telemetry?.lastEvent ?? null,
+  };
+  // [LAW:one-source-of-truth] Runtime console emits one canonical JSON
+  // heartbeat line so DevTools/MCP parsing never depends on ad-hoc strings.
+  console.info(`[runtimeConsole] ${JSON.stringify(line)}`);
+}
+
+interface FpsCadenceInputs {
+  now: number;
+  state: AnimationLoopState;
+  currentProgram: CompiledProgramIR;
+  renderer: WebGPURenderer;
+  store: RootStore;
+  onStatsUpdate?: (statsText: string) => void;
+}
+
+function runFpsCadence({
+  now,
+  state,
+  currentProgram,
+  renderer,
+  store,
+  onStatsUpdate,
+}: FpsCadenceInputs): void {
+  if (!shouldRunFpsCadence(now, state.lastFpsUpdate)) {
+    return;
+  }
+  state.fps = Math.round((state.frameCount * 1000) / (now - state.lastFpsUpdate));
+  const schedulerState = renderer.getLifecycleState();
+  const telemetry = renderer.getLatestRuntimeTelemetry();
+  const drawOps = telemetry?.resourceStats.totalInstanceCount ?? 0;
+  const tickMs = telemetry?.stageTimings.totalFrameMs ?? telemetry?.meanMs ?? 0;
+  onStatsUpdate?.(formatStatsText(state.fps, drawOps, tickMs));
+  maybeLogRuntimeTelemetry({ store, state, now, schedulerState, fps: state.fps, telemetry });
+  emitRuntimeConsoleHeartbeat({
+    currentProgram,
+    store,
+    renderer,
+    schedulerState,
+    fps: state.fps,
+    drawOps,
+    tickMs,
+    telemetry,
+  });
+  state.frameCount = 0;
+  state.lastFpsUpdate = now;
+  state.minFrameTime = Infinity;
+  state.maxFrameTime = 0;
+  state.frameTimeSum = 0;
+}
 
 function assertProgramPhaseBoundary(deps: AnimationLoopDeps): void {
   const program = deps.getCurrentProgram();
@@ -129,6 +378,7 @@ export function createAnimationLoopState(): AnimationLoopState {
   return {
     frameCount: 0,
     lastFpsUpdate: performance.now(),
+    lastTelemetryLogAt: TELEMETRY_INITIAL_LOG_AT,
     fps: 0,
     execTime: 0,
     renderTime: 0,
@@ -143,6 +393,7 @@ function resetAnimationLoopState(state: AnimationLoopState): void {
   const next = createAnimationLoopState();
   state.frameCount = next.frameCount;
   state.lastFpsUpdate = next.lastFpsUpdate;
+  state.lastTelemetryLogAt = next.lastTelemetryLogAt;
   state.fps = next.fps;
   state.execTime = next.execTime;
   state.renderTime = next.renderTime;
@@ -205,69 +456,14 @@ export function executeAnimationFrame(
 
   state.frameCount++;
   const now = performance.now();
-  if (now - state.lastFpsUpdate > 500) {
-    state.fps = Math.round((state.frameCount * 1000) / (now - state.lastFpsUpdate));
-    const schedulerState = renderer.getLifecycleState();
-    const telemetry = renderer.getLatestRuntimeTelemetry();
-    const drawOps = telemetry?.resourceStats.totalInstanceCount ?? 0;
-    const tickMs = telemetry?.stageTimings.totalFrameMs ?? telemetry?.meanMs ?? 0;
-    const statsText = `FPS: ${state.fps} | DrawOps: ${drawOps} | `
-      + `Tick: ${tickMs.toFixed(1)}ms`;
-    onStatsUpdate?.(statsText);
-    if (RUNTIME_CONSOLE_ENABLED) {
-      const programScheduleSteps = Array.isArray(currentProgram?.schedule?.steps) ? currentProgram.schedule.steps : [];
-      const renderStepCount = programScheduleSteps.filter((step: { kind?: string }) => step?.kind === 'render').length;
-      const installedGpuPassIds =
-        typeof renderer.getInstalledGpuPassIds === 'function' ? renderer.getInstalledGpuPassIds() : [];
-      const rendererSinkTableSample =
-        typeof renderer.getLatestSinkTableSample === 'function' ? renderer.getLatestSinkTableSample() : null;
-      const sinkTableSample = rendererSinkTableSample ?? null;
-      const schedulerFrameCount = telemetry?.frameCount ?? 0;
-      const overheadDispatches = 2; // instance assembly + draw-prep
-      const simulationPassCount = telemetry?.dispatchCounters.computeDispatchCount
-        ? Math.max(1, telemetry.dispatchCounters.computeDispatchCount - overheadDispatches)
-        : Math.max(1, installedGpuPassIds.length);
-      // [LAW:one-source-of-truth] Expected ping/pong parity derives from
-      // the canonical simulation pass count emitted by runtime telemetry.
-      const expectedPingPongIndexFromParity = (schedulerFrameCount * simulationPassCount) & 1;
-      const line = {
-        kind: 'runtime-heartbeat',
-        fps: state.fps,
-        stats: {
-          drawOps,
-          lastTickMs: tickMs,
-          meanTickMs: telemetry?.meanMs ?? 0,
-          sinkWords: telemetry?.resourceStats.sinkTableWordCount ?? 0,
-          frameCount: telemetry?.frameCount ?? 0,
-        },
-        scheduler: schedulerState,
-        telemetry: telemetry ? {
-          stageTimings: telemetry.stageTimings,
-          dispatchCounters: telemetry.dispatchCounters,
-          resourceStats: telemetry.resourceStats,
-        } : null,
-        runtime: {
-          demoFilename: store.demo.currentFilename ?? null,
-          renderStepCount,
-          drawPrepSinkCount: currentProgram?.drawPrepProgram?.sinks?.length ?? 0,
-          installedGpuPassIds,
-          sinkTableSample,
-          schedulerFrameCount,
-          simulationPassCount,
-          expectedPingPongIndexFromParity,
-        },
-        breadcrumb: telemetry?.lastEvent ?? null,
-      };
-      // [LAW:one-source-of-truth] Runtime console emits one canonical JSON
-      // heartbeat line so DevTools/MCP parsing never depends on ad-hoc strings.
-      console.info(`[runtimeConsole] ${JSON.stringify(line)}`);
-    }
-    state.frameCount = 0;
-    state.lastFpsUpdate = now;
-    state.minFrameTime = Infinity;
-    state.maxFrameTime = 0;
-    state.frameTimeSum = 0;
-  }
+  runFpsCadence({
+    now,
+    state,
+    currentProgram,
+    renderer,
+    store,
+    onStatsUpdate,
+  });
 }
 
 /**

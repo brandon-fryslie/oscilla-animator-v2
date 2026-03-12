@@ -15,6 +15,7 @@ import type { ValueRenderer } from '../ValueRenderer';
 import type { RendererSample, AggregateStats } from '../types';
 import { formatFloat } from './formatFloat';
 import { genericNumericRenderer } from './GenericNumericRenderer';
+import { oklchToEncodedSrgb, toCssOklch } from '../../../core/color/oklch';
 
 const styles = {
   container: { fontFamily: 'monospace', fontSize: '12px', color: '#e0e0e0' } as const,
@@ -61,33 +62,38 @@ const styles = {
   countBadge: { color: '#666', fontSize: '10px' } as const,
 };
 
-const CHANNEL_COLORS = ['#ff4444', '#44cc44', '#4488ff', '#aaaaaa'] as const;
-const CHANNEL_LABELS = ['R', 'G', 'B', 'A'] as const;
+const CHANNEL_COLORS = ['#3b82f6', '#8b5cf6', '#f59e0b', '#aaaaaa'] as const;
+const CHANNEL_LABELS = ['H', 'C', 'L', 'A'] as const;
 
 /**
- * Convert float [0,1] components to CSS rgba string.
+ * Convert normalized OKLCH+A channels to native CSS color.
  */
-function toRgba(r: number, g: number, b: number, a: number): string {
-  return `rgba(${Math.round(r * 255)}, ${Math.round(g * 255)}, ${Math.round(b * 255)}, ${a})`;
+function toCssColor(h: number, c: number, l: number, a: number): string {
+  return toCssOklch(h, c, l, a);
 }
 
 /**
- * Convert float [0,1] RGB to hex string.
+ * Convert normalized OKLCH channels to hex (derived via encoded sRGB).
  */
-function toHex(r: number, g: number, b: number): string {
-  const hex = (v: number) => Math.round(Math.max(0, Math.min(1, v)) * 255).toString(16).padStart(2, '0');
+function toHex(h: number, c: number, l: number): string {
+  const [r, g, b] = oklchToEncodedSrgb(h, c, l);
+  const hex = (v: number) => {
+    const finite = Number.isFinite(v) ? v : 0;
+    const clamped = Math.max(0, Math.min(1, finite));
+    return Math.round(clamped * 255).toString(16).padStart(2, '0');
+  };
   return `#${hex(r)}${hex(g)}${hex(b)}`;
 }
 
 /**
- * ColorSwatch component - div with rgba background over checkerboard.
+ * ColorSwatch component - div with oklch background over checkerboard.
  */
-function ColorSwatch(props: { r: number; g: number; b: number; a: number; large: boolean }): React.ReactElement {
+function ColorSwatch(props: { h: number; c: number; l: number; a: number; large: boolean }): React.ReactElement {
   const swatchStyle = props.large ? styles.swatchLarge : styles.swatchSmall;
   return React.createElement('div', { style: swatchStyle },
     React.createElement('div', { style: styles.checkerboard }),
     React.createElement('div', {
-      style: { ...styles.colorOverlay, background: toRgba(props.r, props.g, props.b, props.a) },
+      style: { ...styles.colorOverlay, background: toCssColor(props.h, props.c, props.l, props.a) },
     })
   );
 }
@@ -132,14 +138,14 @@ function ChannelBar(props: { channel: number; min: number; max: number; mean: nu
 }
 
 function renderAggregateFull(stats: AggregateStats): React.ReactElement {
-  const meanR = stats.mean[0], meanG = stats.mean[1], meanB = stats.mean[2], meanA = stats.mean[3];
+  const meanH = stats.mean[0], meanC = stats.mean[1], meanL = stats.mean[2], meanA = stats.mean[3];
 
   return React.createElement('div', { style: styles.container },
     React.createElement('div', { style: styles.row },
-      React.createElement(ColorSwatch, { r: meanR, g: meanG, b: meanB, a: meanA, large: true }),
+      React.createElement(ColorSwatch, { h: meanH, c: meanC, l: meanL, a: meanA, large: true }),
       React.createElement('div', { style: { display: 'flex', flexDirection: 'column', gap: '2px', justifyContent: 'center' } },
         React.createElement('div', { style: styles.hexLabel },
-          `${toHex(meanR, meanG, meanB)} (α=${formatFloat(meanA)})`),
+          `${toHex(meanH, meanC, meanL)} (α=${formatFloat(meanA)})`),
         React.createElement('div', { style: styles.countBadge }, `n=${stats.count}`)
       )
     )
@@ -149,7 +155,7 @@ function renderAggregateFull(stats: AggregateStats): React.ReactElement {
 function renderAggregateInline(stats: AggregateStats): React.ReactElement {
   return React.createElement('span', { style: { ...styles.container, display: 'inline-flex', alignItems: 'center', gap: '4px' } },
     React.createElement(ColorSwatch, {
-      r: stats.mean[0], g: stats.mean[1], b: stats.mean[2], a: stats.mean[3], large: false,
+      h: stats.mean[0], c: stats.mean[1], l: stats.mean[2], a: stats.mean[3], large: false,
     }),
     React.createElement('span', null, toHex(stats.mean[0], stats.mean[1], stats.mean[2]))
   );

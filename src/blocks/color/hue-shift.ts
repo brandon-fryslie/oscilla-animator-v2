@@ -1,7 +1,7 @@
 /**
  * HueShift Block
  *
- * Shift hue by an offset, preserving s/l/a.
+ * Shift hue by an offset, preserving c/l/a.
  * shift is in "turns" (1.0 = full cycle).
  */
 
@@ -26,7 +26,7 @@ export function register(): void {
     type: 'HueShift',
     label: 'Hue Shift',
     category: 'color',
-    description: 'Shift hue by an offset with wrapping, preserving s/l/a',
+    description: 'Shift hue by an offset with wrapping, preserving c/l/a',
     form: 'primitive',
     capability: 'pure',
     loweringPurity: 'pure',
@@ -52,7 +52,7 @@ export function register(): void {
   
       // Extract channels
       const h = ctx.b.extract(colorInput.id, 0, intermediateFloat);
-      const s = ctx.b.extract(colorInput.id, 1, intermediateFloat);
+      const c = ctx.b.extract(colorInput.id, 1, intermediateFloat);
       const l = ctx.b.extract(colorInput.id, 2, intermediateFloat);
       const a = ctx.b.extract(colorInput.id, 3, intermediateFloat);
   
@@ -61,9 +61,9 @@ export function register(): void {
       const wrap01 = ctx.b.opcode(OpCode.Wrap01);
       const hShifted = zipAuto([h, shiftInput.id], addFn, intermediateFloat, ctx.b);
       const hWrapped = mapAuto(hShifted, wrap01, intermediateFloat, ctx.b);
-  
+
       // Reconstruct with shifted hue
-      const result = ctx.b.construct([hWrapped, s, l, a], outType);
+      const result = ctx.b.construct([hWrapped, c, l, a], outType);
       return {
         outputsById: {
           out: { id: result, slot: undefined, type: outType, stride: payloadStride(outType.payload) },

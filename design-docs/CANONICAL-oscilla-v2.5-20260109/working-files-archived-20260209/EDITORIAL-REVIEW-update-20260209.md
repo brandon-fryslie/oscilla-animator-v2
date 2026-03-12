@@ -190,8 +190,8 @@ The updated Topics 01 and 04 now have pure-lowering and fixpoint-loop content in
 |---|----------|---------|
 | 1 | Q2 Status field | Typo: "RESOVLED" should be "RESOLVED" |
 | 2 | Q5 Status field | Says "Resolve" (incomplete sentence, missing resolution text formatting) |
-| 3 | Topic 23 | Still uses `{ kind: 'color', space: 'hsl' }` in one place (T2 section line 18: `space: 'hsl'`) — but wait, checking again: it says `unit: 'hsl'`. Disregard. |
-| 4 | CANONICALIZED-TOPICS | Topic 23 T2 content list still says `{ kind: 'color', space: 'hsl' }` (line 18) — not updated per Q2 resolution |
+| 3 | Topic 23 | Still uses `{ kind: 'color', space: 'oklch' }` in one place (T2 section line 18: `space: 'oklch'`) — but wait, checking again: it says `unit: 'oklch'`. Disregard. |
+| 4 | CANONICALIZED-TOPICS | Topic 23 T2 content list still says `{ kind: 'color', space: 'oklch' }` (line 18) — not updated per Q2 resolution |
 | 5 | INDEX.md | Needs update_history entry for this integration (26 topics, 117 sources, 134 resolutions) — appears to already be updated |
 | 6 | GLOSSARY Binding entry | Lists `{ kind: 'weak'; referent: ReferentRef }` etc. but Topic 01 says v0 uses `unbound` only and has no `referent` field. These definitions may be aspirational. Consider noting this. |
 

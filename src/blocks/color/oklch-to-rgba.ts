@@ -1,5 +1,5 @@
 /**
- * HslToRgba Block (Adapter)
+ * OklchToRgba Block (Adapter)
  *
  * Convert color from OKLCH to RGBA color space.
  * Alpha passes through unchanged.
@@ -13,7 +13,7 @@ import { cardinalityVar } from '../../core/inference-types';
 import { cardinalityVarId } from '../../core/ids';
 
 // [LAW:one-source-of-truth] Per-port cardinality behavior is declared on CT/ICT.
-const HSL_TO_RGBA_CARD = cardinalityVar(cardinalityVarId('hsl_to_rgba_cardinality'), {
+const OKLCH_TO_RGBA_CARD = cardinalityVar(cardinalityVarId('oklch_to_rgba_cardinality'), {
   relation: 'promoteToMany',
   acceptance: 'oneOrMany',
   instanceBinding: 'inherit',
@@ -38,14 +38,14 @@ export function register(): void {
       stability: 'stable',
     },
     inputs: {
-      in: { label: 'OKLCH', type: canonicalType(COLOR, unitOklch(), { cardinality: HSL_TO_RGBA_CARD }) },
+      in: { label: 'OKLCH', type: canonicalType(COLOR, unitOklch(), { cardinality: OKLCH_TO_RGBA_CARD }) },
     },
     outputs: {
-      out: { label: 'RGBA', type: canonicalType(COLOR, unitRgba01(), { cardinality: HSL_TO_RGBA_CARD }) },
+      out: { label: 'RGBA', type: canonicalType(COLOR, unitRgba01(), { cardinality: OKLCH_TO_RGBA_CARD }) },
     },
     lower: ({ ctx, inputsById }) => {
       const input = inputsById.in;
-      if (!input) throw new Error('HslToRgba requires input');
+      if (!input) throw new Error('OklchToRgba requires input');
   
       const outType = ctx.outTypes[0];
   

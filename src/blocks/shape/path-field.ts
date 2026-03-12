@@ -10,7 +10,6 @@ import { FLOAT, INT, VEC2, VEC3 } from '../../core/canonical-types';
 import type { ValueExprId } from '../../compiler/ir/Indices';
 import type { TopologyId } from '../../shapes/types';
 import { promoteToMany } from '../lower-utils';
-import { resolveManyFieldInstance } from './_instance-helpers';
 
 /**
  * Find the topologyId for a given control point field by searching for
@@ -109,11 +108,11 @@ export function register(): void {
       // Resolve topology ID from the shapeRef that produced this field
       const topologyId = findTopologyIdForField(ctx.b, controlPointsFieldId);
   
-      const { instanceId: instance } = resolveManyFieldInstance(
-        ctx,
-        controlPointsInput,
-        'PathField.controlPoints',
-      );
+      // Get instance from context (inferred from input fields by lowering system)
+      const instance = ctx.inferredInstance !== undefined ? ctx.inferredInstance : ctx.instance;
+      if (!instance) {
+        throw new Error('PathField requires instance context from control points field');
+      }
   
       const posType = ctx.outTypes[0];
       const idxType = ctx.outTypes[1];

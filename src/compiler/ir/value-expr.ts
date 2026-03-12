@@ -93,7 +93,7 @@ export type ValueExpr =
   | ValueExprEvent
   | ValueExprExtract
   | ValueExprConstruct
-  | ValueExprHslToRgb;
+  | ValueExprOklchToRgb;
 
 // =============================================================================
 // ValueExpr Variants
@@ -253,15 +253,11 @@ export interface ValueExprShapeRef {
   readonly topologyId: TopologyId;
   readonly paramArgs: readonly ValueExprId[];
   /**
-   * For Type 2: The list of ValueExprs driving the dynamic parameters.
-   */
-  readonly parameterExprs?: readonly ValueExprId[];
-  /**
-   * Base field providing dynamic parameters for Type 2 parametric shapes.
+   * Optional control points for paths.
    * Referenced expr MUST have field-extent (cardinality many).
-   * Stride is derived from the topology definition.
+   * Stride is derivable via payloadStride(expr.type.payload) at consumer site.
    */
-  readonly parameterBaseField?: ValueExprId;
+  readonly controlPointField?: ValueExprId;
 }
 
 /**
@@ -362,13 +358,13 @@ export interface ValueExprConstruct {
 /**
  * OKLCH→RGB color space conversion (structural intrinsic).
  *
- * Takes a color+oklch input (stride 4: h,s,l,a) and produces color+rgba01
+ * Takes a color+oklch input (stride 4: h,c,l,a) and produces color+rgba01
  * output (stride 4: r,g,b,a). Alpha passes through unchanged.
  *
  * This is a structural intrinsic (not a component-wise opcode) because
  * OKLCH→RGB conversion requires access to all 3 color components at once.
  */
-export interface ValueExprHslToRgb {
+export interface ValueExprOklchToRgb {
   readonly kind: 'oklchToRgb';
   readonly type: CanonicalType;
   readonly input: ValueExprId; // Must be color+oklch (stride 4)

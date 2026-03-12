@@ -79,6 +79,11 @@ describe('compile worker payload clone safety', () => {
                 entryPoint: 'compute_main',
                 wgsl: '@compute @workgroup_size(64, 1, 1)\nfn compute_main() {}',
               }],
+              passSignatures: [{
+                passId: 'simulation',
+                stage: 'compute' as const,
+                entryPoint: 'compute_main',
+              }],
             },
             warnings: backendResult.warnings,
           },

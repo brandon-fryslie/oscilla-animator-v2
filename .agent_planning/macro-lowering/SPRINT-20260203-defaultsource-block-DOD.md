@@ -19,7 +19,7 @@ Generated: 2026-02-03
 - [ ] `sandbox.lowerBlock('Add', ...)` works in a unit test
 
 ### DefaultSource + HueRainbow
-- [ ] `HueRainbow` block registered — input `t` (float), output `out` (color RGBA via HSL→RGB)
+- [ ] `HueRainbow` block registered — input `t` (float), output `out` (color RGBA via OKLCH→RGB)
 - [ ] `HueRainbow` tagged `loweringPurity: 'pure'`
 - [ ] `DefaultSource` block registered — generic output type resolves via constraint propagation
 - [ ] DefaultSource type table covers all concrete payload types (float, int, bool, vec2, vec3, color, cameraProjection)

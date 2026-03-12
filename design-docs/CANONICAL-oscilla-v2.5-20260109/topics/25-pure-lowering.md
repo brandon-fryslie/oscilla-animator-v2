@@ -21,7 +21,7 @@ order: 25
 
 A capability-based IR builder that enforces purity during block lowering.
 
-**Provides**: `emitConst`, `emitOp`, `emitKernel`, `emitExtract`, `emitConstruct`, `readRail`, `hslToRgb`
+**Provides**: `emitConst`, `emitOp`, `emitKernel`, `emitExtract`, `emitConstruct`, `readRail`, `oklchToRgb`
 **Prevents**: graph mutation, global state access, scheduling side effects
 
 Used for both:

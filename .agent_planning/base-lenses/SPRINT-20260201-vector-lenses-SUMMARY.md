@@ -72,12 +72,12 @@ Implement Extract and Construct lenses for accessing/building vector components 
 ### IR Already Supports This
 The research phase revealed that the IR has native support for component extraction and construction:
 
-**Extract Pattern** (from `SplitColorHSL`):
+**Extract Pattern** (from `SplitColorOKLCH`):
 ```typescript
 const h = ctx.b.extract(colorInput.id, 0, hueType);  // Extract component 0
 ```
 
-**Construct Pattern** (from `MakeColorHSL`):
+**Construct Pattern** (from `MakeColorOKLCH`):
 ```typescript
 const result = ctx.b.construct([h, s, l, a], outType);  // Pack components
 ```
@@ -87,8 +87,8 @@ const result = ctx.b.construct([h, s, l, a], outType);  // Pack components
 ## Implementation Patterns
 
 ### Reference Implementations
-- **Extract**: Followed `SplitColorHSL` pattern
-- **Construct**: Followed `MakeColorHSL` pattern
+- **Extract**: Followed `SplitColorOKLCH` pattern
+- **Construct**: Followed `MakeColorOKLCH` pattern
 
 ### Lens Block Characteristics
 All lens blocks share these properties:

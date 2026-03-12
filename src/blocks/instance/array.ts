@@ -22,7 +22,7 @@ const ARRAY_OUTPUT_CARD = cardinalityVar(cardinalityVarId('array_outputs'), {
 });
 
 // [LAW:single-enforcer] Array instance fan-out safety is enforced at one boundary.
-const ARRAY_SAFE_MAX_COUNT = 10_000;
+const ARRAY_SAFE_MAX_COUNT = 1_000_000;
 
 export function register(): void {
   registerBlock({

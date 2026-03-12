@@ -203,7 +203,7 @@
 
 ### 13. Color Math — `src/runtime/kernels/color.ts`
 
-**What it does**: HSL↔RGB conversion, color blending, gamma correction.
+**What it does**: OKLCH↔RGB conversion, color blending, gamma correction.
 
 **Risk factors**: Well-known algorithms, straightforward implementation. Hue wrapping at 360° boundary is the main edge case and is handled.
 

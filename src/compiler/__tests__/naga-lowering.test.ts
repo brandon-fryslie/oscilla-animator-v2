@@ -34,7 +34,7 @@ function buildRenderPatch() {
   });
 }
 
-describe('naga lowering artifact', () => {
+describe('naga lowering artifact metadata', () => {
   it('emits structured Naga module artifact with compute entrypoint', () => {
     const result = compile(buildSimplePatch());
     expect(result.kind).toBe('ok');
@@ -91,7 +91,9 @@ describe('naga lowering artifact', () => {
     const hasBlockBoundEntry = mapEntries.some(([, value]) => value.blockId !== null && value.stepIndex >= 0);
     expect(hasBlockBoundEntry).toBe(true);
   });
+});
 
+describe('naga lowering artifact render coverage', () => {
   it('treats non-compute schedule steps as boundary work (not incomplete lowering)', () => {
     const result = compile(buildRenderPatch());
     expect(result.kind).toBe('ok');
@@ -151,5 +153,37 @@ describe('naga lowering artifact', () => {
     );
     expect(minCalls.length).toBeGreaterThan(0);
     expect(minCalls.some((expr) => expr.args.includes(laneExprId))).toBe(true);
+  });
+});
+
+describe('naga lowering artifact lane addressing', () => {
+  it('clamps lane addressing to slot cardinality in compute lowering', () => {
+    const result = compile(buildRenderPatch());
+    expect(result.kind).toBe('ok');
+    if (result.kind !== 'ok') return;
+
+    const artifact = result.program.nagaLoweringProgram;
+    expect(artifact).toBeDefined();
+    if (!artifact) return;
+
+    const mainFn = artifact.module.functions[0];
+    const argumentExprId = mainFn.expressions.findIndex(
+      (expr) => expr.kind === 'argument' && expr.argument === 0,
+    );
+    expect(argumentExprId).toBeGreaterThanOrEqual(0);
+
+    const laneExprId = mainFn.expressions.findIndex(
+      (expr) => expr.kind === 'access_index' && expr.base === argumentExprId && expr.index === 0,
+    );
+    expect(laneExprId).toBeGreaterThanOrEqual(0);
+
+    const laneBoundsChecks = mainFn.expressions.filter((expr) => {
+      if (expr.kind !== 'binary' || expr.op !== 'lt' || expr.left !== laneExprId) {
+        return false;
+      }
+      const rightExpr = mainFn.expressions[expr.right];
+      return rightExpr?.kind === 'constant';
+    });
+    expect(laneBoundsChecks.length).toBeGreaterThan(0);
   });
 });
