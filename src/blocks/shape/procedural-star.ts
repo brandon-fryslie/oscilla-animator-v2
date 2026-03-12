@@ -11,7 +11,7 @@ import { DOMAIN_CONTROL } from '../../core/domain-registry';
 import { PathVerb, type PathTopologyDefInput } from '../../shapes/types';
 import { defaultSourceConst } from '../../types';
 import { OpCode } from '../../compiler/ir/types';
-import { resolveInputConstant } from '../lower-utils';
+import { promoteToMany, resolveInputConstant } from '../lower-utils';
 
 /**
  * Create a star path topology definition.
@@ -183,12 +183,12 @@ export function register(): void {
       const floatFieldType = canonicalMany(FLOAT, { kind: 'none' }, ref);
   
       // Step 1: broadcast single-instance values to field extent
-      const pointsBroadcast = ctx.b.broadcast(pointsSig, floatFieldType);
-      const outerRadiusBroadcast = ctx.b.broadcast(outerRadiusSig, floatFieldType);
-      const innerRadiusBroadcast = ctx.b.broadcast(innerRadiusSig, floatFieldType);
-      const twoPiBroadcast = ctx.b.broadcast(twoPi, floatFieldType);
-      const halfPiBroadcast = ctx.b.broadcast(halfPi, floatFieldType);
-      const twoBroadcast = ctx.b.broadcast(two, floatFieldType);
+      const pointsBroadcast = promoteToMany(pointsSig, floatFieldType, ctx.b);
+      const outerRadiusBroadcast = promoteToMany(outerRadiusSig, floatFieldType, ctx.b);
+      const innerRadiusBroadcast = promoteToMany(innerRadiusSig, floatFieldType, ctx.b);
+      const twoPiBroadcast = promoteToMany(twoPi, floatFieldType, ctx.b);
+      const halfPiBroadcast = promoteToMany(halfPi, floatFieldType, ctx.b);
+      const twoBroadcast = promoteToMany(two, floatFieldType, ctx.b);
   
       // Step 2: Compute angle (same as polygon)
       // totalPoints = points * 2
