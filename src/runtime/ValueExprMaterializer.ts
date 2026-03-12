@@ -94,6 +94,7 @@ function resolveShapeControlPointSlot(
 const SHAPE_KIND_RIGID = 1;
 const SHAPE_KIND_PARAMETRIC = 2;
 const SHAPE_FLAG_CLOSED = 1;
+const SHAPE_TOPOLOGY_MODE_PATH_INDEXED = 1;
 
 function hasTopologyParam(topology: PathTopologyDef, paramName: string): boolean {
   return topology.params.some((param) => param.name === paramName);
@@ -124,7 +125,10 @@ function resolveTopologyParamDefault(
   fallback: number,
 ): number {
   const match = topology.params.find((param) => param.name === paramName);
-  return match?.default ?? fallback;
+  if (!match) {
+    return fallback;
+  }
+  return match.default;
 }
 
 function resolveTopologyParamIndex(
@@ -221,7 +225,7 @@ function evaluateShapeRefHandle(
   const isType2Curve = classifyType2ParametricTopology(topology);
   const controlPointCount = isPath ? topology.totalControlPoints : 0;
   let shapeKind = SHAPE_KIND_RIGID;
-  let topologyMode = isPath ? 1 : 0;
+  let topologyMode = isPath ? SHAPE_TOPOLOGY_MODE_PATH_INDEXED : 0;
   let flags = isPath && topology.closed ? SHAPE_FLAG_CLOSED : 0;
   let vertexCount = controlPointCount;
   let indexCount = isPath && topology.closed && vertexCount >= 3

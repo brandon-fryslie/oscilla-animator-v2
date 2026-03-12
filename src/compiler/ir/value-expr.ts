@@ -253,11 +253,15 @@ export interface ValueExprShapeRef {
   readonly topologyId: TopologyId;
   readonly paramArgs: readonly ValueExprId[];
   /**
-   * Optional control points for paths.
-   * Referenced expr MUST have field-extent (cardinality many).
-   * Stride is derivable via payloadStride(expr.type.payload) at consumer site.
+   * For Type 2: The list of ValueExprs driving the dynamic parameters.
    */
-  readonly controlPointField?: ValueExprId;
+  readonly parameterExprs?: readonly ValueExprId[];
+  /**
+   * Base field providing dynamic parameters for Type 2 parametric shapes.
+   * Referenced expr MUST have field-extent (cardinality many).
+   * Stride is derived from the topology definition.
+   */
+  readonly parameterBaseField?: ValueExprId;
 }
 
 /**

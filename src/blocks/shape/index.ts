@@ -14,6 +14,10 @@ import { register as register_6_make_shape2d } from './make-shape2d';
 import { register as register_7_parametric_curve_2d } from './parametric-curve-2d';
 import { register as register_8_shape_twist_2d } from './shape-twist-2d';
 import { register as register_9_shape_polar_ripple_2d } from './shape-polar-ripple-2d';
+import { register as register_10_shape_lissajous_2d } from './shape-lissajous-2d';
+import { register as register_11_shape_radial_pulse_2d } from './shape-radial-pulse-2d';
+import { register as register_12_shape_orbit_shift_2d } from './shape-orbit-shift-2d';
+import { register as register_13_shape_squish_wave_2d } from './shape-squish-wave-2d';
 
 export function registerShapeBlocks(): void {
   register_0_ellipse();
@@ -26,4 +30,8 @@ export function registerShapeBlocks(): void {
   register_7_parametric_curve_2d();
   register_8_shape_twist_2d();
   register_9_shape_polar_ripple_2d();
+  register_10_shape_lissajous_2d();
+  register_11_shape_radial_pulse_2d();
+  register_12_shape_orbit_shift_2d();
+  register_13_shape_squish_wave_2d();
 }

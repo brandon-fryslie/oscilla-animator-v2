@@ -316,28 +316,31 @@ export interface StepMaterialize {
 export interface StepRender {
   readonly kind: 'render';
   readonly instanceId: InstanceId;
-  /** Slot containing position buffer (after continuity applied) */
-  readonly controlPointsSlot: ValueSlot;
-  /** Slot containing color buffer (after continuity applied) */
+  /** Primary World Space coordinates (cardinality many; stride 2 for XY) */
+  readonly positionXYSlot: ValueSlot;
+  /** Optional World Space Z (depth) coordinates (cardinality many; stride 1) */
+  readonly positionZSlot: ValueSlot | null;
+  /** Slot containing color buffer (cardinality many; stride 4 for RGBA) */
   readonly colorSlot: ValueSlot;
   /**
    * Scale multiplier for shape dimensions.
-   * - `slot`: per-instance isotropic scale (cardinality many; stride 1)
+   * Strictly isotropic uniform scalar for SDF/Type 2 compatibility.
    */
-  readonly scale: { readonly k: 'slot'; readonly slot: ValueSlot };
+  readonly scaleSlot: ValueSlot;
+  /**
+   * Per-instance rotation (radians).
+   */
+  readonly rotationSlot: ValueSlot | null;
   /**
    * Shape source for rendering.
-   *
-   * [LAW:one-source-of-truth] Canonical path is slot-backed shape handles only
-   * (numeric handle flow via arena + ShapeBank).
+   * [LAW:one-source-of-truth] Canonical path is slot-backed shape handles only.
    */
-  readonly shape: { readonly k: 'slot'; readonly slot: ValueSlot };
-  /** Optional control points for path rendering - P5c: Add control points field */
-  readonly controlPoints?: { readonly k: 'slot'; readonly slot: ValueSlot };
-  /** C-13: Per-instance rotation (radians) - slot containing Float32Array */
-  readonly rotationSlot?: ValueSlot;
-  /** C-13: Per-instance anisotropic scale (x,y pairs) - slot containing Float32Array */
-  readonly scale2Slot?: ValueSlot;
+  readonly shapeSlot: { readonly k: 'slot'; readonly slot: ValueSlot };
+  /**
+   * NEW: Base slot index in the Compute Arena for Type 2 parametric shapes.
+   * Draw-Prep kernel forwards this to the Uber Shader for dynamic vertex evaluation.
+   */
+  readonly parameterBaseSlot: ValueSlot | null;
 }
 
 export interface StepStateWrite {
