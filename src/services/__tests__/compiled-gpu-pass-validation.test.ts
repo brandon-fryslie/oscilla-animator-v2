@@ -119,6 +119,19 @@ describe('validateCompiledGpuPassBundle bundle policy validation', () => {
     expect(result.errors.some((error) => error.message.includes('invalid fluid pass order'))).toBe(true);
   });
 
+  it('rejects unknown fluid pass identifiers at compile boundary', () => {
+    const result = validateCompiledGpuPassBundle(
+      buildBundle([
+        buildPass({ passId: 'fluid.splat', entryPoint: 'compute_splat_main', wgsl: '@compute\nfn compute_splat_main() {}' }),
+        buildPass({ passId: 'fluid.unknown', entryPoint: 'compute_unknown_main', wgsl: '@compute\nfn compute_unknown_main() {}' }),
+        buildPass({ passId: 'fluid.present', entryPoint: 'compute_present_main', wgsl: '@compute\nfn compute_present_main() {}' }),
+      ]),
+    );
+    expect(result.kind).toBe('error');
+    if (result.kind !== 'error') return;
+    expect(result.errors.some((error) => error.message.includes('unknown passId \"fluid.unknown\"'))).toBe(true);
+  });
+
   it('returns a structured error when passes payload is malformed', () => {
     const malformedBundle = {
       schemaVersion: 1,
