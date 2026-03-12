@@ -59,32 +59,34 @@ export function register(): void {
       },
     },
     lower: ({ ctx, inputsById }) => {
-      const value = inputsById.value;
-      const amount = inputsById.amount;
-      const seed = inputsById.seed;
-      if (!value) throw new Error('NoisyBroadcast value input is required');
-      if (!amount) throw new Error('NoisyBroadcast amount input is required');
-      if (!seed) throw new Error('NoisyBroadcast seed input is required');
-  
+      const requireInput = <T>(input: T | undefined, name: 'value' | 'amount' | 'seed'): T => {
+        if (!input) {
+          throw new Error(`NoisyBroadcast ${name} input is required`);
+        }
+        return input;
+      };
+
+      const value = requireInput(inputsById.value, 'value');
+      const amount = requireInput(inputsById.amount, 'amount');
+      const seed = requireInput(inputsById.seed, 'seed');
+
       const outType = ctx.outTypes[0];
       const floatFieldType = { ...canonicalType(FLOAT, outType.unit), extent: outType.extent };
-  
+
       const indexField = ctx.b.intrinsic('normalizedIndex', floatFieldType);
-  
-      const hashFn = ctx.b.opcode(OpCode.Hash);
-      const subFn = ctx.b.opcode(OpCode.Sub);
-      const mulFn = ctx.b.opcode(OpCode.Mul);
-      const addFn = ctx.b.opcode(OpCode.Add);
-  
+      const zipHash = ctx.b.opcode(OpCode.Hash);
+      const zipSub = ctx.b.opcode(OpCode.Sub);
+      const zipMul = ctx.b.opcode(OpCode.Mul);
+      const zipAdd = ctx.b.opcode(OpCode.Add);
+
       // [LAW:dataflow-not-control-flow] Cardinality alignment is expressed
       // through zipAuto promotion, never ad-hoc raw broadcast calls.
-      const noise01 = zipAuto([indexField, seed.id], hashFn, floatFieldType, ctx.b);
+      const noise01 = zipAuto([indexField, seed.id], zipHash, floatFieldType, ctx.b);
       const half = ctx.b.constant(floatConst(0.5), canonicalType(FLOAT, outType.unit));
-      const centeredNoise = zipAuto([noise01, half], subFn, floatFieldType, ctx.b);
-  
-      const scaledNoise = zipAuto([centeredNoise, amount.id], mulFn, outType, ctx.b);
-      const outId = zipAuto([value.id, scaledNoise], addFn, outType, ctx.b);
-  
+      const centeredNoise = zipAuto([noise01, half], zipSub, floatFieldType, ctx.b);
+      const scaledNoise = zipAuto([centeredNoise, amount.id], zipMul, outType, ctx.b);
+      const outId = zipAuto([value.id, scaledNoise], zipAdd, outType, ctx.b);
+
       return {
         outputsById: {
           out: { id: outId, slot: undefined, type: outType, stride: payloadStride(outType.payload) },

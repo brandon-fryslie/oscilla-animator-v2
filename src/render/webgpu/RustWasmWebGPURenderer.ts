@@ -182,16 +182,6 @@ const RUNTIME_CONSOLE_ENABLED = isRuntimeConsoleEnabled();
 // decide whether to split/configure timeout policy from real data.
 // https://github.com/brandon-fryslie/oscilla-animator-v2/issues/185
 const WORKER_RESPONSE_TIMEOUT_MS = 20_000;
-const FLUID_PASS_ORDER = [
-  'fluid.splat',
-  'fluid.curl',
-  'fluid.vorticity',
-  'fluid.divergence',
-  'fluid.pressure',
-  'fluid.gradient-subtract',
-  'fluid.advect',
-  'fluid.present',
-] as const;
 
 function getRuntimeBootstrapConfig(): RustRendererBootstrapConfig {
   if (!RUNTIME_CONSOLE_ENABLED) return DEFAULT_BOOTSTRAP_CONFIG;
@@ -323,45 +313,12 @@ function validateGpuPass(pass: RustRendererGpuPass, index: number): RustRenderer
 }
 
 function validateGpuPassBundle(passes: readonly RustRendererGpuPass[]): readonly RustRendererGpuPass[] {
-  // TODO(#181): Move bundle/order invariants to compiler artifact validation.
-  // [LAW:single-enforcer] Renderer should execute validated manifests, not
-  // enforce compiler-owned pass-order policy.
-  // https://github.com/brandon-fryslie/oscilla-animator-v2/issues/181
+  // [LAW:single-enforcer] Renderer owns transport/runtime payload integrity
+  // only; compile boundary owns semantic pass and bundle policy validation.
   if (passes.length === 0) {
     throw new Error('Rust renderer GPU pass contract violation: pass bundle must contain at least one pass');
   }
-  const validated = passes.map((pass, index) => validateGpuPass(pass, index));
-  const seenPassIds = new Set<string>();
-  for (const pass of validated) {
-    if (seenPassIds.has(pass.passId)) {
-      throw new Error(`Rust renderer GPU pass contract violation: duplicate passId "${pass.passId}"`);
-    }
-    seenPassIds.add(pass.passId);
-  }
-
-  const fluidPassIds = validated.filter((pass) => pass.passId.startsWith('fluid.')).map((pass) => pass.passId);
-  if (fluidPassIds.length > 0) {
-    if (!fluidPassIds.includes('fluid.present')) {
-      throw new Error('Rust renderer GPU pass contract violation: fluid pass bundle must include "fluid.present"');
-    }
-    let cursor = -1;
-    for (const passId of fluidPassIds) {
-      // TODO(#183): Remove cast-based pass-id narrowing and use explicit
-      // guard-backed lookup for fluid pass ordering.
-      // https://github.com/brandon-fryslie/oscilla-animator-v2/issues/183
-      const nextIndex = FLUID_PASS_ORDER.indexOf(passId as (typeof FLUID_PASS_ORDER)[number]);
-      if (nextIndex === -1) {
-        throw new Error(`Rust renderer GPU pass contract violation: unknown fluid passId "${passId}"`);
-      }
-      if (nextIndex < cursor) {
-        throw new Error(
-          `Rust renderer GPU pass contract violation: fluid pass "${passId}" is out of canonical order`,
-        );
-      }
-      cursor = nextIndex;
-    }
-  }
-  return validated;
+  return passes.map((pass, index) => validateGpuPass(pass, index));
 }
 
 function assertFiniteUint32(value: number, context: string): number {

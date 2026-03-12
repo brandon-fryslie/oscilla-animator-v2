@@ -9,16 +9,29 @@ function buildBundle(passes: readonly CompiledGpuPassArtifact[]): CompiledGpuArt
   };
 }
 
+function buildPass(overrides: Partial<CompiledGpuPassArtifact> = {}): CompiledGpuPassArtifact {
+  return {
+    passId: 'simulation',
+    stage: 'compute',
+    entryPoint: 'compute_main',
+    wgsl: '@compute @workgroup_size(64, 1, 1)\nfn compute_main() {}',
+    ...overrides,
+  };
+}
+
+function expectValidationError(
+  passOverrides: Partial<CompiledGpuPassArtifact>,
+  expectedMessageFragment: string,
+): void {
+  const result = validateCompiledGpuPassBundle(buildBundle([buildPass(passOverrides)]));
+  expect(result.kind).toBe('error');
+  if (result.kind !== 'error') return;
+  expect(result.errors.some((error) => error.message.includes(expectedMessageFragment))).toBe(true);
+}
+
 describe('validateCompiledGpuPassBundle', () => {
   it('accepts valid pass signatures and emits manifest signatures', () => {
-    const result = validateCompiledGpuPassBundle(
-      buildBundle([{
-        passId: 'simulation',
-        stage: 'compute',
-        entryPoint: 'compute_main',
-        wgsl: '@compute @workgroup_size(64, 1, 1)\nfn compute_main() {}',
-      }]),
-    );
+    const result = validateCompiledGpuPassBundle(buildBundle([buildPass()]));
 
     expect(result.kind).toBe('ok');
     if (result.kind !== 'ok') return;
@@ -30,86 +43,60 @@ describe('validateCompiledGpuPassBundle', () => {
         entryPoint: 'compute_main',
       }],
     });
-    expect(result.bundle.passes[0]).toEqual({
-      passId: 'simulation',
-      stage: 'compute',
-      entryPoint: 'compute_main',
-      wgsl: '@compute @workgroup_size(64, 1, 1)\nfn compute_main() {}',
-    });
+    expect(result.bundle.passes[0]).toEqual(buildPass());
   });
 
   it('rejects pass bundles with invalid stage', () => {
-    const result = validateCompiledGpuPassBundle(
-      buildBundle([{
-        passId: 'simulation',
-        stage: 'vertex' as unknown as 'compute',
-        entryPoint: 'compute_main',
-        wgsl: '@compute @workgroup_size(64, 1, 1)\nfn compute_main() {}',
-      }]),
+    expectValidationError(
+      { stage: 'vertex' as unknown as 'compute' },
+      'unsupported stage',
     );
-
-    expect(result.kind).toBe('error');
-    if (result.kind !== 'error') return;
-    expect(result.errors.some((error) => error.message.includes('unsupported stage'))).toBe(true);
   });
 
   it('rejects invalid entrypoint identifiers', () => {
-    const result = validateCompiledGpuPassBundle(
-      buildBundle([{
-        passId: 'simulation',
-        stage: 'compute',
-        entryPoint: '123bad',
-        wgsl: '@compute @workgroup_size(64, 1, 1)\nfn 123bad() {}',
-      }]),
+    expectValidationError(
+      { entryPoint: '123bad', wgsl: '@compute @workgroup_size(64, 1, 1)\nfn 123bad() {}' },
+      'invalid entryPoint',
     );
-
-    expect(result.kind).toBe('error');
-    if (result.kind !== 'error') return;
-    expect(result.errors.some((error) => error.message.includes('invalid entryPoint'))).toBe(true);
   });
 
   it('rejects missing entrypoint values', () => {
-    const result = validateCompiledGpuPassBundle(
-      buildBundle([{
-        passId: 'simulation',
-        stage: 'compute',
-        entryPoint: '',
-        wgsl: '@compute @workgroup_size(64, 1, 1)\nfn compute_main() {}',
-      }]),
-    );
-
-    expect(result.kind).toBe('error');
-    if (result.kind !== 'error') return;
-    expect(result.errors.some((error) => error.message.includes('missing entryPoint'))).toBe(true);
+    expectValidationError({ entryPoint: '' }, 'missing entryPoint');
   });
 
   it('rejects WGSL payloads missing compute annotation', () => {
-    const result = validateCompiledGpuPassBundle(
-      buildBundle([{
-        passId: 'simulation',
-        stage: 'compute',
-        entryPoint: 'compute_main',
-        wgsl: 'fn compute_main() {}',
-      }]),
-    );
-
-    expect(result.kind).toBe('error');
-    if (result.kind !== 'error') return;
-    expect(result.errors.some((error) => error.message.includes('missing @compute entry annotation'))).toBe(true);
+    expectValidationError({ wgsl: 'fn compute_main() {}' }, 'missing @compute entry annotation');
   });
 
   it('rejects WGSL payloads missing declared entrypoint function', () => {
-    const result = validateCompiledGpuPassBundle(
-      buildBundle([{
-        passId: 'simulation',
-        stage: 'compute',
-        entryPoint: 'compute_main',
-        wgsl: '@compute @workgroup_size(64, 1, 1)\nfn other_main() {}',
-      }]),
+    expectValidationError(
+      { wgsl: '@compute @workgroup_size(64, 1, 1)\nfn other_main() {}' },
+      'missing fn compute_main(...)',
     );
+  });
 
+  it('rejects duplicate pass identifiers', () => {
+    const result = validateCompiledGpuPassBundle(
+      buildBundle([
+        buildPass({ passId: 'fluid.present', entryPoint: 'compute_present_main', wgsl: '@compute\nfn compute_present_main() {}' }),
+        buildPass({ passId: 'fluid.present', entryPoint: 'compute_present_main', wgsl: '@compute\nfn compute_present_main() {}' }),
+      ]),
+    );
     expect(result.kind).toBe('error');
     if (result.kind !== 'error') return;
-    expect(result.errors.some((error) => error.message.includes('missing fn compute_main(...)'))).toBe(true);
+    expect(result.errors.some((error) => error.message.includes('duplicate passId'))).toBe(true);
+  });
+
+  it('rejects invalid fluid bundle order and missing present pass', () => {
+    const result = validateCompiledGpuPassBundle(
+      buildBundle([
+        buildPass({ passId: 'fluid.advect', entryPoint: 'compute_advect_main', wgsl: '@compute\nfn compute_advect_main() {}' }),
+        buildPass({ passId: 'fluid.curl', entryPoint: 'compute_curl_main', wgsl: '@compute\nfn compute_curl_main() {}' }),
+      ]),
+    );
+    expect(result.kind).toBe('error');
+    if (result.kind !== 'error') return;
+    expect(result.errors.some((error) => error.message.includes('missing \"fluid.present\"'))).toBe(true);
+    expect(result.errors.some((error) => error.message.includes('invalid fluid pass order'))).toBe(true);
   });
 });
