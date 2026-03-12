@@ -2,10 +2,7 @@
 
 import { compileFromFrontend } from '../compiler';
 import { compileFrontend } from '../compiler/frontend';
-import {
-  compileProgramWithNaga,
-  validateGpuPassSignaturesAtCompileBoundary,
-} from '../compiler/naga-compile';
+import { compileProgramWithNaga } from '../compiler/naga-compile';
 import { EventHub } from '../events/EventHub';
 import { deserializePatch } from './PatchPersistence';
 import { maybeBuildFluidGpuBundle } from './fluid-gpu-bundle';
@@ -15,104 +12,118 @@ import type {
   CompileWorkerResponse,
   CompileWorkerBackendResult,
 } from './compile-worker-protocol';
+import { validateCompiledGpuPassBundle } from './compiled-gpu-pass-validation';
 import { stripKernelRegistry } from './compile-worker-serialization';
+import type { CompileError } from '../compiler/types';
+import type { GeneratedGpuArtifactManifestIR } from '../compiler/ir/program';
+
+function attachPreNagaWarnings(
+  errors: readonly CompileError[],
+  preNagaWarnings: readonly CompileError[],
+): readonly CompileError[] {
+  return errors.map((error) => ({
+    ...error,
+    details: {
+      ...(error.details ?? {}),
+      preNagaWarnings,
+    },
+  }));
+}
+
+function toBackendError(errors: readonly CompileError[]): CompileWorkerBackendResult {
+  return {
+    kind: 'error',
+    errors,
+  };
+}
+
+function buildCanonicalSimulationPassBundle(wgsl: string): CompiledGpuArtifactBundle {
+  return {
+    schemaVersion: 1,
+    passes: [{
+      passId: 'simulation',
+      stage: 'compute',
+      entryPoint: 'compute_main',
+      wgsl,
+    }],
+  };
+}
+
+function withGpuManifest(
+  program: ReturnType<typeof stripKernelRegistry>,
+  manifest: GeneratedGpuArtifactManifestIR,
+): ReturnType<typeof stripKernelRegistry> {
+  return {
+    ...program,
+    generatedGpuArtifactManifest: manifest,
+  };
+}
+
+async function compileNonFluidBundle(
+  program: Parameters<typeof compileProgramWithNaga>[0],
+): Promise<
+  | { readonly kind: 'ok'; readonly bundle: CompiledGpuArtifactBundle }
+  | { readonly kind: 'error'; readonly errors: readonly CompileError[] }
+> {
+  // [LAW:single-enforcer] Non-fluid shader lowering is validated by one
+  // Naga boundary before entering runtime worker transport.
+  const nagaCompilation = await compileProgramWithNaga(program);
+  if (nagaCompilation.kind === 'error') {
+    return { kind: 'error', errors: nagaCompilation.errors };
+  }
+  return {
+    kind: 'ok',
+    bundle: buildCanonicalSimulationPassBundle(nagaCompilation.wgsl),
+  };
+}
 
 async function toBackendResult(
   frontendResult: ReturnType<typeof compileFrontend>,
   result: ReturnType<typeof compileFromFrontend>,
 ): Promise<CompileWorkerBackendResult> {
-  if (result.kind === 'ok') {
-    if (!result.program.generatedComputeProgram) {
-      return {
-        kind: 'error',
-        errors: [
-          {
-            code: 'IRValidationFailed',
-            message: 'Compiled program is missing generatedComputeProgram metadata',
-            details: {
-              preNagaWarnings: result.warnings,
-            },
-          },
-        ],
-      };
-    }
-    const fluidBundle = maybeBuildFluidGpuBundle(frontendResult.normalizedPatch, result.program);
-    let compiledGpuBundle: CompiledGpuArtifactBundle;
-    if (fluidBundle) {
-      // [LAW:one-source-of-truth] Fluid-first compile emits one canonical
-      // pass bundle artifact and bypasses legacy single-pass lowering output.
-      compiledGpuBundle = fluidBundle;
-    } else {
-      // [LAW:single-enforcer] Non-fluid shader lowering is validated by one
-      // Naga boundary before entering runtime worker transport.
-      const nagaCompilation = await compileProgramWithNaga(result.program);
-      if (nagaCompilation.kind === 'error') {
-        return {
-          kind: 'error',
-          errors: nagaCompilation.errors.map((error) => ({
-            ...error,
-            details: {
-              ...(error.details ?? {}),
-              preNagaWarnings: result.warnings,
-            },
-          })),
-        };
-      }
-      compiledGpuBundle = {
-        schemaVersion: 1,
-        passes: [{
-          passId: 'simulation',
-          stage: 'compute',
-          entryPoint: 'compute_main',
-          wgsl: nagaCompilation.wgsl,
-        }],
-      };
-    }
-
-    // [LAW:single-enforcer] Compile worker is the only runtime boundary that
-    // admits GPU pass artifacts into worker transport after signature checks.
-    const passSignatureValidation = validateGpuPassSignaturesAtCompileBoundary(compiledGpuBundle.passes);
-    if (passSignatureValidation.kind === 'error') {
-      return {
-        kind: 'error',
-        errors: passSignatureValidation.errors.map((error) => ({
-          ...error,
-          details: {
-            ...(error.details ?? {}),
-            preNagaWarnings: result.warnings,
-          },
-        })),
-      };
-    }
-
-    const passSignatures = passSignatureValidation.signatures;
-    const validatedCompiledGpuBundle: CompiledGpuArtifactBundle = {
-      ...compiledGpuBundle,
-      passSignatures,
-    };
-
-    const program = stripKernelRegistry(result.program);
-    const programWithGpuManifest = {
-      ...program,
-      generatedGpuArtifactManifest: {
-        schemaVersion: validatedCompiledGpuBundle.schemaVersion,
-        passes: passSignatures.map((signature) => ({
-          passId: signature.passId,
-          stage: signature.stage,
-          entryPoint: signature.entryPoint,
-        })),
-      },
-    };
-    return {
-      kind: 'ok',
-      program: programWithGpuManifest,
-      compiledGpuBundle: validatedCompiledGpuBundle,
-      warnings: result.warnings,
-    };
+  if (result.kind !== 'ok') {
+    return toBackendError(result.errors);
   }
+  if (!result.program.generatedComputeProgram) {
+    return toBackendError(attachPreNagaWarnings(
+      [{
+        code: 'IRValidationFailed',
+        message: 'Compiled program is missing generatedComputeProgram metadata',
+      }],
+      result.warnings,
+    ));
+  }
+  const fluidBundle = maybeBuildFluidGpuBundle(frontendResult.normalizedPatch, result.program);
+  const nonFluidBundleResult = fluidBundle
+    ? null
+    : await compileNonFluidBundle(result.program);
+
+  if (nonFluidBundleResult?.kind === 'error') {
+    return toBackendError(attachPreNagaWarnings(nonFluidBundleResult.errors, result.warnings));
+  }
+  const compiledGpuBundle = fluidBundle ?? nonFluidBundleResult?.bundle;
+  if (!compiledGpuBundle) {
+    return toBackendError(attachPreNagaWarnings(
+      [{
+        code: 'IRValidationFailed',
+        message: 'Compiler emitted invalid non-fluid GPU artifact bundle',
+      }],
+      result.warnings,
+    ));
+  }
+
+  const passValidation = validateCompiledGpuPassBundle(compiledGpuBundle);
+  if (passValidation.kind === 'error') {
+    return toBackendError(attachPreNagaWarnings(passValidation.errors, result.warnings));
+  }
+
+  const program = stripKernelRegistry(result.program);
+  const programWithGpuManifest = withGpuManifest(program, passValidation.manifest);
   return {
-    kind: 'error',
-    errors: result.errors,
+    kind: 'ok',
+    program: programWithGpuManifest,
+    compiledGpuBundle: passValidation.bundle,
+    warnings: result.warnings,
   };
 }
 
