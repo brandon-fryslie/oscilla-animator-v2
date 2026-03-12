@@ -577,6 +577,8 @@ export interface EditorStateChangedEvent {
  */
 export interface GpuFaultEvent {
   readonly type: 'GpuFault';
+  readonly patchId: string;
+  readonly patchRevision: number;
   readonly severity: 'warning' | 'fatal';
   readonly code: string;
   readonly message: string;

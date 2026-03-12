@@ -1434,7 +1434,7 @@ export class WebGPURenderer {
     this.reportEngineError(payload.code, payload.reason, 'WORKER', true);
     this.emitGpuFault({
       severity: 'fatal',
-      code: 'DEVICE_LOST',
+      code: payload.code,
       message: payload.reason,
       source: 'WORKER',
       recoverable: false,

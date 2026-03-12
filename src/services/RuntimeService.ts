@@ -520,6 +520,8 @@ export class RuntimeService {
         });
         store.events.emit({
           type: 'GpuFault',
+          patchId: 'patch-0',
+          patchRevision: store.getPatchRevision(),
           severity: fault.severity,
           code: fault.code,
           message: fault.message,
