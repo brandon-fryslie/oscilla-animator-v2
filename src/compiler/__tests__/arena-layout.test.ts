@@ -25,7 +25,6 @@ import type { InstanceDecl } from '../ir/types';
 import { buildPatch } from '../../graph';
 import { compile } from '../compile';
 import { createRuntimeState } from '../../runtime';
-import { getOrCreateTargetState, type StableTargetId } from '../../runtime/ContinuityState';
 import type { ScheduleIR } from '../backend/schedule-program';
 import type { ValueSlot } from '../../types';
 
@@ -51,6 +50,13 @@ function makeInstances(
 }
 
 const emptyInstances: ReadonlyMap<InstanceId, InstanceDecl> = new Map();
+
+function requireValue<T>(value: T | undefined, message: string): T {
+  if (value === undefined) {
+    throw new Error(message);
+  }
+  return value;
+}
 
 // ---------------------------------------------------------------------------
 // deriveArenaDescriptor — unit tests
@@ -125,7 +131,9 @@ describe('deriveArenaDescriptor', () => {
     expect(desc.laneCount).toBe(32);
     expect(desc.length).toBe(32);
   });
+});
 
+describe('deriveArenaDescriptor offsets', () => {
   it('respects arenaOffset for bump allocation', () => {
     const type = canonicalScalar(VEC3);
     const desc = deriveArenaDescriptor(type, 100, emptyInstances);
@@ -351,7 +359,7 @@ describe('arenaLayout integration', () => {
     expect(first.program.arenaZones).toEqual(second.program.arenaZones);
   });
 
-  it('keeps continuity-owned multi-component render slots in SoA descriptors', () => {
+  it('keeps canonical render slots materialized in SoA descriptors', () => {
     const patch = buildPatch((b) => {
       b.addBlock('InfiniteTimeRoot');
 
@@ -384,17 +392,17 @@ describe('arenaLayout integration', () => {
     expect(renderStep).toBeDefined();
     if (!renderStep || renderStep.kind !== 'render') return;
 
-    const continuityOutputSlots = new Set(
+    const materializedSlots = new Set(
       schedule.steps
-        .filter((s): s is Extract<ScheduleIR['steps'][number], { kind: 'continuityApply' }> => s.kind === 'continuityApply')
-        .map((s) => s.outputSlot),
+        .filter((s): s is Extract<ScheduleIR['steps'][number], { kind: 'materialize' }> => s.kind === 'materialize')
+        .map((s) => s.target as number),
     );
-    expect(continuityOutputSlots.has(renderStep.controlPointsSlot)).toBe(true);
-    expect(continuityOutputSlots.has(renderStep.colorSlot)).toBe(true);
+    expect(materializedSlots.has(renderStep.controlPointsSlot as number)).toBe(true);
+    expect(materializedSlots.has(renderStep.colorSlot as number)).toBe(true);
 
     const positionDesc = result.program.runtimeAddressTable?.slotToArena.get(renderStep.controlPointsSlot);
     const colorDesc = result.program.runtimeAddressTable?.slotToArena.get(renderStep.colorSlot);
-    // [LAW:dataflow-not-control-flow] Continuity does not change packing mode;
+    // [LAW:dataflow-not-control-flow] Canonical materialization does not change packing mode;
     // render multi-component lanes stay channel-separated in SoA layout.
     expect(positionDesc?.packing).toBe('soa');
     expect(colorDesc?.packing).toBe('soa');
@@ -415,18 +423,16 @@ describe('arenaLayout integration', () => {
     const schedule = program.schedule as ScheduleIR;
     expect((schedule.stateSlotCount ?? 0)).toBeGreaterThan(0);
 
-    const stateZone = program.arenaZones?.zones.find((z) => z.kind === 'state');
-    expect(stateZone).toBeDefined();
-    if (!stateZone) {
-      throw new Error('Missing state zone metadata');
-    }
+    const stateZone = requireValue(
+      program.arenaZones?.zones.find((z) => z.kind === 'state'),
+      'Missing state zone metadata',
+    );
     expect(stateZone.length).toBe((schedule.stateSlotCount ?? 0) * 2);
 
-    const stateLayout = program.arenaRuntimeLayout?.stateBank;
-    expect(stateLayout).toBeDefined();
-    if (!stateLayout) {
-      throw new Error('Missing arenaRuntimeLayout.stateBank metadata');
-    }
+    const stateLayout = requireValue(
+      program.arenaRuntimeLayout?.stateBank,
+      'Missing arenaRuntimeLayout.stateBank metadata',
+    );
     expect(stateLayout.bankLength).toBe(schedule.stateSlotCount ?? 0);
     expect(stateLayout.offset).toBe(stateZone.start);
 
@@ -445,7 +451,7 @@ describe('arenaLayout integration', () => {
     expect(state.stateArena.offset).toBe(stateZone.start);
   });
 
-  it('binds continuity gauge targets to zone-5 arena slices', () => {
+  it('keeps gauge zone empty when continuity is removed from canonical schedule', () => {
     const patch = buildPatch((b) => {
       b.addBlock('InfiniteTimeRoot');
 
@@ -480,12 +486,10 @@ describe('arenaLayout integration', () => {
     if (!gaugeZone) {
       throw new Error('Missing gauge zone metadata');
     }
-    expect(gaugeZone.length).toBeGreaterThan(0);
+    expect(gaugeZone.length).toBe(0);
 
     const gaugeTargets = program.arenaRuntimeLayout?.gaugeTargets ?? [];
-    expect(gaugeTargets.length).toBeGreaterThan(0);
-    const totalGaugeFloats = gaugeTargets.reduce((sum, target) => sum + target.descriptor.length, 0);
-    expect(gaugeZone.length).toBe(totalGaugeFloats);
+    expect(gaugeTargets.length).toBe(0);
 
     const state = createRuntimeState(
       schedule.stateSlotCount ?? 0,
@@ -496,19 +500,7 @@ describe('arenaLayout integration', () => {
       undefined,
       program.arenaRuntimeLayout,
     );
-
-    for (const target of gaugeTargets) {
-      const targetState = getOrCreateTargetState(
-        state.continuity,
-        target.targetId as StableTargetId,
-        target.descriptor.length,
-        target.instanceId,
-      );
-      expect(targetState.gaugeBuffer.buffer).toBe(state.arena.buffer);
-      expect(targetState.gaugeBuffer.length).toBe(target.descriptor.length);
-      expect(target.descriptor.offset).toBeGreaterThanOrEqual(gaugeZone.start);
-      expect(target.descriptor.offset + target.descriptor.length).toBeLessThanOrEqual(gaugeZone.end);
-    }
+    expect(state.arena.length).toBe(program.arenaTotalFloats);
   });
 
   it('compiled program has consistent arenaLayout', () => {

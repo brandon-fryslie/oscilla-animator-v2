@@ -7,7 +7,7 @@
 
 import { registerBlock } from '../registry';
 import { canonicalType, payloadStride, floatConst, FLOAT } from '../../core/canonical-types';
-import { inferType, unitVar, cardinalityVar } from '../../core/inference-types';
+import { inferType, unitVar, cardinalityVar, type InferenceUnitType } from '../../core/inference-types';
 import { cardinalityVarId } from '../../core/ids';
 import { defaultSourceConst } from '../../types';
 import { OpCode } from '../../compiler/ir/types';
@@ -18,11 +18,21 @@ const NOISY_BROADCAST_OUT_CARD = cardinalityVar(cardinalityVarId('noisy_broadcas
   acceptance: 'manyOnly',
   instanceBinding: 'inherit',
 });
-const NOISY_BROADCAST_IN_CARD = cardinalityVar(cardinalityVarId('noisy_broadcast_in'), {
-  relation: 'promoteToMany',
-  acceptance: 'oneOrMany',
-  instanceBinding: 'inherit',
+const NOISY_BROADCAST_UNIT = unitVar('noisy_broadcast_u');
+const NOISY_BROADCAST_INPUT_TYPE = inferType(FLOAT, NOISY_BROADCAST_UNIT, {
+  cardinality: cardinalityVar(cardinalityVarId('noisy_broadcast_in'), {
+    relation: 'promoteToMany',
+    acceptance: 'oneOrMany',
+    instanceBinding: 'inherit',
+  }),
 });
+const NOISY_BROADCAST_OUTPUT_TYPE = inferType(FLOAT, NOISY_BROADCAST_UNIT, {
+  cardinality: NOISY_BROADCAST_OUT_CARD,
+});
+
+function sliderUiHint(min: number, max: number, step: number): { kind: 'slider'; min: number; max: number; step: number } {
+  return { kind: 'slider', min, max, step };
+}
 
 function requireInput<T>(value: T | undefined, label: string): T {
   if (value === undefined) {
@@ -41,37 +51,43 @@ export function register(): void {
     capability: 'pure',
     loweringPurity: 'pure',
     inputs: {
-      value: { label: 'Value', type: inferType(FLOAT, unitVar('noisy_broadcast_u'), { cardinality: NOISY_BROADCAST_IN_CARD }) },
+      value: { label: 'Value', type: NOISY_BROADCAST_INPUT_TYPE },
       amount: {
         label: 'Noise Amount',
-        type: inferType(FLOAT, unitVar('noisy_broadcast_u'), { cardinality: NOISY_BROADCAST_IN_CARD }),
+        type: NOISY_BROADCAST_INPUT_TYPE,
         defaultValue: 0.1,
         defaultSource: defaultSourceConst(0.1),
         exposedAsPort: true,
-        uiHint: { kind: 'slider', min: 0, max: 2, step: 0.01 },
+        uiHint: sliderUiHint(0, 2, 0.01),
       },
       seed: {
         label: 'Seed',
-        type: inferType(FLOAT, unitVar('noisy_broadcast_u'), { cardinality: NOISY_BROADCAST_IN_CARD }),
+        type: NOISY_BROADCAST_INPUT_TYPE,
         defaultValue: 0,
         defaultSource: defaultSourceConst(0),
         exposedAsPort: true,
-        uiHint: { kind: 'slider', min: 0, max: 1000, step: 1 },
+        uiHint: sliderUiHint(0, 1000, 1),
       },
     },
     outputs: {
       out: {
         label: 'Out',
-        type: inferType(FLOAT, unitVar('noisy_broadcast_u'), { cardinality: NOISY_BROADCAST_OUT_CARD }),
+        type: NOISY_BROADCAST_OUTPUT_TYPE,
       },
     },
     lower: ({ ctx, inputsById }) => {
-      const value = requireInput(inputsById.value, 'value');
-      const amount = requireInput(inputsById.amount, 'amount');
-      const seed = requireInput(inputsById.seed, 'seed');
+      // [LAW:single-enforcer] Required-input invariants are enforced at the
+      // compiler/orchestrator boundary; lowering consumes validated inputs.
+      const value = inputsById.value!;
+      const amount = inputsById.amount!;
+      const seed = inputsById.seed!;
   
       const outType = ctx.outTypes[0];
-      const floatFieldType = { ...canonicalType(FLOAT, outType.unit), extent: outType.extent };
+      const outputUnit = outType.unit as InferenceUnitType;
+      if (outputUnit.kind === 'var') {
+        throw new Error('NoisyBroadcast: output unit must be resolved before lowering');
+      }
+      const floatFieldType = { ...canonicalType(FLOAT, outputUnit), extent: outType.extent };
   
       const indexField = ctx.b.intrinsic('normalizedIndex', floatFieldType);
   
