@@ -81,13 +81,6 @@ const DESCRIPTOR_WORD_ROTATION_BASE_OFFSET: u32 = 10u;
 const DESCRIPTOR_WORD_ROTATION_LANE_STRIDE: u32 = 11u;
 const DESCRIPTOR_WORD_ROTATION_COMPONENT_STRIDE: u32 = 12u;
 const DESCRIPTOR_WORD_ROTATION_DEFAULT_BITS: u32 = 13u;
-const DESCRIPTOR_WORD_SCALE2_MODE: u32 = 14u;
-const DESCRIPTOR_WORD_SCALE2_BASE_OFFSET: u32 = 15u;
-const DESCRIPTOR_WORD_SCALE2_LANE_STRIDE: u32 = 16u;
-const DESCRIPTOR_WORD_SCALE2_COMPONENT_STRIDE: u32 = 17u;
-const DESCRIPTOR_WORD_SCALE2_DEFAULT_X_BITS: u32 = 18u;
-const DESCRIPTOR_WORD_SCALE2_DEFAULT_Y_BITS: u32 = 19u;
-
 const OPTIONAL_MODE_CONSTANT: u32 = 0u;
 const OPTIONAL_MODE_SLOT: u32 = 1u;
 
@@ -135,8 +128,6 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   var pos_y = 0.0;
   var scale = 1.0;
   var rotation = 0.0;
-  var scale2_x = 1.0;
-  var scale2_y = 1.0;
   var shape_word_offset = 0u;
   var color_r = 1.0;
   var color_g = 1.0;
@@ -256,31 +247,6 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
         rotation_default,
       );
       rotation = select(rotation_default, rotation_from_slot, rotation_mode == OPTIONAL_MODE_SLOT);
-
-      let scale2_mode = read_sink_word(descriptor_base + DESCRIPTOR_WORD_SCALE2_MODE);
-      let scale2_default_x = read_sink_f32(descriptor_base + DESCRIPTOR_WORD_SCALE2_DEFAULT_X_BITS, 1.0);
-      let scale2_default_y = read_sink_f32(descriptor_base + DESCRIPTOR_WORD_SCALE2_DEFAULT_Y_BITS, 1.0);
-      let scale2_base_offset = read_sink_word(descriptor_base + DESCRIPTOR_WORD_SCALE2_BASE_OFFSET);
-      let scale2_lane_stride = read_sink_word(descriptor_base + DESCRIPTOR_WORD_SCALE2_LANE_STRIDE);
-      let scale2_component_stride = read_sink_word(descriptor_base + DESCRIPTOR_WORD_SCALE2_COMPONENT_STRIDE);
-      let scale2_x_from_slot = read_arena_f32(
-        scale2_base_offset,
-        scale2_lane_stride,
-        scale2_component_stride,
-        sink_lane,
-        0u,
-        scale2_default_x,
-      );
-      let scale2_y_from_slot = read_arena_f32(
-        scale2_base_offset,
-        scale2_lane_stride,
-        scale2_component_stride,
-        sink_lane,
-        1u,
-        scale2_default_y,
-      );
-      scale2_x = select(scale2_default_x, scale2_x_from_slot, scale2_mode == OPTIONAL_MODE_SLOT);
-      scale2_y = select(scale2_default_y, scale2_y_from_slot, scale2_mode == OPTIONAL_MODE_SLOT);
       shape_word_offset = read_sink_word(sink_base + RECORD_WORD_SHAPE_WORD_OFFSET);
     }
   }
@@ -289,8 +255,10 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   instance_words[base + 1u] = pos_y;
   instance_words[base + 2u] = scale;
   instance_words[base + 3u] = rotation;
-  instance_words[base + 4u] = scale2_x;
-  instance_words[base + 5u] = scale2_y;
+  // [LAW:single-enforcer] Canonical isotropic scale is enforced at draw-prep
+  // assembly; transform1.xy remain identity placeholders in the ABI.
+  instance_words[base + 4u] = 1.0;
+  instance_words[base + 5u] = 1.0;
   instance_words[base + 6u] = bitcast<f32>(shape_word_offset);
   instance_words[base + 7u] = 0.0;
   instance_words[base + 8u] = color_r;
@@ -360,10 +328,9 @@ fn oklch_to_linear_srgb(h: f32, c: f32, l: f32) -> vec3<f32> {
   let rawCenterY = inst.transform0.y;
   let centerX = select(0.0, rawCenterX, rawCenterX == rawCenterX);
   let centerY = select(0.0, rawCenterY, rawCenterY == rawCenterY);
-  let rawScaleX = inst.transform0.z * inst.transform1.x;
-  let rawScaleY = inst.transform0.z * inst.transform1.y;
-  let scaleX = clamp(abs(select(1.0, rawScaleX, rawScaleX == rawScaleX)), 0.001, 1024.0);
-  let scaleY = clamp(abs(select(1.0, rawScaleY, rawScaleY == rawScaleY)), 0.001, 1024.0);
+  let rawScale = inst.transform0.z;
+  let scaleX = clamp(abs(select(1.0, rawScale, rawScale == rawScale)), 0.001, 1024.0);
+  let scaleY = scaleX;
   let rawRotation = inst.transform0.w;
   let safeRotation = select(0.0, rawRotation, rawRotation == rawRotation);
 
