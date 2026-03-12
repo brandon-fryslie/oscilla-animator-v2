@@ -198,7 +198,11 @@ function findShapeRefExprId(
     if (expr.kind === 'shapeRef') {
       if (resolved !== undefined && resolved !== (exprId as ValueExprId)) {
         throw new Error(
-          `RenderInstances2D: shape source ${String(rootExprId)} resolves to multiple shapeRef expressions (${String(resolved)}, ${String(exprId)})`,
+          renderMultipleShapeRefsMessage(
+            rootExprId,
+            resolved,
+            exprId as ValueExprId,
+          ),
         );
       }
       resolved = exprId as ValueExprId;
@@ -250,17 +254,11 @@ function collectRenderTargets(
 
     const instanceDecl = instances.get(instanceId);
     if (!instanceDecl) {
-      throw new Error(
-        `RenderInstances2D: Instance ${instanceId} not found in instances registry. ` +
-        `This indicates a compiler bug - instanceId was inferred from controlPoints field but instance doesn't exist.`
-      );
+      throw new Error(renderMissingInstanceMessage(instanceId));
     }
 
     if (!instanceDecl.shapeField) {
-      throw new Error(
-        `RenderInstances2D: Instance ${instanceId} does not have a shapeField. ` +
-        `Ensure the instance was created with a shape (e.g., Array block with Ellipse.shape as element).`
-      );
+      throw new Error(renderMissingShapeFieldMessage(instanceId));
     }
 
     const scale = scaleExpr
@@ -270,10 +268,7 @@ function collectRenderTargets(
     const shapeFieldId = instanceDecl.shapeField;
     const shapeExpr = valueExprs[shapeFieldId as number];
     if (!shapeExpr) {
-      throw new Error(
-        `RenderInstances2D: Shape field ${shapeFieldId} not found in valueExprs. ` +
-        `Instance ${instanceId} has invalid shapeField reference.`
-      );
+      throw new Error(renderInvalidShapeFieldReferenceMessage(instanceId, shapeFieldId));
     }
 
     const shape = { sourceExprId: shapeFieldId };
@@ -309,6 +304,139 @@ function collectRenderTargets(
  * @returns RenderMaterializationPipelineIR with pre-built steps (all slots allocated through builder)
  */
 type FieldSemantic = 'position' | 'radius' | 'opacity' | 'color' | 'custom';
+
+function renderMissingExprMessage(renderBlockId: string, label: string, exprId: ValueExprId): string {
+  return `RenderInstances2D (${renderBlockId}): missing ${label} expr ${String(exprId)}`;
+}
+
+function renderMissingBroadcastExprMessage(renderBlockId: string, label: string, exprId: ValueExprId): string {
+  return `RenderInstances2D (${renderBlockId}): missing broadcast ${label} expr ${String(exprId)}`;
+}
+
+function renderMultipleShapeRefsMessage(
+  rootExprId: ValueExprId,
+  resolvedExprId: ValueExprId,
+  currentExprId: ValueExprId,
+): string {
+  return (
+    `RenderInstances2D: shape source ${String(rootExprId)} resolves to multiple shapeRef expressions ` +
+    `(${String(resolvedExprId)}, ${String(currentExprId)})`
+  );
+}
+
+function renderMissingInstanceMessage(instanceId: InstanceId): string {
+  return (
+    `RenderInstances2D: Instance ${instanceId} not found in instances registry. ` +
+    "This indicates a compiler bug - instanceId was inferred from controlPoints field but instance doesn't exist."
+  );
+}
+
+function renderMissingShapeFieldMessage(instanceId: InstanceId): string {
+  return (
+    `RenderInstances2D: Instance ${instanceId} does not have a shapeField. ` +
+    'Ensure the instance was created with a shape (e.g., Array block with Ellipse.shape as element).'
+  );
+}
+
+function renderInvalidShapeFieldReferenceMessage(instanceId: InstanceId, shapeFieldId: ValueExprId): string {
+  return (
+    `RenderInstances2D: Shape field ${String(shapeFieldId)} not found in valueExprs. ` +
+    `Instance ${instanceId} has invalid shapeField reference.`
+  );
+}
+
+function renderMissingShapeInputMessage(instanceId: InstanceId): string {
+  return (
+    `Render step for instance ${instanceId} requires shape, but shape is undefined. ` +
+    'Ensure a shape block (Ellipse, Rect, etc.) is wired to the render pipeline.'
+  );
+}
+
+function renderControlPointsRoleKey(renderBlockId: string): string {
+  return `${renderBlockId}:controlPoints`;
+}
+
+function renderColorRoleKey(renderBlockId: string): string {
+  return `${renderBlockId}:color`;
+}
+
+function renderShapeRoleKey(renderBlockId: string): string {
+  return `${renderBlockId}:shape`;
+}
+
+function renderScaleRoleKey(scaleFieldExprId: ValueExprId): string {
+  return `scale:${String(scaleFieldExprId)}`;
+}
+
+function renderCustomSemantic(): FieldSemantic {
+  return 'custom';
+}
+
+function slotRef(slot: ValueSlot): { k: 'slot'; slot: ValueSlot } {
+  return { k: 'slot', slot };
+}
+
+function identityScaleConstValue(): { kind: 'float'; value: number } {
+  return { kind: 'float', value: 1 };
+}
+
+function identityScaleConstKey(): string {
+  return 'render.scale.identity.one';
+}
+
+function readRenderBuilderInstances(
+  builder: UnlinkedIRFragments['builder'],
+): ReadonlyMap<InstanceId, InstanceDecl> {
+  return builder.getInstances();
+}
+
+function readRenderBuilderValueExprs(builder: UnlinkedIRFragments['builder']): readonly ValueExpr[] {
+  return builder.getValueExprs();
+}
+
+function createMaterializeStepsBuffer(): StepMaterialize[] {
+  return [];
+}
+
+function createFieldSlotsBuffer(): Map<string, ValueSlot> {
+  return new Map<string, ValueSlot>();
+}
+
+function listRenderTargets(args: {
+  readonly blocks: readonly CompilerGraphBlock[];
+  readonly edges: readonly NormalizedEdge[];
+  readonly blockOutputs: Map<BlockIndex, Map<string, ValueRefPacked>>;
+  readonly instances: ReadonlyMap<InstanceId, InstanceDecl>;
+  readonly valueExprs: readonly ValueExpr[];
+}): RenderTargetInfo[] {
+  return collectRenderTargets(
+    args.blocks,
+    args.edges,
+    args.blockOutputs,
+    args.instances,
+    args.valueExprs,
+  );
+}
+
+function buildRenderStepsFromTargets(args: {
+  readonly renderTargets: readonly RenderTargetInfo[];
+  readonly builder: UnlinkedIRFragments['builder'];
+  readonly valueExprs: readonly ValueExpr[];
+  readonly fieldSlots: Map<string, ValueSlot>;
+  readonly fieldExprToRefSlot: Map<number, ValueSlot>;
+  readonly materializeSteps: StepMaterialize[];
+}): StepRender[] {
+  return args.renderTargets.map((target) =>
+    buildRenderStepForTarget({
+      target,
+      builder: args.builder,
+      valueExprs: args.valueExprs,
+      fieldSlots: args.fieldSlots,
+      fieldExprToRefSlot: args.fieldExprToRefSlot,
+      materializeSteps: args.materializeSteps,
+    }),
+  );
+}
 
 function readValueExprOrThrow(
   valueExprs: readonly ValueExpr[],
@@ -360,7 +488,7 @@ function createFieldSlotAllocator(args: {
     const fieldExpr = readValueExprOrThrow(
       args.valueExprs,
       fieldId,
-      `RenderInstances2D (${args.renderBlockId}): missing ${roleKey} expr ${fieldId}`,
+      renderMissingExprMessage(args.renderBlockId, roleKey, fieldId),
     );
     slot = args.fieldExprToRefSlot.get(fieldId as number)
       ?? args.builder.allocTypedSlot(fieldExpr.type, `render_materialize_${args.instanceId}_${semantic}`);
@@ -386,7 +514,7 @@ function resolveFieldExprId(args: {
   const sourceExpr = readValueExprOrThrow(
     args.valueExprs,
     args.sourceExprId,
-    `RenderInstances2D (${args.renderBlockId}): missing ${args.label} expr ${args.sourceExprId}`,
+    renderMissingExprMessage(args.renderBlockId, args.label, args.sourceExprId),
   );
   const fieldExprId = isFieldExtent(args.sourceExprId, args.valueExprs)
     ? args.sourceExprId
@@ -394,7 +522,7 @@ function resolveFieldExprId(args: {
   readValueExprOrThrow(
     args.valueExprs,
     fieldExprId,
-    `RenderInstances2D (${args.renderBlockId}): missing broadcast ${args.label} expr ${fieldExprId}`,
+    renderMissingBroadcastExprMessage(args.renderBlockId, args.label, fieldExprId),
   );
   return fieldExprId;
 }
@@ -415,7 +543,11 @@ function resolveShapeOutputs(args: {
     renderBlockId: args.renderBlockId,
     label: 'shape',
   });
-  const shapeSlot = args.getFieldSlot(shapeFieldExprId, 'custom', `${args.renderBlockId}:shape`);
+  const shapeSlot = args.getFieldSlot(
+    shapeFieldExprId,
+    renderCustomSemantic(),
+    renderShapeRoleKey(args.renderBlockId),
+  );
 
   const shapeInfo = resolveShapeRefInfo(args.shape.sourceExprId, args.valueExprs);
   if (!shapeInfo) {
@@ -425,11 +557,19 @@ function resolveShapeOutputs(args: {
   }
 
   const controlPoints: StepRender['controlPoints'] = shapeInfo.controlPointField
-    ? { k: 'slot', slot: args.getFieldSlot(shapeInfo.controlPointField.id, 'custom', `${args.renderBlockId}:controlPoints`) }
+    ? {
+        ...slotRef(
+          args.getFieldSlot(
+          shapeInfo.controlPointField.id,
+          renderCustomSemantic(),
+          renderControlPointsRoleKey(args.renderBlockId),
+          ),
+        ),
+      }
     : undefined;
 
   return {
-    shape: { k: 'slot', slot: shapeSlot },
+    shape: slotRef(shapeSlot),
     ...(controlPoints && { controlPoints }),
   };
 }
@@ -446,7 +586,7 @@ function buildRenderStepForTarget(args: {
   const controlPointsExpr = readValueExprOrThrow(
     valueExprs,
     target.controlPoints.id,
-    `RenderInstances2D (${target.renderBlockId}): missing controlPoints expr ${target.controlPoints.id}`,
+    renderMissingExprMessage(target.renderBlockId, 'controlPoints', target.controlPoints.id),
   );
   const renderInstance = requireManyInstance(controlPointsExpr.type);
 
@@ -463,7 +603,7 @@ function buildRenderStepForTarget(args: {
   const controlPointsSlot = getFieldSlot(
     target.controlPoints.id,
     'position',
-    `${target.renderBlockId}:controlPoints`,
+    renderControlPointsRoleKey(target.renderBlockId),
   );
 
   const colorFieldExprId = resolveFieldExprId({
@@ -474,12 +614,12 @@ function buildRenderStepForTarget(args: {
     renderBlockId: target.renderBlockId,
     label: 'color',
   });
-  const colorSlot = getFieldSlot(colorFieldExprId, 'color', `${target.renderBlockId}:color`);
+  const colorSlot = getFieldSlot(colorFieldExprId, 'color', renderColorRoleKey(target.renderBlockId));
 
   const identityScaleExprId = builder.constantWithKey(
-    { kind: 'float', value: 1 },
+    identityScaleConstValue(),
     canonicalType(FLOAT, unitNone()),
-    'render.scale.identity.one',
+    identityScaleConstKey(),
   );
   const scaleSourceExprId = target.scale?.id ?? identityScaleExprId;
   const scaleFieldExprId = resolveFieldExprId({
@@ -490,13 +630,14 @@ function buildRenderStepForTarget(args: {
     renderBlockId: target.renderBlockId,
     label: 'scale',
   });
-  const scaleSlot = getFieldSlot(scaleFieldExprId, 'custom', `scale:${String(scaleFieldExprId)}`);
+  const scaleSlot = getFieldSlot(
+    scaleFieldExprId,
+    renderCustomSemantic(),
+    renderScaleRoleKey(scaleFieldExprId),
+  );
 
   if (!target.shape) {
-    throw new Error(
-      `Render step for instance ${target.instanceId} requires shape, but shape is undefined. ` +
-      'Ensure a shape block (Ellipse, Rect, etc.) is wired to the render pipeline.',
-    );
+    throw new Error(renderMissingShapeInputMessage(target.instanceId));
   }
   const shapeOutputs = resolveShapeOutputs({
     shape: target.shape,
@@ -512,7 +653,7 @@ function buildRenderStepForTarget(args: {
     instanceId: target.instanceId,
     controlPointsSlot,
     colorSlot,
-    scale: { k: 'slot', slot: scaleSlot },
+    scale: slotRef(scaleSlot),
     shape: shapeOutputs.shape,
     ...(shapeOutputs.controlPoints && { controlPoints: shapeOutputs.controlPoints }),
   };
@@ -523,27 +664,25 @@ export function allocateRenderMaterializationPipeline(
   validated: AcyclicOrLegalGraph
 ): RenderMaterializationPipelineIR {
   const builder = unlinkedIR.builder;
-  const instances = builder.getInstances();
-  const valueExprs = builder.getValueExprs();
+  const instances = readRenderBuilderInstances(builder);
+  const valueExprs = readRenderBuilderValueExprs(builder);
   const fieldExprToRefSlot = collectFieldExprToRefSlots(unlinkedIR, valueExprs);
-  const renderTargets = collectRenderTargets(
-    validated.blocks,
-    validated.edges,
-    unlinkedIR.blockOutputs,
+  const renderTargets = listRenderTargets({
+    blocks: validated.blocks,
+    edges: validated.edges,
+    blockOutputs: unlinkedIR.blockOutputs,
     instances,
     valueExprs,
-  );
-  const materializeSteps: StepMaterialize[] = [];
-  const fieldSlots = new Map<string, ValueSlot>();
-  const renderSteps = renderTargets.map((target) =>
-    buildRenderStepForTarget({
-      target,
-      builder,
-      valueExprs,
-      fieldSlots,
-      fieldExprToRefSlot,
-      materializeSteps,
-    }),
-  );
+  });
+  const materializeSteps = createMaterializeStepsBuffer();
+  const fieldSlots = createFieldSlotsBuffer();
+  const renderSteps = buildRenderStepsFromTargets({
+    renderTargets,
+    builder,
+    valueExprs,
+    fieldSlots,
+    fieldExprToRefSlot,
+    materializeSteps,
+  });
   return { materializeSteps, renderSteps };
 }

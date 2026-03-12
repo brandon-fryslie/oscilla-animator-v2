@@ -30,6 +30,10 @@ const NOISY_BROADCAST_OUTPUT_TYPE = inferType(FLOAT, NOISY_BROADCAST_UNIT, {
   cardinality: NOISY_BROADCAST_OUT_CARD,
 });
 
+function sliderUiHint(min: number, max: number, step: number): { kind: 'slider'; min: number; max: number; step: number } {
+  return { kind: 'slider', min, max, step };
+}
+
 export function register(): void {
   registerBlock({
     type: 'NoisyBroadcast',
@@ -47,7 +51,7 @@ export function register(): void {
         defaultValue: 0.1,
         defaultSource: defaultSourceConst(0.1),
         exposedAsPort: true,
-        uiHint: { kind: 'slider', min: 0, max: 2, step: 0.01 },
+        uiHint: sliderUiHint(0, 2, 0.01),
       },
       seed: {
         label: 'Seed',
@@ -55,7 +59,7 @@ export function register(): void {
         defaultValue: 0,
         defaultSource: defaultSourceConst(0),
         exposedAsPort: true,
-        uiHint: { kind: 'slider', min: 0, max: 1000, step: 1 },
+        uiHint: sliderUiHint(0, 1000, 1),
       },
     },
     outputs: {

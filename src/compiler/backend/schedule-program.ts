@@ -552,12 +552,12 @@ export function pass7Schedule(
     stateWriteSteps,
   });
 
-  const stateSlotCount = unlinkedIR.builder.getStateSlotCount();
-  const stateMappings = unlinkedIR.builder.getStateMappings();
+  const stateSlotCount = readStateSlotCount(unlinkedIR.builder);
+  const stateMappings = readStateMappings(unlinkedIR.builder);
 
   // Get event counts for runtime allocation
-  const eventSlotCount = unlinkedIR.builder.getEventSlotCount();
-  const eventCount = unlinkedIR.builder.getValueExprs().filter(e => e.kind === 'event').length;
+  const eventSlotCount = readEventSlotCount(unlinkedIR.builder);
+  const eventCount = countEventExprs(valueExprs);
 
   return {
     timeModel,
@@ -641,12 +641,12 @@ function buildScalarMaterializeSteps(
 
   for (const [scalarExprId, target] of scalarSlots) {
     const exprId = scalarExprId as ValueExprId;
-    const expr = valueExprs[exprId as number];
+    const expr = valueExprs[valueExprIndex(exprId)];
     if (!expr) continue;
 
     const canMaterialize =
       isArenaScalarPayload(expr) &&
-      canMaterializeScalarExpr(exprId as number, valueExprs, scalarMaterializeEligibility, new Set());
+      canMaterializeScalarExpr(valueExprIndex(exprId), valueExprs, scalarMaterializeEligibility, new Set());
     if (!canMaterialize) {
       // [LAW:no-silent-fallbacks] Legacy evalOne scheduling is removed; scalar
       // paths must compile through canonical materialize lowering or fail.
@@ -654,12 +654,7 @@ function buildScalarMaterializeSteps(
         `Schedule invariant violated: scalar expr ${String(exprId)} (${expr.kind}) requires deprecated evalOne fallback`,
       );
     }
-    scalarMaterializeSteps.push({
-      kind: 'materialize',
-      field: exprId,
-      instanceId: SCALAR_INSTANCE_ID,
-      target,
-    });
+    scalarMaterializeSteps.push(toMaterializeStep(exprId, SCALAR_INSTANCE_ID, target));
   }
 
   return { scalarMaterializeSteps, scalarRootExprIds };
@@ -673,19 +668,32 @@ function collectEventDispatchSteps(
   for (const [eventId, target] of builder.getEventSlots()) {
     const expr = valueExprs[eventId as number];
     if (!expr) continue;
-    eventDispatchSteps.push({
-      kind: 'eventDispatch',
-      expr: eventId,
-      target,
-    });
+    eventDispatchSteps.push(toEventDispatchStep(eventId, target));
   }
   return eventDispatchSteps;
 }
 
+function isStateWriteStep(step: Step): boolean {
+  return step.kind === 'stateWrite' || step.kind === 'fieldStateWrite';
+}
+
 function collectStateWriteSteps(builderSteps: readonly Step[]): Step[] {
-  return builderSteps.filter(
-    (step) => step.kind === 'stateWrite' || step.kind === 'fieldStateWrite',
-  );
+  return builderSteps.filter(isStateWriteStep);
+}
+
+function toMaterializeStep(
+  field: ValueExprId,
+  instanceId: InstanceId,
+  target: StepMaterialize['target'],
+): StepMaterialize {
+  return { kind: 'materialize', field, instanceId, target };
+}
+
+function toEventDispatchStep(
+  expr: ValueExprId,
+  target: StepEvalEvent['target'],
+): StepEvalEvent {
+  return { kind: 'eventDispatch', expr, target };
 }
 
 function splitEventDependentMaterializeSteps(
@@ -695,7 +703,7 @@ function splitEventDependentMaterializeSteps(
   const pre: StepMaterialize[] = [];
   const post: StepMaterialize[] = [];
   for (const step of materializeSteps) {
-    if (valueExprDependsOnEvent(step.field as number, valueExprs)) {
+    if (valueExprDependsOnEvent(valueExprIndex(step.field), valueExprs)) {
       post.push(step);
     } else {
       pre.push(step);
@@ -724,4 +732,30 @@ function buildOrderedScheduleSteps(args: {
     ...args.renderSteps,
     ...args.stateWriteSteps,
   ];
+}
+
+function readStateSlotCount(builder: UnlinkedIRFragments['builder']): number {
+  return builder.getStateSlotCount();
+}
+
+function readStateMappings(
+  builder: UnlinkedIRFragments['builder'],
+): readonly StateMapping[] {
+  return builder.getStateMappings();
+}
+
+function readEventSlotCount(builder: UnlinkedIRFragments['builder']): number {
+  return builder.getEventSlotCount();
+}
+
+function countEventExprs(valueExprs: readonly ValueExpr[]): number {
+  return valueExprs.filter(isEventExpr).length;
+}
+
+function isEventExpr(expr: ValueExpr): boolean {
+  return expr.kind === 'event';
+}
+
+function valueExprIndex(exprId: ValueExprId): number {
+  return exprId as number;
 }
