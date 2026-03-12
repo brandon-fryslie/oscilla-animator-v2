@@ -27,7 +27,7 @@ export type GpuPassSignatureValidationOutcome =
   | { readonly kind: 'ok'; readonly signatures: readonly ValidatedGpuPassSignature[] }
   | { readonly kind: 'error'; readonly errors: readonly CompileError[] };
 
-function parseMaxActiveLanes(maxActiveLanes: number | undefined): number | undefined {
+function parseMaxActiveLanes(maxActiveLanes: unknown): number | undefined {
   if (typeof maxActiveLanes !== 'number') return undefined;
   const parsed = Math.trunc(maxActiveLanes);
   if (!Number.isFinite(parsed) || parsed <= 0) return undefined;
@@ -164,7 +164,10 @@ function toCompileErrors(
 export async function compileProgramWithNaga(
   program: CompiledProgramIR,
 ): Promise<NagaCompilationOutcome> {
-  const lowering = program.nagaLoweringProgram;
+  // [LAW:single-enforcer] Naga compile boundary validates malformed payloads
+  // from untyped callers before crossing into the Naga bridge.
+  const unsafeProgram = program as Partial<Pick<CompiledProgramIR, 'nagaLoweringProgram' | 'generatedComputeProgram'>>;
+  const lowering = unsafeProgram.nagaLoweringProgram;
   if (!lowering) {
     return {
       kind: 'error',
@@ -176,8 +179,7 @@ export async function compileProgramWithNaga(
       ],
     };
   }
-
-  const generatedComputeProgram = program.generatedComputeProgram;
+  const generatedComputeProgram = unsafeProgram.generatedComputeProgram;
   if (!generatedComputeProgram) {
     return {
       kind: 'error',
@@ -189,7 +191,6 @@ export async function compileProgramWithNaga(
       ],
     };
   }
-
   const maxActiveLanes = parseMaxActiveLanes(generatedComputeProgram.maxActiveLanes);
   if (!maxActiveLanes) {
     return {

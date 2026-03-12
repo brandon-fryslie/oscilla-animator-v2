@@ -67,7 +67,7 @@ function resolveShapeControlPointSlot(
     }
     return SHAPE_BANK_NO_CONTROL_POINT_SLOT;
   }
-  const slot = program.runtimeAddressTable?.fieldExprToSlot.get(expr.controlPointField as number);
+  const slot = program.runtimeAddressTable.fieldExprToSlot.get(expr.controlPointField as number);
   if (slot === undefined) {
     if (requireControlPointSlot) {
       // [LAW:one-source-of-truth] Runtime address table owns field->slot mapping;
