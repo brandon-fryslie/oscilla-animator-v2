@@ -161,19 +161,49 @@ export function getFieldSlots(schedule: ScheduleIR): FieldSlotDecl[] {
   );
 }
 
+const ARENA_SCALAR_PAYLOAD_KINDS = new Set([
+  'float',
+  'int',
+  'bool',
+  'vec2',
+  'vec3',
+  'vec4',
+  'color',
+  'shape',
+  'cameraProjection',
+]);
+
 function isArenaScalarPayload(expr: ValueExpr): boolean {
-  const payloadKind = expr.type.payload.kind;
-  return (
-    payloadKind === 'float' ||
-    payloadKind === 'int' ||
-    payloadKind === 'bool' ||
-    payloadKind === 'vec2' ||
-    payloadKind === 'vec3' ||
-    payloadKind === 'vec4' ||
-    payloadKind === 'color' ||
-    payloadKind === 'shape' ||
-    payloadKind === 'cameraProjection'
-  );
+  return ARENA_SCALAR_PAYLOAD_KINDS.has(expr.type.payload.kind);
+}
+
+function canMaterializeScalarKernelExpr(
+  expr: Extract<ValueExpr, { kind: 'kernel' }>,
+  valueExprs: readonly ValueExpr[],
+  cache: Map<number, boolean>,
+  visiting: Set<number>,
+): boolean {
+  switch (expr.kernelKind) {
+    case 'map':
+      return canMaterializeScalarExpr(expr.input as number, valueExprs, cache, visiting);
+    case 'zip':
+      return expr.inputs.every((id) =>
+        canMaterializeScalarExpr(id as number, valueExprs, cache, visiting),
+      );
+    case 'reduce':
+      return true;
+    case 'zipPromote':
+    case 'broadcast':
+    case 'pathDerivative':
+    case 'pathSample':
+      return false;
+    default: {
+      const _exhaustive: never = expr;
+      throw new Error(
+        `Unknown kernel kind during scalar materialize eligibility check: ${(_exhaustive as ValueExpr).kind}`,
+      );
+    }
+  }
 }
 
 function canMaterializeScalarExpr(
@@ -197,63 +227,59 @@ function canMaterializeScalarExpr(
     return false;
   }
 
-  let result = false;
-  switch (expr.kind) {
-    case 'const':
-    case 'time':
-    case 'external':
-    case 'state':
-    case 'eventRead':
-    case 'intrinsic':
-      result = true;
-      break;
-    case 'kernel':
-      switch (expr.kernelKind) {
-        case 'map':
-          result = canMaterializeScalarExpr(expr.input as number, valueExprs, cache, visiting);
-          break;
-        case 'zip':
-          result = expr.inputs.every((id) =>
-            canMaterializeScalarExpr(id as number, valueExprs, cache, visiting),
-          );
-          break;
-        case 'reduce':
-          result = true;
-          break;
-        case 'zipPromote':
-        case 'broadcast':
-        case 'pathDerivative':
-        case 'pathSample':
-          result = false;
-          break;
+  const result = (() => {
+    switch (expr.kind) {
+      case 'const':
+      case 'time':
+      case 'external':
+      case 'state':
+      case 'eventRead':
+      case 'intrinsic':
+      case 'shapeRef':
+        return true;
+      case 'event':
+        return false;
+      case 'kernel':
+        return canMaterializeScalarKernelExpr(expr, valueExprs, cache, visiting);
+      case 'extract':
+        return canMaterializeScalarExpr(expr.input as number, valueExprs, cache, visiting);
+      case 'construct':
+        return expr.components.every((id) =>
+          canMaterializeScalarExpr(id as number, valueExprs, cache, visiting),
+        );
+      case 'oklchToRgb':
+        return canMaterializeScalarExpr(expr.input as number, valueExprs, cache, visiting);
+      default: {
+        const _exhaustive: never = expr;
+        throw new Error(
+          `Unknown ValueExpr kind during scalar materialize eligibility check: ${(_exhaustive as ValueExpr).kind}`,
+        );
       }
-      break;
-    case 'extract':
-      result = canMaterializeScalarExpr(expr.input as number, valueExprs, cache, visiting);
-      break;
-    case 'construct':
-      result = expr.components.every((id) =>
-        canMaterializeScalarExpr(id as number, valueExprs, cache, visiting),
-      );
-      break;
-    case 'oklchToRgb':
-      result = canMaterializeScalarExpr(expr.input as number, valueExprs, cache, visiting);
-      break;
-    case 'shapeRef':
-      result = true;
-      break;
-    case 'event':
-      result = false;
-      break;
-    default: {
-      const _exhaustive: never = expr;
-      throw new Error(`Unknown ValueExpr kind during scalar materialize eligibility check: ${(_exhaustive as ValueExpr).kind}`);
     }
-  }
+  })();
 
   cache.set(exprId, result);
   visiting.delete(exprId);
   return result;
+}
+
+function validateBroadcastComponentExpr(
+  broadcastExprId: number,
+  componentExprId: number,
+  valueExprs: readonly ValueExpr[],
+): void {
+  const componentExpr = valueExprs[componentExprId as number];
+  if (!componentExpr) {
+    throw new Error(
+      `Schedule invariant violated: broadcast expr ${broadcastExprId} references missing component expr ${componentExprId}`,
+    );
+  }
+  const componentCard = requireInst(componentExpr.type.extent.cardinality, 'cardinality').kind;
+  if (componentCard === 'many') {
+    throw new Error(
+      `Schedule invariant violated: broadcast expr ${broadcastExprId} component expr ${componentExprId} is many-cardinality`,
+    );
+  }
 }
 
 function validateBroadcastKernelInputs(valueExprs: readonly ValueExpr[]): void {
@@ -276,18 +302,7 @@ function validateBroadcastKernelInputs(valueExprs: readonly ValueExpr[]): void {
     }
 
     for (const componentExprId of expr.oneComponents ?? []) {
-      const componentExpr = valueExprs[componentExprId as number];
-      if (!componentExpr) {
-        throw new Error(
-          `Schedule invariant violated: broadcast expr ${exprId} references missing component expr ${componentExprId}`,
-        );
-      }
-      const componentCard = requireInst(componentExpr.type.extent.cardinality, 'cardinality').kind;
-      if (componentCard === 'many') {
-        throw new Error(
-          `Schedule invariant violated: broadcast expr ${exprId} component expr ${componentExprId} is many-cardinality`,
-        );
-      }
+      validateBroadcastComponentExpr(exprId, componentExprId as number, valueExprs);
     }
   }
 }
@@ -492,42 +507,14 @@ export function pass7Schedule(
   // Collect steps from builder (stateWrite steps from stateful blocks)
   const builderSteps = unlinkedIR.builder.getSteps();
 
-  // Generate scalar write steps for all registered cardinality-one slots.
-  // Scalar expressions that depend on eventRead must be evaluated AFTER events.
-  // Pre-event ones go in Phase 1, post-event ones go after eventDispatch.
-  const scalarSlots = unlinkedIR.builder.getScalarSlots();
-  const scalarRootExprIds = new Set<number>(scalarSlots.keys());
-  const scalarMaterializeStepsPre: StepMaterialize[] = [];
-  const scalarMaterializeStepsPost: StepMaterialize[] = [];
-  const scalarMaterializeEligibility = new Map<number, boolean>();
-  for (const [scalarExprId, slot] of scalarSlots) {
-    const exprId = scalarExprId as ValueExprId;
-    const expr = valueExprs[exprId as number];
-    if (!expr) continue;
-
-    const canMaterialize =
-      isArenaScalarPayload(expr) &&
-      canMaterializeScalarExpr(exprId as number, valueExprs, scalarMaterializeEligibility, new Set());
-    if (!canMaterialize) {
-      // [LAW:no-silent-fallbacks] Legacy evalOne scheduling is removed; scalar
-      // paths must compile through canonical materialize lowering or fail.
-      throw new Error(
-        `Schedule invariant violated: scalar expr ${String(exprId)} (${expr.kind}) requires deprecated evalOne fallback`,
-      );
-    }
-
-    const scalarStep: StepMaterialize = {
-      kind: 'materialize',
-      field: exprId,
-      instanceId: SCALAR_INSTANCE_ID,
-      target: slot,
-    };
-    if (valueExprDependsOnEvent(scalarExprId as number, valueExprs)) {
-      scalarMaterializeStepsPost.push(scalarStep);
-    } else {
-      scalarMaterializeStepsPre.push(scalarStep);
-    }
-  }
+  const { scalarMaterializeSteps, scalarRootExprIds } = buildScalarMaterializeSteps(
+    unlinkedIR.builder,
+    valueExprs,
+  );
+  const {
+    pre: scalarMaterializeStepsPre,
+    post: scalarMaterializeStepsPost,
+  } = splitEventDependentMaterializeSteps(scalarMaterializeSteps, valueExprs);
 
   // [LAW:single-enforcer] Schedule construction is the single compile-time boundary
   // that validates ValueExpr runtime invariants before execution.
@@ -536,40 +523,16 @@ export function pass7Schedule(
 
   // Generate eventDispatch steps for all registered event slots.
   // Events are evaluated after materialization and before render.
-  const eventSlots = unlinkedIR.builder.getEventSlots();
-  const eventDispatchSteps: StepEvalEvent[] = [];
-  for (const [eventId, eventSlot] of eventSlots) {
-    const expr = valueExprs[eventId as number];
-    if (!expr) continue;
-
-    eventDispatchSteps.push({
-      kind: 'eventDispatch',
-      expr: eventId,
-      target: eventSlot,
-    });
-  }
-
-  // Separate builder steps by kind:
-  // - stateWrite/fieldStateWrite goes in Phase 8 (end)
-  const stateWriteSteps: Step[] = [];
-  for (const step of builderSteps) {
-    if (step.kind === 'stateWrite' || step.kind === 'fieldStateWrite') {
-      stateWriteSteps.push(step);
-    }
-  }
+  const eventDispatchSteps = collectEventDispatchSteps(unlinkedIR.builder, valueExprs);
+  const stateWriteSteps = collectStateWriteSteps(builderSteps);
 
   // [LAW:one-source-of-truth] Event-dependent field materializations are split
   // here using canonical ValueExpr dependency analysis so runtime never reads
   // stale pre-dispatch event scalars for field slots.
-  const renderMaterializeStepsPre: StepMaterialize[] = [];
-  const renderMaterializeStepsPost: StepMaterialize[] = [];
-  for (const step of renderMaterializationPipeline.materializeSteps) {
-    if (valueExprDependsOnEvent(step.field as number, valueExprs)) {
-      renderMaterializeStepsPost.push(step);
-    } else {
-      renderMaterializeStepsPre.push(step);
-    }
-  }
+  const {
+    pre: renderMaterializeStepsPre,
+    post: renderMaterializeStepsPost,
+  } = splitEventDependentMaterializeSteps(renderMaterializationPipeline.materializeSteps, valueExprs);
 
   // Combine all steps in correct execution order:
   // 1. Materialize-pre (ones/fields NOT dependent on events)
@@ -579,17 +542,15 @@ export function pass7Schedule(
   // 5. Render materialize-post (event-dependent fields)
   // 6. Render
   // 7. StateWrite (persist state for next frame)
-  // [LAW:dataflow-not-control-flow] Canonical schedule executes all stages in
-  // fixed order; stage inputs may be empty.
-  const steps: Step[] = [
-    ...scalarMaterializeStepsPre,
-    ...renderMaterializeStepsPre,
-    ...eventDispatchSteps,
-    ...scalarMaterializeStepsPost,
-    ...renderMaterializeStepsPost,
-    ...renderMaterializationPipeline.renderSteps,
-    ...stateWriteSteps,
-  ];
+  const steps = buildOrderedScheduleSteps({
+    scalarPre: scalarMaterializeStepsPre,
+    renderPre: renderMaterializeStepsPre,
+    eventDispatch: eventDispatchSteps,
+    scalarPost: scalarMaterializeStepsPost,
+    renderPost: renderMaterializeStepsPost,
+    renderSteps: renderMaterializationPipeline.renderSteps,
+    stateWriteSteps,
+  });
 
   const stateSlotCount = unlinkedIR.builder.getStateSlotCount();
   const stateMappings = unlinkedIR.builder.getStateMappings();
@@ -664,4 +625,103 @@ function valueExprDependsOnEvent(valueExprId: number, valueExprs: readonly Value
   }
 
   return check(valueExprId);
+}
+
+function buildScalarMaterializeSteps(
+  builder: UnlinkedIRFragments['builder'],
+  valueExprs: readonly ValueExpr[],
+): {
+  scalarMaterializeSteps: StepMaterialize[];
+  scalarRootExprIds: Set<number>;
+} {
+  const scalarSlots = builder.getScalarSlots();
+  const scalarRootExprIds = new Set<number>(scalarSlots.keys());
+  const scalarMaterializeEligibility = new Map<number, boolean>();
+  const scalarMaterializeSteps: StepMaterialize[] = [];
+
+  for (const [scalarExprId, target] of scalarSlots) {
+    const exprId = scalarExprId as ValueExprId;
+    const expr = valueExprs[exprId as number];
+    if (!expr) continue;
+
+    const canMaterialize =
+      isArenaScalarPayload(expr) &&
+      canMaterializeScalarExpr(exprId as number, valueExprs, scalarMaterializeEligibility, new Set());
+    if (!canMaterialize) {
+      // [LAW:no-silent-fallbacks] Legacy evalOne scheduling is removed; scalar
+      // paths must compile through canonical materialize lowering or fail.
+      throw new Error(
+        `Schedule invariant violated: scalar expr ${String(exprId)} (${expr.kind}) requires deprecated evalOne fallback`,
+      );
+    }
+    scalarMaterializeSteps.push({
+      kind: 'materialize',
+      field: exprId,
+      instanceId: SCALAR_INSTANCE_ID,
+      target,
+    });
+  }
+
+  return { scalarMaterializeSteps, scalarRootExprIds };
+}
+
+function collectEventDispatchSteps(
+  builder: UnlinkedIRFragments['builder'],
+  valueExprs: readonly ValueExpr[],
+): StepEvalEvent[] {
+  const eventDispatchSteps: StepEvalEvent[] = [];
+  for (const [eventId, target] of builder.getEventSlots()) {
+    const expr = valueExprs[eventId as number];
+    if (!expr) continue;
+    eventDispatchSteps.push({
+      kind: 'eventDispatch',
+      expr: eventId,
+      target,
+    });
+  }
+  return eventDispatchSteps;
+}
+
+function collectStateWriteSteps(builderSteps: readonly Step[]): Step[] {
+  return builderSteps.filter(
+    (step) => step.kind === 'stateWrite' || step.kind === 'fieldStateWrite',
+  );
+}
+
+function splitEventDependentMaterializeSteps(
+  materializeSteps: readonly StepMaterialize[],
+  valueExprs: readonly ValueExpr[],
+): { pre: StepMaterialize[]; post: StepMaterialize[] } {
+  const pre: StepMaterialize[] = [];
+  const post: StepMaterialize[] = [];
+  for (const step of materializeSteps) {
+    if (valueExprDependsOnEvent(step.field as number, valueExprs)) {
+      post.push(step);
+    } else {
+      pre.push(step);
+    }
+  }
+  return { pre, post };
+}
+
+function buildOrderedScheduleSteps(args: {
+  readonly scalarPre: readonly StepMaterialize[];
+  readonly renderPre: readonly StepMaterialize[];
+  readonly eventDispatch: readonly StepEvalEvent[];
+  readonly scalarPost: readonly StepMaterialize[];
+  readonly renderPost: readonly StepMaterialize[];
+  readonly renderSteps: readonly Step[];
+  readonly stateWriteSteps: readonly Step[];
+}): Step[] {
+  // [LAW:dataflow-not-control-flow] Canonical schedule executes all stages in
+  // fixed order; stage inputs may be empty.
+  return [
+    ...args.scalarPre,
+    ...args.renderPre,
+    ...args.eventDispatch,
+    ...args.scalarPost,
+    ...args.renderPost,
+    ...args.renderSteps,
+    ...args.stateWriteSteps,
+  ];
 }
