@@ -240,6 +240,9 @@ export function packDrawPrepSinkTableV1(
   state: RuntimeState,
 ): PackedDrawPrepSinkTableV1 | null {
   const drawPrepProgram = program.drawPrepProgram;
+  // [LAW:single-enforcer] Draw-prep ABI invariants are validated at this
+  // boundary even when there are no sinks to emit for the frame.
+  const header = buildDrawPrepSinkTableHeader(drawPrepProgram);
   if (drawPrepProgram.sinks.length === 0) {
     state.cache.drawPrepSinkTableWords = undefined;
     state.cache.drawPrepSinkTableWordCount = 0;
@@ -249,7 +252,6 @@ export function packDrawPrepSinkTableV1(
 
   // [LAW:one-source-of-truth] Compiler owns sink ordering + indirect metadata.
   // Runtime packs canonical command records + static source descriptors only.
-  const header = buildDrawPrepSinkTableHeader(drawPrepProgram);
   const sinkInstanceCounts: number[] = [];
   for (let sinkIndex = 0; sinkIndex < drawPrepProgram.sinks.length; sinkIndex++) {
     const instanceCount = resolveSinkInstanceCount(program, state, sinkIndex);
