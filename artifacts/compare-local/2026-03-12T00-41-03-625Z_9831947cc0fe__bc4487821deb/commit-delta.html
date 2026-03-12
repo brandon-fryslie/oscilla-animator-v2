@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Commit Complexity Delta</title>
+  <style>
+    :root { color-scheme: dark; }
+    body { margin: 0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif; background: #0e0f13; color: #e6e8ef; }
+    main { max-width: 1300px; margin: 0 auto; padding: 24px; }
+    h1, h2, h3 { margin: 0 0 12px; }
+    h2 { margin-top: 28px; }
+    p, li { color: #b9c0d0; }
+    .meta { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 8px; margin: 16px 0 20px; }
+    .meta div { background: #171922; border: 1px solid #2a3040; border-radius: 8px; padding: 10px 12px; }
+    code { background: #1a1d27; border: 1px solid #2a3040; border-radius: 4px; padding: 1px 6px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 13px; }
+    th, td { border: 1px solid #2a3040; padding: 8px 10px; text-align: left; vertical-align: top; }
+    th { background: #171922; }
+    tr:nth-child(even) td { background: #11131a; }
+    details { border: 1px solid #2a3040; border-radius: 8px; background: #131722; margin: 8px 0; padding: 10px 12px; }
+    summary { cursor: pointer; font-weight: 600; }
+    pre { background: #0d111b; border: 1px solid #2a3040; border-radius: 8px; overflow: auto; padding: 10px; white-space: pre-wrap; word-break: break-word; }
+    .small { font-size: 12px; color: #9098ab; }
+  </style>
+</head>
+<body>
+<main><style>
+  .inline-links { margin-top: 4px; font-size: 12px; line-height: 1.4; }
+  .colorized-table .sev-row.sev-regression-4 td { background: #321010 !important; }
+  .colorized-table .sev-row.sev-regression-3 td { background: #2e1313 !important; }
+  .colorized-table .sev-row.sev-regression-2 td { background: #2d1c10 !important; }
+  .colorized-table .sev-row.sev-regression-1 td { background: #2a2410 !important; }
+  .colorized-table .sev-row.sev-neutral td { background: #21242a !important; }
+  .colorized-table .sev-row.sev-unchanged td { background: #1b1e25 !important; }
+  .colorized-table .sev-row.sev-improvement-1 td { background: #162410 !important; }
+  .colorized-table .sev-row.sev-improvement-2 td { background: #102819 !important; }
+  .colorized-table .sev-row.sev-improvement-3 td { background: #0f2d1f !important; }
+  .colorized-table .sev-row.sev-improvement-4 td { background: #0a331f !important; }
+</style>
+<h1>Commit Complexity Delta</h1>
+<p class="small">Generated: 2026-03-12T00:41:03.598Z</p>
+<div class="meta">
+<div><strong>Base</strong><br>9831947cc0fe0f473375fcc092eb320e00f0cf5a (9831947cc0fe)</div>
+<div><strong>Head</strong><br>bc4487821deb006ed1944c3fe006e0b483e8055c (bc4487821deb)</div>
+<div><strong>Base Report</strong><br>2026-03-12T00:40:36.598Z</div>
+<div><strong>Head Report</strong><br>2026-03-12T00:41:03.193Z</div>
+<div><strong>Improved Metrics</strong><br>0</div>
+<div><strong>Regressed Metrics</strong><br>0</div>
+<div><strong>Unchanged / Near-Zero</strong><br>26</div>
+<div><strong>Net Score</strong><br>0</div>
+<div><strong>Changed-File Gate</strong><br>pass (0/60)</div>
+</div>
+<h2>How To Read This</h2>
+<ul>
+<li>Delta indicator uses emojis only: unchanged `⬜️`, near-zero `😐`, worse `🟨🟧🟥‼️`, better `🟩✅❇️🤑`.</li>
+<li>Tables are sorted by signal (high first), then worst-to-best delta.</li>
+<li>Lower-is-better metrics should trend down toward target. Zero is ideal for rule violations.</li>
+<li>Higher-is-better metrics should trend up (for example maintainability index).</li>
+</ul>
+<h2>Metric Interpretation Guide</h2>
+<table><thead><tr><th>Metric</th><th>Desired Trend</th><th>Practical Target Range</th><th>Signal</th><th>Description</th></tr></thead><tbody><tr><td>dependency-cruiser error violations</td><td>lower is better</td><td>0</td><td>high</td><td>dependency-cruiser error violations. lower is better.</td></tr>
+<tr><td>dependency-cruiser max fan-in</td><td>lower is better</td><td>watch hotspots</td><td>medium</td><td>dependency-cruiser max fan-in. lower is better.</td></tr>
+<tr><td>dependency-cruiser max fan-out</td><td>lower is better</td><td>&lt;= 15 preferred</td><td>high</td><td>dependency-cruiser max fan-out. lower is better.</td></tr>
+<tr><td>dependency-cruiser warning violations</td><td>lower is better</td><td>0</td><td>medium</td><td>dependency-cruiser warning violations. lower is better.</td></tr>
+<tr><td>ESLint cognitive-complexity hits</td><td>lower is better</td><td>0</td><td>high</td><td>ESLint cognitive-complexity hits. lower is better.</td></tr>
+<tr><td>ESLint cyclomatic rule hits</td><td>lower is better</td><td>0</td><td>high</td><td>ESLint cyclomatic rule hits. lower is better.</td></tr>
+<tr><td>ESLint errors</td><td>lower is better</td><td>0 (strict gate)</td><td>high</td><td>ESLint errors. lower is better.</td></tr>
+<tr><td>ESLint max-depth hits</td><td>lower is better</td><td>0</td><td>high</td><td>ESLint max-depth hits. lower is better.</td></tr>
+<tr><td>ESLint max-lines-per-function hits</td><td>lower is better</td><td>0</td><td>medium</td><td>ESLint max-lines-per-function hits. lower is better.</td></tr>
+<tr><td>ESLint max-params hits</td><td>lower is better</td><td>0</td><td>medium</td><td>ESLint max-params hits. lower is better.</td></tr>
+<tr><td>ESLint warnings</td><td>lower is better</td><td>0-10 (team policy)</td><td>medium</td><td>ESLint warnings. lower is better.</td></tr>
+<tr><td>Plato avg Halstead difficulty</td><td>lower is better</td><td>trend down</td><td>low</td><td>Plato avg Halstead difficulty. lower is better.</td></tr>
+<tr><td>Plato avg Halstead volume</td><td>lower is better</td><td>trend down</td><td>low</td><td>Plato avg Halstead volume. lower is better.</td></tr>
+<tr><td>Plato average maintainability</td><td>higher is better</td><td>&gt;= 65 good</td><td>medium</td><td>Plato average maintainability. higher is better.</td></tr>
+<tr><td>Plato max cyclomatic</td><td>lower is better</td><td>&lt;= 15 preferred</td><td>medium</td><td>Plato max cyclomatic. lower is better.</td></tr>
+<tr><td>ts-morph average maintainability index</td><td>higher is better</td><td>&gt;= 65 good, &lt; 50 risky</td><td>high</td><td>Average maintainability index across analyzed functions.</td></tr>
+<tr><td>ts-morph max cognitive</td><td>lower is better</td><td>&lt;= 20 preferred</td><td>high</td><td>Highest cognitive complexity across analyzed functions.</td></tr>
+<tr><td>ts-morph max cyclomatic</td><td>lower is better</td><td>&lt;= 15 preferred</td><td>high</td><td>Highest cyclomatic complexity across analyzed functions.</td></tr>
+<tr><td>ts-morph max fan-in</td><td>lower is better</td><td>watch hotspots</td><td>medium</td><td>Maximum number of internal modules that import the same module (hotspot fan-in).</td></tr>
+<tr><td>ts-morph max fan-out</td><td>lower is better</td><td>&lt;= 15 preferred</td><td>high</td><td>Maximum number of internal modules imported by a single module.</td></tr>
+<tr><td>ts-morph max Halstead volume</td><td>lower is better</td><td>trend down over time</td><td>medium</td><td>Largest Halstead volume observed among functions.</td></tr>
+<tr><td>ts-morph max nesting depth</td><td>lower is better</td><td>&lt;= 4 preferred</td><td>high</td><td>Deepest nested control-flow depth found in a function.</td></tr>
+<tr><td>Typhon avg Halstead difficulty</td><td>lower is better</td><td>trend down</td><td>low</td><td>Typhon avg Halstead difficulty. lower is better.</td></tr>
+<tr><td>Typhon avg Halstead volume</td><td>lower is better</td><td>trend down</td><td>low</td><td>Typhon avg Halstead volume. lower is better.</td></tr>
+<tr><td>Typhon average maintainability</td><td>higher is better</td><td>&gt;= 65 good</td><td>medium</td><td>Typhon average maintainability. higher is better.</td></tr>
+<tr><td>Typhon max cyclomatic</td><td>lower is better</td><td>&lt;= 15 preferred</td><td>medium</td><td>Typhon max cyclomatic. lower is better.</td></tr></tbody></table>
+<h2>Changed-File Threshold Gate</h2>
+<p>Policy: file must be under threshold or improve by at least 1%. Tracked changed files: 6.</p>
+<p><strong>Policy lock:</strong> MANDATORY: the changed-file complexity gate requires at least 1% improvement when a modified file remains over threshold. This notice must not be removed or changed.</p>
+<table><thead><tr><th>File</th><th>Metric</th><th>Base</th><th>Head</th><th>Threshold</th><th>Improvement</th><th>Result</th></tr></thead><tbody><tr><td>src/blocks/field/noisy-broadcast.ts</td><td>ESLint cyclomatic rule hits (per file)</td><td>0</td><td>0</td><td>&lt;= 0</td><td>0%</td><td>pass</td></tr>
+<tr><td>src/blocks/field/noisy-broadcast.ts</td><td>ESLint max-depth hits (per file)</td><td>0</td><td>0</td><td>&lt;= 0</td><td>0%</td><td>pass</td></tr>
+<tr><td>src/blocks/field/noisy-broadcast.ts</td><td>ESLint max-lines-per-function hits (per file)</td><td>0</td><td>0</td><td>&lt;= 0</td><td>0%</td><td>pass</td></tr>
+<tr><td>src/blocks/field/noisy-broadcast.ts</td><td>ESLint max-params hits (per file)</td><td>0</td><td>0</td><td>&lt;= 0</td><td>0%</td><td>pass</td></tr>
+<tr><td>src/blocks/field/noisy-broadcast.ts</td><td>ESLint cognitive-complexity hits (per file)</td><td>0</td><td>0</td><td>&lt;= 0</td><td>0%</td><td>pass</td></tr>
+<tr><td>src/blocks/field/noisy-broadcast.ts</td><td>ts-morph max cyclomatic (per file)</td><td>4</td><td>2</td><td>&lt;= 15</td><td>50%</td><td>pass</td></tr>
+<tr><td>src/blocks/field/noisy-broadcast.ts</td><td>ts-morph max cognitive (per file)</td><td>3</td><td>1</td><td>&lt;= 20</td><td>67%</td><td>pass</td></tr>
+<tr><td>src/blocks/field/noisy-broadcast.ts</td><td>ts-morph max nesting depth (per file)</td><td>1</td><td>1</td><td>&lt;= 4</td><td>0%</td><td>pass</td></tr>
+<tr><td>src/blocks/field/noisy-broadcast.ts</td><td>ts-morph average maintainability index (per file)</td><td>39</td><td>49</td><td>&gt;= 65</td><td>25%</td><td>pass</td></tr>
+<tr><td>src/blocks/field/noisy-broadcast.ts</td><td>ts-morph module fan-out (per file)</td><td>7</td><td>7</td><td>&lt;= 15</td><td>0%</td><td>pass</td></tr>
+<tr><td>src/render/webgpu/gpu-pass-debug.ts</td><td>ESLint cyclomatic rule hits (per file)</td><td>0</td><td>0</td><td>&lt;= 0</td><td>0%</td><td>pass</td></tr>
+<tr><td>src/render/webgpu/gpu-pass-debug.ts</td><td>ESLint max-depth hits (per file)</td><td>0</td><td>0</td><td>&lt;= 0</td><td>0%</td><td>pass</td></tr>
+<tr><td>src/render/webgpu/gpu-pass-debug.ts</td><td>ESLint max-lines-per-function hits (per file)</td><td>0</td><td>0</td><td>&lt;= 0</td><td>0%</td><td>pass</td></tr>
+<tr><td>src/render/webgpu/gpu-pass-debug.ts</td><td>ESLint max-params hits (per file)</td><td>0</td><td>0</td><td>&lt;= 0</td><td>0%</td><td>pass</td></tr>
+<tr><td>src/render/webgpu/gpu-pass-debug.ts</td><td>ESLint cognitive-complexity hits (per file)</td><td>0</td><td>0</td><td>&lt;= 0</td><td>0%</td><td>pass</td></tr>
+<tr><td>src/render/webgpu/gpu-pass-debug.ts</td><td>ts-morph max cyclomatic (per file)</td><td>n/a</td><td>4</td><td>&lt;= 15</td><td>n/a</td><td>pass</td></tr>
+<tr><td>src/render/webgpu/gpu-pass-debug.ts</td><td>ts-morph max cognitive (per file)</td><td>n/a</td><td>3</td><td>&lt;= 20</td><td>n/a</td><td>pass</td></tr>
+<tr><td>src/render/webgpu/gpu-pass-debug.ts</td><td>ts-morph max nesting depth (per file)</td><td>n/a</td><td>2</td><td>&lt;= 4</td><td>n/a</td><td>pass</td></tr>
+<tr><td>src/render/webgpu/gpu-pass-debug.ts</td><td>ts-morph average maintainability index (per file)</td><td>n/a</td><td>72</td><td>&gt;= 65</td><td>n/a</td><td>pass</td></tr>
+<tr><td>src/render/webgpu/gpu-pass-debug.ts</td><td>ts-morph module fan-out (per file)</td><td>n/a</td><td>0</td><td>&lt;= 15</td><td>n/a</td><td>pass</td></tr>
+<tr><td>src/render/webgpu/RustWasmWebGPURenderer.ts</td><td>ESLint cyclomatic rule hits (per file)</td><td>0</td><td>0</td><td>&lt;= 0</td><td>0%</td><td>pass</td></tr>
+<tr><td>src/render/webgpu/RustWasmWebGPURenderer.ts</td><td>ESLint max-depth hits (per file)</td><td>0</td><td>0</td><td>&lt;= 0</td><td>0%</td><td>pass</td></tr>
+<tr><td>src/render/webgpu/RustWasmWebGPURenderer.ts</td><td>ESLint max-lines-per-function hits (per file)</td><td>0</td><td>0</td><td>&lt;= 0</td><td>0%</td><td>pass</td></tr>
+<tr><td>src/render/webgpu/RustWasmWebGPURenderer.ts</td><td>ESLint max-params hits (per file)</td><td>0</td><td>0</td><td>&lt;= 0</td><td>0%</td><td>pass</td></tr>
+<tr><td>src/render/webgpu/RustWasmWebGPURenderer.ts</td><td>ESLint cognitive-complexity hits (per file)</td><td>0</td><td>0</td><td>&lt;= 0</td><td>0%</td><td>pass</td></tr>
+<tr><td>src/render/webgpu/RustWasmWebGPURenderer.ts</td><td>ts-morph max cyclomatic (per file)</td><td>9</td><td>8</td><td>&lt;= 15</td><td>11%</td><td>pass</td></tr>
+<tr><td>src/render/webgpu/RustWasmWebGPURenderer.ts</td><td>ts-morph max cognitive (per file)</td><td>15</td><td>10</td><td>&lt;= 20</td><td>33%</td><td>pass</td></tr>
+<tr><td>src/render/webgpu/RustWasmWebGPURenderer.ts</td><td>ts-morph max nesting depth (per file)</td><td>3</td><td>4</td><td>&lt;= 4</td><td>-33%</td><td>pass</td></tr>
+<tr><td>src/render/webgpu/RustWasmWebGPURenderer.ts</td><td>ts-morph average maintainability index (per file)</td><td>64</td><td>65</td><td>&gt;= 65</td><td>1%</td><td>pass</td></tr>
+<tr><td>src/render/webgpu/RustWasmWebGPURenderer.ts</td><td>ts-morph module fan-out (per file)</td><td>8</td><td>9</td><td>&lt;= 15</td><td>-13%</td><td>pass</td></tr>
+<tr><td>src/services/__tests__/compiled-gpu-pass-validation.test.ts</td><td>ESLint cyclomatic rule hits (per file)</td><td>0</td><td>0</td><td>&lt;= 0</td><td>0%</td><td>pass</td></tr>
+<tr><td>src/services/__tests__/compiled-gpu-pass-validation.test.ts</td><td>ESLint max-depth hits (per file)</td><td>0</td><td>0</td><td>&lt;= 0</td><td>0%</td><td>pass</td></tr>
+<tr><td>src/services/__tests__/compiled-gpu-pass-validation.test.ts</td><td>ESLint max-lines-per-function hits (per file)</td><td>0</td><td>0</td><td>&lt;= 0</td><td>0%</td><td>pass</td></tr>
+<tr><td>src/services/__tests__/compiled-gpu-pass-validation.test.ts</td><td>ESLint max-params hits (per file)</td><td>0</td><td>0</td><td>&lt;= 0</td><td>0%</td><td>pass</td></tr>
+<tr><td>src/services/__tests__/compiled-gpu-pass-validation.test.ts</td><td>ESLint cognitive-complexity hits (per file)</td><td>0</td><td>0</td><td>&lt;= 0</td><td>0%</td><td>pass</td></tr>
+<tr><td>src/services/__tests__/compiled-gpu-pass-validation.test.ts</td><td>ts-morph max cyclomatic (per file)</td><td>n/a</td><td>5</td><td>&lt;= 15</td><td>n/a</td><td>pass</td></tr>
+<tr><td>src/services/__tests__/compiled-gpu-pass-validation.test.ts</td><td>ts-morph max cognitive (per file)</td><td>n/a</td><td>4</td><td>&lt;= 20</td><td>n/a</td><td>pass</td></tr>
+<tr><td>src/services/__tests__/compiled-gpu-pass-validation.test.ts</td><td>ts-morph max nesting depth (per file)</td><td>n/a</td><td>1</td><td>&lt;= 4</td><td>n/a</td><td>pass</td></tr>
+<tr><td>src/services/__tests__/compiled-gpu-pass-validation.test.ts</td><td>ts-morph average maintainability index (per file)</td><td>n/a</td><td>72</td><td>&gt;= 65</td><td>n/a</td><td>pass</td></tr>
+<tr><td>src/services/__tests__/compiled-gpu-pass-validation.test.ts</td><td>ts-morph module fan-out (per file)</td><td>n/a</td><td>3</td><td>&lt;= 15</td><td>n/a</td><td>pass</td></tr>
+<tr><td>src/services/compile.worker.ts</td><td>ESLint cyclomatic rule hits (per file)</td><td>0</td><td>0</td><td>&lt;= 0</td><td>0%</td><td>pass</td></tr>
+<tr><td>src/services/compile.worker.ts</td><td>ESLint max-depth hits (per file)</td><td>0</td><td>0</td><td>&lt;= 0</td><td>0%</td><td>pass</td></tr>
+<tr><td>src/services/compile.worker.ts</td><td>ESLint max-lines-per-function hits (per file)</td><td>0</td><td>0</td><td>&lt;= 0</td><td>0%</td><td>pass</td></tr>
+<tr><td>src/services/compile.worker.ts</td><td>ESLint max-params hits (per file)</td><td>0</td><td>0</td><td>&lt;= 0</td><td>0%</td><td>pass</td></tr>
+<tr><td>src/services/compile.worker.ts</td><td>ESLint cognitive-complexity hits (per file)</td><td>0</td><td>0</td><td>&lt;= 0</td><td>0%</td><td>pass</td></tr>
+<tr><td>src/services/compile.worker.ts</td><td>ts-morph max cyclomatic (per file)</td><td>7</td><td>8</td><td>&lt;= 15</td><td>-14%</td><td>pass</td></tr>
+<tr><td>src/services/compile.worker.ts</td><td>ts-morph max cognitive (per file)</td><td>14</td><td>7</td><td>&lt;= 20</td><td>50%</td><td>pass</td></tr>
+<tr><td>src/services/compile.worker.ts</td><td>ts-morph max nesting depth (per file)</td><td>4</td><td>2</td><td>&lt;= 4</td><td>50%</td><td>pass</td></tr>
+<tr><td>src/services/compile.worker.ts</td><td>ts-morph average maintainability index (per file)</td><td>60</td><td>62</td><td>&gt;= 65</td><td>1.9%</td><td>pass</td></tr>
+<tr><td>src/services/compile.worker.ts</td><td>ts-morph module fan-out (per file)</td><td>8</td><td>11</td><td>&lt;= 15</td><td>-38%</td><td>pass</td></tr>
+<tr><td>src/services/compiled-gpu-pass-validation.ts</td><td>ESLint cyclomatic rule hits (per file)</td><td>0</td><td>0</td><td>&lt;= 0</td><td>0%</td><td>pass</td></tr>
+<tr><td>src/services/compiled-gpu-pass-validation.ts</td><td>ESLint max-depth hits (per file)</td><td>0</td><td>0</td><td>&lt;= 0</td><td>0%</td><td>pass</td></tr>
+<tr><td>src/services/compiled-gpu-pass-validation.ts</td><td>ESLint max-lines-per-function hits (per file)</td><td>0</td><td>0</td><td>&lt;= 0</td><td>0%</td><td>pass</td></tr>
+<tr><td>src/services/compiled-gpu-pass-validation.ts</td><td>ESLint max-params hits (per file)</td><td>0</td><td>0</td><td>&lt;= 0</td><td>0%</td><td>pass</td></tr>
+<tr><td>src/services/compiled-gpu-pass-validation.ts</td><td>ESLint cognitive-complexity hits (per file)</td><td>0</td><td>0</td><td>&lt;= 0</td><td>0%</td><td>pass</td></tr>
+<tr><td>src/services/compiled-gpu-pass-validation.ts</td><td>ts-morph max cyclomatic (per file)</td><td>n/a</td><td>6</td><td>&lt;= 15</td><td>n/a</td><td>pass</td></tr>
+<tr><td>src/services/compiled-gpu-pass-validation.ts</td><td>ts-morph max cognitive (per file)</td><td>n/a</td><td>7</td><td>&lt;= 20</td><td>n/a</td><td>pass</td></tr>
+<tr><td>src/services/compiled-gpu-pass-validation.ts</td><td>ts-morph max nesting depth (per file)</td><td>n/a</td><td>3</td><td>&lt;= 4</td><td>n/a</td><td>pass</td></tr>
+<tr><td>src/services/compiled-gpu-pass-validation.ts</td><td>ts-morph average maintainability index (per file)</td><td>n/a</td><td>70</td><td>&gt;= 65</td><td>n/a</td><td>pass</td></tr>
+<tr><td>src/services/compiled-gpu-pass-validation.ts</td><td>ts-morph module fan-out (per file)</td><td>n/a</td><td>3</td><td>&lt;= 15</td><td>n/a</td><td>pass</td></tr></tbody></table>
+<h2>High-Signal Regressions</h2>
+<table class="colorized-table"><thead><tr><th>Signal</th><th>Metric</th><th>Base/Head</th><th>Delta (%)</th><th>Magnitude</th><th>Impact</th></tr></thead><tbody><tr><td colspan="6">none</td></tr></tbody></table>
+<h2>High-Signal Improvements</h2>
+<table class="colorized-table"><thead><tr><th>Signal</th><th>Metric</th><th>Base/Head</th><th>Delta (%)</th><th>Magnitude</th><th>Impact</th></tr></thead><tbody><tr><td colspan="6">none</td></tr></tbody></table>
+<h2>Regressions</h2>
+<table class="colorized-table"><thead><tr><th>Signal</th><th>Metric</th><th>Base/Head</th><th>Delta (%)</th><th>Magnitude</th><th>Impact</th></tr></thead><tbody><tr><td colspan="6">none</td></tr></tbody></table>
+<h2>Regression Drilldown (click row)</h2>
+<p>None.</p>
+<h2>Improvements</h2>
+<table class="colorized-table"><thead><tr><th>Signal</th><th>Metric</th><th>Base/Head</th><th>Delta (%)</th><th>Magnitude</th><th>Impact</th></tr></thead><tbody><tr><td colspan="6">none</td></tr></tbody></table>
+<h2>Improvement Drilldown (click row)</h2>
+<p>None.</p>
+<h2>Full Delta Table</h2>
+<table class="colorized-table"><thead><tr><th>Signal</th><th>Metric</th><th>Base/Head</th><th>Delta (%)</th><th>Magnitude</th><th>Impact</th></tr></thead><tbody><tr class="sev-row sev-neutral"><td>high</td><td><span title="Average maintainability index across analyzed functions.">ts-morph average maintainability index</span></td><td>65/65</td><td>😐 +0.056 (0.087%)</td><td>tiny</td><td>minor improvement</td></tr>
+<tr class="sev-row sev-unchanged"><td>high</td><td><span title="dependency-cruiser error violations. lower is better.">dependency-cruiser error violations</span></td><td>51/51</td><td>⬜️ 0 (0%)</td><td>none</td><td>no meaningful change</td></tr>
+<tr class="sev-row sev-unchanged"><td>high</td><td><span title="dependency-cruiser max fan-out. lower is better.">dependency-cruiser max fan-out</span></td><td>32/32</td><td>⬜️ 0 (0%)</td><td>none</td><td>no meaningful change</td></tr>
+<tr class="sev-row sev-unchanged"><td>high</td><td><span title="ESLint cognitive-complexity hits. lower is better.">ESLint cognitive-complexity hits</span></td><td>112/112</td><td>⬜️ 0 (0%)</td><td>none</td><td>no meaningful change</td></tr>
+<tr class="sev-row sev-unchanged"><td>high</td><td><span title="ESLint cyclomatic rule hits. lower is better.">ESLint cyclomatic rule hits</span></td><td>191/191</td><td>⬜️ 0 (0%)</td><td>none</td><td>no meaningful change</td></tr>
+<tr class="sev-row sev-unchanged"><td>high</td><td><span title="ESLint errors. lower is better.">ESLint errors</span></td><td>362/362</td><td>⬜️ 0 (0%)</td><td>none</td><td>no meaningful change</td></tr>
+<tr class="sev-row sev-unchanged"><td>high</td><td><span title="ESLint max-depth hits. lower is better.">ESLint max-depth hits</span></td><td>34/34</td><td>⬜️ 0 (0%)</td><td>none</td><td>no meaningful change</td></tr>
+<tr class="sev-row sev-unchanged"><td>high</td><td><span title="Highest cognitive complexity across analyzed functions.">ts-morph max cognitive</span></td><td>287/287</td><td>⬜️ 0 (0%)</td><td>none</td><td>no meaningful change</td></tr>
+<tr class="sev-row sev-unchanged"><td>high</td><td><span title="Highest cyclomatic complexity across analyzed functions.">ts-morph max cyclomatic</span></td><td>87/87</td><td>⬜️ 0 (0%)</td><td>none</td><td>no meaningful change</td></tr>
+<tr class="sev-row sev-unchanged"><td>high</td><td><span title="Maximum number of internal modules imported by a single module.">ts-morph max fan-out</span></td><td>30/30</td><td>⬜️ 0 (0%)</td><td>none</td><td>no meaningful change</td></tr>
+<tr class="sev-row sev-unchanged"><td>high</td><td><span title="Deepest nested control-flow depth found in a function.">ts-morph max nesting depth</span></td><td>9/9</td><td>⬜️ 0 (0%)</td><td>none</td><td>no meaningful change</td></tr>
+<tr class="sev-row sev-neutral"><td>medium</td><td><span title="Plato average maintainability. higher is better.">Plato average maintainability</span></td><td>69/69</td><td>😐 +0.031 (0.046%)</td><td>tiny</td><td>minor improvement</td></tr>
+<tr class="sev-row sev-neutral"><td>medium</td><td><span title="Typhon average maintainability. higher is better.">Typhon average maintainability</span></td><td>63/63</td><td>😐 +0.022 (0.036%)</td><td>tiny</td><td>minor improvement</td></tr>
+<tr class="sev-row sev-unchanged"><td>medium</td><td><span title="dependency-cruiser max fan-in. lower is better.">dependency-cruiser max fan-in</span></td><td>178/178</td><td>⬜️ 0 (0%)</td><td>none</td><td>no meaningful change</td></tr>
+<tr class="sev-row sev-unchanged"><td>medium</td><td><span title="dependency-cruiser warning violations. lower is better.">dependency-cruiser warning violations</span></td><td>5/5</td><td>⬜️ 0 (0%)</td><td>none</td><td>no meaningful change</td></tr>
+<tr class="sev-row sev-unchanged"><td>medium</td><td><span title="ESLint max-lines-per-function hits. lower is better.">ESLint max-lines-per-function hits</span></td><td>190/190</td><td>⬜️ 0 (0%)</td><td>none</td><td>no meaningful change</td></tr>
+<tr class="sev-row sev-unchanged"><td>medium</td><td><span title="ESLint max-params hits. lower is better.">ESLint max-params hits</span></td><td>46/46</td><td>⬜️ 0 (0%)</td><td>none</td><td>no meaningful change</td></tr>
+<tr class="sev-row sev-unchanged"><td>medium</td><td><span title="ESLint warnings. lower is better.">ESLint warnings</span></td><td>246/246</td><td>⬜️ 0 (0%)</td><td>none</td><td>no meaningful change</td></tr>
+<tr class="sev-row sev-unchanged"><td>medium</td><td><span title="Plato max cyclomatic. lower is better.">Plato max cyclomatic</span></td><td>133/133</td><td>⬜️ 0 (0%)</td><td>none</td><td>no meaningful change</td></tr>
+<tr class="sev-row sev-unchanged"><td>medium</td><td><span title="Maximum number of internal modules that import the same module (hotspot fan-in).">ts-morph max fan-in</span></td><td>345/345</td><td>⬜️ 0 (0%)</td><td>none</td><td>no meaningful change</td></tr>
+<tr class="sev-row sev-unchanged"><td>medium</td><td><span title="Largest Halstead volume observed among functions.">ts-morph max Halstead volume</span></td><td>38000/38000</td><td>⬜️ 0 (0%)</td><td>none</td><td>no meaningful change</td></tr>
+<tr class="sev-row sev-unchanged"><td>medium</td><td><span title="Typhon max cyclomatic. lower is better.">Typhon max cyclomatic</span></td><td>284/284</td><td>⬜️ 0 (0%)</td><td>none</td><td>no meaningful change</td></tr>
+<tr class="sev-row sev-neutral"><td>low</td><td><span title="Plato avg Halstead difficulty. lower is better.">Plato avg Halstead difficulty</span></td><td>22/23</td><td>😐 +0.053 (0.23%)</td><td>tiny</td><td>minor regression</td></tr>
+<tr class="sev-row sev-neutral"><td>low</td><td><span title="Plato avg Halstead volume. lower is better.">Plato avg Halstead volume</span></td><td>2700/2700</td><td>😐 +4.3 (0.16%)</td><td>tiny</td><td>minor regression</td></tr>
+<tr class="sev-row sev-neutral"><td>low</td><td><span title="Typhon avg Halstead difficulty. lower is better.">Typhon avg Halstead difficulty</span></td><td>28/28</td><td>😐 +0.006 (0.021%)</td><td>tiny</td><td>minor regression</td></tr>
+<tr class="sev-row sev-neutral"><td>low</td><td><span title="Typhon avg Halstead volume. lower is better.">Typhon avg Halstead volume</span></td><td>4000/4000</td><td>😐 -11 (-0.26%)</td><td>tiny</td><td>minor improvement</td></tr></tbody></table></main>
+</body>
+</html>
