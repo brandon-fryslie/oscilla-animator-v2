@@ -17,6 +17,7 @@ import { ReactFlowEditorPanel } from './panels/ReactFlowEditorPanel';
 import { PreviewPanel } from './panels/PreviewPanel';
 import { DiagnosticConsolePanel } from './panels/DiagnosticConsolePanel';
 import { LogPanel } from './panels/LogPanel';
+import { ContinuityPanel } from './panels/ContinuityPanel';
 import { CompilationInspectorPanel } from './panels/CompilationInspectorPanel';
 import { DebugMiniViewPanel } from './panels/DebugMiniViewPanel';
 import { CompositeEditorPanel } from './panels/CompositeEditorPanel';
@@ -39,6 +40,7 @@ export const PANEL_COMPONENTS = {
   'preview': PreviewPanel,
   'diagnostic-console': DiagnosticConsolePanel,
   'log-panel': LogPanel,
+  'continuity-panel': ContinuityPanel,
   'compilation-inspector': CompilationInspectorPanel,
   'debug-miniview': DebugMiniViewPanel,
   'help': HelpPanelWrapper,

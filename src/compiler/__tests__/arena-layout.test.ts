@@ -51,6 +51,13 @@ function makeInstances(
 
 const emptyInstances: ReadonlyMap<InstanceId, InstanceDecl> = new Map();
 
+function requireValue<T>(value: T | undefined, message: string): T {
+  if (value === undefined) {
+    throw new Error(message);
+  }
+  return value;
+}
+
 // ---------------------------------------------------------------------------
 // deriveArenaDescriptor — unit tests
 // ---------------------------------------------------------------------------
@@ -124,7 +131,9 @@ describe('deriveArenaDescriptor', () => {
     expect(desc.laneCount).toBe(32);
     expect(desc.length).toBe(32);
   });
+});
 
+describe('deriveArenaDescriptor offsets', () => {
   it('respects arenaOffset for bump allocation', () => {
     const type = canonicalScalar(VEC3);
     const desc = deriveArenaDescriptor(type, 100, emptyInstances);
@@ -414,18 +423,16 @@ describe('arenaLayout integration', () => {
     const schedule = program.schedule as ScheduleIR;
     expect((schedule.stateSlotCount ?? 0)).toBeGreaterThan(0);
 
-    const stateZone = program.arenaZones?.zones.find((z) => z.kind === 'state');
-    expect(stateZone).toBeDefined();
-    if (!stateZone) {
-      throw new Error('Missing state zone metadata');
-    }
+    const stateZone = requireValue(
+      program.arenaZones?.zones.find((z) => z.kind === 'state'),
+      'Missing state zone metadata',
+    );
     expect(stateZone.length).toBe((schedule.stateSlotCount ?? 0) * 2);
 
-    const stateLayout = program.arenaRuntimeLayout?.stateBank;
-    expect(stateLayout).toBeDefined();
-    if (!stateLayout) {
-      throw new Error('Missing arenaRuntimeLayout.stateBank metadata');
-    }
+    const stateLayout = requireValue(
+      program.arenaRuntimeLayout?.stateBank,
+      'Missing arenaRuntimeLayout.stateBank metadata',
+    );
     expect(stateLayout.bankLength).toBe(schedule.stateSlotCount ?? 0);
     expect(stateLayout.offset).toBe(stateZone.start);
 

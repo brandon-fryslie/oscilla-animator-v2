@@ -292,6 +292,150 @@ function validateBroadcastKernelInputs(valueExprs: readonly ValueExpr[]): void {
   }
 }
 
+function validateScalarIntrinsic(
+  exprId: number,
+  expr: Extract<ValueExpr, { kind: 'intrinsic' }>,
+): void {
+  const card = requireInst(expr.type.extent.cardinality, 'cardinality').kind;
+  if (card === 'many') {
+    // [LAW:single-enforcer] Scalar-evaluation compatibility is enforced once at schedule construction.
+    throw new Error(
+      `Schedule invariant violated: scalar root depends on field intrinsic expr ${exprId}`,
+    );
+  }
+}
+
+function validateScalarExtractExpr(
+  exprId: number,
+  expr: Extract<ValueExpr, { kind: 'extract' }>,
+  valueExprs: readonly ValueExpr[],
+  scalarRootExprIds: ReadonlySet<number>,
+  stack: number[],
+): void {
+  const inputExprId = expr.input as number;
+  const inputExpr = valueExprs[inputExprId];
+  if (!inputExpr) {
+    throw new Error(
+      `Schedule invariant violated: extract expr ${exprId} references missing input expr ${inputExprId}`,
+    );
+  }
+
+  const inputCard = requireInst(inputExpr.type.extent.cardinality, 'cardinality').kind;
+  if (inputCard === 'many') {
+    throw new Error(
+      `Schedule invariant violated: scalar extract expr ${exprId} input expr ${inputExprId} is many-cardinality`,
+    );
+  }
+
+  const inputStride = payloadStride(inputExpr.type.payload);
+  if (expr.componentIndex < 0 || expr.componentIndex >= inputStride) {
+    throw new Error(
+      `Schedule invariant violated: extract expr ${exprId} requests component ${expr.componentIndex} but input stride is ${inputStride}`,
+    );
+  }
+
+  const inputIsAddressable = scalarRootExprIds.has(inputExprId);
+  if (!inputIsAddressable && inputExpr.kind !== 'construct') {
+    throw new Error(
+      `Schedule invariant violated: scalar extract expr ${exprId} input expr ${inputExprId} has no scalar slot mapping`,
+    );
+  }
+
+  if (inputIsAddressable) {
+    stack.push(inputExprId);
+    return;
+  }
+  if (inputExpr.kind !== 'construct') {
+    throw new Error(
+      `Schedule invariant violated: scalar extract expr ${exprId} input expr ${inputExprId} has no scalar construct source`,
+    );
+  }
+
+  const componentExprId = inputExpr.components[expr.componentIndex];
+  if (componentExprId === undefined) {
+    throw new Error(
+      `Schedule invariant violated: extract expr ${exprId} component ${expr.componentIndex} missing in construct expr ${inputExprId}`,
+    );
+  }
+  stack.push(componentExprId as number);
+}
+
+function validateScalarKernelExpr(
+  exprId: number,
+  expr: Extract<ValueExpr, { kind: 'kernel' }>,
+  stack: number[],
+): void {
+  switch (expr.kernelKind) {
+    case 'map':
+      stack.push(expr.input as number);
+      return;
+    case 'zip':
+      for (const inputId of expr.inputs) {
+        stack.push(inputId as number);
+      }
+      return;
+    case 'reduce':
+      // [LAW:single-enforcer] Reduce sub-graph evaluation is delegated to executor context.
+      return;
+    case 'zipPromote':
+    case 'broadcast':
+    case 'pathDerivative':
+    case 'pathSample':
+      throw new Error(
+        `Schedule invariant violated: scalar root depends on field-only kernel ${expr.kernelKind} (expr ${exprId})`,
+      );
+    default: {
+      const _exhaustive: never = expr;
+      throw new Error(
+        `Unknown kernel kind during scalar invariant validation: ${(_exhaustive as ValueExpr).kind}`,
+      );
+    }
+  }
+}
+
+function validateScalarExpr(
+  exprId: number,
+  expr: ValueExpr,
+  valueExprs: readonly ValueExpr[],
+  scalarRootExprIds: ReadonlySet<number>,
+  stack: number[],
+): void {
+  switch (expr.kind) {
+    case 'const':
+    case 'time':
+    case 'external':
+    case 'state':
+    case 'eventRead':
+    case 'shapeRef':
+    case 'event':
+      return;
+    case 'intrinsic':
+      validateScalarIntrinsic(exprId, expr);
+      return;
+    case 'oklchToRgb':
+      throw new Error(
+        `Schedule invariant violated: scalar root depends on field-only oklchToRgb expr ${exprId}`,
+      );
+    case 'construct':
+      for (const componentId of expr.components) {
+        stack.push(componentId as number);
+      }
+      return;
+    case 'extract':
+      validateScalarExtractExpr(exprId, expr, valueExprs, scalarRootExprIds, stack);
+      return;
+    case 'kernel':
+      validateScalarKernelExpr(exprId, expr, stack);
+      return;
+    default: {
+      const _exhaustive: never = expr;
+      throw new Error(
+        `Unknown ValueExpr kind during scalar invariant validation: ${(_exhaustive as ValueExpr).kind}`,
+      );
+    }
+  }
+}
+
 function validateScalarExtractInputs(
   valueExprs: readonly ValueExpr[],
   scalarRootExprIds: ReadonlySet<number>,
@@ -308,121 +452,7 @@ function validateScalarExtractInputs(
     if (!expr) {
       throw new Error(`Schedule invariant violated: scalar root references missing expr ${exprId}`);
     }
-
-    switch (expr.kind) {
-      case 'const':
-      case 'time':
-      case 'external':
-      case 'state':
-      case 'eventRead':
-      case 'shapeRef':
-      case 'event':
-        continue;
-
-      case 'intrinsic': {
-        const card = requireInst(expr.type.extent.cardinality, 'cardinality').kind;
-        if (card === 'many') {
-          // [LAW:single-enforcer] Scalar-evaluation compatibility is enforced once at schedule construction.
-          throw new Error(
-            `Schedule invariant violated: scalar root depends on field intrinsic expr ${exprId}`,
-          );
-        }
-        continue;
-      }
-
-      case 'oklchToRgb': {
-        throw new Error(
-          `Schedule invariant violated: scalar root depends on field-only oklchToRgb expr ${exprId}`,
-        );
-      }
-
-      case 'construct': {
-        for (const componentId of expr.components) {
-          stack.push(componentId as number);
-        }
-        continue;
-      }
-
-      case 'extract': {
-        const inputExprId = expr.input as number;
-        const inputExpr = valueExprs[inputExprId];
-        if (!inputExpr) {
-          throw new Error(
-            `Schedule invariant violated: extract expr ${exprId} references missing input expr ${inputExprId}`,
-          );
-        }
-
-        const inputCard = requireInst(inputExpr.type.extent.cardinality, 'cardinality').kind;
-        if (inputCard === 'many') {
-          throw new Error(
-            `Schedule invariant violated: scalar extract expr ${exprId} input expr ${inputExprId} is many-cardinality`,
-          );
-        }
-
-        const inputStride = payloadStride(inputExpr.type.payload);
-        if (expr.componentIndex < 0 || expr.componentIndex >= inputStride) {
-          throw new Error(
-            `Schedule invariant violated: extract expr ${exprId} requests component ${expr.componentIndex} but input stride is ${inputStride}`,
-          );
-        }
-
-        const inputIsAddressable = scalarRootExprIds.has(inputExprId);
-        if (!inputIsAddressable && inputExpr.kind !== 'construct') {
-          throw new Error(
-            `Schedule invariant violated: scalar extract expr ${exprId} input expr ${inputExprId} has no scalar slot mapping`,
-          );
-        }
-
-        if (!inputIsAddressable && inputExpr.kind === 'construct') {
-          const componentExprId = inputExpr.components[expr.componentIndex];
-          if (componentExprId === undefined) {
-            throw new Error(
-              `Schedule invariant violated: extract expr ${exprId} component ${expr.componentIndex} missing in construct expr ${inputExprId}`,
-            );
-          }
-          stack.push(componentExprId as number);
-        } else {
-          stack.push(inputExprId);
-        }
-        continue;
-      }
-
-      case 'kernel': {
-        switch (expr.kernelKind) {
-          case 'map':
-            stack.push(expr.input as number);
-            continue;
-          case 'zip':
-            for (const inputId of expr.inputs) {
-              stack.push(inputId as number);
-            }
-            continue;
-          case 'reduce':
-            // [LAW:single-enforcer] Reduce sub-graph evaluation is delegated to executor context.
-            continue;
-          case 'zipPromote':
-          case 'broadcast':
-          case 'pathDerivative':
-          case 'pathSample':
-            throw new Error(
-              `Schedule invariant violated: scalar root depends on field-only kernel ${expr.kernelKind} (expr ${exprId})`,
-            );
-          default: {
-            const _exhaustive: never = expr;
-            throw new Error(
-              `Unknown kernel kind during scalar invariant validation: ${(_exhaustive as ValueExpr).kind}`,
-            );
-          }
-        }
-      }
-
-      default: {
-        const _exhaustive: never = expr;
-        throw new Error(
-          `Unknown ValueExpr kind during scalar invariant validation: ${(_exhaustive as ValueExpr).kind}`,
-        );
-      }
-    }
+    validateScalarExpr(exprId, expr, valueExprs, scalarRootExprIds, stack);
   }
 }
 
