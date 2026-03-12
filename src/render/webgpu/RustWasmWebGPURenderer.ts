@@ -241,6 +241,18 @@ function requireGpuPassWgsl(pass: RustRendererGpuPass, passId: string): string {
   );
 }
 
+function hasGpuPassPayloads(passes: readonly RustRendererGpuPass[]): boolean {
+  return passes.length > 0;
+}
+
+function createEmptyGpuPassBundleError(): Error {
+  return new Error('Rust renderer GPU pass contract violation: pass bundle must contain at least one pass');
+}
+
+function normalizeGpuPassPayloads(passes: readonly RustRendererGpuPass[]): readonly RustRendererGpuPass[] {
+  return passes.map((pass, index) => validateGpuPass(pass, index));
+}
+
 /**
  * Transport-level GPU pass normalization.
  *
@@ -280,10 +292,10 @@ function validateGpuPass(pass: RustRendererGpuPass, index: number): RustRenderer
 function validateGpuPassBundle(passes: readonly RustRendererGpuPass[]): readonly RustRendererGpuPass[] {
   // [LAW:single-enforcer] Renderer owns transport/runtime payload integrity
   // only; compile boundary owns semantic pass and bundle policy validation.
-  if (passes.length === 0) {
-    throw new Error('Rust renderer GPU pass contract violation: pass bundle must contain at least one pass');
+  if (!hasGpuPassPayloads(passes)) {
+    throw createEmptyGpuPassBundleError();
   }
-  return passes.map((pass, index) => validateGpuPass(pass, index));
+  return normalizeGpuPassPayloads(passes);
 }
 
 function isFiniteUint32Value(value: number): boolean {
