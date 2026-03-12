@@ -27,7 +27,8 @@ export type GpuPassSignatureValidationOutcome =
   | { readonly kind: 'ok'; readonly signatures: readonly ValidatedGpuPassSignature[] }
   | { readonly kind: 'error'; readonly errors: readonly CompileError[] };
 
-function parseMaxActiveLanes(maxActiveLanes: number): number | undefined {
+function parseMaxActiveLanes(maxActiveLanes: unknown): number | undefined {
+  if (typeof maxActiveLanes !== 'number') return undefined;
   const parsed = Math.trunc(maxActiveLanes);
   if (!Number.isFinite(parsed) || parsed <= 0) return undefined;
   return parsed;

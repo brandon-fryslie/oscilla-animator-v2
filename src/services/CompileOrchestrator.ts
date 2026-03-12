@@ -378,7 +378,13 @@ export async function compileAndSwap(
     return bindings;
   };
 
-  const runtimeAddressTable = program.runtimeAddressTable;
+  const runtimeAddressTable =
+    (program as Partial<Pick<CompiledProgramIR, 'runtimeAddressTable'>>).runtimeAddressTable;
+  if (!runtimeAddressTable) {
+    // [LAW:single-enforcer] Runtime slot cardinality comes from the compiler
+    // runtime-address contract; orchestrator must not derive from legacy metadata.
+    throw new Error('[compile] runtimeAddressTable is missing - compiler/runtime contract violation');
+  }
   if (!runtimeAddressTable.slotLookup) {
     // [LAW:single-enforcer] Runtime slot cardinality comes from the compiler
     // runtime-address contract; orchestrator must not derive from legacy metadata.
