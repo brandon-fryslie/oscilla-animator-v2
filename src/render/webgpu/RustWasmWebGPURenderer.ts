@@ -200,7 +200,7 @@ function getRuntimeBootstrapConfig(): RustRendererBootstrapConfig {
 }
 
 function dumpShaderWithLineNumbers(name: string, wgsl: string): void {
-  if (!RUNTIME_CONSOLE_ENABLED) {
+  if (!shouldDumpRuntimeShaderPayload()) {
     return;
   }
   // [LAW:verifiable-goals] Runtime shader dumps include line numbers so
@@ -253,6 +253,23 @@ function normalizeGpuPassPayloads(passes: readonly RustRendererGpuPass[]): reado
   return passes.map((pass, index) => validateGpuPass(pass, index));
 }
 
+function buildValidatedGpuPassPayload(
+  passId: string,
+  entryPoint: string,
+  wgsl: string,
+): RustRendererGpuPass {
+  return {
+    passId,
+    stage: 'compute',
+    entryPoint,
+    wgsl,
+  };
+}
+
+function shouldDumpRuntimeShaderPayload(): boolean {
+  return RUNTIME_CONSOLE_ENABLED;
+}
+
 /**
  * Transport-level GPU pass normalization.
  *
@@ -274,12 +291,7 @@ function validateGpuPass(pass: RustRendererGpuPass, index: number): RustRenderer
   const passId = requireGpuPassId(pass, index);
   const entryPoint = requireGpuPassEntryPoint(pass, passId);
   const wgsl = requireGpuPassWgsl(pass, passId);
-  return {
-    passId,
-    stage: 'compute',
-    entryPoint,
-    wgsl,
-  };
+  return buildValidatedGpuPassPayload(passId, entryPoint, wgsl);
 }
 
 /**
