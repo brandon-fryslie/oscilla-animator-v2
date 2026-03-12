@@ -1,7 +1,7 @@
 # Execution Model: Two-Phase Frame Execution
 
 **Target audience:** Runtime maintainers
-**Last updated:** 2026-01-27
+**Last updated:** 2026-03-11
 **Implementation:** `src/runtime/ScheduleExecutor.ts`
 
 ---
@@ -27,7 +27,7 @@
 
 The Oscilla runtime executes each animation frame using a **two-phase execution model**:
 
-- **Phase 1** evaluates all signals, materializes fields, applies continuity, fires events, and collects render operations. All state reads see values from the **previous frame**.
+- **Phase 1** evaluates all signals, materializes fields, fires events, and collects render operations. All state reads see values from the **previous frame**.
 - **Phase 2** writes new state values that will be used in the **next frame**.
 
 This separation is **non-negotiable**. It ensures stateful blocks (like `UnitDelay`, `Lag`, `Phasor`, `SampleAndHold`) maintain proper delay semantics and prevents causality violations in feedback loops.
@@ -49,19 +49,18 @@ Frame N:
   │ 1. Read external inputs (mouse, time)       │
   │ 2. Evaluate all signal expressions          │
   │    └─> State reads: get state[i] (t-1)      │
-  │ 3. Materialize field buffers                │
-  │ 4. Build continuity mappings                │
-  │ 5. Apply continuity policies                │
-  │ 6. Fire events (edge detection)             │
-  │ 7. Collect render operations                │
+  │ 3. Materialize pre-event buffers            │
+  │ 4. Dispatch events (eventDispatch)          │
+  │ 5. Materialize post-event buffers           │
+  │ 6. Collect render operations                │
   └──────────────────────────────────────────────┘
   ┌─ Phase 2 ───────────────────────────────────┐
-  │ 8. Write new state values (for frame N+1)   │
+  │ 7. Write new state values (for frame N+1)   │
   │    └─> State writes: state[i] = value (t)   │
   └──────────────────────────────────────────────┘
   ┌─ Post-Frame ─────────────────────────────────┐
-  │ 9. Render to canvas                          │
-  │ 10. Advance frame counter                    │
+  │ 8. Render to canvas                          │
+  │ 9. Advance frame counter                     │
   └──────────────────────────────────────────────┘
 ```
 
@@ -161,10 +160,13 @@ This pattern guarantees:
 | `evalSig` | Evaluate signal expression, cache result | **Reads** state via `SigExprStateRead` nodes |
 | `slotWriteStrided` | Write multi-component values (vec2, vec3, color) | None (slot writes only) |
 | `materialize` | Instantiate field buffers for arrays | None (allocates buffers, reads slots) |
-| `continuityMapBuild` | Detect domain changes, build element mappings | **Reads** previous domain from continuity store |
-| `continuityApply` | Apply slew/snap policies to field transitions | **Reads** previous field values from continuity store |
-| `evalEvent` | Fire events based on edge detection | **Reads** previous event state |
+| `eventDispatch` | Fire events based on edge detection | **Reads** previous event state |
 | `render` | Collect render operations for canvas | None (reads slots only) |
+
+Phase 1 `materialize` execution is intentionally split around event dispatch:
+- Pre-event materialize runs for expressions that do not depend on `eventRead`.
+- `eventDispatch` populates event slots.
+- Post-event materialize runs for expressions that depend on `eventRead`.
 
 ### Key Invariant (Phase 1)
 
@@ -193,14 +195,12 @@ case 'stateRead':
   return state.state[expr.stateSlot]; // Previous frame's value
 ```
 
-### Why Continuity Operations Are Phase 1
+### Continuity and Canonical Schedule
 
-Continuity (slew, snap) must see **stable domain state** from the previous frame. If continuity ran in Phase 2:
-- Domain changes could conflict with state writes
-- Gauges (continuity state) wouldn't be available for rendering
-- Render operations would use pre-continuity values (janky animations)
-
-By placing continuity in Phase 1, we ensure smoothed values are ready for rendering.
+Canonical schedules built by `src/compiler/backend/schedule-program.ts` do not emit
+`continuityMapBuild` or `continuityApply` steps. Continuity-related step kinds remain in
+the step union for compatibility with non-canonical/legacy paths, but they are not part of
+the canonical phase ordering described in this document.
 
 ---
 
@@ -269,20 +269,18 @@ Why not embed state writes directly in `evalSig` steps? Because:
 
 ## Schedule Structure and Step Types
 
-The schedule is built by `src/compiler/passes-v2/pass7-schedule.ts` with explicit phase ordering.
+The schedule is built by `src/compiler/backend/schedule-program.ts` with explicit phase ordering.
 
 ### Phase Ordering in Schedule Construction
 
-From `pass7-schedule.ts` (lines 4-15):
+From `schedule-program.ts` (header comment in this pass):
 ```
 1. Update rails/time inputs       [Phase 1]
-2. Execute continuous scalars     [Phase 1: evalSig]
-3. Build continuity mappings      [Phase 1: continuityMapBuild]
-4. Execute continuous fields      [Phase 1: materialize]
-5. Apply continuity policies      [Phase 1: continuityApply]
-6. Apply discrete ops             [Phase 1: evalEvent]
-7. Sinks (render)                 [Phase 1: render]
-8. State writes                   [Phase 2: stateWrite, fieldStateWrite]
+2. Execute cardinality-one values [Phase 1: materialize]
+3. Execute render materialization [Phase 1: materialize]
+4. Apply discrete ops             [Phase 1: evalEvent]
+5. Sinks (render)                 [Phase 1: render]
+6. State writes                   [Phase 2: stateWrite, fieldStateWrite]
 ```
 
 ### Step Definitions
@@ -296,8 +294,8 @@ type Step =
   | StepSlotWriteStrided  // Phase 1
   | StepMaterialize       // Phase 1
   | StepRender            // Phase 1
-  | StepContinuityMapBuild // Phase 1
-  | StepContinuityApply   // Phase 1
+  | StepContinuityMapBuild // Legacy compatibility (not emitted by canonical scheduler)
+  | StepContinuityApply   // Legacy compatibility (not emitted by canonical scheduler)
   | StepEvalEvent         // Phase 1
   | StepStateWrite        // Phase 2
   | StepFieldStateWrite;  // Phase 2
@@ -350,7 +348,7 @@ The cycle is broken by the phase boundary. Without it, the graph would be cyclic
 |-----------|------------------|
 | **I1: Time is monotonic** | Phase 1 sees consistent time; Phase 2 doesn't re-evaluate time |
 | **I3: State continuity with stable IDs** | Phase 2 boundary provides migration point for hot-swap |
-| **I5: Continuity preserves smooth transitions** | Continuity applies in Phase 1 using stable t-1 state |
+| **I5: Render inputs are slot-backed canonical values** | Materialize runs in Phase 1 before render |
 | **(Implicit) One-frame delay for stateful blocks** | Guaranteed by Phase 1 reads before Phase 2 writes |
 
 ---
@@ -456,7 +454,7 @@ for (const step of steps) {
 
 **Graph:**
 ```
-time → sin → slew → render
+time → sin → render
          ↓
       unitDelay (feedback)
 ```
@@ -474,11 +472,11 @@ time → sin → slew → render
     // Phase 1: Materialize fields (if any)
     { kind: 'materialize', field: positionField, instanceId: 'circles', target: posSlot },
 
-    // Phase 1: Apply continuity (slew)
-    { kind: 'continuityApply', targetKey: 'slew1', instanceId: 'circles', policy: 'slew', baseSlot: sinSlot, outputSlot: slewedSlot, semantic: 'custom', stride: 1 },
+    // Phase 1: Materialize render color (if field-backed)
+    { kind: 'materialize', field: colorField, instanceId: 'circles', target: colorSlot },
 
     // Phase 1: Render
-    { kind: 'render', instanceId: 'circles', positionSlot: posSlot, colorSlot: slewedSlot, shape: {...} },
+    { kind: 'render', instanceId: 'circles', positionSlot: posSlot, colorSlot, shape: {...} },
 
     // Phase 2: State writes
     { kind: 'stateWrite', stateSlot: 0, value: sinExpr }
@@ -488,9 +486,8 @@ time → sin → slew → render
 
 **Key observations:**
 - `delayOutputExpr` reads `state[0]` in Phase 1 (sees previous frame's sine value)
-- `continuityApply` (slew) runs in Phase 1, using the slewed value for rendering
 - `stateWrite` persists the current sine value for the next frame
-- Dependencies within Phase 1 are resolved by topological ordering (time → sin → slew → render)
+- Dependencies within Phase 1 are resolved by topological ordering (time → sin → materialize → render)
 
 ---
 
@@ -516,7 +513,7 @@ time → sin → slew → render
 
 **Design-time:**
 - Type system enforces step kinds (`stateWrite` is a distinct type)
-- Compiler pass ordering documented in `pass7-schedule.ts`
+- Compiler pass ordering documented in `schedule-program.ts`
 
 **Runtime:**
 - Phase 1 loop explicitly skips `stateWrite` and `fieldStateWrite` steps
@@ -593,10 +590,8 @@ See `src/runtime/StateMigration.ts` for details.
 
 Continuity (slew, snap) stores per-instance "gauges" that track element-wise state for smooth transitions.
 
-**Interaction with phasing:**
-- `continuityMapBuild` (Phase 1): Detects domain changes, builds mappings
-- `continuityApply` (Phase 1): Applies policies using gauges from previous frame
-- Gauges are updated at the end of Phase 1 (before Phase 2)
+Canonical schedules do not execute continuity steps in Phase 1. If continuity execution is
+reintroduced, this section must be updated alongside `schedule-program.ts` and its tests.
 
 Continuity state is **separate from the state array**. It does not participate in Phase 2 writes.
 
@@ -636,7 +631,7 @@ Events do not write to the main state array.
 - [ ] Define step interface in `src/compiler/ir/types.ts`
 - [ ] Add to `Step` union type
 - [ ] Add case to Phase 1 or Phase 2 loop in `ScheduleExecutor.ts`
-- [ ] Update schedule construction in `pass7-schedule.ts`
+- [ ] Update schedule construction in `schedule-program.ts`
 - [ ] Add tests in `src/runtime/__tests__/ScheduleExecutor.test.ts`
 - [ ] Document in this file (if semantically significant)
 
@@ -681,7 +676,7 @@ Events do not write to the main state array.
 
 - **Canonical Spec**: `design-docs/CANONICAL-oscilla-v2.5-20260109/ESSENTIAL-SPEC.md` (Invariant I7)
 - **Implementation**: `src/runtime/ScheduleExecutor.ts` (lines 167-505)
-- **Schedule Construction**: `src/compiler/passes-v2/pass7-schedule.ts`
+- **Schedule Construction**: `src/compiler/backend/schedule-program.ts`
 - **Step Definitions**: `src/compiler/ir/types.ts` (lines 434-550)
 - **State Migration**: `src/runtime/StateMigration.ts`
 - **Continuity System**: `design-docs/CANONICAL-oscilla-v2.5-20260109/11-continuity-system.md`
@@ -692,4 +687,5 @@ Events do not write to the main state array.
 
 | Date | Author | Changes |
 |------|--------|---------|
+| 2026-03-11 | Codex | Updated canonical phase ordering to remove continuity step execution from runtime execution-model docs |
 | 2026-01-27 | Initial | First version documenting two-phase execution model |

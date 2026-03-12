@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { observer } from 'mobx-react-lite';
+import { formatWgslWithLineNumbers } from '../../../render/shader-debug';
 import { shaderInspector } from '../../../services/ShaderInspectorService';
 import { useStores } from '../../../stores';
 
@@ -23,13 +24,6 @@ function isEngineErrorDetail(value: unknown): value is EngineErrorDetail {
     && typeof candidate.location === 'string'
     && typeof candidate.fatal === 'boolean'
   );
-}
-
-function formatWgslWithLineNumbers(wgsl: string): string {
-  return wgsl
-    .split('\n')
-    .map((line, index) => `${String(index + 1).padStart(4, ' ')} | ${line}`)
-    .join('\n');
 }
 
 const ShaderInspectorPanel: React.FC = () => {
@@ -247,4 +241,3 @@ export const EngineDebugOverlay: React.FC = () => (
     <EngineErrorPanel />
   </>
 );
-
