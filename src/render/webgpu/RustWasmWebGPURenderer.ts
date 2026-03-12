@@ -234,6 +234,15 @@ function requireGpuPassEntryPoint(pass: RustRendererGpuPass, passId: string): st
   );
 }
 
+function requireGpuPassStage(pass: RustRendererGpuPass, passId: string): 'compute' {
+  if (pass.stage !== 'compute') {
+    throw new Error(
+      `Rust renderer GPU pass contract violation: pass \"${passId}\" has unsupported stage \"${String(pass.stage)}\"`,
+    );
+  }
+  return pass.stage;
+}
+
 function requireGpuPassWgsl(pass: RustRendererGpuPass, passId: string): string {
   return requireNonEmptyString(
     pass.wgsl,
@@ -255,12 +264,13 @@ function normalizeGpuPassPayloads(passes: readonly RustRendererGpuPass[]): reado
 
 function buildValidatedGpuPassPayload(
   passId: string,
+  stage: 'compute',
   entryPoint: string,
   wgsl: string,
 ): RustRendererGpuPass {
   return {
     passId,
-    stage: 'compute',
+    stage,
     entryPoint,
     wgsl,
   };
@@ -275,6 +285,7 @@ function shouldDumpRuntimeShaderPayload(): boolean {
  *
  * This renderer boundary intentionally validates only worker-transport safety:
  * - required identifiers are present and non-empty
+ * - required stage payload is the expected literal (`compute`)
  * - shader payload exists as non-empty text
  *
  * Semantic guarantees are established upstream at compile worker validation:
@@ -289,9 +300,10 @@ function validateGpuPass(pass: RustRendererGpuPass, index: number): RustRenderer
   // [LAW:single-enforcer] Renderer enforces transport/runtime payload integrity
   // only; semantic pass-signature validation is owned by compile worker.
   const passId = requireGpuPassId(pass, index);
+  const stage = requireGpuPassStage(pass, passId);
   const entryPoint = requireGpuPassEntryPoint(pass, passId);
   const wgsl = requireGpuPassWgsl(pass, passId);
-  return buildValidatedGpuPassPayload(passId, entryPoint, wgsl);
+  return buildValidatedGpuPassPayload(passId, stage, entryPoint, wgsl);
 }
 
 /**

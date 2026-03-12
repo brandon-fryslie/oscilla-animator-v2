@@ -99,4 +99,15 @@ describe('validateCompiledGpuPassBundle', () => {
     expect(result.errors.some((error) => error.message.includes('missing \"fluid.present\"'))).toBe(true);
     expect(result.errors.some((error) => error.message.includes('invalid fluid pass order'))).toBe(true);
   });
+
+  it('returns a structured error when passes payload is malformed', () => {
+    const malformedBundle = {
+      schemaVersion: 1,
+      passes: null,
+    } as unknown as CompiledGpuArtifactBundle;
+    const result = validateCompiledGpuPassBundle(malformedBundle);
+    expect(result.kind).toBe('error');
+    if (result.kind !== 'error') return;
+    expect(result.errors.some((error) => error.message.includes('empty GPU artifact pass bundle'))).toBe(true);
+  });
 });

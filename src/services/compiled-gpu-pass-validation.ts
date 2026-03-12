@@ -191,13 +191,14 @@ function buildManifestFromPasses(passes: readonly CompiledGpuPassArtifact[]): Ge
  */
 export function validateCompiledGpuPassBundle(bundle: CompiledGpuArtifactBundle): CompiledGpuPassValidationResult {
   const errors: CompileError[] = [];
-  if (!Array.isArray(bundle.passes) || bundle.passes.length === 0) {
+  const passes = Array.isArray(bundle.passes) ? bundle.passes : [];
+  if (passes.length === 0) {
     errors.push(createBundleError('Compiler emitted an empty GPU artifact pass bundle'));
   }
 
   // [LAW:dataflow-not-control-flow] Every emitted pass flows through the same
   // validation step; validity is represented in error data, not skipped ops.
-  const validatedPasses = bundle.passes.map((pass, index) => validatePassShape(pass, index, errors));
+  const validatedPasses = passes.map((pass, index) => validatePassShape(pass, index, errors));
   validateUniquePassIds(validatedPasses, errors);
   validateFluidPassOrder(validatedPasses, errors);
 
