@@ -49,17 +49,18 @@ Frame N:
   │ 1. Read external inputs (mouse, time)       │
   │ 2. Evaluate all signal expressions          │
   │    └─> State reads: get state[i] (t-1)      │
-  │ 3. Materialize field buffers                │
-  │ 4. Fire events (edge detection)             │
-  │ 5. Collect render operations                │
+  │ 3. Materialize pre-event buffers            │
+  │ 4. Dispatch events (eventDispatch)          │
+  │ 5. Materialize post-event buffers           │
+  │ 6. Collect render operations                │
   └──────────────────────────────────────────────┘
   ┌─ Phase 2 ───────────────────────────────────┐
-  │ 8. Write new state values (for frame N+1)   │
+  │ 7. Write new state values (for frame N+1)   │
   │    └─> State writes: state[i] = value (t)   │
   └──────────────────────────────────────────────┘
   ┌─ Post-Frame ─────────────────────────────────┐
-  │ 9. Render to canvas                          │
-  │ 10. Advance frame counter                    │
+  │ 8. Render to canvas                          │
+  │ 9. Advance frame counter                     │
   └──────────────────────────────────────────────┘
 ```
 
@@ -159,8 +160,13 @@ This pattern guarantees:
 | `evalSig` | Evaluate signal expression, cache result | **Reads** state via `SigExprStateRead` nodes |
 | `slotWriteStrided` | Write multi-component values (vec2, vec3, color) | None (slot writes only) |
 | `materialize` | Instantiate field buffers for arrays | None (allocates buffers, reads slots) |
-| `evalEvent` | Fire events based on edge detection | **Reads** previous event state |
+| `eventDispatch` | Fire events based on edge detection | **Reads** previous event state |
 | `render` | Collect render operations for canvas | None (reads slots only) |
+
+Phase 1 `materialize` execution is intentionally split around event dispatch:
+- Pre-event materialize runs for expressions that do not depend on `eventRead`.
+- `eventDispatch` populates event slots.
+- Post-event materialize runs for expressions that depend on `eventRead`.
 
 ### Key Invariant (Phase 1)
 
