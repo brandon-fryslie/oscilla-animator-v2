@@ -7,7 +7,7 @@
 
 import { registerBlock } from '../registry';
 import { canonicalType, payloadStride, floatConst, FLOAT } from '../../core/canonical-types';
-import { inferType, unitVar, cardinalityVar } from '../../core/inference-types';
+import { inferType, unitVar, cardinalityVar, type InferenceUnitType } from '../../core/inference-types';
 import { cardinalityVarId } from '../../core/ids';
 import { defaultSourceConst } from '../../types';
 import { OpCode } from '../../compiler/ir/types';
@@ -67,7 +67,11 @@ export function register(): void {
       if (!seed) throw new Error('NoisyBroadcast seed input is required');
   
       const outType = ctx.outTypes[0];
-      const floatFieldType = { ...canonicalType(FLOAT, outType.unit), extent: outType.extent };
+      const outputUnit = outType.unit as InferenceUnitType;
+      if (outputUnit.kind === 'var') {
+        throw new Error('NoisyBroadcast: output unit must be resolved before lowering');
+      }
+      const floatFieldType = { ...canonicalType(FLOAT, outputUnit), extent: outType.extent };
   
       const indexField = ctx.b.intrinsic('normalizedIndex', floatFieldType);
   
