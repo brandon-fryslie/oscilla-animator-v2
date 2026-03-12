@@ -286,21 +286,21 @@ function validateGpuPassBundle(passes: readonly RustRendererGpuPass[]): readonly
   return passes.map((pass, index) => validateGpuPass(pass, index));
 }
 
+function isFiniteUint32Value(value: number): boolean {
+  return Number.isFinite(value)
+    && Number.isInteger(value)
+    && Number.isSafeInteger(value)
+    && value >= 0
+    && value <= MAX_UINT32;
+}
+
+function createUint32ContractError(context: string, value: number): Error {
+  return new Error(`Rust renderer input contract violation: ${context} must be a uint32, got ${String(value)}`);
+}
+
 function assertFiniteUint32(value: number, context: string): number {
-  if (!Number.isFinite(value)) {
-    throw new Error(`Rust renderer input contract violation: ${context} must be a uint32, got ${String(value)}`);
-  }
-  if (!Number.isInteger(value)) {
-    throw new Error(`Rust renderer input contract violation: ${context} must be a uint32, got ${String(value)}`);
-  }
-  if (!Number.isSafeInteger(value)) {
-    throw new Error(`Rust renderer input contract violation: ${context} must be a uint32, got ${String(value)}`);
-  }
-  if (value < 0) {
-    throw new Error(`Rust renderer input contract violation: ${context} must be a uint32, got ${String(value)}`);
-  }
-  if (value > MAX_UINT32) {
-    throw new Error(`Rust renderer input contract violation: ${context} must be a uint32, got ${String(value)}`);
+  if (!isFiniteUint32Value(value)) {
+    throw createUint32ContractError(context, value);
   }
   return value;
 }
