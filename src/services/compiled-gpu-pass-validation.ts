@@ -126,10 +126,22 @@ function findOutOfOrderFluidPass(fluidPassIds: readonly string[]): string | null
   let cursor = -1;
   for (const passId of fluidPassIds) {
     const nextIndex = FLUID_PASS_INDEX.get(passId);
-    if (nextIndex === undefined || nextIndex < cursor) {
+    if (nextIndex === undefined) {
+      continue;
+    }
+    if (nextIndex < cursor) {
       return passId;
     }
     cursor = nextIndex;
+  }
+  return null;
+}
+
+function findUnknownFluidPassId(fluidPassIds: readonly string[]): string | null {
+  for (const passId of fluidPassIds) {
+    if (!FLUID_PASS_INDEX.has(passId)) {
+      return passId;
+    }
   }
   return null;
 }
@@ -140,6 +152,10 @@ function validateFluidPassOrder(passes: readonly CompiledGpuPassArtifact[], erro
     .map((pass) => pass.passId);
   if (fluidPassIds.length === 0) {
     return;
+  }
+  const unknownFluidPassId = findUnknownFluidPassId(fluidPassIds);
+  if (unknownFluidPassId !== null) {
+    errors.push(createBundleError(`Compiler emitted invalid fluid pass bundle: unknown passId "${unknownFluidPassId}"`));
   }
   const outOfOrderPassId = findOutOfOrderFluidPass(fluidPassIds);
   if (outOfOrderPassId !== null) {
