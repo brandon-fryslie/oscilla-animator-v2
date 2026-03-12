@@ -331,15 +331,6 @@ export function packDrawPrepSinkTableV1(
     words[descriptorBase + DrawPrepSinkDescriptorWord.RotationLaneStride] = rotationSlotAddress?.laneStride ?? 0;
     words[descriptorBase + DrawPrepSinkDescriptorWord.RotationComponentStride] = rotationSlotAddress?.componentStride ?? 0;
     words[descriptorBase + DrawPrepSinkDescriptorWord.RotationDefaultBits] = float32ToUint32Bits(0);
-    // [LAW:single-enforcer] Canonical isotropic-scale policy is enforced at the
-    // runtime sink-table boundary: deprecated scale2 descriptor lanes are pinned
-    // to identity constants and never sourced from slots.
-    words[descriptorBase + DrawPrepSinkDescriptorWord.Scale2Mode] = OPTIONAL_MODE_CONSTANT;
-    words[descriptorBase + DrawPrepSinkDescriptorWord.Scale2BaseOffset] = 0;
-    words[descriptorBase + DrawPrepSinkDescriptorWord.Scale2LaneStride] = 0;
-    words[descriptorBase + DrawPrepSinkDescriptorWord.Scale2ComponentStride] = 0;
-    words[descriptorBase + DrawPrepSinkDescriptorWord.Scale2DefaultXBits] = float32ToUint32Bits(1);
-    words[descriptorBase + DrawPrepSinkDescriptorWord.Scale2DefaultYBits] = float32ToUint32Bits(1);
 
     const nextFirstInstance = packedFirstInstance + instanceCount;
     firstInstance = assertFiniteUint32(nextFirstInstance, 'firstInstancePrefixSum');
