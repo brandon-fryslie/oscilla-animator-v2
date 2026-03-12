@@ -1,11 +1,10 @@
 import type { GeneratedGpuArtifactManifestIR, GpuPassManifestEntryIR } from '../compiler/ir/program';
 import type { CompileError } from '../compiler/types';
-import type { CompiledGpuArtifactBundle, CompiledGpuPassArtifact, CompiledGpuPassSignature } from './compile-worker-protocol';
+import type { CompiledGpuArtifactBundle, CompiledGpuPassArtifact } from './compile-worker-protocol';
 
 interface ValidCompiledGpuPassValidation {
   readonly kind: 'ok';
   readonly bundle: CompiledGpuArtifactBundle;
-  readonly signatures: readonly CompiledGpuPassSignature[];
   readonly manifest: GeneratedGpuArtifactManifestIR;
 }
 
@@ -19,6 +18,19 @@ export type CompiledGpuPassValidationResult =
   | InvalidCompiledGpuPassValidation;
 
 const WGSL_IDENTIFIER_PATTERN = /^[_A-Za-z][_0-9A-Za-z]*$/;
+const FLUID_PASS_ORDER = [
+  'fluid.splat',
+  'fluid.curl',
+  'fluid.vorticity',
+  'fluid.divergence',
+  'fluid.pressure',
+  'fluid.gradient-subtract',
+  'fluid.advect',
+  'fluid.present',
+] as const;
+const FLUID_PASS_INDEX: ReadonlyMap<string, number> = new Map(
+  FLUID_PASS_ORDER.map((passId, index) => [passId, index]),
+);
 
 function escapeRegex(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -35,54 +47,139 @@ function createPassError(index: number, message: string): CompileError {
   };
 }
 
+function createBundleError(message: string): CompileError {
+  return {
+    code: 'IRValidationFailed',
+    message,
+  };
+}
+
+function normalizePassId(pass: CompiledGpuPassArtifact, index: number, errors: CompileError[]): string {
+  if (isNonEmptyString(pass.passId)) {
+    return pass.passId;
+  }
+  errors.push(createPassError(index, 'passId is required'));
+  return `invalid-pass-${index}`;
+}
+
+function normalizeEntryPoint(
+  passId: string,
+  pass: CompiledGpuPassArtifact,
+  index: number,
+  errors: CompileError[],
+): string {
+  if (!isNonEmptyString(pass.entryPoint)) {
+    errors.push(createPassError(index, `pass "${passId}" is missing entryPoint`));
+    return '';
+  }
+  if (!WGSL_IDENTIFIER_PATTERN.test(pass.entryPoint)) {
+    errors.push(createPassError(index, `pass "${passId}" has invalid entryPoint "${pass.entryPoint}"`));
+  }
+  return pass.entryPoint;
+}
+
+function normalizeWgsl(passId: string, pass: CompiledGpuPassArtifact, index: number, errors: CompileError[]): string {
+  if (isNonEmptyString(pass.wgsl)) {
+    return pass.wgsl;
+  }
+  errors.push(createPassError(index, `pass "${passId}" is missing WGSL source`));
+  return '';
+}
+
+function validatePassStage(pass: CompiledGpuPassArtifact, index: number, errors: CompileError[]): void {
+  if (pass.stage !== 'compute') {
+    errors.push(createPassError(index, `unsupported stage "${String(pass.stage)}"`));
+  }
+}
+
+function validateWgslSignature(
+  passId: string,
+  entryPoint: string,
+  wgsl: string,
+  index: number,
+  errors: CompileError[],
+): void {
+  if (wgsl && !wgsl.includes('@compute')) {
+    errors.push(createPassError(index, `pass "${passId}" is missing @compute entry annotation`));
+  }
+  if (!wgsl || !entryPoint) {
+    return;
+  }
+  const entryPattern = new RegExp(`\\bfn\\s+${escapeRegex(entryPoint)}\\s*\\(`);
+  if (!entryPattern.test(wgsl)) {
+    errors.push(createPassError(index, `pass "${passId}" is missing fn ${entryPoint}(...)`));
+  }
+}
+
+function validateUniquePassIds(passes: readonly CompiledGpuPassArtifact[], errors: CompileError[]): void {
+  const seenPassIds = new Set<string>();
+  for (const [index, pass] of passes.entries()) {
+    if (seenPassIds.has(pass.passId)) {
+      errors.push(createPassError(index, `duplicate passId "${pass.passId}"`));
+      continue;
+    }
+    seenPassIds.add(pass.passId);
+  }
+}
+
+function findOutOfOrderFluidPass(fluidPassIds: readonly string[]): string | null {
+  let cursor = -1;
+  for (const passId of fluidPassIds) {
+    const nextIndex = FLUID_PASS_INDEX.get(passId);
+    if (nextIndex === undefined || nextIndex < cursor) {
+      return passId;
+    }
+    cursor = nextIndex;
+  }
+  return null;
+}
+
+function validateFluidPassOrder(passes: readonly CompiledGpuPassArtifact[], errors: CompileError[]): void {
+  const fluidPassIds = passes
+    .filter((pass) => pass.passId.startsWith('fluid.'))
+    .map((pass) => pass.passId);
+  if (fluidPassIds.length === 0) {
+    return;
+  }
+  if (!fluidPassIds.includes('fluid.present')) {
+    errors.push(createBundleError('Compiler emitted invalid fluid pass bundle: missing "fluid.present" pass'));
+  }
+  const outOfOrderPassId = findOutOfOrderFluidPass(fluidPassIds);
+  if (outOfOrderPassId !== null) {
+    errors.push(createBundleError(`Compiler emitted invalid fluid pass order at "${outOfOrderPassId}"`));
+  }
+}
+
 function validatePassShape(
   pass: CompiledGpuPassArtifact,
   index: number,
   errors: CompileError[],
 ): CompiledGpuPassArtifact {
-  const fallbackPassId = `invalid-pass-${index}`;
-  const passId = isNonEmptyString(pass.passId)
-    ? pass.passId
-    : fallbackPassId;
-  if (!isNonEmptyString(pass.passId)) {
-    errors.push(createPassError(index, 'passId is required'));
-  }
-
-  const stage = pass.stage;
-  if (stage !== 'compute') {
-    errors.push(createPassError(index, `unsupported stage "${String(stage)}"`));
-  }
-
-  const entryPoint = isNonEmptyString(pass.entryPoint)
-    ? pass.entryPoint
-    : '';
-  if (!isNonEmptyString(pass.entryPoint)) {
-    errors.push(createPassError(index, `pass "${passId}" is missing entryPoint`));
-  } else if (!WGSL_IDENTIFIER_PATTERN.test(pass.entryPoint)) {
-    errors.push(createPassError(index, `pass "${passId}" has invalid entryPoint "${pass.entryPoint}"`));
-  }
-
-  const wgsl = isNonEmptyString(pass.wgsl)
-    ? pass.wgsl
-    : '';
-  if (!isNonEmptyString(pass.wgsl)) {
-    errors.push(createPassError(index, `pass "${passId}" is missing WGSL source`));
-  }
-  if (wgsl && !wgsl.includes('@compute')) {
-    errors.push(createPassError(index, `pass "${passId}" is missing @compute entry annotation`));
-  }
-  if (wgsl && entryPoint) {
-    const entryPattern = new RegExp(`\\bfn\\s+${escapeRegex(entryPoint)}\\s*\\(`);
-    if (!entryPattern.test(wgsl)) {
-      errors.push(createPassError(index, `pass "${passId}" is missing fn ${entryPoint}(...)`));
-    }
-  }
+  const passId = normalizePassId(pass, index, errors);
+  validatePassStage(pass, index, errors);
+  const entryPoint = normalizeEntryPoint(passId, pass, index, errors);
+  const wgsl = normalizeWgsl(passId, pass, index, errors);
+  validateWgslSignature(passId, entryPoint, wgsl, index, errors);
 
   return {
     passId,
     stage: 'compute',
     entryPoint,
     wgsl,
+  };
+}
+
+function buildManifestFromPasses(passes: readonly CompiledGpuPassArtifact[]): GeneratedGpuArtifactManifestIR {
+  const manifestPasses: GpuPassManifestEntryIR[] = passes.map((pass) => ({
+    passId: pass.passId,
+    stage: pass.stage,
+    entryPoint: pass.entryPoint,
+  }));
+  return {
+    schemaVersion: 1,
+    // [LAW:one-source-of-truth] Runtime pass-signature metadata is derived
+    // only from compile-boundary validated pass signatures.
+    passes: manifestPasses,
   };
 }
 
@@ -95,24 +192,18 @@ function validatePassShape(
 export function validateCompiledGpuPassBundle(bundle: CompiledGpuArtifactBundle): CompiledGpuPassValidationResult {
   const errors: CompileError[] = [];
   if (!Array.isArray(bundle.passes) || bundle.passes.length === 0) {
-    errors.push({
-      code: 'IRValidationFailed',
-      message: 'Compiler emitted an empty GPU artifact pass bundle',
-    });
+    errors.push(createBundleError('Compiler emitted an empty GPU artifact pass bundle'));
   }
 
   // [LAW:dataflow-not-control-flow] Every emitted pass flows through the same
   // validation step; validity is represented in error data, not skipped ops.
   const validatedPasses = bundle.passes.map((pass, index) => validatePassShape(pass, index, errors));
+  validateUniquePassIds(validatedPasses, errors);
+  validateFluidPassOrder(validatedPasses, errors);
+
   if (errors.length > 0) {
     return { kind: 'error', errors };
   }
-
-  const signatures: GpuPassManifestEntryIR[] = validatedPasses.map((pass) => ({
-    passId: pass.passId,
-    stage: pass.stage,
-    entryPoint: pass.entryPoint,
-  }));
 
   return {
     kind: 'ok',
@@ -120,12 +211,6 @@ export function validateCompiledGpuPassBundle(bundle: CompiledGpuArtifactBundle)
       schemaVersion: bundle.schemaVersion,
       passes: validatedPasses,
     },
-    signatures,
-    manifest: {
-      schemaVersion: 1,
-      // [LAW:one-source-of-truth] Runtime pass-signature metadata is derived
-      // only from compile-boundary validated pass signatures.
-      passes: signatures,
-    },
+    manifest: buildManifestFromPasses(validatedPasses),
   };
 }

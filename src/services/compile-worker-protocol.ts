@@ -4,15 +4,12 @@ import type { CompiledProgramIR } from '../compiler/ir/program';
 
 export type SerializableCompiledProgramIR = Omit<CompiledProgramIR, 'kernelRegistry'>;
 
-export interface CompiledGpuPassSignature {
+export interface CompiledGpuPassArtifact {
   readonly passId: string;
   readonly stage: 'compute';
   readonly entryPoint: string;
-}
-
-export type CompiledGpuPassArtifact = CompiledGpuPassSignature & {
   readonly wgsl: string;
-};
+}
 
 export interface CompiledGpuArtifactBundle {
   readonly schemaVersion: 1;
