@@ -2,7 +2,10 @@
 
 import { compileFromFrontend } from '../compiler';
 import { compileFrontend } from '../compiler/frontend';
-import { compileProgramWithNaga } from '../compiler/naga-compile';
+import {
+  compileProgramWithNaga,
+  validateGpuPassSignaturesAtCompileBoundary,
+} from '../compiler/naga-compile';
 import { EventHub } from '../events/EventHub';
 import { deserializePatch } from './PatchPersistence';
 import { maybeBuildFluidGpuBundle } from './fluid-gpu-bundle';
@@ -66,32 +69,44 @@ async function toBackendResult(
       };
     }
 
-    if (!compiledGpuBundle?.passes?.length) {
+    // [LAW:single-enforcer] Compile worker is the only runtime boundary that
+    // admits GPU pass artifacts into worker transport after signature checks.
+    const passSignatureValidation = validateGpuPassSignaturesAtCompileBoundary(compiledGpuBundle.passes);
+    if (passSignatureValidation.kind === 'error') {
       return {
         kind: 'error',
-        errors: [{
-          code: 'IRValidationFailed',
-          message: 'Compiler emitted an empty GPU artifact pass bundle',
-        }],
+        errors: passSignatureValidation.errors.map((error) => ({
+          ...error,
+          details: {
+            ...(error.details ?? {}),
+            preNagaWarnings: result.warnings,
+          },
+        })),
       };
     }
+
+    const passSignatures = passSignatureValidation.signatures;
+    const validatedCompiledGpuBundle: CompiledGpuArtifactBundle = {
+      ...compiledGpuBundle,
+      passSignatures,
+    };
 
     const program = stripKernelRegistry(result.program);
     const programWithGpuManifest = {
       ...program,
       generatedGpuArtifactManifest: {
-        schemaVersion: compiledGpuBundle.schemaVersion,
-        passes: compiledGpuBundle.passes.map((pass) => ({
-          passId: pass.passId,
-          stage: pass.stage,
-          entryPoint: pass.entryPoint,
+        schemaVersion: validatedCompiledGpuBundle.schemaVersion,
+        passes: passSignatures.map((signature) => ({
+          passId: signature.passId,
+          stage: signature.stage,
+          entryPoint: signature.entryPoint,
         })),
       },
     };
     return {
       kind: 'ok',
       program: programWithGpuManifest,
-      compiledGpuBundle,
+      compiledGpuBundle: validatedCompiledGpuBundle,
       warnings: result.warnings,
     };
   }
