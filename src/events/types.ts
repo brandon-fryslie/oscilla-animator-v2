@@ -562,6 +562,29 @@ export interface EditorStateChangedEvent {
 }
 
 // =============================================================================
+// GPU FAULT EVENTS - Emitted by RuntimeService via WebGPURenderer callback
+// =============================================================================
+
+/**
+ * Emitted when a GPU error or device.lost is detected.
+ *
+ * Triggers:
+ * - Rust engine `on_uncaptured_error` (WEBGPU_VALIDATION, WEBGPU_OOM, WEBGPU_INTERNAL)
+ * - Rust scheduler enters `Lost` state (device.lost)
+ * - Worker fatal errors during GPU operations
+ *
+ * Spec: docs/WebGPU-Complete/P5-2_Error_Propagation__Developer_Experience.md
+ */
+export interface GpuFaultEvent {
+  readonly type: 'GpuFault';
+  readonly severity: 'warning' | 'fatal';
+  readonly code: string;
+  readonly message: string;
+  readonly source: string;
+  readonly recoverable: boolean;
+}
+
+// =============================================================================
 // EditorEvent Discriminated Union
 // =============================================================================
 
@@ -592,4 +615,6 @@ export type EditorEvent =
   | PanelLayoutChangedEvent
   | ViewportChangedEvent
   // Editor state events (new)
-  | EditorStateChangedEvent;
+  | EditorStateChangedEvent
+  // GPU fault events
+  | GpuFaultEvent;

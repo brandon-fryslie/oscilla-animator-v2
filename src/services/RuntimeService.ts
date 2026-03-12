@@ -505,6 +505,36 @@ export class RuntimeService {
         throw new Error(`RuntimeService: WebGPU renderer initialization failed: ${message}`);
       }
 
+      // [LAW:single-enforcer] RuntimeService is the sole boundary that routes
+      // GPU fault events from the renderer into diagnostics and EventHub.
+      this.renderer.setGpuFaultCallback((fault) => {
+        const level = fault.severity === 'fatal' ? 'error' : 'warn';
+        store.diagnostics.log({
+          level,
+          message: `GPU ${fault.severity}: [${fault.code}] ${fault.message}`,
+        });
+        store.diagnostics.setGpuFault({
+          severity: fault.severity,
+          code: fault.code,
+          message: fault.message,
+        });
+        store.events.emit({
+          type: 'GpuFault',
+          severity: fault.severity,
+          code: fault.code,
+          message: fault.message,
+          source: fault.source,
+          recoverable: fault.recoverable,
+        });
+        if (fault.severity === 'fatal') {
+          store.diagnostics.log({
+            level: 'error',
+            message: 'GPU device lost \u2014 rendering stopped. Reload the page to recover.',
+          });
+          this.animationLoop?.stop();
+        }
+      });
+
       // Check for test automation demo marker (set by ?loadDemoPatch= during pre-React parse)
       const testDemo = consumeTestDemoFilename();
       if (testDemo) {
@@ -574,6 +604,11 @@ export class RuntimeService {
               message: 'Runtime loop resumed after successful recompile',
             });
           }
+          // Clear non-fatal GPU fault on successful recompile (new pipeline installed).
+          const currentFault = store.diagnostics.gpuFaultState;
+          if (currentFault && currentFault.severity !== 'fatal') {
+            store.diagnostics.clearGpuFault();
+          }
         }
       });
 
@@ -613,6 +648,7 @@ export class RuntimeService {
   dispose(): void {
     compilationInspector.setErrorReporter(null);
     setRenderIssueReporter(null);
+    this.renderer?.setGpuFaultCallback(null);
     this.animationLoop?.stop();
     this.animationLoop = null;
     this.stopSpyReadbackLoop();
