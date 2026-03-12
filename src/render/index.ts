@@ -26,3 +26,7 @@ export type {
 
 // RenderBufferArena for zero-allocation rendering
 export { RenderBufferArena } from './RenderBufferArena';
+
+export function renderBoundaryName(): string {
+  return 'webgpu-canonical-boundary';
+}
