@@ -234,8 +234,12 @@ function requireGpuPassEntryPoint(pass: RustRendererGpuPass, passId: string): st
   );
 }
 
+function isComputePassStage(stage: RustRendererGpuPass['stage']): stage is 'compute' {
+  return stage === 'compute';
+}
+
 function requireGpuPassStage(pass: RustRendererGpuPass, passId: string): 'compute' {
-  if (pass.stage !== 'compute') {
+  if (!isComputePassStage(pass.stage)) {
     throw new Error(
       `Rust renderer GPU pass contract violation: pass \"${passId}\" has unsupported stage \"${String(pass.stage)}\"`,
     );
