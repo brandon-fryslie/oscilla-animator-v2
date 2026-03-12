@@ -220,6 +220,21 @@ function requireNonEmptyString(value: unknown, message: string): string {
   return value;
 }
 
+/**
+ * Transport-level GPU pass normalization.
+ *
+ * This renderer boundary intentionally validates only worker-transport safety:
+ * - required identifiers are present and non-empty
+ * - shader payload exists as non-empty text
+ *
+ * Semantic guarantees are established upstream at compile worker validation:
+ * - stage contract correctness
+ * - entrypoint/WGSL signature agreement
+ * - bundle policy (duplicate IDs / fluid order)
+ *
+ * Keeping this boundary narrow avoids semantic policy drift between compiler
+ * and renderer install paths.
+ */
 function validateGpuPass(pass: RustRendererGpuPass, index: number): RustRendererGpuPass {
   // [LAW:single-enforcer] Renderer enforces transport/runtime payload integrity
   // only; semantic pass-signature validation is owned by compile worker.
@@ -243,6 +258,13 @@ function validateGpuPass(pass: RustRendererGpuPass, index: number): RustRenderer
   };
 }
 
+/**
+ * Bundle-level transport integrity guard.
+ *
+ * Renderer receives compile-validated pass bundles and only enforces that at
+ * least one pass is present and each pass satisfies transport payload shape.
+ * Compiler-side validation remains the single semantic authority.
+ */
 function validateGpuPassBundle(passes: readonly RustRendererGpuPass[]): readonly RustRendererGpuPass[] {
   // [LAW:single-enforcer] Renderer owns transport/runtime payload integrity
   // only; compile boundary owns semantic pass and bundle policy validation.
