@@ -327,13 +327,11 @@ function readRequiredSinkTableWord(
   return value;
 }
 
-function classifyWorkerAckMessage(
-  payload: RustRendererWorkerOutboundMessage,
-  expectedSuccessType: RustRendererWorkerOutboundMessage['type'],
-): WorkerAckDisposition {
-  if (payload.type === expectedSuccessType) {
-    return { kind: 'success' };
-  }
+function isIgnorableAckType(type: RustRendererWorkerOutboundMessage['type']): boolean {
+  return type === 'SCHEDULER_HEARTBEAT' || type === 'RUNTIME_EVENT';
+}
+
+function toWorkerFailureDisposition(payload: RustRendererWorkerOutboundMessage): WorkerAckDisposition | null {
   if (payload.type === 'FATAL_ERROR') {
     return {
       kind: 'fail',
@@ -364,21 +362,42 @@ function classifyWorkerAckMessage(
       message: payload.message,
     };
   }
-  if (payload.type === 'SCHEDULER_HEARTBEAT' || payload.type === 'RUNTIME_EVENT') {
-    return { kind: 'ignore' };
-  }
-  // [LAW:single-enforcer] Ack message classification happens in one helper so
-  // all await paths share identical non-success handling.
+  return null;
+}
+
+function buildWorkerProtocolViolation(
+  expectedSuccessType: RustRendererWorkerOutboundMessage['type'],
+  actualType: RustRendererWorkerOutboundMessage['type'],
+): WorkerAckDisposition {
   return {
     kind: 'fail',
     fatal: true,
     code: 'WORKER_PROTOCOL_VIOLATION',
     stage: expectedSuccessType,
-    message: `expected ${expectedSuccessType}, got ${payload.type}`,
+    message: `expected ${expectedSuccessType}, got ${actualType}`,
     error: new Error(
-      `Rust renderer worker protocol violation: expected ${expectedSuccessType}, got ${payload.type}`,
+      `Rust renderer worker protocol violation: expected ${expectedSuccessType}, got ${actualType}`,
     ),
   };
+}
+
+function classifyWorkerAckMessage(
+  payload: RustRendererWorkerOutboundMessage,
+  expectedSuccessType: RustRendererWorkerOutboundMessage['type'],
+): WorkerAckDisposition {
+  if (payload.type === expectedSuccessType) {
+    return { kind: 'success' };
+  }
+  if (isIgnorableAckType(payload.type)) {
+    return { kind: 'ignore' };
+  }
+  const workerFailure = toWorkerFailureDisposition(payload);
+  if (workerFailure) {
+    return workerFailure;
+  }
+  // [LAW:single-enforcer] Ack message classification happens in one helper so
+  // all await paths share identical non-success handling.
+  return buildWorkerProtocolViolation(expectedSuccessType, payload.type);
 }
 
 
