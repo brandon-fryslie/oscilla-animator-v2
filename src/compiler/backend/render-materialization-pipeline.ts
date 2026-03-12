@@ -99,11 +99,16 @@ function getInputRef(
   edges: readonly NormalizedEdge[],
   blockOutputs: Map<BlockIndex, Map<string, ValueRefPacked>>
 ): ValueRefPacked | undefined {
-  const edge = edges.find(
-    e => e.toBlock === blockIndex && e.toPort === portId
+  const matchingEdges = edges.filter(
+    (edge) => edge.toBlock === blockIndex && edge.toPort === portId,
   );
-
-  if (!edge) return undefined;
+  if (matchingEdges.length === 0) return undefined;
+  if (matchingEdges.length > 1) {
+    throw new Error(
+      `RenderInstances2D: input ${portId} on block ${String(blockIndex)} has multiple incoming edges (${matchingEdges.length}); render materialization requires a single resolved writer at this pass boundary`,
+    );
+  }
+  const edge = matchingEdges[0];
 
   const sourceOutputs = blockOutputs.get(edge.fromBlock);
   if (!sourceOutputs) return undefined;

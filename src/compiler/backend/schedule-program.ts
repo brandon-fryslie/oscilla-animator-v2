@@ -33,6 +33,7 @@ import type { RenderMaterializationPipelineIR } from './render-materialization-p
 import { requireInst } from '../../core/canonical-types';
 import type { InstanceDecl } from '../ir/types';
 import { payloadStride } from '../../core/canonical-types';
+import { getValueExprChildren } from '../../runtime/ValueExprTreeWalker';
 
 // =============================================================================
 // Schedule IR Types
@@ -198,9 +199,8 @@ function canMaterializeScalarKernelExpr(
     case 'pathSample':
       return false;
     default: {
-      const _exhaustive: never = expr;
       throw new Error(
-        `Unknown kernel kind during scalar materialize eligibility check: ${(_exhaustive as ValueExpr).kind}`,
+        `Unknown kernel kind during scalar materialize eligibility check: ${(expr as { kernelKind?: string }).kernelKind ?? 'unknown'}`,
       );
     }
   }
@@ -400,9 +400,8 @@ function validateScalarKernelExpr(
         `Schedule invariant violated: scalar root depends on field-only kernel ${expr.kernelKind} (expr ${exprId})`,
       );
     default: {
-      const _exhaustive: never = expr;
       throw new Error(
-        `Unknown kernel kind during scalar invariant validation: ${(_exhaustive as ValueExpr).kind}`,
+        `Unknown kernel kind during scalar invariant validation: ${(expr as { kernelKind?: string }).kernelKind ?? 'unknown'} (expr ${exprId})`,
       );
     }
   }
@@ -575,56 +574,23 @@ export function pass7Schedule(
  * Used to schedule event-dependent cardinality-one values after event evaluation.
  */
 function valueExprDependsOnEvent(valueExprId: number, valueExprs: readonly ValueExpr[]): boolean {
+  // [LAW:one-source-of-truth] ValueExpr child traversal uses the canonical
+  // runtime walker to keep dependency analysis aligned across all expr kinds.
   const visited = new Set<number>();
+  const stack = [valueExprId];
 
-  function check(id: number): boolean {
-    if (visited.has(id)) return false;
+  while (stack.length > 0) {
+    const id = nextStackId(stack);
+    if (id === undefined) continue;
+    if (visited.has(id)) continue;
     visited.add(id);
-
     const expr = valueExprs[id];
-    if (!expr) return false;
-
-    switch (expr.kind) {
-      case 'eventRead':
-        return true;
-
-      case 'kernel': {
-        switch (expr.kernelKind) {
-          case 'map':
-            return check(expr.input as number);
-          case 'zip':
-            return expr.inputs.some(input => check(input as number));
-          case 'zipPromote':
-            return (
-              check(expr.field as number) ||
-              expr.ones.some(sig => check(sig as number))
-            );
-          case 'broadcast':
-            return check(expr.one as number);
-          case 'reduce':
-            return check(expr.field as number);
-          case 'pathDerivative':
-            return check(expr.field as number);
-          default:
-            return false;
-        }
-      }
-
-      case 'const':
-      case 'time':
-      case 'external':
-      case 'state':
-      case 'shapeRef':
-      case 'intrinsic':
-      case 'event':
-        return false;
-
-      default:
-        return false;
-    }
+    if (!expr) continue;
+    if (isEventReadDependency(expr)) return true;
+    pushExprChildren(stack, expr);
   }
 
-  return check(valueExprId);
+  return false;
 }
 
 function buildScalarMaterializeSteps(
@@ -758,4 +724,23 @@ function isEventExpr(expr: ValueExpr): boolean {
 
 function valueExprIndex(exprId: ValueExprId): number {
   return exprId as number;
+}
+
+function isEventReadDependency(expr: ValueExpr): boolean {
+  switch (expr.kind) {
+    case 'eventRead':
+      return true;
+    default:
+      return false;
+  }
+}
+
+function pushExprChildren(stack: number[], expr: ValueExpr): void {
+  for (const child of getValueExprChildren(expr)) {
+    stack.push(child as number);
+  }
+}
+
+function nextStackId(stack: number[]): number | undefined {
+  return stack.pop();
 }
