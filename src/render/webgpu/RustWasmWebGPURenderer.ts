@@ -543,6 +543,10 @@ export class WebGPURenderer {
     console.warn(this.formatRuntimeConsolePayload(payload));
   }
 
+  private shouldEmitRuntimeConsole(): boolean {
+    return RUNTIME_CONSOLE_ENABLED;
+  }
+
   private buildFatalTransition(transition: RendererFatalTransition): RendererFatalTransition {
     return transition;
   }
@@ -744,7 +748,7 @@ export class WebGPURenderer {
   }
 
   private maybeEmitRenderInputDebugSample(sinkTableWords: Uint32Array, wordCount: number): void {
-    if (!RUNTIME_CONSOLE_ENABLED || this.renderInputDebugLogged || wordCount <= 0) {
+    if (!this.shouldEmitRuntimeConsole() || this.renderInputDebugLogged || wordCount <= 0) {
       return;
     }
     this.renderInputDebugLogged = true;
@@ -819,7 +823,7 @@ export class WebGPURenderer {
       dumpShaderWithLineNumbers(pass.passId, pass.wgsl);
     }
     this.lastInstalledPassIds = validatedPasses.map((pass) => pass.passId);
-    if (RUNTIME_CONSOLE_ENABLED) {
+    if (this.shouldEmitRuntimeConsole()) {
       // TODO(#159): Replace this inline payload assembly with:
       // `buildGpuPipelineRebuildPayload(validatedPasses)` and emit through a
       // shared `emitRuntimeConsolePayload(...)` helper from this
@@ -949,7 +953,7 @@ export class WebGPURenderer {
   }
 
   private warnWorkerLifecycleBoundary(message: string, error: unknown): void {
-    if (!RUNTIME_CONSOLE_ENABLED) {
+    if (!this.shouldEmitRuntimeConsole()) {
       return;
     }
     console.warn(`[RustWasmWebGPURenderer] ${message}`, error);
@@ -1071,7 +1075,7 @@ export class WebGPURenderer {
   }
 
   private maybeCaptureSinkTableDebugSample(sinkTableWords: Uint32Array, wordCount: number): void {
-    if (!RUNTIME_CONSOLE_ENABLED) {
+    if (!this.shouldEmitRuntimeConsole()) {
       return;
     }
     this.sinkTableDebugLogCounter += 1;
@@ -1342,7 +1346,7 @@ export class WebGPURenderer {
     // [LAW:single-enforcer] One debug emitter boundary should own
     // serialization/log formatting.
     // https://github.com/brandon-fryslie/oscilla-animator-v2/issues/159
-    if (RUNTIME_CONSOLE_ENABLED) {
+    if (this.shouldEmitRuntimeConsole()) {
       this.emitRuntimeConsoleWarn({
         kind: 'render-health-warning',
         code,
