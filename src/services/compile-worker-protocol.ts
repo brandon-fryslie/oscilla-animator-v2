@@ -22,7 +22,7 @@ export interface CompiledGpuArtifactBundle {
   readonly passes: readonly CompiledGpuPassArtifact[];
   // [LAW:single-enforcer] Pass signature semantics are enforced once at
   // compile boundary and transported as typed metadata.
-  readonly passSignatures?: readonly CompiledGpuPassSignature[];
+  readonly passSignatures: readonly CompiledGpuPassSignature[];
 }
 
 export type CompileWorkerBackendResult =
