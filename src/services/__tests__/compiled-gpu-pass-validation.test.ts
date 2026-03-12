@@ -106,7 +106,7 @@ describe('validateCompiledGpuPassBundle bundle policy validation', () => {
     expect(result.errors.some((error) => error.message.includes('duplicate passId'))).toBe(true);
   });
 
-  it('rejects invalid fluid bundle order and missing present pass', () => {
+  it('rejects invalid fluid bundle order', () => {
     const result = validateCompiledGpuPassBundle(
       buildBundle([
         buildPass({ passId: 'fluid.advect', entryPoint: 'compute_advect_main', wgsl: '@compute\nfn compute_advect_main() {}' }),
@@ -115,8 +115,17 @@ describe('validateCompiledGpuPassBundle bundle policy validation', () => {
     );
     expect(result.kind).toBe('error');
     if (result.kind !== 'error') return;
-    expect(result.errors.some((error) => error.message.includes('missing \"fluid.present\"'))).toBe(true);
     expect(result.errors.some((error) => error.message.includes('invalid fluid pass order'))).toBe(true);
+  });
+
+  it('accepts valid fluid bundle without fluid.present', () => {
+    const result = validateCompiledGpuPassBundle(
+      buildBundle([
+        buildPass({ passId: 'fluid.splat', entryPoint: 'compute_splat_main', wgsl: '@compute\nfn compute_splat_main() {}' }),
+        buildPass({ passId: 'fluid.curl', entryPoint: 'compute_curl_main', wgsl: '@compute\nfn compute_curl_main() {}' }),
+      ]),
+    );
+    expect(result.kind).toBe('ok');
   });
 
   it('rejects unknown fluid pass identifiers at compile boundary', () => {
