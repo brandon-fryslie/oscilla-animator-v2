@@ -314,6 +314,14 @@ function validateGpuPass(pass: RustRendererGpuPass, index: number): RustRenderer
     pass.wgsl,
     `Rust renderer GPU pass contract violation: pass "${passId}" is missing WGSL source`,
   );
+  if (pass.stage !== 'compute') {
+    throw new Error(
+      `Rust renderer GPU pass contract violation: pass "${passId}" has invalid stage "${String(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (pass as any).stage,
+      )}", expected "compute"`,
+    );
+  }
   return pass;
 }
 
