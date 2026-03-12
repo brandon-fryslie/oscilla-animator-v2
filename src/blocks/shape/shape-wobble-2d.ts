@@ -12,13 +12,13 @@ import {
   canonicalManyDef,
   payloadStride,
   floatConst,
-  instanceRef,
   withInstance,
   requireInst,
 } from '../../core/canonical-types';
 import { FLOAT, VEC2 } from '../../core/canonical-types';
 import { OpCode } from '../../compiler/ir/types';
 import { defaultSourceConst } from '../../types';
+import { resolveManyFieldInstance } from './_instance-helpers';
 
 export function register(): void {
   registerBlock({
@@ -75,18 +75,13 @@ export function register(): void {
       const frequencyInput = inputsById.frequency;
       if (!frequencyInput) throw new Error('ShapeWobble2D: frequency input not wired — normalization bug');
   
-      const instanceId = ctx.inferredInstance !== undefined ? ctx.inferredInstance : ctx.instance;
-      if (!instanceId) {
-        throw new Error('ShapeWobble2D requires instance context from controlPoints input');
-      }
-  
-      const instanceDecl = ctx.instances.get(instanceId);
-      if (!instanceDecl) {
-        throw new Error(`ShapeWobble2D: instance '${instanceId}' not found in instance registry`);
-      }
+      const { instanceId, ref } = resolveManyFieldInstance(
+        ctx,
+        controlPointsInput,
+        'ShapeWobble2D.controlPoints',
+      );
   
       // [LAW:one-source-of-truth] Output field instance is derived from the input field instance.
-      const ref = instanceRef(instanceDecl.domainType as string, instanceId as string);
       const outputType = withInstance(ctx.outTypes[0], ref);
       const floatFieldType = canonicalMany(FLOAT, { kind: 'none' }, ref);
   

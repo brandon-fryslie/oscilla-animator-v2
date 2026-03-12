@@ -6,6 +6,11 @@
  */
 
 import { PathVerb, type PathTopologyDefInput } from '../../shapes/types';
+import {
+  PARAMETRIC_CUBIC_CONTROL_POINT_COUNT,
+  PARAMETRIC_RESOLUTION_DEFAULT,
+  PARAMETRIC_THICKNESS_DEFAULT,
+} from '../../shapes/parametric-contract';
 
 /**
  * Create a line-path topology definition.
@@ -65,12 +70,12 @@ export function createLinePathTopology(pointCount: number, closed: boolean): Pat
 export function createParametricCubicPathTopology(): PathTopologyDefInput {
   return {
     params: [
-      { name: 'resolution', type: 'float', default: 64 },
-      { name: 'thickness', type: 'float', default: 0.02 },
+      { name: 'resolution', type: 'float', default: PARAMETRIC_RESOLUTION_DEFAULT },
+      { name: 'thickness', type: 'float', default: PARAMETRIC_THICKNESS_DEFAULT },
     ],
     closed: true,
     verbs: [PathVerb.MOVE, PathVerb.CUBIC, PathVerb.CLOSE],
     pointsPerVerb: [1, 3, 0],
-    totalControlPoints: 4,
+    totalControlPoints: PARAMETRIC_CUBIC_CONTROL_POINT_COUNT,
   };
 }

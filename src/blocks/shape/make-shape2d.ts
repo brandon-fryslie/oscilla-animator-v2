@@ -14,6 +14,7 @@ import { canonicalType, canonicalManyDef, payloadStride, requireInst } from '../
 import { BOOL, FLOAT, SHAPE, VEC2 } from '../../core/canonical-types';
 import { DOMAIN_CONTROL } from '../../core/domain-registry';
 import { createLinePathTopology } from './_topology-helpers';
+import { resolveManyFieldInstance } from './_instance-helpers';
 
 /**
  * MakeShape2D - Assemble Field<vec2> into One<shape>
@@ -74,18 +75,11 @@ export function register(): void {
           `got ${card.kind}. Cannot assemble a shape from a single point.`
         );
       }
-  
-      // Get instance from context (inferred from input field)
-      const instance = ctx.inferredInstance !== undefined ? ctx.inferredInstance : ctx.instance;
-      if (!instance) {
-        throw new Error('MakeShape2D: no instance context — controlPoints must come from a field-producing block');
-      }
-  
-      // Look up instance declaration to get point count
-      const instanceDecl = ctx.instances.get(instance);
-      if (!instanceDecl) {
-        throw new Error(`MakeShape2D: instance '${instance}' not found in instance registry`);
-      }
+      const { instanceId: instance, instanceDecl } = resolveManyFieldInstance(
+        ctx,
+        controlPointsInput,
+        'MakeShape2D.controlPoints',
+      );
       // [LAW:one-source-of-truth] Topology lane capacity is derived from the
       // canonical instance declaration (static count or dynamic maxCount).
       const pointCount = typeof instanceDecl.count === 'number'

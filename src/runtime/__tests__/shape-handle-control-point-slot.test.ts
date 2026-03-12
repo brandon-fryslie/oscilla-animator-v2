@@ -24,6 +24,11 @@ import { buildProgramTopologyTableFromIds } from '../../compiler/ir/program-topo
 import { materializeValueExpr } from '../ValueExprMaterializer';
 import { registerDynamicTopology } from '../../shapes/registry';
 import { PathVerb } from '../../shapes/types';
+import {
+  PARAMETRIC_CUBIC_CONTROL_POINT_COUNT,
+  PARAMETRIC_RESOLUTION_DEFAULT,
+  PARAMETRIC_THICKNESS_DEFAULT,
+} from '../../shapes/parametric-contract';
 
 const PATH_TOPOLOGY_ID = registerDynamicTopology(
   {
@@ -46,15 +51,53 @@ const NON_PATH_TOPOLOGY_ID = registerDynamicTopology(
 const TYPE2_CUBIC_TOPOLOGY_ID = registerDynamicTopology(
   {
     params: [
-      { name: 'resolution', type: 'float', default: 64 },
-      { name: 'thickness', type: 'float', default: 0.02 },
+      { name: 'resolution', type: 'float', default: PARAMETRIC_RESOLUTION_DEFAULT },
+      { name: 'thickness', type: 'float', default: PARAMETRIC_THICKNESS_DEFAULT },
     ],
     verbs: [PathVerb.MOVE, PathVerb.CUBIC, PathVerb.CLOSE],
     pointsPerVerb: [1, 3, 0],
-    totalControlPoints: 4,
+    totalControlPoints: PARAMETRIC_CUBIC_CONTROL_POINT_COUNT,
     closed: true,
   },
   'shape-handle-control-point-slot-type2-cubic',
+);
+
+const TYPE2_CUBIC_REORDERED_PARAMS_TOPOLOGY_ID = registerDynamicTopology(
+  {
+    params: [
+      { name: 'thickness', type: 'float', default: PARAMETRIC_THICKNESS_DEFAULT },
+      { name: 'resolution', type: 'float', default: PARAMETRIC_RESOLUTION_DEFAULT },
+    ],
+    verbs: [PathVerb.MOVE, PathVerb.CUBIC, PathVerb.CLOSE],
+    pointsPerVerb: [1, 3, 0],
+    totalControlPoints: PARAMETRIC_CUBIC_CONTROL_POINT_COUNT,
+    closed: true,
+  },
+  'shape-handle-control-point-slot-type2-cubic-reordered-params',
+);
+
+const TYPE2_CUBIC_MISSING_THICKNESS_TOPOLOGY_ID = registerDynamicTopology(
+  {
+    params: [
+      { name: 'resolution', type: 'float', default: PARAMETRIC_RESOLUTION_DEFAULT },
+    ],
+    verbs: [PathVerb.MOVE, PathVerb.CUBIC, PathVerb.CLOSE],
+    pointsPerVerb: [1, 3, 0],
+    totalControlPoints: PARAMETRIC_CUBIC_CONTROL_POINT_COUNT,
+    closed: true,
+  },
+  'shape-handle-control-point-slot-type2-cubic-missing-thickness',
+);
+
+const CUBIC_FOUR_POINT_NON_TYPE2_TOPOLOGY_ID = registerDynamicTopology(
+  {
+    params: [],
+    verbs: [PathVerb.MOVE, PathVerb.CUBIC, PathVerb.CLOSE],
+    pointsPerVerb: [1, 3, 0],
+    totalControlPoints: PARAMETRIC_CUBIC_CONTROL_POINT_COUNT,
+    closed: true,
+  },
+  'shape-handle-control-point-slot-cubic-four-point-non-type2',
 );
 
 function mockProgram(fieldExprToSlot: ReadonlyMap<number, number> = new Map()): CompiledProgramIR {
@@ -66,6 +109,9 @@ function mockProgram(fieldExprToSlot: ReadonlyMap<number, number> = new Map()): 
       PATH_TOPOLOGY_ID,
       NON_PATH_TOPOLOGY_ID,
       TYPE2_CUBIC_TOPOLOGY_ID,
+      TYPE2_CUBIC_REORDERED_PARAMS_TOPOLOGY_ID,
+      TYPE2_CUBIC_MISSING_THICKNESS_TOPOLOGY_ID,
+      CUBIC_FOUR_POINT_NON_TYPE2_TOPOLOGY_ID,
     ]),
     kernelRegistry: {},
   } as unknown as CompiledProgramIR;
@@ -211,8 +257,8 @@ describe('shape handle control-point slot invariants', () => {
             {
               id: controlInstance,
               domainType: domainTypeId('shape-domain'),
-              count: 4,
-              maxCount: 4,
+              count: PARAMETRIC_CUBIC_CONTROL_POINT_COUNT,
+              maxCount: PARAMETRIC_CUBIC_CONTROL_POINT_COUNT,
               lifecycle: 'static',
               identityMode: 'none',
             },
@@ -251,5 +297,367 @@ describe('shape handle control-point slot invariants', () => {
       decodeU32[0] = word;
       expect(Number.isFinite(decodeF32[0])).toBe(true);
     }
+  });
+
+  it('uses Type 2 topology defaults when paramArgs are omitted', () => {
+    const controlInstance = instanceId('shape-handle-type2-default-control');
+    const controlFieldExprId = 1 as ValueExprId;
+    const valueExprs: ValueExpr[] = [
+      {
+        kind: 'shapeRef',
+        type: canonicalType(HANDLE),
+        topologyId: TYPE2_CUBIC_TOPOLOGY_ID,
+        paramArgs: [],
+        controlPointField: controlFieldExprId,
+      },
+      {
+        kind: 'const',
+        value: vec2Const(0, 0),
+        type: canonicalMany(
+          VEC2,
+          unitNone(),
+          instanceRef('shape-domain', 'shape-handle-type2-default-control'),
+        ),
+      },
+    ];
+    const program = {
+      ...mockProgram(new Map([[controlFieldExprId, 19]])),
+      valueExprs: { nodes: valueExprs },
+      schedule: {
+        instances: new Map([
+          [
+            controlInstance,
+            {
+              id: controlInstance,
+              domainType: domainTypeId('shape-domain'),
+              count: PARAMETRIC_CUBIC_CONTROL_POINT_COUNT,
+              maxCount: PARAMETRIC_CUBIC_CONTROL_POINT_COUNT,
+              lifecycle: 'static',
+              identityMode: 'none',
+            },
+          ],
+        ]),
+      },
+    } as unknown as CompiledProgramIR;
+    const state = createState(8);
+    const out = materializeValueExpr(
+      0 as ValueExprId,
+      { nodes: valueExprs },
+      instanceId('shape-instance'),
+      1,
+      state,
+      program,
+    );
+
+    const handle = Math.trunc(out[0] ?? -1);
+    expect(handle).toBeGreaterThanOrEqual(0);
+    const header = readShapeBankHeader(state.shapeBank!.data, handle);
+    const expectedVertexCount = (PARAMETRIC_RESOLUTION_DEFAULT + 1) * 2;
+    expect(header.vertexCount).toBe(expectedVertexCount);
+    expect(header.paramBlockWords).toBe(expectedVertexCount * 2);
+  });
+
+  it('rejects Type 2 many-cardinality paramArgs', () => {
+    const controlInstance = instanceId('shape-handle-type2-many-param-control');
+    const controlFieldExprId = 1 as ValueExprId;
+    const valueExprs: ValueExpr[] = [
+      {
+        kind: 'shapeRef',
+        type: canonicalType(HANDLE),
+        topologyId: TYPE2_CUBIC_TOPOLOGY_ID,
+        paramArgs: [2 as ValueExprId, 3 as ValueExprId],
+        controlPointField: controlFieldExprId,
+      },
+      {
+        kind: 'const',
+        value: vec2Const(0, 0),
+        type: canonicalMany(
+          VEC2,
+          unitNone(),
+          instanceRef('shape-domain', 'shape-handle-type2-many-param-control'),
+        ),
+      },
+      {
+        kind: 'const',
+        value: floatConst(16),
+        type: canonicalMany(
+          FLOAT,
+          unitNone(),
+          instanceRef('shape-domain', 'shape-handle-type2-many-param-control'),
+        ),
+      },
+      {
+        kind: 'const',
+        value: floatConst(0.04),
+        type: canonicalType(FLOAT),
+      },
+    ];
+    const program = {
+      ...mockProgram(new Map([[controlFieldExprId, 23]])),
+      valueExprs: { nodes: valueExprs },
+      schedule: {
+        instances: new Map([
+          [
+            controlInstance,
+            {
+              id: controlInstance,
+              domainType: domainTypeId('shape-domain'),
+              count: PARAMETRIC_CUBIC_CONTROL_POINT_COUNT,
+              maxCount: PARAMETRIC_CUBIC_CONTROL_POINT_COUNT,
+              lifecycle: 'static',
+              identityMode: 'none',
+            },
+          ],
+        ]),
+      },
+    } as unknown as CompiledProgramIR;
+    const state = createState(8);
+    expect(() =>
+      materializeValueExpr(
+        0 as ValueExprId,
+        { nodes: valueExprs },
+        instanceId('shape-instance'),
+        1,
+        state,
+        program,
+      ),
+    ).toThrow(/must be scalar\/const cardinality/);
+  });
+
+  it('resolves Type 2 defaults by param name when topology param order differs', () => {
+    const controlInstance = instanceId('shape-handle-type2-reordered-default-control');
+    const controlFieldExprId = 1 as ValueExprId;
+    const valueExprs: ValueExpr[] = [
+      {
+        kind: 'shapeRef',
+        type: canonicalType(HANDLE),
+        topologyId: TYPE2_CUBIC_REORDERED_PARAMS_TOPOLOGY_ID,
+        paramArgs: [],
+        controlPointField: controlFieldExprId,
+      },
+      {
+        kind: 'const',
+        value: vec2Const(0, 0),
+        type: canonicalMany(
+          VEC2,
+          unitNone(),
+          instanceRef('shape-domain', 'shape-handle-type2-reordered-default-control'),
+        ),
+      },
+    ];
+    const program = {
+      ...mockProgram(new Map([[controlFieldExprId, 29]])),
+      valueExprs: { nodes: valueExprs },
+      schedule: {
+        instances: new Map([
+          [
+            controlInstance,
+            {
+              id: controlInstance,
+              domainType: domainTypeId('shape-domain'),
+              count: PARAMETRIC_CUBIC_CONTROL_POINT_COUNT,
+              maxCount: PARAMETRIC_CUBIC_CONTROL_POINT_COUNT,
+              lifecycle: 'static',
+              identityMode: 'none',
+            },
+          ],
+        ]),
+      },
+    } as unknown as CompiledProgramIR;
+    const state = createState(8);
+    const out = materializeValueExpr(
+      0 as ValueExprId,
+      { nodes: valueExprs },
+      instanceId('shape-instance'),
+      1,
+      state,
+      program,
+    );
+
+    const handle = Math.trunc(out[0] ?? -1);
+    expect(handle).toBeGreaterThanOrEqual(0);
+    const header = readShapeBankHeader(state.shapeBank!.data, handle);
+    const expectedVertexCount = (PARAMETRIC_RESOLUTION_DEFAULT + 1) * 2;
+    expect(header.vertexCount).toBe(expectedVertexCount);
+    expect(header.paramBlockWords).toBe(expectedVertexCount * 2);
+  });
+
+  it('resolves Type 2 explicit params by param name when topology param order differs', () => {
+    const controlInstance = instanceId('shape-handle-type2-reordered-explicit-control');
+    const controlFieldExprId = 1 as ValueExprId;
+    const valueExprs: ValueExpr[] = [
+      {
+        kind: 'shapeRef',
+        type: canonicalType(HANDLE),
+        topologyId: TYPE2_CUBIC_REORDERED_PARAMS_TOPOLOGY_ID,
+        // Topology order is [thickness, resolution].
+        paramArgs: [2 as ValueExprId, 3 as ValueExprId],
+        controlPointField: controlFieldExprId,
+      },
+      {
+        kind: 'const',
+        value: vec2Const(0, 0),
+        type: canonicalMany(
+          VEC2,
+          unitNone(),
+          instanceRef('shape-domain', 'shape-handle-type2-reordered-explicit-control'),
+        ),
+      },
+      {
+        kind: 'const',
+        value: floatConst(0.04),
+        type: canonicalType(FLOAT),
+      },
+      {
+        kind: 'const',
+        value: floatConst(12),
+        type: canonicalType(FLOAT),
+      },
+    ];
+    const program = {
+      ...mockProgram(new Map([[controlFieldExprId, 31]])),
+      valueExprs: { nodes: valueExprs },
+      schedule: {
+        instances: new Map([
+          [
+            controlInstance,
+            {
+              id: controlInstance,
+              domainType: domainTypeId('shape-domain'),
+              count: PARAMETRIC_CUBIC_CONTROL_POINT_COUNT,
+              maxCount: PARAMETRIC_CUBIC_CONTROL_POINT_COUNT,
+              lifecycle: 'static',
+              identityMode: 'none',
+            },
+          ],
+        ]),
+      },
+    } as unknown as CompiledProgramIR;
+    const state = createState(8);
+    const out = materializeValueExpr(
+      0 as ValueExprId,
+      { nodes: valueExprs },
+      instanceId('shape-instance'),
+      1,
+      state,
+      program,
+    );
+
+    const handle = Math.trunc(out[0] ?? -1);
+    expect(handle).toBeGreaterThanOrEqual(0);
+    const header = readShapeBankHeader(state.shapeBank!.data, handle);
+    expect(header.vertexCount).toBe(26);
+    expect(header.paramBlockWords).toBe(52);
+  });
+
+  it('fails fast when Type 2 topology omits required thickness param', () => {
+    const controlInstance = instanceId('shape-handle-type2-missing-thickness-control');
+    const controlFieldExprId = 1 as ValueExprId;
+    const valueExprs: ValueExpr[] = [
+      {
+        kind: 'shapeRef',
+        type: canonicalType(HANDLE),
+        topologyId: TYPE2_CUBIC_MISSING_THICKNESS_TOPOLOGY_ID,
+        paramArgs: [],
+        controlPointField: controlFieldExprId,
+      },
+      {
+        kind: 'const',
+        value: vec2Const(0, 0),
+        type: canonicalMany(
+          VEC2,
+          unitNone(),
+          instanceRef('shape-domain', 'shape-handle-type2-missing-thickness-control'),
+        ),
+      },
+    ];
+    const program = {
+      ...mockProgram(new Map([[controlFieldExprId, 37]])),
+      valueExprs: { nodes: valueExprs },
+      schedule: {
+        instances: new Map([
+          [
+            controlInstance,
+            {
+              id: controlInstance,
+              domainType: domainTypeId('shape-domain'),
+              count: PARAMETRIC_CUBIC_CONTROL_POINT_COUNT,
+              maxCount: PARAMETRIC_CUBIC_CONTROL_POINT_COUNT,
+              lifecycle: 'static',
+              identityMode: 'none',
+            },
+          ],
+        ]),
+      },
+    } as unknown as CompiledProgramIR;
+    const state = createState(8);
+    expect(() =>
+      materializeValueExpr(
+        0 as ValueExprId,
+        { nodes: valueExprs },
+        instanceId('shape-instance'),
+        1,
+        state,
+        program,
+      ),
+    ).toThrow(/missing required param 'thickness'/);
+  });
+
+  it('keeps cubic-4 path without Type 2 params on rigid path materialization path', () => {
+    const controlInstance = instanceId('shape-handle-cubic-four-point-non-type2-control');
+    const controlFieldExprId = 1 as ValueExprId;
+    const valueExprs: ValueExpr[] = [
+      {
+        kind: 'shapeRef',
+        type: canonicalType(HANDLE),
+        topologyId: CUBIC_FOUR_POINT_NON_TYPE2_TOPOLOGY_ID,
+        paramArgs: [],
+        controlPointField: controlFieldExprId,
+      },
+      {
+        kind: 'const',
+        value: vec2Const(0, 0),
+        type: canonicalMany(
+          VEC2,
+          unitNone(),
+          instanceRef('shape-domain', 'shape-handle-cubic-four-point-non-type2-control'),
+        ),
+      },
+    ];
+    const program = {
+      ...mockProgram(new Map([[controlFieldExprId, 41]])),
+      valueExprs: { nodes: valueExprs },
+      schedule: {
+        instances: new Map([
+          [
+            controlInstance,
+            {
+              id: controlInstance,
+              domainType: domainTypeId('shape-domain'),
+              count: PARAMETRIC_CUBIC_CONTROL_POINT_COUNT,
+              maxCount: PARAMETRIC_CUBIC_CONTROL_POINT_COUNT,
+              lifecycle: 'static',
+              identityMode: 'none',
+            },
+          ],
+        ]),
+      },
+    } as unknown as CompiledProgramIR;
+    const state = createState(8);
+    const out = materializeValueExpr(
+      0 as ValueExprId,
+      { nodes: valueExprs },
+      instanceId('shape-instance'),
+      1,
+      state,
+      program,
+    );
+
+    const handle = Math.trunc(out[0] ?? -1);
+    expect(handle).toBeGreaterThanOrEqual(0);
+    const header = readShapeBankHeader(state.shapeBank!.data, handle);
+    expect(header.kind).toBe(1);
+    expect(header.vertexCount).toBe(4);
+    expect(header.paramBlockWords).toBe(8);
   });
 });

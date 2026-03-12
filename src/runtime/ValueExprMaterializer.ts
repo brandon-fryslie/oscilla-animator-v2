@@ -31,6 +31,11 @@ import { requireInst } from '../core/canonical-types';
 import { payloadStride } from '../core/canonical-types';
 import { constValueAsNumber, type ConstValue } from '../core/canonical-types';
 import type { PathTopologyDef, TopologyDef } from '../shapes/types';
+import {
+  PARAMETRIC_CUBIC_CONTROL_POINT_COUNT,
+  PARAMETRIC_RESOLUTION_DEFAULT,
+  PARAMETRIC_THICKNESS_DEFAULT,
+} from '../shapes/parametric-contract';
 import { applyOpcode } from './OpcodeInterpreter';
 import {
   applyPureFn as applySharedPureFn,
@@ -90,8 +95,74 @@ const SHAPE_KIND_RIGID = 1;
 const SHAPE_KIND_PARAMETRIC = 2;
 const SHAPE_FLAG_CLOSED = 1;
 
-function isType2ParametricTopology(topology: TopologyDef): topology is PathTopologyDef {
-  return isPathTopology(topology) && topology.hasCubic && topology.totalControlPoints === 4;
+function hasTopologyParam(topology: PathTopologyDef, paramName: string): boolean {
+  return topology.params.some((param) => param.name === paramName);
+}
+
+function classifyType2ParametricTopology(topology: TopologyDef): topology is PathTopologyDef {
+  if (!isPathTopology(topology)) {
+    return false;
+  }
+  const isCubicFourPointPath = topology.hasCubic && topology.totalControlPoints === PARAMETRIC_CUBIC_CONTROL_POINT_COUNT;
+  if (!isCubicFourPointPath) {
+    return false;
+  }
+  const hasResolution = hasTopologyParam(topology, 'resolution');
+  const hasThickness = hasTopologyParam(topology, 'thickness');
+  if (hasResolution !== hasThickness) {
+    // [LAW:single-enforcer] Type 2 topology schema validity is enforced at the
+    // runtime materialization boundary where param semantics are consumed.
+    const missing = hasResolution ? 'thickness' : 'resolution';
+    throw new Error(`Type2 shape topology missing required param '${missing}'`);
+  }
+  return hasResolution && hasThickness;
+}
+
+function resolveTopologyParamDefault(
+  topology: PathTopologyDef,
+  paramName: string,
+  fallback: number,
+): number {
+  const match = topology.params.find((param) => param.name === paramName);
+  return match?.default ?? fallback;
+}
+
+function resolveTopologyParamIndex(
+  topology: PathTopologyDef,
+  paramName: string,
+): number {
+  const paramIndex = topology.params.findIndex((param) => param.name === paramName);
+  if (paramIndex < 0) {
+    // [LAW:single-enforcer] Type 2 topology-param schema is validated at
+    // materialization, the boundary that consumes param payload semantics.
+    throw new Error(`Type2 shape topology missing required param '${paramName}'`);
+  }
+  return paramIndex;
+}
+
+function resolveShapeParamValueByName(
+  expr: Extract<ValueExpr, { kind: 'shapeRef' }>,
+  topology: PathTopologyDef,
+  table: ValueExprTable,
+  state: RuntimeState,
+  program: CompiledProgramIR,
+  scratch: MaterializeScratch | undefined,
+  pureFnContext: PureFnExecutionContext,
+  paramName: string,
+  fallback: number,
+): number {
+  const paramIndex = resolveTopologyParamIndex(topology, paramName);
+  const paramFallback = resolveTopologyParamDefault(topology, paramName, fallback);
+  return resolveShapeParamValue(
+    expr,
+    table,
+    state,
+    program,
+    scratch,
+    pureFnContext,
+    paramIndex,
+    paramFallback,
+  );
 }
 
 function resolveShapeParamValue(
@@ -147,7 +218,7 @@ function evaluateShapeRefHandle(
   }
   const topology = getProgramTopology(program, expr.topologyId);
   const isPath = isPathTopology(topology);
-  const isType2Curve = isType2ParametricTopology(topology);
+  const isType2Curve = classifyType2ParametricTopology(topology);
   const controlPointCount = isPath ? topology.totalControlPoints : 0;
   let shapeKind = SHAPE_KIND_RIGID;
   let topologyMode = isPath ? 1 : 0;
@@ -224,37 +295,37 @@ function evaluateShapeRefHandle(
       return words;
     }
 
-    const cpScalars = new Float32Array(8);
-    for (let point = 0; point < 4; point++) {
+    const cpScalars = new Float32Array(PARAMETRIC_CUBIC_CONTROL_POINT_COUNT * 2);
+    for (let point = 0; point < PARAMETRIC_CUBIC_CONTROL_POINT_COUNT; point++) {
       const pointBase = point * controlPointStride;
       cpScalars[point * 2] = controlPoints[pointBase];
       cpScalars[point * 2 + 1] = controlPoints[pointBase + 1];
     }
 
-    const defaultResolution = topology.params[0]?.default ?? 64;
-    const defaultThickness = topology.params[1]?.default ?? 0.02;
     const resolution = clampParametricResolution(
-      resolveShapeParamValue(
+      resolveShapeParamValueByName(
         expr,
+        topology,
         table,
         state,
         program,
         scratch,
         pureFnContext,
-        0,
-        defaultResolution,
+        'resolution',
+        PARAMETRIC_RESOLUTION_DEFAULT,
       ),
     );
     const thickness = clampParametricThickness(
-      resolveShapeParamValue(
+      resolveShapeParamValueByName(
         expr,
+        topology,
         table,
         state,
         program,
         scratch,
         pureFnContext,
-        1,
-        defaultThickness,
+        'thickness',
+        PARAMETRIC_THICKNESS_DEFAULT,
       ),
     );
 

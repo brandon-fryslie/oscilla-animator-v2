@@ -1,5 +1,13 @@
-const MIN_RESOLUTION = 4;
-const MAX_RESOLUTION = 2048;
+import {
+  PARAMETRIC_CUBIC_CONTROL_POINT_COUNT,
+  PARAMETRIC_RESOLUTION_DEFAULT,
+  PARAMETRIC_RESOLUTION_MAX,
+  PARAMETRIC_RESOLUTION_MIN,
+  PARAMETRIC_THICKNESS_DEFAULT,
+  PARAMETRIC_THICKNESS_MAX,
+  PARAMETRIC_THICKNESS_MIN,
+} from '../shapes/parametric-contract';
+
 const EPSILON = 1e-6;
 
 export interface Vec2Point {
@@ -8,14 +16,14 @@ export interface Vec2Point {
 }
 
 export function clampParametricResolution(value: number): number {
-  const finite = Number.isFinite(value) ? value : MIN_RESOLUTION;
+  const finite = Number.isFinite(value) ? value : PARAMETRIC_RESOLUTION_MIN;
   const quantized = Math.trunc(finite);
-  return Math.max(MIN_RESOLUTION, Math.min(MAX_RESOLUTION, quantized));
+  return Math.max(PARAMETRIC_RESOLUTION_MIN, Math.min(PARAMETRIC_RESOLUTION_MAX, quantized));
 }
 
 export function clampParametricThickness(value: number): number {
-  const finite = Number.isFinite(value) ? Math.abs(value) : 0.02;
-  return Math.max(0.0005, Math.min(2.0, finite));
+  const finite = Number.isFinite(value) ? Math.abs(value) : PARAMETRIC_THICKNESS_DEFAULT;
+  return Math.max(PARAMETRIC_THICKNESS_MIN, Math.min(PARAMETRIC_THICKNESS_MAX, finite));
 }
 
 export function generateParametricTemplateTValues(resolution: number): Float32Array {
@@ -89,9 +97,10 @@ export function buildCubicRibbonContour(
   resolution: number,
   thickness: number,
 ): Float32Array {
-  if (controlPointScalars.length < 8) {
+  const requiredScalars = PARAMETRIC_CUBIC_CONTROL_POINT_COUNT * 2;
+  if (controlPointScalars.length < requiredScalars) {
     throw new Error(
-      `buildCubicRibbonContour: expected at least 8 scalar values for 4 vec2 control points, got ${String(controlPointScalars.length)}`,
+      `buildCubicRibbonContour: expected at least ${String(requiredScalars)} scalar values for ${String(PARAMETRIC_CUBIC_CONTROL_POINT_COUNT)} vec2 control points, got ${String(controlPointScalars.length)}`,
     );
   }
   const finiteOrZero = (value: number): number => (Number.isFinite(value) ? value : 0);

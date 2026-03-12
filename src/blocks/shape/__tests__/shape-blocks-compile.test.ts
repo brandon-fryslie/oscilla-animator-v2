@@ -3,6 +3,16 @@ import { deserializePatchFromHCL } from '../../../patch-dsl/index';
 import { compileFrontend } from '../../../compiler/frontend/index';
 import '../../all';
 import { getBlockDefinition } from '../../registry';
+import {
+  canonicalMany,
+  canonicalType,
+  FLOAT,
+  INT,
+  SHAPE,
+  instanceRef,
+  unitNone,
+  VEC2,
+} from '../../../core/canonical-types';
 import { createLinePathTopology, createParametricCubicPathTopology } from '../_topology-helpers';
 
 describe('MakeShape2D block', () => {
@@ -152,6 +162,32 @@ patch "Test Parametric Curve 2D" {
     const result = compileFrontend(patch);
     expect(result.typedPatch.blocks.some((b) => b.type === 'ParametricCurve2D')).toBe(true);
   });
+
+  it('rejects non-cubic control-point arity at block lowering boundary', () => {
+    const definition = getBlockDefinition('ParametricCurve2D');
+    expect(definition).toBeDefined();
+    expect(() =>
+      definition!.lower({
+        ctx: {
+          inferredInstance: undefined,
+          instance: 'shape-instance',
+          instances: new Map([
+            ['cp3', { id: 'cp3', count: 3, maxCount: 3 }],
+          ]),
+          b: {},
+          outTypes: [canonicalType(SHAPE)],
+        },
+        inputsById: {
+          controlPoints: {
+            id: 1,
+            type: canonicalMany(VEC2, unitNone(), instanceRef('shape-domain', 'cp3')),
+          },
+          resolution: { id: 2, type: canonicalType(INT) },
+          thickness: { id: 3, type: canonicalType(FLOAT) },
+        },
+      } as never),
+    ).toThrow(/exactly 4 lanes/);
+  });
 });
 
 describe('ShapeWobble2D block', () => {
@@ -214,6 +250,133 @@ patch "Test Shape Wobble" {
     expect(errors).toEqual([]);
     const result = compileFrontend(patch);
     expect(result.typedPatch.blocks.some((b) => b.type === 'ShapeWobble2D')).toBe(true);
+  });
+});
+
+describe('ShapeTwist2D block', () => {
+  it('is registered', () => {
+    expect(getBlockDefinition('ShapeTwist2D')).toBeDefined();
+  });
+
+  it('frontend compiles rect -> twist -> parametric pipeline', () => {
+    const hcl = `
+patch "Test Shape Twist 2D" {
+  block "InfiniteTimeRoot" "clock" {
+    periodAMs = 4500
+    role = "timeRoot"
+    outputs {
+      phaseA = twist.phase
+    }
+  }
+
+  block "Rect" "anchors" {
+    width = 0.16
+    height = 0.12
+    outputs {
+      controlPoints = twist.controlPoints
+    }
+  }
+
+  block "ShapeTwist2D" "twist" {
+    twistTurns = 0.8
+    mix = 0.9
+    outputs {
+      points = curve.controlPoints
+    }
+  }
+
+  block "ParametricCurve2D" "curve" {
+    resolution = 72
+    thickness = 0.022
+    outputs {
+      shape = arr.element
+    }
+  }
+
+  block "Array" "arr" {
+    count = 12
+    outputs {
+      elements = layout.elements
+    }
+  }
+
+  block "CircleLayoutUV" "layout" {
+    radius = 0.22
+    outputs {
+      controlPoints = render.controlPoints
+    }
+  }
+
+  block "RenderInstances2D" "render" {}
+}`;
+    const { patch, errors } = deserializePatchFromHCL(hcl);
+    expect(errors).toEqual([]);
+    const result = compileFrontend(patch);
+    expect(result.typedPatch.blocks.some((b) => b.type === 'ShapeTwist2D')).toBe(true);
+  });
+});
+
+describe('ShapePolarRipple2D block', () => {
+  it('is registered', () => {
+    expect(getBlockDefinition('ShapePolarRipple2D')).toBeDefined();
+  });
+
+  it('frontend compiles rect -> ripple -> parametric pipeline', () => {
+    const hcl = `
+patch "Test Shape Polar Ripple 2D" {
+  block "InfiniteTimeRoot" "clock" {
+    periodAMs = 6200
+    role = "timeRoot"
+    outputs {
+      phaseA = ripple.phase
+    }
+  }
+
+  block "Rect" "anchors" {
+    width = 0.14
+    height = 0.14
+    outputs {
+      controlPoints = ripple.controlPoints
+    }
+  }
+
+  block "ShapePolarRipple2D" "ripple" {
+    amount = 0.04
+    pointFrequency = 5
+    radialFrequency = 3
+    outputs {
+      points = curve.controlPoints
+    }
+  }
+
+  block "ParametricCurve2D" "curve" {
+    resolution = 80
+    thickness = 0.02
+    outputs {
+      shape = arr.element
+    }
+  }
+
+  block "Array" "arr" {
+    count = 10
+    outputs {
+      elements = layout.elements
+    }
+  }
+
+  block "CircleLayoutUV" "layout" {
+    radius = 0.24
+    outputs {
+      controlPoints = render.controlPoints
+    }
+  }
+
+  block "RenderInstances2D" "render" {}
+}`;
+    const { patch, errors } = deserializePatchFromHCL(hcl);
+    expect(errors).toEqual([]);
+    const result = compileFrontend(patch);
+    expect(result.typedPatch.blocks.some((b) => b.type === 'ShapePolarRipple2D')).toBe(true);
   });
 });
 

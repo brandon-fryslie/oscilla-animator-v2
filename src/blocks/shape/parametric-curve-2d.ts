@@ -10,7 +10,19 @@ import { registerBlock } from '../registry';
 import { canonicalType, canonicalManyDef, payloadStride, requireInst } from '../../core/canonical-types';
 import { VEC2, SHAPE, FLOAT, INT } from '../../core/canonical-types';
 import { defaultSourceConst } from '../../types';
+import {
+  PARAMETRIC_CUBIC_CONTROL_POINT_COUNT,
+  PARAMETRIC_RESOLUTION_DEFAULT,
+  PARAMETRIC_RESOLUTION_MIN,
+  PARAMETRIC_RESOLUTION_UI_MAX,
+  PARAMETRIC_RESOLUTION_UI_STEP,
+  PARAMETRIC_THICKNESS_DEFAULT,
+  PARAMETRIC_THICKNESS_UI_MAX,
+  PARAMETRIC_THICKNESS_UI_MIN,
+  PARAMETRIC_THICKNESS_UI_STEP,
+} from '../../shapes/parametric-contract';
 import { createParametricCubicPathTopology } from './_topology-helpers';
+import { resolveManyFieldInstance } from './_instance-helpers';
 
 export function register(): void {
   registerBlock({
@@ -29,18 +41,28 @@ export function register(): void {
       resolution: {
         label: 'Resolution',
         type: canonicalType(INT),
-        defaultValue: 64,
-        defaultSource: defaultSourceConst(64),
+        defaultValue: PARAMETRIC_RESOLUTION_DEFAULT,
+        defaultSource: defaultSourceConst(PARAMETRIC_RESOLUTION_DEFAULT),
         exposedAsPort: true,
-        uiHint: { kind: 'slider', min: 4, max: 256, step: 1 },
+        uiHint: {
+          kind: 'slider',
+          min: PARAMETRIC_RESOLUTION_MIN,
+          max: PARAMETRIC_RESOLUTION_UI_MAX,
+          step: PARAMETRIC_RESOLUTION_UI_STEP,
+        },
       },
       thickness: {
         label: 'Thickness',
         type: canonicalType(FLOAT),
-        defaultValue: 0.02,
-        defaultSource: defaultSourceConst(0.02),
+        defaultValue: PARAMETRIC_THICKNESS_DEFAULT,
+        defaultSource: defaultSourceConst(PARAMETRIC_THICKNESS_DEFAULT),
         exposedAsPort: true,
-        uiHint: { kind: 'slider', min: 0.001, max: 0.2, step: 0.001 },
+        uiHint: {
+          kind: 'slider',
+          min: PARAMETRIC_THICKNESS_UI_MIN,
+          max: PARAMETRIC_THICKNESS_UI_MAX,
+          step: PARAMETRIC_THICKNESS_UI_STEP,
+        },
       },
     },
     outputs: {
@@ -56,22 +78,19 @@ export function register(): void {
         throw new Error('ParametricCurve2D: controlPoints must be a field (many cardinality)');
       }
 
-      const instance = ctx.inferredInstance !== undefined ? ctx.inferredInstance : ctx.instance;
-      if (!instance) {
-        throw new Error('ParametricCurve2D: missing instance context from controlPoints');
-      }
-      const instanceDecl = ctx.instances.get(instance);
-      if (!instanceDecl) {
-        throw new Error(`ParametricCurve2D: instance '${String(instance)}' not found`);
-      }
+      const { instanceId: instance, instanceDecl } = resolveManyFieldInstance(
+        ctx,
+        controlPointsInput,
+        'ParametricCurve2D.controlPoints',
+      );
       const pointCount = typeof instanceDecl.count === 'number'
         ? instanceDecl.count
         : instanceDecl.maxCount;
       // [LAW:single-enforcer] Type 2 cubic contract is enforced at the block
       // lowering boundary so runtime/materializer receives one fixed arity.
-      if (pointCount !== 4) {
+      if (pointCount !== PARAMETRIC_CUBIC_CONTROL_POINT_COUNT) {
         throw new Error(
-          `ParametricCurve2D: controlPoints must have exactly 4 lanes (P0..P3), got ${String(pointCount)}`,
+          `ParametricCurve2D: controlPoints must have exactly ${String(PARAMETRIC_CUBIC_CONTROL_POINT_COUNT)} lanes (P0..P3), got ${String(pointCount)}`,
         );
       }
 
@@ -110,4 +129,3 @@ export function register(): void {
     },
   });
 }
-
