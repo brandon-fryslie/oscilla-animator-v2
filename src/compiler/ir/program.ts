@@ -116,7 +116,7 @@ export interface CompiledProgramIR {
    * [LAW:single-enforcer] Runtime address resolution has one owning boundary:
    * compiler-emitted runtimeAddressTable (no runtime derivation pass).
    */
-  readonly runtimeAddressTable?: RuntimeAddressTableIR;
+  readonly runtimeAddressTable: RuntimeAddressTableIR;
 
   // Debug provenance
   readonly debugIndex: DebugIndexIR;
@@ -235,13 +235,13 @@ export interface CompiledProgramIR {
    * [LAW:one-source-of-truth] Compiler owns the canonical sink ordering and
    * instance-count mode contract consumed by draw-prep execution.
    */
-  readonly drawPrepProgram?: DrawPrepProgramIR;
+  readonly drawPrepProgram: DrawPrepProgramIR;
 
   /**
    * Compiler-owned metadata used by the Naga compile boundary.
    * WGSL emission remains in the Rust/WASM serializer boundary.
    */
-  readonly generatedComputeProgram?: GeneratedComputeProgramIR;
+  readonly generatedComputeProgram: GeneratedComputeProgramIR;
 
   /**
    * Compiler-owned GPU pass manifest describing installable runtime passes.
@@ -255,7 +255,7 @@ export interface CompiledProgramIR {
    * Compiler-generated typed Naga lowering artifact (P2-2).
    * Contains the structured module and expr/statement source-map provenance.
    */
-  readonly nagaLoweringProgram?: NagaLoweringProgramIR;
+  readonly nagaLoweringProgram: NagaLoweringProgramIR;
 }
 
 export interface ProgramTopologyTableIR {

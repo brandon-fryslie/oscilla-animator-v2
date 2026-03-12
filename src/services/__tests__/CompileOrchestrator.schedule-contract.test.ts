@@ -36,6 +36,7 @@ function makeHarness(schedule: unknown): { deps: CompileDeps; precomputed: Preco
     sourcePatchRevision: 7,
     frontendResult,
     backendResult,
+    compiledGpuBundle: null,
     compileDurationMs: 1,
   } satisfies PrecomputedArtifacts;
 

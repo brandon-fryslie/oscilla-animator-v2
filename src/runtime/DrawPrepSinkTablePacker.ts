@@ -81,7 +81,7 @@ function resolveSlotArenaAddress(
   slot: ValueSlot,
   context: string,
 ): PackedArenaAddress {
-  const descriptor = program.runtimeAddressTable?.slotToArena.get(slot);
+  const descriptor = program.runtimeAddressTable.slotToArena.get(slot);
   if (!descriptor) {
     throw new Error(
       'DrawPrepSinkTablePacker: missing runtimeAddressTable slotToArena descriptor for ' + context,
@@ -164,9 +164,6 @@ function assertShapeHandleInBankWindow(state: RuntimeState, shapeHandleWordOffse
 
 function resolveSinkInstanceCount(program: CompiledProgramIR, state: RuntimeState, sinkIndex: number): number {
   const drawPrepProgram = program.drawPrepProgram;
-  if (!drawPrepProgram) {
-    throw new Error('DrawPrepSinkTablePacker: missing drawPrepProgram');
-  }
   const sink = drawPrepProgram.sinks[sinkIndex];
   if (!sink) {
     throw new Error(`DrawPrepSinkTablePacker: sink ${sinkIndex} missing`);
@@ -243,7 +240,10 @@ export function packDrawPrepSinkTableV1(
   state: RuntimeState,
 ): PackedDrawPrepSinkTableV1 | null {
   const drawPrepProgram = program.drawPrepProgram;
-  if (!drawPrepProgram) {
+  // [LAW:single-enforcer] Draw-prep ABI invariants are validated at this
+  // boundary even when there are no sinks to emit for the frame.
+  const header = buildDrawPrepSinkTableHeader(drawPrepProgram);
+  if (drawPrepProgram.sinks.length === 0) {
     state.cache.drawPrepSinkTableWords = undefined;
     state.cache.drawPrepSinkTableWordCount = 0;
     state.cache.drawPrepSinkTableFrameId = state.cache.frameId;
@@ -252,7 +252,6 @@ export function packDrawPrepSinkTableV1(
 
   // [LAW:one-source-of-truth] Compiler owns sink ordering + indirect metadata.
   // Runtime packs canonical command records + static source descriptors only.
-  const header = buildDrawPrepSinkTableHeader(drawPrepProgram);
   const sinkInstanceCounts: number[] = [];
   for (let sinkIndex = 0; sinkIndex < drawPrepProgram.sinks.length; sinkIndex++) {
     const instanceCount = resolveSinkInstanceCount(program, state, sinkIndex);

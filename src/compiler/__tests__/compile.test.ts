@@ -396,9 +396,6 @@ describe('TimeModel', () => {
     if (result.kind !== 'ok') return;
 
     const generated = result.program.generatedComputeProgram;
-    expect(generated).toBeDefined();
-    if (!generated) return;
-
     expect(generated.maxActiveLanes).toBeGreaterThan(0);
     expect(generated.offsetConstants.size).toBeGreaterThan(0);
     expect(Array.from(generated.offsetConstants.values()).every((name) => name.startsWith('OFFSET_SLOT_'))).toBe(true);
@@ -434,9 +431,6 @@ describe('TimeModel', () => {
     if (result.kind !== 'ok') return;
 
     const lowering = result.program.nagaLoweringProgram;
-    expect(lowering).toBeDefined();
-    if (!lowering) return;
-
     const globalNames = lowering.module.global_variables.map((global) => global.name);
     expect(globalNames).toEqual(expect.arrayContaining(['state_in', 'state_out']));
 

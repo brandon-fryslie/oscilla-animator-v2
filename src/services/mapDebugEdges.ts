@@ -87,7 +87,8 @@ export function mapDebugEdges(patch: Patch, program: CompiledProgramIR): Map<str
 export function mapDebugMappings(patch: Patch, program: CompiledProgramIR): DebugMappings {
     const edgeMetaMap = new Map<string, EdgeMetadata>();
     const debugIndex = program.debugIndex;
-    const runtimeAddressTable = program.runtimeAddressTable;
+    const runtimeAddressTable =
+      (program as Partial<Pick<CompiledProgramIR, 'runtimeAddressTable'>>).runtimeAddressTable;
 
     // Guard: If debug index is missing required data, throw - silent failures hide bugs
     if (!debugIndex) {
@@ -102,7 +103,10 @@ export function mapDebugMappings(patch: Patch, program: CompiledProgramIR): Debu
     if (!debugIndex.slotToPort) {
         throw new Error('[mapDebugEdges] debugIndex.slotToPort is missing - compiler debug index is incomplete');
     }
-    if (!runtimeAddressTable?.slotLookup) {
+    if (!runtimeAddressTable) {
+        throw new Error('[mapDebugEdges] runtimeAddressTable is null/undefined - compiler did not produce runtime address metadata');
+    }
+    if (!runtimeAddressTable.slotLookup) {
         // [LAW:single-enforcer] Slot type/address metadata is owned by
         // compiler-emitted runtimeAddressTable; debug mapping must not derive
         // types from legacy metadata mirrors.

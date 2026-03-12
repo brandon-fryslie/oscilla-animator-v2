@@ -297,7 +297,7 @@ function makeFailure(errors: CompileError[]): CompileFailure {
 }
 
 function collectNagaLoweringCoverageWarnings(program: CompiledProgramIR): CompileError[] {
-  const coverage = program.nagaLoweringProgram?.coverage;
+  const coverage = program.nagaLoweringProgram.coverage;
   if (!coverage) return [];
 
   if (coverage.droppedComputeStepCount === 0) {
