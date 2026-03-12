@@ -38,6 +38,11 @@ import {
 } from './ScalarKernelLibrary';
 import { getProgramTopology } from '../compiler/ir/program-topology';
 import { resolveInstanceLaneCount } from './InstanceCountResolver';
+import {
+  buildCubicRibbonContour,
+  clampParametricResolution,
+  clampParametricThickness,
+} from './ParametricCurveGeometry';
 
 function isPathTopology(topology: TopologyDef): topology is PathTopologyDef {
   return 'verbs' in topology;
@@ -81,6 +86,53 @@ function resolveShapeControlPointSlot(
   return slot as number;
 }
 
+const SHAPE_KIND_RIGID = 1;
+const SHAPE_KIND_PARAMETRIC = 2;
+const SHAPE_FLAG_CLOSED = 1;
+
+function isType2ParametricTopology(topology: TopologyDef): topology is PathTopologyDef {
+  return isPathTopology(topology) && topology.hasCubic && topology.totalControlPoints === 4;
+}
+
+function resolveShapeParamValue(
+  expr: Extract<ValueExpr, { kind: 'shapeRef' }>,
+  table: ValueExprTable,
+  state: RuntimeState,
+  program: CompiledProgramIR,
+  scratch: MaterializeScratch | undefined,
+  pureFnContext: PureFnExecutionContext,
+  paramIndex: number,
+  fallback: number,
+): number {
+  const paramExpr = expr.paramArgs[paramIndex];
+  if (paramExpr === undefined) {
+    return fallback;
+  }
+  const paramNode = table.nodes[paramExpr];
+  if (!paramNode) {
+    throw new Error(
+      `shapeRef paramArgs[${String(paramIndex)}] references missing expression ${String(paramExpr)}`,
+    );
+  }
+  const paramCardinality = requireInst(paramNode.type.extent.cardinality, 'cardinality');
+  if (paramCardinality.kind === 'many') {
+    // [LAW:single-enforcer] Type 2 scalar shape params (resolution/thickness)
+    // are enforced at this materialization boundary to keep one handle contract.
+    throw new Error(
+      `shapeRef paramArgs[${String(paramIndex)}] must be scalar/const cardinality, got many`,
+    );
+  }
+  const value = evaluateScalarForMaterialize(
+    paramExpr,
+    table,
+    state,
+    program,
+    scratch,
+    pureFnContext,
+  );
+  return Number.isFinite(value) ? value : fallback;
+}
+
 function evaluateShapeRefHandle(
   expr: Extract<ValueExpr, { kind: 'shapeRef' }>,
   table: ValueExprTable,
@@ -95,16 +147,18 @@ function evaluateShapeRefHandle(
   }
   const topology = getProgramTopology(program, expr.topologyId);
   const isPath = isPathTopology(topology);
-  const vertexCount = isPath ? topology.totalControlPoints : 0;
-  const indexCount = isPath && topology.closed && vertexCount >= 3
+  const isType2Curve = isType2ParametricTopology(topology);
+  const controlPointCount = isPath ? topology.totalControlPoints : 0;
+  let shapeKind = SHAPE_KIND_RIGID;
+  let topologyMode = isPath ? 1 : 0;
+  let flags = isPath && topology.closed ? SHAPE_FLAG_CLOSED : 0;
+  let vertexCount = controlPointCount;
+  let indexCount = isPath && topology.closed && vertexCount >= 3
     ? (vertexCount - 2) * 3
     : 0;
-  // [LAW:one-source-of-truth] ShapeBank header flags are encoded directly at
-  // handle materialization (bit0 = closed path).
-  const flags = isPath && topology.closed ? 1 : 0;
   const controlPointSlot = resolveShapeControlPointSlot(expr, program, isPath);
   const controlPointWordPayload = (() => {
-    if (!isPath || vertexCount <= 0) {
+    if (!isPath || controlPointCount <= 0) {
       return new Uint32Array(0);
     }
     if (expr.controlPointField == null) {
@@ -142,28 +196,79 @@ function evaluateShapeRefHandle(
       );
     }
     const availablePointCount = resolveInstanceLaneCount(controlPointInstanceDecl, program, state, pureFnContext);
-    if (availablePointCount < vertexCount) {
+    if (availablePointCount < controlPointCount) {
       throw new Error(
         'shapeRef controlPointField has fewer lanes than topology requires ' +
-          `(topologyId=${String(expr.topologyId)}, needed=${vertexCount}, available=${availablePointCount})`,
+          `(topologyId=${String(expr.topologyId)}, needed=${controlPointCount}, available=${availablePointCount})`,
       );
     }
     const controlPoints = materializeValueExpr(
       expr.controlPointField,
       table,
       controlPointInstanceId,
-      vertexCount,
+      controlPointCount,
       state,
       program,
       undefined,
       scratch,
       pureFnContext,
     );
-    const words = new Uint32Array(vertexCount * 2);
-    for (let point = 0; point < vertexCount; point++) {
+
+    if (!isType2Curve) {
+      const words = new Uint32Array(controlPointCount * 2);
+      for (let point = 0; point < controlPointCount; point++) {
+        const pointBase = point * controlPointStride;
+        words[point * 2] = float32ToUint32Bits(controlPoints[pointBase]);
+        words[point * 2 + 1] = float32ToUint32Bits(controlPoints[pointBase + 1]);
+      }
+      return words;
+    }
+
+    const cpScalars = new Float32Array(8);
+    for (let point = 0; point < 4; point++) {
       const pointBase = point * controlPointStride;
-      words[point * 2] = float32ToUint32Bits(controlPoints[pointBase]);
-      words[point * 2 + 1] = float32ToUint32Bits(controlPoints[pointBase + 1]);
+      cpScalars[point * 2] = controlPoints[pointBase];
+      cpScalars[point * 2 + 1] = controlPoints[pointBase + 1];
+    }
+
+    const defaultResolution = topology.params[0]?.default ?? 64;
+    const defaultThickness = topology.params[1]?.default ?? 0.02;
+    const resolution = clampParametricResolution(
+      resolveShapeParamValue(
+        expr,
+        table,
+        state,
+        program,
+        scratch,
+        pureFnContext,
+        0,
+        defaultResolution,
+      ),
+    );
+    const thickness = clampParametricThickness(
+      resolveShapeParamValue(
+        expr,
+        table,
+        state,
+        program,
+        scratch,
+        pureFnContext,
+        1,
+        defaultThickness,
+      ),
+    );
+
+    // [LAW:dataflow-not-control-flow] Type 2 geometry always runs through the
+    // same cubic sampling path; variability is encoded in resolution/thickness values.
+    const contour = buildCubicRibbonContour(cpScalars, resolution, thickness);
+    vertexCount = contour.length >>> 1;
+    indexCount = vertexCount >= 3 ? (vertexCount - 2) * 3 : 0;
+    flags = SHAPE_FLAG_CLOSED;
+    shapeKind = SHAPE_KIND_PARAMETRIC;
+    topologyMode = 1;
+    const words = new Uint32Array(contour.length);
+    for (let i = 0; i < contour.length; i++) {
+      words[i] = float32ToUint32Bits(contour[i] as number);
     }
     return words;
   })();
@@ -176,8 +281,8 @@ function evaluateShapeRefHandle(
     shapeBank.data,
     handle,
     createShapeBankHeaderV1({
-      kind: 1,
-      topologyMode: isPath ? 1 : 0,
+      kind: shapeKind,
+      topologyMode,
       flags,
       indexCount,
       vertexCount,

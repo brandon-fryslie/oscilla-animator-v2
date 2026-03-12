@@ -2,7 +2,7 @@
  * useDebugMiniView - Reactive hook for DebugMiniView data.
  *
  * Reads DebugStore.hoveredEdgeId, resolves edge metadata, value, and
- * history from DebugService/HistoryService. Polls at 4Hz for responsiveness.
+ * history from DebugService/HistoryService. Polls at 10Hz for responsiveness.
  *
  * Returns null when nothing is hovered.
  */
@@ -16,7 +16,7 @@ import type { TrackedEntry } from './HistoryService';
 import type { SpyReadbackMeta } from './ValueRenderer';
 
 /** Poll interval for value updates (ms). */
-const POLL_INTERVAL_MS = 250;
+const POLL_INTERVAL_MS = 100;
 
 /**
  * Resolved data for the DebugMiniView to render.

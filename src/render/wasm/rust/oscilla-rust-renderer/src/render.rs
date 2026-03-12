@@ -174,9 +174,9 @@ impl RenderDispatcher {
                 resolve_target: None,
                 ops: wgpu::Operations {
                     load: wgpu::LoadOp::Clear(wgpu::Color {
-                        r: 0.05,
-                        g: 0.05,
-                        b: 0.05,
+                        r: 0.01,
+                        g: 0.015,
+                        b: 0.025,
                         a: 1.0,
                     }),
                     store: wgpu::StoreOp::Store,

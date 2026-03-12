@@ -98,6 +98,12 @@ export interface RustRendererRuntimeTelemetry {
   readonly lastEvent: RuntimeEventBreadcrumb | null;
 }
 
+export interface RustRendererGpuDebugReadback {
+  readonly frameCount: number;
+  readonly capturedAtMs: number;
+  readonly arenaWords: Float32Array;
+}
+
 export interface SinkTableDebugSample {
   readonly sinkTableWordCount: number;
   readonly totalRecords: number;
@@ -154,7 +160,7 @@ interface RendererFatalTransition {
 }
 
 const DEFAULT_BOOTSTRAP_CONFIG: RustRendererBootstrapConfig = Object.freeze({
-  maxParticles: 65_536,
+  maxParticles: 1_000_000,
   maxShapes: 65_536,
   debugReadbackHz: 0,
 });
@@ -463,7 +469,11 @@ function classifyWorkerAckMessage(
       message: payload.message,
     };
   }
-  if (payload.type === 'SCHEDULER_HEARTBEAT' || payload.type === 'RUNTIME_EVENT') {
+  if (
+    payload.type === 'SCHEDULER_HEARTBEAT'
+    || payload.type === 'RUNTIME_EVENT'
+    || payload.type === 'DEBUG_READBACK_PACKET'
+  ) {
     return { kind: 'ignore' };
   }
   // [LAW:single-enforcer] Ack message classification happens in one helper so
@@ -526,6 +536,7 @@ export class WebGPURenderer {
   private latestTelemetry: RustRendererRuntimeTelemetry | null = null;
   private lifecycleState: RustRendererSchedulerState = 'Booting';
   private latestRuntimeEvent: RuntimeEventBreadcrumb | null = null;
+  private latestGpuDebugReadback: RustRendererGpuDebugReadback | null = null;
   private lastInstalledPassIds: readonly string[] = [];
   private latestSinkTableSample: SinkTableDebugSample | null = null;
   private renderInputDebugLogged = false;
@@ -890,6 +901,10 @@ export class WebGPURenderer {
 
   getLatestSinkTableSample(): SinkTableDebugSample | null {
     return this.latestSinkTableSample;
+  }
+
+  getLatestGpuDebugReadback(): RustRendererGpuDebugReadback | null {
+    return this.latestGpuDebugReadback;
   }
 
   private throwIfFatalError(): void {
@@ -1409,7 +1424,12 @@ export class WebGPURenderer {
   private shouldIgnoreRuntimeMessage(
     payload: RustRendererWorkerOutboundMessage,
   ): boolean {
-    return this.fatalRecord !== null && (payload.type === 'SCHEDULER_HEARTBEAT' || payload.type === 'RUNTIME_EVENT');
+    return this.fatalRecord !== null
+      && (
+        payload.type === 'SCHEDULER_HEARTBEAT'
+        || payload.type === 'RUNTIME_EVENT'
+        || payload.type === 'DEBUG_READBACK_PACKET'
+      );
   }
 
   private handleEngineErrorMessage(
@@ -1434,6 +1454,18 @@ export class WebGPURenderer {
     if (payload.severity === 'fatal') {
       this.markRendererFatal(this.buildRuntimeEventFatalTransition(payload));
     }
+  }
+
+  private handleDebugReadbackMessage(
+    payload: Extract<RustRendererWorkerOutboundMessage, { type: 'DEBUG_READBACK_PACKET' }>,
+  ): void {
+    // [LAW:one-source-of-truth] GPU debug packet freshness/values are owned by
+    // the renderer worker payload and mirrored without reinterpretation here.
+    this.latestGpuDebugReadback = {
+      frameCount: payload.frameCount,
+      capturedAtMs: payload.capturedAtMs,
+      arenaWords: payload.arenaWords,
+    };
   }
 
   private handleFatalErrorMessage(
@@ -1489,6 +1521,10 @@ export class WebGPURenderer {
     }
     if (payload.type === 'RUNTIME_EVENT') {
       this.handleRuntimeEventMessage(payload);
+      return;
+    }
+    if (payload.type === 'DEBUG_READBACK_PACKET') {
+      this.handleDebugReadbackMessage(payload);
       return;
     }
     if (payload.type === 'SCHEDULER_HEARTBEAT') {

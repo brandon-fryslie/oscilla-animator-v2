@@ -58,7 +58,13 @@ import { LocalDebugProbeTransport } from './LocalDebugProbeTransport';
 import { createWasmDebugProbeTransport } from './WasmDebugProbeTransport';
 import type { CompiledGpuArtifactBundle } from './compile-worker-protocol';
 import { shaderInspector } from './ShaderInspectorService';
-import { buildRuntimeHotpathInstallPlanes } from './runtime-hotpath-install';
+import {
+  buildRuntimeHotpathInstallPlanes,
+} from './runtime-hotpath-install';
+import {
+  createDebugProbeRuntimeSnapshotFromArena,
+  extractDebugProbeSamplesFromRuntimeSnapshot,
+} from './DebugProbeRuntimeSnapshot';
 
 const INITIAL_COMPILE_FAILURE_PROBE_MESSAGE =
   'initial_compile_failed: animation loop started but no program is ready';
@@ -124,6 +130,7 @@ export class RuntimeService {
   private debugProbeUpgradeInFlight: Promise<void> | null = null;
   private spyReadbackAnomalyFrameId: number | null = null;
   private readonly spyReadbackAnomalyKeysForFrame = new Set<string>();
+  private lastGpuDebugReadbackKey: string | null = null;
 
   constructor(
     private readonly store: RootStore,
@@ -530,9 +537,20 @@ export class RuntimeService {
         }
       }
 
+      let initialCompileErrorMessage: string | null = null;
       // [LAW:single-enforcer] Startup compile must flow through the async worker
       // path so the main thread never runs compiler lowering/linking directly.
-      await this.runInitialCompileViaWorker();
+      try {
+        await this.runInitialCompileViaWorker();
+      } catch (error) {
+        initialCompileErrorMessage = error instanceof Error ? error.message : String(error);
+        // [LAW:dataflow-not-control-flow] Initial compile failure is represented
+        // as runtime data; startup continues so later valid edits can recover.
+        store.diagnostics.log({
+          level: 'error',
+          message: `Initial compilation failed: ${initialCompileErrorMessage}`,
+        });
+      }
       const initialCompileSucceeded =
         this.compileState.currentProgram !== null &&
         this.compileState.currentState !== null;
@@ -641,6 +659,7 @@ export class RuntimeService {
     shaderInspector.clear();
     this.statsSink = null;
     this.runtimeReadySink = null;
+    this.lastGpuDebugReadbackKey = null;
   }
 
   private bindSpyReadbackTracking(): void {
@@ -755,7 +774,7 @@ export class RuntimeService {
     }
     this.spyReadbackInFlight = true;
     try {
-      const packet = this.buildSpyReadbackPacket(performance.now());
+      const packet = this.buildSpyReadbackPacket();
       if (!packet) {
         return;
       }
@@ -766,35 +785,66 @@ export class RuntimeService {
     }
   }
 
-  private buildSpyReadbackPacket(capturedAtMs: number): RuntimeSpyReadbackPacket | null {
-    const probePacket = this.debugProbeTransport.debugPollPacket(capturedAtMs);
-    if (!probePacket) {
-      return null;
-    }
-
-    const entries: RuntimeSpyReadbackEntry[] = [];
-    for (const sample of probePacket.samples) {
-      if (sample.payloadKind === 'scalar') {
-        if (sample.values.length < 1) {
-          continue;
+  private buildSpyReadbackPacket(): RuntimeSpyReadbackPacket | null {
+    const program = this.compileState.currentProgram;
+    const subscriptions = debugService.getTrackedDebugProbeSubscriptions(16);
+    const gpuReadback = this.renderer?.getLatestGpuDebugReadback();
+    if (program && gpuReadback && subscriptions.length > 0) {
+      const frameId = Math.max(0, Math.floor(gpuReadback.frameCount));
+      const readbackKey = `${frameId}:${Math.floor(gpuReadback.capturedAtMs * 1000)}`;
+      if (this.lastGpuDebugReadbackKey !== readbackKey) {
+        this.lastGpuDebugReadbackKey = readbackKey;
+        const snapshot = createDebugProbeRuntimeSnapshotFromArena(
+          program,
+          gpuReadback.arenaWords,
+          frameId,
+          subscriptions,
+        );
+        if (snapshot) {
+          const { packetFlags, samples } = extractDebugProbeSamplesFromRuntimeSnapshot(
+            snapshot,
+            subscriptions,
+          );
+          const packet = this.buildRuntimeSpyReadbackPacket(
+            gpuReadback.capturedAtMs,
+            frameId,
+            packetFlags >>> 0,
+            samples,
+          );
+          if (packet) {
+            return packet;
+          }
         }
-        const value = sample.values[0];
-        entries.push({
-          slotId: sample.slotId,
-          value,
-        });
       }
     }
-    if (probePacket.samples.length === 0) {
+    return null;
+  }
+
+  private buildRuntimeSpyReadbackPacket(
+    packetCapturedAtMs: number,
+    runtimeFrameId: number,
+    packetFlags: number,
+    samples: readonly DebugProbePacketSample[],
+  ): RuntimeSpyReadbackPacket | null {
+    if (samples.length === 0) {
       return null;
     }
-
+    const entries: RuntimeSpyReadbackEntry[] = [];
+    for (const sample of samples) {
+      if (sample.payloadKind !== 'scalar' || sample.values.length < 1) {
+        continue;
+      }
+      entries.push({
+        slotId: sample.slotId,
+        value: sample.values[0]!,
+      });
+    }
     return {
-      capturedAtMs: probePacket.capturedAtMs,
-      frameId: probePacket.runtimeFrameId,
-      packetFlags: probePacket.packetFlags >>> 0,
+      capturedAtMs: packetCapturedAtMs,
+      frameId: runtimeFrameId,
+      packetFlags: packetFlags >>> 0,
       entries,
-      samples: probePacket.samples,
+      samples,
     };
   }
 

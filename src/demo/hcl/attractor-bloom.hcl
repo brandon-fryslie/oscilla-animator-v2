@@ -280,4 +280,5 @@ patch "Attractor Bloom" {
   block "RenderInstances2D" "base_render" {}
   block "RenderInstances2D" "soft_render" {}
   block "RenderInstances2D" "hard_render" {}
+
 }

@@ -1,10 +1,9 @@
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use js_sys::{Atomics, Float32Array, Int32Array, SharedArrayBuffer, Uint32Array};
 use wasm_bindgen::JsCast;
 use wasm_bindgen::JsValue;
-use web_sys::console;
 use web_sys::OffscreenCanvas;
 
 use crate::allocator::StrictAllocator;
@@ -370,9 +369,18 @@ struct VertexOutput {
 
 @fragment
 fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
+  // [LAW:single-enforcer] Global demo color grading is applied once in the
+  // fragment sink so all demo patches share one canonical visual treatment.
+  let baseRgb = clamp(input.color.rgb, vec3<f32>(0.0), vec3<f32>(1.0));
+  let luminance = dot(baseRgb, vec3<f32>(0.2126, 0.7152, 0.0722));
+  let saturated = mix(vec3<f32>(luminance), baseRgb, 1.18);
+  let contrasted = (saturated - vec3<f32>(0.5)) * 1.08 + vec3<f32>(0.5);
+  let lifted = contrasted + contrasted * contrasted * 0.08;
+  let gradedRgb = clamp(lifted, vec3<f32>(0.0), vec3<f32>(1.0));
+  let gradedAlpha = clamp(input.color.a * 1.03, 0.0, 1.0);
   // [LAW:single-enforcer] Fragment stage outputs premultiplied alpha so browser
   // compositing and pipeline blending share one canonical alpha contract.
-  return vec4<f32>(input.color.rgb * input.color.a, input.color.a);
+  return vec4<f32>(gradedRgb * gradedAlpha, gradedAlpha);
 }
 "#;
 
@@ -380,6 +388,13 @@ pub struct EngineConfig {
     pub max_particles: usize,
     pub max_shapes: usize,
     pub debug_readback_hz: u32,
+}
+
+#[derive(Clone)]
+pub struct DebugReadbackPacket {
+    pub frame_count: u64,
+    pub captured_at_ms: f64,
+    pub arena_words: Vec<f32>,
 }
 
 pub struct Engine {
@@ -400,6 +415,7 @@ pub struct Engine {
     frame_count: u64,
     debug_readback_interval_frames: u64,
     debug_readback_in_flight: Arc<AtomicBool>,
+    latest_debug_readback: Arc<Mutex<Option<DebugReadbackPacket>>>,
     max_particles: u32,
     max_shapes: u32,
     draw_regions: IndirectRegionPlan,
@@ -721,6 +737,7 @@ impl Engine {
             frame_count: 0,
             debug_readback_interval_frames,
             debug_readback_in_flight: Arc::new(AtomicBool::new(false)),
+            latest_debug_readback: Arc::new(Mutex::new(None)),
             max_particles: config.max_particles as u32,
             max_shapes: config.max_shapes as u32,
             draw_regions: IndirectRegionPlan::default(),
@@ -927,13 +944,15 @@ impl Engine {
                 let is_debug_tick = self.debug_readback_interval_frames > 0
                     && self.frame_count % self.debug_readback_interval_frames == 0;
                 if is_debug_tick {
+                    let read_index = self.arena.ping_pong_index();
+                    let readback_source = self.arena.compiler_arena_buffer_for_index(read_index);
                     let copy_bytes = self
                         .arena
                         .debug_staging_buffer()
                         .size()
-                        .min(self.arena.instance_buffer.size());
+                        .min(readback_source.size());
                     encoder.copy_buffer_to_buffer(
-                        &self.arena.instance_buffer,
+                        readback_source,
                         0,
                         self.arena.debug_staging_buffer(),
                         0,
@@ -974,7 +993,7 @@ impl Engine {
                 // [LAW:single-enforcer] Async map callbacks can allocate in
                 // browser glue and therefore run only after lock scope exits.
                 if debug_tick {
-                    self.trigger_debug_readback();
+                    self.trigger_debug_readback(frame_count);
                 }
                 let now_ms = worker_monotonic_now_ms();
                 let tick_elapsed_ms = (now_ms - tick_start_ms).max(0.0);
@@ -1189,10 +1208,13 @@ impl Engine {
             total_instance_count = total_instance_count
                 .saturating_add(plane_words[record_base + SINK_RECORD_WORD_INSTANCE_COUNT]);
         }
+        // [LAW:single-enforcer] Instance fan-out safety is enforced at the
+        // renderer boundary: runtime dispatch count never exceeds engine capacity.
+        let capped_total_instance_count = total_instance_count.min(self.max_particles);
         // [LAW:single-enforcer] Indirect args are authored by the canonical
         // GPU draw-prep pass; CPU mirror writes are intentionally removed.
         IndirectRegionPlan {
-            total_instance_count,
+            total_instance_count: capped_total_instance_count,
             indexed_record_count,
             non_indexed_record_count,
             indexed_region_base_words,
@@ -1239,7 +1261,10 @@ impl Engine {
             uniforms.view_proj[3][1] = ty;
             uniforms.view_proj[3][3] = 1.0;
             let install_revision =
-                parse_finite_u32(shared_input.get_index(INPUT_WORD_INSTALL_REVISION as u32), "installRevision");
+                parse_finite_u32(
+                    shared_input.get_index(INPUT_WORD_INSTALL_REVISION as u32).into(),
+                    "installRevision",
+                );
             // [LAW:single-enforcer] Shared-plane upload ownership is gated by
             // one install revision word; per-frame ticks do not re-copy planes.
             if install_revision != self.last_install_revision {
@@ -1265,11 +1290,11 @@ impl Engine {
                             .saturating_add(SINK_TABLE_HEADER_WORDS as u32)
                     });
                 let shape_bank_words = parse_finite_u32(
-                    shared_input.get_index(INPUT_WORD_SHAPE_BANK_WORDS as u32),
+                    shared_input.get_index(INPUT_WORD_SHAPE_BANK_WORDS as u32).into(),
                     "shapeBankWordCount",
                 );
                 let sink_table_words = parse_finite_u32(
-                    shared_input.get_index(INPUT_WORD_SINK_TABLE_WORDS as u32),
+                    shared_input.get_index(INPUT_WORD_SINK_TABLE_WORDS as u32).into(),
                     "sinkTableWordCount",
                 );
                 if shape_bank_words > shape_bank_word_limit {
@@ -1308,7 +1333,7 @@ impl Engine {
         self.arena.update_uniforms(&self.queue, uniforms);
     }
 
-    fn trigger_debug_readback(&self) {
+    fn trigger_debug_readback(&self, frame_count: u64) {
         if self
             .debug_readback_in_flight
             .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
@@ -1318,18 +1343,17 @@ impl Engine {
         }
 
         let readback_gate = self.debug_readback_in_flight.clone();
+        let readback_store = self.latest_debug_readback.clone();
+        let captured_at_ms = worker_monotonic_now_ms();
         let slice = self.arena.debug_staging_buffer().slice(..);
         let staging_buffer_for_callback = self.arena.debug_staging_buffer().clone();
         let _ = slice.map_async(wgpu::MapMode::Read, move |result| {
             if result.is_ok() {
                 let mapped = staging_buffer_for_callback.slice(..).get_mapped_range();
-                let preview_f32_count = (mapped.len() / std::mem::size_of::<f32>()).min(24);
-                if preview_f32_count > 0 {
-                    let mut preview = String::new();
-                    for index in 0..preview_f32_count {
-                        if index > 0 {
-                            preview.push_str(", ");
-                        }
+                let word_count = mapped.len() / std::mem::size_of::<f32>();
+                if word_count > 0 {
+                    let mut arena_words = Vec::with_capacity(word_count);
+                    for index in 0..word_count {
                         let byte_index = index * std::mem::size_of::<f32>();
                         let value = f32::from_le_bytes([
                             mapped[byte_index],
@@ -1337,14 +1361,17 @@ impl Engine {
                             mapped[byte_index + 2],
                             mapped[byte_index + 3],
                         ]);
-                        preview.push_str(&format!("{value:.3}"));
+                        arena_words.push(value);
                     }
-                    // [LAW:single-enforcer] exception: temporary observability log
-                    // for instance payload verification during migration.
-                    console::info_1(&JsValue::from_str(&format!(
-                        "[instancePreview] {}",
-                        preview
-                    )));
+                    if let Ok(mut packet_slot) = readback_store.lock() {
+                        // [LAW:single-enforcer] The renderer engine is the
+                        // sole owner that publishes GPU arena readback packets.
+                        *packet_slot = Some(DebugReadbackPacket {
+                            frame_count,
+                            captured_at_ms,
+                            arena_words,
+                        });
+                    }
                 }
                 drop(mapped);
             }
@@ -1358,6 +1385,14 @@ impl Engine {
         // so all observability packets are drained from one owner.
         self.scheduler
             .take_observability_packet(worker_monotonic_now_ms())
+    }
+
+    pub fn take_debug_readback_packet(&mut self) -> Option<DebugReadbackPacket> {
+        // [LAW:single-enforcer] Engine owns the GPU debug readback queue.
+        self.latest_debug_readback
+            .lock()
+            .ok()
+            .and_then(|mut packet_slot| packet_slot.take())
     }
 
     pub fn inject_poison_alloc(&self) {

@@ -127,9 +127,17 @@ fn vs_main(input: VertexInput, @builtin(instance_index) instanceIndex: u32) -> V
 
 @fragment
 fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
+  // [LAW:single-enforcer] Apply canonical demo color grading at fragment sink.
+  let baseRgb = clamp(input.color.rgb, vec3<f32>(0.0), vec3<f32>(1.0));
+  let luminance = dot(baseRgb, vec3<f32>(0.2126, 0.7152, 0.0722));
+  let saturated = mix(vec3<f32>(luminance), baseRgb, 1.18);
+  let contrasted = (saturated - vec3<f32>(0.5)) * 1.08 + vec3<f32>(0.5);
+  let lifted = contrasted + contrasted * contrasted * 0.08;
+  let gradedRgb = clamp(lifted, vec3<f32>(0.0), vec3<f32>(1.0));
+  let gradedAlpha = clamp(input.color.a * 1.03, 0.0, 1.0);
   // [LAW:single-enforcer] Fragment stage outputs premultiplied alpha so browser
   // compositing and pipeline blending share one canonical alpha contract.
-  return vec4<f32>(input.color.rgb * input.color.a, input.color.a);
+  return vec4<f32>(gradedRgb * gradedAlpha, gradedAlpha);
 }
 `;
 

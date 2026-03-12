@@ -18,6 +18,14 @@ registerAllBlocks();
 
 const HCL_DIR = join(__dirname, '..');
 const hclFiles = readdirSync(HCL_DIR).filter(f => f.endsWith('.hcl'));
+const demoFilter = (process.env.DEMO_FILTER ?? '').trim();
+const filteredHclFiles = demoFilter.length > 0
+  ? hclFiles.filter((file) => file === demoFilter)
+  : hclFiles;
+
+if (demoFilter.length > 0 && filteredHclFiles.length === 0) {
+  throw new Error(`DEMO_FILTER="${demoFilter}" did not match any demo in ${HCL_DIR}`);
+}
 
 function expectedCompileErrorSubstring(hcl: string): string | null {
   const match = hcl.match(/@expect-compile-error(?:\s+([^\n\r]+))?/);
@@ -27,7 +35,9 @@ function expectedCompileErrorSubstring(hcl: string): string | null {
 }
 
 describe('HCL demo patches', () => {
-  for (const file of hclFiles) {
+  // [LAW:single-enforcer] Demo filtering is enforced once at test-file entry;
+  // all per-demo checks consume the same filtered source set.
+  for (const file of filteredHclFiles) {
     describe(file, () => {
       const hcl = readFileSync(join(HCL_DIR, file), 'utf-8');
       const expectedCompileError = expectedCompileErrorSubstring(hcl);

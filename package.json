@@ -15,6 +15,8 @@
     "test:memory": "VITEST_EXPOSE_GC=1 vitest run src/__tests__/memory-profile.test.ts",
     "test:webgpu-matrix": "node scripts/webgpu-browser-matrix.mjs",
     "test:rust-worker-gates": "pnpm run -s build:rust-renderer && playwright test tests/e2e/webgpu/rust-worker-gates.spec.ts",
+    "check:demo-compile": "./scripts/compile-demo-patch.sh all",
+    "check:demo-compile:one": "./scripts/compile-demo-patch.sh",
     "ci:webgpu-readiness": "node scripts/webgpu-ci-readiness-gate.mjs",
     "test:migration-readiness": "node scripts/webgpu-migration-readiness.mjs",
     "bench": "vitest bench",

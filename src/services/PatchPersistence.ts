@@ -11,6 +11,7 @@ import { serializePatchToHCL, deserializePatchFromHCL, type PatchDslError } from
 import { resolveLocalStorageCapability } from './local-storage-capability';
 
 export const STORAGE_KEY = 'oscilla-v2-patch-v11'; // Bumped for required edge alias persistence.
+const TEST_DEMO_SESSION_KEY = 'oscilla-test:loadDemoPatch';
 const MAX_PERSISTENCE_ISSUES = 128;
 
 export type PatchPersistenceIssueLevel = 'warn' | 'error';
@@ -249,6 +250,11 @@ export function clearStorageAndReload(): void {
     // [LAW:single-enforcer] localStorage capability detection is centralized.
     const storage = resolveLocalStorageCapability();
     storage?.removeItem?.(STORAGE_KEY);
+    // [LAW:single-enforcer] Reset action clears the test demo bootstrap marker
+    // so startup cannot remain pinned to a stale loadDemoPatch session flag.
+    if (typeof sessionStorage !== 'undefined') {
+      sessionStorage.removeItem(TEST_DEMO_SESSION_KEY);
+    }
   } catch (error) {
     // [LAW:no-silent-fallbacks] Clear failures should be visible as operational warnings.
     recordIssue({

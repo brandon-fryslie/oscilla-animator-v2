@@ -165,6 +165,13 @@ export interface RustRendererRuntimeEvent {
   readonly emittedAtMs: number;
 }
 
+export interface RustRendererDebugReadbackPacket {
+  readonly type: 'DEBUG_READBACK_PACKET';
+  readonly frameCount: number;
+  readonly capturedAtMs: number;
+  readonly arenaWords: Float32Array;
+}
+
 export type RustRendererWorkerOutboundMessage =
   | RustRendererBootstrapSuccess
   | RustRendererEngineError
@@ -172,4 +179,5 @@ export type RustRendererWorkerOutboundMessage =
   | RustRendererRebuildGpuPipelinesSuccess
   | RustRendererDeviceLost
   | RustRendererSchedulerHeartbeat
-  | RustRendererRuntimeEvent;
+  | RustRendererRuntimeEvent
+  | RustRendererDebugReadbackPacket;

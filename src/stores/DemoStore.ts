@@ -9,7 +9,7 @@
  * [LAW:single-enforcer] Only DemoStore mutates demo selection state.
  */
 
-import { makeObservable, observable, action } from 'mobx';
+import { makeObservable, observable, action, computed } from 'mobx';
 import { hclDemos, type HclDemo } from '../demo';
 import type { PatchStore } from './PatchStore';
 
@@ -20,9 +20,19 @@ export class DemoStore {
   constructor(private readonly patchStore: PatchStore) {
     makeObservable(this, {
       currentFilename: observable,
+      standardDemos: computed,
+      diagnosticDemos: computed,
       selectDemo: action,
       loadDefault: action,
     });
+  }
+
+  get standardDemos(): readonly HclDemo[] {
+    return this.demos.filter((demo) => demo.category === 'standard');
+  }
+
+  get diagnosticDemos(): readonly HclDemo[] {
+    return this.demos.filter((demo) => demo.category === 'diagnostic');
   }
 
   /**

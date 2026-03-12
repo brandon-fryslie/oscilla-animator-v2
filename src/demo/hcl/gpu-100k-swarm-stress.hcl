@@ -1,14 +1,13 @@
-# GPU 100K Swarm Stress
+# GPU 10K Swarm Stress
 #
 # GPU-only stress demo:
-# - 100,000 simultaneously animated instances (250x400 field)
+# - 10,000 simultaneously animated instances (100x100 field)
 # - layered trigonometric field warping in Expression
 # - per-instance scale modulation and hue drift
 #
-# Note: current Rust bootstrap config caps shapes/particles at 100,000.
-# This patch intentionally drives that ceiling.
+# Note: this patch intentionally drives a high instance load near safety limits.
 
-patch "GPU 100K Swarm Stress" {
+patch "GPU 10K Swarm Stress" {
   block "InfiniteTimeRoot" "clock" {
     periodAMs = 18000
     periodBMs = 7000
@@ -28,7 +27,7 @@ patch "GPU 100K Swarm Stress" {
   }
 
   block "Array" "swarm" {
-    count = 100000
+    count = 10000
     outputs {
       elements = lattice.elements
       t = [position.refs, scale.refs, hue-shift.b]
@@ -36,8 +35,8 @@ patch "GPU 100K Swarm Stress" {
   }
 
   block "GridLayoutUV" "lattice" {
-    rows = 250
-    cols = 400
+    rows = 100
+    cols = 100
     outputs {
       controlPoints = [position.refs, scale.refs]
     }
@@ -112,4 +111,78 @@ patch "GPU 100K Swarm Stress" {
   }
 
   block "RenderInstances2D" "render" {}
+
+  # spice_overlay_v2: radial accent layer
+  block "Rect" "spicea_tile" {
+    width = 0.009
+    height = 0.009
+    cornerRadius = 0.002
+    outputs {
+      shape = spicea_instances.element
+    }
+  }
+
+  block "Array" "spicea_instances" {
+    count = 36
+    outputs {
+      elements = spicea_layout.elements
+      t = [spicea_offset.refs, spicea_color.h]
+    }
+  }
+
+  block "CircleLayoutUV" "spicea_layout" {
+    radius = 0.44
+    outputs {
+      controlPoints = spicea_offset.refs
+    }
+  }
+
+  block "Expression" "spicea_offset" {
+    expression = <<-EXPR
+      lane = spicea_instances.t * 31.4159
+      x = spicea_layout.controlPoints.x + 0.018 * sin(lane)
+      y = spicea_layout.controlPoints.y + 0.018 * cos(lane * 1.3)
+      vec2(x, y)
+    EXPR
+    outputs {
+      out = spicea_render.controlPoints
+    }
+  }
+
+  block "Const" "spicea_scale" {
+    value = 0.38
+    outputs {
+      out = spicea_render.scale
+    }
+  }
+
+  block "Const" "spicea_sat" {
+    value = 0.84
+    outputs {
+      out = spicea_color.s
+    }
+  }
+
+  block "Const" "spicea_light" {
+    value = 0.72
+    outputs {
+      out = spicea_color.l
+    }
+  }
+
+  block "Const" "spicea_alpha" {
+    value = 0.7
+    outputs {
+      out = spicea_color.a
+    }
+  }
+
+  block "MakeColorOKLCH" "spicea_color" {
+    outputs {
+      color = spicea_render.color
+    }
+  }
+
+  block "RenderInstances2D" "spicea_render" {}
+
 }

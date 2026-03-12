@@ -8,7 +8,7 @@ mod scheduler;
 
 use std::cell::RefCell;
 
-use js_sys::{Array, Function, Object};
+use js_sys::{Array, Float32Array, Function, Object};
 use wasm_bindgen::closure::Closure;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
@@ -516,6 +516,40 @@ pub fn take_frame_pacing_packet() -> Result<JsValue, JsValue> {
                 &payload,
                 &JsValue::from_str("frameCount"),
                 &JsValue::from_f64(packet.heartbeat.frame_count as f64),
+            )?;
+            return Ok(payload.into());
+        }
+        Ok(JsValue::NULL)
+    })
+}
+
+#[wasm_bindgen]
+pub fn take_debug_readback_packet() -> Result<JsValue, JsValue> {
+    ENGINE.with(|engine_cell| {
+        let mut engine_ref = engine_cell.borrow_mut();
+        let engine = engine_ref.as_mut().ok_or_else(|| {
+            JsValue::from_str("Rust engine must be initialized before take_debug_readback_packet")
+        })?;
+        if let Some(packet) = engine.take_debug_readback_packet() {
+            let payload = Object::new();
+            js_sys::Reflect::set(
+                &payload,
+                &JsValue::from_str("frameCount"),
+                &JsValue::from_f64(packet.frame_count as f64),
+            )?;
+            js_sys::Reflect::set(
+                &payload,
+                &JsValue::from_str("capturedAtMs"),
+                &JsValue::from_f64(packet.captured_at_ms),
+            )?;
+            let arena_words = Float32Array::new_with_length(packet.arena_words.len() as u32);
+            arena_words.copy_from(packet.arena_words.as_slice());
+            // [LAW:single-enforcer] The wasm engine boundary owns debug packet
+            // serialization from Rust-native vectors into JS typed arrays.
+            js_sys::Reflect::set(
+                &payload,
+                &JsValue::from_str("arenaWords"),
+                &arena_words.into(),
             )?;
             return Ok(payload.into());
         }

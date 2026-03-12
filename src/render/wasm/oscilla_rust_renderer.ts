@@ -19,6 +19,7 @@ interface RendererWasmModule {
   readonly resume_engine?: () => void;
   readonly inject_poison_alloc?: () => void;
   readonly take_frame_pacing_packet?: () => unknown;
+  readonly take_debug_readback_packet?: () => unknown;
   readonly rebuild_gpu_pipelines?: (
     passes: readonly RustRendererGpuPass[],
   ) => Promise<void> | void;
@@ -35,6 +36,7 @@ let pauseEngineImpl: RendererWasmModule['pause_engine'] | null = null;
 let resumeEngineImpl: RendererWasmModule['resume_engine'] | null = null;
 let injectPoisonAllocImpl: RendererWasmModule['inject_poison_alloc'] | null = null;
 let takeFramePacingPacketImpl: RendererWasmModule['take_frame_pacing_packet'] | null = null;
+let takeDebugReadbackPacketImpl: RendererWasmModule['take_debug_readback_packet'] | null = null;
 let rebuildGpuPipelinesImpl: RendererWasmModule['rebuild_gpu_pipelines'] | null = null;
 
 export async function initRustRendererWasm(): Promise<void> {
@@ -84,6 +86,9 @@ export async function initRustRendererWasm(): Promise<void> {
       if (typeof wasmModule.take_frame_pacing_packet !== 'function') {
         throw new Error('Rust renderer wasm module missing take_frame_pacing_packet export');
       }
+      if (typeof wasmModule.take_debug_readback_packet !== 'function') {
+        throw new Error('Rust renderer wasm module missing take_debug_readback_packet export');
+      }
       initEngineImpl = wasmModule.init_engine.bind(wasmModule);
       attachSharedInputImpl = wasmModule.attach_shared_input.bind(wasmModule);
       attachSharedShapeBankImpl = wasmModule.attach_shared_shape_bank.bind(wasmModule);
@@ -93,6 +98,7 @@ export async function initRustRendererWasm(): Promise<void> {
       resumeEngineImpl = wasmModule.resume_engine.bind(wasmModule);
       injectPoisonAllocImpl = wasmModule.inject_poison_alloc.bind(wasmModule);
       takeFramePacingPacketImpl = wasmModule.take_frame_pacing_packet.bind(wasmModule);
+      takeDebugReadbackPacketImpl = wasmModule.take_debug_readback_packet.bind(wasmModule);
       rebuildGpuPipelinesImpl = wasmModule.rebuild_gpu_pipelines.bind(wasmModule);
       initialized = true;
     })().catch((error) => {
@@ -175,6 +181,13 @@ export function takeRustRendererFramePacingPacket(): unknown {
     throw new Error('Rust renderer wasm is not initialized');
   }
   return takeFramePacingPacketImpl();
+}
+
+export function takeRustRendererDebugReadbackPacket(): unknown {
+  if (!initialized || !takeDebugReadbackPacketImpl) {
+    throw new Error('Rust renderer wasm is not initialized');
+  }
+  return takeDebugReadbackPacketImpl();
 }
 
 export async function rebuildRustRendererGpuPipelines(

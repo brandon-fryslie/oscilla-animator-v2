@@ -3,7 +3,7 @@ import { deserializePatchFromHCL } from '../../../patch-dsl/index';
 import { compileFrontend } from '../../../compiler/frontend/index';
 import '../../all';
 import { getBlockDefinition } from '../../registry';
-import { createLinePathTopology } from '../_topology-helpers';
+import { createLinePathTopology, createParametricCubicPathTopology } from '../_topology-helpers';
 
 describe('MakeShape2D block', () => {
   it('is registered', () => {
@@ -88,6 +88,69 @@ patch "Test Pipeline" {
     expect(assembleBlock).toBeDefined();
     const renderBlock = result.typedPatch.blocks.find(b => b.type === 'RenderInstances2D');
     expect(renderBlock).toBeDefined();
+  });
+});
+
+describe('ParametricCurve2D block', () => {
+  it('is registered', () => {
+    expect(getBlockDefinition('ParametricCurve2D')).toBeDefined();
+  });
+
+  it('frontend compiles rect -> wobble -> parametric -> render pipeline', () => {
+    const hcl = `
+patch "Test Parametric Curve 2D" {
+  block "InfiniteTimeRoot" "clock" {
+    periodAMs = 5000
+    role = "timeRoot"
+    outputs {
+      phaseA = wobble.phase
+    }
+  }
+
+  block "Rect" "anchors" {
+    width = 0.2
+    height = 0.14
+    outputs {
+      controlPoints = wobble.controlPoints
+    }
+  }
+
+  block "ShapeWobble2D" "wobble" {
+    amount = 0.04
+    frequency = 2.5
+    outputs {
+      points = curve.controlPoints
+    }
+  }
+
+  block "ParametricCurve2D" "curve" {
+    resolution = 80
+    thickness = 0.02
+    outputs {
+      shape = arr.element
+    }
+  }
+
+  block "Array" "arr" {
+    count = 16
+    outputs {
+      elements = layout.elements
+    }
+  }
+
+  block "CircleLayoutUV" "layout" {
+    radius = 0.22
+    outputs {
+      controlPoints = render.controlPoints
+    }
+  }
+
+  block "RenderInstances2D" "render" {}
+}`;
+    const { patch, errors } = deserializePatchFromHCL(hcl);
+    expect(errors).toEqual([]);
+    const result = compileFrontend(patch);
+    expect(result.typedPatch.blocks.some((b) => b.type === 'ParametricCurve2D')).toBe(true);
   });
 });
 
@@ -177,5 +240,16 @@ describe('createLinePathTopology', () => {
 
   it('throws for fewer than 2 points', () => {
     expect(() => createLinePathTopology(1, false)).toThrow('at least 2 points');
+  });
+});
+
+describe('createParametricCubicPathTopology', () => {
+  it('declares canonical cubic type-2 schema', () => {
+    const topology = createParametricCubicPathTopology();
+    expect(topology.closed).toBe(true);
+    expect(topology.totalControlPoints).toBe(4);
+    expect(topology.verbs.length).toBe(3);
+    expect(topology.pointsPerVerb).toEqual([1, 3, 0]);
+    expect(topology.params.map((p) => p.name)).toEqual(['resolution', 'thickness']);
   });
 });
