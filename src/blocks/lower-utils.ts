@@ -43,6 +43,20 @@ export function mapAuto(
 }
 
 /**
+ * Promote a one-cardinality value to a many-cardinality field.
+ * // [LAW:single-enforcer] Raw one→many broadcast invocation for block lowering
+ * is centralized here to keep policy/mechanics in one boundary.
+ */
+export function promoteToMany(
+  one: ValueExprId,
+  outType: CanonicalType,
+  b: BlockIRBuilder,
+  oneComponents?: readonly ValueExprId[],
+): ValueExprId {
+  return b.broadcast(one, outType, oneComponents);
+}
+
+/**
  * Resolve an input to a compile-time constant value.
  * For inputs that must lower to a const (Array.count, ProceduralPolygon.sides, etc.).
  *

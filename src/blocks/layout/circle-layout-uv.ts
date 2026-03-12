@@ -12,6 +12,7 @@
   import { defaultSourceConst } from '../../types';
   import { OpCode } from '../../compiler/ir/types';
   import { rewriteFieldType } from './_helpers';
+  import { promoteToMany } from '../lower-utils';
 
   // [LAW:one-source-of-truth] Field cardinality behavior is declared on CT/ICT port types.
   const CIRCLE_FIELD_CARD = cardinalityVar(cardinalityVarId('circle_fields'), {
@@ -129,7 +130,7 @@
     
           // rotation = angle (the circle angle per element, already computed)
           // scale = broadcast constant 1.0
-          const scaleField = ctx.b.broadcast(const1, floatFieldType);
+          const scaleField = promoteToMany(const1, floatFieldType, ctx.b);
     
           return {
             outputsById: {

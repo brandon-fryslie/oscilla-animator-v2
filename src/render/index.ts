@@ -17,16 +17,16 @@ export {
   clearRenderIssues,
 } from './render-issues';
 
-// Re-export v2 types (now the only types)
+// Re-export canonical runtime->renderer boundary types.
 export type {
   DrawPrepRenderContract,
-  PathStyle,
-  PathGeometry,
-  InstanceTransforms,
-  DrawPathInstancesOp,
-  LegacyRenderFrame,
-  DrawOp,
+  MatrixViewportContract,
+  RuntimeInputSignalContract,
 } from './types';
 
 // RenderBufferArena for zero-allocation rendering
 export { RenderBufferArena } from './RenderBufferArena';
+
+export function renderBoundaryName(): string {
+  return 'webgpu-canonical-boundary';
+}

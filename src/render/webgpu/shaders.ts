@@ -109,6 +109,38 @@ fn oklch_to_linear_srgb(h: f32, c: f32, l: f32) -> vec3<f32> {
   );
 }
 
+fn build_model_matrix(centerPx: vec2<f32>, scalePx: vec2<f32>, rotationRad: f32) -> mat3x3<f32> {
+  let c = cos(rotationRad);
+  let s = sin(rotationRad);
+  let scaleRotate = mat3x3<f32>(
+    vec3<f32>(c * scalePx.x, s * scalePx.x, 0.0),
+    vec3<f32>(-s * scalePx.y, c * scalePx.y, 0.0),
+    vec3<f32>(0.0, 0.0, 1.0)
+  );
+  let translate = mat3x3<f32>(
+    vec3<f32>(1.0, 0.0, 0.0),
+    vec3<f32>(0.0, 1.0, 0.0),
+    vec3<f32>(centerPx.x, centerPx.y, 1.0)
+  );
+  return translate * scaleRotate;
+}
+
+fn build_view_projection_matrix(viewportPx: vec2<f32>, panPx: vec2<f32>, zoom: f32) -> mat3x3<f32> {
+  let viewTranslate = (viewportPx * 0.5) * (1.0 - zoom) + (panPx * zoom);
+  let view = mat3x3<f32>(
+    vec3<f32>(zoom, 0.0, 0.0),
+    vec3<f32>(0.0, zoom, 0.0),
+    vec3<f32>(viewTranslate.x, viewTranslate.y, 1.0)
+  );
+  // [LAW:single-enforcer] Aspect correction is owned by the View->Clip matrix.
+  let viewToClip = mat3x3<f32>(
+    vec3<f32>(2.0 / viewportPx.x, 0.0, 0.0),
+    vec3<f32>(0.0, -2.0 / viewportPx.y, 0.0),
+    vec3<f32>(-1.0, 1.0, 1.0)
+  );
+  return viewToClip * view;
+}
+
 @vertex
 fn vs_main(input: VertexInput, @builtin(instance_index) instanceIndex: u32) -> VertexOutput {
   let inst = instances[instanceIndex];
@@ -123,28 +155,19 @@ fn vs_main(input: VertexInput, @builtin(instance_index) instanceIndex: u32) -> V
   let viewportMinPx = scene.v1.y;
 
   let centerPx = inst.transform0.xy * viewportPx;
-  let centeredPx = (centerPx - (viewportPx * 0.5)) * zoom + (viewportPx * 0.5) + (panPx * zoom);
-
-  let localScaled = vec2<f32>(
-    input.localPos.x * inst.transform0.z * inst.transform1.x,
-    input.localPos.y * inst.transform0.z * inst.transform1.y
-  ) * viewportMinPx * zoom;
-
-  let c = cos(inst.transform0.w);
-  let s = sin(inst.transform0.w);
-  let rotatedPx = vec2<f32>(
-    localScaled.x * c - localScaled.y * s,
-    localScaled.x * s + localScaled.y * c
-  );
-
-  let finalPx = centeredPx + rotatedPx;
-  let ndc = vec2<f32>(
-    (finalPx.x / viewportPx.x) * 2.0 - 1.0,
-    1.0 - (finalPx.y / viewportPx.y) * 2.0
-  );
+  let scalePx = vec2<f32>(
+    inst.transform0.z * inst.transform1.x,
+    inst.transform0.z * inst.transform1.y
+  ) * viewportMinPx;
+  let localPos = vec3<f32>(input.localPos, 1.0);
+  let model = build_model_matrix(centerPx, scalePx, inst.transform0.w);
+  let viewProjection = build_view_projection_matrix(viewportPx, panPx, zoom);
+  // [LAW:dataflow-not-control-flow] Canonical transform chain is fixed:
+  // p_clip = VP * (M * p_local)
+  let clipPos = viewProjection * (model * localPos);
 
   var output: VertexOutput;
-  output.position = vec4<f32>(ndc, 0.0, 1.0);
+  output.position = vec4<f32>(clipPos.xy, 0.0, 1.0);
   let safeH = select(0.0, inst.color.x, inst.color.x == inst.color.x);
   let safeC = max(0.0, select(0.0, inst.color.y, inst.color.y == inst.color.y));
   let safeL = clamp(select(0.0, inst.color.z, inst.color.z == inst.color.z), 0.0, 1.0);
@@ -251,3 +274,11 @@ fn cs_main(@builtin(global_invocation_id) gid: vec3<u32>) {
   indirectArgs[base + 4u] = drawPrepParams.v1.x; // firstInstance
 }
 `;
+
+export function shaderUsesCanonicalVpMTransformChain(source: string = PATH_RENDER_WGSL): boolean {
+  return source.includes('let clipPos = viewProjection * (model * localPos);');
+}
+
+export function shaderEncodesViewToClipAspectCorrection(source: string = PATH_RENDER_WGSL): boolean {
+  return source.includes('2.0 / viewportPx.x') && source.includes('-2.0 / viewportPx.y');
+}
