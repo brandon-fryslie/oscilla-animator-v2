@@ -19,6 +19,11 @@ interface InvalidCompiledGpuPassValidation {
   readonly errors: readonly CompileError[];
 }
 
+interface IndexedCompiledGpuPass {
+  readonly originalIndex: number;
+  readonly pass: CompiledGpuPassArtifact;
+}
+
 export type CompiledGpuPassValidationResult =
   | ValidCompiledGpuPassValidation
   | InvalidCompiledGpuPassValidation;
@@ -124,14 +129,20 @@ function validateWgslSignature(
   }
 }
 
-function validateUniquePassIds(passes: readonly CompiledGpuPassArtifact[], errors: CompileError[]): void {
-  const seenPassIds = new Set<string>();
-  for (const [index, pass] of passes.entries()) {
-    if (seenPassIds.has(pass.passId)) {
-      errors.push(createPassError(index, `duplicate passId "${pass.passId}"`));
+function validateUniquePassIds(passes: readonly IndexedCompiledGpuPass[], errors: CompileError[]): void {
+  const seenPassIds = new Map<string, number>();
+  for (const indexedPass of passes) {
+    const duplicateIndex = seenPassIds.get(indexedPass.pass.passId);
+    if (duplicateIndex !== undefined) {
+      errors.push(
+        createPassError(
+          indexedPass.originalIndex,
+          `duplicate passId "${indexedPass.pass.passId}" (already declared at passes[${duplicateIndex}])`,
+        ),
+      );
       continue;
     }
-    seenPassIds.add(pass.passId);
+    seenPassIds.set(indexedPass.pass.passId, indexedPass.originalIndex);
   }
 }
 
@@ -173,6 +184,12 @@ function validateFluidPassOrder(passes: readonly CompiledGpuPassArtifact[], erro
   const outOfOrderPassId = findOutOfOrderFluidPass(fluidPassIds);
   if (outOfOrderPassId !== null) {
     errors.push(createBundleError(`Compiler emitted invalid fluid pass order at "${outOfOrderPassId}"`));
+  }
+}
+
+function validateComputePassPresence(passes: readonly CompiledGpuPassArtifact[], errors: CompileError[]): void {
+  if (!passes.some((pass) => pass.stage === 'compute')) {
+    errors.push(createBundleError('Compiler emitted invalid GPU pass bundle: at least one compute pass is required'));
   }
 }
 
@@ -227,11 +244,22 @@ export function validateCompiledGpuPassBundle(bundle: CompiledGpuArtifactBundle)
 
   // [LAW:dataflow-not-control-flow] Every emitted pass flows through the same
   // validation step; validity is represented in error data, not skipped ops.
-  const validatedPasses = passes
-    .map((pass, index) => validatePassShape(pass, index, errors))
-    .filter((pass): pass is CompiledGpuPassArtifact => pass !== null);
-  validateUniquePassIds(validatedPasses, errors);
+  const validatedIndexedPasses = passes
+    .map((pass, index) => {
+      const normalizedPass = validatePassShape(pass, index, errors);
+      if (normalizedPass === null) {
+        return null;
+      }
+      return {
+        originalIndex: index,
+        pass: normalizedPass,
+      };
+    })
+    .filter((pass): pass is IndexedCompiledGpuPass => pass !== null);
+  const validatedPasses = validatedIndexedPasses.map((pass) => pass.pass);
+  validateUniquePassIds(validatedIndexedPasses, errors);
   validateFluidPassOrder(validatedPasses, errors);
+  validateComputePassPresence(validatedPasses, errors);
 
   if (errors.length > 0) {
     return { kind: 'error', errors };

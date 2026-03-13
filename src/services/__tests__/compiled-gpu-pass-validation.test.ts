@@ -61,8 +61,14 @@ describe('validateCompiledGpuPassBundle pass signature validation', () => {
     );
   });
 
-  it('accepts valid vertex + fragment stage signatures', () => {
+  it('accepts valid compute + vertex + fragment stage signatures', () => {
     const result = validateCompiledGpuPassBundle(buildBundle([
+      buildPass({
+        passId: 'simulation.compute',
+        stage: 'compute',
+        entryPoint: 'compute_main',
+        wgsl: '@compute @workgroup_size(64, 1, 1)\nfn compute_main() {}',
+      }),
       buildPass({
         passId: 'fullscreen.vertex',
         stage: 'vertex',
@@ -78,7 +84,7 @@ describe('validateCompiledGpuPassBundle pass signature validation', () => {
     ]));
     expect(result.kind).toBe('ok');
     if (result.kind !== 'ok') return;
-    expect(result.bundle.passes.map((pass) => pass.stage)).toEqual(['vertex', 'fragment']);
+    expect(result.bundle.passes.map((pass) => pass.stage)).toEqual(['compute', 'vertex', 'fragment']);
   });
 
   it('rejects invalid entrypoint identifiers', () => {
@@ -158,6 +164,56 @@ describe('validateCompiledGpuPassBundle bundle policy validation', () => {
       ]),
     );
     expect(result.kind).toBe('ok');
+  });
+
+  it('rejects bundles that contain no compute passes', () => {
+    const result = validateCompiledGpuPassBundle(
+      buildBundle([
+        buildPass({
+          passId: 'fullscreen.vertex',
+          stage: 'vertex',
+          entryPoint: 'vertex_main',
+          wgsl: '@vertex\nfn vertex_main() -> @builtin(position) vec4<f32> { return vec4<f32>(0.0); }',
+        }),
+        buildPass({
+          passId: 'fullscreen.fragment',
+          stage: 'fragment',
+          entryPoint: 'fragment_main',
+          wgsl: '@fragment\nfn fragment_main() -> @location(0) vec4<f32> { return vec4<f32>(1.0); }',
+        }),
+      ]),
+    );
+    expect(result.kind).toBe('error');
+    if (result.kind !== 'error') return;
+    expect(result.errors.some((error) => error.message.includes('at least one compute pass is required'))).toBe(true);
+  });
+
+  it('preserves original pass indices for duplicate diagnostics after filtering invalid entries', () => {
+    const result = validateCompiledGpuPassBundle(
+      buildBundle([
+        buildPass({
+          passId: 'invalid-stage',
+          stage: 'geometry' as unknown as GpuPassStage,
+          entryPoint: 'invalid_stage_main',
+          wgsl: 'fn invalid_stage_main() {}',
+        }),
+        buildPass({
+          passId: 'dup',
+          entryPoint: 'dup_main_a',
+          wgsl: '@compute\nfn dup_main_a() {}',
+        }),
+        buildPass({
+          passId: 'dup',
+          entryPoint: 'dup_main_b',
+          wgsl: '@compute\nfn dup_main_b() {}',
+        }),
+      ]),
+    );
+    expect(result.kind).toBe('error');
+    if (result.kind !== 'error') return;
+    expect(result.errors.some((error) => error.message.includes('passes[2]') && error.message.includes('duplicate passId'))).toBe(
+      true,
+    );
   });
 
   it('rejects unknown fluid pass identifiers at compile boundary', () => {

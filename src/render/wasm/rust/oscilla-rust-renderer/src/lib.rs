@@ -73,6 +73,13 @@ fn parse_gpu_pass_specs(passes: JsValue) -> Result<Vec<CompilerComputePassSpec>,
             });
         }
     }
+    if specs.is_empty() {
+        return Err(JsValue::from_str(
+            // [LAW:no-silent-fallbacks] The compute pipeline install boundary
+            // must fail explicitly when no executable compute pass is present.
+            "GPU pass payload must contain at least one compute pass",
+        ));
+    }
     Ok(specs)
 }
 
