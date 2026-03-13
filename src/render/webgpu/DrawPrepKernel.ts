@@ -16,9 +16,8 @@ import {
   ExprHandle,
   type BlockContext,
   NagaScalarKind,
-  type NagaHandle,
   type NagaModule,
-} from '@/compiler/ir/naga-emitter';
+} from '../../compiler/ir/naga-emitter';
 
 // =============================================================================
 // Constants
@@ -58,11 +57,9 @@ export function buildDrawPrepModule(): NagaModule {
   const indirectWordsVar = b.declareGlobalVariable(
     'indirectWords', 'storage', 'read_write', 0, 0, arrayU32,
   );
-  b.declareGlobalVariable(
+  const paramsVarHandle = b.declareGlobalVariable(
     'drawPrepParams', 'uniform', 'read', 0, 1, paramsStruct,
   );
-  // paramsVar handle = 1 (second declared global variable)
-  const paramsVarHandle: NagaHandle = 1;
 
   // ── Compute Function ──────────────────────────────────────────────────────
   b.beginFunction('cs_main', [
@@ -70,6 +67,9 @@ export function buildDrawPrepModule(): NagaModule {
   ], null);
 
   b.buildBlock(() => {
+    const indirectWordsRef = b.globalVariableRef(indirectWordsVar, arrayU32, META);
+    const paramsRef = b.globalVariableRef(paramsVarHandle, paramsStruct, META);
+
     // ── Lane guard ─────────────────────────────────────────────────────────
     // workgroup_size(1) → only gid.x == 0 is valid
     const gid = b.functionArgument(0, vec3u32, META);
@@ -81,17 +81,17 @@ export function buildDrawPrepModule(): NagaModule {
     }), [], META);
 
     // ── Load uniform struct ────────────────────────────────────────────────
-    const paramsExpr = emitGlobalVarExpr(b, paramsVarHandle, paramsStruct);
+    const paramsExpr = b.load(paramsRef, paramsStruct, META);
 
     // v0 = [drawMode, countOrIndexCount, firstOrFirstIndex, baseVertexBits]
-    const v0 = emitLoadExpr(b, b.accessIndex(paramsExpr, 0, vec4u32, META), vec4u32);
+    const v0 = b.accessIndex(paramsExpr, 0, vec4u32, META);
     const drawMode        = b.accessIndex(v0, 0, u32Type, META);
     const countOrIdxCount = b.accessIndex(v0, 1, u32Type, META);
     const firstOrFirstIdx = b.accessIndex(v0, 2, u32Type, META);
     const baseVertexBits  = b.accessIndex(v0, 3, u32Type, META);
 
     // v1 = [instanceCount, firstInstance, recordIndex, maxRecords]
-    const v1 = emitLoadExpr(b, b.accessIndex(paramsExpr, 1, vec4u32, META), vec4u32);
+    const v1 = b.accessIndex(paramsExpr, 1, vec4u32, META);
     const instanceCount = b.accessIndex(v1, 0, u32Type, META);
     const firstInstance = b.accessIndex(v1, 1, u32Type, META);
     const recordIndex   = b.accessIndex(v1, 2, u32Type, META);
@@ -99,7 +99,7 @@ export function buildDrawPrepModule(): NagaModule {
 
     // v2 = [indexedRegionBaseWords, nonIndexedRegionBaseWords,
     //       indexedStrideWords, nonIndexedStrideWords]
-    const v2 = emitLoadExpr(b, b.accessIndex(paramsExpr, 2, vec4u32, META), vec4u32);
+    const v2 = b.accessIndex(paramsExpr, 2, vec4u32, META);
     const idxRegionBase   = b.accessIndex(v2, 0, u32Type, META);
     const nonIdxRegionBase = b.accessIndex(v2, 1, u32Type, META);
     const idxStride       = b.accessIndex(v2, 2, u32Type, META);
@@ -113,18 +113,17 @@ export function buildDrawPrepModule(): NagaModule {
 
     // ── Emit indirect draw command ─────────────────────────────────────────
     const isIndexed = b.equal(drawMode, zero, META);
-    const bufKey = String(indirectWordsVar);
 
     // Indexed path: DrawIndexedIndirectArgs (5 words)
     // [indexCount, instanceCount, firstIndex, baseVertex, firstInstance]
     const indexedBlock = b.buildBlock(() => {
       const offset = b.mul(recordIndex, idxStride, META);
       const base = b.add(idxRegionBase, offset, META);
-      emitStoreWord(b, bufKey, base, 0, countOrIdxCount);
-      emitStoreWord(b, bufKey, base, 1, instanceCount);
-      emitStoreWord(b, bufKey, base, 2, firstOrFirstIdx);
-      emitStoreWord(b, bufKey, base, 3, baseVertexBits);
-      emitStoreWord(b, bufKey, base, 4, firstInstance);
+      emitStoreWord(b, indirectWordsRef, base, 0, countOrIdxCount);
+      emitStoreWord(b, indirectWordsRef, base, 1, instanceCount);
+      emitStoreWord(b, indirectWordsRef, base, 2, firstOrFirstIdx);
+      emitStoreWord(b, indirectWordsRef, base, 3, baseVertexBits);
+      emitStoreWord(b, indirectWordsRef, base, 4, firstInstance);
     });
 
     // Non-indexed path: DrawIndirectArgs (4 words)
@@ -132,10 +131,10 @@ export function buildDrawPrepModule(): NagaModule {
     const nonIndexedBlock = b.buildBlock(() => {
       const offset = b.mul(recordIndex, nonIdxStride, META);
       const base = b.add(nonIdxRegionBase, offset, META);
-      emitStoreWord(b, bufKey, base, 0, countOrIdxCount);
-      emitStoreWord(b, bufKey, base, 1, instanceCount);
-      emitStoreWord(b, bufKey, base, 2, firstOrFirstIdx);
-      emitStoreWord(b, bufKey, base, 3, firstInstance);
+      emitStoreWord(b, indirectWordsRef, base, 0, countOrIdxCount);
+      emitStoreWord(b, indirectWordsRef, base, 1, instanceCount);
+      emitStoreWord(b, indirectWordsRef, base, 2, firstOrFirstIdx);
+      emitStoreWord(b, indirectWordsRef, base, 3, firstInstance);
     });
 
     b.ifStatement(isIndexed, indexedBlock, nonIndexedBlock, META);
@@ -150,54 +149,15 @@ export function buildDrawPrepModule(): NagaModule {
 }
 
 // =============================================================================
-// Helpers — Naga IR expression construction
+// Helpers — Indirect buffer writes
 // =============================================================================
-
-/**
- * Create a GlobalVariable expression referencing a declared global variable.
- *
- * NagaBuilder lacks a public method for this; follows the same pattern as
- * lower-to-naga-module.ts::arenaLoad.
- */
-function emitGlobalVarExpr(
-  b: NagaBuilder,
-  varHandle: NagaHandle,
-  typeHandle: NagaHandle,
-): ExprHandle {
-  // [LAW:single-enforcer] exception: NagaBuilder does not expose a public
-  // GlobalVariable expression constructor. Using test seam per established pattern.
-  const handle = b.unsafeAppendExpressionForTesting(
-    { type: 'GlobalVariable', variable: varHandle },
-    META,
-    typeHandle,
-  );
-  return new ExprHandle(handle);
-}
-
-/**
- * Create a Load expression that dereferences a pointer expression.
- *
- * Required for uniform struct access: GlobalVariable → AccessIndex → Load.
- */
-function emitLoadExpr(
-  b: NagaBuilder,
-  pointer: ExprHandle,
-  resultType: NagaHandle,
-): ExprHandle {
-  const handle = b.unsafeAppendExpressionForTesting(
-    { type: 'Load', pointer: pointer.nagaHandle },
-    META,
-    resultType,
-  );
-  return new ExprHandle(handle);
-}
 
 /**
  * Write a u32 value to the indirect buffer at `base + wordOffset`.
  */
 function emitStoreWord(
   b: NagaBuilder,
-  bufKey: string,
+  indirectWordsRef: ExprHandle,
   base: ExprHandle,
   wordOffset: number,
   value: ExprHandle,
@@ -205,5 +165,5 @@ function emitStoreWord(
   const index = wordOffset === 0
     ? base
     : b.add(base, b.literalUint(wordOffset, META), META);
-  b.bufferWrite(bufKey, index, value, META);
+  b.storeAt(indirectWordsRef, index, value, META);
 }

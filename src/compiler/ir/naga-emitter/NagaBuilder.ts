@@ -37,10 +37,6 @@ interface StateVariableBinding {
   readonly typeHandle: NagaHandle;
 }
 
-interface BufferVariableBinding {
-  readonly variableHandle: NagaHandle;
-}
-
 // =============================================================================
 // Per-Function Expression Arena
 // =============================================================================
@@ -54,6 +50,12 @@ interface FunctionScope {
   readonly expressionTypeByHandle: Map<NagaHandle, NagaHandle>;
   readonly statementArena: NagaArena<NagaStatement>;
   readonly statementSourceMap: Map<NagaHandle, BlockContext>;
+}
+
+interface CompletedFunctionMetadata {
+  readonly expressionSourceMap: ReadonlyMap<NagaHandle, BlockContext>;
+  readonly expressionTypeByHandle: ReadonlyMap<NagaHandle, NagaHandle>;
+  readonly statementSourceMap: ReadonlyMap<NagaHandle, BlockContext>;
 }
 
 const ZERO_MATRIX4: readonly number[] = Object.freeze([
@@ -141,11 +143,11 @@ export class NagaBuilder {
   // Global variables (shared across functions)
   private readonly globalVariables: NagaGlobalVariable[] = [];
   private readonly stateVariables = new Map<string, StateVariableBinding>();
-  private readonly bufferVariables = new Map<string, BufferVariableBinding>();
   private nextGlobalVariableHandle = 0;
 
   // Per-function arenas
   private readonly completedFunctions: NagaFunction[] = [];
+  private readonly completedFunctionMetadata: CompletedFunctionMetadata[] = [];
   private currentFunction: FunctionScope | null = null;
 
   // Entry points
@@ -250,6 +252,11 @@ export class NagaBuilder {
     };
     const handle = this.completedFunctions.length;
     this.completedFunctions.push(nagaFn);
+    this.completedFunctionMetadata.push({
+      expressionSourceMap: new Map(fn.expressionSourceMap),
+      expressionTypeByHandle: new Map(fn.expressionTypeByHandle),
+      statementSourceMap: new Map(fn.statementSourceMap),
+    });
     this.currentFunction = null;
     this.activeBlock = null;
     this.rootBlock = null;
@@ -658,6 +665,18 @@ export class NagaBuilder {
     return this.completedFunctions;
   }
 
+  public getCompletedFunctionExpressionType(functionHandle: NagaHandle, expressionHandle: NagaHandle): NagaHandle | undefined {
+    return this.completedFunctionMetadata[functionHandle]?.expressionTypeByHandle.get(expressionHandle);
+  }
+
+  public getCompletedFunctionExpressionContext(functionHandle: NagaHandle, expressionHandle: NagaHandle): BlockContext | null {
+    return this.completedFunctionMetadata[functionHandle]?.expressionSourceMap.get(expressionHandle) ?? null;
+  }
+
+  public getCompletedFunctionStatementContext(functionHandle: NagaHandle, statementHandle: NagaHandle): BlockContext | null {
+    return this.completedFunctionMetadata[functionHandle]?.statementSourceMap.get(statementHandle) ?? null;
+  }
+
   public callBuiltin(functionHandle: NagaHandle, args: readonly ExprHandle[], resultType: NagaHandle, meta: BlockContext): ExprHandle {
     const expr: NagaExpression = {
       type: 'Call',
@@ -774,36 +793,25 @@ export class NagaBuilder {
   // ==========================================================================
 
   public arrayLength(bufferKey: string, meta: BlockContext): ExprHandle {
-    const bufferBinding = this.getOrCreateBufferVariable(bufferKey);
-    const expr: NagaExpression = {
-      type: 'ArrayLength',
-      expr: bufferBinding.variableHandle,
-    };
-    const typeHandle = this.getOrCreateScalarType(NagaScalarKind.Uint);
-    return this.registerExpression(expr, typeHandle, meta);
+    void bufferKey;
+    void meta;
+    // [LAW:single-enforcer] Legacy string-key buffer APIs are forbidden here.
+    // Function-scope lowering must use globalVariableRef()/arrayLengthOf().
+    throw new Error(
+      'NagaBuilder.arrayLength is deprecated. Use arrayLengthOf(bufferRef, meta) with a globalVariableRef handle.',
+    );
   }
 
   public bufferRead(bufferKey: string, index: ExprHandle, targetType: CanonicalType, meta: BlockContext): ExprHandle {
-    const bufferBinding = this.getOrCreateBufferVariable(bufferKey);
-    const indexType = this.typeArena.get(this.requireExpressionType(index));
-    if (!isIntegerScalar(indexType)) {
-      throw new Error('NagaBuilder.bufferRead: dynamic index must be integer scalar.');
-    }
-
-    const accessExpr: NagaExpression = {
-      type: 'Access',
-      base: bufferBinding.variableHandle,
-      index: index.nagaHandle,
-    };
-    const accessHandle = this.exprArena.append(accessExpr);
-    this.exprSourceMap.set(accessHandle, meta);
-
-    const loadExpr: NagaExpression = {
-      type: 'Load',
-      pointer: accessHandle,
-    };
-    const targetTypeHandle = this.resolveNagaType(targetType);
-    return this.registerExpression(loadExpr, targetTypeHandle, meta);
+    void bufferKey;
+    void index;
+    void targetType;
+    void meta;
+    // [LAW:single-enforcer] Legacy string-key buffer APIs are forbidden here.
+    // Function-scope lowering must use accessLoad() with explicit buffer refs.
+    throw new Error(
+      'NagaBuilder.bufferRead is deprecated. Use accessLoad(bufferRef, index, elementType, meta).',
+    );
   }
 
   /**
@@ -811,78 +819,39 @@ export class NagaBuilder {
    * Use this for non-CanonicalType buffers (e.g. u32 shape bank).
    */
   public bufferReadTyped(bufferKey: string, index: ExprHandle, resultTypeHandle: NagaHandle, meta: BlockContext): ExprHandle {
-    const bufferBinding = this.getOrCreateBufferVariable(bufferKey);
-    const indexType = this.typeArena.get(this.requireExpressionType(index));
-    if (!isIntegerScalar(indexType)) {
-      throw new Error('NagaBuilder.bufferReadTyped: dynamic index must be integer scalar.');
-    }
-
-    const accessExpr: NagaExpression = {
-      type: 'Access',
-      base: bufferBinding.variableHandle,
-      index: index.nagaHandle,
-    };
-    const accessHandle = this.exprArena.append(accessExpr);
-    this.exprSourceMap.set(accessHandle, meta);
-
-    const loadExpr: NagaExpression = {
-      type: 'Load',
-      pointer: accessHandle,
-    };
-    return this.registerExpression(loadExpr, resultTypeHandle, meta);
+    void bufferKey;
+    void index;
+    void resultTypeHandle;
+    void meta;
+    // [LAW:single-enforcer] Legacy string-key buffer APIs are forbidden here.
+    // Function-scope lowering must use accessLoad() with explicit buffer refs.
+    throw new Error(
+      'NagaBuilder.bufferReadTyped is deprecated. Use accessLoad(bufferRef, index, resultTypeHandle, meta).',
+    );
   }
 
   public bufferWrite(bufferKey: string, index: ExprHandle, value: ExprHandle, meta: BlockContext): void {
-    const bufferBinding = this.getOrCreateBufferVariable(bufferKey);
-    const indexType = this.typeArena.get(this.requireExpressionType(index));
-    if (!isIntegerScalar(indexType)) {
-      throw new Error('NagaBuilder.bufferWrite: dynamic index must be integer scalar.');
-    }
-    this.requireExpressionType(value);
-
-    const accessExpr: NagaExpression = {
-      type: 'Access',
-      base: bufferBinding.variableHandle,
-      index: index.nagaHandle,
-    };
-    const pointerHandle = this.exprArena.append(accessExpr);
-    this.exprSourceMap.set(pointerHandle, meta);
-
-    this.emitStatement({
-      type: 'Store',
-      pointer: pointerHandle,
-      value: value.nagaHandle,
-    }, meta);
+    void bufferKey;
+    void index;
+    void value;
+    void meta;
+    // [LAW:single-enforcer] Legacy string-key buffer APIs are forbidden here.
+    // Function-scope lowering must use storeAt() with explicit buffer refs.
+    throw new Error(
+      'NagaBuilder.bufferWrite is deprecated. Use storeAt(bufferRef, index, value, meta).',
+    );
   }
 
   public atomicAdd(bufferKey: string, index: ExprHandle, value: ExprHandle, meta: BlockContext): ExprHandle {
-    const bufferBinding = this.getOrCreateBufferVariable(bufferKey);
-    const indexType = this.typeArena.get(this.requireExpressionType(index));
-    const valueTypeHandle = this.requireExpressionType(value);
-    const valueType = this.typeArena.get(valueTypeHandle);
-
-    if (!isIntegerScalar(indexType)) {
-      throw new Error('NagaBuilder.atomicAdd: index must be integer scalar.');
-    }
-    if (!isIntegerScalar(valueType)) {
-      throw new Error('NagaBuilder.atomicAdd: value must be int scalar.');
-    }
-
-    const accessExpr: NagaExpression = {
-      type: 'Access',
-      base: bufferBinding.variableHandle,
-      index: index.nagaHandle,
-    };
-    const pointerHandle = this.exprArena.append(accessExpr);
-    this.exprSourceMap.set(pointerHandle, meta);
-
-    const atomicExpr: NagaExpression = {
-      type: 'AtomicResult',
-      kind: 'Add',
-      pointer: pointerHandle,
-      value: value.nagaHandle,
-    };
-    return this.registerExpression(atomicExpr, valueTypeHandle, meta);
+    void bufferKey;
+    void index;
+    void value;
+    void meta;
+    // [LAW:single-enforcer] Legacy string-key buffer APIs are forbidden here.
+    // If atomic ops are required, add explicit pointer-based APIs.
+    throw new Error(
+      'NagaBuilder.atomicAdd is deprecated. Add a pointer-based atomic API before using atomics.',
+    );
   }
 
   // ==========================================================================
@@ -1198,19 +1167,6 @@ export class NagaBuilder {
       throw new Error('NagaBuilder: missing expression type for handle ' + String(handle.nagaHandle));
     }
     return typeHandle;
-  }
-
-  private getOrCreateBufferVariable(bufferKey: string): BufferVariableBinding {
-    const existing = this.bufferVariables.get(bufferKey);
-    if (existing) {
-      return existing;
-    }
-    const binding: BufferVariableBinding = {
-      variableHandle: this.nextGlobalVariableHandle,
-    };
-    this.nextGlobalVariableHandle += 1;
-    this.bufferVariables.set(bufferKey, binding);
-    return binding;
   }
 
   private getOrCreateStateVariable(stateKey: string, type: CanonicalType): StateVariableBinding {

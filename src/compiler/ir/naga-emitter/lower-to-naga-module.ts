@@ -31,7 +31,8 @@ import { resolveArenaAddress } from '../../../runtime/ArenaValueStore';
 import type { ValueSlot } from '../Indices';
 import { SCALAR_INSTANCE_ID } from '../Indices';
 import type { RuntimeAddressTableIR, ArenaRuntimeLayoutIR } from '../program';
-import { payloadStride, canonicalScalar, FLOAT } from '../../../core/canonical-types';
+import { payloadStride } from '../../../core/canonical-types';
+import { INPUT_HEADER_LAYOUT } from '../../../runtime/InputHeaderLayout';
 
 // =============================================================================
 // Public API
@@ -92,15 +93,14 @@ const BINDING_ARENA_OUT = { group: 0, binding: 1 } as const;
 
 const WORKGROUP_SIZE: readonly [number, number, number] = [64, 1, 1];
 
-// Header offsets (in floats) matching WEBGPU_RENDER_CONTRACT
-const HEADER_TIME_MS = 0;        // inputHeaderTimeOffsetBytes / 4
-const HEADER_DELTA_TIME = 1;     // inputHeaderDeltaTimeOffsetBytes / 4
-const HEADER_FRAME_COUNT = 2;    // inputHeaderFrameCountOffsetBytes / 4
-const HEADER_RESOLUTION_X = 3;   // inputHeaderResolutionXOffsetBytes / 4
-const HEADER_RESOLUTION_Y = 4;   // inputHeaderResolutionYOffsetBytes / 4
-const HEADER_MOUSE_X = 5;        // inputHeaderMouseXOffsetBytes / 4
-const HEADER_MOUSE_Y = 6;        // inputHeaderMouseYOffsetBytes / 4
-const HEADER_MOUSE_BUTTONS = 7;  // inputHeaderMouseButtonsOffsetBytes / 4
+// Header offsets (in words) from canonical input-header layout.
+const HEADER_TIME_SECONDS = INPUT_HEADER_LAYOUT.fields.TimeSeconds.wordOffset;
+const HEADER_DELTA_TIME = INPUT_HEADER_LAYOUT.fields.DeltaTimeSeconds.wordOffset;
+const HEADER_RESOLUTION_X = INPUT_HEADER_LAYOUT.fields.ResolutionX.wordOffset;
+const HEADER_RESOLUTION_Y = INPUT_HEADER_LAYOUT.fields.ResolutionY.wordOffset;
+const HEADER_MOUSE_X = INPUT_HEADER_LAYOUT.fields.MouseX.wordOffset;
+const HEADER_MOUSE_Y = INPUT_HEADER_LAYOUT.fields.MouseY.wordOffset;
+const HEADER_MOUSE_BUTTONS = INPUT_HEADER_LAYOUT.fields.MouseButtons.wordOffset;
 
 const META: BlockContext = { visualBlockId: '__naga_lowering' };
 
@@ -281,7 +281,7 @@ class LoweringContext {
         ? this.scalarWriteAddress(address, c)
         : this.fieldWriteAddress(address, laneId, c);
 
-      this.arenaStore(this.arenaOutVar, writeAddr, components[c]);
+      this.arenaStore(this.arenaOutRef, writeAddr, components[c]);
     }
 
     this.loweredStepCount++;
@@ -324,7 +324,7 @@ class LoweringContext {
         stateLayout.writeOffset + mapping.slotStart + c,
         META,
       );
-      this.arenaStore(this.arenaOutVar, addr, components[c]);
+      this.arenaStore(this.arenaOutRef, addr, components[c]);
     }
 
     this.loweredStepCount++;
@@ -369,7 +369,7 @@ class LoweringContext {
         META,
       );
       const addr = this.builder.add(baseOffset, laneOffset, META);
-      this.arenaStore(this.arenaOutVar, addr, components[c]);
+      this.arenaStore(this.arenaOutRef, addr, components[c]);
     }
 
     this.loweredStepCount++;
@@ -482,7 +482,7 @@ class LoweringContext {
   private lowerTime(expr: Extract<ValueExpr, { kind: 'time' }>): ExprHandle[] | null {
     const headerOffset = TIME_HEADER_OFFSETS[expr.which];
     if (headerOffset === undefined) return null;
-    return [this.arenaLoad(this.arenaInVar, this.builder.literalUint(headerOffset, META))];
+    return [this.arenaLoad(this.arenaInRef, this.builder.literalUint(headerOffset, META))];
   }
 
   // =========================================================================
@@ -492,20 +492,20 @@ class LoweringContext {
   private lowerExternal(expr: Extract<ValueExpr, { kind: 'external' }>): ExprHandle[] | null {
     switch (expr.channel) {
       case 'mouseX':
-        return [this.arenaLoad(this.arenaInVar, this.builder.literalUint(HEADER_MOUSE_X, META))];
+        return [this.arenaLoad(this.arenaInRef, this.builder.literalUint(HEADER_MOUSE_X, META))];
       case 'mouseY':
-        return [this.arenaLoad(this.arenaInVar, this.builder.literalUint(HEADER_MOUSE_Y, META))];
+        return [this.arenaLoad(this.arenaInRef, this.builder.literalUint(HEADER_MOUSE_Y, META))];
       case 'mouseXY':
         return [
-          this.arenaLoad(this.arenaInVar, this.builder.literalUint(HEADER_MOUSE_X, META)),
-          this.arenaLoad(this.arenaInVar, this.builder.literalUint(HEADER_MOUSE_Y, META)),
+          this.arenaLoad(this.arenaInRef, this.builder.literalUint(HEADER_MOUSE_X, META)),
+          this.arenaLoad(this.arenaInRef, this.builder.literalUint(HEADER_MOUSE_Y, META)),
         ];
       case 'mouseButtons':
-        return [this.arenaLoad(this.arenaInVar, this.builder.literalUint(HEADER_MOUSE_BUTTONS, META))];
+        return [this.arenaLoad(this.arenaInRef, this.builder.literalUint(HEADER_MOUSE_BUTTONS, META))];
       case 'resolutionX':
-        return [this.arenaLoad(this.arenaInVar, this.builder.literalUint(HEADER_RESOLUTION_X, META))];
+        return [this.arenaLoad(this.arenaInRef, this.builder.literalUint(HEADER_RESOLUTION_X, META))];
       case 'resolutionY':
-        return [this.arenaLoad(this.arenaInVar, this.builder.literalUint(HEADER_RESOLUTION_Y, META))];
+        return [this.arenaLoad(this.arenaInRef, this.builder.literalUint(HEADER_RESOLUTION_Y, META))];
       default:
         // Unknown external channel; not lowerable.
         return null;
@@ -545,14 +545,14 @@ class LoweringContext {
           META,
         );
         const addr = this.builder.add(baseAddr, laneOffset, META);
-        components.push(this.arenaLoad(this.arenaInVar, addr));
+        components.push(this.arenaLoad(this.arenaInRef, addr));
       } else {
         // Scalar: readOffset + slotStart + component
         const addr = this.builder.literalUint(
           stateLayout.readOffset + mapping.slotStart + c,
           META,
         );
-        components.push(this.arenaLoad(this.arenaInVar, addr));
+        components.push(this.arenaLoad(this.arenaInRef, addr));
       }
     }
 
@@ -886,38 +886,26 @@ class LoweringContext {
    * Read from arena buffer with bounds clamping.
    * [LAW:single-enforcer] Every dynamic buffer read injects arrayLength + min clamping.
    */
-  private arenaLoad(bufferVar: NagaHandle, index: ExprHandle): ExprHandle {
+  private arenaLoad(bufferRef: ExprHandle, index: ExprHandle): ExprHandle {
     // Bounds clamp: min(index, arrayLength(buffer) - 1)
-    const bufRef = this.builder.unsafeAppendExpressionForTesting(
-      { type: 'GlobalVariable', variable: bufferVar },
-      META,
-      this.arenaArrayType,
-    );
-    const bufRefHandle = new ExprHandle(bufRef);
-    const len = this.builder.arrayLength(
-      // arrayLength needs a buffer key; we use the variable handle as key
-      String(bufferVar),
-      META,
-    );
+    const len = this.builder.arrayLengthOf(bufferRef, META);
+    const zero = this.builder.literalUint(0, META);
     const one = this.builder.literalUint(1, META);
+    const hasElements = this.builder.greater(len, zero, META);
     const maxIdx = this.builder.sub(len, one, META);
-    const clampedIdx = this.builder.min(index, maxIdx, META);
+    const clampedNonEmpty = this.builder.min(index, maxIdx, META);
+    const clampedIdx = this.builder.select(hasElements, clampedNonEmpty, zero, META);
 
     // Access + Load
     // [LAW:one-source-of-truth] Arena elements are always f32 scalars.
-    return this.builder.bufferRead(
-      String(bufferVar),
-      clampedIdx,
-      canonicalScalar(FLOAT),
-      META,
-    );
+    return this.builder.accessLoad(bufferRef, clampedIdx, this.f32Type, META);
   }
 
   /**
    * Write to arena buffer.
    */
-  private arenaStore(bufferVar: NagaHandle, index: ExprHandle, value: ExprHandle): void {
-    this.builder.bufferWrite(String(bufferVar), index, value, META);
+  private arenaStore(bufferRef: ExprHandle, index: ExprHandle, value: ExprHandle): void {
+    this.builder.storeAt(bufferRef, index, value, META);
   }
 
   // =========================================================================
@@ -939,7 +927,7 @@ class LoweringContext {
 // =============================================================================
 
 const TIME_HEADER_OFFSETS: Record<string, number | undefined> = {
-  tMs: HEADER_TIME_MS,
+  tMs: HEADER_TIME_SECONDS,
   dt: HEADER_DELTA_TIME,
   // Phase A/B: derived from time, not direct header reads.
   // These would need to be computed from tMs.

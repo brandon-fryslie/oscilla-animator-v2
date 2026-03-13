@@ -24,6 +24,14 @@ import type {
   GpuTexture,
 } from '@/render/webgpu/gpu-api';
 import { INPUT_BUFFER_SIZE } from './InputBuffer';
+import { executeIndirectDraws } from './RenderPassConfig';
+
+export const COMPUTE_WORKGROUP_SIZE = 64;
+
+export function deriveWorkgroupCount(maxActiveLanes: number): number {
+  const laneCount = Number.isFinite(maxActiveLanes) ? Math.max(0, Math.floor(maxActiveLanes)) : 0;
+  return Math.max(1, Math.ceil(laneCount / COMPUTE_WORKGROUP_SIZE));
+}
 
 // ---- Stage Definition -------------------------------------------------------
 
@@ -65,7 +73,14 @@ export interface FrameLoopResources {
   readonly readOnlyGroupB: GpuBindGroup;
   readonly renderPipeline: GpuRenderPipeline;
   readonly computePipelines: readonly GpuComputePipeline[];
+  readonly workgroupCount: number;
   readonly drawPrepPipeline: GpuComputePipeline;
+  readonly indirectBuffer: GpuBuffer;
+  readonly indexBuffer: GpuBuffer;
+  readonly indexedRecordCount: number;
+  readonly indexedRegionBaseBytes: number;
+  readonly nonIndexedRecordCount: number;
+  readonly nonIndexedRegionBaseBytes: number;
   readonly canvasContext: GpuCanvasContext;
   readonly depthTexture: GpuTexture;
   readonly msaaTexture: GpuTexture;
@@ -171,7 +186,7 @@ export function executeFrame(ctx: FrameContext, state: FrameLoopState): void {
     pass.setBindGroup(0, bindGroups.physicsGroup);
     for (const pipeline of resources.computePipelines) {
       pass.setPipeline(pipeline);
-      pass.dispatchWorkgroups(1); // Workgroup count from compiled program (wired later)
+      pass.dispatchWorkgroups(resources.workgroupCount);
     }
     pass.end();
   }
@@ -209,7 +224,14 @@ export function executeFrame(ctx: FrameContext, state: FrameLoopState): void {
     });
     pass.setPipeline(resources.renderPipeline);
     pass.setBindGroup(0, bindGroups.postPhysicsReadGroup);
-    // Draw commands use indirect buffers -- CPU does NOT set draw counts.
+    executeIndirectDraws(pass, {
+      indirectBuffer: resources.indirectBuffer,
+      indexBuffer: resources.indexBuffer,
+      indexedRecordCount: resources.indexedRecordCount,
+      indexedRegionBaseBytes: resources.indexedRegionBaseBytes,
+      nonIndexedRecordCount: resources.nonIndexedRecordCount,
+      nonIndexedRegionBaseBytes: resources.nonIndexedRegionBaseBytes,
+    });
     pass.end();
   }
 

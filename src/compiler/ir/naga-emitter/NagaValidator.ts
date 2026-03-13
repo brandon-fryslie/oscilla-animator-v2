@@ -5,6 +5,8 @@ import {
   NagaMathFunction,
   NagaScalarKind,
   NagaType,
+  type NagaExpression,
+  type NagaStatement,
 } from './naga-types';
 
 export interface NagaValidationIssue {
@@ -28,6 +30,15 @@ export class NagaValidationError extends Error {
     this.handle = handle;
     this.visualBlockId = visualBlockId;
   }
+}
+
+interface ValidationArena {
+  readonly expressions: readonly NagaExpression[];
+  readonly statements: readonly NagaStatement[];
+  readonly getExpressionType: (handle: NagaHandle) => NagaHandle | undefined;
+  readonly getExpressionContext: (handle: NagaHandle) => string | null;
+  readonly getStatementContext: (handle: NagaHandle) => string | null;
+  readonly hasStatementHandle: (handle: NagaHandle) => boolean;
 }
 
 function isNumericScalar(type: NagaType): boolean {
@@ -106,16 +117,11 @@ function pushIssue(
   });
 }
 
-export function collectNagaValidationIssues(builder: NagaBuilder): readonly NagaValidationIssue[] {
-  // [LAW:single-enforcer] Validation coverage is centralized in this single pass.
-  const issues: NagaValidationIssue[] = [];
-  const expressions = builder.expressions.toArray();
-  const statements = builder.statements.toArray();
-
-  for (let handle = 0; handle < expressions.length; handle++) {
-    const expression = expressions[handle];
-    const visualBlockId = builder.getExpressionContext(handle)?.visualBlockId ?? null;
-    const expressionTypeHandle = builder.getExpressionType(handle);
+function validateArena(builder: NagaBuilder, arena: ValidationArena, issues: NagaValidationIssue[]): void {
+  for (let handle = 0; handle < arena.expressions.length; handle++) {
+    const expression = arena.expressions[handle];
+    const visualBlockId = arena.getExpressionContext(handle);
+    const expressionTypeHandle = arena.getExpressionType(handle);
 
     if (expressionTypeHandle === undefined && expression.type !== 'Access') {
       pushIssue(issues, handle, visualBlockId, 'Expression is missing result type metadata.');
@@ -125,8 +131,8 @@ export function collectNagaValidationIssues(builder: NagaBuilder): readonly Naga
     const expressionType = expressionTypeHandle !== undefined ? builder.types.get(expressionTypeHandle) : null;
 
     if (expression.type === 'Binary') {
-      const leftTypeHandle = builder.getExpressionType(expression.left);
-      const rightTypeHandle = builder.getExpressionType(expression.right);
+      const leftTypeHandle = arena.getExpressionType(expression.left);
+      const rightTypeHandle = arena.getExpressionType(expression.right);
       if (leftTypeHandle === undefined || rightTypeHandle === undefined) {
         pushIssue(issues, handle, visualBlockId, 'Binary expression has missing operand type metadata.');
         continue;
@@ -149,9 +155,9 @@ export function collectNagaValidationIssues(builder: NagaBuilder): readonly Naga
           pushIssue(issues, handle, visualBlockId, 'Mix requires arg, arg1, and arg2.');
           continue;
         }
-        const aTypeHandle = builder.getExpressionType(expression.arg);
-        const bTypeHandle = builder.getExpressionType(expression.arg1);
-        const tTypeHandle = builder.getExpressionType(expression.arg2);
+        const aTypeHandle = arena.getExpressionType(expression.arg);
+        const bTypeHandle = arena.getExpressionType(expression.arg1);
+        const tTypeHandle = arena.getExpressionType(expression.arg2);
         if (aTypeHandle === undefined || bTypeHandle === undefined || tTypeHandle === undefined) {
           pushIssue(issues, handle, visualBlockId, 'Mix expression has missing operand type metadata.');
           continue;
@@ -171,8 +177,8 @@ export function collectNagaValidationIssues(builder: NagaBuilder): readonly Naga
           pushIssue(issues, handle, visualBlockId, 'Mix factor must be float scalar or match a/b type.');
         }
       } else if (expression.fun === NagaMathFunction.Min || expression.fun === NagaMathFunction.Max) {
-        const aTypeHandle = builder.getExpressionType(expression.arg);
-        const bTypeHandle = expression.arg1 !== undefined ? builder.getExpressionType(expression.arg1) : undefined;
+        const aTypeHandle = arena.getExpressionType(expression.arg);
+        const bTypeHandle = expression.arg1 !== undefined ? arena.getExpressionType(expression.arg1) : undefined;
         if (aTypeHandle === undefined || bTypeHandle === undefined) {
           pushIssue(issues, handle, visualBlockId, String(expression.fun) + ' has missing operand type metadata.');
           continue;
@@ -195,9 +201,9 @@ export function collectNagaValidationIssues(builder: NagaBuilder): readonly Naga
     }
 
     if (expression.type === 'Select') {
-      const condTypeHandle = builder.getExpressionType(expression.condition);
-      const acceptTypeHandle = builder.getExpressionType(expression.accept);
-      const rejectTypeHandle = builder.getExpressionType(expression.reject);
+      const condTypeHandle = arena.getExpressionType(expression.condition);
+      const acceptTypeHandle = arena.getExpressionType(expression.accept);
+      const rejectTypeHandle = arena.getExpressionType(expression.reject);
       if (condTypeHandle === undefined || acceptTypeHandle === undefined || rejectTypeHandle === undefined) {
         pushIssue(issues, handle, visualBlockId, 'Select expression has missing operand type metadata.');
         continue;
@@ -311,7 +317,7 @@ export function collectNagaValidationIssues(builder: NagaBuilder): readonly Naga
     }
 
     if (expression.type === 'Access') {
-      const indexTypeHandle = builder.getExpressionType(expression.index);
+      const indexTypeHandle = arena.getExpressionType(expression.index);
       if (indexTypeHandle === undefined) {
         pushIssue(issues, handle, visualBlockId, 'Access index is missing type metadata.');
         continue;
@@ -331,7 +337,7 @@ export function collectNagaValidationIssues(builder: NagaBuilder): readonly Naga
     }
 
     if (expression.type === 'AtomicResult') {
-      const valueTypeHandle = builder.getExpressionType(expression.value);
+      const valueTypeHandle = arena.getExpressionType(expression.value);
       if (valueTypeHandle === undefined) {
         pushIssue(issues, handle, visualBlockId, 'Atomic operation value is missing type metadata.');
         continue;
@@ -354,7 +360,7 @@ export function collectNagaValidationIssues(builder: NagaBuilder): readonly Naga
     }
 
     if (expression.type === 'As') {
-      const sourceTypeHandle = builder.getExpressionType(expression.expr);
+      const sourceTypeHandle = arena.getExpressionType(expression.expr);
       if (sourceTypeHandle === undefined) {
         pushIssue(issues, handle, visualBlockId, 'As (cast) source expression is missing type metadata.');
       }
@@ -376,12 +382,12 @@ export function collectNagaValidationIssues(builder: NagaBuilder): readonly Naga
     }
   }
 
-  for (let handle = 0; handle < statements.length; handle++) {
-    const statement = statements[handle];
-    const visualBlockId = builder.getStatementContext(handle)?.visualBlockId ?? null;
+  for (let handle = 0; handle < arena.statements.length; handle++) {
+    const statement = arena.statements[handle];
+    const visualBlockId = arena.getStatementContext(handle);
 
     if (statement.type === 'If') {
-      const condTypeHandle = builder.getExpressionType(statement.condition);
+      const condTypeHandle = arena.getExpressionType(statement.condition);
       if (condTypeHandle === undefined) {
         pushIssue(issues, handle, visualBlockId, 'If statement condition is missing type metadata.', true);
         continue;
@@ -391,17 +397,13 @@ export function collectNagaValidationIssues(builder: NagaBuilder): readonly Naga
         pushIssue(issues, handle, visualBlockId, 'If statement condition strictly requires a boolean scalar.', true);
       }
       for (const acceptStatement of statement.accept) {
-        try {
-          builder.statements.get(acceptStatement);
-        } catch {
+        if (!arena.hasStatementHandle(acceptStatement)) {
           pushIssue(issues, handle, visualBlockId, 'If accept block contains an invalid nested statement handle.', true);
           break;
         }
       }
       for (const rejectStatement of statement.reject) {
-        try {
-          builder.statements.get(rejectStatement);
-        } catch {
+        if (!arena.hasStatementHandle(rejectStatement)) {
           pushIssue(issues, handle, visualBlockId, 'If reject block contains an invalid nested statement handle.', true);
           break;
         }
@@ -410,7 +412,7 @@ export function collectNagaValidationIssues(builder: NagaBuilder): readonly Naga
     }
 
     if (statement.type === 'StoreState' || statement.type === 'Store') {
-      const valueTypeHandle = builder.getExpressionType(statement.value);
+      const valueTypeHandle = arena.getExpressionType(statement.value);
       if (valueTypeHandle === undefined) {
         pushIssue(issues, handle, visualBlockId, 'Store statement value is missing type metadata.', true);
       }
@@ -419,9 +421,7 @@ export function collectNagaValidationIssues(builder: NagaBuilder): readonly Naga
 
     if (statement.type === 'Loop') {
       for (const bodyStatement of statement.body) {
-        try {
-          builder.statements.get(bodyStatement);
-        } catch {
+        if (!arena.hasStatementHandle(bodyStatement)) {
           pushIssue(issues, handle, visualBlockId, 'Loop contains an invalid nested statement handle.', true);
           break;
         }
@@ -431,7 +431,7 @@ export function collectNagaValidationIssues(builder: NagaBuilder): readonly Naga
 
     if (statement.type === 'Return') {
       if (statement.value !== undefined) {
-        const valueTypeHandle = builder.getExpressionType(statement.value);
+        const valueTypeHandle = arena.getExpressionType(statement.value);
         if (valueTypeHandle === undefined) {
           pushIssue(issues, handle, visualBlockId, 'Return value is missing type metadata.', true);
         }
@@ -443,6 +443,35 @@ export function collectNagaValidationIssues(builder: NagaBuilder): readonly Naga
     if (statement.type === 'Break' || statement.type === 'Continue' || statement.type === 'Comment') {
       continue;
     }
+  }
+}
+
+export function collectNagaValidationIssues(builder: NagaBuilder): readonly NagaValidationIssue[] {
+  // [LAW:single-enforcer] Validation coverage is centralized in this single pass.
+  const issues: NagaValidationIssue[] = [];
+
+  const legacyExpressions = builder.expressions.toArray();
+  const legacyStatements = builder.statements.toArray();
+  validateArena(builder, {
+    expressions: legacyExpressions,
+    statements: legacyStatements,
+    getExpressionType: (handle) => builder.getExpressionType(handle),
+    getExpressionContext: (handle) => builder.getExpressionContext(handle)?.visualBlockId ?? null,
+    getStatementContext: (handle) => builder.getStatementContext(handle)?.visualBlockId ?? null,
+    hasStatementHandle: (handle) => handle >= 0 && handle < legacyStatements.length,
+  }, issues);
+
+  const completedFunctions = builder.getCompletedFunctions();
+  for (let fnHandle = 0; fnHandle < completedFunctions.length; fnHandle++) {
+    const fn = completedFunctions[fnHandle];
+    validateArena(builder, {
+      expressions: fn.expressions,
+      statements: fn.statements,
+      getExpressionType: (handle) => builder.getCompletedFunctionExpressionType(fnHandle, handle),
+      getExpressionContext: (handle) => builder.getCompletedFunctionExpressionContext(fnHandle, handle)?.visualBlockId ?? null,
+      getStatementContext: (handle) => builder.getCompletedFunctionStatementContext(fnHandle, handle)?.visualBlockId ?? null,
+      hasStatementHandle: (handle) => handle >= 0 && handle < fn.statements.length,
+    }, issues);
   }
 
   return issues;

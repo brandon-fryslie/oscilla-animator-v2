@@ -1,5 +1,5 @@
 import { WEBGPU_RENDER_CONTRACT } from './shaders';
-import { SHAPE_BANK_HEADER_WORDS } from '../../runtime/RuntimeState';
+import { SHAPE_HEADER_STRIDE } from './ShapeBank';
 import type { GpuBindGroup, GpuBuffer, GpuDevice, GpuRenderPipeline } from './gpu-api';
 
 const GPU_BUFFER_USAGE = {
@@ -108,9 +108,9 @@ export class WebGPUShapeBankManager {
   }
 
   private assertShapeBankAlignment(volatilePtr: number): void {
-    if ((volatilePtr % SHAPE_BANK_HEADER_WORDS) !== 0) {
+    if ((volatilePtr % SHAPE_HEADER_STRIDE) !== 0) {
       throw new Error(
-        `WebGPUShapeBankManager: shapeBank volatilePtr ${volatilePtr} is not aligned to ${SHAPE_BANK_HEADER_WORDS} words`,
+        `WebGPUShapeBankManager: shapeBank volatilePtr ${volatilePtr} is not aligned to ${SHAPE_HEADER_STRIDE} words`,
       );
     }
   }
@@ -150,10 +150,10 @@ export class WebGPUShapeBankManager {
 
   private buildTopologyWordOffsetMap(source: RenderShapeBankSource): Map<number, number> {
     const byTopologyId = new Map<number, number>();
-    for (let handle = 0; handle + SHAPE_BANK_HEADER_WORDS <= source.volatilePtr; handle += SHAPE_BANK_HEADER_WORDS) {
+    for (let handle = 0; handle + SHAPE_HEADER_STRIDE <= source.volatilePtr; handle += SHAPE_HEADER_STRIDE) {
       const topologyId = source.topologyIdByHandle[handle] >>> 0;
       let hasHeaderPayload = false;
-      for (let word = 0; word < SHAPE_BANK_HEADER_WORDS; word++) {
+      for (let word = 0; word < SHAPE_HEADER_STRIDE; word++) {
         if (source.data[handle + word] !== 0) {
           hasHeaderPayload = true;
           break;

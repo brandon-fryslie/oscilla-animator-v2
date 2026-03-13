@@ -1,18 +1,19 @@
 // [LAW:one-source-of-truth] Rust worker message ABI is declared in one module
 // so worker, renderer facade, and tests consume one canonical contract.
+import { SHAPE_HEADER_STRIDE } from '../webgpu/ShapeBank';
+
 export interface RustRendererBootstrapConfig {
   readonly maxParticles: number;
   readonly maxShapes: number;
   readonly debugReadbackHz: number;
 }
 
-export const RUST_RENDERER_SHAPE_HEADER_WORDS = 16;
 export const RUST_RENDERER_SINK_TABLE_HEADER_WORDS = 8;
 export const RUST_RENDERER_SINK_TABLE_RECORD_WORDS = 8;
 export const RUST_RENDERER_SINK_TABLE_DESCRIPTOR_WORDS = 20;
 
 export function computeRustRendererShapeBankWordCapacity(config: RustRendererBootstrapConfig): number {
-  return Math.max(RUST_RENDERER_SHAPE_HEADER_WORDS, Math.floor(config.maxShapes) * RUST_RENDERER_SHAPE_HEADER_WORDS);
+  return Math.max(SHAPE_HEADER_STRIDE, Math.floor(config.maxShapes) * SHAPE_HEADER_STRIDE);
 }
 
 export function computeRustRendererSinkTableWordCapacity(config: RustRendererBootstrapConfig): number {

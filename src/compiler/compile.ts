@@ -55,6 +55,12 @@ import { getValueExprChildren } from '../runtime/ValueExprTreeWalker';
 import { compileFrontend, type FrontendResult, type FrontendError } from './frontend';
 import type { CompileError } from './types';
 import { buildProgramTopologyTable, collectAllProgramTopologyIds } from './ir/program-topology';
+import {
+  INDEXED_INDIRECT_STRIDE,
+  INDEXED_INDIRECT_WORDS,
+  NON_INDEXED_INDIRECT_STRIDE,
+  NON_INDEXED_INDIRECT_WORDS,
+} from '../render/webgpu/IndirectBuffer';
 
 import { registerAllBlocks } from '../blocks/all';
 
@@ -1038,7 +1044,7 @@ function buildDrawPrepProgram(
       // compiler and consumed by runtime/renderer as one canonical contract.
       drawMode,
       indirectRegion: drawMode === 'indexed' ? 'indexed' : 'nonIndexed',
-      indirectStrideBytes: drawMode === 'indexed' ? 20 : 16,
+      indirectStrideBytes: drawMode === 'indexed' ? INDEXED_INDIRECT_STRIDE : NON_INDEXED_INDIRECT_STRIDE,
       topologySource: 'shapeHeaderV1',
       firstInstanceSource: 'runtimePacked',
       ...(drawMode === 'indexed'
@@ -1052,8 +1058,8 @@ function buildDrawPrepProgram(
     });
   }
   const indexedRegionBaseWords = 0;
-  const indexedStrideWords = 5 as const;
-  const nonIndexedStrideWords = 4 as const;
+  const indexedStrideWords = INDEXED_INDIRECT_WORDS;
+  const nonIndexedStrideWords = NON_INDEXED_INDIRECT_WORDS;
   const nonIndexedRegionBaseWords = indexedRecordCount * indexedStrideWords;
   const totalRecordCount = indexedRecordCount + nonIndexedRecordCount;
   // [LAW:no-string-math] P0-0 forbids lowering-time WGSL source emission.

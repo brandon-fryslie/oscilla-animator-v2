@@ -28,10 +28,8 @@ export {
   type ShapeBankHeaderRecord,
   type ShapeBankHandleMetadata,
   type ContinuityConfig,
-  SHAPE_BANK_HEADER_WORDS,
   SHAPE_BANK_NO_CONTROL_POINT_SLOT,
   DEFAULT_SHAPE_BANK_WORD_CAPACITY,
-  ShapeBankHeaderWord,
   createValueStore,
   createFrameCache,
   createShapeBank,
@@ -52,6 +50,7 @@ export {
   commitStateWriteBank,
   advanceFrame,
 } from './RuntimeState';
+export { SHAPE_HEADER_STRIDE, ShapeHeaderField } from '../render/webgpu/ShapeBank';
 export {
   ExternalWriteBus,
   ExternalChannelSnapshot,

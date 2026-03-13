@@ -21,6 +21,12 @@ import type { BlockId } from '../../types/compiler';
 import type { ValueExpr } from './value-expr';
 import type { KernelRegistry } from '../../runtime/KernelRegistry';
 import type { ArenaSlotDescriptor } from '../../runtime/ArenaValueStore';
+import {
+  INDEXED_INDIRECT_STRIDE,
+  INDEXED_INDIRECT_WORDS,
+  NON_INDEXED_INDIRECT_STRIDE,
+  NON_INDEXED_INDIRECT_WORDS,
+} from '../../render/webgpu/IndirectBuffer';
 // [LAW:one-source-of-truth] NagaLoweringProgramIR is the structured output of
 // Family A Naga lowering (lower-to-naga-module.ts → NagaBuilder → NagaModule).
 export interface NagaLoweringProgramIR {
@@ -397,7 +403,7 @@ export interface DrawPrepSinkIR {
    * - indexed: 20 bytes (`drawIndexedIndirect`)
    * - nonIndexed: 16 bytes (`drawIndirect`)
    */
-  readonly indirectStrideBytes: 20 | 16;
+  readonly indirectStrideBytes: typeof INDEXED_INDIRECT_STRIDE | typeof NON_INDEXED_INDIRECT_STRIDE;
   /**
    * Source authority for topology fields consumed by draw-prep.
    * Current sink contracts read topology counts/offsets from ShapeHeaderV1.
@@ -432,13 +438,13 @@ export interface DrawPrepProgramIR {
    */
   readonly indexedRecordCount: number;
   readonly indexedRegionBaseWords: number;
-  readonly indexedStrideWords: 5;
+  readonly indexedStrideWords: typeof INDEXED_INDIRECT_WORDS;
   /**
    * Non-indexed stream region metadata (words in the shared indirect buffer).
    */
   readonly nonIndexedRecordCount: number;
   readonly nonIndexedRegionBaseWords: number;
-  readonly nonIndexedStrideWords: 4;
+  readonly nonIndexedStrideWords: typeof NON_INDEXED_INDIRECT_WORDS;
   readonly sinks: readonly DrawPrepSinkIR[];
 }
 

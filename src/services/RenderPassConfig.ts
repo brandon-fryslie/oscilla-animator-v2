@@ -18,6 +18,10 @@ import type {
   GpuTexture,
   GpuTextureView,
 } from '@/render/webgpu/gpu-api';
+import {
+  INDEXED_INDIRECT_STRIDE,
+  NON_INDEXED_INDIRECT_STRIDE,
+} from '@/render/webgpu/IndirectBuffer';
 import { getNavigatorGpu } from '@/render/webgpu/gpu-api';
 
 // ---------------------------------------------------------------------------
@@ -41,30 +45,6 @@ interface GpuBlendComponent {
 interface GpuBlendState {
   readonly color: GpuBlendComponent;
   readonly alpha: GpuBlendComponent;
-}
-
-/**
- * Extended render pass encoder that includes `drawIndirect`.
- *
- * The project's GpuRenderPassEncoder in gpu-api.ts currently declares
- * `drawIndexedIndirect` but omits `drawIndirect`. Rather than modifying
- * the shared interface (which the task forbids), we define the extended
- * shape locally and cast at the call site.
- */
-interface GpuRenderPassEncoderWithDrawIndirect extends GpuRenderPassEncoder {
-  drawIndirect(indirectBuffer: GpuBuffer, indirectOffset: number): void;
-}
-
-/**
- * Extended device interface that includes `createPipelineLayout`.
- *
- * The project's GpuDevice in gpu-api.ts is intentionally minimal and
- * omits `createPipelineLayout`. We extend locally for pipeline creation.
- */
-interface GpuDeviceWithPipelineLayout extends GpuDevice {
-  createPipelineLayout(descriptor: {
-    bindGroupLayouts: readonly unknown[];
-  }): unknown;
 }
 
 // ---------------------------------------------------------------------------
@@ -111,10 +91,10 @@ export const PREMULTIPLIED_ALPHA_BLEND: GpuBlendState = {
 };
 
 /** Indirect draw arg size for indexed draws: 5 x u32 = 20 bytes. */
-export const INDEXED_INDIRECT_BYTES = 20;
+export const INDEXED_INDIRECT_BYTES = INDEXED_INDIRECT_STRIDE;
 
 /** Indirect draw arg size for non-indexed draws: 4 x u32 = 16 bytes. */
-export const NON_INDEXED_INDIRECT_BYTES = 16;
+export const NON_INDEXED_INDIRECT_BYTES = NON_INDEXED_INDIRECT_STRIDE;
 
 // ---------------------------------------------------------------------------
 // Texture factory functions
@@ -242,11 +222,8 @@ export interface RenderPipelineConfig {
 export async function createOpaqueRenderPipeline(
   config: RenderPipelineConfig,
 ): Promise<GpuRenderPipeline> {
-  // Cast to access createPipelineLayout — GpuDevice in gpu-api.ts is
-  // intentionally minimal; the real GPUDevice always has this method.
-  const device = config.device as GpuDeviceWithPipelineLayout;
-  return device.createRenderPipelineAsync({
-    layout: device.createPipelineLayout({
+  return config.device.createRenderPipelineAsync({
+    layout: config.device.createPipelineLayout({
       bindGroupLayouts: [...config.bindGroupLayouts],
     }),
     vertex: {
@@ -319,10 +296,8 @@ export function executeIndirectDraws(
   }
 
   // Non-indexed region — issue non-indexed indirect draws.
-  // Cast required: GpuRenderPassEncoder in gpu-api.ts omits drawIndirect.
-  const extendedPass = pass as GpuRenderPassEncoderWithDrawIndirect;
   for (let j = 0; j < streams.nonIndexedRecordCount; j++) {
-    extendedPass.drawIndirect(
+    pass.drawIndirect(
       streams.indirectBuffer,
       streams.nonIndexedRegionBaseBytes + j * NON_INDEXED_INDIRECT_BYTES,
     );

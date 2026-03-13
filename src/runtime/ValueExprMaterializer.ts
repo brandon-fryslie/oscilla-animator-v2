@@ -13,13 +13,13 @@
 
 import type { RuntimeState } from './RuntimeState';
 import {
-  SHAPE_BANK_HEADER_WORDS,
   SHAPE_BANK_NO_CONTROL_POINT_SLOT,
   allocShapeBankWords,
   createShapeBankHeaderV1,
   writeShapeBankHandleMetadata,
   writeShapeBankHeader,
 } from './RuntimeState';
+import { SHAPE_HEADER_STRIDE } from '../render/webgpu/ShapeBank';
 import type { ValueExpr, ValueExprKernel } from '../compiler/ir/value-expr';
 import type { ValueExprId } from '../compiler/ir/Indices';
 import type { PureFn } from '../compiler/ir/types';
@@ -169,8 +169,8 @@ function evaluateShapeRefHandle(
     return words;
   })();
   const paramBlockWords = controlPointWordPayload.length;
-  const handle = allocShapeBankWords(shapeBank, SHAPE_BANK_HEADER_WORDS + paramBlockWords);
-  const paramBlockOffset = paramBlockWords > 0 ? handle + SHAPE_BANK_HEADER_WORDS : 0;
+  const handle = allocShapeBankWords(shapeBank, SHAPE_HEADER_STRIDE + paramBlockWords);
+  const paramBlockOffset = paramBlockWords > 0 ? handle + SHAPE_HEADER_STRIDE : 0;
   // [LAW:one-source-of-truth] Handle semantics are anchored in ShapeBank:
   // header stores draw topology dimensions, sidecar stores topology/control-slot metadata.
   writeShapeBankHeader(

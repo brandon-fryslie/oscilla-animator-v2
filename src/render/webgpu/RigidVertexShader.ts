@@ -21,7 +21,7 @@ import {
   type NagaModule,
   type NagaStructField,
 } from '../../compiler/ir/naga-emitter';
-import { SHAPE_HEADER_STRIDE } from './ShapeBank';
+import { SHAPE_HEADER_STRIDE, ShapeHeaderField } from './ShapeBank';
 
 // =============================================================================
 // Binding Layout
@@ -76,13 +76,6 @@ export const DEFAULT_RIGID_INSTANCE_LAYOUT: RigidInstanceLayout = {
   colorBOffset: 7,
   colorAOffset: 8,
 } as const;
-
-// =============================================================================
-// Shape Header Field Offsets (matching ShapeBank.ts ShapeHeaderField)
-// =============================================================================
-
-const HEADER_FIRST_INDEX = 5;
-const HEADER_BASE_VERTEX = 6;
 
 // =============================================================================
 // Builder
@@ -174,8 +167,8 @@ export function buildRigidVertexShader(
     const headerBase = b.mul(shapeId, headerStride, META);
 
     // Read indexed topology fields
-    const firstIndexAddr = b.add(headerBase, b.literalUint(HEADER_FIRST_INDEX, META), META);
-    const baseVertexAddr = b.add(headerBase, b.literalUint(HEADER_BASE_VERTEX, META), META);
+    const firstIndexAddr = b.add(headerBase, b.literalUint(ShapeHeaderField.FirstIndex, META), META);
+    const baseVertexAddr = b.add(headerBase, b.literalUint(ShapeHeaderField.BaseVertex, META), META);
 
     const firstIndex = readBank(firstIndexAddr);
     const baseVertexU32 = readBank(baseVertexAddr);

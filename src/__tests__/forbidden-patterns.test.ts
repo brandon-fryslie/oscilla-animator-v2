@@ -125,6 +125,19 @@ describe('Forbidden Patterns', () => {
 
     expect(matches, formatViolations('ScheduleNagaLowering references', matches)).toHaveLength(0);
   });
+
+  it('no production calls to unsafeAppendExpressionForTesting', () => {
+    const files = collectFiles(SRC_ROOT, ['.ts', '.tsx'])
+      .filter((f) =>
+        f !== THIS_FILE
+        && !f.includes('__tests__')
+        && !f.includes('.test.')
+      );
+    const pattern = /\.\s*unsafeAppendExpressionForTesting\s*\(/;
+    const matches = scanForPattern(files, pattern);
+
+    expect(matches, formatViolations('production unsafeAppendExpressionForTesting calls', matches)).toHaveLength(0);
+  });
 });
 
 // =============================================================================

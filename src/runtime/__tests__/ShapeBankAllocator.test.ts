@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import {
-  SHAPE_BANK_HEADER_WORDS,
   allocShapeBankWords,
   createShapeBankHeaderV1,
   createRuntimeState,
@@ -8,6 +7,7 @@ import {
   resetFrameVolatileShapeBank,
   writeShapeBankHeader,
 } from '../RuntimeState';
+import { SHAPE_HEADER_STRIDE } from '../../render/webgpu/ShapeBank';
 
 describe('ShapeBank allocator', () => {
   it('starts volatile allocation at static boundary and allocates linearly', () => {
@@ -22,8 +22,8 @@ describe('ShapeBank allocator', () => {
     expect(state.shapeBank).toBeDefined();
     expect(state.shapeBank?.volatilePtr).toBe(16);
 
-    const first = allocShapeBankWords(state.shapeBank!, SHAPE_BANK_HEADER_WORDS);
-    const second = allocShapeBankWords(state.shapeBank!, SHAPE_BANK_HEADER_WORDS);
+    const first = allocShapeBankWords(state.shapeBank!, SHAPE_HEADER_STRIDE);
+    const second = allocShapeBankWords(state.shapeBank!, SHAPE_HEADER_STRIDE);
 
     expect(first).toBe(16);
     expect(second).toBe(32);
@@ -47,7 +47,7 @@ describe('ShapeBank allocator', () => {
 
   it('writes and reads strict shape header fields', () => {
     const state = createRuntimeState(0, 0, 0, 0, 32, 0);
-    const handle = allocShapeBankWords(state.shapeBank!, SHAPE_BANK_HEADER_WORDS);
+    const handle = allocShapeBankWords(state.shapeBank!, SHAPE_HEADER_STRIDE);
 
     writeShapeBankHeader(state.shapeBank!.data, handle, createShapeBankHeaderV1({
       kind: 7,

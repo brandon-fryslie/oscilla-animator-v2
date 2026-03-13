@@ -83,6 +83,7 @@ export interface GpuDevice {
     }>;
   }): GpuBindGroup;
   createShaderModule(descriptor: { code: string }): unknown;
+  createPipelineLayout(descriptor: { bindGroupLayouts: readonly unknown[] }): unknown;
   createComputePipelineAsync(descriptor: unknown): Promise<GpuComputePipeline>;
   createRenderPipelineAsync(descriptor: unknown): Promise<GpuRenderPipeline>;
   createTexture(descriptor: unknown): GpuTexture;

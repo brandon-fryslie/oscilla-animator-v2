@@ -6,33 +6,35 @@
  *
  * Spec: docs/WebGPU-Complete/P3-1_CPU_to_GPU_Input_Marshalling.md
  *
- * [LAW:one-source-of-truth] InputBufferOffset is the single authority for field layout.
+ * [LAW:one-source-of-truth] INPUT_HEADER_LAYOUT is the single authority for field layout.
  * [LAW:no-shared-mutable-globals] Each runtime instance creates its own InputBuffer.
  * [LAW:dataflow-not-control-flow] All fields written every frame in fixed order — no conditional writes.
  */
 
+import { INPUT_HEADER_LAYOUT } from '../runtime/InputHeaderLayout';
+
 // ─── Constants ───────────────────────────────────────────────────────────────
 
 /** Total size of the input header block in bytes. */
-export const INPUT_BUFFER_SIZE = 256;
+export const INPUT_BUFFER_SIZE = INPUT_HEADER_LAYOUT.totalBytes;
 
 /**
  * Byte offsets for each field in the 256-byte input header.
  * Matches the canonical schema in P3-1 exactly.
  */
 export const InputBufferOffset = {
-  Time: 0x00,
-  DeltaTime: 0x04,
-  FrameCount: 0x08,
-  ResolutionX: 0x0c,
-  ResolutionY: 0x10,
-  MouseX: 0x14,
-  MouseY: 0x18,
-  MouseButtons: 0x1c,
-  AudioLow: 0x20,
-  AudioMid: 0x24,
-  AudioHigh: 0x28,
-  GaugeActive: 0x2c,
+  Time: INPUT_HEADER_LAYOUT.fields.TimeSeconds.byteOffset,
+  DeltaTime: INPUT_HEADER_LAYOUT.fields.DeltaTimeSeconds.byteOffset,
+  FrameCount: INPUT_HEADER_LAYOUT.fields.FrameCount.byteOffset,
+  ResolutionX: INPUT_HEADER_LAYOUT.fields.ResolutionX.byteOffset,
+  ResolutionY: INPUT_HEADER_LAYOUT.fields.ResolutionY.byteOffset,
+  MouseX: INPUT_HEADER_LAYOUT.fields.MouseX.byteOffset,
+  MouseY: INPUT_HEADER_LAYOUT.fields.MouseY.byteOffset,
+  MouseButtons: INPUT_HEADER_LAYOUT.fields.MouseButtons.byteOffset,
+  AudioLow: INPUT_HEADER_LAYOUT.fields.AudioLow.byteOffset,
+  AudioMid: INPUT_HEADER_LAYOUT.fields.AudioMid.byteOffset,
+  AudioHigh: INPUT_HEADER_LAYOUT.fields.AudioHigh.byteOffset,
+  GaugeActive: INPUT_HEADER_LAYOUT.fields.GaugeActive.byteOffset,
 } as const;
 
 // ─── Snapshot Interface ──────────────────────────────────────────────────────
@@ -84,7 +86,9 @@ export class InputBuffer {
     const v = this.view;
     v.setFloat32(InputBufferOffset.Time, snapshot.time, true);
     v.setFloat32(InputBufferOffset.DeltaTime, snapshot.deltaTime, true);
-    v.setFloat32(InputBufferOffset.FrameCount, snapshot.frameCount, true);
+    // [LAW:one-source-of-truth] FrameCount is encoded as u32 in the canonical
+    // input-header layout to preserve integer precision across long sessions.
+    v.setUint32(InputBufferOffset.FrameCount, Math.trunc(snapshot.frameCount) >>> 0, true);
     v.setFloat32(InputBufferOffset.ResolutionX, snapshot.resolutionX, true);
     v.setFloat32(InputBufferOffset.ResolutionY, snapshot.resolutionY, true);
     v.setFloat32(InputBufferOffset.MouseX, snapshot.mouseX, true);
