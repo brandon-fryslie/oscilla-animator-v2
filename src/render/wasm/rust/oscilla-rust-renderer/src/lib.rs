@@ -1,5 +1,6 @@
 mod allocator;
 mod compute;
+mod default_shaders;
 mod engine;
 mod error_boundary;
 mod memory;
