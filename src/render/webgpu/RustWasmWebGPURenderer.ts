@@ -30,6 +30,7 @@ import {
   hashWgslSource,
   previewWgsl,
 } from './gpu-pass-debug';
+import { type GpuPassStage, isGpuPassStage } from '../../types/gpu-pass-stage';
 
 interface RenderInput extends DrawPrepRenderContract, MatrixViewportContract, RuntimeInputSignalContract {
   readonly shapeBank: RenderShapeBankSource;
@@ -222,12 +223,8 @@ function requireGpuPassEntryPoint(pass: RustRendererGpuPass, passId: string): st
   );
 }
 
-function isComputePassStage(stage: RustRendererGpuPass['stage']): stage is 'compute' {
-  return stage === 'compute';
-}
-
-function requireGpuPassStage(pass: RustRendererGpuPass, passId: string): 'compute' {
-  if (!isComputePassStage(pass.stage)) {
+function requireGpuPassStage(pass: RustRendererGpuPass, passId: string): GpuPassStage {
+  if (!isGpuPassStage(pass.stage)) {
     throw new Error(
       `Rust renderer GPU pass contract violation: pass \"${passId}\" has unsupported stage \"${String(pass.stage)}\"`,
     );
@@ -256,7 +253,7 @@ function normalizeGpuPassPayloads(passes: readonly RustRendererGpuPass[]): reado
 
 function buildValidatedGpuPassPayload(
   passId: string,
-  stage: 'compute',
+  stage: GpuPassStage,
   entryPoint: string,
   wgsl: string,
 ): RustRendererGpuPass {
@@ -277,7 +274,7 @@ function shouldDumpRuntimeShaderPayload(): boolean {
  *
  * This renderer boundary intentionally validates only worker-transport safety:
  * - required identifiers are present and non-empty
- * - required stage payload is the expected literal (`compute`)
+ * - required stage payload is one of the declared GPU pass stages
  * - shader payload exists as non-empty text
  *
  * Semantic guarantees are established upstream at compile worker validation:
