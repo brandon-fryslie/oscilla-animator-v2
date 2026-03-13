@@ -1,0 +1,13 @@
+# Shapes 1: Rigid Stamp - CRITICAL Items
+
+## Item 1: Topology is Mutable During Frame Loop (Violates Hard Invariant 1)
+**Spec says**: Hard Invariant 1: "Rigid topology payload is immutable during frame loop."
+**Implementation**: `src/runtime/ValueExprMaterializer.ts:172-196` writes shape bank headers AND control-point payloads during frame materialization. The `allocShapeBankWords()` call and `writeShapeBankHeader()` happen in the hot path of `materializeShapeRef()`. The Rust renderer's `realize_shape_bank_geometry()` in `engine.rs:500-598` re-realizes ALL shape bank geometry every frame when install revision changes (mutating vertex/index data and writing back to shape_bank_words in place).
+**Gap**: Shape bank data is written every frame during materialization, not pre-computed at compile time. The Rust renderer mutates `shape_bank_words` in place at `engine.rs:526-527,529` (writes `first_vertex`, `base_vertex`, `first_index` back into the header). This violates the immutability invariant. The spec says "immutable during frame loop" and the current architecture writes geometry every frame.
+**Classification**: CRITICAL - Shape bank geometry is recomputed per-frame rather than being pre-allocated and immutable. This is a fundamental architectural mismatch: the spec envisions compile-time geometry upload with only transforms changing at runtime, but the implementation regenerates control-point geometry each frame because shapes are expressed as runtime fields. This is a known design tension between the path-based control-point model and the rigid stamp spec. The current approach works but burns CPU/GPU bandwidth on repeated geometry upload.
+
+## Item 2: No Material Class Bucketing
+**Spec says**: Hard Invariant 2: "Draw-prep must split incompatible rigid records (topology/material differences)." Data Contract 1.1: "Material class metadata."
+**Implementation**: `ShapeBankHeaderWord.MaterialClass` exists at word offset 3 (`src/runtime/RuntimeState.ts:30`) but is always written as `0` (default). No material system or bucketing by material exists. `DrawPrepSinkTablePacker.ts:227-228` reads `materialClass` from the header but it's always 0.
+**Gap**: MaterialClass field is allocated in the header but never populated with meaningful values. No material system exists. All shapes render with the same "uber shader" fragment stage. When multiple materials are needed (e.g., different blend modes, textures), the current architecture has no bucketing mechanism.
+**Classification**: CRITICAL - Material class metadata is dead (always 0). No material bucketing exists. This will block any work requiring per-shape material differentiation (different shaders, blend modes, texture bindings).

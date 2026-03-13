@@ -1,0 +1,7 @@
+# Shapes 0: Shape Taxonomy Overview - CRITICAL Items
+
+## Item 1: Draw-Prep is Static Kernel + Metadata Input (Not Fully GPU-Driven)
+**Spec says**: Shared Runtime Contract 1: "Draw Prep is static kernel + metadata input." This implies draw-prep is a GPU compute kernel that reads metadata and writes indirect args.
+**Implementation**: Draw-prep compute shader exists at `src/render/webgpu/shaders.ts:254-284` (DRAW_PREP_COMPUTE_WGSL) but it is a simple pass-through that copies CPU-provided values into the indirect buffer. The actual draw-prep logic (instance counting, shape handle resolution, topology field extraction) happens on the CPU in `src/runtime/DrawPrepSinkTablePacker.ts`. The GPU compute is a `memcpy` rather than autonomous draw-prep.
+**Gap**: The spec envisions GPU-autonomous draw-prep where the compute kernel reads sink metadata and produces indirect args. The current implementation does all draw-prep work on the CPU and uses the GPU compute shader only to copy pre-computed values. This defeats the purpose of GPU-driven rendering for large instance counts because the CPU must touch every instance's data each frame.
+**Classification**: CRITICAL - CPU-side draw-prep bottleneck. For the target scale (10k-100k instances), the CPU cannot efficiently iterate all instances per frame. The GPU compute draw-prep kernel needs to read from Arena channels and produce indirect args autonomously.
