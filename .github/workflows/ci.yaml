@@ -45,14 +45,7 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: >
-          pnpm eslint src/blocks/
-          src/runtime/ValueExprMaterializer.ts
-          src/runtime/ValueExprEventEvaluator.ts
-          src/runtime/ContinuityApply.ts
-          src/compiler/compile.ts
-          src/runtime/OpcodeInterpreter.ts
-          src/render/RenderBufferArena.ts
+      - run: pnpm lint
 
   test:
     name: Vitest
