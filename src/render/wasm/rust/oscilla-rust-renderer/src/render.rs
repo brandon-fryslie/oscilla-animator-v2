@@ -1,18 +1,29 @@
 use crate::memory::GpuMemoryArena;
 
 const U32_BYTES: u64 = std::mem::size_of::<u32>() as u64;
+pub const CANONICAL_MSAA_SAMPLE_COUNT: u32 = 4;
+
+fn build_multisample_state(sample_count: u32) -> wgpu::MultisampleState {
+    wgpu::MultisampleState {
+        count: sample_count.max(1),
+        mask: !0,
+        alpha_to_coverage_enabled: false,
+    }
+}
 
 pub struct DepthTarget {
     _depth_texture: wgpu::Texture,
     depth_view: wgpu::TextureView,
     width: u32,
     height: u32,
+    sample_count: u32,
 }
 
 impl DepthTarget {
-    pub fn new(device: &wgpu::Device, width: u32, height: u32) -> Self {
+    pub fn new(device: &wgpu::Device, width: u32, height: u32, sample_count: u32) -> Self {
         let safe_width = width.max(1);
         let safe_height = height.max(1);
+        let safe_sample_count = sample_count.max(1);
         let depth_texture = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("Render.DepthTarget"),
             size: wgpu::Extent3d {
@@ -21,7 +32,7 @@ impl DepthTarget {
                 depth_or_array_layers: 1,
             },
             mip_level_count: 1,
-            sample_count: 1,
+            sample_count: safe_sample_count,
             dimension: wgpu::TextureDimension::D2,
             format: wgpu::TextureFormat::Depth32Float,
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
@@ -33,20 +44,96 @@ impl DepthTarget {
             depth_view,
             width: safe_width,
             height: safe_height,
+            sample_count: safe_sample_count,
         }
     }
 
-    pub fn resize(&mut self, device: &wgpu::Device, width: u32, height: u32) {
+    pub fn resize(&mut self, device: &wgpu::Device, width: u32, height: u32, sample_count: u32) {
         let safe_width = width.max(1);
         let safe_height = height.max(1);
-        if self.width == safe_width && self.height == safe_height {
+        let safe_sample_count = sample_count.max(1);
+        if self.width == safe_width
+            && self.height == safe_height
+            && self.sample_count == safe_sample_count
+        {
             return;
         }
-        *self = Self::new(device, safe_width, safe_height);
+        *self = Self::new(device, safe_width, safe_height, safe_sample_count);
     }
 
     pub fn view(&self) -> &wgpu::TextureView {
         &self.depth_view
+    }
+}
+
+pub struct MsaaColorTarget {
+    _color_texture: wgpu::Texture,
+    color_view: wgpu::TextureView,
+    width: u32,
+    height: u32,
+    format: wgpu::TextureFormat,
+    sample_count: u32,
+}
+
+impl MsaaColorTarget {
+    pub fn new(
+        device: &wgpu::Device,
+        format: wgpu::TextureFormat,
+        width: u32,
+        height: u32,
+        sample_count: u32,
+    ) -> Self {
+        let safe_width = width.max(1);
+        let safe_height = height.max(1);
+        let safe_sample_count = sample_count.max(1);
+        let color_texture = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("Render.MsaaColorTarget"),
+            size: wgpu::Extent3d {
+                width: safe_width,
+                height: safe_height,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: safe_sample_count,
+            dimension: wgpu::TextureDimension::D2,
+            format,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+            view_formats: &[],
+        });
+        let color_view = color_texture.create_view(&wgpu::TextureViewDescriptor::default());
+        Self {
+            _color_texture: color_texture,
+            color_view,
+            width: safe_width,
+            height: safe_height,
+            format,
+            sample_count: safe_sample_count,
+        }
+    }
+
+    pub fn resize(
+        &mut self,
+        device: &wgpu::Device,
+        format: wgpu::TextureFormat,
+        width: u32,
+        height: u32,
+        sample_count: u32,
+    ) {
+        let safe_width = width.max(1);
+        let safe_height = height.max(1);
+        let safe_sample_count = sample_count.max(1);
+        if self.width == safe_width
+            && self.height == safe_height
+            && self.format == format
+            && self.sample_count == safe_sample_count
+        {
+            return;
+        }
+        *self = Self::new(device, format, safe_width, safe_height, safe_sample_count);
+    }
+
+    pub fn view(&self) -> &wgpu::TextureView {
+        &self.color_view
     }
 }
 
@@ -72,6 +159,7 @@ impl RenderDispatcher {
         device: &wgpu::Device,
         uber_shader_wgsl: &str,
         surface_format: wgpu::TextureFormat,
+        sample_count: u32,
         uniform_layout: &wgpu::BindGroupLayout,
     ) -> Self {
         let instance_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -147,7 +235,9 @@ impl RenderDispatcher {
                 stencil: wgpu::StencilState::default(),
                 bias: wgpu::DepthBiasState::default(),
             }),
-            multisample: wgpu::MultisampleState::default(),
+            // [LAW:one-source-of-truth] Render pipeline multisample state is
+            // centralized so depth/color attachment sample counts cannot drift.
+            multisample: build_multisample_state(sample_count),
             multiview: None,
             cache: None,
         });
@@ -163,15 +253,22 @@ impl RenderDispatcher {
         &self,
         encoder: &mut wgpu::CommandEncoder,
         arena: &GpuMemoryArena,
-        color_view: &wgpu::TextureView,
+        surface_color_view: &wgpu::TextureView,
+        msaa_color_view: Option<&wgpu::TextureView>,
         depth_view: &wgpu::TextureView,
         plan: IndirectRegionPlan,
     ) {
+        // [LAW:dataflow-not-control-flow] Render pass submission always executes
+        // once per frame; attachment wiring data decides resolve behavior.
+        let (color_attachment_view, resolve_target) = match msaa_color_view {
+            Some(view) => (view, Some(surface_color_view)),
+            None => (surface_color_view, None),
+        };
         let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("Render.Uber.Pass"),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                view: color_view,
-                resolve_target: None,
+                view: color_attachment_view,
+                resolve_target,
                 ops: wgpu::Operations {
                     load: wgpu::LoadOp::Clear(wgpu::Color {
                         r: 0.05,
