@@ -188,11 +188,43 @@ describe('validateGpuPassSignaturesAtCompileBoundary', () => {
     });
   });
 
+  it('accepts valid vertex + fragment pass signatures', () => {
+    const result = validateGpuPassSignaturesAtCompileBoundary([
+      {
+        passId: 'fullscreen.vertex',
+        stage: 'vertex',
+        entryPoint: 'vertex_main',
+        wgsl: '@vertex\nfn vertex_main() -> @builtin(position) vec4<f32> { return vec4<f32>(0.0); }',
+      },
+      {
+        passId: 'fullscreen.fragment',
+        stage: 'fragment',
+        entryPoint: 'fragment_main',
+        wgsl: '@fragment\nfn fragment_main() -> @location(0) vec4<f32> { return vec4<f32>(1.0); }',
+      },
+    ]);
+    expect(result).toMatchObject({
+      kind: 'ok',
+      signatures: [
+        {
+          passId: 'fullscreen.vertex',
+          stage: 'vertex',
+          entryPoint: 'vertex_main',
+        },
+        {
+          passId: 'fullscreen.fragment',
+          stage: 'fragment',
+          entryPoint: 'fragment_main',
+        },
+      ],
+    });
+  });
+
   it('rejects invalid stage metadata', () => {
     const result = validateGpuPassSignaturesAtCompileBoundary([
       {
         passId: 'simulation',
-        stage: 'fragment',
+        stage: 'geometry',
         entryPoint: 'compute_main',
         wgsl: '@compute @workgroup_size(64, 1, 1)\nfn compute_main() {}',
       },
@@ -214,5 +246,19 @@ describe('validateGpuPassSignaturesAtCompileBoundary', () => {
     expect(result.kind).toBe('error');
     if (result.kind !== 'error') return;
     expect(result.errors.some((error) => error.message.includes('missing fn compute_main'))).toBe(true);
+  });
+
+  it('rejects stage-specific entry annotation mismatches', () => {
+    const result = validateGpuPassSignaturesAtCompileBoundary([
+      {
+        passId: 'fullscreen.fragment',
+        stage: 'fragment',
+        entryPoint: 'fragment_main',
+        wgsl: '@vertex\nfn fragment_main() -> @location(0) vec4<f32> { return vec4<f32>(1.0); }',
+      },
+    ]);
+    expect(result.kind).toBe('error');
+    if (result.kind !== 'error') return;
+    expect(result.errors.some((error) => error.message.includes('missing @fragment annotation'))).toBe(true);
   });
 });

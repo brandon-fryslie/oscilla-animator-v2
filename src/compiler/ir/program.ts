@@ -18,6 +18,7 @@ import type {
 } from './Indices';
 import type { BlockIndex } from './BlockIndex';
 import type { BlockId } from '../../types/compiler';
+import type { GpuPassStage } from '../../types/gpu-pass-stage';
 import type { ValueExpr } from './value-expr';
 import type { KernelRegistry } from '../../runtime/KernelRegistry';
 import type { ArenaSlotDescriptor } from '../../runtime/ArenaValueStore';
@@ -265,7 +266,7 @@ export interface ProgramTopologyTableIR {
 
 export interface GpuPassManifestEntryIR {
   readonly passId: string;
-  readonly stage: 'compute';
+  readonly stage: GpuPassStage;
   readonly entryPoint: string;
 }
 

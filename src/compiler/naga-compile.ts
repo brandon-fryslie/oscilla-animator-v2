@@ -1,6 +1,11 @@
 import type { CompileError } from './types';
 import { NagaService, NagaValidationError } from './naga-bridge';
 import type { CompiledProgramIR } from './ir/program';
+import {
+  type GpuPassStage,
+  isGpuPassStage,
+  requiredEntryAnnotationForGpuPassStage,
+} from '../types/gpu-pass-stage';
 
 interface NagaSourceRef {
   readonly blockId: string | null;
@@ -19,7 +24,7 @@ export interface GpuPassSignatureCandidate {
 
 export interface ValidatedGpuPassSignature {
   readonly passId: string;
-  readonly stage: 'compute';
+  readonly stage: GpuPassStage;
   readonly entryPoint: string;
 }
 
@@ -64,6 +69,22 @@ function makeGpuPassError(message: string): CompileError {
   };
 }
 
+function normalizeGpuPassStage(
+  stage: string,
+  passRef: string,
+): { readonly kind: 'ok'; readonly stage: GpuPassStage } | { readonly kind: 'error'; readonly error: CompileError } {
+  if (!isGpuPassStage(stage)) {
+    return {
+      kind: 'error',
+      error: makeGpuPassError(`GPU pass contract violation: pass ${passRef} has unsupported stage "${String(stage)}"`),
+    };
+  }
+  return {
+    kind: 'ok',
+    stage,
+  };
+}
+
 export function validateGpuPassSignaturesAtCompileBoundary(
   passes: readonly GpuPassSignatureCandidate[],
 ): GpuPassSignatureValidationOutcome {
@@ -82,10 +103,9 @@ export function validateGpuPassSignaturesAtCompileBoundary(
       errors.push(makeGpuPassError(`GPU pass contract violation: pass ${index} is missing passId`));
       continue;
     }
-    if (pass.stage !== 'compute') {
-      errors.push(
-        makeGpuPassError(`GPU pass contract violation: pass ${passRef} has unsupported stage "${String(pass.stage)}"`),
-      );
+    const normalizedStage = normalizeGpuPassStage(pass.stage, passRef);
+    if (normalizedStage.kind === 'error') {
+      errors.push(normalizedStage.error);
       continue;
     }
     if (!isNonEmptyString(pass.entryPoint)) {
@@ -104,15 +124,11 @@ export function validateGpuPassSignaturesAtCompileBoundary(
       errors.push(makeGpuPassError(`GPU pass contract violation: pass ${passRef} is missing WGSL source`));
       continue;
     }
-    if (!pass.wgsl.includes('@compute')) {
-      errors.push(
-        makeGpuPassError(`GPU pass contract violation: pass ${passRef} WGSL is missing @compute annotation`),
-      );
-      continue;
-    }
-
-    const entryPattern = new RegExp(`\\bfn\\s+${escapeRegex(pass.entryPoint)}\\s*\\(`);
-    if (!entryPattern.test(pass.wgsl)) {
+    const entryPattern = new RegExp(
+      `((?:\\s*@[\\w:]+(?:\\([^)]*\\))?)*)\\s*fn\\s+${escapeRegex(pass.entryPoint)}\\s*\\(`,
+    );
+    const entryMatch = entryPattern.exec(pass.wgsl);
+    if (entryMatch === null) {
       errors.push(
         makeGpuPassError(
           `GPU pass contract violation: pass ${passRef} WGSL is missing fn ${pass.entryPoint}(...)`,
@@ -120,10 +136,18 @@ export function validateGpuPassSignaturesAtCompileBoundary(
       );
       continue;
     }
+    const requiredAnnotation = requiredEntryAnnotationForGpuPassStage(normalizedStage.stage);
+    const entryAttributes = entryMatch[1] ?? '';
+    if (!entryAttributes.includes(requiredAnnotation)) {
+      errors.push(
+        makeGpuPassError(`GPU pass contract violation: pass ${passRef} WGSL is missing ${requiredAnnotation} annotation`),
+      );
+      continue;
+    }
 
     signatures.push({
       passId: pass.passId,
-      stage: 'compute',
+      stage: normalizedStage.stage,
       entryPoint: pass.entryPoint,
     });
   }
