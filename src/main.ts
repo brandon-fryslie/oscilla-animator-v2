@@ -36,6 +36,7 @@ import { registerAllBlocks } from './blocks/all';
 import { StoreProvider, type RootStore } from './stores';
 import { RuntimeService } from './services/RuntimeService';
 import { BootService } from './services/BootService';
+import { ensureCrossOriginIsolationForSharedArrayBuffer } from './services/cross-origin-isolation';
 import {
   initializeComposites,
   compositeStorage,
@@ -211,5 +212,15 @@ if (import.meta.hot) {
 }
 
 if (!navigating) {
-  main();
+  void ensureCrossOriginIsolationForSharedArrayBuffer()
+    .then((shouldBootApp) => {
+      if (!shouldBootApp) {
+        return;
+      }
+      main();
+    })
+    .catch((error: unknown) => {
+      console.error('Failed to initialize cross-origin isolation bootstrap:', error);
+      main();
+    });
 }
